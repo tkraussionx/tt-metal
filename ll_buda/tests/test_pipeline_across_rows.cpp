@@ -32,6 +32,8 @@ int main(int argc, char **argv) {
 
         uint32_t single_tile_size = 2 * 1024;
         uint32_t num_tiles = 2048;
+
+        // source and destination buffers
         uint32_t dram_buffer_size = single_tile_size * num_tiles; // num_tiles of FP16_B, hard-coded in the reader/writer kernels
 
         auto src_dram_buffer = ll_buda::CreateDramBuffer(0, dram_buffer_size, 0);
@@ -40,21 +42,27 @@ int main(int argc, char **argv) {
         auto dram_src_noc_xy = src_dram_buffer->noc_coordinates(device);
         auto dram_dst_noc_xy = dst_dram_buffer->noc_coordinates(device);
 
+        // circular buffers
         uint32_t cb_index = 8;
         uint32_t cb_addr = 250 * 1024;
         uint32_t cb_size_tiles = 16;
-        auto cb1 = ll_buda::CreateCircularBuffer(
-            program,
-            cb_index,
-            cores[0],
-            cb_size_tiles,
-            cb_size_tiles * single_tile_size,
-            cb_addr,
-            tt::DataFormat::Float16_b
-        );
-        
-        auto reader_first_stage_kernel_args = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[0], {8, 2});
-        auto writer_last_stage_kernel_args = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[0], {8, 4});
+        TT_ASSERT(cb_size_tiles % 2 == 0);
+
+        for (auto core : cores) {
+            auto cb = ll_buda::CreateCircularBuffer(
+                program,
+                cb_index,
+                core,
+                cb_size_tiles,
+                cb_size_tiles * single_tile_size,
+                cb_addr,
+                tt::DataFormat::Float16_b
+            );
+        }
+
+        // kernels 
+        auto reader_first_stage_kernel_args = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[0], {cb_index, cb_size_tiles/2});
+        auto writer_last_stage_kernel_args = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[0], {cb_index, cb_size_tiles/2});
 
         auto reader_first_stage_kernel = ll_buda::CreateDataMovementKernel(
             program,
