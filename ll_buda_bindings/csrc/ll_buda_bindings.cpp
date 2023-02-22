@@ -5,6 +5,7 @@
 #include "ll_buda/op_library/reduce/reduce_op.hpp"
 #include "ll_buda/op_library/transpose/transpose_op.hpp"
 #include "ll_buda/op_library/eltwise_unary/eltwise_unary_op.hpp"
+#include "ll_buda/op_library/tilize/tilize_op.hpp"
 #include "ll_buda/op_library/untilize/untilize_op.hpp"
 
 #include "ll_buda_bindings.hpp"
@@ -71,7 +72,7 @@ void TensorModule(py::module &m_tensor) {
     // TMs
     // transpose
     m_tensor.def("transpose", &transpose);
-    // m_tensor.def("tilize", &tilize);
+    m_tensor.def("tilize", &tilize);
     m_tensor.def("untilize", &untilize);
 
     // bast enums
