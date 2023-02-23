@@ -143,12 +143,11 @@ int main(int argc, char **argv) {
             device,
             sender_intermediate_stage_kernel,
             cores[0],
-            {src_dram_buffer->address(),
-            (uint32_t)device->worker_core_from_logical_core(cores[1]).x,
-            (uint32_t)device->worker_core_from_logical_core(cores[1]).y,
-            (uint32_t)num_tiles,
-            (uint32_t)sender_semaphore_addr,
-            (uint32_t)receiver_semaphore_addr});
+            {(uint32_t)device->worker_core_from_logical_core(cores[1]).x,
+             (uint32_t)device->worker_core_from_logical_core(cores[1]).y,
+             (uint32_t)num_tiles,
+             (uint32_t)sender_semaphore_addr,
+             (uint32_t)receiver_semaphore_addr});
 
         // core 1
         ll_buda::WriteRuntimeArgsToDevice(
