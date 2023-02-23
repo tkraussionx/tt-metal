@@ -80,6 +80,17 @@ int main(int argc, char **argv) {
             ll_buda::DataMovementProcessor::RISCV_0,
             ll_buda::NOC::RISCV_0_default);
 
+        ///
+        auto writer_intermediate_stage_kernel_args = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[1], {cb_index, cb_size_tiles/2});
+
+        auto writer_test = ll_buda::CreateDataMovementKernel(
+            program,
+            "kernels/dataflow/writer_intermediate_stage.cpp",
+            cores[1],
+            writer_intermediate_stage_kernel_args,
+            ll_buda::DataMovementProcessor::RISCV_1,
+            ll_buda::NOC::RISCV_1_default);
+
         ////////////////////////////////////////////////////////////////////////////
         //                      Compile Application
         ////////////////////////////////////////////////////////////////////////////

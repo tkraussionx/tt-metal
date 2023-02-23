@@ -343,6 +343,12 @@ void noc_async_write(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr
 }
 
 inline __attribute__((always_inline)) 
+void noc_semaphore_set(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr) {
+        ncrisc_noc_fast_write_any_len(loading_noc, NCRISC_WR_REG_CMD_BUF, src_local_l1_addr, dst_noc_addr, 4 /* size in bytes */,   
+                            NOC_UNICAST_WRITE_VC, false, false, 1);
+}
+
+inline __attribute__((always_inline)) 
 void noc_async_write_multicast(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr_multicast, std::uint32_t size, std::uint32_t num_dests) {
         ncrisc_noc_fast_write_any_len(loading_noc, NCRISC_WR_REG_CMD_BUF, src_local_l1_addr, dst_noc_addr_multicast, size,   
                             NOC_MULTICAST_WRITE_VC, true, false, num_dests);
