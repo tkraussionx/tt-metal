@@ -1,6 +1,9 @@
 #include "dataflow_api.h"
+#include "tools/profiler/kernel_profiler.hpp"
 
 void kernel_main() {
+    kernel_profiler::mark_time(7);
+    
     std::uint32_t dram_buffer_dst_addr  = get_arg_val<uint32_t>(0);
     std::uint32_t dram_dst_noc_x        = get_arg_val<uint32_t>(1);
     std::uint32_t dram_dst_noc_y        = get_arg_val<uint32_t>(2);
@@ -23,4 +26,6 @@ void kernel_main() {
         cb_pop_front(cb_id, block_size_tiles);
         dram_buffer_dst_addr += block_size_bytes;
     }
+
+    kernel_profiler::mark_time(8);
 }

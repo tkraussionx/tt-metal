@@ -189,7 +189,7 @@ void device_setup() {
 
   volatile uint32_t* cfg_regs = core.cfg_regs_base(0);
 
-  stagger_startup();
+  //stagger_startup();
 
   // FIXME MT: enable later
   // enable_power_management();
