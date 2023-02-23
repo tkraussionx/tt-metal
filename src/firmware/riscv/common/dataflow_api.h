@@ -583,7 +583,7 @@ void noc_async_write_multicast(std::uint32_t src_local_l1_addr, std::uint64_t ds
 }
 
 FORCE_INLINE
-void noc_semaphore_set(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr) {
+void noc_semaphore_set_remote(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr) {
         ncrisc_noc_fast_write_any_len(loading_noc, NCRISC_WR_REG_CMD_BUF, src_local_l1_addr, dst_noc_addr, 4 /* size in bytes */,   
                             NOC_UNICAST_WRITE_VC, false, false, 1);
 }

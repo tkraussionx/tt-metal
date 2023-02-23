@@ -4,6 +4,7 @@
 
 #include "ll_buda/host_api.hpp"
 #include "common/bfloat16.hpp"
+#include "hostdevcommon/common_values.hpp"
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // TODO: explain what test does
@@ -60,11 +61,17 @@ int main(int argc, char **argv) {
             );
         }
 
-        // kernels 
-        auto reader_first_stage_kernel_args = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[0], {cb_index, cb_size_tiles/2});
-        auto writer_last_stage_kernel_args = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[0], {cb_index, cb_size_tiles/2});
+        // semaphores in L1, 32B aligned for NOC transfers
+        uint32_t sender_semaphore_addr = 109600;
+        uint32_t receiver_semaphore_addr = 109632;
+        TT_ASSERT(sender_semaphore_addr % 32 == 0);
+        TT_ASSERT(receiver_semaphore_addr % 32 == 0);
 
-        auto reader_first_stage_kernel = ll_buda::CreateDataMovementKernel(
+        // kernels 
+
+        // core 0
+        auto reader_first_stage_kernel_args  = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[0], {cb_index, cb_size_tiles/2});
+        auto reader_first_stage_kernel       = ll_buda::CreateDataMovementKernel(
             program,
             "kernels/dataflow/reader_first_stage.cpp",
             cores[0],
@@ -72,24 +79,34 @@ int main(int argc, char **argv) {
             ll_buda::DataMovementProcessor::RISCV_1,
             ll_buda::NOC::RISCV_1_default);
 
-        auto writer_last_stage_kernel = ll_buda::CreateDataMovementKernel(
+        auto sender_intermediate_stage_kernel_args = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[0], {cb_index, cb_size_tiles/2});
+        auto sender_intermediate_stage_kernel      = ll_buda::CreateDataMovementKernel(
+            program,
+            "kernels/dataflow/sender_intermediate_stage.cpp",
+            cores[0],
+            sender_intermediate_stage_kernel_args,
+            ll_buda::DataMovementProcessor::RISCV_0,
+            ll_buda::NOC::RISCV_0_default);
+
+        // core 1
+        auto receiver_intermediate_stage_kernel_args = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[1], {cb_index, cb_size_tiles/2});
+        auto receiver_intermediate_stage_kernel      = ll_buda::CreateDataMovementKernel(
+            program,
+            "kernels/dataflow/receiver_intermediate_stage.cpp",
+            cores[1],
+            receiver_intermediate_stage_kernel_args,
+            ll_buda::DataMovementProcessor::RISCV_1,
+            ll_buda::NOC::RISCV_1_default);
+
+        auto writer_last_stage_kernel_args = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[1], {cb_index, cb_size_tiles/2});
+        auto writer_last_stage_kernel      = ll_buda::CreateDataMovementKernel(
             program,
             "kernels/dataflow/writer_last_stage.cpp",
-            cores[0],
+            cores[1],
             writer_last_stage_kernel_args,
             ll_buda::DataMovementProcessor::RISCV_0,
             ll_buda::NOC::RISCV_0_default);
 
-        ///
-        auto writer_intermediate_stage_kernel_args = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[1], {cb_index, cb_size_tiles/2});
-
-        auto writer_test = ll_buda::CreateDataMovementKernel(
-            program,
-            "kernels/dataflow/writer_intermediate_stage.cpp",
-            cores[1],
-            writer_intermediate_stage_kernel_args,
-            ll_buda::DataMovementProcessor::RISCV_1,
-            ll_buda::NOC::RISCV_1_default);
 
         ////////////////////////////////////////////////////////////////////////////
         //                      Compile Application
@@ -106,6 +123,13 @@ int main(int argc, char **argv) {
 
         pass &= ll_buda::ConfigureDeviceWithProgram(device, program);
 
+        // host initializes only the sender's semaphores, reciver's semaphores are initialized by the kernel
+        std::vector<uint32_t> invalid = {INVALID};
+        for (auto core : cores) {
+            ll_buda::WriteToDeviceL1(device, core, invalid, sender_semaphore_addr);
+        }
+
+        // core 0
         ll_buda::WriteRuntimeArgsToDevice(
             device,
             reader_first_stage_kernel,
@@ -117,8 +141,30 @@ int main(int argc, char **argv) {
 
         ll_buda::WriteRuntimeArgsToDevice(
             device,
-            writer_last_stage_kernel,
+            sender_intermediate_stage_kernel,
             cores[0],
+            {src_dram_buffer->address(),
+            (uint32_t)device->worker_core_from_logical_core(cores[1]).x,
+            (uint32_t)device->worker_core_from_logical_core(cores[1]).y,
+            (uint32_t)num_tiles,
+            (uint32_t)sender_semaphore_addr,
+            (uint32_t)receiver_semaphore_addr});
+
+        // core 1
+        ll_buda::WriteRuntimeArgsToDevice(
+            device,
+            receiver_intermediate_stage_kernel,
+            cores[1],
+            {(uint32_t)device->worker_core_from_logical_core(cores[0]).x,
+             (uint32_t)device->worker_core_from_logical_core(cores[0]).y,
+             (uint32_t)num_tiles,
+             (uint32_t)sender_semaphore_addr,
+             (uint32_t)receiver_semaphore_addr});
+
+        ll_buda::WriteRuntimeArgsToDevice(
+            device,
+            writer_last_stage_kernel,
+            cores[1],
             {dst_dram_buffer->address(),
             (uint32_t)dram_dst_noc_xy.x,
             (uint32_t)dram_dst_noc_xy.y,

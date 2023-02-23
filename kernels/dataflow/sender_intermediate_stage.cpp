@@ -6,7 +6,7 @@ void kernel_main() {
     uint32_t receiver_noc_y          = get_arg_val<uint32_t>(1);
     uint32_t num_tiles               = get_arg_val<uint32_t>(2);
     uint32_t sender_semaphore_addr   = get_arg_val<uint32_t>(3);
-    uint32_t receiver_semaphore_addr = get_arg_val<uint32_t>(3);
+    uint32_t receiver_semaphore_addr = get_arg_val<uint32_t>(4);
 
     // initialized by the host to 0 before program launch
     volatile uint32_t* sender_semaphore_addr_ptr = reinterpret_cast<volatile uint32_t*>(sender_semaphore_addr);
@@ -15,7 +15,7 @@ void kernel_main() {
     volatile uint32_t* receiver_semaphore_addr_ptr = reinterpret_cast<volatile uint32_t*>(receiver_semaphore_addr);
     *(receiver_semaphore_addr_ptr) = VALID;
 
-    constexpr uint32_t cb_id             = get_compile_time_arg_val(0);
+    constexpr uint32_t cb_id            = get_compile_time_arg_val(0);
     constexpr uint32_t block_size_tiles = get_compile_time_arg_val(1);
 
     uint32_t block_size_bytes = get_tile_size(cb_id) * block_size_tiles; 
@@ -35,9 +35,10 @@ void kernel_main() {
 
         // We also send the the flag to the receiver, so that it knows when to start
         uint64_t receiver_semaphore_noc_addr = get_noc_addr(receiver_noc_x, receiver_noc_y, receiver_semaphore_addr);
-        noc_semaphore_set(receiver_semaphore_addr, receiver_semaphore_noc_addr);
+        noc_semaphore_set_remote(receiver_semaphore_addr, receiver_semaphore_noc_addr);
 
         // need to make sure we've sent the data before we pop the CB
+        // TODO: we may not need this barrier
         noc_async_write_barrier();
 
         cb_pop_front(cb_id, block_size_tiles);
