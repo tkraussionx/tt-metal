@@ -112,7 +112,8 @@ int main(int argc, char **argv) {
         //                      Compile Application
         ////////////////////////////////////////////////////////////////////////////
         bool skip_hlkc = false;
-        pass &= ll_buda::CompileProgram(device, program, skip_hlkc);
+        constexpr bool profile_kernel = true;
+        pass &= ll_buda::CompileProgram(device, program, skip_hlkc, profile_kernel);
 
         ////////////////////////////////////////////////////////////////////////////
         //                      Execute Application
@@ -121,7 +122,7 @@ int main(int argc, char **argv) {
             dram_buffer_size, 100, std::chrono::system_clock::now().time_since_epoch().count());
         pass &= ll_buda::WriteToDeviceDRAM(device, src_dram_buffer, src_vec);
 
-        pass &= ll_buda::ConfigureDeviceWithProgram(device, program);
+        pass &= ll_buda::ConfigureDeviceWithProgram(device, program, profile_kernel);
 
         // host initializes only the sender's semaphores, reciver's semaphores are initialized by the kernel
         std::vector<uint32_t> invalid = {INVALID};

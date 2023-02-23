@@ -1,8 +1,11 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
+#include "tools/profiler/kernel_profiler.hpp"
 
 void kernel_main() {
+    kernel_profiler::mark_time(5);
+
     uint32_t sender_noc_x            = get_arg_val<uint32_t>(0);
     uint32_t sender_noc_y            = get_arg_val<uint32_t>(1);
     uint32_t num_tiles               = get_arg_val<uint32_t>(2);
@@ -31,4 +34,6 @@ void kernel_main() {
         
         cb_push_back(cb_id, block_size_tiles);
     }
+
+    kernel_profiler::mark_time(6);
 }

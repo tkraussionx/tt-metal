@@ -67,6 +67,28 @@ class test_base:
     }
 
 
+class test_pipeline_across_rows(test_base):
+    plotHeight = 500
+
+    riscTimerCombo = {
+        "NCRISC": [
+            ("START", "1", "blank", ""),
+            ("1", "2", "green", "NCRISC start to end"),
+            ("2", "END", "blank", ""),
+            ("START", "5", "blank", ""),
+            ("5", "6", "green", "NCRISC start to end"),
+            ("6", "END", "blank", ""),
+        ],
+        "BRISC": [
+            ("START", "3", "blank", ""),
+            ("3", "4", "red", "BRISC start to end"),
+            ("4", "END", "blank", ""),
+            ("START", "7", "blank", ""),
+            ("7", "8", "red", "BRISC start to end"),
+            ("8", "END", "blank", ""),
+        ],
+    }
+
 class test_matmul_multi_core_multi_dram(test_base):
     plotHeight = 9000
     riscTimerCombo = {
