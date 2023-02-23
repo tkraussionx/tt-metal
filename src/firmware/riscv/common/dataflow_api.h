@@ -582,6 +582,12 @@ void noc_async_write_multicast(std::uint32_t src_local_l1_addr, std::uint64_t ds
                             NOC_MULTICAST_WRITE_VC, true, false, num_dests);
 }
 
+FORCE_INLINE
+void noc_semaphore_set(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr) {
+        ncrisc_noc_fast_write_any_len(loading_noc, NCRISC_WR_REG_CMD_BUF, src_local_l1_addr, dst_noc_addr, 4 /* size in bytes */,   
+                            NOC_UNICAST_WRITE_VC, false, false, 1);
+}
+
 /**
  * Initiates an asynchronous write from a source address in L1 memory on the
  * Tensix core executing this function call to a rectangular destination grid.
