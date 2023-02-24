@@ -29,16 +29,46 @@ int main(int argc, char **argv) {
         ////////////////////////////////////////////////////////////////////////////
         ll_buda::Program *program = new ll_buda::Program();
 
-        std::vector<tt_xy_pair> cores = {{0,0}, {1,0}, {2,0}};
+        // set up the program
+
+        // pass
+        //uint32_t num_cores = 2;
+        //uint32_t num_tiles = 2048;
+        //uint32_t block_size_tiles = 8;
+        //uint32_t double_buffer = true; // 2 cores pass w/ double buffer
+
+        // pass
+        //uint32_t num_cores = 12;
+        //uint32_t num_tiles = 2048;
+        //uint32_t block_size_tiles = 8;
+        //uint32_t double_buffer = false; // 12 cores pass w/o double buffer
+
+        // hang
+        // uint32_t num_cores = 3; // 3 cores hang w/ double buffer
+        // uint32_t num_tiles = 16;
+        // uint32_t block_size_tiles = 8;
+        // uint32_t double_buffer = true;
+
+        // pass (same as above but num_tiles == block_size, so double buffers not exercised)
+        uint32_t num_cores = 3; // 
+        uint32_t num_tiles = 8; // 
+        uint32_t block_size_tiles = 8;
+        uint32_t double_buffer = true;
+
+        TT_ASSERT(num_cores >= 2 && num_cores <= 12); // grayskull
+        TT_ASSERT(num_tiles % block_size_tiles == 0);
+
+        std::vector<tt_xy_pair> cores;
+        for (uint32_t i = 0; i < num_cores; i++) {
+            cores.push_back({i, 0});    
+        }
+
+        log_info(LogTest, "num_cores: {}", num_cores);
+        log_info(LogTest, "num_tiles: {}", num_tiles);
+        log_info(LogTest, "block_size_tiles: {}", block_size_tiles);
+        log_info(LogTest, "double_buffer: {}", double_buffer);
 
         uint32_t single_tile_size = 2 * 1024;
-        
-        uint32_t num_tiles = 2048;
-        //uint32_t num_tiles = 16;
-
-        uint32_t block_size_tiles = 8;
-        TT_ASSERT(num_tiles % block_size_tiles == 0);
-        uint32_t double_buffer = false;
 
         // source and destination buffers
         uint32_t dram_buffer_size = single_tile_size * num_tiles; // num_tiles of FP16_B, hard-coded in the reader/writer kernels
@@ -77,68 +107,42 @@ int main(int argc, char **argv) {
         TT_ASSERT(sender_semaphore_addr % 32 == 0);
         TT_ASSERT(receiver_semaphore_addr % 32 == 0);
 
-        // kernels 
+        // create kernels 
+        vector<ll_buda::DataMovementKernel*> receiver_kernels;
+        vector<ll_buda::DataMovementKernel*> sender_kernels;
+        for (int core_id = 0; core_id < num_cores; core_id++) {
 
-        // core 0
-        int core_id = 0;
-        auto reader_first_stage_kernel_args  = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[core_id], {cb_index, block_size_tiles});
-        auto reader_first_stage_kernel       = ll_buda::CreateDataMovementKernel(
-            program,
-            "kernels/dataflow/reader_first_stage.cpp",
-            cores[core_id],
-            reader_first_stage_kernel_args,
-            ll_buda::DataMovementProcessor::RISCV_1,
-            ll_buda::NOC::RISCV_1_default);
+            string receiver_kernel_name;
+            if (core_id == 0) {
+                receiver_kernel_name = "kernels/dataflow/reader_first_stage.cpp";
+            } else {
+                receiver_kernel_name = "kernels/dataflow/receiver_intermediate_stage.cpp";
+            }
 
-        auto sender_intermediate_stage_kernel_args_0 = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[core_id], {cb_index, block_size_tiles});
-        auto sender_intermediate_stage_kernel_0      = ll_buda::CreateDataMovementKernel(
-            program,
-            "kernels/dataflow/sender_intermediate_stage.cpp",
-            cores[core_id],
-            sender_intermediate_stage_kernel_args_0,
-            ll_buda::DataMovementProcessor::RISCV_0,
-            ll_buda::NOC::RISCV_0_default);
-        
-        // core 1
-        core_id = 1;
-        auto receiver_intermediate_stage_kernel_args_1 = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[core_id], {cb_index, block_size_tiles});
-        auto receiver_intermediate_stage_kernel_1      = ll_buda::CreateDataMovementKernel(
-            program,
-            "kernels/dataflow/receiver_intermediate_stage.cpp",
-            cores[core_id],
-            receiver_intermediate_stage_kernel_args_1,
-            ll_buda::DataMovementProcessor::RISCV_1,
-            ll_buda::NOC::RISCV_1_default);
+            ll_buda::DataMovementKernelArgs* receiver_kernel_compile_time_args = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[core_id], {cb_index, block_size_tiles});
+            receiver_kernels.push_back(ll_buda::CreateDataMovementKernel(
+                program,
+                receiver_kernel_name,
+                cores[core_id],
+                receiver_kernel_compile_time_args,
+                ll_buda::DataMovementProcessor::RISCV_1,
+                ll_buda::NOC::RISCV_1_default));
 
-        auto sender_intermediate_stage_kernel_args_1 = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[core_id], {cb_index, block_size_tiles});
-        auto sender_intermediate_stage_kernel_1     = ll_buda::CreateDataMovementKernel(
-            program,
-            "kernels/dataflow/sender_intermediate_stage.cpp",
-            cores[core_id],
-            sender_intermediate_stage_kernel_args_1,
-            ll_buda::DataMovementProcessor::RISCV_0,
-            ll_buda::NOC::RISCV_0_default);
-
-        // core 2
-        core_id = 2;
-        auto receiver_intermediate_stage_kernel_args_2 = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[core_id], {cb_index, block_size_tiles});
-        auto receiver_intermediate_stage_kernel_2      = ll_buda::CreateDataMovementKernel(
-            program,
-            "kernels/dataflow/receiver_intermediate_stage.cpp",
-            cores[core_id],
-            receiver_intermediate_stage_kernel_args_2,
-            ll_buda::DataMovementProcessor::RISCV_1,
-            ll_buda::NOC::RISCV_1_default);
-
-        auto writer_last_stage_kernel_args = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[core_id], {cb_index, block_size_tiles});
-        auto writer_last_stage_kernel      = ll_buda::CreateDataMovementKernel(
-            program,
-            "kernels/dataflow/writer_last_stage.cpp",
-            cores[core_id],
-            writer_last_stage_kernel_args,
-            ll_buda::DataMovementProcessor::RISCV_0,
-            ll_buda::NOC::RISCV_0_default);
-
+            string sender_kernel_name;
+            if (core_id == num_cores - 1) {
+                sender_kernel_name = "kernels/dataflow/writer_last_stage.cpp";
+            } else {
+                sender_kernel_name = "kernels/dataflow/sender_intermediate_stage.cpp";
+            }
+            ll_buda::DataMovementKernelArgs* sender_kernel_compile_time_args = ll_buda::InitializeCompileTimeDataMovementKernelArgs(cores[core_id], {cb_index, block_size_tiles});
+            sender_kernels.push_back(ll_buda::CreateDataMovementKernel(
+                program,
+                sender_kernel_name,
+                cores[core_id],
+                sender_kernel_compile_time_args,
+                ll_buda::DataMovementProcessor::RISCV_0,
+                ll_buda::NOC::RISCV_0_default));
+        }
 
         ////////////////////////////////////////////////////////////////////////////
         //                      Compile Application
@@ -162,70 +166,51 @@ int main(int argc, char **argv) {
             ll_buda::WriteToDeviceL1(device, core, invalid, sender_semaphore_addr);
         }
 
-        // core 0
-        core_id = 0;
-        ll_buda::WriteRuntimeArgsToDevice(
-            device,
-            reader_first_stage_kernel,
-            cores[core_id],
-            {src_dram_buffer->address(),
-            (uint32_t)dram_src_noc_xy.x,
-            (uint32_t)dram_src_noc_xy.y,
-            (uint32_t)num_tiles});
+        // send run-time kernel arguments
+        for (int core_id = 0; core_id < num_cores; core_id++) {
+            if (core_id == 0) {
+                ll_buda::WriteRuntimeArgsToDevice(
+                    device,
+                    receiver_kernels[core_id],
+                    cores[core_id],
+                    {src_dram_buffer->address(),
+                    (uint32_t)dram_src_noc_xy.x,
+                    (uint32_t)dram_src_noc_xy.y,
+                    (uint32_t)num_tiles});
+            } else {
+                ll_buda::WriteRuntimeArgsToDevice(
+                    device,
+                    receiver_kernels[core_id],
+                    cores[core_id],
+                    {(uint32_t)device->worker_core_from_logical_core(cores[core_id-1]).x,
+                    (uint32_t)device->worker_core_from_logical_core(cores[core_id-1]).y,
+                    (uint32_t)num_tiles,
+                    (uint32_t)sender_semaphore_addr,
+                    (uint32_t)receiver_semaphore_addr});
+            }
 
-        ll_buda::WriteRuntimeArgsToDevice(
-            device,
-            sender_intermediate_stage_kernel_0,
-            cores[core_id],
-            {(uint32_t)device->worker_core_from_logical_core(cores[core_id+1]).x,
-             (uint32_t)device->worker_core_from_logical_core(cores[core_id+1]).y,
-             (uint32_t)num_tiles,
-             (uint32_t)sender_semaphore_addr,
-             (uint32_t)receiver_semaphore_addr});
+            if (core_id == num_cores - 1) {
+                ll_buda::WriteRuntimeArgsToDevice(
+                    device,
+                    sender_kernels[core_id],
+                    cores[core_id],
+                    {dst_dram_buffer->address(),
+                    (uint32_t)dram_dst_noc_xy.x,
+                    (uint32_t)dram_dst_noc_xy.y,
+                    (uint32_t)num_tiles});
+            } else {
+                ll_buda::WriteRuntimeArgsToDevice(
+                    device,
+                    sender_kernels[core_id],
+                    cores[core_id],
+                    {(uint32_t)device->worker_core_from_logical_core(cores[core_id+1]).x,
+                    (uint32_t)device->worker_core_from_logical_core(cores[core_id+1]).y,
+                    (uint32_t)num_tiles,
+                    (uint32_t)sender_semaphore_addr,
+                    (uint32_t)receiver_semaphore_addr});
+            }
+        }
 
-        // core 1
-        core_id = 1;
-        ll_buda::WriteRuntimeArgsToDevice(
-            device,
-            receiver_intermediate_stage_kernel_1,
-            cores[core_id],
-            {(uint32_t)device->worker_core_from_logical_core(cores[core_id-1]).x,
-             (uint32_t)device->worker_core_from_logical_core(cores[core_id-1]).y,
-             (uint32_t)num_tiles,
-             (uint32_t)sender_semaphore_addr,
-             (uint32_t)receiver_semaphore_addr});
-
-        ll_buda::WriteRuntimeArgsToDevice(
-            device,
-            sender_intermediate_stage_kernel_1,
-            cores[core_id],
-            {(uint32_t)device->worker_core_from_logical_core(cores[core_id+1]).x,
-             (uint32_t)device->worker_core_from_logical_core(cores[core_id+1]).y,
-             (uint32_t)num_tiles,
-             (uint32_t)sender_semaphore_addr,
-             (uint32_t)receiver_semaphore_addr});
-
-
-        // core 2
-        core_id = 2;
-        ll_buda::WriteRuntimeArgsToDevice(
-            device,
-            receiver_intermediate_stage_kernel_2,
-            cores[core_id],
-            {(uint32_t)device->worker_core_from_logical_core(cores[core_id-1]).x,
-             (uint32_t)device->worker_core_from_logical_core(cores[core_id-1]).y,
-             (uint32_t)num_tiles,
-             (uint32_t)sender_semaphore_addr,
-             (uint32_t)receiver_semaphore_addr});
-
-        ll_buda::WriteRuntimeArgsToDevice(
-            device,
-            writer_last_stage_kernel,
-            cores[core_id],
-            {dst_dram_buffer->address(),
-            (uint32_t)dram_dst_noc_xy.x,
-            (uint32_t)dram_dst_noc_xy.y,
-            (uint32_t)num_tiles});
 
         pass &= ll_buda::LaunchKernels(device, program);
 
