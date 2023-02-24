@@ -17,8 +17,16 @@ void kernel_main() {
     for (uint32_t i = 0; i < num_tiles; i += block_size_tiles) {
         std::uint64_t dram_buffer_dst_noc_addr = get_noc_addr(dram_dst_noc_x, dram_dst_noc_y, dram_buffer_dst_addr); 
 
+        /*
+        kernel_profiler::mark_time(my_x[0]);
+        kernel_profiler::mark_time(my_y[0]);
+        kernel_profiler::mark_time(i);
+        */
+
         cb_wait_front(cb_id, block_size_tiles);
         uint32_t l1_read_addr = get_read_ptr(cb_id);
+
+        kernel_profiler::mark_time(i);
 
         noc_async_write(l1_read_addr, dram_buffer_dst_noc_addr, block_size_bytes);
         noc_async_write_barrier();

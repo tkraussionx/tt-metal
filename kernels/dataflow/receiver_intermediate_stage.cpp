@@ -28,10 +28,17 @@ void kernel_main() {
         // Atomic increment sender's semaphore
         uint64_t sender_semaphore_noc_addr = get_noc_addr(sender_noc_x, sender_noc_y, sender_semaphore_addr);
         noc_semaphore_inc(sender_semaphore_noc_addr, 1);
-        
+
+        /*
+        kernel_profiler::mark_time(my_x[0]);
+        kernel_profiler::mark_time(my_y[0]);
+        kernel_profiler::mark_time(i);
+        kernel_profiler::mark_time(*receiver_semaphore_addr_ptr);
+        */
+
         // wait on receiver's emaphore value to become VALID (set by sender after it sends data)
         noc_semaphore_wait(receiver_semaphore_addr_ptr, VALID);
-        
+
         cb_push_back(cb_id, block_size_tiles);
     }
 
