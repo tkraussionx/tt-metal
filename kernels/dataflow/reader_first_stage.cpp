@@ -15,6 +15,7 @@ void kernel_main() {
     uint32_t block_size_bytes = get_tile_size(cb_id) * block_size_tiles; 
 
     for (uint32_t i = 0; i<num_tiles ; i += block_size_tiles) {
+        //DPRINT << i << ENDL();
 
         std::uint64_t dram_buffer_src_noc_addr = get_noc_addr(dram_src_noc_x, dram_src_noc_y, dram_buffer_src_addr);
         cb_reserve_back(cb_id, block_size_tiles);
