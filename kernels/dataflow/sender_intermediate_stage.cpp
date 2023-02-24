@@ -14,10 +14,6 @@ void kernel_main() {
     // initialized by the host to 0 before program launch
     volatile uint32_t* sender_semaphore_addr_ptr = reinterpret_cast<volatile uint32_t*>(sender_semaphore_addr);
 
-    // Set your local VALID value, to be sent to the receiver semaphore after the data has been sent
-    volatile uint32_t* receiver_semaphore_addr_ptr = reinterpret_cast<volatile uint32_t*>(receiver_semaphore_addr);
-    *(receiver_semaphore_addr_ptr) = VALID;
-
     constexpr uint32_t cb_id            = get_compile_time_arg_val(0);
     constexpr uint32_t block_size_tiles = get_compile_time_arg_val(1);
 
@@ -44,11 +40,10 @@ void kernel_main() {
 
         // We also set the receiver's semaphore, so that it knows that the data has been written to the CB
         uint64_t receiver_semaphore_noc_addr = get_noc_addr(receiver_noc_x, receiver_noc_y, receiver_semaphore_addr);
-        noc_semaphore_set_remote(receiver_semaphore_addr, receiver_semaphore_noc_addr);
+        noc_semaphore_inc(receiver_semaphore_noc_addr, 1);
 
         // do we need the barrier? to make sure we've sent the data before we pop the CB?
-        // hangs with barrier
-        //noc_async_write_barrier();
+        noc_async_write_barrier();
 
         cb_pop_front(cb_id, block_size_tiles);
     }

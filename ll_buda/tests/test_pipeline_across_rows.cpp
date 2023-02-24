@@ -32,10 +32,10 @@ int main(int argc, char **argv) {
         // set up the program
 
         // pass w/ w/o write barrier
-        uint32_t num_cores = 2;
-        uint32_t num_tiles = 2048;
-        uint32_t block_size_tiles = 8;
-        uint32_t double_buffer = true; // 2 cores pass w/ double buffer
+        // uint32_t num_cores = 2;
+        // uint32_t num_tiles = 2048;
+        // uint32_t block_size_tiles = 8;
+        // uint32_t double_buffer = true; // 2 cores pass w/ double buffer
 
         // pass w/ barrier / hang w/o write barrier
         //uint32_t num_cores = 12;
@@ -43,11 +43,11 @@ int main(int argc, char **argv) {
         //uint32_t block_size_tiles = 8;
         //uint32_t double_buffer = false; // 12 cores pass w/o double buffer
 
-        // hang
-        // uint32_t num_cores = 12;
-        // uint32_t num_tiles = 2048;
-        // uint32_t block_size_tiles = 8;
-        // uint32_t double_buffer = true;
+        // PASS
+        uint32_t num_cores = 12;
+        uint32_t num_tiles = 2048;
+        uint32_t block_size_tiles = 8;
+        uint32_t double_buffer = true;
 
         // hang
         // uint32_t num_cores = 3; // 3 cores hang w/ double buffer
