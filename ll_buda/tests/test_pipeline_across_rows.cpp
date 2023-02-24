@@ -31,17 +31,23 @@ int main(int argc, char **argv) {
 
         // set up the program
 
-        // pass
-        //uint32_t num_cores = 2;
-        //uint32_t num_tiles = 2048;
-        //uint32_t block_size_tiles = 8;
-        //uint32_t double_buffer = true; // 2 cores pass w/ double buffer
+        // pass w/ w/o write barrier
+        uint32_t num_cores = 2;
+        uint32_t num_tiles = 2048;
+        uint32_t block_size_tiles = 8;
+        uint32_t double_buffer = true; // 2 cores pass w/ double buffer
 
-        // pass
+        // pass w/ barrier / hang w/o write barrier
         //uint32_t num_cores = 12;
         //uint32_t num_tiles = 2048;
         //uint32_t block_size_tiles = 8;
         //uint32_t double_buffer = false; // 12 cores pass w/o double buffer
+
+        // hang
+        // uint32_t num_cores = 12;
+        // uint32_t num_tiles = 2048;
+        // uint32_t block_size_tiles = 8;
+        // uint32_t double_buffer = true;
 
         // hang
         // uint32_t num_cores = 3; // 3 cores hang w/ double buffer
@@ -50,17 +56,24 @@ int main(int argc, char **argv) {
         // uint32_t double_buffer = true;
 
         // pass (same as above but num_tiles == block_size, so double buffers not exercised)
-        uint32_t num_cores = 3; // 
-        uint32_t num_tiles = 8; // 
-        uint32_t block_size_tiles = 8;
-        uint32_t double_buffer = true;
+        // uint32_t num_cores = 3; //
+        // uint32_t num_tiles = 8; //
+        // uint32_t block_size_tiles = 8;
+        // uint32_t double_buffer = true;
+
+        // hang -- the smallest hanging case
+        // uint32_t num_cores = 3; // 3 cores hang w/ double buffer
+        // uint32_t num_tiles = 2;
+        // uint32_t block_size_tiles = 1;
+        // uint32_t double_buffer = true;
+
 
         TT_ASSERT(num_cores >= 2 && num_cores <= 12); // grayskull
         TT_ASSERT(num_tiles % block_size_tiles == 0);
 
         std::vector<tt_xy_pair> cores;
         for (uint32_t i = 0; i < num_cores; i++) {
-            cores.push_back({i, 0});    
+            cores.push_back({i, 0});
         }
 
         log_info(LogTest, "num_cores: {}", num_cores);
@@ -107,7 +120,7 @@ int main(int argc, char **argv) {
         TT_ASSERT(sender_semaphore_addr % 32 == 0);
         TT_ASSERT(receiver_semaphore_addr % 32 == 0);
 
-        // create kernels 
+        // create kernels
         vector<ll_buda::DataMovementKernel*> receiver_kernels;
         vector<ll_buda::DataMovementKernel*> sender_kernels;
         for (int core_id = 0; core_id < num_cores; core_id++) {
@@ -158,13 +171,14 @@ int main(int argc, char **argv) {
             dram_buffer_size, 100, std::chrono::system_clock::now().time_since_epoch().count());
         pass &= ll_buda::WriteToDeviceDRAM(device, src_dram_buffer, src_vec);
 
-        pass &= ll_buda::ConfigureDeviceWithProgram(device, program, profile_kernel);
-
         // host initializes only the sender's semaphores, reciver's semaphores are initialized by the kernel
         std::vector<uint32_t> invalid = {INVALID};
         for (auto core : cores) {
             ll_buda::WriteToDeviceL1(device, core, invalid, sender_semaphore_addr);
         }
+
+        pass &= ll_buda::ConfigureDeviceWithProgram(device, program, profile_kernel);
+
 
         // send run-time kernel arguments
         for (int core_id = 0; core_id < num_cores; core_id++) {
