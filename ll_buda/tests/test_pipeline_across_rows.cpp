@@ -30,43 +30,10 @@ int main(int argc, char **argv) {
         ll_buda::Program *program = new ll_buda::Program();
 
         // set up the program
-
-        // pass w/ w/o write barrier
-        // uint32_t num_cores = 2;
-        // uint32_t num_tiles = 2048;
-        // uint32_t block_size_tiles = 8;
-        // uint32_t double_buffer = true; // 2 cores pass w/ double buffer
-
-        // pass w/ barrier / hang w/o write barrier
-        //uint32_t num_cores = 12;
-        //uint32_t num_tiles = 2048;
-        //uint32_t block_size_tiles = 8;
-        //uint32_t double_buffer = false; // 12 cores pass w/o double buffer
-
-        // PASS
-        uint32_t num_cores = 12;
+        uint32_t num_cores = 10;
         uint32_t num_tiles = 2048;
         uint32_t block_size_tiles = 8;
         uint32_t double_buffer = true;
-
-        // hang
-        // uint32_t num_cores = 3; // 3 cores hang w/ double buffer
-        // uint32_t num_tiles = 16;
-        // uint32_t block_size_tiles = 8;
-        // uint32_t double_buffer = true;
-
-        // pass (same as above but num_tiles == block_size, so double buffers not exercised)
-        // uint32_t num_cores = 3; //
-        // uint32_t num_tiles = 8; //
-        // uint32_t block_size_tiles = 8;
-        // uint32_t double_buffer = true;
-
-        // hang -- the smallest hanging case
-        // uint32_t num_cores = 3; // 3 cores hang w/ double buffer
-        // uint32_t num_tiles = 2;
-        // uint32_t block_size_tiles = 1;
-        // uint32_t double_buffer = true;
-
 
         TT_ASSERT(num_cores >= 2 && num_cores <= 12); // grayskull
         TT_ASSERT(num_tiles % block_size_tiles == 0);

@@ -23,16 +23,10 @@ void kernel_main() {
         cb_wait_front(cb_id, block_size_tiles);
         uint32_t l1_addr = get_read_ptr(cb_id);
 
-        kernel_profiler::mark_time(my_x[0]);
-        kernel_profiler::mark_time(my_y[0]);
-        kernel_profiler::mark_time(i);
-        kernel_profiler::mark_time(*sender_semaphore_addr_ptr);
-
         // wait until receiver has set the sender's semaphore_addr value to 1, which means receiver has reserved space in the CB
         noc_semaphore_wait(sender_semaphore_addr_ptr, 1);
         // set the semaphore value back to zero for the next block
         noc_semaphore_set(sender_semaphore_addr_ptr, 0);
-        //DPRINT << (uint32_t)my_x[0] << ' ' << (uint32_t)my_y[0] << ' ' <<  i << ENDL();
 
         // Now we have the block in the CB (at l1_addr), we can send to receiver
         uint64_t receiver_data_noc_addr = get_noc_addr(receiver_noc_x, receiver_noc_y, l1_addr);
@@ -42,7 +36,7 @@ void kernel_main() {
         uint64_t receiver_semaphore_noc_addr = get_noc_addr(receiver_noc_x, receiver_noc_y, receiver_semaphore_addr);
         noc_semaphore_inc(receiver_semaphore_noc_addr, 1);
 
-        // do we need the barrier? to make sure we've sent the data before we pop the CB?
+        // do we need the barrier? to make sure we've sent the data before we pop the CB? or does sempahore inter-lock already guarantee that?
         noc_async_write_barrier();
 
         cb_pop_front(cb_id, block_size_tiles);
