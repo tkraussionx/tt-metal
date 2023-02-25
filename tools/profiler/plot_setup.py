@@ -80,10 +80,14 @@ class test_pipeline_across_rows(test_base):
             ("6", "END", "blank", ""),
         ],
         "BRISC": [
-            ("START", "3", "blank", ""),
+            ("START", "42", "blank", ""),
+            ("42", "420", "orange", ""),
+
+            ("420", "3", "purple", ""),
             ("3", "4", "red", "BRISC start to end"),
             ("4", "END", "blank", ""),
-            ("START", "7", "blank", ""),
+
+            ("420", "7", "purple", ""),
             ("7", "8", "red", "BRISC start to end"),
             ("8", "END", "blank", ""),
         ],
