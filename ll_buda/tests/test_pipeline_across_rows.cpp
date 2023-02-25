@@ -6,10 +6,19 @@
 #include "common/bfloat16.hpp"
 #include "hostdevcommon/common_values.hpp"
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// TODO: explain what test does
-//////////////////////////////////////////////////////////////////////////////////////////
 using namespace tt;
+
+// helper l1 allocator (same addrs across all cores, real alloc to be per-core)
+uint32_t l1_alloc(uint32_t size_in_bytes) {
+    constexpr uint32_t L1_SIZE = 1024*1024;
+    static uint32_t l1_alloc_addr = UNRESERVED_BASE;
+
+    uint32_t addr = l1_alloc_addr;
+    TT_ASSERT(addr < L1_SIZE);
+    TT_ASSERT(addr % 32 == 0); // 32-byte aligned to allow NOC transfers to any allocated address
+    l1_alloc_addr += size_in_bytes;
+    return addr;
+}
 
 int main(int argc, char **argv) {
     bool pass = true;
@@ -32,12 +41,12 @@ int main(int argc, char **argv) {
         // set up the program
 
         // saturate DRAM
-        // uint32_t num_cores = 10;
-        // uint32_t num_tiles = 2048;
-        // uint32_t block_size_tiles = 16;
-        // uint32_t num_blocks_in_CB = 2;
-        // uint32_t IO_data_in_dram = true;
-        // uint32_t num_repetitions = 4;
+        uint32_t num_cores = 12;
+        uint32_t num_tiles = 64 * 1024;
+        uint32_t block_size_tiles = 16;
+        uint32_t num_blocks_in_CB = 2;
+        uint32_t IO_data_in_dram = true;
+        uint32_t num_repetitions = 1;
 
         // saturate L1
         // uint32_t num_cores = 10;
@@ -47,12 +56,12 @@ int main(int argc, char **argv) {
         // uint32_t IO_data_in_dram = false;
         // uint32_t num_repetitions = 64;
 
-        uint32_t num_cores = 10;
-        uint32_t num_tiles = 384;
-        uint32_t block_size_tiles = 1;
-        uint32_t num_blocks_in_CB = 2;
-        uint32_t IO_data_in_dram = false;
-        uint32_t num_repetitions = 128;
+        // uint32_t num_cores = 12;
+        // uint32_t num_tiles = 384;
+        // uint32_t block_size_tiles = 32;
+        // uint32_t num_blocks_in_CB = 2;
+        // uint32_t IO_data_in_dram = false;
+        // uint32_t num_repetitions = 128;
 
         TT_ASSERT(num_cores >= 2 && num_cores <= 12); // grayskull
         TT_ASSERT(num_tiles % block_size_tiles == 0);
@@ -76,11 +85,16 @@ int main(int argc, char **argv) {
         uint32_t total_bytes_moved = buffer_size * num_repetitions;
         log_info(LogTest, "total_bytes_moved: {}", total_bytes_moved);
 
+        // semaphores in L1, 32B aligned for NOC transfers
+        uint32_t sender_semaphore_addr = l1_alloc(32); // we need 4B, use 32B for NOC alignemnt
+        uint32_t receiver_semaphore_addr = l1_alloc(32);
+        uint32_t l1_valid_value_addr = l1_alloc(32);
+
         // circular buffers in L1
         uint32_t cb_index = 8;
-        uint32_t cb_addr = 120 * 1024;
         uint32_t cb_size_tiles = num_blocks_in_CB * block_size_tiles;
         uint32_t cb_size_bytes = cb_size_tiles * single_tile_size;
+        uint32_t cb_addr = l1_alloc(cb_size_bytes);
 
         for (auto core : cores) {
             auto cb = ll_buda::CreateCircularBuffer(
@@ -119,8 +133,7 @@ int main(int argc, char **argv) {
             dst_address = dst_dram_buffer->address();
             dst_noc_xy = dst_dram_buffer->noc_coordinates(device);
         } else {
-            uint32_t l1_buffer_addr = cb_addr + cb_size_bytes;
-            TT_ASSERT(l1_buffer_addr + buffer_size <= 1024 * 1024); // 1 MB
+            uint32_t l1_buffer_addr = l1_alloc(buffer_size); // same address on src / dst cores
 
             src_l1_buffer = ll_buda::CreateL1Buffer(program, cores[0],           buffer_size, l1_buffer_addr);
             dst_l1_buffer = ll_buda::CreateL1Buffer(program, cores[num_cores-1], buffer_size, l1_buffer_addr);
@@ -131,11 +144,6 @@ int main(int argc, char **argv) {
             dst_noc_xy = device->worker_core_from_logical_core(dst_l1_buffer->core());
         }
 
-        // semaphores in L1, 32B aligned for NOC transfers
-        uint32_t sender_semaphore_addr = 109600;
-        uint32_t receiver_semaphore_addr = 109632;
-        TT_ASSERT(sender_semaphore_addr % 32 == 0);
-        TT_ASSERT(receiver_semaphore_addr % 32 == 0);
 
         // create kernels
         vector<ll_buda::DataMovementKernel*> receiver_kernels;
@@ -244,13 +252,17 @@ int main(int argc, char **argv) {
                     (uint32_t)num_tiles,
                     (uint32_t)sender_semaphore_addr,
                     (uint32_t)receiver_semaphore_addr,
+                    (uint32_t)l1_valid_value_addr,
                     (uint32_t)num_repetitions});
             }
         }
 
         pass &= ll_buda::ConfigureDeviceWithProgram(device, program, profile_kernel);
+        log_info(LogTest, "Launching kernels...");
         pass &= ll_buda::LaunchKernels(device, program);
+        log_info(LogTest, "Kernels done.");
 
+        log_info(LogTest, "Reading results from device...");
         std::vector<uint32_t> result_vec;
         if (IO_data_in_dram) {
             ll_buda::ReadFromDeviceDRAM(device, dst_dram_buffer, result_vec, dst_dram_buffer->size());
