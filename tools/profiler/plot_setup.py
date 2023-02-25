@@ -68,7 +68,7 @@ class test_base:
 
 
 class test_pipeline_across_rows(test_base):
-    plotHeight = 500
+    plotHeight = 900
 
     riscTimerCombo = {
         "NCRISC": [
