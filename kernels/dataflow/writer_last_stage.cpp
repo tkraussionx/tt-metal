@@ -26,6 +26,12 @@ void kernel_main() {
                 uint32_t l1_read_addr = get_read_ptr(cb_id);
                 noc_async_write(l1_read_addr, buffer_dst_noc_addr, block_size_bytes);
                 noc_async_write_barrier();
+
+                // some delay to test backpressure
+                // volatile uint32_t *l1_read_addr_ptr = reinterpret_cast<volatile uint32_t*>(BRISC_BREAKPOINT);
+                // for (int delay = 0; delay < 10000; delay++) {
+                //     *l1_read_addr_ptr = 1;
+                // }
             }
 
             cb_pop_front(cb_id, block_size_tiles);

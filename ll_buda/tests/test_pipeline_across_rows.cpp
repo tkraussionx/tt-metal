@@ -14,9 +14,11 @@ uint32_t l1_alloc(uint32_t size_in_bytes) {
     static uint32_t l1_alloc_addr = UNRESERVED_BASE;
 
     uint32_t addr = l1_alloc_addr;
-    TT_ASSERT(addr < L1_SIZE);
     TT_ASSERT(addr % 32 == 0); // 32-byte aligned to allow NOC transfers to any allocated address
+    TT_ASSERT(addr + size_in_bytes <= L1_SIZE); // need to fit into L1
+
     l1_alloc_addr += size_in_bytes;
+
     return addr;
 }
 
@@ -41,12 +43,12 @@ int main(int argc, char **argv) {
         // set up the program
 
         // saturate DRAM
-        uint32_t num_cores = 12;
-        uint32_t num_tiles = 64 * 1024;
-        uint32_t block_size_tiles = 16;
-        uint32_t num_blocks_in_CB = 2;
-        uint32_t IO_data_in_dram = true;
-        uint32_t num_repetitions = 1;
+        // uint32_t num_cores = 12;
+        // uint32_t num_tiles = 64 * 1024;
+        // uint32_t block_size_tiles = 16;
+        // uint32_t num_blocks_in_CB = 2;
+        // uint32_t IO_data_in_dram = true;
+        // uint32_t num_repetitions = 1;
 
         // saturate L1
         // uint32_t num_cores = 10;
@@ -56,12 +58,70 @@ int main(int argc, char **argv) {
         // uint32_t IO_data_in_dram = false;
         // uint32_t num_repetitions = 64;
 
+        // test #1
         // uint32_t num_cores = 12;
         // uint32_t num_tiles = 384;
-        // uint32_t block_size_tiles = 32;
-        // uint32_t num_blocks_in_CB = 2;
+        // uint32_t block_size_tiles = 1;
+        // uint32_t num_blocks_in_CB = 16;
         // uint32_t IO_data_in_dram = false;
         // uint32_t num_repetitions = 128;
+
+        // test #2
+        // uint32_t num_cores = 12;
+        // uint32_t num_tiles = 384;
+        // uint32_t block_size_tiles = 2;
+        // uint32_t num_blocks_in_CB = 16;
+        // uint32_t IO_data_in_dram = false;
+        // uint32_t num_repetitions = 128;
+
+        // test #3
+        // uint32_t num_cores = 12;
+        // uint32_t num_tiles = 384;
+        // uint32_t block_size_tiles = 4;
+        // uint32_t num_blocks_in_CB = 16;
+        // uint32_t IO_data_in_dram = false;
+        // uint32_t num_repetitions = 128;
+
+        // test #5
+        // uint32_t num_cores = 12;
+        // uint32_t num_tiles = 384;
+        // uint32_t block_size_tiles = 8;
+        // uint32_t num_blocks_in_CB = 8;
+        // uint32_t IO_data_in_dram = false;
+        // uint32_t num_repetitions = 128;
+
+        // test #6
+        // uint32_t num_cores = 12;
+        // uint32_t num_tiles = 384;
+        // uint32_t block_size_tiles = 16;
+        // uint32_t num_blocks_in_CB = 4;
+        // uint32_t IO_data_in_dram = false;
+        // uint32_t num_repetitions = 128;
+
+        // test #7
+        // uint32_t num_cores = 12;
+        // // uint32_t num_tiles = 256;
+        // // uint32_t block_size_tiles = 32;
+        // // uint32_t num_blocks_in_CB = 4;
+        // // uint32_t IO_data_in_dram = false;
+        // // uint32_t num_repetitions = 256;
+
+        // test #8
+        // uint32_t num_cores = 12;
+        // uint32_t num_tiles = 128;
+        // uint32_t block_size_tiles = 64;
+        // uint32_t num_blocks_in_CB = 4;
+        // uint32_t IO_data_in_dram = false;
+        // uint32_t num_repetitions = 512;
+
+        // test #9
+        uint32_t num_cores = 12;
+        uint32_t num_tiles = 128;
+        uint32_t block_size_tiles = 128;
+        uint32_t num_blocks_in_CB = 2;
+        uint32_t IO_data_in_dram = false;
+        uint32_t num_repetitions = 512;
+
 
         TT_ASSERT(num_cores >= 2 && num_cores <= 12); // grayskull
         TT_ASSERT(num_tiles % block_size_tiles == 0);
@@ -79,6 +139,9 @@ int main(int argc, char **argv) {
         log_info(LogTest, "num_repetitions: {}", num_repetitions);
 
         uint32_t single_tile_size = 2 * 1024;
+        uint32_t block_size_bytes = block_size_tiles * single_tile_size;
+        log_info(LogTest, "block_size_bytes: {}", block_size_bytes);
+        log_info(LogTest, "CB size: {}", block_size_bytes * num_blocks_in_CB);
 
         // source and destination buffers
         uint32_t buffer_size = single_tile_size * num_tiles; // num_tiles of FP16_B, hard-coded in the reader/writer kernels
@@ -195,6 +258,7 @@ int main(int argc, char **argv) {
         // send input data to the device
         std::vector<uint32_t> src_vec = create_random_vector_of_bfloat16(
             buffer_size, 100, std::chrono::system_clock::now().time_since_epoch().count());
+        log_info("src_vec[0] = {}", src_vec[0]);
 
         if (IO_data_in_dram) {
             pass &= ll_buda::WriteToDeviceDRAM(device, src_dram_buffer, src_vec);
