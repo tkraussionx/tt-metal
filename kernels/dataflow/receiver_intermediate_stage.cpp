@@ -20,6 +20,8 @@ void kernel_main() {
 
     uint32_t block_size_bytes = get_tile_size(cb_id) * block_size_tiles;
 
+    uint64_t sender_semaphore_noc_addr = get_noc_addr(sender_noc_x, sender_noc_y, sender_semaphore_addr);
+
     for (uint32_t j = 0; j < num_repetitions; j++) {
         for (uint32_t i = 0; i<num_tiles ; i += block_size_tiles) {
             cb_reserve_back(cb_id, block_size_tiles);
@@ -28,7 +30,6 @@ void kernel_main() {
             noc_semaphore_set(receiver_semaphore_addr_ptr, INVALID);
 
             // Tell sender we're ready -- atomic increment sender's semaphore
-            uint64_t sender_semaphore_noc_addr = get_noc_addr(sender_noc_x, sender_noc_y, sender_semaphore_addr);
             noc_semaphore_inc(sender_semaphore_noc_addr, 1);
 
             // Wait on receiver's own semaphore value to become VALID (set by sender after it sends the data)
