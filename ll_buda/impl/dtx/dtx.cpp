@@ -8,7 +8,7 @@
 
 int Tensor::volume() {
     if (this->rank == 0 || this->rank == -1) return 0;
-    
+
     int volume = 1;
     for (int d=0; d<this->rank; d++) {
         assert(this->end[d] >= this->str[d]);
@@ -16,6 +16,16 @@ int Tensor::volume() {
         volume = volume * dim_size;
     }
     return volume;
+}
+
+pair<vector<int>, vector<int>> Tensor::get_chunk(int start_offset, int chunk_size) {
+    pair<vector<int>, vector<int>> chunk_coordinates;
+    assert(start_offset < this->volume());
+    assert(chunk_size <= this->volume());
+    int dim_to_increment = this->rank - 1;
+    int count = 0;
+    while (count < start_offset) {
+    }
 }
 
 void Tensor::print() {
@@ -31,7 +41,7 @@ string Tensor::get_string() {
     for (int i=0; i<this->rank; i++) {
         str.append(to_string(this->str[i]));
         end.append(to_string(this->end[i]));
-        
+
         if (i != this->rank-1) {
             str.append(",");
             end.append(",");
@@ -39,7 +49,7 @@ string Tensor::get_string() {
     }
     str.append("]");
     end.append("]");
-    
+
     string out;
     out.append(str);
     out.append("->");
@@ -49,12 +59,12 @@ string Tensor::get_string() {
 }
 
 void TensorPair::print_string(){
-    cout << this->get_string() << endl; 
+    cout << this->get_string() << endl;
 }
 
 string TensorPair::get_string() {
     string out;
-    
+
     out.append("SRC: group=");
     out.append(to_string(this->src_group));
     out.append(", Tensor=");
@@ -78,13 +88,13 @@ string Transfer::get_string() {
 }
 
 void TransformationNode::print(int spaces) {
-    
+
     cout << s(spaces) << "Transformation Node: opcode = " << this->opcode << endl;
 
     int group_index = 0;
     for (TensorPairGroup * group : this->groups) {
         cout << s(2 + spaces) << "Group = " << group_index << ";  shape = " << v2s(group->shape) << ", core=" << v2s(group->core) << endl;
-        
+
         cout << s(4+spaces) << "TensorPairs:" << endl;
         int tp_index = 0;
         for (TensorPair * tp : group->tensor_pairs) {
@@ -126,5 +136,3 @@ bool DataTransformations::compare_to_golden(TransformationNode * golden) {
     bool pass = true;
     return true;
 }
-
-

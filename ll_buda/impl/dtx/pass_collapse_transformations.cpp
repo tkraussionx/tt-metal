@@ -14,7 +14,7 @@ bool collapse_transformations(DataTransformations * dtx) {
     TransformationNode * consumer_node = dtx->transformations.back();
     if (DEBUG) cout << s(2) << "consumer_node = " << consumer_node->opcode << endl;
     int spaces = 0;
-
+    int c = 0;
     while (dtx->transformations.size() > 2) {
 
         if (DEBUG) cout << s(4) << "There are more than 2 tx. Starting to resolve." << endl;
@@ -42,9 +42,20 @@ bool collapse_transformations(DataTransformations * dtx) {
 
                         Tensor * overlap = calculate_tensor_overlap_in_nd(producer_node->groups[producer_group_idx]->tensor_pairs[producer_tp_idx]->dst_tensor, consumer_node->groups[consumer_group_idx]->tensor_pairs[consumer_tp_idx]->src_tensor);
 
-                        if (has_overlap(overlap)) {
+                         //c++;
 
+                        // if(c >= 4) {
+                        //     exit(0);
+                        // }
+                        if (has_overlap(overlap)) {
+                            c++;
                             // Part 1: Calculating the new SRC tensor
+
+                            cout << "Producer src tensor - " << endl;
+                            producer_node->groups[producer_group_idx]->tensor_pairs[producer_tp_idx]->src_tensor->print();
+                            cout << "Producer dst tensor - " << endl;
+                            producer_node->groups[producer_group_idx]->tensor_pairs[producer_tp_idx]->dst_tensor->print();
+
                             vector<int> producer_offset = vector_subtraction(producer_node->groups[producer_group_idx]->tensor_pairs[producer_tp_idx]->dst_tensor->str,
                                                                             producer_node->groups[producer_group_idx]->tensor_pairs[producer_tp_idx]->src_tensor->str);
                             if (DEBUG) cout << s(12) << "producer_offset = " << v2s(producer_offset) << endl;
@@ -68,6 +79,8 @@ bool collapse_transformations(DataTransformations * dtx) {
 
                             // Store results
                             resolved_tensor_pairs.push_back(new TensorPair(new_src, new_src_group, new_dst));
+                            cout << s(6) << "new resolved tp  " << resolved_tensor_pairs.back()->get_string() << endl;
+                            exit(0);
                         }
                     }
                 }
@@ -79,6 +92,7 @@ bool collapse_transformations(DataTransformations * dtx) {
 
         dtx->transformations.erase(dtx->transformations.end() - 2);
         if (DEBUG) dtx->print(4);
+        //exit(0);
 
     } // while: transformations > 2
 

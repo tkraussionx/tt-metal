@@ -67,7 +67,7 @@ bool conv3d_to_matrix_transformation(DataTransformations * dtx, std::array<int, 
                     end_w = W-1;
                 }
                 vector<int> str = {n, 0, start_h, start_w};
-                vector<int> end = {n, C, end_h, end_w};
+                vector<int> end = {n, C-1, end_h, end_w};
                 assert(i < consumer_rows);
                 vector<int> consumer_str = {i, 0};
                 vector<int> consumer_end = {i, consumer_cols-1};

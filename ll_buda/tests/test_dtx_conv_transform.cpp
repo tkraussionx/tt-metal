@@ -44,8 +44,8 @@ int main(int argc, char **argv) {
         // 3x3 conv, stride=1, padding=0
         pass &= conv3d_to_matrix_transformation(dtx_full, {3,3,1,1,0,0});
         dtx_full->print();
-        pass &= tilize_and_store(dtx_full, {1,0});
-        dtx_full->print();
+        //pass &= tilize_and_store(dtx_full, {1,0});
+        //dtx_full->print();
         //exit(0);
         pass &= collapse_transformations(dtx_full);
         dtx_full->print();
