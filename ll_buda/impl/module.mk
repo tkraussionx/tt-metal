@@ -20,6 +20,8 @@ LL_BUDA_IMPL_SRCS = \
 	ll_buda/impl/dtx/pass_reverse_transformations.cpp \
 	ll_buda/impl/dtx/pass_tilize.cpp \
 	ll_buda/impl/dtx/pass_util.cpp \
+	ll_buda/impl/dtx/pass_conv3d_to_matrix.cpp \
+	ll_buda/impl/dtx/pass_conv3d_to_channels_last.cpp \
 	ll_buda/impl/dtx/util.cpp \
 	ll_buda/impl/dtx/util_vector_of_ints.cpp \
 	ll_buda/impl/dtx/evaluate.cpp \
@@ -37,6 +39,6 @@ $(LL_BUDA_IMPL_LIB): $(COMMON_LIB) $(LL_BUDA_IMPL_OBJS)
 	@mkdir -p $(@D)
 	ar rcs -o $@ $(LL_BUDA_IMPL_OBJS)
 
-$(OBJDIR)/ll_buda/impl/%.o: ll_buda/impl/%.cpp 
+$(OBJDIR)/ll_buda/impl/%.o: ll_buda/impl/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(LL_BUDA_IMPL_CFLAGS) $(CXXFLAGS) $(STATIC_LIB_FLAGS) $(LL_BUDA_IMPL_INCLUDES) $(LL_BUDA_IMPL_DEFINES) -c -o $@ $<

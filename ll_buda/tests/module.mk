@@ -46,6 +46,7 @@ LL_BUDA_TESTS += \
 		 ll_buda/tests/test_generic_binary_reader_matmul_large_block \
 		 ll_buda/tests/test_dtx \
 		 ll_buda/tests/test_dtx_tilized_row_to_col_major \
+		 ll_buda/tests/test_dtx_conv_transform \
 
 LL_BUDA_TESTS_SRCS = $(addsuffix .cpp, $(LL_BUDA_TESTS))
 
@@ -81,4 +82,3 @@ $(OBJDIR)/ll_buda/tests/%.o: ll_buda/tests/%.cpp
 $(OBJDIR)/ll_buda/tests/ops/%.o: ll_buda/tests/ops/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CFLAGS) $(CXXFLAGS) $(LL_BUDA_TEST_INCLUDES) -c -o $@ $<
-
