@@ -2,11 +2,11 @@
 LL_BUDA_TESTS += \
 		 ll_buda/tests/ops/test_eltwise_binary_op \
 		 ll_buda/tests/ops/test_eltwise_unary_op \
-		 ll_buda/tests/dtx/unit_tests.cpp \
 		 ll_buda/tests/ops/test_transpose_op \
 		 ll_buda/tests/ops/test_reduce_op \
 		 ll_buda/tests/ops/test_bcast_op \
 		 ll_buda/tests/ops/test_bmm_op \
+		 ll_buda/tests/dtx/unit_tests \
 		 ll_buda/tests/test_bmm \
 		 ll_buda/tests/tensors/test_host_device_loopback \
 		 ll_buda/tests/test_add_two_ints \
@@ -81,4 +81,3 @@ $(OBJDIR)/ll_buda/tests/%.o: ll_buda/tests/%.cpp
 $(OBJDIR)/ll_buda/tests/ops/%.o: ll_buda/tests/ops/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CFLAGS) $(CXXFLAGS) $(LL_BUDA_TEST_INCLUDES) -c -o $@ $<
-
