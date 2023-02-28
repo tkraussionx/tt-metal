@@ -142,8 +142,8 @@ bool run_DataTransformation_test_0(bool DEBUG) {
 
     // Transformation #1: vertical blocks
     node1->groups[0]->shape = {20,20};
-    node1->groups[0]->tensor_pairs.push_back(  new TensorPair( new Tensor({0,0},  {20,10}), 0,  new Tensor({0,0},  {20,10}))   );
-    node1->groups[0]->tensor_pairs.push_back(  new TensorPair( new Tensor({0,10}, {20,20}), 0,  new Tensor({0,10}, {20,20}))   );
+    node1->groups[0]->tensor_pairs.push_back(  new TensorPair( new Tensor({0,0},  {19,9}), 0,  new Tensor({0,0}, {19,9}))   );
+    node1->groups[0]->tensor_pairs.push_back(  new TensorPair( new Tensor({0,9}, {19,19}), 0,  new Tensor({0,10}, {20,20}))   );
 
     node2->groups[0]->shape = {20,20};
     node2->groups[0]->tensor_pairs.push_back(  new TensorPair( new Tensor({0,0}, {10,20}),  0,  new Tensor({0,0}, {10,20}))    );
