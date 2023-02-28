@@ -37,15 +37,17 @@ int main(int argc, char **argv) {
         node0->groups[0]->shape = {1,64,10,10};
         dtx->transformations.push_back(node0);
         pass &= conv3d_to_channels_last_transformation(dtx);
-        //pass &= tilize_and_store(dtx, {0,1});
         dtx->print();
+        //exit(0);
         DataTransformations * dtx_full = reverse_transformations(dtx);
         dtx_full->print();
+        //exit(0);
         // 3x3 conv, stride=1, padding=0
         pass &= conv3d_to_matrix_transformation(dtx_full, {3,3,1,1,0,0});
         dtx_full->print();
-        pass &= tilize_and_store(dtx_full, {1,0});
-        dtx_full->print();
+        //exit(0);
+        //pass &= tilize_and_store(dtx_full, {3,2,1,0});
+        //dtx_full->print();
         //exit(0);
         pass &= collapse_transformations(dtx_full);
         dtx_full->print();

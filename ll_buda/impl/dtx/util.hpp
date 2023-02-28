@@ -19,7 +19,7 @@
 using namespace std;
 
 const int TEST = 3;
-const vector<int> TILE_SHAPE = {32,32};
+const vector<int> TILE_SHAPE = {1,1,32,32};
 
 enum DataLayout {
     RowMajor = 0,
@@ -41,3 +41,4 @@ bool compare_two_groups(TensorPairGroup * a, TensorPairGroup * b);
 bool has_overlap(Tensor * overlap);
 vector<int> calculate_line_segment_overlap_in_1d(int l1_str, int l1_end, int l2_str, int l2_end);
 Tensor * calculate_tensor_overlap_in_nd(Tensor * t1, Tensor * t2);
+pair<vector<int>, vector<int>> get_chunk_within_tensor(Tensor * t, int start_offset, int chunk_size);

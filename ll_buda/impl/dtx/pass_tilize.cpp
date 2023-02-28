@@ -27,16 +27,16 @@ vector<vector<int>> dim_order_counting(vector<int> shape, vector<int> dim_order)
     vector<int> counter = zeros(rank);
     for (int i=0; i<count_size; i++){
         vector<int> counter_reordered;
-        
+
         for (int d=0; d<rank; d++) {
             counter_reordered.push_back(counter[dim_order[d]]);
         }
-        
+
         vector<int> str = vector_multiplication(counter_reordered, tile_shape);
         vector<int> end = vector_addition(str, tile_shape);
         end[rank-1]--;
         end[rank-2]--;
-         
+
         cout << s(3) << "counter = " << v2s(counter) << ", reorderd = " << v2s(counter_reordered) << ";   " << v2s(str) << " => " << v2s(end) << endl;
         list_of_counted_dims.push_back(counter_reordered);
 
@@ -46,7 +46,7 @@ vector<vector<int>> dim_order_counting(vector<int> shape, vector<int> dim_order)
                 counter[d-1]++;
                 counter[d] = 0;
             }
-        } 
+        }
     }
     cout << endl;
     cout << endl;
@@ -64,10 +64,10 @@ bool tilize_and_store(DataTransformations * dtx, vector<int> dim_order) {
     TransformationNode * producer = dtx->transformations.back();
     TransformationNode * consumer = new TransformationNode("tilize_and_store", producer->groups.size());  // TODO: generalize for groups>1
     dtx->transformations.push_back(consumer);
-    
+
     for (int group_idx=0; group_idx<producer->groups.size(); group_idx++) {
         cout << "\n\n" << s(2) << "Group = " << group_idx << endl;
-    
+
         TensorPairGroup * consumer_group = consumer->groups[group_idx];
         TensorPairGroup * producer_group = producer->groups[group_idx];
         inherit_group_attributes_from_producer(producer_group, consumer_group);
@@ -77,21 +77,21 @@ bool tilize_and_store(DataTransformations * dtx, vector<int> dim_order) {
         vector<int> tile_shape = vector_pad_on_left(TILE_SHAPE, rank-2, 1);
         vector<int> shape_tiled = vector_division(shape, tile_shape);
         vector<vector<int>> list_of_counted_dims = dim_order_counting(shape_tiled,   dim_order);
-        
+
         vector<int> consumer_str = zeros(rank);
         vector<int> consumer_end = vector_addition(consumer_str, tile_shape, -1);
         cout << s(4) << "tile shape      = " << v2s(tile_shape) << endl;
-        
+
         if (shape.size() != dim_order.size()) throw std::runtime_error("shape and dim_order dont have the same rank!");
 
         int shape_x = list_of_counted_dims.size() * 32;
-        consumer_group->shape = {32, shape_x};
+        consumer_group->shape = {1, 1, 32, shape_x};
 
         cout << s(4) << "Tensor Pairs: " << list_of_counted_dims.size() << endl;
         for (int i=0; i< list_of_counted_dims.size(); i++) {
             std::cout <<  std::endl;
             for(int j = 0; j < list_of_counted_dims[i].size(); j++) {
-                
+
                 std::cout << "dim " << list_of_counted_dims[i][j] << std::endl;
             }
             std::cout <<  std::endl;
@@ -101,8 +101,8 @@ bool tilize_and_store(DataTransformations * dtx, vector<int> dim_order) {
             str = vector_multiplication(list_of_counted_dims[i], tile_shape);
             end = vector_addition(str, tile_shape, -1);
 
-            TensorPair * tp = new TensorPair(new Tensor({str}, {end}), 
-                                            group_idx, 
+            TensorPair * tp = new TensorPair(new Tensor({str}, {end}),
+                                            group_idx,
                                             new Tensor({consumer_str}, {consumer_end}));
             consumer_group->tensor_pairs.push_back(tp);
 

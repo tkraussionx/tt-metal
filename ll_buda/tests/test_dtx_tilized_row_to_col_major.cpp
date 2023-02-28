@@ -9,7 +9,7 @@
 //////////////////////////////////////////////////////////////////////////////////////////
 // 1. Host writes data to buffer in DRAM
 // 2. Host generates DTX transformation node -> Producer : 1D vector sized 64 -> Consumer : 1D vector of same size but flips first 32 elements with last 32 elements
-// 2. dram_to_l1_copy_with_address_map kernel on logical core {0, 0} BRISC copies data from buffer in step 1. to buffer in L1 
+// 2. dram_to_l1_copy_with_address_map kernel on logical core {0, 0} BRISC copies data from buffer in step 1. to buffer in L1
 // 3. Host reads from buffer written to in step 2.
 //////////////////////////////////////////////////////////////////////////////////////////
 using namespace tt;
@@ -30,23 +30,23 @@ int main(int argc, char **argv) {
         ////////////////////////////////////////////////////////////////////////////
         //                      Application Setup
         ////////////////////////////////////////////////////////////////////////////
-        
+
 
         DataTransformations * dtx = new DataTransformations();
         TransformationNode * node0 = new TransformationNode("producer", 1);
-        node0->groups[0]->shape = {64,64};
+        node0->groups[0]->shape = {1,1,64,64};
         dtx->transformations.push_back(node0);
-        pass &= tilize_and_store(dtx, {0,1});
+        pass &= tilize_and_store(dtx, {0,1,2,3});
         dtx->print();
         DataTransformations * dtx_full = reverse_transformations(dtx);
         dtx_full->print();
-        pass &= tilize_and_store(dtx_full, {1,0});
+        pass &= tilize_and_store(dtx_full, {3,2,1,0});
         dtx_full->print();
         pass &= collapse_transformations(dtx_full);
         dtx_full->print();
-        
+
         pass &= generate_transfer_addresses_tiled_data(dtx_full);
-        
+
         // copy transfer addresses into a vector
         std::vector<uint32_t> address_map;
         for(auto transfer : dtx_full->transformations.back()->groups[0]->transfers){
@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
         pass &= ll_buda::WriteToDeviceDRAM(device, input_dram_buffer, input_vec);
 
         pass &= ll_buda::ConfigureDeviceWithProgram(device, program);
-        
+
         ll_buda::WriteToDeviceL1(device, core, address_map, address_map_l1_addr);
 
         ll_buda::WriteRuntimeArgsToDevice(
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
 
         std::vector<uint32_t> result_vec;
         ll_buda::ReadFromDeviceL1(device, core, l1_buffer_addr, result_vec, dram_buffer_size);
-        
+
         ////////////////////////////////////////////////////////////////////////////
         //                      Validation & Teardown
         ////////////////////////////////////////////////////////////////////////////

@@ -9,7 +9,7 @@
 
 bool compare_two_vectors_of_ints(vector<int> a, vector<int> b) {
     bool pass = true;
-    
+
     if (a.size() != b.size()) return false;
     for (int d=0; d<a.size(); d++) {
         if (a[d] != b[d]) return false;
@@ -54,9 +54,9 @@ vector<int> calculate_line_segment_overlap_in_1d(int l1_str, int l1_end, int l2_
     vector<int> overlap = {-2, -2};
 
     // No Overlap
-    if ((l1_str >= l2_end) || (l2_str >= l1_end)) {
+    if ((l1_str > l2_end) || (l2_str > l1_end)) {
         return {-1, -1};}
-    
+
     // Full overlap
     else if (l1_str >= l2_str and l1_end <= l2_end) {
         return {l1_str, l1_end};}
@@ -71,7 +71,7 @@ vector<int> calculate_line_segment_overlap_in_1d(int l1_str, int l1_end, int l2_
 }
 
 Tensor * calculate_tensor_overlap_in_nd(Tensor * t0, Tensor * t1) {
-    bool DEBUG = false;
+    bool DEBUG = true;
     // Tensors must be of the same rank
     int rank = t1->rank;
 
@@ -82,7 +82,7 @@ Tensor * calculate_tensor_overlap_in_nd(Tensor * t0, Tensor * t1) {
     for (int d=0; d<rank; d++) {
         vector<int> overlap_1d = calculate_line_segment_overlap_in_1d(t0->str[d], t0->end[d], t1->str[d], t1->end[d]);
         //if (DEBUG) cout << "dim = " << d << ", overlap_1d = " << v2s(overlap_1d) << endl;
-        
+
         if (overlap_1d[0] == -1 && overlap_1d[1] == -1) {
             overlap_nd_exists = false;
         }
@@ -93,11 +93,44 @@ Tensor * calculate_tensor_overlap_in_nd(Tensor * t0, Tensor * t1) {
 
     //if (DEBUG) cout << "nd overlap exists = " << overlap_nd_exists << endl;
     //if (DEBUG) cout << "nd overlap exists = " << has_overlap(overlap_nd) << endl;
-    
+
     if (DEBUG) cout << "Calculating overlap between: " << t0->get_string() << " && " << t1->get_string() << "  ==  " << overlap_nd->get_string() << "    (" << has_overlap(overlap_nd) << ")" << endl;
-    
+
     return overlap_nd;
 
 }
 
-
+pair<vector<int>, vector<int>> get_chunk_within_tensor(Tensor * t, int start_offset, int chunk_size) {
+    pair<vector<int>, vector<int>> chunk_coordinates;
+    int tensor_volume = t->volume();
+    int rank = t->rank;
+    assert(start_offset < tensor_volume);
+    assert(chunk_size <= tensor_volume);
+    auto chunk_start = t->str;
+    int dim_to_increment = rank - 1;
+    int count = 0;
+    std::cout << "start_offset " << start_offset << std::endl;
+    while (count < start_offset-1) {
+        if(chunk_start[dim_to_increment]+1 > t->end[dim_to_increment]) {
+            dim_to_increment--;
+            assert(dim_to_increment >= 0);
+        }
+        chunk_start[dim_to_increment]++;
+        count++;
+    }
+    auto chunk_end = chunk_start;
+    count = 0;
+    dim_to_increment = rank - 1;
+    std::cout << "chunk_size " << chunk_size << std::endl;
+    while(count < chunk_size-1) {
+        if(chunk_end[dim_to_increment]+1 > t->end[dim_to_increment]) {
+            dim_to_increment--;
+            assert(dim_to_increment >= 0);
+        }
+        chunk_end[dim_to_increment]++;
+        count++;
+    }
+    chunk_coordinates.first = chunk_start;
+    chunk_coordinates.second = chunk_end;
+    return chunk_coordinates;
+}

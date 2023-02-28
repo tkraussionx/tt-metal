@@ -21,7 +21,7 @@ bool conv3d_to_channels_last_transformation(DataTransformations * dtx) {
     auto C = shape[1];
     auto H = shape[2];
     auto W = shape[3];
-    consumer_group->shape = {N*C*H*W};
+    consumer_group->shape = {1,1,1,N*C*H*W};
     int i = 0;
     int count = 0;
     if(DEBUG) {
@@ -34,9 +34,9 @@ bool conv3d_to_channels_last_transformation(DataTransformations * dtx) {
         for(auto h = 0; h < H; h++) {
             for(auto w = 0; w < W; w++) {
                 vector<int> str = {n, 0, h, w};
-                vector<int> end = {n, C, h, w};
-                vector<int> consumer_str = {i};
-                vector<int> consumer_end = {i+C-1};
+                vector<int> end = {n, C-1, h, w};
+                vector<int> consumer_str = {0,0,0,i};
+                vector<int> consumer_end = {0,0,0,i+C-1};
                 TensorPair * tp = new TensorPair(
                                         new Tensor({str}, {end}),
                                         0,

@@ -26,7 +26,7 @@ bool generate_transfer_addresses(DataTransformations * dtx){
 
             consumer_group->transfers.push_back(transfer);
 
-            if (DEBUG) cout << transfer->get_string() << endl;            
+            if (DEBUG) cout << transfer->get_string() << endl;
         }
     }
 
@@ -46,10 +46,13 @@ bool generate_transfer_addresses_tiled_data(DataTransformations * dtx){
 
     TransformationNode * producer_node = dtx->transformations[0];
     TransformationNode * consumer_node = dtx->transformations[1];
-    
+
     // Loop over all groups
     for (TensorPairGroup * consumer_group : consumer_node->groups) {
-        assert(consumer_group->shape.size() == 2 && consumer_group->shape[0] == 32);
+        assert(consumer_group->shape.size() == 4 &&
+                consumer_group->shape[0] == 1 &&
+                consumer_group->shape[1] == 1 &&
+                consumer_group->shape[2] == 32);
         // Loop over all TensorPairs
         for (TensorPair * consumer_tp : consumer_group->tensor_pairs) {
             //if (DEBUG) consumer_tp->print_string();
@@ -67,7 +70,7 @@ bool generate_transfer_addresses_tiled_data(DataTransformations * dtx){
 
             consumer_group->transfers.push_back(transfer);
 
-            if (DEBUG) cout << transfer->get_string() << endl;            
+            if (DEBUG) cout << transfer->get_string() << endl;
         }
     }
 

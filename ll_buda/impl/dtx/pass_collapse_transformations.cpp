@@ -1,10 +1,11 @@
+#include <numeric>
 #include "dtx.hpp"
 #include "util_vector_of_ints.hpp"
 #include "util.hpp"
 
 bool collapse_transformations(DataTransformations * dtx) {
     bool DEBUG = true;
-
+    bool nitika_debug = true;
     if (DEBUG) cout << "\n----- Start Resolving Transoformations -----\n" << endl;
 
 
@@ -14,7 +15,7 @@ bool collapse_transformations(DataTransformations * dtx) {
     TransformationNode * consumer_node = dtx->transformations.back();
     if (DEBUG) cout << s(2) << "consumer_node = " << consumer_node->opcode << endl;
     int spaces = 0;
-
+    int c = 0;
     while (dtx->transformations.size() > 2) {
 
         if (DEBUG) cout << s(4) << "There are more than 2 tx. Starting to resolve." << endl;
@@ -41,29 +42,58 @@ bool collapse_transformations(DataTransformations * dtx) {
                         if (DEBUG) cout << s(10) << "producer_tp_idx = " << producer_tp_idx << ",   consumer_tp_idx = " << consumer_tp_idx << endl;
 
                         Tensor * overlap = calculate_tensor_overlap_in_nd(producer_node->groups[producer_group_idx]->tensor_pairs[producer_tp_idx]->dst_tensor, consumer_node->groups[consumer_group_idx]->tensor_pairs[consumer_tp_idx]->src_tensor);
-
+                        // c++;
+                        // if (c > 15) {
+                        //     exit(0);
+                        // }
                         if (has_overlap(overlap)) {
+                            Tensor * new_src;
+                            if(nitika_debug) {
+                                auto overlap_producer_start_offset_vector = vector_subtraction(
+                                                                    overlap->str,
+                                                                    producer_node->groups[producer_group_idx]->tensor_pairs[producer_tp_idx]->dst_tensor->str);
+                                int overlap_producer_start_offset = std::accumulate(overlap_producer_start_offset_vector.begin(), overlap_producer_start_offset_vector.end(),0);
+                                assert(overlap_producer_start_offset >= 0);
+                                int overlap_size = overlap->volume();
+                                auto producer_src_tensor = producer_node->groups[producer_group_idx]->tensor_pairs[producer_tp_idx]->src_tensor;
+                                auto new_src_coords = get_chunk_within_tensor(producer_src_tensor, overlap_producer_start_offset, overlap_size);
+                                new_src = new Tensor(new_src_coords.first, new_src_coords.second);
+                            }
+                            else {
+                                // Part 1: Calculating the new SRC tensor
+                                vector<int> producer_offset = vector_subtraction(producer_node->groups[producer_group_idx]->tensor_pairs[producer_tp_idx]->dst_tensor->str,
+                                                                                producer_node->groups[producer_group_idx]->tensor_pairs[producer_tp_idx]->src_tensor->str);
+                                if (DEBUG) cout << s(12) << "producer_offset = " << v2s(producer_offset) << endl;
 
-                            // Part 1: Calculating the new SRC tensor
-                            vector<int> producer_offset = vector_subtraction(producer_node->groups[producer_group_idx]->tensor_pairs[producer_tp_idx]->dst_tensor->str,
-                                                                            producer_node->groups[producer_group_idx]->tensor_pairs[producer_tp_idx]->src_tensor->str);
-                            if (DEBUG) cout << s(12) << "producer_offset = " << v2s(producer_offset) << endl;
-
-                            vector<int> new_src_str = vector_subtraction(overlap->str, producer_offset);
-                            vector<int> new_src_end = vector_subtraction(overlap->end, producer_offset);
-                            Tensor * new_src = new Tensor(new_src_str, new_src_end);
+                                vector<int> new_src_str = vector_subtraction(overlap->str, producer_offset);
+                                vector<int> new_src_end = vector_subtraction(overlap->end, producer_offset);
+                                new_src = new Tensor(new_src_str, new_src_end);
+                            }
 
                             if (DEBUG) cout << s(12) << "offset overlap = " << new_src->get_string() << endl;
 
                             // Part 2: Calculating the new DST tensor
-                            vector<int> consumer_offset = vector_subtraction(consumer_node->groups[consumer_group_idx]->tensor_pairs[consumer_tp_idx]->src_tensor->str,
-                                                                            consumer_node->groups[consumer_group_idx]->tensor_pairs[consumer_tp_idx]->dst_tensor->str);
-                            if (DEBUG) cout << s(12) << "consumer_offset = " << v2s(consumer_offset) << endl;
+                            Tensor * new_dst;
+                            if(nitika_debug) {
+                                auto overlap_consumer_start_offset_vector = vector_subtraction(
+                                                                    overlap->str,
+                                                                    consumer_node->groups[consumer_group_idx]->tensor_pairs[consumer_tp_idx]->src_tensor->str);
+                                int overlap_consumer_start_offset = std::accumulate(overlap_consumer_start_offset_vector.begin(), overlap_consumer_start_offset_vector.end(),0);
+                                assert(overlap_consumer_start_offset >= 0);
+                                int overlap_size = overlap->volume();
+                                auto consumer_dst_tensor = producer_node->groups[producer_group_idx]->tensor_pairs[producer_tp_idx]->dst_tensor;
+                                auto new_dst_coords = get_chunk_within_tensor(consumer_dst_tensor, overlap_consumer_start_offset, overlap_size);
+                                new_dst = new Tensor(new_dst_coords.first, new_dst_coords.second);
+                            }
+                            else {
+                                vector<int> consumer_offset = vector_subtraction(consumer_node->groups[consumer_group_idx]->tensor_pairs[consumer_tp_idx]->src_tensor->str,
+                                                                                consumer_node->groups[consumer_group_idx]->tensor_pairs[consumer_tp_idx]->dst_tensor->str);
+                                if (DEBUG) cout << s(12) << "consumer_offset = " << v2s(consumer_offset) << endl;
 
-                            vector<int> new_dst_str = vector_subtraction(overlap->str, consumer_offset);
-                            vector<int> new_dst_end = vector_subtraction(overlap->end, consumer_offset);
-                            Tensor * new_dst = new Tensor(new_dst_str, new_dst_end);
-
+                                vector<int> new_dst_str = vector_subtraction(overlap->str, consumer_offset);
+                                vector<int> new_dst_end = vector_subtraction(overlap->end, consumer_offset);
+                                new_dst = new Tensor(new_dst_str, new_dst_end);
+                            }
                             int new_src_group = producer_node->groups[producer_group_idx]->tensor_pairs[producer_tp_idx]->src_group;
 
                             // Store results
