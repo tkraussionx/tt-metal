@@ -24,7 +24,8 @@ bool run_risc_write_speed(tt_cluster *cluster, int chip_id, const tt_xy_pair& co
     std::uint32_t buffer_dst_addr = 300 * 1024;
     log_info(tt::LogVerif, "dst_xy = {}", dst_xy.str());
 
-    TT_ASSERT(buffer_size <= 400*1024);
+    TT_ASSERT(buffer_size <= 512*1024);
+    TT_ASSERT(buffer_size % transaction_size == 0);
    // TT_ASSERT(transaction_size <= 8192);
 
     std::uint32_t num_transactions = buffer_size / transaction_size;
@@ -114,7 +115,7 @@ int main(int argc, char** argv)
         cluster->start_device(default_params); // use default params
         tt::llrt::utils::log_current_ai_clk(cluster);
 
-        pass = run_risc_write_speed(cluster, 0, {5,4}, buffer_size, num_repetitions, transaction_size, {dst_noc_x,dst_noc_y});
+        pass = run_risc_write_speed(cluster, 0, {2,1}, buffer_size, num_repetitions, transaction_size, {dst_noc_x,dst_noc_y});
 
         cluster->close_device();
         delete cluster;

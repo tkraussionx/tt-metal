@@ -42,6 +42,7 @@ void kernel_main() {
             noc_fast_write_inc_num_dests(num_transactions);
 
         #else
+
             for (std::uint32_t j=0; j<num_transactions; j++) {
                 std::uint64_t buffer_dst_noc_addr = get_noc_addr(dst_noc_x, dst_noc_y, buffer_dst_addr_);
                 noc_async_write(buffer_src_addr_, buffer_dst_noc_addr, transaction_size_const);

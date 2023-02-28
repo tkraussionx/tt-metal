@@ -27,7 +27,7 @@ bool run_risc_read_speed(tt_cluster *cluster, int chip_id, const tt_xy_pair& cor
     std::uint32_t buffer_src_addr = 200 * 1024;
     log_info(tt::LogVerif, "src_xy = {}", src_xy.str());
 
-    TT_ASSERT(buffer_size <= 400*1024);
+    TT_ASSERT(buffer_size <= 512*1024);
     //TT_ASSERT(transaction_size <= 8192);
     TT_ASSERT(buffer_size % transaction_size == 0);
 
