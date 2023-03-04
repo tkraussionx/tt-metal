@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <functional>
 #include <random>
+#include <cstdlib> // for putenv()
 
 #include "ll_buda/host_api.hpp"
 #include "common/bfloat16.hpp"
@@ -26,6 +27,9 @@ int main(int argc, char **argv) {
     bool pass = true;
 
     try {
+        std::string env_var = "TT_PCI_DMA_BUF_SIZE=1048576";
+        int result = putenv(const_cast<char*>(env_var.c_str()));
+
         ////////////////////////////////////////////////////////////////////////////
         //                      Grayskull Device Setup
         ////////////////////////////////////////////////////////////////////////////
@@ -43,12 +47,12 @@ int main(int argc, char **argv) {
         // set up the program
 
         // saturate DRAM
-        // uint32_t num_cores = 12;
-        // uint32_t num_tiles = 64 * 1024;
-        // uint32_t block_size_tiles = 16;
-        // uint32_t num_blocks_in_CB = 2;
-        // uint32_t IO_data_in_dram = true;
-        // uint32_t num_repetitions = 1;
+        uint32_t num_cores = 12;
+        uint32_t num_tiles = 64 * 1024;
+        uint32_t block_size_tiles = 16;
+        uint32_t num_blocks_in_CB = 2;
+        uint32_t IO_data_in_dram = true;
+        uint32_t num_repetitions = 1;
 
         // saturate L1
         // uint32_t num_cores = 10;
@@ -115,12 +119,12 @@ int main(int argc, char **argv) {
         // uint32_t num_repetitions = 512;
 
         // test #9
-        uint32_t num_cores = 12;
-        uint32_t num_tiles = 128;
-        uint32_t block_size_tiles = 128;
-        uint32_t num_blocks_in_CB = 2;
-        uint32_t IO_data_in_dram = false;
-        uint32_t num_repetitions = 512;
+        // uint32_t num_cores = 12;
+        // uint32_t num_tiles = 128;
+        // uint32_t block_size_tiles = 128;
+        // uint32_t num_blocks_in_CB = 2;
+        // uint32_t IO_data_in_dram = false;
+        // uint32_t num_repetitions = 512;
 
 
         TT_ASSERT(num_cores >= 2 && num_cores <= 12); // grayskull
@@ -162,6 +166,7 @@ int main(int argc, char **argv) {
         for (auto core : cores) {
             auto cb = ll_buda::CreateCircularBuffer(
                 program,
+                device,
                 cb_index,
                 core,
                 cb_size_tiles,
@@ -188,23 +193,23 @@ int main(int argc, char **argv) {
             uint32_t dram_buffer_addr = 0;
             TT_ASSERT(dram_buffer_addr + buffer_size <= 1024 * 1024 * 1024); // 1GB
 
-            src_dram_buffer = ll_buda::CreateDramBuffer(0, buffer_size, dram_buffer_addr);
-            dst_dram_buffer = ll_buda::CreateDramBuffer(7, buffer_size, dram_buffer_addr);
+            src_dram_buffer = ll_buda::CreateDramBuffer(device, 0, buffer_size, dram_buffer_addr);
+            dst_dram_buffer = ll_buda::CreateDramBuffer(device, 7, buffer_size, dram_buffer_addr);
 
             src_address = src_dram_buffer->address();
-            src_noc_xy = src_dram_buffer->noc_coordinates(device);
+            src_noc_xy = src_dram_buffer->noc_coordinates();
             dst_address = dst_dram_buffer->address();
-            dst_noc_xy = dst_dram_buffer->noc_coordinates(device);
+            dst_noc_xy = dst_dram_buffer->noc_coordinates();
         } else {
             uint32_t l1_buffer_addr = l1_alloc(buffer_size); // same address on src / dst cores
 
-            src_l1_buffer = ll_buda::CreateL1Buffer(program, cores[0],           buffer_size, l1_buffer_addr);
-            dst_l1_buffer = ll_buda::CreateL1Buffer(program, cores[num_cores-1], buffer_size, l1_buffer_addr);
+            src_l1_buffer = ll_buda::CreateL1Buffer(program, device, cores[0],           buffer_size, l1_buffer_addr);
+            dst_l1_buffer = ll_buda::CreateL1Buffer(program, device, cores[num_cores-1], buffer_size, l1_buffer_addr);
 
             src_address = src_l1_buffer->address();
-            src_noc_xy = device->worker_core_from_logical_core(src_l1_buffer->core());
+            src_noc_xy = device->worker_core_from_logical_core(src_l1_buffer->logical_core());
             dst_address = dst_l1_buffer->address();
-            dst_noc_xy = device->worker_core_from_logical_core(dst_l1_buffer->core());
+            dst_noc_xy = device->worker_core_from_logical_core(dst_l1_buffer->logical_core());
         }
 
 
@@ -261,9 +266,9 @@ int main(int argc, char **argv) {
         log_info("src_vec[0] = {}", src_vec[0]);
 
         if (IO_data_in_dram) {
-            pass &= ll_buda::WriteToDeviceDRAM(device, src_dram_buffer, src_vec);
+            pass &= ll_buda::WriteToDeviceDRAM(src_dram_buffer, src_vec);
         } else {
-            pass &= ll_buda::WriteToDeviceL1(device, src_l1_buffer->core(), src_vec, src_l1_buffer->address());
+            pass &= ll_buda::WriteToDeviceL1(device, src_l1_buffer->logical_core(), src_vec, src_l1_buffer->address());
         }
         // host initializes only the sender's semaphores, reciver's semaphores are initialized by the kernel
         std::vector<uint32_t> invalid = {INVALID};
@@ -329,9 +334,9 @@ int main(int argc, char **argv) {
         log_info(LogTest, "Reading results from device...");
         std::vector<uint32_t> result_vec;
         if (IO_data_in_dram) {
-            ll_buda::ReadFromDeviceDRAM(device, dst_dram_buffer, result_vec, dst_dram_buffer->size());
+            ll_buda::ReadFromDeviceDRAM(dst_dram_buffer, result_vec);
         } else {
-            ll_buda::ReadFromDeviceL1(device, dst_l1_buffer->core(), dst_l1_buffer->address(), result_vec, dst_l1_buffer->size());
+            ll_buda::ReadFromDeviceL1(device, dst_l1_buffer->logical_core(), dst_l1_buffer->address(), result_vec, dst_l1_buffer->size());
         }
             ////////////////////////////////////////////////////////////////////////////
         //                      Validation & Teardown

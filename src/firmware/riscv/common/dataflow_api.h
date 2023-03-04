@@ -557,6 +557,12 @@ void noc_async_write(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr
                             NOC_UNICAST_WRITE_VC, false, false, 1);
 }
 
+FORCE_INLINE
+void noc_semaphore_set_remote(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr) {
+        ncrisc_noc_fast_write_any_len(loading_noc, NCRISC_WR_REG_CMD_BUF, src_local_l1_addr, dst_noc_addr, 4 /* size in bytes */,
+                            NOC_UNICAST_WRITE_VC, false, false, 1);
+}
+
 /**
  * Initiates an asynchronous write from a source address in L1 memory on the
  * Tensix core executing this function call to a rectangular destination grid.
@@ -594,12 +600,6 @@ void noc_async_write_multicast(std::uint32_t src_local_l1_addr, std::uint64_t ds
                             NOC_MULTICAST_WRITE_VC, true, false, num_dests);
 }
 
-FORCE_INLINE
-void noc_semaphore_set_remote(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr) {
-        ncrisc_noc_fast_write_any_len(loading_noc, NCRISC_WR_REG_CMD_BUF, src_local_l1_addr, dst_noc_addr, 4 /* size in bytes */,
-                            NOC_UNICAST_WRITE_VC, false, false, 1);
-}
-
 /**
  * Initiates an asynchronous write from a source address in L1 memory on the
  * Tensix core executing this function call to a rectangular destination grid.
@@ -619,12 +619,6 @@ void noc_semaphore_set_remote(std::uint32_t src_local_l1_addr, std::uint64_t dst
  * | dst_noc_addr_multicast | Encoding of the destinations nodes (x_start,y_start,x_end,y_end)+address | uint64_t | DOX-TODO(insert a reference to what constitutes valid coords) | True     |
  * | num_dests              | Number of destinations that the multicast source is targetting           | uint32_t | 0..119                                                    | True     |
  */
-FORCE_INLINE
-void noc_async_write_multicast(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr_multicast, std::uint32_t size, std::uint32_t num_dests) {
-        ncrisc_noc_fast_write_any_len(loading_noc, NCRISC_WR_REG_CMD_BUF, src_local_l1_addr, dst_noc_addr_multicast, size,
-                            NOC_MULTICAST_WRITE_VC, true, false, num_dests);
-}
-
 FORCE_INLINE
 void noc_semaphore_set_multicast(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr_multicast, std::uint32_t num_dests) {
         ncrisc_noc_fast_write_any_len(loading_noc, NCRISC_WR_REG_CMD_BUF, src_local_l1_addr, dst_noc_addr_multicast, 4 /*size in bytes*/,
