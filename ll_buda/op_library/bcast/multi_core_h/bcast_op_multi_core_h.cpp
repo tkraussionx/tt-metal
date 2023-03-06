@@ -205,6 +205,8 @@ Tensor bcast_multi_core_h(const Tensor &a, const Tensor &b, BcastOpMath::Enum bc
 
     delete program;
 
+    ll_buda::dumpProfilerResults("multi_core_h_" + std::to_string(num_cores), true);
+
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;
 }

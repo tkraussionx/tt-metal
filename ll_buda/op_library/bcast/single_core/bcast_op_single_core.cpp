@@ -168,6 +168,8 @@ Tensor bcast_single_core(const Tensor &a, const Tensor &b, BcastOpMath::Enum bca
 
     delete program;
 
+    ll_buda::dumpProfilerResults("single_core", true);
+
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;
 }
