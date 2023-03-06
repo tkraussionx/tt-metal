@@ -18,6 +18,10 @@ LL_BUDA_SRCS = \
 	ll_buda/op_library/transpose_rm/transpose_rm_op.cpp \
 	ll_buda/op_library/reduce/reduce_op.cpp \
 	ll_buda/op_library/bcast/bcast_op.cpp \
+	ll_buda/op_library/bcast/single_core/bcast_op_single_core.cpp \
+	ll_buda/op_library/bcast/multi_core_h/bcast_op_multi_core_h.cpp \
+	ll_buda/op_library/bcast/multi_core_w/bcast_op_multi_core_w.cpp \
+	ll_buda/op_library/bcast/multi_core_hw/bcast_op_multi_core_hw.cpp \
 	ll_buda/op_library/bmm/bmm_op.cpp \
 	ll_buda/op_library/tilize/tilize_op.cpp \
 	ll_buda/op_library/untilize/untilize_op.cpp \
