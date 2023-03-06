@@ -818,7 +818,7 @@ namespace tt {
 namespace tt_metal {
 
 
-Tensor matmul_multi_core_reuse_mcast_(const Tensor &a, const Tensor &b, bool bcast_batch) {
+Tensor matmul_multi_core_reuse_mcast_(const Tensor &a, const Tensor &b, bool bcast_batch, bool profile_device) {
 
     const auto& ashape = a.shape(), bshape = b.shape();
 
@@ -903,7 +903,7 @@ Tensor matmul_multi_core_reuse_mcast_(const Tensor &a, const Tensor &b, bool bca
     TT_ASSERT(in1_dram_addr + dram_buffer_size_weights < 1024 * 1024 * 1024);
     TT_ASSERT(out_dram_addr + dram_buffer_size_out < 1024 * 1024 * 1024);
     tt_metal::Program * program;
-
+    std::string parallelization;
     if (core_range.x > 1 && core_range.y > 1) {
         program = create_program_mcast_in0_in1(
             device,
@@ -918,6 +918,7 @@ Tensor matmul_multi_core_reuse_mcast_(const Tensor &a, const Tensor &b, bool bca
             in0_mcast_sender_semaphore_noc_addr, in1_mcast_sender_semaphore_noc_addr,
             in0_mcast_receiver_semaphore_noc_addr, in1_mcast_receiver_semaphore_noc_addr
         );
+        parallelization = "multi_core_reuse_mcast_in0_in1";
     } else if (core_range.x > 1) {
         program = create_program_mcast_in0(
             device,
@@ -932,6 +933,7 @@ Tensor matmul_multi_core_reuse_mcast_(const Tensor &a, const Tensor &b, bool bca
             in0_mcast_sender_semaphore_noc_addr,
             in0_mcast_receiver_semaphore_noc_addr
         );
+        parallelization = "multi_core_reuse_mcast_in0";
     } else {
         program = create_program_mcast_in1(
             device,
@@ -946,6 +948,7 @@ Tensor matmul_multi_core_reuse_mcast_(const Tensor &a, const Tensor &b, bool bca
             in1_mcast_sender_semaphore_noc_addr,
             in1_mcast_receiver_semaphore_noc_addr
         );
+        parallelization = "multi_core_reuse_mcast_in1";
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -953,7 +956,7 @@ Tensor matmul_multi_core_reuse_mcast_(const Tensor &a, const Tensor &b, bool bca
     ////////////////////////////////////////////////////////////////////////////
     bool pass = true;
     constexpr bool skip_hlkc = false;
-    tt_metal::CompileProgram(device, program, skip_hlkc);
+    tt_metal::CompileProgram(device, program, skip_hlkc, profile_device);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
@@ -961,18 +964,23 @@ Tensor matmul_multi_core_reuse_mcast_(const Tensor &a, const Tensor &b, bool bca
     tt_metal::ConfigureDeviceWithProgram(device, program);
     tt_metal::LaunchKernels(device, program);
 
+    tt_metal::DumpHostProfileResults("\"{'parallelization':'" + parallelization +"','num_cores':" + std::to_string((std::int32_t) num_blocks_total) + ",'cores_x':" + std::to_string((std::int32_t) core_range.x - 1)  + ",'cores_y':" + std::to_string((std::int32_t) core_range.y - 1) + "}\"");
+    if (profile_device){
+		tt_metal::DumpDeviceProfileResults(device, program);
+	}
+
     delete program;
 
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;
 }
 
-Tensor matmul_multi_core_reuse_mcast(const Tensor& a, const Tensor& b) {
-    return matmul_multi_core_reuse_mcast_(a, b, true);
+Tensor matmul_multi_core_reuse_mcast(const Tensor& a, const Tensor& b, bool profile_device) {
+    return matmul_multi_core_reuse_mcast_(a, b, true, profile_device);
 }
 
-Tensor bmm_multi_core_reuse_mcast(const Tensor& a, const Tensor& b) {
-    return matmul_multi_core_reuse_mcast_(a, b, false);
+Tensor bmm_multi_core_reuse_mcast(const Tensor& a, const Tensor& b, bool profile_device) {
+    return matmul_multi_core_reuse_mcast_(a, b, false, profile_device);
 }
 
 }  // namespace tt_metal

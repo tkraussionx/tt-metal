@@ -220,7 +220,7 @@ namespace tt {
 namespace tt_metal {
 
 
-Tensor matmul_multi_core_reuse_(const Tensor &a, const Tensor &b, bool bcast_batch) {
+Tensor matmul_multi_core_reuse_(const Tensor &a, const Tensor &b, bool bcast_batch, bool profile_device) {
 
     const auto& ashape = a.shape(), bshape = b.shape();
 
@@ -316,7 +316,7 @@ Tensor matmul_multi_core_reuse_(const Tensor &a, const Tensor &b, bool bcast_bat
     ////////////////////////////////////////////////////////////////////////////
     bool pass = true;
     constexpr bool skip_hlkc = false;
-    pass &= tt_metal::CompileProgram(device, program, skip_hlkc);
+    pass &= tt_metal::CompileProgram(device, program, skip_hlkc, profile_device);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
@@ -324,7 +324,10 @@ Tensor matmul_multi_core_reuse_(const Tensor &a, const Tensor &b, bool bcast_bat
     pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
     pass &= tt_metal::LaunchKernels(device, program);
 
-    delete program;
+    tt_metal::DumpHostProfileResults("\"{'parallelization': 'multi_core_reuse', 'num_cores':" + std::to_string((std::int32_t) num_blocks_total) + "}\"");
+    if (profile_device){
+		tt_metal::DumpDeviceProfileResults(device, program);
+	}
 
     TT_ASSERT(pass);
 
@@ -332,12 +335,12 @@ Tensor matmul_multi_core_reuse_(const Tensor &a, const Tensor &b, bool bcast_bat
     return output;
 }
 
-Tensor matmul_multi_core_reuse(const Tensor& a, const Tensor& b) {
-    return matmul_multi_core_reuse_(a, b, true);
+Tensor matmul_multi_core_reuse(const Tensor& a, const Tensor& b, bool profile_device) {
+    return matmul_multi_core_reuse_(a, b, true, profile_device);
 }
 
-Tensor bmm_multi_core_reuse(const Tensor& a, const Tensor& b) {
-    return matmul_multi_core_reuse_(a, b, false);
+Tensor bmm_multi_core_reuse(const Tensor& a, const Tensor& b, bool profile_device) {
+    return matmul_multi_core_reuse_(a, b, false, profile_device);
 }
 
 }  // namespace tt_metal

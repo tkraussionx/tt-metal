@@ -470,6 +470,8 @@ void DeviceModule(py::module &m_device) {
 
     m_device.def("StartDebugPrintServer", &StartDebugPrintServer);
     m_device.def("SetProfilerDir", &SetProfilerDir);
+    m_device.def("FreshProfilerHostLog", &FreshProfilerHostLog);
+    m_device.def("FreshProfilerDeviceLog", &FreshProfilerDeviceLog);
 
     m_device.def("SetForceRecompiles", &SetForceRecompiles);
     m_device.def("GetForceRecompiles", &GetForceRecompiles);

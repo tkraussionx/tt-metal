@@ -78,6 +78,9 @@ class Profiler {
         //Change the output dir of the profile logs
         void setOutputDir(std::string new_output_dir);
 
+        //Set firstRun attributes to true
+        void setNewFile();
+
         //Traverse all timers and dump the results
         void dumpHostResults(std::string name_append);
 

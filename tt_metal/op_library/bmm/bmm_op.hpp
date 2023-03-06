@@ -12,16 +12,16 @@ struct BmmOpParallelizationStrategy {
     static const vector<Enum> all() { return { MULTI_CORE, MULTI_CORE_REUSE, MULTI_CORE_REUSE_MCAST, SINGLE_CORE }; }
 };
 
-Tensor matmul (const Tensor &A, const Tensor &B); // broadcasts batch, expects N=1 for now
-Tensor bmm     (const Tensor &A, const Tensor &B); // doesn't broadcast batch, expects batch to match in A and B
-Tensor matmul_single_core  (const Tensor &A, const Tensor &B); // broadcasts batch, expects N=1 for now
-Tensor bmm_single_core     (const Tensor &A, const Tensor &B); // doesn't broadcast batch, expects batch to match in A and B
-Tensor matmul_multi_core  (const Tensor &A, const Tensor &B); // broadcasts batch, expects N=1 for now
-Tensor bmm_multi_core     (const Tensor &A, const Tensor &B); // doesn't broadcast batch, expects batch to match in A and B
-Tensor matmul_multi_core_reuse  (const Tensor &A, const Tensor &B); // Only supports 2D matmul expects N=1 for now
-Tensor bmm_multi_core_reuse  (const Tensor &A, const Tensor &B); // Only supports 2D matmul expects N=1 for now
-Tensor matmul_multi_core_reuse_mcast  (const Tensor &A, const Tensor &B); // Only supports 2D matmul expects N=1 for now
-Tensor bmm_multi_core_reuse_mcast  (const Tensor &A, const Tensor &B); // Only supports 2D matmul expects N=1 for now
+Tensor matmul (const Tensor &A, const Tensor &B, bool profile_device=false); // broadcasts batch, expects N=1 for now
+Tensor bmm     (const Tensor &A, const Tensor &B, bool profile_device=false); // doesn't broadcast batch, expects batch to match in A and B
+Tensor matmul_single_core  (const Tensor &A, const Tensor &B, bool profile_device=false); // broadcasts batch, expects N=1 for now
+Tensor bmm_single_core     (const Tensor &A, const Tensor &B, bool profile_device=false); // doesn't broadcast batch, expects batch to match in A and B
+Tensor matmul_multi_core  (const Tensor &A, const Tensor &B, bool profile_device=false); // broadcasts batch, expects N=1 for now
+Tensor bmm_multi_core     (const Tensor &A, const Tensor &B, bool profile_device=false); // doesn't broadcast batch, expects batch to match in A and B
+Tensor matmul_multi_core_reuse  (const Tensor &A, const Tensor &B, bool profile_device=false); // Only supports 2D matmul expects N=1 for now
+Tensor bmm_multi_core_reuse  (const Tensor &A, const Tensor &B, bool profile_device=false); // Only supports 2D matmul expects N=1 for now
+Tensor matmul_multi_core_reuse_mcast  (const Tensor &A, const Tensor &B, bool profile_device=false); // Only supports 2D matmul expects N=1 for now
+Tensor bmm_multi_core_reuse_mcast  (const Tensor &A, const Tensor &B, bool profile_device=false); // Only supports 2D matmul expects N=1 for now
 
 }  // namespace tt_metal
 

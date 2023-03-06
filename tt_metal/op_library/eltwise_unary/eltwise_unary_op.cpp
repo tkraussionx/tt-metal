@@ -49,15 +49,15 @@ namespace tt {
 
 namespace tt_metal {
 
-Tensor eltwise_unary(const Tensor &a, UnaryOpType::Enum op_type) {
+Tensor eltwise_unary(const Tensor &a, UnaryOpType::Enum op_type, bool profile_device) {
 
     switch (eltwise_unary_op_utils::get_parallelization_strategy(a)){
         case UnaryOpParallelizationStrategy::MULTI_CORE:
-            return eltwise_unary_multi_core(a, op_type);
+            return eltwise_unary_multi_core(a, op_type, profile_device);
             break;
         case UnaryOpParallelizationStrategy::SINGLE_CORE:
         default:
-            return eltwise_unary_single_core(a, op_type);
+            return eltwise_unary_single_core(a, op_type, profile_device);
     }
 
 }

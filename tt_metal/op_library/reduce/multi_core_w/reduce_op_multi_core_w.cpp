@@ -11,7 +11,7 @@ namespace tt {
 
 namespace tt_metal {
 
-Tensor reduce_multi_core_w(const Tensor &a, ReduceOpMath::Enum reduce_op, ReduceOpDim::Enum reduce_dim, float scaler) {
+Tensor reduce_multi_core_w(const Tensor &a, ReduceOpMath::Enum reduce_op, ReduceOpDim::Enum reduce_dim, float scaler, bool profile_device) {
 
     TT_ASSERT(reduce_dim == ReduceOpDim::W);
     const auto shape = a.shape();
@@ -129,9 +129,9 @@ Tensor reduce_multi_core_w(const Tensor &a, ReduceOpMath::Enum reduce_op, Reduce
     ////////////////////////////////////////////////////////////////////////////
     bool skip_hlkc = false;
     if (reduce_op == ReduceOpMath::SUM){
-        tt_metal::CompileProgramNew(device, program);
+        tt_metal::CompileProgramNew(device, program, profile_device);
     } else {
-        tt_metal::CompileProgram(device, program, skip_hlkc);
+        tt_metal::CompileProgram(device, program, skip_hlkc, profile_device);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -168,6 +168,11 @@ Tensor reduce_multi_core_w(const Tensor &a, ReduceOpMath::Enum reduce_op, Reduce
     }
 
     tt_metal::LaunchKernels(device, program);
+
+    tt_metal::DumpHostProfileResults("\"{'parallelization': 'multi_core_w', 'num_cores':" + std::to_string(num_cores) + "}\"");
+    if (profile_device){
+		tt_metal::DumpDeviceProfileResults(device, program);
+	}
 
     delete program;
 

@@ -13,7 +13,7 @@ namespace tt {
 
 namespace tt_metal {
 
-Tensor bcast_multi_core_hw(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, BcastOpDim::Enum bcast_dim) {
+Tensor bcast_multi_core_hw(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, BcastOpDim::Enum bcast_dim, bool profile_device) {
     TT_ASSERT(bcast_dim == BcastOpDim::HW);
 
     const auto ashape = a.shape();
@@ -144,7 +144,7 @@ Tensor bcast_multi_core_hw(const Tensor &a, const Tensor &b, BcastOpMath::Enum b
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
     bool skip_hlkc = false;
-    tt_metal::CompileProgram(device, program, skip_hlkc);
+    tt_metal::CompileProgram(device, program, skip_hlkc, profile_device);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
@@ -192,6 +192,11 @@ Tensor bcast_multi_core_hw(const Tensor &a, const Tensor &b, BcastOpMath::Enum b
     tt_metal::ConfigureDeviceWithProgram(device, program);
 
     tt_metal::LaunchKernels(device, program);
+
+	tt_metal::DumpHostProfileResults("\"{'parallelization': 'multi_core_hw', 'num_cores':" + std::to_string(num_cores) + "}\"");
+	if (profile_device){
+		tt_metal::DumpDeviceProfileResults(device, program);
+	}
 
     delete program;
 

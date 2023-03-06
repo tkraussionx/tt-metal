@@ -36,7 +36,6 @@ BmmOpParallelizationStrategy::Enum get_parallelization_strategy(const Tensor &a,
     uint32_t num_cores_y = logical_grid_size.y;
     uint32_t num_blocks_total = (Mt / per_core_M) * (Nt / per_core_N);
     tt_xy_pair core_range = get_core_range((Mt / per_core_M), (Nt / per_core_N), num_cores_y, num_cores_x);
-
     if (
         Mt % per_core_M == 0 and
         Nt % per_core_N == 0 and
@@ -54,7 +53,6 @@ BmmOpParallelizationStrategy::Enum get_parallelization_strategy(const Tensor &a,
         return BmmOpParallelizationStrategy::SINGLE_CORE;
     }
 }
-
 }
 
 namespace tt {
@@ -62,37 +60,37 @@ namespace tt {
 namespace tt_metal {
 
 
-Tensor matmul(const Tensor& a, const Tensor& b) {
+Tensor matmul(const Tensor& a, const Tensor& b, bool profile_device) {
     switch (bmm_op_utils::get_parallelization_strategy(a, b)){
         case BmmOpParallelizationStrategy::MULTI_CORE:
-            return matmul_multi_core(a, b);
+            return matmul_multi_core(a, b, profile_device);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE:
-            return matmul_multi_core_reuse(a, b);
+            return matmul_multi_core_reuse(a, b, profile_device);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST:
-            return matmul_multi_core_reuse_mcast(a, b);
+            return matmul_multi_core_reuse_mcast(a, b, profile_device);
             break;
         case BmmOpParallelizationStrategy::SINGLE_CORE:
         default:
-            return matmul_single_core(a, b);
+            return matmul_single_core(a, b, profile_device);
     }
 }
 
-Tensor bmm(const Tensor& a, const Tensor& b) {
+Tensor bmm(const Tensor& a, const Tensor& b, bool profile_device) {
     switch (bmm_op_utils::get_parallelization_strategy(a, b)){
         case BmmOpParallelizationStrategy::MULTI_CORE:
-            return bmm_multi_core(a, b);
+            return bmm_multi_core(a, b, profile_device);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE:
-            return bmm_multi_core_reuse(a, b);
+            return bmm_multi_core_reuse(a, b, profile_device);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST:
-            return bmm_multi_core_reuse_mcast(a, b);
+            return bmm_multi_core_reuse_mcast(a, b, profile_device);
             break;
         case BmmOpParallelizationStrategy::SINGLE_CORE:
         default:
-            return bmm_single_core(a, b);
+            return bmm_single_core(a, b, profile_device);
     }
 }
 

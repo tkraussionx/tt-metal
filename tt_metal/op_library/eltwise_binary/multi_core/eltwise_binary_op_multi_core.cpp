@@ -11,7 +11,7 @@ namespace tt {
 
 namespace tt_metal {
 
-Tensor eltwise_binary_multi_core(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type) {
+Tensor eltwise_binary_multi_core(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type, bool profile_device) {
     tt_metal::Program *program = new tt_metal::Program();
 
     // TODO: Build some sort of dispatcher based on location of op operands
@@ -137,7 +137,7 @@ Tensor eltwise_binary_multi_core(const Tensor &a, const Tensor &b, BinaryOpType:
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
     bool skip_hlkc = false;
-    tt_metal::CompileProgram(device, program, skip_hlkc);
+    tt_metal::CompileProgram(device, program, skip_hlkc, profile_device);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
@@ -175,6 +175,11 @@ Tensor eltwise_binary_multi_core(const Tensor &a, const Tensor &b, BinaryOpType:
     }
 
     tt_metal::LaunchKernels(device, program);
+
+    tt_metal::DumpHostProfileResults("\"{'parallelization': 'multi_core', 'num_cores':" + std::to_string(num_cores) + "}\"");
+    if (profile_device){
+		tt_metal::DumpDeviceProfileResults(device, program);
+	}
 
     delete program;
 

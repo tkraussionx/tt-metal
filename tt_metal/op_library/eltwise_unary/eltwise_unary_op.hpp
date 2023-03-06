@@ -17,18 +17,18 @@ struct UnaryOpParallelizationStrategy {
     static const vector<Enum> all() { return { MULTI_CORE, SINGLE_CORE }; }
 };
 
-Tensor eltwise_unary (const Tensor &a, UnaryOpType::Enum op_type);
-Tensor eltwise_unary_single_core (const Tensor &a, UnaryOpType::Enum op_type);
-Tensor eltwise_unary_multi_core (const Tensor &a, UnaryOpType::Enum op_type);
+Tensor eltwise_unary (const Tensor &a, UnaryOpType::Enum op_type, bool profile_device=false);
+Tensor eltwise_unary_single_core (const Tensor &a, UnaryOpType::Enum op_type, bool profile_device=false);
+Tensor eltwise_unary_multi_core (const Tensor &a, UnaryOpType::Enum op_type, bool profile_device=false);
 
-inline Tensor exp     (const Tensor &a) { return eltwise_unary(a, UnaryOpType::EXP); }
-inline Tensor recip   (const Tensor &a) { return eltwise_unary(a, UnaryOpType::RECIP); }
-inline Tensor gelu    (const Tensor &a) { return eltwise_unary(a, UnaryOpType::GELU); }
-inline Tensor relu    (const Tensor &a) { return eltwise_unary(a, UnaryOpType::RELU); }
-inline Tensor sqrt    (const Tensor &a) { return eltwise_unary(a, UnaryOpType::SQRT); }
-inline Tensor sigmoid (const Tensor &a) { return eltwise_unary(a, UnaryOpType::SIGMOID); }
-inline Tensor log     (const Tensor &a) { return eltwise_unary(a, UnaryOpType::LOG); }
-inline Tensor tanh     (const Tensor &a) { return eltwise_unary(a, UnaryOpType::TANH); }
+inline Tensor exp     (const Tensor &a, bool profile_device=false) { return eltwise_unary(a, UnaryOpType::EXP, profile_device); }
+inline Tensor recip   (const Tensor &a, bool profile_device=false) { return eltwise_unary(a, UnaryOpType::RECIP, profile_device); }
+inline Tensor gelu    (const Tensor &a, bool profile_device=false) { return eltwise_unary(a, UnaryOpType::GELU, profile_device); }
+inline Tensor relu    (const Tensor &a, bool profile_device=false) { return eltwise_unary(a, UnaryOpType::RELU, profile_device); }
+inline Tensor sqrt    (const Tensor &a, bool profile_device=false) { return eltwise_unary(a, UnaryOpType::SQRT, profile_device); }
+inline Tensor sigmoid (const Tensor &a, bool profile_device=false) { return eltwise_unary(a, UnaryOpType::SIGMOID, profile_device); }
+inline Tensor log     (const Tensor &a, bool profile_device=false) { return eltwise_unary(a, UnaryOpType::LOG, profile_device); }
+inline Tensor tanh     (const Tensor &a, bool profile_device=false) { return eltwise_unary(a, UnaryOpType::TANH, profile_device); }
 
 }  // namespace tt_metal
 

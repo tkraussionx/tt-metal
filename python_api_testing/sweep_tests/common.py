@@ -1,9 +1,12 @@
 import argparse
 import random
+import pandas
+import ast
 from itertools import product
 from functools import partial
 
 from python_api_testing.sweep_tests import generation_funcs
+from pymetal import ttmetal as ttm
 
 fieldnames = [
     "test_name",
@@ -12,7 +15,15 @@ fieldnames = [
     "status",
     "test_output",
     "pass/fail",
+    "parallelization_strategy",
+    "num_cores",
+    "cores_x",
+    "cores_y",
+    "launchkernels_time_ns",
+    "kernel_runtime_ns",
 ]
+
+cycle_count_to_ns = 1.2
 
 
 def run_test(
@@ -22,6 +33,7 @@ def run_test(
     data_gen_funcs,
     output_comparison_func,
     pcie_slot=0,
+    profile_device=False,
 ):
     tensor_inputs = []
 
@@ -29,7 +41,7 @@ def run_test(
         tensor_input = data_gen_func(input_shape)
         tensor_inputs.append(tensor_input)
 
-    ttmetal_out = ttmetal_op(*tensor_inputs, pcie_slot)
+    ttmetal_out = ttmetal_op(*tensor_inputs, pcie_slot, profile_device)
     pytorch_out = pytorch_op(*tensor_inputs)
 
     result, output = output_comparison_func(pytorch_out, ttmetal_out)
@@ -37,10 +49,104 @@ def run_test(
 
 
 def run_test_and_save_results(
-    results_csv_writer, test_name, input_shapes, data_seed, *run_test_args
+    results_csv_writer,
+    test_name,
+    input_shapes,
+    data_seed,
+    output_folder,
+    profile_device,
+    *run_test_args
 ):
     try:
+        parallelization_strategy = "N/A"
+        num_cores = "N/A"
+        launchkernels_perf = "N/A"
+        kernel_runtime = "N/A"
+        cores_x = "N/A"
+        cores_y = "N/A"
+
+        # Set profiler log dump and to overwrite/write a new file instead of appending
+        ttm.device.SetProfilerDir(str(output_folder))
+        ttm.device.FreshProfilerHostLog()
+        ttm.device.FreshProfilerDeviceLog()
+
         test_pass, test_output = run_test(*run_test_args)
+
+        try:
+            # TODO: Files should be unique per chip
+
+            # Get Host Side LaunchKernels Time
+            df_host = pandas.read_csv(
+                output_folder / "profile_log_host.csv", skipinitialspace=True
+            )
+            parallelization_strategies = df_host["Section Name"].unique().tolist()
+            parallelization_strategy = []
+            num_cores = []
+            cores_x = []
+            cores_y = []
+            for p in parallelization_strategies:
+                if "single_core" in p:
+                    parallelization_strategy.append(p)
+                    num_cores.append(1)
+                    cores_x.append(0)
+                    cores_y.append(0)
+                else:
+                    pc = ast.literal_eval(p)
+                    par = pc["parallelization"]
+                    cores = int(pc["num_cores"])
+                    if "cores_x" in pc:
+                        core_x = int(pc["cores_x"])
+                    else:
+                        core_x = "N/A"
+                    if "cores_y" in pc:
+                        core_y = int(pc["cores_y"])
+                    else:
+                        core_y = "N/A"
+                    # par, cores = p.rsplit("_", 1)
+                    parallelization_strategy.append(par)
+                    num_cores.append(cores)
+                    cores_x.append(core_x)
+                    cores_y.append(core_y)
+            if len(parallelization_strategy) == 1:
+                parallelization_strategy = parallelization_strategy[0]
+                num_cores = num_cores[0]
+                cores_x = cores_x[0]
+                cores_y = cores_y[0]
+
+            launchkernels_perf = df_host.loc[
+                df_host["Function Name"] == "LaunchKernels"
+            ]["Delta timer count [ns]"].sum()
+            if profile_device:
+                # Get Device Side BRISC and NCRISC Time
+
+                df_device = pandas.read_csv(
+                    output_folder / "profile_log_device.csv",
+                    skiprows=1,
+                    skipinitialspace=True,
+                ).drop(
+                    columns=["PCIe slot"]
+                )  # Don't need PCIe slot right now
+                # We only care about kernel start/stop
+                df_device = df_device.query("`timer_id`==3 | `timer_id`==2")
+                kernel_runtime = 0
+                for c in [num_cores] if isinstance(num_cores, int) else num_cores:
+                    # 4 markers per core
+                    risc = df_device[: c * 4]
+                    risc_ends_per_core = risc.query("`timer_id`==3")[
+                        "time[cycles since reset]"
+                    ]
+
+                    risc_starts_per_core = risc.query("`timer_id`==2")[
+                        "time[cycles since reset]"
+                    ]
+                    kernel_runtime += (
+                        risc_ends_per_core.max() - risc_starts_per_core.min()
+                    )
+                    df_device = df_device[c * 4 :]
+                kernel_runtime = int(kernel_runtime / cycle_count_to_ns)
+        except Exception as err:
+            print(err)
+            pass
 
         if test_pass:
             test_result = "pass"
@@ -62,6 +168,12 @@ def run_test_and_save_results(
             "status": test_status,
             "test_output": test_output,
             "pass/fail": test_result,
+            "parallelization_strategy": parallelization_strategy,
+            "num_cores": num_cores,
+            "cores_x": cores_x,
+            "cores_y": cores_y,
+            "launchkernels_time_ns": launchkernels_perf,
+            "kernel_runtime_ns": kernel_runtime,
         }
     )
 

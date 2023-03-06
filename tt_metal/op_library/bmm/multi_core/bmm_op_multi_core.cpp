@@ -10,7 +10,7 @@ namespace tt {
 namespace tt_metal {
 
 
-Tensor matmul_multi_core_(const Tensor &a, const Tensor &b, bool bcast_batch) {
+Tensor matmul_multi_core_(const Tensor &a, const Tensor &b, bool bcast_batch, bool profile_device) {
 
     tt_metal::Program *program = new tt_metal::Program();
 
@@ -177,10 +177,15 @@ Tensor matmul_multi_core_(const Tensor &a, const Tensor &b, bool bcast_batch) {
         num_tiles_written += num_output_tiles_per_core[i];
     }
     bool skip_hlkc = false;
-    pass &= tt_metal::CompileProgram(device, program, skip_hlkc);
+    pass &= tt_metal::CompileProgram(device, program, skip_hlkc, profile_device);
     pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
 
     pass &= tt_metal::LaunchKernels(device, program);
+
+    tt_metal::DumpHostProfileResults("\"{'parallelization': 'multi_core', 'num_cores':" + std::to_string(num_cores) + "}\"");
+    if (profile_device){
+		tt_metal::DumpDeviceProfileResults(device, program);
+	}
 
     delete program;
 
@@ -190,12 +195,12 @@ Tensor matmul_multi_core_(const Tensor &a, const Tensor &b, bool bcast_batch) {
     return output;
 }
 
-Tensor matmul_multi_core(const Tensor& a, const Tensor& b) {
-    return matmul_multi_core_(a, b, true);
+Tensor matmul_multi_core(const Tensor& a, const Tensor& b, bool profile_device) {
+    return matmul_multi_core_(a, b, true, profile_device);
 }
 
-Tensor bmm_multi_core(const Tensor& a, const Tensor& b) {
-    return matmul_multi_core_(a, b, false);
+Tensor bmm_multi_core(const Tensor& a, const Tensor& b, bool profile_device) {
+    return matmul_multi_core_(a, b, false, profile_device);
 }
 
 }  // namespace tt_metal

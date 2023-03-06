@@ -17,13 +17,13 @@ struct BinaryOpParallelizationStrategy {
     static const vector<Enum> all() { return { MULTI_CORE, SINGLE_CORE }; }
 };
 
-Tensor eltwise_binary (const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type);
-Tensor eltwise_binary_single_core (const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type);
-Tensor eltwise_binary_multi_core (const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type);
+Tensor eltwise_binary (const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type, bool profile_device=false);
+Tensor eltwise_binary_single_core (const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type, bool profile_device=false);
+Tensor eltwise_binary_multi_core (const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type, bool profile_device=false);
 
-inline Tensor add     (const Tensor &a, const Tensor &b) { return eltwise_binary(a, b, BinaryOpType::ADD); }
-inline Tensor sub     (const Tensor &a, const Tensor &b) { return eltwise_binary(a, b, BinaryOpType::SUB); }
-inline Tensor mul     (const Tensor &a, const Tensor &b) { return eltwise_binary(a, b, BinaryOpType::MUL); }
+inline Tensor add     (const Tensor &a, const Tensor &b, bool profile_device=false) { return eltwise_binary(a, b, BinaryOpType::ADD, profile_device); }
+inline Tensor sub     (const Tensor &a, const Tensor &b, bool profile_device=false) { return eltwise_binary(a, b, BinaryOpType::SUB, profile_device); }
+inline Tensor mul     (const Tensor &a, const Tensor &b, bool profile_device=false) { return eltwise_binary(a, b, BinaryOpType::MUL, profile_device); }
 
 }  // namespace tt_metal
 

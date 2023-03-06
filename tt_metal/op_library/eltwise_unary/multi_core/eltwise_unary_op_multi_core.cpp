@@ -11,7 +11,7 @@ namespace tt {
 
 namespace tt_metal {
 
-Tensor eltwise_unary_multi_core(const Tensor &a, UnaryOpType::Enum op_type) {
+Tensor eltwise_unary_multi_core(const Tensor &a, UnaryOpType::Enum op_type, bool profile_device) {
     tt_metal::Program *program = new tt_metal::Program();
 
 
@@ -132,7 +132,7 @@ Tensor eltwise_unary_multi_core(const Tensor &a, UnaryOpType::Enum op_type) {
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
     bool skip_hlkc = false;
-    tt_metal::CompileProgram(device, program, skip_hlkc);
+    tt_metal::CompileProgram(device, program, skip_hlkc, profile_device);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
@@ -166,6 +166,11 @@ Tensor eltwise_unary_multi_core(const Tensor &a, UnaryOpType::Enum op_type) {
     }
 
     tt_metal::LaunchKernels(device, program);
+
+    tt_metal::DumpHostProfileResults("\"{'parallelization': 'multi_core', 'num_cores':" + std::to_string(num_cores) + "}\"");
+    if (profile_device){
+		tt_metal::DumpDeviceProfileResults(device, program);
+	}
 
     delete program;
 

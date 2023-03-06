@@ -40,15 +40,15 @@ namespace tt {
 
 namespace tt_metal {
 
-Tensor eltwise_binary(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type) {
+Tensor eltwise_binary(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type, bool profile_device) {
 
     switch (eltwise_binary_op_utils::get_parallelization_strategy(a, b)){
         case BinaryOpParallelizationStrategy::MULTI_CORE:
-            return eltwise_binary_multi_core(a, b, op_type);
+            return eltwise_binary_multi_core(a, b, op_type, profile_device);
             break;
         case BinaryOpParallelizationStrategy::SINGLE_CORE:
         default:
-            return eltwise_binary_single_core(a, b, op_type);
+            return eltwise_binary_single_core(a, b, op_type, profile_device);
     }
 
 }

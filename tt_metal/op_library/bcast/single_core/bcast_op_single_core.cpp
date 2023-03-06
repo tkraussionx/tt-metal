@@ -13,7 +13,7 @@ namespace tt {
 
 namespace tt_metal {
 
-Tensor bcast_single_core(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, BcastOpDim::Enum bcast_dim) {
+Tensor bcast_single_core(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, BcastOpDim::Enum bcast_dim, bool profile_device) {
 
     const auto ashape = a.shape();
     const auto bshape = b.shape();
@@ -137,7 +137,7 @@ Tensor bcast_single_core(const Tensor &a, const Tensor &b, BcastOpMath::Enum bca
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
     bool skip_hlkc = false;
-    tt_metal::CompileProgram(device, program, skip_hlkc);
+    tt_metal::CompileProgram(device, program, skip_hlkc, profile_device);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
@@ -173,6 +173,11 @@ Tensor bcast_single_core(const Tensor &a, const Tensor &b, BcastOpMath::Enum bca
     tt_metal::ConfigureDeviceWithProgram(device, program);
 
     tt_metal::LaunchKernels(device, program);
+
+    tt_metal::DumpHostProfileResults("single_core");
+    if (profile_device){
+		tt_metal::DumpDeviceProfileResults(device, program);
+	}
 
     delete program;
 

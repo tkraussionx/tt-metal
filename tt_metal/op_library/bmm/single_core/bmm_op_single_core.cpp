@@ -10,7 +10,7 @@ namespace tt {
 namespace tt_metal {
 
 
-Tensor matmul_single_core_(const Tensor &a, const Tensor &b, bool bcast_batch) {
+Tensor matmul_single_core_(const Tensor &a, const Tensor &b, bool bcast_batch, bool profile_device) {
 
     tt_metal::Program *program = new tt_metal::Program();
     tt_xy_pair core = {0, 0};
@@ -147,11 +147,18 @@ Tensor matmul_single_core_(const Tensor &a, const Tensor &b, bool bcast_batch) {
             );
 
             bool skip_hlkc = false;
-            pass &= tt_metal::CompileProgram(device, program, skip_hlkc);
+            pass &= tt_metal::CompileProgram(device, program, skip_hlkc, profile_device);
             pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
         }
         pass &= tt_metal::LaunchKernels(device, program);
+
+        tt_metal::DumpHostProfileResults("single_core");
+        if (profile_device){
+            tt_metal::DumpDeviceProfileResults(device, program);
+        }
     }
+
+    delete program;
 
     TT_ASSERT(pass);
 
@@ -159,12 +166,12 @@ Tensor matmul_single_core_(const Tensor &a, const Tensor &b, bool bcast_batch) {
     return output;
 }
 
-Tensor matmul_single_core(const Tensor& a, const Tensor& b) {
-    return matmul_single_core_(a, b, true);
+Tensor matmul_single_core(const Tensor& a, const Tensor& b, bool profile_device) {
+    return matmul_single_core_(a, b, true, profile_device);
 }
 
-Tensor bmm_single_core(const Tensor& a, const Tensor& b) {
-    return matmul_single_core_(a, b, false);
+Tensor bmm_single_core(const Tensor& a, const Tensor& b, bool profile_device) {
+    return matmul_single_core_(a, b, false, profile_device);
 }
 
 }  // namespace tt_metal

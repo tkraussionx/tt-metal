@@ -9,7 +9,7 @@ namespace tt {
 
 namespace tt_metal {
 
-Tensor eltwise_unary_single_core(const Tensor &a, UnaryOpType::Enum op_type) {
+Tensor eltwise_unary_single_core(const Tensor &a, UnaryOpType::Enum op_type, bool profile_device) {
     tt_metal::Program *program = new tt_metal::Program();
 
     tt_xy_pair core = {0, 0};
@@ -115,7 +115,7 @@ Tensor eltwise_unary_single_core(const Tensor &a, UnaryOpType::Enum op_type) {
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
     bool skip_hlkc = false;
-    tt_metal::CompileProgram(device, program, skip_hlkc);
+    tt_metal::CompileProgram(device, program, skip_hlkc, profile_device);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
@@ -143,6 +143,11 @@ Tensor eltwise_unary_single_core(const Tensor &a, UnaryOpType::Enum op_type) {
     );
 
     tt_metal::LaunchKernels(device, program);
+
+    tt_metal::DumpHostProfileResults("single_core");
+    if (profile_device){
+		tt_metal::DumpDeviceProfileResults(device, program);
+	}
 
     delete program;
 

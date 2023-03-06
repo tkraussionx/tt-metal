@@ -9,7 +9,7 @@ namespace tt {
 
 namespace tt_metal {
 
-Tensor reduce_single_core(const Tensor &a, ReduceOpMath::Enum reduce_op, ReduceOpDim::Enum reduce_dim, float scaler) {
+Tensor reduce_single_core(const Tensor &a, ReduceOpMath::Enum reduce_op, ReduceOpDim::Enum reduce_dim, float scaler, bool profile_device) {
 
     const auto shape = a.shape();
     uint32_t W = shape[3], H = shape[2], NC = shape[1]*shape[0];
@@ -120,9 +120,9 @@ Tensor reduce_single_core(const Tensor &a, ReduceOpMath::Enum reduce_op, ReduceO
     ////////////////////////////////////////////////////////////////////////////
     bool skip_hlkc = false;
     if (reduce_op == ReduceOpMath::SUM){
-        tt_metal::CompileProgramNew(device, program);
+        tt_metal::CompileProgramNew(device, program, profile_device);
     } else {
-        tt_metal::CompileProgram(device, program, skip_hlkc);
+        tt_metal::CompileProgram(device, program, skip_hlkc, profile_device);
     }
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
@@ -158,6 +158,11 @@ Tensor reduce_single_core(const Tensor &a, ReduceOpMath::Enum reduce_op, ReduceO
     );
 
     tt_metal::LaunchKernels(device, program);
+
+    tt_metal::DumpHostProfileResults("single_core");
+    if (profile_device){
+		tt_metal::DumpDeviceProfileResults(device, program);
+	}
 
     delete program;
 

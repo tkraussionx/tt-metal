@@ -91,7 +91,7 @@ namespace tt {
 namespace tt_metal {
 
 
-Tensor bcast(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, BcastOpDim::Enum bcast_dim) {
+Tensor bcast(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, BcastOpDim::Enum bcast_dim, bool profile_device) {
     const auto ashape = a.shape();
     const auto bshape = b.shape();
     u32 N  = ashape[0], C  = ashape[1], H  = ashape[2], W  = ashape[3];
@@ -114,17 +114,17 @@ Tensor bcast(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, Bca
 
     switch (bcast_op_utils::get_parallelization_strategy(a, bcast_dim)){
         case BcastOpParallelizationStrategy::MULTI_CORE_H:
-            return bcast_multi_core_h(a, b, bcast_math, bcast_dim);
+            return bcast_multi_core_h(a, b, bcast_math, bcast_dim, profile_device);
             break;
         case BcastOpParallelizationStrategy::MULTI_CORE_W:
-            return bcast_multi_core_w(a, b, bcast_math, bcast_dim);
+            return bcast_multi_core_w(a, b, bcast_math, bcast_dim, profile_device);
             break;
         case BcastOpParallelizationStrategy::MULTI_CORE_HW:
-            return bcast_multi_core_hw(a, b, bcast_math, bcast_dim);
+            return bcast_multi_core_hw(a, b, bcast_math, bcast_dim, profile_device);
             break;
         case BcastOpParallelizationStrategy::SINGLE_CORE:
         default:
-            return bcast_single_core(a, b, bcast_math, bcast_dim);
+            return bcast_single_core(a, b, bcast_math, bcast_dim, profile_device);
     }
 }
 

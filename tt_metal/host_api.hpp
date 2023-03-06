@@ -94,6 +94,8 @@ void FreshProfilerHostLog();
 void FreshProfilerDeviceLog();
 
 
+void setProfilerNewFile();
+
 // ==================================================
 //                  HOST API: host and device
 // ==================================================

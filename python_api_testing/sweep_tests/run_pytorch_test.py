@@ -33,6 +33,8 @@ def run_pytorch_test(args):
     ################# PARSE ARGS #################
     pcie_slot = args.pcie_slot
     logger.info(f"Running on device {pcie_slot} for test.")
+    profile_device = args.profile_device
+    logger.info(f"Profiling kernels for test: {profile_device}")
 
     ################# PARSE TEST CONFIGS #################
     with open(args.input_test_config, "r") as stream:
@@ -78,12 +80,15 @@ def run_pytorch_test(args):
                     test_name,
                     input_shapes,
                     data_seed,
+                    output_folder,
+                    profile_device,
                     op_map[test_name]["ttmetal_op"],
                     op_map[test_name]["pytorch_op"],
                     input_shapes,
                     datagen_funcs,
                     comparison_func,
                     pcie_slot,
+                    profile_device,
                 )
                 results_csv.flush()
 
@@ -108,6 +113,12 @@ if __name__ == "__main__":
         default=0,
         type=int,
         help="Virtual PCIE slot of GS device to run on",
+    )
+    parser.add_argument(
+        "-p",
+        "--profile-device",
+        action="store_true",
+        help="Enable device side profiling",
     )
 
     args = parser.parse_args()

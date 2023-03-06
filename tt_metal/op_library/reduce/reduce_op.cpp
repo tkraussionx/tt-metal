@@ -53,21 +53,21 @@ ReduceOpParallelizationStrategy::Enum get_parallelization_strategy(const Tensor 
 namespace tt {
 namespace tt_metal {
 
-Tensor reduce (const Tensor &a, ReduceOpMath::Enum reduce_op, ReduceOpDim::Enum reduce_dim, float scaler) {
+Tensor reduce (const Tensor &a, ReduceOpMath::Enum reduce_op, ReduceOpDim::Enum reduce_dim, float scaler, bool profile_device) {
 
     switch (reduce_op_utils::get_parallelization_strategy(a, reduce_dim)){
         case ReduceOpParallelizationStrategy::MULTI_CORE_H:
-            return reduce_multi_core_h(a, reduce_op, reduce_dim, scaler);
+            return reduce_multi_core_h(a, reduce_op, reduce_dim, scaler, profile_device);
             break;
          case ReduceOpParallelizationStrategy::MULTI_CORE_W:
-            return reduce_multi_core_w(a, reduce_op, reduce_dim, scaler);
+            return reduce_multi_core_w(a, reduce_op, reduce_dim, scaler, profile_device);
             break;
          case ReduceOpParallelizationStrategy::MULTI_CORE_HW:
-            return reduce_multi_core_hw(a, reduce_op, reduce_dim, scaler);
+            return reduce_multi_core_hw(a, reduce_op, reduce_dim, scaler, profile_device);
             break;
         case ReduceOpParallelizationStrategy::SINGLE_CORE:
         default:
-            return reduce_single_core(a, reduce_op, reduce_dim, scaler);
+            return reduce_single_core(a, reduce_op, reduce_dim, scaler, profile_device);
     }
 
 }

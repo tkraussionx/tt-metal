@@ -22,11 +22,11 @@ struct ReduceOpParallelizationStrategy {
 };
 
 // TODO: Accept parallelization
-Tensor reduce(const Tensor &a, ReduceOpMath::Enum reduce_math, ReduceOpDim::Enum reduce_dim, float scaler = 1.0f);
-Tensor reduce_single_core(const Tensor &a, ReduceOpMath::Enum reduce_math, ReduceOpDim::Enum reduce_dim, float scaler = 1.0f);
-Tensor reduce_multi_core_h(const Tensor &a, ReduceOpMath::Enum reduce_math, ReduceOpDim::Enum reduce_dim, float scaler = 1.0f);
-Tensor reduce_multi_core_w(const Tensor &a, ReduceOpMath::Enum reduce_math, ReduceOpDim::Enum reduce_dim, float scaler = 1.0f);
-Tensor reduce_multi_core_hw(const Tensor &a, ReduceOpMath::Enum reduce_math, ReduceOpDim::Enum reduce_dim, float scaler = 1.0f);
+Tensor reduce(const Tensor &a, ReduceOpMath::Enum reduce_math, ReduceOpDim::Enum reduce_dim, float scaler = 1.0f, bool profile_device=false);
+Tensor reduce_single_core(const Tensor &a, ReduceOpMath::Enum reduce_math, ReduceOpDim::Enum reduce_dim, float scaler = 1.0f, bool profile_device=false);
+Tensor reduce_multi_core_h(const Tensor &a, ReduceOpMath::Enum reduce_math, ReduceOpDim::Enum reduce_dim, float scaler = 1.0f, bool profile_device=false);
+Tensor reduce_multi_core_w(const Tensor &a, ReduceOpMath::Enum reduce_math, ReduceOpDim::Enum reduce_dim, float scaler = 1.0f, bool profile_device=false);
+Tensor reduce_multi_core_hw(const Tensor &a, ReduceOpMath::Enum reduce_math, ReduceOpDim::Enum reduce_dim, float scaler = 1.0f, bool profile_device=false);
 
 }  // namespace tt_metal
 
