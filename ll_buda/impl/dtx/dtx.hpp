@@ -22,12 +22,26 @@ using namespace std;
 //                      CLASSES
 // ========================================================
 
+class TensorData {
+    public:
+        vector<int> data;
+        int rank;
+        vector<int> shape;
+        int volume;
+
+        TensorData(vector<int> shape);
+
+        void init_increasing();
+        void print();
+        void generate_csv(string filename);
+};
+
 class Tensor {
-    public: 
+    public:
         vector<int> str;
         vector<int> end;
         int rank = -1;
-        
+
         Tensor(vector<int> str, vector<int> end){
             this->str = str;
             this->end = end;
@@ -39,17 +53,17 @@ class Tensor {
         };
 
         int volume();
-        
+
         void print();
         string get_string();
 };
 
 class TensorPair {
     public:
-        Tensor * src_tensor;    // Tensor range    
+        Tensor * src_tensor;    // Tensor range
         int src_group;          // ID of the group to which the src_tensor is pointing
         Tensor * dst_tensor;    // Tensor Range
-        
+
         TensorPair(Tensor * src_tensor,  Tensor * dst_tensor) {
             this->src_tensor = src_tensor;
             this->src_group = 0;

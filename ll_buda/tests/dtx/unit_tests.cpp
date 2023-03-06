@@ -344,6 +344,38 @@ bool test_pass_convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1() {
     return pass;
 }
 
+bool test_transpose_xy() {
+    TensorData * t = new TensorData({32,32});
+    t->print();
+    t->generate_csv("tensor1");
+
+    return true;
+}
+
+bool test_tensor_evaluate() {
+    TransformationNode * node0 = new TransformationNode("producer", 1);
+    TransformationNode * node1 = new TransformationNode("tx1", 1);
+
+    // NODE 0:
+    node0->groups[0]->shape = {40};
+
+    // NODE 1:
+    node1->groups[0]->shape = {40};
+    node1->groups[0]->tensor_pairs.push_back(  new TensorPair( new Tensor({0},  {20}), 1, new Tensor({20}, {40}))  );
+    node1->groups[0]->tensor_pairs.push_back(  new TensorPair( new Tensor({20}, {40}), 1, new Tensor({0}, {20}))   );
+
+    DataTransformations * dtx = new DataTransformations();
+    dtx->transformations.push_back(node0);
+    dtx->transformations.push_back(node1);
+
+    TensorData * t = new TensorData({40});
+    t->print();
+    t->generate_csv("tensor1");
+
+    //TensorData * t_out = dtx->evaluate(t_in);
+
+}
+
 void run_dtx_tests() {
     bool pass = true;
 
@@ -369,6 +401,11 @@ void run_dtx_tests() {
     // pass &= test_pass_convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1();
     // printf("test_pass_convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1 - %d\n\n", pass);
 
+    //pass &= test_transpose_xy();
+    //printf("test_transpose_xy - %d\n\n", pass);
+
+    //pass &= test_tensor_evaluate();
+    //printf("test_tensor_evaluate - %d\n\n", pass);
 
     if (pass == true) cout << "\nTESTS PASSED\n\n\n" << endl;
     else cout << "TESTS FAILED\n\n\n" << endl;
