@@ -324,25 +324,6 @@ bool test_pass_tilize_and_store() {
     return pass;
 }
 
-bool test_pass_convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1() {
-    bool pass = true;
-
-    // Test #1
-    DataTransformations * dtx = new DataTransformations();
-    TransformationNode * node0 = new TransformationNode("producer", 1);
-
-    int x = 5;
-    int y = 5;
-    int z = 128;
-
-
-    node0->groups[0]->shape = {1, z*y*x};
-    dtx->transformations.push_back(node0);
-
-    pass &= convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1(dtx);
-
-    return pass;
-}
 
 bool test_transpose_xy() {
     TensorData * t = new TensorData({32,32});
@@ -374,6 +355,43 @@ bool test_tensor_evaluate() {
 
     //TensorData * t_out = dtx->evaluate(t_in);
 
+    return true;
+}
+
+bool test_pass_transpose_xy() {
+    bool pass = true;
+    DataTransformations * dtx = new DataTransformations();
+    TransformationNode * node0 = new TransformationNode("producer", 1);
+    node0->groups[0]->shape = {40, 50};
+    dtx->transformations.push_back(node0);
+    pass &= transpose_xy(dtx);
+    dtx->print();
+    return pass;
+}
+
+bool test_pass_transpose_yz() {
+    bool pass = true;
+    DataTransformations * dtx = new DataTransformations();
+    TransformationNode * node0 = new TransformationNode("producer", 1);
+    node0->groups[0]->shape = {2, 3, 4};
+    dtx->transformations.push_back(node0);
+    pass &= transpose_yz(dtx);
+    dtx->print();
+    return pass;
+}
+
+bool test_pass_convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1() {
+    bool pass = true;
+    DataTransformations * dtx = new DataTransformations();
+    TransformationNode * node0 = new TransformationNode("producer", 1);
+    node0->groups[0]->shape = {2, 3, 4};
+    dtx->transformations.push_back(node0);
+    pass &= convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1(dtx);
+    dtx->print();
+    return pass;
+
+
+    return true;
 }
 
 void run_dtx_tests() {
@@ -398,14 +416,21 @@ void run_dtx_tests() {
     // pass &= test_pass_tilize_and_store();
     // printf("test_pass_tilize_and_store - %d\n\n", pass);
 
-    // pass &= test_pass_convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1();
-    // printf("test_pass_convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1 - %d\n\n", pass);
-
     //pass &= test_transpose_xy();
     //printf("test_transpose_xy - %d\n\n", pass);
 
     //pass &= test_tensor_evaluate();
     //printf("test_tensor_evaluate - %d\n\n", pass);
+
+    // pass &= test_pass_transpose_xy();
+    // printf("test_pass_transpose_xy - %d\n\n", pass);
+
+    //pass &= test_pass_transpose_yz();
+    //printf("test_pass_transpose_yz - %d\n\n", pass);
+
+    pass &= test_pass_convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1();
+    printf("test_pass_transpose_xy - %d\n\n", pass);
+
 
     if (pass == true) cout << "\nTESTS PASSED\n\n\n" << endl;
     else cout << "TESTS FAILED\n\n\n" << endl;

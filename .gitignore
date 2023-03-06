@@ -71,3 +71,8 @@ gpai/gpai/*.so
 
 # exclude MNIST etc model downloads
 data/
+
+runme.sh
+
+#exclude Tensor generated heatmaps (debug)
+*.png

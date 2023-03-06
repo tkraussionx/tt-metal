@@ -42,7 +42,7 @@ bool generate_transfer_addresses_tiled_data(DataTransformations * dtx);
 //                 PART 2: TENSOR LAYOUTs
 //
 // Terminology:
-//     RM - row major 
+//     RM - row major
 //     Tile - Tiled, 32x32
 //     CL - ChannelsLast
 // ========================================================
@@ -50,15 +50,15 @@ bool generate_transfer_addresses_tiled_data(DataTransformations * dtx);
 // Slice into tiles (32x32) - WORKS?
 bool tilize_and_store(DataTransformations * dtx, vector<int> dim_order);
 
-// Slice into tiles and store into row-major, col-major, or any other dim order - IS THIS NOW OBSOLETE? 
+// Slice into tiles and store into row-major, col-major, or any other dim order - IS THIS NOW OBSOLETE?
 bool slice_into_tiles_and_store(DataTransformations * dtx, vector<int> dim_order);
 
 bool convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1(DataTransformations * dtx);
 
 // Convert from a particular layout, stored in 1 place (ex, CPU), to the same layout, stored in 8 places (ex. device DRAM), with sharding
 bool convert_tensor_layout_CL1_to_CL8(DataTransformations * dtx);       // need for CNN bring up
-bool convert_tensor_layout_RM1_to_RM8(DataTransformations * dtx);       
-bool convert_tensor_layout_Tile1_to_Tile8(DataTransformations * dtx);       
+bool convert_tensor_layout_RM1_to_RM8(DataTransformations * dtx);
+bool convert_tensor_layout_Tile1_to_Tile8(DataTransformations * dtx);
 
 // ========================================================
 //             PART 3: PARALLELIZATION & SLICING
@@ -73,7 +73,7 @@ bool parallelize_generic_tensor_slice(DataTransformations * dtx, vector<int> sli
 // ========================================================
 
 // For stress testing purposes (not a real OP)
-bool random_tile_reshuffle(DataTransformations * dtx);  
+bool random_tile_reshuffle(DataTransformations * dtx);
 
 // Pytorch reshape op
 bool reshape(DataTransformations * dtx, vector<int> reshaped_tensor);
@@ -83,6 +83,12 @@ bool transpose_xy_of_tiles(DataTransformations * dtx);
 
 // Pytorch permute op (with some limitations, can not permute with X-dim, this requires a decomposition into TransposeXY+TransposeY?)
 bool permute(DataTransformations * dtx, vector<int> permute_dims);
+
+// An abstract Transpose XY, which neds to be canceled out with other TransposeXY transformations,
+// or explicitly executed on the device.
+bool transpose_xy(DataTransformations * dtx);
+
+bool transpose_yz(DataTransformations * dtx);
 
 // ========================================================
 //             PART 5: CONVOLUTIONs

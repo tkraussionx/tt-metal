@@ -20,6 +20,8 @@ LL_BUDA_IMPL_SRCS = \
 	ll_buda/impl/dtx/pass_generate_transfer_addresses.cpp \
 	ll_buda/impl/dtx/pass_reverse_transformations.cpp \
 	ll_buda/impl/dtx/pass_tilize.cpp \
+	ll_buda/impl/dtx/pass_transpose_xy.cpp \
+	ll_buda/impl/dtx/pass_transpose_yz.cpp \
 	ll_buda/impl/dtx/pass_util.cpp \
 	ll_buda/impl/dtx/util.cpp \
 	ll_buda/impl/dtx/util_vector_of_ints.cpp \
