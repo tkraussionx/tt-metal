@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
         ////////////////////////////////////////////////////////////////////////////
         //                      Application Setup
         ////////////////////////////////////////////////////////////////////////////
-        std::array<uint32_t, 4> shape = {1, 1, TILE_HEIGHT, TILE_WIDTH};
+        std::array<uint32_t, 4> shape = {1, 1, 10*TILE_HEIGHT, 12*TILE_WIDTH};
         // Allocates a DRAM buffer on device populated with values specified by initialize
         Tensor a = Tensor(shape, Initialize::INCREMENT, DataType::BFLOAT16, Layout::TILE, device);
 
@@ -84,9 +84,6 @@ int main(int argc, char **argv) {
         ////////////////////////////////////////////////////////////////////////////
         ll_buda::Tensor host_a = a.to(host); // Move tensor a to host to validate
         auto host_vec = *reinterpret_cast<std::vector<bfloat16>*>(host_a.data_ptr());
-        for(uint32_t i = 0; i < host_vec.size(); i++) {
-            std::cout << "host vec at i=" << i << ", =" << host_vec[i] << std::endl;
-        }
         auto golden_vec = *reinterpret_cast<std::vector<bfloat16>*>(perform_transpose_wh(host_a).data_ptr());
         auto result_vec = *reinterpret_cast<std::vector<bfloat16>*>(d.data_ptr());
         if(golden_vec != result_vec) {

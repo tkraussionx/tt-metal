@@ -259,7 +259,7 @@ Tensor transpose_wh_multi_core(const Tensor &a) {
         ll_buda::DataMovementProcessor::RISCV_0,
         ll_buda::NOC::RISCV_0_default);
 
-    void *hlk_args = new hlk_transpose_wh::hlk_args_t{ .NHtWt = int(Ht*Wt*NC) };
+    void *hlk_args = new hlk_transpose_wh::hlk_args_t{ .NHtWt = int(1*1*NC) }; // 1 core is doing 1 tile per channel
     ll_buda::ComputeKernelArgs *eltwise_binary_args = ll_buda::InitializeCompileTimeComputeKernelArgs(all_cores, hlk_args, sizeof(hlk_transpose_wh::hlk_args_t));
 
     bool fp32_dest_acc_en = false;
@@ -285,6 +285,8 @@ Tensor transpose_wh_multi_core(const Tensor &a) {
     //                      Execute Application
     ////////////////////////////////////////////////////////////////////////////
     ll_buda::ConfigureDeviceWithProgram(device, program);
+    std::cout << "Num cores r " << num_cores_r << std::endl;
+    std::cout << "Num cores c " << num_cores_c << std::endl;
     for(int i = 0; i < num_cores_r; i++) {
         for(int j = 0; j < num_cores_c; j++) {
             int core_index = i * num_cores_c + j;
