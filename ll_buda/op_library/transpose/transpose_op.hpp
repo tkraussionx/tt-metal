@@ -8,6 +8,7 @@ namespace ll_buda {
 
 // TODO: Accept parallelization
 Tensor transpose(const Tensor &a);
+Tensor transpose_wh_multi_core(const Tensor &a);
 Tensor transpose_hc(const Tensor &a);
 
 }  // namespace ll_buda

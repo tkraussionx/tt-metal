@@ -13,9 +13,8 @@ namespace tensor_impl {
 template <class T>
 inline std::vector<T> initialize_row_major_tensor_data(const std::array<uint32_t, 4> &shape, Initialize init_type, int rand_max_val = 100, int seed = 0) {
     std::vector<T> values;
-
-    auto get_val = [&init_type, shape, rand_max_val, seed](int x, int y, int z, int w) {
-        auto rand_float = std::bind(std::uniform_real_distribution<float>(0, rand_max_val), std::mt19937(seed));
+    auto rand_float = std::bind(std::uniform_real_distribution<float>(0, rand_max_val), std::mt19937(seed));
+    auto get_val = [&init_type, shape, &rand_float](int x, int y, int z, int w) {
         float val;
         switch (init_type) {
             case Initialize::ZEROS:

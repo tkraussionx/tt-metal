@@ -7,6 +7,8 @@ LL_BUDA_TESTS += \
 		 ll_buda/tests/dtx/overlap \
 		 ll_buda/tests/dtx/collapse_transformations \
 		 ll_buda/tests/ops/test_transpose_op \
+		 ll_buda/tests/ops/test_transpose_wh_single_core \
+		 ll_buda/tests/ops/test_transpose_wh_multi_core \
 		 ll_buda/tests/ops/test_reduce_op \
 		 ll_buda/tests/ops/test_bcast_op \
 		 ll_buda/tests/ops/test_bmm_op \
