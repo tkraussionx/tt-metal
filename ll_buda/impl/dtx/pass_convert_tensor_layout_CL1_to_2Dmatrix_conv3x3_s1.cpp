@@ -9,6 +9,9 @@ bool convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1(DataTransformations * dtx)
     Notes:
     Should not support groups (I think). This transformation has to be applied before parallelizations.
     What if it's applied to a DRAM swizzled layout - need to think about that.
+
+    Note: Input activatins need to already be padded. Padding not supported yet.
+    // int pad = 1; // all around
     */
 
     bool DEBUG = true;
@@ -24,69 +27,50 @@ bool convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1(DataTransformations * dtx)
     TransformationNode * consumer = new TransformationNode("convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1", producer->groups.size());
     dtx->transformations.push_back(consumer);
 
+    // Calculate producer / consumer shapes
+    vector<int> producer_shape = producer->groups[0]->shape;
+    int rank = producer_shape.size();
+
+    // Calculate the consumer shape
+    int kernel_x = 3;
+    int kernel_y = 3;
+    int consumer_shape_x = kernel_x * kernel_y;
+    int consumer_shape_y =  (producer_shape[Y(rank)] - 2)  *  (producer_shape[Z(rank)] - 2);
+    vector<int> consumer_shape = {consumer_shape_y, consumer_shape_x};
+    consumer->groups[0]->shape = {consumer_shape_y, consumer_shape_x};
 
 
+    int consumer_y = 0;
+    int consumer_x = 0;
 
+    for (int producer_y=1; producer_y<producer_shape[Y(rank)]-1; producer_y++) {
+    for (int producer_z=1; producer_z<producer_shape[Z(rank)]-1; producer_z++) {
 
+        for (int kernel_x=-1; kernel_x<2; kernel_x++) {
+        for (int kernel_y=-1; kernel_y<2; kernel_y++) {
 
-    // Setup
-    vector<int> shape = producer->groups[0]->shape;
-    int rank = shape.size();
-    vector<int> channel_shape = vector_pad_on_left({shape[0]}, rank-1, 1);
+            vector<int> sweep_zy = { producer_z + kernel_y, producer_y + kernel_x };
 
-    int x_size = shape[rank-1];
-    int y_size = shape[rank-2];
+            // Producer str/end
+            vector<int> producer_str = { producer_z + kernel_y, producer_y + kernel_x, 0};
+            vector<int> producer_end = { producer_z + kernel_y, producer_y + kernel_x, producer_shape[X(rank)]};
 
-    if (DEBUG) {
-        cout << s(2) << "activation shape = " << v2s(shape) << endl;
-        cout << s(2) << "channel shape = " << v2s(channel_shape) << endl;
-        cout << s(2) << "x/y_size = " << x_size << ", " << y_size << endl;
-    }
+            vector<int> consumer_str = {consumer_y, consumer_x};
+            vector<int> consumer_end = {consumer_y, consumer_x + producer_shape[X(rank)]};
 
-    // Kernel Window
-    int kernel_size_x = 3;
-    int kernel_size_y = 3;
-    int activation_size_x = shape[rank-1];
-    int activation_size_y = shape[rank-2];
+            TensorPair * tp = new TensorPair(new Tensor({producer_str}, {producer_end}),
+                                            0,
+                                            new Tensor({consumer_str}, {consumer_end}));
+            consumer->groups[0]->tensor_pairs.push_back(tp);
 
-    TensorPairGroup * consumer_group = consumer->groups[0];
-    //consumer_group->shape = {, };
+            //if (DEBUG) cout << s(2) << "src = " << v2s(src_str) << "-" << v2s(src_end) << " ==> " << v2s(dst_str) << "-" << v2s(dst_end) << endl;
 
+            consumer_x += producer_shape[X(rank)]; // length of channel
 
-    // 2D Matrix destination:
-    int matrix2d_x = 0;
-    int matrix2d_y = 0;
+        }} // done with kernel_x/y sweep
 
-    // Do the work
-
-    // Sweep over the face of the activation
-    for (int y=1; y<y_size-1; y++) {
-        for (int x=1; x<x_size-1; x++) {
-            if (DEBUG) cout << s(2) << "[y, x] = [" << y << ", " << x << "]" << endl;
-
-            // Sweep over the kernel window size (hardcoded 3x3 right now)
-            for (int kernel_y=-1; kernel_y<2; kernel_y++){
-                for (int kernel_x=-1; kernel_x<2; kernel_x++){
-
-                    int position_y = y + kernel_y;
-                    int position_x = x + kernel_x;
-
-                    if (DEBUG) {
-                        if (DEBUG) cout << s(4) << "[pos_y, pos_x] = [" << position_y << ", " << position_x << "]" << endl;
-                    }
-
-
-                    //TensorPair * tp = new TensorPair(new Tensor({str}, {end}),
-                    //                                            group_idx,
-                    //                                            new Tensor({consumer_str}, {consumer_end}));
-                    //consumer_group->tensor_pairs.push_back(tp);
-
-                }
-            }
-
-
-        }
-    }
+        consumer_y++;
+    }}
 
 
 

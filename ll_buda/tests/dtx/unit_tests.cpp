@@ -369,15 +369,25 @@ bool test_pass_transpose_xy() {
     return pass;
 }
 
-bool test_pass_transpose_yz() {
+bool run_transpose_yz(vector<int> shape) {
     bool pass = true;
     DataTransformations * dtx = new DataTransformations();
     TransformationNode * node0 = new TransformationNode("producer", 1);
-    node0->groups[0]->shape = {2, 3, 4};
+    node0->groups[0]->shape = shape;
     dtx->transformations.push_back(node0);
     pass &= transpose_yz(dtx);
     dtx->print();
     return pass;
+}
+
+bool test_pass_transpose_yz() {
+    bool pass = true;
+
+    //pass &= run_transpose_yz({2,3,4});
+    pass &= run_transpose_yz({90, 2, 2, 100});
+    pass &= run_transpose_yz({20, 21, 22, 2, 2, 100});
+    return pass;
+
 }
 
 bool test_pass_convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1() {
@@ -425,11 +435,11 @@ void run_dtx_tests() {
     // pass &= test_pass_transpose_xy();
     // printf("test_pass_transpose_xy - %d\n\n", pass);
 
-    //pass &= test_pass_transpose_yz();
-    //printf("test_pass_transpose_yz - %d\n\n", pass);
+    pass &= test_pass_transpose_yz();
+    printf("test_pass_transpose_yz - %d\n\n", pass);
 
-    pass &= test_pass_convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1();
-    printf("test_pass_transpose_xy - %d\n\n", pass);
+    //pass &= test_pass_convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1();
+    //printf("test_pass_transpose_xy - %d\n\n", pass);
 
 
     if (pass == true) cout << "\nTESTS PASSED\n\n\n" << endl;

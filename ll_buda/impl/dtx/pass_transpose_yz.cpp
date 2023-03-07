@@ -11,7 +11,7 @@ vector<int> flip_yz_dims(vector<int> input) {
 }
 
 bool transpose_yz(DataTransformations * dtx) {
-    bool DEBUG = true;
+    bool DEBUG = false;
 
     if (DEBUG) cout << "\n\nPASS: Transpose XY" << endl;
 
@@ -46,14 +46,26 @@ bool transpose_yz(DataTransformations * dtx) {
     for (int producer_y=0; producer_y<producer_shape[Y(rank)]; producer_y++) {
         for (int producer_z=0; producer_z<producer_shape[Z(rank)]; producer_z++) {
 
-            vector<int> src_str = yz_stick_shape;
+            // Source start
+            vector<int> src_str = zeros(rank); //
             src_str[Y(rank)] = producer_y;
             src_str[Z(rank)] = producer_z;
-            vector<int> src_end = src_str;
-            //vector<int> src_end = vector_addition(src_str, yz_ones);
 
-            vector<int> dst_str = flip_yz_dims(src_str);
-            vector<int> dst_end = flip_yz_dims(dst_str);
+            // Source end
+            vector<int> src_end = vector_subtraction(producer_shape, ones(rank));
+            src_end[Y(rank)] = producer_y;
+            src_end[Z(rank)] = producer_z;
+
+
+            // Destination Start
+            vector<int> dst_str = zeros(rank);
+            dst_str[Y(rank)] = producer_z;
+            dst_str[Z(rank)] = producer_y;
+
+            // Destination end
+            vector<int> dst_end = vector_subtraction(consumer_shape, ones(rank));
+            dst_end[Y(rank)] = producer_z;
+            dst_end[Z(rank)] = producer_y;
 
             TensorPair * tp = new TensorPair(new Tensor({src_str}, {src_end}),
                                             0,
