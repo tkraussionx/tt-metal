@@ -167,7 +167,7 @@ void TransformationNode::print(int spaces) {
     for (TensorPairGroup * group : this->groups) {
         cout << s(2 + spaces) << "Group = " << group_index << ";  shape = " << v2s(group->shape) << ", core=" << v2s(group->core) << endl;
 
-        cout << s(4+spaces) << "TensorPairs:" << endl;
+        cout << s(4+spaces) << "TensorPairs (" << group->tensor_pairs.size() << "):" << endl;
         int tp_index = 0;
         for (TensorPair * tp : group->tensor_pairs) {
             cout << s(6+spaces) << "TensorPair[" << tp_index << "]  " << tp->get_string() << endl;

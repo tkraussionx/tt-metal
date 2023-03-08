@@ -1,0 +1,13 @@
+Cleanup
+--------
+
+1. transpose xy - rank generalization
+
+2. reverse txs
+    - remove old reverse, and update tests
+    - update name
+
+3. optimize transposes
+- put into seperate file
+- test
+- generalize for dtx graph

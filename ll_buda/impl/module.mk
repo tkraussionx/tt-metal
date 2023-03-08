@@ -22,6 +22,7 @@ LL_BUDA_IMPL_SRCS = \
 	ll_buda/impl/dtx/pass_tilize.cpp \
 	ll_buda/impl/dtx/pass_transpose_xy.cpp \
 	ll_buda/impl/dtx/pass_transpose_yz.cpp \
+	ll_buda/impl/dtx/pass_convert_abstract_tensor_to_channels_last_layout.cpp \
 	ll_buda/impl/dtx/pass_util.cpp \
 	ll_buda/impl/dtx/util.cpp \
 	ll_buda/impl/dtx/util_vector_of_ints.cpp \

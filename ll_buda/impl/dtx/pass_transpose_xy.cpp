@@ -4,7 +4,7 @@
 
 
 bool transpose_xy(DataTransformations * dtx) {
-    bool DEBUG = true;
+    bool DEBUG = false;
 
     if (DEBUG) cout << "\n\nPASS: Transpose XY" << endl;
 

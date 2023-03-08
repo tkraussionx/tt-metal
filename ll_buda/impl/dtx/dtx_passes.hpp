@@ -32,6 +32,10 @@ bool collapse_transformations(DataTransformations * dtx);               // TO DO
 // WORKS, WELL TESTED, (missing golden check) - Reverse the transformations
 DataTransformations * reverse_transformations(DataTransformations * forward);
 
+DataTransformations * reverse_and_combine_transformations(DataTransformations * dtx_left, DataTransformations * dtx_right);
+
+bool optimize_away_transpose(DataTransformations * dtx);
+
 // Generates src/dst addresses for data transfers for 1D transformation
 bool generate_transfer_addresses(DataTransformations * dtx);
 
@@ -53,7 +57,10 @@ bool tilize_and_store(DataTransformations * dtx, vector<int> dim_order);
 // Slice into tiles and store into row-major, col-major, or any other dim order - IS THIS NOW OBSOLETE?
 bool slice_into_tiles_and_store(DataTransformations * dtx, vector<int> dim_order);
 
+// TO DO: rename to: convert_MathTensor_to_2Dmatrix_conv3x3_s1()
 bool convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1(DataTransformations * dtx);
+
+bool convert_abstract_tensor_to_channels_last_layout(DataTransformations * dtx);
 
 // Convert from a particular layout, stored in 1 place (ex, CPU), to the same layout, stored in 8 places (ex. device DRAM), with sharding
 bool convert_tensor_layout_CL1_to_CL8(DataTransformations * dtx);       // need for CNN bring up
