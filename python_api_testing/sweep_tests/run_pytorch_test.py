@@ -28,6 +28,8 @@ def run_pytorch_test(args):
         )
         sys.exit(1)
     output_folder.mkdir()
+    log_folder = output_folder / "logs"
+    log_folder.mkdir()
     logger.info(f"Starting pytorch tests in: {output_folder}")
 
     ################# PARSE ARGS #################

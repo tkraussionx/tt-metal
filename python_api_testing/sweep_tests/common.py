@@ -76,8 +76,9 @@ def run_test_and_save_results(
             # TODO: Files should be unique per chip
 
             # Get Host Side LaunchKernels Time
+            host_log = output_folder / "profile_log_host.csv"
             df_host = pandas.read_csv(
-                output_folder / "profile_log_host.csv", skipinitialspace=True
+                host_log, skipinitialspace=True
             )
             parallelization_strategies = df_host["Section Name"].unique().tolist()
             parallelization_strategy = []
@@ -116,11 +117,13 @@ def run_test_and_save_results(
             launchkernels_perf = df_host.loc[
                 df_host["Function Name"] == "LaunchKernels"
             ]["Delta timer count [ns]"].sum()
+            prefix = f"{test_name}_" + "_".join("-".join(map(str, shape)) for shape in input_shapes)
+            host_log.rename(host_log.parent / "logs" / f"{prefix}_{host_log.name}")
             if profile_device:
                 # Get Device Side BRISC and NCRISC Time
-
+                device_log = output_folder / "profile_log_device.csv"
                 df_device = pandas.read_csv(
-                    output_folder / "profile_log_device.csv",
+                    device_log,
                     skiprows=1,
                     skipinitialspace=True,
                 ).drop(
@@ -144,6 +147,7 @@ def run_test_and_save_results(
                     )
                     df_device = df_device[c * 4 :]
                 kernel_runtime = int(kernel_runtime / cycle_count_to_ns)
+                device_log.rename(device_log.parent / "logs" / f"{prefix}_{device_log.name}")
         except Exception as err:
             print(err)
             pass
