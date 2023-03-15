@@ -453,7 +453,7 @@ bool CompileProgram(Device *device, Program *program, bool skip_hlkc, bool profi
         build_kernel_for_riscv_options_t dummy_op("dummy_type", dummy_op_name + std::to_string(op_idx++));
 
         auto kernel_group_hash = KernelGroupCompileHash(kernel_group, logical_core, dummy_op_name);
-        std::string op_path = out_dir_path + dummy_op_name + "/" + std::to_string(kernel_group_hash);
+        std::string op_path = out_dir_path + dummy_op_name + "/" + std::to_string(kernel_group_hash) + "_" + std::to_string(device->pcie_slot());
 
         SetCircularBufferDataFormat(program, logical_core, &dummy_op, op_path);
 
