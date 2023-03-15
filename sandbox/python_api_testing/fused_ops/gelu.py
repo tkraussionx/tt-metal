@@ -14,14 +14,6 @@ from sweep_tests import comparison_funcs
 def gelu(x, stable=False):
     H, W = 64, 96
 
-    RMAX = ttm.tensor.ReduceOpMath.MAX
-    RSUM = ttm.tensor.ReduceOpMath.SUM
-    RW = ttm.tensor.ReduceOpDim.W
-    BCW = ttm.tensor.BcastOpDim.W
-    BCHW = ttm.tensor.BcastOpDim.HW
-
-    BCMUL = ttm.tensor.BcastOpMath.MUL
-    BCSUB = ttm.tensor.BcastOpMath.MUL
     z = x
 
     k1 = torch.full((1,1,H, W), 0.5)
@@ -106,7 +98,6 @@ if __name__ == "__main__":
 
     tt_got_back = torch.Tensor(t2_data).reshape((1,1,H,W))
     tt_got_back = untilize(tt_got_back)
-
 
     print("Comparison to golden outputs")
     passing, output = comparison_funcs.comp_allclose_and_pcc(ref_gelu, tt_got_back)
