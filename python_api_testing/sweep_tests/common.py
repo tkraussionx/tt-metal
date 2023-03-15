@@ -55,7 +55,7 @@ def run_test_and_save_results(
     data_seed,
     output_folder,
     profile_device,
-    *run_test_args
+    *run_test_args,
 ):
     try:
         parallelization_strategy = "N/A"
@@ -77,9 +77,7 @@ def run_test_and_save_results(
 
             # Get Host Side LaunchKernels Time
             host_log = output_folder / "profile_log_host.csv"
-            df_host = pandas.read_csv(
-                host_log, skipinitialspace=True
-            )
+            df_host = pandas.read_csv(host_log, skipinitialspace=True)
             parallelization_strategies = df_host["Section Name"].unique().tolist()
             parallelization_strategy = []
             num_cores = []
@@ -117,7 +115,9 @@ def run_test_and_save_results(
             launchkernels_perf = df_host.loc[
                 df_host["Function Name"] == "LaunchKernels"
             ]["Delta timer count [ns]"].sum()
-            prefix = f"{test_name}_" + "_".join("-".join(map(str, shape)) for shape in input_shapes)
+            prefix = f"{test_name}_" + "_".join(
+                "-".join(map(str, shape)) for shape in input_shapes
+            )
             host_log.rename(host_log.parent / "logs" / f"{prefix}_{host_log.name}")
             if profile_device:
                 # Get Device Side BRISC and NCRISC Time
@@ -147,7 +147,9 @@ def run_test_and_save_results(
                     )
                     df_device = df_device[c * 4 :]
                 kernel_runtime = int(kernel_runtime / cycle_count_to_ns)
-                device_log.rename(device_log.parent / "logs" / f"{prefix}_{device_log.name}")
+                device_log.rename(
+                    device_log.parent / "logs" / f"{prefix}_{device_log.name}"
+                )
         except Exception as err:
             print(err)
             pass
@@ -191,7 +193,7 @@ def shapes_and_datagen(shape_dict, datagen_dict):
             generation_funcs.gen_func_with_cast(
                 partial(
                     getattr(generation_funcs, datagen_dict["function"]),
-                    **datagen_dict["args"]
+                    **datagen_dict["args"],
                 ),
                 generation_funcs.supported_dtypes[datagen_dict.get("dtype", "float32")],
             )
@@ -201,7 +203,7 @@ def shapes_and_datagen(shape_dict, datagen_dict):
             generation_funcs.gen_func_with_cast(
                 partial(
                     getattr(generation_funcs, _datagen_dict["function"]),
-                    **_datagen_dict["args"]
+                    **_datagen_dict["args"],
                 ),
                 generation_funcs.supported_dtypes[datagen_dict.get("dtype", "float32")],
             )
@@ -324,6 +326,17 @@ def shapes_and_datagen(shape_dict, datagen_dict):
             sweeps_generator = list(product(*dim_ranges))
             total_shapes = len(sweeps_generator)
             idx_list = _get_sample_indices(total_shapes, num_shapes)
+
+            if "split" in shape_dict:
+                split_params = shape_dict["split"]
+                assert len(split_params) == 2
+
+                split_id, num_splits = split_params
+                assert len(idx_list) % num_splits == 0
+                samples_per_split = len(idx_list) // num_splits
+                idx_list = idx_list[
+                    (split_id - 1) * samples_per_split : split_id * samples_per_split
+                ]
 
             for idx in idx_list:
                 b, c, h, w, outer_dim = sweeps_generator[idx]
