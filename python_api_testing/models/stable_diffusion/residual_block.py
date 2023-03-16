@@ -5,7 +5,7 @@ f = f"{Path(__file__).parent}"
 sys.path.append(f"{f}/..")
 sys.path.append(f"{f}/../..")
 
-
+import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms, datasets
 
 from pymetal import ttmetal as ttm
-from utility_functions import pad_activation, pad_weight, tilize_to_list, get_oom_of_float
+from utility_functions import pad_activation, pad_weight, tilize_to_list, get_oom_of_float, untilize, print_diff_argmax
 from python_api_testing.fused_ops.linear import Linear as TtLinear
 
 
@@ -37,14 +37,17 @@ class ResidualBlock(torch.nn.Module):
         residue = feature
 
         feature = self.groupnorm_feature(feature)
-        return feature
+
         feature = F.silu(feature)
         feature = self.conv_feature(feature)
 
         time = F.silu(time)
         time = self.linear_time(time)
-
-        merged = feature + time.unsqueeze(-1).unsqueeze(-1)
+        print(time.shape, "time")
+        print(feature.shape, "feature")
+        time = time.unsqueeze(-1).unsqueeze(-1)
+        print(time.shape, "after unsqueeze")
+        merged = feature + time
         merged = self.groupnorm_merged(merged)
         merged = F.silu(merged)
         merged = self.conv_merged(merged)
@@ -53,7 +56,7 @@ class ResidualBlock(torch.nn.Module):
 
 
 class TtResidualBlock(torch.nn.Module):
-    def __init__(self,  in_channels, out_channels, n_time=1280, state_dict=None):
+    def __init__(self,  in_channels, out_channels, device, n_time=1280, state_dict=None):
         super().__init__()
         # Note: Only caring about cases where in_channels == out_channels
 
@@ -80,11 +83,14 @@ class TtResidualBlock(torch.nn.Module):
 
         ####### what to implement!
 
-        self.torch_groupnorm_feature = nn.GroupNorm(1, in_channels)
+        self.torch_groupnorm_feature = nn.GroupNorm(32, in_channels)
         self.torch_conv_feature = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
-        # self.linear_time = nn.Linear(n_time, out_channels)
 
-        # self.linear_time = TtLinear(fc1_weight, *fc1_weight_shape[-2:], fc1_bias, device)
+        self.linear_time_weight = torch.ones([1, 1, n_time, out_channels]).flatten().tolist()
+        self.linear_time_bias = torch.zeros([1, 1, n_time, out_channels]).flatten().tolist()
+
+        self.linear_time = TtLinear(n_time, out_channels, self.linear_time_weight, self.linear_time_bias, device)
+
 
         self.torch_groupnorm_merged = nn.GroupNorm(32, out_channels)
         self.torch_conv_merged = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
@@ -97,60 +103,73 @@ class TtResidualBlock(torch.nn.Module):
         ####### What to implement as residual block!
 
 
-
-
-
-
-
     def SiLU(self, x):
-        # return x * sigmoid(x)
-        # return x * (1/(1 + exp(-x)))
-        return ttm.tensor.relu(x)
+        xs = ttm.tensor.sigmoid(x)
+        xs = ttm.tensor.mul(xs, x)
+        return xs
+
+
+    def move_to_cpu(self, x):
+        x_shape = x.shape()
+        x = x.to(host).data()
+        x = torch.tensor(x).reshape(x_shape)
+        return untilize(x)
+
+
+    def move_to_device(self, x):
+        x_shape = x.shape
+        x = ttm.tensor.Tensor(tilize_to_list(x), x_shape, ttm.tensor.DataType.BFLOAT16, ttm.tensor.Layout.TILE, device)
+        return x
+
 
     def forward(self, feature, time):
         residue = feature # make a copy
         # move to cpu and
-        feature = feature.to(host).data() # move to cpu
+        print(feature.shape())
 
-        # print(len(feature))
-        feature = torch.Tensor(feature)
-        # feature = torch.reshape(feature, [2, 320, 64, 64])
-        feature = torch.reshape(feature, [1, 1, 32, 32]) # this should be untilize
+        feature = self.move_to_cpu(feature)
         feature = self.torch_groupnorm_feature(feature)
-        return feature
+        feature = self.move_to_device(feature)
 
         # exec group norm on cpu
         # move from cpu to tensix
-        feature = feature.to(device).data() # move to tensix
+
         feature = self.SiLU(feature)
         # move to cpu again
         # exec conv_feature
-        feature = feature.to(host).data()  # move to cpu
+        feature = self.move_to_cpu(feature)
         feature = self.torch_conv_feature(feature)
         # move from CPU to tensix
-        feature = feature.to(device).data()
-
+        feature = self.move_to_device(feature)
 
         # all on tensix
         time = self.SiLU(time)
-        # time = self.linear_time(time)
+        time = self.linear_time(time)
+        time = ttm.tensor.reshape(time, 32, 320, 32, 32)
+        print("time in tt", time.shape())
+        # time.unsqueeze(-1).unsqueeze(-1) # unnecessary since for tt modules time is 4d initially
 
-        time = time.to(host).data()
-        time.unsqueeze(-1).unsqueeze(-1)
-        time = time.to(device) # to tensix
-        merged == ttm.tensor.add(feature, time)
-        # merged = feature + time.unsqueeze(-1).unsqueeze(-1)
+        # merged = ttm.tensor.add(feature, time) # this is a broadcast?
+        # merged = ttm.tensor.bcast(time, feature, ttm.tensor.BcastOpMath.ADD, ttm.tensor.BcastOpDim.HW)
+
+        merged = feature + time.unsqueeze(-1).unsqueeze(-1)
+
 
         # move from tensix to CPU
-        merged = merged.to(host).data()
+        merged = self.move_to_cpu(merged)
         merged = self.groupnorm_merged(merged)
-        merged = merged.to(device).data()
+
+        merged = self.move_to_device(merged)
         # move back to tensix
+
         merged = self.SiLU(merged)
         # move from tensix to CPU
-        merged = merged.to(host).data() # move to CPU
+
+        merged = self.move_to_cpu(merged)
+
         merged = self.conv_merged(merged)
-        merged = merged.to(device).data()
+
+        merged = self.move_to_device(merged)
 
         return ttm.tensor.add(merged, residue)
 
@@ -170,7 +189,6 @@ if __name__ == "__main__":
     time_shape = [1, 1280]
     feature_shape = [2, 320, 64, 64]
 
-    feature_shape = [1, 32, 32, 32]
 
     torch.manual_seed(123)
     time = torch.randn(time_shape)
@@ -183,21 +201,22 @@ if __name__ == "__main__":
     print("pytorch result is ready!")
 
 
-    # time = torch.reshape(time, [32, 32, 32, 1280])
-    # time = torch.randn([32, 32, 32, 1280])
-    time = torch.randn([1, 1, 32, 32])
-    new_time_shape = [1, 1, 32, 32]
+    tt_time_shape = [32, 32, 32, 1280]
+    tt_time = torch.randn(tt_time_shape)
+
     tt_feature = ttm.tensor.Tensor(tilize_to_list(feature), feature_shape, ttm.tensor.DataType.BFLOAT16, ttm.tensor.Layout.TILE, device)
 
-    tt_time = ttm.tensor.Tensor(tilize_to_list(time), new_time_shape, ttm.tensor.DataType.BFLOAT16, ttm.tensor.Layout.TILE, device)
+    tt_time = ttm.tensor.Tensor(tilize_to_list(tt_time), tt_time_shape, ttm.tensor.DataType.BFLOAT16, ttm.tensor.Layout.TILE, device)
 
-    tt_rb = TtResidualBlock(in_channel, out_channel)
+    tt_rb = TtResidualBlock(in_channel, out_channel, device)
     tt_out = tt_rb(tt_feature, tt_time)
 
-    diff = (abs(torch_out - tt_out) < 0.1).all().item()
+    tt_out = tt_out.to(host).data()
+    tt_out = torch.Tensor(tt_out).reshape(torch_out.shape)
+    tt_untilized_output = untilize(tt_out)
+    print_diff_argmax(tt_untilized_output, torch_out)
 
-    if not diff:
-        print("bad results")
+    assert np.allclose(torch_out.detach().numpy(), tt_untilized_output.numpy(), 1e-5, 0.17)
 
 
     # compare results!
