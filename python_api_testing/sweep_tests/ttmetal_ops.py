@@ -7,7 +7,7 @@ from python_api_testing.models.utility_functions import (
 )
 
 
-def datacopy(pcie_slot, x):
+def datacopy(x, pcie_slot, *args, **kwargs):
     # TODO: Add actual datacopy once tensor op implementation is added
 
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
@@ -29,7 +29,7 @@ def datacopy(pcie_slot, x):
     return output
 
 
-def eltwise_exp(pcie_slot, x):
+def eltwise_exp(x, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -50,7 +50,7 @@ def eltwise_exp(pcie_slot, x):
     return output
 
 
-def eltwise_recip(pcie_slot, x):
+def eltwise_recip(x, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -71,7 +71,7 @@ def eltwise_recip(pcie_slot, x):
     return output
 
 
-def eltwise_sqrt(pcie_slot, x):
+def eltwise_sqrt(x, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -92,7 +92,7 @@ def eltwise_sqrt(pcie_slot, x):
     return output
 
 
-def eltwise_gelu(pcie_slot, x):
+def eltwise_gelu(x, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -113,7 +113,7 @@ def eltwise_gelu(pcie_slot, x):
     return output
 
 
-def eltwise_relu(pcie_slot, x):
+def eltwise_relu(x, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -134,7 +134,7 @@ def eltwise_relu(pcie_slot, x):
     return output
 
 
-def eltwise_sigmoid(pcie_slot, x):
+def eltwise_sigmoid(x, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -155,7 +155,7 @@ def eltwise_sigmoid(pcie_slot, x):
     return output
 
 
-def eltwise_log(pcie_slot, x):
+def eltwise_log(x, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -176,7 +176,7 @@ def eltwise_log(pcie_slot, x):
     return output
 
 
-def eltwise_tanh(pcie_slot, x):
+def eltwise_tanh(x, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -197,7 +197,7 @@ def eltwise_tanh(pcie_slot, x):
     return output
 
 
-def eltwise_add(pcie_slot, x, y):
+def eltwise_add(x, y, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -225,7 +225,7 @@ def eltwise_add(pcie_slot, x, y):
     return output
 
 
-def eltwise_sub(pcie_slot, x, y):
+def eltwise_sub(x, y, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -253,7 +253,7 @@ def eltwise_sub(pcie_slot, x, y):
     return output
 
 
-def eltwise_mul(pcie_slot, x, y):
+def eltwise_mul(x, y, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -281,7 +281,7 @@ def eltwise_mul(pcie_slot, x, y):
     return output
 
 
-def matmul(pcie_slot, x, y):
+def matmul(x, y, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -309,7 +309,7 @@ def matmul(pcie_slot, x, y):
     return output
 
 
-def bmm(pcie_slot, x, y):
+def bmm(x, y, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -337,7 +337,7 @@ def bmm(pcie_slot, x, y):
     return output
 
 
-def bcast_add_h(pcie_slot, x, y):
+def bcast_add_h(x, y, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -367,7 +367,7 @@ def bcast_add_h(pcie_slot, x, y):
     return output
 
 
-def bcast_add_w(pcie_slot, x, y):
+def bcast_add_w(x, y, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -397,7 +397,7 @@ def bcast_add_w(pcie_slot, x, y):
     return output
 
 
-def bcast_add_hw(pcie_slot, x, y):
+def bcast_add_hw(x, y, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -427,7 +427,7 @@ def bcast_add_hw(pcie_slot, x, y):
     return output
 
 
-def bcast_sub_h(pcie_slot, x, y):
+def bcast_sub_h(x, y, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -457,7 +457,7 @@ def bcast_sub_h(pcie_slot, x, y):
     return output
 
 
-def bcast_sub_w(pcie_slot, x, y):
+def bcast_sub_w(x, y, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -487,7 +487,7 @@ def bcast_sub_w(pcie_slot, x, y):
     return output
 
 
-def bcast_sub_hw(pcie_slot, x, y):
+def bcast_sub_hw(x, y, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -517,7 +517,7 @@ def bcast_sub_hw(pcie_slot, x, y):
     return output
 
 
-def bcast_mul_h(pcie_slot, x, y):
+def bcast_mul_h(x, y, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -547,7 +547,7 @@ def bcast_mul_h(pcie_slot, x, y):
     return output
 
 
-def bcast_mul_w(pcie_slot, x, y):
+def bcast_mul_w(x, y, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -577,7 +577,7 @@ def bcast_mul_w(pcie_slot, x, y):
     return output
 
 
-def bcast_mul_hw(pcie_slot, x, y):
+def bcast_mul_hw(x, y, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -607,7 +607,7 @@ def bcast_mul_hw(pcie_slot, x, y):
     return output
 
 
-def reduce_sum_h(pcie_slot, x):
+def reduce_sum_h(x, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -631,7 +631,7 @@ def reduce_sum_h(pcie_slot, x):
     return output
 
 
-def reduce_sum_w(pcie_slot, x):
+def reduce_sum_w(x, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -655,7 +655,7 @@ def reduce_sum_w(pcie_slot, x):
     return output
 
 
-def reduce_sum_hw(pcie_slot, x):
+def reduce_sum_hw(x, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -681,7 +681,7 @@ def reduce_sum_hw(pcie_slot, x):
     return output
 
 
-def reduce_max_h(pcie_slot, x):
+def reduce_max_h(x, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -705,7 +705,7 @@ def reduce_max_h(pcie_slot, x):
     return output
 
 
-def reduce_max_w(pcie_slot, x):
+def reduce_max_w(x, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -729,7 +729,7 @@ def reduce_max_w(pcie_slot, x):
     return output
 
 
-def reduce_max_hw(pcie_slot, x):
+def reduce_max_hw(x, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -755,7 +755,7 @@ def reduce_max_hw(pcie_slot, x):
     return output
 
 
-def transpose_wh(pcie_slot, x):
+def transpose_wh(x, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
@@ -776,7 +776,7 @@ def transpose_wh(pcie_slot, x):
     return output
 
 
-def transpose_hc(pcie_slot, x):
+def transpose_hc(x, pcie_slot, *args, **kwargs):
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, pcie_slot)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
