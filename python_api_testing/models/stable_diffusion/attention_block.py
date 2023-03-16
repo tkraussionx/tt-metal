@@ -46,7 +46,7 @@ class AttentionBlock(torch.nn.Module):
         residue_long = x
 
         x = self.groupnorm(x)
-        return x
+
         x = self.conv_input(x)
 
         n, c, h, w = x.shape
