@@ -56,7 +56,7 @@ namespace bmm_op_utils {
 using namespace tt::tt_metal;
 
 
-tuple<uint32_t, uint32_t, uint32_t, uint32_t> get_large_matmul_params(uint32_t Nt, uint32_t Mt, uint32_t num_cores_x, uint32_t num_cores_y, uint32_t in0_block_w) {
+tuple<uint32_t, uint32_t, uint32_t, uint32_t> get_large_matmul_params(uint32_t Mt, uint32_t Nt, uint32_t num_cores_y, uint32_t num_cores_x, uint32_t in0_block_w) {
     auto Nt_fac = _get_prime_factors(Nt);
     auto Mt_fac = _get_prime_factors(Mt);
     uint32_t Npc_min = 1;
@@ -182,23 +182,32 @@ BmmOpParallelizationStrategy::Enum get_parallelization_strategy(const Tensor &a,
     uint32_t Kt = ashape[3]/TILE_WIDTH;
     uint32_t Nt = bshape[3]/TILE_WIDTH;
     uint32_t in0_block_w = 2;
-    uint32_t per_core_M = 16;
-    uint32_t per_core_N = 16;
 
     tt::tt_metal::Device *device = a.device();
     auto logical_grid_size = device->logical_grid_size();
     uint32_t num_cores_x = logical_grid_size.x;
     uint32_t num_cores_y = logical_grid_size.y;
-    uint32_t num_blocks_total = (Mt / per_core_M) * (Nt / per_core_N);
-    tt_xy_pair core_range = get_core_range((Mt / per_core_M), (Nt / per_core_N), num_cores_y, num_cores_x);
-    if (
-        Mt % per_core_M == 0 and
-        Nt % per_core_N == 0 and
-        Kt % in0_block_w == 0 and
-        num_blocks_total <= num_cores_x * num_cores_y
-    ) {
+
+    // Get large matmul params
+    auto matmul_params = bmm_op_utils::get_large_matmul_params(Mt, Nt, num_cores_y, num_cores_x, in0_block_w);
+    uint32_t per_core_M = std::get<0>(matmul_params);
+    uint32_t per_core_N = std::get<1>(matmul_params);
+    uint32_t out_subblock_h = std::get<2>(matmul_params);
+    uint32_t out_subblock_w = std::get<3>(matmul_params);
+
+    // If no possible params, matmul_params will be (0, 0, 0, 0)
+    if (per_core_M > 0 and B == 1) {
+        tt_xy_pair core_range = get_core_range((Mt / per_core_M), (Nt / per_core_N), num_cores_y, num_cores_x);
         if (core_range.y > 0) {
-            return BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST;
+            // If matmul params are (16, 16, 4, 2), use the default mcast op
+            if (
+                per_core_M == 16 and
+                per_core_N == 16 and
+                out_subblock_h == 4 and
+                out_subblock_w == 2
+            )
+                return BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST;
+            return BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_GENERALIZED;
         }
         return BmmOpParallelizationStrategy::MULTI_CORE_REUSE;
     }
@@ -226,6 +235,9 @@ Tensor matmul(const Tensor& a, const Tensor& b, bool profile_device) {
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST:
             return matmul_multi_core_reuse_mcast(a, b, profile_device);
             break;
+        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_GENERALIZED:
+            return matmul_multi_core_reuse_mcast_generalized(a, b, profile_device);
+            break;
         case BmmOpParallelizationStrategy::SINGLE_CORE:
         default:
             return matmul_single_core(a, b, profile_device);
@@ -242,6 +254,9 @@ Tensor bmm(const Tensor& a, const Tensor& b, bool profile_device) {
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST:
             return bmm_multi_core_reuse_mcast(a, b, profile_device);
+            break;
+        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_GENERALIZED:
+            return bmm_multi_core_reuse_mcast_generalized(a, b, profile_device);
             break;
         case BmmOpParallelizationStrategy::SINGLE_CORE:
         default:
