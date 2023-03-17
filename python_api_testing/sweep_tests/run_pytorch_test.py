@@ -1,3 +1,4 @@
+import os
 import csv
 import sys
 import time
@@ -48,8 +49,39 @@ def run_pytorch_test(args):
     assert "test-list" in pytorch_test_configs_yaml
     pytorch_test_list = pytorch_test_configs_yaml["test-list"]
 
+    default_env_dict = {"TT_PCI_DMA_BUF_SIZE": "1048576"}
+    # Get env variables from CLI
+    args_env_dict = {}
+    if args.env != "":
+        envs = args.env.split(" ")
+        for e in envs:
+            if "=" not in e:
+                name = e
+                value = "1"
+            else:
+                name, value = e.split("=")
+            args_env_dict[name] = value
+
     for test_name, test_config in pytorch_test_list.items():
         assert test_name in op_map
+
+        # Get env variables from yaml (yaml overrides CLI)
+        yaml_env_dict = test_config.get("env", {})
+
+        # Env variables to use (precedence yaml > cli > default)
+        if yaml_env_dict:
+            env_dict = yaml_env_dict
+        elif args_env_dict:
+            env_dict = yaml_env_dict
+        else:
+            env_dict = default_env_dict
+
+        old_env_dict = {}
+        assert isinstance(env_dict, dict)
+        for key, value in env_dict.items():
+            old_env_dict[key] = os.environ.pop(key, None)
+            os.environ[key] = value
+
         shape_dict = test_config["shape"]
         datagen_dict = test_config["datagen"]
         results_csv_path = output_folder / test_config["output-file"]
@@ -82,6 +114,7 @@ def run_pytorch_test(args):
                     test_name,
                     input_shapes,
                     data_seed,
+                    env_dict,
                     output_folder,
                     profile_device,
                     op_map[test_name]["ttmetal_op"],
@@ -93,6 +126,13 @@ def run_pytorch_test(args):
                     profile_device,
                 )
                 results_csv.flush()
+
+        # Unset env variables
+        for key, value in old_env_dict.items():
+            os.environ.pop(key)
+            if value is not None:
+                os.environ[key] = value
+
 
 
 if __name__ == "__main__":
@@ -122,7 +162,13 @@ if __name__ == "__main__":
         action="store_true",
         help="Enable device side profiling",
     )
-
+    parser.add_argument(
+        "-e",
+        "--env",
+        type=str,
+        default="",
+        help="Env variables to set",
+    )
     args = parser.parse_args()
 
     run_pytorch_test(args)
