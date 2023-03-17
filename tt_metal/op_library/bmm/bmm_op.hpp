@@ -30,6 +30,8 @@ Tensor bmm_multi_core_reuse_mcast  (const Tensor &A, const Tensor &B, bool profi
 namespace bmm_op_utils {
 using namespace tt::tt_metal;
 
+tuple<uint32_t, uint32_t, uint32_t, uint32_t> get_large_matmul_params(uint32_t x , uint32_t y, uint32_t num_cores_x, uint32_t num_cores_y, uint32_t in0_block_w);
+
 tt_xy_pair get_core_range(uint32_t num_blocks_rows, uint32_t num_blocks_cols, uint32_t max_num_rows, uint32_t max_num_cols);
 
 BmmOpParallelizationStrategy::Enum get_parallelization_strategy(const Tensor &a, const Tensor &b);
