@@ -11,9 +11,9 @@ from torch.nn import functional as F
 
 import numpy as np
 from pymetal import ttmetal as ttm
-from utility_functions import tilize_to_list, print_diff_argmax, untilize, tilize, tilize_to_list, tt2torch, torch2tt
+from utility_functions import tilize_to_list, print_diff_argmax, untilize, tilize, tilize_to_list
 
-
+from utils import move_to_cpu, move_to_device
 
 
 
@@ -77,14 +77,15 @@ class Upsample2D(nn.Module):
 
 
 class TtUpsampled2d(nn.Module):
-
-    def __init__(self, channels, use_conv=False, use_conv_transpose=False, out_channels=None, name="conv"):
+    def __init__(self, channels, use_conv=False, use_conv_transpose=False, out_channels=None, name="conv", device=None, host=None):
         super().__init__()
         assert not use_conv_transpose, "StableDiffusion's VAE does not use convTranspose, so leaving it out"
         self.channels = channels
         self.out_channels = out_channels or channels
         self.use_conv = use_conv
         self.name = name
+        self.device = device
+        self.host = host
 
         self.conv = None
         if self.use_conv:
@@ -95,24 +96,24 @@ class TtUpsampled2d(nn.Module):
         # TT's execution is done on bfloat16 - casting makes no sense
         assert hidden_states.shape()[1] == self.channels
 
-        hidden_states = tt2torch(hidden_states)
+        hidden_states = move_to_cpu(hidden_states, self.host)
 
         if output_size is None:
             hidden_states = F.interpolate(hidden_states, scale_factor=2.0, mode="nearest")
         else:
             hidden_states = F.interpolate(hidden_states, size=output_size, mode="nearest")
 
-        hidden_states = torch2tt(hidden_states, hidden_states.shape, device)
+        hidden_states = move_to_device(hidden_states, self.device)
 
         if self.use_conv:
-            hidden_states = tt2torch(hidden_states)
+            hidden_states = move_to_cpu(hidden_states, self.host)
             hidden_states = self.conv(hidden_states)
-            hidden_states = torch2tt(hidden_states, hidden_states.shape, device)
+            hidden_states = move_to_device(hidden_states, self.device)
 
         return hidden_states
 
 
-def run_upsample2d_inference(device):
+def run_upsample2d_inference(device, host):
 
     input_shape =  [1, 1, 32, 32]
     input = torch.randn(input_shape)
@@ -122,7 +123,7 @@ def run_upsample2d_inference(device):
 
     tt_input = ttm.tensor.Tensor(tilize_to_list(input), input_shape, ttm.tensor.DataType.BFLOAT16, ttm.tensor.Layout.TILE, device)
 
-    tt_up = TtUpsampled2d(channels)
+    tt_up = TtUpsampled2d(channels, device=device, host=host)
     tt_out = tt_up(tt_input, device).to(host).data()
     tt_out = torch.Tensor(tt_out).reshape(torch_out.shape)
     tt_untilized_output = untilize(tt_out)
@@ -139,5 +140,5 @@ if __name__ == "__main__":
     device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
     ttm.device.InitializeDevice(device)
     host = ttm.device.GetHost()
-    run_upsample2d_inference(device)
+    run_upsample2d_inference(device, host)
     ttm.device.CloseDevice(device)
