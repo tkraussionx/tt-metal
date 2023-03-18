@@ -109,6 +109,7 @@ def run_pytorch_test(args):
                 data_seed = int(time.time())
                 torch.manual_seed(data_seed)
 
+                logger.info(f"Running with shape: {input_shapes} and seed: {data_seed}")
                 test_pass = run_test_and_save_results(
                     results_csv_writer,
                     test_name,
@@ -132,7 +133,6 @@ def run_pytorch_test(args):
             os.environ.pop(key)
             if value is not None:
                 os.environ[key] = value
-
 
 
 if __name__ == "__main__":
