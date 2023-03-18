@@ -198,18 +198,21 @@ BmmOpParallelizationStrategy::Enum get_parallelization_strategy(const Tensor &a,
     // If no possible params, matmul_params will be (0, 0, 0, 0)
     if (per_core_M > 0 and B == 1) {
         tt_xy_pair core_range = get_core_range((Mt / per_core_M), (Nt / per_core_N), num_cores_y, num_cores_x);
-        if (core_range.y > 0) {
-            // If matmul params are (16, 16, 4, 2), use the default mcast op
-            if (
-                per_core_M == 16 and
-                per_core_N == 16 and
-                out_subblock_h == 4 and
-                out_subblock_w == 2
-            )
+        // If matmul params are (16, 16, 4, 2), use the default mcast op
+        if (
+            per_core_M == 16 and
+            per_core_N == 16 and
+            out_subblock_h == 4 and
+            out_subblock_w == 2
+        ) {
+            if (core_range.y > 0)
                 return BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST;
-            return BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_GENERALIZED;
+            return BmmOpParallelizationStrategy::MULTI_CORE_REUSE;
         }
-        return BmmOpParallelizationStrategy::MULTI_CORE_REUSE;
+        else
+            if (core_range.y > 0)
+                return BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_GENERALIZED;
+            return BmmOpParallelizationStrategy::MULTI_CORE_REUSE_GENERALIZED;
     }
     else if (num_output_tiles > 1) {
         return BmmOpParallelizationStrategy::MULTI_CORE;
@@ -235,6 +238,9 @@ Tensor matmul(const Tensor& a, const Tensor& b, bool profile_device) {
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST:
             return matmul_multi_core_reuse_mcast(a, b, profile_device);
             break;
+        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_GENERALIZED:
+            return matmul_multi_core_reuse_generalized(a, b, profile_device);
+            break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_GENERALIZED:
             return matmul_multi_core_reuse_mcast_generalized(a, b, profile_device);
             break;
@@ -254,6 +260,9 @@ Tensor bmm(const Tensor& a, const Tensor& b, bool profile_device) {
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST:
             return bmm_multi_core_reuse_mcast(a, b, profile_device);
+            break;
+        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_GENERALIZED:
+            return bmm_multi_core_reuse_generalized(a, b, profile_device);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_GENERALIZED:
             return bmm_multi_core_reuse_mcast_generalized(a, b, profile_device);
