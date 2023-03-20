@@ -9,6 +9,7 @@ from dash import Dash, dcc, html, Input, Output
 from rich import print
 import plotly.express as px
 import pandas as pd
+import numpy as np
 
 import plot_setup
 
@@ -250,23 +251,141 @@ def main(args):
         for core in deviceData[device].keys():
             for risc in deviceData[device][core].keys():
                 timeSeries = deviceData[device][core][risc]['timeSeries']
-                timeSeries.sort(key=lambda x: x[1])
+                timeSeries.sort(key=lambda x: x[1]) # Sort on timestamp
                 for startTime, endTime in zip(timeSeries[:-1],timeSeries[1:]):
                     ganttData.append(
-                        dict(core=f"{core[0]}-{core[1]}-{risc}", Start=startTime[1], Finish=endTime[1], Resource=f"{startTime[0]}-{endTime[0]}"))
+                        dict(core=core, risc=risc, start=startTime[1], end=endTime[1], duration=(startTime[0],endTime[0])))
 
     df = pd.DataFrame(ganttData)
-    df['delta'] = df['Finish'] - df['Start']
-    minCycle = min(df.Start)
-    df['Start'] = df['Start'] - minCycle
-    df['Finish'] = df['Finish'] - minCycle
+    df['delta'] = df['end'] - df['start']
+    minCycle = min(df.start)
+    df['start'] = df['start'] - minCycle
+    df['end'] = df['end'] - minCycle
 
-    print(df)
-    fig = px.timeline(df, x_start="Start", x_end="Finish", y="core", color="Resource")
-    fig.update_yaxes(autorange="reversed")
-    fig.layout.xaxis.type = 'linear'
-    for i in range(len(fig.data)):
-        fig.data[i].x = (df.delta[i],)
+
+    yVals = sorted(list(set(df.core.tolist())), key=lambda x: x[1]*100 + x[0], reverse=True)
+
+    def return_row_data_tuple(row):
+        return (
+            row.start,
+            row.end,
+            row.delta,
+        )
+
+    def add_x_val_to_core (xVal, xVals, core):
+        for yVal in yVals:
+            xValAdd = 0
+            if core == yVal:
+                xValAdd = xVal
+            xVals.append(xValAdd)
+        return xVals
+
+    devicePlotData = {}
+    for index, row in df.iterrows():
+        if row.core in devicePlotData.keys():
+            if row.risc in devicePlotData[row.core].keys():
+                if row.duration in devicePlotData[row.core][row.risc]["data"].keys():
+                    devicePlotData[row.core][row.risc]["data"][row.duration].append(return_row_data_tuple(row))
+                else:
+                    devicePlotData[row.core][row.risc]["data"][row.duration] = [return_row_data_tuple(row)]
+                devicePlotData[row.core][row.risc]["order"].append((row.duration,
+                                                                   len(devicePlotData[row.core][row.risc]["data"][row.duration])-1))
+            else:
+                devicePlotData[row.core][row.risc] ={
+                    "data": {row.duration:[return_row_data_tuple(row)]},
+                    "order":[(row.duration, 0)]
+                }
+        else:
+            devicePlotData[row.core] = {
+                row.risc:{
+                    "data": {row.duration:[return_row_data_tuple(row)]},
+                    "order":[(row.duration, 0)]
+                }
+            }
+
+    print(devicePlotData)
+
+    riscs = ['BRISC','NCRISC']
+    riscColors = {
+        'BRISC': "rgba(255,0,100,{})",
+        'NCRISC': "rgba(100,0,255,{})",
+    }
+
+    xValsDict = {risc:[] for risc in riscs}
+    traces = {risc:[] for risc in riscs}
+
+    for core in devicePlotData.keys():
+        for risc in devicePlotData[core].keys():
+            for durationType in devicePlotData[core][risc]["order"]:
+                    xValsDict[risc].append(((durationType,core), []))
+
+    for risc in riscs:
+        for xVals in xValsDict[risc]:
+            xVal = 0
+            core = xVals[0][1]
+            duration = xVals[0][0][0]
+            durationIndex = xVals[0][0][1]
+            if risc in devicePlotData[core].keys():
+                xVal = devicePlotData[core][risc]["data"][duration][durationIndex][2]
+
+            add_x_val_to_core(xVal, xVals[1], core)
+
+    print(xValsDict)
+
+    layout = go.Layout(xaxis=dict(title="Cycle count"), yaxis=dict(title="Cores"), hoverlabel=dict(bgcolor="black"))
+    fig = go.Figure(layout=layout)
+
+    fig.add_trace(
+        go.Bar(
+            y=[yVals, [" "] * len(yVals)],
+            x=[0] * len(yVals),
+            orientation="h",
+            showlegend=False,
+            marker=dict(color="rgba(255, 255, 255, 0.0)"),
+        )
+    )
+    for risc in riscs:
+        for xVals in xValsDict[risc]:
+            duration = xVals[0][0][0]
+            if duration == (4,1):
+                color = "rgba(255,255,255,0.0)"
+            else:
+                color = riscColors[risc].format((30*duration[1] - 10*duration[0])/100)
+
+            showlegend = False
+            # if combo[2] == "blank":
+                # showlegend = False
+
+            fig.add_trace(
+                go.Bar(
+                    y=[yVals, [risc] * len(yVals)],
+                    x=xVals[1],
+                    orientation="h",
+                    name=f"{duration}",
+                    showlegend=showlegend,
+                    marker=dict(color=color),
+                    customdata=np.transpose([34, "Is" ,"Test" ]),
+                    hovertemplate="<br>".join([
+                        "label: %{customdata[0]}",
+                        "duration: %{x}",
+                        "area: %{customdata[1]}",
+                    ])
+                )
+            )
+    fig.add_trace(
+        go.Bar(
+            y=[yVals, [""] * len(yVals)],
+            x=[0] * len(yVals),
+            orientation="h",
+            showlegend=False,
+            marker=dict(color="rgba(255, 255, 255, 0.0)"),
+        )
+    )
+    print(fig)
+
+    fig.update_layout(
+        barmode="stack", height=BASE_HEIGHT + PER_CORE_HEIGHT * len(yVals)
+    )
 
     external_stylesheets = ["https://codepen.io/chriddyp/pen/bWLwgP.css"]
     app = Dash(__name__, external_stylesheets=external_stylesheets)
