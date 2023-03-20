@@ -262,7 +262,6 @@ def main(args):
     df['start'] = df['start'] - minCycle
     df['end'] = df['end'] - minCycle
 
-
     yVals = sorted(list(set(df.core.tolist())), key=lambda x: x[1]*100 + x[0], reverse=True)
 
     def return_row_data_tuple(row):
@@ -291,19 +290,33 @@ def main(args):
                 devicePlotData[row.core][row.risc]["order"].append((row.duration,
                                                                    len(devicePlotData[row.core][row.risc]["data"][row.duration])-1))
             else:
-                devicePlotData[row.core][row.risc] ={
-                    "data": {row.duration:[return_row_data_tuple(row)]},
-                    "order":[(row.duration, 0)]
-                }
+                if row.start != 0:
+                    devicePlotData[row.core][row.risc] = {
+                        "data": {(-1,0):[(0,row.start,row.start)],row.duration:[return_row_data_tuple(row)]},
+                        "order":[((-1,0),0),(row.duration, 0)]
+                    }
+                else:
+                    devicePlotData[row.core][row.risc] = {
+                        "data": {row.duration:[return_row_data_tuple(row)]},
+                        "order":[(row.duration, 0)]
+                    }
         else:
-            devicePlotData[row.core] = {
-                row.risc:{
-                    "data": {row.duration:[return_row_data_tuple(row)]},
-                    "order":[(row.duration, 0)]
+            if row.start != 0:
+                devicePlotData[row.core] = {
+                    row.risc:{
+                        "data": {(-1,0):[(0,row.start,row.start)],row.duration:[return_row_data_tuple(row)]},
+                        "order":[((-1,0),0),(row.duration, 0)]
+                    }
                 }
-            }
+            else:
+                devicePlotData[row.core] = {
+                    row.risc:{
+                        "data": {row.duration:[return_row_data_tuple(row)]},
+                        "order":[(row.duration, 0)]
+                    }
+                }
 
-    print(devicePlotData)
+    # print(devicePlotData)
 
     riscs = ['BRISC','NCRISC']
     riscColors = {
@@ -312,7 +325,6 @@ def main(args):
     }
 
     xValsDict = {risc:[] for risc in riscs}
-    traces = {risc:[] for risc in riscs}
 
     for core in devicePlotData.keys():
         for risc in devicePlotData[core].keys():
@@ -347,7 +359,7 @@ def main(args):
     for risc in riscs:
         for xVals in xValsDict[risc]:
             duration = xVals[0][0][0]
-            if duration == (4,1):
+            if duration == (4,1) or duration == (-1,0):
                 color = "rgba(255,255,255,0.0)"
             else:
                 color = riscColors[risc].format((30*duration[1] - 10*duration[0])/100)
@@ -364,11 +376,10 @@ def main(args):
                     name=f"{duration}",
                     showlegend=showlegend,
                     marker=dict(color=color),
-                    customdata=np.transpose([34, "Is" ,"Test" ]),
+                    customdata=[duration for i in range(len(xVals[1]))],
                     hovertemplate="<br>".join([
-                        "label: %{customdata[0]}",
+                        "duration type: %{customdata}",
                         "duration: %{x}",
-                        "area: %{customdata[1]}",
                     ])
                 )
             )
@@ -381,7 +392,6 @@ def main(args):
             marker=dict(color="rgba(255, 255, 255, 0.0)"),
         )
     )
-    print(fig)
 
     fig.update_layout(
         barmode="stack", height=BASE_HEIGHT + PER_CORE_HEIGHT * len(yVals)
