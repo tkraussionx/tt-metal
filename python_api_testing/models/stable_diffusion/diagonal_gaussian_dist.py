@@ -208,7 +208,7 @@ def run_diagonal_gaussian_dist_inference(device):
 
     tt_dg = TtDiagonalGaussianDistribution(input, device)
 
-    tt_out = tt_dg.sample().data()
+    tt_out = tt_dg.sample().to(host).data()
     tt_out.pretty_print()
 
     tt_untilized_output = untilize(torch.Tensor(tt_out).reshape(torch_out.shape))
