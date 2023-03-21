@@ -77,14 +77,14 @@ tt_metal::Program * create_program_mcast_in0_in1(
 
     auto mm_reader_kernel_in0_sender_in1_receiver = tt_metal::CreateDataMovementKernel(
         program,
-        "kernels/dataflow/reader_bmm_tile_layout_in0_sender_in1_receiver.cpp",
+        "kernels/dataflow/reader_bmm_tile_layout_in0_sender_in1_receiver_padding.cpp",
         in0_sender_in1_receiver,
         tt_metal::DataMovementProcessor::RISCV_1,
         tt_metal::NOC::RISCV_0_default);
 
     auto mm_reader_kernel_in0_receiver_in1_sender = tt_metal::CreateDataMovementKernel(
         program,
-        "kernels/dataflow/reader_bmm_tile_layout_in0_receiver_in1_sender.cpp",
+        "kernels/dataflow/reader_bmm_tile_layout_in0_receiver_in1_sender_padding.cpp",
         in0_receiver_in1_sender,
         tt_metal::DataMovementProcessor::RISCV_1,
         tt_metal::NOC::RISCV_1_default);
@@ -98,14 +98,14 @@ tt_metal::Program * create_program_mcast_in0_in1(
 
     auto unary_writer_kernel_noc0 = tt_metal::CreateDataMovementKernel(
         program,
-        "kernels/dataflow/writer_bmm_tile_layout.cpp",
+        "kernels/dataflow/writer_bmm_tile_layout_padding.cpp",
         all_except_left_column,
         tt_metal::DataMovementProcessor::RISCV_0,
         tt_metal::NOC::RISCV_0_default);
 
     auto unary_writer_kernel_noc1 = tt_metal::CreateDataMovementKernel(
         program,
-        "kernels/dataflow/writer_bmm_tile_layout.cpp",
+        "kernels/dataflow/writer_bmm_tile_layout_padding.cpp",
         left_column,
         tt_metal::DataMovementProcessor::RISCV_0,
         tt_metal::NOC::RISCV_1_default);
