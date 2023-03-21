@@ -18,10 +18,10 @@ torch.set_printoptions(threshold=10_000)
 from python_api_testing.sweep_tests.comparison_funcs import comp_pcc
 
 #v1_ assume input is always 32x32
-def Batchnorm(mean_run, var_run, gamma, beta, C, device): 
+def Batchnorm(mean_run, var_run, gamma, beta, C, device):
     # gamma, beta, epsilon should be vectors of size C
     mean_run = ttmetal.tensor.Tensor(
-        mean_run, 
+        mean_run,
         [1, C, 32, 32],  # will this auto-broadcast?
         ttmetal.tensor.DataType.BFLOAT16,
         ttmetal.tensor.Layout.TILE,
@@ -58,7 +58,7 @@ def Batchnorm(mean_run, var_run, gamma, beta, C, device):
         # take sqrt of running_var+eps
         var_sqrt = ttmetal.tensor.sqrt(var_run)
         # reciprocal
-        inv_sqrt = ttmetal.tensor.recip(var_sqrt)       
+        inv_sqrt = ttmetal.tensor.recip(var_sqrt)
         #mulitply by reciprocal
         x_div_sqrt = ttmetal.tensor.mul(x_minus_mean, inv_sqrt)
         #multiply by gamma
@@ -76,7 +76,7 @@ def ref_batchnorm_torch(x, eps, gamma, beta, mean_run, var_run):
     bnorm.bias         = torch.nn.Parameter(torch.tensor([beta] * x.shape[1]))
     bnorm.running_mean = torch.nn.Parameter(torch.tensor([mean_run] * x.shape[1]))
     bnorm.running_var  = torch.nn.Parameter(torch.tensor([var_run] * x.shape[1]))
-    
+
     with torch.no_grad():
         result = bnorm(x)
     return result
@@ -98,7 +98,7 @@ def ref_batchnorm_torch(x, eps, gamma, beta, mean_run, var_run):
 
     model = nn.Sequential(bnorm)
     model.eval()
-    
+
     with torch.no_grad():
         result = model(x)
     return result
@@ -116,7 +116,7 @@ if __name__ == "__main__":
     betaf = 0.345
     gammaf = 0.123
     mean_runf = 0.789
-    var_runf = 0.567 
+    var_runf = 0.567
     torch.manual_seed(123)
     x = torch.randn((1,C,H,W))
 
@@ -126,12 +126,13 @@ if __name__ == "__main__":
     beta = pad_weight(torch.full((1,C,32,32), betaf))
     mean_run = pad_weight(torch.full((1,C,32,32), mean_runf))
     var_run = pad_weight(torch.full((1,C,32,32), var_runf + epsf))
-    
+
     t0 = ttmetal.tensor.Tensor(tilize_to_list(x), [1, C, H, W], ttmetal.tensor.DataType.BFLOAT16, ttmetal.tensor.Layout.TILE, device)
     ttgamma = tilize_to_list(gamma)
     ttbeta = tilize_to_list(beta)
     ttmean_run = tilize_to_list(mean_run)
     ttvar_run = tilize_to_list(var_run)
+
 
     func = Batchnorm(ttmean_run, ttvar_run, ttgamma, ttbeta, C, device)
 
