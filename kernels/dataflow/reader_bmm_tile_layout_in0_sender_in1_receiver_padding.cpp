@@ -59,6 +59,10 @@ void kernel_main() {
     uint32_t batch                              = get_arg_val<uint32_t>(37);
     uint32_t bcast_B                            = get_arg_val<uint32_t>(38);
 
+    // padding args
+    uint32_t h_pad                              = get_arg_val<uint32_t>(39);
+    uint32_t w_pad                              = get_arg_val<uint32_t>(40);
+
     // const args for tile-based bank-swizzled layout
     // could be added to the arg list in the future to test different
     // bank-swizzling configurations
@@ -68,11 +72,17 @@ void kernel_main() {
 
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in1 = 1;
+    constexpr uint32_t cb_id_in2 = 2; // Dummy cb containing 16 (ie. per_core_M/N) tiles of zeros for padding
 
     uint32_t single_tile_size_bytes = get_tile_size(cb_id_in0);
 
     uint32_t l1_write_addr_in0;
 
+    uint32_t l1_zeros_addr_in2 = get_write_ptr(cb_id_in2);
+    //constexpr uint32_t num_elems0 = 2048 / sizeof(uint32_t); // tile size*16 tiles/4
+    //volatile uint32_t* zeros = reinterpret_cast<volatile uint32_t*>(l1_zeros_addr_in2);
+    //for (uint32_t iz = 0; iz < num_elems0; iz++)
+    //    zeros[iz] = 0;
 
     // Set ur local VALID value, to be mcasted to destinations flag address after the data has been mcasted
     volatile uint32_t* in0_mcast_receiver_semaphore_addr_ptr = reinterpret_cast<volatile uint32_t*>(in0_mcast_receiver_semaphore_addr);
@@ -109,8 +119,12 @@ void kernel_main() {
             for(uint32_t h = 0; h < in0_block_h; h++) {
                 uint32_t in0_tensor_tile_id = in0_tensor_row_start_tile_id;
                 for(uint32_t w = 0; w < in0_block_w; w++) {
-                    uint64_t in0_tile_noc_address = get_noc_addr(in0_tensor_tile_id, s0);
-                    noc_async_read(in0_tile_noc_address, l1_write_addr_in0, single_tile_size_bytes);
+                    if (h < in0_block_h - h_pad) {
+                        uint64_t in0_tile_noc_address = get_noc_addr(in0_tensor_tile_id, s0);
+                        noc_async_read(in0_tile_noc_address, l1_write_addr_in0, single_tile_size_bytes);
+                    }
+                    else
+                        noc_async_read(l1_zeros_addr_in2, l1_write_addr_in0, single_tile_size_bytes);
                     l1_write_addr_in0 += single_tile_size_bytes;
                     in0_tensor_tile_id += in0_tensor_stride_w;
                     in0_block_size_bytes += single_tile_size_bytes;

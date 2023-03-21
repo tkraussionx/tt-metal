@@ -33,7 +33,12 @@ tt_metal::Program * create_program_mcast_in0_in1(
     uint32_t in1_CB_size = in1_block_tiles * 2 * single_tile_size; // double buffer
     uint32_t out_CB_tiles = per_core_M * per_core_N;
     uint32_t out_CB_size = out_CB_tiles * single_tile_size;
-    TT_ASSERT(2 * in0_block_w * (per_core_M + per_core_N) + per_core_M * per_core_N <= 400);
+
+    // Dummy cb to store 16 (ie. per_core_M/N) tiles of zeros for padding
+    uint32_t in2_block_tiles = 1;
+    uint32_t in2_CB_size = in2_block_tiles * single_tile_size;
+
+    TT_ASSERT(2 * in0_block_w * (per_core_M + per_core_N) + per_core_M * per_core_N + in2_block_tiles <= 400);
 
     uint32_t start_core_x = 0;
     uint32_t start_core_y = 0;
@@ -190,6 +195,21 @@ tt_metal::Program * create_program_mcast_in0_in1(
                 tt::DataFormat::Float16_b
             );
 
+            uint32_t src2_cb_index = 2;
+            uint32_t src2_cb_addr = l1_valid_address;
+            l1_valid_address += in2_CB_size;
+            uint32_t cb2_tiles = in2_block_tiles * 2; // double buffer
+            auto cb_src2 = tt_metal::CreateCircularBuffer(
+                program,
+                device,
+                src2_cb_index,
+                core,
+                cb2_tiles,
+                cb2_tiles * single_tile_size,
+                src2_cb_addr,
+                tt::DataFormat::Float16_b
+            );
+
             uint32_t ouput_cb_index = 16; // output operands start at index 16
             uint32_t output_cb_addr = l1_valid_address;
             l1_valid_address += out_CB_size;
@@ -218,7 +238,7 @@ tt_metal::Program * create_program_mcast_in0_in1(
 
             TT_ASSERT(l1_valid_address < 1024 * 1024);
 
-             std::vector<uint32_t> invalid = {INVALID};
+            std::vector<uint32_t> invalid = {INVALID};
             tt_metal::WriteToDeviceL1(device, core, invalid, in0_mcast_sender_semaphore_addr);
             tt_metal::WriteToDeviceL1(device, core, invalid, in1_mcast_sender_semaphore_addr);
 
@@ -301,16 +321,69 @@ tt_metal::Program * create_program_mcast_in0_in1(
                 (std::uint32_t) B // batch
             };
 
+            uint32_t h_pad = M % per_core_M == 0 ? 0 : per_core_M - M % per_core_M;
+            uint32_t w_pad = N % per_core_N == 0 ? 0 : per_core_N - N % per_core_N;
+            std::cout << "Core: " << core_idx_y << ", " << core_idx_x << std::endl;
+            std::cout << h_pad << std::endl;
+            std::cout << w_pad << std::endl;
             if(core_idx_x == 0 and core_idx_y == 0) {
+                // h_pad and w_pad for writer_args
+                writer_args.push_back(0);
+                writer_args.push_back(0);
+
                 tt_metal::WriteRuntimeArgsToDevice(device, mm_reader_kernel_in0_sender_in1_sender, core, mm_reader_args); // RISCV_0_default
                 tt_metal::WriteRuntimeArgsToDevice(device, unary_writer_kernel_noc1, core, writer_args); // RISCV_1_default
             } else if (core_idx_x == 0 and core_idx_y != 0) {
+                // h_pad
+                if (core_idx_y == num_cores_r - 1) {
+                    mm_reader_args.push_back(h_pad);
+                    writer_args.push_back(h_pad);
+                } else {
+                    mm_reader_args.push_back(0);
+                    writer_args.push_back(0);
+                }
+                // w_pad
+                mm_reader_args.push_back(0); // not used
+                writer_args.push_back(0);
+                std::cout << "left col reader" << mm_reader_args[39] << " " << mm_reader_args[40] << std::endl;
+                std::cout << "left col writer" << writer_args[13] << " " << writer_args[14] << std::endl;
+
                 tt_metal::WriteRuntimeArgsToDevice(device, mm_reader_kernel_in0_sender_in1_receiver, core, mm_reader_args); // RISCV_0_default
                 tt_metal::WriteRuntimeArgsToDevice(device, unary_writer_kernel_noc1, core, writer_args); // RISCV_1_default
             } else if (core_idx_x != 0 and core_idx_y == 0) {
+                // h_pad
+                mm_reader_args.push_back(0); // not used
+                writer_args.push_back(0);
+                // w_pad
+                if (core_idx_x == num_cores_c - 1) {
+                    mm_reader_args.push_back(w_pad);
+                    writer_args.push_back(w_pad);
+                } else {
+                    mm_reader_args.push_back(0);
+                    writer_args.push_back(0);
+                }
+                std::cout << "top row reader" << mm_reader_args[39] << " " << mm_reader_args[40] << std::endl;
+                std::cout << "top row writer" << writer_args[13] << " " << writer_args[14] << std::endl;
+
                 tt_metal::WriteRuntimeArgsToDevice(device, mm_reader_kernel_in0_receiver_in1_sender, core, mm_reader_args); // RISCV_1_default
                 tt_metal::WriteRuntimeArgsToDevice(device, unary_writer_kernel_noc0, core, writer_args); // RISCV_0_default
             } else {
+                // h_pad and w_pad for writer_args
+                if (core_idx_x == num_cores_c - 1 and core_idx_y == num_cores_r - 1) {
+                    writer_args.push_back(h_pad);
+                    writer_args.push_back(w_pad);
+                } else if (core_idx_y == num_cores_r - 1) {
+                    writer_args.push_back(h_pad);
+                    writer_args.push_back(0);
+                } else if (core_idx_x == num_cores_c - 1) {
+                    writer_args.push_back(0);
+                    writer_args.push_back(w_pad);
+                } else {
+                    writer_args.push_back(0);
+                    writer_args.push_back(0);
+                }
+                std::cout << "right col or bot row writer" << writer_args[13] << " " << writer_args[14] << std::endl;
+
                 tt_metal::WriteRuntimeArgsToDevice(device, mm_reader_kernel_in0_receiver_in1_receiver, core, mm_reader_args); // RISCV_1_default
                 tt_metal::WriteRuntimeArgsToDevice(device, unary_writer_kernel_noc0, core, writer_args); // RISCV_0_default
             }

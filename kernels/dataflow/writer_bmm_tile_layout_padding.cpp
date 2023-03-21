@@ -22,6 +22,10 @@ void kernel_main() {
     uint32_t MtNt                               = get_arg_val<uint32_t>(11); // if 0
     uint32_t batch                              = get_arg_val<uint32_t>(12);
 
+    // padding args
+    uint32_t h_pad                              = get_arg_val<uint32_t>(13);
+    uint32_t w_pad                              = get_arg_val<uint32_t>(14);
+
     // const args for tile-based bank-swizzled layout
     // could be added to the arg list in the future to test different
     // bank-swizzling configurations
@@ -41,22 +45,39 @@ void kernel_main() {
         .log_base_2_of_bank_unit_size = tile_size_pow2_exponent
     };
 
+    // stuff for padding
+    uint32_t core_M = 16 - h_pad;
+    uint32_t core_N = 16 - w_pad;
+    uint32_t out_subblocks_h_total = (core_M  - 1) / out_subblock_h + 1;
+    uint32_t out_subblocks_w_total = (core_N  - 1) / out_subblock_w + 1;
+    uint32_t out_last_subblock_h = core_M % out_subblock_h == 0 ? out_subblock_h : core_M % out_subblock_h;
+    uint32_t out_last_subblock_w = core_N % out_subblock_w == 0 ? out_subblock_w : core_N % out_subblock_w;
 
     bool one_time_profile = true;
     for (uint32_t b = 0; b < batch; b++) {
         uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id;
-        for(uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
+        for(uint32_t sbh = 0; sbh < out_subblocks_h_total; sbh++) {
             uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
-            for(uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
+            for(uint32_t sbw = 0; sbw < out_subblocks_w_total; sbw++) {
                 uint32_t out_tensor_sb_row_start_tile_id = out_tensor_sbw_start_tile_id;
+
+                uint32_t out_subblock_h_ = out_subblock_h;
+                uint32_t out_subblock_w_ = out_subblock_w;
+                if (sbh == out_subblocks_h_total - 1) {
+                    out_subblock_h_ = out_last_subblock_h;
+                }
+                if (sbw == out_subblocks_w_total - 1) {
+                    out_subblock_w_ = out_last_subblock_w;
+                }
+                uint32_t out_subblock_tile_count_ = out_subblock_h_ * out_subblock_w_;
 
                 cb_wait_front(cb_id_out0, out_subblock_tile_count);
                 kernel_profiler::mark_time_once(5, &one_time_profile);
                 uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
 
-                for(uint32_t h = 0; h < out_subblock_h; h++) {
+                for(uint32_t h = 0; h < out_subblock_h_; h++) {
                     uint32_t out_tensor_tile_id = out_tensor_sb_row_start_tile_id;
-                    for(uint32_t w = 0; w < out_subblock_w; w++) {
+                    for(uint32_t w = 0; w < out_subblock_w_; w++) {
                         uint64_t out_tensor_tile_noc_addr = get_noc_addr(out_tensor_tile_id, s);
 
                         noc_async_write(l1_read_addr, out_tensor_tile_noc_addr, single_tile_size_bytes);
@@ -64,6 +85,8 @@ void kernel_main() {
 
                         out_tensor_tile_id += out_tensor_stride_w;
                     }
+                    // Pop padded tiles in subblock along row
+                    l1_read_addr += single_tile_size_bytes * (out_subblock_w - out_subblock_w_);
                     out_tensor_sb_row_start_tile_id += out_tensor_stride_h;
                 }
 
@@ -71,6 +94,9 @@ void kernel_main() {
                 cb_pop_front(cb_id_out0, out_subblock_tile_count);
                 out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
             }
+            // Pop fully padded subblocks along the row
+            cb_wait_front(cb_id_out0, out_subblock_tile_count * (out_num_subblocks_w - out_subblocks_w_total));
+            cb_pop_front(cb_id_out0, out_subblock_tile_count * (out_num_subblocks_w - out_subblocks_w_total));
             out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
         }
         out_tensor_start_tile_id += MtNt;
