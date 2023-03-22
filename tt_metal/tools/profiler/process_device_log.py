@@ -9,7 +9,7 @@ from dash import Dash, dcc, html, Input, Output
 from rich import print
 import plotly.express as px
 import pandas as pd
-import numpy as np
+import seaborn as sns
 
 import plot_setup
 
@@ -271,14 +271,6 @@ def main(args):
             row.delta,
         )
 
-    def add_x_val_to_core (xVal, xVals, core):
-        for yVal in yVals:
-            xValAdd = 0
-            if core == yVal:
-                xValAdd = xVal
-            xVals.append(xValAdd)
-        return xVals
-
     devicePlotData = {}
     for index, row in df.iterrows():
         if row.core in devicePlotData.keys():
@@ -290,61 +282,82 @@ def main(args):
                 devicePlotData[row.core][row.risc]["order"].append((row.duration,
                                                                    len(devicePlotData[row.core][row.risc]["data"][row.duration])-1))
             else:
-                if row.start != 0:
-                    devicePlotData[row.core][row.risc] = {
-                        "data": {(-1,0):[(0,row.start,row.start)],row.duration:[return_row_data_tuple(row)]},
-                        "order":[((-1,0),0),(row.duration, 0)]
-                    }
-                else:
-                    devicePlotData[row.core][row.risc] = {
-                        "data": {row.duration:[return_row_data_tuple(row)]},
-                        "order":[(row.duration, 0)]
-                    }
+                devicePlotData[row.core][row.risc] = {
+                    "data": {(0,1):[(0,row.start,row.start)],row.duration:[return_row_data_tuple(row)]},
+                    "order":[((0,1),0),(row.duration, 0)]
+                }
         else:
-            if row.start != 0:
-                devicePlotData[row.core] = {
-                    row.risc:{
-                        "data": {(-1,0):[(0,row.start,row.start)],row.duration:[return_row_data_tuple(row)]},
-                        "order":[((-1,0),0),(row.duration, 0)]
-                    }
+            devicePlotData[row.core] = {
+                row.risc:{
+                    "data": {(0,1):[(0,row.start,row.start)],row.duration:[return_row_data_tuple(row)]},
+                    "order":[((0,1),0),(row.duration, 0)]
                 }
-            else:
-                devicePlotData[row.core] = {
-                    row.risc:{
-                        "data": {row.duration:[return_row_data_tuple(row)]},
-                        "order":[(row.duration, 0)]
-                    }
-                }
+            }
 
-    # print(devicePlotData)
-
-    riscs = ['BRISC','NCRISC']
-    riscColors = {
-        'BRISC': "rgba(255,0,100,{})",
-        'NCRISC': "rgba(100,0,255,{})",
-    }
+    riscs = ['BRISC', 'NCRISC']
 
     xValsDict = {risc:[] for risc in riscs}
+    traces = {risc:[] for risc in riscs}
 
-    for core in devicePlotData.keys():
-        for risc in devicePlotData[core].keys():
-            for durationType in devicePlotData[core][risc]["order"]:
-                    xValsDict[risc].append(((durationType,core), []))
-
+    coreOrderTrav = {core:{risc:0 for risc in devicePlotData[core].keys()} for core in devicePlotData.keys()}
     for risc in riscs:
-        for xVals in xValsDict[risc]:
-            xVal = 0
-            core = xVals[0][1]
-            duration = xVals[0][0][0]
-            durationIndex = xVals[0][0][1]
-            if risc in devicePlotData[core].keys():
-                xVal = devicePlotData[core][risc]["data"][duration][durationIndex][2]
+        ordering = True
+        traceToAdd = None
+        discardedTraces = set()
+        while ordering:
 
-            add_x_val_to_core(xVal, xVals[1], core)
+            ordering = False
+            addTrace = True
+            for core in devicePlotData.keys():
+                if risc in devicePlotData[core].keys():
+                    if coreOrderTrav[core][risc] < len(devicePlotData[core][risc]["order"]):
+                        ordering = True
+                        trace = devicePlotData[core][risc]["order"][coreOrderTrav[core][risc]]
+                        if traceToAdd:
+                            if core not in traceToAdd[1]:
+                                if traceToAdd[0] == trace:
+                                    traceToAdd[1].add(core)
+                                else:
+                                    #Let see if any trace in the future is the candidate for this core
+                                    for i in range (coreOrderTrav[core][risc]+1, len(devicePlotData[core][risc]["order"])):
+                                        futureTrace = devicePlotData[core][risc]["order"][i]
+                                        if futureTrace == traceToAdd[0] and traceToAdd[0] not in discardedTraces:
+                                            #Pick a better candidate
+                                            discardedTraces.add(traceToAdd[0])
+                                            traceToAdd = (trace,set([core]))
+                                            addTrace = False
+                                            break
+                                    if addTrace == False:
+                                        break
+                        else:
+                            #Pick a new candidate
+                            traceToAdd = (trace,set([core]))
+                            addTrace = False
+                            break
 
-    print(xValsDict)
+            if addTrace and traceToAdd:
+                if traceToAdd[0] in discardedTraces:
+                    discardedTraces.remove(traceToAdd[0])
+                traces[risc].append(traceToAdd)
+                for core in traceToAdd[1]:
+                    if risc in devicePlotData[core].keys():
+                        coreOrderTrav[core][risc] += 1
+                traceToAdd = None
 
-    layout = go.Layout(xaxis=dict(title="Cycle count"), yaxis=dict(title="Cores"), hoverlabel=dict(bgcolor="black"))
+    print(traces)
+    for risc in traces.keys():
+        for trace in traces[risc]:
+            xVals = []
+            traceType = trace[0]
+            cores = trace[1]
+            for core in yVals:
+                xVal = 0
+                if core in cores:
+                    xVal = devicePlotData[core][risc]["data"][traceType[0]][traceType[1]][2]
+                xVals.append(xVal)
+            xValsDict[risc].append((traceType,xVals))
+
+    layout = go.Layout(xaxis=dict(title="Cycle count"), yaxis=dict(title="Cores"))
     fig = go.Figure(layout=layout)
 
     fig.add_trace(
@@ -356,17 +369,29 @@ def main(args):
             marker=dict(color="rgba(255, 255, 255, 0.0)"),
         )
     )
+    riscColors = {
+        'BRISC': "light:b",
+        'NCRISC': "light:r",
+    }
     for risc in riscs:
+        durations = []
         for xVals in xValsDict[risc]:
-            duration = xVals[0][0][0]
-            if duration == (4,1) or duration == (-1,0):
-                color = "rgba(255,255,255,0.0)"
-            else:
-                color = riscColors[risc].format((30*duration[1] - 10*duration[0])/100)
+            duration = xVals[0][0]
+            if duration not in durations:
+                durations.append(duration)
+
+        colors = sns.color_palette(riscColors[risc],len(durations) + 1).as_hex()
+        colorMap = {duration:color for duration,color in zip(durations,colors)}
+        colorMap [(4,1)] = "rgba(255, 255, 255, 0.0)"
+        colorMap [(0,1)] = "rgba(255, 255, 255, 0.0)"
+        colorMap [(1,2)] = colors[-1]
+        colorMap [(3,4)] = colors[-1]
+
+        for xVals in xValsDict[risc]:
+            duration = xVals[0][0]
+            color = colorMap[duration]
 
             showlegend = False
-            # if combo[2] == "blank":
-                # showlegend = False
 
             fig.add_trace(
                 go.Bar(
@@ -378,9 +403,9 @@ def main(args):
                     marker=dict(color=color),
                     customdata=[duration for i in range(len(xVals[1]))],
                     hovertemplate="<br>".join([
-                        "duration type: %{customdata}",
-                        "duration: %{x}",
-                    ])
+                        "%{customdata}",
+                        "%{x} cycles",
+                    ]),
                 )
             )
     fig.add_trace(
@@ -394,7 +419,8 @@ def main(args):
     )
 
     fig.update_layout(
-        barmode="stack", height=BASE_HEIGHT + PER_CORE_HEIGHT * len(yVals)
+        barmode="stack",
+        height=BASE_HEIGHT + PER_CORE_HEIGHT * len(yVals)
     )
 
     external_stylesheets = ["https://codepen.io/chriddyp/pen/bWLwgP.css"]
