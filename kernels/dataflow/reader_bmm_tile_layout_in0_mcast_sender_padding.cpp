@@ -48,6 +48,10 @@ void kernel_main() {
     uint32_t batch                              = get_arg_val<uint32_t>(28);
     uint32_t bcast_B                            = get_arg_val<uint32_t>(29);
 
+    // padding args
+    uint32_t last_block_h                       = get_arg_val<uint32_t>(30);
+    uint32_t last_block_w                       = get_arg_val<uint32_t>(31); // not used
+
     // const args for tile-based bank-swizzled layout
     // could be added to the arg list in the future to test different
     // bank-swizzling configurations
@@ -57,11 +61,13 @@ void kernel_main() {
 
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in1 = 1;
+    constexpr uint32_t cb_id_in2 = 2;
 
     uint32_t single_tile_size_bytes = get_tile_size(cb_id_in0);
 
     uint32_t l1_write_addr_in0;
     uint32_t l1_write_addr_in1;
+    uint32_t l1_zeros_addr_in2 = get_write_ptr(cb_id_in2);
 
     uint32_t in0_tensor_current_block_start_tile_id = in0_tensor_start_tile_id;
     uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;
@@ -105,8 +111,12 @@ void kernel_main() {
             for(uint32_t h = 0; h < in0_block_h; h++) {
                 uint32_t in0_tensor_tile_id = in0_tensor_row_start_tile_id;
                 for(uint32_t w = 0; w < in0_block_w; w++) {
-                    uint64_t in0_tile_noc_address = get_noc_addr(in0_tensor_tile_id, s0);
-                    noc_async_read(in0_tile_noc_address, l1_write_addr_in0, single_tile_size_bytes);
+                    if (h < last_block_h) {
+                        uint64_t in0_tile_noc_address = get_noc_addr(in0_tensor_tile_id, s0);
+                        noc_async_read(in0_tile_noc_address, l1_write_addr_in0, single_tile_size_bytes);
+                    }
+                    else
+                        noc_async_read(l1_zeros_addr_in2, l1_write_addr_in0, single_tile_size_bytes);
                     l1_write_addr_in0 += single_tile_size_bytes;
                     in0_tensor_tile_id += in0_tensor_stride_w;
                     in0_block_size_bytes += single_tile_size_bytes;
