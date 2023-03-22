@@ -221,48 +221,25 @@ def import_device_profile_log (logPath):
                     }
     return deviceData
 
+def timeSeries_to_durations_dataframe(deviceTimeSeries):
+    durations = []
+    for core in deviceTimeSeries.keys():
+        for risc in deviceTimeSeries[core].keys():
+            timeSeries = deviceTimeSeries[core][risc]['timeSeries']
+            timeSeries.sort(key=lambda x: x[1]) # Sort on timestamp
+            for startTime, endTime in zip(timeSeries[:-1],timeSeries[1:]):
+                durations.append(
+                    dict(core=core, risc=risc, start=startTime[1], end=endTime[1], durationType=(startTime[0],endTime[0])))
 
-def main(args):
-    if len(args) == 1:
-        try:
-            setup = getattr(plot_setup, args[0])()
-            try:
-                setup.timerAnalysis.update(setup.timerAnalysisBase)
-            except Exception:
-                setup.timerAnalysis = setup.timerAnalysisBase
-        except Exception:
-            print_help()
-            return
-    elif len(args) == 0:
-        try:
-            setup = getattr(plot_setup, "test_base")()
-            setup.timerAnalysis = setup.timerAnalysisBase
-        except Exception:
-            print_help()
-            return
-    else:
-        print_help()
-        return
-
-    deviceData = import_device_profile_log(DEVICE_TIME_CSV)
-
-    ganttData = []
-    for device in deviceData.keys():
-        for core in deviceData[device].keys():
-            for risc in deviceData[device][core].keys():
-                timeSeries = deviceData[device][core][risc]['timeSeries']
-                timeSeries.sort(key=lambda x: x[1]) # Sort on timestamp
-                for startTime, endTime in zip(timeSeries[:-1],timeSeries[1:]):
-                    ganttData.append(
-                        dict(core=core, risc=risc, start=startTime[1], end=endTime[1], duration=(startTime[0],endTime[0])))
-
-    df = pd.DataFrame(ganttData)
+    df = pd.DataFrame(durations)
     df['delta'] = df['end'] - df['start']
     minCycle = min(df.start)
     df['start'] = df['start'] - minCycle
     df['end'] = df['end'] - minCycle
 
-    yVals = sorted(list(set(df.core.tolist())), key=lambda x: x[1]*100 + x[0], reverse=True)
+    return df
+
+def duration_DF_to_plotData (durationsDF):
 
     def return_row_data_tuple(row):
         return (
@@ -271,36 +248,37 @@ def main(args):
             row.delta,
         )
 
-    devicePlotData = {}
-    for index, row in df.iterrows():
-        if row.core in devicePlotData.keys():
-            if row.risc in devicePlotData[row.core].keys():
-                if row.duration in devicePlotData[row.core][row.risc]["data"].keys():
-                    devicePlotData[row.core][row.risc]["data"][row.duration].append(return_row_data_tuple(row))
+    plotData = {}
+    for index, row in durationsDF.iterrows():
+        if row.core in plotData.keys():
+            if row.risc in plotData[row.core].keys():
+                if row.durationType in plotData[row.core][row.risc]["data"].keys():
+                    plotData[row.core][row.risc]["data"][row.durationType].append(return_row_data_tuple(row))
                 else:
-                    devicePlotData[row.core][row.risc]["data"][row.duration] = [return_row_data_tuple(row)]
-                devicePlotData[row.core][row.risc]["order"].append((row.duration,
-                                                                   len(devicePlotData[row.core][row.risc]["data"][row.duration])-1))
+                    plotData[row.core][row.risc]["data"][row.durationType] = [return_row_data_tuple(row)]
+                plotData[row.core][row.risc]["order"].append((row.durationType,
+                                                                   len(plotData[row.core][row.risc]["data"][row.durationType])-1))
             else:
-                devicePlotData[row.core][row.risc] = {
-                    "data": {(0,1):[(0,row.start,row.start)],row.duration:[return_row_data_tuple(row)]},
-                    "order":[((0,1),0),(row.duration, 0)]
+                plotData[row.core][row.risc] = {
+                    "data": {(0,1):[(0,row.start,row.start)],row.durationType:[return_row_data_tuple(row)]},
+                    "order":[((0,1),0),(row.durationType, 0)]
                 }
         else:
-            devicePlotData[row.core] = {
+            plotData[row.core] = {
                 row.risc:{
-                    "data": {(0,1):[(0,row.start,row.start)],row.duration:[return_row_data_tuple(row)]},
-                    "order":[((0,1),0),(row.duration, 0)]
+                    "data": {(0,1):[(0,row.start,row.start)],row.durationType:[return_row_data_tuple(row)]},
+                    "order":[((0,1),0),(row.durationType, 0)]
                 }
             }
 
-    riscs = ['BRISC', 'NCRISC']
+    return plotData
 
-    xValsDict = {risc:[] for risc in riscs}
-    traces = {risc:[] for risc in riscs}
+def plotData_to_timelineXVals(plotData, plotCores, plotRiscs):
+    xValsDict = {risc:[] for risc in plotRiscs}
+    traces = {risc:[] for risc in plotRiscs}
 
-    coreOrderTrav = {core:{risc:0 for risc in devicePlotData[core].keys()} for core in devicePlotData.keys()}
-    for risc in riscs:
+    coreOrderTrav = {core:{risc:0 for risc in plotData[core].keys()} for core in plotData.keys()}
+    for risc in plotRiscs:
         ordering = True
         traceToAdd = None
         discardedTraces = set()
@@ -308,19 +286,19 @@ def main(args):
 
             ordering = False
             addTrace = True
-            for core in devicePlotData.keys():
-                if risc in devicePlotData[core].keys():
-                    if coreOrderTrav[core][risc] < len(devicePlotData[core][risc]["order"]):
+            for core in plotData.keys():
+                if risc in plotData[core].keys():
+                    if coreOrderTrav[core][risc] < len(plotData[core][risc]["order"]):
                         ordering = True
-                        trace = devicePlotData[core][risc]["order"][coreOrderTrav[core][risc]]
+                        trace = plotData[core][risc]["order"][coreOrderTrav[core][risc]]
                         if traceToAdd:
                             if core not in traceToAdd[1]:
                                 if traceToAdd[0] == trace:
                                     traceToAdd[1].add(core)
                                 else:
                                     #Let see if any trace in the future is the candidate for this core
-                                    for i in range (coreOrderTrav[core][risc]+1, len(devicePlotData[core][risc]["order"])):
-                                        futureTrace = devicePlotData[core][risc]["order"][i]
+                                    for i in range (coreOrderTrav[core][risc]+1, len(plotData[core][risc]["order"])):
+                                        futureTrace = plotData[core][risc]["order"][i]
                                         if futureTrace == traceToAdd[0] and traceToAdd[0] not in discardedTraces:
                                             #Pick a better candidate
                                             discardedTraces.add(traceToAdd[0])
@@ -340,22 +318,25 @@ def main(args):
                     discardedTraces.remove(traceToAdd[0])
                 traces[risc].append(traceToAdd)
                 for core in traceToAdd[1]:
-                    if risc in devicePlotData[core].keys():
+                    if risc in plotData[core].keys():
                         coreOrderTrav[core][risc] += 1
                 traceToAdd = None
 
-    print(traces)
     for risc in traces.keys():
         for trace in traces[risc]:
             xVals = []
             traceType = trace[0]
             cores = trace[1]
-            for core in yVals:
+            for core in plotCores:
                 xVal = 0
                 if core in cores:
-                    xVal = devicePlotData[core][risc]["data"][traceType[0]][traceType[1]][2]
+                    xVal = plotData[core][risc]["data"][traceType[0]][traceType[1]][2]
                 xVals.append(xVal)
             xValsDict[risc].append((traceType,xVals))
+    return xValsDict
+
+
+def timeline_plot(yVals, xValsDict, riscColors):
 
     layout = go.Layout(xaxis=dict(title="Cycle count"), yaxis=dict(title="Cores"))
     fig = go.Figure(layout=layout)
@@ -369,11 +350,7 @@ def main(args):
             marker=dict(color="rgba(255, 255, 255, 0.0)"),
         )
     )
-    riscColors = {
-        'BRISC': "light:b",
-        'NCRISC': "light:r",
-    }
-    for risc in riscs:
+    for risc in xValsDict.keys():
         durations = []
         for xVals in xValsDict[risc]:
             duration = xVals[0][0]
@@ -423,6 +400,48 @@ def main(args):
         height=BASE_HEIGHT + PER_CORE_HEIGHT * len(yVals)
     )
 
+    return fig
+
+def main(args):
+    if len(args) == 1:
+        try:
+            setup = getattr(plot_setup, args[0])()
+            try:
+                setup.timerAnalysis.update(setup.timerAnalysisBase)
+            except Exception:
+                setup.timerAnalysis = setup.timerAnalysisBase
+        except Exception:
+            print_help()
+            return
+    elif len(args) == 0:
+        try:
+            setup = getattr(plot_setup, "test_base")()
+            setup.timerAnalysis = setup.timerAnalysisBase
+        except Exception:
+            print_help()
+            return
+    else:
+        print_help()
+        return
+
+    riscs = ['BRISC', 'NCRISC']
+    riscColors = {
+        'BRISC': "light:b",
+        'NCRISC': "light:r",
+    }
+
+    devicesData = import_device_profile_log(DEVICE_TIME_CSV)
+    timelineFigs = {}
+
+    for chipID, deviceData in devicesData.items():
+        durationsDF = timeSeries_to_durations_dataframe(deviceData)
+        devicePlotData = duration_DF_to_plotData(durationsDF)
+        yVals = sorted(devicePlotData.keys(), key=lambda x: x[1]*100 + x[0], reverse=True)
+        xValsDict = plotData_to_timelineXVals(devicePlotData, yVals, riscs)
+        timelineFigs[chipID] = timeline_plot(yVals, xValsDict, riscColors)
+
+
+
     external_stylesheets = ["https://codepen.io/chriddyp/pen/bWLwgP.css"]
     app = Dash(__name__, external_stylesheets=external_stylesheets)
 
@@ -432,7 +451,14 @@ def main(args):
             html.Br(),
             html.H3("Stats Table"),
             # generate_analysis_table(timerStats),
-            dcc.Graph(figure=fig),
+        ] +
+        [
+            html.Div(
+                [
+                    html.H6(f"PCIe slot: {chipID}"),
+                    dcc.Graph(figure=timelineFigs[chipID])
+                ]
+            ) for chipID in sorted(timelineFigs.keys())
         ]
     )
 
