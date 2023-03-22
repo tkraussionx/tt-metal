@@ -447,7 +447,12 @@ tt_metal::Program * create_program_mcast_in0(
     uint32_t in1_CB_size = in1_block_tiles * 2 * single_tile_size; // double buffer
     uint32_t out_CB_tiles = per_core_M * per_core_N;
     uint32_t out_CB_size = out_CB_tiles * single_tile_size;
-    TT_ASSERT(2 * in0_block_w * (per_core_M + per_core_N) + per_core_M * per_core_N <= 400);
+
+    // Dummy cb to store one tile of zeros for padding
+    uint32_t in2_block_tiles = 1;
+    uint32_t in2_CB_size = in2_block_tiles * single_tile_size;
+
+    TT_ASSERT(2 * in0_block_w * (per_core_M + per_core_N) + per_core_M * per_core_N + in2_block_tiles <= 400);
 
     uint32_t start_core_x = 0;
     uint32_t start_core_y = 0;
@@ -467,21 +472,21 @@ tt_metal::Program * create_program_mcast_in0(
 
     auto mm_reader_kernel_sender = tt_metal::CreateDataMovementKernel(
         program,
-        "kernels/dataflow/reader_bmm_tile_layout_in0_mcast_sender.cpp",
+        "kernels/dataflow/reader_bmm_tile_layout_in0_mcast_sender_padding.cpp",
         mcast_senders,
         tt_metal::DataMovementProcessor::RISCV_1,
         tt_metal::NOC::RISCV_1_default);
 
     auto mm_reader_kernel_receiver = tt_metal::CreateDataMovementKernel(
         program,
-        "kernels/dataflow/reader_bmm_tile_layout_in0_mcast_receiver.cpp",
+        "kernels/dataflow/reader_bmm_tile_layout_in0_mcast_receiver_padding.cpp",
         mcast_receivers,
         tt_metal::DataMovementProcessor::RISCV_1,
         tt_metal::NOC::RISCV_1_default);
 
     auto unary_writer_kernel = tt_metal::CreateDataMovementKernel(
         program,
-        "kernels/dataflow/writer_bmm_tile_layout.cpp",
+        "kernels/dataflow/writer_bmm_tile_layout_padding.cpp",
         all_cores,
         tt_metal::DataMovementProcessor::RISCV_0,
         tt_metal::NOC::RISCV_0_default);
@@ -562,6 +567,21 @@ tt_metal::Program * create_program_mcast_in0(
                 cb1_tiles,
                 cb1_tiles * single_tile_size,
                 src1_cb_addr,
+                tt::DataFormat::Float16_b
+            );
+
+            uint32_t src2_cb_index = 2;
+            uint32_t src2_cb_addr = l1_valid_address;
+            l1_valid_address += in2_CB_size;
+            uint32_t cb2_tiles = in2_block_tiles * 2; // double buffer
+            auto cb_src2 = tt_metal::CreateCircularBuffer(
+                program,
+                device,
+                src2_cb_index,
+                core,
+                cb2_tiles,
+                cb2_tiles * single_tile_size,
+                src2_cb_addr,
                 tt::DataFormat::Float16_b
             );
 
@@ -695,7 +715,12 @@ tt_metal::Program * create_program_mcast_in1(
     uint32_t in1_CB_size = in1_block_tiles * 2 * single_tile_size; // double buffer
     uint32_t out_CB_tiles = per_core_M * per_core_N;
     uint32_t out_CB_size = out_CB_tiles * single_tile_size;
-    TT_ASSERT(2 * in0_block_w * (per_core_M + per_core_N) + per_core_M * per_core_N <= 400);
+
+    // Dummy cb to store one tile of zeros for padding
+    uint32_t in2_block_tiles = 1;
+    uint32_t in2_CB_size = in2_block_tiles * single_tile_size;
+
+    TT_ASSERT(2 * in0_block_w * (per_core_M + per_core_N) + per_core_M * per_core_N + in2_block_tiles <= 400);
 
     uint32_t start_core_x = 0;
     uint32_t start_core_y = 0;
@@ -715,21 +740,21 @@ tt_metal::Program * create_program_mcast_in1(
 
     auto mm_reader_kernel_sender = tt_metal::CreateDataMovementKernel(
         program,
-        "kernels/dataflow/reader_bmm_tile_layout_in1_mcast_sender.cpp",
+        "kernels/dataflow/reader_bmm_tile_layout_in1_mcast_sender_padding.cpp",
         mcast_senders,
         tt_metal::DataMovementProcessor::RISCV_1,
         tt_metal::NOC::RISCV_1_default);
 
     auto mm_reader_kernel_receiver = tt_metal::CreateDataMovementKernel(
         program,
-        "kernels/dataflow/reader_bmm_tile_layout_in1_mcast_receiver.cpp",
+        "kernels/dataflow/reader_bmm_tile_layout_in1_mcast_receiver_padding.cpp",
         mcast_receivers,
         tt_metal::DataMovementProcessor::RISCV_1,
         tt_metal::NOC::RISCV_1_default);
 
     auto unary_writer_kernel = tt_metal::CreateDataMovementKernel(
         program,
-        "kernels/dataflow/writer_bmm_tile_layout.cpp",
+        "kernels/dataflow/writer_bmm_tile_layout_padding.cpp",
         all_cores,
         tt_metal::DataMovementProcessor::RISCV_0,
         tt_metal::NOC::RISCV_0_default);
@@ -811,6 +836,21 @@ tt_metal::Program * create_program_mcast_in1(
                 cb1_tiles,
                 cb1_tiles * single_tile_size,
                 src1_cb_addr,
+                tt::DataFormat::Float16_b
+            );
+
+            uint32_t src2_cb_index = 2;
+            uint32_t src2_cb_addr = l1_valid_address;
+            l1_valid_address += in2_CB_size;
+            uint32_t cb2_tiles = in2_block_tiles * 2; // double buffer
+            auto cb_src2 = tt_metal::CreateCircularBuffer(
+                program,
+                device,
+                src2_cb_index,
+                core,
+                cb2_tiles,
+                cb2_tiles * single_tile_size,
+                src2_cb_addr,
                 tt::DataFormat::Float16_b
             );
 
