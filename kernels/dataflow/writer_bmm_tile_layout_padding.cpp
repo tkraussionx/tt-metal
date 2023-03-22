@@ -23,8 +23,12 @@ void kernel_main() {
     uint32_t batch                              = get_arg_val<uint32_t>(12);
 
     // padding args
-    uint32_t h_pad                              = get_arg_val<uint32_t>(13);
-    uint32_t w_pad                              = get_arg_val<uint32_t>(14);
+    uint32_t out_num_nonzero_subblocks_h        = get_arg_val<uint32_t>(13);
+    uint32_t out_last_subblock_h                = get_arg_val<uint32_t>(14);
+    uint32_t out_num_nonzero_subblocks_w        = get_arg_val<uint32_t>(15);
+    uint32_t out_last_subblock_w                = get_arg_val<uint32_t>(16);
+    uint32_t padded_subblock_tiles_addr_skip    = get_arg_val<uint32_t>(17);
+    uint32_t padded_block_tiles_skip            = get_arg_val<uint32_t>(18);
 
     // const args for tile-based bank-swizzled layout
     // could be added to the arg list in the future to test different
@@ -45,31 +49,24 @@ void kernel_main() {
         .log_base_2_of_bank_unit_size = tile_size_pow2_exponent
     };
 
-    // stuff for padding
-    uint32_t core_M = 16 - h_pad;
-    uint32_t core_N = 16 - w_pad;
-    uint32_t out_subblocks_h_total = (core_M  - 1) / out_subblock_h + 1;
-    uint32_t out_subblocks_w_total = (core_N  - 1) / out_subblock_w + 1;
-    uint32_t out_last_subblock_h = core_M % out_subblock_h == 0 ? out_subblock_h : core_M % out_subblock_h;
-    uint32_t out_last_subblock_w = core_N % out_subblock_w == 0 ? out_subblock_w : core_N % out_subblock_w;
-
     bool one_time_profile = true;
     for (uint32_t b = 0; b < batch; b++) {
         uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id;
-        for(uint32_t sbh = 0; sbh < out_subblocks_h_total; sbh++) {
+        for(uint32_t sbh = 0; sbh < out_num_nonzero_subblocks_h; sbh++) {
             uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
-            for(uint32_t sbw = 0; sbw < out_subblocks_w_total; sbw++) {
+            for(uint32_t sbw = 0; sbw < out_num_nonzero_subblocks_w; sbw++) {
                 uint32_t out_tensor_sb_row_start_tile_id = out_tensor_sbw_start_tile_id;
 
                 uint32_t out_subblock_h_ = out_subblock_h;
                 uint32_t out_subblock_w_ = out_subblock_w;
-                if (sbh == out_subblocks_h_total - 1) {
+                uint32_t subblock_tiles_addr_skip = 0;
+                if (sbh == out_num_nonzero_subblocks_h - 1) {
                     out_subblock_h_ = out_last_subblock_h;
                 }
-                if (sbw == out_subblocks_w_total - 1) {
+                if (sbw == out_num_nonzero_subblocks_w - 1) {
                     out_subblock_w_ = out_last_subblock_w;
+                    subblock_tiles_addr_skip = padded_subblock_tiles_addr_skip;
                 }
-                uint32_t out_subblock_tile_count_ = out_subblock_h_ * out_subblock_w_;
 
                 cb_wait_front(cb_id_out0, out_subblock_tile_count);
                 kernel_profiler::mark_time_once(5, &one_time_profile);
@@ -85,8 +82,8 @@ void kernel_main() {
 
                         out_tensor_tile_id += out_tensor_stride_w;
                     }
-                    // Pop padded tiles in subblock along row
-                    l1_read_addr += single_tile_size_bytes * (out_subblock_w - out_subblock_w_);
+                    // Skip padded tiles in subblock along row
+                    l1_read_addr += subblock_tiles_addr_skip;
                     out_tensor_sb_row_start_tile_id += out_tensor_stride_h;
                 }
 
@@ -95,8 +92,8 @@ void kernel_main() {
                 out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
             }
             // Pop fully padded subblocks along the row
-            cb_wait_front(cb_id_out0, out_subblock_tile_count * (out_num_subblocks_w - out_subblocks_w_total));
-            cb_pop_front(cb_id_out0, out_subblock_tile_count * (out_num_subblocks_w - out_subblocks_w_total));
+            cb_wait_front(cb_id_out0, padded_block_tiles_skip);
+            cb_pop_front(cb_id_out0, padded_block_tiles_skip);
             out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
         }
         out_tensor_start_tile_id += MtNt;
