@@ -1,21 +1,29 @@
 class test_base:
     timerAnalysisBase = {
         "FW start": {
+            "type": "risc",
             "start": {"risc": "BRISC", "timerID": 0},
             "end": {"risc": "BRISC", "timerID": 1},
         },
         "BRISC kernel start -> BRISC kernel end": {
+            "type": "risc",
             "start": {"risc": "BRISC", "timerID": 2},
             "end": {"risc": "BRISC", "timerID": 3},
         },
         "NCRISC kernel start -> NCRISC kernel end": {
+            "type": "risc",
             "start": {"risc": "NCRISC", "timerID": 2},
             "end": {"risc": "NCRISC", "timerID": 3},
         },
         "compute~": {
-            "type": "diff",
+            "type": "core",
             "start": {"risc": "NCRISC", "timerID": 2},
             "end": {"risc": "BRISC", "timerID": 3},
+        },
+        "Device start -> Device end": {
+            "type": "device",
+            "start": {"core""risc": "NCRISC", "timerID": 1},
+            "end": {"risc": "NCRISC", "timerID": 4},
         },
     }
 
@@ -25,8 +33,14 @@ class test_base:
         },
         'NCRISC': {
             "color":"light:r"
+        },
+        'TENSIX': {
+            "color":"light:gray"
         }
+
     }
+
+    riscs = ["BRISC","NCRISC","TENSIX"]
 
     timerIDLabels = [
         (0, "Start"),
