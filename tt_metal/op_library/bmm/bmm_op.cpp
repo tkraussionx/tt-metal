@@ -237,7 +237,7 @@ BmmOpParallelizationStrategy::Enum get_parallelization_strategy(const Tensor &a,
         }
         else if (core_range.y > 0)
             return BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_PADDING;
-        return BmmOpParallelizationStrategy::MULTI_CORE; //TODO: Implement MULTI_CORE_REUSE_PADDING
+        return BmmOpParallelizationStrategy::MULTI_CORE_REUSE_PADDING;
     }
     else if (num_output_tiles > 1) {
         return BmmOpParallelizationStrategy::MULTI_CORE;
@@ -269,6 +269,9 @@ Tensor matmul(const Tensor& a, const Tensor& b, bool profile_device) {
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_GENERALIZED:
             return matmul_multi_core_reuse_mcast_generalized(a, b, profile_device);
             break;
+        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_PADDING:
+            return matmul_multi_core_reuse_padding(a, b, profile_device);
+            break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_PADDING:
             return matmul_multi_core_reuse_mcast_padding(a, b, profile_device);
             break;
@@ -294,6 +297,9 @@ Tensor bmm(const Tensor& a, const Tensor& b, bool profile_device) {
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_GENERALIZED:
             return bmm_multi_core_reuse_mcast_generalized(a, b, profile_device);
+            break;
+        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_PADDING:
+            return bmm_multi_core_reuse_padding(a, b, profile_device);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_PADDING:
             return bmm_multi_core_reuse_mcast_padding(a, b, profile_device);
