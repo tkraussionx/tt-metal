@@ -10,7 +10,7 @@ from torch import nn
 from torch.nn import functional as F
 
 import numpy as np
-from pymetal import ttmetal as ttm
+from pymetal import ttlib as ttl
 from utility_functions import tilize_to_list, print_diff_argmax, untilize, tilize, tilize_to_list
 from utils import move_to_device, move_to_cpu
 
@@ -52,7 +52,7 @@ def run_upsample_nearest_inference(device, host):
 
     torch_out = F.interpolate(input, scale_factor=2.0, mode="nearest")
 
-    tt_input = ttm.tensor.Tensor(tilize_to_list(input), input_shape, ttm.tensor.DataType.BFLOAT16, ttm.tensor.Layout.TILE, device)
+    tt_input = ttl.tensor.Tensor(tilize_to_list(input), input_shape, ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
 
     tt_up = TtUpsampledNearest2d(scale_factor=2.0, device=device, host=host)
     tt_out = tt_up(tt_input).to(host).data()
@@ -64,8 +64,8 @@ def run_upsample_nearest_inference(device, host):
 
 if __name__ == "__main__":
     # Initialize the device
-    device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
-    ttm.device.InitializeDevice(device)
-    host = ttm.device.GetHost()
+    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
+    ttl.device.InitializeDevice(device)
+    host = ttl.device.GetHost()
     run_upsample_nearest_inference(device, host)
-    ttm.device.CloseDevice(device)
+    ttl.device.CloseDevice(device)

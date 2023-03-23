@@ -26,20 +26,21 @@ from transformers import CLIPModel, CLIPConfig
 
 
 class CLIPEncoderLayer(nn.Module):
-    def __init__(self, state_dict, config: CLIPConfig):
+    def __init__(self, state_dict, config: CLIPConfig, base_address="text_model.encoder.layers.10"):
         super().__init__()
         self.embed_dim = config.hidden_size
 
         self.self_attn = CLIPAttention(config=config, state_dict=state_dict)
 
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.layer_norm1.weight = nn.Parameter(state_dict['text_model.encoder.layers.10.layer_norm1.weight'])
-        self.layer_norm1.bias = nn.Parameter(state_dict['text_model.encoder.layers.10.layer_norm1.bias'])
+        self.layer_norm1.weight = nn.Parameter(state_dict[f"{base_address}.layer_norm1.weight"])
+        self.layer_norm1.bias = nn.Parameter(state_dict[f"{base_address}.layer_norm1.bias"])
 
         self.mlp = CLIPMLP(config=config, state_dict=state_dict)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.layer_norm2.weight = nn.Parameter(state_dict['text_model.encoder.layers.10.layer_norm2.weight'])
-        self.layer_norm2.bias = nn.Parameter(state_dict['text_model.encoder.layers.10.layer_norm2.bias'])
+
+        self.layer_norm2.weight = nn.Parameter(state_dict[f"{base_address}.layer_norm2.weight"])
+        self.layer_norm2.bias = nn.Parameter(state_dict[f"{base_address}.layer_norm2.bias"])
 
 
     def forward(
@@ -86,28 +87,27 @@ class CLIPEncoderLayer(nn.Module):
 
 
 class TtCLIPEncoderLayer(nn.Module):
-    def __init__(self, device, state_dict, config=None, hidden_size=None):
+    def __init__(self, device, state_dict, config=None, hidden_size=None, base_address="text_model.encoder.layers.10"):
         super().__init__()
         self.device = device
         self.embed_dim = config.hidden_size if config else hidden_size
         self.self_attn = TtCLIPAttention(device=device, config=config, state_dict=state_dict)
 
 
-        self.layer_norm1_weight = tilize_to_list(pad_weight(state_dict["text_model.encoder.layers.10.layer_norm1.weight"]))
-        self.layer_norm1_bias = tilize_to_list(pad_weight(state_dict["text_model.encoder.layers.10.layer_norm1.bias"]))
+        self.layer_norm1_weight = tilize_to_list(pad_weight(state_dict[f"{base_address}.layer_norm1.weight"]))
+        self.layer_norm1_bias = tilize_to_list(pad_weight(state_dict[f"{base_address}.layer_norm1.bias"]))
 
-# def Layernorm(gamma: float, beta: float, epsilon: float, H, W, device, num_dims = 2):
         H = self.embed_dim
         W = -1
-        self.layer_norm1 = tt_layernorm(gamma=self.layer_norm1_weight, beta=self.layer_norm1_bias, epsilon=config.layer_norm_eps, H=H, W=W, device=device)
+        self.layer_norm1 = tt_layernorm(gamma=self.layer_norm1_weight, beta=self.layer_norm1_bias, epsilon=config.layer_norm_eps, H=H, W=W, device=device, num_dims=1)
 
 
         self.mlp = TtCLIPMLP(device=device, config=config, state_dict=state_dict)
 
-        self.layer_norm2_weight = tilize_to_list(pad_weight(state_dict["text_model.encoder.layers.10.layer_norm2.weight"]))
-        self.layer_norm2_bias = tilize_to_list(pad_weight(state_dict["text_model.encoder.layers.10.layer_norm2.bias"]))
+        self.layer_norm2_weight = tilize_to_list(pad_weight(state_dict[f"{base_address}.layer_norm2.weight"]))
+        self.layer_norm2_bias = tilize_to_list(pad_weight(state_dict[f"{base_address}.layer_norm2.bias"]))
 
-        self.layer_norm2 = tt_layernorm(gamma=self.layer_norm2_weight, beta=self.layer_norm2_bias, epsilon=config.layer_norm_eps, H=H, W=W, device=device)
+        self.layer_norm2 = tt_layernorm(gamma=self.layer_norm2_weight, beta=self.layer_norm2_bias, epsilon=config.layer_norm_eps, H=H, W=W, device=device, num_dims=1)
 
 
     def forward(
@@ -185,9 +185,6 @@ def run_clip_encoder_layer_inference(device):
     tt_untilized_output = untilize(torch.Tensor(tt_out).reshape(torch_out.shape))
     print_diff_argmax(tt_untilized_output, torch_out)
     assert np.allclose(torch_out.detach().numpy(), tt_untilized_output.numpy(), 1e-5, 0.17)
-
-
-
 
 
 

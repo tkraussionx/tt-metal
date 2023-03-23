@@ -13,20 +13,20 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms, datasets
 
-from pymetal import ttmetal as ttm
+from pymetal import ttlib as ttl
 from utility_functions import pad_activation, pad_weight, tilize_to_list, get_oom_of_float, untilize
-from pymetal.ttmetal.utils import print_diff_argmax
+from pymetal.ttlib.utils import print_diff_argmax
 from python_api_testing.fused_ops.linear import Linear as tt_linear
 
 
 class CLIPMLP(nn.Module):
-    def __init__(self, state_dict, config=None, hidden_size=None, intermediate_size=None):
+    def __init__(self, state_dict, config=None, hidden_size=None, intermediate_size=None, base_address="text_model.encoder.layers.10"):
         super().__init__()
 
-        fc1_weight = state_dict["text_model.encoder.layers.10.mlp.fc1.weight"]
-        fc1_bias = state_dict["text_model.encoder.layers.10.mlp.fc1.bias"]
-        fc2_weight = state_dict["text_model.encoder.layers.10.mlp.fc2.weight"]
-        fc2_bias = state_dict["text_model.encoder.layers.10.mlp.fc2.bias"]
+        fc1_weight = state_dict[f"{base_address}.mlp.fc1.weight"]
+        fc1_bias = state_dict[f"{base_address}.mlp.fc1.bias"]
+        fc2_weight = state_dict[f"{base_address}.mlp.fc2.weight"]
+        fc2_bias = state_dict[f"{base_address}.mlp.fc2.bias"]
 
 
         self.config = config
@@ -51,12 +51,12 @@ class CLIPMLP(nn.Module):
 
 
 class TtCLIPMLP(torch.nn.Module):
-    def __init__(self,  device, state_dict, config=None, hidden_size=None, intermediate_size=None):
+    def __init__(self,  device, state_dict, config=None, hidden_size=None, intermediate_size=None, base_address="text_model.encoder.layers.10"):
         super().__init__()
-        self.linear1_weight = tilize_to_list(pad_weight(state_dict["text_model.encoder.layers.10.mlp.fc1.weight"]))
-        self.linear1_bias = tilize_to_list(pad_weight(state_dict["text_model.encoder.layers.10.mlp.fc1.bias"]))
-        self.linear2_weight = tilize_to_list(pad_weight(state_dict["text_model.encoder.layers.10.mlp.fc2.weight"]))
-        self.linear2_bias = tilize_to_list(pad_weight(state_dict["text_model.encoder.layers.10.mlp.fc2.bias"]))
+        self.linear1_weight = tilize_to_list(pad_weight(state_dict[f"{base_address}.mlp.fc1.weight"]))
+        self.linear1_bias = tilize_to_list(pad_weight(state_dict[f"{base_address}.mlp.fc1.bias"]))
+        self.linear2_weight = tilize_to_list(pad_weight(state_dict[f"{base_address}.mlp.fc2.weight"]))
+        self.linear2_bias = tilize_to_list(pad_weight(state_dict[f"{base_address}.mlp.fc2.bias"]))
 
         # Note: Load Weights
         self.config = config
@@ -72,7 +72,7 @@ class TtCLIPMLP(torch.nn.Module):
     def forward(self, x):
 
         x = self.linear_1(x)
-        x = ttm.tensor.gelu(x)
+        x = ttl.tensor.gelu(x)
         x = self.linear_2(x)
         return x
 
@@ -95,7 +95,7 @@ def run_clip_mlp_inference(device):
     torch_mlp = CLIPMLP(config=config, state_dict=state_dict)
     torch_out = torch_mlp(input)
 
-    tt_input = ttm.tensor.Tensor(tilize_to_list(input), input_shape, ttm.tensor.DataType.BFLOAT16, ttm.tensor.Layout.TILE, device)
+    tt_input = ttl.tensor.Tensor(tilize_to_list(input), input_shape, ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
 
     # tt_mlp = TtCLIPMLP(device, hidden_size=hidden_size, intermediate_size=intermediate_size)
     tt_mlp = TtCLIPMLP(device, config=config, state_dict=state_dict)
@@ -112,8 +112,8 @@ def run_clip_mlp_inference(device):
 
 if __name__ == "__main__":
     # Initialize the device
-    device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
-    ttm.device.InitializeDevice(device)
-    host = ttm.device.GetHost()
+    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
+    ttl.device.InitializeDevice(device)
+    host = ttl.device.GetHost()
     run_clip_mlp_inference(device)
-    ttm.device.CloseDevice(device)
+    ttl.device.CloseDevice(device)

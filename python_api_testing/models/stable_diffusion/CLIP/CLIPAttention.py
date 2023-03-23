@@ -25,7 +25,7 @@ from typing import Optional, Tuple, Union
 class CLIPAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, state_dict, config=None, hidden_size=None, num_attention_heads=None):
+    def __init__(self, state_dict, config=None, hidden_size=None, num_attention_heads=None, base_address="text_model.encoder.layers.10"):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size if config else hidden_size
@@ -45,17 +45,17 @@ class CLIPAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
 
-        self.k_proj.weight = nn.Parameter(state_dict['text_model.encoder.layers.10.self_attn.k_proj.weight'])
-        self.k_proj.bias = nn.Parameter(state_dict['text_model.encoder.layers.10.self_attn.k_proj.bias'])
+        self.k_proj.weight = nn.Parameter(state_dict[f"{base_address}.self_attn.k_proj.weight"])
+        self.k_proj.bias = nn.Parameter(state_dict[ f"{base_address}.self_attn.k_proj.bias"])
 
-        self.v_proj.weight = nn.Parameter(state_dict['text_model.encoder.layers.10.self_attn.v_proj.weight'])
-        self.v_proj.bias = nn.Parameter(state_dict['text_model.encoder.layers.10.self_attn.v_proj.bias'])
+        self.v_proj.weight = nn.Parameter(state_dict[f"{base_address}.self_attn.v_proj.weight"])
+        self.v_proj.bias = nn.Parameter(state_dict[f"{base_address}.self_attn.v_proj.bias"])
 
-        self.q_proj.weight = nn.Parameter(state_dict['text_model.encoder.layers.10.self_attn.q_proj.weight'])
-        self.q_proj.bias = nn.Parameter(state_dict['text_model.encoder.layers.10.self_attn.q_proj.bias'])
+        self.q_proj.weight = nn.Parameter(state_dict[f"{base_address}.self_attn.q_proj.weight"])
+        self.q_proj.bias = nn.Parameter(state_dict[f"{base_address}.self_attn.q_proj.bias"])
 
-        self.out_proj.weight = nn.Parameter(state_dict['text_model.encoder.layers.10.self_attn.out_proj.weight'])
-        self.out_proj.bias = nn.Parameter(state_dict['text_model.encoder.layers.10.self_attn.out_proj.bias'])
+        self.out_proj.weight = nn.Parameter(state_dict[f"{base_address}.self_attn.out_proj.weight"])
+        self.out_proj.bias = nn.Parameter(state_dict[f"{base_address}.self_attn.out_proj.bias"])
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -147,7 +147,7 @@ class CLIPAttention(nn.Module):
 class TtCLIPAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, device, state_dict, config=None, hidden_size=None, num_attention_heads=None):
+    def __init__(self, device, state_dict, config=None, hidden_size=None, num_attention_heads=None, base_address="text_model.encoder.layers.10"):
         super().__init__()
         self.config = config
         self.device = device
@@ -163,21 +163,21 @@ class TtCLIPAttention(nn.Module):
 
         # self.dropout = config.attention_dropout
 
-        self.k_proj_weights = tilize_to_list(pad_weight(state_dict["text_model.encoder.layers.10.self_attn.k_proj.weight"]))
-        self.k_proj_bias = tilize_to_list(pad_weight(state_dict["text_model.encoder.layers.10.self_attn.k_proj.bias"]))
+        self.k_proj_weights = tilize_to_list(pad_weight(state_dict[f"{base_address}.self_attn.k_proj.weight"]))
+        self.k_proj_bias = tilize_to_list(pad_weight(state_dict[f"{base_address}.self_attn.k_proj.bias"]))
         self.k_proj = tt_linear(self.embed_dim, self.embed_dim, self.k_proj_weights, self.k_proj_bias, device)
 
-        self.v_proj_weights = tilize_to_list(pad_weight(state_dict["text_model.encoder.layers.10.self_attn.v_proj.weight"]))
-        self.v_proj_bias = tilize_to_list(pad_weight(state_dict["text_model.encoder.layers.10.self_attn.v_proj.bias"]))
+        self.v_proj_weights = tilize_to_list(pad_weight(state_dict[f"{base_address}.self_attn.v_proj.weight"]))
+        self.v_proj_bias = tilize_to_list(pad_weight(state_dict[f"{base_address}.self_attn.v_proj.bias"]))
         self.v_proj = tt_linear(self.embed_dim, self.embed_dim, self.v_proj_weights, self.v_proj_bias, device)
 
 
-        self.q_proj_weights = tilize_to_list(pad_weight(state_dict["text_model.encoder.layers.10.self_attn.q_proj.weight"]))
-        self.q_proj_bias = tilize_to_list(pad_weight(state_dict["text_model.encoder.layers.10.self_attn.q_proj.bias"]))
+        self.q_proj_weights = tilize_to_list(pad_weight(state_dict[f"{base_address}.self_attn.q_proj.weight"]))
+        self.q_proj_bias = tilize_to_list(pad_weight(state_dict[ f"{base_address}.self_attn.q_proj.bias"]))
         self.q_proj = tt_linear(self.embed_dim, self.embed_dim, self.q_proj_weights, self.q_proj_bias, device)
 
-        self.out_proj_weights = tilize_to_list(pad_weight(state_dict["text_model.encoder.layers.10.self_attn.out_proj.weight"]))
-        self.out_proj_bias = tilize_to_list(pad_weight(state_dict["text_model.encoder.layers.10.self_attn.out_proj.bias"]))
+        self.out_proj_weights = tilize_to_list(pad_weight(state_dict[ f"{base_address}.self_attn.out_proj.weight"]))
+        self.out_proj_bias = tilize_to_list(pad_weight(state_dict[ f"{base_address}.self_attn.out_proj.bias"]))
         self.out_proj = tt_linear(self.embed_dim, self.embed_dim, self.out_proj_weights, self.out_proj_bias, device)
 
 

@@ -7,7 +7,7 @@ sys.path.append(f"{f}/../..")
 
 import torch
 
-from pymetal import ttmetal as ttm
+from pymetal import ttlib as ttl
 from utility_functions import untilize, tilize, tilize_to_list
 
 
@@ -21,5 +21,5 @@ def move_to_cpu(x, host):
 
 def move_to_device(x, device):
     x_shape = x.shape
-    x = ttm.tensor.Tensor(tilize_to_list(x), x_shape, ttm.tensor.DataType.BFLOAT16, ttm.tensor.Layout.TILE, device)
+    x = ttl.tensor.Tensor(tilize_to_list(x), x_shape, ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
     return x
