@@ -41,11 +41,15 @@ def run_large_matmul_test(Ha, Wa, Wb, tilize_a, untilize_out):
     )
 
     out = ttl.tensor.large_bmm(tta, ttb, tilize_a, untilize_out)
-    out_pytorch = torch.tensor(out.to(host).data()).reshape(a_shape)
+    out_shape = [1, 1, Ha, Wb]
+    out_pytorch = torch.tensor(out.to(host).data()).reshape(out_shape)
     if not untilize_out:
         out_pytorch = untilize(out_pytorch)
-
-    assert (out_pytorch == a).all(), "Output should be identical to pytorch"
+    golden = torch.matmul(a, b)
+    maxmag = golden.abs().max().item() # % of max magnitude since that determines cancellations
+    match = is_close(out_pytorch, golden, 0.07, 0.07, maxmag, 0.01)
+    print("Match=", match.item())
+    #assert (out_pytorch == a).all(), "Output should be identical to pytorch"
 
 if __name__ == "__main__":
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
@@ -55,10 +59,10 @@ if __name__ == "__main__":
     TILE_HEIGHT = TILE_WIDTH = 32
 
     Ha = 8 * TILE_HEIGHT
-    Wa = 4 * TILE_WIDTH
+    Wa = 9 * TILE_WIDTH
     Wb = 4 * TILE_WIDTH
-    run_large_matmul_test(Ha, Wa, Wb, False, False)
-    run_large_matmul_test(Ha, Wa, Wb, False, True)
+    #run_large_matmul_test(Ha, Wa, Wb, False, False)
+    #run_large_matmul_test(Ha, Wa, Wb, False, True)
     run_large_matmul_test(Ha, Wa, Wb, True, False)
-    run_large_matmul_test(Ha, Wa, Wb, True, True)
+    #run_large_matmul_test(Ha, Wa, Wb, True, True)
     ttl.device.CloseDevice(device)

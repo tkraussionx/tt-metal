@@ -1,5 +1,6 @@
 #include "tt_metal/op_library/eltwise_binary/eltwise_binary_op.hpp"
 #include "tt_metal/op_library/bmm/bmm_op.hpp"
+#include "tt_metal/op_library/conv/conv_op.hpp"
 #include "tt_metal/op_library/pad_h_rm/pad_h_rm_op.hpp"
 #include "tt_metal/op_library/fill_rm/fill_rm_op.hpp"
 #include "tt_metal/op_library/bcast/bcast_op.hpp"
@@ -396,6 +397,26 @@ void TensorModule(py::module &m_tensor) {
         | b            | RHS matmul operand                                                                         | Tensor    |             | Yes      |
         +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
         | tilize_a     | Whether or not to tilize a (useful if a is in row major layout)                            | bool      |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | untilize_out | Whether or not to untilize the output (useful if a consuming op requires row major layout) | bool      |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+    )doc");
+    // conv
+    m_tensor.def("conv_as_large_bmm_single_block_single_core", &conv_as_large_bmm_single_block_single_core, R"doc(
+        Perform a convolution with activation, "a", and weights, "b", as batched matmul where batch dims match.
+        This op converts activation tensor "a" (channels last layout) to 2d matrix for matmul and tilizes it.
+        It expects weights, "b", to already be converted to 2d matrix and tilized.
+        It supports untilizing the output if you so choose.
+        It performs a large single block matmul on a single core.
+        Only supports specific dimensions of activation and weight tensors.
+        Only supports 3x3 convolution with stride=1 and padding=0.
+
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | Argument     | Description                                                                                | Data type | Valid range | Required |
+        +==============+============================================================================================+===========+=============+==========+
+        | a            | LHS matmul operand                                                                         | Tensor    |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | b            | RHS matmul operand                                                                         | Tensor    |             | Yes      |
         +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
         | untilize_out | Whether or not to untilize the output (useful if a consuming op requires row major layout) | bool      |             | Yes      |
         +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
