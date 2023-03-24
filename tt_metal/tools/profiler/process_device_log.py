@@ -6,7 +6,7 @@ import csv
 
 import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output
-from rich import print
+# from rich import print
 import pandas as pd
 import seaborn as sns
 
@@ -34,27 +34,24 @@ def coreCompare(core):
     return x + y * 100
 
 
-def generate_analysis_table(analysisData):
-    stats = set()
-    for analysis in analysisData.keys():
-        for stat in analysisData[analysis].keys():
-            stats.add(stat)
-
-    stats = sorted(stats)
-    return html.Table(
-        # Header
-        [html.Tr([html.Th("Type")] + [html.Th(f"{stat} [cycles]") for stat in stats])]
-        +
-        # Body
-        [
-            html.Tr(
-                [html.Td(f"{analysis}")]
-                + [html.Td(f"{analysisData[analysis][stat]:.0f}")\
-                   if stat in analysisData[analysis].keys() else html.Td("-") for stat in stats]
-            )
-            for analysis in analysisData.keys()
-        ]
-    )
+def generate_analysis_table(analysisData, setup):
+    stats = setup.displayStats
+    return html.Div([
+        html.H6("Stats Table"),
+        html.Table(
+            # Header
+            [html.Tr([html.Th("Type")] + [html.Th(f"{stat} [cycles]") for stat in stats])]
+            +
+            # Body
+            [
+                html.Tr(
+                    [html.Td(f"{analysis}")]
+                    + [html.Td(f"{analysisData[analysis]['stats'][stat]:.0f}")\
+                       if stat in analysisData[analysis]['stats'].keys() else html.Td("-") for stat in stats]
+                )
+                for analysis in analysisData.keys()
+            ]
+        )])
 
 # Note if multiple instances are present, all are returned space delimited
 # Further analysis has to be done on the excel side
@@ -111,81 +108,90 @@ def print_stats_outfile(timerStats, timerStatsCores):
         sys.stdout = original_stdout
 
 
-def print_stats(timerStats, timerStatsCores):
-
-    numberWidth = 12
-    sampleCores = list(timerStatsCores.keys())
-    durationTypes = set()
-    for coreDurations in timerStatsCores.values():
-        for durationType in coreDurations.keys():
-            durationTypes.add(durationType)
-    for duration in sorted(durationTypes):
-        print()
-        print(f"=================== {duration} ===================")
-        for stat in sorted(timerStats[duration].keys()):
-            print(f"{stat:>12} [cycles] = {timerStats[duration][stat]:>13,.0f}")
-        print()
-        for core_y in range(-3, 11):
-            # Print row number
-            if core_y > -1 and core_y < 5:
-                print(f"{core_y:>2}|| ", end="")
-            elif core_y > 5:
-                print(f"{core_y-1:>2}|| ", end="")
-            else:
-                print(f"{' ':>4} ", end="")
-
-            for core_x in range(-1, 12):
-                if core_x > -1:
-                    if core_y == -3:
-                        print(f"{core_x:>{numberWidth}}", end="")
-                    elif core_y == -2:
-                        print(f"{'=':=>{numberWidth}}", end="")
-                    elif core_y == -1:
-                        if core_x in [0, 3, 6, 9]:
-                            print(f"{f'DRAM{int(core_x/3)}':>{numberWidth}}", end="")
-                        else:
-                            print(f"{'---':>{numberWidth}}", end="")
-                    elif core_y != 5:
-                        core = f"{core_x},{core_y}"
-                        if core_y > 5:
-                            core = f"{core_x},{core_y-1}"
-                        if (
-                            core in timerStatsCores.keys()
-                            and duration in timerStatsCores[core].keys()
-                        ):
-                            print(
-                                f"{timerStatsCores[core][duration]:>{numberWidth},}",
-                                end="",
-                            )
-                        else:
-                            print(f"{'X':>{numberWidth}}", end="")
-                    else:
-                        if core_x in [0, 3, 6, 9]:
-                            print(
-                                f"{f'DRAM{4 + int(core_x/3)}':>{numberWidth}}", end=""
-                            )
-                        else:
-                            print(f"{'---':>{numberWidth}}", end="")
-
+def print_stats(deviceData, setup):
+    numberWidth = 15
+    for device in deviceData.keys():
+        for analysis in setup.timerAnalysis.keys():
+            if analysis in deviceData[device]["DEVICE"]["TENSIX"]["analysis"].keys():
+                stats = deviceData[device]["DEVICE"]["TENSIX"]["analysis"][analysis]["stats"]
+                print()
+                print(f"=================== {analysis} ===================")
+                if stats["Count"] > 1:
+                    for stat in setup.displayStats:
+                        print(f"{stat:>12} [cycles] = {stats[stat]:>10,.0f}")
                 else:
-                    if core_y == 1:
-                        print("ARC", end="")
-                    elif core_y == 3:
-                        print("PCI", end="")
-                    elif core_y > -1:
-                        print("---", end="")
-                    else:
-                        print("   ", end="")
+                    print(f"{'Duration':>12} [cycles] = {stats['Max']:>10,.0f}")
+                print()
+                if setup.timerAnalysis[analysis]["across"] in ["risc","core"]:
+                    for core_y in range(-3, 11):
+                        # Print row number
+                        if core_y > -1 and core_y < 5:
+                            print(f"{core_y:>2}|| ", end="")
+                        elif core_y > 5:
+                            print(f"{core_y-1:>2}|| ", end="")
+                        else:
+                            print(f"{' ':>4} ", end="")
 
-            print()
-        print()
-        print()
-        print()
-    for duration in timerStats.keys():
-        if duration not in durationTypes:
-            print(f"=================== {duration} ===================")
-            for stat in sorted(timerStats[duration].keys()):
-                print(f"{stat:>12} [cycles] = {timerStats[duration][stat]:>13,.0f}")
+                        for core_x in range(-1, 12):
+                            if core_x > -1:
+                                if core_y == -3:
+                                    print(f"{core_x:>{numberWidth}}", end="")
+                                elif core_y == -2:
+                                    print(f"{'=':=>{numberWidth}}", end="")
+                                elif core_y == -1:
+                                    if core_x in [0, 3, 6, 9]:
+                                        print(f"{f'DRAM{int(core_x/3)}':>{numberWidth}}", end="")
+                                    else:
+                                        print(f"{'---':>{numberWidth}}", end="")
+                                elif core_y != 5:
+                                    core = (core_x,core_y)
+                                    if core_y > 5:
+                                        core = (core_x,core_y-1)
+                                    if core in deviceData[device].keys():
+                                        for risc in deviceData[device][core].keys():
+                                            if analysis in deviceData[device][core][risc]["analysis"].keys():
+                                                stats = deviceData[device][core][risc]["analysis"][analysis]["stats"]
+                                                plusMinus = (stats['Max']-stats['Min'])
+                                                median = stats['Median']
+                                                tmpStr = f"{median:,}"
+                                                if plusMinus:
+                                                    tmpStr = "{tmpStr}{sign}{plusMinus:,}".format(
+                                                        tmpStr=tmpStr,
+                                                        sign=u"\u00B1",
+                                                        plusMinus=plusMinus)
+                                                print(
+                                                    f"{tmpStr:>{numberWidth}}",
+                                                    end="",
+                                                )
+                                    else:
+                                        print(f"{'X':>{numberWidth}}", end="")
+                                else:
+                                    if core_x in [0, 3, 6, 9]:
+                                        print(
+                                            f"{f'DRAM{4 + int(core_x/3)}':>{numberWidth}}", end=""
+                                        )
+                                    else:
+                                        print(f"{'---':>{numberWidth}}", end="")
+
+                            else:
+                                if core_y == 1:
+                                    print("ARC", end="")
+                                elif core_y == 3:
+                                    print("PCI", end="")
+                                elif core_y > -1:
+                                    print("---", end="")
+                                else:
+                                    print("   ", end="")
+
+                        print()
+                    print()
+                    print()
+                    print()
+    # for duration in timerStats.keys():
+        # if duration not in durationTypes:
+            # print(f"=================== {duration} ===================")
+            # for stat in sorted(timerStats[duration].keys()):
+                # print(f"{stat:>12} [cycles] = {timerStats[duration][stat]:>13,.0f}")
 
 
 def print_help():
@@ -462,56 +468,84 @@ def timeline_plot(yVals, xValsDict, setup):
 
     return fig
 
-def translate_metaData(metaData):
-    core = None
-    risc = None
+def translate_metaData(metaData, core, risc):
+    metaRisc = None
+    metaCore = None
     if len(metaData) == 2:
-        risc,core = metaData
-        print(risct,core)
+        metaRisc, metaCore = metaData
     elif len(metaData) == 1:
         content = metaData[0]
         if type(content) == str:
-            risc = content
+            metaRisc = content
         elif type(content) == tuple:
-            core = content
+            metaCore = content
+    if core != "ANY" and metaCore:
+        core = metaCore
+    if risc != "ANY" and metaRisc:
+        risc = metaRisc
     return core, risc
+
+def determine_conditions (timerID, metaData, analysis):
+    currCore = analysis["start"]["core"] if "core" in analysis["start"].keys() else None
+    currRisc = analysis["start"]["risc"]
+    currStart = (timerID,) + translate_metaData(metaData,currCore,currRisc)
+
+    currCore = analysis["end"]["core"] if "core" in analysis["end"].keys() else None
+    currRisc = analysis["end"]["risc"]
+    currEnd = (timerID,) + translate_metaData(metaData,currCore,currRisc)
+
+    desStart = (
+        analysis["start"]["timerID"],
+        analysis["start"]["core"] if "core" in analysis["start"].keys() else None,
+        analysis["start"]["risc"],
+    )
+    desEnd = (
+        analysis["end"]["timerID"],
+        analysis["end"]["core"] if "core" in analysis["end"].keys() else None,
+        analysis["end"]["risc"],
+    )
+    return currStart, currEnd, desStart, desEnd
+
 
 def timeseries_analysis(timeseries, analysis):
     tmpList = []
     startFound = None
     for timerID, timestamp, *metaData in timeseries:
-        currCombo = (timerID,) + translate_metaData(metaData)
-        desiredStartCombo = (
-            analysis["start"]["timerID"],
-            analysis["start"]["core"] if "core" in analysis.keys() and currCombo[1] else None,
-            analysis["start"]["risc"] if currCombo[2] else None,
-        )
-        desiredEndCombo = (
-            analysis["end"]["timerID"],
-            analysis["end"]["core"] if "core" in analysis.keys() and currCombo[1] else None,
-            analysis["end"]["risc"] if currCombo[2] else None,
-        )
+        currStart, currEnd, desStart, desEnd = determine_conditions (timerID, metaData, analysis)
         if not startFound:
-            if currCombo == desiredStartCombo:
+            if currStart == desStart:
                 startFound = (timerID,timestamp)
+                if analysis["type"] == "first_last":
+                    break
         else:
-            if currCombo == desiredEndCombo:
+            if currEnd == desEnd:
                 startID , startTS = startFound
                 tmpList.append(dict(start=startTS, end=timestamp, durationType=(startID,timerID), diff=timestamp-startTS))
                 startFound = None
+
+    if startFound and analysis["type"] == "first_last":
+        for i in range(len(timeseries)-1,0,-1):
+            timerID, timestamp, *metaData = timeseries[i]
+            currStart, currEnd, desStart, desEnd = determine_conditions (timerID, metaData, analysis)
+            if currEnd == desEnd:
+                startID , startTS = startFound
+                tmpList.append(dict(start=startTS, end=timestamp, durationType=(startID,timerID), diff=timestamp-startTS))
+                startFound = None
+                break
 
     tmpDF = pd.DataFrame(tmpList)
     tmpDict = {}
     if not tmpDF.empty:
         tmpDict = {
-            "duration markers" : tmpDF.loc[0,'durationType'],
-
+            "analysis": analysis,
             "stats" : {
+                "Count" : tmpDF.loc[:,'diff'].count(),
                 "Average" : tmpDF.loc[:,'diff'].mean(),
                 "Max" : tmpDF.loc[:,'diff'].max(),
                 "Min" : tmpDF.loc[:,'diff'].min(),
                 "Median" : tmpDF.loc[:,'diff'].median(),
-                "Count" : tmpDF.loc[:,'diff'].count(),
+                "Sum" : tmpDF.loc[:,'diff'].sum(),
+                "First" : tmpDF.loc[0,'diff'],
             }
         }
     return tmpDict
@@ -536,7 +570,7 @@ def core_analysis(name, analysis, deviceData):
     for device in deviceData.keys():
         for core in deviceData[device].keys():
             if core != "DEVICE":
-                risc = 'TENSIX'
+                risc = "TENSIX"
                 assert(risc in deviceData[device][core].keys())
                 timeseries = deviceData[device][core][risc]["timeseries"]
                 tmpDict = timeseries_analysis(timeseries,analysis)
@@ -546,6 +580,51 @@ def core_analysis(name, analysis, deviceData):
                     }
                 else:
                     deviceData[device][core][risc]["analysis"][name] = tmpDict
+
+def device_analysis(name, analysis, deviceData):
+    for device in deviceData.keys():
+        core = "DEVICE"
+        risc = "TENSIX"
+        assert(core in deviceData[device].keys())
+        assert(risc in deviceData[device][core].keys())
+        timeseries = deviceData[device][core][risc]["timeseries"]
+        tmpDict = timeseries_analysis(timeseries,analysis)
+        if "analysis" not in deviceData[device][core][risc].keys():
+            deviceData[device][core][risc]["analysis"]={
+                name:tmpDict
+            }
+        else:
+            deviceData[device][core][risc]["analysis"][name] = tmpDict
+
+def generate_device_level_summary(deviceData):
+    for device in deviceData.keys():
+        analysisLists = {}
+        for core in deviceData[device].keys():
+            if core != "DEVICE":
+                for risc in deviceData[device][core].keys():
+                    for name, analysis in deviceData[device][core][risc]["analysis"].items():
+                        if name in analysisLists.keys():
+                            analysisLists[name]["statList"].append(analysis['stats'])
+                        else:
+                            analysisLists[name] = dict(analysis=analysis['analysis'], statList = [analysis['stats']])
+
+        for name, analysisList in analysisLists.items():
+            tmpDF = pd.DataFrame(analysisList["statList"])
+            tmpDict = {}
+            if not tmpDF.empty:
+                tmpDict = {
+                    "analysis": analysisList["analysis"],
+                    "stats" : {
+                        "Count" : tmpDF.loc[:,'Count'].sum(),
+                        "Average" : tmpDF.loc[:,'Sum'].sum()/tmpDF.loc[:,'Count'].sum(),
+                        "Max" : tmpDF.loc[:,'Max'].max(),
+                        "Min" : tmpDF.loc[:,'Min'].min(),
+                        "Median" : tmpDF.loc[:,'Median'].median(),
+                    }
+                }
+            deviceData[device]['DEVICE']['TENSIX']['analysis'][name] = tmpDict
+
+
 
 def main(args):
     if len(args) == 1:
@@ -574,22 +653,33 @@ def main(args):
     core_to_device_timeseries(deviceData)
 
     for name, analysis in sorted(setup.timerAnalysis.items()):
-        if analysis["type"] == "risc":
+        if analysis["across"] == "risc":
             risc_analysis(name, analysis, deviceData)
-        elif analysis["type"] == "core":
+        elif analysis["across"] == "core":
             core_analysis(name, analysis, deviceData)
+        elif analysis["across"] == "device":
+            device_analysis(name, analysis, deviceData)
 
+    generate_device_level_summary(deviceData)
+
+    print_stats(deviceData, setup)
     print_arranged_csv(deviceData, setup.timerIDLabels)
 
     timelineFigs = {}
+    statTables = {}
     for chipID, deviceData in deviceData.items():
         timeseries_to_durations(deviceData)
         yVals = sorted(deviceData.keys(), key=coreCompare, reverse=True)
         yVals.remove('DEVICE')
+
         xValsDict = plotData_to_timelineXVals(deviceData, yVals, setup)
-        timelineFigs[f"Chip {chipID}: Cores"] = timeline_plot(yVals, xValsDict, setup)
+        key = f"Chip {chipID}: Cores"
+        statTables[key] = generate_analysis_table(deviceData["DEVICE"]["TENSIX"]["analysis"],setup)
+        timelineFigs[key] = timeline_plot(yVals, xValsDict, setup)
+
         xValsDict = plotData_to_timelineXVals(deviceData, ['DEVICE'], setup)
-        timelineFigs[f"Chip {chipID}: Device"] = timeline_plot(['DEVICE'], xValsDict, setup)
+        key = f"Chip {chipID}: Device"
+        timelineFigs[key] = timeline_plot(['DEVICE'], xValsDict, setup)
 
     external_stylesheets = ["https://codepen.io/chriddyp/pen/bWLwgP.css"]
     app = Dash(__name__, external_stylesheets=external_stylesheets)
@@ -598,13 +688,12 @@ def main(args):
         [
             html.H1("Device Performance"),
             html.Br(),
-            html.H3("Stats Table"),
-            # generate_analysis_table(timerStats),
         ] +
         [
             html.Div(
                 [
-                    html.H6(f"{figure}"),
+                    html.H5(f"{figure}"),
+                    statTables[figure] if figure in statTables.keys() else html.Div([]),
                     dcc.Graph(figure=timelineFigs[figure])
                 ]
             ) for figure in sorted(timelineFigs.keys())

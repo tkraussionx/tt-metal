@@ -1,29 +1,40 @@
 class test_base:
     timerAnalysisBase = {
         "FW start": {
-            "type": "risc",
+            "across": "risc",
+            "type": "adjacent",
             "start": {"risc": "BRISC", "timerID": 0},
             "end": {"risc": "BRISC", "timerID": 1},
         },
         "BRISC kernel start -> BRISC kernel end": {
-            "type": "risc",
+            "across": "risc",
+            "type": "adjacent",
             "start": {"risc": "BRISC", "timerID": 2},
             "end": {"risc": "BRISC", "timerID": 3},
         },
         "NCRISC kernel start -> NCRISC kernel end": {
-            "type": "risc",
+            "across": "risc",
+            "type": "adjacent",
             "start": {"risc": "NCRISC", "timerID": 2},
             "end": {"risc": "NCRISC", "timerID": 3},
         },
-        "compute~": {
-            "type": "core",
+        "Compute~": {
+            "across": "core",
+            "type": "adjacent",
             "start": {"risc": "NCRISC", "timerID": 2},
             "end": {"risc": "BRISC", "timerID": 3},
         },
+        "Core start -> Core end": {
+            "across": "core",
+            "type": "first_last",
+            "start": {"risc": "ANY", "timerID": 1},
+            "end": {"risc": "ANY", "timerID": 4},
+        },
         "Device start -> Device end": {
-            "type": "device",
-            "start": {"core""risc": "NCRISC", "timerID": 1},
-            "end": {"risc": "NCRISC", "timerID": 4},
+            "across": "device",
+            "type": "first_last",
+            "start": {"core":"ANY", "risc": "ANY", "timerID": 1},
+            "end": {"core":"ANY", "risc": "ANY", "timerID": 4},
         },
     }
 
@@ -49,6 +60,8 @@ class test_base:
         (3, "Data Movement Kernel End"),
         (4, "Firmware End"),
     ]
+
+    displayStats = ["Count","Average","Max","Median","Min"]
 
 class test_matmul_multi_core_multi_dram(test_base):
     timerAnalysis = {
