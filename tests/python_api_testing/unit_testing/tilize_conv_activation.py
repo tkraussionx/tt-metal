@@ -41,5 +41,8 @@ if __name__ == "__main__":
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
     host = ttl.device.GetHost()
-    run_tilize_conv3x3s1_act_test(32, 5, 5)
+    H=18
+    W=18
+    C=32
+    run_tilize_conv3x3s1_act_test(C, H, W)
     ttl.device.CloseDevice(device)

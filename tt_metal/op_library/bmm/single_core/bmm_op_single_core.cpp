@@ -175,8 +175,8 @@ Tensor large_bmm_single_core_(const Tensor& a, const Tensor &b, bool tilize_a, b
     const auto [Bb, Cb, Hb, Wb] = b.shape();
 
     TT_ASSERT(Ha == 8 * TILE_HEIGHT, "For now, assuming practically hard-coded dimensions so that blocking makes sense");
-    TT_ASSERT(Wa == 9 * TILE_WIDTH, "For now, assuming practically hard-coded dimensions so that blocking makes sense");
-    //TT_ASSERT(Hb == Wb, "For now, assuming practically hard-coded dimensions so that blocking makes sense");
+    TT_ASSERT(Wa == 4 * TILE_WIDTH, "For now, assuming practically hard-coded dimensions so that blocking makes sense");
+    TT_ASSERT(Hb == Wb, "For now, assuming practically hard-coded dimensions so that blocking makes sense");
 
     // Normal matrix shape checks
     TT_ASSERT(Ba == 1, "So far, large matmul op has only been tested for batch one.");
@@ -197,7 +197,7 @@ Tensor large_bmm_single_core_(const Tensor& a, const Tensor &b, bool tilize_a, b
 
     tt_metal::Program *program = new tt_metal::Program();
     tt_xy_pair core = {0, 0};
-    tt_start_debug_print_server(a.device()->cluster(), {0}, {{1, 1}});
+
     uint32_t single_tile_size = 2 * 1024; // TODO(agrebenisan): Refactor on df
     tt_metal::Buffer *src0_dram_buffer = a.buffer();
     tt_metal::Buffer *src1_dram_buffer = b.buffer();

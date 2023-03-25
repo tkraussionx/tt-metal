@@ -294,7 +294,7 @@ std::cout << "Num transfers of zeroes " << num_transfers_of_zeroes << std::endl;
             bool math_approx_mode = false;
             auto eltwise_binary_kernel = tt_metal::CreateComputeKernel(
                 program,
-                "kernels/compute/matmul_large_block_3m.cpp",
+                "tt_metal/kernels/compute/matmul_large_block.cpp",
                 core,
                 bmm_args,
                 MathFidelity::HiFi4,
