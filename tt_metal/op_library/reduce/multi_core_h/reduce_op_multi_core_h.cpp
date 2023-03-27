@@ -146,8 +146,8 @@ Tensor reduce_multi_core_h(const Tensor &a, ReduceOpMath::Enum reduce_op, Reduce
                 0, // unused by multibank reader
                 0, // unused by multibank reader
                 num_tensor_tiles_per_core, NC, Ht, Wt, Ht*Wt,
-                num_tiles_read / Ht, // tile index of column to start reading from
-                (uint32_t)num_cols_per_core[i] // number of sequential columns to read (can span across batches)
+                num_tiles_read, // tile index of column to start reading from
+                (uint32_t)num_tensor_tiles_per_core // number of tiles to read in column major order (can span across batches)
             }
         );
 

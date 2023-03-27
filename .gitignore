@@ -3,6 +3,7 @@
 .idea
 *.log
 *.csv
+*.xlsx
 /tt-perf*
 test_hlk_args_init_gen
 tt_build
@@ -25,9 +26,6 @@ blobgen_cmd_log
 
 .hlkc_cache
 
-python_api/env
-python_api/*.so
-python_api/test_run_on_device_out
 __pycache__
 
 *.vcd
@@ -83,3 +81,6 @@ data/
 
 #exclude output debug files
 out*.txt
+
+# releases
+dist
