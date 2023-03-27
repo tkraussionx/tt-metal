@@ -46,7 +46,7 @@ def generate_analysis_table(analysisData, setup):
             [
                 html.Tr(
                     [html.Td(f"{analysis}")]
-                    + [html.Td(f"{analysisData[analysis]['stats'][stat]:.0f}")\
+                    + [html.Td(f"{analysisData[analysis]['stats'][stat]:,.0f}")\
                        if stat in analysisData[analysis]['stats'].keys() else html.Td("-") for stat in stats]
                 )
                 for analysis in analysisData.keys()
@@ -66,10 +66,9 @@ def return_available_timer(timeseries, desiredTimerID):
     return res
 
 
-def print_arranged_csv(deviceData, timerIDLabels, freq_text = CORE_FREQ):
+def print_arranged_csv(devicesData, timerIDLabels, freq_text = CORE_FREQ):
     with open(REARRANGED_TIME_CSV, "w") as timersCSV:
-        for chipID, deviceData in deviceData.items():
-            header = ["core_x", "core_y"]
+        for chipID, deviceData in devicesData["devices"].items():
             timeWriter = csv.writer(timersCSV, delimiter=",")
 
             timeWriter.writerow(["Clock Frequency [GHz]", freq_text])
@@ -79,17 +78,17 @@ def print_arranged_csv(deviceData, timerIDLabels, freq_text = CORE_FREQ):
                 + [f"BRISC {timerIDLabel[1]}" for timerIDLabel in timerIDLabels]
                 + [f"NCRISC {timerIDLabel[1]}" for timerIDLabel in timerIDLabels]
             )
-            for core in sorted(deviceData.keys(), key=coreCompare):
+            for core in sorted(deviceData["cores"].keys(), key=coreCompare):
                 if type(core) == tuple:
                     core_x, core_y = core
                     timeWriter.writerow(
                         [core_x, core_y]
                         + [
-                            return_available_timer(deviceData[core]["BRISC"]["timeseries"], timerIDLabel[0])
+                            return_available_timer(deviceData["cores"][core]["riscs"]["BRISC"]["timeseries"], timerIDLabel[0])
                             for timerIDLabel in timerIDLabels
                         ]
                         + [
-                            return_available_timer(deviceData[core]["NCRISC"]["timeseries"], timerIDLabel[0])
+                            return_available_timer(deviceData["cores"][core]["riscs"]["NCRISC"]["timeseries"], timerIDLabel[0])
                             for timerIDLabel in timerIDLabels
                         ]
                     )
@@ -100,20 +99,21 @@ def analyze_stats(timerStats, timerStatsCores):
         print(f"NOTE: Variance on FW starts seems too high at : {timerStats['FW start']['Max']} [cycles]")
         print(f"Please reboot the host to make sure the device is not in a bad reset state")
 
-def print_stats_outfile(timerStats, timerStatsCores):
+def print_stats_outfile(devicesData, setup):
     original_stdout = sys.stdout
     with open(DEVICE_STATS_TXT, "w") as statsFile:
         sys.stdout = statsFile
-        print_stats(timerStats, timerStatsCores)
+        print_stats(devicesData, setup)
         sys.stdout = original_stdout
 
 
-def print_stats(deviceData, setup):
+def print_stats(devicesData, setup):
     numberWidth = 15
-    for device in deviceData.keys():
+    for chipID, deviceData in devicesData["devices"].items():
         for analysis in setup.timerAnalysis.keys():
-            if analysis in deviceData[device]["DEVICE"]["TENSIX"]["analysis"].keys():
-                stats = deviceData[device]["DEVICE"]["TENSIX"]["analysis"][analysis]["stats"]
+            if analysis in deviceData["cores"]["DEVICE"]["analysis"].keys():
+                assert("stats" in deviceData["cores"]["DEVICE"]["analysis"][analysis].keys())
+                stats = deviceData["cores"]["DEVICE"]["analysis"][analysis]["stats"]
                 print()
                 print(f"=================== {analysis} ===================")
                 if stats["Count"] > 1:
@@ -147,10 +147,10 @@ def print_stats(deviceData, setup):
                                     core = (core_x,core_y)
                                     if core_y > 5:
                                         core = (core_x,core_y-1)
-                                    if core in deviceData[device].keys():
-                                        for risc in deviceData[device][core].keys():
-                                            if analysis in deviceData[device][core][risc]["analysis"].keys():
-                                                stats = deviceData[device][core][risc]["analysis"][analysis]["stats"]
+                                    if core in deviceData["cores"].keys():
+                                        for risc, riscData in deviceData["cores"][core]["riscs"].items():
+                                            if analysis in riscData["analysis"].keys():
+                                                stats = riscData["analysis"][analysis]["stats"]
                                                 plusMinus = (stats['Max']-stats['Min'])
                                                 median = stats['Median']
                                                 tmpStr = f"{median:,}"
@@ -204,7 +204,7 @@ def print_help():
 
 
 def import_device_profile_log (logPath):
-    deviceData = {}
+    devicesData = {"devices" : {}}
     with open(logPath) as csvFile:
         csvReader = csv.reader(csvFile, delimiter=",")
         for lineCount,row in enumerate(csvReader):
@@ -215,78 +215,87 @@ def import_device_profile_log (logPath):
                 timerID = int(row[4])
                 timeData = int(row[5])
 
-                if chipID in deviceData.keys():
-                    if core in deviceData[chipID].keys():
-                        if risc in deviceData[chipID][core].keys():
-                            deviceData[chipID][core][risc]["timeseries"].append(
+                if chipID in devicesData["devices"].keys():
+                    if core in devicesData["devices"][chipID]["cores"].keys():
+                        if risc in devicesData["devices"][chipID]["cores"][core]["riscs"].keys():
+                            devicesData["devices"][chipID]["cores"][core]["riscs"][risc]["timeseries"].append(
                                 (timerID, timeData)
                             )
                         else:
-                            deviceData[chipID][core][risc] = {
+                            devicesData["devices"][chipID]["cores"][core]["riscs"][risc] = {
                                 "timeseries": [(timerID, timeData)]
                             }
                     else:
-                        deviceData[chipID][core] = {
+                        devicesData["devices"][chipID]["cores"][core] = {"riscs":{
                             risc: {"timeseries": [(timerID, timeData)]}
-                        }
+                        }}
                 else:
-                    deviceData[chipID] = {
-                        core: {risc: {"timeseries": [(timerID, timeData)]}}
-                    }
+                    devicesData["devices"][chipID] = {"cores" : {
+                        core: {"riscs": {risc: {"timeseries": [(timerID, timeData)]}}}
+                    }}
 
     #Sort all timeseries and find global min timestamp
-    globalMinTimestamp = (1 << 64) - 1
-    for device in deviceData.keys():
-        for core in deviceData[device].keys():
-            for risc in deviceData[device][core].keys():
-                deviceData[device][core][risc]['timeseries'].sort(key=lambda x: x[1])
-                firstTimeID, firsTimestamp = deviceData[device][core][risc]['timeseries'][0]
-                if globalMinTimestamp > firsTimestamp:
-                    globalMinTimestamp = firsTimestamp
+    globalMinTS = (1 << 64) - 1
+    globalMinRisc = 'BRISC'
+    globalMinCore = (0,0)
+    for chipID, deviceData in devicesData["devices"].items():
+        for core, coreData in deviceData["cores"].items():
+            for risc, riscData in coreData["riscs"].items():
+                riscData['timeseries'].sort(key=lambda x: x[1])
+                firstTimeID, firsTimestamp = riscData['timeseries'][0]
+                if globalMinTS > firsTimestamp:
+                    globalMinTS = firsTimestamp
+                    globalMinCore = core
+                    globalMinRisc = risc
+        deviceData.update(dict(metadata=dict(global_min=dict(ts=globalMinTS,risc=globalMinRisc,core=globalMinCore))))
 
     #Include global min timestamp in all timeseries
-    for device in deviceData.keys():
-        for core in deviceData[device].keys():
-            for risc in deviceData[device][core].keys():
-                deviceData[device][core][risc]['timeseries'].insert(0,(0,globalMinTimestamp))
+    for chipID, deviceData in devicesData["devices"].items():
+        for core, coreData in deviceData["cores"].items():
+            for risc, riscData in coreData["riscs"].items():
+                riscData['timeseries'].insert(0,(0,deviceData["metadata"]["global_min"]["ts"]))
 
-    return deviceData
+    return devicesData
 
 
-def risc_to_core_timeseries(deviceData):
-    for device in deviceData.keys():
-        for core in deviceData[device].keys():
+def risc_to_core_timeseries(devicesData):
+    for chipID, deviceData in devicesData["devices"].items():
+        for core, coreData in deviceData["cores"].items():
             tmpTimeseries = []
-            for risc,data in deviceData[device][core].items():
-                for ts in data["timeseries"]:
+            for risc, riscData in coreData["riscs"].items():
+                for ts in riscData["timeseries"]:
                     tmpTimeseries.append(ts + (risc,))
 
             tmpTimeseries.sort(key= lambda x:x[1])
-            deviceData[device][core]["TENSIX"] = {
+            coreData["riscs"]["TENSIX"] = {
                 "timeseries" : tmpTimeseries
             }
 
-def core_to_device_timeseries(deviceData):
-    for device in deviceData.keys():
-        tmpTimeseries = {}
-        for core,coreData in deviceData[device].items():
-            for risc in coreData.keys():
-                for ts in coreData[risc]["timeseries"]:
-                    if risc in tmpTimeseries.keys():
-                        tmpTimeseries[risc]["timeseries"].append(ts + (core,))
+def core_to_device_timeseries(devicesData):
+    for chipID, deviceData in devicesData["devices"].items():
+        tmpTimeseries = {"riscs":{}}
+        for core, coreData in deviceData["cores"].items():
+            for risc, riscData in coreData["riscs"].items():
+                for ts in riscData["timeseries"]:
+                    timerID, timestamp, *metadata = ts
+                    tsCore = ts+(core,)
+                    if timerID == 0:
+                        tsCore = ts+(deviceData["metadata"]["global_min"]["core"],)
+                    if risc in tmpTimeseries["riscs"].keys():
+                        tmpTimeseries["riscs"][risc]["timeseries"].append(tsCore)
                     else:
-                        tmpTimeseries[risc]= {"timeseries": [ts + (core,)]}
+                        tmpTimeseries["riscs"][risc]= {"timeseries": [tsCore]}
 
-        for risc in tmpTimeseries.keys():
-            tmpTimeseries[risc]["timeseries"].sort(key= lambda x:x[1])
+        for risc in tmpTimeseries["riscs"].keys():
+            tmpTimeseries["riscs"][risc]["timeseries"].sort(key= lambda x:x[1])
 
-        deviceData[device]["DEVICE"] = tmpTimeseries
+        deviceData["cores"]["DEVICE"] = tmpTimeseries
 
 def timeseries_to_durations (deviceData):
-    for core in deviceData.keys():
-        for risc in deviceData[core].keys():
-            deviceData[core][risc]["durations"] = {"data":{},"order":[]}
-            timeseries = deviceData[core][risc]['timeseries']
+    for core, coreData in deviceData["cores"].items():
+        for risc, riscData in coreData["riscs"].items():
+            riscData["durations"] = {"data":{},"order":[]}
+            timeseries = riscData['timeseries']
             for startData, endData in zip(timeseries[:-1],timeseries[1:]):
                 startTimerID, startTime, *startMeta = startData
                 endTimerID, endTime, *endMeta = endData
@@ -297,20 +306,19 @@ def timeseries_to_durations (deviceData):
                 if endMeta:
                     end =(endTimerID,) + tuple(endMeta)
                 durationType = (start,end)
-                if durationType in deviceData[core][risc]["durations"]["data"].keys():
-                    deviceData[core][risc]["durations"]["data"][durationType].append((startTime, endTime, endTime-startTime))
+                if durationType in riscData["durations"]["data"].keys():
+                    riscData["durations"]["data"][durationType].append((startTime, endTime, endTime-startTime))
                 else:
-                    deviceData[core][risc]["durations"]["data"][durationType] = [(startTime, endTime, endTime-startTime)]
-                deviceData[core][risc]["durations"]["order"].append((durationType,
-                                                                   len(deviceData[core][risc]["durations"]["data"][durationType])-1))
+                    riscData["durations"]["data"][durationType] = [(startTime, endTime, endTime-startTime)]
+                riscData["durations"]["order"].append((durationType,len(riscData["durations"]["data"][durationType])-1))
 
 
-def plotData_to_timelineXVals(plotData, plotCores, setup):
+def plotData_to_timelineXVals(deviceData, plotCores, setup):
     plotRiscs = setup.riscsData.keys()
     xValsDict = {risc:[] for risc in plotRiscs}
     traces = {risc:[] for risc in plotRiscs}
 
-    coreOrderTrav = {core:{risc:0 for risc in plotData[core].keys()} for core in plotCores}
+    coreOrderTrav = {core:{risc:0 for risc in deviceData["cores"][core]["riscs"].keys()} for core in plotCores}
     for risc in plotRiscs:
         ordering = True
         traceToAdd = None
@@ -319,11 +327,11 @@ def plotData_to_timelineXVals(plotData, plotCores, setup):
             ordering = False
             addTrace = True
             for core in plotCores:
-                assert(core in plotData.keys())
-                if risc in plotData[core].keys():
-                    if coreOrderTrav[core][risc] < len(plotData[core][risc]["durations"]["order"]):
+                assert(core in deviceData["cores"].keys())
+                if risc in deviceData["cores"][core]["riscs"].keys():
+                    if coreOrderTrav[core][risc] < len(deviceData["cores"][core]["riscs"][risc]["durations"]["order"]):
                         ordering = True
-                        trace = plotData[core][risc]["durations"]["order"][coreOrderTrav[core][risc]]
+                        trace = deviceData["cores"][core]["riscs"][risc]["durations"]["order"][coreOrderTrav[core][risc]]
                         # print(trace)
                         if traceToAdd:
                             if core not in traceToAdd[1]:
@@ -331,8 +339,8 @@ def plotData_to_timelineXVals(plotData, plotCores, setup):
                                     traceToAdd[1].add(core)
                                 else:
                                     #Let see if any trace in the future is the candidate for this core
-                                    for i in range (coreOrderTrav[core][risc]+1, len(plotData[core][risc]["durations"]["order"])):
-                                        futureTrace = plotData[core][risc]["durations"]["order"][i]
+                                    for i in range (coreOrderTrav[core][risc]+1, len(deviceData["cores"][core]["riscs"][risc]["durations"]["order"])):
+                                        futureTrace = deviceData["cores"][core]["riscs"][risc]["durations"]["order"][i]
                                         if futureTrace == traceToAdd[0] and traceToAdd[0] not in discardedTraces:
                                             #Pick a better candidate
                                             discardedTraces.add(traceToAdd[0])
@@ -352,7 +360,7 @@ def plotData_to_timelineXVals(plotData, plotCores, setup):
                     discardedTraces.remove(traceToAdd[0])
                 traces[risc].append(traceToAdd)
                 for core in traceToAdd[1]:
-                    if risc in plotData[core].keys():
+                    if risc in deviceData["cores"][core]["riscs"].keys():
                         coreOrderTrav[core][risc] += 1
                 traceToAdd = None
 
@@ -364,7 +372,7 @@ def plotData_to_timelineXVals(plotData, plotCores, setup):
             for core in plotCores:
                 xVal = 0
                 if core in cores:
-                    xVal = plotData[core][risc]["durations"]["data"][traceType[0]][traceType[1]][2]
+                    xVal = deviceData["cores"][core]["riscs"][risc]["durations"]["data"][traceType[0]][traceType[1]][2]
                 xVals.append(xVal)
             xValsDict[risc].append((traceType,xVals))
     return xValsDict
@@ -374,7 +382,10 @@ def timeline_plot(yVals, xValsDict, setup):
     riscsData = setup.riscsData
     timerIDLabels = setup.timerIDLabels
 
-    layout = go.Layout(xaxis=dict(title="Cycle count"), yaxis=dict(title="Cores"))
+    layout = go.Layout(xaxis=dict(title="Cycle count"))
+    if len(yVals) > 1:
+        layout = go.Layout(xaxis=dict(title="Cycle count"), yaxis=dict(title="Cores"))
+
     fig = go.Figure(layout=layout)
 
     fig.add_trace(
@@ -441,7 +452,7 @@ def timeline_plot(yVals, xValsDict, setup):
                         y=[yVals, [risc] * len(yVals)],
                         x=xValsData,
                         orientation="h",
-                        name=name,
+                        name="",
                         showlegend=showlegend,
                         marker=dict(color=color),
                         customdata=[name for i in range(len(xValsData))],
@@ -463,7 +474,7 @@ def timeline_plot(yVals, xValsDict, setup):
 
     fig.update_layout(
         barmode="stack",
-        height=BASE_HEIGHT + PER_CORE_HEIGHT * len(yVals)
+        height=BASE_HEIGHT + PER_CORE_HEIGHT * len(yVals),
     )
 
     return fig
@@ -507,7 +518,8 @@ def determine_conditions (timerID, metaData, analysis):
     return currStart, currEnd, desStart, desEnd
 
 
-def timeseries_analysis(timeseries, analysis):
+def timeseries_analysis(riscData, name, analysis):
+    timeseries = riscData["timeseries"]
     tmpList = []
     startFound = None
     for timerID, timestamp, *metaData in timeseries:
@@ -548,61 +560,47 @@ def timeseries_analysis(timeseries, analysis):
                 "First" : tmpDF.loc[0,'diff'],
             }
         }
-    return tmpDict
+    if "analysis" not in riscData.keys():
+        riscData["analysis"]={
+            name:tmpDict
+        }
+    else:
+        riscData["analysis"][name] = tmpDict
 
-def risc_analysis(name, analysis, deviceData):
-    for device in deviceData.keys():
-        for core in deviceData[device].keys():
+def risc_analysis(name, analysis, devicesData):
+    for chipID, deviceData in devicesData["devices"].items():
+        for core, coreData in deviceData["cores"].items():
             if core != "DEVICE":
-                for risc in deviceData[device][core].keys():
+                for risc, riscData in coreData["riscs"].items():
                     if risc == analysis["start"]["risc"]:
-                        timeseries = deviceData[device][core][risc]["timeseries"]
-                        tmpDict = timeseries_analysis(timeseries,analysis)
-                        if "analysis" not in deviceData[device][core][risc].keys():
-                            deviceData[device][core][risc]["analysis"]={
-                                name:tmpDict
-                            }
-                        else:
-                            deviceData[device][core][risc]["analysis"][name] = tmpDict
+                        timeseries_analysis(riscData, name, analysis)
 
 
-def core_analysis(name, analysis, deviceData):
-    for device in deviceData.keys():
-        for core in deviceData[device].keys():
+def core_analysis(name, analysis, devicesData):
+    for chipID, deviceData in devicesData["devices"].items():
+        for core, coreData in deviceData["cores"].items():
             if core != "DEVICE":
                 risc = "TENSIX"
-                assert(risc in deviceData[device][core].keys())
-                timeseries = deviceData[device][core][risc]["timeseries"]
-                tmpDict = timeseries_analysis(timeseries,analysis)
-                if "analysis" not in deviceData[device][core][risc].keys():
-                    deviceData[device][core][risc]["analysis"]={
-                        name:tmpDict
-                    }
-                else:
-                    deviceData[device][core][risc]["analysis"][name] = tmpDict
+                assert(risc in coreData["riscs"].keys())
+                riscData = coreData["riscs"][risc]
+                timeseries_analysis(riscData, name, analysis)
 
-def device_analysis(name, analysis, deviceData):
-    for device in deviceData.keys():
+def device_analysis(name, analysis, devicesData):
+    for chipID, deviceData in devicesData["devices"].items():
         core = "DEVICE"
         risc = "TENSIX"
-        assert(core in deviceData[device].keys())
-        assert(risc in deviceData[device][core].keys())
-        timeseries = deviceData[device][core][risc]["timeseries"]
-        tmpDict = timeseries_analysis(timeseries,analysis)
-        if "analysis" not in deviceData[device][core][risc].keys():
-            deviceData[device][core][risc]["analysis"]={
-                name:tmpDict
-            }
-        else:
-            deviceData[device][core][risc]["analysis"][name] = tmpDict
+        assert(core in deviceData["cores"].keys())
+        assert(risc in deviceData["cores"][core]["riscs"].keys())
+        riscData = deviceData["cores"][core]["riscs"][risc]
+        timeseries_analysis(riscData, name, analysis)
 
-def generate_device_level_summary(deviceData):
-    for device in deviceData.keys():
+def generate_device_level_summary(devicesData):
+    for chipID, deviceData in devicesData["devices"].items():
         analysisLists = {}
-        for core in deviceData[device].keys():
-            if core != "DEVICE":
-                for risc in deviceData[device][core].keys():
-                    for name, analysis in deviceData[device][core][risc]["analysis"].items():
+        for core, coreData in deviceData["cores"].items():
+            for risc, riscData in coreData["riscs"].items():
+                if "analysis" in riscData.keys():
+                    for name, analysis in riscData["analysis"].items():
                         if name in analysisLists.keys():
                             analysisLists[name]["statList"].append(analysis['stats'])
                         else:
@@ -622,7 +620,10 @@ def generate_device_level_summary(deviceData):
                         "Median" : tmpDF.loc[:,'Median'].median(),
                     }
                 }
-            deviceData[device]['DEVICE']['TENSIX']['analysis'][name] = tmpDict
+            if "analysis" in deviceData['cores']['DEVICE'].keys():
+                deviceData['cores']['DEVICE']['analysis'][name] = tmpDict
+            else:
+                deviceData['cores']['DEVICE']["analysis"]={name:tmpDict}
 
 
 
@@ -648,33 +649,34 @@ def main(args):
         print_help()
         return
 
-    deviceData = import_device_profile_log(DEVICE_TIME_CSV)
-    risc_to_core_timeseries(deviceData)
-    core_to_device_timeseries(deviceData)
+    devicesData = import_device_profile_log(DEVICE_TIME_CSV)
+    risc_to_core_timeseries(devicesData)
+    core_to_device_timeseries(devicesData)
+
 
     for name, analysis in sorted(setup.timerAnalysis.items()):
         if analysis["across"] == "risc":
-            risc_analysis(name, analysis, deviceData)
+            risc_analysis(name, analysis, devicesData)
         elif analysis["across"] == "core":
-            core_analysis(name, analysis, deviceData)
+            core_analysis(name, analysis, devicesData)
         elif analysis["across"] == "device":
-            device_analysis(name, analysis, deviceData)
+            device_analysis(name, analysis, devicesData)
 
-    generate_device_level_summary(deviceData)
-
-    print_stats(deviceData, setup)
-    print_arranged_csv(deviceData, setup.timerIDLabels)
+    generate_device_level_summary(devicesData)
+    print_stats(devicesData, setup)
+    print_stats_outfile(devicesData, setup)
+    print_arranged_csv(devicesData, setup.timerIDLabels[1:5])
 
     timelineFigs = {}
     statTables = {}
-    for chipID, deviceData in deviceData.items():
+    for chipID, deviceData in devicesData["devices"].items():
         timeseries_to_durations(deviceData)
-        yVals = sorted(deviceData.keys(), key=coreCompare, reverse=True)
-        yVals.remove('DEVICE')
+        yVals = sorted(deviceData["cores"].keys(), key=coreCompare, reverse=True)
+        yVals.remove("DEVICE")
 
         xValsDict = plotData_to_timelineXVals(deviceData, yVals, setup)
         key = f"Chip {chipID}: Cores"
-        statTables[key] = generate_analysis_table(deviceData["DEVICE"]["TENSIX"]["analysis"],setup)
+        statTables[key] = generate_analysis_table(deviceData["cores"]["DEVICE"]["analysis"],setup)
         timelineFigs[key] = timeline_plot(yVals, xValsDict, setup)
 
         xValsDict = plotData_to_timelineXVals(deviceData, ['DEVICE'], setup)

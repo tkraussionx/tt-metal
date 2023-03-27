@@ -18,12 +18,6 @@ class test_base:
             "start": {"risc": "NCRISC", "timerID": 2},
             "end": {"risc": "NCRISC", "timerID": 3},
         },
-        "Compute~": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"risc": "NCRISC", "timerID": 2},
-            "end": {"risc": "BRISC", "timerID": 3},
-        },
         "Core start -> Core end": {
             "across": "core",
             "type": "first_last",
@@ -81,6 +75,12 @@ class test_matmul_multi_core_multi_dram(test_base):
 
 class test_matmul_multi_core_multi_dram_in0_mcast(test_base):
     timerAnalysis = {
+        "Compute~": {
+            "across": "core",
+            "type": "adjacent",
+            "start": {"risc": "NCRISC", "timerID": 2},
+            "end": {"risc": "BRISC", "timerID": 3},
+        },
         "NC_start_sender -> B_end": {
             "type": "diff",
             "start": {"risc": "NCRISC", "timerID": "10"},
