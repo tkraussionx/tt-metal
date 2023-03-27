@@ -39,10 +39,6 @@ def TT_forward(tt_x, in_channels, out_channels,
         x1 = Variable(x1.contiguous())
         x2 = Variable(x2.contiguous())
 
-#        if CUDA:
-#            x1.cuda()
-#            x2.cuda()
-
         x1_ = possible_downsample(x1, in_channels, out_channels, stride,
                                 padding, dilation)
         x2_ = possible_downsample(x2, in_channels, out_channels, stride,
@@ -97,7 +93,6 @@ def TT_forward(tt_x, in_channels, out_channels,
     return y
 
 ####### REFERENCE FUNCTION ###########
-
 
 ## input is a TT tensor that is changed to torch tensor
 def REF_forward(x, in_channels, out_channels,
@@ -186,9 +181,6 @@ def possible_downsample(x, in_channels, out_channels, stride=1, padding=1,
             out.size(2), out.size(3)
         ), requires_grad=True)
 
-#        if CUDA:
-#            pad = pad.cuda()
-
         temp = torch.cat([pad, out], dim=1)
         out = torch.cat([temp, pad], dim=1)
 
@@ -207,10 +199,8 @@ def possible_downsample(x, in_channels, out_channels, stride=1, padding=1,
     return out
 
 
-# Example call
-'''
- _, _, H_out, W_out = size_after_residual(x.size(), out_channels, 3, stride, padding, dilation)
-'''
+# Example call:
+# _, _, H_out, W_out = size_after_residual(x.size(), out_channels, 3, stride, padding, dilation)
 
 def size_after_residual(size, out_channels, kernel_size, stride, padding, dilation):
     """Calculate the size of the output of the residual function
@@ -225,11 +215,7 @@ def size_after_residual(size, out_channels, kernel_size, stride, padding, dilati
     )
     return N, out_channels, H_out, W_out
 
-
 ####################################################################
-
-
-
 
 if __name__ == "__main__":
     # Initialize the device
@@ -286,8 +272,6 @@ if __name__ == "__main__":
                          g_mean_runf, g_var_runf, g_gammaf, g_betaf,
                          matmul,  epsf)
 
-    breakpoint()
-
     # Set up input data for device
     t0 = ttmetal.tensor.Tensor(tilize_to_list(x), [1, C, H, W], ttmetal.tensor.DataType.BFLOAT16, ttmetal.tensor.Layout.TILE, device)
     matmul0 = ttmetal.tensor.Tensor(tilize_to_list(matmul), [1, 1, H, W], ttmetal.tensor.DataType.BFLOAT16, ttmetal.tensor.Layout.TILE, device)
@@ -305,24 +289,21 @@ if __name__ == "__main__":
 
     # Run TT_residual
     t1 = TT_forward(t0, in_channels, out_channels,  stride, padding, dilation,
-    f_ttmean_run, f_ttvar_run, f_ttgamma, f_ttbeta,
-    g_ttmean_run, g_ttvar_run, g_ttgamma, g_ttbeta,
-    matmul0, device, host, C,H,W)
+        f_ttmean_run, f_ttvar_run, f_ttgamma, f_ttbeta,
+        g_ttmean_run, g_ttvar_run, g_ttgamma, g_ttbeta,
+        matmul0, device, host, C,H,W)
 
-    '''
-    t2_data = t1.to(host).data()
-    tt_got_back = torch.Tensor(t2_data).reshape((1,C,H,W))
-    tt_got_back = untilize(tt_got_back)
-    '''
+    # TT_forward returns a torch tensor for now.
+    #t2_data = t1.to(host).data()
+    #tt_got_back = torch.Tensor(t2_data).reshape((1,C,H,W))
+    #tt_got_back = untilize(tt_got_back)
+
 
     print ('=========COMPLETE=============')
     print ("GOLDEN PCC TEST")
     print (comp_pcc(ref_fwd, t1, pcc=.99))
 
     ttmetal.device.CloseDevice(device)
-
-
-
 
 
 ######### REFERENCES
