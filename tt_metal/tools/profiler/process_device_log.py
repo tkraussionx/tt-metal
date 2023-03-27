@@ -21,10 +21,11 @@ CORE_FREQ = 1.2
 
 REARRANGED_TIME_CSV = "device_arranged_timestamps.csv"
 DEVICE_STATS_TXT = "device_stats.txt"
-DEVICE_PERF_HTML = "device_perf.html"
+DEVICE_PERF_HTML = "timeline.html"
+
 DEVICE_TIME_CSV = "logs/profile_log_device.csv"
 
-DEVICE_PERF_RESULTS = "device_perf_results.tar"
+DEVICE_PERF_RESULTS = "device_perf_results.tgz"
 
 def coreCompare(core):
     if type(core) == str:
@@ -66,8 +67,9 @@ def return_available_timer(timeseries, desiredTimerID):
     return res
 
 
-def print_arranged_csv(devicesData, timerIDLabels, freq_text = CORE_FREQ):
-    with open(REARRANGED_TIME_CSV, "w") as timersCSV:
+def print_arranged_csv(devicesData, setup, freq_text = CORE_FREQ):
+    timerIDLabels = setup.timerIDLabels[1:5]
+    with open(f"{setup.outputFolder}/{REARRANGED_TIME_CSV}", "w") as timersCSV:
         for chipID, deviceData in devicesData["devices"].items():
             timeWriter = csv.writer(timersCSV, delimiter=",")
 
@@ -101,7 +103,7 @@ def analyze_stats(timerStats, timerStatsCores):
 
 def print_stats_outfile(devicesData, setup):
     original_stdout = sys.stdout
-    with open(DEVICE_STATS_TXT, "w") as statsFile:
+    with open(f"{setup.outputFolder}/{DEVICE_STATS_TXT}", "w") as statsFile:
         sys.stdout = statsFile
         print_stats(devicesData, setup)
         sys.stdout = original_stdout
@@ -147,6 +149,7 @@ def print_stats(devicesData, setup):
                                     core = (core_x,core_y)
                                     if core_y > 5:
                                         core = (core_x,core_y-1)
+                                    noCoreData = True
                                     if core in deviceData["cores"].keys():
                                         for risc, riscData in deviceData["cores"][core]["riscs"].items():
                                             if analysis in riscData["analysis"].keys():
@@ -159,11 +162,9 @@ def print_stats(devicesData, setup):
                                                         tmpStr=tmpStr,
                                                         sign=u"\u00B1",
                                                         plusMinus=plusMinus)
-                                                print(
-                                                    f"{tmpStr:>{numberWidth}}",
-                                                    end="",
-                                                )
-                                    else:
+                                                print(f"{tmpStr:>{numberWidth}}",end="")
+                                                noCoreData = False
+                                    if noCoreData :
                                         print(f"{'X':>{numberWidth}}", end="")
                                 else:
                                     if core_x in [0, 3, 6, 9]:
@@ -187,11 +188,6 @@ def print_stats(devicesData, setup):
                     print()
                     print()
                     print()
-    # for duration in timerStats.keys():
-        # if duration not in durationTypes:
-            # print(f"=================== {duration} ===================")
-            # for stat in sorted(timerStats[duration].keys()):
-                # print(f"{stat:>12} [cycles] = {timerStats[duration][stat]:>13,.0f}")
 
 
 def print_help():
@@ -560,12 +556,13 @@ def timeseries_analysis(riscData, name, analysis):
                 "First" : tmpDF.loc[0,'diff'],
             }
         }
-    if "analysis" not in riscData.keys():
-        riscData["analysis"]={
-            name:tmpDict
-        }
-    else:
-        riscData["analysis"][name] = tmpDict
+    if tmpDict:
+        if "analysis" not in riscData.keys():
+            riscData["analysis"]={
+                name:tmpDict
+            }
+        else:
+            riscData["analysis"][name] = tmpDict
 
 def risc_analysis(name, analysis, devicesData):
     for chipID, deviceData in devicesData["devices"].items():
@@ -649,10 +646,11 @@ def main(args):
         print_help()
         return
 
+    os.system(f"rm -rf {setup.outputFolder}; mkdir -p {setup.outputFolder}; cp {DEVICE_TIME_CSV} {setup.outputFolder}")
+
     devicesData = import_device_profile_log(DEVICE_TIME_CSV)
     risc_to_core_timeseries(devicesData)
     core_to_device_timeseries(devicesData)
-
 
     for name, analysis in sorted(setup.timerAnalysis.items()):
         if analysis["across"] == "risc":
@@ -665,7 +663,7 @@ def main(args):
     generate_device_level_summary(devicesData)
     print_stats(devicesData, setup)
     print_stats_outfile(devicesData, setup)
-    print_arranged_csv(devicesData, setup.timerIDLabels[1:5])
+    print_arranged_csv(devicesData, setup)
 
     timelineFigs = {}
     statTables = {}
@@ -675,17 +673,22 @@ def main(args):
         yVals.remove("DEVICE")
 
         xValsDict = plotData_to_timelineXVals(deviceData, yVals, setup)
-        key = f"Chip {chipID}: Cores"
+        key = f"Chip {chipID} Cores"
         statTables[key] = generate_analysis_table(deviceData["cores"]["DEVICE"]["analysis"],setup)
         timelineFigs[key] = timeline_plot(yVals, xValsDict, setup)
 
         xValsDict = plotData_to_timelineXVals(deviceData, ['DEVICE'], setup)
-        key = f"Chip {chipID}: Device"
+        key = f"Chip {chipID} Device"
         timelineFigs[key] = timeline_plot(['DEVICE'], xValsDict, setup)
+
+    figHtmls = {f"{setup.outputFolder}/{fig.replace(' ','_')}_{DEVICE_PERF_HTML}":fig for fig in sorted(timelineFigs.keys())}
+    for filename, figHtml in figHtmls.items():
+        timelineFigs[figHtml].write_html(filename)
+
+    os.system(f"cd {setup.outputFolder}; tar -czf ../{DEVICE_PERF_RESULTS} .; mv ../{DEVICE_PERF_RESULTS} .")
 
     external_stylesheets = ["https://codepen.io/chriddyp/pen/bWLwgP.css"]
     app = Dash(__name__, external_stylesheets=external_stylesheets)
-
     app.layout = html.Div(
         [
             html.H1("Device Performance"),
@@ -694,16 +697,14 @@ def main(args):
         [
             html.Div(
                 [
-                    html.H5(f"{figure}"),
+                    html.H5(f"{figure}:"),
                     statTables[figure] if figure in statTables.keys() else html.Div([]),
                     dcc.Graph(figure=timelineFigs[figure])
                 ]
             ) for figure in sorted(timelineFigs.keys())
         ]
     )
-
     app.run_server(host="0.0.0.0", debug=True)
-
 
 if __name__ == "__main__":
     main(sys.argv[1:])
