@@ -6,7 +6,7 @@ import platform
 import subprocess
 
 from distutils.version import LooseVersion
-from setuptools import setup, Extension, find_packages
+from setuptools import setup, Extension, find_namespace_packages
 from setuptools.command.build_ext import build_ext
 
 
@@ -28,18 +28,21 @@ class MyBuild(build_ext):
             src = "build/lib/libpymetal_csrc.so"
             self.copy_file(src, full_lib_path)
 
-pymetal_C = TTExtension("ttmetal._C")
-
-ext_modules = [pymetal_C]
-
-packages = ["ttmetal"]
-
 short_hash = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('ascii').strip()
 date = subprocess.check_output(['git', 'show', '-s', '--format=%cd', "--date=format:%y%m%d", 'HEAD']).decode('ascii').strip()
 version = "0.1." + date + "+dev.gs." + short_hash
 
+pymetal_C = TTExtension("ttlib._C")
+
+ext_modules = [pymetal_C]
+
+packages = find_namespace_packages(
+    where="pymetal",
+    exclude=["*csrc"],
+)
+
 setup(
-    name='ttmetal',
+    name='ttlib',
     version=version,
     author='Tenstorrent',
     url="http://www.tenstorrent.com",
@@ -47,9 +50,9 @@ setup(
     description='General compute framework for Tenstorrent devices',
     python_requires='>=3.8',
     packages=packages,
-    package_dir={"ttmetal": "pymetal/ttmetal"},
+    package_dir={"": "pymetal"},
     long_description_content_type="text/markdown",
     ext_modules=ext_modules,
     cmdclass=dict(build_ext=MyBuild),
-    zip_safe=False
+    zip_safe=False,
 )

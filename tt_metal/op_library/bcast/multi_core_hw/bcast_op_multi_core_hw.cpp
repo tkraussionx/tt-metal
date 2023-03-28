@@ -111,7 +111,7 @@ Tensor bcast_multi_core_hw(const Tensor &a, const Tensor &b, BcastOpMath::Enum b
 
 		tt_metal::DataMovementKernel *unary_writer_kernel = tt_metal::CreateDataMovementKernel(
 			program,
-			"kernels/dataflow/writer_unary_8bank_start_id.cpp",
+			"tt_metal/kernels/dataflow/writer_unary_8bank_start_id.cpp",
 			core,
 			tt_metal::DataMovementProcessor::RISCV_0,
 			tt_metal::NOC::RISCV_0_default);
@@ -137,7 +137,7 @@ Tensor bcast_multi_core_hw(const Tensor &a, const Tensor &b, BcastOpMath::Enum b
 			fp32_dest_acc_en,
 			math_approx_mode
 		);
-		bcast_op_utils::set_compute_kernel_defines(bcast_kernel, bcast_math);
+		bcast_op_utils::add_defines(bcast_kernel, bcast_dim, bcast_math);
 	}
 
     ////////////////////////////////////////////////////////////////////////////

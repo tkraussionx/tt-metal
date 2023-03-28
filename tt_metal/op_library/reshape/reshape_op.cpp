@@ -4,14 +4,6 @@
 #include "tt_metal/host_api.hpp"
 #include "constants.hpp"
 
-namespace eltwise_unary {
-// FIXME:copy pasted the args here from the kernel file,  we could refactor the HLK file
-struct hlk_args_t {
-    std::int32_t per_core_block_cnt;
-    std::int32_t per_core_block_size;
-};
-}
-
 using namespace tt::constants;
 
 namespace tt {
@@ -106,16 +98,11 @@ Tensor reshape(Tensor &a, int N, int C, int H, int W) {
     DataMovementKernelArgs *writer_compile_time_args;
     if (new_stick_size_is_power_of_two) {
         writer_kernel_args.push_back(log2(new_stick_size));
-
-        // Use the fast stick size power of 2 path (get noc addr uses just shift operations, no slow multiply algorithm)
-        writer_compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {1});
-    } else {
-        writer_compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {0});
     }
 
     tt_metal::DataMovementKernel *unary_reader_kernel = tt_metal::CreateDataMovementKernel(
         program,
-        "kernels/dataflow/reader_unary_stick_layout_8bank.cpp",
+        "tt_metal/kernels/dataflow/reader_unary_stick_layout_8bank.cpp",
         core,
         reader_compile_time_args,
         tt_metal::DataMovementProcessor::RISCV_1,
@@ -123,9 +110,8 @@ Tensor reshape(Tensor &a, int N, int C, int H, int W) {
 
     tt_metal::DataMovementKernel *unary_writer_kernel = tt_metal::CreateDataMovementKernel(
         program,
-        "kernels/dataflow/writer_unary_stick_layout_8bank.cpp",
+        "tt_metal/kernels/dataflow/writer_unary_stick_layout_8bank.cpp",
         core,
-        writer_compile_time_args,
         tt_metal::DataMovementProcessor::RISCV_0,
         tt_metal::NOC::RISCV_0_default);
 
@@ -140,7 +126,7 @@ Tensor reshape(Tensor &a, int N, int C, int H, int W) {
     bool math_approx_mode = false;
     auto eltwise_unary_kernel = tt_metal::CreateComputeKernel(
         program,
-        "kernels/compute/eltwise_copy.cpp",
+        "tt_metal/kernels/compute/eltwise_copy.cpp",
         core,
         eltwise_unary_args,
         MathFidelity::HiFi4,

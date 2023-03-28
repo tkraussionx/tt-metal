@@ -86,7 +86,61 @@ void TensorModule(py::module &m_tensor) {
         .def_readonly("interleaved", &MemoryConfig::interleaved, "Whether tensor data is interleaved across mulitple DRAM channels")
         .def_readonly("dram_channel", &MemoryConfig::dram_channel, "DRAM channel holding tensor data. Only used when tensor is not interleaved");
 
-    auto pyTensor = py::class_<Tensor>(m_tensor, "Tensor");
+    auto pyTensor = py::class_<Tensor>(m_tensor, "Tensor", R"doc(
+        .. method:: __init__(self: ttlib.tensor.Tensor, data: List[float], shape: List[int[4]], data_type: ttlib.tensor.DataType, layout: ttlib.tensor.Layout) -> None
+
+        Class constructor. Supports tensors of rank 4 where the size of both of the last two dimensions is a multiple of 32.
+        The constructor takes following arguments:
+
+        +------------+---------------------------------------------+-----------------------+--------------------------------+----------+
+        |  Argument  |                 Description                 |       Data type       |          Valid range           | Required |
+        +============+=============================================+=======================+================================+==========+
+        | data       | Data to store in TT tensor                  | List[float/int]       |                                | Yes      |
+        +------------+---------------------------------------------+-----------------------+--------------------------------+----------+
+        | shape      | Shape of TT tensor                          | List[int[4]]          |                                | Yes      |
+        +------------+---------------------------------------------+-----------------------+--------------------------------+----------+
+        | data_type  | Data type of numbers in TT tensor           | ttlib.tensor.DataType | ttlib.tensor.DataType.BFLOAT16 | Yes      |
+        +------------+---------------------------------------------+-----------------------+--------------------------------+----------+
+        | layout     | Layout of tensor data in memory             | ttlib.tensor.Layout   | ttlib.tensor.Layout.ROW_MAJOR  | Yes      |
+        +------------+---------------------------------------------+-----------------------+--------------------------------+----------+
+
+        Example of creating a TT Tensor:
+
+        .. code-block:: python
+
+            py_tensor = torch.randn((1, 1, 32, 32))
+            ttlib.tensor.Tensor(
+                py_tensor.reshape(-1).tolist(),
+                py_tensor.size(),
+                ttlib.tensor.DataType.BFLOAT16,
+                ttlib.tensor.Layout.ROW_MAJOR,
+            )
+
+        .. method:: to(self: ttlib.tensor.Tensor, arg0: ttlib.device.Device, ) -> ttlib.tensor.Tensor
+
+            Moves TT Tensor form host device to TT accelerator device.
+
+            .. code-block:: python
+
+                tt_tensor = tt_tensor.to(tt_device)
+
+        .. method:: to(self: ttlib.tensor.Tensor, arg0: ttlib.device.Host) -> ttlib.tensor.Tensor
+
+            Move TT Tensor form TT accelerator device to host device.
+
+            .. code-block:: python
+
+                tt_tensor = tt_tensor.to(host)
+
+        .. method:: to(self: ttlib.tensor.Tensor, arg0: ttlib.tensor.Layout) -> ttlib.tensor.Tensor
+
+            Convert TT Tensor to provided memory layout. Available layouts are TILE and ROW_MAJOR.
+
+            .. code-block:: python
+
+                tt_tensor = tt_tensor.to(ttlib.tensor.Layout.TILE)
+
+    )doc");
 
     pyTensor
         .def(
@@ -132,19 +186,54 @@ void TensorModule(py::module &m_tensor) {
             )
         )
         .def("to", [](const Tensor &self, Device *device, const MemoryConfig &mem_config) {
-            self.to(device, mem_config);
-        }, py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true}, "Moves the tensor to device")
-        .def("to", py::overload_cast<Host*>(&Tensor::to, py::const_), "Moves the tensor to CPU")
-        .def("to", py::overload_cast<Layout>(&Tensor::to, py::const_), "Converts the tensor layout")
+            return self.to(device, mem_config);
+        }, py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true})
+        .def("to", py::overload_cast<Host*>(&Tensor::to, py::const_))
+        .def("to", py::overload_cast<Layout>(&Tensor::to, py::const_))
         .def("print", [](const Tensor &self, Layout print_layout) {
             return self.print(print_layout);
-        }, py::arg("print_layout") = Layout::ROW_MAJOR, "Prints the tensor")
+        }, py::arg("print_layout") = Layout::ROW_MAJOR, R"doc(
+            Prints the tensor as a flat list of numbers. By default the tensor will be printed in row major order.
+
+            .. code-block:: python
+
+                tt_tensor.print()
+
+            Example output:
+
+            .. code-block::
+
+                [ 0.722656, 0.0332031, 0.109375, ..., 0.333984, 0.396484, 0.851562 dtype=bfloat16 ]
+        )doc")
         .def("pretty_print", [](const Tensor &self) {
             return self.pretty_print();
-        }, "Pretty prints the tensor")
+        }, R"doc(
+            Prints the tensor as list of nested lists. Number of levels of nesting is equal to tensor rank.
+
+            .. code-block:: python
+
+                tt_tensor.pretty_print()
+
+            Example output for a rank 4 TT Tensor with shape (1, 1, 32, 32):
+
+            .. code-block::
+
+                [ [[[0.220703, 0.839844, 0.960938, ..., 0.378906, 0.507812],
+                [0.03125, 0.511719, 0.0407715, ..., 0.945312, 0.671875],
+                ...
+                [0.433594, 0.165039, 0.980469, ..., , 0.349609]]] dtype=bfloat16 ]
+
+        )doc")
         .def("shape", [](const Tensor &self) {
             return self.shape();
-        }, "Returns the shape of the tensor")
+        }, R"doc(
+            Get the shape of the tensor as list of integers.
+
+            .. code-block:: python
+
+                shape = tt_tensor.shape()
+
+        )doc")
         .def("data", [](const Tensor &self) {
             std::vector<uint32_t> empty_vec;
             TT_ASSERT(self.data_ptr() != nullptr);
@@ -164,10 +253,25 @@ void TensorModule(py::module &m_tensor) {
                 break;
             }
             return py::cast(empty_vec);
-        }, "Returns the data in the output tensor as a 1D vector")
+        }, R"doc(
+            Get data in the tensor as a list of numbers.
+            The tensor must be on host when calling this function.
+
+            .. code-block:: python
+
+                data = tt_tensor.to(host).data() # move TT Tensor to host and get values stored in it
+
+        )doc")
         .def("layout", [](const Tensor &self) {
             return self.layout();
-        }, "Returns the layout of the tensor");
+        }, R"doc(
+            Get memory layout of TT Tensor.
+
+            .. code-block:: python
+
+                layout = tt_tensor.layout()
+
+        )doc");
 
     // Tensor functions
     // eltwise binary
@@ -231,7 +335,7 @@ void TensorModule(py::module &m_tensor) {
         +----------+-----------------------------------------------------------------------+-----------------------+------------------------+----------+
         | wOnes    | Width of high values region                                           | int                   | wOnes <= W             | Yes      |
         +----------+-----------------------------------------------------------------------+-----------------------+------------------------+----------+
-        | any      | Any input tensor with desired device and data types for output tensor | ttmetal.tensor.Tensor |                        | Yes      |
+        | any      | Any input tensor with desired device and data types for output tensor | ttlib.tensor.Tensor   |                        | Yes      |
         +----------+-----------------------------------------------------------------------+-----------------------+------------------------+----------+
         | val_hi   | High value to use                                                     | int                   | Valid bfloat16 integer | Yes      |
         +----------+-----------------------------------------------------------------------+-----------------------+------------------------+----------+
@@ -257,7 +361,7 @@ void TensorModule(py::module &m_tensor) {
         +----------+-----------------------------------------------------------------------+-----------------------+------------------------+----------+
         | wOnes    | Width of high values region                                           | int                   | wOnes <= W             | Yes      |
         +----------+-----------------------------------------------------------------------+-----------------------+------------------------+----------+
-        | any      | Any input tensor with desired device and data types for output tensor | ttmetal.tensor.Tensor |                        | Yes      |
+        | any      | Any input tensor with desired device and data types for output tensor | ttlib.tensor.Tensor   |                        | Yes      |
         +----------+-----------------------------------------------------------------------+-----------------------+------------------------+----------+
     )doc");
     m_tensor.def("pad_h_rm", &pad_h_rm, R"doc(
@@ -280,6 +384,22 @@ void TensorModule(py::module &m_tensor) {
     m_tensor.def("bmm", &bmm, R"doc(
         Perform a batched matmul ``A x B`` with two tensors, where batch dims match.
     )doc");
+    m_tensor.def("large_bmm", &large_bmm, R"doc(
+        Perform a batched matmul ``A x B`` with two tensors, where batch dims match.
+        This op also supports tilizing tensor A and untilizing the output if you so choose.
+
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | Argument     | Description                                                                                | Data type | Valid range | Required |
+        +==============+============================================================================================+===========+=============+==========+
+        | a            | LHS matmul operand                                                                         | Tensor    |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | b            | RHS matmul operand                                                                         | Tensor    |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | tilize_a     | Whether or not to tilize a (useful if a is in row major layout)                            | bool      |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | untilize_out | Whether or not to untilize the output (useful if a consuming op requires row major layout) | bool      |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+    )doc");
 
     // broadcast math
     m_tensor.def("bcast", &bcast, R"doc(
@@ -290,13 +410,13 @@ void TensorModule(py::module &m_tensor) {
         +-----------+-------------------------------+----------------------------+-------------+----------+
         | Argument  | Description                   | Data type                  | Valid range | Required |
         +===========+===============================+============================+=============+==========+
-        | a         | Input tensor                  | ttmetal.tensor.Tensor      |             | Yes      |
+        | a         | Input tensor                  | ttlib.tensor.Tensor        |             | Yes      |
         +-----------+-------------------------------+----------------------------+-------------+----------+
-        | b         | Input tensor                  | ttmetal.tensor.Tensor      |             | Yes      |
+        | b         | Input tensor                  | ttlib.tensor.Tensor        |             | Yes      |
         +-----------+-------------------------------+----------------------------+-------------+----------+
-        | bcast_op  | Math operation to perform     | ttmetal.tensor.BcastOpMath |             | Yes      |
+        | bcast_op  | Math operation to perform     | ttlib.tensor.BcastOpMath   |             | Yes      |
         +-----------+-------------------------------+----------------------------+-------------+----------+
-        | bcast_dim | Height count of output tensor | ttmetal.tensor.BcastOpDim  |             | Yes      |
+        | bcast_dim | Height count of output tensor | ttlib.tensor.BcastOpDim    |             | Yes      |
         +-----------+-------------------------------+----------------------------+-------------+----------+
     )doc");
 
@@ -307,11 +427,11 @@ void TensorModule(py::module &m_tensor) {
         +-------------+---------------------------------------+-----------------------------+-------------+----------+
         | Argument    | Description                           | Data type                   | Valid range | Required |
         +=============+=======================================+=============================+=============+==========+
-        | a           | Input tensor                          | ttmetal.tensor.Tensor       |             | Yes      |
+        | a           | Input tensor                          | ttlib.tensor.Tensor         |             | Yes      |
         +-------------+---------------------------------------+-----------------------------+-------------+----------+
-        | reduce_math | Aggregating math operation            | ttmetal.tensor.ReduceOpMath |             | Yes      |
+        | reduce_math | Aggregating math operation            | ttlib.tensor.ReduceOpMath   |             | Yes      |
         +-------------+---------------------------------------+-----------------------------+-------------+----------+
-        | reduce_dim  | Dim to perform aggregation over       | ttmetal.tensor.ReduceOpDim  |             | Yes      |
+        | reduce_dim  | Dim to perform aggregation over       | ttlib.tensor.ReduceOpDim    |             | Yes      |
         +-------------+---------------------------------------+-----------------------------+-------------+----------+
         | scalar      | Scalar to apply during math operation | float                       |             | Yes      |
         +-------------+---------------------------------------+-----------------------------+-------------+----------+
@@ -335,7 +455,7 @@ void TensorModule(py::module &m_tensor) {
         +----------+--------------------------------+-----------------------+-------------+----------+
         | Argument | Description                    | Data type             | Valid range | Required |
         +==========+================================+=======================+=============+==========+
-        | a        | Input tensor                   | ttmetal.tensor.Tensor |             | Yes      |
+        | a        | Input tensor                   | ttlib.tensor.Tensor   |             | Yes      |
         +----------+--------------------------------+-----------------------+-------------+----------+
         | N        | Batch count of output tensor   | int                   |             | Yes      |
         +----------+--------------------------------+-----------------------+-------------+----------+
@@ -392,6 +512,15 @@ void TensorModule(py::module &m_tensor) {
         | a        | Input tensor         | Tensor    |             | Yes      |
         +----------+----------------------+-----------+-------------+----------+
     )doc");
+    m_tensor.def("tilize_conv_activation", &tilize_conv_activation, R"doc(
+        Converts conv activation to 2d Matrix and tilizes it on device. Pads zeroes height-wise if required.
+
+        +----------+----------------------+-----------+-------------+----------+
+        | Argument | Description          | Data type | Valid range | Required |
+        +==========+======================+===========+=============+==========+
+        | a        | Input tensor         | Tensor    |             | Yes      |
+        +----------+----------------------+-----------+-------------+----------+
+    )doc");
     m_tensor.def("untilize", &untilize, R"doc(
         Untilizes a given tensor tilized across memory on device.
 
@@ -404,21 +533,20 @@ void TensorModule(py::module &m_tensor) {
 }
 
 void DeviceModule(py::module &m_device) {
-    py::enum_<tt::ARCH>(m_device, "Arch", "Type of Tenstorrent accelerator device")
+    py::enum_<tt::ARCH>(m_device, "Arch", "Enum of types of Tenstorrent accelerator devices.")
         .value("GRAYSKULL", tt::ARCH::GRAYSKULL);
 
-    auto pyDevice = py::class_<Device>(m_device, "Device", "A Tenstorrent accelerator device");
-
+    auto pyDevice = py::class_<Device>(m_device, "Device", "Class describing a Tenstorrent accelerator device.");
     pyDevice
         .def(
             py::init<>(
                 [](tt::ARCH arch, int pcie_slot) {
                     return Device(arch, pcie_slot);
                 }
-            ), "Create device"
+            ), "Create device."
         );
 
-    auto pyHost = py::class_<Host>(m_device, "Host", "A host machine");
+    auto pyHost = py::class_<Host>(m_device, "Host", "Class describing the host machine.");
 
     pyHost
         .def(
@@ -426,36 +554,36 @@ void DeviceModule(py::module &m_device) {
                 []() {
                     return Host();
                 }
-            ), "Create host"
+            ), "Create host."
         );
 
     m_device.def("CreateDevice", &CreateDevice, R"doc(
-        Creates a device instance.
+        Creates an instance of TT device.
 
-        +------------------+------------------------+---------------------+-------------+----------+
-        | Argument         | Description            | Data type           | Valid range | Required |
-        +==================+========================+=====================+=============+==========+
-        | arch             | Device type            | ttmetal.device.Arch |             | Yes      |
-        +------------------+------------------------+---------------------+-------------+----------+
-        | pci_express_slot | PCI Express slot index | int                 |             | Yes      |
-        +------------------+------------------------+---------------------+-------------+----------+
+        +------------------+------------------------+---------------------+----------------------------+----------+
+        | Argument         | Description            | Data type           | Valid range                | Required |
+        +==================+========================+=====================+============================+==========+
+        | arch             | Type of TT Device      | ttlib.device.Arch   | tt.device.Arch.GRAYSKULL   | Yes      |
+        +------------------+------------------------+---------------------+----------------------------+----------+
+        | pci_express_slot | PCI Express slot index | int                 |                            | Yes      |
+        +------------------+------------------------+---------------------+----------------------------+----------+
     )doc");
     m_device.def("InitializeDevice", &InitializeDevice, R"doc(
-        Initialize device instance with default params.
+        Initialize instance of TT accelerator device.
 
         +------------------+------------------------+-----------------------+-------------+----------+
         | Argument         | Description            | Data type             | Valid range | Required |
         +==================+========================+=======================+=============+==========+
-        | device           | Device to initialize   | ttmetal.device.Device |             | Yes      |
+        | device           | Device to initialize   | ttlib.device.Device   |             | Yes      |
         +------------------+------------------------+-----------------------+-------------+----------+
     )doc");
     m_device.def("CloseDevice", &CloseDevice, R"doc(
-        Close a device.
+        Reset an instance of TT accelerator device to default state and relinquish connection to device.
 
         +------------------+------------------------+-----------------------+-------------+----------+
         | Argument         | Description            | Data type             | Valid range | Required |
         +==================+========================+=======================+=============+==========+
-        | device           | Device to close        | ttmetal.device.Device |             | Yes      |
+        | device           | TT Device to close     | ttlib.device.Device   |             | Yes      |
         +------------------+------------------------+-----------------------+-------------+----------+
     )doc");
 
@@ -472,14 +600,8 @@ void DeviceModule(py::module &m_device) {
     m_device.def("GetBinaryCacheEnabled", &GetBinaryCacheEnabled);
 
     m_device.def("GetHost", &GetHost, R"doc(
-        Gets the host machine of a device, usually a reference to the host
-        machine you're running this on.
-
-        +------------------+-------------------------------+-----------------------+-------------+----------+
-        | Argument         | Description                   | Data type             | Valid range | Required |
-        +==================+===============================+=======================+=============+==========+
-        | device           | Device whost host to retrieve | ttmetal.device.Device |             | Yes      |
-        +------------------+-------------------------------+-----------------------+-------------+----------+
+        Get a reference to host machine of a TT accelerator device, usually a reference to the host
+        machine executing Python code.
     )doc");
 }
 
@@ -490,8 +612,8 @@ void DeviceModule(py::module &m_device) {
 
 PYBIND11_MODULE(_C, m) {
 
-    m.attr("__name__") = "ttmetal";
-    m.doc() = "General purpose AI python bindings";
+    m.attr("__name__") = "ttlib";
+    m.doc() = "Python bindings for TT-Metal";
 
     py::module_ m_device = m.def_submodule("device", "Submodule defining a host or device");
     tt::tt_metal::DeviceModule(m_device);

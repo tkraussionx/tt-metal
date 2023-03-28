@@ -204,7 +204,6 @@ void generate_binary_for_ncrisc(tt::build_kernel_for_riscv_options_t* build_kern
 void compile_ckernels_for_all_triscs(string, string root, string chlkc_src_dir, vector<uint32_t> kernel_compile_time_args);
 void compile_ckernels_for_trisc(string chlkc_src_dir, string output_dir, string make_src_args, string make_args, uint32_t trisc_mailbox_addr, int thread_id, string kernel_file_name);
 void generate_data_format_descriptors(tt::build_kernel_for_riscv_options_t* build_kernel_for_riscv_options, string out_dir_path);
-void generate_loop_count_file(tt::build_kernel_for_riscv_options_t* build_kernel_for_riscv_options, int epoch, string out_dir_path);
 void generate_math_approx_mode_descriptor(tt::build_kernel_for_riscv_options_t* build_kernel_for_riscv_options, string out_dir_path);
 void generate_math_fidelity_descriptor(tt::build_kernel_for_riscv_options_t* build_kernel_for_riscv_options, string out_dir_path);
 
@@ -241,7 +240,6 @@ void generate_binaries_for_triscs(tt::build_kernel_for_riscv_options_t* build_ke
         generate_data_format_descriptors(build_kernel_for_riscv_options, op_path);
         generate_math_fidelity_descriptor(build_kernel_for_riscv_options, op_path);
         generate_math_approx_mode_descriptor(build_kernel_for_riscv_options, op_path);
-        generate_loop_count_file(build_kernel_for_riscv_options, 1 , op_path); // loop_count = 1
     }
 
     compile_ckernels_for_all_triscs(arch_name, root_dir, op_path, kernel_compile_time_args);
@@ -250,6 +248,8 @@ void generate_binaries_for_triscs(tt::build_kernel_for_riscv_options_t* build_ke
 void generate_binaries_for_triscs_new(tt::build_kernel_for_riscv_options_t* build_kernel_for_riscv_options, const string &out_dir_path, const string& arch_name, bool parallel, std::vector<uint32_t> kernel_compile_time_args) {
 
     string root_dir = std::getenv("TT_METAL_HOME");
+    auto old_cwd = fs::current_path(); //getting path
+    fs::current_path(root_dir); //setting path
 
     // Right now, to support compiling multiple threads, I am overloading
     // the concept of hlk filename to point to a directory with llks
@@ -326,6 +326,8 @@ void generate_binaries_for_triscs_new(tt::build_kernel_for_riscv_options_t* buil
     for (int thread_id = 0; thread_id < 3; thread_id++) {
         ths[thread_id].join();
     }
+
+    fs::current_path(old_cwd); // restore cwd
 }
 
 void compile_ckernels_for_all_triscs(string arch_name, string root, string chlkc_src_dir, vector<uint32_t> kernel_compile_time_args) {
@@ -685,16 +687,6 @@ void generate_math_approx_mode_descriptor(build_kernel_for_riscv_options_t* buil
 
     file_stream.open(approx_descriptor);
     file_stream << "constexpr bool APPROX = " << std::boolalpha << desc.get_hlk_math_approx_mode() << ";" << endl;
-    file_stream.close();
-}
-
-void generate_loop_count_file(build_kernel_for_riscv_options_t* build_kernel_for_riscv_options, int input_count, string out_dir_path) {
-    string loop_count_file = out_dir_path + "/" + "loop_count.h";
-
-    ofstream file_stream;
-
-    file_stream.open(loop_count_file);
-    file_stream << "constexpr std::int32_t arg_loop_count = " << input_count << ";" << endl;
     file_stream.close();
 }
 

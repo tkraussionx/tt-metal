@@ -3,6 +3,7 @@
 .idea
 *.log
 *.csv
+*.xlsx
 /tt-perf*
 test_hlk_args_init_gen
 tt_build
@@ -25,9 +26,6 @@ blobgen_cmd_log
 
 .hlkc_cache
 
-python_api/env
-python_api/*.so
-python_api/test_run_on_device_out
 __pycache__
 
 *.vcd
@@ -52,6 +50,7 @@ docs/doxygen_build
 
 **.swp
 **.swo
+**.swn
 
 *profile_log*.csv
 device_perf.html
@@ -67,7 +66,7 @@ release/machine_setup/assets/
 
 # PyBind extensions and wheel setup
 *.egg-info/
-pymetal/ttmetal/*.so
+pymetal/**/*.so
 .installed.cfg
 *.egg
 
@@ -77,12 +76,11 @@ data/
 # exclude pytorch binaries
 *.pt
 
-# Remove stuff from before, get rid of later
-gpai/
-runme.sh
-
 # exclude Tensor generated heatmaps (debug)
 *.png
 
 #exclude output debug files
 out*.txt
+
+# releases
+dist

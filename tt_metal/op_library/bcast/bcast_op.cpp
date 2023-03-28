@@ -4,9 +4,7 @@
 
 #include "constants.hpp"
 
-// TODO(AP): duplication
 namespace bcast_op_utils {
-
 using namespace tt::tt_metal;
 using namespace tt::constants;
 
@@ -14,20 +12,20 @@ using namespace tt::constants;
 const char* get_reader_name(BcastOpDim::Enum bcast_dim, BcastOpParallelizationStrategy::Enum bcast_parallelization_strategy) {
 		if (bcast_parallelization_strategy == BcastOpParallelizationStrategy::SINGLE_CORE) {
         if (bcast_dim == BcastOpDim::H) {
-            return "kernels/dataflow/reader_bcast_h_8bank.cpp";
+            return "tt_metal/kernels/dataflow/reader_bcast_h_8bank.cpp";
         } else if (bcast_dim == BcastOpDim::W) {
-            return "kernels/dataflow/reader_bcast_w_8bank.cpp";
+            return "tt_metal/kernels/dataflow/reader_bcast_w_8bank.cpp";
         } if (bcast_dim == BcastOpDim::HW) {
-            return "kernels/dataflow/reader_bcast_hw_8bank.cpp";
+            return "tt_metal/kernels/dataflow/reader_bcast_hw_8bank.cpp";
         }
     }
     else {
         if (bcast_dim == BcastOpDim::H) {
-            return "kernels/dataflow/reader_bcast_h_8bank_input_rows_partitioned.cpp";
+            return "tt_metal/kernels/dataflow/reader_bcast_h_8bank_input_rows_partitioned.cpp";
         } else if (bcast_dim == BcastOpDim::W) {
-            return "kernels/dataflow/reader_bcast_w_8bank_input_cols_partitioned.cpp";
+            return "tt_metal/kernels/dataflow/reader_bcast_w_8bank_input_cols_partitioned.cpp";
         } if (bcast_dim == BcastOpDim::HW) {
-            return "kernels/dataflow/reader_bcast_hw_8bank_partitioned.cpp";
+            return "tt_metal/kernels/dataflow/reader_bcast_hw_8bank_partitioned.cpp";
         }
     }
     TT_ASSERT(false && "Unexpected bcast_dim!");
@@ -36,27 +34,22 @@ const char* get_reader_name(BcastOpDim::Enum bcast_dim, BcastOpParallelizationSt
 
 const char* get_compute_name(BcastOpDim::Enum bcast_dim) {
     switch (bcast_dim) {
-        case BcastOpDim::H:  return "kernels/compute/bcast_h.cpp";
-        case BcastOpDim::W:  return "kernels/compute/bcast_w.cpp";
-        case BcastOpDim::HW: return "kernels/compute/bcast_hw.cpp";
-        default:           TT_ASSERT(false && "Unexpected bcast_dim!");
+        case BcastOpDim::H:  return "tt_metal/kernels/compute/bcast_h.cpp";
+        case BcastOpDim::W:  return "tt_metal/kernels/compute/bcast_w.cpp";
+        case BcastOpDim::HW: return "tt_metal/kernels/compute/bcast_hw.cpp";
+        default:  TT_ASSERT(false && "Unexpected bcast_dim!");
     }
     return "";
 }
 
-const char* get_math_to_op_define(BcastOpMath::Enum bcast_math) {
-    switch (bcast_math) {
-        case BcastOpMath::ADD:  return "add_tiles_bcast";
-        case BcastOpMath::SUB:  return "sub_tiles_bcast";
-        case BcastOpMath::MUL:  return "mul_tiles_bcast";
-        default:           TT_ASSERT(false && "Unexpected bcast_math!");
-    }
-    return "";
-}
-
-void set_compute_kernel_defines(ComputeKernel * bcast_kernel, BcastOpMath::Enum bcast_math){
-    bcast_kernel->add_define("BCAST_OP", get_math_to_op_define(bcast_math));
-    return;
+void add_defines(ComputeKernel* k, BcastOpDim::Enum bcast_dim, BcastOpMath::Enum bcast_math)
+{
+    const char* math_to_op_define[] = { "add_tiles_bcast", "sub_tiles_bcast", "mul_tiles_bcast" };
+    const char* math_to_llkop_define[] = {"ELWADD", "ELWSUB", "ELWMUL"};
+    const char* bdim_to_llkdim_define[] = { "BroadcastType::ROW", "BroadcastType::COL", "BroadcastType::SCALAR" };
+    k->add_define("BCAST_OP", math_to_op_define[int(bcast_math)]);
+    k->add_define("BCAST_LLKOP", math_to_llkop_define[int(bcast_math)]);
+    k->add_define("BCAST_DIM", bdim_to_llkdim_define[int(bcast_dim)]);
 }
 
 BcastOpParallelizationStrategy::Enum get_parallelization_strategy(const Tensor &a, BcastOpDim::Enum bcast_dim){

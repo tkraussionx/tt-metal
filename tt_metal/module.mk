@@ -9,20 +9,15 @@ include $(TT_METAL_HOME)/tt_metal/device/module.mk
 include $(TT_METAL_HOME)/src/ckernels/module.mk
 include $(TT_METAL_HOME)/src/firmware/module.mk
 include $(TT_METAL_HOME)/hlkc/module.mk
-include $(TT_METAL_HOME)/tt_gdb/module.mk # needs to compiled after llrt and tt_metal
-include $(TT_METAL_HOME)/tensor/module.mk
+include $(TT_METAL_HOME)/tt_metal/tools/module.mk
 include $(TT_METAL_HOME)/tt_metal/build_kernels_for_riscv/module.mk
-include $(TT_METAL_HOME)/llrt/module.mk
+include $(TT_METAL_HOME)/tt_metal/llrt/module.mk
+include $(TT_METAL_HOME)/tt_metal/python_env/module.mk
 
-# only include these modules if we're in development
-ifdef TT_METAL_ENV_IS_DEV
-include $(TT_METAL_HOME)/tt_metal/build_kernels_for_riscv/tests/module.mk
-include $(TT_METAL_HOME)/llrt/tests/module.mk
-include tt_metal/tests/module.mk
-endif
+# Programming examples for external users
+include $(TT_METAL_HOME)/tt_metal/programming_examples/module.mk
 
 TT_METAL_LIB = $(LIBDIR)/libtt_metal.a
-TT_BUILD_LIB = $(LIBDIR)/libbuild_kernels_for_riscv.a
 TT_METAL_DEFINES = -DGIT_HASH=$(shell git rev-parse HEAD)
 TT_METAL_INCLUDES = $(COMMON_INCLUDES) -I$(TT_METAL_HOME)/tt_metal -I$(TT_METAL_HOME)/.
 TT_METAL_LDFLAGS = -L$(TT_METAL_HOME) -lcommon -lbuild_kernels_for_riscv -lllrt -ltt_metal_impl
@@ -40,6 +35,9 @@ TT_METAL_SRCS = \
 	tt_metal/op_library/pad_h_rm/pad_h_rm_op.cpp \
 	tt_metal/op_library/fill_rm/fill_rm_op.cpp \
 	tt_metal/op_library/transpose/transpose_op.cpp \
+	tt_metal/op_library/transpose/wh_multi_core/transpose_wh_op_multi_core.cpp \
+	tt_metal/op_library/transpose/hc_multi_core/transpose_hc_op_multi_core.cpp \
+	tt_metal/op_library/transpose/single_core/transpose_op_single_core.cpp \
 	tt_metal/op_library/transpose_rm/transpose_rm_op.cpp \
 	tt_metal/op_library/reduce/reduce_op.cpp \
 	tt_metal/op_library/reduce/single_core/reduce_op_single_core.cpp \
@@ -72,10 +70,21 @@ TT_METAL_DEPS = $(addprefix $(OBJDIR)/, $(TT_METAL_SRCS:.cpp=.d))
 # Each module has a top level target as the entrypoint which must match the subdir name
 tt_metal: $(TT_METAL_LIB)
 
-$(TT_METAL_LIB): $(COMMON_LIB) $(TT_METAL_OBJS) $(TT_METAL_IMPL_LIB) $(LLRT_LIB) $(TT_BUILD_LIB)
+$(TT_METAL_LIB): $(COMMON_LIB) $(TT_METAL_OBJS) $(TT_METAL_IMPL_LIB) $(LLRT_LIB) $(BUILD_KERNELS_FOR_RISCV_LIB)
 	@mkdir -p $(LIBDIR)
 	$(CXX) $(TT_METAL_CFLAGS) $(CXXFLAGS) $(SHARED_LIB_FLAGS) -o $@ $^ $(LDFLAGS) $(TT_METAL_LDFLAGS)
 
-$(OBJDIR)/tt_metal/%.o: tt_metal/%.cpp
+# TODO: rk: need to use a general way to do the following directives, note that using tt_metal/%.o will
+# include EVERYTHING under tt_metal, forcing the build step to use only build directives in this file
+# rather than the specialized ones in each submodule
+$(OBJDIR)/tt_metal/tt_metal.o: tt_metal/tt_metal.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(TT_METAL_CFLAGS) $(CXXFLAGS) $(STATIC_LIB_FLAGS) $(TT_METAL_INCLUDES) $(TT_METAL_DEFINES) -c -o $@ $<
+
+$(OBJDIR)/tt_metal/op_library/%.o: tt_metal/op_library/%.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(TT_METAL_CFLAGS) $(CXXFLAGS) $(STATIC_LIB_FLAGS) $(TT_METAL_INCLUDES) $(TT_METAL_DEFINES) -c -o $@ $<
+
+$(OBJDIR)/tt_metal/tensor/%.o: tt_metal/tensor/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(TT_METAL_CFLAGS) $(CXXFLAGS) $(STATIC_LIB_FLAGS) $(TT_METAL_INCLUDES) $(TT_METAL_DEFINES) -c -o $@ $<

@@ -329,15 +329,6 @@ ComputeKernel *CreateComputeKernel(
     bool fp32_dest_acc_en,
     bool math_approx_mode);
 
-ComputeKernel *CreateComputeKernelNew(
-    Program *program,
-    const std::string &file_name,
-    const tt_xy_pair &core,
-    ComputeKernelArgs *kernel_args,
-    MathFidelity math_fidelity,
-    bool fp32_dest_acc_en,
-    bool math_approx_mode);
-
 /**
  * Creates a multi-core compute kernel object, and adds it to the program.
  *
@@ -437,7 +428,7 @@ CircularBuffer *CreateCircularBuffer(
 bool CompileProgram(
     Device *device,                 // Device - device doesn't have to be initialized to compile the program.
     Program *program,               // Program
-    bool skip_hlkc,                 // Skips HLK to LLK compilation for all compute kernels
+    bool skip_hlkc = false,                 // Skips HLK to LLK compilation for all compute kernels
     bool profile_kernel = false);   // Set the compile flag for kernels to report profiling timer marks
 
 bool CompileProgramNew(

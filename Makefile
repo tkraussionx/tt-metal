@@ -100,11 +100,8 @@ LIBS_TO_BUILD = \
 	hlkc/api \
 	build_kernels_for_riscv \
 	device \
-	tt_gdb \
-	tensor \
 	llrt \
 	tt_metal \
-	tools/profiler \
 	tools \
 	python_env \
 	pymetal
@@ -118,18 +115,13 @@ endif
 # These must be in dependency order (enforces no circular deps)
 include tt_metal/common/common.mk
 include tt_metal/module.mk
-include tools/module.mk
-include tools/profiler/module.mk
-include python_env/module.mk
 include pymetal/module.mk
 
 # only include these modules if we're in development
 ifdef TT_METAL_ENV_IS_DEV
-include git_hooks/module.mk
+include infra/git_hooks/module.mk
+include tests/module.mk
 endif
-
-# Programming examples for external users
-include programming_examples/module.mk
 
 build: $(LIBS_TO_BUILD)
 

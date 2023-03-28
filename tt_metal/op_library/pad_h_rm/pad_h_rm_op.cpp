@@ -4,13 +4,6 @@
 #include "tt_metal/host_api.hpp"
 #include "constants.hpp"
 
-namespace blank_hlk {
-// FIXME:copy pasted the args here from the kernel file,  we could refactor the HLK file
-struct hlk_args_t {
-    std::int32_t dummy;
-};
-}
-
 using namespace tt::constants;
 
 namespace tt {
@@ -64,11 +57,11 @@ Tensor pad_h_rm(const Tensor &a, int paddedH) {
         DataFormat::Float16_b);
 
     tt_metal::DataMovementKernel *binary_reader_kernel = tt_metal::CreateDataMovementKernel(
-        program, "kernels/dataflow/pad_h_rm_8bank.cpp",
+        program, "tt_metal/kernels/dataflow/pad_h_rm_8bank.cpp",
         core, tt_metal::DataMovementProcessor::RISCV_1, tt_metal::NOC::RISCV_1_default);
 
     tt_metal::DataMovementKernel *unary_writer_kernel = tt_metal::CreateDataMovementKernel(
-        program, "kernels/dataflow/blank.cpp",
+        program, "tt_metal/kernels/dataflow/blank.cpp",
         core, tt_metal::DataMovementProcessor::RISCV_0, tt_metal::NOC::RISCV_0_default);
 
     vector<uint32_t> compute_args = {
@@ -79,7 +72,7 @@ Tensor pad_h_rm(const Tensor &a, int paddedH) {
     bool fp32_dest_acc_en = false;
     bool math_approx_mode = false;
     auto eltwise_unary_kernel = tt_metal::CreateComputeKernel(
-        program, "kernels/compute/blank.cpp",
+        program, "tt_metal/kernels/compute/blank.cpp",
         core, blank_args, MathFidelity::HiFi4, fp32_dest_acc_en, math_approx_mode);
 
     // Compile kernels
