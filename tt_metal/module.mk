@@ -54,6 +54,7 @@ TT_METAL_SRCS = \
 	tt_metal/op_library/bmm/multi_core/bmm_op_multi_core.cpp \
 	tt_metal/op_library/bmm/multi_core_reuse/bmm_op_multi_core_reuse.cpp \
 	tt_metal/op_library/bmm/multi_core_reuse_mcast/bmm_op_multi_core_reuse_mcast.cpp \
+	tt_metal/op_library/conv/conv_op.cpp \
 	tt_metal/op_library/tilize/tilize_op.cpp \
 	tt_metal/op_library/untilize/untilize_op.cpp \
 	tt_metal/op_library/reshape/reshape_op.cpp \
