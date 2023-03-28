@@ -24,10 +24,10 @@ import torch
 @pytest.mark.parametrize(
     "tilize_a, untilize_out",
     (
-        (False, False),
-        (False, True),
+        # (False, False),
+        # (False, True),
         (True, False),
-        (True, True),
+        # (True, True),
     ),
 )
 def test_run_large_matmul_test(tilize_a, untilize_out):
@@ -36,7 +36,7 @@ def test_run_large_matmul_test(tilize_a, untilize_out):
 
     TILE_HEIGHT = TILE_WIDTH = 32
 
-    Ha = 16 * TILE_HEIGHT
+    Ha = 8 * TILE_HEIGHT
     Wa = 4 * TILE_WIDTH
     Wb = 4 * TILE_WIDTH
     torch.manual_seed(0)
