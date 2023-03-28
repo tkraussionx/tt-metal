@@ -1,5 +1,6 @@
 #include "tt_metal/op_library/eltwise_binary/eltwise_binary_op.hpp"
 #include "tt_metal/op_library/bmm/bmm_op.hpp"
+#include "tt_metal/op_library/conv/conv_op.hpp"
 #include "tt_metal/op_library/pad_h_rm/pad_h_rm_op.hpp"
 #include "tt_metal/op_library/fill_rm/fill_rm_op.hpp"
 #include "tt_metal/op_library/bcast/bcast_op.hpp"
@@ -88,7 +89,7 @@ void TensorModule(py::module &m_tensor) {
 
     auto pyTensor = py::class_<Tensor>(m_tensor, "Tensor", R"doc(
         .. method:: __init__(self: ttlib.tensor.Tensor, data: List[float], shape: List[int[4]], data_type: ttlib.tensor.DataType, layout: ttlib.tensor.Layout) -> None
-        
+
         Class constructor. Supports tensors of rank 4 where the size of both of the last two dimensions is a multiple of 32.
         The constructor takes following arguments:
 
@@ -102,12 +103,12 @@ void TensorModule(py::module &m_tensor) {
         | data_type  | Data type of numbers in TT tensor           | ttlib.tensor.DataType | ttlib.tensor.DataType.BFLOAT16 | Yes      |
         +------------+---------------------------------------------+-----------------------+--------------------------------+----------+
         | layout     | Layout of tensor data in memory             | ttlib.tensor.Layout   | ttlib.tensor.Layout.ROW_MAJOR  | Yes      |
-        +------------+---------------------------------------------+-----------------------+--------------------------------+----------+ 
+        +------------+---------------------------------------------+-----------------------+--------------------------------+----------+
 
         Example of creating a TT Tensor:
 
         .. code-block:: python
-        
+
             py_tensor = torch.randn((1, 1, 32, 32))
             ttlib.tensor.Tensor(
                 py_tensor.reshape(-1).tolist(),
@@ -125,7 +126,7 @@ void TensorModule(py::module &m_tensor) {
                 tt_tensor = tt_tensor.to(tt_device)
 
         .. method:: to(self: ttlib.tensor.Tensor, arg0: ttlib.device.Host) -> ttlib.tensor.Tensor
-        
+
             Move TT Tensor form TT accelerator device to host device.
 
             .. code-block:: python
@@ -133,7 +134,7 @@ void TensorModule(py::module &m_tensor) {
                 tt_tensor = tt_tensor.to(host)
 
         .. method:: to(self: ttlib.tensor.Tensor, arg0: ttlib.tensor.Layout) -> ttlib.tensor.Tensor
-        
+
             Convert TT Tensor to provided memory layout. Available layouts are TILE and ROW_MAJOR.
 
             .. code-block:: python
@@ -194,9 +195,9 @@ void TensorModule(py::module &m_tensor) {
             return self.print(print_layout);
         }, py::arg("print_layout") = Layout::ROW_MAJOR, R"doc(
             Prints the tensor as a flat list of numbers. By default the tensor will be printed in row major order.
-            
+
             .. code-block:: python
-            
+
                 tt_tensor.print()
 
             Example output:
@@ -232,7 +233,7 @@ void TensorModule(py::module &m_tensor) {
             .. code-block:: python
 
                 shape = tt_tensor.shape()
-                
+
         )doc")
         .def("data", [](const Tensor &self) {
             std::vector<uint32_t> empty_vec;
@@ -270,7 +271,7 @@ void TensorModule(py::module &m_tensor) {
             .. code-block:: python
 
                 layout = tt_tensor.layout()
-                
+
         )doc");
 
     // Tensor functions
@@ -396,6 +397,20 @@ void TensorModule(py::module &m_tensor) {
         | b            | RHS matmul operand                                                                         | Tensor    |             | Yes      |
         +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
         | tilize_a     | Whether or not to tilize a (useful if a is in row major layout)                            | bool      |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | untilize_out | Whether or not to untilize the output (useful if a consuming op requires row major layout) | bool      |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+    )doc");
+    m_tensor.def("conv_as_large_bmm_single_core", &conv_as_large_bmm_single_core, R"doc(
+        Perform a batched matmul ``A x B`` with two tensors, where batch dims match.
+        This op also supports tilizing tensor A and untilizing the output if you so choose.
+
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | Argument     | Description                                                                                | Data type | Valid range | Required |
+        +==============+============================================================================================+===========+=============+==========+
+        | a            | LHS matmul operand                                                                         | Tensor    |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | b            | RHS matmul operand                                                                         | Tensor    |             | Yes      |
         +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
         | untilize_out | Whether or not to untilize the output (useful if a consuming op requires row major layout) | bool      |             | Yes      |
         +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
