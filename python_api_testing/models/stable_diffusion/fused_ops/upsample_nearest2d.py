@@ -1,4 +1,3 @@
-import math
 from pathlib import Path
 import sys
 f = f"{Path(__file__).parent}"
@@ -40,8 +39,6 @@ class TtUpsampledNearest2d(nn.Module):
         input = move_to_device(input, self.device)
 
         return input
-
-
 
 
 

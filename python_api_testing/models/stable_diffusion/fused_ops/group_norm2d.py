@@ -32,14 +32,9 @@ class TtGroupNorm2D(nn.Module):
         super().__init__()
 
         self.num_groups = num_groups
-        assert num_channels % num_groups == 0
+        assert num_channels % num_groups == 0, f"num_channels: {num_channels}, num_groups: {num_groups}"
         self.chunks = num_channels // num_groups
-        # keep them chunked already
-        # create in pytorch
-        # chunk them up
-        # then load them
-        # self.weight = ???
-        # self.bias = ???
+
         weights_ = pad_weight(torch.ones((1, num_channels, 1, 1)))
         bias_ = pad_weight(torch.zeros((1, num_channels, 1, 1)))
 

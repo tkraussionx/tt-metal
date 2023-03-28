@@ -2,5 +2,8 @@
 datasets==2.9.0
 torchvision==0.14.1+cpu
 transformers==4.20.1
+diffusers==0.12.1
+accelerate
+ftfy
 tiktoken
 tqdm

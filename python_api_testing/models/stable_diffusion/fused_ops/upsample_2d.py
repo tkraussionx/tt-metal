@@ -1,4 +1,3 @@
-import math
 from pathlib import Path
 import sys
 f = f"{Path(__file__).parent}"
@@ -16,7 +15,7 @@ from utility_functions import tilize_to_list, print_diff_argmax, untilize, tiliz
 
 from utils import move_to_cpu, move_to_device
 
-from upsample_nearest2d import TtUpsampledNearest2d
+from .upsample_nearest2d import TtUpsampledNearest2d
 
 
 

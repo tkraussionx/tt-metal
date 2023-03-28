@@ -425,7 +425,7 @@ def run_resnet_inference(device):
     state_dict = vae.state_dict()
     vae_encoder = pipe.vae.encoder
     resnet = vae_encoder.mid_block.resnets[0]
-    resnet.norm1 = resnet.norm1.to('cpu')
+
     in_channels = 512
     temb_channels = None
     eps = 1e-06
@@ -435,9 +435,7 @@ def run_resnet_inference(device):
 
     input_shape  = [1, 512, 32, 32]
     input = torch.randn(input_shape, dtype=torch.float16)
-    print("type ", resnet.norm1.weight.dtype)
-    print("input type", input.dtype)
-    print("resnet device", resnet.norm1.weight.device)
+
     # temb_shape = [1, 1, 1, 1280]
     # temp = torch.randn(temb_shape)
 
