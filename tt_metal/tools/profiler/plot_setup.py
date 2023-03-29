@@ -18,6 +18,12 @@ class test_base:
             "start": {"risc": "NCRISC", "timerID": 2},
             "end": {"risc": "NCRISC", "timerID": 3},
         },
+        "Launch delta": {
+            "across": "core",
+            "type": "adjacent",
+            "start": {"risc": "ANY", "timerID": 4},
+            "end": {"risc": "BRISC", "timerID": 1},
+        },
         "Core end": {
             "across": "core",
             "type": "first_last",

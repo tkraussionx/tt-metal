@@ -110,7 +110,7 @@ def print_stats_outfile(devicesData, setup):
 
 
 def print_stats(devicesData, setup):
-    numberWidth = 15
+    numberWidth = 17
     for chipID, deviceData in devicesData["devices"].items():
         for analysis in setup.timerAnalysis.keys():
             if analysis in deviceData["cores"]["DEVICE"]["analysis"].keys():
@@ -152,11 +152,11 @@ def print_stats(devicesData, setup):
                                     noCoreData = True
                                     if core in deviceData["cores"].keys():
                                         for risc, riscData in deviceData["cores"][core]["riscs"].items():
-                                            if analysis in riscData["analysis"].keys():
+                                            if "analysis" in riscData.keys() and analysis in riscData["analysis"].keys():
                                                 stats = riscData["analysis"][analysis]["stats"]
-                                                plusMinus = (stats['Max']-stats['Min'])
+                                                plusMinus = (stats['Max']-stats['Min'])//2
                                                 median = stats['Median']
-                                                tmpStr = f"{median:,}"
+                                                tmpStr = f"{median:,.0f}"
                                                 if stats["Count"] > 1:
                                                     tmpStr = "{tmpStr}{sign}{plusMinus:,}".format(
                                                         tmpStr=tmpStr,
@@ -530,6 +530,8 @@ def timeseries_analysis(riscData, name, analysis):
                 startID , startTS = startFound
                 tmpList.append(dict(start=startTS, end=timestamp, durationType=(startID,timerID), diff=timestamp-startTS))
                 startFound = None
+            elif currStart == desStart:
+                startFound = (timerID,timestamp)
 
     if startFound and analysis["type"] == "first_last":
         for i in range(len(timeseries)-1,0,-1):
