@@ -1,4 +1,3 @@
-import math
 from pathlib import Path
 import sys
 f = f"{Path(__file__).parent}"
