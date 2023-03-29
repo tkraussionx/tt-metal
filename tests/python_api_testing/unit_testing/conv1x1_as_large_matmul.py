@@ -10,7 +10,7 @@ from pymetal.ttlib.utils import tilize_to_list, channels_last, convert_weights_2
 from python_api_testing.models.utility_functions import is_close
 import torch
 
-def run_conv_test(K, C, H, W, untilize_out):
+def run_conv_test(K, C, H, W, untilize_out, use_single_bank_reader):
     #torch.manual_seed(0)
     a_activation_shape = [1,C,H,W]
     b_weights_shape = [K,C,1,1]
@@ -23,8 +23,8 @@ def run_conv_test(K, C, H, W, untilize_out):
         ttl.tensor.DataType.BFLOAT16,
         ttl.tensor.Layout.CHANNELS_LAST,
         device,
-        ttl.tensor.MemoryConfig(False, 0)
-    )
+        ttl.tensor.MemoryConfig(False, 0) if use_single_bank_reader else ttl.tensor.MemoryConfig(True, -1)
+        )
 
     # Prepare weights
     B_pyt = torch.randn(b_weights_shape, dtype=torch.bfloat16).float()
@@ -42,11 +42,11 @@ def run_conv_test(K, C, H, W, untilize_out):
         ttl.tensor.DataType.BFLOAT16,
         ttl.tensor.Layout.TILE,
         device,
-        ttl.tensor.MemoryConfig(False, 1)
+        ttl.tensor.MemoryConfig(False, 0) if use_single_bank_reader else ttl.tensor.MemoryConfig(True, -1)
         )
 
     # Run TT metal OP
-    out = ttl.tensor.conv_as_large_bmm_single_core(A, B_t, untilize_out)
+    out = ttl.tensor.conv_as_large_bmm_single_core(A, B_t, untilize_out, use_single_bank_reader)
     out_shape = [1,1,Ha,Wb]
     assert(out.shape() == out_shape)
     out_pytorch = torch.tensor(out.to(host).data()).reshape(out_shape)
@@ -78,5 +78,6 @@ if __name__ == "__main__":
     W=16
     C=128
     K=128
-    run_conv_test(K,C,H,W,False)
+    #run_conv_test(K,C,H,W,False,True)
+    run_conv_test(K,C,H,W,False,False)
     ttl.device.CloseDevice(device)

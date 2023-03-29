@@ -414,6 +414,8 @@ void TensorModule(py::module &m_tensor) {
         +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
         | untilize_out | Whether or not to untilize the output (useful if a consuming op requires row major layout) | bool      |             | Yes      |
         +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | use_single_bank_reader | Whether or not to use single bank reader kernel. Useful for debugging.           | bool      |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
     )doc");
 
     // broadcast math

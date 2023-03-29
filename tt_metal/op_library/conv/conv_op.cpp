@@ -227,7 +227,7 @@ void create_CBs_for_fused_matmul_c(tt_metal::Program* program, tt_metal::Device*
 
 // TODO(whoever gets a chance!): Refactor this so it's a part of matmul_single_core_... keeping it
 // independent for now as it's easier for me to progress
-Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, bool untilize_out) {
+Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, bool untilize_out, bool use_single_bank_reader) {
     bool tilize_a = true;
     std::cout << "Untilize output? - " << untilize_out << std::endl;
 
@@ -235,7 +235,7 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, bool unt
 
     //vector<int> shape = {5, 4,4};
     vector<int> shape = {(int) a.shape()[1], (int) a.shape()[2], (int) a.shape()[3]};
-
+    auto activation_C = a.shape()[1];
     // Right side: AbstractTensor --> consumer conv/mm
     DataTransformations * dtx_right = new DataTransformations();
     TransformationNode * node0 = new TransformationNode("producer", 1);
@@ -281,12 +281,30 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, bool unt
     // copy transfer addresses into a vector
     std::vector<uint32_t> address_map;
     uint32_t t_bytes = 0;
+
+    // Generate address map for reader kernel and
+    // verify for the assumptions taken by the reader kernel about the DTX address map
+    uint32_t transfer_size = combined->transformations.back()->groups[0]->transfers[0]->size*2; // 2 for bfloat16
+    // Channels last layout -> so each transfer size should = activation_C
+    assert(transfer_size == activation_C*2); // 2 for bfloat16
     for(auto transfer : combined->transformations.back()->groups[0]->transfers){
         address_map.push_back(transfer->src_address*2); // 2 for bfloat16
+        // TODO: remove dst address. It is not used by the reader kernel because it writes to L1 destination contiguously
         address_map.push_back(transfer->dst_address*2);
+        // transfer size should be the same for each transfer
+        assert(transfer->size*2 == transfer_size);
         address_map.push_back(transfer->size*2);
+        if(!use_single_bank_reader) {
+            // Using multi bank reader
+            // add stick id to address map which will be used to determine stick bank address in the reader kernel
+            // data is in channels last "stick" layout in 8 banks where each stick size = activation_C
+            assert(transfer->src_address % activation_C == 0); // src address points to the start of a stick
+            auto stick_id = transfer->src_address / activation_C;
+            address_map.push_back(stick_id);
+        }
         t_bytes += transfer->size*2;
     }
+
     uint32_t total_bytes = num_rows * num_cols * 2; // 2 for bfloat16
     assert(total_bytes == t_bytes);
 
@@ -407,7 +425,8 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, bool unt
 
         // num blocks
         uint32_t num_blocks = (Wat / in0_block_w);
-
+        // reader kernel only supports single block
+        assert(num_blocks == 1);
         // in1
         uint32_t in1_dram_addr = src1_dram_buffer->address();
 
@@ -443,24 +462,43 @@ std::cout << "in1 tiles " << Wbt * in0_block_w << std::endl;
 std::cout << "in0 tiles " << Hat * in0_block_w << std::endl;
 std::cout << "Num bytes of zeroes " << num_bytes_of_zeroes_per_transfer << std::endl;
 std::cout << "Num transfers of zeroes " << num_transfers_of_zeroes << std::endl;
-            string reader_kernel = "tt_metal/kernels/dataflow/reader_large_single_matmul_block_with_address_map.cpp";
-            vector<uint32_t> reader_rt_args = {
-                // arguments for in1
-                in1_dram_addr,
-                in1_dram_noc_x,
-                in1_dram_noc_y,
-                Wbt * in0_block_w, // input 1 block num tiles
-                Wbt * in0_block_w * single_tile_size, // input 1 block bytes
-                // arguments for in0
-                in0_dram_addr,
-                in0_dram_noc_x,
-                in0_dram_noc_y,
-                Hat * in0_block_w, // input 0 block num tiles
-                num_bytes_of_zeroes_per_transfer,
-                num_transfers_of_zeroes,
-                address_map_l1_addr,
-                (uint32_t)address_map.size()
-            };
+            string reader_kernel;
+            vector<uint32_t> reader_rt_args;
+            if (use_single_bank_reader) {
+                reader_kernel = "tt_metal/kernels/dataflow/reader_single_bank_single_matmul_block_cl_acts_tl_weights_dtx.cpp";
+                reader_rt_args = {
+                    // arguments for in1
+                    in1_dram_addr,
+                    in1_dram_noc_x,
+                    in1_dram_noc_y,
+                    Wbt * in0_block_w, // input 1 block num tiles
+                    Wbt * in0_block_w * single_tile_size, // input 1 block bytes
+                    // arguments for in0
+                    in0_dram_addr,
+                    in0_dram_noc_x,
+                    in0_dram_noc_y,
+                    Hat * in0_block_w, // input 0 block num tiles
+                    num_bytes_of_zeroes_per_transfer,
+                    num_transfers_of_zeroes,
+                    address_map_l1_addr,
+                    (uint32_t)address_map.size()
+                };
+            }
+            else {
+                reader_kernel = "tt_metal/kernels/dataflow/reader_multi_bank_single_matmul_block_cl_acts_tl_weights_dtx.cpp";
+                reader_rt_args = {
+                    // arguments for in1
+                    in1_dram_addr,
+                    Wbt * in0_block_w, // input 1 block num tiles
+                    // arguments for in0
+                    in0_dram_addr,
+                    Hat * in0_block_w, // input 0 block num tiles
+                    num_bytes_of_zeroes_per_transfer,
+                    num_transfers_of_zeroes,
+                    address_map_l1_addr,
+                    (uint32_t)address_map.size()
+                };
+            }
 
             string writer_kernel;
             vector<uint32_t> writer_rt_args;
@@ -557,9 +595,9 @@ std::cout << "Num transfers of zeroes " << num_transfers_of_zeroes << std::endl;
     return output;
 }
 
-Tensor conv_as_large_bmm_single_core(const Tensor& a, const Tensor &b, bool untilize_out) {
+Tensor conv_as_large_bmm_single_core(const Tensor& a, const Tensor &b, bool untilize_out, bool use_single_bank_reader) {
 
-    Tensor output = conv_as_large_bmm_single_core_(a, b, untilize_out);
+    Tensor output = conv_as_large_bmm_single_core_(a, b, untilize_out, use_single_bank_reader);
     return output;
 }
 
