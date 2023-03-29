@@ -157,7 +157,7 @@ def print_stats(devicesData, setup):
                                                 plusMinus = (stats['Max']-stats['Min'])
                                                 median = stats['Median']
                                                 tmpStr = f"{median:,}"
-                                                if plusMinus:
+                                                if stats["Count"] > 1:
                                                     tmpStr = "{tmpStr}{sign}{plusMinus:,}".format(
                                                         tmpStr=tmpStr,
                                                         sign=u"\u00B1",
