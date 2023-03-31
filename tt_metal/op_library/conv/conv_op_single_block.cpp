@@ -11,7 +11,7 @@ namespace tt {
 
 namespace tt_metal {
 
-void create_CBs_for_fused_matmul_c(tt_metal::Program* program, tt_metal::Device* device, tt_xy_pair core, bool activations_rm, bool output_rm, uint32_t M, uint32_t N, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t num_bytes_for_df) {
+void create_CBs_for_fused_matmul_c_sb(tt_metal::Program* program, tt_metal::Device* device, tt_xy_pair core, bool activations_rm, bool output_rm, uint32_t M, uint32_t N, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t num_bytes_for_df) {
 
     uint32_t in0_cb                                   = 0;
     uint32_t in1_cb                                   = 1;
@@ -246,7 +246,7 @@ void create_CBs_for_fused_matmul_c(tt_metal::Program* program, tt_metal::Device*
 
 // TODO(whoever gets a chance!): Refactor this so it's a part of matmul_single_core_... keeping it
 // independent for now as it's easier for me to progress
-Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, bool untilize_out) {
+Tensor conv_as_large_bmm_single_core_single_block_(const Tensor& a, const Tensor &b, bool untilize_out, bool use_single_bank_reader) {
     bool tilize_a = true;
     std::cout << "Untilize output? - " << untilize_out << std::endl;
 
@@ -313,12 +313,14 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, bool unt
         // transfer size should be the same for each transfer
         assert(transfer->size*2 == transfer_size);
         address_map.push_back(transfer->size*2);
-        // Using multi bank reader
-        // add stick id to address map which will be used to determine stick bank address in the reader kernel
-        // data is in channels last "stick" layout in 8 banks where each stick size = activation_C
-        assert(transfer->src_address % activation_C == 0); // src address points to the start of a stick
-        auto stick_id = transfer->src_address / activation_C;
-        address_map.push_back(stick_id);
+        if(!use_single_bank_reader) {
+            // Using multi bank reader
+            // add stick id to address map which will be used to determine stick bank address in the reader kernel
+            // data is in channels last "stick" layout in 8 banks where each stick size = activation_C
+            assert(transfer->src_address % activation_C == 0); // src address points to the start of a stick
+            auto stick_id = transfer->src_address / activation_C;
+            address_map.push_back(stick_id);
+        }
         t_bytes += transfer->size*2;
     }
 
@@ -331,9 +333,12 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, bool unt
     auto Wa = num_cols;
 
     const auto [Bb, Cb, Hb, Wb] = b.shape();
+    uint32_t M = 8;
+    uint32_t K = 4;
+    uint32_t N = K;
 
-    TT_ASSERT(Ha == 512, "For now, assuming practically hard-coded dimensions so that blocking makes sense");
-    TT_ASSERT(Wa == 128, "For now, assuming practically hard-coded dimensions so that blocking makes sense");
+    TT_ASSERT(Ha == M*32, "For now, assuming practically hard-coded dimensions so that blocking makes sense");
+    TT_ASSERT(Wa == K*32, "For now, assuming practically hard-coded dimensions so that blocking makes sense");
     TT_ASSERT(Hb == Wb, "For now, assuming practically hard-coded dimensions so that blocking makes sense");
 
     // Normal matrix shape checks
@@ -430,15 +435,13 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, bool unt
         uint32_t in0_dram_addr = src0_dram_buffer->address();
         uint32_t in0_row_size = Wa * 2; // some row major data needed in case we want to tilize A
 
-        // Important, dictates in0 block width, in1 block height
-        uint32_t num_blocks = 2;
+        uint32_t num_blocks = 1;
 
         // in0 block info
-        uint32_t in0_block_w = Wat / num_blocks; // Two blocks in the W dimension
-        uint32_t in0_channel_stick_size = Wat * 32 * 2;
-        uint32_t in0_partial_channel_stick_size = (in0_block_w * 32) * 2;
-        uint32_t in0_num_blocks_w = Wat / in0_block_w;
-        uint32_t in0_block_h = Hat;
+        uint32_t in0_block_w = Wat / num_blocks;
+        //uint32_t in0_partial_row_size = (in0_block_w * 32) * 2;
+        //uint32_t in0_num_blocks_w = Wat / in0_block_w;
+        //uint32_t in0_block_h = Hat;
         uint32_t in0_num_subblocks = (Hat / out_subblock_h);
         uint32_t in0_block_num_tiles = out_subblock_h * in0_block_w * in0_num_subblocks;
         uint32_t in0_subblock_h = (in0_block_num_tiles / in0_num_subblocks) / in0_block_w;
@@ -450,40 +453,18 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, bool unt
         // in1 block info
         uint32_t in1_num_subblocks = (Wbt / out_subblock_w);
         uint32_t in1_block_num_tiles = out_subblock_w * in0_block_w*in1_num_subblocks;
-        uint32_t in1_block_w = out_subblock_w * in1_num_subblocks;
-        uint32_t in1_block_h = in0_block_w;
+        uint32_t in1_per_core_w = out_subblock_w * in1_num_subblocks;
 
-        // For debug, uncomment this
-        /*
-        std::cout << "in0 information" << std::endl;
-        std::cout << "\t in0_dram_addr: " << in0_dram_addr << std::endl;
-        std::cout << "\t in0_row_size: " << in0_row_size << std::endl;
-        std::cout << "\t in0_block_w: " << in0_block_w << std::endl;
-        std::cout << "\t in0_partial_row_size: " << in0_partial_row_size << std::endl;
-        std::cout << "\t in0_num_blocks_w: " << in0_num_blocks_w << std::endl;
-        std::cout << "\t in0_block_h: " << in0_block_h << std::endl;
-        std::cout << "\t in0_num_subblocks: " << in0_num_subblocks << std::endl;
-        std::cout << "\t in0_block_num_tiles: " << in0_block_num_tiles << std::endl;
-        std::cout << "\t in0_subblock_h: " << in0_subblock_h << std::endl;
-        std::cout << "\t in0_subblock_num_tiles: " << in0_subblock_num_tiles << std::endl;
-
-        std::cout << "in1 information" << std::endl;
-        std::cout << "\t in1_dram_addr: " << in1_dram_addr << std::endl;
-        std::cout << "\t in1_num_subblocks: " << in1_num_subblocks << std::endl;
-        std::cout << "\t in1_block_num_tiles: " << in1_block_num_tiles << std::endl;
-        std::cout << "\t in1_block_w: " << in1_block_w << std::endl;
-        std::cout << "\t in1_block_h: " << in1_block_h << std::endl;
-
-        std::cout << "out information" << std::endl;
-        std::cout << "\t out_dram_addr: " << out_dram_addr << std::endl;
-        std::cout << "\t out_row_size: " << out_row_size << std::endl;
-        std::cout << "\t out_subblock_h: " << out_subblock_h << std::endl;
-        std::cout << "\t out_subblock_w: " << out_subblock_w << std::endl;
-        std::cout << "\t out_subblock_num_tiles: " << out_subblock_num_tiles << std::endl;
-        */
+        // NOC coordinates for single bank reader
+        auto in0_dram_noc_xy = src0_dram_buffer->noc_coordinates();
+        auto in1_dram_noc_xy = src1_dram_buffer->noc_coordinates();
+        uint32_t in0_dram_noc_x = uint32_t(in0_dram_noc_xy.x);
+        uint32_t in0_dram_noc_y = uint32_t(in0_dram_noc_xy.y);
+        uint32_t in1_dram_noc_x = uint32_t(in1_dram_noc_xy.x);
+        uint32_t in1_dram_noc_y = uint32_t(in1_dram_noc_xy.y);
 
         {
-            create_CBs_for_fused_matmul_c(
+            create_CBs_for_fused_matmul_c_sb(
                 program,
                 a.device(),
                 core,
@@ -493,43 +474,52 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, bool unt
                 Wbt,
                 in0_block_w,
                 out_subblock_h,
-                2); // TODO(agrebenisan): fix df num bytes
+                2);
 
+            TT_ASSERT(in0_subblock_h * in0_block_w * in0_num_subblocks == in0_block_num_tiles);
+            TT_ASSERT(in0_block_w == K);
 std::cout << "Reader kernel args - " << std::endl;
+std::cout << "in1 tiles " << Wbt * in0_block_w << std::endl;
+std::cout << "in0 tiles " << Hat * in0_block_w << std::endl;
 std::cout << "Num bytes of zeroes " << num_bytes_of_zeroes_per_transfer << std::endl;
 std::cout << "Num transfers of zeroes " << num_transfers_of_zeroes << std::endl;
-
-            uint32_t in1_tensor_start_tile_id = 0;
-            uint32_t in1_tensor_stride_w = 1;
-            uint32_t in1_tensor_stride_h = Wbt;
-            uint32_t in1_tensor_next_block_stride = in0_block_w * Wbt;
-            uint32_t in0_num_channel_sticks_per_row = 1; // For 1x1 conv
             string reader_kernel;
             vector<uint32_t> reader_rt_args;
-            reader_kernel = "tt_metal/kernels/dataflow/reader_multi_bank_matmul_blocked_cl_acts_tl_weights_dtx.cpp";
-            reader_rt_args = {
-                num_blocks,
-                // arguments for in1
-                in1_dram_addr,
-                in1_block_w,
-                in1_block_h,
-                in1_block_num_tiles,
-                in1_tensor_start_tile_id,
-                in1_tensor_stride_w,
-                in1_tensor_stride_h,
-                in1_tensor_next_block_stride,
-                // arguments for in0
-                in0_dram_addr,
-                in0_block_num_tiles,
-                in0_block_h,
-                in0_num_channel_sticks_per_row,
-                in0_channel_stick_size,
-                in0_partial_channel_stick_size,
-                num_bytes_of_zeroes_per_transfer,
-                num_transfers_of_zeroes,
-                address_map_l1_addr,
-                (uint32_t)address_map.size()
-            };
+            if (use_single_bank_reader) {
+                reader_kernel = "tt_metal/kernels/dataflow/reader_single_bank_single_matmul_block_cl_acts_tl_weights_dtx.cpp";
+                reader_rt_args = {
+                    // arguments for in1
+                    in1_dram_addr,
+                    in1_dram_noc_x,
+                    in1_dram_noc_y,
+                    Wbt * in0_block_w, // input 1 block num tiles
+                    Wbt * in0_block_w * single_tile_size, // input 1 block bytes
+                    // arguments for in0
+                    in0_dram_addr,
+                    in0_dram_noc_x,
+                    in0_dram_noc_y,
+                    Hat * in0_block_w, // input 0 block num tiles
+                    num_bytes_of_zeroes_per_transfer,
+                    num_transfers_of_zeroes,
+                    address_map_l1_addr,
+                    (uint32_t)address_map.size()
+                };
+            }
+            else {
+                reader_kernel = "tt_metal/kernels/dataflow/reader_multi_bank_single_matmul_block_cl_acts_tl_weights_dtx.cpp";
+                reader_rt_args = {
+                    // arguments for in1
+                    in1_dram_addr,
+                    Wbt * in0_block_w, // input 1 block num tiles
+                    // arguments for in0
+                    in0_dram_addr,
+                    Hat * in0_block_w, // input 0 block num tiles
+                    num_bytes_of_zeroes_per_transfer,
+                    num_transfers_of_zeroes,
+                    address_map_l1_addr,
+                    (uint32_t)address_map.size()
+                };
+            }
 
             string writer_kernel;
             vector<uint32_t> writer_rt_args;
@@ -569,38 +559,42 @@ std::cout << "Num transfers of zeroes " << num_transfers_of_zeroes << std::endl;
                 core, DataMovementProcessor::RISCV_0, NOC::RISCV_0_default);
 
             vector<uint32_t> compute_kernel_args = {
-                in0_block_w,
-                in0_num_subblocks,
-                in0_block_num_tiles,
-                in0_subblock_num_tiles,
-                in0_subblock_h,
+            uint(in0_block_w),
+            uint(in0_num_subblocks),
+            uint(in0_block_num_tiles),
+            uint(in0_subblock_num_tiles),
+            uint(in0_subblock_h),
 
-                in1_num_subblocks,
-                in1_block_num_tiles,
-                in1_block_w,
+            uint(in1_num_subblocks),
+            uint(in1_block_num_tiles),
+            uint(in1_per_core_w),
 
-                num_blocks,
+            uint(num_blocks),
 
-                out_subblock_h,
-                out_subblock_w,
-                out_subblock_num_tiles,
+            uint(out_subblock_h),
+            uint(out_subblock_w),
+            uint(out_subblock_num_tiles),
 
-                tilize_a,
-                untilize_out
-            };
+            uint(tilize_a),
+            uint(untilize_out)
+        };
 
-            tt_metal::ComputeKernelArgs *bmm_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
-            bool fp32_dest_acc_en = false;
-            bool math_approx_mode = false;
-            auto eltwise_binary_kernel = tt_metal::CreateComputeKernel(
-                program,
-                "tt_metal/kernels/compute/matmul_large_block.cpp",
-                core,
-                bmm_args,
-                MathFidelity::HiFi4,
-                fp32_dest_acc_en,
-                math_approx_mode
-            );
+        tt_metal::ComputeKernelArgs *mm_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
+
+        bool fp32_dest_acc_en = false;
+        bool math_approx_mode = false;
+
+        string compute_kernel = "tt_metal/kernels/compute/matmul_large_block.cpp";
+
+        auto mm_kernel = tt_metal::CreateComputeKernel(
+            program,
+            compute_kernel,
+            core,
+            mm_args,
+            MathFidelity::HiFi4,
+            fp32_dest_acc_en,
+            math_approx_mode
+        );
 
             tt_metal::WriteRuntimeArgsToDevice(
                 device, reader, core,
@@ -626,9 +620,9 @@ std::cout << "Num transfers of zeroes " << num_transfers_of_zeroes << std::endl;
     return output;
 }
 
-Tensor conv_as_large_bmm_single_core(const Tensor& a, const Tensor &b, bool untilize_out) {
+Tensor conv_as_large_bmm_single_core_single_block(const Tensor& a, const Tensor &b, bool untilize_out, bool use_single_bank_reader) {
 
-    Tensor output = conv_as_large_bmm_single_core_(a, b, untilize_out);
+    Tensor output = conv_as_large_bmm_single_core_single_block_(a, b, untilize_out, use_single_bank_reader);
     return output;
 }
 

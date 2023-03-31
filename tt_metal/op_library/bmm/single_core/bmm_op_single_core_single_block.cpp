@@ -1,17 +1,16 @@
-#include "tt_metal/op_library/conv/conv_op.hpp"
+#include "tt_metal/op_library/bmm/bmm_op.hpp"
 
 #include "tt_metal/host_api.hpp"
 #include "common/constants.hpp"
-// #include "test/tt_metal/llrt/test_libs/debug_mailbox.hpp"
-#include "tt_metal/impl/dtx/dtx.hpp"
-#include "tt_metal/impl/dtx/dtx_passes.hpp"
+//#include "tests/tt_metal/llrt/test_libs/debug_mailbox.hpp"
+
 using namespace tt::constants;
 
 namespace tt {
 
 namespace tt_metal {
 
-void create_CBs_for_fused_matmul_c(tt_metal::Program* program, tt_metal::Device* device, tt_xy_pair core, bool activations_rm, bool output_rm, uint32_t M, uint32_t N, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t num_bytes_for_df) {
+void create_CBs_for_fused_matmul_sb(tt_metal::Program* program, tt_metal::Device* device, tt_xy_pair core, bool activations_rm, bool output_rm, uint32_t M, uint32_t N, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t num_bytes_for_df) {
 
     uint32_t in0_cb                                   = 0;
     uint32_t in1_cb                                   = 1;
@@ -246,94 +245,17 @@ void create_CBs_for_fused_matmul_c(tt_metal::Program* program, tt_metal::Device*
 
 // TODO(whoever gets a chance!): Refactor this so it's a part of matmul_single_core_... keeping it
 // independent for now as it's easier for me to progress
-Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, bool untilize_out) {
-    bool tilize_a = true;
-    std::cout << "Untilize output? - " << untilize_out << std::endl;
-
-    TT_ASSERT(a.layout() == Layout::CHANNELS_LAST, "Conv activation should be in channels last layout");
-
-    //vector<int> shape = {5, 4,4};
-    vector<int> shape = {(int) a.shape()[1], (int) a.shape()[2], (int) a.shape()[3]};
-    auto activation_C = a.shape()[1];
-    // Right side: AbstractTensor --> consumer conv/mm
-    DataTransformations * dtx_right = new DataTransformations();
-    TransformationNode * node0 = new TransformationNode("producer", 1);
-    node0->groups[0]->shape = shape;
-    dtx_right->transformations.push_back(node0);
-    bool pass = true;
-    pass &= convert_tensor_layout_CL1_to_2Dmatrix_conv1x1_s1(dtx_right);
-    // Get the 2d matrix shape
-    auto matrix_shape = dtx_right->transformations.back()->groups[0]->shape;
-    assert(matrix_shape.size() == 3);
-    assert(matrix_shape[0] == 1);
-    uint32_t num_rows = (uint32_t) matrix_shape[1];
-    uint32_t num_cols = (uint32_t) matrix_shape[2];
-    pass &= row_major_memory_store(dtx_right);
-
-    //cout << "\n\nDTX_RIGHT" << endl;
-    //dtx_right->print();
-
-
-    // Left side: AbstractTensor --> producer memory buffer
-    DataTransformations * dtx_left = new DataTransformations();
-    TransformationNode * node1 = new TransformationNode("producer", 1);
-    node1->groups[0]->shape = shape;
-    dtx_left->transformations.push_back(node1);
-    pass &= convert_abstract_tensor_to_channels_last_layout(dtx_left);
-
-    //cout << "\n\nDTX_LEFT" << endl;
-    //dtx_left->print();
-
-    DataTransformations * combined = reverse_and_combine_transformations(dtx_left, dtx_right);
-    //cout << "\n\nDTX_COMBINED" << endl;
-    //combined->print();
-
-    pass &= optimize_away_transpose(combined);
-    //cout << "\n\nDTX_OPTIMIZED" << endl;
-    //combined->print();
-
-    pass &= collapse_transformations(combined);
-    //cout << "\n\nDTX_COLLAPSED" << endl;
-    //combined->print();
-    pass &= generate_transfer_addresses(combined);
-    //combined->print();
-    // copy transfer addresses into a vector
-    std::vector<uint32_t> address_map;
-    uint32_t t_bytes = 0;
-
-    // Generate address map for reader kernel and
-    // verify for the assumptions taken by the reader kernel about the DTX address map
-    uint32_t transfer_size = combined->transformations.back()->groups[0]->transfers[0]->size*2; // 2 for bfloat16
-    // Channels last layout -> so each transfer size should = activation_C
-    assert(transfer_size == activation_C*2); // 2 for bfloat16
-    for(auto transfer : combined->transformations.back()->groups[0]->transfers){
-        address_map.push_back(transfer->src_address*2); // 2 for bfloat16
-        // TODO: remove dst address. It is not used by the reader kernel because it writes to L1 destination contiguously
-        address_map.push_back(transfer->dst_address*2);
-        // transfer size should be the same for each transfer
-        assert(transfer->size*2 == transfer_size);
-        address_map.push_back(transfer->size*2);
-        // Using multi bank reader
-        // add stick id to address map which will be used to determine stick bank address in the reader kernel
-        // data is in channels last "stick" layout in 8 banks where each stick size = activation_C
-        assert(transfer->src_address % activation_C == 0); // src address points to the start of a stick
-        auto stick_id = transfer->src_address / activation_C;
-        address_map.push_back(stick_id);
-        t_bytes += transfer->size*2;
-    }
-
-    uint32_t total_bytes = num_rows * num_cols * 2; // 2 for bfloat16
-    assert(total_bytes == t_bytes);
-
-    uint32_t Ba = 1;
-    uint32_t Ca = 1;
-    auto Ha = num_rows;
-    auto Wa = num_cols;
-
+Tensor large_bmm_single_core_single_block_(const Tensor& a, const Tensor &b, bool tilize_a, bool untilize_out) {
+    std::cout << "In single core single block " << std::endl;
+    const auto [Ba, Ca, Ha, Wa] = a.shape();
     const auto [Bb, Cb, Hb, Wb] = b.shape();
 
-    TT_ASSERT(Ha == 512, "For now, assuming practically hard-coded dimensions so that blocking makes sense");
-    TT_ASSERT(Wa == 128, "For now, assuming practically hard-coded dimensions so that blocking makes sense");
+    uint32_t M = 8;
+    uint32_t K = 4;
+    uint32_t N = K;
+
+    TT_ASSERT(Ha == M*32, "For now, assuming practically hard-coded dimensions so that blocking makes sense");
+    TT_ASSERT(Wa == K*32, "For now, assuming practically hard-coded dimensions so that blocking makes sense");
     TT_ASSERT(Hb == Wb, "For now, assuming practically hard-coded dimensions so that blocking makes sense");
 
     // Normal matrix shape checks
@@ -360,31 +282,13 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, bool unt
     tt_metal::Buffer *src0_dram_buffer = a.buffer();
     tt_metal::Buffer *src1_dram_buffer = b.buffer();
     // same condition as above, different message
-    //TT_ASSERT(src0_dram_buffer->size() % single_tile_size == 0, "Buffer size of tensor a must be divisible by single_tile_size (aka divisible by sizeof(df) * 1024)");
+    TT_ASSERT(src0_dram_buffer->size() % single_tile_size == 0, "Buffer size of tensor a must be divisible by single_tile_size (aka divisible by sizeof(df) * 1024)");
     TT_ASSERT(src1_dram_buffer->size() % single_tile_size == 0, "Buffer size of tensor b must be divisible by single_tile_size (aka divisible by sizeof(df) * 1024)");
-
+    auto dram_src0_noc_xy = src0_dram_buffer->noc_coordinates();
+    auto dram_src1_noc_xy = src1_dram_buffer->noc_coordinates();
     // This should allocate a DRAM buffer on the device
     tt_metal::Device *device = a.device();
     std::array<uint32_t, 4> cshape{Ba, Ca, Ha, Wb};
-    // pad height
-    cshape[2] = (uint32_t) (ceil((double) cshape[2] / (double) TILE_HEIGHT ) * TILE_HEIGHT);
-
-    // For height padding in reader kernel
-    uint32_t total_zeroes_bytes = (cshape[2] - Ha) * Wa * 2; // 2 for bfloat16
-    uint32_t zero_buffer_size = l1_mem::address_map::ZEROS_SIZE;
-    uint32_t num_bytes_of_zeroes_per_transfer = 0;
-    uint32_t num_transfers_of_zeroes = 0;
-
-    if(total_zeroes_bytes > zero_buffer_size) {
-        num_bytes_of_zeroes_per_transfer = zero_buffer_size;
-        assert(total_zeroes_bytes % zero_buffer_size == 0);
-        num_transfers_of_zeroes = total_zeroes_bytes / zero_buffer_size;
-    }
-    else if(total_zeroes_bytes > 0) {
-        num_bytes_of_zeroes_per_transfer = total_zeroes_bytes;
-        num_transfers_of_zeroes = 1;
-    }
-
 
     tt::tt_metal::Layout out_layout;
     if (untilize_out) {
@@ -400,14 +304,15 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, bool unt
 
     tt_metal::Buffer *dst_dram_buffer = output.buffer();
     TT_ASSERT(dst_dram_buffer != nullptr, "Output buffer should be allocated on device!");
-    uint32_t address_map_l1_addr = 980 * 1024;
-    auto l1_b0 = tt_metal::CreateL1Buffer(program, device, core, address_map.size() * sizeof(uint32_t), address_map_l1_addr);
+
     // Keep for now, but need to fix when you get to multibank
     uint32_t out_dram_addr = dst_dram_buffer->address();
     auto out_dram_noc_xy = dst_dram_buffer->noc_coordinates();
 
     uint32_t out_dram_noc_x = out_dram_noc_xy.x;
     uint32_t out_dram_noc_y = out_dram_noc_xy.y;
+
+    bool pass = true;
     {
         // Convert tensor dims to tile dims
         uint32_t B   = Ba;
@@ -431,14 +336,13 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, bool unt
         uint32_t in0_row_size = Wa * 2; // some row major data needed in case we want to tilize A
 
         // Important, dictates in0 block width, in1 block height
-        uint32_t num_blocks = 2;
+        uint32_t num_blocks = 1;
 
         // in0 block info
-        uint32_t in0_block_w = Wat / num_blocks; // Two blocks in the W dimension
-        uint32_t in0_channel_stick_size = Wat * 32 * 2;
-        uint32_t in0_partial_channel_stick_size = (in0_block_w * 32) * 2;
-        uint32_t in0_num_blocks_w = Wat / in0_block_w;
-        uint32_t in0_block_h = Hat;
+        uint32_t in0_block_w = Wat / num_blocks;
+        //uint32_t in0_partial_row_size = (in0_block_w * 32) * 2;
+        //uint32_t in0_num_blocks_w = Wat / in0_block_w;
+        //uint32_t in0_block_h = Hat;
         uint32_t in0_num_subblocks = (Hat / out_subblock_h);
         uint32_t in0_block_num_tiles = out_subblock_h * in0_block_w * in0_num_subblocks;
         uint32_t in0_subblock_h = (in0_block_num_tiles / in0_num_subblocks) / in0_block_w;
@@ -450,40 +354,12 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, bool unt
         // in1 block info
         uint32_t in1_num_subblocks = (Wbt / out_subblock_w);
         uint32_t in1_block_num_tiles = out_subblock_w * in0_block_w*in1_num_subblocks;
-        uint32_t in1_block_w = out_subblock_w * in1_num_subblocks;
-        uint32_t in1_block_h = in0_block_w;
-
-        // For debug, uncomment this
-        /*
-        std::cout << "in0 information" << std::endl;
-        std::cout << "\t in0_dram_addr: " << in0_dram_addr << std::endl;
-        std::cout << "\t in0_row_size: " << in0_row_size << std::endl;
-        std::cout << "\t in0_block_w: " << in0_block_w << std::endl;
-        std::cout << "\t in0_partial_row_size: " << in0_partial_row_size << std::endl;
-        std::cout << "\t in0_num_blocks_w: " << in0_num_blocks_w << std::endl;
-        std::cout << "\t in0_block_h: " << in0_block_h << std::endl;
-        std::cout << "\t in0_num_subblocks: " << in0_num_subblocks << std::endl;
-        std::cout << "\t in0_block_num_tiles: " << in0_block_num_tiles << std::endl;
-        std::cout << "\t in0_subblock_h: " << in0_subblock_h << std::endl;
-        std::cout << "\t in0_subblock_num_tiles: " << in0_subblock_num_tiles << std::endl;
-
-        std::cout << "in1 information" << std::endl;
-        std::cout << "\t in1_dram_addr: " << in1_dram_addr << std::endl;
-        std::cout << "\t in1_num_subblocks: " << in1_num_subblocks << std::endl;
-        std::cout << "\t in1_block_num_tiles: " << in1_block_num_tiles << std::endl;
-        std::cout << "\t in1_block_w: " << in1_block_w << std::endl;
-        std::cout << "\t in1_block_h: " << in1_block_h << std::endl;
-
-        std::cout << "out information" << std::endl;
-        std::cout << "\t out_dram_addr: " << out_dram_addr << std::endl;
-        std::cout << "\t out_row_size: " << out_row_size << std::endl;
-        std::cout << "\t out_subblock_h: " << out_subblock_h << std::endl;
-        std::cout << "\t out_subblock_w: " << out_subblock_w << std::endl;
-        std::cout << "\t out_subblock_num_tiles: " << out_subblock_num_tiles << std::endl;
-        */
+        uint32_t in1_per_core_w = out_subblock_w * in1_num_subblocks;
+        //uint32_t in1_block_w = out_subblock_w * in1_num_subblocks;
+        //uint32_t in1_block_h = in0_block_w;
 
         {
-            create_CBs_for_fused_matmul_c(
+            create_CBs_for_fused_matmul_sb(
                 program,
                 a.device(),
                 core,
@@ -493,43 +369,10 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, bool unt
                 Wbt,
                 in0_block_w,
                 out_subblock_h,
-                2); // TODO(agrebenisan): fix df num bytes
+                2);
 
-std::cout << "Reader kernel args - " << std::endl;
-std::cout << "Num bytes of zeroes " << num_bytes_of_zeroes_per_transfer << std::endl;
-std::cout << "Num transfers of zeroes " << num_transfers_of_zeroes << std::endl;
-
-            uint32_t in1_tensor_start_tile_id = 0;
-            uint32_t in1_tensor_stride_w = 1;
-            uint32_t in1_tensor_stride_h = Wbt;
-            uint32_t in1_tensor_next_block_stride = in0_block_w * Wbt;
-            uint32_t in0_num_channel_sticks_per_row = 1; // For 1x1 conv
-            string reader_kernel;
-            vector<uint32_t> reader_rt_args;
-            reader_kernel = "tt_metal/kernels/dataflow/reader_multi_bank_matmul_blocked_cl_acts_tl_weights_dtx.cpp";
-            reader_rt_args = {
-                num_blocks,
-                // arguments for in1
-                in1_dram_addr,
-                in1_block_w,
-                in1_block_h,
-                in1_block_num_tiles,
-                in1_tensor_start_tile_id,
-                in1_tensor_stride_w,
-                in1_tensor_stride_h,
-                in1_tensor_next_block_stride,
-                // arguments for in0
-                in0_dram_addr,
-                in0_block_num_tiles,
-                in0_block_h,
-                in0_num_channel_sticks_per_row,
-                in0_channel_stick_size,
-                in0_partial_channel_stick_size,
-                num_bytes_of_zeroes_per_transfer,
-                num_transfers_of_zeroes,
-                address_map_l1_addr,
-                (uint32_t)address_map.size()
-            };
+            TT_ASSERT(in0_subblock_h * in0_block_w * in0_num_subblocks == in0_block_num_tiles);
+            TT_ASSERT(in0_block_w == K);
 
             string writer_kernel;
             vector<uint32_t> writer_rt_args;
@@ -555,9 +398,22 @@ std::cout << "Num transfers of zeroes " << num_transfers_of_zeroes << std::endl;
                     out_subblock_w * out_subblock_h,
                     Wbt / out_subblock_w,
                     Hat / out_subblock_h
-                    };
+                };
             }
 
+            string reader_kernel = "tt_metal/kernels/dataflow/reader_matmul_blocked.cpp";
+            std::vector<uint32_t> reader_rt_args{
+            in0_dram_addr,
+            (std::uint32_t)dram_src0_noc_xy.x,
+            (std::uint32_t)dram_src0_noc_xy.y,
+            in1_dram_addr,
+            (std::uint32_t)dram_src1_noc_xy.x,
+            (std::uint32_t)dram_src1_noc_xy.y,
+            (std::uint32_t)(K/in0_block_w), // num_blocks
+            M * in0_block_w, // input 0 block num tiles
+            N * in0_block_w, // input 1 block num tiles
+            M * in0_block_w * single_tile_size, // input 0 block bytes
+            N * in0_block_w * single_tile_size}; // input 1 block bytes
             auto reader = tt_metal::CreateDataMovementKernel(
                 program,
                 reader_kernel,
@@ -569,38 +425,42 @@ std::cout << "Num transfers of zeroes " << num_transfers_of_zeroes << std::endl;
                 core, DataMovementProcessor::RISCV_0, NOC::RISCV_0_default);
 
             vector<uint32_t> compute_kernel_args = {
-                in0_block_w,
-                in0_num_subblocks,
-                in0_block_num_tiles,
-                in0_subblock_num_tiles,
-                in0_subblock_h,
+            uint(in0_block_w),
+            uint(in0_num_subblocks),
+            uint(in0_block_num_tiles),
+            uint(in0_subblock_num_tiles),
+            uint(in0_subblock_h),
 
-                in1_num_subblocks,
-                in1_block_num_tiles,
-                in1_block_w,
+            uint(in1_num_subblocks),
+            uint(in1_block_num_tiles),
+            uint(in1_per_core_w),
 
-                num_blocks,
+            uint(num_blocks),
 
-                out_subblock_h,
-                out_subblock_w,
-                out_subblock_num_tiles,
+            uint(out_subblock_h),
+            uint(out_subblock_w),
+            uint(out_subblock_num_tiles),
 
-                tilize_a,
-                untilize_out
-            };
+            uint(tilize_a),
+            uint(untilize_out)
+        };
 
-            tt_metal::ComputeKernelArgs *bmm_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
-            bool fp32_dest_acc_en = false;
-            bool math_approx_mode = false;
-            auto eltwise_binary_kernel = tt_metal::CreateComputeKernel(
-                program,
-                "tt_metal/kernels/compute/matmul_large_block.cpp",
-                core,
-                bmm_args,
-                MathFidelity::HiFi4,
-                fp32_dest_acc_en,
-                math_approx_mode
-            );
+        tt_metal::ComputeKernelArgs *mm_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
+
+        bool fp32_dest_acc_en = false;
+        bool math_approx_mode = false;
+
+        string compute_kernel = "tt_metal/kernels/compute/matmul_large_block.cpp";
+
+        auto mm_kernel = tt_metal::CreateComputeKernel(
+            program,
+            compute_kernel,
+            core,
+            mm_args,
+            MathFidelity::HiFi4,
+            fp32_dest_acc_en,
+            math_approx_mode
+        );
 
             tt_metal::WriteRuntimeArgsToDevice(
                 device, reader, core,
@@ -614,9 +474,7 @@ std::cout << "Num transfers of zeroes " << num_transfers_of_zeroes << std::endl;
 
             pass &= tt_metal::CompileProgram(device, program, false);
             pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
-            tt_metal::WriteToDeviceL1(device, core, address_map, address_map_l1_addr);
         }
-
 
         pass &= tt_metal::LaunchKernels(device, program);
     }
@@ -626,9 +484,10 @@ std::cout << "Num transfers of zeroes " << num_transfers_of_zeroes << std::endl;
     return output;
 }
 
-Tensor conv_as_large_bmm_single_core(const Tensor& a, const Tensor &b, bool untilize_out) {
 
-    Tensor output = conv_as_large_bmm_single_core_(a, b, untilize_out);
+Tensor large_bmm_single_core_single_block(const Tensor& a, const Tensor &b, bool tilize_a, bool untilize_out) {
+
+    Tensor output = large_bmm_single_core_single_block_(a, b, tilize_a, untilize_out);
     return output;
 }
 

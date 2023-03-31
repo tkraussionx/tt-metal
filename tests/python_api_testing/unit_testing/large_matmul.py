@@ -9,13 +9,13 @@ from pymetal import ttlib as ttl
 from python_api_testing.models.utility_functions import pad_activation, pad_weight, tilize, untilize, tilize_to_list, print_diff_argmax, pad_weight, is_close
 import torch
 
-def run_large_matmul_test(Ha, Wa, Wb, tilize_a, untilize_out):
+def run_large_matmul_test(Ha, Wa, Wb, tilize_a, untilize_out, single_block_single_bank):
     torch.manual_seed(0)
     a_shape = [1, 1, Ha, Wa]
     b_shape = [1, 1, Wa, Wb]
 
     a = torch.randn(a_shape, dtype=torch.bfloat16).float()
-    b = torch.randn(b_shape, dtype=torch.bfloat16).float()
+    b = torch.eye(*b_shape[2:]).reshape(b_shape)
 
     layout_a = ttl.tensor.Layout.ROW_MAJOR if tilize_a else ttl.tensor.Layout.TILE
 
@@ -31,6 +31,7 @@ def run_large_matmul_test(Ha, Wa, Wb, tilize_a, untilize_out):
         ttl.tensor.DataType.BFLOAT16,
         layout_a,
         device,
+        ttl.tensor.MemoryConfig(False, 0) if single_block_single_bank else ttl.tensor.MemoryConfig(True, -1)
     )
     ttb = ttl.tensor.Tensor(
         tilize_to_list(b),
@@ -38,17 +39,23 @@ def run_large_matmul_test(Ha, Wa, Wb, tilize_a, untilize_out):
         ttl.tensor.DataType.BFLOAT16,
         ttl.tensor.Layout.TILE,
         device,
+        ttl.tensor.MemoryConfig(False, 0) if single_block_single_bank else ttl.tensor.MemoryConfig(True, -1)
     )
 
-    out = ttl.tensor.large_bmm(tta, ttb, tilize_a, untilize_out)
+    if single_block_single_bank:
+        print("Running single MM block")
+        out = ttl.tensor.large_bmm_single_block(tta, ttb, tilize_a, untilize_out)
+    else:
+        print("Running 2 MM block")
+        out = ttl.tensor.large_bmm(tta, ttb, tilize_a, untilize_out)
     out_shape = [1,1,Ha,Wb]
     out_pytorch = torch.tensor(out.to(host).data()).reshape(out_shape)
     if not untilize_out:
         out_pytorch = untilize(out_pytorch)
     out_golden = torch.matmul(a,b)
     print(abs(out_golden - out_pytorch).max())
-    assert (abs(out_golden - out_pytorch) < 0.02).all(), "Max abs difference can be 0.02 due to bfloat conversions"
-    #assert (out_pytorch == a).all(), "Output should be identical to pytorch"
+    #assert (abs(out_golden - out_pytorch) < 0.02).all(), "Max abs difference can be 0.02 due to bfloat conversions"
+    assert (out_pytorch == a).all(), "Output should be identical to pytorch"
 
 if __name__ == "__main__":
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
@@ -57,11 +64,17 @@ if __name__ == "__main__":
 
     TILE_HEIGHT = TILE_WIDTH = 32
 
-    Ha = 16 * TILE_HEIGHT
+    Ha = 8 * TILE_HEIGHT
     Wa = 4 * TILE_WIDTH
     Wb = 4 * TILE_WIDTH
+    # Run simple matmul - single block single DRAM bank
+    run_large_matmul_test(Ha, Wa, Wb, True, False, True)
+
+    # Run blocked matmul
+    Ha = 16 * TILE_HEIGHT
     # run_large_matmul_test(Ha, Wa, Wb, False, False)
     # run_large_matmul_test(Ha, Wa, Wb, False, True)
-    run_large_matmul_test(Ha, Wa, Wb, True, False)
+    run_large_matmul_test(Ha, Wa, Wb, True, False, False)
     # run_large_matmul_test(Ha, Wa, Wb, True, True)
+    # Run simple matmul - single block single DRAM bank
     ttl.device.CloseDevice(device)

@@ -106,6 +106,11 @@ Tensor large_bmm(const Tensor& a, const Tensor& b, bool tilize_a, bool untilize_
     return large_bmm_single_core(a, b, tilize_a, untilize_out);
 }
 
+// TODO: deprecate single block version once auto blocking is supported in large_bmm op
+Tensor large_bmm_single_block(const Tensor& a, const Tensor& b, bool tilize_a, bool untilize_out) {
+    return large_bmm_single_core_single_block(a, b, tilize_a, untilize_out);
+}
+
 }  // namespace tt_metal
 
 }  // namespace tt

@@ -401,7 +401,23 @@ void TensorModule(py::module &m_tensor) {
         | untilize_out | Whether or not to untilize the output (useful if a consuming op requires row major layout) | bool      |             | Yes      |
         +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
     )doc");
-    m_tensor.def("conv_as_large_bmm_single_core", &conv_as_large_bmm_single_core, R"doc(
+    m_tensor.def("large_bmm_single_block", &large_bmm_single_block, R"doc(
+        Perform a batched matmul ``A x B`` with two tensors, where batch dims match.
+        This op also supports tilizing tensor A and untilizing the output if you so choose.
+
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | Argument     | Description                                                                                | Data type | Valid range | Required |
+        +==============+============================================================================================+===========+=============+==========+
+        | a            | LHS matmul operand                                                                         | Tensor    |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | b            | RHS matmul operand                                                                         | Tensor    |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | tilize_a     | Whether or not to tilize a (useful if a is in row major layout)                            | bool      |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | untilize_out | Whether or not to untilize the output (useful if a consuming op requires row major layout) | bool      |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+    )doc");
+    m_tensor.def("conv_as_large_bmm_single_core_single_block", &conv_as_large_bmm_single_core_single_block, R"doc(
         Perform a batched matmul ``A x B`` with two tensors, where batch dims match.
         This op also supports tilizing tensor A and untilizing the output if you so choose.
 
@@ -417,7 +433,20 @@ void TensorModule(py::module &m_tensor) {
         | use_single_bank_reader | Whether or not to use single bank reader kernel. Useful for debugging.           | bool      |             | Yes      |
         +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
     )doc");
+    m_tensor.def("conv_as_large_bmm_single_core", &conv_as_large_bmm_single_core, R"doc(
+        Perform a batched matmul ``A x B`` with two tensors, where batch dims match.
+        This op also supports tilizing tensor A and untilizing the output if you so choose.
 
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | Argument     | Description                                                                                | Data type | Valid range | Required |
+        +==============+============================================================================================+===========+=============+==========+
+        | a            | LHS matmul operand                                                                         | Tensor    |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | b            | RHS matmul operand                                                                         | Tensor    |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+        | untilize_out | Whether or not to untilize the output (useful if a consuming op requires row major layout) | bool      |             | Yes      |
+        +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
+    )doc");
     // broadcast math
     m_tensor.def("bcast", &bcast, R"doc(
         Perform a broadcasted binary math operation between two tensors.
