@@ -3,10 +3,13 @@ from pathlib import Path
 import sys
 f = f"{Path(__file__).parent}"
 sys.path.append(f"{f}/..")
+sys.path.append(f"{f}/../../..")
+sys.path.append(f"{f}/../../../..")
 
 import torch
 from torch import nn
-from pymetal import ttmetal
+#from pymetal import ttmetal
+from pymetal import ttlib as ttl
 import torch.nn.functional as F
 from torch.autograd import Function, Variable
 
@@ -44,10 +47,10 @@ def TT_forward(tt_x, in_channels, out_channels,
         x2_ = possible_downsample(x2, in_channels, out_channels, stride,
                                 padding, dilation)
 
-        #tt_x1 = ttmetal.tensor.Tensor(tilize_to_list(x1),  [1, x1.size()[1], H, W], ttmetal.tensor.DataType.BFLOAT16, ttmetal.tensor.Layout.TILE, device)
-        tt_x2  = ttmetal.tensor.Tensor(tilize_to_list(x2),  [1, x2.size()[1], H, W], ttmetal.tensor.DataType.BFLOAT16, ttmetal.tensor.Layout.TILE, device)
-        tt_x1_ = ttmetal.tensor.Tensor(tilize_to_list(x1_), [1, x1_.size()[1], H, W], ttmetal.tensor.DataType.BFLOAT16, ttmetal.tensor.Layout.TILE, device)
-        tt_x2_ = ttmetal.tensor.Tensor(tilize_to_list(x2_), [1, x2_.size()[1], H, W], ttmetal.tensor.DataType.BFLOAT16, ttmetal.tensor.Layout.TILE, device)
+        #tt_x1 = ttl.tensor.Tensor(tilize_to_list(x1),  [1, x1.size()[1], H, W], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
+        tt_x2  = ttl.tensor.Tensor(tilize_to_list(x2),  [1, x2.size()[1], H, W], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
+        tt_x1_ = ttl.tensor.Tensor(tilize_to_list(x1_), [1, x1_.size()[1], H, W], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
+        tt_x2_ = ttl.tensor.Tensor(tilize_to_list(x2_), [1, x2_.size()[1], H, W], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
 
         tt_f_x2 = TT_residual(
             tt_x2,
@@ -60,7 +63,7 @@ def TT_forward(tt_x, in_channels, out_channels,
             device=device
         )
 
-        tt_y1 = ttmetal.tensor.add(tt_f_x2, tt_x1_)
+        tt_y1 = ttl.tensor.add(tt_f_x2, tt_x1_)
 
         tt_g_y1 = TT_residual(
             tt_y1,
@@ -73,7 +76,7 @@ def TT_forward(tt_x, in_channels, out_channels,
             device=device
         )
 
-        tt_y2 = ttmetal.tensor.add(tt_g_y1, tt_x2_)
+        tt_y2 = ttl.tensor.add(tt_g_y1, tt_x2_)
 
         y1 = tt_y1.to(host).data()
         y1 = torch.Tensor(y1).reshape((1,x1_.size()[1],H,W))
@@ -219,9 +222,9 @@ def size_after_residual(size, out_channels, kernel_size, stride, padding, dilati
 
 if __name__ == "__main__":
     # Initialize the device
-    device = ttmetal.device.CreateDevice(ttmetal.device.Arch.GRAYSKULL, 0)
-    ttmetal.device.InitializeDevice(device)
-    host = ttmetal.device.GetHost()
+    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
+    ttl.device.InitializeDevice(device)
+    host = ttl.device.GetHost()
 
     H = 32
     W = 32
@@ -273,8 +276,8 @@ if __name__ == "__main__":
                          matmul,  epsf)
 
     # Set up input data for device
-    t0 = ttmetal.tensor.Tensor(tilize_to_list(x), [1, C, H, W], ttmetal.tensor.DataType.BFLOAT16, ttmetal.tensor.Layout.TILE, device)
-    matmul0 = ttmetal.tensor.Tensor(tilize_to_list(matmul), [1, 1, H, W], ttmetal.tensor.DataType.BFLOAT16, ttmetal.tensor.Layout.TILE, device)
+    t0 = ttl.tensor.Tensor(tilize_to_list(x), [1, C, H, W], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
+    matmul0 = ttl.tensor.Tensor(tilize_to_list(matmul), [1, 1, H, W], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
     # TODO: fix C in matmul? Might not need when multi channel ^^ is working
 
     f_ttgamma    = [tilize_to_list(x) for x in f_gamma]
@@ -303,7 +306,7 @@ if __name__ == "__main__":
     print ("GOLDEN PCC TEST")
     print (comp_pcc(ref_fwd, t1, pcc=.99))
 
-    ttmetal.device.CloseDevice(device)
+    ttl.device.CloseDevice(device)
 
 
 ######### REFERENCES

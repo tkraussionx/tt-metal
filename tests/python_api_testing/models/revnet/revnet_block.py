@@ -31,10 +31,14 @@ from pathlib import Path
 import sys
 f = f"{Path(__file__).parent}"
 sys.path.append(f"{f}/..")
+sys.path.append(f"{f}/../../..")
+sys.path.append(f"{f}/../../../..")
 
 import torch
 from torch import nn
-from pymetal import ttmetal
+#from pymetal import ttmetal
+from pymetal import ttlib as ttl
+
 import torch.nn.functional as F
 
 from python_api_testing.models.utility_functions import pad_activation, pad_weight, tilize, untilize, tilize_to_list, pad_weight
@@ -50,11 +54,11 @@ def TT_residual(x, matmul, mean_run, var_run, gamma, beta, C, device):
     bnorm2 = Batchnorm(mean_run[1], var_run[1], gamma[1], beta[1], C, device)
 
     out = bnorm1(x)
-    out = ttmetal.tensor.relu(out)
-    out = ttmetal.tensor.matmul(out, matmul)
+    out = ttl.tensor.relu(out)
+    out = ttl.tensor.matmul(out, matmul)
     out = bnorm2(out)
-    out = ttmetal.tensor.relu(out)
-    out = ttmetal.tensor.matmul(out, matmul)
+    out = ttl.tensor.relu(out)
+    out = ttl.tensor.matmul(out, matmul)
 
     return out
 
@@ -72,9 +76,9 @@ def REF_residual(x, matmul, mean_run, var_run, gamma, beta, eps, training=False)
 
 if __name__ == "__main__":
     # Initialize the device
-    device = ttmetal.device.CreateDevice(ttmetal.device.Arch.GRAYSKULL, 0)
-    ttmetal.device.InitializeDevice(device)
-    host = ttmetal.device.GetHost()
+    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
+    ttl.device.InitializeDevice(device)
+    host = ttl.device.GetHost()
 
     H = 32
     W = 32
@@ -105,8 +109,8 @@ if __name__ == "__main__":
     ref_revblock = REF_residual(x, matmul, mean_runf, var_runf, gammaf, betaf, epsf, training=False)
 
 
-    t0 = ttmetal.tensor.Tensor(tilize_to_list(x), [1, C, H, W], ttmetal.tensor.DataType.BFLOAT16, ttmetal.tensor.Layout.TILE, device)
-    matmul0 = ttmetal.tensor.Tensor(tilize_to_list(matmul), [1, C, H, W], ttmetal.tensor.DataType.BFLOAT16, ttmetal.tensor.Layout.TILE, device)
+    t0 = ttl.tensor.Tensor(tilize_to_list(x), [1, C, H, W], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
+    matmul0 = ttl.tensor.Tensor(tilize_to_list(matmul), [1, C, H, W], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
 
     ttgamma    = [tilize_to_list(x) for x in gamma]
     ttbeta     = [tilize_to_list(x) for x in beta]
@@ -125,4 +129,4 @@ if __name__ == "__main__":
     print ("GOLDEN PCC TEST")
     print (comp_pcc(ref_revblock, tt_got_back, pcc=.99))
 
-    ttmetal.device.CloseDevice(device)
+    ttl.device.CloseDevice(device)

@@ -9,62 +9,65 @@ sys.path.append(f"{f}/..")
 import torch
 from torch import nn
 
-#from gpai import gpai
-from pymetal import ttmetal
+sys.path.append(f"{f}/../../..")
+sys.path.append(f"{f}/../../../..")
 
-from python_api_testing.models.utility_functions import pad_activation, pad_weight, tilize, untilize, tilize_to_list, pad_weight
+#from pymetal import ttmetal
+from pymetal import ttlib as ttl
+
+from tests.python_api_testing.models.utility_functions import pad_activation, pad_weight, tilize, untilize, tilize_to_list, pad_weight
 torch.set_printoptions(threshold=10_000)
 
-from python_api_testing.sweep_tests.comparison_funcs import comp_pcc
+from tests.python_api_testing.sweep_tests.comparison_funcs import comp_pcc
 
 #v1_ assume input is always 32x32
 def Batchnorm(mean_run, var_run, gamma, beta, C, device):
     # gamma, beta, epsilon should be vectors of size C
-    mean_run = ttmetal.tensor.Tensor(
+    mean_run = ttl.tensor.Tensor(
         mean_run,
         [1, C, 32, 32],  # will this auto-broadcast?
-        ttmetal.tensor.DataType.BFLOAT16,
-        ttmetal.tensor.Layout.TILE,
+        ttl.tensor.DataType.BFLOAT16,
+        ttl.tensor.Layout.TILE,
         device
     )
 
-    var_run = ttmetal.tensor.Tensor(
+    var_run = ttl.tensor.Tensor(
         var_run ,
         [1, C, 32, 32],  # will this auto-broadcast?
-        ttmetal.tensor.DataType.BFLOAT16,
-        ttmetal.tensor.Layout.TILE,
+        ttl.tensor.DataType.BFLOAT16,
+        ttl.tensor.Layout.TILE,
         device
     )
 
-    gamma = ttmetal.tensor.Tensor(
+    gamma = ttl.tensor.Tensor(
         gamma,
         [1, C, 32, 32],  # will this auto-broadcast?
-        ttmetal.tensor.DataType.BFLOAT16,
-        ttmetal.tensor.Layout.TILE,
+        ttl.tensor.DataType.BFLOAT16,
+        ttl.tensor.Layout.TILE,
         device
     )
 
-    beta = ttmetal.tensor.Tensor(
+    beta = ttl.tensor.Tensor(
         beta,
         [1, C, 32, 32],
-        ttmetal.tensor.DataType.BFLOAT16,
-        ttmetal.tensor.Layout.TILE,
+        ttl.tensor.DataType.BFLOAT16,
+        ttl.tensor.Layout.TILE,
         device
     )
 
     def batchnorm_(x):
         # first subtract running mean
-        x_minus_mean = ttmetal.tensor.sub(x, mean_run)
+        x_minus_mean = ttl.tensor.sub(x, mean_run)
         # take sqrt of running_var+eps
-        var_sqrt = ttmetal.tensor.sqrt(var_run)
+        var_sqrt = ttl.tensor.sqrt(var_run)
         # reciprocal
-        inv_sqrt = ttmetal.tensor.recip(var_sqrt)
+        inv_sqrt = ttl.tensor.recip(var_sqrt)
         #mulitply by reciprocal
-        x_div_sqrt = ttmetal.tensor.mul(x_minus_mean, inv_sqrt)
+        x_div_sqrt = ttl.tensor.mul(x_minus_mean, inv_sqrt)
         #multiply by gamma
-        x_gamma = ttmetal.tensor.mul(x_div_sqrt, gamma)
+        x_gamma = ttl.tensor.mul(x_div_sqrt, gamma)
         # add beta
-        x_result = ttmetal.tensor.add(x_gamma, beta)
+        x_result = ttl.tensor.add(x_gamma, beta)
 
         return x_result
 
@@ -105,9 +108,9 @@ def ref_batchnorm_torch(x, eps, gamma, beta, mean_run, var_run):
 
 if __name__ == "__main__":
     # Initialize the device
-    device = ttmetal.device.CreateDevice(ttmetal.device.Arch.GRAYSKULL, 0)
-    ttmetal.device.InitializeDevice(device)
-    host = ttmetal.device.GetHost()
+    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
+    ttl.device.InitializeDevice(device)
+    host = ttl.device.GetHost()
 
     H = 32
     W = 32
@@ -127,7 +130,7 @@ if __name__ == "__main__":
     mean_run = pad_weight(torch.full((1,C,32,32), mean_runf))
     var_run = pad_weight(torch.full((1,C,32,32), var_runf + epsf))
 
-    t0 = ttmetal.tensor.Tensor(tilize_to_list(x), [1, C, H, W], ttmetal.tensor.DataType.BFLOAT16, ttmetal.tensor.Layout.TILE, device)
+    t0 = ttl.tensor.Tensor(tilize_to_list(x), [1, C, H, W], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
     ttgamma = tilize_to_list(gamma)
     ttbeta = tilize_to_list(beta)
     ttmean_run = tilize_to_list(mean_run)
@@ -146,4 +149,4 @@ if __name__ == "__main__":
     print ("GOLDEN PCC TEST")
     print (comp_pcc(ref_bnorm, tt_got_back, pcc=.99))
 
-    ttmetal.device.CloseDevice(device)
+    ttl.device.CloseDevice(device)
