@@ -333,7 +333,7 @@ int main() {
   kernel_profiler::mark_time(CC_KERNEL_MAIN_START);
 #endif
   // Run the BRISC kernel
-  kernel_main();
+  //kernel_main();
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & KERNEL_FUNCT_MARKER)
   kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
 #endif

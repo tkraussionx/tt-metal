@@ -65,6 +65,8 @@ class test_base:
         (2, "Data Movement Kernel start"),
         (3, "Data Movement Kernel End"),
         (4, "Firmware End"),
+        (15, "NOC Read Wait Start"),
+        (16, "NOC Read Wait End"),
     ]
 
     displayStats = ["Count","Average","Max","Median","Min"]

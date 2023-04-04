@@ -2,10 +2,6 @@
 #include "dataflow_api.h"
 
 void kernel_main() {
-
-
-    bool one_time_profile = true;
-
     // in0 tensor args
     uint32_t in0_tensor_addr                    = get_arg_val<uint32_t>(0);
     uint32_t in0_tensor_start_tile_id           = get_arg_val<uint32_t>(1);
@@ -104,7 +100,5 @@ void kernel_main() {
 
         cb_push_back(cb_id_in0, in0_block_num_tiles);
         cb_push_back(cb_id_in1, in1_block_num_tiles);
-
-        kernel_profiler::mark_time_once(6, &one_time_profile);
     }
 }

@@ -641,7 +641,9 @@ void noc_async_write_multicast_loopback_src(std::uint32_t src_local_l1_addr, std
  */
 FORCE_INLINE
 void noc_async_read_barrier() {
+    kernel_profiler::mark_time(15);
     while (!ncrisc_noc_reads_flushed(loading_noc));
+    kernel_profiler::mark_time(16);
 }
 
 /**

@@ -113,7 +113,7 @@ def print_stats(devicesData, setup):
     numberWidth = 17
     for chipID, deviceData in devicesData["devices"].items():
         for analysis in setup.timerAnalysis.keys():
-            if analysis in deviceData["cores"]["DEVICE"]["analysis"].keys():
+            if "analysis" in deviceData["cores"]["DEVICE"].keys() and analysis in deviceData["cores"]["DEVICE"]["analysis"].keys():
                 assert("stats" in deviceData["cores"]["DEVICE"]["analysis"][analysis].keys())
                 stats = deviceData["cores"]["DEVICE"]["analysis"][analysis]["stats"]
                 print()
@@ -676,7 +676,8 @@ def main(args):
 
         xValsDict = plotData_to_timelineXVals(deviceData, yVals, setup)
         key = f"Chip {chipID} Cores"
-        statTables[key] = generate_analysis_table(deviceData["cores"]["DEVICE"]["analysis"],setup)
+        if "analysis" in deviceData["cores"]["DEVICE"].keys():
+            statTables[key] = generate_analysis_table(deviceData["cores"]["DEVICE"]["analysis"],setup)
         timelineFigs[key] = timeline_plot(yVals, xValsDict, setup)
 
         xValsDict = plotData_to_timelineXVals(deviceData, ['DEVICE'], setup)

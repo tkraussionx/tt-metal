@@ -14,37 +14,33 @@ namespace kernel_profiler{
 
     volatile uint32_t *buffer;
     uint32_t wIndex;
+    uint32_t time_H_global;
 
-    void init_profiler()
+    inline __attribute__((always_inline)) void init_profiler()
     {
 #ifdef PROFILE_KERNEL
         buffer = reinterpret_cast<uint32_t*>(get_debug_print_buffer());
         wIndex = MARKER_DATA_START;
         buffer [BUFFER_END_INDEX] = wIndex;
         buffer [DROPPED_MARKER_COUNTER] = 0;
+        //buffer [TIMER_H_GLOBAL] = reg_read_barrier(RISCV_DEBUG_REG_WALL_CLOCK_H);
 #endif //PROFILE_KERNEL
     }
 
-    inline void mark_time(uint32_t timer_id)
+    inline __attribute__((always_inline)) void mark_time(uint32_t timer_id)
     {
 #ifdef PROFILE_KERNEL
-        uint32_t time_L = reg_read_barrier(RISCV_DEBUG_REG_WALL_CLOCK_L);
-        uint32_t time_H = reg_read_barrier(RISCV_DEBUG_REG_WALL_CLOCK_H);
-
-	if (wIndex + TIMER_DATA_UINT32_SIZE > PRINT_BUFFER_SIZE) {
+	if (wIndex < PRINT_BUFFER_SIZE) {
+	    buffer[wIndex] = (timer_id<<26) | (((1<<26)-1) & reg_read_barrier(RISCV_DEBUG_REG_WALL_CLOCK_L));
+	} else {
             buffer [DROPPED_MARKER_COUNTER]++;
 	    return;
-	} else {
-	    buffer[wIndex+TIMER_ID] = timer_id;
-	    buffer[wIndex+TIMER_VAL_L] = time_L;
-	    buffer[wIndex+TIMER_VAL_H] = time_H;
 	}
-        wIndex += TIMER_DATA_UINT32_SIZE;
-        buffer [BUFFER_END_INDEX] = wIndex;
+        buffer [BUFFER_END_INDEX] = ++wIndex;
 #endif //PROFILE_KERNEL
     }
 
-    inline void mark_time_once(uint32_t timer_id, bool * one_time)
+    inline __attribute__((always_inline)) void mark_time_once(uint32_t timer_id, bool * one_time)
     {
 #ifdef PROFILE_KERNEL
         if (*one_time)

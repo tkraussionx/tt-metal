@@ -148,14 +148,14 @@ void Profiler::readRiscProfilerResults(
                 risc_name);
     }
 
-    for (int i = kernel_profiler::MARKER_DATA_START; i < end_index; i+=kernel_profiler::TIMER_DATA_UINT32_SIZE) {
+    for (int i = kernel_profiler::MARKER_DATA_START; i < end_index; i++) {
         dumpDeviceResultToFile(
                 pcie_slot,
                 worker_core.x,
                 worker_core.y,
                 risc_name,
-                (uint64_t(profile_buffer[i+kernel_profiler::TIMER_VAL_H]) << 32) | profile_buffer[i+kernel_profiler::TIMER_VAL_L],
-                profile_buffer[i+kernel_profiler::TIMER_ID]);
+                profile_buffer[i] & ((1<<26)-1) ,
+                profile_buffer[i] >> 26);
     }
 }
 
