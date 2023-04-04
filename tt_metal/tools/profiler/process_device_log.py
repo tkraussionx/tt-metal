@@ -13,7 +13,6 @@ import seaborn as sns
 import click
 
 import plot_setup
-from plot_setup import default_setup
 
 
 CYCLE_COUNT_TO_MILISECS = 1.2e6
@@ -634,25 +633,8 @@ def validate_setup(ctx, param, setup):
         raise click.BadParameter(f"Setup {setup} not available")
     return getattr(plot_setup, setup)()
 
-
-@click.command()
-@click.option('-s','--setup', default="default_setup", callback=validate_setup, help='Post processing configuration')
-@click.option('-d','--device-input-log', type=click.Path(exists=True, dir_okay=False), help='Input device side csv log')
-@click.option('-o','--output-folder', type=click.Path(), help='Output folder for plots and stats')
-def main(setup, device_input_log, output_folder):
-    if device_input_log:
-        setup.deviceInputLog = device_input_log
-    if output_folder:
-        setup.outputFolder = output_folder
-
-    os.system(f"rm -rf {setup.outputFolder}; mkdir -p {setup.outputFolder}; cp {setup.deviceInputLog} {setup.outputFolder}")
-
-    try:
-        devicesData = import_device_profile_log(setup.deviceInputLog)
-    except Exception:
-        click.echo('ERROR: Bad device profile log format', err=True)
-        sys.exit(1)
-
+def import_log_run_stats(deviceInputLog, setup=plot_setup.default_setup()):
+    devicesData = import_device_profile_log(setup.deviceInputLog)
     risc_to_core_timeseries(devicesData)
     core_to_device_timeseries(devicesData)
 
@@ -665,10 +647,34 @@ def main(setup, device_input_log, output_folder):
             device_analysis(name, analysis, devicesData)
 
     generate_device_level_summary(devicesData)
+    return devicesData
+
+
+@click.command()
+@click.option('-s','--setup', default="default_setup", callback=validate_setup, help='Post processing configuration')
+@click.option('-d','--device-input-log', type=click.Path(exists=True, dir_okay=False), help='Input device side csv log')
+@click.option('-o','--output-folder', type=click.Path(), help='Output folder for plots and stats')
+def main(setup, device_input_log, output_folder):
+    if device_input_log:
+        setup.deviceInputLog = device_input_log
+    if output_folder:
+        setup.outputFolder = output_folder
+
+    try:
+        devicesData = import_log_run_stats(setup.deviceInputLog, setup)
+    except Exception:
+        click.echo('ERROR: Bad device profile log format', err=True)
+        sys.exit(1)
+
+
+    ### Cut here to generate stats
+
+    os.system(f"rm -rf {setup.outputFolder}; mkdir -p {setup.outputFolder}; cp {setup.deviceInputLog} {setup.outputFolder}")
     print_stats(devicesData, setup)
     print_stats_outfile(devicesData, setup)
     print_arranged_csv(devicesData, setup)
 
+    ### Cut here to generate plots
     timelineFigs = {}
     statTables = {}
     for chipID, deviceData in devicesData["devices"].items():
@@ -690,8 +696,10 @@ def main(setup, device_input_log, output_folder):
     for filename, figHtml in figHtmls.items():
         timelineFigs[figHtml].write_html(filename)
 
+    ### Cut here to generate tarball
     os.system(f"cd {setup.outputFolder}; tar -czf ../{DEVICE_PERF_RESULTS} .; mv ../{DEVICE_PERF_RESULTS} .")
 
+    ### Cut here to start webapp
     external_stylesheets = ["https://codepen.io/chriddyp/pen/bWLwgP.css"]
     app = Dash(__name__, external_stylesheets=external_stylesheets)
     app.layout = html.Div(
