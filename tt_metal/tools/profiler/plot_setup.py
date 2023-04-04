@@ -1,5 +1,14 @@
-class test_base:
-    timerAnalysisBase = {
+from rich import print
+class MergeInfoMetaclass(type):
+    def __new__(metacls, name, bases, attrs):
+        for mergeAttr in ["timerAnalysis"]:
+            for base in bases:
+                if mergeAttr in base.__dict__.keys() and mergeAttr in attrs.keys():
+                    attrs[mergeAttr].update(base.__dict__[mergeAttr])
+        return super().__new__(metacls, name, bases, attrs)
+
+class default_setup(metaclass=MergeInfoMetaclass):
+    timerAnalysis = {
         "FW start": {
             "across": "risc",
             "type": "adjacent",
@@ -71,7 +80,9 @@ class test_base:
 
     outputFolder = "output"
 
-class test_matmul_multi_core_multi_dram(test_base):
+    deviceInputLog = "logs/profile_log_device.csv"
+
+class test_matmul_multi_core_multi_dram(default_setup):
     timerAnalysis = {
         "Compute~": {
             "across": "core",
@@ -82,7 +93,7 @@ class test_matmul_multi_core_multi_dram(test_base):
     }
 
 
-class test_matmul_multi_core_multi_dram_in0_mcast(test_base):
+class test_matmul_multi_core_multi_dram_in0_mcast(default_setup):
     timerAnalysis = {
         "NCRISC start sender -> BRISC kernel end": {
             "across": "core",
@@ -99,7 +110,7 @@ class test_matmul_multi_core_multi_dram_in0_mcast(test_base):
     }
 
 
-class test_matmul_multi_core_multi_dram_in1_mcast(test_base):
+class test_matmul_multi_core_multi_dram_in1_mcast(default_setup):
     timerAnalysis = {
         "NCRISC start sender -> BRISC kernel end": {
             "across": "core",
@@ -115,7 +126,7 @@ class test_matmul_multi_core_multi_dram_in1_mcast(test_base):
         }
     }
 
-class test_matmul_multi_core_multi_dram_in0_mcast_in1_mcast(test_base):
+class test_matmul_multi_core_multi_dram_in0_mcast_in1_mcast(default_setup):
     timerAnalysis = {
         "NC_in0_s_in1_r -> B_end": {
             "across": "core",

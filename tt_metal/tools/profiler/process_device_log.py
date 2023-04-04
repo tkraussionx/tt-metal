@@ -2,6 +2,7 @@
 
 import os
 import sys
+import inspect
 import csv
 
 import plotly.graph_objects as go
@@ -9,8 +10,10 @@ from dash import Dash, dcc, html, Input, Output
 # from rich import print
 import pandas as pd
 import seaborn as sns
+import click
 
 import plot_setup
+from plot_setup import default_setup
 
 
 CYCLE_COUNT_TO_MILISECS = 1.2e6
@@ -19,12 +22,9 @@ PER_CORE_HEIGHT = 90
 
 CORE_FREQ = 1.2
 
-REARRANGED_TIME_CSV = "device_arranged_timestamps.csv"
+REARRANGED_TIME_CSV = "device_rearranged_timestamps.csv"
 DEVICE_STATS_TXT = "device_stats.txt"
 DEVICE_PERF_HTML = "timeline.html"
-
-DEVICE_TIME_CSV = "logs/profile_log_device.csv"
-
 DEVICE_PERF_RESULTS = "device_perf_results.tgz"
 
 def coreCompare(core):
@@ -625,32 +625,34 @@ def generate_device_level_summary(devicesData):
                 deviceData['cores']['DEVICE']["analysis"]={name:tmpDict}
 
 
+def validate_setup(ctx, param, setup):
+    setups = []
+    for name, obj in inspect.getmembers(plot_setup):
+        if inspect.isclass(obj):
+            setups.append(name)
+    if setup not in setups:
+        raise click.BadParameter(f"Setup {setup} not available")
+    return getattr(plot_setup, setup)()
 
-def main(args):
-    if len(args) == 1:
-        try:
-            setup = getattr(plot_setup, args[0])()
-            try:
-                setup.timerAnalysis.update(setup.timerAnalysisBase)
-            except Exception:
-                setup.timerAnalysis = setup.timerAnalysisBase
-        except Exception:
-            print_help()
-            return
-    elif len(args) == 0:
-        try:
-            setup = getattr(plot_setup, "test_base")()
-            setup.timerAnalysis = setup.timerAnalysisBase
-        except Exception:
-            print_help()
-            return
-    else:
-        print_help()
-        return
 
-    os.system(f"rm -rf {setup.outputFolder}; mkdir -p {setup.outputFolder}; cp {DEVICE_TIME_CSV} {setup.outputFolder}")
+@click.command()
+@click.option('-s','--setup', default="default_setup", callback=validate_setup, help='Post processing configuration')
+@click.option('-d','--device-input-log', type=click.Path(exists=True, dir_okay=False), help='Input device side csv log')
+@click.option('-o','--output-folder', type=click.Path(), help='Output folder for plots and stats')
+def main(setup, device_input_log, output_folder):
+    if device_input_log:
+        setup.deviceInputLog = device_input_log
+    if output_folder:
+        setup.outputFolder = output_folder
 
-    devicesData = import_device_profile_log(DEVICE_TIME_CSV)
+    os.system(f"rm -rf {setup.outputFolder}; mkdir -p {setup.outputFolder}; cp {setup.deviceInputLog} {setup.outputFolder}")
+
+    try:
+        devicesData = import_device_profile_log(setup.deviceInputLog)
+    except Exception:
+        click.echo('ERROR: Bad device profile log format', err=True)
+        sys.exit(1)
+
     risc_to_core_timeseries(devicesData)
     core_to_device_timeseries(devicesData)
 
@@ -710,4 +712,4 @@ def main(args):
     app.run_server(host="0.0.0.0", debug=True)
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main()
