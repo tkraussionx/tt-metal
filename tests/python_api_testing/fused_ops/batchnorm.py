@@ -13,7 +13,9 @@ sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
 #from pymetal import ttmetal
-from pymetal import ttlib as ttl
+#from pymetal import ttlib as ttl
+import libs
+from libs import tt_lib
 
 from tests.python_api_testing.models.utility_functions import pad_activation, pad_weight, tilize, untilize, tilize_to_list, pad_weight
 torch.set_printoptions(threshold=10_000)
@@ -23,51 +25,51 @@ from tests.python_api_testing.sweep_tests.comparison_funcs import comp_pcc
 #v1_ assume input is always 32x32
 def Batchnorm(mean_run, var_run, gamma, beta, C, device):
     # gamma, beta, epsilon should be vectors of size C
-    mean_run = ttl.tensor.Tensor(
+    mean_run = tt_lib.tensor.Tensor(
         mean_run,
         [1, C, 32, 32],  # will this auto-broadcast?
-        ttl.tensor.DataType.BFLOAT16,
-        ttl.tensor.Layout.TILE,
+        tt_lib.tensor.DataType.BFLOAT16,
+        tt_lib.tensor.Layout.TILE,
         device
     )
 
-    var_run = ttl.tensor.Tensor(
+    var_run = tt_lib.tensor.Tensor(
         var_run ,
         [1, C, 32, 32],  # will this auto-broadcast?
-        ttl.tensor.DataType.BFLOAT16,
-        ttl.tensor.Layout.TILE,
+        tt_lib.tensor.DataType.BFLOAT16,
+        tt_lib.tensor.Layout.TILE,
         device
     )
 
-    gamma = ttl.tensor.Tensor(
+    gamma = tt_lib.tensor.Tensor(
         gamma,
         [1, C, 32, 32],  # will this auto-broadcast?
-        ttl.tensor.DataType.BFLOAT16,
-        ttl.tensor.Layout.TILE,
+        tt_lib.tensor.DataType.BFLOAT16,
+        tt_lib.tensor.Layout.TILE,
         device
     )
 
-    beta = ttl.tensor.Tensor(
+    beta = tt_lib.tensor.Tensor(
         beta,
         [1, C, 32, 32],
-        ttl.tensor.DataType.BFLOAT16,
-        ttl.tensor.Layout.TILE,
+        tt_lib.tensor.DataType.BFLOAT16,
+        tt_lib.tensor.Layout.TILE,
         device
     )
 
     def batchnorm_(x):
         # first subtract running mean
-        x_minus_mean = ttl.tensor.sub(x, mean_run)
+        x_minus_mean = tt_lib.tensor.sub(x, mean_run)
         # take sqrt of running_var+eps
-        var_sqrt = ttl.tensor.sqrt(var_run)
+        var_sqrt = tt_lib.tensor.sqrt(var_run)
         # reciprocal
-        inv_sqrt = ttl.tensor.recip(var_sqrt)
+        inv_sqrt = tt_lib.tensor.recip(var_sqrt)
         #mulitply by reciprocal
-        x_div_sqrt = ttl.tensor.mul(x_minus_mean, inv_sqrt)
+        x_div_sqrt = tt_lib.tensor.mul(x_minus_mean, inv_sqrt)
         #multiply by gamma
-        x_gamma = ttl.tensor.mul(x_div_sqrt, gamma)
+        x_gamma = tt_lib.tensor.mul(x_div_sqrt, gamma)
         # add beta
-        x_result = ttl.tensor.add(x_gamma, beta)
+        x_result = tt_lib.tensor.add(x_gamma, beta)
 
         return x_result
 
@@ -108,9 +110,9 @@ def ref_batchnorm_torch(x, eps, gamma, beta, mean_run, var_run):
 
 if __name__ == "__main__":
     # Initialize the device
-    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
-    ttl.device.InitializeDevice(device)
-    host = ttl.device.GetHost()
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
+    host = tt_lib.device.GetHost()
 
     H = 32
     W = 32
@@ -130,7 +132,7 @@ if __name__ == "__main__":
     mean_run = pad_weight(torch.full((1,C,32,32), mean_runf))
     var_run = pad_weight(torch.full((1,C,32,32), var_runf + epsf))
 
-    t0 = ttl.tensor.Tensor(tilize_to_list(x), [1, C, H, W], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
+    t0 = tt_lib.tensor.Tensor(tilize_to_list(x), [1, C, H, W], tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.Layout.TILE, device)
     ttgamma = tilize_to_list(gamma)
     ttbeta = tilize_to_list(beta)
     ttmean_run = tilize_to_list(mean_run)
@@ -149,4 +151,4 @@ if __name__ == "__main__":
     print ("GOLDEN PCC TEST")
     print (comp_pcc(ref_bnorm, tt_got_back, pcc=.99))
 
-    ttl.device.CloseDevice(device)
+    tt_metal.device.CloseDevice(device)
