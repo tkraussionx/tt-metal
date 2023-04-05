@@ -1,13 +1,6 @@
-from rich import print
-class MergeInfoMetaclass(type):
-    def __new__(metacls, name, bases, attrs):
-        for mergeAttr in ["timerAnalysis"]:
-            for base in bases:
-                if mergeAttr in base.__dict__.keys() and mergeAttr in attrs.keys():
-                    attrs[mergeAttr].update(base.__dict__[mergeAttr])
-        return super().__new__(metacls, name, bases, attrs)
+from merge_meta_class import MergeMetaclass
 
-class default_setup(metaclass=MergeInfoMetaclass):
+class default_setup(metaclass=MergeMetaclass):
     timerAnalysis = {
         "FW start": {
             "across": "risc",
@@ -76,11 +69,22 @@ class default_setup(metaclass=MergeInfoMetaclass):
         (4, "Firmware End"),
     ]
 
+    coreFreq = 1.2 #GHz
+
     displayStats = ["Count","Average","Max","Median","Min"]
 
-    outputFolder = "output"
+    plotBaseHeight = 200
+    plotPerCoreHeight = 90
 
+    webappPort = 8050
+
+    outputFolder = "output"
     deviceInputLog = "logs/profile_log_device.csv"
+    deviceRearranged = "device_rearranged_timestamps.csv"
+    devicePerfHTML = "timeline.html"
+    deviceStatsTXT = "device_stats.txt"
+    deviceTarball = "device_perf_results.tgz"
+
 
 class test_matmul_multi_core_multi_dram(default_setup):
     timerAnalysis = {

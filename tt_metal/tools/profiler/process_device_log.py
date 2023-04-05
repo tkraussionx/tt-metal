@@ -4,6 +4,7 @@ import os
 import sys
 import inspect
 import csv
+from datetime import datetime
 
 import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output
@@ -13,18 +14,7 @@ import seaborn as sns
 import click
 
 import plot_setup
-
-
-CYCLE_COUNT_TO_MILISECS = 1.2e6
-BASE_HEIGHT = 200
-PER_CORE_HEIGHT = 90
-
-CORE_FREQ = 1.2
-
-REARRANGED_TIME_CSV = "device_rearranged_timestamps.csv"
-DEVICE_STATS_TXT = "device_stats.txt"
-DEVICE_PERF_HTML = "timeline.html"
-DEVICE_PERF_RESULTS = "device_perf_results.tgz"
+import dummy_refresh
 
 def coreCompare(core):
     if type(core) == str:
@@ -66,13 +56,15 @@ def return_available_timer(timeseries, desiredTimerID):
     return res
 
 
-def print_arranged_csv(devicesData, setup, freq_text = CORE_FREQ):
+def print_rearranged_csv(devicesData, setup, freqText = None):
     timerIDLabels = setup.timerIDLabels[1:5]
-    with open(f"{setup.outputFolder}/{REARRANGED_TIME_CSV}", "w") as timersCSV:
+    if not freqText:
+        freqText = setup.coreFreq
+    with open(f"{setup.outputFolder}/{setup.deviceRearranged}", "w") as timersCSV:
         for chipID, deviceData in devicesData["devices"].items():
             timeWriter = csv.writer(timersCSV, delimiter=",")
 
-            timeWriter.writerow(["Clock Frequency [GHz]", freq_text])
+            timeWriter.writerow(["Clock Frequency [GHz]", freqText])
             timeWriter.writerow(["PCIe slot",chipID])
             timeWriter.writerow(
                 ["core x", "core y"]
@@ -102,7 +94,7 @@ def analyze_stats(timerStats, timerStatsCores):
 
 def print_stats_outfile(devicesData, setup):
     original_stdout = sys.stdout
-    with open(f"{setup.outputFolder}/{DEVICE_STATS_TXT}", "w") as statsFile:
+    with open(f"{setup.outputFolder}/{setup.deviceStatsTXT}", "w") as statsFile:
         sys.stdout = statsFile
         print_stats(devicesData, setup)
         sys.stdout = original_stdout
@@ -469,7 +461,7 @@ def timeline_plot(yVals, xValsDict, setup):
 
     fig.update_layout(
         barmode="stack",
-        height=BASE_HEIGHT + PER_CORE_HEIGHT * len(yVals),
+        height=setup.plotBaseHeight + setup.plotPerCoreHeight * len(yVals),
     )
 
     return fig
@@ -633,7 +625,7 @@ def validate_setup(ctx, param, setup):
         raise click.BadParameter(f"Setup {setup} not available")
     return getattr(plot_setup, setup)()
 
-def import_log_run_stats(deviceInputLog, setup=plot_setup.default_setup()):
+def import_log_run_stats(setup=plot_setup.default_setup()):
     devicesData = import_device_profile_log(setup.deviceInputLog)
     risc_to_core_timeseries(devicesData)
     core_to_device_timeseries(devicesData)
@@ -649,34 +641,8 @@ def import_log_run_stats(deviceInputLog, setup=plot_setup.default_setup()):
     generate_device_level_summary(devicesData)
     return devicesData
 
-
-@click.command()
-@click.option('-s','--setup', default="default_setup", callback=validate_setup, help='Post processing configuration')
-@click.option('-d','--device-input-log', type=click.Path(exists=True, dir_okay=False), help='Input device side csv log')
-@click.option('-o','--output-folder', type=click.Path(), help='Output folder for plots and stats')
-def main(setup, device_input_log, output_folder):
-    if device_input_log:
-        setup.deviceInputLog = device_input_log
-    if output_folder:
-        setup.outputFolder = output_folder
-
-    try:
-        devicesData = import_log_run_stats(setup.deviceInputLog, setup)
-    except Exception:
-        click.echo('ERROR: Bad device profile log format', err=True)
-        sys.exit(1)
-
-
-    ### Cut here to generate stats
-
-    os.system(f"rm -rf {setup.outputFolder}; mkdir -p {setup.outputFolder}; cp {setup.deviceInputLog} {setup.outputFolder}")
-    print_stats(devicesData, setup)
-    print_stats_outfile(devicesData, setup)
-    print_arranged_csv(devicesData, setup)
-
-    ### Cut here to generate plots
+def generate_plots (devicesData, setup):
     timelineFigs = {}
-    statTables = {}
     for chipID, deviceData in devicesData["devices"].items():
         timeseries_to_durations(deviceData)
         yVals = sorted(deviceData["cores"].keys(), key=coreCompare, reverse=True)
@@ -684,40 +650,122 @@ def main(setup, device_input_log, output_folder):
 
         xValsDict = plotData_to_timelineXVals(deviceData, yVals, setup)
         key = f"Chip {chipID} Cores"
-        if "analysis" in deviceData["cores"]["DEVICE"].keys():
-            statTables[key] = generate_analysis_table(deviceData["cores"]["DEVICE"]["analysis"],setup)
         timelineFigs[key] = timeline_plot(yVals, xValsDict, setup)
 
         xValsDict = plotData_to_timelineXVals(deviceData, ['DEVICE'], setup)
         key = f"Chip {chipID} Device"
         timelineFigs[key] = timeline_plot(['DEVICE'], xValsDict, setup)
 
-    figHtmls = {f"{setup.outputFolder}/{fig.replace(' ','_')}_{DEVICE_PERF_HTML}":fig for fig in sorted(timelineFigs.keys())}
-    for filename, figHtml in figHtmls.items():
-        timelineFigs[figHtml].write_html(filename)
+        figHtmls = {f"{setup.outputFolder}/{fig.replace(' ','_')}_{setup.devicePerfHTML}":fig for fig in sorted(timelineFigs.keys())}
+        for filename, figHtml in figHtmls.items():
+            timelineFigs[figHtml].write_html(filename)
 
-    ### Cut here to generate tarball
-    os.system(f"cd {setup.outputFolder}; tar -czf ../{DEVICE_PERF_RESULTS} .; mv ../{DEVICE_PERF_RESULTS} .")
+    return timelineFigs
 
-    ### Cut here to start webapp
+def run_dashbaord_webapp(devicesData, timelineFigs, setup):
+    statTables = {}
+    for chipID, deviceData in devicesData["devices"].items():
+        key = f"Chip {chipID} Cores"
+        if "analysis" in deviceData["cores"]["DEVICE"].keys():
+            statTables[key] = generate_analysis_table(deviceData["cores"]["DEVICE"]["analysis"],setup)
     external_stylesheets = ["https://codepen.io/chriddyp/pen/bWLwgP.css"]
     app = Dash(__name__, external_stylesheets=external_stylesheets)
     app.layout = html.Div(
         [
-            html.H1("Device Performance"),
+            html.H1("Device Profiler Dashboard", id="main-header"),
+        ] +
+        [
+            html.Button("Refresh", id="btn-refresh",style={"margin-right": "15px"}),
+
+            html.Button("Download Artifacts", id="btn-download-artifacts",style={"margin-right": "15px"}),
+            dcc.Download(id="download-artifacts"),
+            html.P("", id="p-download-message-bar", style={"display": "inline"}),
+
+            html.Br(),
             html.Br(),
         ] +
         [
             html.Div(
                 [
-                    html.H5(f"{figure}:"),
-                    statTables[figure] if figure in statTables.keys() else html.Div([]),
-                    dcc.Graph(figure=timelineFigs[figure])
+                    html.H5(f"{item}:"),
+                    statTables[item] if item in statTables.keys() else html.Div([]),
+                    dcc.Graph(figure=timelineFigs[item]) if item in timelineFigs.keys() else html.Div([])
                 ]
-            ) for figure in sorted(timelineFigs.keys())
+            ) for item in sorted(set(timelineFigs.keys()) | set(statTables.keys()))
         ]
     )
-    app.run_server(host="0.0.0.0", debug=True)
+
+    @app.callback(
+        Output("btn-refresh", "children"),
+        Input("btn-refresh", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def refresh_callback(n_clicks):
+        os.system("touch dummy_refresh.py")
+        return "Refreshing ..."
+
+    @app.callback(
+        Output("p-download-message-bar", "children"),
+        Output("download-artifacts", "data"),
+        Input("btn-download-artifacts", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def download_callback(n_clicks):
+        newTarballName = f"{datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}_{setup.deviceTarball}"
+        ret = os.system(f"cd {setup.outputFolder}; mv {setup.deviceTarball} {newTarballName} > /dev/null 2>&1")
+        if ret == 0:
+            return "",dcc.send_file(f"{setup.outputFolder}/{newTarballName}")
+        return "No artifact tarball found, make sure webapp is started without the --no-artifact flag",None
+
+    app.run_server(host="0.0.0.0", port=setup.webappPort, debug=True)
+
+def prepare_output_folder(setup):
+    os.system(f"rm -rf {setup.outputFolder}; mkdir -p {setup.outputFolder}; cp {setup.deviceInputLog} {setup.outputFolder}")
+
+def generate_artifact_tarball(setup):
+    os.system(f"cd {setup.outputFolder}; tar -czf ../{setup.deviceTarball} .; mv ../{setup.deviceTarball} .")
+
+@click.command()
+@click.option('-s','--setup', default="default_setup", callback=validate_setup, help='Post processing configurations')
+@click.option('-d','--device-input-log', type=click.Path(exists=True, dir_okay=False), help='Input device side csv log')
+@click.option('-o','--output-folder', type=click.Path(), help='Output folder for plots and stats')
+@click.option('-p','--port', type=int, help='Dashboard webapp port')
+@click.option('--no-print-stats', default = False, is_flag=True, help='Do not print timeline stats')
+@click.option('--no-webapp', default = False, is_flag=True, help='Do not run profiler dashboard webapp')
+@click.option('--no-plots', default = False, is_flag=True, help='Do not generate plots')
+@click.option('--no-artifacts', default = False, is_flag=True, help='Do not generate artifacts tarball')
+def main(setup, device_input_log, output_folder, port, no_print_stats, no_webapp, no_plots, no_artifacts):
+    if device_input_log:
+        setup.deviceInputLog = device_input_log
+    if output_folder:
+        setup.outputFolder = output_folder
+    if port:
+        setup.webappPort = port
+
+    try:
+        devicesData = import_log_run_stats(setup)
+    except Exception:
+        print('ERROR: Bad device profile log format', file=sys.stderr)
+        sys.exit(1)
+
+    prepare_output_folder(setup)
+
+    print_stats_outfile(devicesData, setup)
+    print_rearranged_csv(devicesData, setup)
+
+    if not no_print_stats:
+        print_stats(devicesData, setup)
+
+    timelineFigs = {}
+    if not no_plots:
+        timelineFigs = generate_plots(devicesData, setup)
+
+    if not no_artifacts:
+        generate_artifact_tarball(setup)
+
+    if not no_webapp:
+        run_dashbaord_webapp(devicesData, timelineFigs, setup)
+
 
 if __name__ == "__main__":
     main()
