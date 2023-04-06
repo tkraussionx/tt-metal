@@ -7,12 +7,16 @@ sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 sys.path.append(f"{f}/../../../../..")
 
+from loguru import logger
 from diffusers import StableDiffusionPipeline
 from python_api_testing.sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 from utility_functions import torch_to_tt_tensor, tt_to_torch_tensor
+from libs import tt_lib as ttl
+
+import torch
 
 
-def run_test_feed_forward_inference(device):
+def run_test_feed_forward_inference(device, host):
     pipe = StableDiffusionPipeline.from_pretrained('CompVis/stable-diffusion-v1-4', torch_dtype=torch.float32)
     unet = pipe.unet
     unet.eval()
@@ -54,5 +58,5 @@ def test_feedforward_inference():
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
     host = ttl.device.GetHost()
-    run_test_feed_forward_inference(device)
+    run_test_feed_forward_inference(device, host)
     ttl.device.CloseDevice(device)
