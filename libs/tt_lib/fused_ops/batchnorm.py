@@ -108,6 +108,47 @@ def ref_batchnorm_torch(x, eps, gamma, beta, mean_run, var_run):
         result = model(x)
     return result
 
+
+def test_dummy():
+    x = 1+1
+    return x
+
+
+def test_batchnorm():
+    # Initialize the device
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
+
+    H = 32
+    W = 32
+    C = 1
+    epsf = 1e-4
+    betaf = 0.345
+    gammaf = 0.123
+    mean_runf = 0.789
+    var_runf = 0.567
+    torch.manual_seed(123)
+    x = torch.randn((1,C,H,W))
+
+    gamma = pad_weight(torch.full((1,C,32,32), gammaf))
+    beta = pad_weight(torch.full((1,C,32,32), betaf))
+    mean_run = pad_weight(torch.full((1,C,32,32), mean_runf))
+    var_run = pad_weight(torch.full((1,C,32,32), var_runf + epsf))
+
+    t0 = tt_lib.tensor.Tensor(tilize_to_list(x), [1, C, H, W], tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.Layout.TILE, device)
+    ttgamma = tilize_to_list(gamma)
+    ttbeta = tilize_to_list(beta)
+    ttmean_run = tilize_to_list(mean_run)
+    ttvar_run = tilize_to_list(var_run)
+
+    func = Batchnorm(ttmean_run, ttvar_run, ttgamma, ttbeta, C, device)
+
+    t1 = func(t0)
+    tt_lib.device.CloseDevice(device)
+
+########
+
+'''
 if __name__ == "__main__":
     # Initialize the device
     device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
@@ -154,3 +195,5 @@ if __name__ == "__main__":
     print (comp_allclose_and_pcc(ref_bnorm, tt_got_back))
 
     tt_lib.device.CloseDevice(device)
+
+'''
