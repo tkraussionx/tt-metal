@@ -7,10 +7,12 @@ sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 sys.path.append(f"{f}/../../../../..")
 
+from loguru import logger
 
 import torch.nn as nn
 import torch
 
+from libs import tt_lib as ttl
 from transformers import CLIPModel
 from utility_functions import print_diff_argmax, torch_to_tt_tensor, tt_to_torch_tensor, print_corr_coef
 from python_api_testing.sweep_tests.comparison_funcs import comp_allclose_and_pcc
@@ -19,7 +21,7 @@ from python_api_testing.sweep_tests.comparison_funcs import comp_allclose, comp_
 
 
 
-def run_test_clip_mlp_inference(device):
+def run_test_clip_mlp_inference(device, host):
     model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", torch_dtype=torch.float32)
     model.eval()
     state_dict = model.state_dict()
@@ -60,5 +62,5 @@ def test_CLIPMLP():
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
     host = ttl.device.GetHost()
-    run_test_clip_mlp_inference(device)
+    run_test_clip_mlp_inference(device, host)
     ttl.device.CloseDevice(device)

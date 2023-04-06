@@ -9,20 +9,20 @@ sys.path.append(f"{f}/../../../../..")
 
 import torch
 from torch.nn import functional as F
-
+from loguru import logger
 
 from libs import tt_lib as ttl
 from utility_functions import print_diff_argmax, torch_to_tt_tensor, tt_to_torch_tensor, print_corr_coef
 from python_api_testing.fused_ops.silu import SiLU as TtSiLU
 from python_api_testing.sweep_tests.comparison_funcs import comp_allclose_and_pcc
+from python_api_testing.sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 
 
 def torch_silu(x):
     return F.silu(x)
 
 
-def run_test_silu_inference(device):
-
+def run_test_silu_inference(device, host):
     input_shape =  [1, 1, 32, 32]
     input = torch.randn(input_shape) + 10
 
@@ -46,10 +46,10 @@ def run_test_silu_inference(device):
     assert does_pass
 
 
-if test_silu_inference():
+def test_silu_inference():
     # Initialize the device
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
     host = ttl.device.GetHost()
-    run_test_silu_inference(device)
+    run_test_silu_inference(device, host)
     ttl.device.CloseDevice(device)
