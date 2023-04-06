@@ -37,14 +37,15 @@ sys.path.append(f"{f}/../../../..")
 import torch
 from torch import nn
 #from pymetal import ttmetal
-from pymetal import ttlib as ttl
+#from pymetal import ttlib as ttl
+from libs import tt_lib
 
 import torch.nn.functional as F
 
 from python_api_testing.models.utility_functions import pad_activation, pad_weight, tilize, untilize, tilize_to_list, pad_weight
 torch.set_printoptions(threshold=10_000)
 
-from python_api_testing.sweep_tests.comparison_funcs import comp_pcc
+from tests.python_api_testing.sweep_tests.comparison_funcs import comp_pcc, comp_allclose_and_pcc
 from python_api_testing.fused_ops.batchnorm import Batchnorm
 
 
@@ -54,11 +55,11 @@ def TT_residual(x, matmul, mean_run, var_run, gamma, beta, C, device):
     bnorm2 = Batchnorm(mean_run[1], var_run[1], gamma[1], beta[1], C, device)
 
     out = bnorm1(x)
-    out = ttl.tensor.relu(out)
-    out = ttl.tensor.matmul(out, matmul)
+    out = tt_lib.tensor.relu(out)
+    out = tt_lib.tensor.matmul(out, matmul)
     out = bnorm2(out)
-    out = ttl.tensor.relu(out)
-    out = ttl.tensor.matmul(out, matmul)
+    out = tt_lib.tensor.relu(out)
+    out = tt_lib.tensor.matmul(out, matmul)
 
     return out
 
@@ -76,9 +77,9 @@ def REF_residual(x, matmul, mean_run, var_run, gamma, beta, eps, training=False)
 
 if __name__ == "__main__":
     # Initialize the device
-    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
-    ttl.device.InitializeDevice(device)
-    host = ttl.device.GetHost()
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
+    host = tt_lib.device.GetHost()
 
     H = 32
     W = 32
@@ -109,8 +110,8 @@ if __name__ == "__main__":
     ref_revblock = REF_residual(x, matmul, mean_runf, var_runf, gammaf, betaf, epsf, training=False)
 
 
-    t0 = ttl.tensor.Tensor(tilize_to_list(x), [1, C, H, W], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
-    matmul0 = ttl.tensor.Tensor(tilize_to_list(matmul), [1, C, H, W], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.TILE, device)
+    t0 = tt_lib.tensor.Tensor(tilize_to_list(x), [1, C, H, W], tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.Layout.TILE, device)
+    matmul0 = tt_lib.tensor.Tensor(tilize_to_list(matmul), [1, C, H, W], tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.Layout.TILE, device)
 
     ttgamma    = [tilize_to_list(x) for x in gamma]
     ttbeta     = [tilize_to_list(x) for x in beta]
@@ -127,6 +128,7 @@ if __name__ == "__main__":
 
     print ('=========COMPLETE=============')
     print ("GOLDEN PCC TEST")
-    print (comp_pcc(ref_revblock, tt_got_back, pcc=.99))
+    #print (comp_pcc(ref_revblock, tt_got_back, pcc=.99))
+    print (comp_allclose_and_pcc(ref_revblock, tt_got_back))
 
-    ttl.device.CloseDevice(device)
+    tt_lib.device.CloseDevice(device)
