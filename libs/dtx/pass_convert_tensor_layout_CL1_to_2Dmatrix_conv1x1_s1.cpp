@@ -14,7 +14,7 @@ bool convert_tensor_layout_CL1_to_2Dmatrix_conv1x1_s1(DataTransformations * dtx)
     // int pad = 1; // all around
     */
 
-    bool DEBUG = true;
+    bool DEBUG = false;
     bool pass = true;
     if (DEBUG) cout << "\n\nPASS: convert_tensor_layout_CL1_to_2Dmatrix_conv1x1_s1 - START" << endl;
 

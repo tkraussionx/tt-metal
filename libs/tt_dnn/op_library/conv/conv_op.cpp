@@ -135,7 +135,7 @@ Tensor create_output_dram_buffer_(Device * device, DataType data_type, std::arra
     return output;
 }
 
-std::tuple<uint32_t, uint32_t, uint32_t> compute_block_info_(uint32_t M, uint32_t K, uint32_t N) {
+std::tuple<uint32_t, uint32_t, uint32_t> compute_block_info_(uint32_t M, uint32_t K, uint32_t N, uint32_t channel_stick_size_datums) {
     uint32_t single_tile_size_bytes = 2 * 1024;
 
     // Constraint 1: in0 and in1 should fit in L1. If not, divide into blocks
@@ -154,6 +154,16 @@ std::tuple<uint32_t, uint32_t, uint32_t> compute_block_info_(uint32_t M, uint32_
         num_blocks += 1;
         assert(num_blocks <= K);
         in_block_w = K / num_blocks;
+    }
+    // Constraint 1.5: Reader kernel splits DTX transfers (TODO: fix this in DTX to remove this constraint)
+    assert(channel_stick_size_datums % 32 == 0);
+    if (num_blocks > 1 && in_block_w * 32 > channel_stick_size_datums) {
+        while(in_block_w * 32 % channel_stick_size_datums != 0) {
+            num_blocks += 1;
+            assert(num_blocks <= K);
+            in_block_w = K / num_blocks;
+            assert(in_block_w * 32 >= channel_stick_size_datums);
+        }
     }
     std::cout << "Num blocks=" << num_blocks << std::endl;
     std::cout << "K Block size=" << in_block_w << std::endl;
@@ -358,7 +368,7 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, uint32_t
         uint32_t out_row_size = Wb * 2;
 
         // out block info
-        auto [num_blocks, out_subblock_h, out_subblock_w] = compute_block_info_(Hat, Wat, Wbt);
+        auto [num_blocks, out_subblock_h, out_subblock_w] = compute_block_info_(Hat, Wat, Wbt, activation_C);
         //uint32_t out_subblock_h = 4;
         //uint32_t out_subblock_w = 2;
         uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
