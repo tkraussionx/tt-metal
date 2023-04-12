@@ -15,10 +15,9 @@ import torchvision.transforms as transforms
 
 from libs import tt_lib as ttl
 
-from LeNet5 import *
+from mnist import *
 
-
-def test_LeNet_inference():
+def test_mnist_convnet_inference():
     with torch.no_grad():
         torch.manual_seed(1234)
         # Initialize the device
@@ -29,29 +28,27 @@ def test_LeNet_inference():
 
         #######
 
-        torch_LeNet, state_dict = load_torch_LeNet()
+        torch_ConvNet, state_dict = load_torch()
         test_dataset, test_loader = prep_data()
 
-        TTLeNet = TtLeNet5(num_classes, device, host, state_dict)
+        tt_convnet = TtConvNet(device, host, state_dict)
         correctness = 0
-
         for image, labels in test_loader:
-
             img = image.to('cpu')
-            torch_output = torch_LeNet(img).unsqueeze(1).unsqueeze(1)
+
+            torch_output = torch_ConvNet(img)
             _, torch_predicted = torch.max(torch_output.data, -1)
 
-            tt_output = TTLeNet(img)
+            tt_output = tt_convnet(img)
 
             _, tt_predicted = torch.max(tt_output.data, -1)
+            print(tt_output.shape, torch_output.shape)
             correctness += sum(tt_predicted.flatten() == torch_predicted.flatten())
+
+            # print(f"Torch Predicted: {torch_predicted} \n   TT Predicted: {tt_predicted} \n        Labels: {labels[0]}")
             break
-            # print(tt_predicted.flatten() == torch_predicted.flatten(), correctness)
-            # print(tt_output.shape, " tt")
-            # print(torch_output.shape, "torch")
-            # print(comp_allclose_and_pcc(tt_output, torch_output))
-            # print(f"Torch Predicted: {torch_predicted} \n   TT Predicted: {tt_predicted} \n        Labels: {labels[ind]}")
-
-        assert correctness == batch_size
-
+    print(correctness)
+    assert correctness == batch_size
     ttl.device.CloseDevice(device)
+
+test_mnist_convnet_inference()
