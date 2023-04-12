@@ -16,15 +16,49 @@ from utility_functions import tt2torch_tensor, torch2tt_tensor
 from libs import tt_lib as ttl
 from python_api_testing.fused_ops.linear import Linear as TtLinear
 from libs.tt_lib.utils import pad_activation, pad_weight, print_diff_argmax
-
+from python_api_testing.sweep_tests.comparison_funcs import comp_allclose_and_pcc
 
 # Define relevant variables for the ML task
-batch_size = 64
+batch_size = 16
 num_classes = 10
-learning_rate = 0.001
-num_epochs = 10
 
 
+def load_torch_LeNet():
+
+    weka_path = '/mnt/MLPerf/tt_dnn-models/LeNet/model.pt'
+    model2 = LeNet5(num_classes).to('cpu')
+    checkpoint = torch.load(weka_path, map_location=torch.device('cpu'))
+    model2.load_state_dict(checkpoint['model_state_dict'])
+    model2.eval()
+    return model2, checkpoint['model_state_dict']
+
+def prep_data():
+     #Loading the dataset and preprocessing
+    train_dataset = torchvision.datasets.MNIST(root = './data',
+                                            train = True,
+                                            transform = transforms.Compose([
+                                                    transforms.Resize((32,32)),
+                                                    transforms.ToTensor(),
+                                                    transforms.Normalize(mean = (0.1307,), std = (0.3081,))]),
+                                            download = True)
+
+    test_dataset = torchvision.datasets.MNIST(root = './data',
+                                            train = False,
+                                            transform = transforms.Compose([
+                                                    transforms.Resize((32,32)),
+                                                    transforms.ToTensor(),
+                                                    transforms.Normalize(mean = (0.1325,), std = (0.3105,))]),
+                                            download=True)
+
+    train_loader = torch.utils.data.DataLoader(dataset = train_dataset,
+                                            batch_size = batch_size,
+                                            shuffle = True)
+
+    test_loader = torch.utils.data.DataLoader(dataset = test_dataset,
+                                            batch_size = batch_size,
+                                            shuffle = True)
+
+    return test_dataset, test_loader
 
 #Defining the convolutional neural network
 class LeNet5(nn.Module):
@@ -68,32 +102,31 @@ class TtLeNet5(nn.Module):
 
 
         self.conv1 = nn.Conv2d(1, 6, kernel_size=5, stride=1, padding=0)
+        self.batch_norm1 = nn.BatchNorm2d(6)
+        self.relu1 = ttl.tensor.relu
+        self.maxp1 = nn.MaxPool2d(kernel_size = 2, stride = 2)
+        self.conv2 = nn.Conv2d(6, 16, kernel_size=5, stride=1, padding=0)
+        self.batch_norm2 = nn.BatchNorm2d(16)
+        self.relu2 = ttl.tensor.relu
+        self.maxp2 = nn.MaxPool2d(kernel_size = 2, stride = 2)
+
         self.conv1.weight = nn.Parameter(state_dict["layer1.0.weight"])
         self.conv1.bias = nn.Parameter(state_dict["layer1.0.bias"])
 
-        self.batch_norm1 = nn.BatchNorm2d(6)
         self.batch_norm1.weight = nn.Parameter(state_dict["layer1.1.weight"])
         self.batch_norm1.bias = nn.Parameter(state_dict["layer1.1.bias"])
         self.batch_norm1.running_mean = nn.Parameter(state_dict["layer1.1.running_mean"])
         self.batch_norm1.running_var = nn.Parameter(state_dict["layer1.1.running_var"])
         self.batch_norm1.num_batches_tracked = nn.Parameter(state_dict["layer1.1.num_batches_tracked"], requires_grad=False)
 
-        self.relu1 = ttl.tensor.relu
-        self.maxp1 = nn.MaxPool2d(kernel_size = 2, stride = 2)
-
-        self.conv2 = nn.Conv2d(6, 16, kernel_size=5, stride=1, padding=0)
         self.conv2.weight = nn.Parameter(state_dict["layer2.0.weight"])
         self.conv2.bias = nn.Parameter(state_dict["layer2.0.bias"])
 
-        self.batch_norm2 = nn.BatchNorm2d(16)
         self.batch_norm2.weight = nn.Parameter(state_dict["layer2.1.weight"])
         self.batch_norm2.bias = nn.Parameter(state_dict["layer2.1.bias"])
         self.batch_norm2.running_mean = nn.Parameter(state_dict["layer2.1.running_mean"])
         self.batch_norm2.running_var = nn.Parameter(state_dict["layer2.1.running_var"])
         self.batch_norm2.num_batches_tracked = nn.Parameter(state_dict["layer2.1.num_batches_tracked"], requires_grad=False)
-
-        self.relu2 = ttl.tensor.relu
-        self.maxp2 = nn.MaxPool2d(kernel_size = 2, stride = 2)
 
         fc_weights = pad_weight(state_dict[f"fc.weight"])
         fc_weights = ttl.tensor.Tensor(fc_weights.reshape(-1).tolist(), fc_weights.shape, ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.ROW_MAJOR).to(ttl.tensor.Layout.TILE).data()
@@ -101,7 +134,7 @@ class TtLeNet5(nn.Module):
         fc_bias = pad_weight(state_dict[f"fc.bias"])
         fc_bias = ttl.tensor.Tensor(fc_bias.reshape(-1).tolist(), fc_bias.shape, ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.ROW_MAJOR).to(ttl.tensor.Layout.TILE).data()
 
-        self.fc = TtLinear(400, 120, fc_weights, fc_bias, self.device)
+        self.fc = TtLinear(416, 128, fc_weights, fc_bias, self.device) # 400, 120
         self.final_relu = ttl.tensor.relu
 
         fc1_weights = pad_weight(state_dict[f"fc1.weight"])
@@ -109,8 +142,7 @@ class TtLeNet5(nn.Module):
 
         fc1_bias = pad_weight(state_dict[f"fc1.bias"])
         fc1_bias = ttl.tensor.Tensor(fc1_bias.reshape(-1).tolist(), fc1_bias.shape, ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.ROW_MAJOR).to(ttl.tensor.Layout.TILE).data()
-
-        self.fc1 = TtLinear(120, 84, fc1_weights, fc1_bias, self.device)
+        self.fc1 = TtLinear(128, 96, fc1_weights, fc1_bias, self.device) # 120, 84
 
         self.final_relu1 = ttl.tensor.relu
 
@@ -120,118 +152,74 @@ class TtLeNet5(nn.Module):
         fc2_bias = pad_weight(state_dict[f"fc2.bias"])
         fc2_bias = ttl.tensor.Tensor(fc2_bias.reshape(-1).tolist(), fc2_bias.shape, ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.ROW_MAJOR).to(ttl.tensor.Layout.TILE).data()
 
-        self.fc2 = TtLinear(84, num_classes, fc2_weights, fc2_bias, self.device)
+        self.fc2 = TtLinear(96, 32, fc2_weights, fc2_bias, self.device) # 84, num_classes
 
 
 
-    def forward(self, x):
-        print(x.shape())
-        x = tt2torch_tensor(x)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        batch_size = x.shape[0]
         # Layer1
         out = self.conv1(x) # HOST
         out = self.batch_norm1(out) # HOST
-        print(out.shape)
-        out = torch2tt_tensor(out, self.device)
+        # PAD
+        tt_tensor = ttl.tensor.Tensor(
+        out.reshape(-1).tolist(),
+        out.shape,
+        ttl.tensor.DataType.BFLOAT16,
+        ttl.tensor.Layout.ROW_MAJOR,
+        )
+        tt_tensor = tt_tensor.pad((batch_size, 6, 32, 32), (0, 0, 0, 0), 0)
+        out = tt_tensor.to(ttl.tensor.Layout.TILE).to(self.device)
 
         out = self.relu1(out)
+        # UNPAD
+        out = out.to(self.host).to(ttl.tensor.Layout.ROW_MAJOR)
+        out = out.unpad((0, 0, 0, 0), (batch_size - 1, 5, 27, 27))
+        out  = torch.Tensor(out.data()).reshape(out.shape())
 
-        out = tt2torch_tensor(out)
         out = self.maxp1(out) # HOST
         # Layer2
         out = self.conv2(out) # HOST
         out = self.batch_norm2(out) # HOST
-        out = torch2tt_tensor(out, self.device)
+        #PAD
+        tt_tensor = ttl.tensor.Tensor(
+        out.reshape(-1).tolist(),
+        out.shape,
+        ttl.tensor.DataType.BFLOAT16,
+        ttl.tensor.Layout.ROW_MAJOR,
+        )
+        out = tt_tensor.pad((batch_size, 16, 32, 32), (0, 0, 0, 0), 0)
+        out = out.to(ttl.tensor.Layout.TILE).to(self.device)
 
         out = self.relu2(out)
 
-        out = tt2torch_tensor(out)
+        out = out.to(self.host).to(ttl.tensor.Layout.ROW_MAJOR)
+        out = out.unpad((0, 0, 0, 0), (batch_size - 1, 15, 9, 9))
+        out  = torch.Tensor(out.data()).reshape(out.shape())
+
         out = self.maxp2(out) # HOST
         # end of Layer 2
         out = out.reshape(out.size(0), 1, 1, -1) # madofied to have 4 dims
-        out = torch2tt_tensor(out, self.device)
+        # PAD
+        tt_tensor = ttl.tensor.Tensor(
+        out.reshape(-1).tolist(),
+        out.shape,
+        ttl.tensor.DataType.BFLOAT16,
+        ttl.tensor.Layout.ROW_MAJOR,
+        )
+        out = tt_tensor.pad((batch_size, 1, 32, 416), (0, 0, 0, 0), 0)
+        out = out.to(ttl.tensor.Layout.TILE).to(self.device)
 
         out = self.fc(out)
-        out = self.relu(out)
+        out = self.relu2(out)
         out = self.fc1(out)
-        out = self.relu1(out)
+        out = self.relu2(out)
         out = self.fc2(out)
+        # UNPAD
+        out = out.to(self.host).to(ttl.tensor.Layout.ROW_MAJOR)
+        out = out.unpad((0, 0, 0, 0), (batch_size - 1, 0, 0, 9))
+        out  = torch.Tensor(out.data()).reshape(out.shape())
         return out
-
-def load_torch_LeNet():
-
-    weka_path = '/mnt/MLPerf/tt_dnn-models/LeNet/model.pt'
-    model2 = LeNet5(num_classes).to('cpu')
-    checkpoint = torch.load(weka_path, map_location=torch.device('cpu'))
-    model2.load_state_dict(checkpoint['model_state_dict'])
-    model2.eval()
-    return model2, checkpoint['model_state_dict']
-
-def prep_data():
-     #Loading the dataset and preprocessing
-    train_dataset = torchvision.datasets.MNIST(root = './data',
-                                            train = True,
-                                            transform = transforms.Compose([
-                                                    transforms.Resize((32,32)),
-                                                    transforms.ToTensor(),
-                                                    transforms.Normalize(mean = (0.1307,), std = (0.3081,))]),
-                                            download = True)
-
-    test_dataset = torchvision.datasets.MNIST(root = './data',
-                                            train = False,
-                                            transform = transforms.Compose([
-                                                    transforms.Resize((32,32)),
-                                                    transforms.ToTensor(),
-                                                    transforms.Normalize(mean = (0.1325,), std = (0.3105,))]),
-                                            download=True)
-
-    train_loader = torch.utils.data.DataLoader(dataset = train_dataset,
-                                            batch_size = batch_size,
-                                            shuffle = True)
-
-    test_loader = torch.utils.data.DataLoader(dataset = test_dataset,
-                                            batch_size = batch_size,
-                                            shuffle = True)
-
-    return test_dataset, test_loader
-
-
-
-
-if __name__ == "__main__":
-    with torch.no_grad():
-        torch.manual_seed(1234)
-        # Initialize the device
-
-        device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
-        ttl.device.InitializeDevice(device)
-        host = ttl.device.GetHost()
-
-        #######
-
-        torch_LeNet, state_dict = load_torch_LeNet()
-        test_dataset, test_loader = prep_data()
-
-        TTLeNet = TtLeNet5(num_classes, device, host, state_dict)
-
-        for image, labels in test_loader:
-            img = image[0, :, :, :].unsqueeze(0).to('cpu')
-            label = labels[0]
-            # print(img.shape, label.shape)
-            torch_output = torch_LeNet(img)
-            _, torch_predicted = torch.max(torch_output.data, 1)
-
-            tt_img = torch2tt_tensor(img, device)
-            # tt_output = TTLeNet(tt_img)
-            # tt_output = tt2torch_tensor(tt_output)
-            # _, tt_predicted = torch.max(tt_output.data, 1)
-
-            print(f"Torch Predicted: {torch_predicted} \n   TT Predicted:  \n        Labels: {labels[0]}")
-
-            # print(f"Torch Predicted: {torch_predicted} \n   TT Predicted: {tt_predicted} \n        Labels: {labels}")
-            break
-
-    ttl.device.CloseDevice(device)
-
 
 
 
