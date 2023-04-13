@@ -11,15 +11,13 @@ import torch
 import torch.nn as nn
 import torchvision
 import torchvision.transforms as transforms
-from utility_functions import tt2torch_tensor, torch2tt_tensor
 
 from libs import tt_lib as ttl
 from python_api_testing.fused_ops.linear import Linear as TtLinear
-from libs.tt_lib.utils import pad_activation, pad_weight, print_diff_argmax
-from python_api_testing.sweep_tests.comparison_funcs import comp_allclose_and_pcc
+from libs.tt_lib.utils import pad_weight
 
 # Define relevant variables for the ML task
-batch_size = 16
+batch_size = 64
 num_classes = 10
 
 
@@ -60,12 +58,10 @@ def prep_data():
 
     return test_dataset, test_loader
 
-#Defining the convolutional neural network
+
 class LeNet5(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
-        # NOTE: To test convolution, take the first Conv out and replace it
-        # with a TTConv; let everything else be done by torch
         self.layer1 = nn.Sequential(
             nn.Conv2d(1, 6, kernel_size=5, stride=1, padding=0),
             nn.BatchNorm2d(6),

@@ -7,17 +7,16 @@ sys.path.append(f"{f}/../..")
 sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
-# Load in relevant libraries, and alias where appropriate
 import torch
-import torch.nn as nn
-import torchvision
-import torchvision.transforms as transforms
+
+from loguru import logger
 
 from libs import tt_lib as ttl
-
+from utility_functions import comp_pcc
 from mnist import *
 
 def test_mnist_convnet_inference():
+
     with torch.no_grad():
         torch.manual_seed(1234)
         # Initialize the device
@@ -26,29 +25,23 @@ def test_mnist_convnet_inference():
         ttl.device.InitializeDevice(device)
         host = ttl.device.GetHost()
 
-        #######
-
         torch_ConvNet, state_dict = load_torch()
         test_dataset, test_loader = prep_data()
 
         tt_convnet = TtConvNet(device, host, state_dict)
-        correctness = 0
         for image, labels in test_loader:
             img = image.to('cpu')
-
-            torch_output = torch_ConvNet(img)
+            # unsqueeze to go from [batch, 10] to [batch, 1, 1, 10]
+            torch_output = torch_ConvNet(img).unsqueeze(1).unsqueeze(1)
             _, torch_predicted = torch.max(torch_output.data, -1)
 
             tt_output = tt_convnet(img)
 
             _, tt_predicted = torch.max(tt_output.data, -1)
             print(tt_output.shape, torch_output.shape)
-            correctness += sum(tt_predicted.flatten() == torch_predicted.flatten())
 
-            # print(f"Torch Predicted: {torch_predicted} \n   TT Predicted: {tt_predicted} \n        Labels: {labels[0]}")
+            passing = comp_pcc(torch_output, tt_output)
+            assert passing[0], passing[1:]
             break
-    print(correctness)
-    assert correctness == batch_size
+    logger.info(f"ConvNet MNIST PASSED {passing[1]}")
     ttl.device.CloseDevice(device)
-
-test_mnist_convnet_inference()

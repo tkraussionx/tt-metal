@@ -13,9 +13,13 @@ import torch.nn as nn
 import torchvision
 import torchvision.transforms as transforms
 
+from loguru import logger
 from libs import tt_lib as ttl
 
 from LeNet5 import *
+
+from python_api_testing.sweep_tests.comparison_funcs import comp_allclose_and_pcc, comp_pcc
+
 
 
 def test_LeNet_inference():
@@ -27,13 +31,11 @@ def test_LeNet_inference():
         ttl.device.InitializeDevice(device)
         host = ttl.device.GetHost()
 
-        #######
-
         torch_LeNet, state_dict = load_torch_LeNet()
         test_dataset, test_loader = prep_data()
 
         TTLeNet = TtLeNet5(num_classes, device, host, state_dict)
-        correctness = 0
+
 
         for image, labels in test_loader:
 
@@ -42,16 +44,14 @@ def test_LeNet_inference():
             _, torch_predicted = torch.max(torch_output.data, -1)
 
             tt_output = TTLeNet(img)
-
             _, tt_predicted = torch.max(tt_output.data, -1)
-            correctness += sum(tt_predicted.flatten() == torch_predicted.flatten())
-            break
-            # print(tt_predicted.flatten() == torch_predicted.flatten(), correctness)
-            # print(tt_output.shape, " tt")
-            # print(torch_output.shape, "torch")
-            # print(comp_allclose_and_pcc(tt_output, torch_output))
-            # print(f"Torch Predicted: {torch_predicted} \n   TT Predicted: {tt_predicted} \n        Labels: {labels[ind]}")
 
-        assert correctness == batch_size
+            passing = comp_pcc(torch_output, tt_output)
+            assert passing[0], passing[1:]
+            break
+
+    logger.info(f"LeNet PASSED {passing[1]}")
 
     ttl.device.CloseDevice(device)
+
+test_LeNet_inference()

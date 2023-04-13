@@ -6,22 +6,19 @@ sys.path.append(f"{f}/../..")
 sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
-# Load in relevant libraries, and alias where appropriate
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 import torchvision.transforms as transforms
-from utility_functions import tt2torch_tensor, torch2tt_tensor
 
 from libs import tt_lib as ttl
 from python_api_testing.fused_ops.linear import Linear as TtLinear
 from python_api_testing.fused_ops.softmax import softmax as TtSoftmax
-from python_api_testing.sweep_tests.comparison_funcs import comp_allclose_and_pcc
-from libs.tt_lib.utils import pad_activation, pad_weight, print_diff_argmax
+from libs.tt_lib.utils import pad_weight
 
 
-batch_size = 16
+batch_size = 64
 num_classes = 10
 learning_rate = 0.001
 num_epochs = 10
@@ -75,7 +72,6 @@ class TtConvNet(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.conv1(x)
-        print(out.shape)
         # PAD
         tt_tensor = ttl.tensor.Tensor(
         out.reshape(-1).tolist(),
@@ -123,19 +119,27 @@ class TtConvNet(nn.Module):
         )
         tt_tensor = tt_tensor.pad((batch_size, out.shape[1], 32, out.shape[-1]), (0, 0, 0, 0), 0)
         out = tt_tensor.to(ttl.tensor.Layout.TILE).to(self.device)
-        print(out.shape(), "after padding")
+
         out = self.fc2(out)
         out = out.to(self.host).to(ttl.tensor.Layout.ROW_MAJOR)
         out = out.unpad((0, 0, 0, 0), (batch_size - 1, out.shape()[1] - 1, 0, num_classes - 1))
         out  = torch.Tensor(out.data()).reshape(out.shape())
 
-        return F.softmax(out, dim=-1)
+        tt_tensor = ttl.tensor.Tensor(
+        out.reshape(-1).tolist(),
+        out.shape,
+        ttl.tensor.DataType.BFLOAT16,
+        ttl.tensor.Layout.ROW_MAJOR,
+        )
+        tt_tensor = tt_tensor.pad((batch_size, out.shape[1], 32, 32), (0, 0, 0, 0), -100*1000)
+        out = tt_tensor.to(ttl.tensor.Layout.TILE).to(self.device)
+        out = TtSoftmax(out)
 
-        # x = F.pad(x, (0, 22, 0, 31), 'constant', -float('inf'))
-        # x = torch2tt_tensor(x, self.device)
-        # x = TtSoftmax(x)
-        # x = tt2torch_tensor(x, self.host)
-        # return x[:, :, 1, : num_classes]
+        #UNPAD
+        out = out.to(self.host).to(ttl.tensor.Layout.ROW_MAJOR)
+        out = out.unpad((0, 0, 0, 0), (batch_size - 1, 0, 0, 9))
+        out  = torch.Tensor(out.data()).reshape(out.shape())
+        return out
 
 
 def load_torch():
