@@ -86,6 +86,7 @@ class Transfer {
     int src_address;
     int dst_address;
     int size;
+    int pad;
     vector<int> src_soc_core;
 
     string get_string();

@@ -552,6 +552,63 @@ bool test_high_level_pass_and_evaluate() {
     return data_transformed == golden_data;
 }
 
+bool test_padding_pass_(vector<int> shape, vector<int> pad_to_nearest, vector<uint32_t> input_data, vector<uint32_t> golden_data) {
+    DataTransformations * dtx_left = new DataTransformations();
+    TransformationNode * node1 = new TransformationNode("producer", 1);
+    node1->groups[0]->shape = shape;
+    dtx_left->transformations.push_back(node1);
+    bool pass = row_major_memory_store(dtx_left);
+    //dtx_left->print();
+    DataTransformations * dtx_right = new DataTransformations();
+    TransformationNode * node0 = new TransformationNode("producer", 1);
+    node0->groups[0]->shape = shape;
+    dtx_right->transformations.push_back(node0);
+    pass &= pad_2d_matrix(dtx_right, pad_to_nearest);
+    //dtx_right->print();
+    //exit(1);
+    pass &= row_major_memory_store(dtx_right);
+    //dtx_right->print();
+    //exit(1);
+    //pass &= collapse_transformations(dtx_right);
+    //dtx_right->print();
+    //exit(1);
+    DataTransformations * combined = reverse_and_combine_transformations(dtx_left, dtx_right);
+    //cout << "\n\nDTX_COMBINED" << endl;
+    //combined->print();
+    pass &= collapse_transformations(combined);
+    //cout << "\n\nDTX_COLLAPSED" << endl;
+    //combined->print();
+    pass &= generate_transfer_addresses(combined);
+    vector<uint32_t> data_transformed = evaluate<uint32_t>(input_data, combined);
+    return data_transformed == golden_data;
+}
+
+bool test_padding_pass() {
+    bool pass = true;
+    vector<int> shape = {1, 2, 2};
+    vector<uint32_t> input_data_2_2 = {1, 2, 3, 4};
+    // list of tests - pad to nearest, golden data
+    vector<tuple<vector<int>, vector<uint32_t>>> tests_2_2 = {
+        { {4,4}, {1, 2, 0, 0, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
+        { {3,4}, {1, 2, 0, 0, 3, 4, 0, 0, 0, 0, 0, 0} },
+        { {4,3}, {1, 2, 0, 3, 4, 0, 0, 0, 0, 0, 0, 0} },
+    };
+    for (auto & t : tests_2_2) {
+        auto pad_to_nearest = std::get<0>(t);
+        auto golden_data = std::get<1>(t);
+        pass &= test_padding_pass_(shape, pad_to_nearest, input_data_2_2, golden_data);
+        if(pass) {
+            std::cout << "Passed test with shape = ";
+        }
+        else {
+            std::cout << "Failed test with shape = ";
+        }
+        std::cout << v2s(shape) << " , pad to nearest = " << v2s(pad_to_nearest) << std::endl;
+        if(!pass) exit(1);
+    }
+    return pass;
+}
+
 bool test_block_2d_matrix_pass_(vector<int> shape, vector<int> block_shape, vector<int> dim_order,
                             vector<uint32_t> input_data, vector<uint32_t> golden_data) {
     DataTransformations * dtx_left = new DataTransformations();
@@ -635,6 +692,66 @@ bool test_block_2d_matrix_pass() {
     return pass;
 
 }
+
+bool test_pad_and_block_passes_(vector<int> shape, vector<int> pad_to_nearest, vector<int> block_shape, vector<int> dim_order,
+                            vector<uint32_t> input_data, vector<uint32_t> golden_data) {
+    DataTransformations * dtx_left = new DataTransformations();
+    TransformationNode * node1 = new TransformationNode("producer", 1);
+    node1->groups[0]->shape = shape;
+    dtx_left->transformations.push_back(node1);
+    bool pass = row_major_memory_store(dtx_left);
+    //dtx_left->print();
+    DataTransformations * dtx_right = new DataTransformations();
+    TransformationNode * node0 = new TransformationNode("producer", 1);
+    node0->groups[0]->shape = shape;
+    dtx_right->transformations.push_back(node0);
+    pass &= pad_2d_matrix(dtx_right, pad_to_nearest);
+    pass &= block_2d_matrix(dtx_right, dim_order, block_shape);
+    //dtx_right->print();
+    pass &= row_major_memory_store(dtx_right);
+    //dtx_right->print();
+    DataTransformations * combined = reverse_and_combine_transformations(dtx_left, dtx_right);
+    //cout << "\n\nDTX_COMBINED" << endl;
+    //combined->print();
+    pass &= collapse_transformations(combined);
+    //cout << "\n\nDTX_COLLAPSED" << endl;
+    //combined->print();
+    pass &= generate_transfer_addresses(combined);
+    vector<uint32_t> data_transformed = evaluate<uint32_t>(input_data, combined);
+    return data_transformed == golden_data;
+}
+bool test_pad_and_block_passes() {
+    bool pass = true;
+    vector<int> shape = {1, 2, 2};
+    vector<uint32_t> input_data_2_2 = {1, 2, 3, 4};
+    // list of tests - pad to nearest, block shape, dim order, golden data
+    vector<tuple<vector<int>, vector<int>, vector<int>, vector<uint32_t>>> tests_2_2 = {
+        { {4,4}, {4,4}, {0,1,2}, {1, 2, 0, 0, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
+        { {4,4}, {2,4}, {0,1,2}, {1, 2, 0, 0, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
+        { {4,4}, {2,2}, {0,1,2}, {1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
+    };
+    for (auto & t : tests_2_2) {
+        auto pad_to_nearest = std::get<0>(t);
+        auto block_shape = std::get<1>(t);
+        auto dim_order = std::get<2>(t);
+        auto golden_data = std::get<3>(t);
+        pass &= test_pad_and_block_passes_(shape, pad_to_nearest, block_shape, dim_order, input_data_2_2, golden_data);
+        if(pass) {
+            std::cout << "Passed test with shape = ";
+        }
+        else {
+            std::cout << "Failed test with shape = ";
+        }
+        std::cout << v2s(shape) <<
+            " , pad to nearest = " << v2s(pad_to_nearest) <<
+            " , block shape = " << v2s(block_shape) <<
+            " , dim order = " << v2s(dim_order) <<
+            std::endl;
+        if (!pass) exit(1);
+    }
+    return pass;
+}
+
 void run_dtx_tests() {
     bool pass = true;
 
@@ -687,6 +804,12 @@ void run_dtx_tests() {
 
     pass &= test_block_2d_matrix_pass();
     printf("test_block_2d_matrix_pass - %d\n\n", pass);
+
+    pass &= test_padding_pass();
+    printf("test_pad_2d_matrix_pass - %d\n\n", pass);
+
+    pass &= test_pad_and_block_passes();
+    printf("test_pad_and_block_passes - %d\n\n", pass);
 
     if (pass == true) cout << "\nTESTS PASSED\n\n\n" << endl;
     else cout << "TESTS FAILED\n\n\n" << endl;

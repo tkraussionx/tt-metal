@@ -7,6 +7,7 @@ DTX_CFLAGS = $(CFLAGS) -Werror -Wno-int-to-pointer-cast
 
 DTX_SRCS = \
 	libs/dtx/dtx.cpp \
+	libs/dtx/dtx_evaluate.cpp \
 	libs/dtx/parallelize_generic_tensor_slice.cpp \
 	libs/dtx/pass_collapse_transformations.cpp \
 	libs/dtx/pass_convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1.cpp \
@@ -18,6 +19,7 @@ DTX_SRCS = \
 	libs/dtx/pass_row_major_memory_store.cpp \
 	libs/dtx/pass_convert_abstract_tensor_to_channels_last_layout.cpp \
 	libs/dtx/pass_tilize.cpp \
+	libs/dtx/pass_pad_2d_matrix.cpp \
 	libs/dtx/pass_block_2d_matrix.cpp \
 	libs/dtx/pass_util.cpp \
 	libs/dtx/pass_simple_high_level_pass.cpp \
