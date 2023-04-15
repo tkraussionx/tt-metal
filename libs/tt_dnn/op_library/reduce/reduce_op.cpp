@@ -52,84 +52,92 @@ ReduceOpParallelizationStrategy::Enum get_parallelization_strategy(const Tensor 
 }
 
 } // namespace reduce_op_utils
+
+static Profiler op_profiler = Profiler();
+static uint32_t call_count = 0;
+static const string op_name = "reduce";
+static const string perf_folder = "/tmp/tt_perf/ops/";
+string prepend_name = "";
+
 namespace tt {
 namespace tt_metal {
 
- std::vector<Shape> Reduce::compute_output_shapes(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
-    const auto& input_tensor = input_tensors.at(0).get();
+Tensor reduce_ (const Tensor &a, ReduceOpMath::Enum reduce_op, ReduceOpDim::Enum reduce_dim, float scaler) {
 
-    auto output_shape = input_tensor.shape();
-    switch (this->dim){
-        case ReduceOpDim::H:
-            output_shape[2] = 32;
-            break;
-        case ReduceOpDim::W:
-            output_shape[3] = 32;
-            break;
-        case ReduceOpDim::HW:
-            output_shape[2] = 32;
-            output_shape[3] = 32;
-            break;
-
-    }
-    return {output_shape};
-}
-
-std::vector<Tensor> Reduce::create_output_tensors(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
-    const auto& input_tensor = input_tensors.at(0).get();
-    const auto output_shape = compute_output_shapes(input_tensors).at(0);
-    std::vector<Tensor> output_tensors;
-    output_tensors.emplace_back(tt_metal::Tensor(output_shape, input_tensor.dtype(), tt::tt_metal::Layout::TILE, input_tensor.device()));
-    return output_tensors;
-}
-
-Program Reduce::create_program(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors, std::vector<Tensor> &output_tensors) const {
-    const auto& input_tensor = input_tensors.at(0).get();
-    auto& output_tensor = output_tensors.at(0);
-
-    switch (reduce_op_utils::get_parallelization_strategy(input_tensor, this->dim)){
+    switch (reduce_op_utils::get_parallelization_strategy(a, reduce_dim)){
         case ReduceOpParallelizationStrategy::MULTI_CORE_H:
-            return reduce_multi_core_h(input_tensor, output_tensor, this->math_op, this->dim, this->scaler);
+            prepend_name += "_MULTI_CORE_H";
+            return reduce_multi_core_h(a, reduce_op, reduce_dim, scaler, call_count);
         case ReduceOpParallelizationStrategy::MULTI_CORE_W:
-            return reduce_multi_core_w(input_tensor, output_tensor, this->math_op, this->dim, this->scaler);
+            prepend_name += "_MULTI_CORE_W";
+            return reduce_multi_core_w(a, reduce_op, reduce_dim, scaler, call_count);
+        case ReduceOpParallelizationStrategy::MULTI_CORE_HW:
+            prepend_name += "_MULTI_CORE_HW";
+            return reduce_multi_core_hw(a, reduce_op, reduce_dim, scaler, call_count);
         case ReduceOpParallelizationStrategy::SINGLE_CORE:
         default:
-            return reduce_single_core(input_tensor, output_tensor, this->math_op, this->dim, this->scaler);
+            prepend_name += "_SINGLE_CORE";
+            return reduce_single_core(a, reduce_op, reduce_dim, scaler, call_count);
     }
 
 }
 
-Tensor reduce_(const Tensor &input_tensor, ReduceOpMath::Enum reduce_math, ReduceOpDim::Enum reduce_dim, float scaler) {
-    auto parallelization_strategy = reduce_op_utils::get_parallelization_strategy(input_tensor, reduce_dim);
-    auto is_multicore_hw = parallelization_strategy == ReduceOpParallelizationStrategy::MULTI_CORE_HW;
-    if (is_multicore_hw) {
-        const Tensor output_tensor = std::move(Reduce(reduce_math, ReduceOpDim::W, scaler).run({std::cref(input_tensor)}).at(0));
-        return std::move(Reduce(reduce_math, ReduceOpDim::H, scaler).run({std::cref(output_tensor)}).at(0));
-    } else {
-        return std::move(Reduce(reduce_math, reduce_dim, scaler).run({std::cref(input_tensor)}).at(0));
-    }
-}
 
-Tensor reduce(const Tensor &input_tensor, ReduceOpMath::Enum reduce_math, ReduceOpDim::Enum reduce_dim, float scaler) {
+Tensor _reduce (const Tensor &a, ReduceOpMath::Enum reduce_op, ReduceOpDim::Enum reduce_dim, float scaler) {
+
     Device * device;
-    if (input_tensor.on_host()) {
+
+    // Get the device
+    if (a.on_host()) {
         device = AutoPad::GetDefaultDevice();
         TT_ASSERT(device != nullptr, "Requires setting default device if no inputs to op are on device");
     } else {
-        device = input_tensor.device();
+        device = a.device();
     }
 
-    auto padded_input_shape = AutoPad::pad_to_tile_shape(input_tensor.shape());
-    auto output_shape = Reduce(reduce_math, reduce_dim, scaler).compute_output_shapes({std::cref(input_tensor)}).at(0);
+    // Convert tensor back to original
+    auto a_pad_shape = AutoPad::pad_to_tile_shape(a.shape());
+    auto out_shape = a.shape();
+    switch (reduce_dim){
+        case ReduceOpDim::H:
+            out_shape[2] = 32;
+            break;
+        case ReduceOpDim::W:
+            out_shape[3] = 32;
+            break;
+        case ReduceOpDim::HW:
+            out_shape[2] = 32;
+            out_shape[3] = 32;
+            break;
 
-    if (AutoPad::check_input_tensor_format(input_tensor, padded_input_shape)) {
-        return reduce_(input_tensor, reduce_math, reduce_dim, scaler);
+    }
+
+    if (AutoPad::check_input_tensor_format(a, a_pad_shape)) {
+        prepend_name += "NO_PAD_A";
+        return reduce_(a, reduce_op, reduce_dim, scaler);
     } else {
-        auto output = reduce_(AutoPad::format_input_tensor(input_tensor, device, padded_input_shape, 0), reduce_math, reduce_dim, scaler);
-        AutoPad::format_output_tensor(input_tensor, output, output_shape, device);
+        prepend_name += "PAD_A";
+        auto output = reduce_(AutoPad::format_input_tensor(a, device, a_pad_shape, 0), reduce_op, reduce_dim, scaler);
+        AutoPad::format_output_tensor(a, output, out_shape, device);
         return output;
+
     }
+
 }
+
+Tensor reduce (const Tensor &a, ReduceOpMath::Enum reduce_op, ReduceOpDim::Enum reduce_dim, float scaler) {
+    op_profiler.markStart(op_name);
+    call_count ++;
+
+    Tensor ret = _reduce (a, reduce_op, reduce_dim, scaler);
+
+    op_profiler.markStop(op_name);
+    op_profiler.setOutputDir(perf_folder + op_name);
+    op_profiler.dumpHostResults(to_string(call_count) + "-" + prepend_name);
+    prepend_name = "";
+    return ret;
+}
+
 
 }  // namespace tt_metal
 

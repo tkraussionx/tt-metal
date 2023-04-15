@@ -575,6 +575,7 @@ int main(int argc, char **argv) {
         pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
         pass &= tt_metal::LaunchKernels(device, program);
         if (profile_device){
+            tt_metal::FreshProfilerDeviceLog();
             tt_metal::DumpDeviceProfileResults(device, program);
         }
         log_info(LogTest, "Matmul test done");

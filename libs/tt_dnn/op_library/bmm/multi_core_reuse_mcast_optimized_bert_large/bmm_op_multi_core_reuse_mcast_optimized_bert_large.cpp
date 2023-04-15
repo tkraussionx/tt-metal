@@ -705,9 +705,11 @@ namespace tt {
 
 namespace tt_metal {
 
+static const string perf_folder = "/tmp/tt_perf/ops/";
 
-Tensor matmul_multi_core_reuse_mcast_optimized_bert_large_(const Tensor &a, const Tensor &b, const MemoryConfig& mem_config, bool bcast_batch, CoreCoord compute_and_storage_grid_size, tt::DataFormat output_cb_data_format, MathFidelity math_fidelity, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t out_subblock_w, uint32_t per_core_M, uint32_t per_core_N, bool fuse_batch) {
+Tensor matmul_multi_core_reuse_mcast_optimized_bert_large_(const Tensor &a, const Tensor &b, const MemoryConfig& mem_config, bool bcast_batch, CoreCoord compute_and_storage_grid_size, tt::DataFormat output_cb_data_format, MathFidelity math_fidelity, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t out_subblock_w, uint32_t per_core_M, uint32_t per_core_N, bool fuse_batch, uint32_t call_count, string op_name) {
 
+    tt_metal::SetProfilerDir(perf_folder + op_name + "/" + to_string(call_count));
     const auto& ashape = a.shape(), bshape = b.shape();
 
     // TODO: Build some sort of dispatcher based on location of op operands
@@ -813,13 +815,16 @@ Tensor matmul_multi_core_reuse_mcast_optimized_bert_large_(const Tensor &a, cons
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
     bool pass = true;
-    pass &= tt_metal::CompileProgram(device, program);
+    constexpr bool profile_device = true;
+    pass &= tt_metal::CompileProgram(device, program, profile_device);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
     ////////////////////////////////////////////////////////////////////////////
     pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
     pass &= tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
 
     TT_ASSERT(pass);
 
@@ -827,8 +832,8 @@ Tensor matmul_multi_core_reuse_mcast_optimized_bert_large_(const Tensor &a, cons
     return output;
 }
 
-Tensor matmul_multi_core_reuse_mcast_optimized_bert_large(const Tensor& a, const Tensor& b, const MemoryConfig& mem_config, CoreCoord compute_and_storage_grid_size, tt::DataFormat output_cb_data_format, MathFidelity math_fidelity, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t out_subblock_w, uint32_t per_core_M, uint32_t per_core_N, bool fuse_batch) {
-    return matmul_multi_core_reuse_mcast_optimized_bert_large_(a, b, mem_config, true, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);
+Tensor matmul_multi_core_reuse_mcast_optimized_bert_large(const Tensor& a, const Tensor& b, const MemoryConfig& mem_config, CoreCoord compute_and_storage_grid_size, tt::DataFormat output_cb_data_format, MathFidelity math_fidelity, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t out_subblock_w, uint32_t per_core_M, uint32_t per_core_N, bool fuse_batch, uint32_t call_count, string op_name) {
+    return matmul_multi_core_reuse_mcast_optimized_bert_large_(a, b, mem_config, true, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch , call_count, op_name);
 }
 // bmm_multi_core_reuse_mcast_optimized_bert_large not used
 

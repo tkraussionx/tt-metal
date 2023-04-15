@@ -254,37 +254,51 @@ namespace tt {
 
 namespace tt_metal {
 
+static const string perf_folder = "/tmp/tt_perf/ops/";
+
+static Profiler op_profiler_matmul = Profiler();
+static uint32_t call_count_matmul = 0;
+static const string op_name_matmul = "matmul";
+static string prepend_name_matmul = "";
 
 Tensor matmul_(const Tensor& a, const Tensor& b) {
     switch (bmm_op_utils::get_parallelization_strategy(a, b)){
         case BmmOpParallelizationStrategy::MULTI_CORE:
-            return matmul_multi_core(a, b);
+            prepend_name_matmul += "_MULTI_CORE";
+            return matmul_multi_core(a, b, call_count_matmul);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE:
+            prepend_name_matmul += "_MULTI_CORE_REUSE";
             return matmul_multi_core_reuse(a, b);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST:
+            prepend_name_matmul += "_MULTI_CORE_REUSE_MCAST";
             return matmul_multi_core_reuse_mcast(a, b);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_GENERALIZED:
+            prepend_name_matmul += "_MULTI_CORE_REUSE_GENERALIZED";
             return matmul_multi_core_reuse_generalized(a, b);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_GENERALIZED:
+            prepend_name_matmul += "_MULTI_CORE_REUSE_MCAST_GENERALIZED";
             return matmul_multi_core_reuse_mcast_generalized(a, b);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_PADDING:
+            prepend_name_matmul += "_MULTI_CORE_REUSE_PADDING";
             return matmul_multi_core_reuse_padding(a, b);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_PADDING:
-            return matmul_multi_core_reuse_mcast_padding(a, b);
+            prepend_name_matmul += "_MULTI_CORE_REUSE_MCAST_PADDING";
+            return matmul_multi_core_reuse_mcast_padding(a, b, call_count_matmul);
             break;
         case BmmOpParallelizationStrategy::SINGLE_CORE:
+            prepend_name_matmul += "_SINGLE_CORE";
         default:
             return matmul_single_core(a, b);
     }
 }
 
-Tensor matmul(const Tensor& a, const Tensor& b) {
+Tensor _matmul(const Tensor& a, const Tensor& b) {
 
     Device * device;
 
@@ -307,52 +321,83 @@ Tensor matmul(const Tensor& a, const Tensor& b) {
     auto no_pad_a = AutoPad::check_input_tensor_format(a, a_pad_shape);
     auto no_pad_b = AutoPad::check_input_tensor_format(b, b_pad_shape);
     if (no_pad_a && no_pad_b) {
+        prepend_name_matmul += "NO_PAD_A_B";
         return matmul_(a, b);
     } else if (no_pad_a) {
+        prepend_name_matmul += "NO_PAD_A";
         auto output = matmul_(a, AutoPad::format_input_tensor(b, device, b_pad_shape, 0));
         AutoPad::format_output_tensor(a, output, out_shape, device);
         return output;
     } else if (no_pad_b) {
+        prepend_name_matmul += "NO_PAD_B";
         auto output = matmul_(AutoPad::format_input_tensor(a, device, a_pad_shape, 0), b);
         AutoPad::format_output_tensor(a, output, out_shape, device);
         return output;
     } else {
+        prepend_name_matmul += "PAD_A_B";
         auto output = matmul_(AutoPad::format_input_tensor(a, device, a_pad_shape, 0), AutoPad::format_input_tensor(b, device, b_pad_shape, 0));
         AutoPad::format_output_tensor(a, output, out_shape, device);
         return output;
     }
 }
+Tensor matmul(const Tensor& a, const Tensor& b) {
+
+    op_profiler_matmul.markStart(op_name_matmul);
+    op_profiler_matmul.setOutputDir(perf_folder + op_name_matmul);
+    call_count_matmul ++;
+
+    Tensor ret = _matmul(a, b);
+
+    op_profiler_matmul.markStop(op_name_matmul);
+    op_profiler_matmul.dumpHostResults(to_string(call_count_matmul) + "-" + prepend_name_matmul);
+    prepend_name_matmul = "";
+
+    return ret;
+}
+
+static Profiler op_profiler_bmm = Profiler();
+static uint32_t call_count_bmm = 0;
+static const string op_name_bmm = "bmm";
+static string prepend_name_bmm = "";
 
 Tensor bmm_(const Tensor& a, const Tensor& b) {
     switch (bmm_op_utils::get_parallelization_strategy(a, b)){
         case BmmOpParallelizationStrategy::MULTI_CORE:
-            return bmm_multi_core(a, b);
+            prepend_name_bmm += "_MULTI_CORE";
+            return bmm_multi_core(a, b, call_count_bmm);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE:
+            prepend_name_bmm += "_MULTI_CORE_REUSE";
             return bmm_multi_core_reuse(a, b);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST:
+            prepend_name_bmm += "_MULTI_CORE_REUSE_MCAST";
             return bmm_multi_core_reuse_mcast(a, b);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_GENERALIZED:
+            prepend_name_bmm += "_MULTI_CORE_REUSE_GENERALIZED";
             return bmm_multi_core_reuse_generalized(a, b);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_GENERALIZED:
+            prepend_name_bmm += "_MULTI_CORE_REUSE_MCAST_GENERALIZED";
             return bmm_multi_core_reuse_mcast_generalized(a, b);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_PADDING:
+            prepend_name_bmm += "_MULTI_CORE_REUSE_PADDING";
             return bmm_multi_core_reuse_padding(a, b);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_PADDING:
-            return bmm_multi_core_reuse_mcast_padding(a, b);
+            prepend_name_bmm += "_MULTI_CORE_REUSE_MCAST_PADDING";
+            return bmm_multi_core_reuse_mcast_padding(a, b, call_count_bmm);
             break;
         case BmmOpParallelizationStrategy::SINGLE_CORE:
         default:
+            prepend_name_bmm += "_SINGLE_CORE";
             return bmm_single_core(a, b);
     }
 }
 
-Tensor bmm(const Tensor& a, const Tensor& b) {
+Tensor _bmm(const Tensor& a, const Tensor& b) {
 
     Device * device;
 
@@ -377,26 +422,56 @@ Tensor bmm(const Tensor& a, const Tensor& b) {
     auto no_pad_a = AutoPad::check_input_tensor_format(a, a_pad_shape);
     auto no_pad_b = AutoPad::check_input_tensor_format(b, b_pad_shape);
     if (no_pad_a && no_pad_b) {
+        prepend_name_bmm += "NO_PAD_A_B";
         return bmm_(a, b);
     } else if (no_pad_a) {
+        prepend_name_bmm += "NO_PAD_A";
         auto output = bmm_(a, AutoPad::format_input_tensor(b, device, b_pad_shape, 0));
         AutoPad::format_output_tensor(a, output, out_shape, device);
         return output;
     } else if (no_pad_b) {
+        prepend_name_bmm += "NO_PAD_B";
         auto output = bmm_(AutoPad::format_input_tensor(a, device, a_pad_shape, 0), b);
         AutoPad::format_output_tensor(a, output, out_shape, device);
         return output;
     } else {
+        prepend_name_bmm += "PAD_A_B";
         auto output = bmm_(AutoPad::format_input_tensor(a, device, a_pad_shape, 0), AutoPad::format_input_tensor(b, device, b_pad_shape, 0));
         AutoPad::format_output_tensor(a, output, out_shape, device);
         return output;
     }
 }
 
+Tensor bmm(const Tensor& a, const Tensor& b) {
+    op_profiler_bmm.markStart(op_name_bmm);
+    op_profiler_bmm.setOutputDir(perf_folder + op_name_bmm);
+    call_count_bmm ++;
+
+    Tensor ret =  _bmm(a, b);
+
+    op_profiler_bmm.markStop(op_name_bmm);
+    op_profiler_bmm.dumpHostResults(to_string(call_count_bmm) + "-" + prepend_name_bmm);
+    prepend_name_bmm = "";
+
+    return ret;
+}
+
+static Profiler op_profiler_large_bmm = Profiler();
+static uint32_t call_count_large_bmm = 0;
+static const string op_name_large_bmm = "large_bmm_single_block";
+
 Tensor large_bmm(const Tensor& a, const Tensor& b, bool tilize_act, bool untilize_out) {
+    // TT_ASSERT(
+    //     bmm_op_utils::get_parallelization_strategy(a, b) == BmmOpParallelizationStrategy::SINGLE_CORE,
+    //     "Only single core large_bmm supported so far");
+    op_profiler_large_bmm.markStart(op_name_large_bmm);
+    op_profiler_large_bmm.setOutputDir(perf_folder + op_name_large_bmm);
+    call_count_large_bmm ++;
     if (bmm_op_utils::get_parallelization_strategy(a, b) != BmmOpParallelizationStrategy::SINGLE_CORE) {
         log_warning("WARNING: Only single core mode supported for large_bmm. Falling back to single core.");
     }
+    op_profiler_large_bmm.markStop(op_name_large_bmm);
+    op_profiler_large_bmm.dumpHostResults(to_string(call_count_large_bmm) + "-SINGLE_CORE");
     return large_bmm_single_core(a, b, tilize_act, untilize_out);
 }
 
@@ -416,11 +491,28 @@ Tensor bmm_tilize_untilize(const Tensor& a, const Tensor& b,
                                            tilize_a, untilize_out);
 }
 
+static Profiler op_profiler_large_bmm_single_block = Profiler();
+static uint32_t call_count_large_bmm_single_block = 0;
+static const string op_name_large_bmm_single_block = "large_bmm_single_block";
+
 Tensor large_bmm_single_block(const Tensor& a, const Tensor& b, bool tilize_a, bool untilize_out) {
-    return large_bmm_single_core_single_block(a, b, tilize_a, untilize_out);
+    op_profiler_large_bmm_single_block.markStart(op_name_large_bmm_single_block);
+    op_profiler_large_bmm_single_block.setOutputDir(perf_folder + op_name_large_bmm_single_block);
+    call_count_large_bmm_single_block ++;
+    Tensor ret = large_bmm_single_core_single_block(a, b, tilize_a, untilize_out);
+    op_profiler_large_bmm_single_block.markStop(op_name_large_bmm_single_block);
+    op_profiler_large_bmm_single_block.dumpHostResults(to_string(call_count_large_bmm_single_block) + "-SINGLE_CORE_SINGLE_BLOCK");
+    return ret;
 }
 
+static Profiler op_profiler_fused_qkv = Profiler();
+static uint32_t call_count_fused_qkv = 0;
+static const string op_name_fused_qkv = "bert_large_fused_qkv_matmul";
+
 Tensor bert_large_fused_qkv_matmul(const Tensor& a, const Tensor& b, const MemoryConfig& mem_config) {
+    op_profiler_fused_qkv.markStart(op_name_fused_qkv);
+    op_profiler_fused_qkv.setOutputDir(perf_folder + op_name_fused_qkv);
+    call_count_fused_qkv ++;
     TT_ASSERT((a.shape() == std::array<uint32_t, 4>({9, 1, 384, 1024})), "Unsupported input shape");
     TT_ASSERT((b.shape() == std::array<uint32_t, 4>({1, 1, 1024, 3072})), "Unsupported input shape");
     CoreCoord compute_and_storage_grid_size = {12, 9};
@@ -434,13 +526,22 @@ Tensor bert_large_fused_qkv_matmul(const Tensor& a, const Tensor& b, const Memor
     uint32_t per_core_M = 12;
     uint32_t per_core_N = 8;
     bool fuse_batch = true;
-    Tensor output = matmul_multi_core_reuse_mcast_optimized_bert_large(a, b, mem_config, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);
+    Tensor output = matmul_multi_core_reuse_mcast_optimized_bert_large(a, b, mem_config, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch, call_count_fused_qkv, op_name_fused_qkv);
+    op_profiler_fused_qkv.markStop(op_name_fused_qkv);
+    op_profiler_fused_qkv.dumpHostResults(to_string(call_count_fused_qkv) + "-SINGLE_CORE_SINGLE_BLOCK");
     return output;
     // Old matmul:
     // return matmul_multi_core_reuse_mcast_padding_generalized(a, b, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);
 }
 
+static Profiler op_profiler_ff1= Profiler();
+static uint32_t call_count_ff1= 0;
+static const string op_name_ff1= "bert_large_ff1_matmul";
+
 Tensor bert_large_ff1_matmul(const Tensor& a, const Tensor& b, const MemoryConfig& mem_config) {
+    op_profiler_ff1.markStart(op_name_ff1);
+    op_profiler_ff1.setOutputDir(perf_folder + op_name_ff1);
+    call_count_ff1 ++;
     TT_ASSERT((a.dtype() != DataType::BFLOAT16) or (mem_config.buffer_type == BufferType::DRAM) or (a.buffer_type() == BufferType::DRAM and b.buffer_type() == BufferType::DRAM), "For BFLOAT16, if output is on L1, one of in0 or in1 must be on DRAM!");
     TT_ASSERT((a.shape() == std::array<uint32_t, 4>({9, 1, 384, 1024})), "Unsupported input shape");
     TT_ASSERT((b.shape() == std::array<uint32_t, 4>({1, 1, 1024, 4096})), "Unsupported input shape");
@@ -455,13 +556,22 @@ Tensor bert_large_ff1_matmul(const Tensor& a, const Tensor& b, const MemoryConfi
     uint32_t per_core_M = 12;
     uint32_t per_core_N = 11;
     bool fuse_batch = true;
-    Tensor output = matmul_multi_core_reuse_mcast_optimized_bert_large(a, b, mem_config, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);
+    Tensor output = matmul_multi_core_reuse_mcast_optimized_bert_large(a, b, mem_config, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch, call_count_ff1,op_name_ff1);
+    op_profiler_ff1.markStop(op_name_ff1);
+    op_profiler_ff1.dumpHostResults(to_string(call_count_ff1) + "-SINGLE_CORE_SINGLE_BLOCK");
     return output;
     // Old matmul:
     // return matmul_multi_core_reuse_mcast_padding_generalized(a, b, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);
 }
 
+static Profiler op_profiler_ff2= Profiler();
+static uint32_t call_count_ff2= 0;
+static const string op_name_ff2= "bert_large_ff2_matmul";
+
 Tensor bert_large_ff2_matmul(const Tensor& a, const Tensor& b, const MemoryConfig& mem_config) {
+    op_profiler_ff2.markStart(op_name_ff2);
+    op_profiler_ff2.setOutputDir(perf_folder + op_name_ff2);
+    call_count_ff2 ++;
     TT_ASSERT((a.shape() == std::array<uint32_t, 4>({9, 1, 384, 4096})), "Unsupported input shape");
     TT_ASSERT((b.shape() == std::array<uint32_t, 4>({1, 1, 4096, 1024})), "Unsupported input shape");
     CoreCoord compute_and_storage_grid_size = {11, 9};
@@ -475,13 +585,22 @@ Tensor bert_large_ff2_matmul(const Tensor& a, const Tensor& b, const MemoryConfi
     uint32_t per_core_M = 12;
     uint32_t per_core_N = 3;
     bool fuse_batch = true;
-    Tensor output = matmul_multi_core_reuse_mcast_optimized_bert_large(a, b, mem_config, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);
+    Tensor output = matmul_multi_core_reuse_mcast_optimized_bert_large(a, b, mem_config, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch, call_count_ff2, op_name_ff2);
+    op_profiler_ff2.markStop(op_name_ff2);
+    op_profiler_ff2.dumpHostResults(to_string(call_count_ff2) + "-SINGLE_CORE_SINGLE_BLOCK");
     return output;
     // Old matmul:
     // return matmul_multi_core_reuse_mcast_padding_generalized(a, b, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);
 }
 
+static Profiler op_profiler_selfout= Profiler();
+static uint32_t call_count_selfout= 0;
+static const string op_name_selfout= "bert_large_selfout_matmul";
+
 Tensor bert_large_selfout_matmul(const Tensor& a, const Tensor& b, const MemoryConfig& mem_config) {
+    op_profiler_selfout.markStart(op_name_selfout);
+    op_profiler_selfout.setOutputDir(perf_folder + op_name_selfout);
+    call_count_selfout ++;
     TT_ASSERT((a.shape() == std::array<uint32_t, 4>({9, 1, 384, 1024})), "Unsupported input shape");
     TT_ASSERT((b.shape() == std::array<uint32_t, 4>({1, 1, 1024, 1024})), "Unsupported input shape");
     CoreCoord compute_and_storage_grid_size = {11, 9};
@@ -495,13 +614,22 @@ Tensor bert_large_selfout_matmul(const Tensor& a, const Tensor& b, const MemoryC
     uint32_t per_core_M = 12;
     uint32_t per_core_N = 3;
     bool fuse_batch = true;
-    Tensor output = matmul_multi_core_reuse_mcast_optimized_bert_large(a, b, mem_config, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);
+    Tensor output = matmul_multi_core_reuse_mcast_optimized_bert_large(a, b, mem_config, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch, call_count_selfout, op_name_selfout);
+    op_profiler_selfout.markStop(op_name_selfout);
+    op_profiler_selfout.dumpHostResults(to_string(call_count_selfout) + "-SINGLE_CORE_SINGLE_BLOCK");
     return output;
     // Old matmul:
     // return matmul_multi_core_reuse_mcast_padding_generalized(a, b, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);
 }
 
+static Profiler op_profiler_pre_softmax= Profiler();
+static uint32_t call_count_pre_softmax= 0;
+static const string op_name_pre_softmax= "bert_large_pre_softmax_bmm";
+
 Tensor bert_large_pre_softmax_bmm(const Tensor& a, const Tensor& b, const MemoryConfig& mem_config) {
+    op_profiler_pre_softmax.markStart(op_name_pre_softmax);
+    op_profiler_pre_softmax.setOutputDir(perf_folder + op_name_pre_softmax);
+    call_count_pre_softmax ++;
     TT_ASSERT((a.shape() == std::array<uint32_t, 4>({9, 16, 384, 64})), "Unsupported input shape");
     TT_ASSERT((b.shape() == std::array<uint32_t, 4>({9, 16, 64, 384})), "Unsupported input shape");
     const auto& ashape = a.shape(), bshape = b.shape();
@@ -518,13 +646,22 @@ Tensor bert_large_pre_softmax_bmm(const Tensor& a, const Tensor& b, const Memory
     uint32_t per_core_M = 12;
     uint32_t per_core_N = 12;
     bool fuse_batch = true;
-    Tensor output = bmm_multi_core_reuse_optimized_bert_large(a, b, ashape, bshape, cshape, mem_config, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);
+    Tensor output = bmm_multi_core_reuse_optimized_bert_large(a, b, ashape, bshape, cshape, mem_config, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch, call_count_pre_softmax, op_name_pre_softmax);
+    op_profiler_pre_softmax.markStop(op_name_pre_softmax);
+    op_profiler_pre_softmax.dumpHostResults(to_string(call_count_pre_softmax) + "-SINGLE_CORE_SINGLE_BLOCK");
     return output;
     // Old matmul:
     // return bmm_multi_core_reuse_generalized_bert_large(a, b, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);
 }
 
+static Profiler op_profiler_post_softmax= Profiler();
+static uint32_t call_count_post_softmax= 0;
+static const string op_name_post_softmax= "bert_large_post_softmax_bmm";
+
 Tensor bert_large_post_softmax_bmm(const Tensor& a, const Tensor& b, const MemoryConfig& mem_config) {
+    op_profiler_post_softmax.markStart(op_name_post_softmax);
+    op_profiler_post_softmax.setOutputDir(perf_folder + op_name_post_softmax);
+    call_count_post_softmax ++;
     TT_ASSERT((a.shape() == std::array<uint32_t, 4>({9, 1, 16 * 384, 384})), "Unsupported input shape");
     TT_ASSERT((b.shape() == std::array<uint32_t, 4>({9, 16, 384, 64})), "Unsupported input shape");
     const std::array<uint32_t, 4>& ashape{9, 16, 384, 384};
@@ -542,7 +679,9 @@ Tensor bert_large_post_softmax_bmm(const Tensor& a, const Tensor& b, const Memor
     uint32_t per_core_M = 12;
     uint32_t per_core_N = 2;
     bool fuse_batch = true;
-    Tensor output = bmm_multi_core_reuse_optimized_bert_large(a, b, ashape, bshape, cshape, mem_config, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);
+    Tensor output = bmm_multi_core_reuse_optimized_bert_large(a, b, ashape, bshape, cshape, mem_config, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch, call_count_post_softmax, op_name_post_softmax);
+    op_profiler_post_softmax.markStop(op_name_post_softmax);
+    op_profiler_post_softmax.dumpHostResults(to_string(call_count_post_softmax) + "-SINGLE_CORE_SINGLE_BLOCK");
     return output;
     // Old matmul:
     // return bmm_multi_core_reuse_generalized_bert_large(a, b, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);

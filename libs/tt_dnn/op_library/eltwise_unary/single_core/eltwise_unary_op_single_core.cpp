@@ -9,10 +9,13 @@ namespace tt {
 
 namespace tt_metal {
 
-Program eltwise_unary_single_core(const Tensor &a, Tensor &output, UnaryOpType::Enum op_type) {
+static const string op_name = "eltwise_unary";
+static const string perf_folder = "/tmp/tt_perf/ops/";
 
-    Program program{};
+Tensor eltwise_unary_single_core(const Tensor &a, UnaryOpType::Enum op_type, uint32_t call_count) {
+    tt_metal::Program program = tt_metal::Program();
 
+    tt_metal::SetProfilerDir(perf_folder + op_name + "/" + to_string(call_count));
     CoreCoord core = {0, 0};
 
     // TODO: Build some sort of dispatcher based on location of op operands
@@ -30,6 +33,7 @@ Program eltwise_unary_single_core(const Tensor &a, Tensor &output, UnaryOpType::
 
     // This should allocate a DRAM buffer on the device
     tt_metal::Device *device = a.device();
+    tt_metal::Tensor output = tt_metal::Tensor(a.shape(), a.dtype(), tt::tt_metal::Layout::TILE, device);
 
     tt_metal::Buffer *dst_dram_buffer = output.buffer();
     TT_ASSERT(dst_dram_buffer != nullptr, "Output buffer should be allocated on device!");
@@ -104,6 +108,19 @@ Program eltwise_unary_single_core(const Tensor &a, Tensor &output, UnaryOpType::
 
     eltwise_unary_op_utils::add_defines(eltwise_unary_kernel, op_type);
 
+
+    ////////////////////////////////////////////////////////////////////////////
+    //                      Compile Application
+    ////////////////////////////////////////////////////////////////////////////
+
+    constexpr bool profile_device = true;
+    tt_metal::CompileProgram(device, program, profile_device);
+
+    ////////////////////////////////////////////////////////////////////////////
+    //                      Execute Application
+    ////////////////////////////////////////////////////////////////////////////
+    tt_metal::ConfigureDeviceWithProgram(device, program);
+
     tt_metal::WriteRuntimeArgsToDevice(
         device,
         unary_reader_kernel,
@@ -124,8 +141,12 @@ Program eltwise_unary_single_core(const Tensor &a, Tensor &output, UnaryOpType::
         num_tiles }
     );
 
+    tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
+
     // output does not hold any data, contains pointer to buffer on device with the data
-    return program;
+    return output;
 }
 
 }  // namespace tt_metal

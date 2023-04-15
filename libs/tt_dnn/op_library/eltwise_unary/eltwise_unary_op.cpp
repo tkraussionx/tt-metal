@@ -19,13 +19,7 @@ string get_op_name(UnaryOpType::Enum op_type) {
         case UnaryOpType::SIGMOID: op_name = "sigmoid_tile_init(); sigmoid_tile(0); pack_tile(0, CB::c_out0);"; break;
         case UnaryOpType::LOG: op_name = "log_tile_init(); log_tile(0); pack_tile(0, CB::c_out0);"; break;
         case UnaryOpType::TANH: op_name = "tanh_tile_init(); tanh_tile(0); pack_tile(0, CB::c_out0);"; break;
-        case UnaryOpType::LOG10:
-            // log10[x] = log[x]/log[10] = log[x]*0.4342944819032518; FP32@U32 0x3ede5bd9; FP16@U16 0x36f3;
-            op_name = "log_with_base_tile_init(); log_with_base_tile(0,0x36f3); pack_tile(0,CB::c_out0);";
-            break;
-        case UnaryOpType::LOG2:  // log2[x] = log[x]*1.4426950408889634f; FP32@U32 0x3fb8aa3b; FP16@U16 0x3dc5;
-            op_name = "log_with_base_tile_init(); log_with_base_tile(0,0x3dc5); pack_tile(0,CB::c_out0);";
-            break;
+
         default: TT_ASSERT(false && "Undefined op type");
     }
     return op_name;
@@ -56,55 +50,79 @@ namespace tt {
 
 namespace tt_metal {
 
+static Profiler op_profiler = Profiler();
+static uint32_t call_count = 0;
+static const string op_name = "eltwise_unary";
+static const string perf_folder = "/tmp/tt_perf/ops/";
+static string prepend_string = "";
 
- std::vector<Shape> EltwiseUnary::compute_output_shapes(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
-    const auto& input_tensor = input_tensors.at(0).get();
-    return {input_tensor.shape()};
-}
+static const unordered_map<UnaryOpType::Enum ,string> optype_to_name = {
+    {UnaryOpType::Enum::EXP,"EXP"},
+    {UnaryOpType::Enum::RECIP,"SURECIPB"},
+    {UnaryOpType::Enum::GELU,"GELU"},
+    {UnaryOpType::Enum::RELU,"RELU"},
+    {UnaryOpType::Enum::SQRT,"SQRT"},
+    {UnaryOpType::Enum::SIGMOID,"SIGMOID"},
+    {UnaryOpType::Enum::LOG,"LOG"},
+    {UnaryOpType::Enum::TANH,"TANH"}
+};
 
+Tensor eltwise_unary_(const Tensor &a, UnaryOpType::Enum op_type) {
 
-std::vector<Tensor> EltwiseUnary::create_output_tensors(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
-    const auto& input_tensor = input_tensors.at(0).get();
-    std::vector<Tensor> output_tensors;
-    output_tensors.emplace_back(tt_metal::Tensor(input_tensor.shape(), input_tensor.dtype(), tt::tt_metal::Layout::TILE, input_tensor.device()));
-    return output_tensors;
-}
-
-Program EltwiseUnary::create_program(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors, std::vector<Tensor> &output_tensors) const {
-    const auto& input_tensor = input_tensors.at(0).get();
-    auto& output_tensor = output_tensors.at(0);
-    switch (eltwise_unary_op_utils::get_parallelization_strategy(input_tensor)){
+    switch (eltwise_unary_op_utils::get_parallelization_strategy(a)){
         case UnaryOpParallelizationStrategy::MULTI_CORE:
-            return eltwise_unary_multi_core(input_tensor, output_tensor, this->op_type);
+            prepend_string += "_MULTI_CORE-" + optype_to_name.at(op_type);
+            return eltwise_unary_multi_core(a, op_type, call_count);
             break;
         case UnaryOpParallelizationStrategy::SINGLE_CORE:
         default:
-            return eltwise_unary_single_core(input_tensor, output_tensor, this->op_type);
+            prepend_string += "_SINGLE_CORE-" + optype_to_name.at(op_type);
+            return eltwise_unary_single_core(a, op_type, call_count);
     }
 
 }
 
 
-Tensor eltwise_unary(const EltwiseUnary& op, const Tensor &input_tensor) {
-    Device* device;
-    if (input_tensor.on_host()) {
+Tensor _eltwise_unary(const Tensor &a, UnaryOpType::Enum op_type) {
+
+    Device * device;
+
+    // Get the device
+    if (a.on_host()) {
         device = AutoPad::GetDefaultDevice();
         TT_ASSERT(device != nullptr, "Requires setting default device if no inputs to op are on device");
     } else {
-        device = input_tensor.device();
+        device = a.device();
     }
 
-    auto padded_input_shape = AutoPad::pad_to_tile_shape(input_tensor.shape());
-    auto output_shape = input_tensor.shape();
-    if (AutoPad::check_input_tensor_format(input_tensor, padded_input_shape)) {
-        return std::move(op.run({std::cref(input_tensor)}).at(0));
+    auto a_pad_shape = AutoPad::pad_to_tile_shape(a.shape());
+    auto out_shape = a.shape();
+    if (AutoPad::check_input_tensor_format(a, a_pad_shape)) {
+        prepend_string += "NO_PAD_A";
+        return eltwise_unary_(a, op_type);
     } else {
-        const auto padded_tensor = AutoPad::format_input_tensor(input_tensor, device, padded_input_shape, 0);
-        auto output = std::move(op.run({std::cref(padded_tensor)}).at(0));
-        AutoPad::format_output_tensor(input_tensor, output, output_shape, device);
+        prepend_string += "PAD_A";
+        auto output = eltwise_unary_(AutoPad::format_input_tensor(a, device, a_pad_shape, 0), op_type);
+        AutoPad::format_output_tensor(a, output, out_shape, device);
         return output;
     }
+
 }
+
+Tensor eltwise_unary(const Tensor &a, UnaryOpType::Enum op_type) {
+    op_profiler.markStart(op_name);
+    op_profiler.setOutputDir(perf_folder + op_name);
+    call_count ++;
+
+    Tensor ret = _eltwise_unary(a, op_type) ;
+
+    op_profiler.markStop(op_name);
+    op_profiler.dumpHostResults(to_string(call_count) + "-" + prepend_string);
+    prepend_string = "";
+
+    return ret;
+}
+
 
 }  // namespace tt_metal
 

@@ -11,9 +11,13 @@ namespace tt {
 
 namespace tt_metal {
 
-tt_metal::Program eltwise_unary_multi_core(const Tensor &a, Tensor &output, UnaryOpType::Enum op_type) {
+static const string op_name = "eltwise_unary";
+static const string perf_folder = "/tmp/tt_perf/ops/";
 
-    tt_metal::Program program{};
+Tensor eltwise_unary_multi_core(const Tensor &a, UnaryOpType::Enum op_type, uint32_t call_count) {
+    tt_metal::Program program = tt_metal::Program();
+    tt_metal::SetProfilerDir(perf_folder + op_name + "/" + to_string(call_count));
+
 
     // TODO: Build some sort of dispatcher based on location of op operands
     TT_ASSERT(not a.on_host(), "Operand to eltwise unary needs to be on device!");
@@ -38,6 +42,9 @@ tt_metal::Program eltwise_unary_multi_core(const Tensor &a, Tensor &output, Unar
     for(uint32_t i = 0; i < num_tiles % num_cores; i++){
         num_tiles_per_core[i]++;
     }
+
+    // This should allocate a DRAM buffer on the device
+    tt_metal::Tensor output = tt_metal::Tensor(a.shape(), a.dtype(), tt::tt_metal::Layout::TILE, device);
 
     tt_metal::Buffer *dst_dram_buffer = output.buffer();
     TT_ASSERT(dst_dram_buffer != nullptr, "Output buffer should be allocated on device!");
@@ -81,11 +88,11 @@ tt_metal::Program eltwise_unary_multi_core(const Tensor &a, Tensor &output, Unar
             num_output_tiles * single_tile_size,
             DataFormat::Float16_b
         );
-        bool tile_size_is_power_of_two = (ceil(std::log2(single_tile_size)) == floor(std::log2(single_tile_size)));
+        bool tile_size_is_power_of_two = (ceil(log2(single_tile_size)) == floor(log2(single_tile_size)));
         std::vector<uint32_t> reader_writer_compile_time_args;
         if (tile_size_is_power_of_two) {
             // Use the fast stick size power of 2 path (get noc addr uses just shift operations, no slow multiply algorithm)
-            reader_writer_compile_time_args = {1, (std::uint32_t)std::log2(single_tile_size)};
+            reader_writer_compile_time_args = {1, (std::uint32_t)log2(single_tile_size)};
         } else {
             reader_writer_compile_time_args = {0, 0};
         }
@@ -126,6 +133,18 @@ tt_metal::Program eltwise_unary_multi_core(const Tensor &a, Tensor &output, Unar
         eltwise_unary_op_utils::add_defines(eltwise_unary_kernel, op_type);
     }
 
+    ////////////////////////////////////////////////////////////////////////////
+    //                      Compile Application
+    ////////////////////////////////////////////////////////////////////////////
+
+    constexpr bool profile_device = true;
+    tt_metal::CompileProgram(device, program, profile_device);
+
+    ////////////////////////////////////////////////////////////////////////////
+    //                      Execute Application
+    ////////////////////////////////////////////////////////////////////////////
+    tt_metal::ConfigureDeviceWithProgram(device, program);
+
     for (uint32_t i = 0, num_tiles_written = 0; i < num_cores; i++){
         CoreCoord core = {i / num_cores_y, i % num_cores_y};
         tt_metal::WriteRuntimeArgsToDevice(
@@ -152,8 +171,12 @@ tt_metal::Program eltwise_unary_multi_core(const Tensor &a, Tensor &output, Unar
         num_tiles_written+=num_tiles_per_core[i];
     }
 
+    tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
+
     // output does not hold any data, contains pointer to buffer on device with the data
-    return program;
+    return output;
 }
 
 }  // namespace tt_metal

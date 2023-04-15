@@ -8,6 +8,7 @@ namespace tt {
 
 namespace tt_metal {
 
+static const string perf_folder = "/tmp/tt_perf/ops/";
 // This function needs to be up to date with pad_rm to ensure accurate l1 usage calcaulation
 bool check_pad_rm_l1_size(const Tensor &a, const std::array<uint32_t, 4> &output_tensor_shape, const std::array<uint32_t, 4> &input_tensor_start) {
     if (a.layout() == Layout::ROW_MAJOR) {
@@ -198,7 +199,18 @@ Tensor pad_rm(const Tensor &a, const std::array<uint32_t, 4> &output_tensor_shap
     return output;
 }
 
+static Profiler op_profiler_pad = Profiler();
+static uint32_t call_count_pad = 0;
+static const string op_name_pad = "pad_tile";
+
 Tensor pad_tile(const Tensor &a, const std::array<uint32_t, 4> &output_tensor_shape, const std::array<uint32_t, 4> &input_tensor_start, float pad_value) {
+
+    op_profiler_pad.markStart(op_name_pad);
+    op_profiler_pad.setOutputDir(perf_folder + op_name_pad);
+    call_count_pad ++;
+    string prepend_name = to_string(call_count_pad) + "-SINGLE_CORE";
+
+    tt_metal::SetProfilerDir(perf_folder + op_name_pad + "/" + to_string(call_count_pad));
 
     TT_ASSERT(a.layout() == Layout::TILE);
     TT_ASSERT(not a.on_host(), "Operand to pad needs to be on device!");
@@ -306,7 +318,7 @@ Tensor pad_tile(const Tensor &a, const std::array<uint32_t, 4> &output_tensor_sh
     ////////////////////////////////////////////////////////////////////////////
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
-    tt_metal::CompileProgram(device, program, false);
+    tt_metal::CompileProgram(device, program, true);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
@@ -320,6 +332,11 @@ Tensor pad_tile(const Tensor &a, const std::array<uint32_t, 4> &output_tensor_sh
     );
 
     tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
+
+    op_profiler_pad.markStop(op_name_pad);
+    op_profiler_pad.dumpHostResults(prepend_name);
 
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;

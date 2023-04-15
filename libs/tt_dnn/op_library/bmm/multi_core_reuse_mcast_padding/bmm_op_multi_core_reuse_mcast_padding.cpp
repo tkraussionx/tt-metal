@@ -1047,9 +1047,11 @@ namespace tt {
 
 namespace tt_metal {
 
+static const string perf_folder = "/tmp/tt_perf/ops/";
 
-Tensor matmul_multi_core_reuse_mcast_padding_(const Tensor &a, const Tensor &b, bool bcast_batch) {
+Tensor matmul_multi_core_reuse_mcast_padding_(const Tensor &a, const Tensor &b, bool bcast_batch,string op_name, uint32_t call_count) {
 
+    tt_metal::SetProfilerDir(perf_folder + op_name + "/" + to_string(call_count));
     const auto& ashape = a.shape(), bshape = b.shape();
 
     // TODO: Build some sort of dispatcher based on location of op operands
@@ -1177,13 +1179,17 @@ Tensor matmul_multi_core_reuse_mcast_padding_(const Tensor &a, const Tensor &b, 
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
     bool pass = true;
-    pass &= tt_metal::CompileProgram(device, program);
+    bool profile = true;
+    pass &= tt_metal::CompileProgram(device, program, profile);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
     ////////////////////////////////////////////////////////////////////////////
+
     pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
     pass &= tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
 
     TT_ASSERT(pass);
 
@@ -1191,12 +1197,12 @@ Tensor matmul_multi_core_reuse_mcast_padding_(const Tensor &a, const Tensor &b, 
     return output;
 }
 
-Tensor matmul_multi_core_reuse_mcast_padding(const Tensor& a, const Tensor& b) {
-    return matmul_multi_core_reuse_mcast_padding_(a, b, true);
+Tensor matmul_multi_core_reuse_mcast_padding(const Tensor& a, const Tensor& b, uint32_t call_count) {
+    return matmul_multi_core_reuse_mcast_padding_(a, b, true, "matmul", call_count);
 }
 
-Tensor bmm_multi_core_reuse_mcast_padding(const Tensor& a, const Tensor& b) {
-    return matmul_multi_core_reuse_mcast_padding_(a, b, false);
+Tensor bmm_multi_core_reuse_mcast_padding(const Tensor& a, const Tensor& b, uint32_t call_count) {
+    return matmul_multi_core_reuse_mcast_padding_(a, b, false, "bmm", call_count);
 }
 
 }  // namespace tt_metal

@@ -18,14 +18,15 @@ struct TransposeOpParallelizationStrategy {
 
 // TODO: Accept parallelization
 Tensor transpose_(const Tensor &a, TransposeOpDim::Enum transpose_dim=TransposeOpDim::WH);
-inline Tensor transpose(const Tensor &a) { return transpose_(a, TransposeOpDim::WH); }
-inline Tensor transpose_wh(const Tensor &a) { return transpose_(a, TransposeOpDim::WH); }
-inline Tensor transpose_hc(const Tensor &a) { return transpose_(a, TransposeOpDim::HC); }
-inline Tensor transpose_cn(const Tensor &a) { return transpose_(a, TransposeOpDim::CN); }
+Tensor _transpose(const Tensor &a, TransposeOpDim::Enum transpose_dim=TransposeOpDim::WH);
+inline Tensor transpose(const Tensor &a) { return _transpose(a, TransposeOpDim::WH); }
+inline Tensor transpose_wh(const Tensor &a) { return _transpose(a, TransposeOpDim::WH); }
+inline Tensor transpose_hc(const Tensor &a) { return _transpose(a, TransposeOpDim::HC); }
+inline Tensor transpose_cn(const Tensor &a) { return _transpose(a, TransposeOpDim::CN); }
 
 Tensor transpose_single_core(const Tensor &a, TransposeOpDim::Enum transpose_dim);
-Tensor transpose_wh_multi_core(const Tensor &a);
-Tensor transpose_hc_multi_core(const Tensor &a);
+Tensor transpose_wh_multi_core(const Tensor &a, uint32_t call_count = 0);
+Tensor transpose_hc_multi_core(const Tensor &a, uint32_t call_count = 0);
 
 }  // namespace tt_metal
 

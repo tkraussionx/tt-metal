@@ -9,10 +9,12 @@ namespace tt {
 
 namespace tt_metal {
 
+static const string perf_folder = "/tmp/tt_perf/ops/";
 
-Tensor matmul_multi_core_(const Tensor &a, const Tensor &b, bool bcast_batch) {
+Tensor matmul_multi_core_(const Tensor &a, const Tensor &b, bool bcast_batch, uint32_t call_count, string op_name) {
 
     tt_metal::Program program = tt_metal::Program();
+    tt_metal::SetProfilerDir(perf_folder + op_name + "/" + to_string(call_count));
 
     const auto& ashape = a.shape(), bshape = b.shape();
 
@@ -187,10 +189,13 @@ Tensor matmul_multi_core_(const Tensor &a, const Tensor &b, bool bcast_batch) {
         num_tiles_written += num_output_tiles_per_core[i];
     }
 
-    pass &= tt_metal::CompileProgram(device, program);
+    constexpr bool profile_device = true;
+    pass &= tt_metal::CompileProgram(device, program, profile_device);
     pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
 
-    pass &= tt_metal::LaunchKernels(device, program);
+    tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
 
     TT_ASSERT(pass);
 
@@ -198,12 +203,12 @@ Tensor matmul_multi_core_(const Tensor &a, const Tensor &b, bool bcast_batch) {
     return output;
 }
 
-Tensor matmul_multi_core(const Tensor& a, const Tensor& b) {
-    return matmul_multi_core_(a, b, true);
+Tensor matmul_multi_core(const Tensor& a, const Tensor& b, uint32_t call_count) {
+    return matmul_multi_core_(a, b, true, call_count, "matmul");
 }
 
-Tensor bmm_multi_core(const Tensor& a, const Tensor& b) {
-    return matmul_multi_core_(a, b, false);
+Tensor bmm_multi_core(const Tensor& a, const Tensor& b, uint32_t call_count) {
+    return matmul_multi_core_(a, b, false, call_count, "bmm");
 }
 
 }  // namespace tt_metal

@@ -26,10 +26,10 @@ struct BcastOpParallelizationStrategy {
 };
 
 Tensor bcast(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_op, BcastOpDim::Enum bcast_dim);
-Tensor bcast_single_core(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_op, BcastOpDim::Enum bcast_dim);
-Tensor bcast_multi_core_h(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_op, BcastOpDim::Enum bcast_dim);
-Tensor bcast_multi_core_w(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_op, BcastOpDim::Enum bcast_dim);
-Tensor bcast_multi_core_hw(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_op, BcastOpDim::Enum bcast_dim);
+Tensor bcast_single_core(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_op, BcastOpDim::Enum bcast_dim, uint32_t call_count = 0);
+Tensor bcast_multi_core_h(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_op, BcastOpDim::Enum bcast_dim, uint32_t call_count = 0);
+Tensor bcast_multi_core_w(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_op, BcastOpDim::Enum bcast_dim, uint32_t call_count = 0);
+Tensor bcast_multi_core_hw(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_op, BcastOpDim::Enum bcast_dim, uint32_t call_count = 0);
 
 // TODO(AP): make 9 of these?
 inline Tensor bcast_add_h(const Tensor &a, const Tensor &b) { return bcast(a, b, BcastOpMath::ADD, BcastOpDim::H); }

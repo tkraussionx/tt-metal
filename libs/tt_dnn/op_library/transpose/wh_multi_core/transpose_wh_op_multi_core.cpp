@@ -12,8 +12,12 @@ namespace tt {
 
 namespace tt_metal {
 
-Tensor transpose_wh_multi_core(const Tensor &a) {
+static const string op_name = "transpose";
+static const string perf_folder = "/tmp/tt_perf/ops/";
 
+Tensor transpose_wh_multi_core(const Tensor &a, uint32_t call_count) {
+
+    tt_metal::SetProfilerDir(perf_folder + op_name + "/" + to_string(call_count));
     const auto shape = a.shape();
     u32 W = shape[3], H = shape[2], NC = shape[1]*shape[0];
     u32 HW = H*W;
@@ -132,7 +136,8 @@ Tensor transpose_wh_multi_core(const Tensor &a) {
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
 
-    tt_metal::CompileProgram(device, program);
+    constexpr bool profile_device = true;
+    tt_metal::CompileProgram(device, program, profile_device);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
@@ -171,6 +176,8 @@ Tensor transpose_wh_multi_core(const Tensor &a) {
     }
 
     tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
 
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;

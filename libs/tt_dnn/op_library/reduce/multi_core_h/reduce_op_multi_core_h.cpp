@@ -11,8 +11,12 @@ namespace tt {
 
 namespace tt_metal {
 
-Program reduce_multi_core_h(const Tensor &a, Tensor& output, ReduceOpMath::Enum reduce_op, ReduceOpDim::Enum reduce_dim, float scaler) {
+static const string op_name = "reduce";
+static const string perf_folder = "/tmp/tt_perf/ops/";
 
+Tensor reduce_multi_core_h(const Tensor &a, ReduceOpMath::Enum reduce_op, ReduceOpDim::Enum reduce_dim, float scaler, uint32_t call_count) {
+
+    tt_metal::SetProfilerDir(perf_folder + op_name + "/" + to_string(call_count));
     TT_ASSERT(reduce_dim == ReduceOpDim::H);
     const auto shape = a.shape();
     uint32_t W = shape[3], H = shape[2], NC = shape[1]*shape[0];
@@ -44,6 +48,12 @@ Program reduce_multi_core_h(const Tensor &a, Tensor& output, ReduceOpMath::Enum 
     for(uint32_t i = 0; i < num_cols % num_cores; i++){
         num_cols_per_core[i]++;
     }
+
+     // This should allocate a DRAM buffer on the device
+    auto outshape = a.shape();
+    outshape[2] = 32;
+
+    tt_metal::Tensor output = tt_metal::Tensor(outshape, a.dtype(), tt::tt_metal::Layout::TILE, device);
 
     string compute_kernel_name = reduce_op_utils::dim_to_kernel_name(reduce_dim, reduce_op);
 
@@ -131,6 +141,18 @@ Program reduce_multi_core_h(const Tensor &a, Tensor& output, ReduceOpMath::Enum 
         reduce_op_utils::add_defines(reduce_compute_kernel, reduce_op, reduce_dim);
     }
 
+    ////////////////////////////////////////////////////////////////////////////
+    //                      Compile Application
+    ////////////////////////////////////////////////////////////////////////////
+
+    constexpr bool profile_device = true;
+    tt_metal::CompileProgram(device, program, profile_device);
+
+    ////////////////////////////////////////////////////////////////////////////
+    //                      Execute Application
+    ////////////////////////////////////////////////////////////////////////////
+    tt_metal::ConfigureDeviceWithProgram(device, program);
+
     uint32_t out_dim_divider = Ht;
     for (uint32_t i = 0, num_tiles_read = 0; i < num_cores; i++){
         CoreCoord core = {i / num_cores_y, i % num_cores_y};
@@ -161,8 +183,12 @@ Program reduce_multi_core_h(const Tensor &a, Tensor& output, ReduceOpMath::Enum 
         num_tiles_read+=num_tensor_tiles_per_core;
     }
 
+    tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
+
     // output does not hold any data, contains pointer to buffer on device with the data
-    return program;
+    return output;
 }
 
 }  // namespace tt_metal

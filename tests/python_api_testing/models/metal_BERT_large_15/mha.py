@@ -110,6 +110,8 @@ def mha(qw, qb, kw, kb, vw, vb, hidden_dim, num_heads, device):
 
     def op1_qkv_fused(activation, qkv_weight, qkv_bias):
         # profiler.start("___op1_qkv_fused")
+        print(qkv_bias.shape())
+        print(qkv_weight.shape())
         qkv = run_matmul_with_dataformat(
             ttl.tensor.bert_large_fused_qkv_matmul,
             ttl.tensor.DataType.BFLOAT16,

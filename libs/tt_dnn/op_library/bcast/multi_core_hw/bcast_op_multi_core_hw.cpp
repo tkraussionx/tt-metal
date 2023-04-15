@@ -13,8 +13,12 @@ namespace tt {
 
 namespace tt_metal {
 
-Tensor bcast_multi_core_hw(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, BcastOpDim::Enum bcast_dim) {
+static const string op_name = "bcast";
+static const string perf_folder = "/tmp/tt_perf/ops/";
+
+Tensor bcast_multi_core_hw(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, BcastOpDim::Enum bcast_dim, uint32_t call_count) {
     TT_ASSERT(bcast_dim == BcastOpDim::HW);
+    tt_metal::SetProfilerDir(perf_folder + op_name + "/" + to_string(call_count));
 
     const auto ashape = a.shape();
     const auto bshape = b.shape();
@@ -146,7 +150,8 @@ Tensor bcast_multi_core_hw(const Tensor &a, const Tensor &b, BcastOpMath::Enum b
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
 
-    tt_metal::CompileProgram(device, program);
+    constexpr bool profile_device = true;
+    tt_metal::CompileProgram(device, program,profile_device);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
@@ -194,6 +199,8 @@ Tensor bcast_multi_core_hw(const Tensor &a, const Tensor &b, BcastOpMath::Enum b
     tt_metal::ConfigureDeviceWithProgram(device, program);
 
     tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
 
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;

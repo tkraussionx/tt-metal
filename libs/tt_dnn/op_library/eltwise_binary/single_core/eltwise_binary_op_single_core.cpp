@@ -9,8 +9,12 @@ namespace tt {
 
 namespace tt_metal {
 
-Tensor eltwise_binary_single_core(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type) {
+static const string op_name = "eltwise_binary";
+static const string perf_folder = "/tmp/tt_perf/ops/";
+
+Tensor eltwise_binary_single_core(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type, uint32_t call_count) {
     tt_metal::Program program = tt_metal::Program();
+    tt_metal::SetProfilerDir(perf_folder + op_name + "/" + to_string(call_count));
 
     CoreCoord core = {0, 0};
 
@@ -114,7 +118,8 @@ Tensor eltwise_binary_single_core(const Tensor &a, const Tensor &b, BinaryOpType
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
 
-    tt_metal::CompileProgram(device, program);
+    constexpr bool profile_device = true;
+    tt_metal::CompileProgram(device, program,profile_device);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
@@ -144,6 +149,8 @@ Tensor eltwise_binary_single_core(const Tensor &a, const Tensor &b, BinaryOpType
         num_tiles});
 
     tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
 
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;

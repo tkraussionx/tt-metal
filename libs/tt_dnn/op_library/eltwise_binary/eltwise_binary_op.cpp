@@ -36,17 +36,32 @@ namespace tt {
 
 namespace tt_metal {
 
+static Profiler op_profiler = Profiler();
+static uint32_t call_count = 0;
+static const string op_name = "eltwise_binary";
+static const string perf_folder = "/tmp/tt_perf/ops/";
+static string prepend_string = "";
+
+static const unordered_map<BinaryOpType::Enum ,string> optype_to_name = {
+    {BinaryOpType::Enum::ADD,"ADD"},
+    {BinaryOpType::Enum::SUB,"SUB"},
+    {BinaryOpType::Enum::MUL,"MUL"}
+};
+
 Tensor eltwise_binary_(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type) {
+
     switch (eltwise_binary_op_utils::get_parallelization_strategy(a, b)){
         case BinaryOpParallelizationStrategy::MULTI_CORE:
-            return eltwise_binary_multi_core(a, b, op_type);
+            prepend_string += "_MULTI_CORE-" + optype_to_name.at(op_type);
+            return eltwise_binary_multi_core(a, b, op_type, call_count);
             break;
         case BinaryOpParallelizationStrategy::SINGLE_CORE:
         default:
-            return eltwise_binary_single_core(a, b, op_type);
+            prepend_string += "_SINGLE_CORE-" + optype_to_name.at(op_type);
+            return eltwise_binary_single_core(a, b, op_type, call_count);
     }
 }
-Tensor eltwise_binary(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type) {
+Tensor _eltwise_binary(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type) {
 
     Device * device;
 
@@ -67,22 +82,41 @@ Tensor eltwise_binary(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_ty
     auto no_pad_a = AutoPad::check_input_tensor_format(a, a_pad_shape);
     auto no_pad_b = AutoPad::check_input_tensor_format(b, b_pad_shape);
     if (no_pad_a && no_pad_b) {
+        prepend_string += "NO_PAD_A_B";
         return eltwise_binary_(a, b, op_type);
     } else if (no_pad_a) {
+        prepend_string += "NO_PAD_A";
         auto output = eltwise_binary_(a, AutoPad::format_input_tensor(b, device, b_pad_shape, 0), op_type);
         AutoPad::format_output_tensor(a, output, out_shape, device);
         return output;
     } else if (no_pad_b) {
+        prepend_string += "NO_PAD_B";
         auto output = eltwise_binary_(AutoPad::format_input_tensor(a, device, a_pad_shape, 0), b, op_type);
         AutoPad::format_output_tensor(a, output, out_shape, device);
         return output;
     } else {
+        prepend_string += "PAD_A_B";
         auto output = eltwise_binary_(AutoPad::format_input_tensor(a, device, a_pad_shape, 0), AutoPad::format_input_tensor(b, device, b_pad_shape, 0), op_type);
         AutoPad::format_output_tensor(a, output, out_shape, device);
         return output;
     }
 
 }
+
+Tensor eltwise_binary(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type) {
+    op_profiler.markStart(op_name);
+    op_profiler.setOutputDir(perf_folder + op_name);
+    call_count ++;
+
+    Tensor ret = _eltwise_binary(a, b, op_type) ;
+
+    op_profiler.markStop(op_name);
+    op_profiler.dumpHostResults(to_string(call_count) + "-" + prepend_string);
+    prepend_string = "";
+
+    return ret;
+}
+
 
 }  // namespace tt_metal
 

@@ -133,9 +133,9 @@ def demo():
     # prompt = ["car"]
     prompt = ["oil painting frame of Breathtaking mountain range with a clear river running through it, surrounded by tall trees and misty clouds, serene, peaceful, mountain landscape, high detail"]
 
-    height = 256                        # default height of Stable Diffusion
-    width = 256                         # default width of Stable Diffusion
-    num_inference_steps = 50           # Number of denoising steps
+    height = 64                        # default height of Stable Diffusion
+    width = 64                         # default width of Stable Diffusion
+    num_inference_steps = 1           # Number of denoising steps
     guidance_scale = 7.5                # Scale for classifier-free guidance
     generator = torch.manual_seed(174)    # 10233 Seed generator to create the inital latent noise
     batch_size = len(prompt)
@@ -217,7 +217,7 @@ def demo():
         tt_latents = tt_scheduler.step(noise_pred, t, tt_latents).prev_sample
         save_image_and_latents(tt_latents, iter, vae, pre_fix=f"{experiment_name}_tt", pre_fix2="")
         pcc_res[iter] = comp_allclose_and_pcc(latents_dict[iter], tt_latents)
-        logger.info(iter, pcc_res[iter])
+        logger.info(f"{iter}, {pcc_res[iter]}")
         last_latents = tt_latents
         # tt_latents = torch.Tensor(latents_dict[iter])
         # save things required!
@@ -225,7 +225,7 @@ def demo():
 
     latents = last_latents
     for key, val in pcc_res.items():
-        logger.info(key, val)
+        logger.info(f"{key},{val}")
     # scale and decode the image latents with vae
     latents = 1 / 0.18215 * latents
     with torch.no_grad():

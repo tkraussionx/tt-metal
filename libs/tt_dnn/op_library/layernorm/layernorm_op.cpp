@@ -21,10 +21,22 @@ inline bool is_dram(const Tensor& a) { return a.buffer_type() == BufferType::DRA
 inline bool is_dram(const Tensor* a) { return a ? a->buffer_type() == BufferType::DRAM : true; } // if nullptr doesn't matter
 inline bool is_dram(const Buffer* b) { return b->buffer_type() == BufferType::DRAM; }
 
+static const string perf_folder = "/tmp/tt_perf/ops/";
+
+static Profiler op_profiler_layer_norm = Profiler();
+static uint32_t call_count_layer_norm = 0;
+static const string op_name_layer_norm = "layer_norm";
+
 // computes layernorm(a+*b)*gamma + beta
 // if b is nullptr it's treated as zero (no addition)
 Tensor layernorm_(const Tensor &a, const Tensor* b, float eps, const Tensor* gamma, const Tensor* beta, bool output_dram) {
 
+    op_profiler_layer_norm.markStart(op_name_layer_norm);
+    op_profiler_layer_norm.setOutputDir(perf_folder + op_name_layer_norm);
+    call_count_layer_norm ++;
+    string prepend_name = to_string(call_count_layer_norm) + "-MULTI_CORE";
+
+    tt_metal::SetProfilerDir(perf_folder + op_name_layer_norm + "/" + to_string(call_count_layer_norm));
     const auto shape = a.shape();
     u32 W = shape[3], H = shape[2], NC = shape[1]*shape[0];
     u32 HW = H*W;
@@ -195,7 +207,7 @@ Tensor layernorm_(const Tensor &a, const Tensor* b, float eps, const Tensor* gam
         writers.push_back(writer_kernel);
     }
 
-    bool profile = false;
+    bool profile = true;
     OpEnvConfig::update_profile(&profile);
     CompileProgram(device, program, profile);
     ConfigureDeviceWithProgram(device, program);
@@ -219,7 +231,11 @@ Tensor layernorm_(const Tensor &a, const Tensor* b, float eps, const Tensor* gam
     LaunchKernels(device, program);
 
     if (profile)
+        tt_metal::FreshProfilerDeviceLog();
         tt_metal::DumpDeviceProfileResults(device, program);
+
+    op_profiler_layer_norm.markStop(op_name_layer_norm);
+    op_profiler_layer_norm.dumpHostResults(prepend_name);
 
     return output;
 } // softmax

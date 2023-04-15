@@ -175,7 +175,8 @@ std::vector<Tensor> multi_core_split_fused_qkv(const Tensor &a, const MemoryConf
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
     bool pass = true;
-    pass &= tt_metal::CompileProgram(device, program);
+    constexpr bool profile_device = true;
+    pass &= tt_metal::CompileProgram(device, program, profile_device);
 
 
     ////////////////////////////////////////////////////////////////////////////
@@ -183,6 +184,8 @@ std::vector<Tensor> multi_core_split_fused_qkv(const Tensor &a, const MemoryConf
     ////////////////////////////////////////////////////////////////////////////
     pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
     pass &= tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
 
     TT_ASSERT(pass);
 

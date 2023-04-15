@@ -24,3 +24,4 @@ six==1.16.0
 tenacity==8.1.0
 Werkzeug==2.2.2
 zipp==3.12.1
+rich==13.3.4

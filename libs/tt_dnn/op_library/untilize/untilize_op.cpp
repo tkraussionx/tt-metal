@@ -49,11 +49,30 @@ bool check_untilize_with_unpadding_l1_size(const Tensor &a, const std::array<uin
         return false;
     }
 }
+static Profiler op_profiler = Profiler();
+static uint32_t call_count = 0;
+static const string op_name = "untilize";
+static const string perf_folder = "/tmp/tt_perf/ops/";
+
+static const unordered_map<Layout,string> layout_to_name = {
+    {Layout::ROW_MAJOR,"ROW_MAJOR"},
+    {Layout::TILE,"TILE"},
+    {Layout::CHANNELS_LAST,"CHANNELS_LAST"}
+};
 
 Tensor untilize(const Tensor &a) {
 
+    op_profiler.markStart(op_name);
+    op_profiler.setOutputDir(perf_folder + op_name);
+    call_count ++;
+    string prepend_name = to_string(call_count) + "-SINGLE_CORE_" + layout_to_name.at(a.layout());
+
+    tt_metal::SetProfilerDir(perf_folder + op_name + "/" + to_string(call_count));
+
     if (a.layout() == Layout::ROW_MAJOR) {
         log_warning("Perf warning: Trying to untilize non-tilized data.");
+        op_profiler.markStop(op_name);
+        op_profiler.dumpHostResults(prepend_name);
         return a;
     }
 
@@ -156,7 +175,8 @@ Tensor untilize(const Tensor &a) {
     ////////////////////////////////////////////////////////////////////////////
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
-    tt_metal::CompileProgram(device, program, false);
+    constexpr bool profile_device = true;
+    tt_metal::CompileProgram(device, program, profile_device);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
@@ -183,12 +203,27 @@ Tensor untilize(const Tensor &a) {
     );
 
     tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
 
+    op_profiler.markStop(op_name);
+    op_profiler.dumpHostResults(prepend_name);
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;
 }
 
+static Profiler op_profiler_unpad = Profiler();
+static uint32_t call_count_unpad = 0;
+static const string op_name_unpad = "untilize_unpad";
+
 Tensor untilize_with_unpadding(const Tensor &a, const std::array<uint32_t, 4> &output_tensor_start, const std::array<uint32_t, 4> &output_tensor_end) {
+
+    op_profiler_unpad.markStart(op_name_unpad);
+    op_profiler_unpad.setOutputDir(perf_folder + op_name_unpad);
+    call_count_unpad ++;
+    string prepend_name = to_string(call_count_unpad) + "-SINGLE_CORE_" + layout_to_name.at(a.layout());
+
+    tt_metal::SetProfilerDir(perf_folder + op_name_unpad + "/" + to_string(call_count_unpad));
 
     TT_ASSERT(a.dtype() != DataType::BFLOAT8_B, "Bfloat8_b can only exist as tilized data");
     TT_ASSERT(a.layout() == Layout::TILE, "Can only untilize tile major data");
@@ -362,7 +397,7 @@ Tensor untilize_with_unpadding(const Tensor &a, const std::array<uint32_t, 4> &o
     ////////////////////////////////////////////////////////////////////////////
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
-    tt_metal::CompileProgram(device, program, false);
+    tt_metal::CompileProgram(device, program, true);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
@@ -387,6 +422,11 @@ Tensor untilize_with_unpadding(const Tensor &a, const std::array<uint32_t, 4> &o
     );
 
     tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
+
+    op_profiler_unpad.markStop(op_name_unpad);
+    op_profiler_unpad.dumpHostResults(prepend_name);
 
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;

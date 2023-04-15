@@ -63,6 +63,14 @@ void Profiler::dumpHostResults(std::string name_prepend)
     std::filesystem::path log_path = output_dir / HOST_SIDE_LOG;
     std::ofstream log_file;
 
+    std::ifstream log_file_check;
+    log_file_check.open(log_path);
+    if(log_file_check) {
+        host_new_log = false;
+    } else {
+        host_new_log = true;
+    }
+
     if (host_new_log)
     {
         log_file.open(log_path);
@@ -191,6 +199,14 @@ void Profiler::dumpDeviceResultToFile(
 
     std::filesystem::path log_path = output_dir / DEVICE_SIDE_LOG;
     std::ofstream log_file;
+
+    std::ifstream log_file_check;
+    log_file_check.open(log_path);
+    if(log_file_check) {
+        device_new_log = false;
+    } else {
+        device_new_log = true;
+    }
 
     if (device_new_log)
     {

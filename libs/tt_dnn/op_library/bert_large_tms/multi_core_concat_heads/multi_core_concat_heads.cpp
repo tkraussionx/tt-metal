@@ -167,7 +167,8 @@ Tensor multi_core_concat_heads(const Tensor &a, const MemoryConfig& mem_config, 
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
     bool pass = true;
-    pass &= tt_metal::CompileProgram(device, program);
+    constexpr bool profile_device = true;
+    pass &= tt_metal::CompileProgram(device, program, profile_device);
 
 
     ////////////////////////////////////////////////////////////////////////////
@@ -175,6 +176,8 @@ Tensor multi_core_concat_heads(const Tensor &a, const MemoryConfig& mem_config, 
     ////////////////////////////////////////////////////////////////////////////
     pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
     pass &= tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
 
     TT_ASSERT(pass);
 

@@ -18,8 +18,8 @@ struct BinaryOpParallelizationStrategy {
 };
 
 Tensor eltwise_binary (const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type);
-Tensor eltwise_binary_single_core (const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type);
-Tensor eltwise_binary_multi_core (const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type);
+Tensor eltwise_binary_single_core (const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type, uint32_t call_count = 0);
+Tensor eltwise_binary_multi_core (const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type, uint32_t call_count = 0);
 
 inline Tensor add     (const Tensor &a, const Tensor &b) { return eltwise_binary(a, b, BinaryOpType::ADD); }
 inline Tensor sub     (const Tensor &a, const Tensor &b) { return eltwise_binary(a, b, BinaryOpType::SUB); }

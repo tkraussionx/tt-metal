@@ -17,7 +17,19 @@ namespace tt {
 
 namespace tt_metal {
 
+static Profiler op_profiler_transpose_hc_rm = Profiler();
+static uint32_t call_count_transpose_hc_rm = 0;
+static const string op_name_transpose_hc_rm = "transpose_hc_rm";
+static const string perf_folder = "/tmp/tt_perf/ops/";
+
 Tensor transpose_hc_rm(const Tensor &a) {
+
+    op_profiler_transpose_hc_rm.markStart(op_name_transpose_hc_rm);
+    op_profiler_transpose_hc_rm.setOutputDir(perf_folder + op_name_transpose_hc_rm);
+    call_count_transpose_hc_rm ++;
+    string prepend_name = to_string(call_count_transpose_hc_rm) + "-SINGLE_CORE" ;
+
+    tt_metal::SetProfilerDir(perf_folder + op_name_transpose_hc_rm + "/" + to_string(call_count_transpose_hc_rm));
 
     TT_ASSERT(a.shape()[3] <= 16*1024 && "transpose_hc_rm kernel doesn't support W>=16k elems yet.");
     tt_metal::Device *device = a.device();
@@ -88,6 +100,11 @@ Tensor transpose_hc_rm(const Tensor &a) {
     );
 
     tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
+
+    op_profiler_transpose_hc_rm.markStop(op_name_transpose_hc_rm);
+    op_profiler_transpose_hc_rm.dumpHostResults(prepend_name);
 
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;

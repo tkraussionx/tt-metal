@@ -12,7 +12,15 @@ namespace tt {
 
 namespace tt_metal {
 
+static Profiler op_profiler = Profiler();
+static uint32_t call_count = 0;
+static const string op_name = "reshape";
+static const string perf_folder = "/tmp/tt_perf/ops/";
+string prepend_name = " ";
+
 Tensor reshape_tilized(const Tensor &a, int N, int C, int H, int W) {
+
+    prepend_name = to_string(call_count) + "-SINGLE_CORE_TILIZED";
 
     TT_ASSERT(a.layout() == Layout::TILE, "Only tile and row major reshape supported!");
 
@@ -134,8 +142,9 @@ Tensor reshape_tilized(const Tensor &a, int N, int C, int H, int W) {
         uint32_t(dram_dst_noc_xy.y),
         num_tiles }
     );
-
     tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
 
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;
@@ -143,6 +152,7 @@ Tensor reshape_tilized(const Tensor &a, int N, int C, int H, int W) {
 
 Tensor reshape_rm(const Tensor &a, int N, int C, int H, int W) {
 
+    prepend_name = to_string(call_count) + "-SINGLE_CORE_RM";
 
     TT_ASSERT(a.layout() == Layout::ROW_MAJOR, "Only tile and row major reshape supported!");
 
@@ -282,7 +292,8 @@ Tensor reshape_rm(const Tensor &a, int N, int C, int H, int W) {
 
     // Compile kernels
 
-    tt_metal::CompileProgram(device, program);
+    constexpr bool profile_device = true;
+    tt_metal::CompileProgram(device, program, profile_device);
     tt_metal::ConfigureDeviceWithProgram(device, program);
 
     tt_metal::WriteRuntimeArgsToDevice(
@@ -300,6 +311,8 @@ Tensor reshape_rm(const Tensor &a, int N, int C, int H, int W) {
     );
 
     tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
 
     return output;
 }
@@ -317,6 +330,11 @@ Tensor reshape_(const Tensor &a, int N, int C, int H, int W) {
 
 Tensor reshape(Tensor &a, int N, int C, int H, int W) {
 
+    op_profiler.markStart(op_name);
+    op_profiler.setOutputDir(perf_folder + op_name);
+    call_count ++;
+    tt_metal::SetProfilerDir(perf_folder + op_name + "/" + to_string(call_count));
+
     if (
         ((a.layout() == Layout::TILE or a.layout() == Layout::ROW_MAJOR) && W == a.shape()[3]) ||
         ((a.layout() == Layout::CHANNELS_LAST) && C == a.shape()[1])
@@ -324,6 +342,9 @@ Tensor reshape(Tensor &a, int N, int C, int H, int W) {
         // Don't need to do a check here to see the H and W both divisible by 32
         // since handled within the tensor reshape method
         a.reshape(N, C, H, W);
+        prepend_name = to_string(call_count) + "-HOST";
+        op_profiler.markStop(op_name);
+        op_profiler.dumpHostResults(prepend_name);
         return a;
     }
 
@@ -341,10 +362,15 @@ Tensor reshape(Tensor &a, int N, int C, int H, int W) {
         auto output = reshape_(a.to(device), N, C, H, W);
         // Convert tensor back to original
         AutoPad::format_output_tensor(a, output, infer_dims_for_reshape(N, C, H, W, a.volume()), device);
+        op_profiler.markStop(op_name);
+        op_profiler.dumpHostResults(prepend_name);
         return output;
     } else {
+        op_profiler.markStop(op_name);
+        op_profiler.dumpHostResults(prepend_name);
         return reshape_(a, N, C, H, W);
     }
+
 
 }
 

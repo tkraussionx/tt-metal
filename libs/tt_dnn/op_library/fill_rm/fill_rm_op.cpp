@@ -11,7 +11,18 @@ namespace tt {
 
 namespace tt_metal {
 
+static Profiler op_profiler = Profiler();
+static uint32_t call_count = 0;
+static const string op_name = "fill_rm";
+static const string perf_folder = "/tmp/tt_perf/ops/";
+
 tt_metal::Tensor fill_rm(int N, int C, int H, int W, int hFill, int wFill, const tt_metal::Tensor& any, int val_hi, int val_lo) {
+
+    op_profiler.markStart(op_name);
+    op_profiler.setOutputDir(perf_folder + op_name);
+    call_count ++;
+    string prepend_name = to_string(call_count) + "-SINGLE_CORE";
+    tt_metal::SetProfilerDir(perf_folder + op_name + "/" + to_string(call_count));
 
     TT_ASSERT(hFill <= H && wFill <= W);
     tt_metal::Device *device = any.device();
@@ -64,7 +75,8 @@ tt_metal::Tensor fill_rm(int N, int C, int H, int W, int hFill, int wFill, const
 
     // Compile kernels
 
-    tt_metal::CompileProgram(device, program);
+    constexpr bool profile_device = true;
+    tt_metal::CompileProgram(device, program, profile_device);
     tt_metal::ConfigureDeviceWithProgram(device, program);
     tt_metal::WriteRuntimeArgsToDevice(
         device, binary_reader_kernel, core,
@@ -72,7 +84,11 @@ tt_metal::Tensor fill_rm(int N, int C, int H, int W, int hFill, int wFill, const
     );
 
     tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
 
+    op_profiler.markStop(op_name);
+    op_profiler.dumpHostResults(prepend_name);
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;
 }

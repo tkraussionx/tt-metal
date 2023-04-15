@@ -40,14 +40,16 @@ void DumpDeviceProfileResults(Device *device, const Program &program) {
 
 void SetProfilerDir(std::string output_dir){
      tt_metal_profiler.setOutputDir(output_dir);
+     //tt_metal_profiler.setHostNewLogFlag(true);
+     //tt_metal_profiler.setDeviceNewLogFlag(true);
 }
 
 void FreshProfilerHostLog(){
-     tt_metal_profiler.setHostNewLogFlag(true);
+     //tt_metal_profiler.setHostNewLogFlag(true);
 }
 
 void FreshProfilerDeviceLog(){
-     tt_metal_profiler.setDeviceNewLogFlag(true);
+     //tt_metal_profiler.setDeviceNewLogFlag(true);
 }
 
 Host *GetHost() {
@@ -374,10 +376,10 @@ void WriteToDevice(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
         data_index += num_entries_per_page;
     }
     tt_metal_profiler.markStop("WriteToDevice");
+    tt_metal_profiler.dumpHostResults("");
 }
 
 void WriteToBuffer(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
-    tt_metal_profiler.markStart("WriteToBuffer");
     switch (buffer.buffer_type()) {
         case BufferType::DRAM:
         case BufferType::L1: {
@@ -391,7 +393,6 @@ void WriteToBuffer(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
         default:
             TT_ASSERT(false && "Unsupported buffer type!");
     }
-    tt_metal_profiler.markStop("WriteToBuffer");
 }
 
 void ReadFromDevice(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
@@ -434,6 +435,7 @@ void ReadFromDevice(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
     }
 
     tt_metal_profiler.markStop("ReadFromDevice");
+    tt_metal_profiler.dumpHostResults("");
 }
 
 void ReadFromBuffer(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
@@ -461,6 +463,7 @@ bool ReadFromDeviceDRAMChannel(Device *device, int dram_channel, uint32_t addres
     bool pass = true;
     device->cluster()->read_dram_vec(host_buffer, tt_target_dram{device->pcie_slot(), dram_channel, 0}, address, size);
     tt_metal_profiler.markStop("ReadFromDeviceDRAMChannel");
+    tt_metal_profiler.dumpHostResults("");
     return pass;
 }
 
@@ -469,6 +472,7 @@ bool WriteToDeviceDRAMChannel(Device *device, int dram_channel, uint32_t address
     bool pass = true;
     device->cluster()->write_dram_vec(host_buffer, tt_target_dram{device->pcie_slot(), dram_channel, 0}, address);
     tt_metal_profiler.markStop("WriteToDeviceDRAMChannel");
+    tt_metal_profiler.dumpHostResults("");
     return pass;
 }
 
@@ -478,6 +482,7 @@ bool WriteToDeviceL1(Device *device, const CoreCoord &logical_core, uint32_t add
     auto worker_core = device->worker_core_from_logical_core(logical_core);
     llrt::write_hex_vec_to_core(device->cluster(), device->pcie_slot(), worker_core, host_buffer, address);
     tt_metal_profiler.markStop("WriteToDeviceL1");
+    tt_metal_profiler.dumpHostResults("");
     return pass;
 }
 
@@ -487,6 +492,7 @@ bool ReadFromDeviceL1(Device *device, const CoreCoord &logical_core, uint32_t ad
     auto worker_core = device->worker_core_from_logical_core(logical_core);
     host_buffer = llrt::read_hex_vec_from_core(device->cluster(), device->pcie_slot(), worker_core, address, size);
     tt_metal_profiler.markStop("ReadFromDeviceL1");
+    tt_metal_profiler.dumpHostResults("");
     return pass;
 }
 void GenerateBankToNocCoordHeaders(
@@ -800,6 +806,7 @@ bool CompileProgram(Device *device, Program &program, bool profile_kernel) {
     AddBlankDataMovementKernel(device, program, profile_kernel);
 
     tt_metal_profiler.markStop("CompileProgram");
+    tt_metal_profiler.dumpHostResults("");
     return pass;
 }
 
@@ -872,6 +879,7 @@ bool ConfigureDeviceWithProgram(Device *device, const Program &program) {
         cluster, pcie_slot, riscs_options, worker_cores);                               // PROF_END("LOAD_BLANK")
 
     tt_metal_profiler.markStop("ConfigureDeviceWithProgram");
+    tt_metal_profiler.dumpHostResults("");
     return pass;
 }
 
@@ -931,7 +939,10 @@ llrt::TensixRiscsOptions GetRiscOptionFromCoreConfig(bool core_runs_ncrisc, bool
     return risc_option;
 }
 
+static int LaunchCounter = 0;
 bool LaunchKernels(Device *device, const Program &program, bool stagger_start) {
+    LaunchCounter ++;
+    std::cout << "MOOOOOOOOOOOOOOOOOOOOOOO : " << LaunchCounter << std::endl;
 
     tt_metal_profiler.markStart("LaunchKernels");
     bool pass = true;
@@ -975,6 +986,7 @@ bool LaunchKernels(Device *device, const Program &program, bool stagger_start) {
 
 
     tt_metal_profiler.markStop("LaunchKernels");
+    tt_metal_profiler.dumpHostResults("");
     return pass;
 }
 

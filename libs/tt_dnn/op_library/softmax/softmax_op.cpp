@@ -18,6 +18,12 @@ namespace tt {
 
 namespace tt_metal {
 
+static Profiler op_profiler = Profiler();
+static uint32_t call_count = 0;
+static const string op_name = "scale_mask_softmax_in_place";
+static const string perf_folder = "/tmp/tt_perf/ops/";
+static string prepend_name = "MULTI_CORE";
+
 inline bool is_dram(const Tensor& a) { return a.buffer_type() == BufferType::DRAM; }
 inline bool is_dram(const Tensor* a) { return a ? a->buffer_type() == BufferType::DRAM : true; } // if nullptr doesn't matter
 inline bool is_dram(const Buffer* b) { return b->buffer_type() == BufferType::DRAM; }
@@ -25,8 +31,9 @@ inline bool is_dram(const Buffer* b) { return b->buffer_type() == BufferType::DR
 // implementation of softmax with optional scale/mask (see the header for a more detailed description)
 Tensor scale_mask_softmax_(float scale, const Tensor* mask, Tensor &a) {
 
-    bool profile = false;
+    bool profile = true;
     OpEnvConfig::update_profile(&profile);
+    tt_metal::SetProfilerDir(perf_folder + op_name + "/" + to_string(call_count));
 
     const auto shape = a.shape();
     u32 W = shape[3], H = shape[2], NC = shape[1]*shape[0];
@@ -173,17 +180,38 @@ Tensor scale_mask_softmax_(float scale, const Tensor* mask, Tensor &a) {
 
     LaunchKernels(device, program);
     if (profile)
+    {
+        tt_metal::FreshProfilerDeviceLog();
         tt_metal::DumpDeviceProfileResults(device, program);
+    }
 
     return std::move(a);
 } // scale_mask_softmax_
 
 Tensor scale_mask_softmax_in_place(float scale, const Tensor& mask, Tensor& a) {
-    return std::move(scale_mask_softmax_(scale, &mask, a));
+    op_profiler.markStart(op_name);
+    op_profiler.setOutputDir(perf_folder + op_name);
+    call_count ++;
+
+    Tensor res = std::move(scale_mask_softmax_(scale, &mask, a));
+
+    op_profiler.markStop(op_name);
+    op_profiler.dumpHostResults(to_string(call_count) + "-" + prepend_name);
+
+    return res;
 }
 
 Tensor softmax_in_place(Tensor &a) {
-    return std::move(scale_mask_softmax_(0.0f, nullptr, a)); // 0.0f means unused scale
+    op_profiler.markStart(op_name);
+    op_profiler.setOutputDir(perf_folder + op_name);
+    call_count ++;
+
+    Tensor res = std::move(scale_mask_softmax_(0.0f, nullptr, a)); // 0.0f means unused scale
+
+    op_profiler.markStop(op_name);
+    op_profiler.dumpHostResults(to_string(call_count) + "-" + prepend_name);
+
+    return res;
 }
 
 }  // namespace ll_buda

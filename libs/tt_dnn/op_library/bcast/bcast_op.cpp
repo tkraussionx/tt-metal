@@ -84,6 +84,12 @@ namespace tt {
 
 namespace tt_metal {
 
+static Profiler op_profiler = Profiler();
+static uint32_t call_count = 0;
+static const string op_name = "bcast";
+static const string perf_folder = "/tmp/tt_perf/ops/";
+static string prepend_name = " ";
+
 Tensor bcast_(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, BcastOpDim::Enum bcast_dim) {
     const auto ashape = a.shape();
     const auto bshape = b.shape();
@@ -107,21 +113,25 @@ Tensor bcast_(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, Bc
 
     switch (bcast_op_utils::get_parallelization_strategy(a, bcast_dim)){
         case BcastOpParallelizationStrategy::MULTI_CORE_H:
-            return bcast_multi_core_h(a, b, bcast_math, bcast_dim);
+            prepend_name = "MULTI_CORE_H";
+            return bcast_multi_core_h(a, b, bcast_math, bcast_dim, call_count);
             break;
         case BcastOpParallelizationStrategy::MULTI_CORE_W:
-            return bcast_multi_core_w(a, b, bcast_math, bcast_dim);
+            prepend_name = "MULTI_CORE_W";
+            return bcast_multi_core_w(a, b, bcast_math, bcast_dim, call_count);
             break;
         case BcastOpParallelizationStrategy::MULTI_CORE_HW:
-            return bcast_multi_core_hw(a, b, bcast_math, bcast_dim);
+            prepend_name = "MULTI_CORE_HW";
+            return bcast_multi_core_hw(a, b, bcast_math, bcast_dim, call_count);
             break;
         case BcastOpParallelizationStrategy::SINGLE_CORE:
         default:
-            return bcast_single_core(a, b, bcast_math, bcast_dim);
+            prepend_name = "SINGLE_CORE";
+            return bcast_single_core(a, b, bcast_math, bcast_dim, call_count);
     }
 }
 
-Tensor bcast(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, BcastOpDim::Enum bcast_dim) {
+Tensor _bcast(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, BcastOpDim::Enum bcast_dim) {
 
     Device * device;
 
@@ -168,6 +178,19 @@ Tensor bcast(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, Bca
         AutoPad::format_output_tensor(a, output, out_shape, device);
         return output;
     }
+}
+
+Tensor bcast(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, BcastOpDim::Enum bcast_dim) {
+    op_profiler.markStart(op_name);
+    op_profiler.setOutputDir(perf_folder + op_name);
+    call_count ++;
+
+    Tensor ret = _bcast(a,b,bcast_math,bcast_dim);
+
+    op_profiler.markStop(op_name);
+    op_profiler.dumpHostResults(to_string(call_count) + "-" + prepend_name);
+
+    return ret;
 }
 
 }  // namespace tt_metal

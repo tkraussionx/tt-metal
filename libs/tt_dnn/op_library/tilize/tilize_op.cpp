@@ -40,10 +40,31 @@ bool check_tilize_with_val_padding_l1_size(const Tensor &a, const std::array<uin
         return false;
     }
 }
+static const string perf_folder = "/tmp/tt_perf/ops/";
+
+static const unordered_map<Layout,string> layout_to_name = {
+    {Layout::ROW_MAJOR,"ROW_MAJOR"},
+    {Layout::TILE,"TILE"},
+    {Layout::CHANNELS_LAST,"CHANNELS_LAST"}
+};
+
+static Profiler op_profiler_tilize = Profiler();
+static uint32_t call_count_tilize = 0;
+static const string op_name_tilize = "tilize";
 
 Tensor tilize(const Tensor &a) {
+
+    op_profiler_tilize.markStart(op_name_tilize);
+    op_profiler_tilize.setOutputDir(perf_folder + op_name_tilize);
+    call_count_tilize ++;
+    string prepend_name = to_string(call_count_tilize) + "-SINGLE_CORE_" + layout_to_name.at(a.layout());
+
+    tt_metal::SetProfilerDir(perf_folder + op_name_tilize + "/" + to_string(call_count_tilize));
+
     if (a.layout() == Layout::TILE) {
         log_warning("Perf warning: tilize called on already tilized tensor.");
+        op_profiler_tilize.markStop(op_name_tilize);
+        op_profiler_tilize.dumpHostResults(prepend_name);
         return a;
     } else {
         TT_ASSERT(a.layout() == Layout::ROW_MAJOR or a.layout() == Layout::CHANNELS_LAST, "Can only tilize row major or channels last data");
@@ -158,7 +179,8 @@ Tensor tilize(const Tensor &a) {
     ////////////////////////////////////////////////////////////////////////////
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
-    tt_metal::CompileProgram(device, program, false);
+    constexpr bool profile_device = true;
+    tt_metal::CompileProgram(device, program, profile_device);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
@@ -183,13 +205,31 @@ Tensor tilize(const Tensor &a) {
         (uint32_t) (a.shape()[0] * a.shape()[1] * a.shape()[2] * a.shape()[3] / TILE_HW)}
     );
     tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
 
+    op_profiler_tilize.markStop(op_name_tilize);
+    op_profiler_tilize.dumpHostResults(prepend_name);
     return output;
 }
 
+static Profiler op_profiler_tilize_zero = Profiler();
+static uint32_t call_count_tilize_zero = 0;
+static const string op_name_tilize_zero = "tilize_with_zero_padding";
+
 Tensor tilize_with_zero_padding(const Tensor &a) {
+
+    op_profiler_tilize_zero.markStart(op_name_tilize_zero);
+    op_profiler_tilize_zero.setOutputDir(perf_folder + op_name_tilize_zero);
+    call_count_tilize_zero ++;
+    string prepend_name = to_string(call_count_tilize_zero) + "-SINGLE_CORE_" + layout_to_name.at(a.layout());
+
+    tt_metal::SetProfilerDir(perf_folder + op_name_tilize_zero + "/" + to_string(call_count_tilize_zero));
+
     if (a.layout() == Layout::TILE) {
         log_warning("Perf warning: tilize called on already tilized tensor.");
+        op_profiler_tilize_zero.markStop(op_name_tilize_zero);
+        op_profiler_tilize_zero.dumpHostResults(prepend_name);
         return a;
     } else {
         TT_ASSERT(a.layout() == Layout::ROW_MAJOR or a.layout() == Layout::CHANNELS_LAST, "Can only tilize row major or channels last data");
@@ -324,7 +364,8 @@ Tensor tilize_with_zero_padding(const Tensor &a) {
     ////////////////////////////////////////////////////////////////////////////
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
-    tt_metal::CompileProgram(device, program, false);
+    constexpr bool profile_device = true;
+    tt_metal::CompileProgram(device, program, profile_device);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
@@ -350,13 +391,33 @@ Tensor tilize_with_zero_padding(const Tensor &a) {
     );
     std::vector<uint32_t> zero_buffer_stick(row_size_datum, 0);
     tt_metal::WriteToDeviceL1(device, core, zero_buffer_l1_addr, zero_buffer_stick);
+
     tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
+
+    op_profiler_tilize_zero.markStop(op_name_tilize_zero);
+    op_profiler_tilize_zero.dumpHostResults(prepend_name);
 
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;
 }
 
+static Profiler op_profiler_tilize_val_padding = Profiler();
+static uint32_t call_count_tilize_val_padding = 0;
+static const string op_name_tilize_val_padding = "tilize_with_val_padding";
+
 Tensor tilize_with_val_padding(const Tensor &a, const std::array<uint32_t, 4> &output_tensor_shape, const std::array<uint32_t, 4> &input_tensor_start, float pad_value) {
+
+
+    op_profiler_tilize_val_padding.markStart(op_name_tilize_val_padding);
+    op_profiler_tilize_val_padding.setOutputDir(perf_folder + op_name_tilize_val_padding);
+    call_count_tilize_val_padding ++;
+    string prepend_name = to_string(call_count_tilize_val_padding) + "-SINGLE_CORE_" + layout_to_name.at(a.layout());
+
+    tt_metal::SetProfilerDir(perf_folder + op_name_tilize_val_padding + "/" + to_string(call_count_tilize_val_padding));
+
+
     if (a.layout() == Layout::TILE) {
         if (output_tensor_shape == a.shape()) {
             log_warning("Perf warning: tilize with padding called on already tilized tensor of target shape.");
@@ -516,7 +577,7 @@ Tensor tilize_with_val_padding(const Tensor &a, const std::array<uint32_t, 4> &o
     ////////////////////////////////////////////////////////////////////////////
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
-    tt_metal::CompileProgram(device, program, false);
+    tt_metal::CompileProgram(device, program, true);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
@@ -542,6 +603,11 @@ Tensor tilize_with_val_padding(const Tensor &a, const std::array<uint32_t, 4> &o
     );
 
     tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
+
+    op_profiler_tilize_val_padding.markStop(op_name_tilize_val_padding);
+    op_profiler_tilize_val_padding.dumpHostResults(prepend_name);
 
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;

@@ -9,8 +9,12 @@ namespace tt {
 
 namespace tt_metal {
 
-Program reduce_single_core(const Tensor &a, Tensor& output, ReduceOpMath::Enum reduce_op, ReduceOpDim::Enum reduce_dim, float scaler) {
+static const string op_name = "reduce";
+static const string perf_folder = "/tmp/tt_perf/ops/";
 
+Tensor reduce_single_core(const Tensor &a, ReduceOpMath::Enum reduce_op, ReduceOpDim::Enum reduce_dim, float scaler, uint32_t call_count) {
+
+    tt_metal::SetProfilerDir(perf_folder + op_name + "/" + to_string(call_count));
     const auto shape = a.shape();
     uint32_t W = shape[3], H = shape[2], NC = shape[1]*shape[0];
     uint32_t HW = H*W;
@@ -37,6 +41,14 @@ Program reduce_single_core(const Tensor &a, Tensor& output, ReduceOpMath::Enum r
 
     // This should allocate a DRAM buffer on the device
     tt_metal::Device *device = a.device();
+    auto outshape = a.shape();
+    switch(reduce_dim) {
+        case ReduceOpDim::W: outshape[3] = 32; break;
+        case ReduceOpDim::H: outshape[2] = 32; break;
+        case ReduceOpDim::HW: outshape[2] = outshape[3] = 32; break;
+        default: TT_ASSERT(false && "Invalid reduce_op!");
+    }
+    tt_metal::Tensor output = tt_metal::Tensor(outshape, a.dtype(), tt::tt_metal::Layout::TILE, device);
 
     uint32_t src0_cb_index = 0;
     uint32_t num_input_tiles = 2;
@@ -113,6 +125,17 @@ Program reduce_single_core(const Tensor &a, Tensor& output, ReduceOpMath::Enum r
 
     reduce_op_utils::add_defines(reduce_compute_kernel, reduce_op, reduce_dim);
 
+    ////////////////////////////////////////////////////////////////////////////
+    //                      Compile Application
+    ////////////////////////////////////////////////////////////////////////////
+
+    constexpr bool profile_device = true;
+    tt_metal::CompileProgram(device, program, profile_device);
+    ////////////////////////////////////////////////////////////////////////////
+    //                      Execute Application
+    ////////////////////////////////////////////////////////////////////////////
+    tt_metal::ConfigureDeviceWithProgram(device, program);
+
     tt_metal::WriteRuntimeArgsToDevice(
         device, reader_kernel, core,
         {
@@ -142,8 +165,12 @@ Program reduce_single_core(const Tensor &a, Tensor& output, ReduceOpMath::Enum r
         }
     );
 
+    tt_metal::LaunchKernels(device, program);
+    tt_metal::FreshProfilerDeviceLog();
+    tt_metal::DumpDeviceProfileResults(device, program);
+
     // output does not hold any data, contains pointer to buffer on device with the data
-    return program;
+    return output;
 }
 
 }  // namespace tt_metal
