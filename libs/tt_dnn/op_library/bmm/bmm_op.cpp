@@ -182,6 +182,7 @@ BmmOpParallelizationStrategy::Enum get_parallelization_strategy(const Tensor &a,
     uint32_t Kt = ashape[3]/TILE_WIDTH;
     uint32_t Nt = bshape[3]/TILE_WIDTH;
     uint32_t in0_block_w = 2;
+    std::cout << "strat: " << B << ", " << ashape[2] << ", " << ashape[3] << ", " <<  bshape[3] << std::endl;
 
     tt::tt_metal::Device *device = a.device();
     auto logical_grid_size = device->logical_grid_size();
@@ -236,7 +237,7 @@ BmmOpParallelizationStrategy::Enum get_parallelization_strategy(const Tensor &a,
             return BmmOpParallelizationStrategy::MULTI_CORE_REUSE;
         }
         else if (core_range.y > 0)
-            return BmmOpParallelizationStrategy::MULTI_CORE;
+            return BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_PADDING;
         return BmmOpParallelizationStrategy::MULTI_CORE;
     }
     else if (num_output_tiles > 1) {
@@ -254,7 +255,10 @@ namespace tt_metal {
 
 
 Tensor matmul(const Tensor& a, const Tensor& b) {
-    switch (bmm_op_utils::get_parallelization_strategy(a, b)){
+    auto temp = bmm_op_utils::get_parallelization_strategy(a, b);
+    std::cout << "strat: "<< temp << std::endl;
+
+    switch (temp){
         case BmmOpParallelizationStrategy::MULTI_CORE:
             return matmul_multi_core(a, b);
             break;
@@ -283,7 +287,10 @@ Tensor matmul(const Tensor& a, const Tensor& b) {
 }
 
 Tensor bmm(const Tensor& a, const Tensor& b) {
-    switch (bmm_op_utils::get_parallelization_strategy(a, b)){
+    auto temp = bmm_op_utils::get_parallelization_strategy(a, b);
+    std::cout << "strat: "<< temp << std::endl;
+
+    switch (temp){
         case BmmOpParallelizationStrategy::MULTI_CORE:
             return bmm_multi_core(a, b);
             break;
