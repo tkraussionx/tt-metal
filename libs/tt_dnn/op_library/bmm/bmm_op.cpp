@@ -252,8 +252,21 @@ namespace tt {
 
 namespace tt_metal {
 
+class OpArgs {
+    public:
+        tt_xy_pair core_grid_shape;
+        tt_xy_pair core_location; // Do we need this?
+};
 
-Tensor matmul(const Tensor& a, const Tensor& b) {
+class MatmulArgs : OpArgs {
+    public:
+        BmmOpParallelizationStrategy parallelization;
+        std::tuple<uint32_t, uint32_t> block_size; // M and N
+        std::tuple<uint32_t, uint32_t> subblock_size; // subblock_h and subblock_w
+        // uint32_t batch_parallelization_factor; // Step 2
+};
+
+Tensor matmul(const Tensor& a, const Tensor& b, MatmulArgs matmul_args) {
     switch (bmm_op_utils::get_parallelization_strategy(a, b)){
         case BmmOpParallelizationStrategy::MULTI_CORE:
             return matmul_multi_core(a, b);
