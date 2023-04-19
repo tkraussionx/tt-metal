@@ -1,6 +1,6 @@
 #include <algorithm>
-
 #include "tt_dnn/op_library/eltwise_unary/eltwise_unary_op.hpp"
+#include "tt_dnn/op_library/eltwise_unary/multi_core/eltwise_unary_op_multi_core.hpp"
 
 #include "tt_metal/host_api.hpp"
 #include "constants.hpp"
@@ -11,26 +11,35 @@ namespace tt {
 
 namespace tt_metal {
 
-Tensor eltwise_unary_multi_core(const Tensor &a, UnaryOpType::Enum op_type) {
-    tt_metal::Program *program = new tt_metal::Program();
+EltwiseUnaryOpMultiCore::EltwiseUnaryOpMultiCore(const Tensor &a, UnaryOpType::Enum op_type) : op_type(op_type) {
+    this->tensor_inputs.push_back(a);
+}
 
+EltwiseUnaryOpMultiCore::~EltwiseUnaryOpMultiCore() {
 
-    // TODO: Build some sort of dispatcher based on location of op operands
-    TT_ASSERT(not a.on_host(), "Operand to eltwise unary needs to be on device!");
-    TT_ASSERT(a.buffer() != nullptr, "Operand to eltwise unary needs to be allocated in a buffer on device!");
+}
+
+void EltwiseUnaryOpMultiCore::op_asserts() {
+    TT_ASSERT(tensor_inputs.size() == 1);
+    TT_ASSERT(tensor_inputs[0].volume() % TILE_HW == 0);
+}
+
+Tensor EltwiseUnaryOpMultiCore::create_output() {
+    tt_metal::Tensor output = tt_metal::Tensor(this->tensor_inputs[0].shape(), this->tensor_inputs[0].dtype(), tt::tt_metal::Layout::TILE, this->tensor_inputs[0].device());
+    return output;
+}
+
+void EltwiseUnaryOpMultiCore::create_op(const Tensor& output) {
 
     uint32_t single_tile_size = 2 * TILE_HW;
 
-    tt_metal::Buffer *src0_dram_buffer = a.buffer();
+    tt_metal::Buffer *src0_dram_buffer = this->tensor_inputs[0].buffer();
 
-    TT_ASSERT(a.volume() % TILE_HW == 0);
-    uint32_t num_tiles = a.volume() / TILE_HW;
+    uint32_t num_tiles = this->tensor_inputs[0].volume() / TILE_HW;
 
     auto dram_src0_noc_xy = src0_dram_buffer->noc_coordinates();
 
-    tt_metal::Device *device = a.device();
-
-    auto logical_grid_size = device->logical_grid_size();
+    auto logical_grid_size = this->device->logical_grid_size();
     uint32_t num_cores_x = logical_grid_size.x;
     uint32_t num_cores_y = logical_grid_size.y;
     auto num_cores = std::min(num_tiles, num_cores_x * num_cores_y);
@@ -39,11 +48,7 @@ Tensor eltwise_unary_multi_core(const Tensor &a, UnaryOpType::Enum op_type) {
         num_tiles_per_core[i]++;
     }
 
-    // This should allocate a DRAM buffer on the device
-    tt_metal::Tensor output = tt_metal::Tensor(a.shape(), a.dtype(), tt::tt_metal::Layout::TILE, device);
-
     tt_metal::Buffer *dst_dram_buffer = output.buffer();
-    TT_ASSERT(dst_dram_buffer != nullptr, "Output buffer should be allocated on device!");
     auto dram_dst_noc_xy = dst_dram_buffer->noc_coordinates();
 
     std::vector<tt_metal::DataMovementKernel *> unary_reader_kernels;
@@ -53,8 +58,8 @@ Tensor eltwise_unary_multi_core(const Tensor &a, UnaryOpType::Enum op_type) {
         uint32_t src0_cb_index = 0;
         uint32_t num_input_tiles = 2;
         auto cb_src0 = tt_metal::CreateCircularBuffer(
-            program,
-            device,
+            this->program,
+            this->device,
             src0_cb_index,
             core,
             num_input_tiles,
@@ -64,8 +69,8 @@ Tensor eltwise_unary_multi_core(const Tensor &a, UnaryOpType::Enum op_type) {
 
         uint32_t src1_cb_index = 1;
         auto cb_src1 = tt_metal::CreateCircularBuffer(
-            program,
-            device,
+            this->program,
+            this->device,
             src1_cb_index,
             core,
             num_input_tiles,
@@ -76,8 +81,8 @@ Tensor eltwise_unary_multi_core(const Tensor &a, UnaryOpType::Enum op_type) {
         uint32_t ouput_cb_index = 16; // output operands start at index 16
         uint32_t num_output_tiles = 2;
         auto cb_output = tt_metal::CreateCircularBuffer(
-            program,
-            device,
+            this->program,
+            this->device,
             ouput_cb_index,
             core,
             num_output_tiles,
@@ -86,7 +91,7 @@ Tensor eltwise_unary_multi_core(const Tensor &a, UnaryOpType::Enum op_type) {
         );
 
         tt_metal::DataMovementKernel *unary_reader_kernel = tt_metal::CreateDataMovementKernel(
-            program,
+            this->program,
             "tt_metal/kernels/dataflow/reader_unary_8bank_start_id.cpp",
             core,
             tt_metal::DataMovementProcessor::RISCV_1,
@@ -94,7 +99,7 @@ Tensor eltwise_unary_multi_core(const Tensor &a, UnaryOpType::Enum op_type) {
         unary_reader_kernels.push_back(unary_reader_kernel);
 
         tt_metal::DataMovementKernel *unary_writer_kernel = tt_metal::CreateDataMovementKernel(
-            program,
+            this->program,
             "tt_metal/kernels/dataflow/writer_unary_8bank_start_id.cpp",
             core,
             tt_metal::DataMovementProcessor::RISCV_0,
@@ -110,7 +115,7 @@ Tensor eltwise_unary_multi_core(const Tensor &a, UnaryOpType::Enum op_type) {
         bool fp32_dest_acc_en = false;
         bool math_approx_mode = false;
         auto eltwise_unary_kernel = tt_metal::CreateComputeKernel(
-            program,
+            this->program,
             "tt_metal/kernels/compute/eltwise_sfpu.cpp",
             core,
             eltwise_unary_args,
@@ -122,21 +127,10 @@ Tensor eltwise_unary_multi_core(const Tensor &a, UnaryOpType::Enum op_type) {
         eltwise_unary_op_utils::add_defines(eltwise_unary_kernel, op_type);
     }
 
-    ////////////////////////////////////////////////////////////////////////////
-    //                      Compile Application
-    ////////////////////////////////////////////////////////////////////////////
-
-    tt_metal::CompileProgram(device, program);
-
-    ////////////////////////////////////////////////////////////////////////////
-    //                      Execute Application
-    ////////////////////////////////////////////////////////////////////////////
-    tt_metal::ConfigureDeviceWithProgram(device, program);
-
     for (uint32_t i = 0, num_tiles_written = 0; i < num_cores; i++){
         tt_xy_pair core = {i / num_cores_y, i % num_cores_y};
         tt_metal::WriteRuntimeArgsToDevice(
-            device,
+            this->device,
             unary_reader_kernels[i],
             core,
             {src0_dram_buffer->address(),
@@ -147,7 +141,7 @@ Tensor eltwise_unary_multi_core(const Tensor &a, UnaryOpType::Enum op_type) {
         );
 
         tt_metal::WriteRuntimeArgsToDevice(
-            device,
+            this->device,
             unary_writer_kernels[i],
             core,
             {dst_dram_buffer->address(),
@@ -158,14 +152,13 @@ Tensor eltwise_unary_multi_core(const Tensor &a, UnaryOpType::Enum op_type) {
         );
         num_tiles_written+=num_tiles_per_core[i];
     }
-
-    tt_metal::LaunchKernels(device, program);
-
-    delete program;
-
-    // output does not hold any data, contains pointer to buffer on device with the data
-    return output;
 }
+
+Tensor eltwise_unary_multi_core(const Tensor &a, UnaryOpType::Enum op_type) {
+    EltwiseUnaryOpMultiCore eltwise_unary_op(a, op_type);
+    return eltwise_unary_op.run_op();
+}
+
 
 }  // namespace tt_metal
 
