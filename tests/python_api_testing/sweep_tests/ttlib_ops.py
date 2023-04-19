@@ -399,7 +399,12 @@ def matmul(x, y, pcie_slot, *args, **kwargs):
             .to(device)
         )
 
-        t2 = ttl.tensor.matmul(t0, t1)
+        from op_args import MatmulArgs
+        t2 = ttl.tensor.matmul(
+            t0,
+            t1,
+            MatmulArgs(parallelization, block_size, subblock_size)
+        )
 
         output = torch.Tensor(
             t2.to(host).to(ttl.tensor.Layout.ROW_MAJOR).data()

@@ -829,6 +829,16 @@ void DeviceModule(py::module &m_device) {
     )doc");
 }
 
+
+void OpArgsModule(py::module &m_op_args) {
+  py::class_<MatmulArgs>(op_args, "MatmulArgs")
+    .def(
+      py::init<>(
+          // Initialize (with defaults?)
+      )
+    )
+}
+
 } // end namespace tt_metal
 
 } // end namespace tt
@@ -844,4 +854,7 @@ PYBIND11_MODULE(_C, m) {
 
     py::module_ m_tensor = m.def_submodule("tensor", "Submodule defining an tt_metal tensor");
     tt::tt_metal::TensorModule(m_tensor);
+
+    py::module_ m_op_args = m.def_submodule("op_args", "Submodule defining op args classes");
+    tt::tt_metal::OpArgsModule(m_op_args);
 }

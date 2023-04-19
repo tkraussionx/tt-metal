@@ -258,19 +258,28 @@ class OpArgs {
         tt_xy_pair core_location; // Do we need this?
 };
 
-class MatmulArgs : OpArgs {
+class MatmulArgs : public OpArgs {
     public:
         BmmOpParallelizationStrategy parallelization;
         std::tuple<uint32_t, uint32_t> block_size; // M and N
         std::tuple<uint32_t, uint32_t> subblock_size; // subblock_h and subblock_w
+        uint32_t input_block_inner_dim; // in0_block_w
         // uint32_t batch_parallelization_factor; // Step 2
 };
 
+
+Tensor matmul(const Tensor& a, const Tensor& b) {
+    auto matmul_args = MatmulArgs();
+    return matmul(a, b, matmul_args);
+
 Tensor matmul(const Tensor& a, const Tensor& b, MatmulArgs matmul_args) {
-    switch (bmm_op_utils::get_parallelization_strategy(a, b)){
+    switch (matmul_args.parallelization){
         case BmmOpParallelizationStrategy::MULTI_CORE:
-            return matmul_multi_core(a, b);
+            return matmul_multi_core(a, b, matmul_args);
             break;
+            ...
+
+
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE:
             return matmul_multi_core_reuse(a, b);
             break;
