@@ -12,11 +12,14 @@ class Op {
 
     private:
         // Have to initialize these statics in source file
-        static bool profile_ops;
+        static bool profile_ops = false;
         static string profile_folder;
+
+        static uint32_t call_counter ;
         Profiler op_profiler;
 
     public:
+
         // TODO: Move definition to .cpp
         Tensor run_op(){
             //Run time check, on host side no that costly
@@ -24,7 +27,7 @@ class Op {
             {
                 op_profiler.markStart(get_op_name());
                 op_profiler.setOutputDir(perf_folder + get_op_name());
-                increment_call_count();
+                this->increment_call_count();
             }
             this->general_asserts();
             this->op_asserts();
@@ -33,20 +36,21 @@ class Op {
             this->device = output.device();
             this->create_op(output);
 
-            tt_metal::CompileProgram(device, program);
+
+            tt_metal::CompileProgram(device, program, profile_ops);
 
             tt_metal::ConfigureDeviceWithProgram(device, program);
             tt_metal::LaunchKernels(device, program); // Will there always be 1?
 
-            tt_metal::SetProfilerDir(perf_folder + "/" + get_call_count());
             tt_metal::LaunchKernels(device, program);
-            tt_metal::DumpDeviceProfileResults(device, program);
-
 
             if (profile_ops)
             {
+                tt_metal::SetProfilerDir(perf_folder + "/" + get_call_count());
+
                 op_profiler.markStop(get_op_name());
                 op_profiler.dumpHostResults(get_call_count() + "-" + get_op_meta_data());
+                tt_metal::DumpDeviceProfileResults(device, program);
             }
             // output does not hold any data, contains pointer to buffer on device with the data
             return output;
@@ -54,7 +58,7 @@ class Op {
 
 
         //Pybind to a profile python function for setting global settings per model.
-        void set_profiler_settings(bool do_profile, string profile_folder_path)
+        static void set_profiler_settings(bool do_profile, string profile_folder_path)
         {
             profile_ops = do_profile;
             profile_folder = profile_folder_path;
@@ -90,13 +94,19 @@ class Op {
         virtual void op_asserts() = 0;
 
         //Child class has to define this by keeping a private static int and increment it
-        virtual uint32_t increment_call_count() = 0;
+        virtual uint32_t increment_call_count()
+        {
+            this->call_counter ++;
+        }
 
         //Child class has to define this to get call count
-        virtual uint32_t get_call_count() = 0;
+        virtual uint32_t get_call_count()
+        {
+            return this->call_counter;
+        }
 
         //Child class has to define hyphen separated meta data including parallelization strategy
-        virtual string get_op_meta_data() = 0;
+        virtual string get_op_meta_data () = 0;
 
         //Child class has to define this by keeping a private const string
         virtual string get_op_name() = 0;
