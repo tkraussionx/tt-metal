@@ -1,5 +1,6 @@
 #include "dispatch/dispatch_helper_functions.hpp"
 #include "llrt/tt_debug_print_server.hpp"
+#include "tt_metal/hostdevcommon/profiler_common.h"
 
 uint32_t nearest_multiple_of_32(uint32_t addr) { return ceil(float(addr) / 32) * 32; }
 
@@ -335,6 +336,84 @@ void write_copy_desc_to_l1(
     tt::llrt::write_hex_vec_to_core(cluster, chip_id, dispatch_core, {l1_addr}, BRISC_L1_ARG_BASE);
 }
 
+void dumpDeviceResultToFile(
+        int chip_id,
+        int core_x,
+        int core_y,
+        std::string hart_name,
+        uint64_t timestamp,
+        uint32_t timer_id){
+
+    #define DEVICE_SIDE_LOG "profile_log_device.csv"
+
+    std::filesystem::path output_dir = std::filesystem::path("tt_metal/tools/profiler/logs");
+    std::filesystem::path log_path = output_dir / DEVICE_SIDE_LOG;
+    std::ofstream log_file;
+    bool device_new_log = true;
+    if (device_new_log)
+    {
+        log_file.open(log_path);
+        log_file << "Chip clock is at 1.2 GHz" << std::endl;
+        log_file << "PCIe slot, core_x, core_y, RISC processor type, timer_id, time[cycles since reset]" << std::endl;
+        device_new_log = false;
+    }
+    else
+    {
+        log_file.open(log_path, std::ios_base::app);
+    }
+
+    constexpr int DRAM_ROW = 6;
+    if (core_y > DRAM_ROW){
+       core_y = core_y - 2;
+    }
+    else{
+       core_y--;
+    }
+    core_x--;
+
+    log_file << chip_id << ", " << core_x << ", " << core_y << ", " << hart_name << ", ";
+    log_file << timer_id << ", ";
+    log_file << timestamp;
+    log_file << std::endl;
+    log_file.close();
+}
+
+void readRiscProfilerResults(
+        tt_cluster* cluster,
+        int pcie_slot,
+        const tt_xy_pair &worker_core,
+        std::string risc_name,
+        int risc_print_buffer_addr){
+
+    vector<std::uint32_t> profile_buffer;
+    uint32_t end_index;
+    uint32_t dropped_marker_counter;
+
+    std::cout << "READ" << std::endl;
+    profile_buffer = tt::llrt::read_hex_vec_from_core(
+            cluster,
+            pcie_slot,
+            worker_core,
+            risc_print_buffer_addr,
+            PRINT_BUFFER_SIZE*sizeof(std::uint32_t));
+    std::cout << "DONE READ" << std::endl;
+
+    end_index = profile_buffer[kernel_profiler::BUFFER_END_INDEX];
+    dropped_marker_counter = profile_buffer[kernel_profiler::DROPPED_MARKER_COUNTER];
+
+    std::cout << "END INDEX: " << end_index << std::endl;
+    for (int i = kernel_profiler::MARKER_DATA_START; i < end_index; i+=kernel_profiler::TIMER_DATA_UINT32_SIZE) {
+        dumpDeviceResultToFile(
+                pcie_slot,
+                worker_core.x,
+                worker_core.y,
+                risc_name,
+                (uint64_t(profile_buffer[i+kernel_profiler::TIMER_VAL_H]) << 32) | profile_buffer[i+kernel_profiler::TIMER_VAL_L],
+                profile_buffer[i+kernel_profiler::TIMER_ID]);
+    }
+}
+
+
 void host_dispatch(tt_cluster *cluster, int chip_id, string op, tt_xy_pair dispatch_core, tt_xy_pair worker_core) {
     // Write dispatch binary to core
     tt::llrt::test_load_write_read_risc_binary(
@@ -357,8 +436,12 @@ void host_dispatch(tt_cluster *cluster, int chip_id, string op, tt_xy_pair dispa
 
     uint32_t dispatch_done_addr = 0;
     vector<uint32_t> hugepage_done_addrs = {dispatch_done_addr};
-    tt::llrt::internal_::run_riscs_on_specified_cores(
-        cluster, chip_id, tt::llrt::TensixRiscsOptions::BRISC_ONLY, {dispatch_core}, hugepage_done_addrs);
+
+    for (int i = 0; i < 10; i++) {
+        tt::llrt::internal_::run_riscs_on_specified_cores(
+            cluster, chip_id, tt::llrt::TensixRiscsOptions::BRISC_ONLY, {dispatch_core}, hugepage_done_addrs);
+    }
+    readRiscProfilerResults(cluster, 0, {1, 1}, "BRISC", PRINT_BUFFER_BR);
 }
 
 bool test_dispatch_v1(tt_cluster *cluster, int chip_id, string op) {
