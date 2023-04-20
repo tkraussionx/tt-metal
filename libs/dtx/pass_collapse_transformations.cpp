@@ -46,7 +46,7 @@ bool collapse_transformations(DataTransformations * dtx) {
                             if (DEBUG) cout << s(12) << "PRODUCER = " << producer_tp->get_string() << endl;
                             if (DEBUG) cout << s(12) << "CONSUMER = " << consumer_tp->get_string() << endl;
 
-                            Tensor * overlap = calculate_tensor_overlap_in_nd(producer_tp->dst_tensor, consumer_tp->src_tensor);
+                            DTXTensor * overlap = calculate_tensor_overlap_in_nd(producer_tp->dst_tensor, consumer_tp->src_tensor);
 
                             if (has_overlap(overlap)) {
 
@@ -56,7 +56,7 @@ bool collapse_transformations(DataTransformations * dtx) {
 
                                 vector<int> new_src_str = vector_subtraction(overlap->str, producer_offset);
                                 vector<int> new_src_end = vector_subtraction(overlap->end, producer_offset);
-                                Tensor * new_src = new Tensor(new_src_str, new_src_end);
+                                DTXTensor * new_src = new DTXTensor(new_src_str, new_src_end);
                                 if (DEBUG) cout << s(14) << "new_src_tensor = " << new_src->get_string() << endl;
 
 
@@ -66,7 +66,7 @@ bool collapse_transformations(DataTransformations * dtx) {
 
                                 vector<int> new_dst_str = vector_subtraction(overlap->str, consumer_offset);
                                 vector<int> new_dst_end = vector_subtraction(overlap->end, consumer_offset);
-                                Tensor * new_dst = new Tensor(new_dst_str, new_dst_end);
+                                DTXTensor * new_dst = new DTXTensor(new_dst_str, new_dst_end);
 
                                 int new_src_group = producer_tp->src_group;
 
@@ -81,9 +81,9 @@ bool collapse_transformations(DataTransformations * dtx) {
                     }
                     else {
                         // Source tensor is padding buffer. No need to determine overlap.
-                        auto new_tp = new TensorPair(new Tensor(*consumer_tp->src_tensor),
+                        auto new_tp = new TensorPair(new DTXTensor(*consumer_tp->src_tensor),
                                                     consumer_tp->src_group,
-                                                    new Tensor(*consumer_tp->dst_tensor));
+                                                    new DTXTensor(*consumer_tp->dst_tensor));
                         resolved_tensor_pairs.push_back(new_tp);
                     }
                 }

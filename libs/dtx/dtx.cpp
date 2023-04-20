@@ -88,7 +88,7 @@ void TensorData::generate_csv(string filename){
 }
 
 
-int Tensor::volume() {
+int DTXTensor::volume() {
     if (this->rank == 0 || this->rank == -1) return 0;
 
     int volume = 1;
@@ -100,11 +100,11 @@ int Tensor::volume() {
     return volume;
 }
 
-void Tensor::print() {
+void DTXTensor::print() {
     cout << this->get_string() << endl;
 }
 
-string Tensor::get_string() {
+string DTXTensor::get_string() {
     string str;
     string end;
     str.append("[");

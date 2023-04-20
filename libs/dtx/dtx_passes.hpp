@@ -68,6 +68,7 @@ bool convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1(DataTransformations * dtx)
 
 bool convert_tensor_layout_CL1_to_2Dmatrix_conv1x1_s1(DataTransformations * dtx);
 
+bool convert_tensor_layout_CL1_to_2Dmatrix(DataTransformations * dtx, vector<int> conv_params);
 bool convert_abstract_tensor_to_channels_last_layout(DataTransformations * dtx);
 
 // Convert from a particular layout, stored in 1 place (ex, CPU), to the same layout, stored in 8 places (ex. device DRAM), with sharding
@@ -124,7 +125,11 @@ bool convert_tensor_layout_rowmajor_2_channelslast(DataTransformations * dtx);
 // ========================================================
 //             PART 6: HIGH LEVEL PASSES
 // ========================================================
-template <typename T>
-vector<T> evaluate(vector<T> data, DataTransformations * dtx);
+
+vector<float> evaluate(vector<float> data, DataTransformations * dtx);
 
 DataTransformations * simple_high_level_pass(vector<int> shape);
+
+DataTransformations * conv_transform(vector<int> shape, vector<int> conv_params, bool run_pad_pass);
+
+vector<float> conv_transform_evaluate(vector<int> shape, vector<int> conv_params, vector<float> data);
