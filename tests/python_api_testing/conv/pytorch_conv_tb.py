@@ -72,7 +72,7 @@ def generate_conv_tb():
                     # weight shape - [K,C,R,S]
                     weight_shape = [kernel_size[0], act_shape[1], kernel_size[1], kernel_size[2]]
                     conv_test_params = ConvTestParameters(act_shape, weight_shape, stride[0], stride[1], pad[0], pad[1])
-                    op_full_compute = (R == S) and (R == 1 or R == 3) and stride[0] == 1 and stride[1] == 1 and pad[0] == 0 and pad[1] == 0
+                    op_full_compute = (R == S) and (pad[0] == pad[1])
                     if op_full_compute:
                         conv_op_test_params = ConvOpTestParameters(conv_test_params, TestLevel.OP_FULL_COMPUTE)
                     else:

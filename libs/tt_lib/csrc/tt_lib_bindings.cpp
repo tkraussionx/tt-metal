@@ -1,3 +1,5 @@
+#include "dtx/dtx.hpp"
+#include "dtx/dtx_passes.hpp"
 #include "tt_dnn/op_library/eltwise_binary/eltwise_binary_op.hpp"
 #include "tt_dnn/op_library/bmm/bmm_op.hpp"
 #include "tt_dnn/op_library/conv/conv_op.hpp"
@@ -11,7 +13,6 @@
 #include "tt_dnn/op_library/tilize/tilize_op.hpp"
 #include "tt_dnn/op_library/untilize/untilize_op.hpp"
 #include "tt_dnn/op_library/reshape/reshape_op.hpp"
-
 #include "tensor/tensor_utils.hpp"
 
 #include "tt_lib_bindings.hpp"
@@ -754,6 +755,14 @@ void TensorModule(py::module &m_tensor) {
         | a        | Input tensor         | Tensor    |             | Yes      |
         +----------+----------------------+-----------+-------------+----------+
     )doc");
+    // m_tensor.def("conv_transform_evaluate", &conv_transform_evaluate, R"doc(
+    //     Evaluates data transformation for conv activation.
+    //     +------------------+----------------------------+-----------------------+-------------+----------+
+    //     | Argument         | Description                 | Data type            | Valid range | Required |
+    //     +==================+=============================+======================+=============+==========+
+    //     | data             | Input data to transform     | vector of floats     |             | Yes      |
+    //     +------------------+-----------------------------+----------------------+-------------+----------+
+    // )doc");
 }
 
 void DeviceModule(py::module &m_device) {
@@ -829,6 +838,29 @@ void DeviceModule(py::module &m_device) {
     )doc");
 }
 
+void DTXModule(py::module &m_dtx) {
+
+    // m_dtx.def("evaluate", &evaluate, R"doc(
+    //     Evaluates data transformation.
+    //     +------------------+----------------------------+-----------------------+-------------+----------+
+    //     | Argument         | Description                 | Data type            | Valid range | Required |
+    //     +==================+=============================+======================+=============+==========+
+    //     | data             | Input data to transform     | vector of floats     |             | Yes      |
+    //     | dtx              | Data transformations object | DataTransformations* |             | Yes      |
+    //     +------------------+-----------------------------+----------------------+-------------+----------+
+    // )doc");
+    m_dtx.def("conv_transform_evaluate", [](vector<int> shape, vector<int> conv_params, vector<float> data){
+        return conv_transform_evaluate(shape, conv_params, data);
+    }, R"doc(
+        Evaluates data transformation for conv activation.
+        +------------------+----------------------------+-----------------------+-------------+----------+
+        | Argument         | Description                 | Data type            | Valid range | Required |
+        +==================+=============================+======================+=============+==========+
+        | data             | Input data to transform     | vector of floats     |             | Yes      |
+        +------------------+-----------------------------+----------------------+-------------+----------+
+    )doc");
+}
+
 } // end namespace tt_metal
 
 } // end namespace tt
@@ -844,4 +876,7 @@ PYBIND11_MODULE(_C, m) {
 
     py::module_ m_tensor = m.def_submodule("tensor", "Submodule defining an tt_metal tensor");
     tt::tt_metal::TensorModule(m_tensor);
+
+    py::module_ m_dtx = m.def_submodule("dtx", "Submodule defining data transformation engine");
+    tt::tt_metal::DTXModule(m_dtx);
 }

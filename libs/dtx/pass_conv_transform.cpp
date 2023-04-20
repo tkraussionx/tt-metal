@@ -1,0 +1,71 @@
+#include "dtx.hpp"
+#include "dtx_passes.hpp"
+#include "util.hpp"
+#include "util_vector_of_ints.hpp"
+
+DataTransformations * conv_transform(vector<int> shape, vector<int> conv_params, bool run_pad_pass) {
+    //assert(R == S && "Only square kernel window supported.");
+    //assert((R == 1 || R == 3) && "Only 1x1 and 3x3 kernel window supported.");
+    auto activation_C = shape[1];
+    //assert(activation_C % 32 == 0 && "Channel depth of tensor needs to be divisible by 32");
+    // Right side: AbstractTensor --> consumer conv/mm
+    DataTransformations * dtx_right = new DataTransformations();
+    TransformationNode * node0 = new TransformationNode("producer", 1);
+    node0->groups[0]->shape = shape;
+    dtx_right->transformations.push_back(node0);
+    bool pass = true;
+    pass &= convert_tensor_layout_CL1_to_2Dmatrix(dtx_right, conv_params);
+    // if (R == 1) {
+    //     pass &= convert_tensor_layout_CL1_to_2Dmatrix_conv1x1_s1(dtx_right);
+    // }
+    // else {
+    //     pass &= convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1(dtx_right);
+    // }
+    // Get the 2d matrix shape
+    auto matrix_shape = dtx_right->transformations.back()->groups[0]->shape;
+    assert(matrix_shape.size() == 3);
+    assert(matrix_shape[0] == 1);
+    uint32_t num_rows = (uint32_t) matrix_shape[1];
+    uint32_t num_cols = (uint32_t) matrix_shape[2];
+    if (run_pad_pass) {
+        pass &= pad_2d_matrix(dtx_right, {32,32});
+    }
+    pass &= row_major_memory_store(dtx_right);
+
+    //cout << "\n\nDTX_RIGHT" << endl;
+    //dtx_right->print();
+
+
+    // Left side: AbstractTensor --> producer memory buffer
+    DataTransformations * dtx_left = new DataTransformations();
+    TransformationNode * node1 = new TransformationNode("producer", 1);
+    node1->groups[0]->shape = shape;
+    dtx_left->transformations.push_back(node1);
+    pass &= convert_abstract_tensor_to_channels_last_layout(dtx_left);
+
+    //cout << "\n\nDTX_LEFT" << endl;
+    //dtx_left->print();
+
+    DataTransformations * combined = reverse_and_combine_transformations(dtx_left, dtx_right);
+    //cout << "\n\nDTX_COMBINED" << endl;
+    //combined->print();
+
+    pass &= optimize_away_transpose(combined);
+    //cout << "\n\nDTX_OPTIMIZED" << endl;
+    //combined->print();
+
+    pass &= collapse_transformations(combined);
+    //cout << "\n\nDTX_COLLAPSED" << endl;
+    //combined->print();
+    pass &= generate_transfer_addresses(combined);
+    //combined->print();
+    std::cout << "NUM ROWS=" << num_rows << std::endl;
+    std::cout << "NUM COLS=" << num_cols << std::endl;
+    return combined;
+}
+
+vector<float> conv_transform_evaluate(vector<int> shape, vector<int> conv_params, vector<float> data) {
+    bool pass = true;
+    auto dtx = conv_transform(shape, conv_params, true);
+    return evaluate(data, dtx);
+}

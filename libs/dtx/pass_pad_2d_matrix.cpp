@@ -19,7 +19,7 @@ bool pad_2d_matrix(DataTransformations * dtx, vector<int> pad_to_nearest) {
         assert(rank >= 2 && rank <= 4);
         auto consumer_shape = producer_shape;
         consumer_shape[X(rank)] = std::ceil((double) producer_shape[X(rank)] / (double) pad_to_nearest[1]) * pad_to_nearest[1];
-        consumer_shape[Y(rank)] = std::ceil((double) producer_shape[X(rank)] / (double) pad_to_nearest[0]) * pad_to_nearest[0];
+        consumer_shape[Y(rank)] = std::ceil((double) producer_shape[Y(rank)] / (double) pad_to_nearest[0]) * pad_to_nearest[0];
         consumer_group->shape = consumer_shape;
         if(DEBUG) cout << "Producer shape - " << v2s(producer_shape) << endl;
         if(DEBUG) cout << "Consumer shape - " << v2s(consumer_shape) << endl;
@@ -43,9 +43,9 @@ bool pad_2d_matrix(DataTransformations * dtx, vector<int> pad_to_nearest) {
                     end[X(rank)] = producer_shape[X(rank)]-1;
                     vector<int> consumer_str(str);
                     vector<int> consumer_end(end);
-                    consumer_group->tensor_pairs.push_back(new TensorPair(new Tensor(str, end),
+                    consumer_group->tensor_pairs.push_back(new TensorPair(new DTXTensor(str, end),
                                                     g_idx,
-                                                    new Tensor(consumer_str, consumer_end)));
+                                                    new DTXTensor(consumer_str, consumer_end)));
                     i++;
                     if (DEBUG) cout << s(6) << i << ".  " << consumer_group->tensor_pairs.back()->get_string() << endl;
                     auto pad_width = consumer_shape[X(rank)] - producer_shape[X(rank)];
@@ -57,9 +57,9 @@ bool pad_2d_matrix(DataTransformations * dtx, vector<int> pad_to_nearest) {
                         str[X(rank)] = 0;
                         end[Y(rank)] = 0;
                         end[X(rank)] = pad_width - 1;
-                        consumer_group->tensor_pairs.push_back(new TensorPair(new Tensor(str, end),
+                        consumer_group->tensor_pairs.push_back(new TensorPair(new DTXTensor(str, end),
                                                     -1,
-                                                    new Tensor(consumer_str, consumer_end)));
+                                                    new DTXTensor(consumer_str, consumer_end)));
                         i++;
                         if (DEBUG) cout << s(6) << i << ".  " << consumer_group->tensor_pairs.back()->get_string() << endl;
                     }
@@ -78,9 +78,9 @@ bool pad_2d_matrix(DataTransformations * dtx, vector<int> pad_to_nearest) {
                         consumer_str[X(rank)] = 0;
                         vector<int> consumer_end(consumer_str);
                         consumer_end[X(rank)] = pad_width - 1;
-                        consumer_group->tensor_pairs.push_back(new TensorPair(new Tensor(str, end),
+                        consumer_group->tensor_pairs.push_back(new TensorPair(new DTXTensor(str, end),
                                                         -1,
-                                                        new Tensor(consumer_str, consumer_end)));
+                                                        new DTXTensor(consumer_str, consumer_end)));
                         i++;
                         if (DEBUG) cout << s(6) << i << ".  " << consumer_group->tensor_pairs.back()->get_string() << endl;
                     }

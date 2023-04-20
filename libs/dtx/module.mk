@@ -12,6 +12,7 @@ DTX_SRCS = \
 	libs/dtx/pass_collapse_transformations.cpp \
 	libs/dtx/pass_convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1.cpp \
 	libs/dtx/pass_convert_tensor_layout_CL1_to_2Dmatrix_conv1x1_s1.cpp \
+	libs/dtx/pass_convert_tensor_layout_CL1_to_2Dmatrix.cpp \
 	libs/dtx/pass_generate_transfer_addresses.cpp \
 	libs/dtx/pass_reverse_transformations.cpp \
 	libs/dtx/pass_transpose_xy.cpp \
@@ -23,6 +24,7 @@ DTX_SRCS = \
 	libs/dtx/pass_block_2d_matrix.cpp \
 	libs/dtx/pass_util.cpp \
 	libs/dtx/pass_simple_high_level_pass.cpp \
+	libs/dtx/pass_conv_transform.cpp \
 	libs/dtx/util.cpp \
 	libs/dtx/util_vector_of_ints.cpp
 

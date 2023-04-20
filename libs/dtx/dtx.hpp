@@ -36,19 +36,19 @@ class TensorData {
         void generate_csv(string filename);
 };
 
-class Tensor {
+class DTXTensor {
     public:
         vector<int> str;
         vector<int> end;
         int rank = -1;
 
-        Tensor(vector<int> str, vector<int> end){
+        DTXTensor(vector<int> str, vector<int> end){
             this->str = str;
             this->end = end;
             this->rank = this->str.size();
         }
 
-        Tensor() {
+        DTXTensor() {
             this->rank = 0;
         };
 
@@ -60,17 +60,17 @@ class Tensor {
 
 class TensorPair {
     public:
-        Tensor * src_tensor;    // Tensor range
+        DTXTensor * src_tensor;    // Tensor range
         int src_group;          // ID of the group to which the src_tensor is pointing
-        Tensor * dst_tensor;    // Tensor Range
+        DTXTensor * dst_tensor;    // Tensor Range
 
-        TensorPair(Tensor * src_tensor,  Tensor * dst_tensor) {
+        TensorPair(DTXTensor * src_tensor,  DTXTensor * dst_tensor) {
             this->src_tensor = src_tensor;
             this->src_group = 0;
             this->dst_tensor = dst_tensor;
         }
 
-        TensorPair(Tensor * src_tensor, int src_group, Tensor * dst_tensor) {
+        TensorPair(DTXTensor * src_tensor, int src_group, DTXTensor * dst_tensor) {
             this->src_tensor = src_tensor;
             this->src_group = src_group;
             this->dst_tensor = dst_tensor;
