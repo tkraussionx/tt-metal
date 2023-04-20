@@ -354,6 +354,9 @@ void generate_binary_for_risc(
     const std::vector<std::uint32_t>& kernel_compile_time_args,
     bool profile_kernel) {
 
+    profile_kernel = true;
+    TT_ASSERT(profile_kernel);
+
     // default ARCH_NAME is grayskull in Makefile
     TT_ASSERT( (arch_name.compare("grayskull") == 0) || (arch_name.compare("wormhole") == 0) || (arch_name.compare("wormhole_b0") == 0) );
 
@@ -891,6 +894,8 @@ void generate_binaries_for_triscs(
     const std::vector<std::uint32_t>& kernel_compile_time_args,
     bool profile_kernel)
 {
+
+    profile_kernel = true;
 
     generate_src_for_triscs(topts, dir, arch_name, kernel_compile_time_args);
     auto lambda0 = [=]() { generate_binary_for_risc(RISCID::TR0, topts, dir, arch_name, 0, kernel_compile_time_args, profile_kernel); };

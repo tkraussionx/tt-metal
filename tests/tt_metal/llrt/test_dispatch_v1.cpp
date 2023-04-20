@@ -1,5 +1,5 @@
 #include "dispatch/dispatch_helper_functions.hpp"
-#include "llrt/tt_debug_print_server.hpp"
+// #include "llrt/tt_debug_print_server.hpp"
 #include "tt_metal/hostdevcommon/profiler_common.h"
 
 uint32_t nearest_multiple_of_32(uint32_t addr) { return ceil(float(addr) / 32) * 32; }
@@ -342,14 +342,14 @@ void dumpDeviceResultToFile(
         int core_y,
         std::string hart_name,
         uint64_t timestamp,
-        uint32_t timer_id){
+        uint32_t timer_id,
+        bool device_new_log){
 
     #define DEVICE_SIDE_LOG "profile_log_device.csv"
 
     std::filesystem::path output_dir = std::filesystem::path("tt_metal/tools/profiler/logs");
     std::filesystem::path log_path = output_dir / DEVICE_SIDE_LOG;
     std::ofstream log_file;
-    bool device_new_log = true;
     if (device_new_log)
     {
         log_file.open(log_path);
@@ -402,6 +402,7 @@ void readRiscProfilerResults(
     dropped_marker_counter = profile_buffer[kernel_profiler::DROPPED_MARKER_COUNTER];
 
     std::cout << "END INDEX: " << end_index << std::endl;
+    bool device_new_log = true;
     for (int i = kernel_profiler::MARKER_DATA_START; i < end_index; i+=kernel_profiler::TIMER_DATA_UINT32_SIZE) {
         dumpDeviceResultToFile(
                 pcie_slot,
@@ -409,7 +410,8 @@ void readRiscProfilerResults(
                 worker_core.y,
                 risc_name,
                 (uint64_t(profile_buffer[i+kernel_profiler::TIMER_VAL_H]) << 32) | profile_buffer[i+kernel_profiler::TIMER_VAL_L],
-                profile_buffer[i+kernel_profiler::TIMER_ID]);
+                profile_buffer[i+kernel_profiler::TIMER_ID], device_new_log);
+        device_new_log = false;
     }
 }
 

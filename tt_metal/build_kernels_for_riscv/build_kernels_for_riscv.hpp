@@ -22,7 +22,7 @@ void generate_binary_for_risc(
     const std::string& arch_name,
     const std::uint8_t noc_index=0,
     const std::vector<std::uint32_t>& kernel_compile_time_args = {},
-    bool profile_kernel = false);
+    bool profile_kernel = true);
 
 struct generate_binaries_params_t {
     bool            skip_hlkc = false;

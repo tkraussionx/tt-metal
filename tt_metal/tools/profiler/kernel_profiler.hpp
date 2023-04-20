@@ -16,6 +16,8 @@
 
 //TODO: Add mechanism for selecting PROFILER markers
 
+// #define PROFILE_KERNEL
+
 namespace kernel_profiler{
 
     /*
