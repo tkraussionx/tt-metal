@@ -14,6 +14,7 @@ class Op {
         // Have to initialize these statics in source file
         static bool profile_ops;
         static string profile_folder;
+        Profiler op_profiler;
 
     public:
         // TODO: Move definition to .cpp
@@ -70,6 +71,7 @@ class Op {
 
         Op() {
             program = new tt_metal::Program();
+            op_profiler = Profiler();
         }
         virtual ~Op() {
             if (program != nullptr) {
