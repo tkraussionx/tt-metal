@@ -3,7 +3,7 @@
 #include "util.hpp"
 #include "util_vector_of_ints.hpp"
 
-DataTransformations * conv_transform(vector<int> shape, vector<int> conv_params, bool run_pad_pass) {
+DataTransformations * conv_transform(vector<int> shape, vector<int> conv_params, std::pair<vector<int>,vector<int>> block_info) {
     //assert(R == S && "Only square kernel window supported.");
     //assert((R == 1 || R == 3) && "Only 1x1 and 3x3 kernel window supported.");
     auto activation_C = shape[1];
@@ -27,8 +27,15 @@ DataTransformations * conv_transform(vector<int> shape, vector<int> conv_params,
     assert(matrix_shape[0] == 1);
     uint32_t num_rows = (uint32_t) matrix_shape[1];
     uint32_t num_cols = (uint32_t) matrix_shape[2];
-    if (run_pad_pass) {
+    if (true) {
         pass &= pad_2d_matrix(dtx_right, {32,32});
+    }
+    auto dim_order = block_info.first;
+    auto block_shape = block_info.second;
+    if(dim_order[0] != -1 && block_shape[0] != -1) {
+        std::cout << "Starting blocking" << std::endl;
+        pass &= block_2d_matrix(dtx_right, dim_order, block_shape);
+        std::cout << "Done blocking" << std::endl;
     }
     pass &= row_major_memory_store(dtx_right);
 
@@ -58,14 +65,8 @@ DataTransformations * conv_transform(vector<int> shape, vector<int> conv_params,
     //cout << "\n\nDTX_COLLAPSED" << endl;
     //combined->print();
     pass &= generate_transfer_addresses(combined);
-    //combined->print();
+    combined->print();
     std::cout << "NUM ROWS=" << num_rows << std::endl;
     std::cout << "NUM COLS=" << num_cols << std::endl;
     return combined;
-}
-
-vector<float> conv_transform_evaluate(vector<int> shape, vector<int> conv_params, vector<float> data) {
-    bool pass = true;
-    auto dtx = conv_transform(shape, conv_params, true);
-    return evaluate(data, dtx);
 }

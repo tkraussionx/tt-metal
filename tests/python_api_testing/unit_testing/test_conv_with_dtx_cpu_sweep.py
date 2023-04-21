@@ -66,7 +66,7 @@ def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
     assert(conv_op_test_params.test_level == TestLevel.OP_FULL_COMPUTE)
     A_cl_data = A_cl.data()
     # Call DTX pass to transform A
-    A_transformed_data = ttl.dtx.conv_transform_evaluate([C,H,W], [R,S,stride_h,stride_w,pad_h,pad_w], A_cl_data)
+    A_transformed_data = ttl.dtx.evaluate(A_cl_data, ttl.dtx.conv_transform([C,H,W], [R,S,stride_h,stride_w,pad_h,pad_w], ([-1],[-1])))
     A_transformed_pytorch_tensor = torch.tensor(A_transformed_data).reshape(mm_input_shape)
 
     B_tiled_ = ttl.tensor.convert_conv_weight_tensor_to_tiled_layout(B_)

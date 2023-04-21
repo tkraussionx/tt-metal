@@ -130,6 +130,4 @@ vector<float> evaluate(vector<float> data, DataTransformations * dtx);
 
 DataTransformations * simple_high_level_pass(vector<int> shape);
 
-DataTransformations * conv_transform(vector<int> shape, vector<int> conv_params, bool run_pad_pass);
-
-vector<float> conv_transform_evaluate(vector<int> shape, vector<int> conv_params, vector<float> data);
+DataTransformations * conv_transform(vector<int> shape, vector<int> conv_params, std::pair<vector<int>,vector<int>> block_info);

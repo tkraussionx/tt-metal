@@ -839,20 +839,21 @@ void DeviceModule(py::module &m_device) {
 }
 
 void DTXModule(py::module &m_dtx) {
-
-    // m_dtx.def("evaluate", &evaluate, R"doc(
-    //     Evaluates data transformation.
-    //     +------------------+----------------------------+-----------------------+-------------+----------+
-    //     | Argument         | Description                 | Data type            | Valid range | Required |
-    //     +==================+=============================+======================+=============+==========+
-    //     | data             | Input data to transform     | vector of floats     |             | Yes      |
-    //     | dtx              | Data transformations object | DataTransformations* |             | Yes      |
-    //     +------------------+-----------------------------+----------------------+-------------+----------+
-    // )doc");
-    m_dtx.def("conv_transform_evaluate", [](vector<int> shape, vector<int> conv_params, vector<float> data){
-        return conv_transform_evaluate(shape, conv_params, data);
+    auto pyDataTransformations = py::class_<DataTransformations>(m_dtx, "DataTransformations", "Class describing the data transformations.");
+    m_dtx.def("evaluate", [](vector<float> data, DataTransformations * dtx){
+        return evaluate(data, dtx);
     }, R"doc(
-        Evaluates data transformation for conv activation.
+        Evaluates data transformation on host cpu.
+        +------------------+----------------------------+-----------------------+-------------+----------+
+        | Argument         | Description                 | Data type            | Valid range | Required |
+        +==================+=============================+======================+=============+==========+
+        | data             | Input data to transform     | vector of floats     |             | Yes      |
+        +------------------+-----------------------------+----------------------+-------------+----------+
+    )doc");
+    m_dtx.def("conv_transform", [](vector<int> shape, vector<int> conv_params, std::pair<vector<int>,vector<int>> block_info){
+        return conv_transform(shape, conv_params, block_info);
+    }, R"doc(
+        Evaluates data transformation on host cpu.
         +------------------+----------------------------+-----------------------+-------------+----------+
         | Argument         | Description                 | Data type            | Valid range | Required |
         +==================+=============================+======================+=============+==========+

@@ -54,7 +54,7 @@ vector<vector<int>> dim_order_counting(vector<int> shape, vector<int> dim_order,
 
 
 bool block_2d_matrix(DataTransformations * dtx, vector<int> dim_order, vector<int> block_shape_yx) {
-    bool DEBUG = false;
+    bool DEBUG = true;
     assert(block_shape_yx.size() == 2);
     if (DEBUG) cout << "\n\nPASS: Block 2d matrix" << endl;
 
@@ -76,6 +76,7 @@ bool block_2d_matrix(DataTransformations * dtx, vector<int> dim_order, vector<in
 
         vector<int> block_shape = vector_pad_on_left(block_shape_yx, rank-2, 1);
         if (DEBUG) cout << s(4) << "block shape      = " << v2s(block_shape) << endl;
+        if (DEBUG) cout << s(4) << "shape      = " << v2s(shape) << endl;
         vector<int> shape_blocked = vector_division(shape, block_shape);
         vector<vector<int>> list_of_counted_dims = dim_order_counting(shape_blocked,   dim_order, block_shape);
 
