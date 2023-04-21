@@ -35,8 +35,13 @@ namespace kernel_profiler{
 #if defined(PROFILE_KERNEL)
         buffer = reinterpret_cast<uint32_t*>(get_debug_print_buffer());
         wIndex = MARKER_DATA_START;
-        buffer [BUFFER_END_INDEX] = wIndex;
-        buffer [DROPPED_MARKER_COUNTER] = 0;
+        if (buffer[DROPPED_MARKER_COUNTER] == 256) {
+            wIndex = buffer [ BUFFER_END_INDEX];
+        } else {
+            buffer [BUFFER_END_INDEX] = wIndex;
+        }
+
+        buffer [DROPPED_MARKER_COUNTER] = 256;
 #endif //PROFILE_KERNEL
     }
 

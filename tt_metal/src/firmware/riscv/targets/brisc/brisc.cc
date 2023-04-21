@@ -300,6 +300,7 @@ void local_mem_copy() {
 }
 
 int main() {
+
     kernel_profiler::init_BR_profiler();
 
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
@@ -344,12 +345,12 @@ int main() {
     }
 
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & KERNEL_FUNCT_MARKER)
-    kernel_profiler::mark_time(CC_KERNEL_MAIN_START);
+    // kernel_profiler::mark_time(CC_KERNEL_MAIN_START);
 #endif
     // Run the BRISC kernel
     kernel_main();
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & KERNEL_FUNCT_MARKER)
-    kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
+    // kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
 #endif
 
     if (*use_triscs) {

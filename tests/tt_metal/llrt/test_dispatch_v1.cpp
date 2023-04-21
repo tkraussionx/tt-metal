@@ -431,19 +431,19 @@ void host_dispatch(tt_cluster *cluster, int chip_id, string op, tt_xy_pair dispa
     // Deassert dispatch core
     // tt_start_debug_print_server(cluster, {chip_id}, {dispatch_core});
 
-    tt::llrt::internal_::setup_riscs_on_specified_cores(
-        cluster, chip_id, tt::llrt::TensixRiscsOptions::BRISC_ONLY, {dispatch_core});
-    tt::llrt::internal_::setup_riscs_on_specified_cores(
-        cluster, chip_id, tt::llrt::TensixRiscsOptions::ALL_RISCS, {worker_core});
 
     uint32_t dispatch_done_addr = 0;
     vector<uint32_t> hugepage_done_addrs = {dispatch_done_addr};
 
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 1; i++) {
+        tt::llrt::internal_::setup_riscs_on_specified_cores(
+            cluster, chip_id, tt::llrt::TensixRiscsOptions::BRISC_ONLY, {dispatch_core});
+        tt::llrt::internal_::setup_riscs_on_specified_cores(
+            cluster, chip_id, tt::llrt::TensixRiscsOptions::ALL_RISCS, {worker_core});
         tt::llrt::internal_::run_riscs_on_specified_cores(
             cluster, chip_id, tt::llrt::TensixRiscsOptions::BRISC_ONLY, {dispatch_core}, hugepage_done_addrs);
     }
-    readRiscProfilerResults(cluster, 0, {1, 1}, "BRISC", PRINT_BUFFER_BR);
+    readRiscProfilerResults(cluster, 0, {11, 1}, "BRISC", PRINT_BUFFER_BR);
 }
 
 bool test_dispatch_v1(tt_cluster *cluster, int chip_id, string op) {

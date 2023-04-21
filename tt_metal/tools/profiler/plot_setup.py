@@ -44,6 +44,7 @@ class default_setup(metaclass=MergeMetaclass):
             "start": {"core":"ANY", "risc": "ANY", "timerID": 1},
             "end": {"core":"ANY", "risc": "ANY", "timerID": 4},
         },
+
     }
 
     riscsData = {
@@ -100,6 +101,15 @@ class default_setup(metaclass=MergeMetaclass):
     deviceStatsTXT = "device_stats.txt"
     deviceTarball = "device_perf_results.tgz"
 
+class test_dispatch_v1(default_setup):
+    timerAnalysis = {
+        "Dispatch start -> Dispatch end": {
+            "across": "risc",
+            "type": "adjacent",
+            "start": {"risc": "BRISC", "timerID": 6},
+            "end": {"risc": "BRISC", "timerID": 7},
+        },
+    }
 
 class test_matmul_multi_core_multi_dram(default_setup):
     timerAnalysis = {
