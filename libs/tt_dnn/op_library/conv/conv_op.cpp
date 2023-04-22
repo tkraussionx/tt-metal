@@ -135,7 +135,7 @@ Tensor create_output_dram_buffer_(Device * device, DataType data_type, std::arra
     return output;
 }
 
-std::tuple<uint32_t, uint32_t, uint32_t> compute_block_info_(uint32_t M, uint32_t K, uint32_t N, uint32_t channel_stick_size_datums) {
+std::tuple<uint32_t, uint32_t, uint32_t> compute_conv_op_block_info(uint32_t M, uint32_t K, uint32_t N, uint32_t channel_stick_size_datums) {
     uint32_t single_tile_size_bytes = 2 * 1024;
 
     // Constraint 1: in0 and in1 should fit in L1. If not, divide into blocks
@@ -155,16 +155,16 @@ std::tuple<uint32_t, uint32_t, uint32_t> compute_block_info_(uint32_t M, uint32_
         assert(num_blocks <= K);
         in_block_w = K / num_blocks;
     }
-    // Constraint 1.5: Reader kernel splits DTX transfers (TODO: fix this in DTX to remove this constraint)
-    assert(channel_stick_size_datums % 32 == 0);
-    if (num_blocks > 1 && in_block_w * 32 > channel_stick_size_datums) {
-        while(in_block_w * 32 % channel_stick_size_datums != 0) {
-            num_blocks += 1;
-            assert(num_blocks <= K);
-            in_block_w = K / num_blocks;
-            assert(in_block_w * 32 >= channel_stick_size_datums);
-        }
-    }
+    // // Constraint 1.5: Reader kernel splits DTX transfers (TODO: fix this in DTX to remove this constraint)
+    // assert(channel_stick_size_datums % 32 == 0);
+    // if (num_blocks > 1 && in_block_w * 32 > channel_stick_size_datums) {
+    //     while(in_block_w * 32 % channel_stick_size_datums != 0) {
+    //         num_blocks += 1;
+    //         assert(num_blocks <= K);
+    //         in_block_w = K / num_blocks;
+    //         assert(in_block_w * 32 >= channel_stick_size_datums);
+    //     }
+    // }
     std::cout << "Num blocks=" << num_blocks << std::endl;
     std::cout << "K Block size=" << in_block_w << std::endl;
 
@@ -284,7 +284,10 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
     std::cout << "Wat(K in tiles)=" << Wat << std::endl;
     std::cout << "Wbt(N in tiles)=" << Wbt << std::endl;
     // compute block info
-    auto [num_blocks, out_subblock_h, out_subblock_w] = compute_block_info_(Hat, Wat, Wbt, activation_C);
+    auto [num_blocks, out_subblock_h, out_subblock_w] = compute_conv_op_block_info(Hat, Wat, Wbt, activation_C);
+    // uint32_t num_blocks = 2;
+    // uint32_t out_subblock_h = 1;
+    // uint32_t out_subblock_w = 1;
     // in0 block info
     uint32_t in0_block_w = Wat / num_blocks; // Two blocks in the W dimension
     uint32_t in0_block_w_datums = Wa / num_blocks;
@@ -301,17 +304,43 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
     // Generate address map for reader kernel
     assert(dtx->transformations.size() == 2);
     assert(dtx->transformations.back()->groups[0]->transfers.size() > 0);
+    uint32_t block_size_bytes = num_rows * in0_block_w_datums * 2;
+    uint32_t b_bytes = 0;
+    uint32_t n_blocks = 0;
+    uint32_t block_start_address = 0;
     for(auto transfer : dtx->transformations.back()->groups[0]->transfers){
+        bool dst_address_in_block = (uint32_t) transfer->dst_address*2 >= block_start_address;
+        bool dst_read_in_block = (uint32_t) transfer->dst_address*2 - block_start_address + transfer->size*2 <= block_size_bytes;
+        if(!dst_read_in_block || !dst_address_in_block) {
+            std::cout << "dst_address_in_block=" << dst_address_in_block << std::endl;
+            std::cout << "dst_read_in_block=" << dst_read_in_block << std::endl;
+            std::cout << "n_blocks=" << n_blocks << std::endl;
+            std::cout << "block_start_address=" << block_start_address << std::endl;
+            std::cout << "dst_address=" << transfer->dst_address*2 << std::endl;
+            std::cout << "dst_size=" << transfer->size*2 << std::endl;
+            std::cout << "block_size_bytes=" << block_size_bytes << std::endl;
+        }
+        assert(dst_read_in_block);
+        assert(dst_address_in_block);
         address_map.push_back(transfer->src_address*2);
         address_map.push_back(transfer->dst_address*2);
         address_map.push_back(transfer->size*2);
         address_map.push_back(transfer->pad);
         t_bytes += transfer->size*2;
+        b_bytes += transfer->size*2;
+        if(b_bytes == block_size_bytes) {
+            block_start_address = t_bytes;
+            b_bytes = 0;
+            n_blocks++;
+        }
     }
     uint32_t total_bytes = num_rows * num_cols * 2; // 2 for bfloat16
+    assert(b_bytes == 0);
+    assert(n_blocks == num_blocks);
     assert(total_bytes == t_bytes);
-    assert(total_bytes % 2*num_blocks == 0);
-    uint32_t in0_block_size_bytes = total_bytes / (2*num_blocks);
+    assert(total_bytes % num_blocks == 0);
+    uint32_t in0_block_size_bytes = total_bytes / num_blocks;
+    assert(in0_block_size_bytes == block_size_bytes);
 
     tt_metal::Program *program = new tt_metal::Program();
     tt_xy_pair core = {0, 0};
@@ -363,7 +392,7 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
         uint32_t in0_block_num_tiles = out_subblock_h * in0_block_w * in0_num_subblocks;
         uint32_t in0_subblock_h = (in0_block_num_tiles / in0_num_subblocks) / in0_block_w;
         uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w;
-        assert(in0_block_size_bytes == 1024 * in0_block_num_tiles);
+        assert(in0_block_size_bytes == single_tile_size * in0_block_num_tiles);
         // std::cout << "in0_block_num_tiles=" << in0_block_num_tiles << std::endl;
         // std::cout << "in0_subblock_h=" << in0_subblock_h << std::endl;
         // std::cout << "in0_subblock_num_tiles=" << in0_subblock_num_tiles << std::endl;

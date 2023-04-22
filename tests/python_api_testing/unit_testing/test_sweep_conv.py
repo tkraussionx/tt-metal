@@ -50,7 +50,7 @@ def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
         ttl.tensor.DataType.BFLOAT16,
         ttl.tensor.Layout.ROW_MAJOR)
     A_cl = A_.to(ttl.tensor.Layout.CHANNELS_LAST)
-    A = A_cl.to(device)
+    A = A_cl.to(device, ttl.tensor.MemoryConfig(False, 0))
 
     # Prepare weights
     B_pyt = pytorch_inputs_and_golden[1]
@@ -67,7 +67,7 @@ def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
         return True
     assert(conv_op_test_params.test_level == TestLevel.OP_FULL_COMPUTE)
     # Run TT metal OP
-    out = ttl.tensor.conv_as_large_bmm_single_core(A, B_tiled, R, S)
+    out = ttl.tensor.conv_as_large_bmm_single_core(A, B_tiled, [R,S,stride_h,stride_w,pad_h,pad_w])
     assert(out.shape() == mm_output_shape)
     # Copy output to host and convert tt tensor to pytorch tensor
     out_pytorch = torch.tensor(out.to(host).data()).reshape(mm_output_shape)
@@ -104,6 +104,9 @@ def test_sweep_conv():
                 full_op_compute_passing_tests.append(conv_op_test_params)
         else:
             failing_tests.append(conv_op_test_params)
+            print("Failed test - ")
+            conv_op_test_params.print("   ")
+            assert(False)
         passing &= passing_
     print("Following tests that create only input tensors passed - ")
     for conv_op_test_params in input_tensor_only_passing_tests:

@@ -17,10 +17,11 @@ import torch
 @pytest.mark.parametrize(
     "K, C, H, W, R, S",
     (
-        (32, 32, 8, 4, 1, 1),
+       # (32, 32, 8, 4, 1, 1),
         # (32, 32, 10, 10, 3, 3),
         # (64, 64, 32, 16, 1, 1),
         # (64, 64, 10, 10, 1, 1),
+         (32, 64, 10, 10, 3, 3),
     ),
 )
 def test_run_conv_as_large_matmul(K, C, H, W, R, S):
@@ -36,9 +37,13 @@ def test_run_conv_as_large_matmul(K, C, H, W, R, S):
     host = ttl.device.GetHost()
     a_activation_shape = [1,C,H,W]
     b_weights_shape = [K,C,R,S]
-    mm_input_shape = [1, 1, _nearest_32(OH*OW), C*R*S]
-    mm_weight_shape = [1, 1, C*R*S, K]
-    mm_output_shape = [1,1,_nearest_32(OH*OW),K]
+    mm_input_rows = _nearest_32(OH*OW)
+    mm_input_cols = C*R*S
+    assert mm_input_cols % 32 == 0
+    assert K % 32 == 0
+    mm_input_shape = [1, 1, mm_input_rows, mm_input_cols]
+    mm_weight_shape = [1, 1, mm_input_cols, K]
+    mm_output_shape = [1,1,mm_input_rows,K]
 
     A_pyt = torch.randn(a_activation_shape, dtype=torch.bfloat16).float()
     A_ = ttl.tensor.Tensor(
@@ -57,8 +62,12 @@ def test_run_conv_as_large_matmul(K, C, H, W, R, S):
         ttl.tensor.Layout.ROW_MAJOR
     )
     A_cl_data = A_cl.data()
+    # Determine block info from conv op
+    (num_blocks,_,_) = ttl.tensor.compute_conv_op_block_info((int) (mm_input_rows/32), (int) (mm_input_cols/32), (int) (K/32), C)
+    mm_input_block_cols = (int) (mm_input_cols / num_blocks);
+    block_info = ([0,1,2],[mm_input_rows, mm_input_block_cols])
     # Call DTX pass to transform A
-    A_transformed_data = ttl.dtx.evaluate(A_cl_data, ttl.dtx.conv_transform([C,H,W], [R,S,1,1,0,0], ([-1],[-1])))
+    A_transformed_data = ttl.dtx.evaluate(A_cl_data, ttl.dtx.conv_transform([C,H,W], [R,S,1,1,0,0], block_info))
     A_transformed_pytorch_tensor = torch.tensor(A_transformed_data).reshape(mm_input_shape)
 
     B_tiled_ = ttl.tensor.convert_conv_weight_tensor_to_tiled_layout(B_)
