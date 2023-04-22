@@ -6,7 +6,9 @@ void kernel_main() {
     uint32_t src_noc_x = get_arg_val<uint32_t>(1);
     uint32_t src_noc_y = get_arg_val<uint32_t>(2);
     uint32_t num_blocks = get_arg_val<uint32_t>(3);
-    uint32_t address_map_l1_addr = get_arg_val<uint32_t>(4);
+    uint32_t block_size_tiles = get_arg_val<uint32_t>(4);
+    uint32_t block_size_bytes = get_arg_val<uint32_t>(5);
+    uint32_t address_map_l1_addr = get_arg_val<uint32_t>(6);
 
     constexpr uint32_t cb_id_in0 = 0;
     volatile std::uint32_t* address_map = (volatile uint32_t*)(address_map_l1_addr);
@@ -19,9 +21,6 @@ void kernel_main() {
     }
     uint64_t zeros_base_noc_addr = get_noc_addr(l1_mem::address_map::ZEROS_BASE);
 
-    // Number of bytes in block
-    uint32_t block_size_bytes = get_tile_size(cb_id_in0) * block_size_tiles;
-
     uint32_t index = 0;
     // Read from DRAM into L1 using DTX address map and push one block at a time to CB
     for (uint32_t b = 0; b < num_blocks; b += 1) {
@@ -33,11 +32,12 @@ void kernel_main() {
             uint32_t src_address = address_map[index];
             uint32_t dst_address = address_map[index+1];
             uint32_t read_size = address_map[index+2];
-            if(src_address == UINT32_MAX) {
+            uint32_t pad = address_map[index+3];
+            if(pad) {
                 // source address is set to max. This refers to padding location.
                 // read zeroes from zero buffer
                 uint64_t src_noc_addr = zeros_base_noc_addr;
-                uint32_t dst_addr = l1_write_addr + address_map[index+1];
+                uint32_t dst_addr = l1_write_addr + dst_address;
                 uint32_t pad_size = read_size;
                 if (pad_size <= l1_mem::address_map::ZEROS_SIZE) {
                     noc_async_read(src_noc_addr, dst_addr, pad_size);
@@ -59,13 +59,11 @@ void kernel_main() {
             else {
                 uint32_t src_addr = src_addr_base + src_address;
                 uint64_t src_noc_addr = get_noc_addr(src_noc_x, src_noc_y, src_addr);
-                // We expect contiguous writes to L1. Should we remove destination address from the address map??
-                uint32_t dst_addr = l1_write_addr + address_map[index+1];
-                uint32_t read_size = address_map[index+2];
+                uint32_t dst_addr = l1_write_addr + dst_address;
                 noc_async_read(src_noc_addr, dst_addr, read_size);
             }
             bytes_read += read_size;
-            index += 3;
+            index += 4;
         }
         noc_async_read_barrier();
         cb_push_back(cb_id_in0, block_size_tiles);

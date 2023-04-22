@@ -65,7 +65,7 @@ DataTransformations * conv_transform(vector<int> shape, vector<int> conv_params,
     //cout << "\n\nDTX_COLLAPSED" << endl;
     //combined->print();
     pass &= generate_transfer_addresses(combined);
-    combined->print();
+    //combined->print();
     std::cout << "NUM ROWS=" << num_rows << std::endl;
     std::cout << "NUM COLS=" << num_cols << std::endl;
     return combined;

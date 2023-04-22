@@ -331,69 +331,72 @@ Tensor tilize_with_zero_padding(const Tensor &a) {
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;
 }
-
+vector<uint32_t> compute_conv_as_mm_shape_(vector<int> shape, vector<int> conv_params) {
+    int conv_input_x = shape[2];
+    int conv_input_y = shape[1];
+    int conv_input_z = shape[0];
+    int R = conv_params[0];
+    int S = conv_params[1];
+    int U = conv_params[2];
+    int V = conv_params[3];
+    int Pad_H = conv_params[4];
+    int Pad_W = conv_params[5];
+    int conv_output_h = ((conv_input_x - R + (2 * Pad_H)) / U) + 1;
+    int conv_output_w = ((conv_input_y - S + (2 * Pad_W)) / V) + 1;
+    std::cout << "conv_input_x=" << conv_input_x << std::endl;
+    std::cout << "conv_input_y=" << conv_input_y << std::endl;
+    std::cout << "conv_input_z=" << conv_input_z << std::endl;
+    std::cout << "conv_output_h=" << conv_output_h << std::endl;
+    std::cout << "conv_output_w=" << conv_output_w << std::endl;
+    // pad height
+    uint32_t num_rows = (uint32_t) conv_output_h*conv_output_w;
+    uint32_t num_rows_padded = (uint32_t) (ceil((double) num_rows / (double) TILE_HEIGHT ) * TILE_HEIGHT);
+    uint32_t num_cols = conv_input_z*R*S;
+    uint32_t num_cols_padded = (uint32_t) (ceil((double) num_cols / (double) TILE_WIDTH ) * TILE_HEIGHT);
+    return {1,num_rows_padded, num_cols_padded};
+}
 Tensor tilize_conv_activation(const Tensor &a, bool conv1x1 = false) {
     TT_ASSERT(a.layout() == Layout::CHANNELS_LAST, "Conv activation should be in channels last layout");
 
-    //vector<int> shape = {5, 4,4};
-    vector<int> shape = {(int) a.shape()[1], (int) a.shape()[2], (int) a.shape()[3]};
-
-    // Right side: AbstractTensor --> consumer conv/mm
-    DataTransformations * dtx_right = new DataTransformations();
-    TransformationNode * node0 = new TransformationNode("producer", 1);
-    node0->groups[0]->shape = shape;
-    dtx_right->transformations.push_back(node0);
-    bool pass = true;
-    if (conv1x1) {
-        pass &= convert_tensor_layout_CL1_to_2Dmatrix_conv1x1_s1(dtx_right);
+    // Compute the 2d matrix shape
+    vector<int> shape = {(int)a.shape()[1], (int)a.shape()[2], (int)a.shape()[3]};
+    vector<int> conv_params;
+    if(conv1x1) {
+        conv_params = {1,1,1,1,0,0};
     }
     else {
-        pass &= convert_tensor_layout_CL1_to_2Dmatrix_conv3x3_s1(dtx_right);
+        conv_params = {3,3,1,1,0,0};
     }
-    // Get the 2d matrix shape
-    auto matrix_shape = dtx_right->transformations.back()->groups[0]->shape;
+    auto matrix_shape = compute_conv_as_mm_shape_(shape , conv_params);
     assert(matrix_shape.size() == 3);
     assert(matrix_shape[0] == 1);
     uint32_t num_rows = (uint32_t) matrix_shape[1];
     uint32_t num_cols = (uint32_t) matrix_shape[2];
-    pass &= row_major_memory_store(dtx_right);
-
-    //cout << "\n\nDTX_RIGHT" << endl;
-    //dtx_right->print();
-
-
-    // Left side: AbstractTensor --> producer memory buffer
-    DataTransformations * dtx_left = new DataTransformations();
-    TransformationNode * node1 = new TransformationNode("producer", 1);
-    node1->groups[0]->shape = shape;
-    dtx_left->transformations.push_back(node1);
-    pass &= convert_abstract_tensor_to_channels_last_layout(dtx_left);
-
-    //cout << "\n\nDTX_LEFT" << endl;
-    //dtx_left->print();
-
-    DataTransformations * combined = reverse_and_combine_transformations(dtx_left, dtx_right);
-    //cout << "\n\nDTX_COMBINED" << endl;
-    //combined->print();
-
-    pass &= optimize_away_transpose(combined);
-    //cout << "\n\nDTX_OPTIMIZED" << endl;
-    //combined->print();
-
-    pass &= collapse_transformations(combined);
-    //cout << "\n\nDTX_COLLAPSED" << endl;
-    //combined->print();
-    pass &= generate_transfer_addresses(combined);
-    //combined->print();
+    assert(num_rows > 0);
+    assert(num_cols > 0);
+    std::pair<vector<int>,vector<int>> block_info;
+    block_info.first = {0,1,2};
+    block_info.second = {(int)num_rows, (int)num_cols};
+    uint32_t num_blocks = 1;
+    DataTransformations * dtx = conv_transform(shape, conv_params, block_info);
     // copy transfer addresses into a vector
     std::vector<uint32_t> address_map;
     uint32_t t_bytes = 0;
-    for(auto transfer : combined->transformations.back()->groups[0]->transfers){
-        address_map.push_back(transfer->src_address*2); // 2 for bfloat16
+
+    // Generate address map for reader kernel
+    assert(dtx->transformations.size() == 2);
+    assert(dtx->transformations.back()->groups[0]->transfers.size() > 0);
+    for(auto transfer : dtx->transformations.back()->groups[0]->transfers){
+        address_map.push_back(transfer->src_address*2);
         address_map.push_back(transfer->dst_address*2);
         address_map.push_back(transfer->size*2);
+        address_map.push_back(transfer->pad);
         t_bytes += transfer->size*2;
     }
+    uint32_t total_bytes = num_rows * num_cols * 2; // 2 for bfloat16
+    assert(total_bytes == t_bytes);
+    assert(total_bytes % num_blocks == 0);
+    uint32_t block_size_bytes = total_bytes / num_blocks;
 
     tt_metal::Program *program = new tt_metal::Program();
     tt_start_debug_print_server(a.device()->cluster(), {0}, {{1, 1}});
@@ -409,40 +412,18 @@ Tensor tilize_conv_activation(const Tensor &a, bool conv1x1 = false) {
     tt_metal::Buffer *src0_dram_buffer = a.buffer();
 
     assert(num_cols % TILE_WIDTH == 0);
+    assert(num_rows % TILE_HEIGHT == 0);
     uint32_t num_tiles_c = num_cols / TILE_WIDTH;
-    uint32_t num_tiles_r = ceil((double)num_rows / (double)TILE_HEIGHT);
+    uint32_t num_tiles_r = num_rows / TILE_HEIGHT;
     uint32_t num_tiles = num_tiles_r * num_tiles_c;
-    uint32_t unpadded_last_row_tiles_H = (num_rows % TILE_HEIGHT == 0) ? TILE_HEIGHT : num_rows % TILE_HEIGHT;
-    uint32_t row_size_bytes = num_tiles_c * TILE_WIDTH * 2; // 2 for bfloat16
-    // For height padding in reader kernel
-    uint32_t total_zeroes_bytes = (32 - unpadded_last_row_tiles_H) * row_size_bytes;
-    uint32_t zero_buffer_size = l1_mem::address_map::ZEROS_SIZE;
-    uint32_t num_bytes_of_zeroes_per_transfer = 0;
-    uint32_t num_transfers_of_zeroes = 0;
-    uint32_t remainder_zeroes = 0;
-
-    if(total_zeroes_bytes > zero_buffer_size) {
-        num_bytes_of_zeroes_per_transfer = zero_buffer_size;
-        num_transfers_of_zeroes = total_zeroes_bytes / zero_buffer_size;
-        remainder_zeroes = total_zeroes_bytes % zero_buffer_size;
-    }
-    else if(total_zeroes_bytes > 0) {
-        num_bytes_of_zeroes_per_transfer = total_zeroes_bytes;
-        num_transfers_of_zeroes = 1;
-    }
-    uint32_t tiles_c_bytes = num_tiles_c * single_tile_size;
-    uint32_t total_bytes = num_rows * num_cols * 2; // 2 for bfloat16
-    assert(total_bytes == t_bytes);
-    uint32_t row_size = num_cols * 2; // 2 for bfloat16
+    uint32_t block_size_tiles = num_tiles / num_blocks;
+    assert(block_size_tiles * single_tile_size == block_size_bytes);
 
     auto dram_src0_noc_xy = src0_dram_buffer->noc_coordinates();
 
     // This should allocate a DRAM buffer on the device
     tt_metal::Device *device = a.device();
     std::array<uint32_t, 4> output_shape = {1, 1, num_rows, num_cols};
-    // pad height
-    output_shape[2] = (uint32_t) (ceil((double) output_shape[2] / (double) TILE_HEIGHT ) * TILE_HEIGHT);
-
     tt_metal::Tensor output = tt_metal::Tensor(output_shape, a.dtype(), tt::tt_metal::Layout::TILE, device);
 
     tt_metal::Buffer *dst_dram_buffer = output.buffer();
@@ -483,20 +464,17 @@ Tensor tilize_conv_activation(const Tensor &a, bool conv1x1 = false) {
     auto l1_b0 = tt_metal::CreateL1Buffer(program, device, core, address_map.size() * sizeof(uint32_t), address_map_l1_addr);
 
     vector<uint32_t> reader_kernel_args = {src0_dram_buffer->address(),
-                                            (uint32_t)dram_dst_noc_xy.x,
-                                            (uint32_t)dram_dst_noc_xy.y,
-                                            num_tiles,
-                                            num_tiles_c,
-                                            unpadded_last_row_tiles_H,
-                                            num_bytes_of_zeroes_per_transfer,
-                                            num_transfers_of_zeroes,
-                                            remainder_zeroes,
+                                            (uint32_t)dram_src0_noc_xy.x,
+                                            (uint32_t)dram_src0_noc_xy.y,
+                                            num_blocks,
+                                            block_size_tiles,
+                                            block_size_bytes,
                                             address_map_l1_addr};
 
     // Tilized reader
     tt_metal::DataMovementKernel *unary_reader_kernel = tt_metal::CreateDataMovementKernel(
         program,
-        "tt_metal/kernels/dataflow/reader_unary_rm_address_map.cpp",
+        "tt_metal/kernels/dataflow/reader_unary_dtx.cpp",
         core,
         tt_metal::DataMovementProcessor::RISCV_1,
         tt_metal::NOC::RISCV_1_default);

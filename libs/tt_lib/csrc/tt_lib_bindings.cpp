@@ -616,6 +616,7 @@ void TensorModule(py::module &m_tensor) {
         | b            | RHS matmul operand                                                                         | Tensor    |             | Yes      |
         +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
     )doc");
+    m_tensor.def("compute_conv_op_block_info", &compute_conv_op_block_info);
     // broadcast math
     m_tensor.def("bcast", &bcast, R"doc(
         Perform a broadcasted binary math operation between two tensors.

@@ -15,10 +15,13 @@ import torch
 @pytest.mark.parametrize(
     "K, C, H, W, R, S",
     (
-        (32, 32, 8, 4, 1, 1),
-        # (32, 32, 10, 10, 3, 3),
-        # (64, 64, 32, 16, 1, 1),
-        # (64, 64, 10, 10, 1, 1),
+        #(32, 1024, 8, 4, 1, 1),
+        #(32, 32, 18, 18, 3, 3),
+        (32, 32, 10, 10, 1, 1),
+        (32, 32, 10, 10, 3, 3),
+        #(64, 64, 32, 16, 1, 1),
+        #(64, 64, 10, 10, 1, 1),
+        #(32, 64, 10, 10, 3, 3),
     ),
 )
 def test_run_conv_as_large_matmul(K, C, H, W, R, S):
@@ -72,4 +75,4 @@ def test_run_conv_as_large_matmul(K, C, H, W, R, S):
     passing_pcc, output_pcc = comp_pcc(out_golden, out_result, 0.99)
     print("Passing=", passing_pcc)
     print("Output pcc=", output_pcc)
-    #assert passing_pcc
+    assert passing_pcc
