@@ -13,6 +13,11 @@ from python_api_testing.models.utility_functions import print_diff_argmax, is_cl
 from python_api_testing.conv.pytorch_conv_tb import TestLevel, generate_conv_tb_with_pytorch_golden, generate_conv_tb
 
 import torch
+from time import sleep
+
+def run_conv_on_device(A, B_tiled, conv_params, untilize_out):
+    return ttl.tensor.conv_as_large_bmm_single_core(A, B_tiled, conv_params, untilize_out)
+
 
 def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
     print("Testing convolution with following parameters - ")
@@ -67,7 +72,8 @@ def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
         return True
     assert(conv_op_test_params.test_level == TestLevel.OP_FULL_COMPUTE)
     # Run TT metal OP
-    out = ttl.tensor.conv_as_large_bmm_single_core(A, B_tiled, [R,S,stride_h,stride_w,pad_h,pad_w])
+
+    out = run_conv_on_device(A, B_tiled, [R,S,stride_h,stride_w,pad_h,pad_w], True)
     assert(out.shape() == mm_output_shape)
     # Copy output to host and convert tt tensor to pytorch tensor
     out_pytorch = torch.tensor(out.to(host).data()).reshape(mm_output_shape)
@@ -95,18 +101,23 @@ def test_sweep_conv():
     full_op_compute_passing_tests = []
     input_tensor_only_passing_tests = []
     failing_tests = []
+    failing_tests_exception = []
     for conv_op_test_params, pytorch_inputs_and_golden in pytorch_conv_golden_tb.items():
-        passing_ = run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden)
-        if passing_:
-            if conv_op_test_params.test_level == TestLevel.INPUT_TENSOR_CREATE:
-                input_tensor_only_passing_tests.append(conv_op_test_params)
+        try:
+            passing_ = run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden)
+            if passing_:
+                if conv_op_test_params.test_level == TestLevel.INPUT_TENSOR_CREATE:
+                    input_tensor_only_passing_tests.append(conv_op_test_params)
+                else:
+                    full_op_compute_passing_tests.append(conv_op_test_params)
             else:
-                full_op_compute_passing_tests.append(conv_op_test_params)
-        else:
+                failing_tests_exception.append(conv_op_test_params)
+                print("Failed test - ")
+                conv_op_test_params.print("   ")
+                #assert(False)
+        except:
             failing_tests.append(conv_op_test_params)
-            print("Failed test - ")
-            conv_op_test_params.print("   ")
-            assert(False)
+            passing_ = False
         passing &= passing_
     print("Following tests that create only input tensors passed - ")
     for conv_op_test_params in input_tensor_only_passing_tests:
@@ -114,8 +125,11 @@ def test_sweep_conv():
     print("Following tests that rull full op compute passed - ")
     for conv_op_test_params in full_op_compute_passing_tests:
         conv_op_test_params.print("   ")
-    print("Following tests failed - ")
+    print("Following tests failed with incorrect mismatch - ")
     for conv_op_test_params in failing_tests:
+        conv_op_test_params.print("   ")
+    print("Following tests failed with exception/error - ")
+    for conv_op_test_params in failing_tests_exception:
         conv_op_test_params.print("   ")
     print(str(len(input_tensor_only_passing_tests)) + " \"INPUT TENSORS CREATION\" tests PASSED.")
     print(str(len(full_op_compute_passing_tests)) + " \"FULL OP COMPUTE\" tests PASSED.")

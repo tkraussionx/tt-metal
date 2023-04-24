@@ -4,6 +4,7 @@
 
 bool collapse_transformations(DataTransformations * dtx) {
     bool DEBUG = false;
+    bool pad = false;
 
     if (DEBUG) cout << "\n----- Start Resolving Transoformations -----\n" << endl;
 
@@ -80,11 +81,14 @@ bool collapse_transformations(DataTransformations * dtx) {
                         }
                     }
                     else {
+                        pad = true;
                         // Source tensor is padding buffer. No need to determine overlap.
                         auto new_tp = new TensorPair(new DTXTensor(*consumer_tp->src_tensor),
                                                     consumer_tp->src_group,
                                                     new DTXTensor(*consumer_tp->dst_tensor));
                         resolved_tensor_pairs.push_back(new_tp);
+                        //std::cout << "Printing padding tensor pair" << std::endl;
+                        //cout << s(16)  << new_tp->get_string() << endl;
                     }
                 }
             } // for-loop: producer_groupidx
@@ -94,7 +98,9 @@ bool collapse_transformations(DataTransformations * dtx) {
         }
 
         dtx->transformations.erase(dtx->transformations.end() - 2);
-        if (DEBUG) dtx->print(4);
+        //std::cout << "Printing collapsed transform" << std::endl;
+        //if (true) dtx->print(4);
+        //exit(1);
 
     } // while: transformations > 2
 
@@ -114,6 +120,9 @@ bool collapse_transformations(DataTransformations * dtx) {
     */
 
     if (DEBUG) cout << "\n----- End Resolving Transoformations -----\n" << endl;
-
+    //dtx->print(4);
+    //if(true) {
+    //exit(1);
+    //}
     return true;
 }

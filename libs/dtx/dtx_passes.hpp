@@ -53,6 +53,8 @@ bool generate_transfer_addresses_tiled_data(DataTransformations * dtx);
 
 bool row_major_memory_store(DataTransformations * dtx);
 
+bool row_major_memory_store_blocks(DataTransformations * dtx);
+
 // Slice into tiles (32x32) - WORKS?
 bool tilize_and_store(DataTransformations * dtx, vector<int> dim_order);
 
@@ -127,7 +129,7 @@ bool convert_tensor_layout_rowmajor_2_channelslast(DataTransformations * dtx);
 // ========================================================
 
 vector<float> evaluate(vector<float> data, DataTransformations * dtx);
-
+vector<uint32_t> generate_address_map(DataTransformations * dtx);
 DataTransformations * simple_high_level_pass(vector<int> shape);
 
 DataTransformations * conv_transform(vector<int> shape, vector<int> conv_params, std::pair<vector<int>,vector<int>> block_info);

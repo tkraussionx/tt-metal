@@ -37,7 +37,7 @@ DataTransformations * conv_transform(vector<int> shape, vector<int> conv_params,
         pass &= block_2d_matrix(dtx_right, dim_order, block_shape);
         std::cout << "Done blocking" << std::endl;
     }
-    pass &= row_major_memory_store(dtx_right);
+    pass &= row_major_memory_store_blocks(dtx_right);
 
     //cout << "\n\nDTX_RIGHT" << endl;
     //dtx_right->print();
@@ -68,5 +68,7 @@ DataTransformations * conv_transform(vector<int> shape, vector<int> conv_params,
     //combined->print();
     std::cout << "NUM ROWS=" << num_rows << std::endl;
     std::cout << "NUM COLS=" << num_cols << std::endl;
+    //delete dtx_right;
+    //delete dtx_left;
     return combined;
 }

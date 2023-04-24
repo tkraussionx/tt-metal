@@ -91,7 +91,7 @@ bool block_2d_matrix(DataTransformations * dtx, vector<int> dim_order, vector<in
         assert(list_of_counted_dims.size() == num_blocks);
         int consumer_shape_z = Z(rank) >= 0 ? shape[Z(rank)] * num_blocks : num_blocks;
         assert(consumer_shape_z == num_blocks); // TODO: generalize for z > 1
-        consumer_group->shape = {consumer_shape_z, block_shape[Y(rank)], block_shape[X(rank)]};
+        consumer_group->shape = {num_blocks, block_shape[Y(rank)], block_shape[X(rank)]};
 
         if (DEBUG) cout << s(4) << "Tensor Pairs: " << num_blocks << endl;
 

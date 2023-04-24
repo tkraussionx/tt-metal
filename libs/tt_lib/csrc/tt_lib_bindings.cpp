@@ -851,6 +851,16 @@ void DTXModule(py::module &m_dtx) {
         | data             | Input data to transform     | vector of floats     |             | Yes      |
         +------------------+-----------------------------+----------------------+-------------+----------+
     )doc");
+    m_dtx.def("generate_address_map", [](DataTransformations * dtx){
+        return generate_address_map(dtx);
+    }, R"doc(
+        Generates address map.
+        +------------------+----------------------------+-----------------------+-------------+----------+
+        | Argument         | Description                 | Data type            | Valid range | Required |
+        +==================+=============================+======================+=============+==========+
+        | DataTransformations*             | Data transform object    |     |             | Yes      |
+        +------------------+-----------------------------+----------------------+-------------+----------+
+    )doc");
     m_dtx.def("conv_transform", [](vector<int> shape, vector<int> conv_params, std::pair<vector<int>,vector<int>> block_info){
         return conv_transform(shape, conv_params, block_info);
     }, R"doc(

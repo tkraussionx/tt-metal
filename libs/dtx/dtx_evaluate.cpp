@@ -3,6 +3,22 @@
 #include "util.hpp"
 #include "util_vector_of_ints.hpp"
 
+vector<uint32_t> generate_address_map(DataTransformations * dtx) {
+    assert(dtx->transformations.size() == 2);
+    assert(dtx->transformations.back()->groups[0]->transfers.size() > 0);
+    // copy transfer addresses into a vector
+    std::vector<uint32_t> address_map;
+
+    // Generate address map
+    for(auto transfer : dtx->transformations.back()->groups[0]->transfers){
+        address_map.push_back(transfer->src_address);
+        address_map.push_back(transfer->dst_address);
+        address_map.push_back(transfer->size);
+        address_map.push_back(transfer->pad);
+    }
+    return address_map;
+}
+
 vector<float> evaluate(vector<float> data, DataTransformations * dtx) {
     assert(dtx->transformations.size() == 2);
     assert(dtx->transformations.back()->groups[0]->transfers.size() > 0);
@@ -24,6 +40,12 @@ vector<float> evaluate(vector<float> data, DataTransformations * dtx) {
         auto dst_address = address_map[i+1];
         auto transfer_size = address_map[i+2];
         auto pad = address_map[i+3];
+        if(i==0) {
+            std::cout << "src=" << src_address << std::endl;
+            std::cout << "dst=" << dst_address << std::endl;
+            std::cout << "rs=" << transfer_size << std::endl;
+            std::cout << "pad=" << pad << std::endl;
+        }
         for (uint32_t s = 0; s < transfer_size; s++) {
             assert(dst_address+s < data_transformed.size());
             // if(src_address+s >= data.size()) {

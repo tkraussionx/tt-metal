@@ -8,7 +8,7 @@ sys.path.append(f"{f}/../..")
 import numpy as np
 
 from libs import tt_lib as ttl
-from libs.tt_lib.utils import tilize_to_list, tilize, untilize, channels_last, _nearest_32, convert_weights_2d_matrix
+from libs.tt_lib.utils import blocked_mm, tilize_to_list, tilize, untilize, channels_last, _nearest_32, convert_weights_2d_matrix
 from python_api_testing.models.utility_functions import print_diff_argmax, is_close, comp_pcc
 from python_api_testing.conv.pytorch_conv_tb import TestLevel, generate_conv_tb_with_pytorch_golden, generate_conv_tb
 
@@ -41,9 +41,7 @@ def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
     host = ttl.device.GetHost()
     a_activation_shape = [1,C,H,W]
     b_weights_shape = [K,C,R,S]
-    mm_input_shape = [1, 1, _nearest_32(OH*OW), C*R*S]
-    mm_weight_shape = [1, 1, C*R*S, K]
-    mm_output_shape = [1,1,_nearest_32(OH*OW),K]
+    mm_output_shape = [1,1,_nearest_32(OH*OW),_nearest_32(K)]
 
     A_pyt = pytorch_inputs_and_golden[0]
     A_ = ttl.tensor.Tensor(
@@ -66,12 +64,25 @@ def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
     assert(conv_op_test_params.test_level == TestLevel.OP_FULL_COMPUTE)
     A_cl_data = A_cl.data()
     # Call DTX pass to transform A
-    A_transformed_data = ttl.dtx.evaluate(A_cl_data, ttl.dtx.conv_transform([C,H,W], [R,S,stride_h,stride_w,pad_h,pad_w], ([-1],[-1])))
+    matrix_activation_h = (int) (_nearest_32(OH*OW) / 32)
+    matrix_weight_w = (int) (_nearest_32(K) / 32)
+    matrix_activation_w = (int) (_nearest_32(C*R*S)/32)
+    (num_blocks,_,_,report_string) = ttl.tensor.compute_conv_op_block_info(matrix_activation_h, matrix_activation_w, matrix_weight_w)
+    if report_string != "pass":
+        print(report_string)
+        assert False
+    dim_order = [0,1,2]
+    assert _nearest_32(C*R*S) % num_blocks == 0
+    block_width = (int) (_nearest_32(C*R*S)/num_blocks)
+    block_shape_yx = [_nearest_32(OH*OW), block_width]
+    mm_input_shape = [num_blocks, _nearest_32(OH*OW), block_width]
+    mm_weight_shape = [num_blocks, block_width, _nearest_32(K)]
+    A_transformed_data = ttl.dtx.evaluate(A_cl_data, ttl.dtx.conv_transform([C,H,W], [R,S,stride_h,stride_w,pad_h,pad_w], (dim_order,block_shape_yx)))
     A_transformed_pytorch_tensor = torch.tensor(A_transformed_data).reshape(mm_input_shape)
 
     B_tiled_ = ttl.tensor.convert_conv_weight_tensor_to_tiled_layout(B_)
     B_rm = B_tiled_.to(ttl.tensor.Layout.ROW_MAJOR)
-    assert(B_rm.shape() == [1, 1, C*R*S, K])
+    assert(B_rm.shape() == [1, 1, _nearest_32(C*R*S), _nearest_32(K)])
     B_data = B_rm.data()
     B_pytorch_tensor = torch.tensor(B_data).reshape(mm_weight_shape)
 
@@ -79,10 +90,10 @@ def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
     # Run pytorch matmul
     print("matmul input shape - " + str(A_transformed_pytorch_tensor.shape))
     print("matmul weight shape - " + str(B_pytorch_tensor.shape))
-    out_pytorch = torch.matmul(A_transformed_pytorch_tensor, B_pytorch_tensor)
+    #out_pytorch = torch.matmul(A_transformed_pytorch_tensor, B_pytorch_tensor).reshape(mm_output_shape)
+    out_pytorch = blocked_mm(A_transformed_pytorch_tensor, B_pytorch_tensor)
     assert(list(out_pytorch.shape) == mm_output_shape)
-    # remove padding
-    out_pytorch = out_pytorch[:, :, 0 : (OH * OW), :]
+    out_pytorch = out_pytorch[:, :, 0 : (OH * OW), 0 : K]
 
     # Convert matmul output layout to conv output layout
     out_tr = torch.transpose(out_pytorch, 2, 3)

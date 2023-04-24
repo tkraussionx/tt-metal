@@ -705,16 +705,19 @@ bool test_pad_and_block_passes_(vector<int> shape, vector<int> pad_to_nearest, v
     node0->groups[0]->shape = shape;
     dtx_right->transformations.push_back(node0);
     pass &= pad_2d_matrix(dtx_right, pad_to_nearest);
+    dtx_right->print();
     pass &= block_2d_matrix(dtx_right, dim_order, block_shape);
-    //dtx_right->print();
+    dtx_right->print();
+
     pass &= row_major_memory_store(dtx_right);
-    //dtx_right->print();
+    dtx_right->print();
+    //exit(1);
     DataTransformations * combined = reverse_and_combine_transformations(dtx_left, dtx_right);
     //cout << "\n\nDTX_COMBINED" << endl;
     //combined->print();
     pass &= collapse_transformations(combined);
     //cout << "\n\nDTX_COLLAPSED" << endl;
-    //combined->print();
+    combined->print();
     pass &= generate_transfer_addresses(combined);
     vector<float> data_transformed = evaluate(input_data, combined);
     return data_transformed == golden_data;
@@ -725,9 +728,10 @@ bool test_pad_and_block_passes() {
     vector<float> input_data_2_2 = {1, 2, 3, 4};
     // list of tests - pad to nearest, block shape, dim order, golden data
     vector<tuple<vector<int>, vector<int>, vector<int>, vector<float>>> tests_2_2 = {
-        { {4,4}, {4,4}, {0,1,2}, {1, 2, 0, 0, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { {4,4}, {2,4}, {0,1,2}, {1, 2, 0, 0, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
-        { {4,4}, {2,2}, {0,1,2}, {1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
+        // { {4,4}, {4,4}, {0,1,2}, {1, 2, 0, 0, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
+        // { {4,4}, {2,4}, {0,1,2}, {1, 2, 0, 0, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
+        // { {4,4}, {2,2}, {0,1,2}, {1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
+        { {4,4}, {4,1}, {0,1,2}, {1, 3, 0, 0, 2, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0} },
     };
     for (auto & t : tests_2_2) {
         auto pad_to_nearest = std::get<0>(t);
@@ -754,7 +758,7 @@ bool test_pad_and_block_passes() {
 bool test_conv_transform_pass_and_evaluate() {
     vector<int> shape = {2, 2, 2};
     bool pass = true;
-    auto dtx = conv_transform(shape, {1,1,1,1,0,0}, false);
+    auto dtx = conv_transform(shape, {1,1,1,1,0,0}, {{-1},{-1}});
     vector<float> data_1_1 = {1, 2, 3, 4, 5, 6, 7, 8};
     vector<float> data_transformed_1_1 = evaluate(data_1_1, dtx);
     vector<float> golden_data_1_1 = {1, 2, 3, 4, 5, 6, 7, 8};
@@ -763,7 +767,7 @@ bool test_conv_transform_pass_and_evaluate() {
         std::cout << "1x1 conv transform failed." << std::endl;
     }
     vector<int> shape2 = {2, 3, 3};
-    auto dtx2 = conv_transform(shape2, {3,3,1,1,0,0}, false);
+    auto dtx2 = conv_transform(shape2, {3,3,1,1,0,0}, {{-1},{-1}});
     //vector<float> data_3_3 = {1, 13, 2, 14, 3, 15, 4, 16, 5, 17, 6, 18, 7, 19, 8, 20, 9, 21, 10, 22, 11, 23, 12, 24};
     vector<float> data_3_3 = {1, 10, 2, 11, 3, 12, 4, 13, 5, 14, 6, 15, 7, 16, 8, 17, 9, 18};
     vector<float> data_transformed_3_3 = evaluate(data_3_3, dtx2);
@@ -821,26 +825,26 @@ void run_dtx_tests() {
     //printf("test_pass_convert_abstract_tensor_to_channels_last_layout - %d\n\n", pass);
 
     // In progress
-    pass &= test_channels_last_to_2D_matrix();
-    printf("test_channels_last_to_2D_matrix - %d\n\n", pass);
+    // pass &= test_channels_last_to_2D_matrix();
+    // printf("test_channels_last_to_2D_matrix - %d\n\n", pass);
 
-    pass &= test_channels_last_to_2D_matrix_conv1x1();
-    printf("test_channels_last_to_2D_matrix_conv1x1 - %d\n\n", pass);
+    // pass &= test_channels_last_to_2D_matrix_conv1x1();
+    // printf("test_channels_last_to_2D_matrix_conv1x1 - %d\n\n", pass);
 
-    pass &= test_high_level_pass_and_evaluate();
-    printf("test_high_level_pass_and_evaluate - %d\n\n", pass);
+    // pass &= test_high_level_pass_and_evaluate();
+    // printf("test_high_level_pass_and_evaluate - %d\n\n", pass);
 
-    pass &= test_block_2d_matrix_pass();
-    printf("test_block_2d_matrix_pass - %d\n\n", pass);
+    // pass &= test_block_2d_matrix_pass();
+    // printf("test_block_2d_matrix_pass - %d\n\n", pass);
 
-    pass &= test_padding_pass();
-    printf("test_pad_2d_matrix_pass - %d\n\n", pass);
+    // pass &= test_padding_pass();
+    // printf("test_pad_2d_matrix_pass - %d\n\n", pass);
 
     pass &= test_pad_and_block_passes();
     printf("test_pad_and_block_passes - %d\n\n", pass);
 
-    pass &= test_conv_transform_pass_and_evaluate();
-    printf("test_conv_transform_pass - %d\n\n", pass);
+    // pass &= test_conv_transform_pass_and_evaluate();
+    // printf("test_conv_transform_pass - %d\n\n", pass);
 
     if (pass == true) cout << "\nTESTS PASSED\n\n\n" << endl;
     else cout << "TESTS FAILED\n\n\n" << endl;

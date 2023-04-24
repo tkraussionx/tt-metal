@@ -32,6 +32,8 @@ struct address_map {
   // Base addresses
   static constexpr std::int32_t FIRMWARE_BASE = 0;
   static constexpr std::int32_t ZEROS_BASE = FIRMWARE_BASE + BRISC_FIRMWARE_SIZE;
+  static constexpr std::int32_t N_ZEROS_BASE = 985 * 1024;
+  static constexpr std::int32_t N_ZEROS_SIZE = 512;
   static constexpr std::int32_t NCRISC_FIRMWARE_BASE = FIRMWARE_BASE + FIRMWARE_SIZE;
   static constexpr std::int32_t NCRISC_L1_CODE_BASE =  NCRISC_FIRMWARE_BASE + NCRISC_IRAM_CODE_SIZE;
   static constexpr std::int32_t NCRISC_LOCAL_MEM_BASE = NCRISC_FIRMWARE_BASE + NCRISC_FIRMWARE_SIZE - NCRISC_LOCAL_MEM_SIZE; // Copy of the local memory

@@ -18,6 +18,7 @@ DTX_SRCS = \
 	libs/dtx/pass_transpose_xy.cpp \
 	libs/dtx/pass_transpose_yz.cpp \
 	libs/dtx/pass_row_major_memory_store.cpp \
+	libs/dtx/pass_row_major_memory_store_blocks.cpp \
 	libs/dtx/pass_convert_abstract_tensor_to_channels_last_layout.cpp \
 	libs/dtx/pass_tilize.cpp \
 	libs/dtx/pass_pad_2d_matrix.cpp \
