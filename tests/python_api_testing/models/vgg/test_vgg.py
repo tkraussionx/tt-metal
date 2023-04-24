@@ -21,7 +21,8 @@ from vgg import *
 _batch_size = 16
 
 
-def test_vgg16_inference(model_location_generator):
+def test_vgg16_inference(imagenet_sample_input):
+    image = imagenet_sample_input
     batch_size = _batch_size
     with torch.no_grad():
         # Initialize the device
@@ -37,15 +38,12 @@ def test_vgg16_inference(model_location_generator):
 
         tt_vgg = vgg16(device, host, state_dict)
 
-        root = model_location_generator("pytorch_weka_data/imagenet/dataset/ILSVRC/Data/CLS-LOC")
-        dataloader = prep_ImageNet(root, batch_size = batch_size)
-        for i, (images, targets, _, _, _) in enumerate(tqdm(dataloader)):
-            torch_output = torch_vgg(images).unsqueeze(1).unsqueeze(1)
-            tt_output = tt_vgg(images)
+        torch_output = torch_vgg(image).unsqueeze(1).unsqueeze(1)
+        tt_output = tt_vgg(image)
 
-            passing = comp_pcc(torch_output, tt_output)
+        passing = comp_pcc(torch_output, tt_output)
 
-            assert passing[0], passing[1:]
+        assert passing[0], passing[1:]
 
-            break
+
     logger.info(f"vgg16 PASSED {passing[1]}")

@@ -4,6 +4,7 @@ import random
 import os
 import numpy as np
 from pathlib import Path
+import torchvision.transforms as transforms
 from PIL import Image
 
 @pytest.fixture(scope="function")
@@ -39,7 +40,9 @@ def model_location_generator():
     return model_location_generator_
 
 @pytest.fixture
-def imagenet_sample_input():
-    im = Image.open("/mnt/MLPerf/tt_dnn-models/samples/ILSVRC2012_val_00048736.JPEG")
+def imagenet_sample_input(model_location_generator):
+    sample_path = model_location_generator("/mnt/MLPerf/tt_dnn-models/samples/ILSVRC2012_val_00048736.JPEG")
+    im = Image.open(sample_path)
     im = im.resize((224, 224))
+    im = transforms.ToTensor()(im).unsqueeze(0)
     return im
