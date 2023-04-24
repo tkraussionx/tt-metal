@@ -14,7 +14,7 @@ struct ConvOpParallelizationStrategy {
 
 Tensor conv_as_large_bmm_single_core(const Tensor& A, const Tensor& B, vector<int> conv_params); // Tilizes a, untilizes b
 Tensor conv_as_large_bmm_single_core_single_block(const Tensor& A, const Tensor& B, bool untilize_out, bool use_single_bank_reader); // Allows support for tilizing a, untilize b
-std::tuple<uint32_t, uint32_t, uint32_t> compute_conv_op_block_info(uint32_t M, uint32_t K, uint32_t N, uint32_t channel_stick_size_datums);
+std::tuple<uint32_t, uint32_t, uint32_t, string> compute_conv_op_block_info(uint32_t M, uint32_t K, uint32_t N);
 }  // namespace tt_metal
 
 }  // namespace tt

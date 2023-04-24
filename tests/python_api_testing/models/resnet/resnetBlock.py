@@ -11,7 +11,7 @@ from typing import Type, Union, Optional, List, Callable
 import torch
 import torch.nn as nn
 
-from utils import conv3x3, conv1x1, fold_bn_to_conv, convert_mm_to_conv_tensor
+from utils import conv3x3, conv1x1, fold_bn_to_conv, can_run_conv_on_device, run_conv_on_tt_device
 from utility_functions import tt2torch_tensor, torch2tt_tensor
 from libs.tt_lib.utils import pad_activation, pad_weight, print_diff_argmax
 from libs import tt_lib as ttl
@@ -165,6 +165,11 @@ class BasicBlock(nn.Module):
             raise NotImplementedError("Dilation > 1 not supported in BasicBlock")
         # Both self.conv1 and self.downsample layers downsample the input when stride != 1
         self.conv1 = conv3x3(inplanes, planes, stride, state_dict=state_dict, base_address=f"{base_address}.conv1")
+
+        conv1_weight = state_dict[f"{base_address}.conv1.weight"]
+        self.conv1_params = [planes, inplanes, 3, 3, stride, stride, 1, 1]
+        self.conv1_on_tt = TtConv(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device)
+
         self.bn1 = norm_layer(planes)
         self.bn1.weight = nn.Parameter(state_dict[f"{self.base_address}.bn1.weight"])
         self.bn1.bias = nn.Parameter(state_dict[f"{self.base_address}.bn1.bias"])
@@ -175,6 +180,11 @@ class BasicBlock(nn.Module):
 
         self.relu = ttl.tensor.relu
         self.conv2 = conv3x3(planes, planes, state_dict=state_dict, base_address=f"{base_address}.conv2")
+
+        conv2_weight = state_dict[f"{base_address}.conv2.weight"]
+        self.conv2_params = [planes, planes, 3, 3, 1, 1, 1, 1]
+        self.conv2_on_tt = TtConv(conv2_weight.reshape(-1).tolist(), self.conv2_params, self.device)
+
         self.bn2 = norm_layer(planes)
 
         self.bn2.weight = nn.Parameter(state_dict[f"{self.base_address}.bn2.weight"])
@@ -196,8 +206,12 @@ class BasicBlock(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         identity = x
-
-        out = self.conv1(x)
+        if (not self.fold_batchnorm) and can_run_conv_on_device(list(x.size()), self.conv1_params):
+            print("Conv on tt device. (B)")
+            out = run_conv_on_tt_device(x, self.conv1_on_tt, self.conv1_params, self.device, self.host)
+        else:
+            print("Conv on CPU.(B)")
+            out = self.conv1(x)
         if not self.fold_batchnorm:
             out = self.bn1(out)
         # pad
@@ -207,7 +221,12 @@ class BasicBlock(nn.Module):
         # unpad
         out = unpad_from_zero(out, initial_shape, self.host)
 
-        out = self.conv2(out)
+        if (not self.fold_batchnorm) and can_run_conv_on_device(list(out.size()), self.conv2_params):
+            print("Conv on tt device. (C)")
+            out = run_conv_on_tt_device(out, self.conv2_on_tt, self.conv2_params, self.device, self.host)
+        else:
+            print("Conv on CPU.(C)")
+            out = self.conv2(out)
         if not self.fold_batchnorm:
             out = self.bn2(out)
 
@@ -265,14 +284,13 @@ class ResNet(nn.Module):
             )
         self.groups = groups
         self.base_width = width_per_group
-        #self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
-        #self.conv1.weight = nn.Parameter(state_dict[f"{self.base_address_with_dot}conv1.weight"])
-        print("Setting conv1 weight tensor")
+        self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1.weight = nn.Parameter(state_dict[f"{self.base_address_with_dot}conv1.weight"])
+
         conv1_weight = state_dict[f"{self.base_address_with_dot}conv1.weight"]
         self.conv1_params = [self.inplanes, 3, 7, 7, 2, 2, 3, 3]
-        self.conv1 = TtConv(conv1_weight, self.conv1_params, self.device)
-        self.conv1_on_tt_device = True
-        print("conv1 weight tensor done")
+        self.conv1_on_tt = TtConv(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device)
+
         self.bn1 = norm_layer(self.inplanes) # batch norm
         self.bn1.weight = nn.Parameter(state_dict[f"{self.base_address_with_dot}bn1.weight"])
         self.bn1.bias = nn.Parameter(state_dict[f"{self.base_address_with_dot}bn1.bias"])
@@ -282,10 +300,6 @@ class ResNet(nn.Module):
         self.bn1.eval()
 
         if self.fold_batchnorm:
-            # folding batchnorm is not supported on TT device. Run conv on cpu instead
-            self.conv1_on_tt_device = False
-            self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
-            self.conv1.weight = nn.Parameter(state_dict[f"{self.base_address_with_dot}conv1.weight"])
             self.conv1.weight, self.conv1.bias = fold_bn_to_conv(self.conv1, self.bn1)
             self.bn1 = nn.Identity()
 
@@ -380,19 +394,11 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def _forward_impl(self, x: torch.Tensor) -> torch.Tensor:
-        if self.conv1_on_tt_device:
-            K, C, R, S, U, V, P_H, P_W = [self.conv1_params[i] for i in range(8)]
-            [N,C,H,W] = x.shape()
-            assert (H - R + 2 * P_H) >= 1 and (W - S + 2 * P_W) >= 1
-            OH = ((int) ((H - R + 2 * P_H) / U)) + 1
-            OW = ((int) ((W - S + 2 * P_W) / V)) + 1
-            conv_as_mm_output_shape_unpadded = [1,1,OH*OW,K]
-            print("Going to run conv1")
-            x = self.conv1(x)
-            print("conv1 on tt device done")
-            x = unpad_from_zero(x, conv_as_mm_output_shape_unpadded, self.host)
-            x = convert_mm_to_conv_tensor(x)
+        if (not self.fold_batchnorm) and can_run_conv_on_device(list(x.size()), self.conv1_params):
+            print("Conv on tt device.")
+            x = run_conv_on_tt_device(x, self.conv1_on_tt, self.conv1_params, self.device, self.host)
         else:
+            print("Conv on CPU.(A)")
             x = self.conv1(x)
         if not self.fold_batchnorm:
             x = self.bn1(x)

@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include "dataflow_api.h"
-
+#include "debug_print.h"
 void kernel_main() {
     uint32_t num_blocks = get_arg_val<uint32_t>(0);
 
@@ -26,13 +26,13 @@ void kernel_main() {
     constexpr uint32_t cb_id_in1 = 1;
     uint32_t single_tile_size_bytes = get_tile_size(cb_id_in0);
     volatile std::uint32_t* address_map = (volatile uint32_t*)(address_map_l1_addr);
-
+    DPRINT << "A" << ENDL();
     // Put zeroes in the zero buffer
-    constexpr uint32_t num_elements_in_zeros_buffer = l1_mem::address_map::ZEROS_SIZE / sizeof(uint32_t);
-    volatile uint32_t* zero_base_ptr = reinterpret_cast<volatile uint32_t*>(l1_mem::address_map::ZEROS_BASE);
-    for (uint32_t zero_base_offset = 0; zero_base_offset < num_elements_in_zeros_buffer; zero_base_offset++) {
-        *(zero_base_ptr + zero_base_offset) = 0;
-    }
+    constexpr uint32_t num_elements_in_zeros_buffer = l1_mem::address_map::N_ZEROS_SIZE / sizeof(uint32_t);
+    volatile uint32_t* zero_base_ptr = reinterpret_cast<volatile uint32_t*>(l1_mem::address_map::N_ZEROS_BASE);
+    // for (uint32_t zero_base_offset = 0; zero_base_offset < num_elements_in_zeros_buffer; zero_base_offset++) {
+    //     *(zero_base_ptr + zero_base_offset) = 0;
+    // }
     uint64_t zeros_base_noc_addr = get_noc_addr(l1_mem::address_map::ZEROS_BASE);
 
     // const args for tile-based bank-swizzled layout
@@ -49,9 +49,12 @@ void kernel_main() {
     };
     uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;
     uint32_t index = 0;
+    DPRINT << "B=" << num_blocks << ENDL();
     for (uint32_t b = 0; b < num_blocks; b += 1) {
         // Read weights
+        DPRINT << "T" << ENDL();
         cb_reserve_back(cb_id_in1, in1_block_num_tiles);
+        DPRINT << "R" << ENDL();
         uint32_t l1_write_addr_in1 = get_write_ptr(cb_id_in1);
         uint32_t in1_tensor_row_start_tile_id = in1_tensor_current_block_start_tile_id;
         for(uint32_t h = 0; h < in1_block_h; h++) {
@@ -65,10 +68,13 @@ void kernel_main() {
             in1_tensor_row_start_tile_id += in1_tensor_stride_h;
         }
         noc_async_read_barrier();
+        DPRINT << "O" << ENDL();
         in1_tensor_current_block_start_tile_id += in1_tensor_next_block_stride;
 
         // Read from DRAM into L1 using DTX address map and push one block at a time to CB
+        DPRINT << "P" << ENDL();
         cb_reserve_back(cb_id_in0, in0_block_num_tiles);
+        DPRINT << "Q" << ENDL();
         uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
         uint32_t bytes_read = 0;
         while(bytes_read != in0_block_size_bytes) {
@@ -109,6 +115,7 @@ void kernel_main() {
             index += 4;
         }
         noc_async_read_barrier();
+        DPRINT << "S" << ENDL();
         cb_push_back(cb_id_in0, in0_block_num_tiles);
         cb_push_back(cb_id_in1, in1_block_num_tiles);
     }

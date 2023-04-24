@@ -9,17 +9,18 @@ def conv(weight: List[Union[int, float]], conv_params, device, bias=None):
     """
     assert(len(conv_params) == 8)
     K, C, R, S, U, V, P_H, P_W = [conv_params[i] for i in range(8)]
-
-    weight_untiled = ttl.tensor.Tensor(
-        torch.flatten(B_pyt).tolist(),
-        b_weights_shape,
-        ttl.tensor.DataType.BFLOAT16,
-        ttl.tensor.Layout.ROW_MAJOR
+    weights_shape = [K,C,R,S]
+    weight_untiled = tensor.Tensor(
+        weight,
+        weights_shape,
+        tensor.DataType.BFLOAT16,
+        tensor.Layout.ROW_MAJOR
     )
-    weight_tiled_ = ttl.tensor.convert_conv_weight_tensor_to_tiled_layout(B_)
-    assert(weight_tiled_.shape() == [1, 1, C*R*S, K])
-    weight = weight_tiled_.to(device)
-
+    weight_tiled_ = tensor.convert_conv_weight_tensor_to_tiled_layout(weight_untiled)
+    weight_on_device = weight_tiled_.to(device)
+    assert(weight_on_device.shape() == [1, 1, _nearest_32(C*R*S), K])
+    print(str(conv_params))
+    print(weight_on_device)
     if bias is None:
         bias = None
     else:
@@ -33,13 +34,17 @@ def conv(weight: List[Union[int, float]], conv_params, device, bias=None):
 
     def conv_(activation):
         # check if params are valid
-        [N,C,H,W] = activation.shape()
+        [_,_,H,W] = activation.shape()
         assert (H - R + 2 * P_H) >= 1 and (W - S + 2 * P_W) >= 1
         OH = ((int) ((H - R + 2 * P_H) / U)) + 1
         OW = ((int) ((W - S + 2 * P_W) / V)) + 1
         conv_as_mm_output_shape = [1,1,_nearest_32(OH*OW),K]
-        out = ttl.tensor.conv_as_large_bmm_single_core(activation, weight, [R,S,U,V,P_H,P_W])
-        assert(out.shape() == conv_as_mm_output_shape)
+        print(str(weight_on_device.shape()))
+        print(weight_on_device)
+        assert(weight_on_device.shape() == [1, 1, _nearest_32(C*R*S), K])
+        output = tensor.conv_as_large_bmm_single_core(activation, weight_on_device, [R,S,U,V,P_H,P_W])
+
+        assert(output.shape() == conv_as_mm_output_shape)
 
         if bias is not None:
             assert False # unsupported
