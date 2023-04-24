@@ -11,24 +11,16 @@ namespace tt_metal {
 class Op {
 
     private:
-        // Have to initialize these statics in source file
-        static bool profile_ops = false;
-        static string profile_folder;
 
-        static uint32_t call_counter ;
-        Profiler op_profiler;
+        static inline OpProfiler op_profiler = OpProfiler();
 
     public:
 
         // TODO: Move definition to .cpp
         Tensor run_op(){
-            //Run time check, on host side no that costly
-            if (profile_ops)
-            {
-                op_profiler.markStart(get_op_name());
-                op_profiler.setOutputDir(perf_folder + get_op_name());
-                this->increment_call_count();
-            }
+            op_profiler.startProfiling(get_op_name());
+
+
             this->general_asserts();
             this->op_asserts();
             Tensor output = this->create_output();
@@ -44,25 +36,22 @@ class Op {
 
             tt_metal::LaunchKernels(device, program);
 
-            if (profile_ops)
-            {
-                tt_metal::SetProfilerDir(perf_folder + "/" + get_call_count());
-
-                op_profiler.markStop(get_op_name());
-                op_profiler.dumpHostResults(get_call_count() + "-" + get_op_meta_data());
-                tt_metal::DumpDeviceProfileResults(device, program);
-            }
+            op_profiler.stopProfiling(device, program, get_op_name(), get_op_meta_data());
             // output does not hold any data, contains pointer to buffer on device with the data
             return output;
         }
 
-
-        //Pybind to a profile python function for setting global settings per model.
-        static void set_profiler_settings(bool do_profile, string profile_folder_path)
+        //Pybind the following static functions to profile python functions for setting global settings per model.
+        static void set_profiler_flag(bool do_profile)
         {
-            profile_ops = do_profile;
-            profile_folder = profile_folder_path;
+            op_profiler.set_profiler_flag(do_profile);
         }
+
+        static void set_profiler_location(string profiler_log_location)
+        {
+            op_profiler.set_profiler_location(profiler_log_location);
+        }
+
 
 
     protected:
@@ -93,22 +82,11 @@ class Op {
         }
         virtual void op_asserts() = 0;
 
-        //Child class has to define this by keeping a private static int and increment it
-        virtual uint32_t increment_call_count()
-        {
-            this->call_counter ++;
-        }
 
-        //Child class has to define this to get call count
-        virtual uint32_t get_call_count()
-        {
-            return this->call_counter;
-        }
+        //Child class for returning a vector of meta data strings including parallelization strategy
+        virtual vector<string> get_op_meta_data () = 0;
 
-        //Child class has to define hyphen separated meta data including parallelization strategy
-        virtual string get_op_meta_data () = 0;
-
-        //Child class has to define this by keeping a private const string
+        //Child class has to define this by keeping a const string
         virtual string get_op_name() = 0;
 
         virtual Tensor create_output() = 0;
