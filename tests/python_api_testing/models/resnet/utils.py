@@ -94,3 +94,9 @@ def fold_bn_to_conv(conv: torch.nn.Conv2d, bn: torch.nn.BatchNorm2d) -> Tuple[nn
     bias = bias.squeeze(-1).squeeze(-1).squeeze(-1)
 
     return (nn.Parameter(weight), nn.Parameter(bias))
+
+def convert_mm_to_conv_tensor(x: torch.Tensor):
+    x = torch.transpose(x, 2, 3)
+    assert(x.shape[0] == 1)
+    new_shape = x.shape[1:]
+    return x.reshape(new_shape)
