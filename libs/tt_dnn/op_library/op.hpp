@@ -64,7 +64,6 @@ class Op {
 
         Op() {
             program = new tt_metal::Program();
-            op_profiler = Profiler();
         }
         virtual ~Op() {
             if (program != nullptr) {
