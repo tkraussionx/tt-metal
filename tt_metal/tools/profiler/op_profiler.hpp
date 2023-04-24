@@ -55,8 +55,6 @@ namespace tt_metal {
             }
         }
 
-
-        //Pybind the following static functions to profile python functions for setting global settings per model.
         void set_profiler_flag(bool do_profile)
         {
             profile_ops = do_profile;
