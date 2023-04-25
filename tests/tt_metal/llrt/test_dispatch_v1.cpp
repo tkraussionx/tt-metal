@@ -1,3 +1,5 @@
+#include <chrono>
+
 #include "dispatch/dispatch_helper_functions.hpp"
 // #include "llrt/tt_debug_print_server.hpp"
 #include "tt_metal/hostdevcommon/profiler_common.h"
@@ -5,6 +7,11 @@
 uint32_t nearest_multiple_of_32(uint32_t addr) { return ceil(float(addr) / 32) * 32; }
 
 void assert_32B_alignment(uint32_t addr) { TT_ASSERT((addr % 32) == 0, "Address must be 32B-aligned"); }
+
+using std::chrono::steady_clock;
+using std::chrono::duration;
+using std::chrono::duration_cast;
+using std::chrono::nanoseconds;
 
 // ________ __________    _____      _____
 // \______ \\______   \  /  _  \    /     \
@@ -383,7 +390,8 @@ void readRiscProfilerResults(
         int pcie_slot,
         const tt_xy_pair &worker_core,
         std::string risc_name,
-        int risc_print_buffer_addr){
+        int risc_print_buffer_addr,
+        bool device_new_log){
 
     vector<std::uint32_t> profile_buffer;
     uint32_t end_index;
@@ -402,7 +410,6 @@ void readRiscProfilerResults(
     dropped_marker_counter = profile_buffer[kernel_profiler::DROPPED_MARKER_COUNTER];
 
     std::cout << "END INDEX: " << end_index << std::endl;
-    bool device_new_log = true;
     for (int i = kernel_profiler::MARKER_DATA_START; i < end_index; i+=kernel_profiler::TIMER_DATA_UINT32_SIZE) {
         dumpDeviceResultToFile(
                 pcie_slot,
@@ -435,15 +442,26 @@ void host_dispatch(tt_cluster *cluster, int chip_id, string op, tt_xy_pair dispa
     uint32_t dispatch_done_addr = 0;
     vector<uint32_t> hugepage_done_addrs = {dispatch_done_addr};
 
+    // vector<uint32_t> vec2 = {20, 20, 20, 20};
+
+    // steady_clock::time_point a = steady_clock::now();
+    // sleep(1);
+    // tt::llrt::write_hex_vec_to_core(cluster, chip_id, dispatch_core, vec2, 900 * 1024);
+    // steady_clock::time_point b = steady_clock::now();
+    // std::cout << "Time in nanoseconds: " << duration_cast<nanoseconds>(b - a).count();
+    // exit(0);
     for (int i = 0; i < 1; i++) {
         tt::llrt::internal_::setup_riscs_on_specified_cores(
             cluster, chip_id, tt::llrt::TensixRiscsOptions::BRISC_ONLY, {dispatch_core});
-        tt::llrt::internal_::setup_riscs_on_specified_cores(
-            cluster, chip_id, tt::llrt::TensixRiscsOptions::ALL_RISCS, {worker_core});
+        // tt::llrt::internal_::setup_riscs_on_specified_cores(
+        //     cluster, chip_id, tt::llrt::TensixRiscsOptions::ALL_RISCS, {worker_core});
         tt::llrt::internal_::run_riscs_on_specified_cores(
             cluster, chip_id, tt::llrt::TensixRiscsOptions::BRISC_ONLY, {dispatch_core}, hugepage_done_addrs);
     }
-    readRiscProfilerResults(cluster, 0, {11, 1}, "BRISC", PRINT_BUFFER_BR);
+    bool redo = true;
+    // readRiscProfilerResults(cluster, 0, {1, 1}, "BRISC", PRINT_BUFFER_BR, redo);
+    // redo = false;
+    readRiscProfilerResults(cluster, 0, {1, 11}, "BRISC", PRINT_BUFFER_BR, redo);
 }
 
 bool test_dispatch_v1(tt_cluster *cluster, int chip_id, string op) {
@@ -452,7 +470,7 @@ bool test_dispatch_v1(tt_cluster *cluster, int chip_id, string op) {
         dram_buffer_size, 100, std::chrono::system_clock::now().time_since_epoch().count());
 
     cluster->write_dram_vec(src_vec, tt_target_dram{chip_id, 0, 0}, ACTIVATIONS_DRAM_SRC);
-    tt_xy_pair dispatch_core = {11, 1};
+    tt_xy_pair dispatch_core = {1, 11};
     tt_xy_pair worker_core = {1, 1};
     host_dispatch(cluster, chip_id, op, dispatch_core, worker_core);
 

@@ -509,6 +509,18 @@ void run_riscs_on_specified_cores(
         cluster->set_remote_tensix_risc_reset(core, TENSIX_DEASSERT_SOFT_RESET);
     }
 
+    sleep(5);
+    vector<uint32_t> vec = {10, 10, 10, 10};
+    vector<uint32_t> vec2;
+
+    for (int i = 0; i < 4; i++) {
+        vec2.push_back(20);
+    }
+
+    llrt::write_hex_vec_to_core(cluster, chip_id, cores.at(0), vec, 800 * 1024);
+
+    llrt::write_hex_vec_to_core(cluster, chip_id, cores.at(0), vec2, 900 * 1024);
+
     if (write_to_huge_page) {
         // In this path, host polls hugepage memory rather than the cores
         // to check that they're done

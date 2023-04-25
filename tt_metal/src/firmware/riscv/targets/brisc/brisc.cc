@@ -193,7 +193,7 @@ void device_setup() {
 
     volatile uint32_t* cfg_regs = core.cfg_regs_base(0);
 
-    stagger_startup();
+    // stagger_startup();
 
     // FIXME MT: enable later
     // enable_power_management();
@@ -216,6 +216,7 @@ void device_setup() {
     set_trisc_address();
 
     volatile uint32_t* use_ncrisc = (volatile uint32_t*)(RUNTIME_CONFIG_BASE);
+    use_ncrisc[0] = 0;
 
     if (*use_ncrisc) {
         l1_to_ncrisc_iram_copy();
@@ -302,9 +303,10 @@ void local_mem_copy() {
 int main() {
 
     kernel_profiler::init_BR_profiler();
+    // kernel_profiler::mark_time(6);
 
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
-    kernel_profiler::mark_time(CC_MAIN_START);
+    // kernel_profiler::mark_time(CC_MAIN_START);
 #endif
     RISC_POST_STATUS(0x10000000);
 
@@ -324,11 +326,16 @@ int main() {
     setup_cb_read_write_interfaces();                // done by both BRISC / NCRISC
     init_dram_channel_to_noc_coord_lookup_tables();  // done by both BRISC / NCRISC
 
+    // kernel_profiler::mark_time(7);
+
     device_setup();  // NCRISC is disabled/enabled here
+
+    // kernel_profiler::mark_time(8);
 
     noc_init(loading_noc);
 
     volatile uint32_t* use_triscs = (volatile uint32_t*)(RUNTIME_CONFIG_BASE + 4);
+    use_triscs[0] = 0;
 
     if (*use_triscs) {
         // FIXME: this is not sufficient to bring Trisc / Tensix out of a bad state
@@ -339,31 +346,47 @@ int main() {
         // Bring TRISCs out of reset
         deassert_trisc_reset();
     }
+    // kernel_profiler::mark_time(9);
 
     if ((uint)l1_mem::address_map::RISC_LOCAL_MEM_BASE == ((uint)__local_mem_rodata_end_addr & 0xfff00000)) {
         local_mem_copy();
     }
 
+   *reinterpret_cast<volatile uint32_t*>(900 * 1024) = 0;
+   *reinterpret_cast<volatile uint32_t*>(800 * 1024) = 2;
+   while(*reinterpret_cast<volatile uint32_t*>(800 * 1024) != 10) {}
+
+   kernel_profiler::mark_time(10);
+   while(*reinterpret_cast<volatile uint32_t*>(900 * 1024) != 20) {
+    // for (volatile int i = 0; i < 10; i++) {
+
+    }
+   }
+   kernel_profiler::mark_time(11);
+
+
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & KERNEL_FUNCT_MARKER)
     // kernel_profiler::mark_time(CC_KERNEL_MAIN_START);
 #endif
     // Run the BRISC kernel
-    kernel_main();
+    // kernel_main();
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & KERNEL_FUNCT_MARKER)
     // kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
 #endif
 
-    if (*use_triscs) {
-        // Wait for all the TRISCs to finish (it assumes all 3 TRISCs have been launched and will finish)
-        while (
-            !(*((volatile uint32_t*)trisc_mailbox_addresses[0]) == 1 &&
-              *((volatile uint32_t*)trisc_mailbox_addresses[1]) == 1 &&
-              *((volatile uint32_t*)trisc_mailbox_addresses[2]) == 1)) {
-        }
+    // kernel_profiler::mark_time(6);
 
-        // Once all 3 have finished, assert reset on all of them
-        assert_trisc_reset();
-    }
+    // if (*use_triscs) {
+    //     // Wait for all the TRISCs to finish (it assumes all 3 TRISCs have been launched and will finish)
+    //     while (
+    //         !(*((volatile uint32_t*)trisc_mailbox_addresses[0]) == 1 &&
+    //           *((volatile uint32_t*)trisc_mailbox_addresses[1]) == 1 &&
+    //           *((volatile uint32_t*)trisc_mailbox_addresses[2]) == 1)) {
+    //     }
+
+    //     // Once all 3 have finished, assert reset on all of them
+    //     assert_trisc_reset();
+    // }
 
     volatile uint32_t* test_mailbox_ptr =
         (volatile uint32_t*)(l1_mem::address_map::FIRMWARE_BASE + TEST_MAILBOX_ADDRESS);
@@ -376,7 +399,7 @@ int main() {
 #endif
 
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
-    kernel_profiler::mark_time(CC_MAIN_END);
+    // kernel_profiler::mark_time(CC_MAIN_END);
 #endif
 
 /*
@@ -390,6 +413,8 @@ int main() {
 #if defined(IS_DISPATCH_KERNEL) or defined(WRITE_TO_HUGE_PAGE)
     notify_host_kernel_finished();
 #endif
+
+// kernel_profiler::mark_time(7);
 
 #if defined(DEVICE_DISPATCH_MODE) and not defined(IS_DISPATCH_KERNEL)
     // Notify dispatcher core that it has completed

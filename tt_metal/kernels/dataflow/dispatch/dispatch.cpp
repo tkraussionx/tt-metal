@@ -6,7 +6,7 @@
 
 void kernel_main() {
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 1; i++) {
 
 
         volatile uint32_t* copy_desc_info_addr = reinterpret_cast<volatile uint32_t*>(get_arg_val<uint32_t>(0));
@@ -14,7 +14,7 @@ void kernel_main() {
         noc_prepare_deassert_reset_flag(DEASSERT_RESET_SRC_L1_ADDR);
         noc_prepare_assert_reset_flag(ASSERT_RESET_SRC_L1_ADDR);
 
-        kernel_profiler::mark_time(6);
+        // kernel_profiler::mark_time(6);
         uint32_t num_reads = *copy_desc_info_addr;
 
         copy_desc_info_addr++;
@@ -62,7 +62,6 @@ void kernel_main() {
                 copy_desc_info_addr += 2;
                 noc_async_write(DISPATCH_MESSAGE_REMOTE_SENDER_ADDR, dst_addr, 8);
             }
-            noc_async_write_barrier();
 
             // kernel_profiler::mark_time(7);
             volatile uint32_t* message_addr_ptr = reinterpret_cast<volatile uint32_t*>(DISPATCH_MESSAGE_ADDR);
@@ -76,7 +75,8 @@ void kernel_main() {
                 noc_semaphore_set_remote(DEASSERT_RESET_SRC_L1_ADDR, dst_addr);
             }
 
-            kernel_profiler::mark_time(7);
+            noc_async_write_barrier();
+            // kernel_profiler::mark_time(7);
 
             copy_desc_info_addr = reset_copy_desc_start;
             while (*message_addr_ptr != num_workers); // Could be deasserting through a multicast, in which num_workers > num_resets
