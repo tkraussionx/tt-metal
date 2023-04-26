@@ -14,22 +14,32 @@ from python_api_testing.conv.pytorch_conv_tb import TestLevel, generate_conv_tb_
 
 import torch
 
-def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
-    print("Testing convolution with following parameters - ")
-    conv_op_test_params.print("   ")
-    ctp = conv_op_test_params.conv_params
-    N = ctp.act_shape[0]
-    C = ctp.act_shape[1]
-    H = ctp.act_shape[2]
-    W = ctp.act_shape[3]
-    K = ctp.weight_shape[0]
-    assert(ctp.weight_shape[1] == C)
-    R = ctp.weight_shape[2]
-    S = ctp.weight_shape[3]
-    stride_h = ctp.stride_h;
-    stride_w = ctp.stride_w;
-    pad_h = ctp.pad_h;
-    pad_w = ctp.pad_w;
+@pytest.mark.parametrize(
+    "K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w",
+    (
+        (64, 512, 5, 5, 1, 1, 1, 1, 0, 0),
+        #(32, 1024, 5, 5, 1, 1, 1, 1, 0, 0),
+
+
+        #resnet 18 convs
+        #(256, 128, 28, 28, 3, 3, 2, 2, 1, 1),
+        #(256, 256, 14, 14, 3, 3, 1, 1, 1, 1,),
+
+        #lenet conv
+        #(16, 6, 14, 14, 5, 5, 1, 1, 0, 0),
+
+        #(32, 64, 5, 5, 5, 5, 1, 1, 1, 1,),
+        #(32, 256, 14, 14, 3, 3, 1, 1, 1, 1,),
+        #(32, 1024, 8, 4, 1, 1),
+        #(32, 32, 18, 18, 3, 3),
+        #(32, 32, 5, 5, 1, 1, 1, 1, 0, 0),
+        #(16, 32, 8, 8, 1, 1, 1, 1, 0, 0),
+        #(64, 64, 32, 16, 1, 1),
+        #(64, 64, 10, 10, 1, 1),
+        #(32, 64, 10, 10, 3, 3, 1, 1, 0, 0),
+    ),
+)
+def test_run_conv_as_large_matmul_cpu(K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w):
     # check if params are valid
     assert (H - R + 2 * pad_h) >= 1 and (W - S + 2 * pad_w) >= 1
     OH = ((int) ((H - R + 2 * pad_h) / stride_h)) + 1
@@ -41,9 +51,10 @@ def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
     host = ttl.device.GetHost()
     a_activation_shape = [1,C,H,W]
     b_weights_shape = [K,C,R,S]
+
     mm_output_shape = [1,1,_nearest_32(OH*OW),_nearest_32(K)]
 
-    A_pyt = pytorch_inputs_and_golden[0]
+    A_pyt = torch.randn(a_activation_shape, dtype=torch.bfloat16).float()
     A_ = ttl.tensor.Tensor(
         torch.flatten(A_pyt).tolist(),
         a_activation_shape,
@@ -52,16 +63,13 @@ def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
     A_cl = A_.to(ttl.tensor.Layout.CHANNELS_LAST)
 
     # Prepare weights
-    B_pyt = pytorch_inputs_and_golden[1]
+    B_pyt = torch.randn(b_weights_shape, dtype=torch.bfloat16).float()
     B_ = ttl.tensor.Tensor(
         torch.flatten(B_pyt).tolist(),
         b_weights_shape,
         ttl.tensor.DataType.BFLOAT16,
         ttl.tensor.Layout.ROW_MAJOR
     )
-    if(conv_op_test_params.test_level == TestLevel.INPUT_TENSOR_CREATE):
-        return True
-    assert(conv_op_test_params.test_level == TestLevel.OP_FULL_COMPUTE)
     A_cl_data = A_cl.data()
     # Call DTX pass to transform A
     matrix_activation_h = (int) (_nearest_32(OH*OW) / 32)
@@ -70,6 +78,9 @@ def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
     (num_blocks,_,_,report_string) = ttl.tensor.compute_conv_op_block_info(matrix_activation_h, matrix_activation_w, matrix_weight_w)
     if report_string != "pass":
         print(report_string)
+        assert False
+    if num_blocks != 2:
+        print(str(num_blocks))
         assert False
     dim_order = [0,1,2]
     assert _nearest_32(C*R*S) % num_blocks == 0
@@ -86,7 +97,6 @@ def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
     B_data = B_rm.data()
     B_pytorch_tensor = torch.tensor(B_data).reshape(mm_weight_shape)
 
-
     # Run pytorch matmul
     print("matmul input shape - " + str(A_transformed_pytorch_tensor.shape))
     print("matmul weight shape - " + str(B_pytorch_tensor.shape))
@@ -100,44 +110,10 @@ def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
     assert(list(out_tr.shape) == [1,1,K,(OH*OW)])
     out_result = out_tr.reshape([1,K,OH,OW])
 
-    # Compare against pytorch golden result
-    out_golden = pytorch_inputs_and_golden[2]
+    # Calculate conv result with golden result. Run Pytorch conv
+    out_golden = torch.nn.functional.conv2d(A_pyt, B_pyt, stride=(stride_h, stride_w), padding=(pad_h, pad_w))
     assert(out_result.shape == out_golden.shape)
     passing_pcc, output_pcc = comp_pcc(out_golden, out_result, 0.99)
     print("Passing=", passing_pcc)
     print("Output pcc=", output_pcc)
-    return passing_pcc
-
-def test_sweep_conv():
-    test_bench = generate_conv_tb()
-    pytorch_conv_golden_tb = generate_conv_tb_with_pytorch_golden(test_bench)
-    passing = True
-    full_op_compute_passing_tests = []
-    input_tensor_only_passing_tests = []
-    failing_tests = []
-    for conv_op_test_params, pytorch_inputs_and_golden in pytorch_conv_golden_tb.items():
-        passing_ = run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden)
-        if passing_:
-            if conv_op_test_params.test_level == TestLevel.INPUT_TENSOR_CREATE:
-                input_tensor_only_passing_tests.append(conv_op_test_params)
-            else:
-                full_op_compute_passing_tests.append(conv_op_test_params)
-        else:
-            failing_tests.append(conv_op_test_params)
-            print("Failed test - ")
-            conv_op_test_params.print("   ")
-            assert(False)
-        passing &= passing_
-    print("Following tests that create only input tensors passed - ")
-    for conv_op_test_params in input_tensor_only_passing_tests:
-        conv_op_test_params.print("   ")
-    print("Following tests that rull full op compute passed - ")
-    for conv_op_test_params in full_op_compute_passing_tests:
-        conv_op_test_params.print("   ")
-    print("Following tests failed - ")
-    for conv_op_test_params in failing_tests:
-        conv_op_test_params.print("   ")
-    print(str(len(input_tensor_only_passing_tests)) + " \"INPUT TENSORS CREATION\" tests PASSED.")
-    print(str(len(full_op_compute_passing_tests)) + " \"FULL OP COMPUTE\" tests PASSED.")
-    print(str(len(failing_tests)) + " \"FULL OP COMPUTE\" tests FAILED.")
-    #assert passing
+    assert passing_pcc

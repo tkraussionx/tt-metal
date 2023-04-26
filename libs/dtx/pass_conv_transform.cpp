@@ -68,5 +68,7 @@ DataTransformations * conv_transform(vector<int> shape, vector<int> conv_params,
     //combined->print();
     std::cout << "NUM ROWS=" << num_rows << std::endl;
     std::cout << "NUM COLS=" << num_cols << std::endl;
+    //delete dtx_right;
+    //delete dtx_left;
     return combined;
 }

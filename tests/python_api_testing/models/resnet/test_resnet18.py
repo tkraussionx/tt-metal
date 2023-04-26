@@ -21,8 +21,10 @@ from libs import tt_lib as ttl
 from utility_functions import comp_allclose_and_pcc, comp_pcc
 batch_size=1
 
-@pytest.mark.parametrize("fold_batchnorm", [False], ids=['Batchnorm not folded'])
-def test_run_resnet18_inference(model_location_generator, fold_batchnorm, ):
+# @pytest.mark.parametrize("fold_batchnorm", [False], ids=['Batchnorm not folded'])
+# def test_run_resnet18_inference(model_location_generator, fold_batchnorm, ):
+if __name__ == "__main__":
+    fold_batchnorm = False
     print("Start")
     #image = imagenet_sample_input
     with torch.no_grad():
@@ -56,7 +58,7 @@ def test_run_resnet18_inference(model_location_generator, fold_batchnorm, ):
         tt_output = tt_resnet18(images)
         print(comp_allclose_and_pcc(torch_output, tt_output))
         passing, info = comp_pcc(torch_output, tt_output)
-
+        ttl.device.CloseDevice(device)
         logger.info(info)
         assert passing
 

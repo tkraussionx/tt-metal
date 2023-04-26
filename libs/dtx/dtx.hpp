@@ -79,6 +79,14 @@ class TensorPair {
         string get_string();
         string get_short_string();
         void print_string();
+        ~TensorPair() {
+            if(src_tensor) {
+                delete src_tensor;
+            }
+            if(dst_tensor) {
+                delete dst_tensor;
+            }
+        }
 };
 
 class Transfer {
@@ -104,6 +112,18 @@ class TensorPairGroup {
     int address;                // Address of buffer this is stored in (L1 or DRAM)
     vector<int> core = {-1,-1}; // Tensix core
     int streaming_id;           // The sequence order that's loaded into a CB or Buffer
+    ~TensorPairGroup() {
+        for(auto tp : tensor_pairs) {
+            if(tp)
+                delete tp;
+        }
+        tensor_pairs.clear();
+        for(auto tr : transfers) {
+            if(tr)
+                delete tr;
+        }
+        transfers.clear();
+    }
 };
 
 class TransformationNode {
@@ -127,6 +147,14 @@ class TransformationNode {
     }
 
     void print(int s);
+
+    ~TransformationNode() {
+        for(auto g : groups) {
+            if (g)
+                delete g;
+        }
+        groups.clear();
+    }
 };
 
 

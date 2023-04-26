@@ -26,13 +26,14 @@ void kernel_main() {
     constexpr uint32_t cb_id_in1 = 1;
     uint32_t single_tile_size_bytes = get_tile_size(cb_id_in0);
     volatile std::uint32_t* address_map = (volatile uint32_t*)(address_map_l1_addr);
-    DPRINT << "A" << ENDL();
+    DPRINT << "A=" << num_blocks << ENDL();
+
     // Put zeroes in the zero buffer
-    constexpr uint32_t num_elements_in_zeros_buffer = l1_mem::address_map::N_ZEROS_SIZE / sizeof(uint32_t);
-    volatile uint32_t* zero_base_ptr = reinterpret_cast<volatile uint32_t*>(l1_mem::address_map::N_ZEROS_BASE);
-    // for (uint32_t zero_base_offset = 0; zero_base_offset < num_elements_in_zeros_buffer; zero_base_offset++) {
-    //     *(zero_base_ptr + zero_base_offset) = 0;
-    // }
+    constexpr uint32_t num_elements_in_zeros_buffer = l1_mem::address_map::ZEROS_SIZE / sizeof(uint32_t);
+    volatile uint32_t* zero_base_ptr = reinterpret_cast<volatile uint32_t*>(l1_mem::address_map::ZEROS_BASE);
+    for (uint32_t zero_base_offset = 0; zero_base_offset < num_elements_in_zeros_buffer; zero_base_offset++) {
+        *(zero_base_ptr + zero_base_offset) = 0;
+    }
     uint64_t zeros_base_noc_addr = get_noc_addr(l1_mem::address_map::ZEROS_BASE);
 
     // const args for tile-based bank-swizzled layout
@@ -49,12 +50,18 @@ void kernel_main() {
     };
     uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;
     uint32_t index = 0;
+    for(uint32_t i = 0; i < 2; i++) {
+    cb_reserve_back(cb_id_in1, in1_block_num_tiles);
+    cb_reserve_back(cb_id_in0, in0_block_num_tiles);
+    cb_push_back(cb_id_in0, in0_block_num_tiles);
+        cb_push_back(cb_id_in1, in1_block_num_tiles);
+    }
     DPRINT << "B=" << num_blocks << ENDL();
     for (uint32_t b = 0; b < num_blocks; b += 1) {
         // Read weights
-        DPRINT << "T" << ENDL();
-        cb_reserve_back(cb_id_in1, in1_block_num_tiles);
-        DPRINT << "R" << ENDL();
+        //DPRINT << "T" << ENDL();
+
+        //DPRINT << "R" << ENDL();
         uint32_t l1_write_addr_in1 = get_write_ptr(cb_id_in1);
         uint32_t in1_tensor_row_start_tile_id = in1_tensor_current_block_start_tile_id;
         for(uint32_t h = 0; h < in1_block_h; h++) {
@@ -68,13 +75,13 @@ void kernel_main() {
             in1_tensor_row_start_tile_id += in1_tensor_stride_h;
         }
         noc_async_read_barrier();
-        DPRINT << "O" << ENDL();
+        //DPRINT << "O" << ENDL();
         in1_tensor_current_block_start_tile_id += in1_tensor_next_block_stride;
 
         // Read from DRAM into L1 using DTX address map and push one block at a time to CB
-        DPRINT << "P" << ENDL();
-        cb_reserve_back(cb_id_in0, in0_block_num_tiles);
-        DPRINT << "Q" << ENDL();
+        //DPRINT << "P" << ENDL();
+
+        //DPRINT << "Q" << ENDL();
         uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
         uint32_t bytes_read = 0;
         while(bytes_read != in0_block_size_bytes) {
@@ -83,10 +90,19 @@ void kernel_main() {
             uint32_t dst_address = address_map[index+1];
             uint32_t read_size = address_map[index+2];
             uint32_t pad = address_map[index+3];
+            if (index == 0) {
+            DPRINT << "S=" << src_address << ENDL();
+            DPRINT << "D=" << dst_address << ENDL();
+            DPRINT << "R=" << read_size << ENDL();
+            DPRINT << "pad=" << pad << ENDL();
+            }
             if(pad == 1) {
                 // source address is set to max. This refers to padding location.
                 // read zeroes from zero buffer
                 uint32_t dst_addr = l1_write_addr_in0 + dst_address;
+                if (dst_addr < 200 * 1024) {
+                    DPRINT << "PROBLEM" << ENDL();
+                }
                 uint32_t pad_size = read_size;
                 if (pad_size <= l1_mem::address_map::ZEROS_SIZE) {
                     noc_async_read(zeros_base_noc_addr, dst_addr, pad_size);
@@ -109,13 +125,16 @@ void kernel_main() {
                 uint32_t src_addr = in0_addr_base + src_address;
                 uint64_t src_noc_addr = get_noc_addr(in0_noc_x, in0_noc_y, src_addr);
                 uint32_t dst_addr = l1_write_addr_in0 + dst_address;
-                noc_async_read(src_noc_addr, dst_addr, read_size);
+                if (dst_addr < 200 * 1024) {
+                    DPRINT << "PROBLEM" << ENDL();
+                }
+                //noc_async_read(src_noc_addr, dst_addr, read_size);
             }
             bytes_read += read_size;
             index += 4;
         }
         noc_async_read_barrier();
-        DPRINT << "S" << ENDL();
+        //DPRINT << "S" << ENDL();
         cb_push_back(cb_id_in0, in0_block_num_tiles);
         cb_push_back(cb_id_in1, in1_block_num_tiles);
     }

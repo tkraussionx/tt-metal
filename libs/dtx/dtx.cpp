@@ -164,25 +164,32 @@ void TransformationNode::print(int spaces) {
     cout << s(spaces) << "Transformation Node: opcode = " << this->opcode << endl;
 
     int group_index = 0;
+    int i = 0;
     for (TensorPairGroup * group : this->groups) {
+
         cout << s(2 + spaces) << "Group = " << group_index << ";  shape = " << v2s(group->shape) << ", core=" << v2s(group->core) << endl;
 
         //cout << s(4+spaces) << "TensorPairs:" << endl;
         cout << s(4+spaces) << "TensorPairs (" << group->tensor_pairs.size() << "):" << endl;
         int tp_index = 0;
+        i = 0;
         for (TensorPair * tp : group->tensor_pairs) {
+            if (i == 100)
+                break;
             cout << s(6+spaces) << "TensorPair[" << tp_index << "]  " << tp->get_string() << endl;
             tp_index++;
+            i++;
         }
 
         cout << s(4+spaces) << "Transactions:" << endl;
         int tx_index = 0;
+        i = 0;
         for (Transfer * tx : group->transfers) {
+            if (i == 100)
+                break;
             cout << s(6+spaces) << "Transactoin[" << tx_index << "]  " << tx->get_string() << endl;
             tx_index++;
         }
-
-
         group_index++;
     }
     cout << endl;

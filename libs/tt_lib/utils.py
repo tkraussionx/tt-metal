@@ -302,3 +302,16 @@ def roundup32(a):
 def float_to_bits(x):
     s = struct.pack('>f', x)
     return struct.unpack('>l', s)[0]
+
+def blocked_mm(act, weight):
+    assert len(act.shape) == 3
+    assert len(weight.shape) == 3
+    assert act.shape[0] == weight.shape[0]
+    assert act.shape[2] == weight.shape[1]
+    ret_shape = [1,1,act.shape[1], weight.shape[2]]
+    ret = torch.zeros(ret_shape, dtype=torch.bfloat16).float()
+    for b in range(act.shape[0]):
+        for oh in range(ret_shape[2]):
+            for ow in range(ret_shape[3]):
+                ret[0][0][oh][ow] += torch.dot(act[b,oh,:].reshape(-1), weight[b,:,ow].reshape(-1))
+    return ret

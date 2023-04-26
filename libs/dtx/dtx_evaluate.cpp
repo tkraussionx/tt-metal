@@ -24,6 +24,12 @@ vector<float> evaluate(vector<float> data, DataTransformations * dtx) {
         auto dst_address = address_map[i+1];
         auto transfer_size = address_map[i+2];
         auto pad = address_map[i+3];
+        if(i==0) {
+            std::cout << "src=" << src_address << std::endl;
+            std::cout << "dst=" << dst_address << std::endl;
+            std::cout << "rs=" << transfer_size << std::endl;
+            std::cout << "pad=" << pad << std::endl;
+        }
         for (uint32_t s = 0; s < transfer_size; s++) {
             assert(dst_address+s < data_transformed.size());
             // if(src_address+s >= data.size()) {

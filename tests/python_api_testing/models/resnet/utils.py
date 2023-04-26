@@ -100,13 +100,16 @@ def fold_bn_to_conv(conv: torch.nn.Conv2d, bn: torch.nn.BatchNorm2d) -> Tuple[nn
 def can_run_conv_on_device(act_shape, conv_params):
     K, C, R, S, U, V, P_H, P_W = [conv_params[i] for i in range(8)]
     [N,C,H,W] = act_shape
+    print("Conv will following parameters -")
+    print("K="+str(K)+" C="+str(C)+" H="+str(H)+" W="+str(W)+" R="+str(R)+" S="+str(S)+" U="+str(U)+" V="+str(V)+" PH="+str(P_H)+" PW="+str(P_W))
+    #if(H==14):
+    #    return False
     assert (H - R + 2 * P_H) >= 1 and (W - S + 2 * P_W) >= 1
     OH = ((int) ((H - R + 2 * P_H) / U)) + 1
     OW = ((int) ((W - S + 2 * P_W) / V)) + 1
     matrix_activation_h = (int) (nearest_32(OH*OW) / 32)
-    assert K%32 == 0
-    matrix_weight_w = (int) (K / 32)
-    matrix_activation_w = (int) (nearest_32(C*R*S))
+    matrix_weight_w = (int) (nearest_32(K) / 32)
+    matrix_activation_w = (int) (nearest_32(C*R*S)/32)
     (_,_,_,report_string) = ttl.tensor.compute_conv_op_block_info(matrix_activation_h, matrix_activation_w, matrix_weight_w)
     if report_string != "pass":
         print(report_string)

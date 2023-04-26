@@ -95,18 +95,23 @@ def test_sweep_conv():
     full_op_compute_passing_tests = []
     input_tensor_only_passing_tests = []
     failing_tests = []
+    failing_tests_exception = []
     for conv_op_test_params, pytorch_inputs_and_golden in pytorch_conv_golden_tb.items():
-        passing_ = run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden)
-        if passing_:
-            if conv_op_test_params.test_level == TestLevel.INPUT_TENSOR_CREATE:
-                input_tensor_only_passing_tests.append(conv_op_test_params)
+        try:
+            passing_ = run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden)
+            if passing_:
+                if conv_op_test_params.test_level == TestLevel.INPUT_TENSOR_CREATE:
+                    input_tensor_only_passing_tests.append(conv_op_test_params)
+                else:
+                    full_op_compute_passing_tests.append(conv_op_test_params)
             else:
-                full_op_compute_passing_tests.append(conv_op_test_params)
-        else:
+                failing_tests_exception.append(conv_op_test_params)
+                print("Failed test - ")
+                conv_op_test_params.print("   ")
+                #assert(False)
+        except:
             failing_tests.append(conv_op_test_params)
-            print("Failed test - ")
-            conv_op_test_params.print("   ")
-            #assert(False)
+            passing_ = False
         passing &= passing_
     print("Following tests that create only input tensors passed - ")
     for conv_op_test_params in input_tensor_only_passing_tests:
@@ -114,8 +119,11 @@ def test_sweep_conv():
     print("Following tests that rull full op compute passed - ")
     for conv_op_test_params in full_op_compute_passing_tests:
         conv_op_test_params.print("   ")
-    print("Following tests failed - ")
+    print("Following tests failed with incorrect mismatch - ")
     for conv_op_test_params in failing_tests:
+        conv_op_test_params.print("   ")
+    print("Following tests failed with exception/error - ")
+    for conv_op_test_params in failing_tests_exception:
         conv_op_test_params.print("   ")
     print(str(len(input_tensor_only_passing_tests)) + " \"INPUT TENSORS CREATION\" tests PASSED.")
     print(str(len(full_op_compute_passing_tests)) + " \"FULL OP COMPUTE\" tests PASSED.")
