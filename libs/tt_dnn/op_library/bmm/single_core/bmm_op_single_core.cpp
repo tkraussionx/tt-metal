@@ -3,7 +3,7 @@
 #include "tt_metal/host_api.hpp"
 #include "common/constants.hpp"
 #include "tests/tt_metal/llrt/test_libs/debug_mailbox.hpp"
-
+#include "llrt/tt_debug_print_server.hpp"
 using namespace tt::constants;
 
 namespace tt {
@@ -369,7 +369,7 @@ Tensor large_bmm_single_core_(const Tensor& a, const Tensor &b) {
 
     tt_metal::Program *program = new tt_metal::Program();
     tt_xy_pair core = {0, 0};
-
+    tt_start_debug_print_server(a.device()->cluster(), {0}, {{1, 1}});
     uint32_t single_tile_size = 2 * 1024; // TODO(agrebenisan): Refactor on df
     tt_metal::Buffer *src0_dram_buffer = a.buffer();
     tt_metal::Buffer *src1_dram_buffer = b.buffer();

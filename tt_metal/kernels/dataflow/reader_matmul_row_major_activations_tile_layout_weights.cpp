@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include "dataflow_api.h"
-
+#include "debug_print.h"
 void kernel_main() {
 
 
@@ -50,7 +50,7 @@ void kernel_main() {
 
     uint32_t in0_tensor_current_block_start_row_id = in0_tensor_start_row_id;
     uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;
-
+    DPRINT << "A=" << num_blocks << ENDL();
     const InterleavedAddrGen s0 = {
         .bank_base_address = in0_tensor_addr,
         .num_used_banks = num_used_dram_ch,
