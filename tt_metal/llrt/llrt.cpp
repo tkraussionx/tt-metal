@@ -376,6 +376,10 @@ void assert_enable_core_mailbox_is_valid_for_core(tt_cluster *cluster, int chip_
     std::vector<uint32_t> enable_core_mailbox_init_val_check = {0};
     enable_core_mailbox_init_val_check = read_hex_vec_from_core(
         cluster, chip_id, core, ENABLE_CORE_MAILBOX_ADDR, sizeof(uint32_t));  // read a single uint32_t
+    if (!(enable_core_mailbox_init_val_check[0] == ENABLE_CORE_ENABLE_VALUE ||
+        enable_core_mailbox_init_val_check[0] == ENABLE_CORE_DONE_VALUE)) {
+            std::cout << "enable_core_mailbox_init_val_check[0]=" << enable_core_mailbox_init_val_check[0] << std::endl;
+        }
     TT_ASSERT(
         enable_core_mailbox_init_val_check[0] == ENABLE_CORE_ENABLE_VALUE ||
         enable_core_mailbox_init_val_check[0] == ENABLE_CORE_DONE_VALUE);

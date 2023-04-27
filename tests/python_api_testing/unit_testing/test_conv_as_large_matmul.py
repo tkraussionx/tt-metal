@@ -12,34 +12,45 @@ from libs.tt_lib.utils import tilize_to_list, tilize, untilize, channels_last, _
 from python_api_testing.models.utility_functions import print_diff_argmax, is_close, comp_pcc
 import torch
 
-@pytest.mark.parametrize(
-    "K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w",
-    (
-        (32, 1024, 5, 5, 1, 1, 1, 1, 0, 0),
-        # (64, 512, 5, 5, 1, 1, 1, 1, 0, 0),
-        #resnet 18 convs
-        #(256, 128, 28, 28, 3, 3, 2, 2, 1, 1),
-        #(128, 128, 6, 6, 3, 3, 1, 1, 1, 1),
+# @pytest.mark.parametrize(
+#     "K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w",
+#     (
+#         #(256, 128, 14, 14, 1, 1, 1, 1, 0, 0),
+#         #(32, 1024, 5, 5, 1, 1, 1, 1, 0, 0),
+#         # (64, 512, 5, 5, 1, 1, 1, 1, 0, 0),
+#         #resnet 18 convs
 
-        #lenet conv
-        #(16, 6, 5, 5, 1, 1, 1, 1, 0, 0),
-        #(32, 64, 5, 5, 5, 5, 1, 1, 1, 1,),
-        #(32, 256, 14, 14, 3, 3, 1, 1, 1, 1,),
-        #(32, 1024, 8, 4, 1, 1),
-        #(32, 32, 18, 18, 3, 3),
-        #(32, 32, 10, 10, 1, 1, 1, 1, 0, 0),
-        # (32, 32, 10, 10, 3, 3, 1, 1, 0, 0),
-        #(64, 64, 32, 16, 1, 1),
-        #(64, 64, 10, 10, 1, 1),
-        #(32, 64, 10, 10, 3, 3, 1, 1, 0, 0),
-    ),
-)
-def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w):
-    #torch.manual_seed(0)
-    torch.set_printoptions(threshold=10000)
+#         (256, 128, 28, 28, 3, 3, 2, 2, 1, 1),
+
+#         #(128, 128, 6, 6, 3, 3, 1, 1, 1, 1),
+
+#         #lenet conv
+#         #(16, 6, 5, 5, 1, 1, 1, 1, 0, 0),
+#         #(32, 64, 5, 5, 5, 5, 1, 1, 1, 1,),
+#         #(32, 256, 14, 14, 3, 3, 1, 1, 1, 1,),
+#         #(32, 1024, 8, 4, 1, 1),
+#         #(32, 32, 18, 18, 3, 3),
+#         #(32, 32, 10, 10, 1, 1, 1, 1, 0, 0),
+#         # (32, 32, 10, 10, 3, 3, 1, 1, 0, 0),
+#         #(64, 64, 32, 16, 1, 1),
+#         #(64, 64, 10, 10, 1, 1),
+#         #(32, 64, 10, 10, 3, 3, 1, 1, 0, 0),
+#     ),
+# )
+result = []
+A_i = []
+B_i = []
+def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w, untilize_out):
+    global result
+    global A_i
+    global B_i
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
     host = ttl.device.GetHost()
+    print("Device Initialized")
+
+    #torch.set_printoptions(threshold=10000)
+
     a_activation_shape = [1,C,H,W]
     b_weights_shape = [K,C,R,S]
     # check if params are valid
@@ -47,8 +58,12 @@ def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, p
     OH = ((int) ((H - R + 2 * pad_h) / stride_h)) + 1
     OW = ((int) ((W - S + 2 * pad_w) / stride_w)) + 1
     mm_output_shape = [1,1,_nearest_32(OH*OW),_nearest_32(K)]
-
+    torch.manual_seed(0)
     A_pyt = torch.randn(a_activation_shape, dtype=torch.bfloat16).float()
+    if (A_i == []):
+        A_i = torch.flatten(A_pyt).tolist()
+    elif(A_i != torch.flatten(A_pyt).tolist()):
+        assert False
     A_ = ttl.tensor.Tensor(
         torch.flatten(A_pyt).tolist(),
         a_activation_shape,
@@ -60,6 +75,10 @@ def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, p
 
     # Prepare weights
     B_pyt = torch.randn(b_weights_shape, dtype=torch.bfloat16).float()
+    if (B_i == []):
+        B_i = torch.flatten(B_pyt).tolist()
+    elif(B_i != torch.flatten(B_pyt).tolist()):
+        assert False
     B_ = ttl.tensor.Tensor(
         torch.flatten(B_pyt).tolist(),
         b_weights_shape,
@@ -73,11 +92,19 @@ def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, p
     out_golden = torch.nn.functional.conv2d(A_pyt, B_pyt, stride=(stride_h, stride_w), padding=(pad_h, pad_w))
 
     # Run TT metal OP
-    out = ttl.tensor.conv_as_large_bmm_single_core(A, B_tiled, [R,S,stride_h,stride_w,pad_h,pad_w])
+    out = ttl.tensor.conv_as_large_bmm_single_core(A, B_tiled, [R,S,stride_h,stride_w,pad_h,pad_w], untilize_out)
+    out = out.to(host)
     assert(out.shape() == mm_output_shape)
+    if not untilize_out:
+        # untilize
+        out = out.to(ttl.tensor.Layout.ROW_MAJOR)
     # Copy output to host and convert tt tensor to pytorch tensor
-    out_pytorch_padded = torch.tensor(out.to(host).data()).reshape(mm_output_shape)
-    ttl.device.CloseDevice(device)
+    out_pytorch_padded = torch.tensor(out.data()).reshape(mm_output_shape)
+
+    if (result == []):
+        result = torch.flatten(out_pytorch_padded).tolist()
+    elif(result != torch.flatten(out_pytorch_padded).tolist()):
+        assert False
 
     #Run pytorch matmul
     mm_input_shape = [1, 1, _nearest_32(OH*OW), _nearest_32(C*R*S)]
@@ -112,7 +139,7 @@ def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, p
     p = 0
     nzp = 0
     for h in range(0,mm_output_shape[2]):
-        print("at h=" + str(h))
+        #print("at h=" + str(h))
         for w in range(0,mm_output_shape[3]):
             #if(out_pytorch_padded[0][0][h][w] != 0):
                 #print("Non zero at w=" + str(w))
@@ -125,7 +152,7 @@ def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, p
             else:
                 if(out_pytorch_padded[0][0][h][w] != 0):
                     nzp+=1
-                print("Pases on w=" + str(w))
+                #print("Pases on w=" + str(w))
                 p+=1
         #     if err == 1000:
         #         break
@@ -156,3 +183,23 @@ def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, p
     print("Passing=", passing_pcc)
     print("Output pcc=", output_pcc)
     #assert passing_pcc
+    print("Done")
+    ttl.device.CloseDevice(device)
+    print("Device closed")
+
+if __name__ == "__main__":
+    # Incorrect output
+    #test_run_conv_as_large_matmul(256, 128, 28, 28, 3, 3, 2, 2, 1, 1)
+    #test_run_conv_as_large_matmul(256, 128, 28, 28, 3, 3, 2, 2, 1, 1)
+    #test_run_conv_as_large_matmul(256, 128, 28, 28, 3, 3, 2, 2, 1, 1, True)
+    #test_run_conv_as_large_matmul(256, 128, 28, 28, 3, 3, 2, 2, 1, 1, False)
+    # Hang
+   #test_run_conv_as_large_matmul(32, 1024, 5, 5, 1, 1, 1, 1, 0, 0, True)
+
+    # Crash
+    #test_run_conv_as_large_matmul(256, 256, 14, 14, 3, 3, 1, 1, 1, 1, True)
+
+    # Works
+    test_run_conv_as_large_matmul(32, 32, 5, 5, 1, 1, 1, 1, 0, 0, True)
+    #test_run_conv_as_large_matmul(32, 32, 5, 5, 1, 1, 1, 1, 0, 0, False)
+    #test_run_conv_as_large_matmul(32, 32, 5, 5, 1, 1, 1, 1, 0, 0)

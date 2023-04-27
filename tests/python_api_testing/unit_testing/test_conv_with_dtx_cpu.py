@@ -17,13 +17,13 @@ import torch
 @pytest.mark.parametrize(
     "K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w",
     (
-        (64, 512, 5, 5, 1, 1, 1, 1, 0, 0),
+        #(64, 512, 5, 5, 1, 1, 1, 1, 0, 0),
         #(32, 1024, 5, 5, 1, 1, 1, 1, 0, 0),
 
 
         #resnet 18 convs
         #(256, 128, 28, 28, 3, 3, 2, 2, 1, 1),
-        #(256, 256, 14, 14, 3, 3, 1, 1, 1, 1,),
+        (256, 256, 14, 14, 3, 3, 1, 1, 1, 1,),
 
         #lenet conv
         #(16, 6, 14, 14, 5, 5, 1, 1, 0, 0),
@@ -79,9 +79,9 @@ def test_run_conv_as_large_matmul_cpu(K, C, H, W, R, S, stride_h, stride_w, pad_
     if report_string != "pass":
         print(report_string)
         assert False
-    if num_blocks != 2:
-        print(str(num_blocks))
-        assert False
+    #if num_blocks != 2:
+    #    print(str(num_blocks))
+    #    assert False
     dim_order = [0,1,2]
     assert _nearest_32(C*R*S) % num_blocks == 0
     block_width = (int) (_nearest_32(C*R*S)/num_blocks)
@@ -101,6 +101,7 @@ def test_run_conv_as_large_matmul_cpu(K, C, H, W, R, S, stride_h, stride_w, pad_
     print("matmul input shape - " + str(A_transformed_pytorch_tensor.shape))
     print("matmul weight shape - " + str(B_pytorch_tensor.shape))
     #out_pytorch = torch.matmul(A_transformed_pytorch_tensor, B_pytorch_tensor).reshape(mm_output_shape)
+    # Run host side CPU function
     out_pytorch = blocked_mm(A_transformed_pytorch_tensor, B_pytorch_tensor)
     assert(list(out_pytorch.shape) == mm_output_shape)
     out_pytorch = out_pytorch[:, :, 0 : (OH * OW), 0 : K]

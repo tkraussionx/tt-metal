@@ -67,7 +67,7 @@ def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
         return True
     assert(conv_op_test_params.test_level == TestLevel.OP_FULL_COMPUTE)
     # Run TT metal OP
-    out = ttl.tensor.conv_as_large_bmm_single_core(A, B_tiled, [R,S,stride_h,stride_w,pad_h,pad_w])
+    out = ttl.tensor.conv_as_large_bmm_single_core(A, B_tiled, [R,S,stride_h,stride_w,pad_h,pad_w], True)
     assert(out.shape() == mm_output_shape)
     # Copy output to host and convert tt tensor to pytorch tensor
     out_pytorch = torch.tensor(out.to(host).data()).reshape(mm_output_shape)

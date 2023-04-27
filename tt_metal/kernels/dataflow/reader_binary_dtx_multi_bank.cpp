@@ -42,6 +42,12 @@ void kernel_main() {
     constexpr uint32_t num_used_dram_ch = 8;
     constexpr uint32_t num_used_dram_ch_pow2_exponent = 3;
     constexpr uint32_t tile_size_pow2_exponent = 11;
+    const InterleavedAddrGen s0 = {
+        .bank_base_address = src0_addr,
+        .num_used_banks = num_used_dram_ch,
+        .log_base_2_of_num_used_banks = num_used_dram_ch_pow2_exponent,
+        .bank_unit_size = in0_channel_stick_size // size of 1 stick = transfer size in address map = number of conv activation channels
+    };
     const InterleavedPow2AddrGen s1 = {
         .bank_base_address = src1_addr,
         .num_used_banks = num_used_dram_ch,
@@ -70,7 +76,7 @@ void kernel_main() {
             in1_tensor_row_start_tile_id += in1_tensor_stride_h;
         }
         noc_async_read_barrier();
-        // //DPRINT << "O" << ENDL();
+        //DPRINT << "O" << ENDL();
         in1_tensor_current_block_start_tile_id += in1_tensor_next_block_stride;
 
         // Read from DRAM into L1 using DTX address map and push one block at a time to CB
@@ -85,12 +91,12 @@ void kernel_main() {
             uint32_t dst_address = address_map[index+1];
             uint32_t read_size = address_map[index+2];
             uint32_t pad = address_map[index+3];
-            // if (index == 0) {
-            // DPRINT << "S=" << src_address << ENDL();
-            // DPRINT << "D=" << dst_address << ENDL();
-            // DPRINT << "R=" << read_size << ENDL();
-            // DPRINT << "pad=" << pad << ENDL();
-            // }
+            if (index == 0) {
+            DPRINT << "S=" << src_address << ENDL();
+            DPRINT << "D=" << dst_address << ENDL();
+            DPRINT << "R=" << read_size << ENDL();
+            DPRINT << "pad=" << pad << ENDL();
+            }
             if(pad == 1) {
                 // source address is set to max. This refers to padding location.
                 // read zeroes from zero buffer

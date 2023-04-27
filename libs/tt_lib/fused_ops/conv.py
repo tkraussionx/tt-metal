@@ -36,7 +36,7 @@ def conv(weight: List[Union[int, float]], conv_params, device, bias=None):
         OH = ((int) ((H - R + 2 * P_H) / U)) + 1
         OW = ((int) ((W - S + 2 * P_W) / V)) + 1
         conv_as_mm_output_shape = [1,1,_nearest_32(OH*OW),_nearest_32(K)]
-        output = tensor.conv_as_large_bmm_single_core(activation, weight_on_device, [R,S,U,V,P_H,P_W])
+        output = tensor.conv_as_large_bmm_single_core(activation, weight_on_device, [R,S,U,V,P_H,P_W], True)
 
         assert(output.shape() == conv_as_mm_output_shape)
 

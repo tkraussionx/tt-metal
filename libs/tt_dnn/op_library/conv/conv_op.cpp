@@ -124,12 +124,139 @@ void create_CBs_for_fused_matmul_c(tt_metal::Program* program,
     );
 }
 
-Tensor create_output_dram_buffer_(Device * device, DataType data_type, std::array<uint32_t, 4> cshape) {
+void create_CBs_for_fused_matmul_new(tt_metal::Program* program,
+                                tt_metal::Device* device,
+                                tt_xy_pair core,
+                                uint32_t M,
+                                uint32_t N,
+                                uint32_t in0_block_w,
+                                uint32_t out_subblock_h,
+                                uint32_t num_bytes_for_df,
+                                bool untilize_out) {
+    uint32_t in0_cb                                   = 0;
+    uint32_t in1_cb                                   = 1;
+    uint32_t tilize_mode_tilized_in0_cb               = 24;
+    uint32_t matmul_partials_cb                       = 25;
+    uint32_t untilize_mode_final_matmul_partials_cb   = 26;
+    uint32_t untilize_mode_reblock_cb                 = 27;
+    uint32_t out0_cb                                  = 16;
+
+    uint32_t single_tile_size = num_bytes_for_df * 1024;
+
+    uint32_t num_output_tiles = M * N;
+
+    // Invariants
+    uint32_t cb0_tiles = M * in0_block_w * 2;
+    auto cb_in0 = tt_metal::CreateCircularBuffer(
+        program,
+        device,
+        in0_cb,
+        core,
+        cb0_tiles,
+        cb0_tiles * single_tile_size,
+        tt::DataFormat::Float16_b
+    );
+
+    uint32_t cb1_tiles = N * in0_block_w * 2;
+    auto cb_in1 = tt_metal::CreateCircularBuffer(
+        program,
+        device,
+        in1_cb,
+        core,
+        cb1_tiles,
+        cb1_tiles * single_tile_size,
+        tt::DataFormat::Float16_b
+    );
+
+    // Used for placing tilized activations
+    auto cb_src0_tilized = tt_metal::CreateCircularBuffer(
+        program,
+        device,
+        tilize_mode_tilized_in0_cb,
+        core,
+        cb0_tiles,
+        cb0_tiles * single_tile_size,
+        tt::DataFormat::Float16_b
+    );
+    if(untilize_out) {
+        auto cb_matmul_partials = tt_metal::CreateCircularBuffer(
+            program,
+            device,
+            matmul_partials_cb,
+            core,
+            num_output_tiles,
+            num_output_tiles * single_tile_size,
+            tt::DataFormat::Float16_b
+        );
+
+        // Shares same address space as matmul partials
+        auto cb_final_matmul_partials = tt_metal::CreateCircularBuffer(
+            program,
+            device,
+            untilize_mode_final_matmul_partials_cb,
+            core,
+            num_output_tiles,
+            num_output_tiles * single_tile_size,
+            tt::DataFormat::Float16_b
+        );
+
+        // Supposed to be a small CB only responsible for reorganizing
+        // the output blocks to fill the whole "per core output block width"
+        uint32_t reblock_cb_tiles = N; // Only space for one row
+        auto cb_reblock = tt_metal::CreateCircularBuffer(
+            program,
+            device,
+            untilize_mode_reblock_cb,
+            core,
+            reblock_cb_tiles,
+            reblock_cb_tiles * single_tile_size,
+            tt::DataFormat::Float16_b
+        );
+
+        auto cb_output = tt_metal::CreateCircularBuffer(
+            program,
+            device,
+            out0_cb,
+            core,
+            num_output_tiles,
+            num_output_tiles * single_tile_size,
+            tt::DataFormat::Float16_b
+        );
+    }
+    else {
+
+        auto cb_matmul_partials = tt_metal::CreateCircularBuffer(
+            program,
+            device,
+            matmul_partials_cb,
+            core,
+            num_output_tiles,
+            num_output_tiles * single_tile_size,
+            tt::DataFormat::Float16_b
+        );
+
+        auto cb_matmul_partials_addr = cb_matmul_partials->address();
+
+        auto cb_output = tt_metal::CreateCircularBuffer(
+            program,
+            device,
+            out0_cb,
+            core,
+            num_output_tiles,
+            num_output_tiles * single_tile_size,
+            cb_matmul_partials_addr,
+            tt::DataFormat::Float16_b
+        );
+
+    }
+}
+
+Tensor create_output_dram_buffer_(Device * device, DataType data_type, std::array<uint32_t, 4> cshape, bool untilize_out) {
     tt::tt_metal::Layout out_layout;
     tt_metal::Tensor output = tt_metal::Tensor(
         cshape,
         data_type,
-        tt::tt_metal::Layout::ROW_MAJOR,
+        untilize_out ? tt::tt_metal::Layout::ROW_MAJOR : tt::tt_metal::Layout::TILE,
         device);
 
     return output;
@@ -260,7 +387,7 @@ vector<uint32_t> compute_conv_as_mm_shape(vector<int> shape, vector<int> conv_pa
 }
 // TODO(whoever gets a chance!): Refactor this so it's a part of matmul_single_core_... keeping it
 // independent for now as it's easier for me to progress
-Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<int> conv_params) {
+Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<int> conv_params, bool untilize_out=true) {
     bool pass = true;
     TT_ASSERT(a.layout() == Layout::CHANNELS_LAST, "Conv activation should be in channels last layout");
     TT_ASSERT(a.shape()[0] == 1, "Only batch size 1 supported.");
@@ -363,6 +490,9 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
             std::cout << "rs=" << transfer->size*2 << std::endl;
             std::cout << "pad=" << transfer->pad << std::endl;
         }
+        assert(transfer->size*2 % 32 == 0);
+        assert(transfer->src_address*2 % 32 == 0);
+        assert(transfer->dst_address*2 % 32 == 0);
         address_map.push_back(transfer->src_address*2);
         address_map.push_back(transfer->dst_address*2);
         address_map.push_back(transfer->size*2);
@@ -386,7 +516,7 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
     //delete dtx;
     tt_metal::Program *program = new tt_metal::Program();
     tt_xy_pair core = {0, 0};
-    tt_start_debug_print_server(a.device()->cluster(), {0}, {{1, 1}});
+    //tt_start_debug_print_server(a.device()->cluster(), {0}, {{1, 1}});
 
 
     uint32_t single_tile_size = 2 * 1024; // TODO(agrebenisan): Refactor on df
@@ -400,14 +530,13 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
     tt_metal::Device *device = a.device();
     std::array<uint32_t, 4> cshape{Ba, Ca, Ha, Wb};
 
-    Tensor output = create_output_dram_buffer_(a.device(), a.dtype(), cshape);
+    Tensor output = create_output_dram_buffer_(a.device(), a.dtype(), cshape, untilize_out);
     tt_metal::Buffer *dst_dram_buffer = output.buffer();
     TT_ASSERT(dst_dram_buffer != nullptr, "Output buffer should be allocated on device!");
-    uint32_t address_map_l1_addr = (760  * 1024) + (Hat * Wbt * single_tile_size) + (5 * 1024);
-    std::cout << "address map l1 address=" << address_map_l1_addr << std::endl;
-    std::cout << "address map size=" << address_map.size() * sizeof(uint32_t) << std::endl;
+    auto l1_b0 = tt_metal::CreateL1Buffer(program, device, core, address_map.size() * sizeof(uint32_t));
+    uint32_t address_map_l1_addr = l1_b0->address();
     assert(address_map_l1_addr + (address_map.size() * sizeof(uint32_t)) <= 995 * 1024);
-    auto l1_b0 = tt_metal::CreateL1Buffer(program, device, core, address_map.size() * sizeof(uint32_t), address_map_l1_addr);
+
     // Keep for now, but need to fix when you get to multibank
     uint32_t out_dram_addr = dst_dram_buffer->address();
     auto out_dram_noc_xy = dst_dram_buffer->noc_coordinates();
@@ -479,8 +608,16 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
         std::cout << "\t out_subblock_num_tiles: " << out_subblock_num_tiles << std::endl;
 
 
-
-            create_CBs_for_fused_matmul_c(
+// create_CBs_for_fused_matmul_c(
+//                 program,
+//                 a.device(),
+//                 core,
+//                 Hat,
+//                 Wbt,
+//                 in0_block_w,
+//                 out_subblock_h,
+//                 2);
+            create_CBs_for_fused_matmul_new(
                 program,
                 a.device(),
                 core,
@@ -488,7 +625,8 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
                 Wbt,
                 in0_block_w,
                 out_subblock_h,
-                2); // TODO(agrebenisan): fix df num bytes
+                2,
+                untilize_out); // TODO(agrebenisan): fix df num bytes
 
             uint32_t in1_tensor_start_tile_id = 0;
             uint32_t in1_tensor_stride_w = 1;
@@ -520,11 +658,31 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
             };
 
             string writer_kernel = "tt_metal/kernels/dataflow/writer_unary_stick_layout_8bank.cpp";
-            vector<uint32_t> writer_rt_args = {
-                out_dram_addr,
-                cshape[2], // padded height
-                out_row_size
-            };
+            vector<uint32_t> writer_rt_args;
+            if (untilize_out) {
+                writer_kernel = "tt_metal/kernels/dataflow/writer_unary_stick_layout_8bank.cpp";
+                writer_rt_args = {
+                    out_dram_addr,
+                    Ha,
+                    out_row_size
+                };
+            } else {
+                writer_kernel = "tt_metal/kernels/dataflow/writer_matmul_tile_layout.cpp";
+                writer_rt_args = {
+                    out_dram_addr,
+                    0,
+                    1,
+                    Wbt,
+                    out_subblock_w,
+                    out_subblock_h * Wbt,
+
+                    out_subblock_w,
+                    out_subblock_h,
+                    out_subblock_w * out_subblock_h,
+                    Wbt / out_subblock_w,
+                    Hat / out_subblock_h
+                };
+            }
             auto reader = tt_metal::CreateDataMovementKernel(
                 program,
                 reader_kernel,
@@ -553,7 +711,7 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
                 out_subblock_num_tiles,
 
                 true,
-                true
+                untilize_out
             };
 
             tt_metal::ComputeKernelArgs *bmm_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
@@ -597,9 +755,9 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
     return output;
 }
 
-Tensor conv_as_large_bmm_single_core(const Tensor& a, const Tensor &b, vector<int> conv_params) {
+Tensor conv_as_large_bmm_single_core(const Tensor& a, const Tensor &b, vector<int> conv_params, bool untilize_out) {
 
-    Tensor output = conv_as_large_bmm_single_core_(a, b, conv_params);
+    Tensor output = conv_as_large_bmm_single_core_(a, b, conv_params, untilize_out);
     return output;
 }
 
