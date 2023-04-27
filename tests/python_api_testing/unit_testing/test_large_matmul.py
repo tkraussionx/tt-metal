@@ -23,13 +23,19 @@ import torch
 
 
 @pytest.mark.parametrize(
-    "Hat, Wat, Wbt",
+    "Hat, Wat, Wbt, tilize_act, untilize_out",
     (
-        (1, 9, 1),
-        (2, 9, 9),
+        (1, 9, 1, True, True),
+        (1, 9, 1, True, False),
+        (1, 9, 1, False, True),
+        (1, 9, 1, False, False),
+        (2, 9, 9, True, True),
+        (2, 9, 9, True, False),
+        (2, 9, 9, False, True),
+        (2, 9, 9, False, False),
     ),
 )
-def test_run_large_matmul_test(Hat, Wat, Wbt):
+def test_run_large_matmul_test(Hat, Wat, Wbt, tilize_act, untilize_out):
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
     TILE_HEIGHT = TILE_WIDTH = 32
@@ -45,11 +51,16 @@ def test_run_large_matmul_test(Hat, Wat, Wbt):
     a = torch.randn(a_shape, dtype=torch.bfloat16).float()
     b = torch.randn(b_shape, dtype=torch.bfloat16).float()
 
-    layout_a = ttl.tensor.Layout.ROW_MAJOR
+    layout_a = ttl.tensor.Layout.ROW_MAJOR if tilize_act else ttl.tensor.Layout.TILE
+    def tt_a():
+        if layout_a == ttl.tensor.Layout.ROW_MAJOR:
+            return a.flatten().tolist()
+        else:
+            return tilize_to_list(a)
 
 
     tta = ttl.tensor.Tensor(
-        a.flatten().tolist(),
+        tt_a(),
         a_shape,
         ttl.tensor.DataType.BFLOAT16,
         layout_a,
@@ -62,9 +73,13 @@ def test_run_large_matmul_test(Hat, Wat, Wbt):
         ttl.tensor.Layout.TILE,
         device)
 
-    out = ttl.tensor.large_bmm(tta, ttb)
+    out = ttl.tensor.large_bmm(tta, ttb, tilize_act, untilize_out)
     out_shape = [1,1,Ha,Wb]
-    out_pytorch = torch.tensor(out.to(host).data()).reshape(out_shape)
+    out = out.to(host)
+    if not untilize_out:
+        # untilize
+        out = out.to(ttl.tensor.Layout.ROW_MAJOR)
+    out_pytorch = torch.tensor(out.data()).reshape(out_shape)
     ttl.device.CloseDevice(device)
     golden_pytorch = torch.matmul(a,b)
     assert(out_pytorch.shape == golden_pytorch.shape)
