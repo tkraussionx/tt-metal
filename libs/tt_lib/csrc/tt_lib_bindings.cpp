@@ -13,6 +13,7 @@
 #include "tt_dnn/op_library/tilize/tilize_op.hpp"
 #include "tt_dnn/op_library/untilize/untilize_op.hpp"
 #include "tt_dnn/op_library/reshape/reshape_op.hpp"
+#include "tt_dnn/op_library/reader_writer_op_multi_blocks/reader_writer_op_multi_blocks.hpp"
 
 #include "tensor/tensor_utils.hpp"
 
@@ -576,7 +577,9 @@ void TensorModule(py::module &m_tensor) {
         | paddedH  | New H dim            | int       | >= current H | Yes      |
         +----------+----------------------+-----------+--------------+----------+
     )doc");
-
+    m_tensor.def("reader_writer_op_multi_blocks", &reader_writer_op_multi_blocks, R"doc(
+        Read from DRAM using address map in blocks and write it back to DRAM.
+    )doc");
     // matrix multiplication
     m_tensor.def("matmul", &matmul, R"doc(
         Perform a non-batched matmul ``A x B`` with two tensors.

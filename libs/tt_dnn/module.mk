@@ -40,7 +40,8 @@ TT_DNN_SRCS = \
 	libs/tt_dnn/op_library/untilize/untilize_op.cpp \
 	libs/tt_dnn/op_library/softmax/softmax_op.cpp \
 	libs/tt_dnn/op_library/layernorm/layernorm_op.cpp \
-	libs/tt_dnn/op_library/reshape/reshape_op.cpp
+	libs/tt_dnn/op_library/reshape/reshape_op.cpp \
+	libs/tt_dnn/op_library/reader_writer_op_multi_blocks/reader_writer_op_multi_blocks.cpp
 
 TT_DNN_LIB = $(LIBDIR)/libtt_dnn.a
 TT_DNN_DEFINES = -DGIT_HASH=$(shell git rev-parse HEAD)
