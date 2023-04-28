@@ -33,6 +33,10 @@ import torch
         (2, 9, 9, True, False),
         (2, 9, 9, False, True),
         (2, 9, 9, False, False),
+        (1, 32, 1, True, True),
+        (1, 32, 1, True, False),
+        (1, 32, 1, False, True),
+        (1, 32, 1, False, False),
     ),
 )
 def test_run_large_matmul_test(Hat, Wat, Wbt, tilize_act, untilize_out):
