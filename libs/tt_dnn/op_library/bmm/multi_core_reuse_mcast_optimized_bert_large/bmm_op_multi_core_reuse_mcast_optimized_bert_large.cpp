@@ -51,13 +51,9 @@ tt_metal::Program * create_program_mcast_in0_in1(
         {(std::size_t) start_core_x, (std::size_t) start_core_y},
         {(std::size_t) start_core_x, (std::size_t) start_core_y + num_cores_r - 1});
 
-    tt_metal::CoreRange all_except_left_column(
-        {(std::size_t) start_core_x + 1, (std::size_t) start_core_y},
-        {(std::size_t) start_core_x + num_cores_c - 1, (std::size_t) start_core_y + num_cores_r - 1});
-
-    tt_metal::CoreRange in0_sender_in1_sender(
+    tt_metal::CoreRange top_row(
         {(std::size_t) start_core_x, (std::size_t) start_core_y},
-        {(std::size_t) start_core_x, (std::size_t) start_core_y});
+        {(std::size_t) start_core_x + num_cores_c - 1, (std::size_t) start_core_y});
 
     tt_metal::CoreRange in0_sender_in1_receiver(
         {(std::size_t) start_core_x, (std::size_t) start_core_y + 1},
@@ -80,53 +76,52 @@ tt_metal::Program * create_program_mcast_in0_in1(
         reader_writer_compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(all_cores, {0, 0});
     }
 
-    auto mm_reader_kernel_in0_sender_in1_sender = tt_metal::CreateDataMovementKernel(
+    auto mm_kernel_in0_sender = tt_metal::CreateDataMovementKernel(
         program,
-        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in0_sender_in1_sender.cpp",
-        in0_sender_in1_sender,
+        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in0_sender_padding.cpp",
+        left_column,
         reader_writer_compile_time_args,
         tt_metal::DataMovementProcessor::RISCV_1,
         tt_metal::NOC::RISCV_0_default);
-
-    auto mm_reader_kernel_in0_sender_in1_receiver = tt_metal::CreateDataMovementKernel(
+    auto mm_kernel_in1_sender_writer = tt_metal::CreateDataMovementKernel(
         program,
-        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in0_sender_in1_receiver_padding.cpp",
+        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in1_sender_writer_padding.cpp",
+        top_row,
+        reader_writer_compile_time_args,
+        tt_metal::DataMovementProcessor::RISCV_0,
+        tt_metal::NOC::RISCV_1_default);
+
+    auto mm_kernel_in1_receiver_writer = tt_metal::CreateDataMovementKernel(
+        program,
+        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in1_receiver_writer_padding.cpp",
         in0_sender_in1_receiver,
         reader_writer_compile_time_args,
-        tt_metal::DataMovementProcessor::RISCV_1,
-        tt_metal::NOC::RISCV_0_default);
+        tt_metal::DataMovementProcessor::RISCV_0,
+        tt_metal::NOC::RISCV_1_default);
 
-    auto mm_reader_kernel_in0_receiver_in1_sender = tt_metal::CreateDataMovementKernel(
+    auto mm_kernel_in0_receiver = tt_metal::CreateDataMovementKernel(
         program,
-        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in0_receiver_in1_sender_padding.cpp",
+        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in0_receiver.cpp",
         in0_receiver_in1_sender,
         reader_writer_compile_time_args,
         tt_metal::DataMovementProcessor::RISCV_1,
-        tt_metal::NOC::RISCV_1_default);
+        tt_metal::NOC::RISCV_0_default);
 
-    auto mm_reader_kernel_in0_receiver_in1_receiver = tt_metal::CreateDataMovementKernel(
+    auto mm_kernel_checkerboard_in0_receiver = tt_metal::CreateDataMovementKernel(
         program,
-        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in0_receiver_in1_receiver.cpp",
+        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in0_receiver.cpp",
         in0_receiver_in1_receiver,
         reader_writer_compile_time_args,
         tt_metal::DataMovementProcessor::RISCV_1,
         tt_metal::NOC::RISCV_1_default);
 
-    auto unary_writer_kernel_noc0 = tt_metal::CreateDataMovementKernel(
+    auto mm_kernel_checkerboard_in1_receiver_writer = tt_metal::CreateDataMovementKernel(
         program,
-        "tt_metal/kernels/dataflow/writer_bmm_tile_layout_padding.cpp",
-        all_except_left_column,
+        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in1_receiver_writer_padding.cpp",
+        in0_receiver_in1_receiver,
         reader_writer_compile_time_args,
         tt_metal::DataMovementProcessor::RISCV_0,
         tt_metal::NOC::RISCV_0_default);
-
-    auto unary_writer_kernel_noc1 = tt_metal::CreateDataMovementKernel(
-        program,
-        "tt_metal/kernels/dataflow/writer_bmm_tile_layout_padding.cpp",
-        left_column,
-        reader_writer_compile_time_args,
-        tt_metal::DataMovementProcessor::RISCV_0,
-        tt_metal::NOC::RISCV_1_default);
 
     // Compute kernel compile time args
     uint32_t num_blocks = (K/in0_block_w);
@@ -335,101 +330,150 @@ tt_metal::Program * create_program_mcast_in0_in1(
                 (std::uint32_t) B // batch
             };
 
+            // in0 sender and in1 sender
             if(core_idx_x == 0 and core_idx_y == 0) {
-                // h and w for writer_args
-                writer_args.push_back(per_core_M / out_subblock_h);
-                writer_args.push_back(out_subblock_h);
-                writer_args.push_back(0);
-                writer_args.push_back(per_core_N / out_subblock_w);
-                writer_args.push_back(out_subblock_w);
-                writer_args.push_back(0);
-                writer_args.push_back(0);
+                auto mm_in0_reader_args =  mm_reader_args;
+                auto mm_in1_reader_writer_args =  mm_reader_args;
+                mm_in1_reader_writer_args.insert(mm_in1_reader_writer_args.end(), writer_args.begin(), writer_args.end()-1);
 
-                tt_metal::WriteRuntimeArgsToDevice(device, mm_reader_kernel_in0_sender_in1_sender, core, mm_reader_args); // RISCV_0_default
-                tt_metal::WriteRuntimeArgsToDevice(device, unary_writer_kernel_noc1, core, writer_args); // RISCV_1_default
-            } else if (core_idx_x == 0 and core_idx_y != 0) {
-                // h
+                // padding args (READER)
+                mm_in0_reader_args.push_back(per_core_M); // last_block_h
+                mm_in0_reader_args.push_back(per_core_N); // last_block_w
+
+                mm_in1_reader_writer_args.push_back(per_core_M); // last_block_h
+                mm_in1_reader_writer_args.push_back(per_core_N); // last_block_w
+
+                // padding args (WRITER)
+                mm_in1_reader_writer_args.push_back(per_core_M / out_subblock_h);
+                mm_in1_reader_writer_args.push_back(out_subblock_h);
+                mm_in1_reader_writer_args.push_back(0);
+                mm_in1_reader_writer_args.push_back(per_core_N / out_subblock_w);
+                mm_in1_reader_writer_args.push_back(out_subblock_w);
+                mm_in1_reader_writer_args.push_back(0);
+                mm_in1_reader_writer_args.push_back(0);
+
+                tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in0_sender, core, mm_in0_reader_args); // RISCV_0_default
+                tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in1_sender_writer, core, mm_in1_reader_writer_args); // RISCV_1_default
+            }
+            // in0 sender and in1 receiver
+            else if (core_idx_x == 0 and core_idx_y != 0) {
+                auto mm_in0_reader_args =  mm_reader_args;
+                auto mm_in1_receiver_writer_args =  mm_reader_args;
+                mm_in1_receiver_writer_args.insert(mm_in1_receiver_writer_args.end(), writer_args.begin(), writer_args.end()-1);
+
                 if (core_idx_y == num_cores_r - 1) {
-                    mm_reader_args.push_back(last_block_h);
-                    writer_args.push_back(last_block_num_nonzero_subblocks_h);
-                    writer_args.push_back(last_subblock_of_last_block_h);
-                    writer_args.push_back(last_block_padded_block_tiles_h_skip);
-                } else {
-                    mm_reader_args.push_back(per_core_M);
-                    writer_args.push_back(per_core_M / out_subblock_h);
-                    writer_args.push_back(out_subblock_h);
-                    writer_args.push_back(0);
-                }
-                // w
-                mm_reader_args.push_back(per_core_N); // not used
-                writer_args.push_back(per_core_N / out_subblock_w);
-                writer_args.push_back(out_subblock_w);
-                writer_args.push_back(0);
-                writer_args.push_back(0);
+                    // padding args (READER)
+                    mm_in0_reader_args.push_back(last_block_h);
+                    mm_in0_reader_args.push_back(per_core_N); // not used
 
-                tt_metal::WriteRuntimeArgsToDevice(device, mm_reader_kernel_in0_sender_in1_receiver, core, mm_reader_args); // RISCV_0_default
-                tt_metal::WriteRuntimeArgsToDevice(device, unary_writer_kernel_noc1, core, writer_args); // RISCV_1_default
-            } else if (core_idx_x != 0 and core_idx_y == 0) {
-                // h
-                mm_reader_args.push_back(per_core_M); // not used
-                writer_args.push_back(per_core_M / out_subblock_h);
-                writer_args.push_back(out_subblock_h);
-                writer_args.push_back(0);
-                // w
+                    // padding args (WRITER)
+                    mm_in1_receiver_writer_args.push_back(last_block_num_nonzero_subblocks_h);
+                    mm_in1_receiver_writer_args.push_back(last_subblock_of_last_block_h);
+                    mm_in1_receiver_writer_args.push_back(last_block_padded_block_tiles_h_skip);
+                    mm_in1_receiver_writer_args.push_back(per_core_N / out_subblock_w);
+                    mm_in1_receiver_writer_args.push_back(out_subblock_w);
+                    mm_in1_receiver_writer_args.push_back(0);
+                    mm_in1_receiver_writer_args.push_back(0);
+                } else {
+                    // padding args (READER)
+                    mm_in0_reader_args.push_back(per_core_M);
+                    mm_in0_reader_args.push_back(per_core_N); // not used
+
+                    // padding args (WRITER)
+                    mm_in1_receiver_writer_args.push_back(per_core_M / out_subblock_h);
+                    mm_in1_receiver_writer_args.push_back(out_subblock_h);
+                    mm_in1_receiver_writer_args.push_back(0);
+                    mm_in1_receiver_writer_args.push_back(per_core_N / out_subblock_w);
+                    mm_in1_receiver_writer_args.push_back(out_subblock_w);
+                    mm_in1_receiver_writer_args.push_back(0);
+                    mm_in1_receiver_writer_args.push_back(0);
+                }
+
+                tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in0_sender, core, mm_in0_reader_args); // RISCV_0_default
+                tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in1_receiver_writer, core, mm_in1_receiver_writer_args); // RISCV_1_default
+            }
+            // in0 receiver and in 1 sender
+            else if (core_idx_x != 0 and core_idx_y == 0) {
+                auto mm_in0_receiver_args =  mm_reader_args;
+                auto mm_in1_sender_writer_args =  mm_reader_args;
+                mm_in1_sender_writer_args.insert(mm_in1_sender_writer_args.end(), writer_args.begin(), writer_args.end()-1);
+
                 if (core_idx_x == num_cores_c - 1) {
-                    mm_reader_args.push_back(last_block_w);
-                    writer_args.push_back(last_block_num_nonzero_subblocks_w);
-                    writer_args.push_back(last_subblock_of_last_block_w);
-                    writer_args.push_back(last_block_padded_subblock_tiles_addr_skip);
-                    writer_args.push_back(last_block_padded_block_tiles_w_skip);
+                    // padding args (READER)
+                    mm_in1_sender_writer_args.push_back(per_core_M); // not used
+                    mm_in1_sender_writer_args.push_back(last_block_w);
+
+                    // padding args (WRITER)
+                    mm_in1_sender_writer_args.push_back(per_core_M /out_subblock_h);
+                    mm_in1_sender_writer_args.push_back(out_subblock_h);
+                    mm_in1_sender_writer_args.push_back(0);
+                    mm_in1_sender_writer_args.push_back(last_block_num_nonzero_subblocks_w);
+                    mm_in1_sender_writer_args.push_back(last_subblock_of_last_block_w);
+                    mm_in1_sender_writer_args.push_back(last_block_padded_subblock_tiles_addr_skip);
+                    mm_in1_sender_writer_args.push_back(last_block_padded_block_tiles_w_skip);
                 } else {
-                    mm_reader_args.push_back(per_core_N);
-                    writer_args.push_back(per_core_N / out_subblock_w);
-                    writer_args.push_back(out_subblock_w);
-                    writer_args.push_back(0);
-                    writer_args.push_back(0);
+                    // padding args (READER)
+                    mm_in1_sender_writer_args.push_back(per_core_M); // not used
+                    mm_in1_sender_writer_args.push_back(per_core_N);
+
+                    // padding args (WRITER)
+                    mm_in1_sender_writer_args.push_back(per_core_M /out_subblock_h);
+                    mm_in1_sender_writer_args.push_back(out_subblock_h);
+                    mm_in1_sender_writer_args.push_back(0);
+                    mm_in1_sender_writer_args.push_back(per_core_N / out_subblock_w);
+                    mm_in1_sender_writer_args.push_back(out_subblock_w);
+                    mm_in1_sender_writer_args.push_back(0);
+                    mm_in1_sender_writer_args.push_back(0);
                 }
 
-                tt_metal::WriteRuntimeArgsToDevice(device, mm_reader_kernel_in0_receiver_in1_sender, core, mm_reader_args); // RISCV_1_default
-                tt_metal::WriteRuntimeArgsToDevice(device, unary_writer_kernel_noc0, core, writer_args); // RISCV_0_default
-            } else {
-                // h and w for writer_args
+                tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in0_receiver, core, mm_in0_receiver_args); // RISCV_1_default
+                tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in1_sender_writer, core, mm_in1_sender_writer_args); // RISCV_0_default
+            }
+            // in0 receiver and in 1 receiver
+            else {
+                auto mm_checkerboard_in0_receiver_args =  mm_reader_args;
+                auto mm_checkerboard_in1_receiver_writer_args =  mm_reader_args;
+                mm_checkerboard_in1_receiver_writer_args.insert(mm_checkerboard_in1_receiver_writer_args.end(), writer_args.begin(), writer_args.end()-1);
                 if (core_idx_x == num_cores_c - 1 and core_idx_y == num_cores_r - 1) {
-                    writer_args.push_back(last_block_num_nonzero_subblocks_h);
-                    writer_args.push_back(last_subblock_of_last_block_h);
-                    writer_args.push_back(last_block_padded_block_tiles_h_skip);
-                    writer_args.push_back(last_block_num_nonzero_subblocks_w);
-                    writer_args.push_back(last_subblock_of_last_block_w);
-                    writer_args.push_back(last_block_padded_subblock_tiles_addr_skip);
-                    writer_args.push_back(last_block_padded_block_tiles_w_skip);
+                    // padding args (WRITER)
+                    mm_checkerboard_in1_receiver_writer_args.push_back(last_block_num_nonzero_subblocks_h);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(last_subblock_of_last_block_h);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(last_block_padded_block_tiles_h_skip);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(last_block_num_nonzero_subblocks_w);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(last_subblock_of_last_block_w);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(last_block_padded_subblock_tiles_addr_skip);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(last_block_padded_block_tiles_w_skip);
                 } else if (core_idx_y == num_cores_r - 1) {
-                    writer_args.push_back(last_block_num_nonzero_subblocks_h);
-                    writer_args.push_back(last_subblock_of_last_block_h);
-                    writer_args.push_back(last_block_padded_block_tiles_h_skip);
-                    writer_args.push_back(per_core_N / out_subblock_w);
-                    writer_args.push_back(out_subblock_w);
-                    writer_args.push_back(0);
-                    writer_args.push_back(0);
+                    // padding args (WRITER)
+                    mm_checkerboard_in1_receiver_writer_args.push_back(last_block_num_nonzero_subblocks_h);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(last_subblock_of_last_block_h);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(last_block_padded_block_tiles_h_skip);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(per_core_N / out_subblock_w);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(out_subblock_w);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(0);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(0);
                 } else if (core_idx_x == num_cores_c - 1) {
-                    writer_args.push_back(per_core_M / out_subblock_h);
-                    writer_args.push_back(out_subblock_h);
-                    writer_args.push_back(0);
-                    writer_args.push_back(last_block_num_nonzero_subblocks_w);
-                    writer_args.push_back(last_subblock_of_last_block_w);
-                    writer_args.push_back(last_block_padded_subblock_tiles_addr_skip);
-                    writer_args.push_back(last_block_padded_block_tiles_w_skip);
+                    // padding args (WRITER)
+                    mm_checkerboard_in1_receiver_writer_args.push_back(per_core_M / out_subblock_h);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(out_subblock_h);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(0);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(last_block_num_nonzero_subblocks_w);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(last_subblock_of_last_block_w);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(last_block_padded_subblock_tiles_addr_skip);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(last_block_padded_block_tiles_w_skip);
                 } else {
-                    writer_args.push_back(per_core_M / out_subblock_h);
-                    writer_args.push_back(out_subblock_h);
-                    writer_args.push_back(0);
-                    writer_args.push_back(per_core_N / out_subblock_w);
-                    writer_args.push_back(out_subblock_w);
-                    writer_args.push_back(0);
-                    writer_args.push_back(0);
+                    // padding args (WRITER)
+                    mm_checkerboard_in1_receiver_writer_args.push_back(per_core_M / out_subblock_h);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(out_subblock_h);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(0);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(per_core_N / out_subblock_w);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(out_subblock_w);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(0);
+                    mm_checkerboard_in1_receiver_writer_args.push_back(0);
                 }
 
-                tt_metal::WriteRuntimeArgsToDevice(device, mm_reader_kernel_in0_receiver_in1_receiver, core, mm_reader_args); // RISCV_1_default
-                tt_metal::WriteRuntimeArgsToDevice(device, unary_writer_kernel_noc0, core, writer_args); // RISCV_0_default
+                tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_checkerboard_in0_receiver, core, mm_checkerboard_in0_receiver_args); // RISCV_1_default
+                tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_checkerboard_in1_receiver_writer, core, mm_checkerboard_in1_receiver_writer_args); // RISCV_0_default
             }
 
         }
