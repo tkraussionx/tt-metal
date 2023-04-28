@@ -374,10 +374,12 @@ void enable_cores(tt_cluster *cluster, int chip_id, const std::vector<tt_xy_pair
 
 void assert_enable_core_mailbox_is_valid_for_core(tt_cluster *cluster, int chip_id, const tt_xy_pair &core) {
     std::vector<uint32_t> enable_core_mailbox_init_val_check = {0};
+
     enable_core_mailbox_init_val_check = read_hex_vec_from_core(
         cluster, chip_id, core, ENABLE_CORE_MAILBOX_ADDR, sizeof(uint32_t));  // read a single uint32_t
     if (!(enable_core_mailbox_init_val_check[0] == ENABLE_CORE_ENABLE_VALUE ||
         enable_core_mailbox_init_val_check[0] == ENABLE_CORE_DONE_VALUE)) {
+            std::cout << "ENABLE_CORE_MAILBOX_ADDR=" << ENABLE_CORE_MAILBOX_ADDR << std::endl;
             std::cout << "enable_core_mailbox_init_val_check[0]=" << enable_core_mailbox_init_val_check[0] << std::endl;
         }
     TT_ASSERT(
@@ -446,6 +448,11 @@ bool check_if_riscs_on_specified_core_done(
         std::vector<uint32_t> test_mailbox_read_val = {0};
         test_mailbox_read_val = read_hex_vec_from_core(
             cluster, chip_id, core, test_mailbox_address_, sizeof(uint32_t));  // read a single uint32_t
+        if(!(test_mailbox_read_val[0] == INIT_VALUE || test_mailbox_read_val[0] == DONE_VALUE)) {
+            std::cout << "test_mailbox_address_" << test_mailbox_address_ << std::endl;
+            std::cout << "test_mailbox_read_val[0]" << test_mailbox_read_val[0] << std::endl;
+
+        }
         TT_ASSERT(
             test_mailbox_read_val[0] == INIT_VALUE || test_mailbox_read_val[0] == DONE_VALUE);  // ensure no corruption
         return test_mailbox_read_val[0] == DONE_VALUE;

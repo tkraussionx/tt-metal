@@ -79,7 +79,9 @@ void kernel_main() {
         //DPRINT << "Q" << ENDL();
         uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
         uint32_t bytes_read = 0;
-        while(bytes_read != in0_block_size_bytes) {
+        uint32_t num_reads_current_block = address_map[index];
+        index += 1;
+        for(uint32_t i = 0; i < num_reads_current_block; i+=1) {
             // There are 4 entries in the address map per read
             uint32_t src_address = address_map[index];
             uint32_t dst_address = address_map[index+1];
@@ -127,6 +129,9 @@ void kernel_main() {
             }
             bytes_read += read_size;
             index += 4;
+        }
+        if(bytes_read != in0_block_size_bytes) {
+            DPRINT << "PROBLEM" << ENDL();
         }
         noc_async_read_barrier();
         //DPRINT << "S" << ENDL();

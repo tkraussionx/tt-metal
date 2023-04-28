@@ -197,9 +197,9 @@ if __name__ == "__main__":
    #test_run_conv_as_large_matmul(32, 1024, 5, 5, 1, 1, 1, 1, 0, 0, True)
 
     # Crash
-    #test_run_conv_as_large_matmul(256, 256, 14, 14, 3, 3, 1, 1, 1, 1, True)
+    test_run_conv_as_large_matmul(256, 256, 14, 14, 3, 3, 1, 1, 1, 1, True)
 
     # Works
-    test_run_conv_as_large_matmul(32, 32, 5, 5, 1, 1, 1, 1, 0, 0, True)
+    #test_run_conv_as_large_matmul(32, 32, 5, 5, 1, 1, 1, 1, 0, 0, True)
     #test_run_conv_as_large_matmul(32, 32, 5, 5, 1, 1, 1, 1, 0, 0, False)
     #test_run_conv_as_large_matmul(32, 32, 5, 5, 1, 1, 1, 1, 0, 0)

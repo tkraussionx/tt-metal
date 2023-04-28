@@ -5,7 +5,7 @@
 #include "constants.hpp"
 #include "dtx/dtx.hpp"
 #include "dtx/dtx_passes.hpp"
-
+#include "tt_dnn/op_library/conv/conv_op.hpp"
 #include "llrt/tt_debug_print_server.hpp"
 using namespace tt::constants;
 
@@ -355,18 +355,12 @@ vector<uint32_t> compute_conv_as_mm_shape_(vector<int> shape, vector<int> conv_p
     uint32_t num_cols_padded = (uint32_t) (ceil((double) num_cols / (double) TILE_WIDTH ) * TILE_HEIGHT);
     return {1,num_rows_padded, num_cols_padded};
 }
-Tensor tilize_conv_activation(const Tensor &a, bool conv1x1 = false) {
+Tensor tilize_conv_activation(const Tensor &a, vector<int> conv_params, int conv_output_channels) {
     TT_ASSERT(a.layout() == Layout::CHANNELS_LAST, "Conv activation should be in channels last layout");
 
     // Compute the 2d matrix shape
     vector<int> shape = {(int)a.shape()[1], (int)a.shape()[2], (int)a.shape()[3]};
-    vector<int> conv_params;
-    if(conv1x1) {
-        conv_params = {1,1,1,1,0,0};
-    }
-    else {
-        conv_params = {3,3,1,1,0,0};
-    }
+
     auto matrix_shape = compute_conv_as_mm_shape_(shape , conv_params);
     assert(matrix_shape.size() == 3);
     assert(matrix_shape[0] == 1);
@@ -374,10 +368,27 @@ Tensor tilize_conv_activation(const Tensor &a, bool conv1x1 = false) {
     uint32_t num_cols = (uint32_t) matrix_shape[2];
     assert(num_rows > 0);
     assert(num_cols > 0);
+    auto Ha = num_rows;
+    auto Wa = num_cols;
+    auto Wb = conv_output_channels;
+    // Convert tensor dims to tile dims
+    uint32_t Hat = Ha / TILE_HEIGHT;
+    uint32_t Wat = Wa / TILE_WIDTH;
+    uint32_t Wbt = Wb / TILE_WIDTH;
+    std::cout << "Hat(M in tiles)=" << Hat << std::endl;
+    std::cout << "Wat(K in tiles)=" << Wat << std::endl;
+    std::cout << "Wbt(N in tiles)=" << Wbt << std::endl;
+    // compute block info
+    auto [num_blocks, out_subblock_h, out_subblock_w, report_string] = compute_conv_op_block_info(Hat, Wat, Wbt);
+    assert(report_string == "pass");
+    std::cout << "num block=" << num_blocks << std::endl;
+    // in0 block info
+    uint32_t in0_block_w = Wat / num_blocks; // Two blocks in the W dimension
+    uint32_t in0_block_w_datums = Wa / num_blocks;
     std::pair<vector<int>,vector<int>> block_info;
     block_info.first = {0,1,2};
-    block_info.second = {(int)num_rows, (int)num_cols};
-    uint32_t num_blocks = 1;
+    block_info.second = {(int)num_rows, (int)in0_block_w_datums};
+
     DataTransformations * dtx = conv_transform(shape, conv_params, block_info);
     // copy transfer addresses into a vector
     std::vector<uint32_t> address_map;
@@ -386,17 +397,64 @@ Tensor tilize_conv_activation(const Tensor &a, bool conv1x1 = false) {
     // Generate address map for reader kernel
     assert(dtx->transformations.size() == 2);
     assert(dtx->transformations.back()->groups[0]->transfers.size() > 0);
+    uint32_t block_size_bytes = num_rows * in0_block_w_datums * 2;
+    uint32_t b_bytes = 0;
+    uint32_t n_blocks = 0;
+    uint32_t block_start_address = 0;
+    uint32_t next_block_start_index = 0;
+    uint32_t num_reads_current_block = 0;
+    address_map.push_back(0); // Update this value with number of reads for first block
     for(auto transfer : dtx->transformations.back()->groups[0]->transfers){
+        assert(n_blocks < num_blocks);
+        bool dst_address_in_block = (uint32_t) transfer->dst_address*2 >= block_start_address;
+        bool dst_read_in_block = (uint32_t) transfer->dst_address*2 - block_start_address + transfer->size*2 <= block_size_bytes;
+        if(!dst_read_in_block || !dst_address_in_block) {
+            std::cout << "dst_address_in_block=" << dst_address_in_block << std::endl;
+            std::cout << "dst_read_in_block=" << dst_read_in_block << std::endl;
+            std::cout << "n_blocks=" << n_blocks << std::endl;
+            std::cout << "block_start_address=" << block_start_address << std::endl;
+            std::cout << "dst_address=" << transfer->dst_address*2 << std::endl;
+            std::cout << "dst_size=" << transfer->size*2 << std::endl;
+            std::cout << "block_size_bytes=" << block_size_bytes << std::endl;
+        }
+        assert(dst_read_in_block);
+        assert(dst_address_in_block);
+        if(address_map.size()==0) {
+            std::cout << "in conv op" << std::endl;
+            std::cout << "src=" << transfer->src_address*2 << std::endl;
+            std::cout << "dst=" << transfer->dst_address*2 << std::endl;
+            std::cout << "rs=" << transfer->size*2 << std::endl;
+            std::cout << "pad=" << transfer->pad << std::endl;
+        }
+        assert(transfer->size*2 % 32 == 0);
+        assert(transfer->src_address*2 % 32 == 0);
+        assert(transfer->dst_address*2 % 32 == 0);
         address_map.push_back(transfer->src_address*2);
         address_map.push_back(transfer->dst_address*2);
         address_map.push_back(transfer->size*2);
         address_map.push_back(transfer->pad);
+        num_reads_current_block++;
         t_bytes += transfer->size*2;
+        b_bytes += transfer->size*2;
+        if(b_bytes == block_size_bytes) {
+            address_map[next_block_start_index] = num_reads_current_block;
+            next_block_start_index = address_map.size();
+            block_start_address = t_bytes;
+            b_bytes = 0;
+            n_blocks++;
+            if (n_blocks != num_blocks) {
+                address_map.push_back(0); // This value will be updated once we have pushed all entries for the next block bytes
+            }
+            num_reads_current_block = 0;
+        }
     }
     uint32_t total_bytes = num_rows * num_cols * 2; // 2 for bfloat16
+    assert(b_bytes == 0);
+    assert(n_blocks == num_blocks);
     assert(total_bytes == t_bytes);
     assert(total_bytes % num_blocks == 0);
-    uint32_t block_size_bytes = total_bytes / num_blocks;
+    uint32_t in0_block_size_bytes = total_bytes / num_blocks;
+    assert(in0_block_size_bytes == block_size_bytes);
 
     tt_metal::Program *program = new tt_metal::Program();
     tt_start_debug_print_server(a.device()->cluster(), {0}, {{1, 1}});
@@ -424,52 +482,38 @@ Tensor tilize_conv_activation(const Tensor &a, bool conv1x1 = false) {
     // This should allocate a DRAM buffer on the device
     tt_metal::Device *device = a.device();
     std::array<uint32_t, 4> output_shape = {1, 1, num_rows, num_cols};
-    tt_metal::Tensor output = tt_metal::Tensor(output_shape, a.dtype(), tt::tt_metal::Layout::TILE, device);
+    tt_metal::Tensor output = tt_metal::Tensor(output_shape, a.dtype(), tt::tt_metal::Layout::ROW_MAJOR, device, MemoryConfig({false,1}));
 
     tt_metal::Buffer *dst_dram_buffer = output.buffer();
     TT_ASSERT(dst_dram_buffer != nullptr, "Output buffer should be allocated on device!");
     auto dram_dst_noc_xy = dst_dram_buffer->noc_coordinates();
 
-    uint32_t src0_cb_index = 0;
-    uint32_t src0_cb_addr = 200 * 1024;
-    uint32_t num_input_tiles = num_tiles_c;
 
-    auto cb_src0 = tt_metal::CreateCircularBuffer(
-        program,
-        device,
-        src0_cb_index,
-        core,
-        num_input_tiles,
-        num_input_tiles * single_tile_size,
-        src0_cb_addr,
-        DataFormat::Float16_b
-    );
-
-    uint32_t ouput_cb_index = 16; // output operands start at index 16
-    uint32_t output_cb_addr = 300 * 1024;
-    uint32_t num_output_tiles = num_tiles_c;
-
+    uint32_t ouput_cb_index = 0; // output operands start at index 16
+    uint32_t output_cb_addr = 220 * 1024;
+    uint32_t num_tiles_cb = num_tiles_r * in0_block_w * 2;
     auto cb_output = tt_metal::CreateCircularBuffer(
         program,
         device,
         ouput_cb_index,
         core,
-        num_output_tiles,
-        num_output_tiles * single_tile_size,
+        num_tiles_cb,
+        num_tiles_cb * single_tile_size,
         output_cb_addr,
         DataFormat::Float16_b
     );
 
-    uint32_t address_map_l1_addr = 400 * 1024;
-    auto l1_b0 = tt_metal::CreateL1Buffer(program, device, core, address_map.size() * sizeof(uint32_t), address_map_l1_addr);
 
-    vector<uint32_t> reader_kernel_args = {src0_dram_buffer->address(),
+    auto l1_b0 = tt_metal::CreateL1Buffer(program, device, core, address_map.size() * sizeof(uint32_t));
+    uint32_t address_map_l1_addr =l1_b0->address();
+    vector<uint32_t> reader_kernel_args = {num_blocks,
+                                            src0_dram_buffer->address(),
                                             (uint32_t)dram_src0_noc_xy.x,
                                             (uint32_t)dram_src0_noc_xy.y,
-                                            num_blocks,
                                             block_size_tiles,
-                                            block_size_bytes,
-                                            address_map_l1_addr};
+                                            address_map_l1_addr,
+                                            block_size_bytes
+                                            };
 
     // Tilized reader
     tt_metal::DataMovementKernel *unary_reader_kernel = tt_metal::CreateDataMovementKernel(
@@ -482,7 +526,7 @@ Tensor tilize_conv_activation(const Tensor &a, bool conv1x1 = false) {
     // Tilized writer
     tt_metal::DataMovementKernel *unary_writer_kernel = tt_metal::CreateDataMovementKernel(
         program,
-        "tt_metal/kernels/dataflow/writer_unary_8bank.cpp",
+        "tt_metal/kernels/dataflow/writer_unary_stick_layout_blocked.cpp",
         core,
         tt_metal::DataMovementProcessor::RISCV_0,
         tt_metal::NOC::RISCV_0_default);
@@ -497,7 +541,7 @@ Tensor tilize_conv_activation(const Tensor &a, bool conv1x1 = false) {
     bool math_approx_mode = false;
     auto tilize_kernel = tt_metal::CreateComputeKernel(
         program,
-        "tt_metal/kernels/compute/tilize.cpp",
+        "tt_metal/kernels/compute/blank.cpp",
         core,
         eltwise_unary_args,
         MathFidelity::HiFi4,
@@ -525,7 +569,7 @@ Tensor tilize_conv_activation(const Tensor &a, bool conv1x1 = false) {
         core,
         reader_kernel_args
     );
-
+    assert(block_size_bytes == num_tiles_r * in0_block_w * 2048);
     tt_metal::WriteRuntimeArgsToDevice(
         device,
         unary_writer_kernel,
@@ -533,7 +577,10 @@ Tensor tilize_conv_activation(const Tensor &a, bool conv1x1 = false) {
         {dst_dram_buffer->address(),
         (uint32_t) dram_dst_noc_xy.x,
         (uint32_t) dram_dst_noc_xy.y,
-        (uint32_t) (output.shape()[0] * output.shape()[1] * output.shape()[2] * output.shape()[3] / TILE_HW)}
+        num_blocks,
+        num_tiles_r * in0_block_w,
+        block_size_bytes
+        }
     );
     tt_metal::LaunchKernels(device, program);
 

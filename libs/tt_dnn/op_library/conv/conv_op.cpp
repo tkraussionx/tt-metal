@@ -469,7 +469,11 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
     uint32_t b_bytes = 0;
     uint32_t n_blocks = 0;
     uint32_t block_start_address = 0;
+    uint32_t next_block_start_index = 0;
+    uint32_t num_reads_current_block = 0;
+    address_map.push_back(0); // Update this value with number of reads for first block
     for(auto transfer : dtx->transformations.back()->groups[0]->transfers){
+        assert(n_blocks < num_blocks);
         bool dst_address_in_block = (uint32_t) transfer->dst_address*2 >= block_start_address;
         bool dst_read_in_block = (uint32_t) transfer->dst_address*2 - block_start_address + transfer->size*2 <= block_size_bytes;
         if(!dst_read_in_block || !dst_address_in_block) {
@@ -497,13 +501,19 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
         address_map.push_back(transfer->dst_address*2);
         address_map.push_back(transfer->size*2);
         address_map.push_back(transfer->pad);
-
+        num_reads_current_block++;
         t_bytes += transfer->size*2;
         b_bytes += transfer->size*2;
         if(b_bytes == block_size_bytes) {
+            address_map[next_block_start_index] = num_reads_current_block;
+            next_block_start_index = address_map.size();
             block_start_address = t_bytes;
             b_bytes = 0;
             n_blocks++;
+            if (n_blocks != num_blocks) {
+                address_map.push_back(0); // This value will be updated once we have pushed all entries for the next block bytes
+            }
+            num_reads_current_block = 0;
         }
     }
     uint32_t total_bytes = num_rows * num_cols * 2; // 2 for bfloat16
@@ -516,7 +526,7 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
     //delete dtx;
     tt_metal::Program *program = new tt_metal::Program();
     tt_xy_pair core = {0, 0};
-    //tt_start_debug_print_server(a.device()->cluster(), {0}, {{1, 1}});
+    tt_start_debug_print_server(a.device()->cluster(), {0}, {{1, 1}});
 
 
     uint32_t single_tile_size = 2 * 1024; // TODO(agrebenisan): Refactor on df
