@@ -354,8 +354,8 @@ int main(int argc, char **argv) {
     bool pass = true;
 
     try {
-        int num_cores_r = 10;
-        int num_cores_c = 12;
+        int num_cores_r = 1;
+        int num_cores_c = 1;
         uint32_t M = 16 * num_cores_r;
         uint32_t K = 16 * 12;
         uint32_t N = 16 * num_cores_c;
@@ -394,7 +394,7 @@ int main(int argc, char **argv) {
         ////////////////////////////////////////////////////////////////////////////
         //                      Compile Application
         ////////////////////////////////////////////////////////////////////////////
-        constexpr bool profile_device = true;
+        constexpr bool profile_device = false;
         pass &= tt_metal::CompileProgram(device, program, profile_device);
 
         ////////////////////////////////////////////////////////////////////////////
@@ -425,11 +425,15 @@ int main(int argc, char **argv) {
         );
         log_info(LogTest, "Writing kernel runtime args to device complete");
 
+        tt_metal::StartDebugPrintServer(device);
         log_info(LogTest, "Running Matmul {} core test", num_cores_r * num_cores_c);
         pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
         pass &= tt_metal::LaunchKernels(device, program);
-        tt_metal::DumpDeviceProfileResults(device, program);
 
+        if (profile_device)
+        {
+            tt_metal::DumpDeviceProfileResults(device, program);
+        }
         tt_metal::DumpHostProfileResults("Init");
 
         log_info(LogTest, "Matmul test done");

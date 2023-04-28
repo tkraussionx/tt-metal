@@ -2,6 +2,9 @@
 
 #include "llk_3c.h"
 
+
+#include "debug_print.h"
+
 #include "tools/profiler/kernel_profiler.hpp"
 namespace NAMESPACE {
 void MAIN {
@@ -22,6 +25,11 @@ void MAIN {
 
     mm_init();
     bool enable_reload = false;
+
+
+    UNPACK((DPRINT << "UN" << ENDL()));
+    MATH((DPRINT << "MA" << ENDL()));
+    PACK((DPRINT << "PA" << ENDL()));
 
     for(uint32_t block = 0; block < num_blocks; block++)
     {
