@@ -101,6 +101,47 @@ class default_setup(metaclass=MergeMetaclass):
     deviceTarball = "device_perf_results.tgz"
 
 
+class test_matmul_bert_large_optimized(default_setup):
+    timerAnalysis = {
+	"Kernel start -> Kernel end": {
+            "across": "core",
+            "type": "first_last",
+            "start": {"risc": "ANY", "timerID": 2},
+            "end": {"risc": "ANY", "timerID": 3},
+        },
+	"Kernel start -> TRISC_0 end": {
+            "across": "core",
+            "type": "first_last",
+            "start": {"risc": "ANY", "timerID": 2},
+            "end": {"risc": "TRISC_0", "timerID": 3},
+        },
+        "Kernel start -> TRISC_1 end": {
+            "across": "core",
+            "type": "first_last",
+            "start": {"risc": "ANY", "timerID": 2},
+            "end": {"risc": "TRISC_1", "timerID": 3},
+        },
+        "Kernel start -> TRISC_2 end": {
+            "across": "core",
+            "type": "first_last",
+            "start": {"risc": "ANY", "timerID": 2},
+            "end": {"risc": "TRISC_2", "timerID": 3},
+        },
+        "BRISC start -> BRISC read end": {
+            "across": "core",
+            "type": "adjacent",
+            "start": {"risc": "BRISC", "timerID": 2},
+            "end": {"risc": "BRISC", "timerID": 5},
+        },
+        "BRISC write start -> BRISC end": {
+            "across": "core",
+            "type": "adjacent",
+            "start": {"risc": "BRISC", "timerID": 5},
+            "end": {"risc": "BRISC", "timerID": 3},
+        },
+    }
+
+
 class test_matmul_multi_core_multi_dram(default_setup):
     timerAnalysis = {
         "Compute~": {
