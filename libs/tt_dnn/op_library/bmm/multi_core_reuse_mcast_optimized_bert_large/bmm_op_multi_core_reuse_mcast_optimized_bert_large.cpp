@@ -67,6 +67,32 @@ tt_metal::Program * create_program_mcast_in0_in1(
         {(std::size_t) start_core_x + 1, (std::size_t) start_core_y + 1},
         {(std::size_t) start_core_x + num_cores_c - 1, (std::size_t) start_core_y + num_cores_r - 1});
 
+    /* TODO: CreateDataMovementKernel doesn't support CoreBlocks??
+    tt_metal::CoreBlocks in0_receiver_in1_receiver_ckb_white;
+    tt_metal::CoreBlocks in0_receiver_in1_receiver_ckb_black;
+    bool white = true;
+    for (int y = start_core_y + 1; y < start_core_y + num_cores_r; y++) {
+        for (int x = start_core_x + 1; x < start_core_x + num_cores_c; x++) {
+            if (white) {
+                in0_receiver_in1_receiver_ckb_white.push_back(tt_xy_pair((std::size_t) x, (std::size_t) y));
+                white = false;
+            }
+            else {
+                in0_receiver_in1_receiver_ckb_black.push_back(tt_xy_pair((std::size_t) x, (std::size_t) y));
+                white = true;
+            }
+        }
+    }
+    std::cout << "white" << std::endl;
+    for (auto &it : in0_receiver_in1_receiver_ckb_white) {
+        std::cout << std::get<tt_xy_pair>(it).str() << std::endl;
+    }
+    std::cout << "black" << std::endl;
+    for (auto &it : in0_receiver_in1_receiver_ckb_black) {
+        std::cout << std::get<tt_xy_pair>(it).str() << std::endl;
+    }
+    */
+
     bool tile_size_is_power_of_two = (ceil(log2(single_tile_size)) == floor(log2(single_tile_size)));
     tt_metal::DataMovementKernelArgs *reader_writer_compile_time_args;
     if (tile_size_is_power_of_two) {
@@ -107,6 +133,41 @@ tt_metal::Program * create_program_mcast_in0_in1(
         tt_metal::DataMovementProcessor::RISCV_1,
         tt_metal::NOC::RISCV_0_default);
 
+    /* TODO: CreateDataMovementKernel doesn't support CoreBlocks??
+    auto mm_kernel_in0_receiver_ckb_white = tt_metal::CreateDataMovementKernel(
+        program,
+        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in0_receiver.cpp",
+        in0_receiver_in1_receiver_ckb_white,
+        reader_writer_compile_time_args,
+        tt_metal::DataMovementProcessor::RISCV_1,
+        tt_metal::NOC::RISCV_1_default);
+
+    auto mm_kernel_in1_receiver_writer_ckb_white = tt_metal::CreateDataMovementKernel(
+        program,
+        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in1_receiver_writer_padding.cpp",
+        in0_receiver_in1_receiver_ckb_white,
+        reader_writer_compile_time_args,
+        tt_metal::DataMovementProcessor::RISCV_0,
+        tt_metal::NOC::RISCV_0_default);
+
+    auto mm_kernel_in0_receiver_ckb_black = tt_metal::CreateDataMovementKernel(
+        program,
+        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in0_receiver.cpp",
+        in0_receiver_in1_receiver_ckb_black,
+        reader_writer_compile_time_args,
+        tt_metal::DataMovementProcessor::RISCV_1,
+        tt_metal::NOC::RISCV_0_default);
+
+    auto mm_kernel_in1_receiver_writer_ckb_black = tt_metal::CreateDataMovementKernel(
+        program,
+        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in1_receiver_writer_padding.cpp",
+        in0_receiver_in1_receiver_ckb_black,
+        reader_writer_compile_time_args,
+        tt_metal::DataMovementProcessor::RISCV_0,
+        tt_metal::NOC::RISCV_1_default);
+    */
+
+    /* Uncomment if we don't checkerboard
     auto mm_kernel_checkerboard_in0_receiver = tt_metal::CreateDataMovementKernel(
         program,
         "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in0_receiver.cpp",
@@ -122,6 +183,7 @@ tt_metal::Program * create_program_mcast_in0_in1(
         reader_writer_compile_time_args,
         tt_metal::DataMovementProcessor::RISCV_0,
         tt_metal::NOC::RISCV_0_default);
+    */
 
     // Compute kernel compile time args
     uint32_t num_blocks = (K/in0_block_w);
@@ -472,8 +534,54 @@ tt_metal::Program * create_program_mcast_in0_in1(
                     mm_checkerboard_in1_receiver_writer_args.push_back(0);
                 }
 
+                // Checkerboard
+                // white
+                if ((core_idx_x + core_idx_y) % 2 == 0) {
+                    auto mm_kernel_in0_receiver_ckb_white = tt_metal::CreateDataMovementKernel(
+                        program,
+                        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in0_receiver.cpp",
+                        core,
+                        reader_writer_compile_time_args,
+                        tt_metal::DataMovementProcessor::RISCV_1,
+                        tt_metal::NOC::RISCV_1_default);
+
+                    auto mm_kernel_in1_receiver_writer_ckb_white = tt_metal::CreateDataMovementKernel(
+                        program,
+                        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in1_receiver_writer_padding.cpp",
+                        core,
+                        reader_writer_compile_time_args,
+                        tt_metal::DataMovementProcessor::RISCV_0,
+                        tt_metal::NOC::RISCV_0_default);
+
+                    tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in0_receiver_ckb_white, core, mm_checkerboard_in0_receiver_args); // RISCV_1_default
+                    tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in1_receiver_writer_ckb_white, core, mm_checkerboard_in1_receiver_writer_args); // RISCV_0_default
+                }
+                // black
+                else {
+                    auto mm_kernel_in0_receiver_ckb_black = tt_metal::CreateDataMovementKernel(
+                        program,
+                        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in0_receiver.cpp",
+                        core,
+                        reader_writer_compile_time_args,
+                        tt_metal::DataMovementProcessor::RISCV_1,
+                        tt_metal::NOC::RISCV_0_default);
+
+                    auto mm_kernel_in1_receiver_writer_ckb_black = tt_metal::CreateDataMovementKernel(
+                        program,
+                        "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in1_receiver_writer_padding.cpp",
+                        core,
+                        reader_writer_compile_time_args,
+                        tt_metal::DataMovementProcessor::RISCV_0,
+                        tt_metal::NOC::RISCV_1_default);
+
+                    tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in0_receiver_ckb_black, core, mm_checkerboard_in0_receiver_args); // RISCV_1_default
+                    tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in1_receiver_writer_ckb_black, core, mm_checkerboard_in1_receiver_writer_args); // RISCV_0_default
+                }
+
+                /* Uncomment if we don't checkerboard
                 tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_checkerboard_in0_receiver, core, mm_checkerboard_in0_receiver_args); // RISCV_1_default
                 tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_checkerboard_in1_receiver_writer, core, mm_checkerboard_in1_receiver_writer_args); // RISCV_0_default
+                */
             }
 
         }
