@@ -389,13 +389,16 @@ Tensor matmul_multi_core_reuse_optimized_bert_large_(const Tensor &a, const Tens
     //                      Compile Application
     ////////////////////////////////////////////////////////////////////////////
     bool pass = true;
-    pass &= tt_metal::CompileProgram(device, program);
+    pass &= tt_metal::CompileProgram(device, program, /*profile_device=*/true);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Execute Application
     ////////////////////////////////////////////////////////////////////////////
     pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
     pass &= tt_metal::LaunchKernels(device, program);
+
+    tt_metal::DumpHostProfileResults();
+    tt_metal::DumpDeviceProfileResults(device, program);
 
     delete program;
 
