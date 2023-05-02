@@ -1,6 +1,7 @@
 #include "tt_dnn/op_library/eltwise_binary/eltwise_binary_op.hpp"
 #include "tt_metal/host_api.hpp"
 #include "constants.hpp"
+#include "tt_dnn/op_library/auto_pad.hpp"
 
 using namespace tt::constants;
 
@@ -37,14 +38,37 @@ namespace tt_metal {
 
 Tensor eltwise_binary(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type) {
 
-    switch (eltwise_binary_op_utils::get_parallelization_strategy(a, b)){
+    Device * device;
+
+    // Get the device
+    if (a.on_host() && b.on_host()) {
+        device = AutoPad::GetDefaultDevice();
+        TT_ASSERT(device != nullptr, "Requires setting default device if no inputs to op are on device");
+    } else if (!a.on_host()){
+        device = a.device();
+    } else {
+        device = b.device();
+    }
+
+    // Bring tensor to host if it isn't already, pad and convert layout, send to device
+    auto input1 = AutoPad::format_input_tensor(a, device);
+    auto input2 = AutoPad::format_input_tensor(b, device);
+
+    Tensor output = Tensor({1, 1, 1, 1}, Initialize::ZEROS, DataType::BFLOAT16, Layout::ROW_MAJOR); // No Default Tensor Constructor, create dummy
+
+    switch (eltwise_binary_op_utils::get_parallelization_strategy(input1, input2)){
         case BinaryOpParallelizationStrategy::MULTI_CORE:
-            return eltwise_binary_multi_core(a, b, op_type);
+            output = eltwise_binary_multi_core(input1, input2, op_type);
             break;
         case BinaryOpParallelizationStrategy::SINGLE_CORE:
         default:
-            return eltwise_binary_single_core(a, b, op_type);
+            output = eltwise_binary_single_core(input1, input2, op_type);
     }
+
+    // Convert tensor back to original
+    output = AutoPad::format_output_tensor(a, output, a.shape(), device);
+
+    return output;
 
 }
 

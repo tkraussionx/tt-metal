@@ -4,6 +4,7 @@
 #include "tt_metal/host_api.hpp"
 #include "constants.hpp"
 #include "tensor/tensor_utils.hpp"
+#include "tt_dnn/op_library/auto_pad.hpp"
 
 using namespace tt::constants;
 
@@ -320,14 +321,33 @@ Tensor reshape_rm(Tensor &a, int N, int C, int H, int W) {
 }
 
 Tensor reshape(Tensor &a, int N, int C, int H, int W) {
-    if (a.layout() == Layout::TILE) {
-        return reshape_tilized(a, N, C, H, W);
-    } else if (a.layout() == Layout::ROW_MAJOR) {
-        return reshape_rm(a, N, C, H, W);
+    Device * device;
+
+    // Get the device
+    if (a.on_host()) {
+        device = AutoPad::GetDefaultDevice();
+        TT_ASSERT(device != nullptr, "Requires setting default device if no inputs to op are on device");
+    } else {
+        device = a.device();
+    }
+
+    auto input1 = a.on_host() ? a.to(device) : a;
+
+    Tensor output = Tensor({1, 1, 1, 1}, Initialize::ZEROS, DataType::BFLOAT16, Layout::ROW_MAJOR); // No Default Tensor Constructor, create dummy
+
+    if (input1.layout() == Layout::TILE) {
+        output = reshape_tilized(input1, N, C, H, W);
+    } else if (input1.layout() == Layout::ROW_MAJOR) {
+        output = reshape_rm(input1, N, C, H, W);
     } else {
         TT_ASSERT(false, "Unsupported layout for reshape");
-        return a;
     }
+
+    // Convert tensor back to original
+    output = AutoPad::format_output_tensor(a, output, infer_dims_for_reshape(N, C, H, W, a.volume()), device);
+
+
+    return output;
 }
 
 } // namespace tt_metal

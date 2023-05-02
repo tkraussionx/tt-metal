@@ -1,6 +1,7 @@
 #include "tt_dnn/op_library/eltwise_unary/eltwise_unary_op.hpp"
 #include "tt_metal/host_api.hpp"
 #include "constants.hpp"
+#include "tt_dnn/op_library/auto_pad.hpp"
 
 using namespace tt::constants;
 
@@ -51,14 +52,34 @@ namespace tt_metal {
 
 Tensor eltwise_unary(const Tensor &a, UnaryOpType::Enum op_type) {
 
-    switch (eltwise_unary_op_utils::get_parallelization_strategy(a)){
+    Device * device;
+
+    // Get the device
+    if (a.on_host()) {
+        device = AutoPad::GetDefaultDevice();
+        TT_ASSERT(device != nullptr, "Requires setting default device if no inputs to op are on device");
+    } else {
+        device = a.device();
+    }
+
+    // Bring tensor to host if it isn't already, pad and convert layout, send to device
+    auto input1 = AutoPad::format_input_tensor(a, device);
+
+    Tensor output = Tensor({1, 1, 1, 1}, Initialize::ZEROS, DataType::BFLOAT16, Layout::ROW_MAJOR); // No Default Tensor Constructor, create dummy
+
+    switch (eltwise_unary_op_utils::get_parallelization_strategy(input1)){
         case UnaryOpParallelizationStrategy::MULTI_CORE:
-            return eltwise_unary_multi_core(a, op_type);
+            output = eltwise_unary_multi_core(input1, op_type);
             break;
         case UnaryOpParallelizationStrategy::SINGLE_CORE:
         default:
-            return eltwise_unary_single_core(a, op_type);
+            output = eltwise_unary_single_core(input1, op_type);
     }
+
+    // Convert tensor back to original
+    output = AutoPad::format_output_tensor(a, output, a.shape(), device);
+
+    return output;
 
 }
 
