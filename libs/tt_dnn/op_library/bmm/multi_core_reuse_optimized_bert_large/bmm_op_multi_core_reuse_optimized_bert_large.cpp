@@ -122,23 +122,6 @@ tt_metal::Program * create_program(
             reader_writer_compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {0, 0});
         }
 
-        // Create reader and writer kernels per core
-        auto mm_kernel_in0_reader = tt_metal::CreateDataMovementKernel(
-            program,
-            "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in0.cpp",
-            core,
-            reader_writer_compile_time_args,
-            tt_metal::DataMovementProcessor::RISCV_1,
-            num_output_blocks_per_core[i] > num_evenly_divided_output_blocks ? tt_metal::NOC::RISCV_1_default : tt_metal::NOC::RISCV_0_default);
-
-        auto mm_kernel_in1_reader_writer = tt_metal::CreateDataMovementKernel(
-            program,
-            "tt_metal/kernels/dataflow/reader_writer_bmm_tile_layout_in1.cpp",
-            core,
-            reader_writer_compile_time_args,
-            tt_metal::DataMovementProcessor::RISCV_0,
-            num_output_blocks_per_core[i] > num_evenly_divided_output_blocks ? tt_metal::NOC::RISCV_0_default : tt_metal::NOC::RISCV_1_default);
-
         vector<uint32_t> compute_kernel_args = {
             in0_block_w, // in0_block_w
             in0_num_subblocks, // in0_num_subblocks
@@ -218,9 +201,78 @@ tt_metal::Program * create_program(
             (std::uint32_t) num_output_blocks_per_core[i] // batch
         };
 
+        // Create reader and writer kernels per core
+        // Checkerboard
+        // white
+        if ((core_idx_x + core_idx_y) % 2 == 0) {
+            auto mm_kernel_in0_reader = tt_metal::CreateDataMovementKernel(
+                program,
+                "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in0.cpp",
+                core,
+                reader_writer_compile_time_args,
+                tt_metal::DataMovementProcessor::RISCV_1,
+                tt_metal::NOC::RISCV_1_default
+            );
+
+            auto mm_kernel_in1_reader_writer = tt_metal::CreateDataMovementKernel(
+                program,
+                "tt_metal/kernels/dataflow/reader_writer_bmm_tile_layout_in1.cpp",
+                core,
+                reader_writer_compile_time_args,
+                tt_metal::DataMovementProcessor::RISCV_0,
+                tt_metal::NOC::RISCV_0_default
+            );
+
+            tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in0_reader, core, mm_reader_args);
+            mm_reader_args.insert(mm_reader_args.end(), writer_args.begin(), writer_args.end()-1);
+            tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in1_reader_writer, core, mm_reader_args);
+        }
+        // black
+        else {
+            auto mm_kernel_in0_reader = tt_metal::CreateDataMovementKernel(
+                program,
+                "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in0.cpp",
+                core,
+                reader_writer_compile_time_args,
+                tt_metal::DataMovementProcessor::RISCV_1,
+                tt_metal::NOC::RISCV_0_default
+            );
+
+            auto mm_kernel_in1_reader_writer = tt_metal::CreateDataMovementKernel(
+                program,
+                "tt_metal/kernels/dataflow/reader_writer_bmm_tile_layout_in1.cpp",
+                core,
+                reader_writer_compile_time_args,
+                tt_metal::DataMovementProcessor::RISCV_0,
+                tt_metal::NOC::RISCV_1_default
+            );
+
+            tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in0_reader, core, mm_reader_args);
+            mm_reader_args.insert(mm_reader_args.end(), writer_args.begin(), writer_args.end()-1);
+            tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in1_reader_writer, core, mm_reader_args);
+        }
+
+        /* Uncomment if we don't checkerboard
+        auto mm_kernel_in0_reader = tt_metal::CreateDataMovementKernel(
+            program,
+            "tt_metal/kernels/dataflow/reader_bmm_tile_layout_in0.cpp",
+            core,
+            reader_writer_compile_time_args,
+            tt_metal::DataMovementProcessor::RISCV_1,
+            num_output_blocks_per_core[i] > num_evenly_divided_output_blocks ? tt_metal::NOC::RISCV_1_default : tt_metal::NOC::RISCV_0_default);
+
+        auto mm_kernel_in1_reader_writer = tt_metal::CreateDataMovementKernel(
+            program,
+            "tt_metal/kernels/dataflow/reader_writer_bmm_tile_layout_in1.cpp",
+            core,
+            reader_writer_compile_time_args,
+            tt_metal::DataMovementProcessor::RISCV_0,
+            num_output_blocks_per_core[i] > num_evenly_divided_output_blocks ? tt_metal::NOC::RISCV_0_default : tt_metal::NOC::RISCV_1_default);
+
         tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in0_reader, core, mm_reader_args);
         mm_reader_args.insert(mm_reader_args.end(), writer_args.begin(), writer_args.end()-1);
         tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in1_reader_writer, core, mm_reader_args);
+        */
 
         num_blocks_written += num_output_blocks_per_core[i];
     }
