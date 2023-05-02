@@ -40,6 +40,17 @@ BasicAllocator::BasicAllocator(const tt_SocDescriptor &soc_desc) : Allocator() {
         allocator->allocate(0, UNRESERVED_BASE);
         this->l1_manager_.insert({logical_core, std::move(allocator)});
     }
+
+    auto allocator = std::make_unique<allocator::FreeList>(
+        1024 * 1024 * 1024,
+        min_allocation_size_bytes,
+        alignment,
+        allocator::FreeList::SearchPolicy::FIRST
+    );
+    // Space up to UNRESERVED_SYSMEM_BASE is reserved for table CBs
+    uint32_t UNRESERVED_SYSMEM_BASE;
+    allocator->allocate(0, UNRESERVED_SYSMEM_BASE);
+    this->sysmem_manager_ = std::move(allocator);
 }
 
 // BasicAllocator::BasicAllocator(const BasicAllocator &other);
@@ -62,6 +73,10 @@ allocator::Algorithm &BasicAllocator::allocator_for_logical_core(const tt_xy_pai
     return *this->l1_manager_.at(logical_core);
 }
 
+allocator::Algorithm &BasicAllocator::allocator_for_sysmem() const {
+    return *this->sysmem_manager_;
+}
+
 uint32_t BasicAllocator::allocate_dram_buffer(int dram_channel, uint32_t size_bytes) {
     return this->allocator_for_dram_channel(dram_channel).allocate(size_bytes);
 }
@@ -69,6 +84,11 @@ uint32_t BasicAllocator::allocate_dram_buffer(int dram_channel, uint32_t size_by
 uint32_t BasicAllocator::allocate_dram_buffer(int dram_channel, uint32_t start_address, uint32_t size_bytes) {
     return this->allocator_for_dram_channel(dram_channel).allocate(start_address, size_bytes);
 }
+
+uint32_t BasicAllocator::allocate_sysmem_buffer(uint32_t size_bytes) {
+    return this->allocator_for_sysmem().allocate(size_bytes);
+}
+
 
 uint32_t find_address_of_smallest_chunk(const std::vector<std::pair<uint32_t, uint32_t>> &candidate_addr_ranges) {
     uint32_t smallest_chunk = candidate_addr_ranges[0].second - candidate_addr_ranges[0].first;
@@ -140,6 +160,10 @@ void BasicAllocator::deallocate_l1_buffer(const tt_xy_pair &logical_core, uint32
     this->allocator_for_logical_core(logical_core).deallocate(address);
 }
 
+void BasicAllocator::deallocate_sysmem_buffer(uint32_t address) {
+    this->allocator_for_sysmem().deallocate(address);
+}
+
 uint32_t BasicAllocator::get_address_for_l1_buffers_across_core_range(const std::pair<tt_xy_pair, tt_xy_pair> &logical_core_range, uint32_t size_in_bytes) const {
     std::vector<std::pair<uint32_t, uint32_t>> candidate_addr_ranges;
     auto start_core = logical_core_range.first;
@@ -172,9 +196,14 @@ void BasicAllocator::clear_l1() {
     }
 }
 
+void BasicAllocator::clear_sysmem() {
+    this->allocator_for_sysmem().clear();
+}
+
 void BasicAllocator::clear() {
     this->clear_dram();
     this->clear_l1();
+    this->clear_sysmem();
 }
 
 }  // namespace tt_metal

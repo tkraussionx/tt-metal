@@ -157,6 +157,25 @@ void Device::free_l1_buffer(const tt_xy_pair &logical_core, uint32_t address) {
     this->allocator_->deallocate_l1_buffer(logical_core, address);
 }
 
+uint32_t Device::allocate_sysmem_buffer(uint32_t size_in_bytes) {
+    if (not cluster_is_initialized()) {
+        TT_THROW("Device has not been initialized, did you forget to call InitializeDevice?");
+    }
+    auto buffer_address = this->allocator_->allocate_sysmem_buffer(size_in_bytes);
+    return buffer_address;
+}
+
+void Device::free_sysmem_buffer(uint32_t address) {
+    if (this->closed_) {
+        return;
+    }
+    if (not cluster_is_initialized()) {
+        TT_THROW("Device has not been initialized, did you forget to call InitializeDevice?");
+    }
+
+    this->allocator_->deallocate_sysmem_buffer(address);
+}
+
 uint32_t Device::address_for_interleaved_dram_buffer(const std::map<int, uint32_t> &size_in_bytes_per_bank) {
     return this->allocator_->get_address_for_interleaved_dram_buffer(size_in_bytes_per_bank);
 }

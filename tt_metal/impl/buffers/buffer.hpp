@@ -99,6 +99,24 @@ class L1Buffer : public Buffer {
     tt_xy_pair logical_core_;          // Logical core
 };
 
+class SysMemBuffer : public Buffer {
+    public:
+     SysMemBuffer(Device *device, uint32_t size_in_bytes);
+
+     ~SysMemBuffer();
+
+     Buffer *clone();
+
+     tt_xy_pair noc_coordinates() const;
+
+    protected:
+     void reserve();
+
+     void free();
+     friend void DeallocateBuffer(Buffer *buffer);
+
+}
+
 }  // namespace tt_metal
 
 }  // namespace tt

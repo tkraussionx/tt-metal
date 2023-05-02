@@ -32,9 +32,15 @@ class Allocator {
 
     virtual void deallocate_l1_buffer(const tt_xy_pair &logical_core, uint32_t address) = 0;
 
+    virtual uint32_t allocate_sysmem_buffer(uint32_t size_bytes) = 0;
+
+    virtual void deallocate_sysmem_buffer(uint32_t address) = 0;
+
     virtual void clear_dram() = 0;
 
     virtual void clear_l1() = 0;
+
+    virtual void clear_sysmem() = 0;
 
     virtual void clear() = 0;
 };
