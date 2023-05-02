@@ -434,6 +434,26 @@ void TensorModule(py::module &m_tensor) {
                 shape = tt_tensor.shape()
 
         )doc")
+        .def("on_host", [](const Tensor &self) {
+            return self.on_host();
+        }, R"doc(
+            Check if the tensor is on host
+
+            .. code-block:: python
+
+                on_host = tt_tensor.on_host()
+
+        )doc")
+        .def("device", [](const Tensor &self) {
+            return self.device();
+        }, R"doc(
+            Get the device of the tensor.
+
+            .. code-block:: python
+
+                device = tt_tensor.device()
+
+        )doc")
         .def("data", [](const Tensor &self) {
             std::vector<uint32_t> empty_vec;
             TT_ASSERT(self.data_ptr() != nullptr);
