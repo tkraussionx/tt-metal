@@ -3,20 +3,20 @@
 #include "hostdevcommon/common_values.hpp"
 
 void kernel_main() {
-    // in0 block args
-    uint32_t in0_block_num_tiles                = get_arg_val<uint32_t>(0);
-
-    // in0/in1 common args
-    uint32_t num_blocks                         = get_arg_val<uint32_t>(1);
-
     // in0 mcast args
-    uint32_t in0_mcast_sender_noc_x             = get_arg_val<uint32_t>(2);
-    uint32_t in0_mcast_sender_noc_y             = get_arg_val<uint32_t>(3);
-    uint32_t in0_mcast_sender_semaphore_addr    = get_arg_val<uint32_t>(4);
-    uint32_t in0_mcast_receiver_semaphore_addr  = get_arg_val<uint32_t>(5);
+    uint32_t in0_mcast_sender_noc_y             = get_arg_val<uint32_t>(0);
+    uint32_t in0_mcast_sender_semaphore_addr    = get_arg_val<uint32_t>(1);
+    uint32_t in0_mcast_receiver_semaphore_addr  = get_arg_val<uint32_t>(2);
 
+    // COMPILE TIME ARGS
+    // in0 block args
+    constexpr uint32_t in0_block_num_tiles                = get_compile_time_arg_val(0);
+    // in0/in1 common args
+    constexpr uint32_t num_blocks                         = get_compile_time_arg_val(1);
+    // in0 mcast args
+    constexpr uint32_t in0_mcast_sender_noc_x             = get_compile_time_arg_val(2);
     // batch args
-    uint32_t batch                              = get_arg_val<uint32_t>(6);
+    constexpr uint32_t batch                              = get_compile_time_arg_val(3);
 
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in1 = 1;

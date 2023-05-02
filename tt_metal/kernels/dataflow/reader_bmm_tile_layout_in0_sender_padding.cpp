@@ -4,35 +4,40 @@
 
 void kernel_main() {
     // in0 tensor args
-    uint32_t in0_tensor_addr                    = get_arg_val<uint32_t>(0);
-    uint32_t in0_tensor_start_tile_id           = get_arg_val<uint32_t>(1);
-    uint32_t in0_tensor_stride_w                = get_arg_val<uint32_t>(2);
-    uint32_t in0_tensor_stride_h                = get_arg_val<uint32_t>(3);
-    uint32_t in0_tensor_next_block_stride       = get_arg_val<uint32_t>(4);
-
-    // in0 block args
-    uint32_t in0_block_w                        = get_arg_val<uint32_t>(5);
-    uint32_t in0_block_h                        = get_arg_val<uint32_t>(6);
-    uint32_t in0_block_num_tiles                = get_arg_val<uint32_t>(7);
-
-    // in0/in1 common args
-    uint32_t num_blocks                         = get_arg_val<uint32_t>(8);
-
+    uint32_t in0_tensor_start_tile_id           = get_arg_val<uint32_t>(0);
     // in0 mcast args
-    uint32_t in0_mcast_dest_noc_start_x         = get_arg_val<uint32_t>(9);
-    uint32_t in0_mcast_dest_noc_start_y         = get_arg_val<uint32_t>(10);
-    uint32_t in0_mcast_dest_noc_end_x           = get_arg_val<uint32_t>(11);
-    uint32_t in0_mcast_dest_noc_end_y           = get_arg_val<uint32_t>(12);
-    uint32_t in0_mcast_num_dests                = get_arg_val<uint32_t>(13);
-    uint32_t in0_mcast_sender_semaphore_addr    = get_arg_val<uint32_t>(14);
-    uint32_t in0_mcast_receiver_semaphore_addr  = get_arg_val<uint32_t>(15);
-
-    // batch args
-    uint32_t MtKt                               = get_arg_val<uint32_t>(16); // if 0
-    uint32_t batch                              = get_arg_val<uint32_t>(17);
+    uint32_t in0_mcast_dest_noc_start_y         = get_arg_val<uint32_t>(1);
+    uint32_t in0_mcast_dest_noc_end_y           = get_arg_val<uint32_t>(2);
+    uint32_t in0_mcast_sender_semaphore_addr    = get_arg_val<uint32_t>(3);
+    uint32_t in0_mcast_receiver_semaphore_addr  = get_arg_val<uint32_t>(4);
 
     // padding args
-    uint32_t last_block_h                       = get_arg_val<uint32_t>(18);
+    uint32_t last_block_h                       = get_arg_val<uint32_t>(5);
+
+    // COMPILE TIME ARGS
+    // interleaved accessor args
+    constexpr uint32_t tile_size_is_power_of_two          = get_compile_time_arg_val(0);
+    constexpr uint32_t tile_size_pow2_exponent            = get_compile_time_arg_val(1);
+
+    // in0 tensor args
+    constexpr uint32_t in0_tensor_addr                    = get_compile_time_arg_val(2);
+    constexpr uint32_t in0_tensor_stride_w                = get_compile_time_arg_val(3);
+    constexpr uint32_t in0_tensor_stride_h                = get_compile_time_arg_val(4);
+    constexpr uint32_t in0_tensor_next_block_stride       = get_compile_time_arg_val(5);
+    // in0 block args
+    constexpr uint32_t in0_block_w                        = get_compile_time_arg_val(6);
+    constexpr uint32_t in0_block_h                        = get_compile_time_arg_val(7);
+    constexpr uint32_t in0_block_num_tiles                = get_compile_time_arg_val(8);
+    // in0/in1 common args
+    constexpr uint32_t num_blocks                         = get_compile_time_arg_val(9);
+    // in0 mcast args
+    constexpr uint32_t in0_mcast_dest_noc_start_x         = get_compile_time_arg_val(10);
+    constexpr uint32_t in0_mcast_dest_noc_end_x           = get_compile_time_arg_val(11);
+    constexpr uint32_t in0_mcast_num_dests                = get_compile_time_arg_val(12);
+    // batch args
+    constexpr uint32_t MtKt                               = get_compile_time_arg_val(13); // if 0
+    constexpr uint32_t batch                              = get_compile_time_arg_val(14);
+
 
     // const args for tile-based bank-swizzled layout
     // could be added to the arg list in the future to test different
@@ -57,9 +62,8 @@ void kernel_main() {
     // to receive the mcast
     volatile uint32_t* in0_mcast_sender_semaphore_addr_ptr = reinterpret_cast<volatile uint32_t*>(in0_mcast_sender_semaphore_addr);
 
-    #define tile_size_is_pow2 get_compile_time_arg_val(0) == 1
+    #define tile_size_is_pow2 tile_size_is_power_of_two == 1
     #if (tile_size_is_pow2)
-    constexpr uint32_t tile_size_pow2_exponent = get_compile_time_arg_val(1);
     const InterleavedPow2AddrGen s0 = {
         .bank_base_address = in0_tensor_addr,
         .num_used_banks = num_used_dram_ch,
