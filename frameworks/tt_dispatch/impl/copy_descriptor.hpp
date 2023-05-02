@@ -27,7 +27,7 @@ struct CopyDescriptor {
         this->data[this->read_ptr++] = size;
     }
 
-    void add_write(uint32_t src, uint64_t dst, uint32_t) {
+    void add_write(uint32_t src, uint64_t dst, uint32_t size) {
         this->data[write_base]++; // Increment num_writes
 
         this->data[this->write_ptr++] = src;
@@ -38,7 +38,7 @@ struct CopyDescriptor {
         this->data[this->write_ptr++] = size;
     }
 
-    void clear_table() {
-        memset(this->data, 0, sizeof(this->data));
+    void clear() {
+        this->data.fill(0);
     }
 };
