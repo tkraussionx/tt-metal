@@ -57,17 +57,55 @@ namespace tt_metal {
 
 Tensor reduce_ (const Tensor &a, ReduceOpMath::Enum reduce_op, ReduceOpDim::Enum reduce_dim, float scaler) {
 
-    switch (reduce_op_utils::get_parallelization_strategy(a, reduce_dim)){
+    Device * device;
+
+    // Get the device
+    if (a.on_host()) {
+        device = AutoPad::GetDefaultDevice();
+        TT_ASSERT(device != nullptr, "Requires setting default device if no inputs to op are on device");
+    } else {
+        device = a.device();
+    }
+
+    // Bring tensor to host if it isn't already, pad and convert layout, send to device
+    auto input1 = AutoPad::format_input_tensor(a, device, false, false, reduce_op == ReduceOpMath::Enum::MAX ? -std::numeric_limits<float>::max() : 0);
+
+    Tensor output = Tensor({1, 1, 1, 1}, Initialize::ZEROS, DataType::BFLOAT16, Layout::ROW_MAJOR); // No Default Tensor Constructor, create dummy
+
+    switch (reduce_op_utils::get_parallelization_strategy(input1, reduce_dim)){
         case ReduceOpParallelizationStrategy::MULTI_CORE_H:
-            return reduce_multi_core_h(a, reduce_op, reduce_dim, scaler);
+            output = reduce_multi_core_h(input1, reduce_op, reduce_dim, scaler);
+            break;
         case ReduceOpParallelizationStrategy::MULTI_CORE_W:
-            return reduce_multi_core_w(a, reduce_op, reduce_dim, scaler);
+            output = reduce_multi_core_w(input1, reduce_op, reduce_dim, scaler);
+            break;
         case ReduceOpParallelizationStrategy::MULTI_CORE_HW:
-            return reduce_multi_core_hw(a, reduce_op, reduce_dim, scaler);
+            output = reduce_multi_core_hw(input1, reduce_op, reduce_dim, scaler);
+            break;
         case ReduceOpParallelizationStrategy::SINGLE_CORE:
         default:
-            return reduce_single_core(a, reduce_op, reduce_dim, scaler);
+            output = reduce_single_core(input1, reduce_op, reduce_dim, scaler);
     }
+
+
+    // Convert tensor back to original
+    auto shape = a.shape();
+    switch (reduce_dim){
+        case ReduceOpDim::H:
+            shape[2] = 32;
+            break;
+        case ReduceOpDim::W:
+            shape[3] = 32;
+            break;
+        case ReduceOpDim::HW:
+            shape[2] = 32;
+            shape[3] = 32;
+            break;
+
+    }
+    output = AutoPad::format_output_tensor(a, output, shape, device);
+
+    return output;
 
 }
 
