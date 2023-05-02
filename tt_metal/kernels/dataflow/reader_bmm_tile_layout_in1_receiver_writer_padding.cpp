@@ -3,89 +3,47 @@
 #include "hostdevcommon/common_values.hpp"
 
 void kernel_main() {
-    // in0 tensor args
-    uint32_t in0_tensor_addr                    = get_arg_val<uint32_t>(0);
-    uint32_t in0_tensor_start_tile_id           = get_arg_val<uint32_t>(1);
-    uint32_t in0_tensor_stride_w                = get_arg_val<uint32_t>(2);
-    uint32_t in0_tensor_stride_h                = get_arg_val<uint32_t>(3);
-    uint32_t in0_tensor_next_block_stride       = get_arg_val<uint32_t>(4);
-
-    // in0 block args
-    uint32_t in0_block_w                        = get_arg_val<uint32_t>(5);
-    uint32_t in0_block_h                        = get_arg_val<uint32_t>(6);
-    uint32_t in0_block_num_tiles                = get_arg_val<uint32_t>(7);
-
-    // in1 tensor args
-    uint32_t in1_tensor_addr                    = get_arg_val<uint32_t>(8);
-    uint32_t in1_tensor_start_tile_id           = get_arg_val<uint32_t>(9);
-    uint32_t in1_tensor_stride_w                = get_arg_val<uint32_t>(10);
-    uint32_t in1_tensor_stride_h                = get_arg_val<uint32_t>(11);
-    uint32_t in1_tensor_next_block_stride       = get_arg_val<uint32_t>(12);
-
     // in1 block args
-    uint32_t in1_block_w                        = get_arg_val<uint32_t>(13);
-    uint32_t in1_block_h                        = get_arg_val<uint32_t>(14);
-    uint32_t in1_block_num_tiles                = get_arg_val<uint32_t>(15);
+    uint32_t in1_block_num_tiles                = get_arg_val<uint32_t>(0);
 
     // in0/in1 common args
-    uint32_t num_blocks                         = get_arg_val<uint32_t>(16);
-
-    // in0 mcast args
-    uint32_t in0_mcast_dest_noc_start_x         = get_arg_val<uint32_t>(17);
-    uint32_t in0_mcast_dest_noc_start_y         = get_arg_val<uint32_t>(18);
-    uint32_t in0_mcast_dest_noc_end_x           = get_arg_val<uint32_t>(19);
-    uint32_t in0_mcast_dest_noc_end_y           = get_arg_val<uint32_t>(20);
-    uint32_t in0_mcast_num_dests                = get_arg_val<uint32_t>(21);
-    uint32_t in0_mcast_sender_noc_x             = get_arg_val<uint32_t>(22);
-    uint32_t in0_mcast_sender_noc_y             = get_arg_val<uint32_t>(23);
-    uint32_t in0_mcast_sender_semaphore_addr    = get_arg_val<uint32_t>(24);
-    uint32_t in0_mcast_receiver_semaphore_addr  = get_arg_val<uint32_t>(25);
+    uint32_t num_blocks                         = get_arg_val<uint32_t>(1);
 
     // in1 mcast args
-    uint32_t in1_mcast_dest_noc_start_x         = get_arg_val<uint32_t>(26);
-    uint32_t in1_mcast_dest_noc_start_y         = get_arg_val<uint32_t>(27);
-    uint32_t in1_mcast_dest_noc_end_x           = get_arg_val<uint32_t>(28);
-    uint32_t in1_mcast_dest_noc_end_y           = get_arg_val<uint32_t>(29);
-    uint32_t in1_mcast_num_dests                = get_arg_val<uint32_t>(30);
-    uint32_t in1_mcast_sender_noc_x             = get_arg_val<uint32_t>(31);
-    uint32_t in1_mcast_sender_noc_y             = get_arg_val<uint32_t>(32);
-    uint32_t in1_mcast_sender_semaphore_addr    = get_arg_val<uint32_t>(33);
-    uint32_t in1_mcast_receiver_semaphore_addr  = get_arg_val<uint32_t>(34);
+    uint32_t in1_mcast_sender_noc_x             = get_arg_val<uint32_t>(2);
+    uint32_t in1_mcast_sender_noc_y             = get_arg_val<uint32_t>(3);
+    uint32_t in1_mcast_sender_semaphore_addr    = get_arg_val<uint32_t>(4);
+    uint32_t in1_mcast_receiver_semaphore_addr  = get_arg_val<uint32_t>(5);
 
     // batch args
-    uint32_t MtKt                               = get_arg_val<uint32_t>(35); // if 0
-    uint32_t KtNt                               = get_arg_val<uint32_t>(36);
-    uint32_t batch                              = get_arg_val<uint32_t>(37);
-    uint32_t bcast_B                            = get_arg_val<uint32_t>(38);
+    uint32_t batch                              = get_arg_val<uint32_t>(6);
 
     // WRITER
     // out tensor args
-    uint32_t out_tensor_addr                    = get_arg_val<uint32_t>(39);
-    uint32_t out_tensor_start_tile_id           = get_arg_val<uint32_t>(40);
-    uint32_t out_tensor_stride_w                = get_arg_val<uint32_t>(41);
-    uint32_t out_tensor_stride_h                = get_arg_val<uint32_t>(42);
-    uint32_t out_tensor_next_subblock_stride_w  = get_arg_val<uint32_t>(43);
-    uint32_t out_tensor_next_subblock_stride_h  = get_arg_val<uint32_t>(44);
+    uint32_t out_tensor_addr                    = get_arg_val<uint32_t>(7);
+    uint32_t out_tensor_start_tile_id           = get_arg_val<uint32_t>(8);
+    uint32_t out_tensor_stride_w                = get_arg_val<uint32_t>(9);
+    uint32_t out_tensor_stride_h                = get_arg_val<uint32_t>(10);
+    uint32_t out_tensor_next_subblock_stride_w  = get_arg_val<uint32_t>(11);
+    uint32_t out_tensor_next_subblock_stride_h  = get_arg_val<uint32_t>(12);
 
     // out subblock args
-    uint32_t out_subblock_w                     = get_arg_val<uint32_t>(45);
-    uint32_t out_subblock_h                     = get_arg_val<uint32_t>(46);
-    uint32_t out_subblock_tile_count            = get_arg_val<uint32_t>(47);
-    uint32_t out_num_subblocks_w                = get_arg_val<uint32_t>(48);
-    uint32_t out_num_subblocks_h                = get_arg_val<uint32_t>(49);
+    uint32_t out_subblock_w                     = get_arg_val<uint32_t>(13);
+    uint32_t out_subblock_h                     = get_arg_val<uint32_t>(14);
+    uint32_t out_subblock_tile_count            = get_arg_val<uint32_t>(15);
 
     // batch args
-    uint32_t MtNt                               = get_arg_val<uint32_t>(50); // if 0
+    uint32_t MtNt                               = get_arg_val<uint32_t>(16); // if 0
     // Don't need batch; same as batch from READER args
 
     // padding args (WRITER)
-    uint32_t out_num_nonzero_subblocks_h        = get_arg_val<uint32_t>(51);
-    uint32_t out_last_subblock_h                = get_arg_val<uint32_t>(52);
-    uint32_t padded_block_tiles_h_skip          = get_arg_val<uint32_t>(53);
-    uint32_t out_num_nonzero_subblocks_w        = get_arg_val<uint32_t>(54);
-    uint32_t out_last_subblock_w                = get_arg_val<uint32_t>(55);
-    uint32_t padded_subblock_tiles_addr_skip    = get_arg_val<uint32_t>(56);
-    uint32_t padded_block_tiles_w_skip          = get_arg_val<uint32_t>(57);
+    uint32_t out_num_nonzero_subblocks_h        = get_arg_val<uint32_t>(17);
+    uint32_t out_last_subblock_h                = get_arg_val<uint32_t>(18);
+    uint32_t padded_block_tiles_h_skip          = get_arg_val<uint32_t>(19);
+    uint32_t out_num_nonzero_subblocks_w        = get_arg_val<uint32_t>(20);
+    uint32_t out_last_subblock_w                = get_arg_val<uint32_t>(21);
+    uint32_t padded_subblock_tiles_addr_skip    = get_arg_val<uint32_t>(22);
+    uint32_t padded_block_tiles_w_skip          = get_arg_val<uint32_t>(23);
 
     // WRITER
     // const args for tile-based bank-swizzled layout
