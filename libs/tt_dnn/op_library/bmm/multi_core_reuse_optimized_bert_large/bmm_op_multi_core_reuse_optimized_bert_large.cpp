@@ -17,7 +17,7 @@ tt_metal::Program * create_program(
     MathFidelity math_fidelity,
     uint32_t single_tile_size,
     tt_xy_pair core_range,
-    uint32_t B, uint32_t M, uint32_t unfused_M, uint32_t N, uint32_t unfused_N, uint32_t K,
+    uint32_t B, uint32_t M, uint32_t N, uint32_t K,
     bool bcast_batch,
     uint32_t in0_block_w,
     uint32_t out_subblock_h, uint32_t out_subblock_w,
@@ -48,10 +48,10 @@ tt_metal::Program * create_program(
     uint32_t out_subblock_num_tiles = out_subblock_h*out_subblock_w;
 
     uint32_t num_cores = core_range.x * core_range.y;
-    uint32_t num_block_rows_per_batch = (unfused_M / per_core_M);
-    uint32_t num_block_cols_per_batch = (unfused_N / per_core_N);
+    uint32_t num_block_rows_per_batch = (M / per_core_M);
+    uint32_t num_block_cols_per_batch = (N / per_core_N);
     uint32_t num_output_blocks_per_batch = num_block_rows_per_batch * num_block_cols_per_batch;
-    uint32_t num_output_blocks_total = (M / per_core_M) * (unfused_N / per_core_N);
+    uint32_t num_output_blocks_total = B * (M / per_core_M) * (N / per_core_N);
     uint32_t num_evenly_divided_output_blocks = num_output_blocks_total / num_cores;
     std::vector<uint32_t> num_output_blocks_per_core(num_cores, num_evenly_divided_output_blocks);
     for(uint32_t i = 0; i < num_output_blocks_total % num_cores; i++){
@@ -185,8 +185,8 @@ tt_metal::Program * create_program(
             (std::uint32_t)  in1_dram_addr, // in1_tensor_addr
             (std::uint32_t)  per_core_N * (output_idx_x + K * output_idx_batch * num_block_cols_per_batch), //in1_tensor_start_tile_id
             (std::uint32_t)  1, // in1_tensor_stride_w
-            (std::uint32_t)  unfused_N, // in1_tensor_stride_h
-            (std::uint32_t)  in0_block_w * unfused_N, //in1_tensor_next_block_stride
+            (std::uint32_t)  N, // in1_tensor_stride_h
+            (std::uint32_t)  in0_block_w * N, //in1_tensor_next_block_stride
 
             (std::uint32_t)  per_core_N, // in1_block_w
             (std::uint32_t)  in0_block_w, //in1_block_h
@@ -194,19 +194,19 @@ tt_metal::Program * create_program(
 
             (std::uint32_t)  K / in0_block_w, // num_blocks
 
-            (std::uint32_t)  unfused_M * K, // MtKt
-            (std::uint32_t)  K * unfused_N, // KtNt
+            (std::uint32_t)  M * K, // MtKt
+            (std::uint32_t)  K * N, // KtNt
             (std::uint32_t)  num_output_blocks_per_core[i], // batch
             (std::uint32_t)  bcast_batch, // bcast_B
         };
 
         std::vector<uint32_t> writer_args = {
             (std::uint32_t) out_dram_addr, // out_tensor_addr
-            (std::uint32_t) output_idx_x * per_core_N + (output_idx_y + output_idx_batch * num_block_rows_per_batch) * per_core_M * unfused_N, // out_tensor_start_tile_id
+            (std::uint32_t) output_idx_x * per_core_N + (output_idx_y + output_idx_batch * num_block_rows_per_batch) * per_core_M * N, // out_tensor_start_tile_id
             (std::uint32_t) 1, // out_tensor_stride_w
-            (std::uint32_t) unfused_N,  // out_tensor_stride_h
+            (std::uint32_t) N,  // out_tensor_stride_h
             (std::uint32_t) out_subblock_w, // out_tensor_next_subblock_stride_w
-            (std::uint32_t) out_subblock_h * unfused_N, // out_tensor_next_subblock_stride_h
+            (std::uint32_t) out_subblock_h * N, // out_tensor_next_subblock_stride_h
 
             (std::uint32_t) out_subblock_w, // out_subblock_w
             (std::uint32_t) out_subblock_h, // out_subblock_h
@@ -214,7 +214,7 @@ tt_metal::Program * create_program(
             (std::uint32_t) (per_core_N / out_subblock_w), // out_num_subblocks_w
             (std::uint32_t) (per_core_M / out_subblock_h), // out_num_subblocks_h
 
-            (std::uint32_t) unfused_M * unfused_N, // MtNt
+            (std::uint32_t) M * N, // MtNt
             (std::uint32_t) num_output_blocks_per_core[i] // batch
         };
 
@@ -284,17 +284,11 @@ Tensor matmul_multi_core_reuse_optimized_bert_large_(const Tensor &a, const Tens
     // NOTE: Only supports matmuls where output is blocks of 16 x 16 tiles (ie. multiples of 16*32 x 16*32)
     // NOTE: Maximum number of tiles in output is 120 * 16^2 = 30,720 (eg. [1, 1, 5120, 6144])
     uint32_t B = ashape[0]*ashape[1];
-    uint32_t unfused_Mt = ashape[2]/TILE_HEIGHT;
-    uint32_t Mt = unfused_Mt;
+    uint32_t Mt = ashape[2]/TILE_HEIGHT;
     uint32_t Kt = ashape[3]/TILE_WIDTH;
-    uint32_t unfused_Nt = bshape[3]/TILE_WIDTH;
-    uint32_t Nt = unfused_Nt;
+    uint32_t Nt = bshape[3]/TILE_WIDTH;
 
-    if (fuse_batch) {
-        Mt = B * Mt;
-        Nt = B * Nt;
-        B = 1;
-    }
+    TT_ASSERT(fuse_batch, "Only fuse_batch=true is supported for bert large optimized bmm!");
     TT_ASSERT(Kt % in0_block_w == 0);
 
     uint32_t num_cores_x = compute_and_storage_grid_size.x;
@@ -306,7 +300,7 @@ Tensor matmul_multi_core_reuse_optimized_bert_large_(const Tensor &a, const Tens
     TT_ASSERT(Nt % per_core_N == 0);
     TT_ASSERT(Kt % in0_block_w == 0);
 
-    uint32_t num_blocks_total = (Mt / per_core_M) * (unfused_Nt / per_core_N);
+    uint32_t num_blocks_total = B * (Mt / per_core_M) * (Nt / per_core_N);
     tt_xy_pair core_range = compute_and_storage_grid_size;
 
     ////////////////////////////////////////////////////////////////////////////
@@ -330,7 +324,7 @@ Tensor matmul_multi_core_reuse_optimized_bert_large_(const Tensor &a, const Tens
         math_fidelity,
         single_tile_size,
         core_range,
-        B, Mt, unfused_Mt, Nt, unfused_Nt, Kt,
+        B, Mt, Nt, Kt,
         bcast_batch,
         in0_block_w,
         out_subblock_h, out_subblock_w,
