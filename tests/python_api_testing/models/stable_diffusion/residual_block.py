@@ -71,20 +71,17 @@ class TtResnetBlock2D(nn.Module):
         norm1_weights = state_dict[f"{base_address}.norm1.weight"]
         norm1_bias = state_dict[f"{base_address}.norm1.bias"]
 
-        # self.norm1 = fallback_ops.GroupNorm(nn.Parameter(norm1_weights), nn.Parameter(norm1_bias), num_groups=groups, num_channels=in_channels, eps=eps, affine=True)
+        self.norm1 = fallback_ops.GroupNorm(nn.Parameter(norm1_weights), nn.Parameter(norm1_bias), num_groups=groups, num_channels=in_channels, eps=eps, affine=True)
 
         # self.norm1.weight = nn.Parameter(norm1_weights)
         # self.norm1.bias = nn.Parameter(norm1_bias)
 
-        self.norm1.weight = norm1_weights
-        self.norm1.bias = norm1_bias
-
-        self.conv1 = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1) # TODO: we dont have support, so using torch
+        # self.conv1 = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1) # TODO: we dont have support, so using torch
 
         conv1_weights = state_dict[f"{base_address}.conv1.weight"]
         conv1_bias = state_dict[f"{base_address}.conv1.bias"]
 
-        #self.conv1 = fallback_ops.Conv2d(conv1_weights, conv1_bias, in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.conv1 = fallback_ops.Conv2d(conv1_weights, conv1_bias, in_channels, out_channels, kernel_size=3, stride=1, padding=1)
 
         self.conv1.weight = nn.Parameter(conv1_weights)
         self.conv1.bias = nn.Parameter(conv1_bias)
