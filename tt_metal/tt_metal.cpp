@@ -347,6 +347,12 @@ std::vector<CircularBuffer *> CreateCircularBuffers(
     return circular_buffers;
 }
 
+void InitializeDispatch(Device* device, uint32_t num_tables, uint32_t table_size_in_bytes) {
+    TableCircularBuffer* table_cb = new TableCircularBuffer(device, num_tables, table_size_in_bytes);
+
+
+}
+
 void DeallocateBuffer(Buffer *buffer) {
     buffer->free();
 }

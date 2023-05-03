@@ -42,14 +42,13 @@ BasicAllocator::BasicAllocator(const tt_SocDescriptor &soc_desc) : Allocator() {
     }
 
     auto allocator = std::make_unique<allocator::FreeList>(
-        1024 * 1024 * 1024,
+        1024 * 1024 * 1024, // Hugepage size is 1GB
         min_allocation_size_bytes,
         alignment,
         allocator::FreeList::SearchPolicy::FIRST
     );
-    // Space up to UNRESERVED_SYSMEM_BASE is reserved for table CBs
-    uint32_t UNRESERVED_SYSMEM_BASE;
-    allocator->allocate(0, UNRESERVED_SYSMEM_BASE);
+    // Space up to SYSMEM_UNRESERVED_BASE is reserved for table CBs
+    allocator->allocate(0, SYSMEM_UNRESERVED_BASE);
     this->sysmem_manager_ = std::move(allocator);
 }
 

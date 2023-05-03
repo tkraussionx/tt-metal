@@ -36,6 +36,41 @@ CircularBuffer::~CircularBuffer() {
     this->free();
 }
 
+TableCircularBuffer::TableCircularBuffer(Device *device, const uint32_t num_tables, const uint32_t table_size_in_bytes) : device_(device), num_tables_(num_tables), table_size_in_bytes_(table_size_in_bytes), size_in_bytes_(num_tables * table_size_in_bytes_) {
+    // For now, hard-coding to 0... eventually, need to make configurable for both dispatch cores
+    uint32_t dispatch_core_id = 0;
+
+    tt_cluster* cluster = device->cluster();
+
+    // Setup CB write interface
+    this->write_ptr_ = 0;
+    uint32_t fifo_addr = this->write_ptr_;
+    uint32_t fifo_size = this->size_in_bytes_;
+    uint32_t fifo_size_tables = this->num_tables_;
+
+    uint32_t fifo_limit = fifo_addr + fifo_size - 1;
+    uint32_t fifo_wr_ptr = fifo_addr;
+
+    // Writing the write interface to system memory
+    vector<uint32_t> cb_write_interface = {fifo_limit, fifo_wr_ptr, fifo_size, fifo_size_tables};
+    cluster->write_sysmem_vec(cb_write_interface, 0, 0);
+
+    // Setup CB read interface
+    tt_xy_pair dispatch_core = device->worker_core_from_logical_core({9, 0});
+    vector<uint32_t> cb_read_interface;
+    uint32_t table_cb_read_interface_addr;
+    llrt::write_hex_vec_to_core(cluster, 0, dispatch_core, cb_read_interface, table_cb_read_interface_addr);
+}
+
+void TableCircularBuffer::cb_reserve_back() {
+
+}
+
+void TableCircularBuffer::cb_push_back() {
+
+}
+
+
 }  // namespace tt_metal
 
 }  // namespace tt

@@ -44,7 +44,25 @@ class CircularBuffer : public L1Buffer {
     DataFormat data_format_;              // e.g. fp16, bfp8
 };
 
+class TableCircularBuffer {
+    public:
+     TableCircularBuffer(Device *device, const uint32_t num_tables, const uint32_t table_size_in_bytes) : num_tables_(num_tables), table_size_in_bytes_(table_size_in_bytes_), size_in_bytes_(num_tables * table_size);
 
+     ~TableCircularBuffer() {}
+
+     void cb_reserve_back();
+
+     void cb_push_back();
+
+    private:
+     Device *device_;
+     const uint32_t size_in_bytes_;
+     const uint32_t num_tables_;
+     const uint32_t table_size_in_bytes_;
+     uint32_t address_;
+
+     uint32_t write_ptr_; // No read ptr, since device will update that
+};
 
 
 }  // namespace tt_metal

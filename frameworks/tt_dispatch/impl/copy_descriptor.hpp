@@ -40,5 +40,7 @@ struct CopyDescriptor {
 
     void clear() {
         this->data.fill(0);
+        this->read_ptr = this->read_base;
+        this->write_ptr = this->write_base;
     }
 };

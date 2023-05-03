@@ -31,6 +31,8 @@ constexpr static std::uint32_t CONSTANT_REGISTER_VALUE = PRINT_BUFFER_BR + PRINT
 
 constexpr static std::uint32_t UNRESERVED_BASE = 120 * 1024; // Start of unreserved space
 
+constexpr static std::uint32_t SYSMEM_UNRESERVED_BASE = 120 * 1024;
+
 // Breakpoint regions
 constexpr static std::uint32_t NCRISC_BREAKPOINT = 109568;
 constexpr static std::uint32_t TRISC0_BREAKPOINT = 109572;
