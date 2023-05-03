@@ -1,6 +1,7 @@
 # Every variable in subdir must be prefixed with subdir (emulating a namespace)
 #TT_DISPATCH_TESTS += $(basename $(wildcard tt_dispatch/*.cpp))
-TT_DISPATCH_TESTS += tests/frameworks/tt_dispatch/test_copy_descriptor
+TT_DISPATCH_TESTS += tests/frameworks/tt_dispatch/test_copy_descriptor \
+					 tests/frameworks/tt_dispatch/test_dispatch_primitives
 
 TT_DISPATCH_TESTS_SRCS = $(addprefix tests/frameworks/tt_dispatch/, $(addsuffix .cpp, $(TT_DISPATCH_TESTS:tests%=%)))
 
