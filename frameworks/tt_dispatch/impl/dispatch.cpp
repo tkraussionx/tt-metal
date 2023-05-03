@@ -2,6 +2,25 @@
 #include <mutex>
 #include <thread>
 
+Event::Event(EventType etype): etype(etype) {}
+
+void Event::handle() {
+    switch (this->etype) {
+        case EventType::ADD_READ:
+
+            break;
+        case EventType::ADD_WRITE:
+            break;
+        case EventType::CLEAR:
+            break;
+        case EventType::WRITE_TO_SYSTEM_MEM:
+            break;
+        case EventType::ENQUEUE:
+            break;
+        default:
+            TT_THROW("Invalid event type");
+    }
+}
 
 EventQueue::EventQueue(uint32_t capacity) {
     this->q = std::queue<Event>();
@@ -19,20 +38,25 @@ void EventQueue::push(Event e) {
     this->empty_condition.notify_one();
 }
 
-void EventQueue::pop() {
+Event EventQueue::pop() {
     std::unique_lock<std::mutex> lock(this->m);
 
     this->empty_condition.wait(lock, [this]() { return !this->q.empty(); });
 
+    Event e = this->q.front();
     this->q.pop();
 
     this->full_condition.notify_one();
+    return e;
 }
 
 size_t EventQueue::size() { return this->q.size(); }
 
 void run_worker(EventQueue &q) {
-    while (true) q.pop();
+    while (true) {
+        Event e = q.pop();
+        e.handle();
+    }
 }
 
 void DispatchManager::push(Event &e) { this->q.push(e); }

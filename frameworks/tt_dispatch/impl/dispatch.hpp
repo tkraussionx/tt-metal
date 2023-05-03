@@ -4,8 +4,22 @@
 #include "tt_metal/host_api.hpp"
 #include "frameworks/tt_dispatch/impl/copy_descriptor.hpp"
 
-class Event {
 
+enum class EventType: uint8_t {
+    ADD_READ = 0,
+    ADD_WRITE = 1,
+    CLEAR = 2,
+    WRITE_TO_SYSTEM_MEM = 3,
+    ENQUEUE = 4
+};
+
+class Event {
+    public:
+        Event(EventType etype);
+        void handle();
+
+    private:
+        EventType etype;
 };
 
 class DispatchManager;
@@ -16,7 +30,7 @@ class EventQueue {
 
         void push(Event e);
 
-        void pop();
+        Event pop();
 
         size_t size();
 
@@ -29,9 +43,6 @@ class EventQueue {
         std::condition_variable full_condition;
 
         uint32_t capacity;
-
-        bool all_requests_sent;
-
 };
 
 void run_worker(EventQueue &q);
