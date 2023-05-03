@@ -8,11 +8,9 @@ void kernel_main() {
     // in0 mcast args
     uint32_t in0_mcast_dest_noc_start_y         = get_arg_val<uint32_t>(1);
     uint32_t in0_mcast_dest_noc_end_y           = get_arg_val<uint32_t>(2);
-    uint32_t in0_mcast_sender_semaphore_addr    = get_arg_val<uint32_t>(3);
-    uint32_t in0_mcast_receiver_semaphore_addr  = get_arg_val<uint32_t>(4);
 
     // padding args
-    uint32_t last_block_h                       = get_arg_val<uint32_t>(5);
+    uint32_t last_block_h                       = get_arg_val<uint32_t>(3);
 
     // COMPILE TIME ARGS
     // interleaved accessor args
@@ -33,10 +31,12 @@ void kernel_main() {
     // in0 mcast args
     constexpr uint32_t in0_mcast_dest_noc_start_x         = get_compile_time_arg_val(10);
     constexpr uint32_t in0_mcast_dest_noc_end_x           = get_compile_time_arg_val(11);
-    constexpr uint32_t in0_mcast_num_dests                = get_compile_time_arg_val(12);
+    constexpr uint32_t in0_mcast_sender_semaphore_addr    = get_compile_time_arg_val(12);
+    constexpr uint32_t in0_mcast_receiver_semaphore_addr  = get_compile_time_arg_val(13);
+    constexpr uint32_t in0_mcast_num_dests                = get_compile_time_arg_val(14);
     // batch args
-    constexpr uint32_t MtKt                               = get_compile_time_arg_val(13); // if 0
-    constexpr uint32_t batch                              = get_compile_time_arg_val(14);
+    constexpr uint32_t MtKt                               = get_compile_time_arg_val(15); // if 0
+    constexpr uint32_t batch                              = get_compile_time_arg_val(16);
 
 
     // const args for tile-based bank-swizzled layout

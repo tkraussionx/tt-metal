@@ -113,6 +113,17 @@ tt_metal::Program * create_program_mcast_in0_in1(
     */
 
     // Mcast args
+    auto in0_mcast_sender_semaphore_vec = tt_metal::CreateSemaphores(program, device, all_cores, 0);
+    auto in0_mcast_receiver_semaphore_vec = tt_metal::CreateSemaphores(program, device, all_cores, 0);
+    auto in1_mcast_sender_semaphore_vec = tt_metal::CreateSemaphores(program, device, all_cores, 0);
+    auto in1_mcast_receiver_semaphore_vec = tt_metal::CreateSemaphores(program, device, all_cores, 0);
+
+    // Address should be same across all cores
+    auto in0_mcast_sender_semaphore = in0_mcast_sender_semaphore_vec[0];
+    auto in0_mcast_receiver_semaphore = in0_mcast_receiver_semaphore_vec[0];
+    auto in1_mcast_sender_semaphore = in1_mcast_sender_semaphore_vec[0];
+    auto in1_mcast_receiver_semaphore = in1_mcast_receiver_semaphore_vec[0];
+
     tt_xy_pair top_left_core = {(std::size_t) start_core_x, (std::size_t) start_core_y};
     tt_xy_pair top_left_core_plus_one = {(std::size_t) start_core_x + 1, (std::size_t) start_core_y + 1};
     tt_xy_pair bottom_right_core = {(std::size_t) start_core_x + num_cores_c - 1, (std::size_t) start_core_y + num_cores_r - 1};
@@ -142,6 +153,8 @@ tt_metal::Program * create_program_mcast_in0_in1(
             // in0 mcast args
             (std::uint32_t)  bottom_right_core_physical.x, // in0_mcast_dest_noc_start_x
             (std::uint32_t)  top_left_core_plus_one_physical.x, // in0_mcast_dest_noc_end_x
+            (std::uint32_t)  in0_mcast_sender_semaphore->address(),
+            (std::uint32_t)  in0_mcast_receiver_semaphore->address(),
             (std::uint32_t)  (num_cores_c - 1), // in0_mcast_num_dests
             // batch args
             (std::uint32_t)  M * K, // MtKt
@@ -169,6 +182,8 @@ tt_metal::Program * create_program_mcast_in0_in1(
             // in1 mcast args
             (std::uint32_t)  bottom_right_core_physical.y, // in1_mcast_dest_noc_start_y
             (std::uint32_t)  top_left_core_plus_one_physical.y, // in1_mcast_dest_noc_end_y
+            (std::uint32_t)  in1_mcast_sender_semaphore->address(),
+            (std::uint32_t)  in1_mcast_receiver_semaphore->address(),
             (std::uint32_t)  (num_cores_r - 1), // in1_mcast_num_dests
             // batch args
             (std::uint32_t)  K * N, // KtNt
@@ -198,6 +213,8 @@ tt_metal::Program * create_program_mcast_in0_in1(
             (std::uint32_t)  K / in0_block_w, // num_blocks
             // in0 mcast args
             (std::uint32_t)  top_left_core_physical.x, // in0_mcast_sender_noc_x
+            (std::uint32_t)  in0_mcast_sender_semaphore->address(),
+            (std::uint32_t)  in0_mcast_receiver_semaphore->address(),
             // batch args
             (std::uint32_t)  B // batch
         }
@@ -215,6 +232,8 @@ tt_metal::Program * create_program_mcast_in0_in1(
             (std::uint32_t)  K / in0_block_w, // num_blocks
             // in1 mcast args
             (std::uint32_t)  top_left_core_physical.y, // in1_mcast_sender_noc_y
+            (std::uint32_t)  in1_mcast_sender_semaphore->address(),
+            (std::uint32_t)  in1_mcast_receiver_semaphore->address(),
             // batch args
             (std::uint32_t)  B, // batch
 
@@ -233,7 +252,6 @@ tt_metal::Program * create_program_mcast_in0_in1(
             (std::uint32_t)  M * N // MtNt
         }
     );
-
 
     auto mm_kernel_in0_sender = tt_metal::CreateDataMovementKernel(
         program,
@@ -378,11 +396,6 @@ tt_metal::Program * create_program_mcast_in0_in1(
         for(int core_idx_x = 0; core_idx_x < num_cores_c; core_idx_x++) {
             tt_xy_pair core = {(std::size_t) start_core_x + core_idx_x, (std::size_t) start_core_y + core_idx_y};
 
-            auto in0_mcast_sender_semaphore = tt_metal::CreateL1Buffer(program, device, core, sizeof(uint32_t));
-            auto in0_mcast_receiver_semaphore = tt_metal::CreateL1Buffer(program, device, core, sizeof(uint32_t));
-            auto in1_mcast_sender_semaphore = tt_metal::CreateL1Buffer(program, device, core, sizeof(uint32_t));
-            auto in1_mcast_receiver_semaphore = tt_metal::CreateL1Buffer(program, device, core, sizeof(uint32_t));
-
             uint32_t src0_cb_index = 0;
             uint32_t cb0_tiles = in0_block_tiles * 2; // double buffer
             auto cb_src0 = tt_metal::CreateCircularBuffer(
@@ -468,8 +481,6 @@ tt_metal::Program * create_program_mcast_in0_in1(
                     // in0 mcast args
                     (std::uint32_t)  right_core_physical.y, // in0_mcast_dest_noc_start_y
                     (std::uint32_t)  left_core_plus_one_physical.y, // in0_mcast_dest_noc_end_y
-                    (std::uint32_t)  in0_mcast_sender_semaphore->address(),
-                    (std::uint32_t)  in0_mcast_receiver_semaphore->address(),
 
                     // padding args
                     (std::uint32_t) per_core_M // last_block_h
@@ -481,8 +492,6 @@ tt_metal::Program * create_program_mcast_in0_in1(
                     // in1 mcast args
                     (std::uint32_t)  bottom_core_physical.x, // in1_mcast_dest_noc_start_x
                     (std::uint32_t)  top_core_plus_one_physical.x, // in1_mcast_dest_noc_end_x
-                    (std::uint32_t)  in1_mcast_sender_semaphore->address(),
-                    (std::uint32_t)  in1_mcast_receiver_semaphore->address(),
 
                     // WRITER
                     // out tensor args
@@ -510,17 +519,13 @@ tt_metal::Program * create_program_mcast_in0_in1(
                     (std::uint32_t)  K * per_core_M * core_idx_y, // in0_tensor_start_tile_id
                     // in0 mcast args
                     (std::uint32_t)  right_core_physical.y, // in0_mcast_dest_noc_start_y
-                    (std::uint32_t)  left_core_plus_one_physical.y, // in0_mcast_dest_noc_end_y
-                    (std::uint32_t)  in0_mcast_sender_semaphore->address(),
-                    (std::uint32_t)  in0_mcast_receiver_semaphore->address()
+                    (std::uint32_t)  left_core_plus_one_physical.y // in0_mcast_dest_noc_end_y
                 };
 
                 std::vector<uint32_t> mm_in1_receiver_writer_args = {
                     // READER
                     // in1 mcast args
                     (std::uint32_t)  top_core_physical.x, // in1_mcast_sender_noc_x
-                    (std::uint32_t)  in1_mcast_sender_semaphore->address(),
-                    (std::uint32_t)  in1_mcast_receiver_semaphore->address(),
 
                     // WRITER
                     // out tensor args
@@ -560,9 +565,7 @@ tt_metal::Program * create_program_mcast_in0_in1(
             else if (core_idx_x != 0 and core_idx_y == 0) {
                 std::vector<uint32_t> mm_in0_receiver_args = {
                     // in0 mcast args
-                    (std::uint32_t)  left_core_physical.y, // in0_mcast_sender_noc_y
-                    (std::uint32_t)  in0_mcast_sender_semaphore->address(),
-                    (std::uint32_t)  in0_mcast_receiver_semaphore->address()
+                    (std::uint32_t)  left_core_physical.y // in0_mcast_sender_noc_y
                 };
                 std::vector<uint32_t> mm_in1_sender_writer_args = {
                     // READER
@@ -571,8 +574,6 @@ tt_metal::Program * create_program_mcast_in0_in1(
                     // in1 mcast args
                     (std::uint32_t)  bottom_core_physical.x, // in1_mcast_dest_noc_start_x
                     (std::uint32_t)  top_core_plus_one_physical.x, // in1_mcast_dest_noc_end_x
-                    (std::uint32_t)  in1_mcast_sender_semaphore->address(),
-                    (std::uint32_t)  in1_mcast_receiver_semaphore->address(),
 
                     // WRITER
                     // out tensor args
@@ -612,16 +613,12 @@ tt_metal::Program * create_program_mcast_in0_in1(
             else {
                 std::vector<uint32_t> mm_checkerboard_in0_receiver_args = {
                     // in0 mcast args
-                    (std::uint32_t)  left_core_physical.y, // in0_mcast_sender_noc_y
-                    (std::uint32_t)  in0_mcast_sender_semaphore->address(),
-                    (std::uint32_t)  in0_mcast_receiver_semaphore->address()
+                    (std::uint32_t)  left_core_physical.y // in0_mcast_sender_noc_y
                 };
                 std::vector<uint32_t> mm_checkerboard_in1_receiver_writer_args = {
                     // READER
                     // in1 mcast args
                     (std::uint32_t)  top_core_physical.x, // in1_mcast_sender_noc_x
-                    (std::uint32_t)  in1_mcast_sender_semaphore->address(),
-                    (std::uint32_t)  in1_mcast_receiver_semaphore->address(),
 
                     // WRITER
                     // out tensor args

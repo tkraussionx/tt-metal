@@ -5,8 +5,6 @@
 void kernel_main() {
     // in0 mcast args
     uint32_t in0_mcast_sender_noc_y             = get_arg_val<uint32_t>(0);
-    uint32_t in0_mcast_sender_semaphore_addr    = get_arg_val<uint32_t>(1);
-    uint32_t in0_mcast_receiver_semaphore_addr  = get_arg_val<uint32_t>(2);
 
     // COMPILE TIME ARGS
     // in0 block args
@@ -15,8 +13,10 @@ void kernel_main() {
     constexpr uint32_t num_blocks                         = get_compile_time_arg_val(1);
     // in0 mcast args
     constexpr uint32_t in0_mcast_sender_noc_x             = get_compile_time_arg_val(2);
+    constexpr uint32_t in0_mcast_sender_semaphore_addr    = get_compile_time_arg_val(3);
+    constexpr uint32_t in0_mcast_receiver_semaphore_addr  = get_compile_time_arg_val(4);
     // batch args
-    constexpr uint32_t batch                              = get_compile_time_arg_val(3);
+    constexpr uint32_t batch                              = get_compile_time_arg_val(5);
 
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in1 = 1;
