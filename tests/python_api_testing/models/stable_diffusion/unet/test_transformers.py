@@ -125,5 +125,5 @@ def test_run_transformer_inference():
     logger.info(f"PASSED {passing[1]}")
 
 
-    test_run_basic_transformer_inference()
-    test_run_transformer_inference()
+test_run_basic_transformer_inference()
+# test_run_transformer_inference()

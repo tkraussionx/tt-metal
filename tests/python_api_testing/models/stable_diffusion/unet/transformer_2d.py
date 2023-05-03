@@ -202,8 +202,11 @@ class TtBasicTransformerBlock(nn.Module):
         hidden_states = ttl.tensor.add(attn_output, hidden_states)
 
         if self.attn2 is not None:
+            # norm_hidden_states = (
+            #     self.norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.norm2(hidden_states)
+            # )
             norm_hidden_states = (
-                self.norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.norm2(hidden_states)
+                self.torch_norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.torch_norm2(hidden_states)
             )
 
             # 2. Cross-Attention
