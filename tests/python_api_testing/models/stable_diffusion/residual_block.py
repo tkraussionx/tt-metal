@@ -64,27 +64,17 @@ class TtResnetBlock2D(nn.Module):
         if groups_out is None:
             groups_out = groups
 
-        # self.ttnorm1 = TtGroupNorm2D(num_groups=groups, num_channels=in_channels, epsf=eps, device=device, host=host)
-        #self.norm1 = torch.nn.GroupNorm(num_groups=groups, num_channels=in_channels, eps=eps, affine=True)
-
-
         norm1_weights = state_dict[f"{base_address}.norm1.weight"]
         norm1_bias = state_dict[f"{base_address}.norm1.bias"]
 
         self.norm1 = fallback_ops.GroupNorm(norm1_weights, norm1_bias, num_groups=groups, num_channels=in_channels, eps=eps, affine=True)
 
-        # self.norm1.weight = nn.Parameter(norm1_weights)
-        # self.norm1.bias = nn.Parameter(norm1_bias)
-
-        # self.conv1 = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1) # TODO: we dont have support, so using torch
 
         conv1_weights = state_dict[f"{base_address}.conv1.weight"]
         conv1_bias = state_dict[f"{base_address}.conv1.bias"]
 
         self.conv1 = fallback_ops.Conv2d(conv1_weights, conv1_bias, in_channels, out_channels, kernel_size=3, stride=1, padding=1)
 
-        # self.conv1.weight = nn.Parameter(conv1_weights)
-        # self.conv1.bias = nn.Parameter(conv1_bias)
 
         if temb_channels is not None:
             if self.time_embedding_norm == "default":
@@ -100,22 +90,14 @@ class TtResnetBlock2D(nn.Module):
         else:
             self.time_emb_proj = None
 
-
-        # self.norm2 = torch.nn.GroupNorm(num_groups=groups_out, num_channels=out_channels, eps=eps, affine=True)
-
-
         norm2_weights = state_dict[f"{base_address}.norm2.weight"]
         norm2_bias = state_dict[f"{base_address}.norm2.bias"]
-        # self.norm2.weight = nn.Parameter(norm2_weights)
-        # self.norm2.bias = nn.Parameter(norm2_bias)
+
 
         self.norm2 = fallback_ops.GroupNorm(norm2_weights, norm2_bias, num_groups=groups, num_channels=in_channels, eps=eps, affine=True)
 
 
         # self.dropout = torch.nn.Dropout(dropout)
-
-        # self.conv2 = torch.nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
-
 
         conv2_weights = state_dict[f"{base_address}.conv2.weight"]
         conv2_bias = state_dict[f"{base_address}.conv2.bias"]
@@ -162,12 +144,7 @@ class TtResnetBlock2D(nn.Module):
 
     def  forward(self, input_tensor, temb):
         hidden_states = input_tensor
-
-        # hidden_states = tt_to_torch_tensor(hidden_states, self.host)
-
         hidden_states = self.norm1(hidden_states)
-        # hidden_states = torch_to_tt_tensor(hidden_states, device=self.device)
-
         hidden_states = self.nonlinearity(hidden_states)
 
         if self.upsample is not None:
@@ -184,9 +161,7 @@ class TtResnetBlock2D(nn.Module):
             # hidden_states = self.downsample(hidden_states)
 
 
-        # hidden_states = tt_to_torch_tensor(hidden_states, self.host)
         hidden_states = self.conv1(hidden_states)
-        # hidden_states = torch_to_tt_tensor(hidden_states, device=self.device)
 
         if temb is not None:
             assert False, "not tested since we dont have tests for it yet"
@@ -196,9 +171,7 @@ class TtResnetBlock2D(nn.Module):
         if temb is not None and self.time_embedding_norm == "default":
             hidden_states = ttl.tensor.add(hidden_states, temb)
 
-        # hidden_states = tt_to_torch_tensor(hidden_states, self.host)
         hidden_states = self.norm2(hidden_states)
-        # hidden_states = torch_to_tt_tensor(hidden_states, device=self.device)
 
         if temb is not None and self.time_embedding_norm == "scale_shift":
             assert False, "this is support but not tested!"
@@ -218,14 +191,10 @@ class TtResnetBlock2D(nn.Module):
         hidden_states = self.nonlinearity(hidden_states)
 
         # hidden_states = self.dropout(hidden_states)
-        # hidden_states = tt_to_torch_tensor(hidden_states, self.host)
         hidden_states = self.conv2(hidden_states)
-        # hidden_states = torch_to_tt_tensor(hidden_states, device=self.device)
 
         if self.conv_shortcut is not None:
-            # input_tensor = tt_to_torch_tensor(input_tensor, self.host)
             input_tensor = self.conv_shortcut(input_tensor)
-            # input_tensor = torch_to_tt_tensor(input_tensor, device=self.device)
 
 
         # create a tensor of size output_scale_factor
@@ -257,7 +226,7 @@ def run_resnet_inference(device):
 
     input_shape  = [1, 512, 32, 32]
     input = torch.randn(input_shape, dtype=torch.float32)
-    # Note: Temb is none since this is how it is used in the model.
+    # Note: Temb is none.
 
     torch_out = resnet(input, None)
 
