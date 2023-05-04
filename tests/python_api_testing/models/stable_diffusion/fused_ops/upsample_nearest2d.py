@@ -32,7 +32,11 @@ class TtUpsampleNearest2d(nn.Module):
         output_shape[-1] *= self.scale_factor
         output_shape[-2] *= self.scale_factor
         # input = tt_to_torch_tensor(input, self.host)
-        input =  fallback_ops.repeat_interleave(input, repeats= self.scale_factor, dim=-1, output_size=None)
+        input =  fallback_ops.repeat_interleave(input, repeats= self.scale_factor, dim=-1)
+        input =  fallback_ops.repeat_interleave(input, repeats= self.scale_factor, dim=-2)
+
+        # input = torch.repeat_interleave(input, repeats= self.scale_factor, dim=-1)
+        # input = torch.repeat_interleave(input, repeats=self.scale_factor, dim=-2)
         # input = torch.repeat_interleave(input, repeats=self.scale_factor, dim=-2)
         # input = torch_to_tt_tensor(input, self.device)
 
