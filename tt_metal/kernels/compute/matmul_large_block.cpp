@@ -34,7 +34,7 @@ inline void reblock_and_untilize(
 {
     uint32_t num_tiles_in_row_of_subblocks = mulsi3(out_subblock_num_tiles, num_out_subblocks_in_col);
     cb_wait_front(interm_cb_id, num_tiles_in_row_of_subblocks);
-    //DPRINT << "C" << ENDL();
+    //DPRINT << 'C' << ENDL();
     int within_block_index = 0;
     for (uint32_t h = 0; h < out_subblock_h; h++) {
         int block_offset = 0;
@@ -42,7 +42,7 @@ inline void reblock_and_untilize(
         // Reblock
         copy_tile_to_dst_init_short();
         cb_reserve_back(reblock_cb_id, out_block_w);
-        //DPRINT << "D" << ENDL();
+        //DPRINT << 'D' << ENDL();
         for (uint32_t n = 0; n < num_out_subblocks_in_col; n++) {
             for (uint32_t w = 0; w < out_subblock_w; w++) {
                 uint32_t tile_index = block_offset + within_block_index + w;
@@ -137,12 +137,13 @@ void MAIN {
     uint32_t out0_cb                                  = CB::c_out0;
     mm_init();
     for(uint32_t block_h = 0; block_h < num_blocks_h; block_h++) {
-
+        enable_reload = false;
         for(uint32_t block_w = 0; block_w < num_blocks_w; block_w++)
         {
             bool last_out = block_w == (num_blocks_w-1);
             if  (tilize_in) {
                 tilize_activation(in0_cb, in0_subblock_h, in0_block_w, in0_num_subblocks, tilize_mode_tilized_in0_cb);
+
                 mm_init_short();
                 cb_wait_front(tilize_mode_tilized_in0_cb, in0_block_num_tiles);
             } else {
@@ -150,16 +151,20 @@ void MAIN {
             }
 
             cb_wait_front(CB::c_in1, in1_block_num_tiles);
+            //DPRINT << 'T' << ENDL();
             int in0_index_subblock_offset = 0;
             for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; in0_subblock++) {
                 int in1_index_subblock_offset = 0;
                 for (uint32_t in1_subblock = 0; in1_subblock < in1_num_subblocks; in1_subblock++) {
-
+                    //DPRINT << 'B' << ENDL();
                     acquire_dst(DstMode::Half);
 
                     if (enable_reload) {
+                        //DPRINT << 'B' << ENDL();
                         copy_tile_to_dst_init_short();
+                        //DPRINT << 'B' << ENDL();
                         cb_wait_front(matmul_partials_cb, out_subblock_num_tiles);
+                        //DPRINT << 'T' << ENDL();
                         for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
                             copy_tile(matmul_partials_cb, i, i);
                         }
@@ -206,7 +211,6 @@ void MAIN {
                 if (untilize_out) {
 
                     if (last_out) {
-                        //DPRINT << "L" << ENDL();
                         reblock_and_untilize(
                             in1_num_subblocks,
                             out_subblock_num_tiles,

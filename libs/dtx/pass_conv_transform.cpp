@@ -45,7 +45,7 @@ DataTransformations * conv_transform(vector<int> shape, vector<int> conv_params,
 
     //cout << "\n\nDTX_LEFT" << endl;
     //dtx_left->print();
-
+    std::cout << "Do reverse and combine" << std::endl;
     DataTransformations * combined = reverse_and_combine_transformations(dtx_left, dtx_right);
     //cout << "\n\nDTX_COMBINED" << endl;
     //combined->print();
@@ -53,10 +53,11 @@ DataTransformations * conv_transform(vector<int> shape, vector<int> conv_params,
     pass &= optimize_away_transpose(combined);
     //cout << "\n\nDTX_OPTIMIZED" << endl;
     //combined->print();
-
+    std::cout << "Do collapse" << std::endl;
     pass &= collapse_transformations(combined);
     //cout << "\n\nDTX_COLLAPSED" << endl;
     //combined->print();
+    std::cout << "Generate transfer addresses" << std::endl;
     pass &= generate_transfer_addresses(combined);
     //combined->print();
     //delete dtx_right;

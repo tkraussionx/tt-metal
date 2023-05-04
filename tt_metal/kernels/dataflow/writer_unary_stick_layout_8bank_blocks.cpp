@@ -29,10 +29,11 @@ void kernel_main() {
     };
     for(uint32_t batch = 0; batch < batch_size; batch++) {
         for(uint32_t block_h = 0; block_h < num_blocks_h; block_h++) {
-            DPRINT << "W" << ENDL();
+            //DPRINT << 'W' << ENDL();
             for (uint32_t i = 0; i < num_rows_block / 32; i++) {
                 // We reserve back an entire tile row and issue a bunch of reads
                 cb_wait_front(cb_id_out0, num_tiles_block_c);
+                //DPRINT << 'X' << ENDL();
                 uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
                 for (uint32_t j = 0; j < 32; j++) {
                     uint64_t dst_noc_addr = get_noc_addr(
@@ -45,7 +46,7 @@ void kernel_main() {
                 }
                 noc_async_write_barrier();
                 cb_pop_front(cb_id_out0, num_tiles_block_c);
-                //DPRINT << "X" << ENDL();
+
             }
         }
     }

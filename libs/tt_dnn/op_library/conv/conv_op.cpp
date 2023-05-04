@@ -327,10 +327,10 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
     //auto [num_blocks_in0_h, num_blocks_in0_w, out_subblock_h, out_subblock_w, report_string] = compute_conv_op_block_info(Hat, Wat, Wbt);
     //assert(report_string == "pass");
 
-    uint32_t num_blocks_in0_h = Hat;
-    uint32_t num_blocks_in0_w = Wat;
-    uint32_t out_subblock_h = 1;
-    uint32_t out_subblock_w = 1;
+    // uint32_t num_blocks_in0_h = Hat;
+    // uint32_t num_blocks_in0_w = Wat;
+    // uint32_t out_subblock_h = 1;
+    // uint32_t out_subblock_w = 1;
 
     // in0 block info
     uint32_t in0_block_w = Wat / num_blocks_in0_w; // Two blocks in the W dimension
@@ -342,7 +342,8 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
     block_info.second = {(int)in0_block_h_datums, (int)in0_block_w_datums};
 
     DataTransformations * dtx = conv_transform(shape, conv_params, block_info);
-
+    log_debug(tt::LogOp, "Done dtx passes");
+    log_debug(tt::LogOp, "Copying addresses into address map vector");
     // copy transfer addresses into a vector
     std::vector<uint32_t> address_map;
     uint32_t t_bytes = 0;
@@ -370,6 +371,7 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
             n_blocks++;
         }
     }
+    log_debug(tt::LogOp, "Done address map vector");
     // for(uint32_t i = 0; i < address_map.size(); i+=4) {
     //     std::cout << "src address - " << address_map[i]/2 << std::endl;
     //     std::cout << "dst address - " << address_map[i+1]/2 << std::endl;
@@ -388,7 +390,7 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
     //delete dtx;
     tt_metal::Program *program = new tt_metal::Program();
     tt_xy_pair core = {0, 0};
-    tt_start_debug_print_server(a.device()->cluster(), {0}, {{1, 1}});
+    //tt_start_debug_print_server(a.device()->cluster(), {0}, {{1, 1}});
 
 
     uint32_t single_tile_size = 2 * 1024; // TODO(agrebenisan): Refactor on df
