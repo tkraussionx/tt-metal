@@ -37,7 +37,6 @@ class TtUpsampleNearest2d(nn.Module):
 
         # input = torch.repeat_interleave(input, repeats= self.scale_factor, dim=-1)
         # input = torch.repeat_interleave(input, repeats=self.scale_factor, dim=-2)
-        # input = torch.repeat_interleave(input, repeats=self.scale_factor, dim=-2)
         # input = torch_to_tt_tensor(input, self.device)
 
         return input
