@@ -54,7 +54,7 @@ vector<vector<int>> dim_order_counting(vector<int> shape, vector<int> dim_order,
 
 
 bool block_2d_matrix(DataTransformations * dtx, vector<int> dim_order, vector<int> block_shape_yx) {
-    bool DEBUG = false;
+    bool DEBUG = true;
     assert(block_shape_yx.size() == 2);
     if (DEBUG) cout << "\n\nPASS: Block 2d matrix" << endl;
 
@@ -94,7 +94,6 @@ bool block_2d_matrix(DataTransformations * dtx, vector<int> dim_order, vector<in
         consumer_group->shape = {consumer_shape_z, block_shape[Y(rank)], block_shape[X(rank)]};
 
         if (DEBUG) cout << s(4) << "Tensor Pairs: " << num_blocks << endl;
-
         for (int i=0; i< list_of_counted_dims.size(); i++) {
             for(int j = 0; j < list_of_counted_dims[i].size(); j++) {
                 if (DEBUG) std::cout << "dim " << list_of_counted_dims[i][j] << std::endl;
@@ -112,7 +111,6 @@ bool block_2d_matrix(DataTransformations * dtx, vector<int> dim_order, vector<in
                                             group_idx,
                                             new DTXTensor({consumer_str}, {consumer_end}));
             consumer_group->tensor_pairs.push_back(tp);
-
             if (DEBUG) cout << s(6) << i << ".  " << tp->get_string() << endl;
         }
     }
