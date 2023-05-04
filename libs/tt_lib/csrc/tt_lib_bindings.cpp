@@ -697,10 +697,16 @@ void TensorModule(py::module &m_tensor) {
                 layout = tt_tensor.layout()
 
         )doc")
-        .def("buffer_type", [](const Tensor &self) {
-            return self.buffer_type();
+        .def("dtype", [](const Tensor &self) {
+            return self.dtype();
         }, R"doc(
-            Get buffer type of TT Tensor.
+            Get dtype of TT Tensor.
+
+            .. code-block:: python
+
+                dtype = tt_tensor.dtype()
+
+        )doc");
 
             .. code-block:: python
 
