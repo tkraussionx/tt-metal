@@ -16,7 +16,7 @@ from diffusers import StableDiffusionPipeline
 
 from libs import tt_lib as ttl
 from libs.tt_lib.fallback_ops import fallback_ops
-from utility_functions import pad_weight, tilize_to_list, print_diff_argmax, torch_to_tt_tensor, tt_to_torch_tensor, print_corr_coef
+from utility_functions import pad_weight, tilize_to_list, print_diff_argmax, torch_to_tt_tensor, tt_to_torch_tensor
 from python_api_testing.fused_ops.linear import Linear as TtLinear
 from python_api_testing.fused_ops.silu import SiLU as TtSiLU
 from python_api_testing.sweep_tests.comparison_funcs import comp_allclose_and_pcc
@@ -84,9 +84,9 @@ class TtResnetBlock2D(nn.Module):
             else:
                 raise ValueError(f"unknown time_embedding_norm : {self.time_embedding_norm} ")
 
-            weights = tilize_to_list(pad_weight(state_dict[f"{base_address}.time_emb_proj.weight"]))
-            bias = tilize_to_list(pad_weight(state_dict[f"{base_address}.time_emb_proj.bias"]))
-            self.time_emb_proj = TtLinear(temb_channels, time_emb_proj_out_channels, weights, bias)
+            # weights = state_dict[f"{base_address}.time_emb_proj.weight"]
+            # bias = state_dict[f"{base_address}.time_emb_proj.bias"]
+            # self.time_emb_proj = TtLinear(temb_channels, time_emb_proj_out_channels, weights, bias)
         else:
             self.time_emb_proj = None
 
