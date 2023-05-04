@@ -41,7 +41,7 @@ def pad(input, pad, mode="constant", value=None):
 
 @convert_tt_tensors_wrapper
 def repeat_interleave(input, repeats, dim=None, *, output_size=None):
-    return torch.repeat_interleave(input, repeats, dim, output_size)
+    return torch.repeat_interleave(input, repeats, dim, output_size=output_size)
 
 
 @convert_tt_tensors_wrapper
