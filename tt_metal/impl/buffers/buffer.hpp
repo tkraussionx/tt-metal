@@ -99,23 +99,23 @@ class L1Buffer : public Buffer {
     tt_xy_pair logical_core_;          // Logical core
 };
 
-class SysMemBuffer : public Buffer {
-    public:
-     SysMemBuffer(Device *device, uint32_t size_in_bytes);
+// class SysMemBuffer : public Buffer {
+//     public:
+//      SysMemBuffer(Device *device, uint32_t size_in_bytes);
 
-     ~SysMemBuffer();
+//      ~SysMemBuffer();
 
-     Buffer *clone();
+//      Buffer *clone();
 
-     tt_xy_pair noc_coordinates() const;
+//      tt_xy_pair noc_coordinates() const;
 
-    protected:
-     void reserve();
+//     protected:
+//      void reserve();
 
-     void free();
-     friend void DeallocateBuffer(Buffer *buffer);
+//      void free();
+//      friend void DeallocateBuffer(Buffer *buffer);
 
-}
+// };
 
 }  // namespace tt_metal
 

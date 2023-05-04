@@ -5,7 +5,10 @@ TT_DISPATCH_TESTS += tests/frameworks/tt_dispatch/test_copy_descriptor \
 
 TT_DISPATCH_TESTS_SRCS = $(addprefix tests/frameworks/tt_dispatch/, $(addsuffix .cpp, $(TT_DISPATCH_TESTS:tests%=%)))
 
-TT_DISPATCH_TEST_INCLUDES = $(TEST_INCLUDES) $(TT_METAL_INCLUDES) -Itt_gdb
+TT_DISPATCH_TEST_INCLUDES = $(TEST_INCLUDES) $(TT_METAL_INCLUDES) -Itt_gdb -I$(TT_METAL_HOME)/frameworks/tt_dispatch
+
+# TT_DISPATCH_TESTS_LDFLAGS = -ltt_dispatch -ltensor -ltt_dnn -ldtx -ltt_metal_impl -ltt_metal -lllrt -ltt_gdb -ldevice -lbuild_kernels_for_riscv -ldl -lcommon -lprofiler -lstdc++fs -pthread -lyaml-cpp
+
 TT_DISPATCH_TESTS_LDFLAGS = -ltensor -ltt_dnn -ldtx -ltt_metal_impl -ltt_metal -lllrt -ltt_gdb -ldevice -lbuild_kernels_for_riscv -ldl -lcommon -lprofiler -lstdc++fs -pthread -lyaml-cpp
 
 TT_DISPATCH_TESTS_OBJS = $(addprefix $(OBJDIR)/, $(TT_DISPATCH_TESTS_SRCS:.cpp=.o))

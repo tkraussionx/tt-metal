@@ -7,29 +7,7 @@
 
 using std::tuple;
 
-enum class EventType: uint8_t {
-    ADD_READ,
-    ADD_WRITE,
-    CLEAR,
-    WRITE_TO_SYSTEM_MEM,
-    ENQUEUE,
-
-    // Only used to get the number of elements in the enum, not
-    // an actual event
-    COUNT
-};
-
-class Event {
-    public:
-        Event(EventType etype);
-        void handle();
-
-    private:
-        EventType etype;
-};
-
-template <size_t T>
-class DispatchManager;
+using namespace tt::tt_metal;
 
 template <class T>
 class TSQueue {
@@ -51,8 +29,6 @@ class TSQueue {
         std::mutex m;
 };
 
-typedef TSQueue<Event> EventQueue;
-
 // Make a queue containing arguments for each of the possible events
 template <size_t T>
 using AddReadArgQueue = TSQueue<tuple<
@@ -72,28 +48,149 @@ using AddWriteArgQueue = TSQueue<tuple<
 
 using WriteToSystemMemArgQueue = TSQueue<std::vector<uint32_t>>;
 
-// // void run_worker(EventQueue &q);
+// template <size_t T>
+// using EventArgsQueues = std::tuple<
+//     AddReadArgQueue<T>, AddWriteArgQueue<T>, WriteToSystemMemArgQueue
+// >;
 
 template <size_t T>
-using EventArgsQueues = std::tuple<
-    AddReadArgQueue<T>, AddWriteArgQueue<T>, WriteToSystemMemArgQueue
->;
+class DispatchManager;
 
+#include <mutex>
+#include <thread>
 
-template <size_t T>
-class DispatchManager {
-    public:
-        DispatchManager(tt::tt_metal::Device *device, uint32_t num_tables, uint32_t table_size_in_bytes);
+template <class T>
+TSQueue<T>::TSQueue(uint32_t capacity) {
+    this->q = std::queue<T>();
+    this->capacity = capacity;
+}
 
-        void push(Event &e);
+template <class T>
+TSQueue<T>::TSQueue() {
+    this->q = std::queue<T>();
+    this->capacity = 100;
+}
 
-        ~DispatchManager();
+template <class T>
+void TSQueue<T>::push(T t) {
 
-    private:
-        CopyDescriptor<T> cd;
-        EventQueue eventq;
+    std::unique_lock<std::mutex> lock(this->m);
 
-        EventArgsQueues<T> event_argsq;
+    this->full_condition.wait(lock, [this]() { return this->q.size() < this->capacity; });
 
-        std::thread worker;
+    this->q.push(t);
+
+    this->empty_condition.notify_one();
+}
+
+template <class T>
+T TSQueue<T>::pop() {
+    std::unique_lock<std::mutex> lock(this->m);
+
+    this->empty_condition.wait(lock, [this]() { return !this->q.empty(); });
+
+    T t = this->q.front();
+    this->q.pop();
+
+    this->full_condition.notify_one();
+    return t;
+}
+
+template <class T>
+size_t TSQueue<T>::size() { return this->q.size(); }
+
+// template <size_t T>
+// void run_worker(EventQueue<T> &q, EventArgsQueues<T> &event_args) {
+//     while (true) {
+//         Event e = q.pop();
+//         e.handle(event_args);
+//     }
+// }
+
+enum class CommandType: uint {
+    ENQUEUE_PROGRAM,
+    ENQUEUE_WRITE_DRAM_BUFFER, // For now, but eventually would want to make this generic (write buffer, rather than DRAM buffer)
+    ENQUEUE_READ_DRAM_BUFFER,
 };
+
+class Command {
+    public:
+        Command() {}
+        virtual uint handle() = 0;
+};
+
+class EnqueueProgramCommand: public Command {
+    public:
+        EnqueueProgramCommand();
+        uint handle();
+};
+
+uint EnqueueProgramCommand::handle() {
+    return uint(CommandType::ENQUEUE_PROGRAM);
+}
+
+class EnqueueWriteBufferCommand: public Command {
+    public:
+        EnqueueWriteBufferCommand();
+        uint handle();
+};
+
+uint EnqueueWriteBufferCommand::handle() {
+    return uint(CommandType::ENQUEUE_WRITE_DRAM_BUFFER);
+}
+
+class EnqueueReadBufferCommand: public Command {
+    public:
+        EnqueueReadBufferCommand();
+        uint handle();
+};
+
+uint EnqueueReadBufferCommand::handle() {
+    return uint(CommandType::ENQUEUE_READ_DRAM_BUFFER);
+}
+
+using CommandQueue = TSQueue<Command*>;
+
+
+void EnqueueProgram(
+    tt::tt_metal::Device* device,
+    CommandQueue &command_queue,
+    Program* program,
+    bool blocking
+) {
+    if (blocking) {
+        // command_queue.push(&command);
+    } else {
+        TT_THROW("Non-blocking EnqueueProgram not yet supported");
+    }
+}
+
+void EnqueueWriteToDeviceDRAM(
+    tt::tt_metal::Device* device,
+    CommandQueue &command_queue,
+    DramBuffer* buffer,
+    void* src,
+    bool blocking
+) {
+    EnqueueWriteBufferCommand command;
+    if (blocking) {
+        command_queue.push(&command);
+
+    } else {
+        TT_THROW("Non-blocking EnqueueWriteBuffer not yet supported");
+    }
+}
+
+void EnqueueReadFromDeviceDRAM(
+    tt::tt_metal::Device* device,
+    CommandQueue &command_queue,
+    DramBuffer* buffer,
+    void* dst,
+    bool blocking
+) {
+    if (blocking) {
+        // command_queue.push(&command);
+    } else {
+        TT_THROW("Non-blocking EnqueueWriteBuffer not yet supported");
+    }
+}

@@ -46,8 +46,7 @@ class CircularBuffer : public L1Buffer {
 
 class TableCircularBuffer {
     public:
-     TableCircularBuffer(Device *device, const uint32_t num_tables, const uint32_t table_size_in_bytes) : num_tables_(num_tables), table_size_in_bytes_(table_size_in_bytes_), size_in_bytes_(num_tables * table_size);
-
+     TableCircularBuffer(Device *device, const uint32_t num_tables, const uint32_t table_size_in_bytes) : num_tables_(num_tables), table_size_in_bytes_(table_size_in_bytes), size_in_bytes_(num_tables * table_size_in_bytes) {}
      ~TableCircularBuffer() {}
 
      void cb_reserve_back();

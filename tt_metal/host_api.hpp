@@ -490,7 +490,8 @@ std::vector<L1Buffer *> CreateL1Buffers(Program *program, Device *device, const 
 std::vector<L1Buffer *> CreateL1Buffers(Program *program, Device *device, const CoreRange &core_range, uint32_t size_in_bytes);
 
 
-SysMemBuffer* CreateSysMemBuffer(Program *program, Device *device, uint32_t size_in_bytes);
+// SysMemBuffer* CreateSysMemBuffer(Program *program, Device *device, uint32_t size_in_bytes);
+
 
 /**
  * Creates a Circular Buffer (CBs) in L1 memory at specified address and core and adds it to the program. L1 allocator does not track CBs with manually specified addresses.

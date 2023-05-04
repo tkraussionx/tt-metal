@@ -1,73 +1,121 @@
-#include "frameworks/tt_dispatch/impl/dispatch.hpp"
-#include <mutex>
-#include <thread>
+// #include "frameworks/tt_dispatch/impl/dispatch.hpp"
+// #include <mutex>
+// #include <thread>
 
-Event::Event(EventType etype): etype(etype) {}
+// template <size_t T>
+// Event<T>::Event(EventType etype): etype(etype) {}
 
-void Event::handle() {
-    switch (this->etype) {
-        case EventType::ADD_READ:
+// template <size_t T>
+// void Event<T>::handle(EventArgsQueues<T> &event_args) {
+//     switch (this->etype) {
+//         case EventType::ADD_READ:
+//             std::get<uint8_t(EventType::ADD_READ)>(event_args).pop();
+//             break;
+//         case EventType::ADD_WRITE:
+//             std::get<uint8_t(EventType::ADD_WRITE)>(event_args).pop();
+//             break;
+//         case EventType::CLEAR:
+//             std::get<uint8_t(EventType::CLEAR)>(event_args).pop();
+//             break;
+//         case EventType::WRITE_TO_SYSTEM_MEM:
+//             std::get<uint8_t(EventType::WRITE_TO_SYSTEM_MEM)>(event_args).pop();
+//             break;
+//         case EventType::ENQUEUE:
+//             std::get<uint8_t(EventType::ENQUEUE)>(event_args).pop();
+//             break;
+//         default:
+//             TT_THROW("Invalid event type");
+//     }
+// }
 
-            break;
-        case EventType::ADD_WRITE:
-            break;
-        case EventType::CLEAR:
-            break;
-        case EventType::WRITE_TO_SYSTEM_MEM:
-            break;
-        case EventType::ENQUEUE:
-            break;
-        default:
-            TT_THROW("Invalid event type");
-    }
-}
+// template <class T>
+// TSQueue<T>::TSQueue(uint32_t capacity) {
+//     this->q = std::queue<T>();
+//     this->capacity = capacity;
+// }
 
-EventQueue::EventQueue(uint32_t capacity) {
-    this->q = std::queue<Event>();
-    this->capacity = capacity;
-}
+// template <class T>
+// TSQueue<T>::TSQueue() {
+//     this->q = std::queue<T>();
+//     this->capacity = 100;
+// }
 
-void EventQueue::push(Event e) {
+// template <class T>
+// void TSQueue<T>::push(T t) {
 
-    std::unique_lock<std::mutex> lock(this->m);
+//     std::unique_lock<std::mutex> lock(this->m);
 
-    this->full_condition.wait(lock, [this]() { return this->q.size() < this->capacity; });
+//     this->full_condition.wait(lock, [this]() { return this->q.size() < this->capacity; });
 
-    this->q.push(e);
+//     this->q.push(t);
 
-    this->empty_condition.notify_one();
-}
+//     this->empty_condition.notify_one();
+// }
 
-Event EventQueue::pop() {
-    std::unique_lock<std::mutex> lock(this->m);
+// template <class T>
+// T TSQueue<T>::pop() {
+//     std::unique_lock<std::mutex> lock(this->m);
 
-    this->empty_condition.wait(lock, [this]() { return !this->q.empty(); });
+//     this->empty_condition.wait(lock, [this]() { return !this->q.empty(); });
 
-    Event e = this->q.front();
-    this->q.pop();
+//     T t = this->q.front();
+//     this->q.pop();
 
-    this->full_condition.notify_one();
-    return e;
-}
+//     this->full_condition.notify_one();
+//     return t;
+// }
 
-size_t EventQueue::size() { return this->q.size(); }
+// template <class T>
+// size_t TSQueue<T>::size() { return this->q.size(); }
 
-void run_worker(EventQueue &q) {
-    while (true) {
-        Event e = q.pop();
-        e.handle();
-    }
-}
+// template <size_t T>
+// void run_worker(EventQueue<T> &q, EventArgsQueues<T> &event_args) {
+//     while (true) {
+//         Event e = q.pop();
+//         e.handle(event_args);
+//     }
+// }
 
-void DispatchManager::push(Event &e) { this->q.push(e); }
+// template <size_t T>
+// DispatchManager<T>::DispatchManager(tt::tt_metal::Device* device, uint32_t num_tables, uint32_t table_size_in_bytes) {
+//     this->worker = std::thread(run_worker, this->eventq, this->event_argsq);
+//     this->worker.detach(); // Once main thread completes, auto-terminates this thread
+// }
 
-DispatchManager::DispatchManager(Device* device, uint32_t num_tables, uint32_t table_size_in_bytes) {
-    this->worker = std::thread(run_worker, this->q);
-    this->worker.detach(); // Once main thread completes, auto-terminates this thread
-}
+// template <size_t T>
+// void DispatchManager<T>::push(Event<T> &e) {
+//     this->eventq.push(e);
+// }
 
-DispatchManager::~DispatchManager() {
-    std::mutex m;
-    std::unique_lock<std::mutex> lock(m);
-    this->queue_flushed_condition.wait(lock, [this]() { return this->q.size() == 0; });
-}
+// template <size_t T>
+// void DispatchManager<T>::push_add_read_event_args(Event<T> &e, uint64_t src, uint32_t dst, uint32_t size_in_bytes) {
+//     std::get<uint8_t(EventType::ADD_READ)>(this->event_argsq).push(tuple(this->cd, src, dst, size_in_bytes));
+// }
+
+// template <size_t T>
+// void DispatchManager<T>::push_add_write_event_args(Event<T> &e, uint32_t src, uint64_t dst, uint32_t size_in_bytes) {
+//     std::get<uint8_t(EventType::ADD_WRITE)>(this->event_argsq).push(tuple(this->cd, src, dst, size_in_bytes));
+// }
+
+// template <size_t T>
+// void DispatchManager<T>::push_clear_event_args(Event<T> &e) {
+//     std::get<uint8_t(EventType::CLEAR)>(this->event_argsq).push(this->cd);
+// }
+
+// template <size_t T>
+// void DispatchManager<T>::push_write_to_system_mem_event_args(Event<T> &e, vector<uint32_t> vec) {
+//     std::get<uint8_t(EventType::WRITE_TO_SYSTEM_MEM)>(this->event_argsq).push(vec);
+// }
+
+// template <size_t T>
+// void DispatchManager<T>::push_enqueue_event_args(Event<T> &e) {
+//     std::get<uint8_t(EventType::ENQUEUE)>(this->event_argsq).push(cd);
+// }
+
+
+// template <size_t T>
+// DispatchManager<T>::~DispatchManager() {
+//     std::mutex m;
+//     std::unique_lock<std::mutex> lock(m);
+//     this->eventq.full_condition.wait(lock, [this]() { return this->q.size() == 0; });
+// }

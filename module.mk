@@ -45,7 +45,6 @@ endif
 
 OBJDIR 		 = $(OUT)/obj
 LIBDIR 		 = $(OUT)/lib
-FRAMEWORKDIR = $(OUT)/framework
 BINDIR 		 = $(OUT)/bin
 INCDIR 		 = $(OUT)/include
 TESTDIR      = $(OUT)/test
@@ -93,9 +92,6 @@ LIBS_TO_BUILD = \
 	libs \
 	tools
 
-FRAMEWORKS_TO_BUILD = \
-	tt_dispatch
-
 ifdef TT_METAL_ENV_IS_DEV
 LIBS_TO_BUILD += \
 	python_env/dev \
@@ -117,8 +113,6 @@ include $(TT_METAL_HOME)/tests/module.mk
 endif
 
 build: $(LIBS_TO_BUILD)
-
-frameworks: $(FRAMEWORKS_TO_BUILD)
 
 clean: src/ckernels/clean
 	rm -rf $(OUT)

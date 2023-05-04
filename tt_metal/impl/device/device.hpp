@@ -85,7 +85,7 @@ class Device {
     friend class DramBuffer;
     friend class InterleavedDramBuffer;
     friend class L1Buffer;
-    friend class SysMemBuffer;
+    // friend class SysMemBuffer;
     friend std::vector<L1Buffer *> CreateL1Buffers(Program *program, Device *device, const CoreRange &core_range, uint32_t size_in_bytes);
     friend std::vector<CircularBuffer *> CreateCircularBuffers(
         Program *program,

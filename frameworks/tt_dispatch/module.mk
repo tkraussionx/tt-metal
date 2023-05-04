@@ -1,6 +1,6 @@
 # Every variable in subdir must be prefixed with subdir (emulating a namespace)
 
-TT_DISPATCH_FRAMEWORK = $(FRAMEWORKDIR)/fwtt_dispatch.a
+TT_DISPATCH_FRAMEWORK = $(LIBDIR)/libtt_dispatch.a
 TT_DISPATCH_DEFINES = -DGIT_HASH=$(shell git rev-parse HEAD)
 TT_DISPATCH_INCLUDES = $(COMMON_INCLUDES) -I$(TT_METAL_HOME)/frameworks/tt_dispatch
 TT_DISPATCH_LDFLAGS = -L$(TT_METAL_HOME) -ltt_gdb -ldevice -lcommon

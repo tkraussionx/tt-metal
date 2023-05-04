@@ -1,20 +1,27 @@
 #include <cstdint>
 #include <array>
 
-template <size_t T>
+template <size_t NR, size_t NW, size_t NIR, size_t NIW>
 struct CopyDescriptor {
 
-    static_assert((T % 2) == 0, "Size of copy descriptor must be divisible by 2");
+    uint num_reads;
+    uint num_writes;
+    uint num_interleaved_reads;
+    uint num_interleaved_writes;
+    std::array<uint32_t, T> data;
+
+    // static_assert((T % 2) == 0, "Size of copy descriptor must be divisible by 2");
 
     // These two attributes are only used by host to know where
     // to write this copy descriptor
     uint32_t l1_addr;
     const uint32_t read_base = 0;
     const uint32_t write_base = T / 2;
+
+
     uint32_t read_ptr = read_base + 1;
     uint32_t write_ptr = write_base + 1;
 
-    std::array<uint32_t, T> data;
 
     void add_read(uint64_t src, uint32_t dst, uint32_t size) {
         this->data[read_base]++; // Increment num_reads

@@ -245,10 +245,10 @@ std::vector<L1Buffer *> CreateL1Buffers(Program *program, Device *device, const 
     return l1_buffers;
 }
 
-SysMemBuffer* CreateSysMemBuffer(Program *program, Device *device, uint32_t size_in_bytes) {
-    SysMemBuffer *sysmem_buffer = new SysMemBuffer(device, size_in_bytes);
-    return sysmem_buffer;
-}
+// SysMemBuffer* CreateSysMemBuffer(Program *program, Device *device, uint32_t size_in_bytes) {
+//     SysMemBuffer *sysmem_buffer = new SysMemBuffer(device, size_in_bytes);
+//     return sysmem_buffer;
+// }
 
 std::vector<L1Buffer *> CreateL1Buffers(Program *program, Device *device, const CoreRange &core_range, uint32_t size_in_bytes) {
     uint32_t l1_address = device->address_for_l1_buffers_across_core_range(core_range, size_in_bytes);

@@ -330,7 +330,7 @@ inline void wait_for_sync_register_value(std::uint32_t addr, std::int32_t val) {
  *
  * | Argument  | Description                          | Type     | Valid Range                                                                                       | Required |
  * |-----------|--------------------------------------|----------|---------------------------------------------------------------------------------------------------|----------|
- * | cb_id     | The index of the cirular buffer (CB) | uint32_t | 0 to 31                                                                                           | True     |
+ * | cb_id     | The index of the circular buffer (CB) | uint32_t | 0 to 31                                                                                           | True     |
  * | num_tiles | The number of free tiles to wait for | uint32_t | It must be less or equal than the size of the CB (the total number of tiles that fit into the CB) |          |
  */
 FORCE_INLINE
@@ -368,7 +368,7 @@ void cb_reserve_back(std::int32_t operand, std::int32_t num_tiles) {
  *
  * | Argument  | Description                          | Type     | Valid Range                                                                                       | Required |
  * |-----------|--------------------------------------|----------|---------------------------------------------------------------------------------------------------|----------|
- * | cb_id     | The index of the cirular buffer (CB) | uint32_t | 0 to 31                                                                                           | True     |
+ * | cb_id     | The index of the circular buffer (CB) | uint32_t | 0 to 31                                                                                           | True     |
  * | num_tiles | The number of tiles to wait for      | uint32_t | It must be less or equal than the size of the CB (the total number of tiles that fit into the CB) |          |
  * */
 FORCE_INLINE

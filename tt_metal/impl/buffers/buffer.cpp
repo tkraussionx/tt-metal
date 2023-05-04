@@ -72,33 +72,33 @@ L1Buffer::~L1Buffer() {
     this->free();
 }
 
-SysMemBuffer::SysMemBuffer(Device *device, uint32_t size_in_bytes) {
-   this->address_ = this->device_->allocate_sysmem_buffer(this->size_in_bytes_);
-}
+// SysMemBuffer::SysMemBuffer(Device *device, uint32_t size_in_bytes) {
+//    this->address_ = this->device_->allocate_sysmem_buffer(this->size_in_bytes_);
+// }
 
-Buffer* SysMemBuffer::clone() {
-    return new SysMemBuffer(this->device_, this->size_in_bytes_);
-}
+// Buffer* SysMemBuffer::clone() {
+//     return new SysMemBuffer(this->device_, this->size_in_bytes_);
+// }
 
-tt_xy_pair SysMemBuffer::noc_coordinates() const {
-    TT_ASSERT(false, "No noc coordinates for sysmem buffer");
-}
+// tt_xy_pair SysMemBuffer::noc_coordinates() const {
+//     TT_ASSERT(false, "No noc coordinates for sysmem buffer");
+// }
 
-void SysMemBuffer::reserve() {
-    auto address = this->device_->allocate_sysmem_buffer(this->size_in_bytes_);
-    TT_ASSERT(address == this->address_);
-}
+// void SysMemBuffer::reserve() {
+//     auto address = this->device_->allocate_sysmem_buffer(this->size_in_bytes_);
+//     TT_ASSERT(address == this->address_);
+// }
 
-void SysMemBuffer::free() {
-    if (this->allocated_on_device_) {
-        this->device_->free_sysmem_buffer(this->address_);
-        this->allocated_on_device_ = false;
-    }
-}
+// void SysMemBuffer::free() {
+//     if (this->allocated_on_device_) {
+//         this->device_->free_sysmem_buffer(this->address_);
+//         this->allocated_on_device_ = false;
+//     }
+// }
 
-SysMemBuffer::~SysMemBuffer() {
-    this->free();
-}
+// SysMemBuffer::~SysMemBuffer() {
+//     this->free();
+// }
 
 }  // namespace tt_metal
 
