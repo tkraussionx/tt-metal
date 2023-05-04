@@ -494,6 +494,16 @@ void TensorModule(py::module &m_tensor) {
 
                 layout = tt_tensor.layout()
 
+        )doc")
+        .def("dtype", [](const Tensor &self) {
+            return self.dtype();
+        }, R"doc(
+            Get dtype of TT Tensor.
+
+            .. code-block:: python
+
+                dtype = tt_tensor.dtype()
+
         )doc");
 
     // Tensor functions
