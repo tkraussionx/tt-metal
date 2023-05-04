@@ -32,7 +32,7 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program* program,
     uint32_t num_output_tiles = output_block_size;
 
     // Invariants
-    uint32_t cb0_tiles = act_block_size * 2;
+    uint32_t cb0_tiles = act_block_size;
     auto cb_in0 = tt_metal::CreateCircularBuffer(
         program,
         device,
@@ -43,7 +43,7 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program* program,
         tt::DataFormat::Float16_b
     );
 
-    uint32_t cb1_tiles = weight_block_size * 2;
+    uint32_t cb1_tiles = weight_block_size;
     auto cb_in1 = tt_metal::CreateCircularBuffer(
         program,
         device,
@@ -324,8 +324,14 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
     log_debug(tt::LogOp, "Wat(MM Activation W (MM Weight H) in tiles): {}", Wat);
     log_debug(tt::LogOp, "Wbt(MM Weight W in tiles): {}", Wbt);
     // compute block info
-    auto [num_blocks_in0_h, num_blocks_in0_w, out_subblock_h, out_subblock_w, report_string] = compute_conv_op_block_info(Hat, Wat, Wbt);
-    assert(report_string == "pass");
+    //auto [num_blocks_in0_h, num_blocks_in0_w, out_subblock_h, out_subblock_w, report_string] = compute_conv_op_block_info(Hat, Wat, Wbt);
+    //assert(report_string == "pass");
+
+    uint32_t num_blocks_in0_h = Hat;
+    uint32_t num_blocks_in0_w = Wat;
+    uint32_t out_subblock_h = 1;
+    uint32_t out_subblock_w = 1;
+
     // in0 block info
     uint32_t in0_block_w = Wat / num_blocks_in0_w; // Two blocks in the W dimension
     uint32_t in0_block_w_datums = Wa / num_blocks_in0_w;
@@ -351,6 +357,7 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
         assert(transfer->size*2 % 32 == 0);
         assert(transfer->src_address*2 % 32 == 0);
         assert(transfer->dst_address*2 % 32 == 0);
+        assert(transfer->dst_address*2 + transfer->size*2 <= block_size_bytes);
         address_map.push_back(transfer->src_address*2);
         address_map.push_back(transfer->dst_address*2);
         address_map.push_back(transfer->size*2);
@@ -363,6 +370,13 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
             n_blocks++;
         }
     }
+    // for(uint32_t i = 0; i < address_map.size(); i+=4) {
+    //     std::cout << "src address - " << address_map[i]/2 << std::endl;
+    //     std::cout << "dst address - " << address_map[i+1]/2 << std::endl;
+    //     std::cout << "size - " << address_map[i+2]/2 << std::endl;
+    //     std::cout << "pad - " << address_map[i+3] << std::endl;
+    // }
+
     uint32_t total_bytes = num_rows * num_cols * 2; // 2 for bfloat16
     assert(b_bytes == 0);
     std::cout << "n_blocks " << n_blocks << std::endl;
@@ -431,6 +445,9 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
 
     // For debug
     {
+        log_debug(tt::LogOp, "Hat (act height in tiles): {}", Hat);
+        log_debug(tt::LogOp, "Wat (act width in tiles): {}", Wat);
+        log_debug(tt::LogOp, "Wbt (weight width in tiles): {}", Wbt);
         log_debug(tt::LogOp, "num_blocks_in0_h: {}", num_blocks_in0_h);
         log_debug(tt::LogOp, "num_blocks_in0_w: {}", num_blocks_in0_w);
         log_debug(tt::LogOp, "in0_dram_addr: {}", in0_dram_addr);

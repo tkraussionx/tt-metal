@@ -34,7 +34,7 @@ inline void reblock_and_untilize(
 {
     uint32_t num_tiles_in_row_of_subblocks = mulsi3(out_subblock_num_tiles, num_out_subblocks_in_col);
     cb_wait_front(interm_cb_id, num_tiles_in_row_of_subblocks);
-
+    //DPRINT << "C" << ENDL();
     int within_block_index = 0;
     for (uint32_t h = 0; h < out_subblock_h; h++) {
         int block_offset = 0;
@@ -42,6 +42,7 @@ inline void reblock_and_untilize(
         // Reblock
         copy_tile_to_dst_init_short();
         cb_reserve_back(reblock_cb_id, out_block_w);
+        //DPRINT << "D" << ENDL();
         for (uint32_t n = 0; n < num_out_subblocks_in_col; n++) {
             for (uint32_t w = 0; w < out_subblock_w; w++) {
                 uint32_t tile_index = block_offset + within_block_index + w;
@@ -57,7 +58,9 @@ inline void reblock_and_untilize(
         // Untilize
         untilize_init_short(reblock_cb_id);
         cb_wait_front(reblock_cb_id, out_block_w);
+        //DPRINT << "E" << ENDL();
         cb_reserve_back(out_cb_id, out_block_w);
+        //DPRINT << "F" << ENDL();
         untilize_block(reblock_cb_id, out_block_w, out_cb_id);
         cb_pop_front(reblock_cb_id, out_block_w);
         cb_push_back(out_cb_id, out_block_w);
@@ -134,7 +137,7 @@ void MAIN {
     uint32_t out0_cb                                  = CB::c_out0;
     mm_init();
     for(uint32_t block_h = 0; block_h < num_blocks_h; block_h++) {
-        DPRINT << "C" << ENDL();
+
         for(uint32_t block_w = 0; block_w < num_blocks_w; block_w++)
         {
             bool last_out = block_w == (num_blocks_w-1);
@@ -201,7 +204,9 @@ void MAIN {
                 }
 
                 if (untilize_out) {
+
                     if (last_out) {
+                        //DPRINT << "L" << ENDL();
                         reblock_and_untilize(
                             in1_num_subblocks,
                             out_subblock_num_tiles,
@@ -213,7 +218,9 @@ void MAIN {
                             out0_cb
                         );
                         mm_init_short();
+
                     }
+
                 }
 
                 in0_index_subblock_offset += in0_subblock_num_tiles;

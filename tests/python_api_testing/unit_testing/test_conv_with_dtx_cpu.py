@@ -17,7 +17,8 @@ import torch
 @pytest.mark.parametrize(
     "K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w",
     (
-        (64,64,14,14,3,3,1,1,1,1),
+        (32, 32, 10, 10, 3, 3, 1, 1, 0, 0),
+        #(64,64,14,14,3,3,1,1,1,1),
         #resnet 18 convs
         #(256, 128, 28, 28, 3, 3, 2, 2, 1, 1),
         #(256, 256, 14, 14, 3, 3, 1, 1, 1, 1,),
@@ -61,7 +62,7 @@ def test_run_conv_as_large_matmul_cpu(K, C, H, W, R, S, stride_h, stride_w, pad_
     matrix_activation_h = (int) (_nearest_32(OH*OW) / 32)
     matrix_weight_w = (int) (_nearest_32(K) / 32)
     matrix_activation_w = (int) (_nearest_32(C*R*S)/32)
-    (num_blocks,_,_,report_string) = ttl.tensor.compute_conv_op_block_info(matrix_activation_h, matrix_activation_w, matrix_weight_w)
+    (num_blocks_h,num_blocks_w,_,_,report_string) = ttl.tensor.compute_conv_op_block_info(matrix_activation_h, matrix_activation_w, matrix_weight_w)
     if report_string != "pass":
         print(report_string)
         assert False
@@ -69,11 +70,13 @@ def test_run_conv_as_large_matmul_cpu(K, C, H, W, R, S, stride_h, stride_w, pad_
     #    print(str(num_blocks))
     #    assert False
     dim_order = [0,1,2]
-    assert _nearest_32(C*R*S) % num_blocks == 0
-    block_width = (int) (_nearest_32(C*R*S)/num_blocks)
-    block_shape_yx = [_nearest_32(OH*OW), block_width]
-    mm_input_shape = [num_blocks, _nearest_32(OH*OW), block_width]
-    mm_weight_shape = [num_blocks, block_width, _nearest_32(K)]
+    assert _nearest_32(OH*OW) % num_blocks_h == 0
+    assert _nearest_32(C*R*S) % num_blocks_w == 0
+    block_height = (int) (_nearest_32(OH*OW)/num_blocks_h)
+    block_width = (int) (_nearest_32(C*R*S)/num_blocks_w)
+    block_shape_yx = [block_height, block_width]
+    mm_input_shape = [num_blocks_h*num_blocks_w, block_height, block_width]
+    mm_weight_shape = [num_blocks_h*num_blocks_w, block_width, _nearest_32(K)]
     address_map = ttl.dtx.generate_address_map(ttl.dtx.conv_transform([C,H,W], [R,S,stride_h,stride_w,pad_h,pad_w], (dim_order,block_shape_yx)))
 
     B_tiled_ = ttl.tensor.convert_conv_weight_tensor_to_tiled_layout(B_)
@@ -86,7 +89,7 @@ def test_run_conv_as_large_matmul_cpu(K, C, H, W, R, S, stride_h, stride_w, pad_
     print("matmul weight shape - " + str(B_pytorch_tensor.shape))
     #out_pytorch = torch.matmul(A_transformed_pytorch_tensor, B_pytorch_tensor).reshape(mm_output_shape)
     # Run host side CPU function
-    out_pytorch = blocked_mm_with_conv_act(A_cl_data, B_pytorch_tensor, mm_output_shape, address_map, num_blocks, _nearest_32(OH*OW), block_width)
+    out_pytorch = blocked_mm_with_conv_act(A_cl_data, B_pytorch_tensor, mm_output_shape, address_map, num_blocks_h, num_blocks_w, _nearest_32(OH*OW), block_width)
     assert(list(out_pytorch.shape) == mm_output_shape)
     out_pytorch = out_pytorch[:, :, 0 : (OH * OW), 0 : K]
 

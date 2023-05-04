@@ -45,6 +45,7 @@ void kernel_main() {
                 }
                 noc_async_write_barrier();
                 cb_pop_front(cb_id_out0, num_tiles_block_c);
+                //DPRINT << "X" << ENDL();
             }
         }
     }

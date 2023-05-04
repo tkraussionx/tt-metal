@@ -336,7 +336,7 @@ def read_conv_act_into_mm_act(conv_act, address_map, num_blocks, block_h, block_
     mm_act = mm_act.reshape([num_blocks,block_h,block_w])
     return mm_act
 
-def blocked_mm_with_conv_act(conv_act, mm_weight, mm_output_shape, address_map, num_blocks, block_h, block_w):
+def blocked_mm_with_conv_act(conv_act, mm_weight, mm_output_shape, address_map, num_blocks_h, num_blocks_w, block_h, block_w):
     assert len(mm_output_shape) == 4
     assert len(mm_weight.shape) == 3
     assert mm_output_shape[3] == mm_weight.shape[2]
@@ -344,13 +344,16 @@ def blocked_mm_with_conv_act(conv_act, mm_weight, mm_output_shape, address_map, 
     ret = torch.zeros(ret_shape, dtype=torch.bfloat16).float()
     mm_act_shape = [1,block_h,block_w]
     block_size = block_h*block_w
-    mm_act = read_conv_act_into_mm_act(conv_act, address_map, num_blocks, block_h, block_w)
+    mm_act = read_conv_act_into_mm_act(conv_act, address_map, num_blocks_h*num_blocks_w, block_h, block_w)
     assert len(mm_act.shape) == 3
     index = 0
-    for b in range(num_blocks):
-        for oh in range(ret_shape[2]):
-            for ow in range(ret_shape[3]):
-                ret[0][0][oh][ow] += torch.dot(mm_act[b,oh,:].reshape(-1), mm_weight[b,:,ow].reshape(-1))
+    for bh in range(num_blocks_h):
+        for bw in range(num_blocks_w):
+            for h in range(block_h):
+                for ow in range(ret_shape[3]):
+                    oh = bh * block_h + h
+                    act_b = bh * num_blocks_w + bw
+                    ret[0][0][oh][ow] += torch.dot(mm_act[act_b,h,:].reshape(-1), mm_weight[bw,:,ow].reshape(-1))
     return ret
 
 

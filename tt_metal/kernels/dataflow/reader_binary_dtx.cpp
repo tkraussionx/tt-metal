@@ -50,13 +50,14 @@ void kernel_main() {
     };
     uint32_t index = 0;
     for(uint32_t block_in0_h = 0; block_in0_h < num_blocks_in0_h; block_in0_h++) {
-        DPRINT << "R" << ENDL();
+        //DPRINT << "R" << ENDL();
         // Move in1 (weight) start tile index to top
         uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;
         for (uint32_t b = 0; b < num_blocks_in0_w; b += 1) {
             // Read weights
             cb_reserve_back(cb_id_in1, in1_block_num_tiles);
             cb_reserve_back(cb_id_in0, in0_block_num_tiles);
+            //DPRINT << "R_re" << ENDL();
             uint32_t l1_write_addr_in1 = get_write_ptr(cb_id_in1);
             uint32_t in1_tensor_row_start_tile_id = in1_tensor_current_block_start_tile_id;
             for(uint32_t h = 0; h < in1_block_h; h++) {

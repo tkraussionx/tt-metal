@@ -58,7 +58,7 @@ DataTransformations * conv_transform(vector<int> shape, vector<int> conv_params,
     //cout << "\n\nDTX_COLLAPSED" << endl;
     //combined->print();
     pass &= generate_transfer_addresses(combined);
-    combined->print();
+    //combined->print();
     //delete dtx_right;
     //delete dtx_left;
     return combined;
