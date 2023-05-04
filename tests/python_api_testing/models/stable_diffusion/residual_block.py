@@ -30,7 +30,7 @@ class TtResnetBlock2D(nn.Module):
         out_channels=None,
         conv_shortcut=False,
         dropout=0.0,
-        temb_channels=512,
+        temb_channels=2560,
         groups=32,
         groups_out=None,
         pre_norm=True,
@@ -45,7 +45,7 @@ class TtResnetBlock2D(nn.Module):
         device=None,
         host=None,
         state_dict=None,
-        base_address="encoder.mid_block.resnets.0"
+        base_address="up_blocks.0.resnets.0"
     ):
         super().__init__()
         self.pre_norm = pre_norm
@@ -67,13 +67,13 @@ class TtResnetBlock2D(nn.Module):
         norm1_weights = state_dict[f"{base_address}.norm1.weight"]
         norm1_bias = state_dict[f"{base_address}.norm1.bias"]
 
-        self.norm1 = fallback_ops.GroupNorm(norm1_weights, norm1_bias, num_groups=groups, num_channels=in_channels, eps=eps, affine=True)
+        self.norm1 = fallback_ops.GroupNorm(norm1_weights, norm1_bias, num_groups=groups, num_channels=self.in_channels, eps=eps, affine=True)
 
 
         conv1_weights = state_dict[f"{base_address}.conv1.weight"]
         conv1_bias = state_dict[f"{base_address}.conv1.bias"]
 
-        self.conv1 = fallback_ops.Conv2d(conv1_weights, conv1_bias, in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.conv1 = fallback_ops.Conv2d(conv1_weights, conv1_bias, self.in_channels, self.out_channels, kernel_size=3, stride=1, padding=1)
 
 
         if temb_channels is not None:
@@ -94,17 +94,15 @@ class TtResnetBlock2D(nn.Module):
         norm2_bias = state_dict[f"{base_address}.norm2.bias"]
 
 
-        self.norm2 = fallback_ops.GroupNorm(norm2_weights, norm2_bias, num_groups=groups, num_channels=in_channels, eps=eps, affine=True)
+        self.norm2 = fallback_ops.GroupNorm(norm2_weights, norm2_bias, num_groups=groups, num_channels=self.in_channels, eps=eps, affine=True)
 
 
         # self.dropout = torch.nn.Dropout(dropout)
 
         conv2_weights = state_dict[f"{base_address}.conv2.weight"]
         conv2_bias = state_dict[f"{base_address}.conv2.bias"]
-        # self.conv2.weight = nn.Parameter(conv2_weights)
-        # self.conv2.bias = nn.Parameter(conv2_bias)
 
-        self.conv2 = fallback_ops.Conv2d(conv2_weights, conv2_bias, in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.conv2 = fallback_ops.Conv2d(conv2_weights, conv2_bias, self.in_channels, self.out_channels, kernel_size=3, stride=1, padding=1)
 
 
         if non_linearity == "swish":
@@ -140,7 +138,7 @@ class TtResnetBlock2D(nn.Module):
         self.conv_shortcut = None
         if self.use_in_shortcut:
             # self.conv_shortcut = torch.nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0) # TODO
-            pass
+            assert self.use_in_shortcut == True, 'shortcut got triggered!'
 
     def  forward(self, input_tensor, temb):
         hidden_states = input_tensor
@@ -213,25 +211,26 @@ class TtResnetBlock2D(nn.Module):
 def run_resnet_inference(device):
     pipe = StableDiffusionPipeline.from_pretrained('CompVis/stable-diffusion-v1-4', torch_dtype=torch.float32)
 
-    vae = pipe.vae
-    vae.eval()
-    state_dict = vae.state_dict()
-    vae_encoder = pipe.vae.encoder
-    resnet = vae_encoder.mid_block.resnets[0]
+    unet = pipe.unet
+    unet.eval()
+    state_dict = unet.state_dict()
+    unet_upblock = pipe.unet.up_blocks[0]
+    resnet = unet_upblock.resnets[0]
 
-    in_channels = 512
+    in_channels = 2560
+    out_channels = 2560
     temb_channels = None
     eps = 1e-06
     resnet_groups = 32
 
-    input_shape  = [1, 512, 32, 32]
+    input_shape  = [1, 2560, 32, 32]
     input = torch.randn(input_shape, dtype=torch.float32)
     # Note: Temb is none.
 
     torch_out = resnet(input, None)
 
     tt_input = torch_to_tt_tensor(input, device)
-    tt_resnet = TtResnetBlock2D(in_channels=in_channels, out_channels=in_channels, temb_channels=temb_channels, groups=resnet_groups,  state_dict=state_dict, device=device, host=host)
+    tt_resnet = TtResnetBlock2D(in_channels=in_channels, out_channels=out_channels, temb_channels=temb_channels, groups=resnet_groups,  state_dict=state_dict, device=device, host=host)
     tt_out = tt_resnet(tt_input, None)
     tt_out = tt_to_torch_tensor(tt_out, host)
 
