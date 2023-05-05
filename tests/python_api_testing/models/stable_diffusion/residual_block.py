@@ -72,9 +72,11 @@ class TtResnetBlock2D(nn.Module):
 
         conv1_weights = state_dict[f"{base_address}.conv1.weight"]
         conv1_bias = state_dict[f"{base_address}.conv1.bias"]
-
         self.conv1 = fallback_ops.Conv2d(conv1_weights, conv1_bias, self.in_channels, self.out_channels, kernel_size=3, stride=1, padding=1)
 
+        # self.conv1 = torch.nn.Conv2d(self.in_channels, self.out_channels, kernel_size=3, stride=1, padding=1)
+        # self.conv1.weights = nn.Parameter(state_dict[f"{base_address}.conv1.weight"])
+        # self.conv1.bias = nn.Parameter(state_dict[f"{base_address}.conv1.bias"])
 
         if temb_channels is not None:
             if self.time_embedding_norm == "default":
@@ -158,7 +160,7 @@ class TtResnetBlock2D(nn.Module):
             # input_tensor = self.downsample(input_tensor)
             # hidden_states = self.downsample(hidden_states)
 
-
+        hidden_states = tt_to_torch_tensor(hidden_states, self.host)
         hidden_states = self.conv1(hidden_states)
 
         if temb is not None:
