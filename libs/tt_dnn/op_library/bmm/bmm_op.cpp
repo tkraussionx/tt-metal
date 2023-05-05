@@ -317,10 +317,9 @@ Tensor bmm(const Tensor& a, const Tensor& b) {
 
     Device * device;
 
-    // Get the device
     if (a.on_host() && b.on_host()) {
-        device = CreateDevice(tt::ARCH::GRAYSKULL, 0); // Hardcoded to device 0 for now :(
-        InitializeDevice(device);
+        device = AutoPad::GetDefaultDevice();
+        TT_ASSERT(device != nullptr, "Requires setting default device if no inputs to op are on device");
     } else if (!a.on_host()){
         device = a.device();
     } else {
