@@ -146,6 +146,7 @@ class TtCrossAttention(nn.Module):
 
         to_out0_weight = state_dict[f"{base_address}.to_out.0.weight"]
         to_out0_bias = state_dict[f"{base_address}.to_out.0.bias"]
+        print("to out")
         self.to_out = make_linear(in_features=inner_dim, out_features=query_dim, weights=to_out0_weight, bias=to_out0_bias, device=self.device)
 
         # to_out0_weight = tilize_to_list(pad_weight(state_dict[f"{base_address}.to_out.0.weight"]))
@@ -200,7 +201,8 @@ class TtCrossAttention(nn.Module):
 
         head_size = self.heads
         _, batch_size, seq_len, dim = tensor.shape()
-        tensor = ttl.tensor.reshape(tensor, batch_size // head_size, head_size, seq_len, dim)
+        # tensor = ttl.tensor.reshape(tensor, batch_size // head_size, head_size, seq_len, dim)
+        tensor = fallback_ops.reshape(tensor, batch_size // head_size, head_size, seq_len, dim)
         tensor = ttl.tensor.permute(tensor, 0, 2, 1, 3)
         tensor = fallback_ops.reshape(tensor, 1, batch_size // head_size, seq_len, dim * head_size)
         return tensor
@@ -224,18 +226,19 @@ class TtCrossAttention(nn.Module):
         print("in get attentino scores", t_key.shape(), query.shape())
         temp = ttl.tensor.bmm(query, t_key)
 
-        _encoded_val = torch.tensor(self.scale, dtype=torch.bfloat16)
-        _encoded_val = _encoded_val.view(torch.int16).item()
+        # _encoded_val = torch.tensor(self.scale, dtype=torch.bfloat16)
+        # _encoded_val = _encoded_val.view(torch.int16).item()
+        # scale_tensor = ttl.tensor.fill_rm(temp.shape()[0],
+        #                                 temp.shape()[1],
+        #                                 temp.shape()[2],
+        #                                 temp.shape()[3],
+        #                                 0,
+        #                                 0,
+        #                                 temp,
+        #                                 _encoded_val,
+        #                                 _encoded_val)
 
-        scale_tensor = ttl.tensor.fill_rm(temp.shape()[0],
-                                        temp.shape()[1],
-                                        temp.shape()[2],
-                                        temp.shape()[3],
-                                        0,
-                                        0,
-                                        temp,
-                                        _encoded_val,
-                                        _encoded_val)
+        scale_tensor = fallback_ops.full(temp.shape(), self.scale)
 
         attention_scores = ttl.tensor.mul(scale_tensor, temp)
         # attention_scores = torch.baddbmm(
@@ -302,14 +305,15 @@ def CrossAttnProcessor(attn: TtCrossAttention, hidden_states, encoder_hidden_sta
     print("after head to batch dim value")
 
     attention_probs = attn.get_attention_scores(query, key, attention_mask)
+
     print("after get attention scores")
     hidden_states = ttl.tensor.bmm(attention_probs, value)
-    hidden_states = attn.batch_to_head_dim(hidden_states)
 
+    hidden_states = attn.batch_to_head_dim(hidden_states)
     # linear proj
     # hidden_states = attn.to_out[0](hidden_states)
     hidden_states = attn.to_out(hidden_states)
+
     # dropout
     # hidden_states = attn.to_out[1](hidden_states)
-
     return hidden_states
