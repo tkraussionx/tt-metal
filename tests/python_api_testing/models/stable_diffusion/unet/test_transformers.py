@@ -15,7 +15,8 @@ from diffusers import StableDiffusionPipeline
 from typing import Optional
 
 from libs import tt_lib as ttl
-from utility_functions import torch_to_tt_tensor, tt_to_torch_tensor, comp_pcc, comp_allclose_and_pcc
+from utility_functions import torch_to_tt_tensor, tt_to_torch_tensor
+from utility_functions import comp_pcc, comp_allclose_and_pcc, torch_to_tt_tensor_rm
 from transformer_2d import TtBasicTransformerBlock, TtTransformer2DModel
 
 from loguru import logger
@@ -72,11 +73,12 @@ def test_run_basic_transformer_inference():
     # Initialize the device
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
+    ttl.device.SetDefaultDevice(device)
     host = ttl.device.GetHost()
     tt_input = torch_to_tt_tensor(input, device)
 
     # setup tt model
-    tt_encoder_hidden_states = torch_to_tt_tensor(encoder_hidden_states, device)
+    tt_encoder_hidden_states = torch_to_tt_tensor_rm(encoder_hidden_states, device, put_on_device=False)
 
     tt_basic_transformer = TtBasicTransformerBlock(
         dim = dim,
@@ -90,6 +92,7 @@ def test_run_basic_transformer_inference():
         host=host,
         state_dict=state_dict,
         base_address="down_blocks.0.attentions.0.transformer_blocks.0",)
+
     tt_basic_transformer.eval()
     tt_out = tt_basic_transformer(tt_input, tt_encoder_hidden_states)
     print(type(tt_out), "type of tt_out")

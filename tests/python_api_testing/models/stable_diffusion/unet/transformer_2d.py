@@ -14,15 +14,12 @@ from diffusers import StableDiffusionPipeline
 from typing import Optional
 
 from libs import tt_lib as ttl
-from utility_functions import torch_to_tt_tensor, tt_to_torch_tensor, comp_pcc, comp_allclose_and_pcc
-from utility_functions import torch_to_tt_tensor_rm
-from python_api_testing.fused_ops.silu import SiLU as TtSiLU
+from utility_functions import comp_pcc, comp_allclose_and_pcc
+from utility_functions import torch_to_tt_tensor_rm, torch_to_tt_tensor, tt_to_torch_tensor
+
 from python_api_testing.fused_ops.layernorm import Layernorm as TtLayerNorm
-from python_api_testing.models.stable_diffusion.residual_block import TtResnetBlock2D
-from python_api_testing.models.stable_diffusion.attention_block import TtAttentionBlock
 from python_api_testing.models.stable_diffusion.cross_attention import TtCrossAttention
 from python_api_testing.models.stable_diffusion.fused_ops.feedforward import TtFeedForward
-from python_api_testing.models.stable_diffusion.unet.unet_2d_blocks import TtUNetMidBlock2D, TtUpDecoderBlock2D
 
 
 
@@ -188,7 +185,7 @@ class TtBasicTransformerBlock(nn.Module):
 
         # 1. Self-Attention
         cross_attention_kwargs = cross_attention_kwargs if cross_attention_kwargs is not None else {}
-
+        print("starting attn1")
         print(norm_hidden_states.shape(), "norm hidden state shape")
         print(encoder_hidden_states.shape(), "encoder hidden state shape")
         # assert False
@@ -206,7 +203,7 @@ class TtBasicTransformerBlock(nn.Module):
             # attn_output = gate_msa.unsqueeze(1) * attn_output
 
         hidden_states = ttl.tensor.add(attn_output, hidden_states)
-
+        print("starting attn2")
         if self.attn2 is not None:
             # norm_hidden_states = (
             #     self.norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.norm2(hidden_states)
@@ -215,8 +212,8 @@ class TtBasicTransformerBlock(nn.Module):
             norm_hidden_states = (
                 self.torch_norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.torch_norm2(hidden_states)
             )
-            norm_hidden_states = torch_to_tt_tensor(norm_hidden_states, self.device)
-            hidden_states = torch_to_tt_tensor_rm(hidden_states, self.device)
+            norm_hidden_states = torch_to_tt_tensor_rm(norm_hidden_states, self.device, put_on_device=False)
+            hidden_states = torch_to_tt_tensor_rm(hidden_states, self.device, put_on_device=False)
 
             print("########## self.attn2############")
             print(self.attn2)
@@ -240,8 +237,8 @@ class TtBasicTransformerBlock(nn.Module):
         # 3. Feed-forward
         hidden_states = tt_to_torch_tensor(hidden_states, self.host)
         norm_hidden_states = self.torch_norm3(hidden_states)
-        norm_hidden_states = torch_to_tt_tensor(norm_hidden_states, self.device)
-        hidden_states = torch_to_tt_tensor(hidden_states, self.device)
+        norm_hidden_states = torch_to_tt_tensor_rm(norm_hidden_states, self.device, put_on_device=False)
+        hidden_states = torch_to_tt_tensor_rm(hidden_states, self.device, put_on_device=False)
 
         if self.use_ada_layer_norm_zero:
             assert False, "AdaLayerNormZero not supported and not used in stable diffusion"

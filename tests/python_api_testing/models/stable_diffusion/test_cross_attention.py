@@ -27,17 +27,17 @@ def test_cross_attn_inference():
     unet.eval()
     state_dict = unet.state_dict()
 
-    test = "test3"
+    test = "test1"
     # synthesize the input
     if test == "test1":
         dim = 1280
         dropout = 0
         heads = 8
-
+        dim_head = 64
         bias=False
         cross_attention_dim = None
         upcast_attention = False
-        input_shape  = [2, 64, 1280]
+        input_shape  = [1, 2, 64, 1280]
         input = torch.randn(input_shape) * 0.01
         encoder_hidden_states = None
         # base_address = "ISLOST!"
@@ -47,6 +47,7 @@ def test_cross_attn_inference():
 
     ##############################################
     if test == "test2":
+        assert False, "this test doesn't work right now!"
         dim = 1280
         heads = 8
         dim_head = 160
@@ -56,8 +57,8 @@ def test_cross_attn_inference():
         cross_attention_dim = None
         upcast_attention = False
         dim_head = 64
-        input_shape = (2, 1, 256, 1280)
-        encoder_hidden_states_shape = (2, 1, 77, 768)
+        input_shape = (1, 2, 256, 1280)
+        encoder_hidden_states_shape = (1, 2, 77, 768)
         input = torch.randn(input_shape)
         encoder_hidden_states = torch.randn(encoder_hidden_states_shape)
         # base_address="mid_block.attentions.0.transformer_blocks.0.attn1"
@@ -91,6 +92,7 @@ def test_cross_attn_inference():
     # Initialize the device
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
+    ttl.device.SetDefaultDevice(device)
     host = ttl.device.GetHost()
 
     # setup tt model

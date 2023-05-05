@@ -13,8 +13,8 @@ from utility_functions import untilize, tilize, tilize_to_list, torch_to_tt_tens
 from python_api_testing.models.stable_diffusion.mini_ops import Linear as SDLinear
 
 def make_linear(in_features: int, out_features: int, weights, bias, device):
-    weights = torch_to_tt_tensor_rm(weights, device, shape=[1, 1, out_features, in_features])
-    bias = torch_to_tt_tensor_rm(bias, device, shape=[1, 1, 1, out_features]) if bias is not None else None
+    weights = torch_to_tt_tensor_rm(weights, device, shape=[1, 1, out_features, in_features], put_on_device=False)
+    bias = torch_to_tt_tensor_rm(bias, device, shape=[1, 1, 1, out_features], put_on_device=False) if bias is not None else None
     return SDLinear(in_features, out_features, weights, bias)
 
 
