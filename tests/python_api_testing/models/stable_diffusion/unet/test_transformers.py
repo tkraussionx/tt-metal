@@ -114,7 +114,7 @@ def test_run_basic_transformer_inference():
 
 
 
-test_run_basic_transformer_inference()
+# test_run_basic_transformer_inference()
 
 
 
@@ -149,7 +149,7 @@ def test_run_transformer_inference():
 
     # setup tt model
     base_address = "down_blocks.0.attentions.0"
-    tt_input = torch_to_tt_tensor(input, device)
+    tt_input = torch_to_tt_tensor_rm(input, device, put_on_device=False)
     tt_encoder_hidden_states = torch_to_tt_tensor(encoder_hidden_states, device)
 
     tt_basic_transformer = TtTransformer2DModel(
@@ -171,4 +171,4 @@ def test_run_transformer_inference():
     assert passing[0], passing[1:]
     logger.info(f"PASSED {passing[1]}")
 
-# test_run_transformer_inference()
+test_run_transformer_inference()
