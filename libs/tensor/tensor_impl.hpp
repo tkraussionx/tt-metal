@@ -502,7 +502,7 @@ inline Tensor to_device(const Tensor &tensor, Device *target_device, const Memor
 template <typename T>
 inline Tensor to_layout(const Tensor &tensor, Layout target_layout) {
     if(tensor.layout() == target_layout) {
-        return Tensor(tensor);
+        return tensor;
     }
     auto data = *reinterpret_cast<std::vector<T>*>(tensor.data_ptr());
     switch (tensor.layout()) {
