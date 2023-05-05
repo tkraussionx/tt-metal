@@ -16,7 +16,7 @@ from diffusers import StableDiffusionPipeline
 
 from libs import tt_lib as ttl
 from libs.tt_lib.fallback_ops import fallback_ops
-from utility_functions import pad_weight, tilize_to_list, print_diff_argmax, torch_to_tt_tensor, tt_to_torch_tensor
+from utility_functions import torch_to_tt_tensor, tt_to_torch_tensor
 from python_api_testing.fused_ops.linear import Linear as TtLinear
 from python_api_testing.fused_ops.silu import SiLU as TtSiLU
 from python_api_testing.sweep_tests.comparison_funcs import comp_allclose_and_pcc
@@ -34,7 +34,7 @@ class TtResnetBlock2D(nn.Module):
         groups=32,
         groups_out=None,
         pre_norm=True,
-        eps=1e-6,
+        eps=1e-5,
         non_linearity="swish",
         time_embedding_norm="default",
         kernel=None,
@@ -42,9 +42,9 @@ class TtResnetBlock2D(nn.Module):
         use_in_shortcut=None,
         up=False,
         down=False,
-        device=None,
-        host=None,
         state_dict=None,
+        host = None,
+        device = None,
         base_address="up_blocks.0.resnets.0"
     ):
         super().__init__()
@@ -74,9 +74,6 @@ class TtResnetBlock2D(nn.Module):
         conv1_bias = state_dict[f"{base_address}.conv1.bias"]
         self.conv1 = fallback_ops.Conv2d(conv1_weights, conv1_bias, self.in_channels, self.out_channels, kernel_size=3, stride=1, padding=1)
 
-        # self.conv1 = torch.nn.Conv2d(self.in_channels, self.out_channels, kernel_size=3, stride=1, padding=1)
-        # self.conv1.weights = nn.Parameter(state_dict[f"{base_address}.conv1.weight"])
-        # self.conv1.bias = nn.Parameter(state_dict[f"{base_address}.conv1.bias"])
 
         if temb_channels is not None:
             if self.time_embedding_norm == "default":
@@ -98,19 +95,18 @@ class TtResnetBlock2D(nn.Module):
 
         self.norm2 = fallback_ops.GroupNorm(norm2_weights, norm2_bias, num_groups=groups, num_channels=self.in_channels, eps=eps, affine=True)
 
-
-        # self.dropout = torch.nn.Dropout(dropout)
+        self.dropout = torch.nn.Dropout(dropout, inplace=False)
 
         conv2_weights = state_dict[f"{base_address}.conv2.weight"]
         conv2_bias = state_dict[f"{base_address}.conv2.bias"]
 
-        self.conv2 = fallback_ops.Conv2d(conv2_weights, conv2_bias, self.in_channels, self.out_channels, kernel_size=3, stride=1, padding=1)
+        self.conv2 = fallback_ops.Conv2d(conv2_weights, conv2_bias, self.out_channels, self.out_channels, kernel_size=3, stride=1, padding=1)
 
 
         if non_linearity == "swish":
             self.nonlinearity = TtSiLU
         elif non_linearity == "mish":
-            assert False, "mish is not implemented!"
+            assert False, "Mish is not implemented!"
             # self.nonlinearity = Mish()
         elif non_linearity == "silu":
             self.nonlinearity = TtSiLU
@@ -139,8 +135,10 @@ class TtResnetBlock2D(nn.Module):
         self.use_in_shortcut = self.in_channels != self.out_channels if use_in_shortcut is None else use_in_shortcut
         self.conv_shortcut = None
         if self.use_in_shortcut:
-            # self.conv_shortcut = torch.nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0) # TODO
-            assert self.use_in_shortcut == True, 'shortcut got triggered!'
+            conv_shortcut_weights = state_dict[f"{base_address}.conv_shortcut.weight"]
+            conv_shortcut_bias = state_dict[f"{base_address}.conv_shortcut.bias"]
+            self.conv_shortcut = fallback_ops.Conv2d(conv_shortcut_weights, conv_shortcut_bias, self.in_channels, self.out_channels, kernel_size=1, stride=1, padding=0)
+            # self.conv_shortcut = torch.nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
 
     def  forward(self, input_tensor, temb):
         hidden_states = input_tensor
@@ -160,7 +158,7 @@ class TtResnetBlock2D(nn.Module):
             # input_tensor = self.downsample(input_tensor)
             # hidden_states = self.downsample(hidden_states)
 
-        hidden_states = tt_to_torch_tensor(hidden_states, self.host)
+        # hidden_states = tt_to_torch_tensor(hidden_states, self.host)
         hidden_states = self.conv1(hidden_states)
 
         if temb is not None:
@@ -189,7 +187,7 @@ class TtResnetBlock2D(nn.Module):
             hidden_states = ttl.tensor.add(hidden_states, shift)
 
         hidden_states = self.nonlinearity(hidden_states)
-
+        # hidden_states = tt_to_torch_tensor(hidden_states, host)
         # hidden_states = self.dropout(hidden_states)
         hidden_states = self.conv2(hidden_states)
 
@@ -210,7 +208,7 @@ class TtResnetBlock2D(nn.Module):
         return output_tensor
 
 
-def run_resnet_inference(device):
+def run_resnet_inference(host, device):
     pipe = StableDiffusionPipeline.from_pretrained('CompVis/stable-diffusion-v1-4', torch_dtype=torch.float32)
 
     unet = pipe.unet
@@ -219,24 +217,23 @@ def run_resnet_inference(device):
     unet_upblock = pipe.unet.up_blocks[0]
     resnet = unet_upblock.resnets[0]
 
-    in_channels = 2560
-    out_channels = 2560
+    in_channels = resnet.conv1.in_channels
+    out_channels = resnet.conv2.in_channels
     temb_channels = None
     eps = 1e-06
     resnet_groups = 32
 
-    input_shape  = [1, 2560, 32, 32]
+    input_shape  = [1, in_channels, 32, 32]
     input = torch.randn(input_shape, dtype=torch.float32)
     # Note: Temb is none.
 
     torch_out = resnet(input, None)
 
     tt_input = torch_to_tt_tensor(input, device)
-    tt_resnet = TtResnetBlock2D(in_channels=in_channels, out_channels=out_channels, temb_channels=temb_channels, groups=resnet_groups,  state_dict=state_dict, device=device, host=host)
+    tt_resnet = TtResnetBlock2D(in_channels=in_channels, out_channels=out_channels, temb_channels=temb_channels, groups=resnet_groups,  state_dict=state_dict, host = host, device=device)
     tt_out = tt_resnet(tt_input, None)
     tt_out = tt_to_torch_tensor(tt_out, host)
 
-    print_diff_argmax(tt_out, torch_out)
     print(comp_allclose_and_pcc(torch_out, tt_out))
 
 
@@ -246,5 +243,5 @@ if __name__ == "__main__":
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
     host = ttl.device.GetHost()
-    run_resnet_inference(device)
+    run_resnet_inference(host, device)
     ttl.device.CloseDevice(device)
