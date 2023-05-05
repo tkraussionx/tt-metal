@@ -16,6 +16,7 @@ from typing import Optional
 from libs import tt_lib as ttl
 from utility_functions import comp_pcc, comp_allclose_and_pcc
 from utility_functions import torch_to_tt_tensor_rm, torch_to_tt_tensor, tt_to_torch_tensor
+from libs.tt_lib.fallback_ops import fallback_ops
 
 from python_api_testing.fused_ops.layernorm import Layernorm as TtLayerNorm
 from python_api_testing.models.stable_diffusion.cross_attention import TtCrossAttention
@@ -124,24 +125,24 @@ class TtBasicTransformerBlock(nn.Module):
             assert False, "AdaLayerNormZero not supported and not used in stable diffusion"
             # self.norm1 = AdaLayerNormZero(dim, num_embeds_ada_norm)
         else:
-            # print("dim in basic transformer", dim)
-            self.torch_norm1 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine)
-            self.torch_norm1.weight = nn.Parameter(state_dict[f"{base_address}.norm1.weight"])
-            self.torch_norm1.bias = nn.Parameter(state_dict[f"{base_address}.norm1.bias"])
-            # norm1_weight = tilize_to_list(pad_weight(state_dict[f"{base_address}.proj_in.weight"]))
-            # norm1_weight = tilize_to_list(state_dict[f"{base_address}.norm1.weight"])
-            # norm1_bias = tilize_to_list(state_dict[f"{base_address}.norm1.bias"])
-            # self.norm1 = TtLayerNorm(epsilon=1e-05, H=dim, W=dim, gamma=norm1_weight, betta=norm1_beta, device=self.device, num_dims=1)
-
+            norm1_weights = state_dict[f"{base_address}.norm1.weight"]
+            norm1_bias = state_dict[f"{base_address}.norm1.bias"]
+            self.norm1 = fallback_ops.LayerNorm(weights=norm1_weights,
+                                                biases=norm1_bias,
+                                                normalized_shape=dim,
+                                                elementwise_affine=norm_elementwise_affine)
 
         if cross_attention_dim is not None:
             # We currently only use AdaLayerNormZero for self attention where there will only be one attention block.
             # I.e. the number of returned modulation chunks from AdaLayerZero would not make sense if returned during
             # the second cross attention block.
             assert not self.use_ada_layer_norm, "AdaLayerNorm not supported and not used in stable diffusion"
-            self.torch_norm2 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine)
-            self.torch_norm2.weight = nn.Parameter(state_dict[f"{base_address}.norm2.weight"])
-            self.torch_norm2.bias = nn.Parameter(state_dict[f"{base_address}.norm2.bias"])
+            norm2_weights = state_dict[f"{base_address}.norm2.weight"]
+            norm2_bias = state_dict[f"{base_address}.norm2.bias"]
+            self.norm2 = fallback_ops.LayerNorm(weights=norm2_weights,
+                                                biases=norm2_bias,
+                                                normalized_shape=dim,
+                                                elementwise_affine=norm_elementwise_affine)
 
             # self.norm2 = (
             #     AdaLayerNorm(dim, num_embeds_ada_norm)
@@ -152,10 +153,12 @@ class TtBasicTransformerBlock(nn.Module):
             self.norm2 = None
 
         # 3. Feed-forward
-        self.torch_norm3 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine)
-        self.torch_norm3.weight = nn.Parameter(state_dict[f"{base_address}.norm3.weight"])
-        self.torch_norm3.bias = nn.Parameter(state_dict[f"{base_address}.norm3.bias"])
-
+        norm3_weight = state_dict[f"{base_address}.norm3.weight"]
+        norm3_bias = state_dict[f"{base_address}.norm3.bias"]
+        self.norm3 = fallback_ops.LayerNorm(weights=norm3_weight,
+                                            biases=norm3_bias,
+                                            normalized_shape=dim,
+                                            elementwise_affine=norm_elementwise_affine)
 
 
     def forward(
@@ -176,11 +179,7 @@ class TtBasicTransformerBlock(nn.Module):
                 # hidden_states, timestep, class_labels, hidden_dtype=hidden_states.dtype
             # )
         else:
-            hidden_states = tt_to_torch_tensor(hidden_states, self.host)
-            norm_hidden_states = self.torch_norm1(hidden_states)
-            norm_hidden_states = torch_to_tt_tensor(norm_hidden_states, self.device)
-            hidden_states = torch_to_tt_tensor(hidden_states, self.device)
-            # norm_hidden_states = self.norm1(hidden_states)
+            norm_hidden_states = self.norm1(hidden_states)
 
 
         # 1. Self-Attention
@@ -205,16 +204,9 @@ class TtBasicTransformerBlock(nn.Module):
         hidden_states = ttl.tensor.add(attn_output, hidden_states)
         print("starting attn2")
         if self.attn2 is not None:
-            # norm_hidden_states = (
-            #     self.norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.norm2(hidden_states)
-            # )
-            hidden_states = tt_to_torch_tensor(hidden_states, self.host)
             norm_hidden_states = (
-                self.torch_norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.torch_norm2(hidden_states)
+                self.norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.norm2(hidden_states)
             )
-            norm_hidden_states = torch_to_tt_tensor_rm(norm_hidden_states, self.device, put_on_device=False)
-            hidden_states = torch_to_tt_tensor_rm(hidden_states, self.device, put_on_device=False)
-
             print("########## self.attn2############")
             print(self.attn2)
             print(norm_hidden_states.shape(), "norm hidden shape")
@@ -230,16 +222,12 @@ class TtBasicTransformerBlock(nn.Module):
                 attention_mask=attention_mask,
                 **cross_attention_kwargs,
             )
-            return attn_output
+
             hidden_states = ttl.tensor.add(attn_output, hidden_states)
 
 
         # 3. Feed-forward
-        hidden_states = tt_to_torch_tensor(hidden_states, self.host)
-        norm_hidden_states = self.torch_norm3(hidden_states)
-        norm_hidden_states = torch_to_tt_tensor_rm(norm_hidden_states, self.device, put_on_device=False)
-        hidden_states = torch_to_tt_tensor_rm(hidden_states, self.device, put_on_device=False)
-
+        norm_hidden_states = self.norm3(hidden_states)
         if self.use_ada_layer_norm_zero:
             assert False, "AdaLayerNormZero not supported and not used in stable diffusion"
             # norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
