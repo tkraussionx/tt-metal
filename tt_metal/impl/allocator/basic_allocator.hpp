@@ -60,6 +60,7 @@ class BasicAllocator : public Allocator {
 
     allocator::Algorithm &allocator_for_logical_core(const tt_xy_pair &logical_core) const;
 
+    tt_xy_pair logical_grid_size_;
     std::map<int, std::unique_ptr<allocator::Algorithm>> dram_manager_;
     std::map<tt_xy_pair, std::unique_ptr<allocator::Algorithm>> l1_manager_;
 };

@@ -8,7 +8,7 @@ namespace tt {
 
 namespace tt_metal {
 
-BasicAllocator::BasicAllocator(const tt_SocDescriptor &soc_desc) : Allocator() {
+BasicAllocator::BasicAllocator(const tt_SocDescriptor &soc_desc) : logical_grid_size_(soc_desc.worker_grid_size), Allocator() {
     constexpr static uint32_t min_allocation_size_bytes = 32;
     // DRAM -> L1 and L1 -> DRAM transfers need to have 32B alignment, which means:
     // DRAM_buffer_addr % 32 == L1_buffer_addr % 32, or
@@ -174,21 +174,23 @@ std::vector<L1BankAddrPair> BasicAllocator::allocate_interleaved_l1_buffer(int n
     std::vector<std::pair<uint32_t, uint32_t>> candidate_addr_ranges;
 
     std::vector<L1BankAddrPair> bank_to_size;
-    for (auto &[logical_core, l1_allocator] : this->l1_manager_) {
-        int num_units_in_bank = num_equally_distributed_units;
-        if (remaining_units_after_equally_distributing > 0) {
-            num_units_in_bank += 1;
-            remaining_units_after_equally_distributing -= 1;
+    for (uint32_t x = 0; x < this->logical_grid_size_.x; x++) {
+        for (uint32_t y = 0; y < this->logical_grid_size_.y; y++) {
+            tt_xy_pair logical_core = {x, y};
+            int num_units_in_bank = num_equally_distributed_units;
+            if (remaining_units_after_equally_distributing > 0) {
+                num_units_in_bank += 1;
+                remaining_units_after_equally_distributing -= 1;
+            }
+            uint32_t buffer_size = num_units_in_bank * (num_entries_per_bank_unit * num_bytes_per_entry);
+            L1Bank bank = {.logical_core=logical_core, .offset_bytes=0};
+            bank_to_size.push_back({bank, buffer_size});
+            auto potential_addr_ranges = this->allocator_for_logical_core(logical_core).available_addresses(buffer_size);
+            allocator::populate_candidate_address_ranges(candidate_addr_ranges, potential_addr_ranges);
+            total_accounted += buffer_size;
+            if (total_accounted == total_size_bytes) { break; }
         }
-        uint32_t buffer_size = num_units_in_bank * (num_entries_per_bank_unit * num_bytes_per_entry);
-        L1Bank bank = {.logical_core=logical_core, .offset_bytes=0};
-        bank_to_size.push_back({bank, buffer_size});
-        auto potential_addr_ranges = l1_allocator->available_addresses(buffer_size);
-        allocator::populate_candidate_address_ranges(candidate_addr_ranges, potential_addr_ranges);
-        total_accounted += buffer_size;
-        if (total_accounted == total_size_bytes) {
-            break;
-        }
+        if (total_accounted == total_size_bytes) { break; }
     }
 
     if (candidate_addr_ranges.empty()) {

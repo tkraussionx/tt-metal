@@ -99,6 +99,7 @@ class L1BankingAllocator : public Allocator {
 
     std::map<int, std::unique_ptr<allocator::Algorithm>> dram_manager_;
 
+    tt_xy_pair logical_grid_size_;
     std::map<tt_xy_pair, UniqueBank> compute_and_storage_cores_l1_manager_;
     std::map<tt_xy_pair, UniqueBanks> storage_cores_l1_manager_;
 };

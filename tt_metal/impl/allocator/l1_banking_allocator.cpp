@@ -8,7 +8,7 @@ namespace tt {
 
 namespace tt_metal {
 
-L1BankingAllocator::L1BankingAllocator(const tt_SocDescriptor &soc_desc) : Allocator() {
+L1BankingAllocator::L1BankingAllocator(const tt_SocDescriptor &soc_desc) : logical_grid_size_(soc_desc.worker_grid_size), Allocator() {
     this->init_dram_manager(soc_desc);
     this->init_compute_and_storage_cores_l1_manager(soc_desc);
     this->init_storage_cores_l1_manager(soc_desc);
@@ -269,50 +269,52 @@ std::vector<L1BankAddrPair> L1BankingAllocator::allocate_interleaved_l1_buffer(i
         return range.first >= this-> storage_core_bank_size_bytes_ and range.second >= this->storage_core_bank_size_bytes_;
     };
 
-    for (auto &[logical_core, bank] : this->compute_and_storage_cores_l1_manager_) {
-        int num_units_in_bank = num_equally_distributed_units;
-        if (remaining_units_after_equally_distributing > 0) {
-            num_units_in_bank += 1;
-            remaining_units_after_equally_distributing -= 1;
-        }
-        uint32_t buffer_size = num_units_in_bank * (num_entries_per_bank_unit * num_bytes_per_entry);
-        L1Bank l1_bank = {.logical_core=logical_core, .offset_bytes=bank->offset_bytes};
-        bank_to_size.push_back({l1_bank, buffer_size});
-        auto potential_addr_ranges = bank->allocator_algo->available_addresses(buffer_size);
-        for (auto &addr_range : potential_addr_ranges) {
-            if (addr_range.first <= this->storage_core_bank_size_bytes_ and this->storage_core_bank_size_bytes_ <= addr_range.second) {
-                addr_range.first = this->storage_core_bank_size_bytes_;
+    for (uint32_t x = 0; x < this->logical_grid_size_.x; x++) {
+        for (uint32_t y = 0; y < this->logical_grid_size_.y; y++) {
+            tt_xy_pair logical_core = {x, y};
+            if (this->is_compute_and_storage_core(logical_core)) {
+                auto &bank = this->bank_for_logical_compute_and_storage_core(logical_core);
+                int num_units_in_bank = num_equally_distributed_units;
+                if (remaining_units_after_equally_distributing > 0) {
+                    num_units_in_bank += 1;
+                    remaining_units_after_equally_distributing -= 1;
+                }
+                uint32_t buffer_size = num_units_in_bank * (num_entries_per_bank_unit * num_bytes_per_entry);
+                L1Bank l1_bank = {.logical_core=logical_core, .offset_bytes=bank.offset_bytes};
+                bank_to_size.push_back({l1_bank, buffer_size});
+                auto potential_addr_ranges = bank.allocator_algo->available_addresses(buffer_size);
+                for (auto &addr_range : potential_addr_ranges) {
+                    if (addr_range.first <= this->storage_core_bank_size_bytes_ and this->storage_core_bank_size_bytes_ <= addr_range.second) {
+                        addr_range.first = this->storage_core_bank_size_bytes_;
+                    }
+                }
+                allocator::populate_candidate_address_ranges(candidate_addr_ranges, potential_addr_ranges, filter_addresses);
+                total_accounted += buffer_size;
+                if (total_accounted == total_size_bytes) { break; }
+            } else if (this->is_storage_only_core(logical_core)) {
+                auto &banks = this->banks_for_storage_only_cores(logical_core);
+                for (auto &bank : banks) {
+                    int num_units_in_bank = num_equally_distributed_units;
+                    if (remaining_units_after_equally_distributing > 0) {
+                        num_units_in_bank += 1;
+                        remaining_units_after_equally_distributing -= 1;
+                    }
+                    uint32_t buffer_size = num_units_in_bank * (num_entries_per_bank_unit * num_bytes_per_entry);
+                    L1Bank l1_bank = {.logical_core=logical_core, .offset_bytes=bank->offset_bytes};
+                    bank_to_size.push_back({l1_bank, buffer_size});
+                    auto potential_addr_ranges = bank->allocator_algo->available_addresses(buffer_size);
+                    uint32_t offset = bank->offset_bytes == 0 ? banks.back()->offset_bytes : bank->offset_bytes;
+                    for (auto &addr_range : potential_addr_ranges) {
+                        addr_range.first = addr_range.first + offset;
+                        addr_range.second = addr_range.second + offset;
+                    }
+                    allocator::populate_candidate_address_ranges(candidate_addr_ranges, potential_addr_ranges);
+                    total_accounted += buffer_size;
+                    if (total_accounted == total_size_bytes) { break; }
+                }
             }
         }
-        allocator::populate_candidate_address_ranges(candidate_addr_ranges, potential_addr_ranges, filter_addresses);
-        total_accounted += buffer_size;
-        if (total_accounted == total_size_bytes) {
-            break;
-        }
-    }
-
-    for (auto &[logical_core, banks] : this->storage_cores_l1_manager_) {
-        for (auto &bank : banks) {
-            int num_units_in_bank = num_equally_distributed_units;
-            if (remaining_units_after_equally_distributing > 0) {
-                num_units_in_bank += 1;
-                remaining_units_after_equally_distributing -= 1;
-            }
-            uint32_t buffer_size = num_units_in_bank * (num_entries_per_bank_unit * num_bytes_per_entry);
-            L1Bank l1_bank = {.logical_core=logical_core, .offset_bytes=bank->offset_bytes};
-            bank_to_size.push_back({l1_bank, buffer_size});
-            auto potential_addr_ranges = bank->allocator_algo->available_addresses(buffer_size);
-            uint32_t offset = bank->offset_bytes == 0 ? banks.back()->offset_bytes : bank->offset_bytes;
-            for (auto &addr_range : potential_addr_ranges) {
-                addr_range.first = addr_range.first + offset;
-                addr_range.second = addr_range.second + offset;
-            }
-            allocator::populate_candidate_address_ranges(candidate_addr_ranges, potential_addr_ranges);
-            total_accounted += buffer_size;
-            if (total_accounted == total_size_bytes) {
-                break;
-            }
-        }
+        if (total_accounted == total_size_bytes) { break; }
     }
 
     if (candidate_addr_ranges.empty()) {
