@@ -15,7 +15,9 @@ from typing import Optional
 
 from libs import tt_lib as ttl
 from utility_functions import torch_to_tt_tensor, tt_to_torch_tensor, comp_pcc, comp_allclose_and_pcc
+from utility_functions import torch_to_tt_tensor_rm
 from python_api_testing.fused_ops.silu import SiLU as TtSiLU
+from python_api_testing.fused_ops.layernorm import Layernorm as TtLayerNorm
 from python_api_testing.models.stable_diffusion.residual_block import TtResnetBlock2D
 from python_api_testing.models.stable_diffusion.attention_block import TtAttentionBlock
 from python_api_testing.models.stable_diffusion.cross_attention import TtCrossAttention
@@ -65,6 +67,7 @@ class TtBasicTransformerBlock(nn.Module):
         self.device = device
         self.host = host
         self.only_cross_attention = only_cross_attention
+        self.base_address = base_address
 
         self.use_ada_layer_norm_zero = (num_embeds_ada_norm is not None) and norm_type == "ada_norm_zero"
         self.use_ada_layer_norm = (num_embeds_ada_norm is not None) and norm_type == "ada_norm"
@@ -74,16 +77,11 @@ class TtBasicTransformerBlock(nn.Module):
                 f"`norm_type` is set to {norm_type}, but `num_embeds_ada_norm` is not defined. Please make sure to"
                 f" define `num_embeds_ada_norm` if setting `norm_type` to {norm_type}."
             )
-        # if dim==1280:
-        #     print("query_dim: ", dim)
-        #     print("heads: ", num_attention_heads)
-        #     print("droput: ", dropout)
-        #     print("bias: ", attention_bias)
-        #     print("cross_attention_dim: ", cross_attention_dim if only_cross_attention else None)
-        #     print("upcast_attention: ", upcast_attention)
-
+        print("name of the basic transformer", self.base_address)
 
         # 1. Self-Attn
+        print("tt stuff", dim, num_attention_heads, attention_head_dim, attention_bias, only_cross_attention)
+        # assert False
         self.attn1 = TtCrossAttention(
             query_dim=dim,
             heads=num_attention_heads,
@@ -97,12 +95,8 @@ class TtBasicTransformerBlock(nn.Module):
             state_dict=state_dict,
             base_address=f"{base_address}.attn1"
         )
-        # print("**** ff")
-        # print("dim, ", dim)
-        # print("dropout: ", dropout)
-        # print("act: ", activation_fn)
-        # print("final dropout: ", final_dropout)
-        # print("**** ff")
+
+
         self.ff = TtFeedForward(dim, dropout=dropout, activation_fn=activation_fn, final_dropout=final_dropout, device=self.device,
             host=self.host,
             state_dict=state_dict,
@@ -133,9 +127,14 @@ class TtBasicTransformerBlock(nn.Module):
             assert False, "AdaLayerNormZero not supported and not used in stable diffusion"
             # self.norm1 = AdaLayerNormZero(dim, num_embeds_ada_norm)
         else:
+            # print("dim in basic transformer", dim)
             self.torch_norm1 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine)
             self.torch_norm1.weight = nn.Parameter(state_dict[f"{base_address}.norm1.weight"])
             self.torch_norm1.bias = nn.Parameter(state_dict[f"{base_address}.norm1.bias"])
+            # norm1_weight = tilize_to_list(pad_weight(state_dict[f"{base_address}.proj_in.weight"]))
+            # norm1_weight = tilize_to_list(state_dict[f"{base_address}.norm1.weight"])
+            # norm1_bias = tilize_to_list(state_dict[f"{base_address}.norm1.bias"])
+            # self.norm1 = TtLayerNorm(epsilon=1e-05, H=dim, W=dim, gamma=norm1_weight, betta=norm1_beta, device=self.device, num_dims=1)
 
 
         if cross_attention_dim is not None:
@@ -184,17 +183,24 @@ class TtBasicTransformerBlock(nn.Module):
             norm_hidden_states = self.torch_norm1(hidden_states)
             norm_hidden_states = torch_to_tt_tensor(norm_hidden_states, self.device)
             hidden_states = torch_to_tt_tensor(hidden_states, self.device)
-
+            # norm_hidden_states = self.norm1(hidden_states)
 
 
         # 1. Self-Attention
         cross_attention_kwargs = cross_attention_kwargs if cross_attention_kwargs is not None else {}
+
+        print(norm_hidden_states.shape(), "norm hidden state shape")
+        print(encoder_hidden_states.shape(), "encoder hidden state shape")
+        # assert False
         attn_output = self.attn1(
             norm_hidden_states,
             encoder_hidden_states=encoder_hidden_states if self.only_cross_attention else None,
             attention_mask=attention_mask,
             **cross_attention_kwargs,
         )
+
+
+
         if self.use_ada_layer_norm_zero:
             assert False, "AdaLayerNormZero not supported and not used in stable diffusion"
             # attn_output = gate_msa.unsqueeze(1) * attn_output
@@ -205,9 +211,20 @@ class TtBasicTransformerBlock(nn.Module):
             # norm_hidden_states = (
             #     self.norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.norm2(hidden_states)
             # )
+            hidden_states = tt_to_torch_tensor(hidden_states, self.host)
             norm_hidden_states = (
                 self.torch_norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.torch_norm2(hidden_states)
             )
+            norm_hidden_states = torch_to_tt_tensor(norm_hidden_states, self.device)
+            hidden_states = torch_to_tt_tensor_rm(hidden_states, self.device)
+
+            print("########## self.attn2############")
+            print(self.attn2)
+            print(norm_hidden_states.shape(), "norm hidden shape")
+            print(encoder_hidden_states.shape(), "encoder hidden state shape")
+            print(attention_mask, "attention mask")
+            print(cross_attention_kwargs, "cross attention kwargs")
+            print("##### end of it #######")
 
             # 2. Cross-Attention
             attn_output = self.attn2(
@@ -216,11 +233,15 @@ class TtBasicTransformerBlock(nn.Module):
                 attention_mask=attention_mask,
                 **cross_attention_kwargs,
             )
+            return attn_output
             hidden_states = ttl.tensor.add(attn_output, hidden_states)
 
 
         # 3. Feed-forward
+        hidden_states = tt_to_torch_tensor(hidden_states, self.host)
         norm_hidden_states = self.torch_norm3(hidden_states)
+        norm_hidden_states = torch_to_tt_tensor(norm_hidden_states, self.device)
+        hidden_states = torch_to_tt_tensor(hidden_states, self.device)
 
         if self.use_ada_layer_norm_zero:
             assert False, "AdaLayerNormZero not supported and not used in stable diffusion"
