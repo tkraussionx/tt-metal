@@ -16,22 +16,21 @@ import numpy as np
 
 from libs import tt_lib as ttl
 from libs.tt_lib.fallback_ops import fallback_ops
-from utility_functions import print_diff_argmax, torch_to_tt_tensor, tt_to_torch_tensor, print_corr_coef
+from utility_functions import torch_to_tt_tensor, tt_to_torch_tensor
 from python_api_testing.sweep_tests.comparison_funcs import comp_allclose_and_pcc
 
 from upsample_nearest2d import TtUpsampleNearest2d
 
 
 class TtUpsample2d(nn.Module):
-    def __init__(self, channels, state_dict, use_conv=False, use_conv_transpose=False, out_channels=None, name="conv", device=None, host=None, base_address="up_blocks.1.upsamplers.0"):
+    def __init__(self, channels, state_dict, use_conv=False, use_conv_transpose=False, out_channels=None, name="conv", base_address="up_blocks.1.upsamplers.0"):
         super().__init__()
         assert not use_conv_transpose, "StableDiffusion's Unet does not use convTranspose, so leaving it out"
         self.in_channels = channels
         self.out_channels = out_channels or channels
         self.use_conv = use_conv
         self.name = name
-        self.device = device
-        self.host = host
+
 
         self.conv = None
         if self.use_conv:
@@ -47,7 +46,8 @@ class TtUpsample2d(nn.Module):
         assert hidden_states.shape()[1] == self.in_channels
 
         if output_size is None:
-            hidden_states = TtUpsampleNearest2d(device=self.device)(hidden_states)
+            upsampler_nearest2d = TtUpsampleNearest2d()
+            hidden_states = upsampler_nearest2d(hidden_states)
         else:
             assert False, "we are not expected to support upsample 2d with output_size yet"
             hidden_states = F.interpolate(hidden_states, size=output_size, mode="nearest")
@@ -84,10 +84,9 @@ class TorchUpsample2D(nn.Module):
             # self.conv = nn.ConvTranspose2d(channels, self.out_channels, 4, 2, 1)
             assert use_conv_transpose == True, 'conv_transpose is used!'
         elif use_conv:
-            self.conv_weight = state_dict[f"{base_address}.conv.weight"]
-            self.conv_bias = state_dict[f"{base_address}.conv.bias"]
-            self.conv = fallback_ops.Conv2d(self.conv_weight, self.conv_bias, self.in_channels, self.out_channels, kernel_size=3, stride=1, padding=1)
-            # self.conv = nn.Conv2d(self.channels, self.out_channels, 3, padding=1)
+            self.conv = nn.Conv2d(self.in_channels, self.out_channels, 3, padding=1)
+            self.conv.weight = nn.Parameter(state_dict[f"{base_address}.conv.weight"])
+            self.conv.bias = nn.Parameter(state_dict[f"{base_address}.conv.bias"])
 
 
     def forward(self, hidden_states, output_size=None):
@@ -141,19 +140,28 @@ def run_upsample2d_inference(device, host):
     input = torch.randn(input_shape)
     in_channels = 1280
     out_channels = 1280
-    # torch_up = TorchUpsample2D(channels=channels, out_channels=out_channels, use_conv=True, state_dict=state_dict)
-    # torch_out = torch_up(input)
-    torch_out = resnet_upsampler(input)
+    unet_out = resnet_upsampler(input)
+
+    print('unet_out size:', unet_out.shape)
+    print('unet_out:', unet_out[0][0][0][:12])
+
+    torch_up = TorchUpsample2D(channels=in_channels, out_channels=out_channels, use_conv=True, state_dict=state_dict)
+    torch_out = torch_up(input)
+
+    print('torch_out size:', torch_out.shape)
     print('torch_out:', torch_out[0][0][0][:12])
 
-    tt_input = torch_to_tt_tensor(input, device,)
+    tt_input = torch_to_tt_tensor(input, device)
 
-    tt_up = TtUpsample2d(channels=in_channels, out_channels=out_channels, use_conv=True, state_dict=state_dict, device=device, host=host)
+    tt_up = TtUpsample2d(channels=in_channels, out_channels=out_channels, use_conv=True, state_dict=state_dict)
     tt_out = tt_up(tt_input)
     tt_out = tt_to_torch_tensor(tt_out, host)
+    print('tt_out size:', tt_out.shape)
     print('tt_out:', tt_out[0][0][0][:12])
 
-    print(comp_allclose_and_pcc(tt_out, torch_out))
+    print('torch vs tt', comp_allclose_and_pcc(torch_out, tt_out), '\n')
+
+    print('torch vs unet', comp_allclose_and_pcc(torch_out, unet_out))
 
 
 if __name__ == "__main__":
