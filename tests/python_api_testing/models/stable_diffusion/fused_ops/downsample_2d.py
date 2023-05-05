@@ -37,7 +37,7 @@ class TtDownsample2D(nn.Module):
         self.host=host
         self.base_address = base_address
         self.state_dict=state_dict
-        self.channels = channels
+        self.in_channels = channels
         self.out_channels = out_channels or channels
         self.use_conv = use_conv
         self.padding = padding
@@ -45,11 +45,13 @@ class TtDownsample2D(nn.Module):
         self.name = name
 
         if use_conv:
-            conv = nn.Conv2d(self.channels, self.out_channels, 3, stride=stride, padding=padding)
-            conv.weight = nn.Parameter(self.state_dict[f"{base_address}.conv.weight"])
-            conv.bias = nn.Parameter(self.state_dict[f"{base_address}.conv.bias"])
+            conv_weight = self.state_dict[f"{base_address}.conv.weight"]
+            conv_bias = self.state_dict[f"{base_address}.conv.bias"]
+            conv = fallback_ops.Conv2d(conv_weight, conv_bias, self.in_channels, self.out_channels, kernel_size=3, stride=stride, padding=padding)
+            # conv = nn.Conv2d(self.in_channels, self.out_channels, 3, stride=stride, padding=padding)
+
         else:
-            assert self.channels == self.out_channels
+            assert self.in_channels == self.out_channels
             assert False, " we don't support AvgPool2d, and we should not need it either"
             conv = nn.AvgPool2d(kernel_size=stride, stride=stride)
 
@@ -63,15 +65,16 @@ class TtDownsample2D(nn.Module):
             self.conv = conv
 
     def forward(self, hidden_states):
-        assert hidden_states.shape()[1] == self.channels
+        assert hidden_states.shape()[1] == self.in_channels
         if self.use_conv and self.padding == 0:
             pad = (0, 1, 0, 1)
-            hidden_states = tt_to_torch_tensor(hidden_states, self.host)
-            hidden_states = F.pad(hidden_states, pad, mode="constant", value=0)
-            hidden_states = torch_to_tt_tensor(hidden_states, self.device)
+            # hidden_states = tt_to_torch_tensor(hidden_states, self.host)
+            # hidden_states = F.pad(hidden_states, pad, mode="constant", value=0)
+            hidden_states = fallback_ops.pad(hidden_states, pad, mode="constant", value=0)
+            # hidden_states = torch_to_tt_tensor(hidden_states, self.device)
 
-        assert hidden_states.shape()[1] == self.channels
-        hidden_states = tt_to_torch_tensor(hidden_states, self.host)
+        assert hidden_states.shape()[1] == self.in_channels
+        # hidden_states = tt_to_torch_tensor(hidden_states, self.host)
         hidden_states = self.conv(hidden_states)
         # hidden_states = torch_to_tt_tensor(hidden_states, self.device)
 
@@ -101,7 +104,7 @@ def run_downsample2d_inference(device, host):
 
     tt_down = TtDownsample2D(channels=in_channels, out_channels=out_channels, use_conv=True, state_dict=state_dict)
     tt_out = tt_down(tt_input)
-    # tt_out = tt_to_torch_tensor(tt_out, host)
+    tt_out = tt_to_torch_tensor(tt_out, host)
     print('tt_out size:', tt_out.shape)
     print('tt_out:', tt_out[0][0][0][:12])
 
