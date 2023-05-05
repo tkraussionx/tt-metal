@@ -20,7 +20,7 @@ from utility_functions import torch_to_tt_tensor, tt_to_torch_tensor
 from python_api_testing.fused_ops.linear import Linear as TtLinear
 from python_api_testing.fused_ops.silu import SiLU as TtSiLU
 from python_api_testing.sweep_tests.comparison_funcs import comp_allclose_and_pcc
-
+from python_api_testing.models.stable_diffusion.mini_ops import Linear
 
 class TtResnetBlock2D(nn.Module):
     def __init__(
@@ -30,7 +30,7 @@ class TtResnetBlock2D(nn.Module):
         out_channels=None,
         conv_shortcut=False,
         dropout=0.0,
-        temb_channels=2560,
+        temb_channels=1280,
         groups=32,
         groups_out=None,
         pre_norm=True,
@@ -66,7 +66,6 @@ class TtResnetBlock2D(nn.Module):
 
         norm1_weights = state_dict[f"{base_address}.norm1.weight"]
         norm1_bias = state_dict[f"{base_address}.norm1.bias"]
-
         self.norm1 = fallback_ops.GroupNorm(norm1_weights, norm1_bias, num_groups=groups, num_channels=self.in_channels, eps=eps, affine=True)
 
 
@@ -83,9 +82,11 @@ class TtResnetBlock2D(nn.Module):
             else:
                 raise ValueError(f"unknown time_embedding_norm : {self.time_embedding_norm} ")
 
-            # weights = state_dict[f"{base_address}.time_emb_proj.weight"]
-            # bias = state_dict[f"{base_address}.time_emb_proj.bias"]
-            # self.time_emb_proj = TtLinear(temb_channels, time_emb_proj_out_channels, weights, bias)
+            print('time_emb_proj_out_channels',time_emb_proj_out_channels)
+            print('temb_channels',temb_channels)
+            time_emb_proj_weights = state_dict[f"{base_address}.time_emb_proj.weight"]
+            time_emb_proj_bias = state_dict[f"{base_address}.time_emb_proj.bias"]
+            self.time_emb_proj = Linear(temb_channels, time_emb_proj_out_channels, time_emb_proj_weights, time_emb_proj_bias)
         else:
             self.time_emb_proj = None
 
@@ -94,8 +95,6 @@ class TtResnetBlock2D(nn.Module):
 
 
         self.norm2 = fallback_ops.GroupNorm(norm2_weights, norm2_bias, num_groups=groups, num_channels=self.in_channels, eps=eps, affine=True)
-
-        self.dropout = torch.nn.Dropout(dropout, inplace=False)
 
         conv2_weights = state_dict[f"{base_address}.conv2.weight"]
         conv2_bias = state_dict[f"{base_address}.conv2.bias"]
@@ -162,7 +161,8 @@ class TtResnetBlock2D(nn.Module):
         hidden_states = self.conv1(hidden_states)
 
         if temb is not None:
-            assert False, "not tested since we dont have tests for it yet"
+            # assert False, "not tested since we dont have tests for it yet"
+            print('temb size', temb.shape)
             temp = self.nonlinearity(temb)
             temb = self.time_emb_proj(temb)[:, :, None, None]
 
@@ -187,8 +187,6 @@ class TtResnetBlock2D(nn.Module):
             hidden_states = ttl.tensor.add(hidden_states, shift)
 
         hidden_states = self.nonlinearity(hidden_states)
-        # hidden_states = tt_to_torch_tensor(hidden_states, host)
-        # hidden_states = self.dropout(hidden_states)
         hidden_states = self.conv2(hidden_states)
 
         if self.conv_shortcut is not None:
@@ -226,15 +224,17 @@ def run_resnet_inference(host, device):
     input_shape  = [1, in_channels, 32, 32]
     input = torch.randn(input_shape, dtype=torch.float32)
     # Note: Temb is none.
+    temb_shape  = [1, out_channels, 32, 32]
+    temb = torch.randn(temb_shape, dtype=torch.float32)
 
-    torch_out = resnet(input, None)
+    unet_out = resnet(input, temb)
 
     tt_input = torch_to_tt_tensor(input, device)
     tt_resnet = TtResnetBlock2D(in_channels=in_channels, out_channels=out_channels, temb_channels=temb_channels, groups=resnet_groups,  state_dict=state_dict, host = host, device=device)
-    tt_out = tt_resnet(tt_input, None)
+    tt_out = tt_resnet(tt_input, temb)
     tt_out = tt_to_torch_tensor(tt_out, host)
 
-    print(comp_allclose_and_pcc(torch_out, tt_out))
+    print(comp_allclose_and_pcc(unet_out, tt_out))
 
 
 
