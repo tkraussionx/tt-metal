@@ -18,18 +18,24 @@ class AutoPad {
         static Device * GetDefaultDevice() { return device; }
 
         static Tensor format_input_tensor(const Tensor &a, Device * device, bool pad_c=false, bool pad_n=false, float pad_value=0) {
-            auto c = pad_c ? roundup(a.shape()[1], TILE_HEIGHT) : a.shape()[1];
             auto n = pad_n ? roundup(a.shape()[0], TILE_HEIGHT) : a.shape()[0];
-            if (a.layout() != Layout::TILE || a.shape()[0] != n || a.shape()[1] != c) {
+            auto c = pad_c ? roundup(a.shape()[1], TILE_HEIGHT) : a.shape()[1];
+            auto h = roundup(a.shape()[2], TILE_HEIGHT);
+            auto w = roundup(a.shape()[3], TILE_WIDTH);
+            const std::array<uint32_t, 4> padded_shape = {n, c, h, w};
+
+            if (a.layout() != Layout::TILE || a.shape() != padded_shape) {
                 auto host = GetHost();
-
                 auto input = a.to(host);
-                if (a.layout() != Layout::ROW_MAJOR) {
-                    input = input.to(Layout::ROW_MAJOR);
+                if (a.shape()!= padded_shape) {
+                    if (a.layout() != Layout::ROW_MAJOR) {
+                        input = input.to(Layout::ROW_MAJOR);
+                    }
+                    input = input.pad(padded_shape, {0, 0, 0, 0}, pad_value);
                 }
-                input = input.pad({n, c, roundup(a.shape()[2], TILE_HEIGHT), roundup(a.shape()[3], TILE_WIDTH)}, {0, 0, 0, 0}, pad_value);
-                input = input.to(Layout::TILE);
-
+                if(input.layout() != Layout::TILE) {
+                    input = input.to(Layout::TILE);
+                }
                 input = input.to(device);
 
                 delete host;
