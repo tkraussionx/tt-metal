@@ -50,6 +50,8 @@ Tensor eltwise_binary(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_ty
         device = b.device();
     }
 
+    TT_ASSERT(a.shape() == b.shape() && "Operand to eltwise binary need to be the same size!");
+
     // Bring tensor to host if it isn't already, pad and convert layout, send to device
     auto input1 = AutoPad::format_input_tensor(a, device);
     auto input2 = AutoPad::format_input_tensor(b, device);

@@ -269,6 +269,9 @@ Tensor matmul(const Tensor& a, const Tensor& b) {
         device = b.device();
     }
 
+    TT_ASSERT(a.shape()[3] == b.shape()[2] && "Dimension K (A.shape[2] and B.shape[3]) must match for A and B in bmm_op"); // A.K == B.K
+
+
     // Bring tensor to host if it isn't already, pad and convert layout, send to device
     auto input1 = AutoPad::format_input_tensor(a, device);
     auto input2 = AutoPad::format_input_tensor(b, device);
@@ -323,6 +326,8 @@ Tensor bmm(const Tensor& a, const Tensor& b) {
     } else {
         device = b.device();
     }
+
+    TT_ASSERT(a.shape()[3] == b.shape()[2] && "Dimension K (A.shape[2] and B.shape[3]) must match for A and B in bmm_op"); // A.K == B.K
 
     // Bring tensor to host if it isn't already, pad and convert layout, send to device
     auto input1 = AutoPad::format_input_tensor(a, device);

@@ -98,6 +98,12 @@ Tensor bcast(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, Bca
     } else {
         device = b.device();
     }
+
+    if (bcast_dim == BcastOpDim::W)
+        TT_ASSERT(a.shape()[2] == b.shape()[2]);
+    else if (bcast_dim == BcastOpDim::H)
+        TT_ASSERT(a.shape()[3] == b.shape()[3]);
+
     // Bring tensor to host if it isn't already, pad and convert layout, send to device
     auto input1 = AutoPad::format_input_tensor(a, device);
     auto input2 = AutoPad::format_input_tensor(b, device);
@@ -117,9 +123,9 @@ Tensor bcast(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, Bca
     // validate input dimensions
     if (bcast_dim == BcastOpDim::W)
         TT_ASSERT(H == bH && bW == TILE_WIDTH);
-    if (bcast_dim == BcastOpDim::H)
+    else if (bcast_dim == BcastOpDim::H)
         TT_ASSERT(W == bW && bH == TILE_HEIGHT);
-    if (bcast_dim == BcastOpDim::HW)
+    else if (bcast_dim == BcastOpDim::HW)
         TT_ASSERT(bW == TILE_WIDTH && bH == TILE_HEIGHT);
 
     Tensor output = Tensor({1, 1, 1, 1}, Initialize::ZEROS, DataType::BFLOAT16, Layout::ROW_MAJOR); // No Default Tensor Constructor, create dummy
