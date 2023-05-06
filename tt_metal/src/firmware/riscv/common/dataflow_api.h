@@ -52,7 +52,7 @@ uint32_t dram_bank_to_noc_y[NUM_DRAM_BANKS];
 uint32_t l1_bank_to_noc_x[NUM_L1_BANKS];
 uint32_t l1_bank_to_noc_y[NUM_L1_BANKS];
 
-uint32_t l1_bank_to_l1_offset[NUM_L1_BANKS];
+int32_t l1_bank_to_l1_offset[NUM_L1_BANKS];
 
 // GS RISC-V RTL bug workaround (l1 reads followed by local mem reads causes a hang)
 // in ncrisc.cc/brisc.cc: volatile uint32_t local_mem_barrier;
@@ -510,9 +510,9 @@ struct InterleavedAddrGen {
         } else {
             uint32_t bank_id = id & (NUM_L1_BANKS - 1);
             addr = mulsi3(id >> LOG_BASE_2_OF_NUM_L1_BANKS, this->page_size) + this->bank_base_address + offset;
+            addr += l1_bank_to_l1_offset[bank_id];
             noc_x = l1_bank_to_noc_x[bank_id];
             noc_y = l1_bank_to_noc_y[bank_id];
-            addr += l1_bank_to_l1_offset[bank_id];
         }
 
         uint64_t noc_addr = get_noc_addr_helper(noc_x, noc_y, addr);
@@ -535,6 +535,9 @@ struct InterleavedPow2AddrGen {
         uint32_t noc_x;
         uint32_t noc_y;
 
+        #ifdef TEMP_DEBUG2
+        // DPRINT << this->bank_base_address << ENDL();
+        #endif
         if constexpr (DRAM) {
             uint32_t bank_id = id & (NUM_DRAM_BANKS - 1);
             addr = ((id >> LOG_BASE_2_OF_NUM_DRAM_BANKS) << this->log_base_2_of_page_size) + this->bank_base_address;
@@ -543,18 +546,18 @@ struct InterleavedPow2AddrGen {
         } else {
             uint32_t bank_id = id & (NUM_L1_BANKS - 1);
             addr = ((id >> LOG_BASE_2_OF_NUM_L1_BANKS) << this->log_base_2_of_page_size) + this->bank_base_address;
+            addr += l1_bank_to_l1_offset[bank_id];
             noc_x = l1_bank_to_noc_x[bank_id];
             noc_y = l1_bank_to_noc_y[bank_id];
-            addr += l1_bank_to_l1_offset[bank_id];
-            // #ifdef TEMP_DEBUG
-            // DPRINT << 'P' << ENDL();
+            // #ifdef TEMP_DEBUG2
+            // DPRINT << id << ENDL();
             // DPRINT << noc_x << ENDL();
             // DPRINT << noc_y << ENDL();
             // DPRINT << addr << ENDL();
+            // DPRINT << int(l1_bank_to_l1_offset[bank_id]) << ENDL();
+            // DPRINT << ENDL();
             // #endif
         }
-
-        // DPRINT << id << ENDL();
 
         uint64_t noc_addr = get_noc_addr_helper(noc_x, noc_y, addr);
         return noc_addr;
@@ -595,6 +598,7 @@ std::uint64_t get_noc_addr(
         InterleavedPow2AddrGen: Check struct for attribute definitions.
     */
 
+    // DPRINT << s.bank_base_address << ',' << ' ' << uint(DRAM) << ENDL();
     return s.get_noc_addr(id);
 }
 
