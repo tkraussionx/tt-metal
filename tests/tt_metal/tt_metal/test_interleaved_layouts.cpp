@@ -427,7 +427,7 @@ template <bool src_is_in_l1, bool dst_is_in_l1>
 bool test_interleaved_l1_datacopy() {
     static_assert(src_is_in_l1 or dst_is_in_l1, "One of src or dst should be in l1");
 
-    uint num_pages = 128;
+    uint num_pages = 129;
     uint num_bytes_per_page = 2048;
     uint num_entries_per_page = 512;
     uint num_bytes_per_entry = 4;
@@ -474,7 +474,7 @@ bool test_interleaved_l1_datacopy() {
         tt_metal::DataMovementProcessor::RISCV_1,
         tt_metal::NOC::RISCV_1_default);
 
-    unary_reader_kernel->add_define("TEMP_DEBUG", "1");
+    // unary_reader_kernel->add_define("TEMP_DEBUG", "1");
 
     auto unary_writer_kernel = tt_metal::CreateDataMovementKernel(
         program,
@@ -482,6 +482,7 @@ bool test_interleaved_l1_datacopy() {
         core,
         tt_metal::DataMovementProcessor::RISCV_0,
         tt_metal::NOC::RISCV_0_default);
+    unary_writer_kernel->add_define("TEMP_DEBUG2", "1");
 
     vector<uint32_t> compute_kernel_args = { num_pages };
     tt_metal::ComputeKernelArgs *eltwise_unary_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
@@ -509,6 +510,8 @@ bool test_interleaved_l1_datacopy() {
         auto src = tt_metal::CreateInterleavedL1Buffer(device, num_pages, num_entries_per_page, num_bytes_per_entry);
         tt_metal::WriteToDeviceL1Interleaved(src, host_buffer);
 
+        std::cout << "SRC ADDR: " << src->address() << std::endl;
+
         tt_metal::WriteRuntimeArgsToDevice(
             device,
             unary_reader_kernel,
@@ -523,6 +526,8 @@ bool test_interleaved_l1_datacopy() {
     std::vector<uint32_t> readback_buffer;
     if constexpr (dst_is_in_l1) {
         auto dst = tt_metal::CreateInterleavedL1Buffer(device, num_pages, num_entries_per_page, num_bytes_per_entry);
+
+        std::cout << "DST ADDR: " << dst->address() << std::endl;
 
          tt_metal::WriteRuntimeArgsToDevice(
             device,
