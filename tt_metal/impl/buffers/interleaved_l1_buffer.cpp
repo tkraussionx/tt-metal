@@ -13,6 +13,7 @@ InterleavedL1Buffer::InterleavedL1Buffer(Device *device, int num_bank_units, int
       Buffer(device, num_bank_units * num_entries_per_bank_unit * num_bytes_per_entry, 0, true) {
     this->l1_bank_to_relative_address_ = this->device_->allocate_interleaved_l1_buffer(num_bank_units, num_entries_per_bank_unit, num_bytes_per_entry);
     this->address_ = this->l1_bank_to_relative_address_.at(0).second;
+    device->buffers_.insert(this);
 }
 
 Buffer *InterleavedL1Buffer::clone() {
@@ -51,18 +52,7 @@ uint32_t InterleavedL1Buffer::address_of_bank_unit(int bank_index, int bank_unit
     int units_read_in_bank = (int)bank_unit_index / this->num_banks();
     auto absolute_address = l1_bank.offset_bytes + relative_address;
     uint32_t offset = (this->bank_unit_size() * units_read_in_bank);
-    switch (this->device_->allocator_scheme()) {
-        case MemoryAllocator::BASIC: {
-            absolute_address += offset;
-        }
-        break;
-        case MemoryAllocator::L1_BANKING: {
-            absolute_address -= offset;
-        }
-        break;
-        default:
-            TT_ASSERT(false && "Unsupported memory allocator");
-    }
+    absolute_address += offset;
     return absolute_address;
 }
 
