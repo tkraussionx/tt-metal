@@ -479,7 +479,7 @@ class TtTransformer2DModel(nn.Module):
                 cross_attention_kwargs=cross_attention_kwargs,
                 class_labels=class_labels,
             )
-        return hidden_states
+
         # 3. Output
         if self.is_input_continuous:
             if not self.use_linear_projection:
@@ -504,5 +504,5 @@ class TtTransformer2DModel(nn.Module):
 
         if not return_dict:
             return (output,)
-
+        return output
         # return Transformer2DModelOutput(sample=output)
