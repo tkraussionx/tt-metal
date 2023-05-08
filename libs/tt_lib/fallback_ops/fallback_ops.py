@@ -59,6 +59,9 @@ def pad(input, pad, mode="constant", value=None):
     """
     return torch.nn.functional.pad(input, pad, mode, value)
 
+@convert_tt_tensors_wrapper
+def silu(input):
+    return torch.nn.functional.silu(input)
 
 @convert_tt_tensors_wrapper
 def repeat_interleave(input, repeats, dim=None, *, output_size=None):
@@ -203,6 +206,14 @@ class LayerNorm(torch.nn.LayerNorm):
     def forward(self, input):
         return super().forward(input)
 
+class SiLU(torch.nn.SiLU):
+    @convert_tt_tensors_wrapper
+    def __init___(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @convert_tt_tensors_wrapper
+    def forward(self, input):
+        return super().forward(input)
 
 class SiLU(torch.nn.SiLU):
     r"""
