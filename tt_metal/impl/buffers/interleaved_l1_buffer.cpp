@@ -13,7 +13,6 @@ InterleavedL1Buffer::InterleavedL1Buffer(Device *device, int num_bank_units, int
       Buffer(device, num_bank_units * num_entries_per_bank_unit * num_bytes_per_entry, 0, true) {
     this->l1_bank_to_relative_address_ = this->device_->allocate_interleaved_l1_buffer(num_bank_units, num_entries_per_bank_unit, num_bytes_per_entry);
     this->address_ = this->l1_bank_to_relative_address_.at(0).second;
-    device->buffers_.insert(this);
 }
 
 Buffer *InterleavedL1Buffer::clone() {
