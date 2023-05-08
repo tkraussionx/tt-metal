@@ -17,7 +17,6 @@ from diffusers import StableDiffusionPipeline
 from libs import tt_lib as ttl
 from libs.tt_lib.fallback_ops import fallback_ops
 from utility_functions import torch_to_tt_tensor, tt_to_torch_tensor, torch_to_tt_tensor_rm
-from python_api_testing.fused_ops.silu import SiLU as TtSiLU
 from python_api_testing.sweep_tests.comparison_funcs import comp_allclose_and_pcc
 from python_api_testing.models.stable_diffusion.mini_ops import Linear
 
@@ -110,13 +109,11 @@ class TtResnetBlock2D(nn.Module):
 
 
         if non_linearity == "swish":
-            # self.nonlinearity = TtSiLU
             self.nonlinearity = fallback_ops.silu
         elif non_linearity == "mish":
             assert False, "Mish is not implemented!"
             # self.nonlinearity = Mish()
         elif non_linearity == "silu":
-            # self.nonlinearity = TtSiLU
             self.nonlinearity = fallback_ops.SiLU()
 
         self.upsample = self.downsample = None
