@@ -22,6 +22,7 @@ from python_api_testing.fused_ops.layernorm import Layernorm as TtLayerNorm
 from python_api_testing.models.stable_diffusion.cross_attention import TtCrossAttention
 from python_api_testing.models.stable_diffusion.fused_ops.feedforward import TtFeedForward
 
+from python_api_testing.models.stable_diffusion.utils import make_linear
 
 
 class TtBasicTransformerBlock(nn.Module):
@@ -329,8 +330,9 @@ class TtTransformer2DModel(nn.Module):
                 proj_in_bias = state_dict[f"{base_address}.proj_in.bias"]
                 self.proj_in = make_linear(in_features=in_channels,
                                         out_features=inner_dim,
-                                        weight=proj_in_weights,
-                                        bias=proj_in_bias)
+                                        weights=proj_in_weights,
+                                        bias=proj_in_bias,
+                                        device=self.device)
             else:
                 proj_in_weights = state_dict[f"{base_address}.proj_in.weight"]
                 proj_in_bias = state_dict[f"{base_address}.proj_in.bias"]
