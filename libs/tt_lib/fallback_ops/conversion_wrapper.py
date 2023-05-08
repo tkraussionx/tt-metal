@@ -13,20 +13,40 @@ def convert_tt_tensors_wrapper(func):
         for i, arg in enumerate(args):
             if isinstance(arg, ttl_tensor.Tensor):
                 if not output_format:
-                    if args[i].on_host():
+                    if arg.on_host():
                         output_format["device"] = host
                     else:
-                        output_format["device"] = args[i].device()
-                    output_format["layout"] = args[i].layout()
-                    output_format["dtype"] = args[i].dtype()
+                        output_format["device"] = arg.device()
+                    output_format["layout"] = arg.layout()
+                    output_format["dtype"] = arg.dtype()
                 # Convert to PT Tensor
                 new_args.append(
                     torch.Tensor(
                         arg.to(host).to(ttl_tensor.Layout.ROW_MAJOR).data()
                     ).reshape(arg.shape())
                 )
+            elif isinstance(arg, list) or isinstance(arg, tuple):
+                new_a = []
+                for j, a in enumerate(arg):
+                    if isinstance(a, ttl_tensor.Tensor):
+                        if not output_format:
+                            if a.on_host():
+                                output_format["device"] = host
+                            else:
+                                output_format["device"] = a.device()
+                            output_format["layout"] = a.layout()
+                            output_format["dtype"] = a.dtype()
+                        # Convert to PT Tensor
+                        new_a.append(
+                            torch.Tensor(
+                                a.to(host).to(ttl_tensor.Layout.ROW_MAJOR).data()
+                            ).reshape(a.shape())
+                        )
+                    else:
+                        new_a.append(a)
+                new_args.append(new_a)
             else:
-                new_args.append(args[i])
+                new_args.append(arg)
 
         for key, value in kwargs.items():
             if isinstance(value, ttl_tensor.Tensor):
