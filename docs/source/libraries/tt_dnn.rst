@@ -119,3 +119,36 @@ base operations together.
 .. autofunction:: tt_lib.fused_ops.layernorm.Layernorm
 
 .. autofunction:: tt_lib.fused_ops.add_and_norm.AddAndNorm
+
+
+Fallback Operations
+-------------------
+
+Operations that currently aren't supported on hardware have a fallback
+implementation using Pytorch.
+
+.. autofunction:: tt_lib.fallback_ops.fallback_ops.full
+
+.. autofunction:: tt_lib.fallback_ops.fallback_ops.reshape
+
+.. autofunction:: tt_lib.fallback_ops.fallback_ops.chunk
+
+.. autofunction:: tt_lib.fallback_ops.fallback_ops.conv2d
+
+.. autofunction:: tt_lib.fallback_ops.fallback_ops.group_norm
+
+.. autofunction:: tt_lib.fallback_ops.fallback_ops.layer_norm
+
+.. autofunction:: tt_lib.fallback_ops.fallback_ops.pad
+
+.. autofunction:: tt_lib.fallback_ops.fallback_ops.repeat_interleave
+
+.. autofunction:: tt_lib.fallback_ops.fallback_ops.softmax
+
+.. autoclass:: tt_lib.fallback_ops.fallback_ops.Conv2d
+
+.. autoclass:: tt_lib.fallback_ops.fallback_ops.GroupNorm
+
+.. autoclass:: tt_lib.fallback_ops.fallback_ops.LayerNorm
+
+.. autoclass:: tt_lib.fallback_ops.fallback_ops.Softmax
