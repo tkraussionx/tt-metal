@@ -110,12 +110,14 @@ class TtResnetBlock2D(nn.Module):
 
 
         if non_linearity == "swish":
-            self.nonlinearity = TtSiLU
+            # self.nonlinearity = TtSiLU
+            self.nonlinearity = fallback_ops.silu
         elif non_linearity == "mish":
             assert False, "Mish is not implemented!"
             # self.nonlinearity = Mish()
         elif non_linearity == "silu":
-            self.nonlinearity = TtSiLU
+            # self.nonlinearity = TtSiLU
+            self.nonlinearity = fallback_ops.SiLU()
 
         self.upsample = self.downsample = None
         if self.up:
@@ -170,6 +172,7 @@ class TtResnetBlock2D(nn.Module):
             # assert False, "not tested since we dont have tests for it yet"
             # print('temb size', temb.shape)
             # temb = torch_to_tt_tensor(temb, device) # to refactor
+            print(temb.shape, "silu input shape")
             temb = self.nonlinearity(temb)
 
             temb = self.time_emb_proj(temb)
@@ -179,6 +182,7 @@ class TtResnetBlock2D(nn.Module):
         if temb is not None and self.time_embedding_norm == "default":
             hidden_states = ttl.tensor.bcast(hidden_states, temb, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.HW)
             # hidden_states = ttl.tensor.add(hidden_states, temb)
+
 
         hidden_states = self.norm2(hidden_states)
 
@@ -372,7 +376,7 @@ def test_run_resnet_inference():
     unet.eval()
     state_dict = unet.state_dict()
 
-    test = "test1"
+    test = "test2"
     if test == "test1":
         unet_upblock = pipe.unet.up_blocks[2]
         resnet = unet_upblock.resnets[2]
@@ -381,7 +385,7 @@ def test_run_resnet_inference():
         out_channels = resnet.conv2.in_channels
         temb_channels = 512
         eps = 1e-05
-        resnet_groups = 32
+        groups = 32
         torch_resnet = TorchResnetBlock2D(
             in_channels=in_channels,
             out_channels=out_channels,
@@ -404,15 +408,41 @@ def test_run_resnet_inference():
 
         input_shape  = [1, in_channels, 32, 32]
         input = torch.randn(input_shape, dtype=torch.float32)
-
-        temb_shape  = [out_channels, out_channels]
-        temb = torch.randn(temb_shape, dtype=torch.float32)
+        temb = None
+        # temb_shape  = [out_channels, out_channels]
+        # temb = torch.randn(temb_shape, dtype=torch.float32)
 
     if test == "test2":
-        pass
+        ############ start of residual block #############
+        in_channels = 1280
+        out_channels = 1280
+        conv_shortcut = False
+        dropout = 0
+        temb_channels = 1280
+        groups = 32
+        groups_out = None
+        pre_norm = True
+        eps = 1e-05
+        non_linearity = "silu"
+        time_embedding_norm = "default"
+        kernel = None
+        output_scale_factor = 1
+        use_in_shortcut = False
+        up = False
+        down = False
+        ########## end of residual block #############
+        hidden_states_shape = [2, 1280, 8, 8]
+        temb_shape = [1, 1, 2, 1280]
 
-    unet_out = resnet(input, None)
-    torch_resnet_out = torch_resnet(input, None)
+        input = torch.randn(hidden_states_shape)
+        temb = torch.randn(temb_shape)
+        base_address="mid_block.resnets.0"
+        resnet = pipe.unet.mid_block.resnets[0]
+
+    print(resnet)
+
+    unet_out = resnet(input, temb.squeeze(0).squeeze(0))
+    # torch_resnet_out = torch_resnet(input, None)
 
     # Initialize the device
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
@@ -424,38 +454,27 @@ def test_run_resnet_inference():
     tt_resnet = TtResnetBlock2D(in_channels=in_channels,
                             out_channels=out_channels,
                             temb_channels=temb_channels,
-                            groups=resnet_groups,
+                            groups=groups,
                             state_dict=state_dict,
                             base_address=base_address,
                             host=host,
                             device=device)
 
     tt_input = torch_to_tt_tensor_rm(input, device, put_on_device=False)
+    tt_temb = torch_to_tt_tensor_rm(temb, device, put_on_device=False)
 
-    tt_out = tt_resnet(tt_input, None)
+    tt_out = tt_resnet(tt_input, temb)
     tt_out = tt_to_torch_tensor(tt_out, host)
 
-    print('torch resnet out:', torch_resnet_out[0,0,0,:12])
-
-    print('tt out:', tt_out[0,0,0,:12])
-
-    print('unet out:', unet_out[0,0,0,:12])
-
-    print('unet vs torch')
-    print(comp_allclose_and_pcc(unet_out, torch_resnet_out))
-
+    # print('unet vs torch')
+    # print(comp_allclose_and_pcc(unet_out, torch_resnet_out))
+    print(unet_out.shape, tt_out.shape, "unet out and tt out")
     print('unet vs tt')
     print(comp_allclose_and_pcc(unet_out, tt_out))
 
-    print('torch vs tt')
-    print(comp_allclose_and_pcc(torch_resnet_out, tt_out))
+    # print('torch vs tt')
+    # print(comp_allclose_and_pcc(torch_resnet_out, tt_out))
 
-test_run_resnet_inference()
 
-# if __name__ == "__main__":
-#     # Initialize the device
-#     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
-#     ttl.device.InitializeDevice(device)
-#     host = ttl.device.GetHost()
-#     run_resnet_inference(host, device)
-#     ttl.device.CloseDevice(device)
+if __name__ == "__main__":
+    test_run_resnet_inference()
