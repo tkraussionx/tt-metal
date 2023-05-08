@@ -100,7 +100,7 @@ class TtResnetBlock2D(nn.Module):
         norm2_bias = state_dict[f"{base_address}.norm2.bias"]
 
 
-        self.norm2 = fallback_ops.GroupNorm(norm2_weights, norm2_bias, num_groups=groups, num_channels=self.in_channels, eps=eps, affine=True)
+        self.norm2 = fallback_ops.GroupNorm(norm2_weights, norm2_bias, num_groups=groups, num_channels=self.out_channels, eps=eps, affine=True)
 
         conv2_weights = state_dict[f"{base_address}.conv2.weight"]
         conv2_bias = state_dict[f"{base_address}.conv2.bias"]
@@ -209,7 +209,6 @@ class TtResnetBlock2D(nn.Module):
 
         output_sc_recip = 1 / self.output_scale_factor
         output_sc_recip = fallback_ops.full(input_tensor.shape(), output_sc_recip)
-
         output_tensor = ttl.tensor.add(input_tensor, hidden_states)
         output_tensor = ttl.tensor.mul(output_tensor, output_sc_recip)
 
