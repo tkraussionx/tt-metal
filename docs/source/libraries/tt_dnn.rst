@@ -145,15 +145,7 @@ Other Operations
 
 .. autofunction:: tt_lib.tensor.layernorm_gamma
 
-.. autofunction:: tt_lib.tensor.layernorm_gamma_beta
-
-.. autofunction:: tt_lib.tensor.add_layernorm_gamma_beta
-
-.. autofunction:: tt_lib.tensor.tilize_with_zero_padding
-
-.. autofunction:: tt_lib.tensor.tilize_conv_activation
-
-.. autofunction:: tt_lib.tensor.convert_conv_weight_tensor_to_tiled_layout
+.. autofunction:: tt_lib.fused_ops.add_and_norm.AddAndNorm
 
 
 Fallback Operations
@@ -178,12 +170,6 @@ implementation using Pytorch.
 
 .. autofunction:: tt_lib.fallback_ops.fallback_ops.repeat_interleave
 
-.. autofunction:: tt_lib.fallback_ops.fallback_ops.concat
-
-.. autofunction:: tt_lib.fallback_ops.fallback_ops.sigmoid
-
-.. autofunction:: tt_lib.fallback_ops.fallback_ops.silu
-
 .. autofunction:: tt_lib.fallback_ops.fallback_ops.softmax
 
 .. autoclass:: tt_lib.fallback_ops.fallback_ops.Conv2d
@@ -191,3 +177,5 @@ implementation using Pytorch.
 .. autoclass:: tt_lib.fallback_ops.fallback_ops.GroupNorm
 
 .. autoclass:: tt_lib.fallback_ops.fallback_ops.LayerNorm
+
+.. autoclass:: tt_lib.fallback_ops.fallback_ops.Softmax

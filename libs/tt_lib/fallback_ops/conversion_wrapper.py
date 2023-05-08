@@ -1,10 +1,11 @@
 from .. import tensor as ttl_tensor, device as ttl_device
 import torch
-
+from functools import wraps
 
 def convert_tt_tensors_wrapper(func):
     host = ttl_device.GetHost()
 
+    @wraps(func)
     def wrap(*args, **kwargs):
         output_format = {}
 
