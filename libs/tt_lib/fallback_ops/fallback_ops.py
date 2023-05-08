@@ -67,6 +67,23 @@ def repeat_interleave(input, repeats, dim=None, *, output_size=None):
     """
     return torch.repeat_interleave(input, repeats, dim, output_size=output_size)
 
+@convert_tt_tensors_wrapper
+def concat(tensors, dim=0):
+    """
+    Concatenates the given sequence of ``seq`` tensors in the given dimension. All tensors must either have the same shape (except in the concatenating dimension) or be empty.
+    """
+    return torch.concat(tensors, dim)
+
+@convert_tt_tensors_wrapper
+def silu(input):
+    r"""
+    Applies the Sigmoid Linear Unit (SiLU) function, element-wise.
+    The SiLU function is also known as the swish function.
+
+    .. math::
+        \text{silu}(x) = x * \sigma(x), \text{where } \sigma(x) \text{ is the logistic sigmoid.}
+    """
+    return torch.nn.functional.silu(input)
 
 @convert_tt_tensors_wrapper
 def softmax(input, dim=None):
@@ -186,6 +203,22 @@ class LayerNorm(torch.nn.LayerNorm):
     def forward(self, input):
         return super().forward(input)
 
+
+class SiLU(torch.nn.SiLU):
+    r"""
+    Applies the Sigmoid Linear Unit (SiLU) function, element-wise.
+    The SiLU function is also known as the swish function.
+
+    .. math::
+        \text{silu}(x) = x * \sigma(x), \text{where } \sigma(x) \text{ is the logistic sigmoid.}
+    """
+    @convert_tt_tensors_wrapper
+    def __init___(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @convert_tt_tensors_wrapper
+    def forward(self, input):
+        return super().forward(input)
 
 class Softmax(torch.nn.Softmax):
     r"""

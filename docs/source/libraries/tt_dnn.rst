@@ -170,6 +170,10 @@ implementation using Pytorch.
 
 .. autofunction:: tt_lib.fallback_ops.fallback_ops.repeat_interleave
 
+.. autofunction:: tt_lib.fallback_ops.fallback_ops.concat
+
+.. autofunction:: tt_lib.fallback_ops.fallback_ops.silu
+
 .. autofunction:: tt_lib.fallback_ops.fallback_ops.softmax
 
 .. autoclass:: tt_lib.fallback_ops.fallback_ops.Conv2d
@@ -177,5 +181,7 @@ implementation using Pytorch.
 .. autoclass:: tt_lib.fallback_ops.fallback_ops.GroupNorm
 
 .. autoclass:: tt_lib.fallback_ops.fallback_ops.LayerNorm
+
+.. autoclass:: tt_lib.fallback_ops.fallback_ops.SiLU
 
 .. autoclass:: tt_lib.fallback_ops.fallback_ops.Softmax
