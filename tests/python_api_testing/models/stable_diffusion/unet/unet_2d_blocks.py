@@ -1,6 +1,7 @@
 from pathlib import Path
 import sys
 f = f"{Path(__file__).parent}"
+sys.path.append(f"{f}/")
 sys.path.append(f"{f}/..")
 sys.path.append(f"{f}/../..")
 sys.path.append(f"{f}/../../..")
@@ -20,7 +21,7 @@ from typing import Optional
 
 from python_api_testing.models.stable_diffusion.residual_block import TtResnetBlock2D as ResnetBlock2D
 # from python_api_testing.models.stable_diffusion.attention_block import TtAttentionBlock as AttentionBlock
-from python_api_testing.models.stable_diffusion.fused_ops.upsample_2d import TtUpsample2d as Upsample2D
+from python_api_testing.models.stable_diffusion.fused_ops.upsample_2d import TtUpsample2D as Upsample2D
 from python_api_testing.models.stable_diffusion.fused_ops.downsample_2d import TtDownsample2D as Downsample2D
 from python_api_testing.models.stable_diffusion.unet.transformer_2d import TtTransformer2DModel
 
@@ -400,7 +401,7 @@ class TtUNetMidBlock2DCrossAttn(nn.Module):
                 hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
                 cross_attention_kwargs=cross_attention_kwargs,
-            ).sample
+            )
             hidden_states = resnet(hidden_states, temb)
 
         return hidden_states
