@@ -95,7 +95,15 @@ void kernel_main() {
     generate_inv_sqrt_hw_bcast_tile();
     #endif
 
-    const InterleavedPow2AddrGen<false> s = { src_addr, 11 };
+    constexpr bool read_from_dram =
+    #ifdef get_compile_time_arg_val
+    get_compile_time_arg_val(0)
+    #else
+    true
+    #endif
+    ;
+
+    const InterleavedPow2AddrGen<read_from_dram> s = { src_addr, 11 };
 
     #if GENERATE_BCAST_SCALER
     // TODO(AP): cleanup, probably with named args/param pack/reflection.

@@ -425,9 +425,8 @@ bool interleaved_tilized_reader_interleaved_stick_writer_datacopy_test() {
 
 template <bool src_is_in_l1, bool dst_is_in_l1>
 bool test_interleaved_l1_datacopy() {
-    static_assert(src_is_in_l1 or dst_is_in_l1, "One of src or dst should be in l1");
 
-    uint num_pages = 129;
+    uint num_pages = 256;
     uint num_bytes_per_page = 2048;
     uint num_entries_per_page = 512;
     uint num_bytes_per_entry = 4;
@@ -471,18 +470,18 @@ bool test_interleaved_l1_datacopy() {
         program,
         "tt_metal/kernels/dataflow/reader_unary_8bank.cpp",
         core,
+        tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {not src_is_in_l1}),
         tt_metal::DataMovementProcessor::RISCV_1,
         tt_metal::NOC::RISCV_1_default);
-
-    // unary_reader_kernel->add_define("TEMP_DEBUG", "1");
 
     auto unary_writer_kernel = tt_metal::CreateDataMovementKernel(
         program,
         "tt_metal/kernels/dataflow/writer_unary_8bank.cpp",
         core,
+        tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {not dst_is_in_l1}),
         tt_metal::DataMovementProcessor::RISCV_0,
         tt_metal::NOC::RISCV_0_default);
-    unary_writer_kernel->add_define("TEMP_DEBUG2", "1");
+
 
     vector<uint32_t> compute_kernel_args = { num_pages };
     tt_metal::ComputeKernelArgs *eltwise_unary_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
@@ -504,13 +503,9 @@ bool test_interleaved_l1_datacopy() {
 
     if constexpr (src_is_in_l1) {
         TT_ASSERT((buffer_size % num_l1_banks) == 0);
-        // we want at least 2 tiles in every single bank. This will test round-robining and ensure we deal with the
-        // tensor storage cores correctly.
 
         auto src = tt_metal::CreateInterleavedL1Buffer(device, num_pages, num_entries_per_page, num_bytes_per_entry);
         tt_metal::WriteToDeviceL1Interleaved(src, host_buffer);
-
-        std::cout << "SRC ADDR: " << src->address() << std::endl;
 
         tt_metal::WriteRuntimeArgsToDevice(
             device,
@@ -521,13 +516,19 @@ bool test_interleaved_l1_datacopy() {
     } else {
         TT_ASSERT((buffer_size % num_dram_banks) == 0);
 
+        auto src = tt_metal::CreateInterleavedDramBuffer(device, num_pages, num_entries_per_page, num_bytes_per_entry);
+        tt_metal::WriteToDeviceDRAMChannelsInterleaved(src, host_buffer);
+
+        tt_metal::WriteRuntimeArgsToDevice(
+            device,
+            unary_reader_kernel,
+            core,
+            {src->address(), 0, 0, num_pages});
     }
 
     std::vector<uint32_t> readback_buffer;
     if constexpr (dst_is_in_l1) {
         auto dst = tt_metal::CreateInterleavedL1Buffer(device, num_pages, num_entries_per_page, num_bytes_per_entry);
-
-        std::cout << "DST ADDR: " << dst->address() << std::endl;
 
          tt_metal::WriteRuntimeArgsToDevice(
             device,
@@ -538,15 +539,26 @@ bool test_interleaved_l1_datacopy() {
         pass &= tt_metal::CompileProgram(device, program);
         pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
 
-        tt_start_debug_print_server(device->cluster(), {0}, {{1, 1}});
         pass &= tt_metal::LaunchKernels(device, program);
 
         tt_metal::ReadFromDeviceL1Interleaved(dst, readback_buffer);
 
     } else {
-        // static_assert(false, "not yet tested");
-    }
+         auto dst = tt_metal::CreateInterleavedDramBuffer(device, num_pages, num_entries_per_page, num_bytes_per_entry);
 
+         tt_metal::WriteRuntimeArgsToDevice(
+            device,
+            unary_writer_kernel,
+            core,
+            {dst->address(), 0, 0, num_pages});
+
+        pass &= tt_metal::CompileProgram(device, program);
+        pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
+
+        pass &= tt_metal::LaunchKernels(device, program);
+
+        tt_metal::ReadFromDeviceDRAMChannelsInterleaved(dst, readback_buffer);
+    }
 
     pass = (host_buffer == readback_buffer);
 
@@ -565,6 +577,9 @@ int main(int argc, char **argv) {
 
     // L1 tile-interleaved tests
     pass &= test_interleaved_l1_datacopy<true, true>();
+    pass &= test_interleaved_l1_datacopy<false, true>();
+    pass &= test_interleaved_l1_datacopy<true, false>();
+    pass &= test_interleaved_l1_datacopy<false, false>();
 
     if (pass) {
         log_info(LogTest, "Test Passed");

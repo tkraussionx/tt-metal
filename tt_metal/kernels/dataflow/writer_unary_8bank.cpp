@@ -10,9 +10,15 @@ void kernel_main() {
     constexpr uint32_t onetile = 1;
     uint32_t tile_bytes = get_tile_size(cb_id_out0);
 
-    // DPRINT << 'D' << ':' << dst_addr << ENDL();
-    const InterleavedPow2AddrGen<false> s = { dst_addr, 11 };
-    // DPRINT << 'E' << ':' << s.bank_base_address << ENDL();
+    constexpr bool write_to_dram =
+    #ifdef get_compile_time_arg_val
+    get_compile_time_arg_val(0)
+    #else
+    true
+    #endif
+    ;
+
+    const InterleavedPow2AddrGen<write_to_dram> s = { dst_addr, 11 };
 
     #if GENERATE_BCAST_SCALER
     constexpr uint32_t blk = BLOCK_SIZE; // needed for correctness of softmax/LN kernels
@@ -25,18 +31,13 @@ void kernel_main() {
     constexpr uint32_t tile_offset = 0;
     #endif
 
-
     for (uint32_t i = 0; i<num_tiles; i += blk) {
-        // DPRINT << i << ENDL();
-        // DPRINT << 'j' << ENDL();
         cb_wait_front(cb_id_out0, blk);
+
         for (uint32_t j = 0; j<blk; j++) {
-            // DPRINT << 'X' << ':' << s.bank_base_address << ENDL();
             uint64_t dst_noc_addr = get_noc_addr(i+j+tile_offset, s);
             uint32_t l1_read_addr = get_read_ptr(cb_id_out0) + (j<<11);
-            // DPRINT << i << ENDL();
             noc_async_write(l1_read_addr, dst_noc_addr, tile_bytes);
-            // DPRINT << 'c' << ENDL();
         }
         noc_async_write_barrier();
         cb_pop_front(cb_id_out0, blk);

@@ -549,14 +549,6 @@ struct InterleavedPow2AddrGen {
             addr += l1_bank_to_l1_offset[bank_id];
             noc_x = l1_bank_to_noc_x[bank_id];
             noc_y = l1_bank_to_noc_y[bank_id];
-            // #ifdef TEMP_DEBUG2
-            // DPRINT << id << ENDL();
-            // DPRINT << noc_x << ENDL();
-            // DPRINT << noc_y << ENDL();
-            // DPRINT << addr << ENDL();
-            // DPRINT << int(l1_bank_to_l1_offset[bank_id]) << ENDL();
-            // DPRINT << ENDL();
-            // #endif
         }
 
         uint64_t noc_addr = get_noc_addr_helper(noc_x, noc_y, addr);
