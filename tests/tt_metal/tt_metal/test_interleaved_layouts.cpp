@@ -571,9 +571,9 @@ int main(int argc, char **argv) {
     bool pass = true;
 
     // DRAM row/tile interleaved layout tests
-    // pass &= test_write_interleaved_sticks_and_then_read_interleaved_sticks();
-    // pass &= interleaved_stick_reader_single_bank_tilized_writer_datacopy_test();
-    // pass &= interleaved_tilized_reader_interleaved_stick_writer_datacopy_test();
+    pass &= test_write_interleaved_sticks_and_then_read_interleaved_sticks();
+    pass &= interleaved_stick_reader_single_bank_tilized_writer_datacopy_test();
+    pass &= interleaved_tilized_reader_interleaved_stick_writer_datacopy_test();
 
     // L1 tile-interleaved tests
     pass &= test_interleaved_l1_datacopy<true, true>();
