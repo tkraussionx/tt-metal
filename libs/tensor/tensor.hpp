@@ -7,6 +7,7 @@
 #include "tt_metal/impl/device/device.hpp"
 #include "tt_metal/impl/device/host.hpp"
 #include "tt_metal/impl/buffers/interleaved_dram_buffer.hpp"
+#include "tt_metal/impl/buffers/interleaved_l1_buffer.hpp"
 #include "common/test_tiles.hpp"
 #include "common/tt_backend_api_types.hpp"
 #include "common/bfloat16.hpp"
@@ -38,9 +39,15 @@ enum class DataType {
     BFLOAT8_B = 3
 };
 
+enum class BufferType {
+    DRAM = 0,
+    L1 = 1
+};
+
 struct MemoryConfig {
     bool interleaved = true;    // Interleave the data across multiple DRAM banks
     int dram_channel = -1;      // If interleaved is false this has to be specified
+    BufferType buffer_type = BufferType::DRAM;
 };
 
 // Forward declarations
@@ -135,11 +142,15 @@ class Tensor {
 
         Buffer *buffer() const { return buffer_; }
 
+        InterleavedL1Buffer *interleaved_l1_buffer() const { return interleaved_l1_buffer_; } // HACK: Won't need this after Buffer supports BufferType
+
         void *data_ptr() const { return data_; }
 
         bool on_host() const { return device_ == nullptr; }
 
         bool interleaved() const;
+
+        BufferType buffer_type() const { return mem_config_.buffer_type; };
 
         // Size in bytes of a single element held in tensor
         uint32_t element_size() const;
@@ -173,6 +184,7 @@ class Tensor {
         Layout layout_;
         Device *device_ = nullptr;                  // Set if tensor is allocated on device
         Buffer *buffer_ = nullptr;                  // Tensor can be stored in multiple DRAM buffers across multiple banks or one buffer
+        InterleavedL1Buffer *interleaved_l1_buffer_ = nullptr;                  // HACK: Won't need this after Buffer supports BufferType
         MemoryConfig mem_config_;
 };
 

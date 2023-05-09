@@ -1154,6 +1154,7 @@ def datacopy(x, pcie_slot, *args, **kwargs):
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, pcie_slot)
     ttl.device.InitializeDevice(device)
 
+    memory_config = ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.L1)
     try:
         t0 = (
             ttl.tensor.Tensor(
@@ -1163,7 +1164,7 @@ def datacopy(x, pcie_slot, *args, **kwargs):
                 ttl.tensor.Layout.ROW_MAJOR,
             )
             .to(ttl.tensor.Layout.TILE)
-            .to(device)
+            .to(device, memory_config)
         )
 
         output = torch.Tensor(

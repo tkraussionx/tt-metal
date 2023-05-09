@@ -78,7 +78,18 @@ std::tuple<int, int, int> get_interleaved_read_write_unit_metadata(
 
 void allocate_interleaved_buffer_on_device(Tensor &tensor, uint32_t buffer_size_bytes) {
     auto [num_bank_units, num_entries_per_bank_unit, num_bytes_per_entry] = get_interleaved_read_write_unit_metadata(tensor.dtype(), tensor.layout(), buffer_size_bytes, tensor.shape());
-    tensor.buffer_ = CreateInterleavedDramBuffer(tensor.device(), num_bank_units, num_entries_per_bank_unit, num_bytes_per_entry);
+    switch (tensor.buffer_type()) {
+        case BufferType::DRAM: {
+            tensor.buffer_ = CreateInterleavedDramBuffer(tensor.device(), num_bank_units, num_entries_per_bank_unit, num_bytes_per_entry);
+        }
+        break;
+        case BufferType::L1: {
+            tensor.interleaved_l1_buffer_ = CreateInterleavedL1Buffer(tensor.device(), num_bank_units, num_entries_per_bank_unit, num_bytes_per_entry);
+        }
+        break;
+        default:
+            TT_ASSERT(false && "Unsupported tensor buffer type when allocated interleaved buffer on device");
+    }
 }
 
 void allocate_dram_buffer_on_device(Tensor &tensor, uint32_t buffer_size_bytes) {
@@ -95,8 +106,19 @@ void allocate_buffer_on_device(Tensor &tensor, uint32_t buffer_size_bytes) {
 }
 
 void read_interleaved_data_from_device(const Tensor &tensor, uint32_t size_in_bytes, std::vector<uint32_t> &host_buffer) {
-    auto [num_bank_units, num_entries_per_bank_unit, num_bytes_per_entry] = get_interleaved_read_write_unit_metadata(tensor.dtype(), tensor.layout(), size_in_bytes, tensor.shape());
-    ReadFromDeviceDRAMChannelsInterleaved(tensor.device(), host_buffer, tensor.buffer()->address(), num_bank_units, num_entries_per_bank_unit, num_bytes_per_entry);
+    switch (tensor.buffer_type()) {
+        case BufferType::DRAM: {
+            auto [num_bank_units, num_entries_per_bank_unit, num_bytes_per_entry] = get_interleaved_read_write_unit_metadata(tensor.dtype(), tensor.layout(), size_in_bytes, tensor.shape());
+            ReadFromDeviceDRAMChannelsInterleaved(tensor.device(), host_buffer, tensor.buffer()->address(), num_bank_units, num_entries_per_bank_unit, num_bytes_per_entry);
+        }
+        break;
+        case BufferType::L1: {
+            ReadFromDeviceL1Interleaved(tensor.interleaved_l1_buffer(), host_buffer);
+        }
+        break;
+        default:
+            TT_ASSERT(false && "Unsupported tensor buffer type when reading interleaved data from device");
+    }
 }
 
 void read_contiguous_data_from_device(const Tensor &tensor, uint32_t size_in_bytes, std::vector<uint32_t> &host_buffer) {
@@ -107,10 +129,20 @@ void read_contiguous_data_from_device(const Tensor &tensor, uint32_t size_in_byt
 }
 
 void write_interleaved_data_to_device(const Tensor &tensor, std::vector<uint32_t> &host_buffer) {
-    uint32_t packed_size_in_bytes = host_buffer.size() * sizeof(uint32_t);
-    auto [num_bank_units, num_entries_per_bank_unit, num_bytes_per_entry] = get_interleaved_read_write_unit_metadata(tensor.dtype(), tensor.layout(), packed_size_in_bytes, tensor.shape());
-    WriteToDeviceDRAMChannelsInterleaved(
-        tensor.device(), host_buffer, tensor.buffer()->address(), num_bank_units, num_entries_per_bank_unit, num_bytes_per_entry);
+    switch (tensor.buffer_type()) {
+        case BufferType::DRAM: {
+            uint32_t packed_size_in_bytes = host_buffer.size() * sizeof(uint32_t);
+            auto [num_bank_units, num_entries_per_bank_unit, num_bytes_per_entry] = get_interleaved_read_write_unit_metadata(tensor.dtype(), tensor.layout(), packed_size_in_bytes, tensor.shape());
+            WriteToDeviceDRAMChannelsInterleaved(tensor.device(), host_buffer, tensor.buffer()->address(), num_bank_units, num_entries_per_bank_unit, num_bytes_per_entry);
+        }
+        break;
+        case BufferType::L1: {
+            WriteToDeviceL1Interleaved(tensor.interleaved_l1_buffer(), host_buffer);
+        }
+        break;
+        default:
+            TT_ASSERT(false && "Unsupported tensor buffer type when writing interleaved data to device");
+    }
 }
 
 void write_contiguous_data_to_device(const Tensor &tensor, std::vector<uint32_t> &host_buffer) {

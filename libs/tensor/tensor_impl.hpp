@@ -493,10 +493,23 @@ void move_device_data(Tensor &&src, Tensor &dst) {
 // ======================================================================================
 template <typename T>
 inline Tensor to_host(const Tensor &tensor) {
-    TT_ASSERT(tensor.buffer() != nullptr, "Need DRAM buffers on device to exist to copy data to host!");
+    std::vector<T> data_vec;
+    switch (tensor.buffer_type()) {
+        case BufferType::DRAM: {
+            TT_ASSERT(tensor.buffer() != nullptr, "Need DRAM buffers on device to exist to copy data to host!");
+            uint32_t size_in_bytes = tensor.buffer()->size();
+            data_vec = read_data_from_device<T>(tensor, size_in_bytes);
+        }
+        break;
+        case BufferType::L1: {
+            TT_ASSERT(tensor.interleaved_l1_buffer() != nullptr, "Need L1 buffers on device to exist to copy data to host!");
+            data_vec = read_data_from_device<T>(tensor, 0); // Doesn't use size_in_bytes???
+        }
+        break;
+        default:
+            TT_ASSERT(false && "Unsupported tensor buffer type when converting tensor to host");
+    }
     TT_ASSERT(tensor.device() != nullptr && "Need device to be set copy data from device to host!");
-    uint32_t size_in_bytes = tensor.buffer()->size();
-    auto data_vec = read_data_from_device<T>(tensor, size_in_bytes);
     return Tensor(data_vec, tensor.shape(), tensor.dtype(), tensor.layout());
 }
 

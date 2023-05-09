@@ -128,6 +128,8 @@ Tensor::Tensor(Tensor &&other)
         // this owns buffer, does not need to be deallocated from device
         this->buffer_ = std::move(other.buffer_);
         other.buffer_ = nullptr;
+        this->interleaved_l1_buffer_ = std::move(other.interleaved_l1_buffer_);
+        other.interleaved_l1_buffer_ = nullptr;
     }
 }
 
@@ -244,12 +246,17 @@ const std::array<uint32_t, 4>& Tensor::reshape(int N, int C, int H, int W) {
 
 void Tensor::free_buffer() {
     TT_ASSERT(not on_host() && "Tensor needs to have a buffer on device to free it!");
-    if (this->buffer_ == nullptr) {
+    if (this->buffer_ != nullptr) {
+        DeallocateBuffer(this->buffer_);
+        delete this->buffer_;
+        this->buffer_ = nullptr;
+        return;
+    } else if (this->interleaved_l1_buffer_ != nullptr) {
+        DeallocateBuffer(this->interleaved_l1_buffer_);
+        delete this->interleaved_l1_buffer_;
+        this->interleaved_l1_buffer_ = nullptr;
         return;
     }
-    DeallocateBuffer(this->buffer_);
-    delete this->buffer_;
-    this->buffer_ = nullptr;
 }
 
 }  // namespace tt_metal
