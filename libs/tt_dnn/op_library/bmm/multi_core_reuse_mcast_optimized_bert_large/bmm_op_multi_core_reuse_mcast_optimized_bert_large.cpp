@@ -728,7 +728,7 @@ Tensor matmul_multi_core_reuse_mcast_optimized_bert_large_(const Tensor &a, cons
     // TODO: Build some sort of dispatcher based on location of op operands
     TT_ASSERT(not a.on_host() and not b.on_host(), "Operands to matmul need to be on device!");
     TT_ASSERT(a.device() == b.device(), "Operands to matmul need to be on the same device!");
-    TT_ASSERT(a.buffer() != nullptr and b.buffer() != nullptr, "Operands to matmul need to be allocated in buffers on device!");
+    TT_ASSERT(a.interleaved_l1_buffer() != nullptr and b.buffer() != nullptr, "Operands to matmul need to be allocated in buffers on device!");
 
     TT_ASSERT(a.dtype() == b.dtype());
     TT_ASSERT(a.dtype() == tt::tt_metal::DataType::BFLOAT16 || a.dtype() == tt::tt_metal::DataType::BFLOAT8_B, "Unsupported data format");
@@ -744,7 +744,7 @@ Tensor matmul_multi_core_reuse_mcast_optimized_bert_large_(const Tensor &a, cons
         log_warning("Input tensor datatype does not match target output dataformat. Defaulting to input dataformat.");
     }
     uint32_t single_tile_size = tt_metal::TileSize(cb_data_format);
-    tt_metal::Buffer *src0_dram_buffer = a.buffer();
+    tt_metal::InterleavedL1Buffer *src0_dram_buffer = a.interleaved_l1_buffer();
     tt_metal::Buffer *src1_dram_buffer = b.buffer();
     if (bcast_batch)
         TT_ASSERT(bshape[0]*bshape[1] == 1 && "matmul (batch bcast variant) expects input tensors of shapes BCMK*11KN=BCMN");
@@ -793,8 +793,10 @@ Tensor matmul_multi_core_reuse_mcast_optimized_bert_large_(const Tensor &a, cons
     //                      Grayskull Device Setup
     ////////////////////////////////////////////////////////////////////////////
     std::array<uint32_t, 4> cshape{ashape[0], ashape[1], ashape[2], bshape[3]}; // C=A*B, N1MK*11KN->N1MN
-    tt_metal::Tensor output = tt_metal::Tensor(cshape, a.dtype(), tt::tt_metal::Layout::TILE, device);
-    tt_metal::Buffer *dst_dram_buffer = output.buffer();
+    //tt_metal::Tensor output = tt_metal::Tensor(cshape, a.dtype(), tt::tt_metal::Layout::TILE, device);
+    //tt_metal::Buffer *dst_dram_buffer = output.buffer();
+    tt_metal::Tensor output = tt_metal::Tensor(cshape, a.dtype(), tt::tt_metal::Layout::TILE, device, tt::tt_metal::MemoryConfig{true, -1, BufferType::L1});
+    tt_metal::InterleavedL1Buffer *dst_dram_buffer = output.interleaved_l1_buffer(); // HACK: Change to generic buffer??
     TT_ASSERT(dst_dram_buffer != nullptr, "Output buffer should be allocated on device!");
 
     uint32_t in0_dram_addr = src0_dram_buffer->address();
