@@ -20,8 +20,8 @@ from cross_attention import TtCrossAttention
 
 
 def test_cross_attn_inference():
-    enable_compile_cache()
-    enable_binary_cache()
+    # enable_compile_cache()
+    # enable_binary_cache()
 
     # setup pytorch model
     pipe = StableDiffusionPipeline.from_pretrained('CompVis/stable-diffusion-v1-4', torch_dtype=torch.float32)
@@ -84,7 +84,6 @@ def test_cross_attn_inference():
         encoder_hidden_states_shape = (1, 2, 77, 768)
         input = torch.randn(input_shape)
         encoder_hidden_states = torch.randn(encoder_hidden_states_shape)
-        # base_address="mid_block.attentions.0.transformer_blocks.0.attn1"
         base_address="down_blocks.0.attentions.0.transformer_blocks.0.attn1"
         cross_attn = pipe.unet.down_blocks[0].attentions[0].transformer_blocks[0].attn1
 
@@ -141,6 +140,3 @@ def test_cross_attn_inference():
     ttl.device.CloseDevice(device)
     assert passing[0], passing[1:]
     logger.info(f"PASSED {passing[1]}")
-
-
-test_cross_attn_inference()

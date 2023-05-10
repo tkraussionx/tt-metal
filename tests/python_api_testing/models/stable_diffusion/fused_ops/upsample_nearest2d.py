@@ -23,21 +23,16 @@ class TtUpsampleNearest2d(nn.Module):
 
         assert scale_factor % 1 == 0 and scale_factor > 0, "We only support scaling by positive integer values"
         self.scale_factor = int(scale_factor)
-        # self.device = device
-        # self.host = host
+
 
     def forward(self, input):
         input_shape = input.shape()
         output_shape = list(input.shape())
         output_shape[-1] *= self.scale_factor
         output_shape[-2] *= self.scale_factor
-        # input = tt_to_torch_tensor(input, self.host)
         input =  fallback_ops.repeat_interleave(input, repeats= self.scale_factor, dim=-1)
         input =  fallback_ops.repeat_interleave(input, repeats= self.scale_factor, dim=-2)
 
-        # input = torch.repeat_interleave(input, repeats= self.scale_factor, dim=-1)
-        # input = torch.repeat_interleave(input, repeats=self.scale_factor, dim=-2)
-        # input = torch_to_tt_tensor(input, self.device)
 
         return input
 

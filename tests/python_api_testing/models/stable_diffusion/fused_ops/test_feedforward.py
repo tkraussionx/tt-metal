@@ -30,8 +30,6 @@ def test_feedforward_inference():
     pipe = StableDiffusionPipeline.from_pretrained('CompVis/stable-diffusion-v1-4', torch_dtype=torch.float32)
     unet = pipe.unet
     unet.eval()
-    pipe("something")
-    assert False
     state_dict = unet.state_dict()
     ff = pipe.unet.mid_block.attentions[0].transformer_blocks[0].ff
     torch_output = ff(input)
@@ -53,5 +51,3 @@ def test_feedforward_inference():
     ttl.device.CloseDevice(device)
     assert passing[0], passing[1:]
     logger.info(f"PASSED {passing[1]}")
-
-test_feedforward_inference()

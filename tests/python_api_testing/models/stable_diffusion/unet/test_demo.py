@@ -27,7 +27,6 @@ from python_api_testing.models.stable_diffusion.unet.unet_2d_condition import UN
 
 
 def constant_prop_time_embeddings(timesteps, sample, time_proj):
-    # self.time_proj = Timesteps(block_out_channels[0], flip_sin_to_cos, freq_shift)
     timesteps = timesteps[None]
     timesteps = timesteps.expand(sample.shape[0])
     t_emb = time_proj(timesteps)
@@ -100,8 +99,9 @@ def demo():
 
     height = 512                        # default height of Stable Diffusion
     width = 512                         # default width of Stable Diffusion
-    num_inference_steps = 1           # Number of denoising steps
-    guidance_scale = 7.5                # Scale for classifier-free guidance
+    num_inference_steps = 10          # Number of denoising steps
+    # guidance_scale = 7.5                # Scale for classifier-free guidance
+    guidance_scale = 12                # Scale for classifier-free guidance
     generator = torch.manual_seed(174)    # 10233 Seed generator to create the inital latent noise
     batch_size = len(prompt)
 
@@ -143,25 +143,27 @@ def demo():
         t1 = time.time()
         # predict the noise residual
         with torch.no_grad():
+            pr = Profiler()
+
+            pr.start("torch_unet")
             torch_noise_pred = unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
+            pr.end("torch_unet")
+            print("one unet iter torch; ", pr.get("torch_unet"))
 
             _t = constant_prop_time_embeddings(t, latent_model_input, torch_unet.time_proj)
 
             _t = torch_to_tt_tensor_rm(_t, device, put_on_device=False)
             tt_latent_model_input = torch_to_tt_tensor_rm(latent_model_input, device, put_on_device=False)
             tt_text_embeddings = torch_to_tt_tensor_rm(text_embeddings, device, put_on_device=False)
-            pr = Profiler()
+
             pr.start("tt_unet")
             tt_noise_pred = tt_unet(tt_latent_model_input, _t, encoder_hidden_states=tt_text_embeddings)
             pr.end("tt_unet")
             print("one unet iter; ", pr.get("tt_unet"))
 
 
-        import pdb; pdb.set_trace()
         tt_noise_pred = tt_to_torch_tensor(tt_noise_pred, host)
-        print("########### comparing ############")
-        print(comp_allclose_and_pcc(torch_noise_pred, tt_noise_pred))
-        print("######### end of comparing #########")
+        print(comp_allclose_and_pcc(torch_noise_pred, tt_noise_pred), i, "th iteration")
 
         noise_pred = tt_noise_pred
 

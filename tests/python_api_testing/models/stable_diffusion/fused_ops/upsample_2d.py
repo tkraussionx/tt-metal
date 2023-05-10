@@ -34,15 +34,12 @@ class TtUpsample2D(nn.Module):
 
         self.conv = None
         if self.use_conv:
-            # self.conv = nn.Conv2d(self.channels, self.out_channels, 3, padding=1)
             self.conv_weight = state_dict[f"{base_address}.conv.weight"]
             self.conv_bias = state_dict[f"{base_address}.conv.bias"]
             self.conv = fallback_ops.Conv2d(self.conv_weight, self.conv_bias, self.in_channels, self.out_channels, kernel_size=3, stride=1, padding=1)
 
 
     def forward(self, hidden_states, output_size=None):
-        # conv Transpose is not our concern
-        # TT's execution is done on bfloat16 - casting makes no sense
         assert hidden_states.shape()[1] == self.in_channels
 
         if output_size is None:
@@ -56,6 +53,7 @@ class TtUpsample2D(nn.Module):
         if self.use_conv:
             hidden_states = self.conv(hidden_states)
         return hidden_states
+
 
 def run_upsample2d_inference(device, host):
 

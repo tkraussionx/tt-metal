@@ -22,7 +22,7 @@ from unet_2d_blocks import TtUNetMidBlock2DCrossAttn
 from loguru import logger
 
 
-def test_run_unetmid2dcrossattn_inference():
+def test_run_unet_mid_block_inference():
     # setup pytorch model
     pipe = StableDiffusionPipeline.from_pretrained('CompVis/stable-diffusion-v1-4', torch_dtype=torch.float32)
     unet = pipe.unet
@@ -102,10 +102,3 @@ def test_run_unetmid2dcrossattn_inference():
     ttl.device.CloseDevice(device)
     assert passing[0], passing[1:]
     logger.info(f"PASSED {passing[1]}")
-
-test_run_unetmid2dcrossattn_inference()
-# sample shape torch.Size([2, 1280, 8, 8])
-# emb shape torch.Size([2, 1280])
-# encoder hidden state shape torch.Size([2, 77, 768])
-# attention mask None
-# cross attentino kwargs None
