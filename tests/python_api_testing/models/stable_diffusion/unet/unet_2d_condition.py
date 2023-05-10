@@ -284,7 +284,7 @@ class UNet2DConditionModel(nn.Module):
         # self.time_proj = Timesteps(block_out_channels[0], flip_sin_to_cos, freq_shift)
         timestep_input_dim = block_out_channels[0]
 
-        print(timestep_input_dim, time_embed_dim, "inputs to time embedding")
+        # print(timestep_input_dim, time_embed_dim, "inputs to time embedding")
         self.time_embedding = TimestepEmbedding(timestep_input_dim,
                                                 time_embed_dim,
                                                 state_dict=state_dict,

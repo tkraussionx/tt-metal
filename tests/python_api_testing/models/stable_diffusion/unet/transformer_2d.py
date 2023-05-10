@@ -76,10 +76,10 @@ class TtBasicTransformerBlock(nn.Module):
                 f"`norm_type` is set to {norm_type}, but `num_embeds_ada_norm` is not defined. Please make sure to"
                 f" define `num_embeds_ada_norm` if setting `norm_type` to {norm_type}."
             )
-        print("name of the basic transformer", self.base_address)
+        # print("name of the basic transformer", self.base_address)
 
         # 1. Self-Attn
-        print("tt stuff", dim, num_attention_heads, attention_head_dim, attention_bias, only_cross_attention)
+        # print("tt stuff", dim, num_attention_heads, attention_head_dim, attention_bias, only_cross_attention)
         # assert False
         self.attn1 = TtCrossAttention(
             query_dim=dim,
@@ -202,18 +202,18 @@ class TtBasicTransformerBlock(nn.Module):
             # attn_output = gate_msa.unsqueeze(1) * attn_output
 
         hidden_states = ttl.tensor.add(attn_output, hidden_states)
-        print("starting attn2")
+        # print("starting attn2")
         if self.attn2 is not None:
             norm_hidden_states = (
                 self.norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.norm2(hidden_states)
             )
-            print("########## self.attn2############")
-            print(self.attn2)
-            print(norm_hidden_states.shape(), "norm hidden shape")
-            print(encoder_hidden_states.shape(), "encoder hidden state shape")
-            print(attention_mask, "attention mask")
-            print(cross_attention_kwargs, "cross attention kwargs")
-            print("##### end of it #######")
+            # print("########## self.attn2############")
+            # print(self.attn2)
+            # print(norm_hidden_states.shape(), "norm hidden shape")
+            # print(encoder_hidden_states.shape(), "encoder hidden state shape")
+            # print(attention_mask, "attention mask")
+            # print(cross_attention_kwargs, "cross attention kwargs")
+            # print("##### end of it #######")
 
             # 2. Cross-Attention
             attn_output = self.attn2(
@@ -438,7 +438,7 @@ class TtTransformer2DModel(nn.Module):
         """
         # 1. Input
         if self.is_input_continuous:
-            print("input is continuous")
+            # print("input is continuous")
             batch, _, height, width = hidden_states.shape()
             residual = hidden_states
 

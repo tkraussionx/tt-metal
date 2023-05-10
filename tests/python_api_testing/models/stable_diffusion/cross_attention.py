@@ -102,7 +102,7 @@ class TtCrossAttention(nn.Module):
 
         kweights = state_dict[f"{base_address}.to_k.weight"]
         kbias = state_dict[f"{base_address}.to_k.bias"] if bias else None
-        print("kweight", kweights.shape, cross_attention_dim, inner_dim)
+        # print("kweight", kweights.shape, cross_attention_dim, inner_dim)
         self.to_k = make_linear(in_features=cross_attention_dim, out_features=inner_dim, weights=kweights, bias=kbias, device=self.device)
         # kweights = tilize_to_list(pad_weight(state_dict[f"{base_address}.to_k.weight"]))
         # kbias = tilize_to_list(pad_weight(state_dict[f"{base_address}.to_k.bias"])) if bias else None
@@ -146,7 +146,7 @@ class TtCrossAttention(nn.Module):
 
         to_out0_weight = state_dict[f"{base_address}.to_out.0.weight"]
         to_out0_bias = state_dict[f"{base_address}.to_out.0.bias"]
-        print("to out")
+        # print("to out")
         self.to_out = make_linear(in_features=inner_dim, out_features=query_dim, weights=to_out0_weight, bias=to_out0_bias, device=self.device)
 
         # to_out0_weight = tilize_to_list(pad_weight(state_dict[f"{base_address}.to_out.0.weight"]))
@@ -291,22 +291,22 @@ def CrossAttnProcessor(attn: TtCrossAttention, hidden_states, encoder_hidden_sta
 
     query = attn.to_q(hidden_states)
 
-    print(query.shape(), " this is query shape")
+    # print(query.shape(), " this is query shape")
     query = attn.head_to_batch_dim(query)
-    print("after head to batch dim")
+    # print("after head to batch dim")
     encoder_hidden_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
     key = attn.to_k(encoder_hidden_states)
-    print("after to k")
+    # print("after to k")
     value = attn.to_v(encoder_hidden_states)
-    print("after to v")
+    # print("after to v")
     key = attn.head_to_batch_dim(key)
-    print("after head to batch dim key")
+    # print("after head to batch dim key")
     value = attn.head_to_batch_dim(value)
-    print("after head to batch dim value")
+    # print("after head to batch dim value")
 
     attention_probs = attn.get_attention_scores(query, key, attention_mask)
 
-    print("after get attention scores")
+    # print("after get attention scores")
     hidden_states = ttl.tensor.bmm(attention_probs, value)
 
     hidden_states = attn.batch_to_head_dim(hidden_states)

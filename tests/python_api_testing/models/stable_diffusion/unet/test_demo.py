@@ -141,6 +141,8 @@ def demo():
         t1 = time.time()
         # predict the noise residual
         with torch.no_grad():
+            torch_noise_pred = unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
+
             _t = constant_prop_time_embeddings(t, latent_model_input, torch_unet.time_proj)
 
             _t = torch_to_tt_tensor_rm(_t, device, put_on_device=False)
@@ -149,7 +151,6 @@ def demo():
 
             tt_noise_pred = tt_unet(tt_latent_model_input, _t, encoder_hidden_states=tt_text_embeddings)
 
-            torch_noise_pred = unet(latent_model_input, t, encoder_hidden_states=text_embeddings)
 
         tt_noise_pred = tt_to_torch_tensor(tt_noise_pred, host)
         print("########### comparing ############")

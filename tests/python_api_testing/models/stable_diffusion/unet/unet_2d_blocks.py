@@ -498,7 +498,7 @@ class TtCrossAttnDownBlock2D(nn.Module):
                     cross_attention_kwargs,
                 )[0]
             else:
-                print("running resnet in cross attention")
+                # print("running resnet in cross attention")
                 hidden_states = resnet(hidden_states, temb)
                 # output_states += (hidden_states,)
 
