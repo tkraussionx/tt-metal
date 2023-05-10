@@ -51,6 +51,12 @@ class AutoPad {
 
         static Tensor format_output_tensor(const Tensor &a, Tensor &output, const std::array<uint32_t, 4>& shape, Device * device) {
 
+            // Hack env variable to leave outputs on device if no unpadding needed
+            if (std::getenv("TT_LEAVE_TILE_OUTPUT_ON_DEVICE") != nullptr) {
+                if (output.shape() == shape && output.layout() == Layout::TILE) {
+                    return output;
+                }
+            }
             auto host = GetHost();
             // Unpad output if necessary, result is always on host
             if (output.shape() != shape) {
