@@ -14,12 +14,15 @@ from loguru import logger
 
 from libs import tt_lib as ttl
 from utility_functions import torch_to_tt_tensor, torch_to_tt_tensor_rm, tt_to_torch_tensor
-from utility_functions import comp_pcc, comp_allclose_and_pcc
+from utility_functions import comp_pcc, comp_allclose_and_pcc, enable_compile_cache, enable_binary_cache
 
 from cross_attention import TtCrossAttention
 
 
 def test_cross_attn_inference():
+    enable_compile_cache()
+    enable_binary_cache()
+
     # setup pytorch model
     pipe = StableDiffusionPipeline.from_pretrained('CompVis/stable-diffusion-v1-4', torch_dtype=torch.float32)
     unet = pipe.unet
@@ -110,7 +113,7 @@ def test_cross_attn_inference():
     torch_output = cross_attn(input.squeeze(0), encoder_hidden_states)
 
     # Initialize the device
-    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
+    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 1)
     ttl.device.InitializeDevice(device)
     ttl.device.SetDefaultDevice(device)
     host = ttl.device.GetHost()
