@@ -1,5 +1,3 @@
-
-
 from pathlib import Path
 import sys
 f = f"{Path(__file__).parent}"
@@ -10,18 +8,17 @@ sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 sys.path.append(f"{f}/../../../../..")
 
+from typing import Optional
 
 import torch.nn as nn
 import torch
 from diffusers import StableDiffusionPipeline
-from typing import Optional
+from loguru import logger
 
 from libs import tt_lib as ttl
 from utility_functions import torch_to_tt_tensor, tt_to_torch_tensor
 from utility_functions import comp_pcc, comp_allclose_and_pcc, torch_to_tt_tensor_rm
 from unet_2d_blocks import TtCrossAttnUpBlock2D
-
-from loguru import logger
 
 
 def test_run_cross_attn_up_block_inference():
@@ -56,14 +53,15 @@ def test_run_cross_attn_up_block_inference():
         ##### end of cross att up blck #####
         hidden_states_shape = torch.Size([2, 1280, 16, 16])
         sample = torch.randn(hidden_states_shape)
+
         temb_shape = torch.Size([1, 1, 2, 1280])
         emb = torch.randn(temb_shape)
 
-        # res_hidden_states_tuple =  3
         res0 = torch.Size([2, 640, 16, 16])
         res1 = torch.Size([2, 1280, 16, 16])
         res2 = torch.Size([2, 1280, 16, 16])
         res_samples = (torch.randn(res0), torch.randn(res1), torch.randn(res2))
+
         encoder_hidden_states_shape =  torch.Size([1, 2, 77, 768])
         encoder_hidden_states = torch.randn(encoder_hidden_states_shape)
 
@@ -72,14 +70,6 @@ def test_run_cross_attn_up_block_inference():
         attention_mask = None
         base_address = "up_blocks.1"
         up_block = pipe.unet.up_blocks[1]
-
-# hidden_states=sample,
-#                     temb=emb,
-#                     res_hidden_states_tuple=res_samples,
-#                     encoder_hidden_states=encoder_hidden_states,
-#                     cross_attention_kwargs=cross_attention_kwargs,
-#                     upsample_size=upsample_size,
-#                     attention_mask=attention_mask,
 
     torch_output = up_block(
                         hidden_states=sample,
@@ -128,19 +118,12 @@ def test_run_cross_attn_up_block_inference():
     tt_output = tt_cross_attn_up_block(
         hidden_states=tt_sample,
         temb=tt_emb,
-        res_hidden_states_tuple= res_samples, # TODO fix this
+        res_hidden_states_tuple= res_samples,
         encoder_hidden_states=tt_encoder_hidden_states,
         attention_mask=attention_mask,
         cross_attention_kwargs=cross_attention_kwargs
-
         )
 
-    # for i in range(len(list_out)):
-    #     tt_o = tt_to_torch_tensor(list_out[i], host)
-    #     torch_o = torch_list_out[i]
-    #     import pdb; pdb.set_trace()
-    #     logger.info(comp_allclose_and_pcc(torch_o, tt_o))
-    #     print(f"this is {i}th iteration results")
 
 
     tt_output = tt_to_torch_tensor(tt_output, host)
@@ -150,5 +133,3 @@ def test_run_cross_attn_up_block_inference():
     ttl.device.CloseDevice(device)
     assert passing[0], passing[1:]
     logger.info(f"PASSED {passing[1]}")
-
-test_run_cross_attn_up_block_inference()

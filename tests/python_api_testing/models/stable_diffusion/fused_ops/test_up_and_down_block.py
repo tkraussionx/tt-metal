@@ -79,10 +79,6 @@ def run_test_down_block_inference(device):
     unet.eval()
     state_dict = unet.state_dict()
     down_block = pipe.unet.down_blocks[3]
-    prompt = "something"
-
-    pipe(prompt, num_inference_steps=1)
-    assert False
 
     print(down_block)
     in_channels =  1280
@@ -150,5 +146,5 @@ def test_down_block_inference():
     run_test_down_block_inference(device)
     ttl.device.CloseDevice(device)
 
-test_down_block_inference()
+# test_down_block_inference()
 # test_up_block_inference()

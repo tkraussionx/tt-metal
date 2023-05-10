@@ -84,36 +84,17 @@ class TtUpBlock2D(nn.Module):
         self.gradient_checkpointing = False
 
     def forward(self, hidden_states, res_hidden_states_tuple, temb=None, upsample_size=None):
-        print('tt upblock resnets:', self.resnets)
         for resnet in self.resnets:
             # pop res hidden states
             res_hidden_states = res_hidden_states_tuple[-1]
             res_hidden_states_tuple = res_hidden_states_tuple[:-1]
 
-            # res_hidden_states = tt_to_torch_tensor(res_hidden_states, self.host)
-            # res_hidden_states_tuple = tt_to_torch_tensor(res_hidden_states_tuple, self.host)
 
             hidden_states = fallback_ops.concat([hidden_states, res_hidden_states], dim=1)
-
-            # hidden_states = torch.cat([hidden_states, res_hidden_states], dim=1)
-            # hidden_states = torch_to_tt_tensor(hidden_states, self.device)
-
-
-            # if self.training and self.gradient_checkpointing:
-            #     assert False, "we do not support training"
-            #     # def create_custom_forward(module):
-            #     #     def custom_forward(*inputs):
-            #     #         return module(*inputs)
-
-            #     #     return custom_forward
-
-            #     # hidden_states = torch.utils.checkpoint.checkpoint(create_custom_forward(resnet), hidden_states, temb)
-            # else:
             hidden_states = resnet(hidden_states, temb)
 
         if self.upsamplers is not None:
             for upsampler in self.upsamplers:
-                print('adding upsampler..')
                 hidden_states = upsampler(hidden_states, upsample_size)
 
         return hidden_states
@@ -142,22 +123,12 @@ def run_upblock_inference(host, device):
 
     res_hidden_states_tuple = (hidden_state , hidden_state , hidden_state )
 
-
-    # temb_shape  = [out_channels, out_channels]
-    # temb = torch.randn(temb_shape, dtype=torch.float32)
-
-###
-    # hidden_states_shape = [2, 1280, 8, 8]
     temb_shape = [1, 1, 2, 1280]
 
-    # input = torch.randn(hidden_states_shape)
     temb = torch.randn(temb_shape)
 
-###
-    # print('my input:', input.shape)
     unet_out = unet_upblock(hidden_state, res_hidden_states_tuple, None, None)
-    # unet_out = unet_upblock.upsamplers[0](unet_out)
-    print('\n\nRun tt upblock\n\n')
+
 
     # tt_hidden_states = torch_to_tt_tensor(hidden_state, device)
     tt_upblock = TtUpBlock2D(in_channels=in_channels, prev_output_channel = prev_output_channel, out_channels=out_channels, temb_channels=temb_channels, dropout= 0.0, num_layers= 3, resnet_eps= 1e-6,
@@ -166,12 +137,6 @@ def run_upblock_inference(host, device):
 
     tt_out = tt_upblock(hidden_state, res_hidden_states_tuple, None, None)
     tt_out = tt_to_torch_tensor(tt_out, host)
-
-    print('unet out shape:', unet_out.shape)
-    print('tt out shape:', tt_out.shape)
-    print('unet out:', unet_out[0,0,0,:12])
-
-    print('tt out:', tt_out[0,0,0,:12])
 
     print(comp_allclose_and_pcc(unet_out, tt_out))
 

@@ -1,5 +1,3 @@
-
-
 from pathlib import Path
 import sys
 f = f"{Path(__file__).parent}"
@@ -11,17 +9,18 @@ sys.path.append(f"{f}/../../../..")
 sys.path.append(f"{f}/../../../../..")
 
 
+from typing import Optional
+
 import torch.nn as nn
 import torch
 from diffusers import StableDiffusionPipeline
-from typing import Optional
+from loguru import logger
 
 from libs import tt_lib as ttl
 from utility_functions import torch_to_tt_tensor, tt_to_torch_tensor
 from utility_functions import comp_pcc, comp_allclose_and_pcc, torch_to_tt_tensor_rm
 from unet_2d_blocks import TtCrossAttnDownBlock2D
 
-from loguru import logger
 
 
 def test_run_cross_attn_down_block_inference():
@@ -132,5 +131,3 @@ def test_run_cross_attn_down_block_inference():
     ttl.device.CloseDevice(device)
     assert passing[0], passing[1:]
     logger.info(f"PASSED {passing[1]}")
-
-test_run_cross_attn_down_block_inference()
