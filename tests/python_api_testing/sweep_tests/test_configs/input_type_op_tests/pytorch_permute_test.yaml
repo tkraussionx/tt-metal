@@ -6,7 +6,7 @@ test-list:
       end-shape: [64, 64, 64, 64]
       interval: [2, 2, 2, 2]
       num-shapes: 1
-      num-samples: 100
+      num-samples: 2048
     datagen:
       function: gen_rand
       dtype: bfloat16

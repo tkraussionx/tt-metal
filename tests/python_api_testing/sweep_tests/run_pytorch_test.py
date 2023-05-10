@@ -49,7 +49,10 @@ def run_pytorch_test(args):
     assert "test-list" in pytorch_test_configs_yaml
     pytorch_test_list = pytorch_test_configs_yaml["test-list"]
 
-    default_env_dict = {"TT_PCI_DMA_BUF_SIZE": "1048576"}
+    default_env_dict = {
+        "TT_PCI_DMA_BUF_SIZE": "1048576",
+        "TT_KERNEL_READBACK_DISABLE": "1",
+    }
     # Get env variables from CLI
     args_env_dict = {}
     if args.env != "":

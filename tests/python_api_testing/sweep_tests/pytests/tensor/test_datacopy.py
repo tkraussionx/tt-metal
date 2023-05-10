@@ -50,5 +50,5 @@ def test_run_datacopy_test(
         datagen_func,
         comparison_func,
         pcie_slot,
-        {"dtype": dtype, "memory_config": memory_config},
+        {"dtype": dtype, "layout": ttl.tensor.Layout.TILE, "on_device": True},
     )
