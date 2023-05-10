@@ -64,7 +64,7 @@ class TtResnetBlock2D(nn.Module):
         if groups_out is None:
             groups_out = groups
 
-        print(base_address)
+        # print(base_address)
         norm1_weights = state_dict[f"{base_address}.norm1.weight"]
         norm1_bias = state_dict[f"{base_address}.norm1.bias"]
         self.norm1 = fallback_ops.GroupNorm(norm1_weights, norm1_bias, num_groups=groups, num_channels=self.in_channels, eps=eps, affine=True)
@@ -83,8 +83,8 @@ class TtResnetBlock2D(nn.Module):
             else:
                 raise ValueError(f"unknown time_embedding_norm : {self.time_embedding_norm} ")
 
-            print('time_emb_proj_out_channels',time_emb_proj_out_channels)
-            print('temb_channels',temb_channels)
+            # print('time_emb_proj_out_channels',time_emb_proj_out_channels)
+            # print('temb_channels',temb_channels)
             time_emb_proj_weights = state_dict[f"{base_address}.time_emb_proj.weight"]
             time_emb_proj_bias = state_dict[f"{base_address}.time_emb_proj.bias"]
             self.time_emb_proj = make_linear(in_features=temb_channels,
@@ -171,7 +171,7 @@ class TtResnetBlock2D(nn.Module):
             # assert False, "not tested since we dont have tests for it yet"
             # print('temb size', temb.shape)
             # temb = torch_to_tt_tensor(temb, device) # to refactor
-            print(temb.shape, "silu input shape")
+            # print(temb.shape, "silu input shape")
             temb = self.nonlinearity(temb)
 
             temb = self.time_emb_proj(temb)
@@ -337,13 +337,13 @@ class TorchResnetBlock2D(nn.Module):
         hidden_states = self.conv1(hidden_states)
 
         if temb is not None:
-            print('unet temb shape:',temb.shape)
-            print('unet time emb linear weight shape:',self.time_emb_proj.weight.shape)
+            # print('unet temb shape:',temb.shape)
+            # print('unet time emb linear weight shape:',self.time_emb_proj.weight.shape)
             temb = self.time_emb_proj(self.nonlinearity(temb))[:, :, None, None]
 
         if temb is not None and self.time_embedding_norm == "default":
-            print('unet hidden state shape:', hidden_states.shape)
-            print('unet temb shape:', temb.shape)
+            # print('unet hidden state shape:', hidden_states.shape)
+            # print('unet temb shape:', temb.shape)
             hidden_states = hidden_states + temb
 
         hidden_states = self.norm2(hidden_states)
@@ -358,7 +358,7 @@ class TorchResnetBlock2D(nn.Module):
         hidden_states = self.conv2(hidden_states)
 
         if self.conv_shortcut is not None:
-            print('shortcut triggered!')
+            # print('shortcut triggered!')
             input_tensor = self.conv_shortcut(input_tensor)
 
         output_tensor = (input_tensor + hidden_states) / self.output_scale_factor
@@ -437,7 +437,7 @@ def test_run_resnet_inference():
         base_address="mid_block.resnets.0"
         resnet = pipe.unet.mid_block.resnets[0]
 
-    print(resnet)
+    # print(resnet)
 
     unet_out = resnet(input, temb.squeeze(0).squeeze(0))
     # torch_resnet_out = torch_resnet(input, None)
@@ -466,9 +466,9 @@ def test_run_resnet_inference():
 
     # print('unet vs torch')
     # print(comp_allclose_and_pcc(unet_out, torch_resnet_out))
-    print(unet_out.shape, tt_out.shape, "unet out and tt out")
-    print('unet vs tt')
-    print(comp_allclose_and_pcc(unet_out, tt_out))
+    # print(unet_out.shape, tt_out.shape, "unet out and tt out")
+    # print('unet vs tt')
+    # print(comp_allclose_and_pcc(unet_out, tt_out))
 
     # print('torch vs tt')
     # print(comp_allclose_and_pcc(torch_resnet_out, tt_out))
