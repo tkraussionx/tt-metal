@@ -20,9 +20,11 @@ from diffusers import AutoencoderKL, UNet2DConditionModel, PNDMScheduler, HeunDi
 from diffusers import LMSDiscreteScheduler
 from tqdm.auto import tqdm
 
-from utility_functions import torch_to_tt_tensor, torch_to_tt_tensor_rm, tt_to_torch_tensor, comp_pcc, comp_allclose_and_pcc
+from utility_functions import torch_to_tt_tensor, torch_to_tt_tensor_rm, tt_to_torch_tensor, comp_pcc, comp_allclose_and_pcc, Profiler
+from utility_functions import enable_binary_cache, enable_compile_cache
 from libs import tt_lib as ttl
 from python_api_testing.models.stable_diffusion.unet.unet_2d_condition import UNet2DConditionModel as tt_unet_condition
+
 
 def constant_prop_time_embeddings(timesteps, sample, time_proj):
     # self.time_proj = Timesteps(block_out_channels[0], flip_sin_to_cos, freq_shift)
@@ -32,8 +34,6 @@ def constant_prop_time_embeddings(timesteps, sample, time_proj):
     return t_emb
 
 
-
-
 def demo():
 
     # Initialize the device
@@ -41,6 +41,8 @@ def demo():
     ttl.device.InitializeDevice(device)
     ttl.device.SetDefaultDevice(device)
     host = ttl.device.GetHost()
+    enable_binary_cache()
+    enable_compile_cache()
 
     # 1. Load t`he autoencoder model which will be used to decode the latents into image space.
     vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae")
@@ -148,10 +150,14 @@ def demo():
             _t = torch_to_tt_tensor_rm(_t, device, put_on_device=False)
             tt_latent_model_input = torch_to_tt_tensor_rm(latent_model_input, device, put_on_device=False)
             tt_text_embeddings = torch_to_tt_tensor_rm(text_embeddings, device, put_on_device=False)
-
+            pr = Profiler()
+            pr.start("tt_unet")
             tt_noise_pred = tt_unet(tt_latent_model_input, _t, encoder_hidden_states=tt_text_embeddings)
+            pr.end("tt_unet")
+            print("one unet iter; ", pr.get("tt_unet"))
 
 
+        import pdb; pdb.set_trace()
         tt_noise_pred = tt_to_torch_tensor(tt_noise_pred, host)
         print("########### comparing ############")
         print(comp_allclose_and_pcc(torch_noise_pred, tt_noise_pred))

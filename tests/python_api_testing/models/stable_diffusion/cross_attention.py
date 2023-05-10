@@ -17,7 +17,7 @@ from typing import Optional
 from libs import tt_lib as ttl
 from libs.tt_lib.fallback_ops import fallback_ops
 
-from utility_functions import pad_weight, tilize_to_list, torch_to_tt_tensor, tt_to_torch_tensor, torch_to_tt_tensor_rm
+from utility_functions import pad_weight, tilize_to_list, torch_to_tt_tensor, tt_to_torch_tensor, torch_to_tt_tensor_rm, Profiler
 
 from python_api_testing.fused_ops.linear import Linear as TtLinear
 from python_api_testing.fused_ops.softmax import softmax as TtSoftmax
@@ -222,9 +222,19 @@ class TtCrossAttention(nn.Module):
         return tensor
 
     def get_attention_scores(self, query, key, attention_mask=None):
+        pr = Profiler()
+
+        pr.start("transpose")
         t_key = ttl.tensor.transpose(key)
+        pr.end("transpose")
+        print("transpose time: ", pr.get("transpose"))
         # print("in get attention scores", t_key.shape(), query.shape())
+
+        pr.start("bmm")
         temp = ttl.tensor.bmm(query, t_key)
+        pr.end("bmm")
+        print("bmm time: ", pr.get("bmm"), query.shape(), t_key.shape())
+
 
         # _encoded_val = torch.tensor(self.scale, dtype=torch.bfloat16)
         # _encoded_val = _encoded_val.view(torch.int16).item()
@@ -237,27 +247,28 @@ class TtCrossAttention(nn.Module):
         #                                 temp,
         #                                 _encoded_val,
         #                                 _encoded_val)
+        pr.start("full")
+        scale_tensor = fallback_ops.full((temp.shape()[0], temp.shape()[1], 1, 1), self.scale)
+        # scale_tensor = fallback_ops.full(temp.shape(), self.scale)
+        pr.end("full")
+        print("full time: ", pr.get("full"))
+        attention_scores = ttl.bcast(temp, scale_tensor, ttl.tensor.BcastOpMath.MUL, ttl.tensor.BcastOpDim.HW)
 
-        scale_tensor = fallback_ops.full(temp.shape(), self.scale)
 
-        attention_scores = ttl.tensor.mul(scale_tensor, temp)
-        # attention_scores = torch.baddbmm(
-        #     torch.empty(query.shape[0], query.shape[1], key.shape[1], dtype=query.dtype, device=query.device),
-        #     query,
-        #     key.transpose(-1, -2),
-        #     beta=0,
-        #     alpha=self.scale,
-        # )
+
+        # pr.start("mul")
+        # attention_scores = ttl.tensor.mul(scale_tensor, temp)
+        # pr.end("mul")
+        # print("mul time: ", pr.get("mul"), scale_tensor.shape(), temp.shape())
 
         if attention_mask is not None:
             attention_scores = ttl.tensor.add(attention_scores, attention_mask)
-            # attention_scores = attention_scores + attention_mask
-
-        # if self.upcast_softmax:
-            # attention_scores = attention_scores.float()
 
         # attention_probs = attention_scores.softmax(dim=-1)
+        pr.start("softmax")
         attention_probs = TtSoftmax(attention_scores)
+        pr.end("softmax")
+        print("softmax time: ", pr.get("softmax"))
         # attention_probs = attention_probs.to(dtype)
 
         return attention_probs
