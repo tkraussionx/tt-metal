@@ -35,25 +35,3 @@ class TtUpsampleNearest2d(nn.Module):
 
 
         return input
-
-
-def run_upsample_nearest_inference(device, host):
-    input_shape =  [1, 1, 32, 32]
-    input = torch.randn(input_shape)
-
-    torch_out = F.interpolate(input, scale_factor=2.0, mode="nearest")
-
-    tt_input = torch_to_tt_tensor(input, device)
-    tt_up = TtUpsampleNearest2d(scale_factor=2.0)
-    tt_out = tt_up(tt_input)
-    tt_out = tt_to_torch_tensor(tt_out, host)
-    print(comp_allclose_and_pcc(torch_out, tt_out))
-
-
-if __name__ == "__main__":
-    # Initialize the device
-    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
-    ttl.device.InitializeDevice(device)
-    host = ttl.device.GetHost()
-    run_upsample_nearest_inference(device, host)
-    ttl.device.CloseDevice(device)

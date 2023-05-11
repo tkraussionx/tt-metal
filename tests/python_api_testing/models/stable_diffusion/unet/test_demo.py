@@ -36,7 +36,7 @@ def constant_prop_time_embeddings(timesteps, sample, time_proj):
 def demo():
 
     # Initialize the device
-    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
+    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 1)
     ttl.device.InitializeDevice(device)
     ttl.device.SetDefaultDevice(device)
     host = ttl.device.GetHost()
@@ -134,7 +134,7 @@ def demo():
     # Denoising loop
     scheduler.set_timesteps(num_inference_steps)
     tic= time.time()
-
+    iteration = 0
     for t in tqdm(scheduler.timesteps):
         # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
         latent_model_input = torch.cat([latents] * 2)
@@ -163,7 +163,8 @@ def demo():
 
 
         tt_noise_pred = tt_to_torch_tensor(tt_noise_pred, host)
-        print(comp_allclose_and_pcc(torch_noise_pred, tt_noise_pred), i, "th iteration")
+        print(comp_allclose_and_pcc(torch_noise_pred, tt_noise_pred), iteration, "th iteration")
+        iteration +=
 
         noise_pred = tt_noise_pred
 
@@ -193,7 +194,7 @@ def demo():
     image = image.detach().cpu().permute(0, 2, 3, 1).numpy()
     images = (image * 255).round().astype("uint8")
     pil_images = [Image.fromarray(image) for image in images][0]
-    pil_images.save("mountain_river_oil_painintg__512.png")
+    pil_images.save("tt_first_image_512.png")
     toc = time.time()
     print("Image Time:", round(toc-tic, 3))
 
