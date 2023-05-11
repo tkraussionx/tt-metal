@@ -37,9 +37,22 @@ namespace tt {
 namespace tt_metal {
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 Tensor eltwise_binary_(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type) {
     switch (eltwise_binary_op_utils::get_parallelization_strategy(a, b)){
 =======
+=======
+Tensor eltwise_binary_(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type) {
+    switch (eltwise_binary_op_utils::get_parallelization_strategy(a, b)){
+        case BinaryOpParallelizationStrategy::MULTI_CORE:
+            return eltwise_binary_multi_core(a, b, op_type);
+            break;
+        case BinaryOpParallelizationStrategy::SINGLE_CORE:
+        default:
+            return eltwise_binary_single_core(a, b, op_type);
+    }
+}
+>>>>>>> #543: Large refactor of autopad to avoid invoking copy constructor as much as possible
 Tensor eltwise_binary(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type) {
 
     Device * device;
@@ -53,9 +66,9 @@ Tensor eltwise_binary(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_ty
     } else {
         device = b.device();
     }
-
     TT_ASSERT(a.shape() == b.shape() && "Operand to eltwise binary need to be the same size!");
 
+<<<<<<< HEAD
     // Bring tensor to host if it isn't already, pad and convert layout, send to device
     auto input1 = AutoPad::format_input_tensor(a, device);
     auto input2 = AutoPad::format_input_tensor(b, device);
@@ -70,6 +83,43 @@ Tensor eltwise_binary(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_ty
         case BinaryOpParallelizationStrategy::SINGLE_CORE:
         default:
             output = eltwise_binary_single_core(input1, input2, op_type);
+=======
+    auto a_pad_shape = AutoPad::pad_to_tile_shape(a.shape());
+    auto b_pad_shape = AutoPad::pad_to_tile_shape(b.shape());
+    auto out_shape = a.shape();
+    auto no_pad_a = AutoPad::check_input_tensor_format(a, a_pad_shape);
+    auto no_pad_b = AutoPad::check_input_tensor_format(b, b_pad_shape);
+    if (no_pad_a && no_pad_b) {
+        auto output = eltwise_binary_(
+            a, b,
+            op_type
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
+
+    } else if (no_pad_a) {
+        auto output = eltwise_binary_(
+            a, AutoPad::format_input_tensor(b, device, b_pad_shape, 0),
+            op_type
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
+
+    } else if (no_pad_b) {
+        auto output = eltwise_binary_(
+            AutoPad::format_input_tensor(a, device, a_pad_shape, 0), b,
+            op_type
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
+    } else {
+        auto output = eltwise_binary_(
+            AutoPad::format_input_tensor(a, device, a_pad_shape, 0), AutoPad::format_input_tensor(b, device, b_pad_shape, 0),
+            op_type
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
+>>>>>>> #543: Large refactor of autopad to avoid invoking copy constructor as much as possible
     }
 }
 Tensor eltwise_binary(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type) {
@@ -123,11 +173,6 @@ Tensor eltwise_binary(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_ty
         AutoPad::format_output_tensor(a, output, out_shape, device);
         return output;
     }
-
-    // Convert tensor back to original
-    output = AutoPad::format_output_tensor(a, output, a.shape(), device);
-
-    return output;
 
 }
 

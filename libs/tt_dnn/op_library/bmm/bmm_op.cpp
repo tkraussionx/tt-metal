@@ -255,11 +255,39 @@ namespace tt {
 namespace tt_metal {
 
 
+Tensor matmul_(const Tensor& a, const Tensor& b) {
+    switch (bmm_op_utils::get_parallelization_strategy(a, b)){
+        case BmmOpParallelizationStrategy::MULTI_CORE:
+            return matmul_multi_core(a, b);
+            break;
+        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE:
+            return matmul_multi_core_reuse(a, b);
+            break;
+        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST:
+            return matmul_multi_core_reuse_mcast(a, b);
+            break;
+        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_GENERALIZED:
+            return matmul_multi_core_reuse_generalized(a, b);
+            break;
+        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_GENERALIZED:
+            return matmul_multi_core_reuse_mcast_generalized(a, b);
+            break;
+        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_PADDING:
+            return matmul_multi_core_reuse_padding(a, b);
+            break;
+        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_PADDING:
+            return matmul_multi_core_reuse_mcast_padding(a, b);
+            break;
+        case BmmOpParallelizationStrategy::SINGLE_CORE:
+        default:
+            return matmul_single_core(a, b);
+    }
+}
+
 Tensor matmul(const Tensor& a, const Tensor& b) {
 
     Device * device;
 
-    // Get the device
     if (a.on_host() && b.on_host()) {
         device = AutoPad::GetDefaultDevice();
         TT_ASSERT(device != nullptr, "Requires setting default device if no inputs to op are on device");
@@ -270,47 +298,70 @@ Tensor matmul(const Tensor& a, const Tensor& b) {
     }
 
     TT_ASSERT(a.shape()[3] == b.shape()[2] && "Dimension K (A.shape[2] and B.shape[3]) must match for A and B in bmm_op"); // A.K == B.K
+    TT_ASSERT(b.shape()[0]*b.shape()[1] == 1 && "matmul (batch bcast variant) expects input tensors of shapes BCMK*11KN=BCMN");
 
+    auto a_pad_shape = AutoPad::pad_to_tile_shape(a.shape());
+    auto b_pad_shape = AutoPad::pad_to_tile_shape(b.shape());
+    auto out_shape = a.shape();
+    out_shape[3] = b.shape()[3];
+    auto no_pad_a = AutoPad::check_input_tensor_format(a, a_pad_shape);
+    auto no_pad_b = AutoPad::check_input_tensor_format(b, b_pad_shape);
+    if (no_pad_a && no_pad_b) {
+        auto output = matmul_(
+            a, b
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
 
-    // Bring tensor to host if it isn't already, pad and convert layout, send to device
-    auto input1 = AutoPad::format_input_tensor(a, device);
-    auto input2 = AutoPad::format_input_tensor(b, device);
+    } else if (no_pad_a) {
+        auto output = matmul_(
+            a, AutoPad::format_input_tensor(b, device, b_pad_shape, 0)
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
 
-    Tensor output = Tensor({1, 1, 1, 1}, Initialize::ZEROS, DataType::BFLOAT16, Layout::ROW_MAJOR); // No Default Tensor Constructor, create dummy
+    } else if (no_pad_b) {
+        auto output = matmul_(
+            AutoPad::format_input_tensor(a, device, a_pad_shape, 0), b
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
+    } else {
+        auto output = matmul_(
+            AutoPad::format_input_tensor(a, device, a_pad_shape, 0), AutoPad::format_input_tensor(b, device, b_pad_shape, 0)
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
+    }
+}
 
-    switch (bmm_op_utils::get_parallelization_strategy(input1, input2)){
+Tensor bmm_(const Tensor& a, const Tensor& b) {
+    switch (bmm_op_utils::get_parallelization_strategy(a, b)){
         case BmmOpParallelizationStrategy::MULTI_CORE:
-            output = matmul_multi_core(input1, input2);
+            return bmm_multi_core(a, b);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE:
-            output = matmul_multi_core_reuse(input1, input2);
+            return bmm_multi_core_reuse(a, b);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST:
-            output = matmul_multi_core_reuse_mcast(input1, input2);
+            return bmm_multi_core_reuse_mcast(a, b);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_GENERALIZED:
-            output = matmul_multi_core_reuse_generalized(input1, input2);
+            return bmm_multi_core_reuse_generalized(a, b);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_GENERALIZED:
-            output = matmul_multi_core_reuse_mcast_generalized(input1, input2);
+            return bmm_multi_core_reuse_mcast_generalized(a, b);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_PADDING:
-            output = matmul_multi_core_reuse_padding(input1, input2);
+            return bmm_multi_core_reuse_padding(a, b);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_PADDING:
-            output = matmul_multi_core_reuse_mcast_padding(input1, input2);
+            return bmm_multi_core_reuse_mcast_padding(a, b);
             break;
         case BmmOpParallelizationStrategy::SINGLE_CORE:
         default:
-            output = matmul_single_core(input1, input2);
+            return bmm_single_core(a, b);
     }
-
-    auto shape = a.shape();
-    shape[3] = b.shape()[3];
-    // Convert tensor back to original
-    output = AutoPad::format_output_tensor(a, output, shape, device);
-
-    return output;
 }
 
 Tensor bmm(const Tensor& a, const Tensor& b) {
@@ -327,46 +378,43 @@ Tensor bmm(const Tensor& a, const Tensor& b) {
     }
 
     TT_ASSERT(a.shape()[3] == b.shape()[2] && "Dimension K (A.shape[2] and B.shape[3]) must match for A and B in bmm_op"); // A.K == B.K
+    TT_ASSERT(a.shape()[1] == b.shape()[1] && a.shape()[0] == b.shape()[0]
+        && "bmm (non-bcast matmul) expects input tensors of shapes BCMK*BCKN=BCMN");
 
-    // Bring tensor to host if it isn't already, pad and convert layout, send to device
-    auto input1 = AutoPad::format_input_tensor(a, device);
-    auto input2 = AutoPad::format_input_tensor(b, device);
+    auto a_pad_shape = AutoPad::pad_to_tile_shape(a.shape());
+    auto b_pad_shape = AutoPad::pad_to_tile_shape(b.shape());
+    auto out_shape = a.shape();
+    out_shape[3] = b.shape()[3];
 
-    Tensor output = Tensor({1, 1, 1, 1}, Initialize::ZEROS, DataType::BFLOAT16, Layout::ROW_MAJOR); // No Default Tensor Constructor, create dummy
+    auto no_pad_a = AutoPad::check_input_tensor_format(a, a_pad_shape);
+    auto no_pad_b = AutoPad::check_input_tensor_format(b, b_pad_shape);
+    if (no_pad_a && no_pad_b) {
+        auto output = bmm_(
+            a, b
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
 
-    switch (bmm_op_utils::get_parallelization_strategy(input1, input2)){
-        case BmmOpParallelizationStrategy::MULTI_CORE:
-            output = bmm_multi_core(input1, input2);
-            break;
-        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE:
-            output = bmm_multi_core_reuse(input1, input2);
-            break;
-        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST:
-            output = bmm_multi_core_reuse_mcast(input1, input2);
-            break;
-        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_GENERALIZED:
-            output = bmm_multi_core_reuse_generalized(input1, input2);
-            break;
-        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_GENERALIZED:
-            output = bmm_multi_core_reuse_mcast_generalized(input1, input2);
-            break;
-        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_PADDING:
-            output = bmm_multi_core_reuse_padding(input1, input2);
-            break;
-        case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_PADDING:
-            output = bmm_multi_core_reuse_mcast_padding(input1, input2);
-            break;
-        case BmmOpParallelizationStrategy::SINGLE_CORE:
-        default:
-            output = bmm_single_core(input1, input2);
+    } else if (no_pad_a) {
+        auto output = bmm_(
+            a, AutoPad::format_input_tensor(b, device, b_pad_shape, 0)
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
+
+    } else if (no_pad_b) {
+        auto output = bmm_(
+            AutoPad::format_input_tensor(a, device, a_pad_shape, 0), b
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
+    } else {
+        auto output = bmm_(
+            AutoPad::format_input_tensor(a, device, a_pad_shape, 0), AutoPad::format_input_tensor(b, device, b_pad_shape, 0)
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
     }
-
-    auto shape = a.shape();
-    shape[3] = b.shape()[3];
-    // Convert tensor back to original
-    output = AutoPad::format_output_tensor(a, output, shape, device);
-
-    return output;
 }
 
 Tensor bmm(const Tensor& a, const Tensor& b) {

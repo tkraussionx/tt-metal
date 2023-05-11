@@ -2,7 +2,7 @@ from .. import tensor as ttl_tensor, device as ttl_device
 from collections.abc import Sequence, Mapping
 import torch
 from functools import wraps
-
+import os
 
 def convert_tt_tensor_to_pt_tensor(tt_tensor, host, output_format):
     # Update output_format with format of first encountered arg
@@ -27,14 +27,24 @@ def convert_pt_tensor_to_tt_tensor(pt_tensor, output_format):
         output_format["dtype"],
         ttl_tensor.Layout.ROW_MAJOR,
     )
-    if output_format["layout"] == ttl_tensor.Layout.TILE:
+    if (os.environ.get("TT_LEAVE_TILE_OUTPUT_ON_DEVICE", None) is not None and
+        tt_tensor.shape()[2] % 32 == 0 and tt_tensor.shape()[3] % 32 == 0):
+        tt_tensor = tt_tensor.to(ttl_tensor.Layout.TILE)
+        if isinstance(output_format["device"], ttl_device.Device):
+            tt_tensor = tt_tensor.to(output_format["device"])
+        else:
+            tt_tensor = tt_tensor.to(ttl_device.GetDefaultDevice())
+
+    elif output_format["layout"] == ttl_tensor.Layout.TILE:
         if (
             tt_tensor.shape()[2] % 32 == 0 and tt_tensor.shape()[3] % 32 == 0
         ):  # Restore tile layout only if legal or else leave as RM
             tt_tensor = tt_tensor.to(ttl_tensor.Layout.TILE)
     else:
-        tt_tensor = tt_tensor.to(output_format["layout"])
-    tt_tensor = tt_tensor.to(output_format["device"])
+        if output_format["layout"] != ttl_tensor.Layout.ROW_MAJOR:
+            tt_tensor = tt_tensor.to(output_format["layout"])
+    if isinstance(output_format["device"], ttl_device.Device):
+        tt_tensor = tt_tensor.to(output_format["device"])
     return tt_tensor
 
 

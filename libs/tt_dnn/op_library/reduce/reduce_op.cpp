@@ -57,6 +57,23 @@ namespace tt_metal {
 
 Tensor reduce_ (const Tensor &a, ReduceOpMath::Enum reduce_op, ReduceOpDim::Enum reduce_dim, float scaler) {
 
+    switch (reduce_op_utils::get_parallelization_strategy(a, reduce_dim)){
+        case ReduceOpParallelizationStrategy::MULTI_CORE_H:
+            return reduce_multi_core_h(a, reduce_op, reduce_dim, scaler);
+        case ReduceOpParallelizationStrategy::MULTI_CORE_W:
+            return reduce_multi_core_w(a, reduce_op, reduce_dim, scaler);
+        case ReduceOpParallelizationStrategy::MULTI_CORE_HW:
+            return reduce_multi_core_hw(a, reduce_op, reduce_dim, scaler);
+        case ReduceOpParallelizationStrategy::SINGLE_CORE:
+        default:
+            return reduce_single_core(a, reduce_op, reduce_dim, scaler);
+    }
+
+}
+
+
+Tensor reduce (const Tensor &a, ReduceOpMath::Enum reduce_op, ReduceOpDim::Enum reduce_dim, float scaler) {
+
     Device * device;
 
     // Get the device
@@ -67,45 +84,34 @@ Tensor reduce_ (const Tensor &a, ReduceOpMath::Enum reduce_op, ReduceOpDim::Enum
         device = a.device();
     }
 
-    // Bring tensor to host if it isn't already, pad and convert layout, send to device
-    auto input1 = AutoPad::format_input_tensor(a, device, false, false, reduce_op == ReduceOpMath::Enum::MAX ? -std::numeric_limits<float>::max() : 0);
-
-    Tensor output = Tensor({1, 1, 1, 1}, Initialize::ZEROS, DataType::BFLOAT16, Layout::ROW_MAJOR); // No Default Tensor Constructor, create dummy
-
-    switch (reduce_op_utils::get_parallelization_strategy(input1, reduce_dim)){
-        case ReduceOpParallelizationStrategy::MULTI_CORE_H:
-            output = reduce_multi_core_h(input1, reduce_op, reduce_dim, scaler);
-            break;
-        case ReduceOpParallelizationStrategy::MULTI_CORE_W:
-            output = reduce_multi_core_w(input1, reduce_op, reduce_dim, scaler);
-            break;
-        case ReduceOpParallelizationStrategy::MULTI_CORE_HW:
-            output = reduce_multi_core_hw(input1, reduce_op, reduce_dim, scaler);
-            break;
-        case ReduceOpParallelizationStrategy::SINGLE_CORE:
-        default:
-            output = reduce_single_core(input1, reduce_op, reduce_dim, scaler);
-    }
-
-
     // Convert tensor back to original
-    auto shape = a.shape();
+    auto a_pad_shape = AutoPad::pad_to_tile_shape(a.shape());
+    auto out_shape = a.shape();
     switch (reduce_dim){
         case ReduceOpDim::H:
-            shape[2] = 32;
+            out_shape[2] = 32;
             break;
         case ReduceOpDim::W:
-            shape[3] = 32;
+            out_shape[3] = 32;
             break;
         case ReduceOpDim::HW:
-            shape[2] = 32;
-            shape[3] = 32;
+            out_shape[2] = 32;
+            out_shape[3] = 32;
             break;
 
     }
-    output = AutoPad::format_output_tensor(a, output, shape, device);
 
-    return output;
+    if (AutoPad::check_input_tensor_format(a, a_pad_shape)) {
+        auto output = reduce_(a, reduce_op, reduce_dim, scaler);
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
+
+    } else {
+        auto output = reduce_(AutoPad::format_input_tensor(a, device, a_pad_shape, 0), reduce_op, reduce_dim, scaler);
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
+
+    }
 
 }
 

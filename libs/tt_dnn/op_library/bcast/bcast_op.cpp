@@ -84,6 +84,42 @@ namespace tt {
 
 namespace tt_metal {
 
+Tensor bcast_(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, BcastOpDim::Enum bcast_dim) {
+    const auto ashape = a.shape();
+    const auto bshape = b.shape();
+    u32 N  = ashape[0], C  = ashape[1], H  = ashape[2], W  = ashape[3];
+    u32 bN = bshape[0], bC = bshape[1], bH = bshape[2], bW = bshape[3];
+    u32 NC = N*C;
+    u32 HW = H*W;
+
+    TT_ASSERT(W % TILE_WIDTH == 0 && H % TILE_HEIGHT == 0);
+    TT_ASSERT(H > 0 && W > 0 && NC > 0);
+    TT_ASSERT(a.volume() % TILE_HW == 0);
+
+    TT_ASSERT((bN*bC == 1 || (bN == N && bC == C)) && "Broadcast is currently only supported when bN*bC=1 or N & C match");
+    // validate input dimensions
+    if (bcast_dim == BcastOpDim::W)
+        TT_ASSERT(H == bH && bW == TILE_WIDTH);
+    if (bcast_dim == BcastOpDim::H)
+        TT_ASSERT(W == bW && bH == TILE_HEIGHT);
+    if (bcast_dim == BcastOpDim::HW)
+        TT_ASSERT(bW == TILE_WIDTH && bH == TILE_HEIGHT);
+
+    switch (bcast_op_utils::get_parallelization_strategy(a, bcast_dim)){
+        case BcastOpParallelizationStrategy::MULTI_CORE_H:
+            return bcast_multi_core_h(a, b, bcast_math, bcast_dim);
+            break;
+        case BcastOpParallelizationStrategy::MULTI_CORE_W:
+            return bcast_multi_core_w(a, b, bcast_math, bcast_dim);
+            break;
+        case BcastOpParallelizationStrategy::MULTI_CORE_HW:
+            return bcast_multi_core_hw(a, b, bcast_math, bcast_dim);
+            break;
+        case BcastOpParallelizationStrategy::SINGLE_CORE:
+        default:
+            return bcast_single_core(a, b, bcast_math, bcast_dim);
+    }
+}
 
 Tensor bcast(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, BcastOpDim::Enum bcast_dim) {
 
@@ -104,51 +140,50 @@ Tensor bcast(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, Bca
     else if (bcast_dim == BcastOpDim::H)
         TT_ASSERT(a.shape()[3] == b.shape()[3]);
 
-    // Bring tensor to host if it isn't already, pad and convert layout, send to device
-    auto input1 = AutoPad::format_input_tensor(a, device);
-    auto input2 = AutoPad::format_input_tensor(b, device);
 
-    const auto ashape = input1.shape();
-    const auto bshape = input2.shape();
-    u32 N  = ashape[0], C  = ashape[1], H  = ashape[2], W  = ashape[3];
-    u32 bN = bshape[0], bC = bshape[1], bH = bshape[2], bW = bshape[3];
-    u32 NC = N*C;
-    u32 HW = H*W;
+    u32 N  = a.shape()[0], C  = a.shape()[1];
+    u32 bN = b.shape()[0], bC = b.shape()[1];
 
-    TT_ASSERT(W % TILE_WIDTH == 0 && H % TILE_HEIGHT == 0);
-    TT_ASSERT(H > 0 && W > 0 && NC > 0);
-    TT_ASSERT(input1.volume() % TILE_HW == 0);
 
     TT_ASSERT((bN*bC == 1 || (bN == N && bC == C)) && "Broadcast is currently only supported when bN*bC=1 or N & C match");
-    // validate input dimensions
-    if (bcast_dim == BcastOpDim::W)
-        TT_ASSERT(H == bH && bW == TILE_WIDTH);
-    else if (bcast_dim == BcastOpDim::H)
-        TT_ASSERT(W == bW && bH == TILE_HEIGHT);
-    else if (bcast_dim == BcastOpDim::HW)
-        TT_ASSERT(bW == TILE_WIDTH && bH == TILE_HEIGHT);
 
-    Tensor output = Tensor({1, 1, 1, 1}, Initialize::ZEROS, DataType::BFLOAT16, Layout::ROW_MAJOR); // No Default Tensor Constructor, create dummy
+    auto a_pad_shape = AutoPad::pad_to_tile_shape(a.shape());
+    auto b_pad_shape = AutoPad::pad_to_tile_shape(b.shape());
+    auto out_shape = a.shape();
 
-    switch (bcast_op_utils::get_parallelization_strategy(input1, bcast_dim)){
-        case BcastOpParallelizationStrategy::MULTI_CORE_H:
-            output = bcast_multi_core_h(input1, input2, bcast_math, bcast_dim);
-            break;
-        case BcastOpParallelizationStrategy::MULTI_CORE_W:
-            output = bcast_multi_core_w(input1, input2, bcast_math, bcast_dim);
-            break;
-        case BcastOpParallelizationStrategy::MULTI_CORE_HW:
-            output = bcast_multi_core_hw(input1, input2, bcast_math, bcast_dim);
-            break;
-        case BcastOpParallelizationStrategy::SINGLE_CORE:
-        default:
-            output = bcast_single_core(input1, input2, bcast_math, bcast_dim);
+    auto no_pad_a = AutoPad::check_input_tensor_format(a, a_pad_shape);
+    auto no_pad_b = AutoPad::check_input_tensor_format(b, b_pad_shape);
+    if (no_pad_a && no_pad_b) {
+        auto output = bcast_(
+            a, b,
+            bcast_math, bcast_dim
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
+
+    } else if (no_pad_a) {
+        auto output = bcast_(
+            a, AutoPad::format_input_tensor(b, device, b_pad_shape, 0),
+            bcast_math, bcast_dim
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
+
+    } else if (no_pad_b) {
+        auto output = bcast_(
+            AutoPad::format_input_tensor(a, device, a_pad_shape, 0), b,
+            bcast_math, bcast_dim
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
+    } else {
+        auto output = bcast_(
+            AutoPad::format_input_tensor(a, device, a_pad_shape, 0), AutoPad::format_input_tensor(b, device, b_pad_shape, 0),
+            bcast_math, bcast_dim
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
     }
-
-    // Convert tensor back to original
-    output = AutoPad::format_output_tensor(a, output, a.shape(), device);
-
-    return output;
 }
 
 Tensor bcast(const Tensor &a, const Tensor &b, BcastOpMath::Enum bcast_math, BcastOpDim::Enum bcast_dim) {

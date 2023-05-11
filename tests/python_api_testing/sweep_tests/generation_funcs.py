@@ -290,9 +290,9 @@ def sanitize_args(input_shapes, dtype_device_layout):
     return dtype_device_layout
 
 
-def gen_dtype_layout_device(input_shapes):
+def gen_dtype_layout_device(input_shapes, supported_dtypes = supported_tt_dtypes, supported_layouts = supported_tt_layouts, on_device = on_device_options):
     for dtype, layout, on_device in product(
-        supported_tt_dtypes, supported_tt_layouts, on_device_options
+        supported_dtypes, supported_layouts, on_device
     ):
         out = sanitize_args(
             input_shapes, {"dtype": dtype, "layout": layout, "on_device": on_device}
@@ -341,7 +341,7 @@ def gen_reshape_args(input_shapes):
     )
     step = 1
     for reshape_dims in _gen_reshape_args_from_volume(vol, step):
-        for input_info in gen_dtype_layout_device((input_shapes[0], reshape_dims)):
+        for input_info in gen_dtype_layout_device((input_shapes[0], reshape_dims["reshape_dims"]), supported_layouts=[ttl.tensor.Layout.TILE]):
             if input_info is not None:
                 input_info.update(reshape_dims)
                 yield input_info

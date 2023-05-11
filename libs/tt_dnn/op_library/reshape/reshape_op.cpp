@@ -309,7 +309,29 @@ Tensor reshape_rm(const Tensor &a, int N, int C, int H, int W) {
     return output;
 }
 
+Tensor reshape_(const Tensor &a, int N, int C, int H, int W) {
+    if (a.layout() == Layout::TILE) {
+        return reshape_tilized(a, N, C, H, W);
+    } else if (a.layout() == Layout::ROW_MAJOR) {
+        return reshape_rm(a, N, C, H, W);
+    } else {
+        TT_ASSERT(false, "Unsupported layout for reshape");
+    }
+    return a;
+}
+
 Tensor reshape(Tensor &a, int N, int C, int H, int W) {
+
+    if (
+        ((a.layout() == Layout::TILE or a.layout() == Layout::ROW_MAJOR) && W == a.shape()[3]) ||
+        ((a.layout() == Layout::CHANNELS_LAST) && C == a.shape()[1])
+    ) {
+        // Don't need to do a check here to see the H and W both divisible by 32
+        // since handled within the tensor reshape method
+        a.reshape(N, C, H, W);
+        return a;
+    }
+
     Device * device;
 
     // Get the device
@@ -320,23 +342,18 @@ Tensor reshape(Tensor &a, int N, int C, int H, int W) {
         device = a.device();
     }
 
-    auto input1 = a.on_host() ? a.to(device) : a;
-
-    Tensor output = Tensor({1, 1, 1, 1}, Initialize::ZEROS, DataType::BFLOAT16, Layout::ROW_MAJOR); // No Default Tensor Constructor, create dummy
-
-    if (input1.layout() == Layout::TILE) {
-        output = reshape_tilized(input1, N, C, H, W);
-    } else if (input1.layout() == Layout::ROW_MAJOR) {
-        output = reshape_rm(input1, N, C, H, W);
+    if (a.on_host()) {
+        auto output = reshape_(a.to(device), N, C, H, W);
+        // Convert tensor back to original
+        AutoPad::format_output_tensor(a, output, infer_dims_for_reshape(N, C, H, W, a.volume()), device);
+        return output;
     } else {
-        TT_ASSERT(false, "Unsupported layout for reshape");
+        auto output = reshape_(a, N, C, H, W);
+        // Convert tensor back to original
+        AutoPad::format_output_tensor(a, output, infer_dims_for_reshape(N, C, H, W, a.volume()), device);
+        return output;
     }
 
-    // Convert tensor back to original
-    output = AutoPad::format_output_tensor(a, output, infer_dims_for_reshape(N, C, H, W, a.volume()), device);
-
-
-    return output;
 }
 
 } // namespace tt_metal

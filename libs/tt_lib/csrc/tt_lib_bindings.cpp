@@ -1352,6 +1352,9 @@ void DeviceModule(py::module &m_device) {
         | device           | TT Device to use       | tt_lib.device.Device  |             | Yes      |
         +------------------+------------------------+-----------------------+-------------+----------+
     )doc");
+    m_device.def("GetDefaultDevice", &AutoPad::GetDefaultDevice, R"doc(
+        Gets the default device to use for ops when inputs aren't on device.
+    )doc");
 
     m_device.def("StartDebugPrintServer", &StartDebugPrintServer);
     m_device.def("SetProfilerDir", &SetProfilerDir);

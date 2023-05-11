@@ -512,7 +512,7 @@ def bcast_sub_h(x, y, *args, host, device, dtype, layout, on_device, **kwargs):
     if on_device:
         t1 = t1.to(device)
 
-    t2 = ttl.tensor.bcast(t0, t1, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.H)
+    t2 = ttl.tensor.bcast(t0, t1, ttl.tensor.BcastOpMath.SUB, ttl.tensor.BcastOpDim.H)
 
     output = torch.Tensor(t2.to(host).to(ttl.tensor.Layout.ROW_MAJOR).data()).reshape(
         t2.shape()
@@ -982,16 +982,6 @@ def permute(x, *args, host, device, dtype, layout, on_device, permute_dims, **kw
 @setup_host_and_device
 def reshape(
     x,  *args, host, device, dtype, layout, on_device, reshape_dims, **kwargs
-):
-    t0 = ttl.tensor.Tensor(
-        x.reshape(-1).tolist(),
-        x.shape,
-        dtype,
-        ttl.tensor.Layout.ROW_MAJOR,
-    )
-
-def reshape(
-    x, pcie_slot, *args, host, device, dtype, layout, on_device, reshape_dims, **kwargs
 ):
     t0 = ttl.tensor.Tensor(
         x.reshape(-1).tolist(),

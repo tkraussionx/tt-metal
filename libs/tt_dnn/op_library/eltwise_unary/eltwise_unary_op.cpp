@@ -50,6 +50,19 @@ namespace tt {
 
 namespace tt_metal {
 
+Tensor eltwise_unary_(const Tensor &a, UnaryOpType::Enum op_type) {
+    switch (eltwise_unary_op_utils::get_parallelization_strategy(a)){
+        case UnaryOpParallelizationStrategy::MULTI_CORE:
+            return eltwise_unary_multi_core(a, op_type);
+            break;
+        case UnaryOpParallelizationStrategy::SINGLE_CORE:
+        default:
+            return eltwise_unary_single_core(a, op_type);
+    }
+
+}
+
+
 Tensor eltwise_unary(const Tensor &a, UnaryOpType::Enum op_type) {
 
     Device * device;
@@ -62,24 +75,25 @@ Tensor eltwise_unary(const Tensor &a, UnaryOpType::Enum op_type) {
         device = a.device();
     }
 
-    // Bring tensor to host if it isn't already, pad and convert layout, send to device
-    auto input1 = AutoPad::format_input_tensor(a, device);
+    auto a_pad_shape = AutoPad::pad_to_tile_shape(a.shape());
+    auto out_shape = a.shape();
+    if (AutoPad::check_input_tensor_format(a, a_pad_shape)) {
+        auto output = eltwise_unary_(
+            a,
+            op_type
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
 
-    Tensor output = Tensor({1, 1, 1, 1}, Initialize::ZEROS, DataType::BFLOAT16, Layout::ROW_MAJOR); // No Default Tensor Constructor, create dummy
+    } else {
+        auto output = eltwise_unary_(
+            AutoPad::format_input_tensor(a, device, a_pad_shape, 0),
+            op_type
+        );
+        AutoPad::format_output_tensor(a, output, out_shape, device);
+        return output;
 
-    switch (eltwise_unary_op_utils::get_parallelization_strategy(input1)){
-        case UnaryOpParallelizationStrategy::MULTI_CORE:
-            output = eltwise_unary_multi_core(input1, op_type);
-            break;
-        case UnaryOpParallelizationStrategy::SINGLE_CORE:
-        default:
-            output = eltwise_unary_single_core(input1, op_type);
     }
-
-    // Convert tensor back to original
-    output = AutoPad::format_output_tensor(a, output, a.shape(), device);
-
-    return output;
 
 }
 

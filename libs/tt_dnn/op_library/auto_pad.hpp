@@ -17,12 +17,24 @@ class AutoPad {
         static void SetDefaultDevice(Device * dev) { device = dev; }
         static Device * GetDefaultDevice() { return device; }
 
-        static Tensor format_input_tensor(const Tensor &a, Device * device, bool pad_c=false, bool pad_n=false, float pad_value=0) {
-            auto n = pad_n ? roundup(a.shape()[0], TILE_HEIGHT) : a.shape()[0];
-            auto c = pad_c ? roundup(a.shape()[1], TILE_HEIGHT) : a.shape()[1];
-            auto h = roundup(a.shape()[2], TILE_HEIGHT);
-            auto w = roundup(a.shape()[3], TILE_WIDTH);
-            const std::array<uint32_t, 4> padded_shape = {n, c, h, w};
+
+        static std::array<uint32_t, 4> pad_to_tile_shape(const std::array<uint32_t, 4>& unpadded_shape, bool pad_c=false, bool pad_n=false) {
+            auto n = pad_n ? roundup(unpadded_shape[0], TILE_HEIGHT) : unpadded_shape[0];
+            auto c = pad_c ? roundup(unpadded_shape[1], TILE_HEIGHT) : unpadded_shape[1];
+            auto h = roundup(unpadded_shape[2], TILE_HEIGHT);
+            auto w = roundup(unpadded_shape[3], TILE_WIDTH);
+            std::array<uint32_t, 4> padded_shape = {n, c, h, w};
+            return padded_shape;
+        }
+
+        static bool check_input_tensor_format(const Tensor &a, const std::array<uint32_t, 4>& shape) {
+            if (a.layout() == Layout::TILE && a.shape() == shape && !a.on_host()) {
+                return true;
+            }
+            return false;
+        }
+
+        static Tensor format_input_tensor(const Tensor &a, Device * device, const std::array<uint32_t, 4>& padded_shape, float pad_value=0) {
 
             if (a.layout() != Layout::TILE || a.shape() != padded_shape) {
                 auto host = GetHost();
@@ -49,12 +61,12 @@ class AutoPad {
             }
         }
 
-        static Tensor format_output_tensor(const Tensor &a, Tensor &output, const std::array<uint32_t, 4>& shape, Device * device) {
+        static void format_output_tensor(const Tensor &a, Tensor &output, const std::array<uint32_t, 4>& shape, Device * device) {
 
             // Hack env variable to leave outputs on device if no unpadding needed
             if (std::getenv("TT_LEAVE_TILE_OUTPUT_ON_DEVICE") != nullptr) {
                 if (output.shape() == shape && output.layout() == Layout::TILE) {
-                    return output;
+                    return;
                 }
             }
             auto host = GetHost();
@@ -76,7 +88,7 @@ class AutoPad {
                 }
 
                 // Default to RM layout if we can't match the input layout
-                if (a.layout() == Layout::TILE && !(output.shape()[2] % TILE_HEIGHT == 0 && output.shape()[3]% TILE_WIDTH == 0)){
+                if (a.layout() == Layout::TILE && !(output.shape()[2] % TILE_HEIGHT == 0 && output.shape()[3] % TILE_WIDTH == 0)) {
                     if (output.layout() != Layout::ROW_MAJOR) {
                         output = output.to(Layout::ROW_MAJOR);
                     }
@@ -87,7 +99,10 @@ class AutoPad {
 
             // Send output to device if a was on device
             if (!a.on_host() && output.on_host()) {
-                output = output.to(device);
+                if (!((output.layout() == Layout::ROW_MAJOR && output.shape()[3] % 2 != 0) ||
+                    (output.layout() == Layout::CHANNELS_LAST && output.shape()[1] % 2 != 0))) {
+                        output = output.to(device);
+                    }
             // Send output to host if a was on host
             } else if (a.on_host() && !output.on_host()) {
                 output = output.to(host);
@@ -95,7 +110,6 @@ class AutoPad {
 
             delete host;
 
-            return output;
         }
 };
 
