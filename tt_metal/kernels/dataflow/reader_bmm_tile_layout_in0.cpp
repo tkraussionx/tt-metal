@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include "dataflow_api.h"
+#include "debug_print.h"
 
 void kernel_main() {
 
@@ -73,6 +74,7 @@ void kernel_main() {
         uint32_t in0_tensor_current_block_start_tile_id = in0_tensor_start_tile_id;
         for(uint32_t block = 0; block < num_blocks; block++) {
             cb_reserve_back(cb_id_in0, in0_block_num_tiles);
+            //DPRINT << "NCRISC: " << block << ENDL();
 
             l1_write_addr_in0 = get_write_ptr(cb_id_in0);
 
@@ -83,6 +85,7 @@ void kernel_main() {
                     uint64_t in0_tile_noc_address = get_noc_addr(in0_tensor_tile_id, s0);
                     noc_async_read(in0_tile_noc_address, l1_write_addr_in0, single_tile_size_bytes);
                     l1_write_addr_in0 += single_tile_size_bytes;
+                    //DPRINT << "NCRISC: " << h << " " << w << " " << block << ENDL();
                     in0_tensor_tile_id += in0_tensor_stride_w;
                 }
                 in0_tensor_row_start_tile_id += in0_tensor_stride_h;

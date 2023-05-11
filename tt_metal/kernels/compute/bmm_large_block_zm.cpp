@@ -1,4 +1,5 @@
 #include <cstdint>
+#include "debug_print.h"
 
 #include "llk_3c.h"
 
@@ -31,6 +32,9 @@ void MAIN {
 
             cb_wait_front(CB::c_in0, in0_block_num_tiles);
             cb_wait_front(CB::c_in1, in1_block_num_tiles);
+            //UNPACK(DPRINT<< "UNPACK" << b << " " << block << ENDL());
+            //MATH(DPRINT<< "MATH" << b << " " << block << ENDL());
+            PACK(DPRINT<< "PACK" << b << " " << block << ENDL());
             int in0_index_subblock_offset = 0;
             for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; in0_subblock++) {
                 int in1_index_subblock_offset = 0;
