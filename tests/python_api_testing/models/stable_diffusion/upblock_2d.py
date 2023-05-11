@@ -15,10 +15,9 @@ from diffusers import StableDiffusionPipeline
 from libs import tt_lib as ttl
 from libs.tt_lib.fallback_ops import fallback_ops
 from utility_functions import torch_to_tt_tensor, tt_to_torch_tensor
-from python_api_testing.sweep_tests.comparison_funcs import comp_allclose_and_pcc
 
-from python_api_testing.models.stable_diffusion.residual_block import TtResnetBlock2D
-from python_api_testing.models.stable_diffusion.fused_ops.upsample_2d import TtUpsample2D
+from residual_block import TtResnetBlock2D
+from upsample_2d import TtUpsample2D
 
 
 class TtUpBlock2D(nn.Module):

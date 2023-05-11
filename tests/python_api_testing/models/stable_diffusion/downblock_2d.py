@@ -18,8 +18,8 @@ from libs.tt_lib.fallback_ops import fallback_ops
 from utility_functions import torch_to_tt_tensor, tt_to_torch_tensor
 from python_api_testing.sweep_tests.comparison_funcs import comp_allclose_and_pcc
 
-from python_api_testing.models.stable_diffusion.residual_block import TtResnetBlock2D
-from python_api_testing.models.stable_diffusion.fused_ops.downsample_2d import TtDownsample2D
+from residual_block import TtResnetBlock2D
+from downsample_2d import TtDownsample2D
 
 
 class TtDownBlock2D(nn.Module):

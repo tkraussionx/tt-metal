@@ -23,7 +23,7 @@ from tqdm.auto import tqdm
 from utility_functions import torch_to_tt_tensor, torch_to_tt_tensor_rm, tt_to_torch_tensor, comp_pcc, comp_allclose_and_pcc, Profiler
 from utility_functions import enable_binary_cache, enable_compile_cache
 from libs import tt_lib as ttl
-from python_api_testing.models.stable_diffusion.unet.unet_2d_condition import UNet2DConditionModel as tt_unet_condition
+from unet_2d_condition import UNet2DConditionModel as tt_unet_condition
 
 
 def constant_prop_time_embeddings(timesteps, sample, time_proj):
@@ -40,8 +40,8 @@ def demo():
     ttl.device.InitializeDevice(device)
     ttl.device.SetDefaultDevice(device)
     host = ttl.device.GetHost()
-    enable_binary_cache()
-    enable_compile_cache()
+    # enable_binary_cache()
+    # enable_compile_cache()
 
     # 1. Load t`he autoencoder model which will be used to decode the latents into image space.
     vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae")
@@ -164,7 +164,7 @@ def demo():
 
         tt_noise_pred = tt_to_torch_tensor(tt_noise_pred, host)
         print(comp_allclose_and_pcc(torch_noise_pred, tt_noise_pred), iteration, "th iteration")
-        iteration +=
+        iteration += 1
 
         noise_pred = tt_noise_pred
 
