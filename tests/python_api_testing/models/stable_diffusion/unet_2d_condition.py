@@ -2,10 +2,10 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch.nn as nn
 
-from python_api_testing.models.stable_diffusion.utils import make_linear
-from python_api_testing.models.stable_diffusion.embeddings import TtTimestepEmbedding as TimestepEmbedding
-from python_api_testing.models.stable_diffusion.fused_ops.downblock_2d import TtDownBlock2D as DownBlock2D
-from python_api_testing.models.stable_diffusion.fused_ops.upblock_2d import TtUpBlock2D as UpBlock2D
+from utils import make_linear
+from embeddings import TtTimestepEmbedding as TimestepEmbedding
+from downblock_2d import TtDownBlock2D as DownBlock2D
+from upblock_2d import TtUpBlock2D as UpBlock2D
 from unet_2d_blocks import TtUNetMidBlock2DCrossAttn as UNetMidBlock2DCrossAttn
 from unet_2d_blocks import TtCrossAttnDownBlock2D as CrossAttnDownBlock2D
 from unet_2d_blocks import TtCrossAttnUpBlock2D as CrossAttnUpBlock2D

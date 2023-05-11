@@ -17,9 +17,9 @@ from libs import tt_lib as ttl
 from utility_functions import comp_pcc, comp_allclose_and_pcc
 from utility_functions import torch_to_tt_tensor_rm, torch_to_tt_tensor, tt_to_torch_tensor
 from libs.tt_lib.fallback_ops import fallback_ops
-from python_api_testing.models.stable_diffusion.cross_attention import TtCrossAttention
-from python_api_testing.models.stable_diffusion.fused_ops.feedforward import TtFeedForward
-from python_api_testing.models.stable_diffusion.utils import make_linear
+from cross_attention import TtCrossAttention
+from feedforward import TtFeedForward
+from utils import make_linear
 
 
 class TtBasicTransformerBlock(nn.Module):

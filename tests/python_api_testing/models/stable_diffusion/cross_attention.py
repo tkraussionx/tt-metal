@@ -17,7 +17,7 @@ from diffusers import StableDiffusionPipeline
 from libs import tt_lib as ttl
 from libs.tt_lib.fallback_ops import fallback_ops
 
-from python_api_testing.fused_ops.linear import Linear as TtLinear
+
 from python_api_testing.fused_ops.softmax import softmax as TtSoftmax
 
 from python_api_testing.models.stable_diffusion.utils import make_linear
