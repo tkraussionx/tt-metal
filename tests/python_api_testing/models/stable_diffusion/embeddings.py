@@ -58,30 +58,3 @@ class TtTimestepEmbedding(nn.Module):
 
         sample = self.linear_2(sample)
         return sample
-
-
-# if __name__ == "__main__":
-#     # Initialize the device
-#     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
-#     ttl.device.InitializeDevice(device)
-#     host = ttl.device.GetHost()
-
-#     n_embd = 32
-#     torch.manual_seed(123)
-
-#     input_shape =  [1, 1, 32, n_embd]
-#     input = torch.randn(input_shape)
-
-#     torch_emb = TimeEmbedding(n_embd)
-#     torch_out = torch_emb(input)
-
-#     tt_input = torch_to_tt_tensor(input, device)
-#     tt_emb = TtTimeEmbedding(n_embd, device)
-#     tt_out = tt_emb(tt_input)
-#     tt_out = tt_to_torch_tensor(tt_out, host)
-
-#     print_diff_argmax(tt_out, torch_out)
-#     print(comp_allclose_and_pcc(torch_out, tt_out))
-
-#     print("TEST PASSED!")
-#     ttl.device.CloseDevice(device)

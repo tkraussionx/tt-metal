@@ -97,7 +97,6 @@ def test_run_basic_transformer_inference():
 
     tt_output = tt_to_torch_tensor(tt_out, host)
 
-
     passing = comp_pcc(torch_output, tt_output)
     logger.info(comp_allclose_and_pcc(tt_output, torch_output))
     ttl.device.CloseDevice(device)
