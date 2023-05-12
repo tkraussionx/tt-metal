@@ -198,8 +198,7 @@ tt_metal::Program * create_program(
             (std::uint32_t) (per_core_N / out_subblock_w), // out_num_subblocks_w
             (std::uint32_t) (per_core_M / out_subblock_h), // out_num_subblocks_h
 
-            (std::uint32_t) M * N, // MtNt
-            (std::uint32_t) num_output_blocks_per_core[i] // batch
+            (std::uint32_t) M * N // MtNt
         };
 
         // Create reader and writer kernels per core
@@ -225,7 +224,7 @@ tt_metal::Program * create_program(
             );
 
             tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in0_reader, core, mm_reader_args);
-            mm_reader_args.insert(mm_reader_args.end(), writer_args.begin(), writer_args.end()-1);
+            mm_reader_args.insert(mm_reader_args.end(), writer_args.begin(), writer_args.end());
             tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in1_reader_writer, core, mm_reader_args);
         }
         // black
@@ -249,7 +248,7 @@ tt_metal::Program * create_program(
             );
 
             tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in0_reader, core, mm_reader_args);
-            mm_reader_args.insert(mm_reader_args.end(), writer_args.begin(), writer_args.end()-1);
+            mm_reader_args.insert(mm_reader_args.end(), writer_args.begin(), writer_args.end());
             tt_metal::WriteRuntimeArgsToDevice(device, mm_kernel_in1_reader_writer, core, mm_reader_args);
         }
 

@@ -425,7 +425,7 @@ Tensor bert_large_pre_softmax_bmm(const Tensor& a, const Tensor& b) {
     TT_ASSERT((compute_and_storage_grid_size.x <= device_compute_and_storage_grid_size.x && compute_and_storage_grid_size.y <= device_compute_and_storage_grid_size.y), "Unsupported grid shape");
     tt::DataFormat output_cb_data_format = tt::DataFormat::Bfp8_b;
     MathFidelity math_fidelity = MathFidelity::LoFi;
-    uint32_t in0_block_w = 2;
+    uint32_t in0_block_w = 1;
     uint32_t out_subblock_h = 4;
     uint32_t out_subblock_w = 2;
     uint32_t per_core_M = 12;

@@ -1,4 +1,5 @@
 #include "tt_dnn/op_library/bmm/bmm_op.hpp"
+#include "tt_metal/llrt/tt_debug_print_server.hpp"
 
 #include "tt_metal/host_api.hpp"
 #include "common/constants.hpp"
@@ -348,6 +349,7 @@ Tensor matmul_multi_core_reuse_generalized_bert_large_(const Tensor &a, const Te
     //                      Execute Application
     ////////////////////////////////////////////////////////////////////////////
     pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
+    tt_start_debug_print_server(a.device()->cluster(), {0}, {{1, 1}});
     pass &= tt_metal::LaunchKernels(device, program);
 
     delete program;
