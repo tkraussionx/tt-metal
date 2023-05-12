@@ -66,7 +66,6 @@ class TtDownBlock2D(nn.Module):
 
         # self.resnets = nn.ModuleList(resnets)
         self.resnets = resnets
-        print('resnets:', self.resnets)
 
         if add_downsample:
             self.downsamplers = [TtDownsample2D(out_channels, use_conv=True, out_channels=out_channels, padding=downsample_padding, name="op", state_dict=self.state_dict, base_address=f"{base_address}.downsamplers.0")]
