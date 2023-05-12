@@ -33,49 +33,31 @@ def test_run_resnet_inference():
     unet.eval()
     state_dict = unet.state_dict()
 
-    test = "test2"
-    if test == "test1":
-        unet_upblock = pipe.unet.up_blocks[2]
-        resnet = unet_upblock.resnets[2]
-        base_address="up_blocks.2.resnets.2"
-        in_channels = resnet.conv1.in_channels
-        out_channels = resnet.conv2.in_channels
-        temb_channels = 512
-        eps = 1e-05
-        groups = 32
-        resnet = unet.up_blocks[2].resnets[2]
+    ############ start of residual block #############
+    in_channels = 1280
+    out_channels = 1280
+    conv_shortcut = False
+    dropout = 0
+    temb_channels = 1280
+    groups = 32
+    groups_out = None
+    pre_norm = True
+    eps = 1e-05
+    non_linearity = "silu"
+    time_embedding_norm = "default"
+    kernel = None
+    output_scale_factor = 1
+    use_in_shortcut = False
+    up = False
+    down = False
+    ########## end of residual block #############
+    hidden_states_shape = [2, 1280, 8, 8]
+    temb_shape = [1, 1, 2, 1280]
 
-        input_shape  = [1, in_channels, 32, 32]
-        input = torch.randn(input_shape, dtype=torch.float32)
-        temb = None
-
-
-    if test == "test2":
-        ############ start of residual block #############
-        in_channels = 1280
-        out_channels = 1280
-        conv_shortcut = False
-        dropout = 0
-        temb_channels = 1280
-        groups = 32
-        groups_out = None
-        pre_norm = True
-        eps = 1e-05
-        non_linearity = "silu"
-        time_embedding_norm = "default"
-        kernel = None
-        output_scale_factor = 1
-        use_in_shortcut = False
-        up = False
-        down = False
-        ########## end of residual block #############
-        hidden_states_shape = [2, 1280, 8, 8]
-        temb_shape = [1, 1, 2, 1280]
-
-        input = torch.randn(hidden_states_shape)
-        temb = torch.randn(temb_shape)
-        base_address="mid_block.resnets.0"
-        resnet = pipe.unet.mid_block.resnets[0]
+    input = torch.randn(hidden_states_shape)
+    temb = torch.randn(temb_shape)
+    base_address="mid_block.resnets.0"
+    resnet = pipe.unet.mid_block.resnets[0]
 
 
     torch_output = resnet(input, temb.squeeze(0).squeeze(0))

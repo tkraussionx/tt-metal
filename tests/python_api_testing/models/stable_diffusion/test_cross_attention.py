@@ -29,82 +29,26 @@ def test_cross_attn_inference():
     unet.eval()
     state_dict = unet.state_dict()
 
-    test = "test2"
     # synthesize the input
-    if test == "test1":
-        query_dim = 1280
-        dropout = 0
-        heads = 8
-        dim_head = 64
-        bias=False
-        cross_attention_dim = None
-        upcast_attention = False
-        input_shape  = [1, 2, 64, 1280]
-        input = torch.randn(input_shape) * 0.01
-        encoder_hidden_states = None
-        # base_address = "ISLOST!"
-        base_address="mid_block.attentions.0.transformer_blocks.0.attn1"
-        cross_attn = pipe.unet.mid_block.attentions[0].transformer_blocks[0].attn1
+    query_dim = 320
+    dim = query_dim
+    cross_attention_dim = 768
+    heads = 8
+    dim_head = 40
+    dropout = 0.0
+    bias = False
+    upcast_attention = False
+    upcast_softmax = False
+    added_kv_proj_dim = None
+    norm_num_groups = None
 
-    if test == "test2":
-        query_dim = 320
-        dim = query_dim
-        cross_attention_dim = 768
-        heads = 8
-        dim_head = 40
-        dropout = 0.0
-        bias = False
-        upcast_attention = False
-        upcast_softmax = False
-        added_kv_proj_dim = None
-        norm_num_groups = None
+    base_address="down_blocks.0.attentions.0.transformer_blocks.0.attn2"
+    cross_attn = pipe.unet.down_blocks[0].attentions[0].transformer_blocks[0].attn2
 
-        base_address="down_blocks.0.attentions.0.transformer_blocks.0.attn2"
-        cross_attn = pipe.unet.down_blocks[0].attentions[0].transformer_blocks[0].attn2
-
-        input_shape =  torch.Size([1, 2, 4096, 320])
-        input = torch.randn(input_shape) * 0.01
-        encoder_hidden_states_shape =  torch.Size([1, 2, 77, 768])
-        encoder_hidden_states = torch.randn(encoder_hidden_states_shape)
-
-
-    ##############################################
-    if test == "test3":
-        assert False, "this test doesn't work right now!"
-        dim = 1280
-        heads = 8
-        dim_head = 160
-        cross_attention_dim = 768
-        dropout = 0
-        bias = False
-        cross_attention_dim = None
-        upcast_attention = False
-        dim_head = 64
-        input_shape = (1, 2, 256, 1280)
-        encoder_hidden_states_shape = (1, 2, 77, 768)
-        input = torch.randn(input_shape)
-        encoder_hidden_states = torch.randn(encoder_hidden_states_shape)
-        base_address="down_blocks.0.attentions.0.transformer_blocks.0.attn1"
-        cross_attn = pipe.unet.down_blocks[0].attentions[0].transformer_blocks[0].attn1
-
-
-    if test == "test4":
-        dim = 320
-        cross_attention_dim = 768
-        heads = 8
-        dim_head = 40
-        dropout  = 0.0
-        bias = False
-        upcast_attention = False
-        upcast_softmax = False
-        added_kv_proj_dim = None
-        norm_num_groups = None
-        input_shape = (1, 2, 4096, 320)
-        encoder_hidden_states_shape = (1, 2, 77, 768)
-        input = torch.randn(input_shape)
-        encoder_hidden_states = torch.randn(encoder_hidden_states_shape)
-        base_address="down_blocks.0.attentions.0.transformer_blocks.0.attn2"
-        cross_attn = pipe.unet.down_blocks[0].attentions[0].transformer_blocks[0].attn2
+    input_shape =  torch.Size([1, 2, 4096, 320])
+    input = torch.randn(input_shape) * 0.01
+    encoder_hidden_states_shape =  torch.Size([1, 2, 77, 768])
+    encoder_hidden_states = torch.randn(encoder_hidden_states_shape)
 
 
     print(cross_attn)
@@ -112,7 +56,7 @@ def test_cross_attn_inference():
     torch_output = cross_attn(input.squeeze(0), encoder_hidden_states)
 
     # Initialize the device
-    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 1)
+    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
     ttl.device.SetDefaultDevice(device)
     host = ttl.device.GetHost()
@@ -140,3 +84,6 @@ def test_cross_attn_inference():
     ttl.device.CloseDevice(device)
     assert passing[0], passing[1:]
     logger.info(f"PASSED {passing[1]}")
+
+
+test_cross_attn_inference()

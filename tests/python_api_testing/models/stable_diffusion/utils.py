@@ -10,7 +10,7 @@ import torch
 from libs import tt_lib as ttl
 from utility_functions import untilize, tilize, tilize_to_list, torch_to_tt_tensor_rm
 
-from python_api_testing.models.stable_diffusion.mini_ops import Linear as SDLinear
+from python_api_testing.models.stable_diffusion.fused_ops import Linear as SDLinear
 
 def make_linear(in_features: int, out_features: int, weights, bias, device):
     weights = torch_to_tt_tensor_rm(weights, device, shape=[1, 1, out_features, in_features], put_on_device=False)
