@@ -80,7 +80,6 @@ def run_test_down_block_inference(device):
     state_dict = unet.state_dict()
     down_block = pipe.unet.down_blocks[3]
 
-    print(down_block)
     in_channels =  1280
     out_channels =  1280
     temb_channels =  1280
