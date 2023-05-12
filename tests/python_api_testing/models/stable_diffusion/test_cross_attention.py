@@ -51,7 +51,6 @@ def test_cross_attn_inference():
     encoder_hidden_states = torch.randn(encoder_hidden_states_shape)
 
 
-    print(cross_attn)
     encoder_hidden_states = encoder_hidden_states.squeeze(0) if encoder_hidden_states is not None else None
     torch_output = cross_attn(input.squeeze(0), encoder_hidden_states)
 
@@ -84,6 +83,3 @@ def test_cross_attn_inference():
     ttl.device.CloseDevice(device)
     assert passing[0], passing[1:]
     logger.info(f"PASSED {passing[1]}")
-
-
-test_cross_attn_inference()

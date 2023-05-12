@@ -63,7 +63,7 @@ def demo():
     vae.to(torch_device)
     text_encoder.to(torch_device)
     unet.to(torch_device)
-    print(unet)
+
     state_dict = torch_unet.state_dict()
     tt_unet = tt_unet_condition(sample_size = 64,
                                 in_channels = 4,
@@ -207,4 +207,3 @@ year = {2022},
 note = {[https://huggingface.co/blog/rlhf](https://huggingface.co/blog/stable_diffusion)},
 }
 '''
-demo()

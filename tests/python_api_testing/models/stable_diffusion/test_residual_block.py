@@ -89,5 +89,3 @@ def test_run_resnet_inference():
     ttl.device.CloseDevice(device)
     assert passing[0], passing[1:]
     logger.info(f"PASSED {passing[1]}")
-
-test_run_resnet_inference()
