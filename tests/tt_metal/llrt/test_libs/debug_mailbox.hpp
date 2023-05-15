@@ -1,3 +1,5 @@
+#pragma once
+
 #include "tensix.h"
 
 void read_trisc_debug_mailbox(tt_cluster* cluster, int chip_id, const tt_xy_pair core, uint16_t trisc_id, uint32_t index = 0) {
