@@ -403,6 +403,16 @@ Tensor large_bmm(const Tensor& a, const Tensor& b, bool tilize_act, bool untiliz
     return large_bmm_single_core(a, b, tilize_act, untilize_out);
 }
 
+/**
+ * Blocked Matmul, with tilize a and untilize output.
+ * NOTE: Takes blocks and subblock information as arguments.
+ */
+Tensor bmm_tilize_untilize(const Tensor& a, const Tensor& b, const uint32_t nblocks, const uint32_t subblock_h, const uint32_t subblock_w) {
+    TT_ASSERT(bmm_op_utils::get_parallelization_strategy(a, b) == BmmOpParallelizationStrategy::SINGLE_CORE,
+                "Only single core mode supported for bmm_tilize_untilize.");
+    return bmm_single_core_tilize_untilize(a, b, nblocks, subblock_h, subblock_w);
+}
+
 Tensor large_bmm_single_block(const Tensor& a, const Tensor& b, bool tilize_a, bool untilize_out) {
     return large_bmm_single_core_single_block(a, b, tilize_a, untilize_out);
 }
