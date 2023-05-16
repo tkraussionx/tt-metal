@@ -323,6 +323,22 @@ def softmax(input: ttl_tensor.Tensor, dim: Optional[int] = None) -> ttl_tensor.T
     return torch.nn.functional.softmax(input, dim)
 
 
+@convert_tt_tensors_wrapper
+def matmul(input: ttl_tensor.Tensor, other: ttl_tensor.Tensor) -> ttl_tensor.Tensor:
+    """
+    Perform a matrix multiplication ``input x other`` with two tensors.
+
+    +----------+---------------------------+-----------+------------------------------+----------+
+    | Argument | Description               | Data type | Valid range                  | Required |
+    +==========+===========================+===========+==============================+==========+
+    | input    | First tensor to multiply  | Tensor    | Tensor of shape [1, 1, Y, S] | Yes      |
+    +----------+---------------------------+-----------+------------------------------+----------+
+    | other    | Second tensor to multiply | Tensor    | Tensor of shape [1, 1, S, X] | Yes      |
+    +----------+---------------------------+-----------+------------------------------+----------+
+    """
+    return torch.matmul(input, other)
+
+
 class Conv2d(torch.nn.Module):
     r"""
     Applies a 2D convolution over an input signal composed of several input planes.
