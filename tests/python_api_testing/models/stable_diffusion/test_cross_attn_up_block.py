@@ -22,13 +22,19 @@ from unet_2d_blocks import TtCrossAttnUpBlock2D
 
 
 def test_run_cross_attn_up_block_inference():
+    # Initialize the device
+    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
+    ttl.device.InitializeDevice(device)
+    ttl.device.SetDefaultDevice(device)
+    host = ttl.device.GetHost()
+
     # setup pytorch model
     pipe = StableDiffusionPipeline.from_pretrained('CompVis/stable-diffusion-v1-4', torch_dtype=torch.float32)
     unet = pipe.unet
     unet.eval()
     state_dict = unet.state_dict()
 
-    test = "test1"
+    test = "test2"
 
     if test == "test1":
         in_channels  = 640
@@ -71,62 +77,51 @@ def test_run_cross_attn_up_block_inference():
         base_address = "up_blocks.1"
         up_block = pipe.unet.up_blocks[1]
 
-    torch_output = up_block(
-                        hidden_states=sample,
-                        temb=emb.squeeze(0).squeeze(0),
-                        res_hidden_states_tuple= res_samples,
-                        encoder_hidden_states=encoder_hidden_states.squeeze(0),
-                        attention_mask=attention_mask,
-                        cross_attention_kwargs=cross_attention_kwargs,
-                        upsample_size=upsample_size,
-                        )
-
-    # Initialize the device
-    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
-    ttl.device.InitializeDevice(device)
-    ttl.device.SetDefaultDevice(device)
-    host = ttl.device.GetHost()
-
-    tt_cross_attn_up_block = TtCrossAttnUpBlock2D(
-                            in_channels = in_channels,
-                            out_channels = out_channels,
-                            temb_channels = temb_channels,
-                            prev_output_channel = prev_output_channel,
-                            dropout = dropout,
-                            num_layers = num_layers,
-                            resnet_eps = resnet_eps,
-                            resnet_time_scale_shift = resnet_time_scale_shift,
-                            resnet_act_fn = resnet_act_fn,
-                            resnet_groups = resnet_groups,
-                            resnet_pre_norm = resnet_pre_norm,
-                            attn_num_head_channels = attn_num_head_channels,
-                            cross_attention_dim = cross_attention_dim,
-                            output_scale_factor = output_scale_factor,
-                            add_upsample = add_upsample,
-                            dual_cross_attention = dual_cross_attention,
-                            use_linear_projection = use_linear_projection,
-                            only_cross_attention = only_cross_attention,
-                            upcast_attention = upcast_attention,
-                            state_dict=state_dict,
-                            base_address="up_blocks.1"
-    )
-
-    tt_sample = torch_to_tt_tensor_rm(sample, device, put_on_device=False)
-    tt_emb = torch_to_tt_tensor_rm(emb, device, put_on_device=False)
-    tt_encoder_hidden_states = torch_to_tt_tensor_rm(encoder_hidden_states, device, put_on_device=False)
-
-    tt_output = tt_cross_attn_up_block(
-        hidden_states=tt_sample,
-        temb=tt_emb,
-        res_hidden_states_tuple= res_samples,
-        encoder_hidden_states=tt_encoder_hidden_states,
-        attention_mask=attention_mask,
-        cross_attention_kwargs=cross_attention_kwargs
+        torch_output = up_block(
+                            hidden_states=sample,
+                            temb=emb.squeeze(0).squeeze(0),
+                            res_hidden_states_tuple= res_samples,
+                            encoder_hidden_states=encoder_hidden_states.squeeze(0),
+                            attention_mask=attention_mask,
+                            cross_attention_kwargs=cross_attention_kwargs,
+                            upsample_size=upsample_size,
+                            )
+        tt_cross_attn_up_block = TtCrossAttnUpBlock2D(
+                                in_channels = in_channels,
+                                out_channels = out_channels,
+                                temb_channels = temb_channels,
+                                prev_output_channel = prev_output_channel,
+                                dropout = dropout,
+                                num_layers = num_layers,
+                                resnet_eps = resnet_eps,
+                                resnet_time_scale_shift = resnet_time_scale_shift,
+                                resnet_act_fn = resnet_act_fn,
+                                resnet_groups = resnet_groups,
+                                resnet_pre_norm = resnet_pre_norm,
+                                attn_num_head_channels = attn_num_head_channels,
+                                cross_attention_dim = cross_attention_dim,
+                                output_scale_factor = output_scale_factor,
+                                add_upsample = add_upsample,
+                                dual_cross_attention = dual_cross_attention,
+                                use_linear_projection = use_linear_projection,
+                                only_cross_attention = only_cross_attention,
+                                upcast_attention = upcast_attention,
+                                state_dict=state_dict,
+                                base_address="up_blocks.1"
         )
 
+        tt_sample = torch_to_tt_tensor_rm(sample, device, put_on_device=False)
+        tt_emb = torch_to_tt_tensor_rm(emb, device, put_on_device=False)
+        tt_encoder_hidden_states = torch_to_tt_tensor_rm(encoder_hidden_states, device, put_on_device=False)
 
-
-    tt_output = tt_to_torch_tensor(tt_output, host)
+        tt_output = tt_cross_attn_up_block(
+            hidden_states=tt_sample,
+            temb=tt_emb,
+            res_hidden_states_tuple= res_samples,
+            encoder_hidden_states=tt_encoder_hidden_states,
+            attention_mask=attention_mask,
+            cross_attention_kwargs=cross_attention_kwargs
+            )
 
     passing = comp_pcc(torch_output, tt_output)
     logger.info(comp_allclose_and_pcc(tt_output, torch_output))

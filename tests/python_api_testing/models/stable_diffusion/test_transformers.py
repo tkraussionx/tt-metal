@@ -40,68 +40,82 @@ final_dropout: False
 '''
 
 
-def test_run_basic_transformer_inference():
-    # synthesize the input
-    only_cross_attention = False
-    dim = 320
-    num_attention_heads = 8
-    attention_head_dim = 40
-    dropout = 0.0
-    cross_attention_dim = 768
-    num_embeds_ada_norm = None
-    attention_bias = False
-    only_cross_attention = False
-    upcast_attention = False
-    norm_elementwise_affine = True
-    final_dropout: False
-    input_shape  = [1, 2, 4096, 320]
-    encoder_hidden_states_shape  = [1, 2, 77, 768]
-    input = torch.randn(input_shape) * 0.01
-    encoder_hidden_states = torch.randn(encoder_hidden_states_shape)
+# def test_run_basic_transformer_inference():
+#     pipe = StableDiffusionPipeline.from_pretrained('CompVis/stable-diffusion-v1-4', torch_dtype=torch.float32)
+#     unet = pipe.unet
+#     unet.eval()
+#     state_dict = unet.state_dict()
+#     # Initialize the device
+#     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
+#     ttl.device.InitializeDevice(device)
+#     ttl.device.SetDefaultDevice(device)
+#     host = ttl.device.GetHost()
 
-    # setup pytorch model
-    pipe = StableDiffusionPipeline.from_pretrained('CompVis/stable-diffusion-v1-4', torch_dtype=torch.float32)
-    unet = pipe.unet
-    unet.eval()
-    state_dict = unet.state_dict()
-    basic_transformer = pipe.unet.down_blocks[0].attentions[0].transformer_blocks[0]
-    # print(basic_transformer)
-    # assert False
-    torch_output = basic_transformer(input.squeeze(0), encoder_hidden_states.squeeze(0))
+#     test = 'test2'
+#     if test == 'test1':
+#         # synthesize the input
+#         only_cross_attention = False
+#         dim = 320
+#         num_attention_heads = 8
+#         attention_head_dim = 40
+#         dropout = 0.0
+#         cross_attention_dim = 768
+#         num_embeds_ada_norm = None
+#         attention_bias = False
+#         only_cross_attention = False
+#         upcast_attention = False
+#         norm_elementwise_affine = True
+#         final_dropout: False
+#         input_shape  = [1, 2, 4096, 320]
+#         encoder_hidden_states_shape  = [1, 2, 77, 768]
+#         input = torch.randn(input_shape) * 0.01
+#         encoder_hidden_states = torch.randn(encoder_hidden_states_shape)
 
-    # Initialize the device
-    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
-    ttl.device.InitializeDevice(device)
-    ttl.device.SetDefaultDevice(device)
-    host = ttl.device.GetHost()
+#         # setup pytorch model
+#         basic_transformer = pipe.unet.down_blocks[0].attentions[0].transformer_blocks[0]
+#         # print(basic_transformer)
+#         # assert False
+#         torch_output = basic_transformer(input.squeeze(0), encoder_hidden_states.squeeze(0))
 
-    # setup tt model
-    tt_input = torch_to_tt_tensor(input, device)
-    tt_encoder_hidden_states = torch_to_tt_tensor_rm(encoder_hidden_states, device, put_on_device=False)
+#         # setup tt model
+#         tt_input = torch_to_tt_tensor(input, device)
+#         tt_encoder_hidden_states = torch_to_tt_tensor_rm(encoder_hidden_states, device, put_on_device=False)
 
-    tt_basic_transformer = TtBasicTransformerBlock(
-        dim = dim,
-        num_attention_heads = num_attention_heads,
-        attention_head_dim = attention_head_dim,
-        cross_attention_dim = cross_attention_dim,
-        only_cross_attention = only_cross_attention,
-        upcast_attention = False,
+#         tt_basic_transformer = TtBasicTransformerBlock(
+#             dim = dim,
+#             num_attention_heads = num_attention_heads,
+#             attention_head_dim = attention_head_dim,
+#             cross_attention_dim = cross_attention_dim,
+#             only_cross_attention = only_cross_attention,
+#             upcast_attention = False,
 
-        device=device,
-        host=host,
-        state_dict=state_dict,
-        base_address="down_blocks.0.attentions.0.transformer_blocks.0",)
+#             device=device,
+#             host=host,
+#             state_dict=state_dict,
+#             base_address="down_blocks.0.attentions.0.transformer_blocks.0",)
 
-    tt_basic_transformer.eval()
-    tt_out = tt_basic_transformer(tt_input, tt_encoder_hidden_states)
+#     if test == 'test2':
+#         init_dict = torch.load('/home/farbabi/git/tt-metal/tests/python_api_testing/models/stable_diffusion/saved_files/basic_transformer_block_init.pt')
+#         unet_transformer_block_input = torch.load('/home/farbabi/git/tt-metal/tests/python_api_testing/models/stable_diffusion/saved_files/basic_transformer_block_input.pt')
+#         base_address = "up_blocks.1.attentions.2.transformer_blocks.0"
+#         transformer = pipe.unet.up_blocks[1].attentions[2].transformer_blocks
+#         tt_transformer = TtBasicTransformerBlock(**init_dict,
+#             device=device,
+#             host=host,
+#             state_dict=state_dict,
+#             base_address=base_address,)
 
-    tt_output = tt_to_torch_tensor(tt_out, host)
+#         torch_output = transformer(**unet_transformer_block_input).sample
+#         tt_out = tt_transformer(**unet_transformer_block_input)
 
-    passing = comp_pcc(torch_output, tt_output)
-    logger.info(comp_allclose_and_pcc(tt_output, torch_output))
-    ttl.device.CloseDevice(device)
-    assert passing[0], passing[1:]
-    logger.info(f"PASSED {passing[1]}")
+#     tt_output = tt_to_torch_tensor(tt_out, host)
+
+#     passing = comp_pcc(torch_output, tt_output)
+#     logger.info(comp_allclose_and_pcc(tt_output, torch_output))
+#     ttl.device.CloseDevice(device)
+#     assert passing[0], passing[1:]
+#     logger.info(f"PASSED {passing[1]}")
+#     assert False
 
 
 def test_run_transformer_inference():
@@ -111,7 +125,13 @@ def test_run_transformer_inference():
     unet.eval()
     state_dict = unet.state_dict()
 
-    test = "test2"
+    # Initialize the device
+    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
+    ttl.device.InitializeDevice(device)
+    ttl.device.SetDefaultDevice(device)
+    host = ttl.device.GetHost()
+
+    test = "test3"
     # synthesize the input
     if test == "test1":
         # assert False, "something is off here!"
@@ -167,33 +187,42 @@ def test_run_transformer_inference():
         encoder_hidden_states_shape  = [1, 2, 77, 768]
         input = torch.randn(input_shape) * 0.01
         encoder_hidden_states = torch.randn(encoder_hidden_states_shape)
-        base_address = "mid_block.attentions.0"
-        transformer = pipe.unet.mid_block.attentions[0]
+        base_address = "up_blocks.1.attentions.1"
+        transformer = pipe.unet.up_blocks[0].attentions[1]
+        # setup tt model
+        tt_input = torch_to_tt_tensor_rm(input, device, put_on_device=False)
+        tt_encoder_hidden_states = torch_to_tt_tensor_rm(encoder_hidden_states, device, put_on_device=False)
+        torch_out = transformer(tt_input, tt_encoder_hidden_states)
+        tt_transformer = TtTransformer2DModel(
+            in_channels = in_channels,
+            num_attention_heads = num_attention_heads,
+            attention_head_dim = attention_head_dim,
+            cross_attention_dim = cross_attention_dim,
+            device=device,
+            host=host,
+            state_dict=state_dict,
+            base_address=base_address,)
+        tt_out = tt_transformer(tt_input, tt_encoder_hidden_states)
 
 
-    torch_output = transformer(input, encoder_hidden_states.squeeze(0)).sample
 
-    # Initialize the device
-    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
-    ttl.device.InitializeDevice(device)
-    ttl.device.SetDefaultDevice(device)
-    host = ttl.device.GetHost()
+    if test == "test3":
+        init_dict = torch.load('/home/farbabi/git/tt-metal/tests/python_api_testing/models/stable_diffusion/saved_files/transformer2d_init.pt')
+        # unet_transformer2d_input = torch.load('/home/farbabi/git/tt-metal/tests/python_api_testing/models/stable_diffusion/saved_files/transformer2d_input.pt')
+        hidden_states = torch.rand(2, 1280, 16, 16)
+        encoder_hidden_states = torch.rand(2, 77, 768)
+        base_address = "up_blocks.1.attentions.1"
+        transformer = pipe.unet.up_blocks[1].attentions[1]
+        tt_transformer = TtTransformer2DModel(**init_dict,
+            device=device,
+            host=host,
+            state_dict=state_dict,
+            base_address=base_address,)
+        torch_output = transformer(hidden_states, encoder_hidden_states).sample
+        tt_out = tt_transformer(hidden_states, encoder_hidden_states)
+        # torch_output = transformer(**unet_transformer2d_input).sample
+        # tt_out = tt_transformer(**unet_transformer2d_input)
 
-    # setup tt model
-    tt_input = torch_to_tt_tensor_rm(input, device, put_on_device=False)
-    tt_encoder_hidden_states = torch_to_tt_tensor_rm(encoder_hidden_states, device, put_on_device=False)
-
-    tt_transformer = TtTransformer2DModel(
-        in_channels = in_channels,
-        num_attention_heads = num_attention_heads,
-        attention_head_dim = attention_head_dim,
-        cross_attention_dim = cross_attention_dim,
-        device=device,
-        host=host,
-        state_dict=state_dict,
-        base_address=base_address,)
-
-    tt_out = tt_transformer(tt_input, tt_encoder_hidden_states)
     tt_output = tt_to_torch_tensor(tt_out, host)
 
     passing = comp_pcc(torch_output, tt_output)

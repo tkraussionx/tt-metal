@@ -158,6 +158,7 @@ class TtBasicTransformerBlock(nn.Module):
         cross_attention_kwargs=None,
         class_labels=None,
     ):
+        hidden_states_log = []
         if self.use_ada_layer_norm:
             assert False, "AdaLayerNorm not supported and not used in stable diffusion"
             # norm_hidden_states = self.norm1(hidden_states, timestep)
@@ -167,7 +168,9 @@ class TtBasicTransformerBlock(nn.Module):
                 # hidden_states, timestep, class_labels, hidden_dtype=hidden_states.dtype
             # )
         else:
-            norm_hidden_states = self.norm1(hidden_states)
+            norm_hidden_states = self.norm1(hidden_states) # log 0
+            hidden_states_log.append(tt_to_torch_tensor(norm_hidden_states, self.host))
+
 
 
         # 1. Self-Attention
@@ -178,42 +181,54 @@ class TtBasicTransformerBlock(nn.Module):
             encoder_hidden_states=encoder_hidden_states if self.only_cross_attention else None,
             attention_mask=attention_mask,
             **cross_attention_kwargs,
-        )
-
+        ) # log 1
+        hidden_states_log.append(tt_to_torch_tensor(attn_output, self.host))
 
 
         if self.use_ada_layer_norm_zero:
             assert False, "AdaLayerNormZero not supported and not used in stable diffusion"
             # attn_output = gate_msa.unsqueeze(1) * attn_output
 
-        hidden_states = ttl.tensor.add(attn_output, hidden_states)
+        hidden_states = ttl.tensor.add(attn_output, hidden_states) # log 2
+        hidden_states_log.append(tt_to_torch_tensor(hidden_states, self.host))
+
         if self.attn2 is not None:
             norm_hidden_states = (
                 self.norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.norm2(hidden_states)
-            )
+            ) # log 3
+            hidden_states_log.append(tt_to_torch_tensor(norm_hidden_states, self.host))
+
             # 2. Cross-Attention
             attn_output = self.attn2(
                 norm_hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
                 attention_mask=attention_mask,
                 **cross_attention_kwargs,
-            )
+            ) # log 4
+            hidden_states_log.append(tt_to_torch_tensor(attn_output, self.host))
 
-            hidden_states = ttl.tensor.add(attn_output, hidden_states)
+            hidden_states = ttl.tensor.add(attn_output, hidden_states) # log 5
+            hidden_states_log.append(tt_to_torch_tensor(hidden_states, self.host))
 
 
         # 3. Feed-forward
-        norm_hidden_states = self.norm3(hidden_states)
+        norm_hidden_states = self.norm3(hidden_states) #log 6
+        hidden_states_log.append(tt_to_torch_tensor(norm_hidden_states, self.host))
+
         if self.use_ada_layer_norm_zero:
             assert False, "AdaLayerNormZero not supported and not used in stable diffusion"
             # norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
-        ff_output = self.ff(norm_hidden_states)
+        ff_output = self.ff(norm_hidden_states)  # log 7
+        hidden_states_log.append(tt_to_torch_tensor(ff_output, self.host))
 
         if self.use_ada_layer_norm_zero:
             assert False, "AdaLayerNormZero not supported and not used in stable diffusion"
             # ff_output = gate_mlp.unsqueeze(1) * ff_output
 
         hidden_states = ttl.tensor.add(ff_output, hidden_states)
+        torch.save(hidden_states_log,
+        '/home/farbabi/git/tt-metal/tests/python_api_testing/models/stable_diffusion/saved_files/tt_basic_hidden_states_log.pt')
+
         return hidden_states
 
 
@@ -397,6 +412,9 @@ class TtTransformer2DModel(nn.Module):
             returning a tuple, the first element is the sample tensor.
         """
         # 1. Input
+        hidden_states = torch_to_tt_tensor_rm(hidden_states, self.device, put_on_device=False)
+        encoder_hidden_states = torch_to_tt_tensor_rm(encoder_hidden_states, self.device ,put_on_device=False)
+        hidden_states_log = []
         if self.is_input_continuous:
             batch, _, height, width = hidden_states.shape()
             residual = hidden_states
@@ -404,12 +422,15 @@ class TtTransformer2DModel(nn.Module):
             hidden_states = self.norm(hidden_states)
 
             if not self.use_linear_projection:
-                hidden_states = self.proj_in(hidden_states)
+                hidden_states = self.proj_in(hidden_states) # hidden_states #0
+                hidden_states_log.append(tt_to_torch_tensor(hidden_states, self.host))
 
                 inner_dim = hidden_states.shape()[1]
 
                 hidden_states = ttl.tensor.permute(hidden_states, 0, 2, 3, 1)
-                hidden_states = fallback_ops.reshape(hidden_states, 1, batch, height * width, inner_dim)
+                hidden_states = fallback_ops.reshape(hidden_states, 1, batch, height * width, inner_dim) # hidden_states #1
+                hidden_states_log.append(tt_to_torch_tensor(hidden_states, self.host))
+
             else:
                 inner_dim = hidden_states.shape()[1]
                 hidden_states = ttl.tensor.permute(hidden_states, 0, 2, 3, 1)
@@ -426,21 +447,33 @@ class TtTransformer2DModel(nn.Module):
                 cross_attention_kwargs=cross_attention_kwargs,
                 class_labels=class_labels,
             )
+            hidden_states_log.append(tt_to_torch_tensor(hidden_states, self.host))
+
+             # hidden_states #2
+
 
         # 3. Output
         if self.is_input_continuous:
             if not self.use_linear_projection:
                 hidden_states = fallback_ops.reshape(hidden_states, batch, height, width, inner_dim)
-                hidden_states = ttl.tensor.permute(hidden_states, 0, 3, 1, 2)
+                hidden_states = ttl.tensor.permute(hidden_states, 0, 3, 1, 2)   # hidden_states #3
+                hidden_states_log.append(tt_to_torch_tensor(hidden_states, self.host))
 
-                hidden_states = self.proj_out(hidden_states)
+
+                hidden_states = self.proj_out(hidden_states)   # hidden_states #4
+                hidden_states_log.append(tt_to_torch_tensor(hidden_states, self.host))
+
             else:
                 hidden_states = self.proj_out(hidden_states)
                 hidden_states = fallback_ops.reshape(hidden_states, batch, height, width, inner_dim)
                 hidden_states = ttl.tensor.permute(hidden_states, 0, 3, 1, 2)
 
 
-            output = ttl.tensor.add(hidden_states, residual)
+            output = ttl.tensor.add(hidden_states, residual)   # hidden_states #5
+            hidden_states_log.append(tt_to_torch_tensor(output, self.host))
+            torch.save(hidden_states_log,
+            '/home/farbabi/git/tt-metal/tests/python_api_testing/models/stable_diffusion/saved_files/tt_hidden_states_log.pt')
+
 
         if not return_dict:
             return (output,)

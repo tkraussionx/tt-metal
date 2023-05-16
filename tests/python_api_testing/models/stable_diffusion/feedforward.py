@@ -8,6 +8,7 @@ sys.path.append(f"{f}/../../../..")
 sys.path.append(f"{f}/../../../../..")
 
 import numpy as np
+import torch
 import torch.nn as nn
 
 from typing import Optional
@@ -80,6 +81,8 @@ class TtFeedForward(nn.Module):
         assert activation_fn == "geglu", "except GEGLU, other activation functions are not supported."
         inner_dim = int(dim * mult)
         dim_out = dim_out if dim_out is not None else dim
+        self.device = device
+        self.host = host
 
 
         if activation_fn == "geglu":
@@ -95,5 +98,14 @@ class TtFeedForward(nn.Module):
 
 
     def forward(self, hidden_states):
+        hidden_states_log = []
+        hidden_states_log.append(tt_to_torch_tensor(hidden_states, self.host))
         hidden_states = self.act_fn(hidden_states)
-        return self.linear(hidden_states)
+        hidden_states_log.append(tt_to_torch_tensor(hidden_states, self.host))
+        hidden_states_log.append(tt_to_torch_tensor(hidden_states, self.host))  # to match dropout
+        hidden_states = self.linear(hidden_states)
+        hidden_states_log.append(tt_to_torch_tensor(hidden_states, self.host))
+        torch.save(hidden_states_log,
+        '/home/farbabi/git/tt-metal/tests/python_api_testing/models/stable_diffusion/saved_files/tt_ff_hidden_states_log.pt')
+
+        return hidden_states
