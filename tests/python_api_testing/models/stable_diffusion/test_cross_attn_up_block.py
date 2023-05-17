@@ -20,6 +20,8 @@ from utility_functions import torch_to_tt_tensor, tt_to_torch_tensor
 from utility_functions import comp_pcc, comp_allclose_and_pcc, torch_to_tt_tensor_rm
 from unet_2d_blocks import TtCrossAttnUpBlock2D
 
+import cProfile
+import pstats
 
 def test_run_cross_attn_up_block_inference():
     # setup pytorch model
@@ -114,16 +116,20 @@ def test_run_cross_attn_up_block_inference():
     tt_sample = torch_to_tt_tensor_rm(sample, device, put_on_device=False)
     tt_emb = torch_to_tt_tensor_rm(emb, device, put_on_device=False)
     tt_encoder_hidden_states = torch_to_tt_tensor_rm(encoder_hidden_states, device, put_on_device=False)
+    with cProfile.Profile() as profile:
+        tt_output = tt_cross_attn_up_block(
+            hidden_states=tt_sample,
+            temb=tt_emb,
+            res_hidden_states_tuple= res_samples,
+            encoder_hidden_states=tt_encoder_hidden_states,
+            attention_mask=attention_mask,
+            cross_attention_kwargs=cross_attention_kwargs
+            )
 
-    tt_output = tt_cross_attn_up_block(
-        hidden_states=tt_sample,
-        temb=tt_emb,
-        res_hidden_states_tuple= res_samples,
-        encoder_hidden_states=tt_encoder_hidden_states,
-        attention_mask=attention_mask,
-        cross_attention_kwargs=cross_attention_kwargs
-        )
 
+    results = pstats.Stats(profile)
+    results.sort(pstats.SortKey.TIME)
+    results.print_stats()
 
 
     tt_output = tt_to_torch_tensor(tt_output, host)
@@ -133,3 +139,5 @@ def test_run_cross_attn_up_block_inference():
     ttl.device.CloseDevice(device)
     assert passing[0], passing[1:]
     logger.info(f"PASSED {passing[1]}")
+
+test_run_cross_attn_up_block_inference()

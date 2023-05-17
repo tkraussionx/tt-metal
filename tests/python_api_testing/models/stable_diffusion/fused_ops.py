@@ -13,9 +13,9 @@ def Linear(in_features: int, out_features: int, weight, bias):
 
     weight = weight
     bias = bias
+    weight_T = tensor.transpose(weight)
 
     def linear_(activation):
-        weight_T = tensor.transpose(weight)
         output = tensor.matmul(activation, weight_T)
 
         if bias is not None:
