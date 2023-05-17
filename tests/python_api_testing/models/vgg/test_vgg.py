@@ -16,7 +16,7 @@ from python_api_testing.sweep_tests.comparison_funcs import comp_allclose_and_pc
 from vgg import *
 
 
-_batch_size = 16
+_batch_size = 1
 
 
 def test_vgg16_inference(imagenet_sample_input):

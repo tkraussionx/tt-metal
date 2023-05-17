@@ -19,7 +19,8 @@ from typing import Optional, Union
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-
+from python_api_testing.fused_ops.conv import conv as TtConv
+from python_api_testing.models.conv_on_device_utils import can_run_conv_on_device, run_conv_on_tt_device
 ACT_FN = nn.ReLU6()
 
 def assign_weight_conv(conv: nn.Conv2d, state_dict, key_w:str):
@@ -103,11 +104,14 @@ class MobileNetV2ConvLayer(nn.Module):
         use_activation: Union[bool, str] = True,
         layer_norm_eps: Optional[float] = None,
         state_dict=None,
-        base_address=""
+        base_address="",
+        device=None,
+        host=None
     ) -> None:
         super().__init__()
         self.config = config
-
+        self.device = device
+        self.host = host
         if in_channels % groups != 0:
             raise ValueError(f"Input channels ({in_channels}) are not divisible by {groups} groups.")
         if out_channels % groups != 0:
@@ -127,6 +131,18 @@ class MobileNetV2ConvLayer(nn.Module):
             padding_mode="zeros",
         )
         assign_weight_conv(self.convolution, state_dict, f"{base_address}.convolution")
+        print(base_address)
+        print("Stride-" + str(stride))
+        print("Dilation-" + str(dilation))
+        print("Groups-" + str(groups))
+        print("Padding-" + str(padding))
+        conv_weight = state_dict[f"{base_address}.convolution.weight"]
+        print(conv_weight.shape)
+        conv_bias = None
+        if self.convolution.bias:
+            conv_bias = state_dict[f"{base_address}.convolution.bias"]
+        self.conv_params = [out_channels, in_channels, kernel_size, kernel_size, stride, stride, padding, padding, dilation, groups]
+        self.conv_on_tt = TtConv(conv_weight.reshape(-1).tolist(), self.conv_params, self.device, conv_bias)
 
         if use_normalization:
             self.normalization = nn.BatchNorm2d(
@@ -153,7 +169,12 @@ class MobileNetV2ConvLayer(nn.Module):
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         if self.config.tf_padding:
             features = apply_tf_padding(features, self.convolution)
-        features = self.convolution(features)
+        if can_run_conv_on_device(list(features.size()), self.conv_params):
+            print("Conv on tt device.")
+            features = run_conv_on_tt_device(features, self.conv_on_tt, self.conv_params, self.device, self.host)
+        else:
+            print("Conv on CPU.")
+            features = self.convolution(features)
         if self.normalization is not None:
             features = self.normalization(features)
         if self.activation is not None:
@@ -170,10 +191,11 @@ class MobileNetV2InvertedResidual(nn.Module):
         stride: int,
         dilation: int = 1,
         state_dict=None,
-        base_address=""
+        base_address="",
+        device=None,
+        host=None
     ) -> None:
         super().__init__()
-
         expanded_channels = make_divisible(
             int(round(in_channels * config.expand_ratio)), config.depth_divisible_by, config.min_depth
         )
@@ -189,7 +211,9 @@ class MobileNetV2InvertedResidual(nn.Module):
             out_channels=expanded_channels,
             kernel_size=1,
             state_dict=state_dict,
-            base_address=f"{base_address}.expand_1x1"
+            base_address=f"{base_address}.expand_1x1",
+            device=device,
+            host=host
         )
 
         self.conv_3x3 = MobileNetV2ConvLayer(
@@ -201,7 +225,9 @@ class MobileNetV2InvertedResidual(nn.Module):
             groups=expanded_channels,
             dilation=dilation,
             state_dict=state_dict,
-            base_address=f"{base_address}.conv_3x3"
+            base_address=f"{base_address}.conv_3x3",
+            device=device,
+            host=host
         )
 
         self.reduce_1x1 = MobileNetV2ConvLayer(
@@ -211,7 +237,9 @@ class MobileNetV2InvertedResidual(nn.Module):
             kernel_size=1,
             use_activation=False,
             state_dict=state_dict,
-            base_address=f"{base_address}.reduce_1x1"
+            base_address=f"{base_address}.reduce_1x1",
+            device=device,
+            host=host
         )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
@@ -231,7 +259,9 @@ class MobileNetV2Stem(nn.Module):
                 expanded_channels: int,
                 out_channels: int,
                 state_dict=None,
-                base_address="") -> None:
+                base_address="",
+                device=None,
+                host=None) -> None:
         super().__init__()
 
         # The very first layer is a regular 3x3 convolution with stride 2 that expands to 32 channels.
@@ -243,7 +273,9 @@ class MobileNetV2Stem(nn.Module):
             kernel_size=3,
             stride=2,
             state_dict=state_dict,
-            base_address=f"{base_address}.first_conv"
+            base_address=f"{base_address}.first_conv",
+            device=device,
+            host=host
         )
 
         if config.first_layer_is_expansion:
@@ -256,6 +288,8 @@ class MobileNetV2Stem(nn.Module):
                 kernel_size=1,
                 state_dict=state_dict,
                 base_address=f"{base_address}.expand_1x1",
+                device=device,
+                host=host
             )
 
         self.conv_3x3 = MobileNetV2ConvLayer(
@@ -266,7 +300,9 @@ class MobileNetV2Stem(nn.Module):
             stride=1,
             groups=expanded_channels,
             state_dict=state_dict,
-            base_address=f"{base_address}.conv_3x3"
+            base_address=f"{base_address}.conv_3x3",
+            device=device,
+            host=host
         )
 
         self.reduce_1x1 = MobileNetV2ConvLayer(
@@ -276,7 +312,9 @@ class MobileNetV2Stem(nn.Module):
             kernel_size=1,
             use_activation=False,
             state_dict=state_dict,
-            base_address=f"{base_address}.reduce_1x1"
+            base_address=f"{base_address}.reduce_1x1",
+            device=device,
+            host=host
         )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
@@ -289,7 +327,7 @@ class MobileNetV2Stem(nn.Module):
 
 
 class MobileNetV2Model(nn.Module):
-    def __init__(self, config, add_pooling_layer: bool = True, state_dict=None, base_address=""):
+    def __init__(self, config, add_pooling_layer: bool = True, state_dict=None, base_address="", device=None, host=None):
         super().__init__()
         self.base_address_with_dot = "" if base_address == "" else f"{base_address}."
         self.config = config
@@ -307,7 +345,9 @@ class MobileNetV2Model(nn.Module):
             expanded_channels=apply_depth_multiplier(config, 32),
             out_channels=channels[0],
             state_dict=state_dict,
-            base_address=f"{self.base_address_with_dot}conv_stem"
+            base_address=f"{self.base_address_with_dot}conv_stem",
+            device=device,
+            host=host
         )
 
         current_stride = 2  # first conv layer has stride 2
@@ -333,7 +373,9 @@ class MobileNetV2Model(nn.Module):
                     stride=layer_stride,
                     dilation=layer_dilation,
                     state_dict=state_dict,
-                    base_address=f"{self.base_address_with_dot}layer.{i}"
+                    base_address=f"{self.base_address_with_dot}layer.{i}",
+                    device=device,
+                    host=host
                 )
             )
 
@@ -348,7 +390,9 @@ class MobileNetV2Model(nn.Module):
             out_channels=output_channels,
             kernel_size=1,
             state_dict=state_dict,
-            base_address=f"{self.base_address_with_dot}conv_1x1"
+            base_address=f"{self.base_address_with_dot}conv_1x1",
+            device=device,
+            host=host
         )
 
         self.pooler = nn.AdaptiveAvgPool2d((1, 1)) if add_pooling_layer else None

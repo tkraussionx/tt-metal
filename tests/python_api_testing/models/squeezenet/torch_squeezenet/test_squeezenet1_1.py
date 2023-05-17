@@ -20,21 +20,25 @@ from squeezenet import squeezenet1_1
 
 _batch_size = 1
 
-@pytest.mark.parametrize("fuse_ops", [False, True], ids=['Not Fused', "Ops Fused"])
+@pytest.mark.parametrize("fuse_ops", [False], ids=['Not Fused'])
 def test_squeezenet1_inference(fuse_ops, imagenet_sample_input):
     image = imagenet_sample_input
     batch_size = _batch_size
     with torch.no_grad():
-
+        # Initialize the device
+        device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
+        ttl.device.InitializeDevice(device)
+        host = ttl.device.GetHost()
         torch_squeezenet = models.squeezenet1_1(weights=models.SqueezeNet1_1_Weights.IMAGENET1K_V1)
 
         torch_squeezenet.eval()
 
         state_dict = torch_squeezenet.state_dict()
 
-        tt_squeezenet = squeezenet1_1(state_dict)
+        tt_squeezenet = squeezenet1_1(state_dict, device=device, host=host)
         tt_squeezenet.eval()
-
+        #TODO (nshanker): enable fuse_ops later after support is added
+        assert not fuse_ops
         if fuse_ops:
             modules_to_fuse = [['features.0', 'features.1'], ['classifier.1', 'classifier.2']]
             fire_indices = [3, 4, 6, 7, 10, 11, 12]

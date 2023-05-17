@@ -11,14 +11,14 @@ from typing import Type, Union, Optional, List, Callable
 import torch
 import torch.nn as nn
 
-from utils import conv3x3, conv1x1, fold_bn_to_conv, can_run_conv_on_device, run_conv_on_tt_device
-from utility_functions import tt2torch_tensor, torch2tt_tensor
+from utils import conv3x3, conv1x1, fold_bn_to_conv
+from utility_functions import pad_by_zero, unpad_from_zero
 from libs.tt_lib.utils import pad_activation, pad_weight, print_diff_argmax
 from libs import tt_lib as ttl
 from python_api_testing.fused_ops.linear import Linear as TtLinear
 from python_api_testing.fused_ops.softmax import softmax as TtSoftmax
 from python_api_testing.fused_ops.conv import conv as TtConv
-from utils import pad_by_zero, unpad_from_zero
+from python_api_testing.models.conv_on_device_utils import can_run_conv_on_device, run_conv_on_tt_device
 
 
 class Bottleneck(nn.Module):
@@ -59,7 +59,7 @@ class Bottleneck(nn.Module):
         self.conv1 = conv1x1(inplanes, width, state_dict=state_dict, base_address=f"{base_address}.conv1")
 
         conv1_weight = state_dict[f"{base_address}.conv1.weight"]
-        self.conv1_params = [width, inplanes, 1, 1, 1, 1, 0, 0]
+        self.conv1_params = [width, inplanes, 1, 1, 1, 1, 0, 0, dilation, groups]
         self.conv1_on_tt = TtConv(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device)
 
         self.bn1 = norm_layer(width)
@@ -72,7 +72,7 @@ class Bottleneck(nn.Module):
 
         self.conv2 = conv3x3(width, width, stride, groups, dilation, state_dict=state_dict, base_address=f"{base_address}.conv2")
         conv2_weight = state_dict[f"{base_address}.conv2.weight"]
-        self.conv2_params = [width, width, 3, 3, stride, stride, 1, 1]
+        self.conv2_params = [width, width, 3, 3, stride, stride, 1, 1, dilation, groups]
         self.conv2_on_tt = TtConv(conv2_weight.reshape(-1).tolist(), self.conv2_params, self.device)
 
         self.bn2 = norm_layer(width)
@@ -85,7 +85,7 @@ class Bottleneck(nn.Module):
 
         self.conv3 = conv1x1(width, planes * self.expansion, state_dict=state_dict, base_address=f"{base_address}.conv3")
         conv3_weight = state_dict[f"{base_address}.conv3.weight"]
-        self.conv3_params = [planes * self.expansion, width, 1, 1, 1, 1, 0, 0]
+        self.conv3_params = [planes * self.expansion, width, 1, 1, 1, 1, 0, 0, dilation, groups]
         self.conv3_on_tt = TtConv(conv3_weight.reshape(-1).tolist(), self.conv3_params, self.device)
 
         self.bn3 = norm_layer(planes * self.expansion)
@@ -189,7 +189,7 @@ class BasicBlock(nn.Module):
         self.conv1 = conv3x3(inplanes, planes, stride, state_dict=state_dict, base_address=f"{base_address}.conv1")
 
         conv1_weight = state_dict[f"{base_address}.conv1.weight"]
-        self.conv1_params = [planes, inplanes, 3, 3, stride, stride, 1, 1]
+        self.conv1_params = [planes, inplanes, 3, 3, stride, stride, 1, 1, dilation, groups]
         self.conv1_on_tt = TtConv(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device)
 
         self.bn1 = norm_layer(planes)
@@ -204,7 +204,7 @@ class BasicBlock(nn.Module):
         self.conv2 = conv3x3(planes, planes, state_dict=state_dict, base_address=f"{base_address}.conv2")
 
         conv2_weight = state_dict[f"{base_address}.conv2.weight"]
-        self.conv2_params = [planes, planes, 3, 3, 1, 1, 1, 1]
+        self.conv2_params = [planes, planes, 3, 3, 1, 1, 1, 1, dilation, groups]
         self.conv2_on_tt = TtConv(conv2_weight.reshape(-1).tolist(), self.conv2_params, self.device)
 
         self.bn2 = norm_layer(planes)
@@ -310,7 +310,7 @@ class ResNet(nn.Module):
         self.conv1.weight = nn.Parameter(state_dict[f"{self.base_address_with_dot}conv1.weight"])
 
         conv1_weight = state_dict[f"{self.base_address_with_dot}conv1.weight"]
-        self.conv1_params = [self.inplanes, 3, 7, 7, 2, 2, 3, 3]
+        self.conv1_params = [self.inplanes, 3, 7, 7, 2, 2, 3, 3, 1, groups]
         self.conv1_on_tt = TtConv(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device)
 
         self.bn1 = norm_layer(self.inplanes) # batch norm
@@ -376,7 +376,7 @@ class ResNet(nn.Module):
                 nl,
             )
             downsample_conv_weight = state_dict[f"{self.base_address_with_dot}{name}.0.downsample.0.weight"]
-            self.downsample_params = [planes * block.expansion, self.inplanes, 1, 1, stride, stride, 0, 0]
+            self.downsample_params = [planes * block.expansion, self.inplanes, 1, 1, stride, stride, 0, 0, self.dilation, 1]
             self.downsample_conv_on_tt = TtConv(downsample_conv_weight.reshape(-1).tolist(), self.downsample_params, self.device)
 
 
