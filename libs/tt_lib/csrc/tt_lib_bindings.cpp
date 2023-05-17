@@ -1195,7 +1195,7 @@ void TensorModule(py::module &m_tensor) {
         | untilize_out | Whether or not to untilize the output (useful if a consuming op requires row major layout) | bool      |             | Yes      |
         +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
     )doc");
-    m_tensor.def("bmm_single_core_tilize_untilize", &bmm_single_core_tilize_untilize, R"doc(
+    m_tensor.def("bmm_tilize_untilize", &bmm_tilize_untilize, R"doc(
         Perform a batched matmul ``A x B`` with two tensors, where batch dims match.
         This op also supports tiling tensor A and untiling the output.
 

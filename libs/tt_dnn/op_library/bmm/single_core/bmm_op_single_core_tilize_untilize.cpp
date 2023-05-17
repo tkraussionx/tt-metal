@@ -2,7 +2,20 @@
 
 #include "tt_metal/host_api.hpp"
 #include "common/constants.hpp"
-#include "tests/tt_metal/llrt/test_libs/debug_mailbox.hpp"
+// #include "tests/tt_metal/llrt/test_libs/debug_mailbox.hpp"
+
+// #include "tt_cluster.hpp"
+// #include "utils.hpp"
+// #include "common/logger.hpp"
+// #include "tensix.h"
+
+// #include "llrt.hpp"
+// #include "common/bfloat16.hpp"
+// #include "tt_metal/llrt/test_libs/debug_mailbox.hpp"
+// #include "tt_metal/llrt/test_libs/tiles.hpp"
+
+#include "llrt/tt_debug_print_server.hpp"
+#include "hostdevcommon/debug_print_common.h"
 
 namespace tt {
 namespace tt_metal {
@@ -134,7 +147,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor& a,
     TT_ASSERT(a.buffer() != nullptr && b.buffer() != nullptr, "Operands need to have buffers allocated on the device!");
 
     // Data format checks
-    TT_ASSERT(a.dtype == b.dtype && a.dtype == BFLOAT16, "Datatypes of operands should match. Only BFLOAT16 supported for now");
+    TT_ASSERT(a.dtype() == b.dtype() && a.dtype() == DataType::BFLOAT16, "Datatypes of operands should match. Only BFLOAT16 supported for now");
 
     const uint32_t TILE_SIZE_BYTES = 2 * tt::constants::TILE_HW;   // TODO: use datatype size
     Buffer *src0_dram_buffer = a.buffer();
@@ -144,12 +157,17 @@ Tensor bmm_single_core_tilize_untilize(const Tensor& a,
     TT_ASSERT(src1_dram_buffer->size() % TILE_SIZE_BYTES == 0, "Buffer size of tensor b must be divisible by TILE_SIZE_BYTES");
 
     tt_xy_pair core = {0, 0};
+    tt_xy_pair debug_core = {1, 1};
     Program *program = new Program();
     Device *device = a.device();
 
+    // for kernel debug print
+    int hart_mask = DPRINT_HART_NC | DPRINT_HART_BR;
+    tt_start_debug_print_server(device->cluster(), {0}, {core}, hart_mask);
+
     const std::array<uint32_t, 4> c_shape{a_batch, a_channel, a_height, b_width};
     Tensor output = Tensor(c_shape,
-                            a.dtype,
+                            a.dtype(),
                             Layout::ROW_MAJOR,
                             device);
     Buffer *dst_dram_buffer = output.buffer();
@@ -186,7 +204,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor& a,
 
     // in0 block info
     uint32_t in0_block_w = a_width_ntiles / num_blocks; // Two blocks in the W dimension
-    uint32_t in0_partial_row_size_bytes = (in0_block_w * tt:constants::TILE_WIDTH) * 2; // TODO: use datatype
+    uint32_t in0_partial_row_size_bytes = (in0_block_w * tt::constants::TILE_WIDTH) * 2; // TODO: use datatype
     uint32_t in0_num_blocks_w = a_width_ntiles / in0_block_w;
     uint32_t in0_block_h = a_height_ntiles;
     uint32_t in0_num_subblocks = in0_block_h / out_subblock_h;
@@ -203,13 +221,15 @@ Tensor bmm_single_core_tilize_untilize(const Tensor& a,
     uint32_t in1_block_w = out_subblock_w * in1_num_subblocks;
     uint32_t in1_block_h = in0_block_w;
 
+    uint32_t out_subblock_num_tiles = out_subblock_w * out_subblock_h;
+
     {
         // debug
         // in0
         log_debug("in0_dram_addr: {}", in0_dram_addr);
-        log_debug("in0_row_size: {}", in0_row_size);
+        // log_debug("in0_row_size: {}", in0_row_size);
         log_debug("in0_block_w: {}", in0_block_w);
-        log_debug("in0_partial_row_size: {}", in0_partial_row_size);
+        // log_debug("in0_partial_row_size: {}", in0_partial_row_size);
         log_debug("in0_num_blocks_w: {}", in0_num_blocks_w);
         log_debug("in0_block_h: {}", in0_block_h);
         log_debug("in0_num_subblocks: {}", in0_num_subblocks);
@@ -224,7 +244,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor& a,
         log_debug("in1_block_h: {}", in1_block_h);
         // out
         log_debug("out_dram_addr: {}", out_dram_addr);
-        log_debug("out_row_size: {}", out_row_size);
+        // log_debug("out_row_size: {}", out_row_size);
         log_debug("out_subblock_h: {}", out_subblock_h);
         log_debug("out_subblock_w: {}", out_subblock_w);
         log_debug("out_subblock_num_tiles: {}", out_subblock_num_tiles);
@@ -234,23 +254,21 @@ Tensor bmm_single_core_tilize_untilize(const Tensor& a,
         program,
         a.device(),
         core,
-        Hat,
-        Wbt,
+        a_height_ntiles,
+        b_width_ntiles,
         in0_block_w,
         out_subblock_h,
-        2,
-        tilize_act,
-        untilize_out); // TODO(agrebenisan): fix df num bytes
+        2);
 
     // Reader kernel
-    std::string reader_kernel = "tt_metal/kernels/dataflow/reader_matmul_row_major_activations_tile_layout_weights.cpp";
+    std::string reader_kernel = "tt_metal/kernels/dataflow/reader_bmm_single_core_tilize_untilize.cpp";
     std::vector<uint32_t> reader_rt_args = {
         in0_dram_addr,
         0,
         in0_block_h,
         in0_block_num_tiles,
-        in0_row_size,
-        in0_partial_row_size,
+        // in0_row_size,
+        // in0_partial_row_size,
         in1_dram_addr,
         0,
         1,
@@ -273,17 +291,17 @@ Tensor bmm_single_core_tilize_untilize(const Tensor& a,
     vector<uint32_t> writer_rt_args = {
         out_dram_addr,
         a_height,
-        out_row_size
+        // out_row_size
     };
-    auto writer = CreateDataMovementKernel(
-        program,
-        writer_kernel,
-        core,
-        DataMovementProcessor::RISCV_0,
-        NOC::RISCV_0_default);
+    // auto writer = CreateDataMovementKernel(
+    //     program,
+    //     writer_kernel,
+    //     core,
+    //     DataMovementProcessor::RISCV_0,
+    //     NOC::RISCV_0_default);
 
     // Compute kernel
-    std::string compute_kernel = "tt_metal/kernels/compute/matmul_large_block.cpp";
+    std::string compute_kernel = "tt_metal/kernels/compute/bmm_tilize_untilize.cpp";
     std::vector<uint32_t> compute_comptime_args = {
         in0_block_w,
         in0_num_subblocks,
@@ -303,7 +321,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor& a,
         program,
         compute_kernel,
         core,
-        bmm_args,
+        compute_args,
         MathFidelity::HiFi4,
         false,  // fp32_dest_acc_en
         false   // math_approx_mode
@@ -312,7 +330,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor& a,
     // Reader rt args
     WriteRuntimeArgsToDevice(device, reader, core, reader_rt_args);
     // Writer rt args
-    WriteRuntimeArgsToDevice(device, writer, core, writer_rt_args);
+    // WriteRuntimeArgsToDevice(device, writer, core, writer_rt_args);
     // Compute and launch
     bool pass = CompileProgram(device, program, false);
     pass &= ConfigureDeviceWithProgram(device, program);

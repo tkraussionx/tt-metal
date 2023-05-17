@@ -76,7 +76,7 @@ def test_run_bmm_single_core_tilize_untilize(a_height_ntiles,
         device)
 
     ## compute out
-    out = ttl.tensor.bmm_single_core_tilize_untilize(tta, ttb, num_blocks, out_subblock_h, out_subblock_w)
+    out = ttl.tensor.bmm_tilize_untilize(tta, ttb, num_blocks, out_subblock_h, out_subblock_w)
     out = out.to(host)
 
     out_pytorch = torch.tensor(out.data()).reshape(out_shape)
