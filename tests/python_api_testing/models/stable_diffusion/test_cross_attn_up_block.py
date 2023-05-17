@@ -34,7 +34,7 @@ def test_run_cross_attn_up_block_inference():
     unet.eval()
     state_dict = unet.state_dict()
 
-    test = "test2"
+    test = "test1"
 
     if test == "test1":
         in_channels  = 640
@@ -123,8 +123,8 @@ def test_run_cross_attn_up_block_inference():
             cross_attention_kwargs=cross_attention_kwargs
             )
 
-    passing = comp_pcc(torch_output, tt_output)
-    logger.info(comp_allclose_and_pcc(tt_output, torch_output))
+    passing = comp_pcc(torch_output, tt_to_torch_tensor(tt_output, host))
+    logger.info(comp_allclose_and_pcc(torch_output, tt_to_torch_tensor(tt_output, host)))
     ttl.device.CloseDevice(device)
     assert passing[0], passing[1:]
     logger.info(f"PASSED {passing[1]}")

@@ -258,8 +258,8 @@ class TtCrossAttnUpBlock2D(nn.Module):
             for upsampler in self.upsamplers:
                 hidden_states = upsampler(hidden_states, upsample_size)
 
-        torch.save(hidden_states,
-            '/home/farbabi/git/tt-metal/tests/python_api_testing/models/stable_diffusion/saved_files/tt_cross_att_upblock_output.pt')
+        # torch.save(hidden_states,
+        #     '/home/farbabi/git/tt-metal/tests/python_api_testing/models/stable_diffusion/saved_files/tt_cross_att_upblock_output.pt')
 
 
         return hidden_states

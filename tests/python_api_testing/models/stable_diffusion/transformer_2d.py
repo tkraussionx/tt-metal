@@ -412,8 +412,8 @@ class TtTransformer2DModel(nn.Module):
             returning a tuple, the first element is the sample tensor.
         """
         # 1. Input
-        hidden_states = torch_to_tt_tensor_rm(hidden_states, self.device, put_on_device=False)
-        encoder_hidden_states = torch_to_tt_tensor_rm(encoder_hidden_states, self.device ,put_on_device=False)
+        # hidden_states = torch_to_tt_tensor_rm(hidden_states, self.device, put_on_device=False)
+        # encoder_hidden_states = torch_to_tt_tensor_rm(encoder_hidden_states, self.device ,put_on_device=False)
         hidden_states_log = []
         if self.is_input_continuous:
             batch, _, height, width = hidden_states.shape()
