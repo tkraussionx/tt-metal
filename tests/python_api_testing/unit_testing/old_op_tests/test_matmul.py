@@ -1,5 +1,5 @@
 import pytest
-from libs import tt_lib
+import tt_lib
 import torch
 from python_api_testing.models.utility_functions import pad_activation, pad_weight, tilize, untilize, tilize_to_list, print_diff_argmax, pad_weight, is_close
 
