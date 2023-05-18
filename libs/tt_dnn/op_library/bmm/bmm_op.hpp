@@ -40,9 +40,14 @@ Tensor large_bmm(const Tensor& A, const Tensor& B, bool tilize_act, bool untiliz
 Tensor large_bmm_single_block(const Tensor& A, const Tensor& B, bool tilize_a, bool untilize_out); // Allows support for tilizing a, untilize b
 Tensor matmul_single_core  (const Tensor &A, const Tensor &B); // broadcasts batch, expects N=1 for now
 Tensor bmm_single_core     (const Tensor &A, const Tensor &B); // doesn't broadcast batch, expects batch to match in A and B
-Tensor bmm_tilize_untilize(const Tensor& a, const Tensor& b, const uint32_t nblocks, const uint32_t subblock_h, const uint32_t subblock_w);
+Tensor bmm_tilize_untilize(const Tensor& a, const Tensor& b,
+                           uint32_t a_height_nblocks, uint32_t a_width_nblocks, uint32_t b_width_nblocks,
+                           uint32_t a_block_height_ntiles, uint32_t a_block_width_ntiles, uint32_t b_block_width_ntiles,
+                           uint32_t out_subblock_height_ntiles, uint32_t out_subblock_width_ntiles);
 Tensor bmm_single_core_tilize_untilize(const Tensor &A, const Tensor &B,
-                                       uint32_t num_blocks, uint32_t out_subblock_h, uint32_t out_subblock_w); // single core, with tilize and untilize for activations (A)
+                                       uint32_t a_height_nblocks, uint32_t a_width_nblocks, uint32_t b_width_nblocks,
+                                       uint32_t a_block_height_ntiles, uint32_t a_block_width_ntiles, uint32_t b_block_width_ntiles,
+                                       uint32_t out_subblock_height_ntiles, uint32_t out_subblock_width_ntiles);
 Tensor large_bmm_single_core(const Tensor& A, const Tensor& B, bool tilize_act, bool untilize_out); // Tilizes a, untilizes b
 Tensor large_bmm_single_core_single_block(const Tensor& A, const Tensor& B, bool tilize_a, bool untilize_out); // Allows support for tilizing a, untilize b
 Tensor matmul_multi_core  (const Tensor &A, const Tensor &B); // broadcasts batch, expects N=1 for now

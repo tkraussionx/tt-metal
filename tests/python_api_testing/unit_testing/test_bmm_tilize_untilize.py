@@ -12,49 +12,54 @@ import torch
 
 from libs import tt_lib as ttl
 from python_api_testing.models.utility_functions import (
-    pad_activation,
-    pad_weight,
-    tilize,
-    untilize,
     tilize_to_list,
-    print_diff_argmax,
-    pad_weight,
-    is_close,
     comp_pcc,
 )
 
 TILE_HEIGHT = TILE_WIDTH = 32
 
 ## parameters
-## input matrix size as number of tiles
-a_height_ntiles = [1]   #[1, 2]
-a_width_ntiles = [1]    #[9, 32]
-b_width_ntiles = [1]    #[1, 9]
-## blocking and subblocking parameters as number of tiles
-num_blocks = [1]        #[1, 2]
-out_subblock_h = [1]    #[2, 4]
-out_subblock_w = [1]    #[2, 4]
+# matrix sizes as number of blocks along h and w:
+a_height_nblocks = [1]
+a_width_nblocks = [1]   # == b_height_nblocks
+b_width_nblocks = [1]
+# block sizes as number of tiles along h and w:
+a_block_height_ntiles = [1]
+a_block_width_ntiles = [1]  # == b_block_height_ntiles
+b_block_width_ntiles = [1]
+# output sublobcking per block:
+out_subblock_height_ntiles = [1]
+out_subblock_width_ntiles = [1]
+
 
 @pytest.mark.parametrize(
-    'a_height_ntiles, a_width_ntiles, b_width_ntiles, num_blocks, out_subblock_h, out_subblock_w',
-    itertools.product(a_height_ntiles, a_width_ntiles, b_width_ntiles, num_blocks, out_subblock_h, out_subblock_w)
+    'a_height_nblocks, a_width_nblocks, b_width_nblocks,\
+     a_block_height_ntiles, a_block_width_ntiles, b_block_width_ntiles,\
+     out_subblock_height_ntiles, out_subblock_width_ntiles',
+    itertools.product(a_height_nblocks, a_width_nblocks, b_width_nblocks,
+                      a_block_height_ntiles, a_block_width_ntiles, b_block_width_ntiles,
+                      out_subblock_height_ntiles, out_subblock_width_ntiles)
 )
-def test_run_bmm_single_core_tilize_untilize(a_height_ntiles,
-                                             a_width_ntiles,
-                                             b_width_ntiles,
-                                             num_blocks,
-                                             out_subblock_h,
-                                             out_subblock_w):
+def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
+                                             a_width_nblocks,
+                                             b_width_nblocks,
+                                             a_block_height_ntiles,
+                                             a_block_width_ntiles,
+                                             b_block_width_ntiles,
+                                             out_subblock_height_ntiles,
+                                             out_subblock_width_ntiles):
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
     host = ttl.device.GetHost()
 
-    a_height = a_height_ntiles * TILE_HEIGHT
-    a_width = a_width_ntiles * TILE_WIDTH
-    b_width = b_width_ntiles * TILE_WIDTH
-    a_shape = [1, 1, a_height, a_width]
-    b_shape = [1, 1, a_width, b_width]
-    out_shape = [1, 1, a_height, b_width]
+    a_batch = b_batch = 1
+    a_channel = b_channel = 1
+    a_height = a_height_nblocks * a_block_height_ntiles * TILE_HEIGHT
+    a_width = a_width_nblocks * a_block_width_ntiles * TILE_WIDTH   # == b_height
+    b_width = b_width_nblocks * b_block_width_ntiles * TILE_WIDTH
+    a_shape = [a_batch, a_channel, a_height, a_width]
+    b_shape = [b_batch, b_channel, a_width, b_width]
+    out_shape = [a_batch, a_channel, a_height, b_width]
 
     torch.manual_seed(0)
     a = torch.randn(a_shape, dtype=torch.bfloat16).float()
@@ -76,7 +81,10 @@ def test_run_bmm_single_core_tilize_untilize(a_height_ntiles,
         device)
 
     ## compute out
-    out = ttl.tensor.bmm_tilize_untilize(tta, ttb, num_blocks, out_subblock_h, out_subblock_w)
+    out = ttl.tensor.bmm_tilize_untilize(tta, ttb,
+                                         a_height_nblocks, a_width_nblocks, b_width_nblocks,
+                                         a_block_height_ntiles, a_block_width_ntiles, b_block_width_ntiles,
+                                         out_subblock_height_ntiles, out_subblock_width_ntiles)
     out = out.to(host)
 
     out_pytorch = torch.tensor(out.data()).reshape(out_shape)

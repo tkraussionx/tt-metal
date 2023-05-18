@@ -10,11 +10,11 @@ void kernel_main() {
     uint32_t in0_addr = get_arg_val<uint32_t>(0);
     uint32_t in0_block_h = get_arg_val<uint32_t>(1);
     uint32_t in0_num_blocks_h = get_arg_val<uint32_t>(2);
-    uint32_t in0_num_blocks_w = get_arg_val<uint32_t>(3); // == in1_num_blocks_h
+    uint32_t in0_num_blocks_w = get_arg_val<uint32_t>(3);           // == in1_num_blocks_h
     uint32_t in0_block_num_tiles = get_arg_val<uint32_t>(4);
     uint32_t in0_start_row_id = get_arg_val<uint32_t>(5);
-    uint32_t in0_row_size_bytes = get_arg_val<uint32_t>(6);
-    uint32_t in0_read_row_size_bytes = get_arg_val<uint32_t>(7);
+    uint32_t in0_row_size_bytes = get_arg_val<uint32_t>(6);         // size of a full row
+    uint32_t in0_read_row_size_bytes = get_arg_val<uint32_t>(7);    // size of partial row to fit within a block width
     // in1
     uint32_t in1_addr = get_arg_val<uint32_t>(8);
     uint32_t in1_block_h = get_arg_val<uint32_t>(9);
@@ -28,8 +28,8 @@ void kernel_main() {
     constexpr uint32_t in0_cb_id = tt::CB::c_in0;
     constexpr uint32_t in1_cb_id = tt::CB::c_in1;
 
-    constexpr uint32_t TILE_HEIGHT = 32;                    // TODO: use a common source of truth
-    uint32_t tile_size_bytes = get_tile_size(in0_cb_id);    // == get_tile_size(in1_cb_id)
+    constexpr uint32_t TILE_HEIGHT = 32;                            // TODO: use a common source of truth
+    const uint32_t tile_size_bytes = get_tile_size(in0_cb_id);  // == get_tile_size(in1_cb_id)
 
     const InterleavedAddrGen<true> s0 = {
         .bank_base_address = in0_addr,
