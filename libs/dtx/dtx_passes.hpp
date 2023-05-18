@@ -73,6 +73,8 @@ bool convert_tensor_layout_CL1_to_CL8(DataTransformations * dtx);       // need 
 bool convert_tensor_layout_RM1_to_RM8(DataTransformations * dtx);
 bool convert_tensor_layout_Tile1_to_Tile8(DataTransformations * dtx);
 
+// converts from 3d abstract tensor to 2d blocks
+bool convert_tensor_layout_3d_conv_act_to_2d_blocks(DataTransformations * dtx, vector<int> dim_order, vector<int> block_shape_yx);
 // ========================================================
 //             PART 3: PARALLELIZATION & SLICING
 // ========================================================
