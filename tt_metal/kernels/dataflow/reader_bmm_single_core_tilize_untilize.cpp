@@ -25,6 +25,12 @@ void kernel_main() {
     uint32_t in1_next_block_stride_h = get_arg_val<uint32_t>(14);
     uint32_t in1_next_block_stride_w = get_arg_val<uint32_t>(15);
 
+    DPRINT << "00: " << in1_next_block_stride_w << ENDL();
+    DPRINT << "01: " << in1_next_block_stride_h << ENDL();
+    DPRINT << "02: " << in1_stride_h << ENDL();
+    DPRINT << "03: " << in1_block_num_tiles << ENDL();
+
+
     constexpr uint32_t in0_cb_id = tt::CB::c_in0;
     constexpr uint32_t in1_cb_id = tt::CB::c_in1;
 
@@ -42,17 +48,18 @@ void kernel_main() {
         .log_base_2_of_page_size = tile_size_pow2_exponent
     };
 
-    DPRINT << "test ... " << ENDL();
-
+    uint32_t in0_row_bank_id = 0;
     // loop over in0 blocks along h
     for(uint32_t in0_block_h_i = 0; in0_block_h_i < in0_num_blocks_h; ++in0_block_h_i) {
         // Reset in1 (weight) start tile index
         uint32_t in1_start_tile_id = 0;
+        in0_start_row_id = in0_row_bank_id;
         // loop over in1 blocks along w
         for(uint32_t in1_block_w_i = 0; in1_block_w_i < in1_num_blocks_w; ++in1_block_w_i) {
             uint32_t in1_current_block_start_tile_id = in1_start_tile_id;
             // Reset in0 (activation) to start block in this row
             uint32_t in0_row_offset_bytes = 0;
+            in0_row_bank_id = in0_start_row_id;
             // loop over in0 blocks along w (== in1 blocks along h)
             for (uint32_t in0_block_w_i = 0; in0_block_w_i < in0_num_blocks_w; ++in0_block_w_i) {
                 // read in input data for current block
@@ -61,9 +68,9 @@ void kernel_main() {
                 // partial rows are read since multiple blocks can span along the rows
                 cb_reserve_back(in0_cb_id, in0_block_num_tiles);
                 uint32_t in0_write_l1_addr = get_write_ptr(in0_cb_id);
-                uint32_t in0_row_bank_id = in0_start_row_id;
                 // loop over in0 block tiles along h
                 for (uint32_t in0_tile_h_i = 0; in0_tile_h_i < in0_block_h; ++in0_tile_h_i) {
+
                     // loop over each row of the tile
                     for (uint32_t in0_row_h_i = 0; in0_row_h_i < TILE_HEIGHT; ++in0_row_h_i) {
                         uint64_t in0_row_noc_addr = get_noc_addr(in0_row_bank_id, s0, in0_row_offset_bytes);
@@ -86,14 +93,24 @@ void kernel_main() {
                     // loop over in1 block tiles along w
                     for(uint32_t in1_tile_w_i = 0; in1_tile_w_i < in1_block_w; ++in1_tile_w_i) {
 
+                        // DPRINT << "IN1 BLOCK TILE: " << in1_tile_id << ENDL();
+
                         uint64_t in1_tile_noc_addr = get_noc_addr(in1_tile_id, s1);
                         noc_async_read(in1_tile_noc_addr, in1_write_l1_addr, tile_size_bytes);
                         in1_write_l1_addr += tile_size_bytes;
+                        DPRINT << "TILE ID: " << in1_tile_id << ENDL();
                         in1_tile_id += 1;
                     } // for in1_block_w
                     in1_row_start_tile_id += in1_stride_h;
                 } // for in1_block_h
                 noc_async_read_barrier();
+
+                // DPRINT << "IN1 BLOCK: " << in1_block_w_i << "," << in0_block_w_i << ENDL();
+
+                auto slice = SliceRange{ .h0 = 1, .h1 = 2, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
+                DPRINT << FIXP() << SETW(32) << SETP(2);
+                DPRINT  << "TILE SLICE: " << TSLICE(in1_cb_id, 0, slice) << ENDL();
+
                 in1_current_block_start_tile_id += in1_next_block_stride_h;
                 cb_push_back(in1_cb_id, in1_block_num_tiles);
             } // for in0_num_blocks_w

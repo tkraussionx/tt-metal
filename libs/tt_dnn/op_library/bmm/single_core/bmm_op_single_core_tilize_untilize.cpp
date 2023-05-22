@@ -156,8 +156,8 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &a,
     Device *device = a.device();
 
     // for kernel debug print
-    int hart_mask = DPRINT_HART_NC | DPRINT_HART_BR;
-    tt_start_debug_print_server(device->cluster(), {0}, {core}, hart_mask);
+    // int hart_mask = DPRINT_HART_NC | DPRINT_HART_BR;
+    tt_start_debug_print_server(device->cluster(), {0}, {debug_core});
 
     const std::array<uint32_t, 4> out_shape{a_batch, a_channel, a_height, b_width};
     Tensor output = Tensor(out_shape,
@@ -197,12 +197,18 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &a,
     // in1
     uint32_t in1_dram_addr = src1_dram_buffer->address();
     // in1 block info
-    uint32_t in1_num_subblocks = b_width_ntiles / out_subblock_width_ntiles;
-    uint32_t in1_block_num_tiles = out_subblock_width_ntiles * in0_block_w * in1_num_subblocks;
-    uint32_t in1_block_w = out_subblock_width_ntiles * in1_num_subblocks;
-    uint32_t in1_block_h = in0_block_w;
+    // uint32_t in1_num_subblocks = in1_block_w / out_subblock_width_ntiles;
+    // uint32_t in1_block_num_tiles = out_subblock_width_ntiles * in0_block_w * in1_num_subblocks;
+    // uint32_t in1_block_w = out_subblock_width_ntiles * in1_num_subblocks;
+    // uint32_t in1_block_h = in0_block_w;
     uint32_t in1_num_blocks_w = b_width_nblocks;
     uint32_t in1_num_blocks_h = a_width_nblocks;
+    uint32_t in1_block_w = b_block_width_ntiles;
+    assert(in1_block_w % out_subblock_width_ntiles == 0);
+    uint32_t in1_num_subblocks = in1_block_w / out_subblock_width_ntiles;
+    uint32_t in1_block_h = in0_block_w;
+    uint32_t in1_block_num_tiles = in1_block_w * in1_block_h;
+
 
     // out
     uint32_t out_dram_addr = dst_dram_buffer->address();

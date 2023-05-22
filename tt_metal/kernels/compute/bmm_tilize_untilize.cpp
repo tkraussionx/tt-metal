@@ -1,7 +1,7 @@
 #include <cstdint>
 
 #include "llk_3c.h"
-
+#include "debug_print.h"
 
 
 inline void tilize_in(
@@ -108,11 +108,16 @@ void MAIN {
     uint32_t untilize_mode_reblock_cb                 = CB::c_intermed3;
     uint32_t out0_cb                                  = CB::c_out0;
 
+    // MATH((DPRINT << "C: START" << ENDL()));
+
     mm_init();
-    for(uint32_t in0_block_h_i = 0; in0_block_h_i < in0_num_blocks_h; ++ in0_block_h_i) {
+    for(uint32_t in0_block_h_i = 0; in0_block_h_i < in0_num_blocks_h; ++in0_block_h_i) {
+        // MATH((DPRINT << "C: IN0_H" << ENDL()));
         for(uint32_t in1_block_w_i = 0; in1_block_w_i < in1_num_blocks_w; ++in1_block_w_i) {
             bool enable_reload = false;
+            // MATH((DPRINT << "C: IN1_W" << ENDL()));
             for(uint32_t in0_block_w_i = 0; in0_block_w_i < in0_num_blocks_w; ++in0_block_w_i) {
+                // MATH((DPRINT << "C: IN0_W" << ENDL()));
                 bool last_out = (in0_block_w_i == in0_num_blocks_w - 1);
                 tilize_in(in0_cb, in0_subblock_h, in0_block_w, in0_num_subblocks, tilize_mode_tilized_in0_cb);
                 mm_init_short();
@@ -120,8 +125,10 @@ void MAIN {
                 cb_wait_front(CB::c_in1, in1_block_num_tiles);
                 int in0_index_subblock_offset = 0;
                 for (uint32_t in0_subblock_i = 0; in0_subblock_i < in0_num_subblocks; ++in0_subblock_i) {
+                    // MATH((DPRINT << "C: IN0_SB" << ENDL()));
                     int in1_index_subblock_offset = 0;
                     for (uint32_t in1_subblock_i = 0; in1_subblock_i < in1_num_subblocks; ++in1_subblock_i) {
+                        // MATH((DPRINT << "C: IN1_SB" << ENDL()));
                         acquire_dst(DstMode::Half);
 
                         if (enable_reload) {
