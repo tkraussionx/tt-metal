@@ -2,11 +2,11 @@ import torch
 import math
 from torch.nn import functional as F
 
-import tt_lib
+from libs import tt_lib as ttm
 import python_api_testing.models.bloom.bloom_utils as bloom_utils
 import python_api_testing.models.bloom.bloom_block as bloom_block
 
-from tt_lib.fallback_ops import fallback_ops
+from fused_ops.layernorm import Layernorm as TtLayernorm
 from typing import Optional, Tuple, Union
 
 
@@ -297,14 +297,17 @@ class TtBloomModel(torch.nn.Module):
         self.word_embeddings = torch.nn.Embedding(config.vocab_size, self.embed_dim)
         self.word_embeddings.weight = torch.nn.Parameter(state_dict[f"{base_address}.word_embeddings.weight"])
 
-        self.word_embeddings_layernorm_bias = bloom_utils.torch2tt_tensor(state_dict[f"{base_address}.word_embeddings_layernorm.bias"], device)
-        self.word_embeddings_layernorm_weight = bloom_utils.torch2tt_tensor(state_dict[f"{base_address}.word_embeddings_layernorm.weight"], device)
+        self.word_embeddings_layernorm_bias = bloom_utils.tt_load_layer_weights(f"{base_address}.word_embeddings_layernorm.bias", state_dict)
+        self.word_embeddings_layernorm_weight = bloom_utils.tt_load_layer_weights(f"{base_address}.word_embeddings_layernorm.weight", state_dict)
 
-        self.word_embeddings_layernorm = fallback_ops.LayerNorm(
-            self.word_embeddings_layernorm_weight,
-            self.word_embeddings_layernorm_bias,
-            eps=config.layer_norm_epsilon,
-            normalized_shape=config.hidden_size
+        self.word_embeddings_layernorm = TtLayernorm(
+            self.word_embeddings_layernorm_weight.data(),
+            self.word_embeddings_layernorm_bias.data(),
+            config.layer_norm_epsilon,
+            config.hidden_size,
+            config.hidden_size,
+            device,
+            1,
         )
 
         # Transformer blocks
@@ -316,16 +319,11 @@ class TtBloomModel(torch.nn.Module):
 
         self.h = torch.nn.ModuleList(blocks)
 
-        self.ln_f_bias = bloom_utils.torch2tt_tensor(state_dict[f"{base_address}.ln_f.bias"], device)
-        self.ln_f_weight = bloom_utils.torch2tt_tensor(state_dict[f"{base_address}.ln_f.weight"], device)
+        self.ln_f_bias = bloom_utils.tt_load_layer_weights(f"{base_address}.ln_f.bias", state_dict)
+        self.ln_f_weight = bloom_utils.tt_load_layer_weights(f"{base_address}.ln_f.weight", state_dict)
 
         # Final Layer Norm
-        self.ln_f = fallback_ops.LayerNorm(
-            self.ln_f_weight,
-            self.ln_f_bias,
-            eps=config.layer_norm_epsilon,
-            normalized_shape=config.hidden_size
-        )
+        self.ln_f = TtLayernorm(self.ln_f_weight.data(), self.ln_f_bias.data(), config.layer_norm_epsilon, config.hidden_size, config.hidden_size, device, 1)
 
     def build_alibi_tensor(self, attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
         return build_alibi_tensor(attention_mask, num_heads, dtype)
@@ -497,7 +495,7 @@ class TtBloomModel(torch.nn.Module):
             i = i + 1
 
         # Add last hidden state
-        hidden_states = self.ln_f(hidden_states) # , overrideH=hidden_states.shape()[-2])
+        hidden_states = self.ln_f(hidden_states, overrideH=hidden_states.shape()[-2])
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)

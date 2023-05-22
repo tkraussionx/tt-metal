@@ -10,6 +10,7 @@ import torch
 from libs import tt_lib as ttm
 
 from transformers import BloomForCausalLM
+from utility_functions import print_diff_argmax
 from python_api_testing.sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 
 from loguru import logger
@@ -31,6 +32,7 @@ def run_bloom_gelu_forward_test(device):
 
     tt_out_converted = bloom_utils.tt2torch_tensor(tt_out)
 
+    print_diff_argmax(pt_out, tt_out_converted)
     does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.98)
 
     print(comp_allclose(pt_out, tt_out_converted))

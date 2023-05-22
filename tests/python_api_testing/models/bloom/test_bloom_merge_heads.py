@@ -7,8 +7,8 @@ sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
 import torch
-import tt_lib
-
+from libs import tt_lib as ttm
+from utility_functions import print_diff_argmax
 from python_api_testing.sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 
 from loguru import logger
@@ -39,10 +39,10 @@ def run_bloom_merge_heads_test(device, num_heads, hidden_size, num_attention_hea
 
 
 def test_bloom_merge_heads():
-    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
-    tt_lib.device.InitializeDevice(device)
+    device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
+    ttm.device.InitializeDevice(device)
     run_bloom_merge_heads_test(device, 32, 1024, 32)
-    tt_lib.device.CloseDevice(device)
+    ttm.device.CloseDevice(device)
 
 
 if __name__ == "__main__":
