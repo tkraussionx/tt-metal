@@ -20,9 +20,15 @@ from loguru import logger
 
 from transformers import WhisperModel, WhisperConfig, AutoFeatureExtractor
 
-from libs import tt_lib as ttm
-from python_api_testing.models.whisper.whisper_common import torch2tt_tensor, tt2torch_tensor
-from python_api_testing.models.whisper.whisper_model import TtWhisperModel, TtWhisperModelOutput
+import tt_lib
+from python_api_testing.models.whisper.whisper_common import (
+    torch2tt_tensor,
+    tt2torch_tensor,
+)
+from python_api_testing.models.whisper.whisper_model import (
+    TtWhisperModel,
+    TtWhisperModelOutput,
+)
 
 from sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 
@@ -56,40 +62,50 @@ def run_whisper_model(device):
     """
 
     feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-tiny")
-    ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    ds = load_dataset(
+        "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+    )
     inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
     # original from HF example should be: seq_len = 3000, when max_source_positions=1500
     input_features = inputs.input_features
 
     dec_seq_len = 32
-    decoder_input_ids = torch.tensor([[1,] * dec_seq_len]) * pytorch_model.config.decoder_start_token_id
+    decoder_input_ids = (
+        torch.tensor(
+            [
+                [
+                    1,
+                ]
+                * dec_seq_len
+            ]
+        )
+        * pytorch_model.config.decoder_start_token_id
+    )
 
     with torch.no_grad():
         pytorch_output = pytorch_model(
-            input_features = input_features,
-            decoder_input_ids=decoder_input_ids
+            input_features=input_features, decoder_input_ids=decoder_input_ids
         )
 
     logger.info("Running tt whisper model")
 
     tt_whisper = TtWhisperModel(
-        state_dict=state_dict,
-        device=device,
-        config=pytorch_model.config
+        state_dict=state_dict, device=device, config=pytorch_model.config
     )
     tt_whisper.eval()
 
     with torch.no_grad():
         ttm_output = tt_whisper(
-            input_features = input_features,
-            decoder_input_ids=decoder_input_ids
+            input_features=input_features, decoder_input_ids=decoder_input_ids
         )
 
     # Check correlations
     tt_out_to_torch = tt2torch_tensor(ttm_output.last_hidden_state)
     tt_out_to_torch = torch.squeeze(tt_out_to_torch, 0)
 
-    does_pass, pcc_message = comp_pcc(pytorch_output.last_hidden_state, tt_out_to_torch, 0.96)
+    does_pass, pcc_message = comp_pcc(
+        pytorch_output.last_hidden_state, tt_out_to_torch, 0.96
+    )
 
     print(comp_allclose(pytorch_output.last_hidden_state, tt_out_to_torch))
     print(pcc_message)
@@ -101,12 +117,14 @@ def run_whisper_model(device):
 
     assert does_pass
 
+
 def test_WhipserModel_inference():
     torch.manual_seed(1234)
-    device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
-    ttm.device.InitializeDevice(device)
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
     run_whisper_model(device=device)
-    ttm.device.CloseDevice(device)
+    tt_lib.device.CloseDevice(device)
+
 
 if __name__ == "__main__":
     test_WhipserModel_inference()

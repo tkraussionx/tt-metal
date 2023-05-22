@@ -16,19 +16,36 @@ import random
 from typing import Optional, Tuple, Union
 from loguru import logger
 
-from transformers import WhisperProcessor, WhisperForAudioClassification, AutoFeatureExtractor, AutoProcessor, WhisperConfig
+from transformers import (
+    WhisperProcessor,
+    WhisperForAudioClassification,
+    AutoFeatureExtractor,
+    AutoProcessor,
+    WhisperConfig,
+)
 from datasets import load_dataset
 
-from python_api_testing.models.whisper.whisper_common import torch2tt_tensor, tt2torch_tensor
-from python_api_testing.models.whisper.whisper_for_audio_classification import TtWhisperForAudioClassification, TtWhisperForAudioClassificationOutput
+from python_api_testing.models.whisper.whisper_common import (
+    torch2tt_tensor,
+    tt2torch_tensor,
+)
+from python_api_testing.models.whisper.whisper_for_audio_classification import (
+    TtWhisperForAudioClassification,
+    TtWhisperForAudioClassificationOutput,
+)
 
-from libs import tt_lib as ttm
+import tt_lib
 
 from sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 
+
 def run_whisper_for_audio_classification(device):
-    feature_extractor = AutoFeatureExtractor.from_pretrained("sanchit-gandhi/whisper-medium-fleurs-lang-id")
-    model = WhisperForAudioClassification.from_pretrained("sanchit-gandhi/whisper-medium-fleurs-lang-id")
+    feature_extractor = AutoFeatureExtractor.from_pretrained(
+        "sanchit-gandhi/whisper-medium-fleurs-lang-id"
+    )
+    model = WhisperForAudioClassification.from_pretrained(
+        "sanchit-gandhi/whisper-medium-fleurs-lang-id"
+    )
 
     model.eval()
     state_dict = model.state_dict()
@@ -38,11 +55,13 @@ def run_whisper_for_audio_classification(device):
     sample = next(iter(ds))
 
     inputs = feature_extractor(
-        sample["audio"]["array"], sampling_rate=sample["audio"]["sampling_rate"], return_tensors="pt"
+        sample["audio"]["array"],
+        sampling_rate=sample["audio"]["sampling_rate"],
+        return_tensors="pt",
     )
 
     input_features = inputs.input_features
-    print(f"Input of size {input_features.size()}") # 1, 80, 3000
+    print(f"Input of size {input_features.size()}")  # 1, 80, 3000
     print("Input audio language:")
     print(sample["language"])
 
@@ -55,16 +74,13 @@ def run_whisper_for_audio_classification(device):
     print(f"Torch predicted label: {predicted_label}")
 
     tt_whisper_model = TtWhisperForAudioClassification(
-        state_dict=state_dict,
-        device=device,
-        config=model.config
+        state_dict=state_dict, device=device, config=model.config
     )
     tt_whisper_model.eval()
 
     with torch.no_grad():
-
         ttm_logits = tt_whisper_model(
-            input_features = input_features,
+            input_features=input_features,
         ).logits
         print(ttm_logits)
         # Convert to Torch
@@ -93,10 +109,11 @@ def run_whisper_for_audio_classification(device):
 
 def test_WhipserForAudioClassification_inference():
     torch.manual_seed(1234)
-    device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
-    ttm.device.InitializeDevice(device)
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
     run_whisper_for_audio_classification(device=device)
-    ttm.device.CloseDevice(device)
+    tt_lib.device.CloseDevice(device)
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     test_WhipserForAudioClassification_inference()
