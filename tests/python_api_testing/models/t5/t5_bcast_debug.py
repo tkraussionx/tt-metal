@@ -7,7 +7,7 @@ sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
 import torch
-from libs import tt_lib as tt_lib
+import tt_lib
 
 def test_T5Bcast_inference(device):
 

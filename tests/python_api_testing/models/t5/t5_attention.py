@@ -1,7 +1,7 @@
 import math
 import torch
 from torch import nn
-from libs import tt_lib as ttm
+import tt_lib
 
 from fused_ops.linear import Linear as TtLinear
 from python_api_testing.fused_ops.softmax import softmax as tt_softmax
@@ -18,8 +18,8 @@ def t5_shape_tt(states, batch_size, n_heads, key_value_proj_dim, device):
         states = states.transpose(1, 2)
         tt_out = torch2tt_tensor(states, device)
     else:
-        tt_out = ttm.tensor.reshape(states, batch_size, -1, n_heads, key_value_proj_dim)
-        tt_out = ttm.tensor.transpose_hc(tt_out)
+        tt_out = tt_lib.tensor.reshape(states, batch_size, -1, n_heads, key_value_proj_dim)
+        tt_out = tt_lib.tensor.transpose_hc(tt_out)
 
     return tt_out
 
@@ -303,10 +303,10 @@ class TtT5Attention(nn.Module):
         self.inner_dim = self.n_heads * self.key_value_proj_dim
         self.device = device
 
-        self.q_weights = torch2tt_tensor(state_dict[f"{base_address}.q.weight"], ttm.device.GetHost())
-        self.k_weights = torch2tt_tensor(state_dict[f"{base_address}.k.weight"], ttm.device.GetHost())
-        self.v_weights = torch2tt_tensor(state_dict[f"{base_address}.v.weight"], ttm.device.GetHost())
-        self.o_weights = torch2tt_tensor(state_dict[f"{base_address}.o.weight"], ttm.device.GetHost())
+        self.q_weights = torch2tt_tensor(state_dict[f"{base_address}.q.weight"], tt_lib.device.GetHost())
+        self.k_weights = torch2tt_tensor(state_dict[f"{base_address}.k.weight"], tt_lib.device.GetHost())
+        self.v_weights = torch2tt_tensor(state_dict[f"{base_address}.v.weight"], tt_lib.device.GetHost())
+        self.o_weights = torch2tt_tensor(state_dict[f"{base_address}.o.weight"], tt_lib.device.GetHost())
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
         self.q = TtLinear(self.d_model, self.inner_dim, weight=self.q_weights.data(), bias=None, device=device)
@@ -493,10 +493,10 @@ class TtT5Attention(nn.Module):
         #scores = torch.matmul(
         #    query_states, key_states.transpose(3, 2)
         #)  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
-        transposed_key_states = ttm.tensor.transpose(key_states)
+        transposed_key_states = tt_lib.tensor.transpose(key_states)
 
-        # print(f"ttm.tensor.bmm query_states x transposed_key_states: {query_states.shape()} x {transposed_key_states.shape()}")
-        scores = ttm.tensor.bmm(query_states, transposed_key_states)
+        # print(f"tt_lib.tensor.bmm query_states x transposed_key_states: {query_states.shape()} x {transposed_key_states.shape()}")
+        scores = tt_lib.tensor.bmm(query_states, transposed_key_states)
 
         if position_bias is None and self.cached_real_seq_length == real_seq_length and self.cached_key_length == key_length:
             # Take cached position bias
@@ -543,7 +543,7 @@ class TtT5Attention(nn.Module):
             self.cached_key_length = key_length
 
         # scores += position_bias_masked
-        scores = ttm.tensor.add(scores, position_bias)
+        scores = tt_lib.tensor.add(scores, position_bias)
 
         # attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
         attn_weights = tt_softmax(scores, stable=False) # (batch_size, n_heads, seq_length, key_length)
@@ -556,10 +556,10 @@ class TtT5Attention(nn.Module):
         # Mask heads if we want to
         if layer_head_mask is not None:
             # attn_weights = attn_weights * layer_head_mask
-            attn_weights = ttm.tensor.mul(attn_weights, layer_head_mask)
+            attn_weights = tt_lib.tensor.mul(attn_weights, layer_head_mask)
 
         # torch.matmul(attn_weights, value_states)
-        attn_output = ttm.tensor.bmm(attn_weights, value_states)
+        attn_output = tt_lib.tensor.bmm(attn_weights, value_states)
         attn_output = unshape(attn_output)  # (batch_size, seq_length, dim)
         attn_output = self.o(attn_output)
 

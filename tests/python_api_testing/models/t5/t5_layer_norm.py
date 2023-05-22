@@ -1,5 +1,5 @@
 import torch
-from libs import tt_lib as ttm
+import tt_lib
 from python_api_testing.models.t5.t5_utils import tt2torch_tensor, torch2tt_tensor
 
 
@@ -39,11 +39,11 @@ class TtT5LayerNorm(torch.nn.Module):
         self.device = device
 
         # hadle constant variance_epsilon
-        self.variance_epsilon_const = ttm.tensor.Tensor(
+        self.variance_epsilon_const = tt_lib.tensor.Tensor(
             [self.variance_epsilon] + [0.0 for _ in range(32 * 32 - 1)],
             [1, 1, 32, 32],
-            ttm.tensor.DataType.BFLOAT16,
-            ttm.tensor.Layout.TILE,
+            tt_lib.tensor.DataType.BFLOAT16,
+            tt_lib.tensor.Layout.TILE,
             self.device
         )
 
@@ -62,10 +62,10 @@ class TtT5LayerNorm(torch.nn.Module):
         variance = torch2tt_tensor(variance, self.device)
 
         # hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        tmp = ttm.tensor.bcast(variance, self.variance_epsilon_const, ttm.tensor.BcastOpMath.ADD, ttm.tensor.BcastOpDim.H)
-        tmp = ttm.tensor.recip(ttm.tensor.sqrt(tmp))
-        hidden_states = ttm.tensor.bcast(hidden_states, tmp, ttm.tensor.BcastOpMath.MUL, ttm.tensor.BcastOpDim.W)
+        tmp = tt_lib.tensor.bcast(variance, self.variance_epsilon_const, tt_lib.tensor.BcastOpMath.ADD, tt_lib.tensor.BcastOpDim.H)
+        tmp = tt_lib.tensor.recip(tt_lib.tensor.sqrt(tmp))
+        hidden_states = tt_lib.tensor.bcast(hidden_states, tmp, tt_lib.tensor.BcastOpMath.MUL, tt_lib.tensor.BcastOpDim.W)
 
         # weight * hidden_states
-        result = ttm.tensor.bcast(hidden_states, self.weight, ttm.tensor.BcastOpMath.MUL, ttm.tensor.BcastOpDim.H)
+        result = tt_lib.tensor.bcast(hidden_states, self.weight, tt_lib.tensor.BcastOpMath.MUL, tt_lib.tensor.BcastOpDim.H)
         return result

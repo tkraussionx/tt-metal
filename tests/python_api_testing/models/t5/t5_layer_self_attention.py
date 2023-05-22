@@ -1,5 +1,5 @@
 import torch
-from libs import tt_lib as ttm
+import tt_lib
 
 from python_api_testing.models.t5.t5_utils import torch2tt_tensor, tt2torch_tensor
 from python_api_testing.models.t5.t5_attention import TtT5Attention
@@ -34,6 +34,6 @@ class TtT5LayerSelfAttention(torch.nn.Module):
             output_attentions=output_attentions,
         )
         #hidden_states = hidden_states + self.dropout(attention_output[0])
-        hidden_states = ttm.tensor.add(hidden_states, attention_output[0])
+        hidden_states = tt_lib.tensor.add(hidden_states, attention_output[0])
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
         return outputs

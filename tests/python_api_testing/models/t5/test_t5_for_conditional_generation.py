@@ -10,14 +10,16 @@ import json
 import torch
 import warnings
 from torch import nn
-from libs import tt_lib as ttm
+import tt_lib
 from loguru import logger
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from transformers import AutoTokenizer, T5Tokenizer, T5ForConditionalGeneration
 from transformers.generation.configuration_utils import GenerationConfig
 
-from utility_functions import print_diff_argmax, comp_allclose, comp_pcc
+from utility_functions import comp_allclose, comp_pcc
+from tt_lib.utils import print_diff_argmax
+
 from python_api_testing.models.t5.t5_utils import torch2tt_tensor, tt2torch_tensor
 from python_api_testing.models.t5.t5_for_conditional_generation import TtT5ForConditionalGeneration as TtT5Model
 
@@ -308,13 +310,13 @@ def test_T5ForConditionalGeneration():
     # input_sentance = "summarize: I'm sitting here in a boring room. It's just another rainy Sunday afternoon. I'm wasting my time I got nothing to do. I'm hanging around I'm waiting for you. But nothing ever happens. And I wonder"
     # correct_output = "i'm sitting here in a boring room. I'm wasting my time I got nothing to do. I wonder if nothing ever happens."
 
-    device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
-    ttm.device.InitializeDevice(device)
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
 
     output_sentance = run_generate(input_sentance, run_tt_model=True, device=device)
     print(f"Decoded output: {output_sentance}")
 
-    ttm.device.CloseDevice(device)
+    tt_lib.device.CloseDevice(device)
     assert output_sentance == correct_output
 
 

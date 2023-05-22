@@ -8,11 +8,13 @@ sys.path.append(f"{f}/../../../..")
 
 import torch
 import json
-from libs import tt_lib as ttm
+import tt_lib
 from loguru import logger
 
 from transformers import T5Model
-from utility_functions import print_diff_argmax, comp_allclose, comp_pcc
+from utility_functions import comp_allclose, comp_pcc
+from tt_lib.utils import print_diff_argmax
+
 from python_api_testing.models.t5.t5_utils import torch2tt_tensor, tt2torch_tensor
 from python_api_testing.models.t5.t5_layer_ff import TtT5LayerFF
 
@@ -61,7 +63,11 @@ def run_test_T5LayerFF_inference(device):
 
 
 def test_T5LayerFF_inference():
-    device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
-    ttm.device.InitializeDevice(device)
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
     run_test_T5LayerFF_inference(device)
-    ttm.device.CloseDevice(device)
+    tt_lib.device.CloseDevice(device)
+
+
+if __name__ == "__main__":
+    test_T5LayerFF_inference()

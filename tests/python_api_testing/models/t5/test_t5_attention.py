@@ -8,10 +8,11 @@ sys.path.append(f"{f}/../../../..")
 
 import torch
 import json
-from libs import tt_lib as ttm
+import tt_lib
 
 from transformers import T5Model
-from utility_functions import print_diff_argmax, comp_allclose, comp_pcc
+from utility_functions import comp_allclose, comp_pcc
+from tt_lib.utils import print_diff_argmax
 
 from loguru import logger
 from python_api_testing.fused_ops.softmax import softmax as tt_softmax
@@ -84,7 +85,7 @@ def run_test_transpose(device):
     test_input = (torch.rand(1, 1, 2048, 512) * 2) - 1
 
     pt_out = test_input.transpose(3, 2)
-    tt_out = ttm.tensor.transpose(torch2tt_tensor(test_input, device))
+    tt_out = tt_lib.tensor.transpose(torch2tt_tensor(test_input, device))
     tt_out = tt2torch_tensor(tt_out)
 
     print_diff_argmax(pt_out, tt_out)
@@ -107,7 +108,7 @@ def run_test_matmul(device):
     test_input2 = ((torch.rand(32, 8, 64, 128) * 2) - 1)
 
     pt_out = torch.matmul(test_input1, test_input2)
-    tt_out = ttm.tensor.bmm(torch2tt_tensor(test_input1, device), torch2tt_tensor(test_input2, device))
+    tt_out = tt_lib.tensor.bmm(torch2tt_tensor(test_input1, device), torch2tt_tensor(test_input2, device))
     tt_out = tt2torch_tensor(tt_out)
 
     print_diff_argmax(pt_out, tt_out)
@@ -201,59 +202,59 @@ def run_test_T5Attention_inference(device, block, use_mask):
 
 
 def test_t5_shape():
-    device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
-    ttm.device.InitializeDevice(device)
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
     run_test_t5_shape(device)
-    ttm.device.CloseDevice(device)
+    tt_lib.device.CloseDevice(device)
 
 
 def test_transpose():
-    device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
-    ttm.device.InitializeDevice(device)
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
     run_test_transpose(device)
-    ttm.device.CloseDevice(device)
+    tt_lib.device.CloseDevice(device)
 
 
 def test_matmul():
-    device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
-    ttm.device.InitializeDevice(device)
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
     run_test_matmul(device)
-    ttm.device.CloseDevice(device)
+    tt_lib.device.CloseDevice(device)
 
 
 def test_softmax():
-    device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
-    ttm.device.InitializeDevice(device)
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
     run_test_softmax(device)
-    ttm.device.CloseDevice(device)
+    tt_lib.device.CloseDevice(device)
 
 
 def test_t5_unshape():
-    device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
-    ttm.device.InitializeDevice(device)
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
     run_test_t5_unshape(device)
-    ttm.device.CloseDevice(device)
+    tt_lib.device.CloseDevice(device)
 
 
 def test_T5Attention_block_0_no_mask():
-    device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
-    ttm.device.InitializeDevice(device)
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
     run_test_T5Attention_inference(device, block=0, use_mask=False)
-    ttm.device.CloseDevice(device)
+    tt_lib.device.CloseDevice(device)
 
 
 def test_T5Attention_block_2_no_mask():
-    device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
-    ttm.device.InitializeDevice(device)
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
     run_test_T5Attention_inference(device, block=2, use_mask=False)
-    ttm.device.CloseDevice(device)
+    tt_lib.device.CloseDevice(device)
 
 
 def test_T5Attention_block_0_with_mask():
-    device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
-    ttm.device.InitializeDevice(device)
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
     run_test_T5Attention_inference(device, block=0, use_mask=True)
-    ttm.device.CloseDevice(device)
+    tt_lib.device.CloseDevice(device)
 
 
 if __name__ == "__main__":

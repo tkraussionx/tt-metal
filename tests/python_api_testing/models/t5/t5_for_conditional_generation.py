@@ -2,7 +2,7 @@ import copy
 import torch
 import warnings
 from torch import nn
-from libs import tt_lib as ttm
+import tt_lib
 from typing import Optional, Tuple
 
 from python_api_testing.models.t5.t5_utils import torch2tt_tensor, tt2torch_tensor
@@ -91,7 +91,7 @@ class TtT5ForConditionalGeneration(nn.Module):
         decoder_config["num_layers"] = config["num_decoder_layers"]
         self.decoder = TtT5Stack(decoder_config, state_dict, "decoder", device, self.shared)
 
-        self.lm_head_weights = torch2tt_tensor(state_dict[f"lm_head.weight"], ttm.device.GetHost())
+        self.lm_head_weights = torch2tt_tensor(state_dict[f"lm_head.weight"], tt_lib.device.GetHost())
         self.lm_head = TtLinear(in_features=config["d_model"], out_features=config["vocab_size"], weight=self.lm_head_weights.data(), bias=None, device=device)
 
         # self.lm_head = nn.Linear(config["d_model"], config["vocab_size"], bias=False)

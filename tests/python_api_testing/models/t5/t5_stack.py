@@ -8,7 +8,6 @@ sys.path.append(f"{f}/../../../..")
 
 import torch
 from torch import nn
-from libs import tt_lib as ttm
 
 from python_api_testing.models.t5.t5_utils import torch2tt_tensor, tt2torch_tensor
 from python_api_testing.models.t5.t5_block import TtT5Block
