@@ -56,10 +56,10 @@ def run_baddbmm_test(device):
 
 
 def test_baddbmm():
-    device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
-    ttm.device.InitializeDevice(device)
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
     run_baddbmm_test(device)
-    ttm.device.CloseDevice(device)
+    tt_lib.device.CloseDevice(device)
 
 
 if __name__ == "__main__":

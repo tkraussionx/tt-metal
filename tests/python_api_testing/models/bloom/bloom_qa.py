@@ -1,5 +1,5 @@
 import torch
-from libs import tt_lib as ttm
+import tt_lib
 import python_api_testing.models.bloom.bloom_utils as bloom_utils
 import python_api_testing.models.bloom.bloom_model as bloom_model
 from fused_ops.linear import Linear as TtLinear
@@ -162,7 +162,7 @@ class TtBloomForQuestionAnswering():
                 start_positions = start_positions.squeeze(-1)
 
             if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
+                 end_positions = end_positions.squeeze(-1)
 
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
