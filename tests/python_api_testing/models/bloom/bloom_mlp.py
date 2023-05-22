@@ -1,7 +1,7 @@
 import torch
 from torch.nn import functional as F
 
-from libs import tt_lib as ttm
+import tt_lib
 from fused_ops.linear import Linear as TtLinear
 
 import python_api_testing.models.bloom.bloom_utils as bloom_utils
@@ -67,6 +67,6 @@ class TtBloomMLP(torch.nn.Module):
 
         # Dropout is used in training only
         # intermediate_output = F.dropout(intermediate_output, p=self.hidden_dropout, training=self.training)
-        output = ttm.tensor.add(residual, intermediate_output)
+        output = tt_lib.tensor.add(residual, intermediate_output)
 
         return output

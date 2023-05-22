@@ -7,10 +7,8 @@ sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
 import torch
-from libs import tt_lib as ttm
-
+import tt_lib
 from transformers import BloomForCausalLM
-from utility_functions import print_diff_argmax
 from python_api_testing.sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 
 from loguru import logger
@@ -52,7 +50,6 @@ def run_bloom_model_test(device):
     print(f"pt_out shape {pt_out.shape}")
     print(f"tt_out_converted shape {tt_out_converted.shape}")
 
-    print_diff_argmax(pt_out, tt_out_converted)
     does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.65)
 
     print(comp_allclose(pt_out, tt_out_converted))
@@ -67,10 +64,10 @@ def run_bloom_model_test(device):
 
 
 def test_bloom_model():
-    device = ttm.device.CreateDevice(ttm.device.Arch.GRAYSKULL, 0)
-    ttm.device.InitializeDevice(device)
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
     run_bloom_model_test(device)
-    ttm.device.CloseDevice(device)
+    tt_lib.device.CloseDevice(device)
 
 
 if __name__ == "__main__":

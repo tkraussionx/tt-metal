@@ -11,7 +11,7 @@ import torch
 import math
 from torch.nn import functional as F
 
-from libs import tt_lib as ttm
+import tt_lib
 from python_api_testing.sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 import numpy as np
 import python_api_testing.models.bloom.bloom_utils as bloom_utils
@@ -42,26 +42,26 @@ def tt_bloom_gelu_forward(x, device):
     tt_k3 = bloom_utils.torch2tt_tensor(k3, device)
 
     #0.5*x
-    factor1 = ttm.tensor.mul(tt_k1, z) # exp(z)
+    factor1 = tt_lib.tensor.mul(tt_k1, z) # exp(z)
 
     #x*x
-    pow2 = ttm.tensor.mul(z, z)
+    pow2 = tt_lib.tensor.mul(z, z)
 
     #(x + 0.044715 * torch.pow(x, 3)))
     #torch.pow(x, 3))
-    pow3 = ttm.tensor.mul(pow2, z)
-    factor3 = ttm.tensor.mul(tt_k2, pow3)
+    pow3 = tt_lib.tensor.mul(pow2, z)
+    factor3 = tt_lib.tensor.mul(tt_k2, pow3)
 
     #(x + 0.044715 * torch.pow(x, 3)))
-    factor3 = ttm.tensor.add(factor3, z)
+    factor3 = tt_lib.tensor.add(factor3, z)
 
-    sumtanh = ttm.tensor.mul(tt_k3, factor3)
-    tanh = ttm.tensor.tanh(sumtanh)
+    sumtanh = tt_lib.tensor.mul(tt_k3, factor3)
+    tanh = tt_lib.tensor.tanh(sumtanh)
 
     k4 = torch.full(x.shape(), 1.0)
     tt_k4 = bloom_utils.torch2tt_tensor(k4, device)
 
-    total = ttm.tensor.add(tt_k4, tanh)
-    output = ttm.tensor.mul(factor1, total)
+    total = tt_lib.tensor.add(tt_k4, tanh)
+    output = tt_lib.tensor.mul(factor1, total)
 
     return output
