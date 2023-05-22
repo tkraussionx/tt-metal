@@ -1,20 +1,8 @@
-from pathlib import Path
-import sys
-f = f"{Path(__file__).parent}"
-sys.path.append(f"{f}/..")
-sys.path.append(f"{f}/../..")
-sys.path.append(f"{f}/../../..")
-sys.path.append(f"{f}/../../../..")
-
-from abc import abstractmethod
 import torch
-import math
-from torch.nn import functional as F
 
 import tt_lib
-from python_api_testing.sweep_tests.comparison_funcs import comp_allclose, comp_pcc
-import numpy as np
-import python_api_testing.models.bloom.bloom_utils as bloom_utils
+
+import python_api_testing.models.bloom_new.bloom_utils as bloom_utils
 
 
 def bloom_gelu_forward(x: torch.Tensor) -> torch.Tensor:

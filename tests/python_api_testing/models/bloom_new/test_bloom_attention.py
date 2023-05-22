@@ -7,14 +7,15 @@ sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
 import torch
+
 import tt_lib
 
 from transformers import BloomForCausalLM
 from python_api_testing.sweep_tests.comparison_funcs import comp_pcc
 from loguru import logger
 
-import python_api_testing.models.bloom.bloom_utils as bloom_utils
-import python_api_testing.models.bloom.bloom_attention as bloom_attention
+import python_api_testing.models.bloom_new.bloom_utils as bloom_utils
+import python_api_testing.models.bloom_new.bloom_attention as bloom_attention
 
 
 def run_bloom_attention_test(device):
@@ -22,7 +23,7 @@ def run_bloom_attention_test(device):
     hugging_bloom_reference_model = BloomForCausalLM.from_pretrained("bigscience/bloom-560m", torchscript=False)
     hugging_bloom_reference_model.eval()
 
-    block = 0
+    block = 2
     config = hugging_bloom_reference_model.config
     state_dict = hugging_bloom_reference_model.state_dict()
     base_address = f"transformer.h.{block}.self_attention"
@@ -33,11 +34,12 @@ def run_bloom_attention_test(device):
 
     # Prepare input
     torch.manual_seed(0)
+    seq_len = 62
 
-    hidden_states = ((torch.rand(1, 64, hidden_size) * 2) - 1) / hidden_size
-    residual = ((torch.rand(1, 64, hidden_size) * 2) - 1) / hidden_size
-    alibi = ((torch.rand(config.n_head, 64, 64) * 2) - 1) / 64
-    attention_mask = torch.randint(0, 2, (1, 1, 64, 64))
+    hidden_states = ((torch.rand(1, seq_len, hidden_size) * 2) - 1) / hidden_size
+    residual = ((torch.rand(1, seq_len, hidden_size) * 2) - 1) / hidden_size
+    alibi = ((torch.rand(config.n_head, seq_len, seq_len) * 2) - 1) / seq_len
+    attention_mask = torch.randint(0, 2, (1, 1, seq_len, seq_len))
 
     pt_out = pt_bloom_attention.forward(hidden_states, residual, alibi, attention_mask)[0]
     print("Finished calc pt")

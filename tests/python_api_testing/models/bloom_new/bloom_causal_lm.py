@@ -2,9 +2,9 @@ import torch
 from torch.nn import functional as F
 
 import tt_lib
-import python_api_testing.models.bloom.bloom_utils as bloom_utils
-import python_api_testing.models.bloom.bloom_model as bloom_model
-from fused_ops.linear import Linear as TtLinear
+
+import python_api_testing.models.bloom_new.bloom_utils as bloom_utils
+import python_api_testing.models.bloom_new.bloom_model as bloom_model
 from typing import Optional, Tuple, Union
 
 
@@ -159,15 +159,16 @@ class TtBloomForCausalLM():
     def __init__(self, config, state_dict, device):
         self.use_return_dict = False
         self.transformer = bloom_model.TtBloomModel(config, state_dict, f"transformer", device)
+        self.lm_head_weight = bloom_utils.torch2tt_tensor(state_dict["lm_head.weight"], device)
 
-        self.lm_head_weight = bloom_utils.tt_load_layer_weights("lm_head.weight", state_dict)
-        self.lm_head= TtLinear(config.hidden_size, config.vocab_size, self.lm_head_weight.data(), None, device)
+        # Transpose the weights
+        self.lm_head_weight = tt_lib.tensor.transpose(self.lm_head_weight)
 
-    def get_output_embeddings(self):
-        return self.lm_head
+    # def get_output_embeddings(self):
+    #    return self.lm_head
 
-    def set_output_embeddings(self, new_embeddings: torch.Tensor):
-        self.lm_head = new_embeddings
+    # def set_output_embeddings(self, new_embeddings: torch.Tensor):
+    #    self.lm_head = new_embeddings
 
     def prepare_inputs_for_generation(
         self,
@@ -247,8 +248,9 @@ class TtBloomForCausalLM():
         )
 
         hidden_states = transformer_outputs[0]
-        lm_logits = self.lm_head(hidden_states)
+        lm_logits = bloom_utils.tt_matmul(hidden_states, self.lm_head_weight, device)
         lm_logits = bloom_utils.tt2torch_tensor(lm_logits)
+        lm_logits = lm_logits.squeeze(0)
 
         loss = None
 

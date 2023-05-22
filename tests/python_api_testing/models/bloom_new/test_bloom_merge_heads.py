@@ -7,13 +7,14 @@ sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
 import torch
+
 import tt_lib
 
 from python_api_testing.sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 
 from loguru import logger
-import python_api_testing.models.bloom.bloom_utils as bloom_utils
-import python_api_testing.models.bloom.bloom_attention_merge_heads as bloom_attention_merge_heads
+import python_api_testing.models.bloom_new.bloom_utils as bloom_utils
+import python_api_testing.models.bloom_new.bloom_merge_heads as bloom_attention_merge_heads
 
 
 def run_bloom_merge_heads_test(device, num_heads, hidden_size, num_attention_heads):

@@ -3,9 +3,8 @@ import math
 from torch.nn import functional as F
 
 import tt_lib
-import python_api_testing.models.bloom.bloom_utils as bloom_utils
-import python_api_testing.models.bloom.bloom_block as bloom_block
-
+import python_api_testing.models.bloom_new.bloom_utils as bloom_utils
+import python_api_testing.models.bloom_new.bloom_block as bloom_block
 from tt_lib.fallback_ops import fallback_ops
 from typing import Optional, Tuple, Union
 

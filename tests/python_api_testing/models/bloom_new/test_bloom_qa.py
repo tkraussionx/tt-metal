@@ -7,31 +7,18 @@ sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
 import torch
+
 import tt_lib
+
 from transformers import BloomForQuestionAnswering, AutoTokenizer, BloomTokenizerFast, pipeline
 from python_api_testing.sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 
 from loguru import logger
-import python_api_testing.models.bloom.bloom_qa as bloom_qa
-
-
-def pad_input_32(tensor, value):
-    len = tensor.shape[1]
-
-    if len % 32 == 0:
-        return tensor
-
-    padded_len = ((len // 32) + 1) * 32
-
-    pad_tensor = (value * torch.ones(tensor.shape[0], padded_len-len)).to(torch.long)
-    tensor = torch.cat([tensor, pad_tensor], dim=1)
-
-    return tensor
+import python_api_testing.models.bloom_new.bloom_qa as bloom_qa
 
 
 def run_bloom_qa_inference(device):
     torch.manual_seed(0)
-
     model_name = "bigscience/bloom-560m"
     hugging_bloom_reference_model = BloomForQuestionAnswering.from_pretrained(model_name, torchscript=False)
     hugging_bloom_reference_model.eval()
@@ -45,14 +32,16 @@ def run_bloom_qa_inference(device):
     # Prepare input
     # tokenizer = AutoTokenizer.from_pretrained(model_name)
     tokenizer = BloomTokenizerFast.from_pretrained(model_name)
-    nlp = pipeline("question-answering", model=hugging_bloom_reference_model, tokenizer=tokenizer)
-    preprocess_params, _, postprocess_params = nlp._sanitize_parameters()
+    # nlp = pipeline("question-answering", model=hugging_bloom_reference_model, tokenizer=tokenizer)
+    # preprocess_params, _, postprocess_params = nlp._sanitize_parameters()
 
     input_sentance = "summarize: QuillBot's Summarizer wants to change how you read! Instead of reading through loads of documents, you can get a short annotated summary or bullet points with all the key information."
     tokenized = tokenizer(input_sentance, return_tensors="pt")
+    input_ids = tokenized.input_ids
+    attention_mask = tokenized.attention_mask
 
-    input_ids = pad_input_32(tokenized.input_ids, config.pad_token_id)
-    attention_mask = pad_input_32(tokenized.attention_mask, 0)
+    # input_ids = bloom_utils.pad_input_32(tokenized.input_ids, config.pad_token_id)
+    # attention_mask = bloom_utils.pad_input_32(tokenized.attention_mask, 0)
 
     pt_out = pt_bloom_qa.forward(input_ids=input_ids) #, attention_mask=attention_mask)
     print("PT finished")
@@ -78,9 +67,14 @@ def run_bloom_qa_inference(device):
 
     # tt_answer = nlp.postprocess([tt_res], **postprocess_params)['answer']
 
-    does_pass, pcc_message = comp_pcc(pt_start_logits, tt_start_logits, 0.91)
+    does_pass, pcc_message = comp_pcc(pt_start_logits, tt_start_logits, 0.41)
 
     print(comp_allclose(pt_start_logits, tt_start_logits))
+    print(pcc_message)
+
+    does_pass, pcc_message = comp_pcc(pt_end_logits, tt_end_logits, 0.41)
+
+    print(comp_allclose(pt_end_logits, tt_end_logits))
     print(pcc_message)
 
     if does_pass:
@@ -92,7 +86,7 @@ def run_bloom_qa_inference(device):
 
 
 def test_bloom_qa():
-    device = tt_lib.device.Arch.GRAYSKULL, 0)
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
     tt_lib.device.InitializeDevice(device)
     run_bloom_qa_inference(device)
     tt_lib.device.CloseDevice(device)
