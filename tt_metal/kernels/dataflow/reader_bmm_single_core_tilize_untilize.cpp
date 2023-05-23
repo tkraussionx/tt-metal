@@ -25,10 +25,10 @@ void kernel_main() {
     uint32_t in1_next_block_stride_h = get_arg_val<uint32_t>(14);
     uint32_t in1_next_block_stride_w = get_arg_val<uint32_t>(15);
 
-    DPRINT << "00: " << in1_next_block_stride_w << ENDL();
-    DPRINT << "01: " << in1_next_block_stride_h << ENDL();
-    DPRINT << "02: " << in1_stride_h << ENDL();
-    DPRINT << "03: " << in1_block_num_tiles << ENDL();
+    // DPRINT << "00: " << in1_next_block_stride_w << ENDL();
+    // DPRINT << "01: " << in1_next_block_stride_h << ENDL();
+    // DPRINT << "02: " << in1_stride_h << ENDL();
+    // DPRINT << "03: " << in1_block_num_tiles << ENDL();
 
 
     constexpr uint32_t in0_cb_id = tt::CB::c_in0;
@@ -98,7 +98,7 @@ void kernel_main() {
                         uint64_t in1_tile_noc_addr = get_noc_addr(in1_tile_id, s1);
                         noc_async_read(in1_tile_noc_addr, in1_write_l1_addr, tile_size_bytes);
                         in1_write_l1_addr += tile_size_bytes;
-                        DPRINT << "TILE ID: " << in1_tile_id << ENDL();
+                        // DPRINT << "TILE ID: " << in1_tile_id << ENDL();
                         in1_tile_id += 1;
                     } // for in1_block_w
                     in1_row_start_tile_id += in1_stride_h;
@@ -107,9 +107,9 @@ void kernel_main() {
 
                 // DPRINT << "IN1 BLOCK: " << in1_block_w_i << "," << in0_block_w_i << ENDL();
 
-                auto slice = SliceRange{ .h0 = 1, .h1 = 2, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
-                DPRINT << FIXP() << SETW(32) << SETP(2);
-                DPRINT  << "TILE SLICE: " << TSLICE(in1_cb_id, 0, slice) << ENDL();
+                // auto slice = SliceRange{ .h0 = 1, .h1 = 2, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
+                // DPRINT << FIXP() << SETW(32) << SETP(2);
+                // DPRINT  << "TILE SLICE: " << TSLICE(in1_cb_id, 0, slice) << ENDL();
 
                 in1_current_block_start_tile_id += in1_next_block_stride_h;
                 cb_push_back(in1_cb_id, in1_block_num_tiles);

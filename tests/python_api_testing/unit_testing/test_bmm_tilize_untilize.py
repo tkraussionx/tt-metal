@@ -22,16 +22,16 @@ TILE_HEIGHT = TILE_WIDTH = 32
 
 ## parameters
 # matrix sizes as number of blocks along h and w:
-a_height_nblocks = [2]  ## various
-a_width_nblocks = [2]   ## various
-b_width_nblocks = [2]   ## > 1 FAILS
+a_height_nblocks = [1, 2, 3, 4, 5, 6, 7, 8]  ## various
+a_width_nblocks = [1, 2, 3, 4, 5, 6, 7, 8]   ## various
+b_width_nblocks = [1, 2, 3, 4, 5, 6, 7, 8]   ## various
 # block sizes as number of tiles along h and w:
 a_block_height_ntiles = [4] ## various
 a_block_width_ntiles = [4]  ## various
-b_block_width_ntiles = [4]  ## various (<= 6)
+b_block_width_ntiles = [16]  ## various
 # output sublobcking per block:
-out_subblock_height_ntiles = [2]    ## == a_block_height_ntiles, <= 8 (various)
-out_subblock_width_ntiles = [1]     ## == b_block_width_ntiles, <= 8 (various)
+out_subblock_height_ntiles = [4]    ## == a_block_height_ntiles, <= 8 (various)
+out_subblock_width_ntiles = [2]     ## == b_block_width_ntiles, <= 8 (various)
 
 
 @pytest.mark.parametrize(
