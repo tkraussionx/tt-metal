@@ -30,7 +30,7 @@ bool run_sfpu_test(string sfpu_name) {
         ////////////////////////////////////////////////////////////////////////////
         //                      Application Setup
         ////////////////////////////////////////////////////////////////////////////
-        tt_metal::Program *program = new tt_metal::Program();
+        tt_metal::Program program = tt_metal::Program();
 
         tt_xy_pair core = {0, 0};
 
@@ -108,7 +108,7 @@ bool run_sfpu_test(string sfpu_name) {
             uint(num_tiles),
             1
         };
-        tt_metal::ComputeKernelArgs *eltwise_unary_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
+        tt_metal::KernelArgs eltwise_unary_args = tt_metal::KernelArgs(core, compute_kernel_args);
         bool fp32_dest_acc_en = false;
         bool math_approx_mode = true;
         string hlk_kernel_name = "tt_metal/kernels/compute/eltwise_sfpu.cpp";
@@ -191,7 +191,8 @@ bool run_sfpu_test(string sfpu_name) {
         }
 
         pass &= tt_metal::CloseDevice(device);;
-        delete device;
+        // TODO (abhullar): Uplift when raw ptr usages are removed. Commenting out delete for now because device needs to outlive buffers
+        //delete device;
 
     } catch (const std::exception &e) {
         pass = false;

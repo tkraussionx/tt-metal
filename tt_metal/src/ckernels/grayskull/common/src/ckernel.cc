@@ -86,9 +86,9 @@ inline bool ready_for_next_epoch() {         // place this through compiler into
 }
 
 inline void set_thread_id_parameter() {
-    if ((uint)__firmware_start == (uint)l1_mem::address_map::TRISC0_BASE) {
+    if ((uint)__firmware_start == (uint)MEM_TRISC0_BASE) {
         thread_id = 0;
-    } else if ((uint) __firmware_start == (uint)l1_mem::address_map::TRISC1_BASE) {
+    } else if ((uint) __firmware_start == (uint)MEM_TRISC1_BASE) {
         thread_id = 1;
     } else {
         thread_id = 2;
@@ -97,12 +97,12 @@ inline void set_thread_id_parameter() {
 
 inline void allocate_debug_mailbox_buffer() {
    std::int32_t debug_mailbox_addr;
-   if ((uint32_t)__firmware_start == (uint32_t)l1_mem::address_map::TRISC0_BASE) {
-      debug_mailbox_addr = l1_mem::address_map::DEBUG_MAILBOX_BUF_BASE + 0*l1_mem::address_map::DEBUG_MAILBOX_BUF_SIZE;
-   } else if ((uint32_t) __firmware_start == (uint32_t)l1_mem::address_map::TRISC1_BASE) {
-      debug_mailbox_addr = l1_mem::address_map::DEBUG_MAILBOX_BUF_BASE + 1*l1_mem::address_map::DEBUG_MAILBOX_BUF_SIZE;
+   if ((uint32_t)__firmware_start == (uint32_t)MEM_TRISC0_BASE) {
+      debug_mailbox_addr = MEM_DEBUG_MAILBOX_ADDRESS + 0*MEM_DEBUG_MAILBOX_SIZE;
+   } else if ((uint32_t) __firmware_start == (uint32_t)MEM_TRISC1_BASE) {
+      debug_mailbox_addr = MEM_DEBUG_MAILBOX_ADDRESS + 1*MEM_DEBUG_MAILBOX_SIZE;
    } else {
-      debug_mailbox_addr = l1_mem::address_map::DEBUG_MAILBOX_BUF_BASE + 2*l1_mem::address_map::DEBUG_MAILBOX_BUF_SIZE;
+      debug_mailbox_addr = MEM_DEBUG_MAILBOX_ADDRESS + 2*MEM_DEBUG_MAILBOX_SIZE;
    }
    debug_mailbox_base = reinterpret_cast<volatile uint16_t *>(debug_mailbox_addr);
    clear_mailbox_values();
@@ -110,27 +110,18 @@ inline void allocate_debug_mailbox_buffer() {
 }
 
 inline void allocate_debug_buffer() {
-   std::int32_t debug_buffer_addr;
-   if ((uint32_t)__firmware_start == (uint32_t)l1_mem::address_map::TRISC0_BASE) {
-      debug_buffer_addr = l1_mem::address_map::TRISC0_DEBUG_BUFFER_BASE;
-   } else if ((uint32_t) __firmware_start == (uint32_t)l1_mem::address_map::TRISC1_BASE) {
-      debug_buffer_addr = l1_mem::address_map::TRISC1_DEBUG_BUFFER_BASE;
-   } else {
-      debug_buffer_addr = l1_mem::address_map::TRISC2_DEBUG_BUFFER_BASE;
-   }
-   debug_buffer = reinterpret_cast<volatile uint8_t *>(debug_buffer_addr);
-   debug_buffer[l1_mem::address_map::DEBUG_BUFFER_SIZE-1]=0x0;
+    // TODO(PK) reimplement debug buffer
 }
 
 } // namespace ckernel
 
 void local_mem_copy() {
    volatile uint *l1_local_mem_start_addr;
-   volatile uint *local_mem_start_addr = (volatile uint*) LOCAL_MEM_BASE_ADDR;
+   volatile uint *local_mem_start_addr = (volatile uint*) MEM_LOCAL_BASE;
 
-   if ((uint)__firmware_start == (uint)l1_mem::address_map::TRISC0_BASE) {
+   if ((uint)__firmware_start == (uint)MEM_TRISC0_BASE) {
       l1_local_mem_start_addr = (volatile uint*)l1_mem::address_map::TRISC0_LOCAL_MEM_BASE;
-   } else if ((uint) __firmware_start == (uint)l1_mem::address_map::TRISC1_BASE) {
+   } else if ((uint) __firmware_start == (uint)MEM_TRISC1_BASE) {
       l1_local_mem_start_addr = (volatile uint*)l1_mem::address_map::TRISC1_LOCAL_MEM_BASE;
    } else {
       l1_local_mem_start_addr = (volatile uint*)l1_mem::address_map::TRISC2_LOCAL_MEM_BASE;
@@ -153,7 +144,7 @@ int main(int argc, char *argv[])
     kernel_profiler::init_profiler();
 
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
-  kernel_profiler::mark_time(CC_MAIN_START);
+    kernel_profiler::mark_time(CC_MAIN_START);
 #endif
     FWEVENT("Launching proudction env kernels");
 
@@ -174,7 +165,7 @@ int main(int argc, char *argv[])
 
     trisc_l1_mailbox_write(RESET_VAL);
 
-    if ((uint)l1_mem::address_map::RISC_LOCAL_MEM_BASE ==
+    if ((uint)MEM_LOCAL_BASE ==
             ((uint)__local_mem_rodata_end_addr&0xfff00000))
     {
        local_mem_copy();
@@ -193,11 +184,11 @@ int main(int argc, char *argv[])
     //while (ready_for_next_epoch())
     {
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
-  kernel_profiler::mark_time(CC_KERNEL_MAIN_START);
+        kernel_profiler::mark_time(CC_KERNEL_MAIN_START);
 #endif
         run_kernel();
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
-  kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
+        kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
 #endif
     }
 
@@ -209,9 +200,12 @@ int main(int argc, char *argv[])
     last_trisc_perf_dump_to_dram();
     tensix_sync();
 #endif
-    trisc_l1_mailbox_write(KERNEL_COMPLETE);
 
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
-  kernel_profiler::mark_time(CC_MAIN_END);
+    // Note this is done before the KERNEL_COMPLETE call as TRISCs
+    // are put into reset immediately by BRISC. This can sometimes
+    // cause the CC_MAIN_END marker to not make it.
+    kernel_profiler::mark_time(CC_MAIN_END);
 #endif
+    trisc_l1_mailbox_write(KERNEL_COMPLETE);
 }

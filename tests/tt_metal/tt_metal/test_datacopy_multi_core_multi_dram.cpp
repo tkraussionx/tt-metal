@@ -79,14 +79,14 @@ std::vector<bfloat16> select_columns(std::vector<bfloat16> data, int M, int K, i
     return result;
 }
 
-std::tuple<tt_metal::Program *, tt_metal::DataMovementKernel *, tt_metal::DataMovementKernel *> create_program(
+std::tuple<tt_metal::Program, tt_metal::DataMovementKernel *, tt_metal::DataMovementKernel *> create_program(
     tt_metal::Device *device,
     int num_cores_r,
     int num_cores_c,
     int tensor_num_tiles,
     int block_num_tiles) {
 
-    tt_metal::Program *program = new tt_metal::Program();
+    tt_metal::Program program = tt_metal::Program();
 
     int num_cores = num_cores_r * num_cores_c;
 
@@ -167,7 +167,7 @@ std::tuple<tt_metal::Program *, tt_metal::DataMovementKernel *, tt_metal::DataMo
         uint(num_blocks_per_core)
     };
 
-    tt_metal::ComputeKernelArgs *eltwise_copy_block = tt_metal::InitializeCompileTimeComputeKernelArgs(all_cores, compute_kernel_args);
+    tt_metal::KernelArgs eltwise_copy_block = tt_metal::KernelArgs(all_cores, compute_kernel_args);
     bool fp32_dest_acc_en = false;
     bool math_approx_mode = false;
     auto compute_kernel = tt_metal::CreateComputeKernel(

@@ -98,11 +98,10 @@ inline void set_thread_id_parameter() {
 inline void allocate_debug_mailbox_buffer() {
    std::int32_t debug_mailbox_addr;
    if ((uint32_t)__firmware_start == (uint32_t)l1_mem::address_map::TRISC0_BASE) {
-      debug_mailbox_addr = l1_mem::address_map::DEBUG_MAILBOX_BUF_BASE + 0*l1_mem::address_map::DEBUG_MAILBOX_BUF_SIZE;
    } else if ((uint32_t) __firmware_start == (uint32_t)l1_mem::address_map::TRISC1_BASE) {
-      debug_mailbox_addr = l1_mem::address_map::DEBUG_MAILBOX_BUF_BASE + 1*l1_mem::address_map::DEBUG_MAILBOX_BUF_SIZE;
+      debug_mailbox_addr = DEBUG_MAILBOX_ADDRESS + 1*DEBUG_MAILBOX_SIZE;
    } else {
-      debug_mailbox_addr = l1_mem::address_map::DEBUG_MAILBOX_BUF_BASE + 2*l1_mem::address_map::DEBUG_MAILBOX_BUF_SIZE;
+      debug_mailbox_addr = DEBUG_MAILBOX_ADDRESS + 2*DEBUG_MAILBOX_SIZE;
    }
    debug_mailbox_base = reinterpret_cast<volatile uint16_t *>(debug_mailbox_addr);
    clear_mailbox_values();
@@ -110,23 +109,14 @@ inline void allocate_debug_mailbox_buffer() {
 }
 
 inline void allocate_debug_buffer() {
-   std::int32_t debug_buffer_addr;
-   if ((uint32_t)__firmware_start == (uint32_t)l1_mem::address_map::TRISC0_BASE) {
-      debug_buffer_addr = l1_mem::address_map::TRISC0_DEBUG_BUFFER_BASE;
-   } else if ((uint32_t) __firmware_start == (uint32_t)l1_mem::address_map::TRISC1_BASE) {
-      debug_buffer_addr = l1_mem::address_map::TRISC1_DEBUG_BUFFER_BASE;
-   } else {
-      debug_buffer_addr = l1_mem::address_map::TRISC2_DEBUG_BUFFER_BASE;
-   }
-   debug_buffer = reinterpret_cast<volatile uint8_t *>(debug_buffer_addr);
-   debug_buffer[l1_mem::address_map::DEBUG_BUFFER_SIZE-1]=0x0;
+    // TODO(pk) reimplement debug buffer
 }
 
 } // namespace ckernel
 
 void local_mem_copy() {
    volatile uint *l1_local_mem_start_addr;
-   volatile uint *local_mem_start_addr = (volatile uint*) LOCAL_MEM_BASE_ADDR;
+   volatile uint *local_mem_start_addr = (volatile uint*) LOCAL_MEM_BASE;
 
    if ((uint)__firmware_start == (uint)l1_mem::address_map::TRISC0_BASE) {
       l1_local_mem_start_addr = (volatile uint*)l1_mem::address_map::TRISC0_LOCAL_MEM_BASE;
@@ -174,7 +164,7 @@ int main(int argc, char *argv[])
 
     trisc_l1_mailbox_write(RESET_VAL);
 
-    if ((uint)l1_mem::address_map::RISC_LOCAL_MEM_BASE ==
+    if ((uint)LOCAL_MEM_BASE ==
             ((uint)__local_mem_rodata_end_addr&0xfff00000))
     {
        local_mem_copy();

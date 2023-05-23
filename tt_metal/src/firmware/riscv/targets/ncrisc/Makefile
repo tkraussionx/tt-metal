@@ -13,7 +13,6 @@ DEFINES =
 SOURCES = \
 	ncrisc.cc \
 	context.cc \
-	contextASM.S \
 	$(TT_METAL_HOME)/src/firmware/riscv/common/risc_common.cc \
 
 
@@ -50,7 +49,6 @@ LINKER_SCRIPT_NAME = ncrisc.ld
 # ifeq ($(DEBUG_MODE),1)
 # 	LINKER_SCRIPT_NAME = ncrisc-debug.ld
 # endif
-LINKER_SECTIONS_PREFIX = ncrisc
 
 # uncomment to enable detailed logging in NCRISC post code for waveform debug
 # DEFINES = -D ENABLE_NCRISC_DEBUG_POST_CODES
@@ -89,6 +87,8 @@ endif
 
 KERNEL_COMPILE_TIME_ARGS := $(filter KERNEL_COMPILE_TIME_ARG_%,$(.VARIABLES))
 DEFINES += $(foreach var,$(KERNEL_COMPILE_TIME_ARGS),-D$(var)=$($(var)))
+
+linker_scripts: $(LINKER_SCRIPT)
 
 all:: $(OUTPUT_DIR)/ncrisc.hex $(OUTPUT_DIR)/ncrisc.map $(OUTPUT_DIR)/ncrisc.fwlog $(OUTPUT_DIR)/ncrisc-decodedline.txt $(OUTPUT_DIR)/ncrisc-debuginfo.txt $(OUTPUT_DIR)/ncrisc-symbols.txt
 

@@ -11,7 +11,7 @@
 #include "tools/profiler/kernel_profiler.hpp"
 
 volatile uint32_t local_mem_barrier;
-volatile uint32_t* test_mailbox_ptr = (volatile uint32_t*)(l1_mem::address_map::NCRISC_FIRMWARE_BASE + 0x4);
+volatile uint32_t* test_mailbox_ptr = (volatile uint32_t*)(MEM_NCRISC_FIRMWARE_BASE + MEM_TEST_MAILBOX_ADDRESS);
 
 int post_index;
 
@@ -33,13 +33,6 @@ uint8_t noc_size_y;
 uint32_t noc_reads_num_issued[NUM_NOCS];
 uint32_t noc_nonposted_writes_num_issued[NUM_NOCS];
 uint32_t noc_nonposted_writes_acked[NUM_NOCS];
-
-// Ncrisc does not implement set_risc_reset_vector since Ncrisc requests Brisc
-// to reset ncrisc. This function is implemented in Brisc.
-void set_risc_reset_vector()
-{
-
-}
 
 inline void record_mailbox_value(uint16_t event_value) {
   if (mailbox_index < mailbox_end) {
@@ -68,15 +61,15 @@ inline __attribute__((section("code_l1"))) void record_mailbox_value_with_index_
 }
 
 inline void allocate_debug_mailbox_buffer() {
-  std::int32_t debug_mailbox_addr = l1_mem::address_map::DEBUG_MAILBOX_BUF_BASE + 3*l1_mem::address_map::DEBUG_MAILBOX_BUF_SIZE;
+  std::int32_t debug_mailbox_addr = MEM_DEBUG_MAILBOX_ADDRESS + 3*MEM_DEBUG_MAILBOX_SIZE;
   debug_mailbox_base = reinterpret_cast<volatile uint16_t *>(debug_mailbox_addr);
 }
 
 void local_mem_copy() {
    volatile uint *l1_local_mem_start_addr;
-   volatile uint *local_mem_start_addr = (volatile uint*) LOCAL_MEM_BASE_ADDR;
+   volatile uint *local_mem_start_addr = (volatile uint*) MEM_LOCAL_BASE;
 
-   if ((uint)__firmware_start == (uint)l1_mem::address_map::NCRISC_FIRMWARE_BASE) {
+   if ((uint)__firmware_start == (uint)MEM_NCRISC_FIRMWARE_BASE) {
       l1_local_mem_start_addr = (volatile uint*)l1_mem::address_map::NCRISC_LOCAL_MEM_BASE;
    }
    uint word_num = ((uint)__local_mem_rodata_end_addr - (uint)__local_mem_rodata_start_addr)>>2;
@@ -101,8 +94,7 @@ int main(int argc, char *argv[]) {
   init_riscv_context();
   allocate_debug_mailbox_buffer();
 
-  if ((uint)l1_mem::address_map::RISC_LOCAL_MEM_BASE ==
-          ((uint)__local_mem_rodata_end_addr&0xfff00000))
+  if ((uint)MEM_LOCAL_BASE == ((uint)__local_mem_rodata_end_addr&0xfff00000))
   {
       local_mem_copy();
   }
@@ -111,6 +103,11 @@ int main(int argc, char *argv[]) {
   risc_init();
 
   setup_cb_read_write_interfaces();
+
+#if defined(IS_DISPATCH_KERNEL)
+    setup_cq_read_write_interface();
+#endif
+
   init_dram_bank_to_noc_coord_lookup_tables();
   init_l1_bank_to_noc_coord_lookup_tables();
 

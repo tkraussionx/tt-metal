@@ -27,7 +27,7 @@ Tensor transpose_hc_multi_core(const Tensor &a) {
 
     uint32_t num_tensor_tiles = N*C*H*W / TILE_HW;
 
-    tt_metal::Program *program = new tt_metal::Program();
+    tt_metal::Program program = tt_metal::Program();
 
     // TODO: Build some sort of dispatcher based on location of op operands
     TT_ASSERT(a.device() != nullptr, "Operand to transpose_wh op needs to be on device!");
@@ -85,12 +85,12 @@ Tensor transpose_hc_multi_core(const Tensor &a) {
             DataFormat::Float16_b
         );
         bool tile_size_is_power_of_two = (ceil(log2(single_tile_size)) == floor(log2(single_tile_size)));
-        tt_metal::DataMovementKernelArgs *reader_writer_compile_time_args;
+        tt_metal::KernelArgs reader_writer_compile_time_args;
         if (tile_size_is_power_of_two) {
             // Use the fast stick size power of 2 path (get noc addr uses just shift operations, no slow multiply algorithm)
-            reader_writer_compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {1, (std::uint32_t)log2(single_tile_size)});
+            reader_writer_compile_time_args = tt_metal::KernelArgs(core, {1, (std::uint32_t)log2(single_tile_size)});
         } else {
-            reader_writer_compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {0, 0});
+            reader_writer_compile_time_args = tt_metal::KernelArgs(core, {0, 0});
         }
         tt_metal::DataMovementKernel *reader_kernel = tt_metal::CreateDataMovementKernel(
             program,
@@ -114,7 +114,7 @@ Tensor transpose_hc_multi_core(const Tensor &a) {
         vector<uint32_t> compute_args = {
             num_tiles_per_core[i] // num_tensor_tiles
         };
-        tt_metal::ComputeKernelArgs *eltwise_binary_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_args);
+        tt_metal::KernelArgs eltwise_binary_args = tt_metal::KernelArgs(core, compute_args);
 
         bool fp32_dest_acc_en = false;
         bool math_approx_mode = false;
@@ -170,8 +170,6 @@ Tensor transpose_hc_multi_core(const Tensor &a) {
     }
 
     tt_metal::LaunchKernels(device, program);
-
-    delete program;
 
     // output does not hold any data, contains pointer to buffer on device with the data
 

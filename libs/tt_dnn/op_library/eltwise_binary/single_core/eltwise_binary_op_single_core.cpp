@@ -10,7 +10,7 @@ namespace tt {
 namespace tt_metal {
 
 Tensor eltwise_binary_single_core(const Tensor &a, const Tensor &b, BinaryOpType::Enum op_type) {
-    tt_metal::Program *program = new tt_metal::Program();
+    tt_metal::Program program = tt_metal::Program();
 
     tt_xy_pair core = {0, 0};
 
@@ -95,7 +95,7 @@ Tensor eltwise_binary_single_core(const Tensor &a, const Tensor &b, BinaryOpType
         num_tiles, // per_core_block_cnt
         1, // per_core_block_size
     };
-    tt_metal::ComputeKernelArgs *eltwise_binary_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
+    tt_metal::KernelArgs eltwise_binary_args = tt_metal::KernelArgs(core, compute_kernel_args);
 
     bool fp32_dest_acc_en = false;
     bool math_approx_mode = false;
@@ -145,8 +145,6 @@ Tensor eltwise_binary_single_core(const Tensor &a, const Tensor &b, BinaryOpType
         num_tiles});
 
     tt_metal::LaunchKernels(device, program);
-
-    delete program;
 
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;

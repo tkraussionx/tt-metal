@@ -14,18 +14,20 @@
 #include "ckernel_globals.h"
 #include "tools/profiler/kernel_profiler.hpp"
 
+
+#include "debug_print.h"
+
 // TODO: commonize this w/ the runtime -- it's the same configs
 // these consts must be constexprs
-constexpr uint32_t TRISC_BASE = l1_mem::address_map::TRISC_BASE;
-constexpr uint32_t TRISC_L1_MAILBOX_OFFSET = l1_mem::address_map::TRISC_L1_MAILBOX_OFFSET;
+constexpr uint32_t TRISC_BASE = MEM_TRISC0_BASE;
+constexpr uint32_t TRISC_L1_MAILBOX_OFFSET = MEM_TEST_MAILBOX_ADDRESS;
 
-constexpr uint32_t trisc_sizes[3] = {
-    l1_mem::address_map::TRISC0_SIZE, l1_mem::address_map::TRISC1_SIZE, l1_mem::address_map::TRISC2_SIZE};
+constexpr uint32_t trisc_sizes[3] = {MEM_TRISC0_SIZE, MEM_TRISC1_SIZE, MEM_TRISC2_SIZE};
 
 constexpr uint32_t trisc_mailbox_addresses[3] = {
-    TRISC_BASE + TRISC_L1_MAILBOX_OFFSET,
-    TRISC_BASE + trisc_sizes[0] + TRISC_L1_MAILBOX_OFFSET,
-    TRISC_BASE + trisc_sizes[0] + trisc_sizes[1] + TRISC_L1_MAILBOX_OFFSET};
+    MEM_TRISC0_BASE + TRISC_L1_MAILBOX_OFFSET,
+    MEM_TRISC0_BASE + trisc_sizes[0] + TRISC_L1_MAILBOX_OFFSET,
+    MEM_TRISC0_BASE + trisc_sizes[0] + trisc_sizes[1] + TRISC_L1_MAILBOX_OFFSET};
 
 c_tensix_core core;
 
@@ -144,35 +146,21 @@ void set_trisc_address() {
     volatile uint32_t* cfg_regs = core.cfg_regs_base(0);
 
     // cfg_regs[NCRISC_RESET_PC_PC_ADDR32] = l1_mem::address_map::NCRISC_FIRMWARE_BASE;
-    cfg_regs[NCRISC_RESET_PC_PC_ADDR32] = l1_mem::address_map::NCRISC_IRAM_MEM_BASE;  // NCRISC IRAM
-    cfg_regs[TRISC_RESET_PC_SEC0_PC_ADDR32] = l1_mem::address_map::TRISC_BASE;
-    cfg_regs[TRISC_RESET_PC_SEC1_PC_ADDR32] = l1_mem::address_map::TRISC_BASE + l1_mem::address_map::TRISC0_SIZE;
-    cfg_regs[TRISC_RESET_PC_SEC2_PC_ADDR32] =
-        l1_mem::address_map::TRISC_BASE + l1_mem::address_map::TRISC0_SIZE + l1_mem::address_map::TRISC1_SIZE;
+    cfg_regs[NCRISC_RESET_PC_PC_ADDR32] = MEM_NCRISC_IRAM_BASE;
+    cfg_regs[TRISC_RESET_PC_SEC0_PC_ADDR32] = MEM_TRISC0_BASE;
+    cfg_regs[TRISC_RESET_PC_SEC1_PC_ADDR32] = MEM_TRISC1_BASE;
+    cfg_regs[TRISC_RESET_PC_SEC2_PC_ADDR32] = MEM_TRISC2_BASE;
     cfg_regs[TRISC_RESET_PC_OVERRIDE_Reset_PC_Override_en_ADDR32] = 0b111;
-    cfg_regs[NCRISC_RESET_PC_OVERRIDE_Reset_PC_Override_en_ADDR32] = 0x1;
-}
-
-// Brisc implements risc_reset_vector since Brisc will reset Ncrisc.
-void set_risc_reset_vector() {
-    volatile uint32_t* cfg_regs = core.cfg_regs_base(0);
-    volatile uint32_t* risc_reset_req = (volatile uint32_t*)l1_mem::address_map::NCRISC_L1_CONTEXT_BASE;
-
-    // Address of ncrisc context restore routine.
-    // Upon exiting reset, we need to restore ncrisc context so that it can resume program execution.
-    // ncrisc puts the address of context restore routine @ 0x5024.
-    cfg_regs[NCRISC_RESET_PC_PC_ADDR32] = risc_reset_req[1];
     cfg_regs[NCRISC_RESET_PC_OVERRIDE_Reset_PC_Override_en_ADDR32] = 0x1;
 }
 
 void l1_to_ncrisc_iram_copy() {
     // Copy NCRISC firmware from L1 to local IRAM using tensix DMA
-    // NOTE: NCRISC_L1_SCRATCH_BASE (part of NCRISC_FIRMWARE_BASE) is used as NCRISC scratch after NCRISC is loaded
     tdma_xmov(
         TDMA_MOVER0,
-        (l1_mem::address_map::NCRISC_FIRMWARE_BASE) >> 4,
+        (MEM_NCRISC_FIRMWARE_BASE) >> 4,
         (0x4 << 12),
-        (l1_mem::address_map::NCRISC_IRAM_CODE_SIZE) >> 4,
+        (MEM_NCRISC_IRAM_SIZE) >> 4,
         XMOV_L1_TO_L0);
     // Wait for DMA to finish
     wait_tdma_movers_done(RISCV_TDMA_STATUS_FLAG_MOVER0_BUSY_MASK);
@@ -257,7 +245,7 @@ void device_setup() {
     // bool debugger_en = debugger::is_enabled();
 
     // Initialize debug mailbox to 0s
-    for (int i = 0; i < DEBUG_MAILBOX_SIZE; i++) core.debug_mailbox()[i] = 0;
+    for (int i = 0; i < MEM_DEBUG_MAILBOX_SIZE; i++) core.debug_mailbox()[i] = 0;
 
     // Read counter at start
     core.wall_clock_mailbox()[0] = core.read_wall_clock();
@@ -282,7 +270,7 @@ inline void notify_host_kernel_finished() {
 
 void local_mem_copy() {
     volatile uint* l1_local_mem_start_addr;
-    volatile uint* local_mem_start_addr = (volatile uint*)LOCAL_MEM_BASE_ADDR;
+    volatile uint* local_mem_start_addr = (volatile uint*)MEM_LOCAL_BASE;
 
     // Removed gating conditional here since getting maybe-unitialized error under
     // 'DEBUG_MODE=1' compilation. It should have been an assert anyway.
@@ -300,6 +288,11 @@ void local_mem_copy() {
 }
 
 int main() {
+
+    // volatile uint* my_ptr = get_cq_commands_received_ptr();
+    // DPRINT << my_ptr[0] << ENDL();
+    // while(true);
+
     kernel_profiler::init_BR_profiler();
 
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
@@ -315,12 +308,18 @@ int main() {
 
 #if not defined(DEVICE_DISPATCH_MODE) or defined(IS_DISPATCH_KERNEL)
     volatile uint32_t* enable_core_mailbox_ptr =
-        (volatile uint32_t*)(l1_mem::address_map::FIRMWARE_BASE + ENABLE_CORE_MAILBOX);
+        (volatile uint32_t*)(MEM_BRISC_FIRMWARE_BASE + MEM_ENABLE_CORE_MAILBOX);
     while (enable_core_mailbox_ptr[0] != 0x1);
 #endif
 
     init_sync_registers();  // this init needs to be done before NCRISC / TRISCs are launched, only done by BRISC
+
+#if defined(IS_DISPATCH_KERNEL)
+    setup_cq_read_write_interface();
+#else
     setup_cb_read_write_interfaces();                // done by both BRISC / NCRISC
+#endif
+
     init_dram_bank_to_noc_coord_lookup_tables();  // done by both BRISC / NCRISC
     init_l1_bank_to_noc_coord_lookup_tables();  // done by both BRISC / NCRISC
 
@@ -340,7 +339,7 @@ int main() {
         deassert_trisc_reset();
     }
 
-    if ((uint)l1_mem::address_map::RISC_LOCAL_MEM_BASE == ((uint)__local_mem_rodata_end_addr & 0xfff00000)) {
+    if ((uint)MEM_LOCAL_BASE == ((uint)__local_mem_rodata_end_addr & 0xfff00000)) {
         local_mem_copy();
     }
 
@@ -348,7 +347,16 @@ int main() {
     kernel_profiler::mark_time(CC_KERNEL_MAIN_START);
 #endif
     // Run the BRISC kernel
+
+#ifdef IS_DISPATCH_KERNEL
+    // while(true) { // Eventually, we want this to keep looping on some 'done' flag
+        kernel_main();
+
+        // Need some sort of semwait here
+    // }
+#else
     kernel_main();
+#endif
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & KERNEL_FUNCT_MARKER)
     kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
 #endif
@@ -366,7 +374,7 @@ int main() {
     }
 
     volatile uint32_t* test_mailbox_ptr =
-        (volatile uint32_t*)(l1_mem::address_map::FIRMWARE_BASE + TEST_MAILBOX_ADDRESS);
+        (volatile uint32_t*)(MEM_BRISC_FIRMWARE_BASE + MEM_TEST_MAILBOX_ADDRESS);
     if (test_mailbox_ptr[0] != RISC_DETECTED_STREAM_ASSERT)
         test_mailbox_ptr[0] = 0x1;
 
@@ -388,7 +396,7 @@ int main() {
 #endif
 
 #if defined(IS_DISPATCH_KERNEL) or defined(WRITE_TO_HUGE_PAGE)
-    notify_host_kernel_finished();
+    // notify_host_kernel_finished();
 #endif
 
 #if defined(DEVICE_DISPATCH_MODE) and not defined(IS_DISPATCH_KERNEL)
@@ -398,7 +406,7 @@ int main() {
 #endif
 
     while (true) {
-        risc_reset_check();
     }
+
     return 0;
 }

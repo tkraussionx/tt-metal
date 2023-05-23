@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
         /*
         * Setup program to execute along with its buffers and kernels to use
         */
-        Program *program = new Program();
+        Program program = Program();
 
         constexpr tt_xy_pair core = {0, 0};
 
@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
             2048, // per_core_block_cnt
             1 // per_core_block_size
         };
-        ComputeKernelArgs *eltwise_binary_args = InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
+        KernelArgs eltwise_binary_args = KernelArgs(core, compute_kernel_args);
 
         constexpr bool fp32_dest_acc_en = false;
         constexpr bool math_approx_mode = false;
@@ -222,7 +222,7 @@ int main(int argc, char **argv) {
         /*
          * Move src data back into DRAM src buffer 0 to do another eltwise calculation
          */
-        Program *program_mul = new Program();
+        Program program_mul = Program();
 
         /*
          * Because we're using a new program, we must redeclare all the
@@ -271,8 +271,6 @@ int main(int argc, char **argv) {
             core,
             DataMovementProcessor::RISCV_0,
             NOC::RISCV_0_default);
-
-        eltwise_binary_args = InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
 
         eltwise_binary_kernel = CreateComputeKernel(
             program_mul,

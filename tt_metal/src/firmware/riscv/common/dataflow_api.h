@@ -9,6 +9,8 @@
 #include <stdint.h>
 #include "hostdevcommon/common_runtime_address_map.h"
 #include "hostdevcommon/common_values.hpp"
+#include "hostdevcommon/bank_to_noc_coord_mapping.h"
+// #include "frameworks/tt_dispatch/impl/command.hpp"
 #include "circular_buffer.h"
 
 #include "debug_print.h"
@@ -35,6 +37,8 @@
 CBWriteInterface cb_write_interface[NUM_CIRCULAR_BUFFERS];
 CBReadInterface cb_read_interface[NUM_CIRCULAR_BUFFERS];
 
+CBReadInterface cq_read_interface;
+
 // Use VC 1 for unicast writes, and VC 4 for mcast writes
 #define NOC_UNICAST_WRITE_VC 1
 #define NOC_MULTICAST_WRITE_VC 4
@@ -48,9 +52,13 @@ CBReadInterface cb_read_interface[NUM_CIRCULAR_BUFFERS];
 // TODO: these should be constexpr compile-time init'd, but it doesn't work on BRISC yet
 uint32_t dram_bank_to_noc_x[NUM_DRAM_BANKS];
 uint32_t dram_bank_to_noc_y[NUM_DRAM_BANKS];
+uint32_t dram_bank_to_noc_xy[NUM_DRAM_BANKS];
+
+uint8_t shuffled_l1_bank_ids[NUM_L1_BANKS];
 
 uint32_t l1_bank_to_noc_x[NUM_L1_BANKS];
 uint32_t l1_bank_to_noc_y[NUM_L1_BANKS];
+uint32_t l1_bank_to_noc_xy[NUM_L1_BANKS];
 
 int32_t l1_bank_to_l1_offset[NUM_L1_BANKS];
 
@@ -110,17 +118,32 @@ void init_dram_bank_to_noc_coord_lookup_tables() {
 
     dram_bank_to_noc_y[0] = dram_bank_to_noc_y[2] = dram_bank_to_noc_y[4] = dram_bank_to_noc_y[6] = 0;
     dram_bank_to_noc_y[1] = dram_bank_to_noc_y[3] = dram_bank_to_noc_y[5] = dram_bank_to_noc_y[7] = 6;
+
+    dram_bank_to_noc_xy[0] = (NOC_Y(0) << NOC_ADDR_NODE_ID_BITS) | NOC_X(1);
+    dram_bank_to_noc_xy[1] = (NOC_Y(6) << NOC_ADDR_NODE_ID_BITS) | NOC_X(1);
+    dram_bank_to_noc_xy[2] = (NOC_Y(0) << NOC_ADDR_NODE_ID_BITS) | NOC_X(4);
+    dram_bank_to_noc_xy[3] = (NOC_Y(6) << NOC_ADDR_NODE_ID_BITS) | NOC_X(4);
+    dram_bank_to_noc_xy[4] = (NOC_Y(0) << NOC_ADDR_NODE_ID_BITS) | NOC_X(7);
+    dram_bank_to_noc_xy[5] = (NOC_Y(6) << NOC_ADDR_NODE_ID_BITS) | NOC_X(7);
+    dram_bank_to_noc_xy[6] = (NOC_Y(0) << NOC_ADDR_NODE_ID_BITS) | NOC_X(10);
+    dram_bank_to_noc_xy[7] = (NOC_Y(6) << NOC_ADDR_NODE_ID_BITS) | NOC_X(10);
 }
 
 void init_l1_bank_to_noc_coord_lookup_tables() {
     int id = 0;
+    int remapped_id;
+
+    init_shuffled_l1_bank_id_mapping(shuffled_l1_bank_ids);
+
     // Single bank cores
     for (uint32_t y = 1; y < 11; y++) {
         if (y == 6) continue;
         for (uint32_t x = 1; x < 13; x++) {
-            l1_bank_to_noc_x[id] = x;
-            l1_bank_to_noc_y[id] = y;
-            l1_bank_to_l1_offset[id] = 0;
+            remapped_id = shuffled_l1_bank_ids[id];
+            l1_bank_to_noc_x[remapped_id] = x;
+            l1_bank_to_noc_y[remapped_id] = y;
+            l1_bank_to_noc_xy[remapped_id] = (NOC_Y(y) << NOC_ADDR_NODE_ID_BITS) | NOC_X(x);
+            l1_bank_to_l1_offset[remapped_id] = 0;
             id++;
         }
     }
@@ -128,26 +151,26 @@ void init_l1_bank_to_noc_coord_lookup_tables() {
     // Storage cores
     for (uint32_t x = 2; x < 13; x++) {
         if (x == 7) continue;
-        // DPRINT << "ID: " << id << ", NOCX: " << x << ", NOCY: " << 12 << ENDL();
-        l1_bank_to_noc_x[id] = x;
-        l1_bank_to_noc_y[id] = 11;
-        l1_bank_to_l1_offset[id] = -512 * 1024; // Bank 0 of storage core allocated top down from 512KB
+        remapped_id = shuffled_l1_bank_ids[id];
+        l1_bank_to_noc_x[remapped_id] = x;
+        l1_bank_to_noc_y[remapped_id] = 11;
+        l1_bank_to_noc_xy[remapped_id] = (NOC_Y(11) << NOC_ADDR_NODE_ID_BITS) | NOC_X(x);
+        l1_bank_to_l1_offset[remapped_id] = -512 * 1024; // Bank 0 of storage core allocated top down from 512KB
         id++;
-        // DPRINT << "ID: " << id << ", NOCX: " << x << ", NOCY: " << 12 << ENDL();
-        l1_bank_to_noc_x[id] = x;
-        l1_bank_to_noc_y[id] = 11;
-        l1_bank_to_l1_offset[id] = 0; // Bank 1 of storage core allocated top down from 1MB, like all other worker cores
+        remapped_id = shuffled_l1_bank_ids[id];
+        l1_bank_to_noc_x[remapped_id] = x;
+        l1_bank_to_noc_y[remapped_id] = 11;
+        l1_bank_to_noc_xy[remapped_id] = (NOC_Y(11) << NOC_ADDR_NODE_ID_BITS) | NOC_X(x);
+        l1_bank_to_l1_offset[remapped_id] = 0; // Bank 1 of storage core allocated top down from 1MB, like all other worker cores
         id++;
     }
 }
 
-
 // only BRISC to call this
 void init_sync_registers() {
 
-    volatile std::uint32_t* tiles_received_ptr;
-    volatile std::uint32_t* tiles_acked_ptr;
-
+    volatile uint* tiles_received_ptr;
+    volatile uint* tiles_acked_ptr;
     for (uint32_t operand = 0; operand < NUM_CIRCULAR_BUFFERS; operand++) {
       tiles_received_ptr = get_cb_tiles_received_ptr(operand);
       tiles_received_ptr[0] = 0;
@@ -196,6 +219,26 @@ void setup_cb_read_write_interfaces() {
   }
 }
 
+
+// Only the read interface is set up on the device... the write interface
+// belongs to host
+void setup_cq_read_write_interface() {
+    uint fifo_addr = (HOST_CQ_FINISH_PTR + 32) >> 4; // The fifo starts after the pointer addresses
+    uint fifo_size = ((1024 * 1024 * 1024) >> 4) - fifo_addr;
+
+    cq_read_interface.fifo_limit = fifo_addr + fifo_size - 1;
+    cq_read_interface.fifo_rd_ptr = fifo_addr;
+    cq_read_interface.fifo_size = fifo_size;
+
+    // Setting up here rather than in init sync registers function
+    // since these are not registers, rather they are L1 values
+    // Read ptr
+    get_cq_read_ptr()[0] = fifo_addr;
+
+    // Write ptr
+    get_cq_write_ptr()[0] = fifo_addr;
+}
+
 // replicated from ckernels_defs.h, which are currently not included in BRISC / NCRISC builds
 // TODO: look into ckernels_defs.h included in NCRISC/BRISC builds
 inline __attribute__((always_inline))
@@ -215,6 +258,16 @@ constexpr static std::int32_t GET_L1_TILE_SIZE(uint format) {
         case ((uint8_t)DataFormat::Bfp2):
         case ((uint8_t)DataFormat::Bfp2_b): return ((256>>4)+(64>>4));
         default: return ((1024>>4)+(64>>4));
+    };
+}
+
+inline __attribute__((always_inline))
+constexpr static std::uint32_t MUL_WITH_TILE_SIZE(uint format, uint index) {
+    switch (format&0x1F) {
+        case ((uint8_t)DataFormat::Bfp8_b): return ((index<<10)+(index<<6));
+        case ((uint8_t)DataFormat::Float16): return (index<<11);
+        //Keep default as Bfp8?
+        default: return ((index<<10)+(index<<6));
     };
 }
 
@@ -511,6 +564,7 @@ struct InterleavedAddrGen {
         if constexpr (DRAM) {
             uint32_t bank_id = id & (NUM_DRAM_BANKS - 1);
             addr = mulsi3(id >> LOG_BASE_2_OF_NUM_DRAM_BANKS, this->page_size) + this->bank_base_address + offset;
+
             noc_x = dram_bank_to_noc_x[bank_id];
             noc_y = dram_bank_to_noc_y[bank_id];
         } else {
@@ -564,6 +618,98 @@ struct InterleavedPow2AddrGen {
 };
 
 template <bool DRAM>
+struct InterleavedAddrGenFast {
+    uint32_t bank_base_address; // Base address for the whole tensor.
+    uint32_t page_size; // Num bytes in bank unit.
+    DataFormat data_format; // Dataformat
+
+    FORCE_INLINE
+    std::uint64_t get_noc_addr(const uint32_t id, const uint32_t offset = 0) const {
+        uint32_t addr;
+        uint32_t noc_x;
+        uint32_t noc_y;
+        if constexpr (DRAM) {
+            uint32_t bank_id = id & (NUM_DRAM_BANKS - 1);
+            addr = MUL_WITH_TILE_SIZE((uint) this->data_format, id >> LOG_BASE_2_OF_NUM_DRAM_BANKS) + this->bank_base_address + offset;
+            noc_x = dram_bank_to_noc_x[bank_id];
+            noc_y = dram_bank_to_noc_y[bank_id];
+        } else {
+            uint32_t bank_id = id & (NUM_L1_BANKS - 1);
+            addr = MUL_WITH_TILE_SIZE((uint) this->data_format, id >> LOG_BASE_2_OF_NUM_L1_BANKS) + this->bank_base_address + offset;
+            addr += l1_bank_to_l1_offset[bank_id];
+            noc_x = l1_bank_to_noc_x[bank_id];
+            noc_y = l1_bank_to_noc_y[bank_id];
+        }
+
+        uint64_t noc_addr = get_noc_addr_helper(noc_x, noc_y, addr);
+        return noc_addr;
+    }
+
+    FORCE_INLINE
+    void noc_async_read_tile(const uint32_t id, uint32_t dest_addr, const uint32_t offset = 0) const {
+        uint32_t src_addr;
+        uint32_t src_noc_xy;
+
+        if constexpr (DRAM) {
+            uint32_t bank_id = id & (NUM_DRAM_BANKS - 1);
+            src_addr = MUL_WITH_TILE_SIZE((uint) this->data_format, id >> LOG_BASE_2_OF_NUM_DRAM_BANKS) + this->bank_base_address + offset;
+            src_noc_xy = dram_bank_to_noc_xy[bank_id];
+        } else {
+            uint32_t bank_id = id & (NUM_L1_BANKS - 1);
+            src_addr = MUL_WITH_TILE_SIZE((uint) this->data_format, id >> LOG_BASE_2_OF_NUM_L1_BANKS) + this->bank_base_address + offset;
+            src_addr += l1_bank_to_l1_offset[bank_id];
+            src_noc_xy = l1_bank_to_noc_xy[bank_id];
+        }
+
+        while (!ncrisc_noc_fast_read_ok(loading_noc, NCRISC_RD_CMD_BUF));
+
+        NOC_CMD_BUF_WRITE_REG(loading_noc, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);
+        NOC_CMD_BUF_WRITE_REG(loading_noc, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, src_addr); // (uint32_t)src_addr
+        NOC_CMD_BUF_WRITE_REG(loading_noc, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_MID, src_noc_xy); // src_addr >> 32
+        NOC_CMD_BUF_WRITE_REG(loading_noc, NCRISC_RD_CMD_BUF, NOC_AT_LEN_BE, this->page_size); // len_bytes
+        NOC_CMD_BUF_WRITE_REG(loading_noc, NCRISC_RD_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+        noc_reads_num_issued[loading_noc] += 1;
+    }
+
+    FORCE_INLINE
+    void noc_async_write_tile(const uint32_t id, uint32_t src_addr) const {
+        uint32_t dest_addr;
+        uint32_t dest_noc_xy;
+
+        if constexpr (DRAM) {
+            uint32_t bank_id = id & (NUM_DRAM_BANKS - 1);
+            dest_addr = MUL_WITH_TILE_SIZE((uint) this->data_format, id >> LOG_BASE_2_OF_NUM_DRAM_BANKS) + this->bank_base_address;
+            dest_noc_xy = dram_bank_to_noc_xy[bank_id];
+        } else {
+            uint32_t bank_id = id & (NUM_L1_BANKS - 1);
+            dest_addr = MUL_WITH_TILE_SIZE((uint) this->data_format, id >> LOG_BASE_2_OF_NUM_L1_BANKS) + this->bank_base_address;
+            dest_addr += l1_bank_to_l1_offset[bank_id];
+            dest_noc_xy = l1_bank_to_noc_xy[bank_id];
+        }
+
+        while (!ncrisc_noc_fast_write_ok(loading_noc, NCRISC_WR_REG_CMD_BUF));
+        uint32_t noc_cmd_field =
+          NOC_CMD_CPY | NOC_CMD_WR |
+          NOC_CMD_VC_STATIC  |
+          NOC_CMD_STATIC_VC(NOC_UNICAST_WRITE_VC) |
+          0x0 | // (linked ? NOC_CMD_VC_LINKED : 0x0)
+          0x0 | // (mcast ? (NOC_CMD_PATH_RESERVE | NOC_CMD_BRCST_PACKET) : 0x0)
+          NOC_CMD_RESP_MARKED;
+
+        NOC_CMD_BUF_WRITE_REG(loading_noc, NCRISC_WR_REG_CMD_BUF, NOC_CTRL, noc_cmd_field);
+        NOC_CMD_BUF_WRITE_REG(loading_noc, NCRISC_WR_REG_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);
+        NOC_CMD_BUF_WRITE_REG(loading_noc, NCRISC_WR_REG_CMD_BUF, NOC_RET_ADDR_LO, dest_addr); // (uint32_t)dest_addr
+        NOC_CMD_BUF_WRITE_REG(loading_noc, NCRISC_WR_REG_CMD_BUF, NOC_RET_ADDR_MID, dest_noc_xy); // dest_addr >> 32
+        NOC_CMD_BUF_WRITE_REG(loading_noc, NCRISC_WR_REG_CMD_BUF, NOC_AT_LEN_BE, this->page_size); // len_bytes
+        NOC_CMD_BUF_WRITE_REG(loading_noc, NCRISC_WR_REG_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+        noc_nonposted_writes_num_issued[loading_noc] += 1;
+        noc_nonposted_writes_acked[loading_noc] += 1; // num_dests
+    }
+
+};
+
+
+template <bool DRAM>
 FORCE_INLINE
 std::uint64_t get_noc_addr(
     const uint32_t id, const InterleavedAddrGen<DRAM> &s, uint32_t offset = 0) {
@@ -598,6 +744,24 @@ std::uint64_t get_noc_addr(
 
     // DPRINT << s.bank_base_address << ',' << ' ' << uint(DRAM) << ENDL();
     return s.get_noc_addr(id);
+}
+
+template <bool DRAM>
+FORCE_INLINE
+std::uint64_t get_noc_addr(
+    const uint32_t id, const InterleavedAddrGenFast<DRAM>& s, uint32_t offset = 0) {
+    /*
+        Alternative API for getting the noc address when we are reading using a swizzled
+        layout. This version assumes bank unit size can be arbitrary size. Use
+        get_noc_addr(const uint32_t id, InterleavedPow2AddrGen s) for optimized algorithm in which stick size
+        is a power of 2.
+
+        id: Unique id for the bank_unit you want to read, assuming row major order. We use this to compute the
+        bank for this unit of data.
+
+        InterleavedAddrGen: Check struct for attribute definitions.
+    */
+    return s.get_noc_addr(id, offset);
 }
 
 FORCE_INLINE
@@ -637,6 +801,16 @@ void noc_async_read(std::uint64_t src_noc_addr, std::uint32_t dst_local_l1_addr,
                                         size);
 }
 
+template <bool DRAM>
+FORCE_INLINE
+void noc_async_read_tile(const uint32_t id, const InterleavedAddrGenFast<DRAM>& s, std::uint32_t dst_local_l1_addr, uint32_t offset = 0) {
+    /*
+        Read requests - use static VC
+        Read responses - assigned VCs dynamically
+    */
+    s.noc_async_read_tile(id, dst_local_l1_addr, offset);
+}
+
 /**
  * Initiates an asynchronous write from a source address in L1 memory on the
  * Tensix core executing this function call. The destination is specified using
@@ -659,6 +833,12 @@ FORCE_INLINE
 void noc_async_write(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr,  std::uint32_t size) {
         ncrisc_noc_fast_write_any_len(loading_noc, NCRISC_WR_REG_CMD_BUF, src_local_l1_addr, dst_noc_addr, size,
                             NOC_UNICAST_WRITE_VC, false, false, 1);
+}
+
+template <bool DRAM>
+FORCE_INLINE
+void noc_async_write_tile(const uint32_t id, const InterleavedAddrGenFast<DRAM>& s, std::uint32_t src_local_l1_addr) {
+    s.noc_async_write_tile(id, src_local_l1_addr);
 }
 
 FORCE_INLINE
@@ -886,4 +1066,36 @@ inline void noc_prepare_deassert_reset_flag(uint32_t l1_addr) {
 
 inline void noc_prepare_assert_reset_flag(uint32_t l1_addr) {
     reinterpret_cast<volatile uint32_t*>(l1_addr)[0] = uint32_t(TENSIX_ASSERT_SOFT_RESET);
+}
+
+
+// Command queue APIs
+FORCE_INLINE
+void cq_wait_front() {
+
+    u32 fifo_wr_ptr;
+    do {
+        fifo_wr_ptr = get_cq_write_ptr()[0];
+    } while (cq_read_interface.fifo_rd_ptr == fifo_wr_ptr);
+}
+
+FORCE_INLINE
+void cq_pop_front(u32 cmd_size_16B) {
+    cq_read_interface.fifo_rd_ptr += cmd_size_16B;
+
+    if (cq_read_interface.fifo_rd_ptr > cq_read_interface.fifo_limit) {
+        cq_read_interface.fifo_rd_ptr -= cq_read_interface.fifo_size;
+    }
+
+    uint32_t pcie_noc_x = NOC_X(0);
+    uint32_t pcie_noc_y = NOC_Y(4); // These are the PCIE core coordinates
+    uint64_t pcie_address =
+        get_noc_addr(pcie_noc_x, pcie_noc_y, HOST_CQ_READ_PTR);  // For now, we are writing to host hugepages at offset 0 (nothing else currently writing to it)
+
+    u32 rd_ptr = cq_read_interface.fifo_rd_ptr;
+    volatile u32* rd_ptr_ptr = get_cq_read_ptr();
+
+    rd_ptr_ptr[0] = rd_ptr;
+    noc_async_write(u32(rd_ptr_ptr), pcie_address, 4);
+    noc_async_write_barrier();
 }

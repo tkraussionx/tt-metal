@@ -28,8 +28,8 @@ void add_defines(tt_metal::ComputeKernel * eltwise_binary_kernel, BinaryOpType::
 }
 
 
-tt_metal::Program *setup_program_one(tt_metal::Device *device, const tt_xy_pair &core, uint32_t single_tile_size) {
-    tt_metal::Program *program = new tt_metal::Program();
+tt_metal::Program setup_program_one(tt_metal::Device *device, const tt_xy_pair &core, uint32_t single_tile_size) {
+    tt_metal::Program program = tt_metal::Program();
 
     uint32_t src0_cb_index = 0;
     uint32_t num_input_tiles = 2;
@@ -84,7 +84,7 @@ tt_metal::Program *setup_program_one(tt_metal::Device *device, const tt_xy_pair 
         1, // per_core_block_cnt
         1 // per_core_block_size
     };
-    tt_metal::ComputeKernelArgs *eltwise_binary_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
+    tt_metal::KernelArgs eltwise_binary_args = tt_metal::KernelArgs(core, compute_kernel_args);
     bool fp32_dest_acc_en = false;
     bool math_approx_mode = false;
     auto eltwise_binary_kernel = tt_metal::CreateComputeKernel(
@@ -99,11 +99,11 @@ tt_metal::Program *setup_program_one(tt_metal::Device *device, const tt_xy_pair 
     eltwise_binary_kernel->add_define("ELTWISE_OP", "add_tiles");
     add_defines(eltwise_binary_kernel, BinaryOpType::ADD);
 
-    return program;
+    return std::move(program);
 }
 
-tt_metal::Program *setup_program_two(tt_metal::Device *device, const tt_xy_pair &core, uint32_t single_tile_size) {
-    tt_metal::Program *program = new tt_metal::Program();
+tt_metal::Program setup_program_two(tt_metal::Device *device, const tt_xy_pair &core, uint32_t single_tile_size) {
+    tt_metal::Program program = tt_metal::Program();
 
     uint32_t src0_cb_index = 0;
     uint32_t num_input_tiles = 2;
@@ -163,7 +163,7 @@ tt_metal::Program *setup_program_two(tt_metal::Device *device, const tt_xy_pair 
         1, // in1_block_tile_cnt
         1 // out_block_tile_cnt
     };
-    tt_metal::ComputeKernelArgs *mm_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
+    tt_metal::KernelArgs mm_args = tt_metal::KernelArgs(core, compute_kernel_args);
     bool fp32_dest_acc_en = false;
     bool math_approx_mode = false;
     auto mm_kernel = tt_metal::CreateComputeKernel(
@@ -176,12 +176,12 @@ tt_metal::Program *setup_program_two(tt_metal::Device *device, const tt_xy_pair 
         math_approx_mode
     );
 
-    return program;
+    return std::move(program);
 }
 
 void write_program_runtime_args_to_device(
     tt_metal::Device *device,
-    tt_metal::Program *program,
+    const tt_metal::Program &program,
     const tt_xy_pair &core,
     uint32_t num_tiles,
     tt_metal::Buffer &src0_dram_buffer,
@@ -192,7 +192,7 @@ void write_program_runtime_args_to_device(
     auto dram_src1_noc_xy = src1_dram_buffer.noc_coordinates();
     auto dram_dst_noc_xy = dst_dram_buffer.noc_coordinates();
 
-    for (auto dm_kernel : program->data_movement_kernels()) {
+    for (auto dm_kernel : program.data_movement_kernels()) {
         if (dm_kernel->name() == "reader_binary" or dm_kernel->name() == "reader_matmul_small_block") {
             tt_metal::WriteRuntimeArgsToDevice(
                 device, dm_kernel, core,
@@ -251,9 +251,9 @@ int main(int argc, char **argv) {
         auto src1_dram_buffer = tt_metal::Buffer(device, dram_buffer_size, dram_buffer_src1_addr, dram_src1_channel_id, dram_buffer_size, tt_metal::BufferType::DRAM);
         auto dst_dram_buffer = tt_metal::Buffer(device, dram_buffer_size, dram_buffer_dst_addr, dram_dst_channel_id, dram_buffer_size, tt_metal::BufferType::DRAM);
 
-        tt_metal::Program *program1 = setup_program_one(device, core, single_tile_size);
+        tt_metal::Program program1 = setup_program_one(device, core, single_tile_size);
 
-        tt_metal::Program *program2 = setup_program_two(device, core, single_tile_size);
+        tt_metal::Program program2 = setup_program_two(device, core, single_tile_size);
 
         ////////////////////////////////////////////////////////////////////////////
         //                      Compile Applications

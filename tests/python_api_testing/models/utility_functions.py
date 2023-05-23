@@ -91,17 +91,6 @@ def get_oom_of_float(float_lst):
     return ooms
 
 
-def get_FR():
-    # TODO(AP): a hacky workflow where we manually set force recompile counter before every kernel from python
-    return ttl.device.GetForceRecompiles()
-
-
-def set_FR(new_val):
-    # TODO(AP): a hacky workflow where we manually set force recompile counter before every kernel from python
-    ttl.device.SetForceRecompiles(new_val)
-    print("Force recompiles=", get_FR())
-
-
 def ttP(x, count=4, offset=0, stride=1):
     if type(x) == torch.Tensor:
         t1 = x.reshape(-1)
@@ -119,44 +108,23 @@ def ttP(x, count=4, offset=0, stride=1):
 
 def enable_compile_cache():
     """
-    Enables the compiler caching.
+    Enables persistent compiled kernel caching - disables recompiling the kernels for the duration of running process if built_kernels/.../hash directory with kernel binaries is present.
     """
     ttl.device.EnableCompileCache()
 
 
 def disable_compile_cache():
     """
-    Disables the compiler caching.
+    Disables persistent compiled kernel caching. This is the default state.
     """
     ttl.device.DisableCompileCache()
 
 
 def get_compile_cache_enabled():
     """
-    Returns the current state of compile cache on/off switch.
+    Returns the current state of persistent compile cache on/off switch.
     """
     return ttl.device.GetCompileCacheEnabled()
-
-
-def enable_binary_cache():
-    """
-    Enables the binary loading cache.
-    """
-    ttl.device.EnableBinaryCache()
-
-
-def disable_binary_cache():
-    """
-    Disables the binary loading cache.
-    """
-    ttl.device.DisableBinaryCache()
-
-
-def get_binary_cache_enabled():
-    """
-    Returns the current state of binary loading cache on/off switch.
-    """
-    return ttl.device.GetBinaryCacheEnabled()
 
 
 def comp_allclose(golden, calculated, rtol=1e-05, atol=1e-08):
@@ -272,6 +240,32 @@ def tt2torch_tensor(tt_tensor, tt_host=None):
     py_output = torch.Tensor(tt_output.data()).reshape(tt_output.shape())
     return py_output
 
+def pad_by_zero(x: torch.Tensor, device):
+    initial_shape = x.shape
+    if x.shape[3] % 32 != 0 or x.shape[2] % 32 != 0:
+        tt_tensor = ttl.tensor.Tensor(
+        x.reshape(-1).tolist(),
+        x.shape,
+        ttl.tensor.DataType.BFLOAT16,
+        ttl.tensor.Layout.ROW_MAJOR,
+        )
+        x = tt_tensor.pad((x.shape[0], x.shape[1], nearest_32(x.shape[2]), nearest_32(x.shape[3])), (0, 0, 0, 0), 0)
+        x = x.to(ttl.tensor.Layout.TILE).to(device)
+
+    else:
+        x = torch2tt_tensor(x, device)
+    return x, initial_shape
+
+def unpad_from_zero(x, desired_shape, host):
+    if x.shape()[-1] == desired_shape[-1] and x.shape()[-2] == desired_shape[-2] :
+        x = tt2torch_tensor(x)
+    else:
+        x = x.to(host)
+        if(x.layout() != ttl.tensor.Layout.ROW_MAJOR):
+            x = x.to(ttl.tensor.Layout.ROW_MAJOR)
+        x = x.unpad((0, 0, 0, 0), (desired_shape[0] - 1, desired_shape[1] - 1, desired_shape[2] - 1, desired_shape[3] - 1) )
+        x = torch.Tensor(x.data()).reshape(x.shape())
+    return x
 
 class Profiler():
     def __init__(self):
@@ -319,3 +313,46 @@ class Profiler():
 
 
 profiler = Profiler()
+def tt_to_torch_tensor(tt_tensor, host):
+    tt_tensor = tt_tensor.to(host).to(ttl.tensor.Layout.ROW_MAJOR)
+    # create a 1D PyTorch tensor from values in TT Tensor obtained with data() member function
+    # and then reshape PyTorch tensor to shape of TT Tensor
+    py_tensor = torch.Tensor(tt_tensor.data()).reshape(tt_tensor.shape())
+    return py_tensor
+
+def torch_to_tt_tensor_rm(py_tensor, device, shape=None, put_on_device=True):
+    if shape is None:
+        shape = list(py_tensor.size())
+        while len(shape) < 4:
+            shape.insert(0, 1)
+
+    tt_tensor = (
+        ttl.tensor.Tensor(
+            py_tensor.reshape(-1).tolist(), # PyTorch tensor flatten into a list of floats
+            shape,               # shape of TT Tensor that will be created
+            ttl.tensor.DataType.BFLOAT16, # data type that will be used in created TT Tensor
+            ttl.tensor.Layout.ROW_MAJOR,  # memory layout that will be used in created TT Tensor
+        )
+    )
+    if put_on_device:
+        tt_tensor = tt_tensor.to(device)
+    return tt_tensor
+
+
+def torch_to_tt_tensor(py_tensor, device):
+    shape = list(py_tensor.size())
+    while len(shape) < 4:
+        shape.insert(0, 1)
+
+    tt_tensor = (
+        ttl.tensor.Tensor(
+            py_tensor.reshape(-1).tolist(), # PyTorch tensor flatten into a list of floats
+            shape,               # shape of TT Tensor that will be created
+            ttl.tensor.DataType.BFLOAT16, # data type that will be used in created TT Tensor
+            ttl.tensor.Layout.ROW_MAJOR,  # memory layout that will be used in created TT Tensor
+        )
+        .to(ttl.tensor.Layout.TILE)     # change memory layout of TT Tensor to TILE (as operation that will use it expects TILE layout)
+        .to(device)                         # move TT Tensor from host to TT accelerator device (device is of type tt_lib.device.Device)
+    )
+
+    return tt_tensor

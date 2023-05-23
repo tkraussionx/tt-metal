@@ -20,7 +20,7 @@ Tensor tilize(const Tensor &a) {
     } else {
         TT_ASSERT(a.layout() == Layout::ROW_MAJOR or a.layout() == Layout::CHANNELS_LAST, "Can only tilize row major or channels last data");
     }
-    tt_metal::Program *program = new tt_metal::Program();
+    tt_metal::Program program = tt_metal::Program();
 
     tt_xy_pair core = {0, 0};
 
@@ -83,14 +83,14 @@ Tensor tilize(const Tensor &a) {
     // Reader compile-time args
     bool stick_size_is_power_of_two = (ceil(log2(stick_size)) == floor(log2(stick_size)));
     vector<uint32_t> reader_kernel_args = {src0_dram_buffer->address(), num_sticks, stick_size};
-    DataMovementKernelArgs *compile_time_args;
+    KernelArgs compile_time_args;
     if (stick_size_is_power_of_two) {
         reader_kernel_args.push_back(log2(stick_size));
 
         // Use the fast stick size power of 2 path (get noc addr uses just shift operations, no slow multiply algorithm)
-        compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {1});
+        compile_time_args = tt_metal::KernelArgs(core, {1});
     } else {
-        compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {0});
+        compile_time_args = tt_metal::KernelArgs(core, {0});
     }
 
     // Tilized reader
@@ -114,7 +114,7 @@ Tensor tilize(const Tensor &a) {
         uint32_t(num_sticks / 32), // per_core_block_cnt
         uint32_t(stick_s / 32) // per_core_block_tile_cnt
     };
-    tt_metal::ComputeKernelArgs *eltwise_unary_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_args);
+    tt_metal::KernelArgs eltwise_unary_args = tt_metal::KernelArgs(core, compute_args);
 
     bool fp32_dest_acc_en = false;
     bool math_approx_mode = false;
@@ -157,8 +157,6 @@ Tensor tilize(const Tensor &a) {
     );
     tt_metal::LaunchKernels(device, program);
 
-    delete program;
-
     return output;
 }
 
@@ -169,7 +167,7 @@ Tensor tilize_with_zero_padding(const Tensor &a) {
     } else {
         TT_ASSERT(a.layout() == Layout::ROW_MAJOR or a.layout() == Layout::CHANNELS_LAST, "Can only tilize row major or channels last data");
     }
-    tt_metal::Program *program = new tt_metal::Program();
+    tt_metal::Program program = tt_metal::Program();
 
     tt_xy_pair core = {0, 0};
 
@@ -252,14 +250,14 @@ Tensor tilize_with_zero_padding(const Tensor &a) {
                                             num_rows_padded,
                                             row_size_bytes,
                                             zero_buffer_l1_addr};
-    DataMovementKernelArgs *compile_time_args;
+    KernelArgs compile_time_args;
     if (stick_size_is_power_of_two) {
         reader_kernel_args.push_back(log2(row_size_bytes));
 
         // Use the fast stick size power of 2 path (get noc addr uses just shift operations, no slow multiply algorithm)
-        compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {1});
+        compile_time_args = tt_metal::KernelArgs(core, {1});
     } else {
-        compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {0});
+        compile_time_args = tt_metal::KernelArgs(core, {0});
     }
 
     // Tilized reader
@@ -284,7 +282,7 @@ Tensor tilize_with_zero_padding(const Tensor &a) {
         uint32_t(row_size_datum / TILE_WIDTH)
     };
 
-    tt_metal::ComputeKernelArgs *eltwise_unary_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
+    tt_metal::KernelArgs eltwise_unary_args = tt_metal::KernelArgs(core, compute_kernel_args);
 
     bool fp32_dest_acc_en = false;
     bool math_approx_mode = false;
@@ -329,8 +327,6 @@ Tensor tilize_with_zero_padding(const Tensor &a) {
     tt_metal::WriteToDeviceL1(device, core, zero_buffer_l1_addr, zero_buffer_stick);
     tt_metal::LaunchKernels(device, program);
 
-    delete program;
-
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;
 }
@@ -346,23 +342,13 @@ Tensor tilize_conv_activation(const Tensor &a, bool conv1x1 = false) {
         R = 1;
         S = 1;
     }
-    DataTransformations * dtx = conv_transform(shape, {R,S,1,1,0,0}, {{-1},{-1}});
     uint32_t num_rows = (uint32_t) (a.shape()[2] - R + 1) * (a.shape()[3] - R + 1);
     num_rows = ceil((double)num_rows / (double)TILE_HEIGHT) * TILE_HEIGHT;
     uint32_t num_cols = (uint32_t) a.shape()[1]*R*S;
+    num_cols = ceil((double)num_cols / (double)TILE_WIDTH) * TILE_WIDTH;
+    std::vector<uint32_t> address_map = conv_transform(shape, {R,S,1,1,0,0}, {{0,1,2},{(int) num_rows, (int) num_cols}}, 2);
 
-    // copy transfer addresses into a vector
-    std::vector<uint32_t> address_map;
-    uint32_t t_bytes = 0;
-    for(auto transfer : dtx->transformations.back()->groups[0]->transfers){
-        address_map.push_back(transfer->src_address*2); // 2 for bfloat16
-        address_map.push_back(transfer->dst_address*2);
-        address_map.push_back(transfer->size*2);
-        address_map.push_back(transfer->pad);
-        t_bytes += transfer->size*2;
-    }
-
-    tt_metal::Program *program = new tt_metal::Program();
+    tt_metal::Program program = tt_metal::Program();
     tt_start_debug_print_server(a.device()->cluster(), {0}, {{1, 1}});
 
     tt_xy_pair core = {0, 0};
@@ -380,7 +366,6 @@ Tensor tilize_conv_activation(const Tensor &a, bool conv1x1 = false) {
     uint32_t num_tiles_r = num_rows / TILE_HEIGHT;
     uint32_t num_tiles = num_tiles_r * num_tiles_c;
     uint32_t total_bytes = num_rows * num_cols * 2; // 2 for bfloat16
-    assert(total_bytes == t_bytes);
     uint32_t row_size = num_cols * 2; // 2 for bfloat16
 
     auto dram_src0_noc_xy = src0_dram_buffer->noc_coordinates();
@@ -453,7 +438,7 @@ Tensor tilize_conv_activation(const Tensor &a, bool conv1x1 = false) {
         uint32_t(num_tiles_r), // per_core_block_cnt
         uint32_t(num_tiles_c) // per_core_block_tile_cnt
     };
-    tt_metal::ComputeKernelArgs *eltwise_unary_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_args);
+    tt_metal::KernelArgs eltwise_unary_args = tt_metal::KernelArgs(core, compute_args);
 
     bool fp32_dest_acc_en = false;
     bool math_approx_mode = false;
@@ -496,8 +481,6 @@ Tensor tilize_conv_activation(const Tensor &a, bool conv1x1 = false) {
         (uint32_t) (output.shape()[0] * output.shape()[1] * output.shape()[2] * output.shape()[3] / TILE_HW)}
     );
     tt_metal::LaunchKernels(device, program);
-
-    delete program;
 
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;

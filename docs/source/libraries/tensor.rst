@@ -11,16 +11,20 @@ The TT Tensor library provides support for creation and manipulation of TT Tenso
 This library is used by TT-Dispatch to represent tensors that can be sent to and received from TT-Metal platform.
 Operations in ttDNN library also utilize this library: operation take TT Tensors as inputs and return TT Tensors as outputs.
 
-This library only supports tensors of rank 4, where the sizes of last two dimensions must be both multiple of 32.
-
+This library only supports tensors of rank 4.
 
 TT Tensor library provides support for different memory layouts of data stored within tensor.
 
 ROW_MAJOR layout will store values in memory row by row, starting from last dimension of tensor.
+For a tensor of shape ``[W, Z, Y, X]`` to be stored in ROW_MAJOR order on TT Accelerator device, ``X`` must be divisible by 2.
+A tensor in ROW_MAJOR order with ``X`` not divisible by 2 can exist on host machine, but can't be sent TT Accelerator device.
+So you can't provide a TT Accelerator device to TT Tensor construct for this type of tensor nor can you use ``tt_lib.tensor.Tensor.to()``
+to send this type of tensor to TT Accelerator device.
 
 TILE layout will store values in memory tile by tile, starting from the last two dimensions of the tensor.
 A tile is a (32, 32) shaped subsection of tensor.
 Tiles are stored in memory in row major order, and then values inside tiles are stored in row major order.
+A TT Tensor of shape ``[W, Z, Y, X]`` can have TILE layout only if both ``X`` and ``Y`` are divisible by 2.
 
 .. code-block::
 
@@ -69,41 +73,34 @@ MemoryConfig
 Examples of converting between PyTorch Tensor and TT Tensor
 ===========================================================
 
-Remember that TT Tensors must
-
-* have rank 4
-* have their final two dimensions (height and width) divisible by 32
+Remember that TT Tensors must have rank 4.
 
 Converting a PyTorch Tensor to a TT Tensor
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-This example shows how to create a TT Tensor from a PyTorch tensor.
-After creating TT Tensor, this example also shows how to set memory layout of TT Tensor to TILE and send the tensor to TT accelerator device.
+This example shows how to create a TT Tensor ``tt_tensor`` from a PyTorch tensor.
+The created tensor will be in ROW_MAJOR layout and stored on TT accelerator device.
 
 .. code-block:: python
 
     py_tensor = torch.randn((1, 1, 32, 32))
-    tt_tensor = (
-        tt_lib.tensor.Tensor(
-            py_tensor.reshape(-1).tolist(), # PyTorch tensor flatten into a list of floats
-            py_tensor.size(),               # shape of TT Tensor that will be created
-            tt_lib.tensor.DataType.BFLOAT16, # data type that will be used in created TT Tensor
-            tt_lib.tensor.Layout.ROW_MAJOR,  # memory layout that will be used in created TT Tensor
-        )
-        .to(tt_lib.tensor.Layout.TILE)     # change memory layout of TT Tensor to TILE (as operation that will use it expects TILE layout)
-        .to(device)                         # move TT Tensor from host to TT accelerator device (device is of type tt_lib.device.Device)
+    tt_tensor = tt_lib.tensor.Tensor(
+        py_tensor.reshape(-1).tolist(),  # PyTorch tensor flatten into a list of floats
+        py_tensor.size(),                # shape of TT Tensor that will be created
+        tt_lib.tensor.DataType.BFLOAT16, # data type that will be used in created TT Tensor
+        tt_lib.tensor.Layout.ROW_MAJOR,  # memory layout that will be used in created TT Tensor
+        tt_device                           # move TT Tensor from host to TT accelerator device (device is of type tt_lib.device.Device)
     )
 
 Converting a TT Tensor to a PyTorch Tensor
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-This example shows how to move a TT Tensor output from device to host and how to convert a TT Tensor to PyTorch tensor.
+This example shows how to move a TT Tensor ``output`` from device to host and how to convert a TT Tensor to PyTorch tensor.
 
 .. code-block:: python
 
     # move TT Tensor output from TT accelerator device to host
-    # and then on host, change memory layout of TT Tensor to ROW_MAJOR
-    tt_output = output.to(host).to(tt_lib.tensor.Layout.ROW_MAJOR)
+    tt_output = tt_output.to(host)
 
     # create a 1D PyTorch tensor from values in TT Tensor obtained with data() member function
     # and then reshape PyTorch tensor to shape of TT Tensor

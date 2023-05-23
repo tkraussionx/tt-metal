@@ -28,14 +28,9 @@ namespace tt {
 
 namespace tt_metal {
 
-extern void SetForceRecompiles(int newval);
-extern int  GetForceRecompiles();
 extern void EnableCompileCache();
 extern int  DisableCompileCache();
 extern bool GetCompileCacheEnabled();
-extern void EnableBinaryCache();
-extern int  DisableBinaryCache();
-extern bool GetBinaryCacheEnabled();
 
 void TensorModule(py::module &m_tensor) {
     // ENUM SECTION
@@ -121,7 +116,7 @@ void TensorModule(py::module &m_tensor) {
     auto pyTensor = py::class_<Tensor>(m_tensor, "Tensor", R"doc(
 
 
-        Class constructor supports tensors of rank 4 where the size of both last two dimensions is a multiple of 32.
+        Class constructor supports tensors of rank 4.
         The constructor takes following arguments:
 
         +------------+--------------------------------------------------------+---------------------------+------------------------------------+----------+
@@ -206,6 +201,8 @@ void TensorModule(py::module &m_tensor) {
 
                 Only BFLOAT16 (in ROW_MAJOR or TILE layout) and BFLOAT8_B (in TILE layout) are supported on device.
 
+                Note that TT Tensor in ROW_MAJOR layout on TT Accelerator device must have size of last dimension divisble by 2.
+
                 Example of creating a TT Tensor on TT accelerator device:
 
                 .. code-block:: python
@@ -245,6 +242,8 @@ void TensorModule(py::module &m_tensor) {
                 +---------------+---------------+
 
                 Only BFLOAT16 (in ROW_MAJOR or TILE layout) and BFLOAT8_B (in TILE layout) are supported on device.
+
+                Note that TT Tensor in ROW_MAJOR layout on TT Accelerator device must have size of last dimension divisble by 2.
 
                 Example of creating a TT Tensor on TT accelerator device with specified mem_config:
 
@@ -1237,29 +1236,37 @@ void TensorModule(py::module &m_tensor) {
         | conv_params  | Conv parameters list: kernel size H, kernel size W ,stride H,stride W,pad H,pad W          |Vector<int>|             | Yes      |
         +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
     )doc");
-    m_tensor.def("bert_large_fused_qkv_matmul", &bert_large_fused_qkv_matmul, R"doc(
+    m_tensor.def("bert_large_fused_qkv_matmul", &bert_large_fused_qkv_matmul,
+        py::arg().noconvert(), py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
         Perform a bert_large_fused_qkv non-batched matmul ``A x B`` with two tensors.
     )doc");
-    m_tensor.def("bert_large_ff1_matmul", &bert_large_ff1_matmul, R"doc(
+    m_tensor.def("bert_large_ff1_matmul", &bert_large_ff1_matmul,
+        py::arg().noconvert(), py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
         Perform a bert_large_ff1 non-batched matmul ``A x B`` with two tensors.
     )doc");
-    m_tensor.def("bert_large_ff2_matmul", &bert_large_ff2_matmul, R"doc(
+    m_tensor.def("bert_large_ff2_matmul", &bert_large_ff2_matmul,
+        py::arg().noconvert(), py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
         Perform a bert_large_ff2 non-batched matmul ``A x B`` with two tensors.
     )doc");
-    m_tensor.def("bert_large_selfout_matmul", &bert_large_selfout_matmul, R"doc(
+    m_tensor.def("bert_large_selfout_matmul", &bert_large_selfout_matmul,
+        py::arg().noconvert(), py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
         Perform a bert_large_selfout non-batched matmul ``A x B`` with two tensors.
     )doc");
-    m_tensor.def("bert_large_pre_softmax_bmm", &bert_large_pre_softmax_bmm, R"doc(
+    m_tensor.def("bert_large_pre_softmax_bmm", &bert_large_pre_softmax_bmm,
+        py::arg().noconvert(), py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
         Perform a bert_large_pre_softmax_bmm batched matmul ``A x B`` with two tensors.
     )doc");
-    m_tensor.def("bert_large_post_softmax_bmm", &bert_large_post_softmax_bmm, R"doc(
+    m_tensor.def("bert_large_post_softmax_bmm", &bert_large_post_softmax_bmm,
+        py::arg().noconvert(), py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
         Perform a bert_large_post_softmax_bmm batched matmul ``A x B`` with two tensors.
     )doc");
     m_tensor.def("compute_conv_op_block_info", &compute_conv_op_block_info);
 
     // softmax
-    m_tensor.def("softmax", &softmax, "Performs a softmax operation on the last tensor dimension.");
-    m_tensor.def("scale_mask_softmax", &scale_mask_softmax, "Performs a fused scale->attention_mask->softmax operation.");
+    m_tensor.def("softmax_in_place", &softmax_in_place,
+        "Performs a softmax operation on the last tensor dimension. Returns a reference to the input tensor modified in place.");
+    m_tensor.def("scale_mask_softmax_in_place", &scale_mask_softmax_in_place,
+        "Performs a fused scale->attention_mask->softmax operation. Returns a reference to the input tensor modified in place.");
 
     // layernorm
     m_tensor.def("layernorm", &layernorm, "Performs a layernorm operation on the last tensor dimension.");
@@ -1380,16 +1387,12 @@ void DeviceModule(py::module &m_device) {
     )doc");
 
     m_device.def("StartDebugPrintServer", &StartDebugPrintServer);
+    m_device.def("StartDebugPrintServerOnCores", &StartDebugPrintServerOnCores);
     m_device.def("SetProfilerDir", &SetProfilerDir);
 
-    m_device.def("SetForceRecompiles", &SetForceRecompiles);
-    m_device.def("GetForceRecompiles", &GetForceRecompiles);
     m_device.def("EnableCompileCache", &EnableCompileCache);
     m_device.def("DisableCompileCache", &DisableCompileCache);
     m_device.def("GetCompileCacheEnabled", &GetCompileCacheEnabled);
-    m_device.def("EnableBinaryCache", &EnableBinaryCache);
-    m_device.def("DisableBinaryCache", &DisableBinaryCache);
-    m_device.def("GetBinaryCacheEnabled", &GetBinaryCacheEnabled);
 
     m_device.def("GetHost", &GetHost, R"doc(
         Get a reference to host machine of a TT accelerator device, usually a reference to the host
@@ -1399,37 +1402,21 @@ void DeviceModule(py::module &m_device) {
 
 void DTXModule(py::module &m_dtx) {
     auto pyDataTransformations = py::class_<DataTransformations>(m_dtx, "DataTransformations", "Class describing the data transformations.");
-    m_dtx.def("evaluate", [](vector<float> data, DataTransformations * dtx){
-        return evaluate(data, dtx);
+    m_dtx.def("evaluate", [](vector<float> data, vector<uint32_t> address_map, vector<int> output_shape){
+        return evaluate(data, address_map, output_shape);
     }, R"doc(
         Evaluates data transformation on host cpu.
         +------------------+----------------------------+-----------------------+-------------+----------+
         | Argument         | Description                 | Data type            | Valid range | Required |
         +==================+=============================+======================+=============+==========+
         | data             | Input data to transform     | vector of floats     |             | Yes      |
-        | DataTransformations* | List of data transformations |  Pointer to dtx object |      | Yes      |
+        | address_map      | address mapping from src to dst  |  vector of uint32_t |      | Yes      |
+        | output shape     | shape of the dst tensor |  vector of int |      | Yes      |
         +------------------+-----------------------------+----------------------+-------------+----------+
     )doc");
-    m_dtx.def("generate_address_map", [](DataTransformations * dtx){
-        return generate_address_map(dtx);
-    }, R"doc(
-        Generates address map.
-        +------------------+----------------------------+-----------------------+-------------+----------+
-        | Argument         | Description                 | Data type            | Valid range | Required |
-        +==================+=============================+======================+=============+==========+
-        | DataTransformations*             | Data transform object    |     |             | Yes      |
-        +------------------+-----------------------------+----------------------+-------------+----------+
-    )doc");
-    m_dtx.def("conv_transform", [](vector<int> shape, vector<int> conv_params, std::pair<vector<int>,vector<int>> block_info){
-        return conv_transform(shape, conv_params, block_info);
-    }, R"doc(
-        Evaluates data transformation on host cpu.
-        +------------------+----------------------------+-----------------------+-------------+----------+
-        | Argument         | Description                 | Data type            | Valid range | Required |
-        +==================+=============================+======================+=============+==========+
-        | data             | Input data to transform     | vector of floats     |             | Yes      |
-        +------------------+-----------------------------+----------------------+-------------+----------+
-    )doc");
+    m_dtx.def("conv_transform", [](vector<int> shape, vector<int> conv_params, std::pair<vector<int>,vector<int>> block_info, uint32_t num_bytes_of_df){
+        return conv_transform(shape, conv_params, block_info, num_bytes_of_df);
+    });
 }
 
 } // end namespace tt_metal

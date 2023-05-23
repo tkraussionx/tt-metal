@@ -56,12 +56,12 @@ void DumpHostProfileResults(std::string name_prepend = "");
  *
  * Return value: void
  *
- * | Argument      | Description                                       | Type       | Valid Range                                            | Required |
- * |---------------|---------------------------------------------------|------------|--------------------------------------------------------|----------|
- * | device        | The device where the L1 buffer resides.           | Device *   |                                                        | True     |
- * | program       | The program to which buffer will be added to.     | Program *  |                                                        | True     |
+ * | Argument      | Description                                       | Type            | Valid Range                                            | Required |
+ * |---------------|---------------------------------------------------|-----------------|--------------------------------------------------------|----------|
+ * | device        | The device holding the program being profiled.    | Device *        |                                                        | True     |
+ * | program       | The program being profiled.                       | const Program & |                                                        | True     |
  * */
-void DumpDeviceProfileResults(Device *device, Program *program);
+void DumpDeviceProfileResults(Device *device, const Program &program);
 
 /**
  * Set the directory for all CSV logs produced by the profiler instance in the tt-metal module
@@ -137,90 +137,61 @@ bool InitializeDevice(Device *device, const MemoryAllocator &memory_allocator = 
  */
 bool CloseDevice(Device *device);
 
+/**
+ * Starts a debug print server on core {1,1} in physical core grid coordinates.
+*/
 void StartDebugPrintServer(Device *device);
+
+/**
+ * Starts a debug print server on specified cores (in physical core grid coordinates).
+ *
+ * |      Argument     |                                                      Description                                                      |        Data type        |    Valid range    | required |
+ * |:-----------------:|:---------------------------------------------------------------------------------------------------------------------:|:-----------------------:|:-----------------:|----------|
+ * | device            | Device pointer                                                                                                        |                         |                   | Yes      |
+ * | cores             | Array of x,y pairs with locations of the Tensix cores (physical coordinates)                                          | const tt_xy_pair &      | {0, 0} -> {9, 11} | Yes      |
+*/
+void StartDebugPrintServerOnCores(Device *device, const std::vector<std::vector<int>>& cores);
 
 // ==================================================
 //                  HOST API: program & kernels
 // ==================================================
-// Kernel args are only initialized with compile time arguments
 
-/**
- * Creates kernel arguments for a data movement kernel
- *
- * Return value: DataMovementKernelArgs *
- *
- * |      Argument     |                                                      Description                                                      |        Data type        |    Valid range    | required |
- * |:-----------------:|:---------------------------------------------------------------------------------------------------------------------:|:-----------------------:|:-----------------:|----------|
- * | logical_core      | The location of the Tensix core with a kernel that receives these arguments (Logical co-ordinates)                    | const tt_xy_pair &      | {0, 0} –> {9, 11} | Yes      |
- * | runtime_args      | Collection of runtime args for the kernel. Required kernel arguments are located in the *.cpp file of the kernel      | std::vector<uint32_t> & |                   | Yes      |
- * | compile_time_args | Collection of compile time args for the kernel. Required kernel arguments are located in the *.cpp file of the kernel | std::vector<uint32_t> & | Default empty     | Yes      |
- */
-DataMovementKernelArgs *InitializeCompileTimeDataMovementKernelArgs(const tt_xy_pair &logical_core, const std::vector<uint32_t> &compile_time_args);
+// /**
+//  * Creates compile time kernel arguments
+//  *
+//  * Return value: KernelArgs
+//  *
+//  * |      Argument     |                                                      Description                                                      |        Data type        |    Valid range    | required |
+//  * |:-----------------:|:---------------------------------------------------------------------------------------------------------------------:|:-----------------------:|:-----------------:|----------|
+//  * | logical_core      | The location of the Tensix core with a kernel that receives these arguments (Logical co-ordinates)                    | const tt_xy_pair &      | {0, 0} –> {9, 11} | Yes      |
+//  * | compile_time_args | Collection of compile time args for the kernel. Required kernel arguments are located in the *.cpp file of the kernel | std::vector<uint32_t> & | Default empty     | Yes      |
+//  */
+// KernelArgs InitializeCompileTimeKernelArgs(const tt_xy_pair &logical_core, const std::vector<uint32_t> &compile_time_args);
 
-/**
- * Creates the same kernel arguments for a range of cores
- *
- * Return value: DataMovementKernelArgs *
- *
- * | Argument          | Description                                                                                                           | Data type                                             | Valid range                                            | required |
- * |-------------------|-----------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------|--------------------------------------------------------|----------|
- * | core_range        | The range of the Tensix co-ordinates with a kernel that receives these arguments (Logical co-ordinates)               | const CoreRange & (std::pair<tt_xy_pair, tt_xy_pair>) | Any range encompassing cores within {0 , 0} –> {9, 11} | Yes      |
- * | runtime_args      | Collection of runtime args for the kernel. Required kernel arguments are located in the *.cpp file of the kernel      | std::vector<uint32_t> &                               |                                                        | Yes      |
- * | compile_time_args | Collection of compile time args for the kernel. Required kernel arguments are located in the *.cpp file of the kernel | std::vector<uint32_t> &                               | Default empty                                          | Yes      |
- */
-DataMovementKernelArgs *InitializeCompileTimeDataMovementKernelArgs(const CoreRange &core_range, const std::vector<uint32_t> &compile_time_args);
+// /**
+//  * Creates kernel arguments for a range of cores with the same compile time arguments
+//  *
+//  * Return value: KernelArgs
+//  *
+//  * | Argument          | Description                                                                                                           | Data type                                             | Valid range                                            | required |
+//  * |-------------------|-----------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------|--------------------------------------------------------|----------|
+//  * | core_range        | The range of the Tensix co-ordinates with a kernel that receives these arguments (Logical co-ordinates)               | const CoreRange & (std::pair<tt_xy_pair, tt_xy_pair>) | Any range encompassing cores within {0 , 0} –> {9, 11} | Yes      |
+//  * | compile_time_args | Collection of compile time args for the kernel. Required kernel arguments are located in the *.cpp file of the kernel | std::vector<uint32_t> &                               | Default empty                                          | Yes      |
+//  */
+// KernelArgs InitializeCompileTimeKernelArgs(const CoreRange &core_range, const std::vector<uint32_t> &compile_time_args);
 
-/**
- * Creates kernel arguments specified by a combination of single core co-ordinates or a range of core co-ordinates
- *
- * Return value: DataMovementKernelArgs *
- *
- * |      Argument     |                                                                 Description                                                                |                               Data type                               |                                                      Valid range                                                      | required |
- * |:-----------------:|:------------------------------------------------------------------------------------------------------------------------------------------:|:---------------------------------------------------------------------:|:---------------------------------------------------------------------------------------------------------------------:|----------|
- * | core_blocks       | A collection containing a single Tensix co-ordinate or a range of Tensix co-ordinates that receives these arguments (Logical co-ordinates) | const CoreBlocks & (std::vector<std::variant<tt_xy_pair, CoreRange>>) | A single core or range encompassing cores within {0 , 0} –> {9, 11}                                                   | Yes      |
- * | runtime_args      | A collection of runtime args. Required kernel arguments are located in the *.cpp file of the kernel                                        | std::vector<std::vector<uint32_t>> &                                  | Same size as core_blocks. Args are assigned to core or range of cores from core_blocks in order of runtime_args.      | Yes      |
- * | compile_time_args | A collection of compile time args. Required kernel arguments are located in the *.cpp file of the kernel                                   | std::vector<std::vector<uint32_t>> &                                  | Same size as core_blocks. Args are assigned to core or range of cores from core_blocks in order of compile_time_args. | Yes      |
- */
-DataMovementKernelArgs *InitializeCompileTimeDataMovementKernelArgs(const CoreBlocks &core_blocks, const std::vector<std::vector<uint32_t>> &compile_time_args_spec);
+// /**
+//  * Creates kernel arguments specified by a combination of single core co-ordinates or a range of core co-ordinates
+//  *
+//  * Return value: KernelArgs
+//  *
+//  * |      Argument     |                                                                 Description                                                                |                               Data type                               |                                                      Valid range                                                      | required |
+//  * |:-----------------:|:------------------------------------------------------------------------------------------------------------------------------------------:|:---------------------------------------------------------------------:|:---------------------------------------------------------------------------------------------------------------------:|----------|
+//  * | core_blocks       | A collection containing a single Tensix co-ordinate or a range of Tensix co-ordinates that receives these arguments (Logical co-ordinates) | const CoreBlocks & (std::vector<std::variant<tt_xy_pair, CoreRange>>) | A single core or range encompassing cores within {0 , 0} –> {9, 11}                                                   | Yes      |
+//  * | compile_time_args | A collection of compile time args. Required kernel arguments are located in the *.cpp file of the kernel                                   | std::vector<std::vector<uint32_t>> &                                  | Same size as core_blocks. Args are assigned to core or range of cores from core_blocks in order of compile_time_args. | Yes      |
+//  */
+// KernelArgs InitializeCompileTimeKernelArgs(const CoreBlocks &core_blocks, const std::vector<std::vector<uint32_t>> &compile_time_args);
 
-/**
- * Creates kernel arguments for compute kernel
- *
- * Return value: ComputeKernelArgs *
- *
- * |        Argument        |                                                Description                                                |      Data type     |    Valid range    | required |
- * |:----------------------:|:---------------------------------------------------------------------------------------------------------:|:------------------:|:-----------------:|----------|
- * | logical_core           | The location of the Tensix core with a kernel that receives these arguments (Logical co-ordinates)        | const tt_xy_pair & | {0, 0} –> {9, 11} | Yes      |
- * | compile_time_args      | A pointer to the struct containing the args. Struct definition is located in the *.cpp file of the kernel | void *             |                   | Yes      |
- * | compile_time_args_size | Size of struct containing the kernel arguments                                                            | size_t             | 0 to 512 Bytes    | Yes      |
- */
-ComputeKernelArgs *InitializeCompileTimeComputeKernelArgs(const tt_xy_pair &logical_core, const vector<uint32_t> &compile_time_args);
-
-/**
- * Creates the same kernel arguments for a range of cores
- *
- * Return value: ComputeKernelArgs *
- *
- * |        Argument        |                                                Description                                                |                       Data type                       |                       Valid range                      | required |
- * |:----------------------:|:---------------------------------------------------------------------------------------------------------:|:-----------------------------------------------------:|:------------------------------------------------------:|----------|
- * | core_range             | The range of the Tensix co-ordinates with a kernel that receives these arguments (Logical co-ordinates)   | const CoreRange & (std::pair<tt_xy_pair, tt_xy_pair>) | Any range encompassing cores within {0 , 0} –> {9, 11} | Yes      |
- * | compile_time_args      | A pointer to the struct containing the args. Struct definition is located in the *.cpp file of the kernel | void *                                                |                                                        | Yes      |
- * | compile_time_args_size | Size of struct containing the kernel arguments                                                            | size_t                                                | 0 to 512 Bytes                                         | Yes      |
- */
-ComputeKernelArgs *InitializeCompileTimeComputeKernelArgs(const CoreRange &core_range, const vector<uint32_t> &compile_time_args);
-
-/**
- * Creates kernel arguments specified by a combination of single core co-ordinates or a range of core co-ordinates
- *
- * Return value: ComputeKernelArgs *
- *
- * | Argument               | Description                                                                                                                                | Data type                                                             | Valid range                                                                                                           | required |
- * |------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|----------|
- * | core_blocks            | A collection containing a single Tensix co-ordinate or a range of Tensix co-ordinates that receives these arguments (Logical co-ordinates) | const CoreBlocks & (std::vector<std::variant<tt_xy_pair, CoreRange>>) | A single core or range encompassing cores within {0 , 0} –> {9, 11}                                                   | Yes      |
- * | compile_time_args      | A collection of pointers to structs containing the args. Struct definition is located in the *.cpp file of the kernel.                     | const std::vector<void *> &                                           | Same size as core_blocks. Args are assigned to core or range of cores from core_blocks in order of compile_time_args. | Yes      |
- * | compile_time_args_size | Size of struct containing the kernel arguments                                                                                             | size_t                                                                | 0 to 512 Bytes                                                                                                        | Yes      |
- */
-ComputeKernelArgs *InitializeCompileTimeComputeKernelArgs(const CoreBlocks &core_blocks, const std::vector<std::vector<uint32_t>> &compile_time_args_spec);
 /**
  * Creates a single core data movement kernel and adds it to the program.
  *
@@ -228,37 +199,37 @@ ComputeKernelArgs *InitializeCompileTimeComputeKernelArgs(const CoreBlocks &core
  *
  * | Argument       | Description                                                                                                  | Data type                | Valid range                                                    | required |
  * |----------------|--------------------------------------------------------------------------------------------------------------|--------------------------|----------------------------------------------------------------|----------|
- * | program        | The program to which this kernel will be added to                                                            | Program *                |                                                                | Yes      |
+ * | program        | The program to which this kernel will be added to                                                            | Program &                |                                                                | Yes      |
  * | file_name      | Name of file containing the kernel                                                                           | const std::string        |                                                                | Yes      |
  * | core           | The location of the Tensix core on which the kernel will execute (Logical co-ordinates)                      | const tt_xy_pair &       | {0, 0} –> {9, 11}                                              | Yes      |
- * | kernel_args    | Compile and runtime kernel arguments passed at compile time and runtime respectively                         | DataMovementKernelArgs * |                                                                | Yes      |
+ * | kernel_args    | Compile and runtime kernel arguments passed at compile time and runtime respectively                         | const KernelArgs &       |                                                                | Yes      |
  * | processor_type | The target RISC-V processor on which the kernel will execute, on the given Tensix core (1 kernel per RISC-V) | enum                     | DataMovementProcessor::RISCV_0, DataMovementProcessor::RISCV_1 | Yes      |
  * | noc            | The NoC ID on which the kernel will perform data transfers                                                   | enum                     | RISCV_0_default, RISCV_1_default, NOC_0, NOC_1,                | Yes      |
  */
+
 DataMovementKernel *CreateDataMovementKernel(
-    Program *program,
+    Program &program,
     const std::string &file_name,
     const tt_xy_pair &core,
-    DataMovementKernelArgs *kernel_args,
+    const KernelArgs &kernel_args,
     DataMovementProcessor processor_type,
     NOC noc);
 
 /**
- * Creates a single core data movement kernel with no default arguments and
- * adds it to the program.
+ * Creates a single core data movement kernel with no default arguments and adds it to the program.
  *
  * Return value: DataMovementKernel *
  *
  * | Argument       | Description                                                                                                  | Data type                | Valid range                                                    | required |
  * |----------------|--------------------------------------------------------------------------------------------------------------|--------------------------|----------------------------------------------------------------|----------|
- * | program        | The program to which this kernel will be added to                                                            | Program *                |                                                                | Yes      |
+ * | program        | The program to which this kernel will be added to                                                            | Program &                |                                                                | Yes      |
  * | file_name      | Name of file containing the kernel                                                                           | const std::string        |                                                                | Yes      |
  * | core           | The location of the Tensix core on which the kernel will execute (Logical co-ordinates)                      | const tt_xy_pair &       | {0, 0} –> {9, 11}                                              | Yes      |
  * | processor_type | The target RISC-V processor on which the kernel will execute, on the given Tensix core (1 kernel per RISC-V) | enum                     | DataMovementProcessor::RISCV_0, DataMovementProcessor::RISCV_1 | Yes      |
  * | noc            | The NoC ID on which the kernel will perform data transfers                                                   | enum                     | RISCV_0_default, RISCV_1_default, NOC_0, NOC_1,                | Yes      |
  */
 DataMovementKernel *CreateDataMovementKernel(
-    Program *program,
+    Program &program,
     const std::string &file_name,
     const tt_xy_pair &core,
     DataMovementProcessor processor_type,
@@ -271,24 +242,23 @@ DataMovementKernel *CreateDataMovementKernel(
  *
  * | Argument       | Description                                                                                                  | Data type                | Valid range                                                    | required |
  * |----------------|--------------------------------------------------------------------------------------------------------------|--------------------------|----------------------------------------------------------------|----------|
- * | program        | The program to which this kernel will be added to                                                            | Program *                |                                                                | Yes      |
+ * | program        | The program to which this kernel will be added to                                                            | Program &                |                                                                | Yes      |
  * | file_name      | Name of file containing the kernel                                                                           | const std::string        |                                                                | Yes      |
  * | core_range     | The range of the Tensix co-ordinates on which the kernel will execute (Logical co-ordinates)                 | const CoreRange &        | Any range encompassing cores within {0 , 0} –> {9, 11}         | Yes      |
- * | kernel_args    | Compile and runtime kernel arguments passed at compile time and runtime respectively                         | DataMovementKernelArgs * |                                                                | Yes      |
+ * | kernel_args    | Compile and runtime kernel arguments passed at compile time and runtime respectively                         | const KernelArgs &       |                                                                | Yes      |
  * | processor_type | The target RISC-V processor on which the kernel will execute, on the given Tensix core (1 kernel per RISC-V) | enum                     | DataMovementProcessor::RISCV_0, DataMovementProcessor::RISCV_1 | Yes      |
  * | noc            | The NoC ID on which the kernel will perform data transfers                                                   | enum                     | RISCV_0_default, RISCV_1_default, NOC_0, NOC_1,                | Yes      |
  */
 DataMovementKernel *CreateDataMovementKernel(
-    Program *program,
+    Program &program,
     const std::string &file_name,
     const CoreRange &core_range,
-    DataMovementKernelArgs *kernel_args,
+    const KernelArgs &kernel_args,
     DataMovementProcessor processor_type,
     NOC noc);
 
 /**
- * Creates a multi-core data movement kernel with no default arguments and adds
- * it to the program.
+ * Creates a multi-core data movement kernel with no default arguments and adds it to the program.
  *
  * Return value: DataMovementKernel *
  *
@@ -301,7 +271,7 @@ DataMovementKernel *CreateDataMovementKernel(
  * | noc            | The NoC ID on which the kernel will perform data transfers                                                   | enum                     | RISCV_0_default, RISCV_1_default, NOC_0, NOC_1,                | Yes      |
  */
 DataMovementKernel *CreateDataMovementKernel(
-    Program *program,
+    Program &program,
     const std::string &file_name,
     const CoreRange &core_range,
     DataMovementProcessor processor_type,
@@ -314,19 +284,19 @@ DataMovementKernel *CreateDataMovementKernel(
  *
  * |     Argument     |                                       Description                                       |      Data type      |      Valid range      | required |
  * |:----------------:|:---------------------------------------------------------------------------------------:|:-------------------:|:---------------------:|----------|
- * | program          | The program to which this kernel will be added to                                       | Program *           |                       | Yes      |
+ * | program          | The program to which this kernel will be added to                                       | Program &           |                       | Yes      |
  * | file_name        | Name of file containing the kernel                                                      | const std::string   |                       | Yes      |
  * | core             | The location of the Tensix core on which the kernel will execute (Logical co-ordinates) | const tt_xy_pair &  | {0, 0} –> {9, 11}     | Yes      |
- * | kernel_args      | Kernel arguments, passed at compile time                                                | ComputeKernelArgs * |                       | Yes      |
+ * | kernel_args      | Kernel arguments, passed at compile time                                                | const KernelArgs &  |                       | Yes      |
  * | math_fidelity    | The percision of the matrix compute engine                                              | enum                | MathFidelity::HiFi4   | Yes      |
  * | fp32_dest_acc_en | Specifies the type of accumulation performed in the matrix compute engine.              | bool                | false (for Grayskull) | Yes      |
  * | math_approx_mode | Used by the vector compute engine. (will be depricated)                                 | bool                | true, false           | Yes      |
  */
 ComputeKernel *CreateComputeKernel(
-    Program *program,
+    Program &program,
     const std::string &file_name,
     const tt_xy_pair &core,
-    ComputeKernelArgs *kernel_args,
+    const KernelArgs &kernel_args,
     MathFidelity math_fidelity,
     bool fp32_dest_acc_en,
     bool math_approx_mode);
@@ -338,19 +308,19 @@ ComputeKernel *CreateComputeKernel(
  *
  * | Argument         | Description                                                                                  | Data type           | Valid range                                            | required |
  * |------------------|----------------------------------------------------------------------------------------------|---------------------|--------------------------------------------------------|----------|
- * | program          | The program to which this kernel will be added to                                            | Program *           |                                                        | Yes      |
+ * | program          | The program to which this kernel will be added to                                            | Program &           |                                                        | Yes      |
  * | file_name        | Name of file containing the kernel                                                           | const std::string   |                                                        | Yes      |
  * | core_range       | The range of the Tensix co-ordinates on which the kernel will execute (Logical co-ordinates) | const CoreRange &   | Any range encompassing cores within {0 , 0} –> {9, 11} | Yes      |
- * | kernel_args      | Kernel arguments, passed at compile time                                                     | ComputeKernelArgs * |                                                        | Yes      |
+ * | kernel_args      | Kernel arguments, passed at compile time                                                     | const KernelArgs &  |                                                        | Yes      |
  * | math_fidelity    | The percision of the matrix compute engine                                                   | enum                | MathFidelity::HiFi4                                    | Yes      |
  * | fp32_dest_acc_en | Specifies the type of accumulation performed in the matrix compute engine.                   | bool                | false (for Grayskull)                                  | Yes      |
  * | math_approx_mode | Used by the vector compute engine. (will be depricated)                                      | bool                | true, false                                            | Yes      |
  */
 ComputeKernel *CreateComputeKernel(
-    Program *program,
+    Program &program,
     const std::string &file_name,
     const CoreRange &core_range,
-    ComputeKernelArgs *kernel_args,
+    const KernelArgs &kernel_args,
     MathFidelity math_fidelity,
     bool fp32_dest_acc_en,
     bool math_approx_mode);
@@ -391,7 +361,7 @@ uint32_t TileSize(const DataFormat &data_format);
  *
  * | Argument      | Description                                                                    | Type               | Valid Range                             | Required |
  * |---------------|--------------------------------------------------------------------------------|--------------------|-----------------------------------------|----------|
- * | program       | The program to which buffer will be added to.                                  | Program *          |                                         | True     |
+ * | program       | The program to which buffer will be added to.                                  | Program &          |                                         | True     |
  * | device        | The device where the L1 buffer resides.                                        | Device *           |                                         | True     |
  * | buffer_index  | The index/ID of the CB.                                                        | uint32_t           | 0 to 32 DOX-TODO: specify more detail here. | True     |
  * | core          | The location of the Tensix core on which the CB will reside (logical co-ordinates) | const tt_xy_pair & | DOX-TODO: { , } –> { , }                    | True     |
@@ -401,7 +371,7 @@ uint32_t TileSize(const DataFormat &data_format);
  * | data_format   | The format of the data to be stored in the CB                                  | DataFormat enum    | DataFormat::Float16_b                   | True     |
  */
 CircularBuffer *CreateCircularBuffer(
-    Program *program,
+    Program &program,
     Device *device,
     uint32_t buffer_index,
     const tt_xy_pair &core,
@@ -418,7 +388,7 @@ CircularBuffer *CreateCircularBuffer(
  *
  * | Argument      | Description                                                                    | Type               | Valid Range                             | Required |
  * |---------------|--------------------------------------------------------------------------------|--------------------|-----------------------------------------|----------|
- * | program       | The program to which buffer will be added to.                                  | Program *          |                                         | True     |
+ * | program       | The program to which buffer will be added to.                                  | Program &          |                                         | True     |
  * | device        | The device where the L1 buffer resides.                                        | Device *           |                                         | True     |
  * | buffer_index  | The index/ID of the CB.                                                        | uint32_t           | 0 to 32 DOX-TODO: specify more detail here. | True     |
  * | core          | The location of the Tensix core on which the CB will reside (logical co-ordinates) | const tt_xy_pair & | DOX-TODO: { , } –> { , }                    | True     |
@@ -427,7 +397,7 @@ CircularBuffer *CreateCircularBuffer(
  * | data_format   | The format of the data to be stored in the CB                                  | DataFormat enum    | DataFormat::Float16_b                   | True     |
  */
 CircularBuffer *CreateCircularBuffer(
-    Program *program,
+    Program &program,
     Device *device,
     uint32_t buffer_index,
     const tt_xy_pair &core,
@@ -453,7 +423,7 @@ CircularBuffer *CreateCircularBuffer(
  * | data_format   | The format of the data to be stored in the CB                                  | DataFormat enum    | DataFormat::Float16_b                   | True     |
  */
 std::vector<CircularBuffer *> CreateCircularBuffers(
-    Program *program,
+    Program &program,
     Device *device,
     uint32_t buffer_index,
     const CoreRange &core_range,
@@ -479,7 +449,7 @@ std::vector<CircularBuffer *> CreateCircularBuffers(
  * | data_format   | The format of the data to be stored in the CB                                  | DataFormat enum    | DataFormat::Float16_b                   | True     |
  */
 std::vector<CircularBuffer *> CreateCircularBuffers(
-    Program *program,
+    Program &program,
     Device *device,
     uint32_t buffer_index,
     const CoreRange &core_range,
@@ -494,12 +464,12 @@ std::vector<CircularBuffer *> CreateCircularBuffers(
  *
  * | Argument      | Description                                          | Type                                                  | Valid Range                                              | Required |
  * |---------------|------------------------------------------------------|-------------------------------------------------------|----------------------------------------------------------|----------|
- * | program       | The program to which semaphore will be added to      | Program *                                             |                                                          | Yes      |
+ * | program       | The program to which semaphore will be added to      | Program &                                             |                                                          | Yes      |
  * | device        | The device where the semaphore resides               | Device *                                              |                                                          | Yes      |
  * | core_range    | Range of the Tensix co-ordinates using the semaphore | const CoreRange & (std::pair<tt_xy_pair, tt_xy_pair>) | Pair of logical coords where first coord <= second coord | Yes      |
  * | initial_value | Initial value of the semaphore                       | uint32_t                                              |                                                          | Yes      |
  */
-std::vector<Semaphore *> CreateSemaphores(Program *program, Device *device, const CoreRange &core_range, uint32_t initial_value);
+std::vector<Semaphore *> CreateSemaphores(Program &program, Device *device, const CoreRange &core_range, uint32_t initial_value);
 
 /**
 * Copies data from a host buffer into the specified buffer
@@ -602,14 +572,14 @@ bool ReadFromDeviceL1(Device *device, const tt_xy_pair &logical_core, uint32_t a
 // Compiles all kernels within the program, and generates their binaries
 bool CompileProgram(
     Device *device,                 // Device - device doesn't have to be initialized to compile the program.
-    Program *program,               // Program
+    Program &program,               // Program
     bool profile_kernel = false);   // Set the compile flag for kernels to report profiling timer marks
 
 // Configures a given device with a given program.
 // - Loads all kernel binaries into L1s of assigned Tensix cores
 // - Configures circular buffers (inits regs with buffer data)
 // - Takes the device out of reset
-bool ConfigureDeviceWithProgram(Device *device, Program *program);
+bool ConfigureDeviceWithProgram(Device *device, const Program &program);
 
 // Loads all kernel args into L1s of assigned Tensix cores
 bool WriteRuntimeArgsToDevice(Device *device, DataMovementKernel *kernel, const tt_xy_pair &logical_core, const std::vector<uint32_t> &runtime_args);
@@ -620,7 +590,7 @@ bool WriteRuntimeArgsToDevice(Device *device, DataMovementKernel *kernel, const 
 
 // Launches all kernels on cores specified with kernels in the program.
 // All kernels on a given Tensix core must be launched.
-bool LaunchKernels(Device *device, Program *program, bool stagger_start = false);
+bool LaunchKernels(Device *device, const Program &program, bool stagger_start = false);
 
 bool WriteToDeviceL1(Device *device, const tt_xy_pair &core, op_info_t op_info, int op_idx);
 

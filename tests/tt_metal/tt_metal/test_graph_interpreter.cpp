@@ -132,7 +132,7 @@ bool run_chained_sfpu_test(int chain_length) {
         ////////////////////////////////////////////////////////////////////////////
         //                      Application Setup
         ////////////////////////////////////////////////////////////////////////////
-        tt_metal::Program *program = new tt_metal::Program();
+        tt_metal::Program program = tt_metal::Program();
 
         tt_xy_pair core = {0, 0};
 
@@ -225,7 +225,7 @@ bool run_chained_sfpu_test(int chain_length) {
             uint(num_tiles),
             uint(chain_length)
         };
-        tt_metal::ComputeKernelArgs *graph_interpreter_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
+        tt_metal::KernelArgs graph_interpreter_args = tt_metal::KernelArgs(core, compute_kernel_args);
 
         bool fp32_dest_acc_en = false;
         bool math_approx_mode = false;
@@ -331,7 +331,6 @@ bool run_chained_sfpu_test(int chain_length) {
         DeallocateBuffer(dst_dram_buffer);
 
         pass &= tt_metal::CloseDevice(device);
-        delete program;
         delete device;
 
 
@@ -365,7 +364,7 @@ bool run_binary_add_and_then_eltwise_gelu_test() {
         ////////////////////////////////////////////////////////////////////////////
         //                      Application Setup
         ////////////////////////////////////////////////////////////////////////////
-        tt_metal::Program *program = new tt_metal::Program();
+        tt_metal::Program program = tt_metal::Program();
 
         tt_xy_pair core = {0, 0};
 
@@ -494,7 +493,7 @@ bool run_binary_add_and_then_eltwise_gelu_test() {
             uint(chain_length)
         };
 
-        tt_metal::ComputeKernelArgs *graph_interpreter_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
+        tt_metal::KernelArgs graph_interpreter_args = tt_metal::KernelArgs(core, compute_kernel_args);
 
         bool fp32_dest_acc_en = false;
         bool math_approx_mode = false;
@@ -608,7 +607,6 @@ bool run_binary_add_and_then_eltwise_gelu_test() {
         }
 
         pass &= tt_metal::CloseDevice(device);
-        delete program;
         delete device;
 
 
@@ -655,7 +653,7 @@ bool run_forked_binary_test() {
         ////////////////////////////////////////////////////////////////////////////
         //                      Application Setup
         ////////////////////////////////////////////////////////////////////////////
-        tt_metal::Program *program = new tt_metal::Program();
+        tt_metal::Program program = tt_metal::Program();
 
         tt_xy_pair core = {0, 0};
 
@@ -767,7 +765,7 @@ bool run_forked_binary_test() {
             uint(num_tiles),
             uint(chain_length)
         };
-        tt_metal::ComputeKernelArgs *graph_interpreter_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
+        tt_metal::KernelArgs graph_interpreter_args = tt_metal::KernelArgs(core, compute_kernel_args);
 
         bool fp32_dest_acc_en = false;
         bool math_approx_mode = false;
@@ -1121,7 +1119,6 @@ bool run_forked_binary_test() {
         }
 
         pass &= tt_metal::CloseDevice(device);
-        delete program;
         delete device;
 
 

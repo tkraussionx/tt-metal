@@ -11,7 +11,7 @@ namespace reuse_generalized_helpers {
 using namespace tt::constants;
 using namespace tt;
 
-tt_metal::Program * create_program(
+tt_metal::Program create_program(
     tt_metal::Device *device,
     tt::DataFormat cb_data_format,
     MathFidelity math_fidelity,
@@ -25,7 +25,7 @@ tt_metal::Program * create_program(
     uint32_t in0_dram_addr, uint32_t in1_dram_addr, uint32_t out_dram_addr
 ) {
 
-    tt_metal::Program *program = new tt_metal::Program();
+    tt_metal::Program program = tt_metal::Program();
 
     uint32_t in0_block_tiles = per_core_M * in0_block_w;
     uint32_t in0_CB_size = in0_block_tiles * 2 * single_tile_size; // double buffer
@@ -120,12 +120,12 @@ tt_metal::Program * create_program(
             );
 
             bool tile_size_is_power_of_two = (ceil(log2(single_tile_size)) == floor(log2(single_tile_size)));
-            tt_metal::DataMovementKernelArgs *reader_writer_compile_time_args;
+            tt_metal::KernelArgs reader_writer_compile_time_args;
             if (tile_size_is_power_of_two) {
                 // Use the fast stick size power of 2 path (get noc addr uses just shift operations, no slow multiply algorithm)
-                reader_writer_compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {1, (std::uint32_t)log2(single_tile_size)});
+                reader_writer_compile_time_args = tt_metal::KernelArgs(core, {1, (std::uint32_t)log2(single_tile_size)});
             } else {
-                reader_writer_compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {0, 0});
+                reader_writer_compile_time_args = tt_metal::KernelArgs(core, {0, 0});
             }
 
             // Create reader and writer kernels per core
@@ -146,7 +146,7 @@ tt_metal::Program * create_program(
                 tt_metal::NOC::RISCV_0_default);
 
             // Create compute kernel
-            tt_metal::ComputeKernelArgs *mm_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
+            tt_metal::KernelArgs mm_args = tt_metal::KernelArgs(core, compute_kernel_args);
             bool fp32_dest_acc_en = false;
             bool math_approx_mode = false;
             auto mm_kernel = tt_metal::CreateComputeKernel(
@@ -214,7 +214,7 @@ tt_metal::Program * create_program(
         }
     }
 
-    return program;
+    return std::move(program);
 }
 
 }
@@ -308,7 +308,7 @@ Tensor matmul_multi_core_reuse_generalized_(const Tensor &a, const Tensor &b, bo
     //                      Application Setup
     ////////////////////////////////////////////////////////////////////////////
 
-    tt_metal::Program * program = reuse_generalized_helpers::create_program(
+    tt_metal::Program program = reuse_generalized_helpers::create_program(
         device,
         cb_data_format,
         math_fidelity,
@@ -333,8 +333,6 @@ Tensor matmul_multi_core_reuse_generalized_(const Tensor &a, const Tensor &b, bo
     ////////////////////////////////////////////////////////////////////////////
     pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
     pass &= tt_metal::LaunchKernels(device, program);
-
-    delete program;
 
     TT_ASSERT(pass);
 

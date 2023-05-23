@@ -23,15 +23,12 @@ INFO_NAME = brisc
 INCLUDES += -I$(TT_METAL_HOME)/src/firmware/riscv/targets/ncrisc \
 	-I$(TT_METAL_HOME)/src/ckernels/$(ARCH_NAME)/common/inc \
 	-I$(TT_METAL_HOME) \
-	-I$(TT_METAL_HOME)/tt_metal \
-	-I$(KERNEL_INC)
+	-I$(TT_METAL_HOME)/tt_metal
 
 LINKER_SCRIPT_NAME = brisc.ld
 ifeq ($(DEBUG_MODE),1)
 	LINKER_SCRIPT_NAME = brisc-debug.ld
 endif
-
-LINKER_SECTIONS_PREFIX = brisc
 
 # -fno-tree-loop-distribute-patterns is needed to prevent memset from being instantiated which gets forced in L0, which can get called from L1 functions
 OPT_FLAGS = -flto -ffast-math -Os -g -fno-tree-loop-distribute-patterns
@@ -62,5 +59,7 @@ DEFINES += $(foreach var,$(KERNEL_COMPILE_TIME_ARGS),-D$(var)=$($(var)))
 
 clean:
 	rm -rfd $(OUTPUT_DIR)
+
+linker_scripts: $(LINKER_SCRIPT)
 
 all:: $(OUTPUT_DIR)/brisc.hex $(OUTPUT_DIR)/brisc.map $(OUTPUT_DIR)/brisc.fwlog $(OUTPUT_DIR)/brisc-decodedline.txt $(OUTPUT_DIR)/brisc-debuginfo.txt $(OUTPUT_DIR)/brisc-symbols.txt

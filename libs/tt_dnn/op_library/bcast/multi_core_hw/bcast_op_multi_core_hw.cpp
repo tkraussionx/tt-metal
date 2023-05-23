@@ -29,7 +29,7 @@ Tensor bcast_multi_core_hw(const Tensor &a, const Tensor &b, BcastOpMath::Enum b
     uint32_t num_tensor_tiles = NC*Ht*Wt;
     uint32_t num_btensor_tiles = NC*bH*bW / TILE_HW;
 
-    tt_metal::Program *program = new tt_metal::Program();
+    tt_metal::Program program = tt_metal::Program();
 
     tt_metal::Device *device = a.device();
 
@@ -96,12 +96,12 @@ Tensor bcast_multi_core_hw(const Tensor &a, const Tensor &b, BcastOpMath::Enum b
 		);
 
 		bool tile_size_is_power_of_two = (ceil(log2(single_tile_size)) == floor(log2(single_tile_size)));
-        tt_metal::DataMovementKernelArgs *reader_writer_compile_time_args;
+        tt_metal::KernelArgs reader_writer_compile_time_args;
         if (tile_size_is_power_of_two) {
             // Use the fast stick size power of 2 path (get noc addr uses just shift operations, no slow multiply algorithm)
-            reader_writer_compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {1, (std::uint32_t)log2(single_tile_size)});
+            reader_writer_compile_time_args = tt_metal::KernelArgs(core, {1, (std::uint32_t)log2(single_tile_size)});
         } else {
-            reader_writer_compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {0, 0});
+            reader_writer_compile_time_args = tt_metal::KernelArgs(core, {0, 0});
         }
 		tt_metal::DataMovementKernel *binary_reader_kernel = tt_metal::CreateDataMovementKernel(
 			program,
@@ -127,7 +127,7 @@ Tensor bcast_multi_core_hw(const Tensor &a, const Tensor &b, BcastOpMath::Enum b
 			1, // Ht
 			num_tiles_per_core[i]  // Wt
 		};
-		tt_metal::ComputeKernelArgs *compute_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
+		tt_metal::KernelArgs compute_args = tt_metal::KernelArgs(core, compute_kernel_args);
 
 		bool fp32_dest_acc_en = false;
 		bool math_approx_mode = false;
@@ -195,8 +195,6 @@ Tensor bcast_multi_core_hw(const Tensor &a, const Tensor &b, BcastOpMath::Enum b
     tt_metal::ConfigureDeviceWithProgram(device, program);
 
     tt_metal::LaunchKernels(device, program);
-
-    delete program;
 
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;

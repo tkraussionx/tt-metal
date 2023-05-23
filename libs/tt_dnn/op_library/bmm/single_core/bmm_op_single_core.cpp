@@ -12,7 +12,7 @@ namespace tt_metal {
 
 Tensor matmul_single_core_(const Tensor &a, const Tensor &b, bool bcast_batch) {
 
-    tt_metal::Program *program = new tt_metal::Program();
+    tt_metal::Program program = tt_metal::Program();
     tt_xy_pair core = {0, 0};
 
     const auto& ashape = a.shape(), bshape = b.shape();
@@ -104,12 +104,12 @@ Tensor matmul_single_core_(const Tensor &a, const Tensor &b, bool bcast_batch) {
     );
 
     bool tile_size_is_power_of_two = (ceil(log2(single_tile_size)) == floor(log2(single_tile_size)));
-    tt_metal::DataMovementKernelArgs *reader_writer_compile_time_args;
+    tt_metal::KernelArgs reader_writer_compile_time_args;
     if (tile_size_is_power_of_two) {
         // Use the fast stick size power of 2 path (get noc addr uses just shift operations, no slow multiply algorithm)
-        reader_writer_compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {1, (std::uint32_t)log2(single_tile_size)});
+        reader_writer_compile_time_args = tt_metal::KernelArgs(core, {1, (std::uint32_t)log2(single_tile_size)});
     } else {
-        reader_writer_compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {0, 0});
+        reader_writer_compile_time_args = tt_metal::KernelArgs(core, {0, 0});
     }
     auto reader = tt_metal::CreateDataMovementKernel(
         program,
@@ -127,7 +127,7 @@ Tensor matmul_single_core_(const Tensor &a, const Tensor &b, bool bcast_batch) {
         Kt, // Kt
         Nt // Nt
     };
-    tt_metal::ComputeKernelArgs *bmm_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_args);
+    tt_metal::KernelArgs bmm_args = tt_metal::KernelArgs(core, compute_args);
     bool fp32_dest_acc_en = false;
     bool math_approx_mode = false;
     auto eltwise_binary_kernel = tt_metal::CreateComputeKernel(
@@ -168,7 +168,7 @@ Tensor bmm_single_core(const Tensor& a, const Tensor& b) {
     return matmul_single_core_(a, b, false);
 }
 
-void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program* program,
+void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program& program,
                                 tt_metal::Device* device,
                                 tt_xy_pair core,
                                 uint32_t M,
@@ -297,7 +297,7 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program* program,
     }
 }
 
-void create_CBs_for_fused_matmul_old_alloc(tt_metal::Program* program,
+void create_CBs_for_fused_matmul_old_alloc(tt_metal::Program& program,
                                 tt_metal::Device* device,
                                 tt_xy_pair core,
                                 uint32_t M,
@@ -635,7 +635,7 @@ Tensor large_bmm_single_core_(const Tensor& a, const Tensor &b, bool tilize_act,
     TT_ASSERT(a.device() == b.device(), "Operands to large matmul need to be on the same device!");
     TT_ASSERT(a.buffer() != nullptr and b.buffer() != nullptr, "Operands to large matmul need to be allocated in buffers on device!");
 
-    tt_metal::Program *program = new tt_metal::Program();
+    tt_metal::Program program = tt_metal::Program();
     tt_xy_pair core = {0, 0};
 
     uint32_t single_tile_size = 2 * 1024; // TODO(agrebenisan): Refactor on df
@@ -875,7 +875,7 @@ Tensor large_bmm_single_core_(const Tensor& a, const Tensor &b, bool tilize_act,
                 untilize_out
             };
 
-            tt_metal::ComputeKernelArgs *bmm_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
+            tt_metal::KernelArgs bmm_args = tt_metal::KernelArgs(core, compute_kernel_args);
             bool fp32_dest_acc_en = false;
             bool math_approx_mode = false;
             auto eltwise_binary_kernel = tt_metal::CreateComputeKernel(

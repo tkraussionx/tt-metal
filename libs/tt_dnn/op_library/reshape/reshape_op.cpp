@@ -16,7 +16,7 @@ Tensor reshape_tilized(const Tensor &a, int N, int C, int H, int W) {
 
     TT_ASSERT(a.layout() == Layout::TILE, "Only tile and row major reshape supported!");
 
-    tt_metal::Program *program = new tt_metal::Program();
+    tt_metal::Program program = tt_metal::Program();
 
     tt_xy_pair core = {0, 0};
 
@@ -89,7 +89,7 @@ Tensor reshape_tilized(const Tensor &a, int N, int C, int H, int W) {
         num_tiles, // per_core_block_cnt
         1 // per_core_block_size
     };
-    tt_metal::ComputeKernelArgs *eltwise_unary_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_kernel_args);
+    tt_metal::KernelArgs eltwise_unary_args = tt_metal::KernelArgs(core, compute_kernel_args);
 
     bool fp32_dest_acc_en = false;
     bool math_approx_mode = false;
@@ -138,8 +138,6 @@ Tensor reshape_tilized(const Tensor &a, int N, int C, int H, int W) {
 
     tt_metal::LaunchKernels(device, program);
 
-    delete program;
-
     // output does not hold any data, contains pointer to buffer on device with the data
     return output;
 }
@@ -154,7 +152,7 @@ Tensor reshape_rm(const Tensor &a, int N, int C, int H, int W) {
 
     TT_ASSERT(N != -1 and C != -1 and H != -1 and W != -1, "-1 reshape not yet supported for rebanking row major reshape");
 
-    tt_metal::Program *program = new tt_metal::Program();
+    tt_metal::Program program = tt_metal::Program();
     tt_xy_pair core = {0, 0};
 
     TT_ASSERT(not a.on_host(), "Operand to reshape needs to be on device");
@@ -232,20 +230,20 @@ Tensor reshape_rm(const Tensor &a, int N, int C, int H, int W) {
     // Reader compile-time args
     bool old_stick_size_is_power_of_two = (ceil(log2(old_stick_size)) == floor(log2(old_stick_size)));
     vector<uint32_t> reader_kernel_args = {src0_dram_buffer->address(), num_old_sticks, old_stick_size};
-    DataMovementKernelArgs *reader_compile_time_args;
+    KernelArgs reader_compile_time_args;
     if (old_stick_size_is_power_of_two) {
         reader_kernel_args.push_back(log2(old_stick_size));
 
         // Use the fast stick size power of 2 path (get noc addr uses just shift operations, no slow multiply algorithm)
-        reader_compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {1});
+        reader_compile_time_args = tt_metal::KernelArgs(core, {1});
     } else {
-        reader_compile_time_args = tt_metal::InitializeCompileTimeDataMovementKernelArgs(core, {0});
+        reader_compile_time_args = tt_metal::KernelArgs(core, {0});
     }
 
     // Writer compile-time args
     bool new_stick_size_is_power_of_two = (ceil(log2(new_stick_size)) == floor(log2(new_stick_size)));
     vector<uint32_t> writer_kernel_args = {dst_dram_buffer->address(), num_new_sticks, new_stick_size};
-    DataMovementKernelArgs *writer_compile_time_args;
+    KernelArgs writer_compile_time_args;
     if (new_stick_size_is_power_of_two) {
         writer_kernel_args.push_back(log2(new_stick_size));
     }
@@ -270,7 +268,7 @@ Tensor reshape_rm(const Tensor &a, int N, int C, int H, int W) {
         uint(a.volume() / TILE_HW), // per_core_block_cnt
         1 // per_core_block_size
     };
-    tt_metal::ComputeKernelArgs *eltwise_unary_args = tt_metal::InitializeCompileTimeComputeKernelArgs(core, compute_args);
+    tt_metal::KernelArgs eltwise_unary_args = tt_metal::KernelArgs(core, compute_args);
 
     bool fp32_dest_acc_en = false;
     bool math_approx_mode = false;
@@ -305,7 +303,6 @@ Tensor reshape_rm(const Tensor &a, int N, int C, int H, int W) {
 
     tt_metal::LaunchKernels(device, program);
 
-    delete program;
     return output;
 }
 
