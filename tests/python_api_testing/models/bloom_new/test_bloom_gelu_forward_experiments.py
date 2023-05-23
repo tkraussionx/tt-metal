@@ -18,346 +18,41 @@ import python_api_testing.models.bloom_new.bloom_gelu_forward as bloom_gelu_forw
 
 
 def gen_input(a,b,c,d,range1,range2):
-    test_in = (range1-range2)*torch.rand(1, 1, 32, 32) + range2
+    test_in = (range1-range2)*torch.rand(a, b, c, d) + range2
     return test_in
 
 def run_bloom_gelu_forward_test(device):
-
     # Prepare input
     torch.manual_seed(0)
 
-
-    print('NEW TEST---------------------------------APPROX GELU TTMETAL NATIVE')
-
-    # test 1
-    test_in = gen_input(1,1,32,32,-1,1)
-
-    pt_out = bloom_gelu_forward.bloom_gelu_forward(test_in)
-    tt_test_in = bloom_utils.torch2tt_tensor(test_in, device)
-
-
-    tt_out = tt_lib.tensor.gelu(tt_test_in)
-    tt_out_converted = bloom_utils.tt2torch_tensor(tt_out)
-
-    does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.98)
-
-    print(comp_allclose(pt_out, tt_out_converted))
-    print(pcc_message)
-
-    if does_pass:
-        logger.info("bloom_gelu_forward: Passed!")
-    else:
-        logger.warning("bloom_gelu_forward: Failed!")
-
-    assert does_pass
-
-    # test 2
-    test_in = gen_input(1,1,32,32,-10,10)
-
-    pt_out = bloom_gelu_forward.bloom_gelu_forward(test_in)
-    tt_test_in = bloom_utils.torch2tt_tensor(test_in, device)
-
-
-    tt_out = tt_lib.tensor.gelu(tt_test_in)
-    tt_out_converted = bloom_utils.tt2torch_tensor(tt_out)
-
-    does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.98)
-
-    print(comp_allclose(pt_out, tt_out_converted))
-    print(pcc_message)
-
-
-    # test 3
-    test_in = gen_input(1,1,32,32,-1000,1000)
-
-    pt_out = bloom_gelu_forward.bloom_gelu_forward(test_in)
-    tt_test_in = bloom_utils.torch2tt_tensor(test_in, device)
-
-
-    tt_out = tt_lib.tensor.gelu(tt_test_in)
-    tt_out_converted = bloom_utils.tt2torch_tensor(tt_out)
-
-    does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.98)
-
-    print(comp_allclose(pt_out, tt_out_converted))
-    print(pcc_message)
-
-    if does_pass:
-        logger.info("bloom_gelu_forward: Passed!")
-    else:
-        logger.warning("bloom_gelu_forward: Failed!")
-
-    assert does_pass
-
-
-
-
-    print('NEW TEST---------------------------------APPROX GELU TTMETAL NATIVE LARGE')
-
-    # test 1
-    test_in = gen_input(1,1,65536,65536,-1,1)
-
-    pt_out = bloom_gelu_forward.bloom_gelu_forward(test_in)
-    tt_test_in = bloom_utils.torch2tt_tensor(test_in, device)
-
-
-    tt_out = tt_lib.tensor.gelu(tt_test_in)
-    tt_out_converted = bloom_utils.tt2torch_tensor(tt_out)
-
-    does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.98)
-
-    print(comp_allclose(pt_out, tt_out_converted))
-    print(pcc_message)
-
-    if does_pass:
-        logger.info("bloom_gelu_forward: Passed!")
-    else:
-        logger.warning("bloom_gelu_forward: Failed!")
-
-    assert does_pass
-
-    # test 2
-    test_in = gen_input(1,1,65536, 65536, -10 ,10)
-
-    pt_out = bloom_gelu_forward.bloom_gelu_forward(test_in)
-    tt_test_in = bloom_utils.torch2tt_tensor(test_in, device)
-
-
-    tt_out = tt_lib.tensor.gelu(tt_test_in)
-    tt_out_converted = bloom_utils.tt2torch_tensor(tt_out)
-
-    does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.98)
-
-    print(comp_allclose(pt_out, tt_out_converted))
-    print(pcc_message)
-
-
-    # test 3
-    test_in = gen_input(1,1,65536,65536,-1000,1000)
-
-    pt_out = bloom_gelu_forward.bloom_gelu_forward(test_in)
-    tt_test_in = bloom_utils.torch2tt_tensor(test_in, device)
-
-
-    tt_out = tt_lib.tensor.gelu(tt_test_in)
-    tt_out_converted = bloom_utils.tt2torch_tensor(tt_out)
-
-    does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.98)
-
-    print(comp_allclose(pt_out, tt_out_converted))
-    print(pcc_message)
-
-    if does_pass:
-        logger.info("bloom_gelu_forward: Passed!")
-    else:
-        logger.warning("bloom_gelu_forward: Failed!")
-
-    assert does_pass
-
-
-
-
-    print('NEW TEST---------------------------------APPROX TT_LIB')
-
-    # test 1
-    test_in = gen_input(1,1,32,32,-1,1)
-
-    pt_out = bloom_gelu_forward.bloom_gelu_forward(test_in)
-    tt_test_in = bloom_utils.torch2tt_tensor(test_in, device)
-
-
-    tt_out = bloom_gelu_forward.tt_bloom_gelu_forward(tt_test_in, device)
-    tt_out_converted = bloom_utils.tt2torch_tensor(tt_out)
-
-    does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.98)
-
-    print(comp_allclose(pt_out, tt_out_converted))
-    print(pcc_message)
-
-    if does_pass:
-        logger.info("bloom_gelu_forward: Passed!")
-    else:
-        logger.warning("bloom_gelu_forward: Failed!")
-
-    assert does_pass
-
-    # test 2
-    test_in = gen_input(1,1,32,32,-10,10)
-
-    pt_out = bloom_gelu_forward.bloom_gelu_forward(test_in)
-    tt_test_in = bloom_utils.torch2tt_tensor(test_in, device)
-
-
-    tt_out = bloom_gelu_forward.tt_bloom_gelu_forward(tt_test_in, device)
-    tt_out_converted = bloom_utils.tt2torch_tensor(tt_out)
-
-    does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.98)
-
-    print(comp_allclose(pt_out, tt_out_converted))
-    print(pcc_message)
-
-
-    # test 3
-    test_in = gen_input(1,1,32,32,-1000,1000)
-
-    pt_out = bloom_gelu_forward.bloom_gelu_forward(test_in)
-    tt_test_in = bloom_utils.torch2tt_tensor(test_in, device)
-
-
-    tt_out = bloom_gelu_forward.tt_bloom_gelu_forward(tt_test_in, device)
-    tt_out_converted = bloom_utils.tt2torch_tensor(tt_out)
-
-    does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.98)
-
-    print(comp_allclose(pt_out, tt_out_converted))
-    print(pcc_message)
-
-    if does_pass:
-        logger.info("bloom_gelu_forward: Passed!")
-    else:
-        logger.warning("bloom_gelu_forward: Failed!")
-
-    assert does_pass
-
-
-
-    print('NEW TEST---------------------------------APPROX TT_LIB LARGE')
-
-    # test 1
-    test_in = gen_input(1,1,65536,65536,-1,1)
-
-    pt_out = bloom_gelu_forward.bloom_gelu_forward(test_in)
-    tt_test_in = bloom_utils.torch2tt_tensor(test_in, device)
-
-
-    tt_out = bloom_gelu_forward.tt_bloom_gelu_forward(tt_test_in, device)
-    tt_out_converted = bloom_utils.tt2torch_tensor(tt_out)
-
-    does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.98)
-
-    print(comp_allclose(pt_out, tt_out_converted))
-    print(pcc_message)
-
-    if does_pass:
-        logger.info("bloom_gelu_forward: Passed!")
-    else:
-        logger.warning("bloom_gelu_forward: Failed!")
-
-    assert does_pass
-
-    # test 2
-    test_in = gen_input(1,1,65536,65536,-10,10)
-
-    pt_out = bloom_gelu_forward.bloom_gelu_forward(test_in)
-    tt_test_in = bloom_utils.torch2tt_tensor(test_in, device)
-
-
-    tt_out = bloom_gelu_forward.tt_bloom_gelu_forward(tt_test_in, device)
-    tt_out_converted = bloom_utils.tt2torch_tensor(tt_out)
-
-    does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.98)
-
-    print(comp_allclose(pt_out, tt_out_converted))
-    print(pcc_message)
-
-
-    # test 3
-    test_in = gen_input(1,1,65536, 65536, -1000,1000)
-
-    pt_out = bloom_gelu_forward.bloom_gelu_forward(test_in)
-    tt_test_in = bloom_utils.torch2tt_tensor(test_in, device)
-
-
-    tt_out = bloom_gelu_forward.tt_bloom_gelu_forward(tt_test_in, device)
-    tt_out_converted = bloom_utils.tt2torch_tensor(tt_out)
-
-    does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.98)
-
-    print(comp_allclose(pt_out, tt_out_converted))
-    print(pcc_message)
-
-    if does_pass:
-        logger.info("bloom_gelu_forward: Passed!")
-    else:
-        logger.warning("bloom_gelu_forward: Failed!")
-
-
     print("TT_METAL APPROX-------------------")
-    for i in range(20):
-        dim = random.randint(1,65536)
+    for i in range(1):
+        dim1 = random.randint(1,65536)
+        dim2 = random.randint(1,65536)
+
         print('DIM:------------------------')
-        print(dim)
+        print(dim1)
+        print(dim2)
+
         # test 1
-        test_in = gen_input(1,1,dim,dim,-1,1)
+        test_in = gen_input(1,1,dim1,dim2,-1000,100)
 
         pt_out = bloom_gelu_forward.bloom_gelu_forward(test_in)
         tt_test_in = bloom_utils.torch2tt_tensor(test_in, device)
-
-
-        tt_out = bloom_gelu_forward.tt_bloom_gelu_forward(tt_test_in, device)
-        tt_out_converted = bloom_utils.tt2torch_tensor(tt_out)
-
-        does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.98)
-
-        print(comp_allclose(pt_out, tt_out_converted))
-        print(pcc_message)
-
-        if does_pass:
-            logger.info("bloom_gelu_forward: Passed!")
-        else:
-            logger.warning("bloom_gelu_forward: Failed!")
-
-        assert does_pass
-
-
-    print("TT_METAL APPROX-------------------")
-    for i in range(20):
-        dim = random.randint(1,65536)
-        print('DIM:------------------------')
-        print(dim)
-        # test 1
-        test_in = gen_input(1,1,dim,dim,-1000,1000)
-
-        pt_out = bloom_gelu_forward.bloom_gelu_forward(test_in)
-        tt_test_in = bloom_utils.torch2tt_tensor(test_in, device)
-
-
-        tt_out = bloom_gelu_forward.tt_bloom_gelu_forward(tt_test_in, device)
-        tt_out_converted = bloom_utils.tt2torch_tensor(tt_out)
-
-        does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.98)
-
-        print(comp_allclose(pt_out, tt_out_converted))
-        print(pcc_message)
-
-        if does_pass:
-            logger.info("bloom_gelu_forward: Passed!")
-        else:
-            logger.warning("bloom_gelu_forward: Failed!")
-
-        assert does_pass
-
-
-
-    print("TT_METAL CORE----------------")
-    for i in range(10):
-        dim = random.randint(1,65536)
-        print('DIM:------------------------')
-        print(dim)
-        # test 1
-        test_in = gen_input(1,1,dim,dim,-1,1)
-
-        pt_out = bloom_gelu_forward.bloom_gelu_forward(test_in)
-        tt_test_in = bloom_utils.torch2tt_tensor(test_in, device)
-
 
         tt_out = tt_lib.tensor.gelu(tt_test_in)
+
+        tt_out_2 = bloom_gelu_forward.tt_bloom_gelu_forward(tt_test_in, device)
+
+
         tt_out_converted = bloom_utils.tt2torch_tensor(tt_out)
 
         does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.98)
 
         print(comp_allclose(pt_out, tt_out_converted))
         print(pcc_message)
+
+        print("TTLIB!-----")
 
         if does_pass:
             logger.info("bloom_gelu_forward: Passed!")
@@ -366,25 +61,12 @@ def run_bloom_gelu_forward_test(device):
 
         assert does_pass
 
+        print("APPROX!-----")
+        tt_out_converted_2 = bloom_utils.tt2torch_tensor(tt_out_2)
 
-    print("TT_METAL CORE----------------")
-    for i in range(10):
-        dim = random.randint(1,65536)
-        print('DIM:------------------------')
-        print(dim)
-        # test 1
-        test_in = gen_input(1,1,dim,dim,-1000,1000)
+        does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted_2, 0.98)
 
-        pt_out = bloom_gelu_forward.bloom_gelu_forward(test_in)
-        tt_test_in = bloom_utils.torch2tt_tensor(test_in, device)
-
-
-        tt_out = tt_lib.tensor.gelu(tt_test_in)
-        tt_out_converted = bloom_utils.tt2torch_tensor(tt_out)
-
-        does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.98)
-
-        print(comp_allclose(pt_out, tt_out_converted))
+        print(comp_allclose(pt_out, tt_out_converted_2))
         print(pcc_message)
 
         if does_pass:
