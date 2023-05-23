@@ -24,8 +24,10 @@ class bfloat16 {
 
         uint32_data = *reinterpret_cast<uint32_t*>(&float_num);
         // just move upper 16 to lower 16 (truncate)
-        uint32_data = (uint32_data >> 16);
-
+        // uint32_data = (uint32_data >> 16);
+        // Round to nearest even
+        uint32_t rounding_bias = ((uint32_data >> 16) & 1) + UINT32_C(0x7FFF);
+        uint32_data = (uint32_data + rounding_bias) >> 16;
         // store lower 16 as 16-bit uint
         uint16_data = (uint16_t)uint32_data;
     }
