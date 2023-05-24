@@ -173,7 +173,8 @@ class TtCrossAttention(nn.Module):
         if attention_mask is not None:
             attention_scores = ttl.tensor.add(attention_scores, attention_mask)
 
-        attention_probs = TtSoftmax(attention_scores)
+        # attention_probs = TtSoftmax(attention_scores)
+        attention_probs = fallback_ops.softmax(attention_scores, dim=-1)
 
         return attention_probs
 

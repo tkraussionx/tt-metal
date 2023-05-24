@@ -485,8 +485,8 @@ class UNet2DConditionModel(nn.Module):
         # 3. down
         down_block_res_samples = (sample,)
         for downsample_block in self.down_blocks:
-            print("doing down sample")
-            profiler.start(f"downsample{iter}")
+            # print("doing down sample")
+            # profiler.start(f"downsample{iter}")
             if hasattr(downsample_block, "has_cross_attention") and downsample_block.has_cross_attention:
 
                 sample, res_samples = downsample_block(
@@ -500,12 +500,12 @@ class UNet2DConditionModel(nn.Module):
                 sample, res_samples = downsample_block(hidden_states=sample, temb=emb)
 
             down_block_res_samples += res_samples
-            profiler.end(f"downsample{iter}")
-            print(profiler.get(f"downsample{iter}"))
+            # profiler.end(f"downsample{iter}")
+            # print(profiler.get(f"downsample{iter}"))
 
-        print("starting mid bloc,")
+        # print("starting mid bloc,")
         # 4. mid
-        profiler.start("midblock")
+        # profiler.start("midblock")
         sample = self.mid_block(
             sample,
             emb,
@@ -513,14 +513,14 @@ class UNet2DConditionModel(nn.Module):
             attention_mask=attention_mask,
             cross_attention_kwargs=cross_attention_kwargs,
         )
-        profiler.end("midblock")
-        print(profiler.get("midblock"))
+        # profiler.end("midblock")
+        # print(profiler.get("midblock"))
 
         # 5. up
         for i, upsample_block in enumerate(self.up_blocks):
             is_final_block = i == len(self.up_blocks) - 1
             print(f"doing {i}th up sample")
-            profiler.start(f"upsample{i}")
+            # profiler.start(f"upsample{i}")
             res_samples = down_block_res_samples[-len(upsample_block.resnets) :]
             down_block_res_samples = down_block_res_samples[: -len(upsample_block.resnets)]
 
@@ -542,8 +542,8 @@ class UNet2DConditionModel(nn.Module):
                 sample = upsample_block(
                     hidden_states=sample, temb=emb, res_hidden_states_tuple=res_samples, upsample_size=upsample_size
                 )
-            profiler.end(f"upsample{i}")
-            print(profiler.get(f"upsample{i}"))
+            # profiler.end(f"upsample{i}")
+            # print(profiler.get(f"upsample{i}"))
         # 6. post-process
         sample = self.conv_norm_out(sample)
         sample = self.conv_act(sample)

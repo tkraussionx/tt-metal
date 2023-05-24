@@ -13,6 +13,7 @@ from torch import autocast
 import torch
 import time
 from PIL import Image
+from tqdm.auto import tqdm
 
 
 from transformers import CLIPTextModel, CLIPTokenizer
@@ -36,8 +37,10 @@ def constant_prop_time_embeddings(timesteps, sample, time_proj):
 def save_image_and_latents(latents, iter, vae, pre_fix="", pre_fix2=""):
     pre_fix = "" if pre_fix == "" else f"{pre_fix}_"
     pre_fix2 = "" if pre_fix2 == "" else f"{pre_fix2}_"
+    _latents = 1 / 0.18215 * latents
+
     with torch.no_grad():
-        image = vae.decode(latents).sample
+        image = vae.decode(_latents).sample
     # Image post-processing
     image = (image / 2 + 0.5).clamp(0, 1)
     image = image.detach().cpu().permute(0, 2, 3, 1).numpy()
@@ -45,14 +48,12 @@ def save_image_and_latents(latents, iter, vae, pre_fix="", pre_fix2=""):
     pil_images = [Image.fromarray(image) for image in images][0]
     pil_images.save(f"{pre_fix}{pre_fix2}image_iter_{iter}.png")
 
-    torch.save(latents, f"{pre_fix}{pre_fix2}latents_{iter}.pt")
+    torch.save(_latents, f"{pre_fix}{pre_fix2}latents_{iter}.pt")
 
-def guide(noise_pred, latents, guidance_scale, scheduler, t): # will return latents
+def guide(noise_pred, guidance_scale, t): # will return latents
     noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
     noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
-    # compute the previous noisy sample x_t -> x_t-1
-    latents = scheduler.step(noise_pred, t, latents).prev_sample
-    return latents
+    return noise_pred
 
 def latent_expansion(latents, scheduler, t):
     latent_model_input = torch.cat([latents] * 2)
@@ -60,37 +61,7 @@ def latent_expansion(latents, scheduler, t):
     return latent_model_input
 
 
-def demo():
-    # Initialize the device
-    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
-    ttl.device.InitializeDevice(device)
-    ttl.device.SetDefaultDevice(device)
-    host = ttl.device.GetHost()
-    enable_binary_cache()
-    enable_compile_cache()
-
-    # 1. Load t`he autoencoder model which will be used to decode the latents into image space.
-    vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae")
-
-    # 2. Load the tokenizer and text encoder to tokenize and encode the text.
-    tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
-    text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-large-patch14")
-
-    # 3. The UNet model for generating the latents.
-    unet = UNet2DConditionModel.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="unet")
-    torch_unet = unet
-    # 4. load the K-LMS scheduler with some fitting parameters.
-    scheduler = LMSDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000)
-    #scheduler = PNDMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000)
-    #scheduler = HeunDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000)
-    #scheduler = DPMSolverMultistepScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000)
-
-    torch_device = "cpu"
-    vae.to(torch_device)
-    text_encoder.to(torch_device)
-    unet.to(torch_device)
-
-    state_dict = torch_unet.state_dict()
+def make_tt_unet(state_dict):
     tt_unet = tt_unet_condition(sample_size = 64,
                                 in_channels = 4,
                                 out_channels = 4,
@@ -118,21 +89,55 @@ def demo():
                                 resnet_time_scale_shift = 'default',
                                 state_dict=state_dict,
                                 base_address="")
+    return tt_unet
 
-    tt_unet.config = torch_unet.config
-    prompt, prompt_summary = ["Car"], "Car"
-    # prompt, prompt_summary = ["a photo of an astronaut riding a horse on mars"], "astronaut"
-    # prompt, prompt_summary = ["oil painting frame of Breathtaking mountain range with a clear river running through it, surrounded by tall trees and misty clouds, serene, peaceful, mountain landscape, high detail"], "mountains"
 
+def demo():
+    # Initialize the device
+    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
+    ttl.device.InitializeDevice(device)
+    ttl.device.SetDefaultDevice(device)
+    host = ttl.device.GetHost()
+    enable_compile_cache()
+
+    # 1. Load the autoencoder model which will be used to decode the latents into image space.
+    vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae")
+
+    # 2. Load the tokenizer and text encoder to tokenize and encode the text.
+    tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
+    text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-large-patch14")
+
+    # 3. The UNet model for generating the latents.
+    unet = UNet2DConditionModel.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="unet")
+
+    # 4. load the K-LMS scheduler with some fitting parameters.
+    scheduler = LMSDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000)
+    tt_scheduler = LMSDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000)
+    #scheduler = PNDMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000)
+    #scheduler = HeunDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000)
+    #scheduler = DPMSolverMultistepScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000)
+
+    torch_device = "cpu"
+    vae.to(torch_device)
+    text_encoder.to(torch_device)
+    unet.to(torch_device)
+
+    state_dict = unet.state_dict()
+    tt_unet = make_tt_unet(state_dict)
+    tt_unet.config = unet.config
+
+    experiment_name = "mountain_softmax_matmul_fallback_nolatentupdate"
+    # prompt = ["a photo of an astronaut riding a horse on mars"]
+    # prompt = ["car"]
+    prompt = ["oil painting frame of Breathtaking mountain range with a clear river running through it, surrounded by tall trees and misty clouds, serene, peaceful, mountain landscape, high detail"]
 
     height = 256                        # default height of Stable Diffusion
     width = 256                         # default width of Stable Diffusion
-    num_inference_steps = 50          # Number of denoising steps
+    num_inference_steps = 50           # Number of denoising steps
     guidance_scale = 7.5                # Scale for classifier-free guidance
     generator = torch.manual_seed(174)    # 10233 Seed generator to create the inital latent noise
     batch_size = len(prompt)
 
-    tic= time.time()
     ## First, we get the text_embeddings for the prompt. These embeddings will be used to condition the UNet model.
     # Tokenizer and Text Encoder
     text_input = tokenizer(prompt, padding="max_length", max_length=tokenizer.model_max_length, truncation=True, return_tensors="pt")
@@ -149,83 +154,88 @@ def demo():
     # Initial random noise
     latents = torch.randn(
         (batch_size, unet.config.in_channels, height // 8, width // 8),
-        generator=generator,
+        generator=generator
     )
     latents = latents.to(torch_device)
 
     scheduler.set_timesteps(num_inference_steps)
+    tt_scheduler.set_timesteps(num_inference_steps)
     latents = latents * scheduler.init_noise_sigma
-    tt_latents = latents
-    toc= time.time()
-    print("Tokenizer Time:", round(toc-tic, 3))
-
-    # Denoising loop
-    scheduler.set_timesteps(num_inference_steps)
-    tic= time.time()
-    iteration = 0
+    tt_latents = torch.tensor(latents)
+    latents_dict = {}
+    pcc_res = {}
+    iter = 0
+    # torch Denoising loop
     for t in tqdm(scheduler.timesteps):
         # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
-        torch_latent_model_input = latent_expansion(latents, scheduler, t)
-        tt_latent_model_input = latent_expansion(tt_latents, scheduler, t)
-
-        t1 = time.time()
+        latent_model_input = latent_expansion(latents, scheduler, t)
         # predict the noise residual
         with torch.no_grad():
-            pr = Profiler()
-
-            pr.start("torch_unet")
-            torch_noise_pred = unet(torch_latent_model_input, t, encoder_hidden_states=text_embeddings).sample
-            pr.end("torch_unet")
-            print("one unet iter torch; ", pr.get("torch_unet"))
-
-            _t = constant_prop_time_embeddings(t, tt_latent_model_input, torch_unet.time_proj)
-
-            _t = torch_to_tt_tensor_rm(_t, device, put_on_device=False)
-            tt_latent_model_input = torch_to_tt_tensor_rm(tt_latent_model_input, device, put_on_device=False)
-            tt_text_embeddings = torch_to_tt_tensor_rm(text_embeddings, device, put_on_device=False)
-
-            pr.start("tt_unet")
-            tt_noise_pred = tt_unet(tt_latent_model_input, _t, encoder_hidden_states=tt_text_embeddings)
-            pr.end("tt_unet")
-            print("one unet iter; ", pr.get("tt_unet"))
-
-
-        tt_noise_pred = tt_to_torch_tensor(tt_noise_pred, host)
-        print(comp_allclose_and_pcc(torch_noise_pred, tt_noise_pred), iteration, "th iteration")
-
-
-        # guide torch
-        latents = guide(torch_noise_pred, latents, guidance_scale, scheduler, t)
-        tt_latents = guide(tt_noise_pred, tt_latents, guidance_scale, scheduler, t)
-        t2 = time.time()
-
+            noise_pred = unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
         # perform guidance
-        t3= time.time()
-        # checkpointing torch
-        save_image_and_latents(latents, iteration, vae, pre_fix="torch", pre_fix2=prompt_summary)
-        save_image_and_latents(tt_latents, iteration, vae, pre_fix="tt", pre_fix2=prompt_summary)
-        iteration += 1
+        noise_pred = guide(noise_pred, guidance_scale, t)
+        # compute the previous noisy sample x_t -> x_t-1
+        latents = scheduler.step(noise_pred, t, latents).prev_sample
+        latents_dict[iter] = latents
+        print(type(latents))
+        save_image_and_latents(latents, iter, vae, pre_fix=f"{experiment_name}_torch", pre_fix2="")
+        print(type(latents))
+        iter += 1
+        # save things required!
 
+    latents = 1 / 0.18215 * latents
+    with torch.no_grad():
+        image = vae.decode(latents).sample
 
-        print( "/t", round(t2-t1, 2), " | ", round(t3-t2, 2), " | ", round(t3-t1, 2) )
-    toc = time.time()
-    print("UNET Loop Time:", round(toc-tic, 3))
+    # Image post-processing
+    image = (image / 2 + 0.5).clamp(0, 1)
+    image = image.detach().cpu().permute(0, 2, 3, 1).numpy()
+    images = (image * 255).round().astype("uint8")
+    pil_images = [Image.fromarray(image) for image in images][0]
+    pil_images.save(f"{experiment_name}_torch.png")
 
+    iter = 0
+    last_latents = None
+    # # Denoising loop
+    for t in tqdm(tt_scheduler.timesteps):
+        # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
+        tt_latent_model_input = latent_expansion(tt_latents, tt_scheduler, t)
 
-    tic = time.time()
+        _t = constant_prop_time_embeddings(t, tt_latent_model_input, unet.time_proj)
+
+        _t = torch_to_tt_tensor_rm(_t, device, put_on_device=False)
+        tt_latent_model_input = torch_to_tt_tensor_rm(tt_latent_model_input, device, put_on_device=False)
+        tt_text_embeddings = torch_to_tt_tensor_rm(text_embeddings, device, put_on_device=False)
+        # predict the noise residual
+        with torch.no_grad():
+            tt_noise_pred = tt_unet(tt_latent_model_input, _t, encoder_hidden_states=tt_text_embeddings)
+            noise_pred = tt_to_torch_tensor(tt_noise_pred, host)
+        # perform guidance
+        noise_pred = guide(noise_pred, guidance_scale, t)
+        # compute the previous noisy sample x_t -> x_t-1
+        tt_latents = tt_scheduler.step(noise_pred, t, tt_latents).prev_sample
+        save_image_and_latents(tt_latents, iter, vae, pre_fix=f"{experiment_name}_tt", pre_fix2="")
+        pcc_res[iter] = comp_allclose_and_pcc(latents_dict[iter], tt_latents)
+        print(iter, pcc_res[iter])
+        last_latents = tt_latents
+        # tt_latents = torch.Tensor(latents_dict[iter])
+        # save things required!
+        iter += 1
+
+    latents = last_latents
+    for key, val in pcc_res.items():
+        print(key, val)
     # scale and decode the image latents with vae
     latents = 1 / 0.18215 * latents
     with torch.no_grad():
         image = vae.decode(latents).sample
 
-    # # Image post-processing
-    # image = (image / 2 + 0.5).clamp(0, 1)
-    # image = image.detach().cpu().permute(0, 2, 3, 1).numpy()
-    # images = (image * 255).round().astype("uint8")
-    # pil_images = [Image.fromarray(image) for image in images][0]
-    # pil_images.save("tt_first_image_512.png")
-    toc = time.time()
-    print("Image Time:", round(toc-tic, 3))
+    # Image post-processing
+    image = (image / 2 + 0.5).clamp(0, 1)
+    image = image.detach().cpu().permute(0, 2, 3, 1).numpy()
+    images = (image * 255).round().astype("uint8")
+    pil_images = [Image.fromarray(image) for image in images][0]
+    pil_images.save(f"{experiment_name}_tt.png")
 
 '''
 @article{patil2022stable,

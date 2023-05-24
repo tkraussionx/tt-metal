@@ -322,6 +322,9 @@ def softmax(input: ttl_tensor.Tensor, dim: Optional[int] = None) -> ttl_tensor.T
     """
     return torch.nn.functional.softmax(input, dim)
 
+@convert_tt_tensors_wrapper
+def matmul(input: ttl_tensor.Tensor, other: ttl_tensor.Tensor) -> ttl_tensor.Tensor:
+    return torch.matmul(input, other)
 
 class Conv2d(torch.nn.Module):
     r"""
