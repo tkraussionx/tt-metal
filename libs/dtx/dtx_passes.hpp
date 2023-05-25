@@ -62,6 +62,8 @@ bool pad_2d_matrix(DataTransformations * dtx, vector<int> pad_to_nearest);
 
 bool block_2d_matrix(DataTransformations * dtx, vector<int> dim_order, vector<int> block_shape_yx);
 
+bool block_2d_with_duplicate_blocks(DataTransformations * dtx, vector<int> dim_order, vector<int> block_shape_yx, int num_duplicates, int dim_to_duplicate);
+
 // expects only 1 producer group and generates groups for the outermost dimension.
 bool generate_groups_outermost_dim(DataTransformations * dtx);
 
@@ -125,8 +127,16 @@ bool convert_tensor_layout_rowmajor_2_channelslast(DataTransformations * dtx);
 // ========================================================
 //             PART 6: HIGH LEVEL PASSES
 // ========================================================
-vector<uint32_t> generate_address_map(DataTransformations * dtx);
+vector<uint32_t> generate_address_map(DataTransformations * dtx, bool in_bytes=false, uint32_t num_df_bytes=0);
 vector<vector<float>> evaluate(vector<float> data, vector<uint32_t> address_map, vector<vector<int>> output_shape);
 DataTransformations * simple_high_level_pass(vector<int> shape);
 
-std::vector<uint32_t> conv_transform(vector<int> shape, vector<int> conv_params, std::pair<vector<int>,vector<int>> block_info, uint32_t num_bytes_of_df);
+std::pair<vector<uint32_t>, vector<uint32_t>> conv_transform(vector<int> activation_shape,
+                                        vector<int> weight_shape,
+                                        vector<int> conv_params,
+                                        uint32_t act_block_h,
+                                        uint32_t act_block_w,
+                                        uint32_t weight_block_w,
+                                        uint32_t num_blocks_act_h,
+                                        uint32_t num_blocks_weight_w,
+                                        uint32_t num_bytes_of_df);

@@ -363,12 +363,20 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
     uint32_t in0_block_h = Hat / num_blocks_in0_h;
     uint32_t in0_block_h_datums = Ha / num_blocks_in0_h;
     uint32_t in0_block_size_bytes = in0_block_h_datums * in0_block_h_datums * num_bytes_of_df; // 2 bytes for bfloat16
-    std::pair<vector<int>,vector<int>> block_info;
-    block_info.first = {0,1,2};
-    block_info.second = {(int)in0_block_h_datums, (int)in0_block_w_datums};
-    // DTX conv activation transform
-    std::vector<uint32_t> address_map = conv_transform(shape, conv_params, block_info, num_bytes_of_df);
 
+    // in1 block info
+    uint32_t in1_block_w = Wbt / num_blocks_in1_w;
+    uint32_t in1_block_w_datums = Wb / num_blocks_in1_w;
+    assert(in1_block_w % out_subblock_w == 0);
+    uint32_t in1_num_subblocks = in1_block_w / out_subblock_w;
+    uint32_t in1_block_h = in0_block_w;
+    uint32_t in1_block_num_tiles = in1_block_w * in1_block_h;
+
+    // DTX conv activation transform
+    auto address_map_act_weight = conv_transform(shape, {(int) Wb, (int) shape[0], (int) conv_params[0], (int) conv_params[1]}, conv_params,
+                            in0_block_h_datums, in0_block_w_datums, in1_block_w_datums,
+                            num_blocks_in0_h, num_blocks_in1_w, num_bytes_of_df);
+    auto address_map =address_map_act_weight.first;
     tt_metal::Program program = tt_metal::Program();
     CoreCoord core = {0, 0};
     //tt_start_debug_print_server(a.device()->cluster(), {0}, {{1, 1}});
@@ -422,12 +430,7 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
     // in1
     uint32_t in1_dram_addr = src1_dram_buffer->address();
 
-    // in1 block info
-    uint32_t in1_block_w = Wbt / num_blocks_in1_w;
-    assert(in1_block_w % out_subblock_w == 0);
-    uint32_t in1_num_subblocks = in1_block_w / out_subblock_w;
-    uint32_t in1_block_h = in0_block_w;
-    uint32_t in1_block_num_tiles = in1_block_w * in1_block_h;
+
 
 
     // For debug

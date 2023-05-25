@@ -47,16 +47,13 @@ void kernel_main() {
 
         .log_base_2_of_page_size = tile_size_pow2_exponent
     };
-    uint32_t in0_address_map_start_block_index = 0;
     uint32_t in0_address_map_index = 0;
+    in0_address_map_index += 1;
     for(uint32_t block_in0_h = 0; block_in0_h < num_blocks_in0_h; block_in0_h++) {
         // Reset in1 (weight) start tile index
         uint32_t in1_tensor_start_tile_id = 0;
-        in0_address_map_start_block_index = in0_address_map_index;
         for(uint32_t block_in1_w = 0; block_in1_w < num_blocks_in1_w; block_in1_w += 1) {
             uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;
-            // Reset in0 (activation) to start block in this row
-            in0_address_map_index = in0_address_map_start_block_index;
 
             for (uint32_t block_in0_w = 0; block_in0_w < num_blocks_in0_w; block_in0_w += 1) {
                 // Read weights
@@ -80,8 +77,9 @@ void kernel_main() {
 
                 // Read from DRAM into L1 using DTX address map and push one block at a time to CB
                 uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
-                uint32_t bytes_read = 0;
-                while(bytes_read != in0_block_size_bytes) {
+                uint32_t address_map_this_block_size = address_map[in0_address_map_index];
+                in0_address_map_index += 1;
+                for(uint32_t i = 0; i < address_map_this_block_size; i+=4) {
                     // There are 4 entries in the address map per read
                     uint32_t src_address = address_map[in0_address_map_index];
 
@@ -117,7 +115,6 @@ void kernel_main() {
                         uint32_t dst_addr = l1_write_addr_in0 + dst_address;
                         noc_async_read(src_noc_addr, dst_addr, read_size);
                     }
-                    bytes_read += read_size;
                     in0_address_map_index += 4;
                 }
                 noc_async_read_barrier();
