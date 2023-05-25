@@ -83,4 +83,6 @@ class Profiler {
 
         //Traverse all cores on the device and dump the device profile results
         void dumpDeviceResults(tt_cluster *cluster, int pcie_slot, const vector<CoreCoord> &worker_cores);
+
+        //Get profiler version
 };

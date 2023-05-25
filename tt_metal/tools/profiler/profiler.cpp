@@ -158,7 +158,6 @@ void Profiler::readRiscProfilerResults(
     dropped_marker_counter = profile_buffer[kernel_profiler::DROPPED_MARKER_COUNTER];
 
     if(dropped_marker_counter > 0){
-        std::cout << "PROFILER OVERFLOW at index " << end_index << std::endl;
         log_debug(
                 tt::LogDevice,
                 "{} device markers on device {} worker core {},{} risc {} were dropped. End index {}",
@@ -195,7 +194,11 @@ void Profiler::dumpDeviceResultToFile(
     if (device_new_log)
     {
         log_file.open(log_path);
-        log_file << "Chip clock is at 1.2 GHz" << std::endl;
+        log_file << "Version: " <<
+            kernel_profiler::profiler_version.major <<
+            "." << kernel_profiler::profiler_version.minor <<
+            "." << kernel_profiler::profiler_version.patch << std::endl;
+        log_file << "Chip clock: 1.2 GHz" << std::endl;
         log_file << "PCIe slot, core_x, core_y, RISC processor type, timer_id, time[cycles since reset]" << std::endl;
         device_new_log = false;
     }
