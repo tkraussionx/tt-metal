@@ -89,6 +89,7 @@ def get_test_fieldnames(test_name):
         [
             "test_name",
             "input_shapes",
+            "datagen_dict",
             "data_seed",
             "env_vars",
             "layout",
@@ -127,6 +128,7 @@ def run_tt_lib_test(
 
 def run_test_and_save_results(
     results_csv_writer,
+    datagen_dict,
     test_name,
     input_shapes,
     data_seed,
@@ -162,6 +164,7 @@ def run_test_and_save_results(
         {
             "test_name": test_name,
             "input_shapes": input_shapes,
+            "datagen_dict": datagen_dict,
             **test_args,
             "data_seed": data_seed,
             "env_vars": env_vars,
@@ -170,6 +173,7 @@ def run_test_and_save_results(
             "pass/fail": test_result,
         }
     )
+
 
     return test_pass
 

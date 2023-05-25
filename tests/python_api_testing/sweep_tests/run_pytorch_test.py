@@ -86,6 +86,7 @@ def run_pytorch_test(args):
         datagen_dict = test_config["datagen"]
         results_csv_path = output_folder / test_config["output-file"]
 
+
         comparison_dict = test_config["comparison"]
         comparison_args = comparison_dict.get("args", {})
         comparison_func = partial(
@@ -108,6 +109,7 @@ def run_pytorch_test(args):
             results_csv_writer = csv.DictWriter(
                 results_csv, fieldnames=get_test_fieldnames(test_name)
             )
+
             if not skip_header:
                 results_csv_writer.writeheader()
                 results_csv.flush()
@@ -127,6 +129,7 @@ def run_pytorch_test(args):
                     )
                     test_pass = run_test_and_save_results(
                         results_csv_writer,
+                        datagen_dict,
                         test_name,
                         input_shapes,
                         data_seed,

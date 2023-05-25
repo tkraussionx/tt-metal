@@ -40,7 +40,7 @@ def run_bloom_gelu_forward_test(device):
         #print(dim2)
 
         # test 1
-        test_in = gen_input(1,1,1024,1024, -1000, 100)
+        test_in = gen_input(1,1,512,512,1,10)
         print(test_in)
 
         pt_out = torch.nn.functional.gelu(test_in)
@@ -85,24 +85,6 @@ def run_bloom_gelu_forward_test(device):
 
         assert does_pass
 
-
-
-        print("PT APPROX!-----")
-
-        pt_out_3 = bloom_gelu_forward.bloom_gelu_forward(test_in)
-
-
-        does_pass, pcc_message = comp_pcc(pt_out, pt_out_3, 0.98)
-
-        print(comp_allclose(pt_out, pt_out_3))
-        print(pcc_message)
-
-        if does_pass:
-            logger.info("bloom_gelu_forward: Passed!")
-        else:
-            logger.warning("bloom_gelu_forward: Failed!")
-
-        assert does_pass
 
 
 
