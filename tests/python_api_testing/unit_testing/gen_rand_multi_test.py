@@ -6,7 +6,7 @@ sys.path.append(f"{f}/..")
 
 import torch
 
-
+import pytest
 
 
 def gen_rand_multi(size, low=[0, 100], high=[100,1000]):
@@ -53,7 +53,6 @@ def gen_rand_multi(size, low=[0, 100], high=[100,1000]):
   return result
 
 
-
 def rand_multi_shape():
     t1= gen_rand_multi([1,1,32,32], low=[-100,-1000,-10], high=[-10, -100, -1])
     print(t1.shape)
@@ -61,6 +60,10 @@ def rand_multi_shape():
     assert(t1.shape == torch.Size([1,1,32,32]))
 
 
+    t1= gen_rand_multi([1,1,512,512], low=[-100,-1000,-10,1], high=[-10, -100, -1,50])
+    print(t1.shape)
+    print(t1)
+    assert(t1.shape == torch.Size([1,1,512,512]))
     #t1= gen_rand_multi([1,1,33,33], low=[-100,-1000,-10], high=[-10, -100, -1])
 
     #assert(t1.shape() == [1,1,33,])
