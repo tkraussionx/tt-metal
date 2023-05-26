@@ -294,10 +294,10 @@ int main() {
     // DPRINT << my_ptr[0] << ENDL();
     // while(true);
 
-    kernel_profiler::init_BR_profiler();
+    // kernel_profiler::init_BR_profiler();
 
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
-    kernel_profiler::mark_time(CC_MAIN_START);
+    //kernel_profiler::mark_time(CC_MAIN_START);
 #endif
     RISC_POST_STATUS(0x10000000);
 
@@ -345,7 +345,7 @@ int main() {
     }
 
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & KERNEL_FUNCT_MARKER)
-    kernel_profiler::mark_time(CC_KERNEL_MAIN_START);
+    //kernel_profiler::mark_time(CC_KERNEL_MAIN_START);
 #endif
     // Run the BRISC kernel
 
@@ -359,7 +359,7 @@ int main() {
     kernel_main();
 #endif
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & KERNEL_FUNCT_MARKER)
-    kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
+    //kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
 #endif
 
     if (*use_triscs) {
@@ -385,7 +385,7 @@ int main() {
 #endif
 
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
-    kernel_profiler::mark_time(CC_MAIN_END);
+    //kernel_profiler::mark_time(CC_MAIN_END);
 #endif
 
 /*

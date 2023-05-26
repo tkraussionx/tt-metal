@@ -103,6 +103,17 @@ class default_setup(metaclass=MergeMetaclass):
     deviceTarball = "device_perf_results.tgz"
 
 
+class test_bmm_new(default_setup):
+    timerAnalysis = {
+        "Reader (NCRISC)": {
+            "across": "core",
+            "type": "adjacent",
+            "start": {"risc": "NCRISC", "timerID": 6},
+            "end": {"risc": "NCRISC", "timerID": 5},
+        }
+    }
+
+
 class test_matmul_multi_core_multi_dram(default_setup):
     timerAnalysis = {
         "Compute~": {

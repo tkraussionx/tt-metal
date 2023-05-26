@@ -125,10 +125,10 @@ using namespace ckernel;
 
 int main(int argc, char *argv[])
 {
-    kernel_profiler::init_profiler();
+    //kernel_profiler::init_profiler();
 
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
-    kernel_profiler::mark_time(CC_MAIN_START);
+    //kernel_profiler::mark_time(CC_MAIN_START);
 #endif
     FWEVENT("Launching proudction env kernels");
 
@@ -161,11 +161,11 @@ int main(int argc, char *argv[])
     //while (ready_for_next_epoch())
     {
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
-        kernel_profiler::mark_time(CC_KERNEL_MAIN_START);
+        //kernel_profiler::mark_time(CC_KERNEL_MAIN_START);
 #endif
         run_kernel();
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
-        kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
+        //kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
 #endif
     }
 
@@ -176,7 +176,7 @@ int main(int argc, char *argv[])
     // Note this is done before the KERNEL_COMPLETE call as TRISCs
     // are put into reset immediately by BRISC. This can sometimes
     // cause the CC_MAIN_END marker to not make it.
-    kernel_profiler::mark_time(CC_MAIN_END);
+    //kernel_profiler::mark_time(CC_MAIN_END);
 #endif
     trisc_l1_mailbox_write(KERNEL_COMPLETE);
 }

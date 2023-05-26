@@ -108,30 +108,30 @@ void Profiler::dumpDeviceResults (
             worker_core,
             "NCRISC",
             PRINT_BUFFER_NC);
-        readRiscProfilerResults(
-            cluster,
-            pcie_slot,
-            worker_core,
-            "BRISC",
-            PRINT_BUFFER_BR);
-        readRiscProfilerResults(
-            cluster,
-            pcie_slot,
-            worker_core,
-            "TRISC_0",
-            PRINT_BUFFER_T0);
-	readRiscProfilerResults(
-	    cluster,
-	    pcie_slot,
-	    worker_core,
-	    "TRISC_1",
-	    PRINT_BUFFER_T1);
-	readRiscProfilerResults(
-	    cluster,
-	    pcie_slot,
-	    worker_core,
-	    "TRISC_2",
-	    PRINT_BUFFER_T2);
+        //readRiscProfilerResults(
+            //cluster,
+            //pcie_slot,
+            //worker_core,
+            //"BRISC",
+            //PRINT_BUFFER_BR);
+        //readRiscProfilerResults(
+            //cluster,
+            //pcie_slot,
+            //worker_core,
+            //"TRISC_0",
+            //PRINT_BUFFER_T0);
+	//readRiscProfilerResults(
+	    //cluster,
+	    //pcie_slot,
+	    //worker_core,
+	    //"TRISC_1",
+	    //PRINT_BUFFER_T1);
+	//readRiscProfilerResults(
+	    //cluster,
+	    //pcie_slot,
+	    //worker_core,
+	    //"TRISC_2",
+	    //PRINT_BUFFER_T2);
     }
 }
 
@@ -151,10 +151,10 @@ void Profiler::readRiscProfilerResults(
             pcie_slot,
             worker_core,
             risc_print_buffer_addr,
-            PRINT_BUFFER_SIZE);
+            5*PRINT_BUFFER_SIZE);
 
     end_index = profile_buffer[kernel_profiler::BUFFER_END_INDEX];
-    TT_ASSERT (end_index < (PRINT_BUFFER_SIZE/sizeof(uint32_t)));
+    //TT_ASSERT (end_index < (PRINT_BUFFER_SIZE/sizeof(uint32_t)));
     dropped_marker_counter = profile_buffer[kernel_profiler::DROPPED_MARKER_COUNTER];
 
     if(dropped_marker_counter > 0){
