@@ -172,7 +172,7 @@ def run_tt_lib_test(
     logger.info(f"Running with args: {test_args}")
 
     tensor_inputs = []
-
+    print(test_args)
     for input_shape, data_gen_func in zip(input_shapes, data_gen_funcs):
         tensor_input = data_gen_func(input_shape)
         tensor_inputs.append(tensor_input)
