@@ -127,6 +127,7 @@ def run_pytorch_test(args):
                     )
                     test_pass = run_test_and_save_results(
                         results_csv_writer,
+                        datagen_dict,
                         test_name,
                         input_shapes,
                         data_seed,
