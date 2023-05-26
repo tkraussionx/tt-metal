@@ -27,7 +27,6 @@ on_device_options = [
 
 # Wrapper around gen functions to include casting
 def gen_func_with_cast(gen_func, dtype, tilize_input=False):
-    print(gen_func)
     return (
         lambda size: tilize(gen_func(size).to(dtype))
         if tilize_input
@@ -60,36 +59,23 @@ def gen_rand_multi(size, low=[0, 100], high=[100,1000]):
   total = 1
   for j in range(len(size)):
     total*=size[j]
-    print(size[j])
-  print(total)
   for i in range(len(low)):
      interval.append(high[i]-low[i])
-     print(interval[i])
   percentage=[]
   count = 0
   for j in range(len(interval)):
     count+=interval[j]
-  print('El count')
-  print(count)
   for i in range(len(interval)):
       percentage.append(interval[i]/count)
-      print(percentage[i])
 
   fractions=[]
   tensors=[]
   for i in range(len(interval)):
     fractions.append(percentage[i]*total)
-    print('ELS')
-    print(i)
-    print(fractions[i])
-    print(total)
-    print('low')
-    print(low[i])
     t =(low[i]-high[i])*torch.rand(round(fractions[i])) + high[i]
 
     tensors.append(t)
 
-    print(tensors[i])
 
   single_tensor = tensors[0]
   for i in range(1, len(tensors)):
@@ -97,8 +83,6 @@ def gen_rand_multi(size, low=[0, 100], high=[100,1000]):
   t = single_tensor
   idx = torch.randperm(t.shape[0])
   t = t[idx].view(t.size())
-  print(single_tensor)
-  print(fractions)
 
   result = t.reshape(size)
   return result
