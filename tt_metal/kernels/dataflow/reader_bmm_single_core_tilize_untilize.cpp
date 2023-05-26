@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include "dataflow_api.h"
-#include "debug_print.h"
+// #include "debug_print.h"
+#include "tools/profiler/kernel_profiler.hpp"
 
 /**
  * Reader kernel used for single core BMM with tilize activations and untilize output.
@@ -64,6 +65,8 @@ void kernel_main() {
             for (uint32_t in0_block_w_i = 0; in0_block_w_i < in0_num_blocks_w; ++in0_block_w_i) {
                 // read in input data for current block
 
+                kernel_profiler::mark_time(5);
+
                 // in0 DRAM -> L1 (activations in row major form)
                 // partial rows are read since multiple blocks can span along the rows
                 cb_reserve_back(in0_cb_id, in0_block_num_tiles);
@@ -90,6 +93,8 @@ void kernel_main() {
                 in0_row_offset_bytes += in0_read_row_size_bytes;
                 cb_push_back(in0_cb_id, in0_block_num_tiles);
 
+                kernel_profiler::mark_time(6);
+
                 // in1 DRAM -> L1 (weights in tiled form)
                 cb_reserve_back(in1_cb_id, in1_block_num_tiles);
                 uint32_t in1_write_l1_addr = get_write_ptr(in1_cb_id);
@@ -114,6 +119,8 @@ void kernel_main() {
 
                 in1_current_block_start_tile_id += in1_next_block_stride_h;
                 cb_push_back(in1_cb_id, in1_block_num_tiles);
+
+                // kernel_profiler::mark_time(7);
             } // for in0_num_blocks_w
             in1_start_tile_id += in1_next_block_stride_w;
         } // for in1_num_blocks_w

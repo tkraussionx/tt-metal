@@ -3,8 +3,10 @@
 #include "tt_metal/host_api.hpp"
 #include "common/constants.hpp"
 
+#ifdef DEBUG_SERVER
 #include "llrt/tt_debug_print_server.hpp"
 #include "hostdevcommon/debug_print_common.h"
+#endif  // DEBUG_SERVER
 
 namespace tt {
 namespace tt_metal {
@@ -151,13 +153,15 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,
     TT_ASSERT(src1_dram_buffer->size() % tile_size_bytes == 0, "Buffer size of tensor in1 must be divisible by tile_size_bytes");
 
     CoreCoord core = {0, 0};
-    CoreCoord debug_core = {1, 1};
     Program program = Program();
     Device *device = in0.device();
 
     // for kernel debug print
-    // int hart_mask = DPRINT_HART_NC | DPRINT_HART_BR;
-    tt_start_debug_print_server(device->cluster(), {0}, {debug_core});
+    #ifdef DEBUG_SERVER
+        // int hart_mask = DPRINT_HART_NC | DPRINT_HART_BR;
+        CoreCoord debug_core = {1, 1};
+        tt_start_debug_print_server(device->cluster(), {0}, {debug_core});
+    #endif  // DEBUG_SERVER
 
     const std::array<uint32_t, 4> out_shape{in0_batch, in0_channel, in0_height, in1_width};
     Tensor output = Tensor(out_shape,
@@ -337,9 +341,22 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,
     WriteRuntimeArgsToDevice(device, writer, core, writer_rt_args);
 
     // Compile and launch
-    bool pass = CompileProgram(device, program, false);
+    bool enable_profile = false;
+    std::string profile_path("/home/ubuntu/tt-metal.git/hehe");
+    #ifndef DEBUG_SERVER
+        std::cout << "Profiling enabled." << std::endl;
+        enable_profile = true;
+        SetProfilerDir(std::string(profile_path));
+    #endif  // DEBUG_SERVER
+    bool pass = CompileProgram(device, program, enable_profile);
     pass &= ConfigureDeviceWithProgram(device, program);
     pass &= LaunchKernels(device, program);
+
+    if (enable_profile) {
+        std::cout << "Dumping profiling results in " << profile_path << std::endl;
+        DumpDeviceProfileResults(device, program);
+    }
+
     TT_ASSERT(pass);
 
     return output;
