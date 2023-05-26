@@ -9,7 +9,7 @@ sys.path.append(f"{f}/../../../..")
 import torch
 import tt_lib
 import random
-
+import math
 from python_api_testing.sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 
 from loguru import logger
@@ -21,10 +21,60 @@ def gen_input(a,b,c,d,range1,range2):
     test_in = (range1-range2)*torch.rand(a, b, c, d) + range2
     return test_in
 
-def gen_input_2(a,b,c,d):
-    test_in = torch.rand(a, b, c, d)
+def gen_input_2(a,range1,range2):
+    test_in = (range1-range2)*torch.rand(a) + range2
     return test_in
+def generate_multi(size, low, high):
+  interval = []
+  total = 1
+  for j in range(len(size)):
+    total*=size[j]
+    print(size[j])
+  print(total)
+  for i in range(len(low)):
+     interval.append(high[i]-low[i])
+     print(interval[i])
+  percentage=[]
+  count = 0
+  for j in range(len(interval)):
+    count+=interval[j]
+  print('El count')
+  print(count)
+  for i in range(len(interval)):
+      percentage.append(interval[i]/count)
+      print(percentage[i])
 
+  fractions=[]
+  tensors=[]
+  for i in range(len(interval)):
+    fractions.append(percentage[i]*total)
+    print('ELS')
+    print(i)
+    print(fractions[i])
+    print(total)
+    t = gen_input_2(math.ceil(fractions[i]),low[i],high[i])
+    #tensors.append(t[:,torch.randperm(t.shape[0]),:])
+
+    #idx = torch.randperm(t.shape[0])
+    #t = t[idx].view(t.size())
+
+    tensors.append(t)
+    #tensors.append(gen_input(math.ceil(fractions[i]),low[i],high[i]))
+    #idx = torch.randperm(tensors[i].nelement())
+    #tensors[i] = tensors[i].view(-1)[idx].view(t.size())
+
+    print(tensors[i])
+
+  single_tensor = tensors[0]
+  for i in range(1, len(tensors)):
+    single_tensor = torch.cat((single_tensor, tensors[i]),0)
+  t = single_tensor
+  idx = torch.randperm(t.shape[0])
+  t = t[idx].view(t.size())
+  print(single_tensor)
+  print(fractions)
+
+  return t.view(size)
 
 def run_bloom_gelu_forward_test(device):
     # Prepare input
@@ -40,7 +90,7 @@ def run_bloom_gelu_forward_test(device):
         #print(dim2)
 
         # test 1
-        test_in = gen_input(1,1,512,512,1,10)
+        test_in =generate_multi([1,1,32,32], [-11000000, 10000000], [-10000000, 11000000])
         print(test_in)
 
         pt_out = torch.nn.functional.gelu(test_in)
