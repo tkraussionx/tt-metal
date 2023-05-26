@@ -5,6 +5,31 @@ from .. import tensor as ttl_tensor
 
 
 @convert_tt_tensors_wrapper
+def add(input, other):
+    return torch.add(input, other)
+
+
+@convert_tt_tensors_wrapper
+def mul(input, other):
+    return torch.mul(input, other)
+
+
+@convert_tt_tensors_wrapper
+def gelu(input):
+    return torch.nn.functional.gelu(input)
+
+
+@convert_tt_tensors_wrapper
+def transpose(x, dim0=-2, dim1=-1):
+    return torch.transpose(x, dim0, dim1)
+
+
+@convert_tt_tensors_wrapper
+def permute(x, dim0, dim1, dim2, dim3):
+    return torch.permute(x, (dim0, dim1, dim2, dim3))
+
+
+@convert_tt_tensors_wrapper
 def full(size: List[int], fill_value: float) -> ttl_tensor.Tensor:
     """
     Creates a ``tt_lib.tensor.Tensor`` of shape ``size`` filled with ``fill_value`` value.
@@ -322,9 +347,11 @@ def softmax(input: ttl_tensor.Tensor, dim: Optional[int] = None) -> ttl_tensor.T
     """
     return torch.nn.functional.softmax(input, dim)
 
+
 @convert_tt_tensors_wrapper
 def matmul(input: ttl_tensor.Tensor, other: ttl_tensor.Tensor) -> ttl_tensor.Tensor:
     return torch.matmul(input, other)
+
 
 class Conv2d(torch.nn.Module):
     r"""
