@@ -25,8 +25,8 @@ from residual_block import TtResnetBlock2D
 def test_run_resnet_inference():
     # setup pytorch model
 
-    enable_binary_cache()
-    enable_compile_cache()
+    # enable_binary_cache()
+    # enable_compile_cache()
     pipe = StableDiffusionPipeline.from_pretrained('CompVis/stable-diffusion-v1-4', torch_dtype=torch.float32)
 
     unet = pipe.unet
