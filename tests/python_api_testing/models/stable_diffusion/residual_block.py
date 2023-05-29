@@ -159,7 +159,9 @@ class TtResnetBlock2D(nn.Module):
         # create a tensor of size output_scale_factor
         output_sc_recip = 1 / self.output_scale_factor
         output_sc_recip = fallback_ops.full(input_tensor.shape(), output_sc_recip)
-        output_tensor = ttl.tensor.add(input_tensor, hidden_states)
-        output_tensor = ttl.tensor.mul(output_tensor, output_sc_recip)
+        output_tensor = fallback_ops.add(input_tensor, hidden_states)
+        # output_tensor = ttl.tensor.add(input_tensor, hidden_states)
+        output_tensor = fallback_ops.mul(output_tensor, output_sc_recip)
+        # output_tensor = ttl.tensor.mul(output_tensor, output_sc_recip)
 
         return output_tensor

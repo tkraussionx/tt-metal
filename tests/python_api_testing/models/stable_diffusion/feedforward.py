@@ -47,7 +47,8 @@ class TtGEGLU(nn.Module):
 
         hidden_states, gate = fallback_ops.chunk(hidden_states, 2, -1)
         act = self.gelu(gate)
-        return ttl.tensor.mul(hidden_states, act)
+        return fallback_ops.mul(hidden_states, act)
+        # return ttl.tensor.mul(hidden_states, act)
 
 
 class TtFeedForward(nn.Module):

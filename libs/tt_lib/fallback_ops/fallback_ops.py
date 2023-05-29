@@ -348,6 +348,15 @@ def softmax(input: ttl_tensor.Tensor, dim: Optional[int] = None) -> ttl_tensor.T
     return torch.nn.functional.softmax(input, dim)
 
 
+@convert_tt_tensors_wrapper
+def mul(input: ttl_tensor.Tensor, other: ttl_tensor.Tensor) -> ttl_tensor.Tensor:
+    return torch.mul(input, other)
+
+
+@convert_tt_tensors_wrapper
+def add(input: ttl_tensor.Tensor, other: ttl_tensor.Tensor) -> ttl_tensor.Tensor:
+    return torch.add(input, other)
+
 
 @convert_tt_tensors_wrapper
 def matmul(input: ttl_tensor.Tensor, other: ttl_tensor.Tensor) -> ttl_tensor.Tensor:
