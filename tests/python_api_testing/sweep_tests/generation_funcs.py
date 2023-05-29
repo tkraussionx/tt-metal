@@ -59,21 +59,17 @@ def gen_rand_multi(size, low=[0, 100], high=[100,1000]):
   total = 1
   for j in range(len(size)):
     total*=size[j]
-  print(total)
   for i in range(len(low)):
      interval.append(high[i]-low[i])
   percentage=[]
   count = 0
   for j in range(len(interval)):
     count+=interval[j]
-  print(count)
   for i in range(len(interval)):
       percentage.append(interval[i]/count)
-      print(percentage[i])
   fractions=[]
   tensors=[]
   for i in range(len(interval)):
-
     if(i==len(interval)):
       all_except_last = 0
       for i in range(len(interval)-1):
@@ -81,11 +77,9 @@ def gen_rand_multi(size, low=[0, 100], high=[100,1000]):
       fractions.append(total-all_except_last)
     else:
       fractions.append(round(percentage[i]*total))
-    print(fractions[i])
     t =(low[i]-high[i])*torch.rand(fractions[i]) + high[i]
 
     tensors.append(t)
-
 
   single_tensor = tensors[0]
   for i in range(1, len(tensors)):
