@@ -128,7 +128,7 @@ def demo():
     tt_unet = make_tt_unet(state_dict)
     tt_unet.config = unet.config
 
-    experiment_name = "mountain_fallback_nolatentupdate"
+    experiment_name = "mountain_gelu_matmul_softmax_bmm_fallback_nolatentupdate"
     # prompt = ["a photo of an astronaut riding a horse on mars"]
     # prompt = ["car"]
     prompt = ["oil painting frame of Breathtaking mountain range with a clear river running through it, surrounded by tall trees and misty clouds, serene, peaceful, mountain landscape, high detail"]
@@ -217,7 +217,7 @@ def demo():
         tt_latents = tt_scheduler.step(noise_pred, t, tt_latents).prev_sample
         save_image_and_latents(tt_latents, iter, vae, pre_fix=f"{experiment_name}_tt", pre_fix2="")
         pcc_res[iter] = comp_allclose_and_pcc(latents_dict[iter], tt_latents)
-        logger.info(iter, pcc_res[iter])
+        logger.info(f"{iter} pcc: {pcc_res[iter]}")
         last_latents = tt_latents
         # tt_latents = torch.Tensor(latents_dict[iter])
         # save things required!
@@ -225,7 +225,7 @@ def demo():
 
     latents = last_latents
     for key, val in pcc_res.items():
-        logger.info(key, val)
+        logger.info(f"{key}: {val}")
     # scale and decode the image latents with vae
     latents = 1 / 0.18215 * latents
     with torch.no_grad():

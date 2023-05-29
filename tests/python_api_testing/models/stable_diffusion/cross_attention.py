@@ -17,6 +17,7 @@ from diffusers import StableDiffusionPipeline
 from libs import tt_lib as ttl
 from libs.tt_lib.fallback_ops import fallback_ops
 
+from utility_functions import torch_to_tt_tensor, tt_to_torch_tensor, torch_to_tt_tensor_rm
 
 from python_api_testing.fused_ops.softmax import softmax as TtSoftmax
 
@@ -147,7 +148,9 @@ class TtCrossAttention(nn.Module):
     def get_attention_scores(self, query, key, attention_mask=None):
         t_key = ttl.tensor.transpose(key)
 
-        temp = ttl.tensor.bmm(query, t_key)
+        # temp = ttl.tensor.bmm(query, t_key)
+        temp = fallback_ops.bmm(query, t_key)
+
         # Aaron: TODO: intentionally keeping this here!
         # _encoded_val = torch.tensor(self.scale, dtype=torch.bfloat16)
         # _encoded_val = _encoded_val.view(torch.int16).item()
@@ -167,7 +170,8 @@ class TtCrossAttention(nn.Module):
         if attention_mask is not None:
             attention_scores = ttl.tensor.add(attention_scores, attention_mask)
 
-        attention_probs = TtSoftmax(attention_scores)
+        # attention_probs = TtSoftmax(attention_scores)
+        attention_probs = fallback_ops.softmax(attention_scores, dim=-1)
 
         return attention_probs
 
@@ -199,8 +203,10 @@ def CrossAttnProcessor(attn: TtCrossAttention, hidden_states, encoder_hidden_sta
 
     attention_probs = attn.get_attention_scores(query, key, attention_mask)
 
-    hidden_states = ttl.tensor.bmm(attention_probs, value)
-
+    # hidden_states = ttl.tensor.bmm(attention_probs, value)
+    # attention_probs = tt_to_torch_tensor(attention_probs)
+    hidden_states = fallback_ops.bmm(attention_probs, value)
+    print("after bmm fallback ops")
     hidden_states = attn.batch_to_head_dim(hidden_states)
     hidden_states = attn.to_out(hidden_states)
     return hidden_states

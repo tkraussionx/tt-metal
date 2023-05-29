@@ -348,9 +348,21 @@ def softmax(input: ttl_tensor.Tensor, dim: Optional[int] = None) -> ttl_tensor.T
     return torch.nn.functional.softmax(input, dim)
 
 
+
 @convert_tt_tensors_wrapper
 def matmul(input: ttl_tensor.Tensor, other: ttl_tensor.Tensor) -> ttl_tensor.Tensor:
     return torch.matmul(input, other)
+
+
+@convert_tt_tensors_wrapper
+def bmm(input: ttl_tensor.Tensor, other: ttl_tensor.Tensor) -> ttl_tensor.Tensor:
+    input = torch.squeeze(input, 0)
+    other = torch.squeeze(other, 0)
+    res =  torch.bmm(input, other)
+    input = torch.unsqueeze(input, 0)
+    other = torch.unsqueeze(other, 0)
+    res = torch.unsqueeze(res, 0)
+    return res
 
 
 class Conv2d(torch.nn.Module):

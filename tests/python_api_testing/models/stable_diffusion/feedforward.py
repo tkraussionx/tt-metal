@@ -16,6 +16,7 @@ from libs.tt_lib.fallback_ops import fallback_ops
 from libs import tt_lib as ttl
 from utility_functions import pad_weight, tilize_to_list, torch_to_tt_tensor, tt_to_torch_tensor
 from python_api_testing.models.stable_diffusion.utils import make_linear
+from libs.tt_lib.fallback_ops import fallback_ops
 
 
 class TtGEGLU(nn.Module):
@@ -38,7 +39,8 @@ class TtGEGLU(nn.Module):
         self.proj = make_linear(in_features=dim_in, out_features=dim_out * 2, weights=weights, bias=bias, device=device)
 
     def gelu(self, gate):
-        return ttl.tensor.gelu(gate)
+        return fallback_ops.gelu(gate)
+        # return ttl.tensor.gelu(gate)
 
     def forward(self, hidden_states):
         hidden_states = self.proj(hidden_states)
