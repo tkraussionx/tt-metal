@@ -128,7 +128,7 @@ def demo():
     tt_unet = make_tt_unet(state_dict)
     tt_unet.config = unet.config
 
-    experiment_name = "mountain_gelu_matmul_softmax_bmm_fallback_nolatentupdate"
+    experiment_name = "mountain_gelu_matmul_softmax_bmm_mul_add_bcast_fallback_nolatentupdate"
     # prompt = ["a photo of an astronaut riding a horse on mars"]
     # prompt = ["car"]
     prompt = ["oil painting frame of Breathtaking mountain range with a clear river running through it, surrounded by tall trees and misty clouds, serene, peaceful, mountain landscape, high detail"]

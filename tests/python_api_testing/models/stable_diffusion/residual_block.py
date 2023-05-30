@@ -142,7 +142,8 @@ class TtResnetBlock2D(nn.Module):
             temb = fallback_ops.reshape(temb, temb.shape()[2], temb.shape()[3], 1, 1)
 
         if temb is not None and self.time_embedding_norm == "default":
-            hidden_states = ttl.tensor.bcast(hidden_states, temb, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.HW)
+            hidden_states = fallback_ops.add(hidden_states, temb)
+            # hidden_states = ttl.tensor.bcast(hidden_states, temb, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.HW)
 
         hidden_states = self.norm2(hidden_states)
 

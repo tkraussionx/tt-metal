@@ -20,7 +20,8 @@ def Linear(in_features: int, out_features: int, weight, bias):
         output = fallback_ops.matmul(activation, weight_T)
 
         if bias is not None:
-            output_plus_bias = tensor.bcast(output, bias, tensor.BcastOpMath.ADD, tensor.BcastOpDim.H)
+            output_plus_bias = fallback_ops.add(output, bias)
+            # output_plus_bias = tensor.bcast(output, bias, tensor.BcastOpMath.ADD, tensor.BcastOpDim.H)
             return output_plus_bias
 
         return output
