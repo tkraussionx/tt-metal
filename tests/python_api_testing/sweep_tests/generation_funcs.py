@@ -56,7 +56,11 @@ def gen_rand_symmetric(size, low=0, high=100):
 
 """
 This generation provides the ability to randomly generate
-numbers from multiple ranges:
+numbers from multiple ranges using uniform distirbution.
+The number of values from ranges that will be present in the
+result is proportional to the size of the range.
+The following parameters have to be provided:
+size - desired random value tensor shape
 low - list of lower bounds
 high - list of upper bounds
 If we have low=[10,-10] and high=[100,-1], the ranges would be [10,100] and [-10,-1]
