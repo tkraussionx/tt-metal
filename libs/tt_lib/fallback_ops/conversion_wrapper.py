@@ -21,7 +21,7 @@ def convert_tt_tensor_to_pt_tensor(tt_tensor, host, output_format):
     if tt_tensor.layout() != ttl_tensor.Layout.ROW_MAJOR:
         tt_tensor = tt_tensor.to(ttl_tensor.Layout.ROW_MAJOR)
 
-    return torch.Tensor(tt_tensor.data()).reshape(tt_tensor.shape())
+    return torch.tensor(tt_tensor.data(), dtype=torch.bfloat16).reshape(tt_tensor.shape())
 
 
 def convert_pt_tensor_to_tt_tensor(pt_tensor, output_format):
