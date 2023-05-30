@@ -70,13 +70,14 @@ def gen_rand_multi(size, low=[0, 100], high=[100,1000]):
   fractions=[]
   tensors=[]
   for i in range(len(interval)):
-    if(i==len(interval)):
+    if(i==len(interval)-1):
       all_except_last = 0
-      for i in range(len(interval)-1):
-        all_except_last+= fractions[i]
+      for k in range(len(interval)-1):
+        all_except_last+= fractions[k]
       fractions.append(total-all_except_last)
     else:
       fractions.append(round(percentage[i]*total))
+
     t =(low[i]-high[i])*torch.rand(fractions[i]) + high[i]
 
     tensors.append(t)
