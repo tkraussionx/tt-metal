@@ -54,6 +54,13 @@ def gen_rand_symmetric(size, low=0, high=100):
     signs = torch.randint(0, 2, size) * 2 - 1
     return torch.Tensor(size=size).uniform_(low, high) * signs
 
+"""
+This generation provides the ability to randomly generate
+numbers from multiple ranges:
+low - list of lower bounds
+high - list of upper bounds
+If we have low=[10,-10] and high=[100,-1], the ranges would be [10,100] and [-10,-1]
+"""
 def gen_rand_multi(size, low=[0, 100], high=[100,1000]):
   interval = []
   total = 1
