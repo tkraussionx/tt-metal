@@ -2,7 +2,7 @@ import torch
 import random
 from itertools import permutations, product
 from functools import lru_cache
-import tt_lib as ttl
+
 from tt_lib.utils import _nearest_32 as nearest_32, tilize
 import math
 # torch.testing.get_all_dtypes()
