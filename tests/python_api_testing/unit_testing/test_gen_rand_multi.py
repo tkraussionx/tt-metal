@@ -2,15 +2,18 @@ import pytest
 
 from pathlib import Path
 import sys
-from loguru import logger
 
 f = f"{Path(__file__).parent}"
 sys.path.append(f"{f}/../..")
 
+import numpy as np
+from loguru import logger
+import tt_lib as ttl
+#from libs import tt_lib as ttl
+
 from python_api_testing.sweep_tests.generation_funcs import gen_rand_multi
+
 import torch
-import pytest
-from libs import tt_lib as ttl
 
 size = [[1,1,32,32]]
 low=[[10,100, 200] ]
