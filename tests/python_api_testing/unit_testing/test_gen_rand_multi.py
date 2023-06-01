@@ -5,6 +5,7 @@ import sys
 
 f = f"{Path(__file__).parent}"
 sys.path.append(f"{f}/../..")
+sys.path.append(f"{f}/..")
 
 import numpy as np
 from loguru import logger
