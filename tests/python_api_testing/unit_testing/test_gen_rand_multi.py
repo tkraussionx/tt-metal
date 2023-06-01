@@ -8,7 +8,8 @@ sys.path.append(f"{f}/../..")
 
 import numpy as np
 from loguru import logger
-import tt_lib as ttl
+
+import tt_lib
 
 from python_api_testing.sweep_tests.generation_funcs import gen_rand_multi
 
