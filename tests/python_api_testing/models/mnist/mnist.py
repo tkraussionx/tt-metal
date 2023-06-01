@@ -8,6 +8,7 @@ sys.path.append(f"{f}/../../../..")
 import torch
 
 from libs import tt_lib
+from libs.tt_lib.fallback_ops import fallback_ops
 from utility_functions import get_oom_of_float
 from utils import tt_linear, get_shape
 
@@ -97,17 +98,10 @@ class TtMnistModel(torch.nn.Module):
         lin3_out = self.lin3(lin2_out_act)
         lin3_out_act = self.act(lin3_out)
 
-        # Softmax on CPU
-        lin3_out_cpu = lin3_out_act.to(self.host)
+        out = fallback_ops.softmax(lin3_out_act, -1).to(self.host)
+        out_cpu_pytorch = torch.Tensor(out.data()).reshape(out.shape())[:, 0, 0, :10]
 
-        # Make pytorch tensor... since we had to pad the output, we need
-        # to only retrieve the 10 values that represent actual classes
-        lin3_out_cpu_pytorch = torch.Tensor(lin3_out_cpu.data()).reshape(
-            lin3_out_cpu.shape()
-        )[:, 0, 0, :10]
-        out = torch.nn.functional.softmax(lin3_out_cpu_pytorch)
-
-        return out
+        return out_cpu_pytorch
 
 
 class PytorchMnistModel(torch.nn.Module):
