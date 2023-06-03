@@ -6,6 +6,8 @@ TT_DNN_SRCS = \
 	libs/tt_dnn/op_library/eltwise_unary/single_core/eltwise_unary_op_single_core.cpp \
 	libs/tt_dnn/op_library/eltwise_unary/multi_core/eltwise_unary_op_multi_core.cpp \
 	libs/tt_dnn/op_library/pad_h_rm/pad_h_rm_op.cpp \
+	libs/tt_dnn/op_library/pad/pad_op.cpp \
+	libs/tt_dnn/op_library/unpad/unpad_op.cpp \
 	libs/tt_dnn/op_library/fill_rm/fill_rm_op.cpp \
 	libs/tt_dnn/op_library/transpose/transpose_op.cpp \
 	libs/tt_dnn/op_library/transpose/wh_multi_core/transpose_wh_op_multi_core.cpp \
@@ -44,6 +46,9 @@ TT_DNN_SRCS = \
 	libs/tt_dnn/op_library/layernorm/layernorm_op.cpp \
 	libs/tt_dnn/op_library/reshape/reshape_op.cpp \
 	libs/tt_dnn/op_library/permute/permute_op.cpp \
+	libs/tt_dnn/op_library/bert_large_tms/bert_large_tms.cpp \
+	libs/tt_dnn/op_library/bert_large_tms/multi_core_split_fused_qkv/multi_core_split_fused_qkv.cpp \
+	libs/tt_dnn/op_library/bert_large_tms/multi_core_split_fused_qkv/multi_core_create_qkv_heads.cpp \
 
 TT_DNN_LIB = $(LIBDIR)/libtt_dnn.a
 TT_DNN_DEFINES = -DGIT_HASH=$(shell git rev-parse HEAD)

@@ -1,6 +1,6 @@
 ---
 test-list:
-  unpad:
+  tensor_unpad:
     shape:
       start-shape: [1, 1, 1, 1]
       end-shape: [10, 10, 100, 100]
@@ -13,7 +13,7 @@ test-list:
       args:
         low: -100
         high: 100
-    args-gen: gen_unpad_args
+    args-gen: gen_tensor_unpad_args
     comparison:
       function: comp_equal
-    output-file: unpad_sweep.csv
+    output-file: tensor_unpad_sweep.csv

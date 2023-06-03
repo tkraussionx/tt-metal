@@ -118,16 +118,14 @@ tt_metal::Program create_program(
         bool in0_is_dram = in0_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
         bool in1_is_dram = in1_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
         bool out_is_dram = out_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
-        tt_metal::KernelArgs reader_writer_compile_time_args = tt_metal::KernelArgs(
-            core, {
+        std::vector<uint32_t> reader_writer_compile_time_args = {
                 // interleaved accessor args
                 (std::uint32_t) tile_size_is_power_of_two,
                 (std::uint32_t) tile_size_pow2_exponent,
                 (std::uint32_t) in0_is_dram,
                 (std::uint32_t) in1_is_dram,
                 (std::uint32_t) out_is_dram
-            }
-        );
+        };
 
         vector<uint32_t> compute_kernel_args = {
             in0_block_w, // in0_block_w
@@ -147,14 +145,13 @@ tt_metal::Program create_program(
             num_output_blocks_per_core[i] // batch
         };
         // Create compute kernel
-        tt_metal::KernelArgs mm_args = tt_metal::KernelArgs(core, compute_kernel_args);
         bool fp32_dest_acc_en = false;
         bool math_approx_mode = false;
         auto mm_kernel = tt_metal::CreateComputeKernel(
             program,
             "tt_metal/kernels/compute/bmm_large_block_zm.cpp",
             core,
-            mm_args,
+            compute_kernel_args,
             math_fidelity,
             fp32_dest_acc_en,
             math_approx_mode
@@ -332,7 +329,7 @@ Tensor matmul_multi_core_reuse_optimized_bert_large_(const Tensor &a, const Tens
     TT_ASSERT(in0_buffer->size() % single_tile_size == 0);
     TT_ASSERT(in1_buffer->size() % single_tile_size == 0);
 
-    TT_ASSERT(ashape[3] == bshape[2], "Dimension K (A.shape[2] and B.shape[3]) must match for A and B in bmm_op"); // A.K == B.K
+    TT_ASSERT(ashape[3] == bshape[2], "Dimension K (A.shape[3] and B.shape[2]) must match for A and B in bmm_op"); // A.K == B.K
     TT_ASSERT(ashape[2] % TILE_HEIGHT == 0);
     TT_ASSERT(ashape[3] % TILE_WIDTH == 0);
     TT_ASSERT(bshape[2] % TILE_HEIGHT == 0);

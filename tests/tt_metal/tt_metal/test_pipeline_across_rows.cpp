@@ -31,11 +31,23 @@ int main(int argc, char **argv) {
         int result = putenv(const_cast<char*>(env_var.c_str()));
 
         ////////////////////////////////////////////////////////////////////////////
-        //                      Grayskull Device Setup
+        //                      Initial Runtime Args Parse
+        ////////////////////////////////////////////////////////////////////////////
+        std::vector<std::string> input_args(argv, argv + argc);
+        string arch_name = "";
+        try {
+            std::tie(arch_name, input_args) =
+                test_args::get_command_option_and_remaining_args(input_args, "--arch", "grayskull");
+        } catch (const std::exception& e) {
+            log_fatal(tt::LogTest, "Command line arguments found exception", e.what());
+        }
+        const tt::ARCH arch = tt::get_arch_from_string(arch_name);
+        ////////////////////////////////////////////////////////////////////////////
+        //                      Device Setup
         ////////////////////////////////////////////////////////////////////////////
         int pci_express_slot = 0;
         tt_metal::Device *device =
-            tt_metal::CreateDevice(tt::ARCH::GRAYSKULL, pci_express_slot);
+            tt_metal::CreateDevice(arch, pci_express_slot);
 
         pass &= tt_metal::InitializeDevice(device);;
 
@@ -229,7 +241,7 @@ int main(int argc, char **argv) {
                 receiver_kernel_name = "tt_metal/kernels/dataflow/receiver_intermediate_stage.cpp";
             }
 
-            tt_metal::KernelArgs receiver_kernel_compile_time_args = tt_metal::KernelArgs(cores[core_id], {cb_index, block_size_tiles});
+            std::vector<uint32_t> receiver_kernel_compile_time_args = {cb_index, block_size_tiles};
             receiver_kernels.push_back(tt_metal::CreateDataMovementKernel(
                 program,
                 receiver_kernel_name,
@@ -244,7 +256,7 @@ int main(int argc, char **argv) {
             } else {
                 sender_kernel_name = "tt_metal/kernels/dataflow/sender_intermediate_stage.cpp";
             }
-            tt_metal::KernelArgs sender_kernel_compile_time_args = tt_metal::KernelArgs(cores[core_id], {cb_index, block_size_tiles});
+            std::vector<uint32_t> sender_kernel_compile_time_args = {cb_index, block_size_tiles};
             sender_kernels.push_back(tt_metal::CreateDataMovementKernel(
                 program,
                 sender_kernel_name,

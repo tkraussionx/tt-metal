@@ -11,6 +11,7 @@
 #include "device/device_api.h"
 #include "llrt_common/tiles.hpp"
 #include "hostdevcommon/common_runtime_address_map.h"
+#include "build_kernels_for_riscv/build_kernels_for_riscv.hpp"
 
 constexpr static uint64_t TEST_MAILBOX_ADDR = MEM_TEST_MAILBOX_ADDRESS + MEM_MAILBOX_BRISC_OFFSET;
 constexpr static uint64_t ENABLE_CORE_MAILBOX_ADDR = MEM_ENABLE_CORE_MAILBOX;
@@ -82,10 +83,7 @@ using CircularBufferConfigVec = std::vector<uint32_t>;
 
 // made these free functions -- they're copy/paste of the member functions
 // TODO: clean-up epoch_loader / epoch_binary -- a bunch of functions there should not be member functions
-vector<uint32_t> get_risc_binary(string path, uint32_t id, bool id_is_trisc = false);
-inline vector<uint32_t> get_trisc_binary(string path, uint32_t trisc_id) {
-    return get_risc_binary(path, trisc_id, true);
-}
+ll_api::memory get_risc_binary(string path);
 
 // TODO: de-asserting reset properly
 //  this deasserts reset for all BRISCs (on all devices, all cores), but not other RISC processors (NCRISC, TRISC)
@@ -129,12 +127,14 @@ void write_graph_interpreter_op_info_to_core(
     tt_cluster *cluster, int chip, const CoreCoord &core, op_info_t op_info, int op_idx);
 
 // for BRISC and NCRISC
+// hex_file_path is relative to the "kernels"/"firwmare" root
 bool test_load_write_read_risc_binary(
-    tt_cluster *cluster, std::string hex_file_path, int chip_id, const CoreCoord &core, int riscv_id);
+    tt_cluster *cluster, std::string hex_file_name, int chip_id, const CoreCoord &core, int riscv_id);
 
 // for TRISCs
+// hex_file_path is relative to the "kernels"/"firwmare" root
 bool test_load_write_read_trisc_binary(
-    tt_cluster *cluster, std::string hex_file_path, int chip_id, const CoreCoord &core, int triscv_id);
+    tt_cluster *cluster, std::string hex_file_name, int chip_id, const CoreCoord &core, int triscv_id);
 
 void disable_ncrisc(tt_cluster *cluster, int chip_id, const CoreCoord &core);
 

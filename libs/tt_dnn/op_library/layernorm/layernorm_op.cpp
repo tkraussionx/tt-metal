@@ -30,6 +30,10 @@ Tensor layernorm_(const Tensor &a, const Tensor* b, float eps, const Tensor* gam
     u32 HW = H*W;
     TT_ASSERT(W % TILE_WIDTH == 0 && H % TILE_HEIGHT == 0);
     TT_ASSERT(H > 0 && W > 0 && NC > 0);
+    TT_ASSERT(a.dtype() == DataType::BFLOAT16);
+    TT_ASSERT(b == nullptr || b->dtype() == DataType::BFLOAT16);
+    TT_ASSERT(gamma == nullptr || gamma->dtype() == DataType::BFLOAT16);
+    TT_ASSERT(beta == nullptr || beta->dtype() == DataType::BFLOAT16);
     u32 Wt = W/TILE_WIDTH;
     u32 Ht = H/TILE_HEIGHT;
 
@@ -162,7 +166,6 @@ Tensor layernorm_(const Tensor &a, const Tensor* b, float eps, const Tensor* gam
             //DataMovementProcessor::RISCV_0, NOC::NOC_1);
 
         vector<uint32_t> compute_args = { wtpc, Wt, num_gamma_tiles>0, num_beta_tiles>0 };
-        KernelArgs softmax_args = KernelArgs(core, compute_args);
 
         bool fp32_dest_acc_en = false;
         bool math_approx_mode = true;
@@ -170,7 +173,7 @@ Tensor layernorm_(const Tensor &a, const Tensor* b, float eps, const Tensor* gam
             program,
             "kernels/compute/layernorm.cpp",
             core,
-            softmax_args,
+            compute_args,
             MathFidelity::HiFi4,
             fp32_dest_acc_en,
             math_approx_mode

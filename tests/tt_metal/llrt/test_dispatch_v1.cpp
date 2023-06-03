@@ -78,7 +78,7 @@ vector<uint32_t> allocate(
 }
 
 DramConfig construct_dram_config(string op) {
-    string op_path = "built_kernels/" + op;
+    string op_path = op;
     std::array<string, 5> datacopy_hex_files = {
         op_path + "/brisc/brisc.hex",
         op_path + "/tensix_thread0/tensix_thread0.hex",
@@ -98,15 +98,15 @@ DramConfig construct_dram_config(string op) {
         return allocate(dram_addr, size, vec, addrs_and_sizes);
     };
 
-    vector<uint32_t> brisc_hex = allocate_helper(tt::llrt::get_risc_binary(brisc_hex_path, 0), kernel_addrs_and_sizes);
-    vector<uint32_t> ncrisc_hex =
-        allocate_helper(tt::llrt::get_risc_binary(ncrisc_hex_path, 1), kernel_addrs_and_sizes);
-    vector<uint32_t> trisc0_hex =
-        allocate_helper(tt::llrt::get_trisc_binary(trisc0_hex_path, 0), kernel_addrs_and_sizes);
-    vector<uint32_t> trisc1_hex =
-        allocate_helper(tt::llrt::get_trisc_binary(trisc1_hex_path, 1), kernel_addrs_and_sizes);
-    vector<uint32_t> trisc2_hex =
-        allocate_helper(tt::llrt::get_trisc_binary(trisc2_hex_path, 2), kernel_addrs_and_sizes);
+    vector<uint32_t> brisc_hex;// = allocate_helper(tt::llrt::get_risc_binary(brisc_hex_path), kernel_addrs_and_sizes);
+    vector<uint32_t> ncrisc_hex;// =
+    //        allocate_helper(tt::llrt::get_risc_binary(ncrisc_hex_path), kernel_addrs_and_sizes);
+    vector<uint32_t> trisc0_hex;// =
+    //allocate_helper(tt::llrt::get_risc_binary(trisc0_hex_path), kernel_addrs_and_sizes);
+    vector<uint32_t> trisc1_hex;// =
+    //allocate_helper(tt::llrt::get_risc_binary(trisc1_hex_path), kernel_addrs_and_sizes);
+    vector<uint32_t> trisc2_hex;// =
+    //allocate_helper(tt::llrt::get_risc_binary(trisc2_hex_path), kernel_addrs_and_sizes);
 
     uint32_t num_tiles = NUM_TILES;
     uint32_t num_bytes_per_tile = NUM_BYTES_PER_TILE;
@@ -173,7 +173,7 @@ tuple<uint32_t, uint64_t, uint32_t> create_kernel_transfer_info(
     uint32_t write_addr;
     switch (kernel_id) {
         case 0: write_addr = MEM_BRISC_FIRMWARE_BASE; break;
-        case 1: write_addr = MEM_NCRISC_FIRMWARE_BASE; break;
+        case 1: write_addr = MEM_NCRISC_INIT_IRAM_L1_BASE; break;
         case 2: write_addr = MEM_TRISC0_BASE; break;
         case 3: write_addr = MEM_TRISC1_BASE; break;
         case 4: write_addr = MEM_TRISC2_BASE; break;
@@ -338,7 +338,7 @@ void write_copy_desc_to_l1(
 void host_dispatch(tt_cluster *cluster, int chip_id, string op, CoreCoord dispatch_core, CoreCoord worker_core) {
     // Write dispatch binary to core
     tt::llrt::test_load_write_read_risc_binary(
-        cluster, "built_kernels/dispatch/brisc/brisc.hex", chip_id, dispatch_core, 0);
+        cluster, "dispatch/brisc/brisc.hex", chip_id, dispatch_core, 0);
 
     DramConfig dram_config = construct_dram_config(op);
     std::cout << dram_config << std::endl;

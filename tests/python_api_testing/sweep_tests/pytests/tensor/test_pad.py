@@ -27,10 +27,10 @@ def test_run_pad_test(input_shapes, pcie_slot, function_level_defaults):
     ]
     comparison_func = partial(comparison_funcs.comp_equal)
     run_single_pytorch_test(
-        "pad",
+        "tensor_pad",
         input_shapes,
         datagen_func,
         comparison_func,
         pcie_slot,
-        generation_funcs.gen_pad_args(input_shapes)[0],
+        generation_funcs.gen_tensor_pad_args(input_shapes)[0],
     )

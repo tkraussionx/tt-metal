@@ -82,15 +82,15 @@ std::vector<std::uint32_t> transpose_tiles(std::vector<std::uint32_t> data, int 
     return result;
 }
 
-bool run_matmul(const bool with_bias) {
+bool run_matmul(const tt::ARCH& arch, const bool with_bias) {
     bool pass = true;
     try {
         ////////////////////////////////////////////////////////////////////////////
-        //                      Grayskull Device Setup
+        //                      Device Setup
         ////////////////////////////////////////////////////////////////////////////
         int pci_express_slot = 0;
         tt_metal::Device *device =
-            tt_metal::CreateDevice(tt::ARCH::GRAYSKULL, pci_express_slot);
+            tt_metal::CreateDevice(arch, pci_express_slot);
 
         pass &= tt_metal::InitializeDevice(device);;
 
@@ -237,7 +237,6 @@ bool run_matmul(const bool with_bias) {
             with_bias // whether or not to use bias
         };
 
-        tt_metal::KernelArgs mm_args = tt_metal::KernelArgs(core, compute_kernel_args);
         bool fp32_dest_acc_en = false;
         bool math_approx_mode = false;
 
@@ -248,7 +247,7 @@ bool run_matmul(const bool with_bias) {
             program,
             compute_kernel_name,
             core,
-            mm_args,
+            compute_kernel_args,
             MathFidelity::HiFi4,
             fp32_dest_acc_en,
             math_approx_mode
@@ -374,8 +373,20 @@ bool run_matmul(const bool with_bias) {
 int main(int argc, char **argv) {
     bool pass = true;
 
-    pass &= run_matmul(false);
-    pass &= run_matmul(true);
+    ////////////////////////////////////////////////////////////////////////////
+    //                      Initial Runtime Args Parse
+    ////////////////////////////////////////////////////////////////////////////
+    std::vector<std::string> input_args(argv, argv + argc);
+    string arch_name = "";
+    try {
+        std::tie(arch_name, input_args) =
+            test_args::get_command_option_and_remaining_args(input_args, "--arch", "grayskull");
+    } catch (const std::exception& e) {
+        log_fatal(tt::LogTest, "Command line arguments found exception", e.what());
+    }
+    const tt::ARCH arch = tt::get_arch_from_string(arch_name);
+    pass &= run_matmul(arch, false);
+    pass &= run_matmul(arch, true);
 
     TT_ASSERT(pass);
 

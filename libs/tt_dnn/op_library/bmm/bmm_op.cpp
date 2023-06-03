@@ -297,7 +297,7 @@ Tensor matmul(const Tensor& a, const Tensor& b) {
         device = b.device();
     }
 
-    TT_ASSERT(a.shape()[3] == b.shape()[2] && "Dimension K (A.shape[2] and B.shape[3]) must match for A and B in bmm_op"); // A.K == B.K
+    TT_ASSERT(a.shape()[3] == b.shape()[2] && "Dimension K (A.shape[3] and B.shape[2]) must match for A and B in bmm_op"); // A.K == B.K
     TT_ASSERT(b.shape()[0]*b.shape()[1] == 1 && "matmul (batch bcast variant) expects input tensors of shapes BCMK*11KN=BCMN");
 
     auto a_pad_shape = AutoPad::pad_to_tile_shape(a.shape());
@@ -365,7 +365,7 @@ Tensor bmm(const Tensor& a, const Tensor& b) {
         device = b.device();
     }
 
-    TT_ASSERT(a.shape()[3] == b.shape()[2] && "Dimension K (A.shape[2] and B.shape[3]) must match for A and B in bmm_op"); // A.K == B.K
+    TT_ASSERT(a.shape()[3] == b.shape()[2] && "Dimension K (A.shape[3] and B.shape[2]) must match for A and B in bmm_op"); // A.K == B.K
     TT_ASSERT(a.shape()[1] == b.shape()[1] && a.shape()[0] == b.shape()[0]
         && "bmm (non-bcast matmul) expects input tensors of shapes BCMK*BCKN=BCMN");
 
@@ -444,6 +444,7 @@ Tensor bert_large_fused_qkv_matmul(const Tensor& a, const Tensor& b, const Memor
 }
 
 Tensor bert_large_ff1_matmul(const Tensor& a, const Tensor& b, const MemoryConfig& mem_config) {
+    TT_ASSERT((a.dtype() != DataType::BFLOAT16) or (mem_config.buffer_type == BufferType::DRAM) or (a.buffer_type() == BufferType::DRAM and b.buffer_type() == BufferType::DRAM), "For BFLOAT16, if output is on L1, one of in0 or in1 must be on DRAM!");
     TT_ASSERT((a.shape() == std::array<uint32_t, 4>({9, 1, 384, 1024})), "Unsupported input shape");
     TT_ASSERT((b.shape() == std::array<uint32_t, 4>({1, 1, 1024, 4096})), "Unsupported input shape");
     CoreCoord compute_and_storage_grid_size = {12, 9};

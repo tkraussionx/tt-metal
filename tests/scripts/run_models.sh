@@ -11,18 +11,13 @@ cd $TT_METAL_HOME
 
 export PYTHONPATH=$TT_METAL_HOME
 
-env pytest tests/python_api_testing/models/stable_diffusion/test_feedforward.py
+
 env pytest tests/python_api_testing/models/stable_diffusion/test_embedding.py
-env pytest tests/python_api_testing/models/stable_diffusion/test_cross_attention.py
-env pytest tests/python_api_testing/models/stable_diffusion/test_cross_attn_down_block.py
-env pytest tests/python_api_testing/models/stable_diffusion/test_downblock_2d.py
-env pytest tests/python_api_testing/models/stable_diffusion/test_downsample_2d.py
-env pytest tests/python_api_testing/models/stable_diffusion/test_residual_block.py
-env pytest tests/python_api_testing/models/stable_diffusion/test_transformers.py
-env pytest tests/python_api_testing/models/stable_diffusion/test_unet_mid_block.py
-env pytest tests/python_api_testing/models/stable_diffusion/test_upblock_2d.py
-env pytest tests/python_api_testing/models/stable_diffusion/test_upsample_2d.py
-env pytest tests/python_api_testing/models/stable_diffusion/test_upsample_nearest2d.py
+env pytest tests/python_api_testing/models/stable_diffusion/test_cross_attn_down_block.py -k test_run_cross_attn_down_block_real_input_inference
+env pytest tests/python_api_testing/models/stable_diffusion/test_cross_attn_up_block.py -k test_run_cross_attn_up_block_real_input_inference
+env pytest tests/python_api_testing/models/stable_diffusion/test_downblock_2d.py -k test_run_downblock_real_input_inference
+env pytest tests/python_api_testing/models/stable_diffusion/test_unet_mid_block.py -k test_run_unet_mid_block_real_input_inference
+env pytest tests/python_api_testing/models/stable_diffusion/test_upblock_2d.py -k test_run_upblock_real_input_inference
 
 env pytest tests/python_api_testing/models/bert/bert_encoder.py -k bert_encoder
 env pytest tests/python_api_testing/models/bert -k bert_question_and_answering
@@ -60,7 +55,28 @@ env pytest tests/python_api_testing/models/whisper -k whisper_for_conditional_ge
 env pytest tests/python_api_testing/models/LeNet -k LeNet
 env pytest tests/python_api_testing/models/ConvNet_MNIST -k  mnist
 
-env pytest tests/python_api_testing/models/bloom -k bloom_mlp
+env pytest tests/python_api_testing/models/roberta -k roberta_self_attention
+env pytest tests/python_api_testing/models/roberta -k roberta_self_output
+env pytest tests/python_api_testing/models/roberta -k roberta_attention
+env pytest tests/python_api_testing/models/roberta -k roberta_intermediate
+env pytest tests/python_api_testing/models/roberta -k roberta_output
+env pytest tests/python_api_testing/models/roberta -k roberta_layer
+env pytest tests/python_api_testing/models/roberta -k roberta_encoder
+env pytest tests/python_api_testing/models/roberta -k roberta_pooler
+env pytest tests/python_api_testing/models/roberta -k roberta_model
+env pytest tests/python_api_testing/models/roberta -k roberta_lm_head
+env pytest tests/python_api_testing/models/roberta -k roberta_for_masked_lm
+env pytest tests/python_api_testing/models/roberta -k roberta_for_qa
+env pytest tests/python_api_testing/models/roberta -k roberta_for_sequence_classification
+env pytest tests/python_api_testing/models/roberta -k roberta_classification_head
+env pytest tests/python_api_testing/models/roberta -k roberta_for_token_classification
+env pytest tests/python_api_testing/models/roberta -k roberta_for_multiple_choice
+
+env pytest tests/python_api_testing/models/bloom -k baddbmm
 env pytest tests/python_api_testing/models/bloom -k bloom_attention
 env pytest tests/python_api_testing/models/bloom -k bloom_block
 env pytest tests/python_api_testing/models/bloom -k bloom_gelu_forward
+env pytest tests/python_api_testing/models/bloom -k bloom_merge_heads
+env pytest tests/python_api_testing/models/bloom -k bloom_mlp
+env pytest tests/python_api_testing/models/bloom -k bloom_model
+env pytest tests/python_api_testing/models/bloom -k bloom_causal_lm

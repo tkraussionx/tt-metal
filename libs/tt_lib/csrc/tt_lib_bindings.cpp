@@ -16,7 +16,10 @@
 #include "tt_dnn/op_library/untilize/untilize_op.hpp"
 #include "tt_dnn/op_library/reshape/reshape_op.hpp"
 #include "tt_dnn/op_library/permute/permute_op.hpp"
+#include "tt_dnn/op_library/pad/pad_op.hpp"
+#include "tt_dnn/op_library/unpad/unpad_op.hpp"
 #include "tt_dnn/op_library/auto_pad.hpp"
+#include "tt_dnn/op_library/bert_large_tms/bert_large_tms.hpp"
 #include "tensor/tensor_utils.hpp"
 
 #include "tt_lib_bindings.hpp"
@@ -1086,6 +1089,25 @@ void TensorModule(py::module &m_tensor) {
         | arg0     | Input tensor                   | Tensor     | Tensor of shape [W, Z, Y, X], where Y%32=0 and X%32=0           | Yes      |
         +----------+--------------------------------+------------+-----------------------------------------------------------------+----------+
     )doc");
+    m_tensor.def("untilize_with_unpadding", &untilize_with_unpadding, R"doc(
+        Changes data layout of input tensor to ROW_MAJOR and unpads/removes elements from the tensor.
+
+        Input tensor must be on TT accelerator device, in TILE, and have BFLOAT16 data type.
+
+        Output tensor will be on TT accelerator device, in ROW_MAJOR layout, and have BFLOAT16 data type.
+
+        +----------+--------------------------------+--------------+-----------------------------------------------------------------+----------+
+        | Argument | Description                    | Data type    | Valid range                                                     | Required |
+        +==========+================================+==============+=================================================================+==========+
+        | arg0     | Input tensor                   | Tensor       | Tensor of shape [W, Z, Y, X], where Y%32=0 and X%32=0           | Yes      |
+        +----------+--------------------------------+--------------+-----------------------------------------------------------------+----------+
+        | arg1     | Start indices of input tensor  | List[int[4]] | Must be all 0s                                                  | Yes      |
+        +----------+--------------------------------+--------------+-----------------------------------------------------------------+----------+
+        | arg2     | End indices of input tensor    | List[int[4]] | Values along each dim must be                                   | Yes      |
+        |          |                                |              |                                                                 |          |
+        |          | in output tensor               |              | < input_tensor_shape[i]                                         |          |
+        +----------+--------------------------------+--------------+-----------------------------------------------------------------+----------+
+    )doc");
     m_tensor.def("fill_rm", &fill_rm, R"doc(
         Generates an NCHW row-major tensor and fill it with high values up to
         hOnes, wOnes in each HW tile with the rest padded with high values. So
@@ -1163,6 +1185,44 @@ void TensorModule(py::module &m_tensor) {
         | paddedH  | New H dim            | int       | >= current H | Yes      |
         +----------+----------------------+-----------+--------------+----------+
     )doc");
+    m_tensor.def("pad", &pad, R"doc(
+        Pad TT Tensor with given pad value ``arg2``.
+
+        The input tensor must be in ROW_MAJOR or TILE layout.
+
+        Returns an output tensor that contains the input tensor at the given input tensor start indices ``arg3`` and the padded value everywhere else.
+
+        +---------------------+------------------------------------------------------+--------------+-----------------------------------------------------+----------+
+        | Argument            | Description                                          | Data type    | Valid range                                         | Required |
+        +=====================+======================================================+==============+=====================================================+==========+
+        | arg0                | Input tensor                                         | Tensor       |                                                     | Yes      |
+        +---------------------+------------------------------------------------------+--------------+-----------------------------------------------------+----------+
+        | arg1                | Shape of output tensor                               | List[int[4]] |                                                     | Yes      |
+        +---------------------+------------------------------------------------------+--------------+-----------------------------------------------------+----------+
+        | arg2                | Start indices to place input tensor in output tensor | List[int[4]] | Must be all 0s                                      | Yes      |
+        |                     |                                                      |              |                                                     |          |
+        |                     |                                                      |              |                                                     |          |
+        +---------------------+------------------------------------------------------+--------------+-----------------------------------------------------+----------+
+        | arg3                | Value to pad input tensor                            | float        |                                                     | Yes      |
+        +---------------------+------------------------------------------------------+--------------+-----------------------------------------------------+----------+
+    )doc");
+    m_tensor.def("unpad", &unpad, R"doc(
+            Unpad TT Tensor.
+
+            Returns an output tensor from output tensor start indices ``arg1`` to output tensor end indices ``arg2`` (inclusive) of the input tensor.
+
+            +---------------------+----------------------------------------------+--------------+-----------------------------------------------------+----------+
+            | Argument            | Description                                  | Data type    | Valid range                                         | Required |
+            +=====================+==============================================+==============+=====================================================+==========+
+            | arg0                | Input tensor                                 | Tensor       |                                                     | Yes      |
+            +---------------------+----------------------------------------------+--------------+-----------------------------------------------------+----------+
+            | arg1                | Start indices of input tensor                | List[int[4]] | Must be all 0s                                      | Yes      |
+            +---------------------+----------------------------------------------+--------------+-----------------------------------------------------+----------+
+            | arg2                | End indices of input tensor in output tensor | List[int[4]] | Values along each dim must be                       | Yes      |
+            |                     |                                              |              |                                                     |          |
+            |                     |                                              |              | < input_tensor_shape[i]                             |          |
+            +---------------------+----------------------------------------------+--------------+-----------------------------------------------------+----------+
+        )doc");
 
     // matrix multiplication
 
@@ -1236,6 +1296,26 @@ void TensorModule(py::module &m_tensor) {
         | conv_params  | Conv parameters list: kernel size H, kernel size W ,stride H,stride W,pad H,pad W          |Vector<int>|             | Yes      |
         +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
     )doc");
+
+    // Custom BERT TMs
+    m_tensor.def("bert_large_split_fused_qkv", &bert_large_split_fused_qkv,
+        py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
+        Splits [9, 1, 384, 3072] fused qkv matrix into 3 heads with shape [9, 1, 384, 1024].
+    )doc");
+    m_tensor.def("bert_large_create_q_head", &bert_large_create_q_head,
+        py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
+        Reshuffles [9, 1, 384, 1024] tensor into tensor with shape [9, 16, 384, 64].
+    )doc");
+    m_tensor.def("bert_large_create_k_head", &bert_large_create_k_head,
+        py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
+        Reshuffles [9, 1, 384, 1024] tensor into tensor with shape [9, 16, 64, 384].
+    )doc");
+    m_tensor.def("bert_large_create_v_head", &bert_large_create_v_head,
+        py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
+        Reshuffles [9, 1, 384, 1024] tensor into tensor with shape [9, 16, 384, 64].
+    )doc");
+
+    // Custom BERT matmuls/bmms
     m_tensor.def("bert_large_fused_qkv_matmul", &bert_large_fused_qkv_matmul,
         py::arg().noconvert(), py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
         Perform a bert_large_fused_qkv non-batched matmul ``A x B`` with two tensors.
@@ -1286,6 +1366,21 @@ void TensorModule(py::module &m_tensor) {
         +==========+======================+===========+=============+==========+
         | a        | Input tensor         | Tensor    |             | Yes      |
         +----------+----------------------+-----------+-------------+----------+
+    )doc");
+    m_tensor.def("tilize_with_val_padding", &tilize_with_val_padding, R"doc(
+        Tilizes a given tensor across memory on device. Pads to specified shape before tilizing.
+
+        +---------------------+------------------------------------------------------+--------------+-----------------------------------------------------+----------+
+        | Argument            | Description                                          | Data type    | Valid range                                         | Required |
+        +=====================+======================================================+==============+=====================================================+==========+
+        | arg0                | Input tensor                                         | Tensor       |                                                     | Yes      |
+        +---------------------+------------------------------------------------------+--------------+-----------------------------------------------------+----------+
+        | arg1                | Shape of output tensor                               | List[int[4]] | shape [W, Z, Y, X], where Y%32=0 and X%32=0         | Yes      |
+        +---------------------+------------------------------------------------------+--------------+-----------------------------------------------------+----------+
+        | arg2                | Start indices to place input tensor in output tensor | List[int[4]] | Must be all 0s                                      | Yes      |
+        +---------------------+------------------------------------------------------+--------------+-----------------------------------------------------+----------+
+        | arg3                | Value to pad input tensor                            | float        |                                                     | Yes      |
+        +---------------------+------------------------------------------------------+--------------+-----------------------------------------------------+----------+
     )doc");
     m_tensor.def("tilize_conv_activation", &tilize_conv_activation, R"doc(
         Converts conv activation to 2d Matrix and tilizes it on device. Pads zeroes height-wise if required.

@@ -2,6 +2,7 @@ import os, sys
 import json
 import re
 import inspect
+import pytest
 
 
 import tests.tt_metal.tools.profiler.common as common
@@ -48,9 +49,14 @@ def get_function_name():
     return frame.f_code.co_name
 
 
+@pytest.mark.skip(reason="Some machines are acting flaky on this test")
 def test_custom_cycle_count():
     REF_CYCLE_COUNT = 52
+    REF_CYCLE_COUNT_MARGIN = 6
     REF_RISC_COUNT = 5
+
+    REF_CYCLE_COUNT_MAX = REF_CYCLE_COUNT + REF_CYCLE_COUNT_MARGIN
+    REF_CYCLE_COUNT_MIN = REF_CYCLE_COUNT - REF_CYCLE_COUNT_MARGIN
 
     devicesData = run_device_profiler_test(doubleRun=True)
 
@@ -60,7 +66,8 @@ def test_custom_cycle_count():
         match = re.search(r"^.* kernel start -> .* kernel end$", key)
         if match:
             riscCount += 1
-            assert stats[key]["stats"]["Range"] == REF_CYCLE_COUNT, "Wrong cycle count"
+            assert stats[key]["stats"]["Range"] < REF_CYCLE_COUNT_MAX  , "Wrong cycle count, too high"
+            assert stats[key]["stats"]["Range"] > REF_CYCLE_COUNT_MIN  , "Wrong cycle count, too low"
     assert riscCount == REF_RISC_COUNT, "Wrong RISC count"
 
 

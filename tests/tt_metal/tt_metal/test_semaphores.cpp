@@ -62,7 +62,6 @@ void initialize_program(tt_metal::Device *device, tt_metal::Program &program, co
     vector<uint32_t> compute_kernel_args = {
         uint(num_tiles) // per_core_tile_cnt
     };
-    tt_metal::KernelArgs eltwise_unary_args = tt_metal::KernelArgs(core_range, compute_kernel_args);
 
     bool fp32_dest_acc_en = false;
     bool math_approx_mode = false;
@@ -70,7 +69,7 @@ void initialize_program(tt_metal::Device *device, tt_metal::Program &program, co
         program,
         "tt_metal/kernels/compute/eltwise_copy_3m.cpp",
         core_range,
-        eltwise_unary_args,
+        compute_kernel_args,
         MathFidelity::HiFi4,
         fp32_dest_acc_en,
         math_approx_mode
@@ -124,11 +123,23 @@ int main(int argc, char **argv) {
 
     try {
         ////////////////////////////////////////////////////////////////////////////
-        //                      Grayskull Device Setup
+        //                      Initial Runtime Args Parse
+        ////////////////////////////////////////////////////////////////////////////
+        std::vector<std::string> input_args(argv, argv + argc);
+        string arch_name = "";
+        try {
+            std::tie(arch_name, input_args) =
+                test_args::get_command_option_and_remaining_args(input_args, "--arch", "grayskull");
+        } catch (const std::exception& e) {
+            log_fatal(tt::LogTest, "Command line arguments found exception", e.what());
+        }
+        const tt::ARCH arch = tt::get_arch_from_string(arch_name);
+        ////////////////////////////////////////////////////////////////////////////
+        //                      Device Setup
         ////////////////////////////////////////////////////////////////////////////
         int pci_express_slot = 0;
         tt_metal::Device *device =
-            tt_metal::CreateDevice(tt::ARCH::GRAYSKULL, pci_express_slot);
+            tt_metal::CreateDevice(arch, pci_express_slot);
 
         pass &= tt_metal::InitializeDevice(device);
 

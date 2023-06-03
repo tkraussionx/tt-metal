@@ -15,11 +15,23 @@ int main(int argc, char **argv) {
 
     try {
         ////////////////////////////////////////////////////////////////////////////
-        //                      Grayskull Device Setup
+        //                      Initial Runtime Args Parse
+        ////////////////////////////////////////////////////////////////////////////
+        std::vector<std::string> input_args(argv, argv + argc);
+        string arch_name = "";
+        try {
+            std::tie(arch_name, input_args) =
+                test_args::get_command_option_and_remaining_args(input_args, "--arch", "grayskull");
+        } catch (const std::exception& e) {
+            log_fatal(tt::LogTest, "Command line arguments found exception", e.what());
+        }
+        const tt::ARCH arch = tt::get_arch_from_string(arch_name);
+        ////////////////////////////////////////////////////////////////////////////
+        //                      Device Setup
         ////////////////////////////////////////////////////////////////////////////
         int pci_express_slot = 0;
         tt_metal::Device *device =
-            tt_metal::CreateDevice(tt::ARCH::GRAYSKULL, pci_express_slot);
+            tt_metal::CreateDevice(arch, pci_express_slot);
 
         pass &= tt_metal::InitializeDevice(device);;
 
@@ -102,8 +114,8 @@ int main(int argc, char **argv) {
             tt::DataFormat::Float16_b
         );
 
-        auto reader_cb_kernel_args = tt_metal::KernelArgs(core, {8, 2});
-        auto writer_cb_kernel_args = tt_metal::KernelArgs(core, {8, 4});
+        std::vector<uint32_t> reader_cb_kernel_args = {8, 2};
+        std::vector<uint32_t> writer_cb_kernel_args = {8, 4};
 
         auto reader_cb_kernel = tt_metal::CreateDataMovementKernel(
             program,

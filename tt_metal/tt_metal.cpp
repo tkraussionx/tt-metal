@@ -55,10 +55,8 @@ Host *GetHost() {
 }
 
 Device *CreateDevice(tt::ARCH arch, int pcie_slot) {
-    TT_ASSERT(arch == tt::ARCH::GRAYSKULL, "Only Grayskull is supported!");
     return new Device(arch, pcie_slot);
 }
-
 bool InitializeDevice(Device *device, const MemoryAllocator &memory_allocator) {
     return device->initialize(memory_allocator);
 }
@@ -82,10 +80,10 @@ DataMovementKernel *CreateDataMovementKernel(
     Program &program,
     const std::string &file_name,
     const CoreCoord &core,
-    const KernelArgs &kernel_args,
+    const std::vector<uint32_t> &compile_args,
     DataMovementProcessor processor_type,
     NOC noc) {
-    DataMovementKernel *kernel = new DataMovementKernel(file_name, core, kernel_args, processor_type, noc);
+    DataMovementKernel *kernel = new DataMovementKernel(file_name, core, compile_args, processor_type, noc);
     program.add_kernel(kernel);
     return kernel;
 }
@@ -105,11 +103,11 @@ DataMovementKernel *CreateDataMovementKernel(
     Program &program,
     const std::string &file_name,
     const CoreRange &core_range,
-    const KernelArgs &kernel_args,
+    const std::vector<uint32_t> &compile_args,
     DataMovementProcessor processor_type,
     NOC noc) {
     TT_ASSERT(core_range.start == core_range.end or core_range.start < core_range.end && "Invalid core range!");
-    DataMovementKernel *kernel = new DataMovementKernel(file_name, core_range, kernel_args, processor_type, noc);
+    DataMovementKernel *kernel = new DataMovementKernel(file_name, core_range, compile_args, processor_type, noc);
     program.add_kernel(kernel);
     return kernel;
 }
@@ -130,10 +128,10 @@ DataMovementKernel *CreateDataMovementKernel(
     Program &program,
     const std::string &file_name,
     const CoreRangeSet &core_range_set,
-    const KernelArgs &kernel_args,
+    const std::vector<uint32_t> &compile_args,
     DataMovementProcessor processor_type,
     NOC noc) {
-    DataMovementKernel *kernel = new DataMovementKernel(file_name, core_range_set, kernel_args, processor_type, noc);
+    DataMovementKernel *kernel = new DataMovementKernel(file_name, core_range_set, compile_args, processor_type, noc);
     program.add_kernel(kernel);
     return kernel;
 }
@@ -153,14 +151,14 @@ ComputeKernel *CreateComputeKernel(
     Program &program,
     const std::string &file_name,
     const CoreCoord &core,
-    const KernelArgs &kernel_args,
+    const std::vector<uint32_t> &compile_args,
     MathFidelity math_fidelity,
     bool fp32_dest_acc_en,
     bool math_approx_mode) {
     ComputeKernel *kernel = new ComputeKernel(
         file_name,
         core,
-        kernel_args,
+        compile_args,
         math_fidelity,
         fp32_dest_acc_en,
         math_approx_mode);
@@ -172,7 +170,7 @@ ComputeKernel *CreateComputeKernel(
     Program &program,
     const std::string &file_name,
     const CoreRange &core_range,
-    const KernelArgs &kernel_args,
+    const std::vector<uint32_t> &compile_args,
     MathFidelity math_fidelity,
     bool fp32_dest_acc_en,
     bool math_approx_mode) {
@@ -180,7 +178,7 @@ ComputeKernel *CreateComputeKernel(
     ComputeKernel *kernel = new ComputeKernel(
         file_name,
         core_range,
-        kernel_args,
+        compile_args,
         math_fidelity,
         fp32_dest_acc_en,
         math_approx_mode);
@@ -192,14 +190,14 @@ ComputeKernel *CreateComputeKernel(
     Program &program,
     const std::string &file_name,
     const CoreRangeSet &core_range_set,
-    const KernelArgs &kernel_args,
+    const std::vector<uint32_t> &compile_args,
     MathFidelity math_fidelity,
     bool fp32_dest_acc_en,
     bool math_approx_mode) {
     ComputeKernel *kernel = new ComputeKernel(
         file_name,
         core_range_set,
-        kernel_args,
+        compile_args,
         math_fidelity,
         fp32_dest_acc_en,
         math_approx_mode);
@@ -491,7 +489,40 @@ bool ReadFromDeviceL1(Device *device, const CoreCoord &logical_core, uint32_t ad
     tt_metal_profiler.markStop("ReadFromDeviceL1");
     return pass;
 }
-
+void GenerateBankToNocCoordHeaders(
+    Device *device,
+    build_kernel_for_riscv_options_t *build_options,
+    const std::string &op_path)
+{
+    // Basic Allocator generates number of banks which may not be power of 2, so we could just pad and alias for now
+    const size_t num_dram_banks = device->num_banks(BufferType::DRAM);
+    const size_t num_dram_banks_pow2 = std::pow(2, std::ceil(std::log2(num_dram_banks)));
+    std::vector<CoreCoord> dram_noc_coord_per_bank(num_dram_banks);
+    for (unsigned bank_id = 0; bank_id < num_dram_banks; bank_id++) {
+        dram_noc_coord_per_bank[bank_id] = device->core_from_dram_channel(device->dram_channel_from_bank_id(bank_id));
+    }
+    const size_t num_l1_banks = device->num_banks(BufferType::L1);
+    const size_t num_l1_banks_pow2 = std::pow(2, std::ceil(std::log2(num_l1_banks)));
+    std::vector<CoreCoord> l1_noc_coord_per_bank(num_l1_banks_pow2);
+    std::vector<i32> l1_offset_per_bank(num_l1_banks_pow2);
+    for (unsigned bank_id = 0; bank_id < num_l1_banks_pow2; bank_id++) {
+        if (bank_id < num_l1_banks) {
+            l1_noc_coord_per_bank[bank_id] = device->worker_core_from_logical_core(device->logical_core_from_bank_id(bank_id));
+            l1_offset_per_bank[bank_id] = device->l1_bank_offset_from_bank_id(bank_id);
+        } else {
+            l1_noc_coord_per_bank[bank_id] = device->worker_core_from_logical_core(device->logical_core_from_bank_id(0));
+            l1_offset_per_bank[bank_id] = device->l1_bank_offset_from_bank_id(0);
+        }
+    }
+    // Generate header file in proper location
+    generate_bank_to_noc_coord_descriptor (
+        build_options,
+        op_path,
+        dram_noc_coord_per_bank,
+        l1_noc_coord_per_bank,
+        l1_offset_per_bank
+    );
+}
 bool GenerateBinaries(
     Device *device,
     build_kernel_for_riscv_options_t *build_options,
@@ -501,14 +532,14 @@ bool GenerateBinaries(
     const CoreCoord &logical_core)
 {
     std::string arch_name = tt::get_string_lowercase(device->arch());
-
+    GenerateBankToNocCoordHeaders(device, build_options, op_path);
     auto brisc_lambda = [=]() {
         generate_binary_for_brisc(
             build_options,
             op_path,
             arch_name,
             kernel_group.riscv_0->noc(),
-            kernel_group.riscv_0->compile_time_args(logical_core),
+            kernel_group.riscv_0->compile_time_args(),
             profile_kernel); };
     auto ncrisc_lambda = [=]() {
         generate_binary_for_ncrisc(
@@ -516,7 +547,7 @@ bool GenerateBinaries(
             op_path,
             arch_name,
             kernel_group.riscv_1->noc(),
-            kernel_group.riscv_1->compile_time_args(logical_core),
+            kernel_group.riscv_1->compile_time_args(),
             profile_kernel); };
 
     generate_descriptors(build_options, op_path);
@@ -526,7 +557,7 @@ bool GenerateBinaries(
         if (kernel_group.compute != nullptr) {
             auto triscs_lambda = [=]() {
                 generate_binaries_for_triscs(
-                    build_options, op_path, arch_name, kernel_group.compute->compile_time_args(logical_core), profile_kernel);
+                    build_options, op_path, arch_name, kernel_group.compute->compile_time_args(), profile_kernel);
             };
             std::thread tr_thread(triscs_lambda);
             tr_thread.join();
@@ -550,10 +581,11 @@ bool BlankKernelBinariesExist(const std::string &blank_op_path) {
     return binaries_exist;
 }
 
-void CompileBlankKernel(Device *device, const std::string &out_dir_path) {
+void CompileBlankKernel(Device *device) {
     build_kernel_for_riscv_options_t blank_build_options("blank_op", "blank_op");
     // Crude way to check if blank_op needs to be compiled or not
-    if (BlankKernelBinariesExist(out_dir_path + blank_build_options.name)) {
+    // TODO: move all this tracking and path generation into the build_kernels file
+    if (BlankKernelBinariesExist(blank_build_options.outpath + blank_build_options.name)) {
         return;
     }
     struct hlk_args_t {
@@ -569,7 +601,8 @@ void CompileBlankKernel(Device *device, const std::string &out_dir_path) {
     std::string arch_name = tt::get_string_lowercase(device->arch());
 
     generate_binaries_params_t default_params;
-    generate_binaries_all_riscs(&blank_build_options, out_dir_path + blank_build_options.name, arch_name, default_params);
+    GenerateBankToNocCoordHeaders(device, &blank_build_options, blank_build_options.name);
+    generate_binaries_all_riscs(&blank_build_options, blank_build_options.name, arch_name, default_params);
 }
 
 void SetCircularBufferDataFormat(
@@ -617,14 +650,12 @@ void PopulateKernelGroupWithDataMovementKernels(Program &program, KernelGroup &k
         return default_noc;
     };
 
-    KernelArgs empty_kernel_args;
     if (kernel_group.riscv_0 == nullptr) {
         NOC riscv_0_noc = get_noc_id(kernel_group.riscv_1, NOC::RISCV_0_default);
         auto riscv_0_kernel = CreateDataMovementKernel(
             program,
             "tt_metal/kernels/dataflow/blank.cpp",
             logical_core,
-            empty_kernel_args,
             DataMovementProcessor::RISCV_0,
             riscv_0_noc);
         kernel_group.riscv_0 = riscv_0_kernel;
@@ -636,7 +667,6 @@ void PopulateKernelGroupWithDataMovementKernels(Program &program, KernelGroup &k
             program,
             "tt_metal/kernels/dataflow/blank.cpp",
             logical_core,
-            empty_kernel_args,
             DataMovementProcessor::RISCV_1,
             riscv_1_noc);
         kernel_group.riscv_1 = riscv_1_kernel;
@@ -666,11 +696,11 @@ std::string GetOpName(const KernelGroup &kernel_group) {
 size_t KernelGroupCompileHash(const KernelGroup &kernel_group, const CoreCoord &logical_core, const std::string &op_name, const int &pcie_slot) {
     size_t kg_compile_hash = 0;
     if (kernel_group.compute != nullptr) {
-        tt::utils::hash_combine(kg_compile_hash, kernel_group.compute->compile_time_args_hash(logical_core));
+        tt::utils::hash_combine(kg_compile_hash, kernel_group.compute->compile_time_args_hash());
         tt::utils::hash_combine(kg_compile_hash, kernel_group.compute->define_args_hash(logical_core));
     }
-    tt::utils::hash_combine(kg_compile_hash, kernel_group.riscv_0->compile_time_args_hash(logical_core));
-    tt::utils::hash_combine(kg_compile_hash, kernel_group.riscv_1->compile_time_args_hash(logical_core));
+    tt::utils::hash_combine(kg_compile_hash, kernel_group.riscv_0->compile_time_args_hash());
+    tt::utils::hash_combine(kg_compile_hash, kernel_group.riscv_1->compile_time_args_hash());
     tt::utils::hash_combine(kg_compile_hash, size_t(kernel_group.riscv_0->noc()));
     tt::utils::hash_combine(kg_compile_hash, size_t(kernel_group.riscv_1->noc()));
     tt::utils::hash_combine(kg_compile_hash, std::hash<std::string>{}(op_name));
@@ -682,10 +712,10 @@ size_t KernelGroupCompileHash(const KernelGroup &kernel_group, const CoreCoord &
     {
         unique_lock<mutex> lock;
         f << op_name << " :: "
-          << ( kernel_group.compute ? kernel_group.compute->compile_time_args_hash(logical_core) : 0 ) << " :: "
+          << ( kernel_group.compute ? kernel_group.compute->compile_time_args_hash() : 0 ) << " :: "
           << ( kernel_group.compute ? kernel_group.compute->define_args_hash(logical_core) : 0 ) << " :: "
-          << kernel_group.riscv_0->compile_time_args_hash(logical_core) << " :: "
-          << kernel_group.riscv_1->compile_time_args_hash(logical_core) << " :: "
+          << kernel_group.riscv_0->compile_time_args_hash() << " :: "
+          << kernel_group.riscv_1->compile_time_args_hash() << " :: "
           << kernel_group.riscv_0->noc() << " :: "
           << kernel_group.riscv_1->noc() << " :: "
           << std::hash<std::string>{}(op_name) << " :: "
@@ -716,6 +746,34 @@ private:
     std::unordered_set<size_t> hashes_;
 };
 
+void SetBuildKernelOptions(const KernelGroup &kernel_group, const CoreCoord &logical_core, build_kernel_for_riscv_options_t &build_options, const std::string &binary_path) {
+    if (kernel_group.compute != nullptr) {
+        build_options.set_hlk_file_name_all_cores(kernel_group.compute->kernel_path_file_name());
+        build_options.set_hlk_math_fidelity_all_cores(kernel_group.compute->math_fidelity());
+        // TODO(AP): see issue #504
+        //build_kernel_for_riscv_options->set_hlk_math_approx_mode_all_cores(kernel_group.compute->math_approx_mode());
+        build_options.fp32_dest_acc_en = kernel_group.compute->fp32_dest_acc_en();
+        build_options.hlk_defines = kernel_group.compute->defines();
+        kernel_group.compute->set_binary_path(logical_core, binary_path);
+    }
+    TT_ASSERT(kernel_group.riscv_0 != nullptr and kernel_group.riscv_1 != nullptr);
+    build_options.brisc_kernel_file_name = kernel_group.riscv_0->kernel_path_file_name();
+    build_options.brisc_defines = kernel_group.riscv_0->defines();
+    kernel_group.riscv_0->set_binary_path(logical_core, binary_path);
+    build_options.ncrisc_kernel_file_name = kernel_group.riscv_1->kernel_path_file_name();
+    build_options.ncrisc_defines = kernel_group.riscv_1->defines();
+    kernel_group.riscv_1->set_binary_path(logical_core, binary_path);
+}
+
+void SetBinaries(const KernelGroup &kernel_group, const std::string &binary_path) {
+    if (kernel_group.compute != nullptr) {
+        kernel_group.compute->set_binaries(binary_path);
+    }
+    TT_ASSERT(kernel_group.riscv_0 != nullptr and kernel_group.riscv_1 != nullptr);
+    kernel_group.riscv_0->set_binaries(binary_path);
+    kernel_group.riscv_1->set_binaries(binary_path);
+}
+
 bool CompileProgram(Device *device, Program &program, bool profile_kernel) {
     bool pass = true;
     tt_metal_profiler.markStart("CompileProgram");
@@ -723,8 +781,7 @@ bool CompileProgram(Device *device, Program &program, bool profile_kernel) {
     TT_ASSERT(!(profile_kernel && tt_is_print_server_running()), "Debug print server is running, profiling is not allowed");
     tt_set_profiler_state_for_debug_print(profile_kernel);
 
-    std::string out_dir_path = tt::utils::get_root_dir() + "/built_kernels/";
-    CompileBlankKernel(device, out_dir_path); // PROF_BEGIN("CCBLANK") PROF_END("CCBLANK")
+    CompileBlankKernel(device); // PROF_BEGIN("CCBLANK") PROF_END("CCBLANK")
 
     // Compute kernels generate dependencies for data movement kernels
     // Kernels running on a core need to be grouped together for compilation
@@ -742,14 +799,12 @@ bool CompileProgram(Device *device, Program &program, bool profile_kernel) {
         build_kernel_for_riscv_options_t build_options("dummy_type", dummy_op_name + std::to_string(op_idx++));
 
         auto kernel_group_hash = KernelGroupCompileHash(kernel_group, logical_core, dummy_op_name, device->pcie_slot());
-        std::string op_path = out_dir_path + dummy_op_name + "/" + std::to_string(kernel_group_hash);
+        std::string op_path = dummy_op_name + "/" + std::to_string(kernel_group_hash);
 
         SetCircularBufferDataFormat(program, logical_core, build_options, op_path);
 
         string root_dir = tt::utils::get_root_dir();
-        ConfigureForCompilation(kernel_group.compute, build_options, logical_core, op_path);
-        ConfigureForCompilation(kernel_group.riscv_0, build_options, logical_core, op_path);
-        ConfigureForCompilation(kernel_group.riscv_1, build_options, logical_core, op_path);
+        SetBuildKernelOptions(kernel_group, logical_core, build_options, op_path);
 
         if (HashLookup::inst().exists(kernel_group_hash)) {
             //std::cout << "--- Kernel Cache hit" << std::endl;
@@ -769,6 +824,7 @@ bool CompileProgram(Device *device, Program &program, bool profile_kernel) {
             //    cout << "======= Compiling" << std::endl;
             // PROF_BEGIN("CCGEN_BIN")
             GenerateBinaries(device, &build_options, op_path, profile_kernel, kernel_group, logical_core);
+            SetBinaries(kernel_group, op_path);
             // PROF_END("CCGEN_BIN")
         } else {
             //if (enable_compile_cache)
@@ -846,8 +902,7 @@ bool ConfigureDeviceWithProgram(Device *device, const Program &program) {
 
 bool WriteRuntimeArgsToDevice(Device *device, DataMovementKernel *kernel, const CoreCoord &logical_core, const std::vector<uint32_t> &runtime_args) {
     bool pass = true;
-    auto &kernel_args = kernel->kernel_args();
-    kernel_args.set_runtime_args(logical_core, runtime_args);
+    kernel->set_runtime_args(logical_core, runtime_args);
     kernel->write_runtime_args_to_device(device, logical_core);
     return pass;
 }

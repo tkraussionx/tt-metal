@@ -3,10 +3,9 @@
 #include <vector>
 #include <map>
 
+#include "build_kernels_for_riscv/build_kernel_options.hpp"
 #include "common/base_types.hpp"
 #include "tt_metal/impl/device/device.hpp"
-#include "tt_metal/impl/kernels/kernel_args.hpp"
-#include "build_kernels_for_riscv/build_kernel_options.hpp"
 
 namespace tt {
 
@@ -32,17 +31,15 @@ enum class KernelType {
 std::ostream& operator<<(std::ostream& os, const DataMovementProcessor& processor);
 std::ostream& operator<<(std::ostream& os, const KernelType& type);
 
-class Kernel;
-
-void ConfigureForCompilation(Kernel *kernel, build_kernel_for_riscv_options_t &build_options, const CoreCoord &logical_core, const std::string &out_dir_path);
+struct KernelGroup;
 
 class Kernel {
    public:
     Kernel(const std::string &kernel_path_file_name, const CoreRangeSet &core_range_set, KernelType kernel_type) :
         kernel_path_file_name_(kernel_path_file_name), core_range_set_(core_range_set), kernel_type_(kernel_type) {}
 
-    Kernel(const std::string &kernel_path_file_name, const CoreRangeSet &core_range_set, const KernelArgs &kernel_args, KernelType kernel_type) :
-        kernel_path_file_name_(kernel_path_file_name), core_range_set_(core_range_set), kernel_args_(kernel_args), kernel_type_(kernel_type) {}
+    Kernel(const std::string &kernel_path_file_name, const CoreRangeSet &core_range_set, const std::vector<uint32_t> &compile_args, KernelType kernel_type) :
+        kernel_path_file_name_(kernel_path_file_name), core_range_set_(core_range_set), compile_time_args_(compile_args), kernel_type_(kernel_type) {}
 
     virtual ~Kernel() {}
 
@@ -60,15 +57,17 @@ class Kernel {
 
     std::string binary_path(const CoreCoord &logical_core) const;
 
-    KernelArgs &kernel_args() { return kernel_args_; }
+    std::vector<ll_api::memory> const &binaries() const;
 
-    const KernelArgs &kernel_args() const { return kernel_args_; }
+    std::vector<uint32_t> compile_time_args() const { return compile_time_args_; }
 
-    std::vector<uint32_t> compile_time_args(const CoreCoord &logical_core) const;
+    size_t compile_time_args_hash() const;
+
+    std::map<std::string, std::string> defines() const { return defines_; }
 
     std::vector<uint32_t> runtime_args(const CoreCoord &logical_core) const;
 
-    size_t compile_time_args_hash(const CoreCoord &logical_core) const;
+    void set_runtime_args(const CoreCoord &logical_core, const std::vector<uint32_t> runtime_args);
 
     virtual bool configure(Device *device, const CoreCoord &logical_core) const = 0;
 
@@ -83,15 +82,17 @@ class Kernel {
     std::string kernel_path_file_name_;                 // Full kernel path and file name
     CoreRangeSet core_range_set_;
     KernelType kernel_type_;
-    std::map<CoreCoord, std::string> binary_path_;     //
-    KernelArgs kernel_args_;
+    std::map<CoreCoord, std::string> binary_path_;
+    std::vector<ll_api::memory> binaries_;      // DataMovement kernels have one binary each and Compute kernels have three binaries
+    std::vector<uint32_t> compile_time_args_;
+    std::map<CoreCoord, std::vector<uint32_t>> core_to_runtime_args_;
     std::map<std::string, std::string> defines_; // preprocessor defines. this is to be able to generate generic instances.
 
     void set_binary_path(const CoreCoord &logical_core, const std::string &binary_path) { binary_path_.insert({logical_core, binary_path}); }
+    friend void SetBuildKernelOptions(const KernelGroup &kernel_group, const CoreCoord &logical_core, build_kernel_for_riscv_options_t &build_options, const std::string &binary_path);
 
-    virtual void configure_for_compilation(build_kernel_for_riscv_options_t &build_options, const CoreCoord &logical_core, const std::string &out_dir_path) = 0;
-
-    friend void ConfigureForCompilation(Kernel *kernel, build_kernel_for_riscv_options_t &build_options, const CoreCoord &logical_core, const std::string &out_dir_path);
+    void set_binaries(const std::string &binary_path);
+    friend void SetBinaries(const KernelGroup &kernel_group, const std::string &binary_path);
 };
 
 class DataMovementKernel : public Kernel {
@@ -108,10 +109,10 @@ class DataMovementKernel : public Kernel {
     DataMovementKernel(
         const std::string &kernel_path_file_name,
         const CoreRangeSet &core_range_set,
-        const KernelArgs &kernel_args,
+        const std::vector<uint32_t> &compile_args,
         DataMovementProcessor processor,
         NOC noc) :
-        Kernel(kernel_path_file_name, core_range_set, kernel_args, KernelType::DataMovement),
+        Kernel(kernel_path_file_name, core_range_set, compile_args, KernelType::DataMovement),
         processor_(processor),
         noc_(noc) {}
 
@@ -127,10 +128,10 @@ class DataMovementKernel : public Kernel {
     DataMovementKernel(
         const std::string &kernel_path_file_name,
         const CoreRange &core_range,
-        const KernelArgs &kernel_args,
+        const std::vector<uint32_t> &compile_args,
         DataMovementProcessor processor,
         NOC noc) :
-        Kernel(kernel_path_file_name, CoreRangeSet({core_range}), kernel_args, KernelType::DataMovement),
+        Kernel(kernel_path_file_name, CoreRangeSet({core_range}), compile_args, KernelType::DataMovement),
         processor_(processor),
         noc_(noc) {}
 
@@ -146,10 +147,10 @@ class DataMovementKernel : public Kernel {
     DataMovementKernel(
         const std::string &kernel_path_file_name,
         const CoreCoord &core,
-        const KernelArgs &kernel_args,
+        const std::vector<uint32_t> &compile_args,
         DataMovementProcessor processor,
         NOC noc) :
-        Kernel(kernel_path_file_name, CoreRangeSet({CoreRange{.start=core, .end=core}}), kernel_args, KernelType::DataMovement),
+        Kernel(kernel_path_file_name, CoreRangeSet({CoreRange{.start=core, .end=core}}), compile_args, KernelType::DataMovement),
         processor_(processor),
         noc_(noc) {}
 
@@ -162,8 +163,6 @@ class DataMovementKernel : public Kernel {
     bool configure(Device *device, const CoreCoord &logical_core) const;
 
    private:
-    void configure_for_compilation(build_kernel_for_riscv_options_t &build_options, const CoreCoord &logical_core, const std::string &out_dir_path);
-
     void write_runtime_args_to_device(Device *device, const CoreCoord &logical_core) const;
 
     friend bool WriteRuntimeArgsToDevice(Device *device, DataMovementKernel *kernel, const CoreCoord &logical_core, const std::vector<uint32_t> &runtime_args);
@@ -177,11 +176,11 @@ class ComputeKernel : public Kernel {
     ComputeKernel(
         const std::string &kernel_path_file_name,
         const CoreRangeSet &core_range_set,
-        const KernelArgs &kernel_args,
+        const std::vector<uint32_t> &compile_args,
         MathFidelity math_fidelity,
         bool fp32_dest_acc_en,
         bool math_approx_mode) :
-        Kernel(kernel_path_file_name, core_range_set, kernel_args, KernelType::Compute),
+        Kernel(kernel_path_file_name, core_range_set, compile_args, KernelType::Compute),
         math_fidelity_(math_fidelity),
         fp32_dest_acc_en_(fp32_dest_acc_en),
         math_approx_mode_(math_approx_mode) {}
@@ -189,11 +188,11 @@ class ComputeKernel : public Kernel {
     ComputeKernel(
         const std::string &kernel_path_file_name,
         const CoreRange &core_range,
-        const KernelArgs &kernel_args,
+        const std::vector<uint32_t> &compile_args,
         MathFidelity math_fidelity,
         bool fp32_dest_acc_en,
         bool math_approx_mode) :
-        Kernel(kernel_path_file_name, CoreRangeSet({core_range}), kernel_args, KernelType::Compute),
+        Kernel(kernel_path_file_name, CoreRangeSet({core_range}), compile_args, KernelType::Compute),
         math_fidelity_(math_fidelity),
         fp32_dest_acc_en_(fp32_dest_acc_en),
         math_approx_mode_(math_approx_mode) {}
@@ -201,11 +200,11 @@ class ComputeKernel : public Kernel {
     ComputeKernel(
         const std::string &kernel_path_file_name,
         const CoreCoord &core,
-        const KernelArgs &kernel_args,
+        const std::vector<uint32_t> &compile_args,
         MathFidelity math_fidelity,
         bool fp32_dest_acc_en,
         bool math_approx_mode) :
-        Kernel(kernel_path_file_name, CoreRangeSet({CoreRange{.start=core, .end=core}}), kernel_args, KernelType::Compute),
+        Kernel(kernel_path_file_name, CoreRangeSet({CoreRange{.start=core, .end=core}}), compile_args, KernelType::Compute),
         math_fidelity_(math_fidelity),
         fp32_dest_acc_en_(fp32_dest_acc_en),
         math_approx_mode_(math_approx_mode) {}
@@ -214,12 +213,24 @@ class ComputeKernel : public Kernel {
 
     bool configure(Device *device, const CoreCoord &logical_core) const;
 
-   private:
-    void configure_for_compilation(build_kernel_for_riscv_options_t &build_options, const CoreCoord &logical_core, const std::string &out_dir_path);
+    MathFidelity math_fidelity() const { return math_fidelity_; }
 
+    bool fp32_dest_acc_en() const { return fp32_dest_acc_en_; }
+
+    bool math_approx_mode() const { return math_approx_mode_; }
+
+   private:
     MathFidelity math_fidelity_;  // Math fidelity
     bool fp32_dest_acc_en_;       //
     bool math_approx_mode_;       // Run math in approx mode
+};
+
+struct KernelDefinesHash {
+    KernelDefinesHash(const CoreCoord &core) : logical_core{core} { }
+
+    size_t operator()(const std::map<std::string, std::string> &c_defines) const;
+
+    CoreCoord logical_core;
 };
 
 }  // namespace tt_metal

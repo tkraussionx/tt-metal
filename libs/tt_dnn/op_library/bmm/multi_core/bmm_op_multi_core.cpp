@@ -69,7 +69,7 @@ Tensor matmul_multi_core_(const Tensor &a, const Tensor &b, bool bcast_batch) {
     else {
         TT_ASSERT(ashape[1] == bshape[1] && ashape[0] == bshape[0] && "Channel and batch dimensions must match in bmm op (non-bcast)");
     }
-    TT_ASSERT(ashape[3] == bshape[2] && "Dimension K (A.shape[2] and B.shape[3]) must match for A and B in bmm_op"); // A.K == B.K
+    TT_ASSERT(ashape[3] == bshape[2] && "Dimension K (A.shape[3] and B.shape[2]) must match for A and B in bmm_op"); // A.K == B.K
     TT_ASSERT(ashape[2] % TILE_HEIGHT == 0);
     TT_ASSERT(ashape[3] % TILE_WIDTH == 0);
     TT_ASSERT(bshape[2] % TILE_HEIGHT == 0);
@@ -122,12 +122,12 @@ Tensor matmul_multi_core_(const Tensor &a, const Tensor &b, bool bcast_batch) {
         );
 
         bool tile_size_is_power_of_two = (ceil(log2(single_tile_size)) == floor(log2(single_tile_size)));
-        tt_metal::KernelArgs reader_writer_compile_time_args;
+        std::vector<uint32_t> reader_writer_compile_time_args;
         if (tile_size_is_power_of_two) {
             // Use the fast stick size power of 2 path (get noc addr uses just shift operations, no slow multiply algorithm)
-            reader_writer_compile_time_args = tt_metal::KernelArgs(core, {1, (std::uint32_t)log2(single_tile_size)});
+            reader_writer_compile_time_args = {1, (std::uint32_t)log2(single_tile_size)};
         } else {
-            reader_writer_compile_time_args = tt_metal::KernelArgs(core, {0, 0});
+            reader_writer_compile_time_args = {0, 0};
         }
 
         auto reader = tt_metal::CreateDataMovementKernel(
@@ -146,7 +146,6 @@ Tensor matmul_multi_core_(const Tensor &a, const Tensor &b, bool bcast_batch) {
             Kt, // Kt
             num_output_tiles_per_core[i] // Nt
         }; // bmm compute kernel the B, Mt, Nt are just 3 for loops that technically act as 1 large loop, so only set Nt for simplicity
-        tt_metal::KernelArgs eltwise_binary_args = tt_metal::KernelArgs(core, compute_args);
 
         bool fp32_dest_acc_en = false;
         bool math_approx_mode = false;
@@ -154,7 +153,7 @@ Tensor matmul_multi_core_(const Tensor &a, const Tensor &b, bool bcast_batch) {
             program,
             "tt_metal/kernels/compute/bmm.cpp",
             core,
-            eltwise_binary_args,
+            compute_args,
             math_fidelity,
             fp32_dest_acc_en,
             math_approx_mode

@@ -7,11 +7,11 @@
 #include "noc_parameters.h"
 #include "tensix.h"
 #include "risc.h"
-#include "l1_address_map.h"
 #include "eth_l1_address_map.h"
 #include "noc_overlay_parameters.h"
 #include "stream_io_map.h"
 #include "hostdevcommon/common_runtime_address_map.h"
+#include "limits.h"
 
 #define NOC_X(x) (loading_noc == 0 ? (x) : (noc_size_x-1-(x)))
 #define NOC_Y(y) (loading_noc == 0 ? (y) : (noc_size_y-1-(y)))
@@ -105,6 +105,31 @@ inline __attribute__((always_inline)) uint32_t buf_ptr_dec_wrap(uint32_t buf_ptr
   return result;
 }
 
+inline void l1_to_local_mem_copy(uint32_t *local_mem_addr, uint32_t *l1_addr, int32_t len) {
+    // Cover L1 load latency of 6 cycles for the bulk of the copy
+    int32_t n = 0;
+    while (n < len - 5) {
+        uint32_t v0 = l1_addr[n + 0];
+        uint32_t v1 = l1_addr[n + 1];
+        uint32_t v2 = l1_addr[n + 2];
+        uint32_t v3 = l1_addr[n + 3];
+        uint32_t v4 = l1_addr[n + 4];
+        uint32_t v5 = l1_addr[n + 5];
+        local_mem_addr[n + 0] = v0;
+        local_mem_addr[n + 1] = v1;
+        local_mem_addr[n + 2] = v2;
+        local_mem_addr[n + 3] = v3;
+        local_mem_addr[n + 4] = v4;
+        local_mem_addr[n + 5] = v5;
+        n += 6;
+    }
+    // Could optimize this further (eg, loop of 2 or 4), probably not worth it
+    while (n < len) {
+        local_mem_addr[n] = l1_addr[n];
+        n++;
+    }
+}
+
 inline uint32_t reg_read_barrier(uint32_t addr)
 {
     volatile uint32_t *p_reg = reinterpret_cast<volatile uint32_t *> (addr);
@@ -113,7 +138,7 @@ inline uint32_t reg_read_barrier(uint32_t addr)
     return data;
 }
 
-inline __attribute__((section("code_l1"))) uint32_t reg_read_barrier_l1(uint32_t addr)
+inline uint32_t reg_read_barrier_l1(uint32_t addr)
 {
     volatile uint32_t *p_reg = reinterpret_cast<volatile uint32_t *> (addr);
     uint32_t data = p_reg[0];
@@ -164,9 +189,72 @@ inline __attribute__((always_inline)) unsigned int mulsi3 (unsigned int a, unsig
   return r;
 }
 
+inline __attribute__((always_inline)) uint32_t fast_udiv_12(uint32_t n)
+{
+    // Uses embedding style magic number
+    // * fixed point 1/12 then shifting.
+    // https://web.archive.org/web/20190703172151/http://www.hackersdelight.org/magic.htm
+    return (((uint64_t) n * 0xAAAAAAAB) >> 32) >> 3;
+}
+
+template <uint32_t d>
+inline __attribute__((always_inline)) uint32_t udivsi3_const_divisor(uint32_t n)
+{
+    if constexpr (d == 12) {
+        // fast divide for 12 divisor
+        return fast_udiv_12(n);
+    } else {
+        // generic divide from llvm
+        const unsigned n_uword_bits = sizeof(uint32_t) * CHAR_BIT;
+        unsigned int q;
+        unsigned int r;
+        unsigned sr;
+        /* special cases */
+        if (d == 0)
+            return 0; /* ?! */
+        if (n == 0)
+            return 0;
+        sr = __builtin_clz(d) - __builtin_clz(n);
+        /* 0 <= sr <= n_uword_bits - 1 or sr large */
+        if (sr > n_uword_bits - 1)  /* d > r */
+            return 0;
+        if (sr == n_uword_bits - 1)  /* d == 1 */
+            return n;
+        ++sr;
+        /* 1 <= sr <= n_uword_bits - 1 */
+        /* Not a special case */
+        q = n << (n_uword_bits - sr);
+        r = n >> sr;
+        unsigned int  carry = 0;
+        for (; sr > 0; --sr)
+        {
+            /* r:q = ((r:q)  << 1) | carry */
+            r = (r << 1) | (q >> (n_uword_bits - 1));
+            q = (q << 1) | carry;
+            /* carry = 0;
+             * if (r.all >= d.all)
+             * {
+             *      r.all -= d.all;
+             *      carry = 1;
+             * }
+             */
+            const int s = (unsigned int)(d - r - 1) >> (n_uword_bits - 1);
+            carry = s & 1;
+            r -= d & s;
+        }
+        q = (q << 1) | carry;
+        return q;
+    }
+}
+template <uint32_t d>
+inline __attribute__((always_inline)) uint32_t umodsi3_const_divisor(uint32_t a)
+{
+    return a - udivsi3_const_divisor<d>(a) * d;
+}
+
 void risc_init();
 void replicate(uint32_t noc_id, uint32_t src_addr, uint64_t dest_addr, uint32_t chunk_size_bytes, uint32_t times_to_replicate);
-void __attribute__((section("code_l1"))) replicate_l1(uint32_t noc_id, uint32_t src_addr, uint64_t dest_addr, uint32_t chunk_size_bytes, uint32_t times_to_replicate);
+void replicate_l1(uint32_t noc_id, uint32_t src_addr, uint64_t dest_addr, uint32_t chunk_size_bytes, uint32_t times_to_replicate);
 void tile_header_buffer_init();
 
 // This call blocks until NCRISC indicates that all epoch start state

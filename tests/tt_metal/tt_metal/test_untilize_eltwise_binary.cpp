@@ -74,11 +74,23 @@ int main(int argc, char **argv) {
     log_info(LogTest, "======= Running eltwise_binary test for op={}", op_id_to_op_name[eltwise_op]);
     try {
         ////////////////////////////////////////////////////////////////////////////
-        //                      Grayskull Device Setup
+        //                      Initial Runtime Args Parse
+        ////////////////////////////////////////////////////////////////////////////
+        std::vector<std::string> input_args(argv, argv + argc);
+        string arch_name = "";
+        try {
+            std::tie(arch_name, input_args) =
+                test_args::get_command_option_and_remaining_args(input_args, "--arch", "grayskull");
+        } catch (const std::exception& e) {
+            log_fatal(tt::LogTest, "Command line arguments found exception", e.what());
+        }
+        const tt::ARCH arch = tt::get_arch_from_string(arch_name);
+        ////////////////////////////////////////////////////////////////////////////
+        //                      Device Setup
         ////////////////////////////////////////////////////////////////////////////
         int pci_express_slot = 0;
         tt_metal::Device *device =
-            tt_metal::CreateDevice(tt::ARCH::GRAYSKULL, pci_express_slot);
+            tt_metal::CreateDevice(arch, pci_express_slot);
 
         pass &= tt_metal::InitializeDevice(device);;
 
@@ -193,7 +205,6 @@ int main(int argc, char **argv) {
             num_tiles_r,
             num_tiles_c
         };
-        tt_metal::KernelArgs eltwise_binary_args = tt_metal::KernelArgs(core, compute_kernel_args);
 
         bool fp32_dest_acc_en = false;
         bool math_approx_mode = false;
@@ -201,7 +212,7 @@ int main(int argc, char **argv) {
             program,
             "tt_metal/kernels/compute/untilA_elwbin_3m.cpp",
             core,
-            eltwise_binary_args,
+            compute_kernel_args,
             MathFidelity::HiFi4,
             fp32_dest_acc_en,
             math_approx_mode

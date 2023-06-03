@@ -76,10 +76,23 @@ int main(int argc, char **argv) {
     log_info(LogTest, "======= Running bcast test for bdim={}, op={}", bdim_to_log_string[bcast_dim], op_id_to_op_name[bcast_op]);
     try {
         ////////////////////////////////////////////////////////////////////////////
-        //                      Grayskull Device Setup
+        //                      Initial Runtime Args Parse
+        ////////////////////////////////////////////////////////////////////////////
+        std::vector<std::string> input_args(argv, argv + argc);
+        string arch_name = "";
+        try {
+            std::tie(arch_name, input_args) =
+                test_args::get_command_option_and_remaining_args(input_args, "--arch", "grayskull");
+        } catch (const std::exception& e) {
+            log_fatal(tt::LogTest, "Command line arguments found exception", e.what());
+        }
+        const tt::ARCH arch = tt::get_arch_from_string(arch_name);
+        ////////////////////////////////////////////////////////////////////////////
+        //                      Device Setup
         ////////////////////////////////////////////////////////////////////////////
         int pci_express_slot = 0;
-        tt_metal::Device *device = tt_metal::CreateDevice(tt::ARCH::GRAYSKULL, pci_express_slot);
+        tt_metal::Device *device =
+            tt_metal::CreateDevice(arch, pci_express_slot);
 
         pass &= tt_metal::InitializeDevice(device);;
 
@@ -272,15 +285,13 @@ int main(int argc, char **argv) {
             uint(Wt)
         };
 
-        tt_metal::KernelArgs compute_args = tt_metal::KernelArgs(core, compute_kernel_args);
-
         bool fp32_dest_acc_en = false;
         bool math_approx_mode = false;
         auto eltwise_binary_kernel = tt_metal::CreateComputeKernel(
             program,
             get_compute_name(bcast_dim),
             core,
-            compute_args,
+            compute_kernel_args,
             MathFidelity::HiFi4,
             fp32_dest_acc_en,
             math_approx_mode

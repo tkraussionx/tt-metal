@@ -8,11 +8,11 @@
 
 #include "build_kernels_for_riscv/build_kernels_for_riscv.hpp"
 #include "dev_mem_map.h"
-#include "l1_address_map.h"
 #include "hostdevcommon/common_runtime_address_map.h"
 
 using namespace std;
 using namespace tt;
+
 
 std::string RISCID_to_string(RISCID id) {
     switch (id) {
@@ -25,23 +25,6 @@ std::string RISCID_to_string(RISCID id) {
     }
     return string();
 }
-
-struct CompileDefines {
-    RISCID           hwthread               { RISCID::NC }; // 0=NC, 1=UNPACK, BR=4
-    uint32_t         mailbox_addr           { 0 };
-    uint32_t         perf_dump_level        { 0 };
-    uint32_t         noc_index              { 0 };
-    bool             firmware               { false };
-    bool             profile_kernel         { false };
-    vector<uint32_t> compile_time_args;
-    string           kernel_inc;
-    ARCH             arch                   { ARCH::GRAYSKULL };
-    map<std::string, std::string> kernel_defines;
-
-    bool is_trisc() const { return (hwthread >= RISCID::TR0) && (hwthread <= RISCID::TR2); }
-    bool is_brisc() const { return hwthread == RISCID::BR; }
-    bool is_ncrisc() const { return hwthread == RISCID::NC; }
-};
 
 struct TriscParams {
     // TODO: commonize this with runtime_common.hpp?
@@ -71,61 +54,91 @@ struct TriscParams {
     }
 };
 
-struct CompileContext {
+struct CompileState {
+    RISCID           hwthread               { RISCID::NC }; // 0=NC, 1=UNPACK, BR=4
+    uint32_t         mailbox_addr           { 0 };
+    uint32_t         perf_dump_level        { 0 };
+    uint32_t         noc_index              { 0 };
+    bool             firmware               { false };
+    bool             profile_kernel         { false };
+    vector<uint32_t> compile_time_args;
+    string           kernel_inc;
+    ARCH             arch                   { ARCH::GRAYSKULL };
+    map<std::string, std::string> kernel_defines;
     string home_;
     string gpp_           { "/tt_metal/src/ckernels/sfpi/compiler/bin/riscv32-unknown-elf-g++ " };
     string gcc_           { "/tt_metal/src/ckernels/sfpi/compiler/bin/riscv32-unknown-elf-gcc " }; // TODO(AP): this wasn't really necessary for assembler
     string objcopy_       { "/tt_metal/src/ckernels/sfpi/compiler/bin/riscv32-unknown-elf-objcopy " };
-    string kernel_subdir_; // full path to kernel subdir
+    string kernel_subdir_;
+    string thread_bin_subdir;
+    string log_file;
 
-    CompileContext(const string& kernel_subdir) {
-        home_ = std::getenv("TT_METAL_HOME");
-        TT_ASSERT(home_.size() > 0);
+    CompileState(RISCID risc_id,
+                 const string& in_kernel_subdir,
+                 tt::build_kernel_for_riscv_options_t* build_opts) {
+
+        home_ = tt::utils::get_root_dir();
         if (home_.back() != '/')
             home_.push_back('/');
-        kernel_subdir_ = kernel_subdir; // example: "eltwise_binary_writer_unary_8bank_reader_dual_8bank/7036516950107541145"
+        kernel_subdir_ = build_opts->outpath + in_kernel_subdir;
         gpp_ = home_ + gpp_;
         gcc_ = home_ + gcc_;
         objcopy_ = home_ + objcopy_;
+
+        // this is in the top-level outdir because "/ncrisc" is deleted by make clean, but we log the output of make clean as well
+        log_file = fs::absolute(kernel_subdir_).string() + "/risc_build_" + RISCID_to_string(risc_id) + ".log";
+        utils::create_file(log_file);
+
+        switch (risc_id) {
+            case RISCID::NC: thread_bin_subdir = "/ncrisc/"; break;
+            case RISCID::BR: thread_bin_subdir = "/brisc/"; break;
+            case RISCID::TR0: thread_bin_subdir = "/tensix_thread0/"; break;
+            case RISCID::TR1: thread_bin_subdir = "/tensix_thread1/"; break;
+            case RISCID::TR2: thread_bin_subdir = "/tensix_thread2/"; break;
+        }
     }
 
-    ~CompileContext() {
+    ~CompileState() {
     }
 
-    string generate_includes(const CompileDefines& defs) {
+    bool is_trisc() const { return (hwthread >= RISCID::TR0) && (hwthread <= RISCID::TR2); }
+    bool is_brisc() const { return hwthread == RISCID::BR; }
+    bool is_ncrisc() const { return hwthread == RISCID::NC; }
+
+    string generate_includes() const {
         vector<string> includes; // relative to home_
         vector<string> includes_abs; // absolute
-        if (defs.is_trisc()) {
+        if (is_trisc()) {
             // TODO(AP): allocating the vec every time is suboptimal
             includes = move(vector<string>({
                 "",
-                "tt_metal/src/ckernels/" + get_string_lowercase(defs.arch) + "/llk_lib/",
-                "tt_metal/src/ckernels/" + get_string_lowercase(defs.arch) + "/common/inc",
+                "tt_metal/src/ckernels/" + get_string_lowercase(arch) + "/llk_lib/",
+                "tt_metal/src/ckernels/" + get_string_lowercase(arch) + "/common/inc",
                 "tt_metal/src/ckernels/sfpi/include",
-                "tt_metal/src/ckernels/sfpi/include/" + get_string_aliased_arch_lowercase(defs.arch),
+                "tt_metal/src/ckernels/sfpi/include/" + get_string_aliased_arch_lowercase(arch),
                 "tt_metal/src/firmware/riscv/common",
-                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch) + "/noc",
-                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch),
-                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch) + "/" + get_string_lowercase(defs.arch) + "_defines",
+                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(arch) + "/noc",
+                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(arch),
+                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(arch) + "/" + get_string_lowercase(arch) + "_defines",
                 "tt_metal",
-                "build/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch) + "/noc", // TODO(AP): this looks wrong, but nonetheless matches the old makefile for TRISCS
+                "build/src/firmware/riscv/" + get_string_aliased_arch_lowercase(arch) + "/noc", // TODO(AP): this looks wrong, but nonetheless matches the old makefile for TRISCS
                 "build/src/ckernels/gen/out", // TODO(AP): same as above - point into build where there's no src/
-                "build/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch),
-                "build/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch) + "/" + get_string_lowercase(defs.arch) + "_defines",
+                "build/src/firmware/riscv/" + get_string_aliased_arch_lowercase(arch),
+                "build/src/firmware/riscv/" + get_string_aliased_arch_lowercase(arch) + "/" + get_string_lowercase(arch) + "_defines",
             }));
             includes_abs.push_back(kernel_subdir_);
-        } else if (defs.is_brisc()) {
+        } else if (is_brisc()) {
             includes = move(vector<string>({
                 "",
-                "tt_metal/src/ckernels/" + get_string_lowercase(defs.arch) + "/common/inc",
+                "tt_metal/src/ckernels/" + get_string_lowercase(arch) + "/common/inc",
                 "tt_metal/src/ckernels/sfpi/include",
-                "tt_metal/src/ckernels/sfpi/include/" + get_string_aliased_arch_lowercase(defs.arch),
+                "tt_metal/src/ckernels/sfpi/include/" + get_string_aliased_arch_lowercase(arch),
                 "tt_metal/src/firmware/riscv/common",
-                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch),
-                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch) + "/" + get_string_lowercase(defs.arch) + "_defines",
-                "build/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch),
-                "build/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch) + "/" + get_string_lowercase(defs.arch) + "_defines",
-                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch) + "/noc",
+                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(arch),
+                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(arch) + "/" + get_string_lowercase(arch) + "_defines",
+                "build/src/firmware/riscv/" + get_string_aliased_arch_lowercase(arch),
+                "build/src/firmware/riscv/" + get_string_aliased_arch_lowercase(arch) + "/" + get_string_lowercase(arch) + "_defines",
+                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(arch) + "/noc",
                 "tt_metal/src/firmware/riscv/targets/brisc",
                 "tt_metal"}
             ));
@@ -133,13 +146,13 @@ struct CompileContext {
         } else {
             includes = move(vector<string>({
                 "",
-                "tt_metal/src/ckernels/" + get_string_lowercase(defs.arch) + "/common/inc",
+                "tt_metal/src/ckernels/" + get_string_lowercase(arch) + "/common/inc",
                 "tt_metal/src/ckernels/sfpi/include",
-                "tt_metal/src/ckernels/sfpi/include/" + get_string_aliased_arch_lowercase(defs.arch),
+                "tt_metal/src/ckernels/sfpi/include/" + get_string_aliased_arch_lowercase(arch),
                 "tt_metal/src/firmware/riscv/common",
-                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch),
-                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch) + "/" + get_string_lowercase(defs.arch) + "_defines",
-                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch) + "/noc",
+                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(arch),
+                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(arch) + "/" + get_string_lowercase(arch) + "_defines",
+                "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(arch) + "/noc",
                 "tt_metal/src/firmware/riscv/targets/ncrisc",
                 "tt_metal"}
             ));
@@ -157,21 +170,21 @@ struct CompileContext {
         // in general this first pass conversion to c++ compiler driver just replicates the Makefile cmdlines verbatim
         // but it looks like a lot of the include paths in the original Makefile were intermixed in unintended ways
         vector<string> iquote_includes_abs;
-        if (defs.is_brisc() || defs.is_ncrisc()) {
+        if (is_brisc() || is_ncrisc()) {
             iquote_includes_abs.push_back("/tt_metal/src/firmware/riscv/common/");
-            iquote_includes_abs.push_back("/tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch) + "/");
-            iquote_includes_abs.push_back("/tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch) + "/" + get_string_lowercase(defs.arch) + "_defines/");
-            if (!defs.is_ncrisc()) // TODO(AP): cleanup, looks like some quirk of original Makefile
-                iquote_includes_abs.push_back("/tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch) + "/noc/");
+            iquote_includes_abs.push_back("/tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(arch) + "/");
+            iquote_includes_abs.push_back("/tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(arch) + "/" + get_string_lowercase(arch) + "_defines/");
+            if (!is_ncrisc()) // TODO(AP): cleanup, looks like some quirk of original Makefile
+                iquote_includes_abs.push_back("/tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(arch) + "/noc/");
         }
         for (auto s: iquote_includes_abs)
             result += " -iquote " + home_ + s;
 
         vector<string> iquote_includes;
-        if (defs.is_trisc()) {
+        if (is_trisc()) {
             iquote_includes.push_back("tt_metal/src/");
             iquote_includes.push_back(".");
-        } else if (defs.is_brisc() || defs.is_ncrisc()) {
+        } else if (is_brisc() || is_ncrisc()) {
             iquote_includes.push_back(".");
         }
         for (auto s: iquote_includes)
@@ -179,16 +192,16 @@ struct CompileContext {
         return result;
     }
 
-    string generate_gpp_options(const CompileDefines& defs, bool is_asm) {
+    string generate_gpp_options(bool is_asm) const {
         string options_string =
-            " -march=rv32i -mabi=ilp32 \"-m" + get_string_aliased_arch_lowercase(defs.arch) + "\" -MD -MP -flto -ffast-math -g -Wall -Werror";
+            " -march=rv32i -mabi=ilp32 \"-m" + get_string_aliased_arch_lowercase(arch) + "\" -MD -MP -flto -ffast-math -g -Wall -Werror";
         if (!is_asm) // TODO(AP): wasn't necessary to split for assembler
             options_string +=
                 " -std=c++17 -Wno-unknown-pragmas -fno-use-cxa-atexit "
                 " -Wno-error=multistatement-macros -Wno-error=parentheses "
                 " -Wno-error=unused-but-set-variable -Wno-unused-variable -fno-exceptions ";
         string result = "";
-        switch  (defs.hwthread) {
+        switch  (hwthread) {
             case RISCID::NC:
                 result += " -Os";
             break;
@@ -205,10 +218,10 @@ struct CompileContext {
         return result;
     }
 
-    string generate_defines(const CompileDefines& defs) {
+    string generate_defines() const {
         string result = "";
         string arch_define = "";
-        switch (defs.arch) {
+        switch (arch) {
             case ARCH::GRAYSKULL:
                 arch_define = " -DARCH_GRAYSKULL";
                 break;
@@ -219,7 +232,7 @@ struct CompileContext {
             default:
                 break;
         }
-        switch (defs.hwthread) {
+        switch (hwthread) {
             case RISCID::NC:
                 result += " -DCOMPILE_FOR_NCRISC ";
             break;
@@ -244,35 +257,31 @@ struct CompileContext {
             default: break;
         }
 
-        if (defs.is_ncrisc() or defs.is_brisc()) {
-            for (const auto &[def, val]: defs.kernel_defines)
+        if (is_ncrisc() or is_brisc()) {
+            for (const auto &[def, val]: kernel_defines)
                 result += " -D" + def + "=" + val + " ";
         }
 
-        if (defs.mailbox_addr != 0)
-            result += " -DMAILBOX_ADDR=" + to_string(defs.mailbox_addr);
-        if (defs.perf_dump_level != 0 || defs.is_trisc()) // TODO(AP): double check
-            result += " -DPERF_DUMP_LEVEL=" + to_string(defs.perf_dump_level);
+        if (mailbox_addr != 0)
+            result += " -DMAILBOX_ADDR=" + to_string(mailbox_addr);
+        if (perf_dump_level != 0 || is_trisc()) // TODO(AP): double check
+            result += " -DPERF_DUMP_LEVEL=" + to_string(perf_dump_level);
         result += " -DTENSIX_FIRMWARE"; // TODO(AP): verify where firmware flag comes from
-        if (defs.profile_kernel) {
+        if (profile_kernel) {
             result += " -DPROFILE_KERNEL=1";
         }
-        for (int j = 0; j < defs.compile_time_args.size(); j++)
-            result += " -DKERNEL_COMPILE_TIME_ARG_" + to_string(j) + "=" + to_string(defs.compile_time_args[j]);
-        if (!defs.is_trisc())
-            result += " -DNOC_INDEX=" + to_string(defs.noc_index);
-        if (defs.firmware)
+        for (int j = 0; j < compile_time_args.size(); j++)
+            result += " -DKERNEL_COMPILE_TIME_ARG_" + to_string(j) + "=" + to_string(compile_time_args[j]);
+        if (!is_trisc())
+            result += " -DNOC_INDEX=" + to_string(noc_index);
+        if (firmware)
             result += " -DTENSIX_FIRMWARE";
         result += " -DLOCAL_MEM_EN=0 ";
         return result;
     }
 
-    string get_compile_cmd(const CompileDefines& defs, const string& hwthread_name, const string& obj_name, const string& cpp_name)
+    string get_compile_cmd(const string& hwthread_name, const string& obj_name, const string& cpp_name) const
     {
-        //"-c -o /home/andrei/git/gp.ai/built_kernels/"
-        //ctx.kernel_name_has_str_ = eltwise_binary_writer_unary_8bank_reader_dual_8bank/7036516950107541145/
-        //"tensix_thread1/ckernel.o"
-        //src/ckernel.cc
         string gpp_str;
         bool is_asm = (cpp_name.find(".S") != std::string::npos);
         if (is_asm) // TODO(AP): wasn't necessary to split for assembler
@@ -280,15 +289,15 @@ struct CompileContext {
         else
             gpp_str = gpp_;
 
-        gpp_str += generate_gpp_options(defs, is_asm);
-        gpp_str += generate_includes(defs);
-        gpp_str += generate_defines(defs);
+        gpp_str += generate_gpp_options(is_asm);
+        gpp_str += generate_includes();
+        gpp_str += generate_defines();
         gpp_str += "-c -o " + kernel_subdir_ + hwthread_name + obj_name + " " + cpp_name;
         return gpp_str;
     }
 
-    vector<string> get_verilog_cmd(const CompileDefines& defs, const string& thread_name, const string& elfname) {
-        string hk = kernel_subdir_ + thread_name;
+    vector<string> get_verilog_cmd(const string& elfname) const {
+        string hk = kernel_subdir_ + thread_bin_subdir;
         string result = objcopy_ + " -O verilog " + hk + elfname + ".elf " + hk + elfname + ".hex.tmp";
         vector<string> results;
         results.push_back(result);
@@ -297,27 +306,27 @@ struct CompileContext {
         return results;
     }
 
-    vector<string> get_link_cmd(const CompileDefines& defs, const string& hwthread_name, const vector<string>& obj_names)
+    vector<string> get_link_cmd(const vector<string>& obj_names) const
     {
-        string linkopts = " -march=rv32i -mabi=ilp32 -m" + get_string_aliased_arch_lowercase(defs.arch) + " -flto -ffast-math -Wl,--gc-sections"
+        string linkopts = " -march=rv32i -mabi=ilp32 -m" + get_string_aliased_arch_lowercase(arch) + " -flto -ffast-math -Wl,--gc-sections"
                           " -Wl,-z,max-page-size=16 -Wl,-z,common-page-size=16 "
                           " -nostartfiles -g";
-        if (defs.is_trisc()) {
+        if (is_trisc()) {
             linkopts += " -fno-exceptions"; // TODO(AP): odd that this was not present for brisc in the Makefile
-        } else if (defs.is_brisc()) {
+        } else if (is_brisc()) {
             // TODO(AP): not on ncrisc, why?
             linkopts += " -fno-tree-loop-distribute-patterns";
         }
 
         if (getenv("TT_KERNEL_LINKER_MAP") != nullptr) {
-            linkopts += " -Wl,-Map=" + kernel_subdir_ + hwthread_name + "linker.map";
+            linkopts += " -Wl,-Map=" + kernel_subdir_ + thread_bin_subdir + "linker.map";
         }
 
         string hk = string(" ") + kernel_subdir_;
         string link_str = gpp_;
         link_str += " -L" + home_ + "/tt_metal/src/firmware/riscv/toolchain ";
         link_str += linkopts;
-        switch  (defs.hwthread) {
+        switch  (hwthread) {
             case RISCID::NC:
             link_str += " -Os";
             link_str += " -T" + home_ + "build/src/firmware/riscv/targets/ncrisc/out/ncrisc.ld "; break;
@@ -331,15 +340,15 @@ struct CompileContext {
             link_str += " -O3";
             link_str += " -T" + home_ + "build/src/ckernels/out/trisc2.ld "; break;
             default:
-            TT_ASSERT(defs.hwthread == RISCID::BR);
+            TT_ASSERT(hwthread == RISCID::BR);
             link_str += " -Os";
             link_str += " -T" + home_ + "build/src/firmware/riscv/targets/brisc/out/brisc.ld "; break;
         }
         for (auto oname: obj_names)
-            link_str += hk + hwthread_name + oname;
+            link_str += hk + thread_bin_subdir + oname;
 
         string elfname;
-        switch (defs.hwthread) {
+        switch (hwthread) {
             case RISCID::NC:
                 elfname = "ncrisc";
             break;
@@ -358,12 +367,12 @@ struct CompileContext {
             default: TT_ASSERT(false); break;
         }
         // add -o target.elf
-        link_str += " -o " + hk + hwthread_name + elfname + ".elf";
+        link_str += " -o " + hk + thread_bin_subdir + elfname + ".elf";
         return vector<string>({link_str, elfname});
     }
 };
 
-void generate_binary_for_risc(
+static CompileState pre_compile_for_risc(
     RISCID risc_id,
     tt::build_kernel_for_riscv_options_t* build_kernel_for_riscv_options,
     const std::string &out_dir_path,
@@ -377,106 +386,91 @@ void generate_binary_for_risc(
 
     log_trace(tt::LogBuildKernels, "Compiling RISCID={}", risc_id);
 
-    // this is in the top-level outdir because "/ncrisc" is deleted by make clean, but we log the output of make clean as well
-    string log_file = fs::absolute(out_dir_path).string() + "/risc_build_" + RISCID_to_string(risc_id) + ".log";
-    utils::create_file(log_file);
-
-    CompileContext ctx(out_dir_path);
-    string kernel_dir = out_dir_path;
-    string thread_bin_subdir;
-    switch (risc_id) {
-        case RISCID::NC: thread_bin_subdir = "/ncrisc/"; break;
-        case RISCID::BR: thread_bin_subdir = "/brisc/"; break;
-        case RISCID::TR0: thread_bin_subdir = "/tensix_thread0/"; break;
-        case RISCID::TR1: thread_bin_subdir = "/tensix_thread1/"; break;
-        case RISCID::TR2: thread_bin_subdir = "/tensix_thread2/"; break;
-    }
-    kernel_dir += "/";
-    kernel_dir += thread_bin_subdir;
+    CompileState ctx(risc_id, out_dir_path, build_kernel_for_riscv_options);
+    string kernel_dir = ctx.kernel_subdir_ + "/" + ctx.thread_bin_subdir;
     fs::create_directories(kernel_dir);
-
-    CompileDefines defs;
-    defs.hwthread = risc_id;
-    defs.arch = get_arch_from_string(arch_name);
+    ctx.hwthread = risc_id;
+    ctx.arch = get_arch_from_string(arch_name);
 
     // Only modifying dataflow paths, we can make a separate
     // isuue for the compute paths
-    if (defs.is_brisc()) {
+    if (ctx.is_brisc()) {
         //cout << "BRISC NOC_INDEX=" << uint32_t(noc_index) << endl;
-        defs.kernel_defines = build_kernel_for_riscv_options->brisc_defines;
-    } else if (defs.is_ncrisc()) {
+        ctx.kernel_defines = build_kernel_for_riscv_options->brisc_defines;
+    } else if (ctx.is_ncrisc()) {
         //cout << "NCRISC NOC_INDEX=" << uint32_t(noc_index) << endl;
-        defs.kernel_defines = build_kernel_for_riscv_options->ncrisc_defines;
+        ctx.kernel_defines = build_kernel_for_riscv_options->ncrisc_defines;
     }
 
-    defs.noc_index = noc_index;
-    defs.profile_kernel = profile_kernel;
-    defs.compile_time_args = kernel_compile_time_args;
-    defs.kernel_inc = fs::absolute(kernel_dir).string();
-    defs.mailbox_addr = TriscParams().get_mailbox_addr(risc_id);
+    ctx.noc_index = noc_index;
+    ctx.profile_kernel = profile_kernel;
+    ctx.compile_time_args = kernel_compile_time_args;
+    ctx.kernel_inc = fs::absolute(kernel_dir).string();
+    ctx.mailbox_addr = TriscParams().get_mailbox_addr(risc_id);
 
     // copy the NCRISC/BRISC kernel to that directory, w/a generic filename kernel.cpp (this is what ncrisc.cc includes)
     // Note that for TRISCS this is not needed because they are currently generated in a previous pass and included
     // indirectly from ckernel_main.cc
     // ckernel_main.cc then includes "chlkc_list.h" which in turn includes one of previously generated cpps for each trisc thread
     string kernel_file_name;
-    if (defs.is_ncrisc()) {
+    if (ctx.is_ncrisc()) {
         kernel_file_name = build_kernel_for_riscv_options->ncrisc_kernel_file_name;
         fs::copy(ctx.home_+ kernel_file_name, kernel_dir + "/kernel.cpp", fs::copy_options::overwrite_existing);
-    } else if (defs.is_brisc()) {
+    } else if (ctx.is_brisc()) {
         kernel_file_name = build_kernel_for_riscv_options->brisc_kernel_file_name;
         fs::copy(ctx.home_+ kernel_file_name, kernel_dir + "/kernel.cpp", fs::copy_options::overwrite_existing);
     }
 
     // copy unpack/pack data formats to the kernel dir
-    if (fs::exists(out_dir_path + "/chlkc_unpack_data_format.h")) {
-        fs::copy(out_dir_path + "/chlkc_unpack_data_format.h", kernel_dir, fs::copy_options::overwrite_existing);
-        fs::copy(out_dir_path + "/chlkc_pack_data_format.h", kernel_dir, fs::copy_options::overwrite_existing);
+    if (fs::exists(ctx.kernel_subdir_ + "/chlkc_unpack_data_format.h")) {
+        fs::copy(ctx.kernel_subdir_ + "/chlkc_unpack_data_format.h", kernel_dir, fs::copy_options::overwrite_existing);
+        fs::copy(ctx.kernel_subdir_ + "/chlkc_pack_data_format.h", kernel_dir, fs::copy_options::overwrite_existing);
     }
+
+    return ctx;
+}
+
+static void compile_for_risc(
+    RISCID risc_id,
+    const CompileState& ctx) {
 
     vector<string> bcpps = {"brisc.cc", "risc_common.cc", "tdma_xmov.c", "noc.c", "substitutes.cpp", "tmu-crt0.S"};
     vector<string> bobjs = {"brisc.o", "risc_common.o", "tdma_xmov.o", "noc.o", "substitutes.o",     "tmu-crt0.o"};
-    vector<string> bobjl = {"brisc.o", "risc_common.o", "tdma_xmov.o", "noc.o", "substitutes.o",     "tmu-crt0.o"};
     vector<string> bcwds = {"",        "",              "",            "",      "",                  ""};
 
     vector<string> ncpps = {"ncrisc.cc", "context.cc", "risc_common.cc", "risc_chip_specific.c", "substitutes.cpp", "tmu-crt0.S"};
     vector<string> nobjs = {"ncrisc.o",  "context.o",  "risc_common.o",  "risc_chip_specific.o", "substitutes.o",   "tmu-crt0.o"};
-    vector<string> nobjl = {"ncrisc.o",  "context.o",  "risc_common.o",  "risc_chip_specific.o", "substitutes.o",   "tmu-crt0.o"};
     vector<string> ncwds = {"",  "",  "", "",  "", ""};
 
     vector<string> tcpps = {"src/ckernel.cc", "src/ckernel_template.cc", "src/ckernel_main.cc", "substitutes.cpp", "tmu-crt0.S" };
     vector<string> tobjs = {"ckernel.o",      "ckernel_template.o",      "ckernel_main.o",      "substitutes.o",   "tmu-crt0.o" };
     // TODO(AP): reorder link objects
-    vector<string> tobjl = {"ckernel_main.o", "substitutes.o",           "ckernel_template.o",  "ckernel.o",       "tmu-crt0.o" };
     vector<string> tcwds = {"",               "",                        "",                    "",                "" };
 
-    vector<string> cpps, objs, cwds, objls;
+    vector<string> cpps, objs, cwds;
     string compile_cwd;
     switch (risc_id) {
         case RISCID::NC:
             ncwds[0] = "tt_metal/src/firmware/riscv/targets/ncrisc";
             ncwds[2] = "tt_metal/src/firmware/riscv/common";
-            ncwds[3] = "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch) + "";
+            ncwds[3] = "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(ctx.arch) + "";
             ncwds[4] = "tt_metal/src/firmware/riscv/toolchain";
             cpps = move(ncpps); objs = move(nobjs); cwds = move(ncwds);
-            objls = move(nobjl);
         break;
         case RISCID::BR:
             bcwds[0] = "tt_metal/src/firmware/riscv/targets/brisc";
             bcwds[1] = "tt_metal/src/firmware/riscv/common";
-            bcwds[2] = "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch) + "";
-            bcwds[3] = "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(defs.arch) + "/noc";
+            bcwds[2] = "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(ctx.arch) + "";
+            bcwds[3] = "tt_metal/src/firmware/riscv/" + get_string_aliased_arch_lowercase(ctx.arch) + "/noc";
             bcwds[4] = "tt_metal/src/firmware/riscv/toolchain";
             cpps = move(bcpps); objs = move(bobjs); cwds = move(bcwds);
-            objls = move(bobjl);
         break;
         case RISCID::TR0:
         case RISCID::TR1:
         case RISCID::TR2:
-            tcwds[0] = "tt_metal/src/ckernels/" + get_string_lowercase(defs.arch) + "/common";
+            tcwds[0] = "tt_metal/src/ckernels/" + get_string_lowercase(ctx.arch) + "/common";
             tcwds[3] = "tt_metal/src/firmware/riscv/toolchain"; // TODO(AP): refactor
             cpps = move(tcpps); objs = move(tobjs); cwds = move(tcwds);
-            objls = move(tobjl);
         break;
     }
 
@@ -486,11 +480,11 @@ void generate_binary_for_risc(
     for (int i = 0; i < cpps.size(); i++) {
         if (cwds[i] != "")
             pushd_cmd = "cd " + ctx.home_ + cwds[i] + " && ";
-        string gpp_cmd = pushd_cmd + ctx.get_compile_cmd(defs, thread_bin_subdir, objs[i], cpps[i]);
-        auto lambda = [gpp_cmd, log_file, defs]() {
+        string gpp_cmd = pushd_cmd + ctx.get_compile_cmd(ctx.thread_bin_subdir, objs[i], cpps[i]);
+        auto lambda = [gpp_cmd, ctx]() {
             log_debug(tt::LogBuildKernels, "    g++ compile cmd: {}", gpp_cmd);
-            if (!tt::utils::run_command(gpp_cmd, log_file, false)) {
-                log_fatal(tt::LogBuildKernels, "{}RISC Build failed -- cmd: {}", RISCID_to_string(defs.hwthread), gpp_cmd);
+            if (!tt::utils::run_command(gpp_cmd, ctx.log_file, false)) {
+                log_fatal(tt::LogBuildKernels, "{}RISC Build failed -- cmd: {}", RISCID_to_string(ctx.hwthread), gpp_cmd);
                 exit(1);
             }
         };
@@ -498,22 +492,63 @@ void generate_binary_for_risc(
         compile_threads.push_back(std::move(t));
     }
     for (auto& t: compile_threads) t.join();
+}
 
-    pushd_cmd = string("cd ") + ctx.home_ + "tt_metal/src/ckernels && "; // TODO(AP): Optimize
+void link_for_risc(RISCID risc_id, const CompileState& ctx) {
 
-    vector<string> link = ctx.get_link_cmd(defs, thread_bin_subdir, objls);
+    string pushd_cmd = string("cd ") + ctx.home_ + "tt_metal/src/ckernels && "; // TODO(AP): Optimize
+
+    vector<string> bobjl = {"brisc.o", "risc_common.o", "tdma_xmov.o", "noc.o", "substitutes.o",     "tmu-crt0.o"};
+    vector<string> nobjl = {"ncrisc.o",  "context.o",  "risc_common.o",  "risc_chip_specific.o", "substitutes.o",   "tmu-crt0.o"};
+    vector<string> tobjl = {"ckernel_main.o", "substitutes.o",           "ckernel_template.o",  "ckernel.o",       "tmu-crt0.o" };
+
+    vector<string> objls;
+    switch (risc_id) {
+        case RISCID::NC:
+            objls = move(nobjl);
+        break;
+        case RISCID::BR:
+            objls = move(bobjl);
+        break;
+        case RISCID::TR0:
+        case RISCID::TR1:
+        case RISCID::TR2:
+            objls = move(tobjl);
+        break;
+    }
+
+    vector<string> link = ctx.get_link_cmd(objls);
     log_debug(tt::LogBuildKernels, "    g++ link cmd: {}", pushd_cmd + link[0]);
-    if (!tt::utils::run_command(pushd_cmd + link[0], log_file, false)) {
-        log_fatal(tt::LogBuildKernels, "{}RISC link failed -- cmd: {}", RISCID_to_string(defs.hwthread), link[0]);
+    if (!tt::utils::run_command(pushd_cmd + link[0], ctx.log_file, false)) {
+        log_fatal(tt::LogBuildKernels, "{}RISC link failed -- cmd: {}", RISCID_to_string(ctx.hwthread), link[0]);
         exit(1);
     }
 
-    pushd_cmd = string("cd ") + ctx.kernel_subdir_ + thread_bin_subdir + " && "; // TODO(AP): Optimize
-    auto verilogcmds = ctx.get_verilog_cmd(defs, thread_bin_subdir, link[1]);
-    tt::utils::run_command(pushd_cmd + verilogcmds[0], log_file, false);
-    tt::utils::run_command(pushd_cmd + verilogcmds[1], log_file, false);
+    pushd_cmd = string("cd ") + ctx.kernel_subdir_ + ctx.thread_bin_subdir + " && "; // TODO(AP): Optimize
+    auto verilogcmds = ctx.get_verilog_cmd(link[1]);
+    tt::utils::run_command(pushd_cmd + verilogcmds[0], ctx.log_file, false);
+    tt::utils::run_command(pushd_cmd + verilogcmds[1], ctx.log_file, false);
 }
 
+void generate_binary_for_risc(RISCID risc_id,
+    tt::build_kernel_for_riscv_options_t* build_kernel_for_riscv_options,
+    const std::string &out_dir_path,
+    const std::string& arch_name,
+    const std::uint8_t noc_index,
+    const std::vector<std::uint32_t>& kernel_compile_time_args,
+    bool profile_kernel) {
+
+    CompileState state = pre_compile_for_risc(
+        risc_id,
+        build_kernel_for_riscv_options,
+        out_dir_path,
+        arch_name,
+        noc_index,
+        kernel_compile_time_args,
+        profile_kernel);
+    compile_for_risc(risc_id, state);
+    link_for_risc(risc_id, state);
+}
 
 //////////////////
 // TRISCs       //
@@ -532,7 +567,8 @@ void gen_trisc_cpp(const string& src_name, const string& dst_name, vector<string
 
 std::string gen_trisc_cpps(
     string input_hlk_file_path,
-    string out_dir_path,
+    tt::build_kernel_for_riscv_options_t* build_opts,
+    string out_kernel_path,
     string device_name,
     const std::map<std::string, std::string>& defines,
     bool dump_perf_events,
@@ -543,18 +579,12 @@ std::string gen_trisc_cpps(
 )
 {
     string hlkc_path;
-    string tt_metal_home;
-    if (!getenv("TT_METAL_HOME")) {
-        fs::path cwd = fs::current_path();
-        tt_metal_home = cwd.string();
-    } else {
-        tt_metal_home = string(getenv("TT_METAL_HOME"));
-    }
 
+    string out_dir_path = build_opts->outpath + out_kernel_path + "/";
     string out_file_name_base = "chlkc";
-    string unpack_base        = out_dir_path + "/" + out_file_name_base + "_unpack";
-    string math_base          = out_dir_path + "/" + out_file_name_base   + "_math";
-    string pack_base          = out_dir_path + "/" + out_file_name_base  + "_pack";
+    string unpack_base        = out_dir_path + out_file_name_base + "_unpack";
+    string math_base          = out_dir_path + out_file_name_base + "_math";
+    string pack_base          = out_dir_path + out_file_name_base + "_pack";
     string unpack_cpp         = unpack_base + ".cpp";
     string unpack_llk_args_h  = unpack_base + "_llk_args.h";
     string math_cpp           = math_base + ".cpp";
@@ -614,6 +644,7 @@ void generate_src_for_triscs(
 
     gen_trisc_cpps(
         hlk_file_name,
+        topts,
         out_dir_path,
         arch_name,
         hlk_defines,
@@ -795,8 +826,8 @@ void equalize_data_format_vectors(std::vector<DataFormat>& v1, std::vector<DataF
 void generate_data_format_descriptors(build_kernel_for_riscv_options_t* build_kernel_for_riscv_options, string out_dir_path) {
     string out_file_name_base = "chlkc_";
     string out_file_name_suffix = "_data_format.h";
-    string unpack_data_format_descs = out_dir_path + "/" + out_file_name_base + "unpack" + out_file_name_suffix;
-    string pack_data_format_descs = out_dir_path + "/" + out_file_name_base + "pack" + out_file_name_suffix;
+    string unpack_data_format_descs = build_kernel_for_riscv_options->outpath + out_dir_path + "/" + out_file_name_base + "unpack" + out_file_name_suffix;
+    string pack_data_format_descs = build_kernel_for_riscv_options->outpath + out_dir_path + "/" + out_file_name_base + "pack" + out_file_name_suffix;
 
     // assuming all cores within a op have the same desc
     tt_hlk_desc& desc = build_kernel_for_riscv_options->hlk_desc;
@@ -846,8 +877,7 @@ void generate_data_format_descriptors(build_kernel_for_riscv_options_t* build_ke
 }
 
 void generate_math_fidelity_descriptor(build_kernel_for_riscv_options_t* build_kernel_for_riscv_options, string out_dir_path) {
-    string math_fidelity_descriptor = out_dir_path + "/" + "chlkc_math_fidelity.h";
-
+    string math_fidelity_descriptor = build_kernel_for_riscv_options->outpath + out_dir_path + "/" + "chlkc_math_fidelity.h";
     // assuming all cores within a op have the same desc
     tt_hlk_desc& desc = build_kernel_for_riscv_options->hlk_desc;
 
@@ -859,7 +889,7 @@ void generate_math_fidelity_descriptor(build_kernel_for_riscv_options_t* build_k
 }
 
 void generate_math_approx_mode_descriptor(build_kernel_for_riscv_options_t* build_kernel_for_riscv_options, string out_dir_path) {
-    string approx_descriptor = out_dir_path + "/" + "chlkc_math_approx_mode.h";
+    string approx_descriptor = build_kernel_for_riscv_options->outpath + out_dir_path + "/" + "chlkc_math_approx_mode.h";
 
     // assuming all cores within a op have the same desc
     tt_hlk_desc& desc = build_kernel_for_riscv_options->hlk_desc;
@@ -869,6 +899,75 @@ void generate_math_approx_mode_descriptor(build_kernel_for_riscv_options_t* buil
     file_stream.open(approx_descriptor);
     file_stream << "constexpr bool APPROX = " << std::boolalpha << desc.get_hlk_math_approx_mode() << ";" << endl;
     file_stream.close();
+}
+
+std::string generate_bank_to_noc_coord_descriptor_string(
+    std::vector<CoreCoord>& dram_bank_map,
+    std::vector<CoreCoord>& l1_bank_map,
+    std::vector<i32>& l1_bank_offset_map
+) {
+    stringstream ss;
+    bool is_dram_pow2 = ceil(log2(dram_bank_map.size())) == log2(dram_bank_map.size());
+    bool is_l1_pow2 = ceil(log2(l1_bank_map.size())) == log2(l1_bank_map.size());
+    ss << "#pragma once" << endl;
+    ss << "/*" << endl;
+    ss << " * This file is autogenerated by tt-metal API" << endl;
+    ss << " * This file contains values that are visible to both host and device compiled code." << endl;
+    ss << " */" << endl;
+    ss << endl;
+    ss << "#define NUM_DRAM_BANKS " << dram_bank_map.size() << endl;
+    ss << "#define NUM_L1_BANKS " << l1_bank_map.size() << endl;
+    if (is_dram_pow2) {
+        ss << "#define LOG_BASE_2_OF_NUM_DRAM_BANKS " << log2(dram_bank_map.size()) << endl;
+    } else {
+        ss << "#define IS_NOT_POW2_NUM_DRAM_BANKS 1" << endl;
+    }
+    if (is_l1_pow2) {
+        ss << "#define LOG_BASE_2_OF_NUM_L1_BANKS " << log2(l1_bank_map.size()) << endl;
+    } else {
+        ss << "#define IS_NOT_POW2_NUM_L1_BANKS 1" << endl;
+    }
+    ss << endl;
+    ss << "// This is to store offsets for any banks that share a core (storage core), so we can view all banks similarly on storage cores" << endl;
+    ss << "// for cores with only 1 bank, this is set to 0 and ignored" << endl;
+    ss << "int32_t bank_to_l1_offset[NUM_L1_BANKS];" << endl;
+    ss << endl;
+    ss << "//! Assumes consumer of the bank coords are always sequential" << endl;
+    ss << "inline void init_dram_bank_coords(uint8_t dram_bank_to_noc_x[], uint8_t dram_bank_to_noc_y[]) {" << endl;
+    for (unsigned int bank_id = 0; bank_id < dram_bank_map.size(); bank_id++) {
+        ss << "    dram_bank_to_noc_x[" << bank_id << "] = " << dram_bank_map[bank_id].x << ";" << endl;
+        ss << "    dram_bank_to_noc_y[" << bank_id << "] = " << dram_bank_map[bank_id].y << ";" << endl;
+    }
+    ss << "}" << endl;
+    ss << "//! Assumes consumer of the bank coords are always sequential" << endl;
+    ss << "inline void init_l1_bank_coords(uint8_t l1_bank_to_noc_x[], uint8_t l1_bank_to_noc_y[], int32_t bank_to_l1_offset[]) {" << endl;
+    for (unsigned int bank_id = 0; bank_id < l1_bank_map.size(); bank_id++) {
+        ss << "    l1_bank_to_noc_x[" << bank_id << "] = " << l1_bank_map[bank_id].x << ";" << endl;
+        ss << "    l1_bank_to_noc_y[" << bank_id << "] = " << l1_bank_map[bank_id].y << ";" << endl;
+        ss << "    bank_to_l1_offset[" << bank_id << "] = " << l1_bank_offset_map[bank_id]<< ";" << endl;
+    }
+    ss << "}" << endl;
+    return ss.str();
+}
+void generate_bank_to_noc_coord_descriptor(
+    build_kernel_for_riscv_options_t* build_kernel_for_riscv_options,
+    string out_dir_path,
+    std::vector<CoreCoord>& dram_bank_map,
+    std::vector<CoreCoord>& l1_bank_map,
+    std::vector<i32>& l1_bank_offset_map
+) {
+    string output_string = generate_bank_to_noc_coord_descriptor_string(dram_bank_map, l1_bank_map, l1_bank_offset_map);
+
+    string full_path = get_kernel_compile_outpath() + out_dir_path;
+    fs::create_directories(full_path + "/brisc");
+    ofstream file_stream_br(full_path + "/brisc/generated_bank_to_noc_coord_mapping.h");
+    file_stream_br << output_string;
+    file_stream_br.close();
+    fs::create_directories(full_path + "/ncrisc");
+    ofstream file_stream_nc(full_path + "/ncrisc/generated_bank_to_noc_coord_mapping.h");
+    file_stream_nc << output_string;
+    file_stream_nc.close();
+
 }
 
 void generate_binaries_all_riscs(
@@ -933,7 +1032,8 @@ void generate_binaries_for_triscs(
 void generate_descriptors(
     tt::build_kernel_for_riscv_options_t* opts, const std::string &op_dir)
 {
-    fs::create_directories(op_dir);
+    string full_path = opts->outpath + op_dir;
+    fs::create_directories(full_path);
     try {
         std::thread td( [=]() { generate_data_format_descriptors(opts, op_dir); } );
         std::thread tm( [=]() { generate_math_fidelity_descriptor(opts, op_dir); } );
@@ -955,4 +1055,78 @@ std::string get_string_aliased_arch_lowercase(tt::ARCH arch) {
         case tt::ARCH::WORMHOLE_B0: return "wormhole"; break;
         default: return "invalid"; break;
     }
+}
+
+//
+namespace __internal {
+void generate_default_bank_to_noc_coord_descriptor(
+    tt::build_kernel_for_riscv_options_t* build_kernel_for_riscv_options,
+    string out_dir_path,
+    tt::ARCH arch
+) {
+    std::vector<CoreCoord> dram_bank_map;
+    std::vector<CoreCoord> l1_bank_map;
+    std::vector<int32_t> l1_bank_offset_map;
+    unsigned int bank_id = 0;
+    switch (arch) {
+        case tt::ARCH::GRAYSKULL:
+            dram_bank_map = std::vector<CoreCoord> ({
+                {.x = 1, .y = 0},
+                {.x = 1, .y = 6},
+                {.x = 4, .y = 0},
+                {.x = 4, .y = 6},
+                {.x = 7, .y = 0},
+                {.x = 7, .y = 6},
+                {.x = 10, .y = 0},
+                {.x = 10, .y = 6},
+            });
+            l1_bank_map = std::vector<CoreCoord> (128, {.x=0, .y=0});
+            for (unsigned int r = 0; r < 10; r++) {
+                for (unsigned int c = 0; c < 12; c++) {
+                    l1_bank_map.at(bank_id) = {.x = c, .y = r};
+                    bank_id++;
+                }
+            }
+            l1_bank_offset_map = std::vector<int32_t> (l1_bank_map.size(), 0);
+            break;
+        case tt::ARCH::WORMHOLE_B0:
+            dram_bank_map = std::vector<CoreCoord> ({
+                {.x = 0, .y = 11},
+                {.x = 0, .y = 1},
+                {.x = 0, .y = 5},
+                {.x = 0, .y = 7},
+                {.x = 5, .y = 1},
+                {.x = 5, .y = 11},
+                {.x = 5, .y = 2},
+                {.x = 5, .y = 9},
+                {.x = 5, .y = 8},
+                {.x = 5, .y = 3},
+                {.x = 5, .y = 5},
+                {.x = 5, .y = 7},
+            });
+            l1_bank_map = std::vector<CoreCoord> (128, {.x=0, .y=0});
+            for (unsigned int r = 0; r < 10; r++) {
+                for (unsigned int c = 0; c < 8; c++) {
+                    l1_bank_map.at(bank_id) = {.x = c, .y = r};
+                    bank_id++;
+                }
+            }
+            l1_bank_offset_map = std::vector<int32_t> (l1_bank_map.size(), 0);
+            break;
+        default:
+            log_fatal("Unsupported arch in generate_default_bank_to_noc_coord_descriptor");
+            break;
+    }
+    string output_string = generate_bank_to_noc_coord_descriptor_string(dram_bank_map, l1_bank_map, l1_bank_offset_map);
+    string full_path = get_kernel_compile_outpath() + out_dir_path;
+    fs::create_directories(full_path + "/brisc");
+    ofstream file_stream_br(full_path + "/brisc/generated_bank_to_noc_coord_mapping.h");
+    file_stream_br << output_string;
+    file_stream_br.close();
+    fs::create_directories(full_path + "/ncrisc");
+    ofstream file_stream_nc(full_path + "/ncrisc/generated_bank_to_noc_coord_mapping.h");
+    file_stream_nc << output_string;
+    file_stream_nc.close();
+
+}
 }
