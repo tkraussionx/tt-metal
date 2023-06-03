@@ -86,10 +86,6 @@ void kernel_main() {
                 } // for in0_block_h
                 noc_async_read_barrier();
 
-                // DPRINT << "IN0 BLOCK: " << in0_block_w_i << "," << in0_block_h_i << ENDL();
-                // auto slice0 = SliceRange{ .h0 = 0, .h1 = 32, .hs = 16, .w0 = 0, .w1 = 32, .ws = 16 };
-                // DPRINT  << TSLICE(in0_cb_id, 0, slice0) << ENDL();
-
                 in0_row_offset_bytes += in0_read_row_size_bytes;
                 cb_push_back(in0_cb_id, in0_block_num_tiles);
 
@@ -112,10 +108,6 @@ void kernel_main() {
                     in1_row_start_tile_id += in1_stride_h;
                 } // for in1_block_h
                 noc_async_read_barrier();
-
-                // DPRINT << "IN1 BLOCK: " << in1_block_w_i << "," << in0_block_w_i << ENDL();
-                // auto slice1 = SliceRange{ .h0 = 0, .h1 = 32, .hs = 16, .w0 = 0, .w1 = 32, .ws = 16 };
-                // DPRINT  << TSLICE(in1_cb_id, 0, slice1) << ENDL();
 
                 in1_current_block_start_tile_id += in1_next_block_stride_h;
                 cb_push_back(in1_cb_id, in1_block_num_tiles);

@@ -17,7 +17,8 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
                                                 uint32_t in0_block_w,
                                                 uint32_t in0_block_h,
                                                 uint32_t in1_block_w,
-                                                uint32_t dtype_nbytes) {
+                                                uint32_t dtype_nbytes,
+                                                bool untilize_out = true) {
     // buffer indices
     uint32_t in0_cb                                 = CB::c_in0;
     uint32_t in1_cb                                 = CB::c_in1;
@@ -25,14 +26,16 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
     uint32_t matmul_partials_cb                     = CB::c_intermed1;
     uint32_t untilize_mode_final_matmul_partials_cb = CB::c_intermed2;
     uint32_t untilize_mode_reblock_cb               = CB::c_intermed3;
-    uint32_t out0_cb                                = CB::c_out0;
+    uint32_t out_cb                                = CB::c_out0;
 
     const uint32_t tile_size_bytes = dtype_nbytes * constants::TILE_HW;
+    const uint32_t cb0_ntiles = in0_block_h * in0_block_w * 2;  // double buffer
+    const uint32_t cb1_ntiles = in0_block_w * in1_block_w * 2;   // double buffer
+    const uint32_t out_ntiles = in0_block_h * in1_block_w;
 
     // inputs
 
     // in0 (RM)
-    const uint32_t cb0_ntiles = in0_block_h * in0_block_w * 2;  // double buffer
     auto cb_in0 = CreateCircularBuffer(
         program,
         device,
@@ -43,7 +46,6 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
         DataFormat::Float16_b
     );
     // in1
-    const uint32_t cb1_ntiles = in0_block_w * in1_block_w * 2;   // double buffer
     auto cb_in1 = CreateCircularBuffer(
         program,
         device,
@@ -54,23 +56,10 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
         DataFormat::Float16_b
     );
 
-    // output
-
-    const uint32_t out_ntiles = in0_block_h * in1_block_w;
-    auto cb_output = tt_metal::CreateCircularBuffer(
-        program,
-        device,
-        out0_cb,
-        core,
-        out_ntiles,
-        out_ntiles * tile_size_bytes,
-        tt::DataFormat::Float16_b
-    );
-
     // intermediates
 
     // in0 (TM)
-    auto cb_src0_tilized = tt_metal::CreateCircularBuffer(
+    auto cb_src0_tilized = CreateCircularBuffer(
         program,
         device,
         tilize_mode_tilized_in0_cb,
@@ -79,7 +68,7 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
         cb0_ntiles * tile_size_bytes,
         DataFormat::Float16_b
     );
-    auto cb_matmul_partials = tt_metal::CreateCircularBuffer(
+    auto cb_matmul_partials = CreateCircularBuffer(
         program,
         device,
         matmul_partials_cb,
@@ -88,26 +77,55 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
         out_ntiles * tile_size_bytes,
         DataFormat::Float16_b
     );
-    // Shares same address space as matmul partials
-    auto cb_final_matmul_partials = tt_metal::CreateCircularBuffer(
-        program,
-        device,
-        untilize_mode_final_matmul_partials_cb,
-        core,
-        out_ntiles,
-        out_ntiles * tile_size_bytes,
-        DataFormat::Float16_b
-    );
-    // CB responsible for reorganizing output blocks to fill the whole "per core output block width"
-    auto cb_reblock = tt_metal::CreateCircularBuffer(
-        program,
-        device,
-        untilize_mode_reblock_cb,
-        core,
-        in1_block_w,                    // a single row of tiles
-        in1_block_w * tile_size_bytes,
-        tt::DataFormat::Float16_b
-    );
+    if (untilize_out) {
+        auto cb_final_matmul_partials = CreateCircularBuffer(
+            program,
+            device,
+            untilize_mode_final_matmul_partials_cb,
+            core,
+            out_ntiles,
+            out_ntiles * tile_size_bytes,
+            DataFormat::Float16_b
+        );
+        // to reorganize output blocks to fill the whole "per core output block width"
+        auto cb_reblock = CreateCircularBuffer(
+            program,
+            device,
+            untilize_mode_reblock_cb,
+            core,
+            in1_block_w,                    // a single row of tiles
+            in1_block_w * tile_size_bytes,
+            DataFormat::Float16_b
+        );
+    }
+
+    // output
+
+    if (untilize_out) {
+        auto cb_output = CreateCircularBuffer(
+            program,
+            device,
+            out_cb,
+            core,
+            out_ntiles,
+            out_ntiles * tile_size_bytes,
+            DataFormat::Float16_b
+        );
+    } else {
+        // use the same address space as the partials intermed CB
+        auto cb_output = CreateCircularBuffer(
+            program,
+            device,
+            out_cb,
+            core,
+            out_ntiles,
+            out_ntiles * tile_size_bytes,
+            cb_matmul_partials->address(),
+            DataFormat::Float16_b
+        );
+    }
+
+    // std::cout << "NUMBER OF TILES IN OUT_CB = " << out_ntiles << " (" << out_ntiles * tile_size_bytes << " bytes)" << std::endl;
 }
 
 Tensor bmm_single_core_tilize_untilize(const Tensor &in0,
@@ -119,11 +137,13 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,
                                        uint32_t in0_block_width_ntiles,
                                        uint32_t in1_block_width_ntiles,
                                        uint32_t out_subblock_height_ntiles,
-                                       uint32_t out_subblock_width_ntiles) {
+                                       uint32_t out_subblock_width_ntiles,
+                                       bool tilize_in0 = true,
+                                       bool untilize_out = true) {
     const auto [in0_batch, in0_channel, in0_height, in0_width] = in0.shape();
     const auto [in1_batch, in1_channel, in1_height, in1_width] = in1.shape();
 
-    const uint32_t dtype_nbytes = 2;
+    constexpr uint32_t dtype_nbytes = 2;    // TODO (AS); Obtain from the datatype
 
     // input matrix shape checks
     TT_ASSERT(in0_batch == 1, "Supports only batch = 1");
@@ -166,7 +186,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,
     const std::array<uint32_t, 4> out_shape{in0_batch, in0_channel, in0_height, in1_width};
     Tensor output = Tensor(out_shape,
                             in0.dtype(),
-                            Layout::ROW_MAJOR,
+                            untilize_out ? Layout::ROW_MAJOR : Layout::TILE,
                             device);
     Buffer *dst_dram_buffer = output.buffer();
     TT_ASSERT(dst_dram_buffer != nullptr, "Output buffer should be allocated on device!");
@@ -203,10 +223,11 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,
     // in1
     uint32_t in1_dram_addr = src1_dram_buffer->address();
     // in1 block info
+    uint32_t in1_subblock_w = out_subblock_width_ntiles;
     uint32_t in1_num_blocks_w = in1_width_nblocks;
     uint32_t in1_num_blocks_h = in0_width_nblocks;
     uint32_t in1_block_w = in1_block_width_ntiles;
-    uint32_t in1_num_subblocks = in1_block_w / out_subblock_width_ntiles;
+    uint32_t in1_num_subblocks = in1_block_w / in1_subblock_w;
     uint32_t in1_block_h = in0_block_w;
     uint32_t in1_block_num_tiles = in1_block_w * in1_block_h;
     TT_ASSERT(in1_block_w % out_subblock_width_ntiles == 0);
@@ -233,6 +254,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,
         log_debug("in0_subblock_num_tiles: {}", in0_subblock_num_tiles);
         // in1
         log_debug("in1_dram_addr: {}", in1_dram_addr);
+        log_debug("in1_subblock_w: {}", in1_subblock_w);
         log_debug("in1_num_subblocks: {}", in1_num_subblocks);
         log_debug("in1_block_num_tiles: {}", in1_block_num_tiles);
         log_debug("in1_block_w: {}", in1_block_w);
@@ -253,58 +275,119 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,
         in0_block_w,
         in0_block_h,
         in1_block_w,
-        dtype_nbytes);
+        dtype_nbytes,
+        untilize_out);
 
     // Reader kernel
-    std::string reader_kernel = "tt_metal/kernels/dataflow/reader_bmm_single_core_tilize_untilize.cpp";
-    std::vector<uint32_t> reader_rt_args = {
-        // in0
-        in0_dram_addr,
-        in0_block_h,
-        in0_num_blocks_h,
-        in0_num_blocks_w,
-        in0_block_num_tiles,
-        in0_block_h * constants::TILE_HEIGHT,               // in0_block_nrows,
-        0,                                                  // start row id
-        in0_width * dtype_nbytes,                           // size of an in0 row
-        in0_block_w * constants::TILE_WIDTH * dtype_nbytes, // size of partial row to fit within a block width
-        // in1
-        in1_dram_addr,
-        in1_block_h,
-        in1_block_w,
-        in1_num_blocks_w,
-        in1_block_num_tiles,
-        in1_width_ntiles,
-        in1_width_ntiles * in1_block_h,
-        in1_block_w
-    };
+    std::string reader_kernel;
+    std::vector<uint32_t> reader_rt_args;
+    if (tilize_in0) {
+        // in0 is row major, in1 is tiled
+        reader_kernel = "tt_metal/kernels/dataflow/reader_bmm_single_core_tilize_untilize.cpp";
+        reader_rt_args = {
+            // in0
+            in0_dram_addr,
+            in0_block_h,
+            in0_num_blocks_h,
+            in0_num_blocks_w,
+            in0_block_num_tiles,
+            in0_block_h * constants::TILE_HEIGHT,               // in0_block_nrows,
+            0,                                                  // start row id
+            in0_width * dtype_nbytes,                           // size of an in0 row
+            in0_block_w * constants::TILE_WIDTH * dtype_nbytes, // size of partial row to fit within a block width
+            // in1
+            in1_dram_addr,
+            in1_block_h,
+            in1_block_w,
+            in1_num_blocks_w,
+            in1_block_num_tiles,
+            in1_width_ntiles,
+            in1_width_ntiles * in1_block_h,
+            in1_block_w
+        };
+    } else {
+        // in0 is tiled, in1 is tiled
+        reader_kernel = "tt_metal/kernels/dataflow/reader_bmm_single_core.cpp";
+        reader_rt_args = {
+            // in0
+            in0_dram_addr,
+            in0_num_blocks_h,
+            in0_num_blocks_w,
+            1,                      // in0_stride_w
+            in0_width_ntiles,       // in0_stride_h
+            in0_block_w,            // in0_next_block_stride
+            in0_block_w,            // in0_block_w
+            in0_block_h,            // in0_block_h
+            in0_block_num_tiles,    // in0_block_num_tiles
+            // in1
+            in1_dram_addr,          // in1_addr
+            in1_num_blocks_w,
+            0,                      // in1_start_tile_id
+            1,                      // in1_stride_w
+            in1_width_ntiles,       // in1_stride_h
+            in0_block_w * in1_width_ntiles, // in1_next_block_stride UNUSED
+            in1_block_w,                    // in1_block_w
+            in1_block_h,                    // in1_block_h
+            in1_block_num_tiles,            // in1_block_num_tiles
+            in0_width_ntiles * in0_block_h, // in0_next_block_stride_h,
+            in0_block_w,                    // in0_next_block_stride_w,
+            in1_width_ntiles * in1_block_h, // in1_next_block_stride_h,
+            in1_block_w,                    // in1_next_block_stride_w
+        };
+    }
     auto reader = CreateDataMovementKernel(
-        program,
-        reader_kernel,
-        core,
-        DataMovementProcessor::RISCV_1,
-        NOC::RISCV_1_default);
+        program,                            // program
+        reader_kernel,                      // file name
+        core,                               // core
+        DataMovementProcessor::RISCV_1,     // processor type
+        NOC::RISCV_1_default                // noc
+    );
 
     // number of data elements along height of an in0 block
     uint32_t in0_block_h_data = in0_height / in0_num_blocks_h;
 
     // Writer kernel
-    std::string writer_kernel = "tt_metal/kernels/dataflow/writer_unary_stick_layout_8bank_blocks.cpp";
-    vector<uint32_t> writer_rt_args = {
-        out_dram_addr,
-        in0_block_h_data,
-        in1_block_w * constants::TILE_WIDTH * dtype_nbytes,
-        1,
-        in0_num_blocks_h,
-        in1_num_blocks_w,
-        in1_width * dtype_nbytes
-    };
+    std::string writer_kernel;
+    vector<uint32_t> writer_rt_args;
+
+    if (untilize_out) {
+        // out is row major
+        writer_kernel = "tt_metal/kernels/dataflow/writer_unary_stick_layout_8bank_blocks.cpp";
+        writer_rt_args = {
+            out_dram_addr,
+            in0_block_h_data,
+            in1_block_w * constants::TILE_WIDTH * dtype_nbytes, // block_row_size
+            1,                                                  // batch
+            in0_num_blocks_h,
+            in1_num_blocks_w,
+            in1_width * dtype_nbytes                            // output_row_size
+        };
+    } else {
+        // out is tiled
+        writer_kernel = "tt_metal/kernels/dataflow/writer_bmm_single_core_tiled.cpp";
+        writer_rt_args = {
+            out_dram_addr,
+            0,                                              // UNUSED
+            1,                                              // out_stride_w
+            in1_width_ntiles,                               // out_stride_h
+            out_subblock_width_ntiles,                      // out_next_subblock_stride_w
+            out_subblock_height_ntiles * in1_width_ntiles,  // out_next_subblock_stride_h
+            out_subblock_width_ntiles,                      // out_subblock_w
+            out_subblock_height_ntiles,                     // out_subblock_h
+            out_subblock_ntiles,                            // out_subblock_tile_count
+            in1_width_ntiles / out_subblock_width_ntiles,   // out_num_subblocks_w
+            in0_height_ntiles / out_subblock_height_ntiles, // out_num_subblocks_h
+        };
+    }
+    for (auto param_val : writer_rt_args) {
+        log_debug("==> {}", param_val);
+    }
     auto writer = CreateDataMovementKernel(
-        program,
-        writer_kernel,
-        core,
-        DataMovementProcessor::RISCV_0,
-        NOC::RISCV_0_default);
+        program,                        // program
+        writer_kernel,                  // file name
+        core,                           // core
+        DataMovementProcessor::RISCV_0, // processor type
+        NOC::RISCV_0_default);          // noc
 
     // Compute kernel
     std::string compute_kernel = "tt_metal/kernels/compute/bmm_tilize_untilize.cpp";
@@ -322,7 +405,9 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,
         in1_num_blocks_w,
         out_subblock_height_ntiles,
         out_subblock_width_ntiles,
-        out_subblock_ntiles
+        out_subblock_ntiles,
+        tilize_in0,
+        untilize_out
     };
     auto bmm_compute = CreateComputeKernel(
         program,
