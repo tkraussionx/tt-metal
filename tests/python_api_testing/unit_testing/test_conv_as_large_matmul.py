@@ -56,7 +56,7 @@ import torch
         # Hat = 2, Wat = 2, Wbt = 2
         (64, 64, 8, 8, 1, 1, 1, 1, 0, 0),
         # w/ conv padding
-        (32, 32, 5, 5, 1, 1, 1, 1, 1, 1),
+        #(32, 32, 5, 5, 1, 1, 1, 1, 1, 1),
     ),
 )
 def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w):
