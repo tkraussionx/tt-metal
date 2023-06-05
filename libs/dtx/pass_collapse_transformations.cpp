@@ -6,24 +6,24 @@ bool collapse_transformations(DataTransformations * dtx) {
     bool DEBUG = false;
     bool pad = false;
 
-    if (DEBUG) cout << "\n----- Start Resolving Transoformations -----\n" << endl;
+    if (true) cout << "\n----- Start Resolving Transoformations -----\n" << endl;
 
 
-    if (DEBUG) dtx->print();
+    if (true) dtx->print();
 
     // Identify the last node (which we are keeping, and using to drive the resolvemnt of overlaps)
     TransformationNode * consumer_node = dtx->transformations.back();
-    if (DEBUG) cout << s(2) << "consumer_node = " << consumer_node->opcode << endl;
+    if (true) cout << s(2) << "consumer_node = " << consumer_node->opcode << endl;
     int spaces = 0;
 
     int collapse_iteration = 0;
     while (dtx->transformations.size() > 2) {
 
-        if (DEBUG) cout << s(4) << "There are more than 2 tx. Starting to resolve - COLLAPSE ITERATION = " << collapse_iteration << endl;
-
+        if (true) cout << s(4) << "There are more than 2 tx. Starting to resolve - COLLAPSE ITERATION = " << collapse_iteration << endl;
+        if (true) dtx->print();
         // The node being currently processed - to be deleted. It's always the second from the back
         TransformationNode * producer_node = dtx->transformations[dtx->transformations.size()-2];
-        if (DEBUG) cout << s(4) << "producer_node = " << producer_node->opcode << endl;
+        if (true) cout << s(4) << "producer_node = " << producer_node->opcode << endl;
 
         // Sweep over groups in the consumer node
         for (int consumer_group_idx = 0; consumer_group_idx < consumer_node->groups.size(); consumer_group_idx++) {
