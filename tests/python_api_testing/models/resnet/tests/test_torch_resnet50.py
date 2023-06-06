@@ -7,6 +7,7 @@ sys.path.append(f"{f}/../..")
 sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 sys.path.append(f"{f}/../../../../..")
+sys.path.append(f"{f}/../torch")
 
 from typing import Type, Union, Optional, Callable
 from loguru import logger
@@ -15,6 +16,7 @@ from torchvision import models, transforms
 import pytest
 
 from libs import tt_lib as ttl
+
 from torch_resnet import _make_layer, ResNet, Bottleneck
 from utility_functions import comp_allclose_and_pcc, comp_pcc
 

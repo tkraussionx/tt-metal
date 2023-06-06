@@ -7,6 +7,7 @@ sys.path.append(f"{f}/../..")
 sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 sys.path.append(f"{f}/../../../../..")
+sys.path.append(f"{f}/../torch")
 
 from typing import Type, Union, Optional, Callable
 from loguru import logger

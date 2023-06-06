@@ -3,6 +3,7 @@ from typing import Type, Union, Optional, List, Callable
 import tt_lib
 import torch
 import torch.nn as nn
+from torchvision import models
 
 from utils import conv3x3, conv1x1, fold_bn_to_conv
 from utility_functions_new import pad_by_zero, unpad_from_zero
@@ -447,3 +448,42 @@ class ResNet(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self._forward_impl(x)
+
+
+def _resnet(block_type, layers, device, host, state_dict, base_address, fold_batchnorm):
+    return ResNet(block_type,
+                    layers,
+                    device=device,
+                    host=host,
+                    state_dict=state_dict,
+                    base_address=base_address,
+                    fold_batchnorm=fold_batchnorm)
+
+
+
+def resnet50(device, host, fold_batchnorm):
+    torch_resnet50 = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
+    torch_resnet50.eval()
+    state_dict = torch_resnet50.state_dict()
+
+    return _reset(Bottleneck, [3, 4, 6, 3],
+                        device=device,
+                        host=host,
+                        state_dict=state_dict,
+                        base_address="",
+                        fold_batchnorm=fold_batchnorm)
+
+
+
+def resnet18(device, host, fold_batchnorm):
+    torch_resnet = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+    torch_resnet.eval()
+    state_dict = torch_resnet.state_dict()
+
+    return _resnet(BasicBlock,
+                    [2, 2, 2, 2],
+                    device=device,
+                    host=host,
+                    state_dict=state_dict,
+                    base_address="",
+                    fold_batchnorm=fold_batchnorm)

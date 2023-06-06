@@ -6,15 +6,19 @@ sys.path.append(f"{f}/..")
 sys.path.append(f"{f}/../..")
 sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
+sys.path.append(f"{f}/../../../../..")
+sys.path.append(f"{f}/../tt")
 
 from loguru import logger
 import torch
 from torchvision import models
 import pytest
-from resnetBlock import ResNet, BasicBlock
+from Resnet_block import ResNet, BasicBlock, resnet18
 import tt_lib
 
 from sweep_tests.comparison_funcs import comp_allclose_and_pcc, comp_pcc
+
+
 
 
 @pytest.mark.parametrize("fold_batchnorm", [False, True], ids=['Batchnorm not folded', "Batchnorm folded"])
@@ -34,12 +38,7 @@ def test_run_resnet18_inference(fold_batchnorm, imagenet_sample_input):
 
         state_dict = torch_resnet.state_dict()
 
-        tt_resnet18 = ResNet(BasicBlock, [2, 2, 2, 2],
-                        device=device,
-                        host=host,
-                        state_dict=state_dict,
-                        base_address="",
-                        fold_batchnorm=fold_batchnorm)
+        tt_resnet18 = resnet18(device, host, fold_batchnorm)
 
         torch_output = torch_resnet(image).unsqueeze(1).unsqueeze(1)
         tt_output = tt_resnet18(image)

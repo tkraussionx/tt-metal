@@ -6,6 +6,8 @@ sys.path.append(f"{f}/..")
 sys.path.append(f"{f}/../..")
 sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
+sys.path.append(f"{f}/../../../../..")
+sys.path.append(f"{f}/../tt")
 
 from loguru import logger
 import torch
@@ -13,7 +15,7 @@ from torchvision import models
 import pytest
 import tt_lib
 
-from resnetBlock import ResNet, Bottleneck
+Resnet_block import ResNet, Bottleneck, resnet50
 from sweep_tests.comparison_funcs import comp_allclose_and_pcc, comp_pcc
 
 
