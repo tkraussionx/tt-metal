@@ -36,21 +36,11 @@ def test_squeezenet1_inference(fuse_ops, imagenet_sample_input):
 
         state_dict = torch_squeezenet.state_dict()
         if not fuse_ops:
-            tt_squeezenet = squeezenet1_0(state_dict, device=device, host=host, disable_conv_on_tt_device=fuse_ops)
+            tt_squeezenet = squeezenet1_0(device=device, host=host, disable_conv_on_tt_device=fuse_ops)
         else:
-            tt_squeezenet = squeezenet1_0(state_dict, device=None, host=None, disable_conv_on_tt_device=fuse_ops)
+            tt_squeezenet = squeezenet1_0(device=None, host=None, disable_conv_on_tt_device=fuse_ops)
         tt_squeezenet.eval()
-        if fuse_ops:
-            modules_to_fuse = [['features.0', 'features.1'], ['classifier.1', 'classifier.2']]
-            fire_indices = [3, 4, 5, 7, 8, 9, 10, 12]
-            fire_1 = [[f"features.{ind}.squeeze", f"features.{ind}.squeeze_activation", ] for ind in fire_indices]
-            fire_2 = [[f"features.{ind}.expand1x1", f"features.{ind}.expand1x1_activation", ] for ind in fire_indices]
-            fire_3 = [[f"features.{ind}.expand3x3", f"features.{ind}.expand3x3_activation", ] for ind in fire_indices]
-            modules_to_fuse.extend(fire_1)
-            modules_to_fuse.extend(fire_2)
-            modules_to_fuse.extend(fire_3)
 
-            tt_squeezenet = torch.ao.quantization.fuse_modules(tt_squeezenet, modules_to_fuse)
 
 
         torch_output = torch_squeezenet(image).unsqueeze(1).unsqueeze(1)

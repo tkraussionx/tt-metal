@@ -35,9 +35,9 @@ def test_squeezenet1_inference(fuse_ops, imagenet_sample_input):
 
         state_dict = torch_squeezenet.state_dict()
         if not fuse_ops:
-            tt_squeezenet = squeezenet1_1(state_dict, device=device, host=host, disable_conv_on_tt_device=fuse_ops)
+            tt_squeezenet = squeezenet1_1(device=device, host=host, disable_conv_on_tt_device=fuse_ops)
         else:
-            tt_squeezenet = squeezenet1_1(state_dict, device=None, host=None, disable_conv_on_tt_device=fuse_ops)
+            tt_squeezenet = squeezenet1_1(device=None, host=None, disable_conv_on_tt_device=fuse_ops)
         tt_squeezenet.eval()
 
         if fuse_ops:

@@ -1,6 +1,7 @@
 from functools import partial
 from typing import Any, Optional
 
+from torchvision import models
 import torch
 import torch.nn as nn
 from python_api_testing.models.conv_on_device_utils import is_conv_supported_on_device, run_conv_on_device_wrapper
@@ -125,10 +126,45 @@ def _squeezenet(version: str, state_dict, device=None, host=None, disable_conv_o
 
 
 # weights: SqueezeNet1_0_Weights.IMAGENET1K_V1
-def squeezenet1_0(state_dict, device=None, host=None, disable_conv_on_tt_device=True) -> SqueezeNet:
-    return _squeezenet("1_0", state_dict=state_dict, device=device, host=host, disable_conv_on_tt_device=disable_conv_on_tt_device)
+def squeezenet1_0(device=None, host=None, disable_conv_on_tt_device=True, fuse_ops = False) -> SqueezeNet:
 
+    torch_squeezenet = models.squeezenet1_0(weights=models.SqueezeNet1_0_Weights.IMAGENET1K_V1)
+    torch_squeezenet.eval()
+    state_dict = torch_squeezenet.state_dict()
+
+    tt_squeezenet = _squeezenet("1_0", state_dict=state_dict, device=device, host=host, disable_conv_on_tt_device=disable_conv_on_tt_device)
+    if fuse_ops:
+        modules_to_fuse = [['features.0', 'features.1'], ['classifier.1', 'classifier.2']]
+        fire_indices = [3, 4, 5, 7, 8, 9, 10, 12]
+        fire_1 = [[f"features.{ind}.squeeze", f"features.{ind}.squeeze_activation", ] for ind in fire_indices]
+        fire_2 = [[f"features.{ind}.expand1x1", f"features.{ind}.expand1x1_activation", ] for ind in fire_indices]
+        fire_3 = [[f"features.{ind}.expand3x3", f"features.{ind}.expand3x3_activation", ] for ind in fire_indices]
+        modules_to_fuse.extend(fire_1)
+        modules_to_fuse.extend(fire_2)
+        modules_to_fuse.extend(fire_3)
+
+        tt_squeezenet = torch.ao.quantization.fuse_modules(tt_squeezenet, modules_to_fuse)
+
+    return tt_squeezenet
 
 # weights:  SqueezeNet1_1_Weights.IMAGENET1K_V1
-def squeezenet1_1(state_dict, device=None, host=None, disable_conv_on_tt_device=True) -> SqueezeNet:
-    return _squeezenet("1_1", state_dict=state_dict, device=device, host=host, disable_conv_on_tt_device=disable_conv_on_tt_device)
+def squeezenet1_1(device=None, host=None, disable_conv_on_tt_device=True, fuse_ops = False) -> SqueezeNet:
+
+    torch_squeezenet = models.squeezenet1_1(weights=models.SqueezeNet1_1_Weights.IMAGENET1K_V1)
+    torch_squeezenet.eval()
+    state_dict = torch_squeezenet.state_dict()
+
+    tt_squeezenet = _squeezenet("1_1", state_dict=state_dict, device=device, host=host, disable_conv_on_tt_device=disable_conv_on_tt_device)
+    if fuse_ops:
+        modules_to_fuse = [['features.0', 'features.1'], ['classifier.1', 'classifier.2']]
+        fire_indices = [3, 4, 6, 7, 10, 11, 12]
+        fire_1 = [[f"features.{ind}.squeeze", f"features.{ind}.squeeze_activation", ] for ind in fire_indices]
+        fire_2 = [[f"features.{ind}.expand1x1", f"features.{ind}.expand1x1_activation", ] for ind in fire_indices]
+        fire_3 = [[f"features.{ind}.expand3x3", f"features.{ind}.expand3x3_activation", ] for ind in fire_indices]
+        modules_to_fuse.extend(fire_1)
+        modules_to_fuse.extend(fire_2)
+        modules_to_fuse.extend(fire_3)
+
+        tt_squeezenet = torch.ao.quantization.fuse_modules(tt_squeezenet, modules_to_fuse)
+
+    return tt_squeezenet
