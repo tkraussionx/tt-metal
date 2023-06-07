@@ -8,6 +8,12 @@ using namespace tt::constants;
 namespace eltwise_binary_op_utils {
 using namespace tt::tt_metal;
 
+static const unordered_map<BinaryOpType::Enum ,string> optype_to_name = {
+    {BinaryOpType::Enum::ADD,"EXP"},
+    {BinaryOpType::Enum::SUB,"SUB"},
+    {BinaryOpType::Enum::MUL,"MUL"}
+};
+
 void add_defines(ComputeKernel * eltwise_binary_kernel, BinaryOpType::Enum op_type){
     string op_name, op_code;
     switch (op_type) {
@@ -57,12 +63,17 @@ Program EltwiseBinary::create_program(const std::vector<std::reference_wrapper<c
     const auto& input_tensor_b = input_tensors.at(1).get();
     auto& output_tensor = output_tensors.at(0);
 
+    TT_ASSERT(eltwise_binary_op_utils::optype_to_name.find(this->op_type) != \
+              eltwise_binary_op_utils::optype_to_name.end(), "Eltwise op not defined");
+    profiler::set_preferred_name(eltwise_binary_op_utils::optype_to_name.at(this->op_type));
     switch (eltwise_binary_op_utils::get_parallelization_strategy(input_tensor_a, input_tensor_b)){
         case BinaryOpParallelizationStrategy::MULTI_CORE:
+            profiler::set_parallelization_strategy ("MULTI_CORE");
             return eltwise_binary_multi_core(input_tensor_a, input_tensor_b, output_tensor, this->op_type);
             break;
         case BinaryOpParallelizationStrategy::SINGLE_CORE:
         default:
+            profiler::set_parallelization_strategy ("SINGLE_CORE");
             return eltwise_binary_single_core(input_tensor_a, input_tensor_b, output_tensor, this->op_type);
     }
 

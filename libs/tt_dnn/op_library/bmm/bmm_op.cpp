@@ -311,28 +311,36 @@ Program Matmul::create_program(const std::vector<std::reference_wrapper<const Te
 
     switch (bmm_op_utils::get_parallelization_strategy(input_tensor_a, input_tensor_b)){
         case BmmOpParallelizationStrategy::MULTI_CORE:
+            profiler::set_parallelization_strategy ("MULTI_CORE");
             return matmul_multi_core(input_tensor_a, input_tensor_b, output_tensor);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE:
+            profiler::set_parallelization_strategy ("MULTI_CORE_REUSE");
             return matmul_multi_core_reuse(input_tensor_a, input_tensor_b, output_tensor);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST:
+            profiler::set_parallelization_strategy ("MULTI_CORE_REUSE_MCAST");
             return matmul_multi_core_reuse_mcast(input_tensor_a, input_tensor_b, output_tensor);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_GENERALIZED:
+            profiler::set_parallelization_strategy ("MULTI_CORE_REUSE_GENERALIZED");
             return matmul_multi_core_reuse_generalized(input_tensor_a, input_tensor_b, output_tensor);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_GENERALIZED:
+            profiler::set_parallelization_strategy ("MULTI_CORE_REUSE_MCAST_GENERALIZED");
             return matmul_multi_core_reuse_mcast_generalized(input_tensor_a, input_tensor_b, output_tensor);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_PADDING:
+            profiler::set_parallelization_strategy ("MULTI_CORE_REUSE_PADDING");
             return matmul_multi_core_reuse_padding(input_tensor_a, input_tensor_b, output_tensor);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_PADDING:
+            profiler::set_parallelization_strategy ("MULTI_CORE_REUSE_MCAST_PADDING");
             return matmul_multi_core_reuse_mcast_padding(input_tensor_a, input_tensor_b, output_tensor);
             break;
         case BmmOpParallelizationStrategy::SINGLE_CORE:
         default:
+            profiler::set_parallelization_strategy ("SINGLE_CORE");
             return matmul_single_core(input_tensor_a, input_tensor_b, output_tensor);
     }
 
@@ -369,33 +377,40 @@ Program BatchedMatmul::create_program(const std::vector<std::reference_wrapper<c
 
     switch (bmm_op_utils::get_parallelization_strategy(input_tensor_a, input_tensor_b)){
         case BmmOpParallelizationStrategy::MULTI_CORE:
+            profiler::set_parallelization_strategy ("MULTI_CORE");
             return bmm_multi_core(input_tensor_a, input_tensor_b, output_tensor);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE:
+            profiler::set_parallelization_strategy ("MULTI_CORE_REUSE");
             return bmm_multi_core_reuse(input_tensor_a, input_tensor_b, output_tensor);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST:
+            profiler::set_parallelization_strategy ("MULTI_CORE_REUSE_MCAST");
             return bmm_multi_core_reuse_mcast(input_tensor_a, input_tensor_b, output_tensor);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_GENERALIZED:
+            profiler::set_parallelization_strategy ("MULTI_CORE_REUSE_GENERALIZED");
             return bmm_multi_core_reuse_generalized(input_tensor_a, input_tensor_b, output_tensor);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_GENERALIZED:
+            profiler::set_parallelization_strategy ("MULTI_CORE_REUSE_MCAST_GENERALIZED");
             return bmm_multi_core_reuse_mcast_generalized(input_tensor_a, input_tensor_b, output_tensor);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_PADDING:
+            profiler::set_parallelization_strategy ("MULTI_CORE_REUSE_PADDING");
             return bmm_multi_core_reuse_padding(input_tensor_a, input_tensor_b, output_tensor);
             break;
         case BmmOpParallelizationStrategy::MULTI_CORE_REUSE_MCAST_PADDING:
+            profiler::set_parallelization_strategy ("MULTI_CORE_REUSE_MCAST_PADDING");
             return bmm_multi_core_reuse_mcast_padding(input_tensor_a, input_tensor_b, output_tensor);
             break;
         case BmmOpParallelizationStrategy::SINGLE_CORE:
         default:
+            profiler::set_parallelization_strategy ("SINGLE_CORE");
             return bmm_single_core(input_tensor_a, input_tensor_b, output_tensor);
     }
 
 }
-
 
 /*
  * BERT LARGE MATMUL AND BMM
@@ -483,6 +498,7 @@ Program BertLargeMatmul::create_program(const std::vector<std::reference_wrapper
     bool fuse_batch = true;
     switch (this->bert_large_matmul_op_type) {
         case BertLargeMatmulOpType::FUSED_QKV:
+            profiler::set_preferred_name("FUSED_QKV");
             compute_and_storage_grid_size = {12, 9};
             TT_ASSERT((compute_and_storage_grid_size.x <= device_compute_and_storage_grid_size.x && compute_and_storage_grid_size.y <= device_compute_and_storage_grid_size.y), "Unsupported grid shape");
             in0_block_w = 4;
@@ -493,6 +509,7 @@ Program BertLargeMatmul::create_program(const std::vector<std::reference_wrapper
             program = matmul_multi_core_reuse_mcast_optimized_bert_large(input_tensor_a, input_tensor_b, output_tensor, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);
             break;
         case BertLargeMatmulOpType::FF1:
+            profiler::set_preferred_name("FF1");
             compute_and_storage_grid_size = {12, 9};
             TT_ASSERT((compute_and_storage_grid_size.x <= device_compute_and_storage_grid_size.x && compute_and_storage_grid_size.y <= device_compute_and_storage_grid_size.y), "Unsupported grid shape");
             in0_block_w = 4;
@@ -503,6 +520,7 @@ Program BertLargeMatmul::create_program(const std::vector<std::reference_wrapper
             program = matmul_multi_core_reuse_mcast_optimized_bert_large(input_tensor_a, input_tensor_b, output_tensor, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);
             break;
         case BertLargeMatmulOpType::FF2:
+            profiler::set_preferred_name("FF2");
             compute_and_storage_grid_size = {11, 9};
             TT_ASSERT((compute_and_storage_grid_size.x <= device_compute_and_storage_grid_size.x && compute_and_storage_grid_size.y <= device_compute_and_storage_grid_size.y), "Unsupported grid shape");
             in0_block_w = 4;
@@ -513,6 +531,7 @@ Program BertLargeMatmul::create_program(const std::vector<std::reference_wrapper
             program = matmul_multi_core_reuse_mcast_optimized_bert_large(input_tensor_a, input_tensor_b, output_tensor, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);
             break;
         case BertLargeMatmulOpType::SELFOUT:
+            profiler::set_preferred_name("SELFOUT");
             compute_and_storage_grid_size = {11, 9};
             TT_ASSERT((compute_and_storage_grid_size.x <= device_compute_and_storage_grid_size.x && compute_and_storage_grid_size.y <= device_compute_and_storage_grid_size.y), "Unsupported grid shape");
             in0_block_w = 4;
@@ -523,6 +542,7 @@ Program BertLargeMatmul::create_program(const std::vector<std::reference_wrapper
             program = matmul_multi_core_reuse_mcast_optimized_bert_large(input_tensor_a, input_tensor_b, output_tensor, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);
             break;
         case BertLargeMatmulOpType::PRE_SOFTMAX_BMM:
+            profiler::set_preferred_name("PRE_SOFTMAX_BMM");
             compute_and_storage_grid_size = {12, 9};
             TT_ASSERT((compute_and_storage_grid_size.x <= device_compute_and_storage_grid_size.x && compute_and_storage_grid_size.y <= device_compute_and_storage_grid_size.y), "Unsupported grid shape");
             in0_block_w = 1;
@@ -533,6 +553,7 @@ Program BertLargeMatmul::create_program(const std::vector<std::reference_wrapper
             program = bmm_multi_core_reuse_optimized_bert_large(input_tensor_a, input_tensor_b, ashape, bshape, output_tensor, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch);
             break;
         case BertLargeMatmulOpType::POST_SOFTMAX_BMM:
+            profiler::set_preferred_name("POST_SOFTMAX_BMM");
             compute_and_storage_grid_size = {12, 9};
             TT_ASSERT((compute_and_storage_grid_size.x <= device_compute_and_storage_grid_size.x && compute_and_storage_grid_size.y <= device_compute_and_storage_grid_size.y), "Unsupported grid shape");
             ashape = {9, 16, 384, 384};
@@ -548,7 +569,6 @@ Program BertLargeMatmul::create_program(const std::vector<std::reference_wrapper
     }
     return program;
 }
-
 
 }  // namespace tt_metal
 

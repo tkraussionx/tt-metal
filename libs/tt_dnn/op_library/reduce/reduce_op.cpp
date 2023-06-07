@@ -87,11 +87,14 @@ Program Reduce::create_program(const std::vector<std::reference_wrapper<const Te
 
     switch (reduce_op_utils::get_parallelization_strategy(input_tensor, this->dim)){
         case ReduceOpParallelizationStrategy::MULTI_CORE_H:
+            profiler::set_parallelization_strategy ("MULTI_CORE_H");
             return reduce_multi_core_h(input_tensor, output_tensor, this->math_op, this->dim, this->scaler);
         case ReduceOpParallelizationStrategy::MULTI_CORE_W:
+            profiler::set_parallelization_strategy ("MULTI_CORE_W");
             return reduce_multi_core_w(input_tensor, output_tensor, this->math_op, this->dim, this->scaler);
         case ReduceOpParallelizationStrategy::SINGLE_CORE:
         default:
+            profiler::set_parallelization_strategy ("SINGLE_CORE");
             return reduce_single_core(input_tensor, output_tensor, this->math_op, this->dim, this->scaler);
     }
 
