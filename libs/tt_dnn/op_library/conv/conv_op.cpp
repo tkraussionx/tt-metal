@@ -405,6 +405,12 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
     auto weight_l1_b0 = tt_metal::Buffer(device, weight_l1_b0_size, l1_bank_id, weight_l1_b0_size, tt_metal::BufferType::L1);
     uint32_t weight_address_map_l1_addr = weight_l1_b0.address();
 
+    uint32_t zeros_padding_buffer_l1_b0_size = 128;
+    uint32_t zeros_padding_buffer_l1_b0_size_bytes = zeros_padding_buffer_l1_b0_size * sizeof(uint32_t);
+    auto zeros_padding_buffer_l1_b0 = tt_metal::Buffer(device, zeros_padding_buffer_l1_b0_size_bytes, l1_bank_id, zeros_padding_buffer_l1_b0_size_bytes, tt_metal::BufferType::L1);
+    uint32_t zeros_padding_buffer_l1_addr = zeros_padding_buffer_l1_b0.address();
+    vector<uint32_t> zeros_padding_buffer(zeros_padding_buffer_l1_b0_size, 0); // copied to l1 before LaunchKernels
+
     // Keep for now, but need to fix when you get to multibank
     uint32_t out_dram_addr = dst_dram_buffer->address();
     auto out_dram_noc_xy = dst_dram_buffer->noc_coordinates();
@@ -499,6 +505,11 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
         in1_noc_y,
         weight_address_map_l1_addr,
         in1_block_num_tiles,
+
+        // padding buffer with zeros in l1
+        zeros_padding_buffer_l1_addr,
+        zeros_padding_buffer_l1_b0_size_bytes,
+
     };
 
     string writer_kernel;
@@ -591,6 +602,7 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
     pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
     tt_metal::WriteToDeviceL1(device, core, act_address_map_l1_addr, act_address_map);
     tt_metal::WriteToDeviceL1(device, core, weight_address_map_l1_addr, weight_address_map);
+    tt_metal::WriteToDeviceL1(device, core, zeros_padding_buffer_l1_addr, zeros_padding_buffer);
 
     pass &= tt_metal::LaunchKernels(device, program);
 
