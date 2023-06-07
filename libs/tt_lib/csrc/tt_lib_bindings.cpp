@@ -1478,7 +1478,6 @@ void DeviceModule(py::module &m_device) {
 
     m_device.def("StartDebugPrintServer", &StartDebugPrintServer);
     m_device.def("StartDebugPrintServerOnCores", &StartDebugPrintServerOnCores);
-    m_device.def("SetProfilerDir", &SetProfilerDir);
 
     m_device.def("EnableCompileCache", &EnableCompileCache);
     m_device.def("DisableCompileCache", &DisableCompileCache);
@@ -1495,6 +1494,77 @@ void DeviceModule(py::module &m_device) {
         Get a reference to host machine of a TT accelerator device, usually a reference to the host
         machine executing Python code.
     )doc");
+}
+
+void ProfilerModule(py::module &m_profiler) {
+    m_profiler.def("set_profiler_flag", &profiler::set_profiler_flag, R"doc(
+        Sets the profiling flag.
+
+        +------------------+------------------------+-----------------------+-------------+----------+
+        | Argument         | Description            | Data type             | Valid range | Required |
+        +==================+========================+=======================+=============+==========+
+        | flag             | Profiling state        | bool                  | true/false  | Yes      |
+        +------------------+------------------------+-----------------------+-------------+----------+
+    )doc");
+
+    m_profiler.def("set_profiler_location", &profiler::set_profiler_location, R"doc(
+        Sets the profiling root folder.
+
+        +------------------+------------------------+-----------------------+-------------+----------+
+        | Argument         | Description            | Data type             | Valid range | Required |
+        +==================+========================+=======================+=============+==========+
+        | profilerLocation | Profiling out folder   | string                | Valid dir   | Yes      |
+        +------------------+------------------------+-----------------------+-------------+----------+
+    )doc");
+
+    m_profiler.def("append_meta_data", &profiler::append_meta_data, R"doc(
+        Append extra information regardig the op.
+
+        +------------------+------------------------+-----------------------+------------------+----------+
+        | Argument         | Description            | Data type             | Valid range      | Required |
+        +==================+========================+=======================+==================+==========+
+        | metaData         | Meta Data              | string                | Non-empty string | Yes      |
+        +------------------+------------------------+-----------------------+------------------+----------+
+    )doc");
+
+    m_profiler.def("append_input_data", &profiler::append_input_data, R"doc(
+        Append op input information .
+
+        +------------------+------------------------+-----------------------+------------------+----------+
+        | Argument         | Description            | Data type             | Valid range      | Required |
+        +==================+========================+=======================+==================+==========+
+        | input            | Input tensor           | Tensor                | Valid Tensor     | Yes      |
+        +------------------+------------------------+-----------------------+------------------+----------+
+    )doc");
+
+    m_profiler.def("append_output_data", &profiler::append_output_data, R"doc(
+        Append op output information .
+
+        +------------------+------------------------+-----------------------+------------------+----------+
+        | Argument         | Description            | Data type             | Valid range      | Required |
+        +==================+========================+=======================+==================+==========+
+        | output           | output tensor          | Tensor                | Valid Tensor     | Yes      |
+        +------------------+------------------------+-----------------------+------------------+----------+
+    )doc");
+
+    m_profiler.def("set_preferred_name", &profiler::set_preferred_name, R"doc(
+        Set a name to be appended to the name that profiler started with.
+
+        +------------------+------------------------+-----------------------+------------------+----------+
+        | Argument         | Description            | Data type             | Valid range      | Required |
+        +==================+========================+=======================+==================+==========+
+        | name             | Preferred Name         | String                | Valid String     | Yes      |
+        +------------------+------------------------+-----------------------+------------------+----------+
+    )doc");
+
+    m_profiler.def("start_profiling", &profiler::start_profiling, R"doc(
+        Start profiling op.
+    )doc");
+
+    m_profiler.def("stop_profiling", &profiler::stop_profiling, R"doc(
+        Stop profiling op.
+    )doc");
+
 }
 
 void DTXModule(py::module &m_dtx) {
@@ -1536,6 +1606,9 @@ PYBIND11_MODULE(_C, m) {
 
     py::module_ m_device = m.def_submodule("device", "Submodule defining a host or device");
     tt::tt_metal::DeviceModule(m_device);
+
+    py::module_ m_profiler = m.def_submodule("profiler", "Submodule defining the profiler");
+    tt::tt_metal::ProfilerModule(m_profiler);
 
     py::module_ m_tensor = m.def_submodule("tensor", "Submodule defining an tt_metal tensor");
     tt::tt_metal::TensorModule(m_tensor);

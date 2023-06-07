@@ -140,16 +140,20 @@ Program EltwiseBinaryBroadcast::create_program(const std::vector<std::reference_
 
     switch (bcast_op_utils::get_parallelization_strategy(input_tensor_a, this->dim)) {
         case BcastOpParallelizationStrategy::MULTI_CORE_H:
+            profiler::set_parallelization_strategy ("MULTI_CORE_H");
             return bcast_multi_core_h(input_tensor_a, input_tensor_b, output_tensor, this->math_op, this->dim);
             break;
         case BcastOpParallelizationStrategy::MULTI_CORE_W:
+            profiler::set_parallelization_strategy ("MULTI_CORE_W");
             return bcast_multi_core_w(input_tensor_a, input_tensor_b, output_tensor, this->math_op, this->dim);
             break;
         case BcastOpParallelizationStrategy::MULTI_CORE_HW:
+            profiler::set_parallelization_strategy ("MULTI_CORE_HW");
             return bcast_multi_core_hw(input_tensor_a, input_tensor_b, output_tensor, this->math_op, this->dim);
             break;
         case BcastOpParallelizationStrategy::SINGLE_CORE:
         default:
+            profiler::set_parallelization_strategy ("SINGLE_CORE");
             return bcast_single_core(input_tensor_a, input_tensor_b, output_tensor, this->math_op, this->dim);
     }
 }

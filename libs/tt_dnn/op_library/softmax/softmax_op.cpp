@@ -7,6 +7,8 @@
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/common/tile_math.hpp"
 
+#include "tt_dnn/op_library/operation.hpp"
+
 #include <iostream>
 
 using u32 = std::uint32_t;
