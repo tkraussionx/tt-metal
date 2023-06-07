@@ -6,6 +6,7 @@
 
 #include <experimental/type_traits>
 
+#include "tt_metal/tools/profiler/op_profiler.hpp"
 
 namespace tt::tt_metal {
 
@@ -36,6 +37,7 @@ class Operation {
         virtual std::vector<Shape> compute_output_shapes(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const = 0;
         virtual std::vector<Tensor> create_output_tensors(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const = 0;
         virtual Program create_program(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors, std::vector<Tensor> &output_tensors) const = 0;
+        virtual std::string get_op_name() const = 0 ;
     };
 
     template< typename T >
@@ -67,6 +69,10 @@ class Operation {
             return this->object.create_program(input_tensors, output_tensors);
         }
 
+        std::string get_op_name() const {
+            return typeid(T).name();
+        }
+
       private:
         T object;
     };
@@ -96,8 +102,13 @@ class Operation {
     Program create_program(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors, std::vector<Tensor> &output_tensors) const {
         return this->implementation_->create_program(input_tensors, output_tensors);
     }
+
+    std::string get_op_name() const {
+        return this->implementation_->get_op_name();
+    }
+
+
 };
 
 }
-
 }

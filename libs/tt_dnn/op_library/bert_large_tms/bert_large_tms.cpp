@@ -62,17 +62,24 @@ Program BertLargeTM::create_program(const std::vector<std::reference_wrapper<con
     Program program;
     switch (this->bert_large_tm_op_type) {
         case BertLargeTMOpType::SPLIT_FUSED_QKV:
+            profiler::set_preferred_name("SPLIT_FUSED_QKV");
             program = multi_core_split_fused_qkv(input_tensor_a, output_tensors, compute_and_storage_grid_size);
             break;
         // Q and V heads use transpose_hw=false, while K head requires the additional transpose with transpose_hw=true.
         case BertLargeTMOpType::CREATE_Q_HEAD:
+            profiler::set_preferred_name("CREATE_Q_HEADS");
+            program = multi_core_create_qkv_heads(input_tensor_a, output_tensor, compute_and_storage_grid_size, /*transpose_hw=*/false);
+            break;
         case BertLargeTMOpType::CREATE_V_HEAD:
+            profiler::set_preferred_name("CREATE_V_HEADS");
             program = multi_core_create_qkv_heads(input_tensor_a, output_tensor, compute_and_storage_grid_size, /*transpose_hw=*/false);
             break;
         case BertLargeTMOpType::CREATE_K_HEAD:
+            profiler::set_preferred_name("CREATE_K_HEADS");
             program = multi_core_create_qkv_heads(input_tensor_a, output_tensor, compute_and_storage_grid_size, /*transpose_hw=*/true);
             break;
         case BertLargeTMOpType::CONCAT_HEADS:
+            profiler::set_preferred_name("CONCAT_HEADS");
             program = multi_core_concat_heads(input_tensor_a, output_tensor, compute_and_storage_grid_size);
             break;
         default:

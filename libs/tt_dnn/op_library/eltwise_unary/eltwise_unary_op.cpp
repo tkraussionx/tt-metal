@@ -8,6 +8,17 @@ using namespace tt::constants;
 namespace eltwise_unary_op_utils {
 using namespace tt::tt_metal;
 
+static const unordered_map<UnaryOpType::Enum ,string> optype_to_name = {
+    {UnaryOpType::Enum::EXP,"EXP"},
+    {UnaryOpType::Enum::RECIP,"SURECIPB"},
+    {UnaryOpType::Enum::GELU,"GELU"},
+    {UnaryOpType::Enum::RELU,"RELU"},
+    {UnaryOpType::Enum::SQRT,"SQRT"},
+    {UnaryOpType::Enum::SIGMOID,"SIGMOID"},
+    {UnaryOpType::Enum::LOG,"LOG"},
+    {UnaryOpType::Enum::TANH,"TANH"}
+};
+
 string get_op_name(UnaryOpType::Enum op_type) {
     string op_name;
     switch (op_type) {
@@ -94,12 +105,19 @@ std::vector<Tensor> EltwiseUnary::create_output_tensors(const std::vector<std::r
 Program EltwiseUnary::create_program(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors, std::vector<Tensor> &output_tensors) const {
     const auto& input_tensor = input_tensors.at(0).get();
     auto& output_tensor = output_tensors.at(0);
+
+    TT_ASSERT(eltwise_unary_op_utils::optype_to_name.find(this->op_type) != \
+            eltwise_unary_op_utils::optype_to_name.end(), "Eltwise op not defined");
+
+    profiler::set_preferred_name(eltwise_unary_op_utils::optype_to_name.at(this->op_type));
     switch (eltwise_unary_op_utils::get_parallelization_strategy(input_tensor)){
         case UnaryOpParallelizationStrategy::MULTI_CORE:
+            profiler::set_parallelization_strategy("MULTI_CORE");
             return eltwise_unary_multi_core(input_tensor, output_tensor, this->op_type);
             break;
         case UnaryOpParallelizationStrategy::SINGLE_CORE:
         default:
+            profiler::set_parallelization_strategy("SINGLE_CORE");
             return eltwise_unary_single_core(input_tensor, output_tensor, this->op_type);
     }
 

@@ -3,6 +3,7 @@
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "libs/tt_dnn/op_library/work_split.hpp"
+#include "tt_dnn/op_library/operation.hpp"
 
 #include "../op_config.hpp"
 
@@ -195,8 +196,7 @@ Tensor layernorm_(const Tensor &a, const Tensor* b, float eps, const Tensor* gam
         writers.push_back(writer_kernel);
     }
 
-    bool profile = false;
-    OpEnvConfig::update_profile(&profile);
+    auto profile = profiler::get_profiler_flag();
     CompileProgram(device, program, profile);
     ConfigureDeviceWithProgram(device, program);
 
@@ -219,7 +219,15 @@ Tensor layernorm_(const Tensor &a, const Tensor* b, float eps, const Tensor* gam
     LaunchKernels(device, program);
 
     if (profile)
+    {
+        profiler::append_input_data(a);
+        if (b)
+        {
+            profiler::append_input_data(*b);
+        }
+        profiler::append_output_data(output);
         tt_metal::DumpDeviceProfileResults(device, program);
+    }
 
     return output;
 } // softmax
@@ -227,7 +235,13 @@ Tensor layernorm_(const Tensor &a, const Tensor* b, float eps, const Tensor* gam
 Tensor layernorm(const Tensor &a, float eps, bool out_dram) { return layernorm_(a, nullptr, eps, nullptr, nullptr, out_dram); }
 Tensor layernorm_gamma(const Tensor &a, float eps, const Tensor& gamma, bool out_dram) { return layernorm_(a, nullptr, eps, &gamma, nullptr, out_dram); }
 Tensor layernorm_gamma_beta(const Tensor &a, float eps, const Tensor& gamma, const Tensor& beta, bool out_dram) { return layernorm_(a, nullptr, eps, &gamma, &beta, out_dram); }
-Tensor add_layernorm_gamma_beta(const Tensor &a, const Tensor& b, float eps, const Tensor& gamma, const Tensor& beta, bool out_dram) { return layernorm_(a, &b, eps, &gamma, &beta, out_dram); }
+Tensor add_layernorm_gamma_beta(const Tensor &a, const Tensor& b, float eps, const Tensor& gamma, const Tensor& beta, bool out_dram) {
+    string op_name = "add_layernorm_gamma_beta";
+    profiler::start_profiling(op_name);
+    auto out = layernorm_(a, &b, eps, &gamma, &beta, out_dram);
+    profiler::stop_profiling(op_name);
+    return out;
+}
 
 }  // namespace ll_buda
 
