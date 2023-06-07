@@ -127,6 +127,10 @@ void MAIN {
                     cb_wait_front(in0_cb_id, in0_block_num_tiles);
                 }
                 cb_wait_front(in1_cb_id, in1_block_num_tiles);
+
+                // SliceRange in1_sr = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
+                // MATH(( DPRINT << TileSlice(in1_cb_id, 0, in1_sr) << ENDL() ));
+
                 int in0_index_subblock_offset = 0;
                 for (uint32_t in0_subblock_i = 0; in0_subblock_i < in0_num_subblocks; ++in0_subblock_i) {
                     int in1_index_subblock_offset = 0;

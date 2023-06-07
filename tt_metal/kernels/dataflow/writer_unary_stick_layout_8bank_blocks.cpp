@@ -15,7 +15,6 @@ void kernel_main() {
     constexpr uint32_t cb_id_out0 = tt::CB::c_out0;
 
     constexpr uint32_t TILE_HEIGHT = 32;                    // TODO: use common source of truth
-    constexpr uint32_t dtype_nbytes = 2;                    // TODO: obtain from data type
 
     // TODO(agrebenisan): This isn't good... here we are assuming
     // that the stick size dictates tiles c, but stick size

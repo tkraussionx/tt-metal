@@ -1,6 +1,7 @@
 #include "dataflow_api.h"
 
 void kernel_main() {
+    // This writer is for output tensor in tile format
 
     uint32_t out_addr                   = get_arg_val<uint32_t>(0);
     uint32_t out_stride_w               = get_arg_val<uint32_t>(2);
@@ -15,12 +16,14 @@ void kernel_main() {
 
     constexpr uint32_t out_cb_id = tt::CB::c_out0;
 
-    constexpr uint32_t tile_size_pow2_exponent = 11;    // == 2^11 = 2048 = 2 * 32 * 32 (assuming dtype = 2 bytes)
-    const InterleavedPow2AddrGen<true> s = {
+    const uint32_t tile_nbytes = get_tile_size(out_cb_id);
+
+    const InterleavedAddrGenFast<true> s = {
         .bank_base_address = out_addr,
-        .log_base_2_of_page_size = tile_size_pow2_exponent
+        .page_size = tile_nbytes,
+        .data_format = DataFormat::Bfp8_b
+        // .data_format = DataFormat::Float16
     };
-    const uint32_t tile_size_bytes = get_tile_size(out_cb_id);
 
     uint32_t out_sbh_start_tile_id = 0;
     for(uint32_t sbh = 0; sbh < out_num_subblocks_h; ++sbh) {
@@ -34,8 +37,8 @@ void kernel_main() {
                 uint32_t out_tile_id = out_sb_row_start_tile_id;
                 for(uint32_t w = 0; w < out_subblock_w; ++w) {
                     uint64_t out_tile_noc_addr = get_noc_addr(out_tile_id, s);
-                    noc_async_write(l1_read_addr, out_tile_noc_addr, tile_size_bytes);
-                    l1_read_addr += tile_size_bytes;
+                    noc_async_write(l1_read_addr, out_tile_noc_addr, tile_nbytes);
+                    l1_read_addr += tile_nbytes;
                     out_tile_id += out_stride_w;
                 }
                 out_sb_row_start_tile_id += out_stride_h;

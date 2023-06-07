@@ -12,12 +12,15 @@ namespace tt_metal {
 void create_cb_bmm_single_core_tilize_untilize(Program &program,
                                                 Device* device,
                                                 CoreCoord core,
+                                                DataFormat in0_df,
+                                                DataFormat in1_df,
+                                                DataFormat out_df,
                                                 uint32_t in0_block_w,
                                                 uint32_t in0_block_h,
                                                 uint32_t in1_block_w,
                                                 uint32_t in0_tile_nbytes,
                                                 uint32_t in1_tile_nbytes,
-                                                uint32_t dtype_nbytes,
+                                                uint32_t out_tile_nbytes,
                                                 bool untilize_out = true) {
     // buffer indices
     uint32_t in0_cb                                 = CB::c_in0;
@@ -28,7 +31,6 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
     uint32_t untilize_mode_reblock_cb               = CB::c_intermed3;
     uint32_t out_cb                                 = CB::c_out0;
 
-    const uint32_t tile_size_bytes = dtype_nbytes * constants::TILE_HW;
     const uint32_t cb0_ntiles = in0_block_h * in0_block_w * 2;  // double buffer
     const uint32_t cb1_ntiles = in0_block_w * in1_block_w * 2;   // double buffer
     const uint32_t out_ntiles = in0_block_h * in1_block_w;
@@ -43,7 +45,7 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
         core,
         cb0_ntiles,
         cb0_ntiles * in0_tile_nbytes,
-        DataFormat::Float16_b
+        in0_df
     );
     // in1
     auto cb_in1 = CreateCircularBuffer(
@@ -53,7 +55,7 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
         core,
         cb1_ntiles,
         cb1_ntiles * in1_tile_nbytes,
-        DataFormat::Float16_b
+        in1_df
     );
 
     // intermediates
@@ -66,7 +68,7 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
         core,
         cb0_ntiles,
         cb0_ntiles * in0_tile_nbytes,
-        DataFormat::Float16_b
+        in0_df
     );
     auto cb_matmul_partials = CreateCircularBuffer(
         program,
@@ -74,8 +76,8 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
         matmul_partials_cb,
         core,
         out_ntiles,
-        out_ntiles * tile_size_bytes,
-        DataFormat::Float16_b
+        out_ntiles * out_tile_nbytes,
+        out_df
     );
     if (untilize_out) {
         auto cb_final_matmul_partials = CreateCircularBuffer(
@@ -84,8 +86,8 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
             untilize_mode_final_matmul_partials_cb,
             core,
             out_ntiles,
-            out_ntiles * tile_size_bytes,
-            DataFormat::Float16_b
+            out_ntiles * out_tile_nbytes,
+            out_df
         );
         // to reorganize output blocks to fill the whole "per core output block width"
         auto cb_reblock = CreateCircularBuffer(
@@ -94,8 +96,8 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
             untilize_mode_reblock_cb,
             core,
             in1_block_w,                    // a single row of tiles
-            in1_block_w * tile_size_bytes,
-            DataFormat::Float16_b
+            in1_block_w * out_tile_nbytes,
+            out_df
         );
     }
 
@@ -108,8 +110,8 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
             out_cb,
             core,
             out_ntiles,
-            out_ntiles * tile_size_bytes,
-            DataFormat::Float16_b
+            out_ntiles * out_tile_nbytes,
+            out_df
         );
     } else {
         // use the same address space as the partials intermed CB
@@ -119,15 +121,15 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
             out_cb,
             core,
             out_ntiles,
-            out_ntiles * tile_size_bytes,
+            out_ntiles * out_tile_nbytes,
             cb_matmul_partials->address(),
-            DataFormat::Float16_b
+            out_df
         );
     }
-
-    // std::cout << "NUMBER OF TILES IN OUT_CB = " << out_ntiles << " (" << out_ntiles * tile_size_bytes << " bytes)" << std::endl;
 }
 
+// NOTE (AS): This is a temporary utility function for dtype -> dformat mapping.
+// TODO: Replace with a common utility.
 DataFormat get_tensor_df_from_dt(const DataType& dt) {
     switch (dt) {
         case DataType::BFLOAT16:
@@ -142,6 +144,7 @@ DataFormat get_tensor_df_from_dt(const DataType& dt) {
 
 Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
                                        const Tensor &in1,       // weights
+                                       DataType out_dt,
                                        uint32_t in0_height_nblocks,
                                        uint32_t in0_width_nblocks,
                                        uint32_t in1_width_nblocks,
@@ -151,8 +154,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
                                        uint32_t out_subblock_height_ntiles,
                                        uint32_t out_subblock_width_ntiles,
                                        bool tilize_in0 = true,
-                                       bool untilize_out = true,
-                                       DataType out_dt = DataType::BFLOAT16) {
+                                       bool untilize_out = true) {
     const auto [in0_batch, in0_channel, in0_height, in0_width] = in0.shape();
     const auto [in1_batch, in1_channel, in1_height, in1_width] = in1.shape();
 
@@ -189,11 +191,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
     TT_ASSERT(!untilize_out || (untilize_out && out_dt == DataType::BFLOAT16));
     const auto out_df = get_tensor_df_from_dt(out_dt);
 
-    constexpr uint32_t dtype_nbytes = 2;    // TODO (AS); Obtain from the datatype
-    const uint32_t tile_size_bytes = dtype_nbytes * constants::TILE_HW;   // TODO: use datatype size
-    const auto in0_dt_nbytes = ...;
     const auto in0_tile_nbytes = tile_size(in0_df);
-    const auto in1_dt_nbytes = ...;
     const auto in1_tile_nbytes = tile_size(in1_df);
     const auto out_tile_nbytes = tile_size(out_df);
 
@@ -214,9 +212,9 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
 
     const std::array<uint32_t, 4> out_shape{in0_batch, in0_channel, in0_height, in1_width};
     Tensor output = Tensor(out_shape,
-                            out_dt,
-                            untilize_out ? Layout::ROW_MAJOR : Layout::TILE,
-                            device);
+                           out_dt,
+                           untilize_out ? Layout::ROW_MAJOR : Layout::TILE,
+                           device);
     Buffer *dst_dram_buffer = output.buffer();
     TT_ASSERT(dst_dram_buffer != nullptr, "Output buffer should be allocated on device!");
 
@@ -240,7 +238,6 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
     uint32_t in0_block_num_tiles = in0_block_h * in0_block_w;
     uint32_t in0_num_subblocks = in0_block_h / in0_subblock_h;
     uint32_t in0_subblock_num_tiles = in0_subblock_h * in0_block_w;
-    uint32_t in0_partial_row_size_bytes = (in0_block_w * constants::TILE_WIDTH) * in0_dt_nbytes; // TODO: use datatype
     TT_ASSERT(in0_block_h % out_subblock_height_ntiles == 0);
 
     // in1
@@ -260,7 +257,6 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
     auto out_dram_noc_xy = dst_dram_buffer->noc_coordinates();
     uint32_t out_dram_noc_x = out_dram_noc_xy.x;
     uint32_t out_dram_noc_y = out_dram_noc_xy.y;
-    uint32_t out_row_size_bytes = in1_width * dtype_nbytes;  // TODO: use datatype info
     uint32_t out_subblock_ntiles = out_subblock_height_ntiles * out_subblock_width_ntiles;
     TT_ASSERT(out_subblock_ntiles <= 8, "Subblock can have at most 8 tiles to fit computed intermediates in dst[half]");
 
@@ -277,6 +273,9 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
         log_debug("in0_block_num_tiles: {}", in0_block_num_tiles);
         log_debug("in0_num_subblocks: {}", in0_num_subblocks);
         log_debug("in0_subblock_num_tiles: {}", in0_subblock_num_tiles);
+        log_debug("in0_df: {}", in0_df);
+        log_debug("in1_df: {}", in1_df);
+        log_debug("out_df: {}", out_df);
         // in1
         log_debug("in1_dram_addr: {}", in1_dram_addr);
         log_debug("in1_width_ntiles: {}", in1_width_ntiles);
@@ -298,12 +297,15 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
         program,
         in0.device(),
         core,
+        in0_df,
+        in1_df,
+        out_df,
         in0_block_w,
         in0_block_h,
         in1_block_w,
         in0_tile_nbytes,
         in1_tile_nbytes,
-        dtype_nbytes,
+        out_tile_nbytes,
         untilize_out);
 
     // Reader kernel
@@ -311,6 +313,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
     std::vector<uint32_t> reader_rt_args;
     if (tilize_in0) {
         // in0 is row major, in1 is tiled
+        // NOTE: this only makes sense for non-tile-shared datatypes for in0
         reader_kernel = "tt_metal/kernels/dataflow/reader_bmm_single_core_tilize_untilize.cpp";
         reader_rt_args = {
             // in0
@@ -319,10 +322,10 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
             in0_num_blocks_h,
             in0_num_blocks_w,
             in0_block_num_tiles,
-            in0_block_h * constants::TILE_HEIGHT,               // in0_block_nrows,
-            0,                                                  // start row id
-            in0_width * dtype_nbytes,                           // size of an in0 row
-            in0_block_w * constants::TILE_WIDTH * dtype_nbytes, // size of partial row to fit within a block width
+            in0_block_h * constants::TILE_HEIGHT,                       // in0_block_nrows,
+            in0.element_size(),                                         // UNUSED
+            in0_width * in0.element_size(),                             // page size (size of an in0 row)
+            in0_block_w * constants::TILE_WIDTH * in0.element_size(),   // size of partial row to fit within a block width
             // in1
             in1_dram_addr,
             in1_block_h,
@@ -331,7 +334,8 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
             in1_block_num_tiles,
             in1_width_ntiles,
             in1_width_ntiles * in1_block_h,
-            in1_block_w
+            in1_block_w,
+            static_cast<uint32_t>(in1_df)
         };
     } else {
         // in0 is tiled, in1 is tiled
@@ -384,11 +388,11 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
         writer_rt_args = {
             out_dram_addr,
             in0_block_h_data,
-            in1_block_w * constants::TILE_WIDTH * dtype_nbytes, // block_row_size
+            in1_block_w * constants::TILE_WIDTH * output.element_size(), // block_row_size
             1,                                                  // batch
             in0_num_blocks_h,
             in1_num_blocks_w,
-            in1_width * dtype_nbytes                            // output_row_size
+            in1_width * output.element_size()   // output_row_size
         };
     } else {
         // out is tiled

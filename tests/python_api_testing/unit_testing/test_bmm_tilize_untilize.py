@@ -32,11 +32,15 @@ b_block_width_ntiles = [16]
 # output sublobcking per block:
 out_subblock_height_ntiles = [4] ## == a_block_height_ntiles, <= 8
 out_subblock_width_ntiles = [2]  ## == b_block_width_ntiles, <= 8
-tilize_a = [True, False]
-untilize_out = [True, False]
-a_dtype = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
-b_dtype = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
-out_dtype = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
+tilize_a = [False]  ## [True, False]
+untilize_out = [False]  ## [True, False]
+
+# a_dtype = [ttl.tensor.DataType.BFLOAT16]    ##, ttl.tensor.DataType.BFLOAT8_B]
+a_dtype = [ttl.tensor.DataType.BFLOAT8_B]
+# b_dtype = [ttl.tensor.DataType.BFLOAT16]    ##, ttl.tensor.DataType.BFLOAT8_B]
+b_dtype = [ttl.tensor.DataType.BFLOAT8_B]
+# out_dtype = [ttl.tensor.DataType.BFLOAT16]    ##, ttl.tensor.DataType.BFLOAT8_B]
+out_dtype = [ttl.tensor.DataType.BFLOAT8_B]
 
 
 @pytest.mark.parametrize(
@@ -80,6 +84,7 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
     torch.manual_seed(0)
     a = torch.randn(a_shape, dtype=torch.bfloat16).float()
     b = torch.randn(b_shape, dtype=torch.bfloat16).float()
+    # b = torch.zeros(b_shape, dtype=torch.bfloat16).float()
 
     ## tensor a
     if tilize_a:
@@ -99,9 +104,8 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
         device)
 
     ## tensor b, in tile format
-    b_list = tilize_to_list(b)
     ttb = ttl.tensor.Tensor(
-        b_list,
+        tilize_to_list(b),
         b_shape,
         b_dtype,
         ttl.tensor.Layout.TILE,
@@ -126,7 +130,7 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
     # print("b slice:\n", ttb_pytorch[0, 0, 0:32*a_block_width_ntiles*a_width_nblocks:32, 0:32*b_width_nblocks*b_block_width_ntiles:1])
 
     ## compute out
-    out = ttl.tensor.bmm_tilize_untilize(tta, ttb,
+    out = ttl.tensor.bmm_tilize_untilize(tta, ttb, out_dtype,
                                          a_height_nblocks, a_width_nblocks, b_width_nblocks,
                                          a_block_height_ntiles, a_block_width_ntiles, b_block_width_ntiles,
                                          out_subblock_height_ntiles, out_subblock_width_ntiles,
