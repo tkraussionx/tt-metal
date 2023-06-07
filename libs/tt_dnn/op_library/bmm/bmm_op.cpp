@@ -409,6 +409,7 @@ Tensor bmm_tilize_untilize(const Tensor& a, const Tensor& b,
                            uint32_t a_block_height_ntiles, uint32_t a_block_width_ntiles, uint32_t b_block_width_ntiles,
                            uint32_t out_subblock_height_ntiles, uint32_t out_subblock_width_ntiles,
                            bool tilize_a, bool untilize_out) {
+    // NOTE: Currently only provides Single Core implementation!
     return bmm_single_core_tilize_untilize(a, b,
                                            a_height_nblocks, a_width_nblocks, b_width_nblocks,
                                            a_block_height_ntiles, a_block_width_ntiles, b_block_width_ntiles,
