@@ -49,17 +49,27 @@ void Profiler::markStart(std::string timer_name)
     name_to_timer_map[timer_name].start = steady_clock::now();
 }
 
-void Profiler::markStop(std::string timer_name)
+void Profiler::markStop(std::string timer_name, bool dumpResults)
 {
     name_to_timer_map[timer_name].stop = steady_clock::now();
+    if (dumpResults)
+    {
+        dumpHostResults();
+    }
 }
 
 
-void Profiler::dumpHostResults(std::string name_prepend)
+void Profiler::dumpHostResults(const std::vector<std::pair<std::string,std::string>>& additional_fields, std::string name_prepend)
 {
     const int large_width = 30;
     const int medium_width = 25;
 
+    for (auto timer : name_to_timer_map)
+    {
+        auto timer_period_ns = timerToTimerInt(timer.second);
+        TT_ASSERT (timer_period_ns.start != 0 , "Timer start cannot be zero on : " + timer.first);
+        TT_ASSERT (timer_period_ns.stop != 0 , "Timer stop cannot be zero on : " + timer.first);
+    }
     std::filesystem::path log_path = output_dir / HOST_SIDE_LOG;
     std::ofstream log_file;
 
@@ -72,6 +82,12 @@ void Profiler::dumpHostResults(std::string name_prepend)
         log_file << "Start timer count [ns]"  << ", ";
         log_file << "Stop timer count [ns]"  << ", ";
         log_file << "Delta timer count [ns]";
+
+        for (auto &field: additional_fields)
+        {
+            log_file  << ", "<< field.first;
+        }
+
         log_file << std::endl;
         host_new_log = false;
     }
@@ -88,12 +104,23 @@ void Profiler::dumpHostResults(std::string name_prepend)
         log_file << timer_period_ns.start  << ", ";
         log_file << timer_period_ns.stop  << ", ";
         log_file << timer_period_ns.delta;
+
+        for (auto &field: additional_fields)
+        {
+            log_file  << ", "<< field.second;
+        }
+
         log_file << std::endl;
     }
 
     log_file.close();
 
     name_to_timer_map.clear();
+}
+
+void Profiler::dumpHostResults(std::string name_prepend)
+{
+    dumpHostResults({}, name_prepend);
 }
 
 void Profiler::dumpDeviceResults (
@@ -158,7 +185,6 @@ void Profiler::readRiscProfilerResults(
     dropped_marker_counter = profile_buffer[kernel_profiler::DROPPED_MARKER_COUNTER];
 
     if(dropped_marker_counter > 0){
-        std::cout << "PROFILER OVERFLOW at index " << end_index << std::endl;
         log_debug(
                 tt::LogDevice,
                 "{} device markers on device {} worker core {},{} risc {} were dropped. End index {}",

@@ -1,3 +1,5 @@
+#include <magic_enum.hpp>
+
 #include "tt_dnn/op_library/bcast/bcast_op.hpp"
 #include "tensor/tensor.hpp"
 #include "tt_metal/host_api.hpp"
@@ -138,7 +140,11 @@ Program EltwiseBinaryBroadcast::create_program(const std::vector<std::reference_
     const auto& input_tensor_b = input_tensors.at(1).get();
     auto& output_tensor = output_tensors.at(0);
 
-    switch (bcast_op_utils::get_parallelization_strategy(input_tensor_a, this->dim)) {
+    auto parallelization_strategy = bcast_op_utils::get_parallelization_strategy(input_tensor_a, this->dim);
+
+    profiler::set_parallelization_strategy(fmt::format("{}",magic_enum::enum_name(parallelization_strategy)));
+
+    switch (parallelization_strategy){
         case BcastOpParallelizationStrategy::MULTI_CORE_H:
             return bcast_multi_core_h(input_tensor_a, input_tensor_b, output_tensor, this->math_op, this->dim);
             break;

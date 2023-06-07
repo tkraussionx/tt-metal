@@ -53,7 +53,7 @@ TT_DNN_SRCS = \
 
 TT_DNN_LIB = $(LIBDIR)/libtt_dnn.a
 TT_DNN_DEFINES = -DGIT_HASH=$(shell git rev-parse HEAD)
-TT_DNN_INCLUDES = $(LIBS_INCLUDES)
+TT_DNN_INCLUDES = $(LIBS_INCLUDES) -I$(TT_METAL_HOME)/tt_metal/third_party/magic_enum
 TT_DNN_LDFLAGS = -lcommon -lllrt -ltt_metal -ltensor -ldtx
 TT_DNN_CFLAGS = $(CFLAGS) -Werror -Wno-int-to-pointer-cast
 

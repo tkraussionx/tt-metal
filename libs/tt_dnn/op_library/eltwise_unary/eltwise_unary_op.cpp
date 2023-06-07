@@ -1,3 +1,5 @@
+#include <magic_enum.hpp>
+
 #include "tt_dnn/op_library/eltwise_unary/eltwise_unary_op.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
@@ -222,7 +224,13 @@ std::vector<Tensor> EltwiseUnary::create_output_tensors(const std::vector<std::r
 Program EltwiseUnary::create_program(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors, std::vector<Tensor> &output_tensors) const {
     const auto& input_tensor = input_tensors.at(0).get();
     auto& output_tensor = output_tensors.at(0);
-    switch (eltwise_unary_op_utils::get_parallelization_strategy(input_tensor)){
+
+    auto parallelization_strategy = eltwise_unary_op_utils::get_parallelization_strategy(input_tensor);
+
+    profiler::set_preferred_name(fmt::format("{}",magic_enum::enum_name(this->op_type)));
+    profiler::set_parallelization_strategy(fmt::format("{}",magic_enum::enum_name(parallelization_strategy)));
+
+    switch (parallelization_strategy){
         case UnaryOpParallelizationStrategy::MULTI_CORE:
             return eltwise_unary_multi_core(input_tensor, output_tensor, this->op_type,param);
             break;

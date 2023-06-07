@@ -1,3 +1,5 @@
+#include <magic_enum.hpp>
+
 #include "tt_dnn/op_library/eltwise_binary/eltwise_binary_op.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
@@ -57,7 +59,12 @@ Program EltwiseBinary::create_program(const std::vector<std::reference_wrapper<c
     const auto& input_tensor_b = input_tensors.at(1).get();
     auto& output_tensor = output_tensors.at(0);
 
-    switch (eltwise_binary_op_utils::get_parallelization_strategy(input_tensor_a, input_tensor_b)){
+    auto parallelization_strategy = eltwise_binary_op_utils::get_parallelization_strategy(input_tensor_a, input_tensor_b);
+
+    profiler::set_preferred_name(fmt::format("{}",magic_enum::enum_name(this->op_type)));
+    profiler::set_parallelization_strategy(fmt::format("{}",magic_enum::enum_name(parallelization_strategy)));
+
+    switch (parallelization_strategy){
         case BinaryOpParallelizationStrategy::MULTI_CORE:
             return eltwise_binary_multi_core(input_tensor_a, input_tensor_b, output_tensor, this->op_type);
             break;

@@ -1,3 +1,5 @@
+#include <magic_enum.hpp>
+
 #include "tt_dnn/op_library/reduce/reduce_op.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
@@ -85,7 +87,11 @@ Program Reduce::create_program(const std::vector<std::reference_wrapper<const Te
     const auto& input_tensor = input_tensors.at(0).get();
     auto& output_tensor = output_tensors.at(0);
 
-    switch (reduce_op_utils::get_parallelization_strategy(input_tensor, this->dim)){
+    auto parallelization_strategy = reduce_op_utils::get_parallelization_strategy(input_tensor, this->dim);
+
+    profiler::set_parallelization_strategy(fmt::format("{}",magic_enum::enum_name(parallelization_strategy)));
+
+    switch (parallelization_strategy){
         case ReduceOpParallelizationStrategy::MULTI_CORE_H:
             return reduce_multi_core_h(input_tensor, output_tensor, this->math_op, this->dim, this->scaler);
         case ReduceOpParallelizationStrategy::MULTI_CORE_W:

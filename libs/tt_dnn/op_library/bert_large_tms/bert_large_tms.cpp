@@ -1,3 +1,5 @@
+#include <magic_enum.hpp>
+
 #include "tt_dnn/op_library/bert_large_tms/bert_large_tms.hpp"
 
 #include "tt_metal/host_api.hpp"
@@ -60,12 +62,17 @@ Program BertLargeTM::create_program(const std::vector<std::reference_wrapper<con
     TT_ASSERT((compute_and_storage_grid_size.x <= device_compute_and_storage_grid_size.x && compute_and_storage_grid_size.y <= device_compute_and_storage_grid_size.y), "Unsupported grid shape");
 
     Program program;
+
+    profiler::set_preferred_name(fmt::format("{}",magic_enum::enum_name(this->bert_large_tm_op_type)));
+
     switch (this->bert_large_tm_op_type) {
         case BertLargeTMOpType::SPLIT_FUSED_QKV:
             program = multi_core_split_fused_qkv(input_tensor_a, output_tensors, compute_and_storage_grid_size);
             break;
         // Q and V heads use transpose_hw=false, while K head requires the additional transpose with transpose_hw=true.
         case BertLargeTMOpType::CREATE_Q_HEAD:
+            program = multi_core_create_qkv_heads(input_tensor_a, output_tensor, compute_and_storage_grid_size, /*transpose_hw=*/false);
+            break;
         case BertLargeTMOpType::CREATE_V_HEAD:
             program = multi_core_create_qkv_heads(input_tensor_a, output_tensor, compute_and_storage_grid_size, /*transpose_hw=*/false);
             break;

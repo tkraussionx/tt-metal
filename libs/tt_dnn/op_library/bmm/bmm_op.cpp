@@ -1,9 +1,12 @@
+#include <magic_enum.hpp>
+
 #include "tt_dnn/op_library/bmm/bmm_op.hpp"
 
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
 
 #include "tt_dnn/op_library/auto_pad.hpp"
+
 
 using namespace tt::constants;
 
@@ -309,7 +312,10 @@ Program Matmul::create_program(const std::vector<std::reference_wrapper<const Te
     const auto& input_tensor_b = input_tensors.at(1).get();
     auto& output_tensor = output_tensors.at(0);
 
-    switch (bmm_op_utils::get_parallelization_strategy(input_tensor_a, input_tensor_b)){
+    auto parallelization_strategy = bmm_op_utils::get_parallelization_strategy(input_tensor_a, input_tensor_b);
+    profiler::set_parallelization_strategy (fmt::format("{}",magic_enum::enum_name(parallelization_strategy)));
+
+    switch (parallelization_strategy){
         case BmmOpParallelizationStrategy::MULTI_CORE:
             return matmul_multi_core(input_tensor_a, input_tensor_b, output_tensor);
             break;
@@ -367,7 +373,10 @@ Program BatchedMatmul::create_program(const std::vector<std::reference_wrapper<c
     const auto& input_tensor_b = input_tensors.at(1).get();
     auto& output_tensor = output_tensors.at(0);
 
-    switch (bmm_op_utils::get_parallelization_strategy(input_tensor_a, input_tensor_b)){
+    auto parallelization_strategy = bmm_op_utils::get_parallelization_strategy(input_tensor_a, input_tensor_b);
+    profiler::set_parallelization_strategy (fmt::format("{}",magic_enum::enum_name(parallelization_strategy)));
+
+    switch (parallelization_strategy){
         case BmmOpParallelizationStrategy::MULTI_CORE:
             return bmm_multi_core(input_tensor_a, input_tensor_b, output_tensor);
             break;
@@ -395,7 +404,6 @@ Program BatchedMatmul::create_program(const std::vector<std::reference_wrapper<c
     }
 
 }
-
 
 /*
  * BERT LARGE MATMUL AND BMM
@@ -481,6 +489,9 @@ Program BertLargeMatmul::create_program(const std::vector<std::reference_wrapper
     MathFidelity math_fidelity = MathFidelity::LoFi;
     uint32_t in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N;
     bool fuse_batch = true;
+
+    profiler::set_preferred_name(fmt::format("{}",magic_enum::enum_name(this->bert_large_matmul_op_type)));
+
     switch (this->bert_large_matmul_op_type) {
         case BertLargeMatmulOpType::FUSED_QKV:
             compute_and_storage_grid_size = {12, 9};
@@ -548,7 +559,6 @@ Program BertLargeMatmul::create_program(const std::vector<std::reference_wrapper
     }
     return program;
 }
-
 
 }  // namespace tt_metal
 

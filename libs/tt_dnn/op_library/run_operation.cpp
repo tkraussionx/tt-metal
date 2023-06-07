@@ -115,15 +115,22 @@ std::vector<Tensor> run_without_program_cache(
     const std::vector<std::reference_wrapper<const Tensor>> &input_tensors,
     const std::vector<std::optional<std::reference_wrapper<const Tensor>>> &optional_input_tensors) {
 
+    auto profile_run_wo_program_cache = profiler::ProfileScope(op.get_op_name());
+
     op.validate(input_tensors);
 
     auto device = detail::get_device(input_tensors);
     auto output_tensors = op.create_output_tensors(input_tensors);
 
     auto program = create_program(op, input_tensors, optional_input_tensors, output_tensors);
-    tt_metal::CompileProgram(device, program);
+    auto do_profile = profiler::get_profiler_flag();
+
+    tt_metal::CompileProgram(device, program, do_profile);
     tt_metal::ConfigureDeviceWithProgram(device, program);
     tt_metal::LaunchKernels(device, program);
+
+    profiler::append_all_tensor_io_data(input_tensors, optional_input_tensors, output_tensors);
+    profiler::dump_device_profiler_results(device, program);
 
     return output_tensors;
 }
@@ -158,6 +165,7 @@ std::vector<Tensor> run(
     const std::vector<std::optional<std::reference_wrapper<const Tensor>>> &optional_input_tensors
 ) {
     if (program_cache::is_enabled() and op.supports_program_caching()) {
+        TT_ASSERT (profiler::get_profiler_flag() == false , "Refer to ticket #1162 regarding profiling and program caching");
         return detail::run_with_program_cache(op, input_tensors, optional_input_tensors);
     } else {
         return detail::run_without_program_cache(op, input_tensors, optional_input_tensors);
