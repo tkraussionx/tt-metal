@@ -331,18 +331,13 @@ void cb_pop_front(std::int32_t operand, std::int32_t num_tiles) {
 #endif
 
 /**
- * Returns a pointer to the beginning of a memory block previously reserved
- * by cb_reserve_back. Note that this call is only valid between calls
- * to cb_reserve_back and cb_push_back. The amount of valid memory
- * is equal to the number of tiles requested in a prior cb_reserve_back call.
+ * Returns the fifo write pointer to the specified CB id.
  *
- * CB total size must be an even multiple of this call.
- *
- * Return value: None
+ * Return value: uint32_t (pointer)
  *
  * | Argument  | Description                          | Type     | Valid Range                                                                                       | Required |
  * |-----------|--------------------------------------|----------|---------------------------------------------------------------------------------------------------|----------|
- * | cb_id     | The index of the cirular buffer (CB) | uint32_t | 0 to 31                                                                                           | True     |
+ * | operand   | The index of a cirular buffer (CB)   | int32_t  | 0 to 31                                                                                           | True     |
  */
 inline __attribute__((always_inline))
 uint32_t get_write_ptr(std::int32_t operand) {
@@ -353,16 +348,13 @@ uint32_t get_write_ptr(std::int32_t operand) {
 }
 
 /**
- * Returns a pointer to the beginning of a memory block previously received
- * by cb_wait_front. Note that this call is only valid between calls
- * to cb_wait_front and cb_pop_front. The amount of valid memory
- * is equal to the number of tiles requested in a prior cb_wait_front call.
+ * Returns the fifo read pointer to the specified CB id.
  *
- * Return value: None
+ * Return value: uint32_t (pointer)
  *
  * | Argument  | Description                          | Type     | Valid Range                                                                                       | Required |
  * |-----------|--------------------------------------|----------|---------------------------------------------------------------------------------------------------|----------|
- * | cb_id     | The index of the cirular buffer (CB) | uint32_t | 0 to 31                                                                                           | True     |
+ * | operand   | The index of a cirular buffer (CB)   | int32_t  | 0 to 31                                                                                           | True     |
  */
 inline __attribute__((always_inline))
 uint32_t get_read_ptr(std::int32_t operand) {
