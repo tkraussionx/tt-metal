@@ -208,7 +208,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
 
     // start debug server for kernel dprint
     // int hart_mask = DPRINT_HART_NC | DPRINT_HART_BR;
-    tt_start_debug_print_server(device->cluster(), {0}, {debug_core});
+    // tt_start_debug_print_server(device->cluster(), {0}, {debug_core});
 
     const std::array<uint32_t, 4> out_shape{in0_batch, in0_channel, in0_height, in1_width};
     Tensor output = Tensor(out_shape,
@@ -274,8 +274,6 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
         log_debug("in0_num_subblocks: {}", in0_num_subblocks);
         log_debug("in0_subblock_num_tiles: {}", in0_subblock_num_tiles);
         log_debug("in0_df: {}", in0_df);
-        log_debug("in1_df: {}", in1_df);
-        log_debug("out_df: {}", out_df);
         // in1
         log_debug("in1_dram_addr: {}", in1_dram_addr);
         log_debug("in1_width_ntiles: {}", in1_width_ntiles);
@@ -286,11 +284,13 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
         log_debug("in1_block_h: {}", in1_block_h);
         log_debug("in1_num_blocks_w: {}", in1_num_blocks_w);
         log_debug("in1_num_blocks_h: {}", in1_num_blocks_h);
+        log_debug("in1_df: {}", in1_df);
         // out
         log_debug("out_dram_addr: {}", out_dram_addr);
         log_debug("out_subblock_height_ntiles: {}", out_subblock_height_ntiles);
         log_debug("out_subblock_width_ntiles: {}", out_subblock_width_ntiles);
         log_debug("out_subblock_ntiles: {}", out_subblock_ntiles);
+        log_debug("out_df: {}", out_df);
     }
 
     create_cb_bmm_single_core_tilize_untilize(
@@ -365,6 +365,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
             in0_block_w,                    // in0_next_block_stride_w,
             in1_width_ntiles * in1_block_h, // in1_next_block_stride_h,
             in1_block_w,                    // in1_next_block_stride_w
+            static_cast<uint32_t>(in1_df)
         };
     }
     auto reader = CreateDataMovementKernel(
@@ -392,7 +393,8 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
             1,                                                  // batch
             in0_num_blocks_h,
             in1_num_blocks_w,
-            in1_width * output.element_size()   // output_row_size
+            in1_width * output.element_size(),   // output_row_size
+            static_cast<uint32_t>(out_df)
         };
     } else {
         // out is tiled
@@ -409,6 +411,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
             out_subblock_ntiles,                            // out_subblock_tile_count
             in1_width_ntiles / out_subblock_width_ntiles,   // out_num_subblocks_w
             in0_height_ntiles / out_subblock_height_ntiles, // out_num_subblocks_h
+            static_cast<uint32_t>(out_df)
         };
     }
     for (auto param_val : writer_rt_args) {

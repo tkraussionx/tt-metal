@@ -1,5 +1,12 @@
 #include "dataflow_api.h"
 
+// NOTE: workaround since the addr gen is defined for fp16 and not fp16_b
+DataFormat get_usable_df(DataFormat df) {
+    return df != DataFormat::Float16_b
+            ? DataFormat::Bfp8_b
+            : DataFormat::Float16;
+} // get_usable_df()
+
 void kernel_main() {
     // This writer is for output tensor in tile format
 
@@ -13,6 +20,7 @@ void kernel_main() {
     uint32_t out_subblock_tile_count    = get_arg_val<uint32_t>(8);
     uint32_t out_num_subblocks_w        = get_arg_val<uint32_t>(9);
     uint32_t out_num_subblocks_h        = get_arg_val<uint32_t>(10);
+    DataFormat out_df = static_cast<DataFormat>(get_arg_val<uint32_t>(11));
 
     constexpr uint32_t out_cb_id = tt::CB::c_out0;
 
@@ -21,8 +29,7 @@ void kernel_main() {
     const InterleavedAddrGenFast<true> s = {
         .bank_base_address = out_addr,
         .page_size = tile_nbytes,
-        .data_format = DataFormat::Bfp8_b
-        // .data_format = DataFormat::Float16
+        .data_format = get_usable_df(out_df)
     };
 
     uint32_t out_sbh_start_tile_id = 0;

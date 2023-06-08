@@ -1,6 +1,13 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 
+// NOTE: workaround since the addr gen is defined for fp16 and not fp16_b
+DataFormat get_usable_df(DataFormat df) {
+    return df != DataFormat::Float16_b
+            ? DataFormat::Bfp8_b
+            : DataFormat::Float16;
+} // get_usable_df()
+
 void kernel_main() {
     // in0 tensor args
     uint32_t in0_addr              = get_arg_val<uint32_t>(0);
@@ -21,7 +28,6 @@ void kernel_main() {
     uint32_t in1_start_tile_id     = get_arg_val<uint32_t>(11);
     uint32_t in1_stride_w          = get_arg_val<uint32_t>(12);
     uint32_t in1_stride_h          = get_arg_val<uint32_t>(13);
-    // uint32_t in1_next_block_stride = get_arg_val<uint32_t>(14);
 
     // in1 block args
     uint32_t in1_block_w         = get_arg_val<uint32_t>(15);
@@ -34,35 +40,28 @@ void kernel_main() {
     uint32_t in1_next_block_stride_h = get_arg_val<uint32_t>(20);
     uint32_t in1_next_block_stride_w = get_arg_val<uint32_t>(21);
 
+    DataFormat in1_df = static_cast<DataFormat>(get_arg_val<uint32_t>(22));
+
+    DataFormat in0_df = in1_df; // TODO (AS): enable multi-precision
+
     constexpr uint32_t in0_cb_id = tt::CB::c_in0;
     constexpr uint32_t in1_cb_id = tt::CB::c_in1;
 
     uint32_t in0_tile_nbytes = get_tile_size(in0_cb_id);
     uint32_t in1_tile_nbytes = get_tile_size(in1_cb_id);
 
-    // constexpr uint32_t tile_size_pow2_exponent = 11;
-    // const InterleavedPow2AddrGen<true> s0 = {
-    //     .bank_base_address = in0_addr,
-    //     .log_base_2_of_page_size = tile_size_pow2_exponent
-    // };
-    // const InterleavedPow2AddrGen<true> s1 = {
-    //     .bank_base_address = in1_addr,
-    //     .log_base_2_of_page_size = tile_size_pow2_exponent
-    // };
     const InterleavedAddrGenFast<true> s0 = {
         .bank_base_address = in0_addr,
         .page_size = in0_tile_nbytes,
-        .data_format = DataFormat::Bfp8_b
-        // .data_format = DataFormat::Float16
+        .data_format = get_usable_df(in0_df)
     };
     const InterleavedAddrGenFast<true> s1 = {
         .bank_base_address = in1_addr,
         .page_size = in1_tile_nbytes,
-        .data_format = DataFormat::Bfp8_b
-        // .data_format = DataFormat::Float16
+        .data_format = get_usable_df(in1_df)
     };
 
-    DPRINT << FIXP() << SETW(32) << SETP(2);
+    // DPRINT << FIXP() << SETW(32) << SETP(2);
 
     uint32_t in0_start_tile_id = 0;
     // loop over in0 blocks along h

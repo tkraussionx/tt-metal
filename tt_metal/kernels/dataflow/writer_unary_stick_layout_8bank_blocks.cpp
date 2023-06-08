@@ -2,6 +2,13 @@
 #include "dataflow_api.h"
 #include "debug_print.h"
 
+// NOTE: workaround since the addr gen is defined for fp16 and not fp16_b
+DataFormat get_usable_df(DataFormat df) {
+    return df != DataFormat::Float16_b
+            ? DataFormat::Bfp8_b
+            : DataFormat::Float16;
+} // get_usable_df()
+
 void kernel_main() {
 
     uint32_t dst_addr = get_arg_val<uint32_t>(0);           // out_dram_addr
@@ -11,6 +18,10 @@ void kernel_main() {
     uint32_t num_blocks_h = get_arg_val<uint32_t>(4);
     uint32_t num_blocks_w = get_arg_val<uint32_t>(5);
     uint32_t output_row_size = get_arg_val<uint32_t>(6);    // in1_width * dtype_nbytes
+    DataFormat out_df = static_cast<DataFormat>(get_arg_val<uint32_t>(7));
+
+    // NOTE: Row major layout only supports fp16_b
+    TT_ASSERT(out_df != DataFormat::Bfp8_b);
 
     constexpr uint32_t cb_id_out0 = tt::CB::c_out0;
 
@@ -24,9 +35,10 @@ void kernel_main() {
     const uint32_t block_ntiles_h = num_rows_block / TILE_HEIGHT;
     uint32_t start_block_row_id = 0;
 
-    const InterleavedAddrGen<true> s = {
+    const InterleavedAddrGenFast<true> s = {
         .bank_base_address = dst_addr,
-        .page_size = output_row_size
+        .page_size = output_row_size,
+        .data_format = get_usable_df(out_df)
     };
     for(uint32_t b = 0; b < batch; ++b) {
         for(uint32_t block_h = 0; block_h < num_blocks_h; block_h++) {

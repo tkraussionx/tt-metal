@@ -2,6 +2,14 @@
 #include "dataflow_api.h"
 #include "debug_print.h"
 
+
+// NOTE: workaround since the addr gen is defined for fp16 and not fp16_b
+DataFormat get_usable_df(DataFormat df) {
+    return df != DataFormat::Float16_b
+            ? DataFormat::Bfp8_b
+            : DataFormat::Float16;
+} // get_usable_df()
+
 /**
  * Reader kernel used for single core BMM with tilize activations and untilize output.
  */
@@ -13,10 +21,8 @@ void kernel_main() {
     uint32_t in0_num_blocks_w = get_arg_val<uint32_t>(3);           // == in1_num_blocks_h
     uint32_t in0_block_num_tiles = get_arg_val<uint32_t>(4);
     uint32_t in0_block_nrows = get_arg_val<uint32_t>(5);
-    // uint32_t in0_dt_nbytes = get_arg_val<uint32_t>(6);
     uint32_t in0_row_size_bytes = get_arg_val<uint32_t>(7);         // size of a full row
     uint32_t in0_read_row_size_bytes = get_arg_val<uint32_t>(8);    // size of partial row to fit within a block width
-
     // in1
     uint32_t in1_addr = get_arg_val<uint32_t>(9);
     uint32_t in1_block_h = get_arg_val<uint32_t>(10);
@@ -26,39 +32,33 @@ void kernel_main() {
     uint32_t in1_stride_h = get_arg_val<uint32_t>(14);
     uint32_t in1_next_block_stride_h = get_arg_val<uint32_t>(15);
     uint32_t in1_next_block_stride_w = get_arg_val<uint32_t>(16);
-    // DataFormat in1_df = static_cast<DataFormat>(get_arg_val<uint32_t>(17));
+    DataFormat in1_df = static_cast<DataFormat>(get_arg_val<uint32_t>(17));
 
-    constexpr uint32_t TILE_HEIGHT = 32;                            // TODO: use a common source of truth
-    constexpr uint32_t TILE_WIDTH = 32;                             // TODO: use a common source of truth
+    DataFormat in0_df = in1_df;             // TODO (AS): handle multi-precision? Currently assuming all DF the same.
+
+    constexpr uint32_t TILE_HEIGHT = 32;    // TODO (AS): use a common source of truth
+    constexpr uint32_t TILE_WIDTH = 32;     // TODO (AS): use a common source of truth
 
     constexpr uint32_t in0_cb_id = tt::CB::c_in0;
     constexpr uint32_t in1_cb_id = tt::CB::c_in1;
 
     uint32_t in0_block_w = in1_block_h;
     const uint32_t in1_tile_nbytes = get_tile_size(in1_cb_id);
-    DPRINT << "TILE SIZE IN1: " << in1_tile_nbytes << ENDL();
 
     const InterleavedAddrGenFast<true> s0 = {
         .bank_base_address = in0_addr,
         .page_size = in0_row_size_bytes,
-        .data_format = DataFormat::Bfp8_b
-        // .data_format = DataFormat::Float16
+        .data_format = get_usable_df(in0_df)
     };
-
-    // const uint32_t tile_size_pow2_exponent = in1_dt_nbytes == 1 ? 10 : 11;    // 2^10 * dt_nbytes = 32 * 32 * dt_nbytes, tile size
-    // const InterleavedPow2AddrGen<true> s1 = {
-    //     .bank_base_address = in1_addr,
-    //     .log_base_2_of_page_size = tile_size_pow2_exponent
-    // };
 
     const InterleavedAddrGenFast<true> s1 = {
         .bank_base_address = in1_addr,
         .page_size = in1_tile_nbytes,
         .data_format = DataFormat::Bfp8_b
-        // .data_format = DataFormat::Float16
+        .data_format = get_usable_df(in1_df)
     };
 
-    DPRINT << FIXP() << SETP(2);
+    // DPRINT << FIXP() << SETP(2);
 
     uint32_t in0_curr_block_start_row_id = 0;
     // loop over in0 blocks along h
@@ -113,8 +113,6 @@ void kernel_main() {
                     in1_row_start_tile_id += in1_stride_h;
                 } // for in1_block_h
                 noc_async_read_barrier();
-
-                DPRINT << "IN1: " << in1_write_l1_addr << " === " << ENDL();
 
                 // SliceRange in1_sr = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
                 // DPRINT << "SLICE " << in1_current_block_start_tile_id << ": " << TileSlice(in1_cb_id, in1_current_block_start_tile_id, in1_sr) << ENDL();

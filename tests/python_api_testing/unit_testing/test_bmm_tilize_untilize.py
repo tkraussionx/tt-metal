@@ -35,25 +35,24 @@ out_subblock_width_ntiles = [2]  ## == b_block_width_ntiles, <= 8
 tilize_a = [False]  ## [True, False]
 untilize_out = [False]  ## [True, False]
 
-# a_dtype = [ttl.tensor.DataType.BFLOAT16]    ##, ttl.tensor.DataType.BFLOAT8_B]
-a_dtype = [ttl.tensor.DataType.BFLOAT8_B]
-# b_dtype = [ttl.tensor.DataType.BFLOAT16]    ##, ttl.tensor.DataType.BFLOAT8_B]
-b_dtype = [ttl.tensor.DataType.BFLOAT8_B]
+dtypes = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
+# # a_dtype = [ttl.tensor.DataType.BFLOAT16]    ##, ttl.tensor.DataType.BFLOAT8_B]
+# a_dtype = [ttl.tensor.DataType.BFLOAT8_B]
+# # b_dtype = [ttl.tensor.DataType.BFLOAT16]    ##, ttl.tensor.DataType.BFLOAT8_B]
+# b_dtype = [ttl.tensor.DataType.BFLOAT8_B]
 # out_dtype = [ttl.tensor.DataType.BFLOAT16]    ##, ttl.tensor.DataType.BFLOAT8_B]
-out_dtype = [ttl.tensor.DataType.BFLOAT8_B]
+# # out_dtype = [ttl.tensor.DataType.BFLOAT8_B]
 
 
 @pytest.mark.parametrize(
     'a_height_nblocks, a_width_nblocks, b_width_nblocks,\
      a_block_height_ntiles, a_block_width_ntiles, b_block_width_ntiles,\
      out_subblock_height_ntiles, out_subblock_width_ntiles,\
-     tilize_a, untilize_out,\
-     a_dtype, b_dtype, out_dtype',
+     tilize_a, untilize_out, dtypes',
     itertools.product(a_height_nblocks, a_width_nblocks, b_width_nblocks,
                       a_block_height_ntiles, a_block_width_ntiles, b_block_width_ntiles,
                       out_subblock_height_ntiles, out_subblock_width_ntiles,
-                      tilize_a, untilize_out,
-                      a_dtype, b_dtype, out_dtype)
+                      tilize_a, untilize_out, dtypes)
 )
 def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
                                              a_width_nblocks,
@@ -65,9 +64,12 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
                                              out_subblock_width_ntiles,
                                              tilize_a,
                                              untilize_out,
-                                             a_dtype,
-                                             b_dtype,
-                                             out_dtype):
+                                             dtypes):
+                                            #  a_dtype,
+                                            #  b_dtype,
+                                            #  out_dtype):
+    if (tilize_a or untilize_out) and dtypes != ttl.tensor.DataType.BFLOAT16:
+        return
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
     host = ttl.device.GetHost()
@@ -87,6 +89,7 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
     # b = torch.zeros(b_shape, dtype=torch.bfloat16).float()
 
     ## tensor a
+    a_dtype = dtypes
     if tilize_a:
         ## a in row-major
         assert(not (a_dtype == ttl.tensor.DataType.BFLOAT8_B) and 'Row-major format does not support BFLOAT8_B datatype!')
@@ -104,6 +107,7 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
         device)
 
     ## tensor b, in tile format
+    b_dtype = dtypes
     ttb = ttl.tensor.Tensor(
         tilize_to_list(b),
         b_shape,
@@ -112,6 +116,7 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
         device)
 
     ## tensor out format checks
+    out_dtype = dtypes
     if untilize_out:
         ## out in row-major
         assert(not (out_dtype == ttl.tensor.DataType.BFLOAT8_B) and 'Row-major format does not support BFLOAT8_B datatype!')
