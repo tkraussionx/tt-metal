@@ -3,12 +3,12 @@
 #include "debug_print.h"
 
 
-// NOTE: workaround since the addr gen is defined for fp16 and not fp16_b
-DataFormat get_usable_df(DataFormat df) {
-    return df != DataFormat::Float16_b
-            ? DataFormat::Bfp8_b
-            : DataFormat::Float16;
-} // get_usable_df()
+// // NOTE: workaround since the addr gen is defined for fp16 and not fp16_b
+// DataFormat get_usable_df(DataFormat df) {
+//     return df != DataFormat::Float16_b
+//             ? DataFormat::Bfp8_b
+//             : DataFormat::Float16;
+// } // get_usable_df()
 
 /**
  * Reader kernel used for single core BMM with tilize activations and untilize output.
@@ -48,14 +48,14 @@ void kernel_main() {
     const InterleavedAddrGenFast<true> s0 = {
         .bank_base_address = in0_addr,
         .page_size = in0_row_size_bytes,
-        .data_format = get_usable_df(in0_df)
+        .data_format = in0_df
     };
 
     const InterleavedAddrGenFast<true> s1 = {
         .bank_base_address = in1_addr,
         .page_size = in1_tile_nbytes,
         .data_format = DataFormat::Bfp8_b
-        .data_format = get_usable_df(in1_df)
+        .data_format = in1_df
     };
 
     // DPRINT << FIXP() << SETP(2);

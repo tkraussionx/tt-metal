@@ -208,7 +208,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
 
     // start debug server for kernel dprint
     // int hart_mask = DPRINT_HART_NC | DPRINT_HART_BR;
-    // tt_start_debug_print_server(device->cluster(), {0}, {debug_core});
+    tt_start_debug_print_server(device->cluster(), {0}, {debug_core});
 
     const std::array<uint32_t, 4> out_shape{in0_batch, in0_channel, in0_height, in1_width};
     Tensor output = Tensor(out_shape,
@@ -291,6 +291,9 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
         log_debug("out_subblock_width_ntiles: {}", out_subblock_width_ntiles);
         log_debug("out_subblock_ntiles: {}", out_subblock_ntiles);
         log_debug("out_df: {}", out_df);
+        // extra
+        log_debug("out size: {}", dst_dram_buffer->size());
+        log_debug("out pagesize: {}", dst_dram_buffer->page_size());
     }
 
     create_cb_bmm_single_core_tilize_untilize(

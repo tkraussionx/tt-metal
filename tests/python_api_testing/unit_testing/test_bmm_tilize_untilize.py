@@ -35,7 +35,9 @@ out_subblock_width_ntiles = [2]  ## == b_block_width_ntiles, <= 8
 tilize_a = [False]  ## [True, False]
 untilize_out = [False]  ## [True, False]
 
-dtypes = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
+dtypes = [ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16]
+# dtypes = [ttl.tensor.DataType.BFLOAT8_B]
+
 # # a_dtype = [ttl.tensor.DataType.BFLOAT16]    ##, ttl.tensor.DataType.BFLOAT8_B]
 # a_dtype = [ttl.tensor.DataType.BFLOAT8_B]
 # # b_dtype = [ttl.tensor.DataType.BFLOAT16]    ##, ttl.tensor.DataType.BFLOAT8_B]
@@ -70,6 +72,13 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
                                             #  out_dtype):
     if (tilize_a or untilize_out) and dtypes != ttl.tensor.DataType.BFLOAT16:
         return
+
+    print("AA ***************************************************************")
+    print("***************************************************************")
+    print("***************************************************************")
+    print("***************************************************************")
+    print("ZZ ***************************************************************")
+
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
     host = ttl.device.GetHost()
@@ -128,6 +137,8 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
        precision=2, threshold=10000,
        sci_mode=False, edgeitems=80, linewidth=400)
 
+    print(f'using dtype: {dtypes}')
+
     # tta_pytorch = untilize(torch.tensor(tta.to(host).data()).reshape(a_shape))
     # print("a slice:\n", tta_pytorch[0, 0, 0:32*a_block_height_ntiles*a_height_nblocks:32*a_block_height_ntiles, 0:32*a_width_nblocks*a_block_width_ntiles:1])
 
@@ -141,6 +152,7 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
                                          out_subblock_height_ntiles, out_subblock_width_ntiles,
                                          tilize_a, untilize_out)
     out = out.to(host)
+    # out.pretty_print()
     if not untilize_out:
         ## output is in tiled format
         out_pytorch = untilize(torch.tensor(out.data()).reshape(out_shape))
