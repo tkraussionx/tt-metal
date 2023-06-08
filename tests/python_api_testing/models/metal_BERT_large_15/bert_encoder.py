@@ -42,9 +42,13 @@ class TtBertEncoder(torch.nn.Module):
         self.mha = TtMultiHeadAttentionModel(config, encoder_idx, state_dict, device)
 
         self.attention_output_weight = pad_weight(
-            state_dict[
-                f"bert.encoder.layer.{encoder_idx}.attention.output.dense.weight"
-            ]
+            torch.transpose(
+                state_dict[
+                    f"bert.encoder.layer.{encoder_idx}.attention.output.dense.weight"
+                ],
+                -2,
+                -1,
+            )
         )
         self.attention_output_weight = (
             ttl.tensor.Tensor(
@@ -71,9 +75,9 @@ class TtBertEncoder(torch.nn.Module):
         )
 
         # Weights pre-transposed on host​. No on-the fly transpose of W.
-        self.attention_output_weight = ttl.tensor.transpose(
-            self.attention_output_weight
-        )
+        # self.attention_output_weight = ttl.tensor.transpose(
+        #     self.attention_output_weight
+        # )
 
         # MHA layernorm part
         gamma0 = state_dict[
@@ -83,7 +87,7 @@ class TtBertEncoder(torch.nn.Module):
             f"bert.encoder.layer.{encoder_idx}.attention.output.LayerNorm.bias"
         ]
         mha_gamma = pad_weight(gamma0)
-        mha_gamma = (
+        self.mha_gamma = (
             ttl.tensor.Tensor(
                 mha_gamma.reshape(-1).tolist(),
                 mha_gamma.shape,
@@ -94,7 +98,7 @@ class TtBertEncoder(torch.nn.Module):
             .to(device)
         )
         mha_beta = pad_weight(beta0)
-        mha_beta = (
+        self.mha_beta = (
             ttl.tensor.Tensor(
                 mha_beta.reshape(-1).tolist(),
                 mha_beta.shape,
@@ -104,6 +108,8 @@ class TtBertEncoder(torch.nn.Module):
             .to(ttl.tensor.Layout.TILE)
             .to(device)
         )
+        """
+        # Old add + layernorm from python composed ops
         self.mha_add_and_norm = AddAndNorm(
             mha_gamma,
             mha_beta,
@@ -113,6 +119,7 @@ class TtBertEncoder(torch.nn.Module):
             config.hidden_size,
             device,
         )
+        """
 
         # FFN part
         self.ffn = TtFeedForwardModel(encoder_idx, state_dict, device)
@@ -121,7 +128,7 @@ class TtBertEncoder(torch.nn.Module):
         gamma1 = state_dict[f"bert.encoder.layer.{encoder_idx}.output.LayerNorm.weight"]
         beta1 = state_dict[f"bert.encoder.layer.{encoder_idx}.output.LayerNorm.bias"]
         ffn_gamma = pad_weight(gamma1)
-        ffn_gamma = (
+        self.ffn_gamma = (
             ttl.tensor.Tensor(
                 ffn_gamma.reshape(-1).tolist(),
                 ffn_gamma.shape,
@@ -132,7 +139,7 @@ class TtBertEncoder(torch.nn.Module):
             .to(device)
         )
         ffn_beta = pad_weight(beta1)
-        ffn_beta = (
+        self.ffn_beta = (
             ttl.tensor.Tensor(
                 ffn_beta.reshape(-1).tolist(),
                 ffn_beta.shape,
@@ -142,6 +149,7 @@ class TtBertEncoder(torch.nn.Module):
             .to(ttl.tensor.Layout.TILE)
             .to(device)
         )
+        """
         self.ffn_add_and_norm = AddAndNorm(
             ffn_gamma,
             ffn_beta,
@@ -151,6 +159,9 @@ class TtBertEncoder(torch.nn.Module):
             config.hidden_size,
             device,
         )
+        """
+
+        self.layer_norm_eps = config.layer_norm_eps
 
     def op11_mm_plus_bias(
         self, mha_res, attention_output_weight, attention_output_bias
@@ -175,14 +186,36 @@ class TtBertEncoder(torch.nn.Module):
 
     def op12_add_layernorm(self, activation, mha_out):
         # profiler.start("__op12_add_layernorm")
+        out_dram = True
+        mha_out_add_and_norm = ttl.tensor.add_layernorm_gamma_beta(
+            activation,
+            mha_out,
+            self.layer_norm_eps,
+            self.mha_gamma,
+            self.mha_beta,
+            out_dram,
+        )
+        """
         mha_out_add_and_norm = self.mha_add_and_norm(activation, mha_out)
+        """
         # profiler.end("__op12_add_layernorm")
 
         return mha_out_add_and_norm
 
     def op15_add_layernorm(self, mha_out_add_and_norm, ffn_out):
         # profiler.start("__op15_add_layernorm")
+        out_dram = True
+        ffn_out_add_and_norm = ttl.tensor.add_layernorm_gamma_beta(
+            mha_out_add_and_norm,
+            ffn_out,
+            self.layer_norm_eps,
+            self.ffn_gamma,
+            self.ffn_beta,
+            out_dram,
+        )
+        """
         ffn_out_add_and_norm = self.ffn_add_and_norm(mha_out_add_and_norm, ffn_out)
+        """
         # profiler.end("__op15_add_layernorm")
 
         return ffn_out_add_and_norm
@@ -209,8 +242,8 @@ class PytorchBertEncoder(torch.nn.Module):
         super().__init__()
         self.bert_encoder = hugging_face_reference_model.bert.encoder.layer[0]
 
-    def forward(self, x):
-        return self.bert_encoder(x)[0]
+    def forward(self, x, attention_mask=None):
+        return self.bert_encoder(x, attention_mask)[0]
 
 
 def run_bert_encoder_inference(
@@ -235,9 +268,10 @@ def run_bert_encoder_inference(
         model_name, torchscript=False
     )
     config = hugging_face_reference_model.config
-    var_scaler = create_var_scaler(
-        seq_len, config.hidden_size, config.layer_norm_eps, device
-    )
+    # var_scaler = create_var_scaler(
+    #     seq_len, config.hidden_size, config.layer_norm_eps, device
+    # )
+    var_scaler = None
 
     tt_bert_encoder_model = TtBertEncoder(
         hugging_face_reference_model.config,
@@ -254,19 +288,38 @@ def run_bert_encoder_inference(
         torch.rand(batch, 1, seq_len, hugging_face_reference_model.config.hidden_size)
         * 2
     ) - 1
+    bert_attention_mask = torch.zeros(batch, 1, 1, seq_len)
+    extended_bert_attention_mask = torch.zeros(batch, 1, 32, seq_len)
 
-    pytorch_out = pytorch_bert_model(bert_encoder_input.squeeze(1)).unsqueeze(1)
+    pytorch_out = pytorch_bert_model(
+        bert_encoder_input.squeeze(1), bert_attention_mask
+    ).unsqueeze(1)
 
     pad_bert_encoder_input = pad_activation(bert_encoder_input)
-    tt_bert_encoder_input = ttl.tensor.Tensor(
-        pad_bert_encoder_input.reshape(-1).tolist(),
-        bert_encoder_input.shape,
-        ttl.tensor.DataType.BFLOAT16,
-        ttl.tensor.Layout.ROW_MAJOR,
-    ).to(ttl.tensor.Layout.TILE)
-    tt_bert_encoder_input = tt_bert_encoder_input.to(device)
+    tt_bert_encoder_input = (
+        ttl.tensor.Tensor(
+            pad_bert_encoder_input.reshape(-1).tolist(),
+            bert_encoder_input.shape,
+            ttl.tensor.DataType.BFLOAT16,
+            ttl.tensor.Layout.ROW_MAJOR,
+        )
+        .to(ttl.tensor.Layout.TILE)
+        .to(device)
+    )
+    tt_bert_attention_mask = (
+        ttl.tensor.Tensor(
+            extended_bert_attention_mask.reshape(-1).tolist(),
+            extended_bert_attention_mask.shape,
+            ttl.tensor.DataType.BFLOAT16,
+            ttl.tensor.Layout.ROW_MAJOR,
+        )
+        .to(ttl.tensor.Layout.TILE)
+        .to(device)
+    )
 
-    tt_out = tt_bert_encoder_model(tt_bert_encoder_input).to(host)
+    tt_out = tt_bert_encoder_model(tt_bert_encoder_input, tt_bert_attention_mask).to(
+        host
+    )
     tt_out = torch.Tensor(tt_out.to(ttl.tensor.Layout.ROW_MAJOR).data()).reshape(
         tt_out.shape()
     )
@@ -286,12 +339,8 @@ def run_bert_encoder_inference(
 
 
 @pytest.mark.parametrize(
-    "model_version, batch, seq_len, on_weka,  pcc",
-    (
-        ("mrm8488/bert-tiny-finetuned-squadv2", 1, 128, True, 0.99),
-        ("phiyodr/bert-base-finetuned-squad2", 1, 128, True, 0.99),
-        ("phiyodr/bert-large-finetuned-squad2", 1, 384, True, 0.99),
-    ),
+    "model_version, batch, seq_len, on_weka, pcc",
+    (("phiyodr/bert-large-finetuned-squad2", 9, 384, True, 0.99),),
 )
 def test_bert_encoder_inference(
     model_version, batch, seq_len, on_weka, pcc, model_location_generator

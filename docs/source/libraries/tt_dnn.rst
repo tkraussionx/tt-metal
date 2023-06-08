@@ -64,6 +64,10 @@ Tensor elementwise operations
 
 .. autofunction:: tt_lib.tensor.log
 
+.. autofunction:: tt_lib.tensor.log2
+
+.. autofunction:: tt_lib.tensor.log10
+
 .. autofunction:: tt_lib.tensor.tanh
 
 
@@ -204,7 +208,5 @@ Other Operations
 .. autofunction:: tt_lib.tensor.add_layernorm_gamma_beta
 
 .. autofunction:: tt_lib.tensor.tilize_with_zero_padding
-
-.. autofunction:: tt_lib.tensor.tilize_conv_activation
 
 .. autofunction:: tt_lib.tensor.convert_conv_weight_tensor_to_tiled_layout

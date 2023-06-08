@@ -126,6 +126,9 @@ def mha(qw, qb, kw, kb, vw, vb, hidden_dim, num_heads, device):
 
     def op2_split(qkv):
         # profiler.start("___op2_split")
+        Q, K, V = ttl.tensor.bert_large_split_fused_qkv(qkv)
+        """
+        # Old TM on host with split
         qkv = tt2torch_tensor(qkv)
         hidden_dim = qkv.shape[-1] // 3
 
@@ -134,27 +137,41 @@ def mha(qw, qb, kw, kb, vw, vb, hidden_dim, num_heads, device):
         Q = torch2tt_tensor(Q, device)
         K = torch2tt_tensor(K, device)
         V = torch2tt_tensor(V, device)
+        """
         # profiler.end("___op2_split")
 
         return Q, K, V
 
     def op3_create_heads(Q):
         # profiler.start("___op3_make_attention_heads")
+        q_heads = ttl.tensor.bert_large_create_q_head(Q)
+        """
+        # Old TM with reshape and transpose
         q_heads = make_attention_heads(Q)
+        """
         # profiler.end("___op3_make_attention_heads")
 
         return q_heads
 
     def op4_create_heads(K):
         # profiler.start("___op4_make_attention_heads")
+        # NOTE: This merges in transpose_hw (op6)
+        k_heads = ttl.tensor.bert_large_create_k_head(K)
+        """
+        # Old TM with reshape and transpose
         k_heads = make_attention_heads(K)
+        """
         # profiler.end("___op4_make_attention_heads")
 
         return k_heads
 
     def op5_create_heads(V):
         # profiler.start("___op5_make_attention_heads")
+        v_heads = ttl.tensor.bert_large_create_v_head(V)
+        """
+        # Old TM with reshape and transpose
         v_heads = make_attention_heads(V)
+        """
         # profiler.end("___op5_make_attention_heads")
 
         return v_heads
@@ -185,17 +202,21 @@ def mha(qw, qb, kw, kb, vw, vb, hidden_dim, num_heads, device):
 
         N, C, H, W = qkt.shape()
 
-        #ref = op8_scale_mask_softmax_ref(qkt, attention_mask)
+        # ref = op8_scale_mask_softmax_ref(qkt, attention_mask)
 
-        new_shape = [N, 1, C*H, W]
+        new_shape = [N, 1, C * H, W]
         ttl.tensor.reshape(qkt, *new_shape)
 
-        if (attention_mask is not None):
-            attention_scores = ttl.tensor.scale_mask_softmax_in_place(freciprocal_of_sqrt_hidden_dim, attention_mask, qkt)
+        if attention_mask is not None:
+            attention_scores = ttl.tensor.scale_mask_softmax_in_place(
+                freciprocal_of_sqrt_hidden_dim, attention_mask, qkt
+            )
         else:
             attention_score_input = multiply_by_sqrt_hidden_dim(qkt)
             attention_scores = ttl.tensor.softmax_in_place(attention_score_input)
-        ttl.tensor.reshape(attention_scores, N, C, H, W) # Reshape back to original shape
+        ttl.tensor.reshape(
+            attention_scores, N, C, H, W
+        )  # Reshape back to original shape
         # profiler.end("___op8_scale_mask_softmax")
 
         return attention_scores
@@ -254,12 +275,16 @@ def mha(qw, qb, kw, kb, vw, vb, hidden_dim, num_heads, device):
             """
 
             # profiler.start("___op10_unmake_attention_heads")
+            retval = ttl.tensor.bert_large_concat_heads(x)
+            """
+            # Old TM with transpose_hc and reshape
             ctx = ttl.tensor.transpose_hc(x)
             ushape = ctx.shape()
             reshaped = ttl.tensor.reshape(
                 ctx, ushape[0], 1, ushape[1], ushape[2] * ushape[3]
             )
             retval = ttl.tensor.tilize(reshaped)
+            """
             # profiler.end("___op10_unmake_attention_heads")
 
             return retval
@@ -270,10 +295,13 @@ def mha(qw, qb, kw, kb, vw, vb, hidden_dim, num_heads, device):
         Q, K, V = op2_split(qkv)
 
         Q_heads = op3_create_heads(Q)
-        K_heads = op4_create_heads(K)
+        K_T_heads = op4_create_heads(K)
         V_heads = op5_create_heads(V)
 
+        """
+        # No longer needed as op4 already returns K_head transposed
         K_T_heads = op6_transpose_hw(K_heads)
+        """
         qkt = op7_bmm(Q_heads, K_T_heads)
 
         attention_scores = op8_scale_mask_softmax(qkt, attention_mask)
@@ -403,12 +431,8 @@ def run_mha_inference(
 
 
 @pytest.mark.parametrize(
-    "model_version, batch, seq_len, on_weka,  pcc",
-    (
-        ("mrm8488/bert-tiny-finetuned-squadv2", 1, 128, True, 0.99),
-        ("phiyodr/bert-base-finetuned-squad2", 1, 128, True, 0.99),
-        ("phiyodr/bert-large-finetuned-squad2", 1, 384, True, 0.99),
-    ),
+    "model_version, batch, seq_len, on_weka, pcc",
+    (("phiyodr/bert-large-finetuned-squad2", 9, 384, True, 0.99),),
 )
 def test_mha_inference(
     model_version, batch, seq_len, on_weka, pcc, model_location_generator

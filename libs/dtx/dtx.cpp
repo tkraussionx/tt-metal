@@ -1,7 +1,6 @@
 #include <iostream>
 #include <fstream>
 
-
 #include "dtx.hpp"
 #include "util.hpp"
 #include "util_vector_of_ints.hpp"
@@ -15,9 +14,9 @@ TensorData::TensorData(vector<int> shape) {
     this->rank = shape.size();
     this->volume = vector_product(shape);
 
-    for (int i=0; i<this->volume; i++){
-        this->data.push_back(i);
-    }
+    this->data.resize(this->volume);
+    int* data_ptr = this->data.data();
+    for(int64_t i=0; i < this->volume; i++) data_ptr[i] = i;
 }
 
 void TensorData::print() {
@@ -89,9 +88,11 @@ void TensorData::generate_csv(string filename){
 
 
 int DTXTensor::volume() {
-    if (this->rank == 0 || this->rank == -1) return 0;
+    assert(this->rank > 0);
 
     int volume = 1;
+    assert(this->end.size() == this->rank);
+    assert(this->str.size() == this->rank);
     for (int d=0; d<this->rank; d++) {
         assert(this->end[d] >= this->str[d]);
         int dim_size = this->end[d] - this->str[d] + 1;
@@ -199,10 +200,6 @@ void DataTransformations::print(int spaces) {
         this->transformations[t]->print(spaces+3);
     }
 }
-
-
-
-
 
 bool DataTransformations::compare_to_golden(TransformationNode * golden) {
     bool pass = true;

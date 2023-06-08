@@ -19,7 +19,13 @@ string get_op_name(UnaryOpType::Enum op_type) {
         case UnaryOpType::SIGMOID: op_name = "sigmoid_tile_init(); sigmoid_tile(0); pack_tile(0, CB::c_out0);"; break;
         case UnaryOpType::LOG: op_name = "log_tile_init(); log_tile(0); pack_tile(0, CB::c_out0);"; break;
         case UnaryOpType::TANH: op_name = "tanh_tile_init(); tanh_tile(0); pack_tile(0, CB::c_out0);"; break;
-
+        case UnaryOpType::LOG10:
+            // log10[x] = log[x]/log[10] = log[x]*0.4342944819032518; FP32@U32 0x3ede5bd9; FP16@U16 0x36f3;
+            op_name = "log_with_base_tile_init(); log_with_base_tile(0,0x36f3); pack_tile(0,CB::c_out0);";
+            break;
+        case UnaryOpType::LOG2:  // log2[x] = log[x]*1.4426950408889634f; FP32@U32 0x3fb8aa3b; FP16@U16 0x3dc5;
+            op_name = "log_with_base_tile_init(); log_with_base_tile(0,0x3dc5); pack_tile(0,CB::c_out0);";
+            break;
         default: TT_ASSERT(false && "Undefined op type");
     }
     return op_name;
@@ -50,41 +56,54 @@ namespace tt {
 
 namespace tt_metal {
 
-Tensor eltwise_unary_(const Tensor &a, UnaryOpType::Enum op_type) {
-    switch (eltwise_unary_op_utils::get_parallelization_strategy(a)){
+
+ std::vector<Shape> EltwiseUnary::compute_output_shapes(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0).get();
+    return {input_tensor.shape()};
+}
+
+
+std::vector<Tensor> EltwiseUnary::create_output_tensors(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0).get();
+    std::vector<Tensor> output_tensors;
+    output_tensors.emplace_back(tt_metal::Tensor(input_tensor.shape(), input_tensor.dtype(), tt::tt_metal::Layout::TILE, input_tensor.device()));
+    return output_tensors;
+}
+
+Program EltwiseUnary::create_program(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors, std::vector<Tensor> &output_tensors) const {
+    const auto& input_tensor = input_tensors.at(0).get();
+    auto& output_tensor = output_tensors.at(0);
+    switch (eltwise_unary_op_utils::get_parallelization_strategy(input_tensor)){
         case UnaryOpParallelizationStrategy::MULTI_CORE:
-            return eltwise_unary_multi_core(a, op_type);
+            return eltwise_unary_multi_core(input_tensor, output_tensor, this->op_type);
             break;
         case UnaryOpParallelizationStrategy::SINGLE_CORE:
         default:
-            return eltwise_unary_single_core(a, op_type);
+            return eltwise_unary_single_core(input_tensor, output_tensor, this->op_type);
     }
 
 }
 
 
-Tensor eltwise_unary(const Tensor &a, UnaryOpType::Enum op_type) {
-
-    Device * device;
-
-    // Get the device
-    if (a.on_host()) {
+Tensor eltwise_unary(const EltwiseUnary& op, const Tensor &input_tensor) {
+    Device* device;
+    if (input_tensor.on_host()) {
         device = AutoPad::GetDefaultDevice();
         TT_ASSERT(device != nullptr, "Requires setting default device if no inputs to op are on device");
     } else {
-        device = a.device();
+        device = input_tensor.device();
     }
 
-    auto a_pad_shape = AutoPad::pad_to_tile_shape(a.shape());
-    auto out_shape = a.shape();
-    if (AutoPad::check_input_tensor_format(a, a_pad_shape)) {
-        return eltwise_unary_(a, op_type);
+    auto padded_input_shape = AutoPad::pad_to_tile_shape(input_tensor.shape());
+    auto output_shape = input_tensor.shape();
+    if (AutoPad::check_input_tensor_format(input_tensor, padded_input_shape)) {
+        return std::move(op.run({std::cref(input_tensor)}).at(0));
     } else {
-        auto output = eltwise_unary_(AutoPad::format_input_tensor(a, device, a_pad_shape, 0), op_type);
-        AutoPad::format_output_tensor(a, output, out_shape, device);
+        const auto padded_tensor = AutoPad::format_input_tensor(input_tensor, device, padded_input_shape, 0);
+        auto output = std::move(op.run({std::cref(padded_tensor)}).at(0));
+        AutoPad::format_output_tensor(input_tensor, output, output_shape, device);
         return output;
     }
-
 }
 
 }  // namespace tt_metal

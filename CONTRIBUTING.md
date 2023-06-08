@@ -46,6 +46,24 @@ page](docs/source/get_started/installation.rst) then please read the the
 ### CI/CD Guidelines
 
 - Revert commits on main which fail post-commit tests immediately.
+- There shall be a recurring scheduled meeting concerning post-commit tests
+  where:
+  - Certain codeowners and project-specific members review current tests in
+    post-commit.
+  - Certain codeowners and project-specific members decide whether to
+    remove/add any current tests in post-commit as project priorities change on
+    an ongoing basis.
+  - Certain codeowners and project-specific members decide if we need to change
+    owners or add more as project priorities change on an ongoing basis.
+  - Communication channels for these decisions and meetings shall be kept
+    internal to Tenstorrent with the intent of having such discussions in the
+    open later.
+- Non-post-commit pipelines will not necessarily mean we have to revert the
+  breaking commit, however any broken pipelines will be considered a priority
+  bug fix.
+- The responsibility of identifying, announcing status-tracking, and escalating
+  broken non-post-commit pipelines will be the responsibility of codeowners
+whose tests are in the said non-post-commit pipeline.
 
 ### Documentation
 
@@ -54,7 +72,9 @@ page](docs/source/get_started/installation.rst) then please read the the
 ### Git rules and guidelines
 
 - Any commit message must be accompanied with an appropriate GitHub issue
-  number with a colon and following message. Ex.
+  number with a colon and following message. The message must start with an
+  imperative verb and descripton of what was done. Preferably a reason is
+  included. Ex.
   ```
   #41: Fix data format error in Gelu op.
   ```
@@ -62,9 +82,12 @@ page](docs/source/get_started/installation.rst) then please read the the
 ### Code reviews
 
 - A PR must be opened for any code change with the following criteria:
-  - Be approved, by a maintaining team member.
+  - Be approved, by a maintaining team member and any codeowners whose modules
+    are relevant for the PR.
   - Pass post-commit tests.
   - Pass any acceptance criteria mandated in the original issue.
+  - Pass any testing criteria mandated by codeowners whose modules are relevant
+    for the PR.
 
 ### New feature and design specifications
 

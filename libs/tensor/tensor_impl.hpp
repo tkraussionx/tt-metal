@@ -281,10 +281,10 @@ void validate_on_device_dtype_and_layout(Device *device, DataType dtype, Layout 
 //                           Data reader, writer, and initializers
 // ======================================================================================
 template <class T>
-inline std::vector<T> initialize_row_major_tensor_data(const std::array<uint32_t, 4> &shape, Initialize init_type, int rand_max_val = 100, int seed = 0) {
+inline std::vector<T> initialize_row_major_tensor_data(const std::array<uint32_t, 4> &shape, Initialize init_type, int rand_limit = 1, int seed = 0) {
     std::vector<T> values;
 
-    auto rand_float = std::bind(std::uniform_real_distribution<float>(0, rand_max_val), std::mt19937(seed));
+    auto rand_float = std::bind(std::uniform_real_distribution<float>(-rand_limit, rand_limit), std::mt19937(seed));
 
     auto get_val = [&init_type, &shape, &rand_float](int x, int y, int z, int w) {
         T val;
@@ -521,10 +521,6 @@ inline Tensor to_layout(const Tensor &tensor, Layout target_layout) {
             if (target_layout == Layout::ROW_MAJOR) {
                 data = convert_layout_tile_to_row_major(tensor.shape(), data);
             }
-            else if (target_layout == Layout::CHANNELS_LAST) {
-                data = convert_layout_tile_to_row_major(tensor.shape(), data);
-                data = convert_layout_row_major_to_channels_last(tensor.shape(), data);
-            }
             else {
                 TT_ASSERT(false && "Unsupported layout conversion");
             }
@@ -532,10 +528,6 @@ inline Tensor to_layout(const Tensor &tensor, Layout target_layout) {
         case Layout::CHANNELS_LAST:
             if (target_layout == Layout::ROW_MAJOR) {
                 data = convert_layout_channels_last_to_row_major(tensor.shape(), data);
-            }
-            else if (target_layout == Layout::TILE) {
-                data = convert_layout_channels_last_to_row_major(tensor.shape(), data);
-                data = convert_layout_row_major_to_tile(tensor.shape(), data);
             }
             else {
                 TT_ASSERT(false && "Unsupported layout conversion");

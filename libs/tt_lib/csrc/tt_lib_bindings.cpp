@@ -91,7 +91,7 @@ void TensorModule(py::module &m_tensor) {
         .def(
             py::init<>(
                 [](bool interleaved, int bank_id, BufferType buffer_type) {
-                    return MemoryConfig{.interleaved=interleaved, bank_id=bank_id, buffer_type=buffer_type};
+                    return MemoryConfig{.interleaved=interleaved, .bank_id=bank_id, .buffer_type=buffer_type};
                 }
             ),
             py::arg("interleaved") = true,
@@ -867,7 +867,32 @@ void TensorModule(py::module &m_tensor) {
         | arg0     | Tensor log is applied to  | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
         +----------+---------------------------+-----------+------------------------------+----------+
     )doc");
+    m_tensor.def("log2", &log2, R"doc(
+        Returns tensor with the base 2 logarithm of elements of the input tensor ``arg0``.
 
+        Input tensor must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+---------------------------+-----------+------------------------------+----------+
+        | Argument | Description               | Data type | Valid range                  | Required |
+        +==========+===========================+===========+==============================+==========+
+        | arg0     | Tensor log2 is applied to | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+---------------------------+-----------+------------------------------+----------+
+    )doc");
+    m_tensor.def("log10", &log10, R"doc(
+        Returns tensor with the base 10 logarithm of elements of the input tensor ``arg0``.
+
+        Input tensor must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+---------------------------+-----------+------------------------------+----------+
+        | Argument | Description               | Data type | Valid range                  | Required |
+        +==========+===========================+===========+==============================+==========+
+        | arg0     | Tensor log10 is applied to| Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+---------------------------+-----------+------------------------------+----------+
+    )doc");
     m_tensor.def("tanh", &tanh, R"doc(
         Returns tensor with the hyperbolic tangent of elements of the input tensor ``arg0``.
 
@@ -1314,6 +1339,10 @@ void TensorModule(py::module &m_tensor) {
         py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
         Reshuffles [9, 1, 384, 1024] tensor into tensor with shape [9, 16, 384, 64].
     )doc");
+    m_tensor.def("bert_large_concat_heads", &bert_large_concat_heads,
+        py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
+        Reshuffles [9, 16, 384, 64] tensor into tensor with shape [9, 1, 384, 1024].
+    )doc");
 
     // Custom BERT matmuls/bmms
     m_tensor.def("bert_large_fused_qkv_matmul", &bert_large_fused_qkv_matmul,
@@ -1381,15 +1410,6 @@ void TensorModule(py::module &m_tensor) {
         +---------------------+------------------------------------------------------+--------------+-----------------------------------------------------+----------+
         | arg3                | Value to pad input tensor                            | float        |                                                     | Yes      |
         +---------------------+------------------------------------------------------+--------------+-----------------------------------------------------+----------+
-    )doc");
-    m_tensor.def("tilize_conv_activation", &tilize_conv_activation, R"doc(
-        Converts conv activation to 2d Matrix and tilizes it on device. Pads zeroes height-wise if required.
-
-        +----------+----------------------+-----------+-------------+----------+
-        | Argument | Description          | Data type | Valid range | Required |
-        +==========+======================+===========+=============+==========+
-        | a        | Input tensor         | Tensor    |             | Yes      |
-        +----------+----------------------+-----------+-------------+----------+
     )doc");
 
     m_tensor.def("convert_conv_weight_tensor_to_tiled_layout", &convert_conv_weight_tensor_to_tiled_layout, R"doc(
@@ -1509,8 +1529,16 @@ void DTXModule(py::module &m_dtx) {
         | output shape     | shape of the dst tensor |  vector of int |      | Yes      |
         +------------------+-----------------------------+----------------------+-------------+----------+
     )doc");
-    m_dtx.def("conv_transform", [](vector<int> shape, vector<int> conv_params, std::pair<vector<int>,vector<int>> block_info, uint32_t num_bytes_of_df){
-        return conv_transform(shape, conv_params, block_info, num_bytes_of_df);
+    m_dtx.def("conv_transform", [](vector<int> activation_shape,
+                                        vector<int> weight_shape,
+                                        vector<int> conv_params,
+                                        uint32_t in0_block_w,
+                                        uint32_t in0_block_h,
+                                        uint32_t in1_block_w,
+                                        uint32_t num_blocks_in0_h,
+                                        uint32_t num_blocks_in1_w,
+                                        uint32_t num_bytes_of_df){
+        return conv_transform(activation_shape, weight_shape, conv_params, in0_block_h, in0_block_w, in1_block_w, num_blocks_in0_h, num_blocks_in1_w, num_bytes_of_df);
     });
 }
 

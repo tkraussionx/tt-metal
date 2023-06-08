@@ -18,7 +18,6 @@ TT_DNN_SRCS = \
 	libs/tt_dnn/op_library/reduce/single_core/reduce_op_single_core.cpp \
 	libs/tt_dnn/op_library/reduce/multi_core_h/reduce_op_multi_core_h.cpp \
 	libs/tt_dnn/op_library/reduce/multi_core_w/reduce_op_multi_core_w.cpp \
-	libs/tt_dnn/op_library/reduce/multi_core_hw/reduce_op_multi_core_hw.cpp \
 	libs/tt_dnn/op_library/bcast/bcast_op.cpp \
 	libs/tt_dnn/op_library/bcast/single_core/bcast_op_single_core.cpp \
 	libs/tt_dnn/op_library/bcast/multi_core_h/bcast_op_multi_core_h.cpp \
@@ -48,7 +47,8 @@ TT_DNN_SRCS = \
 	libs/tt_dnn/op_library/permute/permute_op.cpp \
 	libs/tt_dnn/op_library/bert_large_tms/bert_large_tms.cpp \
 	libs/tt_dnn/op_library/bert_large_tms/multi_core_split_fused_qkv/multi_core_split_fused_qkv.cpp \
-	libs/tt_dnn/op_library/bert_large_tms/multi_core_split_fused_qkv/multi_core_create_qkv_heads.cpp \
+	libs/tt_dnn/op_library/bert_large_tms/multi_core_create_qkv_heads/multi_core_create_qkv_heads.cpp \
+	libs/tt_dnn/op_library/bert_large_tms/multi_core_concat_heads/multi_core_concat_heads.cpp \
 
 TT_DNN_LIB = $(LIBDIR)/libtt_dnn.a
 TT_DNN_DEFINES = -DGIT_HASH=$(shell git rev-parse HEAD)

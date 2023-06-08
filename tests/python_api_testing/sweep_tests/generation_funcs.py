@@ -16,7 +16,7 @@ supported_tt_dtypes = {ttl.tensor.DataType.BFLOAT16}
 supported_tt_layouts = [
     ttl.tensor.Layout.ROW_MAJOR,
     ttl.tensor.Layout.TILE,
-    ttl.tensor.Layout.CHANNELS_LAST,
+    # ttl.tensor.Layout.CHANNELS_LAST,
 ]
 
 on_device_options = [
@@ -512,8 +512,8 @@ def gen_unpad_args(input_shapes):
                     random.randrange(output_tensor_start[i], input_shapes[0][i], 1)
                     for i in range(4)
                 ]
-                output_tensor_end[-2] = nearest_32(output_tensor_end[-2]) - 1
-                output_tensor_end[-1] = nearest_32(output_tensor_end[-1]) - 1
+                output_tensor_end[-2] = max(nearest_32(output_tensor_end[-2]), 32) - 1
+                output_tensor_end[-1] = max(nearest_32(output_tensor_end[-1]), 32) - 1
                 input_info.update(
                     {
                         "output_tensor_start": output_tensor_start,
