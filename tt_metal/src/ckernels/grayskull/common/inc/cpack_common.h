@@ -326,7 +326,7 @@ namespace ckernel::packer
    inline void program_packer_destination(uint32_t addr, uint8_t pack_output)
    {
       const uint8_t fmt = (uint8_t)(pack_dst_format[pack_output] & 0x3);
-      DPRINT << "** fmt: " << (uint) fmt << ENDL();
+      // DPRINT << "** fmt: " << (uint) fmt << ENDL();
       if constexpr (PackSel == PACK_ALL) {
          // const uint32_t offset1 = fmt == (uint8_t)DataFormat::Float32 ? (0x40 << 8) : (fmt == (uint8_t)DataFormat::Float16 || fmt == (uint8_t)DataFormat::Float16_b) ? (0x20 << 8) : (0x1 << 8);
          // const uint32_t offset2 = fmt == (uint8_t)DataFormat::Float32 ? (0x80 << 8) : (fmt == (uint8_t)DataFormat::Float16 || fmt == (uint8_t)DataFormat::Float16_b) ? (0x40 << 8) : (0x2 << 8);
@@ -338,20 +338,20 @@ namespace ckernel::packer
          addr <<= 8;
 
          TT_SETDMAREG_SHFT(0, addr, 0, LO_16(p_gpr_pack::OUTPUT_ADDR+0));
-         DPRINT << "0" << ENDL();
+         // DPRINT << "A" << ENDL();
          TT_SETDMAREG_SHFT(0, addr+offset1, 0, LO_16(p_gpr_pack::OUTPUT_ADDR+1));
-         DPRINT << "1" << ENDL();
+         // DPRINT << "B" << ENDL();
          TT_SETDMAREG_SHFT(0, addr+offset2, 0, LO_16(p_gpr_pack::OUTPUT_ADDR+2));
-         DPRINT << "2" << ENDL();
+         // DPRINT << "C" << ENDL();
          TT_SETDMAREG_SHFT(0, addr+offset3, 0, LO_16(p_gpr_pack::OUTPUT_ADDR+3));
-         DPRINT << "gg" << ENDL();
-	 TTI_STALLWAIT(p_stall::STALL_CFG, p_stall::PACK0 | p_stall::PACK1);
+         // DPRINT << "D" << ENDL();
+         TTI_STALLWAIT(p_stall::STALL_CFG, p_stall::PACK0 | p_stall::PACK1);
          TTI_WRCFG(p_gpr_pack::OUTPUT_ADDR,     p_cfg::WRCFG_32b, THCON_SEC0_REG1_L1_Dest_addr_ADDR32);
          TTI_WRCFG(p_gpr_pack::OUTPUT_ADDR+1,   p_cfg::WRCFG_32b, THCON_SEC0_REG8_L1_Dest_addr_ADDR32);
          TTI_STALLWAIT(p_stall::STALL_CFG, p_stall::PACK2 | p_stall::PACK3);
          TTI_WRCFG(p_gpr_pack::OUTPUT_ADDR+2,   p_cfg::WRCFG_32b, THCON_SEC1_REG1_L1_Dest_addr_ADDR32);
          TTI_WRCFG(p_gpr_pack::OUTPUT_ADDR+3,   p_cfg::WRCFG_32b, THCON_SEC1_REG8_L1_Dest_addr_ADDR32);
-         DPRINT << "uu" << ENDL();
+         // DPRINT << "E" << ENDL();
      } else if constexpr (PackSel == PACK_01) {
          // const uint32_t offset1 = fmt == (uint8_t)DataFormat::Float32 ? (0x40 << 8) : (fmt == (uint8_t)DataFormat::Float16 || fmt == (uint8_t)DataFormat::Float16_b) ? (0x20 << 8) : (0x1 << 8);
          const uint32_t offset1 = fmt == (uint8_t)DataFormat::Float32 ? (0x40 << 8) : fmt == (uint8_t)DataFormat::Float16 ? (0x20 << 8) : (0x1 << 8);

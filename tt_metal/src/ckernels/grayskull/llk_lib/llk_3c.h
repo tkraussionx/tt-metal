@@ -118,11 +118,12 @@ ALWI void binary_op_init_common(uint32_t icb0, uint32_t icb1)
     PACK(( llk_pack_dest_init<SYNC, DstTileFaceLayout::RowMajor, false>() ));
 }
 
-ALWI void mm_init_short_try() {
-    UNPACK(( DPRINT << "Minit" << ENDL() ));
+ALWI void mm_init_short_try(uint32_t cbid) {
+    // UNPACK(( DPRINT << "Minit" << ENDL() ));
     MATH(( llk_math_matmul_init<MATH_FIDELITY>(0)  ));
     UNPACK(( llk_unpack_AB_matmul_init(0) ));
-    UNPACK(( llk_unpack_AB_matmul_hw_configure_disaggregated(0,1,0) ));
+    // UNPACK(( llk_unpack_AB_matmul_hw_configure_disaggregated(0,1,0) ));
+    UNPACK(( llk_unpack_reconfig_data_format(cbid, 0, cbid, 1) ));
 }
 
 ALWI void mm_init_short() {
@@ -259,9 +260,10 @@ ALWI void copy_tile_to_dst_init_short()
 
 ALWI void copy_tile_to_dst_init_short_try(uint32_t cbid)
 {
-    MATH(( DPRINT << "Cinit" << ENDL() ));
+    // PACK(( DPRINT << "Cinit" << ENDL() ));
     UNPACK(( llk_unpack_A_init<BroadcastType::NONE, false, false>() ));
-    UNPACK(( llk_unpack_A_hw_configure_disaggregated(cbid) ));
+    // UNPACK(( llk_unpack_A_hw_configure_disaggregated(cbid) ));
+    UNPACK(( llk_unpack_reconfig_data_format(0, cbid, 1, cbid) ));
 
     MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE, false>() ));
 }

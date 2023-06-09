@@ -23,7 +23,7 @@ TILE_HEIGHT = TILE_WIDTH = 32
 ## parameters
 # matrix sizes as number of blocks along h and w:
 a_height_nblocks = [1]
-a_width_nblocks = [1, 2]
+a_width_nblocks = [5]
 b_width_nblocks = [1]
 # block sizes as number of tiles along h and w:
 a_block_height_ntiles = [4]
@@ -38,10 +38,10 @@ untilize_out = [False]  ## [True, False]
 # dtypes = [ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16]
 # dtypes = [ttl.tensor.DataType.BFLOAT8_B]
 
-# a_dtype = [ttl.tensor.DataType.BFLOAT16]    ##, ttl.tensor.DataType.BFLOAT8_B]
-a_dtype = [ttl.tensor.DataType.BFLOAT8_B]
-# b_dtype = [ttl.tensor.DataType.BFLOAT16]    ##, ttl.tensor.DataType.BFLOAT8_B]
-b_dtype = [ttl.tensor.DataType.BFLOAT8_B]
+a_dtype = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
+# a_dtype = [ttl.tensor.DataType.BFLOAT8_B]
+b_dtype = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
+# b_dtype = [ttl.tensor.DataType.BFLOAT8_B]
 out_dtype = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
 # out_dtype = [ttl.tensor.DataType.BFLOAT8_B]
 

@@ -71,20 +71,20 @@ inline void reblock_and_untilize(
 } // reblock_and_untilize()
 
 inline void pack_matmul_subblock(uint32_t cb_id, uint32_t out_subblock_num_tiles) {
-    PACK(( DPRINT << "RESERVING " << cb_id << "," << out_subblock_num_tiles << ENDL() ));
+    // PACK(( DPRINT << "RESERVING " << cb_id << "," << out_subblock_num_tiles << ENDL() ));
     cb_reserve_back(cb_id, out_subblock_num_tiles);
-    PACK(( DPRINT << "PACKING TILES..." << ENDL() ));
+    // PACK(( DPRINT << "PACKING TILES..." << ENDL() ));
     for (uint32_t i = 0; i < out_subblock_num_tiles; ++i) {
-        PACK(( DPRINT << "... " << i << ENDL() ));
+        // PACK(( DPRINT << "... " << i << ENDL() ));
         pack_tile(i, cb_id);
-        PACK(( DPRINT << "done: " << i << ENDL() ));
+        // PACK(( DPRINT << "done: " << i << ENDL() ));
     }
 
     SliceRange sr = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
-    PACK(( DPRINT << ">>>> PACKED " << TileSlice(cb_id, 0, sr) << ENDL() ));
+    // PACK(( DPRINT << ">>>> PACKED " << TileSlice(cb_id, 0, sr) << ENDL() ));
 
     cb_push_back(cb_id, out_subblock_num_tiles);
-    PACK(( DPRINT << "PUSHED..." << ENDL() ));
+    // PACK(( DPRINT << "PUSHED..." << ENDL() ));
 }
 
 namespace NAMESPACE {
@@ -145,7 +145,7 @@ void MAIN {
                 for (uint32_t in0_subblock_i = 0; in0_subblock_i < in0_num_subblocks; ++in0_subblock_i) {
                     int in1_index_subblock_offset = 0;
                     for (uint32_t in1_subblock_i = 0; in1_subblock_i < in1_num_subblocks; ++in1_subblock_i) {
-                        PACK(( DPRINT << "SUBBLOCK: " << in0_subblock_i << "," << in1_subblock_i << ENDL() ));
+                        // PACK(( DPRINT << "SUBBLOCK: " << in0_subblock_i << "," << in1_subblock_i << ENDL() ));
                         acquire_dst(DstMode::Half);
                         if (enable_reload) {
                             copy_tile_to_dst_init_short_try(matmul_partials_cb);
@@ -156,11 +156,11 @@ void MAIN {
                             }
 
                             SliceRange sr = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
-                            PACK(( DPRINT << "<<<< RELOADED " << TileSlice(matmul_partials_cb, 0, sr) << ENDL() ));
+                            // PACK(( DPRINT << "<<<< RELOADED " << TileSlice(matmul_partials_cb, 0, sr) << ENDL() ));
 
                             cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
                             // PACK (( DPRINT << "POPPED..." << ENDL() ));
-                            mm_init_short_try();
+                            mm_init_short_try(matmul_partials_cb);
                             // mm_init_short();
                             // PACK (( DPRINT << "INITED..." << ENDL() ));
                         } // enable_reload
@@ -169,7 +169,7 @@ void MAIN {
                         int in0_index_h_offset = 0;
                         for (uint32_t h = 0; h < out_subblock_h; ++h) {
                             for (uint32_t w = 0; w < out_subblock_w; ++w) {
-                                PACK (( DPRINT << "SUBB..." << ENDL() ));
+                                // PACK (( DPRINT << "SUBB..." << ENDL() ));
                                 int in1_index_inner_dim_offset = 0;
                                 for (uint32_t inner_dim = 0; inner_dim < in0_block_w; ++inner_dim) {
                                     matmul_tiles(tilize_in0 ? tilized_in0_cb_id : in0_cb_id,                    // in0_cb
@@ -184,7 +184,7 @@ void MAIN {
                             } // for out_subblock_w
                             in0_index_h_offset += in0_block_w;
                         } // for out_subblock_h
-                        PACK (( DPRINT << "PACKING..." << ENDL() ));
+                        // PACK (( DPRINT << "PACKING..." << ENDL() ));
                         pack_matmul_subblock(last_out
                                                 ? (untilize_out
                                                     ? untilize_mode_final_matmul_partials_cb
@@ -192,7 +192,7 @@ void MAIN {
                                                 : matmul_partials_cb,
                                              out_subblock_num_tiles);
                         release_dst(DstMode::Half);
-                        PACK (( DPRINT << "DONE..." << ENDL() ));
+                        // PACK (( DPRINT << "DONE..." << ENDL() ));
                         in1_index_subblock_offset += out_subblock_w;
                     } // for in1_num_subblocks
                     if (last_out && untilize_out) {

@@ -162,8 +162,8 @@ inline void llk_pack(std::uint32_t tile_index, std::uint32_t output, std::uint32
         // however, since there is no tile header we need to -1 the pack address (in terms of 16B words) to offset packer's +1
         pack_tile_addr = cb_write_interface[output_id].fifo_wr_ptr + cb_write_interface[output_id].fifo_wr_tile_ptr - 1;
         cb_write_interface[output_id].fifo_wr_tile_ptr += GET_L1_TILE_SIZE((std::uint8_t)pack_dst_format[OUTPUT_BASE_ID]);
-        DPRINT << "L1 TS: " << (uint) GET_L1_TILE_SIZE((std::uint8_t)pack_dst_format[OUTPUT_BASE_ID]) << ENDL();
-        DPRINT << "L1 TS: " << (uint) GET_L1_TILE_SIZE((std::uint8_t)pack_dst_format[output_id]) << ENDL();
+        // DPRINT << "L1 TS: " << (uint) GET_L1_TILE_SIZE((std::uint8_t)pack_dst_format[OUTPUT_BASE_ID]) << ENDL();
+        // DPRINT << "L1 TS: " << (uint) GET_L1_TILE_SIZE((std::uint8_t)pack_dst_format[output_id]) << ENDL();
     }
 
     // DPRINT << "zz " << ENDL();
@@ -177,11 +177,11 @@ inline void llk_pack(std::uint32_t tile_index, std::uint32_t output, std::uint32
         TT_SETADC(p_setadc::PAC, p_setadc::CH_0, p_setadc::SET_Z, tile_index);
     }
 
-    DPRINT << "addr: " << (uint) pack_tile_addr << ENDL();
+    // DPRINT << "addr: " << (uint) pack_tile_addr << ENDL();
 
     program_packer_destination(pack_tile_addr, OUTPUT_BASE_ID);
 
-    DPRINT << "rr " << ENDL();
+    // DPRINT << "rr " << ENDL();
 
     mop_run(1, 1);
 

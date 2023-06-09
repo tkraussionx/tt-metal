@@ -172,7 +172,7 @@ namespace ckernel::unpacker
       uint unpB_ch1_y_stride = 16*srcb_face_height*unpB_ch1_x_stride;
       uint exp_width = ((uint)unpack_dst_format[unpA_operand]>>2)&0x1; //0=5-bit, 1=8-bit
 
-      DPRINT << "unpA_stride: " << unpA_ch1_x_stride << ", unpB_stride: " << unpB_ch1_x_stride << ENDL();
+      // DPRINT << "unpA_stride: " << unpA_ch1_x_stride << ", unpB_stride: " << unpB_ch1_x_stride << ENDL();
 
       // Math ALU_FORMAT_REG
       // MT: Ensure thread safety between unpacker and math threads by using semaphore
