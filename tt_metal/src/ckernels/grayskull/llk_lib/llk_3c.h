@@ -8,6 +8,7 @@
 #include "ckernel_gpr_map.h"
 #include "chlkc_list.h"
 //#include "llk_defs.h"
+#include "debug_print.h"
 
 #include "kernels/hostdevcommon/kernel_structs.h"
 
@@ -115,6 +116,13 @@ ALWI void binary_op_init_common(uint32_t icb0, uint32_t icb1)
     PACK(( llk_pack_hw_configure_disaggregated<false>(16) ));
     PACK(( llk_setup_outputs() ));
     PACK(( llk_pack_dest_init<SYNC, DstTileFaceLayout::RowMajor, false>() ));
+}
+
+ALWI void mm_init_short_try() {
+    UNPACK(( DPRINT << "Minit" << ENDL() ));
+    MATH(( llk_math_matmul_init<MATH_FIDELITY>(0)  ));
+    UNPACK(( llk_unpack_AB_matmul_init(0) ));
+    UNPACK(( llk_unpack_AB_matmul_hw_configure_disaggregated(0,1,0) ));
 }
 
 ALWI void mm_init_short() {
@@ -247,6 +255,15 @@ ALWI void copy_tile_to_dst_init_short()
     UNPACK(( llk_unpack_A_init<BroadcastType::NONE, false, false>()  ));
 
     MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE, false>()  ));
+}
+
+ALWI void copy_tile_to_dst_init_short_try(uint32_t cbid)
+{
+    MATH(( DPRINT << "Cinit" << ENDL() ));
+    UNPACK(( llk_unpack_A_init<BroadcastType::NONE, false, false>() ));
+    UNPACK(( llk_unpack_A_hw_configure_disaggregated(cbid) ));
+
+    MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE, false>() ));
 }
 
 ALWI void copy_tile_init()

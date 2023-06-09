@@ -3,6 +3,7 @@
 #include "ckernel.h"
 #include "ckernel_globals.h"
 #include "fw_debug.h"
+#include "debug_print.h"
 
 #ifdef PERF_DUMP
 #include "perf_res_decouple.h"
@@ -160,11 +161,18 @@ namespace ckernel::unpacker
       // Get pointer to registers for current state ID
       volatile uint *cfg = get_cfg_pointer();
 
+      // DPRINT << "DF: FP16 = " << (uint) DataFormat::Float16 << ", FP16_B = " << (uint) DataFormat::Float16_b << ", BFP8_B = " << (uint) DataFormat::Bfp8_b << ENDL();
+      // DPRINT << "unpA_operand: " << unpA_operand << ", unpack_dst_format[unpA_operand]: " << (uint) (unpack_dst_format[unpA_operand] & 0x3) << ENDL();
+      // DPRINT << "unpB_operand: " << unpB_operand << ", unpack_dst_format[unpB_operand]: " << (uint) (unpack_dst_format[unpB_operand] & 0x3) << ENDL();
+      // uint unpA_ch1_x_stride = (uint) (unpack_dst_format[unpA_operand]&0x3) == (uint) DataFormat::Float32 ? 4 : ((uint) (unpack_dst_format[unpA_operand]&0x3) == (uint) DataFormat::Float16 || (uint) (unpack_dst_format[unpA_operand]&0x3) == (uint) DataFormat::Float16_b) ? 2 : 1;
+      // uint unpB_ch1_x_stride = (uint) (unpack_dst_format[unpB_operand]&0x3) == (uint) DataFormat::Float32 ? 4 : ((uint) (unpack_dst_format[unpB_operand]&0x3) == (uint) DataFormat::Float16 || (uint) (unpack_dst_format[unpB_operand]&0x3) == (uint) DataFormat::Float16_b) ? 2 : 1;
       uint unpA_ch1_x_stride = (uint) (unpack_dst_format[unpA_operand]&0x3) == (uint) DataFormat::Float32 ? 4 : (uint) (unpack_dst_format[unpA_operand]&0x3) == (uint) DataFormat::Float16 ? 2 : 1;
-      uint unpB_ch1_x_stride = (uint) (unpack_dst_format[unpA_operand]&0x3) == (uint) DataFormat::Float32 ? 4 : (uint) (unpack_dst_format[unpB_operand]&0x3) == (uint) DataFormat::Float16 ? 2 : 1;
+      uint unpB_ch1_x_stride = (uint) (unpack_dst_format[unpB_operand]&0x3) == (uint) DataFormat::Float32 ? 4 : (uint) (unpack_dst_format[unpB_operand]&0x3) == (uint) DataFormat::Float16 ? 2 : 1;
       uint unpA_ch1_y_stride = 16*srca_face_height*unpA_ch1_x_stride;
       uint unpB_ch1_y_stride = 16*srcb_face_height*unpB_ch1_x_stride;
       uint exp_width = ((uint)unpack_dst_format[unpA_operand]>>2)&0x1; //0=5-bit, 1=8-bit
+
+      DPRINT << "unpA_stride: " << unpA_ch1_x_stride << ", unpB_stride: " << unpB_ch1_x_stride << ENDL();
 
       // Math ALU_FORMAT_REG
       // MT: Ensure thread safety between unpacker and math threads by using semaphore

@@ -4,6 +4,7 @@
 #include "ckernel_defs.h"
 #include "ckernel_globals.h"
 #include "fw_debug.h"
+#include "debug_print.h"
 
 #define TT_OP_SETDMAREG_SHFT(Payload_SigSelSize, Payload_SigSelShft, SetSignalsMode, RegIndex16b) \
   TT_OP(0x45, (((Payload_SigSelSize) << 22) + ((Payload_SigSelShft)) + ((SetSignalsMode) << 7) + ((RegIndex16b) << 0)))
@@ -175,7 +176,7 @@ namespace ckernel::packer
       const uint pack_per_xy_plane = 16;
 
       uint x_stride = (uint)(pack_src_format[pack_output]&0x3) == (uint)DataFormat::Float32 ? 4 :
-                      (uint)(pack_src_format[pack_output]&0x3) == (uint)DataFormat::Float16 ? 2 : 1;
+                      ((uint)(pack_src_format[pack_output]&0x3) == (uint)DataFormat::Float16 || (uint)(pack_src_format[pack_output]&0x3) == (uint)DataFormat::Float16_b) ? 2 : 1;
       uint y_stride = 16*x_stride;
       uint z_stride = PACK_CNT*16*y_stride;
 
@@ -325,24 +326,36 @@ namespace ckernel::packer
    inline void program_packer_destination(uint32_t addr, uint8_t pack_output)
    {
       const uint8_t fmt = (uint8_t)(pack_dst_format[pack_output] & 0x3);
+      DPRINT << "** fmt: " << (uint) fmt << ENDL();
       if constexpr (PackSel == PACK_ALL) {
+         // const uint32_t offset1 = fmt == (uint8_t)DataFormat::Float32 ? (0x40 << 8) : (fmt == (uint8_t)DataFormat::Float16 || fmt == (uint8_t)DataFormat::Float16_b) ? (0x20 << 8) : (0x1 << 8);
+         // const uint32_t offset2 = fmt == (uint8_t)DataFormat::Float32 ? (0x80 << 8) : (fmt == (uint8_t)DataFormat::Float16 || fmt == (uint8_t)DataFormat::Float16_b) ? (0x40 << 8) : (0x2 << 8);
+         // const uint32_t offset3 = fmt == (uint8_t)DataFormat::Float32 ? (0xC0 << 8) : (fmt == (uint8_t)DataFormat::Float16 || fmt == (uint8_t)DataFormat::Float16_b) ? (0x60 << 8) : (0x3 << 8);
          const uint32_t offset1 = fmt == (uint8_t)DataFormat::Float32 ? (0x40 << 8) : fmt == (uint8_t)DataFormat::Float16 ? (0x20 << 8) : (0x1 << 8);
          const uint32_t offset2 = fmt == (uint8_t)DataFormat::Float32 ? (0x80 << 8) : fmt == (uint8_t)DataFormat::Float16 ? (0x40 << 8) : (0x2 << 8);
          const uint32_t offset3 = fmt == (uint8_t)DataFormat::Float32 ? (0xC0 << 8) : fmt == (uint8_t)DataFormat::Float16 ? (0x60 << 8) : (0x3 << 8);
+         // DPRINT << "** offsets: " << offset1 << "," << offset2 << "," << offset3 << ENDL();
          addr <<= 8;
 
          TT_SETDMAREG_SHFT(0, addr, 0, LO_16(p_gpr_pack::OUTPUT_ADDR+0));
+         DPRINT << "0" << ENDL();
          TT_SETDMAREG_SHFT(0, addr+offset1, 0, LO_16(p_gpr_pack::OUTPUT_ADDR+1));
+         DPRINT << "1" << ENDL();
          TT_SETDMAREG_SHFT(0, addr+offset2, 0, LO_16(p_gpr_pack::OUTPUT_ADDR+2));
+         DPRINT << "2" << ENDL();
          TT_SETDMAREG_SHFT(0, addr+offset3, 0, LO_16(p_gpr_pack::OUTPUT_ADDR+3));
+         DPRINT << "gg" << ENDL();
 	 TTI_STALLWAIT(p_stall::STALL_CFG, p_stall::PACK0 | p_stall::PACK1);
          TTI_WRCFG(p_gpr_pack::OUTPUT_ADDR,     p_cfg::WRCFG_32b, THCON_SEC0_REG1_L1_Dest_addr_ADDR32);
          TTI_WRCFG(p_gpr_pack::OUTPUT_ADDR+1,   p_cfg::WRCFG_32b, THCON_SEC0_REG8_L1_Dest_addr_ADDR32);
          TTI_STALLWAIT(p_stall::STALL_CFG, p_stall::PACK2 | p_stall::PACK3);
          TTI_WRCFG(p_gpr_pack::OUTPUT_ADDR+2,   p_cfg::WRCFG_32b, THCON_SEC1_REG1_L1_Dest_addr_ADDR32);
          TTI_WRCFG(p_gpr_pack::OUTPUT_ADDR+3,   p_cfg::WRCFG_32b, THCON_SEC1_REG8_L1_Dest_addr_ADDR32);
+         DPRINT << "uu" << ENDL();
      } else if constexpr (PackSel == PACK_01) {
+         // const uint32_t offset1 = fmt == (uint8_t)DataFormat::Float32 ? (0x40 << 8) : (fmt == (uint8_t)DataFormat::Float16 || fmt == (uint8_t)DataFormat::Float16_b) ? (0x20 << 8) : (0x1 << 8);
          const uint32_t offset1 = fmt == (uint8_t)DataFormat::Float32 ? (0x40 << 8) : fmt == (uint8_t)DataFormat::Float16 ? (0x20 << 8) : (0x1 << 8);
+         // DPRINT << "** offset: " << offset1 << ENDL();
          addr <<= 8;
 
          TT_SETDMAREG_SHFT(0, addr, 0, LO_16(p_gpr_pack::OUTPUT_ADDR+0));

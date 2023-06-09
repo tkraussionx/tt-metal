@@ -61,8 +61,8 @@ inline void llk_unpack_untilize_init(const uint32_t operand) {
     constexpr uint32_t srca_face_height = 1;
     constexpr uint32_t srcb_face_height = 16;
 
-    uint unpA_ch1_x_stride = (uint) (unpack_dst_format[operand]&0x3) == (uint) DataFormat::Float32 ? 4 : (uint) (unpack_dst_format[operand]&0x3) == (uint) DataFormat::Float16 ? 2 : 1;
-    uint unpB_ch1_x_stride = (uint) (unpack_dst_format[operand]&0x3) == (uint) DataFormat::Float32 ? 4 : (uint) (unpack_dst_format[1]&0x3) == (uint) DataFormat::Float16 ? 2 : 1;
+    uint unpA_ch1_x_stride = (uint) (unpack_dst_format[operand]&0x3) == (uint) DataFormat::Float32 ? 4 : ((uint) (unpack_dst_format[operand]&0x3) == (uint) DataFormat::Float16 || (uint) (unpack_dst_format[operand]&0x3) == (uint) DataFormat::Float16_b) ? 2 : 1;
+    uint unpB_ch1_x_stride = (uint) (unpack_dst_format[operand]&0x3) == (uint) DataFormat::Float32 ? 4 : ((uint) (unpack_dst_format[1]&0x3) == (uint) DataFormat::Float16 || (uint) (unpack_dst_format[1]&0x3) == (uint) DataFormat::Float16_b) ? 2 : 1;
     uint unpA_ch1_y_stride = 16*srca_face_height*unpA_ch1_x_stride;
     uint unpB_ch1_y_stride = 16*srcb_face_height*unpB_ch1_x_stride;
 
