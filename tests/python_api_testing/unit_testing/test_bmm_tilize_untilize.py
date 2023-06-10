@@ -23,15 +23,15 @@ TILE_HEIGHT = TILE_WIDTH = 32
 ## parameters
 # matrix sizes as number of blocks along h and w:
 a_height_nblocks = [1]
-a_width_nblocks = [5]
+a_width_nblocks = [1]
 b_width_nblocks = [1]
 # block sizes as number of tiles along h and w:
-a_block_height_ntiles = [4]
-a_block_width_ntiles = [4]
-b_block_width_ntiles = [16]
+a_block_height_ntiles = [1] #[4]
+a_block_width_ntiles = [1]  #[4]
+b_block_width_ntiles = [1]  #[16]
 # output sublobcking per block:
-out_subblock_height_ntiles = [4] ## == a_block_height_ntiles, <= 8
-out_subblock_width_ntiles = [2]  ## == b_block_width_ntiles, <= 8
+out_subblock_height_ntiles = [1]    #[4] ## == a_block_height_ntiles, <= 8
+out_subblock_width_ntiles = [1] #[2]  ## == b_block_width_ntiles, <= 8
 tilize_a = [False]  ## [True, False]
 untilize_out = [False]  ## [True, False]
 
@@ -90,6 +90,7 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
 
     torch.manual_seed(0)
     a = torch.randn(a_shape, dtype=torch.bfloat16).float()
+    # a = torch.zeros(a_shape, dtype=torch.bfloat16).float()
     b = torch.randn(b_shape, dtype=torch.bfloat16).float()
     # b = torch.zeros(b_shape, dtype=torch.bfloat16).float()
 
@@ -131,10 +132,10 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
        sci_mode=False, edgeitems=80, linewidth=400)
 
     # tta_pytorch = untilize(torch.tensor(tta.to(host).data()).reshape(a_shape))
-    # print("a slice:\n", tta_pytorch[0, 0, 0:32*a_block_height_ntiles*a_height_nblocks:32*a_block_height_ntiles, 0:32*a_width_nblocks*a_block_width_ntiles:1])
+    # print(f'a slice: {tta_pytorch[0, 0, 0:32*a_block_height_ntiles*a_height_nblocks:32*a_block_height_ntiles, 0:32*a_width_nblocks*a_block_width_ntiles:1]}')
 
     # ttb_pytorch = untilize(torch.tensor(ttb.to(host).data()).reshape(b_shape))
-    # print("b slice:\n", ttb_pytorch[0, 0, 0:32*a_block_width_ntiles*a_width_nblocks:32, 0:32*b_width_nblocks*b_block_width_ntiles:1])
+    # print(f'b slice: {ttb_pytorch[0, 0, 0:32*a_block_width_ntiles*a_width_nblocks:32, 0:32*b_width_nblocks*b_block_width_ntiles:1]}')
 
     ## compute out
     out = ttl.tensor.bmm_tilize_untilize(tta, ttb, out_dtype,
@@ -149,7 +150,7 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
     else:
         out_pytorch = torch.tensor(out.data()).reshape(out_shape)
 
-    # print("out slice:\n", out_pytorch)
+    print(f'output: {out_pytorch[0][0][0]}')
 
     ttl.device.CloseDevice(device)
 

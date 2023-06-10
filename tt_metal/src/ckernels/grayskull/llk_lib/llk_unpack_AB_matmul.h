@@ -94,6 +94,12 @@ inline void llk_unpack_AB_matmul(
     std::uint32_t address_a = base_address_a + offset_address_a - 1;
     std::uint32_t address_b = base_address_b + offset_address_b - 1;
 
+    // DPRINT << "Float16_b: " << (uint) DataFormat::Float16_b << ", Bfp8_b: " << (uint) DataFormat::Bfp8_b << ENDL();
+    // DPRINT << "IN A: " << inputA << ", IN B: " << inputB << ENDL();
+    // DPRINT << "UPSF A: " << (uint) unpack_src_format[inputA] << ", UPSF B: " << (uint) unpack_src_format[inputB] << ENDL();
+    // DPRINT << "OADDR A: " << offset_address_a << ", OADDR B: " << offset_address_b << ENDL();
+    // DPRINT << "TIDX A: " << tile_index_a << ", TIDX B: " << tile_index_b << ENDL();
+
     // Clear z/w start counters
     TTI_SETADCZW(0b011, 0, 0, 0, 0, 0b1111);
 

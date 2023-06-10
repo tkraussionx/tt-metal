@@ -122,7 +122,7 @@ ALWI void mm_init_short_try(uint32_t cbid) {
     // UNPACK(( DPRINT << "Minit" << ENDL() ));
     MATH(( llk_math_matmul_init<MATH_FIDELITY>(0)  ));
     UNPACK(( llk_unpack_AB_matmul_init(0) ));
-    // UNPACK(( llk_unpack_AB_matmul_hw_configure_disaggregated(0,1,0) ));
+    // switch back to data format for input cb 0 and 1
     UNPACK(( llk_unpack_reconfig_data_format(cbid, 0, cbid, 1) ));
 }
 
@@ -262,8 +262,8 @@ ALWI void copy_tile_to_dst_init_short_try(uint32_t cbid)
 {
     // PACK(( DPRINT << "Cinit" << ENDL() ));
     UNPACK(( llk_unpack_A_init<BroadcastType::NONE, false, false>() ));
-    // UNPACK(( llk_unpack_A_hw_configure_disaggregated(cbid) ));
-    UNPACK(( llk_unpack_reconfig_data_format(0, cbid, 1, cbid) ));
+    // configure unpack to unpack from cbid data format instead of input cb 0. Second arg doesn't matter.
+    UNPACK(( llk_unpack_reconfig_data_format(0, cbid, 1, 1) ));
 
     MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE, false>() ));
 }

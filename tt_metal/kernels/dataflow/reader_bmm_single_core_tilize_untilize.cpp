@@ -32,9 +32,8 @@ void kernel_main() {
     uint32_t in1_stride_h = get_arg_val<uint32_t>(14);
     uint32_t in1_next_block_stride_h = get_arg_val<uint32_t>(15);
     uint32_t in1_next_block_stride_w = get_arg_val<uint32_t>(16);
-    DataFormat in1_df = static_cast<DataFormat>(get_arg_val<uint32_t>(17));
-
-    DataFormat in0_df = in1_df;             // TODO (AS): handle multi-precision? Currently assuming all DF the same.
+    DataFormat in0_df = static_cast<DataFormat>(get_arg_val<uint32_t>(17));
+    DataFormat in1_df = static_cast<DataFormat>(get_arg_val<uint32_t>(18));
 
     constexpr uint32_t TILE_HEIGHT = 32;    // TODO (AS): use a common source of truth
     constexpr uint32_t TILE_WIDTH = 32;     // TODO (AS): use a common source of truth

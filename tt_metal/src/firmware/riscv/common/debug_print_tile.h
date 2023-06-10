@@ -46,6 +46,7 @@ struct TileSlice : TileSliceHostDev<MAXCOUNT> {
     }
 
     struct Tile { uint16_t vals[1024] __attribute__((packed)); } __attribute__((aligned(2)));
+    // struct Tile { uint8_t vals[1024]; } __attribute__((aligned(2)));
     // samples the tile using python style slice with strides [h0:h1:hs, w0:w1:ws]
     // endl_rows=false skips printing the endl in the end of row, so it's easier to visualize tall columns
 

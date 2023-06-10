@@ -6,6 +6,8 @@
 #include "llrt/tt_debug_print_server.hpp"
 #include "hostdevcommon/debug_print_common.h"
 
+// #include "tools/tt_gdb/tt_gdb.hpp"
+
 namespace tt {
 namespace tt_metal {
 
@@ -213,6 +215,8 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
     // int hart_mask = DPRINT_HART_NC | DPRINT_HART_BR;
     tt_start_debug_print_server(device->cluster(), {0}, {debug_core});
 
+    // tt_gdb(device, 0, {core}, {"myop"});
+
     const std::array<uint32_t, 4> out_shape{in0_batch, in0_channel, in0_height, in1_width};
     Tensor output = Tensor(out_shape,
                            out_dt,
@@ -342,6 +346,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
             in1_width_ntiles,
             in1_width_ntiles * in1_block_h,
             in1_block_w,
+            static_cast<uint32_t>(in0_df),
             static_cast<uint32_t>(in1_df)
         };
     } else {
@@ -372,6 +377,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
             in0_block_w,                    // in0_next_block_stride_w,
             in1_width_ntiles * in1_block_h, // in1_next_block_stride_h,
             in1_block_w,                    // in1_next_block_stride_w
+            static_cast<uint32_t>(in0_df),
             static_cast<uint32_t>(in1_df)
         };
     }

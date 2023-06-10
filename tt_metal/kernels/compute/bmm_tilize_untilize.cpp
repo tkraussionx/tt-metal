@@ -120,9 +120,53 @@ void MAIN {
     uint32_t untilize_mode_reblock_cb                 = CB::c_intermed3;
     uint32_t out_cb_id                                = CB::c_out0;
 
-    DPRINT << FIXP() << SETP(2);
+    // DPRINT << FIXP() << SETP(2);
 
-    mm_init();
+    {
+        // init
+        UNPACK(( llk_setup_operands() ));
+        // init unpack
+        UNPACK(( llk_unpack_AB_matmul_init() ));
+        UNPACK(( llk_unpack_AB_matmul_hw_configure_disaggregated(in0_cb_id, in1_cb_id) ));
+        // init compute
+        MATH(( llk_math_matmul_init<MATH_FIDELITY>(0) ));
+        MATH(( llk_math_pack_sync_init<SYNC>()  ));
+        // init pack
+        PACK(( llk_pack_init() ));
+        PACK(( llk_pack_hw_configure_disaggregated<false>(out_cb_id) ));
+        PACK(( llk_setup_outputs() ));
+        PACK(( llk_pack_dest_init<SYNC, DstTileFaceLayout::RowMajor, false>() ));
+        PACK(( llk_init_packer_dest_offset_registers<SyncHalf, DstTileFaceLayout::RowMajor, false>() ));
+
+        // wait for inputs
+        cb_wait_front(in0_cb_id, 1);
+        cb_wait_front(in1_cb_id, 1);
+
+        // lock dst
+        acquire_dst(DstMode::Half);
+
+        // matmul:
+        // unpack in0_cb -> srca, in1_cb -> srcb
+        UNPACK(( llk_unpack_AB_matmul(in0_cb_id, in1_cb_id, 0, 0) ));
+        // matmul srca * srcb -> dst
+        MATH(( llk_math_matmul<MATH_FIDELITY>(0) ));
+
+        // reserve output
+        cb_reserve_back(out_cb_id, 1);
+        // pack dst -> out_cb
+        PACK(( llk_pack<false, SYNC, false >(0, out_cb_id) ));
+        // push output
+        cb_push_back(out_cb_id, 1);
+
+        // release dst lock
+        release_dst(DstMode::Half);
+
+        // pop inputs
+        cb_pop_front(in0_cb_id, 1);
+        cb_pop_front(in1_cb_id, 1);
+    }
+
+    /*mm_init();
     for(uint32_t in0_block_h_i = 0; in0_block_h_i < in0_num_blocks_h; ++in0_block_h_i) {
         for(uint32_t in1_block_w_i = 0; in1_block_w_i < in1_num_blocks_w; ++in1_block_w_i) {
             bool enable_reload = false;
@@ -155,7 +199,7 @@ void MAIN {
                                 copy_tile(matmul_partials_cb, i, i);
                             }
 
-                            SliceRange sr = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
+                            // SliceRange sr = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
                             // PACK(( DPRINT << "<<<< RELOADED " << TileSlice(matmul_partials_cb, 0, sr) << ENDL() ));
 
                             cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
@@ -167,6 +211,10 @@ void MAIN {
                         // Compute output sub-block from in0_subblock x in1_subblock
                         int dst_index = 0;
                         int in0_index_h_offset = 0;
+
+                        SliceRange sr1 = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
+                        UNPACK(( DPRINT << "SLICE 1: " << TileSlice(in1_cb_id, 0, sr1) << ENDL() ));
+
                         for (uint32_t h = 0; h < out_subblock_h; ++h) {
                             for (uint32_t w = 0; w < out_subblock_w; ++w) {
                                 // PACK (( DPRINT << "SUBB..." << ENDL() ));
@@ -192,7 +240,11 @@ void MAIN {
                                                 : matmul_partials_cb,
                                              out_subblock_num_tiles);
                         release_dst(DstMode::Half);
+
                         // PACK (( DPRINT << "DONE..." << ENDL() ));
+                        // SliceRange sr = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
+                        // PACK(( DPRINT << "SLICE: " << TileSlice(out_cb_id, 0, sr) << ENDL() ));
+
                         in1_index_subblock_offset += out_subblock_w;
                     } // for in1_num_subblocks
                     if (last_out && untilize_out) {
@@ -219,6 +271,6 @@ void MAIN {
                 cb_pop_front(in1_cb_id, in1_block_num_tiles);
             } // for in0_num_blocks_w
         } // for in1_num_blocks_w
-    } // for in0_num_blocks_h
+    } // for in0_num_blocks_h*/
 } // MAIN
 } // NAMESPACE
