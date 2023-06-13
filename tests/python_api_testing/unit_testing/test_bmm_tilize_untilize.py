@@ -150,7 +150,7 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
     else:
         out_pytorch = torch.tensor(out.data()).reshape(out_shape)
 
-    print(f'output: {out_pytorch[0][0][0]}')
+    print(f'returned output: {out_pytorch[0][0][0]}')
 
     ttl.device.CloseDevice(device)
 

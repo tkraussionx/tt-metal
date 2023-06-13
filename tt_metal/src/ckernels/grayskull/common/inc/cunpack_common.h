@@ -178,8 +178,7 @@ namespace ckernel::unpacker
       // MT: Ensure thread safety between unpacker and math threads by using semaphore
       if (!skip_alu_format_set) {
          uint alu_src_format =
-            // ((row_pool ? ((uint) DataFormat::Float16 | (exp_width<<2)) : unpack_dst_format[unpA_operand]) << ALU_FORMAT_SPEC_REG1_SrcB_SHAMT) // Row polling dest format is always 16-bit float
-            ((row_pool ? ((uint) DataFormat::Float16 | (exp_width<<2)) : unpack_dst_format[unpB_operand]) << ALU_FORMAT_SPEC_REG1_SrcB_SHAMT) // Row polling dest format is always 16-bit float
+            ((row_pool ? ((uint) DataFormat::Float16 | (exp_width<<2)) : unpack_dst_format[unpA_operand]) << ALU_FORMAT_SPEC_REG1_SrcB_SHAMT) // Row polling dest format is always 16-bit float
          | (unpack_dst_format[unpA_operand] << ALU_FORMAT_SPEC_REG0_SrcA_SHAMT)
          | (0x0 << ALU_FORMAT_SPEC_REG_SrcA_val_SHAMT);
          cfg[ALU_FORMAT_SPEC_REG_SrcA_val_ADDR32] = alu_src_format;

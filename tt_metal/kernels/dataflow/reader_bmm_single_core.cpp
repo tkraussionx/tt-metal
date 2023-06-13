@@ -62,7 +62,7 @@ void kernel_main() {
         .data_format = in1_df
     };
 
-    DPRINT << FIXP() << SETW(32) << SETP(2);
+    // DPRINT << FIXP() << SETW(32) << SETP(2);
 
     // DPRINT << "in0 TS: " << in0_tile_nbytes << ENDL();
     // DPRINT << "in1 TS: " << in1_tile_nbytes << ENDL();

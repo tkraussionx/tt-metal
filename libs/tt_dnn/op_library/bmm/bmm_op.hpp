@@ -38,6 +38,7 @@ Tensor large_bmm(const Tensor& A, const Tensor& B, bool tilize_act, bool untiliz
 Tensor large_bmm_single_block(const Tensor& A, const Tensor& B, bool tilize_a, bool untilize_out); // Allows support for tilizing a, untilize b
 Tensor matmul_single_core  (const Tensor &A, const Tensor &B); // broadcasts batch, expects N=1 for now
 Tensor bmm_single_core     (const Tensor &A, const Tensor &B); // doesn't broadcast batch, expects batch to match in A and B
+Tensor bmm_test(const Tensor& a, const Tensor& b, DataType out_dt);
 Tensor bmm_tilize_untilize(const Tensor& a, const Tensor& b, DataType out_dt,
                            uint32_t a_height_nblocks, uint32_t a_width_nblocks, uint32_t b_width_nblocks,
                            uint32_t a_block_height_ntiles, uint32_t a_block_width_ntiles, uint32_t b_block_width_ntiles,

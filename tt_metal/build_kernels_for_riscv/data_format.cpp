@@ -247,14 +247,17 @@ std::vector<DataFormat> get_unpack_src_formats(DataFormat input_formats[8], Data
                default: src_format = DataFormat::Lf8; break;
             }
         }
+        // log_debug("unpack_src::srcfmt {}: {}", i, src_format);
         unpack_src_format.push_back(src_format);
     }
     for (int i=0 ; i<8 ; i++) {
         DataFormat src_format = param_formats[i];
+        // log_debug("unpack_src::paramfmt {}: {}", i, src_format);
         unpack_src_format.push_back(src_format);
     }
     for (int i=0 ; i<8 ; i++) {
         DataFormat src_format = intermed_formats[i];
+        // log_debug("unpack_src::interfmt {}: {}", i, src_format);
         unpack_src_format.push_back(src_format);
     }
     return unpack_src_format;
@@ -294,14 +297,17 @@ std::vector<DataFormat> get_unpack_dst_formats(DataFormat input_formats[8], Data
         } else {
             unpack_dst_format.push_back(get_single_unpack_dst_format(input_formats[i], pack_format, unpack_cond_dst_format));
         }
+        // log_debug("unpack_dst::srcfmt {}: {}", i, src_format);
     }
     unpack_cond_dst_format = (tt::is_all_fp32_formats(param_formats) && fp32_dest_acc_en) ? DataFormat::Tf32 : unpack_conditional_dst_format;
     for (int i=0 ; i<8 ; i++) {
         unpack_dst_format.push_back(get_single_unpack_dst_format(param_formats[i], pack_format, unpack_cond_dst_format));
+        // log_debug("unpack_dst::paramfmt {}: {}", i, get_single_unpack_dst_format(param_formats[i], pack_format, unpack_cond_dst_format));
     }
     unpack_cond_dst_format = (tt::is_all_fp32_formats(intermed_formats) && fp32_dest_acc_en) ? DataFormat::Tf32 : unpack_conditional_dst_format;
     for (int i=0 ; i<8 ; i++) {
         unpack_dst_format.push_back(get_single_unpack_dst_format(intermed_formats[i], pack_format, unpack_cond_dst_format));
+        // log_debug("unpack_dst::interfmt {}: {}", i, get_single_unpack_dst_format(intermed_formats[i], pack_format, unpack_cond_dst_format));
     }
     return unpack_dst_format;
 }
@@ -335,6 +341,7 @@ std::vector<DataFormat> get_pack_src_formats(
             // std::cout << "DEBUG PCK" << i << " unp " << unpack_format << " pck " << pack_format << std::endl;
             pack_src_format = fp32_dest_acc_en ? DataFormat::Float32 : get_single_pack_src_format(unpack_format, pack_format);
         }
+        // log_debug("pack_src::src_fmt {}: {}", i, pack_src_format);
         pack_src_formats.push_back(pack_src_format);
     }
 
@@ -346,6 +353,7 @@ std::vector<DataFormat> get_pack_src_formats(
         }
         // std::cout << "DEBUG INT" << i << " unp " << unpack_format << " pck " << pack_format << std::endl;
         DataFormat pack_src_format = fp32_dest_acc_en ? DataFormat::Float32 : get_single_pack_src_format(unpack_format, pack_format);
+        // log_debug("pack_src::inter_fmt {}: {}", i, pack_src_format);
         pack_src_formats.push_back(pack_src_format);
     }
     return pack_src_formats;
@@ -361,11 +369,13 @@ std::vector<DataFormat> get_pack_dst_formats(DataFormat input_formats[8], DataFo
         } else {
             pack_dst_format.push_back(output_formats[i]);
         }
+        // log_debug("pack_dst::dst_fmt {}: {}", i, pack_dst_format.back());
     }
 
     // Intermediates
     for (int i = 0; i < 8; i++) {
         pack_dst_format.push_back(intermed_formats[i]);
+        // log_debug("pack_dst::inter_fmt {}: {}", i, pack_dst_format.back());
     }
     return pack_dst_format;
 }

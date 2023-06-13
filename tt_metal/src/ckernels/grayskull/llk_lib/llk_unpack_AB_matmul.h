@@ -65,8 +65,8 @@ inline void llk_unpack_AB_matmul_mop_config(bool transpose) {
 
 inline void llk_unpack_AB_matmul_hw_configure(const llk_unpack_AB_matmul_params_t *unpack_AB_params) {
     configure_unpack_AB(
-        // get_operand_id(unpack_AB_params->unpB_operand), get_operand_id(unpack_AB_params->unpA_operand), 16, 16);
-        get_operand_id(unpack_AB_params->unpA_operand), get_operand_id(unpack_AB_params->unpB_operand), 16, 16);
+        get_operand_id(unpack_AB_params->unpB_operand), get_operand_id(unpack_AB_params->unpA_operand), 16, 16);
+        // get_operand_id(unpack_AB_params->unpA_operand), get_operand_id(unpack_AB_params->unpB_operand), 16, 16);
 }
 
 inline void llk_unpack_AB_matmul_hw_configure_disaggregated(

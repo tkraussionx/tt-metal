@@ -201,7 +201,8 @@ namespace ckernel::unpacker
       volatile uint *cfg = get_cfg_pointer();
 
       uint unpA_ch1_x_stride = (uint) (unpack_dst_format[unpA_operand]&0x3) == (uint) DataFormat::Float32 ? 4 : (uint) (unpack_dst_format[unpA_operand]&0x3) == (uint) DataFormat::Float16 ? 2 : 1;
-      uint unpB_ch1_x_stride = (uint) (unpack_dst_format[unpA_operand]&0x3) == (uint) DataFormat::Float32 ? 4 : (uint) (unpack_dst_format[unpB_operand]&0x3) == (uint) DataFormat::Float16 ? 2 : 1;
+      // uint unpB_ch1_x_stride = (uint) (unpack_dst_format[unpA_operand]&0x3) == (uint) DataFormat::Float32 ? 4 : (uint) (unpack_dst_format[unpB_operand]&0x3) == (uint) DataFormat::Float16 ? 2 : 1;
+      uint unpB_ch1_x_stride = (uint) (unpack_dst_format[unpB_operand]&0x3) == (uint) DataFormat::Float32 ? 4 : (uint) (unpack_dst_format[unpB_operand]&0x3) == (uint) DataFormat::Float16 ? 2 : 1;
       uint unpA_ch1_y_stride = 16*srca_face_height*unpA_ch1_x_stride;
       uint unpB_ch1_y_stride = 16*srcb_face_height*unpB_ch1_x_stride;
       uint unpB_ch1_z_stride = 16*srcb_face_height*unpB_ch1_x_stride;
@@ -291,7 +292,8 @@ namespace ckernel::unpacker
       // Program base address for all 2 sections (each section address is loaded to corresponding context)
       // Load dummy data to unused location if face height is 0
       const uint Dest_cntx0_address = srca_face_height == 0 ? 22*16 : 4 * 16;
-      const uint Dest_cntx1_address = srca_face_height == 0 ? 22*16 : 4 * 16;
+      // const uint Dest_cntx1_address = srca_face_height == 0 ? 22*16 : 4 * 16;
+      const uint Dest_cntx1_address = srcb_face_height == 0 ? 22*16 : 4 * 16;
       cfg[THCON_SEC0_REG5_Dest_cntx0_address_ADDR32] = Dest_cntx0_address | (Dest_cntx1_address << 16);
 
       // Program unpacker0 per context x_dim

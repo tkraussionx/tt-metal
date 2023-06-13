@@ -284,6 +284,7 @@ template <class T>
 inline std::vector<T> initialize_row_major_tensor_data(const std::array<uint32_t, 4> &shape, Initialize init_type, int rand_limit = 1, int seed = 0) {
     std::vector<T> values;
 
+    seed = time(NULL);
     auto rand_float = std::bind(std::uniform_real_distribution<float>(-rand_limit, rand_limit), std::mt19937(seed));
 
     auto get_val = [&init_type, &shape, &rand_float](int x, int y, int z, int w) {
