@@ -21,6 +21,7 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
                                                 uint32_t in0_tile_nbytes,
                                                 uint32_t in1_tile_nbytes,
                                                 uint32_t out_tile_nbytes,
+                                                bool tilize_in0 = true,
                                                 bool untilize_out = true) {
     // buffer indices
     uint32_t in0_cb                                 = CB::c_in0;
@@ -37,7 +38,7 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
 
     // inputs
 
-    // in0 (RM)
+    // in0
     auto cb_in0 = CreateCircularBuffer(
         program,
         device,
@@ -60,16 +61,18 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
 
     // intermediates
 
-    // in0 (TM)
-    auto cb_src0_tilized = CreateCircularBuffer(
-        program,
-        device,
-        tilize_mode_tilized_in0_cb,
-        core,
-        cb0_ntiles,
-        cb0_ntiles * in0_tile_nbytes,
-        in0_df
-    );
+    if (tilize_in0) {
+        // in0 (TM)
+        auto cb_src0_tilized = CreateCircularBuffer(
+            program,
+            device,
+            tilize_mode_tilized_in0_cb,
+            core,
+            cb0_ntiles,
+            cb0_ntiles * in0_tile_nbytes,
+            in0_df
+        );
+    }
     auto cb_matmul_partials = CreateCircularBuffer(
         program,
         device,
@@ -309,6 +312,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
         in0_tile_nbytes,
         in1_tile_nbytes,
         out_tile_nbytes,
+        tilize_in0,
         untilize_out);
 
     // Reader kernel

@@ -45,6 +45,10 @@ void kernel_main() {
                 out_sb_row_start_tile_id += out_stride_h;
             }
             noc_async_write_barrier();
+
+            // SliceRange sr = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
+            // DPRINT << "SLICE: " << TileSlice(out_cb_id, 0, sr) << ENDL();
+
             cb_pop_front(out_cb_id, out_subblock_tile_count);
             out_sbw_start_tile_id += out_next_subblock_stride_w;
         }
