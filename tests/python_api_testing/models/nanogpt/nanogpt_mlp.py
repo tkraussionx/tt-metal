@@ -44,6 +44,8 @@ class TtMLP(torch.nn.Module):
 
         x1 = nanogpt_utils.tt_linear(x, self.tt_weight_c_fc, self.tt_bias_c_fc)
 
+        print(x1.shape())
+
         x2 = tt_lib.tensor.gelu(x1)
 
         x3 = nanogpt_utils.tt_linear(x2, self.tt_weight_c_proj, self.tt_bias_c_proj)
