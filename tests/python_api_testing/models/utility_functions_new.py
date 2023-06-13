@@ -7,6 +7,12 @@ from tt_lib.utils import _nearest_32
 
 
 
+def deprecated(func, *args, **kwargs):
+    def helper():
+        logger.warning("this file is deprecated and will be remove soon")
+        return func(args, kwargs)
+    return helper
+
 def is_close(a, b, rtol=1e-2, atol=1e-2, max_mag=2.0, max_mag_fraction=0.02):
     """
     A variant of np.isclose with logging.
@@ -179,7 +185,7 @@ def comp_allclose_and_pcc(golden, calculated, rtol=1e-05, atol=1e-08, pcc=0.99):
 
     return passing, output
 
-
+@deprecated
 def torch2tt_tensor(py_tensor: torch.Tensor, tt_device, tt_layout=tt_lib.tensor.Layout.TILE, tt_memory_config=tt_lib.tensor.MemoryConfig(True, -1)):
     size = list(py_tensor.size())
 
@@ -195,7 +201,7 @@ def torch2tt_tensor(py_tensor: torch.Tensor, tt_device, tt_layout=tt_lib.tensor.
 
     return tt_tensor
 
-
+@deprecated
 def tt2torch_tensor(tt_tensor, tt_host=None):
     if tt_host == None:
         host = tt_lib.device.GetHost()
@@ -207,7 +213,7 @@ def tt2torch_tensor(tt_tensor, tt_host=None):
     py_output = torch.Tensor(tt_output.data()).reshape(tt_output.shape())
     return py_output
 
-
+@deprecated
 def pad_by_zero(x: torch.Tensor, device):
     initial_shape = x.shape
     if x.shape[3] % 32 != 0 or x.shape[2] % 32 != 0:
@@ -224,7 +230,7 @@ def pad_by_zero(x: torch.Tensor, device):
         x = torch2tt_tensor(x, device)
     return x, initial_shape
 
-
+@deprecated
 def unpad_from_zero(x, desired_shape, host):
     if x.shape()[-1] == desired_shape[-1] and x.shape()[-2] == desired_shape[-2] :
         x = tt2torch_tensor(x)
@@ -279,9 +285,6 @@ class Profiler():
         for key in self.times:
             average = self.get(key)
             logger.info(f"{key}: {average:.3f}s")
-
-
-profiler = Profiler()
 
 
 def tt_to_torch_tensor(tt_tensor, host):

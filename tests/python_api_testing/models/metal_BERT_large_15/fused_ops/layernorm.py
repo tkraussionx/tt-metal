@@ -4,7 +4,6 @@ import torch
 
 from libs.tt_lib import tensor, device
 from libs.tt_lib.utils import (
-    pad_activation,
     pad_weight,
     tilize,
     untilize,

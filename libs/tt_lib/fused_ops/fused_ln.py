@@ -16,10 +16,8 @@ import torch
 
 from libs import tt_lib as ttl
 
-# from python_api_testing.models.utility_functions import pad_activation, pad_weight, tilize, untilize, tilize_to_list, print_diff_argmax, pad_weight, is_close
 from libs.tt_lib.utils import (
     _nearest_32 as nearest_32,
-    pad_activation,
     pad_weight,
     tilize,
     tilize_to_list,

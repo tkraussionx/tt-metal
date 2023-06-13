@@ -3,7 +3,7 @@ import math
 import torch
 
 from .. import tensor, device
-from ..utils import pad_activation, pad_weight, tilize, untilize, tilize_to_list, print_diff_argmax
+from ..utils import untilize, tilize_to_list, print_diff_argmax
 
 
 def softmax(x: tensor.Tensor, stable=False):

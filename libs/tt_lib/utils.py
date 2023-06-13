@@ -4,6 +4,14 @@ import struct
 import torch
 import numpy as np
 
+
+
+def deprecated(func, *args, **kwargs):
+    def helper():
+        logger.warning("this method is deprecated")
+        return func(args, kwargs)
+    return helper
+
 def _nearest_32(x):
     return math.ceil(x / 32) * 32
 
@@ -69,7 +77,7 @@ def pad_weight(x):
 
     return padded_tensor
 
-def channels_last(x):
+def channels_last(x:torch.Tensor) -> torch.Tensor:
     """
     This function converts a row-major tensor to channels last.
 
@@ -98,6 +106,7 @@ def channels_last(x):
 
     return ret.reshape(ret_shape)
 
+@deprecated
 def convert_weights_2d_matrix(weights, w_shape):
     """
     :param weights: Input PyTorch Tensor
@@ -118,6 +127,7 @@ def convert_weights_2d_matrix(weights, w_shape):
     assert idx == np.prod(ret_shape)
     return ret.reshape(ret_shape).transpose(2,3)
 
+@deprecated
 def convert_act_2d_matrix(activation, kernel_y, kernel_x, stride_y, stride_x, pad_y, pad_x):
     """
     :param activation: Input PyTorch Tensor
@@ -152,6 +162,7 @@ def convert_act_2d_matrix(activation, kernel_y, kernel_x, stride_y, stride_x, pa
     assert idx == np.prod(ret_shape)
     return ret.reshape(ret_shape)
 
+@deprecated
 def tilize(x):
     """
     This function tilizes a tensor. The last two tensor dims must be divisible by 32, after which this function
@@ -192,6 +203,7 @@ def tilize(x):
 
     return ret.reshape(x.shape)
 
+@deprecated
 def tilize_to_list(x):
     """
     Tilize a PyTorch and then return the values as a flat list. The last two
@@ -206,6 +218,7 @@ def tilize_to_list(x):
 
     return tilize(x).reshape(-1).tolist()
 
+@deprecated
 def untilize(x):
     """
     This function untilizes a tensor to row major format.
@@ -247,7 +260,7 @@ def untilize(x):
 
     return ret
 
-
+@deprecated
 def print_diff_argmax(a, b, annotation = ""):
     """
     Prints out the value of both tensors at a point where the absolute difference is the largest.
@@ -271,7 +284,7 @@ def print_diff_argmax(a, b, annotation = ""):
     print("  Rel b=", relb.reshape(-1)[argmax], " at ", argmax)
     return diff.item()
 
-
+@deprecated
 def tt2torch(ttx):
     """
     Converts an llbuda tiled tensor to torch tensor.
@@ -283,7 +296,7 @@ def tt2torch(ttx):
     torch_out = untilize(torch.Tensor(tt_out.data()).reshape(shp))
     return torch_out
 
-
+@deprecated
 def tt2torch_rm(ttx):
     """
     Converts an llbuda row-major tensor to torch tensor.
@@ -401,7 +414,7 @@ def blocked_mm_with_conv_act(conv_act,
 
     return ret
 
-
+@deprecated
 def is_close(a, b, rtol=8e-2, atol=8e-2, max_mag=4.0, max_mag_fraction=0.02):
     """
     An improved variant of isclose, taking into account max magnitude in the sum, with logging.
