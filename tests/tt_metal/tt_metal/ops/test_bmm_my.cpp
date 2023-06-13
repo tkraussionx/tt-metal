@@ -12,37 +12,37 @@ using namespace tt;
 using namespace tt::tt_metal;
 
 
-// Given a tilized data (each tile's data is contiguous and row major within the tile)
-// transform it back to row major full tensor. (This function inverts the tilize() function)
-template <typename T>
-std::vector<T> untilize(std::vector<T> data, int rows, int cols) {
-    TT_ASSERT(rows % 32 == 0);
-    TT_ASSERT(cols % 32 == 0);
-    int num_tiles_r = rows / 32;
-    int num_tiles_c = cols / 32;
-    std::vector<T> result;
-    for(auto r = 0; r < num_tiles_r; r++) {
-        for(auto i = 0; i < 32; i++) {
-            for(auto c = 0; c < num_tiles_c; c++) {
-                int offset = r * 32 * 32 * num_tiles_c + c * 32 * 32 + i * 32;
-                for(auto j = 0; j < 32; j++) {
-                    result.push_back(data.at(offset + j));
-                }
-            }
-        }
-    }
+// // Given a tilized data (each tile's data is contiguous and row major within the tile)
+// // transform it back to row major full tensor. (This function inverts the tilize() function)
+// template <typename T>
+// std::vector<T> untilize(std::vector<T> data, int rows, int cols) {
+//     TT_ASSERT(rows % 32 == 0);
+//     TT_ASSERT(cols % 32 == 0);
+//     int num_tiles_r = rows / 32;
+//     int num_tiles_c = cols / 32;
+//     std::vector<T> result;
+//     for(auto r = 0; r < num_tiles_r; r++) {
+//         for(auto i = 0; i < 32; i++) {
+//             for(auto c = 0; c < num_tiles_c; c++) {
+//                 int offset = r * 32 * 32 * num_tiles_c + c * 32 * 32 + i * 32;
+//                 for(auto j = 0; j < 32; j++) {
+//                     result.push_back(data.at(offset + j));
+//                 }
+//             }
+//         }
+//     }
 
-    return result;
-}
+//     return result;
+// }
 
-template <typename T>
-std::vector<T> add_ref(const vector<T>& a, const vector<T>& b) {
-    vector<T> out(a.size());
-    for (uint32_t i = 0; i < a.size(); ++i) {
-        out[i] = a[i] + b[i];
-    }
-    return out;
-}
+// template <typename T>
+// std::vector<T> add_ref(const vector<T>& a, const vector<T>& b) {
+//     vector<T> out(a.size());
+//     for (uint32_t i = 0; i < a.size(); ++i) {
+//         out[i] = a[i] + b[i];
+//     }
+//     return out;
+// }
 
 int main(int argc, char **argv) {
     bool pass = true;
