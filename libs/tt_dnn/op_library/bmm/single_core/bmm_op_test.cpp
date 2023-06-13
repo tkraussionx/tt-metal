@@ -3,7 +3,7 @@
 #include "tt_metal/host_api.hpp"
 #include "common/constants.hpp"
 
-// #include "llrt/tt_debug_print_server.hpp"
+#include "llrt/tt_debug_print_server.hpp"
 // #include "hostdevcommon/debug_print_common.h"
 
 // #include "tools/tt_gdb/tt_gdb.hpp"
@@ -125,6 +125,8 @@ Tensor bmm_test(const Tensor &in0,       // activations
     CoreCoord debug_core = {1, 1};
     Program program = Program();
     Device *device = in0.device();
+
+    tt_start_debug_print_server(device->cluster(), {0}, {debug_core});
 
     // start debug server for kernel dprint
     // int hart_mask = DPRINT_HART_NC | DPRINT_HART_BR;
