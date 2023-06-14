@@ -22,16 +22,16 @@ TILE_HEIGHT = TILE_WIDTH = 32
 
 ## parameters
 # matrix sizes as number of blocks along h and w:
-a_height_nblocks = [1]  #[1, 7]
-a_width_nblocks = [1, 2]
-b_width_nblocks = [1]
+a_height_nblocks = [1, 7]
+a_width_nblocks = [1]
+b_width_nblocks = [1, 7]
 # block sizes as number of tiles along h and w:
-a_block_height_ntiles = [1] ## various
-a_block_width_ntiles = [1]  ## various
-b_block_width_ntiles = [1]  ## various
+a_block_height_ntiles = [4] ## various
+a_block_width_ntiles = [4]  ## various
+b_block_width_ntiles = [4]  ## various
 # output sublobcking per block:
-out_subblock_height_ntiles = [1] ## == a_block_height_ntiles, <= 8
-out_subblock_width_ntiles = [1]  ## == b_block_width_ntiles, <= 8
+out_subblock_height_ntiles = [4] ## == a_block_height_ntiles, <= 8
+out_subblock_width_ntiles = [2]  ## == b_block_width_ntiles, <= 8
 tilize_a = [False]  ## [True, False]
 untilize_out = [False]  ## [True, False]
 
@@ -42,7 +42,7 @@ a_dtype = [ttl.tensor.DataType.BFLOAT16]    #, ttl.tensor.DataType.BFLOAT8_B]
 # a_dtype = [ttl.tensor.DataType.BFLOAT8_B]
 b_dtype = [ttl.tensor.DataType.BFLOAT16]    #, ttl.tensor.DataType.BFLOAT8_B]
 # b_dtype = [ttl.tensor.DataType.BFLOAT8_B]
-out_dtype = [ttl.tensor.DataType.BFLOAT16]  #, ttl.tensor.DataType.BFLOAT8_B]
+out_dtype = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
 # out_dtype = [ttl.tensor.DataType.BFLOAT8_B]
 
 

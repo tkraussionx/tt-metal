@@ -255,7 +255,7 @@ ALWI void copy_tile_to_dst_init_short_try(uint32_t cbid)
     // PACK(( DPRINT << "Cinit" << ENDL() ));
     UNPACK(( llk_unpack_A_init<BroadcastType::NONE, false, false>() ));
     // configure unpack to unpack from cbid data format instead of input cb 0. Second arg doesn't matter.
-    UNPACK(( llk_unpack_reconfig_data_format(0, cbid, 1, 1) ));
+    UNPACK(( llk_unpack_reconfig_data_format(0, cbid, 1, cbid) ));
     MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE, false>() ));
 }
 
