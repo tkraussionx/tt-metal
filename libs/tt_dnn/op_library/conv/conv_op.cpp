@@ -725,10 +725,10 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
         writer_rt_args
     );
 
-    pass &= tt_metal::CompileProgram(device, program, false);
-    pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
     tt_metal::WriteToDeviceL1(device, core, act_address_map_metadata_l1_address, act_address_map_metadata);
     tt_metal::WriteToDeviceL1(device, core, weight_address_map_metadata_l1_address, weight_address_map_metadata);
+    pass &= tt_metal::CompileProgram(device, program, false);
+    pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
     pass &= tt_metal::LaunchKernels(device, program);
 
     TT_ASSERT(pass);
