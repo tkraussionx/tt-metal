@@ -62,23 +62,23 @@ void kernel_main() {
     //     .data_format = in1_df
     // };
 
-    constexpr uint32_t tile_size_pow2_exponent = 11;
-    const InterleavedPow2AddrGen<true> s0 = {
-        .bank_base_address = in0_addr,
-        .log_base_2_of_page_size = tile_size_pow2_exponent
-    };
-    const InterleavedPow2AddrGen<true> s1 = {
-        .bank_base_address = in1_addr,
-        .log_base_2_of_page_size = tile_size_pow2_exponent
-    };
-    // const InterleavedAddrGen<true> s0 = {
+    // constexpr uint32_t tile_size_pow2_exponent = 11;
+    // const InterleavedPow2AddrGen<true> s0 = {
     //     .bank_base_address = in0_addr,
-    //     .page_size = in0_tile_nbytes
+    //     .log_base_2_of_page_size = tile_size_pow2_exponent
     // };
-    // const InterleavedAddrGen<true> s1 = {
+    // const InterleavedPow2AddrGen<true> s1 = {
     //     .bank_base_address = in1_addr,
-    //     .page_size = in1_tile_nbytes
+    //     .log_base_2_of_page_size = tile_size_pow2_exponent
     // };
+    const InterleavedAddrGen<true> s0 = {
+        .bank_base_address = in0_addr,
+        .page_size = in0_tile_nbytes
+    };
+    const InterleavedAddrGen<true> s1 = {
+        .bank_base_address = in1_addr,
+        .page_size = in1_tile_nbytes
+    };
 
     // DPRINT << FIXP() << SETW(32) << SETP(2);
 
