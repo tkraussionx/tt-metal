@@ -51,21 +51,36 @@ void kernel_main() {
 
     // DPRINT << "TS0: " << in0_tile_nbytes << ", TS1: " << in1_tile_nbytes << ENDL();
 
-    const InterleavedAddrGenFast<true> s0 = {
+    // const InterleavedAddrGenFast<true> s0 = {
+    //     .bank_base_address = in0_addr,
+    //     .page_size = in0_tile_nbytes,
+    //     .data_format = in0_df
+    // };
+    // const InterleavedAddrGenFast<true> s1 = {
+    //     .bank_base_address = in1_addr,
+    //     .page_size = in1_tile_nbytes,
+    //     .data_format = in1_df
+    // };
+
+    constexpr uint32_t tile_size_pow2_exponent = 11;
+    const InterleavedPow2AddrGen<true> s0 = {
         .bank_base_address = in0_addr,
-        .page_size = in0_tile_nbytes,
-        .data_format = in0_df
+        .log_base_2_of_page_size = tile_size_pow2_exponent
     };
-    const InterleavedAddrGenFast<true> s1 = {
+    const InterleavedPow2AddrGen<true> s1 = {
         .bank_base_address = in1_addr,
-        .page_size = in1_tile_nbytes,
-        .data_format = in1_df
+        .log_base_2_of_page_size = tile_size_pow2_exponent
     };
+    // const InterleavedAddrGen<true> s0 = {
+    //     .bank_base_address = in0_addr,
+    //     .page_size = in0_tile_nbytes
+    // };
+    // const InterleavedAddrGen<true> s1 = {
+    //     .bank_base_address = in1_addr,
+    //     .page_size = in1_tile_nbytes
+    // };
 
     // DPRINT << FIXP() << SETW(32) << SETP(2);
-
-    // DPRINT << "in0 TS: " << in0_tile_nbytes << ENDL();
-    // DPRINT << "in1 TS: " << in1_tile_nbytes << ENDL();
 
     uint32_t in0_start_tile_id = 0;
     // loop over in0 blocks along h
@@ -99,9 +114,6 @@ void kernel_main() {
                 }
                 noc_async_read_barrier();
 
-                // SliceRange sr0 = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
-                // DPRINT << "SLICE 0: " << TileSlice(in0_cb_id, 0, sr0) << ENDL();
-
                 in0_current_block_start_tile_id += in0_next_block_stride_w;
                 cb_push_back(in0_cb_id, in0_block_num_tiles);
 
@@ -122,9 +134,6 @@ void kernel_main() {
                     in1_row_start_tile_id += in1_stride_h;
                 } // for in1_block_h
                 noc_async_read_barrier();
-
-                // SliceRange sr1 = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
-                // DPRINT << "SLICE 1: " << TileSlice(in1_cb_id, 0, sr1) << ENDL();
 
                 in1_current_block_start_tile_id += in1_next_block_stride_h; // in1_width_ntiles * in1_block_h
                 cb_push_back(in1_cb_id, in1_block_num_tiles);

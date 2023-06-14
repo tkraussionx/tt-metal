@@ -1,6 +1,5 @@
 #include "dataflow_api.h"
 
-
 void kernel_main() {
     // This writer is for output tensor in tile format
 
@@ -20,11 +19,21 @@ void kernel_main() {
 
     const uint32_t tile_nbytes = get_tile_size(out_cb_id);
 
-    const InterleavedAddrGenFast<true> s = {
+    constexpr uint32_t tile_size_pow2_exponent = 11;    // == 2^11 = 2048 = 2 * 32 * 32 (assuming dtype = 2 bytes)
+    const InterleavedPow2AddrGen<true> s = {
         .bank_base_address = out_addr,
-        .page_size = tile_nbytes,
-        .data_format = out_df
+        .log_base_2_of_page_size = tile_size_pow2_exponent
     };
+    // const InterleavedAddrGen<true> s = {
+    //     .bank_base_address = out_addr,
+    //     .page_size = tile_nbytes
+    // };
+
+    // const InterleavedAddrGenFast<true> s = {
+    //     .bank_base_address = out_addr,
+    //     .page_size = tile_nbytes,
+    //     .data_format = out_df
+    // };
 
     uint32_t out_sbh_start_tile_id = 0;
     for(uint32_t sbh = 0; sbh < out_num_subblocks_h; ++sbh) {
@@ -45,10 +54,6 @@ void kernel_main() {
                 out_sb_row_start_tile_id += out_stride_h;
             }
             noc_async_write_barrier();
-
-            // SliceRange sr = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
-            // DPRINT << "SLICE: " << TileSlice(out_cb_id, 0, sr) << ENDL();
-
             cb_pop_front(out_cb_id, out_subblock_tile_count);
             out_sbw_start_tile_id += out_next_subblock_stride_w;
         }

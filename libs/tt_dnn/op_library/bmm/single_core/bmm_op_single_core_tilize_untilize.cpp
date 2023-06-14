@@ -3,7 +3,7 @@
 #include "tt_metal/host_api.hpp"
 #include "common/constants.hpp"
 
-// #include "llrt/tt_debug_print_server.hpp"
+#include "llrt/tt_debug_print_server.hpp"
 // #include "hostdevcommon/debug_print_common.h"
 
 // #include "tools/tt_gdb/tt_gdb.hpp"
@@ -28,14 +28,14 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
     // buffer indices
     uint32_t in0_cb                                 = CB::c_in0;
     uint32_t in1_cb                                 = CB::c_in1;
-    // uint32_t tilize_mode_tilized_in0_cb             = CB::c_intermed0;
-    // uint32_t matmul_partials_cb                     = CB::c_intermed1;
-    // uint32_t untilize_mode_final_matmul_partials_cb = CB::c_intermed2;
-    // uint32_t untilize_mode_reblock_cb               = CB::c_intermed3;
+    uint32_t tilize_mode_tilized_in0_cb             = CB::c_intermed0;
+    uint32_t matmul_partials_cb                     = CB::c_intermed1;
+    uint32_t untilize_mode_final_matmul_partials_cb = CB::c_intermed2;
+    uint32_t untilize_mode_reblock_cb               = CB::c_intermed3;
     uint32_t out_cb                                 = CB::c_out0;
 
     const uint32_t cb0_ntiles = in0_block_h * in0_block_w * 2;  // double buffer
-    const uint32_t cb1_ntiles = in0_block_w * in1_block_w * 2;   // double buffer
+    const uint32_t cb1_ntiles = in0_block_w * in1_block_w * 2;  // double buffer
     const uint32_t out_ntiles = in0_block_h * in1_block_w;
 
     // inputs
@@ -63,62 +63,62 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
 
     // intermediates
 
-    // if (tilize_in0) {
-    //     // in0 (TM)
-    //     auto cb_src0_tilized = CreateCircularBuffer(
-    //         program,
-    //         device,
-    //         tilize_mode_tilized_in0_cb,
-    //         core,
-    //         cb0_ntiles,
-    //         cb0_ntiles * in0_tile_nbytes,
-    //         in0_df
-    //     );
-    // }
-    // auto cb_matmul_partials = CreateCircularBuffer(
-    //     program,
-    //     device,
-    //     matmul_partials_cb,
-    //     core,
-    //     out_ntiles,
-    //     out_ntiles * out_tile_nbytes,
-    //     out_df
-    // );
-    // if (untilize_out) {
-    //     auto cb_final_matmul_partials = CreateCircularBuffer(
-    //         program,
-    //         device,
-    //         untilize_mode_final_matmul_partials_cb,
-    //         core,
-    //         out_ntiles,
-    //         out_ntiles * out_tile_nbytes,
-    //         out_df
-    //     );
-    //     // to reorganize output blocks to fill the whole "per core output block width"
-    //     auto cb_reblock = CreateCircularBuffer(
-    //         program,
-    //         device,
-    //         untilize_mode_reblock_cb,
-    //         core,
-    //         in1_block_w,                    // a single row of tiles
-    //         in1_block_w * out_tile_nbytes,
-    //         out_df
-    //     );
-    // }
+    if (tilize_in0) {
+        // in0 (TM)
+        auto cb_src0_tilized = CreateCircularBuffer(
+            program,
+            device,
+            tilize_mode_tilized_in0_cb,
+            core,
+            cb0_ntiles,
+            cb0_ntiles * in0_tile_nbytes,
+            in0_df
+        );
+    }
+    auto cb_matmul_partials = CreateCircularBuffer(
+        program,
+        device,
+        matmul_partials_cb,
+        core,
+        out_ntiles,
+        out_ntiles * out_tile_nbytes,
+        out_df
+    );
+    if (untilize_out) {
+        auto cb_final_matmul_partials = CreateCircularBuffer(
+            program,
+            device,
+            untilize_mode_final_matmul_partials_cb,
+            core,
+            out_ntiles,
+            out_ntiles * out_tile_nbytes,
+            out_df
+        );
+        // to reorganize output blocks to fill the whole "per core output block width"
+        auto cb_reblock = CreateCircularBuffer(
+            program,
+            device,
+            untilize_mode_reblock_cb,
+            core,
+            in1_block_w,                    // a single row of tiles
+            in1_block_w * out_tile_nbytes,
+            out_df
+        );
+    }
 
     // output
 
-    // if (untilize_out) {
-    //     auto cb_output = CreateCircularBuffer(
-    //         program,
-    //         device,
-    //         out_cb,
-    //         core,
-    //         out_ntiles,
-    //         out_ntiles * out_tile_nbytes,
-    //         out_df
-    //     );
-    // } else {
+    if (untilize_out) {
+        auto cb_output = CreateCircularBuffer(
+            program,
+            device,
+            out_cb,
+            core,
+            out_ntiles,
+            out_ntiles * out_tile_nbytes,
+            out_df
+        );
+    } else {
         // use the same address space as the partials intermed CB
         auto cb_output = CreateCircularBuffer(
             program,
@@ -127,10 +127,10 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
             core,
             out_ntiles,
             out_ntiles * out_tile_nbytes,
-//            cb_matmul_partials->address(),
+            cb_matmul_partials->address(),
             out_df
         );
-    // }
+    }
 }
 
 // NOTE (AS): This is a temporary utility function for dtype -> dformat mapping.
@@ -213,7 +213,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
 
     // start debug server for kernel dprint
     // int hart_mask = DPRINT_HART_NC | DPRINT_HART_BR;
-    // tt_start_debug_print_server(device->cluster(), {0}, {debug_core});
+    tt_start_debug_print_server(device->cluster(), {0}, {debug_core});
 
     // tt_gdb(device, 0, {core}, {"myop"});
 
