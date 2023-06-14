@@ -44,11 +44,8 @@ def run_nanogpt_mlp_test(device):
 
     pt_mlp = model_hf.transformer.h[block].mlp
     pt_out = pt_mlp.forward(test_in)
-    print(pt_out.shape)
-
 
     tt_out_converted = nanogpt_utils.tt2torch_tensor(tt_out)
-    print(tt_out_converted.shape)
 
     does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, 0.99)
     logger.info(pcc_message)

@@ -36,14 +36,14 @@ def run_nanogpt_attn_test(device):
 
     pt_attn = model_hf.transformer.h[block].attn
     pt_out = pt_attn.forward(test_in)
-    print(pt_out)
-    print(pt_out[0].shape)
 
     model_type = 'gpt2'
-        # n_layer, n_head and n_embd are determined from model_type
+
+    # n_layer, n_head and n_embd are determined from model_type
     config_args = {
         'gpt2':         dict(n_layer=12, n_head=12, n_embd=768),  # 124M params
     }[model_type]
+
     config_args['vocab_size'] = 50257 # always 50257 for GPT model checkpoints
     config_args['block_size'] = 1024 # always 1024 for GPT model checkpoints
     config_args['bias'] = True # always True for GPT model checkpoints
@@ -68,9 +68,9 @@ def run_nanogpt_attn_test(device):
     logger.info(pcc_message)
 
     if does_pass:
-        logger.info("nanogpt_mlp: Passed!")
+        logger.info("nanogpt_attention: Passed!")
     else:
-        logger.warning("nanogpt_mlp: Failed!")
+        logger.warning("nanogpt_attention: Failed!")
 
     assert does_pass
 
