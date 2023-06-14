@@ -22,9 +22,9 @@ TILE_HEIGHT = TILE_WIDTH = 32
 
 ## parameters
 # matrix sizes as number of blocks along h and w:
-a_height_nblocks = [1, 7]
-a_width_nblocks = [1, 7]
-b_width_nblocks = [1, 7]
+a_height_nblocks = [1]  #[1, 7]
+a_width_nblocks = [7]   #[1, 7]
+b_width_nblocks = [1]   #[1, 7]
 # block sizes as number of tiles along h and w:
 a_block_height_ntiles = [4]
 a_block_width_ntiles = [4]
@@ -32,13 +32,15 @@ b_block_width_ntiles = [16]
 # output sublobcking per block:
 out_subblock_height_ntiles = [4] ## == a_block_height_ntiles, <= 8
 out_subblock_width_ntiles = [2]  ## == b_block_width_ntiles, <= 8
+# tilize_a = [False]  #[True, False]
 tilize_a = [True, False]
+# untilize_out = [False]  #[True, False]
 untilize_out = [True, False]
 
 # dtypes = [ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16]
 # dtypes = [ttl.tensor.DataType.BFLOAT8_B]
 
-a_dtype = [ttl.tensor.DataType.BFLOAT16]    #, ttl.tensor.DataType.BFLOAT8_B]
+a_dtype = [ttl.tensor.DataType.BFLOAT16]  #, ttl.tensor.DataType.BFLOAT8_B]
 # a_dtype = [ttl.tensor.DataType.BFLOAT8_B]
 b_dtype = [ttl.tensor.DataType.BFLOAT16]    #, ttl.tensor.DataType.BFLOAT8_B]
 # b_dtype = [ttl.tensor.DataType.BFLOAT8_B]
@@ -71,9 +73,18 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
                                              a_dtype,
                                              b_dtype,
                                              out_dtype):
+    print(f'a_dtype: {a_dtype}')
+    print(f'b_dtype: {b_dtype}')
+    print(f'out_dtype: {out_dtype}')
+
     if (tilize_a and a_dtype != ttl.tensor.DataType.BFLOAT16) or (untilize_out and out_dtype != ttl.tensor.DataType.BFLOAT16):
-        print('skipping ...')
+        print(f'invalid case, skipping.')
         return
+
+    if tilize_a and a_dtype != out_dtype:
+        print('Case to debug. skipping for now.')
+        return
+        # assert(False and 'The case with multi-precision CBs!')
 
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)

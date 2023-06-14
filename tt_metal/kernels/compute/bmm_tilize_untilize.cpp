@@ -119,7 +119,7 @@ void MAIN {
                 bool last_out = (in0_block_w_i == in0_num_blocks_w - 1);
                 if (tilize_in0) {
                     tilize_in(in0_cb_id, in0_subblock_h, in0_block_w, in0_num_subblocks, tilized_in0_cb_id);
-                    // mm_init_short_try(in0_cb_id);
+                    // mm_init_short_try(tilized_in0_cb_id);
                     mm_init_short();
                     cb_wait_front(tilized_in0_cb_id, in0_block_num_tiles);
                 } else {

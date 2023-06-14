@@ -117,6 +117,14 @@ ALWI void binary_op_init_common(uint32_t icb0, uint32_t icb1)
     PACK(( llk_pack_dest_init<SYNC, DstTileFaceLayout::RowMajor, false>() ));
 }
 
+ALWI void mm_init_short_try(uint32_t cbid) {
+    // UNPACK(( DPRINT << "Minit" << ENDL() ));
+    MATH(( llk_math_matmul_init<MATH_FIDELITY>(0)  ));
+    UNPACK(( llk_unpack_AB_matmul_init(0) ));
+    // switch back to data format for input cb 0 and 1
+    UNPACK(( llk_unpack_reconfig_data_format(cbid, 0, 1, 1) ));
+}
+
 ALWI void mm_init_short() {
     MATH(( llk_math_matmul_init<MATH_FIDELITY>(0)  ));
 
@@ -240,6 +248,15 @@ ALWI void pack_tile(uint32_t ifrom_dst, uint32_t icb)
 ALWI void cb_push_back(uint32_t cbid, uint32_t ntiles)
 {
     PACK(( llk_push_tiles<false,false>(cbid, ntiles)  ));
+}
+
+ALWI void copy_tile_to_dst_init_short_try(uint32_t cbid)
+{
+    // PACK(( DPRINT << "Cinit" << ENDL() ));
+    UNPACK(( llk_unpack_A_init<BroadcastType::NONE, false, false>() ));
+    // configure unpack to unpack from cbid data format instead of input cb 0. Second arg doesn't matter.
+    UNPACK(( llk_unpack_reconfig_data_format(0, cbid, 1, 1) ));
+    MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE, false>() ));
 }
 
 ALWI void copy_tile_to_dst_init_short()

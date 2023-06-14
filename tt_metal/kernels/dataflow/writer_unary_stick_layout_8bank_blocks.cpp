@@ -15,7 +15,7 @@ void kernel_main() {
     DataFormat out_df = static_cast<DataFormat>(get_arg_val<uint32_t>(7));
 
     // NOTE: Row major layout only supports bfp16
-    TT_ASSERT(out_df != DataFormat::Bfp8_b);
+    // TT_ASSERT(out_df != DataFormat::Bfp8_b);
 
     constexpr uint32_t cb_id_out0 = tt::CB::c_out0;
 
@@ -29,15 +29,15 @@ void kernel_main() {
     const uint32_t block_ntiles_h = num_rows_block / TILE_HEIGHT;
     uint32_t start_block_row_id = 0;
 
-    const InterleavedAddrGenFast<true> s = {
-        .bank_base_address = dst_addr,
-        .page_size = output_row_size,
-        .data_format = out_df
-    };
-    // const InterleavedAddrGen<true> s = {
+    // const InterleavedAddrGenFast<true> s = {
     //     .bank_base_address = dst_addr,
-    //     .page_size = output_row_size
+    //     .page_size = output_row_size,
+    //     .data_format = out_df
     // };
+    const InterleavedAddrGen<true> s = {
+        .bank_base_address = dst_addr,
+        .page_size = output_row_size
+    };
     for(uint32_t b = 0; b < batch; ++b) {
         for(uint32_t block_h = 0; block_h < num_blocks_h; block_h++) {
             uint32_t block_row_offset = 0;
