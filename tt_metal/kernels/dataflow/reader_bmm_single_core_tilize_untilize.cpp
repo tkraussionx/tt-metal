@@ -52,10 +52,14 @@ void kernel_main() {
         .page_size = in0_row_size_bytes
     };
 
-    constexpr uint32_t tile_size_pow2_exponent = 11;    // 2^11 = 2048 = 32 * 32 * 2 bytes, tile size for 2 byte data types
-    const InterleavedPow2AddrGen<true> s1 = {
+    // constexpr uint32_t tile_size_pow2_exponent = 11;    // 2^11 = 2048 = 32 * 32 * 2 bytes, tile size for 2 byte data types
+    // const InterleavedPow2AddrGen<true> s1 = {
+    //     .bank_base_address = in1_addr,
+    //     .log_base_2_of_page_size = tile_size_pow2_exponent
+    // };
+    const InterleavedAddrGen<true> s1 = {
         .bank_base_address = in1_addr,
-        .log_base_2_of_page_size = tile_size_pow2_exponent
+        .page_size = in1_tile_nbytes
     };
 
     // DPRINT << FIXP() << SETW(32) << SETP(2);
