@@ -73,7 +73,6 @@ class TtCausalSelfAttention(nn.Module):
         # manual implementation of attention
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
         att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
-        print(att.shape)
         tt_att = nanogpt_utils.torch2tt_tensor(att, device)
 
         tt_att = fallback_ops.softmax(tt_att, dim=-1)
@@ -83,16 +82,17 @@ class TtCausalSelfAttention(nn.Module):
 
         tt_att = nanogpt_utils.torch2tt_tensor(att, device)
         tt_v = nanogpt_utils.torch2tt_tensor(v, device)
-        tt_y = nanogpt_utils.tt_matmul(tt_att, tt_v, device)
-
-        y = nanogpt_utils.tt2torch_tensor(tt_y)
 
         #y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
-        y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
+        tt_y = nanogpt_utils.tt_matmul(tt_att, tt_v, device)
+
+        #y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
+        tt_y = tt_lib.tensor.transpose_hc(tt_y)
+        tt_y = fallback_ops.reshape(tt_y, 1, B, T, C)
+
 
         # output projection
-        pt_y = nanogpt_utils.torch2tt_tensor(y, device)
-        x2 = nanogpt_utils.tt_linear(pt_y, self.tt_weight_c_proj, self.tt_bias_c_proj)
+        x2 = nanogpt_utils.tt_linear(tt_y, self.tt_weight_c_proj, self.tt_bias_c_proj)
         pt_x2 = nanogpt_utils.tt2torch_tensor(x2)
 
         y = self.resid_dropout(pt_x2)
