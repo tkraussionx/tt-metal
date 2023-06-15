@@ -5,6 +5,7 @@ import tt_lib
 import python_api_testing.models.nanogpt.nanogpt_utils as nanogpt_utils
 from dataclasses import dataclass
 import math
+from tt_lib.fallback_ops import fallback_ops
 
 from transformers import GPT2LMHeadModel
 
@@ -72,9 +73,21 @@ class TtCausalSelfAttention(nn.Module):
         # manual implementation of attention
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
         att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
-        att = F.softmax(att, dim=-1)
+        print(att.shape)
+        tt_att = nanogpt_utils.torch2tt_tensor(att, device)
+
+        tt_att = fallback_ops.softmax(tt_att, dim=-1)
+
+        att = nanogpt_utils.tt2torch_tensor(tt_att)
         att = self.attn_dropout(att)
-        y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+
+        tt_att = nanogpt_utils.torch2tt_tensor(att, device)
+        tt_v = nanogpt_utils.torch2tt_tensor(v, device)
+        tt_y = nanogpt_utils.tt_matmul(tt_att, tt_v, device)
+
+        y = nanogpt_utils.tt2torch_tensor(tt_y)
+
+        #y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
 
         # output projection

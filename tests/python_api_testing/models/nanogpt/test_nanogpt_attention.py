@@ -30,7 +30,7 @@ def run_nanogpt_attn_test(device):
 
     torch.manual_seed(0)
 
-    test_in = torch.rand(1, 59, 768)
+    test_in = torch.rand(1, 60, 768)
 
 
 
