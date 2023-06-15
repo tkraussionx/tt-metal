@@ -67,7 +67,7 @@ vector<uint32_t> conv_act_transform(vector<int> activation_shape, vector<int> co
     uint32_t num_rows = (uint32_t) matrix_shape[1];
     uint32_t num_cols = (uint32_t) matrix_shape[2];
     auto dim_order = {0,1,2};
-    pass &= block_2d_with_duplicate_blocks(dtx_right, dim_order, act_block_shape_yx, num_blocks_weight_w, 1);
+    pass &= block_2d_with_duplicate_blocks_rm(dtx_right, dim_order, act_block_shape_yx, num_blocks_weight_w, 1);
     auto blocked_matrix_shape = dtx_right->transformations.back()->groups[0]->shape;
     assert(blocked_matrix_shape.size() == 3);
     uint32_t num_blocks = blocked_matrix_shape[0];

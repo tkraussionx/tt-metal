@@ -66,6 +66,7 @@ bool pad_2d_matrix(DataTransformations * dtx, vector<int> pad_to_nearest);
 bool block_2d_matrix(DataTransformations * dtx, vector<int> dim_order, vector<int> block_shape_yx);
 
 bool block_2d_with_duplicate_blocks(DataTransformations * dtx, vector<int> dim_order, vector<int> block_shape_yx, int num_duplicates, int dim_to_duplicate);
+bool block_2d_with_duplicate_blocks_rm(DataTransformations * dtx, vector<int> dim_order, vector<int> block_shape_yx, int num_duplicates, int dim_to_duplicate);
 
 // expects only 1 producer group and generates groups for the outermost dimension.
 bool generate_groups_outermost_dim(DataTransformations * dtx);

@@ -12,6 +12,7 @@ bool generate_groups_outermost_dim(DataTransformations * dtx) {
     TransformationNode * producer = dtx->transformations.back();
     assert(producer->groups.size() == 1);
     TensorPairGroup * producer_group = producer->groups[0];
+
     auto producer_shape = producer_group->shape;
     uint rank = producer_shape.size();
     assert(rank == 3); // TODO: generalize for rank != 3
@@ -19,13 +20,18 @@ bool generate_groups_outermost_dim(DataTransformations * dtx) {
     if (DEBUG) std::cout << "Number of consumer groups - " << num_consumer_groups << std::endl;
     TransformationNode * consumer = new TransformationNode("generate_groups", num_consumer_groups);
     dtx->transformations.push_back(consumer);
-    for (int g=0; g<num_consumer_groups; g++) {
+
+    for (int producer_tp_idx=0; producer_tp_idx<producer_group->tensor_pairs.size(); producer_tp_idx++) {
+        TensorPair * producer_tp = producer_group->tensor_pairs[producer_tp_idx];
+        assert(producer_tp->dst_tensor->str.size() == 3);
+        int g = producer_tp->dst_tensor->str[0];
+        assert(g < consumer->groups.size());
         TensorPairGroup * consumer_group = consumer->groups[g];
         consumer_group->shape = {1, producer_shape[1], producer_shape[2]};
-        vector<int> producer_str = {g, 0, 0};
-        vector<int> producer_end = {g, producer_shape[1]-1, producer_shape[2]-1};
-        vector<int> consumer_str = {0, 0, 0};
-        vector<int> consumer_end = {0, producer_shape[1]-1, producer_shape[2]-1};
+        vector<int> producer_str = producer_tp->dst_tensor->str;
+        vector<int> producer_end = producer_tp->dst_tensor->end;
+        vector<int> consumer_str = {0, producer_tp->dst_tensor->str[1], producer_tp->dst_tensor->str[2]};
+        vector<int> consumer_end = {0, producer_tp->dst_tensor->end[1], producer_tp->dst_tensor->end[2]};
 
         TensorPair * tp = new TensorPair(new DTXTensor({producer_str}, {producer_end}),
                                         0,
