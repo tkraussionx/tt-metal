@@ -2,18 +2,20 @@
 #include <functional>
 #include <random>
 
-#include "bfloat16.hpp"
 #include "doctest.h"
 #include "single_device_fixture.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/hostdevcommon/common_runtime_address_map.h"  // FIXME: Should remove dependency on this
 #include "tt_metal/test_utils/comparison.hpp"
+#include "tt_metal/test_utils/df/df.hpp"
 #include "tt_metal/test_utils/print_helpers.hpp"
 #include "tt_metal/test_utils/stimulus.hpp"
 
 using namespace tt;
+using namespace tt::test_utils;
+using namespace tt::test_utils::df;
 
-namespace unit_tests::basic_binary_compute {
+namespace unit_tests::single_core_binary_compute {
 const map<string, string> binary_op_name_to_op_code = {
     {"add", "0"},
     {"sub", "1"},
@@ -25,10 +27,6 @@ const map<string, string> binary_op_name_to_op_kernel = {
     {"mul", "mul_tiles"},
 };
 
-// Reader reads from single dram to core, writer synchronizes with datacopy kernel and writes to dram
-// DRAM --> (Reader Core CB using reader RISCV)
-// Reader Core --> Datacopy --> Reader Core
-// Reader Core --> Writes to Dram
 struct SingleCoreBinaryConfig {
     size_t num_tiles = 0;
     size_t tile_byte_size = 0;
@@ -43,6 +41,10 @@ struct SingleCoreBinaryConfig {
     CoreCoord core = {};
     std::string binary_op = "";
 };
+/// @brief Does Dramx2 --> Reader --> CB --> Binary Compute --> CB --> Writer --> Dram
+/// @param device
+/// @param test_config - Configuration of the test -- see struct
+/// @return
 bool single_core_binary(tt_metal::Device* device, const SingleCoreBinaryConfig& test_config) {
     bool pass = true;
     ////////////////////////////////////////////////////////////////////////////
@@ -135,17 +137,37 @@ bool single_core_binary(tt_metal::Device* device, const SingleCoreBinaryConfig& 
     binary_kernel->add_define("ELTWISE_OP", binary_op_name_to_op_kernel.at(test_config.binary_op));
 
     ////////////////////////////////////////////////////////////////////////////
-    //                      Compile Application
+    //                      Stimulus Generation
     ////////////////////////////////////////////////////////////////////////////
-    pass &= tt_metal::CompileProgram(device, program);
+    std::vector<uint32_t> packed_input0 = generate_packed_uniform_random_vector<uint32_t, bfloat16>(
+        -1.0f, 1.0f, byte_size / bfloat16::SIZEOF, std::chrono::system_clock::now().time_since_epoch().count());
+    std::vector<uint32_t> packed_input1 = generate_packed_uniform_random_vector<uint32_t, bfloat16>(
+        0.1f, 2.0f, byte_size / bfloat16::SIZEOF, std::chrono::system_clock::now().time_since_epoch().count());
+    ////////////////////////////////////////////////////////////////////////////
+    //                      Golden Generation
+    ////////////////////////////////////////////////////////////////////////////
+    auto input0 = unpack_vector<bfloat16, uint32_t>(packed_input0);
+    auto input1 = unpack_vector<bfloat16, uint32_t>(packed_input1);
+    std::vector<bfloat16> golden(input0.size());
+    std::transform(
+        input0.begin(), input0.end(), input1.begin(), golden.begin(), [&](const bfloat16& lhs, const bfloat16& rhs) {
+            if (test_config.binary_op == "add") {
+                return (lhs.to_float() + rhs.to_float());
+            } else if (test_config.binary_op == "sub") {
+                return (lhs.to_float() - rhs.to_float());
+            } else if (test_config.binary_op == "mul") {
+                return (lhs.to_float() * rhs.to_float());
+            } else {
+                log_fatal("Unsupported binary_op={}", test_config.binary_op);
+                return 0.0f;
+            }
+        });
+    auto packed_golden = pack_vector<uint32_t, bfloat16>(golden);
 
     ////////////////////////////////////////////////////////////////////////////
-    //                      Execute Application
+    //                      Compile and Execute Application
     ////////////////////////////////////////////////////////////////////////////
-    std::vector<uint32_t> packed_input0 = tt::test_utils::generate_packed_uniform_random_vector<uint32_t, bfloat16>(
-        -1.0f, 1.0f, byte_size / bfloat16::SIZEOF, std::chrono::system_clock::now().time_since_epoch().count());
-    std::vector<uint32_t> packed_input1 = tt::test_utils::generate_packed_uniform_random_vector<uint32_t, bfloat16>(
-        0.1f, 2.0f, byte_size / bfloat16::SIZEOF, std::chrono::system_clock::now().time_since_epoch().count());
+    pass &= tt_metal::CompileProgram(device, program);
     tt_metal::WriteToBuffer(input0_dram_buffer, packed_input0);
     tt_metal::WriteToBuffer(input1_dram_buffer, packed_input1);
 
@@ -176,38 +198,18 @@ bool single_core_binary(tt_metal::Device* device, const SingleCoreBinaryConfig& 
     pass &= tt_metal::LaunchKernels(device, program);
 
     ////////////////////////////////////////////////////////////////////////////
-    //                      Golden Generation
+    //                      Comparison Checking
     ////////////////////////////////////////////////////////////////////////////
-    auto input0 = tt::test_utils::unpack_vector<bfloat16, uint32_t>(packed_input0);
-    auto input1 = tt::test_utils::unpack_vector<bfloat16, uint32_t>(packed_input1);
-    std::vector<bfloat16> golden(input0.size());
-    std::transform(
-        input0.begin(), input0.end(), input1.begin(), golden.begin(), [&](const bfloat16& lhs, const bfloat16& rhs) {
-            if (test_config.binary_op == "add") {
-                return (lhs.to_float() + rhs.to_float());
-            } else if (test_config.binary_op == "sub") {
-                return (lhs.to_float() - rhs.to_float());
-            } else if (test_config.binary_op == "mul") {
-                return (lhs.to_float() * rhs.to_float());
-            } else {
-                log_fatal("Unsupported binary_op={}", test_config.binary_op);
-                return 0.0f;
-            }
-        });
-    auto packed_golden = tt::test_utils::pack_vector<uint32_t, bfloat16>(golden);
     std::vector<uint32_t> dest_buffer_data;
     tt_metal::ReadFromBuffer(output_dram_buffer, dest_buffer_data);
-    pass &= tt::test_utils::is_close_packed_vectors<bfloat16, uint32_t>(
-        dest_buffer_data, packed_golden, [&](const bfloat16& a, const bfloat16& b) {
-            return tt::test_utils::is_close(a, b, 0.015f);
-        });
+    pass &= is_close_packed_vectors<bfloat16, uint32_t>(
+        dest_buffer_data, packed_golden, [&](const bfloat16& a, const bfloat16& b) { return is_close(a, b, 0.015f); });
     return pass;
 }
-}  // namespace unit_tests::basic_binary_compute
-TEST_SUITE("SingleCoreBinary") {
-    TEST_CASE_FIXTURE(unit_tests::SingleDeviceFixture, "SingleTile") {
-        unit_tests::basic_binary_compute::SingleCoreBinaryConfig test_config = {
-            .num_tiles = 1,
+}  // namespace unit_tests::single_core_binary_compute
+TEST_SUITE("BinaryCompute") {
+    TEST_CASE_FIXTURE(unit_tests::SingleDeviceFixture, "SingleCore") {
+        unit_tests::single_core_binary_compute::SingleCoreBinaryConfig test_config = {
             .tile_byte_size = 2 * 32 * 32,
             .output_dram_channel = 0,
             .output_dram_byte_address = 0,
@@ -217,46 +219,36 @@ TEST_SUITE("SingleCoreBinary") {
             .l1_input_data_format = tt::DataFormat::Float16_b,
             .l1_output_byte_address = UNRESERVED_BASE + 16 * 32 * 32,
             .l1_output_data_format = tt::DataFormat::Float16_b,
-            .core = {.x = 0, .y = 0},
-            .binary_op = "add"};
-        SUBCASE("add") {
-            test_config.binary_op = "add";
-            REQUIRE(unit_tests::basic_binary_compute::single_core_binary(device_, test_config));
+            .core = {.x = 0, .y = 0}};
+        SUBCASE("SingleTile") {
+            test_config.num_tiles = 1;
+            SUBCASE("add") {
+                test_config.binary_op = "add";
+                REQUIRE(unit_tests::single_core_binary_compute::single_core_binary(device_, test_config));
+            }
+            SUBCASE("sub") {
+                test_config.binary_op = "sub";
+                REQUIRE(unit_tests::single_core_binary_compute::single_core_binary(device_, test_config));
+            }
+            SUBCASE("sub") {
+                test_config.binary_op = "sub";
+                REQUIRE(unit_tests::single_core_binary_compute::single_core_binary(device_, test_config));
+            }
         }
-        SUBCASE("sub") {
-            test_config.binary_op = "sub";
-            REQUIRE(unit_tests::basic_binary_compute::single_core_binary(device_, test_config));
-        }
-        SUBCASE("sub") {
-            test_config.binary_op = "sub";
-            REQUIRE(unit_tests::basic_binary_compute::single_core_binary(device_, test_config));
-        }
-    }
-    TEST_CASE_FIXTURE(unit_tests::SingleDeviceFixture, "MultiTile") {
-        unit_tests::basic_binary_compute::SingleCoreBinaryConfig test_config = {
-            .num_tiles = 4,
-            .tile_byte_size = 2 * 32 * 32,
-            .output_dram_channel = 0,
-            .output_dram_byte_address = 0,
-            .input_dram_channel = 0,
-            .input_dram_byte_address = 16 * 32 * 32,
-            .l1_input_byte_address = UNRESERVED_BASE,
-            .l1_input_data_format = tt::DataFormat::Float16_b,
-            .l1_output_byte_address = UNRESERVED_BASE + 16 * 32 * 32,
-            .l1_output_data_format = tt::DataFormat::Float16_b,
-            .core = {.x = 0, .y = 0},
-            .binary_op = "add"};
-        SUBCASE("add") {
-            test_config.binary_op = "add";
-            REQUIRE(unit_tests::basic_binary_compute::single_core_binary(device_, test_config));
-        }
-        SUBCASE("sub") {
-            test_config.binary_op = "sub";
-            REQUIRE(unit_tests::basic_binary_compute::single_core_binary(device_, test_config));
-        }
-        SUBCASE("sub") {
-            test_config.binary_op = "sub";
-            REQUIRE(unit_tests::basic_binary_compute::single_core_binary(device_, test_config));
+        SUBCASE("MultiTile") {
+            test_config.num_tiles = 4;
+            SUBCASE("add") {
+                test_config.binary_op = "add";
+                REQUIRE(unit_tests::single_core_binary_compute::single_core_binary(device_, test_config));
+            }
+            SUBCASE("sub") {
+                test_config.binary_op = "sub";
+                REQUIRE(unit_tests::single_core_binary_compute::single_core_binary(device_, test_config));
+            }
+            SUBCASE("sub") {
+                test_config.binary_op = "sub";
+                REQUIRE(unit_tests::single_core_binary_compute::single_core_binary(device_, test_config));
+            }
         }
     }
 }
