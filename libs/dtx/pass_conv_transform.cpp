@@ -236,7 +236,7 @@ std::pair<vector<uint32_t>, vector<uint32_t>> conv_transform(vector<int> activat
     assert(activation_shape.size() == 3);
     assert(weight_shape.size() == 4);
     assert(conv_params.size() == 6);
-    bool enable_dtx_caching = false;
+    bool enable_dtx_caching = true;
     std::pair<vector<uint32_t>, vector<uint32_t>> conv_act_and_weight_address_maps;
     vector<int> act_block_shape_yx = {(int)act_block_h, (int)act_block_w};
     vector<int> weight_block_shape_yx = {(int)act_block_w, (int)weight_block_w};

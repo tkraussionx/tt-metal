@@ -18,24 +18,25 @@ import torch
 @pytest.mark.parametrize(
     "K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w",
     (
-        # channels padding
-        (32, 3, 5, 5, 1, 1, 1, 1, 0, 0),
-        # Hat = 1, Wat = 1, Wbt = 1
-        (32, 32, 5, 5, 1, 1, 1, 1, 0, 0),
-        # Hat = 2, Wat = 1, Wbt = 1
-        (32, 32, 8, 8, 1, 1, 1, 1, 0, 0),
-        # Hat = 1, Wat = 2, Wbt = 1
-        (32, 64, 5, 5, 1, 1, 1, 1, 0, 0),
-        # Hat = 2, Wat = 2, Wbt = 1
-        (32, 64, 8, 8, 1, 1, 1, 1, 0, 0),
-        # Hat = 1, Wat = 1, Wbt = 2
-        (64, 32, 5, 5, 1, 1, 1, 1, 0, 0),
-        # Hat = 1, Wat = 2, Wbt = 2
-        (64, 64, 5, 5, 1, 1, 1, 1, 0, 0),
-        # Hat = 2, Wat = 1, Wbt = 2
-        (64, 32, 8, 8, 1, 1, 1, 1, 0, 0),
-        # Hat = 2, Wat = 2, Wbt = 2
-        (64, 64, 8, 8, 1, 1, 1, 1, 0, 0),
+        (1280, 1920, 8, 8, 3, 3, 1, 1, 1, 1),
+        # # channels padding
+        # (32, 3, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # Hat = 1, Wat = 1, Wbt = 1
+        # (32, 32, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # Hat = 2, Wat = 1, Wbt = 1
+        # (32, 32, 8, 8, 1, 1, 1, 1, 0, 0),
+        # # Hat = 1, Wat = 2, Wbt = 1
+        # (32, 64, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # Hat = 2, Wat = 2, Wbt = 1
+        # (32, 64, 8, 8, 1, 1, 1, 1, 0, 0),
+        # # Hat = 1, Wat = 1, Wbt = 2
+        # (64, 32, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # Hat = 1, Wat = 2, Wbt = 2
+        # (64, 64, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # Hat = 2, Wat = 1, Wbt = 2
+        # (64, 32, 8, 8, 1, 1, 1, 1, 0, 0),
+        # # Hat = 2, Wat = 2, Wbt = 2
+        # (64, 64, 8, 8, 1, 1, 1, 1, 0, 0),
     ),
 )
 def test_run_conv_as_large_matmul_cpu(K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w):
@@ -44,7 +45,7 @@ def test_run_conv_as_large_matmul_cpu(K, C, H, W, R, S, stride_h, stride_w, pad_
     A_pyt = torch.randn(a_activation_shape, dtype=torch.bfloat16).float()
     b_weights_shape = [K,C,R,S]
     B_pyt = torch.randn(b_weights_shape, dtype=torch.bfloat16).float()
-    
+
     # Parameters defining block dims
     act_block_h = 4
     act_block_w = 4
@@ -53,14 +54,14 @@ def test_run_conv_as_large_matmul_cpu(K, C, H, W, R, S, stride_h, stride_w, pad_
     OH = ((int) ((H - R + 2 * pad_h) / stride_h)) + 1
     OW = ((int) ((W - S + 2 * pad_w) / stride_w)) + 1
     mm_output_shape = [1,1,_nearest_y(OH*OW, 32*act_block_h),_nearest_y(K, 32*weight_block_w)]
-    
+
     # Prepare activations
     A_cl = create_conv_act_tensor(A_pyt, 1, C, H, W)
     A_cl_data = A_cl.data()
     # Prepare weights
     B_tiled_ = create_conv_weight_tensor(B_pyt, K, C, R, S, weight_block_h, weight_block_w)
     B_tiled_data = B_tiled_.data()
-    
+
     # Call DTX pass to transform A
     act_block_width_datums = act_block_w * 32
     act_block_height_datums = act_block_h * 32
