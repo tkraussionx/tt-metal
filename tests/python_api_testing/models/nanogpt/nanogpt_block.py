@@ -17,16 +17,15 @@ from transformers import GPT2LMHeadModel
 @dataclass
 class GPTConfig:
     block_size: int = 1024
-    vocab_size: int = 50304 # GPT-2 vocab_size of 50257, padded up to nearest multiple of 64 for efficiency
+    vocab_size: int = 50304  # GPT-2 vocab_size of 50257, padded up to nearest multiple of 64 for efficiency
     n_layer: int = 12
     n_head: int = 12
     n_embd: int = 768
     dropout: float = 0.0
-    bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
+    bias: bool = True  # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
 
 
 class TtBlock(nn.Module):
-
     def __init__(self, config, state_dict, base_address, device):
         super().__init__()
 
@@ -38,43 +37,36 @@ class TtBlock(nn.Module):
         )
 
         self.ln_1 = fallback_ops.LayerNorm(
-            biases = self.gamma_1,
-            weights = self.beta_1,
-            normalized_shape = config.n_embd
+            self.gamma_1,
+            self.beta_1,
+            eps=1e-5,
+            normalized_shape=config.n_embd,
         )
 
-        base_address_attn = f"{base_address}.attn"
-
-        self.attn = nanogpt_attention.TtCausalSelfAttention(config, state_dict, base_address_attn, device)
+        self.attn = nanogpt_attention.TtCausalSelfAttention(
+            config, state_dict, f"{base_address}.attn", device
+        )
 
         self.beta_2 = nanogpt_utils.torch2tt_tensor(
             state_dict[f"{base_address}.ln_2.bias"], device
         )
-        self.gamma_2= nanogpt_utils.torch2tt_tensor(
+        self.gamma_2 = nanogpt_utils.torch2tt_tensor(
             state_dict[f"{base_address}.ln_2.weight"], device
         )
 
         self.ln_2 = fallback_ops.LayerNorm(
-            biases = self.gamma_2,
-            weights = self.beta_2,
-            normalized_shape = config.n_embd
+            self.gamma_2, self.beta_2, eps=1e-5, normalized_shape=config.n_embd
         )
 
-        base_address_mlp = f"{base_address}.mlp"
-
-        self.mlp = nanogpt_mlp.TtMLP(base_address_mlp, state_dict, device)
-
+        self.mlp = nanogpt_mlp.TtMLP(f"{base_address}.mlp", state_dict, device)
 
     def forward(self, x, device):
-        y = self.ln_1(x)
-        res1 = self.ln_1(x)
-        res2 = self.attn.forward(res1, device)
+        # x = x + self.attn(self.ln_1(x))
+        tmp = self.attn.forward(self.ln_1(x), device)
+        x = tt_lib.tensor.add(x, tmp)
 
-        x = tt_lib.tensor.add(x, res2)
-
-        y = self.ln_2(x)
-        res3 = self.ln_2(x)
-        res4 = self.attn.forward(res3, device)
-        x = tt_lib.tensor.add(x, res4)
+        # x = x + self.mlp(self.ln_2(x))
+        tmp = self.mlp.forward(self.ln_2(x), device)
+        x = tt_lib.tensor.add(x, tmp)
 
         return x
