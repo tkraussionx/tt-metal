@@ -24,6 +24,8 @@ bool collapse_transformations(DataTransformations * dtx, pair<int, int> collapse
 
     TransformationNode * consumer_node = dtx->transformations[end_node_index];
     if (DEBUG) cout << s(2) << "consumer_node = " << consumer_node->opcode << endl;
+    if (DEBUG) cout << s(2) << "consumer_node has one to one mapping? " << consumer_node->one_to_one_mapping << endl;
+    bool one_to_one_mapping = consumer_node->one_to_one_mapping;
     int spaces = 0;
 
     int collapse_iteration = 0;
@@ -37,6 +39,13 @@ bool collapse_transformations(DataTransformations * dtx, pair<int, int> collapse
         TransformationNode * producer_node = dtx->transformations[current_node_index];
         if (DEBUG) cout << s(4) << "producer_node = " << producer_node->opcode << endl;
         bool debug_detailed = false;
+        // Copy producer tensor pairs into a separate list where we can remove tensor pairs that are already resolved and we don't have to loop over all tensor pairs everytime
+        vector<vector<TensorPair*>> producer_tensor_pairs;
+        for (int producer_group_idx = 0; producer_group_idx < producer_node->groups.size(); producer_group_idx++) {
+            producer_tensor_pairs.push_back(producer_node->groups[producer_group_idx]->tensor_pairs);
+        }
+        // Track producer tp's dst tensor volume
+        map<TensorPair*, int> producer_tp_dst_tensor;
         // Sweep over groups in the consumer node
         for (int consumer_group_idx = 0; consumer_group_idx < consumer_node->groups.size(); consumer_group_idx++) {
             if (DEBUG) cout << s(6) << "consumer_group_idx = " << consumer_group_idx << endl;
@@ -54,14 +63,18 @@ bool collapse_transformations(DataTransformations * dtx, pair<int, int> collapse
                 if(producer_group_idx != -1) {
                     int consumer_tp_volume_resolved = 0; // for early exit from the loop over producer tensor pairs
                     if (debug_detailed) cout << s(8) << "producer_group_idx = " << producer_group_idx << endl;
-                    // Sweep over all tensor pairs of the producer group corresponding to consumer's src tensor's group index
-                    for (int producer_tp_idx=0; producer_tp_idx<producer_node->groups[producer_group_idx]->tensor_pairs.size(); producer_tp_idx++) {
+                    // Sweep over tensor pairs of the producer group corresponding to consumer's src tensor's group index
+                    if (debug_detailed) cout << "Going to sweep over " << producer_tensor_pairs[producer_group_idx].size() << " producer tensor pairs" << endl;
+                    auto producer_tp_it = producer_tensor_pairs[producer_group_idx].begin();
+                    while (producer_tp_it != producer_tensor_pairs[producer_group_idx].end()) {
 
-                        TensorPair * producer_tp = producer_node->groups[producer_group_idx]->tensor_pairs[producer_tp_idx];
+                        TensorPair * producer_tp = *producer_tp_it;
+                        if(producer_tp_dst_tensor.find(producer_tp) == producer_tp_dst_tensor.end()) {
+                            producer_tp_dst_tensor[producer_tp] = 0;
+                        }
                         // sanity check. TODO - move to a separate validation function which should be called in the beginning collapse_transformations
                         assert(producer_tp->src_tensor->volume() == producer_tp->dst_tensor->volume());
 
-                        if (debug_detailed) cout << s(10) << "producer_tp_idx = " << producer_tp_idx << ",   consumer_tp_idx = " << consumer_tp_idx << endl;
                         if (debug_detailed) cout << s(12) << "PRODUCER = " << producer_tp->get_string() << endl;
                         if (debug_detailed) cout << s(12) << "CONSUMER = " << consumer_tp->get_string() << endl;
 
@@ -95,11 +108,25 @@ bool collapse_transformations(DataTransformations * dtx, pair<int, int> collapse
                                                                     new_dst);
                             if (debug_detailed) cout << s(16) << "NEW OVERLAP TENSOR PAIR: " << overlap_tp->get_string() << endl;
                             resolved_tensor_pairs.push_back(overlap_tp);
+                            producer_tp_dst_tensor[producer_tp] += overlap_tp->src_tensor->volume();
+                            if(one_to_one_mapping && producer_tp_dst_tensor[producer_tp] == producer_tp->dst_tensor->volume()) {
+                                auto si = producer_node->groups[producer_group_idx]->tensor_pairs.size();
+                                // remove producer tensor pair from the list as it is fully resolved.
+                                producer_tp_it = producer_tensor_pairs[producer_group_idx].erase(producer_tp_it);
+                                //cout << "removed producer tensor pair from list as its fully resolved" << endl;
+                                assert(producer_node->groups[producer_group_idx]->tensor_pairs.size() == si);
+                            }
+                            else {
+                                ++producer_tp_it;
+                            }
                             consumer_tp_volume_resolved += overlap_tp->src_tensor->volume();
                             if(consumer_tp_volume_resolved == consumer_tp_volume) {
                                 if (debug_detailed) cout << "consumer tensor pair fully resolved." << endl;
                                 break;
                             }
+                        }
+                        else {
+                            ++producer_tp_it;
                         }
                         delete overlap;
                     }
@@ -116,7 +143,9 @@ bool collapse_transformations(DataTransformations * dtx, pair<int, int> collapse
             // Update all TensorPairs in the consumer node, for this group
             consumer_node->groups[consumer_group_idx]->delete_tensor_pairs();
             consumer_node->groups[consumer_group_idx]->tensor_pairs = resolved_tensor_pairs;
+            assert(resolved_tensor_pairs.size() > 0);
         }
+        consumer_node->one_to_one_mapping = one_to_one_mapping;
         collapse_iteration += 1;
         current_node_index -= 1;
     } // while

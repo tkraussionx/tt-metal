@@ -94,7 +94,7 @@ bool block_2d_with_duplicate_blocks(DataTransformations * dtx, vector<int> dim_o
     TransformationNode * producer = dtx->transformations.back();
     TransformationNode * consumer = new TransformationNode("block_2d_matrix_with_duplicates", producer->groups.size());  // TODO: generalize for groups>1
     dtx->transformations.push_back(consumer);
-
+    consumer->one_to_one_mapping = false;
     for (int group_idx=0; group_idx<producer->groups.size(); group_idx++) {
         if (DEBUG) cout << "\n\n" << s(2) << "Group = " << group_idx << endl;
 
