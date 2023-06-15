@@ -141,6 +141,7 @@ void DumpHostProfileResults(std::string name_prepend){
 }
 
 void DumpDeviceProfileResults(Device *device, const Program &program) {
+    tt_metal_profiler.markStart("DumpDeviceProfileResults");
     TT_ASSERT(tt_is_print_server_running() == false, "Debug print server is running, cannot dump device profiler data");
     auto worker_cores_used_in_program =\
         device->worker_cores_from_logical_cores(program.logical_cores());
@@ -148,6 +149,7 @@ void DumpDeviceProfileResults(Device *device, const Program &program) {
     auto cluster = device->cluster();
     auto pcie_slot = device->pcie_slot();
     tt_metal_profiler.dumpDeviceResults(cluster, pcie_slot, worker_cores_used_in_program);
+    tt_metal_profiler.markStop("DumpDeviceProfileResults");
 }
 
 void SetProfilerDir(std::string output_dir){
