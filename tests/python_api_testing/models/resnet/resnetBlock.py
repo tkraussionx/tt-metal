@@ -12,6 +12,7 @@ from tt_lib.fused_ops.linear import Linear as TtLinear
 from tt_lib.fused_ops.softmax import softmax as TtSoftmax
 from conv_on_device_utils_new import is_conv_supported_on_device, run_conv_on_device_wrapper
 
+profile_name = 'resnet18_forward'
 
 class Bottleneck(nn.Module):
     # Bottleneck in torchvision places the stride for downsampling at 3x3 convolution(self.conv2)
@@ -422,6 +423,10 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def _forward_impl(self, x: torch.Tensor) -> torch.Tensor:
+        tt_lib.profiler.start_profiling(profile_name)
+
+        tt_lib.profiler.append_meta_data(f"{profile_name}_meta")
+
         x = self.conv1(x)
         if not self.fold_batchnorm:
             x = self.bn1(x)
@@ -432,10 +437,14 @@ class ResNet(nn.Module):
 
         x = self.maxpool(x)
 
+        tt_lib.profiler.append_meta_data(f"{profile_name}_layers_meta")
+
+        tt_lib.profiler.start_profiling(f'{profile_name}_layers')
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
+        tt_lib.profiler.stop_profiling(f'{profile_name}_layers')
 
         x = self.avgpool(x)
         x = torch.flatten(x, 1).unsqueeze(1).unsqueeze(1)
@@ -444,7 +453,13 @@ class ResNet(nn.Module):
         x = self.fc(x)
         desired_shape = [x.shape()[0], x.shape()[1], 1, 1000]
         x = unpad_from_zero(x, desired_shape, self.host)
+
+        tt_lib.profiler.stop_profiling(profile_name)
+
         return x
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        tt_lib.profiler.set_profiler_flag(True)
+        tt_lib.profiler.set_profiler_location('mylogs/resnet18/ops')
+
         return self._forward_impl(x)

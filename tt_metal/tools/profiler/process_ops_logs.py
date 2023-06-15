@@ -16,13 +16,14 @@ from process_device_log import import_log_run_stats, generate_plots, import_host
 import plot_setup
 
 # OPS_LOGS_DIR = os.path.abspath("logs/test_profiler/nested_profiling/")
-OPS_LOGS_DIR = os.path.abspath("logs/BERT_large_15/ops")
+# OPS_LOGS_DIR = os.path.abspath("logs/BERT_large_15/ops")
+OPS_LOGS_DIR = os.path.abspath("mylogs/resnet18/ops")
 
 HOST_SIDE_LOG = "profile_log_host.csv"
 DEVICE_SIDE_LOG = "profile_log_device.csv"
 HOST_SIDE_LOG = "profile_log_host.csv"
-OPS_CSV = "logs/profile_log_ops.csv"
-MERGED_DEVICE_SIDE_LOG = "logs/profile_log_device_merged.csv"
+OPS_CSV = "profile_log_ops.csv"
+MERGED_DEVICE_SIDE_LOG = "profile_log_device_merged.csv"
 
 OPS_CSV_HEADER = [
     "OP NAME",
@@ -336,5 +337,6 @@ def print_ops_csv(ops):
 
 if __name__ == "__main__":
     ops = parse_ops_logs()
+    print(ops)
     print(ttMetalFunctionsSet)
     print_ops_csv(ops)

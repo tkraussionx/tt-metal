@@ -6,6 +6,7 @@
 #include "libs/dtx/dtx.hpp"
 #include "libs/dtx/dtx_passes.hpp"
 #include "llrt/tt_debug_print_server.hpp"
+#include "tt_metal/tools/profiler/op_profiler.hpp"
 using namespace tt::constants;
 namespace tt {
 
@@ -738,6 +739,7 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
 Tensor conv(const Tensor& a, const Tensor &b, vector<int> conv_params, uint32_t in0_block_h, uint32_t in0_block_w, uint32_t in1_block_w,
                                         uint32_t out_subblock_h, uint32_t out_subblock_w) {
 
+    profiler::set_preferred_name("CONV");
     Tensor output = conv_as_large_bmm_single_core_(a, b, conv_params, in0_block_h, in0_block_w, in1_block_w, out_subblock_h, out_subblock_w);
     return output;
 }
