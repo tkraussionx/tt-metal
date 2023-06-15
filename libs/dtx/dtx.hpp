@@ -139,13 +139,14 @@ class TransformationNode : tpl_nocopy<TransformationNode> {
 
     string opcode;
     vector<TensorPairGroup *> groups;
-
+    bool one_to_one_mapping;
     TransformationNode(string opcode, int number_of_groups) {
         this->opcode = opcode;
         for (int g=0; g<number_of_groups; g++){
             TensorPairGroup * group = new TensorPairGroup();
             this->groups.push_back(group);
         }
+        this->one_to_one_mapping = true; // TODO (nshanker): make this required arg to constructor
     }
 
     int create_new_group() {

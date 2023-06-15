@@ -3,7 +3,7 @@
 #include "util.hpp"
 
 bool collapse_transformations(DataTransformations * dtx, pair<int, int> collapse_range) {
-    bool DEBUG = false;
+    bool DEBUG = true;
     bool pad = false;
 
     if (DEBUG) cout << "\n----- Start Resolving Transoformations -----\n" << endl;

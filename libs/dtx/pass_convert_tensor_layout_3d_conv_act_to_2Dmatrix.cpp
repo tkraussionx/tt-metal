@@ -27,7 +27,7 @@ bool convert_tensor_layout_3d_conv_act_to_2Dmatrix(DataTransformations * dtx,
     TransformationNode * producer = dtx->transformations.back();
     TransformationNode * consumer = new TransformationNode("convert_tensor_layout_CL1_to_2Dmatrix", producer->groups.size());
     dtx->transformations.push_back(consumer);
-
+    consumer->one_to_one_mapping = false;
     // Calculate producer shape
     vector<int> producer_shape = producer->groups[0]->shape;
     int rank = producer_shape.size();
