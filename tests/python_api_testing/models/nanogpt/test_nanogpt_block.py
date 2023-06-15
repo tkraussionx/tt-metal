@@ -31,11 +31,11 @@ def run_nanogpt_block_test(device):
 
     torch.manual_seed(0)
 
-    test_in = torch.rand(1, 59, 768)
+    test_in = torch.rand(1, 60, 768)
 
 
-    pt_attn = model_hf.transformer.h[block]
-    pt_out = pt_attn.forward(test_in)
+    pt_block = model_hf.transformer.h[block]
+    pt_out = pt_block.forward(test_in)
 
 
     model_type = 'gpt2'
@@ -53,9 +53,9 @@ def run_nanogpt_block_test(device):
 
     tt_test_in = nanogpt_utils.torch2tt_tensor(test_in, device)
 
-    tt_attn = nanogpt_block.TtBlock(config, sd, base_address, device)
+    tt_block = nanogpt_block.TtBlock(config, sd, base_address, device)
 
-    tt_out = tt_attn.forward(
+    tt_out = tt_block.forward(
         tt_test_in,
         device
     )
