@@ -487,7 +487,6 @@ void WriteToDevice(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
 }
 
 void WriteToBuffer(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
-    tt_metal_profiler.markStart("WriteToBuffer");
     switch (buffer.buffer_type()) {
         case BufferType::DRAM:
         case BufferType::L1: {
@@ -501,7 +500,6 @@ void WriteToBuffer(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
         default:
             TT_ASSERT(false && "Unsupported buffer type!");
     }
-    tt_metal_profiler.markStop("WriteToBuffer");
 }
 
 void ReadFromDevice(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
