@@ -134,37 +134,26 @@ void Profiler::dumpDeviceResults (
         int pcie_slot,
         const vector<CoreCoord> &worker_cores){
 
+    vector<std::uint32_t> profile_buffer;
+    vector<string> riscs = {"NCRISC", "TRISC_0", "TRISC_1", "TRISC_2", "BRISC"};
+
     for (const auto &worker_core : worker_cores) {
-        readRiscProfilerResults(
-            cluster,
-            pcie_slot,
-            worker_core,
-            "NCRISC",
-            PRINT_BUFFER_NC);
-        readRiscProfilerResults(
-            cluster,
-            pcie_slot,
-            worker_core,
-            "BRISC",
-            PRINT_BUFFER_BR);
-        readRiscProfilerResults(
-            cluster,
-            pcie_slot,
-            worker_core,
-            "TRISC_0",
-            PRINT_BUFFER_T0);
-	readRiscProfilerResults(
-	    cluster,
-	    pcie_slot,
-	    worker_core,
-	    "TRISC_1",
-	    PRINT_BUFFER_T1);
-	readRiscProfilerResults(
-	    cluster,
-	    pcie_slot,
-	    worker_core,
-	    "TRISC_2",
-	    PRINT_BUFFER_T2);
+        profile_buffer = tt::llrt::read_hex_vec_from_core(
+                cluster,
+                pcie_slot,
+                worker_core,
+                PRINT_BUFFER_NC,
+                PRINT_BUFFER_SIZE * 5);
+        for (unsigned int i = 0; i < riscs.size(); i ++)
+        {
+            readRiscProfilerResults(
+                cluster,
+                pcie_slot,
+                worker_core,
+                riscs[i],
+                profile_buffer,
+                i * (PRINT_BUFFER_SIZE/sizeof(uint32_t)));
+        }
     }
 }
 
@@ -173,22 +162,15 @@ void Profiler::readRiscProfilerResults(
         int pcie_slot,
         const CoreCoord &worker_core,
         std::string risc_name,
-        int risc_print_buffer_addr){
+        vector<std::uint32_t>& profile_buffer,
+        unsigned int start_address){
 
-    vector<std::uint32_t> profile_buffer;
     uint32_t end_index;
     uint32_t dropped_marker_counter;
 
-    profile_buffer = tt::llrt::read_hex_vec_from_core(
-            cluster,
-            pcie_slot,
-            worker_core,
-            risc_print_buffer_addr,
-            PRINT_BUFFER_SIZE);
-
-    end_index = profile_buffer[kernel_profiler::BUFFER_END_INDEX];
+    end_index = profile_buffer[start_address + kernel_profiler::BUFFER_END_INDEX];
     TT_ASSERT (end_index < (PRINT_BUFFER_SIZE/sizeof(uint32_t)));
-    dropped_marker_counter = profile_buffer[kernel_profiler::DROPPED_MARKER_COUNTER];
+    dropped_marker_counter = profile_buffer[start_address + kernel_profiler::DROPPED_MARKER_COUNTER];
 
     if(dropped_marker_counter > 0){
         log_debug(
@@ -208,8 +190,8 @@ void Profiler::readRiscProfilerResults(
                 worker_core.x,
                 worker_core.y,
                 risc_name,
-                (uint64_t(profile_buffer[i+kernel_profiler::TIMER_VAL_H]) << 32) | profile_buffer[i+kernel_profiler::TIMER_VAL_L],
-                profile_buffer[i+kernel_profiler::TIMER_ID]);
+                (uint64_t(profile_buffer[start_address + i+kernel_profiler::TIMER_VAL_H]) << 32) | profile_buffer[start_address + i+kernel_profiler::TIMER_VAL_L],
+                profile_buffer[start_address + i+kernel_profiler::TIMER_ID]);
     }
 }
 

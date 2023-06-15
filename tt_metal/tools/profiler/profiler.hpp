@@ -57,7 +57,8 @@ class Profiler {
                 int pcie_slot,
                 const CoreCoord &worker_core,
                 std::string risc_name,
-                int risc_print_buffer_addr);
+                vector<std::uint32_t>& profile_buffer,
+                unsigned int start_address);
 
     public:
         //Constructor

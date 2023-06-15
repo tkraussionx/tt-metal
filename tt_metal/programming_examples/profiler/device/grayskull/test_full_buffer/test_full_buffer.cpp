@@ -24,24 +24,24 @@ bool RunCustomCycle(tt_metal::Device *device, int loop_count, string run_name = 
 
     bool fp32_dest_acc_en = false;
     bool math_approx_mode = false;
-    tt_metal::ComputeKernel *trisc_kernel = tt_metal::CreateComputeKernel(
-        program, "tt_metal/programming_examples/profiler/device/grayskull/test_full_buffer/kernels/full_buffer_compute.cpp",
-        all_cores,
-        trisc_kernel_args,
-        MathFidelity::HiFi4,
-        fp32_dest_acc_en,
-        math_approx_mode
-    );
+    //tt_metal::ComputeKernel *trisc_kernel = tt_metal::CreateComputeKernel(
+        //program, "tt_metal/programming_examples/profiler/device/grayskull/test_full_buffer/kernels/full_buffer_compute.cpp",
+        //all_cores,
+        //trisc_kernel_args,
+        //MathFidelity::HiFi4,
+        //fp32_dest_acc_en,
+        //math_approx_mode
+    //);
 
     constexpr int loop_size = 200;
     constexpr bool profile_device = true;
     brisc_kernel->add_define("LOOP_COUNT",loop_count);
     ncrisc_kernel->add_define("LOOP_COUNT",loop_count);
-    trisc_kernel->add_define("LOOP_COUNT",loop_count);
+    //trisc_kernel->add_define("LOOP_COUNT",loop_count);
 
     brisc_kernel->add_define("LOOP_SIZE",loop_size);
     ncrisc_kernel->add_define("LOOP_SIZE",loop_size);
-    trisc_kernel->add_define("LOOP_SIZE",loop_size);
+    //trisc_kernel->add_define("LOOP_SIZE",loop_size);
 
     pass &= tt_metal::CompileProgram(device, program, profile_device);
     pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
