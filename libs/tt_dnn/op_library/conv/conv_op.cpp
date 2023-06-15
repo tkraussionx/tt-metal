@@ -11,9 +11,11 @@ using namespace tt::constants;
 namespace tt {
 
 namespace tt_metal {
+
 void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
                                 tt_metal::Device* device,
-                                CoreCoord core,
+                                // CoreCoord core,
+                                CoreRange core,
                                 uint32_t act_block_size,
                                 uint32_t weight_block_size,
                                 uint32_t output_block_size,
@@ -34,7 +36,7 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
 
     // Invariants
     uint32_t cb0_tiles = act_block_size;
-    auto cb_in0 = tt_metal::CreateCircularBuffer(
+    auto cb_in0 = tt_metal::CreateCircularBuffers(
         program,
         device,
         in0_cb,
@@ -45,7 +47,7 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
     );
 
     uint32_t cb1_tiles = weight_block_size;
-    auto cb_in1 = tt_metal::CreateCircularBuffer(
+    auto cb_in1 = tt_metal::CreateCircularBuffers(
         program,
         device,
         in1_cb,
@@ -56,7 +58,7 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
     );
 
     // Used for placing tilized activations
-    auto cb_src0_tilized = tt_metal::CreateCircularBuffer(
+    auto cb_src0_tilized = tt_metal::CreateCircularBuffers(
         program,
         device,
         tilize_mode_tilized_in0_cb,
@@ -66,7 +68,7 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
         tt::DataFormat::Float16_b
     );
     if(untilize_out) {
-        auto cb_matmul_partials = tt_metal::CreateCircularBuffer(
+        auto cb_matmul_partials = tt_metal::CreateCircularBuffers(
             program,
             device,
             matmul_partials_cb,
@@ -77,7 +79,7 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
         );
 
         // Shares same address space as matmul partials
-        auto cb_final_matmul_partials = tt_metal::CreateCircularBuffer(
+        auto cb_final_matmul_partials = tt_metal::CreateCircularBuffers(
             program,
             device,
             untilize_mode_final_matmul_partials_cb,
@@ -90,7 +92,7 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
         // Supposed to be a small CB only responsible for reorganizing
         // the output blocks to fill the whole "per core output block width"
         uint32_t reblock_cb_tiles = reblock_size; // Only space for one row
-        auto cb_reblock = tt_metal::CreateCircularBuffer(
+        auto cb_reblock = tt_metal::CreateCircularBuffers(
             program,
             device,
             untilize_mode_reblock_cb,
@@ -100,7 +102,7 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
             tt::DataFormat::Float16_b
         );
 
-        auto cb_output = tt_metal::CreateCircularBuffer(
+        auto cb_output = tt_metal::CreateCircularBuffers(
             program,
             device,
             out0_cb,
@@ -112,7 +114,7 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
     }
     else {
 
-        auto cb_matmul_partials = tt_metal::CreateCircularBuffer(
+        auto cb_matmul_partials = tt_metal::CreateCircularBuffers(
             program,
             device,
             matmul_partials_cb,
@@ -124,7 +126,7 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
 
         auto cb_matmul_partials_addr = cb_matmul_partials->address();
 
-        auto cb_output = tt_metal::CreateCircularBuffer(
+        auto cb_output = tt_metal::CreateCircularBuffers(
             program,
             device,
             out0_cb,
@@ -269,7 +271,7 @@ std::tuple<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> compute_conv_op_blo
     return std::make_tuple(num_blocks_in0_h, num_blocks_in0_w, num_blocks_in1_w, out_subblock_h, out_subblock_w);
 }
 
-vector<uint32_t> compute_conv_as_mm_shape(vector<int> shape, vector<int> conv_params, uint32_t in0_block_h, uint32_t in0_block_w) {
+vector<uint32_t> compute_conv_as_mm_shape(const std::vector<int>& shape, std::vector<int>& conv_params, uint32_t in0_block_h, uint32_t in0_block_w) {
     int conv_input_x = shape[2];
     int conv_input_y = shape[1];
     int conv_input_z = shape[0];
@@ -353,11 +355,10 @@ std::pair<vector<uint32_t>, vector<uint32_t>> populate_address_map_vectors_for_r
     return make_pair(std::move(address_map), std::move(address_map_metadata));
 }
 
-Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<int> conv_params,
-                                        uint32_t in0_block_h, uint32_t in0_block_w, uint32_t in1_block_w,
-                                        uint32_t out_subblock_h, uint32_t out_subblock_w) {
+Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<int>& conv_params,
+                                       uint32_t in0_block_h, uint32_t in0_block_w, uint32_t in1_block_w,
+                                       uint32_t out_subblock_h, uint32_t out_subblock_w, bool untilize_out, Tensor &output) {
     bool pass = true;
-    bool untilize_out=true;
     tt_metal::Device *device = a.device();
     TT_ASSERT(a.layout() == Layout::CHANNELS_LAST, "Conv activation should be in channels last layout");
     TT_ASSERT(a.shape()[0] == 1, "Only batch size 1 supported.");
@@ -365,8 +366,8 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
     uint32_t activation_C = a.shape()[1];
     //TT_ASSERT(activation_C % TILE_WIDTH == 0, "Channel depth must be divisible by tile width(32).");
     // Compute the 2d matrix shape
-    vector<int> activation_shape = {(int)a.shape()[1], (int)a.shape()[2], (int)a.shape()[3]};
-    auto matrix_shape = compute_conv_as_mm_shape(activation_shape , conv_params, in0_block_h, in0_block_w);
+    std::vector<int> activation_shape{(int)a.shape()[1], (int)a.shape()[2], (int)a.shape()[3]};
+    auto matrix_shape = compute_conv_as_mm_shape(activation_shape, conv_params, in0_block_h, in0_block_w);
     assert(matrix_shape.size() == 3);
     assert(matrix_shape[0] == 1);
     uint32_t num_rows = (uint32_t) matrix_shape[1];
@@ -503,7 +504,8 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
     WriteToDeviceDRAMChannel(device, dram_bank_id, weight_address_map_dram_addr, weight_address_map);
 
     tt_metal::Program program = tt_metal::Program();
-    CoreCoord core = {0, 0};
+    CoreCoord core_coord = {0, 0};      // TODO: avoid another var here. Find a way to use core range instead.
+    CoreRange core = {.start={0, 0}, .end={0, 0}};
     //tt_start_debug_print_server(a.device()->cluster(), {0}, {{1, 1}});
 
     uint32_t single_tile_size = num_bytes_of_df * TILE_HEIGHT * TILE_WIDTH;
@@ -513,12 +515,12 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
 
     std::array<uint32_t, 4> cshape{Ba, Ca, Ha, Wb};
 
-    Tensor output = create_output_dram_buffer_(a.device(), a.dtype(), cshape, untilize_out);
+    // Tensor output = create_output_dram_buffer_(a.device(), a.dtype(), cshape, untilize_out);
     tt_metal::Buffer *dst_dram_buffer = output.buffer();
     TT_ASSERT(dst_dram_buffer != nullptr, "Output buffer should be allocated on device!");
 
     // L1 buffers
-    auto l1_bank_ids = device->bank_ids_from_logical_core(core);
+    auto l1_bank_ids = device->bank_ids_from_logical_core(core_coord);
     TT_ASSERT(not l1_bank_ids.empty());
     auto l1_bank_id = l1_bank_ids.at(0);
     // Create scratchpad buffer in L1 to stream in dtx address map from dram
@@ -728,20 +730,52 @@ Tensor conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<i
 
     pass &= tt_metal::CompileProgram(device, program, false);
     pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
-    tt_metal::WriteToDeviceL1(device, core, act_address_map_metadata_l1_address, act_address_map_metadata);
-    tt_metal::WriteToDeviceL1(device, core, weight_address_map_metadata_l1_address, weight_address_map_metadata);
+    tt_metal::WriteToDeviceL1(device, core_coord, act_address_map_metadata_l1_address, act_address_map_metadata);
+    tt_metal::WriteToDeviceL1(device, core_coord, weight_address_map_metadata_l1_address, weight_address_map_metadata);
     pass &= tt_metal::LaunchKernels(device, program);
 
     TT_ASSERT(pass);
-    return output;
+    return program;
 }
 
-Tensor conv(const Tensor& a, const Tensor &b, vector<int> conv_params, uint32_t in0_block_h, uint32_t in0_block_w, uint32_t in1_block_w,
-                                        uint32_t out_subblock_h, uint32_t out_subblock_w) {
+Program conv(const Tensor& a, const Tensor &b, vector<int>& conv_params, uint32_t in0_block_h, uint32_t in0_block_w, uint32_t in1_block_w,
+             uint32_t out_subblock_h, uint32_t out_subblock_w, bool untilize_out, Tensor &output) {
+    profiler::set_preferred_name("CONV_AS_LARGE_BMM");
+    profiler::set_parallelization_strategy ("SINGLE_CORE");
+    return conv_as_large_bmm_single_core_(a, b, conv_params, in0_block_h, in0_block_w, in1_block_w, out_subblock_h, out_subblock_w, untilize_out, output);
+}
 
-    profiler::set_preferred_name("CONV");
-    Tensor output = conv_as_large_bmm_single_core_(a, b, conv_params, in0_block_h, in0_block_w, in1_block_w, out_subblock_h, out_subblock_w);
-    return output;
+void Conv::validate(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors) const {
+    const auto& input_tensor_a = input_tensors.at(0).get();
+    const auto& input_tensor_b = input_tensors.at(1).get();
+    // TODO: ...
+}
+
+std::vector<Shape> Conv::compute_output_shapes(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors) const {
+    const auto& input_tensor_a = input_tensors.at(0).get();
+    const auto& input_tensor_b = input_tensors.at(1).get();
+    // TODO: ...
+    // Shape output_shape{Ba, Ca, Ha, Wb};
+    Shape output_shape;
+    return {output_shape};
+}
+
+std::vector<Tensor> Conv::create_output_tensors(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors) const {
+    const auto output_shape = this->compute_output_shapes(input_tensors).at(0);
+    const auto& input_tensor = input_tensors.at(0).get();
+    Tensor output = create_output_dram_buffer_(input_tensor.device(), input_tensor.dtype(), output_shape, untilize_out);
+    std::vector<Tensor> output_tensors;
+    // TODO: ...
+    output_tensors.emplace_back(tt_metal::Tensor(output_shape, input_tensor.dtype(), tt::tt_metal::Layout::TILE, input_tensor.device()));
+    return output_tensors;
+}
+
+Program Conv::create_program(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors, std::vector<Tensor>& output_tensors) const {
+    const auto& input_tensor_a = input_tensors.at(0).get();
+    const auto& input_tensor_b = input_tensors.at(1).get();
+    auto& output_tensor = output_tensors.at(0);
+
+    return conv(input_tensor_a, input_tensor_b, conv_params, in0_block_h, in0_block_w, in1_block_w, out_subblock_h, out_subblock_w, untilize_out, output_tensor);
 }
 
 }  // namespace tt_metal

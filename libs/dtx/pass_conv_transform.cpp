@@ -226,7 +226,7 @@ vector<uint32_t> conv_weight_transform(vector<int> weight_shape, vector<int> con
 
 std::pair<vector<uint32_t>, vector<uint32_t>> conv_transform(vector<int> activation_shape,
                                         vector<int> weight_shape,
-                                        vector<int> conv_params,
+                                        const vector<int>& conv_params,
                                         uint32_t act_block_h,
                                         uint32_t act_block_w,
                                         uint32_t weight_block_w,
