@@ -14,8 +14,16 @@ import pytest
 from resnetBlock import ResNet, BasicBlock
 import tt_lib
 
+from utility_functions_new import (
+    profiler,
+    enable_compile_cache,
+    disable_compile_cache,
+    comp_pcc,
+)
+
 from sweep_tests.comparison_funcs import comp_allclose_and_pcc, comp_pcc
 
+PERF_CNT = 1
 
 @pytest.mark.parametrize("fold_batchnorm", [False, True], ids=['Batchnorm not folded', "Batchnorm folded"])
 def test_run_resnet18_inference(fold_batchnorm, imagenet_sample_input):
@@ -41,8 +49,22 @@ def test_run_resnet18_inference(fold_batchnorm, imagenet_sample_input):
                         base_address="",
                         fold_batchnorm=fold_batchnorm)
 
+        profiler.enable()
+
+        profiler.start('reference model')
         torch_output = torch_resnet(image).unsqueeze(1).unsqueeze(1)
+        profiler.end('reference_model')
+
+        profiler.start('tt_resnet18 model RUN0')
         tt_output = tt_resnet18(image)
+        profiler.end('tt_resnet18 model RUN0')
+
+        # enable_compile_cache()
+
+        # for i in range(PERF_CNT):
+        #     profiler.start(f'tt_resnet18 model RUN{i+1}')
+        #     tt_output = tt_resnet18(image)
+        #     profiler.end(f'tt_resnet18 model RUN{i+1}')
 
         logger.info(comp_allclose_and_pcc(torch_output, tt_output))
         passing, info = comp_pcc(torch_output, tt_output)
