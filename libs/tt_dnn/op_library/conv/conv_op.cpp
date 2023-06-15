@@ -271,7 +271,7 @@ std::tuple<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> compute_conv_op_blo
     return std::make_tuple(num_blocks_in0_h, num_blocks_in0_w, num_blocks_in1_w, out_subblock_h, out_subblock_w);
 }
 
-vector<uint32_t> compute_conv_as_mm_shape(const std::vector<int>& shape, std::vector<int>& conv_params, uint32_t in0_block_h, uint32_t in0_block_w) {
+vector<uint32_t> compute_conv_as_mm_shape(const std::vector<int>& shape, const std::vector<int>& conv_params, uint32_t in0_block_h, uint32_t in0_block_w) {
     int conv_input_x = shape[2];
     int conv_input_y = shape[1];
     int conv_input_z = shape[0];
@@ -355,7 +355,7 @@ std::pair<vector<uint32_t>, vector<uint32_t>> populate_address_map_vectors_for_r
     return make_pair(std::move(address_map), std::move(address_map_metadata));
 }
 
-Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<int>& conv_params,
+Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<int> conv_params,
                                        uint32_t in0_block_h, uint32_t in0_block_w, uint32_t in1_block_w,
                                        uint32_t out_subblock_h, uint32_t out_subblock_w, bool untilize_out, Tensor &output) {
     bool pass = true;
@@ -738,7 +738,7 @@ Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<
     return program;
 }
 
-Program conv(const Tensor& a, const Tensor &b, vector<int>& conv_params, uint32_t in0_block_h, uint32_t in0_block_w, uint32_t in1_block_w,
+Program conv(const Tensor& a, const Tensor &b, const vector<int> conv_params, uint32_t in0_block_h, uint32_t in0_block_w, uint32_t in1_block_w,
              uint32_t out_subblock_h, uint32_t out_subblock_w, bool untilize_out, Tensor &output) {
     profiler::set_preferred_name("CONV_AS_LARGE_BMM");
     profiler::set_parallelization_strategy ("SINGLE_CORE");
