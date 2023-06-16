@@ -35,13 +35,13 @@ OPS_CSV_HEADER = [
     "DEVICE Start Cycle",
     "DEVICE End Cycle",
     "DEVICE Duration [ns]",
-    "Core Count",
+    "CORE COUNT",
     "CALL DEPTH",
     "INPUTS",
-    "OUTPUT",
+    "OUTPUTS",
     "MATH FIDEL.",
     "PARAL. STRAT.",
-    "Meta Data",
+    "META DATA",
 ]
 
 HOST_SIDE_STATS = ["Count", "Average"]
@@ -91,22 +91,25 @@ def append_device_time_data(opCandidatePath, call_count, timeDataDict):
         timeDataDict["DEVICE Start Cycle"] = start_ts
         timeDataDict["DEVICE End Cycle"] = end_ts
         timeDataDict["DEVICE Duration [ns]"] = int(delta_time_ns)
-        timeDataDict["Core Count"] = len(cores)
+        timeDataDict["CORE COUNT"] = len(cores)
         timeDataDict["Device to Host Utilization %"] = int(100 * (delta_time_ns / timeDataDict["HOST Duration [ns]"]))
     else:
         timeDataDict["DEVICE Start Cycle"] = "-"
         timeDataDict["DEVICE End Cycle"] = "-"
         timeDataDict["DEVICE Duration [ns]"] = "-"
-        timeDataDict["Core Count"] = "-"
+        timeDataDict["CORE COUNT"] = "-"
         timeDataDict["Device to Host Utilization %"] = "-"
 
 
 minTime = 0
 maxDiff = 0
+maxStackSize = 0
 
+op_to_folder = {}
+op_flavour_to_count = {}
 
 def parse_ops_logs():
-    global minTime, maxDiff
+    global minTime, maxDiff, maxStackSize
     ops = {}
 
     paths = sorted(Path(OPS_LOGS_DIR).iterdir(), key=os.path.getmtime, reverse=True)
@@ -121,10 +124,12 @@ def parse_ops_logs():
                 csvReader = csv.reader(csvFile, delimiter=",")
                 for lineCount, row in enumerate(csvReader):
                     if lineCount > 0:
-                        op_name = row[1].strip()
+                        op_folder_name = row[1].strip()
+                        op_name = op_folder_name
                         extractName = re.findall(r'.*tt.*tt_metal\d*(.*)E', op_name)
                         if extractName:
                             op_name = extractName.pop()
+
                         start_ts = int(row[2].strip())
                         end_ts = int(row[3].strip())
                         delta_time = int(row[4].strip())
@@ -142,7 +147,13 @@ def parse_ops_logs():
 
 
                         if preferredName:
-                            op_name += preferredName
+                            op_name += "_" + preferredName
+
+                        op_to_folder [op_name] = op_folder_name
+                        if op_name in op_flavour_to_count.keys():
+                            op_flavour_to_count[op_name] += 1
+                        else:
+                            op_flavour_to_count[op_name] = 1
 
                         if minTime == 0:
                             minTime = start_ts
@@ -152,22 +163,21 @@ def parse_ops_logs():
                         if maxDiff < delta_time:
                             maxDiff = delta_time
 
-                        # if op_name in ["eltwise_unary", "eltwise_binary"]:
-                        # assert len(metadata) > 2
-                        # op_name = metadata[2].lower()
+                        if stack_size > maxStackSize:
+                            maxStackSize = stack_size
 
                         timeDataDict = {
-                            "OP CALL COUNT": call_count,
+                            "OP CALL COUNT": op_flavour_to_count[op_name],
                             "GLOBAL CALL COUNT": global_call_count,
                             "HOST Start TS": start_ts,
                             "HOST End TS": end_ts,
                             "CALL DEPTH": stack_size,
                             "INPUTS": inputs,
-                            "OUTPUT": outputs,
+                            "OUTPUTS": outputs,
                             "MATH FIDEL.": mathFidelity,
                             "PARAL. STRAT.": parallelizationStrategy,
                             "HOST Duration [ns]": delta_time,
-                            "Meta Data": metadata,
+                            "META DATA": metadata,
                         }
 
                         append_device_time_data(opCandidatePath, call_count, timeDataDict)
@@ -197,18 +207,19 @@ def run_dashbaord_webapp():
         Ss = []
         diffs = []
         names = []
-        print(op)
         for opCall in opCalls:
             s = opCall["HOST Start TS"] - minTime
             e = opCall["HOST End TS"] - minTime
             c = opCall["OP CALL COUNT"]
+            callDepth = opCall["CALL DEPTH"]
+            y = 1 + (0.2/maxStackSize) * (maxStackSize-callDepth+1)
             diff = opCall["HOST Duration [ns]"]
-            ps = opCall["Meta Data"]
+            ps = opCall["META DATA"]
             m = (s + e) // 2
             xVals += [None, s, e, e, s, s]
-            yVals += [None, 0, 0, 1, 1, 0]
+            yVals += [None, 0, 0, y, y, 0]
             Xs += [m]
-            Ys += [0.5]
+            Ys += [y]
             Cs += [c]
             diffs += [diff / 1e9]
             names += [op]
@@ -234,13 +245,14 @@ def run_dashbaord_webapp():
                     ]
                 ),
                 mode="markers",
-                marker_size=60,
+                marker_size=5,
                 hoverlabel=dict(
                     bgcolor="white",
                 ),
+                marker_color="black",
                 hoverinfo="x",
-                showlegend=False,
-                opacity=0,
+                showlegend=True,
+                opacity=0.5,
             )
         )
         fig.update_layout(
@@ -249,6 +261,9 @@ def run_dashbaord_webapp():
                 rangeslider=dict(
                     visible=True,
                 ),
+            ),
+            yaxis=dict(
+                visible=False,
             )
         )
 
@@ -262,19 +277,6 @@ def run_dashbaord_webapp():
         ]
     )
 
-    @app.callback(Output("text", "children"), [Input("plot", "hoverData")])
-    def display_hover_data(hoverData):
-        data = {}
-        try:
-            data = hoverData["points"][0]["curveNumber"]
-        except TypeError:
-            data = {}
-        except NameError:
-            data = {}
-        except KeyError:
-            data = {}
-        return json.dumps(hoverData, indent=2)
-
     @app.callback(Output("plot-2", "figure"), [Input("plot", "hoverData")])
     def plot_device_data(hoverData):
         global preFig
@@ -283,20 +285,18 @@ def run_dashbaord_webapp():
             if len(hoverData["points"]) > 0:
                 if "customdata" in hoverData["points"][0].keys():
                     op = hoverData["points"][0]["customdata"][0]
-                    if op in ["exp", "surecipb", "gelua", "relu", "sqrt", "sigmoid", "log", "tanh"]:
-                        op = "eltwise_binary"
-                    if op in ["add", "mul", "sub"]:
-                        op = "eltwise_binary"
+                    opFolder = op_to_folder [op]
                     callCount = hoverData["points"][0]["customdata"][1]
-                    filePath = f"{OPS_LOGS_DIR}/{op}/{callCount}/{DEVICE_SIDE_LOG}"
-                    setup = plot_setup.default_setup()
-                    setup.deviceInputLog = filePath
-                    setup.timerAnalysis = {}
+                    filePath = f"{OPS_LOGS_DIR}/{opFolder}/{callCount}/{DEVICE_SIDE_LOG}"
+                    if os.path.isfile(filePath):
+                        setup = plot_setup.default_setup()
+                        setup.deviceInputLog = filePath
+                        setup.timerAnalysis = {}
 
-                    devicesData = import_log_run_stats(setup)
-                    figs = generate_plots(devicesData, setup)
-                    for fig in figs.values():
-                        preFig = fig
+                        devicesData = import_log_run_stats(setup)
+                        figs = generate_plots(devicesData, setup)
+                        for fig in figs.values():
+                            preFig = fig
 
         return fig
 
@@ -332,11 +332,9 @@ def print_ops_csv(ops):
                             opsROW.append("0")
                 opsWriter.writerow(opsROW)
 
-    # run_dashbaord_webapp()
 
 
 if __name__ == "__main__":
     ops = parse_ops_logs()
-    print(ops)
-    print(ttMetalFunctionsSet)
     print_ops_csv(ops)
+    # run_dashbaord_webapp()

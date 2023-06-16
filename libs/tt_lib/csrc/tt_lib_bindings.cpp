@@ -1497,47 +1497,6 @@ void DeviceModule(py::module &m_device) {
     )doc");
 }
 
-void ProfilerModule(py::module &m_profiler) {
-    m_profiler.def("set_profiler_flag", &profiler::set_profiler_flag, R"doc(
-        Sets the profiling flag.
-
-        +------------------+------------------------+-----------------------+-------------+----------+
-        | Argument         | Description            | Data type             | Valid range | Required |
-        +==================+========================+=======================+=============+==========+
-        | flag             | Profiling state        | bool                  | true/false  | Yes      |
-        +------------------+------------------------+-----------------------+-------------+----------+
-    )doc");
-
-    m_profiler.def("set_profiler_location", &profiler::set_profiler_location, R"doc(
-        Sets the profiling root folder.
-
-        +------------------+------------------------+-----------------------+-------------+----------+
-        | Argument         | Description            | Data type             | Valid range | Required |
-        +==================+========================+=======================+=============+==========+
-        | profilerLocation | Profiling out folder   | string                | Valid dir   | Yes      |
-        +------------------+------------------------+-----------------------+-------------+----------+
-    )doc");
-
-    m_profiler.def("append_meta_data", &profiler::append_meta_data, R"doc(
-        Append extra information regardig the op.
-
-        +------------------+------------------------+-----------------------+------------------+----------+
-        | Argument         | Description            | Data type             | Valid range      | Required |
-        +==================+========================+=======================+==================+==========+
-        | metaData         | Meta Data              | string                | Non-empty string | Yes      |
-        +------------------+------------------------+-----------------------+------------------+----------+
-    )doc");
-
-    m_profiler.def("start_profiling", &profiler::start_profiling, R"doc(
-        Start profiling op.
-    )doc");
-
-    m_profiler.def("stop_profiling", &profiler::stop_profiling, R"doc(
-        Stop profiling op.
-    )doc");
-
-}
-
 void DTXModule(py::module &m_dtx) {
     auto pyDataTransformations = py::class_<DataTransformations>(m_dtx, "DataTransformations", "Class describing the data transformations.");
     m_dtx.def("evaluate", [](vector<float> data, vector<uint32_t> address_map, vector<vector<int>> output_shape){

@@ -168,9 +168,10 @@ namespace tt_metal {
                 else
                 {
                     unknownOp = OpData(unknownOpName, unknownOp.opCallCount + 1, globalCallCount, 0);
-                    setup_profiling_folders (unknownOpName, unknownOp.opCallCount);
+                    setup_profiling_folders (unknownOpName, globalCallCount);
                 }
             }
+
         public:
 
 
