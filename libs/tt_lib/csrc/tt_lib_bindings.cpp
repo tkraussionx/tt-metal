@@ -1537,8 +1537,8 @@ PYBIND11_MODULE(_C, m) {
     py::module_ m_device = m.def_submodule("device", "Submodule defining a host or device");
     tt::tt_metal::DeviceModule(m_device);
 
-    py::module_ m_profiler = m.def_submodule("profiler", "Submodule defining the profiler");
-    tt::tt_metal::ProfilerModule(m_profiler);
+    // py::module_ m_profiler = m.def_submodule("profiler", "Submodule defining the profiler");
+    // tt::tt_metal::ProfilerModule(m_profiler);
 
     py::module_ m_tensor = m.def_submodule("tensor", "Submodule defining an tt_metal tensor");
     tt::tt_metal::TensorModule(m_tensor);

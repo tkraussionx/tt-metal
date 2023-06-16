@@ -17,7 +17,7 @@ import plot_setup
 
 # OPS_LOGS_DIR = os.path.abspath("logs/test_profiler/nested_profiling/")
 # OPS_LOGS_DIR = os.path.abspath("logs/BERT_large_15/ops")
-OPS_LOGS_DIR = os.path.abspath("mylogs/resnet18/ops")
+OPS_LOGS_DIR = os.path.abspath("/home/ubuntu/tt-metal.git/tests/python_api_testing/models/resnet/mylogs/resnet18/ops")
 
 HOST_SIDE_LOG = "profile_log_host.csv"
 DEVICE_SIDE_LOG = "profile_log_device.csv"
@@ -337,4 +337,4 @@ def print_ops_csv(ops):
 if __name__ == "__main__":
     ops = parse_ops_logs()
     print_ops_csv(ops)
-    # run_dashbaord_webapp()
+    run_dashbaord_webapp()
