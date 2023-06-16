@@ -4,9 +4,11 @@
 #include "tt_metal/common/constants.hpp"
 #include "libs/tt_dnn/op_library/work_split.hpp"
 
+#include "tt_dnn/op_library/run_operation.hpp"
+
 #include "../op_config.hpp"
 
-#include <iostream>
+#include <optional>
 
 using u32 = std::uint32_t;
 using namespace tt::constants;
@@ -17,16 +19,23 @@ namespace tt {
 
 namespace tt_metal {
 
-inline bool is_dram(const Tensor& a) { return a.buffer_type() == BufferType::DRAM; }
-inline bool is_dram(const Tensor* a) { return a ? a->buffer_type() == BufferType::DRAM : true; } // if nullptr doesn't matter
+inline bool is_dram(const Tensor& input_tensor) { return input_tensor.buffer_type() == BufferType::DRAM; }
+inline bool is_dram(const std::optional<std::reference_wrapper<const Tensor>> input_tensor) {
+     return input_tensor.has_value() ? is_dram(input_tensor.value().get()) : true;
+}
 inline bool is_dram(const Buffer* b) { return b->buffer_type() == BufferType::DRAM; }
 
 // computes layernorm(a+*b)*gamma + beta
 // if b is nullptr it's treated as zero (no addition)
-Tensor layernorm_(const Tensor &a, const Tensor* b, float eps, const Tensor* gamma, const Tensor* beta, bool output_dram) {
-
-    bool profile = false;
-    OpEnvConfig::update_profile(&profile);
+Program layernorm_(
+    const Tensor &a,
+    const std::optional<std::reference_wrapper<const Tensor>> b,
+    const std::optional<std::reference_wrapper<const Tensor>> gamma,
+    const std::optional<std::reference_wrapper<const Tensor>> beta,
+    Tensor& output,
+    float eps,
+    bool output_dram
+) {
 
     const auto shape = a.shape();
     u32 W = shape[3], H = shape[2], NC = shape[1]*shape[0];
@@ -34,9 +43,9 @@ Tensor layernorm_(const Tensor &a, const Tensor* b, float eps, const Tensor* gam
     TT_ASSERT(W % TILE_WIDTH == 0 && H % TILE_HEIGHT == 0);
     TT_ASSERT(H > 0 && W > 0 && NC > 0);
     TT_ASSERT(a.dtype() == DataType::BFLOAT16);
-    TT_ASSERT(b == nullptr || b->dtype() == DataType::BFLOAT16);
-    TT_ASSERT(gamma == nullptr || gamma->dtype() == DataType::BFLOAT16);
-    TT_ASSERT(beta == nullptr || beta->dtype() == DataType::BFLOAT16);
+    TT_ASSERT(not b.has_value() || b.value().get().dtype() == DataType::BFLOAT16);
+    TT_ASSERT(not gamma.has_value() || gamma.value().get().dtype() == DataType::BFLOAT16);
+    TT_ASSERT(not beta.has_value() || beta.value().get().dtype() == DataType::BFLOAT16);
     u32 Wt = W/TILE_WIDTH;
     u32 Ht = H/TILE_HEIGHT;
 
@@ -51,24 +60,22 @@ Tensor layernorm_(const Tensor &a, const Tensor* b, float eps, const Tensor* gam
     uint32_t single_tile_size = 2 * 1024;
 
     auto a_addr = a.buffer()->address();
-    auto b_dram_addr = b ? b->buffer()->address() : 0;
-    auto gamma_dram_addr = gamma ? gamma->buffer()->address() : 0;
-    auto beta_dram_addr = beta ? beta->buffer()->address() : 0;
+    auto b_dram_addr = b ? b.value().get().buffer()->address() : 0;
+    auto gamma_dram_addr = gamma.has_value() ? gamma.value().get().buffer()->address() : 0;
+    auto beta_dram_addr = beta.has_value() ? beta.value().get().buffer()->address() : 0;
 
-    TT_ASSERT(b == nullptr || a.shape() == b->shape());
+    TT_ASSERT(not b.has_value() || a.shape() == b.value().get().shape());
     TT_ASSERT(a.volume() % TILE_HW == 0);
     uint32_t num_tiles = a.volume()/TILE_HW;
-    uint32_t num_gamma_tiles = gamma ? gamma->volume()/TILE_HW : 0;
-    uint32_t num_beta_tiles = beta ? beta->volume()/TILE_HW : 0;
+    uint32_t num_gamma_tiles = gamma.has_value() ? gamma.value().get().volume()/TILE_HW : 0;
+    uint32_t num_beta_tiles = beta.has_value() ? beta.value().get().volume()/TILE_HW : 0;
     TT_ASSERT(num_gamma_tiles == Wt || num_gamma_tiles == 0);
     TT_ASSERT(num_beta_tiles == Wt || num_beta_tiles == 0);
 
     // This should allocate a DRAM buffer on the device
     Device *device = a.device();
 
-    std::array<uint32_t, 4> output_shape = {shape[0], shape[1], H, W};
     auto memcfg = tt::tt_metal::MemoryConfig{true, -1, output_dram ? BufferType::DRAM : BufferType::L1};
-    Tensor output = Tensor(output_shape, a.dtype(), Layout::TILE, device, memcfg);
     auto dst_addr = output.buffer()->address();
 
     // These tile capacity counts for CBs need to match the number of tiles expected by the kernel (softmax.cpp)
@@ -186,35 +193,37 @@ Tensor layernorm_(const Tensor &a, const Tensor* b, float eps, const Tensor* gam
         eltwise_binary_kernels->add_define("FUSE_PRE_ADD", "1");
     }
 
+    // Create circular buffers
+    CreateCircularBuffers( program, device, CB::c_in0,       all_cores, in0_t,  in0_t*single_tile_size,  DataFormat::Float16_b );
+    CreateCircularBuffers( program, device, CB::c_out0,      all_cores, out0_t, out0_t*single_tile_size, DataFormat::Float16_b );
+    CreateCircularBuffers( program, device, CB::c_intermed1, all_cores, im1_t,  im1_t*single_tile_size,  DataFormat::Float16_b );
+    CreateCircularBuffers( program, device, CB::c_in2,       all_cores, in2_t,  in2_t*single_tile_size,  DataFormat::Float16_b );
+    CreateCircularBuffers( program, device, CB::c_in3,       all_cores, in3_t,  in3_t*single_tile_size,  DataFormat::Float16_b );
+    CreateCircularBuffers( program, device, CB::c_in4,       all_cores, in4_t,  in4_t*single_tile_size,  DataFormat::Float16_b );
+    CreateCircularBuffers( program, device, CB::c_intermed2, all_cores, im2_t,  im2_t*single_tile_size,  DataFormat::Float16_b );
+    CreateCircularBuffers( program, device, CB::c_intermed0, all_cores, im0_t,  im0_t*single_tile_size,  DataFormat::Float16_b );
+    CreateCircularBuffers( program, device, CB::c_intermed3, all_cores, im3_t,  im3_t*single_tile_size,  DataFormat::Float16_b );
+    CreateCircularBuffers( program, device, CB::c_intermed4, all_cores, im4_t,  im4_t*single_tile_size,  DataFormat::Float16_b );
+    CreateCircularBuffers( program, device, CB::c_intermed5, all_cores, im5_t,  im5_t*single_tile_size,  DataFormat::Float16_b );
+    CreateCircularBuffers( program, device, CB::c_in5,       all_cores, in5_t,  in5_t*single_tile_size,  DataFormat::Float16_b );
+    CreateCircularBuffers( program, device, CB::c_in6,       all_cores, in6_t,  in6_t*single_tile_size,  DataFormat::Float16_b );
+    if (b) {
+        // x = a+b in this notation
+        // result = ln(x)*gamma + beta
+        // if there's no pre-add we use cb_in0 for x, otherwise a is pre-buffered into in0, added into im6, then im6 is used as x
+        // b is buffered into c_in1
+        CreateCircularBuffers( program, device, CB::c_intermed6, all_cores, im6_t,  im6_t*single_tile_size,  DataFormat::Float16_b );
+        // c_in1 is input buffer for b
+        CreateCircularBuffers( program, device, CB::c_in1,       all_cores, in1_t,  in1_t*single_tile_size,  DataFormat::Float16_b );
+    }
+
     for (uint32_t icore = 0; icore < num_cores; icore++) {
         auto core = grid.wrap_core(icore);
-        CreateCircularBuffer( program, device, CB::c_in0,       core, in0_t,  in0_t*single_tile_size,  DataFormat::Float16_b );
-        CreateCircularBuffer( program, device, CB::c_out0,      core, out0_t, out0_t*single_tile_size, DataFormat::Float16_b );
-        CreateCircularBuffer( program, device, CB::c_intermed1, core, im1_t,  im1_t*single_tile_size,  DataFormat::Float16_b );
-        CreateCircularBuffer( program, device, CB::c_in2,       core, in2_t,  in2_t*single_tile_size,  DataFormat::Float16_b );
-        CreateCircularBuffer( program, device, CB::c_in3,       core, in3_t,  in3_t*single_tile_size,  DataFormat::Float16_b );
-        CreateCircularBuffer( program, device, CB::c_in4,       core, in4_t,  in4_t*single_tile_size,  DataFormat::Float16_b );
-        CreateCircularBuffer( program, device, CB::c_intermed2, core, im2_t,  im2_t*single_tile_size,  DataFormat::Float16_b );
-        CreateCircularBuffer( program, device, CB::c_intermed0, core, im0_t,  im0_t*single_tile_size,  DataFormat::Float16_b );
-        CreateCircularBuffer( program, device, CB::c_intermed3, core, im3_t,  im3_t*single_tile_size,  DataFormat::Float16_b );
-        CreateCircularBuffer( program, device, CB::c_intermed4, core, im4_t,  im4_t*single_tile_size,  DataFormat::Float16_b );
-        CreateCircularBuffer( program, device, CB::c_intermed5, core, im5_t,  im5_t*single_tile_size,  DataFormat::Float16_b );
-        CreateCircularBuffer( program, device, CB::c_in5,       core, in5_t,  in5_t*single_tile_size,  DataFormat::Float16_b );
-        CreateCircularBuffer( program, device, CB::c_in6,       core, in6_t,  in6_t*single_tile_size,  DataFormat::Float16_b );
-        if (b) {
-            // x = a+b in this notation
-            // result = ln(x)*gamma + beta
-            // if there's no pre-add we use cb_in0 for x, otherwise a is pre-buffered into in0, added into im6, then im6 is used as x
-            // b is buffered into c_in1
-            CreateCircularBuffer( program, device, CB::c_intermed6, core, im6_t,  im6_t*single_tile_size,  DataFormat::Float16_b );
-            // c_in1 is input buffer for b
-            CreateCircularBuffer( program, device, CB::c_in1,       core, in1_t,  in1_t*single_tile_size,  DataFormat::Float16_b );
-        }
 
         union { float f; uint32_t u; } winv; winv.f = 1.0f / W; // bcast-w scaler
         union { float f; uint32_t u; } e; e.f = eps; // epsilon
-        uint32_t gamma_tiles = gamma ? gamma->volume() / TILE_HW : 0;
-        uint32_t beta_tiles = beta ? beta->volume() / TILE_HW : 0;
+        uint32_t gamma_tiles = gamma ? gamma.value().get().volume() / TILE_HW : 0;
+        uint32_t beta_tiles = beta ? beta.value().get().volume() / TILE_HW : 0;
         //std::cout << "Num gamma=" << num_gamma_tiles << " addr=" << gamma_dram_addr << std::endl;
         //std::cout << "Num beta=" << num_beta_tiles << " addr=" << beta_dram_addr << std::endl;
         uint32_t tile_offset = wtpc*Wt*icore;
@@ -226,20 +235,50 @@ Tensor layernorm_(const Tensor &a, const Tensor* b, float eps, const Tensor* gam
         WriteRuntimeArgsToDevice( device, writer_kernels, core, { dst_addr, 0, 0, wtpc*Wt, tile_offset } );
     }
 
-    CompileProgram(device, program, profile);
-    ConfigureDeviceWithProgram(device, program);
-    LaunchKernels(device, program);
+    return program;
+}
 
-    if (profile)
-        tt_metal::DumpDeviceProfileResults(device, program);
+void ResidualLayerNorm::validate(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
+    TT_ASSERT(input_tensors.size() > 0 and input_tensors.size() <= 4, "Must have between 1 to 4 input tensors");
+}
 
-    return output;
-} // layernorm
+std::vector<Shape> ResidualLayerNorm::compute_output_shapes(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0).get();
+    return {input_tensor.shape()};
+}
 
-Tensor layernorm(const Tensor &a, float eps, bool out_dram) { return layernorm_(a, nullptr, eps, nullptr, nullptr, out_dram); }
-Tensor layernorm_gamma(const Tensor &a, float eps, const Tensor& gamma, bool out_dram) { return layernorm_(a, nullptr, eps, &gamma, nullptr, out_dram); }
-Tensor layernorm_gamma_beta(const Tensor &a, float eps, const Tensor& gamma, const Tensor& beta, bool out_dram) { return layernorm_(a, nullptr, eps, &gamma, &beta, out_dram); }
-Tensor add_layernorm_gamma_beta(const Tensor &a, const Tensor& b, float eps, const Tensor& gamma, const Tensor& beta, bool out_dram) { return layernorm_(a, &b, eps, &gamma, &beta, out_dram); }
+std::vector<Tensor> ResidualLayerNorm::create_output_tensors(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
+    return operation::generic_create_output_tensors(*this, input_tensors);
+}
+
+Program ResidualLayerNorm::create_program(
+    const std::vector<std::reference_wrapper<const Tensor>>& input_tensors,
+    const std::vector<std::optional<std::reference_wrapper<const Tensor>>>& optional_input_tensors,
+    std::vector<Tensor> &output_tensors
+) const {
+    auto& a = input_tensors.at(0).get();
+    const auto b = optional_input_tensors.at(0);
+    const auto gamma = optional_input_tensors.at(1);
+    const auto beta = optional_input_tensors.at(2);
+    auto& output_tensor = output_tensors.at(0);
+    return layernorm_(a, b, gamma, beta, output_tensor, this->eps, this->out_dram);
+
+}
+
+Tensor layernorm(const Tensor &a, float eps, bool out_dram) {
+    return std::move(operation::run(ResidualLayerNorm{.eps=eps, .out_dram=out_dram}, {a}, {std::nullopt, std::nullopt, std::nullopt}).at(0));
+}
+Tensor layernorm_gamma(const Tensor &a, float eps, const Tensor& gamma, bool out_dram) {
+    return std::move(operation::run(ResidualLayerNorm{.eps=eps, .out_dram=out_dram}, {a}, {std::nullopt, gamma, std::nullopt}).at(0));
+}
+Tensor layernorm_gamma_beta(const Tensor &a, float eps, const Tensor& gamma, const Tensor& beta, bool out_dram) {
+    return std::move(operation::run(ResidualLayerNorm{.eps=eps, .out_dram=out_dram}, {a}, {std::nullopt, gamma, beta}).at(0));
+}
+Tensor add_layernorm_gamma_beta(const Tensor &a, const Tensor& b, float eps, const Tensor& gamma, const Tensor& beta, bool out_dram) {
+    return std::move(operation::run(ResidualLayerNorm{.eps=eps, .out_dram=out_dram}, {a}, {b, gamma, beta}).at(0));
+}
+
+
 
 }  // namespace ll_buda
 
