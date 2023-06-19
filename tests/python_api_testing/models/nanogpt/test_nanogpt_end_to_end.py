@@ -21,7 +21,7 @@ import python_api_testing.models.nanogpt.nanogpt_attention as nanogpt_attention
 import python_api_testing.models.nanogpt.nanogpt_model as nanogpt_model
 
 
-def run_nanogpt_model_test(device):
+def run_nanogpt_block_test(device):
     # Prepare input
 
     model_hf = GPT2LMHeadModel.from_pretrained('gpt2')
@@ -31,8 +31,8 @@ def run_nanogpt_model_test(device):
 
     test_in = torch.randint(10,700, (1,16) )
 
-    pt_model = model_hf
-    pt_out = pt_model.forward(test_in)
+    pt_attn = model_hf
+    pt_out = model_hf.forward(test_in)
 
     model_type = 'gpt2'
 
@@ -70,11 +70,11 @@ def run_nanogpt_model_test(device):
     assert does_pass
 
 
-def test_nanogpt_model():
+def test_nanogpt_block():
     device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
     tt_lib.device.InitializeDevice(device)
-    run_nanogpt_model_test(device)
+    run_nanogpt_block_test(device)
     tt_lib.device.CloseDevice(device)
 
 if __name__ == "__main__":
-    test_nanogpt_model()
+    test_nanogpt_block()
