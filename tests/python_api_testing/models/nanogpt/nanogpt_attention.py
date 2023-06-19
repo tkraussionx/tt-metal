@@ -73,6 +73,8 @@ class TtCausalSelfAttention(nn.Module):
         # manual implementation of attention
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
         att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
+        print('ATT----------')
+        print(att.shape)
         tt_att = nanogpt_utils.torch2tt_tensor(att, device)
 
         tt_att = fallback_ops.softmax(tt_att, dim=-1)

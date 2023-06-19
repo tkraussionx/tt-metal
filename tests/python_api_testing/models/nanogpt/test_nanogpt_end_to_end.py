@@ -31,10 +31,10 @@ import python_api_testing.models.nanogpt.nanogpt_model as nanogpt_model
 init_from = 'resume' # either 'resume' (from an out_dir) or a gpt2 variant (e.g. 'gpt2-xl')
 out_dir = 'out' # ignored if init_from is not 'resume'
 start = "\n" # or "<|endoftext|>" or etc. Can also specify a file, use as: "FILE:prompt.txt"
-num_samples = 10 # number of samples to draw
+num_samples = 1 # number of samples to draw
 max_new_tokens = 500 # number of tokens generated in each sample
 temperature = 0.8 # 1.0 = no change, < 1.0 = less random, > 1.0 = more random, in predictions
-top_k = 200 # retain only the top_k most likely tokens, clamp others to have 0 probability
+top_k = 1 # retain only the top_k most likely tokens, clamp others to have 0 probability
 seed = 1337
 device_select = 'cpu' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
 dtype = 'bfloat16' # 'float32' or 'bfloat16' or 'float16'
@@ -72,9 +72,20 @@ def run_nanogpt_model_test(device):
     encode = lambda s: enc.encode(s, allowed_special={"<|endoftext|>"})
     decode = lambda l: enc.decode(l)
 
+    text = 'Once upon a time '
+    start_ids = encode(text)
+    while (len(start_ids)%2==1):
+        text = text + ' '
+        start_ids = encode(text)
 
-    start_ids = encode('Once upon a time...')
+        print('Startiox')
+
+        print(start_ids)
+
+    #print(start_ids.shape)
     x = (torch.tensor(start_ids, dtype=torch.long, device='cpu')[None, ...])
+    print(x.shape)
+    #x = x.squeeze(0)
 
     for k in range(num_samples):
         y = tt_model.generate(x, device, max_new_tokens, temperature=temperature, top_k=top_k)

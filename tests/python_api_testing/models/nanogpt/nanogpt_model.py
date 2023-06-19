@@ -140,6 +140,8 @@ class TtGPT(nn.Module):
 
         return logits, loss
 
+
+
     def generate(self, idx, device, max_new_tokens, temperature=1.0, top_k=None):
             """
             Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
@@ -152,24 +154,29 @@ class TtGPT(nn.Module):
                 # forward the model to get the logits for the index in the sequence
                 tt_logits, _ = self.forward(idx_cond, device)
                 # pluck the logits at the final step and scale by desired temperature
-
+                print(tt_logits.shape())
                 logits = nanogpt_utils.tt2torch_tensor(tt_logits)
-
-                logits = logits[:, -1, :] / temperature
+                print('Logits')
+                print(logits.shape)
+                #logits = logits.squeeze(0)
+                #logits = logits[:, -1, :] / temperature
                 # optionally crop the logits to only the top k options
-                tt_logits = nanogpt_utils.torch2tt_tensor(logits, device)
-
+                #tt_logits = nanogpt_utils.torch2tt_tensor(logits, device)
+            # pluck the logits at the final step and scale by desired temperature
+                logits = logits[:, -1, :] / temperature
+            # optionally crop the logits to only the top k options
                 if top_k is not None:
                     v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
                     logits[logits < v[:, [-1]]] = -float('Inf')
-                # apply softmax to convert logits to (normalized) probabilities
-
-                tt_probs = fallback_ops.softmax(tt_logits, dim=-1)
-                probs = nanogpt_utils.tt2torch_tensor(tt_probs)
-
+            # apply softmax to convert logits to (normalized) probabilities
+                probs = F.softmax(logits, dim=-1)
+                print('P-SHAPEEE')
+                print(probs.shape)
+                probs = probs.squeeze(0)
+                print(probs)
                 # sample from the distribution
                 idx_next = torch.multinomial(probs, num_samples=1)
-                # append sampled index to the running sequence and continue
+            # append sampled index to the running sequence and continue
                 idx = torch.cat((idx, idx_next), dim=1)
 
             return idx
