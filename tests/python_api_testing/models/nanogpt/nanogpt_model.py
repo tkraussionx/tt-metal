@@ -71,6 +71,15 @@ class TtGPT(nn.Module):
         self.wpe = nn.Embedding(config.block_size, config.n_embd)
         self.drop = nn.Dropout(config.dropout)
 
+
+        self.wte.weight = torch.nn.Parameter(
+            state_dict[f"{base_address}.wte.weight"]
+        )
+
+        self.wpe.weight = torch.nn.Parameter(
+            state_dict[f"{base_address}.wpe.weight"]
+        )
+
         blocks = []
 
         for i in range(config.n_layer):
@@ -125,11 +134,8 @@ class TtGPT(nn.Module):
         x = nanogpt_utils.tt2torch_tensor(tt_x)
         x = x[:, [-1], :]
         tt_x = nanogpt_utils.torch2tt_tensor(x, device)
-        print('-------------sgapes')
-        print(tt_x.shape())
-        print(self.tt_weight_lm_head.shape())
 
-        logits = nanogpt_utils.tt_linear(tt_x, self.tt_weight_lm_head)
+        logits = nanogpt_utils.tt_linear(tt_x, weight=self.tt_weight_lm_head, bias=None)
         loss = None
 
         return logits, loss

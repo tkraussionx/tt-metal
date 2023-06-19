@@ -27,7 +27,6 @@ def run_nanogpt_block_test(device):
     model_hf = GPT2LMHeadModel.from_pretrained('gpt2')
     sd = model_hf.state_dict()
     model_hf.eval()
-
     torch.manual_seed(0)
 
     test_in = torch.randint(10,700, (1,16) )
@@ -64,9 +63,9 @@ def run_nanogpt_block_test(device):
     logger.info(pcc_message)
 
     if does_pass:
-        logger.info("nanogpt_block: Passed!")
+        logger.info("nanogpt_model: Passed!")
     else:
-        logger.warning("nanogpt_block: Failed!")
+        logger.warning("nanogpt_model: Failed!")
 
     assert does_pass
 
