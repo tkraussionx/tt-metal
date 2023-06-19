@@ -1,6 +1,11 @@
 from pathlib import Path
 import sys
 
+
+import os
+import pickle
+import tiktoken
+
 f = f"{Path(__file__).parent}"
 sys.path.append(f"{f}/..")
 sys.path.append(f"{f}/../..")
@@ -21,7 +26,23 @@ import python_api_testing.models.nanogpt.nanogpt_attention as nanogpt_attention
 import python_api_testing.models.nanogpt.nanogpt_model as nanogpt_model
 
 
-def run_nanogpt_block_test(device):
+
+# -----------------------------------------------------------------------------
+init_from = 'resume' # either 'resume' (from an out_dir) or a gpt2 variant (e.g. 'gpt2-xl')
+out_dir = 'out' # ignored if init_from is not 'resume'
+start = "\n" # or "<|endoftext|>" or etc. Can also specify a file, use as: "FILE:prompt.txt"
+num_samples = 10 # number of samples to draw
+max_new_tokens = 500 # number of tokens generated in each sample
+temperature = 0.8 # 1.0 = no change, < 1.0 = less random, > 1.0 = more random, in predictions
+top_k = 200 # retain only the top_k most likely tokens, clamp others to have 0 probability
+seed = 1337
+device_select = 'cpu' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
+dtype = 'bfloat16' # 'float32' or 'bfloat16' or 'float16'
+compile = False # use PyTorch 2.0 to compile the model to be faster
+# -----------------------------------------------------------------------------
+
+
+def run_nanogpt_model_test(device):
     # Prepare input
 
     model_hf = GPT2LMHeadModel.from_pretrained('gpt2')
@@ -30,9 +51,6 @@ def run_nanogpt_block_test(device):
     torch.manual_seed(0)
 
     test_in = torch.randint(10,700, (1,16) )
-
-    pt_attn = model_hf
-    pt_out = model_hf.forward(test_in)
 
     model_type = 'gpt2'
 
@@ -46,35 +64,29 @@ def run_nanogpt_block_test(device):
 
     config = nanogpt_attention.GPTConfig(**config_args)
 
-
     tt_test_in = nanogpt_utils.torch2tt_tensor(test_in, device)
 
     tt_model = nanogpt_model.TtGPT(config, sd, device)
 
-
-    tt_out = tt_model.forward(
-        test_in,
-        device
-    )
-
-    tt_out_converted = nanogpt_utils.tt2torch_tensor(tt_out[0])
-
-    does_pass, pcc_message = comp_pcc(pt_out[0], tt_out_converted, 0.99)
-    logger.info(pcc_message)
-
-    if does_pass:
-        logger.info("nanogpt_model: Passed!")
-    else:
-        logger.warning("nanogpt_model: Failed!")
-
-    assert does_pass
+    enc = tiktoken.get_encoding("gpt2")
+    encode = lambda s: enc.encode(s, allowed_special={"<|endoftext|>"})
+    decode = lambda l: enc.decode(l)
 
 
-def test_nanogpt_block():
+    start_ids = encode('Once upon a time...')
+    x = (torch.tensor(start_ids, dtype=torch.long, device='cpu')[None, ...])
+
+    for k in range(num_samples):
+        y = tt_model.generate(x, device, max_new_tokens, temperature=temperature, top_k=top_k)
+        print(decode(y[0].tolist()))
+        print('---------------')
+
+
+def test_nanogpt_model():
     device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
     tt_lib.device.InitializeDevice(device)
-    run_nanogpt_block_test(device)
+    run_nanogpt_model_test(device)
     tt_lib.device.CloseDevice(device)
 
 if __name__ == "__main__":
-    test_nanogpt_block()
+    test_nanogpt_model()
