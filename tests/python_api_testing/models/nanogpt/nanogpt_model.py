@@ -159,15 +159,17 @@ class TtGPT(nn.Module):
                 print('Logits')
                 print(logits.shape)
                 #logits = logits.squeeze(0)
+
                 #logits = logits[:, -1, :] / temperature
                 # optionally crop the logits to only the top k options
                 #tt_logits = nanogpt_utils.torch2tt_tensor(logits, device)
             # pluck the logits at the final step and scale by desired temperature
-                logits = logits[:, -1, :] / temperature
+                logits = logits[:, :, -1, :] / temperature
             # optionally crop the logits to only the top k options
                 if top_k is not None:
                     v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
                     logits[logits < v[:, [-1]]] = -float('Inf')
+
             # apply softmax to convert logits to (normalized) probabilities
                 probs = F.softmax(logits, dim=-1)
                 print('P-SHAPEEE')
@@ -177,6 +179,8 @@ class TtGPT(nn.Module):
                 # sample from the distribution
                 idx_next = torch.multinomial(probs, num_samples=1)
             # append sampled index to the running sequence and continue
+                print(idx.shape)
+                print(idx_next.shape)
                 idx = torch.cat((idx, idx_next), dim=1)
 
             return idx
