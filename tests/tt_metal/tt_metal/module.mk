@@ -17,6 +17,7 @@ TT_METAL_TESTS += \
 		 tests/tt_metal/ops/test_reduce_op \
 		 tests/tt_metal/ops/test_bcast_op \
 		 tests/tt_metal/ops/test_bmm_op \
+		 tests/tt_metal/ops/test_bmm_op_tilize_untilize \
 		 tests/tt_metal/ops/test_tilize_op \
 		 tests/tt_metal/ops/test_tilize_zero_padding \
 		 tests/tt_metal/ops/test_tilize_op_channels_last \
