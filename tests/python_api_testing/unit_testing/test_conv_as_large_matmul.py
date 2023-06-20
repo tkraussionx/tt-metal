@@ -39,7 +39,6 @@ import torch
         # (512, 256, 14, 14, 3, 3, 2, 2, 1, 1),
         # #K=512 C=512 H=7 W=7 R=3 S=3 U=1 V=1 PH=1 PW=1 dilation=1 groups=1
         # (512, 512, 7, 7, 3, 3, 1, 1, 1, 1),
-
         # channels = 3 padding
         (32, 3, 5, 5, 1, 1, 1, 1, 0, 0),
         # w/ conv padding
@@ -62,6 +61,7 @@ import torch
         (64, 64, 8, 8, 1, 1, 1, 1, 0, 0),
         # Hat = 8, Wat = 8, Wbt = 8
         (8*32, 8*32, 16, 16, 1, 1, 1, 1, 0, 0),
+        (320, 320, 32, 32, 3, 3, 1, 1, 1, 1),
     ),
 )
 def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w):

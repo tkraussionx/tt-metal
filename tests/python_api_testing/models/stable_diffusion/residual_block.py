@@ -17,6 +17,7 @@ from diffusers import StableDiffusionPipeline
 import tt_lib as ttl
 from tt_lib.fallback_ops import fallback_ops
 from python_api_testing.models.stable_diffusion.utils import make_linear
+from python_api_testing.models.conv_on_device_utils_new import is_conv_supported_on_device, run_conv_on_device_wrapper
 
 
 class TtResnetBlock2D(nn.Module):
@@ -55,8 +56,8 @@ class TtResnetBlock2D(nn.Module):
         self.up = up
         self.down = down
         self.output_scale_factor = output_scale_factor
-        self.device = device
-        self.host = host
+        self.device = ttl.device.GetDefaultDevice()
+        self.host = ttl.device.GetHost()
 
         if groups_out is None:
             groups_out = groups
@@ -68,7 +69,11 @@ class TtResnetBlock2D(nn.Module):
 
         conv1_weights = state_dict[f"{base_address}.conv1.weight"]
         conv1_bias = state_dict[f"{base_address}.conv1.bias"]
-        self.conv1 = fallback_ops.Conv2d(conv1_weights, conv1_bias, self.in_channels, self.out_channels, kernel_size=3, stride=1, padding=1)
+        self.conv1_params = [self.out_channels, self.in_channels, 3, 3, 1, 1, 1, 1, 1, 1]
+        if self.device != None and is_conv_supported_on_device(self.conv1_params):
+            self.conv1 = run_conv_on_device_wrapper(conv1_weights.reshape(-1).tolist(), self.conv1_params, self.device, self.host, conv1_bias.reshape(-1).tolist(), True, True)
+        else:
+            self.conv1 = fallback_ops.Conv2d(conv1_weights, conv1_bias, self.in_channels, self.out_channels, kernel_size=3, stride=1, padding=1)
 
 
         if temb_channels is not None:

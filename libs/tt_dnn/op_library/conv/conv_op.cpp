@@ -350,7 +350,9 @@ std::pair<vector<uint32_t>, vector<uint32_t>> generate_conv_activation_address_m
             }
             else {
                 uint32_t w = start_block_2d_index_w;
+                //cout << "start_block_2d_index_w=" << start_block_2d_index_w << endl;
                 uint32_t end_block_2d_index_w = start_block_2d_index_w + in0_block_w_datums - 1;
+                //cout << "end_block_2d_index_w=" << end_block_2d_index_w << endl;
                 assert(end_block_2d_index_w < matrix_width_padded);
                 while (w < end_block_2d_index_w) {
                     uint32_t src_address_offset_dram = 0;
@@ -373,7 +375,7 @@ std::pair<vector<uint32_t>, vector<uint32_t>> generate_conv_activation_address_m
                         uint32_t act_tensor_start_y = channel_stick_row_id_y * U;
                         uint32_t act_tensor_padded_x = act_tensor_start_x + (channel_stick_col_id % S);
                         uint32_t act_tensor_padded_y = act_tensor_start_y + (channel_stick_col_id / S);
-                        uint32_t read_size = min(channel_stick_size - channel_stick_offset, in0_block_w_datums);
+                        uint32_t read_size = min(channel_stick_size - channel_stick_offset, (end_block_2d_index_w+1)-w);
                         read_size_bytes = read_size * num_bytes_df;
                         if(act_tensor_padded_x < Pad_W || act_tensor_padded_x >= (Pad_W + conv_input_x) || act_tensor_padded_y < Pad_H || act_tensor_padded_y >= (Pad_H + conv_input_y)) {
                             // pad (conv padding)
@@ -399,6 +401,13 @@ std::pair<vector<uint32_t>, vector<uint32_t>> generate_conv_activation_address_m
                     address_map_current_group_size += 4;
                     dst_address_offset_l1 += read_size_bytes;
                     w += (read_size_bytes/num_bytes_df);
+                    if(w > end_block_2d_index_w+1) {
+                        cout << "w=" << w << endl;
+                        cout << "read_size_bytes=" << read_size_bytes << endl;
+                        cout << "end_block_2d_index_w=" << end_block_2d_index_w << endl;
+                        cout << "matrix_width=" << matrix_width << endl;
+                        cout << "matrix_width_padded=" << matrix_width_padded << endl;
+                    }
                     assert(w <= end_block_2d_index_w+1);
                 }
             }
@@ -538,15 +547,32 @@ Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<
     uint32_t in1_block_h = in0_block_w;
     uint32_t in1_block_num_tiles = in1_block_w * in1_block_h;
 
+    log_debug(tt::LogOp, "Hat (activation height in tiles): {}", Hat);
+    log_debug(tt::LogOp, "Wat (activation width in tiles): {}", Wat);
+    log_debug(tt::LogOp, "Wbt (weight width in tiles): {}", Wbt);
+    log_debug(tt::LogOp, "num_blocks_in0_h: {}", num_blocks_in0_h);
+    log_debug(tt::LogOp, "num_blocks_in0_w: {}", num_blocks_in0_w);
+    log_debug(tt::LogOp, "num_blocks_in1_w: {}", num_blocks_in1_w);
+    log_debug(tt::LogOp, "in0_block_h: {}", in0_block_h);
+    log_debug(tt::LogOp, "in0_block_h_datums: {}", in0_block_h_datums);
+    log_debug(tt::LogOp, "in0_block_w: {}", in0_block_w);
+    log_debug(tt::LogOp, "in0_block_w_datums: {}", in0_block_w_datums);
+    log_debug(tt::LogOp, "in1_num_subblocks: {}", in1_num_subblocks);
+    log_debug(tt::LogOp, "in1_block_num_tiles: {}", in1_block_num_tiles);
+    log_debug(tt::LogOp, "in1_block_w: {}", in1_block_w);
+    log_debug(tt::LogOp, "in1_block_h: {}", in1_block_h);
+    log_debug(tt::LogOp, "out_subblock_h: {}", out_subblock_h);
+    log_debug(tt::LogOp, "out_subblock_w: {}", out_subblock_w);
+
     // DTX conv activation transform data access pattern
     auto [act_address_map, act_address_map_metadata] = generate_conv_activation_address_map(a.shape(), conv_params, in0_block_h_datums, in0_block_w_datums, in1_block_w_datums,
                                                             num_blocks_in0_h, num_blocks_in0_w, num_blocks_in1_w, num_bytes_of_df);
-
+    log_info(tt::LogOp, "Done generating activation address map");
     // DTX conv weight transform data access pattern. Skip conv activation transform.
     auto [_, weight_address_map_raw]  = conv_transform(activation_shape, {(int) Wb, (int) activation_shape[0], (int) conv_params[0], (int) conv_params[1]}, conv_params,
                             in0_block_h_datums, in0_block_w_datums, in1_block_w_datums,
                             num_blocks_in0_h, num_blocks_in1_w, num_bytes_of_df, true);
-
+    log_info(tt::LogOp, "Done generating weight address map");
     // sanity check
     uint32_t num_dtx_groups = act_address_map_metadata[0];
     assert(weight_address_map_raw[0] == num_dtx_groups);

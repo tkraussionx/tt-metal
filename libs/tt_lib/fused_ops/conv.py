@@ -34,7 +34,7 @@ def conv(weight: List[Union[int, float]], conv_params, device, bias=None):
         bias_on_device = None
     else:
         bias_shape = [1,1,1,K]
-        bias_channels_padded_shape = [1, 1, 1, _nearest_32(K)]
+        bias_channels_padded_shape = [1, 1, 1, _nearest_y(_nearest_32(K), weight_block_w*32)]
         bias_ = tensor.Tensor(
             bias,
             bias_shape,
