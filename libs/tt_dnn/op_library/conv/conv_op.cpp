@@ -303,6 +303,85 @@ vector<uint32_t> compute_conv_as_mm_shape(vector<int> shape, vector<int> conv_pa
     return {1,num_rows_padded, num_cols_padded};
 }
 
+std::pair<vector<uint32_t>, vector<uint32_t>> conv_activation_address_map_generator(
+                            vector<uint32_t> activation_shape,
+                            vector<uint32_t> conv_params,
+                            uint32_t in0_block_h_datums,
+                            uint32_t in0_block_w_datums,
+                            uint32_t in1_block_w_datums,
+                            uint32_t num_blocks_in0_h,
+                            uint32_t num_blocks_in0_w,
+                            uint32_t num_blocks_in1_w,
+                            uint32_t num_bytes_df) {
+    vector<uint32_t> address_map;
+    vector<uint32_t> address_map_metadata;
+    uint32_t channel_stick_size = activation_shape[0];
+    uint32_t conv_input_x = activation_shape[2];
+    uint32_t conv_input_y = activation_shape[1];
+    uint32_t conv_input_z = activation_shape[0];
+    uint32_t R = conv_params[0];
+    uint32_t S = conv_params[1];
+    uint32_t U = conv_params[2];
+    uint32_t V = conv_params[3];
+    uint32_t Pad_H = conv_params[4];
+    uint32_t Pad_W = conv_params[5];
+    int conv_output_h = ((conv_input_x - R + (2 * Pad_H)) / U) + 1;
+    int conv_output_w = ((conv_input_y - S + (2 * Pad_W)) / V) + 1;
+    uint32_t matrix_height = conv_output_h * conv_output_w;
+    uint32_t matrix_width = conv_input_z * R * S;
+    uint32_t matrix_height_padded = (uint32_t) (ceil((double) matrix_height / (double) in0_block_h_datums ) * in0_block_h_datums);
+    uint32_t matrix_width_padded = (uint32_t) (ceil((double) matrix_width / (double) in0_block_w_datums ) * in0_block_w_datums);
+
+    uint32_t num_groups = num_blocks_in0_h * num_blocks_in0_w, num_blocks_in1_w;
+    address_map_metadata.push_back(num_groups);
+    for(uint32_t group_idx = 0; group_idx < num_groups; group_idx++) {
+        uint32_t block_idx_h = (uint32_t) (group_idx / num_blocks_in0_w) / (num_blocks_in1_w);
+        uint32_t block_idx_w = (uint32_t) (group_idx % num_blocks_in0_w);
+        uint32_t block_idx = (block_idx_h * num_blocks_in0_w) + block_idx_w;
+        cout << "group_idx=" << group_idx << endl;
+        cout << "block_idx_h=" << block_idx_h << endl;
+        cout << "block_idx_w=" << block_idx_w << endl;
+        cout << "block_idx=" << block_idx << endl;
+        uint32_t start_block_2d_index_h = block_idx_h * in0_block_h_datums;
+        uint32_t start_block_2d_index_w = block_idx_w * in0_block_w_datums;
+        uint32_t start_block_2d_index = (start_block_2d_index_h * in0_block_w_datums * num_blocks_in0_w) + start_block_2d_index_w;
+        cout << "start_block_2d_index_h=" << start_block_2d_index_h << endl;
+        cout << "start_block_2d_index_w=" << start_block_2d_index_w << endl;
+        cout << "start_block_2d_index=" << start_block_2d_index << endl;
+        for(uint32_t h_b = 0; h_b < in0_block_h_datums; h_b++) {
+            uint32_t h = start_block_2d_index_h + h_b;
+            if (h >= matrix_height) {
+                // pad
+            }
+            else {
+                if (start_block_2d_index_w < matrix_width) {
+                    uint32_t w = start_block_2d_index_w;
+                    uint32_t end_block_2d_index_w = start_block_2d_index_w + in0_block_w_datums - 1;
+                    while (w < end_block_2d_index_w) {
+                        if (w >= matrix_width) {
+                            // pad
+                        }
+                        else {
+                            uint32_t channel_stick_offset = start_block_2d_index_w % channel_stick_size;
+                            uint32_t channel_stick_col_id = start_block_2d_index_w / channel_stick_size;
+                            uint32_t channel_stick_row_id = h;
+                            assert(channel_stick_offset % (32/num_bytes_df) == 0); // DRAM read address must be aligned to 32 bytes
+                            uint32_t channel_stick_row_id_x = channel_stick_row_id % conv_output_w;
+                            uint32_t channel_stick_row_id_y = channel_stick_row_id / conv_output_w;
+                            uint32_t act_tensor_channel_id_x = channel_stick_row_id_x * V;
+                             uint32_t act_tensor_channel_id_y = channel_stick_row_id_x * U;
+                            uint32_t read_size = min(channel_stick_size - channel_stick_offset, in0_block_w_datums);
+
+                        }
+                    }
+                }
+            }
+
+        }
+
+    }
+
+}
 std::pair<vector<uint32_t>, vector<uint32_t>> populate_address_map_vectors_for_reader_kernel(vector<uint32_t> address_map_raw) {
     // This function is called twice i.e., for activation and weight address maps
     // "address_map_raw" is the DTX address map vector returned from DTX "conv_transform" function.
