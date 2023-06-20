@@ -26,13 +26,25 @@ import python_api_testing.models.nanogpt.nanogpt_attention as nanogpt_attention
 import python_api_testing.models.nanogpt.nanogpt_model as nanogpt_model
 
 
+def pad_input_2(tensor, value):
+    len = tensor.shape[1]
+
+    if len % 2 == 0:
+        return tensor
+
+    padded_len = ((len // 2) + 1) * 2
+
+    pad_tensor = (value * torch.ones(tensor.shape[0], padded_len - len)).to(torch.long)
+    tensor = torch.cat([tensor, pad_tensor], dim=1)
+
+    return tensor
 
 # -----------------------------------------------------------------------------
 init_from = 'resume' # either 'resume' (from an out_dir) or a gpt2 variant (e.g. 'gpt2-xl')
 out_dir = 'out' # ignored if init_from is not 'resume'
 start = "\n" # or "<|endoftext|>" or etc. Can also specify a file, use as: "FILE:prompt.txt"
 num_samples = 1 # number of samples to draw
-max_new_tokens = 500 # number of tokens generated in each sample
+max_new_tokens = 50 # number of tokens generated in each sample
 temperature = 0.8 # 1.0 = no change, < 1.0 = less random, > 1.0 = more random, in predictions
 top_k = None # retain only the top_k most likely tokens, clamp others to have 0 probability
 seed = 1337
@@ -82,15 +94,20 @@ def run_nanogpt_model_test(device):
 
         print(start_ids)
 
+
+    #attention_mask = pad_input_2(tokenized.attention_mask, 0)
+
     #print(start_ids.shape)
     x = (torch.tensor(start_ids, dtype=torch.long, device='cpu')[None, ...])
     print(x.shape)
     #x = x.squeeze(0)
 
-    for k in range(num_samples):
-        y = tt_model.generate(x, device, max_new_tokens, temperature=temperature, top_k=top_k)
-        print(decode(y[0].tolist()))
-        print('---------------')
+    print('BEGIN-----')
+    print('X-SHAPE-------')
+    print(x.shape)
+        #x = pad_input_2(x, 0)
+    y = tt_model.generate(x, device, max_new_tokens, temperature=temperature, top_k=top_k)
+    print(decode(y[0].tolist()))
 
 
 def test_nanogpt_model():

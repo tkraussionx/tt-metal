@@ -9,11 +9,35 @@ import python_api_testing.models.nanogpt.nanogpt_attention as nanogpt_attention
 import python_api_testing.models.nanogpt.nanogpt_block as nanogpt_block
 from tt_lib.fallback_ops import fallback_ops
 
+import numpy as np
+
 from dataclasses import dataclass
 import math
 
 from transformers import GPT2LMHeadModel
 
+
+def pad_input_tensor(tensor, value, multiple):
+    print('inside---')
+    tensor = torch.transpose(tensor, 0, 1)
+    print(tensor.shape)
+    len = tensor.shape[1]
+
+    if len % multiple == 0:
+        tensor = torch.transpose(tensor, 0, 1)
+
+        return tensor
+
+    padded_len = ((len // multiple) + 1) * multiple
+
+    pad_tensor = (value * torch.ones(tensor.shape[0], padded_len - len)).to(torch.long)
+    tensor = torch.cat([tensor, pad_tensor], dim=1)
+    print('DONE---')
+    print(tensor.shape)
+
+    tensor = torch.transpose(tensor, 0, 1)
+
+    return tensor
 
 @dataclass
 class GPTConfig:
@@ -25,6 +49,20 @@ class GPTConfig:
     dropout: float = 0.0
     bias: bool = True  # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
 
+def pad_2(tensor, value):
+    print('Shape')
+    print(tensor.shape)
+    len = tensor.shape[2]
+
+    if len % 2 == 0:
+        return tensor
+
+    padded_len = len + 1
+
+    pad_tensor = (value * torch.ones(tensor.shape[0], padded_len - len)).to(torch.long)
+    tensor = torch.cat([tensor, pad_tensor], dim=1)
+
+    return tensor
 
 """
 class GPT(nn.Module):
@@ -108,7 +146,7 @@ class TtGPT(nn.Module):
         self.wte.weight = nn.Parameter(self.lm_weight) # https://paperswithcode.com/method/weight-tying
 
 
-    def forward(self, idx, device):
+    def forward(self, idx, device, mask=None):
         b, t = idx.shape
         assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
         pos = torch.arange(0, t, dtype=torch.long).unsqueeze(0) # shape (1, t)
@@ -125,10 +163,19 @@ class TtGPT(nn.Module):
         sum = nanogpt_utils.tt2torch_tensor(tt_sum)
 
         x = self.drop(sum)
-        tt_x = nanogpt_utils.torch2tt_tensor(x, device)
+        print('UNPADDED!!!-----')
+        print(x.shape)
+        x = x.squeeze(0)
+        x = x.squeeze(0)
+        a = pad_input_tensor(x, 0, 2)
+
+        print('PADDED______X')
+        print(a.shape)
+
+        tt_x = nanogpt_utils.torch2tt_tensor(a, device)
 
         for block in self.h:
-            tt_x = block.forward(tt_x, device)
+            tt_x = block.forward(tt_x, device, mask)
 
         tt_x = self.ln_f(tt_x)
         x = nanogpt_utils.tt2torch_tensor(tt_x)
@@ -142,7 +189,8 @@ class TtGPT(nn.Module):
 
 
 
-    def generate(self, idx, device, max_new_tokens, temperature=1.0, top_k=None):
+
+    def generate(self, idx, device, max_new_tokens, temperature=1.0, top_k=None, mask=None):
             """
             Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
             the sequence max_new_tokens times, feeding the predictions back into the model each time.
@@ -152,7 +200,11 @@ class TtGPT(nn.Module):
                 # if the sequence context is growing too long we must crop it at block_size
                 idx_cond = idx if idx.size(1) <= self.config.block_size else idx[:, -self.config.block_size:]
                 # forward the model to get the logits for the index in the sequence
-                tt_logits, _ = self.forward(idx_cond, device)
+
+
+                #mask = pad_2(torch.zeros(idx.shape()))
+
+                tt_logits, _ = self.forward(idx_cond, device, mask)
                 # pluck the logits at the final step and scale by desired temperature
                 print(tt_logits.shape())
                 logits = nanogpt_utils.tt2torch_tensor(tt_logits)
