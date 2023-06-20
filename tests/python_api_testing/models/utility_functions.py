@@ -38,7 +38,7 @@ def get_oom_of_float(float_lst):
 
 @deprecated
 def ttP(x, count=4, offset=0, stride=1):
-    utility_functions_new.x, count, offset, stride)
+    utility_functions_new.ttP(x, count, offset, stride)
 
 @deprecated
 def enable_compile_cache():
