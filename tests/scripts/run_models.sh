@@ -48,10 +48,7 @@ env pytest tests/python_api_testing/models/synthetic_gradients -k linear_test
 env pytest tests/python_api_testing/models/synthetic_gradients -k block_test
 env pytest tests/python_api_testing/models/synthetic_gradients -k full_inference
 
-env pytest tests/python_api_testing/models/llama -k llama_layer_norm
-env pytest tests/python_api_testing/models/llama -k llama_mlp
-env pytest tests/python_api_testing/models/llama -k llama_attention
-env pytest tests/python_api_testing/models/llama -k llama_decoder
+env pytest tests/python_api_testing/models/llama_split/tests -k llama_split_perf
 
 env pytest tests/python_api_testing/models/whisper -k whisper_attention
 env pytest tests/python_api_testing/models/whisper -k WhipserEncoderLayer_inference
