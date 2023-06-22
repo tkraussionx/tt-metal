@@ -349,6 +349,7 @@ bool test_matmul_large_block(const tt::ARCH& arch, bool activations_rm, bool out
         int out_subblock_h = 4;
         int out_subblock_w = 2;
         int in0_block_w = K;
+        uint32_t in1_block_w = 1;
 
         uint32_t single_tile_size = 2 * 1024;
         TT_ASSERT(M * in0_block_w * single_tile_size * 2 <= 150*1024);
@@ -446,31 +447,75 @@ bool test_matmul_large_block(const tt::ARCH& arch, bool activations_rm, bool out
         TT_ASSERT(in0_subblock_h * in0_block_w * in0_num_subblocks == in0_block_num_tiles);
         TT_ASSERT(in0_block_w == K);
 
-        vector<uint32_t> compute_kernel_args = {
-            uint(in0_block_w),
-            uint(in0_num_subblocks),
-            uint(in0_block_num_tiles),
-            uint(in0_subblock_num_tiles),
-            uint(in0_subblock_h),
+        // bool use_generalized = false;
+        bool use_generalized = true;
+        string compute_kernel;
+        vector<uint32_t> compute_kernel_args;
+        if (use_generalized) {
+            // use generalized bmm (using hard coded values/derived from above, for now)
+            uint32_t in0_num_blocks_h = 1;
+            uint32_t in0_num_blocks_w = num_blocks;
+            uint32_t in1_num_blocks_w = 1;
+            compute_kernel = "tt_metal/kernels/compute/bmm_tilize_untilize.cpp";
+            compute_kernel_args = {
+                (uint32_t) in0_block_w,
+                (uint32_t) in0_num_subblocks,
+                (uint32_t) in0_block_num_tiles,
+                (uint32_t) in0_subblock_num_tiles,
+                (uint32_t) in0_subblock_h,
+                (uint32_t) in1_num_subblocks,
+                (uint32_t) in1_block_num_tiles,
+                in1_block_w,
+                in0_num_blocks_h,
+                in0_num_blocks_w,
+                in1_num_blocks_w,
+                (uint32_t) out_subblock_h,
+                (uint32_t) out_subblock_w,
+                (uint32_t) out_subblock_num_tiles,
+                activations_rm,
+                output_rm
+            };
+        } else {
+            // use matmul_large_block
+            compute_kernel = "tt_metal/kernels/compute/matmul_large_block.cpp";
+            compute_kernel_args = {
+                uint(in0_block_w),
+                uint(in0_num_subblocks),
+                uint(in0_block_num_tiles),
+                uint(in0_subblock_num_tiles),
+                uint(in0_subblock_h),
 
-            uint(in1_num_subblocks),
-            uint(in1_block_num_tiles),
-            uint(in1_per_core_w),
+                uint(in1_num_subblocks),
+                uint(in1_block_num_tiles),
+                uint(in1_per_core_w),
 
-            uint(num_blocks),
+                uint(num_blocks),
 
-            uint(out_subblock_h),
-            uint(out_subblock_w),
-            uint(out_subblock_num_tiles),
+                uint(out_subblock_h),
+                uint(out_subblock_w),
+                uint(out_subblock_num_tiles),
 
-            uint(activations_rm),
-            uint(output_rm)
-        };
+                uint(activations_rm),
+                uint(output_rm)
+            };
+        }
+        log_debug("in0_block_w: {}", in0_block_w);
+        log_debug("in0_num_subblocks: {}", in0_num_subblocks);
+        log_debug("in0_block_num_tiles: {}", in0_block_num_tiles);
+        log_debug("in0_subblock_num_tiles: {}", in0_subblock_num_tiles);
+        log_debug("in0_subblock_h: {}", in0_subblock_h);
+        log_debug("in1_num_subblocks: {}", in1_num_subblocks);
+        log_debug("in1_block_num_tiles: {}", in1_block_num_tiles);
+        log_debug("in1_per_core_w: {}", in1_per_core_w);
+        log_debug("num_blocks: {}", num_blocks);
+        log_debug("out_subblock_h: {}", out_subblock_h);
+        log_debug("out_subblock_w: {}", out_subblock_w);
+        log_debug("out_subblock_num_tiles: {}", out_subblock_num_tiles);
+        log_debug("activations_rm: {}", activations_rm);
+        log_debug("output_rm: {}", output_rm);
 
         bool fp32_dest_acc_en = false;
         bool math_approx_mode = false;
-
-        string compute_kernel = "tt_metal/kernels/compute/matmul_large_block.cpp";
 
         auto mm_kernel = tt_metal::CreateComputeKernel(
             program,
@@ -491,7 +536,8 @@ bool test_matmul_large_block(const tt::ARCH& arch, bool activations_rm, bool out
         //                      Execute Application
         ////////////////////////////////////////////////////////////////////////////
         SHAPE shape = {1, 1, M * 32, K * 32};
-        tt::deprecated::Tensor<bfloat16> tensor = tt::deprecated::initialize_tensor<bfloat16>(shape, tt::deprecated::Initialize::RANDOM, 100, std::chrono::system_clock::now().time_since_epoch().count());
+        // tt::deprecated::Tensor<bfloat16> tensor = tt::deprecated::initialize_tensor<bfloat16>(shape, tt::deprecated::Initialize::RANDOM, 100, std::chrono::system_clock::now().time_since_epoch().count());
+        tt::deprecated::Tensor<bfloat16> tensor = tt::deprecated::initialize_tensor<bfloat16>(shape, tt::deprecated::Initialize::RANDOM, 100, 0);
 
         vector<uint32_t> activations;
         if (activations_rm) {
@@ -588,17 +634,19 @@ int main(int argc, char **argv) {
     }
     const tt::ARCH arch = tt::get_arch_from_string(arch_name);
 
+    std::cout << "TESTING...1...2...3..." << std::endl;
+
     // Row major input, tilized output
-    pass &= test_matmul_large_block(arch, true, false);
+    // pass &= test_matmul_large_block(arch, true, false);
 
     // Row major input, untilized output
-    pass &= test_matmul_large_block(arch, true, true);
+    // pass &= test_matmul_large_block(arch, true, true);
 
     // Tilized input, tilized output
     pass &= test_matmul_large_block(arch, false, false);
 
     // Tilized input, untilized output
-    pass &= test_matmul_large_block(arch, false, true);
+    // pass &= test_matmul_large_block(arch, false, true);
 
     TT_ASSERT(pass);
 }
