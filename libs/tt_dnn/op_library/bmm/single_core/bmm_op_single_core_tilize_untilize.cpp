@@ -3,7 +3,7 @@
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
 
-// #include "llrt/tt_debug_print_server.hpp"
+#include "llrt/tt_debug_print_server.hpp"
 // #include "hostdevcommon/debug_print_common.h"
 
 // #include "tools/tt_gdb/tt_gdb.hpp"
@@ -28,8 +28,8 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
     // buffer indices
     uint32_t in0_cb                                 = CB::c_in0;
     uint32_t in1_cb                                 = CB::c_in1;
-    uint32_t tilize_mode_tilized_in0_cb             = CB::c_intermed0;
-    uint32_t matmul_partials_cb                     = CB::c_intermed1;
+    uint32_t matmul_partials_cb                     = CB::c_intermed0;
+    uint32_t tilize_mode_tilized_in0_cb             = CB::c_intermed1;
     uint32_t untilize_mode_final_matmul_partials_cb = CB::c_intermed2;
     uint32_t untilize_mode_reblock_cb               = CB::c_intermed3;
     uint32_t out_cb                                 = CB::c_out0;
@@ -213,7 +213,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
 
     // start debug server for kernel dprint
     // int hart_mask = DPRINT_HART_NC | DPRINT_HART_BR;
-    // tt_start_debug_print_server(device->cluster(), {0}, {debug_core});
+    tt_start_debug_print_server(device->cluster(), {0}, {debug_core});
 
     // tt_gdb(device, 0, {core}, {"myop"});
 
@@ -280,7 +280,6 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
         log_debug("in0_block_num_tiles: {}", in0_block_num_tiles);
         log_debug("in0_num_subblocks: {}", in0_num_subblocks);
         log_debug("in0_subblock_num_tiles: {}", in0_subblock_num_tiles);
-        log_debug("in0_df: {}", in0_df);
         // in1
         log_debug("in1_dram_addr: {}", in1_dram_addr);
         log_debug("in1_width_ntiles: {}", in1_width_ntiles);
@@ -291,16 +290,18 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
         log_debug("in1_block_h: {}", in1_block_h);
         log_debug("in1_num_blocks_w: {}", in1_num_blocks_w);
         log_debug("in1_num_blocks_h: {}", in1_num_blocks_h);
-        log_debug("in1_df: {}", in1_df);
         // out
         log_debug("out_dram_addr: {}", out_dram_addr);
         log_debug("out_subblock_height_ntiles: {}", out_subblock_height_ntiles);
         log_debug("out_subblock_width_ntiles: {}", out_subblock_width_ntiles);
         log_debug("out_subblock_ntiles: {}", out_subblock_ntiles);
-        log_debug("out_df: {}", out_df);
         // extra
         log_debug("out size: {}", dst_dram_buffer->size());
         log_debug("out pagesize: {}", dst_dram_buffer->page_size());
+        // data formats
+        log_debug("in0_df: {}", in0_df);
+        log_debug("in1_df: {}", in1_df);
+        log_debug("out_df: {}", out_df);
     }
 
     create_cb_bmm_single_core_tilize_untilize(
@@ -427,9 +428,9 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
             static_cast<uint32_t>(out_df)
         };
     }
-    for (auto param_val : writer_rt_args) {
-        log_debug("==> {}", param_val);
-    }
+    // for (auto param_val : writer_rt_args) {
+    //     log_debug("==> {}", param_val);
+    // }
     auto writer = CreateDataMovementKernel(
         program,                        // program
         writer_kernel,                  // file name

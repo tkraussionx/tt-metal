@@ -23,28 +23,30 @@ TILE_HEIGHT = TILE_WIDTH = 32
 ## parameters
 # matrix sizes as number of blocks along h and w:
 a_height_nblocks = [1]  #[1, 7]
-a_width_nblocks = [7]   #[1, 7]
+a_width_nblocks = [2]   #[1, 7]
 b_width_nblocks = [1]   #[1, 7]
 # block sizes as number of tiles along h and w:
-a_block_height_ntiles = [4]
-a_block_width_ntiles = [4]
-b_block_width_ntiles = [16]
+a_block_height_ntiles = [1]
+a_block_width_ntiles = [1]
+b_block_width_ntiles = [1]
 # output sublobcking per block:
-out_subblock_height_ntiles = [4] ## == a_block_height_ntiles, <= 8
-out_subblock_width_ntiles = [2]  ## == b_block_width_ntiles, <= 8
-# tilize_a = [False]  #[True, False]
-tilize_a = [True, False]
-# untilize_out = [False]  #[True, False]
-untilize_out = [True, False]
+out_subblock_height_ntiles = [1] ## == a_block_height_ntiles, <= 8
+out_subblock_width_ntiles = [1]  ## == b_block_width_ntiles, <= 8
+tilize_a = [False]  #[True, False]
+# tilize_a = [True]
+untilize_out = [False]  #[True, False]
+# untilize_out = [True]
 
-# dtypes = [ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16]
-# dtypes = [ttl.tensor.DataType.BFLOAT8_B]
+# a_dtype = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
+# a_dtype = [ttl.tensor.DataType.BFLOAT16]
+a_dtype = [ttl.tensor.DataType.BFLOAT8_B]
 
-a_dtype = [ttl.tensor.DataType.BFLOAT16]  #, ttl.tensor.DataType.BFLOAT8_B]
-# a_dtype = [ttl.tensor.DataType.BFLOAT8_B]
-b_dtype = [ttl.tensor.DataType.BFLOAT16]    #, ttl.tensor.DataType.BFLOAT8_B]
+# b_dtype = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
+b_dtype = [ttl.tensor.DataType.BFLOAT16]
 # b_dtype = [ttl.tensor.DataType.BFLOAT8_B]
-out_dtype = [ttl.tensor.DataType.BFLOAT16]  #, ttl.tensor.DataType.BFLOAT8_B]
+
+# out_dtype = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
+out_dtype = [ttl.tensor.DataType.BFLOAT16]
 # out_dtype = [ttl.tensor.DataType.BFLOAT8_B]
 
 
@@ -100,9 +102,11 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
     out_shape = [a_batch, a_channel, a_height, b_width]
 
     torch.manual_seed(0)
+
     a = torch.randn(a_shape, dtype=torch.bfloat16).float()
-    # a = torch.zeros(a_shape, dtype=torch.bfloat16).float()
     b = torch.randn(b_shape, dtype=torch.bfloat16).float()
+
+    # a = torch.zeros(a_shape, dtype=torch.bfloat16).float()
     # b = torch.zeros(b_shape, dtype=torch.bfloat16).float()
 
     ## tensor a
@@ -139,7 +143,7 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
         pass
 
     torch.set_printoptions(
-       precision=2, threshold=10000,
+       precision=2, threshold=1000,
        sci_mode=False, edgeitems=80, linewidth=400)
 
     # tta_pytorch = untilize(torch.tensor(tta.to(host).data()).reshape(a_shape))
@@ -161,7 +165,7 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
     else:
         out_pytorch = torch.tensor(out.data()).reshape(out_shape)
 
-    # print(f'returned output: {out_pytorch[0][0]}')
+    print(f'returned output: {out_pytorch[0][0]}')
 
     ttl.device.CloseDevice(device)
 

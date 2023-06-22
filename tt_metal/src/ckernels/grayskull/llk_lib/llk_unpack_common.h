@@ -6,6 +6,7 @@
 #include "cunpack_common.h"
 #include "llk_param_structs.h"
 #include "llk_io_unpack.h"
+#include "debug_print.h"
 
 #ifdef PERF_DUMP
 #include "ckernel_perf_api.h"
@@ -73,6 +74,10 @@ inline void llk_unpack_reconfig_data_format(const std::uint32_t srca_old_operand
     std::uint32_t old_srcb_operand_id = get_operand_id(srcb_old_operand);
     std::uint32_t new_srcb_operand_id = get_operand_id(srcb_new_operand);
 
+    // DPRINT << "OLD A: " << old_srca_operand_id << " [" << (int) unpack_src_format[old_srca_operand_id]
+    //        << "], NEW A: " << new_srca_operand_id << " [" << (int) unpack_src_format[new_srca_operand_id]
+    //        << "]" << ENDL();
+    // DPRINT << "OLD B: " << old_srcb_operand_id << ", NEW B: " << new_srcb_operand_id << ENDL();
 
     if((unpack_src_format[old_srca_operand_id] != unpack_src_format[new_srca_operand_id]) && (unpack_src_format[old_srcb_operand_id] != unpack_src_format[new_srcb_operand_id])) {
 
@@ -101,7 +106,7 @@ inline void llk_unpack_reconfig_data_format(const std::uint32_t srca_old_operand
 
         uint32_t alu_config_data = gl_alu_format_spec_reg;
 
-        gl_alu_format_spec_reg = cfg_rmw_mmio_rd_tensix_wr(ALU_FORMAT_SPEC_REG_SrcA_val_ADDR32, ALU_FORMAT_SPEC_REG1_SrcB_SHAMT, ALU_FORMAT_SPEC_REG1_SrcB_MASK, unpack_dst_format[new_srcb_operand_id], alu_config_data);
+        gl_alu_format_spec_reg = cfg_rmw_mmio_rd_tensix_wr(ALU_FORMAT_SPEC_REG_SrcB_val_ADDR32, ALU_FORMAT_SPEC_REG1_SrcB_SHAMT, ALU_FORMAT_SPEC_REG1_SrcB_MASK, unpack_dst_format[new_srcb_operand_id], alu_config_data);
 
         reconfig_unpacker_data_format(new_srcb_operand_id, THCON_SEC1_REG0_TileDescriptor_ADDR32, THCON_SEC1_REG2_Out_data_format_ADDR32);
     }

@@ -105,13 +105,13 @@ void MAIN {
     // CB indices
     uint32_t in0_cb_id                                = CB::c_in0;
     uint32_t in1_cb_id                                = CB::c_in1;
-    uint32_t tilized_in0_cb_id                        = CB::c_intermed0;    // valid only when tilize_in0 == true
-    uint32_t matmul_partials_cb                       = CB::c_intermed1;
+    uint32_t matmul_partials_cb                       = CB::c_intermed0;
+    uint32_t tilized_in0_cb_id                        = CB::c_intermed1;    // valid only when tilize_in0 == true
     uint32_t untilize_mode_final_matmul_partials_cb   = CB::c_intermed2;
     uint32_t untilize_mode_reblock_cb                 = CB::c_intermed3;
     uint32_t out_cb_id                                = CB::c_out0;
 
-    mm_init();
+    mm_init(in0_cb_id, in1_cb_id, out_cb_id);
     for(uint32_t in0_block_h_i = 0; in0_block_h_i < in0_num_blocks_h; ++in0_block_h_i) {
         for(uint32_t in1_block_w_i = 0; in1_block_w_i < in1_num_blocks_w; ++in1_block_w_i) {
             bool enable_reload = false;
@@ -132,15 +132,21 @@ void MAIN {
                     for (uint32_t in1_subblock_i = 0; in1_subblock_i < in1_num_subblocks; ++in1_subblock_i) {
                         acquire_dst(DstMode::Half);
                         if (enable_reload) {
-                            // copy_tile_to_dst_init_short_try(matmul_partials_cb);
-                            copy_tile_to_dst_init_short();
+                            // copy_tile_to_dst_init_short();
+                            // copy_tile_init();
+
+                            // Reconfigure fp8 input -> fp16
+                            copy_tile_to_dst_init_short_with_dt(matmul_partials_cb);
                             cb_wait_front(matmul_partials_cb, out_subblock_num_tiles);
                             for (uint32_t i = 0; i < out_subblock_num_tiles; ++i) {
                                 copy_tile(matmul_partials_cb, i, i);
                             }
                             cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
-                            // mm_init_short_try(last_out ? out_cb_id : matmul_partials_cb);
-                            mm_init_short();
+                            // mm_init_short();
+                            // mm_init();
+
+                            // Reconfigure srcA back to fp8
+                            mm_init_short_with_dt(matmul_partials_cb);
                         } // enable_reload
                         // Compute output sub-block from in0_subblock x in1_subblock
                         int dst_index = 0;
@@ -185,10 +191,11 @@ void MAIN {
                     in0_index_subblock_offset += in0_subblock_num_tiles;
                 }
 
-                if (spill) enable_reload = true;
-
                 cb_pop_front(tilize_in0 ? tilized_in0_cb_id : in0_cb_id, in0_block_num_tiles);
                 cb_pop_front(in1_cb_id, in1_block_num_tiles);
+
+                // if partial results are computed, need to reload to accumulate
+                if (spill) enable_reload = true;
             } // for in0_num_blocks_w
         } // for in1_num_blocks_w
     } // for in0_num_blocks_h

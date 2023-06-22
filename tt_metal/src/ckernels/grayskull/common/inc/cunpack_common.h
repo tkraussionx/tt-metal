@@ -3,6 +3,7 @@
 #include "ckernel.h"
 #include "ckernel_globals.h"
 #include "fw_debug.h"
+#include "debug_print.h"
 
 #ifdef PERF_DUMP
 #include "perf_res_decouple.h"
@@ -15,8 +16,8 @@ namespace ckernel::unpacker
 {
    constexpr uint32_t OPERAND_BASE_ID = 0;
    constexpr uint32_t INTERMEDIATE_BASE_ID = 24;
-   constexpr uint32_t TILE_DESC_SIZE = 2; //Unpacker descriptor size in dwords
-   constexpr uint32_t CONFIG_SIZE = 2; //Unpacker configuration size in dwords
+   constexpr uint32_t TILE_DESC_SIZE = 4; //Unpacker descriptor size in dwords
+   constexpr uint32_t CONFIG_SIZE = 3; //Unpacker configuration size in dwords
 
    // Unpack tile descriptor
    typedef struct {
@@ -160,11 +161,11 @@ namespace ckernel::unpacker
       // Get pointer to registers for current state ID
       volatile uint *cfg = get_cfg_pointer();
 
-    uint unpA_ch1_x_stride = (uint)(unpack_dst_format[unpA_operand] & 0x3) == (uint)DataFormat::Float32   ? 4
-                             : (uint)(unpack_dst_format[unpA_operand] & 0x3) == (uint)DataFormat::Float16 ? 2
-                                                                                                          : 1;
-    uint unpB_ch1_x_stride = (uint)(unpack_dst_format[unpB_operand] & 0x3) == (uint)DataFormat::Float32   ? 4
-                             : (uint)(unpack_dst_format[unpB_operand] & 0x3) == (uint)DataFormat::Float16 ? 2
+      uint unpA_ch1_x_stride = (uint)(unpack_dst_format[unpA_operand] & 0x3) == (uint)DataFormat::Float32   ? 4
+                              : (uint)(unpack_dst_format[unpA_operand] & 0x3) == (uint)DataFormat::Float16 ? 2
+                                                                                                            : 1;
+      uint unpB_ch1_x_stride = (uint)(unpack_dst_format[unpB_operand] & 0x3) == (uint)DataFormat::Float32   ? 4
+                              : (uint)(unpack_dst_format[unpB_operand] & 0x3) == (uint)DataFormat::Float16 ? 2
                                                                                                           : 1;
       uint unpA_ch1_y_stride = 16*srca_face_height*unpA_ch1_x_stride;
       uint unpB_ch1_y_stride = 16*srcb_face_height*unpB_ch1_x_stride;
@@ -179,6 +180,7 @@ namespace ckernel::unpacker
             | (unpack_dst_format[unpA_operand] << ALU_FORMAT_SPEC_REG0_SrcA_SHAMT) |
             (0x0 << ALU_FORMAT_SPEC_REG_SrcA_val_SHAMT);
          cfg[ALU_FORMAT_SPEC_REG_SrcA_val_ADDR32] = alu_src_format;
+        //  cfg[ALU_FORMAT_SPEC_REG_SrcB_val_ADDR32] = alu_src_format;
          semaphore_post(semaphore::UNPACK_PACK_CONFIG_SYNC);
       }
 
@@ -203,7 +205,7 @@ namespace ckernel::unpacker
       //tile_descriptor.f.blobs_per_xy_plane = 0;
       //tile_descriptor.f.blobs_y_start = 0;
       for (uint i=0; i<TILE_DESC_SIZE; i++) cfg[THCON_SEC0_REG0_TileDescriptor_ADDR32+i]=tile_descriptor.val[i];
-    tile_descriptor.f.in_data_format = row_pool ? (uint)DataFormat::Float32 : unpack_src_format[unpB_operand];
+      tile_descriptor.f.in_data_format = row_pool ? (uint)DataFormat::Float32 : unpack_src_format[unpB_operand];
       for (uint i=0; i<TILE_DESC_SIZE; i++) cfg[THCON_SEC1_REG0_TileDescriptor_ADDR32+i]=tile_descriptor.val[i];
 
       // Set unpacker config
@@ -222,8 +224,8 @@ namespace ckernel::unpacker
       //config.f.fifo_size = 0; // Set dynamically
       for (uint i=0; i<CONFIG_SIZE; i++) cfg[THCON_SEC0_REG2_Out_data_format_ADDR32+i]=config.val[i];
 
-    config.f.out_data_format =
-        row_pool ? ((uint)DataFormat::Float16 | (exp_width << 2)) : unpack_dst_format[unpB_operand];
+      config.f.out_data_format =
+          row_pool ? ((uint)DataFormat::Float16 | (exp_width << 2)) : unpack_dst_format[unpB_operand];
       for (uint i=0; i<CONFIG_SIZE; i++) cfg[THCON_SEC1_REG2_Out_data_format_ADDR32+i]=config.val[i];
 
       uint unp0_x_end = (srca_face_height == 0) ? 1 : (srca_face_height << 4) - 1;
@@ -260,8 +262,11 @@ namespace ckernel::unpacker
       TT_SETDMAREG(0, (rmw_val & 0xffff), 0, LO_16(p_gpr_unpack::TMP0));
       TT_SETDMAREG(0, ((rmw_val >> 16) & 0xffff), 0, HI_16(p_gpr_unpack::TMP0));
 
-      TTI_WRCFG(p_gpr_unpack::TMP0, p_cfg::WRCFG_32b, addr);
-      TTI_NOP;TTI_NOP;
+      // TTI_WRCFG(p_gpr_unpack::TMP0, p_cfg::WRCFG_32b, addr);
+      // TTI_NOP;TTI_NOP;
+      TT_WRCFG(p_gpr_unpack::TMP0, p_cfg::WRCFG_32b, addr);
+      TT_OP_NOP;
+      TT_OP_NOP;
 
       return rmw_val;
    }
@@ -278,9 +283,11 @@ namespace ckernel::unpacker
 
       TT_SETDMAREG(0, (tile_descriptor.val[0] & 0xffff), 0, LO_16(p_gpr_unpack::TMP0));
       TT_SETDMAREG(0, ((tile_descriptor.val[0] >> 16) & 0xffff), 0, HI_16(p_gpr_unpack::TMP0));
-    TT_WRCFG(p_gpr_unpack::TMP0, p_cfg::WRCFG_32b, tile_addr);
-    TTI_NOP;
-    TTI_NOP;
+      TT_WRCFG(p_gpr_unpack::TMP0, p_cfg::WRCFG_32b, tile_addr);
+      // TTI_NOP;
+      // TTI_NOP;
+      TT_OP_NOP;
+      TT_OP_NOP;
 
       // Set first 32 bites of tile unpacker config, only need data format change
       unpack_config_u config = {0};
@@ -291,9 +298,13 @@ namespace ckernel::unpacker
       //cfg[out_df_addr]=config.val[0];
       TT_SETDMAREG(0, (config.val[0] & 0xffff), 0, LO_16(p_gpr_unpack::TMP0));
       TT_SETDMAREG(0, ((config.val[0] >> 16) & 0xffff), 0, HI_16(p_gpr_unpack::TMP0));
-    TT_WRCFG(p_gpr_unpack::TMP0, p_cfg::WRCFG_32b, out_df_addr);
-    TTI_NOP;
-    TTI_NOP;
+      TT_WRCFG(p_gpr_unpack::TMP0, p_cfg::WRCFG_32b, out_df_addr);
+      // TTI_NOP;
+      // TTI_NOP;
+      TT_OP_NOP;
+      TT_OP_NOP;
+
+      DPRINT << "RECONFIG'ED TO: in = " << tile_descriptor.f.in_data_format << ", out = " << config.f.out_data_format << ENDL();
 
       // Clear context ID
       //reset_config_context();
