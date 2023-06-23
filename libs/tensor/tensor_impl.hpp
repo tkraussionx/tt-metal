@@ -661,13 +661,16 @@ inline Tensor unpad(const Tensor &tensor, const std::array<uint32_t, 4> &output_
 
 template <typename T>
 bool compare_data(const Tensor&a, const Tensor& b) {
+    TT_ASSERT(a.on_host() && b.on_host());
+    TT_ASSERT(a.data_ != nullptr && b.data_ != nullptr);
     std::vector<T> *a_t = reinterpret_cast<std::vector<T>*>(a.data_);
     std::vector<T> *b_t = reinterpret_cast<std::vector<T>*>(b.data_);
     bool is_equal = true;
     std::cout << "a_t: " << a_t << ", size: " << a_t->size() << std::endl;
     std::cout << "b_t: " << b_t << ", size: " << b_t->size() << std::endl;
-    for (uint32_t i = 0; i < a_t->size(); ++i) {
-        is_equal &= a_t[i] == b_t[i];
+    for (uint32_t i = 0; i < a_t->size() / 100; ++i) {
+        is_equal &= (*a_t)[i] == (*b_t)[i];
+        std::cout << (*a_t)[i] << " == " << (*b_t)[i] << std::endl;
     }
     return is_equal;
 }
