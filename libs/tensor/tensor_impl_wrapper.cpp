@@ -147,6 +147,16 @@ void move_device_data_wrapper(Tensor &&src, Tensor &dst) {
     move_dev_data_map.at(src.dtype())(std::move(src), dst);
 }
 
+bool compare_data_wrapper(const Tensor& a, const Tensor& b) {
+    const static std::map<DataType, std::function<bool(const Tensor&, const Tensor&)>> compare_data_map = {
+        {DataType::BFLOAT16, &compare_data<bfloat16>},
+        {DataType::FLOAT32, &compare_data<float>},
+        {DataType::UINT32, &compare_data<uint32_t>},
+        {DataType::BFLOAT8_B, &compare_data<float>}
+    };
+    return compare_data_map.at(a.dtype())(a, b);
+}
+
 }  // namespace tensor_impl
 
 }  // namespace tt_metal

@@ -655,6 +655,23 @@ inline Tensor unpad(const Tensor &tensor, const std::array<uint32_t, 4> &output_
     return Tensor(output_tensor, output_tensor_shape, tensor.dtype(), tensor.layout());
 }
 
+/**
+ * Comparisons
+ */
+
+template <typename T>
+bool compare_data(const Tensor&a, const Tensor& b) {
+    std::vector<T> *a_t = reinterpret_cast<std::vector<T>*>(a.data_);
+    std::vector<T> *b_t = reinterpret_cast<std::vector<T>*>(b.data_);
+    bool is_equal = true;
+    std::cout << "a_t: " << a_t << ", size: " << a_t->size() << std::endl;
+    std::cout << "b_t: " << b_t << ", size: " << b_t->size() << std::endl;
+    for (uint32_t i = 0; i < a_t->size(); ++i) {
+        is_equal &= a_t[i] == b_t[i];
+    }
+    return is_equal;
+}
+
 // ======================================================================================
 //                                         Print
 // ======================================================================================

@@ -374,18 +374,60 @@ bool test_matmul_large_block(const tt::ARCH& arch, bool activations_rm, bool out
         auto dram_src1_noc_xy = src1_dram_buffer.noc_coordinates();
         auto dram_dst_noc_xy = dst_dram_buffer.noc_coordinates();
 
-        std::vector<uint32_t> mm_reader_rt_args{
-            dram_buffer_src0_addr,
-            (std::uint32_t)dram_src0_noc_xy.x,
-            (std::uint32_t)dram_src0_noc_xy.y,
-            dram_buffer_src1_addr,
-            (std::uint32_t)dram_src1_noc_xy.x,
-            (std::uint32_t)dram_src1_noc_xy.y,
-            (std::uint32_t)(K/in0_block_w), // num_blocks
-            M * in0_block_w, // input 0 block num tiles
-            N * in0_block_w, // input 1 block num tiles
-            M * in0_block_w * single_tile_size, // input 0 block bytes
-            N * in0_block_w * single_tile_size}; // input 1 block bytes
+        bool use_new = false;
+        string reader_kernel;
+        vector<uint32_t> mm_reader_rt_args;
+        if (use_new) {
+            reader_kernel = "tt_metal/kernels/dataflow/reader_bmm_single_core.cpp";
+            mm_reader_rt_args = {
+                // in0
+                dram_buffer_src0_addr,
+                1,                      // in0_num_blocks_h
+                K / in0_block_w,        // in0_num_blocks_w
+                1,                      // in0_stride_w
+                in0_width_ntiles,       // in0_stride_h
+                in0_block_w,            // in0_next_block_stride
+                in0_block_w,            // in0_block_w
+                in0_block_h,            // in0_block_h
+                in0_block_num_tiles,    // in0_block_num_tiles
+                // in1
+                dram_buffer_src1_addr,          // in1_addr
+                in1_num_blocks_w,
+                0,                      // in1_start_tile_id
+                1,                      // in1_stride_w
+                in1_width_ntiles,       // in1_stride_h
+                in0_block_w * in1_width_ntiles, // in1_next_block_stride UNUSED
+                in1_block_w,                    // in1_block_w
+                in1_block_h,                    // in1_block_h
+                in1_block_num_tiles,            // in1_block_num_tiles
+                in0_width_ntiles * in0_block_h, // in0_next_block_stride_h,
+                in0_block_w,                    // in0_next_block_stride_w,
+                in1_width_ntiles * in1_block_h, // in1_next_block_stride_h,
+                in1_block_w,                    // in1_next_block_stride_w
+            };
+        } else {
+            reader_kernel = "tt_metal/kernels/dataflow/reader_matmul_blocked.cpp",
+            mm_reader_rt_args = {
+                dram_buffer_src0_addr,
+                (std::uint32_t)dram_src0_noc_xy.x,
+                (std::uint32_t)dram_src0_noc_xy.y,
+                dram_buffer_src1_addr,
+                (std::uint32_t)dram_src1_noc_xy.x,
+                (std::uint32_t)dram_src1_noc_xy.y,
+                (std::uint32_t)(K/in0_block_w), // num_blocks
+                M * in0_block_w, // input 0 block num tiles
+                N * in0_block_w, // input 1 block num tiles
+                M * in0_block_w * single_tile_size, // input 0 block bytes
+                N * in0_block_w * single_tile_size // input 1 block bytes
+            };
+        }
+
+        auto mm_reader_kernel = tt_metal::CreateDataMovementKernel(
+            program,
+            reader_kernel,
+            core,
+            tt_metal::DataMovementProcessor::RISCV_1,
+            tt_metal::NOC::RISCV_1_default);
 
 
         std::vector<uint32_t> writer_rt_args;
@@ -413,13 +455,6 @@ bool test_matmul_large_block(const tt::ARCH& arch, bool activations_rm, bool out
                 (std::uint32_t)out_subblock_w*single_tile_size
             }; // bytes offset to next sub-block
         }
-
-        auto mm_reader_kernel = tt_metal::CreateDataMovementKernel(
-            program,
-            "tt_metal/kernels/dataflow/reader_matmul_blocked.cpp",
-            core,
-            tt_metal::DataMovementProcessor::RISCV_1,
-            tt_metal::NOC::RISCV_1_default);
 
         auto unary_writer_kernel = tt_metal::CreateDataMovementKernel(
             program,

@@ -248,6 +248,16 @@ void Tensor::free_buffer() {
     this->buffer_ = nullptr;
 }
 
+bool Tensor::operator==(const Tensor& other) const {
+    bool is_equal = true;
+    is_equal &= (*this).shape_ == other.shape_;
+    is_equal &= (*this).strides_ == other.strides_;
+    is_equal &= (*this).dtype_ == other.dtype_;
+    is_equal &= (*this).layout_ == other.layout_;
+    is_equal &= tensor_impl::compare_data_wrapper(*this, other);
+    return is_equal;
+}
+
 }  // namespace tt_metal
 
 }  // namespace tt

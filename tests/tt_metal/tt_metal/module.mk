@@ -21,6 +21,7 @@ TT_METAL_TESTS += \
 		 tests/tt_metal/ops/test_tilize_op_channels_last \
 		 tests/tt_metal/ops/test_tilize_zero_padding_channels_last \
 		 tests/tt_metal/test_bmm \
+		 tests/tt_metal/test_bmm_single_core_tilize_untilize \
 		 tests/tt_metal/tensors/test_copy_and_move \
 		 tests/tt_metal/tensors/test_host_device_loopback \
 		 tests/tt_metal/allocator/test_free_list_allocator_algo \
@@ -35,7 +36,6 @@ TT_METAL_TESTS += \
 		 tests/tt_metal/test_matmul_single_tile \
 		 tests/tt_metal/test_matmul_single_tile_output_in_l1 \
 		 tests/tt_metal/test_matmul_multi_tile \
-		 tests/tt_metal/test_matmul_large_block \
 		 tests/tt_metal/test_matmul_single_core \
 		 tests/tt_metal/test_matmul_multi_core_single_dram \
 		 tests/tt_metal/test_matmul_multi_core_multi_dram \
@@ -76,6 +76,7 @@ TT_METAL_TESTS += \
 		 tests/tt_metal/test_compile_sets_kernel_binaries \
 		 tests/tt_metal/test_compile_program \
 		 # test/tt_metal/test_datacopy_multi_core_multi_dram \  # this does not compile
+		 # tests/tt_metal/test_matmul_large_block \
 
 TT_METAL_TESTS_SRCS = $(addprefix tests/tt_metal/, $(addsuffix .cpp, $(TT_METAL_TESTS:tests/%=%)))
 

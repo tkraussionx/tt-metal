@@ -66,6 +66,9 @@ namespace tensor_impl {
 
     template <typename T>
     void move_device_data(Tensor &&src, Tensor &dst);
+
+    template <typename T>
+    bool compare_data(const Tensor& a, const Tensor& b);
 }
 
 class Tensor {
@@ -151,6 +154,8 @@ class Tensor {
         // Size in bytes of a single element held in tensor
         uint32_t element_size() const;
 
+        bool operator==(const Tensor& other) const;
+
     private:
         const std::array<uint32_t, 4> compute_strides() const {
             return {shape_[1]*shape_[2]*shape_[3], shape_[2]*shape_[3], shape_[3], 1};
@@ -172,6 +177,9 @@ class Tensor {
         friend void tensor_impl::move_host_data(Tensor &&src, Tensor &dst);
         template <typename T>
         friend void tensor_impl::move_device_data(Tensor &&src, Tensor &dst);
+        template <typename T>
+        friend bool tensor_impl::compare_data(const Tensor&a, const Tensor& b);
+
 
         void *data_ = nullptr;                      // Unpopulated if tensor is on device
         std::array<uint32_t, 4> shape_;             // Outer-most dimension first

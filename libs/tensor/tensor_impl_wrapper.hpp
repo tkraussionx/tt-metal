@@ -48,6 +48,8 @@ void move_host_data_wrapper(Tensor &&src, Tensor &dst);
 
 void move_device_data_wrapper(Tensor &&src, Tensor &dst);
 
+bool compare_data_wrapper(const Tensor& a, const Tensor& b);
+
 }  // namespace tensor_impl
 
 }  // namespace tt_metal
