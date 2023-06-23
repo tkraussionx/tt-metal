@@ -239,9 +239,18 @@ FORCE_INLINE void write_program_section(
 
         command_ptr += 5;
 
+        #ifdef TT_METAL_DISPATCH_MAP_DUMP
+        DPRINT << "CHUNK" << ENDL();
+        for (u32 i = 0; i < transfer_size; i += sizeof(u32)) {
+            DPRINT << *reinterpret_cast<volatile u32*>(src + i) << ENDL();
+        }
+        #else
         noc_async_write_multicast(src, u64(dst_noc) << 32 | dst, transfer_size, num_receivers);
+        #endif
     }
+    #ifndef TT_METAL_DISPATCH_MAP_DUMP
     noc_async_write_barrier();
+    #endif
 }
 
 FORCE_INLINE void write_program(u32 num_program_relays, volatile u32*& command_ptr) {
@@ -254,6 +263,13 @@ FORCE_INLINE void write_program(u32 num_program_relays, volatile u32*& command_p
         command_ptr += 4;
         write_program_section(src, src_noc, transfer_size, num_writes, command_ptr);
     }
+
+    #ifdef TT_METAL_DISPATCH_MAP_DUMP
+    if (num_program_relays != 0) {
+        DPRINT << "EXIT CONDITION" << ENDL();
+        _exit(0);
+    }
+    #endif
 }
 
 FORCE_INLINE void launch_program(u32 num_workers, volatile u32*& command_ptr) {

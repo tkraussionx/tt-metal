@@ -1,5 +1,6 @@
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/llrt/tt_debug_print_server.hpp"
+#include "debug_tools.hpp"
 
 u64 get_noc_multicast_encoding(const CoreCoord& top_left, const CoreCoord& bottom_right) {
     return NOC_MULTICAST_ENCODING(top_left.x, top_left.y, bottom_right.x, bottom_right.y);
@@ -513,6 +514,12 @@ void send_dispatch_kernel_to_device(Device* device) {
     // Hard-coding as BRISC for now, could potentially be NCRISC
     build_kernel_for_riscv_options.brisc_kernel_file_name = "tt_metal/kernels/dataflow/dispatch/command_queue.cpp";
     std::map<string, string> brisc_defines = {{"IS_DISPATCH_KERNEL", ""}};
+
+    const char *DISPATCH_MAP_DUMP = std::getenv("TT_METAL_DISPATCH_MAP_DUMP");
+    if (DISPATCH_MAP_DUMP) {
+        brisc_defines.emplace("TT_METAL_DISPATCH_MAP_DUMP", "");
+    }
+
     build_kernel_for_riscv_options.brisc_defines = brisc_defines;
     bool profile = false;
 
@@ -548,6 +555,13 @@ CommandQueue::CommandQueue(Device* device) {
     // in its own deassert. Easy fix, just need to do it.
     send_dispatch_kernel_to_device(device);
     this->device = device;
+
+    const char *DISPATCH_MAP_DUMP = std::getenv("TT_METAL_DISPATCH_MAP_DUMP");
+    auto hart_mask = DPRINT_HART_BR;
+    if (DISPATCH_MAP_DUMP != nullptr) {
+        string device_dispatch_dump_file = "device_" + string(DISPATCH_MAP_DUMP);
+        tt_start_debug_print_server(device->cluster(), {0}, {{1, 11}}, hart_mask, device_dispatch_dump_file.c_str());
+    }
 }
 
 CommandQueue::~CommandQueue() {
@@ -678,6 +692,11 @@ void EnqueueProgram(CommandQueue& cq, Program& program, bool blocking) {
     tt::log_debug(tt::LogDispatch, "EnqueueProgram");
 
     cq.enqueue_program(program, blocking);
+
+    const char *DISPATCH_MAP_DUMP = std::getenv("TT_METAL_DISPATCH_MAP_DUMP");
+    if (DISPATCH_MAP_DUMP != nullptr) {
+        internal::wait_for_program_vector_to_arrive_and_compare_to_host_program_vector(DISPATCH_MAP_DUMP, cq.device);
+    }
 }
 
 void Finish(CommandQueue& cq) {
