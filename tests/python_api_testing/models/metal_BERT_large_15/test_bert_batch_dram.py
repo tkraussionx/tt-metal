@@ -110,7 +110,7 @@ class TtBertBatchDram(torch.nn.Module):
                     ttl.tensor.DataType.BFLOAT16,
                     ttl.tensor.Layout.ROW_MAJOR,
                 ).to(ttl.tensor.Layout.TILE)
-                tt_attention_mask = tt_attention_mask.to(self.device)
+                tt_attention_mask = tt_attention_mask.to(self.device, self.mem_config)
             else:
                 tt_attention_mask = attention_mask
 
@@ -130,7 +130,7 @@ class TtBertBatchDram(torch.nn.Module):
                 ttl.tensor.DataType.BFLOAT16,
                 ttl.tensor.Layout.ROW_MAJOR,
             ).to(ttl.tensor.Layout.TILE)
-            tt_embeddings = tt_embeddings.to(self.device)
+            tt_embeddings = tt_embeddings.to(self.device, self.mem_config)
             hidden_states = tt_embeddings  # pad_embeddings #
 
             self.hidden_states_list.append(hidden_states)
@@ -143,8 +143,8 @@ class TtBertBatchDram(torch.nn.Module):
             print(f"Running BERT model {i}")
             # profiler.start("_run_encoders")
 
-            hidden_states = self.hidden_states_list[i]
-            attention_mask = self.tt_attention_mask_list[i]
+            hidden_states = self.hidden_states_list.pop()
+            attention_mask = self.tt_attention_mask_list.pop()
 
             for encoder in self.encoders:
                 # profiler.start("__one_encoder")
@@ -276,7 +276,7 @@ def run_bert_question_and_answering_inference(
     profiler.start("first_model_run_with_compile", force_enable=True)
     tt_out_list = tt_bert_model(1, **bert_input)
     profiler.end("first_model_run_with_compile", force_enable=True)
-
+    del tt_out_list
     print(f"Enable profiler and enable binary and compile cache")
     profiler.enable()
     enable_compile_cache()
