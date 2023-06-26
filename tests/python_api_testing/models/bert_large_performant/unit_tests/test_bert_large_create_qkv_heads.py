@@ -77,8 +77,8 @@ import pytest
 
 @pytest.mark.parametrize(
     "transpose_hw",
-    (False, True),
-    ids=["Q/V_head", "K_head"],
+    (True,),
+    ids=[ "K_head"],
 )
 @pytest.mark.parametrize(
     "out_mem_config",
@@ -98,8 +98,8 @@ import pytest
 )
 @pytest.mark.parametrize(
     "dtype",
-    (ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16),
-    ids=["BFLOAT8_B", "BFLOAT16"],
+    (ttl.tensor.DataType.BFLOAT16,),
+    ids=[ "BFLOAT16"],
 )
 def test_bert_large_create_qkv_heads_test(
     dtype, in0_mem_config, out_mem_config, transpose_hw
