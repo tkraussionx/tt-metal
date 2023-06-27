@@ -25,7 +25,8 @@ sys.path.append(f"{f}/../../../../..")
 
 import tt_lib
 from torch import nn
-
+import torch
+from utility_functions_new import torch_to_tt_tensor
 
 class GELUActivation(nn.Module):
     def __init__(self):
@@ -34,6 +35,22 @@ class GELUActivation(nn.Module):
 
     def forward(self, input: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
         return self.act(input)
+
+
+class QuickGELUActivation(nn.Module):
+    """
+    Applies GELU approximation that is fast but somewhat inaccurate. See: https://github.com/hendrycks/GELUs
+    """
+    def __init__(self):
+        self.const = torch.full((1, 1, 32, 32), 1.702)
+        device = tt_lib.device.GetDefaultDevice()
+        self.const = torch_to_tt_tensor(self.const, device)
+    # def forward(self, input: Tensor) -> Tensor:
+    #     return input * torch.sigmoid(1.702 * input)
+
+    def forward(self, input: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
+        _t = tt_lib.tensor.bcast(input, self.const, tt_lib.tensor.BcastOpMath.ADD, tt_lib.tensor.BcastOpDim.HW)
+        return tt_lib.tensor.mul(input, _t)
 
 
 class ClassInstantier(OrderedDict):
@@ -45,6 +62,8 @@ class ClassInstantier(OrderedDict):
 
 ACT2CLS = {
     "gelu": GELUActivation,
+    # "quick_gelu": QuickGELUActivation,
+    "quick_gelu": GELUActivation,
 }
 ACT2FN = ClassInstantier(ACT2CLS)
 
@@ -60,3 +79,4 @@ def get_activation(activation_string):
 
 # For backwards compatibility with: from activations import gelu_python
 gelu = get_activation("gelu")
+quick_gelu = get_activation("quick_gelu")
