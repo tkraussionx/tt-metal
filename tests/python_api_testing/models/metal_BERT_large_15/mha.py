@@ -142,7 +142,7 @@ def mha(qw, qb, kw, kb, vw, vb, hidden_dim, num_heads, device, mem_config):
             ttl.tensor.bert_large_pre_softmax_bmm,
             ttl.tensor.DataType.BFLOAT16,
             device,
-            ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM),
+            ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.L1),
             Q_heads,
             K_T_heads,
         )
@@ -157,6 +157,7 @@ def mha(qw, qb, kw, kb, vw, vb, hidden_dim, num_heads, device, mem_config):
         # Input and output tensors of this fused op is: [9, 1, 6144, 384] instead of [9, 16, 384, 384]
         # No-op reshapes are handled within pre-softmax (op 7) and post-softmax bmms (op 9)
         if attention_mask is not None:
+            breakpoint()
             attention_scores = ttl.tensor.scale_mask_softmax_in_place(
                 freciprocal_of_sqrt_hidden_dim, attention_mask, qkt
             )
@@ -214,11 +215,13 @@ def mha(qw, qb, kw, kb, vw, vb, hidden_dim, num_heads, device, mem_config):
         # K_T_heads = K_T_heads.to(ttl.device.GetHost())
         # K_T_heads = K_T_heads.to(device, ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM))
         qkt = op7_bmm(Q_heads, K_T_heads)
+
         Q_heads.deallocate()
         K_T_heads.deallocate()
 
+        breakpoint()
         attention_scores = op8_scale_mask_softmax(qkt, attention_mask)
-        # qkt.deallocate()
+        qkt.deallocate()
         weighted_activation = op9_bmm(attention_scores, V_heads)
         attention_scores.deallocate()
         V_heads.deallocate()
@@ -282,11 +285,11 @@ class PytorchMultiHeadAttentionModel(torch.nn.Module):
 
 
 def run_mha_inference(
-    model_version, batch, seq_len, on_weka, dram, pcc, model_location_generator
+    model_version, batch, seq_len, on_weka, pcc, dram, model_location_generator
 ):
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     # Initialize the device
-    ttl.device.InitializeDevice(device, ttl.device.MemoryAllocator.BASIC if dram else ttl.device.MemoryAllocator.L1_BANKING)
+    ttl.device.InitializeDevice(device, ttl.device.MemoryAllocator.L1_BANKING if dram else ttl.device.MemoryAllocator.L1_BANKING)
     host = ttl.device.GetHost()
     mem_config = ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM if dram else ttl.tensor.BufferType.L1)
 
@@ -351,7 +354,7 @@ def run_mha_inference(
 
 @pytest.mark.parametrize(
     "model_version, batch, seq_len, on_weka, dram, pcc",
-    (("phiyodr/bert-large-finetuned-squad2", 9, 384, True, True, 0.99),),
+    (("phiyodr/bert-large-finetuned-squad2", 9, 384, True, False, 0.99),),
 )
 def test_mha_inference(
     model_version, batch, seq_len, on_weka, pcc, dram, model_location_generator

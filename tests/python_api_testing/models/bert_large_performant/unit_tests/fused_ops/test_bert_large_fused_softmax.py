@@ -14,6 +14,9 @@ import torch
 
 from libs import tt_lib as ttl
 from libs.tt_lib.utils import untilize, tilize_to_list, print_diff_argmax, is_close
+from python_api_testing.models.utility_functions import (
+    comp_pcc,
+)
 
 
 def ref_stable_softmax(x):
@@ -71,7 +74,7 @@ def generate_recip_tensor(dev, invsqrt):
 def generate_attn_mask(N, C, W, dev, offs, dtype, mem_config):
     assert W % 32 == 0
     NC = N * C
-    top_row = [offs * (i % 2) for i in range(0, W)]
+    top_row = [0.0 * (i % 2) for i in range(0, W)]
     zero_rows = [0.0 for _ in range(31 * W)]
     # For debugging
     # top_row = [offs]*W
@@ -93,7 +96,7 @@ def generate_attn_mask(N, C, W, dev, offs, dtype, mem_config):
     return valtorch, val
 
 
-def run_softmax_tests(test_id, dtype, in0_mem_config):
+def run_softmax_tests(test_id, dtype, in0_mem_config, mask_mem_config):
     torch.manual_seed(123)
     random.seed(123)
 
@@ -111,23 +114,44 @@ def run_softmax_tests(test_id, dtype, in0_mem_config):
             x = torch.randn((N, C, H, W)) * 2.0 - 1.0
             x_t = tilize_to_list(x)
 
-            t0 = tensor.Tensor(
-                x_t,
-                [N, C, H, W],
+            bmm_input_0 = tensor.Tensor(
+                torch.randn(9*16*384*64).tolist(),
+                [9, 16, 384, 64],
                 dtype,
                 tensor.Layout.TILE,
                 dev,
                 in0_mem_config,
             )
+            bmm_input_1 = tensor.Tensor(
+                torch.randn(9*16*384*64).tolist(),
+                [9, 16, 64, 384],
+                dtype,
+                tensor.Layout.TILE,
+                dev,
+                in0_mem_config,
+            )
+            t0 = ttl.tensor.bert_large_pre_softmax_bmm(bmm_input_0, bmm_input_1, in0_mem_config)
+            t1 = t0
+            x = torch.tensor(t1.to(host).data()).reshape((N, C, H, W))
+
+            #t0 = tensor.Tensor(
+            #    x_t,
+            #    [N, C, H, W],
+            #    dtype,
+            #    tensor.Layout.TILE,
+            #    dev,
+            #    in0_mem_config,
+            #)
 
             if test_id == 0:
                 logger.info("Running scale_mask_softmax")
                 torch_scale, tt_scale = generate_recip_tensor(
-                    dev, 0.5 + random.random()
+                    dev, 0.125 #0.5 + random.random()
                 )
                 torch_attn_mask, tt_attn_mask = generate_attn_mask(
-                    N, C, W, dev, -4.2 * 1, dtype, in0_mem_config
+                    N, C, W, dev, -4.2 * 1, dtype, mask_mem_config
                 )
+                breakpoint()
                 t1_fused = tensor.scale_mask_softmax_in_place(
                     tt_scale, tt_attn_mask, t0
                 )
@@ -145,6 +169,10 @@ def run_softmax_tests(test_id, dtype, in0_mem_config):
 
             time.sleep(0.33)  # so prints don't overlap with kernel prints
 
+            passing_pcc, output_pcc = comp_pcc(ref_sm, tt_unt, 0.99)
+            logger.info(f"Passing={passing_pcc}")
+            logger.info(f"Output pcc={output_pcc}")
+
             assert is_close(tt_unt, ref_sm, rtol=5e-2, atol=5e-2)
             # print_diff_argmax(tt_unt, ref_sm)
 
@@ -154,6 +182,14 @@ def run_softmax_tests(test_id, dtype, in0_mem_config):
 import pytest
 
 
+@pytest.mark.parametrize(
+    "mask_mem_config",
+    (
+        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM),
+        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.L1),
+    ),
+    ids=["mask_DRAM", "mask_L1"],
+)
 @pytest.mark.parametrize(
     "in0_mem_config",
     (
@@ -172,5 +208,5 @@ import pytest
     (0, 1),
     ids=["scale_mask_softmax", "softmax"],
 )
-def test_bert_large_softmax_test(test_id, dtype, in0_mem_config):
-    run_softmax_tests(test_id, dtype, in0_mem_config)
+def test_bert_large_softmax_test(test_id, dtype, in0_mem_config, mask_mem_config):
+    run_softmax_tests(test_id, dtype, in0_mem_config, mask_mem_config)

@@ -215,6 +215,7 @@ def run_bert_encoder_inference(
     ttl.device.InitializeDevice(device, ttl.device.MemoryAllocator.BASIC if dram else ttl.device.MemoryAllocator.L1_BANKING)
     host = ttl.device.GetHost()
     mem_config = ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM if dram else ttl.tensor.BufferType.L1)
+    mem_config_DRAM = ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM)
 
     if on_weka:
         model_name = str(
@@ -262,7 +263,7 @@ def run_bert_encoder_inference(
             ttl.tensor.Layout.ROW_MAJOR,
         )
         .to(ttl.tensor.Layout.TILE)
-        .to(device, mem_config)
+        .to(device, mem_config_DRAM)
     )
     tt_bert_attention_mask = (
         ttl.tensor.Tensor(
