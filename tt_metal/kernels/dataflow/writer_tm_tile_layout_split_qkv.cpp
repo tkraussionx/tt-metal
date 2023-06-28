@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <array>
 #include "dataflow_api.h"
+#include "debug_print.h"
 
 void kernel_main() {
     // WRITER RUNTIME ARGS
@@ -15,6 +16,8 @@ void kernel_main() {
     // WRITER COMPILE TIME ARGS
     constexpr uint32_t out_num_tensors           = get_compile_time_arg_val(2);
     constexpr uint32_t out_num_tiles_per_tensor  = get_compile_time_arg_val(3);
+    constexpr uint32_t out_num_blocks_per_tensor  = get_compile_time_arg_val(4);
+    constexpr uint32_t block_size  = get_compile_time_arg_val(5);
 
 
     constexpr uint32_t cb_id_out0 = 0; // same as cb_id_in0
@@ -59,17 +62,19 @@ void kernel_main() {
     std::array<InterleavedAddrGenFast<out_is_dram_bool>, out_num_tensors> qkv_output_banks{sq, sk, sv};
     uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
     uint32_t out_split_tensor_tile_id;
-    uint32_t out_num_tiles_read = out_num_tiles_per_tensor;
+    uint32_t out_num_tiles_read = block_size;
 
     for (const auto& s : qkv_output_banks) {
         out_split_tensor_tile_id = out_tensor_tile_id;
         cb_wait_front(cb_id_out0, out_num_tiles_read);
-        for (uint32_t i = 0; i < out_num_tiles_per_tensor; i++) {
-            noc_async_write_tile(out_split_tensor_tile_id, s, l1_read_addr);
-            l1_read_addr += single_tile_size_bytes;
-            out_split_tensor_tile_id++;
+        for (uint32_t block = 0; block < out_num_blocks_per_tensor; block++) {
+            for (uint32_t i = 0; i < block_size; i++) {
+                noc_async_write_tile(out_split_tensor_tile_id, s, l1_read_addr);
+                l1_read_addr += single_tile_size_bytes;
+                out_split_tensor_tile_id++;
+            }
+            out_num_tiles_read += block_size;
         }
-        out_num_tiles_read += out_num_tiles_per_tensor;
     }
 
     noc_async_write_barrier();

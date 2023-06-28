@@ -1,6 +1,7 @@
 #include "tt_dnn/op_library/bert_large_tms/bert_large_tms.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
+#include "tt_metal/llrt/tt_debug_print_server.hpp"
 
 using namespace tt::constants;
 using namespace tt;
@@ -34,9 +35,12 @@ operation::ProgramWithCallbacks multi_core_split_fused_qkv(const Tensor &a, std:
     ////////////////////////////////////////////////////////////////////////////
     //                      TM Parameters Setup
     ////////////////////////////////////////////////////////////////////////////
-    uint32_t per_core_tiles = ashape[3] / TILE_WIDTH;
+    uint32_t per_core_tiles = ashape[3] / TILE_WIDTH; // 96
     uint32_t num_tensors = 3;
-    uint32_t num_tiles_per_tensor = per_core_tiles / num_tensors;
+    uint32_t num_tiles_per_tensor = per_core_tiles / num_tensors; // 32
+    uint32_t block_size = 8;
+    uint32_t num_blocks_per_core = per_core_tiles / block_size; // 6
+    uint32_t num_blocks_per_tensor = num_blocks_per_core / num_tensors; // 2
 
     // Parallelize ashape[2] (384 / 32 = 12 tiles) across columns
     // Parallelize ashape[0] (9) across rows
@@ -89,6 +93,8 @@ operation::ProgramWithCallbacks multi_core_split_fused_qkv(const Tensor &a, std:
             // READER COMPILE TIME ARGS
             (std::uint32_t) num_tensors, // out_num_tensors
             (std::uint32_t) num_tiles_per_tensor, // out_num_tiles_per_tensor
+            (std::uint32_t) num_blocks_per_core,
+            (std::uint32_t) block_size,
     };
     std::vector<uint32_t> writer_compile_time_args = {
             // interleaved accessor args
@@ -98,6 +104,8 @@ operation::ProgramWithCallbacks multi_core_split_fused_qkv(const Tensor &a, std:
             // WRITER COMPILE TIME ARGS
             (std::uint32_t) num_tensors, // out_num_tensors
             (std::uint32_t) num_tiles_per_tensor, // out_num_tiles_per_tensor
+            (std::uint32_t) num_blocks_per_tensor, // out_num_tiles_per_tensor
+            (std::uint32_t) block_size, // out_num_tiles_per_tensor
     };
 
     auto reader_kernel = tt_metal::CreateDataMovementKernel(
@@ -203,6 +211,7 @@ operation::ProgramWithCallbacks multi_core_split_fused_qkv(const Tensor &a, std:
         }
     };
 
+    //tt_start_debug_print_server(a.device()->cluster(), {0}, {{1, 1}});
     return {std::move(program), override_runtime_args_callback};
 }
 

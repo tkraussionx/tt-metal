@@ -374,6 +374,10 @@ def test_mha_inference(
     model_version, batch, seq_len, on_weka, dram, pcc, model_location_generator
 ):
     # enable_compile_cache()
+    ttl.profiler.set_profiler_flag(True)
+    ttl.profiler.set_profiler_location(
+        "tt_metal/tools/profiler/logs/BERT_large_mha"
+    )
 
     run_mha_inference(
         model_version, batch, seq_len, on_weka, dram, pcc, model_location_generator

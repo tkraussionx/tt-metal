@@ -12,6 +12,8 @@ void kernel_main() {
     // READER COMPILE TIME ARGS
     constexpr uint32_t out_num_tensors           = get_compile_time_arg_val(2);
     constexpr uint32_t out_num_tiles_per_tensor  = get_compile_time_arg_val(3);
+    constexpr uint32_t out_num_blocks  = get_compile_time_arg_val(4);
+    constexpr uint32_t block_size = get_compile_time_arg_val(5);
 
 
     constexpr uint32_t cb_id_in0 = 0;
@@ -34,14 +36,14 @@ void kernel_main() {
     #endif
 
     uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
-    for (uint32_t out_tensor = 0; out_tensor < out_num_tensors; out_tensor++) {
-        cb_reserve_back(cb_id_in0, out_num_tiles_per_tensor);
-        for (uint32_t i = 0; i < out_num_tiles_per_tensor; i++) {
+    for (uint32_t out_tensor = 0; out_tensor < out_num_blocks; out_tensor++) {
+        cb_reserve_back(cb_id_in0, block_size);
+        for (uint32_t i = 0; i < block_size; i++) {
             noc_async_read_tile(in0_tensor_tile_id, s0, l1_write_addr_in0);
             l1_write_addr_in0 += single_tile_size_bytes;
             in0_tensor_tile_id++;
         }
         noc_async_read_barrier();
-        cb_push_back(cb_id_in0, out_num_tiles_per_tensor);
+        cb_push_back(cb_id_in0, block_size);
     }
 }
