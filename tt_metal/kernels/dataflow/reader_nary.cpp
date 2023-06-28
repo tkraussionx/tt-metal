@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "dataflow_api.h"
+#include "dataflow_kernel_api.h"
 
 // Make n reads defined by num_reads
 // Writes to Specified Circular Buffers in L1

@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "dataflow_api.h"
+#include "dataflow_kernel_api.h"
 #include "debug_print.h"
 inline void noc_async_read_from_dram_to_l1(uint32_t dram_addr, uint32_t dram_noc_x, uint32_t dram_noc_y, uint32_t l1_dest_addr, uint32_t read_size) {
     uint64_t src_noc_addr = get_noc_addr(dram_noc_x, dram_noc_y, dram_addr);

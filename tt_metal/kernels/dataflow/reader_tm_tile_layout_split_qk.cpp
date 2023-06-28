@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-#include "dataflow_api.h"
+#include "dataflow_kernel_api.h"
 
 // #define DEBUG
 #ifdef DEBUG

@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "dataflow_api.h"
+#include "dataflow_kernel_api.h"
 
 void kernel_main() {
     // READER RUNTIME ARGS

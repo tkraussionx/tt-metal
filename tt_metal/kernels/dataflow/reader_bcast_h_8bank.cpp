@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "dataflow_api.h"
+#include "dataflow_kernel_api.h"
 
 void kernel_main() {
     uint32_t src0_addr  = get_arg_val<uint32_t>(0);

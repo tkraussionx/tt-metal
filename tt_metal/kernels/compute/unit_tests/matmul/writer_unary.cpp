@@ -1,4 +1,4 @@
-#include "dataflow_api.h"
+#include "dataflow_kernel_api.h"
 
 void kernel_main() {
     const uint32_t out_cb = get_compile_time_arg_val(0);

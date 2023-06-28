@@ -1,6 +1,6 @@
 #include <cstdint>
 
-#include "dataflow_api.h"
+#include "dataflow_kernel_api.h"
 
 void kernel_main() {
     constexpr std::uint32_t cb_id = get_compile_time_arg_val(0);

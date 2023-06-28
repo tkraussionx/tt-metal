@@ -1,4 +1,4 @@
-#include "dataflow_api.h"
+#include "dataflow_kernel_api.h"
 #include "hostdevcommon/common_values.hpp"
 #include "tools/profiler/kernel_profiler.hpp"
 

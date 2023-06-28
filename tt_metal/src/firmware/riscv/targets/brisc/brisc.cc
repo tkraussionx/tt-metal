@@ -253,8 +253,7 @@ void device_setup() {
     core.wall_clock_mailbox()[0] = core.read_wall_clock();
 }
 
-
-#include "dataflow_api.h"
+#include "dataflow_kernel_api.h"
 #include "kernel.cpp"
 
 int main() {

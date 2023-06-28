@@ -1,4 +1,4 @@
-#include "dataflow_api.h"
+#include "dataflow_kernel_api.h"
 
 #include "debug_print.h"
 

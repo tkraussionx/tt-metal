@@ -1,4 +1,4 @@
-#include "dataflow_api.h"
+#include "dataflow_kernel_api.h"
 
 inline __attribute__((always_inline))
 void pop_from_cb_and_write(const uint32_t cb_id, uint32_t num_tiles_per_cb, uint32_t ublock_size_tiles, uint32_t ublock_size_bytes,

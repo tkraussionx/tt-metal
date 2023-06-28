@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "dataflow_api.h"
+#include "dataflow_kernel_api.h"
 #include "debug_print.h"
 
 // This kernel is used to read untilized src0 data from DRAM and copy it to L1 in tilized layout.

@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include <array>
-#include "dataflow_api.h"
+#include "dataflow_kernel_api.h"
 
 void kernel_main() {
     // WRITER RUNTIME ARGS

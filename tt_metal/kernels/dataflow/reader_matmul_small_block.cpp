@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include "dataflow_api.h"
+#include "dataflow_kernel_api.h"
 
 void kernel_main() {
     std::uint32_t dram_buffer_src0_addr  = get_arg_val<uint32_t>(0);

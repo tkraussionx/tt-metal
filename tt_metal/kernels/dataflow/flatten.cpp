@@ -1,5 +1,5 @@
 #include <cstdlib>
-#include "dataflow_api.h"
+#include "dataflow_kernel_api.h"
 
 void kernel_main() {
     // Kernel args

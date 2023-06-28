@@ -64,7 +64,7 @@ inline void allocate_debug_mailbox_buffer() {
   debug_mailbox_base = reinterpret_cast<volatile uint16_t *>(debug_mailbox_addr);
 }
 
-#include "dataflow_api.h"
+#include "dataflow_kernel_api.h"
 #include "kernel.cpp"
 
 int main(int argc, char *argv[]) {

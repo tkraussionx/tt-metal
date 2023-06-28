@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-#include "dataflow_api.h"
+#include "dataflow_kernel_api.h"
 #include "debug_print.h"
 #include "tt_metal/impl/dispatch/device_command.hpp"
 
