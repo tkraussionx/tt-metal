@@ -84,12 +84,13 @@ class CausalSelfAttention(nn.Module):
     def make_heads(self, x, num_heads):
         untilized_x = ttm.tensor.untilize(x)
         reshaped_unt = ttm.tensor.reshape(untilized_x, x.shape()[0], x.shape()[2], num_heads, x.shape()[3] // num_heads)
-        transposed = ttm.tensor.transpose_hc(reshaped_unt)
+        transposed = ttm.tensor.transpose_hc_rm(reshaped_unt)
         retilized = ttm.tensor.tilize(transposed)
         return retilized
 
     def unmake_heads(self, x):
-        ctx = ttm.tensor.transpose_hc(x)
+        untilized_x = ttm.tensor.untilize(x)
+        ctx = ttm.tensor.transpose_hc_rm(untilized_x)
         ushape = ctx.shape()
         reshaped = ttm.tensor.reshape(ctx, 1, ushape[0], ushape[1], ushape[2]*ushape[3])
         #set_FR(1)
@@ -130,7 +131,7 @@ class CausalSelfAttention(nn.Module):
         attention_score_input = self.multiply_by_sqrt_hidden_dim(qkt)
 
         # create a mask out the sequences to a multiple of 32 (at this point W-T)
-        padded_seq_masku = ttm.tensor.fill_rm(N, C, H, W, seq, seq, x, 0.0, -100,000.0) # 0.0 and -100000 in bf16
+        padded_seq_masku = ttm.tensor.fill_rm(N, C, H, W, seq, seq, x, 0x0, 0xc7c3) # 0.0 and -100000 in bf16
         padded_seq_mask = ttm.tensor.tilize(padded_seq_masku)
 
         # add -100000 to mask out the scores
