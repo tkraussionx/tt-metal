@@ -2627,7 +2627,7 @@ void TensorModule(py::module &m_tensor) {
 
     // Custom BERT matmuls/bmms
     m_tensor.def("bert_large_fused_qkv_matmul", &bert_large_fused_qkv_matmul,
-        py::arg().noconvert(), py::arg().noconvert(), py::arg("bias").noconvert() = std::nullopt, py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
+        py::arg().noconvert(), py::arg().noconvert(), py::arg("bias").noconvert() = std::nullopt, py::arg("mem_config") = MemoryConfig{.interleaved = true}, py::arg("out_dtype").noconvert() = std::nullopt, R"doc(
         Perform a bert_large_fused_qkv non-batched matmul ``A x B`` with two tensors.
     )doc");
     m_tensor.def("bert_large_ff1_matmul", &bert_large_ff1_matmul,

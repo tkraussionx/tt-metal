@@ -16,7 +16,14 @@ import pytest
 
 
 def run_bert_large_fused_qkv_matmul_test(
-    dtype, in0_mem_config, in1_mem_config, bias_mem_config, out_mem_config
+    in0_dtype,
+    in1_dtype,
+    bias_dtype,
+    out_dtype,
+    in0_mem_config,
+    in1_mem_config,
+    bias_mem_config,
+    out_mem_config,
 ):
     torch.manual_seed(1234)
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
@@ -35,7 +42,7 @@ def run_bert_large_fused_qkv_matmul_test(
         ttl.tensor.Tensor(
             A.flatten().tolist(),
             a_shape,
-            dtype,
+            in0_dtype,
             ttl.tensor.Layout.ROW_MAJOR,
         )
         .to(ttl.tensor.Layout.TILE)
@@ -45,7 +52,7 @@ def run_bert_large_fused_qkv_matmul_test(
         ttl.tensor.Tensor(
             B.flatten().tolist(),
             b_shape,
-            dtype,
+            in1_dtype,
             ttl.tensor.Layout.ROW_MAJOR,
         )
         .to(ttl.tensor.Layout.TILE)
@@ -56,7 +63,7 @@ def run_bert_large_fused_qkv_matmul_test(
             ttl.tensor.Tensor(
                 BIAS.flatten().tolist(),
                 bias_shape,
-                dtype,
+                bias_dtype,
                 ttl.tensor.Layout.ROW_MAJOR,
             )
             .pad(bias_pad_shape, [0, 0, 0, 0], 0)
@@ -66,7 +73,7 @@ def run_bert_large_fused_qkv_matmul_test(
     else:
         bias_t = None
 
-    t2 = ttl.tensor.bert_large_fused_qkv_matmul(a_t, b_t, bias_t, out_mem_config)
+    t2 = ttl.tensor.bert_large_fused_qkv_matmul(a_t, b_t, bias_t, out_mem_config, out_dtype)
 
     # Check memory of inputs and outputs
     assert a_t.memory_config().buffer_type == in0_mem_config.buffer_type
@@ -140,7 +147,73 @@ def test_bert_large_fused_qkv_matmul_test(
         f"tt_metal/tools/profiler/logs/BERT_large_fused_qkv_matmul_{request.node.callspec.id}"
     )
     run_bert_large_fused_qkv_matmul_test(
-        dtype, in0_mem_config, in1_mem_config, bias_mem_config, out_mem_config
+        dtype,
+        dtype,
+        dtype,
+        dtype,
+        in0_mem_config,
+        in1_mem_config,
+        bias_mem_config,
+        out_mem_config,
+    )
+
+
+@pytest.mark.parametrize(
+    "in0_mem_config, in1_mem_config, bias_mem_config, out_mem_config",
+    (
+        (
+            ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+            ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+            ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+            ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+        ),
+    ),
+    ids=["BERT_mem_config"],
+)
+@pytest.mark.parametrize(
+    "out_dtype",
+    (ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16),
+    ids=["out_BFLOAT8_B", "out_BFLOAT16"],
+)
+@pytest.mark.parametrize(
+    "bias_dtype",
+    (ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16),
+    ids=["bias_BFLOAT8_B", "bias_BFLOAT16"],
+)
+@pytest.mark.parametrize(
+    "in1_dtype",
+    (ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16),
+    ids=["in1_BFLOAT8_B", "in1_BFLOAT16"],
+)
+@pytest.mark.parametrize(
+    "in0_dtype",
+    (ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16),
+    ids=["in0_BFLOAT8_B", "in0_BFLOAT16"],
+)
+def test_bert_large_fused_qkv_matmul_test_mixed_precision(
+    in0_dtype,
+    in1_dtype,
+    bias_dtype,
+    out_dtype,
+    in0_mem_config,
+    in1_mem_config,
+    bias_mem_config,
+    out_mem_config,
+    request,
+):
+    ttl.profiler.set_profiler_flag(False)
+    ttl.profiler.set_profiler_location(
+        f"tt_metal/tools/profiler/logs/BERT_large_fused_qkv_matmul_mixed_precision_{request.node.callspec.id}"
+    )
+    run_bert_large_fused_qkv_matmul_test(
+        in0_dtype,
+        in1_dtype,
+        bias_dtype,
+        out_dtype,
+        in0_mem_config,
+        in1_mem_config,
+        bias_mem_config,
+        out_mem_config,
     )
 
 
@@ -149,13 +222,27 @@ def test_bert_large_fused_qkv_matmul_with_program_cache(use_program_cache):
     dram_mem_config = ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM)
     for _ in range(2):
         run_bert_large_fused_qkv_matmul_test(
-            dtype, dram_mem_config, dram_mem_config, dram_mem_config, dram_mem_config
+            dtype,
+            dtype,
+            dtype,
+            dtype,
+            dram_mem_config,
+            dram_mem_config,
+            dram_mem_config,
+            dram_mem_config,
         )
 
     dram_mem_config = ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1)
     for _ in range(2):
         run_bert_large_fused_qkv_matmul_test(
-            dtype, dram_mem_config, dram_mem_config, dram_mem_config, dram_mem_config
+            dtype,
+            dtype,
+            dtype,
+            dtype,
+            dram_mem_config,
+            dram_mem_config,
+            dram_mem_config,
+            dram_mem_config,
         )
 
     assert ttl.program_cache.num_entries() == 2

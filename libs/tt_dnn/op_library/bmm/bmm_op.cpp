@@ -507,7 +507,7 @@ operation::ProgramWithCallbacks BertLargeMatmul::create_program(
 
     auto device_compute_and_storage_grid_size = input_tensor_a.device()->compute_and_storage_grid_size();
     CoreCoord compute_and_storage_grid_size;
-    tt::tt_metal::DataType output_dtype = input_tensor_a.dtype(); // TODO: Uplift to be an arg passed in
+    tt::tt_metal::DataType output_dtype = this->output_dtype.value_or(input_tensor_a.dtype());
     tt::DataFormat output_cb_data_format = tt::DataFormat::Bfp8_b; // TODO: Keep bmm the same; get rid of this
     MathFidelity math_fidelity = MathFidelity::LoFi;
     uint32_t in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N;

@@ -916,7 +916,6 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_optimized_bert_lar
     if (output_dtype == tt::tt_metal::DataType::BFLOAT16) {
         output_data_format = tt::DataFormat::Float16_b;
     }
-    //TT_ASSERT(a.dtype() == b.dtype());
 
     tt_metal::Buffer* bias_buffer = nullptr;
     tt::DataFormat bias_data_format = tt::DataFormat::Bfp8_b; // bias; doesn't matter if bias=nullptr
@@ -926,13 +925,17 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_optimized_bert_lar
         TT_ASSERT(a.device() == c.device(), "Operands to matmul need to be on the same device!");
         TT_ASSERT(c.buffer() != nullptr, "Operands to matmul need to be allocated in buffers on device!");
 
-        TT_ASSERT(a.dtype() == c.dtype());
+        //TT_ASSERT(a.dtype() == c.dtype());
         bias_buffer = c.buffer();
 
         if (c.dtype() == tt::tt_metal::DataType::BFLOAT16) {
             bias_data_format = tt::DataFormat::Float16_b;
         }
     }
+    std::cout << "in0 data format: " << in0_data_format << std::endl;
+    std::cout << "in1 data format: " << in1_data_format << std::endl;
+    std::cout << "bias data format: " << bias_data_format << std::endl;
+    std::cout << "output data format: " << output_data_format << std::endl;
 
     tt_metal::Device *device = a.device();
 
