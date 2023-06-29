@@ -65,11 +65,11 @@ class TtGPT(nn.Module):
 
         base_address = f"transformer"
 
-        self.beta = nanogpt_utils.torch2tt_tensor(
-            state_dict[f"{base_address}.ln_f.bias"], device
+        self.beta = torch2tt_tensor(
+            state_dict[f"{base_address}.ln_f.bias"], device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR
         )
-        self.gamma = nanogpt_utils.torch2tt_tensor(
-            state_dict[f"{base_address}.ln_f.weight"], device
+        self.gamma = torch2tt_tensor(
+            state_dict[f"{base_address}.ln_f.weight"], device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR
         )
 
         self.wte = nn.Embedding(config.vocab_size, config.n_embd)
@@ -106,8 +106,8 @@ class TtGPT(nn.Module):
         self.lm_weight = state_dict["lm_head.weight"]
 
         # Push weights to Tt device
-        self.tt_weight_lm_head = nanogpt_utils.torch2tt_tensor(
-            self.lm_weight, device
+        self.tt_weight_lm_head = torch2tt_tensor(
+            self.lm_weight, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR
         )
 
         self.tt_weight_lm_head = tt_lib.tensor.transpose(self.tt_weight_lm_head)
@@ -129,13 +129,9 @@ class TtGPT(nn.Module):
 
         tt_sum = tt_lib.tensor.add(tt_tok_emb, tt_pos_emb)
 
-        sum = nanogpt_utils.tt2torch_tensor(tt_sum)
+        sum = tt2torch_tensor(tt_sum)
 
         x = self.drop(sum)
-        #x = x.squeeze(0)
-        #x = x.squeeze(0)
-
-        #a = nanogpt_utils.pad_input_tensor(x, 0, 2)
 
         tt_x = torch_to_tt_tensor_rm(x, self.device, put_on_device=True)
 
@@ -143,17 +139,14 @@ class TtGPT(nn.Module):
             tt_x = block.forward(tt_x)
 
         tt_x = self.ln_f(tt_x)
-        x = nanogpt_utils.tt2torch_tensor(tt_x)
+        x = tt2torch_tensor(tt_x)
         x = x[:, [-1], :]
-        tt_x = nanogpt_utils.torch2tt_tensor(x, self.device)
+        tt_x = torch2tt_tensor(x, self.device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
 
         logits = nanogpt_utils.tt_linear(tt_x, weight=self.tt_weight_lm_head, bias=None)
         loss = None
 
         return logits, loss
-
-
-
 
     def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):
             """
@@ -166,16 +159,9 @@ class TtGPT(nn.Module):
                 idx_cond = idx if idx.size(1) <= self.config.block_size else idx[:, -self.config.block_size:]
                 # forward the model to get the logits for the index in the sequence
 
-
-                #mask = pad_2(torch.zeros(idx.shape()))
-
                 tt_logits, _ = self.forward(idx_cond)
                 # pluck the logits at the final step and scale by desired temperature
-                print(tt_logits.shape())
-                logits = nanogpt_utils.tt2torch_tensor(tt_logits)
-                print('Logits')
-                print(logits.shape)
-                #logits = logits.squeeze(0)
+                logits = tt2torch_tensor(tt_logits)
 
                 #logits = logits[:, -1, :] / temperature
                 # optionally crop the logits to only the top k options
@@ -189,15 +175,10 @@ class TtGPT(nn.Module):
 
             # apply softmax to convert logits to (normalized) probabilities
                 probs = F.softmax(logits, dim=-1)
-                print('P-SHAPEEE')
-                print(probs.shape)
                 probs = probs.squeeze(0)
-                print(probs)
                 # sample from the distribution
                 idx_next = torch.multinomial(probs, num_samples=1)
             # append sampled index to the running sequence and continue
-                print(idx.shape)
-                print(idx_next.shape)
                 idx = torch.cat((idx, idx_next), dim=1)
 
             return idx

@@ -2,7 +2,6 @@ import torch
 from torch.nn import functional as F
 import torch.nn as nn
 import tt_lib
-import python_api_testing.models.nanogpt.utils as nanogpt_utils
 import python_api_testing.models.nanogpt.nanogpt_mlp as nanogpt_mlp
 import python_api_testing.models.nanogpt.nanogpt_attention as nanogpt_attention
 
@@ -13,6 +12,11 @@ import math
 
 from transformers import GPT2LMHeadModel
 
+from utility_functions_new import (
+    torch2tt_tensor,
+    tt2torch_tensor,
+    torch_to_tt_tensor_rm,
+)
 
 @dataclass
 class GPTConfig:
@@ -24,18 +28,17 @@ class GPTConfig:
     dropout: float = 0.0
     bias: bool = True  # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
 
-
 class TtBlock(nn.Module):
     def __init__(self, config, state_dict, base_address, device):
         super().__init__()
 
         self.device = device
 
-        self.beta_1 = nanogpt_utils.torch2tt_tensor(
-            state_dict[f"{base_address}.ln_1.bias"], device
+        self.beta_1 = torch2tt_tensor(
+            state_dict[f"{base_address}.ln_1.bias"], device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR
         )
-        self.gamma_1 = nanogpt_utils.torch2tt_tensor(
-            state_dict[f"{base_address}.ln_1.weight"], device
+        self.gamma_1 = torch2tt_tensor(
+            state_dict[f"{base_address}.ln_1.weight"], device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR
         )
 
         self.ln_1 = fallback_ops.LayerNorm(
@@ -49,11 +52,11 @@ class TtBlock(nn.Module):
             config, state_dict, f"{base_address}.attn", device
         )
 
-        self.beta_2 = nanogpt_utils.torch2tt_tensor(
-            state_dict[f"{base_address}.ln_2.bias"], device
+        self.beta_2 = torch2tt_tensor(
+            state_dict[f"{base_address}.ln_2.bias"], device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR
         )
-        self.gamma_2 = nanogpt_utils.torch2tt_tensor(
-            state_dict[f"{base_address}.ln_2.weight"], device
+        self.gamma_2 = torch2tt_tensor(
+            state_dict[f"{base_address}.ln_2.weight"], device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR
         )
 
         self.ln_2 = fallback_ops.LayerNorm(

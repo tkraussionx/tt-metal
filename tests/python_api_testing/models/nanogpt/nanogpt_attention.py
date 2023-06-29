@@ -41,19 +41,19 @@ class TtCausalSelfAttention(nn.Module):
         self.tt_weight_c_proj = state_dict[f"{base_address}.c_proj.weight"]
 
         # Push weights to Ttp device
-        self.tt_weight_c_attn = nanogpt_utils.torch2tt_tensor(
-            self.tt_weight_c_attn, device
+        self.tt_weight_c_attn = torch2tt_tensor(
+            self.tt_weight_c_attn, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR
         )
-        self.tt_weight_c_proj = nanogpt_utils.torch2tt_tensor(
-            self.tt_weight_c_proj, device
+        self.tt_weight_c_proj = torch2tt_tensor(
+            self.tt_weight_c_proj, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR
         )
 
         # Load biases
-        self.tt_bias_c_attn = nanogpt_utils.torch2tt_tensor(
-            state_dict[f"{base_address}.c_attn.bias"], device
+        self.tt_bias_c_attn = torch2tt_tensor(
+            state_dict[f"{base_address}.c_attn.bias"], device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR
         )
-        self.tt_bias_c_proj = nanogpt_utils.torch2tt_tensor(
-            state_dict[f"{base_address}.c_proj.bias"], device
+        self.tt_bias_c_proj = torch2tt_tensor(
+            state_dict[f"{base_address}.c_proj.bias"], device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR
         )
 
         self.n_head = config.n_head
@@ -67,7 +67,7 @@ class TtCausalSelfAttention(nn.Module):
         _, B, T, C = x.shape() # batch size, sequence length, embedding dimensionality (n_embd)
 
         x1 = nanogpt_utils.tt_linear(x, self.tt_weight_c_attn, self.tt_bias_c_attn)
-        pt_x1 = nanogpt_utils.tt2torch_tensor(x1)
+        pt_x1 = tt2torch_tensor(x1)
         pt_x1 = pt_x1.squeeze(0)
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
@@ -85,7 +85,7 @@ class TtCausalSelfAttention(nn.Module):
 
         tt_att = fallback_ops.softmax(tt_att, dim=-1)
 
-        att = nanogpt_utils.tt2torch_tensor(tt_att)
+        att = tt2torch_tensor(tt_att)
         att = self.attn_dropout(att)
 
         tt_att = torch_to_tt_tensor_rm(att, self.device, put_on_device=False)
@@ -102,8 +102,8 @@ class TtCausalSelfAttention(nn.Module):
 
         # output projection
         x2 = nanogpt_utils.tt_linear(tt_y, self.tt_weight_c_proj, self.tt_bias_c_proj)
-        pt_x2 = nanogpt_utils.tt2torch_tensor(x2)
+        pt_x2 = tt2torch_tensor(x2)
 
         y = self.resid_dropout(pt_x2)
-        y = nanogpt_utils.torch2tt_tensor(y, self.device)
+        y = torch2tt_tensor(y, self.device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
         return y

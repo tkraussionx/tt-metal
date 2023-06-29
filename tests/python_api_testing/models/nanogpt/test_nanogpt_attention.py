@@ -19,6 +19,12 @@ import python_api_testing.models.nanogpt.nanogpt_utils as nanogpt_utils
 import python_api_testing.models.nanogpt.nanogpt_attention as nanogpt_attention
 
 
+from utility_functions_new import (
+    torch2tt_tensor,
+    tt2torch_tensor,
+    torch_to_tt_tensor_rm,
+)
+
 def run_nanogpt_attn_test(device):
     # Prepare input
 
@@ -31,9 +37,6 @@ def run_nanogpt_attn_test(device):
     torch.manual_seed(0)
 
     test_in = torch.rand(1, 60, 768)
-
-
-
     pt_attn = model_hf.transformer.h[block].attn
     pt_out = pt_attn.forward(test_in)
 
@@ -51,9 +54,7 @@ def run_nanogpt_attn_test(device):
 
     config = nanogpt_attention.GPTConfig(**config_args)
 
-
-
-    tt_test_in = nanogpt_utils.torch2tt_tensor(test_in, device)
+    tt_test_in = torch2tt_tensor(test_in, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
 
     tt_attn = nanogpt_attention.TtCausalSelfAttention(config, sd, base_address, device)
 
@@ -62,7 +63,7 @@ def run_nanogpt_attn_test(device):
         device
     )
 
-    tt_out_converted = nanogpt_utils.tt2torch_tensor(tt_out)
+    tt_out_converted = tt2torch_tensor(tt_out)
 
     does_pass, pcc_message = comp_pcc(pt_out[0], tt_out_converted, 0.99)
     logger.info(pcc_message)

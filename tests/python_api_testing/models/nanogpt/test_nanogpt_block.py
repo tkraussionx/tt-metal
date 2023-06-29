@@ -16,10 +16,15 @@ from transformers import GPT2LMHeadModel
 from sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 
 from loguru import logger
-import python_api_testing.models.nanogpt.utils as nanogpt_utils
 import python_api_testing.models.nanogpt.nanogpt_block as nanogpt_block
 import python_api_testing.models.nanogpt.nanogpt_attention as nanogpt_attention
 
+
+from utility_functions_new import (
+    torch2tt_tensor,
+    tt2torch_tensor,
+    torch_to_tt_tensor_rm,
+)
 
 def run_nanogpt_block_test(device, pcc):
 
@@ -51,16 +56,15 @@ def run_nanogpt_block_test(device, pcc):
     config = nanogpt_attention.GPTConfig(**config_args)
 
 
-    tt_test_in = nanogpt_utils.torch2tt_tensor(test_in, device)
+    tt_test_in = torch2tt_tensor(test_in, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
 
     tt_block = nanogpt_block.TtBlock(config, sd, base_address, device)
 
     tt_out = tt_block.forward(
-        tt_test_in,
-        device
+        tt_test_in
     )
 
-    tt_out_converted = nanogpt_utils.tt2torch_tensor(tt_out)
+    tt_out_converted = tt2torch_tensor(tt_out)
 
     does_pass, pcc_message = comp_pcc(pt_out[0], tt_out_converted, 0.99)
     logger.info(pcc_message)
@@ -83,5 +87,7 @@ def run_nanogpt_block_test(device, pcc):
 def test_nanogpt_block(pcc):
     device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
     tt_lib.device.InitializeDevice(device)
+    tt_lib.device.SetDefaultDevice(device)
+
     run_nanogpt_block_test(device, pcc)
     tt_lib.device.CloseDevice(device)

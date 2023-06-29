@@ -16,9 +16,13 @@ from transformers import GPT2LMHeadModel
 from sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 
 from loguru import logger
-import python_api_testing.models.nanogpt.utils as nanogpt_utils
 import python_api_testing.models.nanogpt.nanogpt_gelu as nanogpt_gelu
 
+from utility_functions_new import (
+    torch2tt_tensor,
+    tt2torch_tensor,
+    torch_to_tt_tensor_rm,
+)
 
 def run_nanogpt_gelu_test(device, pcc):
 
@@ -27,9 +31,9 @@ def run_nanogpt_gelu_test(device, pcc):
 
     pt_out = nanogpt_gelu.new_gelu(test_in)
 
-    tt_test_in = nanogpt_utils.torch2tt_tensor(test_in, device)
+    tt_test_in = torch2tt_tensor(test_in, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
     tt_out = nanogpt_gelu.tt_nanogpt_gelu(tt_test_in, device)
-    tt_out_converted = nanogpt_utils.tt2torch_tensor(tt_out)
+    tt_out_converted = tt2torch_tensor(tt_out)
 
     does_pass, pcc_message = comp_pcc(pt_out, tt_out_converted, pcc)
     logger.info(pcc_message)

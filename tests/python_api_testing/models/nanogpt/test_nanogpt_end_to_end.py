@@ -88,7 +88,7 @@ def run_nanogpt_model_test(device, prompt, temperature, max_new_tokens):
     "prompt, max_new_tokens, temperature",
     (
         (
-            "One joke about Bill gates:",
+            "Where do you go?",
             25,
             0.8,
         ),
