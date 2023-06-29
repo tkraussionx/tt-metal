@@ -305,7 +305,7 @@ def run_bert_encoder_inference(
 def test_bert_encoder_inference(
     model_version, batch, seq_len, on_weka, dram, pcc, model_location_generator
 ):
-    ttl.profiler.set_profiler_flag(False)
+    ttl.profiler.set_profiler_flag(True)
     ttl.profiler.set_profiler_location(
         "tt_metal/tools/profiler/logs/BERT_large_1_encoder"
     )

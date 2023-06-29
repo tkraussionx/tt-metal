@@ -93,6 +93,38 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         .start={(std::size_t) start_core_x + 5, (std::size_t) start_core_y + 1},
         .end={(std::size_t) start_core_x + num_cores_c - 1, (std::size_t) start_core_y + num_cores_r - 1}};
 
+    // HACK: Force blank kernels on unused cores
+    // NOTE: Rows are always full for this op
+    if (num_cores_c < 12) {
+        CoreRange remaining_unused_cores{
+            .start={(std::size_t) 11, (std::size_t) start_core_y},
+            .end={(std::size_t) 11, (std::size_t) 8}};
+
+        auto dummy_reader = tt_metal::CreateDataMovementKernel(
+            program,
+            "tt_metal/kernels/dataflow/blank.cpp",
+            remaining_unused_cores,
+            tt_metal::DataMovementProcessor::RISCV_1,
+            tt_metal::NOC::RISCV_1_default
+        );
+        auto dummy_writer = tt_metal::CreateDataMovementKernel(
+            program,
+            "tt_metal/kernels/dataflow/blank.cpp",
+            remaining_unused_cores,
+            tt_metal::DataMovementProcessor::RISCV_0,
+            tt_metal::NOC::RISCV_0_default
+        );
+        auto dummy_compute = tt_metal::CreateComputeKernel(
+            program,
+            "tt_metal/kernels/compute/blank.cpp",
+            remaining_unused_cores,
+            {0},
+            math_fidelity,
+            false,
+            false
+        );
+    }
+
     /* Uncomment if we don't checkerboard
     CoreRange in0_receiver_in1_receiver{
         .start={(std::size_t) start_core_x + 1, (std::size_t) start_core_y + 1},
