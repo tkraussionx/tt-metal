@@ -2,8 +2,8 @@ import torch
 from torch.nn import functional as F
 import torch.nn as nn
 import tt_lib
-import python_api_testing.models.nanogpt.nanogpt_mlp as nanogpt_mlp
-import python_api_testing.models.nanogpt.nanogpt_attention as nanogpt_attention
+import python_api_testing.models.nanogpt.tt.nanogpt_mlp as nanogpt_mlp
+import python_api_testing.models.nanogpt.tt.nanogpt_attention as nanogpt_attention
 
 from tt_lib.fallback_ops import fallback_ops
 

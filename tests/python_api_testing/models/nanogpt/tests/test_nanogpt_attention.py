@@ -15,8 +15,8 @@ from transformers import GPT2LMHeadModel
 from sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 
 from loguru import logger
-import python_api_testing.models.nanogpt.nanogpt_utils as nanogpt_utils
-import python_api_testing.models.nanogpt.nanogpt_attention as nanogpt_attention
+import python_api_testing.models.nanogpt.utils as nanogpt_utils
+import python_api_testing.models.nanogpt.tt.nanogpt_attention as nanogpt_attention
 
 
 from utility_functions_new import (
@@ -59,8 +59,7 @@ def run_nanogpt_attn_test(device):
     tt_attn = nanogpt_attention.TtCausalSelfAttention(config, sd, base_address, device)
 
     tt_out = tt_attn.forward(
-        tt_test_in,
-        device
+        tt_test_in
     )
 
     tt_out_converted = tt2torch_tensor(tt_out)
@@ -78,6 +77,8 @@ def run_nanogpt_attn_test(device):
 def test_nanogpt_attn():
     device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
     tt_lib.device.InitializeDevice(device)
+    tt_lib.device.SetDefaultDevice(device)
+
     run_nanogpt_attn_test(device)
     tt_lib.device.CloseDevice(device)
 

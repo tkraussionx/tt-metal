@@ -16,7 +16,7 @@ from transformers import GPT2LMHeadModel
 from sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 
 from loguru import logger
-import python_api_testing.models.nanogpt.nanogpt_mlp as nanogpt_mlp
+import python_api_testing.models.nanogpt.tt.nanogpt_mlp as nanogpt_mlp
 
 from utility_functions_new import (
     torch2tt_tensor,
