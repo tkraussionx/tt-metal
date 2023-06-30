@@ -38,7 +38,7 @@ operation::ProgramWithCallbacks multi_core_split_fused_qkv(const Tensor &a, std:
     uint32_t per_core_tiles = ashape[3] / TILE_WIDTH; // 96
     uint32_t num_tensors = 3;
     uint32_t num_tiles_per_tensor = per_core_tiles / num_tensors; // 32
-    uint32_t block_size = 8;
+    uint32_t block_size = 1;
     uint32_t num_blocks_per_core = per_core_tiles / block_size; // 6
     uint32_t num_blocks_per_tensor = num_blocks_per_core / num_tensors; // 2
 
@@ -150,6 +150,10 @@ operation::ProgramWithCallbacks multi_core_split_fused_qkv(const Tensor &a, std:
         cb_data_format
     );
 
+    //std::cout << in0_buffer->address() << std::endl;
+    //std::cout << q_buffer->address() << std::endl;
+    //std::cout << k_buffer->address() << std::endl;
+    //std::cout << v_buffer->address() << std::endl;
     for (int core_idx_y = 0; core_idx_y < num_cores_r; core_idx_y++) {
         for (int core_idx_x = 0; core_idx_x < num_cores_c; core_idx_x++) {
             CoreCoord core = {(std::size_t) start_core_x + core_idx_x, (std::size_t) start_core_y + core_idx_y};
@@ -211,7 +215,7 @@ operation::ProgramWithCallbacks multi_core_split_fused_qkv(const Tensor &a, std:
         }
     };
 
-    //tt_start_debug_print_server(a.device()->cluster(), {0}, {{1, 1}});
+    //tt_start_debug_print_server(a.device()->cluster(), {0}, {{2, 2}});
     return {std::move(program), override_runtime_args_callback};
 }
 

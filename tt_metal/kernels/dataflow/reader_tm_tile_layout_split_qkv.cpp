@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include "dataflow_api.h"
+#include "debug_print.h"
 
 void kernel_main() {
     // READER RUNTIME ARGS
@@ -34,6 +35,14 @@ void kernel_main() {
         .data_format = DataFormat::Bfp8_b
     };
     #endif
+
+    //DPRINT << "Read: " << in0_tensor_addr << ENDL();
+    //DPRINT << "Read: " << in0_tensor_tile_id << ENDL();
+    //DPRINT << "Read: " << out_num_tensors << ENDL();
+    //DPRINT << "Read: " << out_num_tiles_per_tensor << ENDL();
+    //DPRINT << "Read: " << out_num_blocks << ENDL();
+    //DPRINT << "Read: " << block_size << ENDL();
+    //DPRINT << "Read: " << single_tile_size_bytes << ENDL();
 
     uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
     for (uint32_t out_tensor = 0; out_tensor < out_num_blocks; out_tensor++) {

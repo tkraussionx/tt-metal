@@ -59,6 +59,15 @@ void kernel_main() {
     };
     #endif
 
+    //DPRINT << "Write: " << q_tensor_addr << ENDL();
+    //DPRINT << "Write: " << k_tensor_addr << ENDL();
+    //DPRINT << "Write: " << v_tensor_addr << ENDL();
+    //DPRINT << "Write: " << out_tensor_tile_id << ENDL();
+    //DPRINT << "Write: " << out_num_tensors << ENDL();
+    //DPRINT << "Write: " << out_num_blocks_per_tensor << ENDL();
+    //DPRINT << "Write: " << block_size << ENDL();
+    //DPRINT << "Write: " << single_tile_size_bytes << ENDL();
+
     std::array<InterleavedAddrGenFast<out_is_dram_bool>, out_num_tensors> qkv_output_banks{sq, sk, sv};
     uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
     uint32_t out_split_tensor_tile_id;
