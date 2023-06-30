@@ -25,6 +25,7 @@ import python_api_testing.models.nanogpt.utils as nanogpt_utils
 import python_api_testing.models.nanogpt.tt.nanogpt_block as nanogpt_block
 import python_api_testing.models.nanogpt.tt.nanogpt_attention as nanogpt_attention
 import python_api_testing.models.nanogpt.tt.nanogpt_model as nanogpt_model
+import python_api_testing.models.nanogpt.ref.model as reference_model
 
 from utility_functions_new import (
     torch2tt_tensor,
@@ -52,6 +53,7 @@ def run_nanogpt_model_test(device, prompt, temperature, max_new_tokens):
     model_hf.eval()
     torch.manual_seed(0)
 
+    test_in = torch.randint(10,700, (1,16) )
 
     model_type = 'gpt2'
 
@@ -65,6 +67,8 @@ def run_nanogpt_model_test(device, prompt, temperature, max_new_tokens):
 
     config = nanogpt_attention.GPTConfig(**config_args)
 
+    #tt_test_in = torch2tt_tensor(test_in, device)
+
     tt_model = nanogpt_model.TtGPT(config, sd, device)
 
     enc = tiktoken.get_encoding("gpt2")
@@ -76,9 +80,24 @@ def run_nanogpt_model_test(device, prompt, temperature, max_new_tokens):
 
     x = (torch.tensor(start_ids, dtype=torch.long, device='cpu')[None, ...])
 
-    y = tt_model.generate(x, max_new_tokens, temperature, top_k=top_k)
-    print(decode(y[0].tolist()))
+    pt_model = reference_model.GPT.from_pretrained("gpt2", dict(dropout=0.0))
 
+    pt_model.eval()
+    pt_model.to('cpu')
+
+    tt_y = tt_model.generate(x, max_new_tokens, temperature, top_k=top_k)
+
+    pt_y = pt_model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k)
+
+    does_pass, pcc_message = comp_pcc(pt_y[0], tt_y[0], 0.99)
+    logger.info(pcc_message)
+
+    if does_pass:
+        logger.info("nanogpt_mlp: Passed!")
+    else:
+        logger.warning("nanogpt_mlp: Failed!")
+
+    assert does_pass
 
 
 @pytest.mark.parametrize(

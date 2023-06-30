@@ -1,11 +1,6 @@
 from pathlib import Path
 import sys
 
-
-import os
-import pickle
-import tiktoken
-
 f = f"{Path(__file__).parent}"
 sys.path.append(f"{f}/..")
 sys.path.append(f"{f}/../..")
@@ -16,12 +11,15 @@ import torch
 import tt_lib
 import pytest
 
+import os
+import pickle
+import tiktoken
+
 from transformers import GPT2LMHeadModel
 
 from sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 
 from loguru import logger
-import python_api_testing.models.nanogpt.utils as nanogpt_utils
 import python_api_testing.models.nanogpt.tt.nanogpt_block as nanogpt_block
 import python_api_testing.models.nanogpt.tt.nanogpt_attention as nanogpt_attention
 import python_api_testing.models.nanogpt.tt.nanogpt_model as nanogpt_model
@@ -32,19 +30,7 @@ from utility_functions_new import (
     torch_to_tt_tensor_rm,
 )
 
-# -----------------------------------------------------------------------------
-start = "\n" # or "<|endoftext|>" or etc. Can also specify a file, use as: "FILE:prompt.txt"
-max_new_tokens = 20 # number of tokens generated in each sample
-temperature = 0.8 # 1.0 = no change, < 1.0 = less random, > 1.0 = more random, in predictions
-top_k = None # retain only the top_k most likely tokens, clamp others to have 0 probability
-seed = 1337
-device_select = 'cpu' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
-dtype = 'bfloat16' # 'float32' or 'bfloat16' or 'float16'
-compile = False # use PyTorch 2.0 to compile the model to be faster
-# -----------------------------------------------------------------------------
-
-
-def run_nanogpt_model_test(device, prompt, temperature, max_new_tokens):
+def run_nanogpt_model_test(device, pcc):
     # Prepare input
 
     model_hf = GPT2LMHeadModel.from_pretrained('gpt2')
@@ -52,6 +38,20 @@ def run_nanogpt_model_test(device, prompt, temperature, max_new_tokens):
     model_hf.eval()
     torch.manual_seed(0)
 
+    block_size = 1024
+
+    enc = tiktoken.get_encoding("gpt2")
+    encode = lambda s: enc.encode(s, allowed_special={"<|endoftext|>"})
+
+    start_ids = encode("How are you?")
+
+    x = (torch.tensor(start_ids, dtype=torch.long, device='cpu')[None, ...])
+
+    x = x if x.size(1) <= block_size else x[:, -block_size:]
+
+
+    pt_model = model_hf
+    pt_out = pt_model.forward(x)
 
     model_type = 'gpt2'
 
@@ -65,36 +65,39 @@ def run_nanogpt_model_test(device, prompt, temperature, max_new_tokens):
 
     config = nanogpt_attention.GPTConfig(**config_args)
 
+    tt_test_in = torch2tt_tensor(x, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
+
     tt_model = nanogpt_model.TtGPT(config, sd, device)
 
-    enc = tiktoken.get_encoding("gpt2")
-    encode = lambda s: enc.encode(s, allowed_special={"<|endoftext|>"})
-    decode = lambda l: enc.decode(l)
+    tt_out = tt_model.forward(
+        x
+    )
 
-    text = prompt
-    start_ids = encode(text)
+    tt_out_converted = tt2torch_tensor(tt_out[0])
 
-    x = (torch.tensor(start_ids, dtype=torch.long, device='cpu')[None, ...])
+    does_pass, pcc_message = comp_pcc(pt_out[0], tt_out_converted, 0.99)
+    logger.info(pcc_message)
 
-    y = tt_model.generate(x, max_new_tokens, temperature, top_k=top_k)
-    print(decode(y[0].tolist()))
+    if does_pass:
+        logger.info("nanogpt_model: Passed!")
+    else:
+        logger.warning("nanogpt_model: Failed!")
 
+    assert does_pass
 
 
 @pytest.mark.parametrize(
-    "prompt, max_new_tokens, temperature",
+    "pcc",
     (
         (
-            "Where do you go?",
-            25,
-            0.8,
+            0.99,
         ),
     ),
 )
-def test_nanogpt_model(prompt, max_new_tokens, temperature):
+def test_nanogpt_model(pcc):
     device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
     tt_lib.device.InitializeDevice(device)
     tt_lib.device.SetDefaultDevice(device)
 
-    run_nanogpt_model_test(device, prompt, temperature, max_new_tokens)
+    run_nanogpt_model_test(device, pcc)
     tt_lib.device.CloseDevice(device)
