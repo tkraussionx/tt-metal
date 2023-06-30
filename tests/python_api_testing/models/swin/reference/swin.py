@@ -7,7 +7,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-
+import pickle
 from .activations import ACT2FN
 from .pytorch_utils import (
     find_pruneable_heads_and_indices,
@@ -216,11 +216,15 @@ class SwinSelfOutput(nn.Module):
 
 
 class SwinAttention(nn.Module):
-    def __init__(self, config: SwinConfig, dim, num_heads, window_size):
+    def __init__(
+        self, config: SwinConfig, dim, num_heads, window_size, layer_index, index
+    ):
         super().__init__()
         self.self = SwinSelfAttention(config, dim, num_heads, window_size)
         self.output = SwinSelfOutput(config, dim)
         self.pruned_heads = set()
+        self.layer_index = layer_index
+        self.index = index
 
     def prune_heads(self, heads):
         if len(heads) == 0:
@@ -252,9 +256,30 @@ class SwinAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
+        name = (
+            "layer_"
+            + str(self.layer_index)
+            + "_self_attention_input_"
+            + str(self.index)
+            + ".pkl"
+        )
+        with open(name, "wb") as file:
+            pickle.dump(hidden_states, file)
+
         self_outputs = self.self(
             hidden_states, attention_mask, head_mask, output_attentions
         )
+
+        name = (
+            "layer_"
+            + str(self.layer_index)
+            + "_self_attention_output_"
+            + str(self.index)
+            + ".pkl"
+        )
+        with open(name, "wb") as file:
+            pickle.dump(self_outputs[0], file)
+
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[
             1:
@@ -289,16 +314,30 @@ class SwinOutput(nn.Module):
 
 class SwinLayer(nn.Module):
     def __init__(
-        self, config: SwinConfig, dim, input_resolution, num_heads, shift_size=0
+        self,
+        config: SwinConfig,
+        dim,
+        input_resolution,
+        num_heads,
+        shift_size,
+        layer_index,
+        index,
     ):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.shift_size = shift_size
         self.window_size = config.window_size
         self.input_resolution = input_resolution
+        self.layer_index = layer_index
+        self.index = index
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = SwinAttention(
-            config, dim, num_heads, window_size=self.window_size
+            config,
+            dim,
+            num_heads,
+            window_size=self.window_size,
+            layer_index=self.layer_index,
+            index=self.index,
         )
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.intermediate = SwinIntermediate(config, dim)
@@ -390,6 +429,16 @@ class SwinLayer(nn.Module):
         if attn_mask is not None:
             attn_mask = attn_mask.to(hidden_states_windows.device)
 
+        name = (
+            "layer_"
+            + str(self.layer_index)
+            + "_swin_attention_input_"
+            + str(self.index)
+            + ".pkl"
+        )
+        with open(name, "wb") as file:
+            pickle.dump(hidden_states_windows, file)
+
         attention_outputs = self.attention(
             hidden_states_windows,
             attn_mask,
@@ -398,6 +447,16 @@ class SwinLayer(nn.Module):
         )
 
         attention_output = attention_outputs[0]
+
+        name = (
+            "layer_"
+            + str(self.layer_index)
+            + "_swin_attention_output_"
+            + str(self.index)
+            + ".pkl"
+        )
+        with open(name, "wb") as file:
+            pickle.dump(attention_output, file)
 
         attention_windows = attention_output.view(
             -1, self.window_size, self.window_size, channels
@@ -436,11 +495,19 @@ class SwinLayer(nn.Module):
 
 class SwinStage(nn.Module):
     def __init__(
-        self, config: SwinConfig, dim, input_resolution, depth, num_heads, downsample
+        self,
+        config: SwinConfig,
+        dim,
+        input_resolution,
+        depth,
+        num_heads,
+        downsample,
+        layer_index,
     ):
         super().__init__()
         self.config = config
         self.dim = dim
+        self.layer_index = layer_index
         self.blocks = nn.ModuleList(
             [
                 SwinLayer(
@@ -449,6 +516,8 @@ class SwinStage(nn.Module):
                     input_resolution=input_resolution,
                     num_heads=num_heads,
                     shift_size=0 if (i % 2 == 0) else config.window_size // 2,
+                    layer_index=self.layer_index,
+                    index=i,
                 )
                 for i in range(depth)
             ]
@@ -476,6 +545,16 @@ class SwinStage(nn.Module):
         for i, layer_module in enumerate(self.blocks):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
+            name = (
+                "layer_"
+                + str(self.layer_index)
+                + "_swin_layer_input_"
+                + str(i)
+                + ".pkl"
+            )
+            with open(name, "wb") as file:
+                pickle.dump(hidden_states, file)
+
             layer_outputs = layer_module(
                 hidden_states,
                 input_dimensions,
@@ -485,6 +564,16 @@ class SwinStage(nn.Module):
             )
 
             hidden_states = layer_outputs[0]
+
+            name = (
+                "layer_"
+                + str(self.layer_index)
+                + "_swin_layer_output_"
+                + str(i)
+                + ".pkl"
+            )
+            with open(name, "wb") as file:
+                pickle.dump(hidden_states, file)
 
         hidden_states_before_downsampling = hidden_states
         if self.downsample is not None:
@@ -703,6 +792,7 @@ class SwinEncoder(nn.Module):
                     downsample=SwinPatchMerging
                     if (i_layer < self.num_layers - 1)
                     else None,
+                    layer_index=i_layer,
                 )
                 for i_layer in range(self.num_layers)
             ]
@@ -724,6 +814,10 @@ class SwinEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_reshaped_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
+
+        name = "Encoder_input.pkl"
+        with open(name, "wb") as file:
+            pickle.dump(hidden_states, file)
 
         if output_hidden_states:
             batch_size, _, hidden_size = hidden_states.shape
@@ -753,6 +847,10 @@ class SwinEncoder(nn.Module):
                     layer_head_mask,
                 )
             else:
+                name = "swin_stage_input_" + str(i) + ".pkl"
+                with open(name, "wb") as file:
+                    pickle.dump(hidden_states, file)
+
                 layer_outputs = layer_module(
                     hidden_states,
                     input_dimensions,
@@ -764,6 +862,10 @@ class SwinEncoder(nn.Module):
             hidden_states = layer_outputs[0]
             hidden_states_before_downsampling = layer_outputs[1]
             output_dimensions = layer_outputs[2]
+
+            name = "swin_stage_output_" + str(i) + ".pkl"
+            with open(name, "wb") as file:
+                pickle.dump(hidden_states, file)
 
             input_dimensions = (output_dimensions[-2], output_dimensions[-1])
 
@@ -791,6 +893,10 @@ class SwinEncoder(nn.Module):
 
             if output_attentions:
                 all_self_attentions += layer_outputs[3:]
+
+        name = "Encoder_output.pkl"
+        with open(name, "wb") as file:
+            pickle.dump(hidden_states, file)
 
         if not return_dict:
             return tuple(
@@ -886,6 +992,11 @@ class SwinModel(nn.Module):
         )
 
         sequence_output = encoder_outputs.last_hidden_state
+
+        name = "encoder_output_in_swin_model.pkl"
+        with open(name, "wb") as file:
+            pickle.dump(sequence_output, file)
+
         sequence_output = self.layernorm(sequence_output)
 
         pooled_output = None

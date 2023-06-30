@@ -1,7 +1,7 @@
 from typing import Optional, Tuple, Union
 import torch
 import torch.nn as nn
-
+import pickle
 from python_api_testing.models.utility_functions_new import (
     tt_to_torch_tensor,
     torch_to_tt_tensor_rm,
@@ -57,6 +57,7 @@ class TtSwinEncoder(nn.Module):
                     base_address=f"{base_address}.layers.{i_layer}",
                     device=self.device,
                     host=self.host,
+                    layer_index=i_layer,
                 )
                 for i_layer in range(self.num_layers)
             ]
@@ -78,6 +79,11 @@ class TtSwinEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_reshaped_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
+
+        pt_encoder_input = tt_to_torch_tensor(hidden_states, self.host).squeeze(0)
+        name = "tt_encoder_input.pkl"
+        with open(name, "wb") as file:
+            pickle.dump(pt_encoder_input, file)
 
         if output_hidden_states:
             _, batch_size, _, hidden_size = hidden_states.shape()
@@ -110,6 +116,14 @@ class TtSwinEncoder(nn.Module):
                     layer_head_mask,
                 )
             else:
+                pt_swin_stage_input = tt_to_torch_tensor(
+                    hidden_states, self.host
+                ).squeeze(0)
+                name = "tt_swin_stage_input_" + str(i) + ".pkl"
+
+                with open(name, "wb") as file:
+                    pickle.dump(pt_swin_stage_input, file)
+
                 layer_outputs = layer_module(
                     hidden_states,
                     input_dimensions,
@@ -121,6 +135,12 @@ class TtSwinEncoder(nn.Module):
             hidden_states = layer_outputs[0]
             hidden_states_before_downsampling = layer_outputs[1]
             output_dimensions = layer_outputs[2]
+
+            pt_hidden_states = tt_to_torch_tensor(hidden_states, self.host).squeeze(0)
+            name = "tt_swin_stage_output_" + str(i) + ".pkl"
+
+            with open(name, "wb") as file:
+                pickle.dump(pt_hidden_states, file)
 
             input_dimensions = (output_dimensions[-2], output_dimensions[-1])
 
@@ -158,6 +178,12 @@ class TtSwinEncoder(nn.Module):
 
             if output_attentions:
                 all_self_attentions += layer_outputs[3:]
+
+        pt_encoder_output = tt_to_torch_tensor(hidden_states, self.host).squeeze(0)
+        name = "tt_encoder_output.pkl"
+
+        with open(name, "wb") as file:
+            pickle.dump(pt_encoder_output, file)
 
         if not return_dict:
             return tuple(

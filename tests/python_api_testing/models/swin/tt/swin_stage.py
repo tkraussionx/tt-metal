@@ -1,7 +1,7 @@
 from typing import Optional, Tuple, Union
 import torch
 import torch.nn as nn
-
+import pickle
 
 from python_api_testing.models.utility_functions_new import (
     tt_to_torch_tensor,
@@ -26,12 +26,14 @@ class TtSwinStage(nn.Module):
         base_address,
         device,
         host,
+        layer_index,
     ):
         super().__init__()
         self.config = config
         self.dim = dim
         self.device = device
         self.host = host
+        self.layer_index = layer_index
         self.blocks = nn.ModuleList(
             [
                 TtSwinLayer(
@@ -44,6 +46,8 @@ class TtSwinStage(nn.Module):
                     device=self.device,
                     host=self.host,
                     shift_size=0 if i % 2 == 0 else self.config.window_size // 2,
+                    layer_index=self.layer_index,
+                    index=i,
                 )
                 for i in range(depth)
             ]
@@ -77,6 +81,20 @@ class TtSwinStage(nn.Module):
         for i, layer_module in enumerate(self.blocks):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
+            pt_swin_layer_input = tt_to_torch_tensor(hidden_states, self.host).squeeze(
+                0
+            )
+            name = (
+                "layer_"
+                + str(self.layer_index)
+                + "_tt_swin_layer_input_"
+                + str(i)
+                + ".pkl"
+            )
+
+            with open(name, "wb") as file:
+                pickle.dump(pt_swin_layer_input, file)
+
             layer_outputs = layer_module(
                 hidden_states,
                 input_dimensions,
@@ -86,6 +104,19 @@ class TtSwinStage(nn.Module):
             )
 
             hidden_states = layer_outputs[0]
+            pt_swin_layer_output = tt_to_torch_tensor(hidden_states, self.host).squeeze(
+                0
+            )
+            name = (
+                "layer_"
+                + str(self.layer_index)
+                + "_tt_swin_layer_output_"
+                + str(i)
+                + ".pkl"
+            )
+
+            with open(name, "wb") as file:
+                pickle.dump(pt_swin_layer_output, file)
 
         hidden_states_before_downsampling = hidden_states
         if self.downsample is not None:

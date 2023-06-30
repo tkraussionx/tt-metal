@@ -1,6 +1,7 @@
 from typing import Optional, Tuple, Union
 import torch
 import torch.nn as nn
+import pickle
 
 from python_api_testing.models.utility_functions_new import (
     tt_to_torch_tensor,
@@ -31,6 +32,8 @@ class TtSwinLayer(nn.Module):
         device,
         shift_size,
         host,
+        layer_index,
+        index,
     ):
         super().__init__()
         self.device = device
@@ -39,6 +42,8 @@ class TtSwinLayer(nn.Module):
         self.shift_size = shift_size
         self.window_size = config.window_size
         self.input_resolution = input_resolution
+        self.layer_index = layer_index
+        self.index = index
 
         gamma_before = torch_to_tt_tensor_rm(
             state_dict[f"{base_address}.layernorm_before.weight"], self.device
@@ -59,6 +64,8 @@ class TtSwinLayer(nn.Module):
             f"{base_address}.attention",
             device,
             host=host,
+            layer_index=self.layer_index,
+            index=self.index,
         )
 
         gamma_after = torch_to_tt_tensor_rm(
@@ -198,6 +205,21 @@ class TtSwinLayer(nn.Module):
             attn_mask = attn_mask.to(hidden_states_windows.device())
 
         hidden_states_windows = tt_lib.tensor.permute(hidden_states_windows, 3, 0, 1, 2)
+
+        pt_attention_input = tt_to_torch_tensor(
+            hidden_states_windows, self.host
+        ).squeeze(0)
+        name = (
+            "layer_"
+            + str(self.layer_index)
+            + "_tt_swin_attention_input_"
+            + str(self.index)
+            + ".pkl"
+        )
+
+        with open(name, "wb") as file:
+            pickle.dump(pt_attention_input, file)
+
         attention_outputs = self.attention(
             hidden_states_windows,
             attn_mask,
@@ -206,6 +228,18 @@ class TtSwinLayer(nn.Module):
         )
 
         attention_output = attention_outputs[0]
+
+        pt_attention_output = tt_to_torch_tensor(attention_output, self.host).squeeze(0)
+        name = (
+            "layer_"
+            + str(self.layer_index)
+            + "_tt_swin_attention_output_"
+            + str(self.index)
+            + ".pkl"
+        )
+
+        with open(name, "wb") as file:
+            pickle.dump(pt_attention_output, file)
 
         attention_windows = fallback_ops.reshape(
             attention_output, -1, self.window_size, self.window_size, channels
