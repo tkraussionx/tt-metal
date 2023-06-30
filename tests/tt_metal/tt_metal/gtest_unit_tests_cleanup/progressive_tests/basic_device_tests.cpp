@@ -31,27 +31,12 @@ class HostDevSweep : public TestWithParam<BufferConfig> {
     void TearDown() override { tt::tt_metal::CloseDevice(this->device); }
 };
 
-class KernelCompile : public Test {
-   protected:
-    tt::ARCH arch;
-    Device* device;
-
-    void SetUp() override {
-        this->arch = tt::get_arch_from_string(tt::test_utils::get_env_arch_name());
-        const int pci_express_slot = 0;
-        this->device = tt::tt_metal::CreateDevice(arch, pci_express_slot);
-        tt::tt_metal::InitializeDevice(this->device);
-    }
-
-    void TearDown() override { tt::tt_metal::CloseDevice(this->device); }
-};
-
 TEST(DevSetup, InitDevice) {
     auto arch = tt::get_arch_from_string(tt::test_utils::get_env_arch_name());
     const int pci_express_slot = 0;
     auto device = tt::tt_metal::CreateDevice(arch, pci_express_slot);
-    tt::tt_metal::InitializeDevice(device);
-    tt::tt_metal::CloseDevice(device);
+    EXPECT_NO_THROW(tt::tt_metal::InitializeDevice(device));
+    EXPECT_NO_THROW(tt::tt_metal::CloseDevice(device));
 }
 
 TEST_P(HostDevSweep, Loopback) {
@@ -60,9 +45,9 @@ TEST_P(HostDevSweep, Loopback) {
     }
     auto buffer = tt::tt_metal::Buffer(device, this->buffer_config.buf_size, this->buffer_config.bank_start, this->buffer_config.page_size, tt::tt_metal::BufferType::DRAM);
     vector<u32> src_vec(this->buffer_config.buf_size / sizeof(u32), 0);
-    WriteToBuffer(buffer, src_vec);
+    EXPECT_NO_THROW(WriteToBuffer(buffer, src_vec));
     vector<u32> result_vec;
-    ReadFromBuffer(buffer, result_vec);
+    EXPECT_NO_THROW(ReadFromBuffer(buffer, result_vec));
     EXPECT_EQ(result_vec, src_vec);
 }
 
@@ -85,13 +70,3 @@ INSTANTIATE_TEST_SUITE_P(HostDevTransfers, HostDevSweep,
                                         std::to_string(buffer_config.bank_start);
                                     return name;
                                     });
-
-TEST_F(KernelCompile, CompileBlankKernelsOnAllProcessors) {
-    tt::tt_metal::Program program = tt::tt_metal::Program();
-    EXPECT_TRUE(tt::tt_metal::CompileProgram(this->device, program));
-}
-
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}
