@@ -1,5 +1,6 @@
 CONFIG ?= assert
 ENABLE_PROFILER ?= 0
+ENABLE_TRACY ?= 0
 ENABLE_CODE_TIMERS ?= 0
 # TODO: enable OUT to be per config (this impacts all scripts that run tests)
 # OUT ?= build_$(DEVICE_RUNNER)_$(CONFIG)
@@ -20,7 +21,8 @@ CONFIG_CFLAGS += -O3 -fno-lto
 else ifeq ($(CONFIG), ci)  # significantly smaller artifacts
 CONFIG_CFLAGS += -O3 -DDEBUG=DEBUG
 else ifeq ($(CONFIG), assert)
-CONFIG_CFLAGS += -O3 -g -DDEBUG=DEBUG
+CONFIG_CFLAGS += -O3 -g -DDEBUG=DEBUG -fno-omit-frame-pointer
+CONFIG_LDFLAGS += -rdynamic
 else ifeq ($(CONFIG), asan)
 CONFIG_CFLAGS += -O3 -g -DDEBUG=DEBUG -fsanitize=address
 CONFIG_LDFLAGS += -fsanitize=address
@@ -72,7 +74,7 @@ BASE_INCLUDES+=-I./ -I./tt_metal/
 WARNINGS ?= -Wdelete-non-virtual-dtor -Wreturn-type -Wswitch -Wuninitialized -Wno-unused-parameter
 CC ?= gcc
 CXX ?= g++
-CFLAGS ?= -MMD $(WARNINGS) -I. $(CONFIG_CFLAGS) -mavx2 -DBUILD_DIR=\"$(OUT)\"
+CFLAGS ?= -MMD -fPIC $(WARNINGS) -I. $(CONFIG_CFLAGS) -mavx2 -DBUILD_DIR=\"$(OUT)\"
 CXXFLAGS ?= --std=c++17 -fvisibility-inlines-hidden -Werror
 LDFLAGS ?= $(CONFIG_LDFLAGS) -Wl,-rpath,$(PREFIX)/lib -L$(LIBDIR)/tools -L$(LIBDIR) \
 	-ldl \
@@ -108,6 +110,10 @@ ifeq ($(ENABLE_PROFILER), 1)
 CFLAGS += -DPROFILER
 endif
 
+ifeq ($(ENABLE_TRACY), 1)
+CFLAGS += -DTRACY_ENABLE
+endif
+
 LIBS_TO_BUILD = \
 	common \
 	build_kernels_for_riscv \
@@ -116,6 +122,7 @@ LIBS_TO_BUILD = \
 	llrt \
 	tools \
 	tt_metal \
+	tracy \
 	libs
 
 ifdef TT_METAL_ENV_IS_DEV

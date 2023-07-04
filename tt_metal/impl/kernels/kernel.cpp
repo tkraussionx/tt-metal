@@ -6,6 +6,7 @@
 
 #include "build_kernels_for_riscv/build_kernels_for_riscv.hpp"
 #include "llrt/llrt.hpp"
+#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 
 namespace tt {
 
@@ -97,6 +98,8 @@ void Kernel::set_runtime_args(const CoreCoord &logical_core, const std::vector<u
 }
 
 void Kernel::read_binaries(int pcie_slot) {
+    ZoneScoped;
+
     std::vector<ll_api::memory> binaries;
     TT_ASSERT ( !binary_path_.empty(), "Path to Kernel binaries not set!" );
     switch (this->kernel_type_) {

@@ -18,6 +18,9 @@
 #include "tt_metal/detail/program.hpp"
 #include "tt_metal/detail/persistent_kernel_cache.hpp"
 
+#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
+
+
 namespace tt {
 
 namespace tt_metal {
@@ -71,6 +74,7 @@ namespace detail {
 namespace {
 
 void DownloadFirmware(Device *device, CoreCoord phys_core) {
+    ZoneScoped;
     for (int riscv_id = 0; riscv_id < 5; riscv_id++) {
         string fname;
         switch (riscv_id) {
@@ -125,6 +129,7 @@ Host *GetHost() { return new Host(); }
 Device *CreateDevice(tt::ARCH arch, int pcie_slot) { return new Device(arch, pcie_slot); }
 
 bool InitializeDevice(Device *device) {
+    ZoneScoped;
     bool init;
     if (device->initialize()) {
         static std::mutex build_mutex;
@@ -408,6 +413,7 @@ uint32_t CreateSemaphore(Program &program, const CoreRangeSet &core_range_set, u
 }
 
 void WriteToDevice(const Buffer &buffer, const std::vector<uint32_t> &host_buffer) {
+    ZoneScoped;
     detail::ProfileTTMetalScope profile_this = detail::ProfileTTMetalScope("WriteToDevice");
 
     uint32_t page_size = buffer.page_size();
@@ -460,6 +466,7 @@ void WriteToBuffer(const Buffer &buffer, const std::vector<uint32_t> &host_buffe
 }
 
 void ReadFromDevice(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
+    ZoneScoped;
     detail::ProfileTTMetalScope profile_this = detail::ProfileTTMetalScope("ReadFromDevice");
 
     host_buffer.clear();  // overwrite the data
@@ -515,6 +522,7 @@ void DeallocateBuffer(Buffer &buffer) { buffer.deallocate(); }
 
 bool ReadFromDeviceDRAMChannel(
     Device *device, int dram_channel, uint32_t address, uint32_t size, std::vector<uint32_t> &host_buffer) {
+    ZoneScoped;
     detail::ProfileTTMetalScope profile_this = detail::ProfileTTMetalScope("ReadFromDeviceDRAMChannel");
 
     bool pass = true;
@@ -523,6 +531,7 @@ bool ReadFromDeviceDRAMChannel(
 }
 
 bool WriteToDeviceDRAMChannel(Device *device, int dram_channel, uint32_t address, std::vector<uint32_t> &host_buffer) {
+    ZoneScoped;
     detail::ProfileTTMetalScope profile_this = detail::ProfileTTMetalScope("WriteToDeviceDRAMChannel");
 
     bool pass = true;
@@ -532,7 +541,9 @@ bool WriteToDeviceDRAMChannel(Device *device, int dram_channel, uint32_t address
 
 bool WriteToDeviceL1(
     Device *device, const CoreCoord &logical_core, uint32_t address, std::vector<uint32_t> &host_buffer) {
+    ZoneScoped;
     detail::ProfileTTMetalScope profile_this = detail::ProfileTTMetalScope("WriteToDeviceL1");
+    
     bool pass = true;
     auto worker_core = device->worker_core_from_logical_core(logical_core);
     llrt::write_hex_vec_to_core(device->cluster(), device->pcie_slot(), worker_core, host_buffer, address);
@@ -545,7 +556,9 @@ bool ReadFromDeviceL1(
     uint32_t address,
     uint32_t size,
     std::vector<uint32_t> &host_buffer) {
+    ZoneScoped;
     detail::ProfileTTMetalScope profile_this = detail::ProfileTTMetalScope("ReadFromDeviceL1");
+    
     bool pass = true;
     auto worker_core = device->worker_core_from_logical_core(logical_core);
     host_buffer = llrt::read_hex_vec_from_core(device->cluster(), device->pcie_slot(), worker_core, address, size);
@@ -557,6 +570,9 @@ bool GenerateBinaries(
     build_kernel_for_riscv_options_t *build_options,
     const std::string &op_path_suffix,
     Kernel *kernel) {
+    ZoneScoped;
+    const std::string tracyPrefix = "GenerateBinaries_";
+    ZoneName( (tracyPrefix + op_path_suffix).c_str(), op_path_suffix.length() + tracyPrefix.length());
     std::string arch_name = tt::get_string_lowercase(device->arch());
 
     generate_descriptors(build_options, op_path_suffix);
@@ -595,6 +611,7 @@ bool GenerateBinaries(
 
 void SetCircularBufferDataFormat(
     Device *device, const Program &program, Kernel *kernel, build_kernel_for_riscv_options_t &build_options) {
+    ZoneScoped;
     for (auto logical_core : kernel->logical_cores()) {
         auto cbs_on_core = program.circular_buffers_on_core(logical_core);
         for (auto circular_buffer : cbs_on_core) {
@@ -676,7 +693,8 @@ void SetBuildKernelOptions(Kernel *kernel, build_kernel_for_riscv_options_t &bui
 
 void CompileKernel(Device *device, Program &program, Kernel *kernel) {
     build_kernel_for_riscv_options_t build_options(device->pcie_slot(), kernel->name());
-
+    ZoneScoped;
+    
     SetBuildKernelOptions(kernel, build_options);
     SetCircularBufferDataFormat(device, program, kernel, build_options);
 
@@ -700,6 +718,8 @@ void CompileKernel(Device *device, Program &program, Kernel *kernel) {
 }
 
 void AddBlankKernels(Device *device, Program &program) {
+    ZoneScoped;
+    
     // This can be smarter by combining core ranges into maximal rectangles but this code can be removed once we load BRISC FW separately from the kernel binary
     std::set<CoreRange> unique_core_ranges_without_brisc_kernel,
                         unique_core_ranges_without_ncrisc_kernel,
@@ -751,6 +771,8 @@ void AddBlankKernels(Device *device, Program &program) {
 }
 
 bool CompileProgram(Device *device, Program &program) {
+    ZoneScoped;
+    
     log_assert(
         device->is_initialized(),
         "Device needs to be initialized before program {} compilation! Generating headers for banking information is "
@@ -839,6 +861,7 @@ void ConfigureKernelGroup(const KernelGroup &kernel_group, Device *device, const
 bool ConfigureDeviceWithProgram(Device *device, const Program &program) {
     bool pass = true;
 
+    ZoneScoped;
     detail::ProfileTTMetalScope profile_this = detail::ProfileTTMetalScope("ConfigureDeviceWithProgram");
 
     std::vector<CoreCoord> worker_cores;
@@ -903,11 +926,13 @@ bool ConfigureDeviceWithProgram(Device *device, const Program &program) {
 }
 
 void SetRuntimeArgs(Kernel *kernel, const CoreCoord &logical_core, const std::vector<uint32_t> &runtime_args) {
+    ZoneScoped;
     TT_ASSERT(kernel->kernel_type() != KernelType::Compute, "Compute kernels do not support runtime args");
     kernel->set_runtime_args(logical_core, runtime_args);
 }
 
 void SetRuntimeArgs(Kernel *kernel, const CoreRange &core_range, const std::vector<uint32_t> &runtime_args) {
+    ZoneScoped;
     for (auto x = core_range.start.x; x <= core_range.end.x; x++) {
         for (auto y = core_range.start.y; y <= core_range.end.y; y++) {
             CoreCoord logical_core(x, y);
@@ -917,6 +942,7 @@ void SetRuntimeArgs(Kernel *kernel, const CoreRange &core_range, const std::vect
 }
 
 void SetRuntimeArgs(Kernel *kernel, const CoreRangeSet &core_range_set, const std::vector<uint32_t> &runtime_args) {
+    ZoneScoped;
     for (auto core_range : core_range_set.ranges()) {
         SetRuntimeArgs(kernel, core_range, runtime_args);
     }
@@ -927,6 +953,7 @@ std::vector<uint32_t> GetRuntimeArgs(Kernel *kernel, const CoreCoord &logical_co
 }
 
 void WriteRuntimeArgsToDevice(Device *device, const Program &program) {
+    ZoneScoped;
     auto cluster = device->cluster();
     auto pcie_slot = device->pcie_slot();
 
@@ -978,6 +1005,7 @@ llrt::TensixRiscsOptions GetRiscOptionFromCoreConfig(bool core_runs_ncrisc, bool
 bool LaunchKernels(Device *device, const Program &program, bool stagger_start) {
     bool pass = true;
     {//Profiler scope start
+    ZoneScoped;
     detail::ProfileTTMetalScope profile_this = detail::ProfileTTMetalScope("LaunchKernels");
 
     auto cluster = device->cluster();
