@@ -634,6 +634,7 @@ Device *CreateDevice(chip_id_t device_id, const uint8_t num_hw_cqs, const std::v
     ZoneScoped;
     Device * dev = new Device(device_id, num_hw_cqs, l1_bank_remap);
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
+    detail::InitDeviceProfiler(dev);
     return dev;
 }
 
