@@ -15,7 +15,8 @@ from tt_metal.tools.profiler.common import TT_METAL_HOME, PROFILER_BIN_DIR, PROF
 
 TRACY_MODULE_PATH = TT_METAL_HOME / "tt_metal/third_party/tracy"
 TRACY_FILE_NAME = "tracy_profile_log_host.tracy"
-TRACY_CSV_FILE_NAME = "tracy_profile_log_host.csv"
+TRACY_OPS_TIMES_FILE_NAME = "tracy_ops_times.csv"
+TRACY_OPS_DATA_FILE_NAME = "tracy_ops_data.csv"
 
 TRACY_CAPTURE_TOOL = "capture"
 TRACY_CSVEXPROT_TOOL = "csvexport"
@@ -142,16 +143,27 @@ def generate_report():
             f"tracy capture output file {tracyOutFile} was not generated. Run in verbose (-v) mode to see tracy capture info"
         )
         return
-    with open(PROFILER_LOGS_DIR / TRACY_CSV_FILE_NAME, "w") as csvFile:
+    with open(PROFILER_LOGS_DIR / TRACY_OPS_TIMES_FILE_NAME, "w") as csvFile:
         subprocess.run(
-            f"{PROFILER_BIN_DIR / TRACY_CSVEXPROT_TOOL} -u {PROFILER_LOGS_DIR / TRACY_FILE_NAME}",
+            f"{PROFILER_BIN_DIR / TRACY_CSVEXPROT_TOOL} -u -f TT_DNN {PROFILER_LOGS_DIR / TRACY_FILE_NAME}",
             shell=True,
             check=True,
             stdout=csvFile,
             stderr=subprocess.DEVNULL,
         )
 
-    logger.info(f"Host side profiling report generated at {PROFILER_LOGS_DIR / TRACY_CSV_FILE_NAME}")
+    logger.info(f"Host side profiling report generated at {PROFILER_LOGS_DIR / TRACY_OPS_TIMES_FILE_NAME}")
+
+    with open(PROFILER_LOGS_DIR / TRACY_OPS_DATA_FILE_NAME, "w") as csvFile:
+        subprocess.run(
+            f'{PROFILER_BIN_DIR / TRACY_CSVEXPROT_TOOL} -m -s ";" {PROFILER_LOGS_DIR / TRACY_FILE_NAME}',
+            shell=True,
+            check=True,
+            stdout=csvFile,
+            stderr=subprocess.DEVNULL,
+        )
+
+    logger.info(f"Host side profiling report generated at {PROFILER_LOGS_DIR / TRACY_OPS_DATA_FILE_NAME}")
 
 
 def main():
