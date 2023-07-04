@@ -8,6 +8,7 @@
 #include "third_party/magic_enum/magic_enum.hpp"
 
 #include <fmt/ranges.h>
+#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 
 namespace tt::tt_metal::operation {
 
@@ -62,8 +63,13 @@ std::vector<Tensor> run_without_program_cache(
     const std::vector<Tensor> &input_tensors,
     const std::vector<std::optional<const Tensor>> &optional_input_tensors) {
 
-    auto profile_scope = op_profiler::ProfileScope(op.get_type_name());
-    auto do_profile = op_profiler::get_profiler_flag();
+    ZoneScoped;
+    //ZoneScopedS(70);
+    ZoneName(op.get_type_name().c_str(),op.get_type_name().size());
+    TracyMessage("TEST",4);
+    ZoneText("ZONE",4);
+
+    auto do_profile = true;
     if (do_profile) { setup_profiler(op, input_tensors); }
 
     op.validate(input_tensors, optional_input_tensors);
@@ -96,8 +102,9 @@ std::vector<Tensor> run_with_program_cache(
     const std::vector<Tensor> &input_tensors,
     const std::vector<std::optional<const Tensor>> &optional_input_tensors) {
 
-    auto profile_scope = op_profiler::ProfileScope(op.get_type_name());
-    auto do_profile = op_profiler::get_profiler_flag();
+    ZoneScoped;
+    ZoneName(op.get_type_name().c_str(),op.get_type_name().size());
+    auto do_profile = true;
     if (do_profile) { setup_profiler(op, input_tensors); }
 
     op.validate(input_tensors, optional_input_tensors);

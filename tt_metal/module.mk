@@ -1,5 +1,4 @@
 # Every variable in subdir must be prefixed with subdir (emulating a namespace)
-
 CFLAGS += -DFMT_HEADER_ONLY -I$(TT_METAL_HOME)/tt_metal/third_party/fmt
 
 include $(TT_METAL_HOME)/tt_metal/common/module.mk
@@ -44,3 +43,28 @@ $(TT_METAL_LIB): $(COMMON_LIB) $(TT_METAL_OBJS) $(TT_METAL_IMPL_LIB) $(TT_METAL_
 $(OBJDIR)/tt_metal/tt_metal.o: tt_metal/tt_metal.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(TT_METAL_CFLAGS) $(CXXFLAGS) $(STATIC_LIB_FLAGS) $(TT_METAL_INCLUDES) $(TT_METAL_DEFINES) -c -o $@ $<
+
+
+
+
+TRACY_LIB = $(LIBDIR)/libtracy.a
+TRACY_INCLUDES = $(COMMON_INCLUDES) -I$(TT_METAL_HOME)/tt_metal/third_party/tracy/public/tracy/
+TRACY_LDFLAGS = -L$(TT_METAL_HOME)
+
+TRACY_SRCS = \
+	tt_metal/third_party/tracy/public/TracyClient.cpp
+
+TRACY_OBJS = $(addprefix $(OBJDIR)/, $(TRACY_SRCS:.cpp=.o))
+TRACY_DEPS = $(addprefix $(OBJDIR)/, $(TRACY_SRCS:.cpp=.d))
+
+-include $(TRACY_DEPS)
+
+tracy: $(TRACY_LIB)
+
+$(TRACY_LIB): $(TRACY_OBJS)
+	@mkdir -p $(@D)
+	$(CXX) $(CFLAGS) $(CXXFLAGS) $(SHARED_LIB_FLAGS) -o $@ $^ $(LDFLAGS) $(TRACY_LDFLAGS)
+
+$(OBJDIR)/tt_metal/third_party/tracy/public/%.o: tt_metal/third_party/tracy/public/%.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CFLAGS) $(CXXFLAGS) $(STATIC_LIB_FLAGS) $(TRACY_INCLUDES) -c -o $@ $<

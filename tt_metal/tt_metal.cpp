@@ -14,6 +14,8 @@
 #include "tt_metal/detail/reports/compilation_reporter.hpp"
 #include "tt_metal/detail/reports/memory_reporter.hpp"
 
+#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
+
 //TODO(MO): hack until ticket #1184 is in
 bool enable_fw_profile_hack = false;
 
@@ -416,7 +418,7 @@ uint32_t CreateSemaphore(Program &program, const CoreRangeSet &core_range_set, u
 }
 
 void WriteToDevice(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
-    tt_metal_profiler.markStart("WriteToDevice");
+    ZoneScopedN("WriteToDevice");
 
     uint32_t page_size = buffer.page_size();
     TT_ASSERT(buffer.size() % page_size == 0);
@@ -451,7 +453,6 @@ void WriteToDevice(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
         bank_index = (bank_index + 1) % num_banks;
         data_index += num_entries_per_page;
     }
-    tt_metal_profiler.markStop("WriteToDevice");
 }
 
 void WriteToBuffer(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
@@ -471,7 +472,7 @@ void WriteToBuffer(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
 }
 
 void ReadFromDevice(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
-    tt_metal_profiler.markStart("ReadFromDevice");
+    ZoneScopedN("ReadFromDevice");
 
     host_buffer.clear(); // overwrite the data
     uint32_t page_size = buffer.page_size();
@@ -509,7 +510,6 @@ void ReadFromDevice(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
         bank_index = (bank_index + 1) % num_banks;
     }
 
-    tt_metal_profiler.markStop("ReadFromDevice");
 }
 
 void ReadFromBuffer(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
@@ -533,36 +533,32 @@ void DeallocateBuffer(Buffer &buffer) {
 }
 
 bool ReadFromDeviceDRAMChannel(Device *device, int dram_channel, uint32_t address, uint32_t size, std::vector<uint32_t> &host_buffer) {
-    tt_metal_profiler.markStart("ReadFromDeviceDRAMChannel");
+    ZoneScopedN("ReadFromDeviceDRAMChannel");
     bool pass = true;
     device->cluster()->read_dram_vec(host_buffer, tt_target_dram{device->pcie_slot(), dram_channel, 0}, address, size);
-    tt_metal_profiler.markStop("ReadFromDeviceDRAMChannel");
     return pass;
 }
 
 bool WriteToDeviceDRAMChannel(Device *device, int dram_channel, uint32_t address, std::vector<uint32_t> &host_buffer) {
-    tt_metal_profiler.markStart("WriteToDeviceDRAMChannel");
+    ZoneScopedN("WriteToDeviceDRAMChannel");
     bool pass = true;
     device->cluster()->write_dram_vec(host_buffer, tt_target_dram{device->pcie_slot(), dram_channel, 0}, address);
-    tt_metal_profiler.markStop("WriteToDeviceDRAMChannel");
     return pass;
 }
 
 bool WriteToDeviceL1(Device *device, const CoreCoord &logical_core, uint32_t address, std::vector<uint32_t> &host_buffer) {
-    tt_metal_profiler.markStart("WriteToDeviceL1");
+    ZoneScopedN("WriteToDeviceL1");
     bool pass = true;
     auto worker_core = device->worker_core_from_logical_core(logical_core);
     llrt::write_hex_vec_to_core(device->cluster(), device->pcie_slot(), worker_core, host_buffer, address);
-    tt_metal_profiler.markStop("WriteToDeviceL1");
     return pass;
 }
 
 bool ReadFromDeviceL1(Device *device, const CoreCoord &logical_core, uint32_t address, uint32_t size, std::vector<uint32_t> &host_buffer) {
-    tt_metal_profiler.markStart("ReadFromDeviceL1");
+    ZoneScopedN("ReadFromDeviceL1");
     bool pass = true;
     auto worker_core = device->worker_core_from_logical_core(logical_core);
     host_buffer = llrt::read_hex_vec_from_core(device->cluster(), device->pcie_slot(), worker_core, address, size);
-    tt_metal_profiler.markStop("ReadFromDeviceL1");
     return pass;
 }
 void GenerateBankToNocCoordHeaders(
@@ -877,7 +873,7 @@ bool CompileProgram(Device *device, Program &program, bool profile_kernel) {
     }
 
     bool pass = true;
-    tt_metal_profiler.markStart("CompileProgram");
+    ZoneScopedN("CompileProgram");
     std::vector< std::future<void> > events;
     TT_ASSERT(!(profile_kernel && tt_is_print_server_running()), "Debug print server is running, profiling is not allowed");
     tt_set_profiler_state_for_debug_print(profile_kernel);
@@ -918,7 +914,6 @@ bool CompileProgram(Device *device, Program &program, bool profile_kernel) {
         memory_reporter.flush_program_memory_usage(program, device);
     }
 
-    tt_metal_profiler.markStop("CompileProgram");
     return pass;
 }
 
@@ -943,7 +938,7 @@ void ConfigureKernelGroup(const KernelGroup &kernel_group, Device *device, const
 bool ConfigureDeviceWithProgram(Device *device, const Program &program) {
     bool pass = true;
 
-    tt_metal_profiler.markStart("ConfigureDeviceWithProgram");
+    ZoneScopedN("ConfigureDeviceWithProgram");
     std::vector<CoreCoord> worker_cores;
     auto cluster = device->cluster();
     auto pcie_slot = device->pcie_slot();
@@ -1000,7 +995,6 @@ bool ConfigureDeviceWithProgram(Device *device, const Program &program) {
     llrt::internal_::load_blank_kernel_to_all_worker_cores_with_exceptions(
         cluster, pcie_slot, riscs_options, worker_cores);                               // PROF_END("LOAD_BLANK")
 
-    tt_metal_profiler.markStop("ConfigureDeviceWithProgram");
     return pass;
 }
 
@@ -1082,7 +1076,7 @@ llrt::TensixRiscsOptions GetRiscOptionFromCoreConfig(bool core_runs_ncrisc, bool
 
 bool LaunchKernels(Device *device, const Program &program, bool stagger_start) {
 
-    tt_metal_profiler.markStart("LaunchKernels");
+    ZoneScopedN("LaunchKernels");
     bool pass = true;
 
     auto cluster = device->cluster();
@@ -1123,7 +1117,6 @@ bool LaunchKernels(Device *device, const Program &program, bool stagger_start) {
     cluster->broadcast_remote_tensix_risc_reset(pcie_slot, TENSIX_ASSERT_SOFT_RESET);
 
 
-    tt_metal_profiler.markStop("LaunchKernels");
     return pass;
 }
 
