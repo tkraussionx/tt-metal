@@ -79,6 +79,9 @@ void kernel_main() {
     bool db_buf_switch = false;
     while (true) {
 
+        kernel_profiler::init_profiler();
+        kernel_profiler::mark_fw_start();
+        kernel_profiler::mark_kernel_start();
         issue_queue_wait_front();
 
         // Read in command
@@ -86,6 +89,7 @@ void kernel_main() {
         uint64_t src_noc_addr = pcie_core_noc_encoding | rd_ptr;
         noc_async_read(src_noc_addr, COMMAND_START_ADDR, min(DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, issue_queue_size - rd_ptr));
         noc_async_read_barrier();
+        //kernel_profiler::mark_time(9);
 
         // Producer information
         volatile tt_l1_ptr uint32_t* command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(COMMAND_START_ADDR);
@@ -111,6 +115,7 @@ void kernel_main() {
             continue;
         }
 
+        //kernel_profiler::mark_time(10);
         program_local_cb(producer_cb_num_pages, page_size, producer_cb_size);
         while (db_semaphore_addr[0] == 0)
             ;  // Check that there is space in the consumer
@@ -145,5 +150,10 @@ void kernel_main() {
         issue_queue_pop_front(DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + data_size);
 
         db_buf_switch = not db_buf_switch;
+
+        kernel_profiler::mark_kernel_end();
+        kernel_profiler::mark_fw_end();
+        kernel_profiler::finish();
+        kernel_profiler::send_profiler_data_to_dram();
     }
 }
