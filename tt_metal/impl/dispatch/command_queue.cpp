@@ -17,12 +17,13 @@
 #include <algorithm> // for copy() and assign()
 #include <iterator> // for back_inserter
 
+#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
+#include "tt_metal/third_party/tracy/public/tracy/TracyOpenCL.hpp"
 
 static constexpr uint32_t HUGE_PAGE_SIZE = 1024 * 1024 * 1024;
 
 namespace tt::tt_metal {
 
-#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 
 uint32_t get_noc_multicast_encoding(const CoreCoord& top_left, const CoreCoord& bottom_right) {
     return NOC_MULTICAST_ENCODING(top_left.x, top_left.y, bottom_right.x, bottom_right.y);
@@ -822,6 +823,7 @@ void CommandQueue::finish() {
     // Reset this value to 0 before moving on
     finish_vec.at(0) = 0;
     tt::Cluster::instance().write_sysmem_vec(finish_vec, HOST_CQ_FINISH_PTR, 0);
+    tt::tt_metal::detail::DumpDeviceProfileResults(this->device);
 }
 
 void CommandQueue::wrap() {
@@ -856,6 +858,7 @@ void EnqueueProgram(CommandQueue& cq, Program& program, bool blocking) {
 
 void Finish(CommandQueue& cq) {
     detail::DispatchStateCheck(true);
+    ZoneScopedN("Finish");
     cq.finish();
 }
 

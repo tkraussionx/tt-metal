@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_metal/host_api.hpp"
+#include "tt_metal/detail/tt_metal.hpp"
 
 using namespace tt;
 
-bool RunCustomCycle(tt_metal::Device *device, int loop_count, string run_name = " ")
+bool RunCustomCycle(tt_metal::Device *device, int loop_count, bool dumpProfile = false)
 {
     bool pass = true;
 
@@ -44,6 +45,10 @@ bool RunCustomCycle(tt_metal::Device *device, int loop_count, string run_name = 
 
 
     tt_metal::LaunchProgram(device, program);
+    if (dumpProfile)
+    {
+        tt_metal::detail::DumpDeviceProfileResults(device, program);
+    }
 
     return pass;
 }
@@ -61,8 +66,6 @@ int main(int argc, char **argv) {
         int device_id = 0;
         tt_metal::Device *device =
             tt_metal::CreateDevice(device_id);
-
-
 
         int loop_count = 2000;
         pass &= RunCustomCycle(device, loop_count);

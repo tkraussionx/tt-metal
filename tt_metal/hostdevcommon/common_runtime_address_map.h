@@ -48,6 +48,21 @@ constexpr static std::uint32_t PRINT_BUFFER_T2 = PRINT_BUFFER_T1 + PRINT_BUFFER_
 constexpr static std::uint32_t PRINT_BUFFER_BR = PRINT_BUFFER_T2 + PRINT_BUFFER_SIZE; // BRISC
 constexpr static std::uint32_t CONSTANT_REGISTER_VALUE = PRINT_BUFFER_BR + PRINT_BUFFER_SIZE + 4; // Producer/consumer sync scratch address
 
+constexpr static std::uint32_t PROFILER_L1_VECTOR_SIZE = 8;
+constexpr static std::uint32_t PROFILER_L1_BUFFER_SIZE = PROFILER_L1_VECTOR_SIZE * sizeof(uint32_t);
+constexpr static std::uint32_t PROFILER_L1_CONTROL_VECTOR_SIZE = 8;
+constexpr static std::uint32_t PROFILER_L1_CONTROL_BUFFER_SIZE = PROFILER_L1_CONTROL_VECTOR_SIZE * sizeof(uint32_t);
+
+constexpr static std::uint32_t PROFILER_L1_BUFFER_BR = 108 * 1024;
+constexpr static std::uint32_t PROFILER_L1_BUFFER_NC = PROFILER_L1_BUFFER_BR + PROFILER_L1_BUFFER_SIZE;
+constexpr static std::uint32_t PROFILER_L1_BUFFER_T0 = PROFILER_L1_BUFFER_NC + PROFILER_L1_BUFFER_SIZE;
+constexpr static std::uint32_t PROFILER_L1_BUFFER_T1 = PROFILER_L1_BUFFER_T0 + PROFILER_L1_BUFFER_SIZE;
+constexpr static std::uint32_t PROFILER_L1_BUFFER_T2 = PROFILER_L1_BUFFER_T1 + PROFILER_L1_BUFFER_SIZE;
+constexpr static std::uint32_t PROFILER_L1_BUFFER_CONTROL = PROFILER_L1_BUFFER_T2 + PROFILER_L1_CONTROL_BUFFER_SIZE;
+constexpr static std::uint32_t PROFILER_RISC_COUNT = 5;
+constexpr static std::uint32_t PROFILER_DRAM_BUFFER_COUNT = 150;
+
+
 constexpr static std::uint32_t L1_UNRESERVED_BASE = 120 * 1024; // Start of unreserved space
 
 // Breakpoint regions

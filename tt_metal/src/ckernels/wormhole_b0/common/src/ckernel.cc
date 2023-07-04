@@ -89,7 +89,7 @@ int main(int argc, char *argv[])
         while (*trisc_run != RUN_SYNC_MSG_GO);
 
         kernel_profiler::init_profiler();
-        kernel_profiler::mark_time(CC_MAIN_START);
+        kernel_profiler::mark_fw_start();
 
         DEBUG_STATUS('R');
         kernel_init();
@@ -99,6 +99,6 @@ int main(int argc, char *argv[])
         tensix_sync();
         *trisc_run = RUN_SYNC_MSG_DONE;
 
-        kernel_profiler::mark_time(CC_MAIN_END);
+        kernel_profiler::mark_fw_end();
     }
 }

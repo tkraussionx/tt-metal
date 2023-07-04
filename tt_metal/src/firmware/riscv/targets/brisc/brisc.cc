@@ -267,7 +267,6 @@ inline void wait_ncrisc_trisc()
 }
 
 int main() {
-
     DEBUG_STATUS('I');
 
     int32_t num_words = ((uint)__ldm_data_end - (uint)__ldm_data_start) >> 2;
@@ -275,6 +274,7 @@ int main() {
 
     risc_init();
     device_setup();
+    kernel_profiler::mark_BR_fw_first_start();
     noc_init();
 
     // Set ncrisc's resume address to 0 so we know when ncrisc has overwritten it
@@ -301,9 +301,9 @@ int main() {
         DEBUG_STATUS('G', 'W');
         while (mailboxes->launch.run != RUN_MSG_GO);
         DEBUG_STATUS('G', 'D');
-
         kernel_profiler::init_profiler();
-        kernel_profiler::mark_time(CC_MAIN_START);
+
+        kernel_profiler::mark_fw_start();
 
         // Invalidate the i$ now the kernels have loaded and before running
         volatile tt_reg_ptr uint32_t* cfg_regs = core.cfg_regs_base(0);
@@ -325,9 +325,6 @@ int main() {
         wait_ncrisc_trisc();
 
         mailboxes->launch.run = RUN_MSG_DONE;
-
-        // Not including any dispatch related code
-        kernel_profiler::mark_time(CC_MAIN_END);
 
         // Notify dispatcher core that it has completed
         if (mailboxes->launch.mode == DISPATCH_MODE_DEV) {

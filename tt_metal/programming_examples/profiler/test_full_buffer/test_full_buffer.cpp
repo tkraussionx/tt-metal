@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_metal/host_api.hpp"
+#include "tt_metal/detail/tt_metal.hpp"
 
 using namespace tt;
 
-bool RunCustomCycle(tt_metal::Device *device, int loop_count, string run_name = " ")
+bool RunCustomCycle(tt_metal::Device *device, int loop_count)
 {
     bool pass = true;
 
@@ -18,7 +19,6 @@ bool RunCustomCycle(tt_metal::Device *device, int loop_count, string run_name = 
     tt_metal::Program program = tt_metal::Program();
 
     constexpr int loop_size = 200;
-    constexpr bool profile_device = true;
     std::map<string, string> kernel_defines = {
         {"LOOP_COUNT", std::to_string(loop_count)},
         {"LOOP_SIZE", std::to_string(loop_size)}
@@ -39,9 +39,10 @@ bool RunCustomCycle(tt_metal::Device *device, int loop_count, string run_name = 
         program, "tt_metal/programming_examples/profiler/test_full_buffer/kernels/full_buffer_compute.cpp",
         all_cores,
         tt_metal::ComputeConfig{.compile_args = trisc_kernel_args, .defines = kernel_defines}
-    );
+        );
 
     tt_metal::LaunchProgram(device, program);
+    tt_metal::detail::DumpDeviceProfileResults(device, program);
 
     return pass;
 }
@@ -64,12 +65,12 @@ int main(int argc, char **argv) {
 
         int loop_count = 20;
         pass &= RunCustomCycle(device, loop_count);
+        pass &= RunCustomCycle(device, loop_count);
+        pass &= RunCustomCycle(device, loop_count);
 
         pass &= tt_metal::CloseDevice(device);
 
     } catch (const std::exception &e) {
-        pass = false;
-        // Capture the exception error message
         log_error(LogTest, "{}", e.what());
         // Capture system call errors that may have returned from driver/kernel
         log_error(LogTest, "System error message: {}", std::strerror(errno));

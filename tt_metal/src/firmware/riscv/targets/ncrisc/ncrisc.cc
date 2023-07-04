@@ -54,13 +54,13 @@ int main(int argc, char *argv[]) {
       notify_brisc_and_halt(RUN_SYNC_MSG_DONE);
 
       kernel_profiler::init_profiler();
-      kernel_profiler::mark_time(CC_MAIN_START);
+      kernel_profiler::mark_fw_start();
 
       DEBUG_STATUS('R');
       kernel_init();
       DEBUG_STATUS('D');
 
-      kernel_profiler::mark_time(CC_MAIN_END);
+      kernel_profiler::mark_fw_end();
   }
 
   return 0;

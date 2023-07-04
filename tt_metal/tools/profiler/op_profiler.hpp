@@ -13,7 +13,7 @@
 
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tensor/tensor.hpp"
-#include "tools/profiler/profiler.hpp"
+//#include "tools/profiler/profiler.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
@@ -102,6 +102,15 @@ namespace op_profiler {
             recordFile.close();
 
         }
+
+        class Profiler {
+            public:
+                void markStart(const std::string& timer_name){}
+                void markStop(const std::string& timer_name, const std::vector<std::pair<std::string,std::string>>& additional_fields = {}){}
+                void setDeviceNewLogFlag(bool new_log_flag){}
+                void setHostNewLogFlag(bool new_log_flag){}
+                void setOutputDir(const std::string& new_output_dir){}
+        };
 
         struct OpData {
             string name;
@@ -343,7 +352,7 @@ namespace op_profiler {
                         return;
                     }
 
-                    if (getDeviceProfilerState())
+                    if (true)
                     {
                         profileFolder = logFolderDevice;
                         tt::log_info("Device profiling detected, logs folder location changed to {}", profileFolder);
@@ -424,7 +433,7 @@ namespace op_profiler {
 
     static bool get_profiler_flag ()
     {
-        return getHostProfilerState();
+        return true;
     }
 
     static void append_input_data (const Tensor& input)
@@ -533,7 +542,7 @@ namespace op_profiler {
     static void dump_device_profiler_results (Device *device, Program &program)
     {
 #if defined(PROFILER)
-        if (getDeviceProfilerState())
+        if (true)
         {
             tt::tt_metal::detail::DumpDeviceProfileResults(device, program);
         }

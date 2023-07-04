@@ -4,30 +4,37 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/*
-*
-* Ennums and defines shared between host and device profiler.
-*
-*/
 #pragma once
 
-#define CC_MAIN_START          1U
-#define CC_KERNEL_MAIN_START   2U
-#define CC_KERNEL_MAIN_END     3U
-#define CC_MAIN_END            4U
+inline __attribute__((always_inline)) uint32_t get_flat_id(uint32_t coreX, uint32_t coreY)
+{
+    constexpr uint32_t DRAM_ROW = 6;
+    constexpr uint32_t MULTIPLIER = 12;
+    uint32_t coreFlatID = 0;
+
+    if (coreY > DRAM_ROW){
+        coreFlatID = ((coreY - 2) * MULTIPLIER + (coreX - 1));
+    }
+    else{
+        coreFlatID = ((coreY - 1) * MULTIPLIER + (coreX - 1));
+    }
+    return coreFlatID;
+}
 
 namespace kernel_profiler{
 /**
  * L1 buffer structure for profiler markers
  * _____________________________________________________________________________________________________
  *|                  |                        |              |             |             |              |
- *| Buffer end index | Dropped marker counter | 1st timer_id | 1st timer_L | 1st timer_H | 2nd timer_id | ...
+
  *|__________________|________________________|______________|_____________|_____________|______________|
  *
  * */
 
-enum BufferIndex {BUFFER_END_INDEX, DROPPED_MARKER_COUNTER, MARKER_DATA_START};
+enum BufferIndex {SYNC_VAL_H, SYNC_VAL_L, FW_START, KERNEL_START, KERNEL_END, FW_END};
 
-enum TimerDataIndex {TIMER_ID, TIMER_VAL_L, TIMER_VAL_H, TIMER_DATA_UINT32_SIZE};
+enum ControlBuffer {DRAM_BUFFER_NUM, FW_RESET_H, FW_RESET_L};
+
+
 
 }

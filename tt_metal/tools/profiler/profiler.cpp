@@ -7,9 +7,12 @@
 #include <iomanip>
 #include <filesystem>
 
+
+#include "tt_metal/host_api.hpp"
 #include "tools/profiler/profiler.hpp"
 #include "tools/profiler/profiler_state.hpp"
 #include "hostdevcommon/profiler_common.h"
+#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 
 #define HOST_SIDE_LOG "profile_log_host.csv"
 #define DEVICE_SIDE_LOG "profile_log_device.csv"
@@ -79,57 +82,100 @@ void Profiler::dumpHostResults(const std::string& timer_name, const std::vector<
 
 void Profiler::readRiscProfilerResults(
         int device_id,
-        const CoreCoord &worker_core,
-        std::string risc_name,
-        int risc_print_buffer_addr){
+        vector<std::uint32_t> profile_buffer,
+        const CoreCoord &worker_core){
 
-    vector<std::uint32_t> profile_buffer;
-    uint32_t end_index;
-    uint32_t dropped_marker_counter;
+    ZoneScoped;
+    uint32_t core_flat_id = get_flat_id(worker_core.x, worker_core.y);
+    uint32_t startIndex = core_flat_id * PROFILER_RISC_COUNT * PROFILER_L1_VECTOR_SIZE;
 
-    profile_buffer = tt::llrt::read_hex_vec_from_core(
+//#define DEBUG_PRINT_L1
+#ifdef DEBUG_PRINT_L1
+    vector<std::uint32_t> profile_buffer_l1;
+
+    profile_buffer_l1 = tt::llrt::read_hex_vec_from_core(
             device_id,
             worker_core,
-            risc_print_buffer_addr,
-            PRINT_BUFFER_SIZE);
+            PROFILER_L1_BUFFER_BR,
+            PROFILER_L1_BUFFER_SIZE * PROFILER_RISC_COUNT);
 
-    end_index = profile_buffer[kernel_profiler::BUFFER_END_INDEX];
-    TT_ASSERT (end_index < (PRINT_BUFFER_SIZE/sizeof(uint32_t)));
-    dropped_marker_counter = profile_buffer[kernel_profiler::DROPPED_MARKER_COUNTER];
+    std::cout << worker_core.x << "," << worker_core.y <<  "," << core_flat_id << "," << startIndex <<  std::endl ;
+    for (int i= 0; i < 6; i ++)
+    {
+        std::cout << profile_buffer_l1[i] << ",";
+    }
+    std::cout <<  std::endl;
+    for (int i= 0; i < 6; i ++)
+    {
+        std::cout << profile_buffer[startIndex + i] << ",";
+    }
+    std::cout <<  std::endl;
+    std::cout <<  std::endl;
+#endif
 
-    if(dropped_marker_counter > 0){
-        log_debug(
-                tt::LogDevice,
-                "{} device markers on device {} worker core {},{} risc {} were dropped. End index {}",
-                dropped_marker_counter,
-                device_id,
-                worker_core.x,
-                worker_core.y,
-                risc_name,
-                end_index);
+    vector<std::uint32_t> control_buffer;
+
+    control_buffer = tt::llrt::read_hex_vec_from_core(
+            device_id,
+            worker_core,
+            PROFILER_L1_BUFFER_CONTROL,
+            PROFILER_L1_CONTROL_BUFFER_SIZE);
+
+    uint32_t bufferCount = control_buffer[kernel_profiler::DRAM_BUFFER_NUM];
+
+    if (bufferCount > PROFILER_DRAM_BUFFER_COUNT)
+    {
+        bufferCount = PROFILER_DRAM_BUFFER_COUNT;
+        std::cout << "DRAM Buffer for " << worker_core.x << "," << worker_core.y << " is full" << std::endl;
+    }
+    dumpDeviceResultToFile(
+            device_id,
+            worker_core.x,
+            worker_core.y,
+            0,
+            (uint64_t(control_buffer[kernel_profiler::FW_RESET_H]) << 32) | control_buffer[kernel_profiler::FW_RESET_L],
+            0);
+
+    for (int riscNum = 0; riscNum < PROFILER_RISC_COUNT; riscNum++) {
+        for (int bufferNum = 0; bufferNum < bufferCount; bufferNum++){
+            for (int marker = kernel_profiler::FW_START; marker <= kernel_profiler::FW_END; marker++)
+            {
+                uint32_t buffer_shift = bufferNum * PROFILER_L1_VECTOR_SIZE * PROFILER_RISC_COUNT * 120 + startIndex;
+                uint32_t time_H_index = buffer_shift + riscNum * PROFILER_L1_VECTOR_SIZE + kernel_profiler::SYNC_VAL_H;
+                uint32_t time_L_index = buffer_shift + riscNum * PROFILER_L1_VECTOR_SIZE + marker;
+                dumpDeviceResultToFile(
+                        device_id,
+                        worker_core.x,
+                        worker_core.y,
+                        riscNum,
+                        (uint64_t(profile_buffer[time_H_index]) << 32) | profile_buffer[time_L_index],
+                        marker - kernel_profiler::SYNC_VAL_L);
+            }
+        }
     }
 
-    for (int i = kernel_profiler::MARKER_DATA_START; i < end_index; i+=kernel_profiler::TIMER_DATA_UINT32_SIZE) {
-        dumpDeviceResultToFile(
-                device_id,
-                worker_core.x,
-                worker_core.y,
-                risc_name,
-                (uint64_t(profile_buffer[i+kernel_profiler::TIMER_VAL_H]) << 32) | profile_buffer[i+kernel_profiler::TIMER_VAL_L],
-                profile_buffer[i+kernel_profiler::TIMER_ID]);
-    }
+    std::vector<uint32_t> zero_buffer(kernel_profiler::DRAM_BUFFER_NUM + 1, 0);
+    tt::llrt::write_hex_vec_to_core(
+            device_id,
+            worker_core,
+            zero_buffer,
+            PROFILER_L1_BUFFER_CONTROL);
 }
 
 void Profiler::dumpDeviceResultToFile(
         int chip_id,
         int core_x,
         int core_y,
-        std::string hart_name,
+        int risc,
         uint64_t timestamp,
         uint32_t timer_id){
-
-    std::filesystem::path log_path = output_dir / DEVICE_SIDE_LOG;
+    ZoneScoped;
+    auto test  = std::filesystem::path("tt_metal/tools/profiler/logs");
+    std::filesystem::path log_path = test / DEVICE_SIDE_LOG;
     std::ofstream log_file;
+
+    std::string riscName[] = {"BRISC", "NCRISC", "TRISC0", "TRISC1", "TRISC2"};
+
 
     if (device_new_log || !std::filesystem::exists(log_path))
     {
@@ -152,7 +198,21 @@ void Profiler::dumpDeviceResultToFile(
     }
     core_x--;
 
-    log_file << chip_id << ", " << core_x << ", " << core_y << ", " << hart_name << ", ";
+    uint64_t threadID = core_x*1000000+core_y*10000+risc*100;
+    uint64_t eventID = timer_id + threadID;
+
+    if (device_data.find (eventID) != device_data.end())
+    {
+        ZoneScopedNC("eventFound",tracy::Color::Green);
+        device_data.at(eventID).push_back(timestamp);
+    }
+    else
+    {
+        ZoneScopedNC("eventNotFound",tracy::Color::Red);
+        device_data.emplace(eventID,std::list<uint64_t>{timestamp});
+    }
+
+    log_file << chip_id << ", " << core_x << ", " << core_y << ", " << riscName[risc] << ", ";
     log_file << timer_id << ", ";
     log_file << timestamp;
     log_file << std::endl;
@@ -162,10 +222,21 @@ void Profiler::dumpDeviceResultToFile(
 Profiler::Profiler()
 {
 #if defined(PROFILER)
+    ZoneScopedC(tracy::Color::Green);
     host_new_log = true;
     device_new_log = true;
     output_dir = std::filesystem::path("tt_metal/tools/profiler/logs");
     std::filesystem::create_directories(output_dir);
+
+    tracyTTCtx = TracyCLContext();
+#endif
+}
+
+Profiler::~Profiler()
+{
+#if defined(PROFILER)
+    TracyCLDestroy(tracyTTCtx);
+    std::cout << "Destroy global profiler" << std::endl ;
 #endif
 }
 
@@ -217,33 +288,17 @@ void Profiler::dumpDeviceResults (
         int device_id,
         const vector<CoreCoord> &worker_cores){
 #if defined(PROFILER)
+    ZoneScoped;
     device_core_frequency = tt::Cluster::instance().get_device_aiclk(device_id);
+    auto dram_buffer_size = profiler_dram_buffer.size();
+    std::vector<uint32_t> profile_buffer(dram_buffer_size/sizeof(uint32_t), 0);
+    tt_metal::ReadFromBuffer(profiler_dram_buffer, profile_buffer);
+
     for (const auto &worker_core : worker_cores) {
         readRiscProfilerResults(
             device_id,
-            worker_core,
-            "NCRISC",
-            PRINT_BUFFER_NC);
-        readRiscProfilerResults(
-            device_id,
-            worker_core,
-            "BRISC",
-            PRINT_BUFFER_BR);
-        readRiscProfilerResults(
-            device_id,
-            worker_core,
-            "TRISC_0",
-            PRINT_BUFFER_T0);
-	readRiscProfilerResults(
-	    device_id,
-	    worker_core,
-	    "TRISC_1",
-	    PRINT_BUFFER_T1);
-	readRiscProfilerResults(
-	    device_id,
-	    worker_core,
-	    "TRISC_2",
-	    PRINT_BUFFER_T2);
+            profile_buffer,
+            worker_core);
     }
 #endif
 }

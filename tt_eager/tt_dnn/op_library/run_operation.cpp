@@ -14,7 +14,6 @@
 #include "tt_stl/reflection.hpp"
 
 #include "third_party/magic_enum/magic_enum.hpp"
-#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 
 namespace tt::tt_metal::operation {
 
@@ -120,7 +119,7 @@ std::vector<Tensor> run_without_program_cache(
         EnqueueProgram(*::detail::GLOBAL_CQ, program, false);
         // Only need to dump device data when in dispatch mode
         // LaunchKernel automatically dumps device data
-        op_profiler::dump_device_profiler_results(device, program);
+        //op_profiler::dump_device_profiler_results(device, program);
     } else {
         LaunchProgram(device, program);
     }
@@ -163,7 +162,7 @@ std::vector<Tensor> run_with_program_cache(
         EnqueueProgram(*::detail::GLOBAL_CQ, program, false);
         // Only need to dump device data when in dispatch mode
         // LaunchKernel automatically dumps device data
-        op_profiler::dump_device_profiler_results(device, program);
+        //op_profiler::dump_device_profiler_results(device, program);
     } else {
         LaunchProgram(device, program);
     }
