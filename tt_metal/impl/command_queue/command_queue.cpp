@@ -19,7 +19,7 @@ ProgramSrcToDstAddrMap ConstructProgramSrcToDstAddrMap(const Device* device, Pro
 
     u32 pcie_slot = 0;
     u32 l1_size = device->cluster()->get_soc_desc(pcie_slot).worker_l1_size;
-
+    tt::log_assert(l1_size == 1024*1024, "Invalid l1 size");
 
     // Initialize the worker notify section
     for (const CoreRange& core_range : program.logical_core_range_set().ranges()) {
@@ -280,6 +280,7 @@ const DeviceCommand EnqueueReadBufferCommand::assemble_device_command(u32 dst) {
 
     u32 pcie_slot = 0;
     u32 l1_size = this->device->cluster()->get_soc_desc(pcie_slot).worker_l1_size;
+    tt::log_assert(l1_size == 1024*1024, "Invalid l1 size");
     u32 available_l1 = l1_size - DEVICE_COMMAND_DATA_ADDR;
     u32 potential_burst_size = available_l1;
     u32 num_bursts = this->buffer.size() / (available_l1);
@@ -289,7 +290,7 @@ const DeviceCommand EnqueueReadBufferCommand::assemble_device_command(u32 dst) {
     u32 num_pages_per_remainder_burst = remainder_burst_size / this->buffer.page_size();
 
     CoreCoord pcie_core = this->device->cluster()->get_soc_desc(pcie_slot).pcie_cores.at(0);
-    tt::log_assert(pcie_core == {0, 4}, "Invalid pcie core");
+    tt::log_assert(pcie_core == CoreCoord(0, 4), "Invalid pcie core");
     command.add_read_buffer_instruction(
         dst,
         NOC_XY_ENCODING(pcie_core.x, pcie_core.y),
@@ -340,6 +341,7 @@ const DeviceCommand EnqueueWriteBufferCommand::assemble_device_command(u32 src_a
 
     u32 pcie_slot = 0;
     u32 l1_size = this->device->cluster()->get_soc_desc(pcie_slot).worker_l1_size;
+    tt::log_assert(l1_size == 1024*1024, "Invalid l1 size");
     u32 available_l1 = l1_size - DEVICE_COMMAND_DATA_ADDR;
     u32 potential_burst_size = available_l1;
     u32 num_bursts = this->buffer.size() / (available_l1);
@@ -349,7 +351,7 @@ const DeviceCommand EnqueueWriteBufferCommand::assemble_device_command(u32 src_a
     u32 num_pages_per_remainder_burst = remainder_burst_size / this->buffer.page_size();
 
     CoreCoord pcie_core = this->device->cluster()->get_soc_desc(pcie_slot).pcie_cores.at(0);
-    tt::log_assert(pcie_core == {0, 4}, "Invalid pcie core");
+    tt::log_assert(pcie_core == CoreCoord(0, 4), "Invalid pcie core");
     command.add_write_buffer_instruction(
         src_address,
         NOC_XY_ENCODING(pcie_core.x, pcie_core.y),
@@ -542,7 +544,8 @@ void send_dispatch_kernel_to_device(Device* device) {
     );
 
     CoreCoord pcie_core = device->cluster()->get_soc_desc(pcie_slot).pcie_cores.at(0);
-    tt::log_assert(pcie_core == {0, 4}, "Invalid pcie core");
+    tt::log_assert(pcie_core == CoreCoord(0, 4), "Invalid pcie core");
+    tt::log_assert(device->cluster()->get_soc_desc(pcie_slot).pcie_cores.size() == 1, "Should only have one pcie core");
     cq_kernel->add_define("IS_DISPATCH_KERNEL", "1");
     cq_kernel->add_define("PCIE_CORE_X", std::to_string(pcie_core.x));
     cq_kernel->add_define("PCIE_CORE_Y", std::to_string(pcie_core.y));
@@ -622,6 +625,7 @@ void CommandQueue::enqueue_write_buffer(Buffer& buffer, vector<u32>& src, bool b
     TT_ASSERT(not blocking, "EnqueueWriteBuffer only has support for non-blocking mode currently");
     u32 pcie_slot = 0;
     u32 l1_size = this->device->cluster()->get_soc_desc(pcie_slot).worker_l1_size;
+    tt::log_assert(l1_size == 1024*1024, "Invalid l1 size");
 
     TT_ASSERT(
         buffer.page_size() < l1_size - DEVICE_COMMAND_DATA_ADDR,
