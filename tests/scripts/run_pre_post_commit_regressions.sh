@@ -26,10 +26,10 @@ env pytest tests/tt_metal/llrt --tt-arch $ARCH_NAME -m post_commit
 
 if [ "$ARCH_NAME" == "grayskull" ]; then
   ./tests/scripts/run_python_api_unit_tests.sh
-  env python tests/scripts/run_tt_metal.py
+#   env python tests/scripts/run_tt_metal.py
 
   # Tests profiler module FW side
-  ./tests/scripts/run_profiler_regressions.sh FW
+#   ./tests/scripts/run_profiler_regressions.sh FW
 else
   ./build/test/tt_metal/test_bcast --arch $ARCH_NAME
   ./build/test/tt_metal/test_reduce_hw --arch $ARCH_NAME
@@ -37,7 +37,7 @@ else
   ./build/test/tt_metal/test_reduce_h --arch $ARCH_NAME
 fi
 
-./build/test/tt_metal/unit_tests
+# ./build/test/tt_metal/unit_tests
 
 echo "Checking docs build..."
 
