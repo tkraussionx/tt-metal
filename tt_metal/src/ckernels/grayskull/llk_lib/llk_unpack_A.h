@@ -196,6 +196,8 @@ inline void llk_unpack_A(std::uint32_t operand, std::uint32_t tile_index) {
     std::uint32_t input = get_operand_id(operand);
     std::uint32_t base_address = cb_read_interface[input].fifo_rd_ptr;
     std::uint32_t offset_address = MUL_TILE_SIZE_AND_INDEX((uint)unpack_src_format[input], tile_index);
+    DPRINT << "**** offset_addr: " << offset_address << ", base: " << base_address << ENDL();
+    DPRINT << "**** fifo_sz: " << cb_read_interface[input].fifo_size << ", rd_ptr: " << cb_read_interface[input].fifo_rd_ptr << ENDL();
     // note: unpacker is programmed to automatically skip the tile header (+1)
     // since there is no tile header, we need to -1 the address (in terms of 16B words), to offet unpacker's automatic +1
     std::uint32_t address = base_address + offset_address - 1;

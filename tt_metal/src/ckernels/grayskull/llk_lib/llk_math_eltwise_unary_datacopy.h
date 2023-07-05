@@ -8,6 +8,8 @@
 #include "llk_math_common.h"
 #include "ckernel_globals.h"
 
+#include "debug_print.h"
+
 using namespace ckernel;
 
 // local function declarations
@@ -108,6 +110,7 @@ inline void eltwise_unary_configure_mop(uint rows_per_inst, uint total_rows) {
         uint innerloop = (rows_per_inst == p_mova2d::MOV_1_ROW) ? total_rows : (total_rows >> 3);
         uint outerloop = 4;
         ckernel_template tmp(outerloop, innerloop, TT_OP_MOVA2D(rows_per_inst, addr_mod, 4, 0));
+        DPRINT << "ADDR_MOD: " << addr_mod << ENDL();
         if constexpr (transpose_xy) {
             tmp.set_start_op(TT_OP_TRNSPSRCA);
         } else {

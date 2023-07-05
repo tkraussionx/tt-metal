@@ -6,6 +6,7 @@
 #include "cunpack_common.h"
 #include "llk_param_structs.h"
 #include "llk_io_unpack.h"
+#include "debug_print.h"
 
 #ifdef PERF_DUMP
 #include "ckernel_perf_api.h"
@@ -72,6 +73,13 @@ inline void llk_unpack_reconfig_data_format(const std::uint32_t srca_old_operand
     std::uint32_t new_srca_operand_id = get_operand_id(srca_new_operand);
     std::uint32_t old_srcb_operand_id = get_operand_id(srcb_old_operand);
     std::uint32_t new_srcb_operand_id = get_operand_id(srcb_new_operand);
+
+    DPRINT << "-------A> " << (uint) unpack_src_format[old_srca_operand_id] << " (" << (uint) old_srca_operand_id << ")"
+            << " --> " << (uint) unpack_src_format[new_srca_operand_id] << " (" << (uint) new_srca_operand_id << ")" << ENDL();
+    // DPRINT << "-------A> " << (uint) unpack_dst_format[old_srca_operand_id] << " (" << (uint) old_srca_operand_id << ")" << ENDL();
+    DPRINT << "-------B> " << (uint) unpack_src_format[old_srcb_operand_id] << " (" << (uint) old_srcb_operand_id << ")"
+            << " --> " << (uint) unpack_src_format[new_srcb_operand_id] << " (" << (uint) new_srcb_operand_id << ")" << ENDL();
+    // DPRINT << "-------B> " << (uint) unpack_dst_format[old_srcb_operand_id] << " (" << (uint) old_srcb_operand_id << ")" << ENDL();
 
 
     if((unpack_src_format[old_srca_operand_id] != unpack_src_format[new_srca_operand_id]) && (unpack_src_format[old_srcb_operand_id] != unpack_src_format[new_srcb_operand_id])) {
