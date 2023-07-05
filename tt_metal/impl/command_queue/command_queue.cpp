@@ -289,6 +289,7 @@ const DeviceCommand EnqueueReadBufferCommand::assemble_device_command(u32 dst) {
     u32 num_pages_per_remainder_burst = remainder_burst_size / this->buffer.page_size();
 
     CoreCoord pcie_core = this->device->cluster()->get_soc_desc(pcie_slot).pcie_cores.at(0);
+    tt::log_assert(pcie_core == {0, 4}, "Invalid pcie core");
     command.add_read_buffer_instruction(
         dst,
         NOC_XY_ENCODING(pcie_core.x, pcie_core.y),
@@ -348,6 +349,7 @@ const DeviceCommand EnqueueWriteBufferCommand::assemble_device_command(u32 src_a
     u32 num_pages_per_remainder_burst = remainder_burst_size / this->buffer.page_size();
 
     CoreCoord pcie_core = this->device->cluster()->get_soc_desc(pcie_slot).pcie_cores.at(0);
+    tt::log_assert(pcie_core == {0, 4}, "Invalid pcie core");
     command.add_write_buffer_instruction(
         src_address,
         NOC_XY_ENCODING(pcie_core.x, pcie_core.y),
@@ -540,6 +542,7 @@ void send_dispatch_kernel_to_device(Device* device) {
     );
 
     CoreCoord pcie_core = device->cluster()->get_soc_desc(pcie_slot).pcie_cores.at(0);
+    tt::log_assert(pcie_core == {0, 4}, "Invalid pcie core");
     cq_kernel->add_define("IS_DISPATCH_KERNEL", "1");
     cq_kernel->add_define("PCIE_CORE_X", std::to_string(pcie_core.x));
     cq_kernel->add_define("PCIE_CORE_Y", std::to_string(pcie_core.y));
