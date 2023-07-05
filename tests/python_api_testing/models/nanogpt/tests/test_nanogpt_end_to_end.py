@@ -75,11 +75,8 @@ def run_nanogpt_model_test(device, prompt, temperature, max_new_tokens):
     start_ids = encode(text)
 
     x = (torch.tensor(start_ids, dtype=torch.long, device='cpu')[None, ...])
-
     y = tt_model.generate(x, max_new_tokens, temperature, top_k=top_k)
-    print(decode(y[0].tolist()))
-
-
+    logger.info(decode(y[0].tolist()))
 
 @pytest.mark.parametrize(
     "prompt, max_new_tokens, temperature",

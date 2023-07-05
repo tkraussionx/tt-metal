@@ -79,9 +79,9 @@ def run_nanogpt_model_test(device, pcc):
     logger.info(pcc_message)
 
     if does_pass:
-        logger.info("nanogpt_model: Passed!")
+        logger.info("nanogpt_model_real: Passed!")
     else:
-        logger.warning("nanogpt_model: Failed!")
+        logger.warning("nanogpt_model_real: Failed!")
 
     assert does_pass
 

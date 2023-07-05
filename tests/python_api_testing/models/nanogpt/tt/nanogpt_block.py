@@ -66,11 +66,9 @@ class TtBlock(nn.Module):
         self.mlp = nanogpt_mlp.TtMLP(f"{base_address}.mlp", state_dict, device)
 
     def forward(self, x):
-        # x = x + self.attn(self.ln_1(x))
         tmp = self.attn.forward(self.ln_1(x))
         x = tt_lib.tensor.add(x, tmp)
 
-        # x = x + self.mlp(self.ln_2(x))
         tmp = self.mlp.forward(self.ln_2(x))
         x = tt_lib.tensor.add(x, tmp)
 

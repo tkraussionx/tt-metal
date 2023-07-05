@@ -37,18 +37,13 @@ def tt_nanogpt_gelu(x, device):
 
     new_factor = tt_lib.tensor.mul(tt_k3, tt_k4_recip)
 
-    # 0.5*x
-    factor1 = tt_lib.tensor.mul(tt_k1, z)  # exp(z)
+    factor1 = tt_lib.tensor.mul(tt_k1, z)
 
-    # x*x
     pow2 = tt_lib.tensor.mul(z, z)
 
-    # (x + 0.044715 * torch.pow(x, 3)))
-    # torch.pow(x, 3))
     pow3 = tt_lib.tensor.mul(pow2, z)
     factor3 = tt_lib.tensor.mul(tt_k2, pow3)
 
-    # (x + 0.044715 * torch.pow(x, 3)))
     factor3 = tt_lib.tensor.add(factor3, z)
 
     sumtanh = tt_lib.tensor.mul(new_factor, factor3)
