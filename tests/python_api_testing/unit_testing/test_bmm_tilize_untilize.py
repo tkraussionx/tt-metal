@@ -37,30 +37,43 @@ tilize_a = [False]  #[True, False]
 untilize_out = [False]  #[True, False]
 # untilize_out = [True]
 
-# a_dtype = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
-a_dtype = [ttl.tensor.DataType.BFLOAT16]
-# a_dtype = [ttl.tensor.DataType.BFLOAT8_B]
+# # a_dtype = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
+# a_dtype = [ttl.tensor.DataType.BFLOAT16]
+# # a_dtype = [ttl.tensor.DataType.BFLOAT8_B]
 
-# b_dtype = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
-# b_dtype = [ttl.tensor.DataType.BFLOAT16]
-b_dtype = [ttl.tensor.DataType.BFLOAT8_B]
+# # b_dtype = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
+# # b_dtype = [ttl.tensor.DataType.BFLOAT16]
+# b_dtype = [ttl.tensor.DataType.BFLOAT8_B]
 
-# out_dtype = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
-out_dtype = [ttl.tensor.DataType.BFLOAT16]
-# out_dtype = [ttl.tensor.DataType.BFLOAT8_B]
+# # out_dtype = [ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B]
+# out_dtype = [ttl.tensor.DataType.BFLOAT16]
+# # out_dtype = [ttl.tensor.DataType.BFLOAT8_B]
 
 
 @pytest.mark.parametrize(
     'a_height_nblocks, a_width_nblocks, b_width_nblocks,\
      a_block_height_ntiles, a_block_width_ntiles, b_block_width_ntiles,\
      out_subblock_height_ntiles, out_subblock_width_ntiles,\
-     tilize_a, untilize_out,\
-     a_dtype, b_dtype, out_dtype',
+     tilize_a, untilize_out',
     itertools.product(a_height_nblocks, a_width_nblocks, b_width_nblocks,
                       a_block_height_ntiles, a_block_width_ntiles, b_block_width_ntiles,
                       out_subblock_height_ntiles, out_subblock_width_ntiles,
-                      tilize_a, untilize_out,
-                      a_dtype, b_dtype, out_dtype)
+                      tilize_a, untilize_out)
+)
+@pytest.mark.parametrize(
+    "out_dtype",
+    (ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16),
+    ids=["BFLOAT8_B", "BFLOAT16"],
+)
+@pytest.mark.parametrize(
+    "b_dtype",
+    (ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16),
+    ids=["BFLOAT8_B", "BFLOAT16"],
+)
+@pytest.mark.parametrize(
+    "a_dtype",
+    (ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16),
+    ids=["BFLOAT8_B", "BFLOAT16"],
 )
 def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
                                              a_width_nblocks,
@@ -160,7 +173,7 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
     else:
         out_pytorch = torch.tensor(out.data()).reshape(out_shape)
 
-    print(f'returned output: {out_pytorch[0][0]}')
+    # print(f'returned output: {out_pytorch[0][0]}')
 
     ttl.device.CloseDevice(device)
 
