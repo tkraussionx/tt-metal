@@ -4,6 +4,8 @@
 #include "debug_print.h"
 
 
+SliceRange sr = SliceRange{ .h0 = 0, .h1 = 32, .hs = 8, .w0 = 0, .w1 = 32, .ws = 8 };
+
 inline void tilize_in(
     uint32_t in_cb_id,
     uint32_t in_subblock_h,
@@ -75,6 +77,7 @@ inline void pack_matmul_subblock(uint32_t cb_id, uint32_t out_subblock_num_tiles
     for (uint32_t i = 0; i < out_subblock_num_tiles; ++i) {
         pack_tile(i, cb_id);
     }
+    UNPACK(( DPRINT << ">>>> PACKED " << TileSlice(cb_id, 0, sr) << ENDL() ));
     cb_push_back(cb_id, out_subblock_num_tiles);
 }
 
@@ -111,6 +114,16 @@ void MAIN {
     uint32_t untilize_mode_reblock_cb                 = tt::CB::c_intermed3;
     uint32_t out_cb_id                                = tt::CB::c_out0;
 
+    // mm_init();
+    // cb_wait_front(in0_cb_id, 1);
+    // cb_wait_front(in1_cb_id, 1);
+    // acquire_dst(DstMode::Half);
+    // matmul_tiles(in0_cb_id, in1_cb_id, 0, 0, 0, false);
+    // pack_matmul_subblock(out_cb_id, 1);
+    // release_dst(DstMode::Half);
+    // cb_pop_front(in0_cb_id, 1);
+    // cb_pop_front(in1_cb_id, 1);
+
     mm_init(in0_cb_id, in1_cb_id, out_cb_id);
     for(uint32_t in0_block_h_i = 0; in0_block_h_i < in0_num_blocks_h; ++in0_block_h_i) {
         for(uint32_t in1_block_w_i = 0; in1_block_w_i < in1_num_blocks_w; ++in1_block_w_i) {
@@ -131,21 +144,18 @@ void MAIN {
                     for (uint32_t in1_subblock_i = 0; in1_subblock_i < in1_num_subblocks; ++in1_subblock_i) {
                         acquire_dst(tt::DstMode::Half);
                         if (enable_reload) {
-                            // copy_tile_to_dst_init_short();
-                            // copy_tile_init();
-
                             // Reconfigure fp8 input -> fp16
                             copy_tile_to_dst_init_short_with_dt(matmul_partials_cb);
+                            // copy_tile_to_dst_init_short();
                             cb_wait_front(matmul_partials_cb, out_subblock_num_tiles);
+                            UNPACK(( DPRINT << "<<<< RELOADED " << TileSlice(matmul_partials_cb, 0, sr) << ENDL() ));
                             for (uint32_t i = 0; i < out_subblock_num_tiles; ++i) {
                                 copy_tile(matmul_partials_cb, i, i);
                             }
                             cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
-                            // mm_init_short();
-                            // mm_init();
-
                             // Reconfigure srcA back to fp8
                             mm_init_short_with_dt(matmul_partials_cb);
+                            // mm_init_short();
                         } // enable_reload
                         // Compute output sub-block from in0_subblock x in1_subblock
                         int dst_index = 0;

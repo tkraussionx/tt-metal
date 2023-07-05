@@ -278,7 +278,7 @@ namespace ckernel::unpacker
 
       TT_SETDMAREG(0, (tile_descriptor.val[0] & 0xffff), 0, LO_16(p_gpr_unpack::TMP0));
       TT_SETDMAREG(0, ((tile_descriptor.val[0] >> 16) & 0xffff), 0, HI_16(p_gpr_unpack::TMP0));
-    TT_WRCFG(p_gpr_unpack::TMP0, p_cfg::WRCFG_32b, tile_addr);
+    TTI_WRCFG(p_gpr_unpack::TMP0, p_cfg::WRCFG_32b, tile_addr);
     TTI_NOP;
     TTI_NOP;
 
@@ -291,7 +291,7 @@ namespace ckernel::unpacker
       //cfg[out_df_addr]=config.val[0];
       TT_SETDMAREG(0, (config.val[0] & 0xffff), 0, LO_16(p_gpr_unpack::TMP0));
       TT_SETDMAREG(0, ((config.val[0] >> 16) & 0xffff), 0, HI_16(p_gpr_unpack::TMP0));
-    TT_WRCFG(p_gpr_unpack::TMP0, p_cfg::WRCFG_32b, out_df_addr);
+    TTI_WRCFG(p_gpr_unpack::TMP0, p_cfg::WRCFG_32b, out_df_addr);
     TTI_NOP;
     TTI_NOP;
 

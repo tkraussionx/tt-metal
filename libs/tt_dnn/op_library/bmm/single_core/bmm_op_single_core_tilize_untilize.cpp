@@ -48,6 +48,7 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
         cb0_ntiles * in0_tile_nbytes,
         in0_df
     );
+    std::cout << "++ 0: " << cb_in0->address() << ", " << cb_in0->data_format() << std::endl;
     // in1
     auto cb_in1 = CreateCircularBuffer(
         program,
@@ -58,6 +59,7 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
         cb1_ntiles * in1_tile_nbytes,
         in1_df
     );
+    std::cout << "++ 1: " << cb_in1->address() << ", " << cb_in1->data_format() << std::endl;
 
     // intermediates
 
@@ -94,6 +96,7 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
             out_ntiles * out_tile_nbytes,
             out_df
         );
+        std::cout << "++ 24: " << cb_matmul_partials->address() << ", " << cb_matmul_partials->data_format() << std::endl;
     }
 
     if (untilize_out) {
