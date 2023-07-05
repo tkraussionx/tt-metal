@@ -7,11 +7,17 @@ from loguru import logger
 sys.path.append("./")  # to run '$ python *.py' files in subdirectories
 logger = logging.getLogger(__name__)
 import torch
-from models.common import *
-from models.experimental import *
-from utils.autoanchor import check_anchor_order
-from utils.general import make_divisible, check_file, set_logging
-from utils.torch_utils import (
+from python_api_testing.models.yolov7.reference.models.common import *
+from python_api_testing.models.yolov7.reference.models.experimental import *
+from python_api_testing.models.yolov7.reference.utils.autoanchor import (
+    check_anchor_order,
+)
+from python_api_testing.models.yolov7.reference.utils.general import (
+    make_divisible,
+    check_file,
+    set_logging,
+)
+from python_api_testing.models.yolov7.reference.utils.torch_utils import (
     time_synchronized,
     fuse_conv_and_bn,
     model_info,
@@ -20,7 +26,7 @@ from utils.torch_utils import (
     select_device,
     copy_attr,
 )
-from utils.loss import SigmoidBin
+from python_api_testing.models.yolov7.reference.utils.loss import SigmoidBin
 
 try:
     import thop  # for FLOPS computation
@@ -918,7 +924,7 @@ class Model(nn.Module):
     def fuse(self):  # fuse model Conv2d() + BatchNorm2d() layers
         logger.info("Fusing layers... ")
         for m in self.model.modules():
-            if isinstance(m, RepConv):
+            if "RepConv" in str(type(m)):
                 # logger.info(f" fuse_repvgg_block")
                 m.fuse_repvgg_block()
             elif isinstance(m, RepConv_OREPA):

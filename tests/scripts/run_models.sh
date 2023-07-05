@@ -109,3 +109,13 @@ env pytest tests/python_api_testing/models/EfficientNet/tests -k efficientnet_v2
 env pytest tests/python_api_testing/models/EfficientNet/tests -k efficientnet_lite0_model_real
 
 env pytest tests/python_api_testing/models/nanogpt -k nanogpt_model_real
+
+env pytest tests/python_api_testing/models/yolov7 -k concat_module
+env pytest tests/python_api_testing/models/yolov7 -k conv2d_module
+env pytest tests/python_api_testing/models/yolov7 -k conv_module
+env pytest tests/python_api_testing/models/yolov7 -k detect_module
+env pytest tests/python_api_testing/models/yolov7 -k yolov7_model
+env pytest tests/python_api_testing/models/yolov7 -k maxpool_module
+env pytest tests/python_api_testing/models/yolov7 -k repconv_module
+env pytest tests/python_api_testing/models/yolov7 -k sppcspc_module
+env pytest tests/python_api_testing/models/yolov7 -k upsample_module
