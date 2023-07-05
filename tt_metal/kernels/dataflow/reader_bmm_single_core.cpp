@@ -98,8 +98,8 @@ void kernel_main() {
                 }
                 noc_async_read_barrier();
 
-                SliceRange sr0 = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
-                DPRINT << "SLICE 0: " << TileSlice(in0_cb_id, 0, sr0) << ENDL();
+                // SliceRange sr0 = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
+                // DPRINT << "SLICE 0: " << TileSlice(in0_cb_id, 0, sr0) << ENDL();
 
                 // DPRINT << in0_addr
 
@@ -124,8 +124,8 @@ void kernel_main() {
                 } // for in1_block_h
                 noc_async_read_barrier();
 
-                SliceRange sr1 = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
-                DPRINT << "SLICE 1: " << TileSlice(in1_cb_id, 0, sr1) << ENDL();
+                // SliceRange sr1 = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
+                // DPRINT << "SLICE 1: " << TileSlice(in1_cb_id, 0, sr1) << ENDL();
 
                 in1_current_block_start_tile_id += in1_next_block_stride_h; // in1_width_ntiles * in1_block_h
                 cb_push_back(in1_cb_id, in1_block_num_tiles);

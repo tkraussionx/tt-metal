@@ -301,7 +301,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
 
     create_cb_bmm_single_core_tilize_untilize(
         program,
-        in0.device(),
+        device,
         core,
         in0_df,
         in1_df,

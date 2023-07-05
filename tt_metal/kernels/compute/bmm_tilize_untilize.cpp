@@ -4,6 +4,8 @@
 #include "debug_print.h"
 
 
+SliceRange sr = SliceRange{ .h0 = 0, .h1 = 32, .hs = 8, .w0 = 0, .w1 = 32, .ws = 8 };
+
 inline void tilize_in(
     uint32_t in_cb_id,
     uint32_t in_subblock_h,
@@ -71,17 +73,26 @@ inline void reblock_and_untilize(
 } // reblock_and_untilize()
 
 inline void pack_matmul_subblock(uint32_t cb_id, uint32_t out_subblock_num_tiles) {
-    // PACK(( DPRINT << "RESERVING " << cb_id << "," << out_subblock_num_tiles << ENDL() ));
+    PACK(( DPRINT << "RESERVING " << cb_id << "," << out_subblock_num_tiles << ENDL() ));
     cb_reserve_back(cb_id, out_subblock_num_tiles);
     // PACK(( DPRINT << "PACKING TILES..." << ENDL() ));
     for (uint32_t i = 0; i < out_subblock_num_tiles; ++i) {
         // PACK(( DPRINT << "... " << i << ENDL() ));
-        pack_tile(i, cb_id);
+        pack_tile(i, cb_id, i);
         // PACK(( DPRINT << "done: " << i << ENDL() ));
     }
 
-    SliceRange sr = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
-    // PACK(( DPRINT << ">>>> PACKED " << TileSlice(cb_id, 0, sr) << ENDL() ));
+    PACK(( DPRINT << "==== " << cb_id << " PACK 0" << ENDL() ));
+    UNPACK(( DPRINT << "==== " << cb_id << " UNPACK 0" << ENDL() ));
+
+    TT_STALLWAIT(p_stall::STALL_UNPACK, p_stall::PACK);
+    TT_STALLWAIT(p_stall::STALL_PACK, p_stall::UNPACK);
+
+    PACK(( DPRINT << "==== PACK 1" << ENDL() ));
+    UNPACK(( DPRINT << "==== UNPACK 1" << ENDL() ));
+
+    // SliceRange sr = SliceRange{ .h0 = 16, .h1 = 17, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
+    UNPACK(( DPRINT << ">>>> PACKED " << TileSlice(cb_id, 0, sr) << ENDL() ));
 
     cb_push_back(cb_id, out_subblock_num_tiles);
     // PACK(( DPRINT << "PUSHED..." << ENDL() ));
@@ -122,6 +133,16 @@ void MAIN {
 
     DPRINT << FIXP() << SETP(2);
 
+    // mm_init();
+    // cb_wait_front(in0_cb_id, 1);
+    // cb_wait_front(in1_cb_id, 1);
+    // acquire_dst(DstMode::Half);
+    // matmul_tiles(in0_cb_id, in1_cb_id, 0, 0, 0, false);
+    // pack_matmul_subblock(out_cb_id, 1);
+    // release_dst(DstMode::Half);
+    // cb_pop_front(in0_cb_id, 1);
+    // cb_pop_front(in1_cb_id, 1);
+
     mm_init();
     for(uint32_t in0_block_h_i = 0; in0_block_h_i < in0_num_blocks_h; ++in0_block_h_i) {
         for(uint32_t in1_block_w_i = 0; in1_block_w_i < in1_num_blocks_w; ++in1_block_w_i) {
@@ -147,20 +168,21 @@ void MAIN {
                     for (uint32_t in1_subblock_i = 0; in1_subblock_i < in1_num_subblocks; ++in1_subblock_i) {
                         // PACK(( DPRINT << "SUBBLOCK: " << in0_subblock_i << "," << in1_subblock_i << ENDL() ));
                         acquire_dst(DstMode::Half);
+                        // acquire_dst(DstMode::Full);
                         if (enable_reload) {
-                            copy_tile_to_dst_init_short_try(matmul_partials_cb);
+                            copy_tile_to_dst_init_short_try(in0_cb_id, matmul_partials_cb);
                             // copy_tile_to_dst_init_short();
                             cb_wait_front(matmul_partials_cb, out_subblock_num_tiles);
                             for (uint32_t i = 0; i < out_subblock_num_tiles; ++i) {
                                 copy_tile(matmul_partials_cb, i, i);
                             }
 
-                            SliceRange sr = SliceRange{ .h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
-                            // PACK(( DPRINT << "<<<< RELOADED " << TileSlice(matmul_partials_cb, 0, sr) << ENDL() ));
+                            // SliceRange sr = SliceRange{ .h0 = 16, .h1 = 17, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1 };
+                            UNPACK(( DPRINT << "<<<< RELOADED " << TileSlice(matmul_partials_cb, 0, sr) << ENDL() ));
 
                             cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
                             // PACK (( DPRINT << "POPPED..." << ENDL() ));
-                            mm_init_short_try(matmul_partials_cb);
+                            mm_init_short_try(matmul_partials_cb, in0_cb_id);
                             // mm_init_short();
                             // PACK (( DPRINT << "INITED..." << ENDL() ));
                         } // enable_reload
@@ -192,6 +214,7 @@ void MAIN {
                                                 : matmul_partials_cb,
                                              out_subblock_num_tiles);
                         release_dst(DstMode::Half);
+                        // release_dst(DstMode::Full);
                         // PACK (( DPRINT << "DONE..." << ENDL() ));
                         in1_index_subblock_offset += out_subblock_w;
                     } // for in1_num_subblocks
@@ -220,5 +243,7 @@ void MAIN {
             } // for in0_num_blocks_w
         } // for in1_num_blocks_w
     } // for in0_num_blocks_h
+
+    // PACK(( DPRINT << "SLICE " << TileSlice(out_cb_id, 0, sr) << ENDL() ));
 } // MAIN
 } // NAMESPACE

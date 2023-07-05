@@ -35,8 +35,6 @@ inline void llk_setup_cb_read_interface() {
         cb_read_interface[cb_id].tiles_acked = 0;
         //cb_read_interface[cb_id].tiles_acked1 = 0;
 
-        DPRINT << "FIFO SZ: " << fifo_size << ENDL();
-
         buffer_config_addr += UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG; // move by 3 uint32's
     }
 }

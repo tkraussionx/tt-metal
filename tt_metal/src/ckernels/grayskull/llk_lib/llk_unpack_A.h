@@ -255,3 +255,14 @@ inline void llk_unpack_A(std::uint32_t operand, std::uint32_t tile_index) {
     // Switch unpacker config context
     switch_config_context(unp_cfg_context);
 }
+
+inline void llk_unpack_A_reconfig_data_format(const std::uint32_t srca_old_operand, const std::uint32_t srca_new_operand) {
+    std::uint32_t old_srca_operand_id = get_operand_id(srca_old_operand);
+    std::uint32_t new_srca_operand_id = get_operand_id(srca_new_operand);
+    if((unpack_src_format[old_srca_operand_id] != unpack_src_format[new_srca_operand_id])) {
+        TTI_STALLWAIT(p_stall::STALL_CFG, p_stall::UNPACK0);
+        uint32_t alu_config_data = gl_alu_format_spec_reg;
+        gl_alu_format_spec_reg = cfg_rmw_mmio_rd_tensix_wr(ALU_FORMAT_SPEC_REG_SrcA_val_ADDR32, ALU_FORMAT_SPEC_REG0_SrcA_SHAMT, ALU_FORMAT_SPEC_REG0_SrcA_MASK, unpack_dst_format[new_srca_operand_id], alu_config_data);
+        reconfig_unpacker_data_format(new_srca_operand_id, THCON_SEC0_REG0_TileDescriptor_ADDR32, THCON_SEC0_REG2_Out_data_format_ADDR32);
+    }
+}

@@ -111,25 +111,22 @@ ALWI void binary_op_init_common(uint32_t icb0, uint32_t icb1)
 
     MATH(( llk_math_pack_sync_init<SYNC>() ));
 
-
     PACK(( llk_pack_init() ));
     PACK(( llk_pack_hw_configure_disaggregated<false>(16) ));
     PACK(( llk_setup_outputs() ));
     PACK(( llk_pack_dest_init<SYNC, DstTileFaceLayout::RowMajor, false>() ));
 }
 
-ALWI void mm_init_short_try(uint32_t cbid) {
-    // UNPACK(( DPRINT << "Minit" << ENDL() ));
-    MATH(( llk_math_matmul_init<MATH_FIDELITY>(0)  ));
-    UNPACK(( llk_unpack_AB_matmul_init(0) ));
-    // UNPACK(( llk_unpack_AB_matmul_hw_configure_disaggregated(0,1,0) ));
-    UNPACK(( llk_unpack_reconfig_data_format(cbid, 0, cbid, 1) ));
+ALWI void mm_init_short_try(uint32_t old_cbid, uint32_t new_cbid) {
+    UNPACK(( llk_unpack_AB_matmul_init() ));
+    // UNPACK(( llk_unpack_A_reconfig_data_format(old_cbid, new_cbid) ));
+    // UNPACK(( llk_unpack_reconfig_data_format(25, 0, 1, 1) ));
+    MATH(( llk_math_matmul_init<MATH_FIDELITY>() ));
 }
 
 ALWI void mm_init_short() {
-    MATH(( llk_math_matmul_init<MATH_FIDELITY>(0)  ));
-
     UNPACK(( llk_unpack_AB_matmul_init(0)  ));
+    MATH(( llk_math_matmul_init<MATH_FIDELITY>(0)  ));
 }
 
 /**
@@ -240,9 +237,9 @@ ALWI void cb_reserve_back(uint32_t cbid, uint32_t ntiles)
  * | icb            | The identifier of the output circular buffer (CB) | uint32_t | 0 to 31                                             | True     |
  * | icb_tile       | The index of the tile in the output CB to copy to | uint32_t | Must be less than the size of the CB                | True     |
  */
-ALWI void pack_tile(uint32_t ifrom_dst, uint32_t icb)
+ALWI void pack_tile(uint32_t ifrom_dst, uint32_t icb, uint32_t itile = 0)
 {
-    PACK((  llk_pack<false, SYNC, false >(ifrom_dst, icb)  ));
+    PACK(( llk_pack<false, SYNC, false >(ifrom_dst, icb, itile)  ));
 }
 
 // documented in dataflow_api.h
@@ -258,13 +255,10 @@ ALWI void copy_tile_to_dst_init_short()
     MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE, false>()  ));
 }
 
-ALWI void copy_tile_to_dst_init_short_try(uint32_t cbid)
-{
-    // PACK(( DPRINT << "Cinit" << ENDL() ));
+ALWI void copy_tile_to_dst_init_short_try(uint32_t cur_cbid, uint32_t new_cbid) {
     UNPACK(( llk_unpack_A_init<BroadcastType::NONE, false, false>() ));
-    // UNPACK(( llk_unpack_A_hw_configure_disaggregated(cbid) ));
-    UNPACK(( llk_unpack_reconfig_data_format(0, cbid, 1, cbid) ));
-
+    // UNPACK(( llk_unpack_A_reconfig_data_format(cur_cbid, new_cbid) ));
+    // UNPACK(( llk_unpack_reconfig_data_format(0, 25, 1, 1) ));
     MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE, false>() ));
 }
 
@@ -294,9 +288,8 @@ ALWI void copy_tile_init()
  * */
 ALWI void copy_tile(uint32_t icb, uint32_t itile, uint32_t idst)
 {
-    MATH(( llk_math_eltwise_unary_datacopy<A2D, BroadcastType::NONE, SyncHalf>(idst)  ));
-
-    UNPACK(( llk_unpack_A(icb, itile)  ));
+    UNPACK(( llk_unpack_A(icb, itile) ));
+    MATH(( llk_math_eltwise_unary_datacopy<A2D, BroadcastType::NONE, SyncHalf>(idst) ));
 }
 
 

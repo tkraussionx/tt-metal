@@ -156,7 +156,7 @@ inline void configure_unpack_AB(
                                                                                                           : 1;
     uint unpA_ch1_y_stride = 16 * srca_face_height * unpA_ch1_x_stride;
     uint unpB_ch1_y_stride = 16 * srcb_face_height * unpB_ch1_x_stride;
-    uint exp_width = ((uint)unpack_dst_format[unpA_operand] >> 2) & 0x1;  // 0=5-bit, 1=8-bit
+    uint exp_width = ((uint)unpack_dst_format[unpB_operand] >> 2) & 0x1;  // 0=5-bit, 1=8-bit
 
    //  DPRINT << "UNPA: " << unpA_ch1_x_stride << "UNPB: " << unpB_ch1_x_stride <<
 
@@ -224,7 +224,7 @@ inline void configure_unpack_AB(
     // Program base address for all 2 sections (each section address is loaded to corresponding context)
     // Load dummy data to unused location if face height is 0
     const uint Dest_cntx0_address = srca_face_height == 0 ? 22 * 16 : 4 * 16;
-    const uint Dest_cntx1_address = srca_face_height == 0 ? 22 * 16 : 4 * 16;
+    const uint Dest_cntx1_address = srcb_face_height == 0 ? 22 * 16 : 4 * 16;
     cfg[THCON_SEC0_REG5_Dest_cntx0_address_ADDR32] = Dest_cntx0_address | (Dest_cntx1_address << 16);
 
     // Program unpacker0 per context x_dim
@@ -252,7 +252,7 @@ inline uint32_t cfg_rmw_mmio_rd_tensix_wr(uint addr, uint shamt, uint mask, uint
     TT_SETDMAREG(0, (rmw_val & 0xffff), 0, LO_16(p_gpr_unpack::TMP0));
     TT_SETDMAREG(0, ((rmw_val >> 16) & 0xffff), 0, HI_16(p_gpr_unpack::TMP0));
 
-    TTI_WRCFG(p_gpr_unpack::TMP0, p_cfg::WRCFG_32b, addr);
+    TT_WRCFG(p_gpr_unpack::TMP0, p_cfg::WRCFG_32b, addr);
     TTI_NOP;
     TTI_NOP;
 
@@ -293,6 +293,6 @@ inline void reconfig_unpacker_data_format(
 }
 
 inline uint32_t get_operand_id(uint32_t operand) {
-    return (operand >= INTERMEDIATE_BASE_ID) ? operand - 8 : operand - OPERAND_BASE_ID;
+    return operand;
 }
 }  // namespace ckernel::unpacker
