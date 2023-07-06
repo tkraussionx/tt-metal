@@ -63,17 +63,17 @@ untilize_out = [False]  #[True, False]
 @pytest.mark.parametrize(
     "out_dtype",
     (ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16),
-    ids=["BFLOAT8_B", "BFLOAT16"],
+    ids=["out_BFLOAT8_B", "out_BFLOAT16"],
 )
 @pytest.mark.parametrize(
     "b_dtype",
     (ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16),
-    ids=["BFLOAT8_B", "BFLOAT16"],
+    ids=["b_BFLOAT8_B", "b_BFLOAT16"],
 )
 @pytest.mark.parametrize(
     "a_dtype",
     (ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16),
-    ids=["BFLOAT8_B", "BFLOAT16"],
+    ids=["a_BFLOAT8_B", "a_BFLOAT16"],
 )
 def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
                                              a_width_nblocks,

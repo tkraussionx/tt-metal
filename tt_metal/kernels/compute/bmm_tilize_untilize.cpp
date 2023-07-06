@@ -164,6 +164,8 @@ void MAIN {
                             for (uint32_t w = 0; w < out_subblock_w; ++w) {
                                 int in1_index_inner_dim_offset = 0;
                                 for (uint32_t inner_dim = 0; inner_dim < in0_block_w; ++inner_dim) {
+                                    UNPACK(( DPRINT << "MATMUL'ING A: " << TileSlice(in0_cb_id, 0, sr) << ENDL() ));
+                                    UNPACK(( DPRINT << "MATMUL'ING B: " << TileSlice(in1_cb_id, 0, sr) << ENDL() ));
                                     matmul_tiles(tilize_in0 ? tilized_in0_cb_id : in0_cb_id,                    // in0_cb
                                                  in1_cb_id,                                                     // in1_cb
                                                  in0_index_subblock_offset + in0_index_h_offset + inner_dim,    // in0 tile
