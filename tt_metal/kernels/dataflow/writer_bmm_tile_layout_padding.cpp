@@ -4,32 +4,32 @@ void kernel_main() {
 
 
     // out tensor args
-    uint32_t out_tensor_addr                         = get_arg_val<uint32_t>(0);
-    uint32_t out_tensor_start_tile_id                = get_arg_val<uint32_t>(1);
-    uint32_t out_tensor_stride_w                     = get_arg_val<uint32_t>(2);
-    uint32_t out_tensor_stride_h                     = get_arg_val<uint32_t>(3);
-    uint32_t out_tensor_next_subblock_stride_w       = get_arg_val<uint32_t>(4);
-    uint32_t out_tensor_next_subblock_stride_h       = get_arg_val<uint32_t>(5);
+    uint32_t out_tensor_addr                         = dataflow::get_arg_val<uint32_t>(0);
+    uint32_t out_tensor_start_tile_id                = dataflow::get_arg_val<uint32_t>(1);
+    uint32_t out_tensor_stride_w                     = dataflow::get_arg_val<uint32_t>(2);
+    uint32_t out_tensor_stride_h                     = dataflow::get_arg_val<uint32_t>(3);
+    uint32_t out_tensor_next_subblock_stride_w       = dataflow::get_arg_val<uint32_t>(4);
+    uint32_t out_tensor_next_subblock_stride_h       = dataflow::get_arg_val<uint32_t>(5);
 
     // out subblock args
-    uint32_t out_subblock_w                   = get_arg_val<uint32_t>(6);
-    uint32_t out_subblock_h                   = get_arg_val<uint32_t>(7);
-    uint32_t out_subblock_tile_count          = get_arg_val<uint32_t>(8);
-    uint32_t out_num_subblocks_w              = get_arg_val<uint32_t>(9);
-    uint32_t out_num_subblocks_h              = get_arg_val<uint32_t>(10);
+    uint32_t out_subblock_w                   = dataflow::get_arg_val<uint32_t>(6);
+    uint32_t out_subblock_h                   = dataflow::get_arg_val<uint32_t>(7);
+    uint32_t out_subblock_tile_count          = dataflow::get_arg_val<uint32_t>(8);
+    uint32_t out_num_subblocks_w              = dataflow::get_arg_val<uint32_t>(9);
+    uint32_t out_num_subblocks_h              = dataflow::get_arg_val<uint32_t>(10);
 
     // batch args
-    uint32_t MtNt                               = get_arg_val<uint32_t>(11); // if 0
-    uint32_t batch                              = get_arg_val<uint32_t>(12);
+    uint32_t MtNt                               = dataflow::get_arg_val<uint32_t>(11); // if 0
+    uint32_t batch                              = dataflow::get_arg_val<uint32_t>(12);
 
     // padding args
-    uint32_t out_num_nonzero_subblocks_h        = get_arg_val<uint32_t>(13);
-    uint32_t out_last_subblock_h                = get_arg_val<uint32_t>(14);
-    uint32_t padded_block_tiles_h_skip          = get_arg_val<uint32_t>(15);
-    uint32_t out_num_nonzero_subblocks_w        = get_arg_val<uint32_t>(16);
-    uint32_t out_last_subblock_w                = get_arg_val<uint32_t>(17);
-    uint32_t padded_subblock_tiles_addr_skip    = get_arg_val<uint32_t>(18);
-    uint32_t padded_block_tiles_w_skip          = get_arg_val<uint32_t>(19);
+    uint32_t out_num_nonzero_subblocks_h        = dataflow::get_arg_val<uint32_t>(13);
+    uint32_t out_last_subblock_h                = dataflow::get_arg_val<uint32_t>(14);
+    uint32_t padded_block_tiles_h_skip          = dataflow::get_arg_val<uint32_t>(15);
+    uint32_t out_num_nonzero_subblocks_w        = dataflow::get_arg_val<uint32_t>(16);
+    uint32_t out_last_subblock_w                = dataflow::get_arg_val<uint32_t>(17);
+    uint32_t padded_subblock_tiles_addr_skip    = dataflow::get_arg_val<uint32_t>(18);
+    uint32_t padded_block_tiles_w_skip          = dataflow::get_arg_val<uint32_t>(19);
 
     constexpr DataFormat data_format = static_cast<DataFormat>(get_compile_time_arg_val(0));
     constexpr bool out_is_dram = get_compile_time_arg_val(1) == 1;
@@ -37,9 +37,9 @@ void kernel_main() {
     constexpr uint32_t cb_id_out0 = 16;
 
     // single-tile
-    uint32_t single_tile_size_bytes = get_tile_size(cb_id_out0);
+    uint32_t single_tile_size_bytes = dataflow::get_tile_size(cb_id_out0);
 
-    const InterleavedAddrGenFast<out_is_dram> s = {
+    const dataflow::InterleavedAddrGenFast<out_is_dram> s = {
         .bank_base_address = out_tensor_addr,
         .page_size = single_tile_size_bytes,
         .data_format = data_format
@@ -65,14 +65,14 @@ void kernel_main() {
                     subblock_tiles_addr_skip = padded_subblock_tiles_addr_skip;
                 }
 
-                cb_wait_front(cb_id_out0, out_subblock_tile_count);
+                dataflow::cb_wait_front(cb_id_out0, out_subblock_tile_count);
                 kernel_profiler::mark_time_once(5, &one_time_profile);
-                uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
+                uint32_t l1_read_addr = dataflow::get_read_ptr(cb_id_out0);
 
                 for(uint32_t h = 0; h < out_subblock_h_; h++) {
                     uint32_t out_tensor_tile_id = out_tensor_sb_row_start_tile_id;
                     for(uint32_t w = 0; w < out_subblock_w_; w++) {
-                        noc_async_write_tile(out_tensor_tile_id, s, l1_read_addr);
+                        dataflow::noc_async_write_tile(out_tensor_tile_id, s, l1_read_addr);
                         l1_read_addr+=single_tile_size_bytes;
 
                         out_tensor_tile_id += out_tensor_stride_w;
@@ -82,18 +82,18 @@ void kernel_main() {
                     out_tensor_sb_row_start_tile_id += out_tensor_stride_h;
                 }
 
-                noc_async_write_barrier();
-                cb_pop_front(cb_id_out0, out_subblock_tile_count);
+                dataflow::noc_async_write_barrier();
+                dataflow::cb_pop_front(cb_id_out0, out_subblock_tile_count);
                 out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
             }
             // Pop fully padded subblocks along the row
-            cb_wait_front(cb_id_out0, padded_block_tiles_w_skip);
-            cb_pop_front(cb_id_out0, padded_block_tiles_w_skip);
+            dataflow::cb_wait_front(cb_id_out0, padded_block_tiles_w_skip);
+            dataflow::cb_pop_front(cb_id_out0, padded_block_tiles_w_skip);
             out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
         }
         // Pop row(s) of fully padded subblocks
-        cb_wait_front(cb_id_out0, padded_block_tiles_h_skip);
-        cb_pop_front(cb_id_out0, padded_block_tiles_h_skip);
+        dataflow::cb_wait_front(cb_id_out0, padded_block_tiles_h_skip);
+        dataflow::cb_pop_front(cb_id_out0, padded_block_tiles_h_skip);
         out_tensor_start_tile_id += MtNt;
     }
 }

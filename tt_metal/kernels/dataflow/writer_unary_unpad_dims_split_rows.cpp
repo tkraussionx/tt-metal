@@ -11,23 +11,23 @@ void kernel_main() {
     constexpr uint32_t cb_id_out0                      = 16;
     constexpr uint32_t alignment                       = 32;
 
-    const uint32_t dst_addr                 = get_arg_val<uint32_t>(0);
-    const uint32_t num_unpadded_W           = get_arg_val<uint32_t>(1);
-    const uint32_t padded_W_diff_blocks     = get_arg_val<uint32_t>(2);
-    const uint32_t num_unpadded_Z           = get_arg_val<uint32_t>(3);
-    const uint32_t padded_Z_diff_blocks     = get_arg_val<uint32_t>(4);
-    const uint32_t num_unpadded_Y           = get_arg_val<uint32_t>(5);
-    const uint32_t padded_Y_diff_blocks     = get_arg_val<uint32_t>(6);
-    const uint32_t num_leftover_Y           = get_arg_val<uint32_t>(7);
-    const uint32_t num_unpadded_X           = get_arg_val<uint32_t>(8);
-    const uint32_t unpadded_X_size          = get_arg_val<uint32_t>(9);
-    const uint32_t padded_X_size            = get_arg_val<uint32_t>(10);
-    const uint32_t temp_buffer_l1_addr      = get_arg_val<uint32_t>(11);
-    const uint32_t num_blocks_w_input       = get_arg_val<uint32_t>(12);
-    const uint32_t num_blocks_w_output      = get_arg_val<uint32_t>(13);
-    const uint32_t num_blocks_w_diff        = get_arg_val<uint32_t>(14);
-    const uint32_t block_row_size           = get_arg_val<uint32_t>(15);
-    const uint32_t block_row_leftover_size  = get_arg_val<uint32_t>(16);
+    const uint32_t dst_addr                 = dataflow::get_arg_val<uint32_t>(0);
+    const uint32_t num_unpadded_W           = dataflow::get_arg_val<uint32_t>(1);
+    const uint32_t padded_W_diff_blocks     = dataflow::get_arg_val<uint32_t>(2);
+    const uint32_t num_unpadded_Z           = dataflow::get_arg_val<uint32_t>(3);
+    const uint32_t padded_Z_diff_blocks     = dataflow::get_arg_val<uint32_t>(4);
+    const uint32_t num_unpadded_Y           = dataflow::get_arg_val<uint32_t>(5);
+    const uint32_t padded_Y_diff_blocks     = dataflow::get_arg_val<uint32_t>(6);
+    const uint32_t num_leftover_Y           = dataflow::get_arg_val<uint32_t>(7);
+    const uint32_t num_unpadded_X           = dataflow::get_arg_val<uint32_t>(8);
+    const uint32_t unpadded_X_size          = dataflow::get_arg_val<uint32_t>(9);
+    const uint32_t padded_X_size            = dataflow::get_arg_val<uint32_t>(10);
+    const uint32_t temp_buffer_l1_addr      = dataflow::get_arg_val<uint32_t>(11);
+    const uint32_t num_blocks_w_input       = dataflow::get_arg_val<uint32_t>(12);
+    const uint32_t num_blocks_w_output      = dataflow::get_arg_val<uint32_t>(13);
+    const uint32_t num_blocks_w_diff        = dataflow::get_arg_val<uint32_t>(14);
+    const uint32_t block_row_size           = dataflow::get_arg_val<uint32_t>(15);
+    const uint32_t block_row_leftover_size  = dataflow::get_arg_val<uint32_t>(16);
 
     std::uint32_t* temp_buffer = (uint32_t*)(temp_buffer_l1_addr);
 
@@ -42,13 +42,13 @@ void kernel_main() {
 
     #define stick_size_is_pow2 get_compile_time_arg_val(0) == 1
     #if (stick_size_is_pow2)
-    const uint32_t log_base_2_of_page_size = get_arg_val<uint32_t>(17);
-    const InterleavedPow2AddrGen<true> s = {
+    const uint32_t log_base_2_of_page_size = dataflow::get_arg_val<uint32_t>(17);
+    const dataflow::InterleavedPow2AddrGen<true> s = {
         .bank_base_address = dst_addr,
         .log_base_2_of_page_size = log_base_2_of_page_size // TODO(AP): refactor
     };
     #else
-    const InterleavedAddrGen<true> s = {
+    const dataflow::InterleavedAddrGen<true> s = {
         .bank_base_address = dst_addr,
         .page_size = unpadded_X_size
     };
@@ -56,21 +56,21 @@ void kernel_main() {
 
     auto pop_blocks = [&] (uint32_t num_blocks) {
         for (uint32_t i = 0; i < num_blocks; i++) {
-            cb_wait_front(cb_id_out0, num_tiles_block_c);
-            cb_pop_front(cb_id_out0, num_tiles_block_c);
+            dataflow::cb_wait_front(cb_id_out0, num_tiles_block_c);
+            dataflow::cb_pop_front(cb_id_out0, num_tiles_block_c);
         }
     };
 
     auto write_block = [&] (uint32_t base_stick_id, uint32_t num_rows, uint32_t offset, uint32_t block_size) {
-        cb_wait_front(cb_id_out0, num_tiles_block_c);
-        uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
+        dataflow::cb_wait_front(cb_id_out0, num_tiles_block_c);
+        uint32_t l1_read_addr = dataflow::get_read_ptr(cb_id_out0);
         uint32_t curr_stick_id = base_stick_id;
         for (uint32_t k = 0; k < num_rows; k++) {
-            uint64_t dst_noc_addr = get_noc_addr(curr_stick_id, s) + offset;
+            uint64_t dst_noc_addr = dataflow::get_noc_addr(curr_stick_id, s) + offset;
             uint64_t round_down_addr = round_down_32(dst_noc_addr);
             uint64_t diff_addr = dst_noc_addr - round_down_addr;
 
-            noc_async_read(round_down_addr, temp_buffer_l1_addr, diff_addr);
+            dataflow::noc_async_read(round_down_addr, temp_buffer_l1_addr, diff_addr);
 
             // Copy from CB to tmp buffer
             volatile std::uint32_t* src = (volatile uint32_t*)(l1_read_addr);
@@ -79,18 +79,18 @@ void kernel_main() {
                 temp[z] = src[z];
             }
 
-            noc_async_read_barrier();
+            dataflow::noc_async_read_barrier();
 
             // Write out tmp buffer
-            noc_async_write(temp_buffer_l1_addr, round_down_addr, block_size + diff_addr);
+            dataflow::noc_async_write(temp_buffer_l1_addr, round_down_addr, block_size + diff_addr);
 
             l1_read_addr += block_row_size;
             curr_stick_id++;
 
             // Block write
-            noc_async_write_barrier();
+            dataflow::noc_async_write_barrier();
         }
-        cb_pop_front(cb_id_out0, num_tiles_block_c);
+        dataflow::cb_pop_front(cb_id_out0, num_tiles_block_c);
     };
 
     auto write_block_rows = [&] (uint32_t num_rows_block, uint32_t base_stick_id) {

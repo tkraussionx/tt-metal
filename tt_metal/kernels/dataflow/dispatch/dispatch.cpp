@@ -15,12 +15,12 @@ void kernel_main() {
         copy_desc_info_addr++;
         uint32_t transfer_size = *copy_desc_info_addr;
         copy_desc_info_addr++;
-        noc_async_read(src_addr, dst_addr, transfer_size);
+        dataflow::noc_async_read(src_addr, dst_addr, transfer_size);
     }
     uint32_t num_writes = *copy_desc_info_addr;
     copy_desc_info_addr++;
 
-    noc_async_read_barrier();
+    dataflow::noc_async_read_barrier();
 
     for (uint32_t write = 0; write < num_writes; write++) {
         uint32_t src_addr = *copy_desc_info_addr;
@@ -29,15 +29,15 @@ void kernel_main() {
         copy_desc_info_addr += 2; // uint64_t embedded as two uint32_t's since NOC address embedded
         uint32_t transfer_size = *copy_desc_info_addr;
         copy_desc_info_addr++;
-        noc_async_write(src_addr, dst_addr, transfer_size);
+        dataflow::noc_async_write(src_addr, dst_addr, transfer_size);
     }
     uint32_t num_resets = *copy_desc_info_addr;
     copy_desc_info_addr++;
 
 
     // Prepare noc coordinates to send to receiver
-    *reinterpret_cast<volatile uint64_t*>(DISPATCH_MESSAGE_REMOTE_SENDER_ADDR) = get_noc_addr(my_x[0], my_y[0], DISPATCH_MESSAGE_ADDR);
-    noc_async_write_barrier();
+    *reinterpret_cast<volatile uint64_t*>(DISPATCH_MESSAGE_REMOTE_SENDER_ADDR) = dataflow::get_noc_addr(my_x[0], my_y[0], DISPATCH_MESSAGE_ADDR);
+    dataflow::noc_async_write_barrier();
 
     if (num_resets > 0) {
         uint32_t num_workers = *copy_desc_info_addr;
@@ -47,9 +47,9 @@ void kernel_main() {
         for (uint32_t notify = 0; notify < num_resets; notify++) {
             uint64_t dst_addr = *reinterpret_cast<volatile uint64_t*>(copy_desc_info_addr);
             copy_desc_info_addr += 2;
-            noc_async_write(DISPATCH_MESSAGE_REMOTE_SENDER_ADDR, dst_addr, 8);
+            dataflow::noc_async_write(DISPATCH_MESSAGE_REMOTE_SENDER_ADDR, dst_addr, 8);
         }
-        noc_async_write_barrier();
+        dataflow::noc_async_write_barrier();
 
         volatile uint32_t* message_addr_ptr = reinterpret_cast<volatile uint32_t*>(DISPATCH_MESSAGE_ADDR);
         *message_addr_ptr = 0;

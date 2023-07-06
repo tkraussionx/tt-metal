@@ -64,7 +64,7 @@ inline void allocate_debug_mailbox_buffer() {
   debug_mailbox_base = reinterpret_cast<volatile uint16_t *>(debug_mailbox_addr);
 }
 
-#include "dataflow_kernel_api.h"
+#include "dataflow_internals.h"
 #include "kernel.cpp"
 
 int main(int argc, char *argv[]) {
@@ -82,14 +82,14 @@ int main(int argc, char *argv[]) {
   noc_init(loading_noc); // NCRISC uses NOC-1
   risc_init();
 
-  setup_cb_read_write_interfaces();
+  dataflow_internal::setup_cb_read_write_interfaces();
 
 #if defined(IS_DISPATCH_KERNEL)
-    setup_cq_read_write_interface();
+    dataflow_internal::setup_cq_read_write_interface();
 #endif
 
-  init_dram_bank_to_noc_coord_lookup_tables();
-  init_l1_bank_to_noc_coord_lookup_tables();
+  dataflow_internal::init_dram_bank_to_noc_coord_lookup_tables();
+  dataflow_internal::init_l1_bank_to_noc_coord_lookup_tables();
 
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & KERNEL_FUNCT_MARKER)
   kernel_profiler::mark_time(CC_KERNEL_MAIN_START);

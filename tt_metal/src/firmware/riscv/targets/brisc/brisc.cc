@@ -253,7 +253,7 @@ void device_setup() {
     core.wall_clock_mailbox()[0] = core.read_wall_clock();
 }
 
-#include "dataflow_kernel_api.h"
+#include "dataflow_internals.h"
 #include "kernel.cpp"
 
 int main() {
@@ -280,16 +280,16 @@ int main() {
     while (enable_core_mailbox_ptr[0] != 0x1);
 #endif
 
-    init_sync_registers();  // this init needs to be done before NCRISC / TRISCs are launched, only done by BRISC
+    dataflow_internal::init_sync_registers();  // this init needs to be done before NCRISC / TRISCs are launched, only done by BRISC
 
 #if defined(IS_DISPATCH_KERNEL)
-    setup_cq_read_write_interface();
+    dataflow_internal::setup_cq_read_write_interface();
 #else
-    setup_cb_read_write_interfaces();                // done by both BRISC / NCRISC
+    dataflow_internal::setup_cb_read_write_interfaces();                // done by both BRISC / NCRISC
 #endif
 
-    init_dram_bank_to_noc_coord_lookup_tables();  // done by both BRISC / NCRISC
-    init_l1_bank_to_noc_coord_lookup_tables();  // done by both BRISC / NCRISC
+    dataflow_internal::init_dram_bank_to_noc_coord_lookup_tables();  // done by both BRISC / NCRISC
+    dataflow_internal::init_l1_bank_to_noc_coord_lookup_tables();  // done by both BRISC / NCRISC
 
     device_setup();  // NCRISC is disabled/enabled here
 

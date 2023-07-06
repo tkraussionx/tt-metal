@@ -11,15 +11,15 @@ inline u32 TADDR(u32 ti) {
 }
 
 void kernel_main() {
-    u32 src_addr  = get_arg_val<uint32_t>(0);
-    u32 src_noc_x = get_arg_val<uint32_t>(1);
-    u32 src_noc_y = get_arg_val<uint32_t>(2);
-    u32 W         = get_arg_val<uint32_t>(3);
-    u32 H         = get_arg_val<uint32_t>(4);
-    u32 C         = get_arg_val<uint32_t>(5);
-    u32 HW        = get_arg_val<uint32_t>(6);
-    u32 N         = get_arg_val<uint32_t>(7);
-    u32 CHW       = get_arg_val<uint32_t>(8);
+    u32 src_addr  = dataflow::get_arg_val<uint32_t>(0);
+    u32 src_noc_x = dataflow::get_arg_val<uint32_t>(1);
+    u32 src_noc_y = dataflow::get_arg_val<uint32_t>(2);
+    u32 W         = dataflow::get_arg_val<uint32_t>(3);
+    u32 H         = dataflow::get_arg_val<uint32_t>(4);
+    u32 C         = dataflow::get_arg_val<uint32_t>(5);
+    u32 HW        = dataflow::get_arg_val<uint32_t>(6);
+    u32 N         = dataflow::get_arg_val<uint32_t>(7);
+    u32 CHW       = dataflow::get_arg_val<uint32_t>(8);
 
     auto WT = (W >> 5); // number of tiles in W
     auto HT = (H >> 5); // number of tiles in H
@@ -35,7 +35,7 @@ void kernel_main() {
     // The basic idea here is to iterate over output tiles (that will be over CT,WT) and H
     // this will generate a linearly incremented output address in the inner loop
     // we then reverse map this linear dest address to src address
-    uint64_t batch_addr = get_noc_addr(src_noc_x, src_noc_y, src_addr);
+    uint64_t batch_addr = dataflow::get_noc_addr(src_noc_x, src_noc_y, src_addr);
     for (u32 n = 0; n < N; n++) {
         u32 htWT = 0;
         for (u32 h = 0; h < H; h++) {
@@ -47,9 +47,9 @@ void kernel_main() {
                     // every 32 C's acquire a new output tile address
                     //        DPRINT << "h=" << h << " ct=" << ct << " wt=" << wt << " W=" << W << " HW2=" << HW2 << ENDL();
 
-                    cb_reserve_back(operand0, onetile);
+                    dataflow::cb_reserve_back(operand0, onetile);
 
-                    u32 dest_tr0_l1 = get_write_ptr(operand0);
+                    u32 dest_tr0_l1 = dataflow::get_write_ptr(operand0);
                     u32 save_dest = dest_tr0_l1;
                     u32 cSubtileOffs = 0;
                     for (u32 sub = 0; sub < 4; sub++) {
@@ -81,7 +81,7 @@ void kernel_main() {
                             //}
 
                             // this starts async NOC dma from DRAM to TR0_L1 buffer
-                            noc_async_read(src_addr, dest_tr0_l1, SUBTILE_LINE_BYTES);
+                            dataflow::noc_async_read(src_addr, dest_tr0_l1, SUBTILE_LINE_BYTES);
 
                             //if (h == 0 && ct == 0 && wt == 0)
                             //    DPRINT << U32( reinterpret_cast<uint16_t*>( dest_tr0_l1 )[0] ) << ENDL();
@@ -99,10 +99,10 @@ void kernel_main() {
                     } // sub<4
 
                     // block on all outstanding noc DMA requests to complete
-                    noc_async_read_barrier();
+                    dataflow::noc_async_read_barrier();
 
                     // notifies the unpacker that the buffer is populated
-                    cb_push_back(operand0, onetile);
+                    dataflow::cb_push_back(operand0, onetile);
                 }
                 ctoffs += (HW2<<5); // since we increment ct, we need to mlutiply by 32
             } // ct loop

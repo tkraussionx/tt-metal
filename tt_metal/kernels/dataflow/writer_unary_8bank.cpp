@@ -3,12 +3,12 @@
 #include "debug_print.h"
 
 void kernel_main() {
-    uint32_t dst_addr  = get_arg_val<uint32_t>(0);
-    uint32_t num_tiles = get_arg_val<uint32_t>(3); // Index 3 to match with regular writer_unary
+    uint32_t dst_addr  = dataflow::get_arg_val<uint32_t>(0);
+    uint32_t num_tiles = dataflow::get_arg_val<uint32_t>(3); // Index 3 to match with regular writer_unary
 
     constexpr uint32_t cb_id_out0 = 16;
     constexpr uint32_t onetile = 1;
-    uint32_t tile_bytes = get_tile_size(cb_id_out0);
+    uint32_t tile_bytes = dataflow::get_tile_size(cb_id_out0);
 
     #ifdef KERNEL_COMPILE_TIME_ARG_0
     constexpr bool write_to_dram = get_compile_time_arg_val(0);
@@ -17,9 +17,9 @@ void kernel_main() {
     #endif
 
     #ifdef OUTPUT_DRAM
-    const InterleavedPow2AddrGen<OUTPUT_DRAM> s = { dst_addr, 11 };
+    const dataflow::InterleavedPow2AddrGen<OUTPUT_DRAM> s = { dst_addr, 11 };
     #else
-    const InterleavedPow2AddrGen<write_to_dram> s = { dst_addr, 11 };
+    const dataflow::InterleavedPow2AddrGen<write_to_dram> s = { dst_addr, 11 };
     #endif
 
     #if GENERATE_BCAST_SCALER
@@ -34,14 +34,14 @@ void kernel_main() {
     #endif
 
     for (uint32_t i = 0; i<num_tiles; i += blk) {
-        cb_wait_front(cb_id_out0, blk);
+        dataflow::cb_wait_front(cb_id_out0, blk);
 
         for (uint32_t j = 0; j<blk; j++) {
-            uint64_t dst_noc_addr = get_noc_addr(i+j+tile_offset, s);
-            uint32_t l1_read_addr = get_read_ptr(cb_id_out0) + (j<<11);
-            noc_async_write(l1_read_addr, dst_noc_addr, tile_bytes);
+            uint64_t dst_noc_addr = dataflow::get_noc_addr(i+j+tile_offset, s);
+            uint32_t l1_read_addr = dataflow::get_read_ptr(cb_id_out0) + (j<<11);
+            dataflow::noc_async_write(l1_read_addr, dst_noc_addr, tile_bytes);
         }
-        noc_async_write_barrier();
-        cb_pop_front(cb_id_out0, blk);
+        dataflow::noc_async_write_barrier();
+        dataflow::cb_pop_front(cb_id_out0, blk);
     }
 }

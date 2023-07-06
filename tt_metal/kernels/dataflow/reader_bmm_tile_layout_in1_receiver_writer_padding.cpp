@@ -5,24 +5,24 @@
 void kernel_main() {
     // READER
     // in1 mcast args
-    uint32_t in1_mcast_sender_noc_x             = get_arg_val<uint32_t>(0);
+    uint32_t in1_mcast_sender_noc_x             = dataflow::get_arg_val<uint32_t>(0);
 
     // WRITER
     // out tensor args
-    uint32_t out_tensor_addr                    = get_arg_val<uint32_t>(1);
-    uint32_t out_tensor_start_tile_id           = get_arg_val<uint32_t>(2);
+    uint32_t out_tensor_addr                    = dataflow::get_arg_val<uint32_t>(1);
+    uint32_t out_tensor_start_tile_id           = dataflow::get_arg_val<uint32_t>(2);
 
     // padding args (WRITER)
-    uint32_t out_num_nonzero_subblocks_h        = get_arg_val<uint32_t>(3);
-    uint32_t out_last_subblock_h                = get_arg_val<uint32_t>(4);
-    uint32_t padded_block_tiles_h_skip          = get_arg_val<uint32_t>(5);
-    uint32_t out_num_nonzero_subblocks_w        = get_arg_val<uint32_t>(6);
-    uint32_t out_last_subblock_w                = get_arg_val<uint32_t>(7);
-    uint32_t padded_subblock_tiles_addr_skip    = get_arg_val<uint32_t>(8);
-    uint32_t padded_block_tiles_w_skip          = get_arg_val<uint32_t>(9);
+    uint32_t out_num_nonzero_subblocks_h        = dataflow::get_arg_val<uint32_t>(3);
+    uint32_t out_last_subblock_h                = dataflow::get_arg_val<uint32_t>(4);
+    uint32_t padded_block_tiles_h_skip          = dataflow::get_arg_val<uint32_t>(5);
+    uint32_t out_num_nonzero_subblocks_w        = dataflow::get_arg_val<uint32_t>(6);
+    uint32_t out_last_subblock_w                = dataflow::get_arg_val<uint32_t>(7);
+    uint32_t padded_subblock_tiles_addr_skip    = dataflow::get_arg_val<uint32_t>(8);
+    uint32_t padded_block_tiles_w_skip          = dataflow::get_arg_val<uint32_t>(9);
 
     // COMPILE TIME ARGS
-    // interleaved accessor args
+    // dataflow::Interleaved accessor args
     constexpr DataFormat data_format                      = static_cast<DataFormat>(get_compile_time_arg_val(0));
     constexpr bool out_is_dram                            = get_compile_time_arg_val(1) == 1;
 
@@ -56,7 +56,7 @@ void kernel_main() {
 
     #ifdef FUSE_BIAS
         // in3 mcast args
-        uint32_t in3_mcast_sender_noc_x             = get_arg_val<uint32_t>(10);
+        uint32_t in3_mcast_sender_noc_x             = dataflow::get_arg_val<uint32_t>(10);
 
         // in3 block args
         constexpr uint32_t in3_block_w                        = get_compile_time_arg_val(16);
@@ -79,12 +79,12 @@ void kernel_main() {
 
     // WRITER
     // single-tile
-    uint32_t single_tile_size_bytes = get_tile_size(cb_id_out0);
+    uint32_t single_tile_size_bytes = dataflow::get_tile_size(cb_id_out0);
 
     volatile uint32_t* in1_mcast_receiver_semaphore_addr_ptr = reinterpret_cast<volatile uint32_t*>(in1_mcast_receiver_semaphore_addr);
 
     // WRITER
-    const InterleavedAddrGenFast<out_is_dram> s = {
+    const dataflow::InterleavedAddrGenFast<out_is_dram> s = {
         .bank_base_address = out_tensor_addr,
         .page_size = single_tile_size_bytes,
         .data_format = data_format
@@ -94,36 +94,36 @@ void kernel_main() {
     for (uint32_t b = 0; b < batch; b++) {
         for(uint32_t block = 0; block < num_blocks; block++) {
             // Operand 1
-            cb_reserve_back(cb_id_in1, in1_block_num_tiles);
+            dataflow::cb_reserve_back(cb_id_in1, in1_block_num_tiles);
 
             // Set in1 semaphore value to INVALID
             noc_semaphore_set(in1_mcast_receiver_semaphore_addr_ptr, INVALID);
 
             // Atomic increment source core counter
-            uint64_t in1_mcast_sender_semaphore_noc_addr = get_noc_addr(in1_mcast_sender_noc_x, in1_mcast_sender_noc_y, in1_mcast_sender_semaphore_addr);
+            uint64_t in1_mcast_sender_semaphore_noc_addr = dataflow::get_noc_addr(in1_mcast_sender_noc_x, in1_mcast_sender_noc_y, in1_mcast_sender_semaphore_addr);
             noc_semaphore_inc(in1_mcast_sender_semaphore_noc_addr, 1);
 
             // wait on in1 semaphore value to become VALID (set by mcast sender after it multicasts data)
             noc_semaphore_wait(in1_mcast_receiver_semaphore_addr_ptr, VALID);
 
-            cb_push_back(cb_id_in1, in1_block_num_tiles);
+            dataflow::cb_push_back(cb_id_in1, in1_block_num_tiles);
         }
 
         #ifdef FUSE_BIAS
             // Operand 2
-            cb_reserve_back(cb_id_in3, in3_block_w);
+            dataflow::cb_reserve_back(cb_id_in3, in3_block_w);
 
             // Set in1 semaphore value to INVALID
             noc_semaphore_set(in3_mcast_receiver_semaphore_addr_ptr, INVALID);
 
             // Atomic increment source core counter
-            uint64_t in3_mcast_sender_semaphore_noc_addr = get_noc_addr(in3_mcast_sender_noc_x, in3_mcast_sender_noc_y, in3_mcast_sender_semaphore_addr);
+            uint64_t in3_mcast_sender_semaphore_noc_addr = dataflow::get_noc_addr(in3_mcast_sender_noc_x, in3_mcast_sender_noc_y, in3_mcast_sender_semaphore_addr);
             noc_semaphore_inc(in3_mcast_sender_semaphore_noc_addr, 1);
 
             // wait on in1 semaphore value to become VALID (set by mcast sender after it multicasts data)
             noc_semaphore_wait(in3_mcast_receiver_semaphore_addr_ptr, VALID);
 
-            cb_push_back(cb_id_in3, in3_block_w);
+            dataflow::cb_push_back(cb_id_in3, in3_block_w);
         #endif
 
         // WRITER
@@ -144,15 +144,15 @@ void kernel_main() {
                     subblock_tiles_addr_skip = padded_subblock_tiles_addr_skip;
                 }
 
-                cb_wait_front(cb_id_out0, out_subblock_tile_count);
-                uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
+                dataflow::cb_wait_front(cb_id_out0, out_subblock_tile_count);
+                uint32_t l1_read_addr = dataflow::get_read_ptr(cb_id_out0);
 
                 for(uint32_t h = 0; h < out_subblock_h_; h++) {
                     uint32_t out_tensor_tile_id = out_tensor_sb_row_start_tile_id;
                     for(uint32_t w = 0; w < out_subblock_w_; w++) {
-                        //uint64_t out_tensor_tile_noc_addr = get_noc_addr(out_tensor_tile_id, s);
+                        //uint64_t out_tensor_tile_noc_addr = dataflow::get_noc_addr(out_tensor_tile_id, s);
                         //noc_async_write(l1_read_addr, out_tensor_tile_noc_addr, single_tile_size_bytes);
-                        noc_async_write_tile(out_tensor_tile_id, s, l1_read_addr);
+                        dataflow::noc_async_write_tile(out_tensor_tile_id, s, l1_read_addr);
 
                         l1_read_addr+=single_tile_size_bytes;
 
@@ -163,18 +163,18 @@ void kernel_main() {
                     out_tensor_sb_row_start_tile_id += out_tensor_stride_h;
                 }
 
-                noc_async_write_barrier();
-                cb_pop_front(cb_id_out0, out_subblock_tile_count);
+                dataflow::noc_async_write_barrier();
+                dataflow::cb_pop_front(cb_id_out0, out_subblock_tile_count);
                 out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
             }
             // Pop fully padded subblocks along the row
-            cb_wait_front(cb_id_out0, padded_block_tiles_w_skip);
-            cb_pop_front(cb_id_out0, padded_block_tiles_w_skip);
+            dataflow::cb_wait_front(cb_id_out0, padded_block_tiles_w_skip);
+            dataflow::cb_pop_front(cb_id_out0, padded_block_tiles_w_skip);
             out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
         }
         // Pop row(s) of fully padded subblocks
-        cb_wait_front(cb_id_out0, padded_block_tiles_h_skip);
-        cb_pop_front(cb_id_out0, padded_block_tiles_h_skip);
+        dataflow::cb_wait_front(cb_id_out0, padded_block_tiles_h_skip);
+        dataflow::cb_pop_front(cb_id_out0, padded_block_tiles_h_skip);
         out_tensor_start_tile_id += MtNt;
     }
 }

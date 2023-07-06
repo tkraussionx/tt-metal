@@ -2,17 +2,17 @@
 #include "dataflow_kernel_api.h"
 
 void kernel_main() {
-    uint32_t src0_addr  = get_arg_val<uint32_t>(0);
-    uint32_t src0_num_tiles  = get_arg_val<uint32_t>(3);
-    uint32_t src1_addr  = get_arg_val<uint32_t>(4);
+    uint32_t src0_addr  = dataflow::get_arg_val<uint32_t>(0);
+    uint32_t src0_num_tiles  = dataflow::get_arg_val<uint32_t>(3);
+    uint32_t src1_addr  = dataflow::get_arg_val<uint32_t>(4);
     // skip args 1,2,5,6,7 for compat with single bank readers and reader_diff_lengths
-    uint32_t NCHtWt     = get_arg_val<uint32_t>(8);
-    uint32_t NC         = get_arg_val<uint32_t>(9);
-    uint32_t Ht         = get_arg_val<uint32_t>(10);
-    uint32_t Wt         = get_arg_val<uint32_t>(11);
-    uint32_t nc1        = get_arg_val<uint32_t>(12); // if 1 we expect the bcast tensor to have NC=1
-    uint32_t start_id   = get_arg_val<uint32_t>(13);
-    uint32_t HtWt       = get_arg_val<uint32_t>(14); // HtWt of input tensor
+    uint32_t NCHtWt     = dataflow::get_arg_val<uint32_t>(8);
+    uint32_t NC         = dataflow::get_arg_val<uint32_t>(9);
+    uint32_t Ht         = dataflow::get_arg_val<uint32_t>(10);
+    uint32_t Wt         = dataflow::get_arg_val<uint32_t>(11);
+    uint32_t nc1        = dataflow::get_arg_val<uint32_t>(12); // if 1 we expect the bcast tensor to have NC=1
+    uint32_t start_id   = dataflow::get_arg_val<uint32_t>(13);
+    uint32_t HtWt       = dataflow::get_arg_val<uint32_t>(14); // HtWt of input tensor
 
     constexpr DataFormat data_format = static_cast<DataFormat>(get_compile_time_arg_val(0));
     constexpr bool src0_is_dram = get_compile_time_arg_val(1) == 1;
@@ -23,15 +23,15 @@ void kernel_main() {
     constexpr uint32_t onetile = 1;
 
     // single-tile ublocks
-    uint32_t tile_bytes = get_tile_size(cb_id_in0);
+    uint32_t tile_bytes = dataflow::get_tile_size(cb_id_in0);
 
-    const InterleavedAddrGenFast<src0_is_dram> s0 = {
+    const dataflow::InterleavedAddrGenFast<src0_is_dram> s0 = {
         .bank_base_address = src0_addr,
         .page_size = tile_bytes,
         .data_format = data_format
     };
 
-    const InterleavedAddrGenFast<src1_is_dram> s1 = {
+    const dataflow::InterleavedAddrGenFast<src1_is_dram> s1 = {
         .bank_base_address = src1_addr,
         .page_size = tile_bytes,
         .data_format = data_format
@@ -48,19 +48,19 @@ void kernel_main() {
         i = i_nc + start_id;
         for (uint32_t ht = 0; ht < Ht; ht++) {
             for (uint32_t wt = 0; wt < Wt; wt++) {
-                cb_reserve_back(cb_id_in0, onetile);
-                l1_write_addr_in0 = get_write_ptr(cb_id_in0);
-                noc_async_read_tile(i, s0, l1_write_addr_in0);
-                noc_async_read_barrier();
-                cb_push_back(cb_id_in0, onetile);
+                dataflow::cb_reserve_back(cb_id_in0, onetile);
+                l1_write_addr_in0 = dataflow::get_write_ptr(cb_id_in0);
+                dataflow::noc_async_read_tile(i, s0, l1_write_addr_in0);
+                dataflow::noc_async_read_barrier();
+                dataflow::cb_push_back(cb_id_in0, onetile);
 
                 // for each W-tile of the first tensor we push one tile from the second arg tile list
                 // but we loop the second list around
-                cb_reserve_back(cb_id_in1, onetile);
-                l1_write_addr_in1 = get_write_ptr(cb_id_in1);
-                noc_async_read_tile(i1, s1, l1_write_addr_in1);
-                noc_async_read_barrier();
-                cb_push_back(cb_id_in1, onetile);
+                dataflow::cb_reserve_back(cb_id_in1, onetile);
+                l1_write_addr_in1 = dataflow::get_write_ptr(cb_id_in1);
+                dataflow::noc_async_read_tile(i1, s1, l1_write_addr_in1);
+                dataflow::noc_async_read_barrier();
+                dataflow::cb_push_back(cb_id_in1, onetile);
                 i1 ++;
                 i ++; // input tile iterates over NC Ht Wt
             }

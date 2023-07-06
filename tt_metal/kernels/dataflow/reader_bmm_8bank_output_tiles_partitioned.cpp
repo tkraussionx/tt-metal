@@ -5,18 +5,18 @@
 
 void kernel_main() {
     // same arg indices as in reader_binary_diff_lenghts for compat
-    uint32_t src0_addr            = get_arg_val<uint32_t>(0);
-    uint32_t src1_addr            = get_arg_val<uint32_t>(1);
-    uint32_t Mt                   = get_arg_val<uint32_t>(2);
-    uint32_t Kt                   = get_arg_val<uint32_t>(3);
-    uint32_t Nt                   = get_arg_val<uint32_t>(4);
-    uint32_t MtKt                 = get_arg_val<uint32_t>(5); // if 0
-    uint32_t KtNt                 = get_arg_val<uint32_t>(6);
-    uint32_t batch                = get_arg_val<uint32_t>(7);
-    uint32_t bcast_B              = get_arg_val<uint32_t>(8); // if 1 we broadcast B to batch
-    uint32_t output_tile_start_id = get_arg_val<uint32_t>(9);
-    uint32_t num_output_tiles     = get_arg_val<uint32_t>(10);
-    uint32_t MtNt                 = get_arg_val<uint32_t>(11);
+    uint32_t src0_addr            = dataflow::get_arg_val<uint32_t>(0);
+    uint32_t src1_addr            = dataflow::get_arg_val<uint32_t>(1);
+    uint32_t Mt                   = dataflow::get_arg_val<uint32_t>(2);
+    uint32_t Kt                   = dataflow::get_arg_val<uint32_t>(3);
+    uint32_t Nt                   = dataflow::get_arg_val<uint32_t>(4);
+    uint32_t MtKt                 = dataflow::get_arg_val<uint32_t>(5); // if 0
+    uint32_t KtNt                 = dataflow::get_arg_val<uint32_t>(6);
+    uint32_t batch                = dataflow::get_arg_val<uint32_t>(7);
+    uint32_t bcast_B              = dataflow::get_arg_val<uint32_t>(8); // if 1 we broadcast B to batch
+    uint32_t output_tile_start_id = dataflow::get_arg_val<uint32_t>(9);
+    uint32_t num_output_tiles     = dataflow::get_arg_val<uint32_t>(10);
+    uint32_t MtNt                 = dataflow::get_arg_val<uint32_t>(11);
 
     constexpr DataFormat data_format = static_cast<DataFormat>(get_compile_time_arg_val(0));
     constexpr bool src0_is_dram = get_compile_time_arg_val(1) == 1;
@@ -30,7 +30,7 @@ void kernel_main() {
     constexpr uint32_t cb_id_in1 = 1;
 
     constexpr uint32_t onetile = 1;
-    uint32_t tile_bytes = get_tile_size(cb_id_in0);
+    uint32_t tile_bytes = dataflow::get_tile_size(cb_id_in0);
 
     uint32_t itileA = output_tile_start_id / Nt * Kt; // input0 row = output row * input0 width
 
@@ -41,13 +41,13 @@ void kernel_main() {
     if (bcast_B == 0)
         itileB += output_tile_start_id / MtNt * KtNt; // offset into correct batch if not bcasting
 
-    const InterleavedAddrGenFast<src0_is_dram> s0 = {
+    const dataflow::InterleavedAddrGenFast<src0_is_dram> s0 = {
         .bank_base_address = src0_addr,
         .page_size = tile_bytes,
         .data_format = data_format
     };
 
-    const InterleavedAddrGenFast<src1_is_dram> s1 = {
+    const dataflow::InterleavedAddrGenFast<src1_is_dram> s1 = {
         .bank_base_address = src1_addr,
         .page_size = tile_bytes,
         .data_format = data_format
@@ -57,19 +57,19 @@ void kernel_main() {
     for (uint32_t n = 0; n < num_output_tiles; n++) {
         for (uint32_t kt = 0; kt < Kt; kt++) {
             { // Read A's tile at (mt, kt)
-                cb_reserve_back(cb_id_in0, onetile);
-                uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
-                noc_async_read_tile(itileA, s0, l1_write_addr_in0);
-                noc_async_read_barrier();
-                cb_push_back(cb_id_in0, onetile);
+                dataflow::cb_reserve_back(cb_id_in0, onetile);
+                uint32_t l1_write_addr_in0 = dataflow::get_write_ptr(cb_id_in0);
+                dataflow::noc_async_read_tile(itileA, s0, l1_write_addr_in0);
+                dataflow::noc_async_read_barrier();
+                dataflow::cb_push_back(cb_id_in0, onetile);
             }
 
             { // Read B's tile at (kt, nt)
-                cb_reserve_back(cb_id_in1, onetile);
-                uint32_t l1_write_addr_in1 = get_write_ptr(cb_id_in1);
-                noc_async_read_tile(itileB, s1, l1_write_addr_in1);
-                noc_async_read_barrier();
-                cb_push_back(cb_id_in1, onetile);
+                dataflow::cb_reserve_back(cb_id_in1, onetile);
+                uint32_t l1_write_addr_in1 = dataflow::get_write_ptr(cb_id_in1);
+                dataflow::noc_async_read_tile(itileB, s1, l1_write_addr_in1);
+                dataflow::noc_async_read_barrier();
+                dataflow::cb_push_back(cb_id_in1, onetile);
             }
             //DPRINT << "Pushed itileA=" << itileA << " itileB=" << itileB << ENDL();
 

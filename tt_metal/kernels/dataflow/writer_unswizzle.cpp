@@ -1,21 +1,21 @@
 #include "dataflow_kernel_api.h"
 
 void kernel_main() {
-    uint32_t dst_addr           = get_arg_val<uint32_t>(0);
-    uint32_t dst_noc_x          = get_arg_val<uint32_t>(1);
-    uint32_t dst_noc_y          = get_arg_val<uint32_t>(2);
-    uint32_t inner_r            = get_arg_val<uint32_t>(3);
-    uint32_t inner_c            = get_arg_val<uint32_t>(4);
-    uint32_t num_sub_blocks_m   = get_arg_val<uint32_t>(5);
-    uint32_t num_sub_blocks_n   = get_arg_val<uint32_t>(6);
-    uint32_t stride_r           = get_arg_val<uint32_t>(7);
-    uint32_t stride_subblock_r  = get_arg_val<uint32_t>(8);
-    uint32_t stride_subblock_c  = get_arg_val<uint32_t>(9);
+    uint32_t dst_addr           = dataflow::get_arg_val<uint32_t>(0);
+    uint32_t dst_noc_x          = dataflow::get_arg_val<uint32_t>(1);
+    uint32_t dst_noc_y          = dataflow::get_arg_val<uint32_t>(2);
+    uint32_t inner_r            = dataflow::get_arg_val<uint32_t>(3);
+    uint32_t inner_c            = dataflow::get_arg_val<uint32_t>(4);
+    uint32_t num_sub_blocks_m   = dataflow::get_arg_val<uint32_t>(5);
+    uint32_t num_sub_blocks_n   = dataflow::get_arg_val<uint32_t>(6);
+    uint32_t stride_r           = dataflow::get_arg_val<uint32_t>(7);
+    uint32_t stride_subblock_r  = dataflow::get_arg_val<uint32_t>(8);
+    uint32_t stride_subblock_c  = dataflow::get_arg_val<uint32_t>(9);
 
     constexpr uint32_t cb_id_out0 = 16;
 
     // single-tile ublocks
-    uint32_t ublock_size_bytes = get_tile_size(cb_id_out0);
+    uint32_t ublock_size_bytes = dataflow::get_tile_size(cb_id_out0);
     uint32_t ublock_size_tiles = 1;
 
     uint32_t dram_address_block_row_beginning = dst_addr;
@@ -26,16 +26,16 @@ void kernel_main() {
             for(uint32_t r = 0; r < inner_r; r++) {
                 uint32_t dram_address_c = dram_address_r;
                 for(uint32_t c = 0; c < inner_c; c++) {
-                    uint64_t dst_noc_addr = get_noc_addr(dst_noc_x, dst_noc_y, dram_address_c);
+                    uint64_t dst_noc_addr = dataflow::get_noc_addr(dst_noc_x, dst_noc_y, dram_address_c);
 
-                    cb_wait_front(cb_id_out0, ublock_size_tiles);
-                    uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
+                    dataflow::cb_wait_front(cb_id_out0, ublock_size_tiles);
+                    uint32_t l1_read_addr = dataflow::get_read_ptr(cb_id_out0);
 
-                    noc_async_write(l1_read_addr, dst_noc_addr, ublock_size_bytes);
+                    dataflow::noc_async_write(l1_read_addr, dst_noc_addr, ublock_size_bytes);
 
-                    noc_async_write_barrier();
+                    dataflow::noc_async_write_barrier();
 
-                    cb_pop_front(cb_id_out0, ublock_size_tiles);
+                    dataflow::cb_pop_front(cb_id_out0, ublock_size_tiles);
                     dram_address_c += ublock_size_bytes;
                 }
                 dram_address_r += stride_r; // goto next row within sub-block

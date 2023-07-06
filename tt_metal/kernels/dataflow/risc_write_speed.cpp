@@ -3,15 +3,15 @@
 //#define OPT_WRITE 1
 
 void kernel_main() {
-    std::uint32_t   buffer_src_addr  = get_arg_val<uint32_t>(0);
-    std::uint32_t   buffer_dst_addr  = get_arg_val<uint32_t>(1);
+    std::uint32_t   buffer_src_addr  = dataflow::get_arg_val<uint32_t>(0);
+    std::uint32_t   buffer_dst_addr  = dataflow::get_arg_val<uint32_t>(1);
 
-    std::uint32_t   dst_noc_x        = get_arg_val<uint32_t>(2);
-    std::uint32_t   dst_noc_y        = get_arg_val<uint32_t>(3);
+    std::uint32_t   dst_noc_x        = dataflow::get_arg_val<uint32_t>(2);
+    std::uint32_t   dst_noc_y        = dataflow::get_arg_val<uint32_t>(3);
 
-    std::uint32_t   transaction_size = get_arg_val<uint32_t>(4);
-    std::uint32_t   num_transactions = get_arg_val<uint32_t>(5);
-    std::uint32_t   num_repetitions  = get_arg_val<uint32_t>(6);
+    std::uint32_t   transaction_size = dataflow::get_arg_val<uint32_t>(4);
+    std::uint32_t   num_transactions = dataflow::get_arg_val<uint32_t>(5);
+    std::uint32_t   num_repetitions  = dataflow::get_arg_val<uint32_t>(6);
 
     // Use this reg for cmd buf
     std::uint32_t cmd_buf = NCRISC_WR_REG_CMD_BUF;
@@ -27,7 +27,7 @@ void kernel_main() {
 
         #ifdef OPT_WRITE
             // reset these to the original value for each repetition
-            std::uint64_t buffer_dst_noc_addr = get_noc_addr(dst_noc_x, dst_noc_y, buffer_dst_addr);
+            std::uint64_t buffer_dst_noc_addr = dataflow::get_noc_addr(dst_noc_x, dst_noc_y, buffer_dst_addr);
 
 
             noc_fast_write_set_len(transaction_size_const);
@@ -44,15 +44,15 @@ void kernel_main() {
         #else
 
             for (std::uint32_t j=0; j<num_transactions; j++) {
-                std::uint64_t buffer_dst_noc_addr = get_noc_addr(dst_noc_x, dst_noc_y, buffer_dst_addr_);
-                noc_async_write(buffer_src_addr_, buffer_dst_noc_addr, transaction_size_const);
+                std::uint64_t buffer_dst_noc_addr = dataflow::get_noc_addr(dst_noc_x, dst_noc_y, buffer_dst_addr_);
+                dataflow::noc_async_write(buffer_src_addr_, buffer_dst_noc_addr, transaction_size_const);
                 buffer_src_addr_ += transaction_size_const;
                 buffer_dst_addr_ += transaction_size_const;
             }
 
         #endif
 
-        noc_async_write_barrier();
+        dataflow::noc_async_write_barrier();
     }
 
 }

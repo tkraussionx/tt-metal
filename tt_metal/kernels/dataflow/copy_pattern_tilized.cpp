@@ -6,33 +6,33 @@
  * explicit flushes need to be used since the calls are non-blocking
  * */
 void kernel_main() {
-    std::uint32_t dram_buffer_src_addr_base        = get_arg_val<uint32_t>(0);
-    std::uint32_t dram_src_noc_x                   = get_arg_val<uint32_t>(1);
-    std::uint32_t dram_src_noc_y                   = get_arg_val<uint32_t>(2);
+    std::uint32_t dram_buffer_src_addr_base        = dataflow::get_arg_val<uint32_t>(0);
+    std::uint32_t dram_src_noc_x                   = dataflow::get_arg_val<uint32_t>(1);
+    std::uint32_t dram_src_noc_y                   = dataflow::get_arg_val<uint32_t>(2);
 
-    std::uint32_t N                                = get_arg_val<uint32_t>(3);
-    std::uint32_t C                                = get_arg_val<uint32_t>(4);
-    std::uint32_t H                                = get_arg_val<uint32_t>(5);
-    std::uint32_t W                                = get_arg_val<uint32_t>(6);
-    std::uint32_t R                                = get_arg_val<uint32_t>(7);
-    std::uint32_t S                                = get_arg_val<uint32_t>(8);
-    std::uint32_t U                                = get_arg_val<uint32_t>(9);
-    std::uint32_t V                                = get_arg_val<uint32_t>(10);
-    std::uint32_t input_vertical_stride_bytes      = get_arg_val<uint32_t>(11); // W * C * 2B
-    std::uint32_t input_horizontal_stride_bytes    = get_arg_val<uint32_t>(12); // C * 2B
-    std::uint32_t num_tiles_c                      = get_arg_val<uint32_t>(13); // C * R * S / 32
-    std::uint32_t num_bytes_per_row_of_tiles       = get_arg_val<uint32_t>(14); // num_tiles_c * 32x32 * 2B
-    std::uint32_t num_repetitions                  = get_arg_val<uint32_t>(15);
+    std::uint32_t N                                = dataflow::get_arg_val<uint32_t>(3);
+    std::uint32_t C                                = dataflow::get_arg_val<uint32_t>(4);
+    std::uint32_t H                                = dataflow::get_arg_val<uint32_t>(5);
+    std::uint32_t W                                = dataflow::get_arg_val<uint32_t>(6);
+    std::uint32_t R                                = dataflow::get_arg_val<uint32_t>(7);
+    std::uint32_t S                                = dataflow::get_arg_val<uint32_t>(8);
+    std::uint32_t U                                = dataflow::get_arg_val<uint32_t>(9);
+    std::uint32_t V                                = dataflow::get_arg_val<uint32_t>(10);
+    std::uint32_t input_vertical_stride_bytes      = dataflow::get_arg_val<uint32_t>(11); // W * C * 2B
+    std::uint32_t input_horizontal_stride_bytes    = dataflow::get_arg_val<uint32_t>(12); // C * 2B
+    std::uint32_t num_tiles_c                      = dataflow::get_arg_val<uint32_t>(13); // C * R * S / 32
+    std::uint32_t num_bytes_per_row_of_tiles       = dataflow::get_arg_val<uint32_t>(14); // num_tiles_c * 32x32 * 2B
+    std::uint32_t num_repetitions                  = dataflow::get_arg_val<uint32_t>(15);
 
 
     for(std::uint32_t i = 0; i < num_repetitions; i++) {
         // l1 address to write to
-        std::uint32_t l1_address = get_write_ptr(0);
+        std::uint32_t l1_address = dataflow::get_write_ptr(0);
 
         std::uint32_t stick_size_bytes = C << 1; // C * 2B
         noc_fast_read_set_len(stick_size_bytes);
         // DRAM NOC src address
-        std::uint64_t dram_buffer_src_noc_addr = get_noc_addr(dram_src_noc_x, dram_src_noc_y, dram_buffer_src_addr_base);
+        std::uint64_t dram_buffer_src_noc_addr = dataflow::get_noc_addr(dram_src_noc_x, dram_src_noc_y, dram_buffer_src_addr_base);
         noc_fast_read_set_src_xy(dram_buffer_src_noc_addr);
 
         std::uint32_t num_reads_issued = 0; // number of noc reads issued
@@ -86,11 +86,11 @@ void kernel_main() {
                             }
                             // Once done copying a row of tiles, now wait for reads to get flushed then push tiles into stream
                             else {
-                                cb_reserve_back(0, num_tiles_c);
+                                dataflow::cb_reserve_back(0, num_tiles_c);
                                 noc_fast_read_inc_num_issued(num_reads_issued);
-                                noc_async_read_barrier();
-                                cb_push_back(0, num_tiles_c);
-                                l1_address = get_write_ptr(0);
+                                dataflow::noc_async_read_barrier();
+                                dataflow::cb_push_back(0, num_tiles_c);
+                                l1_address = dataflow::get_write_ptr(0);
                                 first_tile_write_address = l1_address;
 
                                 num_reads_issued = 0;

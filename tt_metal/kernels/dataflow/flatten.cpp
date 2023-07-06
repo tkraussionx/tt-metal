@@ -3,14 +3,14 @@
 
 void kernel_main() {
     // Kernel args
-    uint32_t src_addr                      = get_arg_val<uint32_t>(0);
-    uint32_t src_noc_x                     = get_arg_val<uint32_t>(1);
-    uint32_t src_noc_y                     = get_arg_val<uint32_t>(2);
-    uint32_t num_tiles_r                   = get_arg_val<uint32_t>(3);
-    uint32_t num_tiles_c                   = get_arg_val<uint32_t>(4);
+    uint32_t src_addr                      = dataflow::get_arg_val<uint32_t>(0);
+    uint32_t src_noc_x                     = dataflow::get_arg_val<uint32_t>(1);
+    uint32_t src_noc_y                     = dataflow::get_arg_val<uint32_t>(2);
+    uint32_t num_tiles_r                   = dataflow::get_arg_val<uint32_t>(3);
+    uint32_t num_tiles_c                   = dataflow::get_arg_val<uint32_t>(4);
 
     // How many bytes along a row in the original tensor
-    uint32_t num_bytes_per_tensor_row      = get_arg_val<uint32_t>(5);
+    uint32_t num_bytes_per_tensor_row      = dataflow::get_arg_val<uint32_t>(5);
 
     /*
         Constants
@@ -21,7 +21,7 @@ void kernel_main() {
     constexpr uint32_t num_bytes_for_sending_eight_tile_rows        = num_bytes_per_tile_row * 8;
     constexpr uint32_t num_bytes_for_sending_seven_tile_rows        = num_bytes_per_tile_row * 7;
     constexpr uint32_t num_bytes_for_sending_twenty_four_tile_rows  = num_bytes_per_tile_row * 24;
-    uint32_t num_bytes_per_tile                                     = get_tile_size(cb_id_in0);
+    uint32_t num_bytes_per_tile                                     = dataflow::get_tile_size(cb_id_in0);
 
     // Variables
     uint64_t replicate_dest_addr;
@@ -33,17 +33,17 @@ void kernel_main() {
         *(zero_base_ptr + zero_base_offset) = 0;
     }
 
-    uint64_t zeros_base_noc_addr = get_noc_addr(MEM_ZEROS_BASE);
+    uint64_t zeros_base_noc_addr = dataflow::get_noc_addr(MEM_ZEROS_BASE);
     for (uint32_t i = 0; i < num_tiles_r; i++) {
         for (uint32_t j = 0; j < 32; j++) {
             uint32_t src_addr_ = src_addr + start_dram_addr_offset_for_tensor_row;
             for (uint32_t k = 0; k < num_tiles_c; k++) {
-                cb_reserve_back(cb_id_in0, 1);
-                uint64_t src_noc_addr = get_noc_addr(src_noc_x, src_noc_y, src_addr_);
+                dataflow::cb_reserve_back(cb_id_in0, 1);
+                uint64_t src_noc_addr = dataflow::get_noc_addr(src_noc_x, src_noc_y, src_addr_);
 
                 // Read one row of data
-                uint32_t l1_write_addr = get_write_ptr(cb_id_in0);
-                noc_async_read(src_noc_addr, l1_write_addr, num_bytes_per_tile_row);
+                uint32_t l1_write_addr = dataflow::get_write_ptr(cb_id_in0);
+                dataflow::noc_async_read(src_noc_addr, l1_write_addr, num_bytes_per_tile_row);
 
                 // We move one row down
                 l1_write_addr += num_bytes_per_tile_row;
@@ -53,15 +53,15 @@ void kernel_main() {
                     8 rows three times, then we send 7 rows
                 */
                 for (uint32_t z = 0; z < 3; z++) {
-                    noc_async_read(zeros_base_noc_addr, l1_write_addr, num_bytes_for_sending_eight_tile_rows);
+                    dataflow::noc_async_read(zeros_base_noc_addr, l1_write_addr, num_bytes_for_sending_eight_tile_rows);
                     l1_write_addr += num_bytes_for_sending_eight_tile_rows;
                 }
 
-                noc_async_read(zeros_base_noc_addr, l1_write_addr, num_bytes_for_sending_seven_tile_rows);
+                dataflow::noc_async_read(zeros_base_noc_addr, l1_write_addr, num_bytes_for_sending_seven_tile_rows);
 
                 src_addr_ += num_bytes_per_tile;
-                noc_async_read_barrier();
-                cb_push_back(cb_id_in0, 1);
+                dataflow::noc_async_read_barrier();
+                dataflow::cb_push_back(cb_id_in0, 1);
 
             } // End num_tiles_c loop
             start_dram_addr_offset_for_tensor_row += num_bytes_per_tile_row;

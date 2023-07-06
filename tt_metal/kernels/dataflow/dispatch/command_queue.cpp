@@ -3,8 +3,8 @@
 #include "debug_print.h"
 
 void kernel_main() {
-    InterleavedAddrGen<true> dram_addr_gen;
-    InterleavedAddrGen<false> l1_addr_gen;
+    dataflow::InterleavedAddrGen<true> dram_addr_gen;
+    dataflow::InterleavedAddrGen<false> l1_addr_gen;
     // Read command from host command queue... l1 read addr since
     // pulling in the actual command into l1
     static constexpr u32 command_start_addr = UNRESERVED_BASE; // Space between UNRESERVED_BASE -> data_start is for commands
@@ -17,7 +17,7 @@ void kernel_main() {
 
     // Write my own NOC address to local L1 so that when I dispatch kernels,
     // they will know how to let me know they have finished
-    *reinterpret_cast<volatile uint64_t*>(DISPATCH_MESSAGE_REMOTE_SENDER_ADDR) = get_noc_addr(DISPATCH_MESSAGE_ADDR);
+    *reinterpret_cast<volatile uint64_t*>(DISPATCH_MESSAGE_REMOTE_SENDER_ADDR) = dataflow::get_noc_addr(DISPATCH_MESSAGE_ADDR);
 
     // For time being, while true is here until Paul's changes,
     // in which while true loop will be in the firmware
@@ -26,10 +26,10 @@ void kernel_main() {
         volatile u32* command_ptr = reinterpret_cast<volatile u32*>(command_start_addr);
         cq_wait_front();
         // Hardcoded for time being, need to clean this up
-        uint64_t src_noc_addr = get_noc_addr(NOC_X(0), NOC_Y(4), cq_read_interface.fifo_rd_ptr << 4);
+        uint64_t src_noc_addr = dataflow::get_noc_addr(NOC_X(0), NOC_Y(4), cq_read_interface.fifo_rd_ptr << 4);
 
-        noc_async_read(src_noc_addr, u32(command_start_addr), NUM_16B_WORDS_IN_DEVICE_COMMAND << 4);
-        noc_async_read_barrier();
+        dataflow::noc_async_read(src_noc_addr, u32(command_start_addr), NUM_16B_WORDS_IN_DEVICE_COMMAND << 4);
+        dataflow::noc_async_read_barrier();
 
         // Control data
         u32 finish = command_ptr[0];              // Whether to notify the host that we have finished

@@ -2,25 +2,25 @@
 #include "dataflow_kernel_api.h"
 
 void kernel_main() {
-    uint32_t src0_addr  = get_arg_val<uint32_t>(0);
-    uint32_t src0_noc_x = get_arg_val<uint32_t>(1);
-    uint32_t src0_noc_y = get_arg_val<uint32_t>(2);
-    uint32_t src0_num_tiles  = get_arg_val<uint32_t>(3);
-    uint32_t src1_addr  = get_arg_val<uint32_t>(4);
-    uint32_t src1_noc_x = get_arg_val<uint32_t>(5);
-    uint32_t src1_noc_y = get_arg_val<uint32_t>(6);
+    uint32_t src0_addr  = dataflow::get_arg_val<uint32_t>(0);
+    uint32_t src0_noc_x = dataflow::get_arg_val<uint32_t>(1);
+    uint32_t src0_noc_y = dataflow::get_arg_val<uint32_t>(2);
+    uint32_t src0_num_tiles  = dataflow::get_arg_val<uint32_t>(3);
+    uint32_t src1_addr  = dataflow::get_arg_val<uint32_t>(4);
+    uint32_t src1_noc_x = dataflow::get_arg_val<uint32_t>(5);
+    uint32_t src1_noc_y = dataflow::get_arg_val<uint32_t>(6);
     // skip arg 7 for compat with reader_diff_lengths
-    uint32_t NCHtWt     = get_arg_val<uint32_t>(8);
-    uint32_t NC         = get_arg_val<uint32_t>(9);
-    uint32_t Ht         = get_arg_val<uint32_t>(10);
-    uint32_t Wt         = get_arg_val<uint32_t>(11);
+    uint32_t NCHtWt     = dataflow::get_arg_val<uint32_t>(8);
+    uint32_t NC         = dataflow::get_arg_val<uint32_t>(9);
+    uint32_t Ht         = dataflow::get_arg_val<uint32_t>(10);
+    uint32_t Wt         = dataflow::get_arg_val<uint32_t>(11);
 
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in1 = 1;
     constexpr uint32_t onetile = 1;
 
     // single-tile ublocks
-    uint32_t tile_bytes = get_tile_size(cb_id_in0);
+    uint32_t tile_bytes = dataflow::get_tile_size(cb_id_in0);
 
     uint32_t l1_write_addr_in0;
     uint32_t l1_write_addr_in1;
@@ -32,25 +32,25 @@ void kernel_main() {
             {
                 // only read one tile in H per W-line of tiles
                 // So we push a total of NC*H tiles from src1
-                cb_reserve_back(cb_id_in1, onetile);
-                uint64_t src1_noc_addr = get_noc_addr(src1_noc_x, src1_noc_y, src1_addr);
-                l1_write_addr_in1 = get_write_ptr(cb_id_in1);
-                noc_async_read(src1_noc_addr, l1_write_addr_in1, tile_bytes);
-                noc_async_read_barrier();
-                cb_push_back(cb_id_in1, onetile);
+                dataflow::cb_reserve_back(cb_id_in1, onetile);
+                uint64_t src1_noc_addr = dataflow::get_noc_addr(src1_noc_x, src1_noc_y, src1_addr);
+                l1_write_addr_in1 = dataflow::get_write_ptr(cb_id_in1);
+                dataflow::noc_async_read(src1_noc_addr, l1_write_addr_in1, tile_bytes);
+                dataflow::noc_async_read_barrier();
+                dataflow::cb_push_back(cb_id_in1, onetile);
                 src1_addr += tile_bytes;
             }
 
             for (uint32_t wt = 0; wt < Wt; wt++) {
-                uint64_t src0_noc_addr = get_noc_addr(src0_noc_x, src0_noc_y, src0_addr);
-                cb_reserve_back(cb_id_in0, onetile);
-                l1_write_addr_in0 = get_write_ptr(cb_id_in0);
-                noc_async_read(src0_noc_addr, l1_write_addr_in0, tile_bytes);
-                noc_async_read_barrier();
-                cb_push_back(cb_id_in0, onetile);
+                uint64_t src0_noc_addr = dataflow::get_noc_addr(src0_noc_x, src0_noc_y, src0_addr);
+                dataflow::cb_reserve_back(cb_id_in0, onetile);
+                l1_write_addr_in0 = dataflow::get_write_ptr(cb_id_in0);
+                dataflow::noc_async_read(src0_noc_addr, l1_write_addr_in0, tile_bytes);
+                dataflow::noc_async_read_barrier();
+                dataflow::cb_push_back(cb_id_in0, onetile);
                 src0_addr += tile_bytes;
             } // Wt loop
         } // Ht loop
-        src1_addr = get_arg_val<uint32_t>(4); // reset the H-tile ptr
+        src1_addr = dataflow::get_arg_val<uint32_t>(4); // reset the H-tile ptr
     } // NC loop
 }
