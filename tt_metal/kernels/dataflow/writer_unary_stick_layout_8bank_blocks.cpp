@@ -4,13 +4,13 @@
 
 void kernel_main() {
 
-    uint32_t dst_addr = get_arg_val<uint32_t>(0);           // out_dram_addr
-    uint32_t num_rows_block = get_arg_val<uint32_t>(1);
-    uint32_t block_row_size = get_arg_val<uint32_t>(2);     // in0_block_w * TILE_WIDTH * dtype_nbytes
-    uint32_t batch = get_arg_val<uint32_t>(3);
-    uint32_t num_blocks_h = get_arg_val<uint32_t>(4);
-    uint32_t num_blocks_w = get_arg_val<uint32_t>(5);
-    uint32_t output_row_size = get_arg_val<uint32_t>(6);    // in1_width * dtype_nbytes
+    uint32_t dst_addr = tt::dataflow::get_arg_val<uint32_t>(0);           // out_dram_addr
+    uint32_t num_rows_block = tt::dataflow::get_arg_val<uint32_t>(1);
+    uint32_t block_row_size = tt::dataflow::get_arg_val<uint32_t>(2);     // in0_block_w * TILE_WIDTH * dtype_nbytes
+    uint32_t batch = tt::dataflow::get_arg_val<uint32_t>(3);
+    uint32_t num_blocks_h = tt::dataflow::get_arg_val<uint32_t>(4);
+    uint32_t num_blocks_w = tt::dataflow::get_arg_val<uint32_t>(5);
+    uint32_t output_row_size = tt::dataflow::get_arg_val<uint32_t>(6);    // in1_width * dtype_nbytes
 
     constexpr uint32_t cb_id_out0 = tt::CB::c_out0;
 
@@ -25,7 +25,7 @@ void kernel_main() {
     const uint32_t block_ntiles_h = num_rows_block / TILE_HEIGHT;
     uint32_t start_block_row_id = 0;
 
-    const InterleavedAddrGen<true> s = {
+    const tt::dataflow::InterleavedAddrGen<true> s = {
         .bank_base_address = dst_addr,
         .page_size = output_row_size
     };
@@ -36,16 +36,16 @@ void kernel_main() {
                 uint32_t block_row_id = start_block_row_id;
                 for (uint32_t tile_row_id = 0; tile_row_id < block_ntiles_h; tile_row_id++) {
                     // We reserve back an entire row of tiles in a block and issue a bunch of reads
-                    cb_wait_front(cb_id_out0, block_ntiles_w);
-                    uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
+                    tt::dataflow::cb_wait_front(cb_id_out0, block_ntiles_w);
+                    uint32_t l1_read_addr = tt::dataflow::get_read_ptr(cb_id_out0);
                     for (uint32_t j = 0; j < TILE_HEIGHT; j++) {
-                        uint64_t dst_noc_addr = get_noc_addr(block_row_id, s, block_row_offset);
-                        noc_async_write(l1_read_addr, dst_noc_addr, block_row_size);
+                        uint64_t dst_noc_addr = tt::dataflow::get_noc_addr(block_row_id, s, block_row_offset);
+                        tt::dataflow::noc_async_write(l1_read_addr, dst_noc_addr, block_row_size);
                         l1_read_addr += block_row_size;
                         block_row_id++;
                     } // for tile_nrows
-                    noc_async_write_barrier();
-                    cb_pop_front(cb_id_out0, block_ntiles_w);
+                    tt::dataflow::noc_async_write_barrier();
+                    tt::dataflow::cb_pop_front(cb_id_out0, block_ntiles_w);
                 } // for block_ntiles_h
                 block_row_offset += block_row_size;
             } // for num_blocks_w
