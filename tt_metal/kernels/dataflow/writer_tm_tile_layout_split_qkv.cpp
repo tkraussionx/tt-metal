@@ -4,10 +4,10 @@
 
 void kernel_main() {
     // WRITER RUNTIME ARGS
-    uint32_t q_tensor_addr                       = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t k_tensor_addr                       = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t v_tensor_addr                       = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t out_tensor_tile_id                  = dataflow::get_arg_val<uint32_t>(3);
+    uint32_t q_tensor_addr                       = get_arg_val<uint32_t>(0);
+    uint32_t k_tensor_addr                       = get_arg_val<uint32_t>(1);
+    uint32_t v_tensor_addr                       = get_arg_val<uint32_t>(2);
+    uint32_t out_tensor_tile_id                  = get_arg_val<uint32_t>(3);
 
     // COMPILE TIME ARGS
     // dataflow::Interleaved accessor args

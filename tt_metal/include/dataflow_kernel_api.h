@@ -32,8 +32,6 @@
  */
 #define get_compile_time_arg_val(arg_idx) KERNEL_COMPILE_TIME_ARG_ ## arg_idx
 
-namespace dataflow {
-
 int __multiply(int n, int m) {
     int res = 0, count = 0;
     while (m) {
@@ -104,6 +102,8 @@ inline __attribute__((always_inline)) constexpr static std::uint32_t MUL_WITH_TI
             return ((index << 10) + (index << 6));
     };
 }
+
+namespace dataflow {
 
 #ifdef DATA_FORMATS_DEFINED
 /**

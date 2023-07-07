@@ -2,14 +2,14 @@
 #include "dataflow_kernel_api.h"
 
 void kernel_main() {
-    uint32_t src_addr  = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t N = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t C = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t Ht = dataflow::get_arg_val<uint32_t>(3);
-    uint32_t Wt = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t HtWt = dataflow::get_arg_val<uint32_t>(5);
-    uint32_t CHtWt = dataflow::get_arg_val<uint32_t>(6);
-    uint32_t NCHtWt = dataflow::get_arg_val<uint32_t>(7);
+    uint32_t src_addr  = get_arg_val<uint32_t>(0);
+    uint32_t N = get_arg_val<uint32_t>(1);
+    uint32_t C = get_arg_val<uint32_t>(2);
+    uint32_t Ht = get_arg_val<uint32_t>(3);
+    uint32_t Wt = get_arg_val<uint32_t>(4);
+    uint32_t HtWt = get_arg_val<uint32_t>(5);
+    uint32_t CHtWt = get_arg_val<uint32_t>(6);
+    uint32_t NCHtWt = get_arg_val<uint32_t>(7);
 
     constexpr uint32_t cb_id_in0 = 0;
 

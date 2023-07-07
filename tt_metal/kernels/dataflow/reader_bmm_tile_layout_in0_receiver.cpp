@@ -4,7 +4,7 @@
 
 void kernel_main() {
     // in0 mcast args
-    uint32_t in0_mcast_sender_noc_y             = dataflow::get_arg_val<uint32_t>(0);
+    uint32_t in0_mcast_sender_noc_y             = get_arg_val<uint32_t>(0);
 
     // COMPILE TIME ARGS
     // in0 block args

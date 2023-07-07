@@ -11,12 +11,12 @@ inline u32 TADDR(u32 ti) {
 }
 
 void kernel_main() {
-    u32 src0_addr    = dataflow::get_arg_val<uint32_t>(0);
-    u32 input_Wt     = dataflow::get_arg_val<uint32_t>(1);
-    u32 output_N     = dataflow::get_arg_val<uint32_t>(2);
-    u32 output_C     = dataflow::get_arg_val<uint32_t>(3);
-    u32 output_Ht    = dataflow::get_arg_val<uint32_t>(4);
-    u32 output_Wt    = dataflow::get_arg_val<uint32_t>(5);
+    u32 src0_addr    = get_arg_val<uint32_t>(0);
+    u32 input_Wt     = get_arg_val<uint32_t>(1);
+    u32 output_N     = get_arg_val<uint32_t>(2);
+    u32 output_C     = get_arg_val<uint32_t>(3);
+    u32 output_Ht    = get_arg_val<uint32_t>(4);
+    u32 output_Wt    = get_arg_val<uint32_t>(5);
 
     u32 num_sticks_per_input_tile_row = input_Wt << 5; // Tile height is 32
     u32 num_sticks_per_output_tile_row = output_Wt << 5;

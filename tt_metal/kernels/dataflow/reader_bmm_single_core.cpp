@@ -7,35 +7,35 @@ void kernel_main() {
     bool one_time_profile = true;
 
     // in0 tensor args
-    uint32_t in0_addr              = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t in0_num_blocks_h      = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t in0_num_blocks_w      = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t in0_stride_w          = dataflow::get_arg_val<uint32_t>(3);
-    uint32_t in0_stride_h          = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t in0_next_block_stride = dataflow::get_arg_val<uint32_t>(5);
+    uint32_t in0_addr              = get_arg_val<uint32_t>(0);
+    uint32_t in0_num_blocks_h      = get_arg_val<uint32_t>(1);
+    uint32_t in0_num_blocks_w      = get_arg_val<uint32_t>(2);
+    uint32_t in0_stride_w          = get_arg_val<uint32_t>(3);
+    uint32_t in0_stride_h          = get_arg_val<uint32_t>(4);
+    uint32_t in0_next_block_stride = get_arg_val<uint32_t>(5);
 
     // in0 block args
-    uint32_t in0_block_w         = dataflow::get_arg_val<uint32_t>(6);
-    uint32_t in0_block_h         = dataflow::get_arg_val<uint32_t>(7);
-    uint32_t in0_block_num_tiles = dataflow::get_arg_val<uint32_t>(8);
+    uint32_t in0_block_w         = get_arg_val<uint32_t>(6);
+    uint32_t in0_block_h         = get_arg_val<uint32_t>(7);
+    uint32_t in0_block_num_tiles = get_arg_val<uint32_t>(8);
 
     // in1 tensor args
-    uint32_t in1_addr              = dataflow::get_arg_val<uint32_t>(9);
-    uint32_t in1_num_blocks_w      = dataflow::get_arg_val<uint32_t>(10);
-    uint32_t in1_start_tile_id     = dataflow::get_arg_val<uint32_t>(11);
-    uint32_t in1_stride_w          = dataflow::get_arg_val<uint32_t>(12);
-    uint32_t in1_stride_h          = dataflow::get_arg_val<uint32_t>(13);
-    // uint32_t in1_next_block_stride = dataflow::get_arg_val<uint32_t>(14);
+    uint32_t in1_addr              = get_arg_val<uint32_t>(9);
+    uint32_t in1_num_blocks_w      = get_arg_val<uint32_t>(10);
+    uint32_t in1_start_tile_id     = get_arg_val<uint32_t>(11);
+    uint32_t in1_stride_w          = get_arg_val<uint32_t>(12);
+    uint32_t in1_stride_h          = get_arg_val<uint32_t>(13);
+    // uint32_t in1_next_block_stride = get_arg_val<uint32_t>(14);
 
     // in1 block args
-    uint32_t in1_block_w         = dataflow::get_arg_val<uint32_t>(15);
-    uint32_t in1_block_h         = dataflow::get_arg_val<uint32_t>(16);
-    uint32_t in1_block_num_tiles = dataflow::get_arg_val<uint32_t>(17);
+    uint32_t in1_block_w         = get_arg_val<uint32_t>(15);
+    uint32_t in1_block_h         = get_arg_val<uint32_t>(16);
+    uint32_t in1_block_num_tiles = get_arg_val<uint32_t>(17);
 
-    uint32_t in0_next_block_stride_h = dataflow::get_arg_val<uint32_t>(18);
-    uint32_t in0_next_block_stride_w = dataflow::get_arg_val<uint32_t>(19);
-    uint32_t in1_next_block_stride_h = dataflow::get_arg_val<uint32_t>(20);
-    uint32_t in1_next_block_stride_w = dataflow::get_arg_val<uint32_t>(21);
+    uint32_t in0_next_block_stride_h = get_arg_val<uint32_t>(18);
+    uint32_t in0_next_block_stride_w = get_arg_val<uint32_t>(19);
+    uint32_t in1_next_block_stride_h = get_arg_val<uint32_t>(20);
+    uint32_t in1_next_block_stride_w = get_arg_val<uint32_t>(21);
 
     // const args for tile-based bank-swizzled layout
     // could be added to the arg list in the future to test different

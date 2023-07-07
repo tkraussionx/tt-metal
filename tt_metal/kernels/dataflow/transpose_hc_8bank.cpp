@@ -11,15 +11,15 @@ inline u32 TADDR(u32 ti) {
 }
 
 void kernel_main() {
-    u32 src0_addr = dataflow::get_arg_val<uint32_t>(0);
-    u32 src_noc_x = dataflow::get_arg_val<uint32_t>(1);
-    u32 src_noc_y = dataflow::get_arg_val<uint32_t>(2);
-    u32 W         = dataflow::get_arg_val<uint32_t>(3);
-    u32 H         = dataflow::get_arg_val<uint32_t>(4);
-    u32 C         = dataflow::get_arg_val<uint32_t>(5);
-    u32 HW        = dataflow::get_arg_val<uint32_t>(6);
-    u32 N         = dataflow::get_arg_val<uint32_t>(7);
-    u32 CHW       = dataflow::get_arg_val<uint32_t>(8);
+    u32 src0_addr = get_arg_val<uint32_t>(0);
+    u32 src_noc_x = get_arg_val<uint32_t>(1);
+    u32 src_noc_y = get_arg_val<uint32_t>(2);
+    u32 W         = get_arg_val<uint32_t>(3);
+    u32 H         = get_arg_val<uint32_t>(4);
+    u32 C         = get_arg_val<uint32_t>(5);
+    u32 HW        = get_arg_val<uint32_t>(6);
+    u32 N         = get_arg_val<uint32_t>(7);
+    u32 CHW       = get_arg_val<uint32_t>(8);
 
     auto WT = (W >> 5); // number of tiles in W
     auto HT = (H >> 5); // number of tiles in H

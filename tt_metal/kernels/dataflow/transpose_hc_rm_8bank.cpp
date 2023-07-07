@@ -42,13 +42,13 @@ void kernel_main() {
 
     // Note: this kernel is written with maximum simplicity in mind and (deliberately) doesn't pursue performance
 
-    uint32_t src_addr     = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t dst_addr     = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t N            = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t C            = dataflow::get_arg_val<uint32_t>(3);
-    uint32_t H            = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t W            = dataflow::get_arg_val<uint32_t>(5);
-    uint32_t CH           = dataflow::get_arg_val<uint32_t>(6);
+    uint32_t src_addr     = get_arg_val<uint32_t>(0);
+    uint32_t dst_addr     = get_arg_val<uint32_t>(1);
+    uint32_t N            = get_arg_val<uint32_t>(2);
+    uint32_t C            = get_arg_val<uint32_t>(3);
+    uint32_t H            = get_arg_val<uint32_t>(4);
+    uint32_t W            = get_arg_val<uint32_t>(5);
+    uint32_t CH           = get_arg_val<uint32_t>(6);
 
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in1 = 1;

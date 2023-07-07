@@ -9,16 +9,16 @@
 constexpr static std::uint32_t VALID_VAL = 0x1234;
 constexpr static std::uint32_t INVALID_VAL = 0x4321;
 void kernel_main() {
-    std::uint32_t dram_buffer_src_addr_base         = dataflow::get_arg_val<uint32_t>(0);
-    std::uint32_t dram_src_noc_x                    = dataflow::get_arg_val<uint32_t>(1);
-    std::uint32_t dram_src_noc_y                    = dataflow::get_arg_val<uint32_t>(2);
-    std::uint32_t local_buffer_addr                 = dataflow::get_arg_val<uint32_t>(3);
-    std::uint32_t consumer_core_noc_x               = dataflow::get_arg_val<uint32_t>(4);
-    std::uint32_t consumer_core_noc_y               = dataflow::get_arg_val<uint32_t>(5);
-    std::uint32_t stream_register_address           = dataflow::get_arg_val<uint32_t>(6);
-    std::uint32_t num_tiles                         = dataflow::get_arg_val<uint32_t>(7);
-    std::uint32_t transient_buffer_size_tiles       = dataflow::get_arg_val<uint32_t>(8);
-    std::uint32_t transient_buffer_size_bytes       = dataflow::get_arg_val<uint32_t>(9);
+    std::uint32_t dram_buffer_src_addr_base         = get_arg_val<uint32_t>(0);
+    std::uint32_t dram_src_noc_x                    = get_arg_val<uint32_t>(1);
+    std::uint32_t dram_src_noc_y                    = get_arg_val<uint32_t>(2);
+    std::uint32_t local_buffer_addr                 = get_arg_val<uint32_t>(3);
+    std::uint32_t consumer_core_noc_x               = get_arg_val<uint32_t>(4);
+    std::uint32_t consumer_core_noc_y               = get_arg_val<uint32_t>(5);
+    std::uint32_t stream_register_address           = get_arg_val<uint32_t>(6);
+    std::uint32_t num_tiles                         = get_arg_val<uint32_t>(7);
+    std::uint32_t transient_buffer_size_tiles       = get_arg_val<uint32_t>(8);
+    std::uint32_t transient_buffer_size_bytes       = get_arg_val<uint32_t>(9);
 
     // Scratch address in L1, two write register value before we copy it to into local/remote registers
     volatile uint32_t* constant_ptr = reinterpret_cast<volatile uint32_t*>(CONSTANT_REGISTER_VALUE);

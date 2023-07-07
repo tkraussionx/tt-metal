@@ -88,26 +88,26 @@ inline void async_read_from_dram_using_address_map(uint32_t dram_start_addr,
 }
 void kernel_main() {
     // Arguments for in0
-    uint32_t in0_addr_base  = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t in0_noc_x = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t in0_noc_y = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t in0_address_map_dram_addr = dataflow::get_arg_val<uint32_t>(3);
-    uint32_t in0_address_map_dram_noc_x = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t in0_address_map_dram_noc_y = dataflow::get_arg_val<uint32_t>(5);
-    uint32_t in0_address_map_metadata_l1_addr = dataflow::get_arg_val<uint32_t>(6);
-    uint32_t in0_block_num_tiles = dataflow::get_arg_val<uint32_t>(7);
+    uint32_t in0_addr_base  = get_arg_val<uint32_t>(0);
+    uint32_t in0_noc_x = get_arg_val<uint32_t>(1);
+    uint32_t in0_noc_y = get_arg_val<uint32_t>(2);
+    uint32_t in0_address_map_dram_addr = get_arg_val<uint32_t>(3);
+    uint32_t in0_address_map_dram_noc_x = get_arg_val<uint32_t>(4);
+    uint32_t in0_address_map_dram_noc_y = get_arg_val<uint32_t>(5);
+    uint32_t in0_address_map_metadata_l1_addr = get_arg_val<uint32_t>(6);
+    uint32_t in0_block_num_tiles = get_arg_val<uint32_t>(7);
 
     // Arguments for in1
-    uint32_t in1_addr_base  = dataflow::get_arg_val<uint32_t>(8);
-    uint32_t in1_noc_x = dataflow::get_arg_val<uint32_t>(9);
-    uint32_t in1_noc_y = dataflow::get_arg_val<uint32_t>(10);
-    uint32_t in1_address_map_dram_addr = dataflow::get_arg_val<uint32_t>(11);
-    uint32_t in1_address_map_dram_noc_x = dataflow::get_arg_val<uint32_t>(12);
-    uint32_t in1_address_map_dram_noc_y = dataflow::get_arg_val<uint32_t>(13);
-     uint32_t in1_address_map_metadata_l1_addr = dataflow::get_arg_val<uint32_t>(14);
-    uint32_t in1_block_num_tiles = dataflow::get_arg_val<uint32_t>(15);
+    uint32_t in1_addr_base  = get_arg_val<uint32_t>(8);
+    uint32_t in1_noc_x = get_arg_val<uint32_t>(9);
+    uint32_t in1_noc_y = get_arg_val<uint32_t>(10);
+    uint32_t in1_address_map_dram_addr = get_arg_val<uint32_t>(11);
+    uint32_t in1_address_map_dram_noc_x = get_arg_val<uint32_t>(12);
+    uint32_t in1_address_map_dram_noc_y = get_arg_val<uint32_t>(13);
+     uint32_t in1_address_map_metadata_l1_addr = get_arg_val<uint32_t>(14);
+    uint32_t in1_block_num_tiles = get_arg_val<uint32_t>(15);
 
-    uint32_t scratch_pad_for_address_map_in_l1_addr = dataflow::get_arg_val<uint32_t>(16);
+    uint32_t scratch_pad_for_address_map_in_l1_addr = get_arg_val<uint32_t>(16);
 
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in1 = 1;

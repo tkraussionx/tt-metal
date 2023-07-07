@@ -5,8 +5,8 @@
 void kernel_main() {
     constexpr std::uint32_t cb_id = get_compile_time_arg_val(0);
     constexpr std::uint32_t page_size = get_compile_time_arg_val(1);
-    std::uint32_t src_addr_base = dataflow::get_arg_val<uint32_t>(0);
-    std::uint32_t num_tiles = dataflow::get_arg_val<uint32_t>(1);
+    std::uint32_t src_addr_base = get_arg_val<uint32_t>(0);
+    std::uint32_t num_tiles = get_arg_val<uint32_t>(1);
 
     constexpr bool IS_DRAM = true;
     const uint32_t ublock_size_tiles = 1;

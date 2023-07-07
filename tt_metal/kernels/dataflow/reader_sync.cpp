@@ -9,13 +9,13 @@
 constexpr static std::uint32_t VALID_VAL = 0x1234;
 constexpr static std::uint32_t INVALID_VAL = 0x4321;
 void kernel_main() {
-    std::uint32_t buffer_src_addr            = dataflow::get_arg_val<uint32_t>(0);
-    std::uint32_t src_noc_x                  = dataflow::get_arg_val<uint32_t>(1);
-    std::uint32_t src_noc_y                  = dataflow::get_arg_val<uint32_t>(2);
-    std::uint32_t stream_register_address    = dataflow::get_arg_val<uint32_t>(3);
-    std::uint32_t num_tiles                  = dataflow::get_arg_val<uint32_t>(4);
-    std::uint32_t transient_buffer_size_tiles= dataflow::get_arg_val<uint32_t>(5);
-    std::uint32_t transient_buffer_size_bytes= dataflow::get_arg_val<uint32_t>(6);
+    std::uint32_t buffer_src_addr            = get_arg_val<uint32_t>(0);
+    std::uint32_t src_noc_x                  = get_arg_val<uint32_t>(1);
+    std::uint32_t src_noc_y                  = get_arg_val<uint32_t>(2);
+    std::uint32_t stream_register_address    = get_arg_val<uint32_t>(3);
+    std::uint32_t num_tiles                  = get_arg_val<uint32_t>(4);
+    std::uint32_t transient_buffer_size_tiles= get_arg_val<uint32_t>(5);
+    std::uint32_t transient_buffer_size_bytes= get_arg_val<uint32_t>(6);
 
     // L1 address of the operand buffer
     std::uint32_t l1_address = dataflow::get_write_ptr(0);

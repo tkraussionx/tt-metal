@@ -7,20 +7,20 @@
 // The kernel writes to contiguous location in L1 CB. Therefore, the src addresses must be provided in the order in which tiles are generated.
 // It expects src1 data to already be tilized and it simply copies it to L1.
 void kernel_main() {
-    std::uint32_t dram_buffer_src0_addr  = dataflow::get_arg_val<uint32_t>(0);
-    std::uint32_t dram_src0_noc_x        = dataflow::get_arg_val<uint32_t>(1);
-    std::uint32_t dram_src0_noc_y        = dataflow::get_arg_val<uint32_t>(2);
-    std::uint32_t dram_buffer_src1_addr  = dataflow::get_arg_val<uint32_t>(3);
-    std::uint32_t dram_src1_noc_x        = dataflow::get_arg_val<uint32_t>(4);
-    std::uint32_t dram_src1_noc_y        = dataflow::get_arg_val<uint32_t>(5);
-    std::uint32_t address_map_size       = dataflow::get_arg_val<uint32_t>(6);
-    std::uint32_t address_map_l1_addr    = dataflow::get_arg_val<uint32_t>(7);
-    std::uint32_t num_blocks             = dataflow::get_arg_val<uint32_t>(8);
-    std::uint32_t src0_num_reads_per_block = dataflow::get_arg_val<uint32_t>(9);
-    std::uint32_t src0_dram_read_size_bytes = dataflow::get_arg_val<uint32_t>(10);
-    std::uint32_t src1_num_bytes_per_block = dataflow::get_arg_val<uint32_t>(11);
-    std::uint32_t src0_num_tiles_per_block = dataflow::get_arg_val<uint32_t>(12);
-    std::uint32_t src1_num_tiles_per_block = dataflow::get_arg_val<uint32_t>(13);
+    std::uint32_t dram_buffer_src0_addr  = get_arg_val<uint32_t>(0);
+    std::uint32_t dram_src0_noc_x        = get_arg_val<uint32_t>(1);
+    std::uint32_t dram_src0_noc_y        = get_arg_val<uint32_t>(2);
+    std::uint32_t dram_buffer_src1_addr  = get_arg_val<uint32_t>(3);
+    std::uint32_t dram_src1_noc_x        = get_arg_val<uint32_t>(4);
+    std::uint32_t dram_src1_noc_y        = get_arg_val<uint32_t>(5);
+    std::uint32_t address_map_size       = get_arg_val<uint32_t>(6);
+    std::uint32_t address_map_l1_addr    = get_arg_val<uint32_t>(7);
+    std::uint32_t num_blocks             = get_arg_val<uint32_t>(8);
+    std::uint32_t src0_num_reads_per_block = get_arg_val<uint32_t>(9);
+    std::uint32_t src0_dram_read_size_bytes = get_arg_val<uint32_t>(10);
+    std::uint32_t src1_num_bytes_per_block = get_arg_val<uint32_t>(11);
+    std::uint32_t src0_num_tiles_per_block = get_arg_val<uint32_t>(12);
+    std::uint32_t src1_num_tiles_per_block = get_arg_val<uint32_t>(13);
 
     constexpr uint32_t cb0_id = 0;
     constexpr uint32_t cb1_id = 1;

@@ -4,14 +4,14 @@
 
 void kernel_main() {
     // in0 tensor args
-    uint32_t in0_tensor_addr                    = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t in0_tensor_start_tile_id           = dataflow::get_arg_val<uint32_t>(1);
+    uint32_t in0_tensor_addr                    = get_arg_val<uint32_t>(0);
+    uint32_t in0_tensor_start_tile_id           = get_arg_val<uint32_t>(1);
     // in0 mcast args
-    uint32_t in0_mcast_dest_noc_start_y         = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t in0_mcast_dest_noc_end_y           = dataflow::get_arg_val<uint32_t>(3);
+    uint32_t in0_mcast_dest_noc_start_y         = get_arg_val<uint32_t>(2);
+    uint32_t in0_mcast_dest_noc_end_y           = get_arg_val<uint32_t>(3);
 
     // padding args
-    uint32_t last_block_h                       = dataflow::get_arg_val<uint32_t>(4);
+    uint32_t last_block_h                       = get_arg_val<uint32_t>(4);
 
     // COMPILE TIME ARGS
     // dataflow::Interleaved accessor args

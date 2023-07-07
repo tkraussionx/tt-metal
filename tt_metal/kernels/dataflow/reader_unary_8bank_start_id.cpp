@@ -4,10 +4,10 @@
 //#include "debug_print.h"
 
 void kernel_main() {
-    uint32_t src_addr  = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t num_tiles = dataflow::get_arg_val<uint32_t>(3); // same arg index as in reader_unary and in reader_unary_transpose_wh_8bank
-    uint32_t start_id = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t scaler = dataflow::get_arg_val<uint32_t>(5);
+    uint32_t src_addr  = get_arg_val<uint32_t>(0);
+    uint32_t num_tiles = get_arg_val<uint32_t>(3); // same arg index as in reader_unary and in reader_unary_transpose_wh_8bank
+    uint32_t start_id = get_arg_val<uint32_t>(4);
+    uint32_t scaler = get_arg_val<uint32_t>(5);
     if (scaler != 0) {
         union { float f; uint32_t u; } u; u.u = scaler;
         //DPRINT << "startid Scaler = " << F32(u.f) << ENDL();

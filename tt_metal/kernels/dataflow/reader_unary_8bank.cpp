@@ -5,7 +5,7 @@
 
 void generate_bcast_scaler() {
     constexpr uint32_t cb_in_2 = 2;
-    uint32_t scaler = dataflow::get_arg_val<uint32_t>(8);
+    uint32_t scaler = get_arg_val<uint32_t>(8);
     union { float f; uint32_t u; } u; u.u = scaler;
     //DPRINT << "basic Scaler = " << F32(u.f) << ENDL();
     dataflow::cb_reserve_back(cb_in_2, 1);
@@ -20,8 +20,8 @@ void generate_bcast_scaler() {
 }
 
 void kernel_main() {
-    uint32_t src_addr  = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t num_tiles = dataflow::get_arg_val<uint32_t>(3); // same arg index as in reader_unary and in reader_unary_transpose_wh_8bank
+    uint32_t src_addr  = get_arg_val<uint32_t>(0);
+    uint32_t num_tiles = get_arg_val<uint32_t>(3); // same arg index as in reader_unary and in reader_unary_transpose_wh_8bank
 
     constexpr uint32_t cb_id_in0 = 0, cb_id_in1 = 1;
 

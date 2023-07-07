@@ -5,17 +5,17 @@
 // Writes to Specified Circular Buffers in L1
 // Expects n provided src_addr, src_noc_x, src_noc_y, and cb_id_in
 void kernel_main() {
-    uint32_t num_reads = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t num_tiles_per_read = dataflow::get_arg_val<uint32_t>(1);
+    uint32_t num_reads = get_arg_val<uint32_t>(0);
+    uint32_t num_tiles_per_read = get_arg_val<uint32_t>(1);
 
     // ublocks size defined in tiles
     constexpr uint32_t ublock_size_tiles = 1;
 
     for (uint32_t i = 0; i<num_reads; i++){
-        uint32_t src_addr  = dataflow::get_arg_val<uint32_t>(2 + i * 4);
-        uint32_t src_noc_x = dataflow::get_arg_val<uint32_t>(3 + i * 4);
-        uint32_t src_noc_y = dataflow::get_arg_val<uint32_t>(4 + i * 4);
-        uint32_t cb_id_in  = dataflow::get_arg_val<uint32_t>(5 + i * 4);
+        uint32_t src_addr  = get_arg_val<uint32_t>(2 + i * 4);
+        uint32_t src_noc_x = get_arg_val<uint32_t>(3 + i * 4);
+        uint32_t src_noc_y = get_arg_val<uint32_t>(4 + i * 4);
+        uint32_t cb_id_in  = get_arg_val<uint32_t>(5 + i * 4);
 
         uint32_t ublock_size_bytes = dataflow::get_tile_size(cb_id_in);
 

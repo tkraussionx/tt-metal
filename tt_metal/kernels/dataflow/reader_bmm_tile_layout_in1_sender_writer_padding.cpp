@@ -5,27 +5,27 @@
 void kernel_main() {
     // READER
     // in1 tensor args
-    uint32_t in1_tensor_addr                    = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t in1_tensor_start_tile_id           = dataflow::get_arg_val<uint32_t>(1);
+    uint32_t in1_tensor_addr                    = get_arg_val<uint32_t>(0);
+    uint32_t in1_tensor_start_tile_id           = get_arg_val<uint32_t>(1);
     // in1 mcast args
-    uint32_t in1_mcast_dest_noc_start_x         = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t in1_mcast_dest_noc_end_x           = dataflow::get_arg_val<uint32_t>(3);
+    uint32_t in1_mcast_dest_noc_start_x         = get_arg_val<uint32_t>(2);
+    uint32_t in1_mcast_dest_noc_end_x           = get_arg_val<uint32_t>(3);
 
     // WRITER
     // out tensor args
-    uint32_t out_tensor_addr                    = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t out_tensor_start_tile_id           = dataflow::get_arg_val<uint32_t>(5);
+    uint32_t out_tensor_addr                    = get_arg_val<uint32_t>(4);
+    uint32_t out_tensor_start_tile_id           = get_arg_val<uint32_t>(5);
 
     // padding args (READER)
-    uint32_t last_block_w                       = dataflow::get_arg_val<uint32_t>(6);
+    uint32_t last_block_w                       = get_arg_val<uint32_t>(6);
     // padding args (WRITER)
-    uint32_t out_num_nonzero_subblocks_h        = dataflow::get_arg_val<uint32_t>(7);
-    uint32_t out_last_subblock_h                = dataflow::get_arg_val<uint32_t>(8);
-    uint32_t padded_block_tiles_h_skip          = dataflow::get_arg_val<uint32_t>(9);
-    uint32_t out_num_nonzero_subblocks_w        = dataflow::get_arg_val<uint32_t>(10);
-    uint32_t out_last_subblock_w                = dataflow::get_arg_val<uint32_t>(11);
-    uint32_t padded_subblock_tiles_addr_skip    = dataflow::get_arg_val<uint32_t>(12);
-    uint32_t padded_block_tiles_w_skip          = dataflow::get_arg_val<uint32_t>(13);
+    uint32_t out_num_nonzero_subblocks_h        = get_arg_val<uint32_t>(7);
+    uint32_t out_last_subblock_h                = get_arg_val<uint32_t>(8);
+    uint32_t padded_block_tiles_h_skip          = get_arg_val<uint32_t>(9);
+    uint32_t out_num_nonzero_subblocks_w        = get_arg_val<uint32_t>(10);
+    uint32_t out_last_subblock_w                = get_arg_val<uint32_t>(11);
+    uint32_t padded_subblock_tiles_addr_skip    = get_arg_val<uint32_t>(12);
+    uint32_t padded_block_tiles_w_skip          = get_arg_val<uint32_t>(13);
 
     // COMPILE TIME ARGS
     // dataflow::Interleaved accessor args
@@ -72,10 +72,10 @@ void kernel_main() {
 
     #ifdef FUSE_BIAS
         // in3 mcast args
-        uint32_t in3_tensor_addr                    = dataflow::get_arg_val<uint32_t>(14);
-        uint32_t in3_tensor_start_tile_id           = dataflow::get_arg_val<uint32_t>(15);
-        uint32_t in3_mcast_dest_noc_start_x         = dataflow::get_arg_val<uint32_t>(16);
-        uint32_t in3_mcast_dest_noc_end_x           = dataflow::get_arg_val<uint32_t>(17);
+        uint32_t in3_tensor_addr                    = get_arg_val<uint32_t>(14);
+        uint32_t in3_tensor_start_tile_id           = get_arg_val<uint32_t>(15);
+        uint32_t in3_mcast_dest_noc_start_x         = get_arg_val<uint32_t>(16);
+        uint32_t in3_mcast_dest_noc_end_x           = get_arg_val<uint32_t>(17);
         // in3 mcast args
         constexpr bool in3_is_dram                            = get_compile_time_arg_val(26) == 1;
         constexpr uint32_t in3_tensor_stride_w                = get_compile_time_arg_val(27);

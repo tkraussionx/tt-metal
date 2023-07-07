@@ -2,14 +2,14 @@
 #include "dataflow_kernel_api.h"
 
 void kernel_main() {
-    uint32_t src0_addr  = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t src0_noc_x = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t src0_noc_y = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t src0_num_tiles  = dataflow::get_arg_val<uint32_t>(3);
-    uint32_t src1_addr  = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t src1_noc_x = dataflow::get_arg_val<uint32_t>(5);
-    uint32_t src1_noc_y = dataflow::get_arg_val<uint32_t>(6);
-    uint32_t src1_num_tiles  = dataflow::get_arg_val<uint32_t>(7);
+    uint32_t src0_addr  = get_arg_val<uint32_t>(0);
+    uint32_t src0_noc_x = get_arg_val<uint32_t>(1);
+    uint32_t src0_noc_y = get_arg_val<uint32_t>(2);
+    uint32_t src0_num_tiles  = get_arg_val<uint32_t>(3);
+    uint32_t src1_addr  = get_arg_val<uint32_t>(4);
+    uint32_t src1_noc_x = get_arg_val<uint32_t>(5);
+    uint32_t src1_noc_y = get_arg_val<uint32_t>(6);
+    uint32_t src1_num_tiles  = get_arg_val<uint32_t>(7);
 
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in1 = 1;

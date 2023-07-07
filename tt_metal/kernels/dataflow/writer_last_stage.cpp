@@ -3,11 +3,11 @@
 
 void kernel_main() {
 
-    std::uint32_t buffer_dst_addr  = dataflow::get_arg_val<uint32_t>(0);
-    std::uint32_t dst_noc_x        = dataflow::get_arg_val<uint32_t>(1);
-    std::uint32_t dst_noc_y        = dataflow::get_arg_val<uint32_t>(2);
-    std::uint32_t num_tiles             = dataflow::get_arg_val<uint32_t>(3);
-    std::uint32_t num_repetitions       = dataflow::get_arg_val<uint32_t>(4);
+    std::uint32_t buffer_dst_addr  = get_arg_val<uint32_t>(0);
+    std::uint32_t dst_noc_x        = get_arg_val<uint32_t>(1);
+    std::uint32_t dst_noc_y        = get_arg_val<uint32_t>(2);
+    std::uint32_t num_tiles             = get_arg_val<uint32_t>(3);
+    std::uint32_t num_repetitions       = get_arg_val<uint32_t>(4);
 
     constexpr uint32_t cb_id             = get_compile_time_arg_val(0);
     constexpr uint32_t block_size_tiles  = get_compile_time_arg_val(1);

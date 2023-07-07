@@ -3,10 +3,10 @@
 
 void kernel_main() {
     // in0 tensor args
-    uint32_t in0_tensor_addr             = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t in0_tensor_start_tile_id    = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t in0_num_blocks              = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t in0_block_num_tiles         = dataflow::get_arg_val<uint32_t>(3);
+    uint32_t in0_tensor_addr             = get_arg_val<uint32_t>(0);
+    uint32_t in0_tensor_start_tile_id    = get_arg_val<uint32_t>(1);
+    uint32_t in0_num_blocks              = get_arg_val<uint32_t>(2);
+    uint32_t in0_block_num_tiles         = get_arg_val<uint32_t>(3);
 
     constexpr uint32_t cb_id_in0 = 0;
 

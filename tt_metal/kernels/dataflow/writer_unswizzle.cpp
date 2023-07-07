@@ -1,16 +1,16 @@
 #include "dataflow_kernel_api.h"
 
 void kernel_main() {
-    uint32_t dst_addr           = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t dst_noc_x          = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t dst_noc_y          = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t inner_r            = dataflow::get_arg_val<uint32_t>(3);
-    uint32_t inner_c            = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t num_sub_blocks_m   = dataflow::get_arg_val<uint32_t>(5);
-    uint32_t num_sub_blocks_n   = dataflow::get_arg_val<uint32_t>(6);
-    uint32_t stride_r           = dataflow::get_arg_val<uint32_t>(7);
-    uint32_t stride_subblock_r  = dataflow::get_arg_val<uint32_t>(8);
-    uint32_t stride_subblock_c  = dataflow::get_arg_val<uint32_t>(9);
+    uint32_t dst_addr           = get_arg_val<uint32_t>(0);
+    uint32_t dst_noc_x          = get_arg_val<uint32_t>(1);
+    uint32_t dst_noc_y          = get_arg_val<uint32_t>(2);
+    uint32_t inner_r            = get_arg_val<uint32_t>(3);
+    uint32_t inner_c            = get_arg_val<uint32_t>(4);
+    uint32_t num_sub_blocks_m   = get_arg_val<uint32_t>(5);
+    uint32_t num_sub_blocks_n   = get_arg_val<uint32_t>(6);
+    uint32_t stride_r           = get_arg_val<uint32_t>(7);
+    uint32_t stride_subblock_r  = get_arg_val<uint32_t>(8);
+    uint32_t stride_subblock_c  = get_arg_val<uint32_t>(9);
 
     constexpr uint32_t cb_id_out0 = 16;
 

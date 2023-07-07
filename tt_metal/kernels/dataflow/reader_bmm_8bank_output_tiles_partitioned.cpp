@@ -5,18 +5,18 @@
 
 void kernel_main() {
     // same arg indices as in reader_binary_diff_lenghts for compat
-    uint32_t src0_addr            = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t src1_addr            = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t Mt                   = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t Kt                   = dataflow::get_arg_val<uint32_t>(3);
-    uint32_t Nt                   = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t MtKt                 = dataflow::get_arg_val<uint32_t>(5); // if 0
-    uint32_t KtNt                 = dataflow::get_arg_val<uint32_t>(6);
-    uint32_t batch                = dataflow::get_arg_val<uint32_t>(7);
-    uint32_t bcast_B              = dataflow::get_arg_val<uint32_t>(8); // if 1 we broadcast B to batch
-    uint32_t output_tile_start_id = dataflow::get_arg_val<uint32_t>(9);
-    uint32_t num_output_tiles     = dataflow::get_arg_val<uint32_t>(10);
-    uint32_t MtNt                 = dataflow::get_arg_val<uint32_t>(11);
+    uint32_t src0_addr            = get_arg_val<uint32_t>(0);
+    uint32_t src1_addr            = get_arg_val<uint32_t>(1);
+    uint32_t Mt                   = get_arg_val<uint32_t>(2);
+    uint32_t Kt                   = get_arg_val<uint32_t>(3);
+    uint32_t Nt                   = get_arg_val<uint32_t>(4);
+    uint32_t MtKt                 = get_arg_val<uint32_t>(5); // if 0
+    uint32_t KtNt                 = get_arg_val<uint32_t>(6);
+    uint32_t batch                = get_arg_val<uint32_t>(7);
+    uint32_t bcast_B              = get_arg_val<uint32_t>(8); // if 1 we broadcast B to batch
+    uint32_t output_tile_start_id = get_arg_val<uint32_t>(9);
+    uint32_t num_output_tiles     = get_arg_val<uint32_t>(10);
+    uint32_t MtNt                 = get_arg_val<uint32_t>(11);
 
     constexpr DataFormat data_format = static_cast<DataFormat>(get_compile_time_arg_val(0));
     constexpr bool src0_is_dram = get_compile_time_arg_val(1) == 1;

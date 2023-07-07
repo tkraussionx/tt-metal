@@ -3,16 +3,16 @@
 
 void kernel_main() {
 
-    const uint32_t src_addr                 = dataflow::get_arg_val<uint32_t>(0);
-    const uint32_t dst_addr                 = dataflow::get_arg_val<uint32_t>(1);
-    const uint32_t num_unpadded_W           = dataflow::get_arg_val<uint32_t>(2);
-    const uint32_t num_padded_Wt            = dataflow::get_arg_val<uint32_t>(3);
-    const uint32_t num_unpadded_Z           = dataflow::get_arg_val<uint32_t>(4);
-    const uint32_t num_padded_Zt            = dataflow::get_arg_val<uint32_t>(5);
-    const uint32_t num_unpadded_Yt          = dataflow::get_arg_val<uint32_t>(6);
-    const uint32_t num_padded_Yt            = dataflow::get_arg_val<uint32_t>(7);
-    const uint32_t num_unpadded_Xt          = dataflow::get_arg_val<uint32_t>(8);
-    const uint32_t num_padded_Xt            = dataflow::get_arg_val<uint32_t>(9);
+    const uint32_t src_addr                 = get_arg_val<uint32_t>(0);
+    const uint32_t dst_addr                 = get_arg_val<uint32_t>(1);
+    const uint32_t num_unpadded_W           = get_arg_val<uint32_t>(2);
+    const uint32_t num_padded_Wt            = get_arg_val<uint32_t>(3);
+    const uint32_t num_unpadded_Z           = get_arg_val<uint32_t>(4);
+    const uint32_t num_padded_Zt            = get_arg_val<uint32_t>(5);
+    const uint32_t num_unpadded_Yt          = get_arg_val<uint32_t>(6);
+    const uint32_t num_padded_Yt            = get_arg_val<uint32_t>(7);
+    const uint32_t num_unpadded_Xt          = get_arg_val<uint32_t>(8);
+    const uint32_t num_padded_Xt            = get_arg_val<uint32_t>(9);
 
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in1 = 1;
@@ -21,7 +21,7 @@ void kernel_main() {
 
     #define tile_size_is_pow2 get_compile_time_arg_val(0) == 1
     #if (tile_size_is_pow2)
-    const uint32_t log_base_2_of_page_size = dataflow::get_arg_val<uint32_t>(10);
+    const uint32_t log_base_2_of_page_size = get_arg_val<uint32_t>(10);
     const dataflow::InterleavedPow2AddrGen<true> s0 = {
         .bank_base_address = src_addr,
         .log_base_2_of_page_size = log_base_2_of_page_size // TODO(AP): refactor

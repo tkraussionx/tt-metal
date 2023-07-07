@@ -43,14 +43,14 @@ void kernel_main() {
 
     // Note: this kernel is written with maximum simplicity in mind and (deliberately) doesn't pursue performance
 
-    uint32_t dst_addr     = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t NC           = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t H            = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t W            = dataflow::get_arg_val<uint32_t>(3);
-    uint32_t fillH        = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t fillW        = dataflow::get_arg_val<uint32_t>(5);
-    uint32_t val_hi       = dataflow::get_arg_val<uint32_t>(6);
-    uint32_t val_lo       = dataflow::get_arg_val<uint32_t>(7);
+    uint32_t dst_addr     = get_arg_val<uint32_t>(0);
+    uint32_t NC           = get_arg_val<uint32_t>(1);
+    uint32_t H            = get_arg_val<uint32_t>(2);
+    uint32_t W            = get_arg_val<uint32_t>(3);
+    uint32_t fillH        = get_arg_val<uint32_t>(4);
+    uint32_t fillW        = get_arg_val<uint32_t>(5);
+    uint32_t val_hi       = get_arg_val<uint32_t>(6);
+    uint32_t val_lo       = get_arg_val<uint32_t>(7);
 
     //DPRINT << "fill_rm_8bank: NC=" << NC << " H=" << H << " W=" << W << " fillH=" << fillH << " fillW=" << fillW << ENDL();
     constexpr uint32_t cb_id_in0 = 0;

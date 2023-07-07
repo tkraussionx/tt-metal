@@ -7,31 +7,31 @@ void kernel_main() {
     bool one_time_profile = true;
 
     // in0 tensor args
-    uint32_t in0_tensor_addr                    = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t in0_tensor_start_row_id            = dataflow::get_arg_val<uint32_t>(1);
+    uint32_t in0_tensor_addr                    = get_arg_val<uint32_t>(0);
+    uint32_t in0_tensor_start_row_id            = get_arg_val<uint32_t>(1);
 
     // in0 block args
-    uint32_t in0_block_h                        = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t in0_block_num_tiles                = dataflow::get_arg_val<uint32_t>(3);
+    uint32_t in0_block_h                        = get_arg_val<uint32_t>(2);
+    uint32_t in0_block_num_tiles                = get_arg_val<uint32_t>(3);
 
     // in0 row size info
-    uint32_t in0_row_size                      = dataflow::get_arg_val<uint32_t>(4); // num bytes in a row
-    uint32_t in0_partial_row_size              = dataflow::get_arg_val<uint32_t>(5); // num bytes in a row that fit within one in0_block_w
+    uint32_t in0_row_size                      = get_arg_val<uint32_t>(4); // num bytes in a row
+    uint32_t in0_partial_row_size              = get_arg_val<uint32_t>(5); // num bytes in a row that fit within one in0_block_w
 
     // in1 tensor args (sizes are in num tiles)
-    uint32_t in1_tensor_addr                    = dataflow::get_arg_val<uint32_t>(6);
-    uint32_t in1_tensor_start_tile_id           = dataflow::get_arg_val<uint32_t>(7);
-    uint32_t in1_tensor_stride_w                = dataflow::get_arg_val<uint32_t>(8);
-    uint32_t in1_tensor_stride_h                = dataflow::get_arg_val<uint32_t>(9);
-    uint32_t in1_tensor_next_block_stride       = dataflow::get_arg_val<uint32_t>(10);
+    uint32_t in1_tensor_addr                    = get_arg_val<uint32_t>(6);
+    uint32_t in1_tensor_start_tile_id           = get_arg_val<uint32_t>(7);
+    uint32_t in1_tensor_stride_w                = get_arg_val<uint32_t>(8);
+    uint32_t in1_tensor_stride_h                = get_arg_val<uint32_t>(9);
+    uint32_t in1_tensor_next_block_stride       = get_arg_val<uint32_t>(10);
 
     // in1 block args
-    uint32_t in1_block_w                        = dataflow::get_arg_val<uint32_t>(11);
-    uint32_t in1_block_h                        = dataflow::get_arg_val<uint32_t>(12);
-    uint32_t in1_block_num_tiles                = dataflow::get_arg_val<uint32_t>(13);
+    uint32_t in1_block_w                        = get_arg_val<uint32_t>(11);
+    uint32_t in1_block_h                        = get_arg_val<uint32_t>(12);
+    uint32_t in1_block_num_tiles                = get_arg_val<uint32_t>(13);
 
     // in0/in1 common args
-    uint32_t num_blocks                         = dataflow::get_arg_val<uint32_t>(14);
+    uint32_t num_blocks                         = get_arg_val<uint32_t>(14);
 
     // const args for tile-based bank-swizzled layout
     // could be added to the arg list in the future to test different

@@ -3,15 +3,15 @@
 //#define OPT_WRITE 1
 
 void kernel_main() {
-    std::uint32_t   buffer_src_addr  = dataflow::get_arg_val<uint32_t>(0);
-    std::uint32_t   buffer_dst_addr  = dataflow::get_arg_val<uint32_t>(1);
+    std::uint32_t   buffer_src_addr  = get_arg_val<uint32_t>(0);
+    std::uint32_t   buffer_dst_addr  = get_arg_val<uint32_t>(1);
 
-    std::uint32_t   dst_noc_x        = dataflow::get_arg_val<uint32_t>(2);
-    std::uint32_t   dst_noc_y        = dataflow::get_arg_val<uint32_t>(3);
+    std::uint32_t   dst_noc_x        = get_arg_val<uint32_t>(2);
+    std::uint32_t   dst_noc_y        = get_arg_val<uint32_t>(3);
 
-    std::uint32_t   transaction_size = dataflow::get_arg_val<uint32_t>(4);
-    std::uint32_t   num_transactions = dataflow::get_arg_val<uint32_t>(5);
-    std::uint32_t   num_repetitions  = dataflow::get_arg_val<uint32_t>(6);
+    std::uint32_t   transaction_size = get_arg_val<uint32_t>(4);
+    std::uint32_t   num_transactions = get_arg_val<uint32_t>(5);
+    std::uint32_t   num_repetitions  = get_arg_val<uint32_t>(6);
 
     // Use this reg for cmd buf
     std::uint32_t cmd_buf = NCRISC_WR_REG_CMD_BUF;

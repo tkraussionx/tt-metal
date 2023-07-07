@@ -8,12 +8,12 @@ void kernel_main() {
     constexpr uint32_t log_base_2_of_num_dram_channels = 3;
     constexpr uint32_t cb_id_in0                       = 0;
 
-    const uint32_t src_addr                 = dataflow::get_arg_val<uint32_t>(0);
-    const uint32_t num_2d_faces             = dataflow::get_arg_val<uint32_t>(1);
-    const uint32_t num_rows                     = dataflow::get_arg_val<uint32_t>(2);
-    const uint32_t num_rows_padded              = dataflow::get_arg_val<uint32_t>(3);
-    const uint32_t row_size                 = dataflow::get_arg_val<uint32_t>(4);
-    const uint32_t zero_buffer_l1_addr      = dataflow::get_arg_val<uint32_t>(5);
+    const uint32_t src_addr                 = get_arg_val<uint32_t>(0);
+    const uint32_t num_2d_faces             = get_arg_val<uint32_t>(1);
+    const uint32_t num_rows                     = get_arg_val<uint32_t>(2);
+    const uint32_t num_rows_padded              = get_arg_val<uint32_t>(3);
+    const uint32_t row_size                 = get_arg_val<uint32_t>(4);
+    const uint32_t zero_buffer_l1_addr      = get_arg_val<uint32_t>(5);
 
     volatile std::uint32_t* zero_buffer = (volatile uint32_t*)(zero_buffer_l1_addr);
 
@@ -25,7 +25,7 @@ void kernel_main() {
 
     constexpr bool stick_size_is_power_of_two = (get_compile_time_arg_val(0) == 1);
     #if (stick_size_is_power_of_two)
-    const uint32_t log_base_2_of_page_size = dataflow::get_arg_val<uint32_t>(3);
+    const uint32_t log_base_2_of_page_size = get_arg_val<uint32_t>(3);
     const dataflow::InterleavedPow2AddrGen<true> s = {
         .bank_base_address = src_addr,
 

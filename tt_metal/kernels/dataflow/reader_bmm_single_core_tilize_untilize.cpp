@@ -7,25 +7,25 @@
  */
 void kernel_main() {
     // in0
-    uint32_t in0_addr = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t in0_block_h = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t in0_num_blocks_h = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t in0_num_blocks_w = dataflow::get_arg_val<uint32_t>(3);           // == in1_num_blocks_h
-    uint32_t in0_block_num_tiles = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t in0_block_nrows = dataflow::get_arg_val<uint32_t>(5);
-    uint32_t in0_start_row_id = dataflow::get_arg_val<uint32_t>(6);
-    uint32_t in0_row_size_bytes = dataflow::get_arg_val<uint32_t>(7);         // size of a full row
-    uint32_t in0_read_row_size_bytes = dataflow::get_arg_val<uint32_t>(8);    // size of partial row to fit within a block width
+    uint32_t in0_addr = get_arg_val<uint32_t>(0);
+    uint32_t in0_block_h = get_arg_val<uint32_t>(1);
+    uint32_t in0_num_blocks_h = get_arg_val<uint32_t>(2);
+    uint32_t in0_num_blocks_w = get_arg_val<uint32_t>(3);           // == in1_num_blocks_h
+    uint32_t in0_block_num_tiles = get_arg_val<uint32_t>(4);
+    uint32_t in0_block_nrows = get_arg_val<uint32_t>(5);
+    uint32_t in0_start_row_id = get_arg_val<uint32_t>(6);
+    uint32_t in0_row_size_bytes = get_arg_val<uint32_t>(7);         // size of a full row
+    uint32_t in0_read_row_size_bytes = get_arg_val<uint32_t>(8);    // size of partial row to fit within a block width
 
     // in1
-    uint32_t in1_addr = dataflow::get_arg_val<uint32_t>(9);
-    uint32_t in1_block_h = dataflow::get_arg_val<uint32_t>(10);
-    uint32_t in1_block_w = dataflow::get_arg_val<uint32_t>(11);
-    uint32_t in1_num_blocks_w = dataflow::get_arg_val<uint32_t>(12);
-    uint32_t in1_block_num_tiles = dataflow::get_arg_val<uint32_t>(13);
-    uint32_t in1_stride_h = dataflow::get_arg_val<uint32_t>(14);
-    uint32_t in1_next_block_stride_h = dataflow::get_arg_val<uint32_t>(15);
-    uint32_t in1_next_block_stride_w = dataflow::get_arg_val<uint32_t>(16);
+    uint32_t in1_addr = get_arg_val<uint32_t>(9);
+    uint32_t in1_block_h = get_arg_val<uint32_t>(10);
+    uint32_t in1_block_w = get_arg_val<uint32_t>(11);
+    uint32_t in1_num_blocks_w = get_arg_val<uint32_t>(12);
+    uint32_t in1_block_num_tiles = get_arg_val<uint32_t>(13);
+    uint32_t in1_stride_h = get_arg_val<uint32_t>(14);
+    uint32_t in1_next_block_stride_h = get_arg_val<uint32_t>(15);
+    uint32_t in1_next_block_stride_w = get_arg_val<uint32_t>(16);
 
     uint32_t in0_block_w = in1_block_h;
 

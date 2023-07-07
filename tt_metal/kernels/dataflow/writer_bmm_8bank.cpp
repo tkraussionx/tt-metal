@@ -4,10 +4,10 @@
 
 void kernel_main() {
     // same arg indices as in reader_bmm_8bank for reuse
-    uint32_t dst_addr   = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t Mt         = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t Nt         = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t batch      = dataflow::get_arg_val<uint32_t>(7);
+    uint32_t dst_addr   = get_arg_val<uint32_t>(0);
+    uint32_t Mt         = get_arg_val<uint32_t>(2);
+    uint32_t Nt         = get_arg_val<uint32_t>(4);
+    uint32_t batch      = get_arg_val<uint32_t>(7);
 
     constexpr DataFormat data_format = static_cast<DataFormat>(get_compile_time_arg_val(0));
     constexpr bool dst_is_dram = get_compile_time_arg_val(1) == 1;

@@ -8,9 +8,9 @@ void kernel_main() {
     constexpr uint32_t log_base_2_of_num_dram_channels = 3;
     constexpr uint32_t cb_id_out0                      = 16;
 
-    uint32_t dst_addr                 = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t num_sticks               = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t stick_size               = dataflow::get_arg_val<uint32_t>(2);
+    uint32_t dst_addr                 = get_arg_val<uint32_t>(0);
+    uint32_t num_sticks               = get_arg_val<uint32_t>(1);
+    uint32_t stick_size               = get_arg_val<uint32_t>(2);
 
     // TODO(agrebenisan): This isn't good... here we are assuming
     // that the stick size dictates tiles c, but stick size

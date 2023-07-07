@@ -2,15 +2,15 @@
 #include "dataflow_kernel_api.h"
 
 void kernel_main() {
-    std::uint32_t dram_buffer_src0_addr  = dataflow::get_arg_val<uint32_t>(0);
-    std::uint32_t dram_src0_noc_x        = dataflow::get_arg_val<uint32_t>(1);
-    std::uint32_t dram_src0_noc_y        = dataflow::get_arg_val<uint32_t>(2);
+    std::uint32_t dram_buffer_src0_addr  = get_arg_val<uint32_t>(0);
+    std::uint32_t dram_src0_noc_x        = get_arg_val<uint32_t>(1);
+    std::uint32_t dram_src0_noc_y        = get_arg_val<uint32_t>(2);
 
-    std::uint32_t dram_buffer_src1_addr  = dataflow::get_arg_val<uint32_t>(3);
-    std::uint32_t dram_src1_noc_x        = dataflow::get_arg_val<uint32_t>(4);
-    std::uint32_t dram_src1_noc_y        = dataflow::get_arg_val<uint32_t>(5);
+    std::uint32_t dram_buffer_src1_addr  = get_arg_val<uint32_t>(3);
+    std::uint32_t dram_src1_noc_x        = get_arg_val<uint32_t>(4);
+    std::uint32_t dram_src1_noc_y        = get_arg_val<uint32_t>(5);
 
-    std::uint32_t num_tiles              = dataflow::get_arg_val<uint32_t>(6);
+    std::uint32_t num_tiles              = get_arg_val<uint32_t>(6);
 
     // single-tile chunks
     uint32_t chunk_size_bytes_0 = dataflow::get_tile_size(0);

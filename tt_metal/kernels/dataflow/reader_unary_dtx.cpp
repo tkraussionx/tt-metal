@@ -2,13 +2,13 @@
 #include "dataflow_kernel_api.h"
 
 void kernel_main() {
-    uint32_t src_addr_base  = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t src_noc_x = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t src_noc_y = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t num_blocks = dataflow::get_arg_val<uint32_t>(3);
-    uint32_t block_size_tiles = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t block_size_bytes = dataflow::get_arg_val<uint32_t>(5);
-    uint32_t address_map_l1_addr = dataflow::get_arg_val<uint32_t>(6);
+    uint32_t src_addr_base  = get_arg_val<uint32_t>(0);
+    uint32_t src_noc_x = get_arg_val<uint32_t>(1);
+    uint32_t src_noc_y = get_arg_val<uint32_t>(2);
+    uint32_t num_blocks = get_arg_val<uint32_t>(3);
+    uint32_t block_size_tiles = get_arg_val<uint32_t>(4);
+    uint32_t block_size_bytes = get_arg_val<uint32_t>(5);
+    uint32_t address_map_l1_addr = get_arg_val<uint32_t>(6);
 
     constexpr uint32_t cb_id_in0 = 0;
     volatile std::uint32_t* address_map = (volatile uint32_t*)(address_map_l1_addr);

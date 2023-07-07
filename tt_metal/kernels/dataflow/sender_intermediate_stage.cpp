@@ -4,13 +4,13 @@
 
 void kernel_main() {
 
-    uint32_t receiver_noc_x          = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t receiver_noc_y          = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t num_tiles               = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t sender_semaphore_addr   = dataflow::get_arg_val<uint32_t>(3);
-    uint32_t receiver_semaphore_addr = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t l1_valid_value_addr     = dataflow::get_arg_val<uint32_t>(5);
-    uint32_t num_repetitions         = dataflow::get_arg_val<uint32_t>(6);
+    uint32_t receiver_noc_x          = get_arg_val<uint32_t>(0);
+    uint32_t receiver_noc_y          = get_arg_val<uint32_t>(1);
+    uint32_t num_tiles               = get_arg_val<uint32_t>(2);
+    uint32_t sender_semaphore_addr   = get_arg_val<uint32_t>(3);
+    uint32_t receiver_semaphore_addr = get_arg_val<uint32_t>(4);
+    uint32_t l1_valid_value_addr     = get_arg_val<uint32_t>(5);
+    uint32_t num_repetitions         = get_arg_val<uint32_t>(6);
 
     // initialized by the host to 0 before program launch
     volatile uint32_t* sender_semaphore_addr_ptr = reinterpret_cast<volatile uint32_t*>(sender_semaphore_addr);

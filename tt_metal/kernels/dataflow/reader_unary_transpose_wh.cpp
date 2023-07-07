@@ -2,14 +2,14 @@
 #include "dataflow_kernel_api.h"
 
 void kernel_main() {
-    uint32_t src_addr  = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t src_noc_x = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t src_noc_y = dataflow::get_arg_val<uint32_t>(2);
+    uint32_t src_addr  = get_arg_val<uint32_t>(0);
+    uint32_t src_noc_x = get_arg_val<uint32_t>(1);
+    uint32_t src_noc_y = get_arg_val<uint32_t>(2);
     // skip 3 for compat with reader_unary_8bank, reader_unary
-    uint32_t N = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t Ht = dataflow::get_arg_val<uint32_t>(5);
-    uint32_t Wt = dataflow::get_arg_val<uint32_t>(6);
-    uint32_t HtWt = dataflow::get_arg_val<uint32_t>(7);
+    uint32_t N = get_arg_val<uint32_t>(4);
+    uint32_t Ht = get_arg_val<uint32_t>(5);
+    uint32_t Wt = get_arg_val<uint32_t>(6);
+    uint32_t HtWt = get_arg_val<uint32_t>(7);
     uint32_t HtWtTileBytes = HtWt*2048; // TODO(AP): assumed 16-bits
     uint32_t WtTileBytes = Wt*2048; // TODO(AP): assumed 16-bits
 

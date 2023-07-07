@@ -2,13 +2,13 @@
 
 void kernel_main() {
 
-    uint32_t dst_addr  = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t Ht = dataflow::get_arg_val<uint32_t>(3); // Index 3 to match with regular writer_unary
-    uint32_t Wt = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t Wt_read = dataflow::get_arg_val<uint32_t>(5);
-    uint32_t Wt_skip = dataflow::get_arg_val<uint32_t>(6);
-    uint32_t NC = dataflow::get_arg_val<uint32_t>(7);
-    uint32_t HtWt = dataflow::get_arg_val<uint32_t>(8); // HtWt of input tensor
+    uint32_t dst_addr  = get_arg_val<uint32_t>(0);
+    uint32_t Ht = get_arg_val<uint32_t>(3); // Index 3 to match with regular writer_unary
+    uint32_t Wt = get_arg_val<uint32_t>(4);
+    uint32_t Wt_read = get_arg_val<uint32_t>(5);
+    uint32_t Wt_skip = get_arg_val<uint32_t>(6);
+    uint32_t NC = get_arg_val<uint32_t>(7);
+    uint32_t HtWt = get_arg_val<uint32_t>(8); // HtWt of input tensor
 
     constexpr DataFormat data_format = static_cast<DataFormat>(get_compile_time_arg_val(0));
     constexpr bool dst_is_dram = get_compile_time_arg_val(1) == 1;

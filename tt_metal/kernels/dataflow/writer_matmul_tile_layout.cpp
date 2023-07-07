@@ -4,19 +4,19 @@ void kernel_main() {
 
 
     // out tensor args
-    uint32_t out_tensor_addr                         = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t out_tensor_start_tile_id                = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t out_tensor_stride_w                     = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t out_tensor_stride_h                     = dataflow::get_arg_val<uint32_t>(3);
-    uint32_t out_tensor_next_subblock_stride_w       = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t out_tensor_next_subblock_stride_h       = dataflow::get_arg_val<uint32_t>(5);
+    uint32_t out_tensor_addr                         = get_arg_val<uint32_t>(0);
+    uint32_t out_tensor_start_tile_id                = get_arg_val<uint32_t>(1);
+    uint32_t out_tensor_stride_w                     = get_arg_val<uint32_t>(2);
+    uint32_t out_tensor_stride_h                     = get_arg_val<uint32_t>(3);
+    uint32_t out_tensor_next_subblock_stride_w       = get_arg_val<uint32_t>(4);
+    uint32_t out_tensor_next_subblock_stride_h       = get_arg_val<uint32_t>(5);
 
     // out subblock args
-    uint32_t out_subblock_w                   = dataflow::get_arg_val<uint32_t>(6);
-    uint32_t out_subblock_h                   = dataflow::get_arg_val<uint32_t>(7);
-    uint32_t out_subblock_tile_count          = dataflow::get_arg_val<uint32_t>(8);
-    uint32_t out_num_subblocks_w              = dataflow::get_arg_val<uint32_t>(9);
-    uint32_t out_num_subblocks_h              = dataflow::get_arg_val<uint32_t>(10);
+    uint32_t out_subblock_w                   = get_arg_val<uint32_t>(6);
+    uint32_t out_subblock_h                   = get_arg_val<uint32_t>(7);
+    uint32_t out_subblock_tile_count          = get_arg_val<uint32_t>(8);
+    uint32_t out_num_subblocks_w              = get_arg_val<uint32_t>(9);
+    uint32_t out_num_subblocks_h              = get_arg_val<uint32_t>(10);
 
     // const args for tile-based bank-swizzled layout
     // could be added to the arg list in the future to test different

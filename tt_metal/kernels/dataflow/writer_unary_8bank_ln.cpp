@@ -1,15 +1,15 @@
 #include "dataflow_kernel_api.h"
 
 #define GENERATE_BCAST_SCALER 1
-#define TILE_OFFSET dataflow::get_arg_val<uint32_t>(4)
+#define TILE_OFFSET get_arg_val<uint32_t>(4)
 
 #ifndef BLOCK_SIZE // can be already defined via add_define
 #error "Block size must be defined"
 #endif
 
 void kernel_main() {
-    uint32_t dst_addr  = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t num_tiles = dataflow::get_arg_val<uint32_t>(3); // Index 3 to match with regular writer_unary
+    uint32_t dst_addr  = get_arg_val<uint32_t>(0);
+    uint32_t num_tiles = get_arg_val<uint32_t>(3); // Index 3 to match with regular writer_unary
 
     constexpr uint32_t cb_id_out0 = 16;
     constexpr uint32_t onetile = 1;

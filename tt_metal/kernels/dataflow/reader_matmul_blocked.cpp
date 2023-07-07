@@ -2,17 +2,17 @@
 #include "dataflow_kernel_api.h"
 
 void kernel_main() {
-    uint32_t src0_addr  = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t src0_noc_x = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t src0_noc_y = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t src1_addr  = dataflow::get_arg_val<uint32_t>(3);
-    uint32_t src1_noc_x = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t src1_noc_y = dataflow::get_arg_val<uint32_t>(5);
-    uint32_t num_blocks = dataflow::get_arg_val<uint32_t>(6);
-    uint32_t in0_block_tile_cnt  = dataflow::get_arg_val<uint32_t>(7);
-    uint32_t in1_block_tile_cnt  = dataflow::get_arg_val<uint32_t>(8);
-    uint32_t in0_block_size_bytes  = dataflow::get_arg_val<uint32_t>(9);
-    uint32_t in1_block_size_bytes  = dataflow::get_arg_val<uint32_t>(10);
+    uint32_t src0_addr  = get_arg_val<uint32_t>(0);
+    uint32_t src0_noc_x = get_arg_val<uint32_t>(1);
+    uint32_t src0_noc_y = get_arg_val<uint32_t>(2);
+    uint32_t src1_addr  = get_arg_val<uint32_t>(3);
+    uint32_t src1_noc_x = get_arg_val<uint32_t>(4);
+    uint32_t src1_noc_y = get_arg_val<uint32_t>(5);
+    uint32_t num_blocks = get_arg_val<uint32_t>(6);
+    uint32_t in0_block_tile_cnt  = get_arg_val<uint32_t>(7);
+    uint32_t in1_block_tile_cnt  = get_arg_val<uint32_t>(8);
+    uint32_t in0_block_size_bytes  = get_arg_val<uint32_t>(9);
+    uint32_t in1_block_size_bytes  = get_arg_val<uint32_t>(10);
 
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in1 = 1;

@@ -1,31 +1,31 @@
 #include <stdint.h>
 #include "dataflow_kernel_api.h"
 void kernel_main() {
-    uint32_t num_blocks = dataflow::get_arg_val<uint32_t>(0);
+    uint32_t num_blocks = get_arg_val<uint32_t>(0);
 
     // Arguments for in1
-    uint32_t src1_addr  = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t in1_block_w = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t in1_block_h = dataflow::get_arg_val<uint32_t>(3);
-    uint32_t in1_block_num_tiles = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t in1_tensor_start_tile_id           = dataflow::get_arg_val<uint32_t>(5);
-    uint32_t in1_tensor_stride_w                = dataflow::get_arg_val<uint32_t>(6);
-    uint32_t in1_tensor_stride_h                = dataflow::get_arg_val<uint32_t>(7);
-    uint32_t in1_tensor_next_block_stride       = dataflow::get_arg_val<uint32_t>(8);
+    uint32_t src1_addr  = get_arg_val<uint32_t>(1);
+    uint32_t in1_block_w = get_arg_val<uint32_t>(2);
+    uint32_t in1_block_h = get_arg_val<uint32_t>(3);
+    uint32_t in1_block_num_tiles = get_arg_val<uint32_t>(4);
+    uint32_t in1_tensor_start_tile_id           = get_arg_val<uint32_t>(5);
+    uint32_t in1_tensor_stride_w                = get_arg_val<uint32_t>(6);
+    uint32_t in1_tensor_stride_h                = get_arg_val<uint32_t>(7);
+    uint32_t in1_tensor_next_block_stride       = get_arg_val<uint32_t>(8);
 
     // Arguments for in0
-    uint32_t src0_addr  = dataflow::get_arg_val<uint32_t>(9);
-    uint32_t in0_block_num_tiles  = dataflow::get_arg_val<uint32_t>(10);
-    uint32_t in0_num_rows = dataflow::get_arg_val<uint32_t>(11); // in0 has whole column in 1 block
-    uint32_t in0_num_channel_sticks_per_row = dataflow::get_arg_val<uint32_t>(12);
-    uint32_t in0_num_channel_sticks_block_w = dataflow::get_arg_val<uint32_t>(13);
-    uint32_t in0_channel_stick_size = dataflow::get_arg_val<uint32_t>(14);
-    uint32_t in0_partial_channel_stick_size = dataflow::get_arg_val<uint32_t>(15);
-    uint32_t num_bytes_of_zeroes_per_read = dataflow::get_arg_val<uint32_t>(16);
-    uint32_t num_reads_of_zeroes = dataflow::get_arg_val<uint32_t>(17);
-    uint32_t num_bytes_of_zeroes_remainder = dataflow::get_arg_val<uint32_t>(18);
-    uint32_t address_map_l1_addr = dataflow::get_arg_val<uint32_t>(19);
-    uint32_t address_map_size = dataflow::get_arg_val<uint32_t>(20);
+    uint32_t src0_addr  = get_arg_val<uint32_t>(9);
+    uint32_t in0_block_num_tiles  = get_arg_val<uint32_t>(10);
+    uint32_t in0_num_rows = get_arg_val<uint32_t>(11); // in0 has whole column in 1 block
+    uint32_t in0_num_channel_sticks_per_row = get_arg_val<uint32_t>(12);
+    uint32_t in0_num_channel_sticks_block_w = get_arg_val<uint32_t>(13);
+    uint32_t in0_channel_stick_size = get_arg_val<uint32_t>(14);
+    uint32_t in0_partial_channel_stick_size = get_arg_val<uint32_t>(15);
+    uint32_t num_bytes_of_zeroes_per_read = get_arg_val<uint32_t>(16);
+    uint32_t num_reads_of_zeroes = get_arg_val<uint32_t>(17);
+    uint32_t num_bytes_of_zeroes_remainder = get_arg_val<uint32_t>(18);
+    uint32_t address_map_l1_addr = get_arg_val<uint32_t>(19);
+    uint32_t address_map_size = get_arg_val<uint32_t>(20);
 
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in1 = 1;

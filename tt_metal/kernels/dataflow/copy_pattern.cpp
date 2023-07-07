@@ -7,24 +7,24 @@
  * explicit flushes need to be used since the calls are non-blocking
  * */
 void kernel_main() {
-    std::uint32_t dram_buffer_src_addr_base  = dataflow::get_arg_val<uint32_t>(0);
-    std::uint32_t dram_src_noc_x             = dataflow::get_arg_val<uint32_t>(1);
-    std::uint32_t dram_src_noc_y             = dataflow::get_arg_val<uint32_t>(2);
+    std::uint32_t dram_buffer_src_addr_base  = get_arg_val<uint32_t>(0);
+    std::uint32_t dram_src_noc_x             = get_arg_val<uint32_t>(1);
+    std::uint32_t dram_src_noc_y             = get_arg_val<uint32_t>(2);
 
-    std::uint32_t l1_buffer_dst_addr_base    = dataflow::get_arg_val<uint32_t>(3);
-    std::uint32_t N                          = dataflow::get_arg_val<uint32_t>(4);
-    std::uint32_t C                          = dataflow::get_arg_val<uint32_t>(5);
-    std::uint32_t H                          = dataflow::get_arg_val<uint32_t>(6);
-    std::uint32_t W                          = dataflow::get_arg_val<uint32_t>(7);
-    std::uint32_t R                          = dataflow::get_arg_val<uint32_t>(8);
-    std::uint32_t S                          = dataflow::get_arg_val<uint32_t>(9);
-    std::uint32_t U                          = dataflow::get_arg_val<uint32_t>(10);
-    std::uint32_t V                          = dataflow::get_arg_val<uint32_t>(11);
+    std::uint32_t l1_buffer_dst_addr_base    = get_arg_val<uint32_t>(3);
+    std::uint32_t N                          = get_arg_val<uint32_t>(4);
+    std::uint32_t C                          = get_arg_val<uint32_t>(5);
+    std::uint32_t H                          = get_arg_val<uint32_t>(6);
+    std::uint32_t W                          = get_arg_val<uint32_t>(7);
+    std::uint32_t R                          = get_arg_val<uint32_t>(8);
+    std::uint32_t S                          = get_arg_val<uint32_t>(9);
+    std::uint32_t U                          = get_arg_val<uint32_t>(10);
+    std::uint32_t V                          = get_arg_val<uint32_t>(11);
     // The product of W and U, i.e. the offset to move to the next row after doing stride U
-    std::uint32_t WU                         = dataflow::get_arg_val<uint32_t>(12);
-    std::uint32_t log2_of_C                  = dataflow::get_arg_val<uint32_t>(13);
-    std::uint32_t log2_of_bytes_per_datum    = dataflow::get_arg_val<uint32_t>(14);
-    std::uint32_t num_repetitions            = dataflow::get_arg_val<uint32_t>(15);
+    std::uint32_t WU                         = get_arg_val<uint32_t>(12);
+    std::uint32_t log2_of_C                  = get_arg_val<uint32_t>(13);
+    std::uint32_t log2_of_bytes_per_datum    = get_arg_val<uint32_t>(14);
+    std::uint32_t num_repetitions            = get_arg_val<uint32_t>(15);
 
 
     for(std::uint32_t i = 0; i < num_repetitions; i++) {

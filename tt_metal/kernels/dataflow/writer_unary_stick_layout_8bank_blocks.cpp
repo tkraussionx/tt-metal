@@ -4,13 +4,13 @@
 
 void kernel_main() {
 
-    uint32_t dst_addr = dataflow::get_arg_val<uint32_t>(0);           // out_dram_addr
-    uint32_t num_rows_block = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t block_row_size = dataflow::get_arg_val<uint32_t>(2);     // in0_block_w * TILE_WIDTH * dtype_nbytes
-    uint32_t batch = dataflow::get_arg_val<uint32_t>(3);
-    uint32_t num_blocks_h = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t num_blocks_w = dataflow::get_arg_val<uint32_t>(5);
-    uint32_t output_row_size = dataflow::get_arg_val<uint32_t>(6);    // in1_width * dtype_nbytes
+    uint32_t dst_addr = get_arg_val<uint32_t>(0);           // out_dram_addr
+    uint32_t num_rows_block = get_arg_val<uint32_t>(1);
+    uint32_t block_row_size = get_arg_val<uint32_t>(2);     // in0_block_w * TILE_WIDTH * dtype_nbytes
+    uint32_t batch = get_arg_val<uint32_t>(3);
+    uint32_t num_blocks_h = get_arg_val<uint32_t>(4);
+    uint32_t num_blocks_w = get_arg_val<uint32_t>(5);
+    uint32_t output_row_size = get_arg_val<uint32_t>(6);    // in1_width * dtype_nbytes
 
     constexpr uint32_t cb_id_out0 = tt::CB::c_out0;
 

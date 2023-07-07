@@ -4,13 +4,13 @@
 //#include "debug_print.h"
 
 void kernel_main() {
-    uint32_t src_addr  = dataflow::get_arg_val<uint32_t>(0);
+    uint32_t src_addr  = get_arg_val<uint32_t>(0);
     // skip args 1,2,3 for compat with reader_unary, reader_unary_8bank
-    uint32_t N = dataflow::get_arg_val<uint32_t>(4); // args match the order of reader_unary
-    uint32_t Ht = dataflow::get_arg_val<uint32_t>(5);
-    uint32_t Wt = dataflow::get_arg_val<uint32_t>(6);
-    uint32_t HtWt = dataflow::get_arg_val<uint32_t>(7);
-    uint32_t scaler = dataflow::get_arg_val<uint32_t>(8);
+    uint32_t N = get_arg_val<uint32_t>(4); // args match the order of reader_unary
+    uint32_t Ht = get_arg_val<uint32_t>(5);
+    uint32_t Wt = get_arg_val<uint32_t>(6);
+    uint32_t HtWt = get_arg_val<uint32_t>(7);
+    uint32_t scaler = get_arg_val<uint32_t>(8);
 
     constexpr uint32_t cb_id_in0 = 0;
 

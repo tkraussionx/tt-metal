@@ -2,11 +2,11 @@
 
 void kernel_main() {
 
-    uint32_t dst_addr  = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t start_id = dataflow::get_arg_val<uint32_t>(3); // Index 3 to match with regular writer_unary
-    uint32_t num_contiguous_tiles = dataflow::get_arg_val<uint32_t>(4);
-    uint32_t batch_offset = dataflow::get_arg_val<uint32_t>(5);
-    uint32_t num_batch_tiles = dataflow::get_arg_val<uint32_t>(6);
+    uint32_t dst_addr  = get_arg_val<uint32_t>(0);
+    uint32_t start_id = get_arg_val<uint32_t>(3); // Index 3 to match with regular writer_unary
+    uint32_t num_contiguous_tiles = get_arg_val<uint32_t>(4);
+    uint32_t batch_offset = get_arg_val<uint32_t>(5);
+    uint32_t num_batch_tiles = get_arg_val<uint32_t>(6);
 
     constexpr uint32_t cb_id_out0 = 16;
 

@@ -1,7 +1,7 @@
 #include "dataflow_kernel_api.h"
 
 #define GENERATE_BCAST_SCALER 1
-#define TILE_OFFSET dataflow::get_arg_val<uint32_t>(4)
+#define TILE_OFFSET get_arg_val<uint32_t>(4)
 
 #ifndef BLOCK_SIZE // can be alread defined via add_define
 #error "Block size must be defined"
@@ -9,7 +9,7 @@
 
 void generate_bcast_scaler() {
     constexpr uint32_t cb_in_2 = 2;
-    uint32_t scaler = dataflow::get_arg_val<uint32_t>(8);
+    uint32_t scaler = get_arg_val<uint32_t>(8);
     union { float f; uint32_t u; } u; u.u = scaler;
     //DPRINT << "basic Scaler = " << F32(u.f) << ENDL();
     dataflow::cb_reserve_back(cb_in_2, 1);
@@ -26,7 +26,7 @@ void generate_bcast_scaler() {
 // HW-bcast scale for fused scale-attn-softmax
 void generate_inv_sqrt_hw_bcast_tile() {
     constexpr uint32_t scale_cb_id = 3;
-    union { float f; uint32_t u; } u; u.u = dataflow::get_arg_val<uint32_t>(2);
+    union { float f; uint32_t u; } u; u.u = get_arg_val<uint32_t>(2);
     //DPRINT << "NC fused mask scale = " << F32(u.f) << ENDL();
     dataflow::cb_reserve_back(scale_cb_id, 1);
     auto ptr = reinterpret_cast<uint16_t*>(dataflow::get_write_ptr(scale_cb_id));
@@ -39,8 +39,8 @@ void generate_inv_sqrt_hw_bcast_tile() {
 void kernel_main() {
     //auto s16 = SliceRange::hw0_32_16();
 
-    uint32_t src_addr  = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t num_tiles = dataflow::get_arg_val<uint32_t>(3); // same arg index as in reader_unary and in reader_unary_transpose_wh_8bank
+    uint32_t src_addr  = get_arg_val<uint32_t>(0);
+    uint32_t num_tiles = get_arg_val<uint32_t>(3); // same arg index as in reader_unary and in reader_unary_transpose_wh_8bank
 
     constexpr uint32_t cb_id_in0 = 0, cb_id_in1 = 1;
 
@@ -49,9 +49,9 @@ void kernel_main() {
     uint32_t tile_bytes = dataflow::get_tile_size(cb_id_in0);
 
     #if FUSED_SCALE_MASK
-    uint32_t partHt = dataflow::get_arg_val<uint32_t>(5);
-    uint32_t Wt = dataflow::get_arg_val<uint32_t>(6);
-    dataflow::InterleavedPow2AddrGen<MASK_DRAM> addr_mask {dataflow::get_arg_val<uint32_t>(7), 11};
+    uint32_t partHt = get_arg_val<uint32_t>(5);
+    uint32_t Wt = get_arg_val<uint32_t>(6);
+    dataflow::InterleavedPow2AddrGen<MASK_DRAM> addr_mask {get_arg_val<uint32_t>(7), 11};
 
     uint32_t ht = 0, wt = 0, nc = 0, wtblk = 0;
     constexpr uint32_t cb_id_attn = 4;

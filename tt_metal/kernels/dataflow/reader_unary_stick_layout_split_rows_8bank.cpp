@@ -6,14 +6,14 @@ void kernel_main() {
     // Constexpr
     constexpr uint32_t cb_id_in0                       = 0;
 
-    const uint32_t src_addr                   = dataflow::get_arg_val<uint32_t>(0);
-    const uint32_t num_sticks                 = dataflow::get_arg_val<uint32_t>(1);
-    const uint32_t stick_size                 = dataflow::get_arg_val<uint32_t>(2);
-    const uint32_t num_tiles_per_block        = dataflow::get_arg_val<uint32_t>(3);
-    const uint32_t block_width_size           = dataflow::get_arg_val<uint32_t>(4);
-    const uint32_t num_full_blocks_in_row     = dataflow::get_arg_val<uint32_t>(5);
-    // const uint32_t num_leftover_tiles_in_row  = dataflow::get_arg_val<uint32_t>(6);
-    // const uint32_t leftover_width_in_row      = dataflow::get_arg_val<uint32_t>(7);
+    const uint32_t src_addr                   = get_arg_val<uint32_t>(0);
+    const uint32_t num_sticks                 = get_arg_val<uint32_t>(1);
+    const uint32_t stick_size                 = get_arg_val<uint32_t>(2);
+    const uint32_t num_tiles_per_block        = get_arg_val<uint32_t>(3);
+    const uint32_t block_width_size           = get_arg_val<uint32_t>(4);
+    const uint32_t num_full_blocks_in_row     = get_arg_val<uint32_t>(5);
+    // const uint32_t num_leftover_tiles_in_row  = get_arg_val<uint32_t>(6);
+    // const uint32_t leftover_width_in_row      = get_arg_val<uint32_t>(7);
 
 
     // TODO(agrebenisan): This isn't good... here we are assuming
@@ -24,7 +24,7 @@ void kernel_main() {
 
     #define stick_size_is_power_of_two get_compile_time_arg_val(0) == 1
     #if (stick_size_is_power_of_two)
-    const uint32_t log_base_2_of_page_size = dataflow::get_arg_val<uint32_t>(8);
+    const uint32_t log_base_2_of_page_size = get_arg_val<uint32_t>(8);
     const dataflow::InterleavedPow2AddrGen<true> s = {
         .bank_base_address = src_addr,
 

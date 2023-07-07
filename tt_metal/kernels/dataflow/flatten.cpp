@@ -3,14 +3,14 @@
 
 void kernel_main() {
     // Kernel args
-    uint32_t src_addr                      = dataflow::get_arg_val<uint32_t>(0);
-    uint32_t src_noc_x                     = dataflow::get_arg_val<uint32_t>(1);
-    uint32_t src_noc_y                     = dataflow::get_arg_val<uint32_t>(2);
-    uint32_t num_tiles_r                   = dataflow::get_arg_val<uint32_t>(3);
-    uint32_t num_tiles_c                   = dataflow::get_arg_val<uint32_t>(4);
+    uint32_t src_addr                      = get_arg_val<uint32_t>(0);
+    uint32_t src_noc_x                     = get_arg_val<uint32_t>(1);
+    uint32_t src_noc_y                     = get_arg_val<uint32_t>(2);
+    uint32_t num_tiles_r                   = get_arg_val<uint32_t>(3);
+    uint32_t num_tiles_c                   = get_arg_val<uint32_t>(4);
 
     // How many bytes along a row in the original tensor
-    uint32_t num_bytes_per_tensor_row      = dataflow::get_arg_val<uint32_t>(5);
+    uint32_t num_bytes_per_tensor_row      = get_arg_val<uint32_t>(5);
 
     /*
         Constants
