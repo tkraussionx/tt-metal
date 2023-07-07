@@ -99,3 +99,4 @@ env pytest tests/python_api_testing/models/yolov3 -k detection_model
 env pytest tests/python_api_testing/models/yolov3 -k upsample_module
 
 env pytest tests/python_api_testing/models/nanogpt -k nanogpt_model_real
+env tests/python_api_testing/models/squeezenet_1/tests/test_squeezenet_1.py
