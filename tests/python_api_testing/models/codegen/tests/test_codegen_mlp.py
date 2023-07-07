@@ -24,35 +24,31 @@ from utility_functions_new import (
     torch_to_tt_tensor_rm,
 )
 
-def run_nanogpt_mlp_test(device, pcc):
+def run_codegen_mlp_test(device, pcc):
 
     model_hf = CodeGenModel.from_pretrained('Salesforce/codegen-350M-mono')
     sd = model_hf.state_dict()
-    print(sd)
     model_hf.eval()
     block = 0
     base_address = f"h.{block}.mlp"
 
     torch.manual_seed(0)
 
-    test_in = torch.rand(1, 32, 768)
+    test_in = torch.rand(1, 1024, 1024)
 
     tt_test_in = torch2tt_tensor(test_in, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
 
 
-    config = CodeGenConfig()
+    config = CodeGenConfig('Salesforce/codegen-350M-mono')
 
-    inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
-
-
-    tt_mlp = codegen_mlp.TtCodeGenMLP(base_address, config, inner_dim, sd, device)
+    tt_mlp = codegen_mlp.TtCodeGenMLP(base_address, config, sd, device)
 
     tt_out = tt_mlp.forward(
         tt_test_in
     )
 
 
-    pt_mlp = model_hf.transformer.h[block].mlp
+    pt_mlp = model_hf.h[block].mlp
     pt_out = pt_mlp.forward(test_in)
 
     tt_out_converted = tt2torch_tensor(tt_out)
@@ -75,8 +71,9 @@ def run_nanogpt_mlp_test(device, pcc):
         ),
     ),
 )
-def test_nanogpt_mlp(pcc):
+def test_codegen_mlp(pcc):
     device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
     tt_lib.device.InitializeDevice(device)
-    run_nanogpt_mlp_test(device, pcc)
+    tt_lib.device.SetDefaultDevice(device)
+    run_codegen_mlp_test(device, pcc)
     tt_lib.device.CloseDevice(device)
