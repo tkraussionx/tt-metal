@@ -15,6 +15,9 @@
 #include "debug_print.h"
 #include "hostdevcommon/common_runtime_address_map.h"
 #include "hostdevcommon/common_values.hpp"
+
+extern uint8_t loading_noc;
+
 /*
  * This is a trick with Doxygen to force it to not expand the always_inline
  * attribute property. We turn on predefine-only expansion with MACRO_EXPANSION
@@ -30,9 +33,9 @@
 #define FORCE_INLINE inline __attribute__((always_inline))
 #endif
 
-CBWriteInterface cb_write_interface[NUM_CIRCULAR_BUFFERS];
-CBReadInterface cb_read_interface[NUM_CIRCULAR_BUFFERS];
-CBReadInterface cq_read_interface;
+extern CBWriteInterface cb_write_interface[NUM_CIRCULAR_BUFFERS];
+extern CBReadInterface cb_read_interface[NUM_CIRCULAR_BUFFERS];
+extern CBReadInterface cq_read_interface;
 
 namespace dataflow_internal {
 /**
@@ -45,13 +48,13 @@ namespace dataflow_internal {
 
 // dram channel to x/y lookup tables
 // The number of banks is generated based off device we are running on --> controlled by allocator
-uint8_t dram_bank_to_noc_x[NUM_DRAM_BANKS];
-uint8_t dram_bank_to_noc_y[NUM_DRAM_BANKS];
-uint32_t dram_bank_to_noc_xy[NUM_DRAM_BANKS];
+extern uint8_t dram_bank_to_noc_x[NUM_DRAM_BANKS];
+extern uint8_t dram_bank_to_noc_y[NUM_DRAM_BANKS];
+extern uint32_t dram_bank_to_noc_xy[NUM_DRAM_BANKS];
 
-uint8_t l1_bank_to_noc_x[NUM_L1_BANKS];
-uint8_t l1_bank_to_noc_y[NUM_L1_BANKS];
-uint32_t l1_bank_to_noc_xy[NUM_L1_BANKS];
+extern uint8_t l1_bank_to_noc_x[NUM_L1_BANKS];
+extern uint8_t l1_bank_to_noc_y[NUM_L1_BANKS];
+extern uint32_t l1_bank_to_noc_xy[NUM_L1_BANKS];
 
 // GS RISC-V RTL bug workaround (l1 reads followed by local mem reads causes a hang)
 // in ncrisc.cc/brisc.cc: volatile uint32_t local_mem_barrier;
@@ -73,18 +76,6 @@ void init_l1_bank_to_noc_coord_lookup_tables() {
     init_l1_bank_coords(l1_bank_to_noc_x, l1_bank_to_noc_y, bank_to_l1_offset);
     for (uint16_t i = 0; i < NUM_L1_BANKS; i++) {
         l1_bank_to_noc_xy[i] = ((NOC_Y(l1_bank_to_noc_y[i]) << NOC_ADDR_NODE_ID_BITS) | NOC_X(l1_bank_to_noc_x[i])) << (NOC_ADDR_LOCAL_BITS - 32);
-    }
-}
-
-// only BRISC to call this
-void init_sync_registers() {
-    volatile uint* tiles_received_ptr;
-    volatile uint* tiles_acked_ptr;
-    for (uint32_t operand = 0; operand < NUM_CIRCULAR_BUFFERS; operand++) {
-        tiles_received_ptr = get_cb_tiles_received_ptr(operand);
-        tiles_received_ptr[0] = 0;
-        tiles_acked_ptr = get_cb_tiles_acked_ptr(operand);
-        tiles_acked_ptr[0] = 0;
     }
 }
 
@@ -134,14 +125,6 @@ void setup_cq_read_write_interface() {
     cq_read_interface.fifo_limit = fifo_addr + fifo_size - 1;
     cq_read_interface.fifo_rd_ptr = fifo_addr;
     cq_read_interface.fifo_size = fifo_size;
-
-    // Setting up here rather than in init sync registers function
-    // since these are not registers, rather they are L1 values
-    // Read ptr
-    get_cq_read_ptr()[0] = fifo_addr;
-
-    // Write ptr
-    get_cq_write_ptr()[0] = fifo_addr;
 }
 
 inline void wait_for_sync_register_value(std::uint32_t addr, std::int32_t val) {
