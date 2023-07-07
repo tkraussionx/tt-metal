@@ -54,7 +54,7 @@ void kernel_main() {
     constexpr uint32_t cb_id_attn = 4;
     uint32_t mask_tile_bytes = get_tile_size(cb_id_attn);
 
-    const InterleavedAddrGenFast<mask_is_dram> addr_mask = {
+    const dataflow::InterleavedAddrGenFast<mask_is_dram> addr_mask = {
         .bank_base_address = mask_addr,
         .page_size = mask_tile_bytes,
         .data_format = mask_data_format
