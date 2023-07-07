@@ -288,7 +288,7 @@ FORCE_INLINE void launch_program(u32 num_workers, volatile u32*& command_ptr) {
     for (u32 i = 0; i < num_workers; i++) {
         u64 worker_core_noc_coord = u64(command_ptr[i]) << 32;
         u64 deassert_addr = worker_core_noc_coord | TENSIX_SOFT_RESET_ADDR;
-        noc_semaphore_set_remote(DEASSERT_RESET_SRC_L1_ADDR, deassert_addr);
+        dataflow_internal::noc_semaphore_set_remote(DEASSERT_RESET_SRC_L1_ADDR, deassert_addr);
     }
     dataflow::noc_async_write_barrier();
 
@@ -299,7 +299,7 @@ FORCE_INLINE void launch_program(u32 num_workers, volatile u32*& command_ptr) {
         u64 worker_core_noc_coord = u64(command_ptr[i]) << 32;
         u64 assert_addr = worker_core_noc_coord | TENSIX_SOFT_RESET_ADDR;
 
-        noc_semaphore_set_remote(ASSERT_RESET_SRC_L1_ADDR, assert_addr);
+        dataflow_internal::noc_semaphore_set_remote(ASSERT_RESET_SRC_L1_ADDR, assert_addr);
     }
     dataflow::noc_async_write_barrier();
 }

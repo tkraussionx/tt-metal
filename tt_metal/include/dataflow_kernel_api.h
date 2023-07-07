@@ -20,7 +20,17 @@
 #define FORCE_INLINE inline __attribute__((always_inline))
 #endif
 
-/** @file */
+/**
+ * Returns the value of a constexpr argument from kernel_compile_time_args array provided during kernel creation using
+ * CreateDataMovementKernel, CreateComputeKernel calls.
+ *
+ * Return value: constexpr uint32_t
+ *
+ * | Argument              | Description                        | Type                  | Valid Range | Required |
+ * |-----------------------|------------------------------------|-----------------------|-------------|----------|
+ * | arg_idx               | The index of the argument          | uint32_t              | 0 to 31     | True     |
+ */
+#define get_compile_time_arg_val(arg_idx) KERNEL_COMPILE_TIME_ARG_ ## arg_idx
 
 namespace dataflow {
 
@@ -61,18 +71,6 @@ FORCE_INLINE T get_arg_val(int arg_idx) {
     static_assert("Error: only 4B args are supported" && sizeof(T) == 4);
     return *((volatile T*)(dataflow_internal::get_arg_addr(arg_idx)));
 }
-
-/**
- * Returns the value of a constexpr argument from kernel_compile_time_args array provided during kernel creation using
- * CreateDataMovementKernel, CreateComputeKernel calls.
- *
- * Return value: constexpr uint32_t
- *
- * | Argument              | Description                        | Type                  | Valid Range | Required |
- * |-----------------------|------------------------------------|-----------------------|-------------|----------|
- * | arg_idx               | The index of the argument          | uint32_t              | 0 to 31     | True     |
- */
-#define get_compile_time_arg_val(arg_idx) KERNEL_COMPILE_TIME_ARG_##arg_idx
 
 // replicated from ckernels_defs.h, which are currently not included in BRISC / NCRISC builds
 // TODO: look into ckernels_defs.h included in NCRISC/BRISC builds
@@ -791,7 +789,7 @@ void cq_wait_front() {
     u32 fifo_wr_ptr;
     do {
         fifo_wr_ptr = get_cq_write_ptr()[0];
-    } while (dataflow_internal::cq_read_interface.fifo_rd_ptr == fifo_wr_ptr);
+    } while (cq_read_interface.fifo_rd_ptr == fifo_wr_ptr);
 }
 
 FORCE_INLINE
@@ -800,10 +798,10 @@ void cq_pop_front(u32 cmd_size_B) {
     // host and device are consistent in updating their pointers in this way, so they won't get out of sync. The
     // alignment is necessary because we can only read/write from/to 32B aligned addrs in host<->dev communication.
     u32 cmd_size_16B = (((cmd_size_B - 1) | 31) + 1) >> 4;
-    dataflow_internal::cq_read_interface.fifo_rd_ptr += cmd_size_16B;
+    cq_read_interface.fifo_rd_ptr += cmd_size_16B;
 
-    if (dataflow_internal::cq_read_interface.fifo_rd_ptr > dataflow_internal::cq_read_interface.fifo_limit) {
-        dataflow_internal::cq_read_interface.fifo_rd_ptr -= dataflow_internal::cq_read_interface.fifo_size;
+    if (cq_read_interface.fifo_rd_ptr > cq_read_interface.fifo_limit) {
+        cq_read_interface.fifo_rd_ptr -= cq_read_interface.fifo_size;
     }
 
     uint32_t pcie_noc_x = NOC_X(0);
@@ -812,7 +810,7 @@ void cq_pop_front(u32 cmd_size_B) {
         get_noc_addr(pcie_noc_x, pcie_noc_y, HOST_CQ_READ_PTR);  // For now, we are writing to host hugepages at offset
                                                                  // 0 (nothing else currently writing to it)
 
-    u32 rd_ptr = dataflow_internal::cq_read_interface.fifo_rd_ptr;
+    u32 rd_ptr = cq_read_interface.fifo_rd_ptr;
     volatile u32* rd_ptr_ptr = get_cq_read_ptr();
 
     rd_ptr_ptr[0] = rd_ptr;

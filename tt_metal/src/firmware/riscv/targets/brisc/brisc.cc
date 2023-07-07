@@ -352,7 +352,7 @@ kernel_main();
 
     u64 dispatch_addr = get_noc_addr(1, 11, DISPATCH_MESSAGE_ADDR);
 
-    noc_semaphore_inc(dispatch_addr, 1);
+    dataflow_internal::noc_semaphore_inc(dispatch_addr, 1);
 #endif
 
     while (true);

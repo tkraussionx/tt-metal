@@ -97,14 +97,14 @@ void kernel_main() {
             dataflow::cb_reserve_back(cb_id_in1, in1_block_num_tiles);
 
             // Set in1 semaphore value to INVALID
-            noc_semaphore_set(in1_mcast_receiver_semaphore_addr_ptr, INVALID);
+            dataflow_internal::noc_semaphore_set(in1_mcast_receiver_semaphore_addr_ptr, INVALID);
 
             // Atomic increment source core counter
             uint64_t in1_mcast_sender_semaphore_noc_addr = dataflow::get_noc_addr(in1_mcast_sender_noc_x, in1_mcast_sender_noc_y, in1_mcast_sender_semaphore_addr);
-            noc_semaphore_inc(in1_mcast_sender_semaphore_noc_addr, 1);
+            dataflow_internal::noc_semaphore_inc(in1_mcast_sender_semaphore_noc_addr, 1);
 
             // wait on in1 semaphore value to become VALID (set by mcast sender after it multicasts data)
-            noc_semaphore_wait(in1_mcast_receiver_semaphore_addr_ptr, VALID);
+            dataflow_internal::noc_semaphore_wait(in1_mcast_receiver_semaphore_addr_ptr, VALID);
 
             dataflow::cb_push_back(cb_id_in1, in1_block_num_tiles);
         }
@@ -114,14 +114,14 @@ void kernel_main() {
             dataflow::cb_reserve_back(cb_id_in3, in3_block_w);
 
             // Set in1 semaphore value to INVALID
-            noc_semaphore_set(in3_mcast_receiver_semaphore_addr_ptr, INVALID);
+            dataflow_internal::noc_semaphore_set(in3_mcast_receiver_semaphore_addr_ptr, INVALID);
 
             // Atomic increment source core counter
             uint64_t in3_mcast_sender_semaphore_noc_addr = dataflow::get_noc_addr(in3_mcast_sender_noc_x, in3_mcast_sender_noc_y, in3_mcast_sender_semaphore_addr);
-            noc_semaphore_inc(in3_mcast_sender_semaphore_noc_addr, 1);
+            dataflow_internal::noc_semaphore_inc(in3_mcast_sender_semaphore_noc_addr, 1);
 
             // wait on in1 semaphore value to become VALID (set by mcast sender after it multicasts data)
-            noc_semaphore_wait(in3_mcast_receiver_semaphore_addr_ptr, VALID);
+            dataflow_internal::noc_semaphore_wait(in3_mcast_receiver_semaphore_addr_ptr, VALID);
 
             dataflow::cb_push_back(cb_id_in3, in3_block_w);
         #endif

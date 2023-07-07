@@ -86,14 +86,14 @@ void kernel_main() {
             dataflow::cb_reserve_back(cb_id_in0, in0_block_num_tiles);
 
             // Set in0 semaphore value to INVALID
-            noc_semaphore_set(in0_mcast_receiver_semaphore_addr_ptr, INVALID);
+            dataflow_internal::noc_semaphore_set(in0_mcast_receiver_semaphore_addr_ptr, INVALID);
 
             // Atomic increment source core counter
             uint64_t in0_mcast_sender_semaphore_noc_addr = dataflow::get_noc_addr(in0_mcast_sender_noc_x, in0_mcast_sender_noc_y, in0_mcast_sender_semaphore_addr);
-            noc_semaphore_inc(in0_mcast_sender_semaphore_noc_addr, 1);
+            dataflow_internal::noc_semaphore_inc(in0_mcast_sender_semaphore_noc_addr, 1);
 
             // wait on in0 semaphore value to become VALID (set by mcast sender after it multicasts data)
-            noc_semaphore_wait(in0_mcast_receiver_semaphore_addr_ptr, VALID);
+            dataflow_internal::noc_semaphore_wait(in0_mcast_receiver_semaphore_addr_ptr, VALID);
 
             kernel_profiler::mark_time_once(8, &one_time_noc_wait);
 

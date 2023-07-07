@@ -26,13 +26,13 @@ void kernel_main() {
             dataflow::cb_reserve_back(cb_id, block_size_tiles);
 
             // Reset receiver's own semaphore value to INVALID
-            noc_semaphore_set(receiver_semaphore_addr_ptr, INVALID);
+            dataflow_internal::noc_semaphore_set(receiver_semaphore_addr_ptr, INVALID);
 
             // Tell sender we're ready -- atomic increment sender's semaphore
-            noc_semaphore_inc(sender_semaphore_noc_addr, 1);
+            dataflow_internal::noc_semaphore_inc(sender_semaphore_noc_addr, 1);
 
             // Wait on receiver's own semaphore value to become VALID (set by sender after it sends the data)
-            noc_semaphore_wait(receiver_semaphore_addr_ptr, VALID);
+            dataflow_internal::noc_semaphore_wait(receiver_semaphore_addr_ptr, VALID);
 
             dataflow::cb_push_back(cb_id, block_size_tiles);
         }

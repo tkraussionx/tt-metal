@@ -30,16 +30,14 @@
 #define FORCE_INLINE inline __attribute__((always_inline))
 #endif
 
-/** @file */
+CBWriteInterface cb_write_interface[NUM_CIRCULAR_BUFFERS];
+CBReadInterface cb_read_interface[NUM_CIRCULAR_BUFFERS];
+CBReadInterface cq_read_interface;
 
 namespace dataflow_internal {
 /**
  * \private
  */
-CBWriteInterface cb_write_interface[NUM_CIRCULAR_BUFFERS];
-CBReadInterface cb_read_interface[NUM_CIRCULAR_BUFFERS];
-
-CBReadInterface cq_read_interface;
 
 // Use VC 1 for unicast writes, and VC 4 for mcast writes
 #define NOC_UNICAST_WRITE_VC 1
@@ -258,7 +256,7 @@ void noc_async_write_multicast_loopback_src(
  * A blocking call that waits until the value of a local L1 memory address on
  * the Tensix core executing this function becomes equal to a target value.
  * This L1 memory address is used as a semaphore of size 4 Bytes, as a
- * synchronization mechanism. Also, see *noc_semaphore_set*.
+ * synchronization mechanism. Also, see *dataflow_internal::noc_semaphore_set*.
  *
  * Return value: None
  *
@@ -278,7 +276,7 @@ void noc_semaphore_wait(volatile uint32_t* sem_addr, uint32_t val) {
  * Sets the value of a local L1 memory address on the Tensix core executing
  * this function to a specific value. This L1 memory address is used as a
  * semaphore of size 4 Bytes, as a synchronization mechanism. Also, see
- * *noc_semaphore_wait*.
+ * *dataflow_internal::noc_semaphore_wait*.
  *
  * Return value: None
  *

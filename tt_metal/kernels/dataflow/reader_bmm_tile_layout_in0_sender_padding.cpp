@@ -97,11 +97,11 @@ void kernel_main() {
 
             // wait until all in0 mcast destinations have atomically incremented the in0 semaphore_addr (i.e. its value should be in0_mcast_num_dests), then reset
             // the semaphore_addr value back to zero for the next block
-            noc_semaphore_wait(in0_mcast_sender_semaphore_addr_ptr, in0_mcast_num_dests);
-            noc_semaphore_set(in0_mcast_sender_semaphore_addr_ptr, 0);
+            dataflow_internal::noc_semaphore_wait(in0_mcast_sender_semaphore_addr_ptr, in0_mcast_num_dests);
+            dataflow_internal::noc_semaphore_set(in0_mcast_sender_semaphore_addr_ptr, 0);
 
             // Now we have the block in the CB address, we can mcast to dests!
-            uint64_t in0_multicast_data_addr = get_noc_multicast_addr(
+            uint64_t in0_multicast_data_addr = dataflow_internal::get_noc_multicast_addr(
             in0_mcast_dest_noc_end_x,
             in0_mcast_dest_noc_end_y,
             in0_mcast_dest_noc_start_x,
@@ -114,14 +114,14 @@ void kernel_main() {
             // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
 
             // We should also multicast the flag to destinations
-            uint64_t in0_mcast_receiver_semaphore_noc_addr = get_noc_multicast_addr(
+            uint64_t in0_mcast_receiver_semaphore_noc_addr = dataflow_internal::get_noc_multicast_addr(
             in0_mcast_dest_noc_end_x,
             in0_mcast_dest_noc_end_y,
             in0_mcast_dest_noc_start_x,
             in0_mcast_dest_noc_start_y,
             in0_mcast_receiver_semaphore_addr);
             // num_dests must not include source, since we are NOT really doing a local copy!
-            noc_semaphore_set_multicast(in0_mcast_receiver_semaphore_addr, in0_mcast_receiver_semaphore_noc_addr, in0_mcast_num_dests);
+            dataflow_internal::noc_semaphore_set_multicast(in0_mcast_receiver_semaphore_addr, in0_mcast_receiver_semaphore_noc_addr, in0_mcast_num_dests);
 
             dataflow::cb_push_back(cb_id_in0, in0_block_num_tiles);
         }

@@ -140,12 +140,12 @@ void kernel_main() {
 
             // wait until all in1 mcast destinations have atomically incremented the in1 semaphore_addr (i.e. its value should be in0_mcast_num_dests), then reset
             // the semaphore_addr value back to zero for the next block
-            noc_semaphore_wait(in1_mcast_sender_semaphore_addr_ptr, in1_mcast_num_dests);
-            noc_semaphore_set(in1_mcast_sender_semaphore_addr_ptr, 0);
+            dataflow_internal::noc_semaphore_wait(in1_mcast_sender_semaphore_addr_ptr, in1_mcast_num_dests);
+            dataflow_internal::noc_semaphore_set(in1_mcast_sender_semaphore_addr_ptr, 0);
             kernel_profiler::mark_time_once(21, &one_time_noc_wait);
 
             // Now we have the block in the CB address, we can mcast to dests!
-            uint64_t in1_multicast_data_addr = get_noc_multicast_addr(
+            uint64_t in1_multicast_data_addr = dataflow_internal::get_noc_multicast_addr(
             in1_mcast_dest_noc_start_x,
             in1_mcast_dest_noc_start_y,
             in1_mcast_dest_noc_end_x,
@@ -155,14 +155,14 @@ void kernel_main() {
             dataflow::noc_async_write_multicast(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_dests);
             dataflow::noc_async_write_barrier();
             // We should also multicast the flag to destinations
-            uint64_t in1_mcast_receiver_semaphore_noc_addr = get_noc_multicast_addr(
+            uint64_t in1_mcast_receiver_semaphore_noc_addr = dataflow_internal::get_noc_multicast_addr(
             in1_mcast_dest_noc_start_x,
             in1_mcast_dest_noc_start_y,
             in1_mcast_dest_noc_end_x,
             in1_mcast_dest_noc_end_y,
             in1_mcast_receiver_semaphore_addr);
             // num_dests must not include source, since we are NOT really doing a local copy!
-            noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_dests);
+            dataflow_internal::noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_dests);
 
             dataflow::cb_push_back(cb_id_in0, in0_block_num_tiles);
             dataflow::cb_push_back(cb_id_in1, in1_block_num_tiles);

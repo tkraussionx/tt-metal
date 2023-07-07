@@ -59,7 +59,7 @@ void kernel_main() {
         for (uint32_t deassert = 0; deassert < num_resets; deassert++) {
             uint64_t dst_addr = *reinterpret_cast<volatile uint64_t*>(copy_desc_info_addr);
             copy_desc_info_addr += 2; // uint64_t embedded as two uint32_t's since NOC address embedded
-            noc_semaphore_set_remote(DEASSERT_RESET_SRC_L1_ADDR, dst_addr);
+            dataflow_internal::noc_semaphore_set_remote(DEASSERT_RESET_SRC_L1_ADDR, dst_addr);
         }
 
         copy_desc_info_addr = reset_copy_desc_start;
@@ -68,7 +68,7 @@ void kernel_main() {
         for (uint32_t reset = 0; reset < num_resets; reset++) {
             uint64_t dst_addr = *reinterpret_cast<volatile uint64_t*>(copy_desc_info_addr);
             copy_desc_info_addr += 2; // uint64_t embedded as two uint32_t's since NOC address embedded
-            noc_semaphore_set_remote(ASSERT_RESET_SRC_L1_ADDR, dst_addr);
+            dataflow_internal::noc_semaphore_set_remote(ASSERT_RESET_SRC_L1_ADDR, dst_addr);
         }
     }
 }

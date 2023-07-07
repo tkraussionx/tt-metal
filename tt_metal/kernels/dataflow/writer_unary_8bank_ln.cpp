@@ -1,3 +1,5 @@
+#include "dataflow_kernel_api.h"
+
 #define GENERATE_BCAST_SCALER 1
 #define TILE_OFFSET dataflow::get_arg_val<uint32_t>(4)
 

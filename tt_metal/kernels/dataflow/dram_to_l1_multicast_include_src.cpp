@@ -22,7 +22,7 @@ void kernel_main() {
     dataflow::noc_async_read_barrier();
 
     // multicast local L1 buffer to all destination cores
-    uint64_t dst_noc_multicast_addr = get_noc_multicast_addr(
+    uint64_t dst_noc_multicast_addr = dataflow_internal::get_noc_multicast_addr(
         dst_noc_x_start,
         dst_noc_y_start,
         dst_noc_x_end,
