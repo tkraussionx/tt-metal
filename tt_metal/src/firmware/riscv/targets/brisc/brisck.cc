@@ -84,7 +84,7 @@ void kernel_launch() {
 #if defined(TT_METAL_DEVICE_DISPATCH_MODE)
     dispatch_addr = (my_x[loading_noc] == NOC_X(1) && my_y[loading_noc] == NOC_Y(11)) ?
         0 :
-        get_noc_addr(1, 11, DISPATCH_MESSAGE_ADDR);
+        dataflow::get_noc_addr(1, 11, DISPATCH_MESSAGE_ADDR);
 #else
     dispatch_addr = 0;
 #endif

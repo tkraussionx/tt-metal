@@ -103,8 +103,10 @@ inline __attribute__((always_inline)) constexpr static std::uint32_t MUL_WITH_TI
     };
 }
 
+#ifdef DATA_FORMATS_DEFINED
 // this API is used by both the reader and writer side of the CB
-// it uses unpack_src_format, but because unpack_src_format == pack_dst_format, we can use either
+// it uses unpack_src_format, but because unpack_src_format == pack_dst_format for a given CB,
+// we can use either.
 // TODO: this can be made constexpr?
 inline std::int32_t get_tile_size(const std::int32_t operand) {
     std::uint32_t input = operand;
@@ -115,6 +117,7 @@ inline std::int32_t get_tile_size(const std::int32_t operand) {
     // return bytes
     return num_words << 4;
 }
+#endif // DATA_FORMATS_DEFINED
 
 namespace dataflow {
 
