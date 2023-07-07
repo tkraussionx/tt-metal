@@ -2,39 +2,6 @@
 #include "dataflow_kernel_api.h"
 //#include "debug_print.h"
 
-// int __multiply(int n, int m) {
-//     int res = 0, count = 0;
-//     while (m) {
-//         if ((m & 1) == 1)
-//             res += (n << count);
-//         count++;
-//         m >>= 1;
-//     }
-//     return res;
-// }
-
-// int __min(int a, int b) {
-//     if (a < b)
-//         return a;
-//     else
-//         return b;
-// }
-
-// // TODO(AP): duplication with pad_h_rm
-// inline __attribute__((always_inline))
-// std::uint64_t get_noc_addr_rm(
-//     uint32_t row, uint32_t col, uint32_t bank_base_address, uint32_t num_used_banks, uint32_t W)
-// {
-//     uint32_t bank_id = row & (num_used_banks - 1);
-//     uint32_t dram_x = dram_bank_to_noc_x[bank_id];
-//     uint32_t dram_y = dram_bank_to_noc_y[bank_id];
-//     // >>3 is because of 8 banks
-//     // TODO(AP): replace multiply with increments
-//     uint32_t dram_addr = bank_base_address + (__multiply(row>>3, (W<<1))) + (col<<1);
-//     std::uint64_t noc_addr = dataflow::get_noc_addr(dram_x, dram_y, dram_addr);
-//     return noc_addr;
-// }
-
 void kernel_main() {
     // Kernel args
     // This kernel accepts a RM row-interleaved tensor laid out as NC,H,(Wt*32)-RM
