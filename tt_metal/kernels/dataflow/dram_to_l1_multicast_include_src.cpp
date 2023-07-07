@@ -28,6 +28,6 @@ void kernel_main() {
         dst_noc_x_end,
         dst_noc_y_end,
         dst_addr);
-    dataflow::noc_async_write_multicast_loopback_src(local_addr, dst_noc_multicast_addr, src_buffer_size, num_dests);
+    dataflow_internal::noc_async_write_multicast_loopback_src(local_addr, dst_noc_multicast_addr, src_buffer_size, num_dests);
     dataflow::noc_async_write_barrier();
 }
