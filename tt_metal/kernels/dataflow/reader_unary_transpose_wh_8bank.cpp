@@ -16,7 +16,7 @@ void kernel_main() {
 
     // ublocks size defined in tiles
     constexpr uint32_t onetile = 1;
-    uint32_t tile_bytes = dataflow::get_tile_size(cb_id_in0);
+    uint32_t tile_bytes = get_tile_size(cb_id_in0);
 
     if (scaler != 0) {
         union { float f; uint32_t u; } u; u.u = scaler;

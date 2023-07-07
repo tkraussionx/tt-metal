@@ -10,7 +10,7 @@ void kernel_main() {
 
     constexpr bool IS_DRAM = false;
     const uint32_t ublock_size_tiles = 1;
-    uint32_t tile_bytes = dataflow::get_tile_size(cb_id);
+    uint32_t tile_bytes = get_tile_size(cb_id);
     dataflow::InterleavedAddrGen<IS_DRAM> dst_addrgen = {
         .bank_base_address = dst_addr_base,
         .page_size = page_size,

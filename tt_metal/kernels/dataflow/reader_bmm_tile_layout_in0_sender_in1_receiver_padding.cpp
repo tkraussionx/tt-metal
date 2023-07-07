@@ -71,7 +71,7 @@ void kernel_main() {
     constexpr uint32_t cb_id_in1 = 1;
     constexpr uint32_t cb_id_in2 = 2; // Dummy cb containing one tile of zeros for padding
 
-    uint32_t single_tile_size_bytes = dataflow::get_tile_size(cb_id_in0);
+    uint32_t single_tile_size_bytes = get_tile_size(cb_id_in0);
 
     uint32_t l1_write_addr_in0;
 

@@ -18,7 +18,7 @@ void kernel_main() {
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in1 = 1;
 
-    uint32_t tile_size = dataflow::get_tile_size(cb_id_in0);
+    uint32_t tile_size = get_tile_size(cb_id_in0);
 
     #define tile_size_is_pow2 get_compile_time_arg_val(0) == 1
     #if (tile_size_is_pow2)

@@ -28,7 +28,7 @@ void kernel_main() {
     constexpr uint32_t cb_id_out0 = 16;
 
     // single-tile
-    uint32_t single_tile_size_bytes = dataflow::get_tile_size(cb_id_out0);
+    uint32_t single_tile_size_bytes = get_tile_size(cb_id_out0);
 
     const dataflow::InterleavedAddrGenFast<out_is_dram> s = {
         .bank_base_address = out_tensor_addr,

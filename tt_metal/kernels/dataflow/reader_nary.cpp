@@ -17,7 +17,7 @@ void kernel_main() {
         uint32_t src_noc_y = get_arg_val<uint32_t>(4 + i * 4);
         uint32_t cb_id_in  = get_arg_val<uint32_t>(5 + i * 4);
 
-        uint32_t ublock_size_bytes = dataflow::get_tile_size(cb_id_in);
+        uint32_t ublock_size_bytes = get_tile_size(cb_id_in);
 
         // read a ublock of tiles from src to CB, and then push the ublock to unpacker
         for (uint32_t i = 0; i<num_tiles_per_read; i += ublock_size_tiles) {

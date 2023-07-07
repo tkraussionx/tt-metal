@@ -32,7 +32,7 @@ void kernel_main() {
 
     // ublocks size defined in tiles
     constexpr uint32_t onetile = 1;
-    uint32_t tile_bytes = dataflow::get_tile_size(cb_id_in0);
+    uint32_t tile_bytes = get_tile_size(cb_id_in0);
 
     uint32_t i_tile_N = first_tile; // first tile in current batch
     uint32_t i_tile = 0;

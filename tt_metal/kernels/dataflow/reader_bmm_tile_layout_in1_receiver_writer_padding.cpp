@@ -79,7 +79,7 @@ void kernel_main() {
 
     // WRITER
     // single-tile
-    uint32_t single_tile_size_bytes = dataflow::get_tile_size(cb_id_out0);
+    uint32_t single_tile_size_bytes = get_tile_size(cb_id_out0);
 
     volatile uint32_t* in1_mcast_receiver_semaphore_addr_ptr = reinterpret_cast<volatile uint32_t*>(in1_mcast_receiver_semaphore_addr);
 

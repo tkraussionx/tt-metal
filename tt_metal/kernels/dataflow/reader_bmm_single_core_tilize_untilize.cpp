@@ -35,7 +35,7 @@ void kernel_main() {
     constexpr uint32_t dtype_nbytes = 2;
     constexpr uint32_t TILE_HEIGHT = 32;                            // TODO: use a common source of truth
     constexpr uint32_t TILE_WIDTH = 32;                             // TODO: use a common source of truth
-    const uint32_t tile_size_bytes = dataflow::get_tile_size(in0_cb_id);      // == dataflow::get_tile_size(in1_cb_id)
+    const uint32_t tile_size_bytes = get_tile_size(in0_cb_id);      // == get_tile_size(in1_cb_id)
 
     const dataflow::InterleavedAddrGen<true> s0 = {
         .bank_base_address = in0_addr,

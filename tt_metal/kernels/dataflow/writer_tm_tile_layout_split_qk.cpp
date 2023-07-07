@@ -19,7 +19,7 @@ void kernel_main() {
     constexpr uint32_t out_num_tiles_per_tensor = get_compile_time_arg_val(2);
 
     constexpr uint32_t cb_id_out0 = 0;  // same as cb_id_in0
-    uint32_t single_tile_size_bytes = dataflow::get_tile_size(out_tensor_tile_id);
+    uint32_t single_tile_size_bytes = get_tile_size(out_tensor_tile_id);
 
     constexpr bool out_is_dram_bool = out_is_dram == 1;
 #define tile_dtype_is_bfloat16 get_compile_time_arg_val(0) == 1

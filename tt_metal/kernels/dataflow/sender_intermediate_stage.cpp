@@ -21,7 +21,7 @@ void kernel_main() {
     constexpr uint32_t cb_id            = get_compile_time_arg_val(0);
     constexpr uint32_t block_size_tiles = get_compile_time_arg_val(1);
 
-    uint32_t block_size_bytes = dataflow::get_tile_size(cb_id) * block_size_tiles;
+    uint32_t block_size_bytes = get_tile_size(cb_id) * block_size_tiles;
 
     uint64_t receiver_semaphore_noc_addr = dataflow::get_noc_addr(receiver_noc_x, receiver_noc_y, receiver_semaphore_addr);
 

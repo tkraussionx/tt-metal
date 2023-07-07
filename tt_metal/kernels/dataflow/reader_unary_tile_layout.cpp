@@ -10,7 +10,7 @@ void kernel_main() {
 
     constexpr uint32_t cb_id_in0 = 0;
 
-    constexpr uint32_t tile_size_bytes = dataflow::get_tile_size(cb_id_in0);
+    constexpr uint32_t tile_size_bytes = get_tile_size(cb_id_in0);
     // const args for tile-based bank-swizzled layout
     // could be added to the arg list in the future to test different
     // bank-swizzling configurations

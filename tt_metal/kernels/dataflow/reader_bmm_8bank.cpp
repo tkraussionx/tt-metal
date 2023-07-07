@@ -27,7 +27,7 @@ void kernel_main() {
     constexpr uint32_t cb_id_in1 = 1;
 
     constexpr uint32_t onetile = 1;
-    uint32_t tile_bytes = dataflow::get_tile_size(cb_id_in0);
+    uint32_t tile_bytes = get_tile_size(cb_id_in0);
 
     uint32_t itileA_batch = 0;
     uint32_t itileB_batch = 0;

@@ -8,7 +8,7 @@ void kernel_main() {
     uint32_t num_tiles = get_arg_val<uint32_t>(3);
 
     // single-tile ublocks
-    uint32_t ublock_size_bytes = dataflow::get_tile_size(cb_id);
+    uint32_t ublock_size_bytes = get_tile_size(cb_id);
     uint32_t ublock_size_tiles = 1;
 
     for (uint32_t i = 0; i < num_tiles; i += ublock_size_tiles) {

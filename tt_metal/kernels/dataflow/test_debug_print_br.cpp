@@ -29,7 +29,7 @@ void kernel_main() {
         DPRINT << RAISE{x + y*20 + 20000};
 
     // single-tile chunks
-    uint32_t chunk_size_bytes = dataflow::get_tile_size(operand);
+    uint32_t chunk_size_bytes = get_tile_size(operand);
     uint32_t chunk_size_tiles = 1;
 
     for (uint32_t i = 0; i < num_tiles; i += chunk_size_tiles) {

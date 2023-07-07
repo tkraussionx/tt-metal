@@ -9,7 +9,7 @@ void kernel_main() {
     constexpr uint32_t cb_id_out0 = 16;
 
     // single-tile ublocks
-    uint32_t ublock_size_bytes = dataflow::get_tile_size(cb_id_out0);
+    uint32_t ublock_size_bytes = get_tile_size(cb_id_out0);
     uint32_t ublock_size_tiles = 1;
 
     for (uint32_t i = 0; i < num_tiles; i += ublock_size_tiles) {

@@ -42,7 +42,7 @@ void kernel_main() {
 
     // ublocks size defined in tiles
     constexpr uint32_t onetile = 1;
-    uint32_t src0_tile_bytes = dataflow::get_tile_size(cb_id_in0);
+    uint32_t src0_tile_bytes = get_tile_size(cb_id_in0);
 
     #if FUSED_SCALE_MASK
     uint32_t partHt = get_arg_val<uint32_t>(5);

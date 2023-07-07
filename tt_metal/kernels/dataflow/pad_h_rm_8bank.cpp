@@ -20,7 +20,7 @@ void kernel_main() {
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in1 = 1;
     // How many bytes along a row in the original tensor
-    uint32_t num_bytes_per_tile = dataflow::get_tile_size(cb_id_in0);
+    uint32_t num_bytes_per_tile = get_tile_size(cb_id_in0);
     uint32_t num_bytes_per_tile_row = 64;
     uint32_t Wt = (W>>5);
 

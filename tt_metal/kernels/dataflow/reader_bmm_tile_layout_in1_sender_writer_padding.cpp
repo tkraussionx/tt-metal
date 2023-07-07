@@ -99,8 +99,8 @@ void kernel_main() {
     // WRITER
     constexpr uint32_t cb_id_out0 = 16;
 
-    uint32_t single_tile_size_bytes = dataflow::get_tile_size(cb_id_in0);
-    // uint32_t single_tile_size_bytes = dataflow::get_tile_size(cb_id_out0); // Should be same
+    uint32_t single_tile_size_bytes = get_tile_size(cb_id_in0);
+    // uint32_t single_tile_size_bytes = get_tile_size(cb_id_out0); // Should be same
 
     uint32_t l1_write_addr_in1;
     uint32_t l1_zeros_addr_in2 = dataflow::get_write_ptr(cb_id_in2);

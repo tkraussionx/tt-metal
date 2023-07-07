@@ -21,7 +21,7 @@ void kernel_main() {
     constexpr uint32_t num_bytes_for_sending_eight_tile_rows        = num_bytes_per_tile_row * 8;
     constexpr uint32_t num_bytes_for_sending_seven_tile_rows        = num_bytes_per_tile_row * 7;
     constexpr uint32_t num_bytes_for_sending_twenty_four_tile_rows  = num_bytes_per_tile_row * 24;
-    uint32_t num_bytes_per_tile                                     = dataflow::get_tile_size(cb_id_in0);
+    uint32_t num_bytes_per_tile                                     = get_tile_size(cb_id_in0);
 
     // Variables
     uint64_t replicate_dest_addr;

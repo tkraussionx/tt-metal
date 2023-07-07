@@ -27,7 +27,7 @@ void kernel_main() {
 
     // ublocks size defined in tiles
     constexpr uint32_t onetile = 1;
-    uint32_t tile_bytes = dataflow::get_tile_size(cb_id_in0);
+    uint32_t tile_bytes = get_tile_size(cb_id_in0);
 
     #ifdef KERNEL_COMPILE_TIME_ARG_0
     constexpr bool read_from_dram = get_compile_time_arg_val(0);

@@ -103,6 +103,19 @@ inline __attribute__((always_inline)) constexpr static std::uint32_t MUL_WITH_TI
     };
 }
 
+// this API is used by both the reader and writer side of the CB
+// it uses unpack_src_format, but because unpack_src_format == pack_dst_format, we can use either
+// TODO: this can be made constexpr?
+inline std::int32_t get_tile_size(const std::int32_t operand) {
+    std::uint32_t input = operand;
+
+    // L1 16B words
+    std::uint32_t num_words = GET_L1_TILE_SIZE((uint)unpack_src_format[input]);
+
+    // return bytes
+    return num_words << 4;
+}
+
 namespace dataflow {
 
 #ifdef DATA_FORMATS_DEFINED
@@ -165,19 +178,6 @@ void cb_push_back(const std::int32_t operand, const std::int32_t num_tiles) {
         // TODO: change this to fifo_wr_ptr
         cb_write_interface[input].fifo_wr_ptr -= cb_write_interface[input].fifo_size;
     }
-}
-
-// this API is used by both the reader and writer side of the CB
-// it uses unpack_src_format, but because unpack_src_format == pack_dst_format, we can use either
-// TODO: this can be made constexpr?
-inline std::int32_t get_tile_size(const std::int32_t operand) {
-    std::uint32_t input = operand;
-
-    // L1 16B words
-    std::uint32_t num_words = GET_L1_TILE_SIZE((uint)unpack_src_format[input]);
-
-    // return bytes
-    return num_words << 4;
 }
 
 /**

@@ -44,7 +44,7 @@ void kernel_main() {
     constexpr uint32_t in0_cb_id = tt::CB::c_in0;
     constexpr uint32_t in1_cb_id = tt::CB::c_in1;
 
-    uint32_t tile_size_bytes = dataflow::get_tile_size(in0_cb_id);
+    uint32_t tile_size_bytes = get_tile_size(in0_cb_id);
 
 
     constexpr uint32_t tile_size_pow2_exponent = 11;

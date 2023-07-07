@@ -24,7 +24,7 @@ void kernel_main() {
     constexpr uint32_t cb_id_out0 = 0; // same as cb_id_in0
     #endif
 
-    uint32_t single_tile_size_bytes = dataflow::get_tile_size(cb_id_out0);
+    uint32_t single_tile_size_bytes = get_tile_size(cb_id_out0);
 
     constexpr bool out_is_dram_bool = out_is_dram == 1;
     #define tile_dtype_is_bfloat16 get_compile_time_arg_val(0) == 1

@@ -20,7 +20,7 @@ void kernel_main() {
         .bank_base_address = out_addr,
         .log_base_2_of_page_size = tile_size_pow2_exponent
     };
-    const uint32_t tile_size_bytes = dataflow::get_tile_size(out_cb_id);
+    const uint32_t tile_size_bytes = get_tile_size(out_cb_id);
 
     uint32_t out_sbh_start_tile_id = 0;
     for(uint32_t sbh = 0; sbh < out_num_subblocks_h; ++sbh) {

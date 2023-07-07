@@ -24,7 +24,7 @@ void kernel_main() {
 
     constexpr uint32_t out_num_tensors = 2;
     constexpr uint32_t cb_id_in0 = 0;
-    uint32_t single_tile_size_bytes = dataflow::get_tile_size(in0_tensor_tile_id);
+    uint32_t single_tile_size_bytes = get_tile_size(in0_tensor_tile_id);
 
     constexpr bool in0_is_dram_bool = in0_is_dram == 1;
 

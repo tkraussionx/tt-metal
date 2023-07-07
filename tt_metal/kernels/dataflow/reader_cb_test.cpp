@@ -27,7 +27,7 @@ void kernel_main() {
 
     constexpr uint32_t cb_id = get_compile_time_arg_val(0);
     constexpr uint32_t ublock_size_tiles = get_compile_time_arg_val(1);
-    uint32_t ublock_size_bytes = dataflow::get_tile_size(cb_id) * ublock_size_tiles;
+    uint32_t ublock_size_bytes = get_tile_size(cb_id) * ublock_size_tiles;
 
     read_and_push_to_cb(cb_id, num_tiles_per_cb, ublock_size_tiles, ublock_size_bytes,
                               dram_src_noc_x, dram_src_noc_y, dram_buffer_src_addr);

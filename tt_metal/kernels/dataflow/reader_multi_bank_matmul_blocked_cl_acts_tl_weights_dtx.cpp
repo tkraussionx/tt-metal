@@ -29,7 +29,7 @@ void kernel_main() {
 
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in1 = 1;
-    uint32_t single_tile_size_bytes = dataflow::get_tile_size(cb_id_in0);
+    uint32_t single_tile_size_bytes = get_tile_size(cb_id_in0);
     volatile std::uint32_t* channels_address_map = (volatile uint32_t*)(address_map_l1_addr);
     constexpr uint32_t num_elements_in_zeros_buffer = MEM_ZEROS_SIZE / sizeof(uint32_t);
     volatile uint32_t* zero_base_ptr = reinterpret_cast<volatile uint32_t*>(MEM_ZEROS_BASE);

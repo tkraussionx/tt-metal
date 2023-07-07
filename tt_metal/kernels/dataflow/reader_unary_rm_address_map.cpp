@@ -21,7 +21,7 @@ void kernel_main() {
         *(zero_base_ptr + zero_base_offset) = 0;
     }
     uint64_t zeros_base_noc_addr = dataflow::get_noc_addr(MEM_ZEROS_BASE);
-    uint32_t block_size_bytes = dataflow::get_tile_size(cb_id_in0) * block_size_tiles;
+    uint32_t block_size_bytes = get_tile_size(cb_id_in0) * block_size_tiles;
     uint32_t row_size_bytes = 64 * block_size_tiles;
     uint32_t index = 0;
     // read a block of tiles row-wise from src to CB, and then push the block to unpacker

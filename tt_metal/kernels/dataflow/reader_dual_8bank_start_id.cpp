@@ -13,8 +13,8 @@ void kernel_main() {
     constexpr uint32_t cb_id_in1 = 1;
 
     // single-tile ublocks
-    uint32_t ublock_size_bytes_0 = dataflow::get_tile_size(cb_id_in0);
-    uint32_t ublock_size_bytes_1 = dataflow::get_tile_size(cb_id_in1);
+    uint32_t ublock_size_bytes_0 = get_tile_size(cb_id_in0);
+    uint32_t ublock_size_bytes_1 = get_tile_size(cb_id_in1);
     uint32_t ublock_size_tiles = 1;
 
     uint32_t l1_write_addr_in0;

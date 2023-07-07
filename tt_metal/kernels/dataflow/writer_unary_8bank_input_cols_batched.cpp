@@ -17,7 +17,7 @@ void kernel_main() {
 
     // single-tile ublocks
     constexpr uint32_t onetile = 1;
-    uint32_t tile_bytes = dataflow::get_tile_size(cb_id_out0);
+    uint32_t tile_bytes = get_tile_size(cb_id_out0);
 
     const dataflow::InterleavedAddrGenFast<dst_is_dram> s = {
         .bank_base_address = dst_addr,

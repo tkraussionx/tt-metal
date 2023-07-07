@@ -75,7 +75,7 @@ void kernel_main() {
     constexpr uint32_t cb_id_beta = 6;
 
     // ublocks size defined in tiles
-    uint32_t tile_bytes = dataflow::get_tile_size(cb_id_in0);
+    uint32_t tile_bytes = get_tile_size(cb_id_in0);
 
     #define tile_dtype_is_bfloat16 get_compile_time_arg_val(0) == 1
     #if (tile_dtype_is_bfloat16)

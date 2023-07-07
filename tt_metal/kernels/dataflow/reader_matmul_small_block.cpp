@@ -13,8 +13,8 @@ void kernel_main() {
     std::uint32_t num_tiles              = get_arg_val<uint32_t>(6);
 
     // single-tile chunks
-    uint32_t chunk_size_bytes_0 = dataflow::get_tile_size(0);
-    uint32_t chunk_size_bytes_1 = dataflow::get_tile_size(1);
+    uint32_t chunk_size_bytes_0 = get_tile_size(0);
+    uint32_t chunk_size_bytes_1 = get_tile_size(1);
     uint32_t chunk_size_tiles = 1;
 
     uint32_t l1_write_addr_in0;
