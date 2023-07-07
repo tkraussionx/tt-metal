@@ -1,3 +1,5 @@
+#include "dataflow_kernel_api.h"
+
 #define GENERATE_BCAST_SCALER 1
 #define TILE_OFFSET dataflow::get_arg_val<uint32_t>(4)
 
@@ -49,7 +51,7 @@ void kernel_main() {
     #if FUSED_SCALE_MASK
     uint32_t partHt = dataflow::get_arg_val<uint32_t>(5);
     uint32_t Wt = dataflow::get_arg_val<uint32_t>(6);
-    dataflow::InterleavedPow2AddrGen<MASK_DRAM> addr_mask {get_arg_val<uint32_t>(7), 11};
+    dataflow::InterleavedPow2AddrGen<MASK_DRAM> addr_mask {dataflow::get_arg_val<uint32_t>(7), 11};
 
     uint32_t ht = 0, wt = 0, nc = 0, wtblk = 0;
     constexpr uint32_t cb_id_attn = 4;

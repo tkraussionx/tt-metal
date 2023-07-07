@@ -350,7 +350,7 @@ kernel_main();
 #if defined(TT_METAL_DEVICE_DISPATCH_MODE) and not defined(IS_DISPATCH_KERNEL)
     // Notify dispatcher core that it has completed
 
-    u64 dispatch_addr = get_noc_addr(1, 11, DISPATCH_MESSAGE_ADDR);
+    u64 dispatch_addr = dataflow::get_noc_addr(1, 11, DISPATCH_MESSAGE_ADDR);
 
     dataflow_internal::noc_semaphore_inc(dispatch_addr, 1);
 #endif

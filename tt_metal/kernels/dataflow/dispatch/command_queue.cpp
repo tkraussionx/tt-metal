@@ -12,8 +12,8 @@ void kernel_main() {
 
     // These are totally temporary until PK checks in his changes for
     // separating kernels from firmware
-    noc_prepare_deassert_reset_flag(DEASSERT_RESET_SRC_L1_ADDR);
-    noc_prepare_assert_reset_flag(ASSERT_RESET_SRC_L1_ADDR);
+    dataflow_internal::noc_prepare_deassert_reset_flag(DEASSERT_RESET_SRC_L1_ADDR);
+    dataflow_internal::noc_prepare_assert_reset_flag(ASSERT_RESET_SRC_L1_ADDR);
 
     // Write my own NOC address to local L1 so that when I dispatch kernels,
     // they will know how to let me know they have finished
@@ -24,7 +24,7 @@ void kernel_main() {
 
     while (true) {
         volatile u32* command_ptr = reinterpret_cast<volatile u32*>(command_start_addr);
-        cq_wait_front();
+        dataflow::cq_wait_front();
         // Hardcoded for time being, need to clean this up
         uint64_t src_noc_addr = dataflow::get_noc_addr(NOC_X(0), NOC_Y(4), cq_read_interface.fifo_rd_ptr << 4);
 
@@ -60,6 +60,6 @@ void kernel_main() {
         finish_program(finish);
 
         // This tells the dispatch core how to update its read pointer
-        cq_pop_front(data_size_in_bytes + DeviceCommand::size_in_bytes());
+        dataflow::cq_pop_front(data_size_in_bytes + DeviceCommand::size_in_bytes());
     }
 }
