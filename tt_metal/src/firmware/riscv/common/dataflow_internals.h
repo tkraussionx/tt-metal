@@ -37,7 +37,6 @@ extern CBWriteInterface cb_write_interface[NUM_CIRCULAR_BUFFERS];
 extern CBReadInterface cb_read_interface[NUM_CIRCULAR_BUFFERS];
 extern CBReadInterface cq_read_interface;
 
-namespace dataflow_internal {
 /**
  * \private
  */
@@ -55,6 +54,8 @@ extern uint32_t dram_bank_to_noc_xy[NUM_DRAM_BANKS];
 extern uint8_t l1_bank_to_noc_x[NUM_L1_BANKS];
 extern uint8_t l1_bank_to_noc_y[NUM_L1_BANKS];
 extern uint32_t l1_bank_to_noc_xy[NUM_L1_BANKS];
+
+namespace dataflow_internal {
 
 // GS RISC-V RTL bug workaround (l1 reads followed by local mem reads causes a hang)
 // in ncrisc.cc/brisc.cc: volatile uint32_t local_mem_barrier;

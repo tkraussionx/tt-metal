@@ -373,21 +373,21 @@ struct InterleavedAddrGen {
             addr =
                 mulsi3(udivsi3_const_divisor<NUM_DRAM_BANKS>(id), this->page_size) + this->bank_base_address + offset;
             addr += bank_to_dram_offset[bank_id];
-            noc_x = dataflow_internal::dram_bank_to_noc_x[bank_id];
-            noc_y = dataflow_internal::dram_bank_to_noc_y[bank_id];
+            noc_x = dram_bank_to_noc_x[bank_id];
+            noc_y = dram_bank_to_noc_y[bank_id];
 #else
             uint32_t bank_id = id & (NUM_DRAM_BANKS - 1);
             addr = mulsi3(id >> LOG_BASE_2_OF_NUM_DRAM_BANKS, this->page_size) + this->bank_base_address + offset;
             addr += bank_to_dram_offset[bank_id];
-            noc_x = dataflow_internal::dram_bank_to_noc_x[bank_id];
-            noc_y = dataflow_internal::dram_bank_to_noc_y[bank_id];
+            noc_x = dram_bank_to_noc_x[bank_id];
+            noc_y = dram_bank_to_noc_y[bank_id];
 #endif
         } else {
             uint32_t bank_id = id & (NUM_L1_BANKS - 1);
             addr = mulsi3(id >> LOG_BASE_2_OF_NUM_L1_BANKS, this->page_size) + this->bank_base_address + offset;
             addr += bank_to_l1_offset[bank_id];
-            noc_x = dataflow_internal::l1_bank_to_noc_x[bank_id];
-            noc_y = dataflow_internal::l1_bank_to_noc_y[bank_id];
+            noc_x = l1_bank_to_noc_x[bank_id];
+            noc_y = l1_bank_to_noc_y[bank_id];
         }
 
         uint64_t noc_addr = dataflow_internal::get_noc_addr_helper(noc_x, noc_y, addr);
@@ -416,21 +416,21 @@ struct InterleavedPow2AddrGen {
             addr =
                 (udivsi3_const_divisor<NUM_DRAM_BANKS>(id) << this->log_base_2_of_page_size) + this->bank_base_address;
             addr += bank_to_dram_offset[bank_id];
-            noc_x = dataflow_internal::dram_bank_to_noc_x[bank_id];
-            noc_y = dataflow_internal::dram_bank_to_noc_y[bank_id];
+            noc_x = dram_bank_to_noc_x[bank_id];
+            noc_y = dram_bank_to_noc_y[bank_id];
 #else
             uint32_t bank_id = id & (NUM_DRAM_BANKS - 1);
             addr = ((id >> LOG_BASE_2_OF_NUM_DRAM_BANKS) << this->log_base_2_of_page_size) + this->bank_base_address;
             addr += bank_to_dram_offset[bank_id];
-            noc_x = dataflow_internal::dram_bank_to_noc_x[bank_id];
-            noc_y = dataflow_internal::dram_bank_to_noc_y[bank_id];
+            noc_x = dram_bank_to_noc_x[bank_id];
+            noc_y = dram_bank_to_noc_y[bank_id];
 #endif
         } else {
             uint32_t bank_id = id & (NUM_L1_BANKS - 1);
             addr = ((id >> LOG_BASE_2_OF_NUM_L1_BANKS) << this->log_base_2_of_page_size) + this->bank_base_address;
             addr += bank_to_l1_offset[bank_id];
-            noc_x = dataflow_internal::l1_bank_to_noc_x[bank_id];
-            noc_y = dataflow_internal::l1_bank_to_noc_y[bank_id];
+            noc_x = l1_bank_to_noc_x[bank_id];
+            noc_y = l1_bank_to_noc_y[bank_id];
         }
 
         uint64_t noc_addr = dataflow_internal::get_noc_addr_helper(noc_x, noc_y, addr);
@@ -455,23 +455,23 @@ struct InterleavedAddrGenFast {
             addr = MUL_WITH_TILE_SIZE((uint)this->data_format, udivsi3_const_divisor<NUM_DRAM_BANKS>(id)) +
                    this->bank_base_address + offset;
             addr += bank_to_dram_offset[bank_id];
-            noc_x = dataflow_internal::dram_bank_to_noc_x[bank_id];
-            noc_y = dataflow_internal::dram_bank_to_noc_y[bank_id];
+            noc_x = dram_bank_to_noc_x[bank_id];
+            noc_y = dram_bank_to_noc_y[bank_id];
 #else
             uint32_t bank_id = id & (NUM_DRAM_BANKS - 1);
             addr = MUL_WITH_TILE_SIZE((uint)this->data_format, id >> LOG_BASE_2_OF_NUM_DRAM_BANKS) +
                    this->bank_base_address + offset;
             addr += bank_to_dram_offset[bank_id];
-            noc_x = dataflow_internal::dram_bank_to_noc_x[bank_id];
-            noc_y = dataflow_internal::dram_bank_to_noc_y[bank_id];
+            noc_x = dram_bank_to_noc_x[bank_id];
+            noc_y = dram_bank_to_noc_y[bank_id];
 #endif
         } else {
             uint32_t bank_id = id & (NUM_L1_BANKS - 1);
             addr = MUL_WITH_TILE_SIZE((uint)this->data_format, id >> LOG_BASE_2_OF_NUM_L1_BANKS) +
                    this->bank_base_address + offset;
             addr += bank_to_l1_offset[bank_id];
-            noc_x = dataflow_internal::l1_bank_to_noc_x[bank_id];
-            noc_y = dataflow_internal::l1_bank_to_noc_y[bank_id];
+            noc_x = l1_bank_to_noc_x[bank_id];
+            noc_y = l1_bank_to_noc_y[bank_id];
         }
 
         uint64_t noc_addr = dataflow_internal::get_noc_addr_helper(noc_x, noc_y, addr);
@@ -489,20 +489,20 @@ struct InterleavedAddrGenFast {
             src_addr = MUL_WITH_TILE_SIZE((uint)this->data_format, udivsi3_const_divisor<NUM_DRAM_BANKS>(id)) +
                        this->bank_base_address + offset;
             src_addr += bank_to_dram_offset[bank_id];
-            src_noc_xy = dataflow_internal::dram_bank_to_noc_xy[bank_id];
+            src_noc_xy = dram_bank_to_noc_xy[bank_id];
 #else
             uint32_t bank_id = id & (NUM_DRAM_BANKS - 1);
             src_addr = MUL_WITH_TILE_SIZE((uint)this->data_format, id >> LOG_BASE_2_OF_NUM_DRAM_BANKS) +
                        this->bank_base_address + offset;
             src_addr += bank_to_dram_offset[bank_id];
-            src_noc_xy = dataflow_internal::dram_bank_to_noc_xy[bank_id];
+            src_noc_xy = dram_bank_to_noc_xy[bank_id];
 #endif
         } else {
             uint32_t bank_id = id & (NUM_L1_BANKS - 1);
             src_addr = MUL_WITH_TILE_SIZE((uint)this->data_format, id >> LOG_BASE_2_OF_NUM_L1_BANKS) +
                        this->bank_base_address + offset;
             src_addr += bank_to_l1_offset[bank_id];
-            src_noc_xy = dataflow_internal::l1_bank_to_noc_xy[bank_id];
+            src_noc_xy = l1_bank_to_noc_xy[bank_id];
         }
 
         while (!ncrisc_noc_fast_read_ok(loading_noc, NCRISC_RD_CMD_BUF))
@@ -531,13 +531,13 @@ struct InterleavedAddrGenFast {
                         this->bank_base_address;
             dest_addr += bank_to_dram_offset[bank_id];
 #endif
-            dest_noc_xy = dataflow_internal::dram_bank_to_noc_xy[bank_id];
+            dest_noc_xy = dram_bank_to_noc_xy[bank_id];
         } else {
             uint32_t bank_id = id & (NUM_L1_BANKS - 1);
             dest_addr =
                 MUL_WITH_TILE_SIZE((uint)this->data_format, id >> LOG_BASE_2_OF_NUM_L1_BANKS) + this->bank_base_address;
             dest_addr += bank_to_l1_offset[bank_id];
-            dest_noc_xy = dataflow_internal::l1_bank_to_noc_xy[bank_id];
+            dest_noc_xy = l1_bank_to_noc_xy[bank_id];
         }
 
         while (!ncrisc_noc_fast_write_ok(loading_noc, NCRISC_WR_REG_CMD_BUF))
@@ -618,8 +618,8 @@ std::uint64_t get_noc_addr(std::uint32_t addr) {
 FORCE_INLINE
 std::uint64_t get_noc_addr_rm(uint32_t row, uint32_t col, uint32_t bank_base_address, uint32_t num_used_banks, uint32_t W) {
     uint32_t bank_id = row & (num_used_banks - 1);
-    uint32_t dram_x = dataflow_internal::dram_bank_to_noc_x[bank_id];
-    uint32_t dram_y = dataflow_internal::dram_bank_to_noc_y[bank_id];
+    uint32_t dram_x = dram_bank_to_noc_x[bank_id];
+    uint32_t dram_y = dram_bank_to_noc_y[bank_id];
     // >>3 is because of 8 banks
     // TODO(AP): replace multiply with increments
     uint32_t dram_addr = bank_base_address + (__multiply(row>>3, (W<<1))) + (col<<1);
