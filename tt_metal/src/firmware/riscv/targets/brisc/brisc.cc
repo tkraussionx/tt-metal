@@ -13,7 +13,6 @@
 #include "ckernel_globals.h"
 #include "tools/profiler/kernel_profiler.hpp"
 
-
 #include "debug_print.h"
 
 // TODO: commonize this w/ the runtime -- it's the same configs
@@ -33,27 +32,18 @@ volatile uint32_t* instrn_buf[MAX_THREADS];
 volatile uint32_t* pc_buf[MAX_THREADS];
 volatile uint32_t* mailbox[MAX_THREADS];
 
-volatile uint32_t local_mem_barrier;
+volatile uint32_t local_mem_barrier __attribute__((used));
 
-uint8_t my_x[NUM_NOCS];
-uint8_t my_y[NUM_NOCS];
-#ifdef NOC_INDEX
-uint8_t loading_noc = NOC_INDEX;
-#else
-uint8_t loading_noc = 0;  // BRISC uses NOC-0
-#endif
+uint8_t my_x[NUM_NOCS] __attribute__((used));
+uint8_t my_y[NUM_NOCS] __attribute__((used));
+uint8_t noc_size_x __attribute__((used));
+uint8_t noc_size_y __attribute__((used));
+uint8_t kernel_noc_id_var __attribute__((used));
+uint64_t dispatch_addr __attribute__((used));
 
-uint8_t noc_size_x;
-uint8_t noc_size_y;
-
-// to reduce the amount of code changes, both BRISC and NRISCS instatiate these counter for both NOCs (ie NUM_NOCS)
-// however, atm NCRISC uses only NOC-1 and BRISC uses only NOC-0
-// this way we achieve full separation of counters / cmd_buffers etc.
-uint32_t noc_reads_num_issued[NUM_NOCS];
-uint32_t noc_nonposted_writes_num_issued[NUM_NOCS];
-uint32_t noc_nonposted_writes_acked[NUM_NOCS];
-
-int post_index;
+namespace kernel_profiler {
+uint32_t wIndex __attribute__((used));
+}
 
 bool staggered_start_enabled() {
     uint32_t soft_reset_0 = READ_REG(RISCV_DEBUG_REG_SOFT_RESET_0);
@@ -204,9 +194,6 @@ void device_setup() {
     wzeromem(MEM_ZEROS_BASE, MEM_ZEROS_SIZE);
 
     volatile uint32_t* use_ncrisc = (volatile uint32_t*)(RUNTIME_CONFIG_BASE);
-    #ifdef TT_METAL_DEVICE_DISPATCH_MODE
-    *use_ncrisc = true;
-    #endif
     if (*use_ncrisc) {
         l1_to_ncrisc_iram_copy();
         // Bring NCRISC out of reset, keep TRISCs under reset
@@ -253,8 +240,16 @@ void device_setup() {
     core.wall_clock_mailbox()[0] = core.read_wall_clock();
 }
 
-#include "dataflow_internals.h"
-#include "kernel.cpp"
+void init_sync_registers() {
+    volatile uint* tiles_received_ptr;
+    volatile uint* tiles_acked_ptr;
+    for (uint32_t operand = 0; operand < NUM_CIRCULAR_BUFFERS; operand++) {
+      tiles_received_ptr = get_cb_tiles_received_ptr(operand);
+      tiles_received_ptr[0] = 0;
+      tiles_acked_ptr = get_cb_tiles_acked_ptr(operand);
+      tiles_acked_ptr[0] = 0;
+    }
+}
 
 int main() {
 
@@ -274,32 +269,10 @@ int main() {
     // TODO: we could specialize it via "noc_id", in the same manner as "noc_init" (see below)
     risc_init();
 
-#if not defined(TT_METAL_DEVICE_DISPATCH_MODE) or defined(IS_DISPATCH_KERNEL)
-    volatile uint32_t* enable_core_mailbox_ptr =
-        (volatile uint32_t*)(MEM_ENABLE_CORE_MAILBOX);
-    while (enable_core_mailbox_ptr[0] != 0x1);
-#endif
-
-    dataflow_internal::init_sync_registers();  // this init needs to be done before NCRISC / TRISCs are launched, only done by BRISC
-
-#if defined(IS_DISPATCH_KERNEL)
-    dataflow_internal::setup_cq_read_write_interface();
-#else
-    dataflow_internal::setup_cb_read_write_interfaces();                // done by both BRISC / NCRISC
-#endif
-
-    dataflow_internal::init_dram_bank_to_noc_coord_lookup_tables();  // done by both BRISC / NCRISC
-    dataflow_internal::init_l1_bank_to_noc_coord_lookup_tables();  // done by both BRISC / NCRISC
-
+    init_sync_registers();  // this init needs to be done before NCRISC / TRISCs are launched, only done by BRISC
     device_setup();  // NCRISC is disabled/enabled here
 
-    noc_init(loading_noc);
-
     volatile uint32_t* use_triscs = (volatile uint32_t*)(RUNTIME_CONFIG_BASE + 4);
-
-    #ifdef TT_METAL_DEVICE_DISPATCH_MODE
-    *use_triscs = true;
-    #endif
 
     if (*use_triscs) {
         // FIXME: this is not sufficient to bring Trisc / Tensix out of a bad state
@@ -315,8 +288,8 @@ int main() {
     kernel_profiler::mark_time(CC_KERNEL_MAIN_START);
 #endif
     // Run the BRISC kernel
+    kernel_init();
 
-kernel_main();
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & KERNEL_FUNCT_MARKER)
     kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
 #endif
@@ -338,22 +311,14 @@ kernel_main();
     if (test_mailbox_ptr[0] != RISC_DETECTED_STREAM_ASSERT)
         test_mailbox_ptr[0] = 0x1;
 
-// disable core once we're done
-#if not defined(TT_METAL_DEVICE_DISPATCH_MODE) or defined(IS_DISPATCH_KERNEL)
-    enable_core_mailbox_ptr[0] = 0x0;
-#endif
-
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
     kernel_profiler::mark_time(CC_MAIN_END);
 #endif
 
-#if defined(TT_METAL_DEVICE_DISPATCH_MODE) and not defined(IS_DISPATCH_KERNEL)
     // Notify dispatcher core that it has completed
-
-    u64 dispatch_addr = dataflow::get_noc_addr(1, 11, DISPATCH_MESSAGE_ADDR);
-
-    dataflow_internal::noc_semaphore_inc(dispatch_addr, 1);
-#endif
+    if (dispatch_addr != 0) {
+        dataflow_internal::noc_fast_atomic_increment(kernel_noc_id_var, NCRISC_AT_CMD_BUF, dispatch_addr, 1, 31 /*wrap*/, false /*linked*/);
+    }
 
     while (true);
     return 0;

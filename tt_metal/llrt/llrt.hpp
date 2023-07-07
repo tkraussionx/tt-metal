@@ -83,7 +83,7 @@ using CircularBufferConfigVec = std::vector<uint32_t>;
 
 // made these free functions -- they're copy/paste of the member functions
 // TODO: clean-up epoch_loader / epoch_binary -- a bunch of functions there should not be member functions
-ll_api::memory get_risc_binary(string path);
+ll_api::memory get_risc_binary(string path, bool fw_build);
 
 // TODO: de-asserting reset properly
 //  this deasserts reset for all BRISCs (on all devices, all cores), but not other RISC processors (NCRISC, TRISC)
@@ -132,7 +132,7 @@ void program_brisc_startup_addr(tt_cluster* cluster, int chip_id, const CoreCoor
 // for BRISC and NCRISC
 // hex_file_path is relative to the "kernels"/"firwmare" root
 bool test_load_write_read_risc_binary(
-    tt_cluster *cluster, std::string hex_file_name, int chip_id, const CoreCoord &core, int riscv_id);
+    tt_cluster *cluster, std::string hex_file_name, int chip_id, const CoreCoord &core, int riscv_id, bool fw_build = false);
 
 bool test_load_write_read_risc_binary(
     tt_cluster *cluster, ll_api::memory &mem, int chip_id, const CoreCoord &core, int riscv_id);
@@ -228,10 +228,10 @@ inline uint64_t relocate_dev_addr(uint64_t addr, uint64_t local_init_addr) {
     uint64_t relo_addr;
     if ((addr & MEM_LOCAL_BASE) == MEM_LOCAL_BASE) {
         // Move addresses in the local memory range to l1 (copied by kernel)
-        relo_addr = (addr & ~MEM_LOCAL_BASE) | local_init_addr;
+        relo_addr = (addr & ~MEM_LOCAL_BASE) + local_init_addr;
     } else if ((addr & MEM_NCRISC_IRAM_BASE) == MEM_NCRISC_IRAM_BASE) {
         // Move addresses in the trisc memory range to l1 (copied by kernel)
-        relo_addr = (addr & ~MEM_NCRISC_IRAM_BASE) | MEM_NCRISC_INIT_IRAM_L1_BASE;
+        relo_addr = (addr & ~MEM_NCRISC_IRAM_BASE) + MEM_NCRISC_INIT_IRAM_L1_BASE;
     } else {
         relo_addr = addr;
     }

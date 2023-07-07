@@ -1,4 +1,3 @@
-#include "context.h"
 #include "risc_common.h"
 #include "noc_overlay_parameters.h"
 #include "noc_nonblocking_api.h"
@@ -9,29 +8,21 @@
 #include "ckernel_globals.h"
 #include "tools/profiler/kernel_profiler.hpp"
 
-volatile uint32_t local_mem_barrier;
+volatile uint32_t local_mem_barrier __attribute__((used));
 volatile uint32_t* test_mailbox_ptr = (volatile uint32_t*)(MEM_TEST_MAILBOX_ADDRESS + MEM_MAILBOX_NCRISC_OFFSET);
 
-int post_index;
-
-volatile uint32_t noc_read_scratch_buf[32] __attribute__((section("l1_data_noinit"))) __attribute__((aligned(32))) ;
 volatile uint16_t *debug_mailbox_base = nullptr;
 uint8_t mailbox_index = 0;
 uint8_t mailbox_end = 32;
 
-uint8_t my_x[NUM_NOCS];
-uint8_t my_y[NUM_NOCS];
-#ifdef NOC_INDEX
-uint8_t loading_noc = NOC_INDEX;
-#else
-uint8_t loading_noc = 1; // NCRISC uses NOC-1
-#endif
-uint8_t noc_size_x;
-uint8_t noc_size_y;
+uint8_t my_x[NUM_NOCS] __attribute__((used));
+uint8_t my_y[NUM_NOCS] __attribute__((used));
+uint8_t noc_size_x __attribute__((used));
+uint8_t noc_size_y __attribute__((used));
 
-uint32_t noc_reads_num_issued[NUM_NOCS];
-uint32_t noc_nonposted_writes_num_issued[NUM_NOCS];
-uint32_t noc_nonposted_writes_acked[NUM_NOCS];
+namespace kernel_profiler {
+uint32_t wIndex __attribute__((used));
+}
 
 inline void record_mailbox_value(uint16_t event_value) {
   if (mailbox_index < mailbox_end) {
@@ -64,37 +55,23 @@ inline void allocate_debug_mailbox_buffer() {
   debug_mailbox_base = reinterpret_cast<volatile uint16_t *>(debug_mailbox_addr);
 }
 
-#include "dataflow_internals.h"
-#include "kernel.cpp"
-
 int main(int argc, char *argv[]) {
+  int32_t num_words = ((uint)__ldm_data_end - (uint)__ldm_data_start) >> 2;
+  l1_to_local_mem_copy((uint*)__ldm_data_start, (uint*)MEM_NCRISC_INIT_LOCAL_L1_BASE, num_words);
+
   kernel_profiler::init_profiler();
 
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
   kernel_profiler::mark_time(CC_MAIN_START);
 #endif
-  init_riscv_context();
   allocate_debug_mailbox_buffer();
 
-  int32_t num_words = ((uint)__ldm_data_end - (uint)__ldm_data_start) >> 2;
-  l1_to_local_mem_copy((uint*)__ldm_data_start, (uint*)MEM_NCRISC_INIT_LOCAL_L1_BASE, num_words);
-
-  noc_init(loading_noc); // NCRISC uses NOC-1
   risc_init();
-
-  dataflow_internal::setup_cb_read_write_interfaces();
-
-#if defined(IS_DISPATCH_KERNEL)
-    dataflow_internal::setup_cq_read_write_interface();
-#endif
-
-  dataflow_internal::init_dram_bank_to_noc_coord_lookup_tables();
-  dataflow_internal::init_l1_bank_to_noc_coord_lookup_tables();
 
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & KERNEL_FUNCT_MARKER)
   kernel_profiler::mark_time(CC_KERNEL_MAIN_START);
 #endif
-  kernel_main();
+  kernel_init();
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & KERNEL_FUNCT_MARKER)
   kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
 #endif

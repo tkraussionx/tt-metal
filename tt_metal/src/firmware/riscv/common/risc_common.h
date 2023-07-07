@@ -22,8 +22,6 @@
 #define TILE_WORD_16_BIT ((32*32*2 + 32) >> 4)
 #define TILE_WORD_32_BIT ((32*32*4 + 32) >> 4)
 
-#define RISC_LOCAL_DATA_MEM_BASE 0xFFB00000
-
 #define RISC_DETECTED_STREAM_ASSERT 0xdeeeaaad
 
 #ifdef COMPILE_FOR_BRISC
@@ -40,7 +38,6 @@ const uint32_t MAX_TILES_PER_PHASE = 2048;
 
 extern uint8_t my_x[NUM_NOCS];
 extern uint8_t my_y[NUM_NOCS];
-//extern uint8_t loading_noc; // this is now a constexpr in brisc.cc / ncrisc.cc
 extern uint8_t noc_size_x;
 extern uint8_t noc_size_y;
 extern volatile uint32_t local_mem_barrier;
@@ -54,8 +51,6 @@ inline uint32_t READ_REG(uint32_t addr) {
   volatile uint32_t* ptr = (volatile uint32_t*)addr;
   return ptr[0];
 }
-
-extern int post_index;
 
 inline uint32_t dram_io_incr_ptr(uint32_t curr_ptr, uint32_t incr, uint32_t buf_size_q_slots) {
   uint32_t next_ptr = curr_ptr + incr;
@@ -103,31 +98,6 @@ inline __attribute__((always_inline)) uint32_t buf_ptr_dec_wrap(uint32_t buf_ptr
   }
   result -= dec;
   return result;
-}
-
-inline void l1_to_local_mem_copy(uint32_t *local_mem_addr, uint32_t *l1_addr, int32_t len) {
-    // Cover L1 load latency of 6 cycles for the bulk of the copy
-    int32_t n = 0;
-    while (n < len - 5) {
-        uint32_t v0 = l1_addr[n + 0];
-        uint32_t v1 = l1_addr[n + 1];
-        uint32_t v2 = l1_addr[n + 2];
-        uint32_t v3 = l1_addr[n + 3];
-        uint32_t v4 = l1_addr[n + 4];
-        uint32_t v5 = l1_addr[n + 5];
-        local_mem_addr[n + 0] = v0;
-        local_mem_addr[n + 1] = v1;
-        local_mem_addr[n + 2] = v2;
-        local_mem_addr[n + 3] = v3;
-        local_mem_addr[n + 4] = v4;
-        local_mem_addr[n + 5] = v5;
-        n += 6;
-    }
-    // Could optimize this further (eg, loop of 2 or 4), probably not worth it
-    while (n < len) {
-        local_mem_addr[n] = l1_addr[n];
-        n++;
-    }
 }
 
 inline uint32_t reg_read_barrier(uint32_t addr)
