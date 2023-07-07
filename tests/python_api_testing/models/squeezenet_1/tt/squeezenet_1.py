@@ -224,3 +224,12 @@ class TtSqueezeNet(nn.Module):
 
         x = tt2torch_tensor(x)
         return torch.flatten(x, 1)
+
+
+def _squeenet_1(device, hugging_face_reference_model, state_dict):
+    model = TtSqueezeNet(device, hugging_face_reference_model, state_dict)
+    return model
+
+
+def squeezenet_1_0(device, hugging_face_reference_model, state_dict):
+    return _squeenet_1(device, hugging_face_reference_model, state_dict)

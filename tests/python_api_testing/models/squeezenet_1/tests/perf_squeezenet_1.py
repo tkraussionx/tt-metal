@@ -26,9 +26,11 @@ from utility_functions_new import (
 from utility_functions_new import disable_compile_cache, enable_compile_cache
 from utility_functions_new import prep_report, profiler
 
-from python_api_testing.models.squeezenet_1.tt.squeezenet_1 import TtSqueezeNet
+from python_api_testing.models.squeezenet_1.tt.squeezenet_1 import squeezenet_1_0
 from torchvision.models import squeezenet1_0, SqueezeNet1_0_Weights
 from torchvision import transforms
+
+BATCH_SIZE = 1
 
 
 def test_perf():
@@ -68,7 +70,7 @@ def test_perf():
     tt_lib.device.SetDefaultDevice(device)
     host = tt_lib.device.GetHost()
 
-    tt_model = TtSqueezeNet(device, hugging_face_reference_model, state_dict)
+    tt_model = squeezenet_1_0(device, hugging_face_reference_model, state_dict)
 
     with torch.no_grad():
         profiler.start(cpu_key)

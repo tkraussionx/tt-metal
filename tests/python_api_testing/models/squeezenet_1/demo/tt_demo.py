@@ -17,7 +17,7 @@ sys.path.append(f"{f}/../../../..")
 
 from torchvision import transforms
 from torchvision.models import squeezenet1_0, SqueezeNet1_0_Weights
-from python_api_testing.models.squeezenet_1.tt.squeezenet_1 import TtSqueezeNet
+from python_api_testing.models.squeezenet_1.tt.squeezenet_1 import squeezenet_1_0
 from python_api_testing.models.squeezenet_1.squeezenet_utils import download_image
 import tt_lib
 
@@ -56,7 +56,7 @@ def run_squeezenet_demo(device):
     state_dict = hugging_face_reference_model.state_dict()
 
     # tt call ======================================================================
-    tt_module = TtSqueezeNet(device, hugging_face_reference_model, state_dict)
+    tt_module = squeezenet_1_0(device, hugging_face_reference_model, state_dict)
     tt_module.eval()
 
     output = tt_module(input_batch)

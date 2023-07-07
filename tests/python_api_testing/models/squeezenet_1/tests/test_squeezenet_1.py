@@ -25,7 +25,7 @@ from utility_functions_new import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from python_api_testing.models.squeezenet_1.tt.squeezenet_1 import TtSqueezeNet
+from python_api_testing.models.squeezenet_1.tt.squeezenet_1 import squeezenet_1_0
 import torchvision.transforms as transforms
 from torchvision.models import squeezenet1_0, SqueezeNet1_0_Weights
 from python_api_testing.models.squeezenet_1.squeezenet_utils import download_image
@@ -66,7 +66,7 @@ def run_test_squeezenet_inference(device, pcc):
     logger.debug(f"pt_out shape {pt_out.shape}")
 
     # tt call ==============================================================
-    tt_module = TtSqueezeNet(device, hugging_face_reference_model, state_dict)
+    tt_module = squeezenet_1_0(device, hugging_face_reference_model, state_dict)
     tt_module.eval()
 
     # CHANNELS_LAST
