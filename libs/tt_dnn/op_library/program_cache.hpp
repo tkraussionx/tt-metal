@@ -13,8 +13,8 @@ namespace detail {
 struct ProgramCache {
     operation::ProgramWithCallbacks& get_or_create(
         const operation::Operation& op,
-        const std::vector<std::reference_wrapper<const Tensor>> &input_tensors,
-        const std::vector<std::optional<std::reference_wrapper<const Tensor>>> &optional_input_tensors,
+        const std::vector<Tensor> &input_tensors,
+        const std::vector<std::optional<const Tensor>> &optional_input_tensors,
         std::vector<Tensor> &output_tensors,
         Device* device,
         bool profile_device
@@ -72,12 +72,12 @@ static bool is_enabled() {
 }
 
 static void enable() {
-    tt::log_debug(tt::LogOp, "Program Cache: enabled.");
+    tt::log_info(tt::LogOp, "Program Cache: enabled.");
     detail::PROGRAM_CACHE.enable();
 }
 
 static void disable_and_clear() {
-    tt::log_debug(tt::LogOp, "Program Cache: disabled and cleared.");
+    tt::log_info(tt::LogOp, "Program Cache: disabled and cleared.");
     detail::PROGRAM_CACHE.disable();
     detail::PROGRAM_CACHE.clear();
 }

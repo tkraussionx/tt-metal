@@ -1,7 +1,9 @@
 #include "tt_metal/host_api.hpp"
 #include "tensor/tensor.hpp"
+#include "tensor/host_buffer.hpp"
 #include "tt_dnn/op_library/tilize/tilize_op.hpp"
 #include "constants.hpp"
+#include "tt_numpy/functions.hpp"
 
 #include <algorithm>
 #include <functional>
@@ -47,7 +49,7 @@ int main(int argc, char **argv) {
         ////////////////////////////////////////////////////////////////////////////
         std::array<uint32_t, 4> shape = {1, 64, 32, 32};
         // Allocates a DRAM buffer on device populated with values specified by initialize
-        Tensor a = Tensor(shape, Initialize::RANDOM, DataType::BFLOAT16, Layout::CHANNELS_LAST, device);
+        Tensor a = tt::numpy::random::random(shape).to(Layout::CHANNELS_LAST).to(device);
         Tensor b = tilize(a);
         Tensor c = b.to(host);
         ////////////////////////////////////////////////////////////////////////////
@@ -55,12 +57,11 @@ int main(int argc, char **argv) {
         ////////////////////////////////////////////////////////////////////////////
         std::cout << "Moving src data to host to validate" << std::endl;
         Tensor host_a = a.to(host); // Move tensor a to host to validate
-        auto host_vec =  *reinterpret_cast<std::vector<bfloat16>*>(host_a.data_ptr());
         std::array<uint32_t, 4> cl_shape = {1, 32, 32, 64};
-        Tensor g = Tensor(host_vec, cl_shape, DataType::BFLOAT16, Layout::ROW_MAJOR);
+        Tensor g = Tensor(host_a.host_storage().value(), cl_shape, DataType::BFLOAT16, Layout::ROW_MAJOR);
         Tensor golden = g.to(Layout::TILE);
-        auto golden_vec =  *reinterpret_cast<std::vector<bfloat16>*>(golden.data_ptr());
-        auto result_vec = *reinterpret_cast<std::vector<bfloat16>*>(c.data_ptr());
+        auto golden_vec = host_buffer::view_as<bfloat16>(golden);
+        auto result_vec = host_buffer::view_as<bfloat16>(c);
         pass &= (result_vec == golden_vec);
         pass &= tt_metal::CloseDevice(device);;
 

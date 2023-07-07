@@ -14,7 +14,10 @@ from loguru import logger
 
 from transformers import T5Model
 from sweep_tests.comparison_funcs import comp_allclose, comp_pcc
-from python_api_testing.models.t5.t5_utils import torch2tt_tensor, tt2torch_tensor
+from python_api_testing.models.utility_functions_new import (
+    torch2tt_tensor,
+    tt2torch_tensor,
+)
 from python_api_testing.models.t5.t5_dense_act_dense import TtT5DenseActDense
 
 
@@ -51,16 +54,14 @@ def run_test_T5DenseActDense_inference(device):
     tt_out = tt2torch_tensor(tt_out)
 
     does_pass, pcc_message = comp_pcc(pt_out, tt_out, 0.98)
-
-    logger.info(comp_allclose(pt_out, tt_out))
     logger.info(pcc_message)
-
-    assert does_pass
 
     if does_pass:
         logger.info("test_T5DenseActDense_inference Passed!")
     else:
         logger.warning("test_T5DenseActDense_inference Failed!")
+
+    assert does_pass
 
 
 def test_T5DenseActDense_inference():

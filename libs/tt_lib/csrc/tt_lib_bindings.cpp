@@ -22,6 +22,8 @@
 #include "tt_dnn/op_library/split/split_last_dim_qk_tiled.hpp"
 #include "tt_dnn/op_library/program_cache.hpp"
 #include "tt_metal/tools/profiler/op_profiler.hpp"
+#include "tensor/host_buffer.hpp"
+#include "tensor/tensor_impl.hpp"
 #include "tensor/tensor_utils.hpp"
 
 #include "tt_lib_bindings.hpp"
@@ -32,6 +34,57 @@ namespace py = pybind11;
 namespace tt {
 
 namespace tt_metal {
+
+
+namespace detail {
+
+
+HostBuffer create_host_buffer_from_list_of_floats(const std::vector<float>& data, DataType data_type) {
+    HostBuffer host_buffer;
+    switch (data_type) {
+        case DataType::BFLOAT8_B:
+        case DataType::FLOAT32: {
+            auto host_buffer = host_buffer::create<float>(data.size());
+            auto host_buffer_view = host_buffer::view_as<float>(host_buffer);
+            for (auto index = 0; index < data.size(); index++) {
+                host_buffer_view[index] = data[index];
+            }
+            return host_buffer;
+        }
+        case DataType::BFLOAT16: {
+            auto host_buffer = host_buffer::create<bfloat16>(data.size());
+            auto host_buffer_view = host_buffer::view_as<bfloat16>(host_buffer);
+            for (auto index = 0; index < data.size(); index++) {
+                host_buffer_view[index] = bfloat16(data[index]);
+            }
+            return host_buffer;
+        }
+        default: {
+            TT_THROW("Cannot create a host buffer!");
+        }
+    }
+}
+
+DeviceBuffer create_device_buffer_from_host_buffer(const HostBuffer& host_buffer, const Shape& shape, DataType data_type, Layout layout, Device* device, const MemoryConfig& memory_config) {
+    switch (data_type) {
+        case DataType::BFLOAT8_B:
+        case DataType::FLOAT32: {
+            return tensor_impl::device_buffer_from_host_buffer<float>(
+                host_buffer, device, shape, data_type, layout, memory_config
+            );
+        }
+        case DataType::BFLOAT16: {
+            return tensor_impl::device_buffer_from_host_buffer<bfloat16>(
+                host_buffer, device, shape, data_type, layout, memory_config
+            );
+        }
+        default: {
+            TT_THROW("Cannot create a host buffer!");
+        }
+    }
+}
+
+}
 
 void TensorModule(py::module &m_tensor) {
     // ENUM SECTION
@@ -63,13 +116,6 @@ void TensorModule(py::module &m_tensor) {
         .value("TILE", Layout::TILE)
         .value("CHANNELS_LAST", Layout::CHANNELS_LAST);
 
-    // TODO(agrebenisan): This should probably be in its own module, but here for now.
-    py::enum_<Initialize>(m_tensor, "Initialize")
-        .value("ZEROS", Initialize::ZEROS)
-        .value("ONES",Initialize::ONES)
-        .value("INCREMENT", Initialize::INCREMENT)
-        .value("RANDOM", Initialize::RANDOM);
-
     py::enum_<DataType>(m_tensor, "DataType")
         .value("FLOAT32", DataType::FLOAT32)
         .value("BFLOAT16", DataType::BFLOAT16)
@@ -80,6 +126,10 @@ void TensorModule(py::module &m_tensor) {
         .value("DRAM", BufferType::DRAM)
         .value("L1", BufferType::L1);
 
+    py::enum_<StorageType>(m_tensor, "StorageType")
+        .value("HOST", StorageType::HOST)
+        .value("DEVICE", StorageType::DEVICE);
+
     auto pyMemoryConfig = py::class_<MemoryConfig>(m_tensor, "MemoryConfig", R"doc(
         Class defining memory configuration for storing tensor data on TT Accelerator device.
         There are eight DRAM memory banks on TT Accelerator device, indexed as 0, 1, 2, ..., 7.
@@ -88,12 +138,11 @@ void TensorModule(py::module &m_tensor) {
     pyMemoryConfig
         .def(
             py::init<>(
-                [](bool interleaved, int bank_id, BufferType buffer_type) {
-                    return MemoryConfig{.interleaved=interleaved, .bank_id=bank_id, .buffer_type=buffer_type};
+                [](bool interleaved, BufferType buffer_type) {
+                    return MemoryConfig{.interleaved=interleaved, .buffer_type=buffer_type};
                 }
             ),
             py::arg("interleaved") = true,
-            py::arg("bank_id") = -1,
             py::arg("buffer_type") = BufferType::DRAM, R"doc(
                 Create MemoryConfig class.
                 If interleaved is set to True, tensor data will be interleaved across multiple DRAM banks on TT Accelerator device.
@@ -103,11 +152,10 @@ void TensorModule(py::module &m_tensor) {
 
                 .. code-block:: python
 
-                    mem_config = tt_lib.tensor.MemoryConfig(False, 3)
+                    mem_config = tt_lib.tensor.MemoryConfig(False)
             )doc"
         )
         .def_readonly("interleaved", &MemoryConfig::interleaved, "Whether tensor data is interleaved across mulitple DRAM channels")
-        .def_readonly("bank_id", &MemoryConfig::bank_id, "DRAM channel holding tensor data. Only used when tensor is not interleaved")
         .def_readonly("buffer_type", &MemoryConfig::buffer_type, "Buffer type to store tensor data. Can be DRAM or L1");
 
     // Tensor constructors that accept device and .to(device) function use keep alive call policy to communicate that Device needs to outlive Tensor.
@@ -151,8 +199,9 @@ void TensorModule(py::module &m_tensor) {
     pyTensor
         .def(
             py::init<>(
-                [](std::vector<float> &data, const std::array<uint32_t, 4> &shape, DataType data_type, Layout layout) {
-                    return Tensor(data, shape, data_type, layout);
+                [](const std::vector<float>& data, const Shape& shape, DataType data_type, Layout layout) {
+                    auto host_buffer = detail::create_host_buffer_from_list_of_floats(data, data_type);
+                    return Tensor(HostStorage{host_buffer}, shape, data_type, layout);
                 }
             ), R"doc(
                 +---------------+---------------+
@@ -182,8 +231,11 @@ void TensorModule(py::module &m_tensor) {
         )
         .def(
             py::init<>(
-                [](std::vector<float> &data, const std::array<uint32_t, 4> &shape, DataType data_type, Layout layout, Device *device) {
-                    return Tensor(data, shape, data_type, layout, device);
+                [](std::vector<float>& data, const Shape& shape, DataType data_type, Layout layout, Device *device) {
+                    auto host_buffer = detail::create_host_buffer_from_list_of_floats(data, data_type);
+                    auto memory_config = MemoryConfig{};
+                    auto device_buffer = detail::create_device_buffer_from_host_buffer(host_buffer, shape, data_type, layout, device, memory_config);
+                    return Tensor(DeviceStorage{device_buffer, device, memory_config}, shape, data_type, layout);
                 }
             ), py::keep_alive<1, 6>(), R"doc(
                 +---------------+---------------+
@@ -222,8 +274,10 @@ void TensorModule(py::module &m_tensor) {
         )
         .def(
             py::init<>(
-                [](std::vector<float> &data, const std::array<uint32_t, 4> &shape, DataType data_type, Layout layout, Device *device, const MemoryConfig &mem_config) {
-                    return Tensor(data, shape, data_type, layout, device, mem_config);
+                [](const std::vector<float>& data, const Shape& shape, DataType data_type, Layout layout, Device *device, const MemoryConfig& memory_config) {
+                    auto host_buffer = detail::create_host_buffer_from_list_of_floats(data, data_type);
+                    auto device_buffer = detail::create_device_buffer_from_host_buffer(host_buffer, shape, data_type, layout, device, memory_config);
+                    return Tensor(DeviceStorage{device_buffer, device, memory_config}, shape, data_type, layout);
                 }
             ), py::keep_alive<1, 6>(), R"doc(
                 +---------------+---------------+
@@ -252,7 +306,7 @@ void TensorModule(py::module &m_tensor) {
 
                     py_tensor = torch.randn((1, 1, 32, 32))
                     tt_device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
-                    mem_config = tt_lib.tensor.MemoryConfig(False, 3)
+                    mem_config = tt_lib.tensor.MemoryConfig(False)
                     // ...
                     tt_lib.tensor.Tensor(
                         py_tensor.reshape(-1).tolist(),
@@ -262,33 +316,6 @@ void TensorModule(py::module &m_tensor) {
                         tt_device,
                         mem_config
                     )
-            )doc"
-        )
-        .def(
-            py::init<>(
-                [](std::vector<uint32_t> &data, const std::array<uint32_t, 4> &shape, DataType data_type, Layout layout) {
-                    return Tensor(data, shape, data_type, layout);
-                }
-            ), R"doc(
-                Not supported.
-            )doc"
-        )
-        .def(
-            py::init<>(
-                [](std::vector<uint32_t> &data, const std::array<uint32_t, 4> &shape, DataType data_type, Layout layout, Device *device) {
-                    return Tensor(data, shape, data_type, layout, device);
-                }
-            ), py::keep_alive<1, 6>(), R"doc(
-                Not supported.
-            )doc"
-        )
-        .def(
-            py::init<>(
-                [](std::vector<uint32_t> &data, const std::array<uint32_t, 4> &shape, DataType data_type, Layout layout, Device *device, const MemoryConfig &mem_config) {
-                    return Tensor(data, shape, data_type, layout, device, mem_config);
-                }
-            ), py::keep_alive<1, 6>(), R"doc(
-                Not supported.
             )doc"
         )
         .def("deallocate", [](Tensor &self) {
@@ -641,14 +668,14 @@ void TensorModule(py::module &m_tensor) {
                 shape = tt_tensor.shape()
 
         )doc")
-        .def("on_host", [](const Tensor &self) {
-            return self.on_host();
+        .def("storage_type", [](const Tensor &self) {
+            return self.storage_type();
         }, R"doc(
             Check if the tensor is on host
 
             .. code-block:: python
 
-                on_host = tt_tensor.on_host()
+                storage_type = tt_tensor.storage_type()
 
         )doc")
         .def("device", [](const Tensor &self) {
@@ -661,28 +688,38 @@ void TensorModule(py::module &m_tensor) {
                 device = tt_tensor.device()
 
         )doc")
-        .def("data", [](const Tensor &self) {
-            std::vector<uint32_t> empty_vec;
-            TT_ASSERT(self.data_ptr() != nullptr);
+        .def("data", [](const Tensor &self) -> std::optional<std::variant<const vector<uint32_t>, const vector<float>, const vector<bfloat16>>> {
+            TT_ASSERT(self.storage_type() == StorageType::HOST and self.is_allocated(), "Host buffer must be allocated!");
             switch (self.dtype()) {
-                case DataType::BFLOAT16: {
-                    return py::cast(*reinterpret_cast<std::vector<bfloat16>*>(self.data_ptr()));
+                case DataType::UINT32:
+                {
+                    auto view = host_buffer::view_as<uint32_t>(self);
+                    return std::vector(view.begin(), view.end());
                 }
                 break;
                 case DataType::FLOAT32:
-                    return py::cast(*reinterpret_cast<std::vector<float>*>(self.data_ptr()));
+                {
+                    auto view = host_buffer::view_as<float>(self);
+                    return std::vector(view.begin(), view.end());
+                }
                 break;
-                case DataType::UINT32:
-                    return py::cast(*reinterpret_cast<std::vector<uint32_t>*>(self.data_ptr()));
+                case DataType::BFLOAT16:
+                {
+                    auto view = host_buffer::view_as<bfloat16>(self);
+                    return std::vector(view.begin(), view.end());
+                }
                 break;
                 case DataType::BFLOAT8_B:
-                    return py::cast(*reinterpret_cast<std::vector<float>*>(self.data_ptr()));
+                {
+                    auto view = host_buffer::view_as<float>(self);
+                    return std::vector(view.begin(), view.end());
+                }
                 break;
                 default:
                     TT_ASSERT(false && "Unsupported data type!");
                 break;
             }
-            return py::cast(empty_vec);
+            return std::nullopt;
         }, R"doc(
             Get data in the tensor as a list of numbers.
 
@@ -703,14 +740,14 @@ void TensorModule(py::module &m_tensor) {
                 layout = tt_tensor.layout()
 
         )doc")
-        .def("buffer_type", [](const Tensor &self) {
-            return self.buffer_type();
+        .def("memory_config", [](const Tensor &self) {
+            return self.memory_config();
         }, R"doc(
             Get buffer type of TT Tensor.
 
             .. code-block:: python
 
-                buffer_type = tt_tensor.buffer_type()
+                memory_config = tt_tensor.memory_config()
 
         )doc")
         .def("dtype", [](const Tensor &self) {
@@ -724,8 +761,157 @@ void TensorModule(py::module &m_tensor) {
 
         )doc");;
 
+    m_tensor.def("where", &where, R"doc(
+        Perform an ternary where operation on two tensors based on third @predicate.
+
+        where(predicate, true_value, false_value) implements (predicate) ? true_value : false_value.
+
+        All three input tensors must have BFLOAT16 data type, and be of equal shape.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+----------------------+-----------+------------------------------+----------+
+        | Argument | Description          | Data type | Valid range                  | Required |
+        +==========+======================+===========+==============================+==========+
+        | arg0     | predicate tensor     | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+        | arg1     | True tensor          | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+        | arg2     | False tensor         | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+    )doc");
+
+    // *** eltwise binary tied to unary ***
+    m_tensor.def("add_unary", py::overload_cast<const Tensor&,float>(&add_unary), R"doc(
+        Perform an eltwise-binary add on one tensors and one scalar.
+
+        Both inputs, the tensor and scalar, must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+----------------------+-----------+------------------------------+----------+
+        | Argument | Description          | Data type | Valid range                  | Required |
+        +==========+======================+===========+==============================+==========+
+        | arg0     | First tensor to add  | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+        | arg1     | scalar               | scalar    | float value                  | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+    )doc");
+    m_tensor.def("add_unary", py::overload_cast<float,const Tensor&>(&add_unary), R"doc(
+        Perform an eltwise-binary add on one tensors and one scalar.
+
+        Both inputs, the tensor and scalar, must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+----------------------+-----------+------------------------------+----------+
+        | Argument | Description          | Data type | Valid range                  | Required |
+        +==========+======================+===========+==============================+==========+
+        | arg0     | scalar               | scalar    | float value                  | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+        | arg1     | First tensor to add  | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+
+    )doc");
+
+    m_tensor.def("sub_unary", py::overload_cast<const Tensor&,float>(&sub_unary), R"doc(
+        Perform an eltwise-binary sub on one tensors and one scalar.
+
+        Both inputs, the tensors and scalar, must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+----------------------+-----------+------------------------------+----------+
+        | Argument | Description          | Data type | Valid range                  | Required |
+        +==========+======================+===========+==============================+==========+
+        | arg0     | First tensor to sub  | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+        | arg1     | scalar               | scalar    | float value                  | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+    )doc");
+    m_tensor.def("sub_unary", py::overload_cast<float,const Tensor&>(&sub_unary), R"doc(
+        Perform an eltwise-binary sub on one tensors and one scalar.
+
+        Both inputs, the tensor and scalar, must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+----------------------+-----------+------------------------------+----------+
+        | Argument | Description          | Data type | Valid range                  | Required |
+        +==========+======================+===========+==============================+==========+
+        | arg0     | scalar               | scalar    | float value                  | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+        | arg1     | First tensor to add  | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+
+    )doc");
+
+    m_tensor.def("mul_unary", py::overload_cast<const Tensor&,float>(&mul_unary), R"doc(
+        Perform an eltwise-binary mul on one tensors and one scalar.
+
+        Both inputs, the tensors and scalar, must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+----------------------+-----------+------------------------------+----------+
+        | Argument | Description          | Data type | Valid range                  | Required |
+        +==========+======================+===========+==============================+==========+
+        | arg0     | First tensor to add  | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+        | arg1     | scalar               | float     | float value                  | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+    )doc");
+    m_tensor.def("mul_unary", py::overload_cast<float,const Tensor&>(&mul_unary), R"doc(
+        Perform an eltwise-binary mul on one tensors and one scalar.
+
+        Both inputs, the tensor and scalar, must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+----------------------+-----------+------------------------------+----------+
+        | Argument | Description          | Data type | Valid range                  | Required |
+        +==========+======================+===========+==============================+==========+
+        | arg0     | scalar               | scalar    | float value                  | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+        | arg1     | First tensor to add  | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+
+    )doc");
+
+    m_tensor.def("div_unary", py::overload_cast<const Tensor&,float>(&div_unary), R"doc(
+        Perform an eltwise-binary add on one tensors and one scalar.
+
+        Both inputs, the tensors and scalar, must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+----------------------+-----------+------------------------------+----------+
+        | Argument | Description          | Data type | Valid range                  | Required |
+        +==========+======================+===========+==============================+==========+
+        | arg0     | First tensor to div  | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+        | arg1     | scalar               | float     | float value                  | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+    )doc");
+    m_tensor.def("div_unary", py::overload_cast<float,const Tensor&>(&div_unary), R"doc(
+        Perform an eltwise-binary div on one tensors and one scalar.
+
+        Both inputs, the tensor and scalar, must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+----------------------+-----------+------------------------------+----------+
+        | Argument | Description          | Data type | Valid range                  | Required |
+        +==========+======================+===========+==============================+==========+
+        | arg0     | scalar               | scalar    | float value                  | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+        | arg1     | First tensor to add  | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+
+    )doc");
+
     // *** eltwise binary ***
-    m_tensor.def("add", &add, R"doc(
+    m_tensor.def("add",&add, R"doc(
         Perform an eltwise-binary add on two tensors.
 
         Both input tensors must have BFLOAT16 data type, and be of equal shape.
@@ -848,6 +1034,82 @@ void TensorModule(py::module &m_tensor) {
         +----------+-------------------------------+-----------+------------------------------+----------+
     )doc");
 
+    m_tensor.def("hardtanh", &hardtanh,
+		 py::arg().noconvert(), py::arg("low") = -1.0f, py::arg("high") = +1.0f, R"doc(
+        Applies the hard tanh function to the elements of the input tensor ``arg0``.
+
+        Input tensor must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+-------------------------------+-----------+------------------------------+----------+
+        | Argument | Description                   | Data type | Valid range                  | Required |
+        +==========+===============================+===========+==============================+==========+
+        | arg0     | Tensor tanh is applied to     | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+-------------------------------+-----------+------------------------------+----------+
+        | low      | low value (PyTorch default)   | float     | default to -1.0f             | No       |
+        +----------+-------------------------------+-----------+------------------------------+----------+
+        | high     | high value (PyTorch default)  | float     | default to +1.0f             | No       |
+        +----------+-------------------------------+-----------+------------------------------+----------+
+    )doc");
+
+    m_tensor.def("clip", &clip, R"doc(
+        Applies the clip function to the elements of the input tensor ``arg0`` between limits ``arg1`` low and
+        the ``arg2`` high limits.
+
+        Input tensor must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+-------------------------------+-----------+------------------------------+----------+
+        | Argument | Description                   | Data type | Valid range                  | Required |
+        +==========+===============================+===========+==============================+==========+
+        | arg0     | Tensor tanh is applied to     | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+-------------------------------+-----------+------------------------------+----------+
+        | low      | low value (PyTorch default)   | float     | float value                  | Yes      |
+        +----------+-------------------------------+-----------+------------------------------+----------+
+        | high     | high value (PyTorch default)  | float     | float value                  | Yes      |
+        +----------+-------------------------------+-----------+------------------------------+----------+
+    )doc");
+
+    m_tensor.def("hardsigmoid", &hardsigmoid,
+		 py::arg().noconvert(), py::arg("scale") = 1.0f/6.0f, py::arg("shift") = 0.5f, R"doc(
+        Applies the hardsigmoid function to the elements of the input tensor ``arg0``.
+
+        Input tensor must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+-------------------------------+-----------+------------------------------+----------+
+        | Argument | Description                   | Data type | Valid range                  | Required |
+        +==========+===============================+===========+==============================+==========+
+        | arg0     | Tensor sigmoid is applied to  | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+-------------------------------+-----------+------------------------------+----------+
+        | scale    | scale value (PyTorch default) | float     | default to 1.0/6.0f          | No       |
+        +----------+-------------------------------+-----------+------------------------------+----------+
+        | shift    | shift value (PyTorch default) | float     | default to 0.5f              | No       |
+        +----------+-------------------------------+-----------+------------------------------+----------+
+    )doc");
+
+    m_tensor.def("hardswish", &hardswish,
+		 py::arg().noconvert(), py::arg("scale") = 1.0f/6.0f, py::arg("shift") = 0.5f, R"doc(
+        Applies the hard swish function to the elements of the input tensor ``arg0``.
+
+        Input tensor must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+-------------------------------+-----------+------------------------------+----------+
+        | Argument | Description                   | Data type | Valid range                  | Required |
+        +==========+===============================+===========+==============================+==========+
+        | arg0     | Tensor sigmoid is applied to  | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+-------------------------------+-----------+------------------------------+----------+
+        | scale    | scale value (PyTorch default) | float     | default to 1.0/6.0f          | No       |
+        +----------+-------------------------------+-----------+------------------------------+----------+
+        | shift    | shift value (PyTorch default) | float     | default to 0.5f              | No       |
+        +----------+-------------------------------+-----------+------------------------------+----------+
+    )doc");
+
     m_tensor.def("exp", &exp, R"doc(
         Returns a new tensor with the exponential of the elements of the input tensor ``arg0``.
 
@@ -861,6 +1123,114 @@ void TensorModule(py::module &m_tensor) {
         | arg0     | Tensor exp is applied to | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
         +----------+--------------------------+-----------+------------------------------+----------+
     )doc");
+
+
+    m_tensor.def("full_like", &full_like, R"doc(
+        Returns a new tensor with the float value shaped like reference tensor ``arg0``.
+
+        Input tensor must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+--------------------------+-----------+------------------------------+----------+
+        | Argument | Description              | Data type | Valid range                  | Required |
+        +==========+==========================+===========+==============================+==========+
+        | arg0     | reference Tensor         | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+--------------------------+-----------+------------------------------+----------+
+        | arg1     | constant value           | float     | float value                  | Yes      |
+        +----------+--------------------------+-----------+------------------------------+----------+
+    )doc");
+
+    m_tensor.def("zeros_like", &zeros_like, R"doc(
+        Returns a new tensor with the zero of the elements of the input tensor ``arg0``.
+
+        Input tensor must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+--------------------------+-----------+------------------------------+----------+
+        | Argument | Description              | Data type | Valid range                  | Required |
+        +==========+==========================+===========+==============================+==========+
+        | arg0     | reference Tensor         | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+--------------------------+-----------+------------------------------+----------+
+    )doc");
+
+
+    m_tensor.def("ones_like", &ones_like, R"doc(
+        Returns a new tensor with the one of the elements of the input tensor ``arg0``.
+
+        Input tensor must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+--------------------------+-----------+------------------------------+----------+
+        | Argument | Description              | Data type | Valid range                  | Required |
+        +==========+==========================+===========+==============================+==========+
+        | arg0     | reference Tensor         | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+--------------------------+-----------+------------------------------+----------+
+    )doc");
+
+    m_tensor.def("zeros", &zeros, R"doc(
+        Returns a new tensor with the zeros in shape specified by input ``arg0``.
+
+        Input shape is specified as a list of 4 integer elements
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+--------------------------+-----------+------------------------------+----------+
+        | Argument | Description              | Data type | Valid range                  | Required |
+        +==========+==========================+===========+==============================+==========+
+        | arg0     | shape vector             | Vector    | [W, Z, Y, X]                 | Yes      |
+        +----------+--------------------------+-----------+------------------------------+----------+
+    )doc");
+
+    m_tensor.def("ones", &ones, R"doc(
+        Returns a new tensor with the ones in shape specified by input ``arg0``.
+
+        Input shape is specified as a list of 4 integer elements
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+--------------------------+-----------+------------------------------+----------+
+        | Argument | Description              | Data type | Valid range                  | Required |
+        +==========+==========================+===========+==============================+==========+
+        | arg0     | shape vector             | Vector    | [W, Z, Y, X]                 | Yes      |
+        +----------+--------------------------+-----------+------------------------------+----------+
+    )doc");
+
+    m_tensor.def("full", &full, R"doc(
+        Returns a new tensor with the full in shape specified by input ``arg0``.
+
+        Input shape is specified as a list of 4 integer elements
+
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+--------------------------+-----------+------------------------------+----------+
+        | Argument | Description              | Data type | Valid range                  | Required |
+        +==========+==========================+===========+==============================+==========+
+        | arg0     | shape vector             | Vector    | [W, Z, Y, X]                 | Yes      |
+        +----------+--------------------------+-----------+------------------------------+----------+
+        | arg1     | scalar                   | float     | float                        | Yes      |
+        +----------+--------------------------+-----------+------------------------------+----------+
+    )doc");
+
+    m_tensor.def("arange", &arange, R"doc(
+        Returns a new 1D tensor with the incremented values in size specified by inputs start, end and step ``arg0``, ``arg1``, and ``arg2``.
+
+        Inpute scalars are integers specifying start, end, and step sizes.
+        Output tensor will have BFLOAT16 data type.
+
+        +----------+--------------------------+-----------+------------------------------+----------+
+        | Argument | Description              | Data type | Valid range                  | Required |
+        +==========+==========================+===========+==============================+==========+
+        | arg0     | start                    | uint32    | integer                      | yes      |
+        +----------+--------------------------+-----------+------------------------------+----------+
+        | arg1     | end                      | uint32    | integer                      | yes      |
+        +----------+--------------------------+-----------+------------------------------+----------+
+        | arg2     | step                     | uint32    | integer                      | yes      |
+        +----------+--------------------------+-----------+------------------------------+----------+
+    )doc");
+
 
     m_tensor.def("recip", &recip, R"doc(
         Returns a new tensor with the reciprocal of the elements of the input tensor ``arg0``.
@@ -1255,7 +1625,7 @@ void TensorModule(py::module &m_tensor) {
         +----------+---------------------------+-----------+------------------------------+----------+
     )doc");
 
-    m_tensor.def("relu_min", &relu_max, R"doc(
+    m_tensor.def("relu_min", &relu_min, R"doc(
         Returns tensor with the relu min of all of elements of the input tensor ``arg0``.
 
         Input tensor must have BFLOAT16 data type.
@@ -1436,6 +1806,24 @@ void TensorModule(py::module &m_tensor) {
         +----------+---------------------------+-----------+------------------------------+----------+
     )doc");
 
+    m_tensor.def("outer", &outer, R"doc(
+        Perform a non-batched outer product multiplication ``arg0 x arg1`` with two tensors.
+
+        Both input tensors must have BFLOAT16 data type but shape [1,1,N,1] and [1,1,1,M] respectively
+        or reshapeable with only one major dimension while other 3 being squeezable dimensions.
+
+        Output tensor will have BFLOAT16 data type but of shape [1,1,N,M].
+
+        +----------+---------------------------+-----------+------------------------------+----------+
+        | Argument | Description               | Data type | Valid range                  | Required |
+        +==========+===========================+===========+==============================+==========+
+        | arg0     | First tensor to multiply  | Tensor    | Tensor of shape [1, 1, N, 1] | Yes      |
+        +----------+---------------------------+-----------+------------------------------+----------+
+        | arg1     | Second tensor to multiply | Tensor    | Tensor of shape [1, 1, 1, M] | Yes      |
+        +----------+---------------------------+-----------+------------------------------+----------+
+
+    )doc");
+
     m_tensor.def("bmm", &bmm,
         py::arg().noconvert(), py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
         Perform a batched matmul ``arg0 x arg1`` with two tensors, where batch dims match.
@@ -1455,7 +1843,7 @@ void TensorModule(py::module &m_tensor) {
 
     // *** tensor manipulation ***
     m_tensor.def("reshape", &reshape, R"doc(
-        Changes shape of tensor ``arg0`` to new shape ``[W, Z, Y, X]``. The X dimension of input and output tensor must have same size.
+        Returns a tensor with the new shape of ``[W, Z, Y, X]``. The X dimension of input and output tensor must have same size.
 
         Input tensor must be on host device, in TILE layout, and have BFLOAT16 data type.
 
@@ -1815,6 +2203,10 @@ void TensorModule(py::module &m_tensor) {
     )doc");
 
     // Custom BERT TMs
+    m_tensor.def("bert_large_create_qkv_heads", &bert_large_create_qkv_heads,
+        py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
+        Splits [9, 1, 384, 3072] fused qkv matrix into 3 heads with shapes [9, 16, 384, 64], [9, 16, 64, 384], and [9, 16, 384, 64].
+    )doc");
     m_tensor.def("bert_large_split_fused_qkv", &bert_large_split_fused_qkv,
         py::arg().noconvert(), py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
         Splits [9, 1, 384, 3072] fused qkv matrix into 3 heads with shape [9, 1, 384, 1024].
@@ -2031,9 +2423,33 @@ void DeviceModule(py::module &m_device) {
         Disables generation of compilation statistics reports in tt-metal
     )doc");
 
+    m_device.def("EnableMemoryReports", &EnableMemoryReports, R"doc(
+        Enables tt-metal to generate reports of memory allocation statistics
+    )doc");
+    m_device.def("DisableMemoryReports", &DisableMemoryReports, R"doc(
+        Disables generation of memory allocation statistics reports in tt-metal
+    )doc");
+
+    m_device.def("DumpDeviceMemoryState", &DumpDeviceMemoryState, R"doc(
+        Generates reports to dump device memory state. Three reports are generated:
+        - `l1_usage_summary.csv` has a table with an entry for each program indicating the minimum largest free L1 block and size of largest L1 buffer that can be interleaved across available free L1 blocks
+        - `memory_usage_summary.csv` for each program there is an entry indicating total allocatable, allocated, free, and largest free block sizes for each DRAM and L1 bank
+        - `detailed_memory_usage.csv` expands on the memory usage summary report by including each memory block address, size, and allocation status
+
+        +------------------+----------------------------------+-----------------------+-------------+----------+
+        | Argument         | Description                      | Data type             | Valid range | Required |
+        +==================+==================================+=======================+=============+==========+
+        | device           | Device to dump memory state for  | tt_lib.device.Device  |             | Yes      |
+        +------------------+----------------------------------+-----------------------+-------------+----------+
+    )doc");
+
     m_device.def("GetHost", &GetHost, R"doc(
         Get a reference to host machine of a TT accelerator device, usually a reference to the host
         machine executing Python code.
+    )doc");
+
+    m_device.def("Synchronize", &Synchronize, R"doc(
+        Wait for all kernels on TT device to complete.
     )doc");
 }
 

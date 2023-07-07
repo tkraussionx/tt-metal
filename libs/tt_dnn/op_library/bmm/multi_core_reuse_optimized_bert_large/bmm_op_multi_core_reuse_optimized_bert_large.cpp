@@ -74,10 +74,10 @@ operation::ProgramWithCallbacks create_program(
 
     CoreRange left_half{
         .start={(std::size_t) start_core_x, (std::size_t) start_core_y},
-        .end={(std::size_t) start_core_x + 4, (std::size_t) start_core_y + num_cores_r - 1}};
+        .end={(std::size_t) start_core_x + 5, (std::size_t) start_core_y + num_cores_r - 1}};
 
     CoreRange right_half{
-        .start={(std::size_t) start_core_x + 5, (std::size_t) start_core_y},
+        .start={(std::size_t) start_core_x + 6, (std::size_t) start_core_y},
         .end={(std::size_t) start_core_x + num_cores_c - 1, (std::size_t) start_core_y + num_cores_r - 1}};
 
     // Compile time args
@@ -192,7 +192,6 @@ operation::ProgramWithCallbacks create_program(
     uint32_t src0_cb_index = 0;
     auto cb_src0 = tt_metal::CreateCircularBuffers(
         program,
-        device,
         src0_cb_index,
         all_cores,
         in0_CB_tiles,
@@ -203,7 +202,6 @@ operation::ProgramWithCallbacks create_program(
     uint32_t src1_cb_index = 1;
     auto cb_src1 = tt_metal::CreateCircularBuffers(
         program,
-        device,
         src1_cb_index,
         all_cores,
         in1_CB_tiles,
@@ -215,7 +213,6 @@ operation::ProgramWithCallbacks create_program(
     uint32_t interm0_cb_index = 24;
     auto cb_output = tt_metal::CreateCircularBuffers(
         program,
-        device,
         {ouput_cb_index, interm0_cb_index},
         all_cores,
         out_CB_tiles,
@@ -278,13 +275,12 @@ operation::ProgramWithCallbacks create_program(
             (std::uint32_t) (per_core_M / out_subblock_h), // out_num_subblocks_h
 
             (std::uint32_t) M * N, // MtNt
-            (std::uint32_t) num_output_blocks_per_core[i] // batch
         };
 
         // left half
-        if (core_idx_x <= 4) {
+        if (core_idx_x <= 5) {
             tt_metal::SetRuntimeArgs(mm_kernel_in0_reader, core, mm_reader_args);
-            mm_reader_args.insert(mm_reader_args.end(), writer_args.begin(), writer_args.end()-1);
+            mm_reader_args.insert(mm_reader_args.end(), writer_args.begin(), writer_args.end());
             tt_metal::SetRuntimeArgs(mm_kernel_in1_reader_writer, core, mm_reader_args);
             reader_kernels.push_back(mm_kernel_in0_reader);
             writer_kernels.push_back(mm_kernel_in1_reader_writer);
@@ -292,7 +288,7 @@ operation::ProgramWithCallbacks create_program(
         // right half
         else {
             tt_metal::SetRuntimeArgs(mm_kernel_in0_reader_other_noc_setup, core, mm_reader_args);
-            mm_reader_args.insert(mm_reader_args.end(), writer_args.begin(), writer_args.end()-1);
+            mm_reader_args.insert(mm_reader_args.end(), writer_args.begin(), writer_args.end());
             tt_metal::SetRuntimeArgs(mm_kernel_in1_reader_writer_other_noc_setup, core, mm_reader_args);
             reader_kernels.push_back(mm_kernel_in0_reader_other_noc_setup);
             writer_kernels.push_back(mm_kernel_in1_reader_writer_other_noc_setup);
@@ -430,7 +426,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_optimized_bert_large_(co
     // const auto& ashape = a.shape(), bshape = b.shape();
 
     // TODO: Build some sort of dispatcher based on location of op operands
-    TT_ASSERT(not a.on_host() and not b.on_host(), "Operands to matmul need to be on device!");
+    TT_ASSERT(a.storage_type() == StorageType::DEVICE and b.storage_type() == StorageType::DEVICE, "Operands to matmul need to be on device!");
     TT_ASSERT(a.device() == b.device(), "Operands to matmul need to be on the same device!");
     TT_ASSERT(a.buffer() != nullptr and b.buffer() != nullptr, "Operands to matmul need to be allocated in buffers on device!");
 
@@ -497,8 +493,6 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_optimized_bert_large_(co
     //                      Grayskull Device Setup
     ////////////////////////////////////////////////////////////////////////////
     // Pass in cshape instead
-    // std::array<uint32_t, 4> cshape{ashape[0], ashape[1], ashape[2], bshape[3]}; // C=A*B, N1MK*11KN->N1MN
-    //tt_metal::Tensor output = tt_metal::Tensor(cshape, a.dtype(), tt::tt_metal::Layout::TILE, device, mem_config);
     tt_metal::Buffer *out_buffer = output.buffer();
     TT_ASSERT(out_buffer != nullptr, "Output buffer should be allocated on device!");
 

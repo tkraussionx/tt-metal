@@ -10,9 +10,9 @@ sys.path.append(f"{f}/../../../../..")
 
 import torch
 
-from libs import tt_lib as ttl
+import tt_lib as ttl
 
-from libs.tt_lib.utils import (
+from tt_lib.utils import (
     pad_weight,
     tilize_to_list,
     untilize,
@@ -163,13 +163,13 @@ def run_layernorm_tests(test_id, dtype, in0_mem_config, out_mem_config):
                 assert False
             logger.info("Done")
 
-            assert ttx.buffer_type() == in0_mem_config.buffer_type
-            assert tty.buffer_type() == in0_mem_config.buffer_type
-            assert ttz.buffer_type() == out_mem_config.buffer_type
+            assert ttx.memory_config().buffer_type == in0_mem_config.buffer_type
+            assert tty.memory_config().buffer_type == in0_mem_config.buffer_type
+            assert ttz.memory_config().buffer_type == out_mem_config.buffer_type
 
-            logger.debug(f"ttx is on: {ttx.buffer_type()}")
-            logger.debug(f"tty is on: {tty.buffer_type()}")
-            logger.debug(f"ttz is on: {ttz.buffer_type()}")
+            logger.debug(f"ttx is on: {ttx.memory_config().buffer_type}")
+            logger.debug(f"tty is on: {tty.memory_config().buffer_type}")
+            logger.debug(f"ttz is on: {ttz.memory_config().buffer_type}")
 
             t2_data = ttz.to(host).data()
 
@@ -192,16 +192,16 @@ import pytest
 @pytest.mark.parametrize(
     "out_mem_config",
     (
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM),
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.L1),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
     ),
     ids=["out_DRAM", "out_L1"],
 )
 @pytest.mark.parametrize(
     "in0_mem_config",
     (
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM),
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.L1),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
     ),
     ids=["in0_DRAM", "in0_L1"],
 )
@@ -215,5 +215,11 @@ import pytest
     (0, 1, 2, 3),
     ids=["LN", "LN_G", "LN_GB", "add_LN_GB"],
 )
-def test_bert_large_layernorm_test(test_id, dtype, in0_mem_config, out_mem_config):
+def test_bert_large_layernorm_test(
+    test_id, dtype, in0_mem_config, out_mem_config, request
+):
+    ttl.profiler.set_profiler_flag(False)
+    ttl.profiler.set_profiler_location(
+        f"tt_metal/tools/profiler/logs/BERT_large_fused_layernorm_{request.node.callspec.id}"
+    )
     run_layernorm_tests(test_id, dtype, in0_mem_config, out_mem_config)

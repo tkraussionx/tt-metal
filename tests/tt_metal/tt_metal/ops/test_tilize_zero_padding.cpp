@@ -1,7 +1,9 @@
 #include "tt_metal/host_api.hpp"
 #include "tensor/tensor.hpp"
+#include "tensor/host_buffer.hpp"
 #include "tt_dnn/op_library/tilize/tilize_op.hpp"
 #include "constants.hpp"
+#include "tt_numpy/functions.hpp"
 
 #include <algorithm>
 #include <functional>
@@ -47,7 +49,7 @@ int main(int argc, char **argv) {
         ////////////////////////////////////////////////////////////////////////////
         std::array<uint32_t, 4> shape = {1, 32, 45, 64};
         // Allocates a DRAM buffer on device populated with values specified by initialize
-        Tensor a = Tensor(shape, Initialize::RANDOM, DataType::BFLOAT16, Layout::ROW_MAJOR, device);
+        Tensor a =  tt::numpy::random::random(shape).to(device);
         Tensor b = tilize_with_zero_padding(a);
         Tensor c =  b.to(host);
         ////////////////////////////////////////////////////////////////////////////
@@ -61,8 +63,8 @@ int main(int argc, char **argv) {
         padded_shape[3] = roundup(padded_shape[3], TILE_WIDTH);
         Tensor padded_host_a = host_a.pad(padded_shape, {0,0,0,0}, 0);
         Tensor golden = padded_host_a.to(Layout::TILE);
-        auto golden_vec =  *reinterpret_cast<std::vector<bfloat16>*>(golden.data_ptr());
-        auto result_vec = *reinterpret_cast<std::vector<bfloat16>*>(c.data_ptr());
+        auto golden_vec =  host_buffer::view_as<bfloat16>(golden);
+        auto result_vec = host_buffer::view_as<bfloat16>(c);
         std::cout << "Validating " << std::endl;
          std::cout << "golden vec size " << golden_vec.size() << std::endl;
         std::cout << "result vec size " << result_vec.size() << std::endl;

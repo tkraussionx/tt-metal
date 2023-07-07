@@ -14,7 +14,7 @@ operation::ProgramWithCallbacks multi_core_concat_heads(const Tensor &a, Tensor&
     const auto& ashape = a.shape();
 
     TT_ASSERT(ashape[0] == 9 and ashape[1] == 16 and ashape[2] == 384 and ashape[3] == 64, "Input shape to this TM must be [9, 16, 384, 64]!");
-    TT_ASSERT(not a.on_host(), "Operands to TM need to be on device!");
+    TT_ASSERT(a.storage_type() == StorageType::DEVICE, "Operands to TM need to be on device!");
     TT_ASSERT(a.buffer() != nullptr, "Operands to TM need to be allocated in buffers on device!");
     TT_ASSERT(a.dtype() == tt::tt_metal::DataType::BFLOAT16 || a.dtype() == tt::tt_metal::DataType::BFLOAT8_B, "Unsupported data format");
 
@@ -133,7 +133,6 @@ operation::ProgramWithCallbacks multi_core_concat_heads(const Tensor &a, Tensor&
     uint32_t cb0_tiles = per_core_tiles * 2; // double buffer
     auto cb_src0 = tt_metal::CreateCircularBuffers(
         program,
-        device,
         src0_cb_index,
         all_cores,
         cb0_tiles,

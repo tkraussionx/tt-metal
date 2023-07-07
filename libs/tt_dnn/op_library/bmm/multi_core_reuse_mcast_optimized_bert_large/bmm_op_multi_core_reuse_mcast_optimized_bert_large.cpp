@@ -85,6 +85,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         .start={(std::size_t) start_core_x + 1, (std::size_t) start_core_y},
         .end={(std::size_t) start_core_x + num_cores_c - 1, (std::size_t) start_core_y}};
 
+    // Not exactly half-half; this seems to get slightly better perf for fused qkv and selfout
+    // TODO: Experiment with different splits?
     CoreRange in0_receiver_in1_receiver_left_half{
         .start={(std::size_t) start_core_x + 1, (std::size_t) start_core_y + 1},
         .end={(std::size_t) start_core_x + 4, (std::size_t) start_core_y + num_cores_r - 1}};
@@ -122,12 +124,12 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     */
 
     // Mcast args
-    auto in0_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, device, all_cores, INVALID);
-    auto in0_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, device, all_cores, INVALID);
-    auto in1_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, device, all_cores, INVALID);
-    auto in1_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, device, all_cores, INVALID);
-    Semaphore *in3_mcast_sender_semaphore = nullptr;
-    Semaphore *in3_mcast_receiver_semaphore = nullptr;
+    auto in0_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    auto in0_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    auto in1_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    auto in1_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    uint32_t in3_mcast_sender_semaphore = 0;
+    uint32_t in3_mcast_receiver_semaphore = 0;
     if (bias_buffer != nullptr) {
         in3_mcast_sender_semaphore = in1_mcast_sender_semaphore;
         in3_mcast_receiver_semaphore = in1_mcast_receiver_semaphore;
@@ -164,8 +166,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             // in0 mcast args
             (std::uint32_t)  bottom_right_core_physical.x, // in0_mcast_dest_noc_start_x
             (std::uint32_t)  top_left_core_plus_one_physical.x, // in0_mcast_dest_noc_end_x
-            (std::uint32_t)  in0_mcast_sender_semaphore->address(),
-            (std::uint32_t)  in0_mcast_receiver_semaphore->address(),
+            (std::uint32_t)  in0_mcast_sender_semaphore,
+            (std::uint32_t)  in0_mcast_receiver_semaphore,
             (std::uint32_t)  (num_cores_c - 1), // in0_mcast_num_dests
             // batch args
             (std::uint32_t)  M * K, // MtKt
@@ -191,8 +193,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             // in1 mcast args
             (std::uint32_t)  bottom_right_core_physical.y, // in1_mcast_dest_noc_start_y
             (std::uint32_t)  top_left_core_plus_one_physical.y, // in1_mcast_dest_noc_end_y
-            (std::uint32_t)  in1_mcast_sender_semaphore->address(),
-            (std::uint32_t)  in1_mcast_receiver_semaphore->address(),
+            (std::uint32_t)  in1_mcast_sender_semaphore,
+            (std::uint32_t)  in1_mcast_receiver_semaphore,
             (std::uint32_t)  (num_cores_r - 1), // in1_mcast_num_dests
             // batch args
             (std::uint32_t)  K * N, // KtNt
@@ -219,8 +221,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         in1_sender_writer_compile_time_args.push_back((std::uint32_t)  1);
         in1_sender_writer_compile_time_args.push_back((std::uint32_t)  bottom_right_core_physical.y); // in1_mcast_dest_noc_start_y
         in1_sender_writer_compile_time_args.push_back((std::uint32_t)  top_left_core_plus_one_physical.y); // in1_mcast_dest_noc_end_y
-        in1_sender_writer_compile_time_args.push_back((std::uint32_t)  in1_mcast_sender_semaphore->address());
-        in1_sender_writer_compile_time_args.push_back((std::uint32_t)  in1_mcast_receiver_semaphore->address());
+        in1_sender_writer_compile_time_args.push_back((std::uint32_t)  in1_mcast_sender_semaphore);
+        in1_sender_writer_compile_time_args.push_back((std::uint32_t)  in1_mcast_receiver_semaphore);
         in1_sender_writer_compile_time_args.push_back((std::uint32_t)  (num_cores_r - 1)); // in1_mcast_num_dests
     }
     std::vector<uint32_t> in0_receiver_compile_time_args = {
@@ -230,8 +232,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             (std::uint32_t)  K / in0_block_w, // num_blocks
             // in0 mcast args
             (std::uint32_t)  top_left_core_physical.x, // in0_mcast_sender_noc_x
-            (std::uint32_t)  in0_mcast_sender_semaphore->address(),
-            (std::uint32_t)  in0_mcast_receiver_semaphore->address(),
+            (std::uint32_t)  in0_mcast_sender_semaphore,
+            (std::uint32_t)  in0_mcast_receiver_semaphore,
             // batch args
             (std::uint32_t)  B // batch
     };
@@ -247,8 +249,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             (std::uint32_t)  K / in0_block_w, // num_blocks
             // in1 mcast args
             (std::uint32_t)  top_left_core_physical.y, // in1_mcast_sender_noc_y
-            (std::uint32_t)  in1_mcast_sender_semaphore->address(),
-            (std::uint32_t)  in1_mcast_receiver_semaphore->address(),
+            (std::uint32_t)  in1_mcast_sender_semaphore,
+            (std::uint32_t)  in1_mcast_receiver_semaphore,
             // batch args
             (std::uint32_t)  B, // batch
 
@@ -269,8 +271,8 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         // in3 mcast args
         in1_receiver_writer_compile_time_args.push_back((std::uint32_t)  per_core_N);
         in1_receiver_writer_compile_time_args.push_back((std::uint32_t)  top_left_core_physical.y); // in1_mcast_sender_noc_y
-        in1_receiver_writer_compile_time_args.push_back((std::uint32_t)  in3_mcast_sender_semaphore->address());
-        in1_receiver_writer_compile_time_args.push_back((std::uint32_t)  in3_mcast_receiver_semaphore->address());
+        in1_receiver_writer_compile_time_args.push_back((std::uint32_t)  in3_mcast_sender_semaphore);
+        in1_receiver_writer_compile_time_args.push_back((std::uint32_t)  in3_mcast_receiver_semaphore);
     }
 
     auto mm_kernel_in0_sender = tt_metal::CreateDataMovementKernel(
@@ -433,7 +435,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     uint32_t src0_cb_index = 0;
     auto cb_src0 = tt_metal::CreateCircularBuffers(
         program,
-        device,
         src0_cb_index,
         all_cores,
         in0_CB_tiles,
@@ -444,7 +445,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     uint32_t src1_cb_index = 1;
     auto cb_src1 = tt_metal::CreateCircularBuffers(
         program,
-        device,
         src1_cb_index,
         all_cores,
         in1_CB_tiles,
@@ -455,7 +455,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     uint32_t src2_cb_index = 2;
     auto cb_src2 = tt_metal::CreateCircularBuffers(
         program,
-        device,
         src2_cb_index,
         all_cores,
         in2_CB_tiles,
@@ -467,7 +466,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     uint32_t interm0_cb_index = 24;
     auto cb_output = tt_metal::CreateCircularBuffers(
         program,
-        device,
         {ouput_cb_index, interm0_cb_index},
         CoreRangeSet({all_cores}),
         out_CB_tiles,
@@ -479,7 +477,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         uint32_t src3_cb_index = 3;
         auto cb_src3 = tt_metal::CreateCircularBuffers(
             program,
-            device,
             src3_cb_index,
             all_cores,
             in3_CB_tiles,
@@ -490,7 +487,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         uint32_t interm1_cb_index = 25;
         auto cb_interm1 = tt_metal::CreateCircularBuffers(
             program,
-            device,
             interm1_cb_index,
             all_cores,
             interm1_CB_tiles,
@@ -890,12 +886,12 @@ namespace tt {
 namespace tt_metal {
 
 
-operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_optimized_bert_large_(const Tensor &a, const Tensor &b, const std::optional<std::reference_wrapper<const Tensor>> bias, Tensor& output, bool bcast_batch, CoreCoord compute_and_storage_grid_size, tt::DataFormat output_cb_data_format, MathFidelity math_fidelity, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t out_subblock_w, uint32_t per_core_M, uint32_t per_core_N, bool fuse_batch, bool fuse_gelu_activation) {
+operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_optimized_bert_large_(const Tensor &a, const Tensor &b, const std::optional<const Tensor> bias, Tensor& output, bool bcast_batch, CoreCoord compute_and_storage_grid_size, tt::DataFormat output_cb_data_format, MathFidelity math_fidelity, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t out_subblock_w, uint32_t per_core_M, uint32_t per_core_N, bool fuse_batch, bool fuse_gelu_activation) {
 
     const auto& ashape = a.shape(), bshape = b.shape();
 
     // TODO: Build some sort of dispatcher based on location of op operands
-    TT_ASSERT(not a.on_host() and not b.on_host(), "Operands to matmul need to be on device!");
+    TT_ASSERT(a.storage_type() == StorageType::DEVICE and b.storage_type() == StorageType::DEVICE, "Operands to matmul need to be on device!");
     TT_ASSERT(a.device() == b.device(), "Operands to matmul need to be on the same device!");
     TT_ASSERT(a.buffer() != nullptr and b.buffer() != nullptr, "Operands to matmul need to be allocated in buffers on device!");
 
@@ -903,8 +899,8 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_optimized_bert_lar
 
     tt_metal::Buffer* bias_buffer = nullptr;
     if (bias.has_value()) {
-        auto& c = bias.value().get();
-        TT_ASSERT(not c.on_host());
+        auto& c = bias.value();
+        TT_ASSERT(c.storage_type() == StorageType::DEVICE);
         TT_ASSERT(a.device() == c.device(), "Operands to matmul need to be on the same device!");
         TT_ASSERT(c.buffer() != nullptr, "Operands to matmul need to be allocated in buffers on device!");
 
@@ -1005,7 +1001,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_optimized_bert_lar
     return {};
 }
 
-operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_optimized_bert_large(const Tensor& a, const Tensor& b, const std::optional<std::reference_wrapper<const Tensor>> bias, Tensor& output_tensor, CoreCoord compute_and_storage_grid_size, tt::DataFormat output_cb_data_format, MathFidelity math_fidelity, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t out_subblock_w, uint32_t per_core_M, uint32_t per_core_N, bool fuse_batch, bool fuse_gelu_activation) {
+operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_optimized_bert_large(const Tensor& a, const Tensor& b, const std::optional<const Tensor> bias, Tensor& output_tensor, CoreCoord compute_and_storage_grid_size, tt::DataFormat output_cb_data_format, MathFidelity math_fidelity, uint32_t in0_block_w, uint32_t out_subblock_h, uint32_t out_subblock_w, uint32_t per_core_M, uint32_t per_core_N, bool fuse_batch, bool fuse_gelu_activation) {
     return matmul_multi_core_reuse_mcast_optimized_bert_large_(a, b, bias, output_tensor, true, compute_and_storage_grid_size, output_cb_data_format, math_fidelity, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, fuse_batch, fuse_gelu_activation);
 }
 

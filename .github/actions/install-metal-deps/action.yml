@@ -28,13 +28,5 @@ runs:
       run: |
         DEPENDENCIES=$(jq -r --arg os "${{ inputs.os }}" '.[$os] | .[]' $GITHUB_ACTION_PATH/dependencies.json)
         echo $DEPENDENCIES
-        sudo add-apt-repository ppa:git-core/ppa
-        sudo apt-get update
+        sudo apt update
         sudo apt install $DEPENDENCIES
-    - name: Install doxygen
-      shell: bash
-      run: |
-        curl -L "https://www.doxygen.nl/files/doxygen-1.9.6.linux.bin.tar.gz" -o doxygen-1.9.6.linux.bin.tar.gz
-        tar -xvf doxygen-1.9.6.linux.bin.tar.gz
-        cd doxygen-1.9.6
-        sudo make install

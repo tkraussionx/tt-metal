@@ -23,7 +23,7 @@ def custom_tensor_print_handler(tensor_cls):
         return f"tt_lib.tensor.Tensor({'_'.join(map(str, tensor.shape()))})"
 
     def custom_pt_tensor_to_str_fn(tensor):
-        return f"torch.Tensor({'|'.join(['_'.join(map(str, tensor.shape)), str(tensor.dtype), str(tensor.device), str(tensor.layout)])})"
+        return f"torch.Tensor({'|'.join(['_'.join(map(str, tensor.shape)), str(tensor.layout), str(tensor.dtype), str(tensor.device)])})"
 
     # Save original methods
     tensor_str_og = tensor_cls.__str__
@@ -47,7 +47,7 @@ def custom_tensor_print_handler(tensor_cls):
 
 def convert_tt_tensor_to_pt_tensor(tt_tensor, host, output_format):
     # Update output_format with format of first encountered arg
-    if output_format.get("device", None) is None and not tt_tensor.on_host():
+    if output_format.get("device", None) is None and tt_tensor.storage_type() == ttl_tensor.StorageType.DEVICE:
         output_format["device"] = tt_tensor.device()
 
     if output_format.get("dtype", None) is None:
@@ -56,7 +56,7 @@ def convert_tt_tensor_to_pt_tensor(tt_tensor, host, output_format):
     if ttl_profiler.get_profiler_flag():
         ttl_profiler.append_input_data(tt_tensor)
     # Convert to PT Tensor
-    if not tt_tensor.on_host():
+    if tt_tensor.storage_type() == ttl_tensor.StorageType.DEVICE:
         tt_tensor = tt_tensor.to(host)
 
     if tt_tensor.layout() != ttl_tensor.Layout.ROW_MAJOR:
@@ -171,7 +171,13 @@ def convert_tt_tensors_wrapper(func):
 
         if ttl_profiler.get_profiler_flag():
             ttl_profiler.start_profiling("fallback_op")
-            ttl_profiler.set_preferred_name(func.__qualname__)
+            # This is to check if this is a function of a class. We add the object id if it is
+            if '.' in func.__qualname__:
+                obj_id = id(args[0])
+                split_name = func.__qualname__.rsplit(".", 1)
+                ttl_profiler.set_preferred_name(f"{split_name[0]}_{obj_id}.{split_name[1]}")
+            else:
+                ttl_profiler.set_preferred_name(func.__qualname__)
 
             # Override str functions for PT and TT Tensors to format/report desired values
             with custom_tensor_print_handler(
@@ -182,7 +188,7 @@ def convert_tt_tensors_wrapper(func):
                     # Note that this may not work correctly in all cases
                     ttl_profiler.append_meta_data(
                         f"args:({str(args) if '.' not in func.__qualname__ else str(args[1:])})".replace(
-                            ",", "|"
+                            ",", ";"
                         ).replace(
                             " ", ""
                         )

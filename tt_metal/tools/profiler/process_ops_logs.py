@@ -71,15 +71,13 @@ def append_device_time_data(opCandidatePath, call_count, timeDataDict):
         setup.timerAnalysis = {}
 
         devicesData = import_log_run_stats(setup)
+        deviceID = list(devicesData["devices"].keys())[0]  # Assume there is only one device
 
-        start_ID, start_ts, start_risc, start_core = devicesData["devices"][0]["cores"]["DEVICE"]["riscs"]["TENSIX"][
-            "timeseries"
-        ][0]
-        end_ID, end_ts, end_risc, end_core = devicesData["devices"][0]["cores"]["DEVICE"]["riscs"]["TENSIX"][
-            "timeseries"
-        ][-1]
+        timeseriesData = devicesData["devices"][deviceID]["cores"]["DEVICE"]["riscs"]["TENSIX"]["timeseries"]
+        start_ID, start_ts, start_risc, start_core = timeseriesData[0]
+        end_ID, end_ts, end_risc, end_core = timeseriesData[-1]
 
-        cores = list(devicesData["devices"][0]["cores"].keys())
+        cores = list(devicesData["devices"][deviceID]["cores"].keys())
         cores.remove("DEVICE")
 
         delta_time = end_ts - start_ts
@@ -145,11 +143,14 @@ def parse_ops_logs(opsFolder):
                         outputs = row[9].strip()
                         mathFidelity = row[10].strip()
                         parallelizationStrategy = row[11].strip()
-                        preferredName = row[12].strip()
+                        preferredName = row[12].strip().split("tt::tt_metal::")[-1]
                         metadata = row[13].strip()
 
                         if preferredName:
-                            op_name += "_" + preferredName
+                            if is_op == "Yes":
+                                op_name = preferredName
+                            else:
+                                op_name += "_" + preferredName
 
                         op_to_folder[op_name] = op_folder_name
                         if op_name in op_flavour_to_count.keys():
@@ -170,6 +171,7 @@ def parse_ops_logs(opsFolder):
 
                         timeDataDict = {
                             "CALL COUNT": op_flavour_to_count[op_name],
+                            "_OP CALL COUNT": call_count,
                             "IS OP": is_op,
                             "GLOBAL CALL COUNT": global_call_count,
                             "HOST START TS": start_ts,
@@ -215,7 +217,7 @@ def run_dashbaord_webapp(ops, opsFolder, port=None):
         for opCall in opCalls:
             s = opCall["HOST START TS"] - minTime
             e = opCall["HOST END TS"] - minTime
-            c = opCall["CALL COUNT"]
+            c = opCall["_OP CALL COUNT"]
             callDepth = opCall["CALL DEPTH"]
             y = 1 + (0.2 / maxStackSize) * (maxStackSize - callDepth + 1)
             diff = opCall["HOST DURATION [ns]"]
@@ -362,7 +364,12 @@ def print_ops_csv(ops, opsFolder, outputFolder, date, nameAppend):
 
 
 @click.command()
-@click.option("-i", "--ops-folder", type=click.Path(exists=True, dir_okay=True), help="Ops profiler logs folder")
+@click.option(
+    "-i",
+    "--ops-folder",
+    type=click.Path(exists=True, dir_okay=True),
+    help="Ops profiler logs folder",
+)
 @click.option("-o", "--output-folder", type=click.Path(), help="Output folder for artifacts")
 @click.option("-n", "--name-append", type=str, help="Name to be appended to default csv name")
 @click.option("-p", "--port", type=int, help="Dashboard webapp port")

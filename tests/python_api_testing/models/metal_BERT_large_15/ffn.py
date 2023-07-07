@@ -12,12 +12,9 @@ sys.path.append(f"{f}/../../../..")
 import torch
 from transformers import BertForQuestionAnswering
 from tests.python_api_testing.models.conftest import model_location_generator_
-from libs import tt_lib as ttl
-from libs.tt_lib.utils import pad_activation, pad_weight, print_diff_argmax
+import tt_lib as ttl
+from tt_lib.utils import pad_activation, pad_weight, print_diff_argmax
 from utility_functions import comp_pcc, comp_allclose
-from tests.python_api_testing.models.metal_BERT_large_15.utils import (
-    run_matmul_with_dataformat,
-)
 
 
 def feed_forward(
@@ -32,17 +29,7 @@ def feed_forward(
     # output = [1, 9, 384, 4096]
     def op13_MM_bias_gelu(activation, ff1_weighta, ff1_biasa):
         # profiler.start("___op13_MM_bias_gelu")
-        output_plus_bias_act = run_matmul_with_dataformat(
-            ttl.tensor.bert_large_ff1_matmul,
-            ttl.tensor.DataType.BFLOAT16,
-            device,
-            # Force DRAM to fit tensors in L1
-            ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM),
-            activation,
-            ff1_weighta,
-            ff1_biasa,
-            True
-        )
+        output_plus_bias_act = ttl.tensor.bert_large_ff1_matmul(activation, ff1_weighta, ff1_biasa, True, mem_config=ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM))
         # profiler.end("___op13_MM_bias_gelu")
 
         return output_plus_bias_act
@@ -52,15 +39,7 @@ def feed_forward(
     # output = [1, 9, 384, 1024]
     def op14_MM_bias(activation, ff2_weighta, ff2_biasa):
         # profiler.start("___op14_MM_bias")
-        output_plus_bias = run_matmul_with_dataformat(
-            ttl.tensor.bert_large_ff2_matmul,
-            ttl.tensor.DataType.BFLOAT16,
-            device,
-            mem_config,
-            activation,
-            ff2_weighta,
-            ff2_biasa
-        )
+        output_plus_bias = ttl.tensor.bert_large_ff2_matmul(activation, ff2_weighta, ff2_biasa, mem_config=mem_config)
         # profiler.end("___op14_MM_bias")
 
         return output_plus_bias
@@ -203,7 +182,7 @@ def run_ffn_inference(
     # Initialize the device
     ttl.device.InitializeDevice(device, ttl.device.MemoryAllocator.BASIC if dram else ttl.device.MemoryAllocator.L1_BANKING)
     host = ttl.device.GetHost()
-    mem_config = ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM if dram else ttl.tensor.BufferType.L1)
+    mem_config = ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM if dram else ttl.tensor.BufferType.L1)
 
     if on_weka:
         model_name = str(
@@ -239,7 +218,7 @@ def run_ffn_inference(
         ttl.tensor.DataType.BFLOAT16,
         ttl.tensor.Layout.ROW_MAJOR,
     ).to(ttl.tensor.Layout.TILE)
-    tilized_ffn_input = tilized_ffn_input.to(device)
+    tilized_ffn_input = tilized_ffn_input.to(device, mem_config)
 
     tt_out = tt_ffn_model(tilized_ffn_input).to(host)
     tt_out = torch.Tensor(tt_out.to(ttl.tensor.Layout.ROW_MAJOR).data()).reshape(
@@ -259,10 +238,16 @@ def run_ffn_inference(
     if not passing:
         logger.error(f"Output PCC < {pcc}")
 
+    assert(passing)
+
 
 @pytest.mark.parametrize(
     "model_version, batch, seq_len, on_weka, dram, pcc",
-    (("phiyodr/bert-large-finetuned-squad2", 9, 384, True, True, 0.99),),
+    (
+        ("phiyodr/bert-large-finetuned-squad2", 9, 384, True, True, 0.99),
+        ("phiyodr/bert-large-finetuned-squad2", 9, 384, True, False, 0.99),
+    ),
+    ids=["DRAM", "L1"],
 )
 def test_ffn_inference(
     model_version, batch, seq_len, on_weka, dram, pcc, model_location_generator

@@ -6,6 +6,7 @@
 #include <tuple>
 #include <utility>
 #include <variant>
+#include <optional>
 
 #include "tools/profiler/profiler.hpp"
 #include "hostdevcommon/common_runtime_address_map.h"
@@ -13,8 +14,6 @@
 #include "hostdevcommon/common_values.hpp"
 #include "tt_metal/impl/allocator/allocator.hpp"
 #include "tt_metal/impl/buffers/buffer.hpp"
-#include "tt_metal/impl/buffers/circular_buffer.hpp"
-#include "tt_metal/impl/buffers/semaphore.hpp"
 #include "tt_metal/impl/device/device.hpp"
 #include "tt_metal/impl/device/host.hpp"
 #include "tt_metal/impl/kernels/kernel.hpp"
@@ -60,7 +59,6 @@ namespace tt_metal {
  */
 void EnableCompilationReports();
 
-
 /**
  * Disable generation compilation statistics reports.
  *
@@ -68,6 +66,43 @@ void EnableCompilationReports();
  *
  */
 void DisableCompilationReports();
+
+/**
+ * Enable generation of reports for memory allocation statistics.
+ * Three reports are generated in .reports/tt_metal:
+ *  - `prorgam_l1_usage_summary.csv` has a table with an entry for each program indicating the minimum largest free L1 block and size of largest L1 buffer that can be interleaved across available free L1 blocks
+ *  - `program_memory_usage_summary.csv` for each program there is an entry indicating total allocatable, allocated, free, and largest free block sizes for each DRAM and L1 bank
+ *  - `program_detailed_memory_usage.csv` expands on the memory usage summary report by including each memory block address, size, and allocation status
+ *
+ * Note: These reports are generated when program is being compiled so any DRAM or L1 buffer created after program compilation will not be captured! To dump
+ *
+ * Return value: void
+ *
+ */
+void EnableMemoryReports();
+
+/**
+ * Disable generation of memory allocation statistics reports.
+ *
+ * Return value: void
+ *
+ */
+void DisableMemoryReports();
+
+/**
+ * Generates reports to dump device memory state. Three reports are generated:
+ *  - `l1_usage_summary.csv` has a table with an entry for each program indicating the minimum largest free L1 block and size of largest L1 buffer that can be interleaved across available free L1 blocks
+ *  - `memory_usage_summary.csv` for each program there is an entry indicating total allocatable, allocated, free, and largest free block sizes for each DRAM and L1 bank
+ *  - `detailed_memory_usage.csv` expands on the memory usage summary report by including each memory block address, size, and allocation status
+ *
+ * Return value: void
+ *
+ * | Argument      | Description                                       | Type            | Valid Range                                            | Required |
+ * |---------------|---------------------------------------------------|-----------------|--------------------------------------------------------|----------|
+ * | device        | The device for which memory stats will be dumped. | const Device *  |                                                        | True     |
+ * */
+void DumpDeviceMemoryState(const Device *device);
+
 
 // ==================================================
 //                  HOST API: profiler
@@ -437,47 +472,21 @@ uint32_t TileSize(const DataFormat &data_format);
  * | Argument      | Description                                                                    | Type               | Valid Range                             | Required |
  * |---------------|--------------------------------------------------------------------------------|--------------------|-----------------------------------------|----------|
  * | program       | The program to which buffer will be added to.                                  | Program &          |                                         | True     |
- * | device        | The device where the L1 buffer resides.                                        | Device *           |                                         | True     |
  * | buffer_index  | The index/ID of the CB.                                                        | uint32_t           | 0 to 32 DOX-TODO: specify more detail here. | True     |
  * | core          | The location of the Tensix core on which the CB will reside (logical co-ordinates) | const CoreCoord & | DOX-TODO: { , } –> { , }                    | True     |
  * | num_tiles     | Total number of tiles to be stored in the CB                                   | uint32_t           | DOX-TODO: range?                            | True     |
  * | size_in_bytes | Size of CB buffer in Bytes                                                     | uint32_t           | 0 to 1 MB (DOX-TODO: in Bytes)              | True     |
- * | l1_address    | Address at which the CB buffer will reside                                     | uint32_t           | 200 kB to 1MB (DOX-TODO: in bytes)          | True     |
  * | data_format   | The format of the data to be stored in the CB                                  | DataFormat enum    | DataFormat::Float16_b                   | True     |
+ * | l1_address    | Address at which the CB buffer will reside                                     | optional<uint32_t>           | 200 kB to 1MB (DOX-TODO: in bytes)          | False     |
  */
-CircularBuffer *CreateCircularBuffer(
+const CircularBuffer &CreateCircularBuffer(
     Program &program,
-    Device *device,
     uint32_t buffer_index,
     const CoreCoord &core,
     uint32_t num_tiles,
     uint32_t size_in_bytes,
-    uint32_t l1_address,
-    DataFormat data_format);
-
-/**
- * Allocates and creates Circular Buffers (CBs) in L1 memory of specified core and adds it to the program. L1 allocator is responsible for generating address.
- *
- * Return value: CircularBuffer *
- *
- * | Argument      | Description                                                                    | Type               | Valid Range                             | Required |
- * |---------------|--------------------------------------------------------------------------------|--------------------|-----------------------------------------|----------|
- * | program       | The program to which buffer will be added to.                                  | Program &          |                                         | True     |
- * | device        | The device where the L1 buffer resides.                                        | Device *           |                                         | True     |
- * | buffer_indices| IDs of the CB.                                                        | const std::set<uint32_t> &           | 0 to 32 DOX-TODO: specify more detail here. | True     |
- * | core          | The location of the Tensix core on which the CB will reside (logical co-ordinates) | const CoreCoord & | DOX-TODO: { , } –> { , }                    | True     |
- * | num_tiles     | Total number of tiles to be stored in the CB                                   | uint32_t           | DOX-TODO: range?                            | True     |
- * | size_in_bytes | Size of CB buffer in Bytes                                                     | uint32_t           | 0 to 1 MB (DOX-TODO: in Bytes)              | True     |
- * | data_format   | The format of the data to be stored in the CB                                  | DataFormat enum    | DataFormat::Float16_b                   | True     |
- */
-CircularBuffer *CreateCircularBuffer(
-    Program &program,
-    Device *device,
-    uint32_t buffer_index,
-    const CoreCoord &core,
-    uint32_t num_tiles,
-    uint32_t size_in_bytes,
-    DataFormat data_format);
+    DataFormat data_format,
+    std::optional<uint32_t> l1_address = std::nullopt);
 
 /**
  * Creates Circular Buffers (CBs) in L1 memory of all cores within core range (inclusive) at specified address and adds it to the program. L1 allocator reserves size_in_bytes bytes at manually specified addresses.
@@ -487,47 +496,21 @@ CircularBuffer *CreateCircularBuffer(
  * | Argument      | Description                                                                    | Type               | Valid Range                             | Required |
  * |---------------|--------------------------------------------------------------------------------|--------------------|-----------------------------------------|----------|
  * | program       | The program to which buffer will be added to.                                  | Program *          |                                         | True     |
- * | device        | The device where the L1 buffer resides.                                        | Device *           |                                         | True     |
- * | buffer_index  | The index/ID of the CB.                                                        | uint32_t           | 0 to 32 DOX-TODO: specify more detail here. | True     |
- * | core_range    | Range of the Tensix co-ordinates where buffer will reside (Logical co-ordinates)  | const CoreRange & (std::pair<CoreCoord, CoreCoord>) | DOX-TODO: { , } –> { , }                    | True     |
- * | num_tiles     | Total number of tiles to be stored in the CB                                   | uint32_t           | DOX-TODO: range?                            | True     |
- * | size_in_bytes | Size of CB buffer in Bytes                                                     | uint32_t           | 0 to 1 MB (DOX-TODO: in Bytes)              | True     |
- * | l1_address    | Address at which the CB buffer will reside                                     | uint32_t           | 200 kB to 1MB (DOX-TODO: in bytes)          | True     |
- * | data_format   | The format of the data to be stored in the CB                                  | DataFormat enum    | DataFormat::Float16_b                   | True     |
- */
-CircularBuffer *CreateCircularBuffers(
-    Program &program,
-    Device *device,
-    uint32_t buffer_index,
-    const CoreRange &core_range,
-    uint32_t num_tiles,
-    uint32_t size_in_bytes,
-    uint32_t l1_address,
-    DataFormat data_format);
-
-/**
- * Creates Circular Buffer (CB) per core within core range (inclusive). CBs will be allocated to the same address on their respective cores, an error is returned is this is not possible.
- *
- * Return value: CircularBuffer *
- *
- * | Argument      | Description                                                                    | Type               | Valid Range                             | Required |
- * |---------------|--------------------------------------------------------------------------------|--------------------|-----------------------------------------|----------|
- * | program       | The program to which buffer will be added to.                                  | Program *          |                                         | True     |
- * | device        | The device where the L1 buffer resides.                                        | Device *           |                                         | True     |
  * | buffer_index  | The index/ID of the CB.                                                        | uint32_t           | 0 to 32 DOX-TODO: specify more detail here. | True     |
  * | core_range    | Range of the Tensix co-ordinates where buffer will reside (Logical co-ordinates)  | const CoreRange & (std::pair<CoreCoord, CoreCoord>) | DOX-TODO: { , } –> { , }                    | True     |
  * | num_tiles     | Total number of tiles to be stored in the CB                                   | uint32_t           | DOX-TODO: range?                            | True     |
  * | size_in_bytes | Size of CB buffer in Bytes                                                     | uint32_t           | 0 to 1 MB (DOX-TODO: in Bytes)              | True     |
  * | data_format   | The format of the data to be stored in the CB                                  | DataFormat enum    | DataFormat::Float16_b                   | True     |
+ * | l1_address    | Address at which the CB buffer will reside                                     | optional<uint32_t>           | 200 kB to 1MB (DOX-TODO: in bytes)          | False     |
  */
-CircularBuffer *CreateCircularBuffers(
+const CircularBuffer &CreateCircularBuffers(
     Program &program,
-    Device *device,
     uint32_t buffer_index,
     const CoreRange &core_range,
     uint32_t num_tiles,
     uint32_t size_in_bytes,
-    DataFormat data_format);
+    DataFormat data_format,
+    std::optional<uint32_t> l1_address = std::nullopt);
 
 /**
  * Creates Circular Buffers (CBs) in L1 memory of all cores within set of core ranges (inclusive) at specified address and adds it to the program. L1 allocator reserves size_in_bytes bytes at manually specified addresses.
@@ -537,47 +520,21 @@ CircularBuffer *CreateCircularBuffers(
  * | Argument      | Description                                                                    | Type               | Valid Range                             | Required |
  * |---------------|--------------------------------------------------------------------------------|--------------------|-----------------------------------------|----------|
  * | program       | The program to which buffer will be added to.                                  | Program *          |                                         | True     |
- * | device        | The device where the L1 buffer resides.                                        | Device *           |                                         | True     |
  * | buffer_index  | The index/ID of the CB.                                                        | uint32_t           | 0 to 32 DOX-TODO: specify more detail here. | True     |
  * | core_range_set   | Ranges of the Tensix co-ordinates where buffer will reside (Logical co-ordinates)  | const CoreRangeSet & (std::set<CoreRange>) | DOX-TODO: { , } –> { , }                    | True     |
  * | num_tiles     | Total number of tiles to be stored in the CB                                   | uint32_t           | DOX-TODO: range?                            | True     |
  * | size_in_bytes | Size of CB buffer in Bytes                                                     | uint32_t           | 0 to 1 MB (DOX-TODO: in Bytes)              | True     |
- * | l1_address    | Address at which the CB buffer will reside                                     | uint32_t           | 200 kB to 1MB (DOX-TODO: in bytes)          | True     |
  * | data_format   | The format of the data to be stored in the CB                                  | DataFormat enum    | DataFormat::Float16_b                   | True     |
+ * | l1_address    | Address at which the CB buffer will reside                                     | optional<uint32_t>           | 200 kB to 1MB (DOX-TODO: in bytes)          | False     |
  */
-CircularBuffer *CreateCircularBuffers(
+const CircularBuffer &CreateCircularBuffers(
     Program &program,
-    Device *device,
     uint32_t buffer_index,
     const CoreRangeSet &core_range_set,
     uint32_t num_tiles,
     uint32_t size_in_bytes,
-    uint32_t l1_address,
-    DataFormat data_format);
-
-/**
- * Creates Circular Buffer (CB) per core within set of core ranges (inclusive). CBs will be allocated to the same address on their respective cores, an error is returned is this is not possible.
- *
- * Return value: CircularBuffer *
- *
- * | Argument      | Description                                                                    | Type               | Valid Range                             | Required |
- * |---------------|--------------------------------------------------------------------------------|--------------------|-----------------------------------------|----------|
- * | program       | The program to which buffer will be added to.                                  | Program *          |                                         | True     |
- * | device        | The device where the L1 buffer resides.                                        | Device *           |                                         | True     |
- * | buffer_index  | The index/ID of the CB.                                                        | uint32_t           | 0 to 32 DOX-TODO: specify more detail here. | True     |
- * | core_range_set   | Ranges of the Tensix co-ordinates where buffer will reside (Logical co-ordinates)  | const CoreRange & (std::set<CoreRange>) | DOX-TODO: { , } –> { , }                    | True     |
- * | num_tiles     | Total number of tiles to be stored in the CB                                   | uint32_t           | DOX-TODO: range?                            | True     |
- * | size_in_bytes | Size of CB buffer in Bytes                                                     | uint32_t           | 0 to 1 MB (DOX-TODO: in Bytes)              | True     |
- * | data_format   | The format of the data to be stored in the CB                                  | DataFormat enum    | DataFormat::Float16_b                   | True     |
- */
-CircularBuffer *CreateCircularBuffers(
-    Program &program,
-    Device *device,
-    uint32_t buffer_index,
-    const CoreRangeSet &core_range_set,
-    uint32_t num_tiles,
-    uint32_t size_in_bytes,
-    DataFormat data_format);
+    DataFormat data_format,
+    std::optional<uint32_t> l1_address = std::nullopt);
 
 /**
  * Creates Circular Buffers (CBs) in L1 memory of all cores within set of core ranges (inclusive) at specified address and adds it to the program. L1 allocator reserves size_in_bytes bytes at manually specified addresses.
@@ -587,52 +544,26 @@ CircularBuffer *CreateCircularBuffers(
  * | Argument      | Description                                                                    | Type               | Valid Range                             | Required |
  * |---------------|--------------------------------------------------------------------------------|--------------------|-----------------------------------------|----------|
  * | program       | The program to which buffer will be added to.                                  | Program *          |                                         | True     |
- * | device        | The device where the L1 buffer resides.                                        | Device *           |                                         | True     |
  * | buffer_indices  | Indices/IDs of the CB.                                                        | const std::set<uint32_t> &           | 0 to 32 DOX-TODO: specify more detail here. | True     |
  * | core_range_set   | Ranges of the Tensix co-ordinates where buffer will reside (Logical co-ordinates)  | const CoreRangeSet & (std::set<CoreRange>) | DOX-TODO: { , } –> { , }                    | True     |
  * | num_tiles     | Total number of tiles to be stored in the CB                                   | uint32_t           | DOX-TODO: range?                            | True     |
  * | size_in_bytes | Size of CB buffer in Bytes                                                     | uint32_t           | 0 to 1 MB (DOX-TODO: in Bytes)              | True     |
- * | l1_address    | Address at which the CB buffer will reside                                     | uint32_t           | 200 kB to 1MB (DOX-TODO: in bytes)          | True     |
  * | data_format   | The format of the data to be stored in the CB                                  | DataFormat enum    | DataFormat::Float16_b                   | True     |
+ * | l1_address    | Address at which the CB buffer will reside                                     | optional<uint32_t>           | 200 kB to 1MB (DOX-TODO: in bytes)          | True     |
  */
-CircularBuffer *CreateCircularBuffers(
+const CircularBuffer &CreateCircularBuffers(
     Program &program,
-    Device *device,
     const std::set<uint32_t> &buffer_indices,
     const CoreRangeSet &core_range_set,
     uint32_t num_tiles,
     uint32_t size_in_bytes,
-    uint32_t l1_address,
-    DataFormat data_format);
-
-/**
- * Creates Circular Buffer (CB) per core within set of core ranges (inclusive). CBs will be allocated to the same address on their respective cores, an error is returned is this is not possible.
- *
- * Return value: CircularBuffer *
- *
- * | Argument      | Description                                                                    | Type               | Valid Range                             | Required |
- * |---------------|--------------------------------------------------------------------------------|--------------------|-----------------------------------------|----------|
- * | program       | The program to which buffer will be added to.                                  | Program *          |                                         | True     |
- * | device        | The device where the L1 buffer resides.                                        | Device *           |                                         | True     |
- * | buffer_indices  | Indices/IDs of the CB.                                                        | const std::set<uint32_t> &           | 0 to 32 DOX-TODO: specify more detail here. | True     |
- * | core_range_set   | Ranges of the Tensix co-ordinates where buffer will reside (Logical co-ordinates)  | const CoreRange & (std::set<CoreRange>) | DOX-TODO: { , } –> { , }                    | True     |
- * | num_tiles     | Total number of tiles to be stored in the CB                                   | uint32_t           | DOX-TODO: range?                            | True     |
- * | size_in_bytes | Size of CB buffer in Bytes                                                     | uint32_t           | 0 to 1 MB (DOX-TODO: in Bytes)              | True     |
- * | data_format   | The format of the data to be stored in the CB                                  | DataFormat enum    | DataFormat::Float16_b                   | True     |
- */
-CircularBuffer *CreateCircularBuffers(
-    Program &program,
-    Device *device,
-    const std::set<uint32_t> &buffer_indices,
-    const CoreRangeSet &core_range_set,
-    uint32_t num_tiles,
-    uint32_t size_in_bytes,
-    DataFormat data_format);
+    DataFormat data_format,
+    std::optional<uint32_t> l1_address = std::nullopt);
 
 /**
  * Initializes semaphore on all cores within core range (inclusive). Each core can have up to four 32B semaphores.
  *
- * Return value: Semaphore *
+ * Return value: Semaphore address (uint32_t)
  *
  * | Argument      | Description                                          | Type                                                  | Valid Range                                              | Required |
  * |---------------|------------------------------------------------------|-------------------------------------------------------|----------------------------------------------------------|----------|
@@ -641,12 +572,12 @@ CircularBuffer *CreateCircularBuffers(
  * | core_range    | Range of the Tensix co-ordinates using the semaphore | const CoreRange & (std::pair<CoreCoord, CoreCoord>)   | Pair of logical coords where first coord <= second coord | Yes      |
  * | initial_value | Initial value of the semaphore                       | uint32_t                                              |                                                          | Yes      |
  */
-Semaphore *CreateSemaphore(Program &program, Device *device, const CoreRange &core_range, uint32_t initial_value);
+uint32_t CreateSemaphore(Program &program, const CoreRange &core_range, uint32_t initial_value);
 
 /**
  * Initializes semaphore on all cores within core range (inclusive). Each core can have up to four 32B semaphores.
  *
- * Return value: Semaphore *
+ * Return value: Semaphore address (uint32_t)
  *
  * | Argument       | Description                                                 | Type                   | Valid Range                                               | Required |
  * |----------------|-------------------------------------------------------------|------------------------|-----------------------------------------------------------|----------|
@@ -655,7 +586,7 @@ Semaphore *CreateSemaphore(Program &program, Device *device, const CoreRange &co
  * | core_range_set    | Set of Range of the Tensix co-ordinates using the semaphore | const CoreRangeSet &   | Pairs of logical coords where first coord <= second coord | Yes      |
  * | initial_value  | Initial value of the semaphore                              | uint32_t               |                                                           | Yes      |
  */
-Semaphore *CreateSemaphore(Program &program, Device *device, const CoreRangeSet &core_range_set, uint32_t initial_value);
+uint32_t CreateSemaphore(Program &program, const CoreRangeSet &core_range_set, uint32_t initial_value);
 
 /**
 * Copies data from a host buffer into the specified buffer
@@ -878,6 +809,8 @@ void GenerateBankToNocCoordHeaders(
     Device *device,
     build_kernel_for_riscv_options_t *build_options,
     const std::string &op_path);
+
+void Synchronize();
 
 }  // namespace tt_metal
 

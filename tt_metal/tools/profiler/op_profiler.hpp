@@ -13,6 +13,13 @@ namespace tt_metal {
 namespace op_profiler {
 
     namespace detail {
+        static string replace_comma(const string& s)
+        {
+            string ret = s;
+            std::replace( ret.begin(), ret.end(), ',', ';');
+            return ret;
+        }
+
         static string join_vector(const vector<string>& strs, string delimiter = "-")
         {
             string ret = "";
@@ -53,7 +60,7 @@ namespace op_profiler {
                 shape_to_str(tensor.shape()),
                 layout_to_str.at(tensor.layout()),
                 dtype_to_str.at(tensor.dtype()),
-                tensor.on_host() ? "ON_HOST" : "ON_DEVICE"
+                tensor.storage_type() == StorageType::HOST ? "HOST" : fmt::format("DEV_{}_{}", tensor.device()->pcie_slot(), magic_enum::enum_name(tensor.memory_config().buffer_type)),
             };
 
             return join_vector(tensorStrs, "|");
@@ -197,34 +204,36 @@ namespace op_profiler {
 
             public:
 
-                void start_profiling(const string opName)
+                void start_profiling(const string& opName)
                 {
                     if (profileOps)
                     {
+                        auto opNameNoComma = replace_comma(opName);
                         auto callCount = get_call_count_increment(opName);
-                        OpData opData = OpData(opName, callCount, globalCallCount, opStack.size() + 1);
+                        OpData opData = OpData(opNameNoComma, callCount, globalCallCount, opStack.size() + 1);
 
                         opData.profiler.setHostDoProfile(true);
-                        opData.profiler.markStart(opName);
+                        opData.profiler.markStart(opNameNoComma);
 
                         tt::tt_metal::SetHostProfilerFlag(true);
 
-                        setup_profiling_folders (opName, callCount, opData.profiler);
+                        setup_profiling_folders (opNameNoComma, callCount, opData.profiler);
 
                         opStack.push(opData);
                     }
                 }
 
 
-                void stop_profiling(const string opName)
+                void stop_profiling(const string& opName)
                 {
                     if (profileOps)
                     {
+                        auto opNameNoComma = replace_comma(opName);
                         auto& opData = get_op_data();
-                        TT_ASSERT (opName == opData.name, "Something is wrong, op name mismatch");
+                        TT_ASSERT (opNameNoComma == opData.name, "Something is wrong, op name mismatch");
 
                         auto additionalFields = generate_additional_data();
-                        opData.profiler.markStop(opName, false);
+                        opData.profiler.markStop(opNameNoComma, false);
                         opData.profiler.dumpHostResults(additionalFields);
                         clear_profiler();
                     }
@@ -237,46 +246,36 @@ namespace op_profiler {
 
                 void append_input_data (const string& input)
                 {
-                    get_op_data().inputs.push_back(input);
+                    get_op_data().inputs.push_back(replace_comma(input));
                 }
 
                 void append_output_data (const string& output)
                 {
-                    get_op_data().outputs.push_back(output);
+                    get_op_data().outputs.push_back(replace_comma(output));
                 }
 
-                void set_math_fidelity (string fidelity)
+                void set_math_fidelity (const string& fidelity)
                 {
-                    get_op_data().mathFidelity = fidelity;
+                    get_op_data().mathFidelity = replace_comma(fidelity);
                 }
 
-                void set_parallelization_strategy (string strategy)
+                void set_parallelization_strategy (const string& strategy)
                 {
-                    get_op_data().parlStrategy = strategy;
+                    get_op_data().parlStrategy = replace_comma(strategy);
                 }
 
-                void set_preferred_name (string name)
+                void set_preferred_name (const string& name)
                 {
-                    get_op_data().preferredName = name;
+                    get_op_data().preferredName = replace_comma(name);
                 }
 
-                void append_meta_data(string metaData)
+                void append_meta_data(const string& metaData)
                 {
                     if (profileOps)
                     {
                         TT_ASSERT (opStack.size() > 0, "Something is wrong, cannot append meta data, op stack is empty");
-                        string noDashMetaData = "";
-                        for (auto &ch : metaData)
-                        {
-                            if (ch != '-')
-                            {
-                                noDashMetaData += ch;
-                            }
-                            else
-                            {
-                                noDashMetaData += '_';
-                            }
-                        }
+                        string noDashMetaData = replace_comma(metaData);
+                        std::replace( noDashMetaData.begin(), noDashMetaData.end(), '-', '_');
                         get_op_data().metaDataVector.push_back(noDashMetaData);
                     }
                 }
@@ -286,7 +285,7 @@ namespace op_profiler {
                     profileOps = doProfile;
                 }
 
-                void set_profiler_location(string profilerLogFolder)
+                void set_profiler_location(const string& profilerLogFolder)
                 {
                     if (profileOps)
                     {
@@ -319,7 +318,7 @@ namespace op_profiler {
         detail::operationProfiler.append_input_data(detail::tensor_to_str(input));
     }
 
-    static void append_input_optional_data (std::optional<std::reference_wrapper<const Tensor>> input)
+    static void append_input_optional_data (std::optional<const Tensor> input)
     {
         if (input.has_value()) {
             detail::operationProfiler.append_input_data(detail::tensor_to_str(input.value()));
@@ -336,8 +335,8 @@ namespace op_profiler {
     }
 
     static void append_all_tensor_io_data (
-        const std::vector<std::reference_wrapper<const Tensor>> &input_tensors,
-        const std::vector<std::optional<std::reference_wrapper<const Tensor>>> &optional_input_tensors,
+        const std::vector<Tensor> &input_tensors,
+        const std::vector<std::optional<const Tensor>> &optional_input_tensors,
         const std::vector<Tensor> &output_tensors)
     {
         if (detail::operationProfiler.get_profiler_flag())

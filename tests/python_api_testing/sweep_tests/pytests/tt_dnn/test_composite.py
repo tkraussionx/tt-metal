@@ -6,6 +6,7 @@ from functools import partial
 from itertools import product
 from collections import defaultdict
 from math import pi
+import numpy as np
 
 f = f"{Path(__file__).parent}"
 sys.path.append(f"{f}/..")
@@ -51,6 +52,15 @@ def custom_compare(*args, **kwargs):
                 "rad2deg",
                 "threshold",
                 "hypot",
+                "hardswish",
+                "hardsigmoid",
+                "ones_like",
+                "zeros_like",
+                "full_like",
+                "ones",
+                "zeros",
+                "full",
+                "arange",
             ),
             ([[1, 1, 32, 32]], [[1, 3, 320, 64]]),
             (0,),
@@ -71,6 +81,8 @@ def test_run_eltwise_composite_test(
     options["hypot"] = (1, 100)
     options["cbrt"] = (-1000, 1000)
     options["relu6"] = (-100, 100)
+    options["hardsigmoid"] = (-100, 100)
+    options["hardswish"] = (-100, 100)
 
     generator = generation_funcs.gen_rand
     function = fn
@@ -81,11 +93,15 @@ def test_run_eltwise_composite_test(
             torch.bfloat16,
         )
     ]
-
+    test_args = generation_funcs.gen_default_dtype_layout_device(input_shapes)[0]
+    test_args.update({"scalar": np.random.randint(-100, 100)})
+    if fn == "arange":
+        test_args.update({"start": -10, "end": 1024 - 10, "step": 1})
     run_single_pytorch_test(
         "eltwise-%s" % (function),
         input_shapes,
         datagen_func,
         partial(custom_compare, function=fn),
         pcie_slot,
+        test_args,
     )

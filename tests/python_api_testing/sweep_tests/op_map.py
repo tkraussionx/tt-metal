@@ -15,6 +15,54 @@ op_map = {
     #################### TT-DNN ####################
     ################################################
     # Eltwise unary
+    "eltwise-hardtanh": {
+        "tt_lib_op": tt_lib_ops.hardtanh,
+        "pytorch_op": pytorch_ops.hardtanh,
+    },
+    "eltwise-clip": {
+        "tt_lib_op": tt_lib_ops.clip,
+        "pytorch_op": pytorch_ops.clip,
+    },
+    "eltwise-zeros": {
+        "tt_lib_op": tt_lib_ops.zeros,
+        "pytorch_op": pytorch_ops.zeros,
+    },
+    "eltwise-ones": {
+        "tt_lib_op": tt_lib_ops.ones,
+        "pytorch_op": pytorch_ops.ones,
+    },
+    "eltwise-full": {
+        "tt_lib_op": tt_lib_ops.full,
+        "pytorch_op": pytorch_ops.full,
+    },
+    "eltwise-zeros_like": {
+        "tt_lib_op": tt_lib_ops.zeros_like,
+        "pytorch_op": pytorch_ops.zeros_like,
+    },
+    "eltwise-ones_like": {
+        "tt_lib_op": tt_lib_ops.ones_like,
+        "pytorch_op": pytorch_ops.ones_like,
+    },
+    "eltwise-full_like": {
+        "tt_lib_op": tt_lib_ops.full_like,
+        "pytorch_op": pytorch_ops.full_like,
+    },
+    "eltwise-div_unary": {
+        "tt_lib_op": tt_lib_ops.eltwise_div_unary,
+        "pytorch_op": pytorch_ops.div_unary,
+    },
+    "eltwise-mul_unary": {
+        "tt_lib_op": tt_lib_ops.eltwise_mul_unary,
+        "pytorch_op": pytorch_ops.mul_unary,
+    },
+    "eltwise-sub_unary": {
+        "tt_lib_op": tt_lib_ops.eltwise_sub_unary,
+        "pytorch_op": pytorch_ops.sub_unary,
+    },
+    "eltwise-add_unary": {
+        "tt_lib_op": tt_lib_ops.eltwise_add_unary,
+        "pytorch_op": pytorch_ops.add_unary,
+    },
     "eltwise-ltz": {
         "tt_lib_op": tt_lib_ops.eltwise_ltz,
         "pytorch_op": pytorch_ops.ltz,
@@ -108,16 +156,16 @@ op_map = {
         "pytorch_op": pytorch_ops.relu,
     },
     "eltwise-power": {
-        "tt_lib_op": partial(tt_lib_ops.eltwise_power, exponent=7),
-        "pytorch_op": partial(pytorch_ops.power, exponent=7),
+        "tt_lib_op": tt_lib_ops.eltwise_power,
+        "pytorch_op": pytorch_ops.power,
     },
     "eltwise-relu_max": {
-        "tt_lib_op": partial(tt_lib_ops.eltwise_relu_max, upper_limit=2),
-        "pytorch_op": partial(pytorch_ops.relu_max, upper_limit=2),
+        "tt_lib_op": tt_lib_ops.eltwise_relu_max,
+        "pytorch_op": pytorch_ops.relu_max,
     },
     "eltwise-relu_min": {
-        "tt_lib_op": partial(tt_lib_ops.eltwise_relu_min, lower_limit=-2),
-        "pytorch_op": partial(pytorch_ops.relu_min, lower_limit=-2),
+        "tt_lib_op": tt_lib_ops.eltwise_relu_min,
+        "pytorch_op": pytorch_ops.relu_min,
     },
     "eltwise-polyval": {
         "tt_lib_op": partial(tt_lib_ops.eltwise_polyval, coeffs=[0.0, 1.0, 2.0, 1.0]),
@@ -130,6 +178,14 @@ op_map = {
     "eltwise-sigmoid": {
         "tt_lib_op": tt_lib_ops.eltwise_sigmoid,
         "pytorch_op": pytorch_ops.sigmoid,
+    },
+    "eltwise-hardsigmoid": {
+        "tt_lib_op": tt_lib_ops.eltwise_hardsigmoid,
+        "pytorch_op": pytorch_ops.hardsigmoid,
+    },
+    "eltwise-hardswish": {
+        "tt_lib_op": tt_lib_ops.eltwise_hardswish,
+        "pytorch_op": pytorch_ops.hardswish,
     },
     "eltwise-log": {
         "tt_lib_op": tt_lib_ops.eltwise_log,
@@ -192,11 +248,24 @@ op_map = {
         "tt_lib_op": tt_lib_ops.eltwise_relu6,
         "pytorch_op": pytorch_ops.relu6,
     },
+    # Eltwise ternary
+    "eltwise-arange": {
+        "tt_lib_op": tt_lib_ops.arange,
+        "pytorch_op": pytorch_ops.arange,
+    },
+    "eltwise-where": {
+        "tt_lib_op": tt_lib_ops.where,
+        "pytorch_op": pytorch_ops.where,
+    },
     # Matmul
     "matmul": {
         "tt_lib_op": tt_lib_ops.matmul,
         "pytorch_op": pytorch_ops.matmul,
     },
+    "outer": {
+        "tt_lib_op": tt_lib_ops.outer,
+        "pytorch_op": pytorch_ops.outer,
+    },    
     "bmm": {
         "tt_lib_op": tt_lib_ops.bmm,
         "pytorch_op": pytorch_ops.matmul,

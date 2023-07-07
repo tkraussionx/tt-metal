@@ -15,12 +15,9 @@ from transformers import BertForQuestionAnswering
 import numpy as np
 
 from tests.python_api_testing.models.conftest import model_location_generator_
-from libs import tt_lib as ttl
-from libs.tt_lib.utils import pad_activation, pad_weight, print_diff_argmax
+import tt_lib as ttl
+from tt_lib.utils import pad_activation, pad_weight, print_diff_argmax
 from utility_functions import enable_compile_cache, comp_pcc, comp_allclose, profiler
-from tests.python_api_testing.models.metal_BERT_large_15.utils import (
-    run_matmul_with_dataformat,
-)
 
 
 def torch2tt_tensor(py_tensor: torch.Tensor, tt_device):
@@ -87,66 +84,23 @@ def mha(qw, qb, kw, kb, vw, vb, hidden_dim, num_heads, device, mem_config):
 
     def op1_qkv_fused(activation, qkv_weight, qkv_bias):
         # profiler.start("___op1_qkv_fused")
-        qkv = run_matmul_with_dataformat(
-            ttl.tensor.bert_large_fused_qkv_matmul,
-            ttl.tensor.DataType.BFLOAT16,
-            device,
-            mem_config,
-            activation,
-            qkv_weight,
-            qkv_bias,
-        )
+        qkv = ttl.tensor.bert_large_fused_qkv_matmul(activation, qkv_weight, qkv_bias, mem_config=mem_config)
         # profiler.end("___op1_qkv_fused")
 
         return qkv
 
-    def op2_split(qkv):
-        # profiler.start("___op2_split")
-        Q, K, V = ttl.tensor.bert_large_split_fused_qkv(qkv, mem_config)
-        # profiler.end("___op2_split")
+    def op2to6_create_qkv_heads(qkv):
+        # profiler.start("___op2to6_create_qkv_heads")
+        q_heads, kt_heads, v_heads = ttl.tensor.bert_large_create_qkv_heads(
+            qkv, mem_config
+        )
+        # profiler.end("___op2to6_create_qkv_heads")
 
-        return Q, K, V
-
-    def op3_create_heads(Q):
-        # profiler.start("___op3_make_attention_heads")
-        q_heads = ttl.tensor.bert_large_create_q_head(Q, mem_config)
-        # profiler.end("___op3_make_attention_heads")
-
-        return q_heads
-
-    def op4_create_heads(K):
-        # profiler.start("___op4_make_attention_heads")
-        # NOTE: This merges in transpose_hw (op6)
-        k_heads = ttl.tensor.bert_large_create_k_head(K, mem_config)
-        # profiler.end("___op4_make_attention_heads")
-
-        return k_heads
-
-    def op5_create_heads(V):
-        # profiler.start("___op5_make_attention_heads")
-        v_heads = ttl.tensor.bert_large_create_v_head(V, mem_config)
-        # profiler.end("___op5_make_attention_heads")
-
-        return v_heads
-
-    def op6_transpose_hw(K):
-        # profiler.start("___op6_transpose_hw")
-        kt = ttl.tensor.transpose(K)
-        # profiler.end("___op6_transpose_hw")
-
-        return kt
+        return q_heads, kt_heads, v_heads
 
     def op7_bmm(Q_heads, K_T_heads):
         # profiler.start("___op7_bmm")
-        qkt = run_matmul_with_dataformat(
-            ttl.tensor.bert_large_pre_softmax_bmm,
-            ttl.tensor.DataType.BFLOAT16,
-            device,
-            # Force DRAM to fit tensors in L1, PCC issue
-            ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM),
-            Q_heads,
-            K_T_heads,
-        )
+        qkt = ttl.tensor.bert_large_pre_softmax_bmm(Q_heads, K_T_heads, mem_config=ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM))
         # profiler.end("___op7_bmm")
 
         return qkt
@@ -170,14 +124,7 @@ def mha(qw, qb, kw, kb, vw, vb, hidden_dim, num_heads, device, mem_config):
 
     def op9_bmm(attention_scores, V_heads):
         # profiler.start("___op9_bmm")
-        weighted_activation = run_matmul_with_dataformat(
-            ttl.tensor.bert_large_post_softmax_bmm,
-            ttl.tensor.DataType.BFLOAT16,
-            device,
-            mem_config,
-            attention_scores,
-            V_heads,
-        )
+        weighted_activation = ttl.tensor.bert_large_post_softmax_bmm(attention_scores, V_heads, mem_config=mem_config)
         # profiler.end("___op9_bmm")
 
         return weighted_activation
@@ -198,20 +145,10 @@ def mha(qw, qb, kw, kb, vw, vb, hidden_dim, num_heads, device, mem_config):
         # profiler.start("__mha")
         qkv = op1_qkv_fused(activation, qkv_weight, qkv_bias)
         # activation.deallocate()
-        Q, K, V = op2_split(qkv)
+
+        Q_heads, K_T_heads, V_heads = op2to6_create_qkv_heads(qkv)
         qkv.deallocate()
 
-        Q_heads = op3_create_heads(Q)
-        Q.deallocate()
-        K_T_heads = op4_create_heads(K)
-        K.deallocate()
-        V_heads = op5_create_heads(V)
-        V.deallocate()
-
-        """
-        # No longer needed as op4 already returns K_head transposed
-        K_T_heads = op6_transpose_hw(K_heads)
-        """
         qkt = op7_bmm(Q_heads, K_T_heads)
         Q_heads.deallocate()
         K_T_heads.deallocate()
@@ -260,7 +197,16 @@ class TtMultiHeadAttentionModel(torch.nn.Module):
         hidden_dim = qw.shape[-1]
 
         self.mha = mha(
-            qw, qb, kw, kb, vw, vb, hidden_dim, config.num_attention_heads, device, mem_config
+            qw,
+            qb,
+            kw,
+            kb,
+            vw,
+            vb,
+            hidden_dim,
+            config.num_attention_heads,
+            device,
+            mem_config,
         )
 
     def forward(self, activation, attention_mask=None):
@@ -276,8 +222,8 @@ class PytorchMultiHeadAttentionModel(torch.nn.Module):
         # Disable dropout
         self.mha.eval()
 
-    def forward(self, x):
-        result = self.mha(x)[0]
+    def forward(self, x, attention_mask):
+        result = self.mha(x, attention_mask)[0]
         return result
 
 
@@ -286,9 +232,16 @@ def run_mha_inference(
 ):
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     # Initialize the device
-    ttl.device.InitializeDevice(device, ttl.device.MemoryAllocator.BASIC if dram else ttl.device.MemoryAllocator.L1_BANKING)
+    ttl.device.InitializeDevice(
+        device,
+        ttl.device.MemoryAllocator.BASIC
+        if dram
+        else ttl.device.MemoryAllocator.L1_BANKING,
+    )
     host = ttl.device.GetHost()
-    mem_config = ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM if dram else ttl.tensor.BufferType.L1)
+    mem_config = ttl.tensor.MemoryConfig(
+        True, ttl.tensor.BufferType.DRAM if dram else ttl.tensor.BufferType.L1
+    )
 
     if on_weka:
         model_name = str(
@@ -318,7 +271,11 @@ def run_mha_inference(
         torch.rand(batch, 1, seq_len, hugging_face_reference_model.config.hidden_size)
         * 2
     ) - 1
-    pytorch_out = pytorch_mha_model(mha_input.squeeze(1)).unsqueeze(1)
+    bert_attention_mask = torch.zeros(batch, 1, 1, seq_len)
+    extended_bert_attention_mask = torch.zeros(batch, 1, 32, seq_len)
+    pytorch_out = pytorch_mha_model(
+        mha_input.squeeze(1), bert_attention_mask
+    ).unsqueeze(1)
 
     pad_mha_input = pad_activation(mha_input)
     tt_mha_input = ttl.tensor.Tensor(
@@ -327,9 +284,20 @@ def run_mha_inference(
         ttl.tensor.DataType.BFLOAT16,
         ttl.tensor.Layout.ROW_MAJOR,
     ).to(ttl.tensor.Layout.TILE)
-    tt_mha_input = tt_mha_input.to(device)
+    tt_mha_input = tt_mha_input.to(device, mem_config)
 
-    tt_out = tt_mha_model(tt_mha_input).to(host)
+    tt_bert_attention_mask = (
+        ttl.tensor.Tensor(
+            extended_bert_attention_mask.reshape(-1).tolist(),
+            extended_bert_attention_mask.shape,
+            ttl.tensor.DataType.BFLOAT16,
+            ttl.tensor.Layout.ROW_MAJOR,
+        )
+        .to(ttl.tensor.Layout.TILE)
+        .to(device, mem_config)
+    )
+
+    tt_out = tt_mha_model(tt_mha_input, tt_bert_attention_mask).to(host)
     tt_out1 = torch.Tensor(tt_out.to(ttl.tensor.Layout.ROW_MAJOR).data()).reshape(
         tt_out.shape()
     )
@@ -345,13 +313,18 @@ def run_mha_inference(
     if not passing:
         logger.error(f"Output PCC < {pcc}")
 
+    assert passing
     # print_diff_argmax(pytorch_out, tt_out1)
     # assert np.allclose(pytorch_out.detach().numpy(), tt_out1, 1e-5, 0.17)
 
 
 @pytest.mark.parametrize(
     "model_version, batch, seq_len, on_weka, dram, pcc",
-    (("phiyodr/bert-large-finetuned-squad2", 9, 384, True, True, 0.99),),
+    (
+        ("phiyodr/bert-large-finetuned-squad2", 9, 384, True, True, 0.99),
+        ("phiyodr/bert-large-finetuned-squad2", 9, 384, True, False, 0.99),
+    ),
+    ids=["DRAM", "L1"],
 )
 def test_mha_inference(
     model_version, batch, seq_len, on_weka, dram, pcc, model_location_generator

@@ -10,9 +10,9 @@ namespace tt {
 
 namespace tt_metal {
 
-Program transpose_wh_single_core(const Tensor &a, Tensor& output) {
+operation::ProgramWithCallbacks transpose_wh_single_core(const Tensor &a, Tensor& output) {
 
-    TT_ASSERT(not a.on_host(), "Operand to transpose_wh needs to be on device!");
+    TT_ASSERT(a.storage_type() == StorageType::DEVICE, "Operand to transpose_wh needs to be on device!");
     TT_ASSERT(a.buffer() != nullptr, "Operand to transpose_wh needs to be allocated in a buffer on device!");
 
     const auto shape = a.shape();
@@ -50,7 +50,6 @@ Program transpose_wh_single_core(const Tensor &a, Tensor& output) {
     uint32_t num_input_tiles = 2;
     auto cb_src0 = tt_metal::CreateCircularBuffers(
         program,
-        device,
         src0_cb_index,
         core,
         num_input_tiles,
@@ -62,7 +61,6 @@ Program transpose_wh_single_core(const Tensor &a, Tensor& output) {
     uint32_t num_output_tiles = 2;
     auto cb_output = tt_metal::CreateCircularBuffers(
         program,
-        device,
         ouput_cb_index,
         core,
         num_output_tiles,
@@ -123,12 +121,42 @@ Program transpose_wh_single_core(const Tensor &a, Tensor& output) {
         }
     );
 
-    return program;
+    auto override_runtime_args_callback = [reader_kernel, writer_kernel](
+        const std::vector<Buffer*>& input_buffers,
+        const std::vector<Buffer*>& output_buffers
+    ) {
+
+        auto src_dram_buffer = input_buffers.at(0);
+        auto src_dram_noc_xy = src_dram_buffer->noc_coordinates();
+
+        auto dst_dram_buffer = output_buffers.at(0);
+        auto dst_dram_noc_xy = dst_dram_buffer->noc_coordinates();
+
+        CoreCoord core = {0, 0};
+
+        {
+            auto runtime_args = GetRuntimeArgs(reader_kernel, core);
+            runtime_args[0] = src_dram_buffer->address();
+            runtime_args[1] = uint32_t(src_dram_noc_xy.x);
+            runtime_args[2] = uint32_t(src_dram_noc_xy.y);
+            SetRuntimeArgs(reader_kernel, core, runtime_args);
+        }
+
+        {
+            auto runtime_args = GetRuntimeArgs(writer_kernel, core);
+            runtime_args[0] = dst_dram_buffer->address();
+            runtime_args[1] = uint32_t(dst_dram_noc_xy.x);
+            runtime_args[2] = uint32_t(dst_dram_noc_xy.y);
+            SetRuntimeArgs(writer_kernel, core, runtime_args);
+        }
+    };
+
+    return {std::move(program), override_runtime_args_callback};
 }
 
-Program transpose_hc_single_core(const Tensor &a, Tensor &output) {
+operation::ProgramWithCallbacks transpose_hc_single_core(const Tensor &a, Tensor &output) {
 
-    TT_ASSERT(not a.on_host(), "Operand to transpose_hc needs to be on device!");
+    TT_ASSERT(a.storage_type() == StorageType::DEVICE, "Operand to transpose_hc needs to be on device!");
     TT_ASSERT(a.buffer() != nullptr, "Operand to transpose_hc needs to be allocated in a buffer on device!");
 
     const auto shape = a.shape();
@@ -165,7 +193,6 @@ Program transpose_hc_single_core(const Tensor &a, Tensor &output) {
     uint32_t num_input_tiles = 2;
     auto cb_src0 = tt_metal::CreateCircularBuffers(
         program,
-        device,
         src0_cb_index,
         core,
         num_input_tiles,
@@ -177,7 +204,6 @@ Program transpose_hc_single_core(const Tensor &a, Tensor &output) {
     uint32_t num_output_tiles = 2;
     auto cb_output = tt_metal::CreateCircularBuffers(
         program,
-        device,
         ouput_cb_index,
         core,
         num_output_tiles,
@@ -237,12 +263,42 @@ Program transpose_hc_single_core(const Tensor &a, Tensor &output) {
         }
     );
 
-    return program;
+    auto override_runtime_args_callback = [reader_kernel, writer_kernel](
+        const std::vector<Buffer*>& input_buffers,
+        const std::vector<Buffer*>& output_buffers
+    ) {
+
+        auto src_dram_buffer = input_buffers.at(0);
+        auto src_dram_noc_xy = src_dram_buffer->noc_coordinates();
+
+        auto dst_dram_buffer = output_buffers.at(0);
+        auto dst_dram_noc_xy = dst_dram_buffer->noc_coordinates();
+
+        CoreCoord core = {0, 0};
+
+        {
+            auto runtime_args = GetRuntimeArgs(reader_kernel, core);
+            runtime_args[0] = src_dram_buffer->address();
+            runtime_args[1] = uint32_t(src_dram_noc_xy.x);
+            runtime_args[2] = uint32_t(src_dram_noc_xy.y);
+            SetRuntimeArgs(reader_kernel, core, runtime_args);
+        }
+
+        {
+            auto runtime_args = GetRuntimeArgs(writer_kernel, core);
+            runtime_args[0] = dst_dram_buffer->address();
+            runtime_args[1] = uint32_t(dst_dram_noc_xy.x);
+            runtime_args[2] = uint32_t(dst_dram_noc_xy.y);
+            SetRuntimeArgs(writer_kernel, core, runtime_args);
+        }
+    };
+
+    return {std::move(program), override_runtime_args_callback};
 }
 
-Program transpose_cn_single_core(const Tensor &a, Tensor &output) {
+operation::ProgramWithCallbacks transpose_cn_single_core(const Tensor &a, Tensor &output) {
 
-    TT_ASSERT(not a.on_host(), "Operand to transpose_cn needs to be on device!");
+    TT_ASSERT(a.storage_type() == StorageType::DEVICE, "Operand to transpose_cn needs to be on device!");
     TT_ASSERT(a.buffer() != nullptr, "Operand to transpose_cn needs to be allocated in a buffer on device!");
 
     const auto shape = a.shape();
@@ -279,7 +335,6 @@ Program transpose_cn_single_core(const Tensor &a, Tensor &output) {
     uint32_t num_input_tiles = 2;
     auto cb_src0 = tt_metal::CreateCircularBuffers(
         program,
-        device,
         src0_cb_index,
         core,
         num_input_tiles,
@@ -291,7 +346,6 @@ Program transpose_cn_single_core(const Tensor &a, Tensor &output) {
     uint32_t num_output_tiles = 2;
     auto cb_output = tt_metal::CreateCircularBuffers(
         program,
-        device,
         ouput_cb_index,
         core,
         num_output_tiles,
@@ -349,11 +403,38 @@ Program transpose_cn_single_core(const Tensor &a, Tensor &output) {
         }
     );
 
-    return program;
+    auto override_runtime_args_callback = [reader_kernel, writer_kernel](
+        const std::vector<Buffer*>& input_buffers,
+        const std::vector<Buffer*>& output_buffers
+    ) {
+
+        auto src_dram_buffer = input_buffers.at(0);
+
+        auto dst_dram_buffer = output_buffers.at(0);
+        auto dst_dram_noc_xy = dst_dram_buffer->noc_coordinates();
+
+        CoreCoord core = {0, 0};
+
+        {
+            auto runtime_args = GetRuntimeArgs(reader_kernel, core);
+            runtime_args[0] = src_dram_buffer->address();
+            SetRuntimeArgs(reader_kernel, core, runtime_args);
+        }
+
+        {
+            auto runtime_args = GetRuntimeArgs(writer_kernel, core);
+            runtime_args[0] = dst_dram_buffer->address();
+            runtime_args[1] = uint32_t(dst_dram_noc_xy.x);
+            runtime_args[2] = uint32_t(dst_dram_noc_xy.y);
+            SetRuntimeArgs(writer_kernel, core, runtime_args);
+        }
+    };
+
+    return {std::move(program), override_runtime_args_callback};
 }
 
 
-Program transpose_single_core(const Tensor &a, Tensor &output, TransposeOpDim::Enum transpose_dim) {
+operation::ProgramWithCallbacks transpose_single_core(const Tensor &a, Tensor &output, TransposeOpDim::Enum transpose_dim) {
     if (transpose_dim == TransposeOpDim::WH){
         return transpose_wh_single_core(a, output);
     } else if (transpose_dim == TransposeOpDim::HC) {
@@ -361,8 +442,7 @@ Program transpose_single_core(const Tensor &a, Tensor &output, TransposeOpDim::E
     } else if (transpose_dim == TransposeOpDim::CN) {
         return transpose_cn_single_core(a, output);
     } else {
-        TT_ASSERT(false, "Unsupported Transpose Op Dim");
-        return Program();
+        TT_THROW("Unsupported Transpose Op Dim");
     }
 }
 

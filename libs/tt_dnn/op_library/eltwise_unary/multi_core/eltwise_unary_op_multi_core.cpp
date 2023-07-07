@@ -16,7 +16,7 @@ operation::ProgramWithCallbacks eltwise_unary_multi_core(const Tensor &a, Tensor
     tt_metal::Program program{};
 
     // TODO: Build some sort of dispatcher based on location of op operands
-    TT_ASSERT(not a.on_host(), "Operand to eltwise unary needs to be on device!");
+    TT_ASSERT(a.storage_type() == StorageType::DEVICE, "Operand to eltwise unary needs to be on device!");
     TT_ASSERT(a.buffer() != nullptr, "Operand to eltwise unary needs to be allocated in a buffer on device!");
 
     uint32_t single_tile_size = 2 * TILE_HW;
@@ -35,7 +35,6 @@ operation::ProgramWithCallbacks eltwise_unary_multi_core(const Tensor &a, Tensor
     uint32_t num_input_tiles = 2;
     auto cb_src0 = tt_metal::CreateCircularBuffers(
         program,
-        device,
         src0_cb_index,
         all_cores,
         num_input_tiles,
@@ -46,7 +45,6 @@ operation::ProgramWithCallbacks eltwise_unary_multi_core(const Tensor &a, Tensor
     uint32_t src1_cb_index = 1;
     auto cb_src1 = tt_metal::CreateCircularBuffers(
         program,
-        device,
         src1_cb_index,
         all_cores,
         num_input_tiles,
@@ -58,7 +56,6 @@ operation::ProgramWithCallbacks eltwise_unary_multi_core(const Tensor &a, Tensor
     uint32_t num_output_tiles = 2;
     auto cb_output = tt_metal::CreateCircularBuffers(
         program,
-        device,
         ouput_cb_index,
         all_cores,
         num_output_tiles,

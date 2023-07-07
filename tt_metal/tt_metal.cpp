@@ -12,6 +12,9 @@
 #include "common/executor.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 
+#include "tt_metal/detail/reports/compilation_reporter.hpp"
+#include "tt_metal/detail/reports/memory_reporter.hpp"
+
 namespace tt {
 
 namespace tt_metal {
@@ -23,116 +26,19 @@ void EnableCompileCache() { enable_compile_cache = true; }
 void DisableCompileCache() { enable_compile_cache = false; }
 bool GetCompileCacheEnabled() { return enable_compile_cache; }
 
-const std::string &metal_reports_dir() {
-    static const std::string reports_path = utils::get_reports_dir() + "tt_metal/";
-    return reports_path;
-}
-
 bool enable_compilation_reports = false;
 void EnableCompilationReports() { enable_compilation_reports = true; }
 void DisableCompilationReports() { enable_compilation_reports = false; }
+static detail::CompilationReporter compilation_reporter = detail::CompilationReporter();
 
-class CompilationReporter {
-   public:
-    CompilationReporter() {}
+bool enable_memory_reports = false;
+void EnableMemoryReports() { enable_memory_reports = true; }
+void DisableMemoryReports() { enable_memory_reports = false; }
+static detail::MemoryReporter memory_reporter = detail::MemoryReporter();
 
-    ~CompilationReporter() {
-        if (enable_compilation_reports or (this->detailed_report_.is_open() and this->summary_report_.is_open())) {
-            string footer = "Number of CompileProgram API calls: " + std::to_string(this->total_num_compile_programs_) + "\n";
-            this->detailed_report_ << footer;
-            this->summary_report_ << footer;
-            this->detailed_report_.close();
-            this->summary_report_.close();
-        }
-    }
-
-    void add_kernel_compile_stats(const Program &program, Kernel *kernel, bool cache_hit, size_t kernel_hash) {
-        if (not enable_compilation_reports) {
-            return;
-        }
-        unique_lock<mutex> lock(mutex_);
-
-        auto id = this->total_num_compile_programs_;
-        if (cache_hit) {
-            this->program_id_to_cache_hit_counter_[id].hits++;
-        } else {
-            this->program_id_to_cache_hit_counter_[id].misses++;
-        }
-        std::string kernel_stats = "," + kernel->name() + ",";
-        std::string cache_status = cache_hit ? "cache hit" : "cache miss";
-
-        int index = 0;
-        for (auto core_range : kernel->core_range_set().ranges()) {
-            if (index == 0) {
-                kernel_stats += "\"" + core_range.str() + "\", " + cache_status + ", " + kernel_attributes_str(kernel) + ", " + std::to_string(kernel_hash) + "\n";
-            } else {
-                kernel_stats += ",,\"" + core_range.str() + "\", , ,\n";
-            }
-            index++;
-        }
-        this->program_id_to_kernel_stats_[id].push_back(kernel_stats);
-    }
-
-    void flush_program_entry(const Program &program) {
-        if (not enable_compilation_reports) {
-            return;
-        }
-        unique_lock<mutex> lock(mutex_);
-        auto id = this->total_num_compile_programs_;
-        auto num_cache_misses = this->program_id_to_cache_hit_counter_.at(id).misses;
-        auto num_cache_hits = this->program_id_to_cache_hit_counter_.at(id).hits;
-        if (this->total_num_compile_programs_ == 0) {
-            this->init_reports();
-        }
-        this->summary_report_ << id << ", "
-                              << program.compute_kernels().size() << ", "
-                              << program.data_movement_kernels().size() << ", "
-                              << (enable_compile_cache ? "Y" : "N") << ", "
-                              << num_cache_misses << ", "
-                              << num_cache_hits << "\n";
-
-        this->detailed_report_ << "Compiling Program: " << id << "\n";
-        this->detailed_report_ << "\n,Kernel Creation Report:\n";
-        this->detailed_report_ << ",,Number of CreateComputeKernel API calls: " << program.compute_kernels().size() << "\n";
-        this->detailed_report_ << ",,Number of CreateDataMovementKernel API calls: " << program.data_movement_kernels().size() << "\n";
-
-        this->detailed_report_ << "\n,Kernel Compilation Report:\n";
-        this->detailed_report_ << ",,Persistent kernel compile cache enabled: " << (enable_compile_cache ? "Y\n" : "N\n");
-        this->detailed_report_ << ",,Total number of kernel compile cache misses: " << num_cache_misses << "\n";
-        this->detailed_report_ << ",,Total number of kernel compile cache hits: " << num_cache_hits << "\n";
-
-        this->detailed_report_ << "\n,Kernel File Name, Core Range, Cache Hit, Kernel Attributes, Hash\n";
-        auto kernel_stats_vec = this->program_id_to_kernel_stats_.at(id);
-        for (const auto &kernel_stats : kernel_stats_vec) {
-            this->detailed_report_ << kernel_stats;
-        }
-        this->detailed_report_ << "\n";
-
-        this->summary_report_.flush();
-        this->detailed_report_.flush();
-        this->total_num_compile_programs_++;
-    }
-
-   private:
-    void init_reports() {
-        static const std::string compile_report_path = metal_reports_dir() + "compile_program.csv";
-        static const std::string summary_report_path = metal_reports_dir() + "compile_program_summary.csv";
-        fs::create_directories(metal_reports_dir());
-        this->detailed_report_.open(compile_report_path);
-        this->summary_report_.open(summary_report_path);
-        this->summary_report_ << "Program, Number of CreateComputeKernel API calls, Number of CreateDataMovementKernel API calls, Persistent Kernel Compile Cache Enabled, Total Number of Kernel Cache Misses, Total Number of Kernel Cache Hits\n";
-    }
-
-    struct cache_counters {int misses = 0; int hits = 0; };
-    std::mutex mutex_;
-    size_t total_num_compile_programs_ = 0;
-    std::unordered_map<size_t, cache_counters> program_id_to_cache_hit_counter_;
-    std::unordered_map<size_t, std::vector<string>> program_id_to_kernel_stats_;
-    std::ofstream detailed_report_;
-    std::ofstream summary_report_;
-};
-
-static CompilationReporter compilation_reporter = CompilationReporter();
+void DumpDeviceMemoryState(const Device *device) {
+    memory_reporter.dump_memory_usage_state(device);
+}
 
 void DumpHostProfileResults(std::string name_prepend){
     tt_metal_profiler.dumpHostResults(name_prepend);
@@ -174,10 +80,23 @@ Device *CreateDevice(tt::ARCH arch, int pcie_slot) {
     return new Device(arch, pcie_slot);
 }
 bool InitializeDevice(Device *device, const MemoryAllocator &memory_allocator) {
-    return device->initialize(memory_allocator);
+    bool init = device->initialize(memory_allocator);
+    const char *TT_METAL_DEVICE_DISPATCH_MODE = std::getenv("TT_METAL_DEVICE_DISPATCH_MODE");
+    if (TT_METAL_DEVICE_DISPATCH_MODE != nullptr) {
+        HACK_CQ = std::make_unique<CommandQueue>(device);
+    }
+    return init;
 }
 
-bool CloseDevice(Device *device) { return device->close(); }
+bool CloseDevice(Device *device) {
+
+    // Needed to ensure that HACK_CQ doesn't contain a closed device
+    if (HACK_CQ) {
+        HACK_CQ.reset(nullptr);
+    }
+
+    return device->close();
+}
 
 void StartDebugPrintServer(Device* device) {
     tt_start_debug_print_server(device->cluster(), {0}, {{1, 1}});
@@ -329,102 +248,49 @@ uint32_t TileSize(const DataFormat &data_format) {
     return tt::tile_size(data_format);
 }
 
-CircularBuffer *CreateCircularBuffer(
+const CircularBuffer &CreateCircularBuffer(
     Program &program,
-    Device *device,
     uint32_t buffer_index,
     const CoreCoord &core,
     uint32_t num_tiles,
     uint32_t size_in_bytes,
-    uint32_t l1_address,
-    DataFormat data_format) {
+    DataFormat data_format,
+    std::optional<uint32_t> l1_address) {
     CoreRange single_core_range = {.start = core, .end = core};
-    return CreateCircularBuffers(program, device, std::set<u32>({buffer_index}), CoreRangeSet({single_core_range}), num_tiles, size_in_bytes, l1_address, data_format);
+    return CreateCircularBuffers(program, std::set<u32>({buffer_index}), CoreRangeSet({single_core_range}), num_tiles, size_in_bytes, data_format, l1_address);
 }
 
-CircularBuffer *CreateCircularBuffer(
+const CircularBuffer &CreateCircularBuffers(
     Program &program,
-    Device *device,
-    uint32_t buffer_index,
-    const CoreCoord &core,
-    uint32_t num_tiles,
-    uint32_t size_in_bytes,
-    DataFormat data_format) {
-    CoreRange single_core_range = {.start = core, .end = core};
-    return CreateCircularBuffers(program, device, std::set<u32>({buffer_index}), CoreRangeSet({single_core_range}), num_tiles, size_in_bytes, data_format);
-}
-
-CircularBuffer *CreateCircularBuffers(
-    Program &program,
-    Device *device,
     uint32_t buffer_index,
     const CoreRange &core_range,
     uint32_t num_tiles,
     uint32_t size_in_bytes,
-    uint32_t l1_address,
-    DataFormat data_format) {
-    return CreateCircularBuffers(program, device, std::set<u32>({buffer_index}), CoreRangeSet({core_range}), num_tiles, size_in_bytes, l1_address, data_format);
+    DataFormat data_format,
+    std::optional<uint32_t> l1_address) {
+    return CreateCircularBuffers(program, std::set<u32>({buffer_index}), CoreRangeSet({core_range}), num_tiles, size_in_bytes, data_format, l1_address);
 }
 
-CircularBuffer *CreateCircularBuffers(
+const CircularBuffer &CreateCircularBuffers(
     Program &program,
-    Device *device,
-    uint32_t buffer_index,
-    const CoreRange &core_range,
-    uint32_t num_tiles,
-    uint32_t size_in_bytes,
-    DataFormat data_format) {
-    return CreateCircularBuffers(program, device, std::set<u32>({buffer_index}), CoreRangeSet({core_range}), num_tiles, size_in_bytes, data_format);
-}
-
-CircularBuffer *CreateCircularBuffers(
-    Program &program,
-    Device *device,
     uint32_t buffer_index,
     const CoreRangeSet &core_range_set,
     uint32_t num_tiles,
     uint32_t size_in_bytes,
-    uint32_t l1_address,
-    DataFormat data_format) {
-    return CreateCircularBuffers(program, device, std::set<u32>({buffer_index}), core_range_set, num_tiles, size_in_bytes, l1_address, data_format);
+    DataFormat data_format,
+    std::optional<uint32_t> l1_address) {
+    return CreateCircularBuffers(program, std::set<u32>({buffer_index}), core_range_set, num_tiles, size_in_bytes, data_format, l1_address);
 }
 
-CircularBuffer *CreateCircularBuffers(
+const CircularBuffer &CreateCircularBuffers(
     Program &program,
-    Device *device,
-    uint32_t buffer_index,
-    const CoreRangeSet &core_range_set,
-    uint32_t num_tiles,
-    uint32_t size_in_bytes,
-    DataFormat data_format) {
-    return CreateCircularBuffers(program, device, std::set<u32>({buffer_index}), core_range_set, num_tiles, size_in_bytes, data_format);
-}
-
-CircularBuffer *CreateCircularBuffers(
-    Program &program,
-    Device *device,
     const std::set<uint32_t> &buffer_indices,
     const CoreRangeSet &core_range_set,
     uint32_t num_tiles,
     uint32_t size_in_bytes,
-    uint32_t l1_address,
-    DataFormat data_format) {
-    CircularBuffer *circular_buffer = new CircularBuffer(device, core_range_set, buffer_indices, num_tiles, size_in_bytes, l1_address, data_format);
-    program.add_circular_buffer(circular_buffer);
-    return circular_buffer;
-}
-
-CircularBuffer *CreateCircularBuffers(
-    Program &program,
-    Device *device,
-    const std::set<uint32_t> &buffer_indices,
-    const CoreRangeSet &core_range_set,
-    uint32_t num_tiles,
-    uint32_t size_in_bytes,
-    DataFormat data_format) {
-    CircularBuffer *circular_buffer = new CircularBuffer(device, core_range_set, buffer_indices, num_tiles, size_in_bytes, data_format);
-    program.add_circular_buffer(circular_buffer);
-    return circular_buffer;
+    DataFormat data_format,
+    std::optional<uint32_t> l1_address) {
+    return program.add_circular_buffer(core_range_set, buffer_indices, num_tiles, size_in_bytes, data_format, l1_address);
 }
 
 uint32_t get_semaphore_address(const Program &program, const CoreRange &core_range) {
@@ -434,11 +300,11 @@ uint32_t get_semaphore_address(const Program &program, const CoreRange &core_ran
     for (auto x = start_core.x; x <= end_core.x; x++) {
         for (auto y = start_core.y; y <= end_core.y; y++) {
             auto logical_core = CoreCoord{x, y};
-            auto semaphores_on_core = program.semaphores_on_core(logical_core);
-            if (semaphores_on_core.size() == NUM_SEMAPHORES) {
+            auto num_semaphores = program.num_semaphores(logical_core);
+            if (num_semaphores == NUM_SEMAPHORES) {
                 TT_THROW("Cannot add semaphore on core " + logical_core.str() + ". Max number of semaphores (" + std::to_string(NUM_SEMAPHORES) + ") reached!");
             }
-            uint32_t addr = semaphores_on_core.empty() ? SEMAPHORE_BASE : semaphores_on_core.back()->address() + ALIGNED_SIZE_PER_SEMAPHORE;
+            uint32_t addr = num_semaphores == 0 ? SEMAPHORE_BASE : program.semaphore_address(num_semaphores-1) + ALIGNED_SIZE_PER_SEMAPHORE;
             if (address == -1) {
                 address = addr;
             } else if (addr != address) {
@@ -449,17 +315,16 @@ uint32_t get_semaphore_address(const Program &program, const CoreRange &core_ran
     return address;
 }
 
-Semaphore *CreateSemaphore(Program &program, Device *device, const CoreRange &core_range, uint32_t initial_value) {
+uint32_t CreateSemaphore(Program &program, const CoreRange &core_range, uint32_t initial_value) {
     auto start_core = core_range.start;
     auto end_core = core_range.end;
     TT_ASSERT(start_core == end_core or start_core < end_core && "Invalid core range!");
     uint32_t address = get_semaphore_address(program, core_range);
-    Semaphore *semaphore = new Semaphore(device, CoreRangeSet({core_range}), address, initial_value);
-    program.add_semaphore(semaphore);
-    return semaphore;
+    program.add_semaphore(CoreRangeSet({core_range}), address, initial_value);
+    return address;
 }
 
-Semaphore *CreateSemaphore(Program &program, Device *device, const CoreRangeSet &core_range_set, uint32_t initial_value) {
+uint32_t CreateSemaphore(Program &program, const CoreRangeSet &core_range_set, uint32_t initial_value) {
     uint32_t address = -1;
     for (auto core_range : core_range_set.ranges()) {
         auto addr = get_semaphore_address(program, core_range);
@@ -469,9 +334,8 @@ Semaphore *CreateSemaphore(Program &program, Device *device, const CoreRangeSet 
             TT_ASSERT(addr == address);
         }
     }
-    Semaphore *semaphore = new Semaphore(device, core_range_set, address, initial_value);
-    program.add_semaphore(semaphore);
-    return semaphore;
+    program.add_semaphore(core_range_set, address, initial_value);
+    return address;
 }
 
 void WriteToDevice(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
@@ -486,7 +350,7 @@ void WriteToDevice(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
 
     auto device = buffer.device();
     auto num_banks = device->num_banks(buffer.buffer_type());
-    uint32_t bank_index = buffer.starting_bank_id();
+    uint32_t bank_index = 0;
     int data_index = 0;
     for (int page_index = 0; page_index < num_pages; page_index++) {
         auto absolute_address = buffer.page_address(bank_index, page_index);
@@ -541,7 +405,7 @@ void ReadFromDevice(const Buffer &buffer, std::vector<uint32_t> &host_buffer) {
     auto device = buffer.device();
     auto num_banks = device->num_banks(buffer.buffer_type());
 
-    uint32_t bank_index = buffer.starting_bank_id();
+    uint32_t bank_index = 0;
     for (int page_index = 0; page_index < num_pages; page_index++) {
         auto absolute_address = buffer.page_address(bank_index, page_index);
         std::vector<uint32_t> page;
@@ -743,29 +607,12 @@ void CompileBlankKernel(Device *device) {
     generate_binaries_all_riscs(&blank_build_options, blank_build_options.name, arch_name, default_params, /*profile_kernel=*/false);
 }
 
-void ValidateCircularBuffers(Device *device, const std::vector<CircularBuffer *> &circular_buffers, const CoreCoord &logical_core) {
-    std::unordered_set<uint32_t> buffer_addresses;
-    uint32_t total_l1_buffer_size_in_bytes = 0;
-    uint32_t max = device->l1_size() - UNRESERVED_BASE;
-    for (auto circular_buffer : circular_buffers) {
-        if (buffer_addresses.find(circular_buffer->address()) != buffer_addresses.end()) {
-            continue;
-        }
-        buffer_addresses.insert(circular_buffer->address());
-        total_l1_buffer_size_in_bytes += circular_buffer->size();
-        if (total_l1_buffer_size_in_bytes > max) {
-            TT_THROW("Size of circular buffers on " + logical_core.str() + "is " + std::to_string(total_l1_buffer_size_in_bytes) + " bytes, which exceeds maximum size of " + std::to_string(max) + " bytes");
-        }
-    }
-}
-
 void SetCircularBufferDataFormat(Device *device, const Program &program, Kernel *kernel, build_kernel_for_riscv_options_t &build_options) {
     for (auto logical_core : kernel->logical_cores()) {
         auto cbs_on_core = program.circular_buffers_on_core(logical_core);
-        ValidateCircularBuffers(device, cbs_on_core, logical_core);
         for (auto circular_buffer : cbs_on_core) {
-            for (auto buffer_index : circular_buffer->buffer_indices()) {
-                build_options.set_cb_dataformat_all_cores(static_cast<CB>(buffer_index), circular_buffer->data_format());
+            for (auto buffer_index : circular_buffer.buffer_indices()) {
+                build_options.set_cb_dataformat_all_cores(static_cast<CB>(buffer_index), circular_buffer.data_format());
             }
         }
     }
@@ -871,7 +718,9 @@ void CompileKernel(Device *device, Program &program, Kernel *kernel, bool profil
         GenerateBinaries(device, &build_options, kernel_path_suffix, profile_kernel, kernel);
     }
 
-    compilation_reporter.add_kernel_compile_stats(program, kernel, cache_hit, kernel_hash);
+    if (enable_compilation_reports) {
+        compilation_reporter.add_kernel_compile_stats(program, kernel, cache_hit, kernel_hash);
+    }
 
     kernel->set_binary_path(kernel_path_suffix);
 }
@@ -961,6 +810,9 @@ bool CompileProgram(Device *device, Program &program, bool profile_kernel) {
 
     {
         tf::Taskflow tf;
+
+        tf.emplace ( [&program]{ program.construct_core_range_set_for_worker_cores(); });
+
         // This can be removed when we load BRISC FW separately from kernel
         tf.emplace ( [device ] { CompileBlankKernel(device); } );
 
@@ -984,7 +836,14 @@ bool CompileProgram(Device *device, Program &program, bool profile_kernel) {
         }
         GetExecutor().run(tf).wait();
     }
-    compilation_reporter.flush_program_entry(program);
+
+    if (enable_compilation_reports) {
+        compilation_reporter.flush_program_entry(program, enable_compile_cache);
+    }
+    if (enable_memory_reports) {
+        memory_reporter.flush_program_memory_usage(program, device);
+    }
+
     tt_metal_profiler.markStop("CompileProgram");
     return pass;
 }
@@ -1020,6 +879,7 @@ bool ConfigureDeviceWithProgram(Device *device, const Program &program) {
         auto worker_core = device->worker_core_from_logical_core(logical_core);
         worker_cores.push_back(worker_core);
 
+        program.validate_circular_buffer_region(device, logical_core);
         // CircularBufferConfigVec -- common across all kernels, so written once to the core
         llrt::CircularBufferConfigVec circular_buffer_config_vec = llrt::create_circular_buffer_config_vector();
 
@@ -1036,23 +896,29 @@ bool ConfigureDeviceWithProgram(Device *device, const Program &program) {
 
         auto cbs_on_core = program.circular_buffers_on_core(logical_core); // PROF_BEGIN("CBS")
         for (auto circular_buffer : cbs_on_core) {
-            for (auto buffer_index : circular_buffer->buffer_indices()) {
+            for (auto buffer_index : circular_buffer.buffer_indices()) {
                 llrt::set_config_for_circular_buffer(
                     circular_buffer_config_vec,
                     buffer_index,
-                    circular_buffer->address(),
-                    circular_buffer->size(),
-                    circular_buffer->num_tiles()
+                    circular_buffer.address(),
+                    circular_buffer.size(),
+                    circular_buffer.num_tiles()
                 );
             }
         } // PROF_END("CBS")
 
         llrt::write_circular_buffer_config_vector_to_core(cluster, pcie_slot, worker_core, circular_buffer_config_vec); // PROF_BEGIN("WRITE_CBS") PROF_END("WRITE_CBS")
 
-        auto semaphores_on_core = program.semaphores_on_core(logical_core);
-        for (auto semaphore : semaphores_on_core) {
-            llrt::write_hex_vec_to_core(cluster, pcie_slot, worker_core, {semaphore->initial_value()}, semaphore->address());
+        program.init_semaphores(*device, logical_core);
+    }
+
+    // Skip loading of blank kernels to storage cores when using L1 banking
+    if (device->allocator_scheme() == MemoryAllocator::L1_BANKING) {
+        for (const auto& core : device->cluster()->get_soc_desc(device->pcie_slot()).storage_cores) {
+            const auto logical_coord = get_core_coord_from_relative(core, device->logical_grid_size());
+            worker_cores.push_back(device->worker_core_from_logical_core(logical_coord));
         }
+        std::sort(worker_cores.begin(), worker_cores.end());
     }
 
     // Load blank kernel to all riscs of all cores excluding those in worker_cores
@@ -1197,6 +1063,12 @@ bool WriteToDeviceL1(
     llrt::write_graph_interpreter_op_info_to_core(
         device->cluster(), device->pcie_slot(), worker_core, op_info, op_idx);
     return pass;
+}
+
+void Synchronize() {
+    if (HACK_CQ) {
+        Finish(*HACK_CQ);
+    }
 }
 
 }  // namespace tt_metal

@@ -1,9 +1,9 @@
 import torch
 import numpy as np
-from libs import tt_lib as ttl
+import tt_lib as ttl
 from utility_functions import pad_by_zero, unpad_from_zero, torch2tt_tensor
 from python_api_testing.fused_ops.conv import conv as TtConv
-from libs.tt_lib.utils import (
+from tt_lib.utils import (
     _nearest_32 as nearest_32,
 )
 
@@ -39,7 +39,7 @@ def run_conv_on_tt_device(x: torch.Tensor, conv_on_tt, conv_params, device, host
         x.shape,
         ttl.tensor.DataType.BFLOAT16,
         ttl.tensor.Layout.ROW_MAJOR,
-        ).pad(x_shape_channel_padded, (0,0,0,0), 0).to(ttl.tensor.Layout.CHANNELS_LAST).to(device, ttl.tensor.MemoryConfig(False, 0))
+        ).pad(x_shape_channel_padded, (0,0,0,0), 0).to(ttl.tensor.Layout.CHANNELS_LAST).to(device, ttl.tensor.MemoryConfig(False))
     print("Going to run conv on tt device")
     x = conv_on_tt(x)
     print("conv on tt device done")
@@ -65,7 +65,7 @@ def run_conv_on_device_wrapper(conv_weight, conv_params, device, host, conv_bias
             x.shape,
             ttl.tensor.DataType.BFLOAT16,
             ttl.tensor.Layout.ROW_MAJOR,
-            ).pad(x_shape_channel_padded, (0,0,0,0), 0).to(ttl.tensor.Layout.CHANNELS_LAST).to(device, ttl.tensor.MemoryConfig(False, 0))
+            ).pad(x_shape_channel_padded, (0,0,0,0), 0).to(ttl.tensor.Layout.CHANNELS_LAST).to(device, ttl.tensor.MemoryConfig(False))
         print("Going to run conv on tt device")
         x = conv_on_device(x)
         print("conv on tt device done")

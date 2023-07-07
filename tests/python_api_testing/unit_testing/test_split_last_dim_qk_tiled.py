@@ -9,7 +9,7 @@ sys.path.append(f"{f}/../..")
 
 # TODO: need to use old style of importing until
 # the rest of the unit tests have been uplifted
-from libs import tt_lib as ttl
+import tt_lib as ttl
 
 # TODO: need to use old utility_functions until the
 # rest of the unit tests use utility_functions_new
@@ -25,16 +25,16 @@ import pytest
 @pytest.mark.parametrize(
     "in_mem_config",
     (
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM),
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.L1),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
     ),
     ids=["in_DRAM", "in_L1"],
 )
 @pytest.mark.parametrize(
     "out_mem_config",
     (
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM),
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.L1),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
     ),
     ids=["out_DRAM", "out_L1"],
 )
@@ -98,13 +98,13 @@ def test_split_tiled_single_core_test_w(shape, in_mem_config, out_mem_config):
     dev_buffers = ttl.tensor.split_last_dim_qk_tiled(a_t, out_mem_config)
 
     # Check memory of inputs and outputs
-    logger.debug(f"in0 is on: {a_t.buffer_type()}")
+    logger.debug(f"in0 is on: {a_t.memory_config().buffer_type}")
 
     pyt_buff_list = []
 
     assert len(dev_buffers) == num_splits
     for index, buff in enumerate(dev_buffers):
-        logger.debug(f"buff{index} is on: {buff.buffer_type()}")
+        logger.debug(f"buff{index} is on: {buff.memory_config().buffer_type}")
         assert buff.shape() == [n, c, h, int(w / num_splits)]
         tt_host_rm_buff = buff.to(host).to(ttl.tensor.Layout.ROW_MAJOR)
         pyt_got_back_rm_buff = torch.Tensor(tt_host_rm_buff.data()).reshape(

@@ -1,12 +1,31 @@
-## Getting up and running
+<!-- toc -->
+
+   * [Installing](#installing)
+      * [From source on a Tenstorrent machine](#from-source-on-a-tenstorrent-machine)
+      * [From a release wheel (BUDA-Eager only)](#from-a-release-wheel-buda-eager-only)
+   * [Getting started](#getting-started)
+      * [Environment setup](#environment-setup)
+      * [Running example programs](#running-example-programs)
+   * [Documentation](#documentation)
+   * [Contributing](#contributing)
+   * [Communication](#communication)
+
+<!-- tocstop -->
+
+## Installing
+
+### From source on a Tenstorrent machine
+
+Currently, the best way to use our software is through a
+Tenstorrent-provisioned cloud machine and building from source.
+
+Please use the communication information below if you'd like access.
 
 0. If you're using a customer-facing cloud machine, SSH into the cloud machine:
 
 ```
-ssh user@<external-ip> -p <ssh-port> -L 8888:localhost:8888
+ssh user@<external-ip> -p <ssh-port>
 ```
-
-The ``-L`` option will be for docs later.
 
 1. Create an SSH key for your machine.
 
@@ -17,15 +36,15 @@ ssh-keygen
 2. Add the key to your Github profile. Please refer to [SSH keys on
    Github](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account).
 
-3. If you received a pre-provisioned customer-facing machine,
-enter the repo:
+3. If you are an external customer, then you should already have a pre-cloned
+version of the source code. Enter the repo:
 
 ```
 cd tt-metal-user
 ```
 
-then skip to step 4. If you do not have a pre-provisioned customer-facing
-machine, please continue with this step to clone the repo.
+If you do not have a pre-provisioned customer-facing machine, please continue
+with this step to clone the repo.
 
 Clone the repo.
 
@@ -34,37 +53,83 @@ git clone git@github.com:tenstorrent-metal/tt-metal.git --recurse-submodules
 cd tt-metal
 ```
 
-4. Build and activate the TT-Metal environment:
+4. Set up the environment. Note that this setup is required **every time you
+   want to use this project**.
+
 ```
-source ./build_tt_metal.sh
+export ARCH_NAME=<arch name>
+export TT_METAL_HOME=<this repo dir>
+export PYTHONPATH=<this repo dir>
+export TT_METAL_ENV=<dev/production>
+```
+
+5. Build the project.
+
+```
+make build
+```
+
+6. Activate the built Python environment.
+
+```
 source build/python_env/bin/activate
 ```
 
-5. Build the HTML Documentation page.
+You should look ahead to [Getting started](#getting-started) to further use
+this project.
+
+### From a release wheel (BUDA-Eager only)
+
+Coming soon!
+
+## Getting started
+
+### Environment setup
+
+If you just came reading from building from source, you can read ahead to
+[running an example](#running-example-programs).
+
+Otherwise, you must set up the necessary environment variables to use this
+project every time:
 
 ```
-cd docs
-make all
+export ARCH_NAME=<arch name>
+export TT_METAL_ENV=<dev/production>
 ```
 
-You can customize the port by using the `PORT=<port>` environment variable. If
-you're using a customer-facing cloud machine, please disregard this point.
+where ``<arch name>`` is your target, which could be:
 
-6. Navigate to the docs page.
+- ``grayskull``
+- ``wormhole_b0``
 
-Navigate your web browser to `http://<ip address>:<port>`, where `<ip address>`
-is the IP address of the machine on which you launched the web server. For
-example: `http://10.250.37.37:4242`, for port ``4242``.
+etc...
 
-If you're using a customer-facing cloud machine, navigate to
-`http://localhost:8888`.
+If you're setting up an environment from source, you must further set up the
+environment with:
 
-7. Follow the `Getting Started` instructions on the Documentation page.
+```
+export TT_METAL_HOME=<this repo dir>
+export PYTHONPATH=<this repo dir>
+source build/python_env/bin/activate
+```
+
+### Running example programs
+
+After installing, please refer to our [Getting Started
+page](https://tenstorrent-metal.github.io/tt-metal/latest/get_started/get_started.html)
+in our documentation.
+
+## Documentation
+
+Please refer to our
+[documentation](https://tenstorrent-metal.github.io/tt-metal/latest/index.html).
 
 ## Contributing
 
 We appreciate any contributions. Please review the [contributor's
 guide](CONTRIBUTING.md) for more information.
+
+## Communication
 
 Announcements from the Tenstorrent team regarding this project will be in the
 [discussions

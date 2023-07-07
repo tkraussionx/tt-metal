@@ -13,7 +13,6 @@ namespace tt_metal {
 
 // Fwd declares
 enum class BufferType;
-class CircularBuffer;
 class Buffer;
 class Program;
 
@@ -71,6 +70,10 @@ class Device {
     std::vector<uint32_t> bank_ids_from_logical_core(const CoreCoord &logical_core) const;
     bool cluster_is_initialized() const { return cluster_ != nullptr; }
 
+    allocator::Statistics get_memory_allocation_statistics(const BufferType &buffer_type) const;
+
+    void dump_memory_blocks(const BufferType &buffer_type, std::ofstream &out) const;
+
    private:
     void check_allocator_is_initialized() const;
 
@@ -85,8 +88,9 @@ class Device {
     bool close();
     friend bool CloseDevice(Device *device);
 
+    // TODO: Uplift usage of friends. Buffer and Program just need access to allocator
     friend class Buffer;
-    friend class CircularBuffer;
+    friend class Program;
 
     static constexpr TargetDevice target_type_ = TargetDevice::Silicon;
     tt::ARCH arch_;

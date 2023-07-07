@@ -2,15 +2,18 @@
 
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
+
+#include <fmt/ranges.h>
+
 using namespace tt::constants;
 
 namespace tt {
 
 namespace tt_metal {
 
-Program unpad_rm(const Tensor &a, Tensor& output, const std::array<uint32_t, 4> &output_tensor_start, const std::array<uint32_t, 4> &output_tensor_end) {
+operation::ProgramWithCallbacks unpad_rm(const Tensor &a, Tensor& output, const std::array<uint32_t, 4> &output_tensor_start, const std::array<uint32_t, 4> &output_tensor_end) {
 
-    TT_ASSERT(not a.on_host(), "Operand to unpad needs to be on device!");
+    TT_ASSERT(a.storage_type() == StorageType::DEVICE, "Operand to unpad needs to be on device!");
     TT_ASSERT(a.buffer() != nullptr, "Operand to unpad needs to be allocated in a buffer on device!");
 
     const std::array<uint32_t, 4> output_shape = output.shape();
@@ -40,12 +43,9 @@ Program unpad_rm(const Tensor &a, Tensor& output, const std::array<uint32_t, 4> 
     uint32_t src_buffer_size = alignment + src_stick_size;
     uint32_t dst_buffer_size = alignment + dst_stick_size;
 
-    auto l1_bank_ids = device->bank_ids_from_logical_core(core.start);
-    TT_ASSERT(not l1_bank_ids.empty());
-    auto l1_bank_id = l1_bank_ids.at(0);
-    auto cache_buffer_l1 = tt_metal::Buffer(device, cache_buffer_size, l1_bank_id, cache_buffer_size, tt_metal::BufferType::L1);
-    auto src_buffer_l1 = tt_metal::Buffer(device, src_buffer_size, l1_bank_id, src_buffer_size, tt_metal::BufferType::L1);
-    auto dst_buffer_l1 = tt_metal::Buffer(device, dst_buffer_size, l1_bank_id, dst_buffer_size, tt_metal::BufferType::L1);
+    auto cache_buffer_l1 = tt_metal::Buffer(device, cache_buffer_size, cache_buffer_size, tt_metal::BufferType::L1);
+    auto src_buffer_l1 = tt_metal::Buffer(device, src_buffer_size, src_buffer_size, tt_metal::BufferType::L1);
+    auto dst_buffer_l1 = tt_metal::Buffer(device, dst_buffer_size, dst_buffer_size, tt_metal::BufferType::L1);
 
     vector<uint32_t> reader_kernel_args = {
         src0_dram_buffer->address(),
@@ -120,12 +120,34 @@ Program unpad_rm(const Tensor &a, Tensor& output, const std::array<uint32_t, 4> 
         reader_kernel_args
     );
 
-    return program;
+    auto override_runtime_args_callback = [
+        reader_writer_kernel=unary_reader_kernel
+    ](
+        const std::vector<Buffer*>& input_buffers,
+        const std::vector<Buffer*>& output_buffers
+    ) {
+
+        auto src_dram_buffer = input_buffers.at(0);
+        auto src_dram_noc_xy = src_dram_buffer->noc_coordinates();
+
+        auto dst_dram_buffer = output_buffers.at(0);
+
+        CoreCoord core = {0, 0};
+
+        {
+            auto runtime_args = GetRuntimeArgs(reader_writer_kernel, core);
+            runtime_args[0] = src_dram_buffer->address();
+            runtime_args[1] = dst_dram_buffer->address();
+            SetRuntimeArgs(reader_writer_kernel, core, runtime_args);
+        }
+    };
+
+    return {std::move(program), override_runtime_args_callback};
 }
 
-Program unpad_tile(const Tensor &a, Tensor& output, const std::array<uint32_t, 4> &output_tensor_start, const std::array<uint32_t, 4> &output_tensor_end) {
+operation::ProgramWithCallbacks unpad_tile(const Tensor &a, Tensor& output, const std::array<uint32_t, 4> &output_tensor_start, const std::array<uint32_t, 4> &output_tensor_end) {
 
-    TT_ASSERT(not a.on_host(), "Operand to unpad needs to be on device!");
+    TT_ASSERT(a.storage_type() == StorageType::DEVICE, "Operand to unpad needs to be on device!");
     TT_ASSERT(a.buffer() != nullptr, "Operand to unpad needs to be allocated in a buffer on device!");
 
     const std::array<uint32_t, 4> output_shape = output.shape();
@@ -150,7 +172,6 @@ Program unpad_tile(const Tensor &a, Tensor& output, const std::array<uint32_t, 4
 
     auto cb_src0 = tt_metal::CreateCircularBuffers(
         program,
-        device,
         src0_cb_index,
         core,
         num_input_tiles,
@@ -228,12 +249,32 @@ Program unpad_tile(const Tensor &a, Tensor& output, const std::array<uint32_t, 4
         reader_kernel_args
     );
 
-    return program;
+    auto override_runtime_args_callback = [
+        reader_writer_kernel=unary_reader_kernel
+    ](
+        const std::vector<Buffer*>& input_buffers,
+        const std::vector<Buffer*>& output_buffers
+    ) {
+
+        auto src_dram_buffer = input_buffers.at(0);
+        auto dst_dram_buffer = output_buffers.at(0);
+
+        CoreCoord core = {0, 0};
+
+        {
+            auto runtime_args = GetRuntimeArgs(reader_writer_kernel, core);
+            runtime_args[0] = src_dram_buffer->address();
+            runtime_args[1] = dst_dram_buffer->address();
+            SetRuntimeArgs(reader_writer_kernel, core, runtime_args);
+        }
+    };
+
+    return {std::move(program), override_runtime_args_callback};
 }
 
 
-void Unpad::validate(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
-    const auto& input_tensor_a = input_tensors.at(0).get();
+void Unpad::validate(const std::vector<Tensor> &input_tensors) const {
+    const auto& input_tensor_a = input_tensors.at(0);
     TT_ASSERT(input_tensor_a.layout() == Layout::TILE || input_tensor_a.layout() == Layout::ROW_MAJOR);
 
     TT_ASSERT(
@@ -264,27 +305,47 @@ void Unpad::validate(const std::vector<std::reference_wrapper<const Tensor>> &in
         TT_ASSERT(this->output_tensor_shape[3] % 2 == 0, "RM unpadding requires output X dim to be a multiple of 2");
     }
 }
-std::vector<Shape> Unpad::compute_output_shapes(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
+std::vector<Shape> Unpad::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
     return {this->output_tensor_shape};
 }
-std::vector<Tensor> Unpad::create_output_tensors(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
-    const auto& input_tensor_a = input_tensors.at(0).get();
+std::vector<Tensor> Unpad::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
+    const auto& input_tensor_a = input_tensors.at(0);
     return operation::generic_create_output_tensors(*this, input_tensors, input_tensor_a.layout());
 }
 
 // TODO: If unpad is called on a tile and output is not tile, we could untilize then unpad, and output is RM
 // Currently calling unpad on a tile requires the output unpad shape to be tile
-operation::ProgramWithCallbacks Unpad::create_program(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors, std::vector<Tensor> &output_tensors) const {
-    const auto& input_tensor_a = input_tensors.at(0).get();
+operation::ProgramWithCallbacks Unpad::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
+    const auto& input_tensor_a = input_tensors.at(0);
     auto& output_tensor = output_tensors.at(0);
     if (input_tensor_a.layout() == Layout::ROW_MAJOR) {
-        return {unpad_rm(input_tensor_a, output_tensor, output_tensor_start, output_tensor_end)};
+        return unpad_rm(input_tensor_a, output_tensor, output_tensor_start, output_tensor_end);
     } else if (input_tensor_a.layout() == Layout::TILE) {
-        return {unpad_tile(input_tensor_a, output_tensor, output_tensor_start, output_tensor_end)};
+        return unpad_tile(input_tensor_a, output_tensor, output_tensor_start, output_tensor_end);
     } else {
         TT_ASSERT(false, "Unsupported layout for unpad");
         return {};
     }
+}
+
+operation::Hash Unpad::compute_program_hash(const std::vector<Tensor> &input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
+
+    return fmt::format(
+        "{}_{}",
+         *this,
+         operation::hash_tensor(input_tensor)
+    );
+}
+
+std::ostream& operator<<(std::ostream& os, const Unpad& op) {
+    os << boost::core::demangle(typeid(op).name());
+    os << "{";
+    os << fmt::format("output_tensor_start={}", op.output_tensor_start);
+    os << fmt::format(",output_tensor_end={}", op.output_tensor_end);
+    os << fmt::format(",output_tensor_shape={}", op.output_tensor_shape);
+    os << "}";
+    return os;
 }
 
 Tensor unpad(const Tensor &input_tensor_a, const std::array<uint32_t, 4> &output_tensor_start, const std::array<uint32_t, 4> &output_tensor_end) {

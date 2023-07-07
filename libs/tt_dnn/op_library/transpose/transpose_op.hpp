@@ -20,10 +20,12 @@ struct TransposeOpParallelizationStrategy {
 struct Transpose {
     const TransposeOpDim::Enum dim;
 
-    void validate(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const;
-    std::vector<Shape> compute_output_shapes(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const;
-    std::vector<Tensor> create_output_tensors(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const;
-    operation::ProgramWithCallbacks create_program(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors, std::vector<Tensor> &output_tensors) const;
+    void validate(const std::vector<Tensor> &input_tensors) const;
+    std::vector<Shape> compute_output_shapes(const std::vector<Tensor> &input_tensors) const;
+    std::vector<Tensor> create_output_tensors(const std::vector<Tensor> &input_tensors) const;
+    operation::ProgramWithCallbacks create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const;
+    operation::Hash compute_program_hash(const std::vector<Tensor> &input_tensors) const;
+    TransposeOpParallelizationStrategy::Enum get_parallelization_strategy(const std::vector<Tensor> &input_tensors) const;
 };
 
 // TODO: Accept parallelization
@@ -35,18 +37,10 @@ inline Tensor transpose_wh(const Tensor &a) { return transpose_(a, TransposeOpDi
 inline Tensor transpose_hc(const Tensor &a) { return transpose_(a, TransposeOpDim::HC); }
 inline Tensor transpose_cn(const Tensor &a) { return transpose_(a, TransposeOpDim::CN); }
 
-Program transpose_single_core(const Tensor &a, Tensor &output, TransposeOpDim::Enum transpose_dim);
-Program transpose_wh_multi_core(const Tensor &a, Tensor &output);
-Program transpose_hc_multi_core(const Tensor &a, Tensor &output);
+operation::ProgramWithCallbacks transpose_single_core(const Tensor &a, Tensor &output, TransposeOpDim::Enum transpose_dim);
+operation::ProgramWithCallbacks transpose_wh_multi_core(const Tensor &a, Tensor &output);
+operation::ProgramWithCallbacks transpose_hc_multi_core(const Tensor &a, Tensor &output);
 
 }  // namespace tt_metal
 
 }  // namespace tt
-
-namespace transpose_op_utils {
-
-using namespace tt::tt_metal;
-
-TransposeOpParallelizationStrategy::Enum get_parallelization_strategy(const Tensor &a, TransposeOpDim::Enum transpose_dim);
-
-} // namespace transpose_op_utils

@@ -1,12 +1,19 @@
-# Table of Contents
-
 <!-- toc -->
 
-- [Contributing to tt-metal](#contributing-to-tt-metal)
-- [Machine setup](#machine-setup)
-- [Developing tt-metal](#developing-tt-metal)
-- [Debugging Tips](#debugging-tips)
-- [Contribution standards](#contribution-standards)
+   * [Contributing to tt-metal](#contributing-to-tt-metal)
+   * [Machine setup](#machine-setup)
+      * [Hugepages setup](#hugepages-setup)
+   * [Developing tt-metal](#developing-tt-metal)
+      * [Building and viewing the documentation locally](#building-and-viewing-the-documentation-locally)
+   * [Debugging tips](#debugging-tips)
+   * [Contribution standards](#contribution-standards)
+      * [CI/CD Guidelines](#cicd-guidelines)
+      * [Documentation](#documentation)
+      * [Git rules and guidelines](#git-rules-and-guidelines)
+      * [Code reviews](#code-reviews)
+      * [New feature and design specifications](#new-feature-and-design-specifications)
+      * [Release flows](#release-flows)
+      * [Logging, assertions, and exceptions](#logging-assertions-and-exceptions)
 
 <!-- tocstop -->
 
@@ -37,6 +44,8 @@ standards](#contribution-standards).
 
 ### Hugepages setup
 
+Hugepages is required to both run and develop on the Metal project.
+
 If you ever need to re-enable Hugepages, you can try the script we homemade
 for this:
 
@@ -56,9 +65,32 @@ Currently, the most convenient way to develop is to do so on our cloud
 machines. They have prerequisite dependencies, model files, and other settings
 set up for users.
 
-Please refer to the [initial Getting Started
-page](docs/source/get_started/installation.rst) then please read the the
-[developer's page](docs/source/dev_onboarding/get_started.rst).
+Please refer to the [README](README.md) for source installation and environment
+setup instructions, then please read the the [developer's
+page](docs/source/dev_onboarding/get_started.rst).
+
+### Building and viewing the documentation locally
+
+1. First, ensure that you have [built the project and activated the Python
+environment](docs/source/get_started/get_started.rst).
+
+2. Build the HTML Documentation page.
+
+```
+cd docs
+make all
+```
+
+You can customize the port by using the `PORT=<port>` environment variable. If
+you're using a customer-facing cloud machine, please disregard this point.
+
+3. Navigate to the docs page.
+
+Navigate your web browser to `http://<ip address>:<port>`, where `<ip address>`
+is the IP address of the machine on which you launched the web server. For
+example: `http://10.250.37.37:4242`, for port ``4242``.
+
+If you forwarded your port, navigate to `http://localhost:8888`.
 
 ## Debugging tips
 

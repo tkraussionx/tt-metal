@@ -12,7 +12,7 @@ namespace tt {
 namespace tt_metal {
 
 void SplitTiled::boiler_plate_asserts(const Tensor &a) const {
-    TT_ASSERT(not a.on_host(), "Operands to TM need to be on device!");
+    TT_ASSERT(a.storage_type() == StorageType::DEVICE, "Operands to TM need to be on device!");
     TT_ASSERT(a.buffer() != nullptr, "Operands to TM need to be allocated in buffers on device!");
     TT_ASSERT(
         a.dtype() == tt::tt_metal::DataType::BFLOAT16 || a.dtype() == tt::tt_metal::DataType::BFLOAT8_B,
@@ -34,7 +34,7 @@ void SplitTiled::shape_asserts(const Tensor &a) const {
         TT_ASSERT((chunk_size % TILE_HEIGHT == 0), "Chunk not divisible by tile");
 }
 
-inline bool is_dram(const Tensor &a) { return a.buffer_type() == BufferType::DRAM; }
+inline bool is_dram(const Tensor &a) { return a.memory_config().buffer_type == BufferType::DRAM; }
 
 Shape SplitTiled::get_single_output_shape(const Shape &input_shape) const {
     auto output_shape = input_shape;
@@ -50,8 +50,8 @@ tt::DataFormat get_data_format(const Tensor &a) {
     return cb_data_format;
 }
 
-void SplitTiled::validate(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
-    const auto &input_tensor = input_tensors.at(0).get();
+void SplitTiled::validate(const std::vector<Tensor> &input_tensors) const {
+    const auto &input_tensor = input_tensors.at(0);
     tt_metal::Buffer *in0_buffer = input_tensor.buffer();
     auto cb_data_format = get_data_format(input_tensor);
     uint32_t single_tile_size = tt_metal::TileSize(cb_data_format);
@@ -61,8 +61,8 @@ void SplitTiled::validate(const std::vector<std::reference_wrapper<const Tensor>
 }
 
 std::vector<Shape> SplitTiled::compute_output_shapes(
-    const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
-    const auto &input_tensor = input_tensors.at(0).get();
+    const std::vector<Tensor> &input_tensors) const {
+    const auto &input_tensor = input_tensors.at(0);
     auto input_shape = input_tensor.shape();
     auto output_shape = get_single_output_shape(input_tensor.shape());
     // split last dim in half
@@ -70,13 +70,25 @@ std::vector<Shape> SplitTiled::compute_output_shapes(
 }
 
 std::vector<Tensor> SplitTiled::create_output_tensors(
-    const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
+    const std::vector<Tensor> &input_tensors) const {
     return operation::generic_create_output_tensors(*this, input_tensors, Layout::TILE, this->output_mem_config);
 }
 
 operation::ProgramWithCallbacks SplitTiled::create_program(
-    const std::vector<std::reference_wrapper<const Tensor>> &input_tensors, std::vector<Tensor> &output_tensors) const {
+    const std::vector<Tensor> &input_tensors, std::vector<Tensor> &output_tensors) const {
     return {};
+}
+
+operation::Hash SplitTiled::compute_program_hash(const std::vector<Tensor> &input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
+
+    return fmt::format(
+        "SplitTiled_{}_{}_{}_{}",
+         this->dim,
+         this->num_chunks,
+         operation::hash_memory_config(this->output_mem_config),
+         operation::hash_tensor(input_tensor)
+    );
 }
 
 }  // namespace tt_metal

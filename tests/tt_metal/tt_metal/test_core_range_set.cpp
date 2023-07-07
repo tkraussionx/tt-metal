@@ -1,11 +1,12 @@
 #include <algorithm>
 #include <functional>
 #include <random>
+#include <optional>
 
 #include "tt_metal/host_api.hpp"
 #include "common/bfloat16.hpp"
 #include "tt_metal/hostdevcommon/common_runtime_address_map.h"
-
+#include "tt_metal/impl/buffers/semaphore.hpp"
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // TODO: explain what test does
@@ -27,10 +28,10 @@ void check_program_is_mapped_to_correct_cores(const tt_metal::Program &program, 
                     }
                 }
                 for (auto cb : program.circular_buffers()) {
-                    TT_ASSERT(cb->is_on_logical_core(logical_core));
+                    TT_ASSERT(cb.is_on_logical_core(logical_core));
                 }
-                for (auto semaphore : program.semaphores()) {
-                    TT_ASSERT(semaphore->initialized_on_logical_core(logical_core));
+                for (auto semaphore : program.semaphores() ){
+                    TT_ASSERT(semaphore.initialized_on_logical_core(logical_core));
                 }
             }
         }
@@ -61,8 +62,7 @@ bool test_program_specified_with_core_range_set(tt_metal::Device *device, tt_met
     uint32_t num_tiles = 32;
     uint32_t buffer_size = single_tile_size * num_tiles;
 
-    int dram_src_channel_id = 0;
-    auto src_dram_buffer = tt_metal::Buffer(device, buffer_size, dram_src_channel_id, buffer_size, tt_metal::BufferType::DRAM);
+    auto src_dram_buffer = tt_metal::Buffer(device, buffer_size, buffer_size, tt_metal::BufferType::DRAM);
     auto dram_src_noc_xy = src_dram_buffer.noc_coordinates();
 
     std::map<CoreCoord, tt_metal::Buffer> core_to_l1_buffer;
@@ -72,10 +72,7 @@ bool test_program_specified_with_core_range_set(tt_metal::Device *device, tt_met
         for (auto x = start.x; x <= end.x; x++) {
             for (auto y = start.y; y <= end.y; y++) {
                 CoreCoord logical_core({.x=x, .y=y});
-                auto l1_bank_ids = device->bank_ids_from_logical_core(logical_core);
-                TT_ASSERT(not l1_bank_ids.empty());
-                auto l1_bank_id = l1_bank_ids.at(0);
-                auto dst_l1_buffer = tt_metal::Buffer(device, buffer_size, l1_bank_id, buffer_size, tt_metal::BufferType::L1);
+                auto dst_l1_buffer = tt_metal::Buffer(device, buffer_size, buffer_size, tt_metal::BufferType::L1);
                 core_to_l1_buffer.emplace(logical_core, dst_l1_buffer);
             }
         }
@@ -87,7 +84,6 @@ bool test_program_specified_with_core_range_set(tt_metal::Device *device, tt_met
     uint32_t num_input_tiles = 8;
     auto cb_src0 = tt_metal::CreateCircularBuffers(
         program,
-        device,
         src0_cb_index,
         core_range_set,
         num_input_tiles,
@@ -99,7 +95,6 @@ bool test_program_specified_with_core_range_set(tt_metal::Device *device, tt_met
     uint32_t num_output_tiles = 1;
     auto cb_output = tt_metal::CreateCircularBuffers(
         program,
-        device,
         ouput_cb_index,
         core_range_set,
         num_output_tiles,
@@ -142,9 +137,9 @@ bool test_program_specified_with_core_range_set(tt_metal::Device *device, tt_met
     std::vector<uint32_t> golden_sem_values;
     for (uint32_t i = 0; i < NUM_SEMAPHORES; i++) {
         uint32_t initial_value = i;
-        auto semaphore = tt_metal::CreateSemaphore(program, device, core_range_set, initial_value);
+        auto semaphore_addr = tt_metal::CreateSemaphore(program, core_range_set, initial_value);
         golden_sem_values.push_back(initial_value);
-        pass &= semaphore->address() == SEMAPHORE_BASE + (size_per_semaphore * i);
+        pass &= semaphore_addr == SEMAPHORE_BASE + (size_per_semaphore * i);
     }
 
     check_program_is_mapped_to_correct_cores(program, core_range_set, compute_kernel_args);
@@ -197,33 +192,9 @@ bool test_program_specified_with_core_range_set(tt_metal::Device *device, tt_met
     return pass;
 }
 
-bool test_overlapping_core_range_set() {
-    bool pass = true;
-    CoreRange core_range_one = {.start={0, 0}, .end={2, 2}};
-    CoreRange core_range_two = {.start={3, 3}, .end={5, 4}};
 
-    CoreRangeSet valid_ranges = CoreRangeSet({core_range_one, core_range_two});
-    TT_ASSERT(valid_ranges.ranges().size() == 2);
 
-    CoreRange overlapping_range = {.start={1, 2}, .end={3, 3}};
 
-    try {
-        CoreRangeSet invalid_ranges = CoreRangeSet({core_range_one, core_range_two, overlapping_range});
-        pass &= false;
-        TT_ASSERT(false);
-    } catch (const std::exception &e) {}
-
-    CoreRange single_core = {.start={1, 1}, .end={1, 1}};
-    CoreRangeSet second_valid_ranges = CoreRangeSet({single_core, core_range_two});
-
-    try {
-        CoreRangeSet second_invalid_ranges = CoreRangeSet({single_core, core_range_two, core_range_one});
-        pass &= false;
-        TT_ASSERT(false);
-    } catch (const std::exception &e) {}
-
-    return pass;
-}
 
 int main(int argc, char **argv) {
     bool pass = true;
@@ -256,8 +227,6 @@ int main(int argc, char **argv) {
         CoreRangeSet core_ranges = CoreRangeSet({core_range_one, core_range_two});
 
         pass &= test_program_specified_with_core_range_set(device, program, core_ranges);
-
-        pass &= test_overlapping_core_range_set();
 
         ////////////////////////////////////////////////////////////////////////////
         //                              Teardown

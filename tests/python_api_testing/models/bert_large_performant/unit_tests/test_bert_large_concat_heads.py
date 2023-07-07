@@ -7,7 +7,7 @@ sys.path.append(f"{f}/../../../..")
 
 import numpy as np
 
-from libs import tt_lib as ttl
+import tt_lib as ttl
 from python_api_testing.models.utility_functions import (
     comp_pcc,
 )
@@ -37,11 +37,11 @@ def run_bert_large_concat_heads_test(dtype, in0_mem_config, out_mem_config):
     out = ttl.tensor.bert_large_concat_heads(a_t, out_mem_config)
 
     # Check memory of inputs and outputs
-    assert a_t.buffer_type() == in0_mem_config.buffer_type
-    assert out.buffer_type() == out_mem_config.buffer_type
+    assert a_t.memory_config().buffer_type == in0_mem_config.buffer_type
+    assert out.memory_config().buffer_type == out_mem_config.buffer_type
 
-    logger.debug(f"in0 is on: {a_t.buffer_type()}")
-    logger.debug(f"out is on: {out.buffer_type()}")
+    logger.debug(f"in0 is on: {a_t.memory_config().buffer_type}")
+    logger.debug(f"out is on: {out.memory_config().buffer_type}")
 
     assert out.shape() == [9, 1, 384, 1024]
     tt_host_rm_out = out.to(host).to(ttl.tensor.Layout.ROW_MAJOR)
@@ -64,16 +64,16 @@ import pytest
 @pytest.mark.parametrize(
     "out_mem_config",
     (
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM),
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.L1),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
     ),
     ids=["out_DRAM", "out_L1"],
 )
 @pytest.mark.parametrize(
     "in0_mem_config",
     (
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM),
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.L1),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
     ),
     ids=["in0_DRAM", "in0_L1"],
 )
@@ -82,17 +82,21 @@ import pytest
     (ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16),
     ids=["BFLOAT8_B", "BFLOAT16"],
 )
-def test_bert_large_concat_heads_test(dtype, in0_mem_config, out_mem_config):
+def test_bert_large_concat_heads_test(dtype, in0_mem_config, out_mem_config, request):
+    ttl.profiler.set_profiler_flag(False)
+    ttl.profiler.set_profiler_location(
+        f"tt_metal/tools/profiler/logs/BERT_large_concat_heads_tm_{request.node.callspec.id}"
+    )
     run_bert_large_concat_heads_test(dtype, in0_mem_config, out_mem_config)
 
 
 def test_bert_large_concat_heads_with_program_cache(use_program_cache):
     dtype = ttl.tensor.DataType.BFLOAT8_B
-    dram_mem_config = ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM)
+    dram_mem_config = ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM)
     for _ in range(2):
         run_bert_large_concat_heads_test(dtype, dram_mem_config, dram_mem_config)
 
-    dram_mem_config = ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.L1)
+    dram_mem_config = ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1)
     for _ in range(2):
         run_bert_large_concat_heads_test(dtype, dram_mem_config, dram_mem_config)
 

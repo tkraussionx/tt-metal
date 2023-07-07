@@ -1,5 +1,4 @@
 import torch
-import math
 from tt_lib.utils import (
     _nearest_32 as nearest_32,
     tilize as tilize_util,
@@ -25,6 +24,15 @@ def linear(x, weight, bias=None, *args, **kwargs):
 ################################################
 
 
+# Ternary Ops
+def where(x, y, z, *args, **kwargs):
+    return torch.where(x > 0, y, z)
+
+
+def arange(x, *args, **kwargs):
+    return torch.arange(kwargs["start"], kwargs["end"], kwargs.get("step", 1))
+
+
 # Unary Ops
 def hypot(x, *args, **kwargs):
     return torch.hypot(x, x)
@@ -36,12 +44,12 @@ def cbrt(x, *args, **kwargs):
 
 
 def rad2deg(x, *args, **kwargs):
-    result = (180.0 / math.pi) * x
+    result = torch.rad2deg(x)
     return result
 
 
 def deg2rad(x, *args, **kwargs):
-    result = (math.pi / 180.0) * x
+    result = torch.deg2rad(x)
     return result
 
 
@@ -54,6 +62,18 @@ def threshold(x, *args, **kwargs):
 
 def relu6(x, *args, **kwargs):
     result = torch.nn.functional.relu6(x)
+    return result
+
+
+def hardtanh(x, *args, **kwargs):
+    result = torch.nn.functional.hardtanh(x)
+    return result
+
+
+def clip(x, *args, **kwargs):
+    low = kwargs["low"]
+    high = kwargs["high"]
+    result = torch.clip(x, low, high)
     return result
 
 
@@ -73,12 +93,12 @@ def polyval(x, *args, **kwargs):
 
 def relu_max(x, *args, **kwargs):
     upper_limit = kwargs["upper_limit"]
-    return torch.min(torch.relu(x), torch.tensor(upper_limit))
+    return torch.relu(torch.min(x, torch.tensor(upper_limit)))
 
 
 def relu_min(x, *args, **kwargs):
     lower_limit = kwargs["lower_limit"]
-    return torch.max(torch.relu(x), torch.tensor(lower_limit))
+    return torch.max(x, torch.tensor(lower_limit))
 
 
 def abs(x, *args, **kwargs):
@@ -165,6 +185,14 @@ def sigmoid(x, *args, **kwargs):
     return torch.sigmoid(x)
 
 
+def hardsigmoid(x, *args, **kwargs):
+    return torch.nn.functional.hardsigmoid(x)
+
+
+def hardswish(x, *args, **kwargs):
+    return torch.nn.functional.hardswish(x)
+
+
 def log(x, *args, **kwargs):
     return torch.log(x)
 
@@ -195,6 +223,62 @@ def swish(x, *args, **kwargs):
 
 def silu(x, *args, **kwargs):
     return torch.nn.functional.silu(x)
+
+
+def div_unary(x, *args, **kwargs):
+    scalar = kwargs["scalar"]
+    result = torch.div(x, scalar)
+    return result
+
+
+def mul_unary(x, *args, **kwargs):
+    scalar = kwargs["scalar"]
+    result = torch.mul(x, scalar)
+    return result
+
+
+def sub_unary(x, *args, **kwargs):
+    scalar = kwargs["scalar"]
+    result = torch.sub(x, scalar)
+    return result
+
+
+def add_unary(x, *args, **kwargs):
+    scalar = kwargs["scalar"]
+    result = torch.add(x, scalar)
+    return result
+
+
+def zeros_like(x, *args, **kwargs):
+    result = torch.zeros_like(x)
+    return result
+
+
+def ones_like(x, *args, **kwargs):
+    result = torch.ones_like(x)
+    return result
+
+
+def full_like(x, *args, **kwargs):
+    scalar = kwargs["scalar"]
+    result = torch.full_like(x, scalar)
+    return result
+
+
+def zeros(x, *args, **kwargs):
+    result = torch.zeros(x.shape)
+    return result
+
+
+def ones(x, *args, **kwargs):
+    result = torch.ones(x.shape)
+    return result
+
+
+def full(x, *args, **kwargs):
+    scalar = kwargs["scalar"]
+    result = torch.full(x.shape, scalar)
+    return result
 
 
 ## Trinary op
@@ -232,6 +316,8 @@ def mul(x, y, *args, **kwargs):
 def matmul(x, y, *args, **kwargs):
     return torch.matmul(x, y)
 
+def outer(x, y, *args, **kwargs):
+    return torch.outer(x.squeeze(), y.squeeze())
 
 def reduce_sum(x, dims=None, keepdim=True, *args, **kwargs):
     return torch.sum(x, dims, keepdim)

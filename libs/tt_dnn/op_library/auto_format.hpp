@@ -29,7 +29,7 @@ class AutoFormat {
         }
 
         static bool check_input_tensor_format(const Tensor &a, const std::array<uint32_t, 4>& shape, Layout target_layout = Layout::TILE) {
-            if (a.layout() == target_layout && a.shape() == shape && !a.on_host()) {
+            if (a.layout() == target_layout && a.shape() == shape && a.storage_type() == StorageType::DEVICE) {
                 return true;
             }
             return false;
@@ -37,7 +37,7 @@ class AutoFormat {
 
         static Tensor format_input_tensor(const Tensor &a, Device * device, const std::array<uint32_t, 4>& padded_shape, float pad_value=0, Layout target_layout = Layout::TILE);
 
-        static void format_output_tensor(Tensor &output, const std::array<uint32_t, 4>& shape, Device* device, Layout target_layout = Layout::TILE);
+        static Tensor format_output_tensor(const Tensor &output, const std::array<uint32_t, 4>& shape, Device* device, Layout target_layout = Layout::TILE);
 };
 
 

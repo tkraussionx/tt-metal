@@ -16,8 +16,17 @@ concurrency:
 
 jobs:
   build-deploy-docs:
+    strategy:
+      # Do not fail-fast because we need to ensure all tests go to completion
+      # so we try not to get hanging machines
+      fail-fast: false
+      matrix:
+        arch: [grayskull]
     env:
+      TT_METAL_ENV: ${{ vars.TT_METAL_ENV }}
       DOCS_VERSION: latest
+      ARCH_NAME: ${{ matrix.arch }}
+    environment: dev
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v3
@@ -26,6 +35,9 @@ jobs:
           token: ${{ secrets.CHECKOUT_TOKEN }}
           lfs: true
       - uses: ./.github/actions/install-metal-deps
+        with:
+          os: ubuntu-20.04
+      - uses: ./.github/actions/install-metal-dev-deps
         with:
           os: ubuntu-20.04
       - name: Build tt-metal

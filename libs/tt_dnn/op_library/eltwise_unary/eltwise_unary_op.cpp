@@ -3,6 +3,8 @@
 
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
+#include "tt_dnn/op_library/bcast/bcast_op.hpp"
+#include "tt_dnn/op_library/composite/composite_ops.hpp"
 
 #include "third_party/magic_enum/magic_enum.hpp"
 
@@ -70,7 +72,7 @@ public:
     Converter obj(f_);
     std::stringstream ss;
     ss << "0x" << std::hex << obj.u;
-    return std::move(ss.str());
+    return ss.str();
   }
 };
 
@@ -80,11 +82,11 @@ string get_op_name_parameterized(UnaryOpType::Enum op_type,float param0) {
     TT_ASSERT( is_parameterized_type(op_type) && "operator should support one parameter" );
 
     switch (op_type) {
-    case UnaryOpType::RELU_MAX: op_name = "relu_max_tile_init(); relu_max_tile(0,"+std::to_string((uint32_t)param0)+"u ); pack_tile(0, tt::CB::c_out0);"; break;
-    case UnaryOpType::RELU_MIN: op_name = "relu_min_tile_init(); relu_min_tile(0,"+std::to_string((uint32_t)param0)+"u ); pack_tile(0, tt::CB::c_out0);"; break;
+    case UnaryOpType::RELU_MAX: op_name = "relu_max_tile_init(); relu_max_tile(0,"+Converter::to_hex(param0)+"u ); pack_tile(0, tt::CB::c_out0);"; break;
+    case UnaryOpType::RELU_MIN: op_name = "relu_min_tile_init(); relu_min_tile(0,"+Converter::to_hex(param0)+"u ); pack_tile(0, tt::CB::c_out0);"; break;
     case UnaryOpType::POWER: op_name = "power_tile_init(); power_tile(0," + std::to_string( (uint32_t) param0) + " ); pack_tile(0, tt::CB::c_out0);"; break;
-        default:
-	  TT_ASSERT( false && "unexpected parameterized type");
+    default:
+      TT_ASSERT( false && "unexpected parameterized type");
     };
     return op_name;
 }
@@ -158,44 +160,28 @@ void add_defines(ComputeKernel * eltwise_unary_kernel, UnaryOpType::Enum op_type
 }
 
 
-
-UnaryOpParallelizationStrategy::Enum get_parallelization_strategy(const Tensor &a){
-    uint32_t num_tiles = a.volume() / TILE_HW;
-    if(num_tiles > 1){
-        return UnaryOpParallelizationStrategy::MULTI_CORE;
-    }
-    else{
-        return UnaryOpParallelizationStrategy::SINGLE_CORE;
-    }
-}
-
-
 } // namespace eltwise_unary_op_utils
 
 namespace tt {
 
 namespace tt_metal {
 
-void EltwiseUnary::validate(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {}
+void EltwiseUnary::validate(const std::vector<Tensor> &input_tensors) const {}
 
-std::vector<Shape> EltwiseUnary::compute_output_shapes(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
-    const auto& input_tensor = input_tensors.at(0).get();
+std::vector<Shape> EltwiseUnary::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
     return {input_tensor.shape()};
 }
 
-std::vector<Tensor> EltwiseUnary::create_output_tensors(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
+std::vector<Tensor> EltwiseUnary::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
     return operation::generic_create_output_tensors(*this, input_tensors);
 }
 
-operation::ProgramWithCallbacks EltwiseUnary::create_program(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors, std::vector<Tensor> &output_tensors) const {
-    const auto& input_tensor = input_tensors.at(0).get();
+operation::ProgramWithCallbacks EltwiseUnary::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
     auto& output_tensor = output_tensors.at(0);
 
-    auto parallelization_strategy = eltwise_unary_op_utils::get_parallelization_strategy(input_tensor);
-
-    op_profiler::set_preferred_name(this->op_type);
-    op_profiler::set_parallelization_strategy(parallelization_strategy);
-
+    auto parallelization_strategy = this->get_parallelization_strategy(input_tensors);
     switch (parallelization_strategy){
         case UnaryOpParallelizationStrategy::MULTI_CORE:
             return eltwise_unary_multi_core(input_tensor, output_tensor, this->op_type,param);
@@ -206,14 +192,82 @@ operation::ProgramWithCallbacks EltwiseUnary::create_program(const std::vector<s
     }
 }
 
-operation::Hash EltwiseUnary::compute_program_hash(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
-    const auto& input_tensor = input_tensors.at(0).get();
+operation::Hash EltwiseUnary::compute_program_hash(const std::vector<Tensor> &input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
 
     return fmt::format(
-        "eltwise_unary_{}_{}",
-         magic_enum::enum_name(this->op_type),
+        "{}_{}",
+         *this,
          operation::hash_tensor(input_tensor)
     );
+}
+
+
+UnaryOpParallelizationStrategy::Enum EltwiseUnary::get_parallelization_strategy(const std::vector<Tensor> &input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
+    uint32_t num_tiles = input_tensor.volume() / TILE_HW;
+    if (num_tiles > 1) {
+        return UnaryOpParallelizationStrategy::MULTI_CORE;
+    }
+    else{
+        return UnaryOpParallelizationStrategy::SINGLE_CORE;
+    }
+}
+
+std::ostream& operator<<(std::ostream& os, const EltwiseUnary& op) {
+    os << boost::core::demangle(typeid(op).name());
+    os << "{";
+    os << ".op_type=" << magic_enum::enum_name(op.op_type);
+    os << ",.param=";
+    if (op.param.has_value()) {
+        os << op.param.value();
+    } else {
+        os << "std::nullopt";
+    }
+    os << "}";
+    return os;
+}
+
+//unary op version tie
+template<BcastOpMath::Enum OP>
+Tensor tie_binop_to_unary(const Tensor& input_tensor, float value) {
+  Tensor t_value = mk_scalar(value);
+  return bcast(input_tensor,t_value,OP, BcastOpDim::HW);
+}
+
+Tensor div_unary(const Tensor& input_tensor, float value) {
+    return tie_binop_to_unary<BcastOpMath::MUL>(input_tensor,1.0f/value);
+}
+
+Tensor div_unary(float value,const Tensor& input_tensor) {
+    Tensor inv = tie_binop_to_unary<BcastOpMath::MUL>(input_tensor,value);
+    return recip(inv);
+}
+
+
+Tensor mul_unary(const Tensor& input_tensor,float value) {
+    return tie_binop_to_unary<BcastOpMath::MUL>(input_tensor,value);
+}
+
+Tensor sub_unary(const Tensor& input_tensor,float value) {
+    return tie_binop_to_unary<BcastOpMath::SUB>(input_tensor,value);
+}
+
+Tensor sub_unary(float value, const Tensor& input_tensor) {
+  return add_unary(value,neg(input_tensor));
+}
+
+Tensor add_unary(const Tensor& input_tensor,float value) {
+    return tie_binop_to_unary<BcastOpMath::ADD>(input_tensor,value);
+}
+
+// symmetric
+Tensor add_unary(float value, const Tensor& input_tensor) {
+    return add_unary(input_tensor,value);
+}
+
+Tensor mul_unary(float value, const Tensor& input_tensor) {
+    return mul_unary(input_tensor,value);
 }
 
 }  // namespace tt_metal

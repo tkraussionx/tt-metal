@@ -7,8 +7,8 @@ sys.path.append(f"{f}/../..")
 
 import numpy as np
 
-from libs import tt_lib as ttl
-from libs.tt_lib.utils import tilize_to_list, tilize, untilize, channels_last, _nearest_32, _nearest_y, convert_weights_2d_matrix
+import tt_lib as ttl
+from tt_lib.utils import tilize_to_list, tilize, untilize, channels_last, _nearest_32, _nearest_y, convert_weights_2d_matrix
 from python_api_testing.models.utility_functions import print_diff_argmax, is_close, comp_pcc
 from tests.python_api_testing.conv.conv_unit_test_utils import create_conv_act_tensor, create_conv_weight_tensor
 import torch
@@ -91,12 +91,11 @@ def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, p
 
     # Prepare activations
     A_cl_host = create_conv_act_tensor(A_pyt, 1, C, H, W)
-    A_cl_data = A_cl_host.data()
-    A = A_cl_host.to(device, ttl.tensor.MemoryConfig(False, 0))
+    A = A_cl_host.to(device, ttl.tensor.MemoryConfig(False))
 
     # Prepare weights
     B_tiled_host = create_conv_weight_tensor(B_pyt, K, C, R, S, weight_block_h, weight_block_w)
-    B_tiled = B_tiled_host.to(device, ttl.tensor.MemoryConfig(False, 1))
+    B_tiled = B_tiled_host.to(device, ttl.tensor.MemoryConfig(False))
     # Calculate conv result with golden result. Run Pytorch conv
     out_golden = torch.nn.functional.conv2d(A_pyt, B_pyt, stride=(stride_h, stride_w), padding=(pad_h, pad_w))
 

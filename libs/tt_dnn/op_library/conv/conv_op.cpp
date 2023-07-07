@@ -3,8 +3,6 @@
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
 // #include "test/tt_metal/llrt/test_libs/debug_mailbox.hpp"
-#include "libs/dtx/dtx.hpp"
-#include "libs/dtx/dtx_passes.hpp"
 #include "llrt/tt_debug_print_server.hpp"
 
 using namespace tt::constants;
@@ -37,7 +35,6 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
     uint32_t cb0_tiles = act_block_size;
     auto cb_in0 = tt_metal::CreateCircularBuffers(
         program,
-        device,
         in0_cb,
         core,
         cb0_tiles,
@@ -48,7 +45,6 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
     uint32_t cb1_tiles = weight_block_size;
     auto cb_in1 = tt_metal::CreateCircularBuffers(
         program,
-        device,
         in1_cb,
         core,
         cb1_tiles,
@@ -59,7 +55,6 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
     // Used for placing tilized activations
     auto cb_src0_tilized = tt_metal::CreateCircularBuffers(
         program,
-        device,
         tilize_mode_tilized_in0_cb,
         core,
         cb0_tiles,
@@ -69,7 +64,6 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
     if(untilize_out) {
         auto cb_matmul_partials = tt_metal::CreateCircularBuffers(
             program,
-            device,
             matmul_partials_cb,
             core,
             num_output_tiles,
@@ -80,7 +74,6 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
         // Shares same address space as matmul partials
         auto cb_final_matmul_partials = tt_metal::CreateCircularBuffers(
             program,
-            device,
             untilize_mode_final_matmul_partials_cb,
             core,
             num_output_tiles,
@@ -93,7 +86,6 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
         uint32_t reblock_cb_tiles = reblock_size; // Only space for one row
         auto cb_reblock = tt_metal::CreateCircularBuffers(
             program,
-            device,
             untilize_mode_reblock_cb,
             core,
             reblock_cb_tiles,
@@ -103,7 +95,6 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
 
         auto cb_output = tt_metal::CreateCircularBuffers(
             program,
-            device,
             out0_cb,
             core,
             num_output_tiles,
@@ -116,7 +107,6 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
         CoreRangeSet cores(std::set<CoreRange>({core}));
         auto cb_matmul_partials = tt_metal::CreateCircularBuffers(
             program,
-            device,
             {matmul_partials_cb, out0_cb},
             cores,
             num_output_tiles,
@@ -128,7 +118,7 @@ void create_CBs_for_fused_matmul_new_alloc(tt_metal::Program &program,
 
 Tensor create_output_dram_buffer_(Device * device, DataType data_type, std::array<uint32_t, 4> cshape, bool untilize_out) {
     tt::tt_metal::Layout out_layout;
-    tt_metal::Tensor output = tt_metal::Tensor(
+    tt_metal::Tensor output = tt_metal::create_device_tensor(
         cshape,
         data_type,
         untilize_out ? tt::tt_metal::Layout::ROW_MAJOR : tt::tt_metal::Layout::TILE,
@@ -292,6 +282,90 @@ vector<uint32_t> compute_conv_as_mm_shape(vector<int> shape, const std::vector<i
     return {1,num_rows_padded, num_cols_padded};
 }
 
+// generates address map for reader kernel which reads from dram buffer (tiled layout) into l1 buffer
+std::pair<vector<uint32_t>, vector<uint32_t>> generate_conv_weight_address_map(
+                            const std::array<uint32_t, 4>& weight_shape,
+                            uint32_t in1_block_h_datums,
+                            uint32_t in1_block_w_datums,
+                            uint32_t num_blocks_in0_h,
+                            uint32_t num_blocks_in1_h,
+                            uint32_t num_blocks_in1_w,
+                            uint32_t num_bytes_df) {
+    vector<uint32_t> address_map;
+    vector<uint32_t> address_map_metadata;
+    assert(weight_shape[0] == 1 && weight_shape[1] == 1);
+    uint32_t matrix_height = weight_shape[2];
+    uint32_t matrix_width = weight_shape[3];
+    assert(matrix_height % in1_block_h_datums == 0);
+    assert(matrix_width % in1_block_w_datums == 0);
+    uint32_t src_dram_buffer_size_bytes = matrix_height * matrix_width * num_bytes_df;
+    uint32_t dst_l1_buffer_size_bytes = in1_block_h_datums * in1_block_w_datums * num_bytes_df;
+    uint32_t num_groups = num_blocks_in0_h * num_blocks_in1_h * num_blocks_in1_w;
+    assert(matrix_height % TILE_HEIGHT == 0);
+    uint32_t matrix_height_ntiles = matrix_height / TILE_HEIGHT;
+    assert(matrix_width % TILE_WIDTH == 0);
+    uint32_t matrix_width_ntiles = matrix_width / TILE_WIDTH;
+    assert(matrix_height_ntiles % num_blocks_in1_h == 0);
+    uint32_t block_height_ntiles = matrix_height_ntiles / num_blocks_in1_h;
+    assert(matrix_width_ntiles % num_blocks_in1_w == 0);
+    uint32_t block_width_ntiles = matrix_width_ntiles / num_blocks_in1_w;
+    uint32_t matrix_size_ntiles = matrix_height_ntiles * matrix_width_ntiles;
+    assert(in1_block_h_datums % TILE_HEIGHT == 0);
+    assert(in1_block_w_datums % TILE_WIDTH == 0);
+    assert(block_height_ntiles == in1_block_h_datums / TILE_HEIGHT);
+    assert(block_width_ntiles == in1_block_w_datums / TILE_WIDTH);
+    address_map_metadata.push_back(num_groups);
+    uint32_t address_map_current_group_dram_address_offset = 0;
+    for(uint32_t group_idx = 0; group_idx < num_groups; group_idx++) {
+        // Weight blocks are col major
+        uint32_t block_idx_h = (uint32_t) (group_idx % num_blocks_in1_h);
+        uint32_t block_idx_w = (uint32_t) (group_idx / num_blocks_in1_h) % (num_blocks_in1_w);
+        uint32_t block_idx = (block_idx_w * num_blocks_in1_h) + block_idx_h;
+        uint32_t start_block_tile_h_index = block_idx_h * block_height_ntiles;
+        uint32_t start_block_tile_w_index = block_idx_w * block_width_ntiles;
+        uint32_t single_tile_size_bytes = TILE_HEIGHT * TILE_WIDTH * num_bytes_df;
+        uint32_t address_map_current_group_size = 0;
+        // Weight tiles are in row major order within block
+        for(uint32_t tile_h_index_in_block = 0; tile_h_index_in_block < block_height_ntiles; tile_h_index_in_block++) {
+            for(uint32_t tile_w_index_in_block = 0; tile_w_index_in_block < block_width_ntiles; tile_w_index_in_block++) {
+                uint32_t tile_index_h_in_matrix = tile_h_index_in_block + start_block_tile_h_index;
+                uint32_t tile_index_w_in_matrix = tile_w_index_in_block + start_block_tile_w_index;
+                // Weight tiles are in row major order in weight matrix in dram
+                uint32_t tile_index_in_matrix = (tile_index_h_in_matrix * block_width_ntiles * num_blocks_in1_w) + tile_index_w_in_matrix;
+                assert(tile_index_in_matrix < matrix_size_ntiles);
+                // Weight tiles are in row major order in weight block in l1
+                uint32_t tile_index_in_block = tile_h_index_in_block * block_width_ntiles + tile_w_index_in_block;
+                uint32_t src_address_offset_dram = tile_index_in_matrix * single_tile_size_bytes;
+                uint32_t read_size_bytes = single_tile_size_bytes;
+                uint32_t dst_address_offset_l1 = tile_index_in_block * single_tile_size_bytes;
+                uint32_t pad = 0;
+                assert(read_size_bytes > 0);
+                assert(pad == 0 || pad == 1);
+                assert(src_address_offset_dram < src_dram_buffer_size_bytes);
+                assert(dst_address_offset_l1 < dst_l1_buffer_size_bytes);
+                address_map.push_back(src_address_offset_dram);
+                address_map.push_back(dst_address_offset_l1);
+                address_map.push_back(read_size_bytes);
+                address_map.push_back(pad);
+                address_map_current_group_size += 4;
+            }
+        }
+        // DRAM reads should be 32B aligned
+        assert(address_map_current_group_dram_address_offset%32 == 0);
+        address_map_metadata.push_back(address_map_current_group_dram_address_offset);
+        address_map_metadata.push_back(address_map_current_group_size);
+        // Pad 0s in address map buffer to ensure each read address is 32B aligned (32/sizeof(uint32_t) == 8 elements)
+        uint32_t address_map_current_group_size_padded = (uint32_t) (ceil((double) address_map_current_group_size / (double) 8) * 8);
+        if(address_map_current_group_size_padded != address_map_current_group_size) {
+            assert(address_map_current_group_size_padded > address_map_current_group_size);
+            address_map.insert(address_map.end(), address_map_current_group_size_padded - address_map_current_group_size, 0);
+        }
+        // update next group's dram read address offset (in bytes)
+        address_map_current_group_dram_address_offset += (address_map_current_group_size_padded*sizeof(uint32_t));
+    }
+    return make_pair(std::move(address_map), std::move(address_map_metadata));
+}
+
 std::pair<vector<uint32_t>, vector<uint32_t>> generate_conv_activation_address_map(
                             const std::array<uint32_t, 4>& activation_shape,
                             const vector<int>& conv_params,
@@ -352,7 +426,7 @@ std::pair<vector<uint32_t>, vector<uint32_t>> generate_conv_activation_address_m
                 uint32_t w = start_block_2d_index_w;
                 uint32_t end_block_2d_index_w = start_block_2d_index_w + in0_block_w_datums - 1;
                 assert(end_block_2d_index_w < matrix_width_padded);
-                while (w < end_block_2d_index_w) {
+                while (w <= end_block_2d_index_w) {
                     uint32_t src_address_offset_dram = 0;
                     uint32_t read_size_bytes = 0;
                     uint32_t pad = 0;
@@ -373,7 +447,8 @@ std::pair<vector<uint32_t>, vector<uint32_t>> generate_conv_activation_address_m
                         uint32_t act_tensor_start_y = channel_stick_row_id_y * U;
                         uint32_t act_tensor_padded_x = act_tensor_start_x + (channel_stick_col_id % S);
                         uint32_t act_tensor_padded_y = act_tensor_start_y + (channel_stick_col_id / S);
-                        uint32_t read_size = min(channel_stick_size - channel_stick_offset, in0_block_w_datums);
+                        assert(w <= end_block_2d_index_w);
+                        uint32_t read_size = min(channel_stick_size - channel_stick_offset, (end_block_2d_index_w+1)-w);
                         read_size_bytes = read_size * num_bytes_df;
                         if(act_tensor_padded_x < Pad_W || act_tensor_padded_x >= (Pad_W + conv_input_x) || act_tensor_padded_y < Pad_H || act_tensor_padded_y >= (Pad_H + conv_input_y)) {
                             // pad (conv padding)
@@ -418,6 +493,7 @@ std::pair<vector<uint32_t>, vector<uint32_t>> generate_conv_activation_address_m
     }
     return make_pair(std::move(address_map), std::move(address_map_metadata));
 }
+
 std::pair<vector<uint32_t>, vector<uint32_t>> populate_address_map_vectors_for_reader_kernel(vector<uint32_t> address_map_raw) {
     // This function is called twice i.e., for activation and weight address maps
     // "address_map_raw" is the DTX address map vector returned from DTX "conv_transform" function.
@@ -505,7 +581,7 @@ Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<
     TT_ASSERT(Wb % TILE_WIDTH == 0, "Width of tensor b needs to be divisible by 32");
 
     // Device compatibility checks
-    TT_ASSERT(not a.on_host() and not b.on_host(), "Operands to large matmul need to be on device!");
+    TT_ASSERT(a.storage_type() == StorageType::DEVICE and b.storage_type() == StorageType::DEVICE, "Operands to large matmul need to be on device!");
     TT_ASSERT(a.device() == b.device(), "Operands to large matmul need to be on the same device!");
     TT_ASSERT(a.buffer() != nullptr and b.buffer() != nullptr, "Operands to large matmul need to be allocated in buffers on device!");
     // Convert tensor dims to tile dims
@@ -542,15 +618,12 @@ Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<
     auto [act_address_map, act_address_map_metadata] = generate_conv_activation_address_map(a.shape(), conv_params, in0_block_h_datums, in0_block_w_datums, in1_block_w_datums,
                                                             num_blocks_in0_h, num_blocks_in0_w, num_blocks_in1_w, num_bytes_of_df);
 
-    // DTX conv weight transform data access pattern. Skip conv activation transform.
-    auto [_, weight_address_map_raw]  = conv_transform(activation_shape, {(int) Wb, (int) activation_shape[0], (int) conv_params[0], (int) conv_params[1]}, conv_params,
-                            in0_block_h_datums, in0_block_w_datums, in1_block_w_datums,
-                            num_blocks_in0_h, num_blocks_in1_w, num_bytes_of_df, true);
+    auto [weight_address_map, weight_address_map_metadata] = generate_conv_weight_address_map(b.shape(), in0_block_w_datums, in1_block_w_datums,
+                                                                num_blocks_in0_h, num_blocks_in0_w, num_blocks_in1_w, num_bytes_of_df);
 
     // sanity check
     uint32_t num_dtx_groups = act_address_map_metadata[0];
-    assert(weight_address_map_raw[0] == num_dtx_groups);
-    auto [weight_address_map, weight_address_map_metadata] = populate_address_map_vectors_for_reader_kernel(weight_address_map_raw);
+    assert(weight_address_map_metadata[0] == num_dtx_groups);
 
     // debug prints
     int detailed_debug = 1;
@@ -598,9 +671,9 @@ Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<
 
     uint32_t dram_bank_id = 0;
     auto act_address_map_buffer_size_in_dram = act_address_map.size() * sizeof(uint32_t);
-    auto act_address_map_dram_buffer = tt_metal::Buffer(device, act_address_map_buffer_size_in_dram, dram_bank_id, act_address_map_buffer_size_in_dram, tt_metal::BufferType::DRAM);
+    auto act_address_map_dram_buffer = tt_metal::Buffer(device, act_address_map_buffer_size_in_dram, act_address_map_buffer_size_in_dram, tt_metal::BufferType::DRAM);
     auto weight_address_map_buffer_size_in_dram = weight_address_map.size() * sizeof(uint32_t);
-    auto weight_address_map_dram_buffer = tt_metal::Buffer(device, weight_address_map_buffer_size_in_dram, dram_bank_id, weight_address_map_buffer_size_in_dram, tt_metal::BufferType::DRAM);
+    auto weight_address_map_dram_buffer = tt_metal::Buffer(device, weight_address_map_buffer_size_in_dram, weight_address_map_buffer_size_in_dram, tt_metal::BufferType::DRAM);
     uint32_t act_address_map_dram_addr = act_address_map_dram_buffer.address();
     // DRAM to L1 writes should 32B aligned
     assert(act_address_map_dram_addr%32 == 0);
@@ -634,9 +707,6 @@ Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<
     TT_ASSERT(dst_dram_buffer != nullptr, "Output buffer should be allocated on device!");
 
     // L1 buffers
-    auto l1_bank_ids = device->bank_ids_from_logical_core(core_coord);
-    TT_ASSERT(not l1_bank_ids.empty());
-    auto l1_bank_id = l1_bank_ids.at(0);
     // Create scratchpad buffer in L1 to stream in dtx address map from dram
     // One scratchpad buffer is used for both activation and weight address maps
     uint32_t num_address_map_fields_per_transfer = 4; // TODO: (nshanker): remove hardcoded 4 and get this value from output of DTX
@@ -644,17 +714,17 @@ Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<
     auto scratch_pad_for_address_map_in_l1_b0_size_bytes = 32;
     // Scratchpad buffer size must also be a multiple of address map fields per transfer. We need all address map fields for a transfer in scratchpad.
     assert(scratch_pad_for_address_map_in_l1_b0_size_bytes % (num_address_map_fields_per_transfer*sizeof(uint32_t)) == 0);
-    auto scratch_pad_for_address_map_l1_buffer = tt_metal::Buffer(device, scratch_pad_for_address_map_in_l1_b0_size_bytes, l1_bank_id, scratch_pad_for_address_map_in_l1_b0_size_bytes, tt_metal::BufferType::L1);
+    auto scratch_pad_for_address_map_l1_buffer = tt_metal::Buffer(device, scratch_pad_for_address_map_in_l1_b0_size_bytes, scratch_pad_for_address_map_in_l1_b0_size_bytes, tt_metal::BufferType::L1);
     uint32_t scratch_pad_for_address_map_l1_address = scratch_pad_for_address_map_l1_buffer.address();
     // DRAM to L1 writes should 32B aligned
     assert(scratch_pad_for_address_map_l1_address%32 == 0);
     // Create address map metadata buffers in L1
     // Metadata vectors are copied to L1 buffers from host before calling LaunchKernels
     auto act_address_map_metadata_l1_b0_size = act_address_map_metadata.size() * sizeof(uint32_t);
-    auto act_address_map_metadata_l1_buffer = tt_metal::Buffer(device, act_address_map_metadata_l1_b0_size, l1_bank_id, act_address_map_metadata_l1_b0_size, tt_metal::BufferType::L1);
+    auto act_address_map_metadata_l1_buffer = tt_metal::Buffer(device, act_address_map_metadata_l1_b0_size, act_address_map_metadata_l1_b0_size, tt_metal::BufferType::L1);
     uint32_t act_address_map_metadata_l1_address = act_address_map_metadata_l1_buffer.address();
     auto weight_address_map_metadata_l1_b0_size = weight_address_map_metadata.size() * sizeof(uint32_t);
-    auto weight_address_map_metadata_l1_buffer = tt_metal::Buffer(device, weight_address_map_metadata_l1_b0_size, l1_bank_id, weight_address_map_metadata_l1_b0_size, tt_metal::BufferType::L1);
+    auto weight_address_map_metadata_l1_buffer = tt_metal::Buffer(device, weight_address_map_metadata_l1_b0_size, weight_address_map_metadata_l1_b0_size, tt_metal::BufferType::L1);
     uint32_t weight_address_map_metadata_l1_address = weight_address_map_metadata_l1_buffer.address();
 
     // out
@@ -850,7 +920,7 @@ Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<
 
 Tensor conv(const Tensor& a, const Tensor &b, const vector<int> conv_params, uint32_t in0_block_h, uint32_t in0_block_w, uint32_t in1_block_w,
              uint32_t out_subblock_h, uint32_t out_subblock_w) {
-    return std::move(operation::run(Conv(in0_block_h, in0_block_w, in1_block_w, out_subblock_h, out_subblock_w, conv_params, true), {a, b}).at(0));
+    return operation::run(Conv(in0_block_h, in0_block_w, in1_block_w, out_subblock_h, out_subblock_w, conv_params, true), {a, b}).at(0);
 }
 
 Program conv_single_core(const Tensor& a, const Tensor &b, const vector<int> conv_params, uint32_t in0_block_h, uint32_t in0_block_w, uint32_t in1_block_w,
@@ -858,15 +928,15 @@ Program conv_single_core(const Tensor& a, const Tensor &b, const vector<int> con
     return conv_as_large_bmm_single_core_(a, b, conv_params, in0_block_h, in0_block_w, in1_block_w, out_subblock_h, out_subblock_w, untilize_out, output);
 }
 
-void Conv::validate(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors) const {
-    const auto& input_tensor_a = input_tensors.at(0).get();
-    const auto& input_tensor_b = input_tensors.at(1).get();
+void Conv::validate(const std::vector<Tensor>& input_tensors) const {
+    const auto& input_tensor_a = input_tensors.at(0);
+    const auto& input_tensor_b = input_tensors.at(1);
     // TODO: ...
 }
 
-std::vector<Shape> Conv::compute_output_shapes(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors) const {
-    const auto& input_tensor_a = input_tensors.at(0).get();
-    const auto& input_tensor_b = input_tensors.at(1).get();
+std::vector<Shape> Conv::compute_output_shapes(const std::vector<Tensor>& input_tensors) const {
+    const auto& input_tensor_a = input_tensors.at(0);
+    const auto& input_tensor_b = input_tensors.at(1);
     vector<int> input_tensor_a_shape = { (int) input_tensor_a.shape()[1], (int) input_tensor_a.shape()[2], (int) input_tensor_a.shape()[3]};
     auto mm_shape = compute_conv_as_mm_shape(input_tensor_a_shape, conv_params, in0_block_h, in0_block_w);
     // TODO: Update batch size below
@@ -874,9 +944,9 @@ std::vector<Shape> Conv::compute_output_shapes(const std::vector<std::reference_
     return {output_tensor_shape};
 }
 
-std::vector<Tensor> Conv::create_output_tensors(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors) const {
+std::vector<Tensor> Conv::create_output_tensors(const std::vector<Tensor>& input_tensors) const {
     const auto output_shape = this->compute_output_shapes(input_tensors).at(0);
-    const auto& input_tensor = input_tensors.at(0).get();
+    const auto& input_tensor = input_tensors.at(0);
     Tensor output = create_output_dram_buffer_(input_tensor.device(), input_tensor.dtype(), output_shape, untilize_out);
     std::vector<Tensor> output_tensors;
     // TODO: check if anything else needs to be done here.
@@ -884,9 +954,9 @@ std::vector<Tensor> Conv::create_output_tensors(const std::vector<std::reference
     return output_tensors;
 }
 
-operation::ProgramWithCallbacks Conv::create_program(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors, std::vector<Tensor>& output_tensors) const {
-    const auto& input_tensor_a = input_tensors.at(0).get();
-    const auto& input_tensor_b = input_tensors.at(1).get();
+operation::ProgramWithCallbacks Conv::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor>& output_tensors) const {
+    const auto& input_tensor_a = input_tensors.at(0);
+    const auto& input_tensor_b = input_tensors.at(1);
     auto& output_tensor = output_tensors.at(0);
 
     return {conv_single_core(input_tensor_a, input_tensor_b, conv_params, in0_block_h, in0_block_w, in1_block_w, out_subblock_h, out_subblock_w, untilize_out, output_tensor)};

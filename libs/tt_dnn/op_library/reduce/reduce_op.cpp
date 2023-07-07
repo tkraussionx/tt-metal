@@ -1,4 +1,6 @@
 #include "tt_dnn/op_library/reduce/reduce_op.hpp"
+#include "tt_dnn/op_library/auto_format.hpp"
+#include "tt_dnn/op_library/run_operation.hpp"
 #include "tt_metal/tools/profiler/op_profiler.hpp"
 
 #include "tt_metal/host_api.hpp"
@@ -38,31 +40,14 @@ void add_defines(ComputeKernel * reduce_kernel, ReduceOpMath::Enum reduce_op, Re
     return;
 }
 
-ReduceOpParallelizationStrategy::Enum get_parallelization_strategy(const Tensor &a, ReduceOpDim::Enum reduce_dim){
-    uint32_t num_tiles = a.volume() / TILE_HW;
-    auto shape = a.shape();
-    uint32_t Wt = shape[3]/TILE_WIDTH;
-    uint32_t Ht = shape[2]/TILE_HEIGHT;
-    uint32_t NC = shape[1]*shape[0];
-    if(NC * Wt > 1 and reduce_dim == ReduceOpDim::H){
-        return ReduceOpParallelizationStrategy::MULTI_CORE_H;
-    }else if(NC * Ht > 1 and reduce_dim == ReduceOpDim::W){
-        return ReduceOpParallelizationStrategy::MULTI_CORE_W;
-    }else if(num_tiles > 1 and reduce_dim == ReduceOpDim::HW){
-        return ReduceOpParallelizationStrategy::MULTI_CORE_HW;
-    }else{
-        return ReduceOpParallelizationStrategy::SINGLE_CORE;
-    }
-}
-
 } // namespace reduce_op_utils
 namespace tt {
 namespace tt_metal {
 
-void Reduce::validate(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {}
+void Reduce::validate(const std::vector<Tensor> &input_tensors) const {}
 
-std::vector<Shape> Reduce::compute_output_shapes(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
-    const auto& input_tensor = input_tensors.at(0).get();
+std::vector<Shape> Reduce::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
 
     auto output_shape = input_tensor.shape();
     switch (this->dim){
@@ -81,17 +66,15 @@ std::vector<Shape> Reduce::compute_output_shapes(const std::vector<std::referenc
     return {output_shape};
 }
 
-std::vector<Tensor> Reduce::create_output_tensors(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
+std::vector<Tensor> Reduce::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
     return operation::generic_create_output_tensors(*this, input_tensors);
 }
 
-operation::ProgramWithCallbacks Reduce::create_program(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors, std::vector<Tensor> &output_tensors) const {
-    const auto& input_tensor = input_tensors.at(0).get();
+operation::ProgramWithCallbacks Reduce::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
     auto& output_tensor = output_tensors.at(0);
 
-    auto parallelization_strategy = reduce_op_utils::get_parallelization_strategy(input_tensor, this->dim);
-
-    op_profiler::set_parallelization_strategy(parallelization_strategy);
+    auto parallelization_strategy = this->get_parallelization_strategy(input_tensors);
 
     switch (parallelization_strategy){
         case ReduceOpParallelizationStrategy::MULTI_CORE_H:
@@ -105,15 +88,46 @@ operation::ProgramWithCallbacks Reduce::create_program(const std::vector<std::re
 
 }
 
+operation::Hash Reduce::compute_program_hash(const std::vector<Tensor> &input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
+
+    return fmt::format(
+        "reduce_{}_{}_{}_{}",
+         magic_enum::enum_name(this->math_op),
+         magic_enum::enum_name(this->dim),
+         this->scaler,
+         operation::hash_tensor(input_tensor)
+    );
+}
+
+ReduceOpParallelizationStrategy::Enum Reduce::get_parallelization_strategy(const std::vector<Tensor> &input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
+
+    uint32_t num_tiles = input_tensor.volume() / TILE_HW;
+    auto shape = input_tensor.shape();
+    uint32_t Wt = shape[3]/TILE_WIDTH;
+    uint32_t Ht = shape[2]/TILE_HEIGHT;
+    uint32_t NC = shape[1]*shape[0];
+    if(NC * Wt > 1 and this->dim == ReduceOpDim::H){
+        return ReduceOpParallelizationStrategy::MULTI_CORE_H;
+    }else if(NC * Ht > 1 and this->dim == ReduceOpDim::W){
+        return ReduceOpParallelizationStrategy::MULTI_CORE_W;
+    }else if(num_tiles > 1 and this->dim == ReduceOpDim::HW){
+        return ReduceOpParallelizationStrategy::MULTI_CORE_HW;
+    }else{
+        return ReduceOpParallelizationStrategy::SINGLE_CORE;
+    }
+}
+
 Tensor reduce(const Tensor &input_tensor, ReduceOpMath::Enum reduce_math, ReduceOpDim::Enum reduce_dim, float scaler) {
-    auto parallelization_strategy = reduce_op_utils::get_parallelization_strategy(input_tensor, reduce_dim);
+    auto parallelization_strategy = Reduce{reduce_math, reduce_dim, scaler}.get_parallelization_strategy({input_tensor});
     auto is_multicore_hw = parallelization_strategy == ReduceOpParallelizationStrategy::MULTI_CORE_HW;
     float pad_value = reduce_math == ReduceOpMath::MAX ? std::numeric_limits<float>::lowest() : 0;
     if (is_multicore_hw) {
         Device * device;
 
         // Get the device
-        if (input_tensor.on_host()) {
+        if (input_tensor.storage_type() == StorageType::HOST) {
             device = AutoFormat::GetDefaultDevice();
             TT_ASSERT(device != nullptr, "Requires setting default device if no inputs to op are on device");
         } else {
@@ -132,19 +146,6 @@ Tensor reduce(const Tensor &input_tensor, ReduceOpMath::Enum reduce_math, Reduce
     } else {
         return operation::run_with_autoformat(Reduce{reduce_math, reduce_dim, scaler}, input_tensor, pad_value);
     }
-}
-
-
-operation::Hash Reduce::compute_program_hash(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
-    const auto& input_tensor = input_tensors.at(0).get();
-
-    return fmt::format(
-        "reduce_{}_{}_{}_{}",
-         magic_enum::enum_name(this->math_op),
-         magic_enum::enum_name(this->dim),
-         this->scaler,
-         operation::hash_tensor(input_tensor)
-    );
 }
 
 }  // namespace tt_metal

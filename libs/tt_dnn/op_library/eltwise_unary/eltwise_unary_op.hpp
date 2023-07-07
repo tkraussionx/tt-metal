@@ -12,9 +12,9 @@ namespace tt_metal {
 
 struct UnaryOpType {
     enum Enum { EXP = 0, RECIP = 1, GELU = 2, RELU = 3, SQRT = 4, SIGMOID = 5, LOG = 6, TANH = 7, LOG2 = 8, LOG10 = 9, SIN = 10, COS = 11,
-                ABS=12, SIGN=13, SQUARE=14, EQZ = 15, NEZ = 16, GTZ = 17, LTZ = 18, GEZ = 19, LEZ = 20, RELU_MAX = 21, RELU_MIN = 22, POWER = 23  };
+                ABS=12, SIGN=13, SQUARE=14, EQZ = 15, NEZ = 16, GTZ = 17, LTZ = 18, GEZ = 19, LEZ = 20, RELU_MAX = 21, RELU_MIN = 22, POWER = 23};
     static const vector<Enum> all() { return { EXP, RECIP, GELU, RELU, SQRT, SIGMOID, LOG, TANH, LOG2, LOG10, SIN, COS, ABS, SIGN, SQUARE,
-                EQZ , NEZ , GTZ , LTZ , GEZ , LEZ , RELU_MAX , RELU_MIN, POWER }; }
+                EQZ , NEZ , GTZ , LTZ , GEZ , LEZ , RELU_MAX , RELU_MIN, POWER}; }
 };
 
 struct UnaryOpParallelizationStrategy {
@@ -26,12 +26,15 @@ struct EltwiseUnary {
     const UnaryOpType::Enum op_type;
     const std::optional<float> param;
 
-    void validate(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const;
-    std::vector<Shape> compute_output_shapes(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const;
-    std::vector<Tensor> create_output_tensors(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const;
-    operation::ProgramWithCallbacks create_program(const std::vector<std::reference_wrapper<const Tensor>>& input_tensors, std::vector<Tensor> &output_tensors) const;
-    operation::Hash compute_program_hash(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const;
+    void validate(const std::vector<Tensor> &input_tensors) const;
+    std::vector<Shape> compute_output_shapes(const std::vector<Tensor> &input_tensors) const;
+    std::vector<Tensor> create_output_tensors(const std::vector<Tensor> &input_tensors) const;
+    operation::ProgramWithCallbacks create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const;
+    operation::Hash compute_program_hash(const std::vector<Tensor> &input_tensors) const;
+    UnaryOpParallelizationStrategy::Enum get_parallelization_strategy(const std::vector<Tensor> &input_tensors) const;
 };
+
+std::ostream& operator<<(std::ostream& os, const EltwiseUnary& op);
 
 Tensor eltwise_unary(const EltwiseUnary& op, const Tensor &input_tensor);
 
@@ -67,6 +70,19 @@ inline Tensor relu_max(const Tensor& input_tensor, float upper_limit) { return o
 inline Tensor relu_min(const Tensor& input_tensor, float lower_limit) { return operation::run_with_autoformat(EltwiseUnary{UnaryOpType::RELU_MIN, lower_limit}, input_tensor); }
 inline Tensor power(const Tensor& input_tensor, uint32_t exponent) { return operation::run_with_autoformat(EltwiseUnary{UnaryOpType::POWER, exponent}, input_tensor); }
 
+// binop with tied inputs.
+Tensor sub_unary(const Tensor& input_tensor, float value);
+Tensor sub_unary(float value, const Tensor& input_tensor);
+
+Tensor add_unary(const Tensor& input_tensor, float value);
+Tensor add_unary(float value, const Tensor& input_tensor);
+
+Tensor mul_unary(const Tensor& input_tensor, float value);
+Tensor mul_unary(float value, const Tensor& input_tensor);
+
+Tensor div_unary(const Tensor& input_tensor, float value);
+Tensor div_unary(float value, const Tensor& input_tensor);
+
 }  // namespace tt_metal
 
 }  // namespace tt
@@ -77,7 +93,5 @@ using namespace tt::tt_metal;
 bool get_op_approx_mode(UnaryOpType::Enum op_type);
 string get_op_name(UnaryOpType::Enum op_type, std::optional<float> param={});
 void add_defines(ComputeKernel * eltwise_unary_kernel, UnaryOpType::Enum op_type, std::optional<float> param={});
-
-UnaryOpParallelizationStrategy::Enum get_parallelization_strategy(const Tensor &input_tensor);
 
 } // namespace eltwise_unary_op_utils

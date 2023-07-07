@@ -5,7 +5,6 @@
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/common/tile_math.hpp"
-
 #include <optional>
 
 using u32 = std::uint32_t;
@@ -17,22 +16,24 @@ namespace tt {
 
 namespace tt_metal {
 
-inline bool is_dram(const Tensor& input_tensor) { return input_tensor.buffer_type() == BufferType::DRAM; }
-inline bool is_dram(const std::optional<std::reference_wrapper<const Tensor>> input_tensor) {
-     return input_tensor.has_value() ? is_dram(input_tensor.value().get()) : true;
+inline bool is_dram(const Tensor& input_tensor) { return input_tensor.memory_config().buffer_type == BufferType::DRAM; }
+inline bool is_dram(const std::optional<const Tensor> input_tensor) {
+     return input_tensor.has_value() ? is_dram(input_tensor.value()) : true;
 }
 inline bool is_dram(const Buffer* b) { return b->buffer_type() == BufferType::DRAM; }
 
 // implementation of softmax with optional scale/mask (see the header for input_tensor more detailed description)
-operation::ProgramWithCallbacks scale_mask_softmax_(const Tensor &input_tensor, const std::optional<std::reference_wrapper<const Tensor>> mask, float scale) {
+operation::ProgramWithCallbacks scale_mask_softmax_(const Tensor &input_tensor, const std::optional<const Tensor> mask, float scale) {
 
     const auto shape = input_tensor.shape();
     u32 W = shape[3], H = shape[2], NC = shape[1]*shape[0];
     u32 HW = H*W;
     TT_ASSERT(W % TILE_WIDTH == 0 && H % TILE_HEIGHT == 0);
     TT_ASSERT(H > 0 && W > 0 && NC > 0);
-    TT_ASSERT(input_tensor.dtype() == DataType::BFLOAT16);
-    TT_ASSERT(not mask.has_value() || mask.value().get().dtype() == DataType::BFLOAT16);
+    TT_ASSERT(input_tensor.dtype() == DataType::BFLOAT16 || input_tensor.dtype() == DataType::BFLOAT8_B);
+    if (mask.has_value()) {
+        TT_ASSERT(mask.value().dtype() == input_tensor.dtype());
+    }
     u32 Wt = W/TILE_WIDTH;
     u32 Ht = H/TILE_HEIGHT;
 
@@ -40,9 +41,18 @@ operation::ProgramWithCallbacks scale_mask_softmax_(const Tensor &input_tensor, 
 
     Program program = Program();
 
-    TT_ASSERT(input_tensor.device() != nullptr, "Operand to transpose_wh op needs to be on device!");
-
-    uint32_t TBYTES = 2 * 1024;
+    TT_ASSERT(input_tensor.device() != nullptr, "Operand to softmax op needs to be on device!");
+    uint32_t scalar_tile_size = tt_metal::TileSize(tt::DataFormat::Float16_b);
+    tt::DataFormat in0_cb_data_format = tt::DataFormat::Bfp8_b;
+    if (input_tensor.dtype() == tt::tt_metal::DataType::BFLOAT16) {
+        in0_cb_data_format = tt::DataFormat::Float16_b;
+    }
+    uint32_t in0_tile_size = tt_metal::TileSize(in0_cb_data_format);
+    tt::DataFormat mask_cb_data_format = tt::DataFormat::Bfp8_b;
+    if (mask.has_value() && mask.value().dtype() == tt::tt_metal::DataType::BFLOAT16) {
+        mask_cb_data_format = tt::DataFormat::Float16_b;
+    }
+    uint32_t mask_tile_size = tt_metal::TileSize(mask_cb_data_format);
 
     auto src0_dram_buffer = input_tensor.buffer();
 
@@ -57,11 +67,10 @@ operation::ProgramWithCallbacks scale_mask_softmax_(const Tensor &input_tensor, 
     // These tile capacity counts for CBs need to match the number of tiles expected by the kernel (softmax.cpp)
     uint32_t in0_t  = block_size*2;
     uint32_t out0_t = block_size*2;
-    uint32_t im1_t  = 2;
-    uint32_t in2_t  = 2; // scaler for reduce coming from reader
-    uint32_t in3_t  = 2; // 1/sqrt() scaler tile cb for fused scale/mask/softmax variant
+    uint32_t im1_t  = 1; // 1/sum(exp(x))
+    uint32_t in2_t  = 1; // scaler for reduce coming from reader
+    uint32_t in3_t  = 1; // 1/sqrt() scaler tile cb for fused scale/mask/softmax variant
     uint32_t in4_t  = divup(Wt, block_size)*block_size; // attention mask (N,C,32,W) - Wt is reused for each Ht, NC is cycled
-    uint32_t im2_t  = 2; // recip result
 
     // cb_exps - keeps exps in CB in L1 to avoid recomputing
     uint32_t im0_t  = block_size*divup(Wt, block_size);
@@ -111,14 +120,32 @@ operation::ProgramWithCallbacks scale_mask_softmax_(const Tensor &input_tensor, 
         });
     }
     CoreRangeSet all_cores(all_cores_set);
+    bool src0_is_dram = src0_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+    std::vector<uint32_t> reader_compile_time_args = {
+        // interleaved accessor args
+        (std::uint32_t) static_cast<uint32_t>(in0_cb_data_format),
+        src0_is_dram,
+        block_size
+    };
+    if (mask.has_value()) {
+        bool mask_is_dram = mask.value().buffer()->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+        reader_compile_time_args.push_back((std::uint32_t) static_cast<uint32_t>(mask_cb_data_format));
+        reader_compile_time_args.push_back(mask_is_dram);
+    }
 
+    std::vector<uint32_t> writer_compile_time_args = {
+        // interleaved accessor args
+        (std::uint32_t) static_cast<uint32_t>(in0_cb_data_format),
+        src0_is_dram,
+        block_size
+    };
     auto reader_kernels = CreateDataMovementKernel(
-        program, "tt_metal/kernels/dataflow/reader_unary_8bank_sm.cpp", all_cores,
+        program, "tt_metal/kernels/dataflow/reader_unary_8bank_sm.cpp", all_cores, reader_compile_time_args,
         DataMovementProcessor::RISCV_1, NOC::RISCV_1_default);
         //DataMovementProcessor::RISCV_1, core.x < 6 ? NOC::RISCV_1_default : NOC::RISCV_0_default);
 
     auto writer_kernels = CreateDataMovementKernel(
-        program, "tt_metal/kernels/dataflow/writer_unary_8bank_sm.cpp", all_cores,
+        program, "tt_metal/kernels/dataflow/writer_unary_8bank_sm.cpp", all_cores, writer_compile_time_args,
         DataMovementProcessor::RISCV_0, NOC::RISCV_0_default);
         //DataMovementProcessor::RISCV_0, core.x < 6 ? NOC::RISCV_0_default : NOC::RISCV_1_default);
 
@@ -126,20 +153,13 @@ operation::ProgramWithCallbacks scale_mask_softmax_(const Tensor &input_tensor, 
     // NCHt, Nt, Wt
     // if wtpc < Ht then since we pass tpc to the kernel as Ht, the broadcasts should be correct
     // if wtpc >= Ht then tpc should be a multiple of Ht
-    vector<uint32_t> compute_args = { wtpc, partHt, Wt };
+    vector<uint32_t> compute_args = { wtpc, partHt, Wt, block_size };
 
     bool fp32_dest_acc_en = false;
     bool math_approx_mode = true;
     auto softmax_kernels = CreateComputeKernel(
         program, "kernels/compute/softmax.cpp", all_cores, compute_args,
         MathFidelity::HiFi4, fp32_dest_acc_en, math_approx_mode);
-
-    softmax_kernels->add_define("BLOCK_SIZE", block_size);
-    reader_kernels->add_define("BLOCK_SIZE", block_size);
-    reader_kernels->add_define("A_DRAM", is_dram(input_tensor) ? "true" : "false");
-    reader_kernels->add_define("MASK_DRAM", is_dram(mask) ? "true" : "false");
-    writer_kernels->add_define("BLOCK_SIZE", block_size);
-    writer_kernels->add_define("OUTPUT_DRAM", is_dram(input_tensor) ? "true" : "false");
     if (scale != 0.0f) {
         reader_kernels->add_define("FUSED_SCALE_MASK", "1");
         softmax_kernels->add_define("FUSED_SCALE_MASK", "1");
@@ -147,24 +167,22 @@ operation::ProgramWithCallbacks scale_mask_softmax_(const Tensor &input_tensor, 
 
     // Create circular buffers
     // see softmax.cpp for which buffers are needed
-    CreateCircularBuffers( program, device, CB::c_in0,       all_cores, in0_t,  in0_t *TBYTES,  DataFormat::Float16_b );
-    CreateCircularBuffers( program, device, CB::c_out0,      all_cores, out0_t, out0_t*TBYTES,  DataFormat::Float16_b );
-    CreateCircularBuffers( program, device, CB::c_intermed1, all_cores, im1_t,  im1_t *TBYTES,  DataFormat::Float16_b );
-    CreateCircularBuffers( program, device, CB::c_in2,       all_cores, in2_t,  in2_t *TBYTES,  DataFormat::Float16_b );
-    CreateCircularBuffers( program, device, CB::c_intermed2, all_cores, im2_t,  im2_t *TBYTES,  DataFormat::Float16_b );
-    CreateCircularBuffers( program, device, CB::c_intermed0, all_cores, im0_t,  im0_t *TBYTES,  DataFormat::Float16_b );
+    CreateCircularBuffers( program, CB::c_in0,       all_cores, in0_t,  in0_t * in0_tile_size, in0_cb_data_format );
+    CreateCircularBuffers( program, CB::c_out0,      all_cores, out0_t, out0_t * in0_tile_size, in0_cb_data_format );
+    CreateCircularBuffers( program, CB::c_intermed1, all_cores, im1_t,  im1_t * in0_tile_size,  in0_cb_data_format );
+    CreateCircularBuffers( program, CB::c_in2,       all_cores, in2_t,  in2_t * scalar_tile_size,  DataFormat::Float16_b );
+    CreateCircularBuffers( program, CB::c_intermed0, all_cores, im0_t,  im0_t * in0_tile_size,  in0_cb_data_format );
     if (mask.has_value()) {
-        CreateCircularBuffers( program, device, CB::c_intermed3, all_cores, im3_t,  im3_t *TBYTES,  DataFormat::Float16_b );
-        CreateCircularBuffers( program, device, CB::c_in3,       all_cores, in3_t,  in3_t *TBYTES,  DataFormat::Float16_b );
-        CreateCircularBuffers( program, device, CB::c_in4,       all_cores, in4_t,  in4_t *TBYTES,  DataFormat::Float16_b );
+        CreateCircularBuffers( program, CB::c_intermed3, all_cores, im3_t,  im3_t * in0_tile_size,  in0_cb_data_format );
+        CreateCircularBuffers( program, CB::c_in3,       all_cores, in3_t,  in3_t * scalar_tile_size,  DataFormat::Float16_b );
+        CreateCircularBuffers( program, CB::c_in4,       all_cores, in4_t,  in4_t * mask_tile_size,  mask_cb_data_format );
     }
+    uint32_t src_addr = src0_dram_buffer->address();
+    uint32_t mask_addr = mask.has_value() ? mask.value().buffer()->address() : 0;
 
     for (uint32_t icore = 0; icore < num_cores; icore++) {
         auto core = grid.wrap_core(icore);
 
-        uint32_t src_addr = src0_dram_buffer->address();
-        //uint32_t dst_addr = dst_dram_buffer->address();
-        uint32_t mask_addr = mask.has_value() ? mask.value().get().buffer()->address() : 0;
         uint32_t tile_offset = wtpc*Wt*icore;
         //cout << "WTPC=" << wtpc << endl;
         //cout << "Wt=" << Wt << endl;
@@ -173,7 +191,7 @@ operation::ProgramWithCallbacks scale_mask_softmax_(const Tensor &input_tensor, 
         // always in-place
         //                                                              0  1    2       3            4   5       6          7           8
         SetRuntimeArgs(reader_kernels, core, { src_addr, 0, s.u, wtpc*Wt, tile_offset, partHt, Wt, mask_addr, 0x3f800000 }); // [8]=1.0f is scaler
-        SetRuntimeArgs(writer_kernels, core, { src_addr, 0,   0, wtpc*Wt, tile_offset });
+        SetRuntimeArgs(writer_kernels, core, { src_addr, wtpc*Wt, tile_offset });
     }
 
     auto override_runtime_args_callback = [
@@ -215,23 +233,23 @@ operation::ProgramWithCallbacks scale_mask_softmax_(const Tensor &input_tensor, 
 } // scale_mask_softmax_
 
 
-void AttentionSoftmaxInPlace::validate(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors, const std::vector<std::optional<std::reference_wrapper<const Tensor>>>& optional_input_tensors) const {
+void AttentionSoftmaxInPlace::validate(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) const {
     TT_ASSERT(input_tensors.size() == 1 and optional_input_tensors.size() <= 1, "Must have 1 or 2 input tensors");
 }
 
-std::vector<Shape> AttentionSoftmaxInPlace::compute_output_shapes(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
+std::vector<Shape> AttentionSoftmaxInPlace::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
     // Do nothing because it's an in-place operation
     return {};
 }
 
-std::vector<Tensor> AttentionSoftmaxInPlace::create_output_tensors(const std::vector<std::reference_wrapper<const Tensor>> &input_tensors) const {
+std::vector<Tensor> AttentionSoftmaxInPlace::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
     // Do nothing because it's an in-place operation
     return {};
 }
 
 operation::ProgramWithCallbacks AttentionSoftmaxInPlace::create_program(
-    const std::vector<std::reference_wrapper<const Tensor>>& input_tensors,
-    const std::vector<std::optional<std::reference_wrapper<const Tensor>>>& optional_input_tensors,
+    const std::vector<Tensor>& input_tensors,
+    const std::vector<std::optional<const Tensor>>& optional_input_tensors,
     std::vector<Tensor> &output_tensors
 ) const {
     auto& input_tensor = input_tensors.at(0);
@@ -241,28 +259,26 @@ operation::ProgramWithCallbacks AttentionSoftmaxInPlace::create_program(
 }
 
 operation::Hash AttentionSoftmaxInPlace::compute_program_hash(
-    const std::vector<std::reference_wrapper<const Tensor>> &input_tensors,
-    const std::vector<std::optional<std::reference_wrapper<const Tensor>>>& optional_input_tensors
+    const std::vector<Tensor> &input_tensors,
+    const std::vector<std::optional<const Tensor>>& optional_input_tensors
 ) const {
-    const auto& input_tensor = input_tensors.at(0).get();
-    const auto& mask = optional_input_tensors.at(0);
+    const auto& input_tensor = input_tensors.at(0);    const auto& mask = optional_input_tensors.at(0);
 
     return fmt::format(
         "attention_softmax_in_place_{}_{}_{}",
         this->scale,
         operation::hash_tensor(input_tensor),
-        mask.has_value() ? operation::hash_tensor(mask.value().get()) : "nullopt"
+        mask.has_value() ? operation::hash_tensor(mask.value()) : "nullopt"
     );
 }
 
-Tensor scale_mask_softmax_in_place(float scale, std::optional<std::reference_wrapper<const Tensor>> mask, Tensor& input_tensor) {
-    std::vector<std::reference_wrapper<const Tensor>> input_tensors{input_tensor};
-    operation::run(AttentionSoftmaxInPlace{.scale=scale}, input_tensors, {mask});
-    return std::move(input_tensor);
+Tensor scale_mask_softmax_in_place(float scale, std::optional<const Tensor> mask, Tensor& input_tensor) {
+    operation::run(AttentionSoftmaxInPlace{.scale=scale}, {input_tensor}, {mask});
+    return input_tensor;
 }
 
 Tensor softmax_in_place(Tensor& input_tensor) {
-    return std::move(scale_mask_softmax_in_place(0.0f, std::nullopt, input_tensor)); // 0.0f means unused scale
+    return scale_mask_softmax_in_place(0.0f, std::nullopt, input_tensor); // 0.0f means unused scale
 }
 
 

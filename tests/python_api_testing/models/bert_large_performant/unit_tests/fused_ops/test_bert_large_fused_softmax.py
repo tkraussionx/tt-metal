@@ -12,8 +12,8 @@ sys.path.append(f"{f}/../../../../..")
 
 import torch
 
-from libs import tt_lib as ttl
-from libs.tt_lib.utils import untilize, tilize_to_list, print_diff_argmax, is_close
+import tt_lib as ttl
+from tt_lib.utils import untilize, tilize_to_list, print_diff_argmax, is_close
 
 
 def ref_stable_softmax(x):
@@ -94,6 +94,8 @@ def generate_attn_mask(N, C, W, dev, offs, dtype, mem_config):
 
 
 def run_softmax_tests(test_id, dtype, in0_mem_config):
+    if dtype == ttl.tensor.DataType.BFLOAT8_B:
+        pytest.skip("Skipping BFP8_B tests since output is incorrect")
     torch.manual_seed(123)
     random.seed(123)
 
@@ -157,20 +159,27 @@ import pytest
 @pytest.mark.parametrize(
     "in0_mem_config",
     (
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM),
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.L1),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
     ),
     ids=["in0_DRAM", "in0_L1"],
 )
 @pytest.mark.parametrize(
     "dtype",
-    (ttl.tensor.DataType.BFLOAT16,),
-    ids=["BFLOAT16"],
+    (
+        ttl.tensor.DataType.BFLOAT16,
+        ttl.tensor.DataType.BFLOAT8_B,
+    ),
+    ids=["BFLOAT16", "BFLOAT8_B"],
 )
 @pytest.mark.parametrize(
     "test_id",
     (0, 1),
     ids=["scale_mask_softmax", "softmax"],
 )
-def test_bert_large_softmax_test(test_id, dtype, in0_mem_config):
+def test_bert_large_softmax_test(test_id, dtype, in0_mem_config, request):
+    ttl.profiler.set_profiler_flag(False)
+    ttl.profiler.set_profiler_location(
+        f"tt_metal/tools/profiler/logs/BERT_large_fused_softmax_{request.node.callspec.id}"
+    )
     run_softmax_tests(test_id, dtype, in0_mem_config)

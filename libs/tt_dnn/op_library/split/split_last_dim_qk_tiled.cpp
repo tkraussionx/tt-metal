@@ -1,9 +1,12 @@
 #include "tt_dnn/op_library/split/split_last_dim_qk_tiled.hpp"
 
-#include <iostream>
+#include "tt_dnn/op_library/auto_format.hpp"
 
 #include "common/constants.hpp"
 #include "tt_metal/host_api.hpp"
+
+#include <iostream>
+
 using namespace tt::constants;
 using namespace tt::tt_metal;
 
@@ -149,7 +152,7 @@ operation::ProgramWithCallbacks split_last_dim_qk_tiled(
     uint32_t src0_cb_index = 0;
     uint32_t num_input_tiles = 2;
     auto cb_src0 = tt_metal::CreateCircularBuffers(
-        program, device, src0_cb_index, all_cores, num_input_tiles, num_input_tiles * single_tile_size, cb_data_format);
+        program, src0_cb_index, all_cores, num_input_tiles, num_input_tiles * single_tile_size, cb_data_format);
 
     for (int core_idx_y = 0; core_idx_y < num_cores_r; core_idx_y++) {
         for (int core_idx_x = 0; core_idx_x < num_cores_c; core_idx_x++) {
@@ -172,12 +175,50 @@ operation::ProgramWithCallbacks split_last_dim_qk_tiled(
         }
     }
 
-    return {std::move(program)};
+    auto override_runtime_args_callback = [
+            reader_kernel,
+            writer_kernel,
+            num_cores_r,
+            num_cores_c,
+            start_core_x,
+            start_core_y
+        ]
+    (
+        const std::vector<Buffer*>& input_buffers,
+        const std::vector<Buffer*>& output_buffers
+    ) {
+
+        auto src_dram_buffer = input_buffers.at(0);
+
+        auto dst_0_dram_buffer = output_buffers.at(0);
+        auto dst_1_dram_buffer = output_buffers.at(0);
+
+        for (int core_idx_y = 0; core_idx_y < num_cores_r; core_idx_y++) {
+            for (int core_idx_x = 0; core_idx_x < num_cores_c; core_idx_x++) {
+                CoreCoord core = {(std::size_t)start_core_x + core_idx_x, (std::size_t)start_core_y + core_idx_y};
+
+                {
+                    auto runtime_args = GetRuntimeArgs(reader_kernel, core);
+                    runtime_args[1] = src_dram_buffer->address();
+                    SetRuntimeArgs(reader_kernel, core, runtime_args);
+                }
+
+                {
+                    auto runtime_args = GetRuntimeArgs(writer_kernel, core);
+                    runtime_args[1] = dst_0_dram_buffer->address();
+                    runtime_args[2] = dst_1_dram_buffer->address();
+                    SetRuntimeArgs(writer_kernel, core, runtime_args);
+                }
+            }
+        }
+    };
+
+    return {std::move(program), override_runtime_args_callback};
 }
 
 operation::ProgramWithCallbacks SplitLastDimQKTiled::create_program(
-    const std::vector<std::reference_wrapper<const Tensor>> &input_tensors, std::vector<Tensor> &output_tensors) const {
-    const auto &input_tensor = input_tensors.at(0).get();
+    const std::vector<Tensor> &input_tensors, std::vector<Tensor> &output_tensors) const {
+    const auto &input_tensor = input_tensors.at(0);
     return split_last_dim_qk_tiled(input_tensor, output_tensors, this->output_mem_config);
 }
 
@@ -186,7 +227,7 @@ std::vector<Tensor> split_last_dim_qk_tiled(const Tensor &input_tensor, const Me
 
     tt_metal::Device *device;
     // Get the device
-    if (input_tensor.on_host()) {
+    if (input_tensor.storage_type() == StorageType::HOST) {
         device = AutoFormat::GetDefaultDevice();
         TT_ASSERT(device != nullptr, "Requires setting default device if no inputs to op are on device");
     } else {
@@ -196,16 +237,16 @@ std::vector<Tensor> split_last_dim_qk_tiled(const Tensor &input_tensor, const Me
     auto input_shape = input_tensor.shape();
     auto padded_input_shape = AutoFormat::pad_to_tile_shape(input_shape);
     if (AutoFormat::check_input_tensor_format(input_tensor, padded_input_shape)) {
-        return std::move(operation::run(op, {std::cref(input_tensor)}));
+        return operation::run(op, {input_tensor});
     } else {
-        TT_ASSERT(input_tensor.buffer_type() == tt_metal::BufferType::DRAM, "Untiled splits should be in DRAM");
+        TT_ASSERT(input_tensor.memory_config().buffer_type == tt_metal::BufferType::DRAM, "Untiled splits should be in DRAM");
         TT_ASSERT(mem_config.buffer_type == tt_metal::BufferType::DRAM, "Untiled splits should be in DRAM");
         auto device = input_tensor.device();
-        auto output_shape = op.compute_output_shapes({std::cref(input_tensor)}).at(0);
+        auto output_shape = op.compute_output_shapes({input_tensor}).at(0);
         const auto padded_tensor = AutoFormat::format_input_tensor(input_tensor, device, padded_input_shape);
-        auto output_tensors = std::move(operation::run(op, {std::cref(padded_tensor)}));
+        auto output_tensors = operation::run(op, {padded_tensor});
         for (auto &output_tensor : output_tensors) {
-            AutoFormat::format_output_tensor(output_tensor, output_shape, device);
+            output_tensor = AutoFormat::format_output_tensor(output_tensor, output_shape, device);
         }
         return output_tensors;
     }

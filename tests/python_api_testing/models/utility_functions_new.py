@@ -4,7 +4,7 @@ import torch
 import numpy as np
 from loguru import logger
 from tt_lib.utils import _nearest_32
-
+from os import environ
 
 
 def is_close(a, b, rtol=1e-2, atol=1e-2, max_mag=2.0, max_mag_fraction=0.02):
@@ -89,6 +89,34 @@ def get_compile_cache_enabled():
     Returns the current state of persistent compile cache on/off switch.
     """
     return tt_lib.device.GetCompileCacheEnabled()
+
+
+def enable_compilation_reports():
+    """
+    Enables generating reports of compilation statistics in .reports/tt_metal dir
+    """
+    return tt_lib.device.EnableCompilationReports()
+
+
+def disable_compilation_reports():
+    """
+    Disables generating reports of compilation statistics
+    """
+    return tt_lib.device.DisableCompilationReports()
+
+
+def enable_memory_reports():
+    """
+    Enables generating reports of memory allocation statistics in .reports/tt_metal dir
+    """
+    return tt_lib.device.EnableMemoryReports()
+
+
+def disable_memory_reports():
+    """
+    Disables generating reports of memory allocation statistics
+    """
+    return tt_lib.device.DisableMemoryReports()
 
 
 def comp_allclose(golden, calculated, rtol=1e-05, atol=1e-08):
@@ -180,7 +208,7 @@ def comp_allclose_and_pcc(golden, calculated, rtol=1e-05, atol=1e-08, pcc=0.99):
     return passing, output
 
 
-def torch2tt_tensor(py_tensor: torch.Tensor, tt_device, tt_layout=tt_lib.tensor.Layout.TILE, tt_memory_config=tt_lib.tensor.MemoryConfig(True, -1)):
+def torch2tt_tensor(py_tensor: torch.Tensor, tt_device, tt_layout=tt_lib.tensor.Layout.TILE, tt_memory_config=tt_lib.tensor.MemoryConfig(True)):
     size = list(py_tensor.size())
 
     while len(size) < 4:
@@ -328,3 +356,39 @@ def torch_to_tt_tensor(py_tensor, device):
     )
 
     return tt_tensor
+
+def prep_report(model_name: str, batch_size: int, inference_and_compile_time: float, inference_time: float, comments: str, inference_time_cpu: float=None):
+    environ['TZ'] = 'America/Toronto'
+    time.tzset()
+    today = time.strftime("%Y_%m_%d")
+
+    def write_dict_to_file(csv_path, dict_res):
+        columns = ", ".join([str(d) for d in dict_res.keys()])
+        # values = ", ".join([("{:.2f}".format(d) if isinstance(d, float) else str(d)) for d in dict_res.values()])
+        values = ", ".join([d for d in dict_res.values()])
+
+        with open(csv_path, "w") as csvfile:
+            csvfile.write(columns)
+            csvfile.write("\n")
+            csvfile.write(values)
+
+
+    compile_time = inference_and_compile_time - inference_time
+    gs_throughput = "{:.4f}".format(batch_size * (1/inference_time))
+    cpu_throughput = batch_size * (1/inference_time_cpu) if inference_time_cpu else "unknown"
+    cpu_throughput = "{:.4f}".format(cpu_throughput) if not isinstance(cpu_throughput, str) else cpu_throughput
+    dict_res = {
+        "Model": model_name,
+        "Setting": comments,
+        "Batch": str(batch_size),
+        "First Run (sec)": "{:.2f}".format(inference_and_compile_time),
+        "Second Run (sec)":  "{:.2f}".format(inference_time),
+        "Compile Time (sec)": "{:.2f}".format(compile_time),
+        "Inference Time GS (sec)": "{:.2f}".format(inference_time),
+        "Throughput GS (batch*inf/sec)": gs_throughput,
+        "Inference Time CPU (sec)": "{:.2f}".format(inference_time_cpu),
+        "Throughput CPU (batch*inf/sec)": cpu_throughput,
+    }
+
+    csv_file = f"perf_{model_name}_{today}.csv"
+    write_dict_to_file(csv_file, dict_res)

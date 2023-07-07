@@ -7,7 +7,7 @@ sys.path.append(f"{f}/../../../..")
 
 import numpy as np
 
-from libs import tt_lib as ttl
+import tt_lib as ttl
 from python_api_testing.models.utility_functions import (
     comp_pcc,
 )
@@ -43,12 +43,12 @@ def run_bert_large_create_qkv_heads_test(
         out = ttl.tensor.bert_large_create_q_head(a_t, out_mem_config)
 
     # Check memory of inputs and outputs
-    assert a_t.buffer_type() == in0_mem_config.buffer_type
-    assert out.buffer_type() == out_mem_config.buffer_type
+    assert a_t.memory_config().buffer_type == in0_mem_config.buffer_type
+    assert out.memory_config().buffer_type == out_mem_config.buffer_type
 
     which_head_str = "K head" if transpose_hw else "Q/V head"
-    logger.debug(f"in0 is on: {a_t.buffer_type()}")
-    logger.debug(f"out ({which_head_str}) is on: {out.buffer_type()}")
+    logger.debug(f"in0 is on: {a_t.memory_config().buffer_type}")
+    logger.debug(f"out ({which_head_str}) is on: {out.memory_config().buffer_type}")
 
     if transpose_hw:
         expected_out_shape = [9, 16, 64, 384]
@@ -78,21 +78,21 @@ import pytest
 @pytest.mark.parametrize(
     "transpose_hw",
     (False, True),
-    ids=["Q/V_head", "K_head"],
+    ids=["Q_V_head", "K_head"],
 )
 @pytest.mark.parametrize(
     "out_mem_config",
     (
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM),
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.L1),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
     ),
     ids=["out_DRAM", "out_L1"],
 )
 @pytest.mark.parametrize(
     "in0_mem_config",
     (
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM),
-        ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.L1),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
     ),
     ids=["in0_DRAM", "in0_L1"],
 )
@@ -102,8 +102,12 @@ import pytest
     ids=["BFLOAT8_B", "BFLOAT16"],
 )
 def test_bert_large_create_qkv_heads_test(
-    dtype, in0_mem_config, out_mem_config, transpose_hw
+    dtype, in0_mem_config, out_mem_config, transpose_hw, request
 ):
+    ttl.profiler.set_profiler_flag(False)
+    ttl.profiler.set_profiler_location(
+        f"tt_metal/tools/profiler/logs/BERT_large_create_heads_tm_{request.node.callspec.id}"
+    )
     run_bert_large_create_qkv_heads_test(
         dtype, in0_mem_config, out_mem_config, transpose_hw
     )
@@ -111,12 +115,16 @@ def test_bert_large_create_qkv_heads_test(
 
 def test_bert_large_create_qkv_heads_with_program_cache(use_program_cache):
     dtype = ttl.tensor.DataType.BFLOAT8_B
-    dram_mem_config = ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.DRAM)
+    dram_mem_config = ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM)
     for _ in range(2):
-        run_bert_large_create_qkv_heads_test(dtype, dram_mem_config, dram_mem_config, transpose_hw=True)
+        run_bert_large_create_qkv_heads_test(
+            dtype, dram_mem_config, dram_mem_config, transpose_hw=True
+        )
 
-    dram_mem_config = ttl.tensor.MemoryConfig(True, -1, ttl.tensor.BufferType.L1)
+    dram_mem_config = ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1)
     for _ in range(2):
-        run_bert_large_create_qkv_heads_test(dtype, dram_mem_config, dram_mem_config, transpose_hw=False)
+        run_bert_large_create_qkv_heads_test(
+            dtype, dram_mem_config, dram_mem_config, transpose_hw=False
+        )
 
     assert ttl.program_cache.num_entries() == 2
