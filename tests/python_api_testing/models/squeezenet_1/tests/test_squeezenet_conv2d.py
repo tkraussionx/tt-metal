@@ -18,7 +18,7 @@ from python_api_testing.models.utility_functions_new import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from utility_functions_new import comp_pcc
+from utility_functions_new import comp_pcc, comp_allclose_and_pcc
 from torchvision.models import squeezenet1_0, SqueezeNet1_0_Weights
 
 
@@ -109,6 +109,9 @@ def test_Squeezenet_Conv2D():
 
     logger.debug(f"pt_out shape {pt_out.shape}")
     logger.debug(f"tt_out shape {tt_out.shape}")
+
+    _, comp_out = comp_allclose_and_pcc(pt_out, tt_out)
+    logger.info(comp_out)
 
     does_pass, pcc_message = comp_pcc(pt_out, tt_out, 0.99)
     logger.info(pcc_message)

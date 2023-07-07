@@ -16,33 +16,34 @@ import numpy as np
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
-import tt_lib
 from PIL import Image
+import tt_lib
 
 from utility_functions_new import (
-    comp_pcc,
-    comp_allclose_and_pcc,
     torch2tt_tensor,
     tt2torch_tensor,
 )
+from utility_functions_new import disable_compile_cache, enable_compile_cache
+from utility_functions_new import prep_report, profiler
+
 from python_api_testing.models.squeezenet_1.tt.squeezenet_1 import TtSqueezeNet
-import torchvision.transforms as transforms
 from torchvision.models import squeezenet1_0, SqueezeNet1_0_Weights
-from python_api_testing.models.squeezenet_1.squeezenet_utils import download_image
+from torchvision import transforms
 
 
-def run_test_squeezenet_inference(device, pcc):
+def test_perf():
+    disable_compile_cache()
+    first_key = "first_iter"
+    second_key = "second_iter"
+    cpu_key = "ref_key"
+    comments = "SqueezeNet1_0_Weights.DEFAULT weights are used"
+
     # load squeezenet model ================================================
     hugging_face_reference_model = squeezenet1_0(weights=SqueezeNet1_0_Weights.DEFAULT)
     hugging_face_reference_model.eval()
     state_dict = hugging_face_reference_model.state_dict()
 
-    # create input
-    torch.manual_seed(0)
-    # test_input = torch.rand(1, 3, 64, 64)
-
-    download_image("tests/python_api_testing/models/squeezenet_1/demo")
-
+    # create input =========================================================
     input_path = os.path.join(
         "tests/python_api_testing/models/squeezenet_1/demo", "input_image.jpg"
     )
@@ -61,42 +62,38 @@ def run_test_squeezenet_inference(device, pcc):
         0
     )  # create a mini-batch as expected by the model
 
-    # Pytorch call =========================================================
-    pt_out = hugging_face_reference_model(input_batch)
-    logger.debug(f"pt_out shape {pt_out.shape}")
-
-    # tt call ==============================================================
-    tt_module = TtSqueezeNet(device, hugging_face_reference_model, state_dict)
-    tt_module.eval()
-
-    # CHANNELS_LAST
-    tt_out = tt_module(input_batch)
-
-    _, comp_out = comp_allclose_and_pcc(pt_out, tt_out)
-    logger.info(comp_out)
-
-    does_pass, pcc_message = comp_pcc(pt_out, tt_out, pcc)
-    logger.info(pcc_message)
-
-    if does_pass:
-        logger.info("test_Squeezenet Passed!")
-    else:
-        logger.warning("test_Squeezenet Failed!")
-
-    assert does_pass
-
-
-@pytest.mark.parametrize(
-    "pcc",
-    ((0.99,),),
-)
-def test_squeezenet_inference(pcc):
     # Initialize the device
     device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
     tt_lib.device.InitializeDevice(device)
     tt_lib.device.SetDefaultDevice(device)
-
     host = tt_lib.device.GetHost()
 
-    run_test_squeezenet_inference(device, pcc)
-    tt_lib.device.CloseDevice(device)
+    tt_model = TtSqueezeNet(device, hugging_face_reference_model, state_dict)
+
+    with torch.no_grad():
+        profiler.start(cpu_key)
+        logits = hugging_face_reference_model(input_batch)[0]
+        profiler.end(cpu_key)
+
+        profiler.start(first_key)
+        tt_output = tt_model(input_batch)[0]
+        profiler.end(first_key)
+
+        enable_compile_cache()
+
+        profiler.start(second_key)
+        tt_output = tt_model(input_batch)[0]
+        profiler.end(second_key)
+
+    first_iter_time = profiler.get(first_key)
+    second_iter_time = profiler.get(second_key)
+    cpu_time = profiler.get(cpu_key)
+
+    prep_report(
+        "SqueezeNet_1.0",
+        BATCH_SIZE,
+        first_iter_time,
+        second_iter_time,
+        comments,
+        cpu_time,
+    )

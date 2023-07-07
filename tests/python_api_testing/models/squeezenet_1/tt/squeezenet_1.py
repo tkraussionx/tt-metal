@@ -5,7 +5,6 @@ import tt_lib
 from python_api_testing.models.squeezenet_1.tt.squeezenet_conv2d import (
     TtSqueezenetConv2D,
 )
-from python_api_testing.models.squeezenet_1.reference.fire import PytorchFire
 from python_api_testing.models.squeezenet_1.tt.squeezenet_fire import TtFire
 from utility_functions_new import tt2torch_tensor, torch2tt_tensor
 from tt_lib.fallback_ops import fallback_ops
@@ -38,26 +37,7 @@ class TtSqueezeNet(nn.Module):
         self.hugging_face_reference_model = hugging_face_reference_model
 
         if version == "1_0":
-            # self.features = nn.Sequential(
-            #     nn.Conv2d(3, 96, kernel_size=7, stride=2),
-            #     nn.ReLU(inplace=True),
-            #     nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=True),
-            #     Fire(96, 16, 64, 64),
-            #     Fire(128, 16, 64, 64),
-            #     Fire(128, 32, 128, 128),
-            #     nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=True),
-            #     Fire(256, 32, 128, 128),
-            #     Fire(256, 48, 192, 192),
-            #     Fire(384, 48, 192, 192),
-            #     Fire(384, 64, 256, 256),
-            #     nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=True),
-            #     Fire(512, 64, 256, 256),
-            # )
-
-            # self.conv_start = nn.Conv2d(3, 96, kernel_size=7, stride=2)
-            # self.conv_start.weight = torch.nn.Parameter(state_dict[f"features.0.weight"])
-            # self.conv_start.bias = torch.nn.Parameter(state_dict[f"features.0.bias"])
-
+            # started convolution
             # take parameters
             pt_conv2d_start = self.hugging_face_reference_model.features[0]
 
@@ -82,22 +62,6 @@ class TtSqueezeNet(nn.Module):
                 g=groups,
                 d=dilation[0],
             )
-
-            # IT WORKS!!!
-            # self.features = nn.Sequential(
-            #     # nn.ReLU(inplace=True), -> in forward()
-            #     nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=True),
-            #     PytorchFire(position=3, state_dict=state_dict, inplanes=96, squeeze_planes=16, expand1x1_planes=64, expand3x3_planes=64),
-            #     PytorchFire(position=4, state_dict=state_dict, inplanes=128, squeeze_planes=16, expand1x1_planes=64, expand3x3_planes=64),
-            #     PytorchFire(position=5, state_dict=state_dict, inplanes=128, squeeze_planes=32, expand1x1_planes=128, expand3x3_planes=128),
-            #     nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=True),
-            #     PytorchFire(position=7, state_dict=state_dict, inplanes=256, squeeze_planes=32, expand1x1_planes=128, expand3x3_planes=128),
-            #     PytorchFire(position=8, state_dict=state_dict, inplanes=256, squeeze_planes=48, expand1x1_planes=192, expand3x3_planes=192),
-            #     PytorchFire(position=9, state_dict=state_dict, inplanes=384, squeeze_planes=48, expand1x1_planes=192, expand3x3_planes=192),
-            #     PytorchFire(position=10, state_dict=state_dict, inplanes=384, squeeze_planes=64, expand1x1_planes=256, expand3x3_planes=256),
-            #     nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=True),
-            #     PytorchFire(position=12, state_dict=state_dict, inplanes=512, squeeze_planes=64, expand1x1_planes=256, expand3x3_planes=256),
-            # )
 
             self.tt_maxpool2d_1 = fallback_ops.MaxPool2d(
                 kernel_size=3, stride=2, ceil_mode=True
@@ -206,10 +170,6 @@ class TtSqueezeNet(nn.Module):
             )
 
         # Final convolution is initialized differently from the rest
-        # self.final_conv = nn.Conv2d(512, self.num_classes, kernel_size=1)
-        # self.final_conv.weight = torch.nn.Parameter(state_dict[f"classifier.1.weight"])
-        # self.final_conv.bias = torch.nn.Parameter(state_dict[f"classifier.1.bias"])
-
         # take parameters
         pt_conv2d_final = self.hugging_face_reference_model.classifier[1]
 

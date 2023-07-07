@@ -23,7 +23,6 @@ from utility_functions_new import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from python_api_testing.models.squeezenet_1.reference.fire import PytorchFire
 from python_api_testing.models.squeezenet_1.tt.squeezenet_fire import TtFire
 import torchvision.transforms as transforms
 from torchvision.models import squeezenet1_0, SqueezeNet1_0_Weights
@@ -37,7 +36,6 @@ def run_test_fire_inference(device, fire_position, pcc):
 
     # get Fire module =====================================================
     FireBlock = hugging_face_reference_model.features[fire_position]
-    # logger.debug(f"pt_out shape {pt_out.shape}")
 
     _inplanes = FireBlock.squeeze.in_channels
     _squeeze_planes = FireBlock.squeeze.out_channels
@@ -53,18 +51,8 @@ def run_test_fire_inference(device, fire_position, pcc):
     torch.manual_seed(0)
     test_input = torch.rand(1, _inplanes, 64, 64)
 
-    PtFire = PytorchFire(
-        position=fire_position,
-        state_dict=state_dict,
-        inplanes=_inplanes,
-        squeeze_planes=_squeeze_planes,
-        expand1x1_planes=_expand1x1_planes,
-        expand3x3_planes=_expand3x3_planes,
-    )
-
-    # pt_out = FireBlock(test_input)
-    pt_out = PtFire(test_input)
-    logger.debug(f"pt_out shape {pt_out.shape}")
+    # Pytorch call =========================================================
+    pt_out = FireBlock(test_input)
 
     # tt call ==============================================================
     tt_module = TtFire(
