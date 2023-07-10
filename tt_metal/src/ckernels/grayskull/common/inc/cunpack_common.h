@@ -203,7 +203,7 @@ namespace ckernel::unpacker
       //tile_descriptor.f.blobs_per_xy_plane = 0;
       //tile_descriptor.f.blobs_y_start = 0;
       for (uint i=0; i<TILE_DESC_SIZE; i++) cfg[THCON_SEC0_REG0_TileDescriptor_ADDR32+i]=tile_descriptor.val[i];
-    tile_descriptor.f.in_data_format = row_pool ? (uint)DataFormat::Float32 : unpack_src_format[unpB_operand];
+      tile_descriptor.f.in_data_format = row_pool ? (uint)DataFormat::Float32 : unpack_src_format[unpB_operand];
       for (uint i=0; i<TILE_DESC_SIZE; i++) cfg[THCON_SEC1_REG0_TileDescriptor_ADDR32+i]=tile_descriptor.val[i];
 
       // Set unpacker config
@@ -222,8 +222,8 @@ namespace ckernel::unpacker
       //config.f.fifo_size = 0; // Set dynamically
       for (uint i=0; i<CONFIG_SIZE; i++) cfg[THCON_SEC0_REG2_Out_data_format_ADDR32+i]=config.val[i];
 
-    config.f.out_data_format =
-        row_pool ? ((uint)DataFormat::Float16 | (exp_width << 2)) : unpack_dst_format[unpB_operand];
+      config.f.out_data_format =
+          row_pool ? ((uint)DataFormat::Float16 | (exp_width << 2)) : unpack_dst_format[unpB_operand];
       for (uint i=0; i<CONFIG_SIZE; i++) cfg[THCON_SEC1_REG2_Out_data_format_ADDR32+i]=config.val[i];
 
       uint unp0_x_end = (srca_face_height == 0) ? 1 : (srca_face_height << 4) - 1;
@@ -278,9 +278,9 @@ namespace ckernel::unpacker
 
       TT_SETDMAREG(0, (tile_descriptor.val[0] & 0xffff), 0, LO_16(p_gpr_unpack::TMP0));
       TT_SETDMAREG(0, ((tile_descriptor.val[0] >> 16) & 0xffff), 0, HI_16(p_gpr_unpack::TMP0));
-    TTI_WRCFG(p_gpr_unpack::TMP0, p_cfg::WRCFG_32b, tile_addr);
-    TTI_NOP;
-    TTI_NOP;
+      TTI_WRCFG(p_gpr_unpack::TMP0, p_cfg::WRCFG_32b, tile_addr);
+      TTI_NOP;
+      TTI_NOP;
 
       // Set first 32 bites of tile unpacker config, only need data format change
       unpack_config_u config = {0};
@@ -291,9 +291,9 @@ namespace ckernel::unpacker
       //cfg[out_df_addr]=config.val[0];
       TT_SETDMAREG(0, (config.val[0] & 0xffff), 0, LO_16(p_gpr_unpack::TMP0));
       TT_SETDMAREG(0, ((config.val[0] >> 16) & 0xffff), 0, HI_16(p_gpr_unpack::TMP0));
-    TTI_WRCFG(p_gpr_unpack::TMP0, p_cfg::WRCFG_32b, out_df_addr);
-    TTI_NOP;
-    TTI_NOP;
+      TTI_WRCFG(p_gpr_unpack::TMP0, p_cfg::WRCFG_32b, out_df_addr);
+      TTI_NOP;
+      TTI_NOP;
 
       // Clear context ID
       //reset_config_context();

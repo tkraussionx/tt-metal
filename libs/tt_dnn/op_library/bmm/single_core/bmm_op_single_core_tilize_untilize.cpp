@@ -30,7 +30,7 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
     uint32_t tilize_mode_tilized_in0_cb             = CB::c_intermed1;
     uint32_t untilize_mode_final_matmul_partials_cb = CB::c_intermed2;
     uint32_t untilize_mode_reblock_cb               = CB::c_intermed3;
-    uint32_t out_cb                                = CB::c_out0;
+    uint32_t out_cb                                 = CB::c_out0;
 
     const uint32_t cb0_ntiles = in0_block_h * in0_block_w * 2;  // double buffer
     const uint32_t cb1_ntiles = in0_block_w * in1_block_w * 2;   // double buffer
@@ -47,7 +47,6 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
         cb0_ntiles * in0_tile_nbytes,
         in0_df
     );
-    std::cout << "++ 0: " << cb_in0->address() << ", " << cb_in0->data_format() << std::endl;
     // in1
     auto cb_in1 = CreateCircularBuffer(
         program,
@@ -57,7 +56,6 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
         cb1_ntiles * in1_tile_nbytes,
         in1_df
     );
-    std::cout << "++ 1: " << cb_in1->address() << ", " << cb_in1->data_format() << std::endl;
 
     // intermediates
 
@@ -65,7 +63,6 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
         // in0 (TM)
         auto cb_src0_tilized = CreateCircularBuffer(
             program,
-            device,
             tilize_mode_tilized_in0_cb,
             core,
             cb0_ntiles,
@@ -92,7 +89,6 @@ void create_cb_bmm_single_core_tilize_untilize(Program &program,
             out_ntiles * out_tile_nbytes,
             out_df
         );
-        std::cout << "++ 24: " << cb_matmul_partials->address() << ", " << cb_matmul_partials->data_format() << std::endl;
     }
 
     if (untilize_out) {
@@ -183,14 +179,18 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
     const auto in1_df = get_tensor_df_from_dt(in1_dt);
 
     // input data format checks
-    TT_ASSERT(in0_dt == DataType::BFLOAT16 ||
-                (in0_dt == DataType::BFLOAT8_B && !tilize_in0),
+    TT_ASSERT(in0_dt == DataType::BFLOAT16 || (in0_dt == DataType::BFLOAT8_B && !tilize_in0),
               "in0 only supports BFLOAT16 and BFLOAT8_B data types for now");
     TT_ASSERT(in1_dt == DataType::BFLOAT16 || in1_dt == DataType::BFLOAT8_B, "in1 only supports BFLOAT16 and BFLOAT8_B formats for now!");
 
     // output data format
-    TT_ASSERT(!untilize_out || (untilize_out && out_dt == DataType::BFLOAT16));
     const auto out_df = get_tensor_df_from_dt(out_dt);
+
+    // out dt checks
+    TT_ASSERT(!untilize_out || (untilize_out && out_dt == DataType::BFLOAT16));
+
+    // TODO (AS): Certain mixed-prec cases do not currently work. Assert them out.
+    TT_ASSERT(!((in0_dt == out_dt && in0_dt != in1_dt) || (in0_dt != in1_dt && in1_dt == out_dt)), "TODO: Mixed-prec case to be debugged");
 
     const auto in0_tile_nbytes = tile_size(in0_df);
     const auto in1_tile_nbytes = tile_size(in1_df);
