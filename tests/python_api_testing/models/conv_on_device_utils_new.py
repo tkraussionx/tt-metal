@@ -13,6 +13,9 @@ def is_conv_supported_on_device(conv_params):
         logger.warning("DOES NOT HAVE SUPPORT FOR Conv with following parameters -")
         logger.warning("K="+str(K)+" C="+str(C)+" R="+str(R)+" S="+str(S)+" U="+str(U)+" V="+str(V)+" PH="+str(P_H)+" PW="+str(P_W)+" dilation="+str(dilation)+" groups="+str(groups))
         return False
+    else:
+        logger.info("Can run conv with following parameters on device -")
+        logger.info("K="+str(K)+" C="+str(C)+" R="+str(R)+" S="+str(S)+" U="+str(U)+" V="+str(V)+" PH="+str(P_H)+" PW="+str(P_W)+" dilation="+str(dilation)+" groups="+str(groups))
 
     return True
 
@@ -58,30 +61,10 @@ def run_conv_on_device_wrapper(conv_weight, conv_params, device, host, conv_bias
     conv_on_device = TtConv(conv_weight, conv_params, device, conv_bias)
 
     def run_conv_on_device(x: torch.Tensor):
-        [N,C,H,W] = x.shape
-
-        logger.info("Running Conv with following parameters on device -")
-        logger.info("K="+str(K)+" C="+str(C)+" H="+str(H)+" W="+str(W)+" R="+str(R)+" S="+str(S)+" U="+str(U)+" V="+str(V)+" PH="+str(P_H)+" PW="+str(P_W)+" dilation="+str(dilation)+" groups="+str(groups))
-
-        OH = ((int) ((H - R + 2 * P_H) / U)) + 1
-        OW = ((int) ((W - S + 2 * P_W) / V)) + 1
-        conv_as_mm_output_shape_unpadded = [1,1,OH*OW,K]
-        x_shape_channel_padded = [N,_nearest_32(C),H,W]
-        x = tt_lib.tensor.Tensor(
-            x.reshape(-1).tolist(),
-            x.shape,
-            tt_lib.tensor.DataType.BFLOAT16,
-            tt_lib.tensor.Layout.ROW_MAJOR,
-            ).pad(x_shape_channel_padded, (0,0,0,0), 0).to(tt_lib.tensor.Layout.CHANNELS_LAST).to(device, tt_lib.tensor.MemoryConfig(False))
         logger.info("Going to run conv on tt device")
         x = conv_on_device(x)
 
         logger.info("conv on tt device done")
-        x = unpad_from_zero(x, conv_as_mm_output_shape_unpadded, host)
 
-        # Convert matmul output layout to conv output layout
-        x = torch.transpose(x, 2, 3)
-        assert(list(x.shape) == [1,1,K,(OH*OW)])
-
-        return x.reshape([1,K,OH,OW])
+        return x
     return run_conv_on_device

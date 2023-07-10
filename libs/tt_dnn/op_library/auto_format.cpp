@@ -8,6 +8,7 @@
 #include "tt_dnn/op_library/unpad/unpad_op.hpp"
 #include "tt_dnn/op_library/layout_conversion/layout_conversion_op.hpp"
 #include "tt_dnn/op_library/data_transfer/data_transfer_op.hpp"
+#include "tt_dnn/op_library/transpose/transpose_op.hpp"
 
 using namespace tt::constants;
 
@@ -42,21 +43,43 @@ Tensor AutoFormat::format_input_tensor(const Tensor &input, Device * device, con
     // Device side conversions
     if (formatted_input.storage_type() == StorageType::DEVICE) {
         if (convert_layout && !pad_input) {
-            if (target_layout == Layout::TILE) {
+            if (target_layout == Layout::TILE && formatted_input.layout() == Layout::ROW_MAJOR) {
                 return tilize(formatted_input, mem_config);
             } else if (target_layout == Layout::ROW_MAJOR && formatted_input.layout() == Layout::TILE) {
                 return untilize(formatted_input, mem_config);
+            } else if (target_layout == Layout::CHANNELS_LAST && formatted_input.layout() == Layout::ROW_MAJOR) {
+                auto transpose_1_output = transpose_hc(formatted_input);
+                auto transpose_2_output = transpose_wh(transpose_1_output);
+                Tensor channels_last_tensor = Tensor(transpose_2_output.device_storage().value(), formatted_input.shape(), formatted_input.dtype(), Layout::CHANNELS_LAST);
+                return channels_last_tensor;
+            } else if (target_layout == Layout::CHANNELS_LAST && formatted_input.layout() == Layout::TILE) {
+                auto row_major_output = untilize(formatted_input);
+                auto transpose_1_output = transpose_hc(row_major_output);
+                auto transpose_2_output = transpose_wh(transpose_1_output);
+                Tensor channels_last_tensor = Tensor(transpose_2_output.device_storage().value(), row_major_output.shape(), row_major_output.dtype(), Layout::CHANNELS_LAST);
+                return channels_last_tensor;
             }
         } else if (!convert_layout && pad_input) {
-            if (formatted_input.layout() == Layout::ROW_MAJOR || formatted_input.layout() == Layout::TILE) {
+            if (formatted_input.layout() == Layout::ROW_MAJOR || formatted_input.layout() == Layout::TILE || formatted_input.layout() == Layout::CHANNELS_LAST) {
                 return pad(formatted_input, padded_shape, {0, 0, 0, 0}, pad_value, mem_config);
             }
         } else if (convert_layout && pad_input) {
-            if (target_layout == Layout::TILE) {
+            if (formatted_input.layout() == Layout::ROW_MAJOR && target_layout == Layout::TILE) {
                 return tilize_with_val_padding(formatted_input, padded_shape, {0, 0, 0, 0}, pad_value, mem_config);
             }  else if (formatted_input.layout() == Layout::TILE && target_layout == Layout::ROW_MAJOR) {
                 formatted_input = untilize(formatted_input, mem_config);
                 return pad(formatted_input, padded_shape, {0, 0, 0, 0}, pad_value, mem_config);
+            } else if (formatted_input.layout() == Layout::ROW_MAJOR && target_layout == Layout::CHANNELS_LAST) {
+                auto transpose_1_output = transpose_hc(formatted_input);
+                auto transpose_2_output = transpose_wh(transpose_1_output);
+                Tensor channels_last_tensor = Tensor(transpose_2_output.device_storage().value(), formatted_input.shape(), formatted_input.dtype(), Layout::CHANNELS_LAST);
+                return pad(channels_last_tensor, padded_shape, {0, 0, 0, 0}, pad_value);
+            } else if (formatted_input.layout() == Layout::TILE && target_layout == Layout::CHANNELS_LAST) {
+                auto row_major_output = untilize(formatted_input);
+                auto transpose_1_output = transpose_hc(row_major_output);
+                auto transpose_2_output = transpose_wh(transpose_1_output);
+                Tensor channels_last_tensor = Tensor(transpose_2_output.device_storage().value(), row_major_output.shape(), row_major_output.dtype(), Layout::CHANNELS_LAST);
+                return pad(channels_last_tensor, padded_shape, {0, 0, 0, 0}, pad_value);
             }
         }
         // Fall back to host conversions
@@ -95,12 +118,11 @@ Tensor AutoFormat::format_output_tensor(const Tensor &output, const std::array<u
     }
 
     Tensor formatted_output = output;
-
     // Device side conversions
     if (formatted_output.storage_type() == StorageType::DEVICE) {
         if (!unpad_output && convert_layout) {
             // If target layout is tile but shape does not support tile, we don't do any conversions
-            if (target_layout == Layout::TILE) {
+            if (target_layout == Layout::TILE && formatted_output.layout() == Layout::ROW_MAJOR) {
                 if (formatted_output.shape()[2] % TILE_HEIGHT == 0 && formatted_output.shape()[3] % TILE_WIDTH == 0) {
                     formatted_output = tilize(formatted_output, mem_config);
                 }
@@ -108,7 +130,28 @@ Tensor AutoFormat::format_output_tensor(const Tensor &output, const std::array<u
             } else if (target_layout == Layout::ROW_MAJOR && formatted_output.layout() == Layout::TILE) {
                 formatted_output = untilize(formatted_output, mem_config);
                 return formatted_output;
+            } else if (target_layout == Layout::ROW_MAJOR && formatted_output.layout() == Layout::CHANNELS_LAST) {
+                // need to interpret channels last tensor as rm tensor to call transpose op
+                Shape cl_as_rm_shape = {formatted_output.shape()[0], formatted_output.shape()[2], formatted_output.shape()[3], formatted_output.shape()[1]};
+                auto cl_as_rm_tensor = Tensor(formatted_output.device_storage().value(), cl_as_rm_shape, formatted_output.dtype(), Layout::ROW_MAJOR);
+                auto transpose_1_output = transpose_wh(cl_as_rm_tensor);
+                auto transpose_2_output = transpose_hc(transpose_1_output);
+                if(transpose_2_output.layout() == Layout::TILE) {
+                    transpose_2_output = untilize(transpose_2_output);
+                }
+                return transpose_2_output;
+            } else if (target_layout == Layout::TILE && formatted_output.layout() == Layout::CHANNELS_LAST) {
+                // need to interpret channels last tensor as rm tensor to call transpose op
+                Shape cl_as_rm_shape = {formatted_output.shape()[0], formatted_output.shape()[2], formatted_output.shape()[3], formatted_output.shape()[1]};
+                auto cl_as_rm_tensor = Tensor(formatted_output.device_storage().value(), cl_as_rm_shape, formatted_output.dtype(), Layout::ROW_MAJOR);
+                auto transpose_1_output = transpose_wh(cl_as_rm_tensor);
+                auto transpose_2_output = transpose_hc(transpose_1_output);
+                if (formatted_output.shape()[2] % TILE_HEIGHT == 0 && formatted_output.shape()[3] % TILE_WIDTH == 0) {
+                    return tilize(transpose_2_output);
+                }
+                return transpose_2_output;
             }
+
         } else if (unpad_output && !convert_layout) {
             // Output can be unpadded and layout supports the shape
             if ((formatted_output.layout() == Layout::TILE && shape[2] % TILE_HEIGHT == 0 && shape[3] % TILE_WIDTH == 0) ||
@@ -128,6 +171,14 @@ Tensor AutoFormat::format_output_tensor(const Tensor &output, const std::array<u
                 formatted_output = unpad(formatted_output, {0, 0, 0, 0}, {shape[0] - 1, shape[1] - 1, shape[2] - 1, shape[3] - 1}, mem_config);
                 formatted_output = tilize(formatted_output, mem_config);
                 return formatted_output;
+            } else if (formatted_output.layout() == Layout::CHANNELS_LAST && target_layout == Layout::ROW_MAJOR && shape[2] % TILE_HEIGHT == 0 && shape[3] % TILE_WIDTH == 0) {
+                // need to interpret channels last tensor as rm tensor to call transpose op
+                Shape cl_as_rm_shape = {formatted_output.shape()[0], formatted_output.shape()[2], formatted_output.shape()[3], formatted_output.shape()[1]};
+                auto cl_as_rm_tensor = Tensor(formatted_output.device_storage().value(), cl_as_rm_shape, formatted_output.dtype(), Layout::ROW_MAJOR);
+                auto transpose_1_output = transpose_wh(cl_as_rm_tensor);
+                auto transpose_2_output = transpose_hc(transpose_1_output);
+                auto unpadded_output = unpad(transpose_2_output, {0, 0, 0, 0}, {shape[0] - 1, shape[1] - 1, shape[2] - 1, shape[3] - 1});
+                return unpadded_output;
             }
         }
         // Fall back to host conversions

@@ -11,10 +11,10 @@ def conv(weight: List[Union[int, float]], conv_params, device, bias=None):
     assert(len(conv_params) == 10)
     K, C, R, S, U, V, P_H, P_W, dilation, groups = [conv_params[i] for i in range(10)]
     # Hardcode block sizes
-    act_block_h = 8
-    act_block_w = 8
+    act_block_h = 4
+    act_block_w = 4
     weight_block_h = act_block_w
-    weight_block_w = 8
+    weight_block_w = 4
     out_subblock_h = 4
     out_subblock_w = 2
     if dilation != 1 or groups != 1:
@@ -28,7 +28,7 @@ def conv(weight: List[Union[int, float]], conv_params, device, bias=None):
         tensor.Layout.ROW_MAJOR
     ).pad(weights_channels_padded_shape, (0,0,0,0), 0)
     weight_tiled_ = tensor.convert_conv_weight_tensor_to_tiled_layout(weight_untiled, weight_block_h, weight_block_w)
-    weight_on_device = weight_tiled_.to(device, tensor.MemoryConfig(False))
+    weight_on_device = weight_tiled_.to(device)
     if bias is None:
         bias_on_device = None
     else:
@@ -46,10 +46,10 @@ def conv(weight: List[Union[int, float]], conv_params, device, bias=None):
         [_,_,H,W] = activation.shape()
         OH = ((int) ((H - R + 2 * P_H) / U)) + 1
         OW = ((int) ((W - S + 2 * P_W) / V)) + 1
-        conv_as_mm_output_shape = [1,1,_nearest_y(OH*OW, 32*act_block_h),_nearest_y(K, 32*weight_block_w)]
-        output = tensor.conv(activation, weight_on_device, [R,S,U,V,P_H,P_W], act_block_h, act_block_w, weight_block_w, out_subblock_h, out_subblock_w)
+        conv_output_shape = [1,K,OH,OW]
+        output = tensor.conv(activation, weight_on_device, [R,S,U,V,P_H,P_W], act_block_h, act_block_w, weight_block_w, out_subblock_h, out_subblock_w,K)
 
-        assert(output.shape() == conv_as_mm_output_shape)
+        assert(output.shape() == conv_output_shape)
 
         if bias_on_device is not None:
             print(str(output.shape()))

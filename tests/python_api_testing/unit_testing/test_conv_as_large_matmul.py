@@ -62,12 +62,15 @@ import torch
         (64, 64, 8, 8, 1, 1, 1, 1, 0, 0),
         # Hat = 8, Wat = 8, Wbt = 8
         (8*32, 8*32, 16, 16, 1, 1, 1, 1, 0, 0),
+        # K % 32 != 0
+        (30, 32, 5, 5, 1, 1, 1, 1, 0, 0),
     ),
 )
 def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w):
 
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
+    ttl.device.SetDefaultDevice(device)
     host = ttl.device.GetHost()
 
     #torch.set_printoptions(threshold=10000)
@@ -87,7 +90,7 @@ def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, p
 
     OH = ((int) ((H - R + 2 * pad_h) / stride_h)) + 1
     OW = ((int) ((W - S + 2 * pad_w) / stride_w)) + 1
-    mm_output_shape = [1,1,_nearest_y(OH*OW, 32*act_block_h),_nearest_y(K, 32*weight_block_w)]
+    conv_output_shape = [1,K, OH,OW]
 
     # Prepare activations
     A_cl_host = create_conv_act_tensor(A_pyt, 1, C, H, W)
@@ -99,23 +102,14 @@ def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, p
     # Calculate conv result with golden result. Run Pytorch conv
     out_golden = torch.nn.functional.conv2d(A_pyt, B_pyt, stride=(stride_h, stride_w), padding=(pad_h, pad_w))
 
-    untilize_out = True
     # Run TT metal OP
-    out = ttl.tensor.conv(A, B_tiled, [R,S,stride_h,stride_w,pad_h,pad_w], act_block_h, act_block_w, weight_block_w, out_subblock_h, out_subblock_w)
+    out = ttl.tensor.conv(A, B_tiled, [R,S,stride_h,stride_w,pad_h,pad_w], act_block_h, act_block_w, weight_block_w, out_subblock_h, out_subblock_w, K)
     out = out.to(host)
-    assert(out.shape() == mm_output_shape)
-    if not untilize_out:
-        # untilize
-        out = out.to(ttl.tensor.Layout.ROW_MAJOR)
-    # Copy output to host and convert tt tensor to pytorch tensor
-    out_pytorch_padded = torch.tensor(out.data()).reshape(mm_output_shape)
-    # remove padding
-    out_pytorch = out_pytorch_padded[:, :, 0 : (OH * OW), 0 : K]
+    assert(out.shape() == conv_output_shape)
+    assert(out.layout() == ttl.tensor.Layout.ROW_MAJOR)
 
-    # Convert matmul output layout to conv output layout
-    out_tr = torch.transpose(out_pytorch, 2, 3)
-    assert(list(out_tr.shape) == [1,1,K,(OH*OW)])
-    out_result = out_tr.reshape([1,K,OH,OW])
+    # Copy output to host and convert tt tensor to pytorch tensor
+    out_result = torch.tensor(out.data()).reshape(conv_output_shape)
 
     # Compare against golden
     assert(out_result.shape == out_golden.shape)

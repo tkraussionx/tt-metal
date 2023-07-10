@@ -233,11 +233,11 @@ class BasicBlock(nn.Module):
         if not self.fold_batchnorm:
             out = self.bn1(out)
         # pad
-        out, initial_shape = pad_by_zero(out, self.device)
+        #out, initial_shape = pad_by_zero(out, self.device)
 
         out = self.relu(out)
         # unpad
-        out = unpad_from_zero(out, initial_shape, self.host)
+        #out = unpad_from_zero(out, initial_shape, self.host)
 
         out = self.conv2(out)
         if not self.fold_batchnorm:
