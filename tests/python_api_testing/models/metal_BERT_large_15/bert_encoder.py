@@ -327,12 +327,13 @@ def test_bert_encoder_inference(
     dtype,
     mem_config,
     model_location_generator,
+    request,
 ):
     model_config = get_model_config(dtype, mem_config)
 
     ttl.profiler.set_profiler_flag(False)
     ttl.profiler.set_profiler_location(
-        "tt_metal/tools/profiler/logs/BERT_large_1_encoder"
+        f"tt_metal/tools/profiler/logs/BERT_large_1_encoder_{request.node.callspec.id}"
     )
 
     ttl.profiler.start_profiling("entire_run")
