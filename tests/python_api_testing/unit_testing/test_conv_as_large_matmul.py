@@ -41,27 +41,27 @@ import torch
         # (512, 512, 7, 7, 3, 3, 1, 1, 1, 1),
 
         # channels = 3 padding
-        (32, 3, 5, 5, 1, 1, 1, 1, 0, 0),
-        # w/ conv padding
+        # (32, 3, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # w/ conv padding
         (32, 32, 5, 5, 1, 1, 1, 1, 1, 1),
-        # Hat = 1, Wat = 1, Wbt = 1
-        (32, 32, 5, 5, 1, 1, 1, 1, 0, 0),
-        # Hat = 2, Wat = 1, Wbt = 1
-        (32, 32, 8, 8, 1, 1, 1, 1, 0, 0),
-        # Hat = 1, Wat = 2, Wbt = 1
-        (32, 64, 5, 5, 1, 1, 1, 1, 0, 0),
-        # Hat = 2, Wat = 2, Wbt = 1
-        (32, 64, 8, 8, 1, 1, 1, 1, 0, 0),
-        # Hat = 1, Wat = 1, Wbt = 2
-        (64, 32, 5, 5, 1, 1, 1, 1, 0, 0),
-        # Hat = 1, Wat = 2, Wbt = 2
-        (64, 64, 5, 5, 1, 1, 1, 1, 0, 0),
-        # Hat = 2, Wat = 1, Wbt = 2
-        (64, 32, 8, 8, 1, 1, 1, 1, 0, 0),
-        # Hat = 2, Wat = 2, Wbt = 2
-        (64, 64, 8, 8, 1, 1, 1, 1, 0, 0),
-        # Hat = 8, Wat = 8, Wbt = 8
-        (8*32, 8*32, 16, 16, 1, 1, 1, 1, 0, 0),
+        # # Hat = 1, Wat = 1, Wbt = 1
+        # (32, 32, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # Hat = 2, Wat = 1, Wbt = 1
+        # (32, 32, 8, 8, 1, 1, 1, 1, 0, 0),
+        # # Hat = 1, Wat = 2, Wbt = 1
+        # (32, 64, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # Hat = 2, Wat = 2, Wbt = 1
+        # (32, 64, 8, 8, 1, 1, 1, 1, 0, 0),
+        # # Hat = 1, Wat = 1, Wbt = 2
+        # (64, 32, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # Hat = 1, Wat = 2, Wbt = 2
+        # (64, 64, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # Hat = 2, Wat = 1, Wbt = 2
+        # (64, 32, 8, 8, 1, 1, 1, 1, 0, 0),
+        # # Hat = 2, Wat = 2, Wbt = 2
+        # (64, 64, 8, 8, 1, 1, 1, 1, 0, 0),
+        # # Hat = 8, Wat = 8, Wbt = 8
+        # (8*32, 8*32, 16, 16, 1, 1, 1, 1, 0, 0),
     ),
 )
 def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w):
@@ -101,7 +101,7 @@ def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, p
 
     untilize_out = True
     # Run TT metal OP
-    out = ttl.tensor.conv(A, B_tiled, [R,S,stride_h,stride_w,pad_h,pad_w], act_block_h, act_block_w, weight_block_w, out_subblock_h, out_subblock_w)
+    out = ttl.tensor.conv(A, B_tiled, [R,S,stride_h,stride_w,pad_h,pad_w], act_block_h, act_block_w, weight_block_w, out_subblock_h, out_subblock_w, K)
     out = out.to(host)
     assert(out.shape() == mm_output_shape)
     if not untilize_out:

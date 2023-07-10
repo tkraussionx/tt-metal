@@ -171,6 +171,7 @@ Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<
     TT_ASSERT(a.layout() == Layout::CHANNELS_LAST, "Conv activation should be in channels last layout");
     uint32_t act_batch_size = a.shape()[0];
     TT_ASSERT(act_batch_size == 1, "Only batch size 1 supported.");
+    TT_ASSERT(output_channels % TILE_WIDTH == 0, "Conv output channels should be divisible by TILE WIDTH (32)");
     uint32_t num_bytes_of_df = 2; // 2 bytes for bfloat16
     // Compute the 2d matrix shape
     vector<int> activation_shape = {(int)a.shape()[1], (int)a.shape()[2], (int)a.shape()[3]};    // TODO: Update types to use just one kind
@@ -225,6 +226,10 @@ Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<
     uint32_t weight_block_num_tiles = weight_block_w_ntiles * weight_block_h_ntiles;
 
     uint32_t num_groups = num_blocks_act_h * num_blocks_act_w * num_blocks_weight_w;
+    uint32_t output_channels_ntiles = output_channels / TILE_WIDTH;
+    uint32_t last_block_width_ntiles = output_channels_ntiles % weight_block_w_ntiles;
+    // sanity check
+    assert((weight_block_w_ntiles*(num_blocks_weight_w -1)) == (output_channels_ntiles - last_block_width_ntiles));
 
     tt_metal::Program program = tt_metal::Program();
     CoreCoord core_coord = {0, 0};      // TODO: avoid another var here. Find a way to use core range instead.
@@ -395,7 +400,8 @@ Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<
             1,
             num_blocks_act_h,
             num_blocks_weight_w,
-            weight_matrix_width*num_bytes_of_df
+            weight_matrix_width*num_bytes_of_df,
+            last_block_width_ntiles
         };
     } else {
         assert(false && "Tiled output unsupported");
@@ -501,7 +507,7 @@ std::vector<Shape> Conv::compute_output_shapes(const std::vector<Tensor>& input_
 std::vector<Tensor> Conv::create_output_tensors(const std::vector<Tensor>& input_tensors) const {
     const auto output_shape = this->compute_output_shapes(input_tensors).at(0);
     const auto& input_tensor = input_tensors.at(0);
-    Tensor output = create_output_dram_buffer_(input_tensor.device(), input_tensor.dtype(), output_shape, untilize_out);
+    Tensor output = create_output_dram_buffer_(input_tensor.device(), input_tensor.dtype(), output_shape, true);
     std::vector<Tensor> output_tensors;
     // TODO: check if anything else needs to be done here.
     output_tensors.emplace_back(output);
@@ -513,7 +519,7 @@ operation::ProgramWithCallbacks Conv::create_program(const std::vector<Tensor>& 
     const auto& input_tensor_b = input_tensors.at(1);
     auto& output_tensor = output_tensors.at(0);
 
-    return {conv_single_core(input_tensor_a, input_tensor_b, conv_params, act_block_h_ntiles, act_block_w_ntiles, weight_block_w_ntiles, out_subblock_h_ntiles, out_subblock_w_ntiles, untilize_out, output_tensor)};
+    return {conv_single_core(input_tensor_a, input_tensor_b, conv_params, act_block_h_ntiles, act_block_w_ntiles, weight_block_w_ntiles, out_subblock_h_ntiles, out_subblock_w_ntiles, output_channels, output_tensor)};
 }
 
 // generates address map for reader kernel which reads from dram buffer (tiled layout) into l1 buffer
