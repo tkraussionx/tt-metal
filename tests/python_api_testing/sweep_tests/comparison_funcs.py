@@ -1,6 +1,32 @@
 import torch
 import numpy as np
 from loguru import logger
+from functools import wraps
+
+
+def multi_output_handler(func):
+    @wraps(func)
+    def wrap(*args, **kwargs):
+        assert len(args) >= 2
+        pytorch_out = args[0]
+        tt_lib_out = args[1]
+        if isinstance(pytorch_out, (list, tuple)):
+            assert len(pytorch_out) == len(
+                tt_lib_out
+            ), "Number of outputs from tt and pt does not match"
+            result = True
+            output = []
+            for i in range(len(pytorch_out)):
+                res, out = func(pytorch_out[i], tt_lib_out[i], *args[2:], **kwargs)
+                result &= res
+                output.append(out)
+            output = "|".join(output)
+            return result, output
+        else:
+            result, output = func(*args, **kwargs)
+            return result, output
+
+    return wrap
 
 
 def get_atol_rtol_pcc(golden, calculated):
@@ -82,6 +108,7 @@ def get_atol_rtol_pcc(golden, calculated):
     )
 
 
+@multi_output_handler
 def comp_equal(golden, calculated):
     if golden.dtype != calculated.dtype:
         calculated = calculated.type(golden.dtype)
@@ -90,6 +117,7 @@ def comp_equal(golden, calculated):
     return torch.equal(golden, calculated), output_str
 
 
+@multi_output_handler
 def comp_allclose(golden, calculated, rtol=1e-05, atol=1e-08):
     if golden.dtype != calculated.dtype:
         calculated = calculated.type(golden.dtype)
@@ -98,6 +126,7 @@ def comp_allclose(golden, calculated, rtol=1e-05, atol=1e-08):
     return torch.allclose(golden, calculated, rtol, atol, True), output_str
 
 
+@multi_output_handler
 def comp_pcc(golden, calculated, pcc=0.99):
     if golden.dtype != calculated.dtype:
         calculated = calculated.type(golden.dtype)
