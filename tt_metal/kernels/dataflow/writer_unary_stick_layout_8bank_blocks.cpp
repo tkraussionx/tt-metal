@@ -11,6 +11,7 @@ void kernel_main() {
     uint32_t num_blocks_h = get_arg_val<uint32_t>(4);
     uint32_t num_blocks_w = get_arg_val<uint32_t>(5);
     uint32_t output_row_size = get_arg_val<uint32_t>(6);    // in1_width * dtype_nbytes
+    uint32_t output_row_size_unpadded = get_arg_val<uint32_t>(7);
 
     constexpr uint32_t cb_id_out0 = tt::CB::c_out0;
 
