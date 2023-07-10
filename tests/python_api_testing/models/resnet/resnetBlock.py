@@ -4,13 +4,13 @@ import tt_lib
 import torch
 import torch.nn as nn
 
-from utils import conv3x3, conv1x1, fold_bn_to_conv
-from utility_functions_new import pad_by_zero, tt2torch_tensor
+from tests.python_api_testing.models.resnet.utils import conv3x3, conv1x1, fold_bn_to_conv
+from tests.python_api_testing.models.utility_functions_new import pad_by_zero, tt2torch_tensor
 from tt_lib.utils import pad_weight
 
 from tt_lib.fused_ops.linear import Linear as TtLinear
 from tt_lib.fused_ops.softmax import softmax as TtSoftmax
-from conv_on_device_utils_new import is_conv_supported_on_device, run_conv_on_device_wrapper
+from tests.python_api_testing.models.conv_on_device_utils_new import is_conv_supported_on_device, run_conv_on_device_wrapper
 
 # Local copy of unpad_from_zero to always set output to
 def unpad_from_zero(x, desired_shape, host):
