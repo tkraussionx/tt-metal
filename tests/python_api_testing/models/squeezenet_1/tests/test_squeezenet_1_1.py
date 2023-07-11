@@ -25,22 +25,19 @@ from utility_functions_new import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from python_api_testing.models.squeezenet_1.tt.squeezenet_1 import squeezenet_1_0
+from python_api_testing.models.squeezenet_1.tt.squeezenet_1 import squeezenet_1_1
 import torchvision.transforms as transforms
-from torchvision.models import squeezenet1_0, SqueezeNet1_0_Weights
+from torchvision.models import squeezenet1_1, SqueezeNet1_1_Weights
 from python_api_testing.models.squeezenet_1.squeezenet_utils import download_image
 
 
 def run_test_squeezenet_inference(device, pcc):
     # load squeezenet model ================================================
-    hugging_face_reference_model = squeezenet1_0(weights=SqueezeNet1_0_Weights.DEFAULT)
+    hugging_face_reference_model = squeezenet1_1(weights=SqueezeNet1_1_Weights.DEFAULT)
     hugging_face_reference_model.eval()
     state_dict = hugging_face_reference_model.state_dict()
 
-    # create input
-    torch.manual_seed(0)
-    # test_input = torch.rand(1, 3, 64, 64)
-
+    # take input
     download_image("tests/python_api_testing/models/squeezenet_1/demo")
 
     input_path = os.path.join(
@@ -66,7 +63,7 @@ def run_test_squeezenet_inference(device, pcc):
     logger.debug(f"pt_out shape {pt_out.shape}")
 
     # tt call ==============================================================
-    tt_module = squeezenet_1_0(device, hugging_face_reference_model, state_dict)
+    tt_module = squeezenet_1_1(device, hugging_face_reference_model, state_dict)
     tt_module.eval()
 
     # CHANNELS_LAST
