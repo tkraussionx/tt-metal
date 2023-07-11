@@ -1132,13 +1132,3 @@ void cq_pop_front(u32 cmd_size_B) {
 
     notify_host_of_cq_read_pointer();
 }
-
-}  // namespace dataflow
-
-    u32 rd_ptr = cq_read_interface.fifo_rd_ptr;
-    volatile u32* rd_ptr_ptr = get_cq_read_ptr();
-
-    rd_ptr_ptr[0] = rd_ptr;
-    noc_async_write(u32(rd_ptr_ptr), pcie_address, 4);
-    noc_async_write_barrier();
-}
