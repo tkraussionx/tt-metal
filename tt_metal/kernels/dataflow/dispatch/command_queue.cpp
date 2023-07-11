@@ -34,8 +34,8 @@ void kernel_main() {
         if (wrap) {
             // Basically popfront without the extra conditional
             cq_read_interface.fifo_rd_ptr = 6; // Head to beginning of command queue
-            dataflow::notify_host_of_cq_read_toggle();
-            dataflow::notify_host_of_cq_read_pointer();
+            notify_host_of_cq_read_toggle();
+            notify_host_of_cq_read_pointer();
             continue;
         }
 
