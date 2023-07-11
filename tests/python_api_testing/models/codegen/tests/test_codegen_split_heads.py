@@ -18,7 +18,6 @@ import python_api_testing.models.codegen.tt.codegen_split_heads as codegen_split
 from transformers import CodeGenConfig, CodeGenModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-
 from utility_functions_new import (
     torch2tt_tensor,
     tt2torch_tensor,
