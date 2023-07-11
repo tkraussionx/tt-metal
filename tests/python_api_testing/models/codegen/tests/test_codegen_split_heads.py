@@ -18,6 +18,7 @@ import python_api_testing.models.codegen.tt.codegen_split_heads as codegen_split
 from transformers import CodeGenConfig, CodeGenModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 from utility_functions_new import (
     torch2tt_tensor,
     tt2torch_tensor,
@@ -31,7 +32,7 @@ def run_codegen_split_heads_test(device, pcc):
     model_hf.eval()
     block = 0
 
-    test_in = torch.rand(1, 256, 256)
+    test_in = torch.rand(1, 1, 1024)
 
     tt_test_in = torch2tt_tensor(test_in, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
 
@@ -42,7 +43,9 @@ def run_codegen_split_heads_test(device, pcc):
     head_dim = embed_dim // num_attention_heads
     mp_num = 4
 
+
     pt_out = codegen_split_heads.pt_split_heads(test_in, num_attention_heads, head_dim, mp_num=mp_num)
+    print(pt_out.shape)
 
     tt_out = codegen_split_heads.tt_split_heads(tt_test_in, num_attention_heads, head_dim, mp_num=mp_num)
 

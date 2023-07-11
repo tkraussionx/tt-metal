@@ -15,13 +15,20 @@ from utility_functions_new import (
 
 def pt_split_heads(x, n_head, dim_head, mp_num):
     reshaped = x.reshape(x.shape[:-1] + (n_head // mp_num, dim_head))
+    print('target')
+    print(reshaped.shape)
     reshaped = reshaped.reshape(x.shape[:-2] + (-1,) + reshaped.shape[-1:])
     return reshaped
 
 
 def tt_split_heads(x, n_head, dim_head, mp_num):
-    new_shape_1 = x.shape[:-1] + (n_head // mp_num, dim_head)
-    reshaped_1 = fallback_ops.reshape(x, new_shape_1[0], new_shape_1[1], new_shape_1[2])
-    new_shape_2 = x.shape[:-2] + (-1,) + reshaped_1.shape[-1:]
-    reshaped_2 = fallback_ops.reshape(new_shape_2)
+
+    x_shape = torch.Size(x.shape())
+    new_shape_1 = x_shape[1:-1] + (n_head // mp_num, dim_head)
+    print('nes1')
+    print(new_shape_1)
+    reshaped_1 = fallback_ops.reshape(x, new_shape_1[0], new_shape_1[1], new_shape_1[2], new_shape_1[3])
+    reshaped_1_shape = torch.Size(reshaped_1.shape())
+    new_shape_2 = x_shape[:-2] + (-1,) + reshaped_1_shape[-1:]
+    reshaped_2 = fallback_ops.reshape(reshaped_1, new_shape_2[0], new_shape_2[1], new_shape_2[2], new_shape_2[3])
     return reshaped_2
