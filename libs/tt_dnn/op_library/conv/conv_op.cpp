@@ -172,6 +172,7 @@ Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<
     uint32_t act_batch_size = a.shape()[0];
     TT_ASSERT(act_batch_size == 1, "Only batch size 1 supported.");
     TT_ASSERT(output_channels % TILE_WIDTH == 0, "Conv output channels should be divisible by TILE WIDTH (32)");
+    TT_ASSERT(output_channels <= b.shape()[3], "Invalid weight shape. Incorrect weight tensor.");
     uint32_t num_bytes_of_df = 2; // 2 bytes for bfloat16
     // Compute the 2d matrix shape
     vector<int> activation_shape = {(int)a.shape()[1], (int)a.shape()[2], (int)a.shape()[3]};    // TODO: Update types to use just one kind
@@ -227,9 +228,12 @@ Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<
 
     uint32_t num_groups = num_blocks_act_h * num_blocks_act_w * num_blocks_weight_w;
     uint32_t output_channels_ntiles = output_channels / TILE_WIDTH;
-    uint32_t last_block_width_ntiles = output_channels_ntiles % weight_block_w_ntiles;
+    assert(output_channels_ntiles <= weight_matrix_width_ntiles);
+    uint32_t num_blocks_output_w = (uint32_t) ceil((double) output_channels_ntiles / (double) weight_block_w_ntiles);
+    uint32_t last_block_width_ntiles = (output_channels_ntiles % weight_block_w_ntiles == 0) ? weight_block_w_ntiles : (output_channels_ntiles % weight_block_w_ntiles);
+    uint32_t last_block_row_size_unpadded = last_block_width_ntiles * TILE_WIDTH * num_bytes_of_df;
     // sanity check
-    assert((weight_block_w_ntiles*(num_blocks_weight_w -1)) == (output_channels_ntiles - last_block_width_ntiles));
+    assert(num_blocks_output_w == num_blocks_weight_w);
 
     tt_metal::Program program = tt_metal::Program();
     CoreCoord core_coord = {0, 0};      // TODO: avoid another var here. Find a way to use core range instead.
@@ -240,8 +244,6 @@ Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<
     tt_metal::Buffer *src0_dram_buffer = a.buffer();
     tt_metal::Buffer *src1_dram_buffer = b.buffer();
     TT_ASSERT(src1_dram_buffer->size() % single_tile_size == 0, "Buffer size of tensor b must be divisible by single_tile_size (aka divisible by sizeof(df) * 1024)");
-
-    std::array<uint32_t, 4> cshape{1, 1, act_matrix_height, weight_matrix_width};
 
     tt_metal::Buffer *dst_dram_buffer = output.buffer();
     TT_ASSERT(dst_dram_buffer != nullptr, "Output buffer should be allocated on device!");
@@ -400,8 +402,8 @@ Program conv_as_large_bmm_single_core_(const Tensor& a, const Tensor &b, vector<
             1,
             num_blocks_act_h,
             num_blocks_weight_w,
-            weight_matrix_width*num_bytes_of_df,
-            last_block_width_ntiles
+            output_channels*num_bytes_of_df,
+            last_block_row_size_unpadded
         };
     } else {
         assert(false && "Tiled output unsupported");
@@ -500,7 +502,7 @@ std::vector<Shape> Conv::compute_output_shapes(const std::vector<Tensor>& input_
     vector<int> input_tensor_a_shape = { (int) input_tensor_a.shape()[1], (int) input_tensor_a.shape()[2], (int) input_tensor_a.shape()[3]};
     auto mm_shape = compute_conv_activation_as_mm_shape(input_tensor_a_shape, conv_params, act_block_h_ntiles, act_block_w_ntiles);
     // TODO: Update batch size below
-    Shape output_tensor_shape = {1, 1, mm_shape[1], input_tensor_b.shape()[3] };
+    Shape output_tensor_shape = {1, 1, mm_shape[1], output_channels };
     return {output_tensor_shape};
 }
 
@@ -785,11 +787,15 @@ std::pair<vector<uint32_t>, vector<uint32_t>> populate_address_map_vectors_for_r
 
 Program conv_as_large_bmm_with_address_map_single_core_(const Tensor& a, const Tensor &b, vector<int> conv_params,
                                        uint32_t act_block_h_ntiles, uint32_t act_block_w_ntiles, uint32_t weight_block_w_ntiles,
-                                       uint32_t out_subblock_h_ntiles, uint32_t out_subblock_w_ntiles, bool untilize_out, Tensor &output) {
+                                       uint32_t out_subblock_h_ntiles, uint32_t out_subblock_w_ntiles, uint32_t output_channels, Tensor &output) {
     bool pass = true;
+    bool untilize_out = true;
     tt_metal::Device *device = a.device();
     TT_ASSERT(a.layout() == Layout::CHANNELS_LAST, "Conv activation should be in channels last layout");
     TT_ASSERT(a.shape()[0] == 1, "Only batch size 1 supported.");
+    TT_ASSERT(output_channels % TILE_WIDTH == 0, "Conv output channels should be divisible by TILE WIDTH (32)");
+    TT_ASSERT(output_channels <= b.shape()[3], "Invalid weight shape. Incorrect weight tensor.");
+
     uint32_t num_bytes_of_df = 2; // 2 bytes for bfloat16
     uint32_t activation_C = a.shape()[1];
     //TT_ASSERT(activation_C % TILE_WIDTH == 0, "Channel depth must be divisible by tile width(32).");
@@ -851,6 +857,13 @@ Program conv_as_large_bmm_with_address_map_single_core_(const Tensor& a, const T
     uint32_t weight_num_subblocks = weight_block_w_ntiles / out_subblock_w_ntiles;
     uint32_t weight_block_h_ntiles = act_block_w_ntiles;
     uint32_t weight_block_num_tiles = weight_block_w_ntiles * weight_block_h_ntiles;
+    uint32_t output_channels_ntiles = output_channels / TILE_WIDTH;
+    assert(output_channels_ntiles <= Wbt);
+    uint32_t num_blocks_output_w = (uint32_t) ceil((double) output_channels_ntiles / (double) weight_block_w_ntiles);
+    uint32_t last_block_width_ntiles = (output_channels_ntiles % weight_block_w_ntiles == 0) ? weight_block_w_ntiles : (output_channels_ntiles % weight_block_w_ntiles);
+    uint32_t last_block_row_size_unpadded = last_block_width_ntiles * TILE_WIDTH * num_bytes_of_df;
+    // sanity check
+    assert(num_blocks_output_w == num_blocks_weight_w);
 
     // DTX conv activation transform data access pattern
     auto [act_address_map, act_address_map_metadata] = generate_conv_activation_address_map(a.shape(), conv_params, act_block_h_datums, act_block_w_datums, weight_block_w_datums,
@@ -1075,7 +1088,8 @@ Program conv_as_large_bmm_with_address_map_single_core_(const Tensor& a, const T
             1,
             num_blocks_act_h,
             num_blocks_weight_w,
-            Wb*num_bytes_of_df
+            output_channels*num_bytes_of_df,
+            last_block_row_size_unpadded
         };
     } else {
         assert(false && "Tiled output unsupported");
@@ -1157,13 +1171,13 @@ Program conv_as_large_bmm_with_address_map_single_core_(const Tensor& a, const T
 }
 
 Tensor conv_with_address_map(const Tensor& a, const Tensor &b, const vector<int> conv_params, uint32_t act_block_h_ntiles, uint32_t act_block_w_ntiles, uint32_t weight_block_w_ntiles,
-             uint32_t out_subblock_h_ntiles, uint32_t out_subblock_w_ntiles) {
-    return operation::run(ConvWithAddressMap(act_block_h_ntiles, act_block_w_ntiles, weight_block_w_ntiles, out_subblock_h_ntiles, out_subblock_w_ntiles, conv_params, true), {a, b}).at(0);
+             uint32_t out_subblock_h_ntiles, uint32_t out_subblock_w_ntiles, uint32_t output_channels) {
+    return operation::run(ConvWithAddressMap(act_block_h_ntiles, act_block_w_ntiles, weight_block_w_ntiles, out_subblock_h_ntiles, out_subblock_w_ntiles, conv_params, output_channels), {a, b}).at(0);
 }
 
 Program conv_with_address_map_single_core(const Tensor& a, const Tensor &b, const vector<int> conv_params, uint32_t act_block_h_ntiles, uint32_t act_block_w_ntiles, uint32_t weight_block_w_ntiles,
-             uint32_t out_subblock_h_ntiles, uint32_t out_subblock_w_ntiles, bool untilize_out, Tensor &output) {
-    return conv_as_large_bmm_with_address_map_single_core_(a, b, conv_params, act_block_h_ntiles, act_block_w_ntiles, weight_block_w_ntiles, out_subblock_h_ntiles, out_subblock_w_ntiles, untilize_out, output);
+             uint32_t out_subblock_h_ntiles, uint32_t out_subblock_w_ntiles, uint32_t output_channels, Tensor &output) {
+    return conv_as_large_bmm_with_address_map_single_core_(a, b, conv_params, act_block_h_ntiles, act_block_w_ntiles, weight_block_w_ntiles, out_subblock_h_ntiles, out_subblock_w_ntiles, output_channels, output);
 }
 
 void ConvWithAddressMap::validate(const std::vector<Tensor>& input_tensors) const {
@@ -1178,14 +1192,14 @@ std::vector<Shape> ConvWithAddressMap::compute_output_shapes(const std::vector<T
     vector<int> input_tensor_a_shape = { (int) input_tensor_a.shape()[1], (int) input_tensor_a.shape()[2], (int) input_tensor_a.shape()[3]};
     auto mm_shape = compute_conv_activation_as_mm_shape(input_tensor_a_shape, conv_params, act_block_h_ntiles, act_block_w_ntiles);
     // TODO: Update batch size below
-    Shape output_tensor_shape = {1, 1, mm_shape[1], input_tensor_b.shape()[3] };
+    Shape output_tensor_shape = {1, 1, mm_shape[1], output_channels };
     return {output_tensor_shape};
 }
 
 std::vector<Tensor> ConvWithAddressMap::create_output_tensors(const std::vector<Tensor>& input_tensors) const {
     const auto output_shape = this->compute_output_shapes(input_tensors).at(0);
     const auto& input_tensor = input_tensors.at(0);
-    Tensor output = create_output_dram_buffer_(input_tensor.device(), input_tensor.dtype(), output_shape, untilize_out);
+    Tensor output = create_output_dram_buffer_(input_tensor.device(), input_tensor.dtype(), output_shape, output_channels);
     std::vector<Tensor> output_tensors;
     // TODO: check if anything else needs to be done here.
     output_tensors.emplace_back(output);
@@ -1197,7 +1211,7 @@ operation::ProgramWithCallbacks ConvWithAddressMap::create_program(const std::ve
     const auto& input_tensor_b = input_tensors.at(1);
     auto& output_tensor = output_tensors.at(0);
 
-    return {conv_with_address_map_single_core(input_tensor_a, input_tensor_b, conv_params, act_block_h_ntiles, act_block_w_ntiles, weight_block_w_ntiles, out_subblock_h_ntiles, out_subblock_w_ntiles, untilize_out, output_tensor)};
+    return {conv_with_address_map_single_core(input_tensor_a, input_tensor_b, conv_params, act_block_h_ntiles, act_block_w_ntiles, weight_block_w_ntiles, out_subblock_h_ntiles, out_subblock_w_ntiles, output_channels, output_tensor)};
 }
 
 }  // namespace tt_metal

@@ -59,7 +59,7 @@ def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
 
     OH = ((int) ((H - R + 2 * pad_h) / stride_h)) + 1
     OW = ((int) ((W - S + 2 * pad_w) / stride_w)) + 1
-    mm_output_shape = [1,1,_nearest_y(OH*OW, 32*act_block_h),_nearest_y(K, 32*weight_block_w)]
+    mm_output_shape = [1,1,_nearest_y(OH*OW, 32*act_block_h), K]
 
     # Prepare activations
     A_cl_host = create_conv_act_tensor(A_pyt, 1, C, H, W)
@@ -77,7 +77,7 @@ def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
 
     untilize_out = True
     # Run TT metal OP
-    out = ttl.tensor.conv_with_address_map(A, B_tiled, [R,S,stride_h,stride_w,pad_h,pad_w], act_block_h, act_block_w, weight_block_w, out_subblock_h, out_subblock_w)
+    out = ttl.tensor.conv_with_address_map(A, B_tiled, [R,S,stride_h,stride_w,pad_h,pad_w], act_block_h, act_block_w, weight_block_w, out_subblock_h, out_subblock_w, K)
     out = out.to(host)
     assert(out.shape() == mm_output_shape)
     if not untilize_out:

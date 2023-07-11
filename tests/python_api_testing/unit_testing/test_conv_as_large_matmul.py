@@ -41,27 +41,27 @@ import torch
         # (512, 512, 7, 7, 3, 3, 1, 1, 1, 1),
 
         # channels = 3 padding
-        # (32, 3, 5, 5, 1, 1, 1, 1, 0, 0),
-        # # w/ conv padding
+        (32, 3, 5, 5, 1, 1, 1, 1, 0, 0),
+        # w/ conv padding
         (32, 32, 5, 5, 1, 1, 1, 1, 1, 1),
-        # # Hat = 1, Wat = 1, Wbt = 1
-        # (32, 32, 5, 5, 1, 1, 1, 1, 0, 0),
-        # # Hat = 2, Wat = 1, Wbt = 1
-        # (32, 32, 8, 8, 1, 1, 1, 1, 0, 0),
-        # # Hat = 1, Wat = 2, Wbt = 1
-        # (32, 64, 5, 5, 1, 1, 1, 1, 0, 0),
-        # # Hat = 2, Wat = 2, Wbt = 1
-        # (32, 64, 8, 8, 1, 1, 1, 1, 0, 0),
-        # # Hat = 1, Wat = 1, Wbt = 2
-        # (64, 32, 5, 5, 1, 1, 1, 1, 0, 0),
-        # # Hat = 1, Wat = 2, Wbt = 2
-        # (64, 64, 5, 5, 1, 1, 1, 1, 0, 0),
-        # # Hat = 2, Wat = 1, Wbt = 2
-        # (64, 32, 8, 8, 1, 1, 1, 1, 0, 0),
-        # # Hat = 2, Wat = 2, Wbt = 2
-        # (64, 64, 8, 8, 1, 1, 1, 1, 0, 0),
-        # # Hat = 8, Wat = 8, Wbt = 8
-        # (8*32, 8*32, 16, 16, 1, 1, 1, 1, 0, 0),
+        # Hat = 1, Wat = 1, Wbt = 1
+        (32, 32, 5, 5, 1, 1, 1, 1, 0, 0),
+        # Hat = 2, Wat = 1, Wbt = 1
+        (32, 32, 8, 8, 1, 1, 1, 1, 0, 0),
+        # Hat = 1, Wat = 2, Wbt = 1
+        (32, 64, 5, 5, 1, 1, 1, 1, 0, 0),
+        # Hat = 2, Wat = 2, Wbt = 1
+        (32, 64, 8, 8, 1, 1, 1, 1, 0, 0),
+        # Hat = 1, Wat = 1, Wbt = 2
+        (64, 32, 5, 5, 1, 1, 1, 1, 0, 0),
+        # Hat = 1, Wat = 2, Wbt = 2
+        (64, 64, 5, 5, 1, 1, 1, 1, 0, 0),
+        # Hat = 2, Wat = 1, Wbt = 2
+        (64, 32, 8, 8, 1, 1, 1, 1, 0, 0),
+        # Hat = 2, Wat = 2, Wbt = 2
+        (64, 64, 8, 8, 1, 1, 1, 1, 0, 0),
+        # Hat = 8, Wat = 8, Wbt = 8
+        (8*32, 8*32, 16, 16, 1, 1, 1, 1, 0, 0),
     ),
 )
 def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w):
@@ -87,7 +87,7 @@ def test_run_conv_as_large_matmul(K, C, H, W, R, S, stride_h, stride_w, pad_h, p
 
     OH = ((int) ((H - R + 2 * pad_h) / stride_h)) + 1
     OW = ((int) ((W - S + 2 * pad_w) / stride_w)) + 1
-    mm_output_shape = [1,1,_nearest_y(OH*OW, 32*act_block_h),_nearest_y(K, 32*weight_block_w)]
+    mm_output_shape = [1,1,_nearest_y(OH*OW, 32*act_block_h),K]
 
     # Prepare activations
     A_cl_host = create_conv_act_tensor(A_pyt, 1, C, H, W)
