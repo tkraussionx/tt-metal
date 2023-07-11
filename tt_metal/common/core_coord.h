@@ -7,9 +7,11 @@
 #include <utility>
 #include <optional>
 
+//#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 #include "common/assert.hpp"
 // #include <boost/functional/hash.hpp>
 // #include <command_assembler/xy_pair.h>
+
 
 using std::pair;
 
@@ -22,7 +24,10 @@ struct CoreCoord {
   std::size_t x = 0;
   std::size_t y = 0;
 
-  std::string str() const { return "(x=" + std::to_string(x) + ",y=" + std::to_string(y) + ")"; }
+  std::string str() const {
+      //ZoneScopedN("core_coords_str");
+      return "(x=" + std::to_string(x) + ",y=" + std::to_string(y) + ")";
+  }
 
 };
 

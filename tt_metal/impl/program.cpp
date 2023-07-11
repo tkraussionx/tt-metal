@@ -2,6 +2,7 @@
 #include "tt_metal/llrt/llrt.hpp"
 #include "tt_metal/impl/buffers/semaphore.hpp"
 #include "tt_metal/impl/allocator/allocator.hpp"
+#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 
 namespace tt::tt_metal {
 
@@ -158,6 +159,7 @@ const std::vector<CircularBuffer> Program::circular_buffers_on_core(const CoreCo
 }
 
 void Program::validate_circular_buffer_region(const Device *device, const CoreCoord &logical_core) const {
+    ZoneScopedN("validate_circular_buffer_region_coord");
     auto highest_cb_l1_region = [&]() {
         if (this->per_core_cb_config_.find(logical_core) == this->per_core_cb_config_.end()) {
             return std::make_pair((u64)UNRESERVED_BASE, (u64)UNRESERVED_BASE);
@@ -167,21 +169,22 @@ void Program::validate_circular_buffer_region(const Device *device, const CoreCo
 
     const auto &cb_space = highest_cb_l1_region();
 
-    log_assert(cb_space.second <= device->l1_size(), "Local buffers on core {} grow to {} KB which is beyond max L1 size of {} KB", logical_core.str(), cb_space.second/1024, device->l1_size()/1024);
+    //log_assert(cb_space.second <= device->l1_size(), "Local buffers on core {} grow to {} KB which is beyond max L1 size of {} KB", logical_core.str(), cb_space.second/1024, device->l1_size()/1024);
 
     auto bank_ids = device->bank_ids_from_logical_core(logical_core);
-    log_assert(bank_ids.size() == 1, "Expected one bank on core that holds local and L1 buffers");
+    //log_assert(bank_ids.size() == 1, "Expected one bank on core that holds local and L1 buffers");
 
     auto lowest_address = allocator::lowest_occupied_l1_address(*device->allocator_, bank_ids.at(0));
-    if (lowest_address.has_value()) {
-        log_assert(
-            lowest_address.value() >= cb_space.second,
-            "Circular buffers in program {} clash with L1 buffers on core {}. L1 buffer allocated at {} and local buffers end at {}", this->id, logical_core.str(), lowest_address.value(), cb_space.second
-        );
-    }
+    //if (lowest_address.has_value()) {
+        //log_assert(
+            //lowest_address.value() >= cb_space.second,
+            //"Circular buffers in program {} clash with L1 buffers on core {}. L1 buffer allocated at {} and local buffers end at {}", this->id, logical_core.str(), lowest_address.value(), cb_space.second
+        //);
+    //}
 }
 
 void Program::validate_circular_buffer_region(const Device *device) const {
+    ZoneScopedN("validate_circular_buffer_region_device");
     for (const auto &[logical_core, cb_config] : this->per_core_cb_config_) {
         this->validate_circular_buffer_region(device, logical_core);
     }

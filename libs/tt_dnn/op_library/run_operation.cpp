@@ -31,6 +31,7 @@ void override_runtime_args(
     const std::vector<std::optional<const Tensor>> &optional_input_tensors,
     const std::vector<Tensor> &output_tensors
 ) {
+    ZoneScopedN("override_runtime_args");
     std::vector<Buffer*> input_buffers;
     for (auto& tensor : input_tensors) {
         input_buffers.push_back(tensor.buffer());

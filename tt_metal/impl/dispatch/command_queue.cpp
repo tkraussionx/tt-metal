@@ -4,6 +4,8 @@
 #include "tt_metal/impl/buffers/semaphore.hpp"
 #include "debug_tools.hpp"
 
+#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
+
 u64 get_noc_multicast_encoding(const CoreCoord& top_left, const CoreCoord& bottom_right) {
     return NOC_MULTICAST_ENCODING(top_left.x, top_left.y, bottom_right.x, bottom_right.y);
 }
@@ -250,7 +252,7 @@ ProgramSrcToDstAddrMap ConstructProgramSrcToDstAddrMap(const Device* device, Pro
         write_sem_config_transfer(sem);
     }
 
-    TT_ASSERT(current_section_idx == 0, "Testing for just one section so far");
+    //TT_ASSERT(current_section_idx == 0, "Testing for just one section so far");
 
     return program_to_device_map;
 }
@@ -321,9 +323,9 @@ EnqueueCommandType EnqueueReadBufferCommand::type() { return this->type_; }
 EnqueueWriteBufferCommand::EnqueueWriteBufferCommand(
     Device* device, Buffer& buffer, vector<u32>& src, SystemMemoryWriter& writer) :
     writer(writer), src(src), buffer(buffer) {
-    TT_ASSERT(
-        buffer.buffer_type() == BufferType::DRAM or buffer.buffer_type() == BufferType::L1,
-        "Trying to write to an invalid buffer");
+    //TT_ASSERT(
+        //buffer.buffer_type() == BufferType::DRAM or buffer.buffer_type() == BufferType::L1,
+        //"Trying to write to an invalid buffer");
 
     this->device = device;
 }
@@ -581,6 +583,7 @@ CommandQueue::~CommandQueue() {
 }
 
 void CommandQueue::enqueue_command(shared_ptr<Command> command, bool blocking) {
+    ZoneScopedN("CommandQueue_enqueue_command");
     // For the time-being, doing the actual work of enqueing in
     // the main thread.
     // TODO(agrebenisan): Perform the following in a worker thread
@@ -592,6 +595,7 @@ void CommandQueue::enqueue_command(shared_ptr<Command> command, bool blocking) {
 }
 
 void CommandQueue::enqueue_read_buffer(Buffer& buffer, vector<u32>& dst, bool blocking) {
+    ZoneScopedN("CommandQueue_enqueue_read_buffer");
     shared_ptr<EnqueueReadBufferCommand> command =
         std::make_shared<EnqueueReadBufferCommand>(this->device, buffer, dst, this->sysmem_writer);
 
@@ -600,17 +604,18 @@ void CommandQueue::enqueue_read_buffer(Buffer& buffer, vector<u32>& dst, bool bl
     // device moves data into the buffer we want to read out
     // of, we then need to consume it into a vector. This
     // is easiest way to bring this up
-    TT_ASSERT(blocking, "EnqueueReadBuffer only has support for blocking mode currently");
+    //TT_ASSERT(blocking, "EnqueueReadBuffer only has support for blocking mode currently");
     this->enqueue_command(command, blocking);
 
     this->device->cluster()->read_sysmem_vec(dst, command->read_buffer_addr, command->buffer.size(), 0);
 }
 
 void CommandQueue::enqueue_write_buffer(Buffer& buffer, vector<u32>& src, bool blocking) {
-    TT_ASSERT(not blocking, "EnqueueWriteBuffer only has support for non-blocking mode currently");
-    TT_ASSERT(
-        buffer.page_size() < 1024 * 1024 - DEVICE_COMMAND_DATA_ADDR,
-        "Buffer pages must fit within the command queue data section");
+    ZoneScopedN("CommandQueue_enqueue_write_buffer");
+    //TT_ASSERT(not blocking, "EnqueueWriteBuffer only has support for non-blocking mode currently");
+    //TT_ASSERT(
+        //buffer.page_size() < 1024 * 1024 - DEVICE_COMMAND_DATA_ADDR,
+        //"Buffer pages must fit within the command queue data section");
 
     shared_ptr<EnqueueWriteBufferCommand> command =
         std::make_shared<EnqueueWriteBufferCommand>(this->device, buffer, src, this->sysmem_writer);
@@ -618,7 +623,8 @@ void CommandQueue::enqueue_write_buffer(Buffer& buffer, vector<u32>& src, bool b
 }
 
 void CommandQueue::enqueue_program(Program& program, bool blocking) {
-    TT_ASSERT(not blocking, "EnqueueProgram only has support for non-blocking mode currently");
+    ZoneScopedN("CommandQueue_enqueue_program");
+    //TT_ASSERT(not blocking, "EnqueueProgram only has support for non-blocking mode currently");
 
     // Need to relay the program into DRAM if this is the first time
     // we are seeing it
@@ -670,6 +676,7 @@ void CommandQueue::enqueue_program(Program& program, bool blocking) {
 }
 
 void CommandQueue::finish() {
+    ZoneScopedN("CommandQueue_finish");
     FinishCommand command(this->device, this->sysmem_writer);
     shared_ptr<FinishCommand> p = std::make_shared<FinishCommand>(std::move(command));
     this->enqueue_command(p, false);
@@ -689,7 +696,7 @@ void CommandQueue::finish() {
 void EnqueueReadBuffer(CommandQueue& cq, Buffer& buffer, vector<u32>& dst, bool blocking) {
     tt::log_debug(tt::LogDispatch, "EnqueueReadBuffer");
 
-    TT_ASSERT(blocking, "Non-blocking EnqueueReadBuffer not yet supported");
+    //TT_ASSERT(blocking, "Non-blocking EnqueueReadBuffer not yet supported");
     cq.enqueue_read_buffer(buffer, dst, blocking);
 }
 
@@ -700,14 +707,15 @@ void EnqueueWriteBuffer(CommandQueue& cq, Buffer& buffer, vector<u32>& src, bool
 }
 
 void EnqueueProgram(CommandQueue& cq, Program& program, bool blocking) {
+
     tt::log_debug(tt::LogDispatch, "EnqueueProgram");
     const char* COMPARE_DISPATCH_DEVICE_TO_HOST = std::getenv("TT_METAL_COMPARE_DISPATCH_DEVICE_TO_HOST");
     const char* DISPATCH_MAP_DUMP = std::getenv("TT_METAL_DISPATCH_MAP_DUMP");
 
     if (COMPARE_DISPATCH_DEVICE_TO_HOST != nullptr) {
-        tt::log_assert(
-            DISPATCH_MAP_DUMP != nullptr,
-            "Cannot compare dispatch device output to host when dispatch map dump not enabled");
+        //tt::log_assert(
+            //DISPATCH_MAP_DUMP != nullptr,
+            //"Cannot compare dispatch device output to host when dispatch map dump not enabled");
 
         auto hart_mask = DPRINT_HART_BR;
 

@@ -137,7 +137,7 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
     uint32_t out_dim_divider = Ht;
     for (uint32_t i = 0, num_tiles_read = 0; i < num_cores; i++){
         CoreCoord core = {i / num_cores_y, i % num_cores_y};
-        uint32_t num_cols_per_core;
+        uint32_t num_cols_per_core = 0;
         if (core_group_1.core_coord_in_core_ranges(core)) {
             num_cols_per_core = num_cols_per_core_group_1;
         } else if (core_group_2.core_coord_in_core_ranges(core)) {

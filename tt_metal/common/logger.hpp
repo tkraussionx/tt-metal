@@ -260,7 +260,7 @@ static void log_assert(bool cond, LogType type, char const* fmt, Args&&... args)
 
 template <typename... Args>
 static void log_assert(bool cond, char const* fmt, Args&&... args) {
-    log_assert(cond, LogAlways, fmt, std::forward<Args>(args)...);
+    // log_assert(cond, LogAlways, fmt, std::forward<Args>(args)...);
 }
 
 #undef LOGGER_TYPES

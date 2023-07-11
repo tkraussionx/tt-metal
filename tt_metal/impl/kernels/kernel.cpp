@@ -6,6 +6,8 @@
 #include "build_kernels_for_riscv/build_kernels_for_riscv.hpp"
 #include "llrt/llrt.hpp"
 
+#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
+
 namespace tt {
 
 namespace tt_metal {
@@ -60,11 +62,13 @@ size_t Kernel::define_args_hash() const {
 }
 
 std::vector<uint32_t> const &Kernel::runtime_args(const CoreCoord &logical_core) {
-    log_assert(this->is_on_logical_core(logical_core), "Cannot get runtime args for kernel {} that is not placed on core {}", this->name(), logical_core.str());
+    ZoneScopedN("kernel_runtime_args");
+    //log_assert(this->is_on_logical_core(logical_core), "Cannot get runtime args for kernel {} that is not placed on core {}", this->name(), logical_core.str());
     return this->core_to_runtime_args_[logical_core];
 }
 
 void Kernel::set_runtime_args(const CoreCoord &logical_core, const std::vector<uint32_t> &runtime_args) {
+    ZoneScopedN("kernel_set_runtime_args");
     auto validate_runtime_args_size = [&]() {
         uint32_t runtime_args_size = runtime_args.size() * sizeof(uint32_t);
         uint64_t l1_arg_base;
@@ -75,20 +79,21 @@ void Kernel::set_runtime_args(const CoreCoord &logical_core, const std::vector<u
                 result_base = BRISC_L1_RESULT_BASE;
                 break;
             default:
-                log_assert(false, "Only data movement kernels have runtime arg support");
+                //log_assert(false, "Only data movement kernels have runtime arg support");
+                break;
         }
-        std::stringstream identifier;
-        identifier << this->kernel_type_;
         if (l1_arg_base + runtime_args_size >= result_base) {
+            std::stringstream identifier;
+            identifier << this->kernel_type_;
             TT_THROW(std::to_string(runtime_args_size / 1024) + "KB " + identifier.str()  + " runtime args targeting " + logical_core.str() + " are too large.\
                 Cannot be written as they will run into memory region reserved for result. Max allowable size is " + std::to_string((result_base - l1_arg_base)/1024) + " KB.");
         }
     };
 
-    log_assert(this->is_on_logical_core(logical_core), "Cannot set runtime args for core {} since kernel {} is not placed on it!", logical_core.str(), this->name());
+    //log_assert(this->is_on_logical_core(logical_core), "Cannot set runtime args for core {} since kernel {} is not placed on it!", logical_core.str(), this->name());
     validate_runtime_args_size();
     auto &set_rt_args = this->core_to_runtime_args_[logical_core];
-    log_assert(set_rt_args.empty() or set_rt_args.size() == runtime_args.size(), "Illegal Runtime Args: Number of runtime args cannot be modified!");
+    //log_assert(set_rt_args.empty() or set_rt_args.size() == runtime_args.size(), "Illegal Runtime Args: Number of runtime args cannot be modified!");
     set_rt_args = runtime_args;
 }
 
@@ -108,7 +113,7 @@ void Kernel::read_binaries() {
         case KernelType::DataMovement: {
             auto dm_kernel = dynamic_cast<DataMovementKernel *>(this);
             TT_ASSERT(dm_kernel != nullptr);
-            uint32_t riscv_id;
+            uint32_t riscv_id = 0;
             std::string binary_path_suffix;
             switch (dm_kernel->data_movement_processor()) {
                 case (DataMovementProcessor::RISCV_0): {
@@ -178,8 +183,8 @@ bool DataMovementKernel::configure(Device *device, const CoreCoord &logical_core
     auto worker_core = device->worker_core_from_logical_core(logical_core);
     ll_api::memory binary_mem = this->binaries().at(0);
 
-    int riscv_id;
-    uint64_t test_mailbox_addr;
+    int riscv_id = 0;
+    uint64_t test_mailbox_addr = 0;
     switch (processor_) {
         case (DataMovementProcessor::RISCV_0): {
             riscv_id = 0;

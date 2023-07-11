@@ -14,6 +14,7 @@ CONFIG_LDFLAGS =
 
 ifeq ($(CONFIG), release)
 CONFIG_CFLAGS += -O3 -fno-lto
+$(info "DOING rel")
 else ifeq ($(CONFIG), ci)  # significantly smaller artifacts
 CONFIG_CFLAGS += -O3 -DDEBUG=DEBUG
 else ifeq ($(CONFIG), assert)
@@ -69,7 +70,9 @@ BASE_INCLUDES+=-I./ -I./tt_metal/
 WARNINGS ?= -Wdelete-non-virtual-dtor -Wreturn-type -Wswitch -Wuninitialized -Wno-unused-parameter
 CC ?= gcc
 CXX ?= g++
-CFLAGS ?= -MMD -fPIC -DTRACY_ENABLE $(WARNINGS) -I. $(CONFIG_CFLAGS) -mavx2 -DBUILD_DIR=\"$(OUT)\"
+CFLAGS ?= -MMD -fPIC -DTRACY_ENABLE $(WARNINGS) -I. $(CONFIG_CFLAGS) -mavx2 -DBUILD_DIR=\"$(OUT)\" \
+	  -DTRACY_NO_FRAME_IMAGE -DTRACY_NO_CODE_TRANSFER
+
 CXXFLAGS ?= --std=c++17 -fvisibility-inlines-hidden -Werror
 LDFLAGS ?= $(CONFIG_LDFLAGS) -Wl,-rpath,$(PREFIX)/lib -L$(LIBDIR)/tools -L$(LIBDIR) -ldl
 SHARED_LIB_FLAGS = -shared -fPIC

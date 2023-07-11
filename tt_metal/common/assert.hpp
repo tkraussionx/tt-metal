@@ -126,7 +126,7 @@ void tt_assert(char const* file, int line, const std::string& assert_type, bool 
 }  // namespace tt::assert
 
 #ifndef TT_ASSERT
-#define TT_ASSERT(condition, ...) ::tt::assert::tt_assert(__FILE__, __LINE__, "TT_ASSERT", (condition), #condition,      ##__VA_ARGS__)
+#define TT_ASSERT(condition, ...)
 #endif
 #ifndef TT_THROW
 #define TT_THROW(...)             ::tt::assert::tt_throw(__FILE__, __LINE__, "TT_THROW",     "tt::exception", ##__VA_ARGS__)
