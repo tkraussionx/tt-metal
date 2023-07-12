@@ -17,10 +17,12 @@ env pytest tests/python_api_testing/models/stable_diffusion/test_cross_attn_up_b
 env pytest tests/python_api_testing/models/stable_diffusion/test_downblock_2d.py -k test_run_downblock_real_input_inference
 env pytest tests/python_api_testing/models/stable_diffusion/test_unet_mid_block.py -k test_run_unet_mid_block_real_input_inference
 env pytest tests/python_api_testing/models/stable_diffusion/test_upblock_2d.py -k test_run_upblock_real_input_inference
+env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/stable_diffusion/perf_unbatched_stable.py
 
 env pytest tests/python_api_testing/models/deit/tests/test_deit_for_image_classification_with_teacher.py -k test_deit_for_image_classification_with_teacher_inference
 
 env pytest tests/python_api_testing/models/vit/tests/test_vit_image_classification.py -k test_vit_image_classification
+env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/vit/tests/perf_vit.py
 
 env pytest tests/python_api_testing/models/bert/bert_encoder.py -k bert_encoder
 env pytest tests/python_api_testing/models/bert -k bert_question_and_answering
@@ -41,6 +43,7 @@ env pytest tests/python_api_testing/models/t5 -k t5_layer_cross_attention
 env pytest tests/python_api_testing/models/t5 -k t5_block
 env pytest tests/python_api_testing/models/t5 -k t5_stack
 env pytest tests/python_api_testing/models/t5 -k t5_model
+env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/t5/perf_t5.py
 
 env pytest tests/python_api_testing/models/synthetic_gradients -k batchnorm1d_test
 env pytest tests/python_api_testing/models/synthetic_gradients -k linear_test
@@ -51,6 +54,7 @@ env pytest tests/python_api_testing/models/llama -k llama_layer_norm
 env pytest tests/python_api_testing/models/llama -k llama_mlp
 env pytest tests/python_api_testing/models/llama -k llama_attention
 env pytest tests/python_api_testing/models/llama -k llama_decoder
+env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/llama/perf_llama.py
 
 env pytest tests/python_api_testing/models/whisper -k whisper_attention
 env pytest tests/python_api_testing/models/whisper -k WhipserEncoderLayer_inference

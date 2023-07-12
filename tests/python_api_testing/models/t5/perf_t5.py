@@ -27,7 +27,7 @@ BATCH_SIZE = 1
 
 @pytest.mark.parametrize(
     "expected_inference_time",
-    ([3]),)
+    ([0.6]),)
 def test_perf(use_program_cache, expected_inference_time):
     profiler = Profiler()
     disable_compile_cache()
@@ -88,6 +88,7 @@ def test_perf(use_program_cache, expected_inference_time):
             attention_mask=attention_mask,
             decoder_attention_mask=decoder_attention_mask,
         )
+        tt_lib.device.Synchronize()
         profiler.end(first_key)
 
         enable_compile_cache()
@@ -99,6 +100,7 @@ def test_perf(use_program_cache, expected_inference_time):
             attention_mask=attention_mask,
             decoder_attention_mask=decoder_attention_mask,
         )
+        tt_lib.device.Synchronize()
         profiler.end(second_key)
 
     first_iter_time = profiler.get(first_key)
@@ -106,5 +108,4 @@ def test_perf(use_program_cache, expected_inference_time):
     cpu_time = profiler.get(cpu_key)
 
     prep_report("t5", BATCH_SIZE, first_iter_time, second_iter_time, "small", cpu_time)
-    logger.info(second_iter_time)
-    assert second_iter_time < expected_inference_time
+    assert second_iter_time < expected_inference_time, "t5 is too slow"

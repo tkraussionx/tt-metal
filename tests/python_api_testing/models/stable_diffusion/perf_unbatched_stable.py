@@ -16,7 +16,7 @@ from PIL import Image
 from tqdm.auto import tqdm
 from loguru import logger
 import csv
-
+import pytest
 from transformers import CLIPTextModel, CLIPTokenizer
 from diffusers import AutoencoderKL, UNet2DConditionModel
 from diffusers import LMSDiscreteScheduler
@@ -97,8 +97,10 @@ def make_tt_unet(state_dict, device):
     )
     return tt_unet
 
-
-def test_perf():
+@pytest.mark.parametrize(
+    "expected_inference_time",
+    ([120]),)
+def test_perf(use_program_cache, expected_inference_time):
     profiler = Profiler()
     first_key = "first_iter"
     second_key = "second_iter"
@@ -270,6 +272,7 @@ def test_perf():
         # save things required!
         iter += 1
         # we enable compile cache after the first iteration
+        ttl.device.Synchronize()
         enable_compile_cache()
 
     first_iter_time = profiler.get(first_key)
@@ -284,3 +287,5 @@ def test_perf():
         f"image size: {height}x{width} - v1.4",
         cpu_time,
     )
+    logger.info(second_iter_time)
+    assert second_iter_time < expected_inference_time, "stable diffusion is too slow"

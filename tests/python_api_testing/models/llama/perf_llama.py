@@ -28,7 +28,7 @@ BATCH_SIZE = 1
 
 
 @pytest.mark.parametrize(
-    "model_version, tokenizer_version, batch, seq_len, num_decoders, max_position_embeddings, on_weka",
+    "model_version, tokenizer_version, batch, seq_len, num_decoders, max_position_embeddings, on_weka, expected_inference_time",
     (
         (
             "decapoda-research/llama-7b-hf",
@@ -38,6 +38,7 @@ BATCH_SIZE = 1
             2,
             2048,
             False,
+            10
         ),
     ),
 )
@@ -49,6 +50,7 @@ def test_perf(
     num_decoders,
     max_position_embeddings,
     on_weka,
+    expected_inference_time,
     use_program_cache
 ):
     profiler = Profiler()
@@ -110,12 +112,13 @@ def test_perf(
 
         profiler.start(first_key)
         tt_out = tt_llama_model(llama_input)
-
+        ttl.device.Synchronize()
         profiler.end(first_key)
 
         enable_compile_cache()
         profiler.start(second_key)
         tt_out = tt_llama_model(llama_input)
+        ttl.device.Synchronize()
         profiler.end(second_key)
 
     first_iter_time = profiler.get(first_key)
@@ -123,3 +126,4 @@ def test_perf(
     cpu_time = profiler.get(cpu_key)
 
     prep_report("llama", BATCH_SIZE, first_iter_time, second_iter_time, "7B", cpu_time)
+    assert second_iter_time < expected_inference_time, "llama is too slow"
