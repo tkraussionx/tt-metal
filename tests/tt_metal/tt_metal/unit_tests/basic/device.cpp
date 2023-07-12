@@ -93,6 +93,7 @@ TEST_SUITE(
     doctest::timeout(10)) {
     TEST_CASE("Multi Device Initialize and Teardown" * doctest::timeout(2)) {
         auto arch = tt::get_arch_from_string(get_env_arch_name());
+        if (arch == tt::ARCH::GRAYSKULL) { return; } // Skip GS multi-deivce tests since we don't want to hit any harvested parts by accident
         const size_t num_devices = tt::tt_metal::Device::detect_num_available_devices();
         REQUIRE(num_devices > 0);
         std::vector<tt::tt_metal::Device*> devices;
@@ -106,6 +107,7 @@ TEST_SUITE(
         }
     }
     TEST_CASE("Multi Device Load Blank Kernels" * doctest::timeout(2)) {
+        if (this->arch_ == tt::ARCH::GRAYSKULL) { return; } // Skip GS multi-deivce tests since we don't want to hit any harvested parts by accident
         auto arch = tt::get_arch_from_string(get_env_arch_name());
         const size_t num_devices = tt::tt_metal::Device::detect_num_available_devices();
         REQUIRE(num_devices > 0);
@@ -123,6 +125,7 @@ TEST_SUITE(
         }
     }
     TEST_CASE_FIXTURE(unit_tests::MultiDeviceFixture, "Ping all legal dram channels") {
+        if (this->arch_ == tt::ARCH::GRAYSKULL) { return; } // Skip GS multi-deivce tests since we don't want to hit any harvested parts by accident
         for (unsigned int id = 0; id < num_devices_; id++) {
             auto device_ = devices_.at(id);
             SUBCASE("Low Address Dram") {
@@ -150,6 +153,7 @@ TEST_SUITE(
         }
     }
     TEST_CASE_FIXTURE(unit_tests::MultiDeviceFixture, "Ping all legal dram channels + illegal channel") {
+        if (this->arch_ == tt::ARCH::GRAYSKULL) { return; } // Skip GS multi-deivce tests since we don't want to hit any harvested parts by accident
         for (unsigned int id = 0; id < num_devices_; id++) {
             auto device_ = devices_.at(id);
             auto num_channels = device_->num_dram_channels() + 1;
@@ -161,6 +165,7 @@ TEST_SUITE(
     }
 
     TEST_CASE_FIXTURE(unit_tests::MultiDeviceFixture, "Ping all legal l1 cores") {
+        if (this->arch_ == tt::ARCH::GRAYSKULL) { return; } // Skip GS multi-deivce tests since we don't want to hit any harvested parts by accident
         for (unsigned int id = 0; id < num_devices_; id++) {
             auto device_ = devices_.at(id);
             SUBCASE("Low Address L1") {
@@ -190,6 +195,7 @@ TEST_SUITE(
     }
 
     TEST_CASE_FIXTURE(unit_tests::MultiDeviceFixture, "Ping all legal l1 + illegal cores") {
+        if (this->arch_ == tt::ARCH::GRAYSKULL) { return; } // Skip GS multi-deivce tests since we don't want to hit any harvested parts by accident
         for (unsigned int id = 0; id < num_devices_; id++) {
             auto device_ = devices_.at(id);
             auto grid_size = device_->logical_grid_size();

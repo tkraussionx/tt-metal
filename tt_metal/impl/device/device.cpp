@@ -94,7 +94,7 @@ void Device::initialize_harvesting_information() {
         noc_row_harvested[r] = row_harvested;
     }
     tt::log_assert(
-        this->num_harvested_rows_ < 2,
+        this->num_harvested_rows_ <= 2,
         tt::LogDevice,
         "this->pcie_slot_={} has this->num_harvested_rows_={}>2",
         this->pcie_slot_,
