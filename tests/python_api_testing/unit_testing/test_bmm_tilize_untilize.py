@@ -89,10 +89,11 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
         pytest.skip()
         return
 
-    # ## TODO (AS): Certain mixed-prec cases do not yet work. Skip them here (these are currently asserted out in the op.)
-    # if (a_dtype == out_dtype and a_dtype != b_dtype) or (a_dtype != b_dtype and b_dtype == out_dtype) or (a_dtype == b_dtype and a_dtype != out_dtype and untilize_out):
-    #     print(f'TODO: Mixed-prec case to be debugged. Skipping for now.')
-    #     return
+    ## TODO (AS): Certain mixed-prec cases do not yet work. Skip them here (these are currently asserted out in the op.)
+    if (not (a_dtype == out_dtype and a_dtype == b_dtype and a_dtype == ttl.tensor.DataType.BFLOAT16)) and (tilize_a or untilize_out):
+        print(f'TODO: Mixed-prec case to be debugged. Skipping for now.')
+        pytest.skip()
+        return
 
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
