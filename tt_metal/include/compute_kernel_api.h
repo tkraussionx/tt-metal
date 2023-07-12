@@ -109,7 +109,7 @@ ALWI void binary_op_init_common(uint32_t icb0, uint32_t icb1)
 
 ALWI void mm_init_short_with_dt(uint32_t cbid) {
     UNPACK(( llk_unpack_AB_matmul_init() ));
-    UNPACK(( llk_unpack_reconfig_data_format(cbid, 0, 1, 1) ));
+    UNPACK(( llk_unpack_reconfig_data_format(cbid, 1, 0, 0) ));
     MATH(( llk_math_matmul_init<MATH_FIDELITY>() ));
 }
 
@@ -241,7 +241,7 @@ ALWI void cb_push_back(uint32_t cbid, uint32_t ntiles)
 
 ALWI void copy_tile_to_dst_init_short_with_dt(uint32_t cbid) {
     UNPACK(( llk_unpack_A_init<BroadcastType::NONE, false, false>() ));
-    UNPACK(( llk_unpack_reconfig_data_format(0, cbid, 1, 1) ));
+    UNPACK(( llk_unpack_reconfig_data_format(1, cbid, 0, 0) ));
     MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE, false>() ));
 }
 
