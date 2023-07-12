@@ -190,7 +190,7 @@ Tensor bmm_single_core_tilize_untilize(const Tensor &in0,       // activations
     TT_ASSERT(!untilize_out || (untilize_out && out_dt == DataType::BFLOAT16));
 
     // TODO (AS): Certain mixed-prec cases do not currently work. Assert them out.
-    TT_ASSERT(!((in0_dt == out_dt && in0_dt != in1_dt) || (in0_dt != in1_dt && in1_dt == out_dt)), "TODO: Mixed-prec case to be debugged");
+    // TT_ASSERT(!((in0_dt == out_dt && in0_dt != in1_dt) || (in0_dt != in1_dt && in1_dt == out_dt)), "TODO: Mixed-prec case to be debugged");
 
     const auto in0_tile_nbytes = tile_size(in0_df);
     const auto in1_tile_nbytes = tile_size(in1_df);

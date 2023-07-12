@@ -34,6 +34,8 @@ out_subblock_height_ntiles = [4] ## == a_block_height_ntiles, <= 8
 out_subblock_width_ntiles = [2]  ## == b_block_width_ntiles, <= 8
 tilize_a = [True, False]
 untilize_out = [True, False]
+# tilize_a = [False]
+# untilize_out = [False]
 
 @pytest.mark.parametrize(
     'a_height_nblocks, a_width_nblocks, b_width_nblocks,\
@@ -79,16 +81,18 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
 
     if (tilize_a and a_dtype != ttl.tensor.DataType.BFLOAT16) or (untilize_out and out_dtype != ttl.tensor.DataType.BFLOAT16):
         print(f'invalid case, skipping.')
+        pytest.skip()
         return
 
     if tilize_a and a_dtype != out_dtype:
         print(False and 'Case to debug. skipping for now.')
+        pytest.skip()
         return
 
-    ## TODO (AS): Certain mixed-prec cases do not yet work. Skip them here (these are currently asserted out in the op.)
-    if (a_dtype == out_dtype and a_dtype != b_dtype) or (a_dtype != b_dtype and b_dtype == out_dtype) or (a_dtype == b_dtype and a_dtype != out_dtype and untilize_out):
-        print(f'TODO: Mixed-prec case to be debugged. Skipping for now.')
-        return
+    # ## TODO (AS): Certain mixed-prec cases do not yet work. Skip them here (these are currently asserted out in the op.)
+    # if (a_dtype == out_dtype and a_dtype != b_dtype) or (a_dtype != b_dtype and b_dtype == out_dtype) or (a_dtype == b_dtype and a_dtype != out_dtype and untilize_out):
+    #     print(f'TODO: Mixed-prec case to be debugged. Skipping for now.')
+    #     return
 
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
