@@ -71,7 +71,7 @@ def run_codegen_attention_test(device, pcc):
         ),
     ),
 )
-def test_codegen_mlp(pcc):
+def test_codegen_attention(pcc):
     device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
     tt_lib.device.InitializeDevice(device)
     tt_lib.device.SetDefaultDevice(device)
