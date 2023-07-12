@@ -109,3 +109,10 @@ env pytest tests/python_api_testing/models/EfficientNet/tests -k efficientnet_v2
 env pytest tests/python_api_testing/models/EfficientNet/tests -k efficientnet_lite0_model_real
 
 env pytest tests/python_api_testing/models/nanogpt -k nanogpt_model_real
+
+env pytest tests/python_api_testing/models/mobilenet_v2 -k conv2d_layer
+env pytest tests/python_api_testing/models/mobilenet_v2 -k conv_layer
+env pytest tests/python_api_testing/models/mobilenet_v2 -k inverted_residual_layer
+env pytest tests/python_api_testing/models/mobilenet_v2 -k stem_layer
+env pytest tests/python_api_testing/models/mobilenet_v2 -k mobilenetv2_model
+env pytest tests/python_api_testing/models/mobilenet_v2 -k mobilenetv2_for_image_classification
