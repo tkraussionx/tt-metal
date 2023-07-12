@@ -164,6 +164,19 @@ TEST_F(CommandQueueHarness, WriteOneTileToAllL1BanksTwiceRoundRobin) {
     EXPECT_TRUE(local_test_functions::test_EnqueueWriteBuffer_and_EnqueueReadBuffer(this->device, *this->cq, config));
 }
 
+TEST_F(CommandQueueHarness, FusedWriteL1BuffersInWhichRemainderBurstSizeDoesNotFitInLocalL1) {
+    if (this->arch != tt::ARCH::GRAYSKULL) {
+        GTEST_SKIP();
+    }
+
+    BufferConfig config = {
+        .num_pages = 4096,
+        .page_size = 22016,
+        .buftype = BufferType::L1};
+
+    EXPECT_TRUE(local_test_functions::test_EnqueueWriteBuffer_and_EnqueueReadBuffer(this->device, *this->cq, config));
+}
+
 }  // end namespace l1_tests
 }  // end namespace basic_tests
 
