@@ -9,6 +9,7 @@ sys.path.append(f"{f}/../..")
 sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
+import pytest
 from transformers import AutoTokenizer, T5Tokenizer, T5Model
 import torch
 from datasets import load_dataset
@@ -24,8 +25,10 @@ from python_api_testing.models.t5.t5_model import TtT5Model
 
 BATCH_SIZE = 1
 
-
-def test_perf():
+@pytest.mark.parametrize(
+    "expected_inference_time",
+    ([3]),)
+def test_perf(use_program_cache, expected_inference_time):
     profiler = Profiler()
     disable_compile_cache()
     first_key = "first_iter"
@@ -103,3 +106,5 @@ def test_perf():
     cpu_time = profiler.get(cpu_key)
 
     prep_report("t5", BATCH_SIZE, first_iter_time, second_iter_time, "small", cpu_time)
+    logger.info(second_iter_time)
+    assert second_iter_time < expected_inference_time
