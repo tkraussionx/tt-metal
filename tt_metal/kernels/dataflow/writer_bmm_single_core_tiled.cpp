@@ -24,7 +24,7 @@ void kernel_main() {
     //     .bank_base_address = out_addr,
     //     .log_base_2_of_page_size = tile_size_pow2_exponent
     // };
-    const dataflow::InterleavedAddrGen<true> s = {
+    const InterleavedAddrGen<true> s = {
         .bank_base_address = out_addr,
         .page_size = tile_nbytes
     };
@@ -46,7 +46,7 @@ void kernel_main() {
             for(uint32_t h = 0; h < out_subblock_h; ++h) {
                 uint32_t out_tile_id = out_sb_row_start_tile_id;
                 for(uint32_t w = 0; w < out_subblock_w; ++w) {
-                    uint64_t out_tile_noc_addr = dataflow::get_noc_addr(out_tile_id, s);
+                    uint64_t out_tile_noc_addr = get_noc_addr(out_tile_id, s);
                     noc_async_write(l1_read_addr, out_tile_noc_addr, tile_nbytes);
                     l1_read_addr += tile_nbytes;
                     out_tile_id += out_stride_w;
