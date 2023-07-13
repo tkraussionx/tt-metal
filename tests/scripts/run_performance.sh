@@ -7,7 +7,7 @@ if [[ -z "$TT_METAL_HOME" ]]; then
   exit 1
 fi
 
-env pytest tests/python_api_testing/models/stable_diffusion/perf_unbatched_stable.py
+env TT_PCI_DMA_BUF_SIZE=1048576 TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/metal_BERT_large_15/perf_bert15.py
 
 env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/vit/tests/perf_vit.py
 
