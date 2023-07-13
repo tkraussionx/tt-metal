@@ -51,7 +51,7 @@ model_location_generator = model_location_generator_
 
 @pytest.mark.parametrize(
     "expected_inference_time",
-    ([50]),)
+    ([0.24]),)
 def test_perf(use_program_cache, expected_inference_time):
     model_config = get_model_config(dtype, mem_config)
 
