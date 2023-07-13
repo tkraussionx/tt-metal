@@ -43,7 +43,10 @@ class TtGEGLU(nn.Module):
     def forward(self, hidden_states):
         hidden_states = self.proj(hidden_states)
 
-        hidden_states, gate = fallback_ops.chunk(hidden_states, 2, -1)
+        # hidden_states, gate = fallback_ops.chunk(hidden_states, 2, -1)
+        chunk_out_mem_config = ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM)
+        hidden_states, gate = ttl.tensor.split_last_dim_two_chunks_tiled(hidden_states, chunk_out_mem_config)
+
         act = self.gelu(gate)
         return ttl.tensor.mul(hidden_states, act)
 
