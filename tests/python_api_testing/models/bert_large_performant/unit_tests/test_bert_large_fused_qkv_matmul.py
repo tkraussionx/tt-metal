@@ -26,7 +26,7 @@ def run_bert_large_fused_qkv_matmul_test(
     out_mem_config,
 ):
     torch.manual_seed(1234)
-    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
+    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 1)
     ttl.device.InitializeDevice(device, ttl.device.MemoryAllocator.L1_BANKING)
     host = ttl.device.GetHost()
     a_shape = [9, 1, 384, 1024]
@@ -75,17 +75,21 @@ def run_bert_large_fused_qkv_matmul_test(
 
     t2 = ttl.tensor.bert_large_fused_qkv_matmul(a_t, b_t, bias_t, out_mem_config, out_dtype)
 
-    # Check memory of inputs and outputs
+    # Check memory and dtype of inputs and outputs
     assert a_t.memory_config().buffer_type == in0_mem_config.buffer_type
+    assert a_t.dtype() == in0_dtype
     assert b_t.memory_config().buffer_type == in1_mem_config.buffer_type
+    assert b_t.dtype() == in1_dtype
     if bias_mem_config is not None:
         assert bias_t.memory_config().buffer_type == bias_mem_config.buffer_type
+        assert bias_t.dtype() == bias_dtype
     assert t2.memory_config().buffer_type == out_mem_config.buffer_type
-    logger.debug(f"in0 is on: {a_t.memory_config().buffer_type}")
-    logger.debug(f"in1 is on: {b_t.memory_config().buffer_type}")
+    assert t2.dtype() == out_dtype
+    logger.debug(f"in0: {a_t.memory_config().buffer_type} and {a_t.dtype()}")
+    logger.debug(f"in1: {b_t.memory_config().buffer_type} and {b_t.dtype()}")
     if bias_mem_config is not None:
-        logger.debug(f"bias is on: {bias_t.memory_config().buffer_type}")
-    logger.debug(f"out is on: {t2.memory_config().buffer_type}")
+        logger.debug(f"bias: {bias_t.memory_config().buffer_type} and {bias_t.dtype()}")
+    logger.debug(f"out: {t2.memory_config().buffer_type} and {t2.dtype()}")
 
     assert t2.shape() == [9, 1, 384, 3072]
     tt_host_rm = t2.to(host).to(ttl.tensor.Layout.ROW_MAJOR)

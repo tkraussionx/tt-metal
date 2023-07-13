@@ -492,7 +492,18 @@ std::vector<Shape> BertLargeMatmul::compute_output_shapes(const std::vector<Tens
 }
 
 std::vector<Tensor> BertLargeMatmul::create_output_tensors(const std::vector<Tensor>& input_tensors) const {
-    return operation::generic_create_output_tensors(*this, input_tensors, Layout::TILE, this->output_mem_config);
+    // TODO: Uplift generic_create_output_tensors to take in dtype and switch to call that instead
+    const auto& input_tensor = input_tensors.at(0);
+    const auto& output_shapes = this->compute_output_shapes(input_tensors);
+
+    TT_ASSERT(input_tensor.storage_type() == StorageType::DEVICE);
+
+    std::vector<Tensor> output_tensors;
+    output_tensors.reserve(output_shapes.size());
+    for (const auto& output_shape : output_shapes) {
+        output_tensors.emplace_back(create_device_tensor(output_shape, this->output_dtype, Layout::TILE, input_tensor.device(), this->output_mem_config));
+    }
+    return output_tensors;
 }
 
 operation::ProgramWithCallbacks BertLargeMatmul::create_program(
@@ -507,7 +518,7 @@ operation::ProgramWithCallbacks BertLargeMatmul::create_program(
 
     auto device_compute_and_storage_grid_size = input_tensor_a.device()->compute_and_storage_grid_size();
     CoreCoord compute_and_storage_grid_size;
-    tt::tt_metal::DataType output_dtype = this->output_dtype.value_or(input_tensor_a.dtype());
+    tt::tt_metal::DataType output_dtype = this->output_dtype;
     tt::DataFormat output_cb_data_format = tt::DataFormat::Bfp8_b; // TODO: Keep bmm the same; get rid of this
     MathFidelity math_fidelity = MathFidelity::LoFi;
     uint32_t in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N;
