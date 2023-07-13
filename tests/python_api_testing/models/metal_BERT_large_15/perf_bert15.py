@@ -16,7 +16,7 @@ from torchvision import models
 from transformers import AutoImageProcessor
 from transformers import BertForQuestionAnswering, BertTokenizer, pipeline
 from tests.python_api_testing.models.conftest import model_location_generator_
-
+import pytest
 import tt_lib as ttl
 from utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor
 from test_bert_batch_dram import TtBertBatchDram
@@ -49,8 +49,10 @@ dtype = ttl.tensor.DataType.BFLOAT16
 mem_config = ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1)
 model_location_generator = model_location_generator_
 
-
-def test_perf(use_program_cache):
+@pytest.mark.parametrize(
+    "expected_inference_time",
+    ([50]),)
+def test_perf(use_program_cache, expected_inference_time):
     model_config = get_model_config(dtype, mem_config)
 
     disable_compile_cache()
@@ -115,3 +117,5 @@ def test_perf(use_program_cache):
     prep_report(
         "bert15", BATCH_SIZE, first_iter_time, second_iter_time, comments, cpu_time
     )
+    logger.info(f"bert15 inference time: {second_iter_time}")
+    assert second_iter_time < expected_inference_time, "bert15 is too slow"

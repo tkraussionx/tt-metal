@@ -122,3 +122,5 @@ def test_perf(
     cpu_time = profiler.get(cpu_key)
 
     prep_report("llama", BATCH_SIZE, first_iter_time, second_iter_time, "7B", cpu_time)
+    logger.info(f"llama 7B inference time: {second_iter_time}")
+    assert second_iter_time < expected_inference_time, "llama 7B is too slow"

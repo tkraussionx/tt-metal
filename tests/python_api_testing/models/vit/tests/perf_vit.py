@@ -12,6 +12,7 @@ from transformers import AutoImageProcessor, ViTForImageClassification
 import torch
 from datasets import load_dataset
 from loguru import logger
+import pytest
 
 import tt_lib
 from utility_functions_new import torch_to_tt_tensor_rm, tt_to_torch_tensor, Profiler
@@ -21,8 +22,10 @@ from models.vit.tt.modeling_vit import vit_for_image_classification
 
 BATCH_SIZE = 1
 
-
-def test_perf():
+@pytest.mark.parametrize(
+    "expected_inference_time",
+    ([50]),)
+def test_perf(use_program_cache, expected_inference_time):
     profiler = Profiler()
     disable_compile_cache()
     first_key = "first_iter"
@@ -71,3 +74,5 @@ def test_perf():
     prep_report(
         "vit", BATCH_SIZE, first_iter_time, second_iter_time, "base-patch16", cpu_time
     )
+    logger.info(f"vit inference time: {second_iter_time}")
+    assert second_iter_time < expected_inference_time, "vit is too slow"

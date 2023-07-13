@@ -14,7 +14,7 @@ from datasets import load_dataset
 from loguru import logger
 from torchvision import models
 from transformers import AutoImageProcessor
-
+import pytest
 import tt_lib
 from utility_functions_new import torch_to_tt_tensor_rm, tt_to_torch_tensor, profiler
 from utility_functions_new import disable_compile_cache, enable_compile_cache
@@ -26,8 +26,10 @@ from resnetBlock import ResNet, Bottleneck
 
 BATCH_SIZE = 1
 
-
-def test_perf():
+@pytest.mark.parametrize(
+    "expected_inference_time",
+    ([50]),)
+def test_perf(use_program_cache, expected_inference_time):
     disable_compile_cache()
     first_key = "first_iter"
     second_key = "second_iter"
@@ -83,3 +85,5 @@ def test_perf():
     cpu_time = profiler.get(cpu_key)
 
     prep_report("resnet50", BATCH_SIZE, first_iter_time, second_iter_time, comments, cpu_time)
+    logger.info(f"resnet50 {comments} inference time: {second_iter_time}")
+    assert second_iter_time < expected_inference_time, f"resnet50 {comments} is too slow"
