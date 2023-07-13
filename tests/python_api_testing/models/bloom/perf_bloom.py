@@ -12,7 +12,7 @@ sys.path.append(f"{f}/../../../..")
 import torch
 from datasets import load_dataset
 from loguru import logger
-
+import pytest
 import tt_lib
 from utility_functions_new import torch_to_tt_tensor_rm, tt_to_torch_tensor, profiler
 from utility_functions_new import disable_compile_cache, enable_compile_cache
@@ -29,8 +29,10 @@ import python_api_testing.models.bloom.bloom_model as bloom_model
 
 BATCH_SIZE = 1
 
-
-def test_perf():
+pytest.mark.parametrize(
+    "expected_inference_time",
+    ([50]),)
+def test_perf(use_program_cache, expected_inference_time):
     disable_compile_cache()
     first_key = "first_iter"
     second_key = "second_iter"
@@ -84,4 +86,6 @@ def test_perf():
     second_iter_time = profiler.get(second_key)
     cpu_time = profiler.get(cpu_key)
 
-    prep_report("bloom", BATCH_SIZE, first_iter_time, second_iter_time, "", cpu_time)
+    prep_report("bloom", BATCH_SIZE, first_iter_time, second_iter_time, "560M", cpu_time)
+    logger.info(f"bloom 560M inference time: {second_iter_time}")
+    assert second_iter_time < expected_inference_time, "bloom 560M is too slow"

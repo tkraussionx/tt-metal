@@ -14,6 +14,7 @@ import torch
 from datasets import load_dataset
 from loguru import logger
 import json
+import pytest
 
 import tt_lib
 from utility_functions_new import torch_to_tt_tensor_rm, tt_to_torch_tensor, Profiler
@@ -24,8 +25,10 @@ from python_api_testing.models.t5.t5_model import TtT5Model
 
 BATCH_SIZE = 1
 
-
-def test_perf():
+@pytest.mark.parametrize(
+    "expected_inference_time",
+    ([50]),)
+def test_perf(use_program_cache, expected_inference_time):
     profiler = Profiler()
     disable_compile_cache()
     first_key = "first_iter"
@@ -103,3 +106,5 @@ def test_perf():
     cpu_time = profiler.get(cpu_key)
 
     prep_report("t5", BATCH_SIZE, first_iter_time, second_iter_time, "small", cpu_time)
+    logger.info(f"t5 small inference time: {second_iter_time}")
+    assert second_iter_time < expected_inference_time, "t5 small is too slow"

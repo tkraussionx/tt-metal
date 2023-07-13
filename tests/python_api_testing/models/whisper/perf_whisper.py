@@ -27,8 +27,10 @@ from python_api_testing.models.whisper.whisper_common import (
 
 BATCH_SIZE = 1
 
-
-def test_perf():
+@pytest.mark.parametrize(
+    "expected_inference_time",
+    ([50]),)
+def test_perf(use_program_cache, expected_inference_time):
     profiler = Profiler()
     disable_compile_cache()
     first_key = "first_iter"
@@ -104,3 +106,5 @@ def test_perf():
     prep_report(
         "whisper", BATCH_SIZE, first_iter_time, second_iter_time, "tiny", cpu_time
     )
+    logger.info(f"whisper tiny inference time: {second_iter_time}")
+    assert second_iter_time < expected_inference_time, "whisper tiny is too slow"

@@ -16,6 +16,7 @@ from PIL import Image
 from tqdm.auto import tqdm
 from loguru import logger
 import csv
+import pytest
 
 from transformers import CLIPTextModel, CLIPTokenizer
 from diffusers import AutoencoderKL, UNet2DConditionModel
@@ -97,8 +98,10 @@ def make_tt_unet(state_dict, device):
     )
     return tt_unet
 
-
-def test_perf():
+@pytest.mark.parametrize(
+    "expected_inference_time",
+    ([400]),)
+def test_perf(use_program_cache, expected_inference_time):
     profiler = Profiler()
     first_key = "first_iter"
     second_key = "second_iter"
@@ -284,3 +287,5 @@ def test_perf():
         f"image size: {height}x{width} - v1.4",
         cpu_time,
     )
+    logger.info(f"Unbatched Stable Diffusion inference time: {second_iter_time}")
+    assert second_iter_time < expected_inference_time, "Unabtched Stable Diffusion is too slow"
