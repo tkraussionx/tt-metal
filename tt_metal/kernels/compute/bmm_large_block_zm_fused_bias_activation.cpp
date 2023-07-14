@@ -17,14 +17,17 @@ void MAIN {
     uint32_t out_subblock_num_tiles = get_compile_time_arg_val(10); // out_subblock_h * out_subblock_w;
     uint32_t batch = get_compile_time_arg_val(11); // batch dim
 
-    #ifdef FUSE_BIAS
-        init_bcast<EltwiseBinaryType::ELWADD, BroadcastType::ROW>(tt::CB::c_intermed1, tt::CB::c_in3);
-    #endif
-
     uint32_t in0_cb_id = tt::CB::c_in0;
     uint32_t in1_cb_id = tt::CB::c_in1;
     uint32_t out_cb_id = tt::CB::c_out0;
     uint32_t mm_partials_cb_id = tt::CB::c_intermed0;
+    uint32_t mm_bias_intermediate_cb_id = tt::CB::c_intermed1;
+    uint32_t bias_cb_id = tt::CB::c_in3;
+
+    #ifdef FUSE_BIAS
+        init_bcast<EltwiseBinaryType::ELWADD, BroadcastType::ROW>(mm_bias_intermediate_cb_id, bias_cb_id);
+    #endif
+
     mm_init(in0_cb_id, in1_cb_id, out_cb_id);
 
     for (uint32_t b = 0; b < batch; b++){
@@ -79,26 +82,27 @@ void MAIN {
                         // TODO: Uplift to support mixed precision
                         #ifdef FUSE_BIAS
                             // Move matmul result to interm buffer
-                            cb_reserve_back(tt::CB::c_intermed1, out_subblock_num_tiles);
+                            cb_reserve_back(mm_bias_intermediate_cb_id, out_subblock_num_tiles);
                             for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
-                                pack_tile(i, tt::CB::c_intermed1);
+                                pack_tile(i, mm_bias_intermediate_cb_id);
                             }
-                            cb_push_back(tt::CB::c_intermed1, out_subblock_num_tiles);
+                            cb_push_back(mm_bias_intermediate_cb_id, out_subblock_num_tiles);
                             release_dst(tt::DstMode::Half);
 
                             // Redundant wait since we know data was just pushed
-                            cb_wait_front(tt::CB::c_intermed1, out_subblock_num_tiles);
-                            cb_wait_front(tt::CB::c_in3, in1_per_core_w);
-                            add_bcast_rows_init_short();
+                            cb_wait_front(mm_bias_intermediate_cb_id, out_subblock_num_tiles);
+                            cb_wait_front(bias_cb_id, in1_per_core_w);
+                            add_bcast_rows_init_short_with_dt(mm_bias_intermediate_cb_id, bias_cb_id);
                             acquire_dst(tt::DstMode::Half);
                             for (uint32_t i = 0, j = 0; j < out_subblock_h; j++) {
                                 uint32_t bcast_tile_idx = in1_index_subblock_offset;
                                 for (uint32_t k = 0; k < out_subblock_w; k++, i++) {
-                                    add_tiles_bcast_rows(tt::CB::c_intermed1, tt::CB::c_in3, i, bcast_tile_idx, i);
+                                    add_tiles_bcast_rows(mm_bias_intermediate_cb_id, bias_cb_id, i, bcast_tile_idx, i);
                                     bcast_tile_idx++;
                                 }
                             }
-                            cb_pop_front(tt::CB::c_intermed1, out_subblock_num_tiles);
+                            cb_pop_front(mm_bias_intermediate_cb_id, out_subblock_num_tiles);
+                            // TODO: Need to reconfig for mm again if batch > 1
                         #endif
                         // TODO: Can easily generalize for other sfpu activations
                         #ifdef FUSE_GELU_ACTIVATION

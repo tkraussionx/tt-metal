@@ -205,6 +205,9 @@ def test_bert_large_fused_qkv_matmul_test_mixed_precision(
     out_mem_config,
     request,
 ):
+    if in0_dtype != bias_dtype:
+        pytest.skip("Matmul with fused bias only works if input0 and bias have the same dtype!")
+
     ttl.profiler.set_profiler_flag(False)
     ttl.profiler.set_profiler_location(
         f"tt_metal/tools/profiler/logs/BERT_large_fused_qkv_matmul_mixed_precision_{request.node.callspec.id}"
