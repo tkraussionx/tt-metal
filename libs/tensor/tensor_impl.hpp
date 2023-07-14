@@ -520,6 +520,7 @@ inline Tensor to_layout(const Tensor &tensor, Layout target_layout) {
         case Layout::TILE:
             if (target_layout == Layout::ROW_MAJOR) {
                 data = convert_layout_tile_to_row_major(tensor.shape(), data);
+                std::cout << "CONVERTING!!!!!!!!!!!!!!!!" << std::endl;
             }
             else {
                 TT_ASSERT(false && "Unsupported layout conversion");
@@ -660,19 +661,25 @@ inline Tensor unpad(const Tensor &tensor, const std::array<uint32_t, 4> &output_
  */
 
 template <typename T>
+bool compare(const Tensor&a, const Tensor& b) {
+    TT_ASSERT(a.on_host() && b.on_host());
+    TT_ASSERT(a.data_ptr() != nullptr && b.data_ptr() != nullptr);
+    bool is_equal = true;
+    is_equal &= a.layout() == b.layout();
+    is_equal &= a.dtype() == b.dtype();
+    std::vector<T> *a_t = reinterpret_cast<std::vector<T>*>(a.data_ptr());
+    std::vector<T> *b_t = reinterpret_cast<std::vector<T>*>(b.data_ptr());
+    is_equal &= *a_t == *b_t;
+    return is_equal;
+}
+
+template <typename T>
 bool compare_data(const Tensor&a, const Tensor& b) {
     TT_ASSERT(a.on_host() && b.on_host());
-    TT_ASSERT(a.data_ != nullptr && b.data_ != nullptr);
-    std::vector<T> *a_t = reinterpret_cast<std::vector<T>*>(a.data_);
-    std::vector<T> *b_t = reinterpret_cast<std::vector<T>*>(b.data_);
-    bool is_equal = true;
-    std::cout << "a_t: " << a_t << ", size: " << a_t->size() << std::endl;
-    std::cout << "b_t: " << b_t << ", size: " << b_t->size() << std::endl;
-    for (uint32_t i = 0; i < a_t->size() / 100; ++i) {
-        is_equal &= (*a_t)[i] == (*b_t)[i];
-        std::cout << (*a_t)[i] << " == " << (*b_t)[i] << std::endl;
-    }
-    return is_equal;
+    TT_ASSERT(a.data_ptr() != nullptr && b.data_ptr() != nullptr);
+    std::vector<T> *a_t = reinterpret_cast<std::vector<T>*>(a.data_ptr());
+    std::vector<T> *b_t = reinterpret_cast<std::vector<T>*>(b.data_ptr());
+    return *a_t == *b_t;
 }
 
 // ======================================================================================

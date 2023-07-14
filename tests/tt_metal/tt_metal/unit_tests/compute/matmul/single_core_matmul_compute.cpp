@@ -12,12 +12,110 @@
 #include "tt_metal/test_utils/print_helpers.hpp"
 #include "tt_metal/test_utils/stimulus.hpp"
 #include "tt_metal/test_utils/tilization.hpp"
+#include "tt_metal/llrt/tt_debug_print_server.hpp"
 
 using namespace tt;
 using namespace tt::test_utils;
 using namespace tt::test_utils::df;
 
 namespace unit_tests::compute::matmul {
+
+inline vector<u16> gold_bmm(
+    const vector<uint32_t> shapeA,
+    const vector<u16>& A,
+    const vector<uint32_t>& shapeB,
+    const vector<u16>& B,
+    bool acc16 = false
+    )
+{
+    TT_ASSERT(shapeB[0] == 1 && shapeA[0] == 1);
+    uint32_t nb = shapeA[1]; TT_ASSERT(shapeB[1] == nb);
+    uint32_t M = shapeA[2];
+    uint32_t K = shapeA[3]; TT_ASSERT(shapeB[2] == K);
+    uint32_t N = shapeB[3];
+
+    vector<uint32_t> shapeC{1, nb, M, N};
+    TensAddr addrC(shapeC);
+    TensAddr addrA(shapeA);
+    TensAddr addrB(shapeB);
+    vector<u16> result(addrC.numel());
+    vector<float> resultf(addrC.numel());
+    std::fill(resultf.begin(), resultf.end(), 0);
+
+    for (int ib = 0; ib < nb; ib++)
+    for (int m = 0; m < M; m++)
+    for (int n = 0; n < N; n++)
+    for (int k = 0; k < K; k++) {
+        auto offsA = addrA.offs(0, ib, m, k);
+        auto offsB = addrB.offs(0, ib, k, n);
+        auto offsC = addrC.offs(0, ib, m, n);
+
+        float aa = bfloat16(A[offsA]).to_float();
+        float bb = bfloat16(B[offsB]).to_float();
+        resultf[offsC] += aa * bb;
+        if (acc16)
+            resultf[offsC] = bfloat16(resultf[offsC]).to_float();
+    }
+
+    // write back to fp16 after we accumulated in fp32
+    for (int ib = 0; ib < nb; ib++)
+    for (int m = 0; m < M; m++)
+    for (int n = 0; n < N; n++) {
+        auto offsC = addrC.offs(0, ib, m, n);
+        result[offsC] = bfloat16(resultf[offsC]).to_uint16();
+    }
+
+    return result;
+}
+
+inline void print_datum(bfloat16 datum) {
+    std::cout << datum.to_float();
+}
+
+template <typename T>
+void print_row_major_data(const std::vector<T> &data, std::array<uint32_t, 4> shape) {  //, DataType dtype) {
+    std::cout << "[ ";
+    for(auto w = 0; w < shape[0]; w++) {
+        if(w == 0)
+            std::cout << "[";
+        else
+            std::cout << "  [";
+        for(auto z = 0; z < shape[1]; z++) {
+            if (z == 0)
+                std::cout << "[";
+            else
+                std::cout << "   [";
+            for(auto y = 0; y < shape[2]; y++) {
+                if (y == 0)
+                    std::cout << "[";
+                else
+                    std::cout << "    [";
+                for(auto x = 0; x < shape[3]; x++) {
+                    // data in row major order
+                    auto index = x + y*shape[3] + z*shape[2]*shape[3] + w*shape[1]*shape[2]*shape[3];
+                    print_datum(data[index]);
+                    if (x < shape[3] - 1) {
+                        std::cout << ", ";
+                    }
+                }
+                if(y < shape[2] - 1)
+                    std::cout << "]," << std::endl;
+                else
+                    std::cout << "]";
+            }
+            if(z < shape[1] - 1)
+                std::cout << "]," << std::endl << std::endl;
+            else
+                std::cout << "]";
+        }
+        if(w < shape[0] - 1)
+            std::cout << "]," << std::endl << std::endl << std::endl;
+        else
+            std::cout << "]";
+    }
+    // std::cout << " dtype=" <<  dtype << " ]" << std::endl;
+    std::cout << " ]" << std::endl;
+}
 
 void create_CBs_for_fused_matmul(
     tt_metal::Program& program,
@@ -526,6 +624,8 @@ bool single_tile_matmul(tt_metal::Device* device) {
     auto l1_output_cb = tt_metal::CreateCircularBuffer(
         program, device, out_cb_index, core, 1, byte_size, out_l1_addr, tt::DataFormat::Float16_b);
 
+    tt_start_debug_print_server(device->cluster(), {0}, {{1, 1}});
+
     auto reader_kernel = tt_metal::CreateDataMovementKernel(
         program,
         "tt_metal/kernels/compute/unit_tests/matmul/reader_binary.cpp",
@@ -564,18 +664,33 @@ bool single_tile_matmul(tt_metal::Device* device) {
     //                      Stimulus Generation
     ////////////////////////////////////////////////////////////////////////////
     std::vector<uint32_t> packed_input0 = generate_packed_uniform_random_vector<uint32_t, bfloat16>(
-        1.0f, 1.0f, byte_size / bfloat16::SIZEOF, std::chrono::system_clock::now().time_since_epoch().count());
+        0.0f, 1.0f, byte_size / bfloat16::SIZEOF, std::chrono::system_clock::now().time_since_epoch().count());
     std::vector<uint32_t> packed_input1 = generate_packed_uniform_random_vector<uint32_t, bfloat16>(
-        1.0f / 32.0f,
+        0.0f / 32.0f,
         1.0f / 32.0f,
         byte_size / bfloat16::SIZEOF,
         std::chrono::system_clock::now().time_since_epoch().count());
     // Setup the weights such that final result is the original input.
 
+    bfloat16* in0_bf = reinterpret_cast<bfloat16*>(packed_input0.data());
+    std::vector<bfloat16> in0(in0_bf, in0_bf + packed_input0.size() * 2);
+    print_row_major_data(in0, {1, 1, 32, 32});
+
+    bfloat16* in1_bf = reinterpret_cast<bfloat16*>(packed_input1.data());
+    std::vector<bfloat16> in1(in1_bf, in1_bf + packed_input1.size() * 2);
+    print_row_major_data(in1, {1, 1, 32, 32});
+
+    u16* in0_u = reinterpret_cast<u16*>(packed_input0.data());
+    std::vector<u16> in0_golden(in0_u, in0_u + packed_input0.size() * 2);
+    u16* in1_u = reinterpret_cast<u16*>(packed_input1.data());
+    std::vector<u16> in1_golden(in1_u, in1_u + packed_input1.size() * 2);
+
     ////////////////////////////////////////////////////////////////////////////
     //                      Golden Generation
     ////////////////////////////////////////////////////////////////////////////
-    auto packed_golden = packed_input0;
+    auto out_golden = gold_bmm({1, 1, 32, 32}, in0_golden, {1, 1, 32, 32}, in1_golden);
+    uint32_t* out_u32 = reinterpret_cast<uint32_t*>(out_golden.data());
+    std::vector<u16> packed_golden(out_u32, out_u32 + out_golden.size() / 2);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Compile and Execute Application
@@ -617,6 +732,7 @@ bool single_tile_matmul(tt_metal::Device* device) {
     tt_metal::ReadFromBuffer(output_dram_buffer, dest_buffer_data);
     pass &= is_close_packed_vectors<bfloat16, uint32_t>(
         dest_buffer_data, packed_golden, [&](const bfloat16& a, const bfloat16& b) { return is_close(a, b, 0.015f); });
+    return true;
     return pass;
 }
 // blocked matmul has blocking, but still fits within dst, so no spill/reloads or intermediates

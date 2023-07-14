@@ -1,6 +1,9 @@
 #include <cstdint>
 
 #include "llk_3c.h"
+#include "debug_print.h"
+
+SliceRange sr = SliceRange{ .h0 = 0, .h1 = 32, .hs = 8, .w0 = 0, .w1 = 32, .ws = 8 };
 
 namespace NAMESPACE {
 void MAIN {
@@ -19,8 +22,10 @@ void MAIN {
     acquire_dst(DstMode::Half);
     cb_wait_front(in0_cb, num_in0_tiles);
     cb_wait_front(in1_cb, num_in1_tiles);
+    UNPACK(( DPRINT << ">>>> IN0 " << TileSlice(in0_cb, 0, sr) << ENDL() ));
     matmul_tiles(in0_cb, in1_cb, in0_tile_index, in1_tile_index, out_tile_index, transpose);
     pack_tile(0, out_cb);
+    UNPACK(( DPRINT << ">>>> PACKED " << TileSlice(out_cb, 0, sr) << ENDL() ));
     cb_pop_front(in0_cb, num_in0_tiles);
     cb_pop_front(in1_cb, num_in1_tiles);
     release_dst(DstMode::Half);

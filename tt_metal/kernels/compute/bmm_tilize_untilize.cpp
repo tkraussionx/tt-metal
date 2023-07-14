@@ -4,6 +4,8 @@
 #include "debug_print.h"
 
 
+SliceRange sr = SliceRange{ .h0 = 0, .h1 = 32, .hs = 8, .w0 = 0, .w1 = 32, .ws = 8 };
+
 inline void tilize_in(
     uint32_t in_cb_id,
     uint32_t in_subblock_h,
@@ -75,6 +77,7 @@ inline void pack_matmul_subblock(uint32_t cb_id, uint32_t out_subblock_num_tiles
     for (uint32_t i = 0; i < out_subblock_num_tiles; ++i) {
         pack_tile(i, cb_id);
     }
+    // UNPACK(( DPRINT << ">>>> PACKED " << TileSlice(cb_id, 0, sr) << ENDL() ));
     cb_push_back(cb_id, out_subblock_num_tiles);
 }
 
@@ -148,6 +151,7 @@ void MAIN {
                             for (uint32_t w = 0; w < out_subblock_w; ++w) {
                                 int in1_index_inner_dim_offset = 0;
                                 for (uint32_t inner_dim = 0; inner_dim < in0_block_w; ++inner_dim) {
+                                    // UNPACK(( DPRINT << ">>>> IN0 " << TileSlice(in0_cb_id, 0, sr) << ENDL() ));
                                     matmul_tiles(tilize_in0 ? tilized_in0_cb_id : in0_cb_id,
                                                  in1_cb_id,
                                                  in0_index_subblock_offset + in0_index_h_offset + inner_dim,
