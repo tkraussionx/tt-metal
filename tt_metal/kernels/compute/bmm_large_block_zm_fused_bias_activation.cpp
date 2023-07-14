@@ -92,7 +92,18 @@ void MAIN {
                             // Redundant wait since we know data was just pushed
                             cb_wait_front(mm_bias_intermediate_cb_id, out_subblock_num_tiles);
                             cb_wait_front(bias_cb_id, in1_per_core_w);
-                            add_bcast_rows_init_short_with_dt(mm_bias_intermediate_cb_id, bias_cb_id);
+
+                            add_bcast_rows_init_short();
+                            // add_bcast_rows_init_short_with_dt(mm_bias_intermediate_cb_id, bias_cb_id);
+
+                            // RECONFIG unpacker df for src B...
+                            // hlk_reconfig_unpacker_df(core_ptr, HlkOperand::in1, HlkOperand::intermed0, HlkOperand::in0, HlkOperand::in3); //reconfig df for src B register
+                            unpack_reconfig_data_format(mm_bias_intermediate_cb_id, bias_cb_id);
+
+                            // RECONFIG packer df for out from intermed...
+                            // hlk_reconfig_packer_df(core_ptr, HlkOperand::intermed0, HlkOperand::out0);
+                            pack_reconfig_data_format(out_cb_id);
+
                             acquire_dst(tt::DstMode::Half);
                             for (uint32_t i = 0, j = 0; j < out_subblock_h; j++) {
                                 uint32_t bcast_tile_idx = in1_index_subblock_offset;
@@ -102,7 +113,15 @@ void MAIN {
                                 }
                             }
                             cb_pop_front(mm_bias_intermediate_cb_id, out_subblock_num_tiles);
+
                             // TODO: Need to reconfig for mm again if batch > 1
+                            // RECONFIG unpacker df for src B
+                            // hlk_reconfig_unpacker_df(core_ptr, HlkOperand::intermed0, HlkOperand::in1, HlkOperand::in3, HlkOperand::in0); //reconfig df for src B register
+                            unpack_reconfig_data_format(in1_cb_id, in0_cb_id);
+                            // MM INIT
+                            // hlk_mm_tile_init(core_ptr, args->transpose, args->in_tile_dims[0], args->in_tile_dims[1]);
+                            // mm_init(in0_cb_id, in1_cb_id, out_cb_id);
+                            mm_init_short();
                         #endif
                         // TODO: Can easily generalize for other sfpu activations
                         #ifdef FUSE_GELU_ACTIVATION

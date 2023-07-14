@@ -244,6 +244,14 @@ ALWI void copy_tile_to_dst_init_short_with_dt(uint32_t cbid) {
     MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE, false>() ));
 }
 
+ALWI void unpack_reconfig_data_format(const uint32_t srca_new_operand, const uint32_t srcb_new_operand) {
+    UNPACK(( llk_unpack_reconfig_data_format(srca_new_operand, srcb_new_operand) ));
+}
+
+ALWI void pack_reconfig_data_format(const uint32_t new_operand) {
+    PACK(( llk_pack_reconfig_data_format(new_operand) ));
+}
+
 ALWI void copy_tile_to_dst_init_short()
 {
     UNPACK(( llk_unpack_A_init<BroadcastType::NONE, false, false>()  ));
