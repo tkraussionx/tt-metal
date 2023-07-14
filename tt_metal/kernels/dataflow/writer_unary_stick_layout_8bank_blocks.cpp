@@ -20,20 +20,17 @@ void kernel_main() {
     constexpr uint32_t cb_id_out0 = tt::CB::c_out0;
 
     constexpr uint32_t TILE_HEIGHT = 32;                    // TODO: use common source of truth
+    constexpr uint32_t TILE_WIDTH = 32;                    // TODO: use common source of truth
 
     // TODO(agrebenisan): This isn't good... here we are assuming
     // that the stick size dictates tiles c, but stick size
     // doesn't necessarily need to be divisible by tiles c...
     // this is only the case really for tilize
-    const uint32_t block_ntiles_w = block_row_size / 64; // Assuming 2 bytes per datum, there are 64 bytes per tile row
+    const uint32_t block_ntiles_w = block_row_size / (datum_size(out_df) * TILE_WIDTH);
     const uint32_t block_ntiles_h = num_rows_block / TILE_HEIGHT;
     uint32_t start_block_row_id = 0;
 
-    // const InterleavedAddrGenFast<true> s = {
-    //     .bank_base_address = dst_addr,
-    //     .page_size = output_row_size,
-    //     .data_format = out_df
-    // };
+    // NOTE: Row-majow output, so cannot use fast version.
     const InterleavedAddrGen<true> s = {
         .bank_base_address = dst_addr,
         .page_size = output_row_size

@@ -19,21 +19,16 @@ void kernel_main() {
 
     const uint32_t tile_nbytes = get_tile_size(out_cb_id);
 
-    // constexpr uint32_t tile_size_pow2_exponent = 11;    // == 2^11 = 2048 = 2 * 32 * 32 (assuming dtype = 2 bytes)
-    // const InterleavedPow2AddrGen<true> s = {
+    // const InterleavedAddrGen<true> s = {
     //     .bank_base_address = out_addr,
-    //     .log_base_2_of_page_size = tile_size_pow2_exponent
+    //     .page_size = tile_nbytes
     // };
-    const InterleavedAddrGen<true> s = {
-        .bank_base_address = out_addr,
-        .page_size = tile_nbytes
-    };
 
-    // const InterleavedAddrGenFast<true> s = {
-    //     .bank_base_address = out_addr,
-    //     .page_size = tile_nbytes,
-    //     .data_format = out_df
-    // };
+    const InterleavedAddrGenFast<true> s = {
+        .bank_base_address = out_addr,
+        .page_size = tile_nbytes,
+        .data_format = out_df
+    };
 
     uint32_t out_sbh_start_tile_id = 0;
     for(uint32_t sbh = 0; sbh < out_num_subblocks_h; ++sbh) {
