@@ -38,6 +38,7 @@ BATCH_SIZE = 1
             2,
             2048,
             False,
+            100,
         ),
     ),
 )
@@ -49,6 +50,7 @@ def test_perf(
     num_decoders,
     max_position_embeddings,
     on_weka,
+    expected_inference_time,
 ):
     profiler = Profiler()
     disable_compile_cache()
