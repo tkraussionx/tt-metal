@@ -24,46 +24,56 @@ from utility_functions_new import (
     tt2torch_tensor,
 )
 from python_api_testing.models.inception_v4.tt.inception_v4_basicconv2d import (
-    TtIBasicConv2d,
+    TtBasicConv2d,
 )
 import torchvision.transforms as transforms
 import timm
 
 
-def run_test_basic_conv2d_inference(device, basic_conv2d_position, pcc):
+def run_test_basic_conv2d_inference(
+    device,
+    first_basic_conv2d_position,
+    second_basic_conv2d_position,
+    third_basic_conv2d_position,
+    pcc,
+):
     # load inception v4 model =================================================
     hugging_face_reference_model = timm.create_model("inception_v4", pretrained=True)
     hugging_face_reference_model.eval()
     state_dict = hugging_face_reference_model.state_dict()
 
     # get BasicConv2d module ==================================================
-    BasicConv2d = hugging_face_reference_model.features[basic_conv2d_position]
-    # print(f"EPS: {BasicConv2d.bn.eps}")
-    # sys.exit(0)
-
-    _in_channels = BasicConv2d.conv.in_channels
-    _out_channels = BasicConv2d.conv.out_channels
-    _kernel_size = BasicConv2d.conv.kernel_size[0]
-    _stride = BasicConv2d.conv.stride[0]
-
-    logger.debug(f"in_channels: {_in_channels}")
-    logger.debug(f"out_channels: {_out_channels}")
-    logger.debug(f"kernel_size: {_kernel_size}")
-    logger.debug(f"stride: {_stride}")
+    if second_basic_conv2d_position is None:
+        BasicConv2d = hugging_face_reference_model.features[first_basic_conv2d_position]
+    elif (second_basic_conv2d_position is not None) and (
+        third_basic_conv2d_position is None
+    ):
+        BasicConv2d = hugging_face_reference_model.features[first_basic_conv2d_position]
+        BasicConv2d = getattr(BasicConv2d, second_basic_conv2d_position)
+    else:
+        BasicConv2d = hugging_face_reference_model.features[first_basic_conv2d_position]
+        BasicConv2d = getattr(BasicConv2d, second_basic_conv2d_position)
+        BasicConv2d = getattr(BasicConv2d, third_basic_conv2d_position)
 
     # create input
     torch.manual_seed(0)
-    test_input = torch.rand(1, 3, 64, 64)
+    logger.debug(f"BasicConv2d: {BasicConv2d}")
+
+    # set in_channels variable (get Conv2d from BasicConv2d)
+    in_channels = BasicConv2d.conv.in_channels
+    test_input = torch.rand(1, in_channels, 64, 64)
 
     # Pytorch call =========================================================
     pt_out = BasicConv2d(test_input)
     logger.debug(f"pt_out shape: {pt_out.shape}")
 
     # tt call ==============================================================
-    tt_module = TtIBasicConv2d(
+    tt_module = TtBasicConv2d(
         device,
         hugging_face_reference_model,
-        basic_conv2d_position,
+        first_basic_conv2d_position,
+        second_basic_conv2d_position,
+        third_basic_conv2d_position,
     )
 
     # CHANNELS_LAST
@@ -87,7 +97,11 @@ def run_test_basic_conv2d_inference(device, basic_conv2d_position, pcc):
 
 
 # parameters: BasicConv2d position in the model
-_basic_conv2d_position = 0
+_first_basic_conv2d_position = 4  # numbers: 0, 1, ..., 21
+_second_basic_conv2d_position = (
+    "branch0"  # "branch0", "branch1", "branch2", "conv", None
+)
+_third_basic_conv2d_position = 0  # numbers: 0, 1, 2, 3, 4
 
 
 @pytest.mark.parametrize(
@@ -96,13 +110,25 @@ _basic_conv2d_position = 0
 )
 def test_basic_conv2d_inference(pcc):
     # Initialize the device
-    basic_conv2d_position = _basic_conv2d_position
+    first_basic_conv2d_position = _first_basic_conv2d_position
+    second_basic_conv2d_position = _second_basic_conv2d_position
+    third_basic_conv2d_position = (
+        str(_third_basic_conv2d_position)
+        if _third_basic_conv2d_position is not None
+        else None
+    )
 
     device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
     tt_lib.device.InitializeDevice(device)
     tt_lib.device.SetDefaultDevice(device)
     host = tt_lib.device.GetHost()
 
-    run_test_basic_conv2d_inference(device, basic_conv2d_position, pcc)
+    run_test_basic_conv2d_inference(
+        device,
+        first_basic_conv2d_position,
+        second_basic_conv2d_position,
+        third_basic_conv2d_position,
+        pcc,
+    )
 
     tt_lib.device.CloseDevice(device)
