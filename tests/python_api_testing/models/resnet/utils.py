@@ -26,6 +26,24 @@ def conv1x1(in_planes: int, out_planes: int, stride: int = 1, state_dict=None, b
     conv.weight = nn.Parameter(state_dict[f"{base_address}.weight"])
     return conv
 
+def fold_bn_to_conv_weights_bias(conv_weight, bn: torch.nn.BatchNorm2d) -> Tuple[nn.Parameter]:
+    # Note: this function is not used, however I am keeping it for reference
+    epsilon = bn.eps # Crucially important to use batchnorm's eps
+
+    bn_weight = bn.weight.unsqueeze(1).unsqueeze(1).unsqueeze(1)
+    bn_running_var = bn.running_var.unsqueeze(1).unsqueeze(1).unsqueeze(1)
+
+    weight = conv_weight
+    weight = (conv_weight / torch.sqrt(bn_running_var + epsilon)) * bn_weight
+
+    bn_running_mean = bn.running_mean.unsqueeze(1).unsqueeze(1).unsqueeze(1)
+    bn_bias = bn.bias.unsqueeze(1).unsqueeze(1).unsqueeze(1)
+
+    bias = -(bn_weight) * (bn_running_mean / torch.sqrt(bn_running_var + epsilon)) + bn_bias
+
+    bias = bias.squeeze(-1).squeeze(-1).squeeze(-1)
+
+    return (weight, bias)
 
 def fold_bn_to_conv(conv: torch.nn.Conv2d, bn: torch.nn.BatchNorm2d) -> Tuple[nn.Parameter]:
     # Note: this function is not used, however I am keeping it for reference
