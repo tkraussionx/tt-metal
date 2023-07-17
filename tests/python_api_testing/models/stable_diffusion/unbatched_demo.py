@@ -182,11 +182,16 @@ def demo():
         # predict the noise residual
         with torch.no_grad():
             # first forward pass; conditioned on the prompt
-            noise_pred_cond = unet(conditioned, t, encoder_hidden_states=text_embeddings).sample
+            noise_pred_cond = unet(conditioned, t, encoder_hidden_states=text_embeddings)
+            torch_noise_pred_cond = noise_pred_cond
             # second forward pass; un-conditioned
-            noise_pred_uncond = unet(unconditioned, t, encoder_hidden_states=uncond_embeddings).sample
+            noise_pred_uncond = unet(unconditioned, t, encoder_hidden_states=uncond_embeddings)
+            torch_noise_pred_uncond = noise_pred_uncond
+
         # perform guidance
         noise_pred = guide(noise_pred_uncond, noise_pred_cond, guidance_scale, t)
+        torch_noise_pred = noise_pred
+        break
         # compute the previous noisy sample x_t -> x_t-1
         latents = scheduler.step(noise_pred, t, latents).prev_sample
         latents_dict[iter] = latents
@@ -229,11 +234,17 @@ def demo():
         # predict the noise residual
         with torch.no_grad():
             tt_noise_pred_cond = tt_unet(tt_conditioned, _t_cond, encoder_hidden_states=tt_text_embeddings)
-            tt_noise_pred_uncond = tt_unet(tt_unconditioned, _t_uncond, encoder_hidden_states=tt_uncond_embeddings)
             noise_pred_cond = tt_to_torch_tensor(tt_noise_pred_cond, host)
+            tt_noise_pred_uncond = tt_unet(tt_unconditioned, _t_uncond, encoder_hidden_states=tt_uncond_embeddings)
             noise_pred_uncond = tt_to_torch_tensor(tt_noise_pred_uncond, host)
+
+
+
+
         # perform guidance
         noise_pred = guide(noise_pred_uncond, noise_pred_cond, guidance_scale, t)
+        logger.info(f"{comp_allclose_and_pcc(noise_pred, torch_noise_pred)}")
+        break
         # compute the previous noisy sample x_t -> x_t-1
         tt_latents = tt_scheduler.step(noise_pred, t, tt_latents).prev_sample
         save_image_and_latents(tt_latents, iter, vae, pre_fix=f"{experiment_name}_tt", pre_fix2="")
@@ -246,7 +257,7 @@ def demo():
         enable_compile_cache()
 
 
-    latents = last_latents
+    # latents = last_latents
     for key, val in pcc_res.items():
         logger.info(f"{key}, {val}")
     # scale and decode the image latents with vae
@@ -254,7 +265,7 @@ def demo():
     with torch.no_grad():
         image = vae.decode(latents).sample
 
-    # Image post-processing
+    # # Image post-processing
     image = (image / 2 + 0.5).clamp(0, 1)
     image = image.detach().cpu().permute(0, 2, 3, 1).numpy()
     images = (image * 255).round().astype("uint8")

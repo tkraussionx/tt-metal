@@ -31,8 +31,8 @@ class TtTimestepEmbedding(nn.Module):
                                     device=device)
         self.act = None
         if act_fn == "silu":
-            self.act = fallback_ops.silu
-            # self.act = ttl.tensor.silu
+            # self.act = fallback_ops.silu
+            self.act = ttl.tensor.silu
         elif act_fn == "mish":
             assert False, "tt does not support nn.Mish() yet"
             self.act = nn.Mish()

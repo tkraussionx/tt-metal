@@ -378,8 +378,8 @@ class UNet2DConditionModel(nn.Module):
                                                 biases=conv_norm_out_b
                                                 )
 
-        self.conv_act = fallback_ops.silu
-        # self.conv_act = ttl.tensor.silu
+        # self.conv_act = fallback_ops.silu
+        self.conv_act = ttl.tensor.silu
 
         conv_out_w = state_dict[f"{self.base_address_with_dot}conv_out.weight"]
         conv_out_b = state_dict[f"{self.base_address_with_dot}conv_out.bias"]

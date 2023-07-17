@@ -134,8 +134,8 @@ def demo():
     # prompt = ["car"]
     prompt = ["oil painting frame of Breathtaking mountain range with a clear river running through it, surrounded by tall trees and misty clouds, serene, peaceful, mountain landscape, high detail"]
 
-    height = 64                        # default height of Stable Diffusion
-    width = 64                         # default width of Stable Diffusion
+    height = 256                        # default height of Stable Diffusion
+    width = 256                         # default width of Stable Diffusion
     num_inference_steps = 2           # Number of denoising steps
     guidance_scale = 7.5                # Scale for classifier-free guidance
     generator = torch.manual_seed(174)    # 10233 Seed generator to create the inital latent noise
@@ -174,7 +174,9 @@ def demo():
         latent_model_input = latent_expansion(latents, scheduler, t)
         # predict the noise residual
         with torch.no_grad():
-            noise_pred = unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
+            noise_pred = unet(latent_model_input, t, encoder_hidden_states=text_embeddings)
+            latents_dict[iter] = noise_pred
+            break
         # perform guidance
         noise_pred = guide(noise_pred, guidance_scale, t)
         # compute the previous noisy sample x_t -> x_t-1
@@ -185,16 +187,7 @@ def demo():
         iter += 1
         # save things required!
 
-    latents = 1 / 0.18215 * latents
-    with torch.no_grad():
-        image = vae.decode(latents).sample
 
-    # Image post-processing
-    image = (image / 2 + 0.5).clamp(0, 1)
-    image = image.detach().cpu().permute(0, 2, 3, 1).numpy()
-    images = (image * 255).round().astype("uint8")
-    pil_images = [Image.fromarray(image) for image in images][0]
-    pil_images.save(f"{experiment_name}_torch.png")
 
     iter = 0
     last_latents = None
@@ -212,6 +205,8 @@ def demo():
         with torch.no_grad():
             tt_noise_pred = tt_unet(tt_latent_model_input, _t, encoder_hidden_states=tt_text_embeddings)
             noise_pred = tt_to_torch_tensor(tt_noise_pred, host)
+            pcc_res[iter] = comp_allclose_and_pcc(latents_dict[iter], noise_pred)
+            break
         # perform guidance
         noise_pred = guide(noise_pred, guidance_scale, t)
         # compute the previous noisy sample x_t -> x_t-1
@@ -226,20 +221,20 @@ def demo():
         enable_compile_cache()
 
 
-    latents = last_latents
+    # latents = last_latents
     for key, val in pcc_res.items():
         logger.info(f"{key}, {val}")
     # scale and decode the image latents with vae
-    latents = 1 / 0.18215 * latents
-    with torch.no_grad():
-        image = vae.decode(latents).sample
+    # latents = 1 / 0.18215 * latents
+    # with torch.no_grad():
+    #     image = vae.decode(latents).sample
 
-    # Image post-processing
-    image = (image / 2 + 0.5).clamp(0, 1)
-    image = image.detach().cpu().permute(0, 2, 3, 1).numpy()
-    images = (image * 255).round().astype("uint8")
-    pil_images = [Image.fromarray(image) for image in images][0]
-    pil_images.save(f"{experiment_name}_tt.png")
+    # # Image post-processing
+    # image = (image / 2 + 0.5).clamp(0, 1)
+    # image = image.detach().cpu().permute(0, 2, 3, 1).numpy()
+    # images = (image * 255).round().astype("uint8")
+    # pil_images = [Image.fromarray(image) for image in images][0]
+    # pil_images.save(f"{experiment_name}_tt.png")
 
 '''
 @article{patil2022stable,

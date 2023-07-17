@@ -125,12 +125,12 @@ class TtBasicTransformerBlock(nn.Module):
             norm1_bias = torch_to_tt_tensor_rm(norm1_bias, device)
 
 
-            # self.norm1 = partial(ttl.tensor.layernorm, eps=1e-5, gamma=norm1_weights, beta=norm1_bias)
+            self.norm1 = partial(ttl.tensor.layernorm, eps=1e-5, gamma=norm1_weights, beta=norm1_bias)
 
-            self.norm1 = fallback_ops.LayerNorm(weights=norm1_weights,
-                                                biases=norm1_bias,
-                                                normalized_shape=dim,
-                                                elementwise_affine=norm_elementwise_affine)
+            # self.norm1 = fallback_ops.LayerNorm(weights=norm1_weights,
+            #                                     biases=norm1_bias,
+            #                                     normalized_shape=dim,
+            #                                     elementwise_affine=norm_elementwise_affine)
 
         if cross_attention_dim is not None:
             # We currently only use AdaLayerNormZero for self attention where there will only be one attention block.
@@ -143,12 +143,12 @@ class TtBasicTransformerBlock(nn.Module):
             norm2_weights = torch_to_tt_tensor_rm(norm2_weights, device)
             norm2_bias = torch_to_tt_tensor_rm(norm2_bias, device)
 
-            # self.norm2 = partial(ttl.tensor.layernorm, eps=1e-5, gamma=norm2_weights, beta=norm2_bias)
+            self.norm2 = partial(ttl.tensor.layernorm, eps=1e-5, gamma=norm2_weights, beta=norm2_bias)
 
-            self.norm2 = fallback_ops.LayerNorm(weights=norm2_weights,
-                                                biases=norm2_bias,
-                                                normalized_shape=dim,
-                                                elementwise_affine=norm_elementwise_affine)
+            # self.norm2 = fallback_ops.LayerNorm(weights=norm2_weights,
+            #                                     biases=norm2_bias,
+            #                                     normalized_shape=dim,
+            #                                     elementwise_affine=norm_elementwise_affine)
         else:
             self.norm2 = None
 
@@ -159,12 +159,12 @@ class TtBasicTransformerBlock(nn.Module):
         norm3_weights = torch_to_tt_tensor_rm(norm3_weight, device)
         norm3_bias = torch_to_tt_tensor_rm(norm3_bias, device)
 
-        # self.norm3 = partial(ttl.tensor.layernorm, eps=1e-5, gamma=norm3_weights, beta=norm3_bias)
+        self.norm3 = partial(ttl.tensor.layernorm, eps=1e-5, gamma=norm3_weights, beta=norm3_bias)
 
-        self.norm3 = fallback_ops.LayerNorm(weights=norm3_weight,
-                                            biases=norm3_bias,
-                                            normalized_shape=dim,
-                                            elementwise_affine=norm_elementwise_affine)
+        # self.norm3 = fallback_ops.LayerNorm(weights=norm3_weight,
+        #                                     biases=norm3_bias,
+        #                                     normalized_shape=dim,
+        #                                     elementwise_affine=norm_elementwise_affine)
 
 
     def forward(
