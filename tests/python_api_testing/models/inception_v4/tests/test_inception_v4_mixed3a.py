@@ -30,32 +30,51 @@ import torchvision.transforms as transforms
 import timm
 
 
-def run_test_mixed3a_inference(device, pcc):
+def run_test_mixed3a_inference(
+    device,
+    first_basic_conv2d_position,
+    second_basic_conv2d_position,
+    third_basic_conv2d_position,
+    mixed3a_position,
+    eps,
+    momentum,
+    pcc,
+):
     # load inception v4 model =================================================
     hugging_face_reference_model = timm.create_model("inception_v4", pretrained=True)
     hugging_face_reference_model.eval()
     state_dict = hugging_face_reference_model.state_dict()
 
     # get BasiMixed3acConv2d module ==================================================
-    mixed3a_position = 3
     Mixed3a = hugging_face_reference_model.features[mixed3a_position]
 
     # create input
     torch.manual_seed(0)
-    test_input = torch.rand(1, 64, 128, 128)
+    # set in_channels variable (get Conv2d from BasicConv2d)
+    in_channels = Mixed3a.conv.conv.in_channels
+    test_input = torch.rand(1, in_channels, 128, 128)
 
     # Pytorch call =========================================================
     pt_out = Mixed3a(test_input)
     logger.debug(f"pt_out shape: {pt_out.shape}")
 
     # tt call ==============================================================
-    tt_module = TtMixed3a(device, hugging_face_reference_model, mixed3a_position)
+    tt_module = TtMixed3a(
+        device,
+        hugging_face_reference_model,
+        first_basic_conv2d_position,
+        second_basic_conv2d_position,
+        third_basic_conv2d_position,
+        eps,
+        momentum,
+    )
 
-    # CHANNELS_LAST
-    test_input = torch2tt_tensor(test_input, device)
-    tt_out = tt_module(test_input)
-    tt_out = tt2torch_tensor(tt_out)
-    logger.debug(f"tt_out shape: {tt_out.shape}")
+    with torch.no_grad():
+        tt_module.eval()
+        test_input = torch2tt_tensor(test_input, device)
+        tt_out = tt_module(test_input)
+        # tt_out = tt2torch_tensor(tt_out)
+        logger.debug(f"tt_out shape: {tt_out.shape}")
 
     _, comp_out = comp_allclose_and_pcc(pt_out, tt_out)
     logger.info(comp_out)
@@ -64,11 +83,22 @@ def run_test_mixed3a_inference(device, pcc):
     logger.info(pcc_message)
 
     if does_pass:
-        logger.info("test BasicConv2d Passed!")
+        logger.info("test Mixed3a Passed!")
     else:
-        logger.warning("test BasicConv2d Failed!")
+        logger.warning("test Mixed3a Failed!")
 
     assert does_pass
+
+
+# parameters: BasicConv2d position in the model
+_first_basic_conv2d_position = 3  # numbers: 0, 1, ..., 21
+_second_basic_conv2d_position = "conv"  # "branch0", "branch1", "branch2", "conv", None
+_third_basic_conv2d_position = None  # numbers: 0, 1, 2, 3, 4, None
+_mixed3a_position = 3
+
+# BatchNorm 2D
+_eps = 0.001
+_momentum = 0.1
 
 
 @pytest.mark.parametrize(
@@ -76,12 +106,33 @@ def run_test_mixed3a_inference(device, pcc):
     ((0.99,),),
 )
 def test_mixed3a_inference(pcc):
+    # set parameters
+    first_basic_conv2d_position = _first_basic_conv2d_position
+    second_basic_conv2d_position = _second_basic_conv2d_position
+    third_basic_conv2d_position = (
+        str(_third_basic_conv2d_position)
+        if _third_basic_conv2d_position is not None
+        else None
+    )
+    eps = _eps
+    momentum = _momentum
+    mixed3a_position = _mixed3a_position
+
     # Initialize the device
     device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
     tt_lib.device.InitializeDevice(device)
     tt_lib.device.SetDefaultDevice(device)
     host = tt_lib.device.GetHost()
 
-    run_test_mixed3a_inference(device, pcc)
+    run_test_mixed3a_inference(
+        device,
+        first_basic_conv2d_position,
+        second_basic_conv2d_position,
+        third_basic_conv2d_position,
+        mixed3a_position,
+        eps,
+        momentum,
+        pcc,
+    )
 
     tt_lib.device.CloseDevice(device)

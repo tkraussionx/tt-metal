@@ -25,6 +25,8 @@ class TtBasicConv2d(nn.Module):
         first_basic_conv2d_position,
         second_basic_conv2d_position=None,
         third_basic_conv2d_position=None,
+        eps=0.0001,
+        momentum=0.1,
     ) -> None:
         super().__init__()
         self.device = device
@@ -77,32 +79,15 @@ class TtBasicConv2d(nn.Module):
 
         self.tt_batch_norm_2d = create_batchnorm2d(
             out_channels,
+            eps,
+            momentum,
             hugging_face_reference_model.state_dict(),
             batch_norm2d_base_address,
         )
 
-        self.tt_batch_norm_2d.eval()
-
-        # logger
-        # hugging_face_reference_model.eval()
-        # state_dict = hugging_face_reference_model.state_dict()
-
-        # self.batch_norm_2d = nn.BatchNorm2d(num_features=out_channels, eps=0.001, momentum=0.1, track_running_stats=False)
-        # self.batch_norm_2d.weight = torch.nn.Parameter(state_dict[f"{batch_norm2d_base_address}.weight"])
-        # self.batch_norm_2d.bias = torch.nn.Parameter(state_dict[f"{batch_norm2d_base_address}.bias"])
-        # self.batch_norm_2d.running_mean = torch.nn.Parameter(state_dict[f"{batch_norm2d_base_address}.running_mean"])
-        # self.batch_norm_2d.running_var = torch.nn.Parameter(state_dict[f"{batch_norm2d_base_address}.running_var"])
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # TT implementation ---------------------------------
         x = self.tt_basic_conv2d(x)
-
-        # x = tt2torch_tensor(x)
-        # x = self.batch_norm_2d(x)
-        # x = torch.nn.ReLU()(x)
-
-        # x = torch2tt_tensor(x, self.device)
-
         x = self.tt_batch_norm_2d(x)
         x = tt_lib.tensor.relu(x)
 

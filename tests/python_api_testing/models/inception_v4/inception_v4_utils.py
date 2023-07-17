@@ -8,7 +8,9 @@ from utility_functions_new import (
 from tt_lib.fallback_ops import fallback_ops
 
 
-def create_batchnorm2d(out_ch, state_dict, base_address: str, device=None):
+def create_batchnorm2d(
+    out_ch, eps, momentum, state_dict, base_address: str, device=None
+):
     weight = torch_to_tt_tensor_rm(
         state_dict[f"{base_address}.weight"], device, put_on_device=False
     )
@@ -32,8 +34,8 @@ def create_batchnorm2d(out_ch, state_dict, base_address: str, device=None):
         running_variance,
         num_batches_tracked,
         out_ch,
-        eps=0.001,
-        momentum=0.1,
+        eps,
+        momentum,
     )
 
     return norm
