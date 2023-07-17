@@ -1,5 +1,4 @@
 #pragma once
-
 #include "llk_io_unpack.h"
 #include "llk_param_structs.h"
 
@@ -25,50 +24,42 @@ inline void llk_unpack_AB_matmul_mop_config(bool transpose) {
                                                             unpack_srca,
                                                             0, 0, 0);
     */
+#if SKIP_UNP0 == 1
+    static constexpr uint unpack_srca0 = TT_OP_NOP;
+    static constexpr uint unpack_srca1 = TT_OP_NOP;
+    static constexpr uint unpack_srca0_transpose = TT_OP_NOP;
+    static constexpr uint unpack_srca1_transpose = TT_OP_NOP;
+#else
+    static constexpr uint unpack_srca0 = TT_OP_UNPACR(SrcA, 0b1, 0, 0, 0, 1, 1, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
+    static constexpr uint unpack_srca1 = TT_OP_UNPACR(SrcA, 0b1, 0, 0, 0, 1, 1, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
 
-    //SrcB will be converted from row major to column major
-    static constexpr uint unpack_srcb_set_dvalid =
+    static constexpr uint unpack_srca0_transpose = TT_OP_UNPACR(SrcA, 0b10, 0, 0, 0, 1, 1, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
+    static constexpr uint unpack_srca1_transpose = TT_OP_UNPACR(SrcA, 0b10, 0, 0, 0, 1, 1, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
+#endif
+    // UNPACK SRCB Z 0,2,1,3
+    static constexpr uint unpack_src_set_z = TT_OP_SETADCZW(0b010, 0, 0, 0, 1, 0b0101);
+    static constexpr uint unpack_src_set_z_transpose = TT_OP_SETADCZW(0b011, 0, 0, 0, 1, 0b0101);
+#if SKIP_UNP1 == 1
+    static constexpr uint unpack_srcb_top = TT_OP_NOP;
+    static constexpr uint unpack_srcb_bot = TT_OP_NOP;
+#else
+    static constexpr uint unpack_srcb_top =
+        TT_OP_UNPACR(SrcB, 0b00010010, 0, 0, 0, 1, 0, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
+    static constexpr uint unpack_srcb_bot =
         TT_OP_UNPACR(SrcB, 0b00010010, 0, 0, 0, 1, 1, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
+#endif
+    ckernel_unpack_template tmp = ckernel_unpack_template(
+        true,  // src B
+        true,  // halo - just used for 4 unpacks
+        unpack_srcb_top,
+        unpack_srcb_bot,
+        transpose ? unpack_srca0_transpose : unpack_srca0,
+        transpose ? unpack_srca1_transpose : unpack_srca1,
+        0,
+        transpose ? unpack_src_set_z_transpose : unpack_src_set_z,
+        0);
 
-
-    if(transpose){
-        //SrcA unpacked as column major layout, follows src B
-        static constexpr uint unpack_srca_set_dvalid =
-            TT_OP_UNPACR(SrcA, 0b00010010, 0, 0, 0, 1, 1, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
-
-        const uint replay_buf_len = 7;
-        TTI_REPLAY(0, replay_buf_len, 0, 1);
-        TTI_UNPACR(SrcA, 0b00010010, 0, 0, 0, 1, 0 /*Don't Set Dvalid*/, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
-        TTI_UNPACR(SrcB, 0b00010010, 0, 0, 0, 1, 0 /*Don't Set Dvalid*/, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
-        TTI_UNPACR(SrcA, 0b00010010, 0, 0, 0, 1, 0 /*Don't Set Dvalid*/, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
-        TTI_UNPACR(SrcB, 0b00010010, 0, 0, 0, 1, 0 /*Don't Set Dvalid*/, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
-        TTI_SETADCZW(0b011, 0, 0, 0, 1, 0b0001); // UNPACK SRC A and B Z 0,2,1,3
-        TTI_UNPACR(SrcA, 0b00010010, 0, 0, 0, 1, 0 /*Don't Set Dvalid*/, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
-        TTI_UNPACR(SrcB, 0b00010010, 0, 0, 0, 1, 0 /*Don't Set Dvalid*/, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
-        ckernel_template tmp(1 /*outerloop*/, 1 /*innerloop*/, TT_OP_REPLAY(0, replay_buf_len, 0, 0));
-        tmp.set_end_ops(unpack_srca_set_dvalid, unpack_srcb_set_dvalid);
-
-        tmp.program(instrn_buffer);
-    }else{
-        //SrcA unpacked as row major layout
-        static constexpr uint unpack_srca_set_dvalid =
-            TT_OP_UNPACR(SrcA, 0b1, 0, 0, 0, 1, 1, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
-
-        const uint replay_buf_len = 7;
-        TTI_REPLAY(0, replay_buf_len, 0, 1);
-        TTI_UNPACR(SrcA,        0b1, 0, 0, 0, 1, 0 /*Don't Set Dvalid*/, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
-        TTI_UNPACR(SrcB, 0b00010010, 0, 0, 0, 1, 0 /*Don't Set Dvalid*/, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
-        TTI_UNPACR(SrcA,        0b1, 0, 0, 0, 1, 0 /*Don't Set Dvalid*/, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
-        TTI_UNPACR(SrcB, 0b00010010, 0, 0, 0, 1, 0 /*Don't Set Dvalid*/, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
-        TTI_SETADCZW(0b010, 0, 0, 0, 1, 0b0001); // UNPACK SRCB Z 0,2,1,3
-        TTI_UNPACR(SrcA,        0b1, 0, 0, 0, 1, 0 /*Don't Set Dvalid*/, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
-        TTI_UNPACR(SrcB, 0b00010010, 0, 0, 0, 1, 0 /*Don't Set Dvalid*/, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
-        ckernel_template tmp(1 /*outerloop*/, 1 /*innerloop*/, TT_OP_REPLAY(0, replay_buf_len, 0, 0));
-        tmp.set_end_ops(unpack_srca_set_dvalid, unpack_srcb_set_dvalid);
-
-        tmp.program(instrn_buffer);
-    }
-
+    tmp.program(instrn_buffer);
 }
 
 template<bool is_fp32_dest_acc_en = false>
@@ -89,7 +80,16 @@ inline void llk_unpack_AB_matmul_hw_configure_disaggregated(
     llk_unpack_AB_matmul_hw_configure<is_fp32_dest_acc_en>(&unpack_AB_matmul_params);
 }
 
-inline void llk_unpack_AB_matmul_init(const std::uint32_t transpose=0) { llk_unpack_AB_matmul_mop_config(transpose != 0); }
+inline void llk_unpack_AB_matmul_init(const std::uint32_t transpose=0) {
+    llk_unpack_AB_matmul_mop_config(transpose != 0);
+    // also turn on within_face_16x16_transpose if it was turned off by datacopy at runtime
+    // on WH, the unpacker performs both transpose of faces as well as transpose each face.
+    // the former is configured in mop, the latter is configured in cfg register in hw_configure
+    // in large matmul, datacopy will disable the transpose of faces, so we need it turn it back on for matmul.
+
+    // Don't Transpose in metal
+    // cfg_reg_rmw_tensix<THCON_SEC0_REG2_Haloize_mode_RMW>(transpose);
+}
 
 inline void llk_unpack_AB_matmul(
     std::uint32_t operandA, std::uint32_t operandB, std::uint32_t tile_index_a, std::uint32_t tile_index_b) {
@@ -127,21 +127,13 @@ inline void llk_unpack_AB_matmul(
     // Stall unpacker until pending CFG writes from Trisc have completed
     // TTI_STALLWAIT(p_stall::STALL_UNPACK, p_stall::TRISC_CFG);
 
-#ifdef PERF_DUMP
-    if (record_perf_events && !first_unpack_recorded) {
-        uint32_t event_id_first_unpack = perf::get_event_id(
-            0, 0, perf::EventType::UNPACK_FIRST_INSTRUCTION, current_outer_loop_iter);
-        record_timestamp_64b(event_id_first_unpack);
-        first_unpack_recorded = true;
-    }
-#endif
-
     // Run MOP
-    ckernel_template::run(instrn_buffer);
+    mop_run(0, 2);
 
     // T6::SEMGET for context release
     t6_semaphore_get(semaphore::UNPACK_SYNC);
 
     // Switch unpacker config context
     switch_config_context(unp_cfg_context);
+
 }

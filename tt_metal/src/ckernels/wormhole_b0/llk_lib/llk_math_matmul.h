@@ -6,7 +6,6 @@
 
 #include "cmath_common.h"
 #include "llk_math_common.h"
-#include "debug_print.h"
 
 #ifndef HF
 #define HF 0
@@ -18,31 +17,49 @@ using namespace ckernel;
 inline void matmul_configure_addrmod();
 inline void matmul_configure_mop();
 
-template <int NUM_FIDELITY_PHASES>
+template <int NUM_FIDELITY_PHASES, DstTileFaceLayout FaceLayout=DstTileFaceLayout::RowMajor>
 inline void llk_math_matmul(uint dst_index) {
     math::set_dst_write_addr<DstTileLayout::Default, DstTileShape::Tile32x32>(dst_index);
 
     constexpr bool high_fidelity = (NUM_FIDELITY_PHASES > 0);
 
-    if constexpr (high_fidelity) {
-        ckernel_template::run(instrn_buffer);
-        ckernel_template::run(instrn_buffer);
-        TTI_INCRWC(2, 0, 8, 0);
-        TTI_INCRWC(2, 0, 8, 0);
-        TTI_INCRWC(2, 0, 8, 0);
-        TTI_INCRWC(2, 0, 8, 0);
-        TTI_SETRWC(p_setrwc::CLR_NONE, 0, 0, 0, 0, p_setrwc::SET_D);
-        ckernel_template::run(instrn_buffer);
-        ckernel_template::run(instrn_buffer);  // Run 4 times
-        TTI_SETRWC(p_setrwc::CLR_AB, 0, 0, 0, 0, p_setrwc::SET_ABD);
+    if constexpr (FaceLayout == DstTileFaceLayout::ColMajor) {
+        if constexpr (high_fidelity) {
+            ckernel_template::run(instrn_buffer);
+            ckernel_template::run(instrn_buffer);
+            TTI_SETRWC(p_setrwc::CLR_B, 0, 0, 0, 0, p_setrwc::SET_D);
+            ckernel_template::run(instrn_buffer);
+            ckernel_template::run(instrn_buffer);  // Run 4 times
+            TTI_SETRWC(p_setrwc::CLR_B, 0, 0, 0, 0, p_setrwc::SET_D);
+        } else {
+            ckernel_template::run(instrn_buffer);
+            ckernel_template::run(instrn_buffer);  // Run mop twice
+        }
     } else {
-        ckernel_template::run(instrn_buffer);
-        ckernel_template::run(instrn_buffer);  // Run mop twice
-        TTI_SETRWC(p_setrwc::CLR_AB, 0, 0, 0, 0, 0);
+        if constexpr (high_fidelity) {
+            for (int j=0; j<2; j++) {
+                for (int i=0; i<NUM_FIDELITY_PHASES; i++) {
+                    ckernel_template::run(instrn_buffer);
+                }
+                TTI_SETRWC(p_setrwc::CLR_A, p_setrwc::CR_D, 8, 0, 0, p_setrwc::SET_D);          // DEST = 8, DEST_CR = 8
+                TTI_SETRWC(p_setrwc::CLR_NONE, p_setrwc::CR_D, 8, 0, 0, p_setrwc::SET_D_F);     // DEST = 16, DEST_CR = 16, FIDELITY_PHASE = 0
+                for (int i=0; i<NUM_FIDELITY_PHASES; i++) {
+                    ckernel_template::run(instrn_buffer);
+                }
+                TTI_SETRWC(p_setrwc::CLR_AB, 0, 0, 0, 0, p_setrwc::SET_D_F);                      // DEST = 0, DEST_CR = 0, FIDELITY_PHASE = 0
+            }
+        } else {
+            ckernel_template::run(instrn_buffer);
+            ckernel_template::run(instrn_buffer);
+            TTI_SETRWC(p_setrwc::CLR_B, 0, 0, 0, 0, p_setrwc::SET_D);
+            ckernel_template::run(instrn_buffer);
+            ckernel_template::run(instrn_buffer);
+            TTI_SETRWC(p_setrwc::CLR_B, 0, 0, 0, 0, p_setrwc::SET_D);
+        }
     }
 }
 
-template <int NUM_FIDELITY_PHASES>
+template <int NUM_FIDELITY_PHASES, DstTileFaceLayout FaceLayout=DstTileFaceLayout::RowMajor>
 inline void matmul_configure_addrmod() {
     // MVMUL does D = B*A
 
@@ -60,83 +77,133 @@ inline void matmul_configure_addrmod() {
 
     constexpr bool high_fidelity = (NUM_FIDELITY_PHASES > 0);
 
-    if constexpr (high_fidelity) {
-        // Fidelity Loop
-        // DEST -- CR on dest for next fidelity phase
-        // SRCB -- CR on srcB for next fidelity phase
-        // SRCA -- CR on srcA for next fidelity phase
-        // Fidelity -- increment phase
-        addr_mod_t{
-            .srca = {.incr = 0, .clr = 0, .cr = 1},
-            .srcb = {.incr = 0, .clr = 0, .cr = 1},
-            .dest = {.incr = 0, .clr = 0, .cr = 1},
-            .fidelity = {.incr = 1, .clr = 0}}
-            .set(ADDR_MOD_1);
+    if constexpr (FaceLayout == DstTileFaceLayout::ColMajor) {
 
-        // Last outer loop,
-        // DEST -- keep incrementing
-        // SRCB -- CR to either go back to beginning or to next 32x16
-        // SRCA -- increment to next 16x16
-        // Fidelity -- reset fidelity
-        addr_mod_t{
-            .srca = {.incr = 16, .clr = 0, .cr = 1},
-            .srcb = {.incr =  0, .clr = 0, .cr = 1},
-            .dest = {.incr = 32, .clr = 0, .cr = 1},
-            .fidelity = {.incr = 0, .clr = 1}}
-            .set(ADDR_MOD_2);
-    }
-    else {
+        if constexpr (high_fidelity) {
+            // Fidelity Loop
+            // DEST -- CR on dest for next fidelity phase
+            // SRCB -- Go back to beginning of srcB + Clear B Dvalid
+            // SRCA -- Clear A Dvalid
+            // Fidelity -- increment phase
+            addr_mod_t{
+                .srca = {.incr = 0, .clr = 1, .cr = 0},
+                .srcb = {.incr = 0, .clr = 1, .cr = 0},
+                .dest = {.incr = 0, .clr = 0, .cr = 1},
+                .fidelity = {.incr = 1, .clr = 0}}
+                .set(ADDR_MOD_1);
+        } else {
+            // Last outer loop,
+            // DEST -- CR on dest for next fidelity phase
+            // SRCB -- Go back to beginning of srcB + Clear B Dvalid
+            // SRCA -- Clear A Dvalid
+            // Fidelity -- increment phase
+            addr_mod_t{
+                .srca = {.incr = 0, .clr = 1, .cr = 0},
+                .srcb = {.incr = 0, .clr = 1, .cr = 0},
+                .dest = {.incr = 0, .clr = 1, .cr = 1},
+                .fidelity = {.incr = 0, .clr = 0}}
+                .set(ADDR_MOD_1);
+
+        }
+
         // Last inner loop,
         // DEST -- keep incrementing
-        // SRCB -- CR to either go back to beginning or to next 32x16
-        // SRCA -- increment to next 16x16
+        // SRCB -- Go back to beginning of srcB
+        // SRCA -- Clear A Dvalid
         // Fidelity -- reset fidelity
         addr_mod_t{
-            .srca = {.incr = 16, .clr = 0, .cr = 0},
-            .srcb = {.incr =  0, .clr = 0, .cr = 1},
+            .srca = {.incr = 0, .clr = 1, .cr = 0},
+            .srcb = {.incr = 0, .clr = 1, .cr = 0},
             .dest = {.incr = 32, .clr = 0, .cr = 1},
             .fidelity = {.incr = 0, .clr = 1}}
             .set(ADDR_MOD_2);
 
-        // Last outer loop,
-        // DEST -- clear and CR on dest for next 32x16 x 16x16 matmul to accumulate on top
-        // SRCB -- increment to next 32x16
-        // SRCA -- increment to next 16x16
-        addr_mod_t{
-            .srca = {.incr = 16, .clr = 0, .cr = 0},
-            .srcb = {.incr = 32, .clr = 0, .cr = 1},
-            .dest = {.incr = 0, .clr = 1, .cr = 1},
-            .fidelity = {.incr = 0, .clr = 0}}
-            .set(ADDR_MOD_3);
+        if constexpr (!high_fidelity) {
+         // Last outer loop,
+         // DEST -- CR on dest for next fidelity phase
+         // SRCB -- Go back to beginning of srcB + Clear B Dvalid
+         // SRCA -- Clear A Dvalid
+         // Fidelity -- increment phase
+         addr_mod_t{
+             .srca = {.incr = 0, .clr = 1, .cr = 0},
+             .srcb = {.incr = 0, .clr = 1, .cr = 0},
+             .dest = {.incr = 0, .clr = 1, .cr = 1},
+             .fidelity = {.incr = 0, .clr = 0}}
+             .set(ADDR_MOD_3);
+        }
+    } else {
+
+        if constexpr (high_fidelity) {
+
+            addr_mod_t{
+                .srca = {.incr = 0, .clr = 1, .cr = 0},
+                .srcb = {.incr = 8, .clr = 0, .cr = 0},
+                .dest = {.incr = 24, .clr = 0, .cr = 0},
+                .fidelity = {.incr = 0, .clr = 0}}
+                .set(ADDR_MOD_1);
+
+            addr_mod_t{
+                .srca = {.incr = 0, .clr = 1, .cr = 0},
+                .srcb = {.incr = 0, .clr = 1, .cr = 0},
+                .dest = {.incr = 0, .clr = 0, .cr = 1},
+                .fidelity = {.incr = 1, .clr = 0}}
+                .set(ADDR_MOD_2);
+        } else {
+            addr_mod_t{
+                .srca = {.incr = 0, .clr = 1, .cr = 0},
+                .srcb = {.incr = 8, .clr = 0, .cr = 0},
+                .dest = {.incr = 24, .clr = 0, .cr = 0},
+                .fidelity = {.incr = 0, .clr = 0}}
+                .set(ADDR_MOD_1);
+
+            addr_mod_t{
+                .srca = {.incr = 0, .clr = 1, .cr = 0},
+                .srcb = {.incr = 0, .clr = 1, .cr = 0},
+                .dest = {.incr = 16, .clr = 0, .cr = 1},
+                .fidelity = {.incr = 0, .clr = 0}}
+                .set(ADDR_MOD_2);
+        }
     }
 }
 
-template <int NUM_FIDELITY_PHASES>
+template <int NUM_FIDELITY_PHASES, DstTileFaceLayout FaceLayout=DstTileFaceLayout::RowMajor>
 inline void matmul_configure_mop(bool transpose) {
     constexpr bool high_fidelity = (NUM_FIDELITY_PHASES > 0);
 
     constexpr uint32_t num_inner_loops = 32 >> 3; //8 rows produced per op
 
-    if constexpr (high_fidelity) {
-        ckernel_template tmp(NUM_FIDELITY_PHASES, num_inner_loops, TT_OP_MVMUL(p_setrwc::CLR_NONE, 0, ADDR_MOD_0, 0));
-        tmp.set_last_inner_loop_instr(TT_OP_MVMUL(p_setrwc::CLR_NONE, 0, ADDR_MOD_1, 0));
-        tmp.set_last_outer_loop_instr(TT_OP_MVMUL(p_setrwc::CLR_NONE, 0, ADDR_MOD_2, 0));
-        tmp.set_start_op(TT_OP_STALLWAIT(p_stall::STALL_MATH, p_stall::SRCA_VLD|p_stall::SRCB_VLD));
-        tmp.program(instrn_buffer);
+    if constexpr (FaceLayout == DstTileFaceLayout::ColMajor) {
+        if constexpr (high_fidelity) {
+            ckernel_template tmp(NUM_FIDELITY_PHASES, num_inner_loops, TT_OP_MVMUL(p_setrwc::CLR_NONE, 0, ADDR_MOD_0, 0));
+            tmp.set_last_inner_loop_instr(TT_OP_MVMUL(p_setrwc::CLR_NONE, 0, ADDR_MOD_1, 0));
+            tmp.set_last_outer_loop_instr(TT_OP_MVMUL(p_setrwc::CLR_A, 0, ADDR_MOD_2, 0));
+            tmp.program(instrn_buffer);
+        } else {
+            // performs a 32x16 x 16x32 matmul
+            ckernel_template tmp(2, num_inner_loops, TT_OP_MVMUL(p_setrwc::CLR_NONE, 0, ADDR_MOD_0, 0));
+            tmp.set_last_inner_loop_instr(TT_OP_MVMUL(p_setrwc::CLR_A, 0, ADDR_MOD_2, 0));
+            tmp.set_last_outer_loop_instr(TT_OP_MVMUL(p_setrwc::CLR_AB, 0, ADDR_MOD_3, 0));
+            tmp.program(instrn_buffer);
+        }
     } else {
-        // performs a 32x16 x 16x32 matmul
-        ckernel_template tmp(2, num_inner_loops, TT_OP_MVMUL(p_setrwc::CLR_NONE, 0, ADDR_MOD_0, 0));
-        tmp.set_last_inner_loop_instr(TT_OP_MVMUL(p_setrwc::CLR_NONE, 0, ADDR_MOD_2, 0));
-        tmp.set_last_outer_loop_instr(TT_OP_MVMUL(p_setrwc::CLR_NONE, 0, ADDR_MOD_3, 0));
-        tmp.set_start_op(TT_OP_STALLWAIT(p_stall::STALL_MATH, p_stall::SRCA_VLD|p_stall::SRCB_VLD));
+        if constexpr (high_fidelity) {
+            ckernel_template tmp(NUM_FIDELITY_PHASES, num_inner_loops/2, TT_OP_MVMUL(p_setrwc::CLR_NONE, 0, ADDR_MOD_0, 0));
+            tmp.set_last_inner_loop_instr(TT_OP_MVMUL(p_setrwc::CLR_NONE, 0, ADDR_MOD_1, 0));
+            tmp.set_last_outer_loop_instr(TT_OP_MVMUL(p_setrwc::CLR_NONE, 0, ADDR_MOD_2, 0));
+            tmp.program(instrn_buffer);
+        } else {
+            ckernel_template tmp(2, num_inner_loops/2, TT_OP_MVMUL(p_setrwc::CLR_NONE, 0, ADDR_MOD_0, 0));
+            tmp.set_last_inner_loop_instr(TT_OP_MVMUL(p_setrwc::CLR_NONE, 0, ADDR_MOD_1, 0));
+            tmp.set_last_outer_loop_instr(TT_OP_MVMUL(p_setrwc::CLR_A, 0, ADDR_MOD_2, 0));
+            tmp.program(instrn_buffer);
+        }
 
-        tmp.program(instrn_buffer);
     }
 }
 
-template <int NUM_FIDELITY_PHASES>
+template <int NUM_FIDELITY_PHASES, DstTileFaceLayout FaceLayout=DstTileFaceLayout::RowMajor>
 inline void llk_math_matmul_init(std::uint32_t transpose=0) {
-    matmul_configure_addrmod<NUM_FIDELITY_PHASES>();
-    matmul_configure_mop<NUM_FIDELITY_PHASES>(transpose != 0);
+    matmul_configure_addrmod<NUM_FIDELITY_PHASES, FaceLayout>();
+    matmul_configure_mop<NUM_FIDELITY_PHASES, FaceLayout>(transpose>0);
     math::reset_counters(p_setrwc::SET_ABD_F);
 }

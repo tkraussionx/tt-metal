@@ -55,8 +55,8 @@ namespace ckernel {
 
 ALWI void mm_init(uint32_t in0_cb_id = 0, uint32_t in1_cb_id = 1, uint32_t out_cb_id = 16) {
     UNPACK(( llk_setup_operands() ));
-    UNPACK(( llk_unpack_AB_matmul_init() ));
     UNPACK(( llk_unpack_AB_matmul_hw_configure_disaggregated(in0_cb_id, in1_cb_id) ));
+    UNPACK(( llk_unpack_AB_matmul_init() ));
 
     MATH(( llk_math_matmul_init<MATH_FIDELITY>() ));
     MATH(( llk_math_pack_sync_init<SYNC>()  ));
