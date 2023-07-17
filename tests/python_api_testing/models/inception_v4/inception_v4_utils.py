@@ -32,6 +32,8 @@ def create_batchnorm2d(out_ch, state_dict, base_address: str, device=None):
         running_variance,
         num_batches_tracked,
         out_ch,
+        eps=0.001,
+        momentum=0.1,
     )
 
     return norm

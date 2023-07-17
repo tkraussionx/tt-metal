@@ -81,6 +81,8 @@ class TtBasicConv2d(nn.Module):
             batch_norm2d_base_address,
         )
 
+        self.tt_batch_norm_2d.eval()
+
         # logger
         # hugging_face_reference_model.eval()
         # state_dict = hugging_face_reference_model.state_dict()
