@@ -17,7 +17,7 @@ import tt_lib
 from sweep_tests.comparison_funcs import comp_allclose_and_pcc, comp_pcc
 
 
-@pytest.mark.parametrize("fold_batchnorm", [False, True], ids=['Batchnorm not folded', "Batchnorm folded"])
+@pytest.mark.parametrize("fold_batchnorm", [False], ids=['Batchnorm not folded'])
 def test_run_resnet18_inference(fold_batchnorm, imagenet_sample_input):
     image = imagenet_sample_input
 

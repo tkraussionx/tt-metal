@@ -4,14 +4,14 @@ import tt_lib
 import torch
 import torch.nn as nn
 
-from utils import conv3x3, conv1x1, fold_bn_to_conv
+from utils import conv3x3, conv1x1, fold_bn_to_conv, fold_bn_to_conv_weights_bias
 from utility_functions_new import pad_by_zero, unpad_from_zero
 from tt_lib.utils import pad_weight
 
 from tt_lib.fused_ops.linear import Linear as TtLinear
 from tt_lib.fused_ops.softmax import softmax as TtSoftmax
 from conv_on_device_utils_new import is_conv_supported_on_device, run_conv_on_device_wrapper
-
+from tt_lib.fallback_ops import fallback_ops
 
 class Bottleneck(nn.Module):
     # Bottleneck in torchvision places the stride for downsampling at 3x3 convolution(self.conv2)
@@ -185,11 +185,7 @@ class BasicBlock(nn.Module):
         # Both self.conv1 and self.downsample layers downsample the input when stride != 1
 
         conv1_weight = state_dict[f"{base_address}.conv1.weight"]
-        self.conv1_params = [planes, inplanes, 3, 3, stride, stride, 1, 1, dilation, groups]
-        if not self.fold_batchnorm and is_conv_supported_on_device(self.conv1_params):
-            self.conv1 = run_conv_on_device_wrapper(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device, self.host)
-        else:
-            self.conv1 = conv3x3(inplanes, planes, stride, state_dict=state_dict, base_address=f"{base_address}.conv1")
+        conv1_bias = None
 
         self.bn1 = norm_layer(planes)
         self.bn1.weight = nn.Parameter(state_dict[f"{self.base_address}.bn1.weight"])
@@ -218,11 +214,16 @@ class BasicBlock(nn.Module):
         self.bn2.eval()
 
         if self.fold_batchnorm:
-            self.conv1.weight, self.conv1.bias = fold_bn_to_conv(self.conv1, self.bn1)
+            conv1_weight, conv1_bias = fold_bn_to_conv_weights_bias(conv1_weight, self.bn1)
             self.conv2.weight, self.conv2.bias = fold_bn_to_conv(self.conv2, self.bn2)
             self.bn1 = nn.Identity()
             self.bn2 = nn.Identity()
 
+        self.conv1_params = [planes, inplanes, 3, 3, stride, stride, 1, 1, dilation, groups]
+        if is_conv_supported_on_device(self.conv1_params):
+            self.conv1 = run_conv_on_device_wrapper(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device, self.host)
+        else:
+            self.conv1 = fallback_ops.Conv2d(conv1_weight, conv1_bias, inplanes, planes, kernel_size=3, stride=1, padding=1)
 
         self.downsample = downsample
         self.stride = stride
