@@ -49,7 +49,6 @@ class TtCodeGenAttention(nn.Module):
 
         #self.scale_attn = torch.sqrt(torch.tensor(self.head_dim, dtype=torch.float32)).to(torch.get_default_dtype())
 
-
         self.weight_qkv_proj = state_dict[f"{base_address}.qkv_proj.weight"]
         self.weight_out_proj = state_dict[f"{base_address}.out_proj.weight"]
 
@@ -112,6 +111,7 @@ class TtCodeGenAttention(nn.Module):
         #mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
 
         attn_weights = torch.where(causal_mask, attn_weights, mask_value)
+        t3 = ttl.tensor.where(t0, t1, t2)
 
         if attention_mask is not None:
             # Apply the attention mask
@@ -176,7 +176,7 @@ class TtCodeGenAttention(nn.Module):
             k_rot = fallback_ops.tensor_slice(key, slice_list_rot)
 
             k_rot = key[:, :, :, : self.rotary_dim]
-            k_pass = key[:, :, :, self.rotary_dim :]
+            k_pass = key[:, :, :, slice(self.rotary_dim,key.shape[3]) ]
 
             q_rot = query[:, :, :, : self.rotary_dim]
             q_pass = query[:, :, :, self.rotary_dim :]
@@ -190,7 +190,7 @@ class TtCodeGenAttention(nn.Module):
         else:
             sincos = fixed_pos_embedding(key, 1, seq_len=seq_len)
             key = apply_rotary_pos_emb(key, sincos, offset=offset)
-            query = apply_rotary_pos_emb(query, sincos, offset=offset)
+            query = codegen_apply_rotary_pos_emb.tt_apply_rotary_pos_emb(query, sincos, offset=offset)
 
         key = key.permute(0, 2, 1, 3)
         query = query.permute(0, 2, 1, 3)
@@ -209,7 +209,7 @@ class TtCodeGenAttention(nn.Module):
         # compute self-attention: V x Softmax(QK^T)
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
-        attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_dim)
+        attn_output = codegen_merge_heads.tt_merge_heads(attn_output, self.num_attention_heads, self.head_dim)
         attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 

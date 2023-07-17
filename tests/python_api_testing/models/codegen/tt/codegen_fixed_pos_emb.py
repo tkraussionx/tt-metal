@@ -14,7 +14,7 @@ from utility_functions_new import (
 
 
 # Copied from transformers.models.gptj.modeling_gptj.fixed_pos_embedding
-def pt_fixed_pos_embed(x, seq_dim=1, seq_len=None):
+def pt_fixed_pos_emb(x, seq_dim=1, seq_len=None):
     dim = x.shape[-1]
     if seq_len is None:
         seq_len = x.shape[seq_dim]
@@ -28,7 +28,7 @@ def pt_fixed_pos_embed(x, seq_dim=1, seq_len=None):
     return torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)
 
 
-def tt_fixed_pos_embed(x, device, seq_dim=1, seq_len=None):
+def tt_fixed_pos_emb(x, device, seq_dim=1, seq_len=None):
 
     x_shape = x.shape()
     dim = x_shape[-1]
@@ -45,11 +45,9 @@ def tt_fixed_pos_embed(x, device, seq_dim=1, seq_len=None):
 
     sinusoid_inp = torch.einsum("i , j -> i j", pt_aranged, inv_freq)
 
-
     tt_sinusoid_inp = torch2tt_tensor(sinusoid_inp, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
 
     tt_sin = tt_lib.tensor.sin(tt_sinusoid_inp)
     tt_cos = tt_lib.tensor.cos(tt_sinusoid_inp)
-    print(tt_sin)
 
     return tt_sin, tt_cos

@@ -15,11 +15,11 @@ from utility_functions_new import (
 # Copied from transformers.models.gptj.modeling_gptj.rotate_every_two
 def pt_rotate_every_two(x):
     x1 = x[:, :, :, ::2]
+    print(x1)
     x2 = x[:, :, :, 1::2]
     x = torch.stack((-x2, x1), dim=-1)
     res = x.flatten(-2)
     print(res.shape)
-    print(res)
     return x.flatten(-2)  # in einsum notation: rearrange(x, '... d j -> ... (d j)')
 
 
@@ -28,7 +28,9 @@ def tt_rotate_every_two(x):
     x_shape = x.shape()
     slice_list_1 = [slice(None), slice(None), slice(None), slice(0, x_shape[3],2)]
     x1 = fallback_ops.tensor_slice(x, slice_list_1)
-
+    #x1.print()
+    pt_x1=tt2torch_tensor(x1)
+    print(pt_x1)
     slice_list_2 = [slice(None), slice(None), slice(None), slice(1, x_shape[3],2)]
     x2 = fallback_ops.tensor_slice(x, slice_list_2)
 
