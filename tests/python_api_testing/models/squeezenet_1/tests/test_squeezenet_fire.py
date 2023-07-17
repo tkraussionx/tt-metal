@@ -79,9 +79,9 @@ def run_test_fire_inference(device, fire_position, pcc):
     logger.info(pcc_message)
 
     if does_pass:
-        logger.info("test_Squeezenet_Fire Passed!")
+        logger.info("test Squeezenet 1.0 Fire Passed!")
     else:
-        logger.warning("test_Squeezenet_Fire Failed!")
+        logger.warning("test Squeezenet 1.0 Fire Failed!")
 
     assert does_pass
 

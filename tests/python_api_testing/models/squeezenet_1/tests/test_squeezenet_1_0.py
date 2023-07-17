@@ -28,21 +28,19 @@ from utility_functions_new import (
 from python_api_testing.models.squeezenet_1.tt.squeezenet_1 import squeezenet_1_0
 import torchvision.transforms as transforms
 from torchvision.models import squeezenet1_0, SqueezeNet1_0_Weights
-from python_api_testing.models.squeezenet_1.squeezenet_utils import download_image
 
 
-def run_test_squeezenet_inference(device, pcc):
+def run_test_squeezenet_inference(device, model_location_generator, pcc):
     # load squeezenet model ================================================
     hugging_face_reference_model = squeezenet1_0(weights=SqueezeNet1_0_Weights.DEFAULT)
     hugging_face_reference_model.eval()
     state_dict = hugging_face_reference_model.state_dict()
 
-    # take input
-    download_image("tests/python_api_testing/models/squeezenet_1/demo")
-
-    input_path = os.path.join(
-        "tests/python_api_testing/models/squeezenet_1/demo", "input_image.jpg"
-    )
+    # take input from weka
+    image_name = "dog.jpg"
+    data_path = model_location_generator("tt_dnn-models/SqueezeNet/data/")
+    data_image_path = str(data_path / "images")
+    input_path = os.path.join(data_image_path, image_name)
     input_image = Image.open(input_path)
 
     preprocess = transforms.Compose(
@@ -76,9 +74,9 @@ def run_test_squeezenet_inference(device, pcc):
     logger.info(pcc_message)
 
     if does_pass:
-        logger.info("test_Squeezenet Passed!")
+        logger.info("test Squeezenet 1.0 Passed!")
     else:
-        logger.warning("test_Squeezenet Failed!")
+        logger.warning("test Squeezenet 1.0 Failed!")
 
     assert does_pass
 
@@ -87,7 +85,7 @@ def run_test_squeezenet_inference(device, pcc):
     "pcc",
     ((0.99,),),
 )
-def test_squeezenet_inference(pcc):
+def test_squeezenet_1_0_inference(model_location_generator, pcc):
     # Initialize the device
     device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
     tt_lib.device.InitializeDevice(device)
@@ -95,5 +93,5 @@ def test_squeezenet_inference(pcc):
 
     host = tt_lib.device.GetHost()
 
-    run_test_squeezenet_inference(device, pcc)
+    run_test_squeezenet_inference(device, model_location_generator, pcc)
     tt_lib.device.CloseDevice(device)

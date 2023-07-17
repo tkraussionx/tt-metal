@@ -29,13 +29,6 @@ from python_api_testing.models.squeezenet_1.tt.squeezenet_1 import (
 import tt_lib
 
 
-# FILE = Path(__file__).resolve()
-# ROOT = FILE.parents[0]  # SqueezeNet root directory
-# if str(ROOT) not in sys.path:
-#     sys.path.append(str(ROOT))  # add ROOT to PATH
-# ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
-
-
 def run_squeezenet_demo(device, model_location_generator):
     random.seed(42)
     torch.manual_seed(42)
