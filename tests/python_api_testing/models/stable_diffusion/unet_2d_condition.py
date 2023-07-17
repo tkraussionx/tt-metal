@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch.nn as nn
-
+import tt_lib as ttl
 from utils import make_linear
 from embeddings import TtTimestepEmbedding as TimestepEmbedding
 from downblock_2d import TtDownBlock2D as DownBlock2D
@@ -379,6 +379,7 @@ class UNet2DConditionModel(nn.Module):
                                                 )
 
         self.conv_act = fallback_ops.silu
+        # self.conv_act = ttl.tensor.silu
 
         conv_out_w = state_dict[f"{self.base_address_with_dot}conv_out.weight"]
         conv_out_b = state_dict[f"{self.base_address_with_dot}conv_out.bias"]

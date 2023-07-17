@@ -137,8 +137,8 @@ def demo():
     # height and width much be divisible by 32, and can be as little as 64x64
     # 64x64 images are not coherent; but useful for a quick pcc test.
 
-    height = 64                        # default height of Stable Diffusion
-    width = 64                         # default width of Stable Diffusion
+    height = 256                        # default height of Stable Diffusion
+    width = 256                         # default width of Stable Diffusion
     num_inference_steps = 2           # Number of denoising steps
     guidance_scale = 7.5               # Scale for classifier-free guidance
     generator = torch.manual_seed(174)    # 10233 Seed generator to create the inital latent noise

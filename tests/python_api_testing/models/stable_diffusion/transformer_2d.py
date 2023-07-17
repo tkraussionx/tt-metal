@@ -8,6 +8,7 @@ sys.path.append(f"{f}/../../../..")
 sys.path.append(f"{f}/../../../../..")
 
 from typing import Optional
+from functools import partial
 
 import torch.nn as nn
 import torch
@@ -123,16 +124,13 @@ class TtBasicTransformerBlock(nn.Module):
             norm1_weights = torch_to_tt_tensor_rm(norm1_weights, device)
             norm1_bias = torch_to_tt_tensor_rm(norm1_bias, device)
 
-            from functools import partial
-            # input, eps, gamma, beta, mem_config
-            logger.info("making the first partial layernorm func")
-            self.norm1 = partial(ttl.tensor.layernorm, eps=1e-5, gamma=norm1_weights, beta=norm1_bias)
-            # xtt_data = tt_lib.tensor.layernorm(xt, eps)
 
-            # self.norm1 = fallback_ops.LayerNorm(weights=norm1_weights,
-            #                                     biases=norm1_bias,
-            #                                     normalized_shape=dim,
-            #                                     elementwise_affine=norm_elementwise_affine)
+            # self.norm1 = partial(ttl.tensor.layernorm, eps=1e-5, gamma=norm1_weights, beta=norm1_bias)
+
+            self.norm1 = fallback_ops.LayerNorm(weights=norm1_weights,
+                                                biases=norm1_bias,
+                                                normalized_shape=dim,
+                                                elementwise_affine=norm_elementwise_affine)
 
         if cross_attention_dim is not None:
             # We currently only use AdaLayerNormZero for self attention where there will only be one attention block.
@@ -145,12 +143,12 @@ class TtBasicTransformerBlock(nn.Module):
             norm2_weights = torch_to_tt_tensor_rm(norm2_weights, device)
             norm2_bias = torch_to_tt_tensor_rm(norm2_bias, device)
 
-            self.norm2 = partial(ttl.tensor.layernorm, eps=1e-5, gamma=norm2_weights, beta=norm2_bias)
+            # self.norm2 = partial(ttl.tensor.layernorm, eps=1e-5, gamma=norm2_weights, beta=norm2_bias)
 
-            # self.norm2 = fallback_ops.LayerNorm(weights=norm2_weights,
-            #                                     biases=norm2_bias,
-            #                                     normalized_shape=dim,
-            #                                     elementwise_affine=norm_elementwise_affine)
+            self.norm2 = fallback_ops.LayerNorm(weights=norm2_weights,
+                                                biases=norm2_bias,
+                                                normalized_shape=dim,
+                                                elementwise_affine=norm_elementwise_affine)
         else:
             self.norm2 = None
 
@@ -161,12 +159,12 @@ class TtBasicTransformerBlock(nn.Module):
         norm3_weights = torch_to_tt_tensor_rm(norm3_weight, device)
         norm3_bias = torch_to_tt_tensor_rm(norm3_bias, device)
 
-        self.norm3 = partial(ttl.tensor.layernorm, eps=1e-5, gamma=norm3_weights, beta=norm3_bias)
+        # self.norm3 = partial(ttl.tensor.layernorm, eps=1e-5, gamma=norm3_weights, beta=norm3_bias)
 
-        # self.norm3 = fallback_ops.LayerNorm(weights=norm3_weight,
-        #                                     biases=norm3_bias,
-        #                                     normalized_shape=dim,
-        #                                     elementwise_affine=norm_elementwise_affine)
+        self.norm3 = fallback_ops.LayerNorm(weights=norm3_weight,
+                                            biases=norm3_bias,
+                                            normalized_shape=dim,
+                                            elementwise_affine=norm_elementwise_affine)
 
 
     def forward(
@@ -185,7 +183,7 @@ class TtBasicTransformerBlock(nn.Module):
 
         else:
             logger.info("running norm1")
-            norm_hidden_states = self.norm1(input=hidden_states)
+            norm_hidden_states = self.norm1(hidden_states)
             logger.info("end of norm1")
 
         # 1. Self-Attention
@@ -207,7 +205,7 @@ class TtBasicTransformerBlock(nn.Module):
         if self.attn2 is not None:
             logger.info("running norm2")
             norm_hidden_states = (
-                self.norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.norm2(input=hidden_states)
+                self.norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.norm2(hidden_states)
             )
             logger.info("end of norm2")
             # 2. Cross-Attention

@@ -105,10 +105,12 @@ class TtResnetBlock2D(nn.Module):
         if non_linearity == "swish":
 
             self.nonlinearity = fallback_ops.silu
+            # self.nonlinearity = ttl.tensor.silu
         elif non_linearity == "mish":
             assert False, "Mish is not implemented!"
         elif non_linearity == "silu":
             self.nonlinearity = fallback_ops.silu
+            # self.nonlinearity = ttl.tensor.silu
 
         self.upsample = self.downsample = None
         if self.up:
