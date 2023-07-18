@@ -99,9 +99,14 @@ def make_tt_unet(state_dict, device):
     return tt_unet
 
 @pytest.mark.parametrize(
-    "expected_inference_time",
-    ([400]),)
-def test_perf(use_program_cache, expected_inference_time):
+    "expected_inference_time, expected_compile_time",
+    (
+        (400,
+         75,
+        ),
+    ),
+)
+def test_perf(use_program_cache, expected_inference_time, expected_compile_time):
     profiler = Profiler()
     first_key = "first_iter"
     second_key = "second_iter"
@@ -258,9 +263,12 @@ def test_perf(use_program_cache, expected_inference_time):
             tt_noise_pred_cond = tt_unet(
                 tt_conditioned, _t_cond, encoder_hidden_states=tt_text_embeddings
             )
+            ttl.device.Synchronize()
+
             tt_noise_pred_uncond = tt_unet(
                 tt_unconditioned, _t_uncond, encoder_hidden_states=tt_uncond_embeddings
             )
+            ttl.device.Synchronize()
             noise_pred_cond = tt_to_torch_tensor(tt_noise_pred_cond, host)
             noise_pred_uncond = tt_to_torch_tensor(tt_noise_pred_uncond, host)
         # perform guidance
@@ -277,15 +285,23 @@ def test_perf(use_program_cache, expected_inference_time):
 
     first_iter_time = profiler.get(first_key)
     second_iter_time = profiler.get(second_key)
+    ttl.device.CloseDevice(device)
+
+    compile_time = first_iter_time - second_iter_time
+
     cpu_time = profiler.get(cpu_key)
+    comments = f"image size: {height}x{width} - v1.4"
 
     prep_report(
         "unbatched_stable_diffusion",
         BATCH_SIZE,
         first_iter_time,
         second_iter_time,
-        f"image size: {height}x{width} - v1.4",
+        comments,
         cpu_time,
     )
-    logger.info(f"Unbatched Stable Diffusion inference time: {second_iter_time}")
-    assert second_iter_time < expected_inference_time, "Unabtched Stable Diffusion is too slow"
+    logger.info(f"Unbatched Stable Diffusion {comments} inference time: {second_iter_time}")
+    logger.info(f"Unbatched Stable Diffusion {comments} compile time: {compile_time}")
+
+    assert second_iter_time < expected_inference_time, f"Unabtched Stable Diffusion {comments} is too slow"
+    assert compile_time < expected_compile_time, f"Unabtched Stable Diffusion {comments} compile time is too slow"

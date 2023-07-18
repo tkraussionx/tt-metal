@@ -25,9 +25,10 @@ env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/bloom
 
 env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/deit/tests/perf_deit.py
 
+env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/vgg/tests/perf_vgg.py
+
 env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/stable_diffusion/perf_unbatched_stable.py
 
-env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/vgg/tests/perf_vgg.py
 
 ## Merge all the generated reports
 env python tests/python_api_testing/models/merge_perf_results.py
