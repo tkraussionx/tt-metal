@@ -5,6 +5,7 @@
 
 
 SliceRange sr = SliceRange{ .h0 = 0, .h1 = 32, .hs = 8, .w0 = 0, .w1 = 32, .ws = 8 };
+// SliceRange sr = SliceRange{ .h0 = 0, .h1 = 32, .hs = 4, .w0 = 0, .w1 = 32, .ws = 8 };
 
 inline void tilize_in(
     uint32_t in_cb_id,
@@ -13,7 +14,8 @@ inline void tilize_in(
     uint32_t in_num_subblocks,
     uint32_t out_cb_id) {
 
-    tilize_init_short(in_cb_id, in_block_w);
+    tilize_init_short_with_dt(in_cb_id, in_block_w);
+    // tilize_init_short(in_cb_id, in_block_w);
     for (uint32_t in_subblock = 0; in_subblock < in_num_subblocks; ++in_subblock) {
         for (uint32_t h = 0; h < in_subblock_h; ++h) {
             cb_wait_front(in_cb_id, in_block_w);
@@ -23,7 +25,8 @@ inline void tilize_in(
             cb_pop_front(in_cb_id, in_block_w);
         }
     }
-    tilize_uninit();
+    tilize_uninit_with_dt();
+    // tilize_uninit();
 } // tilize_in()
 
 inline void reblock_and_untilize(
@@ -45,6 +48,7 @@ inline void reblock_and_untilize(
 
         // Reblock
         copy_tile_to_dst_init_short();
+        // unpack_reconfig_data_format(interm_cb_id, interm_cb_id);
         cb_reserve_back(reblock_cb_id, out_block_w);
         for (uint32_t n = 0; n < num_out_subblocks_in_col; n++) {
             for (uint32_t w = 0; w < out_subblock_w; w++) {
@@ -58,6 +62,8 @@ inline void reblock_and_untilize(
         }
         cb_push_back(reblock_cb_id, out_block_w);
 
+        // PACK(( DPRINT << "REBLOCKED " << TileSlice(reblock_cb_id, 0, sr) << ENDL() ));
+
         // Untilize
         untilize_init_short(reblock_cb_id);
         cb_wait_front(reblock_cb_id, out_block_w);
@@ -66,6 +72,9 @@ inline void reblock_and_untilize(
         cb_pop_front(reblock_cb_id, out_block_w);
         cb_push_back(out_cb_id, out_block_w);
         untilize_uninit(reblock_cb_id);
+        // unpack_reconfig_data_format(1, 0);
+
+        // PACK(( DPRINT << "UNTILIZED " << TileSlice(out_cb_id, 0, sr) << ENDL() ));
 
         within_block_index += out_subblock_w;
     }
@@ -141,11 +150,15 @@ void MAIN {
                             }
                             cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
                             // Reconfigure srcA back
-                            mm_init_short_with_dt(matmul_partials_cb);
+                            // mm_init_short_with_dt(matmul_partials_cb);
+                            mm_init_short();
+                            unpack_reconfig_data_format(in1_cb_id, in0_cb_id);
                         } // enable_reload
                         // Compute output sub-block from in0_subblock x in1_subblock
                         int dst_index = 0;
                         int in0_index_h_offset = 0;
+                        // PACK(( DPRINT << "IN0 " << TileSlice(in0_cb_id, 0, sr) << ENDL() ));
+                        // PACK(( DPRINT << "IN1 " << TileSlice(in1_cb_id, 0, sr) << ENDL() ));
                         for (uint32_t h = 0; h < out_subblock_h; ++h) {
                             for (uint32_t w = 0; w < out_subblock_w; ++w) {
                                 int in1_index_inner_dim_offset = 0;
@@ -162,16 +175,21 @@ void MAIN {
                             } // for out_subblock_w
                             in0_index_h_offset += in0_block_w;
                         } // for out_subblock_h
+                        uint32_t tmp_out_cb_id = last_out ? (untilize_out ? untilize_mode_final_matmul_partials_cb : out_cb_id) : matmul_partials_cb;
+                        // pack_reconfig_data_format(out_cb_id);
                         pack_matmul_subblock(last_out
                                                 ? (untilize_out
                                                     ? untilize_mode_final_matmul_partials_cb
                                                     : out_cb_id)
                                                 : matmul_partials_cb,
                                              out_subblock_num_tiles);
+                        // PACK(( DPRINT << "OUT " << TileSlice(tmp_out_cb_id, 0, sr) << ENDL() ));
                         release_dst(tt::DstMode::Half);
                         in1_index_subblock_offset += out_subblock_w;
                     } // for in1_num_subblocks
                     if (last_out && untilize_out) {
+                        unpack_reconfig_data_format(untilize_mode_final_matmul_partials_cb, untilize_mode_final_matmul_partials_cb);
+                        // pack_reconfig_data_format(out_cb_id);
                         reblock_and_untilize(
                             in1_num_subblocks,
                             out_subblock_num_tiles,
@@ -182,10 +200,10 @@ void MAIN {
                             untilize_mode_reblock_cb,
                             out_cb_id);
                         mm_init_short();
+                        unpack_reconfig_data_format(in1_cb_id, in0_cb_id);
                     } // last_out
                     in0_index_subblock_offset += in0_subblock_num_tiles;
                 }
-
                 if (spill) enable_reload = true;
 
                 cb_pop_front(tilize_in0 ? tilized_in0_cb_id : in0_cb_id, in0_block_num_tiles);

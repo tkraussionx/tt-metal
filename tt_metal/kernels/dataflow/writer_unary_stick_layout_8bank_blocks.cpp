@@ -20,20 +20,18 @@ void kernel_main() {
     constexpr uint32_t cb_id_out0 = tt::CB::c_out0;
 
     constexpr uint32_t TILE_HEIGHT = 32;                    // TODO: use common source of truth
+    constexpr uint32_t TILE_WIDTH = 32;
 
     // TODO(agrebenisan): This isn't good... here we are assuming
     // that the stick size dictates tiles c, but stick size
     // doesn't necessarily need to be divisible by tiles c...
     // this is only the case really for tilize
-    const uint32_t block_ntiles_w = block_row_size / 64; // Assuming 2 bytes per datum, there are 64 bytes per tile row
+    // const uint32_t block_ntiles_w = block_row_size / (datum_size(out_df) * TILE_WIDTH);
+    const uint32_t block_ntiles_w = block_row_size / (2 * TILE_WIDTH);
     const uint32_t block_ntiles_h = num_rows_block / TILE_HEIGHT;
     uint32_t start_block_row_id = 0;
 
-    // const InterleavedAddrGenFast<true> s = {
-    //     .bank_base_address = dst_addr,
-    //     .page_size = output_row_size,
-    //     .data_format = out_df
-    // };
+    // NOTE: Cannot use 'fast' version for RM.
     const InterleavedAddrGen<true> s = {
         .bank_base_address = dst_addr,
         .page_size = output_row_size
@@ -44,7 +42,7 @@ void kernel_main() {
             for(uint32_t block_w = 0; block_w < num_blocks_w; block_w++) {
                 uint32_t block_row_id = start_block_row_id;
                 for (uint32_t tile_row_id = 0; tile_row_id < block_ntiles_h; tile_row_id++) {
-                    // We reserve back an entire row of tiles in a block and issue a bunch of reads
+                    // We reserve back an entire row of tiles in a block and issue a bunch of writes
                     cb_wait_front(cb_id_out0, block_ntiles_w);
                     uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
                     for (uint32_t j = 0; j < TILE_HEIGHT; j++) {

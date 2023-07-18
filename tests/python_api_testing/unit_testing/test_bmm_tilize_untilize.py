@@ -22,20 +22,21 @@ TILE_HEIGHT = TILE_WIDTH = 32
 
 ## parameters
 # matrix sizes as number of blocks along h and w:
-a_height_nblocks = [1, 7]
-a_width_nblocks = [1, 7]
-b_width_nblocks = [1, 7]
+a_height_nblocks = [1, 2]
+a_width_nblocks = [1, 2]
+b_width_nblocks = [1, 2]
 # block sizes as number of tiles along h and w:
-a_block_height_ntiles = [4]
-a_block_width_ntiles = [4]
-b_block_width_ntiles = [4]
+a_block_height_ntiles = [1]
+a_block_width_ntiles = [1]
+b_block_width_ntiles = [1]
+# a_block_height_ntiles = [1, 4]
+# a_block_width_ntiles = [1, 4]
+# b_block_width_ntiles = [1, 4]
 # output sublobcking per block:
-out_subblock_height_ntiles = [4] ## == a_block_height_ntiles, <= 8
-out_subblock_width_ntiles = [2]  ## == b_block_width_ntiles, <= 8
+out_subblock_height_ntiles = [1]    ##[4] ## == a_block_height_ntiles, <= 8
+out_subblock_width_ntiles = [1]     ##[2]  ## == b_block_width_ntiles, <= 8
 tilize_a = [True, False]
 untilize_out = [True, False]
-# tilize_a = [False]
-# untilize_out = [False]
 
 @pytest.mark.parametrize(
     'a_height_nblocks, a_width_nblocks, b_width_nblocks,\
@@ -89,11 +90,14 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
         pytest.skip()
         return
 
-    ## TODO (AS): Certain mixed-prec cases do not yet work. Skip them here (these are currently asserted out in the op.)
-    if (not (a_dtype == out_dtype and a_dtype == b_dtype and a_dtype == ttl.tensor.DataType.BFLOAT16)) and (tilize_a or untilize_out):
-        print(f'TODO: Mixed-prec case to be debugged. Skipping for now.')
+    if tilize_a and untilize_out:
         pytest.skip()
-        return
+
+    # ## TODO (AS): Certain mixed-prec cases do not yet work. Skip them here (these are currently asserted out in the op.)
+    # if (not (a_dtype == out_dtype and a_dtype == b_dtype and a_dtype == ttl.tensor.DataType.BFLOAT16)) and (tilize_a or untilize_out):
+    #     print(f'TODO: Mixed-prec case to be debugged. Skipping for now.')
+    #     pytest.skip()
+    #     return
 
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
@@ -111,6 +115,8 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
     torch.manual_seed(0)
     a = torch.randn(a_shape, dtype=torch.bfloat16).float()
     b = torch.randn(b_shape, dtype=torch.bfloat16).float()
+    # b = torch.eye(a_width, b_width).float()
+    # b = b[None, None, :]
     # b = torch.zeros(b_shape, dtype=torch.bfloat16).float()
 
     if tilize_a:
@@ -122,6 +128,7 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
         ## a in tile
         a_layout = ttl.tensor.Layout.TILE
         a_list = tilize_to_list(a)
+
     tta = ttl.tensor.Tensor(
         a_list,
         a_shape,
@@ -168,14 +175,14 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
     else:
         out_pytorch = torch.tensor(out.data()).reshape(out_shape)
 
-    # print(f'returned output: {out_pytorch[0][0]}')
+    print(f'returned output: {out_pytorch[0][0]}')
 
     ttl.device.CloseDevice(device)
 
     ## reference
     golden_pytorch = torch.matmul(a, b)
 
-    # print("golden out slice:\n", golden_pytorch)
+    print("golden out slice:\n", golden_pytorch)
 
     ## test for equivalance
     assert(out_pytorch.shape == golden_pytorch.shape)

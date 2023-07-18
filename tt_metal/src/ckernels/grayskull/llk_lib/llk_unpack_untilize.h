@@ -95,7 +95,6 @@ inline void llk_unpack_untilize_init(const uint32_t operand) {
 
 inline void llk_unpack_untilize_uninit(uint32_t operand) {
     wait_for_idle();
-
     configure_unpack_AB(operand, operand, 16, 16, false, true);
 }
 
