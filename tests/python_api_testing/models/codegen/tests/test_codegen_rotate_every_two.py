@@ -35,7 +35,7 @@ def run_codegen_rotate_every_two_test(device, pcc):
 
     pt_out = codegen_rotate_every_two.pt_rotate_every_two(test_in)
 
-    tt_out = codegen_rotate_every_two.tt_rotate_every_two(tt_test_in)
+    tt_out = codegen_rotate_every_two.tt_rotate_every_two(tt_test_in, device)
 
     tt_out_converted = tt2torch_tensor(tt_out)
 
