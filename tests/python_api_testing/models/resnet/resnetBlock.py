@@ -54,11 +54,7 @@ class Bottleneck(nn.Module):
         # Both self.conv2 and self.downsample layers downsample the input when stride != 1
 
         conv1_weight = state_dict[f"{base_address}.conv1.weight"]
-        self.conv1_params = [width, inplanes, 1, 1, 1, 1, 0, 0, dilation, groups]
-        if not self.fold_batchnorm and is_conv_supported_on_device(self.conv1_params):
-            self.conv1 = run_conv_on_device_wrapper(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device, self.host)
-        else:
-            self.conv1 = conv1x1(inplanes, width, state_dict=state_dict, base_address=f"{base_address}.conv1")
+        conv1_bias = None
 
         self.bn1 = norm_layer(width)
         self.bn1.weight = nn.Parameter(state_dict[f"{self.base_address}.bn1.weight"])
@@ -69,11 +65,7 @@ class Bottleneck(nn.Module):
         self.bn1.eval()
 
         conv2_weight = state_dict[f"{base_address}.conv2.weight"]
-        self.conv2_params = [width, width, 3, 3, stride, stride, 1, 1, dilation, groups]
-        if not self.fold_batchnorm and is_conv_supported_on_device(self.conv2_params):
-            self.conv2 = run_conv_on_device_wrapper(conv2_weight.reshape(-1).tolist(), self.conv2_params, self.device, self.host)
-        else:
-            self.conv2 = conv3x3(width, width, stride, groups, dilation, state_dict=state_dict, base_address=f"{base_address}.conv2")
+        conv2_bias = None
 
         self.bn2 = norm_layer(width)
         self.bn2.weight = nn.Parameter(state_dict[f"{self.base_address}.bn2.weight"])
@@ -84,11 +76,7 @@ class Bottleneck(nn.Module):
         self.bn2.eval()
 
         conv3_weight = state_dict[f"{base_address}.conv3.weight"]
-        self.conv3_params = [planes * self.expansion, width, 1, 1, 1, 1, 0, 0, dilation, groups]
-        if not self.fold_batchnorm and is_conv_supported_on_device(self.conv3_params):
-            self.conv3 = run_conv_on_device_wrapper(conv3_weight.reshape(-1).tolist(), self.conv3_params, self.device, self.host)
-        else:
-            self.conv3 = conv1x1(width, planes * self.expansion, state_dict=state_dict, base_address=f"{base_address}.conv3")
+        conv3_bias = None
 
         self.bn3 = norm_layer(planes * self.expansion)
         self.bn3.weight = nn.Parameter(state_dict[f"{self.base_address}.bn3.weight"])
@@ -103,12 +91,30 @@ class Bottleneck(nn.Module):
         self.stride = stride
 
         if self.fold_batchnorm:
-            self.conv1.weight, self.conv1.bias = fold_bn_to_conv(self.conv1, self.bn1)
-            self.conv2.weight, self.conv2.bias = fold_bn_to_conv(self.conv2, self.bn2)
-            self.conv3.weight, self.conv3.bias = fold_bn_to_conv(self.conv3, self.bn3)
+            conv1_weight, conv1_bias = fold_bn_to_conv_weights_bias(conv1_weight, self.bn1)
+            conv2_weight, conv2_bias = fold_bn_to_conv_weights_bias(conv2_weight, self.bn2)
+            conv3_weight, conv3_bias = fold_bn_to_conv_weights_bias(conv3_weight, self.bn3)
             self.bn1 = nn.Identity()
             self.bn2 = nn.Identity()
             self.bn3 = nn.Identity()
+
+        self.conv1_params = [width, inplanes, 1, 1, 1, 1, 0, 0, dilation, groups]
+        if is_conv_supported_on_device(self.conv1_params):
+            self.conv1 = run_conv_on_device_wrapper(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device, self.host, conv1_bias if conv1_bias is not None else None)
+        else:
+            self.conv1 = fallback_ops.Conv2d(conv1_weight, conv1_bias, inplanes, width, kernel_size=1, stride=1, padding=0)
+
+        self.conv2_params = [width, width, 3, 3, stride, stride, 1, 1, dilation, groups]
+        if is_conv_supported_on_device(self.conv2_params):
+            self.conv2 = run_conv_on_device_wrapper(conv2_weight.reshape(-1).tolist(), self.conv2_params, self.device, self.host, conv2_bias if conv2_bias is not None else None)
+        else:
+            self.conv2 = fallback_ops.Conv2d(conv2_weight, conv2_bias, width, width, kernel_size=3, stride=1, padding=1)
+
+        self.conv3_params = [planes * self.expansion, width, 1, 1, 1, 1, 0, 0, dilation, groups]
+        if is_conv_supported_on_device(self.conv3_params):
+            self.conv3 = run_conv_on_device_wrapper(conv3_weight.reshape(-1).tolist(), self.conv3_params, self.device, self.host, conv3_bias if conv3_bias is not None else None)
+        else:
+            self.conv3 = fallback_ops.Conv2d(conv3_weight, conv3_bias, width, planes * self.expansion, kernel_size=1, stride=1, padding=0)
 
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -130,7 +136,6 @@ class Bottleneck(nn.Module):
         out = self.bn3(out)
 
         if self.downsample_conv_on_tt is not None:
-            print("Running downsample conv on tt")
             identity = self.downsample_conv_on_tt(x)
             assert self.norm_layer_after_downsample_conv_on_tt is not None
             identity = self.norm_layer_after_downsample_conv_on_tt(identity)
@@ -198,11 +203,7 @@ class BasicBlock(nn.Module):
         self.relu = tt_lib.tensor.relu
 
         conv2_weight = state_dict[f"{base_address}.conv2.weight"]
-        self.conv2_params = [planes, planes, 3, 3, 1, 1, 1, 1, dilation, groups]
-        if not self.fold_batchnorm and is_conv_supported_on_device(self.conv2_params):
-            self.conv2 = run_conv_on_device_wrapper(conv2_weight.reshape(-1).tolist(), self.conv2_params, self.device, self.host)
-        else:
-            self.conv2 = conv3x3(planes, planes, state_dict=state_dict, base_address=f"{base_address}.conv2")
+        conv2_bias = None
 
         self.bn2 = norm_layer(planes)
 
@@ -215,15 +216,21 @@ class BasicBlock(nn.Module):
 
         if self.fold_batchnorm:
             conv1_weight, conv1_bias = fold_bn_to_conv_weights_bias(conv1_weight, self.bn1)
-            self.conv2.weight, self.conv2.bias = fold_bn_to_conv(self.conv2, self.bn2)
+            conv2_weight, conv2_bias = fold_bn_to_conv_weights_bias(conv2_weight, self.bn2)
             self.bn1 = nn.Identity()
             self.bn2 = nn.Identity()
 
         self.conv1_params = [planes, inplanes, 3, 3, stride, stride, 1, 1, dilation, groups]
         if is_conv_supported_on_device(self.conv1_params):
-            self.conv1 = run_conv_on_device_wrapper(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device, self.host)
+            self.conv1 = run_conv_on_device_wrapper(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device, self.host, conv1_bias.tolist() if conv1_bias is not None else None)
         else:
             self.conv1 = fallback_ops.Conv2d(conv1_weight, conv1_bias, inplanes, planes, kernel_size=3, stride=1, padding=1)
+
+        self.conv2_params = [planes, planes, 3, 3, 1, 1, 1, 1, dilation, groups]
+        if is_conv_supported_on_device(self.conv2_params):
+            self.conv2 = run_conv_on_device_wrapper(conv2_weight.reshape(-1).tolist(), self.conv2_params, self.device, self.host, conv2_bias.tolist() if conv2_bias is not None else None)
+        else:
+            self.conv2 = fallback_ops.Conv2d(conv2_weight, conv2_bias, planes, planes, kernel_size=3, stride=1, padding=1)
 
         self.downsample = downsample
         self.stride = stride
@@ -245,7 +252,6 @@ class BasicBlock(nn.Module):
             out = self.bn2(out)
 
         if self.downsample_conv_on_tt is not None:
-            print("Running downsample conv on tt")
             identity = self.downsample_conv_on_tt(x)
             assert self.norm_layer_after_downsample_conv_on_tt is not None
             identity = self.norm_layer_after_downsample_conv_on_tt(identity)
@@ -305,12 +311,7 @@ class ResNet(nn.Module):
         self.base_width = width_per_group
 
         conv1_weight = state_dict[f"{self.base_address_with_dot}conv1.weight"]
-        self.conv1_params = [self.inplanes, 3, 7, 7, 2, 2, 3, 3, 1, groups]
-        if not self.fold_batchnorm and is_conv_supported_on_device(self.conv1_params):
-            self.conv1 = run_conv_on_device_wrapper(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device, self.host)
-        else:
-            self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
-            self.conv1.weight = nn.Parameter(state_dict[f"{self.base_address_with_dot}conv1.weight"])
+        conv1_bias = None
 
         self.bn1 = norm_layer(self.inplanes) # batch norm
         self.bn1.weight = nn.Parameter(state_dict[f"{self.base_address_with_dot}bn1.weight"])
@@ -321,8 +322,14 @@ class ResNet(nn.Module):
         self.bn1.eval()
 
         if self.fold_batchnorm:
-            self.conv1.weight, self.conv1.bias = fold_bn_to_conv(self.conv1, self.bn1)
+            conv1_weight, conv1_bias = fold_bn_to_conv_weights_bias(conv1_weight, self.bn1)
             self.bn1 = nn.Identity()
+
+        self.conv1_params = [self.inplanes, 3, 7, 7, 2, 2, 3, 3, 1, groups]
+        if is_conv_supported_on_device(self.conv1_params):
+            self.conv1 = run_conv_on_device_wrapper(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device, self.host, conv1_bias if conv1_bias is not None else None)
+        else:
+            self.conv1 = fallback_ops.Conv2d(conv1_weight, conv1_bias, 3, self.inplanes, kernel_size=7, stride=2, padding=3)
 
         self.relu = tt_lib.tensor.relu
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -368,18 +375,21 @@ class ResNet(nn.Module):
             nl.running_var = nn.Parameter(state_dict[f"{self.base_address_with_dot}{name}.0.downsample.1.running_var"])
             nl.num_batches_tracked = nn.Parameter(state_dict[f"{self.base_address_with_dot}{name}.0.downsample.1.num_batches_tracked"], requires_grad=False)
             nl.eval()
-            downsample_conv = conv1x1(self.inplanes, planes * block.expansion, stride, state_dict=self.state_dict, base_address=f"{self.base_address_with_dot}{name}.0.downsample.0")
+            downsample_conv_weight = state_dict[f"{self.base_address_with_dot}{name}.0.downsample.0.weight"]
+            downsample_conv_bias = None
+
             if self.fold_batchnorm:
-                downsample_conv.weight, downsample_conv.bias = fold_bn_to_conv(downsample_conv, nl)
+                downsample_conv_weight, downsample_conv_bias = fold_bn_to_conv_weights_bias(downsample_conv_weight, nl)
                 nl = nn.Identity()
+
+            downsample_conv = fallback_ops.Conv2d(downsample_conv_weight, downsample_conv_bias, self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, padding=0)
             downsample = nn.Sequential(
                 downsample_conv,
                 nl,
             )
-            downsample_conv_weight = state_dict[f"{self.base_address_with_dot}{name}.0.downsample.0.weight"]
             self.downsample_params = [planes * block.expansion, self.inplanes, 1, 1, stride, stride, 0, 0, self.dilation, 1]
-            if not self.fold_batchnorm and is_conv_supported_on_device(self.downsample_params):
-                self.downsample_conv_on_tt = run_conv_on_device_wrapper(downsample_conv_weight.reshape(-1).tolist(), self.downsample_params, self.device, self.host)
+            if is_conv_supported_on_device(self.downsample_params):
+                self.downsample_conv_on_tt = run_conv_on_device_wrapper(downsample_conv_weight.reshape(-1).tolist(), self.downsample_params, self.device, self.host, downsample_conv_bias if downsample_conv_bias is not None else None)
                 self.norm_layer_after_downsample_conv_on_tt = nl
 
         layers = []

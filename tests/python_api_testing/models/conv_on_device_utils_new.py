@@ -55,6 +55,8 @@ def run_conv_on_tt_device(x: torch.Tensor, conv_on_tt, conv_params, device, host
 
 def run_conv_on_device_wrapper(conv_weight, conv_params, device, host, conv_bias=None):
     K, C, R, S, U, V, P_H, P_W, dilation, groups = [conv_params[i] for i in range(10)]
+    if conv_bias is not None and type(conv_bias) is not list:
+        conv_bias = conv_bias.tolist()
     conv_on_device = TtConv(conv_weight, conv_params, device, conv_bias)
 
     def run_conv_on_device(x: torch.Tensor):
@@ -72,7 +74,7 @@ def run_conv_on_device_wrapper(conv_weight, conv_params, device, host, conv_bias
             x.shape,
             tt_lib.tensor.DataType.BFLOAT16,
             tt_lib.tensor.Layout.ROW_MAJOR,
-            ).pad(x_shape_channel_padded, (0,0,0,0), 0).to(tt_lib.tensor.Layout.CHANNELS_LAST).to(device, tt_lib.tensor.MemoryConfig(False))
+            ).pad(x_shape_channel_padded, (0,0,0,0), 0).to(tt_lib.tensor.Layout.CHANNELS_LAST).to(device)
         logger.info("Going to run conv on tt device")
         x = conv_on_device(x)
 

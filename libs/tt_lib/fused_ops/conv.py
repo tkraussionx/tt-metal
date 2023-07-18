@@ -28,12 +28,12 @@ def conv(weight: List[Union[int, float]], conv_params, device, bias=None):
         tensor.Layout.ROW_MAJOR
     ).pad(weights_channels_padded_shape, (0,0,0,0), 0)
     weight_tiled_ = tensor.convert_conv_weight_tensor_to_tiled_layout(weight_untiled, weight_block_h, weight_block_w)
-    weight_on_device = weight_tiled_.to(device, tensor.MemoryConfig(False))
+    weight_on_device = weight_tiled_.to(device)
     if bias is None:
         bias_on_device = None
     else:
         bias_shape = [1,1,1,K]
-        bias_channels_padded_shape = [1, 1, 1, _nearest_32(K)]
+        bias_channels_padded_shape = [1, 1, 1, _nearest_y(K, 32*weight_block_w)]
         bias_ = tensor.Tensor(
             bias,
             bias_shape,
@@ -52,8 +52,6 @@ def conv(weight: List[Union[int, float]], conv_params, device, bias=None):
         assert(output.shape() == conv_as_mm_output_shape)
 
         if bias_on_device is not None:
-            print(str(output.shape()))
-            print(str(bias_on_device.shape()))
             output_plus_bias = tensor.bcast(output, bias_on_device, tensor.BcastOpMath.ADD, tensor.BcastOpDim.H)
             return output_plus_bias
 
