@@ -61,6 +61,7 @@ def test_perf(use_program_cache, expected_inference_time, expected_compile_time)
     with torch.no_grad():
         profiler.start(cpu_key)
         logits = HF_model(**inputs).logits
+        ttl.device.Synchronize()
         profiler.end(cpu_key)
 
         profiler.start(first_key)
@@ -71,12 +72,13 @@ def test_perf(use_program_cache, expected_inference_time, expected_compile_time)
 
         profiler.start(second_key)
         tt_output = tt_model(tt_inputs)[0]
+        ttl.device.Synchronize()
         profiler.end(second_key)
 
     first_iter_time = profiler.get(first_key)
     second_iter_time = profiler.get(second_key)
     cpu_time = profiler.get(cpu_key)
-
+    tt_lib.device.CloseDevice(device)
     prep_report(
         "vit", BATCH_SIZE, first_iter_time, second_iter_time, "base-patch16", cpu_time
     )

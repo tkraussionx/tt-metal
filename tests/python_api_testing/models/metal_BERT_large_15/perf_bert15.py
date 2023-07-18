@@ -119,6 +119,7 @@ def test_perf(use_program_cache, expected_inference_time, expected_compile_time)
     first_iter_time = profiler.get(first_key)
     second_iter_time = profiler.get(second_key)
     cpu_time = profiler.get(cpu_key)
+    ttl.device.CloseDevice(device)
 
     prep_report(
         "bert15", BATCH_SIZE, first_iter_time, second_iter_time, comments, cpu_time
