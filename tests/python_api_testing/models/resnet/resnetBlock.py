@@ -138,7 +138,8 @@ class Bottleneck(nn.Module):
         if self.downsample_conv_on_tt is not None:
             identity = self.downsample_conv_on_tt(x)
             assert self.norm_layer_after_downsample_conv_on_tt is not None
-            identity = self.norm_layer_after_downsample_conv_on_tt(identity)
+            if not self.fold_batchnorm:
+                identity = self.norm_layer_after_downsample_conv_on_tt(identity)
         elif self.downsample is not None:
             identity = self.downsample(x)
 
@@ -254,7 +255,8 @@ class BasicBlock(nn.Module):
         if self.downsample_conv_on_tt is not None:
             identity = self.downsample_conv_on_tt(x)
             assert self.norm_layer_after_downsample_conv_on_tt is not None
-            identity = self.norm_layer_after_downsample_conv_on_tt(identity)
+            if self.fold_batchnorm:
+                identity = self.norm_layer_after_downsample_conv_on_tt(identity)
         elif self.downsample is not None:
             identity = self.downsample(x)
 
@@ -332,12 +334,12 @@ class ResNet(nn.Module):
             self.conv1 = fallback_ops.Conv2d(conv1_weight, conv1_bias, 3, self.inplanes, kernel_size=7, stride=2, padding=3)
 
         self.relu = tt_lib.tensor.relu
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.maxpool = fallback_ops.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.layer1 = self._make_layer(block, 64, layers[0], name="layer1", state_dict=state_dict)
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0], name="layer2", state_dict=state_dict)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1], name="layer3", state_dict=state_dict)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2], name="layer4", state_dict=state_dict)
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.avgpool = fallback_ops.AdaptiveAvgPool2d((1, 1))
 
 
         fc_weight = pad_weight(state_dict[f"{self.base_address_with_dot}fc.weight"])
@@ -382,15 +384,16 @@ class ResNet(nn.Module):
                 downsample_conv_weight, downsample_conv_bias = fold_bn_to_conv_weights_bias(downsample_conv_weight, nl)
                 nl = nn.Identity()
 
-            downsample_conv = fallback_ops.Conv2d(downsample_conv_weight, downsample_conv_bias, self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, padding=0)
-            downsample = nn.Sequential(
-                downsample_conv,
-                nl,
-            )
             self.downsample_params = [planes * block.expansion, self.inplanes, 1, 1, stride, stride, 0, 0, self.dilation, 1]
             if is_conv_supported_on_device(self.downsample_params):
                 self.downsample_conv_on_tt = run_conv_on_device_wrapper(downsample_conv_weight.reshape(-1).tolist(), self.downsample_params, self.device, self.host, downsample_conv_bias if downsample_conv_bias is not None else None)
                 self.norm_layer_after_downsample_conv_on_tt = nl
+            else:
+                downsample_conv = fallback_ops.Conv2d(downsample_conv_weight, downsample_conv_bias, self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, padding=0)
+                downsample = nn.Sequential(
+                    downsample_conv,
+                    nl,
+                )
 
         layers = []
         layers.append(
