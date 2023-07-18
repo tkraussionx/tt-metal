@@ -31,9 +31,14 @@ from python_api_testing.models.roberta.roberta_for_sequence_classification impor
 BATCH_SIZE = 1
 
 @pytest.mark.parametrize(
-    "expected_inference_time",
-    ([50]),)
-def test_perf(use_program_cache, expected_inference_time):
+    "expected_inference_time, expected_compile_time",
+    (
+        (11,
+         21,
+        ),
+    ),
+)
+def test_perf(use_program_cache, expected_inference_time, expected_compile_time):
     profiler = Profiler()
     disable_compile_cache()
     first_key = "first_iter"
@@ -77,17 +82,20 @@ def test_perf(use_program_cache, expected_inference_time):
 
         profiler.start(first_key)
         tt_output = tt_model(inputs.input_ids, tt_attention_mask).logits
+        ttl.device.Synchronize()
         profiler.end(first_key)
 
         enable_compile_cache()
 
         profiler.start(second_key)
         tt_output = tt_model(inputs.input_ids, tt_attention_mask).logits
+        ttl.device.Synchronize()
         profiler.end(second_key)
 
     first_iter_time = profiler.get(first_key)
     second_iter_time = profiler.get(second_key)
     cpu_time = profiler.get(cpu_key)
+    tt_lib.device.CloseDevice(device)
 
     prep_report(
         "roberta",
@@ -97,5 +105,10 @@ def test_perf(use_program_cache, expected_inference_time):
         "Base Emotion",
         cpu_time,
     )
+    compile_time = first_iter_time - second_iter_time
+
     logger.info(f"roberta Base Emotion inference time: {second_iter_time}")
+    logger.info(f"roberta compile time: {compile_time}")
+
     assert second_iter_time < expected_inference_time, "roberta Base Emotion is too slow"
+    assert compile_time < expected_compile_time, "roberta compile time is too slow"
