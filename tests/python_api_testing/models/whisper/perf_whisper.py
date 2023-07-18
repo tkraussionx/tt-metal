@@ -13,6 +13,7 @@ from transformers import WhisperModel, AutoFeatureExtractor
 import torch
 from datasets import load_dataset
 from loguru import logger
+import pytest
 
 import tt_lib
 from utility_functions_new import torch_to_tt_tensor_rm, tt_to_torch_tensor, Profiler
@@ -28,9 +29,14 @@ from python_api_testing.models.whisper.whisper_common import (
 BATCH_SIZE = 1
 
 @pytest.mark.parametrize(
-    "expected_inference_time",
-    ([50]),)
-def test_perf(use_program_cache, expected_inference_time):
+    "expected_inference_time, expected_compile_time",
+    (
+        (74,
+         22,
+        ),
+    ),
+)
+def test_perf(use_program_cache, expected_inference_time, expected_compile_time):
     profiler = Profiler()
     disable_compile_cache()
     first_key = "first_iter"
@@ -89,6 +95,7 @@ def test_perf(use_program_cache, expected_inference_time):
         ttm_output = tt_whisper(
             input_features=input_features, decoder_input_ids=decoder_input_ids
         )
+        tt_lib.device.Synchronize()
         profiler.end(first_key)
 
         enable_compile_cache()
@@ -97,14 +104,21 @@ def test_perf(use_program_cache, expected_inference_time):
         ttm_output = tt_whisper(
             input_features=input_features, decoder_input_ids=decoder_input_ids
         )
+        tt_lib.device.Synchronize()
         profiler.end(second_key)
 
     first_iter_time = profiler.get(first_key)
     second_iter_time = profiler.get(second_key)
     cpu_time = profiler.get(cpu_key)
+    compile_time = first_iter_time - second_iter_time
+    tt_lib.device.CloseDevice(device)
+
 
     prep_report(
         "whisper", BATCH_SIZE, first_iter_time, second_iter_time, "tiny", cpu_time
     )
     logger.info(f"whisper tiny inference time: {second_iter_time}")
+    logger.info(f"whisper compile time: {compile_time}")
+
     assert second_iter_time < expected_inference_time, "whisper tiny is too slow"
+    assert compile_time < expected_compile_time, "whisper compile time is too slow"
