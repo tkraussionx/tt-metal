@@ -82,14 +82,14 @@ def test_perf(use_program_cache, expected_inference_time, expected_compile_time)
 
         profiler.start(first_key)
         tt_output = tt_model(inputs.input_ids, tt_attention_mask).logits
-        ttl.device.Synchronize()
+        tt_lib.device.Synchronize()
         profiler.end(first_key)
 
         enable_compile_cache()
 
         profiler.start(second_key)
         tt_output = tt_model(inputs.input_ids, tt_attention_mask).logits
-        ttl.device.Synchronize()
+        tt_lib.device.Synchronize()
         profiler.end(second_key)
 
     first_iter_time = profiler.get(first_key)
