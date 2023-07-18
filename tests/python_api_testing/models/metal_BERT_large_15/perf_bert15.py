@@ -50,11 +50,15 @@ model_location_generator = model_location_generator_
 
 
 @pytest.mark.parametrize(
-    "expected_inference_time",
-    ([0.21]),
+    "expected_inference_time, expected_compile_time",
+    (
+        (0.21,
+            9,
+        ),
+    ),
 )
-def test_perf(use_program_cache, expected_inference_time):
-    model_config = get_model_config(model_config_str)
+def test_perf(use_program_cache, expected_inference_time, expected_compile_time):
+    model_config = get_model_config(dtype, mem_config)
 
     disable_compile_cache()
     first_key = "first_iter"
@@ -120,4 +124,6 @@ def test_perf(use_program_cache, expected_inference_time):
         "bert15", BATCH_SIZE, first_iter_time, second_iter_time, comments, cpu_time
     )
     logger.info(f"bert15 inference time: {second_iter_time}")
+    compile_time = first_iter_time - second_iter_time
     assert second_iter_time < expected_inference_time, "bert15 is too slow"
+    assert compile_time < expected_compile_time, "bert15 compile time is too slow"
