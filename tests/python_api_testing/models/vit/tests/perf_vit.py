@@ -24,9 +24,14 @@ from models.vit.tt.modeling_vit import vit_for_image_classification
 BATCH_SIZE = 1
 
 @pytest.mark.parametrize(
-    "expected_inference_time",
-    ([50]),)
-def test_perf(use_program_cache, expected_inference_time):
+    "expected_inference_time, expected_compile_time",
+    (
+        (11,
+        14,
+        ),
+    ),
+)
+def test_perf(use_program_cache, expected_inference_time, expected_compile_time):
     profiler = Profiler()
     disable_compile_cache()
     first_key = "first_iter"
@@ -75,5 +80,8 @@ def test_perf(use_program_cache, expected_inference_time):
     prep_report(
         "vit", BATCH_SIZE, first_iter_time, second_iter_time, "base-patch16", cpu_time
     )
+    compile_time = first_iter_time - second_iter_time
     logger.info(f"vit inference time: {second_iter_time}")
+    logger.info(f"vit compile time: {compile_time}")
     assert second_iter_time < expected_inference_time, "vit is too slow"
+    assert compile_time < expected_compile_time, "vit compile time is too slow"
