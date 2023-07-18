@@ -36,13 +36,13 @@ def run_codegen_fixed_pos_embed_test(device, pcc):
 
     tt_test_in = torch2tt_tensor(test_in, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
 
-    pt_out = codegen_fixed_pos_emb.pt_fixed_pos_embed(test_in, seq_dim=1, seq_len=None)
+    pt_out = codegen_fixed_pos_emb.pt_fixed_pos_emb(test_in, seq_dim=1, seq_len=None)
 
-    tt_out = codegen_fixed_pos_emb.tt_fixed_pos_embed(tt_test_in, device, seq_dim=1, seq_len=None)
+    tt_out = codegen_fixed_pos_emb.tt_fixed_pos_emb(tt_test_in, device, seq_dim=1, seq_len=None)
 
-    tt_out_converted = tt2torch_tensor(tt_out[0])
+    tt_out_converted = tt2torch_tensor(tt_out[1])
 
-    does_pass, pcc_message = comp_pcc(pt_out[0], tt_out_converted, 0.99)
+    does_pass, pcc_message = comp_pcc(pt_out[1], tt_out_converted, 0.99)
     logger.info(pcc_message)
 
     if does_pass:

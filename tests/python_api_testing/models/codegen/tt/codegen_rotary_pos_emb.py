@@ -26,7 +26,7 @@ def tt_rotary_pos_emb(x, device, sincos, offset=0):
     tt_cos = fallback_ops.full(x.shape(), cos)
     res1 = tt_lib.tensor.mul(x, tt_cos)
 
-    res2 = codegen_rotate_every_two(x)
+    res2 = codegen_rotate_every_two(x, device)
     tt_sin = fallback_ops.full(x.shape(), cos)
 
     res2 = tt_lib.tensor.mul(res2, tt_sin)
