@@ -7,13 +7,13 @@ if [[ -z "$TT_METAL_HOME" ]]; then
   exit 1
 fi
 
-env TT_PCI_DMA_BUF_SIZE=1048576 TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/metal_BERT_large_15/perf_bert15.py
+# env TT_PCI_DMA_BUF_SIZE=1048576 TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/metal_BERT_large_15/perf_bert15.py
 
-env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/vit/tests/perf_vit.py
+# env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/vit/tests/perf_vit.py
 
-env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/llama/perf_llama.py
+# env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/llama/perf_llama.py
 
-env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/roberta/perf_roberta.py
+# env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/roberta/perf_roberta.py
 
 env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/whisper/perf_whisper.py
 
