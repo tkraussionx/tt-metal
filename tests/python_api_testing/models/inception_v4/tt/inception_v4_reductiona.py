@@ -14,21 +14,45 @@ class TtReductionA(nn.Module):
         super().__init__()
         self.device = device
 
-        self.branch0 = BasicConv2d(384, 384, kernel_size=3, stride=2)
-        TtBasicConv2d(
+        self.branch0 = TtBasicConv2d(
             device=self.device,
             state_dict=state_dict,
             base_address=f"{base_address}.branch0",
             in_planes=384,
-            out_planes=96,
-            kernel_size=1,
-            stride=1,
+            out_planes=384,
+            kernel_size=3,
+            stride=2,
         )
 
         self.branch1 = nn.Sequential(
-            BasicConv2d(384, 192, kernel_size=1, stride=1),
-            BasicConv2d(192, 224, kernel_size=3, stride=1, padding=1),
-            BasicConv2d(224, 256, kernel_size=3, stride=2),
+            TtBasicConv2d(
+                device=self.device,
+                state_dict=state_dict,
+                base_address=f"{base_address}.branch1.0",
+                in_planes=384,
+                out_planes=192,
+                kernel_size=1,
+                stride=1,
+            ),
+            TtBasicConv2d(
+                device=self.device,
+                state_dict=state_dict,
+                base_address=f"{base_address}.branch1.1",
+                in_planes=192,
+                out_planes=224,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            TtBasicConv2d(
+                device=self.device,
+                state_dict=state_dict,
+                base_address=f"{base_address}.branch1.2",
+                in_planes=224,
+                out_planes=256,
+                kernel_size=3,
+                stride=2,
+            ),
         )
 
         self.branch2 = nn.MaxPool2d(3, stride=2)
@@ -36,6 +60,8 @@ class TtReductionA(nn.Module):
     def forward(self, x):
         x0 = self.branch0(x)
         x1 = self.branch1(x)
-        x2 = self.branch2(x)
-        out = torch.cat((x0, x1, x2), 1)
+        torch_x = tt2torch_tensor(x)
+        x2 = self.branch2(torch_x)
+        x2 = torch_to_tt_tensor_rm(x2, self.device, put_on_device=False)
+        out = fallback_ops.concat((x0, x1, x2), 1)
         return out
