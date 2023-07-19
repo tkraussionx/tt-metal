@@ -182,13 +182,8 @@ operation::ProgramWithCallbacks bmm_single_core_tilize_untilize(
     // output data format
     const auto out_df = datatype_to_dataformat_converter(out_dt);
 
-    // out dt checks
-    TT_ASSERT(!untilize_out || (untilize_out && out_dt == DataType::BFLOAT16));
-
-    // TODO (AS): Certain mixed-prec cases do not currently work. Assert them out.
-    if (!(in0_dt == out_dt && in0_dt == in1_dt && in0_dt == DataType::BFLOAT16) && (tilize_in0 || untilize_out)) {
-        TT_ASSERT(false, "TODO: Cases to be debugged");
-    }
+    // out dt checks. assert out invalid cases.
+    TT_ASSERT(!untilize_out || (untilize_out && in0_dt == out_dt && out_dt == DataType::BFLOAT16));
 
     const auto in0_tile_nbytes = tile_size(in0_df);
     const auto in1_tile_nbytes = tile_size(in1_df);

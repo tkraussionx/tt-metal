@@ -13,7 +13,7 @@ inline void tilize_in(
     uint32_t in_num_subblocks,
     uint32_t out_cb_id) {
 
-    tilize_init_short(in_cb_id, in_block_w);
+    tilize_init_short_with_dt(in_cb_id, in_block_w);
     for (uint32_t in_subblock = 0; in_subblock < in_num_subblocks; ++in_subblock) {
         for (uint32_t h = 0; h < in_subblock_h; ++h) {
             cb_wait_front(in_cb_id, in_block_w);
@@ -23,7 +23,7 @@ inline void tilize_in(
             cb_pop_front(in_cb_id, in_block_w);
         }
     }
-    tilize_uninit();
+    tilize_uninit_with_dt();
 } // tilize_in()
 
 inline void reblock_and_untilize(
@@ -141,7 +141,9 @@ void MAIN {
                             }
                             cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
                             // Reconfigure srcA back
-                            mm_init_short_with_dt(matmul_partials_cb);
+                            // mm_init_short_with_dt(matmul_partials_cb);
+                            mm_init_short();
+                            unpack_reconfig_data_format(in1_cb_id, in0_cb_id);
                         } // enable_reload
                         // Compute output sub-block from in0_subblock x in1_subblock
                         int dst_index = 0;
@@ -172,6 +174,7 @@ void MAIN {
                         in1_index_subblock_offset += out_subblock_w;
                     } // for in1_num_subblocks
                     if (last_out && untilize_out) {
+                        unpack_reconfig_data_format(untilize_mode_final_matmul_partials_cb, untilize_mode_final_matmul_partials_cb);
                         reblock_and_untilize(
                             in1_num_subblocks,
                             out_subblock_num_tiles,
@@ -182,6 +185,7 @@ void MAIN {
                             untilize_mode_reblock_cb,
                             out_cb_id);
                         mm_init_short();
+                        unpack_reconfig_data_format(in1_cb_id, in0_cb_id);
                     } // last_out
                     in0_index_subblock_offset += in0_subblock_num_tiles;
                 }

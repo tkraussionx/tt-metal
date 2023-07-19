@@ -992,6 +992,12 @@ ALWI void tilize_init_short(uint32_t icb, uint32_t block)
     UNPACK(( llk_unpack_tilize_init(icb, block) ));
 }
 
+ALWI void tilize_init_short_with_dt(uint32_t icb, uint32_t block) {
+    MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE, false>() ));
+    UNPACK(( llk_unpack_reconfig_data_format(1, 0, 0, 0) ));
+    UNPACK(( llk_unpack_tilize_init(icb, block) ));
+}
+
 ALWI void tilize_block(uint32_t icb, uint32_t block, uint32_t ocb)
 {
 
@@ -1017,6 +1023,12 @@ ALWI void tilize_uninit()
 {
     UNPACK(( llk_unpack_tilize_uninit() ));
 }
+
+ALWI void tilize_uninit_with_dt() {
+    UNPACK(( llk_unpack_tilize_uninit() ));
+    UNPACK(( llk_unpack_reconfig_data_format(0, 1, 0, 0) ));
+}
+
 
 ALWI void untilize_init(uint32_t icb)
 {
