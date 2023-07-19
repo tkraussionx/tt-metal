@@ -1,29 +1,18 @@
-import math
-from pathlib import Path
-import sys
-
-f = f"{Path(__file__).parent}"
-sys.path.append(f"{f}/..")
-sys.path.append(f"{f}/../..")
-sys.path.append(f"{f}/../../..")
-sys.path.append(f"{f}/../../../..")
-
 import pytest
 import torch
 from loguru import logger
-import numpy as np
 from torch import nn
-from torch.nn import CrossEntropyLoss
-from torch.utils.checkpoint import checkpoint
 import tt_lib
 
-from utility_functions_new import (
+from models.utility_functions import (
+    tt2torch_tensor,
+    torch2tt_tensor,
+)
+from tests.python_api_testing.models.utility_functions_new import (
     comp_pcc,
     comp_allclose_and_pcc,
-    torch2tt_tensor,
-    tt2torch_tensor,
 )
-from python_api_testing.models.squeezenet_1.tt.squeezenet_fire import TtFire
+from models.squeezenet.tt.squeezenet_fire import TtFire
 import torchvision.transforms as transforms
 from torchvision.models import squeezenet1_0, SqueezeNet1_0_Weights
 

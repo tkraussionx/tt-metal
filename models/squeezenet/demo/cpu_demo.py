@@ -1,19 +1,10 @@
 import os
-import sys
 import random
 import pytest
 import torch
-from loguru import logger
-import numpy as np
 from torch import nn
-from pathlib import Path
+from loguru import logger
 from PIL import Image
-
-f = f"{Path(__file__).parent}"
-sys.path.append(f"{f}/..")
-sys.path.append(f"{f}/../..")
-sys.path.append(f"{f}/../../..")
-sys.path.append(f"{f}/../../../..")
 
 from torchvision import transforms
 from torchvision.models import (

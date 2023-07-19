@@ -1,39 +1,31 @@
-import math
-from pathlib import Path
-import sys
 import os
-
-f = f"{Path(__file__).parent}"
-sys.path.append(f"{f}/..")
-sys.path.append(f"{f}/../..")
-sys.path.append(f"{f}/../../..")
-sys.path.append(f"{f}/../../../..")
-
 import pytest
 import torch
 from loguru import logger
-import numpy as np
 from torch import nn
-from torch.nn import CrossEntropyLoss
-from torch.utils.checkpoint import checkpoint
 from PIL import Image
 import tt_lib
 
-from utility_functions_new import (
-    torch2tt_tensor,
+from models.utility_functions import (
     tt2torch_tensor,
+    torch2tt_tensor,
 )
-from utility_functions_new import disable_compile_cache, enable_compile_cache
-from utility_functions_new import prep_report, profiler
 
-from python_api_testing.models.squeezenet_1.tt.squeezenet_1 import squeezenet_1_0
+from tests.python_api_testing.models.utility_functions_new import (
+    profiler,
+    enable_compile_cache,
+    disable_compile_cache,
+    prep_report,
+)
+
+from models.squeezenet.tt.squeezenet_1 import squeezenet_1_0
 from torchvision.models import squeezenet1_0, SqueezeNet1_0_Weights
 from torchvision import transforms
 
 BATCH_SIZE = 1
 
 
-def test_perf():
+def test_perf(model_location_generator):
     disable_compile_cache()
     first_key = "first_iter"
     second_key = "second_iter"
@@ -45,10 +37,11 @@ def test_perf():
     hugging_face_reference_model.eval()
     state_dict = hugging_face_reference_model.state_dict()
 
-    # create input =========================================================
-    input_path = os.path.join(
-        "tests/python_api_testing/models/squeezenet_1/demo", "input_image.jpg"
-    )
+    # take input from weka
+    image_name = "dog.jpg"
+    data_path = model_location_generator("tt_dnn-models/SqueezeNet/data/")
+    data_image_path = str(data_path / "images")
+    input_path = os.path.join(data_image_path, image_name)
     input_image = Image.open(input_path)
 
     preprocess = transforms.Compose(

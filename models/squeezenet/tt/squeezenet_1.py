@@ -1,22 +1,15 @@
 import torch
 import torch.nn as nn
-import torch.nn.init as init
-import tt_lib
-from python_api_testing.models.squeezenet_1.tt.squeezenet_conv2d import (
-    TtSqueezenetConv2D,
-)
-from python_api_testing.models.squeezenet_1.tt.squeezenet_fire import TtFire
-from utility_functions_new import tt2torch_tensor, torch2tt_tensor
-from tt_lib.fallback_ops import fallback_ops
-
-
-from functools import partial
-from typing import Any, Optional
-
-import torch
-import torch.nn as nn
-import torch.nn.init as init
 from loguru import logger
+import tt_lib
+from models.squeezenet.squeezenet_mini_graphs import TtSqueezenetConv2D
+from models.squeezenet.tt.squeezenet_fire import TtFire
+from models.utility_functions import (
+    tt2torch_tensor,
+    torch2tt_tensor,
+)
+
+from tt_lib.fallback_ops import fallback_ops
 
 
 class TtSqueezeNet(nn.Module):

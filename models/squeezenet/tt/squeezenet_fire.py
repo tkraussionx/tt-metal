@@ -2,10 +2,13 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import tt_lib
-from python_api_testing.models.squeezenet_1.tt.squeezenet_conv2d import (
+from models.squeezenet.squeezenet_mini_graphs import (
     TtSqueezenetConv2D,
 )
-from utility_functions_new import tt2torch_tensor
+from models.utility_functions import (
+    tt2torch_tensor,
+    torch2tt_tensor,
+)
 
 
 class TtFire(nn.Module):

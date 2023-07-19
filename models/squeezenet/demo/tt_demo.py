@@ -1,19 +1,10 @@
 import os
-import sys
 import pytest
 import torch
+from torch import nn
 import random
 from loguru import logger
-import numpy as np
-from torch import nn
-from pathlib import Path
 from PIL import Image
-
-f = f"{Path(__file__).parent}"
-sys.path.append(f"{f}/..")
-sys.path.append(f"{f}/../..")
-sys.path.append(f"{f}/../../..")
-sys.path.append(f"{f}/../../../..")
 
 from torchvision import transforms
 from torchvision.models import (
@@ -22,7 +13,7 @@ from torchvision.models import (
     squeezenet1_1,
     SqueezeNet1_1_Weights,
 )
-from python_api_testing.models.squeezenet_1.tt.squeezenet_1 import (
+from models.squeezenet.tt.squeezenet_1 import (
     squeezenet_1_0,
     squeezenet_1_1,
 )
