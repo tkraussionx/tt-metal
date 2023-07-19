@@ -81,17 +81,15 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
     print(f'out_dtype: {out_dtype}')
 
     if (tilize_a and a_dtype != ttl.tensor.DataType.BFLOAT16) or (untilize_out and out_dtype != ttl.tensor.DataType.BFLOAT16):
-        print(f'invalid case, skipping.')
+        print(f'Invalid case. Skipping.')
         pytest.skip()
-        return
 
     if tilize_a and a_dtype != out_dtype:
-        print(False and 'Case to debug. skipping for now.')
+        print(False and 'All intermediate CBs need to be of the same data type. Skipping.')
         pytest.skip()
-        return
 
-    if tilize_a and untilize_out:
-        pytest.skip()
+    # if tilize_a and untilize_out:
+    #     pytest.skip()
 
     # ## TODO (AS): Certain mixed-prec cases do not yet work. Skip them here (these are currently asserted out in the op.)
     # if (not (a_dtype == out_dtype and a_dtype == b_dtype and a_dtype == ttl.tensor.DataType.BFLOAT16)) and (tilize_a or untilize_out):
@@ -175,14 +173,14 @@ def test_run_bmm_single_core_tilize_untilize(a_height_nblocks,
     else:
         out_pytorch = torch.tensor(out.data()).reshape(out_shape)
 
-    print(f'returned output: {out_pytorch[0][0]}')
+    # print(f'returned output: {out_pytorch[0][0]}')
 
     ttl.device.CloseDevice(device)
 
     ## reference
     golden_pytorch = torch.matmul(a, b)
 
-    print("golden out slice:\n", golden_pytorch)
+    # print("golden out slice:\n", golden_pytorch)
 
     ## test for equivalance
     assert(out_pytorch.shape == golden_pytorch.shape)
