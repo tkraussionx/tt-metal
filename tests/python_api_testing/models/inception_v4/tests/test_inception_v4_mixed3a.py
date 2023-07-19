@@ -11,8 +11,8 @@ import torch
 from torch import nn
 from loguru import logger
 import tt_lib
-from python_api_testing.models.inception_v4.tt.inception_v4_basicconv2d import (
-    TtBasicConv2d,
+from python_api_testing.models.inception_v4.tt.inception_v4_mixed3a import (
+    TtMixed3a,
 )
 import timm
 from utility_functions_new import (
@@ -22,7 +22,7 @@ from utility_functions_new import (
 )
 
 
-def test_basic_conv2d_inference():
+def test_mixed3a_inference():
     torch.manual_seed(1234)
 
     device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
@@ -32,29 +32,20 @@ def test_basic_conv2d_inference():
     reference_model = timm.create_model("inception_v4", pretrained=True)
     reference_model.eval()
 
-    basic_conv2d_block_id = 0
-    torch_model = reference_model.features[basic_conv2d_block_id]
-    base_address = "features.0"
-    in_channels = torch_model.conv.in_channels
-    out_channels = torch_model.conv.out_channels
-    kernel_size = torch_model.conv.kernel_size[0]
-    stride = torch_model.conv.stride[0]
-    padding = torch_model.conv.padding[0]
+    block_id = 3
+    torch_model = reference_model.features[block_id]
+    base_address = f"features.{block_id}"
 
-    tt_module = TtBasicConv2d(
+    tt_module = TtMixed3a(
         device=device,
         state_dict=reference_model.state_dict(),
         base_address=base_address,
-        in_planes=in_channels,
-        out_planes=out_channels,
-        kernel_size=kernel_size,
-        stride=stride,
-        padding=padding,
     )
     tt_module.eval()
+    torch_model.eval()
 
     with torch.no_grad():
-        test_input = torch.rand(1, 3, 64, 64)
+        test_input = torch.rand(1, 64, 64, 64)
         pt_out = torch_model(test_input)
 
         test_input = torch2tt_tensor(test_input, device)
@@ -67,8 +58,8 @@ def test_basic_conv2d_inference():
     tt_lib.device.CloseDevice(device)
 
     if does_pass:
-        logger.info("TtBasicConv2d Passed!")
+        logger.info("TtMixed3a Passed!")
     else:
-        logger.warning("TtBasicConv2d Failed!")
+        logger.warning("TtMixed3a Failed!")
 
     assert does_pass

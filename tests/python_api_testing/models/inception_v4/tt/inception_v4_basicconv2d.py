@@ -1,61 +1,71 @@
-import sys
 import torch
 import torch.nn as nn
 import torch.nn.init as init
 import tt_lib
-from utility_functions_new import tt2torch_tensor
 from tt_lib.fallback_ops import fallback_ops
-
 from python_api_testing.models.inception_v4.tt.inception_v4_conv2d import (
     TtInterceptV4Conv2D,
 )
+from utility_functions_new import tt2torch_tensor, torch_to_tt_tensor_rm
 
-from python_api_testing.models.inception_v4.inception_v4_utils import create_batchnorm2d
 
-
-class TtIBasicConv2d(nn.Module):
+class TtBasicConv2d(nn.Module):
     def __init__(
         self,
         device,
-        hugging_face_reference_model,
-        basic_block_position,
-    ) -> None:
+        base_address,
+        state_dict,
+        in_planes,
+        out_planes,
+        kernel_size,
+        stride,
+        padding=0,
+    ):
         super().__init__()
         self.device = device
 
-        basic_conv2d = hugging_face_reference_model.features[basic_block_position]
-
-        in_channels = basic_conv2d.conv.in_channels
-        out_channels = basic_conv2d.conv.out_channels
-        kernel_size = basic_conv2d.conv.kernel_size[0]
-        stride = basic_conv2d.conv.stride[0]
-        padding = basic_conv2d.conv.padding[0]
-        groups = basic_conv2d.conv.groups
-        dilation = basic_conv2d.conv.dilation
-
-        self.tt_basic_conv2d = TtInterceptV4Conv2D(
-            state_dict=hugging_face_reference_model.state_dict(),
-            base_address=f"features.{basic_block_position}.conv",
-            device=device,
-            c1=in_channels,
-            c2=out_channels,
+        self.conv = TtInterceptV4Conv2D(
+            state_dict=state_dict,
+            base_address=f"{base_address}.conv",
+            device=self.device,
+            c1=in_planes,
+            c2=out_planes,
             k=kernel_size,
             s=stride,
             p=padding,
-            g=groups,
-            d=dilation[0],
         )
 
-        self.tt_batch_norm_2d = create_batchnorm2d(
-            out_channels,
-            hugging_face_reference_model.state_dict(),
-            f"features.{basic_block_position}.bn",
+        bn_weight = torch_to_tt_tensor_rm(
+            state_dict[f"{base_address}.bn.weight"], device, put_on_device=False
+        )
+        bn_bias = torch_to_tt_tensor_rm(
+            state_dict[f"{base_address}.bn.bias"], device, put_on_device=False
+        )
+        running_mean = torch_to_tt_tensor_rm(
+            state_dict[f"{base_address}.bn.running_mean"], device, put_on_device=False
+        )
+        running_variance = torch_to_tt_tensor_rm(
+            state_dict[f"{base_address}.bn.running_var"], device, put_on_device=False
+        )
+        num_batches_tracked = torch_to_tt_tensor_rm(
+            state_dict[f"{base_address}.bn.num_batches_tracked"],
+            device,
+            put_on_device=False,
+        )
+
+        self.bn = fallback_ops.BatchNorm2d(
+            weights=bn_weight,
+            biases=bn_bias,
+            running_mean=running_mean,
+            running_var=running_variance,
+            num_batches_tracked=num_batches_tracked,
+            eps=0.001,
+            num_features=out_planes,
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # TT implementation ---------------------------------
-        x = self.tt_basic_conv2d(x)
-        x = self.tt_batch_norm_2d(x)
+        x = self.conv(x)
+        x = self.bn(x)
         x = tt_lib.tensor.relu(x)
 
         return x
