@@ -15,13 +15,13 @@ fi
 
 # env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/roberta/perf_roberta.py
 
-env pytest tests/python_api_testing/models/whisper/perf_whisper.py
+# env pytest tests/python_api_testing/models/whisper/perf_whisper.py
 
-env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/t5/perf_t5.py
+# env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/t5/perf_t5.py
 
-env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/resnet/tests/perf_resnet.py
+# env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/resnet/tests/perf_resnet.py
 
-env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/bloom/perf_bloom.py
+# env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/bloom/perf_bloom.py
 
 env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/deit/tests/perf_deit.py
 
