@@ -6,6 +6,10 @@ from python_api_testing.models.helper_funcs import Linear
 import python_api_testing.models.codegen.tt.codegen_gelu as codegen_gelu
 import python_api_testing.models.codegen.tt.codegen_merge_heads as codegen_merge_heads
 import python_api_testing.models.codegen.tt.codegen_split_heads as codegen_split_heads
+
+import python_api_testing.models.codegen.tt.codegen_fixed_pos_emb as codegen_fixed_pos_emb
+import python_api_testing.models.codegen.tt.codegen_rotary_pos_emb as codegen_rotary_pos_emb
+
 from tt_lib.fallback_ops import fallback_ops
 
 from torch import nn
@@ -19,7 +23,7 @@ from utility_functions_new import (
 from transformers import CodeGenConfig, CodeGenModel
 
 class TtCodeGenAttention(nn.Module):
-    def __init__(self, config: CodeGenConfig(), state_dict, device):
+    def __init__(self, base_address, config: CodeGenConfig(), state_dict, device):
         super().__init__()
 
         max_positions = config.max_position_embeddings
@@ -39,6 +43,7 @@ class TtCodeGenAttention(nn.Module):
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
         self.embed_dim = config.hidden_size
+        print(self.embed_dim)
         self.num_attention_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_attention_heads
         if self.head_dim * self.num_attention_heads != self.embed_dim:
@@ -47,33 +52,42 @@ class TtCodeGenAttention(nn.Module):
                 f" `num_attention_heads`: {self.num_attention_heads})."
             )
 
+
         #self.scale_attn = torch.sqrt(torch.tensor(self.head_dim, dtype=torch.float32)).to(torch.get_default_dtype())
 
         self.weight_qkv_proj = state_dict[f"{base_address}.qkv_proj.weight"]
         self.weight_out_proj = state_dict[f"{base_address}.out_proj.weight"]
 
+
+        self.embed_dim = self.weight_qkv_proj.shape[-1]
+
          # Push weights to Tt device
         self.tt_weight_qkv_proj = torch2tt_tensor(
-            self.weight_qkv_in, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR
+            self.weight_qkv_proj, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR
         )
 
         self.tt_weight_out_proj = torch2tt_tensor(
             self.weight_out_proj, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR
         )
 
+
+
         # Load biases
+        """
         self.tt_bias_qkv_proj = torch2tt_tensor(
             state_dict[f"{base_address}.qkv_proj.bias"], device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR
         )
+        """
+        """
         self.tt_bias_out_proj = torch2tt_tensor(
             state_dict[f"{base_address}.out_proj.bias"], device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR
         )
+        """
+
+        self.qkv_proj = Linear(self.embed_dim, self.embed_dim * 3, self.tt_weight_qkv_proj, None) #self.tt_bias_qkv_proj)
 
 
-        self.qkv_proj = Linear(self.embed_dim, self.embed_dim * 3, self.tt_weight_qkv_proj, self.tt_bias_qkv_proj)
-
-
-        self.out_proj = Linear(self.embed_dim, self.embed_dim, self.tt_weight_out_proj, self.tt_bias_out_proj)
+        self.out_proj = Linear(self.embed_dim, self.embed_dim, self.tt_weight_out_proj, None) #self.tt_bias_out_proj)
 
 
         self.rotary_dim = None
@@ -134,23 +148,24 @@ class TtCodeGenAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states: Optional[torch.FloatTensor],
-        attention_mask: Optional[torch.FloatTensor] = None,
-        layer_past: Optional[Tuple[torch.Tensor]] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = False,
-        output_attentions: Optional[bool] = False,
-    ) -> Union[
-        Tuple[torch.Tensor, Tuple[torch.Tensor]],
-        Optional[Tuple[torch.Tensor, Tuple[torch.Tensor], Tuple[torch.Tensor, ...]]],
-    ]:
+        device,
+        hidden_states,
+        attention_mask = None,
+        layer_past = None,
+        head_mask  = None,
+        use_cache = False,
+        output_attentions = False,
+    ):
         qkv = self.qkv_proj(hidden_states)
         mp_num = 4
 
-        qkv_new_shape = qkv.shape()
-        qkv_new_shape = qkv_new_shape[:-1]+ (mp_num, -1))
 
-        qkv_split = tt_lib.tensor.reshape(qkv, qkv_new_shape[0], qkv_new_shape[1], qkv_new_shape[2], qkv_new_shape[3)]
+        pt_qkv = tt2torch_tensor(qkv)
+
+        pt_qkv_split = pt_qkv.reshape(pt_qkv.shape[:-1] + (mp_num, -1))
+
+        qkv_split = torch2tt_tensor(pt_qkv_split, device)
+        #qkv_split = tt_lib.tensor.reshape(qkv, qkv_new_shape[0], qkv_new_shape[1], qkv_new_shape[2], qkv_new_shape[3])
 
         local_dim = self.head_dim * self.num_attention_heads // mp_num
 
@@ -172,25 +187,34 @@ class TtCodeGenAttention(nn.Module):
 
         if self.rotary_dim is not None:
 
-            slice_list_rot = slice(None), slice(None), slice(None), self.rotary_dim)
-            k_rot = fallback_ops.tensor_slice(key, slice_list_rot)
 
-            k_rot = key[:, :, :, : self.rotary_dim]
-            k_pass = key[:, :, :, slice(self.rotary_dim,key.shape[3]) ]
+            query_shape = query.shape()
+            key_shape = key.shape()
 
-            q_rot = query[:, :, :, : self.rotary_dim]
-            q_pass = query[:, :, :, self.rotary_dim :]
 
-            sincos = fixed_pos_embedding(k_rot, 1, seq_len=seq_len)
-            k_rot = apply_rotary_pos_emb(k_rot, sincos, offset=offset)
-            q_rot = apply_rotary_pos_emb(q_rot, sincos, offset=offset)
+            slice_list_1 = [slice(None), slice(None), slice(None), slice(0, self.rotary_dim)]
+            slice_list_2 = slice(None), slice(None), slice(None), slice(self.rotary_dim, query_shape[3])
+            slice_list_3 = slice(None), slice(None), slice(None), slice(self.rotary_dim, key_shape[3])
 
-            key = torch.cat([k_rot, k_pass], dim=-1)
-            query = torch.cat([q_rot, q_pass], dim=-1)
+
+            k_rot = fallback_ops.tensor_slice(key, slice_list_1)
+            k_pass = fallback_ops.tensor_slice(key, slice_list_3)
+
+
+            q_rot = fallback_ops.tensor_slice(query, slice_list_1)
+            q_pass = fallback_ops.tensor_slice(query, slice_list_2)
+
+            sincos = codegen_fixed_post_emb.tt_fixed_pos_embedding(k_rot, device, 1, seq_len=seq_len)
+            k_rot = codegen_rotary_pos_emb.tt_rotary_pos_emb(k_rot, device, sincos, offset=offset)
+            q_rot = codegen_rotary_pos_emb.tt_rotary_pos_emb(q_rot, device, sincos, offset=offset)
+
+            key = fallback_ops.concat([k_rot, k_pass], dim=-1)
+            query = fallback_ops.concat([q_rot, q_pass], dim=-1)
+
         else:
-            sincos = fixed_pos_embedding(key, 1, seq_len=seq_len)
-            key = apply_rotary_pos_emb(key, sincos, offset=offset)
-            query = codegen_apply_rotary_pos_emb.tt_apply_rotary_pos_emb(query, sincos, offset=offset)
+            sincos = codegen_fixed_pos_emb.tt_fixed_pos_emb(key, device, 1, seq_len=seq_len)
+            key = codegen_rotary_pos_emb.tt_rotary_pos_emb(key, device, sincos, offset=offset)
+            query = codegen_apply_rotary_pos_emb.tt_rotary_pos_emb(query, device, sincos, offset=offset)
 
         key = key.permute(0, 2, 1, 3)
         query = query.permute(0, 2, 1, 3)
@@ -198,8 +222,8 @@ class TtCodeGenAttention(nn.Module):
         if layer_past is not None:
             past_key = layer_past[0]
             past_value = layer_past[1]
-            key = torch.cat((past_key, key), dim=-2)
-            value = torch.cat((past_value, value), dim=-2)
+            key = fallback_ops.concat((past_key, key), dim=-2)
+            value = fallback_ops.concat((past_value, value), dim=-2)
 
         if use_cache is True:
             present = (key, value)

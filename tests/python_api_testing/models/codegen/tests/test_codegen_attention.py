@@ -34,22 +34,24 @@ def run_codegen_attention_test(device, pcc):
 
     torch.manual_seed(0)
 
-    test_in = torch.rand(1, 1024, 1024)
+    test_in = torch.rand(4096, 4096)
 
     tt_test_in = torch2tt_tensor(test_in, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
 
 
     config = CodeGenConfig('Salesforce/codegen-350M-mono')
 
-    tt_mlp = codegen_mlp.TtCodeGenAttention(base_address, config, sd, device)
 
-    tt_out = tt_mlp.forward(
+    #pt_attn = model_hf.h[block].attn
+    #pt_out = pt_attn.forward(test_in)
+
+    tt_attn = codegen_attention.TtCodeGenAttention(base_address, config, sd, device)
+
+    tt_out = tt_attn.forward(
+        device,
         tt_test_in
     )
 
-
-    pt_mlp = model_hf.h[block].mlp
-    pt_out = pt_mlp.forward(test_in)
 
     tt_out_converted = tt2torch_tensor(tt_out)
 
