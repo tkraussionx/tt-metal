@@ -27,7 +27,7 @@ env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/deit/
 
 env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/vgg/tests/perf_vgg.py
 
-env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/stable_diffusion/perf_unbatched_stable.py
+env pytest tests/python_api_testing/models/stable_diffusion/perf_unbatched_stable.py
 
 
 ## Merge all the generated reports
