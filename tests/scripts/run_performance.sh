@@ -15,7 +15,7 @@ env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/llama
 
 env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/roberta/perf_roberta.py
 
-env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/whisper/perf_whisper.py
+env pytest tests/python_api_testing/models/whisper/perf_whisper.py
 
 env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/t5/perf_t5.py
 
@@ -23,11 +23,11 @@ env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/resne
 
 env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/bloom/perf_bloom.py
 
-env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/deit/tests/perf_deit.py
+env pytest tests/python_api_testing/models/deit/tests/perf_deit.py
 
 env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/vgg/tests/perf_vgg.py
 
-env TT_METAL_DEVICE_DISPATCH_MODE=1 pytest tests/python_api_testing/models/stable_diffusion/perf_unbatched_stable.py
+env pytest tests/python_api_testing/models/stable_diffusion/perf_unbatched_stable.py
 
 
 ## Merge all the generated reports
