@@ -22,7 +22,7 @@ class TtMixed3a(nn.Module):
         self.maxpool = fallback_ops.MaxPool2d(kernel_size=3, stride=2)
 
         self.conv = TtBasicConv2d(
-            device=device,
+            device=self.device,
             state_dict=state_dict,
             base_address=f"{base_address}.conv",
             in_planes=64,
@@ -31,7 +31,7 @@ class TtMixed3a(nn.Module):
             stride=2,
         )
 
-    def forward(self, x):
+    def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
         x0 = self.maxpool(x)
         x1 = self.conv(x)
         out = fallback_ops.concat((x0, x1), 1)

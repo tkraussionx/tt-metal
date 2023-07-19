@@ -63,7 +63,7 @@ class TtBasicConv2d(nn.Module):
             num_features=out_planes,
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
         x = self.conv(x)
         x = self.bn(x)
         x = tt_lib.tensor.relu(x)

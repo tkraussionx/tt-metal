@@ -80,7 +80,7 @@ class TtMixed4a(nn.Module):
             ),
         )
 
-    def forward(self, x):
+    def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
         x0 = self.branch0(x)
         x1 = self.branch1(x)
         out = fallback_ops.concat((x0, x1), 1)

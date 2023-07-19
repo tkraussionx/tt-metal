@@ -74,7 +74,7 @@ class TtInterceptV4Conv2D(torch.nn.Module):
                 bias=self.conv_bias is not None,
             )
 
-    def forward(self, x):
+    def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
         if self.conv_on_device:
             x = tt2torch_tensor(x)
             x = self.conv(x)

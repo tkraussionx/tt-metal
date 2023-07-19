@@ -9,7 +9,7 @@ from python_api_testing.models.inception_v4.tt.inception_v4_basicconv2d import (
 from utility_functions_new import tt2torch_tensor, torch_to_tt_tensor_rm
 
 
-class Mixed5a(nn.Module):
+class TtMixed5a(nn.Module):
     def __init__(
         self,
         device,
@@ -17,11 +17,21 @@ class Mixed5a(nn.Module):
         state_dict,
     ):
         super().__init__()
-        self.conv = BasicConv2d(192, 192, kernel_size=3, stride=2)
-        self.maxpool = nn.MaxPool2d(3, stride=2)
+        self.device = device
 
-    def forward(self, x):
+        self.conv = TtBasicConv2d(
+            device=self.device,
+            state_dict=state_dict,
+            base_address=f"{base_address}.conv",
+            in_planes=192,
+            out_planes=192,
+            kernel_size=3,
+            stride=2,
+        )
+        self.maxpool = fallback_ops.MaxPool2d(kernel_size=3, stride=2)
+
+    def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
         x0 = self.conv(x)
         x1 = self.maxpool(x)
-        out = torch.cat((x0, x1), 1)
+        out = fallback_ops.concat((x0, x1), 1)
         return out
