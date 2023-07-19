@@ -156,20 +156,33 @@ class TtCodeGenAttention(nn.Module):
         use_cache = False,
         output_attentions = False,
     ):
+        print()
         qkv = self.qkv_proj(hidden_states)
         mp_num = 4
 
-
+        print(qkv.shape())
         pt_qkv = tt2torch_tensor(qkv)
-
+        print(pt_qkv.shape)
         pt_qkv_split = pt_qkv.reshape(pt_qkv.shape[:-1] + (mp_num, -1))
 
-        qkv_split = torch2tt_tensor(pt_qkv_split, device)
+        #qkv_split = torch2tt_tensor(pt_qkv_split, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
+
         #qkv_split = tt_lib.tensor.reshape(qkv, qkv_new_shape[0], qkv_new_shape[1], qkv_new_shape[2], qkv_new_shape[3])
 
         local_dim = self.head_dim * self.num_attention_heads // mp_num
 
-        query, value, key = torch.split(qkv_split, local_dim, dim=-1)
+        res = torch.split(pt_qkv_split, local_dim, dim=-1)
+        print(len(res))
+        pt_query = res[0]
+        pt_value = res[1]
+        pt_key = res[2]
+
+
+        query = torch2tt_tensor(pt_query, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
+
+        value = torch2tt_tensor(pt_value, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
+        key = torch2tt_tensor(pt_key, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
+
 
         query = codegen_split_heads.tt_split_heads(query, self.num_attention_heads, self.head_dim, mp_num=mp_num)
         key = codegen_split_heads.tt_split_heads(key, self.num_attention_heads, self.head_dim, mp_num=mp_num)
