@@ -11,8 +11,8 @@ import torch
 from torch import nn
 from loguru import logger
 import tt_lib
-from python_api_testing.models.inception_v4.tt.inception_v4_reductiona import (
-    TtReductionA,
+from python_api_testing.models.inception_v4.tt.inception_v4_inceptionb import (
+    TtInceptionB,
 )
 import timm
 from utility_functions_new import (
@@ -22,7 +22,7 @@ from utility_functions_new import (
 )
 
 
-def test_reductiona_inference():
+def test_inceptionb_inference():
     torch.manual_seed(1234)
 
     device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
@@ -32,11 +32,11 @@ def test_reductiona_inference():
     reference_model = timm.create_model("inception_v4", pretrained=True)
     reference_model.eval()
 
-    block_id = 10
+    block_id = 11
     torch_model = reference_model.features[block_id]
     base_address = f"features.{block_id}"
 
-    tt_module = TtReductionA(
+    tt_module = TtInceptionB(
         device=device,
         state_dict=reference_model.state_dict(),
         base_address=base_address,
@@ -45,7 +45,7 @@ def test_reductiona_inference():
     torch_model.eval()
 
     with torch.no_grad():
-        test_input = torch.rand(1, 384, 64, 64)
+        test_input = torch.rand(1, 1024, 64, 64)
         pt_out = torch_model(test_input)
 
         test_input = torch2tt_tensor(test_input, device)
@@ -58,8 +58,8 @@ def test_reductiona_inference():
     tt_lib.device.CloseDevice(device)
 
     if does_pass:
-        logger.info("TtReductionA Passed!")
+        logger.info("TtInceptionB Passed!")
     else:
-        logger.warning("TtReductionA Failed!")
+        logger.warning("TtInceptionB Failed!")
 
     assert does_pass

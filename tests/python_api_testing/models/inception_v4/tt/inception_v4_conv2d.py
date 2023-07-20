@@ -7,7 +7,6 @@ from python_api_testing.models.utility_functions_new import (
     tt2torch_tensor,
 )
 from python_api_testing.models.conv_on_device_utils_new import (
-    run_conv_on_tt_device,
     run_conv_on_device_wrapper,
     is_conv_supported_on_device,
 )
@@ -47,7 +46,6 @@ class TtInterceptV4Conv2D(torch.nn.Module):
 
         if self.conv_on_device and is_conv_supported_on_device(self.conv_params):
             self.conv_bias = self.conv_bias.unsqueeze(-1).unsqueeze(-1)
-            logger.debug(f"Using TtConv for params {self.conv_params}")
 
             self.conv = run_conv_on_device_wrapper(
                 self.conv_weight.reshape(-1).tolist(),
@@ -59,7 +57,6 @@ class TtInterceptV4Conv2D(torch.nn.Module):
 
         else:
             self.conv_on_device = False
-            logger.debug(f"Using fallback_ops.Conv2d for params {self.conv_params}")
 
             self.conv = fallback_ops.Conv2d(
                 weights=self.conv_weight,
