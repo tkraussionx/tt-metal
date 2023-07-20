@@ -5,6 +5,7 @@ from torch import nn
 import random
 from loguru import logger
 from PIL import Image
+from pathlib import Path
 
 from torchvision import transforms
 from torchvision.models import (
@@ -18,24 +19,25 @@ from models.squeezenet.tt.squeezenet_1 import (
     squeezenet_1_1,
 )
 import tt_lib
+from models.squeezenet.squeezenet_utils import download_imagenet_classes, download_image
 
 
-def run_squeezenet_demo(device, model_location_generator):
+def run_squeezenet_demo(device):
     random.seed(42)
     torch.manual_seed(42)
 
-    data_path = model_location_generator("tt_dnn-models/SqueezeNet/data/")
-    data_image_path = str(data_path / "images")
+    data_path = "models/squeezenet"
+    download_image(data_path)
+    download_imagenet_classes(data_path)
 
     # Read the categories
     with open(os.path.join(data_path, "imagenet_classes.txt"), "r") as f:
         categories = [s.strip() for s in f.readlines()]
 
     # make prediction for all images from weka folder
-    for img in os.listdir(data_image_path):
+    for img in Path(data_path).glob("*.jpg"):
         # load image
-        input_path = os.path.join(data_image_path, img)
-        input_image = Image.open(input_path)
+        input_image = Image.open(img)
 
         preprocess = transforms.Compose(
             [
@@ -78,12 +80,12 @@ def run_squeezenet_demo(device, model_location_generator):
         logger.info(f"Grayskull's classification for {img}: {result}")
 
 
-def test_gs_demo(model_location_generator):
+def test_gs_demo():
     # Initialize the device
     device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
     tt_lib.device.InitializeDevice(device)
     tt_lib.device.SetDefaultDevice(device)
 
-    run_squeezenet_demo(device, model_location_generator)
+    run_squeezenet_demo(device)
 
     tt_lib.device.CloseDevice(device)

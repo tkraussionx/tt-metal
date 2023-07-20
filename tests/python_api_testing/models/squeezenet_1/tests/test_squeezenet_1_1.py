@@ -19,18 +19,21 @@ from models.squeezenet.tt.squeezenet_1 import squeezenet_1_1
 import torchvision.transforms as transforms
 from torchvision.models import squeezenet1_1, SqueezeNet1_1_Weights
 
+from models.squeezenet.squeezenet_utils import download_image
 
-def run_test_squeezenet_inference(device, model_location_generator, pcc):
+
+def run_test_squeezenet_inference(device, pcc):
     # load squeezenet model ================================================
     hugging_face_reference_model = squeezenet1_1(weights=SqueezeNet1_1_Weights.DEFAULT)
     hugging_face_reference_model.eval()
     state_dict = hugging_face_reference_model.state_dict()
 
-    # take input from weka
+    # load image
+    data_path = "tests/python_api_testing/models/squeezenet_1"
+    download_image(data_path)
+
     image_name = "dog.jpg"
-    data_path = model_location_generator("tt_dnn-models/SqueezeNet/data/")
-    data_image_path = str(data_path / "images")
-    input_path = os.path.join(data_image_path, image_name)
+    input_path = os.path.join(data_path, image_name)
     input_image = Image.open(input_path)
 
     preprocess = transforms.Compose(
@@ -75,7 +78,7 @@ def run_test_squeezenet_inference(device, model_location_generator, pcc):
     "pcc",
     ((0.99,),),
 )
-def test_squeezenet_1_1_inference(model_location_generator, pcc):
+def test_squeezenet_1_1_inference(pcc):
     # Initialize the device
     device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
     tt_lib.device.InitializeDevice(device)
@@ -83,5 +86,5 @@ def test_squeezenet_1_1_inference(model_location_generator, pcc):
 
     host = tt_lib.device.GetHost()
 
-    run_test_squeezenet_inference(device, model_location_generator, pcc)
+    run_test_squeezenet_inference(device, pcc)
     tt_lib.device.CloseDevice(device)

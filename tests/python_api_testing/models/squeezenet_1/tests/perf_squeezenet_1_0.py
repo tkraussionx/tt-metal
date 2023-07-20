@@ -21,11 +21,12 @@ from tests.python_api_testing.models.utility_functions_new import (
 from models.squeezenet.tt.squeezenet_1 import squeezenet_1_0
 from torchvision.models import squeezenet1_0, SqueezeNet1_0_Weights
 from torchvision import transforms
+from models.squeezenet.squeezenet_utils import download_image
 
 BATCH_SIZE = 1
 
 
-def test_perf(model_location_generator):
+def test_perf():
     disable_compile_cache()
     first_key = "first_iter"
     second_key = "second_iter"
@@ -37,11 +38,12 @@ def test_perf(model_location_generator):
     hugging_face_reference_model.eval()
     state_dict = hugging_face_reference_model.state_dict()
 
-    # take input from weka
+    # load image
+    data_path = "tests/python_api_testing/models/squeezenet_1"
+    download_image(data_path)
+
     image_name = "dog.jpg"
-    data_path = model_location_generator("tt_dnn-models/SqueezeNet/data/")
-    data_image_path = str(data_path / "images")
-    input_path = os.path.join(data_image_path, image_name)
+    input_path = os.path.join(data_path, image_name)
     input_image = Image.open(input_path)
 
     preprocess = transforms.Compose(

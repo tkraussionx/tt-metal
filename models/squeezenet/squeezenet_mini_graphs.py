@@ -9,8 +9,7 @@ from models.utility_functions import (
     torch2tt_tensor,
 )
 
-from tests.python_api_testing.models.conv_on_device_utils_new import (
-    run_conv_on_tt_device,
+from models.conv_on_device_utils import (
     run_conv_on_device_wrapper,
     is_conv_supported_on_device,
 )

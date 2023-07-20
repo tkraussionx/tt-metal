@@ -5,6 +5,7 @@ import torch
 from torch import nn
 from loguru import logger
 from PIL import Image
+from pathlib import Path
 
 from torchvision import transforms
 from torchvision.models import (
@@ -14,23 +15,25 @@ from torchvision.models import (
     SqueezeNet1_1_Weights,
 )
 
+from models.squeezenet.squeezenet_utils import download_imagenet_classes, download_image
 
-def test_cpu_demo(model_location_generator):
+
+def test_cpu_demo():
     random.seed(42)
     torch.manual_seed(42)
 
-    data_path = model_location_generator("tt_dnn-models/SqueezeNet/data/")
-    data_image_path = str(data_path / "images")
+    data_path = "models/squeezenet"
+    download_imagenet_classes(data_path)
+    download_image(data_path)
 
     # Read the categories
     with open(os.path.join(data_path, "imagenet_classes.txt"), "r") as f:
         categories = [s.strip() for s in f.readlines()]
 
     # make prediction for all images from weka folder
-    for img in os.listdir(data_image_path):
+    for img in Path(data_path).glob("*.jpg"):
         # load image
-        input_path = os.path.join(data_image_path, img)
-        input_image = Image.open(input_path)
+        input_image = Image.open(img)
 
         preprocess = transforms.Compose(
             [
