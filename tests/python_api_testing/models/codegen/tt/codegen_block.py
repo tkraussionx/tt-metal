@@ -38,7 +38,6 @@ class TtCodeGenBlock(torch.nn.Module):
         self.attn = TtCodeGenAttention(config)
         self.mlp = TtCodeGenMLP(inner_dim, config)
 
-
     def forward(
         self,
         hidden_states,
@@ -61,15 +60,27 @@ class TtCodeGenBlock(torch.nn.Module):
         )
 
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
-        outputs = attn_outputs[1:]
+
+        attn_output_shape = attn_output.shape()
+
+        slice_list_outputs = [slice(1, attn_output_shape[0])]
+
+        outputs = fallback_ops.tensor_slice(attn_output, slice_list_outputs)
 
         feed_forward_hidden_states = self.mlp(hidden_states)
         hidden_states = tt_lib.tensor.add(attn_output, feed_forward_hidden_states)
         hidden_states = tt_lib.tensor.add(hidden_states, residual)
 
+
+        outputs_shape = outputs.shape()
+
+        slice_list_outputs_2 = [slice(1, outputs_shape[0])]
+
+        outputs_sliced = fallback_ops.tensor_slice(outputs, slice_list_outputs_2)
+
         if use_cache:
             outputs = (hidden_states,) + outputs
         else:
-            outputs = (hidden_states,) + outputs[1:]
+            outputs = (hidden_states,) + outputs_sliced
 
         return outputs  # hidden_states, present, (attentions)
