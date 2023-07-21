@@ -144,17 +144,25 @@ Tensor large_bmm_single_core_single_block(const Tensor &input_tensor_a, const Te
  * Generalized blocked matmul with support for tilize and untilize and mixed-prec
  */
 struct BMMTilizeUntilize {
-    const DataType out_dt_;
-    const uint32_t in0_nblocks_h_, in0_nblocks_w_, in1_nblocks_w_;
-    const uint32_t in0_block_ntiles_h_, in0_block_ntiles_w_, in1_block_ntiles_w_;
-    const uint32_t out_subblock_ntiles_h_, out_subblock_ntiles_w_;
-    const bool tilize_in0_, untilize_out_;
-
-    void validate(const std::vector<Tensor>& input_tensors) const;
-    std::vector<Shape> compute_output_shapes(const std::vector<Tensor> &input_tensors) const;
-    std::vector<Tensor> create_output_tensors(const std::vector<Tensor> &input_tensors) const;
-    operation::ProgramWithCallbacks create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const;
+    void validate(const std::vector<Tensor>& inputs) const;
+    std::vector<Shape> compute_output_shapes(const std::vector<Tensor> &inputs) const;
+    std::vector<Tensor> create_output_tensors(const std::vector<Tensor> &inputs) const;
+    operation::ProgramWithCallbacks create_program(const std::vector<Tensor>& inputs, std::vector<Tensor> &outputs) const;
     stl::reflection::Attributes attributes() const;
+
+    // output data type
+    const DataType out_dt_;
+    // in0/in1 block decomposition
+    const uint32_t in0_nblocks_h_;
+    const uint32_t in0_nblocks_w_;
+    const uint32_t in1_nblocks_w_;
+    const uint32_t in0_block_ntiles_h_;
+    const uint32_t in0_block_ntiles_w_;
+    const uint32_t in1_block_ntiles_w_;
+    // out subblock decomposition
+    const uint32_t out_subblock_ntiles_h_, out_subblock_ntiles_w_;
+    // additional stuff
+    const bool tilize_in0_, untilize_out_;
 };
 
 /**
@@ -173,16 +181,22 @@ operation::ProgramWithCallbacks bmm_single_core_tilize_untilize(
                                     uint32_t out_subblock_height_ntiles, uint32_t out_subblock_width_ntiles,
                                     bool tilize_in0, bool untilize_out,
                                     Tensor &out);
+operation::ProgramWithCallbacks bmm_multi_core_tilize_untilize(
+                                    const Tensor &in0, const Tensor &in1, DataType out_dt,
+                                    uint32_t in0_height_nblocks, uint32_t in0_width_nblocks, uint32_t in1_width_nblocks,
+                                    uint32_t in0_block_height_ntiles, uint32_t in0_block_width_ntiles, uint32_t in1_block_width_ntiles,
+                                    uint32_t out_subblock_height_ntiles, uint32_t out_subblock_width_ntiles,
+                                    bool tilize_in0, bool untilize_out,
+                                    const CoreCoord &grid_size,
+                                    Tensor &out);
 
 }  // namespace tt_metal
-
 }  // namespace tt
+
 
 namespace bmm_op_utils {
 using namespace tt::tt_metal;
 
 tuple<uint32_t, uint32_t, uint32_t, uint32_t> get_large_matmul_params(uint32_t Mt, uint32_t Nt, uint32_t num_cores_y, uint32_t num_cores_x, uint32_t in0_block_w);
-
 CoreCoord get_core_range(uint32_t num_blocks_rows, uint32_t num_blocks_cols, uint32_t max_num_rows, uint32_t max_num_cols);
-
 }

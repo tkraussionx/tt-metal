@@ -553,5 +553,93 @@ tt::stl::reflection::Attributes BertLargeMatmul::attributes() const {
 }
 
 
+/**
+ * BMM (generalized) with tilize-untilize options.
+ */
+Tensor bmm_tilize_untilize(const Tensor& a, const Tensor& b, DataType out_dt,
+                           uint32_t a_height_nblocks, uint32_t a_width_nblocks, uint32_t b_width_nblocks,
+                           uint32_t a_block_height_ntiles, uint32_t a_block_width_ntiles, uint32_t b_block_width_ntiles,
+                           uint32_t out_subblock_height_ntiles, uint32_t out_subblock_width_ntiles,
+                           bool tilize_in0, bool untilize_out) {
+    // NOTE: Currently only single core implementation exists.
+    return operation::run(BMMTilizeUntilize {
+                            out_dt,
+                            a_height_nblocks, a_width_nblocks, b_width_nblocks,
+                            a_block_height_ntiles, a_block_width_ntiles, b_block_width_ntiles,
+                            out_subblock_height_ntiles, out_subblock_width_ntiles,
+                            tilize_in0, untilize_out},
+                          {a, b},
+                          {}).at(0);
+}
+
+void BMMTilizeUntilize::validate(const std::vector<Tensor>& inputs) const {
+    const auto& in0 = inputs.at(0);
+    const auto& in1 = inputs.at(1);
+    // TODO: Currently all validation is part of the primary function from create_program. Move them here.
+}
+
+std::vector<Shape> BMMTilizeUntilize::compute_output_shapes(const std::vector<Tensor>& inputs) const {
+    const auto& in0 = inputs.at(0);
+    const auto& in1 = inputs.at(1);
+    const auto [in0_batch, in0_channel, in0_height, in0_width] = in0.shape();
+    const auto [in1_batch, in1_channel, in1_height, in1_width] = in1.shape();
+    const Shape out_shape { in0_batch, in0_channel, in0_height, in1_width };
+    return {out_shape};
+}
+
+std::vector<Tensor> BMMTilizeUntilize::create_output_tensors(const std::vector<Tensor>& inputs) const {
+    const auto& output_shapes = this->compute_output_shapes(inputs);
+    auto output_layout = untilize_out_ ? Layout::ROW_MAJOR : Layout::TILE;
+    std::vector<Tensor> output_tensors;
+    // There is just one output tensor
+    output_tensors.reserve(1);
+    output_tensors.emplace_back(create_device_tensor(output_shapes.at(0), out_dt_, output_layout, inputs.at(0).device()));
+    return output_tensors;
+}
+
+operation::ProgramWithCallbacks BMMTilizeUntilize::create_program(const std::vector<Tensor>& inputs,
+                                                                  std::vector<Tensor>& outputs) const {
+    const auto& in0 = inputs.at(0);
+    const auto& in1 = inputs.at(1);
+    auto& out = outputs.at(0);
+
+    auto device_grid_size = in0.device()->compute_and_storage_grid_size();
+    CoreCoord grid_size = {2, 2};   // TODO: how do we want to set the grid size to use?
+    TT_ASSERT((grid_size.x <= device_grid_size.x && grid_size.y <= device_grid_size.y), "Unsupported grid size");
+
+    // // single core version
+    // return bmm_single_core_tilize_untilize(in0, in1, out_dt_,
+    //                                        in0_nblocks_h_, in0_nblocks_w_, in1_nblocks_w_,
+    //                                        in0_block_ntiles_h_, in0_block_ntiles_w_, in1_block_ntiles_w_,
+    //                                        out_subblock_ntiles_h_, out_subblock_ntiles_w_,
+    //                                        tilize_in0_, untilize_out_,
+    //                                        out);
+    // multi core version
+    return bmm_multi_core_tilize_untilize(in0, in1, out_dt_,
+                                          in0_nblocks_h_, in0_nblocks_w_, in1_nblocks_w_,
+                                          in0_block_ntiles_h_, in0_block_ntiles_w_, in1_block_ntiles_w_,
+                                          out_subblock_ntiles_h_, out_subblock_ntiles_w_,
+                                          tilize_in0_, untilize_out_,
+                                          grid_size,
+                                          out);
+}
+
+stl::reflection::Attributes BMMTilizeUntilize::attributes() const {
+    return {
+        {"out_dt", fmt::format("{}", out_dt_)},
+        {"in0_nblocks_h", fmt::format("{}", in0_nblocks_h_)},
+        {"in0_nblocks_w", fmt::format("{}", in0_nblocks_w_)},
+        {"in1_nblocks_w", fmt::format("{}", in1_nblocks_w_)},
+        {"in0_block_ntiles_h", fmt::format("{}", in0_block_ntiles_h_)},
+        {"in0_block_ntiles_w", fmt::format("{}", in0_block_ntiles_w_)},
+        {"in1_block_ntiles_w", fmt::format("{}", in1_block_ntiles_w_)},
+        {"out_subblock_ntiles_h", fmt::format("{}", out_subblock_ntiles_h_)},
+        {"out_subblock_ntiles_w", fmt::format("{}", out_subblock_ntiles_w_)},
+        {"tilize_in0", fmt::format("{}", tilize_in0_)},
+        {"untilize_out", fmt::format("{}", untilize_out_)}
+    };
+}
+
+
 }  // namespace tt_metal
 }  // namespace tt
