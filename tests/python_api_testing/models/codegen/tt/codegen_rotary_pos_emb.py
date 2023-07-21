@@ -4,6 +4,7 @@ from torch.nn import functional as F
 import tt_lib
 from tt_lib.fallback_ops import fallback_ops
 import python_api_testing.models.codegen.tt.codegen_rotate_every_two as codegen_rotate_every_two
+import python_api_testing.models.codegen.tt.codegen_duplicate_interleave as codegen_duplicate_interleave
 
 
 import math
@@ -21,15 +22,36 @@ def pt_rotary_pos_emb(x, sincos, offset=0):
     return (x * cos) + (rotate_every_two(x) * sin)
 
 def tt_rotary_pos_emb(x, device, sincos, offset=0):
-    sin, cos = (duplicate_interleave(t)[None, offset : x.shape[1] + offset, None, :] for t in sincos)
+    x_shape = x.shape()
 
-    tt_cos = fallback_ops.full(x.shape(), cos)
-    res1 = tt_lib.tensor.mul(x, tt_cos)
+    sin = sincos[0]
+    cos = sincos[1]
 
-    res2 = codegen_rotate_every_two(x, device)
-    tt_sin = fallback_ops.full(x.shape(), cos)
+    sin_shape = sin.shape()
 
-    res2 = tt_lib.tensor.mul(res2, tt_sin)
+    slice_list = [slice(None), slice(offset, x_shape[1] + offset), slice(None), slice(0, sin_shape[3])]
+
+    sin = codegen_duplicate_interleave.tt_duplicate_interleave(sin)
+    cos = codegen_duplicate_interleave.tt_duplicate_interleave(cos)
+
+    sin = fallback_ops.tensor_slice(sin, slice_list)
+    cos = fallback_ops.tensor_slice(cos, slice_list)
+
+    print('SHAPES-----')
+    print(x.shape())
+    print(cos.shape())
+    print(sin.shape())
+
+    #res1 = tt_lib.tensor.mul(x, cos)
+    cos = tt_lib.tensor.transpose(cos)
+
+    res1 = tt_lib.tensor.bcast(x, cos, tt_lib.tensor.BcastOpMath.MUL, tt_lib.tensor.BcastOpDim.W)
+
+    res2 = codegen_rotate_every_two.tt_rotate_every_two(x, device)
+
+    sin = tt_lib.tensor.transpose(sin)
+
+    res2 = tt_lib.tensor.bcast(res2, sin, tt_lib.tensor.BcastOpMath.MUL, tt_lib.tensor.BcastOpDim.W)
 
     output = tt_lib.tensor.add(res1, res2)
 

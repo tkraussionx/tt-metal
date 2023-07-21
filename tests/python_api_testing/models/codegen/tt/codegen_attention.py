@@ -10,6 +10,7 @@ import python_api_testing.models.codegen.tt.codegen_split_heads as codegen_split
 import python_api_testing.models.codegen.tt.codegen_fixed_pos_emb as codegen_fixed_pos_emb
 import python_api_testing.models.codegen.tt.codegen_rotary_pos_emb as codegen_rotary_pos_emb
 
+
 from tt_lib.fallback_ops import fallback_ops
 
 from torch import nn
@@ -53,7 +54,7 @@ class TtCodeGenAttention(nn.Module):
             )
 
 
-        #self.scale_attn = torch.sqrt(torch.tensor(self.head_dim, dtype=torch.float32)).to(torch.get_default_dtype())
+        self.scale_attn = torch.sqrt(torch.tensor(self.head_dim, dtype=torch.float32)).to(torch.get_default_dtype())
 
         self.weight_qkv_proj = state_dict[f"{base_address}.qkv_proj.weight"]
         self.weight_out_proj = state_dict[f"{base_address}.out_proj.weight"]
@@ -97,6 +98,7 @@ class TtCodeGenAttention(nn.Module):
 
     def _attn(
         self,
+        device,
         query,
         key,
         value,
@@ -104,8 +106,13 @@ class TtCodeGenAttention(nn.Module):
         head_mask=None,
     ):
         # compute causal mask from causal mask buffer
-        query_length, key_length = torch.Size(query.shape())(-2), torch.Size(key.shape())(-2)
-        causal_mask = self.causal_mask[:, :, key_length - query_length : key_length, :key_length]
+        query_shape = query.shape()
+        key_shape = key.shape()
+        query_length, key_length = query_shape[-2], key_shape[-2]
+
+        causal_mask = self.causal_mask[:, :, key_length - query_length : key_length, : key_length]
+        tt_causal_mask = torch_to_tt_tensor_rm(causal_mask, device, put_on_device=False)
+
 
         # Keep the attention weights computation in fp32 to avoid overflow issues
         #query = query.to(torch.float32)
@@ -113,19 +120,40 @@ class TtCodeGenAttention(nn.Module):
 
         tt_key_transposed = tt_lib.tensor.transpose(key)
 
-        tt_attn_weights = tt_lib.tensor.matmul(query, tt_key_transposed)
+        print('BREAKING SHAPES')
+        print(query.shape())
+        print(tt_key_transposed.shape())
 
-        tt_scale_attn_recip = tt_lib.tensor.recip(self.scale_attn)
+
+        pt_query = tt2torch_tensor(query)
+        pt_key_transposed = tt2torch_tensor(tt_key_transposed)
+
+        attn_weights = torch.matmul(pt_query, pt_key_transposed)
+
+        #tt_attn_weights = tt_lib.tensor.matmul(query, tt_key_transposed)
+
+
+        tt_scale_attn = torch_to_tt_tensor_rm(self.scale_attn, device, put_on_device=False)
+
+        tt_scale_attn_recip = tt_lib.tensor.recip(tt_scale_attn)
+
+
+        tt_attn_weights = torch_to_tt_tensor_rm(attn_weights, device, put_on_device=False)
 
         tt_attn_weights = tt_lib.tensor.matmul(tt_attn_weights, tt_scale_attn_recip)
 
-        mask_value = torch.finfo(attn_weights.dtype).min
+        mask_value = -10000000
         # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
         # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
         #mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
 
-        attn_weights = torch.where(causal_mask, attn_weights, mask_value)
-        t3 = ttl.tensor.where(t0, t1, t2)
+        pt_attn_weights = tt2torch_tensor(tt_attn_weights)
+
+        attn_weights = torch.where(causal_mask, pt_attn_weights, mask_value)
+
+        #attn_weights = tt_lib.tensor.where(tt_causal_mask, tt_attn_weights, mask_value)
+        tt_attn_weights = torch_to_tt_tensor_rm(attn_weights, device, put_on_device=False)
+
 
         if attention_mask is not None:
             # Apply the attention mask
@@ -134,14 +162,29 @@ class TtCodeGenAttention(nn.Module):
         tt_attn_weights = fallback_ops.softmax(tt_attn_weights, dim=-1)
 
         #attn_weights = attn_weights.to(value.dtype)
+        attn_weights = tt2torch_tensor(tt_attn_weights)
 
         attn_weights = self.attn_dropout(attn_weights)
+
+        tt_attn_weights = torch_to_tt_tensor_rm(attn_weights, device, put_on_device=False)
 
         # Mask heads if we want to
         if head_mask is not None:
             tt_attn_weights = tt_lib.tensor.matmul(attn_weights, head_mask)
 
-        tt_attn_output = tt_lib.tensor.matmul(tt_attn_weights, value)
+
+        print('outcome')
+        print(tt_attn_weights.shape())
+        print(value.shape())
+
+        pt_attn_weights = tt2torch_tensor(tt_attn_weights)
+        pt_value = tt2torch_tensor(value)
+
+        attn_output = torch.matmul(pt_attn_weights, pt_value)
+        tt_attn_output = torch_to_tt_tensor_rm(attn_output, device, put_on_device=False)
+
+
+        #tt_attn_output = tt_lib.tensor.bcast(tt_attn_weights, value, tt_lib.tensor.BcastOpMath.MUL, tt_lib.tensor.BcastOpDim.H)
 
         return tt_attn_output, tt_attn_weights
 
@@ -156,10 +199,9 @@ class TtCodeGenAttention(nn.Module):
         use_cache = False,
         output_attentions = False,
     ):
-        print()
         qkv = self.qkv_proj(hidden_states)
         mp_num = 4
-
+        print('QKV_shape')
         print(qkv.shape())
         pt_qkv = tt2torch_tensor(qkv)
         print(pt_qkv.shape)
@@ -168,14 +210,31 @@ class TtCodeGenAttention(nn.Module):
         #qkv_split = torch2tt_tensor(pt_qkv_split, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
 
         #qkv_split = tt_lib.tensor.reshape(qkv, qkv_new_shape[0], qkv_new_shape[1], qkv_new_shape[2], qkv_new_shape[3])
+        self.head_dim = 64
+        self.num_attention_heads = 16
+        self.rotary_dim = 32
 
         local_dim = self.head_dim * self.num_attention_heads // mp_num
+        print('DIMS')
+        print(local_dim)
+        print(self.head_dim)
+        print(self.num_attention_heads)
+        print(mp_num)
+        print('end-----')
+
+
 
         res = torch.split(pt_qkv_split, local_dim, dim=-1)
         print(len(res))
         pt_query = res[0]
         pt_value = res[1]
         pt_key = res[2]
+
+        print('QUERY_SHAPE')
+        print(pt_query.shape)
+        pt_query = pt_query.squeeze(0)
+        pt_value = pt_value.squeeze(0)
+        pt_key = pt_key.squeeze(0)
 
 
         query = torch2tt_tensor(pt_query, device, tt_layout=tt_lib.tensor.Layout.ROW_MAJOR)
@@ -188,9 +247,12 @@ class TtCodeGenAttention(nn.Module):
         key = codegen_split_heads.tt_split_heads(key, self.num_attention_heads, self.head_dim, mp_num=mp_num)
 
         value = codegen_split_heads.tt_split_heads(value, self.num_attention_heads, self.head_dim, mp_num=mp_num)
-        value = value.permute(0, 2, 1, 3)
 
-        seq_len = key.shape[1]
+        value = tt_lib.tensor.permute(value, 0, 2, 1, 3)
+
+        key_shape = key.shape()
+
+        seq_len = key_shape[1]
         offset = 0
 
         if layer_past is not None:
@@ -198,6 +260,8 @@ class TtCodeGenAttention(nn.Module):
             offset = offset[-2]
             seq_len += offset
 
+        print('SELF- ROTART')
+        print(self.rotary_dim)
         if self.rotary_dim is not None:
 
 
@@ -217,7 +281,7 @@ class TtCodeGenAttention(nn.Module):
             q_rot = fallback_ops.tensor_slice(query, slice_list_1)
             q_pass = fallback_ops.tensor_slice(query, slice_list_2)
 
-            sincos = codegen_fixed_post_emb.tt_fixed_pos_embedding(k_rot, device, 1, seq_len=seq_len)
+            sincos = codegen_fixed_pos_emb.tt_fixed_pos_emb(k_rot, device, 1, seq_len=seq_len)
             k_rot = codegen_rotary_pos_emb.tt_rotary_pos_emb(k_rot, device, sincos, offset=offset)
             q_rot = codegen_rotary_pos_emb.tt_rotary_pos_emb(q_rot, device, sincos, offset=offset)
 
@@ -229,8 +293,10 @@ class TtCodeGenAttention(nn.Module):
             key = codegen_rotary_pos_emb.tt_rotary_pos_emb(key, device, sincos, offset=offset)
             query = codegen_apply_rotary_pos_emb.tt_rotary_pos_emb(query, device, sincos, offset=offset)
 
-        key = key.permute(0, 2, 1, 3)
-        query = query.permute(0, 2, 1, 3)
+
+        key = tt_lib.tensor.permute(key, 0, 2, 1, 3)
+
+        query = tt_lib.tensor.permute(query, 0, 2, 1, 3)
 
         if layer_past is not None:
             past_key = layer_past[0]
@@ -244,11 +310,16 @@ class TtCodeGenAttention(nn.Module):
             present = None
 
         # compute self-attention: V x Softmax(QK^T)
-        attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+        attn_output, attn_weights = self._attn(device, query, key, value, attention_mask, head_mask)
 
         attn_output = codegen_merge_heads.tt_merge_heads(attn_output, self.num_attention_heads, self.head_dim)
         attn_output = self.out_proj(attn_output)
-        attn_output = self.resid_dropout(attn_output)
+
+        pt_attn_output = tt2torch_tensor(attn_output)
+
+        pt_attn_output = self.resid_dropout(pt_attn_output)
+
+        tt_attn_output = torch_to_tt_tensor_rm(pt_attn_output, device, put_on_device=False)
 
         outputs = (attn_output, present)
         if output_attentions:

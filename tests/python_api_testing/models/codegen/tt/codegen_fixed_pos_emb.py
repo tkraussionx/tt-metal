@@ -50,4 +50,6 @@ def tt_fixed_pos_emb(x, device, seq_dim=1, seq_len=None):
     tt_sin = tt_lib.tensor.sin(tt_sinusoid_inp)
     tt_cos = tt_lib.tensor.cos(tt_sinusoid_inp)
 
+    tt_sin.print()
+    tt_cos.print()
     return tt_sin, tt_cos

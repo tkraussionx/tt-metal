@@ -39,13 +39,13 @@ def tt_rotate_every_two(x, device):
 
     pt_x2 = tt2torch_tensor(x2)
 
-
     pt_x = torch.stack((pt_x2, pt_x1), dim=-1)
-
 
     pt_x = pt_x.flatten(-2)
 
-    result = torch2tt_tensor(pt_x, device)
+    print('problematic----')
+    print(pt_x.shape)
 
+    result = torch_to_tt_tensor_rm(pt_x, device, put_on_device=False)
 
     return result
