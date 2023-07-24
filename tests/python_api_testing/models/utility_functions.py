@@ -4,6 +4,23 @@ import time
 import torch
 import numpy as np
 from loguru import logger
+from tests.python_api_testing.models.utility_functions_new import (
+    is_close,
+    get_oom_of_float,
+    enable_compile_cache,
+    disable_compile_cache,
+    get_compile_cache_enabled,
+    enable_compilation_reports,
+    disable_compilation_reports,
+    enable_memory_reports,
+    disable_memory_reports,
+    comp_allclose,
+    comp_pcc,
+    comp_allclose_and_pcc,
+    Profiler,
+    profiler,
+    tt_to_torch_tensor
+)
 
 import tt_lib as ttl
 from tt_lib.utils import (
@@ -25,35 +42,7 @@ from tt_lib.utils import (
 )
 
 
-def is_close(a, b, rtol=1e-2, atol=1e-2, max_mag=2.0, max_mag_fraction=0.02):
-    """
-    A variant of np.isclose with logging.
-    """
-    absdiff = (a - b).abs()
-    reldiff1 = (a.abs() / b.abs()) - 1.0
-    reldiff2 = (a.abs() + 1.0) / (b.abs() + 1.0) - 1.0  # in case b.abs() is 0
-    reldiff_or = torch.logical_or(reldiff1.abs() < rtol, reldiff2.abs() < rtol)
-    max_mag_ok = absdiff < max_mag * max_mag_fraction
 
-    or_abs_rel = torch.logical_or(absdiff < atol, reldiff_or)
-    or_abs_rel = torch.logical_or(or_abs_rel, max_mag_ok)
-    debug_index = or_abs_rel.to(torch.int32).argmin().item()
-    if not or_abs_rel.reshape(-1)[debug_index]:
-        print("isclose mismatch at index=", debug_index)
-        print(a.reshape(-1)[debug_index])
-        print(b.reshape(-1)[debug_index])
-        print("reldiff1=", reldiff1.reshape(-1)[debug_index])
-        print("reldiff2=", reldiff2.reshape(-1)[debug_index])
-        print("absdiff=", absdiff.reshape(-1)[debug_index])
-        HT = a.shape[-2] // 32
-        WT = a.shape[-1] // 32
-        hwt = debug_index // 1024
-        wt = hwt % WT
-        ht = hwt // WT
-        h = (debug_index % 1024) // 32
-        w = (debug_index % 1024) % 32
-        print("****    at ", debug_index, " --- ", "HTWT=", ht, wt, "HW=", h, w)
-    return torch.all(or_abs_rel)
 
 
 def print_diff_tt_pyt(a, b, annotation=""):
@@ -63,32 +52,6 @@ def print_diff_tt_pyt(a, b, annotation=""):
     return print_diff_argmax(pyt_a, padded_b, annotation)
 
 
-def get_oom_of_float(float_lst):
-    """
-    Given a list of floats, returns a list of the order or magnitudes
-    of the floats. Useful when you want to make sure that even if your
-    tt outputs don't match pytorch all that well, they are at least
-    on the same order of magnitude
-    """
-    ooms = []
-    for el in float_lst:
-        str_el = str(el)
-        if "e" in str_el:
-            oom = int(str_el.split("e")[1])
-        elif str_el[:2] == "0.":
-            str_el = str_el.split(".")[1]
-
-            oom = -1
-            for e in str_el:
-                if e != "0":
-                    break
-                oom -= 1
-        else:
-            oom = len(str_el.split(".")[0])
-
-        ooms.append(oom)
-
-    return ooms
 
 
 def ttP(x, count=4, offset=0, stride=1):
@@ -126,114 +89,15 @@ def enable_compilation_reports():
     return ttl.device.EnableCompilationReports()
 
 
-def disable_compilation_reports():
-    """
-    Disables generating reports of compilation statistics
-    """
-    return ttl.device.DisableCompilationReports()
 
 
-def enable_memory_reports():
-    """
-    Enables generating reports of memory allocation statistics in .reports/tt_metal dir
-    """
-    return ttl.device.EnableMemoryReports()
 
 
-def disable_memory_reports():
-    """
-    Disables generating reports of memory allocation statistics
-    """
-    return ttl.device.DisableMemoryReports()
 
 
-def comp_allclose(golden, calculated, rtol=1e-05, atol=1e-08):
-    if golden.dtype != calculated.dtype:
-        calculated = calculated.type(golden.dtype)
-
-    atol_delta = torch.max(torch.abs(golden - calculated)).item()
-    rtol_delta = torch.max(
-        torch.abs(golden - calculated) / torch.abs(calculated)
-    ).item()
-    return (
-        torch.allclose(golden, calculated, rtol, atol, True),
-        f"Max ATOL Delta: {atol_delta}, Max RTOL Delta: {rtol_delta}",
-    )
 
 
-def comp_pcc(golden, calculated, pcc=0.99):
-    if golden.dtype != calculated.dtype:
-        calculated = calculated.type(golden.dtype)
 
-    if torch.all(torch.isnan(golden)) and torch.all(torch.isnan(calculated)):
-        logger.warning("Both tensors are 'nan'")
-        return True, f"PCC: {1.0}"
-
-    if torch.all(torch.isnan(golden)) or torch.all(torch.isnan(calculated)):
-        logger.error("One tensor is all nan, the other is not.")
-        return False, f"PCC: {0.0}"
-
-    # Test if either is completely zero
-    if torch.any(golden.bool()) != torch.any(calculated.bool()):
-        logger.error("One tensor is all zero")
-        return False, f"PCC: {0.0}"
-
-    # if torch.any(torch.isinf(golden)) or torch.any(torch.isinf(calculated)):
-    #    raise RuntimeError(f"Tensor overflow to infinity: \n{golden}\n{calculated}")
-
-    # if torch.any(torch.isneginf(golden)) or torch.any(torch.isneginf(calculated)):
-    #    raise RuntimeError(f"Tensor overflow to negative infinity: \n{golden}\n{calculated}")
-
-    # For now, mask all infs and nans so that we check the rest... TODO
-    golden = golden.clone()
-    golden[
-        torch.logical_or(
-            torch.isnan(golden),
-            torch.logical_or(torch.isinf(golden), torch.isneginf(golden)),
-        )
-    ] = 0
-    calculated = calculated.clone()
-    calculated[
-        torch.logical_or(
-            torch.isnan(calculated),
-            torch.logical_or(torch.isinf(calculated), torch.isneginf(calculated)),
-        )
-    ] = 0
-
-    if torch.equal(golden, calculated):
-        return True, f"PCC: {1.0}"
-
-    if golden.dtype == torch.bfloat16:
-        golden = golden.type(torch.float32)
-        calculated = calculated.type(torch.float32)
-    cal_pcc = np.min(
-        np.ma.corrcoef(
-            np.ma.masked_invalid(torch.squeeze(golden).detach().numpy()).flatten(),
-            np.ma.masked_invalid(torch.squeeze(calculated).detach().numpy()).flatten(),
-        )
-    )
-
-    if isinstance(cal_pcc, np.ma.core.MaskedConstant):
-        return True, f"PCC: {1.0}"
-
-    return cal_pcc >= pcc, f"PCC: {cal_pcc}"
-
-
-def comp_allclose_and_pcc(golden, calculated, rtol=1e-05, atol=1e-08, pcc=0.99):
-    if golden.dtype != calculated.dtype:
-        calculated = calculated.type(golden.dtype)
-
-    passing = True
-    output = ""
-    passing_allclose, output_allclose = comp_allclose(golden, calculated, rtol, atol)
-    passing &= passing_allclose
-    output += output_allclose
-    if torch.numel(golden) != 1:
-        passing_pcc, output_pcc = comp_pcc(golden, calculated, pcc)
-        passing &= passing_pcc
-        output += f", {output_pcc}"
-
-    return passing, output
 
 
 def torch2tt_tensor(
@@ -319,61 +183,6 @@ def unpad_from_zero(x, desired_shape, host):
 
         x = torch.frombuffer(x.data(), dtype=dtype).reshape(x.shape())
     return x
-
-
-class Profiler:
-    def __init__(self):
-        self.start_times = dict()
-        self.times = dict()
-        self.disabled = False
-
-    def enable(self):
-        self.disabled = False
-
-    def disable(self):
-        self.disabled = True
-
-    def start(self, key, force_enable=False):
-        if self.disabled and not force_enable:
-            return
-
-        self.start_times[key] = time.time()
-
-    def end(self, key, PERF_CNT=1, force_enable=False):
-        if self.disabled and not force_enable:
-            return
-
-        if key not in self.start_times:
-            return
-
-        diff = time.time() - self.start_times[key]
-
-        if key not in self.times:
-            self.times[key] = []
-
-        self.times[key].append(diff / PERF_CNT)
-
-    def get(self, key):
-        if key not in self.times:
-            return 0
-
-        return sum(self.times[key]) / len(self.times[key])
-
-    def print(self):
-        for key in self.times:
-            average = self.get(key)
-            print(f"{key}: {average:.3f}s")
-
-
-profiler = Profiler()
-
-
-def tt_to_torch_tensor(tt_tensor, host):
-    tt_tensor = tt_tensor.to(host).to(ttl.tensor.Layout.ROW_MAJOR)
-    # create a 1D PyTorch tensor from values in TT Tensor obtained with data() member function
-    # and then reshape PyTorch tensor to shape of TT Tensor
-    py_tensor = torch.Tensor(tt_tensor.data()).reshape(tt_tensor.shape())
-    return py_tensor
 
 
 def torch_to_tt_tensor_rm(py_tensor, device, shape=None, put_on_device=True):
