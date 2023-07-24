@@ -21,8 +21,6 @@ import tt_lib as ttl
 from utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor
 from test_bert_batch_dram import TtBertBatchDram
 
-from python_api_testing.models.metal_BERT_large_15.model_config import get_model_config
-
 from utility_functions import (
     enable_compile_cache,
     enable_compilation_reports,
@@ -45,20 +43,87 @@ seq_len = 384
 real_input = True
 attention_mask = True
 token_type_ids = True
-model_config_str = "MIXED_PRECISION_BATCH8"
 model_location_generator = model_location_generator_
+
+MIXED_PRECISION_BATCH8_MODEL_CONFIG = {
+    "DEFAULT_DTYPE": ttl.tensor.DataType.BFLOAT8_B,
+    "DEFAULT_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    # MHA
+    "OP1_FUSED_QKV_MM_INPUT_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    "OP1_FUSED_QKV_MM_WEIGHTS_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),  # Needs to be DRAM
+    "OP1_FUSED_QKV_MM_BIAS_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+    "OP1_FUSED_QKV_MM_OUTPUT_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    "OP2TO6_CREATE_QKV_HEADS_OUTPUT_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    "OP7_PRE_SOFTMAX_BMM_OUTPUT_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    "OP8_SOFTMAX_ATTENTION_MASK_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    "OP9_POST_SOFTMAX_BMM_OUTPUT_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    "OP10_CONCAT_ATTENTION_HEADS_OUTPUT_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    # MHA SELFOUT ATTENTION
+    "OP11_SELFOUT_WEIGHTS_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+    "OP11_SELFOUT_BIAS_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+    "OP11_SELFOUT_OUTPUT_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    # MHA LAYERNORM
+    "OP12_LAYERNORM_GAMMA_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    "OP12_LAYERNORM_BETA_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    "OP12_LAYERNORM_OUTPUT_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    # FFN
+    "OP13_FF1_MM_WEIGHTS_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+    "OP13_FF1_MM_BIAS_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+    "OP13_FF1_MM_OUTPUT_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    "OP14_FF2_MM_WEIGHTS_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+    "OP14_FF2_MM_BIAS_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+    "OP14_FF2_MM_OUTPUT_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    # FFN LAYERNORM
+    "OP15_LAYERNORM_GAMMA_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    "OP15_LAYERNORM_BETA_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    "OP15_LAYERNORM_OUTPUT_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+    # After all encoders
+    "QA_LINEAR_WEIGHTS_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+    "QA_LINEAR_BIAS_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+    "QA_LINEAR_OUTPUT_MEMCFG": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    # MHA
+    "OP1_FUSED_QKV_MM_INPUT_DTYPE": ttl.tensor.DataType.BFLOAT16,
+    "OP1_FUSED_QKV_MM_WEIGHTS_DTYPE": ttl.tensor.DataType.BFLOAT8_B,
+    "OP1_FUSED_QKV_MM_BIAS_DTYPE": ttl.tensor.DataType.BFLOAT8_B,
+    "OP1_FUSED_QKV_MM_OUTPUT_DTYPE": ttl.tensor.DataType.BFLOAT8_B,
+    "OP7_PRE_SOFTMAX_BMM_OUTPUT_DTYPE": ttl.tensor.DataType.BFLOAT16,
+    "OP8_SOFTMAX_ATTENTION_MASK_DTYPE": ttl.tensor.DataType.BFLOAT16,
+    "OP9_POST_SOFTMAX_BMM_OUTPUT_DTYPE": ttl.tensor.DataType.BFLOAT8_B,
+    # MHA SELFOUT ATTENTION
+    "OP11_SELFOUT_WEIGHTS_DTYPE": ttl.tensor.DataType.BFLOAT8_B,
+    "OP11_SELFOUT_BIAS_DTYPE": ttl.tensor.DataType.BFLOAT8_B,
+    "OP11_SELFOUT_OUTPUT_DTYPE": ttl.tensor.DataType.BFLOAT16,
+    # MHA LAYERNORM
+    "OP12_LAYERNORM_GAMMA_DTYPE": ttl.tensor.DataType.BFLOAT16,
+    "OP12_LAYERNORM_BETA_DTYPE": ttl.tensor.DataType.BFLOAT16,
+    "OP12_LAYERNORM_OUTPUT_DTYPE": ttl.tensor.DataType.BFLOAT16,  # Used for ffn sub-graph test, might need in the future with mixed precision
+    # FFN
+    "OP13_FF1_MM_WEIGHTS_DTYPE": ttl.tensor.DataType.BFLOAT8_B,
+    "OP13_FF1_MM_BIAS_DTYPE": ttl.tensor.DataType.BFLOAT8_B,
+    "OP13_FF1_MM_OUTPUT_DTYPE": ttl.tensor.DataType.BFLOAT8_B,
+    "OP14_FF2_MM_WEIGHTS_DTYPE": ttl.tensor.DataType.BFLOAT8_B,
+    "OP14_FF2_MM_BIAS_DTYPE": ttl.tensor.DataType.BFLOAT8_B,
+    "OP14_FF2_MM_OUTPUT_DTYPE": ttl.tensor.DataType.BFLOAT16,
+    # FFN LAYERNORM
+    "OP15_LAYERNORM_GAMMA_DTYPE": ttl.tensor.DataType.BFLOAT16,
+    "OP15_LAYERNORM_BETA_DTYPE": ttl.tensor.DataType.BFLOAT16,
+    # After all encoders
+    "QA_LINEAR_WEIGHTS_DTYPE": ttl.tensor.DataType.BFLOAT16,
+    "QA_LINEAR_BIAS_DTYPE": ttl.tensor.DataType.BFLOAT16,
+}
 
 
 @pytest.mark.parametrize(
     "expected_inference_time, expected_compile_time",
     (
-        (0.08,
-         9.6,
+        (
+            0.08,
+            9.6,
         ),
     ),
 )
 def test_perf(use_program_cache, expected_inference_time, expected_compile_time):
-    model_config = get_model_config(model_config_str)
+    model_config = MIXED_PRECISION_BATCH8_MODEL_CONFIG
 
     disable_compile_cache()
     first_key = "first_iter"
@@ -121,9 +186,7 @@ def test_perf(use_program_cache, expected_inference_time, expected_compile_time)
     cpu_time = profiler.get(cpu_key)
     ttl.device.CloseDevice(device)
 
-    prep_report(
-        "bert15", BATCH_SIZE, first_iter_time, second_iter_time, comments, cpu_time
-    )
+    prep_report("bert15", BATCH_SIZE, first_iter_time, second_iter_time, comments, cpu_time)
     compile_time = first_iter_time - second_iter_time
     logger.info(f"bert15 inference time: {second_iter_time}")
     logger.info(f"bert15 compile time: {compile_time}")
