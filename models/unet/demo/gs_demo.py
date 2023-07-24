@@ -1,15 +1,24 @@
-import argparse
-import logging
 import os
-
-import numpy as np
+import pytest
 import torch
-import torch.nn.functional as F
+from torch import nn
+import numpy as np
+import random
+from loguru import logger
 from PIL import Image
-from torchvision import transforms
+from pathlib import Path
+
+import tt_lib
+
 from torch.utils.data import Dataset
 
+from models.unet.tt.unet_model import TtUnet
 from tests.python_api_testing.models.unet.reference.unet_model import UNet
+
+from models.utility_functions import (
+    tt2torch_tensor,
+    torch2tt_tensor,
+)
 
 
 class BasicDataset(Dataset):
@@ -123,6 +132,7 @@ def predict_img(net, full_img, device, scale_factor=1, out_threshold=0.5):
         BasicDataset.preprocess(None, full_img, scale_factor, is_mask=False)
     )
     img = img.unsqueeze(0)
+    img = torch2tt_tensor(img, device)
     img = img.to(device=device, dtype=torch.float32)
 
     with torch.no_grad():
@@ -136,13 +146,6 @@ def predict_img(net, full_img, device, scale_factor=1, out_threshold=0.5):
             mask = torch.sigmoid(output) > out_threshold
 
     return mask[0].long().squeeze().numpy()
-
-
-def get_output_filenames(args):
-    def _generate_name(fn):
-        return f"{os.path.splitext(fn)[0]}_OUT.png"
-
-    return args.output or list(map(_generate_name, args.input))
 
 
 def mask_to_image(mask: np.ndarray, mask_values):
@@ -164,38 +167,38 @@ def mask_to_image(mask: np.ndarray, mask_values):
     return Image.fromarray(out)
 
 
-if __name__ == "__main__":
+def run_tt_unet_demo(device):
+    random.seed(42)
+    torch.manual_seed(42)
+
+    n_channels = 3
+    n_classes = 2
+
+    # load Unet model ================================================
+    reference_model = UNet(n_channels=n_channels, n_classes=n_classes, bilinear=False)
+    checkpoint = torch.hub.load_state_dict_from_url(
+        "https://github.com/milesial/Pytorch-UNet/releases/download/v3.0/unet_carvana_scale0.5_epoch2.pth",
+        map_location="cpu",
+    )
+    reference_model.load_state_dict(checkpoint)
+    reference_model.eval()
+    state_dict = reference_model.state_dict()
+
+    # get TtUnet module ========================================
+    gs_module = TtUnet(device, state_dict, n_channels, n_classes, False)
+
     in_files = ["models/unet/bmw.jpeg", "models/unet/honda.jpg"]
     out_files = [
         "models/unet/bmw_out.jpeg",
         "models/unet/honda_out.jpg",
     ]
 
-    net = UNet(n_channels=3, n_classes=2, bilinear=False)
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logging.info(f"Using device {device}")
-
-    net.to(device=device)
-
-    # state_dict = torch.load(args.model, map_location=device)
-    checkpoint = torch.hub.load_state_dict_from_url(
-        "https://github.com/milesial/Pytorch-UNet/releases/download/v3.0/unet_carvana_scale0.5_epoch2.pth",
-        map_location="cpu",
-    )
-    net.load_state_dict(checkpoint)
-
-    state_dict = net.state_dict()
-    mask_values = state_dict.pop("mask_values", [0, 1])
-
-    print("Model loaded!")
-
     for i, filename in enumerate(in_files):
         print(f"Predicting image {filename} ...")
         img = Image.open(filename)
 
         mask = predict_img(
-            net=net,
+            net=gs_module,
             full_img=img,
             device=device,
         )
@@ -204,3 +207,14 @@ if __name__ == "__main__":
         result = mask_to_image(mask, mask_values)
         result.save(out_filename)
         print(f"Mask saved to {out_filename}")
+
+
+def test_gs_demo():
+    # Initialize the device
+    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    tt_lib.device.InitializeDevice(device)
+    tt_lib.device.SetDefaultDevice(device)
+
+    run_tt_unet_demo(device)
+
+    tt_lib.device.CloseDevice(device)

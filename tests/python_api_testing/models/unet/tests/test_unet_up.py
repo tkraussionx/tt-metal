@@ -14,15 +14,14 @@ from tests.python_api_testing.models.utility_functions_new import (
     comp_allclose_and_pcc,
 )
 
-from models.unet.tt.unet_double_conv import TtDoubleConv
+from models.unet.tt.unet_up import TtUp
 from tests.python_api_testing.models.unet.reference.unet_model import UNet
 
 
-def run_test_double_conv_inference(
+def run_test_up_inference(
     device,
     in_channels,
     out_channels,
-    mid_channels,
     pcc,
 ):
     # load Unet model ================================================
@@ -35,30 +34,38 @@ def run_test_double_conv_inference(
     reference_model.eval()
     state_dict = reference_model.state_dict()
 
-    # get subgraph
-    double_conv = reference_model.down1.maxpool_conv[1]
-    logger.debug(f"CPU model: {double_conv}")
+    # get Pytorch subgraph
+    # cpu_module = reference_model.up1
+    cpu_module = reference_model.up1
 
-    # get TtDoubleConv module =====================================================
-    base_address = "down1.maxpool_conv.1.double_conv"
-
-    tt_module = TtDoubleConv(
-        device, base_address, state_dict, in_channels, out_channels, mid_channels
-    )
+    logger.debug(f"CPU model: {cpu_module}")
 
     # create input
     torch.manual_seed(0)
-    test_input = torch.rand(1, 64, 128, 128)
+
+    # up2 ----------------------------------------
+    # up_position = "up2"
+    # test_input_1 = torch.rand(1, 512, 64, 128)
+    # test_input_2 = torch.rand(1, 256, 128, 256)
+
+    # up1 -----------------------------------------
+    up_position = "up1"
+    test_input_1 = torch.rand(1, 1024, 32, 64)
+    test_input_2 = torch.rand(1, 512, 64, 128)
 
     # Pytorch call ===================================================
-    pt_out = double_conv(test_input)
+    pt_out = cpu_module(test_input_1, test_input_2)
     logger.debug(f"pt_out shape {pt_out.shape}")
 
-    # TT call =========================================================
+    # TT call ========================================================
+    # get TtDoubleConv module
+    gs_module = TtUp(device, up_position, state_dict, in_channels, out_channels, False)
+
     with torch.no_grad():
-        tt_module.eval()
-        test_input = torch2tt_tensor(test_input, device)
-        tt_out = tt_module(test_input)
+        gs_module.eval()
+        test_input_1 = torch2tt_tensor(test_input_1, device)
+        test_input_2 = torch2tt_tensor(test_input_2, device)
+        tt_out = gs_module(test_input_1, test_input_2)
         tt_out = tt2torch_tensor(tt_out)
 
     logger.debug(f"tt_out shape {tt_out.shape}")
@@ -70,28 +77,26 @@ def run_test_double_conv_inference(
     logger.info(pcc_message)
 
     if does_pass:
-        logger.info("test DoubleConv Passed!")
+        logger.info("test Up Passed!")
     else:
-        logger.warning("test DoubleConv Failed!")
+        logger.warning("test Up Failed!")
 
     assert does_pass
 
 
-# parameters: DoubleConv position in the model
-_in_channels = 64
-_out_channels = 128
-_mid_channels = 128
+# parameters: Up position in the model
+_in_channels = 1024
+_out_channels = 512
 
 
 @pytest.mark.parametrize(
     "pcc",
     ((0.99,),),
 )
-def test_double_conv_inference(pcc):
+def test_up_inference(pcc):
     # Initialize the device
     in_channels = _in_channels
     out_channels = _out_channels
-    mid_channels = _mid_channels
 
     device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
     tt_lib.device.InitializeDevice(device)
@@ -99,11 +104,10 @@ def test_double_conv_inference(pcc):
 
     host = tt_lib.device.GetHost()
 
-    run_test_double_conv_inference(
+    run_test_up_inference(
         device,
         in_channels,
         out_channels,
-        mid_channels,
         pcc,
     )
     tt_lib.device.CloseDevice(device)
