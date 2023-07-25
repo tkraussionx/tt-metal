@@ -8,7 +8,7 @@ sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 sys.path.append(f"{f}/../../../../..")
 
-
+import pytest
 from torch import autocast
 import torch
 import time
@@ -18,21 +18,24 @@ from loguru import logger
 from transformers import CLIPTextModel, CLIPTokenizer
 from diffusers import AutoencoderKL, UNet2DConditionModel, PNDMScheduler, HeunDiscreteScheduler, DPMSolverMultistepScheduler
 from diffusers import LMSDiscreteScheduler
+from unet_2d_condition import UNet2DConditionModel as tt_unet_condition
 from tqdm.auto import tqdm
 
-from utility_functions_new import torch_to_tt_tensor, torch_to_tt_tensor_rm, tt_to_torch_tensor, comp_pcc, comp_allclose_and_pcc, Profiler
-from utility_functions_new import enable_compile_cache, disable_compile_cache
-
 import tt_lib as ttl
-from unet_2d_condition import UNet2DConditionModel as tt_unet_condition
 
+from models.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor, torch_to_tt_tensor
+from tests.python_api_testing.models.utility_functions_new import comp_pcc, comp_allclose_and_pcc
+from tests.python_api_testing.models.utility_functions_new import Profiler
+from models.utility_functions import disable_compile_cache, enable_compile_cache
+from tests.python_api_testing.models.utility_functions_new import prep_report
+
+BATCH_SIZE = 1
 
 def constant_prop_time_embeddings(timesteps, sample, time_proj):
     timesteps = timesteps[None]
     timesteps = timesteps.expand(sample.shape[0])
     t_emb = time_proj(timesteps)
     return t_emb
-
 
 def save_image_and_latents(latents, iter, vae, pre_fix="", pre_fix2=""):
     pre_fix = "" if pre_fix == "" else f"{pre_fix}_"
@@ -91,15 +94,22 @@ def make_tt_unet(state_dict):
                                 base_address="")
     return tt_unet
 
+def test_batched_perf():
+    disable_compile_cache()
+    profiler = Profiler()
+    first_key = "first_iter"
+    second_key = "second_iter"
+    cpu_key = "ref_iter"
 
-def demo():
+    expected_inference_time = 78
+    expected_compile_time = 70
+
     # Initialize the device
     device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
     ttl.device.InitializeDevice(device)
     ttl.device.SetDefaultDevice(device)
     host = ttl.device.GetHost()
-    # enable_compile_cache()
-    disable_compile_cache()
+
     # 1. Load the autoencoder model which will be used to decode the latents into image space.
     vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae")
 
@@ -166,6 +176,7 @@ def demo():
     pcc_res = {}
     iter = 0
     # torch Denoising loop
+    profiler.start(cpu_key)
     for t in tqdm(scheduler.timesteps):
         # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
         latent_model_input = latent_expansion(latents, scheduler, t)
@@ -180,7 +191,9 @@ def demo():
 
         save_image_and_latents(latents, iter, vae, pre_fix=f"{experiment_name}_torch", pre_fix2="")
         iter += 1
-        # save things required!
+        if iter==0:
+            # save things required!
+            profiler.end(cpu_key)
 
     latents = 1 / 0.18215 * latents
     with torch.no_grad():
@@ -196,6 +209,7 @@ def demo():
     iter = 0
     last_latents = None
     # # Denoising loop
+    profiler_key = first_key
     for t in tqdm(tt_scheduler.timesteps):
         # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
         tt_latent_model_input = latent_expansion(tt_latents, tt_scheduler, t)
@@ -221,6 +235,8 @@ def demo():
         # save things required!
         iter += 1
         enable_compile_cache()
+        profiler.end(profiler_key)
+        profiler_key = second_key
 
 
     latents = last_latents
@@ -238,15 +254,23 @@ def demo():
     pil_images = [Image.fromarray(image) for image in images][0]
     pil_images.save(f"{experiment_name}_tt.png")
 
-    ttl.device.CloseDevice(device)
+    first_iter_time = profiler.get(first_key)
+    second_iter_time = profiler.get(second_key)
+    cpu_time = profiler.get(cpu_key)
+    logger.info(second_iter_time)
+    logger.info(cpu_time)
 
-'''
-@article{patil2022stable,
-author = {Patil, Suraj and Cuenca, Pedro and Lambert, Nathan and von Platen, Patrick},
-title = {Stable Diffusion with :firecracker: Diffusers},
-journal = {Hugging Face Blog},
-year = {2022},
-note = {[https://huggingface.co/blog/rlhf](https://huggingface.co/blog/stable_diffusion)},
-}
-'''
-demo()
+    # compile_time = first_iter_time - second_iter_time
+    # comments = f"image size: {height}x{width} - v1.4"
+    # # prep_report(
+    # #     "batched_stable_diffusion",
+    # #     BATCH_SIZE,
+    # #     first_iter_time,
+    # #     second_iter_time,
+    # #     comments,
+    # #     cpu_time,
+    # # )
+    # logger.info(f"Batched Stable Diffusion {comments} inference time: {second_iter_time}")
+    # logger.info(f"Batched Stable Diffusion {comments} compile time: {compile_time}")
+
+    ttl.device.CloseDevice(device)
