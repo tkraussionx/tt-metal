@@ -15,6 +15,46 @@ from utility_functions_new import (
 from transformers import CodeGenConfig, CodeGenModel
 
 
+class CodeGenPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = CodeGenConfig
+    base_model_prefix = "transformer"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["CodeGenBlock"]
+
+    def __init__(self, *inputs, **kwargs):
+        super().__init__(*inputs, **kwargs)
+
+    def _init_weights(self, module):
+        """Initialize the weights."""
+        if isinstance(module, (nn.Linear,)):
+            # Slightly different from Mesh Transformer JAX which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, CodeGenModel):
+            module.gradient_checkpointing = value
+
+
+
+
+
+
+
 class CodeGenModel(CodeGenPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -62,6 +102,47 @@ class TtCodeGenModel(torch.nn.Module):
         )
 
 
+    def _convert_head_mask_to_5d(self, head_mask, num_hidden_layers):
+        """-> [num_hidden_layers x batch x num_heads x seq_length x seq_length]"""
+        if head_mask.dim() == 1:
+            head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+            head_mask = head_mask.expand(num_hidden_layers, -1, -1, -1, -1)
+        elif head_mask.dim() == 2:
+            head_mask = (
+                head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
+            )  # We can specify head_mask for each layer
+        assert head_mask.dim() == 5, f"head_mask.dim != 5, instead {head_mask.dim()}"
+
+        head_mask = head_mask.to(
+            dtype=self.dtype
+        )  # switch to float if need + fp16 compatibility
+        return head_mask
+
+    def get_head_mask(
+        self, head_mask, num_hidden_layers: int, is_attention_chunked: bool = False
+    ):
+        """
+        Prepare the head mask if needed.
+        Args:
+            head_mask (Tensor with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
+                The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard).
+            num_hidden_layers (`int`):
+                The number of hidden layers in the model.
+            is_attention_chunked: (`bool`, *optional*, defaults to `False`):
+                Whether or not the attentions scores are computed by chunks or not.
+        Returns:
+            Tensor with shape `[num_hidden_layers x batch x num_heads x seq_length x seq_length]` or list with
+            `[None]` for each layer.
+        """
+        if head_mask is not None:
+            head_mask = self._convert_head_mask_to_5d(head_mask, num_hidden_layers)
+            if is_attention_chunked is True:
+                head_mask = head_mask.unsqueeze(-1)
+        else:
+            head_mask = [None] * num_hidden_layers
+
+        return head_mask
+
 
     def get_input_embeddings(self):
         return self.wte
@@ -104,6 +185,8 @@ class TtCodeGenModel(torch.nn.Module):
             input_ids_shape = input_ids.shape()
 
             batch_size = input_ids_shape[0]
+
+
 
         elif inputs_embeds is not None:
             input_shape_2 = inputs_embeds.shape()
@@ -173,7 +256,6 @@ class TtCodeGenModel(torch.nn.Module):
         # attention_probs has shape bsz x num_attention_heads x N x N
         # head_mask has shape n_layer x batch x num_attention_heads x N x N
 
-        #Problem???
         head_mask = self.get_head_mask(head_mask, self.config.n_layer)
 
         if inputs_embeds is None:
