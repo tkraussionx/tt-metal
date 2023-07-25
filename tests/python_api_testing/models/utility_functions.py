@@ -19,7 +19,13 @@ from tests.python_api_testing.models.utility_functions_new import (
     comp_allclose_and_pcc,
     Profiler,
     profiler,
-    tt_to_torch_tensor
+    tt_to_torch_tensor,
+    torch_to_tt_tensor,
+    torch_to_tt_tensor_rm,
+    unpad_from_zero,
+    pad_by_zero,
+    tt2torch_tensor,
+    torch2tt_tensor
 )
 
 import tt_lib as ttl
@@ -45,11 +51,11 @@ from tt_lib.utils import (
 
 
 
-def print_diff_tt_pyt(a, b, annotation=""):
-    # first convert a pytorch tensor argument b to tt
-    padded_b = pad_weight(b)
-    pyt_a = tt2torch(a)  # untilizes also
-    return print_diff_argmax(pyt_a, padded_b, annotation)
+# def print_diff_tt_pyt(a, b, annotation=""):
+#     # first convert a pytorch tensor argument b to tt
+#     padded_b = pad_weight(b)
+#     pyt_a = tt2torch(a)  # untilizes also
+#     return print_diff_argmax(pyt_a, padded_b, annotation)
 
 
 

@@ -31,7 +31,7 @@ def is_close(a, b, rtol=1e-2, atol=1e-2, max_mag=2.0, max_mag_fraction=0.02):
 
         HT = a.shape[-2] // 32
         WT = a.shape[-1] // 32
-        hwt = debug_index//1024
+        hwt = debug_index // 1024
         wt = hwt % WT
         ht = hwt // WT
         h = (debug_index % 1024) // 32
@@ -200,7 +200,12 @@ def comp_allclose_and_pcc(golden, calculated, rtol=1e-05, atol=1e-08, pcc=0.99):
     return passing, output
 
 
-def torch2tt_tensor(py_tensor: torch.Tensor, tt_device, tt_layout=tt_lib.tensor.Layout.TILE, tt_memory_config=tt_lib.tensor.MemoryConfig(True)):
+def torch2tt_tensor(
+    py_tensor: torch.Tensor,
+    tt_device,
+    tt_layout=tt_lib.tensor.Layout.TILE,
+    tt_memory_config=tt_lib.tensor.MemoryConfig(True),
+):
     size = list(py_tensor.size())
 
     while len(size) < 4:
@@ -229,12 +234,14 @@ def tt2torch_tensor(tt_tensor, tt_host=None):
         tt_output = tt_output.to(tt_lib.tensor.Layout.ROW_MAJOR)
 
     dtype = {
-        tt_lib.tensor.DataType.FLOAT32:   torch.float,
-        tt_lib.tensor.DataType.BFLOAT16:  torch.bfloat16,
+        tt_lib.tensor.DataType.FLOAT32: torch.float,
+        tt_lib.tensor.DataType.BFLOAT16: torch.bfloat16,
         tt_lib.tensor.DataType.BFLOAT8_B: torch.float,
     }[tt_tensor.dtype()]
 
-    py_output = torch.frombuffer(tt_output.data(), dtype=dtype).reshape(tt_output.shape())
+    py_output = torch.frombuffer(tt_output.data(), dtype=dtype).reshape(
+        tt_output.shape()
+    )
     return py_output
 
 
@@ -242,7 +249,16 @@ def pad_by_zero(x: torch.Tensor, device):
     initial_shape = x.shape
     if initial_shape[3] % 32 != 0 or initial_shape[2] % 32 != 0:
         x = tt_lib.tensor.Tensor(x.contiguous().to(torch.bfloat16))
-        x = x.pad((initial_shape[0], initial_shape[1], _nearest_32(initial_shape[2]), _nearest_32(initial_shape[3])), (0, 0, 0, 0), 0)
+        x = x.pad(
+            (
+                initial_shape[0],
+                initial_shape[1],
+                _nearest_32(initial_shape[2]),
+                _nearest_32(initial_shape[3]),
+            ),
+            (0, 0, 0, 0),
+            0,
+        )
         x = x.to(tt_lib.tensor.Layout.TILE).to(device)
 
     else:
@@ -251,16 +267,24 @@ def pad_by_zero(x: torch.Tensor, device):
 
 
 def unpad_from_zero(x, desired_shape, host):
-    if x.shape()[-1] == desired_shape[-1] and x.shape()[-2] == desired_shape[-2] :
+    if x.shape()[-1] == desired_shape[-1] and x.shape()[-2] == desired_shape[-2]:
         x = tt2torch_tensor(x)
     else:
         x = x.to(host)
-        if(x.layout() != tt_lib.tensor.Layout.ROW_MAJOR):
+        if x.layout() != tt_lib.tensor.Layout.ROW_MAJOR:
             x = x.to(tt_lib.tensor.Layout.ROW_MAJOR)
-        x = x.unpad((0, 0, 0, 0), (desired_shape[0] - 1, desired_shape[1] - 1, desired_shape[2] - 1, desired_shape[3] - 1) )
+        x = x.unpad(
+            (0, 0, 0, 0),
+            (
+                desired_shape[0] - 1,
+                desired_shape[1] - 1,
+                desired_shape[2] - 1,
+                desired_shape[3] - 1,
+            ),
+        )
         dtype = {
-            tt_lib.tensor.DataType.FLOAT32:   torch.float,
-            tt_lib.tensor.DataType.BFLOAT16:  torch.bfloat16,
+            tt_lib.tensor.DataType.FLOAT32: torch.float,
+            tt_lib.tensor.DataType.BFLOAT16: torch.bfloat16,
             tt_lib.tensor.DataType.BFLOAT8_B: torch.float,
         }[x.dtype()]
 
@@ -268,7 +292,7 @@ def unpad_from_zero(x, desired_shape, host):
     return x
 
 
-class Profiler():
+class Profiler:
     def __init__(self):
         self.start_times = dict()
         self.times = dict()
@@ -322,12 +346,14 @@ def tt_to_torch_tensor(tt_tensor, host):
     # py_tensor = torch.Tensor(tt_tensor.data()).reshape(tt_tensor.shape())
 
     dtype = {
-        tt_lib.tensor.DataType.FLOAT32:   torch.float,
-        tt_lib.tensor.DataType.BFLOAT16:  torch.bfloat16,
+        tt_lib.tensor.DataType.FLOAT32: torch.float,
+        tt_lib.tensor.DataType.BFLOAT16: torch.bfloat16,
         tt_lib.tensor.DataType.BFLOAT8_B: torch.float,
     }[tt_tensor.dtype()]
 
-    py_output = torch.frombuffer(tt_output.data(), dtype=dtype).reshape(tt_output.shape())
+    py_output = torch.frombuffer(tt_output.data(), dtype=dtype).reshape(
+        tt_output.shape()
+    )
 
     return py_output
 
@@ -338,8 +364,8 @@ def torch_to_tt_tensor_rm(py_tensor, device, shape=None, put_on_device=True):
         while len(shape) < 4:
             shape.insert(0, 1)
 
-    tt_tensor = (
-         tt_lib.tensor.Tensor(py_tensor.contiguous().to(torch.bfloat16).reshape(shape))
+    tt_tensor = tt_lib.tensor.Tensor(
+        py_tensor.contiguous().to(torch.bfloat16).reshape(shape)
     )
     if put_on_device:
         tt_tensor = tt_tensor.to(device)
@@ -352,14 +378,26 @@ def torch_to_tt_tensor(py_tensor, device):
         shape.insert(0, 1)
 
     tt_tensor = (
-         tt_lib.tensor.Tensor(py_tensor.contiguous().to(torch.bfloat16).reshape(shape))
-        .to(tt_lib.tensor.Layout.TILE)     # change memory layout of TT Tensor to TILE (as operation that will use it expects TILE layout)
-        .to(device)                         # move TT Tensor from host to TT accelerator device (device is of type tt_lib.device.Device)
+        tt_lib.tensor.Tensor(py_tensor.contiguous().to(torch.bfloat16).reshape(shape))
+        .to(
+            tt_lib.tensor.Layout.TILE
+        )  # change memory layout of TT Tensor to TILE (as operation that will use it expects TILE layout)
+        .to(
+            device
+        )  # move TT Tensor from host to TT accelerator device (device is of type tt_lib.device.Device)
     )
 
     return tt_tensor
 
-def prep_report(model_name: str, batch_size: int, inference_and_compile_time: float, inference_time: float, comments: str, inference_time_cpu: float=None):
+
+def prep_report(
+    model_name: str,
+    batch_size: int,
+    inference_and_compile_time: float,
+    inference_time: float,
+    comments: str,
+    inference_time_cpu: float = None,
+):
     today = time.strftime("%Y_%m_%d")
 
     def write_dict_to_file(csv_path, dict_res):
@@ -372,17 +410,22 @@ def prep_report(model_name: str, batch_size: int, inference_and_compile_time: fl
             csvfile.write("\n")
             csvfile.write(values)
 
-
     compile_time = inference_and_compile_time - inference_time
-    gs_throughput = "{:.4f}".format(batch_size * (1/inference_time))
-    cpu_throughput = batch_size * (1/inference_time_cpu) if inference_time_cpu else "unknown"
-    cpu_throughput = "{:.4f}".format(cpu_throughput) if not isinstance(cpu_throughput, str) else cpu_throughput
+    gs_throughput = "{:.4f}".format(batch_size * (1 / inference_time))
+    cpu_throughput = (
+        batch_size * (1 / inference_time_cpu) if inference_time_cpu else "unknown"
+    )
+    cpu_throughput = (
+        "{:.4f}".format(cpu_throughput)
+        if not isinstance(cpu_throughput, str)
+        else cpu_throughput
+    )
     dict_res = {
         "Model": model_name,
         "Setting": comments,
         "Batch": str(batch_size),
         "First Run (sec)": "{:.2f}".format(inference_and_compile_time),
-        "Second Run (sec)":  "{:.2f}".format(inference_time),
+        "Second Run (sec)": "{:.2f}".format(inference_time),
         "Compile Time (sec)": "{:.2f}".format(compile_time),
         "Inference Time GS (sec)": "{:.4f}".format(inference_time),
         "Throughput GS (batch*inf/sec)": gs_throughput,
