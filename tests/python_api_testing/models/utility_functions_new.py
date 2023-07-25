@@ -292,6 +292,7 @@ def unpad_from_zero(x, desired_shape, host):
     return x
 
 
+
 class Profiler:
     def __init__(self):
         self.start_times = dict()
@@ -304,14 +305,14 @@ class Profiler:
     def disable(self):
         self.disabled = True
 
-    def start(self, key):
-        if self.disabled:
+    def start(self, key, force_enable=False):
+        if self.disabled and not force_enable:
             return
 
         self.start_times[key] = time.time()
 
-    def end(self, key, PERF_CNT=1):
-        if self.disabled:
+    def end(self, key, PERF_CNT=1, force_enable=False):
+        if self.disabled and not force_enable:
             return
 
         if key not in self.start_times:
