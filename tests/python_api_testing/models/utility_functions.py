@@ -7,8 +7,6 @@ from loguru import logger
 from tests.python_api_testing.models.utility_functions_new import (
     is_close,
     get_oom_of_float,
-    enable_compile_cache,
-    disable_compile_cache,
     get_compile_cache_enabled,
     enable_compilation_reports,
     disable_compilation_reports,
@@ -27,8 +25,7 @@ from tests.python_api_testing.models.utility_functions_new import (
     tt2torch_tensor,
     torch2tt_tensor,
     enable_persistent_kernel_cache,
-    disable_persistent_kernel_cache,
-    enable_compilation_reports
+    disable_persistent_kernel_cache
 )
 
 import tt_lib as ttl
