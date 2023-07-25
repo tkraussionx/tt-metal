@@ -53,7 +53,6 @@ class TtCodeGenAttention(nn.Module):
                 f" `num_attention_heads`: {self.num_attention_heads})."
             )
 
-
         self.scale_attn = torch.sqrt(torch.tensor(self.head_dim, dtype=torch.float32)).to(torch.get_default_dtype())
 
         self.weight_qkv_proj = state_dict[f"{base_address}.qkv_proj.weight"]

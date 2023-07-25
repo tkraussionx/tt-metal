@@ -58,5 +58,6 @@ class TtCodeGenMLP(torch.nn.Module):
         hidden_states = self.fc_out(hidden_states)
         pt_hidden_states = tt2torch_tensor(hidden_states)
         pt_hidden_states = self.dropout(pt_hidden_states)
-        tt_hidden_states = torch2tt_tensor(pt_hidden_states, self.device)
+        tt_hidden_states = torch_to_tt_tensor_rm(pt_hidden_states, self.device, put_on_device=False)
+
         return hidden_states
