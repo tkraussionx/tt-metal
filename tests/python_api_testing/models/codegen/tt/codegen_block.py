@@ -83,20 +83,20 @@ class TtCodeGenBlock(torch.nn.Module):
         print(attn_output_shape)
 
 
-        #pt_attn_output = tt2torch_tensor(attn_output)
+        pt_attn_output = tt2torch_tensor(attn_output)
         #Wpt_attn_output = pt_attn_output.squeeze(0)
         #pt_attn_output = pt_attn_output.squeeze(0)
         #pt_attn_output = pt_attn_output.squeeze(0)
 
-        #outputs = pt_attn_output[1:]
+        outputs = pt_attn_output[0:]
 
 
 
-        #slice_list_outputs = [slice(1, attn_output_shape[3])]
+        slice_list_outputs = [slice(0, attn_output_shape[3])]
 
         #outputs = fallback_ops.tensor_slice(attn_output, slice_list_outputs)
 
-        #attn_output = torch_to_tt_tensor_rm(outputs, device, put_on_device=False)
+        attn_output = torch_to_tt_tensor_rm(outputs, device, put_on_device=False)
 
         feed_forward_hidden_states = self.mlp(hidden_states)
 
@@ -109,15 +109,15 @@ class TtCodeGenBlock(torch.nn.Module):
         hidden_states = tt_lib.tensor.add(hidden_states, residual)
 
 
-        outputs_shape = outputs.shape()
+        outputs_shape = attn_output.shape()
 
-        slice_list_outputs_2 = [slice(1, outputs_shape[0])]
+        #slice_list_outputs_2 = [slice(1, outputs_shape[0])]
 
-        outputs_sliced = fallback_ops.tensor_slice(outputs, slice_list_outputs_2)
+        #outputs_sliced = fallback_ops.tensor_slice(attn_output, slice_list_outputs_2)
 
         if use_cache:
-            outputs = (hidden_states,) + outputs
+            outputs = (hidden_states,) + (outputs,)
         else:
-            outputs = (hidden_states,) + outputs_sliced
+            outputs = (hidden_states,) + (outputs,)
 
         return outputs  # hidden_states, present, (attentions)
