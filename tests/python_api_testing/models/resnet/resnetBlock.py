@@ -10,6 +10,7 @@ from tt_lib.utils import pad_weight
 
 from tt_lib.fused_ops.linear import Linear as TtLinear
 from tt_lib.fused_ops.softmax import softmax as TtSoftmax
+from tt_lib.fused_ops.fc import run_fc_on_device_wrapper as TtFC
 from conv_on_device_utils import is_conv_supported_on_device, run_conv_on_device_wrapper, _nearest_32
 from tt_lib.fallback_ops import fallback_ops
 # Local copy of unpad_from_zero to always set output to
@@ -344,14 +345,53 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2], name="layer4", state_dict=state_dict)
         self.avgpool = fallback_ops.AdaptiveAvgPool2d((1, 1))
 
+        ## FC. This expects padded shapes in RM
+        fc_weight = state_dict[f"{self.base_address_with_dot}fc.weight"]
+        fc_weight_dtype = tt_lib.tensor.DataType.BFLOAT16
+        fc_weight_pad_value = 0.
+        if len(fc_weight.shape) == 4:
+            fc_weight_shape = [ fc_weight.shape[0], fc_weight.shape[1], fc_weight.shape[2], fc_weight.shape[3] ]
+            fc_weight_padded_shape = [ fc_weight.shape[0], fc_weight.shape[1], _nearest_32(fc_weight.shape[2]), _nearest_32(fc_weight.shape[3]) ]
+        elif len(fc_weight.shape) == 2:
+            fc_weight_shape = [ 1, 1, fc_weight.shape[0], fc_weight.shape[1] ]
+            fc_weight_padded_shape = [ 1, 1, _nearest_32(fc_weight.shape[0]), _nearest_32(fc_weight.shape[1]) ]
+        else:
+            assert(False and 'FC has a weight issue!')
+        fc_weight = tt_lib.tensor.Tensor(fc_weight.reshape(-1).tolist(),
+                                         fc_weight_shape,
+                                         fc_weight_dtype,
+                                         tt_lib.tensor.Layout.ROW_MAJOR)
+        fc_weight = fc_weight.pad(fc_weight_padded_shape,
+                                  (0, 0, 0, 0),
+                                  fc_weight_pad_value).data()
 
-        fc_weight = pad_weight(state_dict[f"{self.base_address_with_dot}fc.weight"])
-        fc_weight = tt_lib.tensor.Tensor(fc_weight.reshape(-1).tolist(), fc_weight.shape, tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.Layout.ROW_MAJOR).to(tt_lib.tensor.Layout.TILE).data()
         fc_bias = pad_weight(state_dict[f"{self.base_address_with_dot}fc.bias"])
-        fc_bias = tt_lib.tensor.Tensor(fc_bias.reshape(-1).tolist(), fc_bias.shape, tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.Layout.ROW_MAJOR).to(tt_lib.tensor.Layout.TILE).data()
+        fc_bias_dtype = tt_lib.tensor.DataType.BFLOAT16
+        fc_bias_pad_value = 0.
+        if len(fc_bias.shape) == 2:
+            fc_bias_shape = [ 1, 1, fc_bias.shape[0], fc_bias.shape[1] ]
+            fc_bias_padded_shape = [ 1, 1, fc_bias.shape[0], _nearest_32(fc_bias.shape[1]) ]
+        elif len(fc_bias.shape) == 1:
+            fc_bias_shape = [ 1, 1, 1, fc_bias.shape[1] ]
+            fc_bias_padded_shape = [ 1, 1, 1, _nearest_32(fc_bias.shape[0]) ]
+        elif len(fc_bias.shape) == 4:
+            fc_bias_shape = [ fc_bias.shape[0], fc_bias.shape[1], fc_bias.shape[2], fc_bias.shape[3] ]
+            fc_bias_padded_shape = [ fc_bias.shape[0], fc_bias.shape[1], fc_bias.shape[2], _nearest_32(fc_bias.shape[3]) ]
+        else:
+            assert(False and 'FC has a bias issue!')
+        fc_bias = tt_lib.tensor.Tensor(fc_bias.reshape(-1).tolist(),
+                                       fc_bias_shape,
+                                       fc_bias_dtype,
+                                       tt_lib.tensor.Layout.ROW_MAJOR)
+        fc_bias = fc_bias.pad(fc_bias_padded_shape,
+                              (0, 0, 0, 0),
+                              fc_bias_pad_value).data()
+        fc_params = (fc_weight_padded_shape,
+                     fc_weight_dtype,
+                     fc_bias_padded_shape,
+                     fc_bias_dtype)
 
-        self.fc = TtLinear(512 * block.expansion, 1024, fc_weight, fc_bias, self.device) # num_classes = 1000
-        # self.fc = nn.Linear(512 * block.expansion, num_classes)
+        self.fc = TtFC(fc_weight, fc_params, self.device, fc_bias)
 
 
     def _make_layer(
