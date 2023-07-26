@@ -261,7 +261,7 @@ class TestEltwiseUnary:
             test_args,
         )
 
-    @pytest.mark.parametrize("fn_kind", ["abs", "sign", "neg"])
+    @pytest.mark.parametrize("fn_kind", ["abs", "sign", "neg", "ceil"])
     def test_run_eltwise_sign_ops(
         self, fn_kind, input_shapes, pcie_slot, function_level_defaults
     ):

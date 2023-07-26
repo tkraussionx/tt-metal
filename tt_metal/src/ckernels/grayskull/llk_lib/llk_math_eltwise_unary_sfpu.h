@@ -414,6 +414,17 @@ inline void llk_math_eltwise_unary_sfpu_heaviside_init() {
     llk_math_eltwise_unary_sfpu_init<SfpuType::heaviside, APPROXIMATE>();
 }
 
+// Ceil
+template <bool APPROXIMATE, DstSync dst_sync = DstSync::SyncFull>
+inline void llk_math_eltwise_unary_sfpu_ceil(uint dst_index, int vector_mode = Dim::RC) {
+    llk_math_eltwise_unary_sfpu<SfpuType::ceil, APPROXIMATE, dst_sync>(dst_index, vector_mode);
+}
+
+template <bool APPROXIMATE>
+inline void llk_math_eltwise_unary_sfpu_ceil_init() {
+    llk_math_eltwise_unary_sfpu_init<SfpuType::ceil, APPROXIMATE>();
+}
+
 //EXPM1
 template <bool APPROXIMATE, DstSync dst_sync = DstSync::SyncFull>
 inline void llk_math_eltwise_unary_sfpu_expm1(uint dst_index, int vector_mode = Dim::RC) {

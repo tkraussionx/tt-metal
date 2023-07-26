@@ -518,6 +518,13 @@ ALWI void cos_tile_init() {
     MATH(( llk_math_eltwise_unary_sfpu_cos_init<APPROX>() ));
 }
 
+ALWI void ceil_tile_init() {
+    MATH(( llk_math_eltwise_unary_sfpu_ceil_init<APPROX>() ));
+}
+
+ALWI void ceil_tile(uint32_t idst) {
+    MATH(( llk_math_eltwise_unary_sfpu_ceil<APPROX, SyncHalf>(idst) ));
+}
 /**
  *  Please refer to documentation for exp_tile.
  */

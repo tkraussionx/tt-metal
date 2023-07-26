@@ -134,6 +134,7 @@ inline void sfpu_init(SfpuType operation, uint param0 = 0)
     uint imm2;
     switch (operation) {
     case SfpuType::tanh:
+    case SfpuType::ceil:
     case SfpuType::tanh_derivative:
         imm0 = 0x1DFF; //0.90625*x
         imm1 = 0x481A; //0.09375*x + 0.8125
@@ -779,6 +780,47 @@ union Converter {
     return c.f;
   }
 };
+
+union Converter2 {
+  vFloat f;
+  uint32_t u;
+  static uint32_t to_uint32(vFloat _v) {
+    Converter2 c{};
+    c.f = _v;
+    return c.u;
+  }
+};
+
+template <bool APPROXIMATION_MODE, int ITERATIONS>
+inline void calculate_ceil()
+{
+
+    for (int d = 0; d < ITERATIONS; d++)
+    {
+        vFloat val = dst_reg[0];
+        uint32_t bits = Converter2::to_uint32(val);
+        // float res = Converter::to_float(bits);
+
+        uint32_t exponent_s = (bits >> 23) & 255;
+        uint32_t mantissa = bits & 0x7FFFFF;
+        int sign =  (bits >> 31) & 1;
+        vFloat isNeg = (sign) ? -1.0f : 1.0f;
+        vFloat integerPart = 0;
+
+        if (exponent_s >= 127) {
+        integerPart = (1 << (exponent_s - 127)) | (mantissa >> (23 - (exponent_s - 127)));
+        }
+
+        if (bits > 0 && (bits & 0x7FFFFF) != 0) {
+            integerPart += 1;
+        }
+
+        dst_reg[0] = integerPart*isNeg;
+        // dst_reg[0] = res;
+        dst_reg++;
+    }
+
+}
 
 template <bool APPROXIMATION_MODE, int ITERATIONS>
 inline void calculate_lrelu(uint slope)
@@ -1455,6 +1497,9 @@ inline void calculate_sfpu(uint param0 = 0, uint param1 = 0, uint param2 = 0, ui
     }
     else if constexpr (operation == SfpuType::tanh) {
         calculate_tanh<APPROXIMATION_MODE, ITERATIONS>();
+    }
+    else if constexpr (operation == SfpuType::ceil) {
+        calculate_ceil<APPROXIMATION_MODE, ITERATIONS>();
     }
     else if constexpr (operation == SfpuType::hardtanh) {
         calculate_hardtanh<APPROXIMATION_MODE, ITERATIONS>(param0, param1, param2);

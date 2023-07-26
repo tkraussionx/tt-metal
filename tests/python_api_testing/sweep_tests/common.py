@@ -42,7 +42,7 @@ def run_tt_lib_test(
 
     tt_lib_out = tt_lib_op(*tensor_inputs, pcie_slot=pcie_slot, **test_args)
     pytorch_out = pytorch_op(*tensor_inputs, **test_args)
-
+    print(tt_lib_out, pytorch_out)
     result, output = output_comparison_func(pytorch_out, tt_lib_out)
     return result, output
 

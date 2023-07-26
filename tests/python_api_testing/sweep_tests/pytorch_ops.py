@@ -229,6 +229,7 @@ def relu(x, *args, **kwargs):
 def sigmoid(x, *args, **kwargs):
     return torch.sigmoid(x)
 
+
 def log_sigmoid(x, *args, **kwargs):
     result = torch.nn.functional.logsigmoid(x)
     return result
@@ -262,6 +263,10 @@ def log10(x, *args, **kwargs):
 
 def tanh(x, *args, **kwargs):
     return torch.tanh(x)
+
+
+def ceil(x, *args, **kwargs):
+    return torch.ceil(x)
 
 
 def tanhshrink(x, *args, **kwargs):
