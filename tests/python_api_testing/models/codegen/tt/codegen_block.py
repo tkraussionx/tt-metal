@@ -83,23 +83,29 @@ class TtCodeGenBlock(torch.nn.Module):
         print(attn_output_shape)
 
 
-        pt_attn_output = tt2torch_tensor(attn_output)
-        pt_attn_output = pt_attn_output.squeeze(0)
-        pt_attn_output = pt_attn_output.squeeze(0)
-        pt_attn_output = pt_attn_output.squeeze(0)
+        #pt_attn_output = tt2torch_tensor(attn_output)
+        #Wpt_attn_output = pt_attn_output.squeeze(0)
+        #pt_attn_output = pt_attn_output.squeeze(0)
+        #pt_attn_output = pt_attn_output.squeeze(0)
 
-        outputs = pt_attn_output[1:]
+        #outputs = pt_attn_output[1:]
 
 
 
-        #slice_list_outputs = [None, None, slice(1, attn_output_shape[3])]
+        #slice_list_outputs = [slice(1, attn_output_shape[3])]
 
         #outputs = fallback_ops.tensor_slice(attn_output, slice_list_outputs)
 
-        attn_output = torch_to_tt_tensor_rm(outputs, device, put_on_device=False)
+        #attn_output = torch_to_tt_tensor_rm(outputs, device, put_on_device=False)
 
         feed_forward_hidden_states = self.mlp(hidden_states)
+
+        print('SHAPES')
+        print(attn_output.shape())
+        print(feed_forward_hidden_states.shape())
+
         hidden_states = tt_lib.tensor.add(attn_output, feed_forward_hidden_states)
+
         hidden_states = tt_lib.tensor.add(hidden_states, residual)
 
 

@@ -42,8 +42,8 @@ def run_codegen_attention_test(device2, pcc):
     config = CodeGenConfig('Salesforce/codegen-350M-mono')
 
 
-    #pt_attn = model_hf.h[block].attn
-    #pt_out = pt_attn.forward(test_in)
+    pt_attn = model_hf.h[block].attn
+    pt_out = pt_attn.forward(test_in)
 
     tt_attn = codegen_attention.TtCodeGenAttention(base_address, config, sd, device2)
 
