@@ -27,7 +27,8 @@ uint32_t get_page_size(DataType dtype, Layout layout, uint32_t total_size_bytes,
             page_size = W * 2;
         }
         break;
-        case Layout::TILE: {
+        case Layout::TILE:
+        case Layout::TILE_CL: {
             // TODO: Update to be generic for data type (issue 462)
             switch (dtype) {
                 case DataType::BFLOAT16:

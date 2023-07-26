@@ -14,11 +14,16 @@ namespace tt {
 namespace tt_metal {
 
 operation::ProgramWithCallbacks bcast_single_core(const Tensor &a, const Tensor &b, Tensor& output, BcastOpMath::Enum bcast_math, BcastOpDim::Enum bcast_dim) {
-
-    const auto ashape = a.shape();
-    const auto bshape = b.shape();
-    uint32_t N  = ashape[0], C  = ashape[1], H  = ashape[2], W  = ashape[3];
-    uint32_t bN = bshape[0], bC = bshape[1], bH = bshape[2], bW = bshape[3];
+    TT_ASSERT(a.layout() == b.layout());
+    TT_ASSERT(a.layout() == Layout::TILE_CL || a.layout() == Layout::TILE);
+    auto true_ashape = a.shape();
+    auto true_bshape = b.shape();
+    if (a.layout() == Layout::TILE_CL) {
+        true_ashape = {true_ashape[0], true_ashape[2], true_ashape[3], true_ashape[1]};
+        true_bshape = {true_bshape[0], true_bshape[2], true_bshape[3], true_bshape[1]};
+    }
+    uint32_t N  = true_ashape[0], C  = true_ashape[1], H  = true_ashape[2], W  = true_ashape[3];
+    uint32_t bN = true_bshape[0], bC = true_bshape[1], bH = true_bshape[2], bW = true_bshape[3];
     uint32_t NC = N*C;
     uint32_t HW = H*W;
 

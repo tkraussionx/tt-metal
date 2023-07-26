@@ -16,7 +16,8 @@ namespace tt_metal {
 
 operation::ProgramWithCallbacks bcast_multi_core_hw(const Tensor &a, const Tensor &b, Tensor& output, BcastOpMath::Enum bcast_math, BcastOpDim::Enum bcast_dim) {
     TT_ASSERT(bcast_dim == BcastOpDim::HW);
-
+    TT_ASSERT(a.layout() == b.layout());
+    TT_ASSERT(a.layout() == Layout::TILE);
     const auto ashape = a.shape();
     const auto bshape = b.shape();
     uint32_t N  = ashape[0], C  = ashape[1], H  = ashape[2], W  = ashape[3];

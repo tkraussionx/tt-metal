@@ -26,6 +26,8 @@ def test_run_resnet18_inference(fold_batchnorm, imagenet_sample_input):
 
         # Initialize the device
         device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+        #tt_lib.profiler.set_profiler_flag(True)
+        #tt_lib.profiler.set_profiler_location(f'/home/cloud_nshanker/tt_metal2/tt-metal/resnet18_profiler_results')
         tt_lib.device.InitializeDevice(device)
         tt_lib.device.SetDefaultDevice(device)
         host = tt_lib.device.GetHost()

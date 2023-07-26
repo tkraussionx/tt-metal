@@ -14,6 +14,8 @@ void LayoutConversionOnHost::validate(const std::vector<Tensor> &input_tensors) 
     const auto& input_tensor = input_tensors.at(0);
     if (this->target_layout == Layout::TILE) {
         TT_ASSERT(input_tensor.shape()[2] % TILE_HEIGHT == 0 && input_tensor.shape()[3] % TILE_WIDTH == 0);
+    } else if (this->target_layout == Layout::TILE_CL) {
+        TT_ASSERT(input_tensor.shape()[3] % TILE_HEIGHT == 0 && input_tensor.shape()[1] % TILE_WIDTH == 0);
     }
 }
 std::vector<Shape> LayoutConversionOnHost::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {

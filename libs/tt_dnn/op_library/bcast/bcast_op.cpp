@@ -76,22 +76,24 @@ void EltwiseBinaryBroadcast::validate(const std::vector<Tensor> &input_tensors) 
     TT_ASSERT(input_tensor_a.device() == input_tensor_b.device(), "Operands to bcast need to be on the same device!");
     TT_ASSERT(input_tensor_a.buffer() != nullptr and input_tensor_b.buffer() != nullptr, "Operands to bcast need to be allocated in buffers on device!");
 
-    const auto input_shape_a = input_tensor_a.shape();
-    const auto input_shape_b = input_tensor_b.shape();
-
-    TT_ASSERT(input_tensor_a.layout() == Layout::TILE);
-    TT_ASSERT(input_tensor_b.layout() == Layout::TILE);
+    TT_ASSERT((input_tensor_a.layout() == Layout::TILE && input_tensor_b.layout() == Layout::TILE)
+        || (input_tensor_a.layout() == Layout::TILE_CL && input_tensor_b.layout() == Layout::TILE_CL));
     TT_ASSERT(input_tensor_a.dtype() == input_tensor_b.dtype());
     TT_ASSERT(input_tensor_a.dtype() == tt::tt_metal::DataType::BFLOAT16 || input_tensor_a.dtype() == tt::tt_metal::DataType::BFLOAT8_B, "Unsupported data format");
-
-    auto batch_size_a = input_shape_a[0];
-    auto num_channels_a = input_shape_a[1];
-    auto height_a = input_shape_a[2];
-    auto width_a = input_shape_a[3];
-    auto batch_size_b = input_shape_b[0];
-    auto num_channels_b = input_shape_b[1];
-    auto height_b = input_shape_b[2];
-    auto width_b = input_shape_b[3];
+    auto true_input_shape_a = input_tensor_a.shape();
+    auto true_input_shape_b = input_tensor_b.shape();
+    if(input_tensor_a.layout() == Layout::TILE_CL) {
+        true_input_shape_a = {true_input_shape_a[0], true_input_shape_a[2], true_input_shape_a[3], true_input_shape_a[1]};
+        true_input_shape_b = {true_input_shape_b[0], true_input_shape_b[2], true_input_shape_b[3], true_input_shape_b[1]};
+    }
+    auto batch_size_a = true_input_shape_a[0];
+    auto num_channels_a = true_input_shape_a[1];
+    auto height_a = true_input_shape_a[2];
+    auto width_a = true_input_shape_a[3];
+    auto batch_size_b = true_input_shape_b[0];
+    auto num_channels_b = true_input_shape_b[1];
+    auto height_b = true_input_shape_b[2];
+    auto width_b = true_input_shape_b[3];
 
     TT_ASSERT((batch_size_b * num_channels_b == 1 || (batch_size_b == batch_size_a && num_channels_b == num_channels_a)) && "Broadcast is currently only supported when bN*bC=1 or N & C match");
 
@@ -113,7 +115,8 @@ std::vector<Shape> EltwiseBinaryBroadcast::compute_output_shapes(const std::vect
 
 std::vector<Tensor> EltwiseBinaryBroadcast::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
-    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor.dtype(), Layout::TILE, this->output_mem_config);
+    TT_ASSERT(input_tensor.layout() == Layout::TILE || input_tensor.layout() == Layout::TILE_CL);
+    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor.dtype(), input_tensor.layout(), this->output_mem_config);
 }
 
 operation::ProgramWithCallbacks EltwiseBinaryBroadcast::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {

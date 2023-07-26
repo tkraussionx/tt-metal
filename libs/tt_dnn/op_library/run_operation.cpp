@@ -253,10 +253,26 @@ std::vector<Tensor> run_with_autoformat(
     std::vector<Tensor> formatted_input_tensors;
     formatted_input_tensors.reserve(input_tensors.size());
     for (auto& input_tensor : input_tensors) {
-        auto padded_input_shape = AutoFormat::pad_to_tile_shape(input_tensor.shape(), pad_c);
-        auto pad_input = not AutoFormat::check_input_tensor_format(input_tensor, padded_input_shape);
+        bool pad_c = false;
+        bool pad_n = false;
+        bool pad_h = false;
+        bool pad_w = false;
+        Layout target_layout;
+        if(input_tensor.layout() == Layout::ROW_MAJOR || input_tensor.layout() == Layout::TILE) {
+            pad_h = true;
+            pad_w = true;
+            target_layout = Layout::TILE;
+        } else if(input_tensor.layout() == Layout::CHANNELS_LAST || input_tensor.layout() == Layout::TILE_CL) {
+            pad_w = true;
+            pad_c = true;
+            target_layout = Layout::TILE_CL;
+        } else {
+            TT_ASSERT(false, "Expected TILE or TILE_CL layouts");
+        }
+        auto padded_input_shape = AutoFormat::pad_to_tile_shape(input_tensor.shape(), pad_c, pad_n, pad_h, pad_w);
+        auto pad_input = not AutoFormat::check_input_tensor_format(input_tensor, padded_input_shape, target_layout);
         if (pad_input) {
-            formatted_input_tensors.push_back(AutoFormat::format_input_tensor(input_tensor, device, padded_input_shape, pad_value));
+            formatted_input_tensors.push_back(AutoFormat::format_input_tensor(input_tensor, device, padded_input_shape, pad_value, target_layout));
         } else {
             formatted_input_tensors.push_back(input_tensor);
         }
@@ -267,10 +283,26 @@ std::vector<Tensor> run_with_autoformat(
     for (auto& optional_input_tensor : optional_input_tensors) {
         if (optional_input_tensor.has_value()) {
             auto& input_tensor = optional_input_tensor.value();
-            auto padded_input_shape = AutoFormat::pad_to_tile_shape(input_tensor.shape(), pad_c);
-            auto pad_input = not AutoFormat::check_input_tensor_format(input_tensor, padded_input_shape);
+            bool pad_c = false;
+            bool pad_n = false;
+            bool pad_h = false;
+            bool pad_w = false;
+            Layout target_layout;
+            if(input_tensor.layout() == Layout::ROW_MAJOR || input_tensor.layout() == Layout::TILE) {
+                pad_h = true;
+                pad_w = true;
+                target_layout = Layout::TILE;
+            } else if(input_tensor.layout() == Layout::CHANNELS_LAST || input_tensor.layout() == Layout::TILE_CL) {
+                pad_w = true;
+                pad_c = true;
+                target_layout = Layout::TILE_CL;
+            } else {
+                TT_ASSERT(false, "Expected TILE or TILE_CL layouts");
+            }
+            auto padded_input_shape = AutoFormat::pad_to_tile_shape(input_tensor.shape(), pad_c, pad_n, pad_h, pad_w);
+            auto pad_input = not AutoFormat::check_input_tensor_format(input_tensor, padded_input_shape, target_layout);
             if (pad_input) {
-                formatted_optional_input_tensors.push_back(AutoFormat::format_input_tensor(input_tensor, device, padded_input_shape, pad_value));
+                formatted_optional_input_tensors.push_back(AutoFormat::format_input_tensor(input_tensor, device, padded_input_shape, pad_value, target_layout));
             } else {
                 formatted_optional_input_tensors.push_back(input_tensor);
             }
@@ -284,7 +316,7 @@ std::vector<Tensor> run_with_autoformat(
     std::vector<Tensor> formatted_output_tensors;
     formatted_output_tensors.reserve(output_tensors.size());
     for (auto i = 0; i < output_tensors.size(); i++) {
-        formatted_output_tensors.push_back(AutoFormat::format_output_tensor(output_tensors[i], output_shapes[i], device));
+        formatted_output_tensors.push_back(AutoFormat::format_output_tensor(output_tensors[i], output_shapes[i], device, output_tensors[i].layout()));
     }
     return formatted_output_tensors;
 }

@@ -210,7 +210,8 @@ void TensorModule(py::module &m_tensor) {
     py::enum_<Layout>(m_tensor, "Layout")
         .value("ROW_MAJOR", Layout::ROW_MAJOR)
         .value("TILE", Layout::TILE)
-        .value("CHANNELS_LAST", Layout::CHANNELS_LAST);
+        .value("CHANNELS_LAST", Layout::CHANNELS_LAST)
+        .value("TILE_CL", Layout::TILE_CL);
 
     py::enum_<DataType>(m_tensor, "DataType")
         .value("FLOAT32", DataType::FLOAT32)

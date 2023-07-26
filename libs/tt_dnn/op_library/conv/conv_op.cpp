@@ -299,7 +299,7 @@ operation::ProgramWithCallbacks conv_as_large_bmm_single_core_(const Tensor& a, 
     // output data format
     const auto out_df = datatype_to_dataformat_converter(a.dtype());
     // For debug
-    {
+    if(false) {
         log_debug(tt::LogOp, "act_matrix_height_ntiles: {}", act_matrix_height_ntiles);
         log_debug(tt::LogOp, "act_matrix_width_ntiles: {}", act_matrix_width_ntiles);
         log_debug(tt::LogOp, "weight_matrix_width_ntiles: {}", weight_matrix_width_ntiles);
@@ -1078,7 +1078,7 @@ operation::ProgramWithCallbacks conv_as_large_bmm_with_address_map_single_core_(
     // output data format
     const auto out_df = datatype_to_dataformat_converter(a.dtype());
     // For debug
-    {
+    if(false) {
         log_debug(tt::LogOp, "Hat (activation height in tiles): {}", Hat);
         log_debug(tt::LogOp, "Wat (activation width in tiles): {}", Wat);
         log_debug(tt::LogOp, "Wbt (weight width in tiles): {}", Wbt);

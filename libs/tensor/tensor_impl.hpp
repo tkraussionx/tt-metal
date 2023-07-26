@@ -149,6 +149,18 @@ inline std::vector<T> convert_layout_channels_last_to_row_major(const std::array
     return convert_layout(data_to_convert, shape_vec, TensorLayout::CHANNELS_LAST, TensorLayout::LIN_ROW_MAJOR);
 }
 
+template <typename T, template<typename> typename BufferType>
+inline std::vector<T> convert_layout_channels_last_to_tile_cl(const std::array<uint32_t, 4> &shape, const BufferType<T>& data_to_convert) {
+    std::vector<uint32_t> shape_vec = {shape[0], shape[1], shape[2], shape[3]};
+    return convert_layout(data_to_convert, shape_vec, TensorLayout::CHANNELS_LAST, TensorLayout::TILED32_4FACES_CL);
+}
+
+template <typename T, template<typename> typename BufferType>
+inline std::vector<T> convert_layout_tile_cl_to_channels_last(const std::array<uint32_t, 4> &shape, const BufferType<T>& data_to_convert) {
+    std::vector<uint32_t> shape_vec = {shape[0], shape[1], shape[2], shape[3]};
+    return convert_layout(data_to_convert, shape_vec, TensorLayout::TILED32_4FACES_CL, TensorLayout::CHANNELS_LAST);
+}
+
 // ======================================================================================
 //                                         Print
 // ======================================================================================
@@ -427,6 +439,17 @@ inline Tensor to_layout(const Tensor &tensor, Layout target_layout) {
                 if (target_layout == Layout::ROW_MAJOR) {
                     return convert_layout_channels_last_to_row_major(shape, input_data);
                 }
+                else if (target_layout == Layout::TILE_CL) {
+                    return convert_layout_channels_last_to_tile_cl(shape, input_data);
+                }
+                else {
+                    TT_THROW("Unsupported layout conversion");
+                }
+            break;
+            case Layout::TILE_CL:
+                if (target_layout == Layout::CHANNELS_LAST) {
+                    return convert_layout_tile_cl_to_channels_last(shape, input_data);
+                }
                 else {
                     TT_THROW("Unsupported layout conversion");
                 }
@@ -469,50 +492,60 @@ inline Tensor pad(const Tensor &tensor, const std::array<uint32_t, 4> &output_te
     auto pad_value_ = static_cast<T>(pad_value);
     const auto input_tensor_shape = tensor.shape();
     const auto input_tensor_strides = tensor.strides();
+    auto true_input_tensor_shape = input_tensor_shape;
+    auto true_input_tensor_strides = input_tensor_strides;
+    auto true_output_tensor_shape = output_tensor_shape;
+    auto true_input_tensor_start = input_tensor_start;
+    if(tensor.layout() == Layout::CHANNELS_LAST) {
+        true_input_tensor_shape = {true_input_tensor_shape[0], true_input_tensor_shape[2], true_input_tensor_shape[3], true_input_tensor_shape[1]};
+        true_input_tensor_strides = {true_input_tensor_shape[1] * true_input_tensor_shape[2] * true_input_tensor_shape[3], true_input_tensor_shape[3] * true_input_tensor_shape[1], true_input_tensor_shape[1], 1};
+        true_output_tensor_shape = {true_output_tensor_shape[0], true_output_tensor_shape[2], true_output_tensor_shape[3], true_output_tensor_shape[1]};
+        true_input_tensor_start = {true_input_tensor_start[0], true_input_tensor_start[2], true_input_tensor_start[3], true_input_tensor_start[1]};
+    }
 
     auto pad =
-        [&input_tensor_shape, &input_tensor_strides, &output_tensor_shape, &input_tensor_start, &pad_value_]
+        [&true_input_tensor_shape, &true_input_tensor_strides, &true_output_tensor_shape, &true_input_tensor_start, &pad_value_]
         (const auto& input_buffer) {
         // Check if input tensor fits in output tensor given the input tensor start indices
-        TT_ASSERT(input_tensor_shape[0] + input_tensor_start[0] <= output_tensor_shape[0]);
-        TT_ASSERT(input_tensor_shape[1] + input_tensor_start[1] <= output_tensor_shape[1]);
-        TT_ASSERT(input_tensor_shape[2] + input_tensor_start[2] <= output_tensor_shape[2]);
-        TT_ASSERT(input_tensor_shape[3] + input_tensor_start[3] <= output_tensor_shape[3]);
+        TT_ASSERT(true_input_tensor_shape[0] + true_input_tensor_start[0] <= true_output_tensor_shape[0]);
+        TT_ASSERT(true_input_tensor_shape[1] + true_input_tensor_start[1] <= true_output_tensor_shape[1]);
+        TT_ASSERT(true_input_tensor_shape[2] + true_input_tensor_start[2] <= true_output_tensor_shape[2]);
+        TT_ASSERT(true_input_tensor_shape[3] + true_input_tensor_start[3] <= true_output_tensor_shape[3]);
 
         // Figure out pad size on each dim
         uint32_t pad_size[4][2] = {
-            {input_tensor_start[0], output_tensor_shape[0] - input_tensor_shape[0] - input_tensor_start[0]},
-            {input_tensor_start[1], output_tensor_shape[1] - input_tensor_shape[1] - input_tensor_start[1]},
-            {input_tensor_start[2], output_tensor_shape[2] - input_tensor_shape[2] - input_tensor_start[2]},
-            {input_tensor_start[3], output_tensor_shape[3] - input_tensor_shape[3] - input_tensor_start[3]}
+            {true_input_tensor_start[0], true_output_tensor_shape[0] - true_input_tensor_shape[0] - true_input_tensor_start[0]},
+            {true_input_tensor_start[1], true_output_tensor_shape[1] - true_input_tensor_shape[1] - true_input_tensor_start[1]},
+            {true_input_tensor_start[2], true_output_tensor_shape[2] - true_input_tensor_shape[2] - true_input_tensor_start[2]},
+            {true_input_tensor_start[3], true_output_tensor_shape[3] - true_input_tensor_shape[3] - true_input_tensor_start[3]}
         };
 
         const std::array<uint32_t, 4> output_tensor_strides = {
-            output_tensor_shape[1] * output_tensor_shape[2] * output_tensor_shape[3],
-            output_tensor_shape[2] * output_tensor_shape[3],
-            output_tensor_shape[3],
+            true_output_tensor_shape[1] * true_output_tensor_shape[2] * true_output_tensor_shape[3],
+            true_output_tensor_shape[2] * true_output_tensor_shape[3],
+            true_output_tensor_shape[3],
             1
         };
 
-        auto output_buffer = owned_buffer::create<T>(volume(output_tensor_shape));
+        auto output_buffer = owned_buffer::create<T>(volume(true_output_tensor_shape));
         auto output_index = 0;
         for(auto i = 0; i < pad_size[0][0] * output_tensor_strides[0]; i++) {
             output_buffer[output_index++] = pad_value_;
         }
-        for(auto dim0 = 0; dim0 < input_tensor_shape[0]; dim0++) {
+        for(auto dim0 = 0; dim0 < true_input_tensor_shape[0]; dim0++) {
             for(auto i = 0; i < pad_size[1][0] * output_tensor_strides[1]; i++) {
                 output_buffer[output_index++] = pad_value_;
             }
-            for(auto dim1 = 0; dim1 < input_tensor_shape[1]; dim1++) {
+            for(auto dim1 = 0; dim1 < true_input_tensor_shape[1]; dim1++) {
                 for(auto i = 0; i < pad_size[2][0] * output_tensor_strides[2]; i++) {
                     output_buffer[output_index++] = pad_value_;
                 }
-                for(auto dim2 = 0; dim2 < input_tensor_shape[2]; dim2++) {
+                for(auto dim2 = 0; dim2 < true_input_tensor_shape[2]; dim2++) {
                     for(auto i = 0; i < pad_size[3][0] * output_tensor_strides[3]; i++) {
                         output_buffer[output_index++] = pad_value_;
                     }
-                    for(auto dim3 = 0; dim3 < input_tensor_shape[3]; dim3++) {
-                        auto input_index = dim3 + input_tensor_strides[2] * dim2 + input_tensor_strides[1] * dim1 + input_tensor_strides[0] * dim0;
+                    for(auto dim3 = 0; dim3 < true_input_tensor_shape[3]; dim3++) {
+                        auto input_index = dim3 + true_input_tensor_strides[2] * dim2 + true_input_tensor_strides[1] * dim1 + true_input_tensor_strides[0] * dim0;
                         output_buffer[output_index++] = input_buffer[input_index];
                     }
                     for(auto i = 0; i < pad_size[3][1] * output_tensor_strides[3]; i++) {

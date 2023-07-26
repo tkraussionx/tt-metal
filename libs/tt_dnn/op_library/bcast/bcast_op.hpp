@@ -62,11 +62,15 @@ inline Tensor bcast(const Tensor &input_tensor_a, const Tensor &input_tensor_b, 
         }
     }
     else if (bcast_dim == BcastOpDim::H) {
-        TT_ASSERT(input_tensor_a.shape()[3] == input_tensor_b.shape()[3]);
         if (input_tensor_b.layout() == Layout::TILE) {
             TT_ASSERT(input_tensor_b.shape()[2] == TILE_HEIGHT);
-        } else if (input_tensor_b.layout() == Layout::ROW_MAJOR || input_tensor_b.layout() == Layout::CHANNELS_LAST) {
+            TT_ASSERT(input_tensor_a.shape()[3] == input_tensor_b.shape()[3]);
+        } else if (input_tensor_b.layout() == Layout::ROW_MAJOR) {
             TT_ASSERT(input_tensor_b.shape()[2] == 1 || input_tensor_b.shape()[2] == TILE_HEIGHT);
+            TT_ASSERT(input_tensor_a.shape()[3] == input_tensor_b.shape()[3]);
+        } else if (input_tensor_b.layout() == Layout::TILE_CL) {
+            TT_ASSERT(input_tensor_b.shape()[3] == TILE_HEIGHT);
+            TT_ASSERT(input_tensor_a.shape()[1] == input_tensor_b.shape()[1]);
         } else {
             TT_ASSERT(false, "Unsupported layout");
         }

@@ -15,6 +15,15 @@ namespace tt_metal {
 
 operation::ProgramWithCallbacks untilize_single_core(const Tensor &a, Tensor& output) {
 
+    auto output_layout = output.layout();
+    if(a.layout() == Layout::TILE) {
+        TT_ASSERT(output_layout == Layout::ROW_MAJOR, "Can only untilize TILE layout to ROW_MAJOR layout. Incorrect output layout.");
+    } else if(a.layout() == Layout::TILE_CL) {
+        TT_ASSERT(output_layout == Layout::CHANNELS_LAST, "Can only untilize TILE_CL layout to CHANNELS_LAST layout. Incorrect output layout.");
+    } else {
+        TT_ASSERT(false, "Incorrect input layout. Can only untilize TILE or TILE_CL layouts.");
+    }
+
     tt_metal::Program program = tt_metal::Program();
 
     CoreRange core = {.start={0, 0}, .end={0, 0}};
@@ -26,10 +35,15 @@ operation::ProgramWithCallbacks untilize_single_core(const Tensor &a, Tensor& ou
 
     int32_t num_tiles = a.volume() / TILE_HW;
 
-    uint32_t num_sticks = a.shape()[0] * a.shape()[1] * a.shape()[2];
-    uint32_t stick_size = a.shape()[3] * a.element_size();
+    auto true_input_shape = a.shape();
+    if (a.layout() == Layout::TILE_CL) {
+        true_input_shape = {a.shape()[0], a.shape()[2], a.shape()[3], a.shape()[1]};
+    }
 
-    uint32_t stick_s = a.shape()[3];
+    uint32_t num_sticks = true_input_shape[0] * true_input_shape[1] * true_input_shape[2];
+    uint32_t stick_size = true_input_shape[3] * a.element_size();
+
+    uint32_t stick_s = true_input_shape[3];
     uint32_t num_tiles_in_row = stick_s / TILE_WIDTH;
     uint32_t max_l1_size = a.device()->l1_size() - UNRESERVED_BASE;
     uint32_t max_tiles = max_l1_size / (2 * single_tile_size); // 2 CBs
@@ -188,7 +202,7 @@ void Untilize::validate(const std::vector<Tensor> &input_tensors) const {
     TT_ASSERT(input_tensor_a.storage_type() == StorageType::DEVICE, "Operands to untilize need to be on device!");
     TT_ASSERT(input_tensor_a.buffer() != nullptr , "Operands to untilize need to be allocated in buffers on device!");
     TT_ASSERT(input_tensor_a.dtype() == DataType::BFLOAT16, "Only bloat16 dataformat supported");
-    TT_ASSERT(input_tensor_a.layout() == Layout::TILE, "Can only untilize tile major data");
+    TT_ASSERT(input_tensor_a.layout() == Layout::TILE || input_tensor_a.layout() == Layout::TILE_CL, "Can only untilize tile major data");
 
     TT_ASSERT(input_tensor_a.volume() % TILE_HW == 0);
 }
@@ -200,7 +214,15 @@ std::vector<Shape> Untilize::compute_output_shapes(const std::vector<Tensor> &in
 
 std::vector<Tensor> Untilize::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
-    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor_a.dtype(), Layout::ROW_MAJOR, this->output_mem_config);
+    Layout output_layout;
+    if(input_tensor_a.layout() == Layout::TILE) {
+        output_layout = Layout::ROW_MAJOR;
+    } else if (input_tensor_a.layout() == Layout::TILE_CL) {
+        output_layout = Layout::CHANNELS_LAST;
+    } else {
+        TT_ASSERT(false, "Can only tilize row major or channels last data");
+    }
+    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor_a.dtype(), output_layout, this->output_mem_config);
 }
 
 operation::ProgramWithCallbacks Untilize::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
@@ -222,7 +244,7 @@ tt::stl::reflection::Attributes Untilize::attributes() const {
 
 Tensor untilize(const Tensor &input_tensor_a, const MemoryConfig& mem_config) {
     // No-op (Will do a tensor copy)
-    if (input_tensor_a.layout() == Layout::ROW_MAJOR) {
+    if (input_tensor_a.layout() == Layout::ROW_MAJOR || input_tensor_a.layout() == Layout::CHANNELS_LAST) {
         log_warning("Perf warning: Trying to untilize non-tilized data.");
         return input_tensor_a;
     }
@@ -232,7 +254,14 @@ Tensor untilize(const Tensor &input_tensor_a, const MemoryConfig& mem_config) {
 
 operation::ProgramWithCallbacks untilize_with_unpadding_single_core(const Tensor &a, Tensor& output, const std::array<uint32_t, 4> &output_tensor_start, const std::array<uint32_t, 4> &output_tensor_end) {
 
-    const std::array<uint32_t, 4> output_shape = output.shape();
+    auto output_layout = output.layout();
+    if(a.layout() == Layout::TILE) {
+        TT_ASSERT(output_layout == Layout::ROW_MAJOR, "Can only untilize TILE layout to ROW_MAJOR layout. Incorrect output layout.");
+    } else if(a.layout() == Layout::TILE_CL) {
+        TT_ASSERT(output_layout == Layout::CHANNELS_LAST, "Can only untilize TILE_CL layout to CHANNELS_LAST layout. Incorrect output layout.");
+    } else {
+        TT_ASSERT(false, "Incorrect input layout. Can only untilize TILE or TILE_CL layouts.");
+    }
 
     tt_metal::Program program = tt_metal::Program();
 
@@ -251,14 +280,21 @@ operation::ProgramWithCallbacks untilize_with_unpadding_single_core(const Tensor
     tt_metal::Buffer *dst_buffer = output.buffer();
     TT_ASSERT(dst_buffer != nullptr, "Output buffer should be allocated on device!");
 
-    uint32_t num_padded_sticks = a.shape()[0] * a.shape()[1] * a.shape()[2];
-    uint32_t num_unpadded_sticks = a.shape()[0] * a.shape()[1] * output_shape[2];
-    uint32_t padded_stick_size = a.shape()[3] * a.element_size(); // Assuming bfloat16 dataformat
-    uint32_t unpadded_stick_size = output_shape[3] * a.element_size();
+    auto true_input_shape = a.shape();
+    auto true_output_shape = output.shape();
+    if (a.layout() == Layout::TILE_CL) {
+        true_input_shape = {true_input_shape[0], true_input_shape[2], true_input_shape[3], true_input_shape[1]};
+        true_output_shape = {output.shape()[0], output.shape()[2], output.shape()[3], output.shape()[1]};
+    }
+
+    uint32_t num_padded_sticks = true_input_shape[0] * true_input_shape[1] * true_input_shape[2];
+    uint32_t num_unpadded_sticks = true_input_shape[0] * true_input_shape[1] * true_output_shape[2];
+    uint32_t padded_stick_size = true_input_shape[3] * a.element_size(); // Assuming bfloat16 dataformat
+    uint32_t unpadded_stick_size = true_output_shape[3] * a.element_size();
 
     constexpr uint32_t alignment = 32;
 
-    uint32_t num_tiles_in_row = a.shape()[3] / TILE_WIDTH;
+    uint32_t num_tiles_in_row = true_input_shape[3] / TILE_WIDTH;
     uint32_t max_l1_size = a.device()->l1_size() - UNRESERVED_BASE;
     // Memory usage is 2 CBs of width W, plus buffer of size alignment + (W * datum size)
     uint32_t max_X = (max_l1_size - alignment) / (a.element_size() * TILE_HEIGHT * 2 + a.element_size());
@@ -285,10 +321,10 @@ operation::ProgramWithCallbacks untilize_with_unpadding_single_core(const Tensor
     // Number of blocks that differ between input and output
     const uint32_t num_blocks_w_diff = num_blocks_w_input - num_blocks_w_output - (block_row_leftover_size > 0 ? 1 : 0);
 
-    const uint32_t padded_Y_diff_blocks = (a.shape()[2] - output_shape[2]) / TILE_HEIGHT * num_blocks_w_input;
-    const uint32_t padded_Z_diff_blocks = (a.shape()[1] - output_shape[1]) * a.shape()[2] / TILE_HEIGHT * num_blocks_w_input;
-    const uint32_t padded_W_diff_blocks = (a.shape()[0] - output_shape[0]) * a.shape()[1] * a.shape()[2] / TILE_HEIGHT * num_blocks_w_input;
-    const uint32_t num_leftover_Y = output_shape[2] - output_shape[2] / TILE_HEIGHT * TILE_HEIGHT;
+    const uint32_t padded_Y_diff_blocks = (true_input_shape[2] - true_output_shape[2]) / TILE_HEIGHT * num_blocks_w_input;
+    const uint32_t padded_Z_diff_blocks = (true_input_shape[1] - true_output_shape[1]) * true_input_shape[2] / TILE_HEIGHT * num_blocks_w_input;
+    const uint32_t padded_W_diff_blocks = (true_input_shape[0] - true_output_shape[0]) * true_input_shape[1] * true_input_shape[2] / TILE_HEIGHT * num_blocks_w_input;
+    const uint32_t num_leftover_Y = true_output_shape[2] - true_output_shape[2] / TILE_HEIGHT * TILE_HEIGHT;
 
     uint32_t src0_cb_index = 0;
     uint32_t num_input_tiles = num_tiles_per_block;
@@ -314,14 +350,14 @@ operation::ProgramWithCallbacks untilize_with_unpadding_single_core(const Tensor
 
     vector<uint32_t> writer_kernel_args = {
         dst_buffer->address(),
-        output_shape[0],
+        true_output_shape[0],
         padded_W_diff_blocks,
-        output_shape[1],
+        true_output_shape[1],
         padded_Z_diff_blocks,
-        output_shape[2],
+        true_output_shape[2],
         padded_Y_diff_blocks,
         num_leftover_Y,
-        output_shape[3],
+        true_output_shape[3],
         unpadded_stick_size,
         padded_stick_size,
         num_blocks_w_input,
@@ -429,7 +465,7 @@ void UntilizeWithUnpadding::validate(const std::vector<Tensor> &input_tensors) c
     TT_ASSERT(input_tensor_a.storage_type() == StorageType::DEVICE, "Operandsneed to be on device!");
     TT_ASSERT(input_tensor_a.buffer() != nullptr , "Operands need to be allocated in buffers on device!");
     TT_ASSERT(input_tensor_a.dtype() == DataType::BFLOAT16, "Only bloat16 dataformat supported");
-    TT_ASSERT(input_tensor_a.layout() == Layout::TILE, "Can only untilize tile major data");
+    TT_ASSERT(input_tensor_a.layout() == Layout::TILE || input_tensor_a.layout() == Layout::TILE_CL, "Can only untilize tile major data");
 
     TT_ASSERT(
         (this->output_tensor_start[0] == 0 && this->output_tensor_start[1] == 0 && this->output_tensor_start[2] == 0 && this->output_tensor_start[3] == 0),
@@ -466,7 +502,15 @@ std::vector<Shape> UntilizeWithUnpadding::compute_output_shapes(const std::vecto
 }
 std::vector<Tensor> UntilizeWithUnpadding::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
-    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor_a.dtype(), Layout::ROW_MAJOR, this->output_mem_config);
+    Layout output_layout;
+    if(input_tensor_a.layout() == Layout::TILE) {
+        output_layout = Layout::ROW_MAJOR;
+    } else if (input_tensor_a.layout() == Layout::TILE_CL) {
+        output_layout = Layout::CHANNELS_LAST;
+    } else {
+        TT_ASSERT(false, "Can only tilize row major or channels last data");
+    }
+    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor_a.dtype(), output_layout, this->output_mem_config);
 }
 
 operation::ProgramWithCallbacks UntilizeWithUnpadding::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
@@ -497,7 +541,7 @@ Tensor untilize_with_unpadding(const Tensor &input_tensor_a, const std::array<ui
         output_tensor_end[2] - output_tensor_start[2] + 1,
         output_tensor_end[3] - output_tensor_start[3] + 1,
     };
-    if (input_tensor_a.layout() != Layout::TILE) {
+    if (input_tensor_a.layout() != Layout::TILE && input_tensor_a.layout() != Layout::TILE_CL) {
         if (input_tensor_a.shape() == output_tensor_shape) {
             log_warning("Perf warning: Untilize with unpadding called on already untilized tensor of target shape");
             return input_tensor_a;

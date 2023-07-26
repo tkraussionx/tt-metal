@@ -10,9 +10,9 @@ namespace tt {
 
 namespace tt_metal {
 
-operation::ProgramWithCallbacks unpad_rm(const Tensor &a, Tensor& output, const std::array<uint32_t, 4> &output_tensor_start, const std::array<uint32_t, 4> &output_tensor_end) {
+operation::ProgramWithCallbacks unpad_rm_or_cl(const Tensor &a, Tensor& output, const std::array<uint32_t, 4> &output_tensor_start, const std::array<uint32_t, 4> &output_tensor_end) {
 
-    const std::array<uint32_t, 4> output_shape = output.shape();
+    TT_ASSERT(a.layout() == Layout::ROW_MAJOR || a.layout() == Layout::CHANNELS_LAST, "Operand must be in row major or channels last layout");
 
     tt_metal::Program program = tt_metal::Program();
 
@@ -23,8 +23,15 @@ operation::ProgramWithCallbacks unpad_rm(const Tensor &a, Tensor& output, const 
 
     tt_metal::Buffer *src0_buffer = a.buffer();
 
-    uint32_t padded_row_size_bytes = a.shape()[3] * a.element_size();
-    uint32_t unpadded_row_size_bytes = output_shape[3] * a.element_size();
+    auto true_input_shape = a.shape();
+    auto true_output_shape = output.shape();
+    if (a.layout() == Layout::CHANNELS_LAST) {
+        true_input_shape = {true_input_shape[0], true_input_shape[2], true_input_shape[3], true_input_shape[1]};
+        true_output_shape = {output.shape()[0], output.shape()[2], output.shape()[3], output.shape()[1]};
+    }
+
+    uint32_t padded_row_size_bytes = true_input_shape[3] * a.element_size();
+    uint32_t unpadded_row_size_bytes = true_output_shape[3] * a.element_size();
 
     tt_metal::Buffer *dst_buffer = output.buffer();
     TT_ASSERT(dst_buffer != nullptr, "Output buffer should be allocated on device!");
@@ -38,14 +45,14 @@ operation::ProgramWithCallbacks unpad_rm(const Tensor &a, Tensor& output, const 
     vector<uint32_t> reader_kernel_args = {
         src0_buffer->address(),
         dst_buffer->address(),
-        output_shape[0],
-        a.shape()[0],
-        output_shape[1],
-        a.shape()[1],
-        output_shape[2],
-        a.shape()[2],
-        output_shape[3],
-        a.shape()[3],
+        true_output_shape[0],
+        true_input_shape[0],
+        true_output_shape[1],
+        true_input_shape[1],
+        true_output_shape[2],
+        true_input_shape[2],
+        true_output_shape[3],
+        true_input_shape[3],
         unpadded_row_size_bytes,
         padded_row_size_bytes,
         padded_row_size_bytes - unpadded_row_size_bytes,
@@ -219,7 +226,7 @@ void Unpad::validate(const std::vector<Tensor> &input_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
     TT_ASSERT(input_tensor_a.storage_type() == StorageType::DEVICE, "Operands to unpad need to be on device!");
     TT_ASSERT(input_tensor_a.buffer() != nullptr , "Operands to unpad need to be allocated in buffers on device!");
-    TT_ASSERT(input_tensor_a.layout() == Layout::TILE || input_tensor_a.layout() == Layout::ROW_MAJOR);
+    TT_ASSERT(input_tensor_a.layout() == Layout::TILE || input_tensor_a.layout() == Layout::ROW_MAJOR || input_tensor_a.layout() == Layout::CHANNELS_LAST);
 
     TT_ASSERT(
         (this->output_tensor_start[0] == 0 && this->output_tensor_start[1] == 0 && output_tensor_start[2] == 0 && output_tensor_start[3] == 0),
@@ -254,6 +261,8 @@ void Unpad::validate(const std::vector<Tensor> &input_tensors) const {
         TT_ASSERT((output_tensor_shape[3] % TILE_WIDTH == 0), "Can only unpad tilized tensor with full tiles");
     } else if (input_tensor_a.layout() == Layout::ROW_MAJOR) {
         TT_ASSERT(output_tensor_shape[3] % 2 == 0, "RM unpadding requires output X dim to be a multiple of 2");
+    } else if (input_tensor_a.layout() == Layout::CHANNELS_LAST) {
+        TT_ASSERT(output_tensor_shape[1] % 2 == 0, "CL unpadding requires output C dim to be a multiple of 2");
     }
 }
 std::vector<Shape> Unpad::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
@@ -276,9 +285,11 @@ operation::ProgramWithCallbacks Unpad::create_program(const std::vector<Tensor>&
     const auto& input_tensor_a = input_tensors.at(0);
     auto& output_tensor = output_tensors.at(0);
     if (input_tensor_a.layout() == Layout::ROW_MAJOR) {
-        return unpad_rm(input_tensor_a, output_tensor, output_tensor_start, output_tensor_end);
+        return unpad_rm_or_cl(input_tensor_a, output_tensor, output_tensor_start, output_tensor_end);
     } else if (input_tensor_a.layout() == Layout::TILE) {
         return unpad_tile(input_tensor_a, output_tensor, output_tensor_start, output_tensor_end);
+    } else if (input_tensor_a.layout() == Layout::CHANNELS_LAST) {
+        return unpad_rm_or_cl(input_tensor_a, output_tensor, output_tensor_start, output_tensor_end);
     } else {
         TT_ASSERT(false, "Unsupported layout for unpad");
         return {};
@@ -317,7 +328,7 @@ Tensor unpad(const Tensor &input_tensor_a, const std::array<uint32_t, 4> &output
 void UnpadOnHost::validate(const std::vector<Tensor> &input_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
     TT_ASSERT(input_tensor.storage_type() == StorageType::OWNED);
-    TT_ASSERT(input_tensor.layout() == Layout::ROW_MAJOR);
+    TT_ASSERT(input_tensor.layout() == Layout::ROW_MAJOR || input_tensor.layout() == Layout::CHANNELS_LAST);
 
     TT_ASSERT(this->output_tensor_start[0] < input_tensor.shape()[0]);
     TT_ASSERT(this->output_tensor_end[0] < input_tensor.shape()[0]);

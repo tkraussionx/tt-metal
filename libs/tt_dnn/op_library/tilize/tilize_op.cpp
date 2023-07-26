@@ -29,6 +29,15 @@ operation::ProgramWithCallbacks tilize_single_core(const Tensor &a, Tensor& outp
     tt_metal::Device *device = a.device();
     auto output_shape = output.shape();
 
+    auto output_layout = output.layout();
+    if(a.layout() == Layout::ROW_MAJOR) {
+        TT_ASSERT(output_layout == Layout::TILE, "Can only tilize ROW_MAJOR layout to TILE layout. Incorrect output layout.");
+    } else if(a.layout() == Layout::CHANNELS_LAST) {
+        TT_ASSERT(output_layout == Layout::TILE_CL, "Can only tilize CHANNELS_LAST layout to TILE_CL layout. Incorrect output layout.");
+    } else {
+        TT_ASSERT(false, "Incorrect input layout. Can only tilize ROW_MAJOR or CHANNELS_LAST layouts.");
+    }
+
     tt_metal::Buffer *dst_buffer = output.buffer();
     TT_ASSERT(dst_buffer != nullptr, "Output buffer should be allocated on device!");
 
@@ -212,16 +221,20 @@ void Tilize::validate(const std::vector<Tensor> &input_tensors) const {
 std::vector<Shape> Tilize::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
     auto output_shape = input_tensor_a.shape();
-    if(input_tensor_a.layout() == Layout::CHANNELS_LAST) {
-        // Set channels last in the innermost dim in the shape
-        output_shape = {input_tensor_a.shape()[0], input_tensor_a.shape()[2], input_tensor_a.shape()[3], input_tensor_a.shape()[1]};
-    }
     return {output_shape};
 }
 
 std::vector<Tensor> Tilize::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
-    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor_a.dtype(), Layout::TILE, this->output_mem_config);
+    Layout output_layout;
+    if(input_tensor_a.layout() == Layout::ROW_MAJOR) {
+        output_layout = Layout::TILE;
+    } else if (input_tensor_a.layout() == Layout::CHANNELS_LAST) {
+        output_layout = Layout::TILE_CL;
+    } else {
+        TT_ASSERT(false, "Can only tilize row major or channels last data");
+    }
+    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor_a.dtype(), output_layout, this->output_mem_config);
 }
 
 operation::ProgramWithCallbacks Tilize::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
@@ -243,7 +256,7 @@ tt::stl::reflection::Attributes Tilize::attributes() const {
 
 Tensor tilize(const Tensor &input_tensor_a, const MemoryConfig& mem_config) {
     // No-op (Will do a tensor copy)
-    if (input_tensor_a.layout() == Layout::TILE) {
+    if (input_tensor_a.layout() == Layout::TILE || input_tensor_a.layout() == Layout::TILE_CL) {
         log_warning("Perf warning: tilize called on already tilized tensor.");
         return input_tensor_a;
     }
@@ -254,6 +267,15 @@ operation::ProgramWithCallbacks tilize_with_val_padding_single_core(const Tensor
 
 
     auto output_shape = output.shape();
+
+    auto output_layout = output.layout();
+    if(a.layout() == Layout::ROW_MAJOR) {
+        TT_ASSERT(output_layout == Layout::TILE, "Can only tilize ROW_MAJOR layout to TILE layout. Incorrect output layout.");
+    } else if(a.layout() == Layout::CHANNELS_LAST) {
+        TT_ASSERT(output_layout == Layout::TILE_CL, "Can only tilize CHANNELS_LAST layout to TILE_CL layout. Incorrect output layout.");
+    } else {
+        TT_ASSERT(false, "Incorrect input layout. Can only tilize ROW_MAJOR or CHANNELS_LAST layouts.");
+    }
 
     tt_metal::Program program = tt_metal::Program();
 
@@ -273,6 +295,7 @@ operation::ProgramWithCallbacks tilize_with_val_padding_single_core(const Tensor
     auto true_output_shape = output.shape();
     if (a.layout() == Layout::CHANNELS_LAST) {
         true_input_shape = {a.shape()[0], a.shape()[2], a.shape()[3], a.shape()[1]};
+        true_output_shape = {output.shape()[0], output.shape()[2], output.shape()[3], output.shape()[1]};
     }
 
     uint32_t unpadded_row_size_datum = true_input_shape[3];
@@ -496,14 +519,19 @@ void TilizeWithValPadding::validate(const std::vector<Tensor> &input_tensors) co
 std::vector<Shape> TilizeWithValPadding::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
     auto output_shape = this->output_tensor_shape;
-    if (input_tensor_a.layout() == Layout::CHANNELS_LAST) {
-        output_shape = {output_shape[0], output_shape[2], output_shape[3], output_shape[1]};
-    }
     return {output_shape};
 }
 std::vector<Tensor> TilizeWithValPadding::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
-    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor_a.dtype(), Layout::TILE, this->output_mem_config);
+    Layout output_layout;
+    if(input_tensor_a.layout() == Layout::ROW_MAJOR) {
+        output_layout = Layout::TILE;
+    } else if (input_tensor_a.layout() == Layout::CHANNELS_LAST) {
+        output_layout = Layout::TILE_CL;
+    } else {
+        TT_ASSERT(false, "Can only tilize row major or channels last data");
+    }
+    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor_a.dtype(), output_layout, this->output_mem_config);
 }
 
 // TODO: If pad is called on a tile and output is not tile, we could untilize then pad, and output is RM
@@ -531,7 +559,7 @@ tt::stl::reflection::Attributes TilizeWithValPadding::attributes() const {
 Tensor tilize_with_val_padding(const Tensor &input_tensor_a, const std::array<uint32_t, 4> &output_tensor_shape, const std::array<uint32_t, 4> &input_tensor_start, const float pad_value, const MemoryConfig& mem_config) {
     // No-op (Will do a tensor copy)
     // TODO: We need to run asserts before this
-    if (input_tensor_a.layout() == Layout::TILE) {
+    if (input_tensor_a.layout() == Layout::TILE || input_tensor_a.layout() == Layout::TILE_CL) {
         if (output_tensor_shape == input_tensor_a.shape()) {
             log_warning("Perf warning: tilize with padding called on already tilized tensor of target shape.");
             return input_tensor_a;
@@ -545,7 +573,7 @@ Tensor tilize_with_val_padding(const Tensor &input_tensor_a, const std::array<ui
 
 Tensor tilize_with_zero_padding(const Tensor &input_tensor_a, const MemoryConfig& mem_config) {
     // No-op (Will do a tensor copy)
-    if (input_tensor_a.layout() == Layout::TILE) {
+    if (input_tensor_a.layout() == Layout::TILE || input_tensor_a.layout() == Layout::TILE_CL) {
         log_warning("Perf warning: tilize called on already tilized tensor.");
         return input_tensor_a;
     }

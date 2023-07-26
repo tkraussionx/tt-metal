@@ -453,11 +453,13 @@ class ResNet(nn.Module):
         x = self.relu(x)
 
         x = self.maxpool(x)
-
+        x_padded_shape = [x.shape()[0], _nearest_32(x.shape()[1]), x.shape()[2], _nearest_32(x.shape()[3])]
+        x = x.to(self.host).to(tt_lib.tensor.Layout.CHANNELS_LAST).pad(x_padded_shape, (0, 0, 0, 0), 0).to(tt_lib.tensor.Layout.TILE_CL).to(self.device)
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
+        print(x.layout())
         x = self.avgpool(x)
         x = fallback_ops.reshape(x, 1, 1, 1, x.shape()[1])
         #x = torch.flatten(x, 1).unsqueeze(1).unsqueeze(1)

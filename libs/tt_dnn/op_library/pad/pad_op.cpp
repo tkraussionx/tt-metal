@@ -10,11 +10,11 @@ namespace tt {
 
 namespace tt_metal {
 
-operation::ProgramWithCallbacks pad_rm(const Tensor &a, Tensor &output, const std::array<uint32_t, 4> &output_tensor_shape, const std::array<uint32_t, 4> &input_tensor_start, const float pad_value) {
+operation::ProgramWithCallbacks pad_rm_or_cl(const Tensor &a, Tensor &output, const std::array<uint32_t, 4> &output_tensor_shape, const std::array<uint32_t, 4> &input_tensor_start, const float pad_value) {
 
     TT_ASSERT(a.storage_type() == StorageType::DEVICE, "Operand to pad needs to be on device!");
     TT_ASSERT(a.buffer() != nullptr, "Operand to pad needs to be allocated in a buffer on device!");
-
+    TT_ASSERT(a.layout() == Layout::ROW_MAJOR || a.layout() == Layout::CHANNELS_LAST, "Operand must be in row major or channels last layout");
     tt_metal::Program program{};
 
     CoreRange core = {.start={0, 0}, .end={0, 0}};
@@ -22,12 +22,17 @@ operation::ProgramWithCallbacks pad_rm(const Tensor &a, Tensor &output, const st
     // This should allocate a DRAM buffer on the device
     tt_metal::Device *device = a.device();
 
-    auto output_shape = output_tensor_shape;
-
     tt_metal::Buffer *src0_buffer = a.buffer();
 
-    uint32_t unpadded_row_size_bytes = a.shape()[3] * a.element_size();
-    uint32_t padded_row_size_bytes = output_shape[3] * a.element_size();
+    auto true_input_shape = a.shape();
+    auto true_output_shape = output_tensor_shape;
+    if (a.layout() == Layout::CHANNELS_LAST) {
+        true_input_shape = {a.shape()[0], a.shape()[2], a.shape()[3], a.shape()[1]};
+        true_output_shape = {output_tensor_shape[0], output_tensor_shape[2], output_tensor_shape[3], output_tensor_shape[1]};
+    }
+
+    uint32_t unpadded_row_size_bytes = true_input_shape[3] * a.element_size();
+    uint32_t padded_row_size_bytes = true_output_shape[3] * a.element_size();
 
     tt_metal::Buffer *dst_buffer = output.buffer();
     TT_ASSERT(dst_buffer != nullptr, "Output buffer should be allocated on device!");
@@ -45,14 +50,14 @@ operation::ProgramWithCallbacks pad_rm(const Tensor &a, Tensor &output, const st
     vector<uint32_t> reader_kernel_args = {
         src0_buffer->address(),
         dst_buffer->address(),
-        a.shape()[0],
-        output_shape[0],
-        a.shape()[1],
-        output_shape[1],
-        a.shape()[2],
-        output_shape[2],
-        a.shape()[3],
-        output_shape[3],
+        true_input_shape[0],
+        true_output_shape[0],
+        true_input_shape[1],
+        true_output_shape[1],
+        true_input_shape[2],
+        true_output_shape[2],
+        true_input_shape[3],
+        true_output_shape[3],
         unpadded_row_size_bytes,
         padded_row_size_bytes,
         padded_row_size_bytes - unpadded_row_size_bytes,
@@ -252,6 +257,9 @@ void Pad::validate(const std::vector<Tensor> &input_tensors) const {
     } else if (input_tensor.layout() == Layout::ROW_MAJOR) {
         TT_ASSERT(this->output_tensor_shape[3] % 2 == 0, "RM padding requires output X dim to be a multiple of 2");
         TT_ASSERT(input_tensor.dtype() == DataType::BFLOAT16, "Cannot pad RM tensor with specified format");
+    } else if (input_tensor.layout() == Layout::CHANNELS_LAST) {
+        TT_ASSERT(this->output_tensor_shape[1] % 2 == 0, "CL padding requires output C dim to be a multiple of 2");
+        TT_ASSERT(input_tensor.dtype() == DataType::BFLOAT16, "Cannot pad CL tensor with specified format");
     }
 }
 
@@ -270,9 +278,11 @@ operation::ProgramWithCallbacks Pad::create_program(const std::vector<Tensor>& i
     const auto& input_tensor = input_tensors.at(0);
     auto& output_tensor = output_tensors.at(0);
     if (input_tensor.layout() == Layout::ROW_MAJOR) {
-        return pad_rm(input_tensor, output_tensor, this->output_tensor_shape, this->input_tensor_start, this->pad_value);
+        return pad_rm_or_cl(input_tensor, output_tensor, this->output_tensor_shape, this->input_tensor_start, this->pad_value);
     } else if (input_tensor.layout() == Layout::TILE) {
         return pad_tile(input_tensor, output_tensor, this->output_tensor_shape, this->input_tensor_start, this->pad_value);
+    } else if (input_tensor.layout() == Layout::CHANNELS_LAST) {
+        return pad_rm_or_cl(input_tensor, output_tensor, this->output_tensor_shape, this->input_tensor_start, this->pad_value);
     } else {
         TT_ASSERT(false, "Unsupported layout for pad");
         return {};
