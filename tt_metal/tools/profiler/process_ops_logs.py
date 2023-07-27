@@ -357,8 +357,6 @@ def print_ops_csv(ops, opsFolder, outputFolder, date, nameAppend):
 
     outFolder = os.path.abspath(outFolder)
 
-    os.system(f"rm -rf {outFolder}; mkdir -p {outFolder}")
-
     if date:
         name = f"{datetime.now().strftime('%Y_%d_%m_%H_%M')}"
     else:

@@ -334,10 +334,20 @@ def gen_dtype_layout_device(
             yield out
 
 
-def gen_permute_args(input_shapes):
+def gen_permute_args(
+    input_shapes,
+    supported_dtypes=supported_tt_dtypes,
+    supported_layouts=supported_tt_layouts,
+    on_device=on_device_options,
+):
     for permute_dims in permutations([0, 1, 2, 3]):
         permuted_shape = [input_shapes[0][i] for i in permute_dims]
-        for input_info in gen_dtype_layout_device((input_shapes[0], permuted_shape)):
+        for input_info in gen_dtype_layout_device(
+            (input_shapes[0], permuted_shape),
+            supported_dtypes,
+            supported_layouts,
+            on_device,
+        ):
             if input_info is not None:
                 input_info.update({"permute_dims": permute_dims})
                 yield input_info
@@ -365,29 +375,44 @@ def _gen_reshape_args_from_volume(volume, step):
     return shapes
 
 
-def gen_reshape_args(input_shapes):
+def gen_reshape_args(
+    input_shapes,
+    supported_dtypes=supported_tt_dtypes,
+    supported_layouts=[ttl.tensor.Layout.TILE],
+    on_device=on_device_options,
+):
     vol = (
         input_shapes[0][0]
         * input_shapes[0][1]
         * input_shapes[0][2]
         * input_shapes[0][3]
     )
-    step = 1
-    for reshape_dims in _gen_reshape_args_from_volume(vol, step):
+
+    out_shapes = _gen_reshape_args_from_volume(vol, step=1)
+    out_shapes = random.sample(out_shapes, 8)
+
+    for reshape_dims in out_shapes:
         for input_info in gen_dtype_layout_device(
             (input_shapes[0], reshape_dims["reshape_dims"]),
-            supported_layouts=[ttl.tensor.Layout.TILE],
+            supported_dtypes,
+            supported_layouts,
+            on_device,
         ):
             if input_info is not None:
                 input_info.update(reshape_dims)
                 yield input_info
 
 
-def gen_tilize_with_val_padding_args(input_shapes):
+def gen_tilize_with_val_padding_args(
+    input_shapes,
+    supported_dtypes=supported_tt_dtypes,
+    supported_layouts=[ttl.tensor.Layout.ROW_MAJOR],
+    on_device=on_device_options,
+):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
     for input_info in gen_dtype_layout_device(
-        input_shapes, supported_layouts=[ttl.tensor.Layout.ROW_MAJOR], on_device=[True]
+        input_shapes, supported_dtypes, supported_layouts, on_device
     ):
         if input_info is not None:
             pad_sizes = (10, 10, 64, 64)
@@ -418,13 +443,18 @@ def gen_tilize_with_val_padding_args(input_shapes):
             yield input_info
 
 
-def gen_untilize_with_unpadding_args(input_shapes):
+def gen_untilize_with_unpadding_args(
+    input_shapes,
+    supported_dtypes=supported_tt_dtypes,
+    supported_layouts=supported_tt_layouts,
+    on_device=on_device_options,
+):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
     assert input_shapes[0][-2] % 32 == 0
     assert input_shapes[0][-1] % 32 == 0
     for input_info in gen_dtype_layout_device(
-        input_shapes, supported_layouts=[ttl.tensor.Layout.TILE], on_device=[True]
+        input_shapes, supported_dtypes, supported_layouts, on_device
     ):
         if input_info is not None:
             output_tensor_start = [0, 0, 0, 0]
@@ -443,13 +473,20 @@ def gen_untilize_with_unpadding_args(input_shapes):
             yield input_info
 
 
-def gen_pad_args(input_shapes):
+def gen_pad_args(
+    input_shapes,
+    supported_dtypes=supported_tt_dtypes,
+    supported_layouts=supported_tt_layouts,
+    on_device=on_device_options,
+):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
+
     for input_info in gen_dtype_layout_device(
         input_shapes,
-        supported_layouts=[ttl.tensor.Layout.ROW_MAJOR, ttl.tensor.Layout.TILE],
-        on_device=[True],
+        supported_dtypes,
+        supported_layouts,
+        on_device,
     ):
         if input_info is not None:
             if input_info["layout"] == ttl.tensor.Layout.ROW_MAJOR:
@@ -505,14 +542,17 @@ def gen_pad_args(input_shapes):
             yield input_info
 
 
-def gen_unpad_args(input_shapes):
+def gen_unpad_args(
+    input_shapes,
+    supported_dtypes=supported_tt_dtypes,
+    supported_layouts=supported_tt_layouts,
+    on_device=on_device_options,
+):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
 
     for input_info in gen_dtype_layout_device(
-        input_shapes,
-        supported_layouts=[ttl.tensor.Layout.ROW_MAJOR, ttl.tensor.Layout.TILE],
-        on_device=[True],
+        input_shapes, supported_dtypes, supported_layouts, on_device
     ):
         if input_info is not None:
             if input_info["layout"] == ttl.tensor.Layout.ROW_MAJOR:
@@ -547,9 +587,18 @@ def gen_unpad_args(input_shapes):
 
 
 def gen_scalar_args(
-    input_shapes, arg_name="scalar", low=-100, high=100, dtype=torch.bfloat16
+    input_shapes,
+    supported_dtypes,
+    supported_layouts,
+    on_device,
+    arg_name="scalar",
+    low=-100,
+    high=100,
+    dtype=torch.bfloat16,
 ):
-    for input_info in gen_dtype_layout_device(input_shapes):
+    for input_info in gen_dtype_layout_device(
+        input_shapes, supported_dtypes, supported_layouts, on_device
+    ):
         if input_info is not None:
             if dtype.is_floating_point:
                 scalar = torch.tensor(1, dtype=dtype).uniform_(low, high).item()
@@ -560,69 +609,231 @@ def gen_scalar_args(
 
 
 def gen_scalar_symmetric_args(
-    input_shapes, arg_name="scalar", low=0.01, high=100, dtype=torch.bfloat16
+    input_shapes,
+    supported_dtypes,
+    supported_layouts,
+    on_device,
+    arg_name="scalar",
+    low=0.01,
+    high=100,
+    dtype=torch.bfloat16,
 ):
-    for input_info in gen_scalar_args(input_shapes, arg_name, low, high, dtype):
+    for input_info in gen_scalar_args(
+        input_shapes,
+        supported_dtypes,
+        supported_layouts,
+        on_device,
+        arg_name,
+        low,
+        high,
+        dtype,
+    ):
         if input_info is not None:
             sign = (torch.tensor(1, dtype=torch.int).random_(0, 2) * 2 - 1).item()
             input_info[arg_name] *= sign
             yield input_info
 
 
-def gen_power_args(input_shapes, low=0, high=10, dtype=torch.int):
-    for input_info in gen_scalar_args(input_shapes, "exponent", low, high, dtype):
+def gen_power_args(
+    input_shapes,
+    supported_dtypes,
+    supported_layouts,
+    on_device,
+    low=0,
+    high=10,
+    dtype=torch.int,
+):
+    for input_info in gen_scalar_args(
+        input_shapes,
+        supported_dtypes,
+        supported_layouts,
+        on_device,
+        "exponent",
+        low,
+        high,
+        dtype,
+    ):
         yield input_info
 
 
-def gen_relu_min_args(input_shapes, low=-100, high=100, dtype=torch.bfloat16):
-    for input_info in gen_scalar_args(input_shapes, "lower_limit", low, high, dtype):
+def gen_relu_min_args(
+    input_shapes,
+    supported_dtypes,
+    supported_layouts,
+    on_device,
+    low=0,
+    high=100,
+    dtype=torch.bfloat16,
+):
+    for input_info in gen_scalar_args(
+        input_shapes,
+        supported_dtypes,
+        supported_layouts,
+        on_device,
+        "lower_limit",
+        low,
+        high,
+        dtype,
+    ):
         yield input_info
 
 
-def gen_relu_max_args(input_shapes, low=-100, high=100, dtype=torch.bfloat16):
-    for input_info in gen_scalar_args(input_shapes, "upper_limit", low, high, dtype):
+def gen_relu_max_args(
+    input_shapes,
+    supported_dtypes,
+    supported_layouts,
+    on_device,
+    low=0,
+    high=100,
+    dtype=torch.bfloat16,
+):
+    for input_info in gen_scalar_args(
+        input_shapes,
+        supported_dtypes,
+        supported_layouts,
+        on_device,
+        "upper_limit",
+        low,
+        high,
+        dtype,
+    ):
         yield input_info
 
 
-def gen_heaviside_args(input_shapes, low=-100, high=100, dtype=torch.bfloat16):
-    for input_info in gen_scalar_args(input_shapes, "value", low, high, dtype):
+def gen_heaviside_args(
+    input_shapes,
+    supported_dtypes,
+    supported_layouts,
+    on_device,
+    low=-100,
+    high=100,
+    dtype=torch.bfloat16,
+):
+    for input_info in gen_scalar_args(
+        input_shapes,
+        supported_dtypes,
+        supported_layouts,
+        on_device,
+        "value",
+        low,
+        high,
+        dtype,
+    ):
         yield input_info
 
 
-def gen_subalpha_args(input_shapes, low=-100, high=100, dtype=torch.bfloat16):
-    for input_info in gen_scalar_args(input_shapes, "alpha", low, high, dtype):
+def gen_subalpha_args(input_shapes, supported_dtypes, supported_layouts, on_device, low=-100, high=100, dtype=torch.bfloat16):
+    for input_info in gen_scalar_args(input_shapes, supported_dtypes, supported_layouts, on_device, "alpha", low, high, dtype):
         yield input_info
 
 
-def gen_shrink_args(input_shapes, low=0, high=100, dtype=torch.bfloat16):
-    for input_info in gen_scalar_args(input_shapes, "lambd", low, high, dtype):
+def gen_bias_gelu_args(input_shapes, supported_dtypes, supported_layouts, on_device, low=0, high=100, dtype=torch.bfloat16):
+    for input_info in gen_scalar_args(input_shapes, supported_dtypes, supported_layouts, on_device, "bias", low, high, dtype):
         yield input_info
 
 
-def gen_bias_gelu_args(input_shapes, low=0, high=100, dtype=torch.bfloat16):
-    for input_info in gen_scalar_args(input_shapes, "bias", low, high, dtype):
+def gen_shrink_args(
+    input_shapes,
+    supported_dtypes,
+    supported_layouts,
+    on_device,
+    low=0,
+    high=100,
+    dtype=torch.bfloat16,
+):
+    for input_info in gen_scalar_args(
+        input_shapes,
+        supported_dtypes,
+        supported_layouts,
+        on_device,
+        "_lambda",
+        low,
+        high,
+        dtype,
+    ):
         yield input_info
 
 
-def gen_leaky_relu_args(input_shapes, low=0, high=100, dtype=torch.bfloat16):
-    for input_info in gen_scalar_args(input_shapes, "negative_slope", low, high, dtype):
+def gen_leaky_relu_args(
+    input_shapes,
+    supported_dtypes,
+    supported_layouts,
+    on_device,
+    low=0,
+    high=100,
+    dtype=torch.bfloat16,
+):
+    for input_info in gen_scalar_args(
+        input_shapes,
+        supported_dtypes,
+        supported_layouts,
+        on_device,
+        "negative_slope",
+        low,
+        high,
+        dtype,
+    ):
         yield input_info
 
 
-def gen_elu_args(input_shapes, low=-10, high=10, dtype=torch.bfloat16):
-    for input_info in gen_scalar_args(input_shapes, "alpha", low, high, dtype):
+def gen_elu_args(
+    input_shapes,
+    supported_dtypes,
+    supported_layouts,
+    on_device,
+    low=-10,
+    high=10,
+    dtype=torch.bfloat16,
+):
+    for input_info in gen_scalar_args(
+        input_shapes,
+        supported_dtypes,
+        supported_layouts,
+        on_device,
+        "alpha",
+        low,
+        high,
+        dtype,
+    ):
+        yield input_info
+
+
+def gen_gelu_args(
+    input_shapes,
+    supported_dtypes,
+    supported_layouts,
+    on_device,
+    low=0,
+    high=100,
+    dtype=torch.bfloat16,
+):
+    for input_info in gen_scalar_args(
+        input_shapes,
+        supported_dtypes,
+        supported_layouts,
+        on_device,
+        "fast_and_appx",
+        low,
+        high,
+        dtype,
+    ):
         yield input_info
 
 
 def gen_two_scalar_args(
     input_shapes,
+    supported_dtypes,
+    supported_layouts,
+    on_device,
     arg0_name="scalar0",
     arg1_name="scalar1",
     low=-100,
     high=100,
     dtype=torch.bfloat16,
 ):
-    for input_info in gen_dtype_layout_device(input_shapes):
+    for input_info in gen_dtype_layout_device(
+        input_shapes, supported_dtypes, supported_layouts, on_device
+    ):
         if input_info is not None:
             if dtype.is_floating_point:
                 scalar0 = torch.tensor(1, dtype=dtype).uniform_(low, high).item()
@@ -634,9 +845,25 @@ def gen_two_scalar_args(
             yield input_info
 
 
-def gen_clip_args(input_shapes, low=-100, high=100, dtype=torch.bfloat16):
+def gen_clip_args(
+    input_shapes,
+    supported_dtypes,
+    supported_layouts,
+    on_device,
+    low=-100,
+    high=100,
+    dtype=torch.bfloat16,
+):
     for input_info in gen_two_scalar_args(
-        input_shapes, "low", "high", low, high, dtype
+        input_shapes,
+        supported_dtypes,
+        supported_layouts,
+        on_device,
+        "low",
+        "high",
+        low,
+        high,
+        dtype,
     ):
         if input_info["low"] > input_info["high"]:
             input_info["low"], input_info["high"] = (
@@ -646,14 +873,39 @@ def gen_clip_args(input_shapes, low=-100, high=100, dtype=torch.bfloat16):
         yield input_info
 
 
-def gen_threshold_args(input_shapes, low=-100, high=100, dtype=torch.bfloat16):
+def gen_threshold_args(
+    input_shapes,
+    supported_dtypes,
+    supported_layouts,
+    on_device,
+    low=-100,
+    high=100,
+    dtype=torch.bfloat16,
+):
     for input_info in gen_two_scalar_args(
-        input_shapes, "threshold", "value", low, high, dtype
+        input_shapes,
+        supported_dtypes,
+        supported_layouts,
+        on_device,
+        "threshold",
+        "value",
+        low,
+        high,
+        dtype,
     ):
         yield input_info
 
 
-def gen_polyval_args(input_shapes, max_num_coeffs=10, low=-100, high=100):
+def gen_polyval_args(
+    input_shapes,
+    supported_dtypes,
+    supported_layouts,
+    on_device,
+    max_num_coeffs=10,
+    low=-100,
+    high=100,
+    dtype=torch.bfloat16,
+):
     for input_info in gen_dtype_layout_device(input_shapes):
         if input_info is not None:
             num_coeffs = (
@@ -664,9 +916,19 @@ def gen_polyval_args(input_shapes, max_num_coeffs=10, low=-100, high=100):
             yield input_info
 
 
-def gen_arange_args(input_shapes, low=-100, high=100):
+def gen_arange_args(
+    input_shapes, supported_dtypes, supported_layouts, on_device, low=-100, high=100
+):
     for input_info in gen_two_scalar_args(
-        input_shapes, "start", "end", low, high, torch.int
+        input_shapes,
+        supported_dtypes,
+        supported_layouts,
+        on_device,
+        "start",
+        "end",
+        low,
+        high,
+        torch.int,
     ):
         if input_info["start"] > input_info["end"]:
             input_info["start"], input_info["end"] = (
