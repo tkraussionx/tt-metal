@@ -715,18 +715,26 @@ class MaxPool2d(torch.nn.Module):
         return_indices: bool = False,
         ceil_mode: bool = False,
         channels_last = False,
+        unpadded_shape = []
     ):
         super().__init__()
         self.pt_fallback = torch.nn.MaxPool2d(
             kernel_size, stride, padding, dilation, return_indices, ceil_mode
         )
         self.channels_last = channels_last
+        self.unpadded_shape = unpadded_shape
 
     @convert_tt_tensors_wrapper
     def forward(self, input: ttl_tensor.Tensor) -> ttl_tensor.Tensor:
         output = input
         if self.channels_last:
             output = torch.permute(output, (0, 3, 1, 2))
+        if len(self.unpadded_shape) and self.unpadded_shape != output.size():
+            assert(self.unpadded_shape[0] <= output.shape[0])
+            assert(self.unpadded_shape[1] <= output.shape[1])
+            assert(self.unpadded_shape[2] <= output.shape[2])
+            assert(self.unpadded_shape[3] <= output.shape[3])
+            output = output[0:self.unpadded_shape[0],0:self.unpadded_shape[1],0:self.unpadded_shape[2],0:self.unpadded_shape[3]]
         output = self.pt_fallback(output)
         if self.channels_last:
             output = torch.permute(output, (0, 2, 3, 1))
@@ -753,16 +761,23 @@ class AdaptiveAvgPool2d(torch.nn.Module):
         self,
         output_size: Union[int, None, Tuple[Optional[int], Optional[int]]],
         channels_last = False,
+        unpadded_shape = []
     ):
         super().__init__()
         self.pt_fallback = torch.nn.AdaptiveAvgPool2d(output_size)
         self.channels_last = channels_last
-
+        self.unpadded_shape = unpadded_shape
     @convert_tt_tensors_wrapper
     def forward(self, input: ttl_tensor.Tensor) -> ttl_tensor.Tensor:
         output = input
         if self.channels_last:
             output = torch.permute(output, (0, 3, 1, 2))
+        if len(self.unpadded_shape) and self.unpadded_shape != output.size():
+            assert(self.unpadded_shape[0] <= output.shape[0])
+            assert(self.unpadded_shape[1] <= output.shape[1])
+            assert(self.unpadded_shape[2] <= output.shape[2])
+            assert(self.unpadded_shape[3] <= output.shape[3])
+            output = output[0:self.unpadded_shape[0],0:self.unpadded_shape[1],0:self.unpadded_shape[2],0:self.unpadded_shape[3]]
         output = self.pt_fallback(output)
         if self.channels_last:
             output = torch.permute(output, (0, 2, 3, 1))

@@ -80,6 +80,38 @@ inline Tensor bcast(const Tensor &input_tensor_a, const Tensor &input_tensor_b, 
     return operation::run_with_autoformat(EltwiseBinaryBroadcast{bcast_op, bcast_dim, mem_config}, {input_tensor_a, input_tensor_b}).at(0);
 }
 
+inline Tensor bcast_without_autoformat(const Tensor &input_tensor_a, const Tensor &input_tensor_b, BcastOpMath::Enum bcast_op, BcastOpDim::Enum bcast_dim, const MemoryConfig& mem_config = MemoryConfig{.interleaved = true}) {
+    using tt::constants::TILE_HEIGHT;
+    using tt::constants::TILE_WIDTH;
+
+    if (bcast_dim == BcastOpDim::W) {
+        TT_ASSERT(input_tensor_a.shape()[2] == input_tensor_b.shape()[2]);
+        if (input_tensor_b.layout() == Layout::TILE) {
+            TT_ASSERT(input_tensor_b.shape()[3] == TILE_WIDTH);
+        } else if (input_tensor_b.layout() == Layout::ROW_MAJOR) {
+            TT_ASSERT(input_tensor_b.shape()[3] == 1 || input_tensor_b.shape()[3] == TILE_WIDTH);
+        } else {
+            TT_ASSERT(false, "Unsupported layout");
+        }
+    }
+    else if (bcast_dim == BcastOpDim::H) {
+        TT_ASSERT(input_tensor_a.shape()[3] == input_tensor_b.shape()[3]);
+        if (input_tensor_b.layout() == Layout::TILE) {
+            TT_ASSERT(input_tensor_b.shape()[2] == TILE_HEIGHT);
+        } else if (input_tensor_b.layout() == Layout::ROW_MAJOR) {
+            TT_ASSERT(input_tensor_b.shape()[2] == 1 || input_tensor_b.shape()[2] == TILE_HEIGHT);
+        } else {
+            TT_ASSERT(false, "Unsupported layout");
+        }
+    } else if (bcast_dim == BcastOpDim::HW) {
+        if (input_tensor_b.layout() == Layout::TILE) {
+            TT_ASSERT(input_tensor_b.shape()[2] == TILE_HEIGHT && input_tensor_b.shape()[3] == TILE_WIDTH);
+        } else if (input_tensor_b.layout() == Layout::ROW_MAJOR) {
+            TT_ASSERT((input_tensor_b.shape()[2] == 1 && input_tensor_b.shape()[3] == 1) || (input_tensor_b.shape()[2] == TILE_HEIGHT && input_tensor_b.shape()[3] == TILE_WIDTH));
+        }
+    }
+    return operation::run_without_autoformat(EltwiseBinaryBroadcast{bcast_op, bcast_dim, mem_config}, {input_tensor_a, input_tensor_b}).at(0);
+}
 
 }  // namespace tt_metal
 

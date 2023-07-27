@@ -13,7 +13,7 @@ from torchvision import models
 import pytest
 import tt_lib
 
-from resnetBlock import ResNet, Bottleneck
+from tests.python_api_testing.models.resnet.genericResnetBlock import ResNet, Bottleneck
 from sweep_tests.comparison_funcs import comp_allclose_and_pcc, comp_pcc
 
 

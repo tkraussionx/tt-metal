@@ -33,6 +33,7 @@
 #include "tensor/borrowed_buffer.hpp"
 #include "tensor/tensor_impl.hpp"
 #include "tensor/tensor_utils.hpp"
+#include "tt_dnn/op_library/auto_format.hpp"
 #include "tt_lib_bindings.hpp"
 #include "type_caster.hpp"
 
@@ -230,6 +231,26 @@ void TensorModule(py::module &m_tensor) {
         .value("OWNED", StorageType::OWNED)
         .value("DEVICE", StorageType::DEVICE)
         .value("BORROWED", StorageType::BORROWED);
+
+    auto pyShape = py::class_<Shape>(m_tensor, "Shape", R"doc(
+        Class defining shape of tensor.
+    )doc");
+    pyShape
+        .def(
+            py::init<>(
+                [](const std::array<uint32_t, 4>& data) {
+                    return Shape(data);
+                }
+            )
+        )
+        .def("without_padding", &Shape::without_padding);
+    auto pyAutoFormat = py::class_<AutoFormat>(m_tensor, "AutoFormat", R"doc(
+        Class defining functions to format input tensors of ops. It handles layout conversions and padding.
+    )doc");
+    pyAutoFormat
+        .def_static("format_input_tensor", &AutoFormat::format_input_tensor)
+        .def_static("format_output_tensor", &AutoFormat::format_output_tensor)
+        .def_static("pad_to_tile_shape", &AutoFormat::pad_to_tile_shape);
 
     auto pyMemoryConfig = py::class_<MemoryConfig>(m_tensor, "MemoryConfig", R"doc(
         Class defining memory configuration for storing tensor data on TT Accelerator device.
@@ -800,6 +821,16 @@ void TensorModule(py::module &m_tensor) {
                 [0.433594, 0.165039, 0.980469, ..., , 0.349609]]] dtype=bfloat16 ]
 
         )doc")
+        .def("shape_object", [](const Tensor &self) {
+            return self.shape();
+        }, R"doc(
+            Get the shape of the tensor as list of integers.
+
+            .. code-block:: python
+
+                shape = tt_tensor.shape_object()
+
+        )doc")
         .def("shape", [](const Tensor &self) {
             const auto& shape = self.shape();
             return std::vector<std::uint32_t>(std::begin(shape), std::end(shape));
@@ -1056,6 +1087,24 @@ void TensorModule(py::module &m_tensor) {
         +----------+----------------------+-----------+------------------------------+----------+
     )doc");
 
+    m_tensor.def("add_without_autoformat", add_without_autformat, R"doc(
+        Perform an eltwise-binary add on two tensors.
+
+        Both input tensors must have BFLOAT16 data type, and be of equal shape.
+
+        Output tensor will have BFLOAT16 data type.
+
+        Auto formatting is disabled. Both input tensors must have TILE layout. Output tensor will have TILE layout.
+
+        +----------+----------------------+-----------+------------------------------+----------+
+        | Argument | Description          | Data type | Valid range                  | Required |
+        +==========+======================+===========+==============================+==========+
+        | arg0     | First tensor to add  | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+        | arg1     | Second tensor to add | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+----------------------+-----------+------------------------------+----------+
+    )doc");
+
     m_tensor.def("sub", sub, R"doc(
         Perform an eltwise-binary sub (``arg0 - arg1``) on two tensors.\
 
@@ -1275,6 +1324,22 @@ void TensorModule(py::module &m_tensor) {
         Input tensor must have BFLOAT16 data type.
 
         Output tensor will have BFLOAT16 data type.
+
+        +----------+----------------------------+-----------+------------------------------+----------+
+        | Argument | Description                | Data type | Valid range                  | Required |
+        +==========+============================+===========+==============================+==========+
+        | arg0     | Tensor ReLU is applied to  | Tensor    | Tensor of shape [W, Z, Y, X] | Yes      |
+        +----------+----------------------------+-----------+------------------------------+----------+
+    )doc");
+
+    m_tensor.def("relu_without_autoformat", &relu_without_autoformat, R"doc(
+        Applies the rectified linear unit (ReLU) function to the elements of the input tensor ``arg0``.
+
+        Input tensor must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        Auto formatting is disabled. Input tensor must have TILE layout. Output tensor will have TILE layout.
 
         +----------+----------------------------+-----------+------------------------------+----------+
         | Argument | Description                | Data type | Valid range                  | Required |
@@ -2679,6 +2744,40 @@ void TensorModule(py::module &m_tensor) {
         Both input tensors must have BFLOAT16 data type.
 
         Output tensor will have BFLOAT16 data type.
+
+        +------------+------------------------------------+--------------+-------------------------------------------------------------+----------+
+        | Argument   | Description                        | Data type    | Valid range                                                 | Required |
+        +============+====================================+==============+=============================================================+==========+
+        | arg0       | Input tensor                       | Tensor       | Tensor of shape [W0, Z0, Y0, X0], where Y0%32=0 and X0%32=0 | Yes      |
+        +------------+------------------------------------+--------------+-------------------------------------------------------------+----------+
+        | arg1       | Input tensor                       | Tensor       | Tensor of shape [W1, Z1, Y1, X1], where Y1%32=0 and X1%32=0 | Yes      |
+        +------------+------------------------------------+--------------+-------------------------------------------------------------+----------+
+        | arg2       | Math operation to perform          | BcastOpMath  | ADD, SUB, MUL                                               | Yes      |
+        +------------+------------------------------------+--------------+-------------------------------------------------------------+----------+
+        | arg3       | Dimension on which to broadcast    | BcastOpDim   | W, H, HW                                                    | Yes      |
+        +------------+------------------------------------+--------------+-------------------------------------------------------------+----------+
+        | mem_config | Layout of tensor in TT Accelerator | MemoryConfig | Default is interleaved in DRAM                              | No       |
+        |            | device memory banks                |              |                                                             |          |
+        +------------+------------------------------------+--------------+-------------------------------------------------------------+----------+
+    )doc");
+
+    m_tensor.def("bcast_without_autoformat", &bcast_without_autoformat,
+        py::arg().noconvert(), py::arg().noconvert(), py::arg("math_op"), py::arg("dim"), py::arg("mem_config") = MemoryConfig{.interleaved = true}, R"doc(
+        Perform a binary elementwise operation ``arg2`` between tensors ``arg0`` and ``arg1``, where values from tensor ``arg1`` are broadcast.
+
+        Let tensor ``arg0`` have shape ``[W0, Z0, Y0, X0]`` and tensor ``arg1`` shape ``[W1, Z1, Y1, X1]``. ``arg3`` determines the type of broadcast performed.
+
+        For ``arg3=BcastOpDim::W`` broadcast is performed on dimension ``X``. ``Y0`` and ``Y1`` must be the same and either (W1=1 and Z1=1) or (W0=W1 and Z0=Z1).
+
+        For ``arg3=BcastOpDim::H`` broadcast is performed on dimension  ``Y``. ``X0`` and ``X1`` must be the same and either (W1=1 and Z1=1) or (W0=W1 and Z0=Z1).
+
+        For ``arg3=BcastOpDim::HW`` broadcast is performed on dimensions ``X`` and ``Y``. Either (W1=1 and Z1=1) or (W0=W1 and Z0=Z1) must hold for input shapes.
+
+        Both input tensors must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        Auto formatting is disabled. Input tensors must have TILE layout. Output tensors will have TILE layout.
 
         +------------+------------------------------------+--------------+-------------------------------------------------------------+----------+
         | Argument   | Description                        | Data type    | Valid range                                                 | Required |
