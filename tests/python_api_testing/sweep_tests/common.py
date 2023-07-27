@@ -86,18 +86,20 @@ def run_test_and_save_results(
     test_pass, test_status, test_output, test_result = _try_except_wrapper(
         run_tt_lib_test, *run_test_args
     )
-    results_csv_writer.writerow(
-        {
-            "test_name": test_name,
-            "input_shapes": input_shapes,
-            **test_args,
-            "data_seed": data_seed,
-            "env_vars": env_vars,
-            "status": test_status,
-            "test_output": test_output,
-            "pass/fail": test_result,
-        }
-    )
+
+    if results_csv_writer is not None:
+        results_csv_writer.writerow(
+            {
+                "test_name": test_name,
+                "input_shapes": input_shapes,
+                **test_args,
+                "data_seed": data_seed,
+                "env_vars": env_vars,
+                "status": test_status,
+                "test_output": test_output,
+                "pass/fail": test_result,
+            }
+        )
 
     return test_pass
 
