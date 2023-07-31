@@ -136,7 +136,7 @@ def resnet_conv(weight: List[Union[int, float]], conv_params, device, bias=None)
                 # convert to tile layout
                 output_padded_shape = tensor.AutoFormat.pad_to_tile_shape(output.shape_object(), False, False, True, True)
                 output = tensor.AutoFormat.format_input_tensor(output, device, output_padded_shape, 0.0, tensor.Layout.TILE)
-            output_plus_bias = tensor.bcast_without_autoformat(output, bias_on_device, tensor.BcastOpMath.ADD, tensor.BcastOpDim.H)
+            output_plus_bias = tensor.bcast(output, bias_on_device, tensor.BcastOpMath.ADD, tensor.BcastOpDim.H)
             return output_plus_bias
 
         return output

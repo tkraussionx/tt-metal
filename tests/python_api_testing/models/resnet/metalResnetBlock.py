@@ -116,7 +116,7 @@ class Bottleneck(nn.Module):
         self.bn3.num_batches_tracked = nn.Parameter(state_dict[f"{self.base_address}.bn3.num_batches_tracked"], requires_grad=False)
         self.bn3.eval()
 
-        self.relu = tt_lib.tensor.relu_without_autoformat
+        self.relu = tt_lib.tensor.relu
         self.downsample = downsample
         self.stride = stride
 
@@ -174,7 +174,7 @@ class Bottleneck(nn.Module):
             identity = self.downsample(x)
         out = format_tensor(out, tt_lib.tensor.Layout.TILE, self.device)
         identity = format_tensor(identity, tt_lib.tensor.Layout.TILE, self.device, 0.0)
-        out = tt_lib.tensor.add_without_autoformat(out, identity)
+        out = tt_lib.tensor.add(out, identity)
 
         out = self.relu(out)
 
@@ -226,7 +226,7 @@ class BasicBlock(nn.Module):
         self.bn1.num_batches_tracked = nn.Parameter(state_dict[f"{self.base_address}.bn1.num_batches_tracked"], requires_grad=False)
         self.bn1.eval()
 
-        self.relu = tt_lib.tensor.relu_without_autoformat
+        self.relu = tt_lib.tensor.relu
 
         conv2_weight = state_dict[f"{base_address}.conv2.weight"]
         conv2_bias = None
@@ -284,7 +284,7 @@ class BasicBlock(nn.Module):
 
         identity = format_tensor(identity, tt_lib.tensor.Layout.TILE, self.device)
         out = format_tensor(out, tt_lib.tensor.Layout.TILE, self.device)
-        out = tt_lib.tensor.add_without_autoformat(out, identity)
+        out = tt_lib.tensor.add(out, identity)
 
         out = self.relu(out)
 
@@ -351,7 +351,7 @@ class ResNet(nn.Module):
         else:
             self.conv1 = fallback_ops.Conv2d(conv1_weight, conv1_bias, 3, self.inplanes, kernel_size=7, stride=2, padding=3)
 
-        self.relu = tt_lib.tensor.relu_without_autoformat
+        self.relu = tt_lib.tensor.relu
         # HACK
         unpadded_maxpool_input_shape = [1, 64, 112, 112]
         self.maxpool = fallback_ops.MaxPool2d(kernel_size=3, stride=2, padding=1, channels_last=True, unpadded_shape=unpadded_maxpool_input_shape)
