@@ -9,6 +9,7 @@ from utility_functions_new import pad_by_zero, tt2torch_tensor
 from tt_lib.utils import pad_weight
 
 from tt_lib.fused_ops.average_pool import run_avg_pool_on_device_wrapper as TtAvgPool
+from tt_lib.fused_ops.max_pool import run_max_pool_on_device_wrapper as TtMaxPool
 from tt_lib.fused_ops.linear import Linear as TtLinear
 from tt_lib.fused_ops.softmax import softmax as TtSoftmax
 from tt_lib.fused_ops.conv import resnet_conv as TtResnetConv
@@ -251,7 +252,8 @@ class ResNet(nn.Module):
             self.conv1 = fallback_ops.Conv2d(conv1_weight, conv1_bias, 3, self.inplanes, kernel_size=7, stride=2, padding=3)
 
         self.relu = tt_lib.tensor.relu_without_autoformat
-        self.maxpool = fallback_ops.MaxPool2d(kernel_size=3, stride=2, padding=1, channels_last=True, reshape_2d=True)
+        # self.maxpool = fallback_ops.MaxPool2d(kernel_size=3, stride=2, padding=1, channels_last=True)
+        self.maxpool = TtMaxPool(self.device, kernel_size=3, stride=2, padding=1, channels_last=True)
         self.layer1 = self._make_layer(block, 64, layers[0], name="layer1", state_dict=state_dict)
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0], name="layer2", state_dict=state_dict)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1], name="layer3", state_dict=state_dict)
