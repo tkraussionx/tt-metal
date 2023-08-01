@@ -14,78 +14,23 @@ from utility_functions_new import (
 
 from transformers import CodeGenConfig, CodeGenModel
 
-
-class CodeGenPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = CodeGenConfig
-    base_model_prefix = "transformer"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["CodeGenBlock"]
-
-    def __init__(self, *inputs, **kwargs):
-        super().__init__(*inputs, **kwargs)
-
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear,)):
-            # Slightly different from Mesh Transformer JAX which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, CodeGenModel):
-            module.gradient_checkpointing = value
-
-
-
-
-
-
-
-class CodeGenModel(CodeGenPreTrainedModel):
-    def __init__(self, config):
+class TtCodeGenModel(PreTrainedModel):
+    def __init__(self, config: CodeGenConfig(), state_dict, device):
         super().__init__(config)
 
         self.embed_dim = config.n_embd
         self.vocab_size = config.vocab_size
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([CodeGenBlock(config) for _ in range(config.n_layer)])
-        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
+        blocks = []
 
-        self.rotary_dim = min(config.rotary_dim, config.n_ctx // config.num_attention_heads)
+        for i in range(config.n_layer):
+            block = codegen_block.CodeGenBlock(i, config, state_dict, device)
+            blocks.append(block)
 
-        self.gradient_checkpointing = False
+        self.h = torch.nn.ModuleList(blocks)
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
-class TtCodeGenModel(torch.nn.Module):
-    def __init__(self, base_address, config: CodeGenConfig(), state_dict, device):
-        super().__init__()
-
-
-        self.embed_dim = config.n_embd
-        self.vocab_size = config.vocab_size
-        self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
-        self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([TtCodeGenBlock(config) for _ in range(config.n_layer)])
-
-        self.rotary_dim = min(config.rotary_dim, config.n_ctx // config.num_attention_heads)
 
         self.beta = bloom_utils.torch2tt_tensor(
             state_dict[f"{base_address}.ln_f.bias"], device
@@ -100,6 +45,8 @@ class TtCodeGenModel(torch.nn.Module):
             eps=config.layer_norm_epsilon,
             normalized_shape=config.hidden_size,
         )
+
+        self.rotary_dim = min(config.rotary_dim, config.n_ctx // config.num_attention_heads)
 
 
     def _convert_head_mask_to_5d(self, head_mask, num_hidden_layers):
@@ -187,7 +134,6 @@ class TtCodeGenModel(torch.nn.Module):
             batch_size = input_ids_shape[0]
 
 
-
         elif inputs_embeds is not None:
             input_shape_2 = inputs_embeds.shape()
             input_shape_2 = input_shape_2[:-1]
@@ -251,12 +197,10 @@ class TtCodeGenModel(torch.nn.Module):
 
             attention_mask = tt_lib.tensor.sub(tt_const_1, attention_mask_shape)
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x num_attention_heads x N x N
-        # head_mask has shape n_layer x batch x num_attention_heads x N x N
 
-        head_mask = self.get_head_mask(head_mask, self.config.n_layer)
+        pt_head_mask = tt2torch_tensor(head_mask)
+
+        pt_head_mask = self.get_head_mask(pt_head_mask, self.config.n_layer)
 
         if inputs_embeds is None:
             pt_input_ids = tt2torch_tensor(input_ids)
@@ -305,7 +249,7 @@ class TtCodeGenModel(torch.nn.Module):
                 hidden_states,
                 layer_past=layer_past,
                 attention_mask=attention_mask,
-                head_mask=head_mask[i],
+                head_mask=pt_head_mask[i],
                 use_cache=use_cache,
                 output_attentions=output_attentions,
             )

@@ -42,10 +42,8 @@ def run_codegen_model_test(device2, pcc):
     config = CodeGenConfig('Salesforce/codegen-350M-mono')
 
 
-    #pt_attn = model_hf.h[block].attn
-    #pt_out = pt_attn.forward(test_in)
 
-    tt_attn = codegen_attention.TtCodeGenModel(base_address, config, sd, device2)
+    tt_attn = codegen_attention.TtCodeGenModel(config, sd, device2)
 
     tt_out = tt_attn.forward(
         device2,
