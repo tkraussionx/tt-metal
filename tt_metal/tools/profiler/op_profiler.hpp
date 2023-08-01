@@ -8,6 +8,8 @@
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tensor/tensor.hpp"
 #include "tools/profiler/profiler.hpp"
+#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
+#include "tt_metal/third_party/tracy/public/tracy/TracyC.h"
 
 namespace tt {
 
@@ -488,6 +490,19 @@ namespace op_profiler {
             tt::tt_metal::detail::DumpDeviceProfileResults(device, program);
         }
 #endif
+    }
+
+    inline TracyCZoneCtx zone;
+    static void start_tracy_zone (const string& zoneName)
+    {
+        TracyCZone(ctx, 1);
+        TracyCZoneName(ctx, zoneName.c_str(), zoneName.length())
+        zone = ctx;
+    }
+
+    static void stop_tracy_zone ()
+    {
+        TracyCZoneEnd(zone);
     }
 
     class OpProfileScope
