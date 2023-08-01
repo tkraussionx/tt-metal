@@ -14,7 +14,7 @@ namespace tt_metal {
 void validate_buffer_size_and_page_size(u64 size, u64 page_size, const BufferType &buffer_type) {
     TT_ASSERT(size != 0 and page_size != 0, "Buffer size and page size should be larger than 0 bytes!");
     bool valid_page_size = (size % page_size == 0);
-    TT_ASSERT(valid_page_size, "For valid non-interleaved buffers page size {} must equal buffer size {}. For interleaved-buffers page size should be divisible by buffer size", page_size, size);
+    TT_ASSERT(valid_page_size, "For valid non-interleaved buffers page size {} must equal buffer size {}. For interleaved-buffers buffer size should be divisible by page size", page_size, size);
     TT_ASSERT(page_size % sizeof(u32) == 0, "Page size must be divisible by sizeof(uint32_t) because buffers hold uint32_t values");
 }
 
