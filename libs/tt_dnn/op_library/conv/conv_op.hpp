@@ -17,15 +17,17 @@ struct Conv {
      // additional parameters
     const std::vector<int> conv_params;
     const uint32_t act_block_h_ntiles, act_block_w_ntiles, weight_block_w_ntiles, out_subblock_h_ntiles, out_subblock_w_ntiles, output_channels;
+    const MemoryConfig output_mem_config;
 
-    Conv(uint32_t act_bh, uint32_t act_bw, uint32_t weight_bw, uint32_t out_sh, uint32_t out_sw, const std::vector<int>&c_params, uint32_t output_channels)
+    Conv(uint32_t act_bh, uint32_t act_bw, uint32_t weight_bw, uint32_t out_sh, uint32_t out_sw, const std::vector<int>&c_params, uint32_t output_channels, const MemoryConfig& output_mc)
         : act_block_h_ntiles(act_bh),
           act_block_w_ntiles(act_bw),
           weight_block_w_ntiles(weight_bw),
           out_subblock_h_ntiles(out_sh),
           out_subblock_w_ntiles(out_sw),
           output_channels(output_channels),
-          conv_params(c_params) {}
+          conv_params(c_params),
+          output_mem_config(output_mc) {}
 
     operation::Hash compute_program_hash(const std::vector<Tensor> &input_tensors) const;
     void validate(const std::vector<Tensor>& input_tensors) const;
@@ -36,7 +38,7 @@ struct Conv {
 };
 
 Tensor conv(const Tensor& a, const Tensor &b, const vector<int> conv_params, uint32_t act_block_h_ntiles, uint32_t act_block_w_ntiles, uint32_t weight_block_w_ntiles,
-             uint32_t out_subblock_h_ntiles, uint32_t out_subblock_w_ntiles, uint32_t output_channels);
+             uint32_t out_subblock_h_ntiles, uint32_t out_subblock_w_ntiles, uint32_t output_channels, const MemoryConfig& output_mem_config = MemoryConfig{.interleaved = true});
 operation::ProgramWithCallbacks conv_single_core(const Tensor& A, const Tensor& B, vector<int> conv_params, uint32_t act_block_h_ntiles, uint32_t act_block_w_ntiles, uint32_t weight_block_w_ntiles,
              uint32_t out_subblock_h_ntiles, uint32_t out_subblock_w_ntiles, uint32_t output_channels, Tensor& output); // Tilizes a, untilizes b
 
@@ -45,15 +47,17 @@ struct ConvWithAddressMap {
     // additional parameters
     const std::vector<int> conv_params;
     const uint32_t act_block_h_ntiles, act_block_w_ntiles, weight_block_w_ntiles, out_subblock_h_ntiles, out_subblock_w_ntiles, output_channels;
+    const MemoryConfig output_mem_config;
 
-    ConvWithAddressMap(uint32_t act_bh, uint32_t act_bw, uint32_t weight_bw, uint32_t out_sh, uint32_t out_sw, const std::vector<int>&c_params, uint32_t output_channels)
+    ConvWithAddressMap(uint32_t act_bh, uint32_t act_bw, uint32_t weight_bw, uint32_t out_sh, uint32_t out_sw, const std::vector<int>&c_params, uint32_t output_channels, const MemoryConfig& output_mc)
         : act_block_h_ntiles(act_bh),
           act_block_w_ntiles(act_bw),
           weight_block_w_ntiles(weight_bw),
           out_subblock_h_ntiles(out_sh),
           out_subblock_w_ntiles(out_sw),
           output_channels(output_channels),
-          conv_params(c_params) {}
+          conv_params(c_params),
+          output_mem_config(output_mc) {}
 
     void validate(const std::vector<Tensor>& input_tensors) const;
     std::vector<Shape> compute_output_shapes(const std::vector<Tensor>& input_tensors) const;
@@ -63,7 +67,7 @@ struct ConvWithAddressMap {
 };
 
 Tensor conv_with_address_map(const Tensor& a, const Tensor &b, const vector<int> conv_params, uint32_t act_block_h_ntiles, uint32_t act_block_w_ntiles, uint32_t weight_block_w_ntiles,
-             uint32_t out_subblock_h_ntiles, uint32_t out_subblock_w_ntiles, uint32_t output_channels);
+             uint32_t out_subblock_h_ntiles, uint32_t out_subblock_w_ntiles, uint32_t output_channels, const MemoryConfig& output_mem_config = MemoryConfig{.interleaved = true});
 operation::ProgramWithCallbacks conv_with_address_map_single_core(const Tensor& A, const Tensor& B, vector<int> conv_params, uint32_t act_block_h_ntiles, uint32_t act_block_w_ntiles, uint32_t weight_block_w_ntiles,
              uint32_t out_subblock_h_ntiles, uint32_t out_subblock_w_ntiles, uint32_t output_channels, Tensor& output); // Tilizes a, untilizes b
 

@@ -505,13 +505,13 @@ operation::ProgramWithCallbacks conv_as_large_bmm_single_core_(const Tensor& a, 
 }
 
 Tensor conv(const Tensor& a, const Tensor &b, const vector<int> conv_params, uint32_t act_block_h_ntiles, uint32_t act_block_w_ntiles, uint32_t weight_block_w_ntiles,
-             uint32_t out_subblock_h_ntiles, uint32_t out_subblock_w_ntiles, uint32_t output_channels) {
+             uint32_t out_subblock_h_ntiles, uint32_t out_subblock_w_ntiles, uint32_t output_channels, const MemoryConfig& output_mem_config) {
     TT_ASSERT(b.layout() == Layout::TILE); // Weights should already be formatted
     auto padded_a_shape = AutoFormat::pad_to_tile_shape(a.shape(), false, false, false, true);
     FormatParams input_a_format_params = {.pad_shape=padded_a_shape, .pad_value=0.0, .target_layout=Layout::ROW_MAJOR};
     FormatParams input_b_format_params = {.pad_shape=b.shape(), .pad_value=0.0, .target_layout=Layout::TILE};
     return operation::run_with_autoformat(
-        Conv(act_block_h_ntiles, act_block_w_ntiles, weight_block_w_ntiles, out_subblock_h_ntiles, out_subblock_w_ntiles, conv_params, output_channels),
+        Conv(act_block_h_ntiles, act_block_w_ntiles, weight_block_w_ntiles, out_subblock_h_ntiles, out_subblock_w_ntiles, conv_params, output_channels, output_mem_config),
         {a, b},
         {input_a_format_params, input_b_format_params},
         {Layout::ROW_MAJOR}).at(0);
@@ -551,7 +551,7 @@ std::vector<Shape> Conv::compute_output_shapes(const std::vector<Tensor>& input_
 
 std::vector<Tensor> Conv::create_output_tensors(const std::vector<Tensor>& input_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
-    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor.dtype(), Layout::ROW_MAJOR, MemoryConfig{.interleaved = true});
+    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor.dtype(), Layout::ROW_MAJOR, this->output_mem_config);
 }
 
 operation::Hash Conv::compute_program_hash(const std::vector<Tensor> &input_tensors) const {
@@ -1263,13 +1263,13 @@ operation::ProgramWithCallbacks conv_as_large_bmm_with_address_map_single_core_(
 }
 
 Tensor conv_with_address_map(const Tensor& a, const Tensor &b, const vector<int> conv_params, uint32_t act_block_h_ntiles, uint32_t act_block_w_ntiles, uint32_t weight_block_w_ntiles,
-             uint32_t out_subblock_h_ntiles, uint32_t out_subblock_w_ntiles, uint32_t output_channels) {
+             uint32_t out_subblock_h_ntiles, uint32_t out_subblock_w_ntiles, uint32_t output_channels, const MemoryConfig& output_mem_config) {
     TT_ASSERT(b.layout() == Layout::TILE); // Weights should already be formatted
     auto padded_a_shape = AutoFormat::pad_to_tile_shape(a.shape(), false, false, false, true);
     FormatParams input_a_format_params = {.pad_shape=padded_a_shape, .pad_value=0.0, .target_layout=Layout::ROW_MAJOR};
     FormatParams input_b_format_params = {.pad_shape=b.shape(), .pad_value=0.0, .target_layout=Layout::TILE};
     return operation::run_with_autoformat(
-        ConvWithAddressMap(act_block_h_ntiles, act_block_w_ntiles, weight_block_w_ntiles, out_subblock_h_ntiles, out_subblock_w_ntiles, conv_params, output_channels),
+        ConvWithAddressMap(act_block_h_ntiles, act_block_w_ntiles, weight_block_w_ntiles, out_subblock_h_ntiles, out_subblock_w_ntiles, conv_params, output_channels, output_mem_config),
         {a, b},
         {input_a_format_params, input_b_format_params},
         {Layout::ROW_MAJOR}).at(0);
@@ -1309,7 +1309,7 @@ std::vector<Shape> ConvWithAddressMap::compute_output_shapes(const std::vector<T
 
 std::vector<Tensor> ConvWithAddressMap::create_output_tensors(const std::vector<Tensor>& input_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
-    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor.dtype(), Layout::ROW_MAJOR, MemoryConfig{.interleaved = true});
+    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor.dtype(), Layout::ROW_MAJOR, this->output_mem_config);
 }
 
 operation::ProgramWithCallbacks ConvWithAddressMap::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor>& output_tensors) const {
