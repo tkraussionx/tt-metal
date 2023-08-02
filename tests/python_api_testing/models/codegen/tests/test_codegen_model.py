@@ -43,7 +43,7 @@ def run_codegen_model_test(device2, pcc):
 
 
 
-    tt_attn = codegen_attention.TtCodeGenModel(config, sd, device2)
+    tt_attn = codegen_model.TtCodeGenModel(config, sd, device2)
 
     tt_out = tt_attn.forward(
         device2,

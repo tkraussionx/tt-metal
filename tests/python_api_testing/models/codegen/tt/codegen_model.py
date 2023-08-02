@@ -12,7 +12,7 @@ from utility_functions_new import (
     torch_to_tt_tensor_rm,
 )
 
-from transformers import CodeGenConfig, CodeGenModel
+from transformers import CodeGenConfig
 
 class TtCodeGenModel(PreTrainedModel):
     def __init__(self, config: CodeGenConfig(), state_dict, device):
@@ -198,9 +198,9 @@ class TtCodeGenModel(PreTrainedModel):
             attention_mask = tt_lib.tensor.sub(tt_const_1, attention_mask_shape)
 
 
-        pt_head_mask = tt2torch_tensor(head_mask)
+        #pt_head_mask = tt2torch_tensor(head_mask)
 
-        pt_head_mask = self.get_head_mask(pt_head_mask, self.config.n_layer)
+        #pt_head_mask = self.get_head_mask(pt_head_mask, self.config.n_layer)
 
         if inputs_embeds is None:
             pt_input_ids = tt2torch_tensor(input_ids)
@@ -249,7 +249,7 @@ class TtCodeGenModel(PreTrainedModel):
                 hidden_states,
                 layer_past=layer_past,
                 attention_mask=attention_mask,
-                head_mask=pt_head_mask[i],
+                head_mask=None,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
             )
@@ -263,7 +263,9 @@ class TtCodeGenModel(PreTrainedModel):
 
         hidden_states = self.ln_f(hidden_states)
 
-        hidden_states = hidden_states.view(output_shape)
+        outputs_shapes = outputs.shape()
+
+        hidden_states = tt_lib.fallback_ops.reshape(hidden_states, outputs_shape[0], outputs_shape[1], outputs_shape[2], outputs_shape[3])
         # Add last hidden state
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
