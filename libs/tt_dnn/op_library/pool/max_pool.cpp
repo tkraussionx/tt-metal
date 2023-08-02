@@ -77,59 +77,56 @@ operation::ProgramWithCallbacks max_pool_2d_single_core(const Tensor &input, Ten
                                             in_nbytes_w, out_nbytes_w,
                                             input_shape[0], input_shape[1], input_shape[2], input_shape[3],
                                             out_pagesize};
-    std::vector<uint32_t> writer_ct_args = reader_ct_args;
-    std::vector<uint32_t> writer_rt_args = reader_rt_args;
-
-    DataMovementKernel *reader_kernel = CreateDataMovementKernel(
+    auto reader_config = DataMovementConfig{.processor = DataMovementProcessor::RISCV_1,
+                                            .noc = NOC::RISCV_1_default,
+                                            .compile_args = reader_ct_args};
+    auto reader_kernel = CreateDataMovementKernel(
         program,
         "tt_metal/kernels/dataflow/reader_max_pool_2d_single_core.cpp",
         cores,
-        reader_ct_args,
-        DataMovementProcessor::RISCV_1,
-        NOC::RISCV_1_default);
+        reader_config);
 
-    DataMovementKernel *writer_kernel = CreateDataMovementKernel(
-        program,
-        "tt_metal/kernels/dataflow/writer_max_pool_2d_single_core.cpp",
-        cores,
-        writer_ct_args,
-        DataMovementProcessor::RISCV_0,
-        NOC::RISCV_0_default);
+    std::vector<uint32_t> writer_ct_args = reader_ct_args;
+    std::vector<uint32_t> writer_rt_args = reader_rt_args;
+    auto writer_config = DataMovementConfig{.processor = DataMovementProcessor::RISCV_0,
+                                            .noc = NOC::RISCV_0_default,
+                                            .compile_args = writer_ct_args};
+    auto writer_kernel = CreateDataMovementKernel(program,
+                                                  "tt_metal/kernels/dataflow/writer_max_pool_2d_single_core.cpp",
+                                                  cores,
+                                                  writer_config);
 
     // No compute required, so using blank kernel
-    vector<uint32_t> compute_args = {};
-    bool fp32_dest_acc_en = false;
-    bool math_approx_mode = false;
-    auto compute_kernel = CreateComputeKernel(
-        program,
-        "tt_metal/kernels/compute/blank.cpp",
-        cores,
-        compute_args,
-        MathFidelity::HiFi4,
-        fp32_dest_acc_en,
-        math_approx_mode
-    );
+    auto compute_config = ComputeConfig{.math_fidelity = MathFidelity::HiFi4,
+                                        .fp32_dest_acc_en = false,
+                                        .math_approx_mode = false,
+                                        .compile_args = {}};
+    auto compute_kernel = CreateComputeKernel(program,
+                                              "tt_metal/kernels/compute/blank.cpp",
+                                              cores,
+                                              compute_config);
 
-    SetRuntimeArgs(reader_kernel, cores, reader_rt_args);
-    SetRuntimeArgs(writer_kernel, cores, writer_rt_args);
+    SetRuntimeArgs(program, reader_kernel, cores, reader_rt_args);
+    SetRuntimeArgs(program, writer_kernel, cores, writer_rt_args);
 
     auto override_runtime_args_callback =
-        [reader_kernel, writer_kernel](const std::vector<Buffer*>& input_buffers,
+        [reader_kernel, writer_kernel](const Program& program,
+                                       const std::vector<Buffer*>& input_buffers,
                                        const std::vector<Buffer*>& output_buffers) {
         auto src_dram_buffer = input_buffers.at(0);
         auto dst_dram_buffer = output_buffers.at(0);
         CoreCoord core = {0, 0};
         {
-            auto runtime_args = GetRuntimeArgs(reader_kernel, core);
+            auto runtime_args = GetRuntimeArgs(program, reader_kernel, core);
             runtime_args[0] = src_dram_buffer->address();
             runtime_args[1] = dst_dram_buffer->address();
-            SetRuntimeArgs(reader_kernel, core, runtime_args);
+            SetRuntimeArgs(program, reader_kernel, core, runtime_args);
         }
         {
-            auto runtime_args = GetRuntimeArgs(writer_kernel, core);
+            auto runtime_args = GetRuntimeArgs(program, writer_kernel, core);
             runtime_args[0] = src_dram_buffer->address();
             runtime_args[1] = dst_dram_buffer->address();
-            SetRuntimeArgs(writer_kernel, core, runtime_args);
+            SetRuntimeArgs(program, writer_kernel, core, runtime_args);
         }
     };
     return {std::move(program), override_runtime_args_callback};
