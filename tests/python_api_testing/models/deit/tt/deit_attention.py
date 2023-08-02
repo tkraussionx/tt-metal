@@ -1,13 +1,3 @@
-from pathlib import Path
-import sys
-f = f"{Path(__file__).parent}"
-sys.path.append(f"{f}")
-sys.path.append(f"{f}/../")
-sys.path.append(f"{f}/../..")
-sys.path.append(f"{f}/../../..")
-sys.path.append(f"{f}/../../../..")
-sys.path.append(f"{f}/../../../../..")
-
 import torch
 from torch import nn
 from typing import Union, Optional, Tuple, Dict, Set, List
@@ -15,8 +5,8 @@ from deit_config import DeiTConfig
 
 import tt_lib
 from tt_lib.fallback_ops import fallback_ops
-from deit_self_attention import TtDeiTSelfAttention
-from deit_self_output import TtDeiTSelfOutput
+from tests.python_api_testing.models.deit.tt.deit_self_attention import TtDeiTSelfAttention
+from tests.python_api_testing.models.deit.tt.deit_self_output import TtDeiTSelfOutput
 
 class TtDeiTAttention(nn.Module):
     def __init__(self, config: DeiTConfig(), device, state_dict=None, base_address="") -> None:
