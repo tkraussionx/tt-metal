@@ -1,3 +1,4 @@
+#include "noc_overlay_parameters.hpp"
 #include "noc_overlay_parameters.h"
 
 using namespace Noc;

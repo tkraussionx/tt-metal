@@ -47,14 +47,14 @@
 #define NCRISC_PIC_CONFIG_PHASE_DEFAULT           0
 
 #define NOC_STREAM_WRITE_REG(stream_id, reg_id, val)  ((*((volatile uint32_t*)(STREAM_REG_ADDR(stream_id, reg_id)))) = (val))
-#define NOC_STREAM_READ_REG(stream_id, reg_id)        (*((volatile uint32_t*)(STREAM_REG_ADDR(stream_id, reg_id))))
+#define NOC_STREAM_READ_REG(stream_id, reg_id)        (*((volatile uint32_t tt_reg_ptr *)(STREAM_REG_ADDR(stream_id, reg_id))))
 
 #define NOC_STREAM_WRITE_REG_FIELD(stream_id, reg_id, field, val) (NOC_STREAM_WRITE_REG(stream_id, reg_id, ((NOC_STREAM_READ_REG(stream_id, reg_id) & ~((1 << field##_WIDTH) - 1)) | ((val & ((1 << field##_WIDTH) - 1)) << field))))
 #define NOC_STREAM_READ_REG_FIELD(stream_id, reg_id, field)       ((NOC_STREAM_READ_REG(stream_id, reg_id) >> field) & ((1 << field##_WIDTH) - 1))
 #define NOC_STREAM_GET_REG_FIELD(reg_val, field)       (((reg_val) >> field) & ((1 << field##_WIDTH) - 1))
 
 #define NOC_WRITE_REG(addr, val) ((*((volatile uint32_t*)(addr)))) = (val)
-#define NOC_READ_REG(addr)       (*((volatile uint32_t*)(addr)))
+#define NOC_READ_REG(addr)       (*((volatile uint32_t tt_reg_ptr *)(addr)))
 
 
 #define NOC_ID_WIDTH     6
@@ -164,6 +164,21 @@
 // Subsequently its incremented automatically as messages are forwarded.
 #define   STREAM_REMOTE_DEST_MSG_INFO_WR_PTR_REG_INDEX   9
 
+
+#ifdef RISC_B0_HW
+// On WH B0, this register aliases STREAM_REMOTE_DEST_MSG_INFO_WR_PTR_REG_INDEX.
+// It can be used to clear multiple tiles at once, even if they haven't been loaded into the msg info
+// buffer. (Which is required for using STREAM_MSG_INFO/DATA_CLEAR_REG_INDEX.)  This way, we
+// can clear however many pending messages have actually been received in L1.
+// To clear N messages, we need to:
+//   - Poll to ensure that the register value is 0 (indicating that previous clearing is done).
+//   - Write (-2*N) in 2's complement (i.e. ~N+1) into the register.
+// This performs both info and data clear steps at once.
+// The register should be used only in RECEIVER_ENDPOINT mode.
+#define   STREAM_RECEIVER_ENDPOINT_MULTI_TILE_CLEAR_REG_INDEX 9
+#endif
+
+
 // The ID of NOCs used for incoming and outgoing data, followed by misc. stream configuration options:
 //   * Source - set exactly one of these to 1:
 //        SOURCE_ENDPOINT = source is local math/packer
@@ -258,6 +273,12 @@
 #define       STREAM_MCAST_NO_PATH_RES_WIDTH   1
 #define       STREAM_MCAST_XY                (STREAM_MCAST_NO_PATH_RES+STREAM_MCAST_NO_PATH_RES_WIDTH)
 #define       STREAM_MCAST_XY_WIDTH            1
+#ifdef RISC_B0_HW
+#define       STREAM_MCAST_SRC_SIDE_DYNAMIC_LINKED          (STREAM_MCAST_XY+STREAM_MCAST_XY_WIDTH)
+#define       STREAM_MCAST_SRC_SIDE_DYNAMIC_LINKED_WIDTH    1
+#define       STREAM_MCAST_DEST_SIDE_DYNAMIC_LINKED         (STREAM_MCAST_SRC_SIDE_DYNAMIC_LINKED+STREAM_MCAST_SRC_SIDE_DYNAMIC_LINKED_WIDTH)
+#define       STREAM_MCAST_DEST_SIDE_DYNAMIC_LINKED_WIDTH   1
+#endif
 
 // Number of multicast destinations (dont-care for non-multicast streams)
 #define   STREAM_MCAST_DEST_NUM_REG_INDEX   14
