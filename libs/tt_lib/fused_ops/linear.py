@@ -32,10 +32,10 @@ def Linear(in_features: int, out_features: int, weight: List[Union[int, float]],
 
     def linear_(activation):
         weight_T = tensor.transpose(weight)
-        output = tensor.matmul(activation, weight_T)
+        output = tensor.matmul(activation, weight_T, tensor.MemoryConfig(True, tensor.BufferType.L1))
 
         if bias is not None:
-            output_plus_bias = tensor.bcast(output, bias, tensor.BcastOpMath.ADD, tensor.BcastOpDim.H)
+            output_plus_bias = tensor.bcast(output, bias, tensor.BcastOpMath.ADD, tensor.BcastOpDim.H, tensor.MemoryConfig(True, tensor.BufferType.L1))
             return output_plus_bias
 
         return output
