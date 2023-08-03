@@ -54,6 +54,7 @@ operation::ProgramWithCallbacks max_pool_2d_single_core(const Tensor &input, Ten
     );
 
     uint32_t out_pagesize = (out_nbytes_w % 16 == 0) ? out_nbytes_w : (out_nbytes_w + 16 - out_nbytes_w % 16);
+    // Temporary hack -- no longer used, clean it up
     uint32_t out_tile_size = detail::TileSize(out_df);
     uint32_t out_pagesize_tile_aligned = out_pagesize % out_tile_size == 0
                                          ? out_pagesize
@@ -64,7 +65,7 @@ operation::ProgramWithCallbacks max_pool_2d_single_core(const Tensor &input, Ten
         out_cb_id,
         cores,
         out_npages,
-        out_npages * out_pagesize_tile_aligned,   // padded row size
+        out_npages * out_pagesize,   // padded row size
         out_df
     );
 
