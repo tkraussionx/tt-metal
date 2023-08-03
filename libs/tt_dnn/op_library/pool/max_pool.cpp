@@ -4,6 +4,7 @@
 #include "tt_dnn/op_library/pool/max_pool.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tensor/tensor_utils.hpp"
+#include "detail/util.hpp"
 
 // #include "tt_metal/llrt/tt_debug_print_server.hpp"
 
@@ -53,30 +54,35 @@ operation::ProgramWithCallbacks max_pool_2d_single_core(const Tensor &input, Ten
     );
 
     uint32_t out_pagesize = (out_nbytes_w % 16 == 0) ? out_nbytes_w : (out_nbytes_w + 16 - out_nbytes_w % 16);
-    uint32_t out_npages = 1;
+    uint32_t out_tile_size = detail::TileSize(out_df);
+    uint32_t out_pagesize_tile_aligned = out_pagesize % out_tile_size == 0
+                                         ? out_pagesize
+                                         : out_pagesize + out_tile_size - out_pagesize % out_tile_size;
+    uint32_t out_npages = 2;    // double buf
     auto cb_out = CreateCircularBuffers(
         program,
         out_cb_id,
         cores,
         out_npages,
-        out_npages * out_pagesize,   // padded row size
+        out_npages * out_pagesize_tile_aligned,   // padded row size
         out_df
     );
 
-    log_debug("SRC: {}", src_dram_buffer->address());
-    log_debug("DST: {}", dst_dram_buffer->address());
+    uint32_t kernel_size_hw = kernel_size_h * kernel_size_w;
+    // take multiple of 4
+    kernel_size_hw = kernel_size_hw % 4 == 0 ? kernel_size_hw : (kernel_size_hw + 4 - kernel_size_hw % 4);
 
     std::vector<uint32_t> reader_ct_args = {(input.memory_config().buffer_type == BufferType::DRAM) ? (uint) 1 : (uint) 0,
                                             (out_mem_config.buffer_type == BufferType::DRAM) ? (uint) 1 : (uint) 0};
     std::vector<uint32_t> reader_rt_args = {src_dram_buffer->address(),
                                             dst_dram_buffer->address(),
-                                            kernel_size_h, kernel_size_w, kernel_size_h * kernel_size_w,
+                                            kernel_size_h, kernel_size_w, kernel_size_hw,
                                             stride_h, stride_w,
                                             pad_h, pad_w,
                                             output_shape[0], output_shape[1], output_shape[2], output_shape[3],
                                             in_nbytes_w, out_nbytes_w,
                                             input_shape[0], input_shape[1], input_shape[2], input_shape[3],
-                                            out_pagesize};
+                                            out_pagesize, out_pagesize_tile_aligned};
     auto reader_config = DataMovementConfig{.processor = DataMovementProcessor::RISCV_1,
                                             .noc = NOC::RISCV_1_default,
                                             .compile_args = reader_ct_args};
