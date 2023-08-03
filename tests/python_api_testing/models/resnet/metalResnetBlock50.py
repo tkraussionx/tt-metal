@@ -381,18 +381,20 @@ class ResNet(nn.Module):
                 x.shape,
                 tt_lib.tensor.DataType.BFLOAT16,
                 tt_lib.tensor.Layout.ROW_MAJOR)
-        x = x.pad((x.shape()[0], x.shape()[1], x.shape()[2], _nearest_y(x.shape()[3], 16)), (0, 0, 0, 0), 0)
+        x = x.pad((x.shape()[0], x.shape()[1], x.shape()[2], _nearest_32(x.shape()[3])), (0, 0, 0, 0), 0)
         x = x.to(self.device, self.memory_config)
         saved_shape = compute_conv_output_shape(self.conv1_params, x.shape())
         x = self.conv1(x)
         x = x.reshape(1, 1, x.shape()[0]*x.shape()[1]*x.shape()[2], x.shape()[3])
         x = self.relu(x)
-        x = format_tensor(x, tt_lib.tensor.Layout.ROW_MAJOR, self.device)
-        x = x.reshape(saved_shape[0], saved_shape[1], saved_shape[2], saved_shape[3])
-        x = self.maxpool(x)
+        #x = format_tensor(x, tt_lib.tensor.Layout.ROW_MAJOR, self.device)
+        #x = x.reshape(saved_shape[0], saved_shape[1], saved_shape[2], saved_shape[3])
+        x = self.maxpool(x, saved_shape)
         saved_shape = compute_max_pool_shape(3, 2, 1, saved_shape)
-        x = x.reshape(1, 1, x.shape()[0]*x.shape()[1]*x.shape()[2], x.shape()[3])
-        x = format_tensor(x, tt_lib.tensor.Layout.TILE, self.device)
+        #x = x.reshape(1, 1, x.shape()[0]*x.shape()[1]*x.shape()[2], x.shape()[3])
+        #x = format_tensor(x, tt_lib.tensor.Layout.TILE, self.device)
+        print("saved shape after maxpool")
+        print(saved_shape)
         for layer in self.layer1:
             x, saved_shape = layer.run_forward(x, saved_shape)
         for layer in self.layer2:
