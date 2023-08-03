@@ -79,17 +79,14 @@ void kernel_main() {
     };
 
     uint16_t bfloat16_arr[window_hw_ceil4];   // temporary array to hold at most one window worth of values
-
-    uint32_t start_in_row_id = 0;
-    uint32_t out_row_id = 0;
-
-    // bool one_time_noc_wait = false;
-    // bool one_time_cb_push = false;
-
+    uint32_t* bfloat16_arr_uint = reinterpret_cast<uint32_t*>(bfloat16_arr);
     const uint32_t in_l1_write_addr = get_write_ptr(in_cb_id);
     const uint32_t in_l1_read_addr = get_read_ptr(in_cb_id);
     uint16_t* in_data_ptr = reinterpret_cast<uint16_t*>(in_l1_read_addr);
+    // uint32_t* in_data_uint_ptr = reinterpret_cast<uint32_t*>(in_l1_read_addr);
 
+    uint32_t start_in_row_id = 0;
+    uint32_t out_row_id = 0;
     for (int32_t c_i = 0; c_i < out_nchannel; ++ c_i) {
         int32_t start_h = - pad_h;
         int32_t read_nrows = window_h - pad_h; // initialize the number of input rows to read into L1
@@ -117,32 +114,44 @@ void kernel_main() {
             cb_reserve_back(out_cb_id, 1);      // make sure one row is available to write in output cb
             // for every output col
             for (int32_t out_w_i = 0; out_w_i < out_w; ++ out_w_i) {
-                uint16_t* curr_data_ptr = in_data_ptr;
                 // start = {start_h, start_w}
                 int32_t end_h = start_h + window_h;
                 int32_t end_w = start_w + window_w;
-                // populate the array to find max
-                uint32_t arr_i = 0;
                 int32_t start_h_max = start_h < 0 ? 0 : start_h;
                 int32_t start_w_max = start_w < 0 ? 0 : start_w;
                 int32_t end_h_min = end_h < in_h ? end_h : in_h;
                 int32_t end_w_min = end_w < in_w ? end_w : in_w;
                 // MY_IF DPRINT << "Window: " << (uint) start_h_max << "," << (uint) start_w_max << " --> " << (uint) end_h_min << "," << (uint) end_w_min << ENDL();
 
+                // uint16_t* curr_data_ptr = in_data_ptr;
+                uint32_t* curr_data_uint_ptr = reinterpret_cast<uint32_t*>(in_data_ptr + start_w_max);
+
                 kernel_profiler::mark_time(10);
 
+                // populate the array to find max
+                uint32_t arr_i = 0;
+                // uint32_t* bfloat16_arr_uint = reinterpret_cast<uint32_t*>(bfloat16_arr);
                 for (int32_t h = start_h_max; h < end_h_min; ++ h) {
-                    for (int32_t w = start_w_max; w < end_w_min; ++ w) {
-                        bfloat16_arr[arr_i ++] = curr_data_ptr[w];
-                        // TODO [AS]: load 32b data at a time instead with uint32_t ptr (or 64b with uint64_t?)
-                        // Need to make sure the window width boundary is taken care of since it may be odd.
+                    int32_t window_w = end_w_min - start_w_max;
+                    bool is_odd = window_w & 0x01;
+                    window_w = window_w >> 1;
+                    for (int32_t w = 0; w < window_w; ++ w) {
+                        // bfloat16_arr[arr_i ++] = curr_data_ptr[w];
+                        bfloat16_arr_uint[arr_i ++] = curr_data_uint_ptr[w];
                     }
-                    curr_data_ptr += in_w;   // next row (num 16b elements)
+                    if (is_odd) {
+                        bfloat16_arr_uint[arr_i] = curr_data_uint_ptr[window_w];
+                        // the last 16b are not to be considered, so turn that into 0xff7f (smallest -ve)
+                        // this is done so that the bfloat16_arr_uint can be continuously used without re-casting
+                        bfloat16_arr_uint[arr_i] &= 0xffffff7f;
+                        ++ arr_i;
+                    }
+                    curr_data_uint_ptr += (in_w >> 1);   // next row (num 32b elements). TODO: Need to handle odd case? No, in_w is assumed to be even (for now).
                 }
 
                 kernel_profiler::mark_time(11);
 
-                uint16_t max_val = max_bfloat16(bfloat16_arr, arr_i);
+                uint16_t max_val = max_bfloat16(bfloat16_arr, 2 * arr_i);
                 out_data_ptr[out_w_i] = max_val;
                 start_w += stride_w;
             }
