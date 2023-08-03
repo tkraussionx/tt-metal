@@ -69,10 +69,9 @@ operation::ProgramWithCallbacks max_pool_2d_single_core(const Tensor &input, Ten
         out_df
     );
 
-    uint32_t kernel_size_hw = kernel_size_h * (kernel_size_w + (kernel_size_w & 0x01));    // need to pad width if its odd so that it is even sized
+    uint32_t kernel_size_hw = kernel_size_h * kernel_size_w;
     // take multiple of 4
     kernel_size_hw = kernel_size_hw % 4 == 0 ? kernel_size_hw : (kernel_size_hw + 4 - kernel_size_hw % 4);
-    log_debug("kernel_size: {},{} ; kernel_size_hw: {}", kernel_size_h, kernel_size_w, kernel_size_hw);
 
     std::vector<uint32_t> reader_ct_args = {(input.memory_config().buffer_type == BufferType::DRAM) ? (uint) 1 : (uint) 0,
                                             (out_mem_config.buffer_type == BufferType::DRAM) ? (uint) 1 : (uint) 0};
