@@ -326,7 +326,7 @@ int main() {
 
     // Notify dispatcher core that it has completed
     if (dispatch_addr != 0) {
-        noc_fast_atomic_increment(kernel_noc_id_var, NCRISC_AT_CMD_BUF, dispatch_addr, 1, 31 /*wrap*/, false /*linked*/);
+        noc_fast_atomic_increment(kernel_noc_id_var, NCRISC_WR_CMD_BUF, dispatch_addr, 1, 31 /*wrap*/, false /*linked*/);
     }
 
     while (true);

@@ -23,7 +23,7 @@ void replicate(uint32_t noc_id, uint32_t src_addr, uint64_t dest_addr, uint32_t 
                           src_addr,
                           dest_addr,
                           chunk_size_bytes,
-                          REPLICATE_VC, false, false, 1);
+                          REPLICATE_VC, false, false, 1, NCRISC_WR_DEF_TRID);
     dest_addr += chunk_size_bytes;
   }
 }
@@ -36,7 +36,7 @@ void replicate_l1(uint32_t noc_id, uint32_t src_addr, uint64_t dest_addr, uint32
                           src_addr,
                           dest_addr,
                           chunk_size_bytes,
-                          REPLICATE_VC, false, false, 1);
+                          REPLICATE_VC, false, false, 1, NCRISC_WR_DEF_TRID);
     dest_addr += chunk_size_bytes;
   }
 }

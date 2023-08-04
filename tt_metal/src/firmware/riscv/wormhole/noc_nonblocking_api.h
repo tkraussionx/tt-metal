@@ -429,8 +429,9 @@ inline void noc_atomic_read_and_increment(uint32_t noc, uint32_t cmd_buf, uint64
 
 void __attribute__((section("code_l1"))) noc_atomic_read_and_increment_l1(uint32_t noc, uint32_t cmd_buf, uint64_t addr, uint32_t incr, uint32_t wrap, uint64_t read_addr, bool linked, uint32_t transaction_id);
 
-/*
+
 inline void noc_fast_atomic_increment(uint32_t noc, uint32_t cmd_buf, uint64_t addr, uint32_t incr, uint32_t wrap, bool linked) {
+  while (!ncrisc_noc_fast_write_ok(noc, cmd_buf))
   NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_TARG_ADDR_LO, (uint32_t)(addr & 0xFFFFFFFF));
   NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_TARG_ADDR_MID, (uint32_t)(addr >> 32));
   NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_CTRL, (linked ? NOC_CMD_VC_LINKED : 0x0) | NOC_CMD_AT);
@@ -438,9 +439,7 @@ inline void noc_fast_atomic_increment(uint32_t noc, uint32_t cmd_buf, uint64_t a
   NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_AT_DATA, incr);
   NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_CMD_CTRL, 0x1);
 }
-*/
 
-/*
 inline void noc_fast_atomic_increment_l1(uint32_t noc, uint32_t cmd_buf, uint64_t addr, uint32_t incr, uint32_t wrap, bool linked) {
   NOC_CMD_BUF_WRITE_REG_L1(noc, cmd_buf, NOC_TARG_ADDR_LO, (uint32_t)(addr & 0xFFFFFFFF));
   NOC_CMD_BUF_WRITE_REG_L1(noc, cmd_buf, NOC_TARG_ADDR_MID, (uint32_t)(addr >> 32));
@@ -449,4 +448,3 @@ inline void noc_fast_atomic_increment_l1(uint32_t noc, uint32_t cmd_buf, uint64_
   NOC_CMD_BUF_WRITE_REG_L1(noc, cmd_buf, NOC_AT_DATA, incr);
   NOC_CMD_BUF_WRITE_REG_L1(noc, cmd_buf, NOC_CMD_CTRL, 0x1);
 }
-*/

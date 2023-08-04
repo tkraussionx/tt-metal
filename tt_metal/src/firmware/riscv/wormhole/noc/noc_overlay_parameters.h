@@ -10,6 +10,7 @@
 //                                                                                                             //
 // to regenerate                                                                                               //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#include "risc_attribs.h"
 
 #ifndef NOC_OVERLAY_PARAMETERS_H
 #define NOC_OVERLAY_PARAMETERS_H
