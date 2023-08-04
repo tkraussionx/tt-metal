@@ -5,11 +5,7 @@
 #include "tt_metal/host_api.hpp"
 #include "common/bfloat16.hpp"
 
-// #include "test_tiles.hpp"
-// #include "test_gold_impls.hpp"
 #include "constants.hpp"
-
-// #include "llrt/tt_debug_print_server.hpp"
 
 using namespace tt;
 using namespace constants;
