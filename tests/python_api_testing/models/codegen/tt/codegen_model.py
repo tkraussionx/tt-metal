@@ -4,6 +4,10 @@ from torch.nn import functional as F
 import tt_lib
 from python_api_testing.models.helper_funcs import Linear
 import python_api_testing.models.codegen.tt.codegen_gelu as codegen_gelu
+import python_api_testing.models.codegen.tt.codegen_block as codegen_block
+from tt_lib.fallback_ops import fallback_ops
+
+
 from torch import nn
 
 from utility_functions_new import (
@@ -14,36 +18,49 @@ from utility_functions_new import (
 
 from transformers import CodeGenConfig
 
-class TtCodeGenModel(PreTrainedModel):
+class TtCodeGenModel(torch.nn.Module):
     def __init__(self, config: CodeGenConfig(), state_dict, device):
-        super().__init__(config)
+        super().__init__()
 
+
+        self.config = config
         self.embed_dim = config.n_embd
-        self.vocab_size = config.vocab_size
-        self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
+        self.vocab_size = 50400
+        self.n_layer = 19
+        self.hidden_size = 1024
+
+        print('CONFIG')
+        print(config)
+        print('PARAME')
+        print(self.vocab_size)
+        print(self.embed_dim)
+
+
+        self.wte = nn.Embedding(self.vocab_size, self.embed_dim)
         self.drop = nn.Dropout(config.embd_pdrop)
 
         blocks = []
 
-        for i in range(config.n_layer):
-            block = codegen_block.CodeGenBlock(i, config, state_dict, device)
+        for i in range(self.n_layer):
+            block = codegen_block.TtCodeGenBlock(i, config, state_dict, device)
             blocks.append(block)
 
         self.h = torch.nn.ModuleList(blocks)
 
 
-        self.beta = bloom_utils.torch2tt_tensor(
-            state_dict[f"{base_address}.ln_f.bias"], device
+        self.beta = torch_to_tt_tensor_rm(
+            state_dict["ln_f.bias"], device
         )
 
-        self.gamma = bloom_utils.torch2tt_tensor(
-            state_dict[f"{base_address}.ln_f.weight"], device
+        self.gamma = torch_to_tt_tensor_rm(
+            state_dict["ln_f.weight"], device
+        )
 
         self.ln_f = fallback_ops.LayerNorm(
             self.gamma,
             self.beta,
             eps=config.layer_norm_epsilon,
-            normalized_shape=config.hidden_size,
+            normalized_shape=self.hidden_size,
         )
 
         self.rotary_dim = min(config.rotary_dim, config.n_ctx // config.num_attention_heads)
@@ -100,6 +117,7 @@ class TtCodeGenModel(PreTrainedModel):
 
     def forward(
         self,
+        device,
         input_ids,
         past_key_values= None,
         attention_mask = None,
@@ -145,12 +163,12 @@ class TtCodeGenModel(PreTrainedModel):
 
         if token_type_ids is not None:
 
-            input_shape_3 = input_shape.shape()
+            input_shape_3 = input_ids.shape()
 
             token_type_ids = tt_lib.fallback_ops.reshape(token_type_ids, 1, 1, -1, input_shape_3[-1])
 
         if position_ids is not None:
-            input_shape_4 = input_shape.shape()
+            input_shape_4 = input_ids.shape()
 
             position_ids = tt_lib.fallback_ops.reshape(position_ids, 1, 1, -1, input_shape_4[-1])
 
@@ -163,18 +181,18 @@ class TtCodeGenModel(PreTrainedModel):
             past_length = past_key_values[0][0].size(-2)
 
         if position_ids is None:
-            input_shape_5 = input_shape.shape()
+            input_shape_5 = input_ids.shape()
 
             position_ids = torch.arange(past_length, input_shape_5[-1] + past_length)
 
             position_ids = tt_lib.fallback_ops.reshape(position_ids, 1, 1, -1, input_shape_5[-1])
 
-            pt_position_ids = tt2torch_tensor(position_ids)
+            position_ids = tt2torch_tensor(position_ids)
 
-            pt_position_ids = pt_position_ids.unsqueeze(0)
-            tt_position_ids = torch2tt_tensor(pt_position_ids, device)
+            position_ids = position_ids.unsqueeze(0)
+            position_ids = torch2tt_tensor(position_ids, device)
 
-            position_ids = tt_lib.fallback_ops.reshape(tt_position_ids, 1, 1, -1, input_shape_5[-1])
+            position_ids = tt_lib.fallback_ops.reshape(position_ids, 1, 1, -1, input_shape_5[-1])
 
 
         # Attention mask.
@@ -202,6 +220,7 @@ class TtCodeGenModel(PreTrainedModel):
 
         #pt_head_mask = self.get_head_mask(pt_head_mask, self.config.n_layer)
 
+
         if inputs_embeds is None:
             pt_input_ids = tt2torch_tensor(input_ids)
             pt_inputs_embeds = self.wte(pt_input_ids)
@@ -224,7 +243,7 @@ class TtCodeGenModel(PreTrainedModel):
 
         hidden_states = torch2tt_tensor(pt_hidden_states, device)
 
-        input_shape_6 = input_shape.shape()
+        input_shape_6 = input_ids.shape()
         hidden_states_size = hidden_states.shape()
 
         output_shape = input_shape_6 + (hidden_states_size[-1],)

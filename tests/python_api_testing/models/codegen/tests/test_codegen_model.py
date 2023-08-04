@@ -11,7 +11,7 @@ import torch
 import tt_lib
 import pytest
 
-from sweep_tests.comparison_funcs import comp_allclose, comp_pcc
+#from sweep_tests.comparison_funcs import comp_allclose, comp_pcc
 
 from loguru import logger
 import python_api_testing.models.codegen.tt.codegen_model as codegen_model
@@ -28,6 +28,10 @@ def run_codegen_model_test(device2, pcc):
 
     model_hf = CodeGenModel.from_pretrained('Salesforce/codegen-350M-mono')
     sd = model_hf.state_dict()
+
+
+    print(sd)
+
     model_hf.eval()
     block = 0
     base_address = f"h.{block}"
