@@ -5,6 +5,8 @@
 
 #include "tt_metal/detail/tt_metal.hpp"
 
+#include "tt_metal/third_party/tracy/public/tracy/TracyOpenCL.hpp"
+
 namespace tt {
 
 namespace tt_metal {
@@ -13,6 +15,8 @@ namespace detail {
 
 static Profiler tt_metal_profiler = Profiler();
 
+cl_device_id deviceTEST;
+cl_context context;
 void DumpDeviceProfileResults(Device *device, const Program &program) {
 #if defined(PROFILER)
     ZoneScoped;
@@ -29,6 +33,21 @@ void DumpDeviceProfileResults(Device *device, const Program &program) {
         auto cluster = device->cluster();
         auto pcie_slot = device->pcie_slot();
         tt_metal_profiler.dumpDeviceResults(cluster, pcie_slot, worker_cores_used_in_program);
+
+        TracyCLCtx tracyCLCtx = TracyCLContext(context, deviceTEST);
+        {
+            TracyCLZone(tracyCLCtx, "Write BufferA");
+        }
+        //{
+            //TracyCLZone(tracyCLCtx, "Write BufferB");
+        //}
+        //{
+            //TracyCLZone(tracyCLCtx, "Write BufferC");
+        //}
+
+        std::cout<< "before" << std::endl;
+        TracyCLCollect(tracyCLCtx);
+        std::cout<< "after" << std::endl;
     }
 #endif
 }
