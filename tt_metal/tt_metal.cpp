@@ -766,7 +766,7 @@ bool LaunchKernels(Device *device, const Program &program, bool stagger_start) {
     auto logical_cores_used_in_program = program.logical_cores();
     auto worker_cores = device->worker_cores_from_logical_cores(logical_cores_used_in_program);
 
-    llrt::deassert_brisc_reset_for_all_chips_all_cores(cluster, stagger_start);
+    cluster->deassert_risc_reset(pcie_slot, stagger_start);
 
     bool riscs_are_done = false;
     while (not riscs_are_done) {
@@ -793,7 +793,7 @@ bool LaunchKernels(Device *device, const Program &program, bool stagger_start) {
     }
 
     // Reset the device that was running
-    cluster->broadcast_remote_tensix_risc_reset(pcie_slot, TENSIX_ASSERT_SOFT_RESET);
+    cluster->assert_risc_reset(pcie_slot);
 
     }//Profiler scope end
     detail::DumpDeviceProfileResults(device,program);

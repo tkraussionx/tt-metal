@@ -10,7 +10,9 @@ LLRT_SRCS_RELATIVE = \
 	llrt/tt_cluster.cpp \
 	llrt/tt_debug_print_server.cpp \
 	llrt/llrt.cpp \
-	llrt/watcher.cpp
+	llrt/watcher.cpp \
+	llrt/tt_memory.cpp \
+	llrt/tt_hexfile.cpp
 
 LLRT_SRCS = $(addprefix tt_metal/, $(LLRT_SRCS_RELATIVE))
 
