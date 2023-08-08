@@ -4,7 +4,7 @@
 
 void generate_bcast_scaler() {
     constexpr uint32_t cb_in_2 = 2;
-    union { float f; uint32_t u; } u; u.u = get_arg_val<uint32_t>(4);
+    union { float f; uint32_t u; } u; u.f = 1.0f;
     cb_reserve_back(cb_in_2, 1);
     auto ptr = reinterpret_cast<uint16_t*>(get_write_ptr(cb_in_2));
     for (int j = 0; j < 1024; j++)
@@ -13,6 +13,17 @@ void generate_bcast_scaler() {
     for (int k = 0; k < 4; k++)
     for (int j = 0; j < 16; j++)
         ptr[k*256 + j] = uint16_t(u.u>>16);
+    cb_push_back(cb_in_2, 1);
+
+    u.u = get_arg_val<uint32_t>(4);
+    cb_reserve_back(cb_in_2, 1);
+    ptr = reinterpret_cast<uint16_t*>(get_write_ptr(cb_in_2));
+    for (int j = 0; j < 1024; j++)
+        ptr[j] = uint16_t(0);
+
+    for (int k = 0; k < 4; k+=2)
+    for (int j = 0; j < 16; j++)
+        ptr[k*256 + j*16] = uint16_t(u.u>>16);
     cb_push_back(cb_in_2, 1);
 }
 

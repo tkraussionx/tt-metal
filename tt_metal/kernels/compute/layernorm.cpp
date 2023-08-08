@@ -58,7 +58,7 @@ void MAIN {
     constexpr auto cb_x = tt::CB::c_in0;
     #endif
 
-    cb_wait_front(cb_scaler, 1); // comes from the reader
+    cb_wait_front(cb_scaler, 2); // comes from the reader
     cb_wait_front(cb_eps, 1); // comes from the reader
 
 
@@ -100,7 +100,7 @@ void MAIN {
          * means = tensor.reduce(x, RSUM, RW, 1.0/W) # -> NCH1
          */
         ACQ();
-        cb_reserve_back(cb_ex, 1*onetile);
+        cb_reserve_back(cb_ex, onetile);
         reduce_init_delta_v2<false>(REDUCE_OP, REDUCE_DIM);
         for (uint32_t wt = 0; wt < Wt; wt += blk) {
             cb_wait_front(cb_x, wt+blk);
@@ -115,6 +115,15 @@ void MAIN {
 
         cb_push_back(cb_ex, 1);
 
+        cb_wait_front(cb_ex, 1); // should have 1 tile
+        cb_reserve_back(cb_ex, 1); // should have 1 tile
+        mul_tiles_init();
+        ACQ();
+        mul_tiles(cb_ex, cb_scaler, 0, 1, 0);
+        pack_tile(0, cb_ex);
+        cb_push_back(cb_ex, 1);
+        cb_pop_front(cb_ex, 1);
+        REL();
         /*
          * x - E[x]
          * compute xmm=x-mean. Reuse cb_x since we didn't pop anything from it
@@ -173,6 +182,17 @@ void MAIN {
         REL();
 
         cb_push_back(cb_ex2, 1);
+
+        cb_wait_front(cb_ex2, 1); // should have 1 tile
+        cb_reserve_back(cb_ex2, 1); // should have 1 tile
+        mul_tiles_init();
+        ACQ();
+        mul_tiles(cb_ex2, cb_scaler, 0, 1, 0);
+        pack_tile(0, cb_ex2);
+        cb_push_back(cb_ex2, 1);
+        cb_pop_front(cb_ex2, 1);
+        REL();
+
         cb_wait_front(cb_ex2, 1);
 
         /* Var(x) + eps

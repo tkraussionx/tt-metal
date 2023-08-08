@@ -18,7 +18,9 @@ from tt_lib.utils import (
     untilize,
     is_close,
 )
-
+from tests.python_api_testing.models.utility_functions import (
+    comp_pcc,
+)
 
 # This ref implementation is only here for debugging
 def ref_ln(x, gamma, beta=None, epsilon=1e-5, b=None):
@@ -178,9 +180,9 @@ def run_layernorm_tests(test_id, dtype, in0_mem_config, out_mem_config):
             # ref_lnorm = ref_layernorm(x, epsf, gammaf, betaf, H, W)
             ref_lnorm, _, _, _, _, _ = ref_ln(x + y, gamma, beta, epsf, y)
 
-            time.sleep(0.3)  # sleep to avoid print intermixing with kernel prints
-
-            assert is_close(tt_got_back, ref_lnorm)
+            logger.info(comp_pcc(tt_got_back, ref_lnorm))
+            passing = is_close(tt_got_back, ref_lnorm)
+            assert passing
 
     device.CloseDevice(dev)
 
