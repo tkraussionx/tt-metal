@@ -4,7 +4,7 @@
 #include "compute_kernel_api/untilize.h"
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"
-
+#include "debug_print.h"
 
 
 inline void tilize_in(
@@ -39,7 +39,6 @@ inline void reblock_and_untilize(
 
     uint32_t num_tiles_in_row_of_subblocks = mulsi3(out_subblock_num_tiles, num_out_subblocks_in_col);
     cb_wait_front(interm_cb_id, num_tiles_in_row_of_subblocks);
-
     int within_block_index = 0;
     for (uint32_t h = 0; h < out_subblock_h; h++) {
         int block_offset = 0;
@@ -172,7 +171,9 @@ void MAIN {
                         release_dst(tt::DstMode::Half);
                         in1_index_subblock_offset += out_subblock_w;
                     } // for in1_num_subblocks
+                    //DPRINT << "x" << ENDL();
                     if (last_out && untilize_out) {
+                        //DPRINT << "s" << ENDL();
                         reblock_and_untilize(
                             in1_num_subblocks,
                             out_subblock_num_tiles,
@@ -186,7 +187,6 @@ void MAIN {
                     } // last_out
                     in0_index_subblock_offset += in0_subblock_num_tiles;
                 }
-
                 if (spill) enable_reload = true;
 
                 cb_pop_front(tilize_in0 ? tilized_in0_cb_id : in0_cb_id, in0_block_num_tiles);

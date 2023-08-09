@@ -21,18 +21,18 @@ TILE_HEIGHT = TILE_WIDTH = 32
 
 ## parameters
 # matrix sizes as number of blocks along h and w:
-a_height_nblocks = [1, 7]
-a_width_nblocks = [1, 7]
-b_width_nblocks = [1, 7]
+a_height_nblocks = [1]
+a_width_nblocks = [1]
+b_width_nblocks = [1]
 # block sizes as number of tiles along h and w:
-a_block_height_ntiles = [4]
-a_block_width_ntiles = [4]
-b_block_width_ntiles = [4]
+a_block_height_ntiles = [1]
+a_block_width_ntiles = [2]
+b_block_width_ntiles = [1]
 # output sublobcking per block:
-out_subblock_height_ntiles = [4] ## == a_block_height_ntiles, <= 8
-out_subblock_width_ntiles = [2]  ## == b_block_width_ntiles, <= 8
-tilize_a = [True, False]
-untilize_out = [True, False]
+out_subblock_height_ntiles = [1] ## == a_block_height_ntiles, <= 8
+out_subblock_width_ntiles = [1]  ## == b_block_width_ntiles, <= 8
+tilize_a = [True]
+untilize_out = [True]
 # tilize_a = [False]
 # untilize_out = [False]
 

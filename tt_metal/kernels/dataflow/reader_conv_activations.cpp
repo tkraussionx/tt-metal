@@ -72,7 +72,9 @@ void kernel_main() {
         // Read activations for this group
         // Activations are in channels last layout in dram
         {
+            DPRINT << "reserving act block" << ENDL();
             cb_reserve_back(cb_id_act, act_block_num_tiles);
+            DPRINT << "reserved act block" << ENDL();
             uint32_t block_idx_h = (uint32_t) (group_idx / num_blocks_act_w) / (num_blocks_weight_w);
             uint32_t block_idx_w = (uint32_t) (group_idx % num_blocks_act_w);
             uint32_t block_idx = (block_idx_h * num_blocks_act_w) + block_idx_w;
@@ -95,7 +97,7 @@ void kernel_main() {
                         DPRINT << "Problem" << ENDL();
                     }
                     uint32_t dst_addr = l1_write_addr_act + dst_address_offset_l1;
-                    pad_l1_buffer_with_zeroes(dst_addr, pad_size_bytes);
+                    //pad_l1_buffer_with_zeroes(dst_addr, pad_size_bytes);
                 }
                 else {
                     uint32_t w = start_block_2d_index_w;
@@ -119,7 +121,7 @@ void kernel_main() {
                                 DPRINT << "Problem" << ENDL();
                             }
                             uint32_t dst_addr = l1_write_addr_act + dst_address_offset_l1;
-                            pad_l1_buffer_with_zeroes(dst_addr, pad_size_bytes);
+                            //pad_l1_buffer_with_zeroes(dst_addr, pad_size_bytes);
                             read_size_bytes = pad_size_bytes;
                         }
                         else {
@@ -149,7 +151,7 @@ void kernel_main() {
                                 if(dst_address_offset_l1 + (pad_size_bytes-1) >= dst_l1_act_buffer_size_bytes) {
                                     DPRINT << "Problem" << ENDL();
                                 }
-                                pad_l1_buffer_with_zeroes(dst_addr, pad_size_bytes);
+                                //pad_l1_buffer_with_zeroes(dst_addr, pad_size_bytes);
                             }
                             else {
                                 uint32_t act_tensor_x = act_tensor_padded_x - pad_w;
@@ -171,7 +173,7 @@ void kernel_main() {
                                 uint32_t src_addr = act_addr_dram_base + src_address_offset_dram;
                                 uint32_t dst_addr = l1_write_addr_act + dst_address_offset_l1;
                                 uint64_t act_noc_addr = get_noc_addr(act_tensor_channel_id, s_act, (channel_stick_offset<<1));
-                                noc_async_read(act_noc_addr, dst_addr, read_size_bytes);
+                                //noc_async_read(act_noc_addr, dst_addr, read_size_bytes);
                             }
                         }
                         dst_address_offset_l1 += read_size_bytes;
@@ -185,6 +187,7 @@ void kernel_main() {
         }
 
         noc_async_read_barrier();
+        DPRINT << "read act block" << ENDL();
         cb_push_back(cb_id_act, act_block_num_tiles);
     }
 

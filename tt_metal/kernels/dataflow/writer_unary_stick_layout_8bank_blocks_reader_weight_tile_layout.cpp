@@ -15,7 +15,9 @@ inline void read_weight_blocks_inner_h_dim(uint32_t cb_id_weight,
     // weight DRAM -> L1 (weights in tiled form)
     uint32_t weight_current_block_start_tile_id = weight_start_tile_id;
     for(uint32_t block_weight_h = 0; block_weight_h < num_blocks_weight_h; block_weight_h++) {
+        DPRINT << "reserving weight block" << ENDL();
         cb_reserve_back(cb_id_weight, weight_block_num_tiles);
+        DPRINT << "reserved weight block" << ENDL();
         uint32_t weight_write_l1_addr = get_write_ptr(cb_id_weight);
         uint32_t weight_row_start_tile_id = weight_current_block_start_tile_id;
         // loop over weight block tiles along h
@@ -24,14 +26,14 @@ inline void read_weight_blocks_inner_h_dim(uint32_t cb_id_weight,
             // loop over weight block tiles along w
             for(uint32_t weight_tile_w_i = 0; weight_tile_w_i < weight_block_width_ntiles; ++weight_tile_w_i) {
                 uint64_t weight_tile_noc_addr = get_noc_addr(weight_tile_id, s_weight);
-                noc_async_read(weight_tile_noc_addr, weight_write_l1_addr, weight_tile_nbytes);
+                //noc_async_read(weight_tile_noc_addr, weight_write_l1_addr, weight_tile_nbytes);
                 weight_write_l1_addr += weight_tile_nbytes;
                 weight_tile_id += 1;
             } // for weight_block_w
             weight_row_start_tile_id += weight_stride_h;
         } // for weight_block_h
         noc_async_read_barrier();
-
+        DPRINT << "read weight block" << ENDL();
         weight_current_block_start_tile_id += weight_next_block_stride_h;
         cb_push_back(cb_id_weight, weight_block_num_tiles);
     } // for num_blocks_weight_h
@@ -51,7 +53,9 @@ inline void write_tiles_in_output_block(uint32_t cb_id_out0,
     uint32_t block_row_id = block_start_row_id;
     for (uint32_t tile_row_id = 0; tile_row_id < block_height_ntiles; tile_row_id++) {
         // We reserve back an entire row of tiles in a block and issue a bunch of reads
+        DPRINT << "Waiting for out0 cb" << ENDL();
         cb_wait_front(cb_id_out0, block_width_ntiles);
+         DPRINT << "Waited for out0 cb" << ENDL();
         uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
         for (uint32_t j = 0; j < TILE_HEIGHT; j++) {
             if (block_row_id >= num_rows_unpadded) {
@@ -63,6 +67,7 @@ inline void write_tiles_in_output_block(uint32_t cb_id_out0,
             block_row_id++;
         } // for tile_nrows
         noc_async_write_barrier();
+        DPRINT << "Written out0 cb to dram" << ENDL();
         cb_pop_front(cb_id_out0, block_width_ntiles);
     } // for block_height_ntiles
 }

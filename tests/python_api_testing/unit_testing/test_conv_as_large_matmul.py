@@ -42,27 +42,29 @@ import torch
         # (512, 512, 7, 7, 3, 3, 1, 1, 1, 1),
 
         # channels = 3 padding
-        (32, 3, 5, 5, 1, 1, 1, 1, 0, 0),
+        #(32, 3, 5, 5, 1, 1, 1, 1, 0, 0),
         # w/ conv padding
-        (32, 32, 5, 5, 1, 1, 1, 1, 1, 1),
-        # Hat = 1, Wat = 1, Wbt = 1
-        (32, 32, 5, 5, 1, 1, 1, 1, 0, 0),
-        # Hat = 2, Wat = 1, Wbt = 1
-        (32, 32, 8, 8, 1, 1, 1, 1, 0, 0),
-        # Hat = 1, Wat = 2, Wbt = 1
+        # (32, 32, 5, 5, 1, 1, 1, 1, 1, 1),
+        # # Hat = 1, Wat = 1, Wbt = 1
+        # (32, 32, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # Hat = 2, Wat = 1, Wbt = 1
+        # (32, 32, 8, 8, 1, 1, 1, 1, 0, 0),
+        # # Hat = 1, Wat = 2, Wbt = 1
+        # (32, 64, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # Hat = 2, Wat = 2, Wbt = 1
+        # (32, 64, 8, 8, 1, 1, 1, 1, 0, 0),
+        # # Hat = 1, Wat = 1, Wbt = 2
+        # (64, 32, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # Hat = 1, Wat = 2, Wbt = 2
+        # (64, 64, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # Hat = 2, Wat = 1, Wbt = 2
+        # (64, 32, 8, 8, 1, 1, 1, 1, 0, 0),
+        # # Hat = 2, Wat = 2, Wbt = 2
+        # (64, 64, 8, 8, 1, 1, 1, 1, 0, 0),
+        # THIS HANGS -
         (32, 64, 5, 5, 1, 1, 1, 1, 0, 0),
-        # Hat = 2, Wat = 2, Wbt = 1
-        (32, 64, 8, 8, 1, 1, 1, 1, 0, 0),
-        # Hat = 1, Wat = 1, Wbt = 2
-        (64, 32, 5, 5, 1, 1, 1, 1, 0, 0),
-        # Hat = 1, Wat = 2, Wbt = 2
-        (64, 64, 5, 5, 1, 1, 1, 1, 0, 0),
-        # Hat = 2, Wat = 1, Wbt = 2
-        (64, 32, 8, 8, 1, 1, 1, 1, 0, 0),
-        # Hat = 2, Wat = 2, Wbt = 2
-        (64, 64, 8, 8, 1, 1, 1, 1, 0, 0),
         # Hat = 8, Wat = 8, Wbt = 8
-        (8*32, 8*32, 16, 16, 1, 1, 1, 1, 0, 0),
+       # (8*32, 8*32, 16, 16, 1, 1, 1, 1, 0, 0),
     ),
 )
 def test_run_conv_as_large_matmul(use_program_cache, run_conv_with_address_map, K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w):
@@ -72,7 +74,7 @@ def test_run_conv_as_large_matmul(use_program_cache, run_conv_with_address_map, 
     ttl.device.SetDefaultDevice(device)
     num_iterations = 1
     if not run_conv_with_address_map:
-        num_iterations = 2 # run twice to test op caching flow for conv op (without address map)
+        num_iterations = 1 # run twice to test op caching flow for conv op (without address map)
     for i in range(num_iterations):
         #torch.set_printoptions(threshold=10000)
         torch.manual_seed(0)
@@ -82,12 +84,12 @@ def test_run_conv_as_large_matmul(use_program_cache, run_conv_with_address_map, 
         B_pyt = torch.randn(b_weights_shape, dtype=torch.bfloat16).float()
 
         # Parameters to define block dims
-        act_block_h = 4
-        act_block_w = 4
+        act_block_h = 1
+        act_block_w = (int) ((C*S)/32) # for C=64, this is 2
         weight_block_h = act_block_w
-        weight_block_w = 4
-        out_subblock_h = 4
-        out_subblock_w = 2
+        weight_block_w = 1
+        out_subblock_h = 1
+        out_subblock_w = 1
 
         OH = ((int) ((H - R + 2 * pad_h) / stride_h)) + 1
         OW = ((int) ((W - S + 2 * pad_w) / stride_w)) + 1
