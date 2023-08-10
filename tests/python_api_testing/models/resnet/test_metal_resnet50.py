@@ -19,32 +19,35 @@ from sweep_tests.comparison_funcs import comp_allclose_and_pcc, comp_pcc
 
 @pytest.mark.parametrize("fold_batchnorm", [True], ids=["Batchnorm folded"])
 def test_run_resnet50_inference(fold_batchnorm, imagenet_sample_input):
-    image = imagenet_sample_input
+    for i in range(1):
+        image = imagenet_sample_input
 
-    with torch.no_grad():
-        torch.manual_seed(1234)
+        with torch.no_grad():
+            torch.manual_seed(1234)
 
-        # Initialize the device
-        device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
-        tt_lib.device.InitializeDevice(device)
-        tt_lib.device.SetDefaultDevice(device)
+            # Initialize the device
+            device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+            tt_lib.device.InitializeDevice(device)
+            tt_lib.device.SetDefaultDevice(device)
 
-        torch_resnet50 = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
-        torch_resnet50.eval()
+            torch_resnet50 = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
+            torch_resnet50.eval()
 
-        state_dict = torch_resnet50.state_dict()
-        storage_in_dram = False
-        tt_resnet50 = ResNet(Bottleneck, [3, 4, 6, 3],
-                        device=device,
-                        state_dict=state_dict,
-                        base_address="",
-                        fold_batchnorm=fold_batchnorm,
-                        storage_in_dram=storage_in_dram)
+            state_dict = torch_resnet50.state_dict()
+            storage_in_dram = False
+
+            tt_resnet50 = ResNet(Bottleneck, [3, 4, 6, 3],
+                            device=device,
+                            state_dict=state_dict,
+                            base_address="",
+                            fold_batchnorm=fold_batchnorm,
+                            storage_in_dram=storage_in_dram)
 
 
-        torch_output = torch_resnet50(image).unsqueeze(1).unsqueeze(1)
-        tt_output = tt_resnet50(image)
+            torch_output = torch_resnet50(image).unsqueeze(1).unsqueeze(1)
+            tt_output = tt_resnet50(image)
 
-        passing, info = comp_pcc(torch_output, tt_output, pcc=0.985)
-        logger.info(info)
-        assert passing
+            passing, info = comp_pcc(torch_output, tt_output, pcc=0.985)
+            logger.info(info)
+            tt_lib.device.CloseDevice(device)
+            assert passing
