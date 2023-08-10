@@ -22,50 +22,36 @@ inline void pad_l1_buffer_with_zeroes(uint32_t l1_addr, uint32_t pad_size_bytes)
 void kernel_main() {
     uint32_t i = 0;
     uint32_t act_addr_dram_base  = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t act_dram_noc_x = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t act_dram_noc_y = get_arg_val<uint32_t>(i); i+=1;
 
-    uint32_t conv_act_size_w_ = get_arg_val<uint32_t>(i); i+=1;
+    uint32_t conv_act_size_w = get_arg_val<uint32_t>(i); i+=1;
     uint32_t conv_act_size_h = get_arg_val<uint32_t>(i); i+=1;
     uint32_t conv_act_size_c = get_arg_val<uint32_t>(i); i+=1;
     uint32_t weight_size_h = get_arg_val<uint32_t>(i); i+=1;
     uint32_t weight_size_w = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t stride_h_ = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t stride_w_ = get_arg_val<uint32_t>(i); i+=1;
     uint32_t pad_h = get_arg_val<uint32_t>(i); i+=1;
     uint32_t pad_w = get_arg_val<uint32_t>(i); i+=1;
     uint32_t conv_output_size_h = get_arg_val<uint32_t>(i); i+=1;
     uint32_t conv_output_size_w = get_arg_val<uint32_t>(i); i+=1;
+
     uint32_t num_blocks_act_h = get_arg_val<uint32_t>(i); i+=1;
     uint32_t num_blocks_act_w = get_arg_val<uint32_t>(i); i+=1;
     uint32_t num_blocks_weight_w = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t num_groups = get_arg_val<uint32_t>(i); i+=1;
-
-    uint32_t act_matrix_height_unpadded = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t act_matrix_width_unpadded = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t act_matrix_height = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t act_matrix_width = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t act_matrix_height_ntiles = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t act_matrix_width_ntiles = get_arg_val<uint32_t>(i); i+=1;
     uint32_t act_block_h_datums = get_arg_val<uint32_t>(i); i+=1;
     uint32_t act_block_w_datums = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t act_block_h_ntiles = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t act_block_w_ntiles = get_arg_val<uint32_t>(i); i+=1;
     uint32_t act_block_num_tiles = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t src_dram_act_buffer_size_bytes = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t dst_l1_act_buffer_size_bytes = get_arg_val<uint32_t>(i); i+=1;
+    // TODO (nshanker): add these variables to check boundaries for debug
+    //uint32_t src_dram_act_buffer_size_bytes = get_arg_val<uint32_t>(i); i+=1;
+    //uint32_t dst_l1_act_buffer_size_bytes = get_arg_val<uint32_t>(i); i+=1;
 
     constexpr bool act_in_dram = get_compile_time_arg_val(0) == 1;
-    constexpr uint32_t stride_h = get_compile_time_arg_val(1);
-    constexpr uint32_t stride_w = get_compile_time_arg_val(2);
-    constexpr uint32_t conv_act_size_w = get_compile_time_arg_val(3);
-    //constexpr uint32_t act_block_width_padding_bytes = get_compile_time_arg_val(1);
+    constexpr uint32_t stride_h_ = get_compile_time_arg_val(1);
+    constexpr uint32_t stride_w_ = get_compile_time_arg_val(2);
+    constexpr uint32_t conv_act_size_w_ = get_compile_time_arg_val(3);
 
     constexpr uint32_t cb_id_act = 0;
     constexpr uint32_t tile_size_pow2_exponent = 11;
     const DataFormat data_format = get_dataformat(cb_id_act);
-    uint32_t channel_stick_size = conv_act_size_c;
-    uint32_t channel_stick_size_bytes = channel_stick_size << 1;
+    uint32_t channel_stick_size_bytes = conv_act_size_c << 1;
     const InterleavedAddrGen<act_in_dram> s_act = {
         .bank_base_address = act_addr_dram_base,
         .page_size = channel_stick_size_bytes
@@ -77,8 +63,6 @@ void kernel_main() {
     // assert(act_block_w_datums % C == 0)
     // assert(act_block_w_datums % 32 == 0)
     // assert(act_block_h_datums % 32 == 0)
-    // assert(act_block_h_ntiles == act_block_h_datums/32)
-    // assert(act_block_w_ntiles == act_block_w_datums/32)
     // assert(act_block_num_tiles == (act_block_h_datums * act_block_w_datums)/1024)
 
     uint32_t out_h = 0;
@@ -96,8 +80,8 @@ void kernel_main() {
                 uint32_t l1_write_addr_act = get_write_ptr(cb_id_act);
                 uint32_t l1_addr_offset = 0;
                 for(uint32_t bh = 0; bh < act_block_h_datums; bh++) {
-                    uint32_t in_h_offset = out_h * stride_h;
-                    uint32_t in_w_offset = out_w * stride_w; // expect stride 1 or 2.. make this compile time args - also conv input width
+                    uint32_t in_h_offset = out_h * stride_h_;
+                    uint32_t in_w_offset = out_w * stride_w_; // expect stride 1 or 2.. make this compile time args - also conv input width
                     uint32_t in_w_offset_within_kernel_window = 0;
                     for(uint32_t bw = 0; bw < weight_size_w; bw++) {
                         uint32_t read_size_bytes = channel_stick_size_bytes;
@@ -105,7 +89,7 @@ void kernel_main() {
                             uint32_t in_h = in_h_offset + in_h_offset_within_kernel_window;
                             uint32_t in_w = in_w_offset + in_w_offset_within_kernel_window;
 
-                            if(in_h < pad_h || in_w < pad_w || in_h >= (conv_act_size_h + pad_h) || in_w >= (conv_act_size_w_ + pad_w)) {
+                            if(in_h < pad_h || in_w < pad_w || in_h >= (conv_act_size_h + pad_h) || in_w >= (conv_act_size_w + pad_w)) {
                                 // pad 0s in l1
                                 uint32_t dst_addr = l1_write_addr_act + l1_addr_offset;
                                 uint32_t pad_size_bytes = read_size_bytes;
@@ -114,7 +98,7 @@ void kernel_main() {
                                 // read one channel from dram multi bank - row_id = channel_id
                                 uint32_t in_h_raw = in_h - pad_h;
                                 uint32_t in_w_raw = in_w - pad_w;
-                                uint32_t channel_id = (in_h_raw * conv_act_size_w) + in_w_raw;
+                                uint32_t channel_id = (in_h_raw * conv_act_size_w_) + in_w_raw;
                                 uint32_t dst_addr = l1_write_addr_act + l1_addr_offset;
                                 uint64_t act_noc_addr = get_noc_addr(channel_id, s_act);
                                 noc_async_read(act_noc_addr, dst_addr, read_size_bytes);
