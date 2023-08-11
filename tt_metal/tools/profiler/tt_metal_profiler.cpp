@@ -35,15 +35,18 @@ void DumpDeviceProfileResults(Device *device, const Program &program) {
         tt_metal_profiler.dumpDeviceResults(cluster, pcie_slot, worker_cores_used_in_program);
 
         TracyCLCtx tracyCLCtx = TracyCLContext(context, deviceTEST);
+
+
         {
-            TracyCLZone(tracyCLCtx, "Write BufferA");
+            TracyCLZone(tracyCLCtx, "Write BufferA",10000);
         }
-        //{
-            //TracyCLZone(tracyCLCtx, "Write BufferB");
-        //}
-        //{
-            //TracyCLZone(tracyCLCtx, "Write BufferC");
-        //}
+        {
+            TracyCLZone(tracyCLCtx, "Write BufferB",10001);
+        }
+        {
+            TracyCLZone(tracyCLCtx, "Write BufferC",10002);
+        }
+
 
         std::cout<< "before" << std::endl;
         TracyCLCollect(tracyCLCtx);
