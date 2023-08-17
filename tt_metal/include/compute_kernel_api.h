@@ -7,6 +7,7 @@
 #include "hostdevcommon/kernel_structs.h"
 #include "src/firmware/riscv/common/risc_attribs.h"
 
+// NOTE: Only SyncHalf is known to work
 #define SYNC SyncHalf
 
 #define ALWI inline __attribute__((always_inline))
@@ -73,7 +74,7 @@ ALWI void pack_reconfig_data_format(const uint32_t new_operand) {
 ALWI void mm_init(uint32_t in0_cb_id = 0, uint32_t in1_cb_id = 1, uint32_t out_cb_id = 16) {
     UNPACK(( llk_setup_operands() ));
     #ifdef ARCH_GRAYSKULL
-    UNPACK(( llk_unpack_AB_matmul_init() ));
+    UNPACK(( llk_unpack_AB_matmul_init(in0_cb_id, in1_cb_id) ));
     #else
     UNPACK(( llk_unpack_AB_matmul_init(in0_cb_id, in1_cb_id) ));
     #endif
@@ -98,7 +99,7 @@ ALWI void mm_init_once() {
 
 }
 
-ALWI void unary_op_init_common(uint32_t icb)
+ALWI void unary_op_init_common(uint32_t icb, uint32_t ocb = 16)
 {
     UNPACK(( llk_setup_operands() ));
     #ifdef ARCH_GRAYSKULL
@@ -110,7 +111,7 @@ ALWI void unary_op_init_common(uint32_t icb)
     #endif
 
     PACK(( llk_pack_init() ));
-    PACK(( llk_pack_hw_configure_disaggregated<false>(16) ));
+    PACK(( llk_pack_hw_configure_disaggregated<false>(ocb) ));
     PACK(( llk_setup_outputs() ));
     PACK(( llk_pack_dest_init<SYNC, DstTileFaceLayout::RowMajor, false>() ));
 
@@ -126,7 +127,7 @@ ALWI void init_sfpu(uint32_t icb) {
     unary_op_init_common(icb);
 }
 
-ALWI void binary_op_init_common(uint32_t icb0, uint32_t icb1)
+ALWI void binary_op_init_common(uint32_t icb0, uint32_t icb1, uint32_t ocb = 16)
 {
     UNPACK(( llk_setup_operands() ));
     #ifdef ARCH_GRAYSKULL
@@ -141,14 +142,14 @@ ALWI void binary_op_init_common(uint32_t icb0, uint32_t icb1)
 
 
     PACK(( llk_pack_init() ));
-    PACK(( llk_pack_hw_configure_disaggregated<false>(16) ));
+    PACK(( llk_pack_hw_configure_disaggregated<false>(ocb) ));
     PACK(( llk_setup_outputs() ));
     PACK(( llk_pack_dest_init<SYNC, DstTileFaceLayout::RowMajor, false>() ));
 }
 
 ALWI void mm_init_short_with_dt(uint32_t cbid) {
     #ifdef ARCH_GRAYSKULL
-    UNPACK(( llk_unpack_AB_matmul_init() ));
+    UNPACK(( llk_unpack_AB_matmul_init(cbid, 1) ));
     UNPACK(( llk_unpack_reconfig_data_format(cbid, 1, 0, 0) ));
     MATH(( llk_math_matmul_init<MATH_FIDELITY>() ));
     #else
@@ -161,7 +162,7 @@ ALWI void mm_init_short_with_dt(uint32_t cbid) {
 ALWI void mm_init_short() {
     #ifdef ARCH_GRAYSKULL
     MATH(( llk_math_matmul_init<MATH_FIDELITY>(0)  ));
-    UNPACK(( llk_unpack_AB_matmul_init(0)  ));
+    UNPACK(( llk_unpack_AB_matmul_init(0, 1)  ));
     #else
     MATH(( llk_math_matmul_init<MATH_FIDELITY>(0, 1, 0)  ));
     UNPACK(( llk_unpack_AB_matmul_init(0, 1) ));
@@ -817,7 +818,7 @@ ALWI void add_tiles_bcast_cols(uint32_t icb0, uint32_t icb1, uint32_t itile0, ui
 }
 
 template<EltwiseBinaryType tBcastOp, BroadcastType tBcastDim>
-void init_bcast(uint32_t icb0, uint32_t icb1)
+void init_bcast(uint32_t icb0, uint32_t icb1, uint32_t ocb = 16)
 {
     if constexpr (tBcastOp == ELWMUL)
         MATH(( llk_math_eltwise_binary_init<tBcastOp, tBcastDim, MATH_FIDELITY>() ));
@@ -840,7 +841,7 @@ void init_bcast(uint32_t icb0, uint32_t icb1)
     //UNPACK(( llk_unpack_AB_hw_configure_disaggregated<BroadcastType::NONE>(icb0, icb1) ));
 
     PACK(( llk_pack_init() ));
-    PACK(( llk_pack_hw_configure_disaggregated<false>(16) ));
+    PACK(( llk_pack_hw_configure_disaggregated<false>(ocb) ));
     PACK(( llk_setup_outputs() ));
     PACK(( llk_pack_dest_init<SyncHalf, DstTileFaceLayout::RowMajor, false>() ));
 
@@ -1118,7 +1119,7 @@ ALWI void reduce_tile_v2(PoolType reduce_op, ReduceDim dim, uint32_t icb0, uint3
 }
 #endif
 
-ALWI void transpose_wh_init(uint32_t icb)
+ALWI void transpose_wh_init(uint32_t icb, uint32_t ocb = 16)
 {
     #ifdef ARCH_GRAYSKULL
     MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE, true>() ));
@@ -1129,17 +1130,17 @@ ALWI void transpose_wh_init(uint32_t icb)
     MATH(( llk_math_pack_sync_init<SyncHalf>() ));
 
     PACK(( llk_pack_init() ));
-    PACK(( llk_pack_hw_configure_disaggregated<false>(16) ));
+    PACK(( llk_pack_hw_configure_disaggregated<false>(ocb) ));
     PACK(( llk_setup_outputs() ));
     PACK(( llk_pack_dest_init<SyncHalf, DstTileFaceLayout::RowMajor, false>() ));
 
     UNPACK(( llk_setup_operands() ));
     #ifdef ARCH_GRAYSKULL
     UNPACK(( llk_unpack_A_init<BroadcastType::NONE, true, false>() ));
-    UNPACK(( llk_unpack_A_hw_configure_disaggregated<BroadcastType::NONE, true, true, false>(0) ));
+    UNPACK(( llk_unpack_A_hw_configure_disaggregated<BroadcastType::NONE, true, true, false>(icb) ));
     #else
     UNPACK(( llk_unpack_A_init<BroadcastType::NONE, true, EltwiseBinaryReuseDestType::NONE>()  ));
-    UNPACK(( llk_unpack_A_hw_configure_disaggregated<>(0, true) ));
+    UNPACK(( llk_unpack_A_hw_configure_disaggregated<>(icb, true) ));
     #endif
 }
 
@@ -1292,16 +1293,16 @@ ALWI void get_next_op_info(tt::op_info_t& op_info)
     UNPACK(( llk_get_next_op_info(op_info) ));
 }
 
-ALWI void graph_interpreter_init() // TODO(AP): probably duplicated, remove
+ALWI void graph_interpreter_init(uing32_t icb0 = 0, uint32_t icb1 = 0, uint32_t ocb = 16) // TODO(AP): probably duplicated, remove
 {
     MATH(( llk_math_eltwise_unary_sfpu_exponential_init<APPROX>() ));
     MATH(( llk_math_pack_sync_init<SyncHalf>() ));
     PACK(( llk_pack_init() ));
     PACK(( llk_setup_outputs() ));
     PACK(( llk_pack_dest_init<SyncHalf, DstTileFaceLayout::RowMajor, false>() ));
-    PACK(( llk_pack_hw_configure_disaggregated<false>(16) ));
+    PACK(( llk_pack_hw_configure_disaggregated<false>(ocb) ));
     UNPACK(( llk_setup_operands() ));
-    UNPACK(( llk_unpack_AB_hw_configure_disaggregated(0,0) ));
+    UNPACK(( llk_unpack_AB_hw_configure_disaggregated(icb0, icb1) ));
 }
 
 //Leaky Relu : y = relu(x) + slope*-relu(-x)

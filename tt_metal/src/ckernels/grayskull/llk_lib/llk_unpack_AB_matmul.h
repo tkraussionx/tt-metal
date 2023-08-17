@@ -12,7 +12,7 @@
 using namespace ckernel;
 using namespace ckernel::unpacker;
 
-inline void llk_unpack_AB_matmul_mop_config(bool transpose) {
+inline void llk_unpack_AB_matmul_mop_config(uint32_t unpA = 0, uint32_t unpB = 1, bool transpose = false) {
     /*
     static constexpr uint unpack_srcb_top  = TT_OP_UNPACR(SrcB, 0b01000001, 0, 0, 0, 1, 0, p_unpacr::RAREFYB_DISABLE, 0,
     0, 0, 0, 1); static constexpr uint unpack_srcb_bot =  TT_OP_UNPACR(SrcB, 0b01000001, 0, 0, 0, 1, 1,
@@ -34,20 +34,20 @@ inline void llk_unpack_AB_matmul_mop_config(bool transpose) {
     static constexpr uint unpack_srca0_transpose = TT_OP_NOP;
     static constexpr uint unpack_srca1_transpose = TT_OP_NOP;
 #else
-    static constexpr uint unpack_srca0 = TT_OP_UNPACR(SrcA, 0b1, 0, 0, 0, 1, 1, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
-    static constexpr uint unpack_srca1 = TT_OP_UNPACR(SrcA, 0b1, 0, 0, 0, 1, 1, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
+    static constexpr uint unpack_srca0 = TT_OP_UNPACR(unpA, 0b1, 0, 0, 0, 1, 1, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
+    static constexpr uint unpack_srca1 = TT_OP_UNPACR(unpA, 0b1, 0, 0, 0, 1, 1, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
 
-    static constexpr uint unpack_srca0_transpose = TT_OP_UNPACR(SrcA, 0b10, 0, 0, 0, 1, 1, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
-    static constexpr uint unpack_srca1_transpose = TT_OP_UNPACR(SrcA, 0b10, 0, 0, 0, 1, 1, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
+    static constexpr uint unpack_srca0_transpose = TT_OP_UNPACR(unpA, 0b10, 0, 0, 0, 1, 1, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
+    static constexpr uint unpack_srca1_transpose = TT_OP_UNPACR(unpA, 0b10, 0, 0, 0, 1, 1, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
 #endif
 #if SKIP_UNP1 == 1
     static constexpr uint unpack_srcb_top = TT_OP_NOP;
     static constexpr uint unpack_srcb_bot = TT_OP_NOP;
 #else
     static constexpr uint unpack_srcb_top =
-        TT_OP_UNPACR(SrcB, 0b01000010, 0, 0, 0, 1, 0, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
+        TT_OP_UNPACR(unpB, 0b01000010, 0, 0, 0, 1, 0, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
     static constexpr uint unpack_srcb_bot =
-        TT_OP_UNPACR(SrcB, 0b01000010, 0, 0, 0, 1, 1, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
+        TT_OP_UNPACR(unpB, 0b01000010, 0, 0, 0, 1, 1, p_unpacr::RAREFYB_DISABLE, 0, 0, 0, 0, 1);
 #endif
     ckernel_unpack_template tmp = ckernel_unpack_template(
         true,  // src B
@@ -76,7 +76,9 @@ inline void llk_unpack_AB_matmul_hw_configure_disaggregated(
 }
 
 
-inline void llk_unpack_AB_matmul_init(const std::uint32_t transpose=0) { llk_unpack_AB_matmul_mop_config(transpose>0); }
+inline void llk_unpack_AB_matmul_init(uint32_t icb0, uint32_t icb1, const std::uint32_t transpose = 0) {
+    llk_unpack_AB_matmul_mop_config(icb0, icb1, transpose > 0);
+}
 
 inline void llk_unpack_AB_matmul(
     std::uint32_t operandA, std::uint32_t operandB, std::uint32_t tile_index_a, std::uint32_t tile_index_b) {
