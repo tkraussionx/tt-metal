@@ -16,21 +16,20 @@ from tests.python_api_testing.sweep_tests.comparison_funcs import (
     comp_pcc,
 )
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor
-from tests.python_api_testing.models.falcon.falcon_common import PytorchFalconModel
 
-# class PytorchFalconModel(torch.nn.Module):
-#     def __init__(self, hf_reference_model, num_layers):
-#         super().__init__()
-#         self.model = hf_reference_model.transformer
-#         self.model.h = self.model.h[:num_layers]
+class PytorchFalconModel(torch.nn.Module):
+    def __init__(self, hf_reference_model, num_layers):
+        super().__init__()
+        self.model = hf_reference_model.transformer
+        self.model.h = self.model.h[:num_layers]
 
-#         # Disable dropout
-#         self.model.eval()
+        # Disable dropout
+        self.model.eval()
 
-#     def forward(self, input_ids):
-#         result = self.model(input_ids=input_ids)[0]
+    def forward(self, input_ids):
+        result = self.model(input_ids=input_ids)[0]
 
-#         return result
+        return result
 
 
 def run_test_FalconModel_inference(

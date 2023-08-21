@@ -2,23 +2,6 @@ import torch
 
 MODEL_VERSION = "tiiuae/falcon-7b-instruct"
 
-class PytorchFalconModel(torch.nn.Module):
-    def __init__(self, hf_reference_model, num_layers=None):
-        super().__init__()
-        self.model = hf_reference_model.transformer
-        if num_layers is None:
-            pass
-        else:
-            self.model.h = self.model.h[:num_layers]
-
-        # Disable dropout
-        self.model.eval()
-
-    def forward(self, input_ids):
-        result = self.model(input_ids=input_ids)[0]
-
-        return result
-
 
 class PytorchFalconCausalLM(torch.nn.Module):
     def __init__(self, hf_reference_model, num_layers=None):

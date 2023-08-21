@@ -13,26 +13,14 @@ from tests.python_api_testing.models.falcon.model_config import (
     get_tt_cache_path,
 )
 
+from tests.python_api_testing.models.falcon.falcon_common import PytorchFalconCausalLM
+
 from tests.python_api_testing.sweep_tests.comparison_funcs import (
     comp_allclose,
     comp_pcc,
 )
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor
 
-
-class PytorchFalconCausalLM(torch.nn.Module):
-    def __init__(self, hf_reference_model, num_layers):
-        super().__init__()
-        self.model = hf_reference_model
-        self.model.transformer.h = self.model.transformer.h[:num_layers]
-
-        # Disable dropout
-        self.model.eval()
-
-    def forward(self, input_ids):
-        result = self.model(input_ids=input_ids)[0]
-
-        return result
 
 
 def run_test_FalconCausalLM_inference(
