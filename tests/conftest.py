@@ -243,34 +243,34 @@ def device(request):
             os.environ["TT_METAL_SLOW_DISPATCH_MODE"] = dispatch
 
 
-@pytest.fixture(autouse=True)
-def clear_program_cache():
-    yield
-    import tt_lib as ttl
+# @pytest.fixture(autouse=True)
+# def clear_program_cache():
+#     yield
+#     import tt_lib as ttl
 
-    ttl.program_cache.disable_and_clear()
-
-
-@pytest.fixture()
-def clear_compile_cache():
-    yield
-    import tt_lib as ttl
-
-    ttl.device.DisablePersistentKernelCache()
+#     ttl.program_cache.disable_and_clear()
 
 
-@pytest.fixture(autouse=True)
-def reset_default_device():
-    import tt_lib as ttl
+# @pytest.fixture()
+# def clear_compile_cache():
+#     yield
+#     import tt_lib as ttl
 
-    device = ttl.device.GetDefaultDevice()
-    yield
-    ttl.device.SetDefaultDevice(device)
+#     ttl.device.DisablePersistentKernelCache()
 
 
-@pytest.fixture(scope="function")
-def use_program_cache(clear_program_cache):
-    import tt_lib as ttl
+# @pytest.fixture(autouse=True)
+# def reset_default_device():
+#     import tt_lib as ttl
 
-    ttl.program_cache.enable()
-    yield
+#     device = ttl.device.GetDefaultDevice()
+#     yield
+#     ttl.device.SetDefaultDevice(device)
+
+
+# @pytest.fixture(scope="function")
+# def use_program_cache(clear_program_cache):
+#     import tt_lib as ttl
+
+#     ttl.program_cache.enable()
+#     yield

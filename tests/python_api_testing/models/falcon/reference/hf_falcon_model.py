@@ -369,6 +369,9 @@ class Attention(nn.Module):
             value_layer_ = value_layer.reshape(
                 batch_size, self.num_kv, -1, self.head_dim
             )
+            print('query_layer_', query_layer_.shape())
+            print('key_layer_', key_layer_.shape())
+            print('value_layer_', value_layer_.shape())
 
             attn_output = TT_functional.scaled_dot_product_attention(
                 query_layer_, key_layer_, value_layer_, None, 0.0, is_causal=True
