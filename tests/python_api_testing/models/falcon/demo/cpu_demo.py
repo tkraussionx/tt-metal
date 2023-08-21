@@ -35,7 +35,7 @@ def test_cpu_demo():
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_VERSION)
     prompt_text = "Girafatron is obsessed with giraffes, the most glorious animal on the face of this Earth. Giraftron believes all other animals are irrelevant when compared to the glorious majesty of the giraffe.\nDaniel: Hello, Girafatron!\nGirafatron:"
-
+    prompt_text = "Write a poem about Valencia"
     logger.info("Tokenizing inputs")
     tokenized_inputs = tokenizer(prompt_text, padding=False, add_special_tokens=False, return_tensors="pt")
     input_ids = tokenized_inputs['input_ids']
@@ -49,8 +49,10 @@ def test_cpu_demo():
 
     logger.info("Generating new ids")
     ids = input_ids
-    for _ in range(4):
+    for i in range(50):
+        logger.info(f"generating token {i}")
         ids = generator(input_ids=ids)
+
 
     logger.info(f"Input Prompt: {prompt_text}")
 
@@ -58,3 +60,14 @@ def test_cpu_demo():
     text = tokenizer.decode(ids[0])
     logger.info("Total output (including input): ")
     logger.info(text)
+
+# 50 tokens
+
+# input prompt: Write a poem about Valencia
+
+# Valencia, the city of the sun,
+# A place of beauty, of fun,
+# A place of culture, of art,
+# Where the people are warm, and the heart.
+
+# The city of the sun, where the sky
