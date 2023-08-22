@@ -77,6 +77,7 @@ void Profiler::readRiscProfilerResults(
         tt_cluster *cluster,
         int pcie_slot,
         const CoreCoord &worker_core,
+        int risc_num,
         std::string risc_name,
         int risc_print_buffer_addr){
 
@@ -112,22 +113,27 @@ void Profiler::readRiscProfilerResults(
                 pcie_slot,
                 worker_core.x,
                 worker_core.y,
+                risc_num,
                 risc_name,
                 (uint64_t(profile_buffer[i+kernel_profiler::TIMER_VAL_H]) << 32) | profile_buffer[i+kernel_profiler::TIMER_VAL_L],
                 profile_buffer[i+kernel_profiler::TIMER_ID]);
     }
 }
 
+
+
 void Profiler::dumpDeviceResultToFile(
         int chip_id,
         int core_x,
         int core_y,
+        int risc,
         std::string hart_name,
         uint64_t timestamp,
         uint32_t timer_id){
 
     std::filesystem::path log_path = output_dir / DEVICE_SIDE_LOG;
     std::ofstream log_file;
+
 
     if (device_new_log || !std::filesystem::exists(log_path))
     {
@@ -149,6 +155,11 @@ void Profiler::dumpDeviceResultToFile(
        core_y--;
     }
     core_x--;
+
+    uint64_t threadID = core_x*1000000+core_y*10000+risc*100;
+    uint64_t eventID = timer_id + threadID;
+
+    device_data.emplace(eventID,timestamp);
 
     log_file << chip_id << ", " << core_x << ", " << core_y << ", " << hart_name << ", ";
     log_file << timer_id << ", ";
@@ -214,30 +225,35 @@ void Profiler::dumpDeviceResults (
             cluster,
             pcie_slot,
             worker_core,
+            2,
             "NCRISC",
             PRINT_BUFFER_NC);
         readRiscProfilerResults(
             cluster,
             pcie_slot,
             worker_core,
+            1,
             "BRISC",
             PRINT_BUFFER_BR);
         readRiscProfilerResults(
             cluster,
             pcie_slot,
             worker_core,
+            3,
             "TRISC_0",
             PRINT_BUFFER_T0);
 	readRiscProfilerResults(
 	    cluster,
 	    pcie_slot,
 	    worker_core,
+            4,
 	    "TRISC_1",
 	    PRINT_BUFFER_T1);
 	readRiscProfilerResults(
 	    cluster,
 	    pcie_slot,
 	    worker_core,
+            5,
 	    "TRISC_2",
 	    PRINT_BUFFER_T2);
     }

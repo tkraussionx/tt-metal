@@ -58,6 +58,7 @@ class Profiler {
                 int chip_id,
                 int core_x,
                 int core_y,
+                int risc_num,
                 std::string hart_name,
                 uint64_t timestamp,
                 uint32_t timer_id);
@@ -67,12 +68,16 @@ class Profiler {
                 tt_cluster *cluster,
                 int pcie_slot,
                 const CoreCoord &worker_core,
+                int risc_num,
                 std::string risc_name,
                 int risc_print_buffer_addr);
 
     public:
         //Constructor
         Profiler();
+
+        // Map for storing dvice data
+        std::unordered_map<uint64_t,uint64_t> device_data;
 
         //Mark the steady_clock for the start of the asked name
         void markStart(const std::string& timer_name);

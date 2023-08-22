@@ -103,9 +103,9 @@ int main(int argc, char *argv[])
 
     // Signal completion
     tensix_sync();
-    trisc_run_mailbox_write(KERNEL_COMPLETE);
-
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
     kernel_profiler::mark_time(CC_MAIN_END);
 #endif
+    trisc_run_mailbox_write(KERNEL_COMPLETE);
+
 }
