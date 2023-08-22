@@ -20,4 +20,10 @@ TEST_F(CoreCoordHarness, TestCoreRangeNotMergeable){
     EXPECT_FALSE ( this->cr1.merge(this->cr6));
 }
 
+TEST_F(CoreCoordHarness, TestCoreRangeNotMergeable){
+    EXPECT_FALSE ( this->cr1.merge(this->cr3));
+    EXPECT_FALSE ( this->cr2.merge(this->cr3));
+    EXPECT_FALSE ( this->cr1.merge(this->cr6));
+}
+
 }
