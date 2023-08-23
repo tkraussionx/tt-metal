@@ -41,7 +41,7 @@ op_map = {
     },
     # Eltwise unary
     "eltwise-hardtanh": {
-        "tt_lib_op": tt_lib_ops.hardtanh,
+        "tt_lib_op": tt_lib_ops.eltwise_hardtanh,
         "pytorch_op": pytorch_ops.hardtanh,
     },
     "eltwise-clip": {
@@ -55,6 +55,14 @@ op_map = {
     "eltwise-ones": {
         "tt_lib_op": tt_lib_ops.ones,
         "pytorch_op": pytorch_ops.ones,
+    },
+    "fill-rm": {
+        "tt_lib_op": tt_lib_ops.fill_rm,
+        "pytorch_op": pytorch_ops.fill_rm,
+    },
+    "fill-ones-rm": {
+        "tt_lib_op": tt_lib_ops.fill_ones_rm,
+        "pytorch_op": pytorch_ops.fill_ones_rm,
     },
     "eltwise-full": {
         "tt_lib_op": tt_lib_ops.full,
@@ -228,6 +236,14 @@ op_map = {
     "eltwise-gelu": {
         "tt_lib_op": tt_lib_ops.eltwise_gelu,
         "pytorch_op": pytorch_ops.gelu,
+    },
+    "eltwise-softmax_in_place": {
+        "tt_lib_op": tt_lib_ops.eltwise_softmax_in_place,
+        "pytorch_op": pytorch_ops.softmax_in_place,
+    },
+    "eltwise-scale_mask_softmax_in_place": {
+        "tt_lib_op": tt_lib_ops.eltwise_scale_mask_softmax_in_place,
+        "pytorch_op": pytorch_ops.scale_mask_softmax_in_place,
     },
     "eltwise-rsqrt": {
         "tt_lib_op": tt_lib_ops.eltwise_rsqrt,
@@ -574,6 +590,10 @@ op_map = {
     "reshape": {
         "tt_lib_op": tt_lib_ops.reshape,
         "pytorch_op": pytorch_ops.reshape,
+    },
+    "split-last-dim-two-chunks-tiled": {
+        "tt_lib_op": tt_lib_ops.split_last_dim_two_chunks_tiled,
+        "pytorch_op": pytorch_ops.split_last_dim_two_chunks_tiled,
     },
     "tilize": {
         "tt_lib_op": tt_lib_ops.tilize,

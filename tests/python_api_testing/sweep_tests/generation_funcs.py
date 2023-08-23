@@ -53,6 +53,16 @@ def gen_constant(size, constant=1.0):
 def gen_rand(size, low=0, high=100):
     return torch.Tensor(size=size).uniform_(low, high)
 
+def gen_bin(size, probabilityones=0.5):
+    element_count = 1
+    for i in size:
+        element_count=element_count*i
+    raw = torch.zeros(element_count)
+    raw[:int(probabilityones * element_count)] = 1
+    ridx = torch.randperm(element_count)   # a random permutation of the entries
+    mask = torch.reshape(raw[ridx], size)
+    return mask
+
 
 def gen_linspace(size, low=0, high=100):
     lsteps = size[0] * size[1] * size[2] * size[3]
@@ -186,11 +196,11 @@ def gen_identity(size):
 ###################################################
 
 
-def gen_default_args(input_shapes):
+def gen_default_args(input_shapes, supported_dtypes, supported_layouts, on_device):
     return [{}]
 
 
-def gen_tensor_pad_args(input_shapes):
+def gen_tensor_pad_args(input_shapes, supported_dtypes, supported_layouts, on_device):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
     test_args = {}
@@ -212,12 +222,16 @@ def gen_tensor_pad_args(input_shapes):
             "output_tensor_shape": output_tensor_shape,
             "input_tensor_start": input_tensor_start,
             "pad_value": pad_value,
+            "dtype": [ttl.tensor.DataType.BFLOAT16],
+            "layout": [ttl.tensor.Layout.ROW_MAJOR],
+            "on_device": [False],
         }
     )
+
     return [test_args]
 
 
-def gen_tensor_unpad_args(input_shapes):
+def gen_tensor_unpad_args(input_shapes, supported_dtypes, supported_layouts, on_device):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
     test_args = {}
@@ -230,12 +244,16 @@ def gen_tensor_unpad_args(input_shapes):
         {
             "output_tensor_start": output_tensor_start,
             "output_tensor_end": output_tensor_end,
+            "dtype": [ttl.tensor.DataType.BFLOAT16],
+            "layout": [ttl.tensor.Layout.ROW_MAJOR],
+            "on_device": [False],
         }
     )
+
     return [test_args]
 
 
-def gen_pad_to_tile_args(input_shapes):
+def gen_pad_to_tile_args(input_shapes, supported_dtypes, supported_layouts, on_device):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
 
@@ -245,12 +263,15 @@ def gen_pad_to_tile_args(input_shapes):
 
     test_args = {
         "pad_value": pad_value,
+        "dtype": [ttl.tensor.DataType.BFLOAT16],
+        "layout": [ttl.tensor.Layout.ROW_MAJOR],
+        "on_device": [False],
     }
 
     return [test_args]
 
 
-def gen_unpad_from_tile_args(input_shapes):
+def gen_unpad_from_tile_args(input_shapes, supported_dtypes, supported_layouts, on_device):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
     assert input_shapes[0][-2] % 32 == 0
@@ -264,54 +285,64 @@ def gen_unpad_from_tile_args(input_shapes):
 
     test_args = {
         "output_tensor_shape": output_tensor_shape,
+        "dtype": [ttl.tensor.DataType.BFLOAT16],
+        "layout": [ttl.tensor.Layout.ROW_MAJOR],
+        "on_device": [False],
     }
+
     return [test_args]
 
 
-def gen_default_dtype_layout_device(input_shapes):
-    if input_shapes[0][-2] % 32 == 0 and input_shapes[0][-1] % 32 == 0:
-        return [
-            {
-                "dtype": ttl.tensor.DataType.BFLOAT16,
-                "layout": ttl.tensor.Layout.TILE,
-                "on_device": True,
-            }
-        ]
-    else:
-        return [
-            {
-                "dtype": ttl.tensor.DataType.BFLOAT16,
-                "layout": ttl.tensor.Layout.ROW_MAJOR,
-                "on_device": True,
-            }
-        ]
+def gen_default_dtype_layout_device(input_shapes, supported_dtypes, supported_layouts, on_device):
+    dtype = []
+    layout = []
+    on_device = []
 
+    for input_shape in input_shapes:
+        dtype.append(ttl.tensor.DataType.BFLOAT16)
+        on_device.append(True)
 
-def gen_default_dtype_layout_rm_device(input_shapes):
+        if input_shape[-2] % 32 == 0 and input_shape[-1] % 32 == 0:
+            layout.append(ttl.tensor.Layout.TILE)
+        else:
+            layout.append(ttl.tensor.Layout.ROW_MAJOR)
+
     return [
         {
-            "dtype": ttl.tensor.DataType.BFLOAT16,
-            "layout": ttl.tensor.Layout.ROW_MAJOR,
-            "on_device": True,
+            "dtype": dtype,
+            "layout": layout,
+            "on_device": on_device,
+        }
+    ]
+
+
+def gen_default_dtype_layout_rm_device(input_shapes, supported_dtypes, supported_layouts, on_device):
+    return [
+        {
+            "dtype": [ttl.tensor.DataType.BFLOAT16] * len(input_shapes),
+            "layout": [ttl.tensor.Layout.ROW_MAJOR] * len(input_shapes),
+            "on_device": [True] * len(input_shapes),
         }
     ]
 
 
 def sanitize_args(input_shapes, dtype_device_layout):
-    for shape in input_shapes:
+    for i in range(len(input_shapes)):
+        shape = input_shapes[i]
+
         if (
             (
-                dtype_device_layout["layout"] == ttl.tensor.Layout.TILE
+                dtype_device_layout[i]["layout"] == ttl.tensor.Layout.TILE
                 and (shape[2] % 32 != 0 or shape[3] % 32 != 0)
             )  # Shape cannot be tilized
             or (
-                dtype_device_layout["layout"] == ttl.tensor.Layout.ROW_MAJOR
-                and dtype_device_layout["on_device"]
+                dtype_device_layout[i]["layout"] == ttl.tensor.Layout.ROW_MAJOR
+                and dtype_device_layout[i]["on_device"]
                 and shape[3] % 2 != 0
             )  # Shape cannot be placed as row major on device
             or (
-                dtype_device_layout["dtype"] == ttl.tensor.DataType.BFLOAT8_B
-                and dtype_device_layout["layout"] != ttl.tensor.Layout.TILE
+                dtype_device_layout[i]["dtype"] == ttl.tensor.DataType.BFLOAT8_B
+                and dtype_device_layout[i]["layout"] != ttl.tensor.Layout.TILE
             )  # BFLOAT8_B must be tile layout
         ):
             return None
@@ -324,14 +355,35 @@ def gen_dtype_layout_device(
     supported_layouts=supported_tt_layouts,
     on_device=on_device_options,
 ):
-    for dtype, layout, on_dev in product(
-        supported_dtypes, supported_layouts, on_device
-    ):
-        out = sanitize_args(
-            input_shapes, {"dtype": dtype, "layout": layout, "on_device": on_dev}
-        )
+    dtype_device_layouts = []
+
+    for i in range(len(input_shapes)):
+        dtype_device_layout = []
+
+        for dtype, layout, on_dev in product(
+            supported_dtypes[i],
+            supported_layouts[i],
+            on_device[i],
+        ):
+            dtype_device_layout.append({"dtype": dtype, "layout": layout, "on_device": on_dev})
+
+        dtype_device_layouts.append(dtype_device_layout)
+
+    for dtype_device_layout_combination in product(*dtype_device_layouts):
+        out = sanitize_args(input_shapes, dtype_device_layout_combination)
+
         if out is not None:
-            yield out
+            dtype = []
+            layout = []
+            on_dev = []
+
+            for x in dtype_device_layout_combination:
+                dtype.append(x["dtype"])
+                layout.append(x["layout"])
+                on_dev.append(x["on_device"])
+
+            res = {"dtype": dtype, "layout": layout, "on_device": on_dev}
+            yield res
 
 
 def gen_permute_args(
@@ -351,6 +403,32 @@ def gen_permute_args(
             if input_info is not None:
                 input_info.update({"permute_dims": permute_dims})
                 yield input_info
+
+
+def gen_fill_rm_args(input_shapes, supported_dtypes, supported_layouts, on_device):
+    H = input_shapes[0][-2]
+    W = input_shapes[0][-1]
+
+    for input_info in gen_dtype_layout_device(input_shapes, supported_dtypes, supported_layouts, on_device):
+        if input_info is not None:
+            input_info["hOnes"] = random.randint(1, H)
+            input_info["wOnes"] = random.randint(1, W)
+
+            input_info["val_hi"] = random.uniform(-100, 100)
+            input_info["val_lo"] = random.uniform(-100, 100)
+
+            yield input_info
+
+
+def gen_fill_ones_rm_args(input_shapes, supported_dtypes, supported_layouts, on_device):
+    H = input_shapes[0][-2]
+    W = input_shapes[0][-1]
+
+    for input_info in gen_dtype_layout_device(input_shapes, supported_dtypes, supported_layouts, on_device):
+        if input_info is not None:
+            input_info["hOnes"] = random.randint(1, H)
+            input_info["wOnes"] = random.randint(1, W)
+            yield input_info
 
 
 @lru_cache(maxsize=5000)
@@ -393,7 +471,7 @@ def gen_reshape_args(
 
     for reshape_dims in out_shapes:
         for input_info in gen_dtype_layout_device(
-            (input_shapes[0], reshape_dims["reshape_dims"]),
+            input_shapes,
             supported_dtypes,
             supported_layouts,
             on_device,
@@ -411,6 +489,7 @@ def gen_tilize_with_val_padding_args(
 ):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
+    
     for input_info in gen_dtype_layout_device(
         input_shapes, supported_dtypes, supported_layouts, on_device
     ):
@@ -453,6 +532,7 @@ def gen_untilize_with_unpadding_args(
     assert len(input_shapes[0]) == 4
     assert input_shapes[0][-2] % 32 == 0
     assert input_shapes[0][-1] % 32 == 0
+    
     for input_info in gen_dtype_layout_device(
         input_shapes, supported_dtypes, supported_layouts, on_device
     ):
@@ -489,7 +569,7 @@ def gen_pad_args(
         on_device,
     ):
         if input_info is not None:
-            if input_info["layout"] == ttl.tensor.Layout.ROW_MAJOR:
+            if input_info["layout"][0] == ttl.tensor.Layout.ROW_MAJOR:
                 pad_sizes = (10, 10, 64, 64)
                 output_tensor_shape = [
                     random.randint(
@@ -513,7 +593,7 @@ def gen_pad_args(
                         "pad_value": pad_value,
                     }
                 )
-            elif input_info["layout"] == ttl.tensor.Layout.TILE:
+            elif input_info["layout"][0] == ttl.tensor.Layout.TILE:
                 pad_sizes = (10, 10, 64, 64)
                 output_tensor_shape = [
                     random.randrange(
@@ -555,7 +635,7 @@ def gen_unpad_args(
         input_shapes, supported_dtypes, supported_layouts, on_device
     ):
         if input_info is not None:
-            if input_info["layout"] == ttl.tensor.Layout.ROW_MAJOR:
+            if input_info["layout"][0] == ttl.tensor.Layout.ROW_MAJOR:
                 output_tensor_start = [0, 0, 0, 0]
                 output_tensor_end = [
                     random.randrange(output_tensor_start[i], input_shapes[0][i], 1)
@@ -569,7 +649,7 @@ def gen_unpad_args(
                         "output_tensor_end": output_tensor_end,
                     }
                 )
-            elif input_info["layout"] == ttl.tensor.Layout.TILE:
+            elif input_info["layout"][0] == ttl.tensor.Layout.TILE:
                 output_tensor_start = [0, 0, 0, 0]
                 output_tensor_end = [
                     random.randrange(output_tensor_start[i], input_shapes[0][i], 1)
@@ -700,6 +780,10 @@ def gen_relu_max_args(
         yield input_info
 
 
+def gen_scale_mask_softmax_in_place_args(input_shapes, supported_dtypes, supported_layouts, on_device,low=1, high=100, dtype=torch.bfloat16):
+    for input_info in gen_scalar_args(input_shapes, supported_dtypes, supported_layouts, on_device, "scale", low, high, dtype):
+        yield input_info
+
 def gen_heaviside_args(
     input_shapes,
     supported_dtypes,
@@ -721,6 +805,9 @@ def gen_heaviside_args(
     ):
         yield input_info
 
+def gen_lerp_binary_args(input_shapes, supported_dtypes, supported_layouts, on_device, low=-100, high=100, dtype=torch.bfloat16):
+    for input_info in gen_scalar_args(input_shapes, supported_dtypes, supported_layouts, on_device, "weight", low, high, dtype):
+        yield input_info
 
 def gen_subalpha_args(input_shapes, supported_dtypes, supported_layouts, on_device, low=-100, high=100, dtype=torch.bfloat16):
     for input_info in gen_scalar_args(input_shapes, supported_dtypes, supported_layouts, on_device, "alpha", low, high, dtype):
@@ -798,26 +885,24 @@ def gen_elu_args(
         yield input_info
 
 
-def gen_gelu_args(
-    input_shapes,
-    supported_dtypes,
-    supported_layouts,
-    on_device,
-    low=0,
-    high=100,
-    dtype=torch.bfloat16,
-):
-    for input_info in gen_scalar_args(
-        input_shapes,
-        supported_dtypes,
-        supported_layouts,
-        on_device,
-        "fast_and_appx",
-        low,
-        high,
-        dtype,
-    ):
-        yield input_info
+def gen_gelu_args(input_shapes, supported_dtypes, supported_layouts, on_device):
+    for input_info in gen_dtype_layout_device(input_shapes, supported_dtypes, supported_layouts, on_device):
+        if input_info is not None:
+            input_info.update({"fast_and_appx": True})
+            yield input_info
+
+            input_info.update({"fast_and_appx": False})
+            yield input_info
+
+
+def gen_fast_and_appx_args(input_shapes, supported_dtypes, supported_layouts, on_device):
+    for input_info in gen_dtype_layout_device(input_shapes, supported_dtypes, supported_layouts, on_device):
+        if input_info is not None:
+            input_info.update({"fast_and_appx": True})
+            yield input_info
+
+            input_info.update({"fast_and_appx": False})
+            yield input_info
 
 
 def gen_two_scalar_args(
@@ -896,6 +981,19 @@ def gen_threshold_args(
         yield input_info
 
 
+def gen_hardtanh_args(input_shapes, supported_dtypes, supported_layouts, on_device, low=-10, high=10, dtype=torch.bfloat16):
+    for input_info in gen_two_scalar_args(
+        input_shapes, supported_dtypes, supported_layouts, on_device, "low", "high", low, high, dtype
+    ):
+        if input_info["low"] > input_info["high"]:
+            input_info["low"], input_info["high"] = (
+                input_info["high"],
+                input_info["low"],
+            )
+
+        yield input_info
+
+
 def gen_polyval_args(
     input_shapes,
     supported_dtypes,
@@ -906,7 +1004,7 @@ def gen_polyval_args(
     high=100,
     dtype=torch.bfloat16,
 ):
-    for input_info in gen_dtype_layout_device(input_shapes):
+    for input_info in gen_dtype_layout_device(input_shapes, supported_dtypes, supported_layouts, on_device):
         if input_info is not None:
             num_coeffs = (
                 torch.tensor(1, dtype=torch.int).random_(1, max_num_coeffs + 1).item()
