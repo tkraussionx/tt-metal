@@ -974,8 +974,11 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(cons
     uint32_t num_blocks_x = (Nt - 1) / per_core_N + 1;
     uint32_t num_blocks_total = num_blocks_y * num_blocks_x;
     TT_ASSERT(num_blocks_total <= num_cores_x * num_cores_y);
+    cout << "per_core_M=" << per_core_M << " per_core_N=" << per_core_N << endl;
+    cout << "num_blocks_y=" << num_blocks_y << " num_blocks_x=" << num_blocks_x << " num_cores_y=" << num_cores_y << " num_cores_x=" << num_cores_x << endl;
+    cout << "Mt=" << Mt << " Kt=" << Kt << " Nt=" << Nt << endl;
     CoreCoord core_range = bmm_op_utils::get_core_range(num_blocks_y, num_blocks_x, num_cores_y, num_cores_x);
-
+    cout << "core_range.x=" << core_range.x << " core_range.y=" << core_range.y << endl;
     ////////////////////////////////////////////////////////////////////////////
     //                      Grayskull Device Setup
     ////////////////////////////////////////////////////////////////////////////

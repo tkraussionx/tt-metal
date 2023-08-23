@@ -1,5 +1,5 @@
 from typing import List, Union
-from .. import tensor
+from .. import tensor, operations
 from ..utils import _nearest_32, _nearest_y
 
 
@@ -71,7 +71,7 @@ def conv(weight: List[Union[int, float]], conv_params, device, bias=None):
     return conv_
 
 
-def resnet_conv(weight: List[Union[int, float]], conv_params, device, act_block_shape_hw, weight_block_shape_hw, outsubblock_shape_hw, bias=None, padded_filter_window_width=0, pre_pad_conv=False):
+def resnet_conv(weight: List[Union[int, float]], conv_params, device, act_block_shape_hw, weight_block_shape_hw, outsubblock_shape_hw, bias=None, padded_filter_window_width=0, pre_pad_conv=False, matmul_config=None):
     """
     Returns a function that performs a Convolution.
     For bias, it calls bcast op without autoformatting
@@ -141,11 +141,27 @@ def resnet_conv(weight: List[Union[int, float]], conv_params, device, act_block_
     if pre_pad_conv:
         P_H = 0
         P_W = 0
+    matmul_program_config = None
+    if matmul_config is not None:
+        matmul_program_config = operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+                                    compute_with_storage_grid_size=matmul_config["compute_with_storage_grid_size"],
+                                    in0_block_w=matmul_config["in0_block_w"],
+                                    out_subblock_h=matmul_config["out_subblock_h"],
+                                    out_subblock_w=matmul_config["out_subblock_w"],
+                                    per_core_M=matmul_config["per_core_M"],
+                                    per_core_N=matmul_config["per_core_N"],
+                                    fuse_gelu_activation=False)
+
     def conv_(activation):
         # if conv1x1 stride 1 padding 0, use matmul op
         if use_regular_matmul_op:
             assert(activation.layout() == tensor.Layout.TILE)
-            output = tensor.matmul(activation, weight_on_device, activation.memory_config())
+            if matmul_program_config is not None:
+                output = operations.primary.matmul(activation, weight_on_device, program_config=matmul_program_config,
+                                                   output_mem_config=activation.memory_config(),
+                                                   output_dtype=activation.dtype())
+            else:
+                output = tensor.matmul(activation, weight_on_device, activation.memory_config())
         else:
             assert(activation.layout() == tensor.Layout.ROW_MAJOR)
             output = tensor.conv_with_fast_reader(activation, weight_on_device, [R,padded_filter_window_width,U,V,P_H,P_W], act_block_h, act_block_w, weight_block_w, out_subblock_h, out_subblock_w, K, False)
