@@ -615,6 +615,10 @@ op_map = {
         "tt_lib_op": tt_lib_ops.untilize_with_unpadding,
         "pytorch_op": pytorch_ops.untilize_with_unpadding,
     },
+    "layernorm": {
+        "tt_lib_op": tt_lib_ops.layernorm,
+        "pytorch_op": pytorch_ops.layernorm,
+    },
     "pad": {
         "tt_lib_op": tt_lib_ops.pad,
         "pytorch_op": pytorch_ops.pad,

@@ -258,10 +258,61 @@ def gelu(x, *args, **kwargs):
 def softmax_in_place(x, *args, **kwargs):
     return torch.softmax(x, -1)
 
+
+def ref_stable_softmax(x):
+    torch.set_printoptions(
+        precision=2, threshold=1000, sci_mode=False, edgeitems=8, linewidth=480
+    )
+    z = x  # - torch.max(x, dim=3, keepdim=True)[0]
+    numerator = torch.exp(z)
+    # print(x.shape)
+    H = x.shape[-2]
+    # print("H=", H)
+    pw0, pw1 = 0, 1  # prints a tile slice with these tile coord range
+    ph0, ph1 = 0, 1
+    sh, sw = 16, 16  # stride inside the tile
+    ow0, ow1 = 0, 0  # offset inside the tile
+    oh0, oh1 = 0, 0
+    # print(
+    #     "Ref x=\n",
+    #     x[
+    #         0,
+    #         0,
+    #         ph0 * 32 + oh0 : ph1 * 32 + oh1 : sh,
+    #         pw0 * 32 + ow0 : pw1 * 32 + ow1 : sw,
+    #     ],
+    # )
+    # print("Ref exps=\n", numerator[0, 0, ph0*32 : ph1*32 : sh, pw0*32 : pw1*32 : sw])
+    denominator = torch.sum(numerator, 3, keepdim=True)
+    # print("denom shape=", denominator.shape)
+    # print("Ref sumexp=\n", torch.reshape(denominator, (-1,H))[:, ph0*32:ph1*32])
+
+    denom1 = torch.reciprocal(denominator)
+    # print("ref 1/sumexp=\n", denom1[0, 0, 0:32:8, 0:64:8])
+    softmax = numerator * denom1
+    # print("softmaxManual=\n", softmax[0, 0, 0:32:8, 0:64:8])
+    softmax = torch.nn.Softmax(3)(x)
+    # print("softmaxTorch=\n", softmax[0, 0, 0:32:8, 0:64:8])
+
+    return softmax
+
+
+def layernorm(x, y, z, *args, **kwargs):
+    return torch.nn.functional.layer_norm(input=x, normalized_shape=y, weight=y, bias=z, eps=1e-05)
+
+
 def scale_mask_softmax_in_place(x, y, scale, *args, **kwargs):
-    res = x * scale
-    res = res * y.int().float()
-    return torch.softmax(res, 0)
+    x1 = scale * y
+    x2 = x1 + x
+    retval = ref_stable_softmax(x2)
+    return retval
+
+"""
+def scale_mask_softmax_in_place(x, y, scale, *args, **kwargs):
+    res = y * scale
+    res = res * x.int().float()
+    return torch.softmax(res, -1)
+"""
 
 def rsqrt(x, *args, **kwargs):
     return torch.rsqrt(x)
