@@ -143,10 +143,25 @@ class Bottleneck(nn.Module):
             self.bn2 = nn.Identity()
             self.bn3 = nn.Identity()
 
+        # key: (M, K, N)
+        hardcoded_matmul_config_conv1 = {
+            (3136, 64, 64) : {"compute_with_storage_grid_size" : (2,2),
+                                    "in0_block_w" : 2,
+                                    "out_subblock_h" : 1,
+                                    "out_subblock_w": 1,
+                                    "per_core_M": 49,
+                                    "per_core_N": 1,
+                                }
+        }
         self.conv1_params = [width, inplanes, 1, 1, 1, 1, 0, 0, dilation, groups]
+        conv1_as_mm_padded_act_height = _nearest_32(input_shape[1] * input_shape[2])
+        matmul_config = None
+        if (conv1_as_mm_padded_act_height, inplanes, width) in hardcoded_matmul_config_conv1:
+            print("Setting matmul config for 1x1 conv (first conv in module)")
+            matmul_config = hardcoded_matmul_config_conv1[(conv1_as_mm_padded_act_height, inplanes, width)]
         if is_conv_supported_on_device(self.conv1_params):
             # 1x1 conv with stride 1 padding 0 is run using regular matmul
-            self.conv1 = TtResnetConv(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device, [1, 1], [1, 1], [1, 1], conv1_bias.tolist() if conv1_bias is not None else None)
+            self.conv1 = TtResnetConv(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device, [1, 1], [1, 1], [1, 1], conv1_bias.tolist() if conv1_bias is not None else None, matmul_config=matmul_config)
         else:
             self.conv1 = fallback_ops.Conv2d(conv1_weight, conv1_bias, inplanes, width, kernel_size=1, stride=1, padding=0)
 
