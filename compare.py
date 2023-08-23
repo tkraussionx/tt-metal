@@ -43,9 +43,6 @@ def main():
             if hf_tensor.shape[3] < tt_tensor.shape[3]:
                 tt_tensor = tt_tensor[:, :,  :, :hf_tensor.shape[3]]
 
-        if "attention_input.hf" in str(hf_file):
-            tt_tensor = tt_tensor[:, :hf_tensor.shape[1]]
-
         # if hf_tensor.shape != tt_tensor.shape:
         #     continue
 

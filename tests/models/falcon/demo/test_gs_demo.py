@@ -35,7 +35,7 @@ def test_decode_stage(device):
 
     batch_size = 32
     seq_len = 5
-    max_seq_len = 64
+    max_seq_len = 32
     num_layers = 32
 
     hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_version)
