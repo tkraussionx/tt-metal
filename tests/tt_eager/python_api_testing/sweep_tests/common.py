@@ -92,7 +92,9 @@ def run_test_and_save_results(
             {
                 "test_name": test_name,
                 "input_shapes": input_shapes,
-                **test_args,
+                "dtype": test_args["dtype"],
+                "layout": test_args["layout"],
+                "on_device": test_args["on_device"],
                 "data_seed": data_seed,
                 "env_vars": env_vars,
                 "status": test_status,

@@ -117,7 +117,10 @@ def bias_gelu(x, *args, bias, **kwargs):
 
 
 def hardtanh(x, *args, **kwargs):
-    result = torch.nn.functional.hardtanh(x)
+    low = kwargs.pop("low")
+    high = kwargs.pop("high")
+
+    result = torch.nn.functional.hardtanh(x, min_val=low, max_val=high)
     return result
 
 
@@ -248,8 +251,17 @@ def sqrt(x, *args, **kwargs):
 
 
 def gelu(x, *args, **kwargs):
-    return torch.nn.functional.gelu(x)
+    fast_and_appx = kwargs.pop("fast_and_appx")
+    approximate = 'tanh' if fast_and_appx else 'none'
+    return torch.nn.functional.gelu(x, approximate=approximate)
 
+def softmax_in_place(x, *args, **kwargs):
+    return torch.softmax(x, -1)
+
+def scale_mask_softmax_in_place(x, y, scale, *args, **kwargs):
+    res = x * scale
+    res = res * y.int().float()
+    return torch.softmax(res, 0)
 
 def rsqrt(x, *args, **kwargs):
     return torch.rsqrt(x)
@@ -408,18 +420,43 @@ def full(x, *args, scalar, **kwargs):
     return result
 
 
+def fill_rm(x, *args, **kwargs):
+    hOnes = kwargs.pop("hOnes")
+    wOnes = kwargs.pop("wOnes")
+
+    val_hi = kwargs.pop("val_hi")
+    val_lo = kwargs.pop("val_lo")
+
+    y = x
+    y[:, :, :, :] = val_lo
+    y[:, :, 0:hOnes, 0:wOnes] = val_hi
+
+    return y
+
+
+def fill_ones_rm(x, *args, **kwargs):
+    hOnes = kwargs.pop("hOnes")
+    wOnes = kwargs.pop("wOnes")
+
+    y = x
+    y[:, :, :, :] = 0
+    y[:, :, 0:hOnes, 0:wOnes] = 1
+
+    return y
+
+
 ## Trinary op
 def mac(x, y, z, *args, **kwargs):
     return x * y + z
 
 
-def addcmul(x, y, z, *args, value, **kwargs):
-    result = torch.addcmul(x, y, z, value=value)
+def addcmul(x, y, z, *args, scalar, **kwargs):
+    result = torch.addcmul(x, y, z, value=scalar)
     return result
 
 
-def addcdiv(x, y, z, *args, value, **kwargs):
-    result = torch.addcdiv(x, y, z, value=value)
+def addcdiv(x, y, z, *args, scalar, **kwargs):
+    result = torch.addcdiv(x, y, z, value=scalar)
     return result
 
 
@@ -535,6 +572,16 @@ def permute(x, *args, permute_dims, **kwargs):
 
 def reshape(x, *args, reshape_dims, **kwargs):
     return torch.reshape(x, reshape_dims)
+
+
+def split_last_dim_two_chunks_tiled(x, *args, **kwargs):
+    W = x.shape[-1]
+    half = W // 2
+
+    output0 = x[:, :, :, 0:half]
+    output1 = x[:, :, :, half:W]
+
+    return [output0, output1]
 
 
 def tilize(x, *args, **kwargs):

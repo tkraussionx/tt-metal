@@ -119,6 +119,23 @@ def comp_pcc(golden, calculated, pcc=0.99):
     return cal_pcc >= pcc, output_str
 
 
+def comp_pcc_list(golden, calculated, pcc=0.99):
+    total_str = ""
+    min_pcc = 1
+
+    for i in range(len(golden)):
+        if golden[i].dtype != calculated[i].dtype:
+            calculated[i] = calculated[i].type(golden[i].dtype)
+        _, _, cal_pcc, output_str = get_atol_rtol_pcc(golden[i], calculated[i])
+
+        total_str = f"{total_str}Tensor {i}: {output_str} "
+
+        if cal_pcc < min_pcc:
+            min_pcc = cal_pcc
+
+    return min_pcc >= pcc, total_str
+
+
 def comp_allclose_and_pcc(golden, calculated, rtol=1e-05, atol=1e-08, pcc=0.99):
     if golden.dtype != calculated.dtype:
         calculated = calculated.type(golden.dtype)

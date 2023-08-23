@@ -131,29 +131,50 @@ def run_pytorch_test(args):
             test_args = test_config.get("args", {})
 
             # Set tests parameters --------------------------
-            # test layouts
-            test_tt_layouts = []
-            if 'data-layout' in test_args:
-                for layout in test_args['data-layout']:
-                    test_tt_layouts.append(LAYOUTS_TT_DICT[layout])
-            else:
-                test_tt_layouts = generation_funcs.supported_tt_layouts
-
-            # test dtypes
             test_tt_dtypes = []
-            if 'data-type' in test_args:
-                for dtype in test_args['data-type']:
-                    test_tt_dtypes.append(DTYPES_TT_DICT[dtype])
-            else:
-                test_tt_dtypes = generation_funcs.supported_tt_dtypes
-
-            # is on device
+            test_tt_layouts = []
             test_on_device_options = []
-            if 'on-device' in test_args:
-                for device_type in test_args['on-device']:
-                    test_on_device_options.append(device_type)
+
+            if "inputs" in test_args:
+                for input_spec in test_args["inputs"]:
+                    test_tt_dtypes.append([])
+                    test_tt_layouts.append([])
+                    test_on_device_options.append([])
+
+                    for dtype in input_spec['data-type']:
+                        test_tt_dtypes[-1].append(DTYPES_TT_DICT[dtype])
+
+                    for layout in input_spec['data-layout']:
+                        test_tt_layouts[-1].append(LAYOUTS_TT_DICT[layout])
+
+                    for device_type in input_spec['on-device']:
+                        test_on_device_options[-1].append(device_type)
             else:
-                test_on_device_options = generation_funcs.on_device_options
+                for i in range(shape_dict["num-shapes"]):
+                    test_tt_dtypes.append([])
+                    test_tt_layouts.append([])
+                    test_on_device_options.append([])
+
+                    # test layouts
+                    if 'data-layout' in test_args:
+                        for layout in test_args['data-layout']:
+                            test_tt_layouts[-1].append(LAYOUTS_TT_DICT[layout])
+                    else:
+                        test_tt_layouts[-1] = generation_funcs.supported_tt_layouts
+
+                    # test dtypes
+                    if 'data-type' in test_args:
+                        for dtype in test_args['data-type']:
+                            test_tt_dtypes[-1].append(DTYPES_TT_DICT[dtype])
+                    else:
+                        test_tt_dtypes[-1] = generation_funcs.supported_tt_dtypes
+
+                    # is on device
+                    if 'on-device' in test_args:
+                        for device_type in test_args['on-device']:
+                            test_on_device_options[-1].append(device_type)
+                    else:
+                        test_on_device_options[-1] = generation_funcs.on_device_options
             # Set tests parameters --------------------------
 
             skip_header = False
