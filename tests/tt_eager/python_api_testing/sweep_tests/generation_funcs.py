@@ -393,9 +393,8 @@ def gen_permute_args(
     on_device=on_device_options,
 ):
     for permute_dims in permutations([0, 1, 2, 3]):
-        permuted_shape = [input_shapes[0][i] for i in permute_dims]
         for input_info in gen_dtype_layout_device(
-            (input_shapes[0], permuted_shape),
+            input_shapes,
             supported_dtypes,
             supported_layouts,
             on_device,
@@ -489,7 +488,7 @@ def gen_tilize_with_val_padding_args(
 ):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
-    
+
     for input_info in gen_dtype_layout_device(
         input_shapes, supported_dtypes, supported_layouts, on_device
     ):
@@ -532,7 +531,7 @@ def gen_untilize_with_unpadding_args(
     assert len(input_shapes[0]) == 4
     assert input_shapes[0][-2] % 32 == 0
     assert input_shapes[0][-1] % 32 == 0
-    
+
     for input_info in gen_dtype_layout_device(
         input_shapes, supported_dtypes, supported_layouts, on_device
     ):
