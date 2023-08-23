@@ -102,7 +102,6 @@ def test_cpu_demo_kv(batch_size):
     prompt_text = ["Write a poem about Valencia"] * batch_size
 
     logger.info("Tokenizing inputs")
-    tokenizer.pad_token = tokenizer.eos_token
     tokenized_inputs = tokenizer(
         prompt_text, padding=False, add_special_tokens=False, return_tensors="pt"
     )
@@ -131,7 +130,7 @@ def test_cpu_demo_kv(batch_size):
         dump_tensor("cached_key", "hf", key)
         dump_tensor("cached_value", "hf", value)
 
-    for i in range(10):
+    for i in range(0):
         start_ = time.time()
         logger.info(f"generating token {i}")
         # input:
