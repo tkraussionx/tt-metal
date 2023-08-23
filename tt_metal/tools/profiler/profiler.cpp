@@ -159,7 +159,14 @@ void Profiler::dumpDeviceResultToFile(
     uint64_t threadID = core_x*1000000+core_y*10000+risc*100;
     uint64_t eventID = timer_id + threadID;
 
-    device_data.emplace(eventID,timestamp);
+    if (device_data.find (eventID) != device_data.end())
+    {
+        device_data.at(eventID).push_back(timestamp);
+    }
+    else
+    {
+        device_data.emplace(eventID,std::list<uint64_t>{timestamp});
+    }
 
     log_file << chip_id << ", " << core_x << ", " << core_y << ", " << hart_name << ", ";
     log_file << timer_id << ", ";

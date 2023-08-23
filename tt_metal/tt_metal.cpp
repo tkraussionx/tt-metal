@@ -772,6 +772,7 @@ bool LaunchKernels(Device *device, const Program &program, bool stagger_start) {
     auto logical_cores_used_in_program = program.logical_cores();
     auto worker_cores = device->worker_cores_from_logical_cores(logical_cores_used_in_program);
 
+    tracy::enable_set_cpu_time();
     llrt::deassert_brisc_reset_for_all_chips_all_cores(cluster, stagger_start);
 
     bool riscs_are_done = false;

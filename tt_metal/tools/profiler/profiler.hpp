@@ -77,7 +77,7 @@ class Profiler {
         Profiler();
 
         // Map for storing dvice data
-        std::unordered_map<uint64_t,uint64_t> device_data;
+        std::unordered_map<uint64_t,std::list<uint64_t>> device_data;
 
         //Mark the steady_clock for the start of the asked name
         void markStart(const std::string& timer_name);
