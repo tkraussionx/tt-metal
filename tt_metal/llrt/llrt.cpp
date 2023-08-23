@@ -8,6 +8,7 @@
 #include <mutex>
 
 #include "tools/cpuprof/cpuprof.h"
+#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 
 namespace tt {
 
@@ -85,6 +86,7 @@ ll_api::memory get_risc_binary(string path, int chip_id, bool fw_build) {
 // This avoids the issue of cores running garbahe out of their L1
 // TODO: deassert reset only for used BRISCs (needs a new deassert function w/ a list of core to de-assert)
 void deassert_brisc_reset_for_all_chips_all_cores(tt_cluster *cluster, bool stagger_start) {
+    ZoneScoped;
     cluster->deassert_risc_reset(stagger_start);
     log_debug(tt::LogLLRuntime, "deasserted reset for all BRISCs");
 }
@@ -427,6 +429,7 @@ void setup_riscs_on_specified_cores(
 bool check_if_riscs_on_specified_core_done(
     tt_cluster *cluster, int chip_id, const TensixRiscsOptions riscs_options, const CoreCoord &core) {
 
+    ZoneScoped;
     std::function<bool(uint64_t)> get_mailbox_is_done = [&](uint64_t run_mailbox_address_) {
         std::vector<uint32_t> run_mailbox_read_val = {0};
         run_mailbox_read_val = read_hex_vec_from_core(

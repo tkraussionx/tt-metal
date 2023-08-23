@@ -774,7 +774,6 @@ bool LaunchKernels(Device *device, const Program &program, bool stagger_start) {
 
     llrt::deassert_brisc_reset_for_all_chips_all_cores(cluster, stagger_start);
 
-    tracy::set_cpu_time();
     bool riscs_are_done = false;
     while (not riscs_are_done) {
         riscs_are_done = true;

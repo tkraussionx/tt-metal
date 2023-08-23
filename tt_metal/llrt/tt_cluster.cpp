@@ -8,6 +8,7 @@
 #include <iostream>
 #include "hostdevcommon/common_runtime_address_map.h"
 #include "hostdevcommon/debug_print_common.h"
+#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 
 using std::to_string;
 using std::cout;
@@ -440,6 +441,7 @@ void tt_cluster::enable_ethernet_queue(const chip_id_t &chip, int timeout) {
 
 void tt_cluster::broadcast_remote_tensix_risc_reset(const chip_id_t &chip, const TensixSoftResetOptions &soft_resets) {
 
+    ZoneScoped;
     if (type == TargetDevice::Silicon) {
         auto valid = soft_resets & ALL_TENSIX_SOFT_RESET;
 
@@ -453,6 +455,8 @@ void tt_cluster::broadcast_remote_tensix_risc_reset(const chip_id_t &chip, const
 }
 
 void tt_cluster::set_remote_tensix_risc_reset(const tt_cxy_pair &core, const TensixSoftResetOptions &soft_resets) {
+
+    ZoneScoped;
     auto valid = soft_resets & ALL_TENSIX_SOFT_RESET;
 
     std::vector<uint32_t> vec = {(std::underlying_type<TensixSoftResetOptions>::type) valid};
@@ -461,6 +465,7 @@ void tt_cluster::set_remote_tensix_risc_reset(const tt_cxy_pair &core, const Ten
 }
 
 void tt_cluster::deassert_risc_reset(bool start_stagger) {
+    ZoneScoped;
     if (type == TargetDevice::Versim) {
         // Not running silicon multichip test
         device->deassert_risc_reset();
@@ -483,6 +488,7 @@ void tt_cluster::deassert_risc_reset(bool start_stagger) {
 }
 
 void tt_cluster::deassert_risc_reset_remote_chip(const chip_id_t &chip, bool start_stagger) {
+    ZoneScoped;
     if (start_stagger){
         broadcast_remote_tensix_risc_reset(chip, TENSIX_DEASSERT_SOFT_RESET);
     }else{
