@@ -21,15 +21,15 @@ test-list:
           - input-1:
             data-layout: ["TILE"]
             data-type: ["BFLOAT16", "BFLOAT8_B"]
-            on-device: [True, False]
+            on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
           - input-2:
             data-layout: ["TILE"]
             data-type: ["BFLOAT16", "BFLOAT8_B"]
-            on-device: [True, False]
+            on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
           - input-3:
             data-layout: ["TILE"]
             data-type: ["BFLOAT16", "BFLOAT8_B"]
-            on-device: [True, False]
+            on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
   - layernorm:
       shape:
         start-shape: [1, 1, 2, 2]
@@ -51,12 +51,12 @@ test-list:
           - input-1:
             data-layout: ["ROW_MAJOR"]
             data-type: ["BFLOAT16"]
-            on-device: [True, False]
+            on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
           - input-2:
             data-layout: ["ROW_MAJOR"]
             data-type: ["BFLOAT16"]
-            on-device: [True, False]
+            on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
           - input-3:
             data-layout: ["ROW_MAJOR"]
             data-type: ["BFLOAT16"]
-            on-device: [True, False]
+            on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
