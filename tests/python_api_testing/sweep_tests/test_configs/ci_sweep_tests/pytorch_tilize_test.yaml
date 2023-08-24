@@ -19,4 +19,4 @@ test-list:
       args:
         data-layout: ["ROW_MAJOR", "TILE"]
         data-type: ["BFLOAT16", "BFLOAT8_B"]
-        on-device: [True, False]
+        on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]

@@ -18,5 +18,5 @@ test-list:
       args:
         data-layout: ["ROW_MAJOR"]
         data-type: ["BFLOAT16"]
-        on-device: [True, False]
+        on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
       output-file: fill_ones_rm_sweep.csv
