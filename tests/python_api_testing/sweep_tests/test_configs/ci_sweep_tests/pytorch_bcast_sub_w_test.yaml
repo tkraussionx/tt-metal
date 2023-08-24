@@ -19,7 +19,7 @@ test-list:
       args:
         data-layout: ["TILE"]
         data-type: ["BFLOAT16", "BFLOAT8_B"]
-        on-device: [True, False]
+        on-device: ["DRAM", "L1", False]
       output-file: bcast_sub_w_sweep.csv
   - bcast-sub-w:
       shape:
@@ -40,5 +40,5 @@ test-list:
       args:
         data-layout: ["ROW_MAJOR"]
         data-type: ["BFLOAT16"]
-        on-device: [True, False]
+        on-device: ["DRAM", "L1", False]
       output-file: bcast_sub_w_sweep.csv

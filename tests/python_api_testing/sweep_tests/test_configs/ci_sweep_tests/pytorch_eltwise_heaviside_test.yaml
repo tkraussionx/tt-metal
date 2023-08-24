@@ -14,12 +14,12 @@ test-list:
           high: 100
       comparison:
         function: comp_pcc
-      args-gen: gen_heaviside_args
+      args-gen: gen_scalar_args
       output-file: eltwise_heaviside_sweep.csv
       args:
         data-layout: ["TILE"]
         data-type: ["BFLOAT16", "BFLOAT8_B"]
-        on-device: [True, False]
+        on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
   - eltwise-heaviside:
       shape:
         start-shape: [1, 1, 2, 2]
@@ -34,9 +34,9 @@ test-list:
           high: 100
       comparison:
         function: comp_pcc
-      args-gen: gen_heaviside_args
+      args-gen: gen_scalar_args
       output-file: eltwise_heaviside_sweep.csv
       args:
         data-layout: ["ROW_MAJOR"]
         data-type: ["BFLOAT16"]
-        on-device: [True, False]
+        on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]

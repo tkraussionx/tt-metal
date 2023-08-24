@@ -18,7 +18,7 @@ test-list:
       args:
         data-layout: ["TILE"]
         data-type: ["BFLOAT16", "BFLOAT8_B"]
-        on-device: [True, False]
+        on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
       output-file: eltwise_deg2rad_sweep.csv
   - eltwise-deg2rad:
       shape:
@@ -38,5 +38,5 @@ test-list:
       args:
         data-layout: ["ROW_MAJOR"]
         data-type: ["BFLOAT16"]
-        on-device: [True, False]
+        on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
       output-file: eltwise_deg2rad_sweep.csv

@@ -783,30 +783,11 @@ def gen_scale_mask_softmax_in_place_args(input_shapes, supported_dtypes, support
     for input_info in gen_scalar_args(input_shapes, supported_dtypes, supported_layouts, on_device, "scale", low, high, dtype):
         yield input_info
 
-def gen_heaviside_args(
-    input_shapes,
-    supported_dtypes,
-    supported_layouts,
-    on_device,
-    low=-100,
-    high=100,
-    dtype=torch.bfloat16,
-):
-    for input_info in gen_scalar_args(
-        input_shapes,
-        supported_dtypes,
-        supported_layouts,
-        on_device,
-        "value",
-        low,
-        high,
-        dtype,
-    ):
-        yield input_info
 
 def gen_lerp_binary_args(input_shapes, supported_dtypes, supported_layouts, on_device, low=-100, high=100, dtype=torch.bfloat16):
     for input_info in gen_scalar_args(input_shapes, supported_dtypes, supported_layouts, on_device, "weight", low, high, dtype):
         yield input_info
+
 
 def gen_subalpha_args(input_shapes, supported_dtypes, supported_layouts, on_device, low=-100, high=100, dtype=torch.bfloat16):
     for input_info in gen_scalar_args(input_shapes, supported_dtypes, supported_layouts, on_device, "alpha", low, high, dtype):

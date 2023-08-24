@@ -866,7 +866,7 @@ def eltwise_heaviside(x, *args, value, device, dtype, layout, on_device, **kwarg
     t0 = t0.to(layout[0])
     t0 = tensor_to_device(t0, on_device[0], device)
 
-    t1 = ttl.tensor.heaviside(t0, value)
+    t1 = ttl.tensor.heaviside(t0, scalar)
 
     output = t1.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
     return output
