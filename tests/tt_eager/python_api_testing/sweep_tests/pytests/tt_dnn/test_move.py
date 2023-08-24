@@ -36,7 +36,6 @@ if is_wormhole_b0():
     "input_shapes",
     shapes
 )
-@pytest.mark.parametrize("device_id", [0])
 @pytest.mark.parametrize(
     "output_mem_config",
     output_mem_configs
@@ -44,7 +43,7 @@ if is_wormhole_b0():
 def test_run_move_op(
     input_shapes,
     output_mem_config,
-    device_id,
+    device,
     function_level_defaults,
 ):
     datagen_func = [
@@ -62,6 +61,6 @@ def test_run_move_op(
         input_shapes,
         datagen_func,
         comparison_func,
-        device_id,
+        device,
         test_args,
     )

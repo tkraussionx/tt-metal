@@ -38,9 +38,8 @@ if is_wormhole_b0():
     "input_shapes",
     shapes
 )
-@pytest.mark.parametrize("device_id", (0,))
 @pytest.mark.parametrize("dtype", (ttl.tensor.DataType.BFLOAT16,))
-def test_run_outer_test(input_shapes, device_id, dtype, function_level_defaults):
+def test_run_outer_test(input_shapes, device, dtype, function_level_defaults):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
             partial(generation_funcs.gen_rand, low=-100, high=100), torch.bfloat16
@@ -52,7 +51,7 @@ def test_run_outer_test(input_shapes, device_id, dtype, function_level_defaults)
         input_shapes,
         datagen_func,
         comparison_func,
-        device_id,
+        device,
         {
             "dtype": [dtype, dtype],
             "layout": [ttl.tensor.Layout.ROW_MAJOR, ttl.tensor.Layout.ROW_MAJOR],

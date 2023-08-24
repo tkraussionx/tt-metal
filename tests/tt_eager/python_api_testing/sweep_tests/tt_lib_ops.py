@@ -11,16 +11,20 @@ from tests.models.helper_funcs import Linear as tt_Linear
 
 from itertools import product
 
-
+# device_id arg will eventually be fully deprecated in favour of pytest uplift
+# and passing device from fixture
 def setup_host_and_device(func):
-    def wrap(*args, device_id, **kwargs):
-        device = ttl.device.CreateDevice(device_id)
-        ttl.device.InitializeDevice(device)
-        ttl.device.SetDefaultDevice(device)
-        try:
+    def wrap(*args, device_id, device=None, **kwargs):
+        if device is None:
+            device = ttl.device.CreateDevice(device_id)
+            ttl.device.InitializeDevice(device)
+            ttl.device.SetDefaultDevice(device)
+            try:
+                output = func(*args, device=device, **kwargs)
+            finally:
+                ttl.device.CloseDevice(device)
+        else:
             output = func(*args, device=device, **kwargs)
-        finally:
-            ttl.device.CloseDevice(device)
 
         return output
 
