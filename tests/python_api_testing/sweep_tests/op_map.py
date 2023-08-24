@@ -619,6 +619,10 @@ op_map = {
         "tt_lib_op": tt_lib_ops.layernorm,
         "pytorch_op": pytorch_ops.layernorm,
     },
+    "add-layernorm": {
+        "tt_lib_op": tt_lib_ops.add_layernorm,
+        "pytorch_op": pytorch_ops.add_layernorm,
+    },
     "pad": {
         "tt_lib_op": tt_lib_ops.pad,
         "pytorch_op": pytorch_ops.pad,
