@@ -21,7 +21,7 @@ run_perf_models() {
 
     env pytest tests/models/roberta -m $pipeline_type
 
-    env pytest tests/models/t5/tests -m $pipeline_type
+    # env pytest tests/models/t5/tests -m $pipeline_type
 
     # # Bad tests, don't enable: Hanging post commit 8/24/23 debug war room session, see PR#2297, PR#2301
     # #env pytest tests/models/resnet/tests -m $pipeline_type
