@@ -734,6 +734,56 @@ def layernorm(x, y, z, *args, device, dtype, layout, on_device, **kwargs):
     return output
 
 
+
+@setup_host_and_device
+def add_layernorm(x, y, z, w, *args, device, dtype, layout, on_device, **kwargs):
+    t0 = ttl.tensor.Tensor(
+        x.reshape(-1).tolist(),
+        x.shape,
+        dtype[0],
+        ttl.tensor.Layout.ROW_MAJOR,
+    )
+
+    t0 = t0.to(layout[0])
+    t0 = tensor_to_device(t0, on_device[0], device)
+
+    t1 = ttl.tensor.Tensor(
+        y.reshape(-1).tolist(),
+        y.shape,
+        dtype[1],
+        ttl.tensor.Layout.ROW_MAJOR,
+    )
+
+    t1 = t1.to(layout[1])
+    t1 = tensor_to_device(t1, on_device[1], device)
+
+    t2 = ttl.tensor.Tensor(
+        z.reshape(-1).tolist(),
+        z.shape,
+        dtype[2],
+        ttl.tensor.Layout.ROW_MAJOR,
+    )
+
+    t2 = t2.to(layout[2])
+    t2 = tensor_to_device(t2, on_device[2], device)
+
+    t3 = ttl.tensor.Tensor(
+        w.reshape(-1).tolist(),
+        w.shape,
+        dtype[3],
+        ttl.tensor.Layout.ROW_MAJOR,
+    )
+
+    t3 = t3.to(layout[3])
+
+    t3 = tensor_to_device(t3, on_device[3], device)
+
+    t4 = ttl.operations.primary.add_layernorm(t0, t1, 1e-5, t2, t3)
+
+    output = t4.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
+
+    return output
+
 @setup_host_and_device
 def eltwise_lerp_ternary(x, y, z, *args, device, dtype, layout, on_device, **kwargs):
     t0 = ttl.tensor.Tensor(
