@@ -190,9 +190,9 @@ def run_pytorch_test(args):
                     shape_dict, datagen_dict
                 ):
                     for generated_test_args in test_args_gen(input_shapes, test_tt_dtypes, test_tt_layouts, test_on_device_options):
-                        generated_test_args.update(
-                            test_args
-                        )  # specified test args overrides generated test args
+                        # generated_test_args.update(
+                        #     test_args
+                        # )  # specified test args overrides generated test args
 
                         # Moved this here so that we don't need to maintain a hardcoded list of headers per op
                         if init_file and write_to_csv:
