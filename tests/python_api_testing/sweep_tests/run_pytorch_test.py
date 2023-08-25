@@ -35,6 +35,12 @@ LAYOUTS_TT_DICT = {
     "TILE": tt_lib.tensor.Layout.TILE,
 }
 
+BUFFER_TYPES_TT_DICT = {
+    "DRAM": tt_lib.tensor.BufferType.DRAM,
+    "L1": tt_lib.tensor.BufferType.L1,
+    "SYSTEM_MEMORY": None,
+}
+
 
 def run_pytorch_test(args):
     # Create output folder
@@ -133,17 +139,17 @@ def run_pytorch_test(args):
             # Set tests parameters --------------------------
             test_tt_dtypes = []
             test_tt_layouts = []
-            test_on_device_options = []
+            test_buffer_types = []
 
             if "inputs" in test_args:
                 for input_spec in test_args["inputs"]:
                     test_tt_dtypes.append([])
                     test_tt_layouts.append([])
-                    test_on_device_options.append([])
+                    test_buffer_types.append([])
 
                     assert 'data-type' in input_spec, f"For each input you need to specify 'data-type'"
                     assert 'data-layout' in input_spec, f"For each input you need to specify 'data-layout'"
-                    assert 'on-device' in input_spec, f"For each input you need to specify 'on-device'"
+                    assert 'buffer-type' in input_spec, f"For each input you need to specify 'buffer-type'"
 
                     for dtype in input_spec['data-type']:
                         test_tt_dtypes[-1].append(DTYPES_TT_DICT[dtype])
@@ -151,54 +157,48 @@ def run_pytorch_test(args):
                     for layout in input_spec['data-layout']:
                         test_tt_layouts[-1].append(LAYOUTS_TT_DICT[layout])
 
-                    for device_type in input_spec['on-device']:
-                        test_on_device_options[-1].append(device_type)
-
-            if "outputs" in test_args:
-                for out_spec in test_args["outputs"]:
-                    test_tt_dtypes.append([])
-                    test_tt_layouts.append([])
-                    test_on_device_options.append([])
-
-                    assert 'data-type' in out_spec, f"For output you need to specify 'data-type'"
-                    assert 'data-layout' in out_spec, f"For output you need to specify 'data-layout'"
-                    assert 'on-device' in out_spec, f"For v you need to specify 'on-device'"
-
-                    for dtype in out_spec['data-type']:
-                        test_tt_dtypes[-1].append(DTYPES_TT_DICT[dtype])
-
-                    for layout in out_spec['data-layout']:
-                        test_tt_layouts[-1].append(LAYOUTS_TT_DICT[layout])
-
-                    for device_type in out_spec['on-device']:
-                        test_on_device_options[-1].append(device_type)
-
-            if not "inputs" in test_args:
+                    for buffer_type in input_spec['buffer-type']:
+                        test_buffer_types[-1].append(BUFFER_TYPES_TT_DICT[buffer_type])
+            else:
                 for i in range(shape_dict["num-shapes"]):
                     test_tt_dtypes.append([])
                     test_tt_layouts.append([])
-                    test_on_device_options.append([])
+                    test_buffer_types.append([])
 
-                    # test layouts
                     if 'data-layout' in test_args:
                         for layout in test_args['data-layout']:
                             test_tt_layouts[-1].append(LAYOUTS_TT_DICT[layout])
                     else:
                         test_tt_layouts[-1] = generation_funcs.supported_tt_layouts
 
-                    # test dtypes
                     if 'data-type' in test_args:
                         for dtype in test_args['data-type']:
                             test_tt_dtypes[-1].append(DTYPES_TT_DICT[dtype])
                     else:
                         test_tt_dtypes[-1] = generation_funcs.supported_tt_dtypes
 
-                    # is on device
-                    if 'on-device' in test_args:
-                        for device_type in test_args['on-device']:
-                            test_on_device_options[-1].append(device_type)
+                    if 'buffer-type' in test_args:
+                        for buffer_type in test_args['buffer-type']:
+                            test_buffer_types[-1].append(BUFFER_TYPES_TT_DICT[buffer_type])
                     else:
-                        test_on_device_options[-1] = generation_funcs.on_device_options
+                        test_buffer_types[-1] = generation_funcs.supported_tt_buffer_types
+
+            if "outputs" in test_args:
+                for out_spec in test_args["outputs"]:
+                    test_buffer_types.append([])
+
+                    assert 'out-buffer-type' in out_spec, f"For output you need to specify 'out-buffer-type'"
+
+                    for buffer_type in out_spec['out-buffer-type']:
+                        test_buffer_types[-1].append(buffer_type)
+            else:
+                test_buffer_types.append([])
+
+                if 'out-buffer-type' in test_args:
+                    for buffer_type in test_args['out-buffer-type']:
+                        test_buffer_types[-1].append(BUFFER_TYPES_TT_DICT[buffer_type])
+                else:
+                    test_buffer_types[-1] = [tt_lib.tensor.BufferType.DRAM]
             # Set tests parameters --------------------------
 
             skip_header = False
@@ -213,7 +213,7 @@ def run_pytorch_test(args):
                 for input_shapes, datagen_funcs in shapes_and_datagen(
                     shape_dict, datagen_dict
                 ):
-                    for generated_test_args in test_args_gen(input_shapes, test_tt_dtypes, test_tt_layouts, test_on_device_options):
+                    for generated_test_args in test_args_gen(input_shapes, test_tt_dtypes, test_tt_layouts, test_buffer_types):
                         # generated_test_args.update(
                         #     test_args
                         # )  # specified test args overrides generated test args

@@ -19,7 +19,8 @@ test-list:
       args:
         data-layout: ["TILE"]
         data-type: ["BFLOAT16", "BFLOAT8_B"]
-        on-device: ["DRAM", "L1", False]
+        buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
+        out-buffer-type: ["DRAM", "L1"]
       output-file: bcast_mul_h_sweep.csv
   - bcast-mul-h:
       shape:
@@ -40,5 +41,6 @@ test-list:
       args:
         data-layout: ["ROW_MAJOR"]
         data-type: ["BFLOAT16"]
-        on-device: ["DRAM", "L1", False]
+        buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
+        out-buffer-type: ["DRAM", "L1"]
       output-file: bcast_mul_h_sweep.csv

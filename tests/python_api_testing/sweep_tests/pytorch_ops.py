@@ -130,11 +130,6 @@ def clip(x, *args, low, high, **kwargs):
 
 
 # Unary Ops and Composite Unary
-def bitwise_complement(x, *args, **kwargs):
-    result = torch.bitwise_not(x)
-    return result
-
-
 def logical_not(x, *args, **kwargs):
     result = torch.logical_not(x).to(torch.int32)
     return result

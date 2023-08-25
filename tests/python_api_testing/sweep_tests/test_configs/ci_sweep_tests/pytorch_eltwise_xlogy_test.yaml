@@ -17,15 +17,10 @@ test-list:
       args-gen: gen_dtype_layout_device
       output-file: eltwise_xlogy_sweep.csv
       args:
-        inputs:
-          - input-1:
-            data-layout: ["TILE"]
-            data-type: ["BFLOAT16", "BFLOAT8_B"]
-            on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
-          - input-2:
-            data-layout: ["TILE"]
-            data-type: ["BFLOAT16", "BFLOAT8_B"]
-            on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
+        data-layout: ["TILE"]
+        data-type: ["BFLOAT16", "BFLOAT8_B"]
+        buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
+        out-buffer-type: ["DRAM", "L1"]
   - eltwise-xlogy:
       shape:
         start-shape: [1, 1, 2, 2]
@@ -43,12 +38,8 @@ test-list:
       args-gen: gen_dtype_layout_device
       output-file: eltwise_xlogy_sweep.csv
       args:
-        inputs:
-          - input-1:
-            data-layout: ["ROW_MAJOR"]
-            data-type: ["BFLOAT16"]
-            on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
-          - input-2:
-            data-layout: ["ROW_MAJOR"]
-            data-type: ["BFLOAT16"]
-            on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
+        data-layout: ["ROW_MAJOR"]
+        data-type: ["BFLOAT16"]
+        on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
+        buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
+        out-buffer-type: ["DRAM", "L1"]

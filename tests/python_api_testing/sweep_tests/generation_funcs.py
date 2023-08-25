@@ -11,11 +11,17 @@ supported_dtypes = {
     "bfloat16": torch.bfloat16,
 }
 
-supported_tt_dtypes = {ttl.tensor.DataType.BFLOAT16}
+supported_tt_dtypes = [ttl.tensor.DataType.BFLOAT16]
 
 supported_tt_layouts = [
     ttl.tensor.Layout.ROW_MAJOR,
     ttl.tensor.Layout.TILE,
+]
+
+supported_tt_buffer_types = [
+    ttl.tensor.BufferType.DRAM,
+    ttl.tensor.BufferType.L1,
+    None,
 ]
 
 supported_mem_configs = [
@@ -23,11 +29,14 @@ supported_mem_configs = [
     ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
 ]
 
-on_device_options = [
-    "DRAM",
-    "L1",
-    "SYSTEM_MEMORY",
-]
+
+def make_mem_config(out_buffer_type):
+    if out_buffer_type == ttl.tensor.BufferType.DRAM:
+        return ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM)
+    elif out_buffer_type ==  ttl.tensor.BufferType.L1:
+        return ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1)
+    else:
+        return None
 
 
 # Wrapper around gen functions to include casting
@@ -197,10 +206,6 @@ def gen_identity(size):
 ###################################################
 
 
-def gen_default_args(input_shapes, supported_dtypes, supported_layouts, on_device):
-    return [{}]
-
-
 def gen_tensor_pad_args(input_shapes, supported_dtypes, supported_layouts, on_device):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
@@ -225,7 +230,8 @@ def gen_tensor_pad_args(input_shapes, supported_dtypes, supported_layouts, on_de
             "pad_value": pad_value,
             "dtype": [ttl.tensor.DataType.BFLOAT16],
             "layout": [ttl.tensor.Layout.ROW_MAJOR],
-            "on_device": [False],
+            "buffer_type": [None],
+            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
         }
     )
 
@@ -247,7 +253,8 @@ def gen_tensor_unpad_args(input_shapes, supported_dtypes, supported_layouts, on_
             "output_tensor_end": output_tensor_end,
             "dtype": [ttl.tensor.DataType.BFLOAT16],
             "layout": [ttl.tensor.Layout.ROW_MAJOR],
-            "on_device": [False],
+            "buffer_type": [None],
+            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
         }
     )
 
@@ -266,7 +273,8 @@ def gen_pad_to_tile_args(input_shapes, supported_dtypes, supported_layouts, on_d
         "pad_value": pad_value,
         "dtype": [ttl.tensor.DataType.BFLOAT16],
         "layout": [ttl.tensor.Layout.ROW_MAJOR],
-        "on_device": [False],
+        "buffer_type": [None],
+        "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
     }
 
     return [test_args]
@@ -288,20 +296,21 @@ def gen_unpad_from_tile_args(input_shapes, supported_dtypes, supported_layouts, 
         "output_tensor_shape": output_tensor_shape,
         "dtype": [ttl.tensor.DataType.BFLOAT16],
         "layout": [ttl.tensor.Layout.ROW_MAJOR],
-        "on_device": [False],
+        "buffer_type": [None],
+        "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
     }
 
     return [test_args]
 
 
-def gen_default_dtype_layout_device(input_shapes, supported_dtypes, supported_layouts, on_device):
+def gen_default_dtype_layout_device(input_shapes, dtypes, layouts, buffer_types):
     dtype = []
     layout = []
-    on_device = []
+    buffer_type = []
 
     for input_shape in input_shapes:
         dtype.append(ttl.tensor.DataType.BFLOAT16)
-        on_device.append(True)
+        buffer_type.append(True)
 
         if input_shape[-2] % 32 == 0 and input_shape[-1] % 32 == 0:
             layout.append(ttl.tensor.Layout.TILE)
@@ -312,104 +321,112 @@ def gen_default_dtype_layout_device(input_shapes, supported_dtypes, supported_la
         {
             "dtype": dtype,
             "layout": layout,
-            "on_device": on_device,
+            "buffer_type": buffer_type,
+            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
         }
     ]
 
 
-def gen_default_dtype_layout_rm_device(input_shapes, supported_dtypes, supported_layouts, on_device):
+def gen_default_dtype_layout_rm_device(input_shapes, dtypes, layouts, buffer_types):
     return [
         {
             "dtype": [ttl.tensor.DataType.BFLOAT16] * len(input_shapes),
             "layout": [ttl.tensor.Layout.ROW_MAJOR] * len(input_shapes),
-            "on_device": [True] * len(input_shapes),
+            "buffer_type": [True] * len(input_shapes),
+            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
         }
     ]
 
 
-def sanitize_args(input_shapes, dtype_device_layout):
+def sanitize_args(input_shapes, dtype_buffer_layout):
     for i in range(len(input_shapes)):
         shape = input_shapes[i]
 
         if (
             (
-                dtype_device_layout[i]["layout"] == ttl.tensor.Layout.TILE
+                dtype_buffer_layout[i]["layout"] == ttl.tensor.Layout.TILE
                 and (shape[2] % 32 != 0 or shape[3] % 32 != 0)
             )  # Shape cannot be tilized
             or (
-                dtype_device_layout[i]["layout"] == ttl.tensor.Layout.ROW_MAJOR
-                and dtype_device_layout[i]["on_device"]
+                dtype_buffer_layout[i]["layout"] == ttl.tensor.Layout.ROW_MAJOR
+                and dtype_buffer_layout[i]["buffer_type"] != None
                 and shape[3] % 2 != 0
             )  # Shape cannot be placed as row major on device
             or (
-                dtype_device_layout[i]["dtype"] == ttl.tensor.DataType.BFLOAT8_B
-                and dtype_device_layout[i]["layout"] != ttl.tensor.Layout.TILE
+                dtype_buffer_layout[i]["dtype"] == ttl.tensor.DataType.BFLOAT8_B
+                and dtype_buffer_layout[i]["layout"] != ttl.tensor.Layout.TILE
             )  # BFLOAT8_B must be tile layout
         ):
             return None
-    return dtype_device_layout
+    return dtype_buffer_layout
 
 
 def gen_dtype_layout_device(
     input_shapes,
-    supported_dtypes=supported_tt_dtypes,
-    supported_layouts=supported_tt_layouts,
-    on_device=on_device_options,
+    dtypes=[supported_tt_dtypes],
+    layouts=[supported_tt_layouts],
+    buffer_types=[supported_tt_buffer_types],
 ):
-    dtype_device_layouts = []
+    # last buffer_types option is for output buffer
+    dtype_buffer_layouts = []
 
     for i in range(len(input_shapes)):
-        dtype_device_layout = []
+        dtype_buffer_layout = []
 
-        for dtype, layout, on_dev in product(
-            supported_dtypes[i],
-            supported_layouts[i],
-            on_device[i],
+        for dtype, layout, buffer_type in product(
+            dtypes[i],
+            layouts[i],
+            buffer_types[i],
         ):
-            dtype_device_layout.append({"dtype": dtype, "layout": layout, "on_device": on_dev})
+            dtype_buffer_layout.append({"dtype": dtype, "layout": layout, "buffer_type": buffer_type})
 
-        dtype_device_layouts.append(dtype_device_layout)
+        dtype_buffer_layouts.append(dtype_buffer_layout)
 
-    for dtype_device_layout_combination in product(*dtype_device_layouts):
-        out = sanitize_args(input_shapes, dtype_device_layout_combination)
+    for out_buffer_type in buffer_types[-1]:
+        for dtype_buffer_layout_combination in product(*dtype_buffer_layouts):
+            out = sanitize_args(input_shapes, dtype_buffer_layout_combination)
 
-        if out is not None:
-            dtype = []
-            layout = []
-            on_dev = []
+            if out is not None:
+                dtype = []
+                layout = []
+                buff_type = []
 
-            for x in dtype_device_layout_combination:
-                dtype.append(x["dtype"])
-                layout.append(x["layout"])
-                on_dev.append(x["on_device"])
+                for x in dtype_buffer_layout_combination:
+                    dtype.append(x["dtype"])
+                    layout.append(x["layout"])
+                    buff_type.append(x["buffer_type"])
 
-            res = {"dtype": dtype, "layout": layout, "on_device": on_dev}
-            yield res
+                yield {
+                    "dtype": dtype,
+                    "layout": layout,
+                    "buffer_type": buff_type,
+                    "output_mem_config": make_mem_config(out_buffer_type),
+                }
 
 
 def gen_permute_args(
     input_shapes,
-    supported_dtypes=supported_tt_dtypes,
-    supported_layouts=supported_tt_layouts,
-    on_device=on_device_options,
+    dtypes=[supported_tt_dtypes],
+    layouts=[supported_tt_layouts],
+    buffer_types=[supported_tt_buffer_types],
 ):
     for permute_dims in permutations([0, 1, 2, 3]):
         for input_info in gen_dtype_layout_device(
             input_shapes,
-            supported_dtypes,
-            supported_layouts,
-            on_device,
+            dtypes,
+            layouts,
+            buffer_types,
         ):
             if input_info is not None:
                 input_info.update({"permute_dims": permute_dims})
                 yield input_info
 
 
-def gen_fill_rm_args(input_shapes, supported_dtypes, supported_layouts, on_device):
+def gen_fill_rm_args(input_shapes, dtypes, layouts, buffer_types):
     H = input_shapes[0][-2]
     W = input_shapes[0][-1]
 
-    for input_info in gen_dtype_layout_device(input_shapes, supported_dtypes, supported_layouts, on_device):
+    for input_info in gen_dtype_layout_device(input_shapes, dtypes, layouts, buffer_types):
         if input_info is not None:
             input_info["hOnes"] = random.randint(1, H)
             input_info["wOnes"] = random.randint(1, W)
@@ -420,11 +437,11 @@ def gen_fill_rm_args(input_shapes, supported_dtypes, supported_layouts, on_devic
             yield input_info
 
 
-def gen_fill_ones_rm_args(input_shapes, supported_dtypes, supported_layouts, on_device):
+def gen_fill_ones_rm_args(input_shapes, dtypes, layouts, buffer_types):
     H = input_shapes[0][-2]
     W = input_shapes[0][-1]
 
-    for input_info in gen_dtype_layout_device(input_shapes, supported_dtypes, supported_layouts, on_device):
+    for input_info in gen_dtype_layout_device(input_shapes, dtypes, layouts, buffer_types):
         if input_info is not None:
             input_info["hOnes"] = random.randint(1, H)
             input_info["wOnes"] = random.randint(1, W)
@@ -455,9 +472,9 @@ def _gen_reshape_args_from_volume(volume, step):
 
 def gen_reshape_args(
     input_shapes,
-    supported_dtypes=supported_tt_dtypes,
-    supported_layouts=[ttl.tensor.Layout.TILE],
-    on_device=on_device_options,
+    dtypes=[supported_tt_dtypes],
+    layouts=[[ttl.tensor.Layout.TILE]],
+    buffer_types=[supported_tt_buffer_types],
 ):
     vol = (
         input_shapes[0][0]
@@ -472,9 +489,9 @@ def gen_reshape_args(
     for reshape_dims in out_shapes:
         for input_info in gen_dtype_layout_device(
             input_shapes,
-            supported_dtypes,
-            supported_layouts,
-            on_device,
+            dtypes,
+            layouts,
+            buffer_types,
         ):
             if input_info is not None:
                 input_info.update(reshape_dims)
@@ -483,15 +500,15 @@ def gen_reshape_args(
 
 def gen_tilize_with_val_padding_args(
     input_shapes,
-    supported_dtypes=supported_tt_dtypes,
-    supported_layouts=[ttl.tensor.Layout.ROW_MAJOR],
-    on_device=on_device_options,
+    dtypes=[supported_tt_dtypes],
+    layouts=[[ttl.tensor.Layout.ROW_MAJOR]],
+    buffer_types=[supported_tt_buffer_types],
 ):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
 
     for input_info in gen_dtype_layout_device(
-        input_shapes, supported_dtypes, supported_layouts, on_device
+        input_shapes, dtypes, layouts, buffer_types
     ):
         if input_info is not None:
             pad_sizes = (10, 10, 64, 64)
@@ -524,9 +541,9 @@ def gen_tilize_with_val_padding_args(
 
 def gen_untilize_with_unpadding_args(
     input_shapes,
-    supported_dtypes=supported_tt_dtypes,
-    supported_layouts=supported_tt_layouts,
-    on_device=on_device_options,
+    dtypes=[supported_tt_dtypes],
+    layouts=[supported_tt_layouts],
+    buffer_types=[supported_tt_buffer_types],
 ):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
@@ -534,7 +551,7 @@ def gen_untilize_with_unpadding_args(
     assert input_shapes[0][-1] % 32 == 0
 
     for input_info in gen_dtype_layout_device(
-        input_shapes, supported_dtypes, supported_layouts, on_device
+        input_shapes, dtypes, layouts, buffer_types
     ):
         if input_info is not None:
             output_tensor_start = [0, 0, 0, 0]
@@ -555,18 +572,18 @@ def gen_untilize_with_unpadding_args(
 
 def gen_pad_args(
     input_shapes,
-    supported_dtypes=supported_tt_dtypes,
-    supported_layouts=supported_tt_layouts,
-    on_device=on_device_options,
+    dtypes=[supported_tt_dtypes],
+    layouts=[supported_tt_layouts],
+    buffer_types=[supported_tt_buffer_types],
 ):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
 
     for input_info in gen_dtype_layout_device(
         input_shapes,
-        supported_dtypes,
-        supported_layouts,
-        on_device,
+        dtypes,
+        layouts,
+        buffer_types
     ):
         if input_info is not None:
             if input_info["layout"][0] == ttl.tensor.Layout.ROW_MAJOR:
@@ -624,15 +641,15 @@ def gen_pad_args(
 
 def gen_unpad_args(
     input_shapes,
-    supported_dtypes=supported_tt_dtypes,
-    supported_layouts=supported_tt_layouts,
-    on_device=on_device_options,
+    dtypes=[supported_tt_dtypes],
+    layouts=[supported_tt_layouts],
+    buffer_types=[supported_tt_buffer_types],
 ):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
 
     for input_info in gen_dtype_layout_device(
-        input_shapes, supported_dtypes, supported_layouts, on_device
+        input_shapes, dtypes, layouts, buffer_types
     ):
         if input_info is not None:
             if input_info["layout"][0] == ttl.tensor.Layout.ROW_MAJOR:
@@ -668,16 +685,16 @@ def gen_unpad_args(
 
 def gen_scalar_args(
     input_shapes,
-    supported_dtypes,
-    supported_layouts,
-    on_device,
+    dtypes,
+    layouts,
+    buffer_types,
     arg_name="scalar",
     low=-100,
     high=100,
     dtype=torch.bfloat16,
 ):
     for input_info in gen_dtype_layout_device(
-        input_shapes, supported_dtypes, supported_layouts, on_device
+        input_shapes, dtypes, layouts, buffer_types
     ):
         if input_info is not None:
             if dtype.is_floating_point:
@@ -690,9 +707,9 @@ def gen_scalar_args(
 
 def gen_scalar_symmetric_args(
     input_shapes,
-    supported_dtypes,
-    supported_layouts,
-    on_device,
+    dtypes,
+    layouts,
+    buffer_types,
     arg_name="scalar",
     low=0.01,
     high=100,
@@ -700,9 +717,9 @@ def gen_scalar_symmetric_args(
 ):
     for input_info in gen_scalar_args(
         input_shapes,
-        supported_dtypes,
-        supported_layouts,
-        on_device,
+        dtypes,
+        layouts,
+        buffer_types,
         arg_name,
         low,
         high,
@@ -716,18 +733,18 @@ def gen_scalar_symmetric_args(
 
 def gen_power_args(
     input_shapes,
-    supported_dtypes,
-    supported_layouts,
-    on_device,
+    dtypes,
+    layouts,
+    buffer_types,
     low=0,
     high=10,
     dtype=torch.int,
 ):
     for input_info in gen_scalar_args(
         input_shapes,
-        supported_dtypes,
-        supported_layouts,
-        on_device,
+        dtypes,
+        layouts,
+        buffer_types,
         "exponent",
         low,
         high,
@@ -738,18 +755,18 @@ def gen_power_args(
 
 def gen_relu_min_args(
     input_shapes,
-    supported_dtypes,
-    supported_layouts,
-    on_device,
+    dtypes,
+    layouts,
+    buffer_types,
     low=0,
     high=100,
     dtype=torch.bfloat16,
 ):
     for input_info in gen_scalar_args(
         input_shapes,
-        supported_dtypes,
-        supported_layouts,
-        on_device,
+        dtypes,
+        layouts,
+        buffer_types,
         "lower_limit",
         low,
         high,
@@ -760,18 +777,18 @@ def gen_relu_min_args(
 
 def gen_relu_max_args(
     input_shapes,
-    supported_dtypes,
-    supported_layouts,
-    on_device,
+    dtypes,
+    layouts,
+    buffer_types,
     low=0,
     high=100,
     dtype=torch.bfloat16,
 ):
     for input_info in gen_scalar_args(
         input_shapes,
-        supported_dtypes,
-        supported_layouts,
-        on_device,
+        dtypes,
+        layouts,
+        buffer_types,
         "upper_limit",
         low,
         high,
@@ -780,13 +797,47 @@ def gen_relu_max_args(
         yield input_info
 
 
-def gen_scale_mask_softmax_in_place_args(input_shapes, supported_dtypes, supported_layouts, on_device,low=1, high=100, dtype=torch.bfloat16):
-    for input_info in gen_scalar_args(input_shapes, supported_dtypes, supported_layouts, on_device, "scale", low, high, dtype):
+def gen_scale_mask_softmax_in_place_args(
+    input_shapes,
+    dtypes,
+    layouts,
+    buffer_types,
+    low=1,
+    high=100,
+    dtype=torch.bfloat16
+):
+    for input_info in gen_scalar_args(
+        input_shapes,
+        dtypes,
+        layouts,
+        buffer_types,
+        "scale",
+        low,
+        high,
+        dtype
+    ):
         yield input_info
 
 
-def gen_lerp_binary_args(input_shapes, supported_dtypes, supported_layouts, on_device, low=-100, high=100, dtype=torch.bfloat16):
-    for input_info in gen_scalar_args(input_shapes, supported_dtypes, supported_layouts, on_device, "weight", low, high, dtype):
+def gen_lerp_binary_args(
+    input_shapes,
+    dtypes,
+    layouts,
+    buffer_types,
+    low=-100,
+    high=100,
+    dtype=torch.bfloat16
+):
+    for input_info in gen_scalar_args(
+        input_shapes,
+        dtypes,
+        layouts,
+        buffer_types,
+        "weight",
+        low,
+        high,
+        dtype
+    ):
         yield input_info
 
 
@@ -802,18 +853,18 @@ def gen_bias_gelu_args(input_shapes, supported_dtypes, supported_layouts, on_dev
 
 def gen_shrink_args(
     input_shapes,
-    supported_dtypes,
-    supported_layouts,
-    on_device,
+    dtypes,
+    layouts,
+    buffer_types,
     low=0,
     high=100,
     dtype=torch.bfloat16,
 ):
     for input_info in gen_scalar_args(
         input_shapes,
-        supported_dtypes,
-        supported_layouts,
-        on_device,
+        dtypes,
+        layouts,
+        buffer_types,
         "_lambda",
         low,
         high,
@@ -824,18 +875,18 @@ def gen_shrink_args(
 
 def gen_leaky_relu_args(
     input_shapes,
-    supported_dtypes,
-    supported_layouts,
-    on_device,
+    dtypes,
+    layouts,
+    buffer_types,
     low=0,
     high=100,
     dtype=torch.bfloat16,
 ):
     for input_info in gen_scalar_args(
         input_shapes,
-        supported_dtypes,
-        supported_layouts,
-        on_device,
+        dtypes,
+        layouts,
+        buffer_types,
         "negative_slope",
         low,
         high,
@@ -846,18 +897,18 @@ def gen_leaky_relu_args(
 
 def gen_elu_args(
     input_shapes,
-    supported_dtypes,
-    supported_layouts,
-    on_device,
+    dtypes,
+    layouts,
+    buffer_types,
     low=-10,
     high=10,
     dtype=torch.bfloat16,
 ):
     for input_info in gen_scalar_args(
         input_shapes,
-        supported_dtypes,
-        supported_layouts,
-        on_device,
+        dtypes,
+        layouts,
+        buffer_types,
         "alpha",
         low,
         high,
@@ -866,8 +917,18 @@ def gen_elu_args(
         yield input_info
 
 
-def gen_gelu_args(input_shapes, supported_dtypes, supported_layouts, on_device):
-    for input_info in gen_dtype_layout_device(input_shapes, supported_dtypes, supported_layouts, on_device):
+def gen_gelu_args(
+    input_shapes,
+    dtypes,
+    layouts,
+    buffer_types
+):
+    for input_info in gen_dtype_layout_device(
+        input_shapes,
+        dtypes,
+        layouts,
+        buffer_types,
+    ):
         if input_info is not None:
             input_info.update({"fast_and_appx": True})
             yield input_info
@@ -876,8 +937,18 @@ def gen_gelu_args(input_shapes, supported_dtypes, supported_layouts, on_device):
             yield input_info
 
 
-def gen_fast_and_appx_args(input_shapes, supported_dtypes, supported_layouts, on_device):
-    for input_info in gen_dtype_layout_device(input_shapes, supported_dtypes, supported_layouts, on_device):
+def gen_fast_and_appx_args(
+    input_shapes,
+    dtypes,
+    layouts,
+    buffer_types
+):
+    for input_info in gen_dtype_layout_device(
+        input_shapes,
+        dtypes,
+        layouts,
+        buffer_types,
+    ):
         if input_info is not None:
             input_info.update({"fast_and_appx": True})
             yield input_info
@@ -888,9 +959,9 @@ def gen_fast_and_appx_args(input_shapes, supported_dtypes, supported_layouts, on
 
 def gen_two_scalar_args(
     input_shapes,
-    supported_dtypes,
-    supported_layouts,
-    on_device,
+    dtypes,
+        layouts,
+        buffer_types,
     arg0_name="scalar0",
     arg1_name="scalar1",
     low=-100,
@@ -898,7 +969,10 @@ def gen_two_scalar_args(
     dtype=torch.bfloat16,
 ):
     for input_info in gen_dtype_layout_device(
-        input_shapes, supported_dtypes, supported_layouts, on_device
+        input_shapes,
+        dtypes,
+        layouts,
+        buffer_types,
     ):
         if input_info is not None:
             if dtype.is_floating_point:
@@ -913,18 +987,18 @@ def gen_two_scalar_args(
 
 def gen_clip_args(
     input_shapes,
-    supported_dtypes,
-    supported_layouts,
-    on_device,
+    dtypes,
+    layouts,
+    buffer_types,
     low=-100,
     high=100,
     dtype=torch.bfloat16,
 ):
     for input_info in gen_two_scalar_args(
         input_shapes,
-        supported_dtypes,
-        supported_layouts,
-        on_device,
+        dtypes,
+        layouts,
+        buffer_types,
         "low",
         "high",
         low,
@@ -941,18 +1015,18 @@ def gen_clip_args(
 
 def gen_threshold_args(
     input_shapes,
-    supported_dtypes,
-    supported_layouts,
-    on_device,
+    dtypes,
+    layouts,
+    buffer_types,
     low=-100,
     high=100,
     dtype=torch.bfloat16,
 ):
     for input_info in gen_two_scalar_args(
         input_shapes,
-        supported_dtypes,
-        supported_layouts,
-        on_device,
+        dtypes,
+        layouts,
+        buffer_types,
         "threshold",
         "value",
         low,
@@ -962,9 +1036,25 @@ def gen_threshold_args(
         yield input_info
 
 
-def gen_hardtanh_args(input_shapes, supported_dtypes, supported_layouts, on_device, low=-10, high=10, dtype=torch.bfloat16):
+def gen_hardtanh_args(
+    input_shapes,
+    dtypes,
+    layouts,
+    buffer_types,
+    low=-10,
+    high=10,
+    dtype=torch.bfloat16
+):
     for input_info in gen_two_scalar_args(
-        input_shapes, supported_dtypes, supported_layouts, on_device, "low", "high", low, high, dtype
+        input_shapes,
+        dtypes,
+        layouts,
+        buffer_types,
+        "low",
+        "high",
+        low,
+        high,
+        dtype
     ):
         if input_info["low"] > input_info["high"]:
             input_info["low"], input_info["high"] = (
@@ -977,15 +1067,19 @@ def gen_hardtanh_args(input_shapes, supported_dtypes, supported_layouts, on_devi
 
 def gen_polyval_args(
     input_shapes,
-    supported_dtypes,
-    supported_layouts,
-    on_device,
+    dtypes,
+    layouts,
+    buffer_types,
     max_num_coeffs=10,
     low=-100,
     high=100,
-    dtype=torch.bfloat16,
 ):
-    for input_info in gen_dtype_layout_device(input_shapes, supported_dtypes, supported_layouts, on_device):
+    for input_info in gen_dtype_layout_device(
+        input_shapes,
+        dtypes,
+        layouts,
+        buffer_types,
+    ):
         if input_info is not None:
             num_coeffs = (
                 torch.tensor(1, dtype=torch.int).random_(1, max_num_coeffs + 1).item()
@@ -996,13 +1090,18 @@ def gen_polyval_args(
 
 
 def gen_arange_args(
-    input_shapes, supported_dtypes, supported_layouts, on_device, low=-100, high=100
+    input_shapes,
+    dtypes,
+    layouts,
+    buffer_types,
+    low=-100,
+    high=100
 ):
     for input_info in gen_two_scalar_args(
         input_shapes,
-        supported_dtypes,
-        supported_layouts,
-        on_device,
+        dtypes,
+        layouts,
+        buffer_types,
         "start",
         "end",
         low,
