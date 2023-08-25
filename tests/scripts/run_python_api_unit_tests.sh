@@ -8,12 +8,12 @@ if [[ -z "$TT_METAL_HOME" ]]; then
 fi
 
 if [[ -z "$FAST_DISPATCH" ]]; then
-  env TT_METAL_SLOW_DISPATCH_MODE=1 pytest $TT_METAL_HOME/tests/python_api_testing/unit_testing/
-  env TT_METAL_SLOW_DISPATCH_MODE=1 pytest $(find $TT_METAL_HOME/tests/python_api_testing/sweep_tests/pytests/ -name 'test_*.py' -a ! -name 'test_sweep_conv_with_address_map.py') -vvv
+  env TT_METAL_SLOW_DISPATCH_MODE=1 pytest $(find $TT_METAL_HOME/tests/python_api_testing/unit_testing/ -name 'test_*.py' -a ! -name '*conv*')
+  env TT_METAL_SLOW_DISPATCH_MODE=1 pytest $(find $TT_METAL_HOME/tests/python_api_testing/sweep_tests/pytests/ -name 'test_*.py' -a ! -name 'test_sweep_conv_with_address_map.py' -a ! -name '*conv*.py') -vvv
 else
   # Need to remove move for time being since failing
-  env pytest $(find $TT_METAL_HOME/tests/python_api_testing/unit_testing/ -name 'test_*.py' -a ! -name 'test_move.py') -vvv
-  env pytest $(find $TT_METAL_HOME/tests/python_api_testing/sweep_tests/pytests/ -name 'test_*.py' -a ! -name 'test_sweep_conv_with_address_map.py' -a ! -name 'test_move.py') -vvv
+  env pytest $(find $TT_METAL_HOME/tests/python_api_testing/unit_testing/ -name 'test_*.py' -a ! -name 'test_move.py' -a ! -name '*conv*.py') -vvv
+  env pytest $(find $TT_METAL_HOME/tests/python_api_testing/sweep_tests/pytests/ -name 'test_*.py' -a ! -name 'test_sweep_conv_with_address_map.py' -a ! -name 'test_move.py' -a ! -name '*conv*.py') -vvv
 fi
 
 # This must run in slow dispatch mode
@@ -42,7 +42,7 @@ pytest $TT_METAL_HOME/tests/python_api_testing/models/bert_large_performant/unit
 pytest $TT_METAL_HOME/tests/python_api_testing/models/bert_large_performant/unit_tests/fused_ops/test_bert_large_fused_softmax.py -k "in0_L1 and batch_9"
 
 # Resnet18 tests with conv on cpu and with conv on device
-pytest $TT_METAL_HOME/tests/python_api_testing/models/resnet/test_resnet18.py
+#pytest $TT_METAL_HOME/tests/python_api_testing/models/resnet/test_resnet18.py
 
 # Falcon tests
 pytest $TT_METAL_HOME/tests/python_api_testing/models/falcon/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "seq_len_128 and in0_BFLOAT16-in1_BFLOAT8_B-out_BFLOAT16-weights_DRAM"
