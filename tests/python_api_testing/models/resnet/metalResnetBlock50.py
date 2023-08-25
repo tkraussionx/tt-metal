@@ -242,7 +242,7 @@ class Bottleneck(nn.Module):
             matmul_config = hardcoded_matmul_config_conv[(conv1_as_mm_padded_act_height, inplanes, width)]
         if is_conv_supported_on_device(self.conv1_params):
             # 1x1 conv with stride 1 padding 0 is run using regular matmul
-            self.conv1 = TtResnetConv(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device, [1, 1], [1, 1], [1, 1], conv1_bias.tolist() if conv1_bias is not None else None, matmul_config=matmul_config)
+            self.conv1 = TtResnetConv(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device, [1, 1], [1, 1], [1, 1], conv1_bias.tolist() if conv1_bias is not None else None, matmul_config=matmul_config, fuse_relu=True)
         else:
             self.conv1 = fallback_ops.Conv2d(conv1_weight, conv1_bias, inplanes, width, kernel_size=1, stride=1, padding=0)
 
@@ -296,7 +296,8 @@ class Bottleneck(nn.Module):
         # conv1 is 1x1 conv
         #print("Running conv1")
         out = self.conv1(x)
-        out = self.relu(out, self.memory_config)
+        # Relu after conv1 is fused with the 1x1 conv (matmul)
+        #out = self.relu(out, self.memory_config)
         out = format_tensor(out, tt_lib.tensor.Layout.ROW_MAJOR, self.device, self.memory_config)
         out = out.reshape(x_actual_shape[0], x_actual_shape[1], x_actual_shape[2], out.shape()[3])
         saved_shape = out.shape()

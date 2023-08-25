@@ -71,7 +71,7 @@ def conv(weight: List[Union[int, float]], conv_params, device, bias=None):
     return conv_
 
 
-def resnet_conv(weight: List[Union[int, float]], conv_params, device, act_block_shape_hw, weight_block_shape_hw, outsubblock_shape_hw, bias=None, padded_filter_window_width=0, pre_pad_conv=False, matmul_config=None):
+def resnet_conv(weight: List[Union[int, float]], conv_params, device, act_block_shape_hw, weight_block_shape_hw, outsubblock_shape_hw, bias=None, padded_filter_window_width=0, pre_pad_conv=False, matmul_config=None, fuse_relu=False):
     """
     Returns a function that performs a Convolution.
     For bias, it calls bcast op without autoformatting
@@ -151,7 +151,7 @@ def resnet_conv(weight: List[Union[int, float]], conv_params, device, act_block_
                                     out_subblock_w=matmul_config["out_subblock_w"],
                                     per_core_M=matmul_config["per_core_M"],
                                     per_core_N=matmul_config["per_core_N"],
-                                    fused_activation=None)
+                                    fused_activation=tensor.FusibleActivationWithParam(tensor.FusibleActivation.RELU) if fuse_relu else None)
 
     def conv_(activation):
         # if conv1x1 stride 1 padding 0, use matmul op
