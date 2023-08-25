@@ -20,22 +20,34 @@ bool RunCustomCycle(tt_metal::Device *device, int loop_count, string run_name = 
         {"LOOP_SIZE", std::to_string(loop_size)}
     };
 
-    tt_metal::KernelID brisc_kernel = tt_metal::CreateDataMovementKernel(
-        program, "tt_metal/programming_examples/profiler/device/grayskull/test_full_buffer/kernels/full_buffer.cpp",
-        all_cores,
-        tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = tt_metal::NOC::RISCV_0_default, .defines = kernel_defines});
+    //for (auto data:kernel_defines)
+    //{
+        //std::cout << data.first << ":" << data.second << std::endl;
+    //}
 
-    tt_metal::KernelID ncrisc_kernel = tt_metal::CreateDataMovementKernel(
-        program, "tt_metal/programming_examples/profiler/device/grayskull/test_full_buffer/kernels/full_buffer.cpp",
-        all_cores,
-        tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = tt_metal::NOC::RISCV_1_default, .defines = kernel_defines});
+    for (uint32_t x = all_cores.start.x; x < 1; x++)
+    {
+        for (uint32_t y = all_cores.start.y; y < 1; y++)
+        {
+            CoreCoord curr_core = {x, y};
+            tt_metal::KernelID brisc_kernel = tt_metal::CreateDataMovementKernel(
+                program, "tt_metal/programming_examples/profiler/device/grayskull/test_full_buffer/kernels/full_buffer.cpp",
+                curr_core,
+                tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = tt_metal::NOC::RISCV_0_default, .defines = kernel_defines});
 
-    vector<uint32_t> trisc_kernel_args = {};
-    tt_metal::KernelID trisc_kernel = tt_metal::CreateComputeKernel(
-        program, "tt_metal/programming_examples/profiler/device/grayskull/test_full_buffer/kernels/full_buffer_compute.cpp",
-        all_cores,
-        tt_metal::ComputeConfig{.compile_args = trisc_kernel_args, .defines = kernel_defines}
-    );
+            tt_metal::KernelID ncrisc_kernel = tt_metal::CreateDataMovementKernel(
+                program, "tt_metal/programming_examples/profiler/device/grayskull/test_full_buffer/kernels/full_buffer.cpp",
+                curr_core,
+                tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = tt_metal::NOC::RISCV_1_default, .defines = kernel_defines});
+
+            vector<uint32_t> trisc_kernel_args = {};
+            tt_metal::KernelID trisc_kernel = tt_metal::CreateComputeKernel(
+                program, "tt_metal/programming_examples/profiler/device/grayskull/test_full_buffer/kernels/full_buffer_compute.cpp",
+                curr_core,
+                tt_metal::ComputeConfig{.compile_args = trisc_kernel_args, .defines = kernel_defines}
+            );
+        }
+    }
 
     pass &= tt_metal::CompileProgram(device, program);
     pass &= tt_metal::ConfigureDeviceWithProgram(device, program);

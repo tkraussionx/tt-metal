@@ -299,9 +299,9 @@ int main() {
     // Run the BRISC kernel
     kernel_init();
 
-#if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & KERNEL_FUNCT_MARKER)
-    kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
-#endif
+//#if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & KERNEL_FUNCT_MARKER)
+    //kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
+//#endif
     if (*use_triscs) {
         while (
             !(*trisc_run_mailbox_addresses[0] == 1 &&
@@ -320,9 +320,9 @@ int main() {
 
     *brisc_run_mailbox_address = 0x1;
 
-#if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
-    kernel_profiler::mark_time(CC_MAIN_END);
-#endif
+//#if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
+    //kernel_profiler::mark_time(CC_MAIN_END);
+//#endif
 
     // Notify dispatcher core that it has completed
     if (dispatch_addr != 0) {

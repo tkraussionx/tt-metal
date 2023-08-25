@@ -104,4 +104,5 @@ namespace kernel_profiler{
         *one_time = false;
 #endif //PROFILE_KERNEL
     }
+
 }

@@ -48,4 +48,10 @@ void kernel_launch() {
     noc_init(loading_noc);
 
     kernel_main();
+#if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & KERNEL_FUNCT_MARKER)
+  kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
+#endif
+#if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
+  kernel_profiler::mark_time(CC_MAIN_END);
+#endif
 }

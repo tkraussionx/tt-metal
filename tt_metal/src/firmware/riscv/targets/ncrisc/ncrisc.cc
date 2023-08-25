@@ -72,15 +72,9 @@ int main(int argc, char *argv[]) {
   kernel_profiler::mark_time(CC_KERNEL_MAIN_START);
 #endif
   kernel_init();
-#if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & KERNEL_FUNCT_MARKER)
-  kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
-#endif
 
   *run_mailbox_address = 0x1;
 
-#if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
-  kernel_profiler::mark_time(CC_MAIN_END);
-#endif
   while (true);
   return 0;
 }

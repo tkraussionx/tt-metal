@@ -61,6 +61,18 @@ inline void notify_host_kernel_finished() {
     noc_async_write_barrier();
 }
 
+inline __attribute__((always_inline)) void finish_BR_profiler()
+{
+#if defined(PROFILE_KERNEL) && defined(COMPILE_FOR_BRISC)
+
+    // DRAM NOC dst address
+    std::uint64_t dram_buffer_dst_noc_addr = get_noc_addr(1, 0, 0);
+
+    noc_async_write(PRINT_BUFFER_NC, dram_buffer_dst_noc_addr, 1024);
+    noc_async_write_barrier();
+#endif //PROFILE_KERNEL
+}
+
 void kernel_launch() {
 
     firmware_kernel_common_init((void *)MEM_BRISC_INIT_LOCAL_L1_BASE);
@@ -78,6 +90,10 @@ void kernel_launch() {
 
     kernel_main();
 
+#if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & KERNEL_FUNCT_MARKER)
+    kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
+#endif
+
     // FW needs to notify device dispatcher when we are done
     // Some information needed is known here, pass it back
     kernel_noc_id_var = loading_noc;
@@ -87,5 +103,10 @@ void kernel_launch() {
         get_noc_addr(1, 11, DISPATCH_MESSAGE_ADDR);
 #else
     dispatch_addr = 0;
+#endif
+
+#if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
+    kernel_profiler::mark_time(CC_MAIN_END);
+    finish_BR_profiler();
 #endif
 }
