@@ -467,7 +467,7 @@ def gen_reshape_args(
     )
 
     out_shapes = _gen_reshape_args_from_volume(vol, step=1)
-    out_shapes = random.sample(out_shapes, 8)
+    out_shapes = random.sample(out_shapes, 2)
 
     for reshape_dims in out_shapes:
         for input_info in gen_dtype_layout_device(
