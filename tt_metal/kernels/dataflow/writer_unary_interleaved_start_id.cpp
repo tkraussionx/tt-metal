@@ -1,4 +1,5 @@
 #include "dataflow_api.h"
+#include "debug_print.h"
 
 void kernel_main() {
 
@@ -19,6 +20,7 @@ void kernel_main() {
         .page_size = tile_bytes,
         .data_format = data_format
     };
+    DPRINT << "writer dprint " << cb_id_out << ENDL();
 
     uint32_t end_id = start_id + num_tiles;
     for (uint32_t i = start_id; i<end_id; i ++) {

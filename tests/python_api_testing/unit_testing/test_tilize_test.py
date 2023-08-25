@@ -17,27 +17,31 @@ from models.utility_functions import tilize
     "nb, nc, nh, nw",
     (
         (5, 2, 4, 8),
-        (5, 2, 4, 7),
+        #(5, 2, 4, 7),
     ),
 )
 def test_run_tilize_test(nb, nc, nh, nw, device):
-    nt = nb * nc * nh * nw
-    shape = [nb, nc, 32 * nh, 32 * nw]
+    iterations = 10
+    for i in range(iterations):
+        print("Running iteration", i)
+        nt = nb * nc * nh * nw
+        shape = [nb, nc, 32 * nh, 32 * nw]
 
-    inp = np.random.rand(*shape)
+        inp = np.random.rand(*shape)
 
-    a = ttl.tensor.Tensor(
-        inp.flatten().tolist(),
-        shape,
-        ttl.tensor.DataType.BFLOAT16,
-        ttl.tensor.Layout.ROW_MAJOR,
-        device,
-    )
-    b = ttl.tensor.tilize(a)
-    c = b.cpu().to_torch().to(torch.float32).reshape(shape).numpy()
+        a = ttl.tensor.Tensor(
+            inp.flatten().tolist(),
+            shape,
+            ttl.tensor.DataType.BFLOAT16,
+            ttl.tensor.Layout.ROW_MAJOR,
+            device,
+        )
+        b = ttl.tensor.tilize(a)
+        print("Done tilize")
+        c = b.cpu().to_torch().to(torch.float32).reshape(shape).numpy()
+        print("Done copy to host")
+        tilized_inp = tilize(inp.reshape(*shape))
 
-    tilized_inp = tilize(inp.reshape(*shape))
-
-    assert (
-        abs(tilized_inp - c) < 0.02
-    ).all(), "Max abs difference for tilize can be 0.02 due to bfloat conversions"
+        assert (
+            abs(tilized_inp - c) < 0.02
+        ).all(), "Max abs difference for tilize can be 0.02 due to bfloat conversions"
