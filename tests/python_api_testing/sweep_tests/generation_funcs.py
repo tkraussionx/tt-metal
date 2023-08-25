@@ -24,8 +24,9 @@ supported_mem_configs = [
 ]
 
 on_device_options = [
-    True,
-    False,
+    "DRAM",
+    "L1",
+    "SYSTEM_MEMORY",
 ]
 
 
