@@ -159,11 +159,11 @@ operation::ProgramWithCallbacks multi_core_attn_matmul(const Tensor &a, const Te
 
     vector<uint32_t> compute_args_group_1 = {
         1, // B
-        1, // Mt
+        Mt, // Mt
         Kt, // Kt
-        num_output_blocks_per_core_group_1 * MtNt, // Nt
+        num_output_blocks_per_core_group_1 * Nt, // Nt
         (uint32_t) transpose_hw_bool, // transpose_hw for matmul_init
-    }; // bmm compute kernel the B, Mt, Nt are just 3 for loops that technically act as 1 large loop, so only set Nt for simplicity
+    };
 
     auto eltwise_binary_kernel_group_1_id = tt_metal::CreateComputeKernel(
         program,
@@ -175,11 +175,11 @@ operation::ProgramWithCallbacks multi_core_attn_matmul(const Tensor &a, const Te
     if (!core_group_2.ranges().empty()) {
         vector<uint32_t> compute_args_group_2 = {
             1, // B
-            1, // Mt
+            Mt, // Mt
             Kt, // Kt
-            num_output_blocks_per_core_group_2 * MtNt, // Nt
+            num_output_blocks_per_core_group_2 * Nt, // Nt
             (uint32_t) transpose_hw_bool, // transpose_hw for matmul_init
-        }; // bmm compute kernel the B, Mt, Nt are just 3 for loops that technically act as 1 large loop, so only set Nt for simplicity
+        };
 
         auto eltwise_binary_kernel_group_2_id = tt_metal::CreateComputeKernel(
             program,

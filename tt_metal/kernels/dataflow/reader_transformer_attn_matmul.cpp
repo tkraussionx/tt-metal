@@ -56,29 +56,33 @@ void kernel_main() {
     uint32_t cb_intermed2_addr;
     constexpr uint32_t bfloat16_row_bytes = 64;
     constexpr uint32_t num_rows_in_one_tile = 32;
+    bool reload_A = true;
 
     for (uint32_t b = 0; b < blocks; b++) {
         itileA_Mt = itileA_batch;
         itileB_batch = itileB_start;
 
     for (uint32_t m = 0; m < Mt; m++) {
+        itileA = itileA_Mt;
         itileB_Nt = itileB_batch;
 
     for (uint32_t n = 0; n < Nt; n++) {
         cb_intermed1_addr = cb_intermed1_addr_initial;
         cb_intermed2_addr = cb_intermed2_addr_initial;
-        itileA = itileA_Mt;
         itileB = itileB_Nt;
 
-        cb_reserve_back(cb_id_in0, Kt);
-        for (uint32_t kt = 0; kt < Kt; kt++) {
-            // Read A's tile at (mt, kt)
-            uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
-            noc_async_read_tile(itileA, s0, l1_write_addr_in0);
-            noc_async_read_barrier();
-            cb_push_back(cb_id_in0, onetile);
+        if (reload_A) {
+            cb_reserve_back(cb_id_in0, Kt);
+            for (uint32_t kt = 0; kt < Kt; kt++) {
+                // Read A's tile at (mt, kt)
+                uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
+                noc_async_read_tile(itileA, s0, l1_write_addr_in0);
+                noc_async_read_barrier();
+                cb_push_back(cb_id_in0, onetile);
 
-            itileA++; // A is MK
+                itileA++; // A is MK
+            }
+            reload_A = false;
         }
 
         cb_reserve_back(cb_id_intermed2, 1);
@@ -118,6 +122,7 @@ void kernel_main() {
         #endif
     } // Nt loop
 
+    reload_A = true;
     itileA_Mt += Kt;
     // here, KtNt is the stride of the full B tensor (ie. max cache length is incorporated in one of Kt or Nt depending on transpose_hw)
     itileB_batch += in1_KtNt_mul_32; // different depending on transpose_hw
