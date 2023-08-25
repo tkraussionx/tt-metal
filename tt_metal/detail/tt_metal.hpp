@@ -30,6 +30,7 @@ namespace tt::tt_metal{
          * | program       | The program being profiled.                       | const Program & |                           | True     |
          * */
         void DumpDeviceProfileResults(Device *device, const Program &program);
+	void set_buffer(Device *device);
 
         /**
          * Set the directory for all CSV logs produced by the profiler instance in the tt-metal module

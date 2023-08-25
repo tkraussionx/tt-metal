@@ -6,6 +6,7 @@
 #include <iostream>
 #include <filesystem>
 
+#include "tt_metal/impl/buffers/buffer.hpp"
 #include "llrt/llrt.hpp"
 #include "tools/profiler/profiler_state.hpp"
 
@@ -65,7 +66,7 @@ class Profiler {
 
         // Helper function for reading risc profile results
         void readRiscProfilerResults(
-                tt_cluster *cluster,
+                vector<std::uint32_t> profile_buffer,
                 int pcie_slot,
                 const CoreCoord &worker_core,
                 int risc_num,
@@ -95,7 +96,9 @@ class Profiler {
         void setOutputDir(const std::string& new_output_dir);
 
         //Traverse all cores on the device and dump the device profile results
-        void dumpDeviceResults(tt_cluster *cluster, int pcie_slot, const vector<CoreCoord> &worker_cores);
+        void dumpDeviceResults(Device *device, int pcie_slot, const vector<CoreCoord> &worker_cores);
+
+        Buffer output_dram_buffer;
 };
 
 }  // namespace tt_metal

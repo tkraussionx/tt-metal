@@ -15,6 +15,18 @@ namespace detail {
 
 static Profiler tt_metal_profiler = Profiler();
 
+void set_buffer(Device *device){
+
+    const size_t byte_size = 1024;
+    const size_t dram_byte_address = 0;
+
+    tt_metal_profiler.output_dram_buffer = tt_metal::Buffer(device, byte_size, dram_byte_address, byte_size, tt_metal::BufferType::DRAM);
+
+    std::vector<uint32_t> inputs_DRAM(1024, 3);
+    tt_metal::WriteToBuffer(tt_metal_profiler.output_dram_buffer, inputs_DRAM);
+}
+
+
 cl_device_id deviceTEST;
 cl_context context;
 void DumpDeviceProfileResults(Device *device, const Program &program) {
@@ -32,7 +44,7 @@ void DumpDeviceProfileResults(Device *device, const Program &program) {
             device->worker_cores_from_logical_cores(program.logical_cores());
         auto cluster = device->cluster();
         auto pcie_slot = device->pcie_slot();
-        tt_metal_profiler.dumpDeviceResults(cluster, pcie_slot, worker_cores_used_in_program);
+        tt_metal_profiler.dumpDeviceResults(device, pcie_slot, worker_cores_used_in_program);
 
         static TracyCLCtx tracyCLCtx = TracyCLContext(context, deviceTEST);
 

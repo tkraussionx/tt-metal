@@ -65,10 +65,12 @@ inline __attribute__((always_inline)) void finish_BR_profiler()
 {
 #if defined(PROFILE_KERNEL) && defined(COMPILE_FOR_BRISC)
 
-    // DRAM NOC dst address
-    std::uint64_t dram_buffer_dst_noc_addr = get_noc_addr(1, 0, 0);
+    uint32_t dram_noc_x = NOC_X(1);
+    uint32_t dram_noc_y = NOC_Y(0);
+    std::uint64_t dram_buffer_dst_noc_addr = get_noc_addr(dram_noc_x, dram_noc_y, 0);
 
-    noc_async_write(PRINT_BUFFER_NC, dram_buffer_dst_noc_addr, 1024);
+    uint32_t size = 512;
+    noc_async_write(PRINT_BUFFER_NC, dram_buffer_dst_noc_addr, size);
     noc_async_write_barrier();
 #endif //PROFILE_KERNEL
 }
