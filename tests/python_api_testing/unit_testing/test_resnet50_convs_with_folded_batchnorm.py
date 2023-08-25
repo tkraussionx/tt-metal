@@ -210,23 +210,33 @@ def test_resnet50_convs_with_folded_batch_norm(device):
                 1,
             ]
             assert is_conv_supported_on_device(conv_params)
+
+            '''
             if not (conv.out_channels == 64 and conv.in_channels == 256 and conv.kernel_size[0] == 1 and conv.kernel_size[1] == 1 and
                     conv.stride[0] == 1 and conv.stride[1] == 1 and conv.padding[0] == 0 and conv.padding[1] == 0 and
                     x_shape[1] == 56 and x_shape[2] == 56):
                 print("Skipping test")
                 continue
+            '''
             conv_on_device = run_conv_on_device_wrapper(
                 conv_weight.reshape(-1).tolist(),
                 conv_params,
                 device,
                 conv_bias.reshape(-1).tolist(),
             )
+
             x_on_device = create_conv_act_tensor(
                 x, x_shape[0], x_shape[1], x_shape[2], x_shape[3]
             ).to(device)
+
+            print("started running conv idx: ",i)
             x_on_device = conv_on_device(x_on_device)
+            print("finished running conv")
+
             # Copy output to host and convert tt tensor to pytorch tensor
+            print("copy tensor to host")
             x_result = x_on_device.cpu()
+            print("done copying tensor to host")
             out_result = x_result.to_torch()
             out_result = torch.transpose(out_result, 2, 3)
             out_result = torch.transpose(out_result, 1, 2)
