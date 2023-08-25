@@ -298,12 +298,12 @@ def ref_stable_softmax(x):
 
 
 def layernorm(x, y, z, *args, **kwargs):
-    return torch.nn.functional.layer_norm(input=x, normalized_shape=y, weight=y, bias=z, eps=1e-05)
+    return torch.nn.functional.layer_norm(input=x, normalized_shape=y.shape, weight=y, bias=z, eps=1e-05)
 
 
 def add_layernorm(x, y, z, w, *args, **kwargs):
     res = x+y
-    return torch.nn.functional.layer_norm(input=res, normalized_shape=y, weight=z, bias=w, eps=1e-05)
+    return torch.nn.functional.layer_norm(input=res, normalized_shape=z.shape, weight=z, bias=w, eps=1e-05)
 
 def scale_mask_softmax_in_place(x, y, scale, *args, **kwargs):
     x1 = scale * x
