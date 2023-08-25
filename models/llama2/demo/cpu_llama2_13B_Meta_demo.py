@@ -1,20 +1,29 @@
 import sys
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer
 from models.llama2.llama2_utils import get_logits_processor, model_location_generator
-
+from llama import Llama
 from loguru import logger
 import pytest
 
 prompt = """If the sugar intake is low but fat intake is high, does it lead to fat storage in the body?"""
 num_words = 100
 
+def prep_tokenizer():
+    # we are assuming that 7B tokenizer is the same as 13B tokenizer
+    llama2_tokenizer_path = str(model_location_generator("llama-2-7b", model_subdir="llama-2"))
+    tokenizer = AutoTokenizer.from_pretrained(llama2_tokenizer_path)
+    return tokenizer
+
+
 def test_cpu_demo(prompt = prompt, num_words = num_words, model_location_generator = model_location_generator):
+    # prep tokenizier
+    tokenizer = prep_tokenizer()
+
     # set parameters =================================================================
-    llama2_path = str(model_location_generator("llama-2-7b", model_subdir="llama-2"))
+    llama2_path = str(model_location_generator("llama-2-13b", model_subdir="llama-2")) # fix this
 
     # load llama pytorch model =======================================================
-    tokenizer = AutoTokenizer.from_pretrained(llama2_path)
     hugging_face_reference_model = AutoModelForCausalLM.from_pretrained(llama2_path)
 
     hugging_face_reference_model.eval()

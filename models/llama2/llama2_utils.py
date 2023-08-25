@@ -1,6 +1,6 @@
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.generation.logits_process import LogitsProcessorList
-
+from pathlib import Path
 
 def _merge_criteria_processor_list(
     default_list,  # Union[LogitsProcessorList, StoppingCriteriaList],
@@ -196,3 +196,19 @@ def get_logits_processor(input_ids, config):
     )
 
     return logits_processor
+
+
+def model_location_generator(model_version, model_subdir=""):
+    model_folder = Path("tt_dnn-models") / model_subdir
+    internal_weka_path = Path("/mnt/MLPerf") / model_folder / model_version
+    has_internal_weka = internal_weka_path.exists()
+    internal_cache_path = (
+        Path("/opt/tt-metal-models") / model_folder / model_version
+    )
+    has_internal_cache = internal_cache_path.exists()
+    if has_internal_weka:
+        return internal_weka_path
+    elif has_internal_cache:
+        return internal_cache_path
+    else:
+        return model_version
