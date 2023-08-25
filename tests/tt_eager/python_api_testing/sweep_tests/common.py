@@ -92,7 +92,7 @@ def run_test_and_save_results(
             {
                 "test_name": test_name,
                 "input_shapes": input_shapes,
-                **test_args,
+                "args": test_args,
                 "data_seed": data_seed,
                 "env_vars": env_vars,
                 "status": test_status,

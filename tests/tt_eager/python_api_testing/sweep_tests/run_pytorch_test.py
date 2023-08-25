@@ -141,6 +141,10 @@ def run_pytorch_test(args):
                     test_tt_layouts.append([])
                     test_on_device_options.append([])
 
+                    assert 'data-type' in input_spec, f"For each input you need to specify 'data-type'"
+                    assert 'data-layout' in input_spec, f"For each input you need to specify 'data-layout'"
+                    assert 'on-device' in input_spec, f"For each input you need to specify 'on-device'"
+
                     for dtype in input_spec['data-type']:
                         test_tt_dtypes[-1].append(DTYPES_TT_DICT[dtype])
 
@@ -149,7 +153,27 @@ def run_pytorch_test(args):
 
                     for device_type in input_spec['on-device']:
                         test_on_device_options[-1].append(device_type)
-            else:
+
+            if "outputs" in test_args:
+                for out_spec in test_args["outputs"]:
+                    test_tt_dtypes.append([])
+                    test_tt_layouts.append([])
+                    test_on_device_options.append([])
+
+                    assert 'data-type' in out_spec, f"For output you need to specify 'data-type'"
+                    assert 'data-layout' in out_spec, f"For output you need to specify 'data-layout'"
+                    assert 'on-device' in out_spec, f"For v you need to specify 'on-device'"
+
+                    for dtype in out_spec['data-type']:
+                        test_tt_dtypes[-1].append(DTYPES_TT_DICT[dtype])
+
+                    for layout in out_spec['data-layout']:
+                        test_tt_layouts[-1].append(LAYOUTS_TT_DICT[layout])
+
+                    for device_type in out_spec['on-device']:
+                        test_on_device_options[-1].append(device_type)
+
+            if not "inputs" in test_args:
                 for i in range(shape_dict["num-shapes"]):
                     test_tt_dtypes.append([])
                     test_tt_layouts.append([])
@@ -198,7 +222,7 @@ def run_pytorch_test(args):
                         if init_file and write_to_csv:
                             results_csv_writer = csv.DictWriter(
                                 results_csv,
-                                fieldnames=get_test_fieldnames(generated_test_args.keys()),
+                                fieldnames=get_test_fieldnames(["args"])
                             )
                             if not skip_header:
                                 results_csv_writer.writeheader()
