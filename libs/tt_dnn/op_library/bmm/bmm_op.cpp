@@ -626,7 +626,7 @@ operation::ProgramWithCallbacks Matmul::create_program(
     auto& output_tensor = output_tensors.at(0);
 
     tt::tt_metal::DataType output_dtype = this->output_dtype;
-    MathFidelity math_fidelity = MathFidelity::LoFi;
+    MathFidelity math_fidelity = MathFidelity::HiFi4;
     bool fuse_batch = true;
 
     return std::visit(

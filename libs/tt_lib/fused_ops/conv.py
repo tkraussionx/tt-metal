@@ -83,6 +83,7 @@ def resnet_conv(weight: List[Union[int, float]], conv_params, device, act_block_
     if R == S and R == 1 and P_H == P_W and P_H == 0 and U == V and U == 1:
         # use regular matmul op
         use_regular_matmul_op = True
+        #assert matmul_config is not None
 
     if not use_regular_matmul_op:
         assert len(act_block_shape_hw) == 2
@@ -157,7 +158,7 @@ def resnet_conv(weight: List[Union[int, float]], conv_params, device, act_block_
         if use_regular_matmul_op:
             assert(activation.layout() == tensor.Layout.TILE)
             if matmul_program_config is not None:
-                output = operations.primary.matmul(activation, weight_on_device, program_config=matmul_program_config,
+                output = operations.primary.matmul(activation, weight_on_device, bias=bias_on_device, program_config=matmul_program_config,
                                                    output_mem_config=activation.memory_config(),
                                                    output_dtype=activation.dtype())
             else:
@@ -167,7 +168,7 @@ def resnet_conv(weight: List[Union[int, float]], conv_params, device, act_block_
             output = tensor.conv_with_fast_reader(activation, weight_on_device, [R,padded_filter_window_width,U,V,P_H,P_W], act_block_h, act_block_w, weight_block_w, out_subblock_h, out_subblock_w, K, False)
         assert(output.storage_type() == tensor.StorageType.DEVICE)
 
-        if bias_on_device is not None:
+        if matmul_program_config is None and bias_on_device is not None:
             assert output.layout() == tensor.Layout.TILE
             if output.layout() == tensor.Layout.ROW_MAJOR:
                 # convert to tile layout
