@@ -2746,6 +2746,7 @@ void DeviceModule(py::module &m_device) {
     )doc");
 
     m_device.def("StartDebugPrintServer", &StartDebugPrintServer);
+    m_device.def("StopDebugPrintServer", &StopDebugPrintServer);
 
     m_device.def("EnablePersistentKernelCache", &detail::EnablePersistentKernelCache, R"doc(
         Enable kernel compilation cache to be persistent across runs. When this is called, kernels will not be compiled if the output binary path exists.

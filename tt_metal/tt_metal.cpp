@@ -209,6 +209,11 @@ void StartDebugPrintServer(Device *device, const std::vector<CoreCoord> & cores)
     tt_start_debug_print_server(device->cluster(), {0}, cores);
 }
 
+void StopDebugPrintServer(Device *device)
+{
+    tt_stop_debug_print_server(device->cluster());
+}
+
 KernelID CreateDataMovementKernel(Program &program, const std::string &file_name, const std::variant<CoreCoord, CoreRange, CoreRangeSet> &core_spec, const std::optional<DataMovementConfig> &config) {
     CoreRangeSet core_ranges = detail::GetCoreRangeSet(core_spec);
     auto dm_config = detail::GetDataMovementConfig(program, file_name, core_ranges, config);

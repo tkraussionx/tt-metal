@@ -81,6 +81,19 @@ bool CloseDevice(Device *device);
 
 void StartDebugPrintServer(Device *device, const std::vector<CoreCoord> & cores);
 
+/**
+ * Stops a debug print server on device
+ *
+ * Return value: void
+ *
+ * | Argument | Description                | Type                   | Valid Range | Required |
+ * |----------|----------------------------|------------------------|-------------|----------|
+ * | device   | Pointer to a device object | Device *               |             | True     |
+
+ */
+
+void StopDebugPrintServer(Device *device);
+
 
 // ==================================================
 //                  HOST API: program & kernels

@@ -52,32 +52,35 @@ import torch
         # (512, 256, 14, 14, 3, 3, 2, 2, 1, 1),
         # #K=512 C=512 H=7 W=7 R=3 S=3 U=1 V=1 PH=1 PW=1 dilation=1 groups=1
         # (512, 512, 7, 7, 3, 3, 1, 1, 1, 1),
-        # channels = 3 padding
-        (32, 3, 5, 5, 1, 1, 1, 1, 0, 0),
-        # w/ conv padding
-        (32, 32, 5, 5, 1, 1, 1, 1, 1, 1),
-        # Hat = 1, Wat = 1, Wbt = 1
+        # # channels = 3 padding
+        # (32, 3, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # w/ conv padding
+        # (32, 32, 5, 5, 1, 1, 1, 1, 1, 1),
+        # # Hat = 1, Wat = 1, Wbt = 1
+        # (32, 32, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # Hat = 2, Wat = 1, Wbt = 1
+        # (32, 32, 8, 8, 1, 1, 1, 1, 0, 0),
+        # # Hat = 1, Wat = 2, Wbt = 1
+        # (32, 64, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # Hat = 2, Wat = 2, Wbt = 1
+        # (32, 64, 8, 8, 1, 1, 1, 1, 0, 0),
+        # # Hat = 1, Wat = 1, Wbt = 2
+        # (64, 32, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # Hat = 1, Wat = 2, Wbt = 2
+        # (64, 64, 5, 5, 1, 1, 1, 1, 0, 0),
+        # # Hat = 2, Wat = 1, Wbt = 2
+        # (64, 32, 8, 8, 1, 1, 1, 1, 0, 0),
+        # # Hat = 2, Wat = 2, Wbt = 2
+        # (64, 64, 8, 8, 1, 1, 1, 1, 0, 0),
+        # # Hat = 8, Wat = 8, Wbt = 8
+        # (8 * 32, 8 * 32, 16, 16, 1, 1, 1, 1, 0, 0),
+        # # resnet50 first conv
+        # (64, 3, 224, 224, 7, 7, 2, 2, 3, 3),
+        # # num blocks weight w = 4, num blocks act h = 4, num blocks act w = 3
+        # (16 * 32, 32, 24, 24, 3, 3, 1, 1, 0, 0),
+        #K=64 C=56 H=56 W=256 R=1 S=1 U=1 V=1 PH=0 PW=0 dilation=1 groups=1
         (32, 32, 5, 5, 1, 1, 1, 1, 0, 0),
-        # Hat = 2, Wat = 1, Wbt = 1
-        (32, 32, 8, 8, 1, 1, 1, 1, 0, 0),
-        # Hat = 1, Wat = 2, Wbt = 1
-        (32, 64, 5, 5, 1, 1, 1, 1, 0, 0),
-        # Hat = 2, Wat = 2, Wbt = 1
-        (32, 64, 8, 8, 1, 1, 1, 1, 0, 0),
-        # Hat = 1, Wat = 1, Wbt = 2
-        (64, 32, 5, 5, 1, 1, 1, 1, 0, 0),
-        # Hat = 1, Wat = 2, Wbt = 2
-        (64, 64, 5, 5, 1, 1, 1, 1, 0, 0),
-        # Hat = 2, Wat = 1, Wbt = 2
-        (64, 32, 8, 8, 1, 1, 1, 1, 0, 0),
-        # Hat = 2, Wat = 2, Wbt = 2
-        (64, 64, 8, 8, 1, 1, 1, 1, 0, 0),
-        # Hat = 8, Wat = 8, Wbt = 8
-        (8 * 32, 8 * 32, 16, 16, 1, 1, 1, 1, 0, 0),
-        # resnet50 first conv
-        (64, 3, 224, 224, 7, 7, 2, 2, 3, 3),
-        # num blocks weight w = 4, num blocks act h = 4, num blocks act w = 3
-        (16 * 32, 32, 24, 24, 3, 3, 1, 1, 0, 0),
+        #(64, 256, 56, 56, 1, 1, 1, 1, 0, 0),
     ),
 )
 @pytest.mark.skip(reason="Hanging post commit 8/24/23 debug war room session, see PR#2297, PR#2301")
@@ -99,9 +102,11 @@ def test_run_conv_as_large_matmul(
     num_iterations = 1
     if not run_conv_with_address_map:
         num_iterations = (
-            2  # run twice to test op caching flow for conv op (without address map)
+            1000  # run twice to test op caching flow for conv op (without address map)
         )
     for i in range(num_iterations):
+        print("Running iteration", i)
+        #ttl.device.StartDebugPrintServer(device, [ttl.tensor.CoreCoord(1,1)])
         # torch.set_printoptions(threshold=10000)
         torch.manual_seed(0)
         a_activation_shape = [1, C, H, W]
@@ -110,8 +115,15 @@ def test_run_conv_as_large_matmul(
         B_pyt = torch.randn(b_weights_shape, dtype=torch.bfloat16).float()
 
         # Parameters to define block dims
+        # act_block_h = 4
+        # act_block_w = 4 #(int)((_nearest_32(_nearest_y(C, 16) * S)) / 32)
+        # weight_block_h = act_block_w
+        # weight_block_w = 4
+        # out_subblock_h = 4
+        # out_subblock_w = 2
+
         act_block_h = 4
-        act_block_w = (int)((_nearest_32(_nearest_y(C, 16) * S)) / 32)
+        act_block_w = 4
         weight_block_h = act_block_w
         weight_block_w = 4
         out_subblock_h = 4
@@ -129,7 +141,7 @@ def test_run_conv_as_large_matmul(
             A = A_cl_host.to(device)
 
         # Prepare weights
-        B_tiled_host = create_conv_weight_tensor_special_padding(
+        B_tiled_host = create_conv_weight_tensor(
             B_pyt, K, C, R, S, weight_block_h, weight_block_w
         )
         if run_conv_with_address_map:
@@ -155,7 +167,8 @@ def test_run_conv_as_large_matmul(
                 K,
             )
         else:
-            out = ttl.tensor.conv_with_fast_reader(
+            print("Running conv nitika")
+            out = ttl.tensor.conv(
                 A,
                 B_tiled,
                 [R, S, stride_h, stride_w, pad_h, pad_w],
@@ -166,9 +179,12 @@ def test_run_conv_as_large_matmul(
                 out_subblock_w,
                 K,
             )
+            print("Done conv nitika")
         out = out.cpu()
+        print("Running copy to host nitika")
         assert out.shape() == conv_output_shape
         assert out.layout() == ttl.tensor.Layout.ROW_MAJOR
+        #ttl.device.StopDebugPrintServer(device)
 
         # Copy output to host and convert tt tensor to pytorch tensor
         out_result = out.to_torch()

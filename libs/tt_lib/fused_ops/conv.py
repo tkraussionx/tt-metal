@@ -39,6 +39,7 @@ def conv(weight: List[Union[int, float]], conv_params, device, bias=None):
         bias_on_device = bias_.to(device)
 
     def conv_(activation):
+        print("Running conv nitika")
         output = tensor.conv(
             activation,
             weight_on_device,
@@ -50,19 +51,24 @@ def conv(weight: List[Union[int, float]], conv_params, device, bias=None):
             out_subblock_w,
             K,
         )
+        print("Done conv nitika")
 
         assert output.storage_type() == tensor.StorageType.DEVICE
 
         if bias_on_device is not None:
+            print("Running bias nitika")
             output_plus_bias = tensor.bcast(
                 output, bias_on_device, tensor.BcastOpMath.ADD, tensor.BcastOpDim.H
             )
+            print("Done bias nitika")
             if output_plus_bias.layout() != tensor.Layout.ROW_MAJOR:
                 assert output_plus_bias.layout() == tensor.Layout.TILE
                 assert output_plus_bias.storage_type() == tensor.StorageType.DEVICE
+                print("Running untilize nitika")
                 output_plus_bias = tensor.untilize(
                     output_plus_bias, output_plus_bias.memory_config()
                 )
+                print("Done untilize bias")
                 assert output_plus_bias.layout() == tensor.Layout.ROW_MAJOR
             return output_plus_bias
 
