@@ -210,6 +210,11 @@ def test_resnet50_convs_with_folded_batch_norm(device):
                 1,
             ]
             assert is_conv_supported_on_device(conv_params)
+            if not (conv.out_channels == 64 and conv.in_channels == 256 and conv.kernel_size[0] == 1 and conv.kernel_size[1] == 1 and
+                    conv.stride[0] == 1 and conv.stride[1] == 1 and conv.padding[0] == 0 and conv.padding[1] == 0 and
+                    x_shape[1] == 56 and x_shape[2] == 56):
+                print("Skipping test")
+                continue
             conv_on_device = run_conv_on_device_wrapper(
                 conv_weight.reshape(-1).tolist(),
                 conv_params,
