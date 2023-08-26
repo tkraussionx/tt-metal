@@ -121,16 +121,6 @@ def resnet_1x1conv_as_mm(weight: List[Union[int, float]], conv_params, device, m
                                             output_mem_config=activation.memory_config(),
                                             output_dtype=activation.dtype())
 
-        if matmul_program_config is None and bias_on_device is not None:
-            assert output.layout() == tensor.Layout.TILE
-            if output.layout() == tensor.Layout.ROW_MAJOR:
-                # convert to tile layout
-                output = output.reshape(1, 1, output.shape()[0] * output.shape()[1] * output.shape()[2], output.shape()[3])
-                output_padded_shape = tensor.pad_to_tile_shape(output.shape(), False, False, True, True)
-                output = tensor.format_input_tensor(output, device, output_padded_shape, 0.0, tensor.Layout.TILE)
-            output_plus_bias = tensor.bcast_without_autoformat(output, bias_on_device, tensor.BcastOpMath.ADD, tensor.BcastOpDim.H, output.memory_config())
-            return output_plus_bias
-
         return output
 
     return conv_
