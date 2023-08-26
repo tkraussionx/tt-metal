@@ -25,12 +25,12 @@ a_height_nblocks = [1, 7]
 a_width_nblocks = [1, 7]
 b_width_nblocks = [1, 7]
 # block sizes as number of tiles along h and w:
-a_block_height_ntiles = [1]
-a_block_width_ntiles = [1]
-b_block_width_ntiles = [1]
+a_block_height_ntiles = [4]
+a_block_width_ntiles = [4]
+b_block_width_ntiles = [4]
 # output sublobcking per block:
-out_subblock_height_ntiles = [1]  ## == a_block_height_ntiles, <= 8
-out_subblock_width_ntiles = [1]  ## == b_block_width_ntiles, <= 8
+out_subblock_height_ntiles = [4]  ## == a_block_height_ntiles, <= 8
+out_subblock_width_ntiles = [2]  ## == b_block_width_ntiles, <= 8
 tilize_a = [True, False]
 untilize_out = [True, False]
 
@@ -124,10 +124,6 @@ def test_run_bmm_single_core_tilize_untilize(
     b_height = a_width
     b_width = b_width_nblocks * b_block_width_ntiles * TILE_WIDTH
 
-    a_height = 25
-    # a_width = 32
-    b_width = 64
-
     a_shape = [a_batch, a_channel, a_height, a_width]
     b_shape = [b_batch, b_channel, b_height, b_width]
     out_shape = [a_batch, a_channel, a_height, b_width]
@@ -149,9 +145,9 @@ def test_run_bmm_single_core_tilize_untilize(
         ## a in tile
         a_layout = ttl.tensor.Layout.TILE
         a_list = tilize_to_list(a)
-    # tta = ttl.tensor.Tensor(a_list, a_shape, a_dtype, a_layout, device)
-    tta = ttl.tensor.Tensor(a_list, a_shape, a_dtype, ttl.tensor.Layout.ROW_MAJOR)
-    tta = tta.pad_to_tile(0).to(device)
+    tta = ttl.tensor.Tensor(a_list, a_shape, a_dtype, a_layout, device)
+    # tta = ttl.tensor.Tensor(a_list, a_shape, a_dtype, ttl.tensor.Layout.ROW_MAJOR)
+    # tta = tta.pad_to_tile(0).to(a_layout).to(device)
 
     ## tensor b, in tile format
     ttb = ttl.tensor.Tensor(
@@ -199,7 +195,7 @@ def test_run_bmm_single_core_tilize_untilize(
         b_width_nblocks,
         a_block_height_ntiles,
         a_block_width_ntiles,
-        int(b_width / TILE_WIDTH),
+        b_block_width_ntiles,
         out_subblock_height_ntiles,
         out_subblock_width_ntiles,
         tilize_a,
@@ -209,19 +205,19 @@ def test_run_bmm_single_core_tilize_untilize(
     out = out.cpu()
     out = out.to(ttl.tensor.Layout.ROW_MAJOR).unpad_from_tile(out_shape).to_torch().float()
 
-    print(f'returned output: {out}')
+    # print(f'returned output: {out}')
 
     ## reference
     golden_pytorch = torch.matmul(a, b)
     if has_bias:
         golden_pytorch += bias
 
-    print("golden out:\n", golden_pytorch)
+    # print("golden out:\n", golden_pytorch)
 
-    print(f'{torch.isclose(out, golden_pytorch, atol=0.1, rtol=0.1)}')
+    # print(f'{torch.isclose(out, golden_pytorch, atol=0.1, rtol=0.1)}')
 
     ## test for equivalance
-    print (f'{out.shape} <-> {golden_pytorch.shape}')
+    # print (f'{out.shape} <-> {golden_pytorch.shape}')
     # assert out.shape == golden_pytorch.shape
     passing_pcc, output_pcc = comp_pcc(golden_pytorch, out)
     print(f"Passing PCC = {passing_pcc}")
