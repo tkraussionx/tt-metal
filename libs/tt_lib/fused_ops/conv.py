@@ -70,6 +70,70 @@ def conv(weight: List[Union[int, float]], conv_params, device, bias=None):
 
     return conv_
 
+def resnet_1x1conv_as_mm(weight: List[Union[int, float]], conv_params, device, matmul_config, bias, fuse_relu=False):
+    """
+    Returns a function that performs a Convolution.
+    For bias, it calls bcast op without autoformatting
+    """
+    assert len(conv_params) == 10
+    K, C, R, S, U, V, P_H, P_W, dilation, groups = [conv_params[i] for i in range(10)]
+
+    assert R == S and R == 1 and P_H == P_W and P_H == 0 and U == V and U == 1
+    assert dilation == 1 and groups == 1
+
+    weights_shape = [K, C, R, S]
+
+    assert C % 16 == 0
+    assert K % 32 == 0
+
+    weight_untiled = tensor.Tensor(
+        weight, weights_shape, tensor.DataType.BFLOAT16, tensor.Layout.ROW_MAJOR
+    )
+    # weight for matmul op
+    weight_tiled_ = tensor.convert_conv_weight_tensor_to_tiled_layout(
+        weight_untiled, 1, 1
+    )
+
+    weight_on_device = weight_tiled_.to(device)
+    bias_shape = [1, 1, 1, K]
+    bias_channels_padded_shape = [1, 1, 32, K]
+    bias_ = (
+        tensor.Tensor(
+            bias, bias_shape, tensor.DataType.BFLOAT16, tensor.Layout.ROW_MAJOR
+        )
+        .pad(bias_channels_padded_shape, (0, 0, 0, 0), 0)
+        .to(tensor.Layout.TILE)
+    )
+    bias_on_device = bias_.to(device)
+
+    matmul_program_config = operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+                                    compute_with_storage_grid_size=matmul_config["compute_with_storage_grid_size"],
+                                    in0_block_w=matmul_config["in0_block_w"],
+                                    out_subblock_h=matmul_config["out_subblock_h"],
+                                    out_subblock_w=matmul_config["out_subblock_w"],
+                                    per_core_M=matmul_config["per_core_M"],
+                                    per_core_N=matmul_config["per_core_N"],
+                                    fused_activation=tensor.FusibleActivationWithParam(tensor.FusibleActivation.RELU) if fuse_relu else None)
+
+    def conv_(activation):
+        # conv1x1 stride 1 padding 0, use matmul op
+        output = operations.primary.matmul(activation, weight_on_device, bias=bias_on_device, program_config=matmul_program_config,
+                                            output_mem_config=activation.memory_config(),
+                                            output_dtype=activation.dtype())
+
+        if matmul_program_config is None and bias_on_device is not None:
+            assert output.layout() == tensor.Layout.TILE
+            if output.layout() == tensor.Layout.ROW_MAJOR:
+                # convert to tile layout
+                output = output.reshape(1, 1, output.shape()[0] * output.shape()[1] * output.shape()[2], output.shape()[3])
+                output_padded_shape = tensor.pad_to_tile_shape(output.shape(), False, False, True, True)
+                output = tensor.format_input_tensor(output, device, output_padded_shape, 0.0, tensor.Layout.TILE)
+            output_plus_bias = tensor.bcast_without_autoformat(output, bias_on_device, tensor.BcastOpMath.ADD, tensor.BcastOpDim.H, output.memory_config())
+            return output_plus_bias
+
+        return output
+
+    return conv_
 
 def resnet_conv(weight: List[Union[int, float]], conv_params, device, act_block_shape_hw, weight_block_shape_hw, outsubblock_shape_hw, bias=None, padded_filter_window_width=0, pre_pad_conv=False, matmul_config=None, fuse_relu=False):
     """
