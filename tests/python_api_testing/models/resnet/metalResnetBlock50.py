@@ -178,12 +178,19 @@ class Bottleneck(nn.Module):
             (224, 256) : [64, 128, 64, 128],
             (64, 512) : [32, 64, 32, 64] ,
         }
+        hardcoded_enable_fused_bias_for_conv2 = {
+            (3136, 64) : True,
+            (800, 128) : True,
+            (224, 256) : False,
+            (64, 512) : False,
+        }
         self.conv1_output_shape = compute_conv_output_shape(self.conv1_params, input_shape)
         self.conv2_params = [width, width, 3, 3, stride, stride, 1, 1, dilation, groups]
         self.conv2_output_shape = compute_conv_output_shape(self.conv2_params, self.conv1_output_shape)
         conv2_output_padded_face_size = _nearest_32(self.conv2_output_shape[1] * self.conv2_output_shape[2])
         assert (conv2_output_padded_face_size, width) in hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_conv2
         [act_block_h_datums, weight_block_w_datums, out_subblock_h_datums, out_subblock_w_datums] = hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_conv2[(conv2_output_padded_face_size, width)]
+        enable_fused_bias_for_this_conv = hardcoded_enable_fused_bias_for_conv2[(conv2_output_padded_face_size, width)]
         if is_conv_supported_on_device(self.conv2_params):
             self.conv2 = TtResnetConv(conv2_weight.reshape(-1).tolist(),
                                       self.conv2_params,
@@ -192,7 +199,7 @@ class Bottleneck(nn.Module):
                                       [width*3, weight_block_w_datums],
                                       [out_subblock_h_datums, out_subblock_w_datums],
                                       conv2_bias.tolist() if conv2_bias is not None else None,
-                                      enable_fused_bias=False)
+                                      enable_fused_bias=enable_fused_bias_for_this_conv)
         else:
             self.conv2 = fallback_ops.Conv2d(conv2_weight, conv2_bias, width, width, kernel_size=3, stride=1, padding=1)
 
@@ -402,7 +409,7 @@ class ResNet(nn.Module):
                                                           [self.inplanes, weight_block_w_datums],
                                                           [out_subblock_h_datums, out_subblock_w_datums],
                                                           downsample_conv_bias.tolist() if downsample_conv_bias is not None else None,
-                                                          enable_fused_bias=True)
+                                                          enable_fused_bias=False)
                 self.norm_layer_after_downsample_conv_on_tt = nl
             else:
                 downsample_conv = fallback_ops.Conv2d(downsample_conv_weight, downsample_conv_bias, self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, padding=0)
