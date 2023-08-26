@@ -5,11 +5,11 @@ import torch
 from loguru import logger
 
 import tt_lib
-from models.utility_functions import (
+from tt_models.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from models.whisper.tt.whisper_for_audio_classification import (
+from tt_models.whisper.tt.whisper_for_audio_classification import (
     TtWhisperForAudioClassification,
 )
 

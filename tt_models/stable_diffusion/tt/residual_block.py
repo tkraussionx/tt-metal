@@ -4,8 +4,8 @@ import torch
 
 import tt_lib as ttl
 from tt_lib.fallback_ops import fallback_ops
-from models.stable_diffusion.sd_utils import make_linear
-from models.stable_diffusion.tt.experimental_ops import Conv2d
+from tt_models.stable_diffusion.sd_utils import make_linear
+from tt_models.stable_diffusion.tt.experimental_ops import Conv2d
 
 
 class TtResnetBlock2D(nn.Module):

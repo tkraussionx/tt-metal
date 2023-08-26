@@ -2,13 +2,13 @@ from typing import Optional, Tuple, List
 import torch
 import torch.nn as nn
 
-from models.utility_functions import (
+from tt_models.utility_functions import (
     tt_to_torch_tensor,
     torch_to_tt_tensor_rm,
 )
 import tt_lib
 import tt_lib.fallback_ops as fallback_ops
-from models.helper_funcs import Linear as TtLinear
+from tt_models.helper_funcs import Linear as TtLinear
 
 
 class TtMultiHeadSelfAttention(nn.Module):

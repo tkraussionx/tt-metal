@@ -4,8 +4,8 @@ from loguru import logger
 from PIL import Image
 
 import tt_lib
-from models.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor
-from models.vit.tt.modeling_vit import vit_for_image_classification
+from tt_models.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor
+from tt_models.vit.tt.modeling_vit import vit_for_image_classification
 
 
 def test_gs_demo():

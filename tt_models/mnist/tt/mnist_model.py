@@ -4,8 +4,8 @@ import tt_lib
 
 from tt_lib.fallback_ops import fallback_ops
 from tt_lib.fused_ops.softmax import softmax as tt_softmax
-from models.utility_functions import torch2tt_tensor, tt2torch_tensor
-from models.mnist.reference.mnist import MnistModel
+from tt_models.utility_functions import torch2tt_tensor, tt2torch_tensor
+from tt_models.mnist.reference.mnist import MnistModel
 
 
 class TtMnistModel(torch.nn.Module):

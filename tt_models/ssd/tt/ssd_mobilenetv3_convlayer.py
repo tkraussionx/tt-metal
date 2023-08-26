@@ -3,10 +3,10 @@ import torch.nn as nn
 
 import tt_lib
 import tt_lib.fallback_ops as fallback_ops
-from models.utility_functions import (
+from tt_models.utility_functions import (
     torch_to_tt_tensor_rm,
 )
-from models.ssd.ssd_utils import create_batchnorm
+from tt_models.ssd.ssd_utils import create_batchnorm
 
 ACT_FN_1 = tt_lib.tensor.relu
 ACT_FN_2 = tt_lib.tensor.hardswish

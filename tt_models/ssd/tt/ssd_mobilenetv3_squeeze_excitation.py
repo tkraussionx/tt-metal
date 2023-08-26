@@ -1,7 +1,7 @@
 import torch
 import tt_lib
 import tt_lib.fallback_ops as fallback_ops
-from models.utility_functions import (
+from tt_models.utility_functions import (
     torch_to_tt_tensor_rm,
 )
 

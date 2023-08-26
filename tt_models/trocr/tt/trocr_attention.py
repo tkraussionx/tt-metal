@@ -6,8 +6,8 @@ from typing import Optional, Tuple
 import tt_lib
 from tt_lib import fallback_ops
 
-from models.helper_funcs import Linear
-from models.utility_functions import torch_to_tt_tensor_rm
+from tt_models.helper_funcs import Linear
+from tt_models.utility_functions import torch_to_tt_tensor_rm
 
 
 class TtTrOCRAttention(nn.Module):

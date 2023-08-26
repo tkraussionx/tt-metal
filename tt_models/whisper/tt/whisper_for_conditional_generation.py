@@ -14,11 +14,11 @@ from transformers import (
 )
 from datasets import load_dataset
 
-from models.utility_functions import torch2tt_tensor, tt2torch_tensor
+from tt_models.utility_functions import torch2tt_tensor, tt2torch_tensor
 
-from models.whisper.tt.whisper_common import linear
+from tt_models.whisper.tt.whisper_common import linear
 
-from models.whisper.tt.whisper_model import TtWhisperModel
+from tt_models.whisper.tt.whisper_model import TtWhisperModel
 
 
 def shift_tokens_right(

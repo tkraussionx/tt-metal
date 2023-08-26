@@ -1,10 +1,10 @@
 from torch import nn
 import tt_lib
 
-from models.ssd.tt.ssd_mobilenetv3_convlayer import (
+from tt_models.ssd.tt.ssd_mobilenetv3_convlayer import (
     TtMobileNetV3ConvLayer,
 )
-from models.ssd.tt.ssd_mobilenetv3_inverted_squeeze import (
+from tt_models.ssd.tt.ssd_mobilenetv3_inverted_squeeze import (
     TtMobileNetV3InvertedSqueeze,
 )
 

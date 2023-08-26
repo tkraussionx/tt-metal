@@ -2,10 +2,10 @@ import torch.nn as nn
 from typing import Optional, Tuple
 
 import tt_lib
-from models.utility_functions import torch_to_tt_tensor_rm
-from models.helper_funcs import Linear
-from models.trocr.tt.trocr_attention import TtTrOCRAttention
-from models.trocr.tt.trocr_configuration import TtTrOCRConfig
+from tt_models.utility_functions import torch_to_tt_tensor_rm
+from tt_models.helper_funcs import Linear
+from tt_models.trocr.tt.trocr_attention import TtTrOCRAttention
+from tt_models.trocr.tt.trocr_configuration import TtTrOCRConfig
 
 
 class TtTrOCRDecoderLayer(nn.Module):

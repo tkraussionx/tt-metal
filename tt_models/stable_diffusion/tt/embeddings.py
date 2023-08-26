@@ -5,7 +5,7 @@ import torch
 
 
 import tt_lib as ttl
-from models.stable_diffusion.sd_utils import make_linear
+from tt_models.stable_diffusion.sd_utils import make_linear
 from tt_lib.fallback_ops import fallback_ops
 
 class TtTimestepEmbedding(nn.Module):

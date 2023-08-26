@@ -5,8 +5,8 @@ from loguru import logger
 from tt_lib.fallback_ops import fallback_ops
 from typing import Optional, Sequence, Tuple, Union
 
-from models.utility_functions import torch2tt_tensor
-from models.utility_functions import (
+from tt_models.utility_functions import torch2tt_tensor
+from tt_models.utility_functions import (
     run_conv_on_device_wrapper,
     is_conv_supported_on_device,
 )

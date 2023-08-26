@@ -7,11 +7,11 @@ from loguru import logger
 from transformers import WhisperConfig
 
 import tt_lib
-from models.whisper.tt.whisper_encoder import (
+from tt_models.whisper.tt.whisper_encoder import (
     TtWhisperEncoder,
     TtWhisperEncoderOutput,
 )
-from models.whisper.tt.whisper_decoder import TtWhisperDecoder
+from tt_models.whisper.tt.whisper_decoder import TtWhisperDecoder
 
 
 @dataclass

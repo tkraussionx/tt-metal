@@ -1,7 +1,7 @@
 from typing import Optional, Tuple, Union
 import torch.nn as nn
 
-from models.utility_functions import (
+from tt_models.utility_functions import (
     tt_to_torch_tensor,
     torch_to_tt_tensor_rm,
 )
@@ -9,8 +9,8 @@ from models.utility_functions import (
 import tt_lib
 from dataclasses import dataclass
 
-from models.distilbert.tt.distilbert_embedding import TtDistilBert_Embeddings
-from models.distilbert.tt.distilbert_transformer import TtTransformer
+from tt_models.distilbert.tt.distilbert_embedding import TtDistilBert_Embeddings
+from tt_models.distilbert.tt.distilbert_transformer import TtTransformer
 
 
 @dataclass

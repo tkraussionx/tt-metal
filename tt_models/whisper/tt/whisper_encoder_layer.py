@@ -6,15 +6,15 @@ from typing import Tuple
 
 from transformers import WhisperConfig
 
-from models.utility_functions import torch2tt_tensor, tt2torch_tensor
+from tt_models.utility_functions import torch2tt_tensor, tt2torch_tensor
 
-from models.whisper.tt.whisper_common import (
+from tt_models.whisper.tt.whisper_common import (
     linear,
 )
 
 # from tt_lib.fallback_ops import fallback_ops
 import tt_lib.fallback_ops as fallback_ops
-from models.whisper.tt.whisper_attention import TtWhisperAttention
+from tt_models.whisper.tt.whisper_attention import TtWhisperAttention
 
 
 class TtWhisperEncoderLayer(nn.Module):

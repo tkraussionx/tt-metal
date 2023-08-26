@@ -1,7 +1,7 @@
 import torch
 from loguru import logger
 
-from models.squeezebert.squeezebert_utils import get_answer
+from tt_models.squeezebert.squeezebert_utils import get_answer
 from transformers import SqueezeBertForQuestionAnswering, AutoTokenizer
 
 

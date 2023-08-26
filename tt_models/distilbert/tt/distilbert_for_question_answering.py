@@ -2,15 +2,15 @@ from typing import Optional, Tuple, Union
 import torch.nn as nn
 from dataclasses import dataclass
 
-from models.utility_functions import (
+from tt_models.utility_functions import (
     tt_to_torch_tensor,
     torch_to_tt_tensor_rm,
 )
 
 import tt_lib
 from dataclasses import dataclass
-from models.distilbert.tt.distilbert_model import TtDistilBertModel
-from models.helper_funcs import Linear as TtLinear
+from tt_models.distilbert.tt.distilbert_model import TtDistilBertModel
+from tt_models.helper_funcs import Linear as TtLinear
 
 
 @dataclass

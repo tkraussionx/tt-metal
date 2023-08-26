@@ -1,7 +1,7 @@
 import torch.nn as nn
 
-from models.utility_functions import tt_to_torch_tensor, torch_to_tt_tensor_rm
-from models.trocr.tt.trocr_configuration import TtTrOCRConfig
+from tt_models.utility_functions import tt_to_torch_tensor, torch_to_tt_tensor_rm
+from tt_models.trocr.tt.trocr_configuration import TtTrOCRConfig
 import tt_lib
 
 

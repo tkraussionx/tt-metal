@@ -1,9 +1,9 @@
 import torch
 import tt_lib
 
-from models.t5.tt.t5_layer_norm import TtT5LayerNorm
-from models.t5.tt.t5_dense_act_dense import TtT5DenseActDense
-from models.t5.tt.t5_dense_gated_act_dense import TtT5DenseGatedActDense
+from tt_models.t5.tt.t5_layer_norm import TtT5LayerNorm
+from tt_models.t5.tt.t5_dense_act_dense import TtT5DenseActDense
+from tt_models.t5.tt.t5_dense_gated_act_dense import TtT5DenseGatedActDense
 
 
 # class T5LayerFF(nn.Module):

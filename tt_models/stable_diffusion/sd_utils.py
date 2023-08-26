@@ -1,9 +1,9 @@
 import torch
 
 import tt_lib as ttl
-from models.utility_functions import torch_to_tt_tensor_rm
+from tt_models.utility_functions import torch_to_tt_tensor_rm
 
-from models.helper_funcs import Linear as SDLinear
+from tt_models.helper_funcs import Linear as SDLinear
 
 def make_linear(in_features: int, out_features: int, weights: ttl.tensor.Tensor, bias: ttl.tensor.Tensor, device, out_mem_config = None) -> SDLinear:
     if out_mem_config is None:

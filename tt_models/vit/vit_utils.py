@@ -1,5 +1,5 @@
-from models.helper_funcs import Linear as linear
-from models.utility_functions import torch_to_tt_tensor_rm
+from tt_models.helper_funcs import Linear as linear
+from tt_models.utility_functions import torch_to_tt_tensor_rm
 import tt_lib
 
 def make_address(base_address, op_name):

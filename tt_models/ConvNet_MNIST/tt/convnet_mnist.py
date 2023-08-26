@@ -1,9 +1,9 @@
 import torch
 import tt_lib
 
-from models.ConvNet_MNIST.reference.convnet import ConvNet
+from tt_models.ConvNet_MNIST.reference.convnet import ConvNet
 from tt_lib.fallback_ops import fallback_ops
-from models.utility_functions import torch2tt_tensor
+from tt_models.utility_functions import torch2tt_tensor
 
 
 class TtConvNet(torch.nn.Module):

@@ -3,7 +3,7 @@ from loguru import logger
 from typing import Callable, List, Optional, Union
 from transformers.generation.configuration_utils import GenerationConfig
 
-from models.utility_functions import (
+from tt_models.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,
 )

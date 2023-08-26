@@ -5,7 +5,7 @@ from contextlib import AbstractContextManager
 from loguru import logger
 from functools import wraps
 from tt_lib.fallback_ops import fallback_ops
-from models.utility_functions import (
+from tt_models.utility_functions import (
     run_conv_on_device_wrapper,
     is_conv_supported_on_device,
 )

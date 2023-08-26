@@ -3,14 +3,14 @@ import pytest
 from loguru import logger
 
 
-from models.utility_functions import (
+from tt_models.utility_functions import (
     tt_to_torch_tensor,
     torch_to_tt_tensor_rm,
 )
 
 from transformers import AutoTokenizer
 import tt_lib
-from models.distilbert.tt.distilbert import *
+from tt_models.distilbert.tt.distilbert import *
 
 
 @pytest.mark.parametrize(

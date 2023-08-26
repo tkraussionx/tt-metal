@@ -1,14 +1,14 @@
 from typing import Optional, Tuple
 import torch.nn as nn
 
-from models.utility_functions import (
+from tt_models.utility_functions import (
     torch_to_tt_tensor_rm,
 )
 import tt_lib
-from models.distilbert.tt.distilbert_multihead_self_attention import (
+from tt_models.distilbert.tt.distilbert_multihead_self_attention import (
     TtMultiHeadSelfAttention,
 )
-from models.distilbert.tt.distilbert_ffn import TtFFN
+from tt_models.distilbert.tt.distilbert_ffn import TtFFN
 
 
 class TtTransformerBlock(nn.Module):

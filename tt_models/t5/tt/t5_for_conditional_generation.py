@@ -6,11 +6,11 @@ import tt_lib
 import json
 from typing import Optional, Tuple
 
-from models.utility_functions import (
+from tt_models.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from models.t5.tt.t5_stack import TtT5Stack
+from tt_models.t5.tt.t5_stack import TtT5Stack
 from loguru import logger
 from transformers import T5ForConditionalGeneration
 

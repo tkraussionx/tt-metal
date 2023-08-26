@@ -3,7 +3,7 @@ import torch.nn as nn
 
 import tt_lib
 from dataclasses import dataclass
-from models.distilbert.tt.distilbert_transformer_block import TtTransformerBlock
+from tt_models.distilbert.tt.distilbert_transformer_block import TtTransformerBlock
 
 
 @dataclass

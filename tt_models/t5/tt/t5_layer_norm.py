@@ -1,6 +1,6 @@
 import torch
 import tt_lib
-from models.utility_functions import pad_by_zero
+from tt_models.utility_functions import pad_by_zero
 
 # class T5LayerNorm(nn.Module):
 #     def __init__(self, hidden_size, eps=1e-6):

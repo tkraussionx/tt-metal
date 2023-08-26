@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from models.trocr.tt.trocr_decoder import TtTrOCRDecoder
+from tt_models.trocr.tt.trocr_decoder import TtTrOCRDecoder
 
 
 class TtTrOCRDecoderWrapper(nn.Module):

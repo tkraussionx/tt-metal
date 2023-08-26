@@ -1,6 +1,6 @@
 import torch.nn as nn
 import tt_lib
-from models.ssd.tt.ssd_mobilenetv3_convlayer import (
+from tt_models.ssd.tt.ssd_mobilenetv3_convlayer import (
     TtMobileNetV3ConvLayer,
 )
 

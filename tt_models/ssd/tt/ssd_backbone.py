@@ -5,13 +5,13 @@ from collections import OrderedDict
 from typing import (
     Dict,
 )
-from models.ssd.tt.ssd_mobilenetv3_features import (
+from tt_models.ssd.tt.ssd_mobilenetv3_features import (
     TtMobileNetV3Features,
 )
-from models.ssd.tt.ssd_mobilenetv3_extract import (
+from tt_models.ssd.tt.ssd_mobilenetv3_extract import (
     TtMobileNetV3extract,
 )
-from models.ssd.tt.ssd_mobilenetv3_inverted_residual import (
+from tt_models.ssd.tt.ssd_mobilenetv3_inverted_residual import (
     TtMobileNetV3InvertedResidual,
 )
 

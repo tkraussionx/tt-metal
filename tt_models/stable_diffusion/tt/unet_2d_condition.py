@@ -2,24 +2,24 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch.nn as nn
 
-from models.stable_diffusion.sd_utils import make_linear
-from models.stable_diffusion.tt.embeddings import (
+from tt_models.stable_diffusion.sd_utils import make_linear
+from tt_models.stable_diffusion.tt.embeddings import (
     TtTimestepEmbedding as TimestepEmbedding,
 )
-from models.stable_diffusion.tt.downblock_2d import TtDownBlock2D as DownBlock2D
-from models.stable_diffusion.tt.upblock_2d import TtUpBlock2D as UpBlock2D
-from models.stable_diffusion.tt.unet_2d_blocks import (
+from tt_models.stable_diffusion.tt.downblock_2d import TtDownBlock2D as DownBlock2D
+from tt_models.stable_diffusion.tt.upblock_2d import TtUpBlock2D as UpBlock2D
+from tt_models.stable_diffusion.tt.unet_2d_blocks import (
     TtUNetMidBlock2DCrossAttn as UNetMidBlock2DCrossAttn,
 )
-from models.stable_diffusion.tt.unet_2d_blocks import (
+from tt_models.stable_diffusion.tt.unet_2d_blocks import (
     TtCrossAttnDownBlock2D as CrossAttnDownBlock2D,
 )
-from models.stable_diffusion.tt.unet_2d_blocks import (
+from tt_models.stable_diffusion.tt.unet_2d_blocks import (
     TtCrossAttnUpBlock2D as CrossAttnUpBlock2D,
 )
 import tt_lib as ttl
 from tt_lib.fallback_ops import fallback_ops
-from models.stable_diffusion.tt.experimental_ops import Conv2d
+from tt_models.stable_diffusion.tt.experimental_ops import Conv2d
 
 
 def get_down_block(

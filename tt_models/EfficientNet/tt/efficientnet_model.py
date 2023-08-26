@@ -7,18 +7,18 @@ import torchvision
 from functools import partial
 from loguru import logger
 
-from models.utility_functions import (
+from tt_models.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from models.EfficientNet.tt.efficientnet_conv import TtEfficientnetConv2dNormActivation
-from models.EfficientNet.reference.efficientnet_lite import build_efficientnet_lite
-from models.EfficientNet.tt.efficientnet_mbconv import (
+from tt_models.EfficientNet.tt.efficientnet_conv import TtEfficientnetConv2dNormActivation
+from tt_models.EfficientNet.reference.efficientnet_lite import build_efficientnet_lite
+from tt_models.EfficientNet.tt.efficientnet_mbconv import (
     TtEfficientnetMbConv,
     _MBConvConfig,
     MBConvConfig,
 )
-from models.EfficientNet.tt.efficientnet_fused_mbconv import (
+from tt_models.EfficientNet.tt.efficientnet_fused_mbconv import (
     TtEfficientnetFusedMBConv,
     FusedMBConvConfig,
 )

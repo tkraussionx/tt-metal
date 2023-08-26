@@ -4,7 +4,7 @@ from loguru import logger
 import math
 
 from transformers import T5Model
-from models.utility_functions import (
+from tt_models.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,
 )

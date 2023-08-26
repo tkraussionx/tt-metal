@@ -27,14 +27,14 @@ from tt_lib import tensor
 import tt_lib.fallback_ops as fallback_ops
 from transformers import ViTForImageClassification
 
-from models.utility_functions import (
+from tt_models.utility_functions import (
     torch_to_tt_tensor,
     torch_to_tt_tensor_rm,
     tt_to_torch_tensor,
 )
-from models.vit.tt.configuration_vit import ViTConfig
-from models.vit.tt.activations import ACT2FN
-from models.vit.vit_utils import make_address, make_linear
+from tt_models.vit.tt.configuration_vit import ViTConfig
+from tt_models.vit.tt.activations import ACT2FN
+from tt_models.vit.vit_utils import make_address, make_linear
 
 tt_tensor = tt_lib.tensor.Tensor
 

@@ -1,7 +1,7 @@
 import sys
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from models.llama2.llama2_utils import get_logits_processor
+from tt_models.llama2.llama2_utils import get_logits_processor
 
 from loguru import logger
 import pytest

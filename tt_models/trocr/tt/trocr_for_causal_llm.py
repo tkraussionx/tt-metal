@@ -6,9 +6,9 @@ from typing import Optional, Tuple, Union
 from dataclasses import dataclass
 
 import tt_lib
-from models.utility_functions import torch_to_tt_tensor_rm
-from models.trocr.tt.trocr_decoder_wrapper import TtTrOCRDecoderWrapper
-from models.helper_funcs import Linear
+from tt_models.utility_functions import torch_to_tt_tensor_rm
+from tt_models.trocr.tt.trocr_decoder_wrapper import TtTrOCRDecoderWrapper
+from tt_models.helper_funcs import Linear
 
 
 @dataclass

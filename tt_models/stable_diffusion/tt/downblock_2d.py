@@ -7,8 +7,8 @@ import torch
 import tt_lib as ttl
 from tt_lib.fallback_ops import fallback_ops
 
-from models.stable_diffusion.tt.residual_block import TtResnetBlock2D
-from models.stable_diffusion.tt.downsample_2d import TtDownsample2D
+from tt_models.stable_diffusion.tt.residual_block import TtResnetBlock2D
+from tt_models.stable_diffusion.tt.downsample_2d import TtDownsample2D
 
 
 class TtDownBlock2D(nn.Module):

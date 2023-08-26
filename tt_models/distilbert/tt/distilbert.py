@@ -1,4 +1,4 @@
-from models.distilbert.tt.distilbert_for_question_answering import (
+from tt_models.distilbert.tt.distilbert_for_question_answering import (
     TtDistilBertForQuestionAnswering,
 )
 from transformers import (

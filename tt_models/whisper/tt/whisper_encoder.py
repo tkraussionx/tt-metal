@@ -9,11 +9,11 @@ from typing import Optional, Tuple, Union
 from transformers import WhisperConfig
 from dataclasses import dataclass
 
-from models.utility_functions import (
+from tt_models.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from models.whisper.tt.whisper_encoder_layer import (
+from tt_models.whisper.tt.whisper_encoder_layer import (
     TtWhisperEncoderLayer,
 )
 
