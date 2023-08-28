@@ -1,12 +1,12 @@
 ---
 test-list:
-  - eltwise-lerp_ternary:
+  - eltwise-leaky_relu:
       shape:
         start-shape: [1, 1, 32, 32]
         end-shape: [12, 24, 512, 512]
         interval: [1, 1, 32, 32]
-        num-shapes: 3
-        num-samples: 4
+        num-shapes: 1
+        num-samples: 8
       datagen:
         function: gen_rand
         args:
@@ -14,19 +14,20 @@ test-list:
           high: 100
       comparison:
         function: comp_pcc
-      args-gen: gen_dtype_layout_device
-      output-file: eltwise_lerp_ternary_sweep.csv
+      args-gen: gen_leaky_relu_args
+      output-file: eltwise_leaky_relu_sweep.csv
       args:
         data-layout: ["TILE"]
         data-type: ["BFLOAT16", "BFLOAT8_B"]
-        on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
-  - eltwise-lerp_ternary:
+        buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
+        out-buffer-type: ["DRAM", "L1"]
+  - eltwise-leaky_relu:
       shape:
         start-shape: [1, 1, 2, 2]
         end-shape: [12, 24, 512, 512]
         interval: [1, 1, 2, 2]
-        num-shapes: 3
-        num-samples: 4
+        num-shapes: 1
+        num-samples: 8
       datagen:
         function: gen_rand
         args:
@@ -34,9 +35,10 @@ test-list:
           high: 100
       comparison:
         function: comp_pcc
-      args-gen: gen_dtype_layout_device
-      output-file: eltwise_lerp_ternary_sweep.csv
+      args-gen: gen_leaky_relu_args
+      output-file: eltwise_leaky_relu_sweep.csv
       args:
         data-layout: ["ROW_MAJOR"]
         data-type: ["BFLOAT16"]
-        on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
+        buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
+        out-buffer-type: ["DRAM", "L1"]

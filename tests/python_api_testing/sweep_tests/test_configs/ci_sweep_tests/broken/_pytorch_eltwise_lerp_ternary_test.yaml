@@ -1,6 +1,6 @@
 ---
 test-list:
-  - eltwise-addcmul:
+  - eltwise-lerp_ternary:
       shape:
         start-shape: [1, 1, 32, 32]
         end-shape: [12, 24, 512, 512]
@@ -14,17 +14,18 @@ test-list:
           high: 100
       comparison:
         function: comp_pcc
-      args-gen: gen_scalar_args
+      args-gen: gen_dtype_layout_device
+      output-file: eltwise_lerp_ternary_sweep.csv
       args:
         data-layout: ["TILE"]
         data-type: ["BFLOAT16", "BFLOAT8_B"]
-        on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
-      output-file: eltwise_addcmul_sweep.csv
-  - eltwise-addcmul:
+        buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
+        out-buffer-type: ["DRAM"]
+  - eltwise-lerp_ternary:
       shape:
         start-shape: [1, 1, 2, 2]
         end-shape: [12, 24, 512, 512]
-        interval: [1, 1, 1, 2]
+        interval: [1, 1, 2, 2]
         num-shapes: 3
         num-samples: 4
       datagen:
@@ -34,9 +35,10 @@ test-list:
           high: 100
       comparison:
         function: comp_pcc
-      args-gen: gen_scalar_args
+      args-gen: gen_dtype_layout_device
+      output-file: eltwise_lerp_ternary_sweep.csv
       args:
         data-layout: ["ROW_MAJOR"]
         data-type: ["BFLOAT16"]
-        on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
-      output-file: eltwise_addcmul_sweep.csv
+        buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
+        out-buffer-type: ["DRAM"]
