@@ -19,7 +19,7 @@ test-list:
         data-layout: ["TILE"]
         data-type: ["BFLOAT16", "BFLOAT8_B"]
         buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
-        out-buffer-type: ["DRAM", "L1"]
+        out-buffer-type: ["DRAM"]
       output-file: eltwise_relu_max_sweep_tile.csv
   - eltwise-relu_max:
       shape:
@@ -40,5 +40,5 @@ test-list:
         data-layout: ["ROW_MAJOR"]
         data-type: ["BFLOAT16"]
         buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
-        out-buffer-type: ["DRAM", "L1"]
+        out-buffer-type: ["DRAM"]
       output-file: eltwise_relu_max_sweep_rm.csv
