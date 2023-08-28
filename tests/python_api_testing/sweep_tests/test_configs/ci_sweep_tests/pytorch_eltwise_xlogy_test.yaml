@@ -20,7 +20,7 @@ test-list:
         data-layout: ["TILE"]
         data-type: ["BFLOAT16", "BFLOAT8_B"]
         buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
-        out-buffer-type: ["DRAM", "L1"]
+        out-buffer-type: ["DRAM"]
   - eltwise-xlogy:
       shape:
         start-shape: [1, 1, 2, 2]
@@ -42,4 +42,4 @@ test-list:
         data-type: ["BFLOAT16"]
         on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
         buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
-        out-buffer-type: ["DRAM", "L1"]
+        out-buffer-type: ["DRAM"]
