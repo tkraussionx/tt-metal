@@ -1,6 +1,6 @@
 ---
 test-list:
-  - eltwise-addcdiv:
+  - eltwise-addcmul:
       shape:
         start-shape: [1, 1, 32, 32]
         end-shape: [12, 24, 512, 512]
@@ -20,8 +20,8 @@ test-list:
         data-type: ["BFLOAT16", "BFLOAT8_B"]
         buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
         out-buffer-type: ["DRAM"]
-      output-file: eltwise_addcdiv_sweep.csv
-  - eltwise-addcdiv:
+      output-file: eltwise_addcmul_sweep.csv
+  - eltwise-addcmul:
       shape:
         start-shape: [1, 1, 2, 2]
         end-shape: [12, 24, 512, 512]
@@ -41,4 +41,4 @@ test-list:
         data-type: ["BFLOAT16"]
         buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
         out-buffer-type: ["DRAM"]
-      output-file: eltwise_addcdiv_sweep.csv
+      output-file: eltwise_addcmul_sweep.csv

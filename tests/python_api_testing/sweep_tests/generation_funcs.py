@@ -382,6 +382,8 @@ def gen_dtype_layout_device(
 
         dtype_buffer_layouts.append(dtype_buffer_layout)
 
+    result = []
+
     for out_buffer_type in buffer_types[-1]:
         for dtype_buffer_layout_combination in product(*dtype_buffer_layouts):
             out = sanitize_args(input_shapes, dtype_buffer_layout_combination)
@@ -396,12 +398,14 @@ def gen_dtype_layout_device(
                     layout.append(x["layout"])
                     buff_type.append(x["buffer_type"])
 
-                yield {
+                result.append({
                     "dtype": dtype,
                     "layout": layout,
                     "buffer_type": buff_type,
                     "output_mem_config": make_mem_config(out_buffer_type),
-                }
+                })
+
+    return result
 
 
 def gen_permute_args(
