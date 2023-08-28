@@ -96,8 +96,8 @@ void py_module(py::module& m_primary) {
     // TODO(arakhmati): delete redundant matmul overrides by figuring out how to pass in MatmulProgramConfig (which is a std::variant)
     m_primary.def(
         "matmul",
-        [](const Tensor& input_tensor_a, const Tensor& input_tensor_b, const MatmulDefaultProgramConfig& program_config, const MemoryConfig& out_mem_config, std::optional<DataType> output_dtype) {
-            return matmul(input_tensor_a, input_tensor_b, program_config, out_mem_config, output_dtype);
+        [](const Tensor& input_tensor_a, const Tensor& input_tensor_b, const MatmulDefaultProgramConfig& program_config, const MemoryConfig& out_mem_config, std::optional<DataType> output_dtype, const MathFidelity math_fidelity) {
+            return matmul(input_tensor_a, input_tensor_b, program_config, out_mem_config, output_dtype, math_fidelity);
         },
         py::arg("input_tensor_a").noconvert(),
         py::arg("input_tensor_b").noconvert(),
@@ -105,6 +105,7 @@ void py_module(py::module& m_primary) {
         py::arg("program_config").noconvert() = MatmulDefaultProgramConfig(),
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("output_dtype").noconvert() = std::nullopt,
+        py::arg("math_fidelity").noconvert() = MathFidelity::LoFi,
         R"doc(
             Perform a matrix multiplication ``input_tensor_a x input_tensor_b``.
 
@@ -121,8 +122,8 @@ void py_module(py::module& m_primary) {
 
     m_primary.def(
         "matmul",
-        [](const Tensor& input_tensor_a, const Tensor& input_tensor_b, const MatmulMultiCoreReuseProgramConfig& program_config, const MemoryConfig& out_mem_config, std::optional<DataType> output_dtype) {
-            return matmul(input_tensor_a, input_tensor_b, program_config, out_mem_config, output_dtype);
+        [](const Tensor& input_tensor_a, const Tensor& input_tensor_b, const MatmulMultiCoreReuseProgramConfig& program_config, const MemoryConfig& out_mem_config, std::optional<DataType> output_dtype, const MathFidelity math_fidelity) {
+            return matmul(input_tensor_a, input_tensor_b, program_config, out_mem_config, output_dtype, math_fidelity);
         },
         py::arg("input_tensor_a").noconvert(),
         py::arg("input_tensor_b").noconvert(),
@@ -130,6 +131,7 @@ void py_module(py::module& m_primary) {
         py::arg("program_config").noconvert(),
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("output_dtype").noconvert() = std::nullopt,
+        py::arg("math_fidelity").noconvert() = MathFidelity::LoFi,
         R"doc(
             Perform a matrix multiplication ``input_tensor_a x input_tensor_b``.
 
@@ -146,8 +148,8 @@ void py_module(py::module& m_primary) {
 
     m_primary.def(
         "matmul",
-        [](const Tensor& input_tensor_a, const Tensor& input_tensor_b, std::optional<const Tensor> bias, const MatmulDefaultProgramConfig& program_config, const MemoryConfig& out_mem_config, std::optional<DataType> output_dtype) {
-            return matmul(input_tensor_a, input_tensor_b, bias, program_config, out_mem_config, output_dtype);
+        [](const Tensor& input_tensor_a, const Tensor& input_tensor_b, std::optional<const Tensor> bias, const MatmulDefaultProgramConfig& program_config, const MemoryConfig& out_mem_config, std::optional<DataType> output_dtype, const MathFidelity math_fidelity) {
+            return matmul(input_tensor_a, input_tensor_b, bias, program_config, out_mem_config, output_dtype, math_fidelity);
         },
         py::arg("input_tensor_a").noconvert(),
         py::arg("input_tensor_b").noconvert(),
@@ -156,6 +158,7 @@ void py_module(py::module& m_primary) {
         py::arg("program_config").noconvert() = MatmulDefaultProgramConfig(),
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("output_dtype").noconvert() = std::nullopt,
+        py::arg("math_fidelity").noconvert() = MathFidelity::LoFi,
         R"doc(
             Perform a matrix multiplication ``input_tensor_a x input_tensor_b``.
 
@@ -173,8 +176,8 @@ void py_module(py::module& m_primary) {
 
     m_primary.def(
         "matmul",
-        [](const Tensor& input_tensor_a, const Tensor& input_tensor_b, std::optional<const Tensor> bias, const MatmulMultiCoreReuseMultiCastProgramConfig& program_config, const MemoryConfig& out_mem_config, std::optional<DataType> output_dtype) {
-            return matmul(input_tensor_a, input_tensor_b, bias, program_config, out_mem_config, output_dtype);
+        [](const Tensor& input_tensor_a, const Tensor& input_tensor_b, std::optional<const Tensor> bias, const MatmulMultiCoreReuseMultiCastProgramConfig& program_config, const MemoryConfig& out_mem_config, std::optional<DataType> output_dtype, const MathFidelity math_fidelity) {
+            return matmul(input_tensor_a, input_tensor_b, bias, program_config, out_mem_config, output_dtype, math_fidelity);
         },
         py::arg("input_tensor_a").noconvert(),
         py::arg("input_tensor_b").noconvert(),
@@ -183,6 +186,7 @@ void py_module(py::module& m_primary) {
         py::arg("program_config").noconvert(),
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("output_dtype").noconvert() = std::nullopt,
+        py::arg("math_fidelity").noconvert() = MathFidelity::LoFi,
         R"doc(
             Perform a matrix multiplication ``input_tensor_a x input_tensor_b``.
 
