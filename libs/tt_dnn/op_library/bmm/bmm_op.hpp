@@ -87,10 +87,31 @@ Tensor falcon_dense_4h_to_h_matmul(const Tensor &input_tensor_a, const Tensor &i
 Tensor falcon_dense_h_to_4h_matmul (const Tensor &input_tensor_a, const Tensor &input_tensor_b, std::optional<const Tensor> bias, bool fuse_gelu_activation = false, const MemoryConfig& mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, std::optional<const DataType> output_dtype=std::nullopt);
 Tensor falcon_lm_head_matmul (const Tensor &input_tensor_a, const Tensor &input_tensor_b, std::optional<const Tensor> bias, const MemoryConfig& mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, std::optional<const DataType> output_dtype=std::nullopt);
 
+} // namespace tt_metal
+
 /**
  * Generalized blocked matmul with support for tilize and untilize and mixed-prec
  */
+// namespace operations::primary {
+
+using namespace tt_metal;
+
+struct BMMTilizeUntilizeDefaultProgramConfig{
+   tt::stl::reflection::Attributes attributes() const { return {}; };
+};
+struct BMMTilizeUntilizeBaseProgramConfig {
+    std::optional<UnaryWithParam> fused_activation;
+    tt::stl::reflection::Attributes attributes() const;
+};
+using BMMTilizeUntilizeProgramConfig = std::variant<BMMTilizeUntilizeDefaultProgramConfig,
+                                                    BMMTilizeUntilizeBaseProgramConfig>;
+
+// } // operations::primary
+
+namespace tt_metal {
+
 struct BMMTilizeUntilize {
+    const BMMTilizeUntilizeProgramConfig program_config;
     const DataType out_dt_;
     const uint32_t in0_nblocks_h_, in0_nblocks_w_, in1_nblocks_w_;
     const uint32_t in0_block_ntiles_h_, in0_block_ntiles_w_, in1_block_ntiles_w_;
@@ -113,14 +134,15 @@ Tensor bmm_tilize_untilize(const Tensor& a, const Tensor& b, const Tensor& bias,
                            uint32_t a_height_nblocks, uint32_t a_width_nblocks, uint32_t b_width_nblocks,
                            uint32_t a_block_height_ntiles, uint32_t a_block_width_ntiles, uint32_t b_block_width_ntiles,
                            uint32_t out_subblock_height_ntiles, uint32_t out_subblock_width_ntiles,
-                           bool tilize_in0, bool untilize_out, bool has_bias);
+                           bool tilize_in0, bool untilize_out, bool has_bias,
+                           const BMMTilizeUntilizeProgramConfig& program_config = BMMTilizeUntilizeDefaultProgramConfig{});
 operation::ProgramWithCallbacks bmm_single_core_tilize_untilize(
                                     const Tensor &in0, const Tensor &in1, Tensor &bias, DataType out_dt,
                                     uint32_t in0_height_nblocks, uint32_t in0_width_nblocks, uint32_t in1_width_nblocks,
                                     uint32_t in0_block_height_ntiles, uint32_t in0_block_width_ntiles, uint32_t in1_block_width_ntiles,
                                     uint32_t out_subblock_height_ntiles, uint32_t out_subblock_width_ntiles,
                                     bool tilize_in0, bool untilize_out, bool has_bias,
-                                    Tensor &out);
+                                    Tensor &out, std::optional<UnaryWithParam> fused_activation);
 
 }  // namespace tt_metal
 

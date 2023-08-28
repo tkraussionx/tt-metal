@@ -203,6 +203,10 @@ def test_run_bmm_single_core_tilize_untilize(
     # ttb_pytorch = untilize(ttb.to_torch())
     # print(f'b slice: {ttb_pytorch[0, 0, 0:32*a_block_width_ntiles*a_width_nblocks:32, 0:32*b_width_nblocks*b_block_width_ntiles:1]}')
 
+    fuse_relu = True
+    program_config = ttl.tensor.BMMTilizeUntilizeBaseProgramConfig(
+                        fused_activation=ttl.tensor.FusibleActivationWithParam(ttl.tensor.FusibleActivation.RELU) if fuse_relu else None)
+
     ## compute out
     out = ttl.tensor.bmm_tilize_untilize(
         tta,
@@ -220,7 +224,7 @@ def test_run_bmm_single_core_tilize_untilize(
         tilize_a,
         untilize_out,
         has_bias,
-    )
+        program_config)
     out = out.cpu()
     out = out.to(ttl.tensor.Layout.ROW_MAJOR).unpad_from_tile(out_shape).to_torch().float()
 

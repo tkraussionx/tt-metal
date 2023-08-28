@@ -15,9 +15,11 @@ Tensor bmm_tilize_untilize(const Tensor& a, const Tensor& b, const Tensor& bias,
                            uint32_t a_height_nblocks, uint32_t a_width_nblocks, uint32_t b_width_nblocks,
                            uint32_t a_block_height_ntiles, uint32_t a_block_width_ntiles, uint32_t b_block_width_ntiles,
                            uint32_t out_subblock_height_ntiles, uint32_t out_subblock_width_ntiles,
-                           bool tilize_in0, bool untilize_out, bool has_bias) {
+                           bool tilize_in0, bool untilize_out, bool has_bias,
+                           const BMMTilizeUntilizeProgramConfig& program_config) {
     // NOTE: Currently only single core implementation exists.
     return operation::run(BMMTilizeUntilize {
+                            program_config,
                             out_dt,
                             a_height_nblocks, a_width_nblocks, b_width_nblocks,
                             a_block_height_ntiles, a_block_width_ntiles, b_block_width_ntiles,
@@ -177,7 +179,8 @@ operation::ProgramWithCallbacks bmm_single_core_tilize_untilize(
                                     bool tilize_in0,
                                     bool untilize_out,
                                     bool has_bias,
-                                    Tensor &out) {
+                                    Tensor &out,
+                                    std::optional<UnaryWithParam> fused_activation) {
 
     uint32_t in0_batch = in0.shape()[0];
     uint32_t in0_channel = in0.shape()[1];
@@ -321,7 +324,7 @@ operation::ProgramWithCallbacks bmm_single_core_tilize_untilize(
         bias_ntiles_w = bias.shape()[3] / constants::TILE_WIDTH;
         bias_df = datatype_to_dataformat_converter(bias.dtype());
         bias_tile_nbytes = tile_size(bias_df);
-        bias_log2_of_pagesize = (uint32_t) log2((float) bias_tile_nbytes);
+        bias_log2_of_pagesize = (uint32_t) std::log2((float) bias_tile_nbytes);
     }
 
     {   // debug
@@ -384,10 +387,14 @@ operation::ProgramWithCallbacks bmm_single_core_tilize_untilize(
                                               untilize_out,
                                               has_bias);
 
-    // defines for Bias
+    // defines
     std::map<string, string> all_defines;
     if (has_bias) {
         all_defines["FUSE_BIAS"] = "1";
+    }
+    if (fused_activation.has_value()) {
+        all_defines.merge(eltwise_unary_op_utils::get_defines(fused_activation.value().op_type, fused_activation.value().param, "ACTIVATION", "i"));
+        all_defines[fmt::format("{}_ACTIVATION", magic_enum::enum_name(fused_activation.value().op_type).data())] = "1";
     }
 
     // Reader kernel
@@ -626,14 +633,33 @@ operation::ProgramWithCallbacks BMMTilizeUntilize::create_program(const std::vec
     const auto& in1 = inputs.at(1);
     const auto& bias = inputs.at(2);
     auto& out = outputs.at(0);
-    // NOTE: currently only single core version exists
-    return bmm_single_core_tilize_untilize(in0, in1, bias, out_dt_,
-                                           in0_nblocks_h_, in0_nblocks_w_, in1_nblocks_w_,
-                                           in0_block_ntiles_h_, in0_block_ntiles_w_, in1_block_ntiles_w_,
-                                           out_subblock_ntiles_h_, out_subblock_ntiles_w_,
-                                           tilize_in0_, untilize_out_,
-                                           has_bias_,
-                                           out);
+
+    return std::visit(
+        [&](const auto& program_config) -> operation::ProgramWithCallbacks {
+            using ProgramConfigType = std::decay_t<decltype(program_config)>;
+            if constexpr (std::is_same_v<ProgramConfigType, BMMTilizeUntilizeBaseProgramConfig>) {
+                // NOTE: currently only single core version exists
+                return bmm_single_core_tilize_untilize(in0, in1, bias, out_dt_,
+                                                    in0_nblocks_h_, in0_nblocks_w_, in1_nblocks_w_,
+                                                    in0_block_ntiles_h_, in0_block_ntiles_w_, in1_block_ntiles_w_,
+                                                    out_subblock_ntiles_h_, out_subblock_ntiles_w_,
+                                                    tilize_in0_, untilize_out_,
+                                                    has_bias_,
+                                                    out,
+                                                    program_config.fused_activation);
+            } else {
+                return bmm_single_core_tilize_untilize(in0, in1, bias, out_dt_,
+                                                    in0_nblocks_h_, in0_nblocks_w_, in1_nblocks_w_,
+                                                    in0_block_ntiles_h_, in0_block_ntiles_w_, in1_block_ntiles_w_,
+                                                    out_subblock_ntiles_h_, out_subblock_ntiles_w_,
+                                                    tilize_in0_, untilize_out_,
+                                                    has_bias_,
+                                                    out,
+                                                    std::nullopt);
+            }
+        },
+        this->program_config
+    );
 }
 
 stl::reflection::Attributes BMMTilizeUntilize::attributes() const {
@@ -653,5 +679,5 @@ stl::reflection::Attributes BMMTilizeUntilize::attributes() const {
     };
 }
 
-}  // namespace tt_metal
-}  // namespace tt
+} // namespace tt_metal
+} // namespace tt

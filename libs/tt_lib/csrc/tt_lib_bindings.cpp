@@ -2340,8 +2340,27 @@ void TensorModule(py::module &m_tensor) {
         +----------+-----------------------------------------------------------------------+-----------------------+------------------------+----------+
     )doc");
 
+    py::class_<BMMTilizeUntilizeProgramConfig>(m_tensor, "BMMTilizeUntilizeProgramConfig");
+    py::class_<BMMTilizeUntilizeDefaultProgramConfig>(m_tensor, "BMMTilizeUntilizeDefaultProgramConfig")
+        .def(py::init<>());
+    py::class_<BMMTilizeUntilizeBaseProgramConfig>(m_tensor, "BMMTilizeUntilizeBaseProgramConfig")
+        .def(
+            py::init<>(
+                [] (std::optional<UnaryWithParam> fused_activation) {
+                    return BMMTilizeUntilizeBaseProgramConfig{
+                        .fused_activation=fused_activation,
+                    };
+                }
+            )
+        );
+
     // matrix multiplication
-    m_tensor.def("bmm_tilize_untilize", &bmm_tilize_untilize, R"doc(
+    m_tensor.def("bmm_tilize_untilize", &bmm_tilize_untilize,
+                 py::arg().noconvert(), py::arg().noconvert(), py::arg().noconvert(), py::arg().noconvert(), py::arg().noconvert(),
+                 py::arg().noconvert(), py::arg().noconvert(), py::arg().noconvert(), py::arg().noconvert(), py::arg().noconvert(),
+                 py::arg().noconvert(), py::arg().noconvert(), py::arg().noconvert(), py::arg().noconvert(), py::arg().noconvert(),
+                 py::arg("program_config").noconvert() = BMMTilizeUntilizeDefaultProgramConfig(),
+    R"doc(
         Perform a batched matmul ``A x B`` with two tensors, where batch and channel dims match.
         This op also supports tiling tensor A and untiling the output.
 
