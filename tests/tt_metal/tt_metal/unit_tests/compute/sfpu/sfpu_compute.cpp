@@ -222,7 +222,12 @@ bool run_sfpu_all_same_buffer(tt_metal::Device* device, const SfpuConfig& test_c
     tt_metal::CompileProgram(device, program);
 
     std::vector<u32> dest_buffer_data;
+    bool slow_dispatch_env = getenv("TT_METAL_SLOW_DISPATCH_MODE") != nullptr;
+    log_info(LogTest, "TT_METAL_SLOW_DISPATCH_MODE = {}", slow_dispatch_env);
+
     if (device->arch() == tt::ARCH::GRAYSKULL) {
+        log_assert(!slow_dispatch_env, "Running CQ APIs with TT_METAL_SLOW_DISPATCH_MODE=1 is not supported");
+        std::cout << "Running with CQ APIs" << std::endl;
         CommandQueue& cq = *tt::tt_metal::detail::GLOBAL_CQ;
         EnqueueWriteBuffer(cq, input_dram_buffer, packed_input, false);
 
@@ -230,6 +235,7 @@ bool run_sfpu_all_same_buffer(tt_metal::Device* device, const SfpuConfig& test_c
 
         EnqueueReadBuffer(cq, output_dram_buffer, dest_buffer_data, true);
     } else {
+        log_assert(slow_dispatch_env, "Running slow dispatch APIs with TT_METAL_SLOW_DISPATCH_MODE=0 is not supported");
         tt_metal::WriteRuntimeArgsToDevice(device, program);
         tt_metal::WriteToBuffer(input_dram_buffer, packed_input);
         tt_metal::ConfigureDeviceWithProgram(device, program);
