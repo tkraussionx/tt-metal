@@ -9,6 +9,7 @@
 #include "tt_metal/impl/buffers/buffer.hpp"
 #include "llrt/llrt.hpp"
 #include "tools/profiler/profiler_state.hpp"
+#include "tt_metal/third_party/tracy/public/tracy/TracyOpenCL.hpp"
 
 using std::chrono::steady_clock;
 using std::chrono::duration;
@@ -76,6 +77,7 @@ class Profiler {
     public:
         //Constructor
         Profiler();
+        ~Profiler();
 
         // Map for storing dvice data
         std::unordered_map<uint64_t,std::list<uint64_t>> device_data;
@@ -99,6 +101,8 @@ class Profiler {
         void dumpDeviceResults(Device *device, int pcie_slot, const vector<CoreCoord> &worker_cores);
 
         Buffer output_dram_buffer;
+
+        TracyCLCtx tracyTTCtx;
 };
 
 }  // namespace tt_metal

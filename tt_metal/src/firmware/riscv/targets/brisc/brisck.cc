@@ -65,13 +65,29 @@ inline __attribute__((always_inline)) void finish_BR_profiler()
 {
 #if defined(PROFILE_KERNEL) && defined(COMPILE_FOR_BRISC)
 
-    uint32_t dram_noc_x = NOC_X(1);
-    uint32_t dram_noc_y = NOC_Y(0);
-    std::uint64_t dram_buffer_dst_noc_addr = get_noc_addr(dram_noc_x, dram_noc_y, 0);
+    const uint32_t NOC_ID_MASK = (1 << NOC_ADDR_NODE_ID_BITS) - 1;
+    uint32_t noc_id = noc_local_node_id() & 0xFFF;
+    uint32_t dram_noc_x = noc_id & NOC_ID_MASK;
+    uint32_t dram_noc_y = (noc_id >> NOC_ADDR_NODE_ID_BITS) & NOC_ID_MASK;
+    uint32_t flat_id = (dram_noc_y - 1) * 12 + (dram_noc_x - 1);
 
-    uint32_t size = 512;
-    noc_async_write(PRINT_BUFFER_NC, dram_buffer_dst_noc_addr, size);
-    noc_async_write_barrier();
+    uint32_t dram_address = flat_id * 1024;
+
+
+    //volatile uint32_t *buffer = reinterpret_cast<uint32_t*>(PRINT_BUFFER_NC);
+    //buffer[0] = flat_id;
+    //buffer[1] = dram_noc_x;
+    //buffer[2] = dram_noc_y;
+    //buffer[3] = dram_address;
+
+
+    uint32_t size = 1024;
+    //if (flat_id == 0)
+    //{
+        std::uint64_t dram_buffer_dst_noc_addr = get_noc_addr(1, 0, dram_address);
+        noc_async_write(PRINT_BUFFER_NC, dram_buffer_dst_noc_addr, size);
+        noc_async_write_barrier();
+    //}
 #endif //PROFILE_KERNEL
 }
 

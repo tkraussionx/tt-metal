@@ -178,10 +178,20 @@ void Profiler::dumpDeviceResultToFile(
 Profiler::Profiler()
 {
 #if defined(PROFILER)
+    ZoneScopedC(tracy::Color::Green);
     host_new_log = true;
     device_new_log = true;
     output_dir = std::filesystem::path("tt_metal/tools/profiler/logs");
     std::filesystem::create_directories(output_dir);
+
+    tracyTTCtx = TracyCLContext();
+#endif
+}
+
+Profiler::~Profiler()
+{
+#if defined(PROFILER)
+    TracyCLDestroy(tracyTTCtx);
 #endif
 }
 
@@ -232,24 +242,23 @@ void Profiler::dumpDeviceResults (
 
         auto dram_noc_xy = output_dram_buffer.noc_coordinates();
 
-        std::cout << dram_noc_xy.x << "," << dram_noc_xy.y << std::endl;
+        //std::cout << dram_noc_xy.x << "," << dram_noc_xy.y << std::endl;
 
 
         vector<std::uint32_t> profile_buffer;
 	tt_metal::ReadFromBuffer(output_dram_buffer, profile_buffer);
-        vector<std::uint32_t> profile_buffer_2 = tt::llrt::read_hex_vec_from_core(
-		device->cluster(),
-		pcie_slot,
-		worker_core,
-		(uint32_t)(106*1024),
-		(uint32_t)1024);
+        //vector<std::uint32_t> profile_buffer_2 = tt::llrt::read_hex_vec_from_core(
+		//device->cluster(),
+		//pcie_slot,
+		//worker_core,
+		//(uint32_t)(106*1024),
+		//(uint32_t)1024);
 
 
-        for (int i=0; i < profile_buffer.size(); i++)
-        {
-            std::cout << profile_buffer[i] << "," << profile_buffer_2 [i] << std::endl;
-        }
-    return;
+        //for (int i=0; i < profile_buffer.size(); i++)
+        //{
+            //std::cout << profile_buffer[i] << "," << profile_buffer_2 [i] << std::endl;
+        //}
 
         readRiscProfilerResults(
             profile_buffer,

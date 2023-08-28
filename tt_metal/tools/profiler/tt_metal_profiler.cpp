@@ -27,8 +27,6 @@ void set_buffer(Device *device){
 }
 
 
-cl_device_id deviceTEST;
-cl_context context;
 void DumpDeviceProfileResults(Device *device, const Program &program) {
 #if defined(PROFILER)
     ZoneScoped;
@@ -46,10 +44,13 @@ void DumpDeviceProfileResults(Device *device, const Program &program) {
         auto pcie_slot = device->pcie_slot();
         tt_metal_profiler.dumpDeviceResults(device, pcie_slot, worker_cores_used_in_program);
 
-        static TracyCLCtx tracyCLCtx = TracyCLContext(context, deviceTEST);
+        tt_metal_profiler.tracyTTCtx->PopulateCLContext();
+
+
 
         for (auto& data: tt_metal_profiler.device_data)
         {
+            ZoneScopedNC("Marker",tracy::Color::Red);
             uint64_t threadID = 100*(data.first/100);
             uint64_t row = int(threadID / 1000000);
             uint64_t col = int((threadID-row*1000000)/10000);
@@ -64,9 +65,9 @@ void DumpDeviceProfileResults(Device *device, const Program &program) {
                     {
                         case 1:
                             {
-                                TracyCLZoneC(tracyCLCtx, "FW", tracy::Color::Red3,threadID);
+                                TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "FW", tracy::Color::Red3,threadID);
                                 {
-                                    TracyCLZoneC(tracyCLCtx, "KERNEL", tracy::Color::Red2,threadID);
+                                    TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "KERNEL", tracy::Color::Red2,threadID);
                                     TracyCLZoneSetEvent(tracy::TTDeviceEvent(pcie_slot,row,col,risc,0));
                                 }
                                 TracyCLZoneSetEvent(tracy::TTDeviceEvent(pcie_slot,row,col,risc,1));
@@ -74,9 +75,9 @@ void DumpDeviceProfileResults(Device *device, const Program &program) {
                             break;
                         case 2:
                             {
-                                TracyCLZoneC(tracyCLCtx, "FW", tracy::Color::Green4,threadID);
+                                TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "FW", tracy::Color::Green4,threadID);
                                 {
-                                    TracyCLZoneC(tracyCLCtx, "KERNEL", tracy::Color::Green3,threadID);
+                                    TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "KERNEL", tracy::Color::Green3,threadID);
                                     TracyCLZoneSetEvent(tracy::TTDeviceEvent(pcie_slot,row,col,risc,0));
                                 }
                                 TracyCLZoneSetEvent(tracy::TTDeviceEvent(pcie_slot,row,col,risc,1));
@@ -84,9 +85,9 @@ void DumpDeviceProfileResults(Device *device, const Program &program) {
                             break;
                         case 3:
                             {
-                                TracyCLZoneC(tracyCLCtx, "FW", tracy::Color::Blue4,threadID);
+                                TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "FW", tracy::Color::Blue4,threadID);
                                 {
-                                    TracyCLZoneC(tracyCLCtx, "KERNEL", tracy::Color::Blue3,threadID);
+                                    TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "KERNEL", tracy::Color::Blue3,threadID);
                                     TracyCLZoneSetEvent(tracy::TTDeviceEvent(pcie_slot,row,col,risc,0));
                                 }
                                 TracyCLZoneSetEvent(tracy::TTDeviceEvent(pcie_slot,row,col,risc,1));
@@ -94,9 +95,9 @@ void DumpDeviceProfileResults(Device *device, const Program &program) {
                             break;
                         case 4:
                             {
-                                TracyCLZoneC(tracyCLCtx, "FW", tracy::Color::Purple3,threadID);
+                                TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "FW", tracy::Color::Purple3,threadID);
                                 {
-                                    TracyCLZoneC(tracyCLCtx, "KERNEL", tracy::Color::Purple2,threadID);
+                                    TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "KERNEL", tracy::Color::Purple2,threadID);
                                     TracyCLZoneSetEvent(tracy::TTDeviceEvent(pcie_slot,row,col,risc,0));
                                 }
                                 TracyCLZoneSetEvent(tracy::TTDeviceEvent(pcie_slot,row,col,risc,1));
@@ -104,9 +105,9 @@ void DumpDeviceProfileResults(Device *device, const Program &program) {
                             break;
                         case 5:
                             {
-                                TracyCLZoneC(tracyCLCtx, "FW", tracy::Color::Yellow4,threadID);
+                                TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "FW", tracy::Color::Yellow4,threadID);
                                 {
-                                    TracyCLZoneC(tracyCLCtx, "KERNEL", tracy::Color::Yellow3,threadID);
+                                    TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "KERNEL", tracy::Color::Yellow3,threadID);
                                     TracyCLZoneSetEvent(tracy::TTDeviceEvent(pcie_slot,row,col,risc,0));
                                 }
                                 TracyCLZoneSetEvent(tracy::TTDeviceEvent(pcie_slot,row,col,risc,1));
@@ -120,8 +121,7 @@ void DumpDeviceProfileResults(Device *device, const Program &program) {
             }
         }
 
-        TracyCLCollect(tracyCLCtx, tt_metal_profiler.device_data);
-        //TracyCLDestroy(tracyCLCtx);
+        TracyCLCollect(tt_metal_profiler.tracyTTCtx, tt_metal_profiler.device_data);
     }
 #endif
 }
