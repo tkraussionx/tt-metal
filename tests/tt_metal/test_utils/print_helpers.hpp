@@ -24,7 +24,11 @@ void print_vector_fixed_numel_per_row(const std::vector<T>& vec, const unsigned 
         if ((i%numel_per_row) == 0) {
             std::cout << std::endl;
         }
-        std::cout << vec.at(i) << ", ";
+        if constexpr (std::is_integral<T>::value or std::is_floating_point<T>::value) {
+            std::cout << vec.at(i) << ", ";
+        } else {
+            std::cout << vec.at(i).to_float() << ", ";
+        }
     }
     std::cout << std::endl;
 }

@@ -511,13 +511,13 @@ bool single_tile_matmul(tt_metal::Device* device) {
 
     auto reader_kernel = tt_metal::CreateDataMovementKernel(
         program,
-        "tt_metal/kernels/compute/unit_tests/matmul/reader_binary.cpp",
+        "tt_metal/kernels/dataflow/unit_tests/matmul/reader_binary.cpp",
         core,
         tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = tt_metal::NOC::RISCV_1_default, .compile_args = {in0_cb_index, in1_cb_index}});
 
     auto writer_kernel = tt_metal::CreateDataMovementKernel(
         program,
-        "tt_metal/kernels/compute/unit_tests/matmul/writer_unary.cpp",
+        "tt_metal/kernels/dataflow/unit_tests/matmul/writer_unary.cpp",
         core,
         tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = tt_metal::NOC::RISCV_0_default, .compile_args = {out_cb_index}});
 
@@ -633,13 +633,13 @@ bool single_block_matmul(tt_metal::Device* device, uint32_t M, uint32_t K, uint3
 
     auto reader_kernel = tt_metal::CreateDataMovementKernel(
         program,
-        "tt_metal/kernels/compute/unit_tests/matmul/reader_binary_blocked.cpp",
+        "tt_metal/kernels/dataflow/unit_tests/matmul/reader_binary_blocked.cpp",
         core,
         tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = tt_metal::NOC::RISCV_1_default, .compile_args = {in0_cb_index, in1_cb_index}});
 
     auto writer_kernel = tt_metal::CreateDataMovementKernel(
         program,
-        "tt_metal/kernels/compute/unit_tests/matmul/writer_unary.cpp",
+        "tt_metal/kernels/dataflow/unit_tests/matmul/writer_unary.cpp",
         core,
         tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = tt_metal::NOC::RISCV_0_default, .compile_args = {out_cb_index}});
 
@@ -774,13 +774,13 @@ bool blocked_matmul(tt_metal::Device* device, uint32_t M, uint32_t K, uint32_t N
 
     auto reader_kernel = tt_metal::CreateDataMovementKernel(
         program,
-        "tt_metal/kernels/compute/unit_tests/matmul/reader_binary_blocked.cpp",
+        "tt_metal/kernels/dataflow/unit_tests/matmul/reader_binary_blocked.cpp",
         core,
         tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = tt_metal::NOC::RISCV_1_default, .compile_args = {in0_cb_index, in1_cb_index}});
 
     auto writer_kernel = tt_metal::CreateDataMovementKernel(
         program,
-        "tt_metal/kernels/compute/unit_tests/matmul/writer_unary.cpp",
+        "tt_metal/kernels/dataflow/unit_tests/matmul/writer_unary.cpp",
         core,
         tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = tt_metal::NOC::RISCV_0_default, .compile_args = {out_cb_index}});
 

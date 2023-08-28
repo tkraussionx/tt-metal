@@ -1125,21 +1125,20 @@ ALWI void transpose_wh_init(uint32_t icb)
     #else
     MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE>(true, true, icb) ));
     #endif
-
-    MATH(( llk_math_pack_sync_init<SyncHalf>() ));
+    MATH(( llk_math_pack_sync_init<SYNC>() ));
 
     PACK(( llk_pack_init() ));
     PACK(( llk_pack_hw_configure_disaggregated<false>(16) ));
     PACK(( llk_setup_outputs() ));
-    PACK(( llk_pack_dest_init<SyncHalf, DstTileFaceLayout::RowMajor, false>() ));
+    PACK(( llk_pack_dest_init<SYNC, DstTileFaceLayout::RowMajor, false>() ));
 
     UNPACK(( llk_setup_operands() ));
     #ifdef ARCH_GRAYSKULL
-    UNPACK(( llk_unpack_A_init<BroadcastType::NONE, true, false>() ));
-    UNPACK(( llk_unpack_A_hw_configure_disaggregated<BroadcastType::NONE, true, true, false>(0) ));
+    UNPACK(( llk_unpack_A_init<BroadcastType::NONE>() ));
+    UNPACK(( llk_unpack_A_hw_configure_disaggregated<BroadcastType::NONE, true, true, false>(icb) ));
     #else
-    UNPACK(( llk_unpack_A_init<BroadcastType::NONE, true, EltwiseBinaryReuseDestType::NONE>(true, true)  ));
-    UNPACK(( llk_unpack_A_hw_configure_disaggregated<>(0, true) ));
+    UNPACK(( llk_unpack_A_init<BroadcastType::NONE, true, EltwiseBinaryReuseDestType::NONE>(true, true, icb)  ));
+    UNPACK(( llk_unpack_A_hw_configure_disaggregated<>(icb, true) ));
     #endif
 }
 
