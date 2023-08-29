@@ -20,7 +20,7 @@ test-list:
         data-type: ["BFLOAT16", "BFLOAT8_B"]
         buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
         out-buffer-type: ["DRAM"]
-      output-file: eltwise_neg_sweep_tile.csv
+      output-file: eltwise_neg_sweep.csv
   - eltwise-neg:
       shape:
         start-shape: [1, 1, 2, 2]
@@ -41,4 +41,4 @@ test-list:
         data-type: ["BFLOAT16"]
         buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
         out-buffer-type: ["DRAM"]
-      output-file: eltwise_neg_sweep_rm.csv
+      output-file: eltwise_neg_sweep.csv
