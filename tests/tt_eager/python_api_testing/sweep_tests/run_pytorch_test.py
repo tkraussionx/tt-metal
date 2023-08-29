@@ -201,25 +201,22 @@ def run_pytorch_test(args):
                     test_buffer_types[-1] = [tt_lib.tensor.BufferType.DRAM]
             # Set tests parameters --------------------------
 
-            skip_header = False
-            if results_csv_path.exists():
-                skip_header = True
-
             ################# RUN TEST SWEEP #################
-            with open(results_csv_path, "a", newline="") as results_csv:
-                results_csv_writer = None
+            for input_shapes, datagen_funcs in shapes_and_datagen(
+                shape_dict, datagen_dict
+            ):
+                for generated_test_args in test_args_gen(input_shapes, test_tt_dtypes, test_tt_layouts, test_buffer_types):
+                    # generated_test_args.update(
+                    #     test_args
+                    # )  # specified test args overrides generated test args
 
-                init_file = True
-                for input_shapes, datagen_funcs in shapes_and_datagen(
-                    shape_dict, datagen_dict
-                ):
-                    for generated_test_args in test_args_gen(input_shapes, test_tt_dtypes, test_tt_layouts, test_buffer_types):
-                        # generated_test_args.update(
-                        #     test_args
-                        # )  # specified test args overrides generated test args
+                    # Moved this here so that we don't need to maintain a hardcoded list of headers per op
+                    skip_header = results_csv_path.exists()
 
-                        # Moved this here so that we don't need to maintain a hardcoded list of headers per op
-                        if init_file and write_to_csv:
+                    with open(results_csv_path, "a", newline="") as results_csv:
+                        results_csv_writer = None
+
+                        if write_to_csv:
                             results_csv_writer = csv.DictWriter(
                                 results_csv,
                                 fieldnames=get_test_fieldnames(["args"])
@@ -227,7 +224,6 @@ def run_pytorch_test(args):
                             if not skip_header:
                                 results_csv_writer.writeheader()
                                 results_csv.flush()
-                            init_file = False
 
                         data_seed = random.randint(0, 20000000) # int(time.time())
                         torch.manual_seed(data_seed)

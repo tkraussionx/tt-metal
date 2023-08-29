@@ -1,6 +1,6 @@
 ---
 test-list:
-  - eltwise-hypot:
+  - eltwise-xlogy:
       shape:
         start-shape: [1, 1, 32, 32]
         end-shape: [12, 24, 512, 512]
@@ -10,18 +10,18 @@ test-list:
       datagen:
         function: gen_rand
         args:
-          low: -100
+          low: 0.001
           high: 100
       comparison:
         function: comp_pcc
       args-gen: gen_dtype_layout_device
-      output-file: eltwise_hypot_sweep.csv
+      output-file: eltwise_xlogy_sweep.csv
       args:
         data-layout: ["TILE"]
         data-type: ["BFLOAT16", "BFLOAT8_B"]
-        buffer-type: ["DRAM", "SYSTEM_MEMORY"]
+        buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
         out-buffer-type: ["DRAM"]
-  - eltwise-hypot:
+  - eltwise-xlogy:
       shape:
         start-shape: [1, 1, 2, 2]
         end-shape: [12, 24, 512, 512]
@@ -31,14 +31,15 @@ test-list:
       datagen:
         function: gen_rand
         args:
-          low: -100
+          low: 0.001
           high: 100
       comparison:
         function: comp_pcc
       args-gen: gen_dtype_layout_device
-      output-file: eltwise_hypot_sweep.csv
+      output-file: eltwise_xlogy_sweep.csv
       args:
         data-layout: ["ROW_MAJOR"]
         data-type: ["BFLOAT16"]
-        buffer-type: ["DRAM", "SYSTEM_MEMORY"]
+        on-device: ["DRAM", "L1", "SYSTEM_MEMORY"]
+        buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
         out-buffer-type: ["DRAM"]
