@@ -190,6 +190,7 @@ class TtFalconModelShared(torch.nn.Module):
         layer_output = input_embeddings
         presents = ()
         for idx, layer in enumerate(self.layers):
+            print(f"{user_id}, {idx}")
             layer_output = layer(
                 hidden_states=layer_output,
                 alibi=None,

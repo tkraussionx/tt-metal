@@ -84,8 +84,8 @@ UpdateCacheOpParallelizationStrategy UpdateCache::get_parallelization_strategy(c
 
 tt::stl::reflection::Attributes UpdateCache::attributes() const {
     return {
-        {"batch_idx", this->batch_idx},
-        {"update_idx", this->update_idx},
+        //{"batch_idx", this->batch_idx},
+        //{"update_idx", this->update_idx},
         {"op_type", this->op_type},
     };
 }

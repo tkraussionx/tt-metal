@@ -17,8 +17,7 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_allclose,
     comp_pcc,
 )
-from models.utility_functions import torch2tt_tensor, tt2torch_tensor
-
+from models.utility_functions import torch2tt_tensor, tt2torch_tensor, disable_persistent_kernel_cache, enable_persistent_kernel_cache
 
 class PytorchFalconCausalLM(torch.nn.Module):
     def __init__(self, hf_reference_model, num_layers):
@@ -142,6 +141,25 @@ def run_test_FalconCausalLM_inference(
     if llm_mode == "prefill":
         tt_outs = []
         model_inputs = torch.split(model_input, 1)
+        disable_persistent_kernel_cache()
+        tt_embeddings, tt_attention_mask = zip(
+            *[
+                tt_FalconCausalLM.model_preprocessing(m_i, kv_cache_len, llm_mode)
+                for m_i in model_inputs
+            ]
+        )
+        for user_id in range(batch):
+            tt_out, tt_layer_present = tt_FalconCausalLM(
+                input_embeddings=tt_embeddings[user_id],
+                llm_mode=llm_mode,
+                attention_mask=tt_attention_mask[user_id],
+                user_id=user_id,
+                layer_past=tt_layer_past,
+                layer_past_len=kv_cache_len,
+                use_cache=use_cache,
+            )
+        tt_lib.device.Synchronize()
+        enable_persistent_kernel_cache()
         tt_embeddings, tt_attention_mask = zip(
             *[
                 tt_FalconCausalLM.model_preprocessing(m_i, kv_cache_len, llm_mode)
@@ -221,7 +239,7 @@ def run_test_FalconCausalLM_inference(
 @pytest.mark.parametrize(
     "llm_mode, batch, seq_len, kv_cache_len",
     (
-        ("prefill", 2, 128, 0),
+        ("prefill", 4, 128, 0),
         ("decode", 32, 1, 128),
     ),
     ids=["prefill_seq128", "decode_batch32"],
