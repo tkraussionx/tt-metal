@@ -84,11 +84,6 @@
 #define MEM_DEBUG_SANITIZE_NOC_MAILBOX_ADDRESS   (MEM_MAILBOX_BASE + 180) // 2 * 16 bytes
 #define MEM_MAILBOX_END                          (MEM_MAILBOX_BASE + 212)
 
-// XXXX TODO(pgk) remove these when the UMD gets unified and these host
-// dependencies go away
-#define MEM_DEBUG_MAILBOX_ADDRESS 0
-#define MEM_DEBUG_MAILBOX_SIZE    0
-
 /////////////
 // Initialization relocation L1 memory
 // Host downloads to these addresses, fw copies to destination
