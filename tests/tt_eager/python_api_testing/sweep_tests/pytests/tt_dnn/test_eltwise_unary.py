@@ -417,7 +417,7 @@ class TestEltwiseUnary:
             )
         ]
         test_args = generation_funcs.gen_default_dtype_layout_device(input_shapes)[0]
-        test_args.update({"value": value})
+        test_args.update({"scalar": value})
         test_args.update({"input_mem_config": input_mem_config, "output_mem_config": output_mem_config})
         comparison_func = comparison_funcs.comp_equal
         run_single_pytorch_test(

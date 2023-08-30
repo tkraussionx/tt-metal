@@ -23,9 +23,10 @@ params += [
     pytest.param(
         [[4, 4, 32, 32]],
         {
-            "dtype": ttl.tensor.DataType.BFLOAT16,
-            "layout": ttl.tensor.Layout.TILE,
-            "on_device": True,
+            "dtype": [ttl.tensor.DataType.BFLOAT16],
+            "layout": [ttl.tensor.Layout.TILE],
+            "buffer_type": [ttl.tensor.BufferType.DRAM],
+            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
             "reshape_dims": [-1, 2, 32, 32],
         },
         0,
@@ -33,9 +34,10 @@ params += [
     pytest.param(
         [[4, 4, 32, 32]],
         {
-            "dtype": ttl.tensor.DataType.BFLOAT16,
-            "layout": ttl.tensor.Layout.TILE,
-            "on_device": True,
+            "dtype": [ttl.tensor.DataType.BFLOAT16],
+            "layout": [ttl.tensor.Layout.TILE],
+            "buffer_type": [ttl.tensor.BufferType.DRAM],
+            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
             "reshape_dims": [-1, 2, 32, 64],
         },
         0,
@@ -43,9 +45,10 @@ params += [
     pytest.param(
         [[4, 4, 32, 32]],
         {
-            "dtype": ttl.tensor.DataType.BFLOAT16,
-            "layout": ttl.tensor.Layout.TILE,
-            "on_device": True,
+            "dtype": [ttl.tensor.DataType.BFLOAT16],
+            "layout": [ttl.tensor.Layout.TILE],
+            "buffer_type": [ttl.tensor.BufferType.DRAM],
+            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
             "reshape_dims": [2, -1, 32, 32],
         },
         0,
@@ -53,9 +56,10 @@ params += [
     pytest.param(
         [[4, 4, 32, 32]],
         {
-            "dtype": ttl.tensor.DataType.BFLOAT16,
-            "layout": ttl.tensor.Layout.TILE,
-            "on_device": True,
+            "dtype": [ttl.tensor.DataType.BFLOAT16],
+            "layout": [ttl.tensor.Layout.TILE],
+            "buffer_type": [ttl.tensor.BufferType.DRAM],
+            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
             "reshape_dims": [2, -1, 32, 64],
         },
         0,
@@ -63,9 +67,10 @@ params += [
     pytest.param(
         [[4, 4, 32, 32]],
         {
-            "dtype": ttl.tensor.DataType.BFLOAT16,
-            "layout": ttl.tensor.Layout.TILE,
-            "on_device": True,
+            "dtype": [ttl.tensor.DataType.BFLOAT16],
+            "layout": [ttl.tensor.Layout.TILE],
+            "buffer_type": [ttl.tensor.BufferType.DRAM],
+            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
             "reshape_dims": [4, 2, -1, 32],
         },
         0,
@@ -73,9 +78,10 @@ params += [
     pytest.param(
         [[4, 4, 32, 32]],
         {
-            "dtype": ttl.tensor.DataType.BFLOAT16,
-            "layout": ttl.tensor.Layout.TILE,
-            "on_device": True,
+            "dtype": [ttl.tensor.DataType.BFLOAT16],
+            "layout": [ttl.tensor.Layout.TILE],
+            "buffer_type": [ttl.tensor.BufferType.DRAM],
+            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
             "reshape_dims": [4, 2, -1, 64],
         },
         0,
@@ -83,9 +89,10 @@ params += [
     pytest.param(
         [[4, 4, 32, 32]],
         {
-            "dtype": ttl.tensor.DataType.BFLOAT16,
-            "layout": ttl.tensor.Layout.TILE,
-            "on_device": True,
+            "dtype": [ttl.tensor.DataType.BFLOAT16],
+            "layout": [ttl.tensor.Layout.TILE],
+            "buffer_type": [ttl.tensor.BufferType.DRAM],
+            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
             "reshape_dims": [4, 4, 32, -1],
         },
         0,
@@ -93,9 +100,10 @@ params += [
     pytest.param(
         [[4, 4, 32, 32]],
         {
-            "dtype": ttl.tensor.DataType.BFLOAT16,
-            "layout": ttl.tensor.Layout.TILE,
-            "on_device": True,
+            "dtype": [ttl.tensor.DataType.BFLOAT16],
+            "layout": [ttl.tensor.Layout.TILE],
+            "buffer_type": [ttl.tensor.BufferType.DRAM],
+            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
             "reshape_dims": [4, 2, 32, -1],
         },
         0,

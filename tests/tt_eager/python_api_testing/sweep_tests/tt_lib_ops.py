@@ -107,7 +107,7 @@ def move(
     t0 = t0.to(layout[0])
     t0 = tensor_to_device(t0, device, buffer_type[0])
 
-    t1 = ttl.tensor.move(t0, output_mem_config)
+    t1 = ttl.tensor.move(t0, output_mem_config=output_mem_config)
     output = t1.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
 
     return output
@@ -423,11 +423,11 @@ def std_hw(x, *args, device, dtype, layout, buffer_type, output_mem_config, **kw
     t0 = ttl.tensor.Tensor(
         x.reshape(-1).tolist(),
         x.shape,
-        dtype,
+        dtype[0],
         ttl.tensor.Layout.ROW_MAJOR,
     )
 
-    t0 = t0.to(layout)
+    t0 = t0.to(layout[0])
     t0 = tensor_to_device(t0, device, buffer_type[0])
 
     t1 = ttl.tensor.std_hw(t0, output_mem_config=output_mem_config)
@@ -443,11 +443,11 @@ def var_hw(x, *args, device, dtype, layout, buffer_type, output_mem_config, **kw
     t0 = ttl.tensor.Tensor(
         x.reshape(-1).tolist(),
         x.shape,
-        dtype,
+        dtype[0],
         ttl.tensor.Layout.ROW_MAJOR,
     )
 
-    t0 = t0.to(layout)
+    t0 = t0.to(layout[0])
     t0 = tensor_to_device(t0, device, buffer_type[0])
 
     t1 = ttl.tensor.var_hw(t0, output_mem_config=output_mem_config)
@@ -463,11 +463,11 @@ def mean_hw(x, *args, device, dtype, layout, buffer_type, output_mem_config, **k
     t0 = ttl.tensor.Tensor(
         x.reshape(-1).tolist(),
         x.shape,
-        dtype,
+        dtype[0],
         ttl.tensor.Layout.ROW_MAJOR,
     )
 
-    t0 = t0.to(layout)
+    t0 = t0.to(layout[0])
     t0 = tensor_to_device(t0, device, buffer_type[0])
 
     t1 = ttl.tensor.mean_hw(t0, output_mem_config=output_mem_config)
@@ -483,11 +483,11 @@ def normalize_hw(x, *args, device, dtype, layout, buffer_type, output_mem_config
     t0 = ttl.tensor.Tensor(
         x.reshape(-1).tolist(),
         x.shape,
-        dtype,
+        dtype[0],
         ttl.tensor.Layout.ROW_MAJOR,
     )
 
-    t0 = t0.to(layout)
+    t0 = t0.to(layout[0])
     t0 = tensor_to_device(t0, device, buffer_type[0])
 
     t1 = ttl.tensor.normalize_hw(t0, output_mem_config=output_mem_config)

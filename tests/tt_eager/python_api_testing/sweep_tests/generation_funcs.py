@@ -21,7 +21,6 @@ supported_tt_layouts = [
 supported_tt_buffer_types = [
     ttl.tensor.BufferType.DRAM,
     ttl.tensor.BufferType.L1,
-    None,
 ]
 
 supported_mem_configs = [
@@ -30,13 +29,11 @@ supported_mem_configs = [
 ]
 
 
-def make_mem_config(out_buffer_type):
-    if out_buffer_type == ttl.tensor.BufferType.DRAM:
-        return ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM)
-    elif out_buffer_type ==  ttl.tensor.BufferType.L1:
+def make_out_mem_config(out_buffer_type):
+    if out_buffer_type ==  ttl.tensor.BufferType.L1:
         return ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1)
     else:
-        return None
+        return ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM)
 
 
 # Wrapper around gen functions to include casting
@@ -206,7 +203,7 @@ def gen_identity(size):
 ###################################################
 
 
-def gen_tensor_pad_args(input_shapes, supported_dtypes, supported_layouts, on_device):
+def gen_tensor_pad_args(input_shapes, supported_dtypes=None, supported_layouts=None, buffer_types=None):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
     test_args = {}
@@ -230,7 +227,7 @@ def gen_tensor_pad_args(input_shapes, supported_dtypes, supported_layouts, on_de
             "pad_value": pad_value,
             "dtype": [ttl.tensor.DataType.BFLOAT16],
             "layout": [ttl.tensor.Layout.ROW_MAJOR],
-            "buffer_type": [None],
+            "buffer_type": [ttl.tensor.BufferType.DRAM],
             "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
         }
     )
@@ -238,7 +235,7 @@ def gen_tensor_pad_args(input_shapes, supported_dtypes, supported_layouts, on_de
     return [test_args]
 
 
-def gen_tensor_unpad_args(input_shapes, supported_dtypes, supported_layouts, on_device):
+def gen_tensor_unpad_args(input_shapes, supported_dtypes=None, supported_layouts=None, buffer_types=None):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
     test_args = {}
@@ -253,7 +250,7 @@ def gen_tensor_unpad_args(input_shapes, supported_dtypes, supported_layouts, on_
             "output_tensor_end": output_tensor_end,
             "dtype": [ttl.tensor.DataType.BFLOAT16],
             "layout": [ttl.tensor.Layout.ROW_MAJOR],
-            "buffer_type": [None],
+            "buffer_type": [ttl.tensor.BufferType.DRAM],
             "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
         }
     )
@@ -261,7 +258,7 @@ def gen_tensor_unpad_args(input_shapes, supported_dtypes, supported_layouts, on_
     return [test_args]
 
 
-def gen_pad_to_tile_args(input_shapes, supported_dtypes, supported_layouts, on_device):
+def gen_pad_to_tile_args(input_shapes, supported_dtypes=None, supported_layouts=None, buffer_types=None):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
 
@@ -280,7 +277,7 @@ def gen_pad_to_tile_args(input_shapes, supported_dtypes, supported_layouts, on_d
     return [test_args]
 
 
-def gen_unpad_from_tile_args(input_shapes, supported_dtypes, supported_layouts, on_device):
+def gen_unpad_from_tile_args(input_shapes, supported_dtypes=None, supported_layouts=None, buffer_types=None):
     assert len(input_shapes) == 1
     assert len(input_shapes[0]) == 4
     assert input_shapes[0][-2] % 32 == 0
@@ -303,14 +300,14 @@ def gen_unpad_from_tile_args(input_shapes, supported_dtypes, supported_layouts, 
     return [test_args]
 
 
-def gen_default_dtype_layout_device(input_shapes, dtypes, layouts, buffer_types):
+def gen_default_dtype_layout_device(input_shapes, dtypes=None, layouts=None, buffer_types=None):
     dtype = []
     layout = []
     buffer_type = []
 
     for input_shape in input_shapes:
         dtype.append(ttl.tensor.DataType.BFLOAT16)
-        buffer_type.append(True)
+        buffer_type.append(ttl.tensor.BufferType.DRAM)
 
         if input_shape[-2] % 32 == 0 and input_shape[-1] % 32 == 0:
             layout.append(ttl.tensor.Layout.TILE)
@@ -327,12 +324,12 @@ def gen_default_dtype_layout_device(input_shapes, dtypes, layouts, buffer_types)
     ]
 
 
-def gen_default_dtype_layout_rm_device(input_shapes, dtypes, layouts, buffer_types):
+def gen_default_dtype_layout_rm_device(input_shapes, dtypes=None, layouts=None, buffer_types=None):
     return [
         {
             "dtype": [ttl.tensor.DataType.BFLOAT16] * len(input_shapes),
             "layout": [ttl.tensor.Layout.ROW_MAJOR] * len(input_shapes),
-            "buffer_type": [True] * len(input_shapes),
+            "buffer_type": [ttl.tensor.BufferType.DRAM] * len(input_shapes),
             "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
         }
     ]
@@ -402,7 +399,7 @@ def gen_dtype_layout_device(
                     "dtype": dtype,
                     "layout": layout,
                     "buffer_type": buff_type,
-                    "output_mem_config": make_mem_config(out_buffer_type),
+                    "output_mem_config": make_out_mem_config(out_buffer_type),
                 })
 
     return result
@@ -640,6 +637,7 @@ def gen_pad_args(
                         "pad_value": pad_value,
                     }
                 )
+
             yield input_info
 
 
