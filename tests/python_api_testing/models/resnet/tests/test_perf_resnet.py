@@ -25,8 +25,8 @@ from tests.python_api_testing.models.resnet.metalResnetBlock50 import ResNet, Bo
 
 BATCH_SIZE = 1
 
-
-def run_perf_resnet(expected_inference_time, expected_compile_time, hf_cat_image_sample_input):
+def run_perf_resnet(expected_inference_time, expected_compile_time, imagenet_sample_input):
+    batch_size = BATCH_SIZE
     disable_persistent_kernel_cache()
     first_key = "first_iter"
     second_key = "second_iter"
@@ -38,13 +38,18 @@ def run_perf_resnet(expected_inference_time, expected_compile_time, hf_cat_image
     tt_lib.device.InitializeDevice(device)
     tt_lib.device.SetDefaultDevice(device)
 
+    image1 = imagenet_sample_input
+    image = image1
+    for i in range(batch_size-1):
+        image = torch.cat((image, image1), dim=0)
 
-    image = hf_cat_image_sample_input
-    image_processor = AutoImageProcessor.from_pretrained(model_name)
-    inputs = image_processor(image, return_tensors="pt")
+    inputs = image
+    # image_processor = AutoImageProcessor.from_pretrained(model_name)
+    # inputs = image_processor(image, return_tensors="pt")
 
-    inputs = inputs["pixel_values"]
-    comments = f"{list(inputs.shape)[-2]}x{list(inputs.shape)[-1]}"
+    # inputs = inputs["pixel_values"]
+    # comments = f"{list(inputs.shape)[-2]}x{list(inputs.shape)[-1]}"
+    comments = f"224x224"
 
     torch_resnet50 = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
     torch_resnet50.eval()
@@ -84,13 +89,13 @@ def run_perf_resnet(expected_inference_time, expected_compile_time, hf_cat_image
     cpu_time = profiler.get(cpu_key)
     compile_time = first_iter_time - second_iter_time
     prep_report(
-        model_name="resnet50",
+        model_name=f"resnet50_batch={batch_size}",
         batch_size=BATCH_SIZE,
         inference_and_compile_time=first_iter_time,
         inference_time=second_iter_time,
         expected_compile_time=expected_compile_time,
         expected_inference_time=expected_inference_time,
-        comments=comments,
+        comments=f"{comments}, batch={batch_size}",
         inference_time_cpu=cpu_time
     )
 
@@ -111,8 +116,8 @@ def run_perf_resnet(expected_inference_time, expected_compile_time, hf_cat_image
     ),
 )
 
-def test_perf_bare_metal(use_program_cache, expected_inference_time, expected_compile_time, hf_cat_image_sample_input):
-    run_perf_resnet(expected_inference_time, expected_compile_time, hf_cat_image_sample_input)
+def test_perf_bare_metal(use_program_cache, expected_inference_time, expected_compile_time, imagenet_sample_input):
+    run_perf_resnet(expected_inference_time, expected_compile_time, imagenet_sample_input)
 
 
 @pytest.mark.models_performance_virtual_machine
@@ -125,5 +130,5 @@ def test_perf_bare_metal(use_program_cache, expected_inference_time, expected_co
     ),
 )
 
-def test_perf_virtual_machine(use_program_cache, expected_inference_time, expected_compile_time, hf_cat_image_sample_input):
-    run_perf_resnet(expected_inference_time, expected_compile_time, hf_cat_image_sample_input)
+def test_perf_virtual_machine(use_program_cache, expected_inference_time, expected_compile_time, imagenet_sample_input):
+    run_perf_resnet(expected_inference_time, expected_compile_time, imagenet_sample_input)
