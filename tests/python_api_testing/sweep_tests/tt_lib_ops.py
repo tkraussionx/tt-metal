@@ -8,8 +8,8 @@ from itertools import product
 
 def setup_host_and_device(func):
     def wrap(*args, pcie_slot, **kwargs):
-        ARCH = is_wormhole_b0() and ttl.device.Arch.WORMHOLE_B0 or ttl.device.Arch.GRAYSKULL            
-        device = ttl.device.CreateDevice(ARCH, pcie_slot)            
+        ARCH = is_wormhole_b0() and ttl.device.Arch.WORMHOLE_B0 or ttl.device.Arch.GRAYSKULL
+        device = ttl.device.CreateDevice(ARCH, pcie_slot)
         ttl.device.InitializeDevice(device)
         ttl.device.SetDefaultDevice(device)
         try:
@@ -696,6 +696,34 @@ def layernorm(x, y, z, *args, device, dtype, layout, buffer_type, output_mem_con
     output = t3.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
     return output
 
+
+
+@setup_host_and_device
+def conv(x, y, arg3, arg4, arg5, arg6, arg7, *args, device, dtype, layout, buffer_type, output_mem_config, **kwargs):
+    t0 = ttl.tensor.Tensor(
+        x.reshape(-1).tolist(),
+        x.shape,
+        dtype[0],
+        ttl.tensor.Layout.ROW_MAJOR,
+    )
+
+    t0 = t0.to(layout[0])
+    t0 = tensor_to_device(t0, device, buffer_type[0])
+
+    t1 = ttl.tensor.Tensor(
+        y.reshape(-1).tolist(),
+        y.shape,
+        dtype[1],
+        ttl.tensor.Layout.ROW_MAJOR,
+    )
+
+    t1 = t1.to(layout[1])
+    t1 = tensor_to_device(t1, device, buffer_type[1])
+
+    t3 = ttl.tensor.conv(t0, t1, arg3, arg4, arg5, arg6, arg7, output_mem_config=output_mem_config)
+
+    output = t3.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
+    return output
 
 
 @setup_host_and_device

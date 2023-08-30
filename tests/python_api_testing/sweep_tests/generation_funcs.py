@@ -345,7 +345,7 @@ def sanitize_args(input_shapes, dtype_buffer_layout):
         if (
             (
                 dtype_buffer_layout[i]["layout"] == ttl.tensor.Layout.TILE
-                and (shape[2] % 32 != 0 or shape[3] % 32 != 0)
+                and ( (shape[2]!=1 and shape[2] % 32 != 0) or shape[3] % 32 != 0)
             )  # Shape cannot be tilized
             or (
                 dtype_buffer_layout[i]["layout"] == ttl.tensor.Layout.ROW_MAJOR
@@ -757,6 +757,36 @@ def gen_power_args(
         yield input_info
 
 
+
+def gen_conv2d_args(
+    input_shapes,
+    dtypes,
+    layouts,
+    buffer_types,
+    low=0,
+    high=10,
+    dtype=torch.int,
+):
+    for input_info in gen_conv_scalar_args(
+        input_shapes,
+        dtypes,
+        layouts,
+        buffer_types,
+        "arg3",
+        "arg4",
+        "arg5",
+        "arg6",
+        "arg7",
+        lowKernel,
+        highKernel,
+        lowStride,
+        highStride,
+        padH,
+        padW,
+        dtype,
+    ):
+        yield input_info
+
 def gen_relu_min_args(
     input_shapes,
     dtypes,
@@ -988,6 +1018,41 @@ def gen_two_scalar_args(
             input_info.update({arg0_name: scalar0, arg1_name: scalar1})
             yield input_info
 
+
+
+def gen_conv_scalar_args(
+    input_shapes,
+    supported_dtypes,
+    supported_layouts,
+    on_device,
+    arg0_name="conv_parameters",
+    lowKernel=1,
+    highKernel=4,
+    lowStride=1,
+    highStride=4,
+    padH=0,
+    padW=0,
+    dtype=torch.bfloat16,
+):
+    for input_info in gen_dtype_layout_device(
+        input_shapes, supported_dtypes, supported_layouts, on_device
+    ):
+
+
+        w=input_shapes[3]
+        h=input_shapes[2]
+
+        assert(lowKernel>0 and highKernel<w)
+        assert(lowStride>0 and highStride<w)
+
+        kernelH = torch.randint(lowKernel, highKernel)
+        kernelW = torch.randint(lowKernel, highKernel)
+        strideH = torch.randint(lowStride, highStride)
+        strideW = torch.randint(lowStride, highStride)
+        conv_params = [kernelH, kernelW, strideH, strideW, padH, padW]
+
+        input_info.update({arg0_name: conv_params})
+        yield input_info
 
 def gen_clip_args(
     input_shapes,

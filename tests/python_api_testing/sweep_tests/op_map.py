@@ -22,6 +22,10 @@ op_map = {
         "tt_lib_op": tt_lib_ops.arange,
         "pytorch_op": pytorch_ops.arange,
     },
+    "conv": {
+        "tt_lib_op": tt_lib_ops.conv,
+        "pytorch_op": pytorch_ops.conv,
+    },
     # stats
      "stats-var_hw": {
         "tt_lib_op": tt_lib_ops.var_hw,

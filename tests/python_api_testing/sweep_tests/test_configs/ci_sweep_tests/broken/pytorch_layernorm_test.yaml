@@ -24,11 +24,11 @@ test-list:
             data-type: ["BFLOAT16", "BFLOAT8_B"]
             buffer-type: ["DRAM", "SYSTEM_MEMORY"]
           - input-2:
-            data-layout: ["TILE"]
+            data-layout: ["ROW_MAJOR"]
             data-type: ["BFLOAT16", "BFLOAT8_B"]
             buffer-type: ["DRAM", "SYSTEM_MEMORY"]
           - input-3:
-            data-layout: ["TILE"]
+            data-layout: ["ROW_MAJOR"]
             data-type: ["BFLOAT16", "BFLOAT8_B"]
             buffer-type: ["DRAM", "SYSTEM_MEMORY"]
         out-buffer-type: ["DRAM"]

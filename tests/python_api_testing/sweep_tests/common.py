@@ -308,10 +308,11 @@ def shapes_and_datagen(shape_dict, datagen_dict):
                     x = random.randint(shape1_start[i], shape1_end[i])
                     shape1.append(align_to_interval(x, shape1_start[i], interval[i]))
 
-                outer_dim = shape1[-1]
-
                 normalized_shape = shape1[-4:]
 
+                normalized_shape[0] = 1
+                normalized_shape[1] = 1
+                normalized_shape[2] = 1
 
                 yield [shape1, normalized_shape, normalized_shape], datagen_funcs
 
@@ -336,9 +337,11 @@ def shapes_and_datagen(shape_dict, datagen_dict):
                     x = random.randint(shape1_start[i], shape1_end[i])
                     shape1.append(align_to_interval(x, shape1_start[i], interval[i]))
 
-                outer_dim = shape1[-1]
-
                 normalized_shape = shape1[-4:]
+
+                normalized_shape[0] = 1
+                normalized_shape[1] = 1
+                normalized_shape[2] = 1
 
                 yield [shape1, shape1, normalized_shape, normalized_shape], datagen_funcs
 
@@ -422,14 +425,14 @@ def is_grayskull():
     return "grayskull" in ARCH_NAME
 
 def skip_for_wormhole_b0(fn):
-    @pytest.mark.skipif(is_wormhole_b0(),reason="not working for Wormhole B0")            
+    @pytest.mark.skipif(is_wormhole_b0(),reason="not working for Wormhole B0")
     @functools.wraps(fn)
     def _caller_fn(*args,**kwargs):
         return fn(*args,**kwargs)
     return _caller_fn
 
 def skip_for_grayskull(fn):
-    @pytest.mark.skipif(is_grayskull(),reason="not working for Grayskull")    
+    @pytest.mark.skipif(is_grayskull(),reason="not working for Grayskull")
     @functools.wraps(fn)
     def _caller_fn(*args,**kwargs):
         return fn(*args,**kwargs)

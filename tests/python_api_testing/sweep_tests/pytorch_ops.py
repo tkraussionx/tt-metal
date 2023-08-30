@@ -293,6 +293,12 @@ def ref_stable_softmax(x):
 
 
 def layernorm(x, y, z, *args, **kwargs):
+    y = y.squeeze(0)
+    y = y.squeeze(0)
+    y = y.squeeze(0)
+    z = z.squeeze(0)
+    z = z.squeeze(0)
+    z = z.squeeze(0)
     return torch.nn.functional.layer_norm(input=x, normalized_shape=y.shape, weight=y, bias=z, eps=1e-05)
 
 
