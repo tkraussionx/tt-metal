@@ -77,6 +77,7 @@ void Profiler::dumpHostResults(const std::string& timer_name, const std::vector<
 }
 
 void Profiler::readRiscProfilerResults(
+        Device *device,
         vector<std::uint32_t> profile_buffer,
         int pcie_slot,
         const CoreCoord &worker_core,
@@ -88,8 +89,51 @@ void Profiler::readRiscProfilerResults(
     uint32_t end_index;
     uint32_t dropped_marker_counter;
 
-    uint32_t startIndex = risc_print_buffer_addr * PRINT_BUFFER_SIZE/sizeof(uint32_t);
+    uint32_t flat_id;
+    constexpr int DRAM_ROW = 6;
+    if (worker_core.y > DRAM_ROW){
+        flat_id = (worker_core.y - 2) * 12 + (worker_core.x - 1);
+    }
+    else{
+        flat_id = (worker_core.y - 1) * 12 + (worker_core.x - 1);
+    }
+
+    uint32_t dram_address = dram_buffer_start_addr + flat_id * 1024;
+    uint32_t startIndex = dram_address/sizeof(uint32_t) + risc_print_buffer_addr * PRINT_BUFFER_SIZE/sizeof(uint32_t);
+
+
     end_index = profile_buffer[startIndex + kernel_profiler::BUFFER_END_INDEX];
+    //vector<std::uint32_t> profile_buffer_l1;
+
+    //profile_buffer_l1 = tt::llrt::read_hex_vec_from_core(
+            //device->cluster(),
+            //pcie_slot,
+            //worker_core,
+            //PRINT_BUFFER_NC,
+            //PRINT_BUFFER_SIZE);
+
+    //if (risc_print_buffer_addr == 0)
+    //{
+        //std::cout << worker_core.x << "," << worker_core.y <<  "," << flat_id << "," << dram_address << std::endl ;
+        //for (int i= 0; i < 4; i ++)
+        //{
+            //end_index = profile_buffer_l1[i];
+            //std::cout << end_index << ",";
+
+        //}
+        //std::cout <<  std::endl;
+        //for (int i= 0; i < 4; i ++)
+        //{
+            //end_index = profile_buffer[startIndex + kernel_profiler::BUFFER_END_INDEX + i];
+            //std::cout << end_index << ",";
+
+        //}
+
+        //std::cout <<  std::endl;
+        //std::cout <<  std::endl;
+    //}
+
+    //return;
     TT_ASSERT (end_index < (PRINT_BUFFER_SIZE/sizeof(uint32_t)));
     dropped_marker_counter = profile_buffer[startIndex + kernel_profiler::DROPPED_MARKER_COUNTER];
 
@@ -129,21 +173,21 @@ void Profiler::dumpDeviceResultToFile(
         uint32_t timer_id){
 
     ZoneScoped;
-    //std::filesystem::path log_path = output_dir / DEVICE_SIDE_LOG;
-    //std::ofstream log_file;
+    std::filesystem::path log_path = output_dir / DEVICE_SIDE_LOG;
+    std::ofstream log_file;
 
 
-    //if (device_new_log || !std::filesystem::exists(log_path))
-    //{
-        //log_file.open(log_path);
-        //log_file << "Chip clock is at 1.2 GHz" << std::endl;
-        //log_file << "PCIe slot, core_x, core_y, RISC processor type, timer_id, time[cycles since reset]" << std::endl;
-        //device_new_log = false;
-    //}
-    //else
-    //{
-        //log_file.open(log_path, std::ios_base::app);
-    //}
+    if (device_new_log || !std::filesystem::exists(log_path))
+    {
+        log_file.open(log_path);
+        log_file << "Chip clock is at 1.2 GHz" << std::endl;
+        log_file << "PCIe slot, core_x, core_y, RISC processor type, timer_id, time[cycles since reset]" << std::endl;
+        device_new_log = false;
+    }
+    else
+    {
+        log_file.open(log_path, std::ios_base::app);
+    }
 
     constexpr int DRAM_ROW = 6;
     if (core_y > DRAM_ROW){
@@ -168,11 +212,11 @@ void Profiler::dumpDeviceResultToFile(
         device_data.emplace(eventID,std::list<uint64_t>{timestamp});
     }
 
-    //log_file << chip_id << ", " << core_x << ", " << core_y << ", " << hart_name << ", ";
-    //log_file << timer_id << ", ";
-    //log_file << timestamp;
-    //log_file << std::endl;
-    //log_file.close();
+    log_file << chip_id << ", " << core_x << ", " << core_y << ", " << hart_name << ", ";
+    log_file << timer_id << ", ";
+    log_file << timestamp;
+    log_file << std::endl;
+    log_file.close();
 }
 
 Profiler::Profiler()
@@ -238,15 +282,15 @@ void Profiler::dumpDeviceResults (
         const vector<CoreCoord> &worker_cores){
 #if defined(PROFILER)
     ZoneScoped;
+    vector<std::uint32_t> profile_buffer;
+    tt_metal::ReadFromBuffer(output_dram_buffer, profile_buffer);
     for (const auto &worker_core : worker_cores) {
 
-        auto dram_noc_xy = output_dram_buffer.noc_coordinates();
+        //auto dram_noc_xy = output_dram_buffer.noc_coordinates();
 
         //std::cout << dram_noc_xy.x << "," << dram_noc_xy.y << std::endl;
 
 
-        vector<std::uint32_t> profile_buffer;
-	tt_metal::ReadFromBuffer(output_dram_buffer, profile_buffer);
         //vector<std::uint32_t> profile_buffer_2 = tt::llrt::read_hex_vec_from_core(
 		//device->cluster(),
 		//pcie_slot,
@@ -261,6 +305,7 @@ void Profiler::dumpDeviceResults (
         //}
 
         readRiscProfilerResults(
+            device,
             profile_buffer,
             pcie_slot,
             worker_core,
@@ -268,6 +313,7 @@ void Profiler::dumpDeviceResults (
             "NCRISC",
             0);
         readRiscProfilerResults(
+            device,
             profile_buffer,
             pcie_slot,
             worker_core,
@@ -275,6 +321,7 @@ void Profiler::dumpDeviceResults (
             "BRISC",
             4);
         readRiscProfilerResults(
+            device,
             profile_buffer,
             pcie_slot,
             worker_core,
@@ -282,6 +329,7 @@ void Profiler::dumpDeviceResults (
             "TRISC_0",
             1);
 	readRiscProfilerResults(
+            device,
 	    profile_buffer,
 	    pcie_slot,
 	    worker_core,
@@ -289,6 +337,7 @@ void Profiler::dumpDeviceResults (
 	    "TRISC_1",
 	    2);
 	readRiscProfilerResults(
+            device,
 	    profile_buffer,
 	    pcie_slot,
 	    worker_core,

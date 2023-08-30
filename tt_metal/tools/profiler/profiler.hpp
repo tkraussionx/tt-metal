@@ -20,6 +20,8 @@ namespace tt {
 
 namespace tt_metal {
 
+inline uint64_t dram_buffer_start_addr;
+
 // struct for holding start, stop and duration of a timer period in integer format
 struct TimerPeriodInt {
     uint64_t start;
@@ -67,6 +69,7 @@ class Profiler {
 
         // Helper function for reading risc profile results
         void readRiscProfilerResults(
+                Device *device,
                 vector<std::uint32_t> profile_buffer,
                 int pcie_slot,
                 const CoreCoord &worker_core,

@@ -27,6 +27,14 @@ uint8_t loading_noc = NOC_INDEX;
 uint8_t loading_noc = 0;
 #endif
 
+volatile uint32_t * const ncrisc_run_mailbox_address =
+    (volatile uint32_t *)(MEM_RUN_MAILBOX_ADDRESS + MEM_MAILBOX_NCRISC_OFFSET);
+volatile uint32_t * const trisc_run_mailbox_addresses[3] = {
+    (volatile uint32_t *)(MEM_RUN_MAILBOX_ADDRESS + MEM_MAILBOX_TRISC0_OFFSET),
+    (volatile uint32_t *)(MEM_RUN_MAILBOX_ADDRESS + MEM_MAILBOX_TRISC1_OFFSET),
+    (volatile uint32_t *)(MEM_RUN_MAILBOX_ADDRESS + MEM_MAILBOX_TRISC2_OFFSET)
+};
+
 // to reduce the amount of code changes, both BRISC and NRISCS instatiate these counter for both NOCs (ie NUM_NOCS)
 // however, atm NCRISC uses only NOC-1 and BRISC uses only NOC-0
 // this way we achieve full separation of counters / cmd_buffers etc.
@@ -65,23 +73,32 @@ inline __attribute__((always_inline)) void finish_BR_profiler()
 {
 #if defined(PROFILE_KERNEL) && defined(COMPILE_FOR_BRISC)
 
+    uint32_t size = 1024;
+
     const uint32_t NOC_ID_MASK = (1 << NOC_ADDR_NODE_ID_BITS) - 1;
     uint32_t noc_id = noc_local_node_id() & 0xFFF;
     uint32_t dram_noc_x = noc_id & NOC_ID_MASK;
     uint32_t dram_noc_y = (noc_id >> NOC_ADDR_NODE_ID_BITS) & NOC_ID_MASK;
-    uint32_t flat_id = (dram_noc_y - 1) * 12 + (dram_noc_x - 1);
 
-    uint32_t dram_address = flat_id * 1024;
+    uint32_t flat_id;
+    constexpr int DRAM_ROW = 6;
+    if (dram_noc_y > DRAM_ROW){
+        flat_id = (dram_noc_y - 2) * 12 + (dram_noc_x - 1);
+    }
+    else{
+        flat_id = (dram_noc_y - 1) * 12 + (dram_noc_x - 1);
+    }
+
+    uint32_t dram_address = DRAM_PROFILER_ADDRESS + flat_id * size;
 
 
     //volatile uint32_t *buffer = reinterpret_cast<uint32_t*>(PRINT_BUFFER_NC);
-    //buffer[0] = flat_id;
-    //buffer[1] = dram_noc_x;
-    //buffer[2] = dram_noc_y;
+    //buffer[0] = dram_noc_x;
+    //buffer[1] = dram_noc_y;
+    //buffer[2] = flat_id;
     //buffer[3] = dram_address;
 
 
-    uint32_t size = 1024;
     //if (flat_id == 0)
     //{
         std::uint64_t dram_buffer_dst_noc_addr = get_noc_addr(1, 0, dram_address);
@@ -122,6 +139,23 @@ void kernel_launch() {
 #else
     dispatch_addr = 0;
 #endif
+
+    volatile uint32_t* use_triscs = (volatile uint32_t*)(MEM_ENABLE_TRISC_MAILBOX_ADDRESS);
+    if (*use_triscs) {
+        while (
+            !(*trisc_run_mailbox_addresses[0] == 1 &&
+              *trisc_run_mailbox_addresses[1] == 1 &&
+              *trisc_run_mailbox_addresses[2] == 1)) {
+        }
+
+        // Once all 3 have finished, assert reset on all of them
+        assert_trisc_reset();
+    }
+
+    volatile uint32_t* use_ncrisc = (volatile uint32_t*)(MEM_ENABLE_NCRISC_MAILBOX_ADDRESS);
+    if (*use_ncrisc) {
+        while (*ncrisc_run_mailbox_address != 1);
+    }
 
 #if defined(PROFILER_OPTIONS) && (PROFILER_OPTIONS & MAIN_FUNCT_MARKER)
     kernel_profiler::mark_time(CC_MAIN_END);

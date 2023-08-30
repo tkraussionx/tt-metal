@@ -10,6 +10,7 @@
 #include "dev_mem_map.h"
 #include "hostdevcommon/common_runtime_address_map.h"
 #include "tools/profiler/profiler_state.hpp"
+#include "tools/profiler/profiler.hpp"
 
 using namespace std;
 using namespace tt;
@@ -261,6 +262,7 @@ struct CompileState {
         result += " -DTENSIX_FIRMWARE"; // TODO(AP): verify where firmware flag comes from
         if (profile_kernel) {
             result += " -DPROFILE_KERNEL=1";
+            result += " -DDRAM_PROFILER_ADDRESS=" + to_string(dram_buffer_start_addr);
         }
         for (int j = 0; j < compile_time_args.size(); j++)
             result += " -DKERNEL_COMPILE_TIME_ARG_" + to_string(j) + "=" + to_string(compile_time_args[j]);

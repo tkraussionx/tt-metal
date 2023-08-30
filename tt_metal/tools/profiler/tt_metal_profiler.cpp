@@ -15,19 +15,21 @@ namespace detail {
 
 static Profiler tt_metal_profiler = Profiler();
 
-void set_buffer(Device *device){
+void InitDeviceProfiler(Device *device){
 
-    const size_t byte_size = 1024;
-    const size_t dram_byte_address = 0;
+    const size_t byte_size = 1024 * 120;
 
-    tt_metal_profiler.output_dram_buffer = tt_metal::Buffer(device, byte_size, dram_byte_address, byte_size, tt_metal::BufferType::DRAM);
+    tt_metal_profiler.output_dram_buffer = tt_metal::Buffer(device, byte_size, byte_size, tt_metal::BufferType::DRAM);
+    dram_buffer_start_addr = tt_metal_profiler.output_dram_buffer.address();
 
-    std::vector<uint32_t> inputs_DRAM(1024, 3);
+    //std::cout << dram_buffer_start_addr << std::endl;
+
+    std::vector<uint32_t> inputs_DRAM(byte_size, 3);
     tt_metal::WriteToBuffer(tt_metal_profiler.output_dram_buffer, inputs_DRAM);
 }
 
 
-void DumpDeviceProfileResults(Device *device, const Program &program) {
+void DumpDeviceProfileResults(Device *device, vector<CoreCoord>& worker_cores) {
 #if defined(PROFILER)
     ZoneScoped;
     if (getDeviceProfilerState())
@@ -38,15 +40,11 @@ void DumpDeviceProfileResults(Device *device, const Program &program) {
             Finish(*GLOBAL_CQ);
         }
         TT_ASSERT(tt_is_print_server_running() == false, "Debug print server is running, cannot dump device profiler data");
-        auto worker_cores_used_in_program =\
-            device->worker_cores_from_logical_cores(program.logical_cores());
         auto cluster = device->cluster();
         auto pcie_slot = device->pcie_slot();
-        tt_metal_profiler.dumpDeviceResults(device, pcie_slot, worker_cores_used_in_program);
+        tt_metal_profiler.dumpDeviceResults(device, pcie_slot, worker_cores);
 
         tt_metal_profiler.tracyTTCtx->PopulateCLContext();
-
-
 
         for (auto& data: tt_metal_profiler.device_data)
         {
@@ -124,6 +122,13 @@ void DumpDeviceProfileResults(Device *device, const Program &program) {
         TracyCLCollect(tt_metal_profiler.tracyTTCtx, tt_metal_profiler.device_data);
     }
 #endif
+}
+
+void DumpDeviceProfileResults(Device *device, const Program &program)
+{
+    auto worker_cores_used_in_program =\
+                                       device->worker_cores_from_logical_cores(program.logical_cores());
+    DumpDeviceProfileResults(device, worker_cores_used_in_program);
 }
 
 void SetProfilerDir(std::string output_dir){

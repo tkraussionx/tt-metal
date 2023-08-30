@@ -764,6 +764,7 @@ bool LaunchKernels(Device *device, const Program &program, bool stagger_start) {
     {//Profiler scope start
     ZoneScoped;
     detail::ProfileTTMetalScope profile_this = detail::ProfileTTMetalScope("LaunchKernels");
+    //detail::InitDeviceProfiler(device);
 
     auto cluster = device->cluster();
     auto pcie_slot = device->pcie_slot();
@@ -803,7 +804,7 @@ bool LaunchKernels(Device *device, const Program &program, bool stagger_start) {
     cluster->broadcast_remote_tensix_risc_reset(pcie_slot, TENSIX_ASSERT_SOFT_RESET);
 
     }//Profiler scope end
-    detail::DumpDeviceProfileResults(device,program);
+    //detail::DumpDeviceProfileResults(device,program);
     return pass;
 }
 

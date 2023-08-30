@@ -20,6 +20,17 @@ namespace tt::tt_metal{
         inline unique_ptr<CommandQueue> GLOBAL_CQ;
 
         /**
+         * Initialize device profiling data buffers
+         *
+         * Return value: void
+         *
+         * | Argument      | Description                                       | Type            | Valid Range               | Required |
+         * |---------------|---------------------------------------------------|-----------------|---------------------------|----------|
+         * | device        | The device holding the program being profiled.    | Device *        |                           | True     |
+         * */
+	void InitDeviceProfiler(Device *device);
+
+        /**
          * Read device side profiler data and dump results into device side CSV log
          *
          * Return value: void
@@ -30,7 +41,7 @@ namespace tt::tt_metal{
          * | program       | The program being profiled.                       | const Program & |                           | True     |
          * */
         void DumpDeviceProfileResults(Device *device, const Program &program);
-	void set_buffer(Device *device);
+        void DumpDeviceProfileResults(Device *device, vector<CoreCoord>& worker_cores);
 
         /**
          * Set the directory for all CSV logs produced by the profiler instance in the tt-metal module
