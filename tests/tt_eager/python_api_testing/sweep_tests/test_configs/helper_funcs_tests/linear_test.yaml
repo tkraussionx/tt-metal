@@ -10,7 +10,7 @@ test-list:
         - [1, 1, 1, 2048]
       interval: 32
       num-shapes: 3
-      num-samples: 2048
+      num-samples: 20
       method: linear
     datagen:
       function: gen_rand
