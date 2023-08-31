@@ -227,7 +227,7 @@ def gen_tensor_pad_args(input_shapes, supported_dtypes=None, supported_layouts=N
             "pad_value": pad_value,
             "dtype": [ttl.tensor.DataType.BFLOAT16],
             "layout": [ttl.tensor.Layout.ROW_MAJOR],
-            "buffer_type": [ttl.tensor.BufferType.DRAM],
+            "buffer_type": [None],
             "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
         }
     )
@@ -250,7 +250,7 @@ def gen_tensor_unpad_args(input_shapes, supported_dtypes=None, supported_layouts
             "output_tensor_end": output_tensor_end,
             "dtype": [ttl.tensor.DataType.BFLOAT16],
             "layout": [ttl.tensor.Layout.ROW_MAJOR],
-            "buffer_type": [ttl.tensor.BufferType.DRAM],
+            "buffer_type": [None],
             "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
         }
     )

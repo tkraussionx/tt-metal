@@ -2057,7 +2057,7 @@ def tensor_pad(
     t0 = t0.to(layout[0])
     t0 = tensor_to_device(t0, device, buffer_type[0])
 
-    t1 = t0.pad(output_tensor_shape, input_tensor_start, pad_value, output_mem_config=output_mem_config)
+    t1 = t0.pad(output_tensor_shape, input_tensor_start, pad_value)
     output = t1.to_torch()
 
     return output
@@ -2086,7 +2086,7 @@ def tensor_unpad(
     t0 = t0.to(layout[0])
     t0 = tensor_to_device(t0, device, buffer_type[0])
 
-    t1 = t0.unpad(output_tensor_start, output_tensor_end, output_mem_config=output_mem_config)
+    t1 = t0.unpad(output_tensor_start, output_tensor_end)
     output = t1.to_torch()
 
     return output
@@ -2114,7 +2114,7 @@ def pad_to_tile(
     t0 = t0.to(layout[0])
     t0 = tensor_to_device(t0, device, buffer_type[0])
 
-    t1 = t0.pad_to_tile(pad_value, output_mem_config=output_mem_config)
+    t1 = t0.pad_to_tile(pad_value)
     output = t1.to_torch()
 
     return output
@@ -2142,7 +2142,7 @@ def unpad_from_tile(
     t0 = t0.to(layout[0])
     t0 = tensor_to_device(t0, device, buffer_type[0])
 
-    t1 = t0.unpad_from_tile(output_tensor_shape, output_mem_config=output_mem_config)
+    t1 = t0.unpad_from_tile(output_tensor_shape)
     output = t1.to_torch()
 
     return output

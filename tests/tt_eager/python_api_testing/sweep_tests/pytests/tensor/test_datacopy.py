@@ -52,7 +52,7 @@ def test_run_datacopy_test(
         pcie_slot,
         {
             "dtype": [dtype],
-            "layout": [ttl.tensor.Layout.ROW_MAJOR],
+            "layout": [ttl.tensor.Layout.TILE],
             "buffer_type": [ttl.tensor.BufferType.DRAM],
             "output_mem_config": memory_config,
         },
