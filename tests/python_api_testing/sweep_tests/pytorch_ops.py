@@ -302,7 +302,8 @@ def layernorm(x, y, z, *args, **kwargs):
     return torch.nn.functional.layer_norm(input=x, normalized_shape=y.shape, weight=y, bias=z, eps=1e-05)
 
 
-def conv(x, y, conv_params, *args, **kwargs):
+def conv(x, y, *args, **kwargs):
+    conv_params = kwargs.pop("conv_params")
     return torch.nn.functional.conv2d(x, y, bias=None, stride=(conv_params[2], conv_params[3]), padding=(conv_params[4], conv_params[5]))
 
 def add_layernorm(x, y, z, w, *args, **kwargs):
