@@ -302,6 +302,9 @@ def layernorm(x, y, z, *args, **kwargs):
     return torch.nn.functional.layer_norm(input=x, normalized_shape=y.shape, weight=y, bias=z, eps=1e-05)
 
 
+def conv(x, y, conv_params, *args, **kwargs):
+    return torch.nn.functional.conv2d(x, y, bias=None, stride=(conv_params[2], conv_params[3]), padding=(conv_params[4], conv_params[5]))
+
 def add_layernorm(x, y, z, w, *args, **kwargs):
     res = x+y
     return torch.nn.functional.layer_norm(input=res, normalized_shape=z.shape, weight=z, bias=w, eps=1e-05)

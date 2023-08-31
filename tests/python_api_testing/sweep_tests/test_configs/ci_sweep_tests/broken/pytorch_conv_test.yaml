@@ -1,6 +1,6 @@
 ---
 test-list:
-  - layernorm:
+  - conv:
       shape:
         start-shape: [1, 1, 32, 32]
         end-shape: [12, 24, 512, 512]
@@ -15,8 +15,8 @@ test-list:
           high: 10
       comparison:
         function: comp_pcc
-      args-gen: gen_dtype_layout_device
-      output-file: layernorm_sweep.csv
+      args-gen: gen_conv_scalar_args
+      output-file: conv_sweep.csv
       args:
         inputs:
           - input-1:

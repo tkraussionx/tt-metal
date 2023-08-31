@@ -763,8 +763,12 @@ def gen_conv2d_args(
     dtypes,
     layouts,
     buffer_types,
-    low=0,
-    high=10,
+    lowKernel=1,
+    highKernel=4,
+    lowStride=1,
+    highStride=4,
+    padH=0,
+    padW=0,
     dtype=torch.int,
 ):
     for input_info in gen_conv_scalar_args(
@@ -772,11 +776,7 @@ def gen_conv2d_args(
         dtypes,
         layouts,
         buffer_types,
-        "arg3",
-        "arg4",
-        "arg5",
-        "arg6",
-        "arg7",
+        "conv_params",
         lowKernel,
         highKernel,
         lowStride,
@@ -1025,7 +1025,7 @@ def gen_conv_scalar_args(
     supported_dtypes,
     supported_layouts,
     on_device,
-    arg0_name="conv_parameters",
+    arg0_name="conv_params",
     lowKernel=1,
     highKernel=4,
     lowStride=1,
@@ -1039,16 +1039,16 @@ def gen_conv_scalar_args(
     ):
 
 
-        w=input_shapes[3]
-        h=input_shapes[2]
+        w=input_shapes[0][3]
+        h=input_shapes[0][2]
 
         assert(lowKernel>0 and highKernel<w)
         assert(lowStride>0 and highStride<w)
 
-        kernelH = torch.randint(lowKernel, highKernel)
-        kernelW = torch.randint(lowKernel, highKernel)
-        strideH = torch.randint(lowStride, highStride)
-        strideW = torch.randint(lowStride, highStride)
+        kernelH = random.randint(lowKernel, highKernel)
+        kernelW = random.randint(lowKernel, highKernel)
+        strideH = random.randint(lowStride, highStride)
+        strideW = random.randint(lowStride, highStride)
         conv_params = [kernelH, kernelW, strideH, strideW, padH, padW]
 
         input_info.update({arg0_name: conv_params})

@@ -20,7 +20,7 @@ test-list:
       args:
         inputs:
           - input-1:
-            data-layout: ["ROW_MAJOR"]
+            data-layout: ["TILE"]
             data-type: ["BFLOAT16", "BFLOAT8_B"]
             buffer-type: ["DRAM", "SYSTEM_MEMORY"]
           - input-2:

@@ -699,7 +699,7 @@ def layernorm(x, y, z, *args, device, dtype, layout, buffer_type, output_mem_con
 
 
 @setup_host_and_device
-def conv(x, y, arg3, arg4, arg5, arg6, arg7, *args, device, dtype, layout, buffer_type, output_mem_config, **kwargs):
+def conv(x, y, conv_params, *args, device, dtype, layout, buffer_type, output_mem_config, **kwargs):
     t0 = ttl.tensor.Tensor(
         x.reshape(-1).tolist(),
         x.shape,
@@ -720,7 +720,7 @@ def conv(x, y, arg3, arg4, arg5, arg6, arg7, *args, device, dtype, layout, buffe
     t1 = t1.to(layout[1])
     t1 = tensor_to_device(t1, device, buffer_type[1])
 
-    t3 = ttl.tensor.conv(t0, t1, arg3, arg4, arg5, arg6, arg7, output_mem_config=output_mem_config)
+    t3 = ttl.tensor.conv(t0, t1, conv_params, output_mem_config=output_mem_config)
 
     output = t3.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
     return output
