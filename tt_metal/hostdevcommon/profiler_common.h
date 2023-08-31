@@ -13,6 +13,11 @@
 #define CC_KERNEL_MAIN_END     3U
 #define CC_MAIN_END            4U
 
+constexpr size_t l1_buffer_size = 1024;
+constexpr size_t l1_buffer_count = 2;
+constexpr size_t core_count = 120;
+constexpr size_t dram_buffer_size = l1_buffer_size * core_count * l1_buffer_count;
+
 namespace kernel_profiler{
 /**
  * L1 buffer structure for profiler markers
@@ -23,7 +28,7 @@ namespace kernel_profiler{
  *
  * */
 
-enum BufferIndex {BUFFER_END_INDEX, DROPPED_MARKER_COUNTER, MARKER_DATA_START};
+enum BufferIndex {BUFFER_END_INDEX, DROPPED_MARKER_COUNTER, PAGE_COUNTER, MARKER_DATA_START};
 
 enum TimerDataIndex {TIMER_ID, TIMER_VAL_L, TIMER_VAL_H, TIMER_DATA_UINT32_SIZE};
 

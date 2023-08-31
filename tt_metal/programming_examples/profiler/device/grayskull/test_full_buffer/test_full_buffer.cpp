@@ -20,16 +20,6 @@ bool RunCustomCycle(tt_metal::Device *device, int loop_count, vector<CoreCoord>*
         {"LOOP_SIZE", std::to_string(loop_size)}
     };
 
-    std::vector<uint32_t> zero_buffer(1024, 0);
-    for (size_t x=start_core.x; x <= end_core.x; x++)
-    {
-        for (size_t y=start_core.y; y <= end_core.y; y++)
-        {
-            CoreCoord curr_core = {x, y};
-            tt_metal::detail::WriteToDeviceL1(device, curr_core, PRINT_BUFFER_NC, zero_buffer);
-        }
-    }
-
     tt_metal::KernelID brisc_kernel = tt_metal::CreateDataMovementKernel(
             program, "tt_metal/programming_examples/profiler/device/grayskull/test_full_buffer/kernels/full_buffer.cpp",
             all_cores,
@@ -51,6 +41,8 @@ bool RunCustomCycle(tt_metal::Device *device, int loop_count, vector<CoreCoord>*
     pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
 
     pass &= tt_metal::LaunchKernels(device, program);
+    pass &= tt_metal::LaunchKernels(device, program);
+    tt_metal::detail::DumpDeviceProfileResults(device, program);
 
     *worker_cores = device->worker_cores_from_logical_cores(program.logical_cores());
     return pass;
@@ -71,15 +63,12 @@ int main(int argc, char **argv) {
 
         vector<CoreCoord> worker_cores;
 
-        tt_metal::detail::InitDeviceProfiler(device);
-
         int loop_count = 20;
         pass &= RunCustomCycle(device, loop_count, &worker_cores);
-        tt_metal::detail::DumpDeviceProfileResults(device, worker_cores);
+        //tt_metal::detail::DumpDeviceProfileResults(device, worker_cores);
 
         //loop_count = 40;
         //pass &= RunCustomCycle(device, loop_count, &worker_cores);
-        //tt_metal::detail::DumpDeviceProfileResults(device, worker_cores);
 
         pass &= tt_metal::CloseDevice(device);
 

@@ -89,75 +89,81 @@ void Profiler::readRiscProfilerResults(
     uint32_t end_index;
     uint32_t dropped_marker_counter;
 
-    uint32_t flat_id;
+    uint32_t core_flat_id;
     constexpr int DRAM_ROW = 6;
     if (worker_core.y > DRAM_ROW){
-        flat_id = (worker_core.y - 2) * 12 + (worker_core.x - 1);
+        core_flat_id = l1_buffer_count * ((worker_core.y - 2) * 12 + (worker_core.x - 1));
     }
     else{
-        flat_id = (worker_core.y - 1) * 12 + (worker_core.x - 1);
+        core_flat_id = l1_buffer_count * ((worker_core.y - 1) * 12 + (worker_core.x - 1));
     }
 
-    uint32_t dram_address = dram_buffer_start_addr + flat_id * 1024;
-    uint32_t startIndex = dram_address/sizeof(uint32_t) + risc_print_buffer_addr * PRINT_BUFFER_SIZE/sizeof(uint32_t);
+    for (int page_id=0; page_id < l1_buffer_count; page_id++)
+    {
+        uint32_t dram_address = dram_buffer_start_addr + (core_flat_id + page_id) * l1_buffer_size;
+        uint32_t startIndex = dram_address/sizeof(uint32_t) + risc_print_buffer_addr * PRINT_BUFFER_SIZE/sizeof(uint32_t);
 
 
-    end_index = profile_buffer[startIndex + kernel_profiler::BUFFER_END_INDEX];
-    //vector<std::uint32_t> profile_buffer_l1;
+        end_index = profile_buffer[startIndex + kernel_profiler::BUFFER_END_INDEX];
 
-    //profile_buffer_l1 = tt::llrt::read_hex_vec_from_core(
-            //device->cluster(),
-            //pcie_slot,
-            //worker_core,
-            //PRINT_BUFFER_NC,
-            //PRINT_BUFFER_SIZE);
+#ifdef DEBUG_PRINT_L1
+        vector<std::uint32_t> profile_buffer_l1;
 
-    //if (risc_print_buffer_addr == 0)
-    //{
-        //std::cout << worker_core.x << "," << worker_core.y <<  "," << flat_id << "," << dram_address << std::endl ;
-        //for (int i= 0; i < 4; i ++)
-        //{
-            //end_index = profile_buffer_l1[i];
-            //std::cout << end_index << ",";
-
-        //}
-        //std::cout <<  std::endl;
-        //for (int i= 0; i < 4; i ++)
-        //{
-            //end_index = profile_buffer[startIndex + kernel_profiler::BUFFER_END_INDEX + i];
-            //std::cout << end_index << ",";
-
-        //}
-
-        //std::cout <<  std::endl;
-        //std::cout <<  std::endl;
-    //}
-
-    //return;
-    TT_ASSERT (end_index < (PRINT_BUFFER_SIZE/sizeof(uint32_t)));
-    dropped_marker_counter = profile_buffer[startIndex + kernel_profiler::DROPPED_MARKER_COUNTER];
-
-    if(dropped_marker_counter > 0){
-        log_debug(
-                tt::LogDevice,
-                "{} device markers on device {} worker core {},{} risc {} were dropped. End index {}",
-                dropped_marker_counter,
+        profile_buffer_l1 = tt::llrt::read_hex_vec_from_core(
+                device->cluster(),
                 pcie_slot,
-                worker_core.x,
-                worker_core.y,
-                risc_name,
-                end_index);
-    }
+                worker_core,
+                PRINT_BUFFER_NC,
+                PRINT_BUFFER_SIZE);
 
-    for (int i = kernel_profiler::MARKER_DATA_START; i < end_index; i+=kernel_profiler::TIMER_DATA_UINT32_SIZE) {
-        dumpDeviceResultToFile(
-                pcie_slot,
-                worker_core.x,
-                worker_core.y,
-                risc_num,
-                risc_name,
-                (uint64_t(profile_buffer[startIndex + i+kernel_profiler::TIMER_VAL_H]) << 32) | profile_buffer[startIndex + i+kernel_profiler::TIMER_VAL_L],
-                profile_buffer[startIndex + i+kernel_profiler::TIMER_ID]);
+        if (risc_print_buffer_addr == 0)
+        {
+            std::cout << worker_core.x << "," << worker_core.y <<  "," << core_flat_id << "," << dram_address << "," << page_id << std::endl ;
+            for (int i= 0; i < 5; i ++)
+            {
+                end_index = profile_buffer_l1[i];
+                std::cout << end_index << ",";
+
+            }
+            std::cout <<  std::endl;
+            for (int i= 0; i < 5; i ++)
+            {
+                end_index = profile_buffer[startIndex + kernel_profiler::BUFFER_END_INDEX + i];
+                std::cout << end_index << ",";
+
+            }
+
+            std::cout <<  std::endl;
+            std::cout <<  std::endl;
+        }
+
+#else
+        TT_ASSERT (end_index < (PRINT_BUFFER_SIZE/sizeof(uint32_t)));
+        dropped_marker_counter = profile_buffer[startIndex + kernel_profiler::DROPPED_MARKER_COUNTER];
+
+        if(dropped_marker_counter > 0){
+            log_debug(
+                    tt::LogDevice,
+                    "{} device markers on device {} worker core {},{} risc {} were dropped. End index {}",
+                    dropped_marker_counter,
+                    pcie_slot,
+                    worker_core.x,
+                    worker_core.y,
+                    risc_name,
+                    end_index);
+        }
+
+        for (int i = kernel_profiler::MARKER_DATA_START; i < end_index; i+=kernel_profiler::TIMER_DATA_UINT32_SIZE) {
+            dumpDeviceResultToFile(
+                    pcie_slot,
+                    worker_core.x,
+                    worker_core.y,
+                    risc_num,
+                    risc_name,
+                    (uint64_t(profile_buffer[startIndex + i+kernel_profiler::TIMER_VAL_H]) << 32) | profile_buffer[startIndex + i+kernel_profiler::TIMER_VAL_L],
+                    profile_buffer[startIndex + i+kernel_profiler::TIMER_ID]);
+        }
+#endif
     }
 }
 

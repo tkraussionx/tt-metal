@@ -2,6 +2,7 @@
 #include "llrt/tt_debug_print_server.hpp"
 
 #include "tools/profiler/profiler.hpp"
+#include "hostdevcommon/profiler_common.h"
 
 #include "tt_metal/detail/tt_metal.hpp"
 
@@ -16,16 +17,29 @@ namespace detail {
 static Profiler tt_metal_profiler = Profiler();
 
 void InitDeviceProfiler(Device *device){
+#if defined(PROFILER)
+    CoreCoord compute_with_storage_size = device->logical_grid_size();
+    CoreCoord start_core = {0, 0};
+    CoreCoord end_core = {compute_with_storage_size.x - 1, compute_with_storage_size.y - 1};
 
-    const size_t byte_size = 1024 * 120;
-
-    tt_metal_profiler.output_dram_buffer = tt_metal::Buffer(device, byte_size, byte_size, tt_metal::BufferType::DRAM);
+    tt_metal_profiler.output_dram_buffer = tt_metal::Buffer(device, dram_buffer_size, dram_buffer_size, tt_metal::BufferType::DRAM);
     dram_buffer_start_addr = tt_metal_profiler.output_dram_buffer.address();
 
     //std::cout << dram_buffer_start_addr << std::endl;
+    std::vector<uint32_t> zero_buffer(l1_buffer_size, 0);
+    for (size_t x=start_core.x; x <= end_core.x; x++)
+    {
+        for (size_t y=start_core.y; y <= end_core.y; y++)
+        {
+            CoreCoord curr_core = {x, y};
+            tt_metal::detail::WriteToDeviceL1(device, curr_core, PRINT_BUFFER_NC, zero_buffer);
+        }
+    }
 
-    std::vector<uint32_t> inputs_DRAM(byte_size, 3);
+
+    std::vector<uint32_t> inputs_DRAM(dram_buffer_size, 0);
     tt_metal::WriteToBuffer(tt_metal_profiler.output_dram_buffer, inputs_DRAM);
+#endif
 }
 
 

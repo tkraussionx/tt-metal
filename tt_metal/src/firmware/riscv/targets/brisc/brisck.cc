@@ -10,6 +10,7 @@
 #include "noc_nonblocking_api.h"
 #include "ckernel_globals.h"
 #include "tools/profiler/kernel_profiler.hpp"
+#include "hostdevcommon/profiler_common.h"
 #include "dataflow_api.h"
 #include "debug_print.h"
 
@@ -73,36 +74,38 @@ inline __attribute__((always_inline)) void finish_BR_profiler()
 {
 #if defined(PROFILE_KERNEL) && defined(COMPILE_FOR_BRISC)
 
-    uint32_t size = 1024;
-
     const uint32_t NOC_ID_MASK = (1 << NOC_ADDR_NODE_ID_BITS) - 1;
     uint32_t noc_id = noc_local_node_id() & 0xFFF;
     uint32_t dram_noc_x = noc_id & NOC_ID_MASK;
     uint32_t dram_noc_y = (noc_id >> NOC_ADDR_NODE_ID_BITS) & NOC_ID_MASK;
 
-    uint32_t flat_id;
+    uint32_t core_flat_id;
     constexpr int DRAM_ROW = 6;
     if (dram_noc_y > DRAM_ROW){
-        flat_id = (dram_noc_y - 2) * 12 + (dram_noc_x - 1);
+        core_flat_id = l1_buffer_count*((dram_noc_y - 2) * 12 + (dram_noc_x - 1));
     }
     else{
-        flat_id = (dram_noc_y - 1) * 12 + (dram_noc_x - 1);
+        core_flat_id = l1_buffer_count*((dram_noc_y - 1) * 12 + (dram_noc_x - 1));
     }
 
-    uint32_t dram_address = DRAM_PROFILER_ADDRESS + flat_id * size;
+    volatile uint32_t *buffer = reinterpret_cast<uint32_t*>(PRINT_BUFFER_BR);
+    uint32_t page_id = buffer[kernel_profiler::PAGE_COUNTER];
+    buffer[kernel_profiler::PAGE_COUNTER]++;
+
+    uint32_t dram_address = DRAM_PROFILER_ADDRESS + (core_flat_id + page_id) * l1_buffer_size;
+
+    //volatile uint32_t *debug_buffer = reinterpret_cast<uint32_t*>(PRINT_BUFFER_NC);
+    //debug_buffer[0] = dram_noc_x;
+    //debug_buffer[1] = dram_noc_y;
+    //debug_buffer[2] = core_flat_id;
+    //debug_buffer[3] = dram_address;
+    //debug_buffer[4] = page_id;
 
 
-    //volatile uint32_t *buffer = reinterpret_cast<uint32_t*>(PRINT_BUFFER_NC);
-    //buffer[0] = dram_noc_x;
-    //buffer[1] = dram_noc_y;
-    //buffer[2] = flat_id;
-    //buffer[3] = dram_address;
-
-
-    //if (flat_id == 0)
+    //if (core_flat_id == 0)
     //{
         std::uint64_t dram_buffer_dst_noc_addr = get_noc_addr(1, 0, dram_address);
-        noc_async_write(PRINT_BUFFER_NC, dram_buffer_dst_noc_addr, size);
+        noc_async_write(PRINT_BUFFER_NC, dram_buffer_dst_noc_addr, l1_buffer_size);
         noc_async_write_barrier();
     //}
 #endif //PROFILE_KERNEL

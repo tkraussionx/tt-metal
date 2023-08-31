@@ -188,6 +188,8 @@ bool InitializeDevice(Device *device) {
         detail::GLOBAL_CQ = std::make_unique<CommandQueue>(device);
     }
 
+    tt_metal::detail::InitDeviceProfiler(device);
+
     return init;
 }
 
