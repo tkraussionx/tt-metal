@@ -106,8 +106,6 @@ void MAIN {
     const uint32_t nbatch = get_compile_time_arg_val(10);
     const uint32_t out_h_per_core = get_compile_time_arg_val(11);
 
-    // DPRINT << "I AM THE COMPUTE!! " << ENDL();
-
     tilize_init(in_cb_id, in_ntiles_hwc, in_tiled_cb_id);
 
     #if DEBUG_PRINT == 1
@@ -135,7 +133,6 @@ void MAIN {
         }
     }
     cb_pop_front(in_scalar_cb_id, 1);
-    // ADPRINT("COMPUTE IS DONE");
 }
 
 }  // namespace NAMESPACE
