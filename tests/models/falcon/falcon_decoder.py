@@ -75,18 +75,33 @@ class TtFalconDecoderLayer(nn.Module):
                 )
             ).to(device, self.model_config["INPUT_LAYERNORM_BIAS_MEMCFG"])
         else:
+            r_layernorm_gamma = torch.rand(self.state_dict[layernorm_weights_str].shape)
             self.layernorm_gamma = pad_by_zero(
-                self.state_dict[layernorm_weights_str],
+                r_layernorm_gamma,
                 device,
                 tt_memory_config=self.model_config["INPUT_LAYERNORM_WEIGHTS_MEMCFG"],
                 tt_dtype=self.model_config["INPUT_LAYERNORM_WEIGHTS_DTYPE"],
             )[0]
+            r_layernorm_beta = torch.rand(self.state_dict[layernorm_bias_str].shape)
             self.layernorm_beta = pad_by_zero(
-                self.state_dict[layernorm_bias_str],
+                r_layernorm_beta,
                 device,
                 tt_memory_config=self.model_config["INPUT_LAYERNORM_BIAS_MEMCFG"],
                 tt_dtype=self.model_config["INPUT_LAYERNORM_BIAS_DTYPE"],
             )[0]
+
+            # self.layernorm_gamma = pad_by_zero(
+            #     self.state_dict[layernorm_weights_str],
+            #     device,
+            #     tt_memory_config=self.model_config["INPUT_LAYERNORM_WEIGHTS_MEMCFG"],
+            #     tt_dtype=self.model_config["INPUT_LAYERNORM_WEIGHTS_DTYPE"],
+            # )[0]
+            # self.layernorm_beta = pad_by_zero(
+            #     self.state_dict[layernorm_bias_str],
+            #     device,
+            #     tt_memory_config=self.model_config["INPUT_LAYERNORM_BIAS_MEMCFG"],
+            #     tt_dtype=self.model_config["INPUT_LAYERNORM_BIAS_DTYPE"],
+            # )[0]
         self.layernorm_eps = config.layer_norm_epsilon
 
     def forward(

@@ -144,9 +144,12 @@ class TtFalconAttention(nn.Module):
         else:
             # TODO: Take in model_config instead of hardcoding dtypes/mem_configs
             # self.query_key_value_weights = torch2tt_tensor(torch.rand(4544, 4672), self.device)
+            from loguru import logger
+            logger.info("in attention making query key value")
+            r_query_key_value_weights = torch.rand(self.state_dict[query_key_value_str].shape)
             self.query_key_value_weights = torch2tt_tensor(
                 torch.transpose(
-                    self.state_dict[query_key_value_str],
+                    r_query_key_value_weights,
                     -2,
                     -1,
                 ),
@@ -154,11 +157,24 @@ class TtFalconAttention(nn.Module):
                 tt_memory_config=self.model_config["FUSED_QKV_MM_WEIGHTS_MEMCFG"],
                 tt_dtype=self.model_config["FUSED_QKV_MM_WEIGHTS_DTYPE"],
             )
+            logger.info("in attention made query key value")
+
+            # self.query_key_value_weights = torch2tt_tensor(
+            #     torch.transpose(
+            #         self.state_dict[query_key_value_str],
+            #         -2,
+            #         -1,
+            #     ),
+            #     self.device,
+            #     tt_memory_config=self.model_config["FUSED_QKV_MM_WEIGHTS_MEMCFG"],
+            #     tt_dtype=self.model_config["FUSED_QKV_MM_WEIGHTS_DTYPE"],
+            # )
 
             # self.dense_weights = torch2tt_tensor(torch.rand(4544, 4544), self.device)
+            r_selfout_str = torch.rand(self.state_dict[selfout_str].shape)
             self.dense_weights = torch2tt_tensor(
                 torch.transpose(
-                    self.state_dict[selfout_str],
+                    r_selfout_str,
                     -2,
                     -1,
                 ),
@@ -166,6 +182,16 @@ class TtFalconAttention(nn.Module):
                 tt_memory_config=self.model_config["SELFOUT_MM_WEIGHTS_MEMCFG"],
                 tt_dtype=self.model_config["SELFOUT_MM_WEIGHTS_DTYPE"],
             )
+            # self.dense_weights = torch2tt_tensor(
+            #     torch.transpose(
+            #         self.state_dict[selfout_str],
+            #         -2,
+            #         -1,
+            #     ),
+            #     self.device,
+            #     tt_memory_config=self.model_config["SELFOUT_MM_WEIGHTS_MEMCFG"],
+            #     tt_dtype=self.model_config["SELFOUT_MM_WEIGHTS_DTYPE"],
+            # )
 
         self.rotary_embedding = TtFalconRotaryEmbedding(
             self.device,

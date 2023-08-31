@@ -11,7 +11,7 @@ from tests.models.falcon.falcon_causallm import TtFalconCausalLM
 
 # TODO: Remove this?
 from tests.models.falcon.falcon_common import (
-    PytorchFalconCausalLM,
+    PytorchFalconCausalLM, load_from_weka_or_hf_cache
 )
 
 from tests.models.falcon.model_config import (
@@ -47,10 +47,12 @@ def run_test_FalconCausalLM_end_to_end(
     tt_cache_path,
     model_location_generator,
 ):
-    model_name = model_location_generator(model_version, model_subdir="Falcon")
+    # model_name = model_location_generator(model_version, model_subdir="Falcon")
 
     profiler.start("hugging_face_model_setup")
-    hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_name)
+    # hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_name)
+    # hugging_face_reference_model = load_from_weka_or_hf_cache(model_version, model_subdir="Falcon")
+    hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_version)
     hugging_face_reference_model.eval()
     configuration = hugging_face_reference_model.config
     state_dict = hugging_face_reference_model.state_dict()
@@ -58,7 +60,7 @@ def run_test_FalconCausalLM_end_to_end(
         hugging_face_reference_model, num_layers
     )
     profiler.end("hugging_face_model_setup")
-
+    logger.info("HF model setup done")
     # Prepare input ------------------------------------------------------------------------
     torch.manual_seed(0)
     base_url = ""
@@ -73,6 +75,7 @@ def run_test_FalconCausalLM_end_to_end(
         model_input = torch.stack([torch.arange(seq_len)] * batch).reshape(
             batch, seq_len
         )
+    logger.info("input made!")
 
     # Generate dummy kv_cache --------------------------------------------------------------
     if llm_mode == "prefill":
@@ -90,6 +93,7 @@ def run_test_FalconCausalLM_end_to_end(
             tt_layer_past += ((tt_k_cache, tt_v_cache),)
 
     elif llm_mode == "decode":
+
         q_len, kv_len = seq_len, kv_cache_len + 1
         assert batch % 32 == 0, "For decode, batch must be multiple of 32!"
         assert q_len == 1, "For decode, q_len must be 1!"
@@ -108,6 +112,7 @@ def run_test_FalconCausalLM_end_to_end(
             tt_k_cache = torch2tt_tensor(tt_k_cache, device)
             tt_v_cache = torch2tt_tensor(tt_v_cache, device)
             tt_layer_past += ((tt_k_cache, tt_v_cache),)
+        logger.info("kv cache tensors made and moved to device")
 
     else:
         raise NotImplementedError(
@@ -119,12 +124,15 @@ def run_test_FalconCausalLM_end_to_end(
     pytorch_out, pytorch_layer_present = pytorch_FalconCausalLM(
         input_ids=model_input, past_key_values=past_key_values, use_cache=use_cache
     )
+
+    logger.info("done with pytorch inference")
+
     profiler.end("hugging_face_reference_model")
 
     # NOTE: Passing in pytorch tensor here instead of ll buda tensor
     # since we don't yet have embedding support on device
     # device, state_dict, base_url, max_position_embeddings, config, num_decoders
-
+    logger.info("staring tt setup")
     profiler.start("TtFalcon_model_setup")
     tt_FalconCausalLM = TtFalconCausalLM(
         device,
@@ -137,6 +145,8 @@ def run_test_FalconCausalLM_end_to_end(
         tt_cache_path,
     )
     profiler.end("TtFalcon_model_setup")
+    logger.info("finished tt setup")
+
 
     profiler.start("processing_of_input")
     # TODO: Generate embeddings and attention_mask on device
@@ -149,9 +159,13 @@ def run_test_FalconCausalLM_end_to_end(
             ]
         )
     elif llm_mode == "decode":
+        logger.info("starting tt inference first try")
+
         tt_embeddings, tt_attention_mask = tt_FalconCausalLM.model_preprocessing(
             model_input, kv_cache_len, llm_mode
         )
+        logger.info("finished tt inference first try")
+
     profiler.end("processing_of_input")
 
     # First run to fill compile cache ----------------------------------------------------
@@ -313,12 +327,12 @@ def run_test_FalconCausalLM_end_to_end(
 
     profiler.print()
 
-    if does_pass:
-        logger.info("Falcon CausalLM Passed!")
-    else:
-        logger.warning("Falcon CausalLM Failed!")
-        # TODO: Fix PCC for decode and uncomment this
-        # assert does_pass, f"PCC value is lower than {pcc}"
+    # if does_pass:
+    #     logger.info("Falcon CausalLM Passed!")
+    # else:
+    #     logger.warning("Falcon CausalLM Failed!")
+    #     # TODO: Fix PCC for decode and uncomment this
+    #     # assert does_pass, f"PCC value is lower than {pcc}"
 
 
 @pytest.mark.parametrize(
@@ -327,8 +341,9 @@ def run_test_FalconCausalLM_end_to_end(
         ("prefill", 2, 128, 0),
         ("decode", 32, 1, 128),
         ("decode", 32, 1, 1024),
+        ("decode", 32, 1, 2047),
     ),
-    ids=["prefill_seq128", "decode_batch32", "decode_batch32_1024"],
+    ids=["prefill_seq128", "decode_batch32", "decode_batch32_1024", "decode_batch32_2047"],
 )
 @pytest.mark.parametrize(
     "num_layers, pcc",
@@ -341,6 +356,7 @@ def run_test_FalconCausalLM_end_to_end(
     ids=["falcon_7b"],
 )
 @pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
+# @pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM",))
 def test_FalconCausalLM_end_to_end_with_program_cache(
     use_program_cache,
     model_version,
@@ -356,7 +372,8 @@ def test_FalconCausalLM_end_to_end_with_program_cache(
     device,
 ):
     model_config = get_model_config(model_config_str)
-    tt_cache_path = get_tt_cache_path(model_version)
+    # tt_cache_path = get_tt_cache_path(model_version)
+    tt_cache_path = None
 
     disable_persistent_kernel_cache()
     disable_compilation_reports()

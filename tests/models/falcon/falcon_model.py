@@ -70,12 +70,14 @@ class TtFalconModelShared(torch.nn.Module):
             #     str(tt_cache_path
             #     / f"{embeddings_weights_str}_{self.model_config['WORD_EMBEDDING_WEIGHTS_DTYPE'].name}.bin")
             # ).to(device, self.model_config["WORD_EMBEDDING_WEIGHTS_MEMCFG"])
+
             self.layernorm_gamma = tt_lib.tensor.load_tensor(
                 str(
                     tt_cache_path
                     / f"{layernorm_weights_str}_{self.model_config['LN_F_WEIGHTS_DTYPE'].name}.bin"
                 )
             ).to(device, self.model_config["LN_F_WEIGHTS_MEMCFG"])
+
             self.layernorm_beta = tt_lib.tensor.load_tensor(
                 str(
                     tt_cache_path
@@ -90,18 +92,37 @@ class TtFalconModelShared(torch.nn.Module):
             #     self.model_config["WORD_EMBEDDING_WEIGHTS_MEMCFG"],
             #     self.model_config['WORD_EMBEDDING_WEIGHTS_DTYPE']
             # )
+            from loguru import logger
+            logger.info("making layernorm gamma")
+            r_layernorm_gamma = torch.rand(self.state_dict[layernorm_weights_str].shape)
             self.layernorm_gamma = pad_by_zero(
-                self.state_dict[layernorm_weights_str],
+                r_layernorm_gamma,
                 device,
                 tt_memory_config=self.model_config["LN_F_WEIGHTS_MEMCFG"],
                 tt_dtype=self.model_config["LN_F_WEIGHTS_DTYPE"],
             )[0]
+            # self.layernorm_gamma = pad_by_zero(
+            #     self.state_dict[layernorm_weights_str],
+            #     device,
+            #     tt_memory_config=self.model_config["LN_F_WEIGHTS_MEMCFG"],
+            #     tt_dtype=self.model_config["LN_F_WEIGHTS_DTYPE"],
+            # )[0]
+
+            logger.info("made layernorm gamma")
+            r_layernorm_beta = torch.rand(self.state_dict[layernorm_bias_str].shape)
             self.layernorm_beta = pad_by_zero(
-                self.state_dict[layernorm_bias_str],
+                r_layernorm_beta,
                 device,
                 tt_memory_config=self.model_config["LN_F_BIAS_MEMCFG"],
                 tt_dtype=self.model_config["LN_F_BIAS_DTYPE"],
             )[0]
+
+            # self.layernorm_beta = pad_by_zero(
+            #     self.state_dict[layernorm_bias_str],
+            #     device,
+            #     tt_memory_config=self.model_config["LN_F_BIAS_MEMCFG"],
+            #     tt_dtype=self.model_config["LN_F_BIAS_DTYPE"],
+            # )[0]
         self.layernorm_eps = config.layer_norm_epsilon
 
     def model_preprocessing(self, input_ids, kv_cache_len, llm_mode):

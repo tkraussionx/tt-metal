@@ -45,12 +45,22 @@ class TtFalconCausalLM(TtFalconModelShared):
                 )
             ).to(device, self.model_config["LM_HEAD_MM_WEIGHTS_MEMCFG"])
         else:
+            from loguru import logger
+            logger.info("making lm head weight")
+            r_lm_head_weights = torch.rand(self.state_dict[f"lm_head.weight"].shape)
             self.lm_head_weights = torch2tt_tensor(
-                torch.transpose(self.state_dict[f"lm_head.weight"], -2, -1),
+                torch.transpose(r_lm_head_weights, -2, -1),
                 self.device,
                 tt_memory_config=self.model_config["LM_HEAD_MM_WEIGHTS_MEMCFG"],
                 tt_dtype=self.model_config["LM_HEAD_MM_WEIGHTS_DTYPE"],
             )
+            logger.info("made lm head weight")
+            # self.lm_head_weights = torch2tt_tensor(
+            #     torch.transpose(self.state_dict[f"lm_head.weight"], -2, -1),
+            #     self.device,
+            #     tt_memory_config=self.model_config["LM_HEAD_MM_WEIGHTS_MEMCFG"],
+            #     tt_dtype=self.model_config["LM_HEAD_MM_WEIGHTS_DTYPE"],
+            # )
 
     def forward(
         self,

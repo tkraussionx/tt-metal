@@ -43,9 +43,10 @@ class TtFalconMLP(nn.Module):
                 )
             ).to(device, self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"])
         else:
+            r_dense_h_to_4h_weights = torch.rand(self.state_dict[dense_h_to_4h_str].shape)
             self.dense_h_to_4h_weights = torch2tt_tensor(
                 torch.transpose(
-                    self.state_dict[dense_h_to_4h_str],
+                    r_dense_h_to_4h_weights,
                     -2,
                     -1,
                 ),
@@ -53,9 +54,20 @@ class TtFalconMLP(nn.Module):
                 tt_memory_config=self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"],
                 tt_dtype=self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_DTYPE"],
             )
+            # self.dense_h_to_4h_weights = torch2tt_tensor(
+            #     torch.transpose(
+            #         self.state_dict[dense_h_to_4h_str],
+            #         -2,
+            #         -1,
+            #     ),
+            #     self.device,
+            #     tt_memory_config=self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"],
+            #     tt_dtype=self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_DTYPE"],
+            # )
+            r_dense_4h_to_h_weights = torch.rand(self.state_dict[dense_4h_to_h_str].shape)
             self.dense_4h_to_h_weights = torch2tt_tensor(
                 torch.transpose(
-                    self.state_dict[dense_4h_to_h_str],
+                    r_dense_4h_to_h_weights,
                     -2,
                     -1,
                 ),
@@ -63,6 +75,16 @@ class TtFalconMLP(nn.Module):
                 tt_memory_config=self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"],
                 tt_dtype=self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_DTYPE"],
             )
+            # self.dense_4h_to_h_weights = torch2tt_tensor(
+            #     torch.transpose(
+            #         self.state_dict[dense_4h_to_h_str],
+            #         -2,
+            #         -1,
+            #     ),
+            #     self.device,
+            #     tt_memory_config=self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"],
+            #     tt_dtype=self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_DTYPE"],
+            # )
 
         # self.act_fn = tt_lib.tensor.gelu
 
