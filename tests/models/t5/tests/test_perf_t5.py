@@ -1,6 +1,5 @@
 from transformers import AutoTokenizer, T5Model
 import torch
-import json
 import pytest
 import tt_lib
 from loguru import logger
@@ -13,13 +12,13 @@ from models.utility_functions import (
 )
 from models.t5.tt.t5_model import TtT5Model
 
-BATCH_SIZE=1
+BATCH_SIZE = 1
 
 
-def run_perf_t5(expected_inference_time, expected_compile_time):
+def run_perf_t5(expected_inference_time, expected_compile_time, model_name):
     profiler = Profiler()
     disable_persistent_kernel_cache()
-    comments = "small"
+    comments = f"{model_name}"
     first_key = "first_iter"
     second_key = "second_iter"
     cpu_key = "ref_key"
@@ -31,11 +30,11 @@ def run_perf_t5(expected_inference_time, expected_compile_time):
     tt_lib.device.InitializeDevice(device)
     tt_lib.device.SetDefaultDevice(device)
 
-    tokenizer = AutoTokenizer.from_pretrained("t5-small", model_max_length=32)
-    hf_reference_model = T5Model.from_pretrained("t5-small")
+    tokenizer = AutoTokenizer.from_pretrained(model_name, model_max_length=32)
+    hf_reference_model = T5Model.from_pretrained(model_name)
     hf_reference_model.eval()
 
-    config = json.loads(hf_reference_model.config.to_json_string())
+    config = hf_reference_model.config
     tt_model = TtT5Model(config, hf_reference_model.state_dict(), device)
 
     # Prepare input
@@ -100,18 +99,18 @@ def run_perf_t5(expected_inference_time, expected_compile_time):
     tt_lib.device.CloseDevice(device)
     compile_time = first_iter_time - second_iter_time
     prep_report(
-        model_name="T5",
+        model_name="flan-t5-small",
         batch_size=BATCH_SIZE,
         inference_and_compile_time=first_iter_time,
         inference_time=second_iter_time,
         expected_compile_time=expected_compile_time,
         expected_inference_time=expected_inference_time,
         comments=comments,
-        inference_time_cpu=cpu_time
+        inference_time_cpu=cpu_time,
     )
 
-    logger.info(f"t5 small inference time: {second_iter_time}")
-    logger.info(f"t5 compile time: {compile_time}")
+    logger.info(f"{model_name} inference time: {second_iter_time}")
+    logger.info(f"{model_name} compile time: {compile_time}")
 
     assert second_iter_time < expected_inference_time, f"t5 {comments} is too slow"
     assert compile_time < expected_compile_time, "t5 compile time is too slow"
@@ -119,27 +118,101 @@ def run_perf_t5(expected_inference_time, expected_compile_time):
 
 @pytest.mark.models_performance_bare_metal
 @pytest.mark.parametrize(
-    "expected_inference_time, expected_compile_time",
+    "expected_inference_time, expected_compile_time, model_name",
     (
         (
             0.1,
             6.5,
+            "t5-small",
         ),
     ),
 )
-def test_perf_bare_metal(use_program_cache, expected_inference_time, expected_compile_time):
-    run_perf_t5(expected_inference_time, expected_compile_time)
+def test_perf_bare_metal(
+    use_program_cache, expected_inference_time, expected_compile_time, model_name
+):
+    run_perf_t5(expected_inference_time, expected_compile_time, model_name)
 
 
 @pytest.mark.models_performance_virtual_machine
 @pytest.mark.parametrize(
-    "expected_inference_time, expected_compile_time",
+    "expected_inference_time, expected_compile_time, model_name",
     (
         (
             0.12,
             7,
+            "t5-small",
         ),
     ),
 )
-def test_perf_virtual_machine(use_program_cache, expected_inference_time, expected_compile_time):
-    run_perf_t5(expected_inference_time, expected_compile_time)
+def test_perf_virtual_machine(
+    use_program_cache, expected_inference_time, expected_compile_time, model_name
+):
+    run_perf_t5(expected_inference_time, expected_compile_time, model_name)
+
+
+@pytest.mark.models_performance_bare_metal
+@pytest.mark.parametrize(
+    "expected_inference_time, expected_compile_time, model_name",
+    (
+        (
+            0.5,
+            7,
+            "t5-base",
+        ),
+    ),
+)
+def test_perf_bare_metal(
+    use_program_cache, expected_inference_time, expected_compile_time, model_name
+):
+    run_perf_t5(expected_inference_time, expected_compile_time, model_name)
+
+
+@pytest.mark.models_performance_virtual_machine
+@pytest.mark.parametrize(
+    "expected_inference_time, expected_compile_time,model_name",
+    (
+        (
+            0.17,
+            7,
+            "t5-base",
+        ),
+    ),
+)
+def test_perf_virtual_machine(
+    use_program_cache, expected_inference_time, expected_compile_time, model_name
+):
+    run_perf_t5(expected_inference_time, expected_compile_time, model_name)
+
+
+@pytest.mark.models_performance_bare_metal
+@pytest.mark.parametrize(
+    "expected_inference_time, expected_compile_time, model_name",
+    (
+        (
+            0.5,
+            7,
+            "google/flan-t5-small",
+        ),
+    ),
+)
+def test_perf_bare_metal(
+    use_program_cache, expected_inference_time, expected_compile_time, model_name
+):
+    run_perf_t5(expected_inference_time, expected_compile_time, model_name)
+
+
+@pytest.mark.models_performance_virtual_machine
+@pytest.mark.parametrize(
+    "expected_inference_time, expected_compile_time,model_name",
+    (
+        (
+            0.17,
+            7,
+            "google/flan-t5-small",
+        ),
+    ),
+)
+def test_perf_virtual_machine(
+    use_program_cache, expected_inference_time, expected_compile_time, model_name
+):
+    run_perf_t5(expected_inference_time, expected_compile_time, model_name)
