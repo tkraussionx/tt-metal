@@ -89,8 +89,6 @@ env pytest tests/models/yolov5/tests -k Yolov5_detection_model
 env pytest tests/models/bloom -k baddbmm
 env pytest tests/models/bloom -k bloom_attention
 env pytest tests/models/bloom -k bloom_block
-env pytest tests/models/bloom -k bloom_gelu_forward
-env pytest tests/models/bloom -k bloom_merge_heads
 env pytest tests/models/bloom -k bloom_mlp
 env pytest tests/models/bloom -k bloom_model
 env pytest tests/models/bloom -k bloom_causal_lm
