@@ -3,7 +3,7 @@
 
 using namespace tt;
 
-bool RunCustomCycle(tt_metal::Device *device, int loop_count, vector<CoreCoord>* worker_cores)
+bool RunCustomCycle(tt_metal::Device *device, int loop_count)
 {
     bool pass = true;
 
@@ -21,30 +21,28 @@ bool RunCustomCycle(tt_metal::Device *device, int loop_count, vector<CoreCoord>*
     };
 
     tt_metal::KernelID brisc_kernel = tt_metal::CreateDataMovementKernel(
-            program, "tt_metal/programming_examples/profiler/device/grayskull/test_full_buffer/kernels/full_buffer.cpp",
-            all_cores,
-            tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = tt_metal::NOC::RISCV_0_default, .defines = kernel_defines});
+        program, "tt_metal/programming_examples/profiler/device/grayskull/test_full_buffer/kernels/full_buffer.cpp",
+        all_cores,
+        tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = tt_metal::NOC::RISCV_0_default, .defines = kernel_defines});
 
     tt_metal::KernelID ncrisc_kernel = tt_metal::CreateDataMovementKernel(
-            program, "tt_metal/programming_examples/profiler/device/grayskull/test_full_buffer/kernels/full_buffer.cpp",
-            all_cores,
-            tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = tt_metal::NOC::RISCV_1_default, .defines = kernel_defines});
+        program, "tt_metal/programming_examples/profiler/device/grayskull/test_full_buffer/kernels/full_buffer.cpp",
+        all_cores,
+        tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = tt_metal::NOC::RISCV_1_default, .defines = kernel_defines});
 
     vector<uint32_t> trisc_kernel_args = {};
     tt_metal::KernelID trisc_kernel = tt_metal::CreateComputeKernel(
-            program, "tt_metal/programming_examples/profiler/device/grayskull/test_full_buffer/kernels/full_buffer_compute.cpp",
-            all_cores,
-            tt_metal::ComputeConfig{.compile_args = trisc_kernel_args, .defines = kernel_defines}
-            );
+        program, "tt_metal/programming_examples/profiler/device/grayskull/test_full_buffer/kernels/full_buffer_compute.cpp",
+        all_cores,
+        tt_metal::ComputeConfig{.compile_args = trisc_kernel_args, .defines = kernel_defines}
+        );
 
     pass &= tt_metal::CompileProgram(device, program);
     pass &= tt_metal::ConfigureDeviceWithProgram(device, program);
-
     pass &= tt_metal::LaunchKernels(device, program);
     pass &= tt_metal::LaunchKernels(device, program);
     tt_metal::detail::DumpDeviceProfileResults(device, program);
 
-    *worker_cores = device->worker_cores_from_logical_cores(program.logical_cores());
     return pass;
 }
 
@@ -61,20 +59,12 @@ int main(int argc, char **argv) {
 
         pass &= tt_metal::InitializeDevice(device);
 
-        vector<CoreCoord> worker_cores;
-
         int loop_count = 20;
-        pass &= RunCustomCycle(device, loop_count, &worker_cores);
-        //tt_metal::detail::DumpDeviceProfileResults(device, worker_cores);
-
-        //loop_count = 40;
-        //pass &= RunCustomCycle(device, loop_count, &worker_cores);
+        pass &= RunCustomCycle(device, loop_count);
 
         pass &= tt_metal::CloseDevice(device);
 
     } catch (const std::exception &e) {
-        pass = false;
-        // Capture the exception error message
         log_error(LogTest, "{}", e.what());
         // Capture system call errors that may have returned from driver/kernel
         log_error(LogTest, "System error message: {}", std::strerror(errno));

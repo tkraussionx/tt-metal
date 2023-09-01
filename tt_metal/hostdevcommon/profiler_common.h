@@ -14,7 +14,7 @@
 #define CC_MAIN_END            4U
 
 constexpr size_t l1_buffer_size = 1024;
-constexpr size_t l1_buffer_count = 2;
+constexpr size_t l1_buffer_count = 1;
 constexpr size_t core_count = 120;
 constexpr size_t dram_buffer_size = l1_buffer_size * core_count * l1_buffer_count;
 

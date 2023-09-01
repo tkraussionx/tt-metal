@@ -106,6 +106,7 @@ void Profiler::readRiscProfilerResults(
 
         end_index = profile_buffer[startIndex + kernel_profiler::BUFFER_END_INDEX];
 
+#define DEBUG_PRINT_L1
 #ifdef DEBUG_PRINT_L1
         vector<std::uint32_t> profile_buffer_l1;
 
@@ -116,20 +117,21 @@ void Profiler::readRiscProfilerResults(
                 PRINT_BUFFER_NC,
                 PRINT_BUFFER_SIZE);
 
+        uint32_t tmp_read;
         if (risc_print_buffer_addr == 0)
         {
             std::cout << worker_core.x << "," << worker_core.y <<  "," << core_flat_id << "," << dram_address << "," << page_id << std::endl ;
-            for (int i= 0; i < 5; i ++)
+            for (int i= 0; i < 7; i ++)
             {
-                end_index = profile_buffer_l1[i];
-                std::cout << end_index << ",";
+                tmp_read = profile_buffer_l1[i];
+                std::cout << tmp_read << ",";
 
             }
             std::cout <<  std::endl;
-            for (int i= 0; i < 5; i ++)
+            for (int i= 0; i < 7; i ++)
             {
-                end_index = profile_buffer[startIndex + kernel_profiler::BUFFER_END_INDEX + i];
-                std::cout << end_index << ",";
+                tmp_read = profile_buffer[startIndex + kernel_profiler::BUFFER_END_INDEX + i];
+                std::cout << tmp_read << ",";
 
             }
 
@@ -137,7 +139,7 @@ void Profiler::readRiscProfilerResults(
             std::cout <<  std::endl;
         }
 
-#else
+#endif
         TT_ASSERT (end_index < (PRINT_BUFFER_SIZE/sizeof(uint32_t)));
         dropped_marker_counter = profile_buffer[startIndex + kernel_profiler::DROPPED_MARKER_COUNTER];
 
@@ -163,7 +165,6 @@ void Profiler::readRiscProfilerResults(
                     (uint64_t(profile_buffer[startIndex + i+kernel_profiler::TIMER_VAL_H]) << 32) | profile_buffer[startIndex + i+kernel_profiler::TIMER_VAL_L],
                     profile_buffer[startIndex + i+kernel_profiler::TIMER_ID]);
         }
-#endif
     }
 }
 

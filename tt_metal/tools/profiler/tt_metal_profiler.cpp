@@ -14,10 +14,12 @@ namespace tt_metal {
 
 namespace detail {
 
-static Profiler tt_metal_profiler = Profiler();
+Profiler tt_metal_profiler;
 
 void InitDeviceProfiler(Device *device){
 #if defined(PROFILER)
+    ZoneScoped;
+    //tt_metal_profiler = Profiler();
     CoreCoord compute_with_storage_size = device->logical_grid_size();
     CoreCoord start_core = {0, 0};
     CoreCoord end_core = {compute_with_storage_size.x - 1, compute_with_storage_size.y - 1};

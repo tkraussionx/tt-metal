@@ -88,7 +88,7 @@ inline __attribute__((always_inline)) void finish_BR_profiler()
         core_flat_id = l1_buffer_count*((dram_noc_y - 1) * 12 + (dram_noc_x - 1));
     }
 
-    volatile uint32_t *buffer = reinterpret_cast<uint32_t*>(PRINT_BUFFER_BR);
+    volatile uint32_t *buffer = reinterpret_cast<uint32_t*>(PRINT_BUFFER_NC);
     uint32_t page_id = buffer[kernel_profiler::PAGE_COUNTER];
     buffer[kernel_profiler::PAGE_COUNTER]++;
 
@@ -102,12 +102,12 @@ inline __attribute__((always_inline)) void finish_BR_profiler()
     //debug_buffer[4] = page_id;
 
 
-    //if (core_flat_id == 0)
-    //{
+    if (page_id < l1_buffer_count)
+    {
         std::uint64_t dram_buffer_dst_noc_addr = get_noc_addr(1, 0, dram_address);
         noc_async_write(PRINT_BUFFER_NC, dram_buffer_dst_noc_addr, l1_buffer_size);
         noc_async_write_barrier();
-    //}
+    }
 #endif //PROFILE_KERNEL
 }
 
@@ -132,17 +132,6 @@ void kernel_launch() {
     kernel_profiler::mark_time(CC_KERNEL_MAIN_END);
 #endif
 
-    // FW needs to notify device dispatcher when we are done
-    // Some information needed is known here, pass it back
-    kernel_noc_id_var = loading_noc;
-#if defined(TT_METAL_DEVICE_DISPATCH_MODE)
-    dispatch_addr = (my_x[loading_noc] == NOC_X(1) && my_y[loading_noc] == NOC_Y(11)) ?
-        0 :
-        get_noc_addr(1, 11, DISPATCH_MESSAGE_ADDR);
-#else
-    dispatch_addr = 0;
-#endif
-
     volatile uint32_t* use_triscs = (volatile uint32_t*)(MEM_ENABLE_TRISC_MAILBOX_ADDRESS);
     if (*use_triscs) {
         while (
@@ -164,4 +153,16 @@ void kernel_launch() {
     kernel_profiler::mark_time(CC_MAIN_END);
     finish_BR_profiler();
 #endif
+
+    // FW needs to notify device dispatcher when we are done
+    // Some information needed is known here, pass it back
+    kernel_noc_id_var = loading_noc;
+#if defined(TT_METAL_DEVICE_DISPATCH_MODE)
+    dispatch_addr = (my_x[loading_noc] == NOC_X(1) && my_y[loading_noc] == NOC_Y(11)) ?
+        0 :
+        get_noc_addr(1, 11, DISPATCH_MESSAGE_ADDR);
+#else
+    dispatch_addr = 0;
+#endif
+
 }

@@ -11,6 +11,7 @@
 
 #include "third_party/magic_enum/magic_enum.hpp"
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
+#include "tt_metal/third_party/tracy/public/tracy/TracyOpenCL.hpp"
 
 namespace tt::tt_metal::operation {
 
@@ -114,6 +115,7 @@ std::vector<Tensor> run_without_program_cache(
     CompileProgram(device, program);
     const char *TT_METAL_DEVICE_DISPATCH_MODE = std::getenv("TT_METAL_DEVICE_DISPATCH_MODE");
     if (TT_METAL_DEVICE_DISPATCH_MODE != nullptr) {
+        tracy::set_cpu_time();
         EnqueueProgram(*::detail::GLOBAL_CQ, program, false);
         // Only need to dump device data when in dispatch mode
         // LaunchKernel automatically dumps device data
@@ -122,6 +124,7 @@ std::vector<Tensor> run_without_program_cache(
         ConfigureDeviceWithProgram(device, program);
         WriteRuntimeArgsToDevice(device, program);
         LaunchKernels(device, program);
+        op_profiler::dump_device_profiler_results(device, program);
     }
 
     return output_tensors;
@@ -149,6 +152,7 @@ std::vector<Tensor> run_with_program_cache(
 
     const char *TT_METAL_DEVICE_DISPATCH_MODE = std::getenv("TT_METAL_DEVICE_DISPATCH_MODE");
     if (TT_METAL_DEVICE_DISPATCH_MODE != nullptr) {
+        tracy::set_cpu_time();
         EnqueueProgram(*::detail::GLOBAL_CQ, program, false);
         // Only need to dump device data when in dispatch mode
         // LaunchKernel automatically dumps device data
