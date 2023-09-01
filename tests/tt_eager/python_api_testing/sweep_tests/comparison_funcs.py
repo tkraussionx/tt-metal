@@ -100,8 +100,13 @@ def comp_equal(golden, calculated):
     if golden.dtype != calculated.dtype:
         calculated = calculated.type(golden.dtype)
 
+    while len(golden.shape) < len(calculated.shape):
+        golden = torch.unsqueeze(golden, 0)
+
     _, _, _, output_str = get_atol_rtol_pcc(golden, calculated)
-    return torch.equal(golden, calculated), output_str
+    equal = torch.equal(golden, calculated)
+
+    return equal, output_str
 
 
 def comp_allclose(golden, calculated, rtol=1e-05, atol=1e-08):

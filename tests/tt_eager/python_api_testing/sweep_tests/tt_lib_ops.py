@@ -951,7 +951,13 @@ def fill_ones_rm(x, *args, hOnes, wOnes, device, dtype, layout, buffer_type, out
 
 @setup_host_and_device
 def arange(x, *args, start, end, step=1, device, dtype, layout, buffer_type, output_mem_config, **kwargs):
-    t1 = ttl.tensor.arange(start, end, step, output_mem_config=output_mem_config)
+    t1 = ttl.tensor.arange(
+        start,
+        end,
+        step,
+        device=device if buffer_type[0] is not None else None,
+        output_mem_config=output_mem_config)
+
     output = t1.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
     return output
 
