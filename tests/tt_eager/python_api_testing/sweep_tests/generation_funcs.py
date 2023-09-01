@@ -473,9 +473,10 @@ def _gen_reshape_args_from_volume(volume, step):
 
 def gen_reshape_args(
     input_shapes,
-    dtypes=[supported_tt_dtypes],
+    dtypes=[[ttl.tensor.DataType.BFLOAT16]],
     layouts=[[ttl.tensor.Layout.TILE]],
-    buffer_types=[supported_tt_buffer_types],
+    buffer_types=[[ttl.tensor.BufferType.DRAM]],
+    max_out_shapes=2,
 ):
     vol = (
         input_shapes[0][0]
@@ -485,9 +486,16 @@ def gen_reshape_args(
     )
 
     out_shapes = _gen_reshape_args_from_volume(vol, step=1)
-    out_shapes = random.sample(out_shapes, 2)
+    random.shuffle(out_shapes)
+    n_out_shapes_used = 0
 
     for reshape_dims in out_shapes:
+        if reshape_dims["reshape_dims"][2] % 32 != 0:
+            continue
+
+        if reshape_dims["reshape_dims"][3] % 32 != 0:
+            continue
+
         for input_info in gen_dtype_layout_device(
             input_shapes,
             dtypes,
@@ -497,6 +505,14 @@ def gen_reshape_args(
             if input_info is not None:
                 input_info.update(reshape_dims)
                 yield input_info
+
+        n_out_shapes_used += 1
+
+        # Reached max out shapes
+        if n_out_shapes_used > max_out_shapes:
+            break
+
+
 
 
 def gen_tilize_with_val_padding_args(

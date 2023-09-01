@@ -358,7 +358,7 @@ def eltwise_scale_mask_softmax_in_place(x, y, scale, *args, device, dtype, layou
     t1 = t1.to(layout[1])
     t1 = tensor_to_device(t1, device, buffer_type[1])
 
-    t2 = ttl.operations.primary.transformers.scale_mask_softmax_in_place(t0, scale, t1, output_mem_config=output_mem_config)
+    t2 = ttl.operations.primary.transformers.scale_mask_softmax_in_place(t0, scale, t1)
 
     output = t2.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
     return output

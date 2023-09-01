@@ -17,7 +17,7 @@ import tt_lib as ttl
 
 params = [
     pytest.param([[4, 4, 32, 32]], reshape_args, 0)
-    for reshape_args in generation_funcs.gen_reshape_args([[4, 4, 32, 32]])
+    for reshape_args in generation_funcs.gen_reshape_args([[4, 4, 32, 32]], max_out_shapes=64)
 ]
 params += [
     pytest.param(
