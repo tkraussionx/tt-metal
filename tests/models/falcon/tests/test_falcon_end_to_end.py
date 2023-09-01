@@ -47,12 +47,11 @@ def run_test_FalconCausalLM_end_to_end(
     tt_cache_path,
     model_location_generator,
 ):
-    # model_name = model_location_generator(model_version, model_subdir="Falcon")
-
+    model_name = model_location_generator(model_version, model_subdir="Falcon")
+    memconfig_l1 = tt_lib.tensor.MemoryConfig(True, tt_lib.tensor.BufferType.L1)
     profiler.start("hugging_face_model_setup")
-    # hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_name)
-    # hugging_face_reference_model = load_from_weka_or_hf_cache(model_version, model_subdir="Falcon")
-    hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_version)
+    hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_name)
+    # hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_version)
     hugging_face_reference_model.eval()
     configuration = hugging_face_reference_model.config
     state_dict = hugging_face_reference_model.state_dict()
@@ -109,8 +108,8 @@ def run_test_FalconCausalLM_end_to_end(
             tt_v_cache = torch.zeros(batch, 1, max_position_embeddings, head_dim)
             tt_k_cache[:, :, :kv_cache_len, :] = k_cache
             tt_v_cache[:, :, :kv_cache_len, :] = v_cache
-            tt_k_cache = torch2tt_tensor(tt_k_cache, device)
-            tt_v_cache = torch2tt_tensor(tt_v_cache, device)
+            tt_k_cache = torch2tt_tensor(tt_k_cache, device,)
+            tt_v_cache = torch2tt_tensor(tt_v_cache, device,)
             tt_layer_past += ((tt_k_cache, tt_v_cache),)
         logger.info("kv cache tensors made and moved to device")
 
@@ -343,7 +342,7 @@ def run_test_FalconCausalLM_end_to_end(
         ("decode", 32, 1, 1024),
         ("decode", 32, 1, 2047),
     ),
-    ids=["prefill_seq128", "decode_batch32", "decode_batch32_1024", "decode_batch32_2047"],
+    ids=["prefill_seq128", "decode_batch32_128", "decode_batch32_1024", "decode_batch32_2047"],
 )
 @pytest.mark.parametrize(
     "num_layers, pcc",
@@ -355,8 +354,8 @@ def run_test_FalconCausalLM_end_to_end(
     ("tiiuae/falcon-7b-instruct",),
     ids=["falcon_7b"],
 )
-@pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
-# @pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM",))
+# @pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
+@pytest.mark.parametrize("model_config_str", ("BFLOAT16-L1",))
 def test_FalconCausalLM_end_to_end_with_program_cache(
     use_program_cache,
     model_version,
@@ -372,8 +371,8 @@ def test_FalconCausalLM_end_to_end_with_program_cache(
     device,
 ):
     model_config = get_model_config(model_config_str)
-    # tt_cache_path = get_tt_cache_path(model_version)
-    tt_cache_path = None
+    tt_cache_path = get_tt_cache_path(model_version)
+    # tt_cache_path = None
 
     disable_persistent_kernel_cache()
     disable_compilation_reports()
