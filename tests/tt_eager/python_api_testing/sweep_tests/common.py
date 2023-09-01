@@ -308,10 +308,8 @@ def shapes_and_datagen(shape_dict, datagen_dict):
                     x = random.randint(shape1_start[i], shape1_end[i])
                     shape1.append(align_to_interval(x, shape1_start[i], interval[i]))
 
-                outer_dim = shape1[-1]
 
-                normalized_shape = shape1[-4:]
-
+                normalized_shape = [1,1,1,shape1]
 
                 yield [shape1, normalized_shape, normalized_shape], datagen_funcs
 
@@ -336,12 +334,37 @@ def shapes_and_datagen(shape_dict, datagen_dict):
                     x = random.randint(shape1_start[i], shape1_end[i])
                     shape1.append(align_to_interval(x, shape1_start[i], interval[i]))
 
-                outer_dim = shape1[-1]
-
-                normalized_shape = shape1[-4:]
+                normalized_shape = [1,1,1,shape1]
 
                 yield [shape1, shape1, normalized_shape, normalized_shape], datagen_funcs
 
+        elif method == "conv":
+            # start-shape and end-shape are lists of two shapes
+            # Only supports dim = 4; for the second shape, only the last dim is used
+
+            shape1_start = start_shape
+            shape1_end = end_shape
+            num_dims = 4
+
+            assert (
+                len(shape1_start)
+                == num_dims
+            )
+
+            for _ in range(num_samples):
+                shape1 = []
+
+                for i in range(num_dims):
+                    x = random.randint(shape1_start[i], shape1_end[i])
+                    shape1.append(align_to_interval(x, shape1_start[i], interval[i]))
+
+                conv_shape = [0, 0, 0, 0]
+                conv_shape[0] = 1
+                conv_shape[1] = shape1[1]
+                conv_shape[2] = random.randint(1,4)
+                conv_shape[3] = random.randint(1, 4)
+
+                yield [shape1, conv_shape], datagen_funcs
 
         elif method == "linear":
             # start-shape and end-shape are lists of two shapes

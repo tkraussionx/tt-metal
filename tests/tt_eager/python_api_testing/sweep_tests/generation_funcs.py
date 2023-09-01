@@ -723,6 +723,56 @@ def gen_scalar_args(
             yield input_info
 
 
+def gen_conv2d_args(
+    input_shapes,
+    dtypes,
+    layouts,
+    buffer_types,
+):
+    for input_info in gen_conv_scalar_args(
+        input_shapes,
+        dtypes,
+        layouts,
+        buffer_types,
+        "conv_params",
+        torch.int,
+    ):
+        yield input_info
+
+def gen_conv_scalar_args(
+    input_shapes,
+    supported_dtypes,
+    supported_layouts,
+    on_device,
+    arg0_name="conv_params",
+    dtype=torch.bfloat16,
+):
+    for input_info in gen_dtype_layout_device(
+        input_shapes, supported_dtypes, supported_layouts, on_device
+    ):
+
+        lowStride = 1
+        highStride = 4
+        padH = 0
+        padW = 0
+
+        w=input_shapes[0][3]
+        h=input_shapes[0][2]
+
+        #assert(lowKernel>0 and highKernel<w and highKernel<w)
+        #assert(lowStride>0 and highStride<w and highStride<h)
+
+        kernelH = input_shapes[1][2]
+        kernelW = input_shapes[1][3]
+
+        strideH = random.randint(lowStride, highStride)
+        strideW = random.randint(lowStride, highStride)
+        conv_params = [kernelH, kernelW, strideH, strideW, padH, padW]
+
+        input_info.update({arg0_name: conv_params})
+        yield input_info
+
+
 def gen_scalar_symmetric_args(
     input_shapes,
     dtypes,

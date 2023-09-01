@@ -660,6 +660,36 @@ def eltwise_lerp_binary(
 
 
 @setup_host_and_device
+def conv(x, y, conv_params, *args, device, dtype, layout, buffer_type, output_mem_config, **kwargs):
+    print('ENTERED CONV')
+    t0 = ttl.tensor.Tensor(
+        x.reshape(-1).tolist(),
+        x.shape,
+        dtype[0],
+        ttl.tensor.Layout.ROW_MAJOR,
+    )
+
+    t0 = t0.to(layout[0])
+    t0 = tensor_to_device(t0, device, buffer_type[0])
+
+    t1 = ttl.tensor.Tensor(
+        y.reshape(-1).tolist(),
+        y.shape,
+        dtype[1],
+        ttl.tensor.Layout.ROW_MAJOR,
+    )
+
+    t1 = t1.to(layout[1])
+    t1 = tensor_to_device(t1, device, buffer_type[1])
+
+    print('PARAMS:')
+    print(conv_params)
+    t2 = ttl.tensor.conv(t0, t1, conv_params, output_mem_config=output_mem_config)
+
+    output = t2.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
+    return output
+
+@setup_host_and_device
 def layernorm(x, y, z, *args, device, dtype, layout, buffer_type, output_mem_config, **kwargs):
     t0 = ttl.tensor.Tensor(
         x.reshape(-1).tolist(),

@@ -658,4 +658,8 @@ op_map = {
         "tt_lib_op": tt_lib_ops.std_hw,
         "pytorch_op": pytorch_ops.std_hw,
     },
+    "conv": {
+        "tt_lib_op": tt_lib_ops.conv,
+        "pytorch_op": pytorch_ops.conv,
+    },
 }
