@@ -433,7 +433,6 @@ def std_hw(x, *args, device, dtype, layout, buffer_type, output_mem_config, **kw
     t1 = ttl.tensor.std_hw(t0, output_mem_config=output_mem_config)
 
     output = t1.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
-    output = output.max(2, True)[0].max(3, True)[0]
 
     return output
 
@@ -453,8 +452,6 @@ def var_hw(x, *args, device, dtype, layout, buffer_type, output_mem_config, **kw
     t1 = ttl.tensor.var_hw(t0, output_mem_config=output_mem_config)
 
     output = t1.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
-    output = output.max(2, True)[0].max(3, True)[0]
-
     return output
 
 
