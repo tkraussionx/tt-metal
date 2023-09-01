@@ -650,4 +650,12 @@ op_map = {
         "tt_lib_op": tt_lib_ops.unpad_from_tile,
         "pytorch_op": pytorch_ops.unpad_from_tile,
     },
+    "var-hw": {
+        "tt_lib_op": tt_lib_ops.var_hw,
+        "pytorch_op": pytorch_ops.var_hw,
+    },
+    "std-hw": {
+        "tt_lib_op": tt_lib_ops.std_hw,
+        "pytorch_op": pytorch_ops.std_hw,
+    },
 }
