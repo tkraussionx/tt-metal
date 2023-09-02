@@ -44,7 +44,7 @@ if is_wormhole_b0():
 
 # TODO: This function should be split apart instead of having all these if cases
 @pytest.mark.parametrize(
-    "fn, input_shapes, pcie_slot",
+    "fn, input_shapes, device_id",
     list(
         product(
             (
@@ -95,7 +95,7 @@ if is_wormhole_b0():
     ),  # Single core, and multi-core
 )
 def test_run_eltwise_composite_test(
-    fn, input_shapes, pcie_slot, function_level_defaults
+    fn, input_shapes, device_id, function_level_defaults
 ):
     options = defaultdict(lambda: (-1.0, 1.0))
     options["log1"] = (0.0, 1.0)
@@ -167,6 +167,6 @@ def test_run_eltwise_composite_test(
         input_shapes,
         datagen_func,
         partial(custom_compare, function=fn),
-        pcie_slot,
+        device_id,
         test_args,
     )

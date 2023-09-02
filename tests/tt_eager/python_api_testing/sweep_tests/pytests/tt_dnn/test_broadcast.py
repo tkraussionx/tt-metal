@@ -38,9 +38,9 @@ if is_wormhole_b0():
 @pytest.mark.parametrize(
     "dtype", (ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B)
 )
-@pytest.mark.parametrize("pcie_slot", (0,))
+@pytest.mark.parametrize("device_id", (0,))
 def test_run_bcast_h_test(
-    input_shapes, bcast_op_type, dtype, pcie_slot, function_level_defaults
+    input_shapes, bcast_op_type, dtype, device_id, function_level_defaults
 ):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
@@ -53,7 +53,7 @@ def test_run_bcast_h_test(
         input_shapes,
         datagen_func,
         comparison_func,
-        pcie_slot,
+        device_id,
         {
             "dtype": [dtype, dtype],
             "layout": [ttl.tensor.Layout.TILE, ttl.tensor.Layout.TILE],
@@ -79,9 +79,9 @@ if is_wormhole_b0():
 @pytest.mark.parametrize(
     "dtype", (ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B)
 )
-@pytest.mark.parametrize("pcie_slot", (0,))
+@pytest.mark.parametrize("device_id", (0,))
 def test_run_bcast_w_test(
-    input_shapes, bcast_op_type, dtype, pcie_slot, function_level_defaults
+    input_shapes, bcast_op_type, dtype, device_id, function_level_defaults
 ):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
@@ -94,7 +94,7 @@ def test_run_bcast_w_test(
         input_shapes,
         datagen_func,
         comparison_func,
-        pcie_slot,
+        device_id,
         {
             "dtype": [dtype, dtype],
             "layout": [ttl.tensor.Layout.TILE, ttl.tensor.Layout.TILE],
@@ -121,9 +121,9 @@ if is_wormhole_b0():
 @pytest.mark.parametrize(
     "dtype", (ttl.tensor.DataType.BFLOAT16, ttl.tensor.DataType.BFLOAT8_B)
 )
-@pytest.mark.parametrize("pcie_slot", (0,))
+@pytest.mark.parametrize("device_id", (0,))
 def test_run_bcast_hw_test(
-    input_shapes, bcast_op_type, dtype, pcie_slot, function_level_defaults
+    input_shapes, bcast_op_type, dtype, device_id, function_level_defaults
 ):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
@@ -136,7 +136,7 @@ def test_run_bcast_hw_test(
         input_shapes,
         datagen_func,
         comparison_func,
-        pcie_slot,
+        device_id,
         {
             "dtype": [dtype, dtype],
             "layout": [ttl.tensor.Layout.TILE, ttl.tensor.Layout.TILE],

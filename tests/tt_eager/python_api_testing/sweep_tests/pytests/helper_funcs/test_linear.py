@@ -26,8 +26,8 @@ from tests.tt_eager.python_api_testing.sweep_tests.run_pytorch_ci_tests import r
     "input_shapes",
     ([[1, 1, 32, 64], [1, 1, 256, 64]], [[1, 1, 64, 128], [1, 1, 32, 128]]),
 )
-@pytest.mark.parametrize("pcie_slot", (0,))
-def test_linear_no_bias(input_shapes, pcie_slot):
+@pytest.mark.parametrize("device_id", (0,))
+def test_linear_no_bias(input_shapes, device_id):
     comparison_func = partial(comparison_funcs.comp_pcc)
 
     datagen_func = [
@@ -43,7 +43,7 @@ def test_linear_no_bias(input_shapes, pcie_slot):
         ],
         datagen_func,
         comparison_func,
-        pcie_slot,
+        device_id,
         {
             "weight": weight,
             "layout": [ttl.tensor.Layout.TILE, ttl.tensor.Layout.TILE],
@@ -62,8 +62,8 @@ def test_linear_no_bias(input_shapes, pcie_slot):
         [[1, 1, 64, 128], [1, 1, 32, 128], [1, 1, 1, 32]],
     ),
 )
-@pytest.mark.parametrize("pcie_slot", (0,))
-def test_linear_with_bias(input_shapes, pcie_slot):
+@pytest.mark.parametrize("device_id", (0,))
+def test_linear_with_bias(input_shapes, device_id):
     comparison_func = partial(comparison_funcs.comp_pcc)
 
     datagen_func = [
@@ -80,7 +80,7 @@ def test_linear_with_bias(input_shapes, pcie_slot):
         ],
         datagen_func,
         comparison_func,
-        pcie_slot,
+        device_id,
         {
             "weight": weight,
             "bias": bias,

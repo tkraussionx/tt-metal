@@ -48,8 +48,8 @@ params += [
 ]
 
 
-@pytest.mark.parametrize("input_shapes, unpad_args, pcie_slot", params)
-def test_run_unpad_test(input_shapes, unpad_args, pcie_slot):
+@pytest.mark.parametrize("input_shapes, unpad_args, device_id", params)
+def test_run_unpad_test(input_shapes, unpad_args, device_id):
     if is_wormhole_b0():
         if input_shapes == [[5,5,64,96]]:
             pytest.skip("skip this shape for Wormhole B0")
@@ -64,6 +64,6 @@ def test_run_unpad_test(input_shapes, unpad_args, pcie_slot):
         input_shapes,
         datagen_func,
         comparison_func,
-        pcie_slot,
+        device_id,
         unpad_args,
     )

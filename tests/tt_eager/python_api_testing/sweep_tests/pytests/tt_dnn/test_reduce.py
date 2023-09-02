@@ -30,10 +30,10 @@ if is_wormhole_b0():
     shapes_n_slots = (shapes_n_slots[0],)
 
 @pytest.mark.parametrize(
-    "input_shapes, pcie_slot",
+    "input_shapes, device_id",
     shapes_n_slots
 )
-def test_run_reduce_max_h_test(input_shapes, pcie_slot, function_level_defaults):
+def test_run_reduce_max_h_test(input_shapes, device_id, function_level_defaults):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
             partial(generation_funcs.gen_rand_along_dim, low=-100, high=100, dim=-2),
@@ -46,7 +46,7 @@ def test_run_reduce_max_h_test(input_shapes, pcie_slot, function_level_defaults)
         input_shapes,
         datagen_func,
         comparison_func,
-        pcie_slot,
+        device_id,
     )
 
 shapes_n_slots2 = (
@@ -59,10 +59,10 @@ if is_wormhole_b0():
 
 @skip_for_wormhole_b0
 @pytest.mark.parametrize(
-    "input_shapes, pcie_slot",
+    "input_shapes, device_id",
     shapes_n_slots2
 )
-def test_run_reduce_max_w_test(input_shapes, pcie_slot, function_level_defaults):
+def test_run_reduce_max_w_test(input_shapes, device_id, function_level_defaults):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
             partial(generation_funcs.gen_rand_along_dim, low=-100, high=100, dim=-1),
@@ -75,7 +75,7 @@ def test_run_reduce_max_w_test(input_shapes, pcie_slot, function_level_defaults)
         input_shapes,
         datagen_func,
         comparison_func,
-        pcie_slot,
+        device_id,
     )
 
 
@@ -89,10 +89,10 @@ if is_wormhole_b0():
     shapes_n_slots3 = (shapes_n_slots3[0],)
 
 @pytest.mark.parametrize(
-    "input_shapes, pcie_slot",
+    "input_shapes, device_id",
     shapes_n_slots3,
 )
-def test_run_reduce_max_hw_test(input_shapes, pcie_slot, function_level_defaults):
+def test_run_reduce_max_hw_test(input_shapes, device_id, function_level_defaults):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
             partial(generation_funcs.gen_rand, low=-100, high=100), torch.bfloat16
@@ -104,7 +104,7 @@ def test_run_reduce_max_hw_test(input_shapes, pcie_slot, function_level_defaults
         input_shapes,
         datagen_func,
         comparison_func,
-        pcie_slot,
+        device_id,
     )
 
 shapes_n_slots5 = (
@@ -117,10 +117,10 @@ if is_wormhole_b0():
 
 
 @pytest.mark.parametrize(
-    "input_shapes, pcie_slot",
+    "input_shapes, device_id",
     shapes_n_slots5
 )
-def test_run_reduce_sum_h_test(input_shapes, pcie_slot, function_level_defaults):
+def test_run_reduce_sum_h_test(input_shapes, device_id, function_level_defaults):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
             partial(generation_funcs.gen_checkerboard, low=0, high=100), torch.float32
@@ -132,7 +132,7 @@ def test_run_reduce_sum_h_test(input_shapes, pcie_slot, function_level_defaults)
         input_shapes,
         datagen_func,
         comparison_func,
-        pcie_slot,
+        device_id,
     )
 
 
@@ -147,10 +147,10 @@ if is_wormhole_b0():
 
 @skip_for_wormhole_b0
 @pytest.mark.parametrize(
-    "input_shapes, pcie_slot",
+    "input_shapes, device_id",
     shapes_n_slots4
 )
-def test_run_reduce_sum_w_test(input_shapes, pcie_slot, function_level_defaults):
+def test_run_reduce_sum_w_test(input_shapes, device_id, function_level_defaults):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
             partial(generation_funcs.gen_checkerboard, low=0, high=100), torch.float32
@@ -162,7 +162,7 @@ def test_run_reduce_sum_w_test(input_shapes, pcie_slot, function_level_defaults)
         input_shapes,
         datagen_func,
         comparison_func,
-        pcie_slot,
+        device_id,
     )
 
 shapes_n_slots5 = (
@@ -175,10 +175,10 @@ if is_wormhole_b0():
 
 
 @pytest.mark.parametrize(
-    "input_shapes, pcie_slot",
+    "input_shapes, device_id",
     shapes_n_slots5
 )
-def test_run_reduce_sum_hw_test(input_shapes, pcie_slot, function_level_defaults):
+def test_run_reduce_sum_hw_test(input_shapes, device_id, function_level_defaults):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
             partial(generation_funcs.gen_checkerboard, low=0, high=100), torch.float32
@@ -190,5 +190,5 @@ def test_run_reduce_sum_hw_test(input_shapes, pcie_slot, function_level_defaults
         input_shapes,
         datagen_func,
         comparison_func,
-        pcie_slot,
+        device_id,
     )

@@ -37,8 +37,8 @@ import tt_lib as ttl
         },
     ),
 )
-@pytest.mark.parametrize("pcie_slot", ((0,)))
-def test_untilize_test(input_shapes, untilize_args, pcie_slot, function_level_defaults):
+@pytest.mark.parametrize("device_id", ((0,)))
+def test_untilize_test(input_shapes, untilize_args, device_id, function_level_defaults):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
             partial(generation_funcs.gen_arange), torch.bfloat16, True
@@ -50,6 +50,6 @@ def test_untilize_test(input_shapes, untilize_args, pcie_slot, function_level_de
         input_shapes,
         datagen_func,
         comparison_func,
-        pcie_slot,
+        device_id,
         untilize_args,
     )

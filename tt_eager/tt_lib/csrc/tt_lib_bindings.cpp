@@ -2778,8 +2778,8 @@ void DeviceModule(py::module &m_device) {
     pyDevice
         .def(
             py::init<>(
-                [](tt::ARCH arch, int pcie_slot) {
-                    return Device(arch, pcie_slot);
+                [](tt::ARCH arch, int device_id) {
+                    return Device(arch, device_id);
                 }
             ), "Create device."
         );
@@ -2792,7 +2792,7 @@ void DeviceModule(py::module &m_device) {
         +==================+========================+=====================+==============================+==========+
         | arch             | Type of TT Device      | tt_lib.device.Arch  | tt_lib.device.Arch.GRAYSKULL | Yes      |
         +------------------+------------------------+---------------------+------------------------------+----------+
-        | pci_express_slot | PCI Express slot index | int                 |                              | Yes      |
+        | device_id        | Device index           | int                 |                              | Yes      |
         +------------------+------------------------+---------------------+------------------------------+----------+
     )doc");
     m_device.def("InitializeDevice", &InitializeDevice, py::arg().noconvert(), R"doc(

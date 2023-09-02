@@ -51,10 +51,10 @@ params += [
 
 
 @pytest.mark.parametrize(
-    "input_shapes, tilize_with_val_padding_args, pcie_slot", params
+    "input_shapes, tilize_with_val_padding_args, device_id", params
 )
 def test_run_tilize_with_val_padding_test(
-    input_shapes, tilize_with_val_padding_args, pcie_slot, function_level_defaults
+    input_shapes, tilize_with_val_padding_args, device_id, function_level_defaults
 ):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
@@ -67,6 +67,6 @@ def test_run_tilize_with_val_padding_test(
         input_shapes,
         datagen_func,
         comparison_func,
-        pcie_slot,
+        device_id,
         tilize_with_val_padding_args,
     )

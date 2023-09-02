@@ -71,7 +71,7 @@ static void print_l1_status(FILE *f, tt_metal::Device *dev, CoreCoord core) {
 
     // Read L1 address 0, looking for memory corruption
     std::vector<uint32_t> data;
-    data = read_hex_vec_from_core(dev->cluster(), dev->pcie_slot(), core, MEM_L1_BASE, sizeof(uint32_t));
+    data = read_hex_vec_from_core(dev->cluster(), dev->id(), core, MEM_L1_BASE, sizeof(uint32_t));
     // XXXX TODO(pgk): get this const from llrt (jump to fw insn)
     if (data[0] != 0x2010006f) {
         fprintf(f, "L1[0]=bad 0x%08x ", data[0]);
@@ -140,7 +140,7 @@ static void print_noc_sanity_status(FILE *f, tt_metal::Device *dev, CoreCoord co
 
     // Read L1 address 0, looking for memory corruption
     std::vector<uint32_t> data;
-    data = read_hex_vec_from_core(dev->cluster(), dev->pcie_slot(), core, MEM_DEBUG_SANITIZE_NOC_MAILBOX_ADDRESS, N_NOCS * sizeof(debug_sanitize_noc_addr_t));
+    data = read_hex_vec_from_core(dev->cluster(), dev->id(), core, MEM_DEBUG_SANITIZE_NOC_MAILBOX_ADDRESS, N_NOCS * sizeof(debug_sanitize_noc_addr_t));
     debug_sanitize_noc_addr_t *san = reinterpret_cast<debug_sanitize_noc_addr_t *>(&data[0]);
 
     for (uint32_t noc = 0; noc < N_NOCS; noc++) {
@@ -154,7 +154,7 @@ static void print_debug_status(FILE *f, tt_metal::Device *dev, CoreCoord core) {
     // Just print brisc status
 
     std::vector<uint32_t> data;
-    data = read_hex_vec_from_core(dev->cluster(), dev->pcie_slot(), core, MEM_DEBUG_STATUS_MAILBOX_START_ADDRESS, MEM_DEBUG_STATUS_MAILBOX_END_ADDRESS - MEM_DEBUG_STATUS_MAILBOX_START_ADDRESS);
+    data = read_hex_vec_from_core(dev->cluster(), dev->id(), core, MEM_DEBUG_STATUS_MAILBOX_START_ADDRESS, MEM_DEBUG_STATUS_MAILBOX_END_ADDRESS - MEM_DEBUG_STATUS_MAILBOX_START_ADDRESS);
     constexpr int num_riscv_per_core = 5;
     constexpr int num_status_bytes_per_riscv = 4;
     static_assert(MEM_DEBUG_STATUS_MAILBOX_END_ADDRESS - MEM_DEBUG_STATUS_MAILBOX_START_ADDRESS == num_riscv_per_core * num_status_bytes_per_riscv);
@@ -209,7 +209,7 @@ static void watcher_loop(int sleep_usecs) {
                 fprintf(f, "No active devices\n");
             }
             for (auto const& dev : devices) {
-                log_info(LogLLRuntime, "Watcher checking device {}", dev->pcie_slot());
+                log_info(LogLLRuntime, "Watcher checking device {}", dev->id());
 
                 CoreCoord grid_size = dev->logical_grid_size();
                 for (uint32_t y = 0; y < grid_size.y; y++) {
@@ -251,7 +251,7 @@ void watcher_attach(tt_metal::Device *dev) {
     if (watcher::enabled) {
         if (llrt::watcher::f != nullptr) {
             // Hmmm, do we want to always open the file so we always get this?
-            fprintf(watcher::f, "At %ds attach device %d\n", watcher::get_elapsed_secs(), dev->pcie_slot());
+            fprintf(watcher::f, "At %ds attach device %d\n", watcher::get_elapsed_secs(), dev->id());
         }
         watcher::devices.push_back(dev);
     }
@@ -261,7 +261,7 @@ void watcher_detach(tt_metal::Device *old) {
     const std::lock_guard<std::mutex> lock(watcher::watch_mutex);
 
     if (watcher::enabled) {
-        fprintf(watcher::f, "At %ds detach device %d\n", watcher::get_elapsed_secs(), old->pcie_slot());
+        fprintf(watcher::f, "At %ds detach device %d\n", watcher::get_elapsed_secs(), old->id());
 
         for (vector<tt_metal::Device *>::iterator iter = watcher::devices.begin();
              iter < watcher::devices.end();
@@ -291,7 +291,7 @@ void watcher_init(tt_metal::Device *dev) {
             for (uint32_t x = 0; x < grid_size.x; x++) {
                 CoreCoord logical_core(x, y);
                 CoreCoord worker_core = dev->worker_core_from_logical_core(logical_core);
-                tt::llrt::write_hex_vec_to_core(dev->cluster(), dev->pcie_slot(), worker_core, dope, MEM_L1_BASE);
+                tt::llrt::write_hex_vec_to_core(dev->cluster(), dev->id(), worker_core, dope, MEM_L1_BASE);
             }
         }
     }
@@ -316,8 +316,8 @@ void watcher_init(tt_metal::Device *dev) {
         for (uint32_t x = 0; x < grid_size.x; x++) {
             CoreCoord logical_core(x, y);
             CoreCoord worker_core = dev->worker_core_from_logical_core(logical_core);
-            tt::llrt::write_hex_vec_to_core(dev->cluster(), dev->pcie_slot(), worker_core, debug_status_init_val, MEM_DEBUG_STATUS_MAILBOX_START_ADDRESS);
-            tt::llrt::write_hex_vec_to_core(dev->cluster(), dev->pcie_slot(), worker_core, debug_sanity_init_val, MEM_DEBUG_SANITIZE_NOC_MAILBOX_ADDRESS);
+            tt::llrt::write_hex_vec_to_core(dev->cluster(), dev->id(), worker_core, debug_status_init_val, MEM_DEBUG_STATUS_MAILBOX_START_ADDRESS);
+            tt::llrt::write_hex_vec_to_core(dev->cluster(), dev->id(), worker_core, debug_sanity_init_val, MEM_DEBUG_SANITIZE_NOC_MAILBOX_ADDRESS);
         }
     }
 }

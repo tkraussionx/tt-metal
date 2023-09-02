@@ -28,7 +28,7 @@ struct hlk_args_t {
 void run_compile_blank(tt_metal::Device *device) {
 
     // Create and config an OP
-    tt::build_kernel_for_riscv_options_t build_kernel_for_riscv_options(device->pcie_slot(), "blank_op");
+    tt::build_kernel_for_riscv_options_t build_kernel_for_riscv_options(device->id(), "blank_op");
 
     log_info(tt::LogBuildKernels, "Compiling OP: {}", build_kernel_for_riscv_options.name);
 
@@ -130,9 +130,9 @@ bool run_chained_sfpu_test(const tt::ARCH& arch, int chain_length) {
         ////////////////////////////////////////////////////////////////////////////
         //                      Device Setup
         ////////////////////////////////////////////////////////////////////////////
-        int pci_express_slot = 0;
+        int device_id = 0;
         tt_metal::Device *device =
-            tt_metal::CreateDevice(arch, pci_express_slot);
+            tt_metal::CreateDevice(arch, device_id);
 
         pass &= tt_metal::InitializeDevice(device);
 
@@ -357,9 +357,9 @@ bool run_binary_add_and_then_eltwise_gelu_test(const tt::ARCH& arch) {
         ////////////////////////////////////////////////////////////////////////////
         //                      Device Setup
         ////////////////////////////////////////////////////////////////////////////
-        int pci_express_slot = 0;
+        int device_id = 0;
         tt_metal::Device *device =
-            tt_metal::CreateDevice(arch, pci_express_slot);
+            tt_metal::CreateDevice(arch, device_id);
 
         pass &= tt_metal::InitializeDevice(device);
 
@@ -631,9 +631,9 @@ bool run_forked_binary_test(const tt::ARCH& arch) {
         ////////////////////////////////////////////////////////////////////////////
         //                      Device Setup
         ////////////////////////////////////////////////////////////////////////////
-        int pci_express_slot = 0;
+        int device_id = 0;
         tt_metal::Device *device =
-            tt_metal::CreateDevice(arch, pci_express_slot);
+            tt_metal::CreateDevice(arch, device_id);
 
         pass &= tt_metal::InitializeDevice(device);
 

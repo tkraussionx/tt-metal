@@ -32,10 +32,10 @@ if is_wormhole_b0():
     shapes_n_slots = (shapes_n_slots[0],)
 
 @pytest.mark.parametrize(
-    "input_shapes, pcie_slot",
+    "input_shapes, device_id",
     shapes_n_slots
 )
-def test_run_eltwise_where_test(input_shapes, pcie_slot, function_level_defaults):
+def test_run_eltwise_where_test(input_shapes, device_id, function_level_defaults):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
             partial(generation_funcs.gen_randint, low=-100, high=+100), torch.float32
@@ -53,5 +53,5 @@ def test_run_eltwise_where_test(input_shapes, pcie_slot, function_level_defaults
         [input_shapes[0], input_shapes[0], input_shapes[0]],
         datagen_func,
         comparison_func,
-        pcie_slot,
+        device_id,
     )

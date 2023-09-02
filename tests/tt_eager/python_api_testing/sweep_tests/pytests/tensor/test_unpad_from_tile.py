@@ -22,10 +22,10 @@ from tests.tt_eager.python_api_testing.sweep_tests.run_pytorch_ci_tests import r
 
 
 @pytest.mark.parametrize(
-    "input_shapes, pcie_slot",
+    "input_shapes, device_id",
     (([[10, 10, 128, 128]], 0),),
 )
-def test_run_unpad_from_tile_test(input_shapes, pcie_slot):
+def test_run_unpad_from_tile_test(input_shapes, device_id):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
             partial(generation_funcs.gen_rand, low=-100, high=100), torch.bfloat16
@@ -37,6 +37,6 @@ def test_run_unpad_from_tile_test(input_shapes, pcie_slot):
         input_shapes,
         datagen_func,
         comparison_func,
-        pcie_slot,
+        device_id,
         generation_funcs.gen_unpad_from_tile_args(input_shapes)[0],
     )

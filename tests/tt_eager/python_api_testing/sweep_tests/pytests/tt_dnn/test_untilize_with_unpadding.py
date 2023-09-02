@@ -51,10 +51,10 @@ params += [
 
 
 @pytest.mark.parametrize(
-    "input_shapes, untilize_with_unpadding_args, pcie_slot", params
+    "input_shapes, untilize_with_unpadding_args, device_id", params
 )
 def test_run_untilize_with_unpadding_test(
-    input_shapes, untilize_with_unpadding_args, pcie_slot
+    input_shapes, untilize_with_unpadding_args, device_id
 ):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
@@ -67,6 +67,6 @@ def test_run_untilize_with_unpadding_test(
         input_shapes,
         datagen_func,
         comparison_func,
-        pcie_slot,
+        device_id,
         untilize_with_unpadding_args,
     )

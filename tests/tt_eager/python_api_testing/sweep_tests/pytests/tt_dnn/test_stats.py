@@ -38,12 +38,12 @@ if is_wormhole_b0():
     "input_shapes_and_pcc",
     shapes,
 )
-@pytest.mark.parametrize("pcie_slot", [0])
+@pytest.mark.parametrize("device_id", [0])
 class TestStats:
     @skip_for_wormhole_b0
     @pytest.mark.parametrize("fn_kind", fns)
     def test_run_stats_ops(
-        self, input_shapes_and_pcc, fn_kind, pcie_slot, function_level_defaults
+        self, input_shapes_and_pcc, fn_kind, device_id, function_level_defaults
     ):
         input_shapes, accepted_pcc = input_shapes_and_pcc
         input_shapes = [input_shapes]
@@ -61,6 +61,6 @@ class TestStats:
             input_shapes,
             datagen_func,
             comparison_func,
-            pcie_slot,
+            device_id,
             test_args,
         )
