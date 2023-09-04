@@ -615,6 +615,14 @@ op_map = {
         "tt_lib_op": tt_lib_ops.layernorm,
         "pytorch_op": pytorch_ops.layernorm,
     },
+    "layernorm-noweights": {
+        "tt_lib_op": tt_lib_ops.layernorm_noweights,
+        "pytorch_op": pytorch_ops.layernorm_noweights,
+    },
+    "add-layernorm-noweights": {
+        "tt_lib_op": tt_lib_ops.add_layernorm_noweights,
+        "pytorch_op": pytorch_ops.add_layernorm_noweights,
+    },
     "add-layernorm": {
         "tt_lib_op": tt_lib_ops.add_layernorm,
         "pytorch_op": pytorch_ops.add_layernorm,

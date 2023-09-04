@@ -730,6 +730,51 @@ def layernorm(x, y, z, *args, device, dtype, layout, buffer_type, output_mem_con
     return output
 
 
+@setup_host_and_device
+def layernorm_noweights(x, *args, device, dtype, layout, buffer_type, output_mem_config, **kwargs):
+    t0 = ttl.tensor.Tensor(
+        x.reshape(-1).tolist(),
+        x.shape,
+        dtype[0],
+        ttl.tensor.Layout.ROW_MAJOR,
+    )
+
+    t0 = t0.to(layout[0])
+    t0 = tensor_to_device(t0, device, buffer_type[0])
+
+    t3 = ttl.operations.primary.layernorm(t0, 1e-5, None, None, output_mem_config=output_mem_config)
+
+    output = t3.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
+    return output
+
+
+@setup_host_and_device
+def add_layernorm_noweights(x, y, *args, device, dtype, layout, buffer_type, output_mem_config, **kwargs):
+    t0 = ttl.tensor.Tensor(
+        x.reshape(-1).tolist(),
+        x.shape,
+        dtype[0],
+        ttl.tensor.Layout.ROW_MAJOR,
+    )
+
+    t0 = t0.to(layout[0])
+    t0 = tensor_to_device(t0, device, buffer_type[0])
+
+    t1 = ttl.tensor.Tensor(
+        y.reshape(-1).tolist(),
+        y.shape,
+        dtype[1],
+        ttl.tensor.Layout.ROW_MAJOR,
+    )
+
+    t1 = t1.to(layout[1])
+    t1 = tensor_to_device(t1, device, buffer_type[1])
+
+    t4 = ttl.operations.primary.add_layernorm(t0, t1, 1e-5, None, None, output_mem_config=output_mem_config)
+
+    output = t4.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
+    return output
+
 
 @setup_host_and_device
 def add_layernorm(x, y, z, w, *args, device, dtype, layout, buffer_type, output_mem_config, **kwargs):
