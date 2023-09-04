@@ -433,6 +433,7 @@ def std_hw(x, *args, device, dtype, layout, buffer_type, output_mem_config, **kw
     t1 = ttl.tensor.std_hw(t0, output_mem_config=output_mem_config)
 
     output = t1.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
+    output = output.max(2, True)[0].max(3, True)[0]
 
     return output
 
@@ -452,6 +453,8 @@ def var_hw(x, *args, device, dtype, layout, buffer_type, output_mem_config, **kw
     t1 = ttl.tensor.var_hw(t0, output_mem_config=output_mem_config)
 
     output = t1.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
+    output = output.max(2, True)[0].max(3, True)[0]
+
     return output
 
 
@@ -1965,42 +1968,6 @@ def eltwise_power(x, *args, exponent, device, dtype, layout, buffer_type, output
     t0 = tensor_to_device(t0, device, buffer_type[0])
 
     t1 = ttl.tensor.power(t0, exponent, output_mem_config=output_mem_config)
-
-    output = t1.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
-    return output
-
-
-@setup_host_and_device
-def std_hw(x, *args, device, dtype, layout, buffer_type, output_mem_config, **kwargs):
-    t0 = ttl.tensor.Tensor(
-        x.reshape(-1).tolist(),
-        x.shape,
-        dtype[0],
-        ttl.tensor.Layout.ROW_MAJOR,
-    )
-
-    t0 = t0.to(layout[0])
-    t0 = tensor_to_device(t0, device, buffer_type[0])
-
-    t1 = ttl.tensor.std_hw(t0, output_mem_config=output_mem_config)
-
-    output = t1.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
-    return output
-
-
-@setup_host_and_device
-def var_hw(x, *args, device, dtype, layout, buffer_type, output_mem_config, **kwargs):
-    t0 = ttl.tensor.Tensor(
-        x.reshape(-1).tolist(),
-        x.shape,
-        dtype[0],
-        ttl.tensor.Layout.ROW_MAJOR,
-    )
-
-    t0 = t0.to(layout[0])
-    t0 = tensor_to_device(t0, device, buffer_type[0])
-
-    t1 = ttl.tensor.var_hw(t0, output_mem_config=output_mem_config)
 
     output = t1.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
     return output
