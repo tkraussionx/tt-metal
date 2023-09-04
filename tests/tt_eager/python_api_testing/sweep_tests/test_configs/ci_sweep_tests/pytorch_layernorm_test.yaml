@@ -15,7 +15,7 @@ test-list:
           high: 10
       comparison:
         function: comp_pcc
-      args-gen: gen_dtype_layout_device
+      args-gen: gen_layernorm_layout_device
       output-file: layernorm_sweep.csv
       args:
         inputs:

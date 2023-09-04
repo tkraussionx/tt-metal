@@ -335,14 +335,13 @@ def gen_default_dtype_layout_rm_device(input_shapes, dtypes=None, layouts=None, 
     ]
 
 
-def sanitize_args(input_shapes, dtype_buffer_layout):
+def sanitize_args(input_shapes, dtype_buffer_layout, runtime_tile_padding_layernorm=False, runtime_tile_padding_add_layernorm=False):
     for i in range(len(input_shapes)):
         shape = input_shapes[i]
-
         if (
             (
                 dtype_buffer_layout[i]["layout"] == ttl.tensor.Layout.TILE
-                and (shape[2] % 32 != 0 or shape[3] % 32 != 0)
+                and (   (shape[2] % 32 != 0 and not runtime_tile_padding_layernorm and not runtime_tile_padding_add_layernorm) or (runtime_tile_padding_layernorm and i>0 and shape[2]!=1) or (runtime_tile_padding_add_layernorm and i>1 and shape[2]!=1)  or (shape[3] % 32 != 0) )
             )  # Shape cannot be tilized
             or (
                 dtype_buffer_layout[i]["layout"] == ttl.tensor.Layout.ROW_MAJOR
@@ -358,11 +357,33 @@ def sanitize_args(input_shapes, dtype_buffer_layout):
     return dtype_buffer_layout
 
 
+
+
+def gen_layernorm_layout_device(
+    input_shapes,
+    dtypes=[supported_tt_dtypes],
+    layouts=[supported_tt_layouts],
+    buffer_types=[supported_tt_buffer_types],
+):
+    return gen_dtype_layout_device(input_shapes, dtypes, layouts, buffer_types, runtime_tile_padding_layernorm = True, runtime_tile_padding_add_layernorm=False)
+
+
+def gen_add_layernorm_layout_device(
+    input_shapes,
+    dtypes=[supported_tt_dtypes],
+    layouts=[supported_tt_layouts],
+    buffer_types=[supported_tt_buffer_types],
+):
+    return gen_dtype_layout_device(input_shapes, dtypes, layouts, buffer_types, runtime_tile_padding_layernorm = False, runtime_tile_padding_add_layernorm=True)
+
+
 def gen_dtype_layout_device(
     input_shapes,
     dtypes=[supported_tt_dtypes],
     layouts=[supported_tt_layouts],
     buffer_types=[supported_tt_buffer_types],
+    runtime_tile_padding_layernorm = False,
+    runtime_tile_padding_add_layernorm = False
 ):
     # last buffer_types option is for output buffer
     dtype_buffer_layouts = []
@@ -383,7 +404,7 @@ def gen_dtype_layout_device(
 
     for out_buffer_type in buffer_types[-1]:
         for dtype_buffer_layout_combination in product(*dtype_buffer_layouts):
-            out = sanitize_args(input_shapes, dtype_buffer_layout_combination)
+            out = sanitize_args(input_shapes, dtype_buffer_layout_combination, runtime_tile_padding_layernorm, runtime_tile_padding_add_layernorm)
 
             if out is not None:
                 dtype = []
@@ -752,7 +773,7 @@ def gen_conv_scalar_args(
     ):
 
         lowStride = 1
-        highStride = 4
+        highStride = 8
         padH = 0
         padW = 0
 
@@ -784,7 +805,7 @@ def gen_scalar_symmetric_args(
     dtype=torch.bfloat16,
 ):
     for input_info in gen_scalar_args(
-        input_shapes,
+    input_shapes,
         dtypes,
         layouts,
         buffer_types,
