@@ -3,6 +3,7 @@ import sys
 import torch
 from pathlib import Path
 from functools import partial
+import tt_lib
 
 f = f"{Path(__file__).parent}"
 sys.path.append(f"{f}/..")
@@ -24,12 +25,20 @@ torch.manual_seed(213919)
 
 params = [
     pytest.param([[5, 5, 50, 50]], unpad_args, 0)
-    for unpad_args in generation_funcs.gen_unpad_args([[5, 5, 50, 50]])
+    for unpad_args in generation_funcs.gen_unpad_args(
+        [[5, 5, 50, 50]],
+        dtypes=[[tt_lib.tensor.DataType.BFLOAT16]],
+        layouts=[[tt_lib.tensor.Layout.ROW_MAJOR]],
+        buffer_types=[[tt_lib.tensor.BufferType.DRAM]])
 ]
 
 params += [
     pytest.param([[5, 5, 64, 96]], unpad_args, 0)
-    for unpad_args in generation_funcs.gen_unpad_args([[5, 5, 64, 96]])
+    for unpad_args in generation_funcs.gen_unpad_args(
+        [[5, 5, 64, 96]],
+        dtypes=[[tt_lib.tensor.DataType.BFLOAT16]],
+        layouts=[[tt_lib.tensor.Layout.TILE]],
+        buffer_types=[[tt_lib.tensor.BufferType.DRAM]])
 ]
 
 

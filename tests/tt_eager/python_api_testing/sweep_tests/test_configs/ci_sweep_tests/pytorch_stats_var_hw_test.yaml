@@ -1,6 +1,6 @@
 ---
 test-list:
-  - var-hw:
+  - stats-var_hw:
       shape:
         start-shape: [1, 1, 32, 32]
         end-shape: [12, 24, 512, 512]
@@ -15,7 +15,7 @@ test-list:
       comparison:
         function: comp_pcc
       args-gen: gen_dtype_layout_device
-      output-file: var_hw_sweep.csv
+      output-file: stats_var_hw_sweep.csv
       args:
         inputs:
           - input-1:
@@ -23,7 +23,7 @@ test-list:
             data-type: ["BFLOAT16", "BFLOAT8_B"]
             buffer-type: ["DRAM", "L1", "SYSTEM_MEMORY"]
         out-buffer-type: ["DRAM"]
-  - var-hw:
+  - stats-var_hw:
       shape:
         start-shape: [1, 1, 2, 2]
         end-shape: [12, 24, 512, 512]
@@ -38,7 +38,7 @@ test-list:
       comparison:
         function: comp_pcc
       args-gen: gen_dtype_layout_device
-      output-file: var_hw_sweep.csv
+      output-file: stats_var_hw_sweep.csv
       args:
         data-layout: ["ROW_MAJOR"]
         data-type: ["BFLOAT16"]
