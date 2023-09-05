@@ -16,21 +16,22 @@ void kernel_main() {
     // const uint32_t num_leftover_tiles_in_row  = get_arg_val<uint32_t>(6);
     // const uint32_t leftover_width_in_row      = get_arg_val<uint32_t>(7);
 
-    uint32_t stick_id          = 0;
+    uint32_t stick_id = 0;
 
-    constexpr bool dst_is_dram          = get_compile_time_arg_val(0) == 1;
+    constexpr bool dst_is_dram = get_compile_time_arg_val(0) == 1;
     #define stick_size_is_power_of_two get_compile_time_arg_val(1) == 1
+
     #if (stick_size_is_power_of_two)
-    constexpr uint32_t log_base_2_of_page_size = get_compile_time_arg_val(2);
-    const InterleavedPow2AddrGen<dst_is_dram> s = {
-        .bank_base_address = dst_addr,
-        .log_base_2_of_page_size = log_base_2_of_page_size // TODO(AP): refactor
-    };
+        constexpr uint32_t log_base_2_of_page_size = get_compile_time_arg_val(2);
+        const InterleavedPow2AddrGen<dst_is_dram> s = {
+            .bank_base_address = dst_addr,
+            .log_base_2_of_page_size = log_base_2_of_page_size // TODO(AP): refactor
+        };
     #else
-    const InterleavedAddrGen<dst_is_dram> s = {
-        .bank_base_address = dst_addr,
-        .page_size = stick_size
-    };
+        const InterleavedAddrGen<dst_is_dram> s = {
+            .bank_base_address = dst_addr,
+            .page_size = stick_size
+        };
     #endif
 
     uint64_t base_dst_noc_addr[tile_height];

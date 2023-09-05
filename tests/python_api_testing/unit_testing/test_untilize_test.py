@@ -32,7 +32,7 @@ def test_run_untilize_test(nb, nc, nh, nw, device):
         ttl.tensor.Layout.TILE,
         device,
     )
-    b = ttl.tensor.untilize(a)
+    b = ttl.tensor.untilize(a, use_multicore=True)
     c = b.cpu().to_torch().to(torch.float32).reshape(shape).numpy()
 
     untilized_inp = untilize(inp.reshape(*shape))
