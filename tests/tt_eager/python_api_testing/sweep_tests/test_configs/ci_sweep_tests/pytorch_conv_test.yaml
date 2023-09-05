@@ -9,6 +9,8 @@ test-list:
         num-samples: 4
         method: conv
       datagen:
+        lowKernel: 1
+        highKernel: 12
         function: gen_rand
         args:
           low: -10
