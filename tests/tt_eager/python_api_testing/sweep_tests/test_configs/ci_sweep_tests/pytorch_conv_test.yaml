@@ -11,6 +11,8 @@ test-list:
       datagen:
         lowKernel: 1
         highKernel: 12
+        inChannels: 32
+        outChannels: 1
         function: gen_rand
         args:
           low: -10
