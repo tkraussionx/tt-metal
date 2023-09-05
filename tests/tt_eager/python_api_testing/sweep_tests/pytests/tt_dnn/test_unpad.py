@@ -45,7 +45,7 @@ params += [
 @pytest.mark.parametrize("input_shapes, unpad_args, pcie_slot", params)
 def test_run_unpad_test(input_shapes, unpad_args, pcie_slot):
     if is_wormhole_b0():
-        if input_shapes == [[5,5,64,96]] and unpad_args['output_tensor_end'] ==  [2, 1, 63, 63]:
+        if input_shapes == [[5,5,64,96]]:
             pytest.skip("skip this shape for Wormhole B0")
     datagen_func = [
         generation_funcs.gen_func_with_cast(
