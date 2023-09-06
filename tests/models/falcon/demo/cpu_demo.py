@@ -12,18 +12,22 @@ from transformers.generation.logits_process import LogitsProcessorList
 from transformers import AutoTokenizer
 import torch.nn.functional as F
 
-from tests.python_api_testing.models.falcon.reference.hf_modeling_falcon import (
-    FalconForCausalLM,
-)
+from tests.models.falcon.reference.hf_modeling_falcon import (
+    FalconForCausalLM,)
 import time
+
+from models.utility_functions import dump_tensor
 
 falcon1b = "tiiuae/falcon-rw-1b"
 MODEL_VERSION = "tiiuae/falcon-7b-instruct"
 
 
 def post_process(logits, input_ids, logits_processor):
+    dump_tensor("logits", "hf", logits)
+    dump_tensor("input_ids", "hf", input_ids)
     next_token_logits = logits[:, -1, :]
     next_tokens_scores = logits_processor(input_ids, next_token_logits)
+    dump_tensor("topk_output", "hf", torch.topk(next_tokens_scores, 20)[1])
     next_tokens = torch.argmax(next_tokens_scores, dim=-1)
     ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
     return ids
@@ -91,6 +95,8 @@ def test_cpu_demo_no_kv(batch_size):
     ([1, 32]),
 )
 def test_cpu_demo_kv(batch_size):
+    torch.manual_seed(0)
+
     logits_processor = LogitsProcessorList()
     post_processor = partial(post_process, logits_processor=logits_processor)
 
@@ -100,8 +106,9 @@ def test_cpu_demo_kv(batch_size):
     prompt_text = ["Write a poem about Valencia"] * batch_size
 
     logger.info("Tokenizing inputs")
+    tokenizer.pad_token = tokenizer.eos_token
     tokenized_inputs = tokenizer(
-        prompt_text, padding=False, add_special_tokens=False, return_tensors="pt"
+        prompt_text, padding="max_length", max_length=32, add_special_tokens=False, return_tensors="pt"
     )
     input_ids = tokenized_inputs["input_ids"]
 
@@ -115,7 +122,7 @@ def test_cpu_demo_kv(batch_size):
 
     logger.info("Generating new ids")
     ids = input_ids
-    generated_ids = torch.tensor(ids)
+    generated_ids = torch.tensor(ids[..., :5])
 
     # input 10 tokens
     ids, kv_cache = generator(input_ids=ids, use_cache=True)
@@ -124,8 +131,13 @@ def test_cpu_demo_kv(batch_size):
     ids = ids[:, -1].unsqueeze(1)
     # [batch x 1]
     generated_ids = torch.concat((generated_ids, ids), dim=1)
+    print("OUTPUT OF PREFILL", generated_ids)
 
-    for i in range(10):
+    for key, value in kv_cache:
+        dump_tensor("cached_key", "hf", key)
+        dump_tensor("cached_value", "hf", value)
+
+    for i in range(0):
         start_ = time.time()
         logger.info(f"generating token {i}")
         # input:

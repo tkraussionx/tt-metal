@@ -491,6 +491,7 @@ Tensor falcon_dense_4h_to_h_matmul(const Tensor &input_tensor_a, const Tensor &i
 Tensor falcon_dense_h_to_4h_matmul(const Tensor &input_tensor_a, const Tensor &input_tensor_b, std::optional<const Tensor> bias, std::optional<UnaryWithParam> fused_activation, const MemoryConfig& mem_config, std::optional<const DataType> output_dtype) {
     auto seq_len = input_tensor_a.shape()[2];
     if (seq_len > 1024) {
+        TT_ASSERT(not fuse_gelu_activation);
         // TODO: Check support for seq_len == 128, 256, 512, ..., 2048
         TT_ASSERT(seq_len % TILE_HEIGHT == 0, "Falcon mm's seq_len must be a multiple of 32!");
         TT_ASSERT(seq_len >=  128, "Falcon mm's seq_len must be greater than 128!");
@@ -630,7 +631,7 @@ operation::ProgramWithCallbacks Matmul::create_program(
     auto& output_tensor = output_tensors.at(0);
 
     tt::tt_metal::DataType output_dtype = this->output_dtype;
-    MathFidelity math_fidelity = MathFidelity::LoFi;
+    MathFidelity math_fidelity = MathFidelity::HiFi4;
     bool fuse_batch = true;
 
     return std::visit(
