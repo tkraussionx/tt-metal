@@ -90,6 +90,7 @@ operation::ProgramWithCallbacks untilize_single_core(const Tensor &a, Tensor& ou
         num_full_blocks_in_row,
         num_leftover_tiles,
         leftover_width_in_row,
+        0
     };
 
     bool src0_is_dram = src0_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
