@@ -14,6 +14,14 @@ import struct
 from tt_lib.fused_ops.conv import conv as TtConv
 from tt_lib.fallback_ops import fallback_ops
 
+full_name_to_index = {}
+
+def dump_tensor(name, suffix, tensor):
+    global full_name_to_index
+    full_name = f"{name}.{suffix}"
+    index = full_name_to_index.get(full_name, 0)
+    torch.save(tensor, f'tmp/{full_name}_{index}.pt')
+    full_name_to_index[full_name] = index + 1
 
 ### Math operations ###
 def _nearest_32(x):
