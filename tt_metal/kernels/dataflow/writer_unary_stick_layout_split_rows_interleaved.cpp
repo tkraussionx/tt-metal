@@ -1,6 +1,8 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 
+// #include "debug_print.h"
+
 void kernel_main() {
 
     // Constexpr
@@ -47,7 +49,6 @@ void kernel_main() {
         noc_async_write_barrier();
         cb_pop_front(cb_id_out0, num_tiles);
     };
-
 
     uint32_t stick_id = start_stick_id;
     for (uint32_t i = 0; i < num_sticks / tile_height; i++) {
