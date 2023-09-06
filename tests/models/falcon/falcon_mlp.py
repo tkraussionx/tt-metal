@@ -7,7 +7,7 @@ from torch import nn
 import tt_lib
 
 from models.helper_funcs import Linear as TTLinear
-from models.utility_functions import torch2tt_tensor
+from models.utility_functions import torch2tt_tensor, dump_tensor, tt2torch_tensor
 
 
 class TtFalconMLP(nn.Module):
@@ -80,12 +80,21 @@ class TtFalconMLP(nn.Module):
         )
         x.deallocate()
 
-        hidden_states = tt_lib.tensor.falcon_dense_4h_to_h_matmul(
-            hidden_states,
-            self.dense_4h_to_h_weights,
-            output_mem_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
-            output_dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
-        )
+        # ff2_output = tt_lib.tensor.falcon_dense_4h_to_h_matmul(
+        #     ff1_output,
+        #     self.dense_4h_to_h_weights,
+        #     output_mem_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
+        #     output_dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
+        # )
+        # dump_tensor("ff2", "tt", tt2torch_tensor(ff2_output))
+        # ff1_output.deallocate()
+
+        ff1_output = tt2torch_tensor(x).to(torch.float32) @ tt2torch_tensor(self.dense_h_to_4h_weights).to(torch.float32)
+        ff1_output = nn.functional.gelu(ff1_output)
+        dump_tensor("ff1", "tt", ff1_output)
+        ff2_output = ff1_output @ tt2torch_tensor(self.dense_4h_to_h_weights).to(torch.float32)
+        ff2_output = tt_lib.tensor.Tensor(ff2_output, tt_lib.tensor.DataType.BFLOAT16)
+        dump_tensor("ff2", "tt", tt2torch_tensor(ff2_output))
 
         # return TT Tensor
-        return hidden_states
+        return ff2_output

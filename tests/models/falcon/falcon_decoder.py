@@ -12,7 +12,7 @@ import tt_lib
 from tests.models.falcon.falcon_attention import TtFalconAttention
 from tests.models.falcon.falcon_mlp import TtFalconMLP
 from models.utility_functions import pad_by_zero
-
+from models.utility_functions import tt2torch_tensor, dump_tensor
 
 class TtFalconDecoderLayer(nn.Module):
     def __init__(
@@ -112,29 +112,35 @@ class TtFalconDecoderLayer(nn.Module):
         assert (
             not output_attentions
         )  # hf_reference Falcon Attention doesn't support this
+        dump_tensor("decoder_input", "tt", tt2torch_tensor(hidden_states))
 
-        layernorm_output = tt_lib.tensor.layernorm(
-            hidden_states,
-            self.layernorm_eps,  # These don't fit: self.layernorm_gamma, self.layernorm_beta
-            output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
-            # output_dtype=self.model_config["INPUT_LAYERNORM_OUTPUT_DTYPE"], # Not currently supported
-        )
-        layernorm_output = tt_lib.tensor.bcast(
-            layernorm_output,
-            self.layernorm_gamma,
-            tt_lib.tensor.BcastOpMath.MUL,
-            tt_lib.tensor.BcastOpDim.H,
-            output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
-            # output_dtype=self.model_config["INPUT_LAYERNORM_OUTPUT_DTYPE"], # Not currently supported
-        )
-        layernorm_output = tt_lib.tensor.bcast(
-            layernorm_output,
-            self.layernorm_beta,
-            tt_lib.tensor.BcastOpMath.ADD,
-            tt_lib.tensor.BcastOpDim.H,
-            output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
-            # output_dtype=self.model_config["INPUT_LAYERNORM_OUTPUT_DTYPE"], # Not currently supported
-        )
+        # layernorm_output = tt_lib.tensor.layernorm(
+        #     hidden_states,
+        #     self.layernorm_eps,  # These don't fit: self.layernorm_gamma, self.layernorm_beta
+        #     output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
+        #     # output_dtype=self.model_config["INPUT_LAYERNORM_OUTPUT_DTYPE"], # Not currently supported
+        # )
+        # layernorm_output = tt_lib.tensor.bcast(
+        #     layernorm_output,
+        #     self.layernorm_gamma,
+        #     tt_lib.tensor.BcastOpMath.MUL,
+        #     tt_lib.tensor.BcastOpDim.H,
+        #     output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
+        #     # output_dtype=self.model_config["INPUT_LAYERNORM_OUTPUT_DTYPE"], # Not currently supported
+        # )
+        # layernorm_output = tt_lib.tensor.bcast(
+        #     layernorm_output,
+        #     self.layernorm_beta,
+        #     tt_lib.tensor.BcastOpMath.ADD,
+        #     tt_lib.tensor.BcastOpDim.H,
+        #     output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
+        #     # output_dtype=self.model_config["INPUT_LAYERNORM_OUTPUT_DTYPE"], # Not currently supported
+        # )
+
+        layernorm_output = nn.functional.layer_norm(tt2torch_tensor(hidden_states).to(torch.float32), (hidden_states.shape()[-1],), weight=tt2torch_tensor(self.layernorm_gamma).to(torch.float32)[0, 0, 0], bias=tt2torch_tensor(self.layernorm_beta).to(torch.float32)[0, 0, 0])
+        layernorm_output = tt_lib.tensor.Tensor(layernorm_output, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(hidden_states.device())
+        dump_tensor("attention_layernorm_out", "tt", tt2torch_tensor(layernorm_output))
+
         residual = hidden_states
 
         # Self Attention
@@ -157,7 +163,9 @@ class TtFalconDecoderLayer(nn.Module):
 
         # MLP
         # mlp will deallocate layernorm_output
+        dump_tensor("mlp_input", "tt", tt2torch_tensor(layernorm_output))
         mlp_output = self.mlp(layernorm_output)
+        dump_tensor("mlp_output", "tt", tt2torch_tensor(mlp_output))
 
         # config.parallel_attn=True
         output = tt_lib.tensor.add(
@@ -168,6 +176,7 @@ class TtFalconDecoderLayer(nn.Module):
         )
         mlp_output.deallocate()
         attention_output.deallocate()
+        dump_tensor("mlp_plus_attention_output", "tt", tt2torch_tensor(output))
 
         # dropout_add
         # For inference, this is just add
@@ -178,6 +187,7 @@ class TtFalconDecoderLayer(nn.Module):
             # output_dtype=self.model_config["DROPOUT_ADD_OUTPUT_DTYPE"], # Not currently supported
         )
         residual.deallocate()
+        dump_tensor("decoder_output", "tt", tt2torch_tensor(output))
 
         if use_cache:
             outputs = (output,) + outputs
