@@ -17,6 +17,19 @@ from models.utility_functions import untilize
     (
         (5, 2, 4, 8),  # fast power of 2 width path
         (5, 2, 4, 7),  # slow non-power of 2 width path
+        ## resnet shapes
+        (1, 1, 7, 8),
+        (1, 1, 49, 1),
+        (1, 1, 49, 16),
+        (1, 1, 49, 32),
+
+        (1, 1, 196, 4),
+        (1, 1, 196, 8),
+        (1, 1, 196, 16),
+        (1, 1, 784, 2),
+        (1, 1, 784, 4),
+        (1, 1, 784, 8),
+        (1, 1, 3136, 2),
     ),
 )
 def test_run_untilize_test(nb, nc, nh, nw, device):
@@ -36,6 +49,10 @@ def test_run_untilize_test(nb, nc, nh, nw, device):
     c = b.cpu().to_torch().to(torch.float32).reshape(shape).numpy()
 
     untilized_inp = untilize(inp.reshape(*shape))
+    np.set_printoptions(precision=3, linewidth=500, threshold=10000, edgeitems=32, suppress=True)
+    torch.set_printoptions(precision=3, sci_mode=False, linewidth=500, threshold=10000, edgeitems=32)
+    # print(f'UNTILIZE: {untilized_inp}')
+    # print(f'GOLDEN: {c}')
     assert (
         abs(untilized_inp - c) < 0.02
     ).all(), "Max abs difference for untilize can be 0.02 due to bfloat conversions"

@@ -15,8 +15,7 @@ void kernel_main() {
     const uint32_t num_full_blocks_in_row     = get_arg_val<uint32_t>(5);
     // const uint32_t num_leftover_tiles_in_row  = get_arg_val<uint32_t>(6);
     // const uint32_t leftover_width_in_row      = get_arg_val<uint32_t>(7);
-
-    uint32_t stick_id = 0;
+    const uint32_t start_stick_id = get_arg_val<uint32_t>(8);
 
     constexpr bool dst_is_dram = get_compile_time_arg_val(0) == 1;
     #define stick_size_is_power_of_two get_compile_time_arg_val(1) == 1
@@ -50,6 +49,7 @@ void kernel_main() {
     };
 
 
+    uint32_t stick_id = start_stick_id;
     for (uint32_t i = 0; i < num_sticks / tile_height; i++) {
         // Get Base Addresses
         for (uint32_t j = 0; j < tile_height; j++) {

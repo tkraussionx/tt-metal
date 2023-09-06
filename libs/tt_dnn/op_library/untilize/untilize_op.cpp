@@ -175,42 +175,74 @@ operation::ProgramWithCallbacks untilize_single_core(const Tensor &a, Tensor& ou
     return {std::move(program), override_runtime_args_callback};
 }
 
-inline std::tuple<> split_blocks_across_cores(CoreCoord grid_size, uint32_t nblocks) {
-    uint32_t ncores_x = grid_size.x;
-    uint32_t ncores_y = grid_size.y;
-    uint32_t ncores = ncores_x * ncores_y;
+inline std::tuple<int32_t, int32_t, int32_t, int32_t, CoreRangeSet, CoreRangeSet, CoreRangeSet, uint32_t, uint32_t> split_blocks_across_cores(CoreCoord grid_size, uint32_t nblocks) {
+    int32_t ncores_x = grid_size.x;
+    int32_t ncores_y = grid_size.y;
+    int32_t ncores = ncores_x * ncores_y;
     uint32_t nblocks_per_core = nblocks;
     uint32_t nblocks_per_core_cliff = 0;
-   std::set<CoreRange> core_range, core_range_cliff;
+    int32_t ncores_x_cliff = 0;
+    std::set<CoreRange> all_cores;
+    std::set<CoreRange> core_range, core_range_cliff;
     if (nblocks <= ncores) {
         nblocks_per_core = 1;
         ncores = nblocks;
+        ncores_x = ceil((float) ncores / ncores_y);
         ncores_y = ceil((float) ncores / ncores_x);
-        uint32_t ncores_y_cliff = ncores - (ncores_y - 1) * ncores_x;
-        if (ncores_y_cliff == ncores_y) {
+        ncores_x_cliff = ncores - (ncores_x * (ncores_y - 1));
+        if (ncores_x_cliff == 0) {
+            // no cliff, all is perfectly divisible
             core_range.insert(CoreRange{.start = CoreCoord(0, 0), .end = CoreCoord(ncores_x - 1, ncores_y - 1)});
-        } else if (ncores_y_cliff < ncores_y) {
+            all_cores.insert(CoreRange{.start = CoreCoord(0, 0), .end = CoreCoord(ncores_x - 1, ncores_y - 1)});
+        } else if (ncores_x_cliff == 1) {
+            nblocks_per_core_cliff = 1;
             core_range.insert(CoreRange{.start = CoreCoord(0, 0), .end = CoreCoord(ncores_x - 1, ncores_y - 2)});
-            core_range.insert(CoreRange{.start = CoreCoord(0, ncores_y - 1), .end = CoreCoord(ncores_y_cliff - 2, ncores_y - 1)});
-            core_range_cliff.insert(CoreRange{.start = CoreCoord(ncores_y_cliff - 2, ncores_y - 1), .end = CoreCoord(ncores_y_cliff - 1, ncores_y - 1)});
+            core_range_cliff.insert(CoreRange{.start = CoreCoord(0, ncores_y - 1), .end = CoreCoord(0, ncores_y - 1)});
+            all_cores.insert(CoreRange{.start = CoreCoord(0, 0), .end = CoreCoord(ncores_x - 1, ncores_y - 2)});
+            all_cores.insert(CoreRange{.start = CoreCoord(0, ncores_y - 1), .end = CoreCoord(0, ncores_y - 1)});
+        } else if (ncores_x_cliff > 1) {
+            nblocks_per_core_cliff = 1;
+            core_range.insert(CoreRange{.start = CoreCoord(0, 0), .end = CoreCoord(ncores_x - 1, ncores_y - 2)});
+            core_range.insert(CoreRange{.start = CoreCoord(0, ncores_y - 1), .end = CoreCoord(ncores_x_cliff - 2, ncores_y - 1)});
+            core_range_cliff.insert(CoreRange{.start = CoreCoord(ncores_x_cliff - 1, ncores_y - 1), .end = CoreCoord(ncores_x_cliff - 1, ncores_y - 1)});
+            all_cores.insert(CoreRange{.start = CoreCoord(0, 0), .end = CoreCoord(ncores_x - 1, ncores_y - 2)});
+            all_cores.insert(CoreRange{.start = CoreCoord(0, ncores_y - 1), .end = CoreCoord(ncores_x_cliff - 1, ncores_y - 1)});
         } else {
-            TT_ASSERT(false, "Something went really wrong in splitting blocks across cores!!");
+            TT_ASSERT(false, "Something went really wrong in splitting blocks across cores {} {}!!", ncores_x, ncores_x_cliff);
         }
     } else {
         nblocks_per_core = ceil((float) nblocks / ncores);
+        ncores = ceil((float) nblocks / nblocks_per_core);
         nblocks_per_core_cliff = nblocks - nblocks_per_core * (ncores - 1);
-        if (nblocks_per_core_cliff < nblocks_per_core) {
+
+        ncores_y = ceil((float) ncores / ncores_x); // 9
+        ncores_x = ceil((float) ncores / ncores_y);
+        ncores_x_cliff = ncores - ncores_x * ncores_y;
+        if (nblocks_per_core_cliff == nblocks_per_core) {
+            // no special cliff at block level for per core
+            if (ncores_x_cliff == ncores_x) {
+                // no x_cliff row => all cores are equal
+                core_range.insert(CoreRange{.start = CoreCoord(0, 0), .end = CoreCoord(ncores_x - 1, ncores_y - 1)});
+            } else if (ncores_x_cliff == 1) {
+                // just 1 core as cliff in the last core row
+                core_range.insert(CoreRange{.start = CoreCoord(0, 0), .end = CoreCoord(ncores_x - 1, ncores_y - 2)});
+                core_range_cliff.insert(CoreRange{.start = CoreCoord(0, ncores_y - 1), .end = CoreCoord(0, ncores_y - 1)});
+            } else if (ncores_x_cliff < ncores_x) {
+                // last core row has last core as cliff, rest are normal
+                core_range.insert(CoreRange{.start = CoreCoord(0, 0), .end = CoreCoord(ncores_x - 1, ncores_y - 2)});
+                core_range.insert(CoreRange{.start = CoreCoord(0, ncores_y - 1), .end = CoreCoord(ncores_x_cliff - 2, ncores_y - 1)});
+                core_range_cliff.insert(CoreRange{.start = CoreCoord(ncores_x_cliff - 1, ncores_y - 1), .end = CoreCoord(ncores_x_cliff - 1, ncores_y - 1)});
+            } else {
+                TT_ASSERT("Something went really wrong in calculating the core ranges {} {}", ncores_x, ncores_x_cliff);
+            }
+        } else if (nblocks_per_core_cliff == nblocks_per_core) {
             core_range.insert(CoreRange{.start = CoreCoord(0, 0), .end = CoreCoord(ncores_x - 2, ncores_y - 1)});
             core_range_cliff.insert(CoreRange{.start = CoreCoord(ncores_x - 2, ncores_y - 1), .end = CoreCoord(ncores_x - 1, ncores_y - 1)});
-        } else if (nblocks_per_core_cliff == nblocks_per_core) {
-            core_range.insert(CoreRange{.start = CoreCoord(0, 0), .end = CoreCoord(ncores_x - 1, ncores_y - 1)});
         } else {
-            TT_ASSERT(false, "Somehting went really wrong in splitting blocks across cores (case else)")
+            TT_ASSERT(false, "Somehting went really wrong in splitting blocks across cores (case else)");
         }
     }
-    CoreRange all_cores{.start = CoreCoord(0, 0), .end = CoreCoord(ncores_x - 1, ncores_y - 1)};
-
-    return std::make_tuple(ncores, all_cores, core_range, core_range_cliff, nblocks_per_core, nblocks_per_core_cliff);
+    return std::make_tuple(ncores, ncores_x, ncores_x_cliff, ncores_y, all_cores, core_range, core_range_cliff, nblocks_per_core, nblocks_per_core_cliff);
 }
 
 operation::ProgramWithCallbacks untilize_multi_core(const Tensor& a, Tensor& output) {
@@ -221,59 +253,31 @@ operation::ProgramWithCallbacks untilize_multi_core(const Tensor& a, Tensor& out
 
     Device *device = a.device();
 
-    int32_t num_tiles = a.volume() / TILE_HW;
-    uint32_t num_sticks = a.shape()[0] * a.shape()[1] * a.shape()[2];
-    uint32_t stick_len = a.shape()[3];
-    uint32_t num_tiles_in_row = stick_len / TILE_WIDTH;      // NOTE: assumed to be perfectly divisible
-    uint32_t stick_size_nbytes = stick_len * a.element_size();
-
-    // Ensure we don't intrude into storage space
-    uint32_t max_l1_size = device->l1_size() / 2 - UNRESERVED_BASE;
-    uint32_t max_tiles = max_l1_size / (2 * single_tile_size); // 2 CBs
-
-    // Currently need the number of tiles in a row to be divisible by tiles in a block
-    uint32_t num_tiles_per_block = 1;
-    if (num_tiles_in_row <= max_tiles) {
-        num_tiles_per_block = num_tiles_in_row;
-    } else {
-        for(uint32_t n_t = max_tiles; n_t > 0; n_t--) {
-            if (num_tiles_in_row % n_t == 0) {
-                num_tiles_per_block = n_t;
-                break;
-            }
-        }
-    }
-    uint32_t block_width_nbytes = num_tiles_per_block * TILE_WIDTH * a.element_size();
-    uint32_t num_full_blocks_in_row = num_tiles_in_row / num_tiles_per_block;
-    uint32_t num_leftover_tiles = num_tiles_in_row % num_tiles_per_block;
-    uint32_t leftover_width_in_row = num_leftover_tiles * a.element_size();
+    uint32_t ntiles = a.volume() / TILE_HW;
+    uint32_t ntiles_per_block = a.shape()[3] / TILE_WIDTH;
+    uint32_t nblocks = ceil((float) ntiles / ntiles_per_block);
+    uint32_t block_size_nbytes = a.shape()[3] * a.element_size();
 
     {
-        log_debug(LogOp, "block_width_nbytes: {}", block_width_nbytes);
-        log_debug(LogOp, "num_full_blocks_in_row: {}", num_full_blocks_in_row);
-        log_debug(LogOp, "num_leftover_tiles: {}", num_leftover_tiles);
-        log_debug(LogOp, "leftover_width_in_row: {}", leftover_width_in_row);
+        log_debug(LogOp, "ntiles: {}", ntiles);
+        log_debug(LogOp, "ntiles_per_block: {}", ntiles_per_block);
+        log_debug(LogOp, "nblocks: {}", nblocks);
     }
 
     auto grid_size = device->compute_with_storage_grid_size();
-    uint32_t ncores_x = grid_size.x;
-    uint32_t ncores_y = grid_size.y;
-    uint32_t nblocks = num_tiles / num_tiles_per_block;
-
-    auto [ncores, all_cores, core_g1, core_g2, nblocks_per_core_g1, nblocks_per_core_g2] = split_blocks_across_cores(grid_size, nblocks);
+    auto [ncores, ncores_x, ncores_x_cliff, ncores_y, all_cores, core_range, core_range_cliff, nblocks_per_core, nblocks_per_core_cliff] = split_blocks_across_cores(grid_size, nblocks);
 
     {
         log_debug(LogOp, "ncores: {}", ncores);
         log_debug(LogOp, "ncores_x: {}", ncores_x);
+        log_debug(LogOp, "ncores_x_cliff: {}", ncores_x_cliff);
         log_debug(LogOp, "ncores_y: {}", ncores_y);
-        log_debug(LogOp, "ntiles_per_core_g1: {}", ntiles_per_core_g1);
-        log_debug(LogOp, "ntiles_per_core_g2: {}", ntiles_per_core_g2);
-        log_debug(LogOp, "core_g1 size: {}", core_g1.ranges().size());
-        log_debug(LogOp, "core_g2 size: {}", core_g2.ranges().size());
+        log_debug(LogOp, "nblocks_per_core: {}", nblocks_per_core);
+        log_debug(LogOp, "nblocks_per_core_cliff: {}", nblocks_per_core_cliff);
     }
 
     uint32_t src0_cb_index = CB::c_in0;
-    uint32_t num_input_tiles = num_tiles_per_block;
+    uint32_t num_input_tiles = ntiles_per_block;
     auto cb_src0 = CreateCircularBuffers(
         program,
         src0_cb_index,
@@ -284,7 +288,7 @@ operation::ProgramWithCallbacks untilize_multi_core(const Tensor& a, Tensor& out
     );
 
     uint32_t output_cb_index = CB::c_out0;
-    uint32_t num_output_tiles = num_tiles_per_block;
+    uint32_t num_output_tiles = ntiles_per_block;
     auto cb_output = CreateCircularBuffers(
         program,
         output_cb_index,
@@ -306,38 +310,18 @@ operation::ProgramWithCallbacks untilize_multi_core(const Tensor& a, Tensor& out
 
     // writer compile time args
     bool out_is_dram = dst_buffer->buffer_type() == BufferType::DRAM ? 1 : 0;
-    bool stick_size_is_power_of_two = is_power_of_two_at_least_32(stick_size_nbytes);
-    uint32_t log2_stick_size = stick_size_is_power_of_two ? (std::uint32_t) std::log2(stick_size_nbytes) : 0;
+    bool stick_size_is_power_of_two = is_power_of_two_at_least_32(block_size_nbytes);
+    uint32_t log2_stick_size = stick_size_is_power_of_two ? (std::uint32_t) std::log2(block_size_nbytes) : 0;
     vector<uint32_t> writer_ct_args = {
         (uint32_t) out_is_dram,
         (uint32_t) stick_size_is_power_of_two,
         (uint32_t) log2_stick_size,
     };
 
-    uint32_t ncores_used = ncores;
-    uint32_t nblocks_per_core = nblocks;
-    uint32_t nblocks_cliff = 0;
-    if (nblocks <= ncores) {
-        // this is the good case
-        ncores_used = nblocks;
-        nblocks_per_core = 1;
-    } else {
-        // TODO: this case needs multiple blocks per core.
-        nblocks_per_core = ceil((float) nblocks / ncores);
-        nblocks_cliff = nblocks - nblocks_per_core * (ncores - 1);
-    }
-
-    {
-        log_debug(LogOp, "nblocks: {}", nblocks);
-        log_debug(LogOp, "ncores_used: {}", ncores_used);
-        log_debug(LogOp, "nblocks_per_core: {}", nblocks_per_core);
-        log_debug(LogOp, "nblocks_cliff: {}", nblocks_cliff);
-    }
-
     // compute compile times args
     vector<uint32_t> compute_args = {
         (uint32_t) nblocks_per_core,    // per_core_block_cnt. NOTE: assumed to be perfectly divisible
-        (uint32_t) num_tiles_per_block  // per_block_ntiles
+        (uint32_t) ntiles_per_block  // per_block_ntiles
     };
 
     // tilized reader
@@ -368,48 +352,96 @@ operation::ProgramWithCallbacks untilize_multi_core(const Tensor& a, Tensor& out
             .compile_args = compute_args});
 
     // 1D distribution of blocks across all cores
-    uint32_t start_id = 0;
-    for (int32_t i = 0; i < ncores; ++ i) {
-        CoreCoord core(i % ncores_x, i / ncores_x);
-
+    uint32_t ncores_full = ncores;
+    if (nblocks_per_core_cliff > 0) {
+        // unequal case with cliff
+        ncores_full -= 1;
     }
+    uint32_t tile_start_id = 0;
+    uint32_t block_start_id = 0;
+    for (uint32_t i = 0; i < ncores_full; ++ i) {
+        CoreCoord core = {i % ncores_x, i / ncores_x};
 
-    // reader runtime args
-    vector<uint32_t> reader_rt_args = {
-        src0_buffer->address(),     // src_addr
-        (uint32_t) num_tiles,       // ntiles
-        0                           // start_id
-    };
+        // reader runtime args
+        vector<uint32_t> reader_rt_args = {
+            src0_buffer->address(),     // src_addr
+            ntiles_per_block * nblocks_per_core, // ntiles
+            tile_start_id                           // start_id
+        };
 
-    // writer runtime args
-    vector<uint32_t> writer_rt_args = {
-        dst_buffer->address(),      // dst_addr
-        num_sticks,                 // nsticks
-        stick_size_nbytes,          // stick_size_nbytes
-        num_tiles_per_block,        // ntiles_per_block
-        block_width_nbytes,         // block_width_nbytes
-        num_full_blocks_in_row,     // full blocks in a row
-        num_leftover_tiles,         // UNUSED
-        leftover_width_in_row,      // UNUSED
-    };
+        // writer runtime args
+        vector<uint32_t> writer_rt_args = {
+            dst_buffer->address(),      // dst_addr
+            nblocks_per_core,           // nblocks per core
+            block_size_nbytes,          // block_size_nbytes
+            ntiles_per_block,           // ntiles_per_block
+            block_size_nbytes,          // block_size_nbytes
+            1,                          // full blocks in a row
+            0,
+            0,
+            block_start_id
+        };
 
-    tt_metal::SetRuntimeArgs(
-        program,
-        unary_reader_kernel_id,
-        all_cores,
-        reader_rt_args
-    );
+        tt_metal::SetRuntimeArgs(
+            program,
+            unary_reader_kernel_id,
+            core,
+            reader_rt_args
+        );
 
-    tt_metal::SetRuntimeArgs(
-        program,
-        unary_writer_kernel_id,
-        all_cores,
-        writer_rt_args
-    );
+        tt_metal::SetRuntimeArgs(
+            program,
+            unary_writer_kernel_id,
+            core,
+            writer_rt_args
+        );
+
+        tile_start_id += ntiles_per_block * nblocks_per_core;
+        block_start_id += TILE_HEIGHT * nblocks_per_core;
+    }
+    // if (nblocks_per_core_cliff > 0) {
+    //     CoreCoord core = { ncores_full % ncores_x, ncores_full / ncores_x};
+
+    //     // reader runtime args
+    //     vector<uint32_t> reader_rt_args = {
+    //         src0_buffer->address(),     // src_addr
+    //         (uint32_t) num_tiles_per_block * nblocks_per_core_cliff,       // ntiles
+    //         tile_start_id                           // start_id
+    //     };
+
+    //     // writer runtime args
+    //     vector<uint32_t> writer_rt_args = {
+    //         dst_buffer->address(),      // dst_addr
+    //         nsticks_per_core,                 // nsticks
+    //         stick_size_nbytes,          // stick_size_nbytes
+    //         num_tiles_per_block,        // ntiles_per_block
+    //         block_width_nbytes,         // block_width_nbytes
+    //         num_full_blocks_in_row,     // full blocks in a row
+    //         num_leftover_tiles,         // UNUSED
+    //         leftover_width_in_row,      // UNUSED
+    //         stick_start_id
+    //     };
+
+    //     tt_metal::SetRuntimeArgs(
+    //         program,
+    //         unary_reader_kernel_id,
+    //         core,
+    //         reader_rt_args
+    //     );
+
+    //     tt_metal::SetRuntimeArgs(
+    //         program,
+    //         unary_writer_kernel_id,
+    //         core,
+    //         writer_rt_args
+    //     );
+    // }
 
     auto override_runtime_args_callback = [
         reader_kernel_id=unary_reader_kernel_id,
-        writer_kernel_id=unary_writer_kernel_id
+        writer_kernel_id=unary_writer_kernel_id,
+        ncores=ncores,
+        ncores_x=ncores_x
     ](
         const Program &program,
         const std::vector<Buffer*>& input_buffers,
@@ -419,18 +451,18 @@ operation::ProgramWithCallbacks untilize_multi_core(const Tensor& a, Tensor& out
         auto src_buffer = input_buffers.at(0);
         auto dst_buffer = output_buffers.at(0);
 
-        CoreCoord core = {0, 0};
-
-        {
-            auto runtime_args = GetRuntimeArgs(program, reader_kernel_id, core);
-            runtime_args[0] = src_buffer->address();
-            SetRuntimeArgs(program, reader_kernel_id, core, runtime_args);
-        }
-
-        {
-            auto runtime_args = GetRuntimeArgs(program, writer_kernel_id, core);
-            runtime_args[0] = dst_buffer->address();
-            SetRuntimeArgs(program, writer_kernel_id, core, runtime_args);
+        for (uint32_t i = 0; i < ncores; ++ i) {
+            CoreCoord core = {i % ncores_x, i / ncores_x};
+            {
+                auto runtime_args = GetRuntimeArgs(program, reader_kernel_id, core);
+                runtime_args[0] = src_buffer->address();
+                SetRuntimeArgs(program, reader_kernel_id, core, runtime_args);
+            }
+            {
+                auto runtime_args = GetRuntimeArgs(program, writer_kernel_id, core);
+                runtime_args[0] = dst_buffer->address();
+                SetRuntimeArgs(program, writer_kernel_id, core, runtime_args);
+            }
         }
     };
 
@@ -593,7 +625,7 @@ operation::ProgramWithCallbacks untilize_with_unpadding_single_core(const Tensor
     bool out_is_dram = dst_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     uint32_t stick_size = unpadded_stick_size;
     bool stick_size_is_power_of_two = is_power_of_two_at_least_32(stick_size);
-    uint32_t log2_stick_size = stick_size_is_power_of_two ? (std::uint32_t)log2(stick_size) : 0;
+    uint32_t log2_stick_size = stick_size_is_power_of_two ? (std::uint32_t)std::log2(stick_size) : 0;
     std::vector<uint32_t> writer_compile_time_args = {
         (std::uint32_t) out_is_dram,
         (std::uint32_t) stick_size_is_power_of_two,
