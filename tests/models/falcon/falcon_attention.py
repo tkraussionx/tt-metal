@@ -345,7 +345,14 @@ class TtFalconAttention(nn.Module):
         ###############
         # TODO: Replace with scaled_softmax_attention_mask from BERT
 
-        dump_tensor("attention_mask", "tt", tt2torch_tensor(attention_mask)[:, :1])
+        # TODO: C can be 1 if we have bcast add along C; otherwise; we need to repeat along C
+        if attention_mask is not None:
+            attn_weights = tt_lib.tensor.add(
+                attn_weights,
+                attention_mask,
+                output_mem_config=self.model_config["PRE_SOFTMAX_MASK_OUTPUT_MEMCFG"],
+                # output_dtype=self.model_config["PRE_SOFTMAX_MASK_OUTPUT_DTYPE"], # Not currently supported
+            )
 
         # TODO: C can be 1 if we have bcast add along C; otherwise; we need to repeat along C
         if attention_mask is not None:
