@@ -48,7 +48,7 @@ def run_conv_as_large_matmul(conv_op_test_params, pytorch_inputs_and_golden):
     pad_w = ctp.pad_w
 
     # torch.manual_seed(0)
-    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
+    device = ttl.device.CreateDevice(0)
     ttl.device.InitializeDevice(device)
     ttl.device.SetDefaultDevice(device)
 

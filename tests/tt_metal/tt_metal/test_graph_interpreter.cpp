@@ -132,7 +132,7 @@ bool run_chained_sfpu_test(const tt::ARCH& arch, int chain_length) {
         ////////////////////////////////////////////////////////////////////////////
         int device_id = 0;
         tt_metal::Device *device =
-            tt_metal::CreateDevice(arch, device_id);
+            tt_metal::CreateDevice(device_id);
 
         pass &= tt_metal::InitializeDevice(device);
 
@@ -359,7 +359,7 @@ bool run_binary_add_and_then_eltwise_gelu_test(const tt::ARCH& arch) {
         ////////////////////////////////////////////////////////////////////////////
         int device_id = 0;
         tt_metal::Device *device =
-            tt_metal::CreateDevice(arch, device_id);
+            tt_metal::CreateDevice(device_id);
 
         pass &= tt_metal::InitializeDevice(device);
 
@@ -633,7 +633,7 @@ bool run_forked_binary_test(const tt::ARCH& arch) {
         ////////////////////////////////////////////////////////////////////////////
         int device_id = 0;
         tt_metal::Device *device =
-            tt_metal::CreateDevice(arch, device_id);
+            tt_metal::CreateDevice(device_id);
 
         pass &= tt_metal::InitializeDevice(device);
 

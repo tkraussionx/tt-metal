@@ -16,7 +16,7 @@ import pytest
 
 def test_run_unet_mid_block_real_input_inference(model_location_generator):
     # Initialize the device
-    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
+    device = ttl.device.CreateDevice(0)
     ttl.device.InitializeDevice(device)
     ttl.device.SetDefaultDevice(device)
 
@@ -130,7 +130,7 @@ def test_run_unet_mid_block_inference():
                         )
 
     # Initialize the device
-    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
+    device = ttl.device.CreateDevice(0)
     ttl.device.InitializeDevice(device)
     ttl.device.SetDefaultDevice(device)
 

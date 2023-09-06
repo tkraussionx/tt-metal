@@ -14,8 +14,7 @@ from itertools import product
 
 def setup_host_and_device(func):
     def wrap(*args, device_id, **kwargs):
-        ARCH = is_wormhole_b0() and ttl.device.Arch.WORMHOLE_B0 or ttl.device.Arch.GRAYSKULL
-        device = ttl.device.CreateDevice(ARCH, device_id)
+        device = ttl.device.CreateDevice(device_id)
         ttl.device.InitializeDevice(device)
         ttl.device.SetDefaultDevice(device)
         try:

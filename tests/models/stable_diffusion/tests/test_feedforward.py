@@ -33,7 +33,7 @@ def test_feedforward_inference():
     torch_output = ff(input)
 
     # Initialize the device
-    device = ttl.device.CreateDevice(ttl.device.Arch.GRAYSKULL, 0)
+    device = ttl.device.CreateDevice(0)
     ttl.device.InitializeDevice(device)
     ttl.device.SetDefaultDevice(device)
 

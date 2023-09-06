@@ -125,7 +125,7 @@ def run_whisper_encoder(device, for_audio_classification=False, encoder_layers=1
 
 def test_WhipserEncoder_inference():
     torch.manual_seed(1234)
-    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    device = tt_lib.device.CreateDevice(0)
     tt_lib.device.InitializeDevice(device)
     run_whisper_encoder(device=device, for_audio_classification=False)
     tt_lib.device.CloseDevice(device)
@@ -133,7 +133,7 @@ def test_WhipserEncoder_inference():
 
 def test_WhipserEncoderForAudioClassification_inference():
     torch.manual_seed(1234)
-    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    device = tt_lib.device.CreateDevice(0)
     tt_lib.device.InitializeDevice(device)
     run_whisper_encoder(device=device, for_audio_classification=True, encoder_layers=24)
     tt_lib.device.CloseDevice(device)
@@ -141,7 +141,7 @@ def test_WhipserEncoderForAudioClassification_inference():
 
 def test_WhipserEncoderForAudioClassification_one_layer_inference():
     torch.manual_seed(1234)
-    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    device = tt_lib.device.CreateDevice(0)
     tt_lib.device.InitializeDevice(device)
     run_whisper_encoder(device=device, for_audio_classification=True, encoder_layers=1)
     tt_lib.device.CloseDevice(device)
@@ -149,7 +149,7 @@ def test_WhipserEncoderForAudioClassification_one_layer_inference():
 
 def test_WhipserEncoderForAudioClassification_two_layers_inference():
     torch.manual_seed(1234)
-    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    device = tt_lib.device.CreateDevice(0)
     tt_lib.device.InitializeDevice(device)
     run_whisper_encoder(device=device, for_audio_classification=True, encoder_layers=2)
     tt_lib.device.CloseDevice(device)
@@ -157,7 +157,7 @@ def test_WhipserEncoderForAudioClassification_two_layers_inference():
 
 def test_WhipserEncoderForAudioClassification_three_layers_inference():
     torch.manual_seed(1234)
-    device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
+    device = tt_lib.device.CreateDevice(0)
     tt_lib.device.InitializeDevice(device)
     run_whisper_encoder(device=device, for_audio_classification=True, encoder_layers=3)
     tt_lib.device.CloseDevice(device)
