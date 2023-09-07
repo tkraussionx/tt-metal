@@ -681,7 +681,7 @@ def conv(x, y, conv_params, *args, device, dtype, layout, buffer_type, output_me
     t1 = t1.to(layout[1])
     t1 = tensor_to_device(t1, device, buffer_type[1])
 
-    t2 = ttl.tensor.conv(t0, t1, conv_params, 0, 0, 0, 0, 0, conv_params[0])
+    t2 = ttl.tensor.conv(t0, t1, None, conv_params, 0, 0, 0, 0, 0, conv_params[0], False)
 
     output = t2.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
     return output
