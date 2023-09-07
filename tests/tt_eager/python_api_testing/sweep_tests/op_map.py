@@ -668,4 +668,8 @@ op_map = {
         "tt_lib_op": tt_lib_ops.conv,
         "pytorch_op": pytorch_ops.conv,
     },
+    "conv-fallback": {
+        "tt_lib_op": tt_lib_ops.conv_fallback,
+        "pytorch_op": pytorch_ops.conv,
+    },
 }
