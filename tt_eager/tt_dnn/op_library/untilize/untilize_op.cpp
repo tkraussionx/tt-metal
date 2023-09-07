@@ -303,8 +303,8 @@ operation::ProgramWithCallbacks untilize_multi_core(const Tensor& a, Tensor& out
 
     Device *device = a.device();
 
-    auto debug_core = CoreCoord(1, 1);
-    tt_start_debug_print_server(device->cluster(), {0}, {debug_core});
+    // auto debug_core = CoreCoord(1, 1);
+    // tt_start_debug_print_server(device->cluster(), {0}, {debug_core});
 
     uint32_t ntiles = a.volume() / TILE_HW;
     uint32_t ntiles_per_block = a.shape()[3] / TILE_WIDTH;
