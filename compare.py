@@ -27,13 +27,21 @@ def main():
             assert tt_tensor.shape[0] == 1
             tt_tensor = tt_tensor[0]
 
-        if hf_tensor.ndim == 3 and tt_tensor.ndim == 3:
-            if hf_tensor.shape[1] == 32 and tt_tensor.shape[1] == 64:
-                tt_tensor = tt_tensor[:, :32]
+        if hf_tensor.ndim == 2 and tt_tensor.ndim == 2:
+            if hf_tensor.shape[1] < tt_tensor.shape[1]:
+                tt_tensor = tt_tensor[:, :hf_tensor.shape[1]]
 
-        # if hf_tensor.ndim == 4 and tt_tensor.ndim == 4:
-        #     if hf_tensor.shape[2] == 1 and tt_tensor.shape[2] == 32:
-        #         tt_tensor = tt_tensor[:, :, :1]
+        if hf_tensor.ndim == 3 and tt_tensor.ndim == 3:
+            if hf_tensor.shape[1] < tt_tensor.shape[1]:
+                tt_tensor = tt_tensor[:, :hf_tensor.shape[1]]
+
+        if hf_tensor.ndim == 4 and tt_tensor.ndim == 4:
+            if hf_tensor.shape[0] < tt_tensor.shape[0]:
+                tt_tensor = tt_tensor[:, :, :hf_tensor.shape[0]]
+            if hf_tensor.shape[2] < tt_tensor.shape[2]:
+                tt_tensor = tt_tensor[:, :, :hf_tensor.shape[2]]
+            if hf_tensor.shape[3] < tt_tensor.shape[3]:
+                tt_tensor = tt_tensor[:, :,  :, :hf_tensor.shape[3]]
 
         if "attention_input.hf" in str(hf_file):
             tt_tensor = tt_tensor[:, :hf_tensor.shape[1]]

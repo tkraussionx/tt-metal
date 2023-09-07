@@ -870,7 +870,7 @@ class FalconModel(FalconPreTrainedModel):
 
         # Transformer blocks
         self.h = nn.ModuleList(
-            [FalconDecoderLayer(config) for _ in range(config.num_hidden_layers)]
+            [FalconDecoderLayer(config) for _ in range(1)]
         )
 
         # Final Layer Norm
