@@ -10,11 +10,14 @@ import torch
 import numpy as np
 from loguru import logger
 from os import environ
+import sys
 import math
 import struct
 
 from tt_lib.fused_ops.conv import conv as TtConv
 from tt_lib.fallback_ops import fallback_ops
+
+import tt_eager.tt_lib_wrapper as tt_lib_wrapper
 
 
 ### Math operations ###
@@ -49,13 +52,14 @@ def float_to_bits(x):
     s = struct.pack(">f", x)
     return struct.unpack(">l", s)[0]
 
-
 ### Profiling ###
 class Profiler:
     def __init__(self):
         self.start_times = dict()
         self.times = dict()
         self.disabled = False
+        self.ttLibCallStack = []
+        self.ttLibRemoveDuration = 0
 
     def clear(self):
         self.start_times = dict()
@@ -68,11 +72,19 @@ class Profiler:
     def disable(self):
         self.disabled = True
 
-    def start(self, key, force_enable=False):
+    def start(self, key, force_enable=False, remove_unwanted_tt_lib=False):
         if self.disabled and not force_enable:
             return
 
         self.start_times[key] = time.time()
+
+        if (
+            remove_unwanted_tt_lib
+            and sys.gettrace() is None
+            and tt_lib_wrapper.functionsToWrap
+        ):
+            tt_lib_wrapper.start = self.profiler_unwanted_start
+            tt_lib_wrapper.stop = self.profiler_unwanted_stop
 
     def end(self, key, PERF_CNT=1, force_enable=False):
         if self.disabled and not force_enable:
@@ -81,7 +93,16 @@ class Profiler:
         if key not in self.start_times:
             return
 
-        diff = time.time() - self.start_times[key]
+        diff = time.time() - self.start_times[key] - self.ttLibRemoveDuration
+
+        if self.ttLibRemoveDuration:
+            logger.info(
+                f"Removed unwanted tt_lib time from {key}: {self.ttLibRemoveDuration*1000:.2f} ms"
+            )
+
+        tt_lib_wrapper.start = None
+        tt_lib_wrapper.stop = None
+        self.ttLibRemoveDuration = 0
 
         if key not in self.times:
             self.times[key] = []
@@ -94,6 +115,15 @@ class Profiler:
 
         return sum(self.times[key]) / len(self.times[key])
 
+    def profiler_unwanted_start(self):
+        self.ttLibCallStack.append(time.time())
+
+    def profiler_unwanted_stop(self):
+        startTime = self.ttLibCallStack.pop()
+        endTime = time.time()
+        duration = endTime - startTime
+        self.ttLibRemoveDuration += duration
+
     def print(self):
         for key in self.times:
             average = self.get(key)
@@ -101,7 +131,6 @@ class Profiler:
 
 
 profiler = Profiler()
-
 
 ### Turn flags on/off ###
 def enable_persistent_kernel_cache():

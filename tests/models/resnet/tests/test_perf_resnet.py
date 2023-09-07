@@ -79,7 +79,7 @@ def run_perf_resnet(batch_size, expected_inference_time, expected_compile_time, 
 
         #enable_persistent_kernel_cache()
 
-        profiler.start(second_key)
+        profiler.start(second_key, remove_unwanted_tt_lib = True)
         tt_output = tt_resnet50(inputs)
         tt_lib.device.Synchronize()
         profiler.end(second_key)

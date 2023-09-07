@@ -1,6 +1,7 @@
 CONFIG ?= assert
 ENABLE_PROFILER ?= 0
 ENABLE_TRACY ?= 0
+ENABLE_TT_LIB_PYTHON_WRAP ?= 0
 ENABLE_CODE_TIMERS ?= 0
 # TODO: enable OUT to be per config (this impacts all scripts that run tests)
 # OUT ?= build_$(DEVICE_RUNNER)_$(CONFIG)
@@ -104,6 +105,10 @@ set_up_kernels:
 
 set_up_kernels/clean:
 	python3 $(TT_METAL_HOME)/scripts/set_up_kernels.py --short clean
+
+ifeq ($(ENABLE_TT_LIB_PYTHON_WRAP), 1)
+CFLAGS += -DWRAP_PYTHON_TT_LIB
+endif
 
 ifeq ($(ENABLE_PROFILER), 1)
 CFLAGS += -DPROFILER

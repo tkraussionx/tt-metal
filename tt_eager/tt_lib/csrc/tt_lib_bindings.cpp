@@ -3042,7 +3042,6 @@ void ProfilerModule(py::module &m_profiler) {
         | Name             | Name of the op or zone to stop profiling       | string                |             | Yes      |
         +------------------+------------------------------------------------+-----------------------+-------------+----------+
     )doc");
-
 }
 
 void DTXModule(py::module &m_dtx) {
@@ -3108,4 +3107,13 @@ PYBIND11_MODULE(_C, m) {
 
     py::module_ m_operations = m.def_submodule("operations", "Submodule for operations");
     tt::operations::py_module(m_operations);
+
+#ifdef WRAP_PYTHON_TT_LIB
+    py::function tt_lib_funct_wrapper = py::module::import("tt_eager.tt_lib_wrapper").attr("tt_lib_funct_wrapper");
+    tt_lib_funct_wrapper(m_device);
+    tt_lib_funct_wrapper(m_tensor);
+    tt_lib_funct_wrapper(m_dtx);
+    tt_lib_funct_wrapper(m_program_cache);
+    tt_lib_funct_wrapper(m_operations);
+#endif
 }
