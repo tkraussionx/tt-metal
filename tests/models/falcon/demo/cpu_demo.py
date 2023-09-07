@@ -30,6 +30,7 @@ def post_process(logits, input_ids, logits_processor):
     dump_tensor("topk_output", "hf", torch.topk(next_tokens_scores, 20)[1])
     next_tokens = torch.argmax(next_tokens_scores, dim=-1)
     ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+    print("OUTPUT IDS", ids)
     return ids
 
 
@@ -108,7 +109,7 @@ def test_cpu_demo_kv(batch_size):
     logger.info("Tokenizing inputs")
     tokenizer.pad_token = tokenizer.eos_token
     tokenized_inputs = tokenizer(
-        prompt_text, padding="max_length", max_length=32, add_special_tokens=False, return_tensors="pt"
+        prompt_text, padding=False, add_special_tokens=False, return_tensors="pt"
     )
     input_ids = tokenized_inputs["input_ids"]
 
@@ -122,7 +123,7 @@ def test_cpu_demo_kv(batch_size):
 
     logger.info("Generating new ids")
     ids = input_ids
-    generated_ids = torch.tensor(ids[..., :5])
+    generated_ids = torch.tensor(ids)
 
     # input 10 tokens
     ids, kv_cache = generator(input_ids=ids, use_cache=True)
