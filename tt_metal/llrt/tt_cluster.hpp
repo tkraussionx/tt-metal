@@ -49,6 +49,7 @@ struct tt_cluster
     };
 
     void configure_static_tlbs(const std::uint32_t& chip);
+    tt_cxy_pair convert_physical_cxy_to_virtual(const tt_cxy_pair &physical_cxy);
     public:
     TargetDevice type;
     int target_ai_clk = 0;
