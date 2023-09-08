@@ -7,11 +7,13 @@ import pytest
 from torch import nn
 from abc import abstractmethod
 from typing import Optional, Tuple
+from loguru import logger
 
 import tt_lib
 
 from tests.models.falcon.falcon_decoder import TtFalconDecoderLayer
 from models.utility_functions import (
+    tt2torch_tensor,
     torch2tt_tensor,
     pad_by_zero,
     tt2torch_tensor,
@@ -110,18 +112,18 @@ class TtFalconModelShared(torch.nn.Module):
             )[0]
         self.layernorm_eps = config.layer_norm_epsilon
 
-    def model_preprocessing(self, input_ids, kv_cache_len, llm_mode):
+    def model_preprocessing(self, input_ids, kv_cache_len, llm_mode, seq_len):
         # input_ids: torch.Tensor with shape [batch, seq_len]
 
         assert input_ids.dim() == 2
-        batch, seq_len = input_ids.shape
+        batch, padded_seq_len = input_ids.shape
 
         embeddings = self.embeddings(input_ids)
 
         # Generate input and attention_mask ---------------------------------------------
         # TODO: Generate attention_mask on device
         if llm_mode == "prefill":
-            q_len, kv_len = seq_len, seq_len
+            q_len, kv_len = 32, seq_len
             assert batch == 1, "For prefill, batch must be 1!"
             assert q_len % 32 == 0, "For prefill, seq_len must be multiple of 32!"
             assert kv_cache_len == 0, "For prefill, no kv_cache is passed in!"
@@ -133,18 +135,32 @@ class TtFalconModelShared(torch.nn.Module):
                 tt_dtype=self.model_config["WORD_EMBEDDING_OUTPUT_DTYPE"],
             )
 
-            attention_mask_bool = torch.ones(batch, 1, q_len, kv_len, dtype=bool).triu(
-                diagonal=1
+            attention_mask_bool = torch.zeros(batch, 1, q_len, kv_len, dtype=bool)
+
+            kv_len_padded = (kv_len + 31) // 32 * 32
+            attention_mask_bool_padded = torch.cat(
+                (
+                    attention_mask_bool,
+                    torch.ones(batch, 1, q_len, kv_len_padded - kv_len, dtype=bool),
+                ),
+                dim=-1,
             )
+            for i in range(0, seq_len):
+                for j in range(i + 1, seq_len):
+                    attention_mask_bool_padded[:, :, i, j] = True
+
             tt_attention_mask = torch2tt_tensor(
-                (attention_mask_bool * -1e9).expand(-1, self.config.n_head, -1, -1),
+                (attention_mask_bool_padded * -1e9).expand(
+                    -1, self.config.n_head, -1, -1
+                ),
                 self.device,
                 tt_memory_config=self.model_config["ATTN_MASK_MEMCFG"],
                 tt_dtype=self.model_config["ATTN_MASK_DTYPE"],
             )
 
+
         elif llm_mode == "decode":
-            q_len, kv_len = seq_len, kv_cache_len + 1
+            q_len, kv_len = padded_seq_len, seq_len
             assert batch % 32 == 0, "For decode, batch must be multiple of 32!"
             assert q_len == 1, "For decode, q_len must be 1!"
 
@@ -167,7 +183,7 @@ class TtFalconModelShared(torch.nn.Module):
                 dim=-1,
             )
             tt_attention_mask = torch2tt_tensor(
-                (attention_mask_bool_padded.transpose(0, 2) * -100000).expand(
+                (attention_mask_bool_padded.transpose(0, 2) * -1e9).expand(
                     -1, self.config.n_head, -1, -1
                 ),
                 self.device,
@@ -195,6 +211,7 @@ class TtFalconModelShared(torch.nn.Module):
     ) -> tt_lib.tensor.Tensor:
         layer_output = input_embeddings
         presents = ()
+        logger.info(f"running in shared {self.layers}")
         for idx, layer in enumerate(self.layers):
             layer_output = layer(
                 hidden_states=layer_output,
