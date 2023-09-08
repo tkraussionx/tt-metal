@@ -34,7 +34,7 @@ else
 fi
 
 if [[ -z "$FAST_DISPATCH" ]]; then
-  TT_METAL_SLOW_DISPATCH_MODE=1 ./build/test/tt_metal/unit_tests
+  env TT_METAL_SLOW_DISPATCH_MODE=1 python3 ${TT_METAL_HOME}/tests/scripts/run_testpoint_perprocess.py
 else
   ./build/test/tt_metal/unit_tests_fast_dispatch
 fi
