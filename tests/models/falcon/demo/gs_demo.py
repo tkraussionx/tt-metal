@@ -15,18 +15,16 @@ from tests.models.falcon.model_config import (
 )
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor, dump_tensor
 
-torch.set_printoptions
-
 def post_process(logits, input_ids, logits_processor):
     dump_tensor("logits", "tt", logits)
     dump_tensor("input_ids", "tt", input_ids)
     next_token_logits = logits[:, -1, :]
     next_tokens_scores = logits_processor(input_ids, next_token_logits)
     next_tokens = torch.argmax(next_tokens_scores, dim=-1)
-    dump_tensor("topk_output", "tt", torch.topk(next_tokens_scores, 20)[1])
+    topk = torch.topk(next_tokens_scores, 5)[1]
+    dump_tensor("topk_output", "tt", torch.topk(next_tokens_scores, 5)[1])
     ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-    print("OUTPUT IDS")
-    print(ids)
+    print("OUTPUT IDS", ids)
     return ids
 
 
@@ -37,8 +35,8 @@ def test_gs_demo_kv(device):
 
     batch_size = 32
     seq_len = 5
-    max_seq_len = 64
-    num_layers = 32
+    max_seq_len = 32
+    num_layers = 1
 
     hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_version)
 
@@ -97,7 +95,7 @@ def test_gs_demo_kv(device):
     (
         tt_prefill_embeddings,
         tt_prefill_attention_mask,
-    ) = tt_FalconCausalLM.model_preprocessing(prefill_ids, 0, "prefill")
+    ) = tt_FalconCausalLM.model_preprocessing(prefill_ids, 0, "prefill", seq_len=seq_len)
     assert tt_prefill_attention_mask is not None
 
     # PREFILL
@@ -111,6 +109,7 @@ def test_gs_demo_kv(device):
         layer_past_len=0,
         use_cache=use_cache,
     )
+    logger.info("finished prefill stage")
     tt_prefill_embeddings.deallocate()
     if tt_prefill_attention_mask is not None:
         tt_prefill_attention_mask.deallocate()
@@ -136,7 +135,7 @@ def test_gs_demo_kv(device):
             tt_decode_embeddings,
             tt_decode_attention_mask,
         ) = tt_FalconCausalLM.model_preprocessing(
-            decode_ids, kv_cache_len, "decode"
+            decode_ids, kv_cache_len, "decode", seq_len=kv_cache_len + 1
         )
         assert tt_decode_attention_mask is not None
 
