@@ -2783,7 +2783,7 @@ void DeviceModule(py::module &m_device) {
                 }
             ), "Create device."
         )
-        .def("pcie_slot", &Device::pcie_slot, "Device's pcie slot")
+        .def("id", &Device::id, "Device's id")
         .def("arch", &Device::arch, "Device's arch");
 
     m_device.def("CreateDevice", &CreateDevice, R"doc(
