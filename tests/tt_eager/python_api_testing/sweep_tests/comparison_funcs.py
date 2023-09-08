@@ -129,6 +129,11 @@ def comp_pcc(golden, calculated, pcc=0.99):
     _, _, cal_pcc, output_str = get_atol_rtol_pcc(golden, calculated)
     return cal_pcc >= pcc, output_str
 
+def comp_pcc_exact(golden, calculated, pcc=0.99):
+    if golden.dtype != calculated.dtype:
+        calculated = calculated.type(golden.dtype)
+    _, _, cal_pcc, output_str = get_atol_rtol_pcc(golden, calculated)
+    return cal_pcc == pcc, output_str
 
 def comp_pcc_list(golden, calculated, pcc=0.99):
     total_str = ""
