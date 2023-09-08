@@ -320,6 +320,13 @@ void tt_cluster::start_device(const tt_device_params &device_params) {
 }
 
 void tt_cluster::close_device() {
+    for (auto cb: on_close_device_callbacks) {
+        // presumably we will have multiple devices per cluster in the future
+        // so we pass a device index here
+        // currently this is only used for shutting down the debug print server
+        cb(this, 0);
+    }
+
     if (device) {
         device->close_device();
         device.reset();
@@ -491,4 +498,12 @@ bool check_dram_core_exists(const std::vector<std::vector<CoreCoord>> &all_dram_
         }
     }
     return false;
+}
+
+void tt_cluster::on_destroy(tt_cluster_on_destroy_callback cb) {
+    on_destroy_callbacks.push_back(cb);
+}
+
+void tt_cluster::on_close_device(tt_cluster_on_close_device_callback cb) {
+    on_close_device_callbacks.push_back(cb);
 }
