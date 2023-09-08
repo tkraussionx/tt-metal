@@ -762,11 +762,13 @@ bool LaunchKernels(Device *device, const Program &program, bool stagger_start) {
     auto cluster = device->cluster();
     auto device_id = device->id();
 
-    // Cores have to be enabled before BRISC reset is de-asserted
+    // Deassert cores uses in the program
+    TensixSoftResetOptions soft_reset_option = stagger_start ? TENSIX_DEASSERT_SOFT_RESET : TENSIX_DEASSERT_SOFT_RESET_NO_STAGGER;
     auto logical_cores_used_in_program = program.logical_cores();
-    auto worker_cores = device->worker_cores_from_logical_cores(logical_cores_used_in_program);
-
-    cluster->deassert_risc_reset(device_id, stagger_start);
+    for (const CoreCoord &logical_core : logical_cores_used_in_program) {
+        CoreCoord worker_core = device->worker_core_from_logical_core(logical_core);
+        cluster->set_remote_tensix_risc_reset(tt_cxy_pair(device_id, worker_core), soft_reset_option);
+    }
 
     bool riscs_are_done = false;
     while (not riscs_are_done) {
@@ -790,10 +792,9 @@ bool LaunchKernels(Device *device, const Program &program, bool stagger_start) {
         auto risc_option = GetRiscOptionFromCoreConfig(ncrisc_runs, triscs_run);
         auto worker_core = device->worker_core_from_logical_core(logical_core);
         llrt::internal_::setup_riscs_on_specified_core(cluster, device_id, risc_option, worker_core);
+        // Reset the cores that were running
+        cluster->set_remote_tensix_risc_reset(tt_cxy_pair(device_id, worker_core), TENSIX_ASSERT_SOFT_RESET);
     }
-
-    // Reset the device that was running
-    cluster->assert_risc_reset(device_id);
 
     }//Profiler scope end
     detail::DumpDeviceProfileResults(device,program);
