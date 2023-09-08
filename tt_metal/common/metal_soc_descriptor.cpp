@@ -139,9 +139,9 @@ void metal_SocDescriptor::generate_physical_descriptors_from_virtual(uint32_t ha
   int row_coordinate = 0;
   int tmp = harvesting_mask;
   while (tmp) {
-      if (tmp & 1)
-          row_coordinates_to_remove.insert(row_coordinate);
-
+      if (tmp & 1) {
+        row_coordinates_to_remove.insert(row_coordinate);
+      }
       tmp = tmp >> 1;
       row_coordinate++;
   }
@@ -173,15 +173,13 @@ void metal_SocDescriptor::generate_physical_descriptors_from_virtual(uint32_t ha
   for (const auto &[virtual_noc_core, core_desc] : this->cores) {
     CoreCoord physical_noc_core = virtual_noc_core;
     CoreDescriptor phys_core_desc = core_desc;
-    if (core_desc.type == CoreType::WORKER or core_desc.type == CoreType::HARVESTED) {
+    if (core_desc.type == CoreType::WORKER) {
       physical_noc_core.y = virtual_routing_to_physical_routing_y.at(virtual_noc_core.y);
       phys_core_desc.coord = physical_noc_core;
-      if (core_desc.type == CoreType::WORKER) {
-        this->physical_workers.push_back(physical_noc_core);
-      } else if (core_desc.type == CoreType::HARVESTED) {
-        this->physical_harvested_workers.push_back(physical_noc_core);
-        this->physical_routing_to_virtual_routing_y.insert({physical_noc_core.y, virtual_noc_core.y});
-      }
+      this->physical_workers.push_back(physical_noc_core);
+    } else if (core_desc.type == CoreType::HARVESTED) {
+      this->physical_harvested_workers.push_back(physical_noc_core);
+      this->physical_routing_to_virtual_routing_y.insert({physical_noc_core.y, virtual_noc_core.y});
     } else {
       this->physical_routing_to_virtual_routing_y.insert({physical_noc_core.y, physical_noc_core.y});
     }
@@ -189,7 +187,7 @@ void metal_SocDescriptor::generate_physical_descriptors_from_virtual(uint32_t ha
   }
 
   TT_ASSERT(
-    this->physical_routing_to_virtual_routing_y.size() == this->cores.size() and this->physical_routing_to_virtual_routing_x.size() == this->cores.size());
+    this->physical_routing_to_virtual_routing_y.size() == this->grid_size.y and this->physical_routing_to_virtual_routing_x.size() == this->grid_size.x);
 }
 
 // UMD initializes and owns tt_SocDescriptor
