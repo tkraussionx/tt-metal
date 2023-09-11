@@ -27,7 +27,8 @@ def post_process(logits, input_ids, logits_processor):
     dump_tensor("input_ids", "hf", input_ids)
     next_token_logits = logits[:, -1, :]
     next_tokens_scores = logits_processor(input_ids, next_token_logits)
-    topk = torch.topk(next_tokens_scores, 5)[1]
+    topk = torch.topk(next_tokens_scores, 20)[1]
+    print(f"topk {topk}")
     dump_tensor("topk_output", "hf", torch.topk(next_tokens_scores, 5)[1])
     next_tokens = torch.argmax(next_tokens_scores, dim=-1)
     ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
