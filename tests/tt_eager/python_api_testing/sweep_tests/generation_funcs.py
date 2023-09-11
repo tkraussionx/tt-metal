@@ -836,6 +836,9 @@ def gen_conv_scalar_args(
         w=input_shapes[0][3]
         h=input_shapes[0][2]
 
+        print('INFO JE---------')
+        print(input_info)
+
         #assert(lowKernel>0 and highKernel<w and highKernel<w)
         #assert(lowStride>0 and highStride<w and highStride<h)
 

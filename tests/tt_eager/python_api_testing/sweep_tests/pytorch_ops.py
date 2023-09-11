@@ -778,4 +778,5 @@ def conv(x, y, z, *args, **kwargs):
         z = z.squeeze(0)
         z = z.squeeze(0)
         z = z.squeeze(0)
+
     return torch.nn.functional.conv2d(x, y, bias=z, stride=(conv_params[2], conv_params[3]), padding=(conv_params[4], conv_params[5]))

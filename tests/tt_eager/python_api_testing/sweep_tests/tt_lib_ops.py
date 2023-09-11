@@ -699,7 +699,9 @@ def conv(x, y, z, *args, conv_params, device, dtype, layout, buffer_type, output
     if layout[2] == ttl.tensor.Layout.TILE:
         print('BIAS')
         print(z.shape)
-        z = torch.nn.functional.pad(z, (0, 32 - z.shape[3], 0, 32 - z.shape[2]))
+        z = torch.nn.functional.pad(z, (0, 0, 0, 32 - z.shape[2]))
+
+        #z = torch.nn.functional.pad(z, (0, 32 - z.shape[3], 0, 32 - z.shape[2]))
         print(z.shape)
 
     t2 = ttl.tensor.Tensor(
