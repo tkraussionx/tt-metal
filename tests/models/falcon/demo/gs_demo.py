@@ -2,7 +2,6 @@ from functools import partial
 
 import torch
 from loguru import logger
-from transformers.generation.logits_process import LogitsProcessorList
 
 from transformers import AutoTokenizer
 
@@ -15,17 +14,15 @@ from tests.models.falcon.model_config import (
 )
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor, dump_tensor
 
-def post_process(logits, input_ids, logits_processor, last_index=-1):
+def post_process(logits, input_ids, last_index=-1):
     dump_tensor("logits", "tt", logits)
     dump_tensor("input_ids", "tt", input_ids)
     next_token_logits = logits[:, last_index, :]
-    next_tokens_scores = logits_processor(input_ids, next_token_logits)
-    next_tokens = torch.argmax(next_tokens_scores, dim=-1)
-    topk = torch.topk(next_tokens_scores, 20)[1]
-    print(f"topk {topk}")
-    dump_tensor("topk_output", "tt", torch.topk(next_tokens_scores, 5)[1])
-    ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-    print("OUTPUT IDS", ids)
+    next_tokens = torch.argmax(next_token_logits, dim=-1)
+    print(f"topk {torch.topk(next_token_logits, 20)[1]}")
+    dump_tensor("topk_output", "tt", torch.topk(next_token_logits, 5)[1])
+    ids = next_tokens[:, None]
+    print("OUTPUT ID", ids)
     return ids
 
 
@@ -52,8 +49,7 @@ def test_gs_demo_kv(device):
     head_dim = configuration.hidden_size // configuration.n_head
     use_cache = True
 
-    logits_processor = LogitsProcessorList()
-    post_processor = partial(post_process, logits_processor=logits_processor)
+    post_processor = partial(post_process)
 
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(model_version)
@@ -118,7 +114,6 @@ def test_gs_demo_kv(device):
     logits = tt2torch_tensor(tt_logits).squeeze(1)
     tt_logits.deallocate()
     output_ids = post_processor(logits=logits, input_ids=prefill_ids, last_index=seq_len-1)
-    output_ids = output_ids[:, -1:]
 
     generated_ids = torch.concat((prefill_ids[..., :seq_len], output_ids), dim=1)
 
@@ -157,7 +152,6 @@ def test_gs_demo_kv(device):
 
         decode_ids = decode_ids[:1] # Slice back to 1 sample
         output_ids = post_processor(logits=logits, input_ids=decode_ids)
-        output_ids = output_ids[:, -1:]
 
         generated_ids = torch.concat((generated_ids, output_ids), dim=1)
         kv_cache_len += 1

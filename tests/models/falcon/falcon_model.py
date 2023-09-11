@@ -211,7 +211,6 @@ class TtFalconModelShared(torch.nn.Module):
     ) -> tt_lib.tensor.Tensor:
         layer_output = input_embeddings
         presents = ()
-        logger.info(f"running in shared {self.layers}")
         for idx, layer in enumerate(self.layers):
             layer_output = layer(
                 hidden_states=layer_output,
