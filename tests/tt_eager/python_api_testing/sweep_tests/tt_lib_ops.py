@@ -666,7 +666,8 @@ def eltwise_lerp_binary(
 
 
 @setup_host_and_device
-def conv(x, y, conv_params, *args, device, dtype, layout, buffer_type, output_mem_config, **kwargs):
+def conv(x, y, z, *args, conv_params, device, dtype, layout, buffer_type, output_mem_config, **kwargs):
+    print('here!')
     t0 = ttl.tensor.Tensor(
         x.reshape(-1).tolist(),
         x.shape,
@@ -687,9 +688,25 @@ def conv(x, y, conv_params, *args, device, dtype, layout, buffer_type, output_me
     t1 = t1.to(layout[1])
     t1 = tensor_to_device(t1, device, buffer_type[1])
 
-    t2 = ttl.tensor.conv(t0, t1, conv_params, 0, 0, 0, 0, 0, conv_params[0])
 
-    output = t2.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
+    if layout[2] == ttl.tensor.Layout.TILE:
+        print('tile-----')
+        z = torch.nn.functional.pad(z, (0, 0, 0, 32 - z.shape[2]))
+        print(z.shape)
+
+    t2 = ttl.tensor.Tensor(
+        z.reshape(-1).tolist(),
+        z.shape,
+        dtype[2],
+        ttl.tensor.Layout.ROW_MAJOR,
+    )
+
+    t2 = t2.to(layout[2])
+    t2 = tensor_to_device(t2, device, buffer_type[2])
+
+    t3 = ttl.tensor.conv(t0, t1, t2, conv_params, 0, 0, 0, 0, 0, conv_params[0], True)
+
+    output = t3.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
     return output
 
 @setup_host_and_device

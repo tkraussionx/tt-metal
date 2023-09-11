@@ -1,9 +1,3 @@
-"""
-SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
-
-SPDX-License-Identifier: Apache-2.0
-"""
-
 import torch
 import random
 from itertools import permutations, product
@@ -364,6 +358,36 @@ def sanitize_args(input_shapes, dtype_buffer_layout):
     return dtype_buffer_layout
 
 
+
+def sanitize_args_conv(input_shapes, dtype_buffer_layout, runtime_tile_padding_bias=True):
+    for i in range(len(input_shapes)):
+        print('first')
+        shape = input_shapes[i]
+        print('here')
+        z = (runtime_tile_padding_bias and i>1 and shape[2]!=1)
+        print((shape[3] % 32 != 0) )
+        print(shape)
+        if (
+            (
+                dtype_buffer_layout[i]["layout"] == ttl.tensor.Layout.TILE
+                and (   (shape[2] % 32 != 0 and not runtime_tile_padding_bias) or (runtime_tile_padding_bias and i>1 and shape[2]!=1) or (shape[3] % 32 != 0) )
+            )  # Shape cannot be tilized
+            or (
+                dtype_buffer_layout[i]["layout"] == ttl.tensor.Layout.ROW_MAJOR
+                and dtype_buffer_layout[i]["buffer_type"] != None
+                and shape[3] % 2 != 0
+            )  # Shape cannot be placed as row major on device
+            or (
+                dtype_buffer_layout[i]["dtype"] == ttl.tensor.DataType.BFLOAT8_B
+                and dtype_buffer_layout[i]["layout"] != ttl.tensor.Layout.TILE
+            )  # BFLOAT8_B must be tile layout
+        ):
+            print("FAILED")
+            return None
+    print('pass')
+    return dtype_buffer_layout
+
+
 def gen_dtype_layout_device(
     input_shapes,
     dtypes=[supported_tt_dtypes],
@@ -390,6 +414,53 @@ def gen_dtype_layout_device(
     for out_buffer_type in buffer_types[-1]:
         for dtype_buffer_layout_combination in product(*dtype_buffer_layouts):
             out = sanitize_args(input_shapes, dtype_buffer_layout_combination)
+
+            if out is not None:
+                dtype = []
+                layout = []
+                buff_type = []
+
+                for x in dtype_buffer_layout_combination:
+                    dtype.append(x["dtype"])
+                    layout.append(x["layout"])
+                    buff_type.append(x["buffer_type"])
+
+                result.append({
+                    "dtype": dtype,
+                    "layout": layout,
+                    "buffer_type": buff_type,
+                    "output_mem_config": make_out_mem_config(out_buffer_type),
+                })
+
+    return result
+
+
+def gen_dtype_layout_conv_device(
+    input_shapes,
+    dtypes=[supported_tt_dtypes],
+    layouts=[supported_tt_layouts],
+    buffer_types=[supported_tt_buffer_types],
+):
+    # last buffer_types option is for output buffer
+    dtype_buffer_layouts = []
+
+    for i in range(len(input_shapes)):
+        dtype_buffer_layout = []
+
+        for dtype, layout, buffer_type in product(
+            dtypes[i],
+            layouts[i],
+            buffer_types[i],
+        ):
+            dtype_buffer_layout.append({"dtype": dtype, "layout": layout, "buffer_type": buffer_type})
+
+        dtype_buffer_layouts.append(dtype_buffer_layout)
+
+    result = []
+
+    for out_buffer_type in buffer_types[-1]:
+        for dtype_buffer_layout_combination in product(*dtype_buffer_layouts):
+            out = sanitize_args_conv(input_shapes, dtype_buffer_layout_combination, True)
 
             if out is not None:
                 dtype = []
@@ -753,7 +824,7 @@ def gen_conv_scalar_args(
     arg0_name="conv_params",
     dtype=torch.bfloat16,
 ):
-    for input_info in gen_dtype_layout_device(
+    for input_info in gen_dtype_layout_conv_device(
         input_shapes, supported_dtypes, supported_layouts, on_device
     ):
 

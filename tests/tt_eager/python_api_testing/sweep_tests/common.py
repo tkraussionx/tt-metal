@@ -363,13 +363,32 @@ def shapes_and_datagen(shape_dict, datagen_dict):
                     x = random.randint(shape1_start[i], shape1_end[i])
                     shape1.append(align_to_interval(x, shape1_start[i], interval[i]))
 
-                conv_shape = [0, 0, 0, 0]
-                conv_shape[0] = 1
-                conv_shape[1] = shape1[1]
-                conv_shape[2] = random.randint(1, 4)
-                conv_shape[3] = random.randint(1, 4)
+                print(datagen_dict)
 
-                yield [shape1, conv_shape], datagen_funcs
+                lowKernel = datagen_dict.get("lowKernel",1)
+                highKernel = datagen_dict.get("highKernel",4)
+                inChannels = datagen_dict.get("inChannels", 32)
+                outChannels = datagen_dict.get("outChannels", 32)
+                hasBias = datagen_dict.get("hasBias", 0)
+
+                print(lowKernel)
+                print(highKernel)
+                print(inChannels)
+                print(outChannels)
+                print(hasBias)
+
+                shape1[1] = inChannels
+
+                groups = 1
+                weight_shape = [0, 0, 0, 0]
+                weight_shape[0] = outChannels
+                weight_shape[1] = inChannels
+                weight_shape[2] = 32 #random.randint(1, lowKernel)
+                weight_shape[3] = 32 #random.randint(1, highKernel)
+
+                bias_shape = [1, 1, 1, outChannels]
+                print(bias_shape)
+                yield [shape1, weight_shape, bias_shape], datagen_funcs
 
         elif method == "linear":
             # start-shape and end-shape are lists of two shapes

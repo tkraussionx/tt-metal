@@ -770,6 +770,12 @@ def unpad_from_tile(x, output_tensor_shape, *args, **kwargs):
 
     return out
 
-def conv(x, y, *args, **kwargs):
+def conv(x, y, z, *args, **kwargs):
+    print('torch')
     conv_params = kwargs.pop("conv_params")
-    return torch.nn.functional.conv2d(x, y, bias=None, stride=(conv_params[2], conv_params[3]), padding=(conv_params[4], conv_params[5]))
+
+    if z is not None:
+        z = z.squeeze(0)
+        z = z.squeeze(0)
+        z = z.squeeze(0)
+    return torch.nn.functional.conv2d(x, y, bias=z, stride=(conv_params[2], conv_params[3]), padding=(conv_params[4], conv_params[5]))
