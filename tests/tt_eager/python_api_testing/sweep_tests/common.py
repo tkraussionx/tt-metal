@@ -383,11 +383,13 @@ def shapes_and_datagen(shape_dict, datagen_dict):
                 weight_shape = [0, 0, 0, 0]
                 weight_shape[0] = outChannels
                 weight_shape[1] = inChannels
-                weight_shape[2] = 32 #random.randint(1, lowKernel)
-                weight_shape[3] = 32 #random.randint(1, highKernel)
+                weight_shape[2] = random.randint(1, lowKernel)
+                weight_shape[3] =  random.randint(1, highKernel)
 
                 bias_shape = [1, 1, 1, outChannels]
                 print(bias_shape)
+                print('shape1')
+                print(shape1)
                 yield [shape1, weight_shape, bias_shape], datagen_funcs
 
         elif method == "linear":

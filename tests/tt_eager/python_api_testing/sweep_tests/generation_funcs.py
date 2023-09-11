@@ -370,7 +370,7 @@ def sanitize_args_conv(input_shapes, dtype_buffer_layout, runtime_tile_padding_b
         if (
             (
                 dtype_buffer_layout[i]["layout"] == ttl.tensor.Layout.TILE
-                and (   (shape[2] % 32 != 0 and not runtime_tile_padding_bias) or (runtime_tile_padding_bias and i>1 and shape[2]!=1) or (shape[3] % 32 != 0) )
+                and (   (shape[2] % 32 != 0 and not runtime_tile_padding_bias) or (runtime_tile_padding_bias and i>1 and shape[2]!=1 and shape[3]!=1) or (shape[3] % 32 != 0 and not runtime_tile_padding_bias)    )
             )  # Shape cannot be tilized
             or (
                 dtype_buffer_layout[i]["layout"] == ttl.tensor.Layout.ROW_MAJOR

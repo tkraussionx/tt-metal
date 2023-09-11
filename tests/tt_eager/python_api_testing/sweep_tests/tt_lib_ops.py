@@ -668,6 +668,7 @@ def eltwise_lerp_binary(
 @setup_host_and_device
 def conv(x, y, z, *args, conv_params, device, dtype, layout, buffer_type, output_mem_config, **kwargs):
     print('here!')
+
     t0 = ttl.tensor.Tensor(
         x.reshape(-1).tolist(),
         x.shape,
@@ -677,6 +678,12 @@ def conv(x, y, z, *args, conv_params, device, dtype, layout, buffer_type, output
 
     t0 = t0.to(layout[0])
     t0 = tensor_to_device(t0, device, buffer_type[0])
+
+
+    if layout[1] == ttl.tensor.Layout.TILE:
+        y = torch.nn.functional.pad(y, (0, 32 - y.shape[3], 0, 32 - y.shape[2]))
+        print('WEIGHT')
+        print(y.shape)
 
     t1 = ttl.tensor.Tensor(
         y.reshape(-1).tolist(),
@@ -690,8 +697,9 @@ def conv(x, y, z, *args, conv_params, device, dtype, layout, buffer_type, output
 
 
     if layout[2] == ttl.tensor.Layout.TILE:
-        print('tile-----')
-        z = torch.nn.functional.pad(z, (0, 0, 0, 32 - z.shape[2]))
+        print('BIAS')
+        print(z.shape)
+        z = torch.nn.functional.pad(z, (0, 32 - z.shape[3], 0, 32 - z.shape[2]))
         print(z.shape)
 
     t2 = ttl.tensor.Tensor(

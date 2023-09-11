@@ -9,10 +9,10 @@ test-list:
         num-samples: 10
         method: conv
       datagen:
-        lowKernel: 1
-        highKernel: 12
-        inChannels: 32
-        outChannels: 64
+        lowKernel: 2
+        highKernel: 4
+        inChannels: 1
+        outChannels: 32
         hasBias: 1
         function: gen_rand
         args:
