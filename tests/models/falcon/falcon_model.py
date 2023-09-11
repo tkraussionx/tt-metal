@@ -141,7 +141,7 @@ class TtFalconModelShared(torch.nn.Module):
             attention_mask_bool_padded = torch.cat(
                 (
                     attention_mask_bool,
-                    torch.ones(batch, 1, q_len, kv_len_padded - kv_len, dtype=bool),
+                    torch.ones(batch, 1, q_len, kv_len_padded - kv_len, dtype=bool)*1000,
                 ),
                 dim=-1,
             )
