@@ -344,6 +344,8 @@ operation::ProgramWithCallbacks optimized_conv_single_core(const Tensor& a, cons
     uint32_t output_height_padded_to_tile_height = round_up(act_matrix_height_unpadded, TILE_HEIGHT);
     uint32_t output_height_num_tiles = output_height_padded_to_tile_height / TILE_HEIGHT;
     assert(output_height_num_tiles <= act_matrix_height_ntiles);
+    cout << "padded output height=" << act_matrix_height_ntiles << endl;
+    cout << "output height=" << output_height_num_tiles << endl;
 
     uint32_t src_dram_act_buffer_size_bytes = src0_dram_buffer->size();
     uint32_t src_dram_weight_buffer_size_bytes = src1_dram_buffer->size();
@@ -420,6 +422,8 @@ operation::ProgramWithCallbacks optimized_conv_single_core(const Tensor& a, cons
                             weight_size_h == 7 && weight_size_w == 8 &&
                             stride_h == 2 && stride_w == 2 &&
                             num_blocks_weight_w == 1);
+
+    cout << "Running rn50 first conv - " << rn50_first_conv << endl;
 
     uint32_t num_weight_cb_tiles = weight_block_h_ntiles * weight_block_w_ntiles * num_blocks_act_w;
     if (rn50_first_conv) {

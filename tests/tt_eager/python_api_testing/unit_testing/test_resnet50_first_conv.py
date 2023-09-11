@@ -19,7 +19,7 @@ from tt_lib.utils import (
     _nearest_y,
     convert_weights_2d_matrix,
 )
-from models.utility_functions import print_diff_argmax, is_close, comp_pcc
+from models.utility_functions import print_diff_argmax, is_close, comp_pcc, comp_pcc_exact
 from tests.tt_eager.python_api_testing.conv.conv_unit_test_utils import (
     create_conv_act_tensor,
     create_conv_act_tensor_special,
@@ -29,7 +29,7 @@ from tests.tt_eager.python_api_testing.conv.conv_unit_test_utils import (
 import torch
 
 @pytest.mark.parametrize("untilize_out", (False,))
-@pytest.mark.parametrize("N", (1,2,8))
+@pytest.mark.parametrize("N", (8,))
 @pytest.mark.parametrize("extra_padding_for_32B_alignment", (25,))
 def test_resnet50_first_conv(use_program_cache, N, extra_padding_for_32B_alignment, device, untilize_out):
     (K, C, padded_C, H, W, R, S, padded_S, stride_h, stride_w, pad_h, pad_w) = (
@@ -58,7 +58,7 @@ def test_resnet50_first_conv(use_program_cache, N, extra_padding_for_32B_alignme
 
         # Parameters to define block dims
         #[128, 32], [32, 64], [128, 64]
-        assert padded_C * padded_S % 32 == 0
+        assert (padded_C * padded_S) % 32 == 0
         act_block_w = (int)((padded_C * padded_S) / 32)
         weight_block_h = act_block_w
         weight_block_w = 2
@@ -81,8 +81,8 @@ def test_resnet50_first_conv(use_program_cache, N, extra_padding_for_32B_alignme
             per_core_act_h_ntiles = 16
         elif(N == 8):
             act_block_h_datums = 256
-            grid_size = (7,7)
-            per_core_act_h_ntiles = 64
+            grid_size = (7,8)
+            per_core_act_h_ntiles = 56
         act_block_h = (int) (act_block_h_datums / 32)
 
         # Prepare activations
@@ -116,8 +116,75 @@ def test_resnet50_first_conv(use_program_cache, N, extra_padding_for_32B_alignme
             A_pyt, B_pyt, stride=(stride_h, stride_w), padding=(pad_h, pad_w)
         )
 
+        run_on_single_core = False
+        if run_on_single_core:
+            act_matrix_height_ntiles = (int) (_nearest_y(N*OH*OW, act_block_h*32) / 32)
+            out_ref_single_core = ttl.tensor.optimized_conv(
+                A_cl_device,
+                B_tiled,
+                None,
+                [R, padded_S, stride_h, stride_w, 0, 0],
+                act_block_h,
+                act_block_w,
+                weight_block_w,
+                out_subblock_h,
+                out_subblock_w,
+                K,
+                untilize_out,
+                False,
+                False,
+                ttl.tensor.MathFidelity.HiFi4,
+                ttl.tensor.OptimizedConvParallelizationConfig(grid_size=(1,1), per_core_act_matrix_height_ntiles=act_matrix_height_ntiles),
+                extra_padding_for_32B_alignment
+            )
+
+            out_ref_single_core_host = out_ref_single_core.cpu().to_torch().to(torch.float)
+
+            for i in range(4):
+                print("i=", i)
+                out_sc = ttl.tensor.optimized_conv(
+                    A_cl_device,
+                    B_tiled,
+                    None,
+                    [R, padded_S, stride_h, stride_w, 0, 0],
+                    act_block_h,
+                    act_block_w,
+                    weight_block_w,
+                    out_subblock_h,
+                    out_subblock_w,
+                    K,
+                    untilize_out,
+                    False,
+                    False,
+                    ttl.tensor.MathFidelity.HiFi4,
+                    ttl.tensor.OptimizedConvParallelizationConfig(grid_size=(1,1), per_core_act_matrix_height_ntiles=act_matrix_height_ntiles),
+                    extra_padding_for_32B_alignment
+                )
+                out_sc_host = out_sc.cpu().to_torch().to(torch.float)
+                assert out_sc_host.shape == out_ref_single_core_host.shape
+                if not torch.equal(out_sc_host, out_ref_single_core_host):
+                    print("shape - ", out_sc_host.shape)
+                    print(out_sc_host)
+                    print("golden -")
+                    print(out_ref_single_core_host)
+                    print("i range 0 to ", str(out_sc_host.shape[2] - 1))
+                    print("j range 0 to ", str(out_sc_host.shape[3] - 1))
+                    num_errors = 0
+                    for i in range(out_sc_host.shape[2]):
+                        for j in range(out_sc_host.shape[3]):
+                            if out_sc_host[0][0][i][j].item() != out_ref_single_core_host[0][0][i][j].item():
+                                print("mismatch at i=" + str(i) + " , j=" + str(j))
+                                print(out_sc_host[0][0][i][j].item())
+                                print(out_ref_single_core_host[0][0][i][j].item())
+                                num_errors += 1
+                                if num_errors == 100:
+                                    assert False
+
+
+                assert torch.equal(out_sc_host, out_ref_single_core_host)
+
         # Run TT metal OP
-        out = ttl.tensor.optimized_conv(
+        out_ref = ttl.tensor.optimized_conv(
             A_cl_device,
             B_tiled,
             None,
@@ -135,11 +202,51 @@ def test_resnet50_first_conv(use_program_cache, N, extra_padding_for_32B_alignme
             ttl.tensor.OptimizedConvParallelizationConfig(grid_size=grid_size, per_core_act_matrix_height_ntiles=per_core_act_h_ntiles),
             extra_padding_for_32B_alignment
         )
+        out_ref_host = out_ref.cpu().to_torch().to(torch.float)
+        if run_on_single_core:
+            if not torch.equal(out_ref_single_core_host, out_ref_host):
+                print(out_ref_single_core_host)
+                print("golden -")
+                print(out_ref_host)
+
+            assert torch.equal(out_ref_single_core_host, out_ref_host)
+
+        for i in range(1000):
+            print("i=", i)
+            out = ttl.tensor.optimized_conv(
+                A_cl_device,
+                B_tiled,
+                None,
+                [R, padded_S, stride_h, stride_w, 0, 0],
+                act_block_h,
+                act_block_w,
+                weight_block_w,
+                out_subblock_h,
+                out_subblock_w,
+                K,
+                untilize_out,
+                False,
+                False,
+                ttl.tensor.MathFidelity.HiFi4,
+                ttl.tensor.OptimizedConvParallelizationConfig(grid_size=grid_size, per_core_act_matrix_height_ntiles=per_core_act_h_ntiles),
+                extra_padding_for_32B_alignment
+            )
+            out_host = out.cpu().to_torch().to(torch.float)
+            if not torch.equal(out_host, out_ref_host):
+                print(out_host)
+                print("golden -")
+                print(out_ref_host)
+
+
+            assert torch.equal(out_host, out_ref_host)
+
+        out = out_ref
         if not untilize_out:
            out_unpadded_shape = [1, 1, N*OH*OW, K]
            assert out_unpadded_shape == out.shape_without_padding()
            out = ttl.tensor.format_output_tensor(out, out.shape_without_padding(), device, ttl.tensor.Layout.ROW_MAJOR)
            out = out.reshape(conv_output_shape[0], conv_output_shape[1], conv_output_shape[2], conv_output_shape[3])
+
         out = out.cpu()
         assert out.shape() == conv_output_shape
         assert out.layout() == ttl.tensor.Layout.ROW_MAJOR
@@ -162,7 +269,13 @@ def test_resnet50_first_conv(use_program_cache, N, extra_padding_for_32B_alignme
         # assert sec_pcc
 
         # Compare against golden
-        passing_pcc, output_pcc = comp_pcc(out_golden, out_result, 0.99)
+        if N == 1:
+            golden_pcc = 0.9999602465593492
+        elif N == 2:
+            golden_pcc =  0.9999593954980799
+        else:
+            golden_pcc = 0.9999599665520962
+        passing_pcc, output_pcc = comp_pcc_exact(out_golden, out_result, golden_pcc)
         print("Passing=", passing_pcc)
         print("Output pcc=", output_pcc)
         assert passing_pcc

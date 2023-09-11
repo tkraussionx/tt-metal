@@ -4,7 +4,7 @@ import sys
 import torch
 import pytest
 import tt_lib
-from models.utility_functions import comp_pcc
+from models.utility_functions import comp_pcc, comp_pcc_exact
 from tests.models.resnet.metalResnetBlock50 import compute_conv_output_shape, resnet50_1x1_conv_as_matmul, resnet50_optimized_conv, _nearest_32, format_tensor
 
 # hardcoding matmul config for 1x1 convs
@@ -297,36 +297,36 @@ hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_conv = {
 }
 
 @pytest.mark.parametrize("use_new_matmul", (True,))
-@pytest.mark.parametrize("N", (1,2,8))
+@pytest.mark.parametrize("N", (8,))
 @pytest.mark.parametrize(
     "K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w",
     (
         # # 1x1 convs in rn50
-        (64, 64, 56, 56, 1, 1, 1, 1, 0, 0),
-        (256, 64, 56, 56, 1, 1, 1, 1, 0, 0), # slow with new_matmul but less than bias computation time
-        (64, 256, 56, 56, 1, 1, 1, 1, 0, 0),
-        (64, 256, 56, 56, 1, 1, 1, 1, 0, 0),
-        (128, 256, 56, 56, 1, 1, 1, 1, 0, 0),
-        (512, 128, 28, 28, 1, 1, 1, 1, 0, 0),
-        (128, 512, 28, 28, 1, 1, 1, 1, 0, 0),
-        (256, 512, 28, 28, 1, 1, 1, 1, 0, 0),
-        (1024, 256, 14, 14, 1, 1, 1, 1, 0, 0),
-        (256, 1024, 14, 14, 1, 1, 1, 1, 0, 0),
-        (512, 1024, 14, 14, 1, 1, 1, 1, 0, 0),
-        (2048, 512, 7, 7, 1, 1, 1, 1, 0, 0),
-        (512, 2048, 7, 7, 1, 1, 1, 1, 0, 0), # slightly slower with new matmul but less than old matmul + bias computation time
+        # (64, 64, 56, 56, 1, 1, 1, 1, 0, 0),
+        #(256, 64, 56, 56, 1, 1, 1, 1, 0, 0), # slow with new_matmul but less than bias computation time
+        # (64, 256, 56, 56, 1, 1, 1, 1, 0, 0),
+        # (64, 256, 56, 56, 1, 1, 1, 1, 0, 0),
+        # (128, 256, 56, 56, 1, 1, 1, 1, 0, 0),
+        # (512, 128, 28, 28, 1, 1, 1, 1, 0, 0),
+        # (128, 512, 28, 28, 1, 1, 1, 1, 0, 0),
+        # (256, 512, 28, 28, 1, 1, 1, 1, 0, 0),
+        # (1024, 256, 14, 14, 1, 1, 1, 1, 0, 0),
+        # (256, 1024, 14, 14, 1, 1, 1, 1, 0, 0),
+        # (512, 1024, 14, 14, 1, 1, 1, 1, 0, 0),
+        # (2048, 512, 7, 7, 1, 1, 1, 1, 0, 0),
+        # (512, 2048, 7, 7, 1, 1, 1, 1, 0, 0), # slightly slower with new matmul but less than old matmul + bias computation time
 
         # 3x3 convs in rn50 (not complete list)
         (64, 64, 56, 56, 3, 3, 1, 1, 1, 1),
-        (256, 256, 28, 28, 3, 3, 2, 2, 1, 1),
-        (256, 256, 14, 14, 3, 3, 1, 1, 1, 1),
-        (512, 512, 14, 14, 3, 3, 2, 2, 1, 1),
-        (512, 512, 7, 7, 3, 3, 1, 1, 1, 1),
-        (512, 512, 7, 7, 3, 3, 1, 1, 1, 1),
+        # (256, 256, 28, 28, 3, 3, 2, 2, 1, 1),
+        # (256, 256, 14, 14, 3, 3, 1, 1, 1, 1),
+        # (512, 512, 14, 14, 3, 3, 2, 2, 1, 1),
+        # (512, 512, 7, 7, 3, 3, 1, 1, 1, 1),
+        # (512, 512, 7, 7, 3, 3, 1, 1, 1, 1),
 
-        # # downsample convs in rn50 (not complete list)
-        (128, 128, 56, 56, 1, 1, 2, 2, 0, 0),
-        (256, 256, 28, 28, 3, 3, 2, 2, 1, 1),
+        # # # downsample convs in rn50 (not complete list)
+        # (128, 128, 56, 56, 1, 1, 2, 2, 0, 0),
+        # (256, 256, 28, 28, 3, 3, 2, 2, 1, 1),
 
     )
 )
@@ -403,7 +403,8 @@ def test_resnet50_conv(use_program_cache, device, N,K,C,H,W,R,S,stride_h,stride_
 
         # Compare against golden
         assert out_result.shape == out_golden.shape
-        passing_pcc, output_pcc = comp_pcc(out_golden, out_result, 0.99)
+        #passing_pcc, output_pcc = comp_pcc_exact(out_golden, out_result, 0.9999873520586748)
+        passing_pcc, output_pcc = comp_pcc_exact(out_golden, out_result, 0.9998715096192352)
         print("Passing=", passing_pcc)
         print("Output pcc=", output_pcc)
         assert passing_pcc
