@@ -226,32 +226,32 @@ class TtFalconModelShared(torch.nn.Module):
             layer_output = layer_output[0]
 
         # # apply final norm layer
-        # layer_output = tt_lib.tensor.layernorm(
-        #     layer_output,
-        #     self.layernorm_eps,  # These don't fit: self.layernorm_gamma, self.layernorm_beta
-        #     output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
-        #     # output_dtype=self.model_config["LN_F_OUTPUT_DTYPE"], # Not currently supported
-        # )
-        # layer_output = tt_lib.tensor.bcast(
-        #     layer_output,
-        #     self.layernorm_gamma,
-        #     tt_lib.tensor.BcastOpMath.MUL,
-        #     tt_lib.tensor.BcastOpDim.H,
-        #     output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
-        #     # output_dtype=self.model_config["LN_F_OUTPUT_DTYPE"], # Not currently supported
-        # )
-        # layer_output = tt_lib.tensor.bcast(
-        #     layer_output,
-        #     self.layernorm_beta,
-        #     tt_lib.tensor.BcastOpMath.ADD,
-        #     tt_lib.tensor.BcastOpDim.H,
-        #     output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
-        #     # output_dtype=self.model_config["LN_F_OUTPUT_DTYPE"], # Not currently supported
-        # )
+        layer_output = tt_lib.tensor.layernorm(
+            layer_output,
+            self.layernorm_eps,  # These don't fit: self.layernorm_gamma, self.layernorm_beta
+            output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
+            # output_dtype=self.model_config["LN_F_OUTPUT_DTYPE"], # Not currently supported
+        )
+        layer_output = tt_lib.tensor.bcast(
+            layer_output,
+            self.layernorm_gamma,
+            tt_lib.tensor.BcastOpMath.MUL,
+            tt_lib.tensor.BcastOpDim.H,
+            output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
+            # output_dtype=self.model_config["LN_F_OUTPUT_DTYPE"], # Not currently supported
+        )
+        layer_output = tt_lib.tensor.bcast(
+            layer_output,
+            self.layernorm_beta,
+            tt_lib.tensor.BcastOpMath.ADD,
+            tt_lib.tensor.BcastOpDim.H,
+            output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
+            # output_dtype=self.model_config["LN_F_OUTPUT_DTYPE"], # Not currently supported
+        )
 
-        device = layer_output.device()
-        layer_output = nn.functional.layer_norm(tt2torch_tensor(layer_output).to(torch.float32), (layer_output.shape()[-1],), weight=tt2torch_tensor(self.layernorm_gamma).to(torch.float32)[0, 0, 0], bias=tt2torch_tensor(self.layernorm_beta).to(torch.float32)[0, 0, 0])
-        layer_output = tt_lib.tensor.Tensor(layer_output, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
+        # device = layer_output.device()
+        # layer_output = nn.functional.layer_norm(tt2torch_tensor(layer_output).to(torch.float32), (layer_output.shape()[-1],), weight=tt2torch_tensor(self.layernorm_gamma).to(torch.float32)[0, 0, 0], bias=tt2torch_tensor(self.layernorm_beta).to(torch.float32)[0, 0, 0])
+        # layer_output = tt_lib.tensor.Tensor(layer_output, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
 
         dump_tensor("falcon_output", "tt", tt2torch_tensor(layer_output))
 
