@@ -2,9 +2,10 @@ from functools import partial
 
 import torch
 from loguru import logger
-from transformers.generation.logits_process import LogitsProcessorList
 
 from transformers import AutoTokenizer
+
+import tt_lib as ttl
 
 from tests.models.falcon.falcon_causallm import TtFalconCausalLM
 
@@ -34,7 +35,7 @@ def test_decode_stage(device):
 
     batch_size = 32
     seq_len = 5
-    max_seq_len = 32
+    max_seq_len = 64
     num_layers = 32
 
     hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_version)
@@ -126,9 +127,6 @@ def test_decode_stage(device):
         generated_ids = torch.concat((generated_ids, output_ids), dim=1)
         kv_cache_len += 1
 
-    generated_ids = generated_ids.tolist()
-    output_prompts = tokenizer.batch_decode(generated_ids)
-
-    for input_prompt, output_prompt in zip(input_prompts, output_prompts):
-        logger.info(f"input: {input_prompt}")
-        logger.info(f"output: {output_prompt}")
+        output_prompts = tokenizer.batch_decode(generated_ids.tolist())
+        for output_prompt in output_prompts:
+            logger.info(f"output: {output_prompt}")
