@@ -2298,7 +2298,7 @@ def split_last_dim_two_chunks_tiled(
 
 
 @setup_host_and_device
-def tilize(x, *args, device, dtype, layout, buffer_type, output_mem_config, **kwargs):
+def tilize(x, *args, device, dtype, layout, buffer_type, output_mem_config, use_multicore, **kwargs):
     t0 = ttl.tensor.Tensor(
         x.reshape(-1).tolist(),
         x.shape,
@@ -2309,7 +2309,7 @@ def tilize(x, *args, device, dtype, layout, buffer_type, output_mem_config, **kw
     t0 = t0.to(layout[0])
     t0 = tensor_to_device(t0, device, buffer_type[0])
 
-    t1 = ttl.tensor.tilize(t0, output_mem_config=output_mem_config)
+    t1 = ttl.tensor.tilize(t0, output_mem_config=output_mem_config, use_multicore=use_multicore)
     output = t1.cpu().to_torch()
 
     return output
