@@ -659,7 +659,7 @@ class ResNet(nn.Module):
             #per_core_act_h_ntiles = 64
             grid_size = (7,8)
             per_core_act_h_ntiles = 56
-        self.conv1 = resnet50_first_conv(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device, [act_block_h_datums, 32], [32, 64], [128, 64], grid_size, per_core_act_h_ntiles, conv1_bias.tolist(), 8)
+        self.conv1 = resnet50_first_conv(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device, [act_block_h_datums, 32], [32, 64], [128, 64], grid_size, per_core_act_h_ntiles, conv1_bias.tolist(), 8, fuse_relu=True)
         self.conv1_output_shape = compute_conv_output_shape(self.conv1_params, [batch_size, self.conv_input_face_shape_hw[0], self.conv_input_face_shape_hw[1], self.inplanes])
         self.relu = tt_lib.tensor.relu_without_autoformat
         # self.maxpool = fallback_ops.MaxPool2d(kernel_size=3, stride=2, padding=1, channels_last=True, reshape_2d=True)
@@ -852,7 +852,8 @@ class ResNet(nn.Module):
         x = self.conv1(x)
         #x = x.reshape(1, 1, x.shape()[0]*x.shape()[1]*x.shape()[2], x.shape()[3]);
         #print("Printing relu after conv1")
-        x = self.relu(x, self.memory_config)
+        # Relu is fused with conv1
+        #x = self.relu(x, self.memory_config)
         #tt_lib.device.DumpDeviceMemoryState(self.device)
         x = format_tensor(x, tt_lib.tensor.Layout.ROW_MAJOR, self.device, self.memory_config)
         x = x.reshape(self.conv1_output_shape[0], self.conv1_output_shape[1], self.conv1_output_shape[2], self.conv1_output_shape[3])
