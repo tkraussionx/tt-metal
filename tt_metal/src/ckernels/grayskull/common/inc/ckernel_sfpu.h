@@ -626,7 +626,7 @@ sfpi_inline void calculate_log_body(const int log_base_scale_factor)
     vFloat result = setexp(in, new_exp);
     vInt shift = lz(exp) + 1;
     result = setman(result, shft(reinterpret<vUInt>(exp), shift));
-    result = result * vConst0p6929 + series_result; // exp correction: ln(1+x) + exp*ln(2)
+    result = result * l_reg[LRegs::LReg5] + series_result; // exp correction: ln(1+x) + exp*ln(2)
 
     if constexpr (HAS_BASE_SCALING) {
         result *= s2vFloat16a(log_base_scale_factor);
