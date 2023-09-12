@@ -1587,6 +1587,26 @@ void TensorModule(py::module &m_tensor) {
             "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
     )doc");
 
+    m_tensor.def("isclose", &isclose,
+        py::arg("input").noconvert(), py::arg("other").noconvert(), py::arg("rtol") = 1e-05f, py::arg("atol") = 1e-08f, py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
+        Applies the isclose function to the elements of the input tensor ``input`` and ``other``.
+
+        Input tensor must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        isclose(input, other, rtol, atol) = ∣input−other∣ ≤ atol+rtol×∣other∣.
+
+        .. csv-table::
+            :header: "Argument", "Description", "Data type", "Valid range", "Required"
+
+            "input", "Tensor isclose is applied to", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
+            "other", "Tensor isclose is applied to", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
+            "rtol", "rtol value", "float", "default to 1e-05f", "No"
+            "atol", "atol value", "float", "default to 1e-08f", "No"
+            "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+    )doc");
+
     m_tensor.def("clip", &clip,
         py::arg("input").noconvert(), py::arg("low"), py::arg("high"), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
         Applies the clip function to the elements of the input tensor ``input`` between limits ``low`` low and
