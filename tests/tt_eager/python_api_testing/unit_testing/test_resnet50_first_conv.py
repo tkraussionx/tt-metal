@@ -31,9 +31,10 @@ import torch
 
 @pytest.mark.parametrize("untilize_out", (False,))
 @pytest.mark.parametrize("has_bias", (True,False))
+@pytest.mark.parametrize("fuse_relu", (True,False))
 @pytest.mark.parametrize("N", (1,2,8))
 @pytest.mark.parametrize("extra_padding_for_32B_alignment", (25,))
-def test_resnet50_first_conv(use_program_cache, N, extra_padding_for_32B_alignment, device, untilize_out, has_bias):
+def test_resnet50_first_conv(use_program_cache, N, extra_padding_for_32B_alignment, device, untilize_out, has_bias, fuse_relu):
     (K, C, padded_C, H, W, R, S, padded_S, stride_h, stride_w, pad_h, pad_w) = (
         64,
         3,
@@ -133,7 +134,8 @@ def test_resnet50_first_conv(use_program_cache, N, extra_padding_for_32B_alignme
         out_golden = torch.nn.functional.conv2d(
             A_pyt, B_pyt, bias=bias, stride=(stride_h, stride_w), padding=(pad_h, pad_w)
         )
-
+        if fuse_relu:
+            out_golden = torch.nn.ReLU()(out_golden)
         # Run TT metal OP
         if not has_bias:
             bias_device = None
@@ -150,7 +152,7 @@ def test_resnet50_first_conv(use_program_cache, N, extra_padding_for_32B_alignme
             K,
             untilize_out,
             has_bias,
-            False,
+            fuse_relu,
             ttl.tensor.MathFidelity.HiFi4,
             ttl.tensor.OptimizedConvParallelizationConfig(grid_size=grid_size, per_core_act_matrix_height_ntiles=per_core_act_h_ntiles),
             extra_padding_for_32B_alignment
@@ -180,6 +182,16 @@ def test_resnet50_first_conv(use_program_cache, N, extra_padding_for_32B_alignme
         # out_golden_sec_image = out_golden[1][:][:][:]
         # sec_pcc, _ = comp_pcc(out_golden_sec_image, out_result_sec_image, pcc=0.9998)
         # assert sec_pcc
+
+        # Sanity check for relu
+        if fuse_relu:
+            print("Relu enabled. Check for all values >= 0")
+            out_bool = out_result >= 0
+            out_nonzero = out_result < 0
+            indices = out_nonzero.nonzero()
+            print("Printing non zero indices -")
+            print(indices)
+            assert torch.all(out_bool)
 
         # Compare against golden
         if N == 8:
