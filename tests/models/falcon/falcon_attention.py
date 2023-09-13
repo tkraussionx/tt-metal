@@ -303,15 +303,15 @@ class TtFalconAttention(nn.Module):
 
 
         if llm_mode == "prefill":
-            attn_weights = tt_lib.operations.primary.matmul(
-                query_layer,
-                key_layer_transposed,
-                output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
-                # output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"], # Not currently supported
-            )
+            # attn_weights = tt_lib.operations.primary.matmul(
+            #     query_layer,
+            #     key_layer_transposed,
+            #     output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
+            #     # output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"], # Not currently supported
+            # )
 
-            # attn_weights = tt2torch_tensor(query_layer).to(torch.float32) @ tt2torch_tensor(key_layer_transposed).to(torch.float32)
-            # attn_weights = tt_lib.tensor.Tensor(attn_weights, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
+            attn_weights = tt2torch_tensor(query_layer).to(torch.float32) @ tt2torch_tensor(key_layer_transposed).to(torch.float32)
+            attn_weights = tt_lib.tensor.Tensor(attn_weights, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
 
         elif llm_mode == "decode":
             attn_weights = tt_lib.operations.primary.transformers.attn_matmul(
@@ -394,15 +394,15 @@ class TtFalconAttention(nn.Module):
         ### POST-SOFTMAX MM ###
         ########################
         if llm_mode == "prefill":
-            attn_output = tt_lib.tensor.matmul(
-                attn_weights,
-                value_layer,
-                output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
-                # output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"], # Not currently supported
-            )
+            # attn_output = tt_lib.tensor.matmul(
+            #     attn_weights,
+            #     value_layer,
+            #     output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
+            #     # output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"], # Not currently supported
+            # )
 
-            # attn_output = tt2torch_tensor(attn_weights).to(torch.float32) @ tt2torch_tensor(value_layer).to(torch.float32)
-            # attn_output = tt_lib.tensor.Tensor(attn_output, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
+            attn_output = tt2torch_tensor(attn_weights).to(torch.float32) @ tt2torch_tensor(value_layer).to(torch.float32)
+            attn_output = tt_lib.tensor.Tensor(attn_output, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
 
         elif llm_mode == "decode":
             attn_output = tt_lib.operations.primary.transformers.attn_matmul(
