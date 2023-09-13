@@ -77,13 +77,13 @@ class TtFalconCausalLM(TtFalconModelShared):
         )
         dump_tensor("lm_head_input", "tt", tt2torch_tensor(hidden_states))
         # dump_tensor("lm_head_weights", "tt", tt2torch_tensor(self.lm_head_weights)[0][0])
-        lm_logits = tt_lib.tensor.falcon_lm_head_matmul(
-            hidden_states,
-            self.lm_head_weights,
-            output_mem_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
-            output_dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
-        )
-        # lm_logits = tt_lib.tensor.Tensor(tt2torch_tensor(hidden_states).to(torch.float32) @ tt2torch_tensor(self.lm_head_weights).to(torch.float32), tt_lib.tensor.DataType.BFLOAT16)
+        # lm_logits = tt_lib.tensor.falcon_lm_head_matmul(
+        #     hidden_states,
+        #     self.lm_head_weights,
+        #     output_mem_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
+        #     output_dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
+        # )
+        lm_logits = tt_lib.tensor.Tensor(tt2torch_tensor(hidden_states).to(torch.float32) @ tt2torch_tensor(self.lm_head_weights).to(torch.float32), tt_lib.tensor.DataType.BFLOAT16)
         dump_tensor("lm_logits", "tt", tt2torch_tensor(lm_logits))
 
         return lm_logits, presents
