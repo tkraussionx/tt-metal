@@ -239,6 +239,7 @@ class TtFalconAttention(nn.Module):
         #     output_dtype=self.model_config["FUSED_QKV_MM_OUTPUT_DTYPE"],
         # )  # b, 1, seq_len, 73 * head_dim
 
+        # TODO(arakhmati): re-enable the code above and remove the code below
         fused_query_key_value = tt2torch_tensor(hidden_states).to(torch.float32) @ tt2torch_tensor(self.query_key_value_weights).to(torch.float32)
         fused_query_key_value = tt_lib.tensor.Tensor(fused_query_key_value, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
 
@@ -285,8 +286,6 @@ class TtFalconAttention(nn.Module):
                 output_mem_config=self.model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"],
             )
 
-        kv_seq_len = key_layer.shape()[-2]
-
         ######################
         ### PRE-SOFTMAX MM ###
         ######################
@@ -309,6 +308,8 @@ class TtFalconAttention(nn.Module):
             #     output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
             #     # output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"], # Not currently supported
             # )
+
+            # TODO(arakhmati): re-enable the code above and remove the code below
 
             attn_weights = tt2torch_tensor(query_layer).to(torch.float32) @ tt2torch_tensor(key_layer_transposed).to(torch.float32)
             attn_weights = tt_lib.tensor.Tensor(attn_weights, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
@@ -364,6 +365,7 @@ class TtFalconAttention(nn.Module):
         #     # output_mem_config=self.model_config["SOFTMAX_OUTPUT_MEMCFG"], # Not needed since in place
         #     # output_dtype=self.model_config["SOFTMAX_OUTPUT_DTYPE"],
         # )
+        # TODO(arakhmati): re-enable the code above and remove the code below
         attn_weights = nn.functional.softmax(tt2torch_tensor(attn_weights).to(torch.float32), dim=-1)
         attn_weights = tt_lib.tensor.Tensor(attn_weights, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
 
@@ -400,6 +402,7 @@ class TtFalconAttention(nn.Module):
             #     output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
             #     # output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"], # Not currently supported
             # )
+            # TODO(arakhmati): re-enable the code above and remove the code below
 
             attn_output = tt2torch_tensor(attn_weights).to(torch.float32) @ tt2torch_tensor(value_layer).to(torch.float32)
             attn_output = tt_lib.tensor.Tensor(attn_output, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
@@ -435,6 +438,7 @@ class TtFalconAttention(nn.Module):
         #     output_mem_config=self.model_config["SELFOUT_MM_OUTPUT_MEMCFG"],
         #     output_dtype=self.model_config["SELFOUT_MM_OUTPUT_DTYPE"],
         # )
+        # TODO(arakhmati): re-enable the code above and remove the code below
 
         attn_output = tt2torch_tensor(attn_output).to(torch.float32) @ tt2torch_tensor(self.dense_weights).to(torch.float32)
         attn_output = tt_lib.tensor.Tensor(attn_output, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)

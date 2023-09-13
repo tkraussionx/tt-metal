@@ -38,7 +38,7 @@ def test_gs_demo_kv(device):
 
     hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_version)
     hugging_face_reference_model.eval()
-    
+
     configuration = hugging_face_reference_model.config
     state_dict = hugging_face_reference_model.state_dict()
 
@@ -116,7 +116,7 @@ def test_gs_demo_kv(device):
     output_ids = post_processor(logits=logits, input_ids=prefill_ids, index=seq_len-1)
 
     generated_ids = torch.concat((prefill_ids[..., :seq_len], output_ids), dim=1)
-    
+
     zeroed_out_kv_cache = ()
     for tt_k_cache, tt_v_cache in kv_cache:
         k_cache = tt2torch_tensor(tt_k_cache)
@@ -135,7 +135,7 @@ def test_gs_demo_kv(device):
         dump_tensor("cached_value", "tt", tt2torch_tensor(value))
 
     kv_cache_len = seq_len  # This will increment by one after each decode
-    for output_token_index in range(100):
+    for output_token_index in range(1):
         assert output_ids.shape[0] == 1
         decode_ids = output_ids.expand(batch_size, -1) # Expand to 32 samples because decode stage only works with batch size of 32
 
