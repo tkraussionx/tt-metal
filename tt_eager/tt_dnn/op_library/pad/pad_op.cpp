@@ -87,7 +87,7 @@ operation::ProgramWithCallbacks pad_rm_reader_writer(const Tensor &a,
                                                                             .compile_args = writer_ct_args});
     uint32_t padded_row_diff_size_nbytes = padded_row_size_nbytes - unpadded_row_size_nbytes;
 
-    #if 1
+    #if 0
     {
         log_debug("src0_buffer_addr: {}", src0_buffer->address());
         log_debug("dst_buffer_addr: {}", dst_buffer->address());
