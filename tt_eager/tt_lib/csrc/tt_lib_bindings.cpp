@@ -1283,6 +1283,7 @@ void TensorModule(py::module &m_tensor) {
     detail::bind_unary_op(m_tensor, "gez", gez, R"doc(Returns tensor with the greater than equal zero of all of the elements of the input tensor ``{0}``.)doc");
     detail::bind_unary_op(m_tensor, "lez", lez, R"doc(Returns tensor with the less than equal zero of all of the elements of the input tensor ``{0}``.)doc");
     detail::bind_unary_op(m_tensor, "exp2", exp2, R"doc(Returns a new tensor with the exp2 (2 power) of the elements of the input tensor ``{0}``.)doc");
+    detail::bind_unary_op(m_tensor, "erfinv", erfinv, R"doc(Computes inverse error function for all elements of the input tensor ``{0}`` in the range (-1,1) .)doc");
     detail::bind_unary_op(m_tensor, "expm1", expm1,
         R"doc(Returns a new tensor with the expm1 of the elements of the input tensor ``{0}``.
         expm1 = exp(x) - 1)doc"
