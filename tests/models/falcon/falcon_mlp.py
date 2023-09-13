@@ -89,6 +89,7 @@ class TtFalconMLP(nn.Module):
         # dump_tensor("ff2", "tt", tt2torch_tensor(ff2_output))
         # ff1_output.deallocate()
 
+        # TODO(arakhmati): re-enable the code above and remove the code below
         ff1_output = tt2torch_tensor(x).to(torch.float32) @ tt2torch_tensor(self.dense_h_to_4h_weights).to(torch.float32)
         ff1_output = nn.functional.gelu(ff1_output)
         dump_tensor("ff1", "tt", ff1_output)

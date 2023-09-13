@@ -114,31 +114,32 @@ class TtFalconDecoderLayer(nn.Module):
         )  # hf_reference Falcon Attention doesn't support this
         dump_tensor("decoder_input", "tt", tt2torch_tensor(hidden_states))
 
-        # layernorm_output = tt_lib.tensor.layernorm(
-        #     hidden_states,
-        #     self.layernorm_eps,  # These don't fit: self.layernorm_gamma, self.layernorm_beta
-        #     output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
-        #     # output_dtype=self.model_config["INPUT_LAYERNORM_OUTPUT_DTYPE"], # Not currently supported
-        # )
-        # layernorm_output = tt_lib.tensor.bcast(
-        #     layernorm_output,
-        #     self.layernorm_gamma,
-        #     tt_lib.tensor.BcastOpMath.MUL,
-        #     tt_lib.tensor.BcastOpDim.H,
-        #     output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
-        #     # output_dtype=self.model_config["INPUT_LAYERNORM_OUTPUT_DTYPE"], # Not currently supported
-        # )
-        # layernorm_output = tt_lib.tensor.bcast(
-        #     layernorm_output,
-        #     self.layernorm_beta,
-        #     tt_lib.tensor.BcastOpMath.ADD,
-        #     tt_lib.tensor.BcastOpDim.H,
-        #     output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
-        #     # output_dtype=self.model_config["INPUT_LAYERNORM_OUTPUT_DTYPE"], # Not currently supported
-        # )
+        layernorm_output = tt_lib.tensor.layernorm(
+            hidden_states,
+            self.layernorm_eps,  # These don't fit: self.layernorm_gamma, self.layernorm_beta
+            output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
+            # output_dtype=self.model_config["INPUT_LAYERNORM_OUTPUT_DTYPE"], # Not currently supported
+        )
+        layernorm_output = tt_lib.tensor.bcast(
+            layernorm_output,
+            self.layernorm_gamma,
+            tt_lib.tensor.BcastOpMath.MUL,
+            tt_lib.tensor.BcastOpDim.H,
+            output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
+            # output_dtype=self.model_config["INPUT_LAYERNORM_OUTPUT_DTYPE"], # Not currently supported
+        )
+        layernorm_output = tt_lib.tensor.bcast(
+            layernorm_output,
+            self.layernorm_beta,
+            tt_lib.tensor.BcastOpMath.ADD,
+            tt_lib.tensor.BcastOpDim.H,
+            output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
+            # output_dtype=self.model_config["INPUT_LAYERNORM_OUTPUT_DTYPE"], # Not currently supported
+        )
 
-        layernorm_output = nn.functional.layer_norm(tt2torch_tensor(hidden_states).to(torch.float32), (hidden_states.shape()[-1],), weight=tt2torch_tensor(self.layernorm_gamma).to(torch.float32)[0, 0, 0], bias=tt2torch_tensor(self.layernorm_beta).to(torch.float32)[0, 0, 0])
-        layernorm_output = tt_lib.tensor.Tensor(layernorm_output, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(hidden_states.device())
+        # TODO(arakhmati): remove the code below
+        # layernorm_output = nn.functional.layer_norm(tt2torch_tensor(hidden_states).to(torch.float32), (hidden_states.shape()[-1],), weight=tt2torch_tensor(self.layernorm_gamma).to(torch.float32)[0, 0, 0], bias=tt2torch_tensor(self.layernorm_beta).to(torch.float32)[0, 0, 0])
+        # layernorm_output = tt_lib.tensor.Tensor(layernorm_output, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(hidden_states.device())
         dump_tensor("attention_layernorm_out", "tt", tt2torch_tensor(layernorm_output))
 
         residual = hidden_states
