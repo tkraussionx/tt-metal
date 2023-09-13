@@ -10,12 +10,6 @@
 #include "tt_metal/detail/util.hpp"
 #include "tensor/owned_buffer_functions.hpp"
 
-// #define DEBUG_SERVER 1
-
-// #if DEBUG_SERVER == 1
-#include "tt_metal/llrt/tt_debug_print_server.hpp"
-// #endif
-
 using namespace tt::constants;
 
 namespace tt {
@@ -37,12 +31,6 @@ operation::ProgramWithCallbacks pad_rm_opt(const Tensor &a,
 
     Device *device = a.device();
     auto dst_buffer_l1 = Buffer(device, padded_row_size_nbytes, padded_row_size_nbytes, BufferType::L1);
-
-    // #if DEBUG_SERVER == 1
-    //     // start debug server
-    //     auto debug_core = CoreCoord(1, 1);
-        // tt_start_debug_print_server(device->cluster());
-    // #endif
 
     // construct const buffer with the pad_value
     uint32_t pad_value_const_buffer_size = 32;  // noc transfers in chunks of 32
@@ -83,25 +71,29 @@ operation::ProgramWithCallbacks pad_rm_opt(const Tensor &a,
                                                                             .noc = NOC::RISCV_1_default,
                                                                             .compile_args = reader_ct_args});
     uint32_t padded_row_diff_size_nbytes = padded_row_size_nbytes - unpadded_row_size_nbytes;
-    // TT_ASSERT(padded_row_size_nbytes % pad_value_const_buffer_nbytes == 0, "Need the row size to be multiple of const buffer size {} {}", padded_row_size_nbytes, pad_value_const_buffer_nbytes);
-    // TT_ASSERT(padded_row_diff_size_nbytes % pad_value_const_buffer_nbytes == 0, "Need the padded row size diff to be multiple of const buffer size", padded_row_diff_size_nbytes, pad_value_const_buffer_nbytes);
-    log_debug("src0_buffer_addr: {}", src0_buffer->address());
-    log_debug("dst_buffer_addr: {}", dst_buffer->address());
-    log_debug("a.shape[0]: {}", a.shape()[0]);
-    log_debug("out.shape[0]: {}", output_shape[0]);
-    log_debug("a.shape[1]: {}", a.shape()[1]);
-    log_debug("out.shape[1]: {}", output_shape[1]);
-    log_debug("a.shape[2]: {}", a.shape()[2]);
-    log_debug("out.shape[2]: {}", output_shape[2]);
-    log_debug("s.shape[3]: {}", a.shape()[3]);
-    log_debug("out.shape[3]: {}", output_shape[3]);
-    log_debug("unpadded_row_size_nbytes: {}", unpadded_row_size_nbytes);
-    log_debug("padded_row_size_nbytes: {}", padded_row_size_nbytes);
-    log_debug("padded_row_diff_size_nbytes: {}", padded_row_diff_size_nbytes);
-    log_debug("pad_value_const_tensor_addr: {}", pad_value_const_tensor_addr);
-    log_debug("pad_value_const_buffer_nbytes: {}", pad_value_const_buffer_nbytes);
-    log_debug("packed_pad_value: {}", packed_pad_value);
-    log_debug("dst_buffer_l1_addr: {}", dst_buffer_l1.address());
+
+    #if 0
+    {
+        log_debug("src0_buffer_addr: {}", src0_buffer->address());
+        log_debug("dst_buffer_addr: {}", dst_buffer->address());
+        log_debug("a.shape[0]: {}", a.shape()[0]);
+        log_debug("out.shape[0]: {}", output_shape[0]);
+        log_debug("a.shape[1]: {}", a.shape()[1]);
+        log_debug("out.shape[1]: {}", output_shape[1]);
+        log_debug("a.shape[2]: {}", a.shape()[2]);
+        log_debug("out.shape[2]: {}", output_shape[2]);
+        log_debug("s.shape[3]: {}", a.shape()[3]);
+        log_debug("out.shape[3]: {}", output_shape[3]);
+        log_debug("unpadded_row_size_nbytes: {}", unpadded_row_size_nbytes);
+        log_debug("padded_row_size_nbytes: {}", padded_row_size_nbytes);
+        log_debug("padded_row_diff_size_nbytes: {}", padded_row_diff_size_nbytes);
+        log_debug("pad_value_const_tensor_addr: {}", pad_value_const_tensor_addr);
+        log_debug("pad_value_const_buffer_nbytes: {}", pad_value_const_buffer_nbytes);
+        log_debug("packed_pad_value: {}", packed_pad_value);
+        log_debug("dst_buffer_l1_addr: {}", dst_buffer_l1.address());
+    }
+    #endif
+
     vector<uint32_t> reader_rt_args = {src0_buffer->address(),
                                        dst_buffer->address(),
                                        a.shape()[0],

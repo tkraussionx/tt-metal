@@ -6,7 +6,8 @@
 #include "dataflow_api.h"
 
 
-inline void fill_with_val_async(uint64_t in_noc_addr, uint32_t begin_addr, uint32_t begin_addr_aligned, uint32_t size_nbytes, uint32_t chunk_nbytes, uint16_t pad_value) {
+inline __attribute__((always_inline))
+void fill_with_val_async(uint64_t in_noc_addr, uint32_t begin_addr, uint32_t begin_addr_aligned, uint32_t size_nbytes, uint32_t chunk_nbytes, uint16_t pad_value) {
     uint32_t curr_addr = begin_addr;
     while (curr_addr < begin_addr_aligned && size_nbytes > 0) {
         reinterpret_cast<uint16_t*>(curr_addr)[0] = pad_value;
