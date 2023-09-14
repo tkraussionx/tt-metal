@@ -144,7 +144,7 @@ void kernel_main() {
 
     // fill in_cb_id rows with -inf
     uint32_t in_l1_write_addr = get_write_ptr(in_cb_id);
-    const InterleavedPow2AddrGen<true> s_const = {
+    const InterleavedPow2AddrGen<is_in_dram> s_const = {
         .bank_base_address = minus_inf_buffer_addr,
         .log_base_2_of_page_size = 6        // TODO: generalize, currently hardcorded for 1 row of 32 16b values
     };
