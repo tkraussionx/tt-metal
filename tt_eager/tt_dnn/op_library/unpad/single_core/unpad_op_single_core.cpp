@@ -42,7 +42,7 @@ operation::ProgramWithCallbacks unpad_rm_single_core(const Tensor &a, Tensor& ou
     uint32_t src0_cb_index = 0;
     uint32_t num_input_pages = 2;
 
-    uint32_t cb_page_size = round_up(unpadded_row_size_bytes, TILE_WIDTH);
+    uint32_t cb_page_size = round_up_to_mul32(unpadded_row_size_bytes);
 
     auto cb_src0 = tt_metal::CreateCircularBuffers(
         program,
