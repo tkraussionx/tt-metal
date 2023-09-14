@@ -224,6 +224,8 @@ void validate_on_device_dtype_and_layout(Device *device, DataType dtype, Layout 
 // ======================================================================================
 //                           Data reader, writer, and initializers
 // ======================================================================================
+DeviceBuffer allocate_sharded_buffer_on_device(uint32_t buffer_size_bytes, Device *device, uint32_t shard_size, const MemoryConfig& memory_config);
+
 DeviceBuffer allocate_buffer_on_device(
     uint32_t buffer_size_bytes,
     Device *device,
@@ -256,7 +258,7 @@ inline void write_data_to_device_buffer(const BufferType<T>& data_to_write, Devi
     // And effectively get rid of any additional allocation
 
     if (data_type == DataType::BFLOAT16) {
-        if (memory_config.interleaved) {
+        if (memory_config.memory_layout == TensorMemoryLayout::INTERLEAVED) {
             TT_ASSERT(shape[3] % 2 == 0, "Input tensor width must be a multiple of 2 to pack interleaved row major data");
         } else {
             TT_ASSERT(compute_volume(shape) % 2 == 0, "Input tensor volume must be a multiple of 2 to pack contiguous data");
