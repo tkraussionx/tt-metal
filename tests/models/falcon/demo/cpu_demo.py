@@ -130,7 +130,7 @@ def test_cpu_demo_kv(batch_size):
         dump_tensor("cached_key", "hf", key)
         dump_tensor("cached_value", "hf", value)
 
-    for i in range(0):
+    for i in range(1):
         start_ = time.time()
         logger.info(f"generating token {i}")
         # input:

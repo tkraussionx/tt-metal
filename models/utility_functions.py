@@ -16,7 +16,9 @@ from tt_lib.fallback_ops import fallback_ops
 
 full_name_to_index = {}
 
-def dump_tensor(name, suffix, tensor):
+def dump_tensor(name, suffix, tensor, do_nothing = True):
+    if do_nothing:
+        return
     global full_name_to_index
     full_name = f"{name}.{suffix}"
     index = full_name_to_index.get(full_name, 0)

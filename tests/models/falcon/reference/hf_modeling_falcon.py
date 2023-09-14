@@ -1180,7 +1180,7 @@ class FalconForCausalLM(FalconPreTrainedModel):
         dump_tensor("lm_head_input", "hf", hidden_states)
         # dump_tensor("lm_head_weights", "hf", self.lm_head.weight.T)
         lm_logits = self.lm_head(hidden_states)
-        dump_tensor("lm_logits", "hf", lm_logits)
+        dump_tensor("lm_logits", "hf", lm_logits, do_nothing = False)
 
         loss = None
         if labels is not None:

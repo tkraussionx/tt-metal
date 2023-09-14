@@ -13,6 +13,7 @@ from tests.models.falcon.model_config import (
     get_model_config,
     get_tt_cache_path,
 )
+<<<<<<< HEAD
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor
 
 
@@ -21,6 +22,19 @@ def post_process(logits, input_ids, logits_processor):
     next_tokens_scores = logits_processor(input_ids, next_token_logits)
     next_tokens = torch.argmax(next_tokens_scores, dim=-1)
     ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+=======
+from models.utility_functions import torch2tt_tensor, tt2torch_tensor, dump_tensor
+
+def post_process(logits, input_ids, last_index=-1):
+    dump_tensor("logits", "tt", logits)
+    dump_tensor("input_ids", "tt", input_ids)
+    next_token_logits = logits[:, last_index, :]
+    next_tokens = torch.argmax(next_token_logits, dim=-1)
+    print(f"topk {torch.topk(next_token_logits, 20)[1]}")
+    dump_tensor("topk_output", "tt", torch.topk(next_token_logits, 5)[1])
+    ids = next_tokens[:, None]
+    print("OUTPUT ID", ids)
+>>>>>>> #2549: F2 completed
     return ids
 
 
@@ -110,9 +124,13 @@ def test_gs_demo_kv(device):
 
     logits = tt2torch_tensor(tt_logits).squeeze(1)
     tt_logits.deallocate()
-    output_ids = post_processor(logits=logits, input_ids=prefill_ids)
+    output_ids = post_processor(logits=logits, input_ids=prefill_ids, last_index=seq_len-1)
 
     generated_ids = torch.concat((prefill_ids[..., :seq_len], output_ids), dim=1)
+
+    for key, value in tt_layer_present:
+        dump_tensor("cached_key", "tt", tt2torch_tensor(key)[:1, :, :32])
+        dump_tensor("cached_value", "tt", tt2torch_tensor(value)[:1, :, :32])
 
     kv_cache_len = seq_len  # This will increment by one after each decode
     for output_token_index in range(4):
@@ -142,9 +160,8 @@ def test_gs_demo_kv(device):
         logits = tt2torch_tensor(tt_logits).squeeze(1)
         tt_logits.deallocate()
 
-        decode_ids = decode_ids[:1] # Slice to 1 sample
+        decode_ids = decode_ids[:1] # Slice back to 1 sample
         output_ids = post_processor(logits=logits, input_ids=decode_ids)
-        print(output_ids)
 
         generated_ids = torch.concat((generated_ids, output_ids), dim=1)
         kv_cache_len += 1
