@@ -48,7 +48,7 @@ tt_tensor = tt_lib.tensor.Tensor
 class TtViTOutput(nn.Module):
     def __init__(self, config: ViTConfig, base_address, state_dict, device) -> None:
         super().__init__()
-        self.out_mem_config_l1 = tt_lib.tensor.MemoryConfig(True, tt_lib.tensor.BufferType.L1)
+        self.out_mem_config_l1 = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1)
 
         self.dense = make_linear(
             config.intermediate_size,
@@ -74,7 +74,7 @@ class TtViTSelfAttention(nn.Module):
     ) -> None:
         super().__init__()
         self.device = device
-        self.out_mem_config_l1 = tt_lib.tensor.MemoryConfig(True, tt_lib.tensor.BufferType.L1)
+        self.out_mem_config_l1 = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1)
 
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
             config, "embedding_size"
@@ -186,7 +186,7 @@ class TtViTSelfOutput(nn.Module):
         self, config: ViTConfig, base_address: str, state_dict: Dict, device
     ) -> None:
         super().__init__()
-        self.out_mem_config_l1 = tt_lib.tensor.MemoryConfig(True, tt_lib.tensor.BufferType.L1)
+        self.out_mem_config_l1 = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1)
 
         self.dense = make_linear(
             config.hidden_size,
@@ -237,7 +237,7 @@ class TtViTIntermediate(nn.Module):
         self, config: ViTConfig, base_address: str, state_dict: Dict, device
     ) -> None:
         super().__init__()
-        self.out_mem_config_l1 = tt_lib.tensor.MemoryConfig(True, tt_lib.tensor.BufferType.L1)
+        self.out_mem_config_l1 = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1)
 
         self.dense = make_linear(
             config.hidden_size,
@@ -267,7 +267,7 @@ class TtViTLayer(nn.Module):
         self, config: ViTConfig, base_address: str, state_dict: Dict, device
     ) -> None:
         super().__init__()
-        self.out_mem_config_l1 = tt_lib.tensor.MemoryConfig(True, tt_lib.tensor.BufferType.L1)
+        self.out_mem_config_l1 = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1)
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.attention = TtViTAttention(
@@ -682,7 +682,7 @@ class TtViTForImageClassification(nn.Module):
         super().__init__()
         self.config = config
         self.num_labels = config.num_labels
-        self.out_mem_config_l1 = tt_lib.tensor.MemoryConfig(True, tt_lib.tensor.BufferType.L1)
+        self.out_mem_config_l1 = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1)
 
         self.vit = TtViTModel(
             config,

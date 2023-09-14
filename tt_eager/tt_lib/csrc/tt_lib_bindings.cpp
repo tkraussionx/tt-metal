@@ -313,7 +313,7 @@ void bind_op_with_mem_config(py::module_ &module, std::string op_name, Func &&f,
         const std::string mem_config_name = "output_mem_config";
         docstring += fmt::format(R"doc(
             "{0}", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is {1} in {2}", "No")doc",
-            mem_config_name, operation::DEFAULT_OUTPUT_MEMORY_CONFIG.interleaved ? "interleaved" : "non-interleaved", magic_enum::enum_name(operation::DEFAULT_OUTPUT_MEMORY_CONFIG.buffer_type)
+            mem_config_name, magic_enum::enum_name(operation::DEFAULT_OUTPUT_MEMORY_CONFIG.memory_layout), magic_enum::enum_name(operation::DEFAULT_OUTPUT_MEMORY_CONFIG.buffer_type)
         );
         module.def(op_name.c_str(), f,
             std::forward<Extra>(extra)..., py::arg(mem_config_name.c_str()).noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, docstring.c_str()
@@ -454,6 +454,8 @@ void TensorModule(py::module &m_tensor) {
 
     detail::export_enum<MathFidelity>(m_tensor);
 
+    detail::export_enum<TensorMemoryLayout>(m_tensor);
+
     py::enum_<BufferType>(m_tensor, "BufferType")
         .value("DRAM", BufferType::DRAM)
         .value("L1", BufferType::L1);
@@ -494,11 +496,11 @@ void TensorModule(py::module &m_tensor) {
     pyMemoryConfig
         .def(
             py::init<>(
-                [](bool interleaved, BufferType buffer_type) {
-                    return MemoryConfig{.interleaved=interleaved, .buffer_type=buffer_type};
+                [](TensorMemoryLayout memory_layout, BufferType buffer_type) {
+                    return MemoryConfig{.memory_layout=memory_layout, .buffer_type=buffer_type};
                 }
             ),
-            py::arg("interleaved") = true,
+            py::arg("memory_layout") = TensorMemoryLayout::INTERLEAVED,
             py::arg("buffer_type") = BufferType::DRAM, R"doc(
                 Create MemoryConfig class.
                 If interleaved is set to True, tensor data will be interleaved across multiple DRAM banks on TT Accelerator device.
@@ -508,14 +510,18 @@ void TensorModule(py::module &m_tensor) {
 
                 .. code-block:: python
 
-                    mem_config = tt_lib.tensor.MemoryConfig(False)
+                    mem_config = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.SINGLE_BANK)
             )doc"
         )
         .def("__repr__", [](const MemoryConfig &memory_config) -> std::string {
             return fmt::format("{}", memory_config);
         }
         )
-        .def_readonly("interleaved", &MemoryConfig::interleaved, "Whether tensor data is interleaved across mulitple DRAM channels")
+        .def("is_sharded", &MemoryConfig::is_sharded, "Whether tensor data is sharded across multiple cores in L1")
+        .def_property_readonly("interleaved", [](const MemoryConfig &memory_config) {
+            return memory_config.memory_layout == TensorMemoryLayout::INTERLEAVED;
+        }, "Whether tensor data is interleaved across multiple DRAM channels"
+        )
         .def_readonly("buffer_type", &MemoryConfig::buffer_type, "Buffer type to store tensor data. Can be DRAM or L1");
 
     auto py_owned_buffer_for_uint32_t = py::class_<owned_buffer::Buffer<uint32_t>>(m_tensor, "owned_buffer_for_uint32_t", py::buffer_protocol());
@@ -689,7 +695,7 @@ void TensorModule(py::module &m_tensor) {
 
                     py_tensor = torch.randn((1, 1, 32, 32))
                     tt_device = tt_lib.device.CreateDevice(tt_lib.device.Arch.GRAYSKULL, 0)
-                    mem_config = tt_lib.tensor.MemoryConfig(False)
+                    mem_config = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.SINGLE_BANK)
                     // ...
                     tt_lib.tensor.Tensor(
                         py_tensor.reshape(-1).tolist(),
@@ -731,7 +737,7 @@ void TensorModule(py::module &m_tensor) {
         )
         .def("to", [](const Tensor &self, Device *device, const MemoryConfig &mem_config) {
             return self.to(device, mem_config);
-        }, py::arg().noconvert(), py::arg("mem_config").noconvert() = MemoryConfig{.interleaved = true}, py::keep_alive<0, 2>(), R"doc(
+        }, py::arg().noconvert(), py::arg("mem_config").noconvert() = MemoryConfig{.memory_layout=TensorMemoryLayout::INTERLEAVED}, py::keep_alive<0, 2>(), R"doc(
             Move TT Tensor from host device to TT accelerator device.
 
             Only BFLOAT16 (in ROW_MAJOR or TILE layout) and BFLOAT8_B (in TILE layout) are supported on device.

@@ -34,7 +34,7 @@ from models.utility_functions import pad_by_zero
 class TtRobertaSelfOutput(nn.Module):
     def __init__(self, config, state_dict, base_address, device):
         super().__init__()
-        self.mem_config = mem_config = tt_lib.tensor.MemoryConfig(True, tt_lib.tensor.BufferType.L1)
+        self.mem_config = mem_config = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1)
         self.device = device
 
         self.dense_weight = pad_by_zero(
