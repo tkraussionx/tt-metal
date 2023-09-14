@@ -85,6 +85,6 @@ class TtFalconCausalLM(TtFalconModelShared):
         # )
         # TODO(arakhmati): re-enable the code above and remove the code below
         lm_logits = tt_lib.tensor.Tensor(tt2torch_tensor(hidden_states).to(torch.float32) @ tt2torch_tensor(self.lm_head_weights).to(torch.float32), tt_lib.tensor.DataType.BFLOAT16)
-        dump_tensor("lm_logits", "tt", tt2torch_tensor(lm_logits))
+        dump_tensor("lm_logits", "tt", tt2torch_tensor(lm_logits), do_nothing=False)
 
         return lm_logits, presents
