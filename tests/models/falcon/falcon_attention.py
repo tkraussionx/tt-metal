@@ -232,16 +232,16 @@ class TtFalconAttention(nn.Module):
         # # #################
         # # ### FUSED QKV ###
         # # #################
-        # fused_query_key_value = tt_lib.operations.primary.matmul(
-        #     hidden_states,
-        #     self.query_key_value_weights,
-        #     output_mem_config=self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
-        #     output_dtype=self.model_config["FUSED_QKV_MM_OUTPUT_DTYPE"],
-        # )  # b, 1, seq_len, 73 * head_dim
+        fused_query_key_value = tt_lib.operations.primary.matmul(
+            hidden_states,
+            self.query_key_value_weights,
+            output_mem_config=self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
+            output_dtype=self.model_config["FUSED_QKV_MM_OUTPUT_DTYPE"],
+        )  # b, 1, seq_len, 73 * head_dim
 
         # TODO(arakhmati): re-enable the code above and remove the code below
-        fused_query_key_value = tt2torch_tensor(hidden_states).to(torch.float32) @ tt2torch_tensor(self.query_key_value_weights).to(torch.float32)
-        fused_query_key_value = tt_lib.tensor.Tensor(fused_query_key_value, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
+        # fused_query_key_value = tt2torch_tensor(hidden_states).to(torch.float32) @ tt2torch_tensor(self.query_key_value_weights).to(torch.float32)
+        # fused_query_key_value = tt_lib.tensor.Tensor(fused_query_key_value, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
 
         dump_tensor("fused_qkv", "tt", tt2torch_tensor(fused_query_key_value))
 
@@ -302,17 +302,17 @@ class TtFalconAttention(nn.Module):
 
 
         if llm_mode == "prefill":
-            attn_weights = tt_lib.operations.primary.matmul(
-                query_layer,
-                key_layer_transposed,
-                output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
-                # output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"], # Not currently supported
-            )
+        #     attn_weights = tt_lib.operations.primary.matmul(
+        #         query_layer,
+        #         key_layer_transposed,
+        #         output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
+        #         # output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"], # Not currently supported
+        #     )
 
-            # TODO(arakhmati): re-enable the code above and remove the code below
+        # TODO(arakhmati): re-enable the code above and remove the code below
 
-            # attn_weights = tt2torch_tensor(query_layer).to(torch.float32) @ tt2torch_tensor(key_layer_transposed).to(torch.float32)
-            # attn_weights = tt_lib.tensor.Tensor(attn_weights, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
+            attn_weights = tt2torch_tensor(query_layer).to(torch.float32) @ tt2torch_tensor(key_layer_transposed).to(torch.float32)
+            attn_weights = tt_lib.tensor.Tensor(attn_weights, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
 
         elif llm_mode == "decode":
             attn_weights = tt_lib.operations.primary.transformers.attn_matmul(
@@ -403,16 +403,16 @@ class TtFalconAttention(nn.Module):
         ### POST-SOFTMAX MM ###
         ########################
         if llm_mode == "prefill":
-            attn_output = tt_lib.tensor.matmul(
-                attn_weights,
-                value_layer,
-                output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
-                # output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"], # Not currently supported
-            )
+        #     attn_output = tt_lib.tensor.matmul(
+        #         attn_weights,
+        #         value_layer,
+        #         output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
+        #         # output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"], # Not currently supported
+        #     )
             # TODO(arakhmati): re-enable the code above and remove the code below
 
-            # attn_output = tt2torch_tensor(attn_weights).to(torch.float32) @ tt2torch_tensor(value_layer).to(torch.float32)
-            # attn_output = tt_lib.tensor.Tensor(attn_output, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
+            attn_output = tt2torch_tensor(attn_weights).to(torch.float32) @ tt2torch_tensor(value_layer).to(torch.float32)
+            attn_output = tt_lib.tensor.Tensor(attn_output, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
 
         elif llm_mode == "decode":
             attn_output = tt_lib.operations.primary.transformers.attn_matmul(
@@ -439,16 +439,16 @@ class TtFalconAttention(nn.Module):
         )
         dump_tensor("merge_heads", "tt", tt2torch_tensor(attn_output))
 
-        # attn_output = tt_lib.tensor.falcon_selfout_matmul(
-        #     attn_output,
-        #     self.dense_weights,
-        #     output_mem_config=self.model_config["SELFOUT_MM_OUTPUT_MEMCFG"],
-        #     output_dtype=self.model_config["SELFOUT_MM_OUTPUT_DTYPE"],
-        # )
+        attn_output = tt_lib.tensor.falcon_selfout_matmul(
+            attn_output,
+            self.dense_weights,
+            output_mem_config=self.model_config["SELFOUT_MM_OUTPUT_MEMCFG"],
+            output_dtype=self.model_config["SELFOUT_MM_OUTPUT_DTYPE"],
+        )
         # TODO(arakhmati): re-enable the code above and remove the code below
 
-        attn_output = tt2torch_tensor(attn_output).to(torch.float32) @ tt2torch_tensor(self.dense_weights).to(torch.float32)
-        attn_output = tt_lib.tensor.Tensor(attn_output, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
+        # attn_output = tt2torch_tensor(attn_output).to(torch.float32) @ tt2torch_tensor(self.dense_weights).to(torch.float32)
+        # attn_output = tt_lib.tensor.Tensor(attn_output, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
 
         dump_tensor("attention_output", "tt", tt2torch_tensor(attn_output))
 
