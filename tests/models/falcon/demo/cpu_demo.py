@@ -69,7 +69,7 @@ def test_cpu_demo_no_kv(batch_size):
 
     logger.info("Generating new ids")
     ids = input_ids
-    for i in range(15):
+    for i in range(10):
         # iteration should become slower one by one
         # First iteration is about 3.5sec (batch=32)
         # Fifth iteration is about 4.5sec (batch=32)

@@ -13,16 +13,6 @@ from tests.models.falcon.model_config import (
     get_model_config,
     get_tt_cache_path,
 )
-<<<<<<< HEAD
-from models.utility_functions import torch2tt_tensor, tt2torch_tensor
-
-
-def post_process(logits, input_ids, logits_processor):
-    next_token_logits = logits[:, -1, :]
-    next_tokens_scores = logits_processor(input_ids, next_token_logits)
-    next_tokens = torch.argmax(next_tokens_scores, dim=-1)
-    ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-=======
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor, dump_tensor
 
 def post_process(logits, input_ids, last_index=-1):
@@ -34,7 +24,6 @@ def post_process(logits, input_ids, last_index=-1):
     dump_tensor("topk_output", "tt", torch.topk(next_token_logits, 5)[1])
     ids = next_tokens[:, None]
     print("OUTPUT ID", ids)
->>>>>>> #2549: F2 completed
     return ids
 
 
@@ -133,7 +122,7 @@ def test_gs_demo_kv(device):
         dump_tensor("cached_value", "tt", tt2torch_tensor(value)[:1, :, :32])
 
     kv_cache_len = seq_len  # This will increment by one after each decode
-    for output_token_index in range(4):
+    for output_token_index in range(10):
         assert output_ids.shape[0] == 1
         decode_ids = output_ids[:, -1].unsqueeze(1)
         decode_ids = decode_ids.expand(batch_size, -1) # Expand to 32 samples
