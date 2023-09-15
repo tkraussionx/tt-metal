@@ -354,44 +354,44 @@ hardcoded_matmul_config_conv = {
 
 hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_conv = {
     1 : {
-        (3136, 64) : [64, 64, 64, 64, (7,7), 64],
-        (800, 128) : [32, 128, 32, 64, (5,5), 32],
-        (224, 256) : [32, 128, 32, 128, (1,7), 32],
-        (64, 512) : [32, 64, 32, 64, (1, 2), 32] ,
+        (3136, 64) : [64, 64, 64, 64, (7,7), 64, 64],
+        (800, 128) : [32, 128, 32, 64, (5,5), 32, 128],
+        (224, 256) : [32, 128, 32, 128, (1,7), 32, 256],
+        (64, 512) : [32, 64, 32, 64, (1, 2), 32, 512],
     },
     2  : {
-        (6272, 64) : [128, 64, 128, 64, (7,7), 128],
-        (1568, 128) : [32, 128, 32, 64, (7,7), 32],
-        (416, 256) : [64, 128, 64, 128, (7,1), 64],
-        (128, 512) : [32, 64, 32, 64, (1,4), 32],
+        (6272, 64) : [128, 64, 128, 64, (7,7), 128, 64],
+        (1568, 128) : [32, 128, 32, 64, (7,7), 32, 128],
+        (416, 256) : [64, 128, 64, 128, (7,1), 64, 256],
+        (128, 512) : [32, 64, 32, 64, (1,4), 32, 512],
     },
     8 : {
-        (25088, 64) : [128, 64, 128, 64, (7,7), 512],
-        (6272, 128) : [64, 128, 64, 64, (7,7), 128],
-        (1568, 256) : [32, 128, 32, 128, (7,7), 32],
-        (416, 512) : [64, 32, 64, 32, (7,1), 64],
+        (25088, 64) : [128, 64, 128, 64, (7,7), 512, 64],
+        (6272, 128) : [64, 128, 64, 64, (7,7), 128, 128],
+        (1568, 256) : [32, 128, 32, 128, (7,7), 32, 256],
+        (416, 512) : [64, 32, 64, 32, (7,8), 64, 64],
     },
 }
 
 # With double buffered input CB, these shapes work -
 hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_downsample_conv = {
     1 : {
-        (3136, 256) : [64, 64, 64, 64, (7,7), 64],
-        (800, 512) : [32, 64, 32, 64, (5,5), 32],
-        (224, 1024) : [32, 128, 32, 64, (1,7), 32],
-        (64, 2048) : [32, 128, 32, 64, (1, 2), 32],
+        (3136, 256) : [64, 64, 64, 64, (7,7), 64, 256],
+        (800, 512) : [32, 64, 32, 64, (5,5), 32, 512],
+        (224, 1024) : [32, 128, 32, 64, (1,7), 32, 1024],
+        (64, 2048) : [32, 128, 32, 64, (1, 2), 32, 2048],
     },
     2 : {
-        (6272, 256) : [128, 64, 128, 64, (7,7), 128],
-        (1568, 512) : [32, 64, 32, 64, (7,7), 32],
-        (416, 1024) : [64, 128, 64, 64, (7,1), 64],
-        (128, 2048) : [64, 128, 64, 64, (1,2), 64],
+        (6272, 256) : [128, 64, 128, 64, (7,7), 128, 256],
+        (1568, 512) : [32, 64, 32, 64, (7,7), 32, 512],
+        (416, 1024) : [64, 128, 64, 64, (7,1), 64, 1024],
+        (128, 2048) : [64, 128, 64, 64, (1,2), 64, 2048],
     },
     8 : {
-        (25088, 256) : [128, 64, 128, 64, (7,7), 512] ,
-        (6272, 512) : [128, 64, 128, 64, (7,7), 128] ,
-        (1568, 1024) : [32, 128, 32, 64, (7,7), 32],
-        (416, 2048) : [64, 128, 64, 64, (7,1), 64] ,
+        (25088, 256) : [128, 64, 128, 64, (7,7), 512, 256] ,
+        (6272, 512) : [128, 64, 128, 64, (7,7), 128, 512] ,
+        (1568, 1024) : [32, 128, 32, 64, (7,7), 32, 1024],
+        (416, 2048) : [64, 128, 64, 64, (7,1), 64, 2048] ,
     },
 }
 
@@ -517,12 +517,13 @@ class Bottleneck(nn.Module):
         self.conv2_output_shape = compute_conv_output_shape(self.conv2_params, self.conv1_output_shape)
         conv2_output_padded_face_size = _nearest_32(self.conv2_output_shape[0] * self.conv2_output_shape[1] * self.conv2_output_shape[2])
         assert (conv2_output_padded_face_size, width) in hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_conv[batch_size]
-        [act_block_h_datums, weight_block_w_datums, out_subblock_h_datums, out_subblock_w_datums, grid_size, per_core_act_h] = hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_conv[batch_size][(conv2_output_padded_face_size, width)]
+        [act_block_h_datums, weight_block_w_datums, out_subblock_h_datums, out_subblock_w_datums, grid_size, per_core_act_h, per_core_weight_w] = hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_conv[batch_size][(conv2_output_padded_face_size, width)]
         assert per_core_act_h % 32 == 0
         per_core_act_h_ntiles = (int) (per_core_act_h / 32)
+        per_core_weight_w_ntiles = (int) (per_core_weight_w / 32)
         self.conv2 = resnet50_optimized_conv(conv2_weight.reshape(-1).tolist(), self.conv2_params, self.device, [act_block_h_datums, width*3], [width*3, weight_block_w_datums],
                                              [out_subblock_h_datums, out_subblock_w_datums],
-                                             grid_size, per_core_act_h_ntiles,
+                                             grid_size, per_core_act_h_ntiles, per_core_weight_w_ntiles,
                                              conv2_bias.tolist(), True)
 
         self.conv3_params = [planes * self.expansion, width, 1, 1, 1, 1, 0, 0, dilation, groups]
@@ -755,9 +756,10 @@ class ResNet(nn.Module):
             self.downsample_conv_output_shape = compute_conv_output_shape(self.downsample_params, layer_input_shape)
             downsample_output_padded_face_size = _nearest_32(self.downsample_conv_output_shape[0] * self.downsample_conv_output_shape[1] * self.downsample_conv_output_shape[2])
             assert (downsample_output_padded_face_size, downsample_output_channels) in hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_downsample_conv[batch_size]
-            [act_block_h_datums, weight_block_w_datums, out_subblock_h_datums, out_subblock_w_datums, grid_size, per_core_act_h] = hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_downsample_conv[batch_size][(downsample_output_padded_face_size, downsample_output_channels)]
+            [act_block_h_datums, weight_block_w_datums, out_subblock_h_datums, out_subblock_w_datums, grid_size, per_core_act_h, per_core_act_w] = hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_downsample_conv[batch_size][(downsample_output_padded_face_size, downsample_output_channels)]
             assert per_core_act_h % 32 == 0
             per_core_act_h_ntiles = (int) (per_core_act_h / 32)
+            per_core_act_w_ntiles = (int) (per_core_act_w / 32)
             is_downsample_1x1_conv = stride == 1
             is_1x1_downsample_conv_sanity_check = self.downsample_params[2] == 1 and self.downsample_params[3] == 1 and \
                                     self.downsample_params[4] == 1 and self.downsample_params[5] == 1 and \
@@ -776,7 +778,7 @@ class ResNet(nn.Module):
                                                             [act_block_h_datums, self.inplanes],
                                                             [self.inplanes, weight_block_w_datums],
                                                             [out_subblock_h_datums, out_subblock_w_datums],
-                                                            grid_size, per_core_act_h_ntiles,
+                                                            grid_size, per_core_act_h_ntiles, per_core_act_w_ntiles,
                                                             downsample_conv_bias.tolist())
             self.norm_layer_after_downsample_conv_on_tt = nl
 

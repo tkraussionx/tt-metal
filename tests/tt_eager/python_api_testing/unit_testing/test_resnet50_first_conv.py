@@ -142,7 +142,7 @@ def test_resnet50_first_conv(use_program_cache, N, extra_padding_for_32B_alignme
         # Run TT metal OP
         if not has_bias:
             bias_device = None
-
+        per_core_weight_matrix_w_ntiles = (int) (K / 32)
         out = ttl.tensor.optimized_conv(
             A_cl_device,
             B_tiled,
@@ -158,7 +158,7 @@ def test_resnet50_first_conv(use_program_cache, N, extra_padding_for_32B_alignme
             has_bias,
             fuse_relu,
             ttl.tensor.MathFidelity.HiFi4,
-            ttl.tensor.OptimizedConvParallelizationConfig(grid_size=grid_size, per_core_act_matrix_height_ntiles=per_core_act_h_ntiles),
+            ttl.tensor.OptimizedConvParallelizationConfig(grid_size=grid_size, per_core_act_matrix_height_ntiles=per_core_act_h_ntiles, per_core_weight_matrix_width_ntiles=per_core_weight_matrix_w_ntiles),
             extra_padding_for_32B_alignment
         )
 
