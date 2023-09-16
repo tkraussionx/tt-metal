@@ -496,17 +496,43 @@ bool LaunchProgram(Device *device, Program &program, bool stagger_start) {
         cluster->set_tensix_risc_reset_on_core(tt_cxy_pair(device_id, worker_core), soft_reset_option);
     }
 
-    bool riscs_are_done = false;
-    while (not riscs_are_done) {
-        riscs_are_done = true;
-        for (const auto &logical_core : logical_cores_used_in_program) {
-            // Check if all the riscs on the core are done
-            bool ncrisc_runs = core_runs_ncrisc(program, logical_core);
-            bool triscs_run = core_runs_triscs(program, logical_core);
-            auto risc_option = GetRiscOptionFromCoreConfig(ncrisc_runs, triscs_run);
+    // Wait for all cores to be done
+
+    // get all the cores that need to be polled
+    auto logical_cores_to_poll = program.logical_cores();
+    std::unordered_set<CoreCoord> not_done_cores(logical_cores_to_poll.begin(), logical_cores_to_poll.end());
+
+    // pre-compute risc_options for each core, so that we don't have to do it in the polling loop
+    std::unordered_map<CoreCoord, llrt::TensixRiscsOptions> risc_options_map;
+    for (const auto &logical_core : logical_cores_to_poll) {
+        bool ncrisc_runs = core_runs_ncrisc(program, logical_core);
+        bool triscs_run = core_runs_triscs(program, logical_core);
+        risc_options_map[logical_core] = GetRiscOptionFromCoreConfig(ncrisc_runs, triscs_run);
+    }
+
+    // poll the cores until the set of not done cores is empty
+    while (!not_done_cores.empty()) {
+        // Print not-done cores
+        std::cout << "Not done cores: ";
+        for (const auto &core : not_done_cores) {
+            std::cout << core.str() << " ";
+        }
+        std::cout << std::endl;
+
+        for (auto it = not_done_cores.begin(); it != not_done_cores.end(); ) {
+            const auto &logical_core = *it;
+
+            auto risc_options = risc_options_map[logical_core];
             auto worker_core = device->worker_core_from_logical_core(logical_core);
-            riscs_are_done &=
-                llrt::internal_::check_if_riscs_on_specified_core_done(cluster, device_id, risc_option, worker_core);
+
+            bool is_done = llrt::internal_::check_if_riscs_on_specified_core_done(cluster, device_id, risc_options, worker_core);
+
+            if (is_done) {
+                std::cout << "Core just done: " << logical_core.str() << std::endl;
+                it = not_done_cores.erase(it);
+            } else {
+                ++it;
+            }
         }
     }
 
