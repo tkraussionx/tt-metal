@@ -53,7 +53,7 @@ def run_perf_vit(expected_inference_time, expected_compile_time, hf_cat_image_sa
         inputs["pixel_values"], device, put_on_device=False
     )
 
-    tt_inputs = tt_inputs.to(device, tt_lib.tensor.MemoryConfig(True, tt_lib.tensor.BufferType.L1))
+    tt_inputs = tt_inputs.to(device, tt_lib.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1))
     tt_model = vit_for_image_classification(device)
 
     with torch.no_grad():

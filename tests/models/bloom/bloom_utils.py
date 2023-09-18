@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 import torch
 import json
 import tt_lib
-mem_config = tt_lib.tensor.MemoryConfig(True, tt_lib.tensor.BufferType.L1)
+mem_config = tt_lib.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1)
 
 def torch2tt_tensor(py_tensor: torch.Tensor, tt_device):
     size = list(py_tensor.size())

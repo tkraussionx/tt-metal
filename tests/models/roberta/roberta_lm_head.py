@@ -30,7 +30,7 @@ from tt_lib.fallback_ops import fallback_ops
 from transformers import RobertaForMaskedLM
 from transformers import AutoTokenizer
 
-mem_config = tt_lib.tensor.MemoryConfig(True, tt_lib.tensor.BufferType.L1)
+mem_config = tt_lib.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1)
 
 class TtRobertaLMHead(nn.Module):
     """Roberta Head for masked language modeling."""

@@ -69,7 +69,7 @@ class TtRobertaModel(nn.Module):
         add_pooling_layer=True,
     ):
         super().__init__()
-        self.mem_config = tt_lib.tensor.MemoryConfig(True, tt_lib.tensor.BufferType.L1)
+        self.mem_config = tt_lib.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1)
         self.config = config
         self.device = device
 

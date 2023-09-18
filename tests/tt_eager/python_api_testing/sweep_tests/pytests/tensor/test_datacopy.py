@@ -29,8 +29,8 @@ from tests.tt_eager.python_api_testing.sweep_tests.run_pytorch_ci_tests import r
 @pytest.mark.parametrize(
     "memory_config",
     (
-        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
-        ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+        ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
+        ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
         ttl.tensor.MemoryConfig(False, ttl.tensor.BufferType.DRAM),
         ttl.tensor.MemoryConfig(False, ttl.tensor.BufferType.L1),
     ),

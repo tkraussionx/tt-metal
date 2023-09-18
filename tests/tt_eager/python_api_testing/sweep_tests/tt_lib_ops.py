@@ -47,14 +47,14 @@ def make_mem_config(beffer_type):
     if beffer_type == None:
         return None
 
-    return ttl.tensor.MemoryConfig(True, beffer_type)
+    return ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, beffer_type)
 
 
 def tensor_to_device(x, device, beffer_type):
     if beffer_type == None:
         return x
 
-    return x.to(device, ttl.tensor.MemoryConfig(True, beffer_type))
+    return x.to(device, ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, beffer_type))
 
 
 @setup_host_and_device
@@ -2514,7 +2514,7 @@ def make_eltwise_unary_op(ttl_tensor_unop):
         dtype,
         layout,
         buffer_type,
-        output_mem_config=ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+        output_mem_config=ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
         **kwargs,
     ):
         t0 = ttl.tensor.Tensor(x, dtype[0])

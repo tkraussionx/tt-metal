@@ -31,16 +31,16 @@ supported_tt_buffer_types = [
 ]
 
 supported_mem_configs = [
-    ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
-    ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1),
+    ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
+    ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
 ]
 
 
 def make_out_mem_config(out_buffer_type):
     if out_buffer_type == ttl.tensor.BufferType.L1:
-        return ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1)
+        return ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
     else:
-        return ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM)
+        return ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
 
 
 # Wrapper around gen functions to include casting
@@ -289,7 +289,7 @@ def gen_pad_to_tile_args(
         "dtype": [ttl.tensor.DataType.BFLOAT16],
         "layout": [ttl.tensor.Layout.ROW_MAJOR],
         "buffer_type": [None],
-        "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+        "output_mem_config": ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
     }
 
     return [test_args]
@@ -314,7 +314,7 @@ def gen_unpad_from_tile_args(
         "dtype": [ttl.tensor.DataType.BFLOAT16],
         "layout": [ttl.tensor.Layout.ROW_MAJOR],
         "buffer_type": [None],
-        "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+        "output_mem_config": ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
     }
 
     return [test_args]

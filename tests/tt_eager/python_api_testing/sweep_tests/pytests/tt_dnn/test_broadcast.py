@@ -57,7 +57,7 @@ def test_run_bcast_h_test(
             "dtype": [dtype, dtype],
             "layout": [ttl.tensor.Layout.TILE, ttl.tensor.Layout.TILE],
             "buffer_type": [ttl.tensor.BufferType.DRAM, ttl.tensor.BufferType.DRAM],
-            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+            "output_mem_config": ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
         },
     )
 
@@ -97,7 +97,7 @@ def test_run_bcast_w_test(
             "dtype": [dtype, dtype],
             "layout": [ttl.tensor.Layout.TILE, ttl.tensor.Layout.TILE],
             "buffer_type": [ttl.tensor.BufferType.DRAM, ttl.tensor.BufferType.DRAM],
-            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+            "output_mem_config": ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
         },
     )
 
@@ -138,6 +138,6 @@ def test_run_bcast_hw_test(
             "dtype": [dtype, dtype],
             "layout": [ttl.tensor.Layout.TILE, ttl.tensor.Layout.TILE],
             "buffer_type": [ttl.tensor.BufferType.DRAM, ttl.tensor.BufferType.DRAM],
-            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+            "output_mem_config": ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
         },
     )
