@@ -883,7 +883,6 @@ def gen_conv2d_args(
     ):
         yield input_info
 
-
 def gen_conv_scalar_args(
     input_shapes,
     supported_dtypes,
@@ -892,19 +891,23 @@ def gen_conv_scalar_args(
     arg0_name="conv_params",
     dtype=torch.bfloat16,
 ):
-    for input_info in gen_dtype_layout_device(
+    for input_info in gen_dtype_layout_conv_device(
         input_shapes, supported_dtypes, supported_layouts, on_device
     ):
+
         lowStride = 1
         highStride = 4
         padH = 0
         padW = 0
 
-        w = input_shapes[0][3]
-        h = input_shapes[0][2]
+        w=input_shapes[0][3]
+        h=input_shapes[0][2]
 
-        # assert(lowKernel>0 and highKernel<w and highKernel<w)
-        # assert(lowStride>0 and highStride<w and highStride<h)
+        print('INFO JE---------')
+        print(input_info)
+
+        #assert(lowKernel>0 and highKernel<w and highKernel<w)
+        #assert(lowStride>0 and highStride<w and highStride<h)
 
         kernelH = input_shapes[1][2]
         kernelW = input_shapes[1][3]
