@@ -112,6 +112,19 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(const Tensor &
         }
     );
 
+    uint32_t num_blocks, num_units_per_block;
+    if (input.layout() == Layout::TILE) {
+        num_blocks = num_units_per_shard;
+        num_units_per_block = 1;
+    } else {
+        if (tt_metal::detail::TileSize(tt::DataFormat::Float16_b) % unit_size == 0) {
+            num_units_per_block = tt_metal::detail::TileSize(tt::DataFormat::Float16_b) / unit_size;
+            num_blocks = num_units_per_shard / num_units_per_block;
+        } else {
+            num_blocks = num_units_per_shard;
+            num_units_per_block = 1;
+        }
+    }
     for (uint32_t i = 0, num_units_written = 0; i < num_cores; i++){
         CoreCoord core = {i % num_cores_x, i / num_cores_x};
 
@@ -126,8 +139,8 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(const Tensor &
                 core,
                 {
                     src_buffer->address(),
-                    num_units_per_shard,
-                    1,
+                    num_blocks,
+                    num_units_per_block,
                     num_units_written
                 }
             );
@@ -139,8 +152,8 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(const Tensor &
                 {
                     src_buffer->address(),
                     unit_size,
-                    num_units_per_shard,
-                    1,
+                    num_blocks,
+                    num_units_per_block,
                     num_units_written
                 }
             );
@@ -274,6 +287,19 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(const Tensor &
         }
     );
 
+    uint32_t num_blocks, num_units_per_block;
+    if (input.layout() == Layout::TILE) {
+        num_blocks = num_units_per_shard;
+        num_units_per_block = 1;
+    } else {
+        if (tt_metal::detail::TileSize(tt::DataFormat::Float16_b) % unit_size == 0) {
+            num_units_per_block = tt_metal::detail::TileSize(tt::DataFormat::Float16_b) / unit_size;
+            num_blocks = num_units_per_shard / num_units_per_block;
+        } else {
+            num_blocks = num_units_per_shard;
+            num_units_per_block = 1;
+        }
+    }
     for (uint32_t i = 0, num_units_written = 0; i < num_cores; i++){
         CoreCoord core = {i % num_cores_x, i / num_cores_x};
 
@@ -288,8 +314,8 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(const Tensor &
                 core,
                 {
                     dst_buffer->address(),
-                    num_units_per_shard,
-                    1,
+                    num_blocks,
+                    num_units_per_block,
                     num_units_written
                 }
             );
@@ -301,8 +327,8 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(const Tensor &
                 {
                     dst_buffer->address(),
                     unit_size,
-                    num_units_per_shard,
-                    1,
+                    num_blocks,
+                    num_units_per_block,
                     num_units_written
                 }
             );
