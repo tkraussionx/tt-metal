@@ -5,7 +5,6 @@ SPDX-License-Identifier: Apache-2.0
 """
 
 import pytest
-
 import torch
 
 import tt_lib as ttl
@@ -103,7 +102,6 @@ def test_sharded_rm(device):
 def test_sharded_untilize(H, num_cores, in_sharded, out_sharded, device):
     N = 1
     C = 1
-    H = 100352
     W = 64
     if out_sharded and not in_sharded and H == 100352:
         pytest.skip("Unsupported config for sharding")
@@ -156,6 +154,57 @@ def test_sharded_untilize(H, num_cores, in_sharded, out_sharded, device):
         )
 
     tt_got_back = yt.cpu().to_torch()
+
+    passing, output = comp_equal(x, tt_got_back)
+    logger.info(output)
+
+    assert passing
+
+@pytest.mark.parametrize("H, num_cores", [[25088, 98]])
+def test_sharded_tilize(H, num_cores, device):
+    N = 1
+    C = 1
+    W = 64
+    x = torch.arange(N * C * H * W).reshape((N, C, H, W)).bfloat16()
+
+    xt = (
+        ttl.tensor.Tensor(
+            x.reshape(-1).tolist(),
+            x.shape,
+            ttl.tensor.DataType.BFLOAT16,
+            ttl.tensor.Layout.ROW_MAJOR,
+        )
+        .to(
+            device,
+            ttl.tensor.MemoryConfig(
+                memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+                buffer_type=ttl.tensor.BufferType.L1,
+            ),
+        )
+    )
+
+    yt = ttl.tensor.interleaved_to_sharded(
+        xt, num_cores, [H // num_cores, 64], ttl.tensor.ShardScheme.HEIGHT_SHARDING
+    )
+
+    yt_tilized = ttl.tensor.tilize(
+        yt,
+        output_mem_config=ttl.tensor.MemoryConfig(
+            memory_layout=ttl.tensor.TensorMemoryLayout.SHARDED,
+            buffer_type=ttl.tensor.BufferType.L1,
+        ),
+        use_multicore=True,
+    )
+
+    zt = ttl.tensor.sharded_to_interleaved(
+        yt_tilized,
+        ttl.tensor.MemoryConfig(
+            memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+            buffer_type=ttl.tensor.BufferType.L1,
+        ),
+    )
+
+    tt_got_back = zt.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
 
     passing, output = comp_equal(x, tt_got_back)
     logger.info(output)
