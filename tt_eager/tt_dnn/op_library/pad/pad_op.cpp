@@ -108,6 +108,8 @@ operation::ProgramWithCallbacks pad_rm_reader_writer(const Tensor &a,
     }
     #endif
 
+    uint32_t start_src_stick_id = 0;
+    uint32_t start_dst_stick_id = 0;
     vector<uint32_t> reader_rt_args = {src0_buffer->address(),
                                        dst_buffer->address(),
                                        a.shape()[0],
@@ -123,7 +125,9 @@ operation::ProgramWithCallbacks pad_rm_reader_writer(const Tensor &a,
                                        padded_row_diff_size_nbytes,
                                        pad_value_const_tensor_addr,
                                        pad_value_const_buffer_nbytes,
-                                       packed_pad_value};
+                                       packed_pad_value,
+                                       start_src_stick_id,
+                                       start_dst_stick_id};
     vector<uint32_t> writer_rt_args = reader_rt_args;
     SetRuntimeArgs(program,
                    reader_kernel_id,
@@ -568,10 +572,15 @@ operation::ProgramWithCallbacks Pad::create_program(const std::vector<Tensor>& i
     const auto& input_tensor = input_tensors.at(0);
     auto& output_tensor = output_tensors.at(0);
     if (input_tensor.layout() == Layout::ROW_MAJOR) {
-        // return pad_rm(input_tensor, output_tensor, this->output_tensor_shape, this->input_tensor_start, this->pad_value);
-        // return pad_rm_opt(input_tensor, output_tensor, this->output_tensor_shape, this->input_tensor_start, this->pad_value);
-        return pad_rm_reader_writer(input_tensor, output_tensor, this->output_tensor_shape, this->input_tensor_start, this->pad_value);
+        if (use_multicore) {
+            return pad_rm_reader_writer_multi_core(input_tensor, output_tensor, this->output_tensor_shape, this->input_tensor_start, this->pad_value);
+        } else {
+            return pad_rm_reader_writer(input_tensor, output_tensor, this->output_tensor_shape, this->input_tensor_start, this->pad_value);
+        }
     } else if (input_tensor.layout() == Layout::TILE) {
+        if (this->use_multicore) {
+            log_warning(LogType::LogOp, "TILE layout does not have multicore implementation yet. Falling back to 1 core.");
+        }
         return pad_tile(input_tensor, output_tensor, this->output_tensor_shape, this->input_tensor_start, this->pad_value);
     } else {
         TT_ASSERT(false, "Unsupported layout for pad");
@@ -588,11 +597,11 @@ tt::stl::reflection::Attributes Pad::attributes() const {
     };
 }
 
-Tensor pad(const Tensor &input_tensor, const Shape &output_tensor_shape, const Shape &input_tensor_start, float pad_value, const MemoryConfig& mem_config) {
+Tensor pad(const Tensor &input_tensor, const Shape &output_tensor_shape, const Shape &input_tensor_start, float pad_value, const MemoryConfig& mem_config, bool use_multicore) {
     if (input_tensor.shape() == output_tensor_shape) {
         return input_tensor;
     }
-    return operation::run_without_autoformat(Pad{output_tensor_shape, input_tensor_start, pad_value, mem_config}, {input_tensor}).at(0);
+    return operation::run_without_autoformat(Pad{output_tensor_shape, input_tensor_start, pad_value, mem_config, use_multicore}, {input_tensor}).at(0);
 
 }
 
