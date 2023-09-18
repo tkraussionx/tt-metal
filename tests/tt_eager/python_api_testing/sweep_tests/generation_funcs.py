@@ -434,6 +434,32 @@ def gen_dtype_layout_device(
 
     return result
 
+def sanitize_args_conv(input_shapes, dtype_buffer_layout, runtime_tile_padding_bias=True):
+    for i in range(len(input_shapes)):
+        print('first')
+        shape = input_shapes[i]
+        print('here')
+        z = (runtime_tile_padding_bias and i>1 and shape[2]!=1)
+        print((shape[3] % 32 != 0) )
+        print(shape)
+        if (
+            (
+                dtype_buffer_layout[i]["layout"] == ttl.tensor.Layout.TILE
+                and (   (shape[2] % 32 != 0 and not runtime_tile_padding_bias) or (runtime_tile_padding_bias and i>1 and shape[2]!=1) or (shape[3] % 32 != 0) )
+            )  # Shape cannot be tilized
+            or (
+                dtype_buffer_layout[i]["layout"] == ttl.tensor.Layout.ROW_MAJOR
+                and dtype_buffer_layout[i]["buffer_type"] != None
+                and shape[3] % 2 != 0
+            )  # Shape cannot be placed as row major on device
+            or (
+                dtype_buffer_layout[i]["dtype"] == ttl.tensor.DataType.BFLOAT8_B
+                and dtype_buffer_layout[i]["layout"] != ttl.tensor.Layout.TILE
+            )  # BFLOAT8_B must be tile layout
+        ):
+            return None
+    return dtype_buffer_layout
+
 
 def sanitize_args_layernorm(input_shapes, dtype_buffer_layout, runtime_tile_padding_layernorm=False, runtime_tile_padding_add_layernorm=False):
     for i in range(len(input_shapes)):
