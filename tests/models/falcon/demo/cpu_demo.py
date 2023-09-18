@@ -69,7 +69,7 @@ def test_cpu_demo_no_kv(batch_size):
 
     logger.info("Generating new ids")
     ids = input_ids
-    for i in range(10):
+    for i in range(15):
         # iteration should become slower one by one
         # First iteration is about 3.5sec (batch=32)
         # Fifth iteration is about 4.5sec (batch=32)
@@ -130,7 +130,7 @@ def test_cpu_demo_kv(batch_size):
         dump_tensor("cached_key", "hf", key)
         dump_tensor("cached_value", "hf", value)
 
-    for i in range(1):
+    for i in range(10):
         start_ = time.time()
         logger.info(f"generating token {i}")
         # input:
@@ -217,7 +217,7 @@ def test_cpu_demo_with_kv_split(batch_size):
     # tensor: [batch x 32 x seq_len x 64]
     logger.info("Generate tokens batched")
     generator = generators[0]
-    for i in range(20):
+    for i in range(10):
         # iterations should be about the same length
         # each iterations is less than 2 sec (machine dependents)
         logger.info(f"generating token {i}")
