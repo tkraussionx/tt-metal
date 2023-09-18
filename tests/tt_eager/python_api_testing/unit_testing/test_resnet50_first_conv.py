@@ -34,7 +34,10 @@ import torch
 @pytest.mark.parametrize("fuse_relu", (True,))
 @pytest.mark.parametrize("N", (1,2,8,))
 @pytest.mark.parametrize("extra_padding_for_32B_alignment", (25,))
-def test_resnet50_first_conv(use_program_cache, N, extra_padding_for_32B_alignment, device, untilize_out, has_bias, fuse_relu):
+@pytest.mark.parametrize("sharded_out", (True, False))
+def test_resnet50_first_conv(use_program_cache, N, extra_padding_for_32B_alignment, device, untilize_out, has_bias, fuse_relu, sharded_out):
+    if (sharded_out and N != 8):
+        pytest.skip("Tensor sharding unsupported for shape")
     (K, C, padded_C, H, W, R, S, padded_S, stride_h, stride_w, pad_h, pad_w) = (
         64,
         3,
@@ -144,6 +147,8 @@ def test_resnet50_first_conv(use_program_cache, N, extra_padding_for_32B_alignme
         if not has_bias:
             bias_device = None
         per_core_weight_matrix_w_ntiles = (int) (K / 32)
+
+        output_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, ttl.tensor.BufferType.L1) if sharded_out else None
         out = ttl.tensor.optimized_conv(
             A_cl_device,
             B_tiled,
@@ -161,8 +166,11 @@ def test_resnet50_first_conv(use_program_cache, N, extra_padding_for_32B_alignme
                                                 out_block_h_ntiles=out_block_h,
                                                 out_subblock_h_ntiles=out_subblock_h,
                                                 out_subblock_w_ntiles=out_subblock_w),
-            extra_padding_for_32B_alignment
+            extra_padding_for_32B_alignment,
+            output_mem_config
         )
+        if sharded_out:
+            out = ttl.tensor.sharded_to_interleaved(out, memory_config)
 
         if not untilize_out:
            out_unpadded_shape = [1, 1, N*OH*OW, K]
