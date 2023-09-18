@@ -80,22 +80,22 @@ class TtFalconMLP(nn.Module):
         )
         x.deallocate()
 
-        # ff2_output = tt_lib.tensor.falcon_dense_4h_to_h_matmul(
-        #     ff1_output,
-        #     self.dense_4h_to_h_weights,
-        #     output_mem_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
-        #     output_dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
-        # )
-        # dump_tensor("ff2", "tt", tt2torch_tensor(ff2_output))
-        # ff1_output.deallocate()
+        ff2_output = tt_lib.tensor.falcon_dense_4h_to_h_matmul(
+            ff1_output,
+            self.dense_4h_to_h_weights,
+            output_mem_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
+            output_dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
+        )
+        dump_tensor("ff2", "tt", tt2torch_tensor(ff2_output))
+        ff1_output.deallocate()
 
         # TODO(arakhmati): re-enable the code above and remove the code below
-        ff1_output = tt2torch_tensor(x).to(torch.float32) @ tt2torch_tensor(self.dense_h_to_4h_weights).to(torch.float32)
-        ff1_output = nn.functional.gelu(ff1_output)
-        dump_tensor("ff1", "tt", ff1_output)
-        ff2_output = ff1_output @ tt2torch_tensor(self.dense_4h_to_h_weights).to(torch.float32)
-        ff2_output = tt_lib.tensor.Tensor(ff2_output, tt_lib.tensor.DataType.BFLOAT16)
-        dump_tensor("ff2", "tt", tt2torch_tensor(ff2_output))
+        # ff1_output = tt2torch_tensor(x).to(torch.float32) @ tt2torch_tensor(self.dense_h_to_4h_weights).to(torch.float32)
+        # ff1_output = nn.functional.gelu(ff1_output)
+        # dump_tensor("ff1", "tt", ff1_output)
+        # ff2_output = ff1_output @ tt2torch_tensor(self.dense_4h_to_h_weights).to(torch.float32)
+        # ff2_output = tt_lib.tensor.Tensor(ff2_output, tt_lib.tensor.DataType.BFLOAT16)
+        # dump_tensor("ff2", "tt", tt2torch_tensor(ff2_output))
 
         # return TT Tensor
         return ff2_output

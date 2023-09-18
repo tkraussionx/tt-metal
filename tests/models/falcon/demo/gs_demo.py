@@ -2,7 +2,6 @@ from functools import partial
 
 import torch
 from loguru import logger
-from transformers.generation.logits_process import LogitsProcessorList
 
 from transformers import AutoTokenizer
 
@@ -15,10 +14,10 @@ from tests.models.falcon.model_config import (
 )
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor, dump_tensor
 
-def post_process(logits, input_ids, last_index=-1):
+def post_process(logits, input_ids, index):
     dump_tensor("logits", "tt", logits)
     dump_tensor("input_ids", "tt", input_ids)
-    next_token_logits = logits[:, last_index, :]
+    next_token_logits = logits[:, index, :]
     next_tokens = torch.argmax(next_token_logits, dim=-1)
     print(f"topk {torch.topk(next_token_logits, 20)[1]}")
     dump_tensor("topk_output", "tt", torch.topk(next_token_logits, 5)[1])
@@ -29,18 +28,17 @@ def post_process(logits, input_ids, last_index=-1):
 
 def test_gs_demo_kv(device):
     model_version = "tiiuae/falcon-7b-instruct"
-    model_config = get_model_config("BFLOAT16-L1")
+    model_config = get_model_config("BFLOAT16-DRAM")
     tt_cache_path = get_tt_cache_path(model_version)
-    tt_cache_path = None #TODO: delete this line
 
     batch_size = 32
     seq_len = 5
-    max_seq_len = 2048
+    max_seq_len = 32
     num_layers = 32
 
     hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_version)
-
     hugging_face_reference_model.eval()
+
     configuration = hugging_face_reference_model.config
     state_dict = hugging_face_reference_model.state_dict()
 
@@ -51,8 +49,7 @@ def test_gs_demo_kv(device):
     head_dim = configuration.hidden_size // configuration.n_head
     use_cache = True
 
-    logits_processor = LogitsProcessorList()
-    post_processor = partial(post_process, logits_processor=logits_processor)
+    post_processor = partial(post_process)
 
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(model_version)
@@ -84,80 +81,99 @@ def test_gs_demo_kv(device):
     # NOTE: tt_decode_attention_mask is only valid for one decode right after prefill here
     # TODO: If we loop, we need to decouple generation for embeddings and just generate new attention_mask
 
-    tt_layer_past = ()
+    kv_cache = ()
     k_cache = torch.zeros(batch_size, 1, max_position_embeddings, head_dim)
     v_cache = torch.zeros(batch_size, 1, max_position_embeddings, head_dim)
-    for i in range(num_layers):
+    for _ in range(num_layers):
         tt_k_cache = torch2tt_tensor(k_cache, device)
         tt_v_cache = torch2tt_tensor(v_cache, device)
-        tt_layer_past += ((tt_k_cache, tt_v_cache),)
+        kv_cache += ((tt_k_cache, tt_v_cache),)
 
     (
         tt_prefill_embeddings,
         tt_prefill_attention_mask,
-    ) = tt_FalconCausalLM.model_preprocessing(prefill_ids, 0, "prefill")
+    ) = tt_FalconCausalLM.model_preprocessing(prefill_ids, 0, "prefill", seq_len=seq_len)
+    assert tt_prefill_attention_mask is not None
 
     # PREFILL
     logger.info(f"Falcon prefill for seq_len {seq_len} and one user only")
-    tt_logits, tt_layer_present = tt_FalconCausalLM(
+    tt_logits, kv_cache = tt_FalconCausalLM(
         input_embeddings=tt_prefill_embeddings,
         llm_mode="prefill",
         attention_mask=tt_prefill_attention_mask,
         user_id=0,
-        layer_past=tt_layer_past,
+        layer_past=kv_cache,
         layer_past_len=0,
         use_cache=use_cache,
     )
+    logger.info("finished prefill stage")
     tt_prefill_embeddings.deallocate()
-    tt_prefill_attention_mask.deallocate()
+    if tt_prefill_attention_mask is not None:
+        tt_prefill_attention_mask.deallocate()
 
     logits = tt2torch_tensor(tt_logits).squeeze(1)
     tt_logits.deallocate()
-    output_ids = post_processor(logits=logits, input_ids=prefill_ids, last_index=seq_len-1)
+    output_ids = post_processor(logits=logits, input_ids=prefill_ids, index=seq_len-1)
 
     generated_ids = torch.concat((prefill_ids[..., :seq_len], output_ids), dim=1)
 
-    for key, value in tt_layer_present:
-        dump_tensor("cached_key", "tt", tt2torch_tensor(key)[:1, :, :32])
-        dump_tensor("cached_value", "tt", tt2torch_tensor(value)[:1, :, :32])
+    zeroed_out_kv_cache = ()
+    for tt_k_cache, tt_v_cache in kv_cache:
+        k_cache = tt2torch_tensor(tt_k_cache)
+        v_cache = tt2torch_tensor(tt_v_cache)
+        k_cache[:, :, seq_len:] = 0
+        v_cache[:, :, seq_len:] = 0
+        k_cache = torch.broadcast_to(k_cache[:1], k_cache.shape)
+        v_cache = torch.broadcast_to(v_cache[:1], v_cache.shape)
+        tt_k_cache = torch2tt_tensor(k_cache, device)
+        tt_v_cache = torch2tt_tensor(v_cache, device)
+        zeroed_out_kv_cache += ((tt_k_cache, tt_v_cache),)
+    kv_cache = zeroed_out_kv_cache
+
+    for key, value in kv_cache:
+        dump_tensor("cached_key", "tt", tt2torch_tensor(key))
+        dump_tensor("cached_value", "tt", tt2torch_tensor(value))
 
     kv_cache_len = seq_len  # This will increment by one after each decode
     for output_token_index in range(10):
         assert output_ids.shape[0] == 1
-        decode_ids = output_ids[:, -1].unsqueeze(1)
-        decode_ids = decode_ids.expand(batch_size, -1) # Expand to 32 samples
+        decode_ids = output_ids.expand(batch_size, -1) # Expand to 32 samples because decode stage only works with batch size of 32
 
         logger.info(f"Falcon decode token {output_token_index} for {batch_size} users")
         (
             tt_decode_embeddings,
             tt_decode_attention_mask,
         ) = tt_FalconCausalLM.model_preprocessing(
-            decode_ids, kv_cache_len, "decode"
+            decode_ids, kv_cache_len, "decode", seq_len=kv_cache_len + 1
         )
+        assert tt_decode_attention_mask is not None
 
-        tt_logits, tt_layer_present = tt_FalconCausalLM(
+        tt_logits, kv_cache = tt_FalconCausalLM(
             input_embeddings=tt_decode_embeddings,
             llm_mode="decode",
             attention_mask=tt_decode_attention_mask,
-            layer_past=tt_layer_present,
+            layer_past=kv_cache,
             layer_past_len=kv_cache_len,
             use_cache=use_cache,
         )
         tt_decode_embeddings.deallocate()
-        tt_decode_attention_mask.deallocate()
+        if tt_decode_attention_mask is not None:
+            tt_decode_attention_mask.deallocate()
 
         logits = tt2torch_tensor(tt_logits).squeeze(1)
         tt_logits.deallocate()
 
         decode_ids = decode_ids[:1] # Slice back to 1 sample
-        output_ids = post_processor(logits=logits, input_ids=decode_ids)
+        output_ids = post_processor(logits=logits, input_ids=decode_ids, index=0)
 
         generated_ids = torch.concat((generated_ids, output_ids), dim=1)
         kv_cache_len += 1
 
-    generated_ids = generated_ids.tolist()
-    output_prompts = tokenizer.batch_decode(generated_ids)
+        output_prompts = tokenizer.batch_decode(generated_ids.tolist())
+        for output_prompt in output_prompts:
+            logger.info(f"output: {output_prompt}")
 
+    output_prompts = tokenizer.batch_decode(generated_ids.tolist())
     for input_prompt, output_prompt in zip(input_prompts, output_prompts):
         logger.info(f"input: {input_prompt}")
         logger.info(f"output: {output_prompt}")
