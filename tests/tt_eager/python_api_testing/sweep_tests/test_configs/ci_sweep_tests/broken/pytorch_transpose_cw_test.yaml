@@ -21,7 +21,7 @@ test-list:
         data-layout: ["TILE"]
         data-type: ["BFLOAT16", "BFLOAT8_B"]
         buffer-type: ["DRAM", "SYSTEM_MEMORY"]
-        out-buffer-type: ["DRAM"]
+        out-buffer-type: ["DRAM", "L1"]
   - transpose-cw:
       shape:
         start-shape: [1, 1, 2, 2]

@@ -15,9 +15,15 @@ test-list:
         low-w-kernel: 2
         high-w-kernel: 4
         in-channels: 1
+        low-h-stride: 2
+        high-h-stride: 4
+        low-w-stride: 2
+        high-w-stride: 4
         out-channels: 32
         has-bias: 1
         groups: 1
+        low-w-pad: 0
+        high-w-pad: 10
         low-h-pad: 2
         high-h-pad: 10
         function: gen_rand

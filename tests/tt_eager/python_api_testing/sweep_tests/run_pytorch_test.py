@@ -208,7 +208,8 @@ def run_pytorch_test(args):
             for input_shapes, datagen_funcs in shapes_and_datagen(
                 shape_dict, datagen_dict
             ):
-                for generated_test_args in test_args_gen(input_shapes, test_tt_dtypes, test_tt_layouts, test_buffer_types):
+                datagen_params = test_config.get("datagen", {})
+                for generated_test_args in test_args_gen(input_shapes, test_tt_dtypes, test_tt_layouts, test_buffer_types, datagen_params):
                     # generated_test_args.update(
                     #     test_args
                     # )  # specified test args overrides generated test args

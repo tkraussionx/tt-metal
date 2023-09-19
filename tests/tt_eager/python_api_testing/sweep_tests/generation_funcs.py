@@ -918,6 +918,7 @@ def gen_conv2d_args(
     dtypes,
     layouts,
     buffer_types,
+    datagen_params=None,
 ):
     for input_info in gen_conv_scalar_args(
         input_shapes,
@@ -925,6 +926,7 @@ def gen_conv2d_args(
         layouts,
         buffer_types,
         "conv_params",
+        datagen_params,
         torch.int,
     ):
         yield input_info
@@ -935,22 +937,39 @@ def gen_conv_scalar_args(
     supported_layouts,
     on_device,
     arg0_name="conv_params",
+    datagen_params=None,
     dtype=torch.bfloat16,
 ):
     for input_info in gen_dtype_layout_conv_device(
         input_shapes, supported_dtypes, supported_layouts, on_device
     ):
 
-        lowStride = 1
-        highStride = 4
-        padH = 0
-        padW = 0
+        low_h_stride = datagen_params.get("low-h-stride", 1)
+        low_w_stride = datagen_params.get("low-w-stride", 1)
+
+
+        high_h_stride = datagen_params.get("high-h-stride", 1)
+        high_w_stride = datagen_params.get("high-w-stride", 1)
+
+
+        low_h_pad = datagen_params.get("low-h-pad", 1)
+        low_w_pad = datagen_params.get("low-w-pad", 1)
+
+
+        high_h_pad = datagen_params.get("high-h-pad", 1)
+        high_w_pad = datagen_params.get("high-w-pad", 1)
 
         w=input_shapes[0][3]
         h=input_shapes[0][2]
 
-        print('INFO JE---------')
-        print(input_info)
+        print('INFO JE--------------------')
+
+        print(low_h_stride)
+        print(low_w_stride)
+        print(high_h_stride)
+        print(high_w_stride)
+
+        print('INFO JE--------------------')
 
         #assert(lowKernel>0 and highKernel<w and highKernel<w)
         #assert(lowStride>0 and highStride<w and highStride<h)
@@ -958,8 +977,22 @@ def gen_conv_scalar_args(
         kernelH = input_shapes[1][2]
         kernelW = input_shapes[1][3]
 
-        strideH = random.randint(lowStride, highStride)
-        strideW = random.randint(lowStride, highStride)
+        strideH = random.randint(low_h_stride, high_h_stride)
+        strideW = random.randint(low_w_stride, high_w_stride)
+
+        padH = random.randint(low_h_pad, high_h_pad)
+        padW = random.randint(low_w_pad, high_w_pad)
+
+
+        print('INFO JE--------------------')
+
+        print(low_h_pad)
+        print(low_w_pad)
+        print(high_h_pad)
+        print(high_w_pad)
+
+        print('INFO JE--------------------')
+
         conv_params = [kernelH, kernelW, strideH, strideW, padH, padW]
 
         input_info.update({arg0_name: conv_params})
