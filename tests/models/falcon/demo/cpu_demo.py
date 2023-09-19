@@ -20,11 +20,11 @@ MODEL_VERSION = "tiiuae/falcon-7b-instruct"
 
 
 def post_process(logits, input_ids):
-    dump_tensor("logits", "hf", logits)
-    dump_tensor("input_ids", "hf", input_ids)
+    # dump_tensor("logits", "hf", logits)
+    # dump_tensor("input_ids", "hf", input_ids)
     next_token_logits = logits[:, -1, :]
     print(f"topk {torch.topk(next_token_logits, 20)[1]}")
-    dump_tensor("topk_output", "hf", torch.topk(next_token_logits, 5)[1])
+    # dump_tensor("topk_output", "hf", torch.topk(next_token_logits, 5)[1])
     next_tokens = torch.argmax(next_token_logits, dim=-1)
     ids = next_tokens[:, None]
     print("OUTPUT ID", ids)
@@ -127,8 +127,8 @@ def test_cpu_demo_kv(batch_size):
     print("OUTPUT OF PREFILL", generated_ids)
 
     for key, value in kv_cache:
-        dump_tensor("cached_key", "hf", key)
-        dump_tensor("cached_value", "hf", value)
+        # dump_tensor("cached_key", "hf", key)
+        # dump_tensor("cached_value", "hf", value)
 
     for i in range(10):
         start_ = time.time()

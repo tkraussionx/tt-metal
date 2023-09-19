@@ -12,28 +12,31 @@ from tests.models.falcon.model_config import (
     get_model_config,
     get_tt_cache_path,
 )
-from models.utility_functions import torch2tt_tensor, tt2torch_tensor, dump_tensor
+from models.utility_functions import torch2tt_tensor, tt2torch_tensor, dump_tensor, enable_memory_reports
+import time
 
 def post_process(logits, input_ids, index):
-    dump_tensor("logits", "tt", logits)
-    dump_tensor("input_ids", "tt", input_ids)
+    # dump_tensor("logits", "tt", logits)
+    # dump_tensor("input_ids", "tt", input_ids)
     next_token_logits = logits[:, index, :]
     next_tokens = torch.argmax(next_token_logits, dim=-1)
     print(f"topk {torch.topk(next_token_logits, 20)[1]}")
-    dump_tensor("topk_output", "tt", torch.topk(next_token_logits, 5)[1])
+    # dump_tensor("topk_output", "tt", torch.topk(next_token_logits, 5)[1])
     ids = next_tokens[:, None]
     print("OUTPUT ID", ids)
     return ids
 
 
 def test_gs_demo_kv(device):
+    start = time.time()
+    # enable_memory_reports()
     model_version = "tiiuae/falcon-7b-instruct"
     model_config = get_model_config("BFLOAT16-DRAM")
     tt_cache_path = get_tt_cache_path(model_version)
 
     batch_size = 32
     seq_len = 5
-    max_seq_len = 32
+    max_seq_len = 2048
     num_layers = 32
 
     hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_version)
@@ -130,12 +133,19 @@ def test_gs_demo_kv(device):
         zeroed_out_kv_cache += ((tt_k_cache, tt_v_cache),)
     kv_cache = zeroed_out_kv_cache
 
-    for key, value in kv_cache:
-        dump_tensor("cached_key", "tt", tt2torch_tensor(key))
-        dump_tensor("cached_value", "tt", tt2torch_tensor(value))
+    # for key, value in kv_cache:
+        # dump_tensor("cached_key", "tt", tt2torch_tensor(key))
+        # dump_tensor("cached_value", "tt", tt2torch_tensor(value))
 
     kv_cache_len = seq_len  # This will increment by one after each decode
-    for output_token_index in range(10):
+
+    end_prefill = time.time()
+    logger.info(f"Prefill Run Time: {round((end_prefill - start), 2)}")
+
+    # DECODE
+
+    for output_token_index in range(2048):
+        decode_start = time.time()
         assert output_ids.shape[0] == 1
         decode_ids = output_ids.expand(batch_size, -1) # Expand to 32 samples because decode stage only works with batch size of 32
 
@@ -172,6 +182,12 @@ def test_gs_demo_kv(device):
         output_prompts = tokenizer.batch_decode(generated_ids.tolist())
         for output_prompt in output_prompts:
             logger.info(f"output: {output_prompt}")
+
+        decode_end = time.time()
+        logger.info(f"Decode #{output_token_index} Run Time: {round((decode_end - decode_start), 2)}")
+
+    end = time.time()
+    logger.info(f"Total Model Run Time: {round((end - start), 2)}")
 
     output_prompts = tokenizer.batch_decode(generated_ids.tolist())
     for input_prompt, output_prompt in zip(input_prompts, output_prompts):

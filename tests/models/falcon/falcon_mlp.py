@@ -86,7 +86,7 @@ class TtFalconMLP(nn.Module):
             output_mem_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
             output_dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
         )
-        dump_tensor("ff2", "tt", tt2torch_tensor(ff2_output))
+        # dump_tensor("ff2", "tt", tt2torch_tensor(ff2_output))
         ff1_output.deallocate()
 
         # TODO(arakhmati): re-enable the code above and remove the code below

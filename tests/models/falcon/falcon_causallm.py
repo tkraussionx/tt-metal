@@ -75,7 +75,7 @@ class TtFalconCausalLM(TtFalconModelShared):
             layer_past_len=layer_past_len,
             use_cache=use_cache,
         )
-        dump_tensor("lm_head_input", "tt", tt2torch_tensor(hidden_states))
+        # dump_tensor("lm_head_input", "tt", tt2torch_tensor(hidden_states))
         # dump_tensor("lm_head_weights", "tt", tt2torch_tensor(self.lm_head_weights)[0][0])
         lm_logits = tt_lib.tensor.falcon_lm_head_matmul(
             hidden_states,
@@ -86,5 +86,6 @@ class TtFalconCausalLM(TtFalconModelShared):
         # TODO(arakhmati): re-enable the code above and remove the code below
         # lm_logits = tt_lib.tensor.Tensor(tt2torch_tensor(hidden_states).to(torch.float32) @ tt2torch_tensor(self.lm_head_weights).to(torch.float32), tt_lib.tensor.DataType.BFLOAT16)
         dump_tensor("lm_logits", "tt", tt2torch_tensor(lm_logits), do_nothing=False)
+        # tt_lib.device.DumpDeviceMemoryState(self.device)
 
         return lm_logits, presents
