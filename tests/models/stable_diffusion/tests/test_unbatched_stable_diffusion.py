@@ -20,10 +20,10 @@ from models.utility_functions import (
     comp_allclose_and_pcc,
 )
 import tt_lib as ttl
-from models.stable_diffusion.tt.unet_2d_condition import (
+from models_wip.stable_diffusion.tt.unet_2d_condition import (
     UNet2DConditionModel as tt_unet_condition,
 )
-from models.stable_diffusion.tt.experimental_ops import UseDeviceConv
+from models_wip.stable_diffusion.tt.experimental_ops import UseDeviceConv
 
 
 NUM_INFERENCE_STEPS = 1  # Number of denoising steps

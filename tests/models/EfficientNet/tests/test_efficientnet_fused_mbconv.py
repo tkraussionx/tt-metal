@@ -12,7 +12,7 @@ from models.utility_functions import (
     tt2torch_tensor,
     comp_pcc,
 )
-from models.EfficientNet.tt.efficientnet_fused_mbconv import (
+from models_wip.EfficientNet.tt.efficientnet_fused_mbconv import (
     TtEfficientnetFusedMBConv,
     FusedMBConvConfig,
 )

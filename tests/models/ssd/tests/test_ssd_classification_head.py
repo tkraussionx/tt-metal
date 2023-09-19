@@ -17,7 +17,7 @@ from models.utility_functions import (
     comp_pcc,
 )
 
-from models.ssd.tt.ssd_classification_head import (
+from models_wip.ssd.tt.ssd_classification_head import (
     TtSSDclassificationhead,
 )
 

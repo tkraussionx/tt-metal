@@ -11,7 +11,7 @@ from models.utility_functions import (
     comp_allclose,
     comp_pcc,
 )
-from models.ssd.tt.ssd_mobilenetv3_squeeze_excitation import (
+from models_wip.ssd.tt.ssd_mobilenetv3_squeeze_excitation import (
     TtSqueezeExcitation,
 )
 

@@ -13,7 +13,7 @@ from models.utility_functions import (
 )
 
 from models.utility_functions import comp_pcc, comp_allclose_and_pcc
-from models.vit.tt.modeling_vit import TtViTOutput
+from models_wip.vit.tt.modeling_vit import TtViTOutput
 
 
 def test_vit_output(pcc=0.99):

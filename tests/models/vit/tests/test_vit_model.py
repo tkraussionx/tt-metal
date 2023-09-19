@@ -13,7 +13,7 @@ from models.utility_functions import (
 )
 
 from models.utility_functions import comp_pcc, comp_allclose_and_pcc
-from models.vit.tt.modeling_vit import TtViTModel
+from models_wip.vit.tt.modeling_vit import TtViTModel
 
 
 def test_vit_model(imagenet_sample_input, pcc=0.95):

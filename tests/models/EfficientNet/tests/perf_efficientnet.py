@@ -15,7 +15,7 @@ from models.utility_functions import (
     profiler,
     prep_report,
 )
-from models.EfficientNet.tt.efficientnet_model import efficientnet_b0
+from models_wip.EfficientNet.tt.efficientnet_model import efficientnet_b0
 from models.utility_functions import disable_compile_cache, enable_compile_cache
 
 

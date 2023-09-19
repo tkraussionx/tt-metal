@@ -11,7 +11,7 @@ from models.utility_functions import (
     enable_persistent_kernel_cache,
 )
 from models.utility_functions import Profiler, prep_report
-from models.ssd.tt.ssd_lite import ssd_for_object_detection
+from models_wip.ssd.tt.ssd_lite import ssd_for_object_detection
 import pytest
 
 

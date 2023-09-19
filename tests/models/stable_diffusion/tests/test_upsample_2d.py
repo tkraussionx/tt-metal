@@ -15,7 +15,7 @@ from models.utility_functions import (
     comp_pcc,
     comp_allclose_and_pcc,
 )
-from models.stable_diffusion.tt.upsample_2d import TtUpsample2D
+from models_wip.stable_diffusion.tt.upsample_2d import TtUpsample2D
 
 def test_run_upsample2d_inference():
     # setup pytorch model

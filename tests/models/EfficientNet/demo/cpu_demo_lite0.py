@@ -17,8 +17,8 @@ import torch
 import torchvision
 from loguru import logger
 from datasets import load_dataset
-from models.EfficientNet.tt.efficientnet_model import reference_efficientnet_lite0
-from models.EfficientNet.demo.demo_utils import (
+from models_wip.EfficientNet.tt.efficientnet_model import reference_efficientnet_lite0
+from models_wip.EfficientNet.demo.demo_utils import (
     load_imagenet_labels,
     download_images,
     preprocess,

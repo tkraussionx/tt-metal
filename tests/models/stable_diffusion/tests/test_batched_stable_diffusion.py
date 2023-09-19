@@ -16,8 +16,8 @@ from diffusers import (
     DPMSolverMultistepScheduler,
 )
 from diffusers import LMSDiscreteScheduler
-from models.stable_diffusion.tt.unet_2d_condition import UNet2DConditionModel as tt_unet_condition
-from models.stable_diffusion.tt.experimental_ops import UseDeviceConv
+from models_wip.stable_diffusion.tt.unet_2d_condition import UNet2DConditionModel as tt_unet_condition
+from models_wip.stable_diffusion.tt.experimental_ops import UseDeviceConv
 
 import tt_lib as ttl
 

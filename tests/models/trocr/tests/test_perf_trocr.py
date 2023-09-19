@@ -16,7 +16,7 @@ from models.utility_functions import Profiler, prep_report
 
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 
-from models.trocr.tt.trocr import trocr_causal_llm
+from models_wip.trocr.tt.trocr import trocr_causal_llm
 
 BATCH_SIZE = 1
 

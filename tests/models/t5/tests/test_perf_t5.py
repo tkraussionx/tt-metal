@@ -15,7 +15,7 @@ from models.utility_functions import (
     enable_persistent_kernel_cache,
     prep_report,
 )
-from models.t5.tt.t5_model import TtT5Model
+from models_wip.t5.tt.t5_model import TtT5Model
 
 BATCH_SIZE=1
 

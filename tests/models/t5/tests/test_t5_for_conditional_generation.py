@@ -6,7 +6,7 @@ import tt_lib
 from loguru import logger
 from transformers import AutoTokenizer
 
-from models.t5.tt.t5_for_conditional_generation import (
+from models_wip.t5.tt.t5_for_conditional_generation import (
     t5_small_for_conditional_generation,
     t5_base_for_conditional_generation,
     flan_t5_small_for_conditional_generation,

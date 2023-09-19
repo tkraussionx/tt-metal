@@ -20,7 +20,7 @@ from models.utility_functions import (
     comp_allclose,
 )
 
-from models.trocr.tt.trocr_embed_tokens import TtTrOCREmbedTokens
+from models_wip.trocr.tt.trocr_embed_tokens import TtTrOCREmbedTokens
 
 
 @pytest.mark.parametrize(

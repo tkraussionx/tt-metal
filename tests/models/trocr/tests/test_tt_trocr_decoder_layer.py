@@ -20,7 +20,7 @@ from models.utility_functions import (
     comp_allclose,
 )
 
-from models.trocr.tt.trocr_decoder_layer import TtTrOCRDecoderLayer
+from models_wip.trocr.tt.trocr_decoder_layer import TtTrOCRDecoderLayer
 
 
 @pytest.mark.parametrize(

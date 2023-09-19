@@ -13,7 +13,7 @@ from models.utility_functions import (
     tt2torch_tensor,
 )
 from models.utility_functions import comp_pcc
-from models.t5.tt.t5_model import TtT5Model
+from models_wip.t5.tt.t5_model import TtT5Model
 
 
 def run_test_T5Model_inference(device, use_attention_mask, model_name):

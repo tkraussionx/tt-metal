@@ -15,7 +15,7 @@ from models.utility_functions import (
     enable_persistent_kernel_cache,
 )
 from models.utility_functions import prep_report, Profiler
-from models.whisper.tt.whisper_model import TtWhisperModel
+from models_wip.whisper.tt.whisper_model import TtWhisperModel
 
 from models.utility_functions import (
     torch2tt_tensor,

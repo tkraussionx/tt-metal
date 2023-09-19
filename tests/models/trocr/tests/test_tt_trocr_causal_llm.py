@@ -11,7 +11,7 @@ from transformers import VisionEncoderDecoderModel
 
 import tt_lib
 
-from models.trocr.trocr_utils import GenerationMixin
+from models_wip.trocr.trocr_utils import GenerationMixin
 
 
 @pytest.mark.parametrize(

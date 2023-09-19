@@ -10,7 +10,7 @@ from torchvision.models.detection import (
     ssdlite320_mobilenet_v3_large as pretrained,
 )
 from models.utility_functions import comp_pcc
-from tests.models.ssd.reference.ssd_head import (
+from tests.models_wip.ssd.reference.ssd_head import (
     ssdlite320_mobilenet_v3_large,
 )
 

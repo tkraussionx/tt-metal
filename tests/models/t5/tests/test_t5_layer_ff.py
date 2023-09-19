@@ -13,7 +13,7 @@ from models.utility_functions import (
     tt2torch_tensor,
 )
 from models.utility_functions import comp_pcc
-from models.t5.tt.t5_layer_ff import TtT5LayerFF
+from models_wip.t5.tt.t5_layer_ff import TtT5LayerFF
 
 
 def run_test_T5LayerFF_inference(device, model_name, input_h, input_w):

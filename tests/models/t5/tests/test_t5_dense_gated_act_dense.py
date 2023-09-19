@@ -13,7 +13,7 @@ from models.utility_functions import (
     tt2torch_tensor,
 )
 from models.utility_functions import comp_pcc
-from models.t5.tt.t5_dense_gated_act_dense import TtT5DenseGatedActDense
+from models_wip.t5.tt.t5_dense_gated_act_dense import TtT5DenseGatedActDense
 
 
 def run_test_T5DenseGatedActDense_inference(device):

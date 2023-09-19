@@ -13,7 +13,7 @@ from models.utility_functions import (
     tt2torch_tensor,
 )
 
-from models.whisper.tt.whisper_attention import TtWhisperAttention
+from models_wip.whisper.tt.whisper_attention import TtWhisperAttention
 from models.utility_functions import (
     comp_allclose,
     comp_pcc,

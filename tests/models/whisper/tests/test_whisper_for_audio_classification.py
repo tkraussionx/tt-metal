@@ -13,7 +13,7 @@ from models.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from models.whisper.tt.whisper_for_audio_classification import (
+from models_wip.whisper.tt.whisper_for_audio_classification import (
     TtWhisperForAudioClassification,
 )
 from models.utility_functions import (

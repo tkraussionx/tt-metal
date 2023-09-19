@@ -14,8 +14,8 @@ from models.utility_functions import (
     prep_report,
     torch2tt_tensor,
 )
-from models.ConvNet_MNIST.tt.convnet_mnist import convnet_mnist
-from models.ConvNet_MNIST.convnet_mnist_utils import get_test_data
+from models_wip.ConvNet_MNIST.tt.convnet_mnist import convnet_mnist
+from models_wip.ConvNet_MNIST.convnet_mnist_utils import get_test_data
 
 
 @pytest.mark.parametrize(
