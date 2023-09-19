@@ -9,3 +9,6 @@ fi
 
 # This must run in slow dispatch mode
 pytest ${TT_METAL_HOME}/tests/tt_eager/python_api_testing/sweep_tests/pytests/tt_dnn/
+
+pytest $TT_METAL_HOME/tests/tt_eager/python_api_testing/unit_testing/test_complex.py
+

@@ -29,6 +29,7 @@
 #include "tt_dnn/op_library/auto_format.hpp"
 #include "tt_dnn/op_library/nlp_tms/nlp_tms.hpp"
 #include "tt_dnn/op_library/composite/composite_ops.hpp"
+#include "tt_dnn/op_library/complex/complex_ops.hpp"
 #include "tt_dnn/op_library/split/split_last_dim_two_chunks_tiled.hpp"
 #include "tt_dnn/op_library/clone/clone_op.hpp"
 #include "tt_dnn/op_library/move/move_op.hpp"
@@ -1459,6 +1460,23 @@ void TensorModule(py::module &m_tensor) {
         R"doc(Returns tensor with the polyval of all of elements of the input tensor ``{0}`` with coefficients ``{1}``.)doc",
         R"doc("coefficients value with highest degree first", "List of float", "List size > 0")doc"
     );
+
+    // *** complex operations ***
+    detail::bind_unary_op(m_tensor, "real", &tt::tt_metal::real, R"doc(Returns real portion of complex tensor ``{0}``.)doc");
+    detail::bind_unary_op(m_tensor, "imag", &tt::tt_metal::imag, R"doc(Returns imag portion of complex tensor ``{0}``.)doc");
+    detail::bind_unary_op(m_tensor, "is_real", &tt::tt_metal::is_real, R"doc(Returns true if complex tensor ``{0}``  is real.)doc");
+    detail::bind_unary_op(m_tensor, "is_imag", &tt::tt_metal::is_imag, R"doc(Returns true if complex tensor ``{0}``  is imaginary.)doc");
+    detail::bind_unary_op(m_tensor, "complex_abs", &tt::tt_metal::complex_abs, R"doc(Returns elementwise abs value of complex tensor ``{0}``.)doc");
+    detail::bind_unary_op(m_tensor, "conj", &tt::tt_metal::conj, R"doc(Returns elementwise complex conjugate of tensor ``{0}``.)doc");
+    detail::bind_unary_op(m_tensor, "complex_recip", &tt::tt_metal::complex_recip, R"doc(Returns elementwise reciprocal of complex tensor ``{0}``.)doc");
+
+    m_tensor.def("complex_mul", &tt::tt_metal::complex_mul,
+		 py::arg("input_a"), py::arg("input_b"),
+		 py::arg("output_mem_config").noconvert() = std::nullopt,R"doc(Perform an eltwise-binary divide (``{0} * {1}``) on two complex tensors.)doc");
+
+    m_tensor.def("complex_div", &tt::tt_metal::complex_div,
+		 py::arg("input_a"), py::arg("input_b"),
+		 py::arg("output_mem_config").noconvert() = std::nullopt,R"doc(Perform an eltwise-binary divide (``{0} / {1}``) on two complex tensors.)doc");
 
 
     // *** bcast binary tied to unary ***
