@@ -7,7 +7,7 @@ from transformers import AutoImageProcessor as HF_AutoImageProcessor
 from loguru import logger
 import torch
 
-from models_wip.vit.tt.modeling_vit import TtViTEncoder
+from models.models_wip.vit.tt.modeling_vit import TtViTEncoder
 import tt_lib
 
 from models.utility_functions import (

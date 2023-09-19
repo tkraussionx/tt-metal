@@ -12,7 +12,7 @@ from models.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from models_wip.whisper.tt.whisper_decoder_layer import (
+from models.models_wip.whisper.tt.whisper_decoder_layer import (
     TtWhisperDecoderLayer,
 )
 from models.utility_functions import (

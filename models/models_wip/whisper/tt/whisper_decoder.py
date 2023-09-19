@@ -16,8 +16,8 @@ from typing import Optional, Tuple, Union
 from transformers import WhisperConfig
 
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor
-from models_wip.whisper.tt.whisper_common import linear
-from models_wip.whisper.tt.whisper_decoder_layer import TtWhisperDecoderLayer
+from models.models_wip.whisper.tt.whisper_common import linear
+from models.models_wip.whisper.tt.whisper_decoder_layer import TtWhisperDecoderLayer
 
 
 class WhisperPositionalEmbedding(nn.Embedding):

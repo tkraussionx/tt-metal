@@ -10,9 +10,9 @@ from typing import Optional, Tuple, Union
 
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor
 
-from models_wip.whisper.tt.whisper_common import linear
+from models.models_wip.whisper.tt.whisper_common import linear
 
-from models_wip.whisper.tt.whisper_encoder import TtWhisperEncoder
+from models.models_wip.whisper.tt.whisper_encoder import TtWhisperEncoder
 
 # from tt_lib.fallback_ops import fallback_ops
 import tt_lib.fallback_ops as fallback_ops

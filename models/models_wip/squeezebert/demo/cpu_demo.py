@@ -5,7 +5,7 @@
 import torch
 from loguru import logger
 
-from models_wip.squeezebert.squeezebert_utils import get_answer
+from models.models_wip.squeezebert.squeezebert_utils import get_answer
 from transformers import SqueezeBertForQuestionAnswering, AutoTokenizer
 
 

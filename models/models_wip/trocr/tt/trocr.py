@@ -2,7 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-from models_wip.trocr.trocr_utils import GenerationMixin
+from models.models_wip.trocr.trocr_utils import GenerationMixin
 
 from transformers import VisionEncoderDecoderModel
 

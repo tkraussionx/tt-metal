@@ -20,9 +20,9 @@ from datasets import load_dataset
 
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor
 
-from models_wip.whisper.tt.whisper_common import linear
+from models.models_wip.whisper.tt.whisper_common import linear
 
-from models_wip.whisper.tt.whisper_model import TtWhisperModel
+from models.models_wip.whisper.tt.whisper_model import TtWhisperModel
 
 
 def shift_tokens_right(

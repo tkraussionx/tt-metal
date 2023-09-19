@@ -11,15 +11,15 @@ import tt_lib as ttl
 
 from typing import Optional
 
-from models_wip.stable_diffusion.tt.residual_block import TtResnetBlock2D as ResnetBlock2D
-from models_wip.stable_diffusion.tt.upsample_2d import TtUpsample2D as Upsample2D
-from models_wip.stable_diffusion.tt.downsample_2d import TtDownsample2D as Downsample2D
-from models_wip.stable_diffusion.tt.transformer_2d import (
+from models.models_wip.stable_diffusion.tt.residual_block import TtResnetBlock2D as ResnetBlock2D
+from models.models_wip.stable_diffusion.tt.upsample_2d import TtUpsample2D as Upsample2D
+from models.models_wip.stable_diffusion.tt.downsample_2d import TtDownsample2D as Downsample2D
+from models.models_wip.stable_diffusion.tt.transformer_2d import (
     TtTransformer2DModel as Transformer2DModel,
 )
 
 from tt_lib.fallback_ops import fallback_ops
-from models_wip.stable_diffusion.tt.experimental_ops import concat
+from models.models_wip.stable_diffusion.tt.experimental_ops import concat
 
 ####################### UNet Mid Block Cross Attention #######################
 

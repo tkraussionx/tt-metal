@@ -36,9 +36,9 @@ from models.utility_functions import (
     torch_to_tt_tensor_rm,
     tt_to_torch_tensor,
 )
-from models_wip.vit.tt.configuration_vit import ViTConfig
-from models_wip.vit.tt.activations import ACT2FN
-from models_wip.vit.vit_utils import make_address, make_linear
+from models.models_wip.vit.tt.configuration_vit import ViTConfig
+from models.models_wip.vit.tt.activations import ACT2FN
+from models.models_wip.vit.vit_utils import make_address, make_linear
 
 tt_tensor = tt_lib.tensor.Tensor
 

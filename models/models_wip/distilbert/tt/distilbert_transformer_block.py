@@ -9,10 +9,10 @@ from models.utility_functions import (
     torch_to_tt_tensor_rm,
 )
 import tt_lib
-from models_wip.distilbert.tt.distilbert_multihead_self_attention import (
+from models.models_wip.distilbert.tt.distilbert_multihead_self_attention import (
     TtMultiHeadSelfAttention,
 )
-from models_wip.distilbert.tt.distilbert_ffn import TtFFN
+from models.models_wip.distilbert.tt.distilbert_ffn import TtFFN
 
 
 class TtTransformerBlock(nn.Module):

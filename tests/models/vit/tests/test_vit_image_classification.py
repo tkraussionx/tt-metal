@@ -14,7 +14,7 @@ from models.utility_functions import (
 )
 
 from models.utility_functions import comp_pcc, comp_allclose_and_pcc
-from models_wip.vit.tt.modeling_vit import TtViTForImageClassification
+from models.models_wip.vit.tt.modeling_vit import TtViTForImageClassification
 
 
 def test_vit_image_classification(hf_cat_image_sample_input, pcc=0.95):

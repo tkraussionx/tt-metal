@@ -13,8 +13,8 @@ from models.utility_functions import (
 import tt_lib
 from dataclasses import dataclass
 
-from models_wip.distilbert.tt.distilbert_embedding import TtDistilBert_Embeddings
-from models_wip.distilbert.tt.distilbert_transformer import TtTransformer
+from models.models_wip.distilbert.tt.distilbert_embedding import TtDistilBert_Embeddings
+from models.models_wip.distilbert.tt.distilbert_transformer import TtTransformer
 
 
 @dataclass

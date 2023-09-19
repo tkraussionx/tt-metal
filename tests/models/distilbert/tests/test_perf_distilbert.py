@@ -19,7 +19,7 @@ from transformers import (
 )
 from transformers import AutoTokenizer
 
-from models_wip.distilbert.tt.distilbert import distilbert_for_question_answering
+from models.models_wip.distilbert.tt.distilbert import distilbert_for_question_answering
 
 BATCH_SIZE = 1
 

@@ -6,7 +6,7 @@ import torch
 import tt_lib
 
 from tt_lib.fallback_ops import fallback_ops
-from models_wip.EfficientNet.tt.efficientnet_conv import TtEfficientnetConv2d
+from models.models_wip.EfficientNet.tt.efficientnet_conv import TtEfficientnetConv2d
 
 
 class TtEfficientnetSqueezeExcitation(torch.nn.Module):

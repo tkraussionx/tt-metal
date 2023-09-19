@@ -6,24 +6,24 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch.nn as nn
 
-from models_wip.stable_diffusion.sd_utils import make_linear
-from models_wip.stable_diffusion.tt.embeddings import (
+from models.models_wip.stable_diffusion.sd_utils import make_linear
+from models.models_wip.stable_diffusion.tt.embeddings import (
     TtTimestepEmbedding as TimestepEmbedding,
 )
-from models_wip.stable_diffusion.tt.downblock_2d import TtDownBlock2D as DownBlock2D
-from models_wip.stable_diffusion.tt.upblock_2d import TtUpBlock2D as UpBlock2D
-from models_wip.stable_diffusion.tt.unet_2d_blocks import (
+from models.models_wip.stable_diffusion.tt.downblock_2d import TtDownBlock2D as DownBlock2D
+from models.models_wip.stable_diffusion.tt.upblock_2d import TtUpBlock2D as UpBlock2D
+from models.models_wip.stable_diffusion.tt.unet_2d_blocks import (
     TtUNetMidBlock2DCrossAttn as UNetMidBlock2DCrossAttn,
 )
-from models_wip.stable_diffusion.tt.unet_2d_blocks import (
+from models.models_wip.stable_diffusion.tt.unet_2d_blocks import (
     TtCrossAttnDownBlock2D as CrossAttnDownBlock2D,
 )
-from models_wip.stable_diffusion.tt.unet_2d_blocks import (
+from models.models_wip.stable_diffusion.tt.unet_2d_blocks import (
     TtCrossAttnUpBlock2D as CrossAttnUpBlock2D,
 )
 import tt_lib as ttl
 from tt_lib.fallback_ops import fallback_ops
-from models_wip.stable_diffusion.tt.experimental_ops import Conv2d
+from models.models_wip.stable_diffusion.tt.experimental_ops import Conv2d
 
 
 def get_down_block(

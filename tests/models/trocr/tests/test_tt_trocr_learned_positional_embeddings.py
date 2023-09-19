@@ -19,7 +19,7 @@ from models.utility_functions import (
     comp_allclose,
 )
 
-from models_wip.trocr.tt.trocr_learned_positional_embeddings import (
+from models.models_wip.trocr.tt.trocr_learned_positional_embeddings import (
     TtTrOCRLearnedPositionalEmbedding,
 )
 

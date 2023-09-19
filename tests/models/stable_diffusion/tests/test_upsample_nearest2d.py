@@ -13,7 +13,7 @@ from models.utility_functions import (
     comp_pcc,
     comp_allclose_and_pcc,
 )
-from models_wip.stable_diffusion.tt.upsample_nearest2d import TtUpsampleNearest2d
+from models.models_wip.stable_diffusion.tt.upsample_nearest2d import TtUpsampleNearest2d
 
 
 def test_run_upsample_nearest_inference():

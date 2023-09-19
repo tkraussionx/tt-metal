@@ -16,7 +16,7 @@ from models.utility_functions import (
     comp_pcc,
 )
 
-from models_wip.ssd.tt.ssd import TtSSD
+from models.models_wip.ssd.tt.ssd import TtSSD
 
 
 @pytest.mark.parametrize(

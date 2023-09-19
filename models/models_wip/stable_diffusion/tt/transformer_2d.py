@@ -11,11 +11,11 @@ import torch
 
 import tt_lib as ttl
 from tt_lib.fallback_ops import fallback_ops
-from models_wip.stable_diffusion.tt.cross_attention import TtCrossAttention
-from models_wip.stable_diffusion.tt.feedforward import TtFeedForward
-from models_wip.stable_diffusion.sd_utils import make_linear
+from models.models_wip.stable_diffusion.tt.cross_attention import TtCrossAttention
+from models.models_wip.stable_diffusion.tt.feedforward import TtFeedForward
+from models.models_wip.stable_diffusion.sd_utils import make_linear
 from models.utility_functions import pad_by_zero, torch2tt_tensor, torch_to_tt_tensor_rm
-from models_wip.stable_diffusion.tt.experimental_ops import Conv2d
+from models.models_wip.stable_diffusion.tt.experimental_ops import Conv2d
 
 
 class TtBasicTransformerBlock(nn.Module):

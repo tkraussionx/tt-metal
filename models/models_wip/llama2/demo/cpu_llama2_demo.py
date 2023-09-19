@@ -5,7 +5,7 @@
 import sys
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from models_wip.llama2.llama2_utils import get_logits_processor
+from models.models_wip.llama2.llama2_utils import get_logits_processor
 
 from loguru import logger
 import pytest

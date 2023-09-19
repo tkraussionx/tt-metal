@@ -2,7 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-from models_wip.vit.tt.modeling_vit import TtViTAttention
+from models.models_wip.vit.tt.modeling_vit import TtViTAttention
 from transformers import ViTForImageClassification as HF_ViTForImageClassication
 from loguru import logger
 import torch

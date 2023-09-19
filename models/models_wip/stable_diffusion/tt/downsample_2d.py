@@ -8,7 +8,7 @@ import torch
 
 import tt_lib as ttl
 from tt_lib.fallback_ops import fallback_ops
-from models_wip.stable_diffusion.tt.experimental_ops import Conv2d
+from models.models_wip.stable_diffusion.tt.experimental_ops import Conv2d
 
 
 class TtDownsample2D(nn.Module):

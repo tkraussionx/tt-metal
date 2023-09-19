@@ -14,7 +14,7 @@ from models.utility_functions import (
     tt2torch_tensor,
 )
 from models.utility_functions import comp_pcc
-from models_wip.t5.tt.t5_attention import (
+from models.models_wip.t5.tt.t5_attention import (
     TtT5Attention,
     t5_unshape_pt,
     t5_unshape_tt,

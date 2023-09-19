@@ -22,8 +22,8 @@ from models.utility_functions import (
     comp_pcc,
     comp_allclose_and_pcc,
 )
-from models_wip.stable_diffusion.tt.unet_2d_blocks import TtCrossAttnDownBlock2D
-from models_wip.stable_diffusion.tt.experimental_ops import UseDeviceConv
+from models.models_wip.stable_diffusion.tt.unet_2d_blocks import TtCrossAttnDownBlock2D
+from models.models_wip.stable_diffusion.tt.experimental_ops import UseDeviceConv
 
 
 

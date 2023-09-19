@@ -10,7 +10,7 @@ from loguru import logger
 import tt_lib as ttl
 from models.utility_functions import torch_to_tt_tensor, torch_to_tt_tensor_rm, tt_to_torch_tensor
 from models.utility_functions import comp_pcc, comp_allclose_and_pcc
-from models_wip.stable_diffusion.tt.cross_attention import TtCrossAttention
+from models.models_wip.stable_diffusion.tt.cross_attention import TtCrossAttention
 
 
 def test_cross_attn_inference():

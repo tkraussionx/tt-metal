@@ -2,7 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-from models_wip.distilbert.tt.distilbert_for_question_answering import (
+from models.models_wip.distilbert.tt.distilbert_for_question_answering import (
     TtDistilBertForQuestionAnswering,
 )
 from transformers import (

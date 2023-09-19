@@ -67,7 +67,7 @@ def create_custom_forward(module):
     return custom_forward
 
 
-from models_wip.trocr.tt.trocr_for_causal_llm import TtTrOCRForCausalLM
+from models.models_wip.trocr.tt.trocr_for_causal_llm import TtTrOCRForCausalLM
 
 
 class GenerationConfig:

@@ -16,7 +16,7 @@ from models.utility_functions import (
     comp_allclose,
     comp_pcc,
 )
-from models_wip.ssd.tt.ssd_mobilenetv3_features import (
+from models.models_wip.ssd.tt.ssd_mobilenetv3_features import (
     TtMobileNetV3Features,
 )
 

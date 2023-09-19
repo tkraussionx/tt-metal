@@ -11,7 +11,7 @@ from models.utility_functions import (
     comp_allclose,
     comp_pcc,
 )
-from models_wip.distilbert.tt.distilbert_transformer_block import TtTransformerBlock
+from models.models_wip.distilbert.tt.distilbert_transformer_block import TtTransformerBlock
 from transformers import (
     DistilBertForQuestionAnswering as HF_DistilBertForQuestionAnswering,
 )

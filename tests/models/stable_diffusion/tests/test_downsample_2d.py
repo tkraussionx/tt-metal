@@ -12,7 +12,7 @@ import tt_lib as ttl
 from models.utility_functions import torch_to_tt_tensor, tt_to_torch_tensor
 from models.utility_functions import comp_allclose_and_pcc, comp_pcc
 
-from models_wip.stable_diffusion.tt.downsample_2d import TtDownsample2D
+from models.models_wip.stable_diffusion.tt.downsample_2d import TtDownsample2D
 
 def test_run_downsample2d_inference():
     # Initialize the device

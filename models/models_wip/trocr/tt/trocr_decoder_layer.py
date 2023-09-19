@@ -8,8 +8,8 @@ from typing import Optional, Tuple
 import tt_lib
 from models.utility_functions import torch_to_tt_tensor_rm
 from models.helper_funcs import Linear
-from models_wip.trocr.tt.trocr_attention import TtTrOCRAttention
-from models_wip.trocr.tt.trocr_configuration import TtTrOCRConfig
+from models.models_wip.trocr.tt.trocr_attention import TtTrOCRAttention
+from models.models_wip.trocr.tt.trocr_configuration import TtTrOCRConfig
 
 
 class TtTrOCRDecoderLayer(nn.Module):

@@ -20,7 +20,7 @@ from models.utility_functions import (
     comp_allclose,
 )
 
-from models_wip.trocr.tt.trocr_attention import TtTrOCRAttention
+from models.models_wip.trocr.tt.trocr_attention import TtTrOCRAttention
 
 
 @pytest.mark.parametrize(

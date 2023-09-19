@@ -7,7 +7,7 @@ from loguru import logger
 import tt_lib
 from models.utility_functions import torch_to_tt_tensor_rm
 
-from models_wip.ssd.tt.ssd_lite import *
+from models.models_wip.ssd.tt.ssd_lite import *
 import torchvision.transforms as transforms
 from torchvision.utils import save_image
 from PIL import Image

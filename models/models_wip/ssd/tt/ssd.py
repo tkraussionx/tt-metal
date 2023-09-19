@@ -8,17 +8,17 @@ import tt_lib
 import tt_lib.fallback_ops as fallback_ops
 from typing import List, Optional, Tuple, Dict, OrderedDict
 
-from models_wip.ssd.tt.ssd_backbone import (
+from models.models_wip.ssd.tt.ssd_backbone import (
     TtSSDLiteFeatureExtractorMobileNet,
 )
-from models_wip.ssd.tt.ssd_box_generator import (
+from models.models_wip.ssd.tt.ssd_box_generator import (
     TtDefaultBoxGenerator,
 )
-from models_wip.ssd.tt.ssd_lite_head import TtSSDLiteHead
+from models.models_wip.ssd.tt.ssd_lite_head import TtSSDLiteHead
 
 from models.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor
-from models_wip.ssd.tt.ssd_backbone import TtSSDLiteFeatureExtractorMobileNet
-from models_wip.ssd.tt.ssd_box_generator import TtDefaultBoxGenerator
+from models.models_wip.ssd.tt.ssd_backbone import TtSSDLiteFeatureExtractorMobileNet
+from models.models_wip.ssd.tt.ssd_box_generator import TtDefaultBoxGenerator
 from torchvision.ops.boxes import batched_nms, clip_boxes_to_image
 from torchvision.models.detection._utils import BoxCoder, Matcher, SSDMatcher
 from torchvision.models.detection.transform import GeneralizedRCNNTransform

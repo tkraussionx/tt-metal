@@ -11,7 +11,7 @@ from torchvision.utils import save_image
 
 import tt_lib
 
-from models_wip.trocr.tt.trocr import trocr_causal_llm
+from models.models_wip.trocr.tt.trocr import trocr_causal_llm
 
 
 @pytest.mark.parametrize(

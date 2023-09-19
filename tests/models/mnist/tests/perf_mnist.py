@@ -9,7 +9,7 @@ from loguru import logger
 import tt_lib
 import pytest
 
-from models_wip.mnist.tt.mnist_model import mnist_model
+from models.models_wip.mnist.tt.mnist_model import mnist_model
 from models.utility_functions import (
     torch2tt_tensor,
     disable_persistent_kernel_cache,

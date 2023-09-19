@@ -10,8 +10,8 @@ import numpy as np
 import tt_lib as ttl
 from tt_lib.fallback_ops import fallback_ops
 
-from models_wip.stable_diffusion.tt.upsample_nearest2d import TtUpsampleNearest2d
-from models_wip.stable_diffusion.tt.experimental_ops import Conv2d
+from models.models_wip.stable_diffusion.tt.upsample_nearest2d import TtUpsampleNearest2d
+from models.models_wip.stable_diffusion.tt.experimental_ops import Conv2d
 
 
 class TtUpsample2D(nn.Module):

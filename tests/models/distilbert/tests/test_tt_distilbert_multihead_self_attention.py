@@ -11,7 +11,7 @@ from models.utility_functions import (
     comp_allclose,
     comp_pcc,
 )
-from models_wip.distilbert.tt.distilbert_multihead_self_attention import (
+from models.models_wip.distilbert.tt.distilbert_multihead_self_attention import (
     TtMultiHeadSelfAttention,
 )
 from transformers import (

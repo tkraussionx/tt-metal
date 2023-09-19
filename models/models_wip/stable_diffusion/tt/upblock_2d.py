@@ -10,9 +10,9 @@ import torch
 import tt_lib as ttl
 from tt_lib.fallback_ops import fallback_ops
 
-from models_wip.stable_diffusion.tt.residual_block import TtResnetBlock2D
-from models_wip.stable_diffusion.tt.upsample_2d import TtUpsample2D
-from models_wip.stable_diffusion.tt.experimental_ops import concat
+from models.models_wip.stable_diffusion.tt.residual_block import TtResnetBlock2D
+from models.models_wip.stable_diffusion.tt.upsample_2d import TtUpsample2D
+from models.models_wip.stable_diffusion.tt.experimental_ops import concat
 
 
 class TtUpBlock2D(nn.Module):

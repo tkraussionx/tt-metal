@@ -13,7 +13,7 @@ from models.utility_functions import (
     tt2torch_tensor,
 )
 from models.utility_functions import comp_pcc
-from models_wip.t5.tt.t5_layer_self_attention import TtT5LayerSelfAttention
+from models.models_wip.t5.tt.t5_layer_self_attention import TtT5LayerSelfAttention
 
 
 def run_test_T5LayerSelfAttention_inference(device, model_name, input_h, input_w):

@@ -9,8 +9,8 @@ import math
 from dataclasses import dataclass
 from typing import List, Callable, Optional
 
-from models_wip.EfficientNet.tt.efficientnet_conv import TtEfficientnetConv2dNormActivation
-from models_wip.EfficientNet.tt.efficientnet_squeeze_excitation import (
+from momodels.models_wipdels_wip.EfficientNet.tt.efficientnet_conv import TtEfficientnetConv2dNormActivation
+from models.models_wip.EfficientNet.tt.efficientnet_squeeze_excitation import (
     TtEfficientnetSqueezeExcitation,
 )
 

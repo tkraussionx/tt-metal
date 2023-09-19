@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from typing import List, Optional, Tuple
-from models_wip.ssd.tt.ssd import TtSSD
+from models.models_wip.ssd.tt.ssd import TtSSD
 from torchvision.models.detection import (
     SSDLite320_MobileNet_V3_Large_Weights,
     ssdlite320_mobilenet_v3_large as pretrained,

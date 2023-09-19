@@ -17,7 +17,7 @@ from models.utility_functions import (
 )
 
 
-from models_wip.ssd.tt.ssd_backbone import (
+from models.models_wip.ssd.tt.ssd_backbone import (
     TtSSDLiteFeatureExtractorMobileNet,
 )
 

@@ -5,7 +5,7 @@
 import torch
 import tt_lib
 
-from models_wip.ConvNet_MNIST.reference.convnet import ConvNet
+from models.models_wip.ConvNet_MNIST.reference.convnet import ConvNet
 from tt_lib.fallback_ops import fallback_ops
 from models.utility_functions import torch2tt_tensor
 

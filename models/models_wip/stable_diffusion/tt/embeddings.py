@@ -9,7 +9,7 @@ import torch
 
 
 import tt_lib as ttl
-from models_wip.stable_diffusion.sd_utils import make_linear
+from models.models_wip.stable_diffusion.sd_utils import make_linear
 from tt_lib.fallback_ops import fallback_ops
 
 class TtTimestepEmbedding(nn.Module):

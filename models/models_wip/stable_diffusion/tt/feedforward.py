@@ -9,7 +9,7 @@ from typing import Optional
 from tt_lib.fallback_ops import fallback_ops
 
 import tt_lib as ttl
-from models_wip.stable_diffusion.sd_utils import make_linear
+from models.models_wip.stable_diffusion.sd_utils import make_linear
 
 
 class TtGEGLU(nn.Module):

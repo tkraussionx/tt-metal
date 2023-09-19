@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 import tt_lib
 from models.utility_functions import torch_to_tt_tensor_rm
-from models_wip.trocr.tt.trocr_decoder_wrapper import TtTrOCRDecoderWrapper
+from models.models_wip.trocr.tt.trocr_decoder_wrapper import TtTrOCRDecoderWrapper
 from models.helper_funcs import Linear
 
 

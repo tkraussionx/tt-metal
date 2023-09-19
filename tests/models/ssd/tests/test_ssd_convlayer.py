@@ -11,7 +11,7 @@ from models.utility_functions import (
     comp_allclose,
     comp_pcc,
 )
-from models_wip.ssd.tt.ssd_mobilenetv3_convlayer import (
+from models.models_wip.ssd.tt.ssd_mobilenetv3_convlayer import (
     TtMobileNetV3ConvLayer,
 )
 from torchvision.models.detection import (

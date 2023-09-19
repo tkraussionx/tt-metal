@@ -14,7 +14,7 @@ from models.utility_functions import (
 )
 
 from models.utility_functions import comp_pcc, comp_allclose_and_pcc
-from models_wip.vit.tt.modeling_vit import TtViTSelfAttention
+from models.models_wip.vit.tt.modeling_vit import TtViTSelfAttention
 
 
 def test_vit_selfattention(pcc=0.99):

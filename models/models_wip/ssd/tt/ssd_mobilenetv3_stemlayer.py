@@ -4,7 +4,7 @@
 
 import torch.nn as nn
 import tt_lib
-from models_wip.ssd.tt.ssd_mobilenetv3_convlayer import (
+from models.models_wip.ssd.tt.ssd_mobilenetv3_convlayer import (
     TtMobileNetV3ConvLayer,
 )
 

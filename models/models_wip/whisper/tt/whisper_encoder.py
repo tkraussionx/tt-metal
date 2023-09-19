@@ -17,7 +17,7 @@ from models.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from models_wip.whisper.tt.whisper_encoder_layer import (
+from models.models_wip.whisper.tt.whisper_encoder_layer import (
     TtWhisperEncoderLayer,
 )
 

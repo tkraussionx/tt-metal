@@ -9,8 +9,8 @@ from typing import (
 )
 import tt_lib
 
-from models_wip.ssd.tt.ssd_classification_head import TtSSDclassificationhead
-from models_wip.ssd.tt.ssd_regression_head import TtSSDregressionhead
+from models.models_wip.ssd.tt.ssd_classification_head import TtSSDclassificationhead
+from models.models_wip.ssd.tt.ssd_regression_head import TtSSDregressionhead
 
 
 class TtSSDLiteHead(nn.Module):

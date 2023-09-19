@@ -11,7 +11,7 @@ import tt_lib
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor, \
     comp_pcc, \
     get_oom_of_float
-from models_wip.mnist.tt.mnist_model import mnist_model
+from models.models_wip.mnist.tt.mnist_model import mnist_model
 
 
 def test_mnist_inference():

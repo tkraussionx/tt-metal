@@ -18,8 +18,8 @@ from models.utility_functions import (
 )
 from models.utility_functions import prep_report, Profiler
 import tt_lib as ttl
-from models_wip.stable_diffusion.tt.unet_2d_condition import UNet2DConditionModel as tt_unet_condition
-from models_wip.stable_diffusion.tt.experimental_ops import UseDeviceConv
+from models.models_wip.stable_diffusion.tt.unet_2d_condition import UNet2DConditionModel as tt_unet_condition
+from models.models_wip.stable_diffusion.tt.experimental_ops import UseDeviceConv
 
 NUM_INFERENCE_STEPS = 2  # Number of denoising steps
 BATCH_SIZE = 1

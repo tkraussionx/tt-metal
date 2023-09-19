@@ -19,7 +19,7 @@ from loguru import logger
 import tt_lib
 
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor
-from models_wip.mnist.tt.mnist_model import mnist_model
+from models.models_wip.mnist.tt.mnist_model import mnist_model
 
 
 def test_mnist_inference():

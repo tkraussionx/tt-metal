@@ -12,7 +12,7 @@ from models.utility_functions import (
     tt2torch_tensor,
     comp_pcc,
 )
-from models_wip.EfficientNet.tt.efficientnet_squeeze_excitation import (
+from models.models_wip.EfficientNet.tt.efficientnet_squeeze_excitation import (
     TtEfficientnetSqueezeExcitation,
 )
 

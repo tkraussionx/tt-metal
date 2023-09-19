@@ -9,8 +9,8 @@ from models.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from models_wip.t5.tt.t5_block import TtT5Block
-from models_wip.t5.tt.t5_layer_norm import TtT5LayerNorm
+from models.models_wip.t5.tt.t5_block import TtT5Block
+from models.models_wip.t5.tt.t5_layer_norm import TtT5LayerNorm
 
 
 class BaseModelOutputWithPastAndCrossAttentions:

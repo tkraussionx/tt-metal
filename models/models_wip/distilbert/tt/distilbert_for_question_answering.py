@@ -13,7 +13,7 @@ from models.utility_functions import (
 
 import tt_lib
 from dataclasses import dataclass
-from models_wip.distilbert.tt.distilbert_model import TtDistilBertModel
+from models.models_wip.distilbert.tt.distilbert_model import TtDistilBertModel
 from models.helper_funcs import Linear as TtLinear
 
 

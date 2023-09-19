@@ -4,7 +4,7 @@
 
 import torch.nn as nn
 
-from models_wip.trocr.tt.trocr_decoder import TtTrOCRDecoder
+from models.models_wip.trocr.tt.trocr_decoder import TtTrOCRDecoder
 
 
 class TtTrOCRDecoderWrapper(nn.Module):

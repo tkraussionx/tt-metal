@@ -12,11 +12,11 @@ from models.utility_functions import (
     tt2torch_tensor,
     comp_pcc,
 )
-from models_wip.EfficientNet.tt.efficientnet_mbconv import (
+from models.models_wip.EfficientNet.tt.efficientnet_mbconv import (
     TtEfficientnetMbConv,
     MBConvConfig,
 )
-from models_wip.EfficientNet.tt.efficientnet_model import reference_efficientnet_lite0
+from models.models_wip.EfficientNet.tt.efficientnet_model import reference_efficientnet_lite0
 
 
 def run_efficientnet_mbconv(

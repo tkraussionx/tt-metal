@@ -9,9 +9,9 @@ from models.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from models_wip.t5.tt.t5_layer_self_attention import TtT5LayerSelfAttention
-from models_wip.t5.tt.t5_layer_cross_attention import TtT5LayerCrossAttention
-from models_wip.t5.tt.t5_layer_ff import TtT5LayerFF
+from models.models_wip.t5.tt.t5_layer_self_attention import TtT5LayerSelfAttention
+from models.models_wip.t5.tt.t5_layer_cross_attention import TtT5LayerCrossAttention
+from models.models_wip.t5.tt.t5_layer_ff import TtT5LayerFF
 
 
 class TtT5Block(nn.Module):

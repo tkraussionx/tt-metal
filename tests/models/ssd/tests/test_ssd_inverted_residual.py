@@ -11,7 +11,7 @@ from models.utility_functions import (
     comp_allclose,
     comp_pcc,
 )
-from models_wip.ssd.tt.ssd_mobilenetv3_inverted_residual import (
+from models.models_wip.ssd.tt.ssd_mobilenetv3_inverted_residual import (
     TtMobileNetV3InvertedResidual,
 )
 from torchvision.models.detection import (

@@ -14,7 +14,7 @@ from models.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from models_wip.t5.tt.t5_stack import TtT5Stack
+from models.models_wip.t5.tt.t5_stack import TtT5Stack
 from loguru import logger
 from transformers import T5ForConditionalGeneration
 

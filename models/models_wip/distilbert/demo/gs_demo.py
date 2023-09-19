@@ -14,7 +14,7 @@ from models.utility_functions import (
 
 from transformers import AutoTokenizer
 import tt_lib
-from models_wip.distilbert.tt.distilbert import *
+from models.models_wip.distilbert.tt.distilbert import *
 
 
 @pytest.mark.parametrize(

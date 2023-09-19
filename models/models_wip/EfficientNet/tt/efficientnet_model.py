@@ -15,14 +15,14 @@ from models.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from models_wip.EfficientNet.tt.efficientnet_conv import TtEfficientnetConv2dNormActivation
-from models_wip.EfficientNet.reference.efficientnet_lite import build_efficientnet_lite
-from models_wip.EfficientNet.tt.efficientnet_mbconv import (
+from models.models_wip.EfficientNet.tt.efficientnet_conv import TtEfficientnetConv2dNormActivation
+from models.models_wip.EfficientNet.reference.efficientnet_lite import build_efficientnet_lite
+from models.models_wip.EfficientNet.tt.efficientnet_mbconv import (
     TtEfficientnetMbConv,
     _MBConvConfig,
     MBConvConfig,
 )
-from models_wip.EfficientNet.tt.efficientnet_fused_mbconv import (
+from models.models_wip.EfficientNet.tt.efficientnet_fused_mbconv import (
     TtEfficientnetFusedMBConv,
     FusedMBConvConfig,
 )
