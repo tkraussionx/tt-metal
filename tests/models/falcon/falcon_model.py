@@ -254,7 +254,7 @@ class TtFalconModelShared(torch.nn.Module):
         # layer_output = nn.functional.layer_norm(tt2torch_tensor(layer_output).to(torch.float32), (layer_output.shape()[-1],), weight=tt2torch_tensor(self.layernorm_gamma).to(torch.float32)[0, 0, 0], bias=tt2torch_tensor(self.layernorm_beta).to(torch.float32)[0, 0, 0])
         # layer_output = tt_lib.tensor.Tensor(layer_output, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
 
-        dump_tensor("falcon_output", "tt", tt2torch_tensor(layer_output))
+        # dump_tensor("falcon_output", "tt", tt2torch_tensor(layer_output))
 
         return layer_output, presents
 
