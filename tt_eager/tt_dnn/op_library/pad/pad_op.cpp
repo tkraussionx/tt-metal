@@ -127,7 +127,17 @@ operation::ProgramWithCallbacks pad_rm_reader_writer(const Tensor &a,
                                        pad_value_const_buffer_nbytes,
                                        packed_pad_value,
                                        start_src_stick_id,
-                                       start_dst_stick_id};
+                                       start_dst_stick_id,
+                                       0,
+                                       0,
+                                       0,
+                                       output_shape[2],
+                                       a.shape()[2],
+                                       unpadded_row_size_nbytes,
+                                       padded_row_size_nbytes,
+                                       0,
+                                       a.shape()[0]
+                                       };
     vector<uint32_t> writer_rt_args = reader_rt_args;
     SetRuntimeArgs(program,
                    reader_kernel_id,

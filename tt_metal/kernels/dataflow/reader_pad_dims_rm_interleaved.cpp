@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 
+// #include "debug_print.h"
+
 
 inline __attribute__((always_inline))
 void fill_with_val_async(const uint64_t in_noc_addr, const uint32_t begin_addr, const uint32_t begin_addr_aligned, uint32_t size_nbytes, uint32_t chunk_nbytes, uint16_t pad_value) {
@@ -46,6 +48,7 @@ void kernel_main() {
     const uint32_t num_local_Y                  = get_arg_val<uint32_t>(21);
     const uint32_t num_local_unpadded_Y         = get_arg_val<uint32_t>(22);
     const uint32_t full_unpadded_X_nbytes       = get_arg_val<uint32_t>(23);
+    const uint32_t num_local_W                  = get_arg_val<uint32_t>(26);
 
     constexpr bool src0_is_dram = get_compile_time_arg_val(0) == 1;
     #define src_stick_size_is_pow2 get_compile_time_arg_val(2) == 1
@@ -78,7 +81,7 @@ void kernel_main() {
     uint16_t pad_value = pad_value_packed >> 16;
 
     uint32_t src_stick_id = start_src_stick_id;
-    for (uint32_t w = 0; w < num_total_W; ++ w) {
+    for (uint32_t w = 0; w < num_local_W; ++ w) {
         for (uint32_t z = 0; z < num_total_Z; ++ z) {
             for (uint32_t y = 0; y < num_local_Y; ++ y) {
                 cb_reserve_back(cb_id, 1);
