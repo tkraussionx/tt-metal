@@ -2258,7 +2258,7 @@ void TensorModule(py::module &m_tensor) {
         py::arg("input_tensor_start"),
         py::arg("pad_value"),
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
-        py::arg("use_multicore") = true,
+        py::arg("use_multicore") = false,
         R"doc(
         Pad TT Tensor with given pad value ``arg2``.
 

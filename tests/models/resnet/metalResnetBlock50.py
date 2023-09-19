@@ -898,7 +898,7 @@ class ResNet(nn.Module):
 
         unpadded_shape = x.shape()
         padded_shape = [ unpadded_shape[0], unpadded_shape[1], _nearest_32(unpadded_shape[2]), _nearest_32(unpadded_shape[3]) ]
-        x = tt_lib.tensor.pad(x, padded_shape, [0, 0, 0, 0], 0, output_mem_config=self.memory_config)
+        x = tt_lib.tensor.pad(x, padded_shape, [0, 0, 0, 0], 0, output_mem_config=self.memory_config, use_multicore=True)
         x = tt_lib.tensor.tilize(x, output_mem_config=self.memory_config)
 
         x = self.avgpool(x, self.memory_config)
@@ -909,7 +909,7 @@ class ResNet(nn.Module):
 
         unpadded_shape = x.shape()
         padded_shape = [ unpadded_shape[0], unpadded_shape[1], _nearest_32(unpadded_shape[2]), _nearest_32(unpadded_shape[3]) ]
-        x = tt_lib.tensor.pad(x, padded_shape, [0, 0, 0, 0], 0, output_mem_config=self.memory_config)
+        x = tt_lib.tensor.pad(x, padded_shape, [0, 0, 0, 0], 0, output_mem_config=self.memory_config, use_multicore=True)
         x = tt_lib.tensor.tilize(x, output_mem_config=self.memory_config)
 
         x = self.fc(x)
