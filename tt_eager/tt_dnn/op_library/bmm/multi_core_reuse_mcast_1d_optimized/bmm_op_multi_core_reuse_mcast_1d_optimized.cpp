@@ -568,7 +568,8 @@ operation::ProgramWithCallbacks create_program_mcast_in1(
     uint32_t per_core_M, uint32_t per_core_N,
     bool fuse_gelu_activation,
     tt_metal::Buffer* in0_buffer, tt_metal::Buffer* in1_buffer, tt_metal::Buffer* bias_buffer, tt_metal::Buffer* out_buffer,
-    tt::DataFormat in0_data_format, tt::DataFormat in1_data_format, tt::DataFormat bias_data_format, tt::DataFormat output_data_format
+    tt::DataFormat in0_data_format, tt::DataFormat in1_data_format, tt::DataFormat bias_data_format, tt::DataFormat output_data_format,
+    std::optional<uint32_t> in0_address, std::optional<uint32_t> output_address
 ) {
 
     tt_metal::Program program{};
@@ -579,7 +580,13 @@ operation::ProgramWithCallbacks create_program_mcast_in1(
     uint32_t output_single_tile_size = tt_metal::detail::TileSize(output_data_format);
 
     uint32_t in0_block_tiles = per_core_M * in0_block_w;
-    uint32_t in0_CB_tiles = in0_block_tiles * 2; // double buffer
+    uint32_t in0_CB_tiles;
+    if (in0_address.has_value()) {
+        uint32_t in0_num_blocks = K / in0_block_w;
+        in0_CB_tiles = in0_num_blocks * in0_block_tiles * B;
+    } else {
+        in0_CB_tiles = in0_block_tiles * 2; // double buffer
+    }
     uint32_t in0_CB_size = in0_CB_tiles * in0_single_tile_size;
     uint32_t in1_block_tiles = per_core_N * in0_block_w;
     uint32_t in1_CB_tiles = in1_block_tiles * 2; // double buffer
@@ -784,6 +791,13 @@ operation::ProgramWithCallbacks create_program_mcast_in1(
         mm_kernel_defines.merge(eltwise_unary_op_utils::get_defines(UnaryOpType::GELU, 1, "ACTIVATION", "i"));
         mm_kernel_defines[fmt::format("{}_ACTIVATION", magic_enum::enum_name(UnaryOpType::GELU).data())] = "1";
     }
+    if (in0_address.has_value()) {
+        mm_kernel_in0_sender_defines["IN0_SHARDED"] = "1";
+    }
+    if (output_address.has_value()) {
+        mm_kernel_in1_sender_writer_defines["OUT_SHARDED"] = "1";
+        mm_kernel_in1_receiver_writer_defines["OUT_SHARDED"] = "1";
+    }
 
     mm_kernel_in0_sender_defines["SKIP_MCAST"] = "1";
     auto mm_kernel_in0_sender_id = tt_metal::CreateDataMovementKernel(
@@ -855,7 +869,9 @@ operation::ProgramWithCallbacks create_program_mcast_in1(
         all_cores,
         in0_CB_tiles,
         in0_CB_size,
-        in0_data_format
+        in0_data_format,
+        in0_address,
+        in0_address.has_value()
     );
 
     uint32_t src1_cb_index = 1;
@@ -903,7 +919,9 @@ operation::ProgramWithCallbacks create_program_mcast_in1(
         all_cores,
         out_CB_tiles,
         out_CB_size,
-        output_data_format
+        output_data_format,
+        output_address,
+        output_address.has_value()
     );
 
     if (bias_buffer != nullptr) {
@@ -1228,6 +1246,14 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_(cons
     ////////////////////////////////////////////////////////////////////////////
     //                      Application Setup
     ////////////////////////////////////////////////////////////////////////////
+    std::optional<uint32_t> a_addr = std::nullopt;
+    std::optional<uint32_t> out_addr = std::nullopt;
+    if (a.memory_config().is_sharded()) {
+        a_addr = a.buffer()->address();
+    }
+    if (output.memory_config().is_sharded()) {
+        out_addr = output.buffer()->address();
+    }
 
     if (mcast_in0) {
         return reuse_mcast_1d_optimized_helpers::create_program_mcast_in0(
@@ -1255,7 +1281,8 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_(cons
             per_core_M, per_core_N,
             fuse_gelu_activation,
             in0_buffer, in1_buffer, bias_buffer, out_buffer,
-            in0_data_format, in1_data_format, bias_data_format, output_data_format
+            in0_data_format, in1_data_format, bias_data_format, output_data_format,
+            a_addr, out_addr
         );
     }
 }

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_dnn/op_library/bmm/bmm_op.hpp"
+#include "tt_dnn/op_library/work_split.hpp"
 #include "tt_metal/tools/profiler/op_profiler.hpp"
 
 #include "tt_metal/host_api.hpp"
@@ -253,7 +254,7 @@ MatmulParallelizationStrategy get_parallelization_strategy(const std::vector<Ten
 tt::operations::primary::MatmulMultiCoreReuseMultiCast1DProgramConfig get_mcast_1d_config(const Tensor &input_tensor_a, const Tensor &input_tensor_b, bool fuse_batch, bool fuse_gelu_activation, bool mcast_in0) {
     auto device = input_tensor_a.device();
     auto grid_size = device->compute_with_storage_grid_size();
-    uint32_t M = fuse_batch ? input_tensor_a.shape()[0] * input_tensor_a.shape()[1] * input_tensor_a.shape()[-2] : input_tensor_a.shape()[-2];
+    uint32_t M = fuse_batch ? input_tensor_a.volume() / input_tensor_a.shape()[-1] : input_tensor_a.shape()[-2];
     uint32_t N = input_tensor_b.shape()[-1];
     uint32_t per_core_M, per_core_N;
     if (mcast_in0) {
@@ -611,6 +612,47 @@ void Matmul::validate(
         [&](const auto& program_config) {
             using ProgramConfigType = std::decay_t<decltype(program_config)>;
             if constexpr (
+                std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCast1DProgramConfig>
+            ) {
+                if (program_config.mcast_in0) {
+                    TT_ASSERT(input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED);
+                    TT_ASSERT(this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED);
+                } else {
+                    if (input_tensor_a.memory_config().is_sharded()) {
+                        TT_ASSERT(program_config.mcast_in0 == false);
+                        TT_ASSERT(program_config.fuse_batch);
+                        TT_ASSERT(input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED);
+                        if (this->output_mem_config.is_sharded()) {
+                            TT_ASSERT(input_tensor_a.memory_config() == this->output_mem_config);
+                        }
+                        uint32_t M = (program_config.fuse_batch ? input_tensor_a.volume() / input_tensor_a.shape()[-1] : input_tensor_a.shape()[-2]) / TILE_HEIGHT;
+                        uint32_t K = input_tensor_a.shape()[-1] / TILE_WIDTH;
+                        uint32_t per_core_M = program_config.per_core_M;
+
+                        // No padding
+                        TT_ASSERT(M % per_core_M == 0);
+                        TT_ASSERT(K == program_config.in0_block_w);
+                    }
+                    if (this->output_mem_config.is_sharded()) {
+                        TT_ASSERT(program_config.mcast_in0 == false);
+                        TT_ASSERT(this->output_mem_config.memory_layout == TensorMemoryLayout::HEIGHT_SHARDED);
+                        uint32_t M = (program_config.fuse_batch ? input_tensor_a.volume() / input_tensor_a.shape()[-1] : input_tensor_a.shape()[-2]) / TILE_HEIGHT;
+                        uint32_t N = input_tensor_b.shape()[2]/TILE_WIDTH;
+                        uint32_t per_core_M = program_config.per_core_M;
+                        uint32_t per_core_N = program_config.per_core_N;
+
+                        // No padding
+                        TT_ASSERT(M % per_core_M == 0);
+                        TT_ASSERT(N % per_core_N == 0);
+                    }
+                }
+                TT_ASSERT(input_tensor_b.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED);
+            } else {
+                TT_ASSERT(input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED);
+                TT_ASSERT(input_tensor_b.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED);
+                TT_ASSERT(this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED);
+            }
+            if constexpr (
                 std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseProgramConfig> ||
                 std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCastProgramConfig> ||
                 std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCast1DProgramConfig>
@@ -639,6 +681,36 @@ std::vector<Shape> Matmul::compute_output_shapes(const std::vector<Tensor>& inpu
 }
 
 std::vector<Tensor> Matmul::create_output_tensors(const std::vector<Tensor>& input_tensors) const {
+    const auto& input_tensor_a = input_tensors.at(0);
+    const auto& input_tensor_b = input_tensors.at(1);
+    if (this->output_mem_config.is_sharded()) {
+        return std::visit(
+            [&](const auto& program_config) -> std::vector<Tensor> {
+                using ProgramConfigType = std::decay_t<decltype(program_config)>;
+                if constexpr (
+                    std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCast1DProgramConfig>
+                ) {
+                    uint32_t M = (program_config.fuse_batch ? input_tensor_a.volume() / input_tensor_a.shape()[-1] : input_tensor_a.shape()[-2]) / TILE_HEIGHT;
+                    uint32_t N = input_tensor_b.shape()[-1]/TILE_WIDTH;
+                    uint32_t per_core_M = program_config.per_core_M;
+                    uint32_t per_core_N = program_config.per_core_N;
+
+                    uint32_t num_blocks_y = (M - 1) / per_core_M + 1;
+                    uint32_t num_blocks_x = (N - 1) / per_core_N + 1;
+                    uint32_t num_blocks_total = num_blocks_y * num_blocks_x;
+                    auto core_range = input_tensor_a.device()->compute_with_storage_grid_size();
+                    uint32_t num_cores = num_blocks_x * num_blocks_y;
+                    CoreRangeSet all_cores = num_cores_to_corerange_set(num_cores, core_range, true);
+                    ShardSpec shard_spec = ShardSpec{.shard_grid=all_cores, .shard_shape={per_core_M * TILE_HEIGHT, per_core_N * TILE_WIDTH}};
+                    return {create_sharded_device_tensor(this->compute_output_shapes(input_tensors).at(0), this->output_dtype, Layout::TILE, input_tensor_a.device(), this->output_mem_config, shard_spec)};
+                } else {
+                    TT_ASSERT(false, "Unsupported op for output sharding");
+                    return {};
+                }
+            },
+            this->program_config
+        );
+    }
     return operation::generic_create_output_tensors(*this, input_tensors, this->output_dtype, Layout::TILE, this->output_mem_config);
 }
 
