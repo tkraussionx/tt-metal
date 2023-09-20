@@ -150,9 +150,9 @@ def test_run_max_pool(
         logger.info("Current maxpool writer needs nchannels to be 64!")
         pytest.skip()
 
-    if use_multicore and nblocks != 1:
-        logger.info("Multi-block version has not been tested with multicore")
-        pytest.skip()
+    # if use_multicore and nblocks != 1:
+    #     logger.info("Multi-block version has not been tested with multicore")
+    #     pytest.skip()
 
     if use_multicore and (padding != (1,1) or stride != (2,2) or kernel_size != (3,3)):
         logger.info("Multicore version only supports Resnet50 configs for now.")
