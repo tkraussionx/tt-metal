@@ -39,7 +39,7 @@ def test_sharded_tile(device):
     )
 
     yt = ttl.tensor.interleaved_to_sharded(
-        xt, 98, [1024, 64], ttl.tensor.ShardScheme.HEIGHT_SHARDING
+        xt, 98, [1024, 64], ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED
     )
 
     zt = ttl.tensor.sharded_to_interleaved(
@@ -78,7 +78,7 @@ def test_sharded_rm(device):
     )
 
     yt = ttl.tensor.interleaved_to_sharded(
-        xt, 98, [1024, 64], ttl.tensor.ShardScheme.HEIGHT_SHARDING
+        xt, 98, [1024, 64], ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED
     )
 
     zt = ttl.tensor.sharded_to_interleaved(
@@ -93,7 +93,10 @@ def test_sharded_rm(device):
 
     tt_got_back = zt.cpu().to_torch()
 
-    assert torch.equal(tt_og, tt_got_back)
+    passing, output = comp_equal(tt_og, tt_got_back)
+    logger.info(output)
+
+    assert passing
 
 
 @pytest.mark.parametrize("H, num_cores", [[100352, 98], [25088, 98]])
@@ -184,13 +187,13 @@ def test_sharded_tilize(H, num_cores, device):
     )
 
     yt = ttl.tensor.interleaved_to_sharded(
-        xt, num_cores, [H // num_cores, 64], ttl.tensor.ShardScheme.HEIGHT_SHARDING
+        xt, num_cores, [H // num_cores, 64], ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED
     )
 
     yt_tilized = ttl.tensor.tilize(
         yt,
         output_mem_config=ttl.tensor.MemoryConfig(
-            memory_layout=ttl.tensor.TensorMemoryLayout.SHARDED,
+            memory_layout=ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
             buffer_type=ttl.tensor.BufferType.L1,
         ),
         use_multicore=True,
