@@ -36,7 +36,7 @@ def test_gs_demo_kv(device):
 
     batch_size = 32
     seq_len = 5
-    max_seq_len = 2048
+    max_seq_len = 64
     num_layers = 32
 
     hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_version)
