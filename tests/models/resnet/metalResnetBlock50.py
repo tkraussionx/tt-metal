@@ -894,7 +894,10 @@ class ResNet(nn.Module):
         x = self.layer4_module2(x)
         x = self.layer4_module3(x)
 
-        x = format_tensor(x, tt_lib.tensor.Layout.ROW_MAJOR, self.device, self.memory_config)
+        unpadded_shape = x.shape_without_padding();
+        x = tt_lib.tensor.untilize(x, self.memory_config, use_multicore=True)
+        x = tt_lib.tensor.unpad(x, (0, 0, 0, 0), (unpadded_shape[0] - 1, unpadded_shape[1] - 1, unpadded_shape[2] - 1, unpadded_shape[3] - 1), output_mem_config=self.memory_config)
+
         x = x.reshape(self.batch_size, x.shape()[1], (int) (x.shape()[2]/self.batch_size), x.shape()[3])
 
         unpadded_shape = x.shape()
@@ -905,7 +908,9 @@ class ResNet(nn.Module):
         x = self.avgpool(x, self.memory_config)
 
         unpadded_shape_end = [x.shape()[0]-1, x.shape()[1]-1, 1-1, x.shape()[3]-1]
-        x = tt_lib.tensor.untilize_with_unpadding(x, output_tensor_end=unpadded_shape_end, output_tensor_start=[0,0,0,0], output_mem_config=self.memory_config)
+        x = tt_lib.tensor.untilize(x, self.memory_config, use_multicore=True)
+        x = tt_lib.tensor.unpad(x, (0, 0, 0, 0), unpadded_shape_end, output_mem_config=self.memory_config)
+
         x = x.reshape(1, x.shape()[1], self.batch_size * x.shape()[2], x.shape()[3])
 
         unpadded_shape = x.shape()
