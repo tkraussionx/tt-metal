@@ -186,7 +186,7 @@ operation::ProgramWithCallbacks optimized_conv_single_core(const Tensor& a, cons
     uint32_t out_block_h_ntiles = block_config.out_block_h_ntiles;
     uint32_t out_subblock_h_ntiles = block_config.out_subblock_h_ntiles;
     uint32_t out_subblock_w_ntiles = block_config.out_subblock_w_ntiles;
-    assert(out_block_h_ntiles == act_block_h_ntiles); // TODO: fix output block sizing
+    //assert(out_block_h_ntiles == act_block_h_ntiles); // TODO: fix output block sizing
     TT_ASSERT(out_block_h_ntiles >= act_block_h_ntiles, "Output block height (in # of tiles) should be greater than or equal to activation block height (in # of tiles)");
 
     // Compute the 2d matrix shape
