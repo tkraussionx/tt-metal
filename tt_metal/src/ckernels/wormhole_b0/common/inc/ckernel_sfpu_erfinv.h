@@ -12,8 +12,6 @@
 #include "llk_math_eltwise_unary_sfpu_0_param.h"
 #include "ckernel_sfpu.h"
 
-using namespace sfpi;
-
 namespace ckernel {
 namespace sfpu {
 
