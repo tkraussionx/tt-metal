@@ -16,12 +16,9 @@ from models.utility_functions import torch2tt_tensor, tt2torch_tensor, dump_tens
 import time
 
 def post_process(logits, input_ids, index):
-    # dump_tensor("logits", "tt", logits)
-    # dump_tensor("input_ids", "tt", input_ids)
     next_token_logits = logits[:, index, :]
     next_tokens = torch.argmax(next_token_logits, dim=-1)
     print(f"topk {torch.topk(next_token_logits, 20)[1]}")
-    # dump_tensor("topk_output", "tt", torch.topk(next_token_logits, 5)[1])
     ids = next_tokens[:, None]
     print("OUTPUT ID", ids)
     return ids
@@ -36,7 +33,7 @@ def test_gs_demo_kv(device):
 
     batch_size = 32
     seq_len = 5
-    max_seq_len = 64
+    max_seq_len = 8
     num_layers = 32
 
     hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_version)
@@ -56,7 +53,6 @@ def test_gs_demo_kv(device):
 
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(model_version)
-    # input_prompts = ["Girafatron is obsessed with giraffes, the most glorious animal on the face of this Earth. Giraftron believes all other animals are irrelevant when compared to the glorious majesty of the giraffe.\nDaniel: Hello, Girafatron!\nGirafatron:"] * batch_size
     input_prompts = ["Write a poem about Valencia"]
 
     logger.info("Tokenizing inputs")
@@ -79,10 +75,7 @@ def test_gs_demo_kv(device):
     )
     logger.info("Created TT Model")
 
-    # TODO: Generate embeddings and attention_mask on device
     logger.info("Setting up inputs and attention masks")
-    # NOTE: tt_decode_attention_mask is only valid for one decode right after prefill here
-    # TODO: If we loop, we need to decouple generation for embeddings and just generate new attention_mask
 
     kv_cache = ()
     k_cache = torch.zeros(batch_size, 1, max_position_embeddings, head_dim)
@@ -132,10 +125,6 @@ def test_gs_demo_kv(device):
         tt_v_cache = torch2tt_tensor(v_cache, device)
         zeroed_out_kv_cache += ((tt_k_cache, tt_v_cache),)
     kv_cache = zeroed_out_kv_cache
-
-    # for key, value in kv_cache:
-        # dump_tensor("cached_key", "tt", tt2torch_tensor(key))
-        # dump_tensor("cached_value", "tt", tt2torch_tensor(value))
 
     kv_cache_len = seq_len  # This will increment by one after each decode
 

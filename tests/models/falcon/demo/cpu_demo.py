@@ -60,7 +60,7 @@ def test_cpu_demo_no_kv(batch_size):
     input_ids = tokenized_inputs["input_ids"]
 
     logger.info("Initializing CausalLM Model")
-    causalLM = FalconForCausalLM.from_pretrained(MODEL_VERSION, device_map="auto")
+    causalLM = FalconForCausalLM.from_pretrained(MODEL_VERSION, device_map="auto", offload_folder="offload")
     causalLM.eval()
 
     generator = partial(
@@ -126,11 +126,11 @@ def test_cpu_demo_kv(batch_size):
     generated_ids = torch.concat((generated_ids, ids), dim=1)
     print("OUTPUT OF PREFILL", generated_ids)
 
-    for key, value in kv_cache:
+    # for key, value in kv_cache:
         # dump_tensor("cached_key", "hf", key)
         # dump_tensor("cached_value", "hf", value)
 
-    for i in range(10):
+    for i in range(32):
         start_ = time.time()
         logger.info(f"generating token {i}")
         # input:
