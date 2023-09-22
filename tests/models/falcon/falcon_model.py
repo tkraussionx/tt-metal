@@ -74,10 +74,7 @@ class TtFalconModelShared(torch.nn.Module):
         layernorm_weights_str = f"{layer_name}.ln_f.weight"
         layernorm_bias_str = f"{layer_name}.ln_f.bias"
         if tt_cache_path is not None:
-            # self.embeddings_weight = tt_lib.tensor.load_tensor(
-            #     str(tt_cache_path
-            #     / f"{embeddings_weights_str}_{self.model_config['WORD_EMBEDDING_WEIGHTS_DTYPE'].name}.bin")
-            # ).to(device, self.model_config["WORD_EMBEDDING_WEIGHTS_MEMCFG"])
+
             self.layernorm_gamma = tt_lib.tensor.load_tensor(
                 str(
                     tt_cache_path
@@ -91,13 +88,7 @@ class TtFalconModelShared(torch.nn.Module):
                 )
             ).to(device, self.model_config["LN_F_BIAS_MEMCFG"])
         else:
-            # self.embeddings_weight = torch2tt_tensor(
-            #     self.state_dict[embeddings_weights_str],
-            #     device,
-            #     tt_lib.tensor.Layout.ROW_MAJOR,
-            #     self.model_config["WORD_EMBEDDING_WEIGHTS_MEMCFG"],
-            #     self.model_config['WORD_EMBEDDING_WEIGHTS_DTYPE']
-            # )
+
             self.layernorm_gamma = pad_by_zero(
                 self.state_dict[layernorm_weights_str],
                 device,
@@ -113,7 +104,6 @@ class TtFalconModelShared(torch.nn.Module):
         self.layernorm_eps = config.layer_norm_epsilon
 
     def model_preprocessing(self, input_ids, kv_cache_len, llm_mode, seq_len):
-        # input_ids: torch.Tensor with shape [batch, seq_len]
 
         assert input_ids.dim() == 2
         batch, padded_seq_len = input_ids.shape
@@ -121,7 +111,6 @@ class TtFalconModelShared(torch.nn.Module):
         embeddings = self.embeddings(input_ids)
 
         # Generate input and attention_mask ---------------------------------------------
-        # TODO: Generate attention_mask on device
         if llm_mode == "prefill":
             q_len, kv_len = 32, seq_len
             assert batch == 1, "For prefill, batch must be 1!"
@@ -228,9 +217,8 @@ class TtFalconModelShared(torch.nn.Module):
         # apply final norm layer
         layer_output = tt_lib.tensor.layernorm(
             layer_output,
-            self.layernorm_eps,  # These don't fit: self.layernorm_gamma, self.layernorm_beta
+            self.layernorm_eps,
             output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
-            # output_dtype=self.model_config["LN_F_OUTPUT_DTYPE"], # Not currently supported
         )
         layer_output = tt_lib.tensor.bcast(
             layer_output,
@@ -238,7 +226,6 @@ class TtFalconModelShared(torch.nn.Module):
             tt_lib.tensor.BcastOpMath.MUL,
             tt_lib.tensor.BcastOpDim.H,
             output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
-            # output_dtype=self.model_config["LN_F_OUTPUT_DTYPE"], # Not currently supported
         )
         layer_output = tt_lib.tensor.bcast(
             layer_output,
@@ -246,15 +233,7 @@ class TtFalconModelShared(torch.nn.Module):
             tt_lib.tensor.BcastOpMath.ADD,
             tt_lib.tensor.BcastOpDim.H,
             output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
-            # output_dtype=self.model_config["LN_F_OUTPUT_DTYPE"], # Not currently supported
         )
-
-        # TODO(arakhmati): remove the code below
-        # device = layer_output.device()
-        # layer_output = nn.functional.layer_norm(tt2torch_tensor(layer_output).to(torch.float32), (layer_output.shape()[-1],), weight=tt2torch_tensor(self.layernorm_gamma).to(torch.float32)[0, 0, 0], bias=tt2torch_tensor(self.layernorm_beta).to(torch.float32)[0, 0, 0])
-        # layer_output = tt_lib.tensor.Tensor(layer_output, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
-
-        # dump_tensor("falcon_output", "tt", tt2torch_tensor(layer_output))
 
         return layer_output, presents
 
