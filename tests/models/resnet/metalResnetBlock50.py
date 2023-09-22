@@ -388,7 +388,6 @@ hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_downsample_conv =
         (128, 2048) : [64, 128, 64, 64, 64, (1,2), 64, 2048],
     },
     8 : {
-        (25088, 256) : [128, 64, 128, 64, 128, (12,9), 256, 64] ,
         (6272, 512) : [128, 64, 128, 64, 128, (7,7), 128, 512] ,
         (1568, 1024) : [32, 128, 32, 64, 32, (7,7), 32, 1024],
         (416, 2048) : [64, 128, 32, 64, 64, (7,8), 64, 256] ,
@@ -753,17 +752,12 @@ class ResNet(nn.Module):
             downsample_output_channels = planes * block.expansion
             self.downsample_params = [downsample_output_channels, self.inplanes, 1, 1, stride, stride, 0, 0, self.dilation, 1]
             self.downsample_conv_output_shape = compute_conv_output_shape(self.downsample_params, layer_input_shape)
-            downsample_output_padded_face_size = _nearest_32(self.downsample_conv_output_shape[0] * self.downsample_conv_output_shape[1] * self.downsample_conv_output_shape[2])
-            assert (downsample_output_padded_face_size, downsample_output_channels) in hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_downsample_conv[batch_size]
-            [act_block_h_datums, weight_block_w_datums, out_subblock_h_datums, out_subblock_w_datums, out_block_h_datums, grid_size, per_core_act_h, per_core_act_w] = hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_downsample_conv[batch_size][(downsample_output_padded_face_size, downsample_output_channels)]
-            assert per_core_act_h % 32 == 0
-            per_core_act_h_ntiles = (int) (per_core_act_h / 32)
-            per_core_act_w_ntiles = (int) (per_core_act_w / 32)
             is_downsample_1x1_conv = stride == 1
             is_1x1_downsample_conv_sanity_check = self.downsample_params[2] == 1 and self.downsample_params[3] == 1 and \
                                     self.downsample_params[4] == 1 and self.downsample_params[5] == 1 and \
                                     self.downsample_params[6] == 0 and self.downsample_params[7] == 0
             assert(is_1x1_downsample_conv_sanity_check == is_downsample_1x1_conv)
+            downsample_output_padded_face_size = _nearest_32(self.downsample_conv_output_shape[0] * self.downsample_conv_output_shape[1] * self.downsample_conv_output_shape[2])
             matmul_config = None
             if is_downsample_1x1_conv:
                 assert (downsample_output_padded_face_size, self.inplanes, downsample_output_channels) in hardcoded_matmul_config_conv[batch_size]
@@ -771,6 +765,11 @@ class ResNet(nn.Module):
                 matmul_config = hardcoded_matmul_config_conv[batch_size][(downsample_output_padded_face_size,  self.inplanes, downsample_output_channels)]
                 self.downsample_conv_on_tt = resnet50_1x1_conv_as_matmul(downsample_conv_weight.reshape(-1).tolist(), self.downsample_params, self.device, downsample_conv_bias.tolist(), matmul_config)
             else:
+                assert (downsample_output_padded_face_size, downsample_output_channels) in hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_downsample_conv[batch_size]
+                [act_block_h_datums, weight_block_w_datums, out_subblock_h_datums, out_subblock_w_datums, out_block_h_datums, grid_size, per_core_act_h, per_core_weight_w] = hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_downsample_conv[batch_size][(downsample_output_padded_face_size, downsample_output_channels)]
+                assert per_core_act_h % 32 == 0
+                per_core_act_h_ntiles = (int) (per_core_act_h / 32)
+                per_core_weight_w_ntiles = (int) (per_core_weight_w / 32)
                 self.downsample_conv_on_tt = resnet50_optimized_conv(downsample_conv_weight.reshape(-1).tolist(),
                                                             self.downsample_params,
                                                             self.device,
@@ -778,7 +777,7 @@ class ResNet(nn.Module):
                                                             [self.inplanes, weight_block_w_datums],
                                                             [out_subblock_h_datums, out_subblock_w_datums],
                                                             out_block_h_datums,
-                                                            grid_size, per_core_act_h_ntiles, per_core_act_w_ntiles,
+                                                            grid_size, per_core_act_h_ntiles, per_core_weight_w_ntiles,
                                                             downsample_conv_bias.tolist())
             self.norm_layer_after_downsample_conv_on_tt = nl
 
