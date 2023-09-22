@@ -623,8 +623,8 @@ operation::ProgramWithCallbacks optimized_conv_single_core(const Tensor& a, cons
     writer_kernel,
     all_cores,
     DataMovementConfig{
-        .processor = DataMovementProcessor::RISCV_0,
-        .noc = NOC::RISCV_0_default,
+        .processor = DataMovementProcessor::RISCV_1,
+        .noc = NOC::RISCV_1_default,
         .compile_args = writer_compile_time_args,
         .defines = all_defines});
 
@@ -634,8 +634,8 @@ operation::ProgramWithCallbacks optimized_conv_single_core(const Tensor& a, cons
         reader_kernel,
         all_cores,
         DataMovementConfig{
-            .processor = DataMovementProcessor::RISCV_1,
-            .noc = NOC::RISCV_1_default,
+            .processor = DataMovementProcessor::RISCV_0,
+            .noc = NOC::RISCV_0_default,
             .compile_args = reader_compile_time_args,
             .defines = reader_defines});
 

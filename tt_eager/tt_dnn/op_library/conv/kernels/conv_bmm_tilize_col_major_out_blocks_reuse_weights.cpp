@@ -4,6 +4,7 @@
 #include "compute_kernel_api/untilize.h"
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"
+#include "compute_kernel_api/reg_api.h"
 
 #ifdef FUSE_BIAS
 #include "compute_kernel_api/bcast.h"
@@ -13,7 +14,7 @@
 #include "compute_kernel_api/eltwise_unary/relu.h"
 #endif
 
-#define DEBUG_PRINT 0
+#include "debug_print.h"
 
 // #include "debug_macros.h"
 
@@ -22,6 +23,10 @@
 // SliceRange srr1 = SliceRange{.h0 = 1, .h1 = 2, .hs = 8, .w0 = 0, .w1 = 32, .ws = 1};
 // SliceRange src = SliceRange{.h0 = 0, .h1 = 32, .hs = 1, .w0 = 0, .w1 = 1, .ws = 1};
 
+
+ALWI void sleep(uint32_t loop_count = 100000) {
+    for (volatile uint32_t i = 0; i < loop_count; i++);
+}
 
 inline void tilize_in(
     uint32_t in_cb_id,
@@ -69,10 +74,14 @@ inline void tilize_in(
             for (uint32_t n = 0; n < num_out_subblocks_in_col; n++) {
                 for (uint32_t w = 0; w < out_subblock_w; w++) {
                     uint32_t tile_index = block_offset + within_block_index + w;
-                    acquire_dst(tt::DstMode::Half);
+                    // acquire_dst(tt::DstMode::Half);
+                    tile_regs_acquire();
                     copy_tile(interm_cb_id, tile_index, 0);
+                    tile_regs_commit();
+                    tile_regs_wait();
                     pack_tile(0, reblock_cb_id);
-                    release_dst(tt::DstMode::Half);
+                    tile_regs_release();
+                    // release_dst(tt::DstMode::Half);
                 }
                 block_offset += out_subblock_num_tiles;
             }
@@ -152,6 +161,7 @@ void MAIN {
         // Wait for weight slice (1 block in weight width dim and full weight matrix height)
         cb_wait_front(in1_cb_id, in1_weight_slice_num_tiles);
         for(uint32_t in0_block_h_i = 0; in0_block_h_i < in0_num_blocks_h; ++in0_block_h_i) {
+            UNPACK(( sleep(2500) ));
             bool enable_reload = false;
             uint32_t in1_index_inner_dim_h_offset = 0;
             for(uint32_t in0_block_w_i = 0; in0_block_w_i < in0_num_blocks_w; ++in0_block_w_i) {
@@ -164,11 +174,15 @@ void MAIN {
                     cb_wait_front(in0_cb_id, in0_block_num_tiles);
                 }
 
+                // MATH(( DPRINT << in1_block_w_i << "," << in0_block_h_i << "," << in0_block_w_i << ENDL() ));
+
                 int in0_index_subblock_offset = 0;
                 for (uint32_t in0_subblock_i = 0; in0_subblock_i < in0_num_subblocks; ++in0_subblock_i) {
                     int in1_index_subblock_offset = 0;
                     for (uint32_t in1_subblock_i = 0; in1_subblock_i < in1_num_subblocks; ++in1_subblock_i) {
-                        acquire_dst(tt::DstMode::Half);
+                        // acquire_dst(tt::DstMode::Half);
+                        // UNPACK(( sleep(2500) ));
+                        tile_regs_acquire();
                         if (enable_reload) {
                             // Reconfigure input
                             copy_tile_to_dst_init_short_with_dt(matmul_partials_cb);
@@ -202,9 +216,12 @@ void MAIN {
                         #ifdef FUSE_BIAS
                             // if bias is to be added, add it to the data in dst before packing into the out cb
                             if (last_out) {
+                                tile_regs_commit();
+                                tile_regs_wait();
                                 // first move the current result from dst to interim CB
                                 pack_matmul_subblock(out_for_bias_cb_id, out_subblock_num_tiles);
-                                release_dst(tt::DstMode::Half);
+                                // release_dst(tt::DstMode::Half);
+                                tile_regs_release();
                                 // reconfig unpacker df for src B
                                 // unpack_reconfig_data_format(out_for_bias_cb_id, bias_cb_id);
                                 // bcast add data from bias_cb_id
@@ -214,6 +231,7 @@ void MAIN {
                                 // reconfig packer df for out
                                 // pack_reconfig_data_format(out_cb_id);
                                 acquire_dst(tt::DstMode::Half);
+                                tile_regs_acquire();
                                 uint32_t i = 0;
                                 for (uint32_t h = 0; h < out_subblock_h; ++ h) {
                                     uint32_t bcast_tile_i = bias_block_offset + in1_index_subblock_offset;
@@ -241,13 +259,24 @@ void MAIN {
                             }
                         #endif
 
+                        tile_regs_commit();
+                        tile_regs_wait();
+                        // MATH(( sleep(2500) ));
+                        // PACK(( sleep(2500) ));
+
                         auto curr_matmul_out_cb = last_out
                                                     ? (untilize_out
                                                         ? untilize_mode_final_matmul_partials_cb
                                                         : out_cb_id)
                                                     : matmul_partials_cb;
-                        pack_matmul_subblock(curr_matmul_out_cb, out_subblock_num_tiles);
-                        release_dst(tt::DstMode::Half);
+                        // pack_matmul_subblock(curr_matmul_out_cb, out_subblock_num_tiles);
+                        cb_reserve_back(curr_matmul_out_cb, out_subblock_num_tiles);
+                        for (uint32_t i = 0; i < out_subblock_num_tiles; ++i) {
+                            pack_tile(i, curr_matmul_out_cb);
+                        }
+                        cb_push_back(curr_matmul_out_cb, out_subblock_num_tiles);
+                        // release_dst(tt::DstMode::Half);
+                        tile_regs_release();
                         in1_index_subblock_offset += out_subblock_w;
                     } // for in1_num_subblocks
                     #ifndef FUSE_BIAS

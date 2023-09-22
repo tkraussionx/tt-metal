@@ -8,6 +8,8 @@
 
 #include "compute_kernel_api/common_globals.h"
 
+#include "debug_print.h"
+
 namespace ckernel {
 
 /**
@@ -52,5 +54,25 @@ ALWI void release_dst(tt::DstMode mode) {
     PACK(( llk_pack_dest_section_done<SYNC>()  ));
 }
 
+
+ALWI void tile_regs_acquire() {
+    MATH(( llk_math_wait_for_dest_available<SYNC>() ));
+    MATH(( DPRINT << 'a' << ENDL() ));
+}
+
+ALWI void tile_regs_commit() {
+    MATH(( llk_math_dest_section_done<SYNC>() ));
+    MATH(( DPRINT << 'c' << ENDL() ));
+}
+
+ALWI void tile_regs_wait() {
+    PACK(( llk_packer_wait_for_math_done() ));
+    PACK(( DPRINT << 'w' << ENDL() ));
+}
+
+ALWI void tile_regs_release() {
+    PACK(( llk_pack_dest_section_done<SYNC>() ));
+    PACK(( DPRINT << 'r' << ENDL() ));
+}
 
 } // namespace ckernel

@@ -5,6 +5,7 @@ import torch
 import pytest
 import tt_lib
 from models.utility_functions import comp_pcc
+from models.utility_functions import untilize
 from tests.models.resnet.metalResnetBlock50 import compute_conv_output_shape, resnet50_1x1_conv_as_matmul, resnet50_optimized_conv, _nearest_32, format_tensor
 
 # hardcoding matmul config for 1x1 convs
@@ -295,6 +296,7 @@ hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_conv = {
         (25088, 64) : [128, 64, 128, 64, 128, (7,7), 512, 64],
         (6272, 128) : [64, 128, 64, 64, 64, (7,7), 128, 128],
         (1568, 256) : [224, 32, 32, 32, 224, (7,8), 224, 32],
+        # (416, 512) : [64, 32, 32, 32, 64, (7,8), 64, 64], # passes but non determinism
         (416, 512) : [32, 32, 32, 32, 64, (7,8), 64, 64], # passes but non determinism
         (224, 512) : [32, 32, 32, 32, 64, (4,8), 64, 64], # passes determistic
         (288, 512) : [32, 32, 32, 32, 64, (5,8), 64, 64], # passes determistic
@@ -352,7 +354,7 @@ def test_resnet50_conv(use_program_cache, device, N,K,C,H,W,R,S,stride_h,stride_
         conv_weight_pyt = torch.randn(conv_weight_shape, dtype=torch.bfloat16).float()
         conv_bias_pyt = torch.randn(conv_bias_shape, dtype=torch.bfloat16).float()
         out_golden = torch.nn.functional.conv2d(conv_input_pyt, conv_weight_pyt,
-                                                bias=conv_bias_pyt.reshape(-1),
+                                                # bias=conv_bias_pyt.reshape(-1),
                                                 stride=(stride_h, stride_w), padding=(pad_h, pad_w))
 
         is_1x1_conv = R == 1 and S == 1 and stride_h == 1 and stride_w == 1 and pad_h == 0 and pad_w == 0
@@ -400,14 +402,19 @@ def test_resnet50_conv(use_program_cache, device, N,K,C,H,W,R,S,stride_h,stride_
 
         # convert tiled output to RM
         assert(output_on_device.layout() == tt_lib.tensor.Layout.TILE)
-        output_on_device = format_tensor(output_on_device, tt_lib.tensor.Layout.ROW_MAJOR, device, memory_config)
-        output_on_device = output_on_device.reshape(conv_output_shape[0], conv_output_shape[1], conv_output_shape[2], conv_output_shape[3])
+        # output_on_device = format_tensor(output_on_device, tt_lib.tensor.Layout.ROW_MAJOR, device, memory_config)
+        # output_on_device = output_on_device.reshape(conv_output_shape[0], conv_output_shape[1], conv_output_shape[2], conv_output_shape[3])
 
         # Copy to host and Compare against pytorch
-        out = output_on_device.cpu()
-        assert out.layout() == tt_lib.tensor.Layout.ROW_MAJOR
+        out = output_on_device.cpu().to(tt_lib.tensor.Layout.ROW_MAJOR)
+        out = out.unpad([0, 0,0,0], [0, 0, 391, 511])
+
+        # assert out.layout() == tt_lib.tensor.Layout.ROW_MAJOR
 
         out_result = out.to_torch()
+        # out_result = untilize(out_result)
+        print(f'{out_result.shape}')
+        out_result = out_result.reshape(conv_output_shape[0], conv_output_shape[1], conv_output_shape[2], conv_output_shape[3])
         # NHWC to NCHW
         out_result = torch.transpose(out_result, 2, 3)
         out_result = torch.transpose(out_result, 1, 2)

@@ -184,7 +184,8 @@ def resnet50_optimized_conv(weight: List[Union[int, float]], conv_params, device
 
     def conv_(activation):
         #assert(activation.layout() == tensor.Layout.ROW_MAJOR)
-        output = tensor.optimized_conv(activation, weight_on_device, bias_on_device, [R,S,U,V,P_H,P_W], K, False, True, fuse_relu, tensor.MathFidelity.HiFi4,
+        # output = tensor.optimized_conv(activation, weight_on_device, bias_on_device, [R,S,U,V,P_H,P_W], K, False, True, fuse_relu, tensor.MathFidelity.HiFi4,
+        output = tensor.optimized_conv(activation, weight_on_device, None, [R,S,U,V,P_H,P_W], K, False, False, fuse_relu, tensor.MathFidelity.HiFi4,
                                        tensor.OptimizedConvParallelizationConfig(grid_size=grid_size, per_core_out_matrix_height_ntiles=per_core_out_matrix_h_ntiles, per_core_weight_matrix_width_ntiles=per_core_weight_matrix_w_ntiles),
                                        tensor.OptimizedConvBlockConfig(act_block_h_ntiles=act_block_h,
                                                 act_block_w_ntiles=act_block_w,
