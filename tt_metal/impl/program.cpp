@@ -104,11 +104,16 @@ void Program::CircularBufferConfig::mark_address(u64 address, u64 size) {
     }
 }
 
-const CircularBuffer &Program::add_circular_buffer(const CoreRangeSet &core_range_set, const std::set<u32> &indices, u32 num_tiles, u32 size_bytes, const DataFormat &data_format, std::optional<u32> address) {
+const CircularBuffer &Program::add_circular_buffer(const CoreRangeSet &core_range_set, const std::set<u32> &indices, u32 num_tiles, u32 size_bytes, const DataFormat &data_format, std::optional<u32> address, bool globally_allocated) {
     log_assert(
         indices.size() <= NUM_CIRCULAR_BUFFERS,
         "Invalid number of circular buffers: Requested number of circular buffers ({}) exceeds max number of circular buffers per core ({})", indices.size(), NUM_CIRCULAR_BUFFERS
     );
+
+    if (globally_allocated) {
+        TT_ASSERT(address.has_value(), "Globally allocated CBs require passing in the allocated address");
+    }
+
     std::optional<u64> computed_addr = std::nullopt;
     std::vector<std::reference_wrapper<CircularBufferConfig>> cb_configs;
     for (const auto &core_range : core_range_set.ranges()) {
@@ -138,8 +143,11 @@ const CircularBuffer &Program::add_circular_buffer(const CoreRangeSet &core_rang
         computed_addr = address;
     }
 
-    for (auto &cb_config : cb_configs) {
-        cb_config.get().mark_address(computed_addr.value(), size_bytes);
+    // Globally allocated CBs are tracked by the global memory allocator, so do not need to be tracked by the local allocator of a program
+    if (!globally_allocated) {
+        for (auto &cb_config : cb_configs) {
+            cb_config.get().mark_address(computed_addr.value(), size_bytes);
+        }
     }
 
     this->circular_buffers_.emplace_back(CircularBuffer(core_range_set, indices, num_tiles, size_bytes, computed_addr.value(), data_format));

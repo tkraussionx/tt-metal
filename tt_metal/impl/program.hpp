@@ -113,7 +113,8 @@ class Program {
         uint32_t num_tiles,
         uint32_t size_in_bytes,
         DataFormat data_format,
-        std::optional<uint32_t> l1_address);
+        std::optional<uint32_t> l1_address,
+        bool sharded);
     friend void detail::ValidateCircularBufferRegion(const Program &program, const Device *device, std::optional<CoreCoord> logical_core);
 
     friend void detail::AddKernel(Program &program, Kernel *kernel);
@@ -124,7 +125,7 @@ class Program {
     void add_kernel(Kernel *kernel);
     Kernel *get_kernel(KernelID kernel_id) const;
 
-    const CircularBuffer &add_circular_buffer(const CoreRangeSet &core_range_set, const std::set<u32> &indices, u32 num_tiles, u32 size_bytes, const DataFormat &data_format, std::optional<u32> address);
+    const CircularBuffer &add_circular_buffer(const CoreRangeSet &core_range_set, const std::set<u32> &indices, u32 num_tiles, u32 size_bytes, const DataFormat &data_format, std::optional<u32> address, bool sharded = false);
 
     void add_semaphore(const CoreRangeSet & crs, uint32_t address, uint32_t init_value);
 

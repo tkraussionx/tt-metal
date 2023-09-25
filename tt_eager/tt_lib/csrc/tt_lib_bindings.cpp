@@ -4,6 +4,7 @@
 
 #include "dtx/dtx.hpp"
 #include "dtx/dtx_passes.hpp"
+#include "tt_dnn/op_library/sharded/sharded_op.hpp"
 #include "tt_dnn/op_library/eltwise_binary/eltwise_binary_op.hpp"
 #include "tt_dnn/op_library/bmm/bmm_op.hpp"
 #include "tt_dnn/op_library/conv/conv_op.hpp"
@@ -1408,7 +1409,6 @@ void TensorModule(py::module &m_tensor) {
 
         Auto formatting is disabled. Input tensor must have TILE layout. Output tensor will have TILE layout.)doc"
     );
-
     // *** composite unary ops ***
     detail::bind_unary_op(m_tensor, "sinh", &tt::tt_metal::sinh, R"doc(Returns tensor with the hyperbolic sine of elements of the input tensor ``{0}`` in range [-9,9] with high accuracy.)doc");
     detail::bind_unary_op(m_tensor, "cosh", &tt::tt_metal::cosh, R"doc(Returns tensor with the hyperbolic cosine of elements of the input tensor ``{0}`` in range [-9,9] with high accuracy.)doc");
@@ -2772,6 +2772,12 @@ void TensorModule(py::module &m_tensor) {
         | output_mem_config | output tensor memory config   | MemoryConfig  |             | No       |
         +-------------------+-------------------------------+---------------+-------------+----------+
     )doc");
+
+     m_tensor.def("interleaved_to_sharded", &interleaved_to_sharded,
+        py::arg("input"), py::arg("num_cores"), py::arg("shard_shape"), py::arg("shard_scheme").noconvert(),
+        R"doc(Converts tensor from interleaved to sharded memory layout)doc"
+    );
+    detail::bind_unary_op(m_tensor, "sharded_to_interleaved", sharded_to_interleaved, R"doc(Converts tensor from sharded_to_interleaved memory layout)doc");
 
     // TMs
     m_tensor.def("split_last_dim_two_chunks_tiled", &split_last_dim_two_chunks_tiled, py::arg("input").noconvert(), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(

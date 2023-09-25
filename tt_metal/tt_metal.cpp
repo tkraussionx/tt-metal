@@ -234,7 +234,8 @@ const CircularBuffer &CreateCircularBuffer(
     uint32_t num_tiles,
     uint32_t size_in_bytes,
     DataFormat data_format,
-    std::optional<uint32_t> l1_address) {
+    std::optional<uint32_t> l1_address,
+    bool globally_allocated) {
     CoreRange single_core_range = {.start = core, .end = core};
     return CreateCircularBuffers(
         program,
@@ -243,7 +244,8 @@ const CircularBuffer &CreateCircularBuffer(
         num_tiles,
         size_in_bytes,
         data_format,
-        l1_address);
+        l1_address,
+        globally_allocated);
 }
 
 const CircularBuffer &CreateCircularBuffers(
@@ -253,7 +255,8 @@ const CircularBuffer &CreateCircularBuffers(
     uint32_t num_tiles,
     uint32_t size_in_bytes,
     DataFormat data_format,
-    std::optional<uint32_t> l1_address) {
+    std::optional<uint32_t> l1_address,
+    bool globally_allocated) {
     return CreateCircularBuffers(
         program,
         std::set<u32>({buffer_index}),
@@ -261,7 +264,8 @@ const CircularBuffer &CreateCircularBuffers(
         num_tiles,
         size_in_bytes,
         data_format,
-        l1_address);
+        l1_address,
+        globally_allocated);
 }
 
 const CircularBuffer &CreateCircularBuffers(
@@ -271,9 +275,10 @@ const CircularBuffer &CreateCircularBuffers(
     uint32_t num_tiles,
     uint32_t size_in_bytes,
     DataFormat data_format,
-    std::optional<uint32_t> l1_address) {
+    std::optional<uint32_t> l1_address,
+    bool globally_allocated) {
     return CreateCircularBuffers(
-        program, std::set<u32>({buffer_index}), core_range_set, num_tiles, size_in_bytes, data_format, l1_address);
+        program, std::set<u32>({buffer_index}), core_range_set, num_tiles, size_in_bytes, data_format, l1_address, globally_allocated);
 }
 
 const CircularBuffer &CreateCircularBuffers(
@@ -283,9 +288,10 @@ const CircularBuffer &CreateCircularBuffers(
     uint32_t num_tiles,
     uint32_t size_in_bytes,
     DataFormat data_format,
-    std::optional<uint32_t> l1_address) {
+    std::optional<uint32_t> l1_address,
+    bool globally_allocated) {
     return program.add_circular_buffer(
-        core_range_set, buffer_indices, num_tiles, size_in_bytes, data_format, l1_address);
+        core_range_set, buffer_indices, num_tiles, size_in_bytes, data_format, l1_address, globally_allocated);
 }
 
 uint32_t CreateSemaphore(Program &program, const CoreRange &core_range, uint32_t initial_value) {
