@@ -1068,7 +1068,6 @@ class FalconModel(FalconPreTrainedModel):
 
         # Add last hidden state
         hidden_states = self.ln_f(hidden_states)
-        # dump_tensor("falcon_output", "hf", hidden_states)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -1177,8 +1176,6 @@ class FalconForCausalLM(FalconPreTrainedModel):
         )
         hidden_states = transformer_outputs[0]
 
-        # dump_tensor("lm_head_input", "hf", hidden_states)
-        # dump_tensor("lm_head_weights", "hf", self.lm_head.weight.T)
         lm_logits = self.lm_head(hidden_states)
         dump_tensor("lm_logits", "hf", lm_logits, do_nothing = False)
 

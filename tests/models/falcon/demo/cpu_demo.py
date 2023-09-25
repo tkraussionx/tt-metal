@@ -20,14 +20,9 @@ MODEL_VERSION = "tiiuae/falcon-7b-instruct"
 
 
 def post_process(logits, input_ids):
-    # dump_tensor("logits", "hf", logits)
-    # dump_tensor("input_ids", "hf", input_ids)
     next_token_logits = logits[:, -1, :]
-    print(f"topk {torch.topk(next_token_logits, 20)[1]}")
-    # dump_tensor("topk_output", "hf", torch.topk(next_token_logits, 5)[1])
     next_tokens = torch.argmax(next_token_logits, dim=-1)
     ids = next_tokens[:, None]
-    print("OUTPUT ID", ids)
     return ids
 
 
@@ -51,7 +46,7 @@ def test_cpu_demo_no_kv(batch_size):
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_VERSION)
     # prompt_text = ["Girafatron is obsessed with giraffes, the most glorious animal on the face of this Earth. Giraftron believes all other animals are irrelevant when compared to the glorious majesty of the giraffe.\nDaniel: Hello, Girafatron!\nGirafatron:"] * batch_size
-    prompt_text = ["Write a poem about Valencia"] * batch_size
+    prompt_text = ["Write me a haiku about Tokyo"] * batch_size
 
     logger.info("Tokenizing inputs")
     tokenized_inputs = tokenizer(
@@ -75,8 +70,6 @@ def test_cpu_demo_no_kv(batch_size):
         # Fifth iteration is about 4.5sec (batch=32)
         start_ = time.time()
         logger.info(f"generating token {i}")
-        # input- > len(ids) = 10
-        # output -> len(ids) = 11
         ids, kv_cache = generator(input_ids=ids)
         logger.info(f"iteration {i} duration {time.time() - start_}")
 
@@ -99,7 +92,7 @@ def test_cpu_demo_kv(batch_size):
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_VERSION)
     # prompt_text = ["Girafatron is obsessed with giraffes, the most glorious animal on the face of this Earth. Giraftron believes all other animals are irrelevant when compared to the glorious majesty of the giraffe.\nDaniel: Hello, Girafatron!\nGirafatron:"] * batch_size
-    prompt_text = ["Write a poem about Valencia"] * batch_size
+    prompt_text = ["Write me 2 haikus about Tokyo"] * batch_size
 
     logger.info("Tokenizing inputs")
     tokenized_inputs = tokenizer(
@@ -108,7 +101,7 @@ def test_cpu_demo_kv(batch_size):
     input_ids = tokenized_inputs["input_ids"]
 
     logger.info("Initializing CausalLM Model")
-    causalLM = FalconForCausalLM.from_pretrained(MODEL_VERSION, device_map="auto")
+    causalLM = FalconForCausalLM.from_pretrained(MODEL_VERSION, device_map="auto", offload_folder="offload")
     causalLM.eval()
 
     generator = partial(
@@ -125,10 +118,6 @@ def test_cpu_demo_kv(batch_size):
     # [batch x 1]
     generated_ids = torch.concat((generated_ids, ids), dim=1)
     print("OUTPUT OF PREFILL", generated_ids)
-
-    # for key, value in kv_cache:
-        # dump_tensor("cached_key", "hf", key)
-        # dump_tensor("cached_value", "hf", value)
 
     for i in range(32):
         start_ = time.time()
@@ -172,7 +161,7 @@ def test_cpu_demo_with_kv_split(batch_size):
     logger.info("Initializing CausalLM Model")
     generators = []
     for i in range(batch_size):
-        causalLM = FalconForCausalLM.from_pretrained(MODEL_VERSION, device_map="auto")
+        causalLM = FalconForCausalLM.from_pretrained(MODEL_VERSION, device_map="auto", offload_folder="offload")
         causalLM.eval()
         generator = partial(
             generate_next_id, causalLMModel=causalLM, post_processor=post_processor
