@@ -1474,12 +1474,11 @@ void TensorModule(py::module &m_tensor) {
 
     m_tensor.def("complex_mul", &tt::tt_metal::complex_mul,
 		 py::arg("input_a"), py::arg("input_b"),
-		 py::arg("output_mem_config").noconvert() = std::nullopt,R"doc(Perform an eltwise-binary divide (``{0} * {1}``) on two complex tensors.)doc");
+		 py::arg("output_mem_config").noconvert() = std::nullopt,R"doc(Perform an eltwise-binary multiplication ``input_a * input_b`` on two complex tensors.)doc");
 
     m_tensor.def("complex_div", &tt::tt_metal::complex_div,
 		 py::arg("input_a"), py::arg("input_b"),
-		 py::arg("output_mem_config").noconvert() = std::nullopt,R"doc(Perform an eltwise-binary divide (``{0} / {1}``) on two complex tensors.)doc");
-
+		 py::arg("output_mem_config").noconvert() = std::nullopt,R"doc(Perform an eltwise-binary divide ``input_a / input_b`` on two complex tensors.)doc");
 
     // *** bcast binary tied to unary ***
     detail::bind_unary_op(m_tensor, "add1", &add1, R"doc(Returns tensor with the addition of one with input tensor ``{0}``.)doc");
