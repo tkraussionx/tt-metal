@@ -32,9 +32,9 @@ def test_gs_demo_kv(device):
     tt_cache_path = get_tt_cache_path(model_version)
 
     batch_size = 32
-    seq_len = 5
-    max_seq_len = 8
     num_layers = 32
+    num_tokens = 128
+    max_seq_len = (num_tokens//32 +1)*32
 
     hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_version)
     hugging_face_reference_model.eval()
@@ -53,7 +53,7 @@ def test_gs_demo_kv(device):
 
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(model_version)
-    input_prompts = ["Write a poem about Valencia"]
+    input_prompts = ["Write me a just few haikus about a few cities in US. Write one haiku for each city."]
 
     logger.info("Tokenizing inputs")
     tokenizer.pad_token = tokenizer.eos_token
@@ -61,6 +61,16 @@ def test_gs_demo_kv(device):
         input_prompts, padding="max_length", max_length=32, add_special_tokens=False, return_tensors="pt"
     )
     prefill_ids = tokenized_inputs["input_ids"]
+
+    tokenized_inputs_nopad = tokenizer(
+        input_prompts, padding=False, max_length=32, add_special_tokens=False, return_tensors="pt"
+    )
+
+    # print('tokenized inputs::', tokenized_inputs_nopad)
+    seq_len = len(tokenized_inputs_nopad["input_ids"][0])
+    # print('seq_len', seq_len)
+
+    logger.info(f"Input # on Tokens: {seq_len}")
 
     logger.info("Creating TT Model")
     tt_FalconCausalLM = TtFalconCausalLM(
@@ -133,7 +143,7 @@ def test_gs_demo_kv(device):
 
     # DECODE
 
-    for output_token_index in range(2048):
+    for output_token_index in range(num_tokens - seq_len):
         decode_start = time.time()
         assert output_ids.shape[0] == 1
         decode_ids = output_ids.expand(batch_size, -1) # Expand to 32 samples because decode stage only works with batch size of 32
@@ -170,7 +180,7 @@ def test_gs_demo_kv(device):
 
         output_prompts = tokenizer.batch_decode(generated_ids.tolist())
         for output_prompt in output_prompts:
-            logger.info(f"output: {output_prompt}")
+            logger.info(f"output::: {output_prompt}")
 
         decode_end = time.time()
         logger.info(f"Decode #{output_token_index} Run Time: {round((decode_end - decode_start), 2)}")
