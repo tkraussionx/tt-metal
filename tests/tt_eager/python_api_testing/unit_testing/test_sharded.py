@@ -218,13 +218,15 @@ def test_sharded_tilize(H, num_cores, device):
     assert passing
 
 
-@pytest.mark.parametrize("in0_sharded", [True, False])
-@pytest.mark.parametrize("out_sharded", [True, False])
-@pytest.mark.parametrize("H, num_cores", [[25088, 98]])
-def test_sharded_matmul(device, in0_sharded, out_sharded, H, num_cores):
-    in0_shape = [1, 1, H, 64]
-    in1_shape = [1, 1, 64, 64]
-    bias_shape = [1, 1, 1, 64]
+@pytest.mark.parametrize("in0_sharded", [True, False], ids=["in0_sharded", "in0_unsharded"])
+@pytest.mark.parametrize("out_sharded", [True, False], ids=["out_sharded", "out_unsharded"])
+@pytest.mark.parametrize("M, num_cores", [[25088, 98]])
+@pytest.mark.parametrize("N", [64, 256])
+@pytest.mark.skip("Skip until matmul 1d apis are exposed")
+def test_sharded_matmul(device, in0_sharded, out_sharded, M, N, num_cores):
+    in0_shape = [1, 1, M, 64]
+    in1_shape = [1, 1, 64, N]
+    bias_shape = [1, 1, 1, N]
 
     interleaved_mem_config = ttl.tensor.MemoryConfig(
         memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
@@ -249,7 +251,7 @@ def test_sharded_matmul(device, in0_sharded, out_sharded, H, num_cores):
         in0_t = ttl.tensor.interleaved_to_sharded(
             in0_t,
             num_cores,
-            [H // num_cores, 64],
+            [M // num_cores, 64],
             ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
         )
 
