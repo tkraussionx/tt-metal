@@ -96,8 +96,9 @@ def run_perf_t5(expected_inference_time, expected_compile_time, device, model_na
     second_iter_time = profiler.get(second_key)
     cpu_time = profiler.get(cpu_key)
     compile_time = first_iter_time - second_iter_time
+    t5_type = {"t5-small": "t5-small", "t5-base":"t5-base", "google/flan-t5-small": "t5-flan-small"}[model_name]
     prep_report(
-        model_name="t5",
+        model_name=t5_type,
         batch_size=BATCH_SIZE,
         inference_and_compile_time=first_iter_time,
         inference_time=second_iter_time,
