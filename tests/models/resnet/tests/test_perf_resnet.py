@@ -160,7 +160,6 @@ def test_perf_bare_metal(
     ),
 )
 def test_perf_virtual_machine(
-    use_program_cache,
     batch_size,
     expected_inference_time,
     expected_compile_time,
