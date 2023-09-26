@@ -11,7 +11,13 @@ namespace tt {
 namespace operations {
 namespace primary {
 
-std::tuple<CoreRangeSet, CoreRangeSet, CoreRangeSet> add_core_offset(
+inline bool is_dram(const Tensor &input_tensor) { return input_tensor.memory_config().buffer_type == BufferType::DRAM; }
+inline bool is_dram(const std::optional<const Tensor> input_tensor) {
+    return input_tensor.has_value() ? is_dram(input_tensor.value()) : true;
+}
+inline bool is_dram(const Buffer *b) { return b->buffer_type() == BufferType::DRAM; }
+
+inline std::tuple<CoreRangeSet, CoreRangeSet, CoreRangeSet> add_core_offset(
     CoreRangeSet all_cores,
     CoreRangeSet core_group_1,
     CoreRangeSet core_group_2,
@@ -86,13 +92,16 @@ std::tuple<uint32_t, CoreRangeSet, CoreRangeSet, CoreRangeSet, uint32_t, uint32_
 KernelHandle CreateReadKernel(
     Program &program,
     const std::string &file_name,
-    const std::variant<CoreCoord, CoreRange, CoreRangeSet> &core_spec,
+    const CoreRangeSet &core,
     const std::vector<uint32_t> &compile_args,
     std::map<string, string> defines) {
-    return tt_metal::CreateKernel(
+    const string dir_path = "tt_metal/kernels/dataflow/";
+    string kernel_file = dir_path + file_name;
+
+    return tt_metal::CreateDataMovementKernel(
         program,
-        file_name,
-        core_spec,
+        kernel_file,
+        core,
         tt_metal::DataMovementConfig{
             .processor = tt_metal::DataMovementProcessor::RISCV_1,
             .noc = tt_metal::NOC::RISCV_1_default,
@@ -103,13 +112,16 @@ KernelHandle CreateReadKernel(
 KernelHandle CreateWriteKernel(
     Program &program,
     const std::string &file_name,
-    const std::variant<CoreCoord, CoreRange, CoreRangeSet> &core_spec,
+    const CoreRangeSet &core,
     const std::vector<uint32_t> &compile_args,
     std::map<string, string> defines) {
-    return tt_metal::CreateKernel(
+    const string dir_path = "tt_metal/kernels/dataflow/";
+    string kernel_file = dir_path + file_name;
+
+    return tt_metal::CreateDataMovementKernel(
         program,
-        file_name,
-        core_spec,
+        kernel_file,
+        core,
         tt_metal::DataMovementConfig{
             .processor = tt_metal::DataMovementProcessor::RISCV_0,
             .noc = tt_metal::NOC::RISCV_0_default,
@@ -164,10 +176,19 @@ KernelHandle CreateWriteKernel(
     std::vector<CBHandle> cb_ids{};
     CBHandle cb_id{};
     for (auto arg : args) {
-        cb_id = CreateCircularBuffer(program, core_range, data_format, arg);
-        cb_ids.push_back(cb_id);
+        if (arg.num_tile_per_core_group > 0) {
+            auto coumpute_kernel = CreateComputeKernel(
+                program,
+                full_path,
+                arg.core_range,
+                tt_metal::ComputeConfig{
+                    .math_fidelity = math_fidelity,
+                    .fp32_dest_acc_en = fp32_dest_acc_en,
+                    .math_approx_mode = math_approx_mode,
+                    .compile_args = arg.compile_args,
+                    .defines = defines});
+        }
     }
-    return cb_ids;
 }
 
 [[maybe_unused]] CBHandle CreateCircularBuffer(
@@ -179,14 +200,15 @@ KernelHandle CreateWriteKernel(
         auto _data_format = (arg.data_format != tt::DataFormat::Invalid) ? arg.data_format : data_format;
         auto _core_range = (arg.core_range != nullptr) ? *arg.core_range : core_range;
 
-        tt_metal::CircularBufferConfig cb_config =
-            tt_metal::CircularBufferConfig(
-                _num_tiles * tt_metal::detail::TileSize(_data_format), {{_buffer_index, _data_format}})
-                .set_page_size(_buffer_index, tt_metal::detail::TileSize(_data_format));
-
-        cb_id = tt_metal::CreateCircularBuffer(program, CoreRangeSet({_core_range}), cb_config);
+        CreateCircularBuffers(
+            program,
+            std::set<u32>({_buffer_index}),
+            CoreRangeSet({_core_range}),
+            _num_tiles,
+            _num_tiles * tt_metal::detail::TileSize(_data_format),
+            _data_format,
+            l1_address);
     }
-    return cb_id;
 }
 
 }  // namespace primary
