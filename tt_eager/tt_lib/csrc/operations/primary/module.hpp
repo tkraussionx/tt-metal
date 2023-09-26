@@ -109,7 +109,7 @@ void py_module(py::module& m_primary) {
                     std::size_t per_core_M,
                     std::size_t per_core_N,
                     bool fuse_batch,
-                    bool fuse_gelu_activation,
+                    std::optional<UnaryWithParam> fused_activation,
                     bool mcast_in0
                 ) {
 
@@ -121,7 +121,7 @@ void py_module(py::module& m_primary) {
                         .per_core_M=per_core_M,
                         .per_core_N=per_core_N,
                         .fuse_batch=fuse_batch,
-                        .fuse_gelu_activation=fuse_gelu_activation,
+                        .fused_activation=fused_activation,
                         .mcast_in0=mcast_in0
                     };
 
@@ -135,9 +135,10 @@ void py_module(py::module& m_primary) {
             py::arg("per_core_M").noconvert(),
             py::arg("per_core_N").noconvert(),
             py::arg("fuse_batch").noconvert(),
-            py::arg("fuse_gelu_activation").noconvert(),
+            py::arg("fused_activation"),
             py::arg("mcast_in0").noconvert()
-        );
+        )
+        .def_readwrite("fused_activation", &MatmulMultiCoreReuseMultiCast1DProgramConfig::fused_activation);
 
     m_primary.def(
         "get_mcast_1d_config",
@@ -145,7 +146,7 @@ void py_module(py::module& m_primary) {
         py::arg("input_tensor_a").noconvert(),
         py::arg("input_tensor_b").noconvert(),
         py::arg("fuse_batch").noconvert() = false,
-        py::arg("fuse_gelu_activation").noconvert() = false,
+        py::arg("fused_activation") = std::nullopt,
         py::arg("mcast_in0").noconvert() = true,
         py::arg("out_sharded").noconvert() = false
     );

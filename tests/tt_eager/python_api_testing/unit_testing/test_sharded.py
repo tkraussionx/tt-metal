@@ -255,7 +255,7 @@ def test_sharded_matmul(device, in0_sharded, out_sharded, M, N, num_cores):
             ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
         )
 
-    program_config = ttl.operations.primary.get_mcast_1d_config(in0_t, in1_t, True, False, False, out_sharded)
+    program_config = ttl.operations.primary.get_mcast_1d_config(in0_t, in1_t, True, None, False, out_sharded)
     output_t = ttl.operations.primary.matmul_1d(
         in0_t, in1_t, bias=bias_t, program_config=program_config, output_mem_config=output_mem_config
     )

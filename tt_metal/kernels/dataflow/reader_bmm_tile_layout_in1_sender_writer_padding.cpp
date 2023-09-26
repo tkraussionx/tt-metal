@@ -329,6 +329,6 @@ void kernel_main() {
     }
 
     #if OUT_SHARDED
-    cb_wait_front(cb_id_out0, batch * num_blocks * out_num_nonzero_subblocks_h * out_num_nonzero_subblocks_w * out_subblock_w * out_subblock_h);
+    cb_wait_front(cb_id_out0, batch * out_num_nonzero_subblocks_h * out_num_nonzero_subblocks_w * out_subblock_w * out_subblock_h);
     #endif
 }

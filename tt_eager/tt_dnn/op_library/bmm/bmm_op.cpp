@@ -251,7 +251,7 @@ MatmulParallelizationStrategy get_parallelization_strategy(const std::vector<Ten
     }
 }
 
-tt::operations::primary::MatmulMultiCoreReuseMultiCast1DProgramConfig get_mcast_1d_config(const Tensor &input_tensor_a, const Tensor &input_tensor_b, bool fuse_batch, bool fuse_gelu_activation, bool mcast_in0, bool out_sharded) {
+tt::operations::primary::MatmulMultiCoreReuseMultiCast1DProgramConfig get_mcast_1d_config(const Tensor &input_tensor_a, const Tensor &input_tensor_b, bool fuse_batch, std::optional<UnaryWithParam> fused_activation, bool mcast_in0, bool out_sharded) {
     auto device = input_tensor_a.device();
     auto grid_size = device->compute_with_storage_grid_size();
     uint32_t M = fuse_batch ? input_tensor_a.volume() / input_tensor_a.shape()[-1] : input_tensor_a.shape()[-2];
@@ -295,7 +295,7 @@ tt::operations::primary::MatmulMultiCoreReuseMultiCast1DProgramConfig get_mcast_
         .per_core_M = per_core_M,
         .per_core_N = per_core_N,
         .fuse_batch = fuse_batch,
-        .fuse_gelu_activation = fuse_gelu_activation,
+        .fused_activation = fused_activation,
         .mcast_in0 = mcast_in0
     };
 }
@@ -494,17 +494,17 @@ Tensor bert_large_post_softmax_bmm(const Tensor &input_tensor_a, const Tensor &i
  * Falcon matmuls using operations::primary::matmul + program_config
  */
 Tensor falcon_fused_qkv_matmul(const Tensor &input_tensor_a, const Tensor &input_tensor_b, std::optional<const Tensor> bias, const MemoryConfig& mem_config, std::optional<const DataType> output_dtype) {
-    auto program_config = bmm_op_utils::get_mcast_1d_config(input_tensor_a, input_tensor_b, true, false, true, mem_config.is_sharded());
+    auto program_config = bmm_op_utils::get_mcast_1d_config(input_tensor_a, input_tensor_b, true, std::nullopt, true, mem_config.is_sharded());
     return operations::primary::matmul_1d(input_tensor_a, input_tensor_b, bias, program_config, mem_config, output_dtype);
 }
 
 Tensor falcon_selfout_matmul(const Tensor &input_tensor_a, const Tensor &input_tensor_b, std::optional<const Tensor> bias, const MemoryConfig& mem_config, std::optional<const DataType> output_dtype) {
-    auto program_config = bmm_op_utils::get_mcast_1d_config(input_tensor_a, input_tensor_b, true, false, true, mem_config.is_sharded());
+    auto program_config = bmm_op_utils::get_mcast_1d_config(input_tensor_a, input_tensor_b, true, std::nullopt, true, mem_config.is_sharded());
     return operations::primary::matmul_1d(input_tensor_a, input_tensor_b, bias, program_config, mem_config, output_dtype);
 }
 
 Tensor falcon_dense_4h_to_h_matmul(const Tensor &input_tensor_a, const Tensor &input_tensor_b, std::optional<const Tensor> bias, const MemoryConfig& mem_config, std::optional<const DataType> output_dtype) {
-    auto program_config = bmm_op_utils::get_mcast_1d_config(input_tensor_a, input_tensor_b, true, false, true, mem_config.is_sharded());
+    auto program_config = bmm_op_utils::get_mcast_1d_config(input_tensor_a, input_tensor_b, true, std::nullopt, true, mem_config.is_sharded());
     return operations::primary::matmul_1d(input_tensor_a, input_tensor_b, bias, program_config, mem_config, output_dtype);
 }
 
@@ -516,9 +516,14 @@ Tensor falcon_dense_h_to_4h_matmul(const Tensor &input_tensor_a, const Tensor &i
         TT_ASSERT(seq_len >=  128, "Falcon mm's seq_len must be greater than 128!");
         TT_ASSERT((input_tensor_a.shape() == Shape({1, 1, seq_len, 4544})), "Unsupported input shape");
         TT_ASSERT((input_tensor_b.shape() == Shape({1, 1, 4544, 18176})), "Unsupported input shape");
+        TT_ASSERT(!fuse_gelu_activation);
         return operation::run_with_autoformat(Matmul{.bcast_batch=true, .output_mem_config=mem_config, .output_dtype=output_dtype.value_or(input_tensor_a.dtype())}, {input_tensor_a, input_tensor_b}).at(0);
     } else {
-        auto program_config = bmm_op_utils::get_mcast_1d_config(input_tensor_a, input_tensor_b, true, fuse_gelu_activation, true, mem_config.is_sharded());
+        std::optional<UnaryWithParam> fused_activation = std::nullopt;
+        if (fuse_gelu_activation) {
+            fused_activation = UnaryWithParam{.op_type=UnaryOpType::GELU, .param=1.0f};
+        }
+        auto program_config = bmm_op_utils::get_mcast_1d_config(input_tensor_a, input_tensor_b, true, fused_activation, true, mem_config.is_sharded());
         return operations::primary::matmul_1d(input_tensor_a, input_tensor_b, bias, program_config, mem_config, output_dtype);
     }
 }
@@ -534,7 +539,7 @@ Tensor falcon_lm_head_matmul(const Tensor &input_tensor_a, const Tensor &input_t
         TT_ASSERT((input_tensor_b.shape() == Shape({1, 1, 4544, 65024})), "Unsupported input shape");
         return operation::run_with_autoformat(Matmul{.bcast_batch=true, .output_mem_config=mem_config, .output_dtype=output_dtype.value_or(input_tensor_a.dtype())}, {input_tensor_a, input_tensor_b}).at(0);
     } else {
-        auto program_config = bmm_op_utils::get_mcast_1d_config(input_tensor_a, input_tensor_b, true, false, true, mem_config.is_sharded());
+        auto program_config = bmm_op_utils::get_mcast_1d_config(input_tensor_a, input_tensor_b, true, std::nullopt, true, mem_config.is_sharded());
         return operations::primary::matmul_1d(input_tensor_a, input_tensor_b, bias, program_config, mem_config, output_dtype);
     }
 }
@@ -589,7 +594,7 @@ tt::stl::reflection::Attributes MatmulMultiCoreReuseMultiCast1DProgramConfig::at
         {"per_core_M",  this->per_core_M},
         {"per_core_N",  this->per_core_N},
         {"fuse_batch",  this->fuse_batch},
-        {"fuse_gelu_activation",  this->fuse_gelu_activation},
+        {"fused_activation",  this->fused_activation},
         {"mcast_in0",  this->mcast_in0},
     };
 }
@@ -792,7 +797,7 @@ operation::ProgramWithCallbacks Matmul::create_program(
                     program_config.compute_with_storage_grid_size,
                     output_dtype, math_fidelity,
                     program_config.in0_block_w, program_config.out_subblock_h, program_config.out_subblock_w,
-                    program_config.per_core_M, program_config.per_core_N, program_config.fuse_batch, program_config.fuse_gelu_activation,
+                    program_config.per_core_M, program_config.per_core_N, program_config.fuse_batch, program_config.fused_activation,
                     program_config.mcast_in0
                 );
             } else {
