@@ -66,8 +66,6 @@ _CHECKPOINT_FOR_DOC = "Rocketknight1/falcon-rw-1b"
 _CONFIG_FOR_DOC = "FalconConfig"
 
 
-# NOTE(Hesslow): Unfortunately we did not fuse matmul and bias during training, this means that there's one additional quantization to bfloat16 between the operations.
-# In order not to degrade the quality of our HF-port, we keep these characteristics in the final model.
 class FalconLinear(nn.Linear):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         hidden_states = input @ self.weight.T
@@ -255,7 +253,6 @@ class TT_functional:
     ):
         DTYPE = Q.dtype
         L, S = Q.size(-2), K.size(-2)
-        # print("QKV:", Q.dtpye, K.dtype, V.dtype)
 
         def make_mask(L, S, DTYPE):
             attn_mask = torch.ones(L, S, dtype=DTYPE).tril(diagonal=0).to(K.device)
@@ -274,8 +271,6 @@ class TT_functional:
         if attn_mask is None or is_causal:
             attn_mask = make_mask(L, S, DTYPE)
 
-        # attn_weight = torch.softmax((Q @ K.transpose(-2, -1) / torch.sqrt(torch.tensor(Q.size(-1), dtype=DTYPE))) + attn_mask, dim=-1)
-        # attn_weight = torch.dropout(attn_weight, dropout_p, train)
         ATT = (
             Q
             @ K.transpose(-2, -1)
@@ -283,24 +278,7 @@ class TT_functional:
         )
         attn_weight = F.softmax(ATT + attn_mask, dim=-1, dtype=DTYPE)
         attn_weight = nn.Dropout(p=dropout_p)(attn_weight)
-        # print(attn_weight.shape, attn_weight.dtype, V.shape, V.dtype)
         output = attn_weight @ V
-
-        # dump_tensor("key_layer_transposed", "hf", K.transpose(-2, -1))
-
-        # dump_tensor("query_by_key", "hf", Q @ K.transpose(-2, -1))
-
-        # dump_tensor("scaled_query_by_key", "hf", ATT)
-
-        # dump_tensor("attention_mask", "hf", attn_mask)
-
-        # dump_tensor("scaled_query_by_key_plus_attention_mask", "hf", ATT + attn_mask)
-
-        # dump_tensor("softmax", "hf", F.softmax(ATT + attn_mask, dim=-1, dtype=DTYPE))
-
-        # dump_tensor("attn_weights", "hf", attn_weight)
-
-        # dump_tensor("scaled_dot_product_attention", "hf", output)
 
         return output
 
@@ -435,16 +413,9 @@ class FalconAttention(nn.Module):
         output_attentions: bool = False,
     ):
 
-        # dump_tensor("attention_input", "hf", hidden_states)
-
-        # dump_tensor("fused_qkv_weights", "hf", self.query_key_value.weight.T)
-
         fused_qkv = self.query_key_value(
             hidden_states
         )  # [batch_size, seq_length, 3 x hidden_size]
-
-        # dump_tensor("fused_qkv", "hf", fused_qkv)
-
 
         num_kv_heads = (
             self.num_heads if self.new_decoder_architecture else self.num_kv_heads
@@ -497,10 +468,6 @@ class FalconAttention(nn.Module):
         key_layer_ = key_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim)
         value_layer_ = value_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim)
 
-        # dump_tensor("query_layer", "hf", query_layer_)
-        # dump_tensor("key_layer", "hf", key_layer_)
-        # dump_tensor("value_layer", "hf", value_layer_)
-
         if alibi is None:
             if output_attentions:
                 # F.scaled_dot_product_attention doesn't return the attention weights, so we have
@@ -533,11 +500,7 @@ class FalconAttention(nn.Module):
                 batch_size, query_length, self.num_heads * self.head_dim
             )
 
-            # dump_tensor("merge_heads", "hf", attn_output)
-
             output_tensor = self.dense(attn_output)
-
-            # dump_tensor("attention_output", "hf", output_tensor)
 
             if output_attentions:
                 return output_tensor, present, attention_scores
@@ -612,9 +575,7 @@ class FalconMLP(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.dense_h_to_4h(x)
         x = self.act(x)
-        # dump_tensor("ff1", "hf", x)
         x = self.dense_4h_to_h(x)
-        # dump_tensor("ff2", "hf", x)
         return x
 
 
@@ -650,7 +611,6 @@ class FalconDecoderLayer(nn.Module):
         use_cache: bool = False,
         output_attentions: bool = False,
     ):
-        # dump_tensor("decoder_input", "hf", hidden_states)
 
         residual = hidden_states
 
@@ -659,7 +619,6 @@ class FalconDecoderLayer(nn.Module):
             mlp_layernorm_out = self.ln_mlp(hidden_states)
         else:
             attention_layernorm_out = self.input_layernorm(hidden_states)
-        # dump_tensor("attention_layernorm_out", "hf", attention_layernorm_out)
 
         # Self attention.
         attn_outputs = self.self_attention(
@@ -689,19 +648,14 @@ class FalconDecoderLayer(nn.Module):
         outputs = attn_outputs[1:]
 
         # MLP.
-        # dump_tensor("mlp_input", "hf", mlp_layernorm_out)
         mlp_output = self.mlp(mlp_layernorm_out)
-        # dump_tensor("mlp_output", "hf", mlp_output)
 
         if self.config.new_decoder_architecture or self.config.parallel_attn:
             mlp_output += attention_output
 
-        # dump_tensor("mlp_plus_attention_output", "hf", mlp_output)
-
         output = dropout_add(
             mlp_output, residual, self.config.hidden_dropout, training=self.training
         )
-        # dump_tensor("decoder_output", "hf", output)
 
         if use_cache:
             outputs = (output,) + outputs
