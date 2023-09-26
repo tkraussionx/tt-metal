@@ -45,7 +45,7 @@ def test_cpu_demo_no_kv(batch_size):
 
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_VERSION)
-    # prompt_text = ["Girafatron is obsessed with giraffes, the most glorious animal on the face of this Earth. Giraftron believes all other animals are irrelevant when compared to the glorious majesty of the giraffe.\nDaniel: Hello, Girafatron!\nGirafatron:"] * batch_size
+    num_tokens = 128
     prompt_text = ["Write me a haiku about Tokyo"] * batch_size
 
     logger.info("Tokenizing inputs")
@@ -64,7 +64,7 @@ def test_cpu_demo_no_kv(batch_size):
 
     logger.info("Generating new ids")
     ids = input_ids
-    for i in range(15):
+    for i in range(num_tokens):
         # iteration should become slower one by one
         # First iteration is about 3.5sec (batch=32)
         # Fifth iteration is about 4.5sec (batch=32)
@@ -91,8 +91,13 @@ def test_cpu_demo_kv(batch_size):
 
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_VERSION)
-    # prompt_text = ["Girafatron is obsessed with giraffes, the most glorious animal on the face of this Earth. Giraftron believes all other animals are irrelevant when compared to the glorious majesty of the giraffe.\nDaniel: Hello, Girafatron!\nGirafatron:"] * batch_size
-    prompt_text = ["Write me 2 haikus about Tokyo"] * batch_size
+
+    num_tokens = 2048
+
+    prompt_text = ["Descriptive writing usually appeals to the five senses: taste, touch, smell, hearing, and sight. \
+    (Example: Jack's coffee mug exploded into tiny shards of glass, catching the attention of everyone at the office.) \
+    Always appealing to the senses is key to writing a good descriptive essay.\
+    Write a very long descriptive writing about Canada's role in fighting with the climate change."] * batch_size
 
     logger.info("Tokenizing inputs")
     tokenized_inputs = tokenizer(
@@ -119,7 +124,7 @@ def test_cpu_demo_kv(batch_size):
     generated_ids = torch.concat((generated_ids, ids), dim=1)
     print("OUTPUT OF PREFILL", generated_ids)
 
-    for i in range(32):
+    for i in range(num_tokens):
         start_ = time.time()
         logger.info(f"generating token {i}")
         # input:
@@ -129,6 +134,10 @@ def test_cpu_demo_kv(batch_size):
 
         generated_ids = torch.concat((generated_ids, ids), dim=1)
         logger.info(f"token {i} generated in {time.time() - start_} secs")
+
+        output_prompts = tokenizer.batch_decode(generated_ids.tolist())
+        for output_prompt in output_prompts:
+            logger.info(f"output::: {output_prompt}")
 
     generated_ids = generated_ids.tolist()
     text = tokenizer.batch_decode(generated_ids)
@@ -147,7 +156,7 @@ def test_cpu_demo_with_kv_split(batch_size):
 
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_VERSION)
-    # prompt_text = ["Girafatron is obsessed with giraffes, the most glorious animal on the face of this Earth. Giraftron believes all other animals are irrelevant when compared to the glorious majesty of the giraffe.\nDaniel: Hello, Girafatron!\nGirafatron:"] * batch_size
+    num_tokens = 128
     prompts = ["Write a poem about Valencia"] * batch_size
 
     logger.info("Tokenizing inputs")
@@ -206,7 +215,7 @@ def test_cpu_demo_with_kv_split(batch_size):
     # tensor: [batch x 32 x seq_len x 64]
     logger.info("Generate tokens batched")
     generator = generators[0]
-    for i in range(10):
+    for i in range(num_tokens):
         # iterations should be about the same length
         # each iterations is less than 2 sec (machine dependents)
         logger.info(f"generating token {i}")
