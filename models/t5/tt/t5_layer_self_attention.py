@@ -19,7 +19,9 @@ class TtT5LayerSelfAttention(torch.nn.Module):
         has_relative_attention_bias=False,
     ):
         super().__init__()
-
+        self.out_mem_config_l1 = tt_lib.tensor.MemoryConfig(
+            True, tt_lib.tensor.BufferType.L1
+        )
         self.SelfAttention = TtT5Attention(
             config,
             state_dict,
@@ -54,6 +56,7 @@ class TtT5LayerSelfAttention(torch.nn.Module):
         hidden_states = tt_lib.tensor.add(
             hidden_states,
             attention_output[0],
+            output_mem_config=self.out_mem_config_l1,
         )
         outputs = (hidden_states,) + attention_output[1:]
         return outputs

@@ -13,6 +13,10 @@ class TtT5LayerCrossAttention(torch.nn.Module):
     def __init__(self, config, state_dict, base_address, device):
         super().__init__()
 
+        self.out_mem_config_l1 = tt_lib.tensor.MemoryConfig(
+            True, tt_lib.tensor.BufferType.L1
+        )
+
         self.EncDecAttention = TtT5Attention(
             config=config,
             state_dict=state_dict,
@@ -52,6 +56,6 @@ class TtT5LayerCrossAttention(torch.nn.Module):
             query_length=query_length,
             output_attentions=output_attentions,
         )
-        layer_output = tt_lib.tensor.add(hidden_states, attention_output[0])
+        layer_output = tt_lib.tensor.add(hidden_states, attention_output[0], output_mem_config=self.out_mem_config_l1)
         outputs = (layer_output,) + attention_output[1:]
         return outputs

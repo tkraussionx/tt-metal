@@ -45,6 +45,7 @@ class TtT5ForConditionalGeneration(nn.Module):
         self.config = config
         self.device = device
         self.model_dim = config.d_model
+        self.model_dim_root = self.model_dim ** (-0.5)
         self.config_use_cache = config.use_cache
         self.config_use_return_dict = config.use_return_dict
         self.main_input_name = "input_ids"
@@ -215,7 +216,7 @@ class TtT5ForConditionalGeneration(nn.Module):
         if self.config.tie_word_embeddings:
             sequence_output = tt_lib.tensor.mul_unary(
                 sequence_output,
-                (self.model_dim**-0.5),
+                (self.model_dim_root),
                 output_mem_config=self.out_mem_config_l1,
             )
 

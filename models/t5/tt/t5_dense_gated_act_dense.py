@@ -54,7 +54,7 @@ class TtT5DenseGatedActDense(torch.nn.Module):
         self.act = tt_lib.tensor.gelu
 
     def forward(self, hidden_states: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
-        hidden_gelu = self.act(self.wi_0(hidden_states))
+        hidden_gelu = self.act(self.wi_0(hidden_states), output_mem_config=self.out_mem_config_l1,)
         hidden_linear = self.wi_1(hidden_states)
         hidden_states = tt_lib.tensor.mul(
             hidden_gelu, hidden_linear, output_mem_config=self.out_mem_config_l1

@@ -10,6 +10,9 @@ from models.utility_functions import pad_by_zero
 class TtT5LayerNorm(torch.nn.Module):
     def __init__(self, config, state_dict, base_address, device):
         super().__init__()
+        self.out_mem_config_l1 = tt_lib.tensor.MemoryConfig(
+            True, tt_lib.tensor.BufferType.L1
+        )
         self.variance_epsilon = config.layer_norm_epsilon
         self.device = device
 
@@ -22,5 +25,6 @@ class TtT5LayerNorm(torch.nn.Module):
             hidden_states,
             self.variance_epsilon,
             self.weight,
+            output_mem_config=self.out_mem_config_l1,
         )
         return result

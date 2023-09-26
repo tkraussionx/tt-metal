@@ -23,6 +23,7 @@ class TtT5DenseActDense(nn.Module):
             config.d_model,
             config.d_ff,
             self.out_proj_wi_weights,
+            output_mem_config=self.out_mem_config_l1,
         )
 
         self.out_proj_w0_weights = torch_to_tt_tensor_rm(
@@ -40,7 +41,7 @@ class TtT5DenseActDense(nn.Module):
     def forward(self, hidden_states: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
         hidden_states = self.out_proj_wi(hidden_states)
         hidden_states = self.act(
-            hidden_states,
+            hidden_states, output_mem_config=self.out_mem_config_l1,
         )
         hidden_states = self.out_proj_w0(hidden_states)
         return hidden_states
