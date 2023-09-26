@@ -264,49 +264,73 @@ hardcoded_matmul_config_conv = {
     },
     8 :
     {
-        (25088, 64, 64) : {"compute_with_storage_grid_size" : (2,8),
-                                "in0_block_w" : 1,
-                                "out_subblock_h" : 1,
-                                "out_subblock_w": 1,
-                                "per_core_M": 98,
-                                "per_core_N": 1,
-                            },
+        (25088, 64, 64) : tt_lib.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                            compute_with_storage_grid_size = (12, 9),
+                            in0_block_w=2,
+                            out_subblock_h=4,
+                            out_subblock_w=2,
+                            per_core_M=8,
+                            per_core_N=2,
+                            fuse_batch=True,
+                            fused_activation=None,
+                            mcast_in0=False
+                        ),
 
-        (25088, 64, 256) : {"compute_with_storage_grid_size" : (8,8),
-                                "in0_block_w" : 1,
-                                "out_subblock_h" : 1,
-                                "out_subblock_w": 1,
-                                "per_core_M": 98,
-                                "per_core_N": 1,
-                            },
-        (25088, 256, 64) : {"compute_with_storage_grid_size" : (2,8),
-                        "in0_block_w" : 1,
-                        "out_subblock_h" : 1,
-                        "out_subblock_w": 1,
-                        "per_core_M": 98,
-                        "per_core_N": 1,
-                    },
-        (25088, 256, 128) : {"compute_with_storage_grid_size" : (4,8),
-                        "in0_block_w" : 1,
-                        "out_subblock_h" : 1,
-                        "out_subblock_w": 1,
-                        "per_core_M": 98,
-                        "per_core_N": 1,
-                    },
-        (6272, 128, 512) : {"compute_with_storage_grid_size" : (4,9),
-                        "in0_block_w" : 2,
-                        "out_subblock_h" : 1,
-                        "out_subblock_w": 1,
-                        "per_core_M": 22,
-                        "per_core_N": 4,
-                    },
-        (6272, 512, 128) : {"compute_with_storage_grid_size" : (4,9),
-                        "in0_block_w" : 2,
-                        "out_subblock_h" : 1,
-                        "out_subblock_w": 1,
-                        "per_core_M": 22,
-                        "per_core_N": 1,
-                    },
+        (25088, 64, 256) : tt_lib.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                            compute_with_storage_grid_size = (12, 9),
+                            in0_block_w=2,
+                            out_subblock_h=1,
+                            out_subblock_w=8,
+                            per_core_M=8,
+                            per_core_N=8,
+                            fuse_batch=True,
+                            fused_activation=None,
+                            mcast_in0=False
+                        ),
+        (25088, 256, 64) : tt_lib.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                            compute_with_storage_grid_size = (12, 9),
+                            in0_block_w=8,
+                            out_subblock_h=4,
+                            out_subblock_w=2,
+                            per_core_M=8,
+                            per_core_N=2,
+                            fuse_batch=True,
+                            fused_activation=None,
+                            mcast_in0=False
+                        ),
+        (25088, 256, 128) : tt_lib.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                            compute_with_storage_grid_size = (12, 9),
+                            in0_block_w=8,
+                            out_subblock_h=2,
+                            out_subblock_w=4,
+                            per_core_M=8,
+                            per_core_N=4,
+                            fuse_batch=True,
+                            fused_activation=None,
+                            mcast_in0=False
+                        ),
+        (6272, 128, 512) : tt_lib.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                            compute_with_storage_grid_size = (12, 9),
+                            in0_block_w=4,
+                            out_subblock_h=1,
+                            out_subblock_w=8,
+                            per_core_M=2,
+                            per_core_N=16,
+                            fuse_batch=True,
+                            fused_activation=None,
+                            mcast_in0=False
+                        ),
+        (6272, 512, 128) : tt_lib.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                            compute_with_storage_grid_size = (12, 9),
+                            in0_block_w=16,
+                            out_subblock_h=2,
+                            out_subblock_w=4,
+                            per_core_M=2,
+                            per_core_N=4,
+                            fuse_batch=True,
+                            fused_activation=None,
+                            mcast_in0=False
+                        ),
         (6272, 512, 256) : {"compute_with_storage_grid_size" : (8,9),
                         "in0_block_w" : 2,
                         "out_subblock_h" : 1,
@@ -595,7 +619,8 @@ class ResNet(nn.Module):
         fold_batchnorm = False,
         storage_in_dram = True,
         conv_input_face_shape_hw = [224,224],
-        batch_size = 1
+        batch_size = 1,
+        sharded = False
     ) -> None:
         super().__init__()
         self.device = device
@@ -609,6 +634,10 @@ class ResNet(nn.Module):
             self.memory_config = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM)
         else:
             self.memory_config = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1)
+        if sharded:
+            self.sharded_memory_config = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, tt_lib.tensor.BufferType.L1)
+        else:
+            self.sharded_memory_config = self.memory_config
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         self._norm_layer = norm_layer
@@ -661,12 +690,12 @@ class ResNet(nn.Module):
             grid_size = (12,9)
             per_core_act_h_ntiles = 32
 
-        self.conv1 = resnet50_first_conv(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device, [act_block_h_datums, 32], [32, 64], [32, 64], act_block_h_datums, grid_size, per_core_act_h_ntiles, conv1_bias.tolist(), 8, fuse_relu=True)
+        self.conv1 = resnet50_first_conv(conv1_weight.reshape(-1).tolist(), self.conv1_params, self.device, [act_block_h_datums, 32], [32, 64], [32, 64], act_block_h_datums, grid_size, per_core_act_h_ntiles, conv1_bias.tolist(), 8, fuse_relu=True, out_mem_config=self.sharded_memory_config if sharded else None)
         self.conv1_output_shape = compute_conv_output_shape(self.conv1_params, [batch_size, self.conv_input_face_shape_hw[0], self.conv_input_face_shape_hw[1], self.inplanes])
         self.relu = tt_lib.tensor.relu_without_autoformat
         # self.maxpool = fallback_ops.MaxPool2d(kernel_size=3, stride=2, padding=1, channels_last=True, reshape_2d=True)
         # self.maxpool = TtMaxPool(self.device, kernel_size=3, stride=2, padding=1, output_mem_config=self.memory_config, nblocks=8, channels_last=True, reshape_2d=True)
-        self.maxpool = TtMaxPool(self.device, kernel_size=3, stride=2, padding=1, output_mem_config=self.memory_config, nblocks=1, channels_last=True, reshape_2d=True)
+        self.maxpool = TtMaxPool(self.device, kernel_size=3, stride=2, padding=1, output_mem_config=self.sharded_memory_config, nblocks=1, channels_last=True, reshape_2d=True)
         self.maxpool_output_shape = compute_max_pool_shape(3, 2, 1, self.conv1_output_shape)
         self.layer1, self.layer1_output_shape = self._make_layer(block, 64, layers[0], name="layer1", state_dict=state_dict, layer_input_shape=self.maxpool_output_shape, batch_size=batch_size)
         self.layer2, self.layer2_output_shape = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0], name="layer2", state_dict=state_dict, layer_input_shape=self.layer1_output_shape, batch_size=batch_size)
@@ -763,7 +792,7 @@ class ResNet(nn.Module):
                 assert (downsample_output_padded_face_size, self.inplanes, downsample_output_channels) in hardcoded_matmul_config_conv[batch_size]
                 #print("Setting matmul config for 1x1 conv (downsample stride 1 conv in module)")
                 matmul_config = hardcoded_matmul_config_conv[batch_size][(downsample_output_padded_face_size,  self.inplanes, downsample_output_channels)]
-                self.downsample_conv_on_tt = resnet50_1x1_conv_as_matmul(downsample_conv_weight.reshape(-1).tolist(), self.downsample_params, self.device, downsample_conv_bias.tolist(), matmul_config)
+                self.downsample_conv_on_tt = resnet50_1x1_conv_as_matmul(downsample_conv_weight.reshape(-1).tolist(), self.downsample_params, self.device, downsample_conv_bias.tolist(), matmul_config, output_mem_config=self.memory_config)
             else:
                 assert (downsample_output_padded_face_size, downsample_output_channels) in hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_downsample_conv[batch_size]
                 [act_block_h_datums, weight_block_w_datums, out_subblock_h_datums, out_subblock_w_datums, out_block_h_datums, grid_size, per_core_act_h, per_core_weight_w] = hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_downsample_conv[batch_size][(downsample_output_padded_face_size, downsample_output_channels)]
@@ -870,7 +899,7 @@ class ResNet(nn.Module):
         x = self.maxpool(x)
         #print("Done maxpool")
         x = x.reshape(1, 1, self.maxpool_output_shape[0] * self.maxpool_output_shape[1] * self.maxpool_output_shape[2], self.maxpool_output_shape[3])
-        x = format_tensor(x, tt_lib.tensor.Layout.TILE, self.device, self.memory_config)
+        x = format_tensor(x, tt_lib.tensor.Layout.TILE, self.device, self.sharded_memory_config)
 
         x = self.layer1_module1(x)
         x = self.layer1_module2(x)

@@ -38,6 +38,9 @@ def test_run_resnet50_inference(use_program_cache, batch_size, imagenet_sample_i
 
         state_dict = torch_resnet50.state_dict()
         storage_in_dram = False
+        sharded = False
+        if batch_size == 8:
+            sharded = True
         # run once to compile ops
         tt_resnet50 = ResNet(Bottleneck, [3, 4, 6, 3],
                         device=device,
@@ -45,7 +48,8 @@ def test_run_resnet50_inference(use_program_cache, batch_size, imagenet_sample_i
                         base_address="",
                         fold_batchnorm=True,
                         storage_in_dram=storage_in_dram,
-                        batch_size=batch_size)
+                        batch_size=batch_size,
+                        sharded=sharded)
 
         torch_output = torch_resnet50(image).unsqueeze(1).unsqueeze(1)
         tt_output = tt_resnet50(image)
@@ -67,4 +71,4 @@ def test_run_resnet50_inference(use_program_cache, batch_size, imagenet_sample_i
             golden_pcc = 0.9899485705112977
         passing_pcc, _ = comp_pcc(torch_output, tt_output, pcc=golden_pcc)
         assert passing_pcc
-        #assert passing # fails because of torch.allclose
+        # assert passing # fails because of torch.allclose
