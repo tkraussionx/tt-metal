@@ -4,7 +4,7 @@ import sys
 import torch
 import pytest
 import tt_lib
-from models.utility_functions import comp_pcc
+from models.utility_functions import comp_pcc, comp_allclose
 from models.utility_functions import untilize
 from tests.models.resnet.metalResnetBlock50 import compute_conv_output_shape, resnet50_1x1_conv_as_matmul, resnet50_optimized_conv, _nearest_32, format_tensor
 
@@ -296,15 +296,18 @@ hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_conv = {
         (25088, 64) : [128, 64, 128, 64, 128, (7,7), 512, 64],
         (6272, 128) : [64, 128, 64, 64, 64, (7,7), 128, 128],
         (1568, 256) : [224, 32, 32, 32, 224, (7,8), 224, 32],
-        # (416, 512) : [64, 32, 32, 32, 64, (7,8), 64, 64], # passes but non determinism
+        # (416, 512) : [64, 32, 32, 32, 64, (7,8), 64, 64], # passes
         (416, 512) : [32, 32, 32, 32, 64, (7,8), 64, 64], # passes but non determinism
+        # (416, 512) : [32, 32, 32, 32, 64, (1,1), 448, 512], # passes
         (224, 512) : [32, 32, 32, 32, 64, (4,8), 64, 64], # passes determistic
         (288, 512) : [32, 32, 32, 32, 64, (5,8), 64, 64], # passes determistic
     },
 }
 
-@pytest.mark.parametrize("use_new_matmul", (True,))
-@pytest.mark.parametrize("N", (8,))
+## 512-512-7-7-3-3-1-1-1-1-8-True
+
+# @pytest.mark.parametrize("use_new_matmul", (True,))
+@pytest.mark.parametrize("N", (1,2,8,))
 @pytest.mark.parametrize(
     "K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w",
     (
@@ -339,7 +342,7 @@ hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_conv = {
 
     )
 )
-def test_resnet50_conv(use_program_cache, device, N,K,C,H,W,R,S,stride_h,stride_w,pad_h,pad_w, use_new_matmul):
+def test_resnet50_conv(use_program_cache, device, N,K,C,H,W,R,S,stride_h,stride_w,pad_h,pad_w):
     for i in range(1): # increase num of iterations to test op caching
         assert C % 32 == 0
         assert K % 32 == 0
@@ -407,11 +410,20 @@ def test_resnet50_conv(use_program_cache, device, N,K,C,H,W,R,S,stride_h,stride_
 
         # Copy to host and Compare against pytorch
         out = output_on_device.cpu().to(tt_lib.tensor.Layout.ROW_MAJOR)
-        out = out.unpad([0, 0,0,0], [0, 0, 391, 511])
+        if N == 8:
+            out = out.unpad([0, 0,0,0], [0, 0, 391, 511])
+        elif N == 2:
+            out = out.unpad([0, 0,0,0], [0, 0, 97, 511])
+        elif N == 1:
+            out = out.unpad([0, 0,0,0], [0, 0, 48, 511])
 
         # assert out.layout() == tt_lib.tensor.Layout.ROW_MAJOR
 
         out_result = out.to_torch()
+
+        torch.save(out_result.float(), 'output5.pt')
+        torch.save(out_golden.float(), 'golden.pt')
+
         # out_result = untilize(out_result)
         print(f'{out_result.shape}')
         out_result = out_result.reshape(conv_output_shape[0], conv_output_shape[1], conv_output_shape[2], conv_output_shape[3])
@@ -425,3 +437,4 @@ def test_resnet50_conv(use_program_cache, device, N,K,C,H,W,R,S,stride_h,stride_
         print("Passing=", passing_pcc)
         print("Output pcc=", output_pcc)
         assert passing_pcc
+        ## assert torch.allclose(out_result.float(), out_golden.float())   ##, rtol=1e-1, atol=1e-1)

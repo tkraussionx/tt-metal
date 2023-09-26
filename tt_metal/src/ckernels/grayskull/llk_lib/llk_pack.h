@@ -109,7 +109,7 @@ inline void llk_pack_hw_configure_disaggregated(std::uint32_t pack_output) {
 template <bool untilize = false, PoolType type, ReduceDim dim>
 inline void llk_pack_reduce_hw_configure(const llk_pack_params_t *pack_params) {
     configure_pack(get_output_id(pack_params->pack_output), pack_params->relu_config.val);
-    volatile uint *cfg = get_cfg_pointer();
+    volatile tt_reg_ptr uint *cfg = get_cfg_pointer();
 
     if constexpr (dim == ReduceDim::REDUCE_ROW) {
         for (uint i = 0; i < 4; i++) cfg[PCK_EDGE_OFFSET_SEC0_mask_ADDR32 + i] = 0x00000001;

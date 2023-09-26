@@ -424,7 +424,7 @@ void watcher_attach(void *dev,
 
         watcher::logfile = watcher::create_file();
 
-        int sleep_usecs = OptionsG.get_watcher_interval() * 1000 * 1000;
+        int sleep_usecs = OptionsG.get_watcher_interval() * 1000;
         std::thread watcher_thread = std::thread(&watcher::watcher_loop, sleep_usecs);
         watcher_thread.detach();
 

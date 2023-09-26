@@ -102,7 +102,7 @@ inline void llk_unpack_AB_matmul(
     // Clear z/w start counters
     TTI_SETADCZW(0b011, 0, 0, 0, 0, 0b1111);
 
-    volatile uint *cfg = get_cfg_pointer();  // get pointer to registers for current state ID
+    volatile tt_reg_ptr uint *cfg = get_cfg_pointer();  // get pointer to registers for current state ID
 
     // Wait for free context
     wait_for_next_context(2);
@@ -128,7 +128,7 @@ inline void llk_unpack_AB_matmul(
 #endif
 
     // Stall unpacker until pending CFG writes from Trisc have completed
-    // TTI_STALLWAIT(p_stall::STALL_UNPACK, p_stall::TRISC_CFG);
+    TTI_STALLWAIT(p_stall::STALL_UNPACK, p_stall::TRISC_CFG);
 
     // Run MOP
     mop_run(0, 2);

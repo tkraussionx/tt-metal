@@ -1,22 +1,30 @@
 #include <stdint.h>
+#include <cstring>
 #include "dataflow_api.h"
 #include "debug_print.h"
 
+inline void sleep_loop(uint32_t loop_count = 100000) {
+    for (volatile uint32_t i = 0; i < loop_count; i++);
+}
+
 inline void pad_l1_buffer_with_zeroes(uint32_t l1_addr, uint32_t pad_size_bytes) {
-    volatile std::uint32_t* dst = reinterpret_cast<volatile std::uint32_t*>(l1_addr);
-    volatile std::uint32_t* end_dst = dst + (pad_size_bytes >> 2);  // Divide by 4 using right shift
+    volatile tt_l1_ptr std::uint32_t* dst = reinterpret_cast<volatile tt_l1_ptr std::uint32_t*>(l1_addr);
+    volatile tt_l1_ptr std::uint32_t* end_dst = dst + (pad_size_bytes >> 2);  // Divide by 4 using right shift
 
-    while (dst < end_dst) {
-        *dst++ = 0;
-    }
+    // while (dst < end_dst) {
+    //     *dst = (std::uint32_t) 0x0;
+    //     ++ dst;
+    // }
+    std::memset((void*) dst, 0x0, pad_size_bytes);
 
-    uint32_t remainder = pad_size_bytes & 0x3;  // Get the remainder using bitwise AND
-    if (remainder != 0) {
-        volatile std::uint8_t* byte_dst = reinterpret_cast<volatile std::uint8_t*>(dst);
-        for (uint32_t i = 0; i < remainder; ++i) {
-            *byte_dst++ = 0;
-        }
-    }
+    // uint32_t remainder = pad_size_bytes & 0x3;  // Get the remainder using bitwise AND
+    // if (remainder != 0) {
+    //     volatile tt_l1_ptr std::uint8_t* byte_dst = reinterpret_cast<volatile tt_l1_ptr std::uint8_t*>(dst);
+    //     for (uint32_t i = 0; i < remainder; ++i) {
+    //         *byte_dst = (std::uint8_t) 0x0;
+    //         ++ byte_dst;
+    //     }
+    // }
 }
 
 void kernel_main() {
@@ -107,6 +115,9 @@ void kernel_main() {
         uint32_t total_h_reset = total_h_start;
         uint32_t n = n_start;
         uint32_t n_reset = n_start;
+
+        // sleep_loop(10000);
+
         for(uint32_t nbh = 0; nbh < num_blocks_act_h; nbh++) {
             uint32_t in_h_offset_within_kernel_window = 0;
             for (uint32_t nbw = 0; nbw < num_blocks_act_w; nbw++) {
@@ -123,6 +134,8 @@ void kernel_main() {
                     uint32_t in_w_offset_within_kernel_window = 0;
                     for(uint32_t bw = 0; bw < weight_size_w; bw++) {
                         uint32_t read_size_bytes = conv_act_size_c_bytes;
+
+                        // sleep_loop(100000);
 
                         if (total_h < act_matrix_height_unpadded) {
                             uint32_t in_h = in_h_offset + in_h_offset_within_kernel_window;

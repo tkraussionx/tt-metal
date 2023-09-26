@@ -8,6 +8,10 @@
 
 //#include "debug_print.h"
 
+inline void sleep_loop(uint32_t loop_count = 100000) {
+    for (volatile uint32_t i = 0; i < loop_count; i++);
+}
+
 namespace NAMESPACE {
 void MAIN {
 
@@ -24,6 +28,7 @@ void MAIN {
         tilize_block(tt::CB::c_in0, per_core_block_tile_cnt, tt::CB::c_out0);
 
         cb_push_back(tt::CB::c_out0, per_core_block_tile_cnt);
+        sleep_loop(2500);
         cb_pop_front(tt::CB::c_in0, per_core_block_tile_cnt);
     }
 }

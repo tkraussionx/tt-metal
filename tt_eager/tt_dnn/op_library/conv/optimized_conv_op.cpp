@@ -416,6 +416,11 @@ operation::ProgramWithCallbacks optimized_conv_single_core(const Tensor& a, cons
     uint32_t num_cores_x = p_config.grid_size.x;
     uint32_t num_cores_y = p_config.grid_size.y;
     uint32_t total_num_cores = num_cores_x * num_cores_y;
+
+    log_debug(tt::LogOp, "total_num_cores: {}", total_num_cores);
+    log_debug(tt::LogOp, "per_core_out_matrix_height_ntiles: {}", p_config.per_core_out_matrix_height_ntiles);
+    log_debug(tt::LogOp, "per_core_weight_matrix_width_ntiles: {}", p_config.per_core_weight_matrix_width_ntiles);
+
     assert(num_cores_x < 13);
     assert(num_cores_y < 10);
     uint32_t per_core_out_matrix_height_ntiles = p_config.per_core_out_matrix_height_ntiles;

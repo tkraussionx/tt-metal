@@ -126,7 +126,7 @@ inline void llk_unpack_AB(
     TTI_SETADCZW(0b011, 0, 0, 0, 0, 0b1111);
 
     // Program srcA and srcB base addresses
-    volatile uint *cfg = get_cfg_pointer();  // get pointer to registers for current state ID
+    volatile tt_reg_ptr uint *cfg = get_cfg_pointer();  // get pointer to registers for current state ID
 
     // Wait for free context
     wait_for_next_context(2);

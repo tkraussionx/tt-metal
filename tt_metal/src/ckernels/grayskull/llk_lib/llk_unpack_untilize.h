@@ -62,7 +62,7 @@ inline void llk_unpack_untilize_init(const uint32_t operand) {
     // // Override default settings
     std::uint32_t input = get_operand_id(operand);
     // Get pointer to registers for current state ID
-    volatile uint *cfg = get_cfg_pointer();
+    volatile tt_reg_ptr uint *cfg = get_cfg_pointer();
 
     constexpr uint32_t srca_face_height = 1;
     constexpr uint32_t srcb_face_height = 16;
@@ -112,7 +112,7 @@ inline void llk_unpack_untilize_(std::uint32_t operand, std::uint32_t block_c_ti
     std::uint32_t rem_blocks_in_row = block_c_tiles;
 
     // Program srcA and srcB base addresses
-    volatile uint *cfg = get_cfg_pointer();  // get pointer to registers for current state ID
+    volatile tt_reg_ptr uint *cfg = get_cfg_pointer();  // get pointer to registers for current state ID
 
     TTI_SETADCXY(0b001, 0, 0, 0, 0, 0b0010);  // Clear l1 addr y cnt
     if constexpr (first_pass) {

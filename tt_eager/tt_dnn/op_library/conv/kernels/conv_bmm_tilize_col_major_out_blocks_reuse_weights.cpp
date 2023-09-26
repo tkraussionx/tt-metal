@@ -161,12 +161,13 @@ void MAIN {
         // Wait for weight slice (1 block in weight width dim and full weight matrix height)
         cb_wait_front(in1_cb_id, in1_weight_slice_num_tiles);
         for(uint32_t in0_block_h_i = 0; in0_block_h_i < in0_num_blocks_h; ++in0_block_h_i) {
-            UNPACK(( sleep(2500) ));
+            // UNPACK(( sleep(2500) ));
             bool enable_reload = false;
             uint32_t in1_index_inner_dim_h_offset = 0;
             for(uint32_t in0_block_w_i = 0; in0_block_w_i < in0_num_blocks_w; ++in0_block_w_i) {
                 bool last_out = (in0_block_w_i == in0_num_blocks_w - 1);
                 if (tilize_in0) {
+                    // UNPACK(( DPRINT << "width: " << in0_num_blocks_w << ENDL()));
                     tilize_in(in0_cb_id, in0_subblock_h, in0_block_w, in0_num_subblocks, tilized_in0_cb_id);
                     mm_init_short();
                     cb_wait_front(tilized_in0_cb_id, in0_block_num_tiles);
@@ -210,6 +211,7 @@ void MAIN {
                                     in1_index_inner_dim_subblock_offset += in1_block_w;
                                 } // for in0_block_w
                                 ++dst_index;
+                                // UNPACK(( DPRINT << dst_index << ENDL() ));
                             } // for out_subblock_w
                             in0_index_h_offset += in0_block_w;
                         } // for out_subblock_h

@@ -45,7 +45,7 @@ inline void llk_unpack_tilize_hw_configure_disaggregated(
 inline void llk_unpack_tilize_uninit() {
     // Undo tilize if added
     wait_for_idle();
-    volatile uint *cfg = get_cfg_pointer();
+    volatile tt_reg_ptr uint *cfg = get_cfg_pointer();
     unpack_config_u config;
 
     config.val[0] = cfg[THCON_SEC0_REG2_Out_data_format_ADDR32 + 0];
@@ -53,6 +53,8 @@ inline void llk_unpack_tilize_uninit() {
     config.f.shift_amount = 0;
     cfg[THCON_SEC0_REG2_Out_data_format_ADDR32 + 0] = config.val[0];
     cfg[THCON_SEC0_REG5_Tile_x_dim_cntx0_ADDR32] = 256 | (256 << 16);
+
+    TTI_STALLWAIT(p_stall::STALL_UNPACK, p_stall::TRISC_CFG);
 }
 
 inline void llk_unpack_tilize_init(const uint32_t unpA_operand, const uint32_t unpA_block_c_tiles) {
@@ -66,7 +68,7 @@ inline void llk_unpack_tilize_init(const uint32_t unpA_operand, const uint32_t u
     // Override default settings
     std::uint32_t input = get_operand_id(unpA_operand);
     unpack_config_u config;
-    volatile uint *cfg = get_cfg_pointer();
+    volatile tt_reg_ptr uint *cfg = get_cfg_pointer();
     config.val[0] = cfg[THCON_SEC0_REG2_Out_data_format_ADDR32 + 0];
     config.f.tileize_mode = 1;
     config.f.shift_amount =
@@ -74,6 +76,7 @@ inline void llk_unpack_tilize_init(const uint32_t unpA_operand, const uint32_t u
     cfg[THCON_SEC0_REG2_Out_data_format_ADDR32 + 0] = config.val[0];
     cfg[THCON_SEC0_REG5_Tile_x_dim_cntx0_ADDR32] = 16 | (16 << 16);
 
+    TTI_STALLWAIT(p_stall::STALL_UNPACK, p_stall::TRISC_CFG);
 
 }
 
@@ -91,7 +94,7 @@ inline void llk_unpack_tilize_block(std::uint32_t operand, std::uint32_t block_c
             SCALE_DATUM_SIZE((uint)unpack_src_format[input], block_c_tiles << 5);  //*16 rows / 16 to get 16B word aligned address
 
         // Program srcA and srcB base addresses
-        volatile uint *cfg = get_cfg_pointer();  // get pointer to registers for current state ID
+        volatile tt_reg_ptr uint *cfg = get_cfg_pointer();  // get pointer to registers for current state ID
 
         for (std::uint32_t n = 0; n < 2; n++) {
             std::uint32_t address = base_address + top_face_offset_address + ((n == 1) ? bot_face_offset_address : 0);

@@ -4,6 +4,10 @@
 
 #include "dataflow_api.h"
 
+inline void sleep_loop(uint32_t loop_count = 100000) {
+    for (volatile uint32_t i = 0; i < loop_count; i++);
+}
+
 void kernel_main() {
     uint32_t dst_addr  = get_arg_val<uint32_t>(0);
     uint32_t num_tiles = get_arg_val<uint32_t>(1);
@@ -25,6 +29,7 @@ void kernel_main() {
 
     uint32_t end_id = start_id + num_tiles;
     for (uint32_t i = start_id; i < end_id; i ++) {
+        // sleep_loop(2000);
         cb_wait_front(cb_id_out, onetile);
         uint32_t l1_read_addr = get_read_ptr(cb_id_out);
         noc_async_write_tile(i, s, l1_read_addr);

@@ -61,24 +61,23 @@ ALWI void tilize_block(uint32_t icb, uint32_t block, uint32_t ocb)
 
     UNPACK(( llk_unpack_tilize_block(icb, block) ));
 
-    // UNPACK(( DPRINT << "WLKRHFJOLWSNDJN W" << ENDL() ));
-
     for (uint32_t t = 0; t < block; t++) {
+        // MATH(( wait_math_semaphores() ));
+        // MATH(( wait_bank_valid<Srcs::SrcA>() ));
+        // MATH(( wait_bank_valid<Srcs::SrcB>() ));
 
         // Acquire dst
-        MATH(( llk_math_wait_for_dest_available<SYNC>() ));
-        PACK(( llk_packer_wait_for_math_done() ));
-
         // Datacopy
-        MATH(( llk_math_eltwise_unary_datacopy<A2D, BroadcastType::NONE, SyncHalf>(0) ));
-        PACK(( llk_pack<false, SYNC, false >(0, ocb)  ));
-
         // Release dest
+
+        MATH(( llk_math_wait_for_dest_available<SYNC>() ));
+        MATH(( llk_math_eltwise_unary_datacopy<A2D, BroadcastType::NONE, SyncHalf>(0) ));
         MATH(( llk_math_dest_section_done<SYNC>() ));
+
+        PACK(( llk_packer_wait_for_math_done() ));
+        PACK(( llk_pack<false, SYNC, false >(0, ocb)  ));
         PACK(( llk_pack_dest_section_done<SYNC>() ));
     }
-    // PACK(( DPRINT << 'p' << ENDL() ));
-
 }
 
 ALWI void tilize_uninit()
