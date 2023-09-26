@@ -7,6 +7,11 @@ Welcome to TT-Metal documentation!
 ==================================
 
 .. toctree::
+   :caption: Model Status
+
+   model_status/model_status
+
+.. toctree::
    :caption: Get Started
 
    get_started/get_started
