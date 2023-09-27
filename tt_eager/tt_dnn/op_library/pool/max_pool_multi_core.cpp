@@ -232,11 +232,11 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
     if (output.memory_config().is_sharded()) {
         uint32_t sharded_out_cb_id = CB::c_out1;            // output rows in RM
 
-        uint32_t sharded_out_cb_size = output.shard_spec().value().shard_shape.first * output.shard_spec().value().shard_shape.second * out_nbytes;    // there is just one row of channels after reduction
+        uint32_t sharded_out_cb_size = output.shard_spec().value().shard_shape[0] * output.shard_spec().value().shard_shape[1] * out_nbytes;    // there is just one row of channels after reduction
         auto cb_sharded_out = CreateCircularBuffers(program,
                                             sharded_out_cb_id,
                                             all_cores,
-                                            output.shard_spec().value().shard_shape.first,
+                                            output.shard_spec().value().shard_shape[0],
                                             sharded_out_cb_size,
                                             out_df,
                                             output.buffer()->address(),
