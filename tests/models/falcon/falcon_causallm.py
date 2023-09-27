@@ -66,6 +66,7 @@ class TtFalconCausalLM(TtFalconModelShared):
         layer_past_len: int = 0,
         use_cache: bool = False,
     ) -> tt_lib.tensor.Tensor:
+        dump_tensor("input_embeddings", "tt", input_embeddings)
         hidden_states, presents = super().forward(
             input_embeddings=input_embeddings,
             attention_mask=attention_mask,
@@ -75,7 +76,7 @@ class TtFalconCausalLM(TtFalconModelShared):
             layer_past_len=layer_past_len,
             use_cache=use_cache,
         )
-
+        dump_tensor("lm_head_input", "tt", hidden_states)
         lm_logits = tt_lib.tensor.falcon_lm_head_matmul(
             hidden_states,
             self.lm_head_weights,
@@ -83,6 +84,6 @@ class TtFalconCausalLM(TtFalconModelShared):
             output_dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
         )
 
-        # dump_tensor("lm_logits", "tt", tt2torch_tensor(lm_logits), do_nothing=False)
+        dump_tensor("lm_logits", "tt", lm_logits)
 
         return lm_logits, presents

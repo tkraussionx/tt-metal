@@ -14,12 +14,20 @@ import struct
 from tt_lib.fused_ops.conv import conv as TtConv
 from tt_lib.fallback_ops import fallback_ops
 
+
 full_name_to_index = {}
 
-def dump_tensor(name, suffix, tensor, do_nothing = True):
-    if do_nothing:
-        return
+def dump_tensor(name, suffix, tensor):
     global full_name_to_index
+    if suffix == "tt":
+        tensor = tt2torch_tensor(tensor)
+    elif suffix == "pt" or suffix == "hf":
+        pass
+    else:
+        logger.warning(f"suffix is {suffix}, should be tt or pt, hf")
+        assert False, "bad argument"
+
+
     full_name = f"{name}.{suffix}"
     index = full_name_to_index.get(full_name, 0)
     torch.save(tensor, f'tmp/{full_name}_{index}.pt')

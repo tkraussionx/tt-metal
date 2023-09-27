@@ -937,7 +937,7 @@ class FalconModel(FalconPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
-
+        dump_tensor("input_embeddings", "hf", input_ids)
         hidden_states = inputs_embeds
 
         presents = () if use_cache else None
@@ -972,6 +972,7 @@ class FalconModel(FalconPreTrainedModel):
         )
 
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
+
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -1001,6 +1002,7 @@ class FalconModel(FalconPreTrainedModel):
                     head_mask[i],
                 )
             else:
+                dump_tensor(f"decoder_{i}_input", "hf", hidden_states)
                 outputs = block(
                     hidden_states,
                     layer_past=layer_past,
@@ -1116,7 +1118,6 @@ class FalconForCausalLM(FalconPreTrainedModel):
         return_dict = (
             return_dict if return_dict is not None else self.config.use_return_dict
         )
-
         transformer_outputs = self.transformer(
             input_ids,
             past_key_values=past_key_values,
@@ -1130,8 +1131,9 @@ class FalconForCausalLM(FalconPreTrainedModel):
         )
         hidden_states = transformer_outputs[0]
 
+        dump_tensor("lm_head_input", "hf", hidden_states)
         lm_logits = self.lm_head(hidden_states)
-        dump_tensor("lm_logits", "hf", lm_logits, do_nothing = False)
+        dump_tensor("lm_logits", "hf", lm_logits)
 
         loss = None
         if labels is not None:

@@ -283,15 +283,24 @@ class TtFalconAttention(nn.Module):
             )
 
         elif llm_mode == "decode":
-            attn_weights = tt_lib.operations.primary.transformers.attn_matmul(
+
+            attn_weights = tt_lib.operations.primary.matmul(
                 query_layer,
                 key_layer_transposed,
-                compute_with_storage_grid_size=tt_lib.tensor.CoreCoord(12, 9),
                 output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
                 output_dtype=self.model_config[
                     "PRE_SOFTMAX_MM_OUTPUT_DTYPE"
                 ],  # Must be BFLOAT16
             )
+            # attn_weights = tt_lib.operations.primary.transformers.attn_matmul(
+            #     query_layer,
+            #     key_layer_transposed,
+            #     compute_with_storage_grid_size=tt_lib.tensor.CoreCoord(12, 9),
+            #     output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
+            #     output_dtype=self.model_config[
+            #         "PRE_SOFTMAX_MM_OUTPUT_DTYPE"
+            #     ],  # Must be BFLOAT16
+            # )
         query_layer.deallocate()
         key_layer_transposed.deallocate()
 
@@ -359,15 +368,23 @@ class TtFalconAttention(nn.Module):
             )
 
         elif llm_mode == "decode":
-            attn_output = tt_lib.operations.primary.transformers.attn_matmul(
+            attn_output = tt_lib.operations.primary.matmul(
                 attn_weights,
                 value_layer,
-                compute_with_storage_grid_size=tt_lib.tensor.CoreCoord(12, 9),
                 output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
                 output_dtype=self.model_config[
                     "POST_SOFTMAX_MM_OUTPUT_DTYPE"
                 ],  # Must be BFLOAT16
             )
+            # attn_output = tt_lib.operations.primary.transformers.attn_matmul(
+            #     attn_weights,
+            #     value_layer,
+            #     compute_with_storage_grid_size=tt_lib.tensor.CoreCoord(12, 9),
+            #     output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
+            #     output_dtype=self.model_config[
+            #         "POST_SOFTMAX_MM_OUTPUT_DTYPE"
+            #     ],  # Must be BFLOAT16
+            # )
         attn_weights.deallocate()
         value_layer.deallocate()
 

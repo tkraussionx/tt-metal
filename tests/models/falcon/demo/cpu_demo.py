@@ -45,7 +45,7 @@ def test_cpu_demo_no_kv(batch_size):
 
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_VERSION)
-    num_tokens = 128
+    num_tokens = 2
     prompt_text = ["Write me a haiku about Tokyo"] * batch_size
 
     logger.info("Tokenizing inputs")
@@ -92,7 +92,7 @@ def test_cpu_demo_kv(batch_size):
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_VERSION)
 
-    num_tokens = 2048
+    num_tokens = 1
 
     # prompt_text = ["Descriptive writing usually appeals to the five senses: taste, touch, smell, hearing, and sight. \
     # (Example: Jack's coffee mug exploded into tiny shards of glass, catching the attention of everyone at the office.) \

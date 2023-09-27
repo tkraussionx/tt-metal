@@ -210,6 +210,7 @@ class TtFalconModelShared(torch.nn.Module):
         layer_output = input_embeddings
         presents = ()
         for idx, layer in enumerate(self.layers):
+            dump_tensor(f"decoder_{idx}_input", "tt", layer_output)
             layer_output = layer(
                 hidden_states=layer_output,
                 alibi=None,
@@ -280,6 +281,7 @@ class TtFalconModel(TtFalconModelShared):
         layer_past_len: int = 0,
         use_cache: bool = False,
     ) -> tt_lib.tensor.Tensor:
+
         hidden_states, presents = super().forward(
             input_embeddings=input_embeddings,
             llm_mode=llm_mode,

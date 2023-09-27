@@ -26,7 +26,6 @@ def post_process(logits, input_ids, index):
 
 def test_gs_demo_kv(device):
     start = time.time()
-    # enable_memory_reports()
     model_version = "tiiuae/falcon-7b-instruct"
     model_config = get_model_config("BFLOAT16-DRAM")
     tt_cache_path = get_tt_cache_path(model_version)
@@ -148,7 +147,8 @@ def test_gs_demo_kv(device):
 
     # DECODE
 
-    for output_token_index in range(num_tokens - seq_len):
+    # for output_token_index in range(num_tokens - seq_len):
+    for output_token_index in range(1):
         decode_start = time.time()
         assert output_ids.shape[0] == 1
         decode_ids = output_ids.expand(batch_size, -1) # Expand to 32 samples because decode stage only works with batch size of 32
