@@ -8,7 +8,7 @@
 #include <functional>
 #include <random>
 
-#include "single_device_fixture.hpp"
+#include "multi_device_fixture.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/hostdevcommon/common_runtime_address_map.h"  // FIXME: Should remove dependency on this
@@ -21,7 +21,7 @@ using namespace tt;
 using namespace tt::test_utils;
 using namespace tt::test_utils::df;
 
-namespace unit_tests::dram::direct {
+namespace unit_tests::dram::multichip {
 /// @brief Does Dram --> Reader --> L1 on a single core
 /// @param device
 /// @param test_config - Configuration of the test -- see struct
@@ -360,45 +360,10 @@ bool reader_datacopy_writer(tt_metal::Device* device, const ReaderDatacopyWriter
     pass &= inputs == dest_buffer_data;
     return pass;
 }
-}  // namespace unit_tests::dram::direct
+}  // namespace unit_tests::dram::multichip
 
-TEST_F(SingleDeviceFixture, SingleCoreDirectDramReaderOnly) {
-    ASSERT_TRUE(unit_tests::dram::direct::reader_only(device_, 1 * 1024, L1_UNRESERVED_BASE, {.x = 1, .y = 6}));
-    //ASSERT_TRUE(unit_tests::dram::direct::reader_only(device_, 2 * 1024, L1_UNRESERVED_BASE, {.x = 0, .y = 0}));
-    //ASSERT_TRUE(unit_tests::dram::direct::reader_only(device_, 16 * 1024, L1_UNRESERVED_BASE, {.x = 0, .y = 0}));
-}
-TEST_F(SingleDeviceFixture, SingleCoreDirectDramWriterOnly) {
-    ASSERT_TRUE(unit_tests::dram::direct::writer_only(device_, 1 * 1024, L1_UNRESERVED_BASE, {.x = 0, .y = 0}));
-    ASSERT_TRUE(unit_tests::dram::direct::writer_only(device_, 2 * 1024, L1_UNRESERVED_BASE, {.x = 0, .y = 0}));
-    ASSERT_TRUE(unit_tests::dram::direct::writer_only(device_, 16 * 1024, L1_UNRESERVED_BASE, {.x = 0, .y = 0}));
-}
-TEST_F(SingleDeviceFixture, SingleCoreDirectDramReaderWriter) {
-    unit_tests::dram::direct::ReaderWriterConfig test_config = {
-        .num_tiles = 1,
-        .tile_byte_size = 2 * 32 * 32,
-        .l1_byte_address = L1_UNRESERVED_BASE,
-        .l1_data_format = tt::DataFormat::Float16_b,
-        .core = {.x = 0, .y = 0}};
-    test_config.num_tiles = 1;
-    ASSERT_TRUE(unit_tests::dram::direct::reader_writer(device_, test_config));
-    test_config.num_tiles = 4;
-    ASSERT_TRUE(unit_tests::dram::direct::reader_writer(device_, test_config));
-    test_config.num_tiles = 8;
-    ASSERT_TRUE(unit_tests::dram::direct::reader_writer(device_, test_config));
-}
-TEST_F(SingleDeviceFixture, SingleCoreDirectDramReaderDatacopyWriter) {
-    unit_tests::dram::direct::ReaderDatacopyWriterConfig test_config = {
-        .num_tiles = 1,
-        .tile_byte_size = 2 * 32 * 32,
-        .l1_input_byte_address = L1_UNRESERVED_BASE,
-        .l1_input_data_format = tt::DataFormat::Float16_b,
-        .l1_output_byte_address = L1_UNRESERVED_BASE + 16 * 32 * 32,
-        .l1_output_data_format = tt::DataFormat::Float16_b,
-        .core = {.x = 0, .y = 0}};
-    test_config.num_tiles = 1;
-    ASSERT_TRUE(unit_tests::dram::direct::reader_datacopy_writer(device_, test_config));
-    test_config.num_tiles = 4;
-    ASSERT_TRUE(unit_tests::dram::direct::reader_datacopy_writer(device_, test_config));
-    test_config.num_tiles = 8;
-    ASSERT_TRUE(unit_tests::dram::direct::reader_datacopy_writer(device_, test_config));
+TEST_F(MultiDeviceFixture, SingleCoreDirectDramReaderMultichip) {
+    ASSERT_TRUE(unit_tests::dram::multichip::reader_only(devices_.at(0), 1 * 1024, L1_UNRESERVED_BASE, {.x = 1, .y = 6}));
+    //ASSERT_TRUE(unit_tests::dram::multichip::reader_only(device_, 2 * 1024, L1_UNRESERVED_BASE, {.x = 0, .y = 0}));
+    //ASSERT_TRUE(unit_tests::dram::multichip::reader_only(device_, 16 * 1024, L1_UNRESERVED_BASE, {.x = 0, .y = 0}));
 }

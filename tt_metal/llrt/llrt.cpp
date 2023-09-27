@@ -92,6 +92,7 @@ void write_hex_vec_to_core(
     tt_cluster *cluster, int chip, const CoreCoord &core, std::vector<uint32_t> hex_vec, uint64_t addr, bool small_access) {
     // the API is named "write_dram_vec", and its overloaded variant is taking (chip, core) pair, ie. it can write to
     // core's L1
+  std::cout << " writing to chip " << chip << " core " << core.str() << " addr " << std::hex << addr << std::dec << " size " << hex_vec.size() << std::endl;
     cluster->write_dram_vec(hex_vec, tt_cxy_pair(chip, core), addr, small_access);
 }
 
