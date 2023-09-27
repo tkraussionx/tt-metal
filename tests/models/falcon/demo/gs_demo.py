@@ -33,7 +33,8 @@ def test_gs_demo_kv(device):
 
     batch_size = 32
     num_layers = 32
-    num_tokens = 2048
+    num_tokens = 64
+    max_input_tokens = 32
     max_seq_len = (num_tokens//32 +1)*32
 
     hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_version)
@@ -54,24 +55,25 @@ def test_gs_demo_kv(device):
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(model_version)
 
-    input_prompts = ["Descriptive writing usually appeals to the five senses: taste, touch, smell, hearing, and sight. \
-    (Example: Jack's coffee mug exploded into tiny shards of glass, catching the attention of everyone at the office.) \
-    Always appealing to the senses is key to writing a good descriptive essay.\
-    Write a very long descriptive writing about Canada's role in fighting with the climate change."]
+    # input_prompts = ["Descriptive writing usually appeals to the five senses: taste, touch, smell, hearing, and sight. \
+    # (Example: Jack's coffee mug exploded into tiny shards of glass, catching the attention of everyone at the office.) \
+    # Always appealing to the senses is key to writing a good descriptive essay.\
+    # Write a a 2 page descriptive writing about Canada's role in fighting with the climate change."]
+
+    input_prompts = ["write a poem about valencia"]
 
     logger.info("Tokenizing inputs")
     tokenizer.pad_token = tokenizer.eos_token
     tokenized_inputs = tokenizer(
-        input_prompts, padding="max_length", max_length=32, add_special_tokens=False, return_tensors="pt"
+        input_prompts, padding="max_length", max_length=max_input_tokens, add_special_tokens=False, return_tensors="pt"
     )
     prefill_ids = tokenized_inputs["input_ids"]
 
     tokenized_inputs_nopad = tokenizer(
-        input_prompts, padding=False, max_length=32, add_special_tokens=False, return_tensors="pt"
+        input_prompts, padding=False, max_length=max_input_tokens, add_special_tokens=False, return_tensors="pt"
     )
 
     seq_len = len(tokenized_inputs_nopad["input_ids"][0])
-    print(seq_len)
 
     logger.info(f"Input # on Tokens: {seq_len}")
 

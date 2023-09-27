@@ -322,6 +322,9 @@ class TtFalconAttention(nn.Module):
                 output_mem_config=self.model_config["PRE_SOFTMAX_MASK_OUTPUT_MEMCFG"],
             )
 
+        ## Add temperature before softmax
+        temperature = 1.0
+        attn_weights = tt_lib.tensor.mul_unary(attn_weights, 1/temperature)
         attn_weights = tt_lib.operations.primary.softmax_in_place(
             attn_weights,
 

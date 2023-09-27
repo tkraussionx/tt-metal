@@ -15,8 +15,8 @@ from tests.models.falcon.falcon_decoder import TtFalconDecoderLayer
 from models.utility_functions import (
     tt2torch_tensor,
     torch2tt_tensor,
+    torch_to_tt_tensor_rm,
     pad_by_zero,
-    tt2torch_tensor,
     dump_tensor,
 )
 
@@ -116,6 +116,15 @@ class TtFalconModelShared(torch.nn.Module):
             assert batch == 1, "For prefill, batch must be 1!"
             assert q_len % 32 == 0, "For prefill, seq_len must be multiple of 32!"
             assert kv_cache_len == 0, "For prefill, no kv_cache is passed in!"
+
+            # print('size of embedding input:::', embeddings.unsqueeze(1).shape)
+
+            # tt_embeddings = torch_to_tt_tensor_rm(
+            #     embeddings.unsqueeze(1),
+            #     self.device,
+            #     tt_memory_config=self.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"],
+            #     tt_dtype=self.model_config["WORD_EMBEDDING_OUTPUT_DTYPE"],
+            # )
 
             tt_embeddings = torch2tt_tensor(
                 embeddings.unsqueeze(1),
