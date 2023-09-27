@@ -30,7 +30,7 @@ from tests.models.yolov5.tt.yolov5_detection_model import (
     yolov5s_detection_model,
 )
 
-from models.utility_functions import (
+from tt_models.utility_functions import (
     torch2tt_tensor,
     comp_pcc,
 )

@@ -14,7 +14,7 @@ from tests.models.resnet.utils import (
     fold_bn_to_conv,
     fold_bn_to_conv_weights_bias,
 )
-from models.utility_functions import pad_by_zero, tt2torch_tensor
+from tt_models.utility_functions import pad_by_zero, tt2torch_tensor
 from tt_lib.utils import pad_weight
 
 from tt_lib.fused_ops.average_pool import run_avg_pool_on_device_wrapper as TtAvgPool
@@ -26,7 +26,7 @@ from tt_lib.fused_ops.conv import (
     resnet50_1x1_conv_as_matmul,
     resnet50_optimized_conv,
 )
-from models.utility_functions import _nearest_32, profiler
+from tt_models.utility_functions import _nearest_32, profiler
 from tt_lib.fallback_ops import fallback_ops
 
 

@@ -7,7 +7,7 @@ import pytest
 from loguru import logger
 
 import tt_lib as ttl
-from models.utility_functions import comp_pcc
+from tt_models.utility_functions import comp_pcc
 from tests.tt_eager.python_api_testing.sweep_tests.common import skip_for_wormhole_b0
 
 

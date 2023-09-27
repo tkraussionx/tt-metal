@@ -15,7 +15,7 @@ import tt_lib as ttl
 from tt_lib.utils import is_close
 from tests.tt_eager.python_api_testing.sweep_tests.common import is_wormhole_b0, skip_for_wormhole_b0
 from loguru import logger
-from models.utility_functions import (
+from tt_models.utility_functions import (
     comp_pcc,
 )
 

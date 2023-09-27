@@ -19,12 +19,12 @@ from torchvision import models
 from transformers import AutoImageProcessor
 import pytest
 import tt_lib
-from models.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor, profiler
-from models.utility_functions import (
+from tt_models.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor, profiler
+from tt_models.utility_functions import (
     disable_persistent_kernel_cache,
     enable_persistent_kernel_cache,
 )
-from models.utility_functions import prep_report
+from tt_models.utility_functions import prep_report
 
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_allclose,

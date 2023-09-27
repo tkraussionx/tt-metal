@@ -20,7 +20,7 @@ from tests.models.bert.ffn import TtFeedForwardModel
 from tests.models.bert.fused_ops.add_and_norm import AddAndNorm
 from tests.models.bert.fused_ops.linear import Linear
 from tt_lib.utils import pad_activation, pad_weight, print_diff_argmax
-from models.utility_functions import comp_pcc, comp_allclose
+from tt_models.utility_functions import comp_pcc, comp_allclose
 
 
 class TtBertEncoder(torch.nn.Module):

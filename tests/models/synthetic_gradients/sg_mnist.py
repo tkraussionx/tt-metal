@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms, datasets
 
 import tt_lib as ttl
-from models.utility_functions import (
+from tt_models.utility_functions import (
     pad_activation,
     pad_weight,
     tilize_to_list,

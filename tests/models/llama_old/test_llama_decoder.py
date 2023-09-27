@@ -25,11 +25,11 @@ from typing import List, Optional, Tuple, Union
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from collections import OrderedDict
 
-from models.llama.llama_utils import *
+from tt_models.llama.llama_utils import *
 from tests.models.llama_old.llama_mlp import TtLlamaMLP
 from tests.models.llama_old.llama_attention import TtLlamaAttention
 from tests.models.llama_old.llama_layer_norm import TtLlamaRMSNorm
-from models.utility_functions import (
+from tt_models.utility_functions import (
     comp_allclose,
     comp_pcc,
     torch_to_tt_tensor_rm,

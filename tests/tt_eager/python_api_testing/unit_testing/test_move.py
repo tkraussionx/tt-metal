@@ -12,7 +12,7 @@ sys.path.append(f"{f}/../..")
 
 from tests.tt_eager.python_api_testing.sweep_tests.common import is_wormhole_b0, skip_for_wormhole_b0
 import tt_lib as ttl
-from models.utility_functions import (
+from tt_models.utility_functions import (
     comp_pcc,
 )
 import torch

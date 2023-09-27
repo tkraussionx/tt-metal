@@ -20,7 +20,7 @@ import tt_lib as ttl
 from tests.models.bert_large_perf.fused_ops.add_and_norm import AddAndNorm
 from tests.models.bert_large_perf.fused_ops.layernorm import create_var_scaler
 from tt_lib.utils import pad_activation, pad_weight, print_diff_argmax
-from models.utility_functions import (
+from tt_models.utility_functions import (
     enable_persistent_kernel_cache,
     comp_pcc,
     comp_allclose,

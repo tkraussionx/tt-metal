@@ -6,7 +6,7 @@ import torch
 import pytest
 
 import tt_lib as ttl
-from models.utility_functions import nearest_32
+from tt_models.utility_functions import nearest_32
 from tests.tt_eager.python_api_testing.sweep_tests.common import skip_for_wormhole_b0
 
 

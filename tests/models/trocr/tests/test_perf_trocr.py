@@ -8,15 +8,15 @@ from PIL import Image
 
 import pytest
 import tt_lib
-from models.utility_functions import (
+from tt_models.utility_functions import (
     disable_persistent_kernel_cache,
     enable_persistent_kernel_cache,
 )
-from models.utility_functions import Profiler, prep_report
+from tt_models.utility_functions import Profiler, prep_report
 
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 
-from models.trocr.tt.trocr import trocr_causal_llm
+from tt_models.trocr.tt.trocr import trocr_causal_llm
 
 BATCH_SIZE = 1
 
@@ -32,7 +32,7 @@ def test_perf(expected_inference_time, expected_compile_time, device):
     model = VisionEncoderDecoderModel.from_pretrained(
         "microsoft/trocr-base-handwritten"
     )
-    iam_ocr_sample_input = Image.open("models/sample_data/iam_ocr_image.jpg")
+    iam_ocr_sample_input = Image.open("tt_models/sample_data/iam_ocr_image.jpg")
     pixel_values = processor(
         images=iam_ocr_sample_input, return_tensors="pt"
     ).pixel_values

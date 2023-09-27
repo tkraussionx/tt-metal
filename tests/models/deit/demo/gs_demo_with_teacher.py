@@ -18,7 +18,7 @@ import torch
 from loguru import logger
 
 import tt_lib
-from models.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor
+from tt_models.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor
 from deit_for_image_classification_with_teacher import (
     deit_for_image_classification_with_teacher,
 )

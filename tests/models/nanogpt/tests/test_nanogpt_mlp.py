@@ -9,10 +9,10 @@ import pytest
 from transformers import GPT2LMHeadModel
 
 from loguru import logger
-import models.nanogpt.tt.nanogpt_mlp as nanogpt_mlp
+from tt_models.nanogpt.tt import nanogpt_mlp
 
 
-from models.utility_functions import (
+from tt_models.utility_functions import (
     tt_to_torch_tensor,
     torch_to_tt_tensor_rm,
     comp_allclose,

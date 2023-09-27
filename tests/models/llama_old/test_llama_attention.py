@@ -22,12 +22,12 @@ import tt_lib
 
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-from models.llama.llama_utils import *
+from tt_models.llama.llama_utils import *
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_allclose,
     comp_pcc,
 )
-from models.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor
+from tt_models.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor
 from tests.models.llama_old.llama_attention import TtLlamaAttention
 
 

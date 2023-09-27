@@ -6,7 +6,7 @@ import torch
 import json
 import numpy as np
 import tt_lib as ttm
-from models.utility_functions import (
+from tt_models.utility_functions import (
     pad_activation,
     pad_weight,
     tilize_to_list,

@@ -6,8 +6,8 @@ import torch
 from torch import nn
 import tt_lib
 
-from models.helper_funcs import Linear as TTLinear
-from models.utility_functions import torch_to_tt_tensor_rm
+from tt_models.helper_funcs import Linear as TTLinear
+from tt_models.utility_functions import torch_to_tt_tensor_rm
 
 
 class TtLlamaMLP(nn.Module):

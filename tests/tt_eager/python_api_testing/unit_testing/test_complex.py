@@ -9,7 +9,7 @@ import sys
 import torch
 
 import tt_lib as ttl
-from models.utility_functions import print_diff_argmax
+from tt_models.utility_functions import print_diff_argmax
 import pytest
 from loguru import logger
 

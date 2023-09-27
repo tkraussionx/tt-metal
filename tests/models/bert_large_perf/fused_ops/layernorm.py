@@ -20,7 +20,7 @@ from tt_lib.utils import (
     roundup32,
     float_to_bits,
 )
-from models.utility_functions import profiler
+from tt_models.utility_functions import profiler
 
 
 def create_var_scaler(H, W, layer_norm_eps, device):

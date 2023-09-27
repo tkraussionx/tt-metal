@@ -9,9 +9,9 @@ import pytest
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
 from loguru import logger
-import models.nanogpt.tt.nanogpt_model as nanogpt_model
+from tt_models.nanogpt.tt import nanogpt_model
 
-from models.utility_functions import tt_to_torch_tensor, comp_allclose, comp_pcc
+from tt_models.utility_functions import tt_to_torch_tensor, comp_allclose, comp_pcc
 
 
 

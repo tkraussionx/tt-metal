@@ -24,7 +24,7 @@ from tests.models.yolov3.reference.models.common import autopad
 from tests.models.yolov3.reference.utils.dataloaders import LoadImages
 from tests.models.yolov3.reference.utils.general import check_img_size
 
-from models.utility_functions import (
+from tt_models.utility_functions import (
     comp_allclose_and_pcc,
     comp_pcc,
     torch2tt_tensor,

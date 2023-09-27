@@ -11,7 +11,7 @@ from typing import Optional, Tuple
 import tt_lib
 
 from tests.models.falcon.falcon_decoder import TtFalconDecoderLayer
-from models.utility_functions import (
+from tt_models.utility_functions import (
     torch2tt_tensor,
     pad_by_zero,
 )

@@ -9,13 +9,13 @@ import tt_lib
 from loguru import logger
 
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from models.utility_functions import (
+from tt_models.utility_functions import (
     tt_to_torch_tensor,
     torch_to_tt_tensor_rm,
     comp_pcc,
     comp_allclose_and_pcc,
 )
-from models.llama.tt.llama_attention import TtLlamaAttention
+from tt_models.llama.tt.llama_attention import TtLlamaAttention
 
 
 class PytorchLlamaAttentionModel(torch.nn.Module):

@@ -10,16 +10,16 @@ import tt_lib
 
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-from models.utility_functions import (
+from tt_models.utility_functions import (
     tt_to_torch_tensor,
     torch_to_tt_tensor_rm,
     comp_pcc,
     comp_allclose_and_pcc,
 )
-from models.llama.llama_utils import gen_position_ids
+from tt_models.llama.llama_utils import gen_position_ids
 
 
-from models.llama.tt.llama_stacked_decoders import TtLlamaDecoderModelStacked
+from tt_models.llama.tt.llama_stacked_decoders import TtLlamaDecoderModelStacked
 from tests.models.llama.cpu_stacked_decoders import (
     PytorchLlamaDecoderModelStacked,
 )

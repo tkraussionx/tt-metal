@@ -14,7 +14,7 @@ sys.path.append(f"{f}/../../../..")
 
 import pytest
 import tt_lib
-from models.llama.llama_utils import *
+from tt_models.llama.llama_utils import *
 from tests.models.llama_old.llama_mlp import TtLlamaMLP
 from tests.models.llama_old.llama_attention import TtLlamaAttention
 from tests.models.llama_old.llama_layer_norm import TtLlamaRMSNorm
@@ -26,7 +26,7 @@ from transformers import (
     PreTrainedModel,
 )
 
-from models.utility_functions import (
+from tt_models.utility_functions import (
     comp_allclose,
     comp_pcc,
     tt_to_torch_tensor,

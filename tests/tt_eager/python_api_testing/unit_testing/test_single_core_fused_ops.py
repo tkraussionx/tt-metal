@@ -12,7 +12,7 @@ from tt_lib.utils import (
 )
 from tests.tt_eager.python_api_testing.sweep_tests.common import skip_for_wormhole_b0
 
-from models.utility_functions import comp_pcc, pad_by_zero
+from tt_models.utility_functions import comp_pcc, pad_by_zero
 
 shapes = [[1, 1, 32, 32], [1, 1, 32, 128]]
 

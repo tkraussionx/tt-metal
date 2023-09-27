@@ -23,8 +23,8 @@ import tt_lib
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from collections import OrderedDict
 
-from models.llama.llama_utils import *
-from models.utility_functions import (
+from tt_models.llama.llama_utils import *
+from tt_models.utility_functions import (
     comp_allclose,
     comp_pcc,
     torch_to_tt_tensor_rm,

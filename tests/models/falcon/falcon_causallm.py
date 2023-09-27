@@ -10,8 +10,8 @@ from typing import Optional, Tuple
 import tt_lib
 
 from tests.models.falcon.falcon_model import TtFalconModelShared
-from models.helper_funcs import Linear as TTLinear
-from models.utility_functions import torch2tt_tensor
+from tt_models.helper_funcs import Linear as TTLinear
+from tt_models.utility_functions import torch2tt_tensor
 
 
 class TtFalconCausalLM(TtFalconModelShared):

@@ -11,7 +11,7 @@ from transformers import VisionEncoderDecoderModel
 
 import tt_lib
 
-from models.trocr.trocr_utils import GenerationMixin
+from tt_models.trocr.trocr_utils import GenerationMixin
 
 
 @pytest.mark.parametrize(
@@ -30,7 +30,7 @@ def test_trocr_causal_llm_inference(device, pcc, reset_seeds):
             device=device,
         )
         processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
-        iam_ocr_sample_input = Image.open("models/sample_data/iam_ocr_image.jpg")
+        iam_ocr_sample_input = Image.open("tt_models/sample_data/iam_ocr_image.jpg")
         pixel_values = processor(
             images=iam_ocr_sample_input, return_tensors="pt"
         ).pixel_values

@@ -11,7 +11,7 @@ import ast
 
 @pytest.fixture
 def imagenet_label_dict():
-    path = "models/sample_data/imagenet_class_labels.txt"
+    path = "tt_models/sample_data/imagenet_class_labels.txt"
     with open(path, "r") as file:
         class_labels = ast.literal_eval(file.read())
     return class_labels
@@ -19,7 +19,7 @@ def imagenet_label_dict():
 
 @pytest.fixture
 def imagenet_sample_input():
-    path = "models/sample_data/ILSVRC2012_val_00048736.JPEG"
+    path = "tt_models/sample_data/ILSVRC2012_val_00048736.JPEG"
 
     im = Image.open(path)
     im = im.resize((224, 224))
@@ -28,20 +28,20 @@ def imagenet_sample_input():
 
 @pytest.fixture
 def mnist_sample_input():
-    path = "models/sample_data/torchvision_mnist_digit_7.jpg"
+    path = "tt_models/sample_data/torchvision_mnist_digit_7.jpg"
     im = Image.open(path)
     return im
 
 
 @pytest.fixture
 def iam_ocr_sample_input():
-    path = "models/sample_data/iam_ocr_image.jpg"
+    path = "tt_models/sample_data/iam_ocr_image.jpg"
     im = Image.open(path)
     return im
 
 
 @pytest.fixture
 def hf_cat_image_sample_input():
-    path = "models/sample_data/huggingface_cat_image.jpg"
+    path = "tt_models/sample_data/huggingface_cat_image.jpg"
     im = Image.open(path)
     return im

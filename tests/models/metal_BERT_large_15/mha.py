@@ -20,7 +20,7 @@ import numpy as np
 
 import tt_lib as ttl
 from tt_lib.utils import pad_activation, pad_weight, print_diff_argmax
-from models.utility_functions import (
+from tt_models.utility_functions import (
     enable_persistent_kernel_cache,
     comp_pcc,
     comp_allclose,

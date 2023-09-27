@@ -10,7 +10,7 @@ from typing import List, Optional, Tuple, Union
 from tests.models.llama_old.llama_mlp import TtLlamaMLP
 from tests.models.llama_old.llama_attention import TtLlamaAttention
 from tests.models.llama_old.llama_layer_norm import TtLlamaRMSNorm
-from models.llama.llama_utils import *
+from tt_models.llama.llama_utils import *
 
 
 class TtLlamaDecoderLayer(nn.Module):

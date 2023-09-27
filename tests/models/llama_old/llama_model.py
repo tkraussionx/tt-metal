@@ -7,7 +7,7 @@ from abc import abstractmethod
 import torch
 from torch import nn
 import tt_lib
-from models.utility_functions import torch_to_tt_tensor_rm
+from tt_models.utility_functions import torch_to_tt_tensor_rm
 
 from tests.models.llama_old.llama_layer_norm import TtLlamaRMSNorm
 from tests.models.llama_old.llama_decoder import TtLlamaDecoderLayer

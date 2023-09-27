@@ -19,14 +19,14 @@ from tests.models.bert_large_perf.embeddings import PytorchEmbeddings
 from tests.models.bert_large_perf.bert_encoder import TtBertEncoder
 from tests.models.bert_large_perf.fused_ops.linear import Linear
 from tt_lib.utils import pad_activation, pad_weight
-from models.utility_functions import (
+from tt_models.utility_functions import (
     enable_persistent_kernel_cache,
     comp_allclose_and_pcc,
     comp_pcc,
     comp_allclose,
     disable_persistent_kernel_cache,
 )
-from models.utility_functions import profiler
+from tt_models.utility_functions import profiler
 from tests.models.bert_large_perf.fused_ops.layernorm import create_var_scaler
 
 

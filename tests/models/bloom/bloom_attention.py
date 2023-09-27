@@ -13,7 +13,7 @@ from tt_lib.fused_ops.softmax import softmax as tt_softmax
 
 import tests.models.bloom.baddbmm as baddbmm
 from typing import Optional, Tuple, Union
-from models.utility_functions import pad_by_zero
+from tt_models.utility_functions import pad_by_zero
 
 
 def split_heads(

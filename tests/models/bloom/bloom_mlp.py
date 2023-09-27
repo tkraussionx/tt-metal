@@ -8,7 +8,7 @@ from torch.nn import functional as F
 import tt_lib
 import tests.models.bloom.bloom_utils as bloom_utils
 import tests.models.bloom.bloom_gelu_forward as bloom_gelu_forward
-from models.utility_functions import pad_by_zero
+from tt_models.utility_functions import pad_by_zero
 
 
 # class BloomMLP(nn.Module):

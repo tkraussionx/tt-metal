@@ -8,18 +8,18 @@ from torch import nn
 import tt_lib
 from loguru import logger
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from models.llama.llama_utils import (
+from tt_models.llama.llama_utils import (
     prepare_llama_input,
     gen_position_ids,
 )
-from models.utility_functions import (
+from tt_models.utility_functions import (
     tt_to_torch_tensor,
     torch_to_tt_tensor_rm,
     comp_allclose_and_pcc,
     comp_pcc,
 )
 from tests.models.llama.cpu_stacked_decoders import PytorchLlamaDecoderModelStacked
-from models.llama.tt.llama_stacked_decoders import TtLlamaDecoderModelStacked
+from tt_models.llama.tt.llama_stacked_decoders import TtLlamaDecoderModelStacked
 
 
 def tt_llama_first_half_decoders(

@@ -13,7 +13,7 @@ sys.path.append(f"{f}/../../../")
 
 import tt_lib
 from loguru import logger
-from models.utility_functions import (
+from tt_models.utility_functions import (
     Profiler,
     disable_persistent_kernel_cache,
     enable_persistent_kernel_cache,

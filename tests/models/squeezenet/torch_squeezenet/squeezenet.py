@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 import torch
 import torch.nn as nn
-from models.utility_functions import (
+from tt_models.utility_functions import (
     is_conv_supported_on_device,
     run_conv_on_device_wrapper,
 )
