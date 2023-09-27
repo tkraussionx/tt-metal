@@ -171,7 +171,7 @@ def resnet50_optimized_conv(weight: List[Union[int, float]], conv_params, device
     ).pad(weights_channels_padded_shape, (0, 0, 0, 0), 0)
 
     # for conv op, pad the weights to block shape
-    weight_tiled_ = tensor.convert_conv_weight_tensor_to_special_padding_tiled_layout(
+    weight_tiled_ = tensor.convert_conv_weight_tensor_to_tiled_layout(
         weight_untiled, weight_block_h, weight_block_w
     )
     weight_on_device = weight_tiled_.to(device)

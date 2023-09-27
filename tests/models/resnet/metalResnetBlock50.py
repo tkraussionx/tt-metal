@@ -552,7 +552,7 @@ class Bottleneck(nn.Module):
         assert per_core_act_h % 32 == 0
         per_core_act_h_ntiles = (int) (per_core_act_h / 32)
         per_core_weight_w_ntiles = (int) (per_core_weight_w / 32)
-        self.conv2 = resnet50_optimized_conv(conv2_weight.reshape(-1).tolist(), self.conv2_params, self.device, [act_block_h_datums, width*3], [width*3, weight_block_w_datums],
+        self.conv2 = resnet50_optimized_conv(conv2_weight.reshape(-1).tolist(), self.conv2_params, self.device, [act_block_h_datums, width], [width, weight_block_w_datums],
                                              [out_subblock_h_datums, out_subblock_w_datums], out_block_h_datums,
                                              grid_size, per_core_act_h_ntiles, per_core_weight_w_ntiles,
                                              conv2_bias.tolist(), True, output_mem_config=self.sharded_memory_config)
@@ -583,24 +583,24 @@ class Bottleneck(nn.Module):
                 self.downsample_or_noop = downsample_conv_op_wrapper(self.downsample_conv_on_tt)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-
+        print("This module input shape - ", self.module_input_shape)
         # conv1 is 1x1 conv
-        #print("Running conv1")
+        print("Running conv1")
         out = self.conv1(x)
         #print("conv1 output shape - ", self.conv1_output_shape)
-        #print("Running ds or nop")
+        print("Running ds or nop")
         ds_out = self.downsample_or_noop(x)
         # Relu after conv1 is fused with the 1x1 conv (matmul)
         #out = self.relu(out, self.memory_config)
-        #print("Running untilize op")
+        print("Running untilize op")
         out = format_tensor(out, tt_lib.tensor.Layout.ROW_MAJOR, self.device, self.memory_config)
         out = out.reshape(self.conv1_output_shape[0], self.conv1_output_shape[1], self.conv1_output_shape[2], self.conv1_output_shape[3])
 
-        #print("Running conv2")
+        print("Running conv2")
         out = self.conv2(out)
         # out = self.relu(out, self.memory_config)  ## fused with conv2
         # conv3 is 1x1 conv
-        #print("Running conv3")
+        print("Running conv3")
         out = self.conv3(out)
 
         fused_activations = [tt_lib.tensor.FusibleActivation.RELU]

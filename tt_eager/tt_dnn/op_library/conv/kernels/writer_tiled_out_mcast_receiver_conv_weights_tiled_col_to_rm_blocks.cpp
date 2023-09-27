@@ -126,34 +126,28 @@ void kernel_main() {
     uint32_t weight_start_tile_id = out_start_tile_id_w;
     //DPRINT << "weight_start_tile_id=" << weight_start_tile_id << ENDL();
     for (uint32_t bw = 0; bw < out_num_blocks_w; bw++) {
-
-        // MCAST RECEIVE WEIGHTS
-        // read weight blocks inner dim
-        // read weight slice - 1 block of weights in width dim and full weight matrix height
-        // read slice only once for all activation blocks
-        for(uint32_t block_weight_h = 0; block_weight_h < num_blocks_weight_h; block_weight_h++) {
-            // Set weights semaphore value to INVALID
-            noc_semaphore_set(weights_mcast_receiver_semaphore_addr_ptr, INVALID);
-
-            // Atomic increment source core counter
-            uint64_t weights_mcast_sender_semaphore_noc_addr = get_noc_addr(weights_mcast_sender_noc_x, weights_mcast_sender_noc_y, weights_mcast_sender_semaphore_addr);
-            noc_semaphore_inc(weights_mcast_sender_semaphore_noc_addr, 1);
-
-            // wait on weights semaphore value to become VALID (set by mcast sender after it multicasts data)
-            noc_semaphore_wait(weights_mcast_receiver_semaphore_addr_ptr, VALID);
-
-            cb_push_back(cb_id_weight, weight_block_num_tiles);
-        } // for num_blocks_weight_h
-
-        // Increment weight start tile id for next block in width dim
-        weight_start_tile_id += weight_next_block_stride_w;
-
-        #ifndef SHARDED_OUT
         uint32_t out_block_h_start_tile_id = out_block_w_start_tile_id;
-        //DPRINT << "out_block_h_start_tile_id=" << out_block_h_start_tile_id << ENDL();
         uint32_t out_block_h_start_tile_id_h = out_start_tile_id_h;
         for(uint32_t bh = 0; bh < out_num_blocks_h; bh++) {
+            // MCAST RECEIVE WEIGHTS
+            // read weight blocks inner dim
+            // read weight slice - 1 block of weights in width dim and full weight matrix height
+            // read slice only once for all activation blocks
+            for(uint32_t block_weight_h = 0; block_weight_h < num_blocks_weight_h; block_weight_h++) {
+                // Set weights semaphore value to INVALID
+                noc_semaphore_set(weights_mcast_receiver_semaphore_addr_ptr, INVALID);
 
+                // Atomic increment source core counter
+                uint64_t weights_mcast_sender_semaphore_noc_addr = get_noc_addr(weights_mcast_sender_noc_x, weights_mcast_sender_noc_y, weights_mcast_sender_semaphore_addr);
+                noc_semaphore_inc(weights_mcast_sender_semaphore_noc_addr, 1);
+
+                // wait on weights semaphore value to become VALID (set by mcast sender after it multicasts data)
+                noc_semaphore_wait(weights_mcast_receiver_semaphore_addr_ptr, VALID);
+
+                cb_push_back(cb_id_weight, weight_block_num_tiles);
+            } // for num_blocks_weight_h
+            
+            #ifndef SHARDED_OUTPUT
             uint32_t out_sbh_start_tile_id = out_block_h_start_tile_id;
             uint32_t out_sbh_start_tile_id_h = out_block_h_start_tile_id_h; //
             for(uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
@@ -200,6 +194,8 @@ void kernel_main() {
         out_block_w_start_tile_id += out_next_block_stride_w;
         out_block_w_start_tile_id_w += weight_block_width_ntiles;
         #endif
+        // Increment weight start tile id for next block in width dim
+        weight_start_tile_id += weight_next_block_stride_w;
     } // out_num_blocks_w
 
     #ifdef SHARDED_OUT
