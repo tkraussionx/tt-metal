@@ -393,7 +393,7 @@ hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_conv = {
         (25088, 64) : [256, 64, 128, 64, 256, (12,9), 256, 64],
         (6272, 128) : [64, 128, 64, 128, 64, (12,9), 64, 128],
         (1568, 256) : [160, 32, 32, 32, 160, (10,8), 160, 32],
-        (416, 512) : [32, 64, 32, 32, 96, (5,8), 96, 64],
+        (416, 512) : [96, 64, 32, 32, 96, (5,8), 96, 64],
     },
 }
 
@@ -449,6 +449,7 @@ class Bottleneck(nn.Module):
         batch_size=1,
         sharded = False,
         out_sharded = False,
+        act_block_w_equals_input_channels_x_filter_width = False
     ) -> None:
         super().__init__()
         self.device = device
@@ -552,7 +553,11 @@ class Bottleneck(nn.Module):
         assert per_core_act_h % 32 == 0
         per_core_act_h_ntiles = (int) (per_core_act_h / 32)
         per_core_weight_w_ntiles = (int) (per_core_weight_w / 32)
-        self.conv2 = resnet50_optimized_conv(conv2_weight.reshape(-1).tolist(), self.conv2_params, self.device, [act_block_h_datums, width*3], [width*3, weight_block_w_datums],
+        if act_block_w_equals_input_channels_x_filter_width:
+            act_block_w_datums = width * 3
+        else:
+            act_block_w_datums = width
+        self.conv2 = resnet50_optimized_conv(conv2_weight.reshape(-1).tolist(), self.conv2_params, self.device, [act_block_h_datums, act_block_w_datums], [act_block_w_datums, weight_block_w_datums],
                                              [out_subblock_h_datums, out_subblock_w_datums], out_block_h_datums,
                                              grid_size, per_core_act_h_ntiles, per_core_weight_w_ntiles,
                                              conv2_bias.tolist(), True, output_mem_config=self.sharded_memory_config)
@@ -583,7 +588,7 @@ class Bottleneck(nn.Module):
                 self.downsample_or_noop = downsample_conv_op_wrapper(self.downsample_conv_on_tt)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-
+        #print("This module input shape - ", self.module_input_shape)
         # conv1 is 1x1 conv
         #print("Running conv1")
         out = self.conv1(x)
@@ -705,7 +710,7 @@ class ResNet(nn.Module):
         # self.maxpool = TtMaxPool(self.device, kernel_size=3, stride=2, padding=1, output_mem_config=self.memory_config, nblocks=8, channels_last=True, reshape_2d=True)
         self.maxpool = TtMaxPool(self.device, kernel_size=3, stride=2, padding=1, output_mem_config=self.sharded_memory_config, nblocks=1, channels_last=True, reshape_2d=True)
         self.maxpool_output_shape = compute_max_pool_shape(3, 2, 1, self.conv1_output_shape)
-        self.layer1, self.layer1_output_shape = self._make_layer(block, 64, layers[0], name="layer1", state_dict=state_dict, layer_input_shape=self.maxpool_output_shape, batch_size=batch_size, sharded=sharded, out_sharded=True)
+        self.layer1, self.layer1_output_shape = self._make_layer(block, 64, layers[0], name="layer1", state_dict=state_dict, layer_input_shape=self.maxpool_output_shape, batch_size=batch_size, sharded=sharded, out_sharded=True, act_block_w_equals_input_channels_x_filter_width=True)
         self.layer2, self.layer2_output_shape = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0], name="layer2", state_dict=state_dict, layer_input_shape=self.layer1_output_shape, batch_size=batch_size, sharded=sharded, out_sharded=False)
         self.layer3, self.layer3_output_shape = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1], name="layer3", state_dict=state_dict, layer_input_shape=self.layer2_output_shape, batch_size=batch_size, sharded=False)
         self.layer4, self.layer4_output_shape = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2], name="layer4", state_dict=state_dict, layer_input_shape=self.layer3_output_shape, batch_size=batch_size, sharded=False)
@@ -756,6 +761,7 @@ class ResNet(nn.Module):
         batch_size = 1,
         sharded = False,
         out_sharded = False,
+        act_block_w_equals_input_channels_x_filter_width = False
     ):
         norm_layer = self._norm_layer
         downsample = None
@@ -846,7 +852,8 @@ class ResNet(nn.Module):
                 input_shape=layer_input_shape,
                 batch_size=batch_size,
                 sharded=sharded,
-                out_sharded=sharded
+                out_sharded=sharded,
+                act_block_w_equals_input_channels_x_filter_width=act_block_w_equals_input_channels_x_filter_width
             )
         )
         self.inplanes = planes * block.expansion
@@ -868,7 +875,8 @@ class ResNet(nn.Module):
                     input_shape=previous_layer.conv3_output_shape,
                     batch_size=batch_size,
                     sharded=sharded,
-                    out_sharded=True if _ != blocks - 1 else out_sharded
+                    out_sharded=True if _ != blocks - 1 else out_sharded,
+                    act_block_w_equals_input_channels_x_filter_width=act_block_w_equals_input_channels_x_filter_width
                 )
             )
         last_layer_shape = layers[-1].conv3_output_shape
