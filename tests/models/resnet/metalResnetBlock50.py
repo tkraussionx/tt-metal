@@ -544,7 +544,7 @@ class Bottleneck(nn.Module):
         assert per_core_act_h % 32 == 0
         per_core_act_h_ntiles = (int) (per_core_act_h / 32)
         per_core_weight_w_ntiles = (int) (per_core_weight_w / 32)
-        self.conv2 = resnet50_optimized_conv(conv2_weight.reshape(-1).tolist(), self.conv2_params, self.device, [act_block_h_datums, width*3], [width*3, weight_block_w_datums],
+        self.conv2 = resnet50_optimized_conv(conv2_weight.reshape(-1).tolist(), self.conv2_params, self.device, [act_block_h_datums, width], [width, weight_block_w_datums],
                                              [out_subblock_h_datums, out_subblock_w_datums], out_block_h_datums,
                                              grid_size, per_core_act_h_ntiles, per_core_weight_w_ntiles,
                                              conv2_bias.tolist(), True)
@@ -575,7 +575,7 @@ class Bottleneck(nn.Module):
                 self.downsample_or_noop = downsample_conv_op_wrapper(self.downsample_conv_on_tt)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-
+        # print("This module input shape - ", self.module_input_shape)
         # conv1 is 1x1 conv
         #print("Running conv1")
         out = self.conv1(x)
