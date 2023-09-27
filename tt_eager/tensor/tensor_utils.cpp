@@ -10,7 +10,6 @@ namespace tt {
 
 namespace tt_metal {
 
-
     template <typename T>
     Tensor to_weight_special_padding_tile_layout(const Tensor& conv_weight_tensor, uint32_t in1_block_h, uint32_t in1_block_w) {
         auto w_shape = conv_weight_tensor.shape();

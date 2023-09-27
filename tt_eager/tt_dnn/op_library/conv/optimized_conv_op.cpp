@@ -34,7 +34,7 @@ pair<uint32_t, uint32_t> compute_opt_conv_output_face_shape(uint32_t conv_activa
     uint32_t conv_output_w = ((conv_activation_w - filter_w + (2 * pad_w) - padding_for_32B_alignment) / stride_w) + 1;
     return {conv_output_h, conv_output_w};
 }
-pair<vector<uint32_t>, vector<uint32_t>> compute_opt_conv_activation_as_mm_shape(Shape conv_activation_shape, vector<int> conv_params, uint32_t act_block_h_ntiles, uint32_t act_block_w_ntiles, uint32_t padding_for_32B_alignment=0) {
+pair<vector<uint32_t>, vector<uint32_t>> compute_opt_conv_activation_as_mm_shape(Shape conv_activation_shape, vector<int> conv_params, uint32_t act_block_h_ntiles, uint32_t act_block_w_ntiles, uint32_t padding_for_32B_alignment, bool rn50_first_conv) {
     uint32_t filter_h = (uint32_t) conv_params[0];
     uint32_t filter_w = (uint32_t) conv_params[1];
     uint32_t stride_h = (uint32_t) conv_params[2];
@@ -49,8 +49,13 @@ pair<vector<uint32_t>, vector<uint32_t>> compute_opt_conv_activation_as_mm_shape
     uint32_t num_rows_padded = (uint32_t) (ceil((double) num_rows / (double) act_block_h_datums ) * act_block_h_datums);
     uint32_t num_cols = conv_activation_shape[3] * filter_h * filter_w;
     uint32_t act_block_w_datums = act_block_w_ntiles * TILE_WIDTH;
-    assert(act_block_w_datums >= conv_activation_shape[3] * filter_w);
-    uint32_t num_cols_padded = act_block_w_datums * filter_h;
+    uint32_t num_cols_padded = 0;
+    if (rn50_first_conv) {
+        assert(act_block_w_datums >= conv_activation_shape[3] * filter_w);
+        num_cols_padded = act_block_w_datums * filter_h;
+    } else {
+        num_cols_padded = act_block_w_datums * filter_h * filter_w;
+    }
     return {{1, num_rows_padded, num_cols_padded}, {1, num_rows, num_cols}};
 }
 
@@ -217,8 +222,21 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
     //assert(out_block_h_ntiles == act_block_h_ntiles); // TODO: fix output block sizing
     TT_ASSERT(out_block_h_ntiles >= act_block_h_ntiles, "Output block height (in # of tiles) should be greater than or equal to activation block height (in # of tiles)");
 
+    uint32_t conv_act_size_h = a.shape()[1];
+    uint32_t conv_act_size_w = a.shape()[2];
+    uint32_t conv_act_size_c = a.shape()[3];
+    uint32_t weight_size_h = (uint32_t) conv_params[0];
+    uint32_t weight_size_w = (uint32_t) conv_params[1];
+    uint32_t stride_h = (uint32_t) conv_params[2];
+    uint32_t stride_w = (uint32_t) conv_params[3];
+    uint32_t pad_h = (uint32_t) conv_params[4];
+    uint32_t pad_w = (uint32_t) conv_params[5];
+
+    bool rn50_first_conv = (conv_act_size_h == 230 && conv_act_size_w == (231 + extra_padding_for_32B_alignment) &&
+                        weight_size_h == 7 && weight_size_w == 8 &&
+                        stride_h == 2 && stride_w == 2);
     // Compute the 2d matrix shape
-    auto [act_matrix_shape, act_matrix_shape_unpadded] = compute_opt_conv_activation_as_mm_shape(a.shape(), conv_params, out_block_h_ntiles, act_block_w_ntiles, extra_padding_for_32B_alignment);
+    auto [act_matrix_shape, act_matrix_shape_unpadded] = compute_opt_conv_activation_as_mm_shape(a.shape(), conv_params, out_block_h_ntiles, act_block_w_ntiles, extra_padding_for_32B_alignment, rn50_first_conv);
     assert(act_matrix_shape.size() == 3);
     assert(act_matrix_shape[0] == 1);
     uint32_t act_matrix_height = (uint32_t) act_matrix_shape[1];
@@ -278,6 +296,10 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
     uint32_t num_blocks_out_h = act_matrix_height_ntiles / out_block_h_ntiles;
     uint32_t num_blocks_act_w = act_matrix_width_ntiles / act_block_w_ntiles;
     uint32_t num_blocks_weight_w = weight_matrix_width_ntiles / weight_block_w_ntiles;
+
+    if (rn50_first_conv) {
+        assert(num_blocks_weight_w == 1);
+    }
 
     // act block info
     uint32_t act_block_w_datums = act_matrix_width / num_blocks_act_w;
@@ -354,17 +376,6 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
         bias_log2_of_pagesize = (uint32_t) std::log2((float) bias_tile_nbytes);
     }
 
-    // more args for reader
-    uint32_t conv_act_size_h = a.shape()[1];
-    uint32_t conv_act_size_w = a.shape()[2];
-    uint32_t conv_act_size_c = a.shape()[3];
-    uint32_t weight_size_h = (uint32_t) conv_params[0];
-    uint32_t weight_size_w = (uint32_t) conv_params[1];
-    uint32_t stride_h = (uint32_t) conv_params[2];
-    uint32_t stride_w = (uint32_t) conv_params[3];
-    uint32_t pad_h = (uint32_t) conv_params[4];
-    uint32_t pad_w = (uint32_t) conv_params[5];
-
     //uint32_t conv_output_size_h = ((conv_act_size_h - weight_size_h + (2 * pad_h)) / stride_h) + 1;
     //uint32_t conv_output_size_w = ((conv_act_size_w - weight_size_w + (2 * pad_w)) / stride_w) + 1;
 
@@ -372,11 +383,6 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
 
     std::map<string, string> reader_defines;
 
-    if(conv_act_size_c * weight_size_w != act_block_w_datums) {
-        assert(act_block_w_datums > conv_act_size_c * weight_size_w);
-        uint32_t conv_act_block_width_padding_bytes = (act_block_w_datums - (conv_act_size_c * weight_size_w)) * num_bytes_of_df;
-        reader_defines["ACT_BLOCK_WIDTH_PADDING_BYTES"] = to_string(conv_act_block_width_padding_bytes);
-    }
     if (act_matrix_height_unpadded < act_block_h_datums * num_blocks_act_h) {
         reader_defines["ACT_BLOCK_HEIGHT_PADDING"] = "1";
     }
@@ -502,13 +508,13 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
     }
     uint32_t bias_ntiles_per_core = bias_ntiles / num_weight_slices_width;
 
-    bool rn50_first_conv = (conv_act_size_h == 230 && conv_act_size_w == (231 + extra_padding_for_32B_alignment) &&
-                            conv_output_size_h == 112 && conv_output_size_w == 112 &&
-                            weight_size_h == 7 && weight_size_w == 8 &&
-                            stride_h == 2 && stride_w == 2 &&
-                            num_blocks_weight_w == 1);
     if (rn50_first_conv) {
         assert(not weight_width_sliced); // weight width slicing not supported for rn50 first conv
+        assert(act_block_w_datums == (conv_act_size_c * weight_size_w));
+    }
+    else {
+        assert(act_block_w_datums == conv_act_size_c);
+        assert(num_blocks_act_w == weight_size_w * weight_size_h);
     }
 
     vector<CoreCoord> debug_cores;
@@ -566,7 +572,10 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
         weights_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
     }
 
-    uint32_t num_weight_cb_tiles = weight_block_h_ntiles * weight_block_w_ntiles * num_blocks_act_w;
+    uint32_t num_weight_cb_tiles = weight_block_h_ntiles * weight_block_w_ntiles;
+    if (per_core_weight_matrix_width_ntiles < 8) {
+        num_weight_cb_tiles = num_weight_cb_tiles * 2;
+    }
     if (rn50_first_conv) {
         num_weight_cb_tiles = weight_block_h_ntiles * weight_block_w_ntiles * num_blocks_weight_w * num_blocks_act_w;
     }
@@ -612,14 +621,14 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
         writer_mcast_receiver_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_and_reader_weights_resnet50_first_conv_tiled_out.cpp";
     } else {
         reader_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/reader_conv_activations_fast_for_col_major_conv_out_blocks.cpp";
-        compute_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/conv_bmm_tilize_col_major_out_blocks_reuse_weights.cpp";
+        compute_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/conv_bmm_tilize_col_major_out_blocks.cpp";
         // TODO: Add support for 2D mcast for weights
         if (weight_width_sliced) {
-            writer_mcast_sender_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_reader_conv_weights_tiled_col_to_rm_blocks_read_weight_slices_once.cpp";
-            writer_mcast_receiver_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_reader_conv_weights_tiled_col_to_rm_blocks_read_weight_slices_once.cpp";
+            writer_mcast_sender_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_reader_conv_weights_tiled_col_to_rm_blocks.cpp";
+            writer_mcast_receiver_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_reader_conv_weights_tiled_col_to_rm_blocks.cpp";
         } else {
-            writer_mcast_sender_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_mcast_sender_conv_weights_tiled_col_to_rm_blocks_read_weight_slices_once.cpp";
-            writer_mcast_receiver_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_mcast_receiver_conv_weights_tiled_col_to_rm_blocks_read_weight_slices_once.cpp";
+            writer_mcast_sender_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_mcast_sender_conv_weights_tiled_col_to_rm_blocks.cpp";
+            writer_mcast_receiver_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_mcast_receiver_conv_weights_tiled_col_to_rm_blocks.cpp";
         }
     }
     std::vector<uint32_t>reader_rt_args;

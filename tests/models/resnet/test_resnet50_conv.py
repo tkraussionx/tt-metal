@@ -419,7 +419,7 @@ def test_resnet50_conv(use_program_cache, device, N,K,C,H,W,R,S,stride_h,stride_
             conv = resnet50_optimized_conv(conv_weight_pyt.reshape(-1).tolist(),
                                 conv_params,
                                 device,
-                                [act_block_h_datums, C*S], [C*S, weight_block_w_datums],
+                                [act_block_h_datums, C], [C, weight_block_w_datums],
                                 [out_subblock_h_datums, out_subblock_w_datums], out_block_h_datums,
                                 grid_size, per_core_out_matrix_h_ntiles, per_core_weight_matrix_w_ntiles,
                                 conv_bias_pyt.reshape(-1).tolist(),
