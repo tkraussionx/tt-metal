@@ -46,7 +46,7 @@ def test_cpu_demo_no_kv(batch_size):
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_VERSION)
     num_tokens = 2
-    prompt_text = ["Write me a haiku about Tokyo"] * batch_size
+    prompt_text = ["Write a poem about valencia"] * batch_size
 
     logger.info("Tokenizing inputs")
     tokenized_inputs = tokenizer(

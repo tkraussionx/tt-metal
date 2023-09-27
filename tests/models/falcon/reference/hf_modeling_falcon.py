@@ -937,7 +937,7 @@ class FalconModel(FalconPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
-        dump_tensor("input_embeddings", "hf", input_ids)
+        dump_tensor("input_embeddings", "hf", inputs_embeds)
         hidden_states = inputs_embeds
 
         presents = () if use_cache else None
