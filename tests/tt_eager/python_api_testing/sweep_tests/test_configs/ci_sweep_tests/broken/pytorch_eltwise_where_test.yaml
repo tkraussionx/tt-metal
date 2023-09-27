@@ -8,7 +8,7 @@ test-list:
         num-shapes: 3
         num-samples: 3
       datagen:
-        function: gen_bin
+        function: gen_rand
         args:
           probabilityones: 0.7
         dtype: bfloat16
