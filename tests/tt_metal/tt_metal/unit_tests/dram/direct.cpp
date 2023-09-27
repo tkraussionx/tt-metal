@@ -8,7 +8,7 @@
 #include <functional>
 #include <random>
 
-#include "single_device_fixture.hpp"
+#include "device_fixture.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/hostdevcommon/common_runtime_address_map.h"  // FIXME: Should remove dependency on this
@@ -361,17 +361,17 @@ bool reader_datacopy_writer(tt_metal::Device* device, const ReaderDatacopyWriter
 }
 }  // namespace unit_tests::dram::direct
 
-TEST_F(SingleDeviceFixture, SingleCoreDirectDramReaderOnly) {
-    ASSERT_TRUE(unit_tests::dram::direct::reader_only(device_, 1 * 1024, L1_UNRESERVED_BASE, {.x = 0, .y = 0}));
+TEST_F(DeviceFixture, SingleCoreDirectDramReaderOnly) {
+    ASSERT_TRUE(unit_tests::dram::direct::reader_only(device_, 1 * 1024, L1_UNRESERVED_BASE, {.x = 1, .y = 6}));
     ASSERT_TRUE(unit_tests::dram::direct::reader_only(device_, 2 * 1024, L1_UNRESERVED_BASE, {.x = 0, .y = 0}));
     ASSERT_TRUE(unit_tests::dram::direct::reader_only(device_, 16 * 1024, L1_UNRESERVED_BASE, {.x = 0, .y = 0}));
 }
-TEST_F(SingleDeviceFixture, SingleCoreDirectDramWriterOnly) {
+TEST_F(DeviceFixture, SingleCoreDirectDramWriterOnly) {
     ASSERT_TRUE(unit_tests::dram::direct::writer_only(device_, 1 * 1024, L1_UNRESERVED_BASE, {.x = 0, .y = 0}));
     ASSERT_TRUE(unit_tests::dram::direct::writer_only(device_, 2 * 1024, L1_UNRESERVED_BASE, {.x = 0, .y = 0}));
     ASSERT_TRUE(unit_tests::dram::direct::writer_only(device_, 16 * 1024, L1_UNRESERVED_BASE, {.x = 0, .y = 0}));
 }
-TEST_F(SingleDeviceFixture, SingleCoreDirectDramReaderWriter) {
+TEST_F(DeviceFixture, SingleCoreDirectDramReaderWriter) {
     unit_tests::dram::direct::ReaderWriterConfig test_config = {
         .num_tiles = 1,
         .tile_byte_size = 2 * 32 * 32,
@@ -385,7 +385,7 @@ TEST_F(SingleDeviceFixture, SingleCoreDirectDramReaderWriter) {
     test_config.num_tiles = 8;
     ASSERT_TRUE(unit_tests::dram::direct::reader_writer(device_, test_config));
 }
-TEST_F(SingleDeviceFixture, SingleCoreDirectDramReaderDatacopyWriter) {
+TEST_F(DeviceFixture, SingleCoreDirectDramReaderDatacopyWriter) {
     unit_tests::dram::direct::ReaderDatacopyWriterConfig test_config = {
         .num_tiles = 1,
         .tile_byte_size = 2 * 32 * 32,

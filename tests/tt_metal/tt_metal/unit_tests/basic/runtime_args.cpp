@@ -8,7 +8,7 @@
 #include <functional>
 #include <random>
 
-#include "single_device_fixture.hpp"
+#include "device_fixture.hpp"
 #include "tt_metal/detail/program.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/host_api.hpp"
@@ -101,7 +101,7 @@ bool verify_result_data_movement(
     return pass;
 }
 
-TEST_F(SingleDeviceFixture, LegallyModifyRTArgsDataMovement) {
+TEST_F(DeviceFixture, LegallyModifyRTArgsDataMovement) {
     // First run the program with the initial runtime args
     CoreRange first_core_range = {.start = CoreCoord(0, 0), .end = CoreCoord(1, 1)};
     CoreRange second_core_range = {.start = CoreCoord(3, 3), .end = CoreCoord(5, 5)};
@@ -192,7 +192,7 @@ bool verify_result_compute(
 }
 
 
-TEST_F(SingleDeviceFixture, LegallyModifyRTArgsCompute) {
+TEST_F(DeviceFixture, LegallyModifyRTArgsCompute) {
     // First run the program with the initial runtime args
     CoreRange first_core_range = {.start = CoreCoord(0, 0), .end = CoreCoord(1, 1)};
     CoreRange second_core_range = {.start = CoreCoord(3, 3), .end = CoreCoord(5, 5)};
@@ -214,7 +214,7 @@ TEST_F(SingleDeviceFixture, LegallyModifyRTArgsCompute) {
     EXPECT_TRUE(unit_tests::runtime_args::verify_result_compute(this->device_, program, core_to_rt_args, KernelType::COMPUTE));
 }
 
-TEST_F(SingleDeviceFixture, IllegallyModifyRTArgs) {
+TEST_F(DeviceFixture, IllegallyModifyRTArgs) {
     // First run the program with the initial runtime args
     CoreRange first_core_range = {.start = CoreCoord(0, 0), .end = CoreCoord(1, 1)};
     CoreRange second_core_range = {.start = CoreCoord(3, 3), .end = CoreCoord(5, 5)};

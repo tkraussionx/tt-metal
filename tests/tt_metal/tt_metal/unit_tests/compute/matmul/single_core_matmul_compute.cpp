@@ -9,7 +9,7 @@
 #include <random>
 
 #include "common/test_tiles.hpp"  // FIXME: Remove dependency on this or move to test_utils like tilize/untilize
-#include "single_device_fixture.hpp"
+#include "device_fixture.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/hostdevcommon/common_runtime_address_map.h"  // FIXME: Should remove dependency on this
@@ -866,15 +866,15 @@ bool blocked_matmul(tt_metal::Device* device, uint32_t M, uint32_t K, uint32_t N
 }
 }  // namespace unit_tests::compute::matmul
 
-TEST_F(SingleDeviceFixture, SingleCoreSingleTileMatmul) {
+TEST_F(DeviceFixture, SingleCoreSingleTileMatmul) {
     ASSERT_TRUE(unit_tests::compute::matmul::single_tile_matmul(this->device_));
 }
-TEST_F(SingleDeviceFixture, SingleCoreSingleBlockSingleTileMatmul) {
+TEST_F(DeviceFixture, SingleCoreSingleBlockSingleTileMatmul) {
     ASSERT_TRUE(unit_tests::compute::matmul::single_block_matmul(this->device_, 1, 1, 1));
 }
-TEST_F(SingleDeviceFixture, SingleCoreSingleBlockSingleTileAccumulationMatmul) {
+TEST_F(DeviceFixture, SingleCoreSingleBlockSingleTileAccumulationMatmul) {
     ASSERT_TRUE(unit_tests::compute::matmul::single_block_matmul(this->device_, 1, 2, 1));
 }
-TEST_F(SingleDeviceFixture, SingleCoreSingleBlockSingleTileNoAccumulationMatmul) {
+TEST_F(DeviceFixture, SingleCoreSingleBlockSingleTileNoAccumulationMatmul) {
     ASSERT_TRUE(unit_tests::compute::matmul::single_block_matmul(this->device_, 2, 1, 2));
 }

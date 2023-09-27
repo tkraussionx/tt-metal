@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "single_device_fixture.hpp"
+#include "device_fixture.hpp"
 #include "gtest/gtest.h"
 #include "circular_buffer_test_utils.hpp"
 #include "tt_metal/host_api.hpp"
@@ -44,7 +44,7 @@ bool test_cb_config_written_to_core(Program &program, Device *device, const Core
     return pass;
 }
 
-TEST_F(SingleDeviceFixture, TestCreateCircularBufferAtValidIndices) {
+TEST_F(DeviceFixture, TestCreateCircularBufferAtValidIndices) {
     CBConfig cb_config;
 
     CoreRange cr = {.start = {0, 0}, .end = {0, 1}};
@@ -60,7 +60,7 @@ TEST_F(SingleDeviceFixture, TestCreateCircularBufferAtValidIndices) {
     EXPECT_TRUE(test_cb_config_written_to_core(program, this->device_, cr_set));
 }
 
-TEST_F(SingleDeviceFixture, TestCreateCircularBufferAtInvalidIndex) {
+TEST_F(DeviceFixture, TestCreateCircularBufferAtInvalidIndex) {
     Program program;
     CBConfig cb_config;
 
@@ -70,7 +70,7 @@ TEST_F(SingleDeviceFixture, TestCreateCircularBufferAtInvalidIndex) {
     EXPECT_ANY_THROW(CreateCircularBuffers(program, NUM_CIRCULAR_BUFFERS, cr_set, cb_config.num_pages, cb_config.page_size, cb_config.data_format));
 }
 
-TEST_F(SingleDeviceFixture, TestCreateCircularBufferAtOverlappingIndex) {
+TEST_F(DeviceFixture, TestCreateCircularBufferAtOverlappingIndex) {
     Program program;
     CBConfig cb_config;
 

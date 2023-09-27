@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "single_device_fixture.hpp"
+#include "device_fixture.hpp"
 #include "gtest/gtest.h"
 #include "test_buffer_utils.hpp"
 #include "tt_metal/host_api.hpp"
@@ -46,7 +46,7 @@ namespace tt::test::buffer::detail {
 }
 
 
-TEST_F(SingleDeviceFixture, TestSimpleDramBufferReadOnlyLo) {
+TEST_F(DeviceFixture, TestSimpleDramBufferReadOnlyLo) {
     size_t lo_address = DRAM_UNRESERVED_BASE;
     ASSERT_TRUE(SimpleDramReadOnly(this->device_, lo_address, 4));
     ASSERT_TRUE(SimpleDramReadOnly(this->device_, lo_address, 8));
@@ -55,7 +55,7 @@ TEST_F(SingleDeviceFixture, TestSimpleDramBufferReadOnlyLo) {
     ASSERT_TRUE(SimpleDramReadOnly(this->device_, lo_address, 1024));
     ASSERT_TRUE(SimpleDramReadOnly(this->device_, lo_address, 16*1024));
 }
-TEST_F(SingleDeviceFixture, TestSimpleDramBufferReadOnlyHi) {
+TEST_F(DeviceFixture, TestSimpleDramBufferReadOnlyHi) {
     size_t hi_address = this->device_->dram_bank_size() - (16*1024);
     ASSERT_TRUE(SimpleDramReadOnly(this->device_, hi_address, 4));
     ASSERT_TRUE(SimpleDramReadOnly(this->device_, hi_address, 8));
@@ -64,7 +64,7 @@ TEST_F(SingleDeviceFixture, TestSimpleDramBufferReadOnlyHi) {
     ASSERT_TRUE(SimpleDramReadOnly(this->device_, hi_address, 1024));
     ASSERT_TRUE(SimpleDramReadOnly(this->device_, hi_address, 16*1024));
 }
-TEST_F(SingleDeviceFixture, TestSimpleDramBufferWriteOnlyLo) {
+TEST_F(DeviceFixture, TestSimpleDramBufferWriteOnlyLo) {
     size_t lo_address = DRAM_UNRESERVED_BASE;
     ASSERT_TRUE(SimpleDramWriteOnly(this->device_, lo_address, 4));
     ASSERT_TRUE(SimpleDramWriteOnly(this->device_, lo_address, 8));
@@ -73,7 +73,7 @@ TEST_F(SingleDeviceFixture, TestSimpleDramBufferWriteOnlyLo) {
     ASSERT_TRUE(SimpleDramWriteOnly(this->device_, lo_address, 1024));
     ASSERT_TRUE(SimpleDramWriteOnly(this->device_, lo_address, 16*1024));
 }
-TEST_F(SingleDeviceFixture, TestSimpleDramBufferWriteOnlyHi) {
+TEST_F(DeviceFixture, TestSimpleDramBufferWriteOnlyHi) {
     size_t hi_address = this->device_->dram_bank_size() - (16*1024);
     ASSERT_TRUE(SimpleDramWriteOnly(this->device_, hi_address, 4));
     ASSERT_TRUE(SimpleDramWriteOnly(this->device_, hi_address, 8));

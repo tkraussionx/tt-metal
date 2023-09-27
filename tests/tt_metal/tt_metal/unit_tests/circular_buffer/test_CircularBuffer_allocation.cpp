@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "single_device_fixture.hpp"
+#include "device_fixture.hpp"
 #include "gtest/gtest.h"
 #include "circular_buffer_test_utils.hpp"
 #include "tt_metal/host_api.hpp"
@@ -13,7 +13,7 @@ using namespace tt::tt_metal;
 
 namespace basic_tests::circular_buffer {
 
-TEST_F(SingleDeviceFixture, TestCircularBuffersSequentiallyPlaced) {
+TEST_F(DeviceFixture, TestCircularBuffersSequentiallyPlaced) {
     Program program;
     CBConfig cb_config;
     CoreRange cr = {.start = {0, 0}, .end = {0, 0}};
@@ -27,7 +27,7 @@ TEST_F(SingleDeviceFixture, TestCircularBuffersSequentiallyPlaced) {
     }
 }
 
-TEST_F(SingleDeviceFixture, TestCircularBufferSequentialAcrossAllCores) {
+TEST_F(DeviceFixture, TestCircularBufferSequentialAcrossAllCores) {
     Program program;
     CBConfig cb_config;
 
@@ -56,7 +56,7 @@ TEST_F(SingleDeviceFixture, TestCircularBufferSequentialAcrossAllCores) {
     EXPECT_EQ(multi_core_cb.address(), expected_address);
 }
 
-TEST_F(SingleDeviceFixture, TestValidCircularBufferAddress) {
+TEST_F(DeviceFixture, TestValidCircularBufferAddress) {
     Program program;
     CBConfig cb_config;
 
@@ -68,7 +68,7 @@ TEST_F(SingleDeviceFixture, TestValidCircularBufferAddress) {
     EXPECT_EQ(multi_core_cb.address(), expected_cb_addr);
 }
 
-TEST_F(SingleDeviceFixture, TestInvalidCircularBufferAddress) {
+TEST_F(DeviceFixture, TestInvalidCircularBufferAddress) {
     Program program;
     CBConfig cb_config;
 
@@ -88,7 +88,7 @@ TEST_F(SingleDeviceFixture, TestInvalidCircularBufferAddress) {
     EXPECT_ANY_THROW(CreateCircularBuffers(program, multi_core_cb_index, cr_set, cb_config.num_pages, cb_config.page_size, cb_config.data_format, L1_UNRESERVED_BASE));
 }
 
-TEST_F(SingleDeviceFixture, TestCircularBuffersAndL1BuffersCollision) {
+TEST_F(DeviceFixture, TestCircularBuffersAndL1BuffersCollision) {
     Program program;
     CBConfig cb_config {.num_pages = 5};
 

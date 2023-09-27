@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "single_device_fixture.hpp"
+#include "device_fixture.hpp"
 #include "gtest/gtest.h"
 #include "tt_metal/test_utils/comparison.hpp"
 #include "tt_metal/test_utils/df/df.hpp"
@@ -241,12 +241,12 @@ LaunchProgram(device, program);
 
 }   // end namespace local_test_functions
 
-TEST_F(SingleDeviceFixture, TestSingleCoreSingleTileBankedL1ReaderOnly) {
+TEST_F(DeviceFixture, TestSingleCoreSingleTileBankedL1ReaderOnly) {
     BankedL1Config test_config;
     EXPECT_TRUE(local_test_functions::l1_reader_cb_writer_l1(this->device_, test_config, true, false));
 }
 
-TEST_F(SingleDeviceFixture, TestSingleCoreMultiTileBankedL1ReaderOnly) {
+TEST_F(DeviceFixture, TestSingleCoreMultiTileBankedL1ReaderOnly) {
     BankedL1Config test_config;
     TT_ASSERT(this->device_->num_banks(BufferType::L1) % 2 == 0);
     size_t num_tiles = this->device_->num_banks(BufferType::L1) / 2;
@@ -262,12 +262,12 @@ TEST_F(SingleDeviceFixture, TestSingleCoreMultiTileBankedL1ReaderOnly) {
     }
 }
 
-TEST_F(SingleDeviceFixture, TestSingleCoreSingleTileBankedL1WriterOnly) {
+TEST_F(DeviceFixture, TestSingleCoreSingleTileBankedL1WriterOnly) {
     BankedL1Config test_config;
     EXPECT_TRUE(local_test_functions::l1_reader_cb_writer_l1(this->device_, test_config, false, true));
 }
 
-TEST_F(SingleDeviceFixture, TestSingleCoreMultiTileBankedL1WriterOnly) {
+TEST_F(DeviceFixture, TestSingleCoreMultiTileBankedL1WriterOnly) {
     BankedL1Config test_config;
     TT_ASSERT(this->device_->num_banks(BufferType::L1) % 2 == 0);
     size_t num_tiles = this->device_->num_banks(BufferType::L1) / 2;
@@ -283,12 +283,12 @@ TEST_F(SingleDeviceFixture, TestSingleCoreMultiTileBankedL1WriterOnly) {
     }
 }
 
-TEST_F(SingleDeviceFixture, TestSingleCoreSingleTileBankedL1ReaderAndWriter) {
+TEST_F(DeviceFixture, TestSingleCoreSingleTileBankedL1ReaderAndWriter) {
     BankedL1Config test_config;
     EXPECT_TRUE(local_test_functions::l1_reader_cb_writer_l1(this->device_, test_config, true, true));
 }
 
-TEST_F(SingleDeviceFixture, TestSingleCoreMultiTileBankedL1ReaderAndWriter) {
+TEST_F(DeviceFixture, TestSingleCoreMultiTileBankedL1ReaderAndWriter) {
     BankedL1Config test_config;
     size_t num_tiles = this->device_->num_banks(BufferType::L1);
     TT_ASSERT(num_tiles % 2 == 0);
@@ -304,13 +304,13 @@ TEST_F(SingleDeviceFixture, TestSingleCoreMultiTileBankedL1ReaderAndWriter) {
     }
 }
 
-TEST_F(SingleDeviceFixture, TestSingleCoreSingleTileBankedDramReaderAndL1Writer) {
+TEST_F(DeviceFixture, TestSingleCoreSingleTileBankedDramReaderAndL1Writer) {
     BankedL1Config test_config;
     test_config.input_buffer_type = BufferType::DRAM;
     EXPECT_TRUE(local_test_functions::l1_reader_cb_writer_l1(this->device_, test_config, true, true));
 }
 
-TEST_F(SingleDeviceFixture, TestSingleCoreMultiTileBankedDramReaderAndL1Writer) {
+TEST_F(DeviceFixture, TestSingleCoreMultiTileBankedDramReaderAndL1Writer) {
     BankedL1Config test_config;
     test_config.input_buffer_type = BufferType::DRAM;
 
@@ -328,13 +328,13 @@ TEST_F(SingleDeviceFixture, TestSingleCoreMultiTileBankedDramReaderAndL1Writer) 
     }
 }
 
-TEST_F(SingleDeviceFixture, TestSingleCoreSingleTileBankedL1ReaderAndDramWriter) {
+TEST_F(DeviceFixture, TestSingleCoreSingleTileBankedL1ReaderAndDramWriter) {
     BankedL1Config test_config;
     test_config.output_buffer_type = BufferType::DRAM;
     EXPECT_TRUE(local_test_functions::l1_reader_cb_writer_l1(this->device_, test_config, true, true));
 }
 
-TEST_F(SingleDeviceFixture, TestSingleCoreMultiTileBankedL1ReaderAndDramWriter) {
+TEST_F(DeviceFixture, TestSingleCoreMultiTileBankedL1ReaderAndDramWriter) {
     BankedL1Config test_config;
     test_config.output_buffer_type = BufferType::DRAM;
 
@@ -352,7 +352,7 @@ TEST_F(SingleDeviceFixture, TestSingleCoreMultiTileBankedL1ReaderAndDramWriter) 
     }
 }
 
-TEST_F(SingleDeviceFixture, TestSingleCoreMultiTileBankedL1ReaderDataCopyL1Writer) {
+TEST_F(DeviceFixture, TestSingleCoreMultiTileBankedL1ReaderDataCopyL1Writer) {
     BankedL1Config test_config;
     size_t num_tiles = this->device_->num_banks(BufferType::L1);
     TT_ASSERT(num_tiles % 2 == 0);

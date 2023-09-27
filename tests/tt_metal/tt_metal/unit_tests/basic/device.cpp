@@ -8,8 +8,7 @@
 #include <functional>
 #include <random>
 
-#include "multi_device_fixture.hpp"
-#include "single_device_fixture.hpp"
+#include "device_fixture.hpp"
 #include "basic_fixture.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/host_api.hpp"
@@ -131,9 +130,9 @@ TEST_F(BasicFixture, MultiDeviceLoadBlankKernels) {
         ASSERT_TRUE(tt::tt_metal::CloseDevice(devices.at(id)));
     }
 }
-TEST_F(MultiDeviceFixture, PingAllLegalDramChannels) {
+TEST_F(DeviceFixture, PingAllLegalDramChannelsMultichip) {
     for (unsigned int id = 0; id < num_devices_; id++) {
-        auto device_ = devices_.at(id);
+        //auto device_ = devices_.at(id);
         {
             size_t start_byte_address = DRAM_UNRESERVED_BASE;
             ASSERT_TRUE(
@@ -166,18 +165,18 @@ TEST_F(MultiDeviceFixture, PingAllLegalDramChannels) {
         }
     }
 }
-TEST_F(MultiDeviceFixture, PingIllegalDramChannels) {
+TEST_F(DeviceFixture, PingIllegalDramChannelsMultichip) {
     for (unsigned int id = 0; id < num_devices_; id++) {
-        auto device_ = devices_.at(id);
+        //auto device_ = devices_.at(id);
         auto num_channels = device_->num_dram_channels() + 1;
         size_t start_byte_address = DRAM_UNRESERVED_BASE;
         ASSERT_ANY_THROW(unit_tests::basic::device::dram_ping(device_, 4, start_byte_address, num_channels));
     }
 }
 
-TEST_F(MultiDeviceFixture, PingAllLegalL1Cores) {
+TEST_F(DeviceFixture, PingAllLegalL1CoresMultichip) {
     for (unsigned int id = 0; id < num_devices_; id++) {
-        auto device_ = devices_.at(id);
+        // auto device_ = devices_.at(id);
         {
             size_t start_byte_address = L1_UNRESERVED_BASE;  // FIXME: Should remove dependency on
                                                           // hostdevcommon/common_runtime_address_map.h header.
@@ -212,9 +211,9 @@ TEST_F(MultiDeviceFixture, PingAllLegalL1Cores) {
     }
 }
 
-TEST_F(MultiDeviceFixture, PingIllegalL1Cores) {
+TEST_F(DeviceFixture, PingIllegalL1CoresMultichip) {
     for (unsigned int id = 0; id < num_devices_; id++) {
-        auto device_ = devices_.at(id);
+        // auto device_ = devices_.at(id);
         auto grid_size = device_->logical_grid_size();
         grid_size.x++;
         grid_size.y++;
@@ -274,7 +273,7 @@ TEST_F(BasicFixture, SingleDeviceLoadBlankKernels) {
     unit_tests::basic::device::load_all_blank_kernels(device);
     ASSERT_TRUE(tt::tt_metal::CloseDevice(device));
 }
-TEST_F(SingleDeviceFixture, PingAllLegalDramChannels) {
+TEST_F(DeviceFixture, PingAllLegalDramChannels) {
     {
         size_t start_byte_address = DRAM_UNRESERVED_BASE;
         ASSERT_TRUE(unit_tests::basic::device::dram_ping(device_, 4, start_byte_address, device_->num_dram_channels()));
@@ -304,13 +303,13 @@ TEST_F(SingleDeviceFixture, PingAllLegalDramChannels) {
             unit_tests::basic::device::dram_ping(device_, 32 * 1024, start_byte_address, device_->num_dram_channels()));
     }
 }
-TEST_F(SingleDeviceFixture, PingIllegalDramChannels) {
+TEST_F(DeviceFixture, PingIllegalDramChannels) {
     auto num_channels = device_->num_dram_channels() + 1;
     size_t start_byte_address = DRAM_UNRESERVED_BASE;
     ASSERT_ANY_THROW(unit_tests::basic::device::dram_ping(device_, 4, start_byte_address, num_channels));
 }
 
-TEST_F(SingleDeviceFixture, PingAllLegalL1Cores) {
+TEST_F(DeviceFixture, PingAllLegalL1Cores) {
     {
         size_t start_byte_address = L1_UNRESERVED_BASE;  // FIXME: Should remove dependency on
                                                       // hostdevcommon/common_runtime_address_map.h header.
@@ -338,7 +337,7 @@ TEST_F(SingleDeviceFixture, PingAllLegalL1Cores) {
     }
 }
 
-TEST_F(SingleDeviceFixture, PingIllegalL1Cores) {
+TEST_F(DeviceFixture, PingIllegalL1Cores) {
     auto grid_size = device_->logical_grid_size();
     grid_size.x++;
     grid_size.y++;
@@ -395,7 +394,7 @@ TEST_F(BasicFixture, ValidateLogicalToPhysicalCoreCoordHostMapping) {
 // 2. Launch a kernel to read and increment the value in each bank
 // 3. Host validates that the value from step 1 has been incremented
 // Purpose of this test is to ensure that L1 reader/writer APIs do not target harvested cores
-TEST_F(SingleDeviceFixture, ValidateKernelDoesNotTargetHarvestedCores) {
+TEST_F(DeviceFixture, ValidateKernelDoesNotTargetHarvestedCores) {
     uint32_t num_l1_banks = this->device_->num_banks(BufferType::L1);
     std::vector<uint32_t> host_input(1);
     std::map<uint32_t, uint32_t> bank_id_to_value;
