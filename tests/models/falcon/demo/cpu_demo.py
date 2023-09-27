@@ -94,10 +94,12 @@ def test_cpu_demo_kv(batch_size):
 
     num_tokens = 2048
 
-    prompt_text = ["Descriptive writing usually appeals to the five senses: taste, touch, smell, hearing, and sight. \
-    (Example: Jack's coffee mug exploded into tiny shards of glass, catching the attention of everyone at the office.) \
-    Always appealing to the senses is key to writing a good descriptive essay.\
-    Write a very long descriptive writing about Canada's role in fighting with the climate change."] * batch_size
+    # prompt_text = ["Descriptive writing usually appeals to the five senses: taste, touch, smell, hearing, and sight. \
+    # (Example: Jack's coffee mug exploded into tiny shards of glass, catching the attention of everyone at the office.) \
+    # Always appealing to the senses is key to writing a good descriptive essay.\
+    # Write a very long descriptive writing about Canada's role in fighting with the climate change."] * batch_size
+
+    prompt_text = ["Write a poem about valencia"] * batch_size
 
     logger.info("Tokenizing inputs")
     tokenized_inputs = tokenizer(
