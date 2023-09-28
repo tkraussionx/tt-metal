@@ -134,6 +134,7 @@ void kernel_main() {
             // read weight slice - 1 block of weights in width dim and full weight matrix height
             // read slice only once for all activation blocks
             for(uint32_t block_weight_h = 0; block_weight_h < num_blocks_weight_h; block_weight_h++) {
+                cb_reserve_back(cb_id_weight, weight_block_num_tiles);
                 // Set weights semaphore value to INVALID
                 noc_semaphore_set(weights_mcast_receiver_semaphore_addr_ptr, INVALID);
 
@@ -146,7 +147,7 @@ void kernel_main() {
 
                 cb_push_back(cb_id_weight, weight_block_num_tiles);
             } // for num_blocks_weight_h
-            
+
             #ifndef SHARDED_OUTPUT
             uint32_t out_sbh_start_tile_id = out_block_h_start_tile_id;
             uint32_t out_sbh_start_tile_id_h = out_block_h_start_tile_id_h; //
@@ -190,10 +191,11 @@ void kernel_main() {
             } // out_num_subblocks_h
             out_block_h_start_tile_id += out_next_block_stride_h;
             out_block_h_start_tile_id_h += out_block_height_num_tiles;
+            #endif
         } // out_num_blocks_h
         out_block_w_start_tile_id += out_next_block_stride_w;
         out_block_w_start_tile_id_w += weight_block_width_ntiles;
-        #endif
+
         // Increment weight start tile id for next block in width dim
         weight_start_tile_id += weight_next_block_stride_w;
     } // out_num_blocks_w

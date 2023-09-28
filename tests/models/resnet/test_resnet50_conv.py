@@ -328,12 +328,12 @@ hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_conv = {
         (25088, 64) : [256, 64, 128, 64, 256, (12,9), 256, 64],
         (6272, 128) : [64, 128, 64, 128, 64, (12,9), 64, 128],
         (1568, 256) : [160, 32, 32, 32, 160, (10,8), 160, 32],
-        (416, 512) : [64, 32, 32, 32, 64, (7,8), 64, 64],
+        (416, 512) : [32, 64, 32, 32, 96, (5,8), 96, 64],
 
         # bypass convs
         (6272, 512) : [64, 512, 32, 256, 64, (12,9), 64, 512] ,
         (1568, 1024) : [160, 128, 32, 64, 160, (10,8), 160, 128],
-        (416, 2048) : [64, 128, 32, 64, 64, (7,8), 64, 256] ,
+        (416, 2048) : [32, 256, 32, 32, 96, (5,8), 96, 256] ,
     },
 }
 
@@ -426,7 +426,7 @@ def test_resnet50_conv(use_program_cache, device, N,K,C,H,W,R,S,stride_h,stride_
                                 [act_block_h_datums, C], [C, weight_block_w_datums],
                                 [out_subblock_h_datums, out_subblock_w_datums], out_block_h_datums,
                                 grid_size, per_core_out_matrix_h_ntiles, per_core_weight_matrix_w_ntiles,
-                                conv_bias_pyt.reshape(-1).tolist(),
+                                conv_bias_pyt.reshape(-1).tolist(), False,
                                 memory_config
                                 )
 

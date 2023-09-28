@@ -249,10 +249,11 @@ void kernel_main() {
             } // out_num_subblocks_h
             out_block_h_start_tile_id += out_next_block_stride_h;
             out_block_h_start_tile_id_h += out_block_height_num_tiles;
+            #endif
         } // out_num_blocks_h
         out_block_w_start_tile_id += out_next_block_stride_w;
         out_block_w_start_tile_id_w += weight_block_width_ntiles;
-        #endif
+
         // Increment weight start tile id for next block in width dim
         weight_start_tile_id += weight_next_block_stride_w;
     } // out_num_blocks_w
