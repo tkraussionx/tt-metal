@@ -12,10 +12,6 @@ import torch
 
 import tt_lib
 from models.utility_functions import print_diff_argmax
-from tests.tt_eager.python_api_testing.sweep_tests.common import (
-    is_wormhole_b0,
-    skip_for_wormhole_b0,
-)
 
 
 def test_fill_rm(device):
@@ -26,11 +22,6 @@ def test_fill_rm(device):
 
     fillH = 33
     fillW = 31
-
-    if is_wormhole_b0():
-        N, C, H, W = [1, 1, 32, 32]
-        fillH = 31
-        fillW = 31
 
     x = torch.zeros((N, C, H, W))
     xp = torch.clone(x)

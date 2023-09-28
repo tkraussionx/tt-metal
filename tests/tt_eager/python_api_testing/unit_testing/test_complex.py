@@ -19,7 +19,6 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
 )
 from tests.tt_eager.python_api_testing.sweep_tests.common import (
     is_wormhole_b0,
-    skip_for_wormhole_b0,
 )
 from functools import partial
 
@@ -103,7 +102,7 @@ def test_level1_is_real(memcfg, dtype, device, function_level_defaults):
     input_shape = torch.Size([1, 1, 32, 64])
     # check real
     x = Complex(input_shape)
-    x = x.add( x.conj() )
+    x = x.add(x.conj())
     xtt = (
         ttl.tensor.Tensor(x.metal, dtype)
         .to(ttl.tensor.Layout.ROW_MAJOR)
@@ -130,7 +129,7 @@ def test_level1_is_imag(memcfg, dtype, device, function_level_defaults):
     input_shape = torch.Size([1, 1, 32, 64])
     # check real
     x = Complex(input_shape)
-    x = x.sub( x.conj() )
+    x = x.sub(x.conj())
     xtt = (
         ttl.tensor.Tensor(x.metal, dtype)
         .to(ttl.tensor.Layout.ROW_MAJOR)
@@ -410,9 +409,6 @@ def test_level1_div(memcfg, dtype, device, function_level_defaults):
 
     tt_cpu = y.div(x).metal
 
-    if is_wormhole_b0():
-        pass  # pytest.skip("[DIV]: skip assertion for this test on WH B0")
-
     passing, output = comp_pcc(tt_cpu, tt_dev, pcc=0.96)
     logger.info(output)
     assert passing
@@ -442,9 +438,6 @@ def test_level1_recip(memcfg, dtype, device, function_level_defaults):
     tt_dev = tt_dev.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
 
     tt_cpu = x.recip().metal
-
-    if is_wormhole_b0():
-        pass  # pytest.skip("[RECIP]: skip assertion for this test on WH B0")
 
     passing, output = comp_pcc(tt_cpu, tt_dev, pcc=0.96)
     logger.info(output)

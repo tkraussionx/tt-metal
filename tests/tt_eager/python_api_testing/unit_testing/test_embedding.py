@@ -11,9 +11,9 @@ import os
 import torch
 
 import tt_lib as ttl
+import pytest
 
 from tt_lib.utils import is_close
-from tests.tt_eager.python_api_testing.sweep_tests.common import is_wormhole_b0, skip_for_wormhole_b0
 from loguru import logger
 from models.utility_functions import (
     comp_pcc,
@@ -29,10 +29,9 @@ def run_embeddings_tests(
     in0_mem_config,
     out_mem_config,
     device,
-    fused=False
+    fused=False,
 ):
     torch.manual_seed(1234)
-
 
     tensor = ttl.tensor
     dev = device
@@ -51,7 +50,7 @@ def run_embeddings_tests(
 
     ttz = tensor.embeddings(input_tensor, weights_tensor, False, fused, out_mem_config)
 
-    if(fused):
+    if fused:
         tt_data = ttz.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
     else:
         tt_data = ttz.cpu().to_torch()
@@ -70,9 +69,6 @@ def run_embeddings_tests(
     assert passing_pcc
 
 
-import pytest
-
-@skip_for_wormhole_b0
 @pytest.mark.parametrize(
     "out_mem_config",
     (ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),),
@@ -93,7 +89,6 @@ import pytest
     (32, 256, 512),
     ids=["Num_Rows_32", "Num_Rows_256", "Num_Rows_512"],
 )
-
 @pytest.mark.parametrize(
     "num_embeddings",
     (512, 30528, 2048),
@@ -113,7 +108,6 @@ import pytest
     (1, 8, 9),
     ids=["Batch_Size_1", "Batch_Size_8", "Batch_Size_9"],
 )
-
 @pytest.mark.parametrize(
     "tilized",
     (True, False),
@@ -128,7 +122,7 @@ def test_embeddings(
     in0_mem_config,
     out_mem_config,
     device,
-    tilized
+    tilized,
 ):
     run_embeddings_tests(
         batch_size,
@@ -139,5 +133,5 @@ def test_embeddings(
         in0_mem_config,
         out_mem_config,
         device,
-        tilized
+        tilized,
     )

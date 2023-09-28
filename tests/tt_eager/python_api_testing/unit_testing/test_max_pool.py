@@ -18,7 +18,6 @@ import tt_lib as ttl
 
 from tt_lib.utils import _nearest_32
 from models.utility_functions import comp_pcc
-from tests.tt_eager.python_api_testing.sweep_tests.common import is_wormhole_b0, skip_for_wormhole_b0
 
 
 def volume(shape):
@@ -33,20 +32,18 @@ def volume(shape):
 ## stride_h, stride_w
 ## pad_h, pad_w
 ## dilation_h, dilation_w
-@skip_for_wormhole_b0
 @pytest.mark.parametrize(
     "act_shape",  ## NCHW
     (
-        (   [1, 32, 32, 32],
+        (
+            [1, 32, 32, 32],
             [1, 64, 64, 64],
             [1, 64, 112, 112],
             [1, 1, 128, 128],
-
             [9, 32, 32, 32],
             [9, 64, 64, 64],
             [9, 64, 112, 112],
             [9, 1, 128, 128],
-
             # [16, 32, 32, 32],
             # [16, 64, 64, 64],
             # [16, 64, 112, 112],
@@ -98,13 +95,13 @@ def volume(shape):
         1,  ## default
         4,
         8,
-        28, # for perf
+        28,  # for perf
         56,
     ),
 )
 @pytest.mark.parametrize(
     "use_multicore",
-    ( False, True ),
+    (False, True),
 )
 @pytest.mark.skip(reason="Hanging. Abhinav to fix later.")
 def test_run_max_pool(
@@ -190,7 +187,7 @@ def test_run_max_pool(
         dilation_w,
         out_mem_config,
         nblocks,
-        use_multicore
+        use_multicore,
     )
     out_padded = out_padded.cpu().to(ttl.tensor.Layout.ROW_MAJOR)
 

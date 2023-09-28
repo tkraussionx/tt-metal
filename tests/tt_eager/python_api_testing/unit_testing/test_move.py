@@ -10,7 +10,6 @@ from loguru import logger
 f = f"{Path(__file__).parent}"
 sys.path.append(f"{f}/../..")
 
-from tests.tt_eager.python_api_testing.sweep_tests.common import is_wormhole_b0, skip_for_wormhole_b0
 import tt_lib as ttl
 from models.utility_functions import (
     comp_pcc,
@@ -61,9 +60,14 @@ def run_move_op(test_id, shape, dtype, in0_mem_config, output_mem_config, device
 
     assert passing_pcc
 
-shapes = [[1, 1, 32, 32], [1, 3, 320, 384],]
+
+shapes = [
+    [1, 1, 32, 32],
+    [1, 3, 320, 384],
+]
 if is_wormhole_b0():
     del shapes[1:]
+
 
 @pytest.mark.parametrize(
     "in0_mem_config, output_mem_config",
@@ -88,6 +92,7 @@ if is_wormhole_b0():
 @pytest.mark.parametrize("test_id", (0, 1), ids=["overlap", "non_overlap"])
 def test_move_op(test_id, shape, dtype, in0_mem_config, output_mem_config, device):
     run_move_op(test_id, shape, dtype, in0_mem_config, output_mem_config, device)
+
 
 def test_move_op_with_program_cache(use_program_cache, device):
     in0_mem_config = ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.L1)

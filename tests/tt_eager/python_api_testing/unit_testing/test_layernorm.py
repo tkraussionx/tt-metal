@@ -23,7 +23,7 @@ from tt_lib.utils import (
     untilize,
     is_close,
 )
-from tests.tt_eager.python_api_testing.sweep_tests.common import is_wormhole_b0, skip_for_wormhole_b0
+
 
 # This ref implementation is only here for debugging
 def ref_ln(x, gamma, beta=None, epsilon=1e-5, b=None):
@@ -80,7 +80,6 @@ def ref_layernorm(x, eps, gamma, beta, H, W):
 
 def run_layernorm_tests(test_id, dtype, in0_mem_config, out_mem_config, device):
     torch.manual_seed(1234)
-
 
     tensor = ttl.tensor
     dev = device
@@ -186,7 +185,6 @@ def run_layernorm_tests(test_id, dtype, in0_mem_config, out_mem_config, device):
             assert is_close(tt_got_back, ref_lnorm)
 
 
-@skip_for_wormhole_b0
 @pytest.mark.parametrize(
     "out_mem_config",
     (

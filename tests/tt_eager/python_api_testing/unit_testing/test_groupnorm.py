@@ -22,7 +22,7 @@ from tt_lib.utils import (
     tilize_to_list,
     untilize,
 )
-from tests.tt_eager.python_api_testing.sweep_tests.common import is_wormhole_b0, skip_for_wormhole_b0
+
 
 def ref_groupnorm(x, group_size, eps, **kwargs):
     n_channels = x.shape[1]
@@ -34,7 +34,6 @@ def run_groupnorm_tests(
     test_id, group_size, dtype, in0_mem_config, out_mem_config, device
 ):
     torch.manual_seed(1234)
-
 
     tensor = ttl.tensor
     dev = device
@@ -133,7 +132,6 @@ def run_groupnorm_tests(
             torch.isclose(golden, tt_got_back)
 
 
-
 @pytest.mark.parametrize(
     "out_mem_config",
     (ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),),
@@ -158,4 +156,6 @@ def run_groupnorm_tests(
 )
 def test_groupnorm_test(test_id, dtype, in0_mem_config, out_mem_config, device):
     group_size = 1
-    run_groupnorm_tests(test_id, group_size, dtype, in0_mem_config, out_mem_config, device)
+    run_groupnorm_tests(
+        test_id, group_size, dtype, in0_mem_config, out_mem_config, device
+    )
