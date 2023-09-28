@@ -20,7 +20,7 @@ from tt_models.utility_functions import (
     comp_allclose,
     comp_pcc,
 )
-from models.vovnet.tt.vovnet import vovnet_for_image_classification
+from tt_models.vovnet.tt.vovnet import vovnet_for_image_classification
 
 
 @pytest.mark.parametrize(

@@ -21,7 +21,7 @@ from tt_models.utility_functions import (
 )
 import tt_lib
 
-from tt.effective_se_module import (
+from tt_models.vovenet.tt.effective_se_module import (
     TtEffectiveSEModule,
 )
 

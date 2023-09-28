@@ -15,7 +15,7 @@ import pytest
 import torch
 from loguru import logger
 
-from reference.vovnet import VoVNet
+from tt_models.vovenet.reference.vovnet import VoVNet
 from tt_models.utility_functions import comp_pcc, comp_allclose_and_pcc
 
 

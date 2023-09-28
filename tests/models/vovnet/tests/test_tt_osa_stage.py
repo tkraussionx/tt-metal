@@ -20,7 +20,7 @@ from tt_models.utility_functions import (
     comp_pcc,
 )
 import tt_lib
-from tests.models.vovnet.tt.osa_stage import TtOsaStage
+fromtt_.models.vovnet.tt.osa_stage import TtOsaStage
 
 
 @pytest.mark.parametrize(

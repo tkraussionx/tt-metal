@@ -20,8 +20,8 @@ from torchvision import models
 import tt_lib
 from tt_lib.fallback_ops import fallback_ops
 from typing import List, Union, Dict, cast
-from vgg_utils import get_shape
-from vgg_helper_funcs import tt_linear
+from tt_models.vgg.vgg_utils import get_shape
+from tt_models.vgg.tt.vgg_helper_funcs import tt_linear
 from tt_models.utility_functions import (
     is_conv_supported_on_device,
     run_conv_on_device_wrapper,

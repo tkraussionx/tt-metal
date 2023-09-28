@@ -20,7 +20,7 @@ from tt_models.utility_functions import (
     comp_pcc,
 )
 import tt_lib
-from tests.models.vovnet.tt.osa_block import TtOsaBlock
+from tt_models.vovnet.tt.osa_block import TtOsaBlock
 
 
 @pytest.mark.parametrize(

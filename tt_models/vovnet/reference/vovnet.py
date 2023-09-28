@@ -9,7 +9,7 @@ from typing import Optional, Tuple, Union, Type, List
 import types
 import functools
 
-from vovnet_utils import *
+from tt_models.vovnet.vovnet_utils import *
 
 model_cfgs = dict(
     stem_chs=[64, 64, 64],

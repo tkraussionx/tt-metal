@@ -19,7 +19,7 @@ from tt_models.utility_functions import (
     comp_pcc,
 )
 import tt_lib
-from tests.models.vovnet.tt.sequential_append_list import (
+from tt_models.vovnet.tt.sequential_append_list import (
     TtSequentialAppendList,
 )
 

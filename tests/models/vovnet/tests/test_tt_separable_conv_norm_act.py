@@ -21,7 +21,7 @@ from tt_models.utility_functions import (
     comp_allclose,
     comp_pcc,
 )
-from tt.separable_conv_norm_act import (
+from tt_models.vovnet.tt.separable_conv_norm_act import (
     TtSeparableConvNormAct,
 )
 

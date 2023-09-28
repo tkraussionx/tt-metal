@@ -19,7 +19,7 @@ from tt_models.utility_functions import (
     comp_pcc,
 )
 import tt_lib
-from models.vovnet.tt.classifier_head import TtClassifierHead
+from tt_models.vovnet.tt.classifier_head import TtClassifierHead
 
 
 @pytest.mark.parametrize(

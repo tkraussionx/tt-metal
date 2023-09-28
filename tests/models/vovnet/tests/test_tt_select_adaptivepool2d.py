@@ -19,7 +19,7 @@ from tt_models.utility_functions import (
     comp_pcc,
 )
 import tt_lib
-from models.vovnet.tt.select_adaptive_pool2d import (
+from tt_models.vovnet.tt.select_adaptive_pool2d import (
     TtSelectAdaptivePool2d,
 )
 

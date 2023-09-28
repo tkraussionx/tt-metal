@@ -20,7 +20,7 @@ from tt_models.utility_functions import (
     comp_pcc,
 )
 import tt_lib
-from tt.conv_norm_act import TtConvNormAct
+from tt_models.vovenet.tt.conv_norm_act import TtConvNormAct
 
 
 @pytest.mark.parametrize(

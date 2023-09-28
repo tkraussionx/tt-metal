@@ -18,7 +18,7 @@ from loguru import logger
 
 import tt_lib
 
-from tt.vgg import *
+from tt_models.vgg.tt.vgg import *
 
 
 _batch_size = 1

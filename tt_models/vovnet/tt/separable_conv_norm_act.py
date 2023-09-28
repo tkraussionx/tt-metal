@@ -15,7 +15,7 @@ import torch.nn.functional as F
 from tt_models.utility_functions import (
     torch_to_tt_tensor_rm,
 )
-from vovnet_utils import create_batchnorm
+from tt_models.vovenet.vovnet_utils import create_batchnorm
 import tt_lib
 from tt_lib import fallback_ops
 
