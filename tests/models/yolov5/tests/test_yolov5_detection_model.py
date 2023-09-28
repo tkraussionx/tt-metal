@@ -23,10 +23,10 @@ import torch
 from loguru import logger
 from datasets import load_dataset
 
-from tests.models.yolov5.reference.models.common import DetectMultiBackend
-from tests.models.yolov5.reference.utils.dataloaders import LoadImages
-from tests.models.yolov5.reference.utils.general import check_img_size
-from tests.models.yolov5.tt.yolov5_detection_model import (
+from tt_models.yolov5.reference.models.common import DetectMultiBackend
+from tt_models.yolov5.reference.utils.dataloaders import LoadImages
+from tt_models.yolov5.reference.utils.general import check_img_size
+from tt_models.yolov5.tt.yolov5_detection_model import (
     yolov5s_detection_model,
 )
 

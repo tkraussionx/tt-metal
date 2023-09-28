@@ -18,7 +18,7 @@ from tt_models.utility_functions import (
     comp_pcc,
 )
 import tt_lib
-from tests.models.swin.tt.swin_layer import (
+from tt_models.swin.tt.swin_layer import (
     TtSwinLayer,
 )
 from transformers import SwinModel

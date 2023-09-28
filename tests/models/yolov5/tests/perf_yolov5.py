@@ -14,8 +14,8 @@ sys.path.append(f"{f}/../../../..")
 import torch
 import tt_lib
 
-from tests.models.yolov5.reference.models.common import DetectMultiBackend
-from tests.models.yolov5.tt.yolov5_detection_model import (
+from tt_models.yolov5.reference.models.common import DetectMultiBackend
+from tt_models.yolov5.tt.yolov5_detection_model import (
     yolov5s_detection_model,
 )
 from tt_models.utility_functions import (

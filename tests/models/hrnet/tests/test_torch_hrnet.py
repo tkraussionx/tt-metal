@@ -15,7 +15,7 @@ import torch
 from loguru import logger
 from datasets import load_dataset
 
-from reference.hrnet import PytorchHighResolutionNet
+from tt_models.hrnet.reference.hrnet import PytorchHighResolutionNet
 from tt_models.utility_functions import comp_pcc, comp_allclose_and_pcc
 
 

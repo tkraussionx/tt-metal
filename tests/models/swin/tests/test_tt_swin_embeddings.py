@@ -18,8 +18,8 @@ from tt_models.utility_functions import (
     comp_pcc,
 )
 import tt_lib
-from tests.models.swin.tt.swin_embeddings import TtSwinEmbeddings
-from tests.models.swin.swin_utils import get_shape
+from tt_models.swin.tt.swin_embeddings import TtSwinEmbeddings
+from tt_models.swin.swin_utils import get_shape
 from transformers import SwinModel
 
 

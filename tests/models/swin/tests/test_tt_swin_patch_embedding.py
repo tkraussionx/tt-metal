@@ -18,7 +18,7 @@ from tt_models.utility_functions import (
     comp_pcc,
 )
 import tt_lib
-from tests.models.swin.tt.swin_patch_embedding import TtSwinPatchEmbeddings
+from tt_models.swin.tt.swin_patch_embedding import TtSwinPatchEmbeddings
 from transformers import SwinModel
 
 

@@ -29,11 +29,11 @@ from tt_models.utility_functions import (
     prep_report,
 )
 
-from tests.models.roberta.roberta_common import (
+from tt_models.roberta.roberta_common import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from tests.models.roberta.roberta_for_sequence_classification import (
+from tt_models.roberta.roberta_for_sequence_classification import (
     TtRobertaForSequenceClassification,
 )
 

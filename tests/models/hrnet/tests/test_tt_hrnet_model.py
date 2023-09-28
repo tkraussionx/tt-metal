@@ -19,7 +19,7 @@ from tt_models.utility_functions import (
     comp_pcc,
 )
 import tt_lib
-from hrnet.tt.hrnet_model import hrnet_w18_small
+from tt_models.hrnet.tt.hrnet_model import hrnet_w18_small
 
 
 @pytest.mark.parametrize(

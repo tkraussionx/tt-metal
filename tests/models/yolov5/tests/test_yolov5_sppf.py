@@ -15,8 +15,8 @@ import tt_lib
 import torch
 from loguru import logger
 
-from tests.models.yolov5.reference.models.common import DetectMultiBackend
-from tests.models.yolov5.tt.yolov5_sppf import TtYolov5SPPF
+from tt_models.yolov5.reference.models.common import DetectMultiBackend
+from tt_models.yolov5.tt.yolov5_sppf import TtYolov5SPPF
 from tt_models.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,

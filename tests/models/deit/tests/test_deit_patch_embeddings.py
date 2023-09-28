@@ -25,9 +25,9 @@ from tt_models.utility_functions import (
     comp_allclose_and_pcc,
 )
 
-from deit_config import DeiTConfig
+from tt_models.deit.tt.deit_config import DeiTConfig
 from transformers import DeiTModel
-from deit_patch_embeddings import DeiTPatchEmbeddings
+from tt_models.deit.tt.deit_patch_embeddings import DeiTPatchEmbeddings
 
 
 def test_deit_patch_embeddings_inference(device, pcc=0.99):

@@ -18,7 +18,7 @@ from tt_models.utility_functions import (
     comp_pcc,
 )
 import tt_lib
-from tests.models.swin.tt.swin_encoder import TtSwinEncoder
+from tt_models.swin.tt.swin_encoder import TtSwinEncoder
 from transformers import SwinModel
 
 

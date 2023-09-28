@@ -20,7 +20,7 @@ from tt_models.utility_functions import (
     comp_pcc,
 )
 import tt_lib
-from hrnet.tt.basicblock import (
+from tt_models.hrnet.tt.basicblock import (
     TtBasicBlock,
 )
 

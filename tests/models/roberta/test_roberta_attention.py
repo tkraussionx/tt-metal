@@ -16,7 +16,7 @@ sys.path.append(f"{f}/../..")
 sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
-from tests.models.roberta.roberta_common import (
+from tt_models.roberta.roberta_common import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
@@ -27,7 +27,7 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_pcc,
 )
 
-from tests.models.roberta.roberta_attention import TtRobertaAttention
+from tt_models.roberta.roberta_attention import TtRobertaAttention
 from transformers import RobertaModel
 
 

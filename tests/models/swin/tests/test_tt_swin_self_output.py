@@ -18,7 +18,7 @@ from tt_models.utility_functions import (
     comp_pcc,
 )
 import tt_lib
-from tests.models.swin.tt.swin_self_output import (
+from tt_models.swin.tt.swin_self_output import (
     TtSwinSelfOutput,
 )
 from transformers import SwinModel

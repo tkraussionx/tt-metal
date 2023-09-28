@@ -16,8 +16,8 @@ import torch
 from loguru import logger
 
 from tt_lib.fallback_ops import fallback_ops
-from tests.models.yolov5.reference.models.common import DetectMultiBackend
-from tests.models.yolov5.tt.yolov5_conv import TtYolov5Conv, TtYolov5Conv2D
+from tt_models.yolov5.reference.models.common import DetectMultiBackend
+from tt_models.yolov5.tt.yolov5_conv import TtYolov5Conv, TtYolov5Conv2D
 from tt_models.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,

@@ -23,7 +23,7 @@ from tt_models.utility_functions import (
 )
 from tt_models.utility_functions import Profiler, prep_report
 
-from hrnet.tt.hrnet_model import hrnet_w18_small
+from tt_models.hrnet.tt.hrnet_model import hrnet_w18_small
 
 BATCH_SIZE = 1
 

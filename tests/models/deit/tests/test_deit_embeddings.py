@@ -26,8 +26,8 @@ from tt_models.utility_functions import (
     comp_allclose_and_pcc,
 )
 
-from deit_config import DeiTConfig
-from deit_embeddings import DeiTEmbeddings
+from tt_models.deit.tt.deit_config import DeiTConfig
+from tt_models.deit.tt.deit_embeddings import DeiTEmbeddings
 
 
 def test_deit_embeddings_inference(device, hf_cat_image_sample_input, pcc=0.99):

@@ -19,10 +19,10 @@ from tt_models.utility_functions import (
 )
 
 import tt_lib
-from tests.models.swin.tt.swin_for_image_classification import (
+from tt_models.swin.tt.swin_for_image_classification import (
     TtSwinForImageClassification,
 )
-from tests.models.swin.swin_utils import get_shape
+from tt_models.swin.swin_utils import get_shape
 from transformers import SwinForImageClassification as HF_SwinForImageClassification
 from transformers import AutoFeatureExtractor
 

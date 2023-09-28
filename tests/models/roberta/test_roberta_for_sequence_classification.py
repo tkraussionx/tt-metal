@@ -16,11 +16,11 @@ sys.path.append(f"{f}/../..")
 sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
-from tests.models.roberta.roberta_common import (
+from tt_models.roberta.roberta_common import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from tests.models.roberta.roberta_for_sequence_classification import (
+from tt_models.roberta.roberta_for_sequence_classification import (
     TtRobertaForSequenceClassification,
 )
 import tt_lib

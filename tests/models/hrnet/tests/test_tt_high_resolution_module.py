@@ -20,10 +20,10 @@ from tt_models.utility_functions import (
     comp_pcc,
 )
 import tt_lib
-from hrnet.tt.high_resolution_module import (
+from tt_models.hrnet.tt.high_resolution_module import (
     TtHighResolutionModule,
 )
-from hrnet.tt.basicblock import TtBasicBlock
+from tt_models.hrnet.tt.basicblock import TtBasicBlock
 
 
 @pytest.mark.parametrize(

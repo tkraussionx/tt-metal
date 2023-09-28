@@ -28,10 +28,10 @@ from tt_models.utility_functions import (
 )
 from tt_models.utility_functions import comp_pcc, comp_allclose_and_pcc
 
-from deit_config import DeiTConfig
+from tt_models.deit.tt.deit_config import DeiTConfig
 
 from transformers import DeiTModel
-from deit_intermediate import TtDeiTIntermediate
+from tt_models.deit.tt.deit_intermediate import TtDeiTIntermediate
 
 
 def test_deit_intermediate_inference(device, pcc=0.99):

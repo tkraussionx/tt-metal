@@ -25,9 +25,9 @@ from tt_models.utility_functions import (
     comp_allclose_and_pcc,
 )
 
-from deit_config import DeiTConfig
+from tt_models.deit.tt.deit_config import DeiTConfig
 from transformers import DeiTModel
-from deit_self_output import TtDeiTSelfOutput
+from tt_models.deit.tt.deit_self_output import TtDeiTSelfOutput
 
 
 def test_deit_self_output_inference(device, pcc=0.99):

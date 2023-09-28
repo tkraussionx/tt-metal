@@ -21,10 +21,10 @@ import tt_lib
 from tt_models.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor
 from tt_models.utility_functions import comp_pcc, comp_allclose_and_pcc
 
-from deit_config import DeiTConfig
+from tt_models.deit.tt.deit_config import DeiTConfig
 
 from transformers import DeiTModel
-from deit_attention import TtDeiTAttention
+from tt_models.deit.tt.deit_attention import TtDeiTAttention
 
 
 def test_deit_attention_inference(device, pcc=0.99):

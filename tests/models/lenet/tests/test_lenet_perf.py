@@ -24,8 +24,8 @@ from tt_models.utility_functions import (
     comp_pcc,
     torch2tt_tensor,
 )
-from tt.lenet import lenet5
-from lenet_utils import load_torch_lenet, prepare_image
+from tt_models.lenet.tt.lenet import lenet5
+from tt_models.lenet.lenet_utils import load_torch_lenet, prepare_image
 
 
 @pytest.mark.parametrize(

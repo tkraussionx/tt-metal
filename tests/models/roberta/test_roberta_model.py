@@ -18,11 +18,11 @@ sys.path.append(f"{f}/../..")
 sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
-from tests.models.roberta.roberta_common import (
+from tt_models.roberta.roberta_common import (
     torch2tt_tensor,
     tt2torch_tensor,
 )
-from tests.models.roberta.roberta_model import TtRobertaModel
+from tt_models.roberta.roberta_model import TtRobertaModel
 import tt_lib
 from tt_lib.fallback_ops import fallback_ops
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (

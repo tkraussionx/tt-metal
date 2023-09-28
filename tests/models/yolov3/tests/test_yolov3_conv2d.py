@@ -15,12 +15,12 @@ sys.path.append(f"{f}/../..")
 sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
-from tests.models.yolov3.reference.models.common import autopad
-from tests.models.yolov3.reference.utils.dataloaders import LoadImages
-from tests.models.yolov3.reference.utils.general import check_img_size
-from tests.models.yolov3.reference.models.yolo import Conv
-from tests.models.yolov3.reference.models.common import DetectMultiBackend
-from tests.models.yolov3.tt.yolov3_conv2d import TtConv2D
+from tt_models.yolov3.reference.models.common import autopad
+from tt_models.yolov3.reference.utils.dataloaders import LoadImages
+from tt_models.yolov3.reference.utils.general import check_img_size
+from tt_models.yolov3.reference.models.yolo import Conv
+from tt_models.yolov3.reference.models.common import DetectMultiBackend
+from tt_models.yolov3.tt.yolov3_conv2d import TtConv2D
 import tt_lib
 
 from tt_models.utility_functions import (

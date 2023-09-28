@@ -28,10 +28,10 @@ from tt_models.utility_functions import (
 )
 from tt_models.utility_functions import comp_pcc, comp_allclose_and_pcc
 
-from deit_config import DeiTConfig
+from tt_models.deit.tt.deit_config import DeiTConfig
 
 from transformers import DeiTModel
-from deit_self_attention import TtDeiTSelfAttention
+from tt_models.deit.tt.deit_self_attention import TtDeiTSelfAttention
 
 
 def test_deit_self_attention_inference(device, pcc=0.99):

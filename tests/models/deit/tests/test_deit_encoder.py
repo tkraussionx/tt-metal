@@ -26,8 +26,8 @@ from tt_models.utility_functions import (
     comp_allclose_and_pcc,
 )
 
-from deit_config import DeiTConfig
-from deit_encoder import TtDeiTEncoder
+from tt_models.deit.tt.deit_config import DeiTConfig
+from tt_models.deit.tt.deit_encoder import TtDeiTEncoder
 
 
 def test_deit_encoder_inference(device, pcc=0.97):

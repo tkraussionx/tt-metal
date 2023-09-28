@@ -17,7 +17,7 @@ from tt_models.utility_functions import (
     comp_allclose,
     comp_pcc,
 )
-from tests.models.swin.tt.swin_intermediate import TtSwinIntermediate
+from tt_models.swin.tt.swin_intermediate import TtSwinIntermediate
 import tt_lib
 
 from transformers import SwinModel

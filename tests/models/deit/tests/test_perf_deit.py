@@ -24,7 +24,7 @@ from tt_models.utility_functions import (
     enable_persistent_kernel_cache,
 )
 from tt_models.utility_functions import prep_report
-from tt.deit_for_image_classification_with_teacher import (
+from tt_models.deit.tt.deit_for_image_classification_with_teacher import (
     deit_for_image_classification_with_teacher,
 )
 
