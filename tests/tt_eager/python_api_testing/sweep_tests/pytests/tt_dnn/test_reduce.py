@@ -15,22 +15,22 @@ sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
 
-from tests.tt_eager.python_api_testing.sweep_tests import comparison_funcs, generation_funcs
-from tests.tt_eager.python_api_testing.sweep_tests.run_pytorch_ci_tests import run_single_pytorch_test
-from tests.tt_eager.python_api_testing.sweep_tests.common import is_wormhole_b0, skip_for_wormhole_b0
+from tests.tt_eager.python_api_testing.sweep_tests import (
+    comparison_funcs,
+    generation_funcs,
+)
+from tests.tt_eager.python_api_testing.sweep_tests.run_pytorch_ci_tests import (
+    run_single_pytorch_test,
+)
 
 shapes = (
     [[1, 1, 32, 32]],  # Single core
     [[1, 1, 32, 3840]],  # Multi core h
     [[1, 3, 32, 3840]],  # Multi core h
 )
-if is_wormhole_b0():
-    shapes = (shapes[0],)
 
-@pytest.mark.parametrize(
-    "input_shapes",
-    shapes
-)
+
+@pytest.mark.parametrize("input_shapes", shapes)
 def test_run_reduce_max_h_test(input_shapes, device, function_level_defaults):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
@@ -47,19 +47,15 @@ def test_run_reduce_max_h_test(input_shapes, device, function_level_defaults):
         device,
     )
 
+
 shapes2 = (
     [[1, 1, 32, 32]],  # Single core
     [[1, 1, 3840, 32]],  # Multi core w
     [[1, 3, 3840, 32]],  # Multi core w
 )
-if is_wormhole_b0():
-    shapes2 = (shapes2[0],)
 
-@skip_for_wormhole_b0
-@pytest.mark.parametrize(
-    "input_shapes",
-    shapes2
-)
+
+@pytest.mark.parametrize("input_shapes", shapes2)
 def test_run_reduce_max_w_test(input_shapes, device, function_level_defaults):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
@@ -77,14 +73,12 @@ def test_run_reduce_max_w_test(input_shapes, device, function_level_defaults):
     )
 
 
-shapes3 =     (
+shapes3 = (
     [[1, 1, 32, 32]],  # Single core
     [[1, 1, 512, 512]],  # Multi core hw (== multi core w + multi core h)
     [[1, 3, 512, 512]],  # Multi core hw (== multi core w + multi core h)
 )
 
-if is_wormhole_b0():
-    shapes3 = (shapes3[0],)
 
 @pytest.mark.parametrize(
     "input_shapes",
@@ -105,19 +99,15 @@ def test_run_reduce_max_hw_test(input_shapes, device, function_level_defaults):
         device,
     )
 
+
 shapes5 = (
     [[1, 1, 32, 32]],  # Single core
     [[1, 1, 32, 3840]],  # Multi core h
     [[1, 1, 32, 3840]],  # Multi core h
 )
-if is_wormhole_b0():
-    shapes5 = (shapes5[0],)
 
 
-@pytest.mark.parametrize(
-    "input_shapes",
-    shapes5
-)
+@pytest.mark.parametrize("input_shapes", shapes5)
 def test_run_reduce_sum_h_test(input_shapes, device, function_level_defaults):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
@@ -140,13 +130,8 @@ shapes4 = (
     [[1, 3, 3840, 32]],  # Multi core w
 )
 
-if is_wormhole_b0():
-    shapes4 = (shapes4[0],)
 
-@pytest.mark.parametrize(
-    "input_shapes",
-    shapes4
-)
+@pytest.mark.parametrize("input_shapes", shapes4)
 def test_run_reduce_sum_w_test(input_shapes, device, function_level_defaults):
     datagen_func = [
         generation_funcs.gen_func_with_cast(
@@ -162,19 +147,15 @@ def test_run_reduce_sum_w_test(input_shapes, device, function_level_defaults):
         device,
     )
 
+
 shapes5 = (
     [[1, 1, 32, 32]],  # Single core
     [[1, 1, 512, 512]],  # Multi core hw (== multi core w + multi core h)
     [[1, 1, 512, 512]],  # Multi core hw (== multi core w + multi core h)
 )
-if is_wormhole_b0():
-    shapes5 = (shapes5[0],)
 
 
-@pytest.mark.parametrize(
-    "input_shapes",
-    shapes5
-)
+@pytest.mark.parametrize("input_shapes", shapes5)
 def test_run_reduce_sum_hw_test(input_shapes, device, function_level_defaults):
     datagen_func = [
         generation_funcs.gen_func_with_cast(

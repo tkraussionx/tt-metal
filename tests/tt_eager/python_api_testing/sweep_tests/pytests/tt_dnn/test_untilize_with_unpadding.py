@@ -15,8 +15,13 @@ sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
 
-from tests.tt_eager.python_api_testing.sweep_tests import comparison_funcs, generation_funcs
-from tests.tt_eager.python_api_testing.sweep_tests.run_pytorch_ci_tests import run_single_pytorch_test
+from tests.tt_eager.python_api_testing.sweep_tests import (
+    comparison_funcs,
+    generation_funcs,
+)
+from tests.tt_eager.python_api_testing.sweep_tests.run_pytorch_ci_tests import (
+    run_single_pytorch_test,
+)
 import tt_lib as ttl
 
 params = [
@@ -39,7 +44,9 @@ params += [
             "dtype": [ttl.tensor.DataType.BFLOAT16],
             "layout": [ttl.tensor.Layout.TILE],
             "buffer_type": [ttl.tensor.BufferType.DRAM],
-            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+            "output_mem_config": ttl.tensor.MemoryConfig(
+                True, ttl.tensor.BufferType.DRAM
+            ),
             "output_tensor_start": [0, 0, 0, 0],
             "output_tensor_end": [0, 0, 119, 7299],
         },
@@ -47,9 +54,7 @@ params += [
 ]
 
 
-@pytest.mark.parametrize(
-    "input_shapes, untilize_with_unpadding_args", params
-)
+@pytest.mark.parametrize("input_shapes, untilize_with_unpadding_args", params)
 def test_run_untilize_with_unpadding_test(
     input_shapes, untilize_with_unpadding_args, device
 ):

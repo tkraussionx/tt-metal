@@ -36,7 +36,6 @@ reference_pcc["swish"] = reference_pcc["silu"]
 reference_pcc["softplus"] = 0.9984
 
 
-
 def custom_compare(*args, **kwargs):
     function = kwargs.pop("function")
     if function in [

@@ -24,10 +24,6 @@ from tests.tt_eager.python_api_testing.sweep_tests import (
 from tests.tt_eager.python_api_testing.sweep_tests.run_pytorch_ci_tests import (
     run_single_pytorch_test,
 )
-from tests.tt_eager.python_api_testing.sweep_tests.common import (
-    skip_for_wormhole_b0,
-    is_wormhole_b0,
-)
 
 shapes = [
     [[1, 1, 32, 32]],  # Single core
@@ -36,16 +32,6 @@ shapes = [
 ]
 input_mem_cfgs = copy.copy(generation_funcs.supported_mem_configs)
 output_mem_cfgs = copy.copy(generation_funcs.supported_mem_configs)
-if is_wormhole_b0():
-    shapes = [
-        shapes[0],
-    ]
-    input_mem_cfgs = [
-        input_mem_cfgs[0],
-    ]
-    #output_mem_cfgs = [
-    #    output_mem_cfgs[0],
-    #]
 
 
 @pytest.mark.parametrize(
@@ -119,7 +105,6 @@ class TestEltwiseUnary:
             test_args,
         )
 
-    @skip_for_wormhole_b0
     @pytest.mark.parametrize(
         "fn_kind",
         ["erfinv"],
@@ -188,8 +173,8 @@ class TestEltwiseUnary:
         input_mem_config,
         output_mem_config,
     ):
-        if (is_wormhole_b0() and fast_and_appx):
-            pytest.skip("Gelu appx mode not working for WH b0")
+        # if (is_wormhole_b0() and fast_and_appx):
+        #    pytest.skip("Gelu appx mode not working for WH b0")
         datagen_func = [
             generation_funcs.gen_func_with_cast(
                 partial(generation_funcs.gen_rand, low=-100, high=100), torch.float32
@@ -578,8 +563,6 @@ class TestEltwiseUnary:
         input_mem_config,
         output_mem_config,
     ):
-        if is_wormhole_b0() and fn_kind == "signbit":
-            pytest.skip("Signbit fails for WH B0 arch")
         if fn_kind == "signbit" and fill_val == 0.0:
             pytest.skip("Signbit fails for 0 value")
         datagen_func = [

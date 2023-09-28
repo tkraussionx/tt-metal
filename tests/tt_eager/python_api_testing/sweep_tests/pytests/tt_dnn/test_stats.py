@@ -15,9 +15,13 @@ sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
 
-from tests.tt_eager.python_api_testing.sweep_tests import comparison_funcs, generation_funcs
-from tests.tt_eager.python_api_testing.sweep_tests.run_pytorch_ci_tests import run_single_pytorch_test
-from tests.tt_eager.python_api_testing.sweep_tests.common import is_wormhole_b0, skip_for_wormhole_b0
+from tests.tt_eager.python_api_testing.sweep_tests import (
+    comparison_funcs,
+    generation_funcs,
+)
+from tests.tt_eager.python_api_testing.sweep_tests.run_pytorch_ci_tests import (
+    run_single_pytorch_test,
+)
 import tt_lib as ttl
 
 
@@ -29,9 +33,6 @@ shapes = [
     [[8, 6, 32, 96], (0.91, 0.82, 0.85, 0.9)],  # Multi core
 ]
 
-if is_wormhole_b0():
-    shapes = [ [[1, 1, 32, 32], (0.99, 0.85, 0.85, 0.9)], ]  # Single core
-    fns = ["normalize_hw"]
 
 @pytest.mark.parametrize(
     "input_shapes_and_pcc",

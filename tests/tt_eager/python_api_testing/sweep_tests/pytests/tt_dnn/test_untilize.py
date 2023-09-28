@@ -15,8 +15,13 @@ sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
 
-from tests.tt_eager.python_api_testing.sweep_tests import comparison_funcs, generation_funcs
-from tests.tt_eager.python_api_testing.sweep_tests.run_pytorch_ci_tests import run_single_pytorch_test
+from tests.tt_eager.python_api_testing.sweep_tests import (
+    comparison_funcs,
+    generation_funcs,
+)
+from tests.tt_eager.python_api_testing.sweep_tests.run_pytorch_ci_tests import (
+    run_single_pytorch_test,
+)
 import tt_lib as ttl
 
 
@@ -31,7 +36,9 @@ import tt_lib as ttl
             "dtype": [ttl.tensor.DataType.BFLOAT16],
             "layout": [ttl.tensor.Layout.TILE],
             "buffer_type": [ttl.tensor.BufferType.DRAM, ttl.tensor.BufferType.DRAM],
-            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+            "output_mem_config": ttl.tensor.MemoryConfig(
+                True, ttl.tensor.BufferType.DRAM
+            ),
         },
     ),
 )

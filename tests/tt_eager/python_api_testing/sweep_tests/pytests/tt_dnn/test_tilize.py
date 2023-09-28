@@ -15,16 +15,17 @@ sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
 
 
-from tests.tt_eager.python_api_testing.sweep_tests import comparison_funcs, generation_funcs
-from tests.tt_eager.python_api_testing.sweep_tests.run_pytorch_ci_tests import run_single_pytorch_test
-from tests.tt_eager.python_api_testing.sweep_tests.common import skip_for_wormhole_b0, is_wormhole_b0
+from tests.tt_eager.python_api_testing.sweep_tests import (
+    comparison_funcs,
+    generation_funcs,
+)
+from tests.tt_eager.python_api_testing.sweep_tests.run_pytorch_ci_tests import (
+    run_single_pytorch_test,
+)
 import tt_lib as ttl
 
-shapes = [
-    [[1, 1, 32, 32]], [[3, 1, 320, 384]], [[1, 1, 128, 7328]]
-]
-if is_wormhole_b0():
-    shapes = [ shapes[0] ]
+shapes = [[[1, 1, 32, 32]], [[3, 1, 320, 384]], [[1, 1, 128, 7328]]]
+
 
 @pytest.mark.parametrize(
     "input_shapes",
@@ -37,7 +38,9 @@ if is_wormhole_b0():
             "dtype": [ttl.tensor.DataType.BFLOAT16],
             "layout": [ttl.tensor.Layout.ROW_MAJOR],
             "buffer_type": [ttl.tensor.BufferType.DRAM],
-            "output_mem_config": ttl.tensor.MemoryConfig(True, ttl.tensor.BufferType.DRAM),
+            "output_mem_config": ttl.tensor.MemoryConfig(
+                True, ttl.tensor.BufferType.DRAM
+            ),
         },
     ),
 )
