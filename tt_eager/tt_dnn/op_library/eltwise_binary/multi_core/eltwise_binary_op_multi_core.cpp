@@ -40,14 +40,23 @@ operation::ProgramWithCallbacks eltwise_binary_multi_core(const Tensor &a, const
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
     auto [num_cores, all_cores, core_group_1, core_group_2, num_tiles_per_core_group_1, num_tiles_per_core_group_2] = split_work_to_cores(compute_with_storage_grid_size, num_tiles, true);
+
     std::optional<ShardSpec> shard_spec = std::nullopt;
-    if (a.memory_config().is_sharded()) {
+    bool src0_sharded = a.memory_config().is_sharded();
+    bool src1_sharded = b.memory_config().is_sharded();
+    bool out_sharded = output.memory_config().is_sharded();
+    bool any_sharded = src0_sharded || src1_sharded || out_sharded;
+
+    if (src0_sharded) {
         shard_spec = a.shard_spec().value();
-    } else if (b.memory_config().is_sharded()) {
+    } else if (src1_sharded) {
         shard_spec = b.shard_spec().value();
-    } if (output.memory_config().is_sharded()) {
+    } if (out_sharded) {
         shard_spec = output.shard_spec().value();
     }
+
+    uint32_t block_size_per_core_group_1 = 1, block_size_per_core_group_2 = 1, max_block_size = 1;
+
     if (shard_spec.has_value()) {
         all_cores = shard_spec.value().shard_grid;
         num_cores = 0;
@@ -58,15 +67,17 @@ operation::ProgramWithCallbacks eltwise_binary_multi_core(const Tensor &a, const
         core_group_2 = CoreRangeSet({});
         num_tiles_per_core_group_1 = shard_spec.value().shard_shape[0] * shard_spec.value().shard_shape[1] / TILE_HW;
         num_tiles_per_core_group_2 = 0;
+        block_size_per_core_group_1 = find_max_block_size(num_tiles_per_core_group_1);
+        max_block_size = block_size_per_core_group_1;
     }
 
     tt_metal::Buffer *dst_buffer = output.buffer();
     TT_ASSERT(dst_buffer != nullptr, "Output buffer should be allocated on device!");
 
     uint32_t src0_cb_index = 0;
-    uint32_t num_input_tiles = 2;
+    uint32_t num_input_tiles = 2 * max_block_size;
 
-    if (a.memory_config().is_sharded()) {
+    if (src0_sharded) {
         uint32_t num_input_tiles = 2;
         auto cb_src0 = tt_metal::CreateCircularBuffers(
             program,
@@ -91,7 +102,7 @@ operation::ProgramWithCallbacks eltwise_binary_multi_core(const Tensor &a, const
 
     uint32_t src1_cb_index = 1;
 
-    if (b.memory_config().is_sharded()) {
+    if (src1_sharded) {
         auto cb_src1 = tt_metal::CreateCircularBuffers(
             program,
             src1_cb_index,
@@ -137,8 +148,8 @@ operation::ProgramWithCallbacks eltwise_binary_multi_core(const Tensor &a, const
     }
 
     uint32_t output_cb_index = 16; // output operands start at index 16
-    uint32_t num_output_tiles = 2;
-    if (output.memory_config().is_sharded()) {
+    uint32_t num_output_tiles = 2 * max_block_size;
+    if (out_sharded) {
         auto cb_output = tt_metal::CreateCircularBuffers(
             program,
             output_cb_index,
@@ -160,14 +171,14 @@ operation::ProgramWithCallbacks eltwise_binary_multi_core(const Tensor &a, const
         );
     }
     std::map<string, string> reader_defines;
-    if (a.memory_config().is_sharded()) {
+    if (src0_sharded) {
         reader_defines["IN0_SHARDED"] = "1";
     }
-    if (b.memory_config().is_sharded()) {
+    if (src1_sharded) {
         reader_defines["IN1_SHARDED"] = "1";
     }
     std::map<string, string> writer_defines;
-    if (output.memory_config().is_sharded()) {
+    if (out_sharded) {
         writer_defines["OUT_SHARDED"] = "1";
     }
     bool src0_is_dram = src0_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
@@ -199,6 +210,10 @@ operation::ProgramWithCallbacks eltwise_binary_multi_core(const Tensor &a, const
         num_tiles_per_core_group_1, // per_core_block_cnt
         1 // per_core_block_size
     };
+    if (any_sharded) {
+        compute_kernel_args_group_1[0] = num_tiles_per_core_group_1 / block_size_per_core_group_1;
+        compute_kernel_args_group_1[1] = block_size_per_core_group_1;
+    }
 
     auto eltwise_binary_kernel_group_1_id = tt_metal::CreateComputeKernel(
         program,
@@ -212,6 +227,11 @@ operation::ProgramWithCallbacks eltwise_binary_multi_core(const Tensor &a, const
             num_tiles_per_core_group_2, // per_core_block_cnt
             1 // per_core_block_size
         };
+        if (any_sharded) {
+            uint32_t block_size = find_max_block_size(num_tiles_per_core_group_2);
+            compute_kernel_args_group_2[0] = num_tiles_per_core_group_2 / block_size_per_core_group_2;
+            compute_kernel_args_group_2[1] = block_size_per_core_group_2;
+        }
 
         auto eltwise_binary_kernel_group_2_id = tt_metal::CreateComputeKernel(
             program,
