@@ -92,14 +92,14 @@ std::tuple<uint32_t, CoreRangeSet, CoreRangeSet, CoreRangeSet, uint32_t, uint32_
 KernelHandle CreateReadKernel(
     Program &program,
     const std::string &file_name,
-    const CoreRangeSet &core,
+    const std::variant<CoreCoord, CoreRange, CoreRangeSet> &core_spec,
     const std::vector<uint32_t> &compile_args,
     std::map<string, string> defines) {
 
     return tt_metal::CreateDataMovementKernel(
         program,
         file_name,
-        core,
+        core_spec,
         tt_metal::DataMovementConfig{
             .processor = tt_metal::DataMovementProcessor::RISCV_1,
             .noc = tt_metal::NOC::RISCV_1_default,
@@ -110,14 +110,14 @@ KernelHandle CreateReadKernel(
 KernelHandle CreateWriteKernel(
     Program &program,
     const std::string &file_name,
-    const CoreRangeSet &core,
+    const std::variant<CoreCoord, CoreRange, CoreRangeSet> &core_spec,
     const std::vector<uint32_t> &compile_args,
     std::map<string, string> defines) {
 
     return tt_metal::CreateDataMovementKernel(
         program,
         file_name,
-        core,
+        core_spec,
         tt_metal::DataMovementConfig{
             .processor = tt_metal::DataMovementProcessor::RISCV_0,
             .noc = tt_metal::NOC::RISCV_0_default,
@@ -176,7 +176,7 @@ KernelHandle CreateWriteKernel(
             auto coumpute_kernel = CreateComputeKernel(
                 program,
                 file_name,
-                arg.core_range,
+                arg.core_spec,
                 tt_metal::ComputeConfig{
                     .math_fidelity = math_fidelity,
                     .fp32_dest_acc_en = fp32_dest_acc_en,
