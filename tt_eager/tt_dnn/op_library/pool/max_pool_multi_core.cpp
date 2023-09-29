@@ -18,6 +18,73 @@ namespace tt_metal {
 
 namespace max_pool_helpers {
 
+// reader noc coords for left and right neighbors
+std::map<CoreCoord, CoreCoord> left_neighbor_noc_xy, right_neighbor_noc_xy;
+void init_neighbor_noc_xy_mapping(CoreCoord grid_size, uint32_t noc = 0) {
+    TT_ASSERT(grid_size.x == 12 && grid_size.y == 9);
+    if (noc == 0) {
+        for (uint32_t y = 1; y <= grid_size.y; ++ y) {
+            for (uint32_t x = 1; x <= grid_size.x; ++ x) {
+                CoreCoord local_noc = {x, y > 5 ? y + 1 : y};
+                CoreCoord left_noc, right_noc;
+                // calculate left neighbor
+                left_noc.x = local_noc.x;
+                left_noc.y = local_noc.y;
+                if (left_noc.x > 1) {
+                    left_noc.x -= 1;
+                } else {
+                    left_noc.x = grid_size.x;
+                    left_noc.y -= 1;
+                }
+                if (left_noc.y < 1) {
+                    // there is no left neighbor
+                } else {
+                    if (left_noc.y == 6) {
+                        // y = 6 is to be skipped
+                        left_noc.y -= 1;
+                    }
+                    left_neighbor_noc_xy[local_noc] = {left_noc.x, left_noc.y};
+                }
+                // calculate right neighbor
+                right_noc.x = local_noc.x;
+                right_noc.y = local_noc.y;
+                if (right_noc.x < grid_size.x) {
+                    right_noc.x += 1;
+                } else {
+                    right_noc.y += 1;
+                    right_noc.x = 1;
+                }
+                if (right_noc.y > grid_size.y) {
+                    // there is no right neighbor
+                } else {
+                    if (right_noc.y == 6) {
+                        // y = 6 is to be skipped
+                        right_noc.y += 1;
+                    }
+                    right_neighbor_noc_xy[local_noc] = {right_noc.x, right_noc.y};
+                }
+            }
+        }
+    } else {
+        // noc == 1
+        TT_ASSERT(noc == 0, "noc = 1 for reader is not yet handled in sharded input case.");
+    }
+}
+
+void print_neighbor_noc_xy_mapping() {
+    for (auto left : left_neighbor_noc_xy) {
+        auto local_noc = left.first;
+        auto left_noc = left.second;
+        log_debug("({},{}) --left--> ({},{})", local_noc.x, local_noc.y, left_noc.x, left_noc.y);
+    }
+    for (auto right : right_neighbor_noc_xy) {
+        auto local_noc = right.first;
+        auto right_noc = right.second;
+        log_debug("({},{}) --right--> ({},{})", local_noc.x, local_noc.y, right_noc.x, right_noc.y);
+    }
+
+}
+
 CoreCoord get_ncores_hw(uint32_t h, uint32_t w, uint32_t avail_cores_h, uint32_t avail_cores_w) {
     CoreCoord cores_shape(0, 0);
     uint32_t total_cores = avail_cores_h * avail_cores_w;
@@ -175,6 +242,19 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
     // distributing out_hw across the grid
     auto grid_size = device->compute_with_storage_grid_size();
     auto [ncores, all_cores, core_range, core_range_cliff, in_nhw_per_core, in_nhw_per_core_cliff, out_nhw_per_core, out_nhw_per_core_cliff] = max_pool_helpers::get_decomposition_nhw(grid_size, in_nhw, out_nhw);
+    if (input.memory_config().is_sharded()) {
+        all_cores = input.shard_spec().value().shard_grid;
+        uint32_t ncores = 0;
+        for (const auto & core_range : all_cores.ranges()) {
+            ncores += core_range.size();
+        }
+        core_range = all_cores;
+        core_range_cliff = CoreRangeSet({});
+        in_nhw_per_core = input.shard_spec().value().shard_shape.first;
+        in_nhw_per_core_cliff = 0;
+        out_nhw_per_core = out_nhw / ncores;
+        out_nhw_per_core_cliff = 0;
+    }
     uint32_t ncores_w = grid_size.x;
 
     // TODO: support generic nblocks
@@ -190,6 +270,21 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
     CircularBufferConfig in_scalar_cb_config = CircularBufferConfig(in_scalar_cb_npages * in_scalar_cb_pagesize, {{in_scalar_cb_id, in_df}})
 		.set_page_size(in_scalar_cb_id, in_scalar_cb_pagesize);
     auto in_scalar_cb = tt_metal::CreateCircularBuffer(program, all_cores, in_scalar_cb_config);
+
+    if (input.memory_config().is_sharded()) {
+        // incoming data is the input cb instead of raw l1/dram addr
+        auto raw_in_cb_id = CB::c_in2;
+        uint32_t raw_in_cb_npages = in_nhw_per_core;
+        uint32_t raw_in_cb_pagesize = in_nbytes_c;
+        auto raw_in_cb = CreateCircularBuffers(program,
+                                               raw_in_cb_id,
+                                               all_cores,
+                                               raw_in_cb_npages,
+                                               raw_in_cb_npages * raw_in_cb_pagesize,
+                                               in_df,
+                                               input.buffer()->address(),
+                                               true);
+    }
 
     // reader output == input to tilize
     uint32_t in_cb_id = CB::c_in0;          // input rows for "multiple (out_nelems)" output pixels
@@ -240,7 +335,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
                                                                      .buffer_type = BufferType::L1});
     auto minus_inf_const_tensor_addr = minus_inf_const_tensor.buffer()->address();
 
-    #if 0
+    #if 1
     {   // debug
         log_debug("in_cb :: PS = {}, NP = {}", in_cb_pagesize, in_cb_npages);
         log_debug("in_scalar_cb :: PS = {}, NP = {}", in_scalar_cb_pagesize, in_scalar_cb_npages);
@@ -279,8 +374,18 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
         log_debug("ncores: {}", ncores);
         log_debug("in_nhw_per_core: {}", in_nhw_per_core);
         log_debug("out_nhw_per_core: {}", out_nhw_per_core);
+        log_debug("is_in_sharded: {}", input.memory_config().is_sharded());
+        log_debug("is_out_sharded: {}", output.memory_config().is_sharded());
     }
     #endif
+
+    const uint32_t reader_noc = 0;
+    const uint32_t writer_noc = 1;
+
+    if (input.memory_config().is_sharded()) {
+        max_pool_helpers::init_neighbor_noc_xy_mapping(grid_size, reader_noc);
+        // max_pool_helpers::print_neighbor_noc_xy_mapping();
+    }
 
     /**
      * Reader Kernel: input rows -> input cb
@@ -293,7 +398,9 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
                                             out_nelems,
                                             static_cast<uint32_t>(((in_nbytes_c & (in_nbytes_c - 1)) == 0) ? 1 : 0),    // is in_nbytes_c power of 2
                                             stride_h,
-                                            stride_w};
+                                            stride_w,
+                                            reader_noc,
+                                            writer_noc};
     uint32_t in_log_base_2_of_page_size = (uint32_t) std::log2((float) in_nbytes_c);
     std::vector<uint32_t> reader_rt_args = {src_dram_buffer->address(),
                                             dst_dram_buffer->address(),
@@ -324,11 +431,27 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
                                             out_nhw_per_core,    // nsticks_per_core
                                             0,          // core_offset_out_row_id
                                             out_nhw_per_core / nblocks,     // loop count with blocks
+                                            // the following are for sharded input
+                                            0,                  // 43: local_out_stick_start
+                                            out_hw,             // out_nsticks_per_batch
+                                            0,                  // local_in_stick_start
+                                            0,                  // local_in_stick_end
+                                            in_hw,              // in_nsticks_per_batch
+                                            in_nhw_per_core,    // in_nsticks_per_core
+                                            0,                  // left_noc_x
+                                            0,                  // left_noc_y
+                                            0,                  // right_noc_x
+                                            0,                  // right_noc_y
                                             };
-    auto reader_config = DataMovementConfig{.processor = DataMovementProcessor::RISCV_1,
-                                            .noc = NOC::RISCV_1_default,
+    auto reader_config = DataMovementConfig{.processor = DataMovementProcessor::RISCV_0,
+                                            .noc = NOC::RISCV_0_default,
                                             .compile_args = reader_ct_args};
-    std::string reader_kernel_fname("tt_metal/kernels/dataflow/reader_max_pool_2d_multi_core.cpp");
+    std::string reader_kernel_fname;
+    if (input.memory_config().is_sharded()) {
+        reader_kernel_fname = "tt_metal/kernels/dataflow/reader_max_pool_2d_multi_core_sharded.cpp";
+    } else {
+        reader_kernel_fname = "tt_metal/kernels/dataflow/reader_max_pool_2d_multi_core.cpp";
+    }
     auto reader_kernel = CreateDataMovementKernel(program,
                                                   reader_kernel_fname,
                                                   all_cores,
@@ -342,8 +465,8 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
         writer_defines["SHARDED_OUT"] = "1";
     }
     std::vector<uint32_t> writer_ct_args = reader_ct_args;
-    auto writer_config = DataMovementConfig{.processor = DataMovementProcessor::RISCV_0,
-                                            .noc = NOC::RISCV_0_default,
+    auto writer_config = DataMovementConfig{.processor = DataMovementProcessor::RISCV_1,
+                                            .noc = NOC::RISCV_1_default,
                                             .compile_args = writer_ct_args,
                                             .defines = writer_defines};
     std::string writer_kernel_fname("tt_metal/kernels/dataflow/writer_max_pool_2d_multi_core.cpp");
@@ -414,13 +537,47 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
         uint32_t core_out_w_i_start = 0;
         uint32_t core_out_h_i_start = 0;
         for (int32_t i = 0; i < ncores; ++ i) {
-            CoreCoord core(i % ncores_w, i / ncores_w);
+            CoreCoord core(i % ncores_w, i / ncores_w); // logical
             reader_rt_args[37] = (curr_in_stick_id / in_hw) * in_hw;
             core_out_w_i_start = curr_out_stick_id % out_w;
             core_out_h_i_start = (curr_out_stick_id / out_w) % out_h;
             reader_rt_args[38] = core_out_w_i_start;
             reader_rt_args[39] = core_out_h_i_start;
             reader_rt_args[41] = curr_out_stick_id;
+
+            if (input.memory_config().is_sharded()) {
+                reader_rt_args[43] = curr_out_stick_id;
+                reader_rt_args[45] = curr_in_stick_id;
+                reader_rt_args[46] = curr_in_stick_id + in_nhw_per_core;
+
+                CoreCoord noc_core = core;  // physical
+                if (reader_noc == 0) {
+                    noc_core.x += 1;
+                    noc_core.y += 1;
+                    if (noc_core.y > 5) {
+                        noc_core.y += 1;
+                    }
+                } else {
+                    TT_ASSERT(false, "reader noc == 1 not yet handled");
+                }
+                if (max_pool_helpers::left_neighbor_noc_xy.count(noc_core) > 0) {
+                    CoreCoord left_noc = max_pool_helpers::left_neighbor_noc_xy.at(noc_core);
+                    reader_rt_args[49] = 1;
+                    reader_rt_args[50] = left_noc.x;
+                    reader_rt_args[51] = left_noc.y;
+                } else {
+                    reader_rt_args[49] = 0;
+                }
+                if (max_pool_helpers::right_neighbor_noc_xy.count(noc_core) > 0) {
+                    CoreCoord right_noc = max_pool_helpers::right_neighbor_noc_xy.at(noc_core);
+                    reader_rt_args[52] = 1;
+                    reader_rt_args[53] = right_noc.x;
+                    reader_rt_args[54] = right_noc.y;
+                } else {
+                    reader_rt_args[52] = 0;
+                }
+            }
+
             // log_debug("CORE: {},{} :: 37 = {}, 38 = {}, 39 = {}, 41 = {}", core.x, core.y, reader_rt_args[37], reader_rt_args[38], reader_rt_args[39], reader_rt_args[41]);
             SetRuntimeArgs(program, reader_kernel, core, reader_rt_args);
             std::vector<uint32_t> writer_rt_args = reader_rt_args;

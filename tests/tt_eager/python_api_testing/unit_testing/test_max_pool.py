@@ -85,8 +85,9 @@ def volume(shape):
     (
         ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
         ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
+        ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, ttl.tensor.BufferType.L1),
     ),
-    ids=["in_DRAM", "in_L1"],
+    ids=["in_DRAM", "in_L1", "in_HEIGHT_SHARDED"],
 )
 @pytest.mark.parametrize(
     "out_mem_config",
@@ -111,7 +112,6 @@ def volume(shape):
     "use_multicore",
     (False, True),
 )
-# @pytest.mark.skip(reason="Hanging. Abhinav to fix later.")
 def test_run_max_pool(
     act_shape,
     kernel_size,
@@ -160,10 +160,10 @@ def test_run_max_pool(
         logger.info("Multicore version only supports Resnet50 configs for now.")
         pytest.skip()
 
-    if out_mem_config.is_sharded():
-        if not use_multicore:
-            pytest.skip("Unsupported sharding")
-        interleaved_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
+    interleaved_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
+
+    if (out_mem_config.is_sharded() or in_mem_config.is_sharded()) and not use_multicore:
+        pytest.skip("Unsupported sharding in single core")
 
     torch.set_printoptions(
         precision=3, sci_mode=False, linewidth=500, threshold=10000, edgeitems=32
@@ -199,7 +199,23 @@ def test_run_max_pool(
         ttl.tensor.DataType.BFLOAT16,
         ttl.tensor.Layout.ROW_MAJOR,
     )
-    ttact = ttact.to(device, in_mem_config)
+    ncores = 1
+    if in_mem_config.is_sharded():
+        ttact = ttact.to(device, interleaved_mem_config)
+        in_height = in_n * in_h * in_w
+        out_nhw = in_n * out_h * out_w
+        ## NOTE: these should match the max_pool op code for now. Hardcoded Resnet shapes only.
+        if out_nhw == 1024:
+            ncores = 32
+        elif out_nhw == 2048 or out_nhw == 4096 or out_nhw == 8192 or out_nhw == 16384 or out_nhw == 32768:
+            ncores = 64
+        elif out_nhw == 3136 or out_nhw == 6272 or out_nhw == 12544 or out_nhw == 25088:
+            ncores = 98
+        else:
+            assert False
+        ttact = ttl.tensor.interleaved_to_sharded(ttact, ncores, [in_height // ncores, act_padded.shape[-1]], ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,)
+    else:
+        ttact = ttact.to(device, in_mem_config)
 
     out_padded = ttl.tensor.max_pool2d(
         ttact,
