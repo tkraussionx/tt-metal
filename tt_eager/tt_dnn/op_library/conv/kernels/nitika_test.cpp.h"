@@ -52,15 +52,15 @@ void kernel_main() {
         return;
     }
 
-    // mcast args
-    uint32_t weights_mcast_dest_noc_start_x         = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t weights_mcast_dest_noc_start_y         = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t weights_mcast_dest_noc_end_x           = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t weights_mcast_dest_noc_end_y           = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t weights_mcast_num_dests                = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t weights_mcast_num_cores                = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t weights_mcast_sender_semaphore_addr    = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t weights_mcast_receiver_semaphore_addr  = get_arg_val<uint32_t>(i); i+=1;
+    // // mcast args
+    // uint32_t weights_mcast_dest_noc_start_x         = get_arg_val<uint32_t>(i); i+=1;
+    // uint32_t weights_mcast_dest_noc_start_y         = get_arg_val<uint32_t>(i); i+=1;
+    // uint32_t weights_mcast_dest_noc_end_x           = get_arg_val<uint32_t>(i); i+=1;
+    // uint32_t weights_mcast_dest_noc_end_y           = get_arg_val<uint32_t>(i); i+=1;
+    // uint32_t weights_mcast_num_dests                = get_arg_val<uint32_t>(i); i+=1;
+    // uint32_t weights_mcast_num_cores                = get_arg_val<uint32_t>(i); i+=1;
+    // uint32_t weights_mcast_sender_semaphore_addr    = get_arg_val<uint32_t>(i); i+=1;
+    // uint32_t weights_mcast_receiver_semaphore_addr  = get_arg_val<uint32_t>(i); i+=1;
 
 
     constexpr bool out_in_dram = get_compile_time_arg_val(0) == 1;
@@ -68,14 +68,14 @@ void kernel_main() {
     constexpr uint32_t cb_id_weight = get_compile_time_arg_val(2);
 
 
-    #ifndef SKIP_MCAST
-    // Set ur local VALID value, to be mcasted to destinations flag address after the data has been mcasted
-    volatile tt_l1_ptr uint32_t* weights_mcast_receiver_semaphore_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(weights_mcast_receiver_semaphore_addr);
-    *(weights_mcast_receiver_semaphore_addr_ptr) = VALID;
-    // local address that will be atomically incremented by mcast receivers, to know when all receivers are ready
-    // to receive the mcast
-    volatile tt_l1_ptr uint32_t* weights_mcast_sender_semaphore_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(weights_mcast_sender_semaphore_addr);
-    #endif
+    // #ifndef SKIP_MCAST
+    // // Set ur local VALID value, to be mcasted to destinations flag address after the data has been mcasted
+    // volatile tt_l1_ptr uint32_t* weights_mcast_receiver_semaphore_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(weights_mcast_receiver_semaphore_addr);
+    // *(weights_mcast_receiver_semaphore_addr_ptr) = VALID;
+    // // local address that will be atomically incremented by mcast receivers, to know when all receivers are ready
+    // // to receive the mcast
+    // volatile tt_l1_ptr uint32_t* weights_mcast_sender_semaphore_addr_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(weights_mcast_sender_semaphore_addr);
+    // #endif
 
     const uint32_t tile_nbytes = get_tile_size(cb_id_out0);
     const DataFormat out_df = get_dataformat(cb_id_out0);
@@ -172,35 +172,35 @@ void kernel_main() {
                 } // for weight_block_h
                 noc_async_read_barrier();
 
-                #ifndef SKIP_MCAST
-                // wait until all weights mcast destinations have atomically incremented the weights semaphore_addr (i.e. its value should be weights_mcast_num_dests), then reset
-                // the semaphore_addr value back to zero for the next block
-                noc_semaphore_wait(weights_mcast_sender_semaphore_addr_ptr, weights_mcast_num_dests);
-                noc_semaphore_set(weights_mcast_sender_semaphore_addr_ptr, 0);
+                // #ifndef SKIP_MCAST
+                // // wait until all weights mcast destinations have atomically incremented the weights semaphore_addr (i.e. its value should be weights_mcast_num_dests), then reset
+                // // the semaphore_addr value back to zero for the next block
+                // noc_semaphore_wait(weights_mcast_sender_semaphore_addr_ptr, weights_mcast_num_dests);
+                // noc_semaphore_set(weights_mcast_sender_semaphore_addr_ptr, 0);
 
-                // Now we have the block in the CB address, we can mcast to dests!
-                uint64_t weights_multicast_data_addr = get_noc_multicast_addr(
-                weights_mcast_dest_noc_end_x,
-                weights_mcast_dest_noc_end_y,
-                weights_mcast_dest_noc_start_x,
-                weights_mcast_dest_noc_start_y,
-                weights_start_address);
-                // num_dests must not include source, since we are NOT really doing a local copy!
-                noc_async_write_multicast(weights_start_address, weights_multicast_data_addr, weights_block_size_bytes, weights_mcast_num_cores);
+                // // Now we have the block in the CB address, we can mcast to dests!
+                // uint64_t weights_multicast_data_addr = get_noc_multicast_addr(
+                // weights_mcast_dest_noc_end_x,
+                // weights_mcast_dest_noc_end_y,
+                // weights_mcast_dest_noc_start_x,
+                // weights_mcast_dest_noc_start_y,
+                // weights_start_address);
+                // // num_dests must not include source, since we are NOT really doing a local copy!
+                // noc_async_write_multicast(weights_start_address, weights_multicast_data_addr, weights_block_size_bytes, weights_mcast_num_cores);
 
-                // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
-                // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
+                // // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
+                // // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
 
-                // We should also multicast the flag to destinations
-                uint64_t weights_mcast_receiver_semaphore_noc_addr = get_noc_multicast_addr(
-                weights_mcast_dest_noc_end_x,
-                weights_mcast_dest_noc_end_y,
-                weights_mcast_dest_noc_start_x,
-                weights_mcast_dest_noc_start_y,
-                weights_mcast_receiver_semaphore_addr);
-                // num_dests must not include source, since we are NOT really doing a local copy!
-                noc_semaphore_set_multicast(weights_mcast_receiver_semaphore_addr, weights_mcast_receiver_semaphore_noc_addr, weights_mcast_num_cores);
-                #endif
+                // // We should also multicast the flag to destinations
+                // uint64_t weights_mcast_receiver_semaphore_noc_addr = get_noc_multicast_addr(
+                // weights_mcast_dest_noc_end_x,
+                // weights_mcast_dest_noc_end_y,
+                // weights_mcast_dest_noc_start_x,
+                // weights_mcast_dest_noc_start_y,
+                // weights_mcast_receiver_semaphore_addr);
+                // // num_dests must not include source, since we are NOT really doing a local copy!
+                // noc_semaphore_set_multicast(weights_mcast_receiver_semaphore_addr, weights_mcast_receiver_semaphore_noc_addr, weights_mcast_num_cores);
+                // #endif
 
                 weight_current_block_start_tile_id += weight_next_block_stride_h;
                 cb_push_back(cb_id_weight, weight_block_num_tiles);
@@ -259,6 +259,5 @@ void kernel_main() {
     } // out_num_blocks_w
     #ifdef SHARDED_OUT
     cb_wait_front(cb_id_out0, out_subblock_tile_count * out_num_subblocks_h * out_num_subblocks_w * out_num_blocks_w * out_num_blocks_h);
-    DPRINT << "Waited. Sender done." << ENDL();
     #endif
 }

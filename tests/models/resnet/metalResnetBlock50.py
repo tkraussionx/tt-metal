@@ -938,7 +938,7 @@ class ResNet(nn.Module):
         x = self.layer4_module1(x)
         x = self.layer4_module2(x)
         x = self.layer4_module3(x)
-
+        print("Done with all repeating blocks")
         unpadded_shape = x.shape_without_padding();
         x = tt_lib.tensor.untilize(x, self.memory_config, use_multicore=True)
         x = tt_lib.tensor.unpad(x, (0, 0, 0, 0), (unpadded_shape[0] - 1, unpadded_shape[1] - 1, unpadded_shape[2] - 1, unpadded_shape[3] - 1), output_mem_config=self.memory_config)
@@ -949,7 +949,7 @@ class ResNet(nn.Module):
         padded_shape = [ unpadded_shape[0], unpadded_shape[1], _nearest_32(unpadded_shape[2]), _nearest_32(unpadded_shape[3]) ]
         x = tt_lib.tensor.pad(x, padded_shape, [0, 0, 0, 0], 0, output_mem_config=self.memory_config, use_multicore=True)
         x = tt_lib.tensor.tilize(x, output_mem_config=self.memory_config)
-
+        print("Running avg pool")
         x = self.avgpool(x, self.memory_config)
 
         unpadded_shape_end = [x.shape()[0]-1, x.shape()[1]-1, 1-1, x.shape()[3]-1]
@@ -962,11 +962,13 @@ class ResNet(nn.Module):
         padded_shape = [ unpadded_shape[0], unpadded_shape[1], _nearest_32(unpadded_shape[2]), _nearest_32(unpadded_shape[3]) ]
         x = tt_lib.tensor.pad(x, padded_shape, [0, 0, 0, 0], 0, output_mem_config=self.memory_config, use_multicore=True)
         x = tt_lib.tensor.tilize(x, output_mem_config=self.memory_config)
-
+        print("Running fc")
         x = self.fc(x)
         x = format_tensor(x, tt_lib.tensor.Layout.ROW_MAJOR, self.device, self.memory_config)
         x = x.reshape(self.batch_size, x.shape()[1], (int) (x.shape()[2] / self.batch_size), x.shape()[3])
+        print("To cpu")
         x = x.cpu()
+        print("Done")
         # assert x.layout() != tt_lib.tensor.Layout.ROW_MAJOR
         # x = x.to(tt_lib.tensor.Layout.ROW_MAJOR)
         desired_shape = [x.shape()[0], x.shape()[1], 1, 1000]

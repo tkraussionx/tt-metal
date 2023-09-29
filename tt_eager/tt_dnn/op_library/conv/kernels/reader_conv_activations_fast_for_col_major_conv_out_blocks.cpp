@@ -172,4 +172,5 @@ void kernel_main() {
             n_reset = n;
         } // for num of act blocks in height dim
     } // for num of weight blocks in width dim
+    DPRINT << "Reader done" << ENDL();
 }

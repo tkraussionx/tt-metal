@@ -146,6 +146,7 @@ void create_CBs(tt_metal::Program &program,
                 tt::DataFormat::Float16_b,
                 output_cb_address.value(), true
             );
+            cout << "Num of output tiles - " << num_writer_output_tiles << endl;
         } else {
             auto cb_output = CreateCircularBuffers(
                 program,
@@ -876,6 +877,7 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
             };
         }
 
+        assert(out_subblock_num_tiles * (act_block_h_ntiles / out_subblock_h_ntiles) * (weight_block_w_ntiles / out_subblock_w_ntiles) * num_blocks_weight_w_per_core * num_blocks_act_h_per_core == writer_output_block_num_tiles);
         writer_rt_args = {
             out_dram_addr,
             weight_dram_addr,

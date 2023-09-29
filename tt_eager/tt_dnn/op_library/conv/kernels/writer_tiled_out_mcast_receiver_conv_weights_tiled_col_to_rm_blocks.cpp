@@ -134,7 +134,9 @@ void kernel_main() {
             // read weight slice - 1 block of weights in width dim and full weight matrix height
             // read slice only once for all activation blocks
             for(uint32_t block_weight_h = 0; block_weight_h < num_blocks_weight_h; block_weight_h++) {
+                //DPRINT << "Reserving weight block cb" << ENDL();
                 cb_reserve_back(cb_id_weight, weight_block_num_tiles);
+                //DPRINT << "Reserved weight block cb" << ENDL();
                 // Set weights semaphore value to INVALID
                 noc_semaphore_set(weights_mcast_receiver_semaphore_addr_ptr, INVALID);
 
@@ -146,6 +148,7 @@ void kernel_main() {
                 noc_semaphore_wait(weights_mcast_receiver_semaphore_addr_ptr, VALID);
 
                 cb_push_back(cb_id_weight, weight_block_num_tiles);
+                //DPRINT << "Pushed weight block cb" << ENDL();
             } // for num_blocks_weight_h
 
             #ifndef SHARDED_OUTPUT
@@ -201,6 +204,16 @@ void kernel_main() {
     } // out_num_blocks_w
 
     #ifdef SHARDED_OUT
+    DPRINT << "# of tiles in output block" << out_subblock_tile_count * out_num_subblocks_h * out_num_subblocks_w * out_num_blocks_w * out_num_blocks_h << ENDL();
+    DPRINT << "out_num_blocks_w=" << out_num_blocks_w << ENDL();
+    DPRINT << "out_num_blocks_h=" << out_num_blocks_h << ENDL();
+    DPRINT << "out_num_subblocks_h=" << out_num_subblocks_h << ENDL();
+    DPRINT << "Waiting for output block. CB-" << cb_id_out0 << ENDL();
+    //cb_wait_front(cb_id_out0, 2);
+    //DPRINT << "Waited for 2 tiles" << ENDL();
+    //cb_wait_front(cb_id_out0, out_subblock_tile_count * out_num_subblocks_w * out_num_blocks_w * out_num_blocks_h);
+    //DPRINT << "Waited for 1st subblock" << ENDL();
     cb_wait_front(cb_id_out0, out_subblock_tile_count * out_num_subblocks_h * out_num_subblocks_w * out_num_blocks_w * out_num_blocks_h);
+    DPRINT << "Waited for all" << ENDL();
     #endif
 }

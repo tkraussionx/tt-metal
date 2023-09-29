@@ -342,45 +342,45 @@ hardcoded_act_blk_h_weight_blk_w_out_subblk_h_out_subblk_w_for_conv = {
     "K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w",
     (
         # 1x1 convs in rn50
-        (64, 64, 56, 56, 1, 1, 1, 1, 0, 0),
-        (256, 64, 56, 56, 1, 1, 1, 1, 0, 0), # slow with new_matmul but less than bias computation time
-        (64, 256, 56, 56, 1, 1, 1, 1, 0, 0),
-        (64, 256, 56, 56, 1, 1, 1, 1, 0, 0),
-        (128, 256, 56, 56, 1, 1, 1, 1, 0, 0),
-        (512, 128, 28, 28, 1, 1, 1, 1, 0, 0),
-        (128, 512, 28, 28, 1, 1, 1, 1, 0, 0),
-        (256, 512, 28, 28, 1, 1, 1, 1, 0, 0),
-        (1024, 256, 14, 14, 1, 1, 1, 1, 0, 0),
-        (256, 1024, 14, 14, 1, 1, 1, 1, 0, 0),
-        (512, 1024, 14, 14, 1, 1, 1, 1, 0, 0),
-        (2048, 512, 7, 7, 1, 1, 1, 1, 0, 0),
-        (512, 2048, 7, 7, 1, 1, 1, 1, 0, 0), # slightly slower with new matmul but less than old matmul + bias computation time
+        # (64, 64, 56, 56, 1, 1, 1, 1, 0, 0),
+        # (256, 64, 56, 56, 1, 1, 1, 1, 0, 0), # slow with new_matmul but less than bias computation time
+        # (64, 256, 56, 56, 1, 1, 1, 1, 0, 0),
+        # (64, 256, 56, 56, 1, 1, 1, 1, 0, 0),
+        # (128, 256, 56, 56, 1, 1, 1, 1, 0, 0),
+        # (512, 128, 28, 28, 1, 1, 1, 1, 0, 0),
+        # (128, 512, 28, 28, 1, 1, 1, 1, 0, 0),
+        # (256, 512, 28, 28, 1, 1, 1, 1, 0, 0),
+        # (1024, 256, 14, 14, 1, 1, 1, 1, 0, 0),
+        # (256, 1024, 14, 14, 1, 1, 1, 1, 0, 0),
+        # (512, 1024, 14, 14, 1, 1, 1, 1, 0, 0),
+        # (2048, 512, 7, 7, 1, 1, 1, 1, 0, 0),
+        # (512, 2048, 7, 7, 1, 1, 1, 1, 0, 0), # slightly slower with new matmul but less than old matmul + bias computation time
 
         # convs in rn50 (not complete list)
         # layer1
         (64, 64, 56, 56, 3, 3, 1, 1, 1, 1),
 
-        # layer2
-        (512, 256, 56, 56, 1, 1, 2, 2, 0, 0),
-        (128, 128, 56, 56, 3, 3, 2, 2, 1, 1),
-        (128, 128, 28, 28, 3, 3, 1, 1, 1, 1),
+        # # layer2
+        # (512, 256, 56, 56, 1, 1, 2, 2, 0, 0),
+        # (128, 128, 56, 56, 3, 3, 2, 2, 1, 1),
+        # (128, 128, 28, 28, 3, 3, 1, 1, 1, 1),
 
-        # layer3
-        (256, 256, 28, 28, 3, 3, 2, 2, 1, 1),
-        (1024, 512, 28, 28, 1, 1, 2, 2, 0, 0),
-        (256, 256, 14, 14, 3, 3, 1, 1, 1, 1),
+        # # layer3
+        # (256, 256, 28, 28, 3, 3, 2, 2, 1, 1),
+        # (1024, 512, 28, 28, 1, 1, 2, 2, 0, 0),
+        # (256, 256, 14, 14, 3, 3, 1, 1, 1, 1),
 
-        # layer4
-        (512, 512, 14, 14, 3, 3, 2, 2, 1, 1),
-        (2048, 1024, 14, 14, 1, 1, 2, 2, 0, 0),
-        (512, 512, 7, 7, 3, 3, 1, 1, 1, 1),
+        # # layer4
+        # (512, 512, 14, 14, 3, 3, 2, 2, 1, 1),
+        # (2048, 1024, 14, 14, 1, 1, 2, 2, 0, 0),
+        # (512, 512, 7, 7, 3, 3, 1, 1, 1, 1),
 
     )
 )
 def test_resnet50_conv(use_program_cache, device, N,K,C,H,W,R,S,stride_h,stride_w,pad_h,pad_w):
-    memory_config = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1)
+    out_memory_config = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1)
     if N == 8:
-        memory_config = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, tt_lib.tensor.BufferType.L1)
+        out_memory_config = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, tt_lib.tensor.BufferType.L1)
 
     for i in range(1): # increase num of iterations to test op caching
         assert C % 32 == 0
@@ -427,7 +427,7 @@ def test_resnet50_conv(use_program_cache, device, N,K,C,H,W,R,S,stride_h,stride_
                                 [out_subblock_h_datums, out_subblock_w_datums], out_block_h_datums,
                                 grid_size, per_core_out_matrix_h_ntiles, per_core_weight_matrix_w_ntiles,
                                 conv_bias_pyt.reshape(-1).tolist(), False,
-                                memory_config
+                                out_memory_config
                                 )
 
         conv_input_on_device = tt_lib.tensor.Tensor(

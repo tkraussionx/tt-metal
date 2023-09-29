@@ -242,7 +242,14 @@ void MAIN {
                                                         ? untilize_mode_final_matmul_partials_cb
                                                         : out_cb_id)
                                                     : matmul_partials_cb;
+                        if (last_out) {
+                        PACK(( DPRINT << "p" << out_subblock_num_tiles << ENDL() ));
+                        PACK(( DPRINT << "c" << curr_matmul_out_cb << ENDL() ));
+                        }
                         pack_matmul_subblock(curr_matmul_out_cb, out_subblock_num_tiles);
+                        if (last_out) {
+                        PACK(( DPRINT << "p" << "d" << ENDL() ));
+                        }
                         release_dst(tt::DstMode::Half);
                         in1_index_subblock_offset += out_subblock_w;
                     } // for in1_num_subblocks
@@ -274,5 +281,9 @@ void MAIN {
             bias_block_offset += in1_block_w;
         #endif
     } // for in1_num_blocks_w
+    PACK(( DPRINT << "P" << ENDL() ));
+    UNPACK(( DPRINT << "U" << ENDL() ));
+    MATH(( DPRINT << "M" << ENDL() ));
 } // MAIN
+
 } // NAMESPACE
