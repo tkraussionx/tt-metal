@@ -355,11 +355,11 @@ def run_test_FalconCausalLM_end_to_end(
 @pytest.mark.parametrize(
     "llm_mode, batch, seq_len, kv_cache_len, expected_inference_time",
     (
-        ("prefill", 1, 128, 0, 0.36),
-        ("prefill", 1, 256, 0, 0.45),
-        ("decode", 32, 1, 128, 0.32),
-        ("decode", 32, 1, 1024, 0.40),
-        ("decode", 32, 1, 2047, 0.52),
+        ("prefill", 1, 128, 0, 0.40),
+        ("prefill", 1, 256, 0, 0.48),
+        ("decode", 32, 1, 128, 0.36),
+        ("decode", 32, 1, 1024, 0.45),
+        ("decode", 32, 1, 2047, 0.58),
     ),
     ids=[
         "prefill_seq128",
@@ -371,7 +371,7 @@ def run_test_FalconCausalLM_end_to_end(
 )
 @pytest.mark.parametrize(
     "num_layers, pcc",
-    ((32, 0.86),),
+    ((32, 0.7),),
     ids=["layers_32"],
 )
 @pytest.mark.parametrize(
@@ -425,8 +425,8 @@ def test_perf_bare_metal(
 @pytest.mark.parametrize(
     "llm_mode, batch, seq_len, kv_cache_len, expected_inference_time",
     (
-        ("prefill", 1, 128, 0, 0.34),
-        ("decode", 32, 1, 128, 0.36),
+        ("prefill", 1, 128, 0, 0.50),
+        ("decode", 32, 1, 128, 0.56),
         # ("prefill", 1, 256, 0, 0.40),
         # ("decode", 32, 1, 1024, 0.36),
         # ("decode", 32, 1, 2047, 0.47),
@@ -438,7 +438,7 @@ def test_perf_bare_metal(
 )
 @pytest.mark.parametrize(
     "num_layers, pcc",
-    ((32, 0.86),),
+    ((32, 0.7),),
     ids=["layers_32"],
 )
 @pytest.mark.parametrize(

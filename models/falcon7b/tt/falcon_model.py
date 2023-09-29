@@ -117,15 +117,6 @@ class TtFalconModelShared(torch.nn.Module):
             assert q_len % 32 == 0, "For prefill, seq_len must be multiple of 32!"
             assert kv_cache_len == 0, "For prefill, no kv_cache is passed in!"
 
-            # print('size of embedding input:::', embeddings.unsqueeze(1).shape)
-
-            # tt_embeddings = torch_to_tt_tensor_rm(
-            #     embeddings.unsqueeze(1),
-            #     self.device,
-            #     tt_memory_config=self.model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"],
-            #     tt_dtype=self.model_config["WORD_EMBEDDING_OUTPUT_DTYPE"],
-            # )
-
             tt_embeddings = torch2tt_tensor(
                 embeddings.unsqueeze(1),
                 self.device,
@@ -149,7 +140,7 @@ class TtFalconModelShared(torch.nn.Module):
 
             tt_attention_mask = torch2tt_tensor(
                 (attention_mask_bool_padded * -1e9).expand(
-                    -1, self.config.n_head, -1, -1
+                    -1, self.config.num_attention_heads, -1, -1
                 ),
                 self.device,
                 tt_memory_config=self.model_config["ATTN_MASK_MEMCFG"],
@@ -182,7 +173,7 @@ class TtFalconModelShared(torch.nn.Module):
             )
             tt_attention_mask = torch2tt_tensor(
                 (attention_mask_bool_padded.transpose(0, 2) * -1e9).expand(
-                    -1, self.config.n_head, -1, -1
+                    -1, self.config.num_attention_heads, -1, -1
                 ),
                 self.device,
                 tt_memory_config=self.model_config["ATTN_MASK_MEMCFG"],

@@ -30,9 +30,11 @@ def test_gs_demo_kv():
     model_config = get_model_config("BFLOAT16-DRAM")
     tt_cache_path = get_tt_cache_path(model_version)
 
+    input_prompts = ["write a poem about Valencia"]
+
     batch_size = 32
     num_layers = 32
-    num_tokens = 32
+    num_tokens = 128
     max_input_tokens = 32
     max_seq_len = (num_tokens//32 +1)*32
 
@@ -46,15 +48,13 @@ def test_gs_demo_kv():
     torch.manual_seed(0)
     base_url = ""
     max_position_embeddings = max_seq_len
-    head_dim = configuration.hidden_size // configuration.n_head
+    head_dim = configuration.hidden_size // configuration.num_attention_heads
     use_cache = True
 
     post_processor = partial(post_process)
 
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(model_version)
-
-    input_prompts = ["write a poem about valencia"]
 
     logger.info("Tokenizing inputs")
     tokenizer.pad_token = tokenizer.eos_token
