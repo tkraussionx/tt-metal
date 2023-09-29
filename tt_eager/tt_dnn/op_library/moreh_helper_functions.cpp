@@ -196,14 +196,10 @@ KernelHandle CreateWriteKernel(
         auto _data_format = (arg.data_format != tt::DataFormat::Invalid) ? arg.data_format : data_format;
         auto _core_range = (arg.core_range != nullptr) ? *arg.core_range : core_range;
 
-        CreateCircularBuffers(
-            program,
-            std::set<u32>({_buffer_index}),
-            CoreRangeSet({_core_range}),
-            _num_tiles,
-            _num_tiles * tt_metal::detail::TileSize(_data_format),
-            _data_format,
-            l1_address);
+        tt_metal::CircularBufferConfig cb_config = tt_metal::CircularBufferConfig(_num_tiles * tt_metal::detail::TileSize(_data_format), {{_buffer_index, _data_format}})
+            .set_page_size(_buffer_index, tt_metal::detail::TileSize(_data_format));
+
+        auto cb_src = tt_metal::CreateCircularBuffer(program, CoreRangeSet({_core_range}), cb_config);
     }
 }
 
