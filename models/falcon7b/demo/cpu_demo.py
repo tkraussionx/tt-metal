@@ -9,7 +9,7 @@ from loguru import logger
 
 from transformers import AutoTokenizer
 
-from tests.models.falcon.reference.hf_modeling_falcon import (
+from models.falcon7b.reference.hf_modeling_falcon import (
     FalconForCausalLM,)
 import time
 
@@ -46,7 +46,7 @@ def test_cpu_demo_no_kv(batch_size):
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_VERSION)
     num_tokens = 128
-    prompt_text = ["Write me a haiku about Tokyo"] * batch_size
+    prompt_text = ["Write a poem about Valencia"] * batch_size
 
     logger.info("Tokenizing inputs")
     tokenized_inputs = tokenizer(
@@ -65,9 +65,6 @@ def test_cpu_demo_no_kv(batch_size):
     logger.info("Generating new ids")
     ids = input_ids
     for i in range(num_tokens):
-        # iteration should become slower one by one
-        # First iteration is about 3.5sec (batch=32)
-        # Fifth iteration is about 4.5sec (batch=32)
         start_ = time.time()
         logger.info(f"generating token {i}")
         ids, kv_cache = generator(input_ids=ids)
@@ -92,14 +89,9 @@ def test_cpu_demo_kv(batch_size):
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_VERSION)
 
-    num_tokens = 2048
+    num_tokens = 128
 
-    # prompt_text = ["Descriptive writing usually appeals to the five senses: taste, touch, smell, hearing, and sight. \
-    # (Example: Jack's coffee mug exploded into tiny shards of glass, catching the attention of everyone at the office.) \
-    # Always appealing to the senses is key to writing a good descriptive essay.\
-    # Write a very long descriptive writing about Canada's role in fighting with the climate change."] * batch_size
-
-    prompt_text = ["Write a poem about valencia"] * batch_size
+    prompt_text = ["Write a poem about Valencia"] * batch_size
 
     logger.info("Tokenizing inputs")
     tokenized_inputs = tokenizer(

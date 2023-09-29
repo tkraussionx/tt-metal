@@ -119,6 +119,7 @@ class TtFalconAttention(nn.Module):
         self.device = device
         self.state_dict = state_dict
         self.model_config = model_config
+        self.temperature = 1.25
 
         if (self.head_dim * num_heads) != self.hidden_size:
             raise ValueError(
@@ -323,8 +324,7 @@ class TtFalconAttention(nn.Module):
             )
 
         ## Add temperature before softmax
-        temperature = 1.0
-        attn_weights = tt_lib.tensor.mul_unary(attn_weights, 1/temperature)
+        attn_weights = tt_lib.tensor.mul_unary(attn_weights, 1/self.temperature)
         attn_weights = tt_lib.operations.primary.softmax_in_place(
             attn_weights,
 

@@ -1,14 +1,14 @@
 from functools import partial
-
+import tt_lib
 import torch
 from loguru import logger
 
 from transformers import AutoTokenizer
 
-from tests.models.falcon.falcon_causallm import TtFalconCausalLM
+from models.falcon7b.tt.falcon_causallm import TtFalconCausalLM
 
-from tests.models.falcon.reference.hf_modeling_falcon import FalconForCausalLM
-from tests.models.falcon.model_config import (
+from models.falcon7b.reference.hf_modeling_falcon import FalconForCausalLM
+from models.falcon7b.model_config import (
     get_model_config,
     get_tt_cache_path,
 )
@@ -18,22 +18,21 @@ import time
 def post_process(logits, input_ids, index):
     next_token_logits = logits[:, index, :]
     next_tokens = torch.argmax(next_token_logits, dim=-1)
-    print(f"topk {torch.topk(next_token_logits, 20)[1]}")
     ids = next_tokens[:, None]
-    print("OUTPUT ID", ids)
     return ids
 
 
-def test_gs_demo_kv(device):
+def test_gs_demo_kv():
+    device = tt_lib.device.CreateDevice(0)
+    tt_lib.device.SetDefaultDevice(device)
     start = time.time()
-    # enable_memory_reports()
     model_version = "tiiuae/falcon-7b-instruct"
     model_config = get_model_config("BFLOAT16-DRAM")
     tt_cache_path = get_tt_cache_path(model_version)
 
     batch_size = 32
     num_layers = 32
-    num_tokens = 64
+    num_tokens = 32
     max_input_tokens = 32
     max_seq_len = (num_tokens//32 +1)*32
 
@@ -55,11 +54,6 @@ def test_gs_demo_kv(device):
     logger.info("Initializing tokenizer")
     tokenizer = AutoTokenizer.from_pretrained(model_version)
 
-    # input_prompts = ["Descriptive writing usually appeals to the five senses: taste, touch, smell, hearing, and sight. \
-    # (Example: Jack's coffee mug exploded into tiny shards of glass, catching the attention of everyone at the office.) \
-    # Always appealing to the senses is key to writing a good descriptive essay.\
-    # Write a a 2 page descriptive writing about Canada's role in fighting with the climate change."]
-
     input_prompts = ["write a poem about valencia"]
 
     logger.info("Tokenizing inputs")
@@ -75,7 +69,7 @@ def test_gs_demo_kv(device):
 
     seq_len = len(tokenized_inputs_nopad["input_ids"][0])
 
-    logger.info(f"Input # on Tokens: {seq_len}")
+    logger.info(f"Input # of Tokens: {seq_len}")
 
     logger.info("Creating TT Model")
     tt_FalconCausalLM = TtFalconCausalLM(
@@ -194,6 +188,10 @@ def test_gs_demo_kv(device):
     logger.info(f"Total Model Run Time: {round((end - start), 2)}")
 
     output_prompts = tokenizer.batch_decode(generated_ids.tolist())
+
+    tt_lib.device.CloseDevice(device)
+    device = None
+
     for input_prompt, output_prompt in zip(input_prompts, output_prompts):
         logger.info(f"input: {input_prompt}")
         logger.info(f"output: {output_prompt}")

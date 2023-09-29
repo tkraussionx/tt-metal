@@ -9,7 +9,7 @@ from typing import Optional, Tuple
 
 import tt_lib
 
-from tests.models.falcon.falcon_model import TtFalconModelShared
+from models.falcon7b.tt.falcon_model import TtFalconModelShared
 from models.helper_funcs import Linear as TTLinear
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor, dump_tensor
 
@@ -82,7 +82,5 @@ class TtFalconCausalLM(TtFalconModelShared):
             output_mem_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
             output_dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
         )
-
-        # dump_tensor("lm_logits", "tt", tt2torch_tensor(lm_logits), do_nothing=False)
 
         return lm_logits, presents

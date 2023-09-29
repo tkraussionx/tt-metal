@@ -11,7 +11,7 @@ from loguru import logger
 
 import tt_lib
 
-from tests.models.falcon.falcon_decoder import TtFalconDecoderLayer
+from models.falcon7b.tt.falcon_decoder import TtFalconDecoderLayer
 from models.utility_functions import (
     tt2torch_tensor,
     torch2tt_tensor,

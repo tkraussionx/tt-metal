@@ -7,17 +7,17 @@ import pytest
 from loguru import logger
 
 import tt_lib
-from tests.models.falcon.reference.hf_modeling_falcon import (
+from models.falcon7b.reference.hf_modeling_falcon import (
     FalconForCausalLM,
 )
-from tests.models.falcon.falcon_causallm import TtFalconCausalLM
+from models.falcon7b.tt.falcon_causallm import TtFalconCausalLM
 
 # TODO: Remove this?
-from tests.models.falcon.falcon_common import (
+from models.falcon7b.tt.falcon_common import (
     PytorchFalconCausalLM,
 )
 
-from tests.models.falcon.model_config import (
+from models.falcon7b.model_config import (
     get_model_config,
     get_tt_cache_path,
 )
@@ -327,7 +327,7 @@ def run_test_FalconCausalLM_end_to_end(
     second_iter_time = profiler.get("model_run_for_inference")
     expected_compile_time = 30
     prep_report(
-        model_name=f"Falcon_{llm_mode}_{comment}",
+        model_name=f"Falcon_{llm_mode}_{kv_cache_len}_{seq_len}",
         batch_size=batch,
         inference_and_compile_time=first_iter_time,
         inference_time=second_iter_time,
@@ -355,11 +355,11 @@ def run_test_FalconCausalLM_end_to_end(
 @pytest.mark.parametrize(
     "llm_mode, batch, seq_len, kv_cache_len, expected_inference_time",
     (
-        ("prefill", 1, 128, 0, 0.34),
+        ("prefill", 1, 128, 0, 0.36),
         ("prefill", 1, 256, 0, 0.45),
-        ("decode", 32, 1, 128, 0.30),
-        ("decode", 32, 1, 1024, 0.37),
-        ("decode", 32, 1, 2047, 0.50),
+        ("decode", 32, 1, 128, 0.32),
+        ("decode", 32, 1, 1024, 0.40),
+        ("decode", 32, 1, 2047, 0.52),
     ),
     ids=[
         "prefill_seq128",

@@ -9,8 +9,8 @@ from typing import Optional, Tuple
 
 import tt_lib
 
-from tests.models.falcon.falcon_attention import TtFalconAttention
-from tests.models.falcon.falcon_mlp import TtFalconMLP
+from models.falcon7b.tt.falcon_attention import TtFalconAttention
+from models.falcon7b.tt.falcon_mlp import TtFalconMLP
 from models.utility_functions import pad_by_zero
 from models.utility_functions import tt2torch_tensor, dump_tensor
 
