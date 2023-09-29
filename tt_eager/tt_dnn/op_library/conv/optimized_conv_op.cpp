@@ -146,7 +146,6 @@ void create_CBs(tt_metal::Program &program,
                 tt::DataFormat::Float16_b,
                 output_cb_address.value(), true
             );
-            cout << "Num of output tiles - " << num_writer_output_tiles << endl;
         } else {
             auto cb_output = CreateCircularBuffers(
                 program,
@@ -169,6 +168,7 @@ void create_CBs(tt_metal::Program &program,
                 tt::DataFormat::Float16_b,
                 output_cb_address.value(), true
             );
+            cout << "Num of output tiles - " << num_writer_output_tiles << endl;
         } else {
             auto cb_matmul_partials = CreateCircularBuffers(
                 program,
@@ -586,7 +586,7 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
     }
 
     uint32_t num_weight_cb_tiles = weight_block_h_ntiles * weight_block_w_ntiles;
-    if (per_core_weight_matrix_width_ntiles < 8) {
+    if (per_core_weight_matrix_width_ntiles < 8 && false) { // switching off weight cb double bufferring for debug
         num_weight_cb_tiles = num_weight_cb_tiles * 2;
     }
     if (rn50_first_conv) {
@@ -634,9 +634,9 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
         writer_mcast_receiver_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_and_reader_weights_resnet50_first_conv_tiled_out.cpp";
     } else {
         reader_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/reader_conv_activations_fast_for_col_major_conv_out_blocks.cpp";
-        compute_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/conv_bmm_tilize_col_major_out_blocks.cpp";
-        writer_mcast_sender_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_mcast_sender_conv_weights_tiled_col_to_rm_blocks.cpp";
-        writer_mcast_receiver_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_mcast_receiver_conv_weights_tiled_col_to_rm_blocks.cpp";
+        compute_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/conv_bmm_tilize_col_major_out_blocks_simplified.cpp";
+        writer_mcast_sender_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_mcast_sender_conv_weights_tiled_col_to_rm_blocks_simplified.cpp";
+        writer_mcast_receiver_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_mcast_receiver_conv_weights_tiled_col_to_rm_blocks_simplified.cpp";
 
     }
     std::vector<uint32_t> reader_rt_args;

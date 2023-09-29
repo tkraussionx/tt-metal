@@ -259,6 +259,6 @@ void kernel_main() {
     } // out_num_blocks_w
     #ifdef SHARDED_OUT
     cb_wait_front(cb_id_out0, out_subblock_tile_count * out_num_subblocks_h * out_num_subblocks_w * out_num_blocks_w * out_num_blocks_h);
-    DPRINT << "Waited. Sender done." << ENDL();
+    //DPRINT << "Waited. Sender done." << ENDL();
     #endif
 }

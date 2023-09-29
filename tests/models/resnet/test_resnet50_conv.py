@@ -6,7 +6,7 @@ import pytest
 import tt_lib
 from models.utility_functions import comp_pcc
 from tests.models.resnet.metalResnetBlock50 import compute_conv_output_shape, resnet50_1x1_conv_as_matmul, resnet50_optimized_conv, _nearest_32, format_tensor
-
+import matplotlib.pyplot as plt
 # hardcoding matmul config for 1x1 convs
 # key: mm act height, mm act width, mm weight width
 hardcoded_matmul_config_conv = {
@@ -445,6 +445,7 @@ def test_resnet50_conv(use_program_cache, device, N,K,C,H,W,R,S,stride_h,stride_
 
         # convert tiled output to RM
         assert(output_on_device.layout() == tt_lib.tensor.Layout.TILE)
+        output_on_device = tt_lib.tensor.sharded_to_interleaved(output_on_device, memory_config)
         output_on_device = format_tensor(output_on_device, tt_lib.tensor.Layout.ROW_MAJOR, device, memory_config)
         output_on_device = output_on_device.reshape(conv_output_shape[0], conv_output_shape[1], conv_output_shape[2], conv_output_shape[3])
 
@@ -453,6 +454,7 @@ def test_resnet50_conv(use_program_cache, device, N,K,C,H,W,R,S,stride_h,stride_
         assert out.layout() == tt_lib.tensor.Layout.ROW_MAJOR
 
         out_result = out.to_torch()
+        out_result_2d = torch.reshape(out_result, [conv_output_shape[0]*conv_output_shape[1]*conv_output_shape[2], conv_output_shape[3]])
         # NHWC to NCHW
         out_result = torch.transpose(out_result, 2, 3)
         out_result = torch.transpose(out_result, 1, 2)
@@ -463,3 +465,31 @@ def test_resnet50_conv(use_program_cache, device, N,K,C,H,W,R,S,stride_h,stride_
         print("Passing=", passing_pcc)
         print("Output pcc=", output_pcc)
         assert passing_pcc
+
+        #plot diff
+        def plot(diff, fid):
+            plt.clf()
+            plt.figure(figsize=(20, 20))
+            #plt.xticks(torch.arange(0, 64, 32))
+            #plt.yticks(torch.arange(0, 25088, 128))
+            plt.grid()
+            plt.imshow(diff, interpolation='none', vmin=0, vmax=1, cmap='Blues', aspect="auto")
+            plt.savefig(f'plot_{fid}.pdf', bbox_inches='tight', pad_inches=0.1)
+
+
+        # d1 = torch.load('data2/output1.pt')
+        # d2 = torch.load('data2/output2.pt')
+        # NCHW to NHWC
+        out_golden = torch.transpose(out_golden, 1, 2)
+        out_golden = torch.transpose(out_golden, 2, 3)
+        out_golden_2d = torch.reshape(out_golden, [conv_output_shape[0]*conv_output_shape[1]*conv_output_shape[2], conv_output_shape[3]])
+        print("Shape of output to plot -", out_golden_2d.shape)
+        diff = abs(out_result_2d - out_golden_2d)
+        max = torch.max(diff)
+        min = torch.min(diff)
+        print("Max diff - ", max)
+        print("Min diff - ", min)
+        diff_bool = diff > (max/2)
+        num_errors = diff_bool.count_nonzero()
+        print("num values above max/2 - ", num_errors)
+        plot(diff_bool, 'bool')
