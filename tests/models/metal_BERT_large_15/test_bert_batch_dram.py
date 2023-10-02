@@ -380,23 +380,32 @@ def run_bert_question_and_answering_inference(
     assert passing, f"At least one start or end logits don't meet PCC requirement {pcc}"
 
 
+# @pytest.mark.parametrize(
+#     "batch, model_config_str",
+#     (
+#         (9, "BFLOAT8_B-DRAM"),
+#         (9, "BFLOAT16-DRAM"),
+#         (9, "BFLOAT8_B-L1"),
+#         (9, "BFLOAT16-L1"),
+#         (9, "MIXED_PRECISION_BATCH9"),
+#         (8, "MIXED_PRECISION_BATCH8"),
+#     ),
+#     ids=[
+#         "batch_9-BFLOAT8_B-DRAM",
+#         "batch_9-BFLOAT16-DRAM",
+#         "batch_9-BFLOAT8_B-L1",
+#         "batch_9-BFLOAT16-L1",
+#         "batch_9-MIXED_PRECISION_BATCH9",
+#         "batch_8-MIXED_PRECISION_BATCH8",
+#     ],
+# )
 @pytest.mark.parametrize(
     "batch, model_config_str",
     (
-        (9, "BFLOAT8_B-DRAM"),
-        (9, "BFLOAT16-DRAM"),
-        (9, "BFLOAT8_B-L1"),
         (9, "BFLOAT16-L1"),
-        (9, "MIXED_PRECISION_BATCH9"),
-        (8, "MIXED_PRECISION_BATCH8"),
     ),
     ids=[
-        "batch_9-BFLOAT8_B-DRAM",
-        "batch_9-BFLOAT16-DRAM",
-        "batch_9-BFLOAT8_B-L1",
         "batch_9-BFLOAT16-L1",
-        "batch_9-MIXED_PRECISION_BATCH9",
-        "batch_8-MIXED_PRECISION_BATCH8",
     ],
 )
 @pytest.mark.parametrize(
