@@ -8,17 +8,17 @@ from loguru import logger
 from pathlib import Path
 
 import tt_lib
-from tests.models.falcon.reference.hf_modeling_falcon import (
+from models.falcon7b.reference.hf_modeling_falcon import (
     FalconForCausalLM,
 )
-from tests.models.falcon.falcon_causallm import TtFalconCausalLM
+from models.falcon7b.tt.falcon_causallm import TtFalconCausalLM
 
 # TODO: Remove this?
-from tests.models.falcon.falcon_common import (
+from models.falcon7b.tt.falcon_common import (
     PytorchFalconCausalLM,
 )
 
-from tests.models.falcon.model_config import (
+from models.falcon7b.model_config import (
     get_model_config,
     get_tt_cache_path,
 )
