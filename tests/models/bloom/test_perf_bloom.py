@@ -33,8 +33,8 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
 
 from loguru import logger
 
-import tests.models.bloom.bloom_utils as bloom_utils
-import tests.models.bloom.bloom_model as bloom_model
+import tt_models.bloom.bloom_utils as bloom_utils
+import tt_models.bloom.bloom_model as bloom_model
 
 
 BATCH_SIZE = 1

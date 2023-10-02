@@ -30,7 +30,7 @@ from tt_models.utility_functions import (
     torch_to_tt_tensor_rm,
     tt_to_torch_tensor,
 )
-from tests.models.llama_old.llama_mlp import TtLlamaMLP
+from tt_models.llama_old.llama_mlp import TtLlamaMLP
 
 
 class PytorchLlamaMLPModel(torch.nn.Module):

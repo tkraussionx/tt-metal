@@ -26,16 +26,16 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from collections import OrderedDict
 
 from tt_models.llama.llama_utils import *
-from tests.models.llama_old.llama_mlp import TtLlamaMLP
-from tests.models.llama_old.llama_attention import TtLlamaAttention
-from tests.models.llama_old.llama_layer_norm import TtLlamaRMSNorm
+from tt_models.llama_old.llama_mlp import TtLlamaMLP
+from tt_models.llama_old.llama_attention import TtLlamaAttention
+from tt_models.llama_old.llama_layer_norm import TtLlamaRMSNorm
 from tt_models.utility_functions import (
     comp_allclose,
     comp_pcc,
     torch_to_tt_tensor_rm,
     tt_to_torch_tensor,
 )
-from tests.models.llama_old.llama_decoder import TtLlamaDecoderLayer
+from tt_models.llama_old.llama_decoder import TtLlamaDecoderLayer
 
 
 class PytorchLlamaDecoderModel(torch.nn.Module):

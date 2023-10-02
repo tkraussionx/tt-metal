@@ -28,7 +28,7 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_pcc,
 )
 from tt_models.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor
-from tests.models.llama_old.llama_attention import TtLlamaAttention
+from tt_models.llama_old.llama_attention import TtLlamaAttention
 
 
 class PytorchLlamaAttentionModel(torch.nn.Module):

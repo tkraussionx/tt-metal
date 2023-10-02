@@ -21,8 +21,8 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
 )
 from loguru import logger
 
-import tests.models.bloom.bloom_utils as bloom_utils
-import tests.models.bloom.bloom_attention as bloom_attention
+import tt_models.bloom.bloom_utils as bloom_utils
+import tt_models.bloom.bloom_attention as bloom_attention
 
 
 def run_bloom_attention_test(device):

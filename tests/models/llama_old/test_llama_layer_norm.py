@@ -31,7 +31,7 @@ from tt_models.utility_functions import (
     torch_to_tt_tensor_rm,
     tt_to_torch_tensor,
 )
-from tests.models.llama_old.llama_layer_norm import TtLlamaRMSNorm
+from tt_models.llama_old.llama_layer_norm import TtLlamaRMSNorm
 
 
 class PytorchLlamaRMSNormModel(torch.nn.Module):

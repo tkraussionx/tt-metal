@@ -7,11 +7,11 @@ import pytest
 from loguru import logger
 
 import tt_lib
-from tests.models.falcon.reference.hf_modeling_falcon import (
+from tt_models.falcon.reference.hf_modeling_falcon import (
     FalconForCausalLM,
 )
-from tests.models.falcon.falcon_mlp import TtFalconMLP
-from tests.models.falcon.model_config import (
+from tt_models.falcon.falcon_mlp import TtFalconMLP
+from tt_models.falcon.model_config import (
     get_model_config,
     get_tt_cache_path,
 )

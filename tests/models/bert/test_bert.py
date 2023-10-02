@@ -11,15 +11,19 @@ import sys
 from pathlib import Path
 
 f = f"{Path(__file__).parent}"
+sys.path.append(f"{f}")
+sys.path.append(f"{f}/../")
+sys.path.append(f"{f}/../..")
 sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
+sys.path.append(f"{f}/../../../../..")
 
 import tt_lib as ttl
-from tests.models.bert.embeddings import PytorchEmbeddings
-from tests.models.bert.mha import TtMultiHeadAttentionModel
-from tests.models.bert.ffn import TtFeedForwardModel
-from tests.models.bert.bert_encoder import TtBertEncoder
-from tests.models.bert.fused_ops.linear import Linear
+from tt_models.bert.embeddings import PytorchEmbeddings
+from tt_models.bert.mha import TtMultiHeadAttentionModel
+from tt_models.bert.ffn import TtFeedForwardModel
+from tt_models.bert.bert_encoder import TtBertEncoder
+from tt_models.bert.fused_ops.linear import Linear
 from tt_lib.utils import pad_activation, pad_weight, print_diff_argmax
 from tt_models.utility_functions import (
     enable_persistent_kernel_cache,

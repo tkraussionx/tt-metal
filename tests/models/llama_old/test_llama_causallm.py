@@ -15,11 +15,11 @@ sys.path.append(f"{f}/../../../..")
 import pytest
 import tt_lib
 from tt_models.llama.llama_utils import *
-from tests.models.llama_old.llama_mlp import TtLlamaMLP
-from tests.models.llama_old.llama_attention import TtLlamaAttention
-from tests.models.llama_old.llama_layer_norm import TtLlamaRMSNorm
-from tests.models.llama_old.llama_decoder import TtLlamaDecoderLayer
-from tests.models.llama_old.llama_embeddings import PytorchEmbeddings
+from tt_models.llama_old.llama_mlp import TtLlamaMLP
+from tt_models.llama_old.llama_attention import TtLlamaAttention
+from tt_models.llama_old.llama_layer_norm import TtLlamaRMSNorm
+from tt_models.llama_old.llama_decoder import TtLlamaDecoderLayer
+from tt_models.llama_old.llama_embeddings import PytorchEmbeddings
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
@@ -31,7 +31,7 @@ from tt_models.utility_functions import (
     comp_pcc,
     tt_to_torch_tensor,
 )
-from tests.models.llama_old.llama_causallm import TtLlamaForCausalLM
+from tt_models.llama_old.llama_causallm import TtLlamaForCausalLM
 
 
 def run_test_llamaCausallm_inference(

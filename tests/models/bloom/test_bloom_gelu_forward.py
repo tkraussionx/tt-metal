@@ -19,8 +19,8 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
 )
 
 from loguru import logger
-import tests.models.bloom.bloom_utils as bloom_utils
-import tests.models.bloom.bloom_gelu_forward as bloom_gelu_forward
+import tt_models.bloom.bloom_utils as bloom_utils
+import tt_models.bloom.bloom_gelu_forward as bloom_gelu_forward
 
 
 def run_bloom_gelu_forward_test(device):

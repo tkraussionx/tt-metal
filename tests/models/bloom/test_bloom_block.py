@@ -20,8 +20,8 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_pcc,
 )
 from loguru import logger
-import tests.models.bloom.bloom_utils as bloom_utils
-import tests.models.bloom.bloom_block as bloom_block
+import tt_models.bloom.bloom_utils as bloom_utils
+import tt_models.bloom.bloom_block as bloom_block
 
 
 def run_bloom_block_test(device):

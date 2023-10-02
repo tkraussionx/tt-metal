@@ -19,7 +19,7 @@ from tt_models.utility_functions import (
 from tt_models.llama.llama_utils import gen_position_ids
 
 from tt_models.llama.tt.tt_stacked_decoders import TtLlamaDecoderModelStacked
-from tests.models.llama.cpu_stacked_decoders import (
+from tt_models.llama.demo.cpu_stacked_decoders import (
     PytorchLlamaDecoderModelStacked,
 )
 

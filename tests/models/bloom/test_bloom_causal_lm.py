@@ -21,7 +21,7 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
 )
 
 from loguru import logger
-import tests.models.bloom.bloom_causal_lm as bloom_causal_lm
+import tt_models.bloom.bloom_causal_lm as bloom_causal_lm
 
 
 def test_bloom_causal_lm(device):

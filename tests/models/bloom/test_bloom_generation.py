@@ -24,8 +24,8 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
 )
 
 from loguru import logger
-import tests.models.bloom.bloom_causal_lm as bloom_causal_lm
-import tests.models.bloom.bloom_utils as bloom_utils
+import tt_models.bloom.bloom_causal_lm as bloom_causal_lm
+import tt_models.bloom.bloom_utils as bloom_utils
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from transformers.generation.logits_process import (

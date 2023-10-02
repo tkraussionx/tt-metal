@@ -20,8 +20,8 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
 )
 
 from loguru import logger
-import tests.models.bloom.bloom_utils as bloom_utils
-import tests.models.bloom.baddbmm as baddbmm
+import tt_models.bloom.bloom_utils as bloom_utils
+import tt_models.bloom.baddbmm as baddbmm
 
 
 def run_baddbmm_test(device):

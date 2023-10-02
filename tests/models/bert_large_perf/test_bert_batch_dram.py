@@ -10,14 +10,18 @@ import sys
 from pathlib import Path
 
 f = f"{Path(__file__).parent}"
+sys.path.append(f"{f}")
+sys.path.append(f"{f}/../")
+sys.path.append(f"{f}/../..")
 sys.path.append(f"{f}/../../..")
 sys.path.append(f"{f}/../../../..")
+sys.path.append(f"{f}/../../../../..")
 
 import time
 import tt_lib as ttl
-from tests.models.bert_large_perf.embeddings import PytorchEmbeddings
-from tests.models.bert_large_perf.bert_encoder import TtBertEncoder
-from tests.models.bert_large_perf.fused_ops.linear import Linear
+from tt_models.bert_large_perf.embeddings import PytorchEmbeddings
+from tt_models.bert_large_perf.bert_encoder import TtBertEncoder
+from tt_models.bert_large_perf.fused_ops.linear import Linear
 from tt_lib.utils import pad_activation, pad_weight
 from tt_models.utility_functions import (
     enable_persistent_kernel_cache,
@@ -27,7 +31,7 @@ from tt_models.utility_functions import (
     disable_persistent_kernel_cache,
 )
 from tt_models.utility_functions import profiler
-from tests.models.bert_large_perf.fused_ops.layernorm import create_var_scaler
+from tt_models.bert_large_perf.fused_ops.layernorm import create_var_scaler
 
 
 class TtBertBatchDram(torch.nn.Module):

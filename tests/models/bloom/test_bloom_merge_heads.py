@@ -19,8 +19,8 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
 )
 
 from loguru import logger
-import tests.models.bloom.bloom_utils as bloom_utils
-import tests.models.bloom.bloom_merge_heads as bloom_attention_merge_heads
+import tt_models.bloom.bloom_utils as bloom_utils
+import tt_models.bloom.bloom_merge_heads as bloom_attention_merge_heads
 
 
 def run_bloom_merge_heads_test(device, num_heads, hidden_size, num_attention_heads):

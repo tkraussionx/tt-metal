@@ -18,7 +18,7 @@ from tt_models.utility_functions import (
     comp_allclose_and_pcc,
     comp_pcc,
 )
-from tests.models.llama.cpu_stacked_decoders import PytorchLlamaDecoderModelStacked
+from tt_models.llama.demo.cpu_stacked_decoders import PytorchLlamaDecoderModelStacked
 from tt_models.llama.tt.llama_stacked_decoders import TtLlamaDecoderModelStacked
 
 
