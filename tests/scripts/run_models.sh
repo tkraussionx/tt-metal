@@ -35,7 +35,7 @@ export PYTHONPATH=$TT_METAL_HOME
 # env pytest tests/models/vit/tests/test_vit_image_classification.py -k test_vit_image_classification
 
 # Split bert tests as a workaround to issue #2892
-# env pytest tests/models/metal_BERT_large_15/test_bert_batch_dram.py::test_bert_batch_dram -k DRAM
+env pytest tests/models/metal_BERT_large_15/test_bert_batch_dram.py::test_bert_batch_dram -k DRAM
 env pytest tests/models/metal_BERT_large_15/test_bert_batch_dram.py::test_bert_batch_dram -k L1
 # env pytest tests/models/metal_BERT_large_15/test_bert_batch_dram.py::test_bert_batch_dram_with_program_cache
 
