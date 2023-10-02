@@ -168,7 +168,18 @@ class TtBertBatchDram(torch.nn.Module):
             # profiler.end("_qa_linear")
 
         return res
+def tt2torch_tensor(tt_tensor):
+    tt_output = tt_tensor.cpu()
+    if tt_output.layout() != ttl.tensor.Layout.ROW_MAJOR:
+        tt_output = tt_output.to(ttl.tensor.Layout.ROW_MAJOR)
+    dtype = {
+        ttl.tensor.DataType.FLOAT32: torch.float,
+        ttl.tensor.DataType.BFLOAT16: torch.bfloat16,
+        ttl.tensor.DataType.BFLOAT8_B: torch.float,
+    }[tt_tensor.dtype()]
 
+    py_output = tt_output.to_torch()
+    return py_output
 
 def run_bert_question_and_answering_inference(
     model_version,
@@ -251,6 +262,14 @@ def run_bert_question_and_answering_inference(
             bert_input = bert_input.reshape(batch, seq_len)
 
     tt_bert_input = tt_bert_model.model_preprocessing(**bert_input)
+    print(f"***************************************************************")
+    print(f"bert_input={bert_input}")
+    print(f"***************************************************************")
+    print(f"tt2torch_tensor(tt_bert_input[0])={tt2torch_tensor(tt_bert_input[0])}")
+    print(f"***************************************************************")
+    print(f"tt2torch_tensor(tt_bert_input[1])={tt2torch_tensor(tt_bert_input[1])}")
+    print(f"***************************************************************")
+
     profiler.end("processing_of_input")
 
     profiler.start("hugging_face_reference_model")
