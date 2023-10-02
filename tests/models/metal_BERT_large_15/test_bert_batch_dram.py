@@ -262,13 +262,13 @@ def run_bert_question_and_answering_inference(
             bert_input = bert_input.reshape(batch, seq_len)
 
     tt_bert_input = tt_bert_model.model_preprocessing(**bert_input)
-    # print(f"***************************************************************")
-    # print(f"bert_input={bert_input}")
-    # print(f"***************************************************************")
-    # print(f"tt2torch_tensor(tt_bert_input[0])={tt2torch_tensor(tt_bert_input[0])}")
-    # print(f"***************************************************************")
-    # print(f"tt2torch_tensor(tt_bert_input[1])={tt2torch_tensor(tt_bert_input[1])}")
-    # print(f"***************************************************************")
+    print(f"***************************************************************")
+    print(f"bert_input={bert_input}")
+    print(f"***************************************************************")
+    print(f"tt2torch_tensor(tt_bert_input[0])={tt2torch_tensor(tt_bert_input[0])}")
+    print(f"***************************************************************")
+    print(f"tt2torch_tensor(tt_bert_input[1])={tt2torch_tensor(tt_bert_input[1])}")
+    print(f"***************************************************************")
 
     profiler.end("processing_of_input")
 
@@ -402,10 +402,14 @@ def run_bert_question_and_answering_inference(
 @pytest.mark.parametrize(
     "batch, model_config_str",
     (
+        (9, "BFLOAT8_B-DRAM"),
+        (9, "BFLOAT16-DRAM"),
         (9, "BFLOAT8_B-L1"),
         (9, "BFLOAT16-L1"),
     ),
     ids=[
+        "batch_9-BFLOAT8_B-DRAM",
+        "batch_9-BFLOAT16-DRAM",
         "batch_9-BFLOAT8_B-L1",
         "batch_9-BFLOAT16-L1",
     ],
