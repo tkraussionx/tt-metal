@@ -402,9 +402,11 @@ def run_bert_question_and_answering_inference(
 @pytest.mark.parametrize(
     "batch, model_config_str",
     (
+        (9, "BFLOAT8_B-L1"),
         (9, "BFLOAT16-L1"),
     ),
     ids=[
+        "batch_9-BFLOAT8_B-L1",
         "batch_9-BFLOAT16-L1",
     ],
 )
