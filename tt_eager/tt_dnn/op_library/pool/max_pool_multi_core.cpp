@@ -335,7 +335,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
                                                                      .buffer_type = BufferType::L1});
     auto minus_inf_const_tensor_addr = minus_inf_const_tensor.buffer()->address();
 
-    #if 1
+    #if 0
     {   // debug
         log_debug("in_cb :: PS = {}, NP = {}", in_cb_pagesize, in_cb_npages);
         log_debug("in_scalar_cb :: PS = {}, NP = {}", in_scalar_cb_pagesize, in_scalar_cb_npages);
@@ -438,8 +438,10 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
                                             0,                  // local_in_stick_end
                                             in_hw,              // in_nsticks_per_batch
                                             in_nhw_per_core,    // in_nsticks_per_core
+                                            0,                  // has_left
                                             0,                  // left_noc_x
                                             0,                  // left_noc_y
+                                            0,                  // has_right
                                             0,                  // right_noc_x
                                             0,                  // right_noc_y
                                             };
@@ -448,9 +450,9 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
                                             .compile_args = reader_ct_args};
     std::string reader_kernel_fname;
     if (input.memory_config().is_sharded()) {
-        reader_kernel_fname = "tt_metal/kernels/dataflow/reader_max_pool_2d_multi_core_sharded.cpp";
+        reader_kernel_fname = std::string("tt_metal/kernels/dataflow/reader_max_pool_2d_multi_core_sharded.cpp");
     } else {
-        reader_kernel_fname = "tt_metal/kernels/dataflow/reader_max_pool_2d_multi_core.cpp";
+        reader_kernel_fname = std::string("tt_metal/kernels/dataflow/reader_max_pool_2d_multi_core.cpp");
     }
     auto reader_kernel = CreateDataMovementKernel(program,
                                                   reader_kernel_fname,
@@ -563,16 +565,18 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
                 if (max_pool_helpers::left_neighbor_noc_xy.count(noc_core) > 0) {
                     CoreCoord left_noc = max_pool_helpers::left_neighbor_noc_xy.at(noc_core);
                     reader_rt_args[49] = 1;
-                    reader_rt_args[50] = left_noc.x;
-                    reader_rt_args[51] = left_noc.y;
+                    reader_rt_args[50] = (uint32_t) left_noc.x;
+                    reader_rt_args[51] = (uint32_t) left_noc.y;
+                    // log_debug("Local NOC: ({},{}), left: ({},{})", noc_core.x, noc_core.y, left_noc.x, left_noc.y);
                 } else {
                     reader_rt_args[49] = 0;
                 }
                 if (max_pool_helpers::right_neighbor_noc_xy.count(noc_core) > 0) {
                     CoreCoord right_noc = max_pool_helpers::right_neighbor_noc_xy.at(noc_core);
                     reader_rt_args[52] = 1;
-                    reader_rt_args[53] = right_noc.x;
-                    reader_rt_args[54] = right_noc.y;
+                    reader_rt_args[53] = (uint32_t) right_noc.x;
+                    reader_rt_args[54] = (uint32_t) right_noc.y;
+                    // log_debug("Local NOC: ({},{}), right: ({},{})", noc_core.x, noc_core.y, right_noc.x, right_noc.y);
                 } else {
                     reader_rt_args[52] = 0;
                 }

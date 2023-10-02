@@ -87,6 +87,9 @@ void kernel_main() {
     constexpr uint32_t stride_h = get_compile_time_arg_val(5);
     constexpr uint32_t stride_w = get_compile_time_arg_val(6);
 
+    constexpr uint32_t reader_noc = get_compile_time_arg_val(7);
+    constexpr uint32_t writer_noc = get_compile_time_arg_val(8);
+
     constexpr uint32_t in_cb_id = tt::CB::c_in0;
     constexpr uint32_t in_scalar_cb_id = tt::CB::c_in1;
     constexpr uint32_t in_shard_cb_id = tt::CB::c_in2;    // local input shard
@@ -120,8 +123,8 @@ void kernel_main() {
 
     uint32_t nsticks_per_core_by_nblocks = get_arg_val<uint32_t>(42);
 
-    uint32_t local_out_stick_start = get_arg_val<uint32_t>(43); // TODO: check
-    uint32_t nsticks_per_batch = get_arg_val<uint32_t>(44); // TODO: check
+    uint32_t local_out_stick_start = get_arg_val<uint32_t>(43);
+    uint32_t nsticks_per_batch = get_arg_val<uint32_t>(44);
     uint32_t local_in_stick_start = get_arg_val<uint32_t>(45);
     uint32_t local_in_stick_end = get_arg_val<uint32_t>(46);
     uint32_t in_nsticks_per_batch = get_arg_val<uint32_t>(47);
@@ -174,28 +177,28 @@ void kernel_main() {
                 uint32_t l1_offset = (global_in_stick_i % in_nsticks_per_core) * in_nbytes_c;
                 uint32_t l1_addr = in_shard_addr + l1_offset;   // NOTE: Assuming the base l1_addr is same on all cores
                 uint64_t noc_addr = 0;
-                if (global_in_stick_i < local_in_stick_start) {
+                if (global_in_stick_i < local_in_stick_start && has_left == 1) {
                     // left halo stick
-                    if (has_left) {
-                        noc_addr = get_noc_addr(left_noc_x, left_noc_y, l1_addr);
-                        noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
-                        curr_in_l1_write_addr += in_nbytes_c;
-                        ++ read_sticks;
-                    }
-                } else if (global_in_stick_i >= local_in_stick_end) {
+                    noc_addr = get_noc_addr(left_noc_x, left_noc_y, l1_addr);
+                    noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
+                    curr_in_l1_write_addr += in_nbytes_c;
+                    ++ read_sticks;
+                } else if (global_in_stick_i >= local_in_stick_end && has_right == 1) {
                     // right halo stick
-                    if (has_right) {
-                        noc_addr = get_noc_addr(right_noc_x, right_noc_y, l1_addr);
-                        noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
-                        curr_in_l1_write_addr += in_nbytes_c;
-                        ++ read_sticks;
-                    }
-                } else {
+                    noc_addr = get_noc_addr(right_noc_x, right_noc_y, l1_addr);
+                    noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
+                    curr_in_l1_write_addr += in_nbytes_c;
+                    ++ read_sticks;
+                } else if (global_in_stick_i >= local_in_stick_start && global_in_stick_i < local_in_stick_end) {
                     // local stick
                     noc_addr = get_noc_addr(l1_addr);
                     noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
                     curr_in_l1_write_addr += in_nbytes_c;
                     ++ read_sticks;
+                } else {
+                    // someting went terribly wrong!!!
+                    // assert(false);
+                    DPRINT << "ERROR!" << ENDL();
                 }
             }
         }

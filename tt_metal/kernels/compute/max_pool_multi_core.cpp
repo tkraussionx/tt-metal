@@ -9,7 +9,7 @@
 #include "compute_kernel_api/reduce.h"
 // #include "tools/profiler/kernel_profiler.hpp"
 
-#define DEBUG_PRINT 0
+#define DEBUG_PRINT 1
 
 #if DEBUG_PRINT == 1
     #include "debug_macros.h"

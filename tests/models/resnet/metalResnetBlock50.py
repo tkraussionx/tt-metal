@@ -1194,18 +1194,14 @@ class ResNet(nn.Module):
         # x = x.reshape(1, 1, x.shape()[0]*x.shape()[1]*x.shape()[2], x.shape()[3]);
         # print("Printing relu after conv1")
         # Relu is fused with conv1
-        # x = self.relu(x, self.memory_config)
-        # tt_lib.device.DumpDeviceMemoryState(self.device)
-        # x = format_tensor(x, tt_lib.tensor.Layout.ROW_MAJOR, self.device, tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM))
-        x = format_tensor(x, tt_lib.tensor.Layout.ROW_MAJOR, self.device, self.memory_config)
-        # time.sleep(2)
-        x = x.reshape(
-            self.conv1_output_shape[0],
-            self.conv1_output_shape[1],
-            self.conv1_output_shape[2],
-            self.conv1_output_shape[3],
-        )
-        # print("Running maxpool")
+        #x = self.relu(x, self.memory_config)
+        #tt_lib.device.DumpDeviceMemoryState(self.device)
+        #x = format_tensor(x, tt_lib.tensor.Layout.ROW_MAJOR, self.device, tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM))
+        # x = format_tensor(x, tt_lib.tensor.Layout.ROW_MAJOR, self.device, self.memory_config)
+        x = format_tensor(x, tt_lib.tensor.Layout.ROW_MAJOR, self.device, self.sharded_memory_config)
+        #time.sleep(2)
+        x = x.reshape(self.conv1_output_shape[0], self.conv1_output_shape[1], self.conv1_output_shape[2], self.conv1_output_shape[3])
+        #print("Running maxpool")
         x = self.maxpool(x)
         # print("Done maxpool")
         x = x.reshape(
