@@ -152,13 +152,13 @@ def run_test_FalconCausalLM_end_to_end(
         model_inputs = torch.split(model_input, 1)
         tt_embeddings, tt_attention_mask = zip(
             *[
-                tt_FalconCausalLM.model_preprocessing(m_i, kv_cache_len, llm_mode)
+                tt_FalconCausalLM.model_preprocessing(m_i, kv_cache_len, llm_mode, seq_len=seq_len)
                 for m_i in model_inputs
             ]
         )
     elif llm_mode == "decode":
         tt_embeddings, tt_attention_mask = tt_FalconCausalLM.model_preprocessing(
-            model_input, kv_cache_len, llm_mode
+            model_input, kv_cache_len, llm_mode, seq_len=seq_len
         )
     profiler.end("processing_of_input")
 
@@ -173,7 +173,7 @@ def run_test_FalconCausalLM_end_to_end(
         model_inputs = torch.split(model_input, 1)
         tt_embeddings, tt_attention_mask = zip(
             *[
-                tt_FalconCausalLM.model_preprocessing(m_i, kv_cache_len, llm_mode)
+                tt_FalconCausalLM.model_preprocessing(m_i, kv_cache_len, llm_mode, seq_len=seq_len)
                 for m_i in model_inputs
             ]
         )
@@ -233,13 +233,13 @@ def run_test_FalconCausalLM_end_to_end(
         model_inputs = torch.split(model_input, 1)
         tt_embeddings, tt_attention_mask = zip(
             *[
-                tt_FalconCausalLM.model_preprocessing(m_i, kv_cache_len, llm_mode)
+                tt_FalconCausalLM.model_preprocessing(m_i, kv_cache_len, llm_mod, seq_len=seq_len)
                 for m_i in model_inputs
             ]
         )
     elif llm_mode == "decode":
         tt_embeddings, tt_attention_mask = tt_FalconCausalLM.model_preprocessing(
-            model_input, kv_cache_len, llm_mode
+            model_input, kv_cache_len, llm_mode, seq_len=seq_len
         )
 
     profiler.start(f"model_run_for_inference")
@@ -248,7 +248,7 @@ def run_test_FalconCausalLM_end_to_end(
         model_inputs = torch.split(model_input, 1)
         tt_embeddings, tt_attention_mask = zip(
             *[
-                tt_FalconCausalLM.model_preprocessing(m_i, kv_cache_len, llm_mode)
+                tt_FalconCausalLM.model_preprocessing(m_i, kv_cache_len, llm_mode, seq_len=seq_len)
                 for m_i in model_inputs
             ]
         )
@@ -348,7 +348,7 @@ def run_test_FalconCausalLM_end_to_end(
     else:
         logger.warning("Falcon CausalLM Failed!")
         # TODO: Fix PCC for decode and uncomment this
-        # assert does_pass, f"PCC value is lower than {pcc}"
+        assert does_pass, f"PCC value is lower than {pcc}"
 
 
 @pytest.mark.models_performance_bare_metal
