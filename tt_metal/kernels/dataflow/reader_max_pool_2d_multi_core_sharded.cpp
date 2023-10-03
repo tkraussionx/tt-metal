@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <cstdint>
+#include <cstring>
 #include "dataflow_api.h"
 
 // #include "debug_print.h"
@@ -113,8 +114,6 @@ void kernel_main() {
     fill_with_val_async(s_const, in_l1_write_addr, in_cb_nsticks, in_nbytes_c);
     noc_async_read_barrier();
 
-    kernel_profiler::mark_time(8);
-
     // NOTE: batch is folded in
 
     uint32_t core_out_w_i_start = get_arg_val<int32_t>(38);
@@ -137,8 +136,13 @@ void kernel_main() {
     uint32_t right_noc_x = get_arg_val<uint32_t>(53);
     uint32_t right_noc_y = get_arg_val<uint32_t>(54);
 
+    // TODO: pass these as runtime args
+    uint32_t in_nbytes_c_log2 = 7;  // for in_nbytes_c == 128
+    // for in_nsticks_per_core == 1024, remainder mask = 0x3ff
+    uint32_t in_nsticks_per_core_rem_mask = 0x3ff;
+
     uint32_t in_shard_addr = get_read_ptr(in_shard_cb_id);
-    for (uint32_t local_out_stick_i = 0; local_out_stick_i < nsticks_per_core; ++ local_out_stick_i) {
+    for (uint32_t local_out_stick_i = 0; local_out_stick_i < nsticks_per_core_by_nblocks; ++ local_out_stick_i) {
         cb_reserve_back(in_cb_id, out_nelems);
         uint32_t in_l1_write_addr = get_write_ptr(in_cb_id);
 
@@ -165,40 +169,36 @@ void kernel_main() {
         // copy at most window_hw input rows into CB
         int32_t read_sticks = 0;
         uint32_t curr_in_l1_write_addr = in_l1_write_addr;
-        uint32_t in_w_multiples = in_w * start_h;
+        uint32_t in_w_multiples = start_h * in_w;
         for (int32_t h = start_h; h < end_h; ++ h, in_w_multiples += in_w) {
             for (int32_t w = start_w; w < end_w; ++ w) {
-                uint32_t batch_in_stick_i = h * in_w + w;
+                uint32_t batch_in_stick_i = in_w_multiples + w;
                 uint32_t global_in_stick_i = global_in_stick_i_batch_offset + batch_in_stick_i;
 
                 // uint32_t noc_id_x = my_x[0];
                 // uint32_t noc_id_y = my_y[0];
 
-                uint32_t l1_offset = (global_in_stick_i % in_nsticks_per_core) * in_nbytes_c;
+                uint32_t l1_offset = (global_in_stick_i & in_nsticks_per_core_rem_mask) << in_nbytes_c_log2;
                 uint32_t l1_addr = in_shard_addr + l1_offset;   // NOTE: Assuming the base l1_addr is same on all cores
                 uint64_t noc_addr = 0;
                 if (global_in_stick_i < local_in_stick_start && has_left == 1) {
                     // left halo stick
                     noc_addr = get_noc_addr(left_noc_x, left_noc_y, l1_addr);
-                    noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
-                    curr_in_l1_write_addr += in_nbytes_c;
-                    ++ read_sticks;
                 } else if (global_in_stick_i >= local_in_stick_end && has_right == 1) {
                     // right halo stick
                     noc_addr = get_noc_addr(right_noc_x, right_noc_y, l1_addr);
-                    noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
-                    curr_in_l1_write_addr += in_nbytes_c;
-                    ++ read_sticks;
                 } else if (global_in_stick_i >= local_in_stick_start && global_in_stick_i < local_in_stick_end) {
                     // local stick
                     noc_addr = get_noc_addr(l1_addr);
-                    noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
-                    curr_in_l1_write_addr += in_nbytes_c;
-                    ++ read_sticks;
                 } else {
                     // someting went terribly wrong!!!
                     // assert(false);
                     DPRINT << "ERROR!" << ENDL();
+                }
+                if (noc_addr != 0) {
+                    noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
+                    curr_in_l1_write_addr += in_nbytes_c;
+                    ++ read_sticks;
                 }
             }
         }
@@ -209,6 +209,7 @@ void kernel_main() {
         in_l1_write_addr += in_cb_pagesize;
 
         noc_async_read_barrier();
+        noc_async_write_barrier();
         cb_push_back(in_cb_id, out_nelems);
     }
 } // kernel_main()
