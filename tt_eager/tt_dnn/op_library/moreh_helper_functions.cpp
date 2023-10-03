@@ -95,7 +95,6 @@ KernelHandle CreateReadKernel(
     const std::variant<CoreCoord, CoreRange, CoreRangeSet> &core_spec,
     const std::vector<uint32_t> &compile_args,
     std::map<string, string> defines) {
-
     return tt_metal::CreateDataMovementKernel(
         program,
         file_name,
@@ -113,7 +112,6 @@ KernelHandle CreateWriteKernel(
     const std::variant<CoreCoord, CoreRange, CoreRangeSet> &core_spec,
     const std::vector<uint32_t> &compile_args,
     std::map<string, string> defines) {
-
     return tt_metal::CreateDataMovementKernel(
         program,
         file_name,
@@ -172,19 +170,11 @@ KernelHandle CreateWriteKernel(
     std::vector<CBHandle> cb_ids{};
     CBHandle cb_id{};
     for (auto arg : args) {
-        if (arg.num_tile_per_core_group > 0) {
-            auto coumpute_kernel = CreateComputeKernel(
-                program,
-                file_name,
-                arg.core_spec,
-                tt_metal::ComputeConfig{
-                    .math_fidelity = math_fidelity,
-                    .fp32_dest_acc_en = fp32_dest_acc_en,
-                    .math_approx_mode = math_approx_mode,
-                    .compile_args = arg.compile_args,
-                    .defines = defines});
-        }
+        compute_kernel_id =
+            CreateComputeKernel(program, file_name, arg, defines, math_fidelity, fp32_dest_acc_en, math_approx_mode);
+        compute_kernel_ids.push_back(compute_kernel_id);
     }
+    return compute_kernel_ids;
 }
 
 [[maybe_unused]] CBHandle CreateCircularBuffer(
@@ -196,11 +186,14 @@ KernelHandle CreateWriteKernel(
         auto _data_format = (arg.data_format != tt::DataFormat::Invalid) ? arg.data_format : data_format;
         auto _core_range = (arg.core_range != nullptr) ? *arg.core_range : core_range;
 
-        tt_metal::CircularBufferConfig cb_config = tt_metal::CircularBufferConfig(_num_tiles * tt_metal::detail::TileSize(_data_format), {{_buffer_index, _data_format}})
-            .set_page_size(_buffer_index, tt_metal::detail::TileSize(_data_format));
+        tt_metal::CircularBufferConfig cb_config =
+            tt_metal::CircularBufferConfig(
+                _num_tiles * tt_metal::detail::TileSize(_data_format), {{_buffer_index, _data_format}})
+                .set_page_size(_buffer_index, tt_metal::detail::TileSize(_data_format));
 
-        auto cb_src = tt_metal::CreateCircularBuffer(program, CoreRangeSet({_core_range}), cb_config);
+        cb_id = tt_metal::CreateCircularBuffer(program, CoreRangeSet({_core_range}), cb_config);
     }
+    return cb_id;
 }
 
 }  // namespace primary
