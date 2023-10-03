@@ -33,14 +33,14 @@ KernelHandle CreateReadKernel(
     const std::string &file_name,
     const std::variant<CoreCoord, CoreRange, CoreRangeSet> &core_spec,
     const std::vector<uint32_t> &compile_args,
-    std::map<string, string> defines);
+    std::map<string, string> defines = {});
 
 KernelHandle CreateWriteKernel(
     Program &program,
     const std::string &file_name,
     const std::variant<CoreCoord, CoreRange, CoreRangeSet> &core_spec,
     const std::vector<uint32_t> &compile_args,
-    std::map<string, string> defines);
+    std::map<string, string> defines = {});
 
 struct ComputeKernelArg {
     const std::variant<CoreCoord, CoreRange, CoreRangeSet> &core_spec;
