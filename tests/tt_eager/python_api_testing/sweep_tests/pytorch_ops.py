@@ -372,6 +372,19 @@ def layernorm_noweights(x, *args, **kwargs):
     )
 
 
+def groupnorm(x, y, z, *args, **kwargs):
+    y = y.squeeze(0)
+    y = y.squeeze(0)
+    y = y.squeeze(0)
+
+    z = z.squeeze(0)
+    z = z.squeeze(0)
+    z = z.squeeze(0)
+
+    return torch.nn.functional.group_norm(
+        input=x, num_groups=1, weight=y, bias=z, eps=1e-05
+    )
+
 def groupnorm_noweights(x, *args, **kwargs):
     return torch.nn.functional.group_norm(
         input=x, num_groups=1, weight=None, bias=None, eps=1e-05

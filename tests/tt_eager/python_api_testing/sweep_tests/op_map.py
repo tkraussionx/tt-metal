@@ -809,4 +809,8 @@ op_map = {
         "tt_lib_op": tt_lib_ops.groupnorm_noweights,
         "pytorch_op": pytorch_ops.groupnorm_noweights,
     },
+    "groupnorm": {
+        "tt_lib_op": tt_lib_ops.groupnorm,
+        "pytorch_op": pytorch_ops.groupnorm,
+    },
 }
