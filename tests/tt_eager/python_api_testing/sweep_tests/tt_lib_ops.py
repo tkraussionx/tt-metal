@@ -593,11 +593,13 @@ def layernorm(
 def groupnorm(
     x, y, z, *args, device, dtype, layout, input_mem_config, output_mem_config, **kwargs
 ):
+
     if layout[1] == ttl.tensor.Layout.TILE:
         y = torch.nn.functional.pad(y, (0, 0, 0, 32 - y.shape[2]))
-
+    print(y.shape)
     if layout[2] == ttl.tensor.Layout.TILE:
         z = torch.nn.functional.pad(z, (0, 0, 0, 32 - z.shape[2]))
+    print(z.shape)
 
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
     t1 = setup_tt_tensor(y, device, layout[1], input_mem_config[1], dtype[1])

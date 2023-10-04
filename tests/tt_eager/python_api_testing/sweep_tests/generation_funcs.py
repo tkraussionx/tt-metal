@@ -446,6 +446,28 @@ def sanitize_args_layernorm(input_shapes, input_setup, runtime_tile_padding_laye
             return None
     return input_setup
 
+def sanitize_args_groupnorm(input_shapes, input_setup, runtime_tile_padding_groupnorm=False):
+    for i in range(len(input_shapes)):
+        shape = input_shapes[i]
+        print(shape)
+        if (
+            (
+                input_setup[i]["layout"] == ttl.tensor.Layout.TILE
+                and (   (shape[2] % 32 != 0 and not runtime_tile_padding_groupnorm) or (runtime_tile_padding_groupnorm and i>0 and shape[2]!=1) or  (shape[3] % 32 != 0) )
+            )  # Shape cannot be tilized
+            or (
+                input_setup[i]["layout"] == ttl.tensor.Layout.ROW_MAJOR
+                and input_setup[i]["input_mem_config"] != None
+                and shape[3] % 2 != 0
+            )  # Shape cannot be placed as row major on device
+            or (
+                input_setup[i]["dtype"] == ttl.tensor.DataType.BFLOAT8_B
+                and input_setup[i]["layout"] != ttl.tensor.Layout.TILE
+            )  # BFLOAT8_B must be tile layout
+        ):
+            return None
+    return input_setup
+
 
 def gen_dtype_layout_device_layernorm(
     input_shapes,
@@ -472,6 +494,7 @@ def gen_dtype_layout_device_layernorm(
 
     result = []
 
+
     for out_mem_config in mem_configs[-1]:
         for input_setup_combination in product(*input_setups):
             out = sanitize_args_layernorm(input_shapes, input_setup_combination, runtime_tile_padding_layernorm, runtime_tile_padding_add_layernorm)
@@ -494,6 +517,65 @@ def gen_dtype_layout_device_layernorm(
                 })
 
     return result
+
+
+
+def gen_dtype_layout_device_groupnorm(
+    input_shapes,
+    dtypes=[supported_tt_dtypes],
+    layouts=[supported_tt_layouts],
+    mem_configs=[supported_mem_configs],
+    runtime_tile_padding_groupnorm=True,
+):
+    # last buffer_types option is for output buffer
+    input_setups = []
+
+    for i in range(len(input_shapes)):
+        input_setup = []
+
+        for dtype, layout, input_mem_config in product(
+            dtypes[i],
+            layouts[i],
+            mem_configs[i],
+        ):
+            input_setup.append({"dtype": dtype, "layout": layout, "input_mem_config": input_mem_config})
+
+        input_setups.append(input_setup)
+
+    result = []
+
+
+    for out_mem_config in mem_configs[-1]:
+        for input_setup_combination in product(*input_setups):
+            out = sanitize_args_groupnorm(input_shapes, input_setup_combination, runtime_tile_padding_groupnorm)
+
+            if out is not None:
+                dtype = []
+                layout = []
+                input_mem_config = []
+
+                for x in input_setup_combination:
+                    dtype.append(x["dtype"])
+                    layout.append(x["layout"])
+                    input_mem_config.append(x["input_mem_config"])
+
+                result.append({
+                    "dtype": dtype,
+                    "layout": layout,
+                    "input_mem_config": input_mem_config,
+                    "output_mem_config": out_mem_config,
+                })
+
+    return result
+
+
+def gen_groupnorm_args(
+    input_shapes,
+    dtypes=[supported_tt_dtypes],
+    layouts=[supported_tt_layouts],
+    mem_configs=[supported_mem_configs],
+):
+    return gen_dtype_layout_device_groupnorm(input_shapes, dtypes, layouts, mem_configs, runtime_tile_padding_groupnorm = True)
 
 
 def gen_layernorm_args(

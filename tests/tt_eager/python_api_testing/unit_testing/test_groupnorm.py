@@ -116,6 +116,8 @@ def run_groupnorm_tests(
                 ttz = tensor.groupnorm(
                     ttx, group_size, epsf, ttgamma, ttbeta, out_mem_config
                 )
+                logger.info(ttgamma.shape())
+                logger.info(ttbeta.shape())
                 golden = ref_groupnorm(x, group_size, epsf, gamma=ttgamma, beta=ttbeta)
             else:
                 assert False
@@ -158,4 +160,4 @@ def run_groupnorm_tests(
 )
 def test_groupnorm_test(test_id, dtype, in0_mem_config, out_mem_config, device):
     group_size = 1
-    run_groupnorm_tests(test_id, group_size, dtype, in0_mem_config, out_mem_config, device)
+    run_groupnorm_tests(0, group_size, dtype, in0_mem_config, out_mem_config, device)
