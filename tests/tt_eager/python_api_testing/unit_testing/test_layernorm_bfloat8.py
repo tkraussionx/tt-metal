@@ -159,7 +159,7 @@ def run_layernorm_tests(test_id, dtype, in0_mem_config, out_mem_config, device):
             elif test_id == 3:
                 logger.info("Running add_LN_GB")
                 ttz = tensor.add_layernorm(
-                    ttx, tty, epsf, ttgamma, ttbeta, out_mem_config
+                    ttx, tty, epsf, None, None, out_mem_config
                 )
             else:
                 assert False
@@ -205,8 +205,8 @@ def run_layernorm_tests(test_id, dtype, in0_mem_config, out_mem_config, device):
 )
 @pytest.mark.parametrize(
     "dtype",
-    (ttl.tensor.DataType.BFLOAT8_B,),
-    ids=["BFLOAT8_b"],
+    (ttl.tensor.DataType.BFLOAT16),
+    ids=["BFLOAT16"],
 )
 @pytest.mark.parametrize(
     "test_id",

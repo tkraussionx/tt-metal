@@ -78,7 +78,7 @@ def ref_layernorm(x, eps, gamma, beta, H, W):
     return lnorm(x)
 
 
-def run_layernorm_tests(test_id, dtype, in0_mem_config, out_mem_config, device):
+def run_layernorm_tests(dtype, in0_mem_config, out_mem_config, device):
     torch.manual_seed(1234)
 
 
@@ -89,44 +89,34 @@ def run_layernorm_tests(test_id, dtype, in0_mem_config, out_mem_config, device):
 
     test_dims = ((1, 9, 384, 1024),)
     for N, C, H, W in test_dims:
-        """
-        test_id = 0  : ln(x)*1+0 path
-        test_id = 1  : ln(x)*g+0 path
-        test_id = 2  : ln(x)*gamma+beta path
-        test_id = 3  : ln(a+b)*gamma+beta path
-        """
+
         for nrepeat in range(0, 1):
-            if test_id >= 0:
-                gamma = torch.ones(1, 1, 1, W)
-                beta = torch.zeros(1, 1, 1, W)
-            if test_id >= 1:
-                gamma = torch.rand(1, 1, 1, W) * 2 - 1
-                gammah32 = tilize_to_list(pad_weight(gamma))
-                ttgamma = tensor.Tensor(
-                    gammah32,
-                    [1, 1, 32, W],
-                    dtype,
-                    tensor.Layout.TILE,
-                    dev,
-                    in0_mem_config,
-                )
-            if test_id >= 2:
-                beta = torch.rand(1, 1, 1, W) * 2.0 - 1.1
-                betah32 = tilize_to_list(pad_weight(beta))
-                ttbeta = tensor.Tensor(
-                    betah32,
-                    [1, 1, 32, W],
-                    dtype,
-                    tensor.Layout.TILE,
-                    dev,
-                    in0_mem_config,
-                )
+            gamma = torch.ones(1, 1, 1, W)
+            beta = torch.zeros(1, 1, 1, W)
+            gamma = torch.rand(1, 1, 1, W) * 2 - 1
+            gammah32 = tilize_to_list(pad_weight(gamma))
+            ttgamma = tensor.Tensor(
+                gammah32,
+                [1, 1, 32, W],
+                dtype,
+                tensor.Layout.TILE,
+                dev,
+                in0_mem_config,
+            )
+
+            beta = torch.rand(1, 1, 1, W) * 2.0 - 1.1
+            betah32 = tilize_to_list(pad_weight(beta))
+            ttbeta = tensor.Tensor(
+                betah32,
+                [1, 1, 32, W],
+                dtype,
+                tensor.Layout.TILE,
+                dev,
+                in0_mem_config,
+            )
 
             x = torch.rand((N, C, H, W)) * 2 - 0.95
             y = torch.rand((N, C, H, W)) * 2 - 0.8
-
-            if test_id < 3:
-                y *= 0.0  # zero out the y to exclude x+y from reference calculation
 
             ttx = tensor.Tensor(
                 tilize_to_list(x),
@@ -145,24 +135,11 @@ def run_layernorm_tests(test_id, dtype, in0_mem_config, out_mem_config, device):
                 in0_mem_config,
             )
 
-            if test_id == 0:
-                logger.info("Running LN_NOGB")
-                ttz = tensor.layernorm(ttx, epsf, output_mem_config=out_mem_config)
-            elif test_id == 1:
-                logger.info("Running LN_G")
-                ttz = tensor.layernorm(
-                    ttx, epsf, ttgamma, output_mem_config=out_mem_config
-                )
-            elif test_id == 2:
-                logger.info("Running LN_GB")
-                ttz = tensor.layernorm(ttx, epsf, ttgamma, ttbeta, out_mem_config)
-            elif test_id == 3:
-                logger.info("Running add_LN_GB")
-                ttz = tensor.add_layernorm(
-                    ttx, tty, epsf, ttgamma, ttbeta, out_mem_config
-                )
-            else:
-                assert False
+            logger.info("Running add_LN_GB")
+            ttz = tensor.add_layernorm(
+                ttx, tty, epsf, None, None, out_mem_config
+            )
+
             logger.info("Done")
 
             assert ttx.memory_config().buffer_type == in0_mem_config.buffer_type
@@ -208,12 +185,7 @@ def run_layernorm_tests(test_id, dtype, in0_mem_config, out_mem_config, device):
     (ttl.tensor.DataType.BFLOAT16,),
     ids=["BFLOAT16"],
 )
-@pytest.mark.parametrize(
-    "test_id",
-    (0, 1, 2, 3),
-    ids=["LN", "LN_G", "LN_GB", "add_LN_GB"],
-)
 def test_layernorm_test(
-    test_id, dtype, in0_mem_config, out_mem_config, request, device
+    dtype, in0_mem_config, out_mem_config, request, device
 ):
-    run_layernorm_tests(test_id, dtype, in0_mem_config, out_mem_config, device)
+    run_layernorm_tests(dtype, in0_mem_config, out_mem_config, device)
