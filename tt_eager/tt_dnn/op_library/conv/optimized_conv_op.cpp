@@ -31,6 +31,7 @@ const uint32_t tilize_mode_tilized_act_cb             = CB::c_intermed1;
 const uint32_t untilize_mode_final_matmul_partials_cb = CB::c_intermed2;
 const uint32_t untilize_mode_reblock_cb               = CB::c_intermed3;
 const uint32_t out_for_bias_cb                        = CB::c_intermed4;
+const uint32_t cb_for_reader_indices                  = CB::c_intermed5;
 const uint32_t out0_cb                                = CB::c_out0;
 
 pair<uint32_t, uint32_t> compute_opt_conv_output_face_shape(uint32_t conv_activation_h, uint32_t conv_activation_w, uint32_t filter_h, uint32_t filter_w, uint32_t stride_h, uint32_t stride_w, uint32_t pad_h, uint32_t pad_w, uint32_t padding_for_32B_alignment=0) {
@@ -70,7 +71,8 @@ CircularBufferID create_CBs(tt_metal::Program &program,
                                 bool untilize_out,
                                 uint32_t bias_ntiles = 0,
                                 bool with_bias = false,
-                                std::optional<uint32_t> output_cb_address = std::nullopt) {
+                                std::optional<uint32_t> output_cb_address = std::nullopt
+) {
 
     uint32_t single_tile_size = num_bytes_for_df * 1024;
 
@@ -139,6 +141,7 @@ CircularBufferID create_CBs(tt_metal::Program &program,
         auto cb_out_for_bias = tt_metal::CreateCircularBuffer(program, core, cb_out_for_bias_config);
         log_debug("BIAS CBs: {} {} {}", bias_cb, bias_ntiles, bias_pagesize);
     }
+
     return cb_output;
 }
 
@@ -562,6 +565,7 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
     string compute_kernel;
     string writer_mcast_sender_kernel;
     string writer_mcast_receiver_kernel;
+    bool reader_with_indices = false;
     if (rn50_first_conv) {
         reader_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/reader_conv_activations_fast_resnet50_first_conv.cpp";
         compute_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/bmm_tilize_untilize_all_weights_in_l1_single_output_block_width_dim.cpp";
@@ -580,22 +584,42 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
                 reader_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/reader_conv_activations_act_block_w_equals_channels_X_filter_width.cpp";
             }
             else {
-            assert(act_block_w_datums == conv_act_size_c);
-            assert(num_blocks_act_w == weight_size_w * weight_size_h);
-            reader_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/reader_conv_activations_fast_for_col_major_conv_out_blocks.cpp";
+                assert(act_block_w_datums == conv_act_size_c);
+                assert(num_blocks_act_w == weight_size_w * weight_size_h);
+
+                if (weight_size_h == 3 && weight_size_w == 3 && not weight_width_sliced) {
+                    reader_with_indices = true;
+                    reader_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/reader_conv_activations_padded_with_halo_3x3_weights.cpp";
+
+                    CircularBufferConfig cb_for_reader_indices_config = CircularBufferConfig(act_block_h_datums * 4, {{cb_for_reader_indices, tt::DataFormat::Float16_b}})
+		                .set_page_size(cb_for_reader_indices, 4);
+                    auto cb_for_reader_indices_id = tt_metal::CreateCircularBuffer(program, all_cores, cb_for_reader_indices_config);
+
+                    // Dummy CB to read from; TODO: delete and read from sharded input
+                    CircularBufferConfig dummy_reader_cb_config = CircularBufferConfig(single_tile_size, {{CB::c_in3, tt::DataFormat::Float16_b}})
+		                .set_page_size(CB::c_in3, single_tile_size);
+                    auto dummy_reader_cb = tt_metal::CreateCircularBuffer(program, all_cores, dummy_reader_cb_config);
+                } else {
+                    reader_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/reader_conv_activations_fast_for_col_major_conv_out_blocks.cpp";
+                }
             }
         }
         compute_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/conv_bmm_tilize_col_major_out_blocks.cpp";
         writer_mcast_sender_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_mcast_sender_conv_weights_tiled_col_to_rm_blocks.cpp";
         writer_mcast_receiver_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_mcast_receiver_conv_weights_tiled_col_to_rm_blocks.cpp";
     }
+    //std::cout << weight_size_h << ", " << weight_size_w << std::endl;
+    //std::cout << act_block_w_equals_input_channels_x_filter_width << std::endl;
+    //std::cout << weight_width_sliced << std::endl;
+    //std::cout << reader_kernel << std::endl;
+
+    TT_ASSERT(!(conv_act_size_c & (conv_act_size_c - 1))); // channel depth power of 2 is supported only
+    TT_ASSERT(!(out_row_size_bytes & (out_row_size_bytes - 1))); // output channels power of 2 is supported only
+
     std::vector<uint32_t> reader_rt_args;
     std::vector<uint32_t> reader_compile_time_args;
     std::vector<uint32_t> writer_rt_args;
     std::vector<uint32_t> writer_compile_time_args;
-
-    TT_ASSERT(!(conv_act_size_c & (conv_act_size_c - 1))); // channel depth power of 2 is supported only
-    TT_ASSERT(!(out_row_size_bytes & (out_row_size_bytes - 1))); // output channels power of 2 is supported only
 
     reader_compile_time_args = {(uint32_t) (src0_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0),
             (uint32_t) stride_h, (uint32_t) stride_w, (uint32_t) conv_act_size_w, (uint32_t) conv_output_size_w,
@@ -767,6 +791,7 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
         // cout << "out_w_start=" << out_w_start << endl;
         // cout << "matrix_h_start=" << matrix_h_start << endl;
         // cout << "n_start=" << n_start << endl;
+
         if (rn50_first_conv) {
             assert(pad_h == 0 && pad_w == 0);
             reader_rt_args = {
@@ -781,6 +806,118 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
                 in_h_start,
                 out_w_start,
                 last_start_in_h_curr_image,
+                (uint32_t) noop_core
+            };
+        } else if (reader_with_indices) {
+            /* Logic to compute:
+             * NOTE: This logic is wrong if stride !=1
+             * first_partial_right_aligned_row_width
+             * skip_after_partial_right_aligned_row
+             * first_partial_image_num_rows
+             * skip_after_first_partial_image_row
+             * num_full_images
+             * skip_after_full_image
+             * last_partial_image_num_rows
+             * last_partial_left_aligned_row_width
+             */
+            uint32_t start_stick = core_i * act_block_h_datums;
+            uint32_t end_stick = start_stick + act_block_h_datums;
+
+            // First partial right-aligned row
+            uint32_t image_row_start_left_width = start_stick % conv_act_size_w;
+            uint32_t first_partial_right_aligned_row_width = image_row_start_left_width > 0 ? conv_act_size_w - image_row_start_left_width : 0;
+
+            // Last partial left-aligned row
+            uint32_t sticks_after_first_partial_row = act_block_h_datums - first_partial_right_aligned_row_width;
+            uint32_t last_partial_left_aligned_row_width = sticks_after_first_partial_row % conv_act_size_w;
+
+            // Figure out how to allocate full image rows to first partial image, full images, or last partial image
+            // This also affects skip after first_partial_right_aligned_row
+            uint32_t image_row_start_idx = start_stick / conv_act_size_w;
+            uint32_t image_row_start_idx_after_partial_right_aligned_row = (start_stick + first_partial_right_aligned_row_width) / conv_act_size_w;
+            uint32_t image_row_end_idx = end_stick / conv_act_size_w;
+            uint32_t image_start_idx = image_row_start_idx / conv_act_size_h;
+            uint32_t image_start_idx_after_partial_right_aligned_row = image_row_start_idx_after_partial_right_aligned_row / conv_act_size_h;
+            uint32_t image_start_height_after_partial_right_aligned_row = image_row_start_idx_after_partial_right_aligned_row % conv_act_size_h;
+            uint32_t image_end_idx = image_row_end_idx / conv_act_size_h;
+
+            // Default case: We don't have a partial right aligned row; so we start with either full images, last partial image, or partial left aligned row
+            uint32_t skip_after_partial_right_aligned_row = 0;
+            // Case: partial_right_aligned_row > 0 and completes an image
+            if (first_partial_right_aligned_row_width > 0 and image_start_height_after_partial_right_aligned_row == 0) {
+                skip_after_partial_right_aligned_row = weight_size_w - 1 + pad_h * (conv_act_size_w + 2 * pad_w);
+            // Case: partial_right_aligned_row > 0 and doesn't complete an image
+            } else if (first_partial_right_aligned_row_width > 0) {
+                skip_after_partial_right_aligned_row = weight_size_w - 1;
+            }
+
+            uint32_t first_partial_image_num_rows = 0;
+            uint32_t skip_after_first_partial_image_row = 0;
+            // Only case where we have first_partial_image_rows: We have at at least 1 completed image and the starting image row is in the middle of an image
+            if (image_end_idx - image_start_idx_after_partial_right_aligned_row > 0 and image_start_height_after_partial_right_aligned_row > 0) {
+                first_partial_image_num_rows = conv_act_size_h - image_start_height_after_partial_right_aligned_row;
+                skip_after_first_partial_image_row = pad_h * (conv_act_size_w + 2 * pad_w);
+            }
+
+            // Full images
+            uint32_t image_rows_after_first_partial_image = sticks_after_first_partial_row / conv_act_size_w - first_partial_image_num_rows;
+            uint32_t num_full_images = image_rows_after_first_partial_image / conv_act_size_h;
+            uint32_t skip_after_full_image = num_full_images > 0 ? pad_h * (conv_act_size_w + 2 * pad_w) : 0;
+
+            // Last partial image rows
+            uint32_t last_partial_image_num_rows = image_rows_after_first_partial_image % conv_act_size_h;
+
+            reader_rt_args = {
+                // arguments for act
+                act_dram_addr,
+                act_noc_x,
+                act_noc_y,
+
+                conv_act_size_w,
+                conv_act_size_h,
+                conv_act_size_c,
+                weight_size_h,
+                weight_size_w,
+                stride_h,
+                stride_w,
+                pad_h,
+                pad_w,
+                conv_output_size_h,
+                conv_output_size_w,
+                num_blocks_act_h_per_core, // per core
+                num_blocks_act_w,
+                num_blocks_weight_w_per_core,
+                num_groups,
+
+                act_matrix_height_unpadded,
+                act_matrix_width_unpadded,
+                act_matrix_height,
+                act_matrix_width,
+                act_matrix_height_ntiles,
+                act_matrix_width_ntiles,
+                act_block_h_datums,
+                act_block_w_datums,
+                act_block_h_ntiles,
+                act_block_w_ntiles,
+                act_block_num_tiles,
+
+                src_dram_act_buffer_size_bytes,
+                dst_l1_act_buffer_size_bytes,
+
+                n_start,
+                out_h_start,
+                out_w_start,
+                total_h_start,
+
+                first_partial_right_aligned_row_width,
+                skip_after_partial_right_aligned_row,
+                first_partial_image_num_rows,
+                skip_after_first_partial_image_row,
+                num_full_images,
+                skip_after_full_image,
+                last_partial_image_num_rows,
+                last_partial_left_aligned_row_width,
+
                 (uint32_t) noop_core
             };
         } else {
