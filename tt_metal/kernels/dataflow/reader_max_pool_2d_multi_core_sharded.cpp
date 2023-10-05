@@ -9,7 +9,29 @@
 // #include "debug_print.h"
 
 // SliceRange srr = SliceRange{ .h0 = 0, .h1 = 1, .hs = 8, .w0 = 0, .w1 = 32, .ws = 1 };
-// SliceRange srt = SliceRange{ .h0 = 0, .h1 = 4, .hs = 1, .w0 = 0, .w1 = 8, .ws = 1 };
+// SliceRange srt = SliceRange{ .h0 = 0, .h1 = 32, .hs = 1, .w0 = 0, .w1 = 1, .ws = 1 };
+
+// inline void print_full_tile(uint32_t cb_id, uint32_t tile_id = 0, bool untilize = false) {
+//     DPRINT << "======" << ENDL();
+//     for (int32_t r = 0; r < 32; ++ r) {
+//         SliceRange sr = SliceRange{.h0 = r, .h1 = r+1, .hs = 1, .w0 = 0, .w1 = 64, .ws = 2};
+//         DPRINT << (uint) r << TileSlice(cb_id, tile_id, sr, true, untilize) << ENDL();
+//     }
+//     DPRINT << "++++++" << ENDL();
+// }
+
+// inline void print_pages(uint32_t l1_addr, uint32_t pagelen, uint32_t npages) {
+//     volatile tt_l1_ptr uint16_t* ptr = reinterpret_cast<volatile tt_l1_ptr uint16_t*>(l1_addr);
+//     for (uint32_t page = 0; page < npages; ++ page) {
+//         for (uint32_t i = 0; i < pagelen; ++ i) {
+//             if (i == 0) {
+//                 DPRINT << BF16(*ptr) << " ";
+//             }
+//             ptr ++;
+//         }
+//         DPRINT << ENDL();
+//     }
+// }
 
 // Fill an L1 buffer with the given val
 // WARNING: Use with caution as there's no memory protection. Make sure size is within limits
@@ -139,7 +161,22 @@ void kernel_main() {
     // TODO: pass these as runtime args
     uint32_t in_nbytes_c_log2 = 7;  // for in_nbytes_c == 128
     // for in_nsticks_per_core == 1024, remainder mask = 0x3ff
-    uint32_t in_nsticks_per_core_rem_mask = 0x3ff;
+    // uint32_t in_nsticks_per_core_rem_mask = 0x3ff;
+    uint32_t in_nsticks_per_core_rem_mask = get_arg_val<uint32_t>(55);
+
+    uint32_t has_left_left = get_arg_val<uint32_t>(56);
+    uint32_t left_left_noc_x = get_arg_val<uint32_t>(57);
+    uint32_t left_left_noc_y = get_arg_val<uint32_t>(58);
+    uint32_t has_right_right = get_arg_val<uint32_t>(59);
+    uint32_t right_right_noc_x = get_arg_val<uint32_t>(60);
+    uint32_t right_right_noc_y = get_arg_val<uint32_t>(61);
+    uint32_t left_in_stick_start = get_arg_val<uint32_t>(62);
+    uint32_t right_in_stick_end = get_arg_val<uint32_t>(63);
+
+    int32_t my_core = get_arg_val<int32_t>(64);
+
+    // DPRINT << (uint) my_x[0] << "," << (uint) my_y[0] << " left_left: " << has_left_left << " :: " << left_left_noc_x << "," << left_left_noc_y << ":" << left_in_stick_start << ENDL();
+    // DPRINT << (uint) my_x[0] << "," << (uint) my_y[0] << " right_right: " << has_right_right << " :: " << right_right_noc_x << "," << right_right_noc_y << ":" << right_in_stick_end << ENDL();
 
     uint32_t in_shard_addr = get_read_ptr(in_shard_cb_id);
     for (uint32_t local_out_stick_i = 0; local_out_stick_i < nsticks_per_core_by_nblocks; ++ local_out_stick_i) {
@@ -159,57 +196,86 @@ void kernel_main() {
         int32_t end_w = start_w + window_w;
 
         // sanitize the values on edges
-        start_w = start_w < 0 ? 0 : start_w;
         start_h = start_h < 0 ? 0 : start_h;
-        end_w = end_w > in_w ? in_w : end_w;
+        start_w = start_w < 0 ? 0 : start_w;
         end_h = end_h > in_h ? in_h : end_h;
+        end_w = end_w > in_w ? in_w : end_w;
 
         int32_t global_in_stick_i_batch_offset = in_nsticks_per_batch * batch;
+
+        // DPRINT << local_in_stick_start << "-" << local_in_stick_end << "," << has_left_left << "," << has_left << "," << left_in_stick_start << "," << has_right << "," << has_right_right << "," << right_in_stick_end << ENDL();
+        // DPRINT << "(" << out_w_i << "," << out_h_i << ")" << " -> " << global_out_stick_i << " <-- " << (uint) start_w << "," << (uint) start_h << "-" << (uint) end_w << "," << (uint) end_h << " [";
 
         // copy at most window_hw input rows into CB
         int32_t read_sticks = 0;
         uint32_t curr_in_l1_write_addr = in_l1_write_addr;
         uint32_t in_w_multiples = start_h * in_w;
-        for (int32_t h = start_h; h < end_h; ++ h, in_w_multiples += in_w) {
+        for (int32_t h = start_h; h < end_h; ++ h) {
             for (int32_t w = start_w; w < end_w; ++ w) {
                 uint32_t batch_in_stick_i = in_w_multiples + w;
                 uint32_t global_in_stick_i = global_in_stick_i_batch_offset + batch_in_stick_i;
 
-                // uint32_t noc_id_x = my_x[0];
-                // uint32_t noc_id_y = my_y[0];
+                // int32_t core = global_in_stick_i / in_nsticks_per_core;
 
                 uint32_t l1_offset = (global_in_stick_i & in_nsticks_per_core_rem_mask) << in_nbytes_c_log2;
                 uint32_t l1_addr = in_shard_addr + l1_offset;   // NOTE: Assuming the base l1_addr is same on all cores
                 uint64_t noc_addr = 0;
-                if (global_in_stick_i < local_in_stick_start && has_left == 1) {
+                // DPRINT << (uint) w << "," << (uint) h << "," << (uint) global_in_stick_i << " ";
+                if (has_left_left == 1 && global_in_stick_i < left_in_stick_start) {
+                    // left left halo stick
+                    // DPRINT << "(LL) ";
+                    noc_addr = get_noc_addr(left_left_noc_x, left_left_noc_y, l1_addr);
+                    noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
+                    curr_in_l1_write_addr += in_nbytes_c;
+                    ++ read_sticks;
+                } else if (has_left == 1 && global_in_stick_i < local_in_stick_start) {
                     // left halo stick
+                    // DPRINT << "(L) ";
                     noc_addr = get_noc_addr(left_noc_x, left_noc_y, l1_addr);
-                } else if (global_in_stick_i >= local_in_stick_end && has_right == 1) {
+                    noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
+                    curr_in_l1_write_addr += in_nbytes_c;
+                    ++ read_sticks;
+                } else if (has_right_right == 1 && global_in_stick_i >= right_in_stick_end) {
+                    // right right halo stick
+                    // DPRINT << "(RR) ";
+                    noc_addr = get_noc_addr(right_right_noc_x, right_right_noc_y, l1_addr);
+                    noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
+                    curr_in_l1_write_addr += in_nbytes_c;
+                    ++ read_sticks;
+                } else if (has_right == 1 && global_in_stick_i >= local_in_stick_end) {
                     // right halo stick
+                    // DPRINT << "(R) ";
                     noc_addr = get_noc_addr(right_noc_x, right_noc_y, l1_addr);
+                    noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
+                    curr_in_l1_write_addr += in_nbytes_c;
+                    ++ read_sticks;
                 } else if (global_in_stick_i >= local_in_stick_start && global_in_stick_i < local_in_stick_end) {
                     // local stick
+                    // uint32_t noc_id_x = my_x[0];
+                    // uint32_t noc_id_y = my_y[0];
+                    // DPRINT << "(O) ";
                     noc_addr = get_noc_addr(l1_addr);
-                } else {
-                    // someting went terribly wrong!!!
-                    // assert(false);
-                    DPRINT << "ERROR!" << ENDL();
-                }
-                if (noc_addr != 0) {
                     noc_async_read(noc_addr, curr_in_l1_write_addr, in_nbytes_c);
                     curr_in_l1_write_addr += in_nbytes_c;
                     ++ read_sticks;
                 }
             }
+            in_w_multiples += in_w;
         }
+        // DPRINT << "]" << ENDL();
         if (read_sticks < window_hw) {
             // if needed, fill the remainining (window_hw - read_sticks) with -INF
             fill_with_val_async(s_const, curr_in_l1_write_addr, window_hw - read_sticks, in_nbytes_c);
         }
-        in_l1_write_addr += in_cb_pagesize;
-
         noc_async_read_barrier();
-        noc_async_write_barrier();
+        // DPRINT << TileSlice(in_cb_id, 0, srt, true, false) << ENDL();
+        // print_full_tile(in_cb_id, 0, false);
+        // if (local_out_stick_i + 4 >= nsticks_per_core_by_nblocks) {
+            // DPRINT << "======== " << local_out_stick_i << " : " << (uint) start_w << "," << (uint) start_h << "-" << (uint) end_w << "," << (uint) end_h << ENDL();
+            // print_pages(in_l1_write_addr, in_c, 10);
+        // }
         cb_push_back(in_cb_id, out_nelems);
+
+        in_l1_write_addr += in_cb_pagesize;
     }
 } // kernel_main()
