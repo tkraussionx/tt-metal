@@ -54,7 +54,8 @@ void init_neighbor_noc_xy_mapping(CoreCoord grid_size, uint32_t noc = 0) {
                     right_noc.y += 1;
                     right_noc.x = 1;
                 }
-                if (right_noc.y > grid_size.y) {
+                // NOTE: y = 6 is to be skipped. Hence go till y + 1
+                if (right_noc.y > grid_size.y + 1) {
                     // there is no right neighbor
                 } else {
                     if (right_noc.y == 6) {
@@ -141,6 +142,9 @@ uint32_t get_num_cores(CoreCoord grid_size, uint32_t out_nhw) {
         case 12544: // nbatch = 4
         case 25088: // nbatch = 8
             ncores = 98;
+            break;
+        case 784:   // test case
+            ncores = 49;
             break;
         default:
             TT_ASSERT(false, "General case is not yet handled! Only RN50 shapes supported in multicore.");
@@ -259,6 +263,10 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
 
     // TODO: support generic nblocks
     TT_ASSERT(out_nhw_per_core % nblocks == 0, "number of sticks per core ({}) should be divisible by nblocks ({})", out_nhw_per_core, nblocks);
+    // TODO: support generic values for in_nhw_per_core
+    TT_ASSERT((in_nhw_per_core & (in_nhw_per_core - 1)) == 0, "in_nhw_per_core {} needs to be power of 2!", in_nhw_per_core);
+
+    uint32_t in_nhw_per_core_rem_mask = in_nhw_per_core - 1;    // NOTE: assuming in_nhw_per_core is power of 2
 
     // CBs
     uint32_t multi_buffering_factor = 2;
@@ -350,7 +358,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
                                                                      .buffer_type = BufferType::L1});
     auto minus_inf_const_tensor_addr = minus_inf_const_tensor.buffer()->address();
 
-    #if 0
+    #if 1
     {   // debug
         log_debug("in_cb :: PS = {}, NP = {}", in_cb_pagesize, in_cb_npages);
         log_debug("in_scalar_cb :: PS = {}, NP = {}", in_scalar_cb_pagesize, in_scalar_cb_npages);
@@ -389,6 +397,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
         log_debug("ncores: {}", ncores);
         log_debug("in_nhw_per_core: {}", in_nhw_per_core);
         log_debug("out_nhw_per_core: {}", out_nhw_per_core);
+        log_debug("in_nhw_per_core_rem_mask: {}", in_nhw_per_core_rem_mask);
         log_debug("is_in_sharded: {}", input.memory_config().is_sharded());
         log_debug("is_out_sharded: {}", output.memory_config().is_sharded());
     }
@@ -459,6 +468,16 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
                                             0,                  // has_right
                                             0,                  // right_noc_x
                                             0,                  // right_noc_y
+                                            in_nhw_per_core_rem_mask,
+                                            0,                  // 56: has_left_left,
+                                            0,                  // left_left_noc_x,
+                                            0,                  // left_left_noc_y,
+                                            0,                  // has_right_right,
+                                            0,                  // right_right_noc_x,
+                                            0,                  // right_right_noc_y,
+                                            0,                  // left_in_stick_start,
+                                            0,                  // right_in_stick_end,
+                                            0,                  // my_core
                                             };
     auto reader_config = DataMovementConfig{.processor = DataMovementProcessor::RISCV_0,
                                             .noc = NOC::RISCV_0_default,
@@ -550,7 +569,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
     } else {
         uint32_t core_batch_offset = 0;
         uint32_t curr_out_stick_id = 0; // track output sticks with batch folded in
-        uint32_t curr_in_stick_id = 0; // track input sticks with batch folded in
+        int32_t curr_in_stick_id = 0; // track input sticks with batch folded in
         uint32_t core_out_w_i_start = 0;
         uint32_t core_out_h_i_start = 0;
         for (int32_t i = 0; i < ncores; ++ i) {
@@ -566,6 +585,8 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
                 reader_rt_args[43] = curr_out_stick_id;
                 reader_rt_args[45] = curr_in_stick_id;
                 reader_rt_args[46] = curr_in_stick_id + in_nhw_per_core;
+
+                reader_rt_args[64] = i; // my_core
 
                 CoreCoord noc_core = core;  // physical
                 if (reader_noc == 0) {
@@ -583,6 +604,17 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
                     reader_rt_args[50] = (uint32_t) left_noc.x;
                     reader_rt_args[51] = (uint32_t) left_noc.y;
                     // log_debug("Local NOC: ({},{}), left: ({},{})", noc_core.x, noc_core.y, left_noc.x, left_noc.y);
+
+                    // left-left
+                    if (max_pool_helpers::left_neighbor_noc_xy.count(left_noc) > 0) {
+                        CoreCoord left_left_noc = max_pool_helpers::left_neighbor_noc_xy.at(left_noc);
+                        reader_rt_args[56] = 1;
+                        reader_rt_args[57] = (uint32_t) left_left_noc.x;
+                        reader_rt_args[58] = (uint32_t) left_left_noc.y;
+                        reader_rt_args[62] = (uint32_t) (curr_in_stick_id - (int32_t) in_nhw_per_core);
+                    } else {
+                        reader_rt_args[56] = 0;
+                    }
                 } else {
                     reader_rt_args[49] = 0;
                 }
@@ -592,6 +624,17 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
                     reader_rt_args[53] = (uint32_t) right_noc.x;
                     reader_rt_args[54] = (uint32_t) right_noc.y;
                     // log_debug("Local NOC: ({},{}), right: ({},{})", noc_core.x, noc_core.y, right_noc.x, right_noc.y);
+
+                    // right-right
+                    if (max_pool_helpers::right_neighbor_noc_xy.count(right_noc) > 0) {
+                        CoreCoord right_right_noc = max_pool_helpers::right_neighbor_noc_xy.at(right_noc);
+                        reader_rt_args[59] = 1;
+                        reader_rt_args[60] = (uint32_t) right_right_noc.x;
+                        reader_rt_args[61] = (uint32_t) right_right_noc.y;
+                        reader_rt_args[63] = (uint32_t) (curr_in_stick_id + 2 * in_nhw_per_core);
+                    } else {
+                        reader_rt_args[59] = 0;
+                    }
                 } else {
                     reader_rt_args[52] = 0;
                 }
