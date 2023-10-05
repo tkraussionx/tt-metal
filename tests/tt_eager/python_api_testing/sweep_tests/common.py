@@ -294,6 +294,37 @@ def shapes_and_datagen(shape_dict, datagen_dict):
                 shape2 = [shape1[0], shape1[1], shape1[3], outer_dim]
                 yield [shape1, shape2], datagen_funcs
 
+        elif method == "bert_bmm":
+            # start-shape and end-shape are lists of two shapes
+            # Only supports dim = 4; for the second shape, only the last dim is used
+
+            shape1_start, shape2_start = start_shape
+            shape1_end, shape2_end = end_shape
+            num_dims = 4
+
+            assert (
+                len(shape1_start)
+                == len(shape1_end)
+                == len(shape2_start)
+                == len(shape2_end)
+                == num_dims
+            )
+
+            for _ in range(num_samples):
+                shape1 = []
+
+                for i in range(num_dims):
+                    x = random.randint(shape1_start[i], shape1_end[i])
+                    shape1.append(align_to_interval(x, shape1_start[i], interval[i]))
+
+                x = random.randint(shape2_start[-1], shape2_end[-1])
+                outer_dim = align_to_interval(x, shape2_start[-1], interval[-1])
+
+                shape2 = [1, 1, shape1[3], outer_dim]
+
+                shape3 = [1,1,1, outer_dim]
+                yield [shape1, shape2, shape3], datagen_funcs
+
 
         elif method == "layernorm":
             # start-shape and end-shape are lists of two shapes
