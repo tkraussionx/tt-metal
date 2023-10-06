@@ -831,50 +831,164 @@ def gen_scalar_args(
             yield input_info
 
 
+def sanitize_args_conv(input_shapes, dtype_buffer_layout, runtime_tile_padding_bias=True):
+    for i in range(len(input_shapes)):
+        print('first')
+        shape = input_shapes[i]
+        print('here')
+        z = (runtime_tile_padding_bias and i>1 and shape[2]!=1)
+        print((shape[3] % 32 != 0) )
+        print(shape)
+        if (
+            (
+                dtype_buffer_layout[i]["layout"] == ttl.tensor.Layout.TILE
+                and (   (shape[2] % 32 != 0 and not runtime_tile_padding_bias) or (runtime_tile_padding_bias and i>1 and shape[2]!=1) )
+            )  # Shape cannot be tilized
+            or (
+                dtype_buffer_layout[i]["layout"] == ttl.tensor.Layout.ROW_MAJOR
+                and input_setup[i]["input_mem_config"] != None
+                and shape[3] % 2 != 0
+            )  # Shape cannot be placed as row major on device
+            or (
+                dtype_buffer_layout[i]["dtype"] == ttl.tensor.DataType.BFLOAT8_B
+                and dtype_buffer_layout[i]["layout"] != ttl.tensor.Layout.TILE
+            )  # BFLOAT8_B must be tile layout
+        ):
+            return None
+    return dtype_buffer_layout
+
+
+
+def gen_dtype_layout_conv_device(
+    input_shapes,
+    dtypes=[supported_tt_dtypes],
+    layouts=[supported_tt_layouts],
+    mem_configs=[supported_mem_configs], # mem_configs[-1] is outpu_mem_config
+):
+    # last buffer_types option is for output buffer
+    dtype_mem_config_layouts = []
+
+    for i in range(len(input_shapes)):
+        dtype_mem_config_layout = []
+
+        for dtype, layout, input_mem_config in product(
+            dtypes[i],
+            layouts[i],
+            mem_configs[i],
+        ):
+            dtype_mem_config_layout.append(
+                {"dtype": dtype, "layout": layout, "input_mem_config": input_mem_config}
+            )
+
+        dtype_mem_config_layouts.append(dtype_mem_config_layout)
+
+    result = []
+
+    for out_mem_config in mem_configs[-1]:
+        for dtype_mem_config_layout_combination in product(*dtype_mem_config_layouts):
+            out = sanitize_args_conv(input_shapes,  dtype_mem_config_layout_combination, True)
+
+            if out is not None:
+                dtype = []
+                layout = []
+                input_mem_config = []
+
+                for x in dtype_mem_config_layout_combination:
+                    dtype.append(x["dtype"])
+                    layout.append(x["layout"])
+                    input_mem_config.append(x["input_mem_config"])
+
+                result.append(
+                    {
+                        "dtype": dtype,
+                        "layout": layout,
+                        "input_mem_config": input_mem_config,
+                        "output_mem_config": out_mem_config,
+                    }
+                )
+
+    return result
+
 def gen_conv2d_args(
     input_shapes,
     dtypes,
     layouts,
-    mem_configs,
+    buffer_types,
+    datagen_params=None,
 ):
     for input_info in gen_conv_scalar_args(
         input_shapes,
         dtypes,
         layouts,
-        mem_configs,
+        buffer_types,
         "conv_params",
+        datagen_params,
         torch.int,
     ):
         yield input_info
-
 
 def gen_conv_scalar_args(
     input_shapes,
     supported_dtypes,
     supported_layouts,
-    mem_configs,
+    on_device,
     arg0_name="conv_params",
+    datagen_params=None,
     dtype=torch.bfloat16,
 ):
-    for input_info in gen_dtype_layout_device(
-        input_shapes, supported_dtypes, supported_layouts, mem_configs
+    for input_info in gen_dtype_layout_conv_device(
+        input_shapes, supported_dtypes, supported_layouts, on_device
     ):
-        lowStride = 1
-        highStride = 4
-        padH = 0
-        padW = 0
 
-        w = input_shapes[0][3]
-        h = input_shapes[0][2]
+        low_h_stride = datagen_params.get("low-h-stride", 1)
+        low_w_stride = datagen_params.get("low-w-stride", 1)
 
-        # assert(lowKernel>0 and highKernel<w and highKernel<w)
-        # assert(lowStride>0 and highStride<w and highStride<h)
+
+        high_h_stride = datagen_params.get("high-h-stride", 1)
+        high_w_stride = datagen_params.get("high-w-stride", 1)
+
+
+        low_h_pad = datagen_params.get("low-h-pad", 1)
+        low_w_pad = datagen_params.get("low-w-pad", 1)
+
+
+        high_h_pad = datagen_params.get("high-h-pad", 1)
+        high_w_pad = datagen_params.get("high-w-pad", 1)
+
+        w=input_shapes[0][3]
+        h=input_shapes[0][2]
+
+        print('INFO JE--------------------')
+
+        print(low_h_stride)
+        print(low_w_stride)
+        print(high_h_stride)
+        print(high_w_stride)
+
+        print('INFO JE--------------------')
+
+        #assert(lowKernel>0 and highKernel<w and highKernel<w)
+        #assert(lowStride>0 and highStride<w and highStride<h)
 
         kernelH = input_shapes[1][2]
         kernelW = input_shapes[1][3]
 
-        strideH = random.randint(lowStride, highStride)
-        strideW = random.randint(lowStride, highStride)
+        strideH = random.randint(low_h_stride, high_h_stride)
+        strideW = random.randint(low_w_stride, high_w_stride)
+
+        padH = random.randint(low_h_pad, high_h_pad)
+        padW = random.randint(low_w_pad, high_w_pad)
+
+
+        print('INFO JE--------------------')
+
+        print(low_h_pad)
+        print(low_w_pad)
+        print(high_h_pad)
+        print(high_w_pad)
+
+        print('INFO JE--------------------')
+
         conv_params = [kernelH, kernelW, strideH, strideW, padH, padW]
 
         input_info.update({arg0_name: conv_params})
