@@ -208,7 +208,13 @@ def run_pytorch_test(args):
             for input_shapes, datagen_funcs in shapes_and_datagen(
                 shape_dict, datagen_dict
             ):
-                for generated_test_args in test_args_gen(input_shapes, test_tt_dtypes, test_tt_layouts, test_mem_configs):
+                datagen_params = test_config.get("datagen", {})
+                if test_name == 'conv':
+                    test_args_gen_result = test_args_gen(input_shapes, test_tt_dtypes, test_tt_layouts, test_mem_configs, datagen_params)
+                else:
+                    test_args_gen_result = test_args_gen(input_shapes, test_tt_dtypes, test_tt_layouts, test_mem_configs)
+
+                for generated_test_args in test_args_gen_result:
                     # generated_test_args.update(
                     #     test_args
                     # )  # specified test args overrides generated test args

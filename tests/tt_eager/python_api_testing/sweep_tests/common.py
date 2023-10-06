@@ -364,13 +364,92 @@ def shapes_and_datagen(shape_dict, datagen_dict):
                     x = random.randint(shape1_start[i], shape1_end[i])
                     shape1.append(align_to_interval(x, shape1_start[i], interval[i]))
 
-                conv_shape = [0, 0, 0, 0]
-                conv_shape[0] = 1
-                conv_shape[1] = shape1[1]
-                conv_shape[2] = random.randint(1, 4)
-                conv_shape[3] = random.randint(1, 4)
+                low_h_kernel = datagen_dict.get("low-h-kernel",1)
+                high_h_kernel = datagen_dict.get("high-h-kernel", 4)
 
-                yield [shape1, conv_shape], datagen_funcs
+
+                low_w_kernel = datagen_dict.get("low-w-kernel",1)
+                high_w_kernel = datagen_dict.get("high-w-kernel", 4)
+
+                in_channels = datagen_dict.get("in-channels", 32)
+                out_channels = datagen_dict.get("out-channels", 32)
+                has_bias = datagen_dict.get("has-bias", 0)
+                groups = datagen_dict.get("groups", 1)
+
+                print(low_h_kernel)
+                print(high_h_kernel)
+                print(low_w_kernel)
+                print(high_w_kernel)
+                print(in_channels)
+                print(out_channels)
+                print(has_bias)
+                print(groups)
+
+                shape1[1] = in_channels
+
+                weight_shape = [0, 0, 0, 0]
+                weight_shape[0] = out_channels
+                weight_shape[1] = in_channels
+                weight_shape[2] = random.randint(low_h_kernel, high_h_kernel)
+                weight_shape[3] =  random.randint(low_w_kernel, high_w_kernel)
+
+                bias_shape = [1, 1, 1, out_channels]
+                print(bias_shape)
+                print('shape1')
+                print(shape1)
+                yield [shape1, weight_shape, bias_shape], datagen_funcs
+
+
+        elif method == "conv-nobias":
+            # start-shape and end-shape are lists of two shapes
+            # Only supports dim = 4; for the second shape, only the last dim is used
+
+            shape1_start = start_shape
+            shape1_end = end_shape
+            num_dims = 4
+
+            assert (
+                len(shape1_start)
+                == num_dims
+            )
+
+            for _ in range(num_samples):
+                shape1 = []
+
+                for i in range(num_dims):
+                    x = random.randint(shape1_start[i], shape1_end[i])
+                    shape1.append(align_to_interval(x, shape1_start[i], interval[i]))
+
+                low_h_kernel = datagen_dict.get("low-h-kernel",1)
+                high_h_kernel = datagen_dict.get("high-h-kernel", 4)
+
+
+                low_w_kernel = datagen_dict.get("low-w-kernel",1)
+                high_w_kernel = datagen_dict.get("high-w-kernel", 4)
+
+                in_channels = datagen_dict.get("in-channels", 32)
+                out_channels = datagen_dict.get("out-channels", 32)
+                has_bias = datagen_dict.get("has-bias", 0)
+                groups = datagen_dict.get("groups", 1)
+
+                print(low_h_kernel)
+                print(high_h_kernel)
+                print(low_w_kernel)
+                print(high_w_kernel)
+                print(in_channels)
+                print(out_channels)
+                print(has_bias)
+                print(groups)
+
+                shape1[1] = in_channels
+
+                weight_shape = [0, 0, 0, 0]
+                weight_shape[0] = out_channels
+                weight_shape[1] = in_channels
+                weight_shape[2] = random.randint(low_h_kernel, high_h_kernel)
+                weight_shape[3] =  random.randint(low_w_kernel, high_w_kernel)
+
+                yield [shape1, weight_shape], datagen_funcs
 
         elif method == "linear":
             # start-shape and end-shape are lists of two shapes

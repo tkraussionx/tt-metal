@@ -496,23 +496,19 @@ def eltwise_lerp_binary(
 
 
 @setup_host_and_device
-def conv(
-    x,
-    y,
-    conv_params,
-    *args,
-    device,
-    dtype,
-    layout,
-    input_mem_config,
-    output_mem_config,
-    **kwargs,
-):
+def conv(x, y, z, *args, conv_params, device, dtype, layout, input_mem_config, output_mem_config, **kwargs):
+    if layout[1] == ttl.tensor.Layout.TILE:
+        y = torch.nn.functional.pad(y, (0, 32 - y.shape[3], 0, 32 - y.shape[2]))
+
+    if layout[2] == ttl.tensor.Layout.TILE:
+        z = torch.nn.functional.pad(z, (0, 0, 0, 32 - z.shape[2]))
+
     t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
     t1 = setup_tt_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
-    t2 = ttl.tensor.conv(t0, t1, conv_params, 0, 0, 0, 0, 0, conv_params[0])
+    t2 = setup_tt_tensor(y, device, layout[2], input_mem_config[2], dtype[2])
 
-    return tt2torch_tensor(t2)
+    t3 = ttl.tensor.conv(t0, t1, t2, conv_params, 0, 0, 0, 0, 0, conv_params[0], True)
+    return tt2torch_tensor(t3)
 
 
 @setup_host_and_device
