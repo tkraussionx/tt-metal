@@ -805,19 +805,24 @@ op_map = {
         "tt_lib_op": tt_lib_ops.activation_swiglu,
         "pytorch_op": pytorch_ops.activation_swiglu,
     },
-    # Matmul
     "bert-large-selfout-matmul": {
         "tt_lib_op": tt_lib_ops.bert_large_selfout_matmul,
         "pytorch_op": pytorch_ops.bert_large_selfout_matmul,
     },
-    # Matmul
     "bert-large-pre-softmax-bmm": {
         "tt_lib_op": tt_lib_ops.bert_large_pre_softmax_bmm,
         "pytorch_op": pytorch_ops.bert_large_pre_softmax_bmm,
     },
-    # Matmul
     "bert-large-post-softmax-bmm": {
         "tt_lib_op": tt_lib_ops.bert_large_post_softmax_bmm,
         "pytorch_op": pytorch_ops.bert_large_post_softmax_bmm,
+    },
+    "bert-large-ff2-matmul": {
+        "tt_lib_op": tt_lib_ops.bert_large_ff2_matmul,
+        "pytorch_op": pytorch_ops.bert_large_ff2_matmul,
+    },
+    "bert-large-ff1-matmul": {
+        "tt_lib_op": tt_lib_ops.bert_large_ff1_matmul,
+        "pytorch_op": pytorch_ops.bert_large_ff1_matmul,
     },
 }

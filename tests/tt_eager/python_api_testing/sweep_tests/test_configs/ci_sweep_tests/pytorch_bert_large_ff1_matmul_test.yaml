@@ -1,13 +1,13 @@
 ---
 test-list:
-  - bert-large-selfout-matmul:
+  - bert-large-ff1-matmul:
       shape:
         start-shape:
           - [9, 1, 384, 1024]
-          - [1, 1, 1024, 1024]
+          - [1, 1, 1024, 4096]
         end-shape:
           - [9, 1, 384, 1024]
-          - [1, 1, 1024, 1024]
+          - [1, 1, 1024, 4096]
         interval: [1, 1, 1, 1, 1]
         num-shapes: 3
         num-samples: 8
@@ -21,7 +21,7 @@ test-list:
       comparison:
         function: comp_pcc
       args-gen: gen_dtype_layout_device_bert
-      output-file: bert_large_selfout_matmul_sweep.csv
+      output-file: bert_large_ff1_matmul_sweep.csv
       args:
         data-layout: ["TILE"]
         data-type: ["BFLOAT16", "BFLOAT8_B"]
