@@ -2234,6 +2234,15 @@ void TensorModule(py::module &m_tensor) {
             "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
     )doc");
 
+    m_tensor.def("untilize_with_halo_concat", &untilize_with_halo_concat,
+        py::arg("input").noconvert(),
+        py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        R"doc(
+        Changes data layout of sharded input tensor to ROW_MAJOR with halo concatenated.
+        Input tensor must be on TT accelerator device, in TILE, and have BFLOAT16 data type.
+        Output tensor will be on TT accelerator device, in ROW_MAJOR layout, and have BFLOAT16 data type.
+    )doc");
+
     m_tensor.def("untilize_with_unpadding",
         [] (const Tensor &tensor, const std::array<uint32_t, 4> &output_tensor_shape, const std::array<uint32_t, 4> &input_tensor_start, const MemoryConfig& output_mem_config) {
             return untilize_with_unpadding(tensor, output_tensor_shape, input_tensor_start, output_mem_config);
