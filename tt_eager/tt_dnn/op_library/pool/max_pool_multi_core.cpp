@@ -254,7 +254,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
         }
         core_range = all_cores;
         core_range_cliff = CoreRangeSet({});
-        in_nhw_per_core = input.shard_spec().value().shard_shape.first;
+        in_nhw_per_core = input.shard_spec().value().shard_shape[0];
         in_nhw_per_core_cliff = 0;
         out_nhw_per_core = out_nhw / ncores;
         out_nhw_per_core_cliff = 0;
@@ -275,8 +275,10 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
     uint32_t in_scalar_cb_id = CB::c_in1;
     uint32_t in_scalar_cb_pagesize = tile_size(in_df);
     uint32_t in_scalar_cb_npages = 1;
-    CircularBufferConfig in_scalar_cb_config = CircularBufferConfig(in_scalar_cb_npages * in_scalar_cb_pagesize, {{in_scalar_cb_id, in_df}})
-		.set_page_size(in_scalar_cb_id, in_scalar_cb_pagesize);
+    CircularBufferConfig in_scalar_cb_config = CircularBufferConfig(
+                                                    in_scalar_cb_npages * in_scalar_cb_pagesize,
+                                                    {{in_scalar_cb_id, in_df}})
+		                                        .set_page_size(in_scalar_cb_id, in_scalar_cb_pagesize);
     auto in_scalar_cb = tt_metal::CreateCircularBuffer(program, all_cores, in_scalar_cb_config);
 
     if (input.memory_config().is_sharded()) {
@@ -284,14 +286,12 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
         auto raw_in_cb_id = CB::c_in2;
         uint32_t raw_in_cb_npages = in_nhw_per_core;
         uint32_t raw_in_cb_pagesize = in_nbytes_c;
-        auto raw_in_cb = CreateCircularBuffers(program,
-                                               raw_in_cb_id,
-                                               all_cores,
-                                               raw_in_cb_npages,
-                                               raw_in_cb_npages * raw_in_cb_pagesize,
-                                               in_df,
-                                               input.buffer()->address(),
-                                               true);
+        CircularBufferConfig raw_in_cb_config = CircularBufferConfig(
+                                                    raw_in_cb_npages * raw_in_cb_pagesize,
+                                                    {{raw_in_cb_id, in_df}})
+                                                .set_page_size(raw_in_cb_id, raw_in_cb_pagesize)
+                                                .set_globally_allocated_address(input.buffer()->address());
+        auto raw_in_cb = CreateCircularBuffer(program, all_cores, raw_in_cb_config);
     }
 
     // reader output == input to tilize
