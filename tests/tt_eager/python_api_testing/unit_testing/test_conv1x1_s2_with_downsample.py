@@ -27,9 +27,10 @@ from tests.tt_eager.python_api_testing.conv.conv_unit_test_utils import (
 import torch
 
 @pytest.mark.parametrize(
-    "batch_size, output_channels, input_channels, input_height, input_width, stride_h, stride_w",
+    "batch_size, output_channels, input_channels, input_height, input_width, stride_h, stride_w, num_cores",
     (
-        (1, 64, 64, 16, 16, 2, 2),
+        #(20, 64, 64, 16, 16, 2, 2, 2),
+        (8, 64, 64, 56, 56, 1, 1, 98),
     ),
 )
 def test_run_downsample(
@@ -41,11 +42,13 @@ def test_run_downsample(
     input_width,
     stride_h,
     stride_w,
+    num_cores,
     device,
 ):
 
     assert(input_channels % 32 == 0)
     assert(output_channels % 32 == 0)
+    assert(stride_h == stride_w)
 
     # torch.set_printoptions(threshold=10000)
     torch.manual_seed(0)
@@ -78,8 +81,9 @@ def test_run_downsample(
     input_2d_width = A_interleaved.shape()[3]
     print("input_2d_height=", input_2d_height)
     print("input_2d_width=", input_2d_width)
+
     A_sharded = ttl.tensor.interleaved_to_sharded(
-        A_interleaved, 1, [input_2d_height, input_2d_width], ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED
+        A_interleaved, num_cores, [(int) (input_2d_height / num_cores), input_2d_width], ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED
     )
     # Prepare weights for simple matmul
     B_tiled_host = create_conv_weight_tensor(
@@ -88,7 +92,7 @@ def test_run_downsample(
     B_tiled = B_tiled_host.to(device)
 
     # downsample golden output using maxpool
-    out_golden = torch.nn.functional.max_pool2d(A_pyt, 1, stride=2)
+    out_golden = torch.nn.functional.max_pool2d(A_pyt, 1, stride=stride_h)
     out_golden_2d_nhwc = torch.permute(out_golden, (0, 2, 3, 1)).reshape(1, 1, batch_size*output_height*output_width, input_channels)
     # for i in range(1):
     # #i = 1

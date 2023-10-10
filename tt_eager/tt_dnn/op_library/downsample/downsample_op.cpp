@@ -108,6 +108,7 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
     TT_ASSERT(input_width == output_width);
 
     uint32_t input_shard_height = a.shard_spec().value().shard_shape[0];
+    TT_ASSERT(input_shard_height * num_cores == input_height);
     uint32_t input_shard_width = a.shard_spec().value().shard_shape[1];
     TT_ASSERT(input_shard_width == input_width); // tensor is sharded across height dim only
 
@@ -136,8 +137,8 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
     cout << "input cb created with - " << num_input_tiles << " tiles" << std::endl;
     // CB to store reader pattern array
     // read pattern array size == output_height
-    uint32_t reader_pattern_array_size = output_height;
-    cout << "output_height=" << output_height << endl;
+    uint32_t reader_pattern_array_size = output_shard_height;
+    cout << "output_shard_height=" << output_shard_height << endl;
     uint32_t reader_pattern_array_cb_index = CB::c_intermed0;
     tt_metal::CircularBufferConfig reader_pattern_array_cb_config = tt_metal::CircularBufferConfig(reader_pattern_array_size * 4, {{reader_pattern_array_cb_index, DataFormat::Float16_b}})
 		.set_page_size(reader_pattern_array_cb_index, 4);
@@ -151,16 +152,18 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
 		.set_page_size(untilize_cb_index, single_tile_size);
     auto untilize_cb = tt_metal::CreateCircularBuffer(program, core_range, untilize_cb_config);
 
-    uint32_t num_output_tiles =  output.volume() / TILE_HW;
-    assert(num_output_tiles == num_output_tiles_in_row * num_rows_of_output_tiles);
+    uint32_t num_output_tiles_all_cores =  output.volume() / TILE_HW;
+    assert(num_output_tiles_all_cores % num_cores == 0);
+    assert((num_output_tiles_all_cores / num_cores) == num_output_tiles_in_row * num_rows_of_output_tiles);
+    uint32_t num_output_tiles = (num_output_tiles_all_cores / num_cores);
     uint32_t untilize_downsampled_cb_index = CB::c_intermed2;
-    uint32_t num_tiles_untilize_downsampled_cb = num_output_tiles; // untilize downsampled cb size == output size
+    uint32_t num_tiles_untilize_downsampled_cb = num_output_tiles; // untilize downsampled cb size == output size per core
     tt_metal::CircularBufferConfig untilize_downsampled_cb_config = tt_metal::CircularBufferConfig(num_tiles_untilize_downsampled_cb * single_tile_size, {{untilize_downsampled_cb_index, cb_data_format}})
 		.set_page_size(untilize_downsampled_cb_index, single_tile_size);
     auto untilize_downsampled_cb = tt_metal::CreateCircularBuffer(program, core_range, untilize_downsampled_cb_config);
 
     uint32_t final_tilize_output_cb_index = CB::c_out0;
-    uint32_t num_tiles_final_tilize_output_cb = output.volume() / TILE_HW; // final output cb size == output size
+    uint32_t num_tiles_final_tilize_output_cb = num_output_tiles; // final output cb size == output size per core
     tt_metal::CircularBufferConfig final_tilize_output_cb_config = tt_metal::CircularBufferConfig(num_tiles_final_tilize_output_cb * single_tile_size, {{final_tilize_output_cb_index, cb_data_format}})
 		.set_page_size(final_tilize_output_cb_index, single_tile_size);
     final_tilize_output_cb_config = final_tilize_output_cb_config.set_globally_allocated_address(output.buffer()->address());
@@ -221,9 +224,11 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
     for (uint32_t i = 0; i < num_cores; i++) {
         CoreCoord core = {i % ncores_x_full_grid, i / ncores_x_full_grid};
         cout << "i=" << i << endl;
+        cout << "img_h=" << img_h << ", img_w=" << img_w << ", next_img_h=" << next_img_h << ", next_img_w=" << img_w << endl;
+        cout << "input_flat_h=" << input_flat_h << ", current_core_end_flat_h=" << current_core_end_flat_h << endl;
         // Sanity checks at the start
         TT_ASSERT(next_img_h >= img_h);
-        TT_ASSERT(next_img_w >= img_w);
+        TT_ASSERT(next_img_w == img_w);
         TT_ASSERT(input_flat_h < current_core_end_flat_h);
         TT_ASSERT(next_img_h < img_height);
         TT_ASSERT(next_img_w < img_width);
@@ -232,6 +237,7 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
         uint32_t num_skip_rows_top_partial_image = 0;
         uint32_t num_full_images = 0;
         uint32_t num_rows_bottom_partial_image = 0;
+         uint32_t num_skip_rows_bottom_partial_image = 0;
         uint32_t bottom_partial_left_aligned_row_width = 0;
         uint32_t skip_bottom_partial_left_aligned_row = 1;
 
@@ -240,6 +246,7 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
         uint32_t skip_top_partial_right_aligned_row = (top_partial_right_aligned_row_width == 0) ? 1 : (next_img_h == img_h) ? 0 : 1;
         if (top_partial_right_aligned_row_width > 0) {
             img_w = 0;
+            next_img_w = 0;
             if (img_h == img_height - 1) {
                 img_h = 0;
                 next_img_h = 0;
@@ -253,36 +260,49 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
         }
         TT_ASSERT(input_flat_h < current_core_end_flat_h); // sharded height is at least 32
         TT_ASSERT(next_img_h >= img_h);
-        TT_ASSERT(img_w == 0);
+        TT_ASSERT(img_w == 0 && next_img_w == 0);
 
         uint32_t num_rows_remaining_of_current_image = (img_h == 0) ? 0 : img_height - img_h;
-        if (num_rows_remaining_of_current_image > 0 && (input_flat_h += (num_rows_remaining_of_current_image * img_width) <= current_core_end_flat_h+1)) {
+        if (num_rows_remaining_of_current_image > 0 && (input_flat_h + (num_rows_remaining_of_current_image * img_width) <= current_core_end_flat_h+1)) {
             // Top partial image section
             num_rows_top_partial_image = img_height - img_h;
             num_skip_rows_top_partial_image = next_img_h - img_h;
             // Sanity check
-            TT_ASSERT((img_h + img_height == num_rows_top_partial_image));
+            TT_ASSERT((img_h + num_rows_top_partial_image == img_height));
             img_h = 0;
             next_img_h = 0;
             input_flat_h += (num_rows_top_partial_image * img_width);
             TT_ASSERT(input_flat_h <= current_core_end_flat_h+1);
         }
 
-        while(input_flat_h + (img_height * img_width) <= current_core_end_flat_h+1) {
-            input_flat_h += (img_height * img_width);
-            img_h = 0;
-            img_w = 0;
-            next_img_h = 0;
-            num_full_images += 1;
+        if (img_h == 0 && img_w == 0) {
+            // Check for full images
+            while(input_flat_h + (img_height * img_width) <= current_core_end_flat_h+1) {
+                input_flat_h += (img_height * img_width);
+                img_h = 0;
+                img_w = 0;
+                next_img_h = 0;
+                next_img_w = 0;
+                num_full_images += 1;
+            }
+            TT_ASSERT(img_h == 0 && img_w == 0 && next_img_h == 0 && next_img_w == 0);
         }
 
         // Sanity check
-        TT_ASSERT(img_h == 0 && img_w == 0 && next_img_h == 0);
         TT_ASSERT(input_flat_h <= current_core_end_flat_h+1);
-
+        bool found_first_unskipped_row_in_bottom_partial_imgage = false;
         while (input_flat_h + img_width <= current_core_end_flat_h+1) {
+            if (!found_first_unskipped_row_in_bottom_partial_imgage) {
+                if (next_img_h == img_h) {
+                    found_first_unskipped_row_in_bottom_partial_imgage = true;
+                } else {
+                    TT_ASSERT(next_img_h > img_h);
+                    num_skip_rows_bottom_partial_image += 1;
+                }
+            }
             input_flat_h += img_width;
             img_w = 0;
+            next_img_w = 0;
             if (img_h == img_height - 1) {
                 img_h = 0;
                 next_img_h = 0;
@@ -294,15 +314,32 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
             }
             num_rows_bottom_partial_image += 1;
         }
+
         if (input_flat_h < current_core_end_flat_h) {
-            TT_ASSERT(img_w == 0);
+            TT_ASSERT(img_w == 0 && next_img_w == 0);
             bottom_partial_left_aligned_row_width = current_core_end_flat_h - input_flat_h + 1;
             TT_ASSERT(bottom_partial_left_aligned_row_width < img_width);
             TT_ASSERT(next_img_h >= img_h);
             skip_bottom_partial_left_aligned_row = (next_img_h == img_h) ? 0 : 1;
-            img_w = bottom_partial_left_aligned_row_width;
+            while(img_w < bottom_partial_left_aligned_row_width) {
+                img_w += 1;
+                if (next_img_w < img_w) {
+                    next_img_w += img_stride_w;
+                }
+            }
+            TT_ASSERT(img_w == bottom_partial_left_aligned_row_width && next_img_w >= img_w);
             input_flat_h += bottom_partial_left_aligned_row_width;
         }
+        cout << "   top_partial_right_aligned_row_width=" << top_partial_right_aligned_row_width << endl;
+        cout << "   skip_top_partial_right_aligned_row=" << skip_top_partial_right_aligned_row << endl;
+        cout << "   num_rows_top_partial_image=" << num_rows_top_partial_image << endl;
+        cout << "   num_skip_rows_top_partial_image=" << num_skip_rows_top_partial_image << endl;
+        cout << "   num_full_images=" << num_full_images << endl;
+        cout << "   num_rows_bottom_partial_image=" << num_rows_bottom_partial_image << endl;
+        cout << "   num_skip_rows_bottom_partial_image=" << num_skip_rows_bottom_partial_image << endl;
+        cout << "   bottom_partial_left_aligned_row_width=" << bottom_partial_left_aligned_row_width << endl;
+        cout << "   skip_bottom_partial_left_aligned_row=" << skip_bottom_partial_left_aligned_row << endl;
+
         // Writer runtime args
         vector<uint32_t> writer_kernel_args = {
             (uint32_t) input_height_size_y,
@@ -315,6 +352,7 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
             num_skip_rows_top_partial_image,
             num_full_images,
             num_rows_bottom_partial_image,
+            num_skip_rows_bottom_partial_image,
             bottom_partial_left_aligned_row_width,
             skip_bottom_partial_left_aligned_row,
 

@@ -24,6 +24,7 @@ void kernel_main() {
     uint32_t num_full_images = get_arg_val<uint32_t>(i); i+=1;
 
     uint32_t num_rows_bottom_partial_image = get_arg_val<uint32_t>(i); i+=1;
+    uint32_t num_skip_rows_bottom_partial_image = get_arg_val<uint32_t>(i); i+=1;
 
     uint32_t bottom_partial_left_aligned_row_width = get_arg_val<uint32_t>(i); i+=1;
     uint32_t skip_bottom_partial_left_aligned_row = get_arg_val<uint32_t>(i); i+=1;
@@ -85,8 +86,8 @@ void kernel_main() {
         img_flat_h_idx += (image_height * image_width);
     }
 
-    uint32_t img_flat_h_idx_bottom_partial_image = img_flat_h_idx;
-    for (uint32_t bottom_partial_image_row_i = 0; bottom_partial_image_row_i < num_rows_bottom_partial_image; bottom_partial_image_row_i += stride_h) {
+    uint32_t img_flat_h_idx_bottom_partial_image = img_flat_h_idx +  (num_skip_rows_bottom_partial_image * image_width);
+    for (uint32_t bottom_partial_image_row_i = num_skip_rows_bottom_partial_image; bottom_partial_image_row_i < num_rows_bottom_partial_image; bottom_partial_image_row_i += stride_h) {
         for (uint32_t row_width_i = 0; row_width_i < image_width; row_width_i += stride_w) {
             reader_pattern[reader_pattern_index] = img_flat_h_idx_bottom_partial_image + row_width_i;
             reader_pattern_index += 1;
@@ -117,7 +118,7 @@ void kernel_main() {
         cb_wait_front(untilize_cb_index, num_tiles_untilized_input_block); // 1 row of tiles
         //DPRINT << "waited for 1 row of tiles in untilized buffer, " << num_tiles_untilized_input_block << ENDL();
         uint32_t untilize_block_l1_read_addr = get_read_ptr(untilize_cb_index);
-        tt_l1_ptr BF16* untilize_block_array = (tt_l1_ptr BF16*)(untilize_block_l1_read_addr);
+        // tt_l1_ptr BF16* untilize_block_array = (tt_l1_ptr BF16*)(untilize_block_l1_read_addr);
         // if (untilized_input_block_i == 0) {
         // for(uint32_t i = 0; i < 128; i += 1) {
         //     DPRINT << "untilize_block_array[" << i << "]=" << BF16(untilize_block_array[i]) << ENDL();
