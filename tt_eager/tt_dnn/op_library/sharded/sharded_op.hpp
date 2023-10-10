@@ -46,6 +46,7 @@ inline Tensor interleaved_to_sharded(const Tensor &input_tensor, uint32_t num_co
 
 inline Tensor sharded_to_interleaved(const Tensor &input_tensor, const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) {
     TT_ASSERT(input_tensor.memory_config().is_sharded());
+    cout << "here in sharded to interleaved" << endl;
     auto shard_spec = input_tensor.shard_spec().value();
     return operation::run(Sharded{.shard_spec=shard_spec, .sharded_op_type=ShardedOpType::SHARDED_TO_INTERLEAVED, .output_mem_config=output_mem_config}, {input_tensor}).at(0);
 }
