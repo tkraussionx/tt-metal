@@ -889,18 +889,16 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
             // Stride paramaters
             uint32_t num_beginning_rows_to_skip_for_stride_h = image_row_start_idx % stride_h > 0 ? stride_h - image_row_start_idx % stride_h : 0;
 
-
-
-            std::cout << "----- core: " << core_i << std::endl;
-            std::cout << first_partial_right_aligned_row_width << std::endl;
-            std::cout << first_partial_image_num_rows << std::endl;
-            std::cout << num_full_images << std::endl;
-            std::cout << last_partial_image_num_rows << std::endl;
-            std::cout << last_partial_left_aligned_row_width << std::endl;
-            std::cout << "skip: " << skip_after_partial_right_aligned_row << std::endl;
-            std::cout << "skip: " << skip_after_first_partial_image_row << std::endl;
-            std::cout << "skip: " << skip_after_full_image << std::endl;
-            std::cout << "skip: " << num_beginning_rows_to_skip_for_stride_h << std::endl;
+            //std::cout << "----- core: " << core_i << std::endl;
+            //std::cout << first_partial_right_aligned_row_width << std::endl;
+            //std::cout << first_partial_image_num_rows << std::endl;
+            //std::cout << num_full_images << std::endl;
+            //std::cout << last_partial_image_num_rows << std::endl;
+            //std::cout << last_partial_left_aligned_row_width << std::endl;
+            //std::cout << "skip: " << skip_after_partial_right_aligned_row << std::endl;
+            //std::cout << "skip: " << skip_after_first_partial_image_row << std::endl;
+            //std::cout << "skip: " << skip_after_full_image << std::endl;
+            //std::cout << "skip: " << num_beginning_rows_to_skip_for_stride_h << std::endl;
 
             conv_act_size_w = old_conv_act_size_w;
             conv_act_size_h = old_conv_act_size_h;
@@ -956,7 +954,9 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
                 skip_after_partial_right_aligned_row,
                 skip_after_first_partial_image_row,
                 skip_after_full_image,
-                num_beginning_rows_to_skip_for_stride_h,
+
+                conv_act_size_w + 2 * pad_w,
+                image_row_start_idx,
 
                 (uint32_t) noop_core
             };

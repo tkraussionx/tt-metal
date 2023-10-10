@@ -63,15 +63,16 @@ void kernel_main() {
     uint32_t out_w_start = get_arg_val<uint32_t>(i); i+=1;
     uint32_t total_h_start = get_arg_val<uint32_t>(i); i+=1;
 
-    uint32_t first_partial_right_aligned_row_width   = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t first_partial_image_num_rows            = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t num_full_images                         = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t last_partial_image_num_rows             = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t last_partial_left_aligned_row_width     = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t skip_after_partial_right_aligned_row    = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t skip_after_first_partial_image_row      = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t skip_after_full_image                   = get_arg_val<uint32_t>(i); i+=1;
-    uint32_t num_beginning_rows_to_skip_for_stride_h = get_arg_val<uint32_t>(i); i+=1;
+    uint32_t first_partial_right_aligned_row_width = get_arg_val<uint32_t>(i); i+=1;
+    uint32_t first_partial_image_num_rows          = get_arg_val<uint32_t>(i); i+=1;
+    uint32_t num_full_images                       = get_arg_val<uint32_t>(i); i+=1;
+    uint32_t last_partial_image_num_rows           = get_arg_val<uint32_t>(i); i+=1;
+    uint32_t last_partial_left_aligned_row_width   = get_arg_val<uint32_t>(i); i+=1;
+    uint32_t skip_after_partial_right_aligned_row  = get_arg_val<uint32_t>(i); i+=1;
+    uint32_t skip_after_first_partial_image_row    = get_arg_val<uint32_t>(i); i+=1;
+    uint32_t skip_after_full_image                 = get_arg_val<uint32_t>(i); i+=1;
+    uint32_t skip_full_padded_row                  = get_arg_val<uint32_t>(i); i+=1;
+    uint32_t first_row_start                       = get_arg_val<uint32_t>(i); i+=1;
 
     uint32_t noop = get_arg_val<uint32_t>(i); i+=1;
     if(noop) {
@@ -105,14 +106,14 @@ void kernel_main() {
     // assert(act_block_num_tiles == (act_block_h_datums * act_block_w_datums)/1024)
 
 
-    //DPRINT << "partial right aligned width: " << first_partial_right_aligned_row_width << ENDL();
-    //DPRINT << "--- skip after: " << skip_after_partial_right_aligned_row << ENDL();
-    //DPRINT << "first partial image rows: " << first_partial_image_num_rows << ENDL();
-    //DPRINT << "--- skip after: " << skip_after_first_partial_image_row << ENDL();
-    //DPRINT << "full images: " << num_full_images << ENDL();
-    //DPRINT << "--- skip after: " << skip_after_full_image << ENDL();
-    //DPRINT << "last partial image rows: " << last_partial_image_num_rows << ENDL();
-    //DPRINT << "partial left aligned width: " << last_partial_left_aligned_row_width << ENDL();
+    DPRINT << "partial right aligned width: " << first_partial_right_aligned_row_width << ENDL();
+    DPRINT << "--- skip after: " << skip_after_partial_right_aligned_row << ENDL();
+    DPRINT << "first partial image rows: " << first_partial_image_num_rows << ENDL();
+    DPRINT << "--- skip after: " << skip_after_first_partial_image_row << ENDL();
+    DPRINT << "full images: " << num_full_images << ENDL();
+    DPRINT << "--- skip after: " << skip_after_full_image << ENDL();
+    DPRINT << "last partial image rows: " << last_partial_image_num_rows << ENDL();
+    DPRINT << "partial left aligned width: " << last_partial_left_aligned_row_width << ENDL();
 
 
     // DUMMY LOOP TO FILL READER INDICES
@@ -122,48 +123,80 @@ void kernel_main() {
     uint32_t weights_top_left_corner_idx = 0;
     uint32_t reader_idx = 0;
 
+    // For stride_h, use row_h_idx to keep track of which rows to store indices for
+    uint32_t row_h_idx = first_row_start;
+
     // First partial right-aligned row
-    for (uint32_t k = 0; k < first_partial_right_aligned_row_width; k++) {
-        reader_indices_ptr[reader_idx++] = weights_top_left_corner_idx++;
+    if (row_h_idx % stride_h == 0) {
+        for (uint32_t k = 0; k < first_partial_right_aligned_row_width; k+=stride_w) {
+            reader_indices_ptr[reader_idx++] = weights_top_left_corner_idx+=stride_w;
+        }
+    } else {
+        weights_top_left_corner_idx += first_partial_right_aligned_row_width;
     }
     weights_top_left_corner_idx += skip_after_partial_right_aligned_row; // Skip padded width
+    if (first_partial_right_aligned_row_width > 0) row_h_idx++;
+    DPRINT << "num indices: " << reader_idx << ENDL();
 
     // First partial image
     for (uint32_t j = 0; j < first_partial_image_num_rows; j++) {
-        for (uint32_t k = 0; k < conv_act_size_w_; k++) {
-            reader_indices_ptr[reader_idx++] = weights_top_left_corner_idx++;
+        if (row_h_idx % stride_h == 0) {
+            for (uint32_t k = 0; k < conv_act_size_w; k+=stride_w) {
+                reader_indices_ptr[reader_idx++] = weights_top_left_corner_idx+=stride_w;
+            }
+            weights_top_left_corner_idx += weight_size_w - 1;
+            row_h_idx++;
+        } else {
+            weights_top_left_corner_idx += skip_full_padded_row;
+            row_h_idx++;
         }
-        weights_top_left_corner_idx += weight_size_w - 1;
     }
     weights_top_left_corner_idx += skip_after_first_partial_image_row; // Skip padded rows
+    DPRINT << "num indices: " << reader_idx << ENDL();
 
     // Full images
     for (uint32_t i = 0; i < num_full_images; i++) {
         for (uint32_t j = 0; j < conv_act_size_h; j++) {
-            for (uint32_t k = 0; k < conv_act_size_w; k++) {
-                reader_indices_ptr[reader_idx++] = weights_top_left_corner_idx++;
+            if (row_h_idx % stride_h == 0) {
+                for (uint32_t k = 0; k < conv_act_size_w; k+=stride_w) {
+                    reader_indices_ptr[reader_idx++] = weights_top_left_corner_idx+=stride_w;
+                }
+                weights_top_left_corner_idx += weight_size_w - 1;
+                row_h_idx++;
+            } else {
+                weights_top_left_corner_idx += skip_full_padded_row;
+                row_h_idx++;
             }
-            weights_top_left_corner_idx += weight_size_w - 1;
         }
         weights_top_left_corner_idx += skip_after_full_image; // Skip padded rows
     }
+    DPRINT << "num indices: " << reader_idx << ENDL();
 
     // Last partial image
     for (uint32_t j = 0; j < last_partial_image_num_rows; j++) {
-        for (uint32_t k = 0; k < conv_act_size_w; k++) {
-            reader_indices_ptr[reader_idx++] = weights_top_left_corner_idx++;
+        if (row_h_idx % stride_h == 0) {
+            for (uint32_t k = 0; k < conv_act_size_w; k+=stride_w) {
+                reader_indices_ptr[reader_idx++] = weights_top_left_corner_idx+=stride_w;
+            }
+            weights_top_left_corner_idx += weight_size_w - 1;
+            row_h_idx++;
+        } else {
+            weights_top_left_corner_idx += skip_full_padded_row;
+            row_h_idx++;
         }
-        weights_top_left_corner_idx += weight_size_w - 1;
     }
+    DPRINT << "num indices: " << reader_idx << ENDL();
 
     // Last partial left-alighted row
-    for (uint32_t k = 0; k < last_partial_left_aligned_row_width; k++) {
-        reader_indices_ptr[reader_idx++] = weights_top_left_corner_idx++;
+    if (row_h_idx % stride_h == 0) {
+        for (uint32_t k = 0; k < last_partial_left_aligned_row_width; k+=stride_w) {
+            reader_indices_ptr[reader_idx++] = weights_top_left_corner_idx+=stride_w;
+        }
     }
 
-    //DPRINT << "num indices: " << reader_idx << ENDL();
+    DPRINT << "num indices: " << reader_idx << ENDL();
     //for (uint32_t i = 0; i < reader_idx; i++) {
-        //DPRINT << reader_indices_ptr[i] << ENDL();
+    //  DPRINT << reader_indices_ptr[i] << ENDL();
     //}
 
     uint32_t reader_offset = 0;
