@@ -342,7 +342,6 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
     // more args for writer
     uint32_t out_block_row_size_bytes = weight_block_w_ntiles*TILE_WIDTH*num_bytes_of_df;
     uint32_t out_row_size_bytes = output_channels_padded_to_tile_width*num_bytes_of_df;
-
     // output data format
     const auto out_df = datatype_to_dataformat_converter(a.dtype());
 
@@ -742,6 +741,15 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
     vector<KernelID> reader_ids;
     vector<KernelID> writer_ids;
     //tt_start_debug_print_server();
+
+    // NOTE: Since act_block_h_datums is essentially passed in as config, this is the only way to determine per core activations
+    // TODO: Should we clean this up and pass in per core activations instead?
+    uint32_t per_core_flattened_activation_h = act_block_h_datums * stride_h * stride_w;
+    if (reader_with_indices) {
+        // TODO: Generalize skip logic for striding; currently, only worked through stride = 1 or 2
+        TT_ASSERT((stride_w <= 2 and stride_h <= 2), "Conv stride should be 1 or 2 for reader indices");
+    }
+
     for(uint32_t core_i = 0; core_i < total_num_cores; core_i++) {
         uint32_t core_x_i = core_i % num_cores_x;
         uint32_t core_y_i = core_i / num_cores_x;
@@ -809,26 +817,37 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
                 (uint32_t) noop_core
             };
         } else if (reader_with_indices) {
-            /* Logic to compute:
-             * NOTE: This logic is wrong if stride !=1
-             * first_partial_right_aligned_row_width
-             * skip_after_partial_right_aligned_row
-             * first_partial_image_num_rows
-             * skip_after_first_partial_image_row
-             * num_full_images
-             * skip_after_full_image
-             * last_partial_image_num_rows
-             * last_partial_left_aligned_row_width
+            /* Logic to compute reader indices:
+             * Inputs:
+             *   - conv_act_size_w, conv_act_size_h
+             *   - per_core_flattened_activation_h
+             * Outputs:
+             *   - first_partial_right_aligned_row_width
+             *   - skip_after_partial_right_aligned_row
+             *   - first_partial_image_num_rows
+             *   - skip_after_first_partial_image_row
+             *   - num_full_images
+             *   - skip_after_full_image
+             *   - last_partial_image_num_rows
+             *   - last_partial_left_aligned_row_width
              */
-            uint32_t start_stick = core_i * act_block_h_datums;
-            uint32_t end_stick = start_stick + act_block_h_datums;
+            uint32_t old_conv_act_size_w = conv_act_size_w;
+            uint32_t old_conv_act_size_h = conv_act_size_h;
+            uint32_t old_act_block_h_datums = act_block_h_datums;
+            uint32_t old_stride_h = stride_h;
+            conv_act_size_w = 56;
+            conv_act_size_h = 56;
+            act_block_h_datums = per_core_flattened_activation_h;
+
+            uint32_t start_stick = core_i * per_core_flattened_activation_h;
+            uint32_t end_stick = start_stick + per_core_flattened_activation_h;
 
             // First partial right-aligned row
             uint32_t image_row_start_left_width = start_stick % conv_act_size_w;
             uint32_t first_partial_right_aligned_row_width = image_row_start_left_width > 0 ? conv_act_size_w - image_row_start_left_width : 0;
 
             // Last partial left-aligned row
-            uint32_t sticks_after_first_partial_row = act_block_h_datums - first_partial_right_aligned_row_width;
+            uint32_t sticks_after_first_partial_row = per_core_flattened_activation_h - first_partial_right_aligned_row_width;
             uint32_t last_partial_left_aligned_row_width = sticks_after_first_partial_row % conv_act_size_w;
 
             // Figure out how to allocate full image rows to first partial image, full images, or last partial image
@@ -866,6 +885,26 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
 
             // Last partial image rows
             uint32_t last_partial_image_num_rows = image_rows_after_first_partial_image % conv_act_size_h;
+
+            // Stride paramaters
+            uint32_t num_beginning_rows_to_skip_for_stride_h = image_row_start_idx % stride_h > 0 ? stride_h - image_row_start_idx % stride_h : 0;
+
+
+
+            std::cout << "----- core: " << core_i << std::endl;
+            std::cout << first_partial_right_aligned_row_width << std::endl;
+            std::cout << first_partial_image_num_rows << std::endl;
+            std::cout << num_full_images << std::endl;
+            std::cout << last_partial_image_num_rows << std::endl;
+            std::cout << last_partial_left_aligned_row_width << std::endl;
+            std::cout << "skip: " << skip_after_partial_right_aligned_row << std::endl;
+            std::cout << "skip: " << skip_after_first_partial_image_row << std::endl;
+            std::cout << "skip: " << skip_after_full_image << std::endl;
+            std::cout << "skip: " << num_beginning_rows_to_skip_for_stride_h << std::endl;
+
+            conv_act_size_w = old_conv_act_size_w;
+            conv_act_size_h = old_conv_act_size_h;
+            act_block_h_datums = old_act_block_h_datums;
 
             reader_rt_args = {
                 // arguments for act
@@ -910,13 +949,14 @@ operation::ProgramWithCallbacks optimized_conv_(const Tensor& a, const Tensor &b
                 total_h_start,
 
                 first_partial_right_aligned_row_width,
-                skip_after_partial_right_aligned_row,
                 first_partial_image_num_rows,
-                skip_after_first_partial_image_row,
                 num_full_images,
-                skip_after_full_image,
                 last_partial_image_num_rows,
                 last_partial_left_aligned_row_width,
+                skip_after_partial_right_aligned_row,
+                skip_after_first_partial_image_row,
+                skip_after_full_image,
+                num_beginning_rows_to_skip_for_stride_h,
 
                 (uint32_t) noop_core
             };
