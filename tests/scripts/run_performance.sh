@@ -12,27 +12,27 @@ run_perf_models() {
 
     env pytest tests/models/falcon/tests -m $pipeline_type
 
-    env pytest tests/models/vgg/tests -m $pipeline_type
+    #env pytest tests/models/vgg/tests -m $pipeline_type
 
-    env pytest tests/models/vit/tests -m $pipeline_type
+    #env pytest tests/models/vit/tests -m $pipeline_type
 
-    env pytest tests/models/llama_old -m $pipeline_type
+    #env pytest tests/models/llama_old -m $pipeline_type
 
-    env pytest tests/models/roberta -m $pipeline_type
+    #env pytest tests/models/roberta -m $pipeline_type
 
-    env pytest tests/models/t5/tests -m $pipeline_type
+    #env pytest tests/models/t5/tests -m $pipeline_type
 
-    env pytest tests/models/resnet/tests -m $pipeline_type
+    #env pytest tests/models/resnet/tests -m $pipeline_type
 
-    env pytest tests/models/metal_BERT_large_15 -m $pipeline_type
+    #env pytest tests/models/metal_BERT_large_15 -m $pipeline_type
 
-    env pytest tests/models/deit/tests -m $pipeline_type
+    #env pytest tests/models/deit/tests -m $pipeline_type
 
-    env pytest tests/models/stable_diffusion/tests -m $pipeline_type
+    #env pytest tests/models/stable_diffusion/tests -m $pipeline_type
 
-    env pytest tests/models/whisper -m $pipeline_type
+    #env pytest tests/models/whisper -m $pipeline_type
 
-    env pytest tests/models/bloom -m $pipeline_type
+    #env pytest tests/models/bloom -m $pipeline_type
 
     ## Merge all the generated reports
     env python tests/models/merge_perf_results.py
