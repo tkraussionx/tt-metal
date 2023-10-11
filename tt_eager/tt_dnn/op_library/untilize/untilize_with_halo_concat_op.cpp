@@ -451,28 +451,42 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
                 writer_rt_args[27] = left_left_noc.y;
                 writer_rt_args[32] = my_right_right_halo[i - 2];    // sticks to left left neighbor core's right right halo
                 writer_rt_args[36] = my_right_right_halo_offset[i - 2];
+            } else {
+                writer_rt_args[25] = 0;
             }
             writer_rt_args[40] = my_right_halo_pad_i_offset[i - 1];
+        } else {
+            writer_rt_args[19] = 0;
+            writer_rt_args[25] = 0;
         }
-        if (untilize_with_halo_helpers::right_neighbor_noc_xy.count(noc_core) > 0) {
+        if (untilize_with_halo_helpers::right_neighbor_noc_xy.count(noc_core) > 0 && (i < ncores_full - 1)) {
             CoreCoord right_noc = untilize_with_halo_helpers::right_neighbor_noc_xy.at(noc_core);
             writer_rt_args[22] = 1;
             writer_rt_args[23] = right_noc.x;
             writer_rt_args[24] = right_noc.y;
             writer_rt_args[34] = my_left_halo[i + 1];       // sticks to right neighbor core's left halo
             writer_rt_args[38] = my_left_halo_offset[i + 1];
-            if (untilize_with_halo_helpers::right_neighbor_noc_xy.count(noc_core) > 0) {
+            if (untilize_with_halo_helpers::right_neighbor_noc_xy.count(noc_core) > 0 && (i < ncores_full - 2)) {
                 CoreCoord right_right_noc = untilize_with_halo_helpers::right_neighbor_noc_xy.at(right_noc);
                 writer_rt_args[28] = 1;
                 writer_rt_args[29] = right_right_noc.x;
                 writer_rt_args[30] = right_right_noc.y;
                 writer_rt_args[35] = my_left_left_halo[i + 2];      // sticks to right right neighbor core's left left halo
                 writer_rt_args[39] = my_left_left_halo_offset[i + 2];
+            } else {
+                writer_rt_args[28] = 0;
             }
             writer_rt_args[41] = my_left_halo_pad_i_offset[i + 1];
+        } else {
+            writer_rt_args[22] = 0;
+            writer_rt_args[28] = 0;
         }
 
         log_debug(LogOp, "++++ Core: {}", i);
+        log_debug(LogOp, "halo::has_left: {}", writer_rt_args[19]);
+        log_debug(LogOp, "halo::has_left_left: {}", writer_rt_args[25]);
+        log_debug(LogOp, "halo::has_right: {}", writer_rt_args[22]);
+        log_debug(LogOp, "halo::has_right_right: {}", writer_rt_args[28]);
         log_debug(LogOp, "local_in_stick_start: {}", writer_rt_args[15]);
         log_debug(LogOp, "partial_first_row_nsticks: {}", writer_rt_args[2]);
         log_debug(LogOp, "partial_top_image_nrows: {}", writer_rt_args[5]);
