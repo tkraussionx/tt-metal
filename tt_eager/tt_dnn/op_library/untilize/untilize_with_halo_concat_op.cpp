@@ -394,14 +394,6 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
         in_stick_start += in_nsticks_per_core;
     }
 
-    // initialize
-    uint32_t partial_first_row_nsticks = 0;
-    uint32_t partial_top_image_nrows = 0;
-    uint32_t full_nimages = in_nsticks_per_core / in_nsticks_per_batch;
-    uint32_t partial_bottom_image_nsticks = in_nsticks_per_core % in_nsticks_per_batch;
-    uint32_t partial_bottom_image_nrows = partial_bottom_image_nsticks / in_w;
-    uint32_t partial_last_row_nsticks = partial_bottom_image_nsticks % in_w;
-
     in_stick_start = 0;
     for (uint32_t i = 0; i < ncores_full; ++ i) {
         CoreCoord core = {i % ncores_x, i / ncores_x};  // logical
@@ -423,13 +415,14 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
         writer_rt_args[15] = in_stick_start;
         writer_rt_args[16] = in_stick_start + in_nsticks_per_core;
 
-        uint32_t partial_first_row_nsticks = (in_w - (in_stick_start % in_w)) % in_w;
-        uint32_t batch = in_stick_start / in_hw;
-        uint32_t partial_top_image_nrows = (batch * in_h - (uint32_t) ceil((float) in_stick_start / in_w)) % in_h;
-        uint32_t full_nimages = (in_nsticks_per_core - (partial_first_row_nsticks + (partial_top_image_nrows * in_w))) / in_nsticks_per_batch;
-        uint32_t rem_nsticks = in_nsticks_per_core - (partial_first_row_nsticks + partial_top_image_nrows * in_w + full_nimages * in_hw);
-        uint32_t partial_bottom_image_nrows = rem_nsticks / in_w;
-        uint32_t partial_last_row_nsticks = rem_nsticks % in_w;
+        int32_t partial_first_row_nsticks = (in_w - (in_stick_start % in_w)) % in_w;
+        int32_t batch = in_stick_start / in_hw;
+        int32_t partial_top_image_nrows = ((batch + 1) * in_h - (int32_t) ceil((float) in_stick_start / in_w)) % in_h;
+        int32_t full_nimages = ((int32_t) in_nsticks_per_core - (partial_first_row_nsticks + (partial_top_image_nrows * in_w))) / in_nsticks_per_batch;
+        full_nimages = full_nimages < 0 ? 0 : full_nimages;
+        int32_t rem_nsticks = (int32_t) in_nsticks_per_core - (partial_first_row_nsticks + partial_top_image_nrows * in_w + full_nimages * in_hw);
+        int32_t partial_bottom_image_nrows = rem_nsticks / in_w;
+        int32_t partial_last_row_nsticks = rem_nsticks % in_w;
 
         writer_rt_args[2] = partial_first_row_nsticks;
         writer_rt_args[5] = partial_top_image_nrows;
@@ -472,11 +465,27 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
             writer_rt_args[41] = my_left_halo_pad_i_offset[i + 1];
         }
 
-        // unused:
-        // writer_rt_args[11] = halo_for_left_left_nsticks;
-        // writer_rt_args[12] = halo_for_left_nsticks;
-        // writer_rt_args[13] = halo_for_right_nsticks;
-        // writer_rt_args[14] = halo_for_right_right_nsticks;
+        log_debug(LogOp, "++++ Core: {}", i);
+        log_debug(LogOp, "partial_first_row_nsticks: {}", writer_rt_args[2]);
+        log_debug(LogOp, "partial_top_image_nrows: {}", writer_rt_args[5]);
+        log_debug(LogOp, "full_nimages: {}", writer_rt_args[8]);
+        log_debug(LogOp, "partial_bottom_image_nrows: {}", writer_rt_args[9]);
+        log_debug(LogOp, "partial_last_row_nsticks: {}", writer_rt_args[10]);
+        log_debug(LogOp, "halo_for_left_left_nsticks: {}", writer_rt_args[11]);
+        log_debug(LogOp, "halo_for_left_nsticks: {}", writer_rt_args[12]);
+        log_debug(LogOp, "halo_for_right_nsticks: {}", writer_rt_args[13]);
+        log_debug(LogOp, "halo_for_right_right_nsticks: {}", writer_rt_args[14]);
+        log_debug(LogOp, "local_in_stick_start: {}", writer_rt_args[15]);
+        log_debug(LogOp, "left_left_core_nsticks: {}", writer_rt_args[32]);
+        log_debug(LogOp, "left_core_nsticks: {}", writer_rt_args[33]);
+        log_debug(LogOp, "right_core_nsticks: {}", writer_rt_args[34]);
+        log_debug(LogOp, "right_right_core_nsticks: {}", writer_rt_args[35]);
+        log_debug(LogOp, "left_left_core_halo_offset: {}", writer_rt_args[36]);
+        log_debug(LogOp, "left_core_halo_offset: {}", writer_rt_args[37]);
+        log_debug(LogOp, "right_core_halo_offset: {}", writer_rt_args[38]);
+        log_debug(LogOp, "right_right_core_halo_offset: {}", writer_rt_args[39]);
+        log_debug(LogOp, "left_going_halo_pad_i_offset: {}", writer_rt_args[40]);
+        log_debug(LogOp, "right_going_halo_pad_i_offset: {}", writer_rt_args[41]);
 
         SetRuntimeArgs(program, writer_kernel_id, core, writer_rt_args);
 
