@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 
+#include "debug_print.h"
+
 void kernel_main() {
     constexpr uint32_t in_cb_id = get_compile_time_arg_val(0);  // has input shard
     constexpr uint32_t out_cb_id = get_compile_time_arg_val(1); // has output shard with padding and halo
@@ -100,8 +102,8 @@ void kernel_main() {
         curr_in_l1_addr += stick_nbytes;
         curr_out_l1_addr += stick_nbytes;
     }
-    // insert padding stick at the end of the row
-    noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
+    // insert padding stick at the end of the row TODO
+    // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
 
     // DPRINT << "2" << ENDL();
 
@@ -109,7 +111,7 @@ void kernel_main() {
     for (uint32_t i = 0; i < partial_top_image_nrows; ++ i) {
         // padding sticks on the left
         for (uint32_t j = 0; j < pad_w; ++ j) {
-            noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
+            // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
             curr_out_l1_addr += stick_nbytes;
         }
         // data sticks for full row
@@ -121,7 +123,7 @@ void kernel_main() {
         }
         // padding sticks on the right
         for (uint32_t j = 0; j < pad_w; ++ j) {
-            noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
+            // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
             curr_out_l1_addr += stick_nbytes;
         }
     }
@@ -134,17 +136,17 @@ void kernel_main() {
         for (uint32_t i = 0; i < pad_h; ++ i) {
             // padding sticks on the left
             for (uint32_t j = 0; j < pad_w; ++ j) {
-                noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
+                // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
                 curr_out_l1_addr += stick_nbytes;
             }
             // padding full row
             for (uint32_t j = 0; j < out_w; ++ j) {
-                noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
+                noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);       // TODO
                 curr_out_l1_addr += stick_nbytes;
             }
             // padding sticks on the right
             for (uint32_t j = 0; j < pad_w; ++ j) {
-                noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
+                // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
                 curr_out_l1_addr += stick_nbytes;
             }
         }
@@ -152,7 +154,7 @@ void kernel_main() {
         for (uint32_t i = 0; i < out_h; ++ i) {
             // padding sticks on the left
             for (uint32_t j = 0; j < pad_w; ++ j) {
-                noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
+                // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
                 curr_out_l1_addr += stick_nbytes;
             }
             // data sticks for full row
@@ -164,7 +166,7 @@ void kernel_main() {
             }
             // padding sticks on the right
             for (uint32_t j = 0; j < pad_w; ++ j) {
-                noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
+                // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
                 curr_out_l1_addr += stick_nbytes;
             }
         }
@@ -176,7 +178,7 @@ void kernel_main() {
     for (uint32_t i = 0; i < partial_bottom_image_nrows; ++ i) {
         // padding sticks on the left
         for (uint32_t j = 0; j < pad_w; ++ j) {
-            noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
+            // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
             curr_out_l1_addr += stick_nbytes;
         }
         // data sticks for full row
@@ -188,7 +190,7 @@ void kernel_main() {
         }
         // padding sticks on the right
         for (uint32_t j = 0; j < pad_w; ++ j) {
-            noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
+            // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
             curr_out_l1_addr += stick_nbytes;
         }
     }
@@ -197,7 +199,7 @@ void kernel_main() {
 
     // section 5
     // insert padding stick at the beginning of the row
-    noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
+    // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
     // partial row sticks
     for (uint32_t i = 0; i < partial_last_row_nsticks; ++ i) {
         uint64_t noc_addr = get_noc_addr(curr_in_l1_addr);
