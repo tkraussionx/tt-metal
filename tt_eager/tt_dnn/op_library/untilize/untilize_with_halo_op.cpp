@@ -77,7 +77,7 @@ void init_neighbor_noc_xy_mapping(CoreCoord grid_size, uint32_t noc = 0) {
 
 } // namespace untilize_with_halo_helpers
 
-operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, Tensor& output, uint32_t pad_val) {
+operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, Tensor& output, uint32_t pad_val, const uint32_t &in_h, const uint32_t &in_w) {
     Program program = Program();
 
     Device *device = a.device();
@@ -108,10 +108,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
     }
 
     // TODO: hard coded for testing only. need to pass these args in.
-    uint32_t nbatch = input_shape[0];
-    uint32_t in_h = std::sqrt(input_shape[2]);
-    uint32_t in_w = in_h;
-    TT_ASSERT(in_h * in_w == input_shape[2]);
+    uint32_t nbatch = 8;
     uint32_t in_c = input_shape[3];
     uint32_t pad_h = 1;
     uint32_t pad_w = 1;
@@ -339,6 +336,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
     map<int32_t, uint32_t> my_left_halo_offset, my_left_left_halo_offset, my_right_halo_offset, my_right_right_halo_offset;
     map<int32_t, uint32_t> my_left_halo_pad_i_offset, my_right_halo_pad_i_offset;
     int32_t in_stick_start = 0;
+
     for (int32_t i = 0; i < ncores_full; ++ i) {
         int32_t in_stick_batch_start = in_stick_start / in_nsticks_per_batch;
         int32_t in_stick_batch_end = (in_stick_start + in_nsticks_per_core) / in_nsticks_per_batch;
@@ -665,8 +663,8 @@ std::vector<Shape> UntilizeWithHalo::compute_output_shapes(const std::vector<Ten
     uint32_t out_cb_pagesize = 2 * input_shape[3];
     uint32_t nbatch = input_shape[0];
     uint32_t in_hw = input_shape[2];
-    uint32_t in_h = std::sqrt(in_hw);
-    uint32_t in_w = in_h;
+    uint32_t in_h = this->in_h;
+    uint32_t in_w = this->in_w;
     uint32_t in_nhw = nbatch * in_hw;
     uint32_t total_data_nsticks = in_nhw                        // input data sticks
                                     + (in_h * nbatch) * 2       // 2 padding sticks per row
@@ -705,18 +703,20 @@ std::vector<Tensor> UntilizeWithHalo::create_output_tensors(const std::vector<Te
 operation::ProgramWithCallbacks UntilizeWithHalo::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
     auto& output_tensor = output_tensors.at(0);
-    return {untilize_with_halo_multi_core(input_tensor_a, output_tensor, pad_val_)};
+    return {untilize_with_halo_multi_core(input_tensor_a, output_tensor, pad_val_, this->in_h, this->in_w)};
 }
 
 tt::stl::reflection::Attributes UntilizeWithHalo::attributes() const {
     return {
         {"pad_val", pad_val_},
+        {"in_h", this->in_h},
+        {"in_w", this->in_w},
         {"output_mem_config", this->output_mem_config},
     };
 }
 
-Tensor untilize_with_halo(const Tensor &input_tensor_a, const uint32_t pad_val, const MemoryConfig& mem_config) {
-    return operation::run_without_autoformat(UntilizeWithHalo{pad_val, mem_config}, {input_tensor_a}).at(0);
+Tensor untilize_with_halo(const Tensor &input_tensor_a, const uint32_t pad_val, const uint32_t &in_h, const uint32_t &in_w, const MemoryConfig& mem_config) {
+    return operation::run_without_autoformat(UntilizeWithHalo{pad_val, in_h, in_w, mem_config}, {input_tensor_a}).at(0);
 }
 
 }  // namespace tt_metal
