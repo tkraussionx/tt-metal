@@ -213,8 +213,10 @@ void kernel_main() {
 
     // DPRINT << "6" << ENDL();
 
+    DPRINT << "in_l1_addr: " << in_l1_addr << ENDL();
+
     // section B (push halo to right and right right neighbors cores)
-    curr_in_l1_addr = curr_in_l1_addr - (out_w + 1) * stick_nbytes;  // rewind by -(out_w + 1)
+    curr_in_l1_addr = curr_in_l1_addr - (out_w + 1) * stick_nbytes;  // rewind by (out_w + 1)
     uint32_t right_i = 0;
     if (has_right) {
         DPRINT << "HALO TO R = " << right_core_nsticks << " (" << right_noc_x << "," << right_noc_y << "): ";
@@ -238,7 +240,7 @@ void kernel_main() {
                 noc_async_write(curr_in_l1_addr, noc_addr, stick_nbytes);
                 out_l1_addr_right += stick_nbytes;
                 curr_in_l1_addr += stick_nbytes;
-                DPRINT << right_i << " ";
+                DPRINT << curr_in_l1_addr << " ";
             }
         }
         DPRINT << ENDL();
@@ -265,7 +267,7 @@ void kernel_main() {
                 noc_async_write(curr_in_l1_addr, noc_addr, stick_nbytes);
                 out_l1_addr_right_right += stick_nbytes;
                 curr_in_l1_addr += stick_nbytes;
-                DPRINT << right_i << " ";
+                DPRINT << curr_in_l1_addr << " ";
             }
         }
         DPRINT << ENDL();
@@ -297,7 +299,7 @@ void kernel_main() {
                 noc_async_write(curr_in_l1_addr, noc_addr, stick_nbytes);
                 out_l1_addr_left_left += stick_nbytes;
                 curr_in_l1_addr += stick_nbytes;
-                DPRINT << left_i << " ";
+                DPRINT << curr_in_l1_addr << " ";
             }
         }
         DPRINT << ENDL();
@@ -323,7 +325,7 @@ void kernel_main() {
                 noc_async_write(curr_in_l1_addr, noc_addr, stick_nbytes);
                 out_l1_addr_left += stick_nbytes;
                 curr_in_l1_addr += stick_nbytes;
-                DPRINT << left_i << " ";
+                DPRINT << curr_in_l1_addr << " ";
             }
         }
         DPRINT << ENDL();

@@ -303,7 +303,8 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
     uint32_t writer_noc = 0;
 
     TT_ASSERT(window_h == 3 && window_w == 3);
-    int32_t halo_in_nsticks = (in_w + (window_w / 2)) * (window_h / 2);
+    // int32_t halo_in_nsticks = (in_w + (window_w / 2)) * (window_h / 2);
+    int32_t halo_in_nsticks = (in_w + 1) * 1;
 
     // NOTE: Irrespective of batch boundary, always ass the left/right halo to the output shards.
     // IE: output shards ALWAYS have halo region on left and right as long as they are not the start/end of the input
@@ -376,6 +377,19 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
             my_right_right_halo_offset[i] = my_right_halo_offset[i] + (my_right_halo[i] + 2) * in_stick_nbytes;
         }
         my_right_halo_pad_i_offset[i] = in_w - ((in_stick_start + in_nsticks_per_core) % in_w);
+
+        log_debug(LogOp, "==== Core {}", i);
+        log_debug(LogOp, "in_stick_start {}", in_stick_start);
+        log_debug(LogOp, "my_left_halo = {}", my_left_halo[i]);
+        log_debug(LogOp, "my_left_halo_offset = {}", my_left_halo_offset[i]);
+        log_debug(LogOp, "my_left_left_halo = {}", my_left_left_halo[i]);
+        log_debug(LogOp, "my_left_left_halo_offset = {}", my_left_left_halo_offset[i]);
+        log_debug(LogOp, "my_left_halo_pad_i_offset = {}", my_left_halo_pad_i_offset[i]);
+        log_debug(LogOp, "my_right_halo = {}", my_right_halo[i]);
+        log_debug(LogOp, "my_right_halo_offset = {}", my_right_halo_offset[i]);
+        log_debug(LogOp, "my_right_right_halo = {}", my_right_right_halo[i]);
+        log_debug(LogOp, "my_right_right_halo_offset = {}", my_right_right_halo_offset[i]);
+        log_debug(LogOp, "my_right_halo_pad_i_offset = {}", my_right_halo_pad_i_offset[i]);
 
         in_stick_start += in_nsticks_per_core;
     }
