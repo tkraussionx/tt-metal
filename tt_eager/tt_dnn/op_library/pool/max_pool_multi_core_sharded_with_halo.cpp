@@ -18,6 +18,7 @@ namespace tt_metal {
 
 namespace max_pool_helpers {
 
+#if 0
 // reader noc coords for left and right neighbors
 std::map<CoreCoord, CoreCoord> left_neighbor_noc_xy, right_neighbor_noc_xy;
 void init_neighbor_noc_xy_mapping(CoreCoord grid_size, uint32_t noc = 0) {
@@ -189,9 +190,10 @@ get_decomposition_nhw(CoreCoord grid_size, uint32_t in_nhw, uint32_t out_nhw) {
 
     return std::make_tuple(ncores, all_cores, core_range, core_range_cliff, in_nhw_per_core, in_nhw_per_core_cliff, out_nhw_per_core, out_nhw_per_core_cliff);
 }
-
+#endif
 } // namespacce max_pool_helpers
 
+#if 0
 // this version uses distribution along height = N * H * W
 operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const Tensor &input, Tensor& output,
                                                                         uint32_t in_h, uint32_t in_w,
@@ -464,6 +466,14 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
                                             0,                  // left_in_stick_start,
                                             0,                  // right_in_stick_end,
                                             0,                  // my_core
+                                            0,                  // 65: partial_first_row_nsticks
+                                            0,                  // partial_first_row_skip
+                                            0,                  // partial_top_image_nrows
+                                            0,                  // partial_top_image_skip
+                                            0,                  // full_nimages
+                                            0,                  // full_images_skip
+                                            0,                  // partial_bottom_image_nrows
+                                            0,                  // partial_last_row_nsticks
                                             };
     auto reader_config = DataMovementConfig{.processor = DataMovementProcessor::RISCV_0,
                                             .noc = NOC::RISCV_0_default,
@@ -673,6 +683,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
     };
     return {.program=std::move(program), .override_runtime_arguments_callback=override_runtime_arguments_callback};
 }
+#endif
 
 } // namespace tt_metal
 } // namespace tt
