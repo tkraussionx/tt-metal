@@ -145,6 +145,7 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
     uint32_t in_hw = in_h * in_w;
     uint32_t in_nhw = nbatch * in_hw;
     uint32_t in_stick_nbytes = in_c * in_nbytes;
+    uint32_t in_nsticks = in_nhw;
     uint32_t in_nsticks_per_batch = in_hw;
     uint32_t in_nsticks_per_core = in_nhw / ncores;
 
@@ -254,8 +255,8 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
     TT_ASSERT(in_nhw % ncores == 0);
 
     vector<uint32_t> writer_rt_args = {
-        0,  // in_nsticks,                     // 0
-        0,  // out_nsticks,
+        ntiles_per_block * nblocks_per_core,  // in_nsticks,                     // 0
+        in_nsticks_per_core,  // UNUSED
         0,  // partial_first_row_nsticks,
         pad_w,
         in_w,
@@ -294,7 +295,9 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
         0,  // right_halo_offset,
         0,  // left_halo_offset,
         0,  // left_left_halo_offset,
-        pad_val_buffer_l1_addr,         // 40
+        0,  // left_halo_pad_i_offset          // 40
+        0,  // right_halo_pad_i_offset
+        pad_val_buffer_l1_addr,
     };
 
     uint32_t writer_noc = 0;
@@ -302,22 +305,16 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
     TT_ASSERT(window_h == 3 && window_w == 3);
     int32_t halo_in_nsticks = (in_w + (window_w / 2)) * (window_h / 2);
 
-    uint32_t partial_first_row_nsticks = 0;
-    uint32_t partial_top_image_nrows = 0;
-    uint32_t full_nimages = in_nsticks_per_core / in_nsticks_per_batch;
-    uint32_t partial_bottom_image_nsticks = in_nsticks_per_core % in_nsticks_per_batch;
-    uint32_t partial_bottom_image_nrows = partial_bottom_image_nsticks / in_w;
-    uint32_t partial_last_row_nsticks = partial_bottom_image_nsticks % in_w;
-
     // NOTE: Irrespective of batch boundary, always ass the left/right halo to the output shards.
     // IE: output shards ALWAYS have halo region on left and right as long as they are not the start/end of the input
     // TODO: Ensure this produces the correct output after padding is inserted.
 
-    // for a core, calculate how many sticks are coming from left left/left/right/right right neighbors:
+    // For each core, calculate how many sticks are coming from left left/left/right/right right neighbors:
     // These are used by the neighbor cores to set their runtime args for the data to be pushed to me.
-    // also calculate each of these segments start offset in my local l1: these need to take all my padding (left/right/top) into account
+    // Also calculate each of these segments start offset in my local l1: these need to take all my padding (left/right/top) into account
     map<int32_t, int32_t> my_left_halo, my_left_left_halo, my_right_halo, my_right_right_halo;
     map<int32_t, uint32_t> my_left_halo_offset, my_left_left_halo_offset, my_right_halo_offset, my_right_right_halo_offset;
+    map<int32_t, uint32_t> my_left_halo_pad_i_offset, my_right_halo_pad_i_offset;
     int32_t in_stick_start = 0;
     for (int32_t i = 0; i < ncores_full; ++ i) {
         int32_t in_stick_batch_start = in_stick_start / in_nsticks_per_batch;
@@ -350,6 +347,7 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
             // left left halo and left halo are in different rows, so there's 2 additional padding sticks (right/left edge)
             my_left_halo_offset[i] = my_left_left_halo_offset[i] + (my_left_left_halo[i] + 2) * in_stick_nbytes;
         }
+        my_left_halo_pad_i_offset[i] = in_w - (in_stick_start % in_w);
 
         // right side halo
         my_right_halo[i] = 0;
@@ -377,10 +375,20 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
         } else {
             my_right_right_halo_offset[i] = my_right_halo_offset[i] + (my_right_halo[i] + 2) * in_stick_nbytes;
         }
+        my_right_halo_pad_i_offset[i] = in_w - ((in_stick_start + in_nsticks_per_core) % in_w);
 
         in_stick_start += in_nsticks_per_core;
     }
 
+    // initialize
+    uint32_t partial_first_row_nsticks = 0;
+    uint32_t partial_top_image_nrows = 0;
+    uint32_t full_nimages = in_nsticks_per_core / in_nsticks_per_batch;
+    uint32_t partial_bottom_image_nsticks = in_nsticks_per_core % in_nsticks_per_batch;
+    uint32_t partial_bottom_image_nrows = partial_bottom_image_nsticks / in_w;
+    uint32_t partial_last_row_nsticks = partial_bottom_image_nsticks % in_w;
+
+    in_stick_start = 0;
     for (uint32_t i = 0; i < ncores_full; ++ i) {
         CoreCoord core = {i % ncores_x, i / ncores_x};  // logical
         CoreCoord noc_core = core;  // calculate physical
@@ -395,57 +403,59 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
         }
 
         // reader rt args
-        SetRuntimeArgs(
-            program,
-            reader_kernel_id,
-            core,
-            reader_rt_args
-        );
+        SetRuntimeArgs(program, reader_kernel_id, core, reader_rt_args);
 
         // writer rt args
-        writer_rt_args[0] = in_nsticks_per_core;
-        writer_rt_args[1] = in_nsticks_per_core;
+        writer_rt_args[15] = in_stick_start;
+        writer_rt_args[16] = in_stick_start + in_nsticks_per_core;
+
+        uint32_t partial_first_row_nsticks = (in_w - (in_stick_start % in_w)) % in_w;
+        uint32_t batch = in_stick_start / in_hw;
+        uint32_t partial_top_image_nrows = (batch * in_h - (uint32_t) ceil((float) in_stick_start / in_w)) % in_h;
+        uint32_t full_nimages = (in_nsticks_per_core - (partial_first_row_nsticks + (partial_top_image_nrows * in_w))) / in_nsticks_per_batch;
+        uint32_t rem_nsticks = in_nsticks_per_core - (partial_first_row_nsticks + partial_top_image_nrows * in_w + full_nimages * in_hw);
+        uint32_t partial_bottom_image_nrows = rem_nsticks / in_w;
+        uint32_t partial_last_row_nsticks = rem_nsticks % in_w;
+
         writer_rt_args[2] = partial_first_row_nsticks;
         writer_rt_args[5] = partial_top_image_nrows;
         writer_rt_args[8] = full_nimages;
         writer_rt_args[9] = partial_bottom_image_nrows;
         writer_rt_args[10] = partial_last_row_nsticks;
-        writer_rt_args[15] = in_stick_start;
-        writer_rt_args[16] = in_stick_start + in_nsticks_per_core;
 
         if (untilize_with_halo_helpers::left_neighbor_noc_xy.count(noc_core) > 0) {
             CoreCoord left_noc = untilize_with_halo_helpers::left_neighbor_noc_xy.at(noc_core);
             writer_rt_args[19] = 1;
             writer_rt_args[20] = left_noc.x;
             writer_rt_args[21] = left_noc.y;
-            writer_rt_args[33] = my_left_halo[i - 1];
+            writer_rt_args[33] = my_right_halo[i - 1];      // sticks to left neighbor core's right halo
             writer_rt_args[37] = my_right_halo_offset[i - 1];
-
             if (untilize_with_halo_helpers::left_neighbor_noc_xy.count(left_noc) > 0) {
                 CoreCoord left_left_noc = untilize_with_halo_helpers::left_neighbor_noc_xy.at(left_noc);
                 writer_rt_args[25] = 1;
                 writer_rt_args[26] = left_left_noc.x;
                 writer_rt_args[27] = left_left_noc.y;
-                writer_rt_args[32] = my_left_left_halo[i - 2];
+                writer_rt_args[32] = my_right_right_halo[i - 2];    // sticks to left left neighbor core's right right halo
                 writer_rt_args[36] = my_right_right_halo_offset[i - 2];
             }
+            writer_rt_args[40] = my_right_halo_pad_i_offset[i - 1];
         }
         if (untilize_with_halo_helpers::right_neighbor_noc_xy.count(noc_core) > 0) {
             CoreCoord right_noc = untilize_with_halo_helpers::right_neighbor_noc_xy.at(noc_core);
             writer_rt_args[22] = 1;
             writer_rt_args[23] = right_noc.x;
             writer_rt_args[24] = right_noc.y;
-            writer_rt_args[34] = my_right_halo[i + 1];
+            writer_rt_args[34] = my_left_halo[i + 1];       // sticks to right neighbor core's left halo
             writer_rt_args[38] = my_left_halo_offset[i + 1];
-
             if (untilize_with_halo_helpers::right_neighbor_noc_xy.count(noc_core) > 0) {
                 CoreCoord right_right_noc = untilize_with_halo_helpers::right_neighbor_noc_xy.at(right_noc);
                 writer_rt_args[28] = 1;
                 writer_rt_args[29] = right_right_noc.x;
                 writer_rt_args[30] = right_right_noc.y;
-                writer_rt_args[35] = my_right_right_halo[i + 2];
+                writer_rt_args[35] = my_left_left_halo[i + 2];      // sticks to right right neighbor core's left left halo
                 writer_rt_args[39] = my_left_left_halo_offset[i + 2];
             }
+            writer_rt_args[41] = my_left_halo_pad_i_offset[i + 1];
         }
 
         // unused:
@@ -454,12 +464,9 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
         // writer_rt_args[13] = halo_for_right_nsticks;
         // writer_rt_args[14] = halo_for_right_right_nsticks;
 
-        SetRuntimeArgs(
-            program,
-            writer_kernel_id,
-            core,
-            writer_rt_args
-        );
+        SetRuntimeArgs(program, writer_kernel_id, core, writer_rt_args);
+
+        in_stick_start += in_nsticks_per_core;
     }
     if (ncores_full < ncores) {
         // last core is the cliff core with nblocks_per_core_cliff blocks
@@ -559,7 +566,7 @@ std::vector<Tensor> UntilizeWithHaloConcat::create_output_tensors(const std::vec
     auto output_shape = this->compute_output_shapes(input_tensors).at(0);
     uint32_t ncores = input_tensor.shape()[0] * input_tensor.shape()[2] / shard_spec.shard_shape[0];
     shard_spec.shard_shape[0] = output_shape[2] / ncores;
-    log_debug(LogOp, "derived ncores: {}", ncores);
+    // log_debug(LogOp, "derived ncores: {}", ncores);
     return {create_sharded_device_tensor(this->compute_output_shapes(input_tensors).at(0), input_tensor.dtype(), Layout::ROW_MAJOR, input_tensor.device(), this->output_mem_config, shard_spec)};
 }
 
