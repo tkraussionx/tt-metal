@@ -119,7 +119,7 @@ void kernel_main() {
 
     constexpr uint32_t TILE_HW = 1024;
 
-    DPRINT << "HAHA 0" << ENDL();
+    // DPRINT << "HAHA 0" << ENDL();
 
     // Reduce scalar = 1
     cb_reserve_back(in_scalar_cb_id, 1);
@@ -140,7 +140,7 @@ void kernel_main() {
 
     // NOTE: batch is folded in
 
-    DPRINT << "HAHA 1" << ENDL();
+    // DPRINT << "HAHA 1" << ENDL();
 
     uint32_t core_out_w_i_start = get_arg_val<int32_t>(38);
     uint32_t core_out_h_i_start = get_arg_val<int32_t>(39);
@@ -194,14 +194,14 @@ void kernel_main() {
     uint32_t top_left_i = 0;
     uint32_t reader_i = 0;
 
-    DPRINT << "HAHA 2" << ENDL();
+    // DPRINT << "HAHA 2" << ENDL();
     // section 1: partial first row
     for (uint32_t i = 0; i < partial_first_row_nsticks; ++ i) {
         reader_indices_ptr[reader_i ++] = top_left_i ++;
     }
     top_left_i += partial_first_row_skip;
 
-    DPRINT << "HAHA 3" << ENDL();
+    // DPRINT << "HAHA 3" << ENDL();
     // section 2: partial first image
     for (uint32_t i = 0; i < partial_top_image_nrows; ++ i) {
         for (int32_t j = 0; j < out_w; ++ j) {
@@ -211,7 +211,7 @@ void kernel_main() {
     }
     top_left_i += partial_top_image_skip;
 
-    DPRINT << "HAHA 4" << ENDL();
+    // DPRINT << "HAHA 4" << ENDL();
     // section 3: full images
     for (uint32_t n = 0; n < full_nimages; ++ n) {
         for (int32_t i = 0; i < out_h; ++ i) {
@@ -223,7 +223,7 @@ void kernel_main() {
         top_left_i += full_images_skip;
     }
 
-    DPRINT << "HAHA 5" << ENDL();
+    // DPRINT << "HAHA 5" << ENDL();
     // section 4: partial last image
     for (uint32_t i = 0; i < partial_bottom_image_nrows; ++ i) {
         for (int32_t j = 0; j < out_w; ++ j) {
@@ -232,15 +232,15 @@ void kernel_main() {
         top_left_i += window_w - 1;
     }
 
-    DPRINT << "HAHA 6" << ENDL();
+    // DPRINT << "HAHA 6" << ENDL();
     // section 5: partial last row
     for (uint32_t i = 0; i < partial_last_row_nsticks; ++ i) {
         reader_indices_ptr[reader_i ++] = top_left_i ++;
     }
 
-    DPRINT << "reader_i = " << reader_i << ENDL();
+    // DPRINT << "reader_i = " << reader_i << ENDL();
     for (uint32_t i = 0; i < reader_i; ++ i) {
-        DPRINT << reader_indices_ptr[i] << ENDL();
+        // DPRINT << reader_indices_ptr[i] << ENDL();
     }
 
 } // kernel_main()
