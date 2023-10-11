@@ -7,6 +7,7 @@
 
 #include "tt_dnn/op_library/untilize/untilize_op.hpp"
 #include "tt_dnn/op_library/work_split.hpp"
+#include "tt_dnn/op_library/sharding_utilities.hpp"
 #include "tt_dnn/op_library/math.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
@@ -415,14 +416,20 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
         writer_rt_args[15] = in_stick_start;
         writer_rt_args[16] = in_stick_start + in_nsticks_per_core;
 
-        int32_t partial_first_row_nsticks = (in_w - (in_stick_start % in_w)) % in_w;
-        int32_t batch = in_stick_start / in_hw;
-        int32_t partial_top_image_nrows = ((batch + 1) * in_h - (int32_t) ceil((float) in_stick_start / in_w)) % in_h;
-        int32_t full_nimages = ((int32_t) in_nsticks_per_core - (partial_first_row_nsticks + (partial_top_image_nrows * in_w))) / in_nsticks_per_batch;
-        full_nimages = full_nimages < 0 ? 0 : full_nimages;
-        int32_t rem_nsticks = (int32_t) in_nsticks_per_core - (partial_first_row_nsticks + partial_top_image_nrows * in_w + full_nimages * in_hw);
-        int32_t partial_bottom_image_nrows = rem_nsticks / in_w;
-        int32_t partial_last_row_nsticks = rem_nsticks % in_w;
+        // int32_t partial_first_row_nsticks = (in_w - (in_stick_start % in_w)) % in_w;
+        // int32_t batch = in_stick_start / in_hw;
+        // int32_t partial_top_image_nrows = ((batch + 1) * in_h - (int32_t) ceil((float) in_stick_start / in_w)) % in_h;
+        // int32_t full_nimages = ((int32_t) in_nsticks_per_core - (partial_first_row_nsticks + (partial_top_image_nrows * in_w))) / in_nsticks_per_batch;
+        // int32_t rem_nsticks = (int32_t) in_nsticks_per_core - (partial_first_row_nsticks + partial_top_image_nrows * in_w + full_nimages * in_hw);
+        // int32_t partial_bottom_image_nrows = rem_nsticks / in_w;
+        // int32_t partial_last_row_nsticks = rem_nsticks % in_w;
+
+        ShardingConfig sc = get_specs_for_sharding_partition(in_stick_start, in_stick_start + in_nsticks_per_core, in_h, in_w, window_w, pad_h, pad_w);
+        uint32_t partial_first_row_nsticks = sc.first_partial_right_aligned_row_width;
+        uint32_t partial_top_image_nrows = sc.first_partial_image_num_rows;
+        uint32_t full_nimages = sc.num_full_images;
+        uint32_t partial_bottom_image_nrows = sc.last_partial_image_num_rows;
+        uint32_t partial_last_row_nsticks = sc.last_partial_left_aligned_row_width;
 
         writer_rt_args[2] = partial_first_row_nsticks;
         writer_rt_args[5] = partial_top_image_nrows;
@@ -466,16 +473,19 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
         }
 
         log_debug(LogOp, "++++ Core: {}", i);
+        log_debug(LogOp, "local_in_stick_start: {}", writer_rt_args[15]);
         log_debug(LogOp, "partial_first_row_nsticks: {}", writer_rt_args[2]);
         log_debug(LogOp, "partial_top_image_nrows: {}", writer_rt_args[5]);
         log_debug(LogOp, "full_nimages: {}", writer_rt_args[8]);
         log_debug(LogOp, "partial_bottom_image_nrows: {}", writer_rt_args[9]);
         log_debug(LogOp, "partial_last_row_nsticks: {}", writer_rt_args[10]);
+        log_debug(LogOp, "skip_after_partial_right_aligned_row: {}", sc.skip_after_partial_right_aligned_row);
+        log_debug(LogOp, "skip_after_first_partial_image_row: {}", sc.skip_after_first_partial_image_row);
+        log_debug(LogOp, "skip_after_full_image: {}", sc.skip_after_full_image);
         log_debug(LogOp, "halo_for_left_left_nsticks: {}", writer_rt_args[11]);
         log_debug(LogOp, "halo_for_left_nsticks: {}", writer_rt_args[12]);
         log_debug(LogOp, "halo_for_right_nsticks: {}", writer_rt_args[13]);
         log_debug(LogOp, "halo_for_right_right_nsticks: {}", writer_rt_args[14]);
-        log_debug(LogOp, "local_in_stick_start: {}", writer_rt_args[15]);
         log_debug(LogOp, "left_left_core_nsticks: {}", writer_rt_args[32]);
         log_debug(LogOp, "left_core_nsticks: {}", writer_rt_args[33]);
         log_debug(LogOp, "right_core_nsticks: {}", writer_rt_args[34]);
