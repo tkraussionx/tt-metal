@@ -8,6 +8,7 @@
 #include "tt_dnn/op_library/pool/max_pool.hpp"
 #include "tt_dnn/op_library/reduce/reduce_op.hpp"   // for reduce_op_utils
 #include "tt_dnn/op_library/work_split.hpp"
+#include "tt_dnn/op_library/sharding_utilities.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tensor/tensor_utils.hpp"
 #include "tensor/owned_buffer_functions.hpp"
@@ -1136,6 +1137,15 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
         cb_sharded_out = tt_metal::CreateCircularBuffer(program, all_cores, cb_sharded_out_config);
     }
 
+    uint32_t reader_indices_cb_id = CB::c_intermed1;
+    uint32_t reader_indices_cb_pagesize = 4;    // uint32_t
+    uint32_t reader_indices_cb_npages = in_nhw_per_core;
+    CircularBufferConfig cb_reader_indices_config = CircularBufferConfig(
+                                                        reader_indices_cb_pagesize * reader_indices_cb_npages,
+                                                        {{reader_indices_cb_id, in_df}})
+		                                            .set_page_size(reader_indices_cb_id, reader_indices_cb_pagesize);
+    auto reader_indices_cb = tt_metal::CreateCircularBuffer(program, all_cores, cb_reader_indices_config);
+
     // Construct const buffer with -INF
     // uint32_t const_buffer_size = 32;
     uint32_t const_buffer_size = input_shape[3];    // set it equal to 1 row
@@ -1213,64 +1223,79 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
                                             reader_noc,
                                             writer_noc};
     uint32_t in_log_base_2_of_page_size = (uint32_t) std::log2((float) in_nbytes_c);
-    std::vector<uint32_t> reader_rt_args = {src_dram_buffer->address(),
+    std::vector<uint32_t> reader_rt_args = {src_dram_buffer->address(),         // 0
                                             dst_dram_buffer->address(),
-                                            kernel_size_h, kernel_size_w, kernel_size_hw, kernel_size_hw_padded,
-                                            stride_h, stride_w,
-                                            pad_h, pad_w,
-                                            out_h, out_w, output_shape[2], output_shape[3],
-                                            in_nbytes_c, out_nbytes_c,
-                                            in_h, in_w, input_shape[2], input_shape[3],
-                                            out_ntiles_hw, out_ntiles_c,
-                                            in_cb_pagesize, out_cb_pagesize,
-                                            in_cb_page_nelems_padded, out_w_loop_count,
+                                            kernel_size_h,
+                                            kernel_size_w,
+                                            kernel_size_hw,
+                                            kernel_size_hw_padded,              // 5
+                                            stride_h,
+                                            stride_w,
+                                            pad_h,
+                                            pad_w,
+                                            out_h,                              // 10
+                                            out_w,
+                                            output_shape[2],
+                                            output_shape[3],
+                                            in_nbytes_c,
+                                            out_nbytes_c,                       // 15
+                                            in_h,
+                                            in_w,
+                                            input_shape[2],
+                                            input_shape[3],
+                                            out_ntiles_hw,                      // 20
+                                            out_ntiles_c,
+                                            in_cb_pagesize,
+                                            out_cb_pagesize,
+                                            in_cb_page_nelems_padded,
+                                            out_w_loop_count,                   // 25
                                             in_log_base_2_of_page_size,
                                             nbatch,
                                             in_hw,
                                             out_hw,
                                             // these are set later in the following
-                                            0,          // start_out_h_i
+                                            0,          // start_out_h_i        // 30
                                             0,          // end_out_h_i
                                             0,          // base_start_h
                                             0,          // start_out_row_id
                                             minus_inf_const_tensor_addr,
-                                            const_buffer_size * in_nbytes,
+                                            const_buffer_size * in_nbytes,      // 35
                                             (in_cb_page_nelems_padded * out_nelems * 2) >> 5,    // TODO: generalize num rows to fill in in_cb
                                             0,          // core_offset_in_row_id
                                             0,          // core_out_w_i_start
                                             0,          // core_out_h_i_start
-                                            out_nhw_per_core,    // nsticks_per_core
+                                            out_nhw_per_core,    // nsticks_per_core    // 40
                                             0,          // core_offset_out_row_id
                                             out_nhw_per_core / nblocks,     // loop count with blocks
                                             // the following are for sharded input
                                             0,                  // 43: local_out_stick_start
                                             out_hw,             // out_nsticks_per_batch
-                                            0,                  // local_in_stick_start
+                                            0,                  // local_in_stick_start // 45
                                             0,                  // local_in_stick_end
                                             in_hw,              // in_nsticks_per_batch
                                             in_nhw_per_core,    // in_nsticks_per_core
                                             0,                  // has_left
-                                            0,                  // left_noc_x
+                                            0,                  // left_noc_x           // 50
                                             0,                  // left_noc_y
                                             0,                  // has_right
                                             0,                  // right_noc_x
                                             0,                  // right_noc_y
-                                            in_nhw_per_core_rem_mask,
+                                            in_nhw_per_core_rem_mask,                   // 55
                                             0,                  // 56: has_left_left,
                                             0,                  // left_left_noc_x,
                                             0,                  // left_left_noc_y,
                                             0,                  // has_right_right,
-                                            0,                  // right_right_noc_x,
+                                            0,                  // right_right_noc_x,   // 60
                                             0,                  // right_right_noc_y,
                                             0,                  // left_in_stick_start,
                                             0,                  // right_in_stick_end,
                                             0,                  // my_core
-                                            0,                  // 65: partial_first_row_nsticks
+                                            0,                  // partial_first_row_nsticks    // 65
                                             0,                  // partial_first_row_skip
                                             0,                  // partial_top_image_nrows
                                             0,                  // partial_top_image_skip
                                             0,                  // full_nimages
-                                            0,                  // full_images_skip
+                                            0,                  // full_images_skip             // 70
                                             0,                  // partial_bottom_image_nrows
                                             0,                  // partial_last_row_nsticks
                                             };
@@ -1426,20 +1451,31 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
                 reader_rt_args[52] = 0;
             }
 
-            uint32_t partial_first_row_nsticks = (in_w - (curr_in_stick_id % in_w)) % in_w;
-            uint32_t batch = curr_in_stick_id / in_hw;
-            uint32_t partial_top_image_nrows = (batch * in_h - (uint32_t) ceil((float) curr_in_stick_id / in_w)) % in_h;
-            uint32_t full_nimages = (in_nhw_per_core - (partial_first_row_nsticks + (partial_top_image_nrows * in_w))) / in_hw;
-            uint32_t rem_nsticks = in_nhw_per_core - (partial_first_row_nsticks + partial_top_image_nrows * in_w + full_nimages * in_hw);
-            uint32_t partial_bottom_image_nrows = rem_nsticks / in_w;
-            uint32_t partial_last_row_nsticks = rem_nsticks % in_w;
+            ShardingConfig sc = get_specs_for_sharding_partition(curr_in_stick_id, curr_in_stick_id + in_nhw_per_core, in_h, in_w, kernel_size_w, pad_h, pad_w);
+
+            uint32_t partial_first_row_nsticks = sc.first_partial_right_aligned_row_width;
+            uint32_t partial_top_image_nrows = sc.first_partial_image_num_rows;
+            uint32_t full_nimages = sc.num_full_images;
+            uint32_t partial_bottom_image_nrows = sc.last_partial_image_num_rows;
+            uint32_t partial_last_row_nsticks = sc.last_partial_left_aligned_row_width;
+            uint32_t partial_first_row_skip = sc.skip_after_partial_right_aligned_row;
+            uint32_t partial_top_image_skip = sc.skip_after_first_partial_image_row;
+            uint32_t full_image_skip = sc.skip_after_full_image;
+
+            // uint32_t partial_first_row_nsticks = (in_w - (curr_in_stick_id % in_w)) % in_w;
+            // uint32_t batch = curr_in_stick_id / in_hw;
+            // uint32_t partial_top_image_nrows = (batch * in_h - (uint32_t) ceil((float) curr_in_stick_id / in_w)) % in_h;
+            // uint32_t full_nimages = (in_nhw_per_core - (partial_first_row_nsticks + (partial_top_image_nrows * in_w))) / in_hw;
+            // uint32_t rem_nsticks = in_nhw_per_core - (partial_first_row_nsticks + partial_top_image_nrows * in_w + full_nimages * in_hw);
+            // uint32_t partial_bottom_image_nrows = rem_nsticks / in_w;
+            // uint32_t partial_last_row_nsticks = rem_nsticks % in_w;
 
             reader_rt_args[65] = partial_first_row_nsticks;
-            reader_rt_args[66] = 2 * pad_h;
+            reader_rt_args[66] = partial_first_row_skip;    // 2 * pad_h;
             reader_rt_args[67] = partial_top_image_nrows;
-            reader_rt_args[68] = in_w + 2 * pad_h;
+            reader_rt_args[68] = partial_top_image_skip;    // in_w + 2 * pad_h;
             reader_rt_args[69] = full_nimages;
-            reader_rt_args[70] = in_w + 2 * pad_h;
+            reader_rt_args[70] = full_image_skip;           // in_w + 2 * pad_h;
             reader_rt_args[71] = partial_bottom_image_nrows;
             reader_rt_args[72] = partial_last_row_nsticks;
 
