@@ -88,13 +88,12 @@ void kernel_main() {
     uint32_t out_base_l1_addr = get_write_ptr(out_cb_id);
     uint64_t padding_noc_addr = get_noc_addr(pad_val_buffer_l1_addr);
 
-    uint32_t halo_nsticks = out_w + 2 * pad_w;
+    uint32_t halo_nsticks = out_w + 1 + 2 * pad_w;
 
     // DPRINT << "1" << ENDL();
 
     // section 1
-    uint32_t section1_l1_addr = out_base_l1_addr + (halo_nsticks + 1) * stick_nbytes;
-    uint32_t curr_out_l1_addr = section1_l1_addr;
+    uint32_t curr_out_l1_addr = out_base_l1_addr + (halo_nsticks + 1) * stick_nbytes;
     uint32_t curr_in_l1_addr = in_l1_addr;
     for (uint32_t i = 0; i < partial_first_row_nsticks; ++ i) {
         uint64_t noc_addr = get_noc_addr(curr_in_l1_addr);
@@ -103,7 +102,12 @@ void kernel_main() {
         curr_out_l1_addr += stick_nbytes;
     }
     // insert padding stick at the end of the row TODO
-    // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
+    if (partial_first_row_nsticks > 0) {
+        for (uint32_t j = 0; j < pad_w; ++ j) {
+            // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
+            curr_out_l1_addr += stick_nbytes;
+        }
+    }
 
     // DPRINT << "2" << ENDL();
 
@@ -141,7 +145,7 @@ void kernel_main() {
             }
             // padding full row
             for (uint32_t j = 0; j < out_w; ++ j) {
-                noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);       // TODO
+                // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);       // TODO
                 curr_out_l1_addr += stick_nbytes;
             }
             // padding sticks on the right
@@ -199,7 +203,12 @@ void kernel_main() {
 
     // section 5
     // insert padding stick at the beginning of the row
-    // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
+    if (partial_last_row_nsticks > 0) {
+        for (uint32_t j = 0; j < pad_w; ++ j) {
+            // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
+            curr_out_l1_addr += stick_nbytes;
+        }
+    }
     // partial row sticks
     for (uint32_t i = 0; i < partial_last_row_nsticks; ++ i) {
         uint64_t noc_addr = get_noc_addr(curr_in_l1_addr);
@@ -213,13 +222,13 @@ void kernel_main() {
 
     // DPRINT << "6" << ENDL();
 
-    DPRINT << "in_l1_addr: " << in_l1_addr << ENDL();
+    // DPRINT << "in_l1_addr: " << in_l1_addr << ENDL();
 
     // section B (push halo to right and right right neighbors cores)
     curr_in_l1_addr = curr_in_l1_addr - (out_w + 1) * stick_nbytes;  // rewind by (out_w + 1)
     uint32_t right_i = 0;
     if (has_right) {
-        DPRINT << "HALO TO R = " << right_core_nsticks << " (" << right_noc_x << "," << right_noc_y << "): ";
+        // DPRINT << "HALO TO R = " << right_core_nsticks << " (" << right_noc_x << "," << right_noc_y << "): ";
         uint32_t out_l1_addr_right = out_base_l1_addr + right_core_halo_offset;
         // push sticks to right neighbor
         for (uint32_t i = 0; i < right_core_nsticks; ++ i, ++ right_i) {
@@ -234,19 +243,19 @@ void kernel_main() {
                 out_l1_addr_right += stick_nbytes;
                 // increament the nsticks to offset due to padding
                 right_core_nsticks += 2 * pad_w;
-                DPRINT << "P P ";
+                // if (i < 5) DPRINT << "P P ";
             } else {
                 uint64_t noc_addr = get_noc_addr(right_noc_x, right_noc_y, out_l1_addr_right);
                 noc_async_write(curr_in_l1_addr, noc_addr, stick_nbytes);
                 out_l1_addr_right += stick_nbytes;
                 curr_in_l1_addr += stick_nbytes;
-                DPRINT << curr_in_l1_addr << " ";
+                // if (i < 5) DPRINT << curr_in_l1_addr << " ";
             }
         }
-        DPRINT << ENDL();
+        // DPRINT << ENDL();
     }
     if (has_right_right) {
-        DPRINT << "HALO TO RR = " << right_right_core_nsticks << " (" << right_right_noc_x << "," << right_right_noc_y << "): ";
+        // DPRINT << "HALO TO RR = " << right_right_core_nsticks << " (" << right_right_noc_x << "," << right_right_noc_y << "): ";
         uint32_t out_l1_addr_right_right = out_base_l1_addr + right_right_core_halo_offset;
         // push sticks to right right neighbor
         for (uint32_t i = 0; i < right_right_core_nsticks; ++ i, ++ right_i) {
@@ -261,16 +270,16 @@ void kernel_main() {
                 out_l1_addr_right_right += stick_nbytes;
                 // increament the nsticks to offset due to padding
                 right_right_core_nsticks += 2 * pad_w;
-                DPRINT << "P P ";
+                // if (i < 5) DPRINT << "P P ";
             } else {
                 uint64_t noc_addr = get_noc_addr(right_right_noc_x, right_right_noc_y, out_l1_addr_right_right);
                 noc_async_write(curr_in_l1_addr, noc_addr, stick_nbytes);
                 out_l1_addr_right_right += stick_nbytes;
                 curr_in_l1_addr += stick_nbytes;
-                DPRINT << curr_in_l1_addr << " ";
+                // if (i < 5) DPRINT << curr_in_l1_addr << " ";
             }
         }
-        DPRINT << ENDL();
+        // DPRINT << ENDL();
     }
 
     // DPRINT << "7" << ENDL();
@@ -279,7 +288,7 @@ void kernel_main() {
     curr_in_l1_addr = in_l1_addr;   // reset to the base
     uint32_t left_i = 0;
     if (has_left_left) {
-        DPRINT << "HALO TO LL = " << left_left_core_nsticks << " (" << left_left_noc_x << "," << left_left_noc_y << "): ";
+        // DPRINT << "HALO TO LL = " << left_left_core_nsticks << " (" << left_left_noc_x << "," << left_left_noc_y << "): " << ENDL();
         // these sticks belong to the right right halo of the left left neighbor
         uint32_t out_l1_addr_left_left = out_base_l1_addr + left_left_core_halo_offset;
         // push sticks to left left neighbor
@@ -293,19 +302,19 @@ void kernel_main() {
                 out_l1_addr_left_left += stick_nbytes;
                 // increament the nsticks to offset due to padding
                 left_left_core_nsticks += 2 * pad_h;
-                DPRINT << "P P ";
+                // if (i < 5) DPRINT << "P P ";
             } else {
                 uint64_t noc_addr = get_noc_addr(left_left_noc_x, left_left_noc_y, out_l1_addr_left_left);
                 noc_async_write(curr_in_l1_addr, noc_addr, stick_nbytes);
                 out_l1_addr_left_left += stick_nbytes;
                 curr_in_l1_addr += stick_nbytes;
-                DPRINT << curr_in_l1_addr << " ";
+                // if (i < 5) DPRINT << curr_in_l1_addr << " ";
             }
         }
-        DPRINT << ENDL();
+        // DPRINT << ENDL();
     }
     if (has_left) {
-        DPRINT << "HALO TO L = " << left_core_nsticks << " (" << left_noc_x << "," << left_noc_y << "): ";
+        // DPRINT << "HALO TO L = " << left_core_nsticks << " (" << left_noc_x << "," << left_noc_y << "): " << ENDL();
         // these sticks belong to the right halo of the left neighbor
         uint32_t out_l1_addr_left = out_base_l1_addr + left_core_halo_offset;
         // send sticks to left left neighbor
@@ -319,16 +328,16 @@ void kernel_main() {
                 out_l1_addr_left += stick_nbytes;
                 // increament the nsticks to offset due to padding
                 left_core_nsticks += 2 * pad_h;
-                DPRINT << "P P ";
+                // if (i < 5) DPRINT << "P P ";
             } else {
                 uint64_t noc_addr = get_noc_addr(left_noc_x, left_noc_y, out_l1_addr_left);
                 noc_async_write(curr_in_l1_addr, noc_addr, stick_nbytes);
                 out_l1_addr_left += stick_nbytes;
                 curr_in_l1_addr += stick_nbytes;
-                DPRINT << curr_in_l1_addr << " ";
+                // if (i < 5) DPRINT << curr_in_l1_addr << " ";
             }
         }
-        DPRINT << ENDL();
+        // DPRINT << ENDL();
     }
 
     noc_async_read_barrier();
