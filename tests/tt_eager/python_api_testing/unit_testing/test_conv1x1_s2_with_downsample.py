@@ -29,8 +29,9 @@ import torch
 @pytest.mark.parametrize(
     "batch_size, output_channels, input_channels, input_height, input_width, stride_h, stride_w, num_cores",
     (
-        #(20, 64, 64, 16, 16, 2, 2, 2),
+        #(20, 64, 64, 16, 16, 2, 2, 20),
         (8, 64, 64, 56, 56, 1, 1, 98),
+        #(8, 64, 64, 56, 56, 2, 2, 98),
     ),
 )
 def test_run_downsample(

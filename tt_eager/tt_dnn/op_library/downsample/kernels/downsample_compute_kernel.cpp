@@ -22,6 +22,8 @@ void MAIN {
     uint32_t num_output_tiles = num_output_blocks * num_output_tiles_per_block;
 
     untilize_init(input_cb_index, untilize_cb_index);
+    // Unilize prev core's halo region - 1 row of tiles
+    // untilize_block(prev_core_input_cb_index, num_input_tiles_per_block, untilize_cb_index);
 
     // Untilize input
     //cb_wait_front(input_cb_index, num_input_blocks * num_input_tiles_per_block);

@@ -69,6 +69,279 @@ Tensor downsample(const Tensor &input_tensor_a, std::array<uint32_t, 5> downsamp
     return operation::run_without_autoformat(Downsample{mem_config, downsample_params}, {input_tensor_a}).at(0);
 }
 
+struct DownsampleReadPatternParams {
+    uint32_t top_partial_middle_aligned_row_width;
+    uint32_t skip_top_partial_middle_aligned_row;
+    uint32_t top_partial_right_aligned_row_width;
+    uint32_t skip_top_partial_right_aligned_row;
+    uint32_t num_rows_top_partial_image;
+    uint32_t num_skip_rows_top_partial_image;
+    uint32_t num_full_images;
+    uint32_t num_rows_bottom_partial_image;
+    uint32_t num_skip_rows_bottom_partial_image;
+    uint32_t bottom_partial_left_aligned_row_width;
+    uint32_t skip_bottom_partial_left_aligned_row;
+};
+
+struct ImgTrackingVars {
+    uint32_t img_h = 0;
+    uint32_t img_w = 0;
+    uint32_t next_img_h = 0; // img_h after stride
+    uint32_t next_img_w = 0;
+    uint32_t input_flat_h = 0; // index within sharded input
+    uint32_t output_flat_h = 0; // index within sharded output
+};
+
+DownsampleReadPatternParams generate_downsample_read_pattern(ImgTrackingVars & v, uint32_t img_height, uint32_t img_width, uint32_t img_stride_h, uint32_t img_stride_w, uint32_t input_shard_height, uint32_t output_shard_height) {
+    cout << "img_h=" << v.img_h << ", img_w=" << v.img_w << ", next_img_h=" << v.next_img_h << ", next_img_w=" << v.img_w << endl;
+    // Sanity checks at the start for local data
+    TT_ASSERT(v.next_img_h >= v.img_h);
+    TT_ASSERT(v.next_img_w == v.img_w); // assumption that the start is picked and not skipped by stride
+    TT_ASSERT(v.img_h < img_height);
+    TT_ASSERT(v.next_img_w < img_width);
+
+    bool current_region_is_halo_from_prev_core = false;
+    if (v.input_flat_h != 0) {
+        current_region_is_halo_from_prev_core = true;
+        cout << "GENERATING READ PATTERN FOR HALO REGION FROM PREVIOUS CORE" << endl;
+        TT_ASSERT(v.output_flat_h == 0);
+    } else {
+        cout << "GENERATING READ FOR LOCAL REGION" << endl;
+    }
+
+    // constant input and output shard per core
+    uint32_t input_end_flat_h = input_shard_height - 1;
+    uint32_t output_end_flat_h = output_shard_height - 1;
+    TT_ASSERT(v.input_flat_h < input_end_flat_h);
+    TT_ASSERT(v.output_flat_h < output_end_flat_h);
+
+    uint32_t output_img_height = std::ceil ( (double) img_height / (double) img_stride_h);
+    uint32_t output_img_width = std::ceil ( (double) img_width / (double) img_stride_w);
+    bool found_halo_for_next_core = false;
+
+    uint32_t top_partial_middle_aligned_row_width = 0;
+    uint32_t skip_top_partial_middle_aligned_row = 1;
+    uint32_t top_partial_right_aligned_row_width = 0;
+    uint32_t skip_top_partial_right_aligned_row = 1;
+    uint32_t num_rows_top_partial_image = 0;
+    uint32_t num_skip_rows_top_partial_image = 0;
+    uint32_t num_full_images = 0;
+    uint32_t num_rows_bottom_partial_image = 0;
+    uint32_t num_skip_rows_bottom_partial_image = 0;
+    uint32_t bottom_partial_left_aligned_row_width = 0;
+    uint32_t skip_bottom_partial_left_aligned_row = 1;
+    cout << "input_flat_h=" << v.input_flat_h << endl;
+    if (v.img_w != 0) {
+        // Check if its right aligned or middle aligned (special corner case for halo)
+        if (v.input_flat_h + img_width - v.img_w <= input_end_flat_h+1) {
+            // top partial right aligned
+            top_partial_right_aligned_row_width = img_width - v.img_w;
+            skip_top_partial_right_aligned_row = (v.next_img_h == v.img_h) ? 0 : 1;
+            v.input_flat_h += top_partial_right_aligned_row_width;
+            if (!skip_top_partial_right_aligned_row) {
+                v.output_flat_h += std::ceil((double) top_partial_right_aligned_row_width / (double) img_stride_w);
+                TT_ASSERT(v.output_flat_h < output_shard_height);
+            }
+            v.img_w = 0;
+            v.next_img_w = 0;
+            if (v.img_h == img_height - 1) {
+                v.img_h = 0;
+                v.next_img_h = 0;
+            } else {
+                v.img_h += 1;
+                if (v.next_img_h < v.img_h) {
+                    v.next_img_h += img_stride_h;
+                }
+            }
+        } else {
+            // special corner case for halo region
+            // middle aligned
+            TT_ASSERT(input_end_flat_h - v.input_flat_h + 1 < img_width);
+            TT_ASSERT(current_region_is_halo_from_prev_core);
+            // top partial middle aligned
+            top_partial_middle_aligned_row_width = input_end_flat_h - v.input_flat_h + 1;
+            skip_top_partial_middle_aligned_row = (v.next_img_h == v.img_h) ? 0 : 1;
+            v.input_flat_h += top_partial_middle_aligned_row_width;
+            if (!skip_top_partial_middle_aligned_row) {
+                v.output_flat_h += std::ceil((double) top_partial_middle_aligned_row_width / (double) img_stride_w);
+                TT_ASSERT(v.output_flat_h < output_shard_height);
+            }
+            while (v.img_w < top_partial_middle_aligned_row_width) {
+                v.img_w += 1;
+                if (v.next_img_w < v.img_w) {
+                    v.next_img_w += img_stride_w;
+                }
+            }
+            TT_ASSERT(v.img_w < img_width-1);
+            TT_ASSERT(v.next_img_w >= v.img_w);
+        }
+    }
+
+    TT_ASSERT(v.output_flat_h <= output_end_flat_h);
+    TT_ASSERT(v.next_img_h >= v.img_h);
+    if (v.img_w != 0) {
+        // special case for halo
+        TT_ASSERT(v.input_flat_h == input_end_flat_h+1);
+    }
+    TT_ASSERT(v.img_h < img_height && v.img_w < img_width);
+
+    uint32_t num_rows_remaining_of_current_image = (v.img_h == 0) ? 0 : img_height - v.img_h;
+    if (num_rows_remaining_of_current_image > 0) {
+        uint32_t num_rows_to_skip = v.next_img_h - v.img_h;
+        uint32_t output_h_from_remaining_rows_of_current_image = std::ceil( (double) (num_rows_remaining_of_current_image - num_rows_to_skip) / (double) img_stride_h ) * output_img_width;
+        bool output_for_partial_top_image = v.output_flat_h + output_h_from_remaining_rows_of_current_image <= output_end_flat_h+1;
+        bool input_for_partial_top_image = v.input_flat_h + (num_rows_remaining_of_current_image * img_width) <= input_end_flat_h+1;
+        if (output_for_partial_top_image && input_for_partial_top_image) {
+            // Top partial image section
+            num_rows_top_partial_image = img_height - v.img_h;
+            num_skip_rows_top_partial_image = v.next_img_h - v.img_h;
+            // Sanity check
+            TT_ASSERT((v.img_h + num_rows_top_partial_image == img_height));
+            v.img_h = 0;
+            v.next_img_h = 0;
+            v.input_flat_h += (num_rows_top_partial_image * img_width);
+            v.output_flat_h += output_h_from_remaining_rows_of_current_image;
+            TT_ASSERT(v.input_flat_h <= input_end_flat_h+1);
+        }
+    TT_ASSERT(v.output_flat_h <= output_end_flat_h+1);
+    }
+    TT_ASSERT(v.img_h < img_height && v.img_w < img_width);
+
+    if (v.img_h == 0 && v.img_w == 0) {
+        // Check for full images
+        while(1) {
+            bool output_for_current_full_image = v.output_flat_h + (output_img_height * output_img_width) <= output_end_flat_h+1;
+            bool input_for_current_full_image = v.input_flat_h + (img_height * img_width) <= input_end_flat_h+1;
+            if (!output_for_current_full_image || !input_for_current_full_image) {
+                break;
+            }
+            v.input_flat_h += (img_height * img_width);
+            v.img_h = 0;
+            v.img_w = 0;
+            v.next_img_h = 0;
+            v.next_img_w = 0;
+            num_full_images += 1;
+            v.output_flat_h +=  (output_img_height * output_img_width);
+        }
+        TT_ASSERT(v.img_h == 0 && v.img_w == 0 && v.next_img_h == 0 && v.next_img_w == 0);
+    }
+
+    // Sanity check
+    TT_ASSERT(v.input_flat_h <= input_end_flat_h+1);
+    TT_ASSERT(v.output_flat_h <= output_end_flat_h+1);
+
+    bool found_first_unskipped_row_in_bottom_partial_imgage = false;
+    // check for bottom partial image rows
+    while (1) {
+        bool output_for_bottom_partial_image_row = (v.next_img_h == v.img_h) ? (v.output_flat_h + output_img_width <= output_end_flat_h+1) : true; // true for skipped row
+        bool input_for_bottom_partial_image_row = v.input_flat_h + img_width <= input_end_flat_h+1;
+        if (!output_for_bottom_partial_image_row || !input_for_bottom_partial_image_row) {
+            break;
+        }
+        if (!found_first_unskipped_row_in_bottom_partial_imgage) {
+            if (v.next_img_h == v.img_h) {
+                found_first_unskipped_row_in_bottom_partial_imgage = true;
+            } else {
+                TT_ASSERT(v.next_img_h > v.img_h);
+                num_skip_rows_bottom_partial_image += 1;
+            }
+        }
+        v.input_flat_h += img_width;
+        if (v.next_img_h == v.img_h) {
+            v.output_flat_h += output_img_width;
+        }
+        v.img_w = 0;
+        v.next_img_w = 0;
+        TT_ASSERT(v.img_h < img_height - 1); // this is supposed to be a bottom partial image
+        v.img_h += 1;
+        if (v.next_img_h < v.img_h) {
+            v.next_img_h += img_stride_h;
+            TT_ASSERT(v.next_img_h < img_height); // odd heights and odd size sharding with stride > 1 not supported
+        }
+        num_rows_bottom_partial_image += 1;
+    }
+
+    // Sanity check
+    TT_ASSERT(v.input_flat_h <= input_end_flat_h+1);
+    TT_ASSERT(v.output_flat_h <= output_end_flat_h+1);
+    TT_ASSERT(v.img_h < img_height && v.img_w < img_width);
+
+    // check if there is a bottom partial left aligned row
+    if (v.input_flat_h < input_end_flat_h && v.output_flat_h < output_end_flat_h) {
+        TT_ASSERT(v.img_w == 0 && v.next_img_w == 0);
+        // bottom partial left aligned row width can be split between 2 cores
+        uint32_t input_remaining = input_end_flat_h - v.input_flat_h + 1;
+        uint32_t output_remaining = output_end_flat_h - v.output_flat_h + 1;
+        TT_ASSERT(output_remaining < output_img_width || input_remaining < img_width);  // there must be a partial width either on input side or output side
+        bottom_partial_left_aligned_row_width = input_remaining;
+        if (output_remaining < output_img_width) {
+            bottom_partial_left_aligned_row_width = std::min(input_remaining, output_remaining * img_stride_w);
+        }
+        // sanity
+        TT_ASSERT(bottom_partial_left_aligned_row_width < img_width);
+        TT_ASSERT(v.next_img_h >= v.img_h);
+        skip_bottom_partial_left_aligned_row = (v.next_img_h == v.img_h) ? 0 : 1;
+        while(v.img_w < bottom_partial_left_aligned_row_width) {
+            v.img_w += 1;
+            if (v.next_img_w < v.img_w) {
+                v.next_img_w += img_stride_w;
+                TT_ASSERT(v.next_img_w < img_width); // odd widths and odd size sharding with stride > 1 not supported
+            }
+        }
+        TT_ASSERT(v.img_w == bottom_partial_left_aligned_row_width && v.next_img_w >= v.img_w);
+        v.input_flat_h += bottom_partial_left_aligned_row_width;
+        if (!skip_bottom_partial_left_aligned_row) {
+            v.output_flat_h += std::ceil( (double) bottom_partial_left_aligned_row_width / (double) img_stride_w);
+        }
+    }
+    TT_ASSERT(v.img_h < img_height && v.img_w < img_width);
+
+    cout << "   top_partial_middle_aligned_row_width=" << top_partial_middle_aligned_row_width << endl;
+    cout << "   skip_top_partial_middle_aligned_row=" << skip_top_partial_middle_aligned_row << endl;
+    cout << "   top_partial_right_aligned_row_width=" << top_partial_right_aligned_row_width << endl;
+    cout << "   skip_top_partial_right_aligned_row=" << skip_top_partial_right_aligned_row << endl;
+    cout << "   num_rows_top_partial_image=" << num_rows_top_partial_image << endl;
+    cout << "   num_skip_rows_top_partial_image=" << num_skip_rows_top_partial_image << endl;
+    cout << "   num_full_images=" << num_full_images << endl;
+    cout << "   num_rows_bottom_partial_image=" << num_rows_bottom_partial_image << endl;
+    cout << "   num_skip_rows_bottom_partial_image=" << num_skip_rows_bottom_partial_image << endl;
+    cout << "   bottom_partial_left_aligned_row_width=" << bottom_partial_left_aligned_row_width << endl;
+    cout << "   skip_bottom_partial_left_aligned_row=" << skip_bottom_partial_left_aligned_row << endl;
+    //cout << "   output_flat_h=" << v.output_flat_h << endl;
+    cout << "   v.output_flat_h=" << v.output_flat_h << endl;
+
+    // Sanity check
+    TT_ASSERT(v.input_flat_h <= input_end_flat_h+1);
+    TT_ASSERT(v.output_flat_h <= output_end_flat_h+1);
+
+    if (v.output_flat_h < output_end_flat_h+1) {
+        TT_ASSERT(current_region_is_halo_from_prev_core);
+        TT_ASSERT(v.input_flat_h == input_end_flat_h+1);
+    }
+
+    if (v.input_flat_h < input_end_flat_h+1) {
+        TT_ASSERT(!current_region_is_halo_from_prev_core);
+    }
+
+    if (v.input_flat_h == input_end_flat_h + 1) {
+        v.input_flat_h = 0;
+    }
+    if (v.output_flat_h == output_end_flat_h + 1) {
+        v.output_flat_h = 0;
+    }
+    return DownsampleReadPatternParams{.top_partial_middle_aligned_row_width=top_partial_middle_aligned_row_width,
+                                    .skip_top_partial_middle_aligned_row=skip_top_partial_middle_aligned_row,
+                                    .top_partial_right_aligned_row_width=top_partial_right_aligned_row_width,
+                                    .skip_top_partial_right_aligned_row=skip_top_partial_right_aligned_row,
+                                    .num_rows_top_partial_image=num_rows_top_partial_image,
+                                    .num_skip_rows_top_partial_image=num_skip_rows_top_partial_image,
+                                    .num_full_images=num_full_images,
+                                    .num_rows_bottom_partial_image=num_rows_bottom_partial_image,
+                                    .num_skip_rows_bottom_partial_image=num_skip_rows_bottom_partial_image,
+                                    .bottom_partial_left_aligned_row_width=bottom_partial_left_aligned_row_width,
+                                    .skip_bottom_partial_left_aligned_row=skip_bottom_partial_left_aligned_row};
+}
+
 operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::array<uint32_t, 5> downsample_params, Tensor& output) {
 
     tt_metal::Program program = tt_metal::Program();
@@ -135,18 +408,27 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
     input_cb_config = input_cb_config.set_globally_allocated_address(a.buffer()->address());
     auto input_cb = tt_metal::CreateCircularBuffer(program, core_range, input_cb_config);
     cout << "input cb created with - " << num_input_tiles << " tiles" << std::endl;
+
+    // CB to store halo data
+    // hardcode to store 1 row of tiles
+    uint32_t halo_input_cb_index = CB::c_intermed0;
+    uint32_t num_halo_input_tiles = num_input_tiles_in_row;
+    tt_metal::CircularBufferConfig halo_input_cb_config = tt_metal::CircularBufferConfig(num_halo_input_tiles * single_tile_size, {{halo_input_cb_index, cb_data_format}})
+		.set_page_size(halo_input_cb_index, single_tile_size);
+    auto halo_input_cb = tt_metal::CreateCircularBuffer(program, core_range, halo_input_cb_config);
+
     // CB to store reader pattern array
     // read pattern array size == output_height
     uint32_t reader_pattern_array_size = output_shard_height;
     cout << "output_shard_height=" << output_shard_height << endl;
-    uint32_t reader_pattern_array_cb_index = CB::c_intermed0;
+    uint32_t reader_pattern_array_cb_index = CB::c_intermed1;
     tt_metal::CircularBufferConfig reader_pattern_array_cb_config = tt_metal::CircularBufferConfig(reader_pattern_array_size * 4, {{reader_pattern_array_cb_index, DataFormat::Float16_b}})
 		.set_page_size(reader_pattern_array_cb_index, 4);
     auto reader_pattern_array_cb = tt_metal::CreateCircularBuffer(program, core_range, reader_pattern_array_cb_config);
     cout << "reader pattern cb created with - " << reader_pattern_array_size * 4 << " bytes" << std::endl;
 
     // untilized CB has size - [32, full width]
-    uint32_t untilize_cb_index = CB::c_intermed1;
+    uint32_t untilize_cb_index = CB::c_intermed2;
     uint32_t num_tiles_untilize_cb = num_input_tiles_in_row;
     tt_metal::CircularBufferConfig untilize_cb_config = tt_metal::CircularBufferConfig(num_tiles_untilize_cb * single_tile_size, {{untilize_cb_index, cb_data_format}})
 		.set_page_size(untilize_cb_index, single_tile_size);
@@ -156,7 +438,7 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
     assert(num_output_tiles_all_cores % num_cores == 0);
     assert((num_output_tiles_all_cores / num_cores) == num_output_tiles_in_row * num_rows_of_output_tiles);
     uint32_t num_output_tiles = (num_output_tiles_all_cores / num_cores);
-    uint32_t untilize_downsampled_cb_index = CB::c_intermed2;
+    uint32_t untilize_downsampled_cb_index = CB::c_intermed3;
     uint32_t num_tiles_untilize_downsampled_cb = num_output_tiles; // untilize downsampled cb size == output size per core
     tt_metal::CircularBufferConfig untilize_downsampled_cb_config = tt_metal::CircularBufferConfig(num_tiles_untilize_downsampled_cb * single_tile_size, {{untilize_downsampled_cb_index, cb_data_format}})
 		.set_page_size(untilize_downsampled_cb_index, single_tile_size);
@@ -176,6 +458,7 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
         (std::uint32_t) reader_pattern_array_cb_index,
         (std::uint32_t) a.element_size(),
         (std::uint32_t) input_width_bytes,
+        (std::uint32_t) halo_input_cb_index,
     };
 
     // Writer to downsample - drops rows from untilized cb
@@ -203,142 +486,70 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
         tt_metal::ComputeConfig{.compile_args = compute_args}
     );
 
-    // track img h, img w, n (img id), across cores
-    uint32_t img_h = 0;
-    uint32_t img_w = 0;
-    uint32_t img_id = 0;
+    // track img h, img w, across cores
+    ImgTrackingVars v;
     uint32_t img_height = input_height_size_y;
     uint32_t img_width = input_height_size_x;
 
     uint32_t img_stride_h = height_y_stride;
     uint32_t img_stride_w = height_x_stride;
 
-    // next img h, w read after striding
-    uint32_t next_img_h = 0;
-    uint32_t next_img_w = 0;
 
-    // input flattened height
-    uint32_t input_flat_h = 0;
-    uint32_t current_core_end_flat_h = input_shard_height - 1;
+    bool halo_from_prev_core = false;
+    uint32_t halo_start_img_h = 0; // this should not be skipped row
+    uint32_t halo_start_img_w = 0; // this should not be skipped row
+    uint32_t halo_start_input_flat_h = 0;
+    uint32_t halo_end_input_flat_h = 0;
+    CoreCoord prev_core = {0,0};
+
     // !!ASSUMPTION!! in determining core coordinate is that all 12 cores in x dim are used
     for (uint32_t i = 0; i < num_cores; i++) {
         CoreCoord core = {i % ncores_x_full_grid, i / ncores_x_full_grid};
         cout << "i=" << i << endl;
-        cout << "img_h=" << img_h << ", img_w=" << img_w << ", next_img_h=" << next_img_h << ", next_img_w=" << img_w << endl;
-        cout << "input_flat_h=" << input_flat_h << ", current_core_end_flat_h=" << current_core_end_flat_h << endl;
-        // Sanity checks at the start
-        TT_ASSERT(next_img_h >= img_h);
-        TT_ASSERT(next_img_w == img_w);
-        TT_ASSERT(input_flat_h < current_core_end_flat_h);
-        TT_ASSERT(next_img_h < img_height);
-        TT_ASSERT(next_img_w < img_width);
 
-        uint32_t num_rows_top_partial_image = 0;
-        uint32_t num_skip_rows_top_partial_image = 0;
-        uint32_t num_full_images = 0;
-        uint32_t num_rows_bottom_partial_image = 0;
-         uint32_t num_skip_rows_bottom_partial_image = 0;
-        uint32_t bottom_partial_left_aligned_row_width = 0;
-        uint32_t skip_bottom_partial_left_aligned_row = 1;
-
-        // Top partial right aligned row section
-        uint32_t top_partial_right_aligned_row_width = (img_w == 0) ? 0 : img_width - img_w;
-        uint32_t skip_top_partial_right_aligned_row = (top_partial_right_aligned_row_width == 0) ? 1 : (next_img_h == img_h) ? 0 : 1;
-        if (top_partial_right_aligned_row_width > 0) {
-            img_w = 0;
-            next_img_w = 0;
-            if (img_h == img_height - 1) {
-                img_h = 0;
-                next_img_h = 0;
-            } else {
-                img_h += 1;
-                if (next_img_h < img_h) {
-                    next_img_h += img_stride_h;
-                }
-            }
-            input_flat_h += top_partial_right_aligned_row_width;
+        // Halo region
+        uint32_t output_flat_h_with_halo_from_prev_core = 0;
+        uint32_t input_flat_h_len_halo = halo_end_input_flat_h - halo_start_input_flat_h;
+        if (halo_from_prev_core) {
+            cout << "   halo_start_input_flat_h=" << halo_start_input_flat_h << endl;
+            cout << "   halo_end_input_flat_h=" << halo_end_input_flat_h << endl;
         }
-        TT_ASSERT(input_flat_h < current_core_end_flat_h); // sharded height is at least 32
-        TT_ASSERT(next_img_h >= img_h);
-        TT_ASSERT(img_w == 0 && next_img_w == 0);
-
-        uint32_t num_rows_remaining_of_current_image = (img_h == 0) ? 0 : img_height - img_h;
-        if (num_rows_remaining_of_current_image > 0 && (input_flat_h + (num_rows_remaining_of_current_image * img_width) <= current_core_end_flat_h+1)) {
-            // Top partial image section
-            num_rows_top_partial_image = img_height - img_h;
-            num_skip_rows_top_partial_image = next_img_h - img_h;
-            // Sanity check
-            TT_ASSERT((img_h + num_rows_top_partial_image == img_height));
-            img_h = 0;
-            next_img_h = 0;
-            input_flat_h += (num_rows_top_partial_image * img_width);
-            TT_ASSERT(input_flat_h <= current_core_end_flat_h+1);
+        bool halo_read_enabled = false;
+        DownsampleReadPatternParams halo_read_pattern_params;
+        uint32_t halo_noc_x = 0;
+        uint32_t halo_noc_y = 0;
+        uint32_t halo_start_addr = 0;
+        uint32_t halo_num_tiles = 0;
+        uint32_t halo_size_bytes = 0;
+        uint32_t halo_read_pattern_offset = 0;
+        uint32_t local_read_pattern_offset = 0;
+        if (v.input_flat_h != 0) {
+            // halo region of previous core
+            TT_ASSERT(i != 0);
+            halo_read_enabled = true;
+            TT_ASSERT(v.input_flat_h < input_shard_height);
+            // get halo size
+            uint32_t halo_size_bytes = (input_shard_height - v.input_flat_h) * input_width * a.element_size();
+            // get halo start tile address from height idx
+            uint32_t halo_start_tile_id_h = v.input_flat_h / TILE_HEIGHT;
+            TT_ASSERT(input_shard_height - v.input_flat_h <= TILE_HEIGHT); // halo input cb is hardcoded to store only 1 row of tiles for now. TODO: allocate bigger CB
+            uint32_t halo_num_tiles = num_input_tiles_in_row;
+            TT_ASSERT(halo_num_tiles * single_tile_size == halo_size_bytes);
+            uint32_t halo_start_offset = num_input_tiles_in_row * halo_start_tile_id_h * single_tile_size;
+            uint32_t halo_start_addr = GetCircularBufferConfig(program, input_cb).globally_allocated_address().value() + halo_start_offset;
+            auto halo_noc_coords = device->worker_core_from_logical_core(prev_core);
+            halo_noc_x = halo_noc_coords.x;
+            halo_noc_y = halo_noc_coords.y;
+            TT_ASSERT(v.input_flat_h >= halo_start_tile_id_h * TILE_HEIGHT);
+            halo_read_pattern_offset = v.input_flat_h - (halo_start_tile_id_h * TILE_HEIGHT);
+            local_read_pattern_offset = (halo_start_tile_id_h * TILE_HEIGHT) + TILE_HEIGHT;
+            halo_read_pattern_params = generate_downsample_read_pattern(v, img_height, img_width, img_stride_h, img_stride_w, input_shard_height, output_shard_height);
         }
-
-        if (img_h == 0 && img_w == 0) {
-            // Check for full images
-            while(input_flat_h + (img_height * img_width) <= current_core_end_flat_h+1) {
-                input_flat_h += (img_height * img_width);
-                img_h = 0;
-                img_w = 0;
-                next_img_h = 0;
-                next_img_w = 0;
-                num_full_images += 1;
-            }
-            TT_ASSERT(img_h == 0 && img_w == 0 && next_img_h == 0 && next_img_w == 0);
-        }
-
-        // Sanity check
-        TT_ASSERT(input_flat_h <= current_core_end_flat_h+1);
-        bool found_first_unskipped_row_in_bottom_partial_imgage = false;
-        while (input_flat_h + img_width <= current_core_end_flat_h+1) {
-            if (!found_first_unskipped_row_in_bottom_partial_imgage) {
-                if (next_img_h == img_h) {
-                    found_first_unskipped_row_in_bottom_partial_imgage = true;
-                } else {
-                    TT_ASSERT(next_img_h > img_h);
-                    num_skip_rows_bottom_partial_image += 1;
-                }
-            }
-            input_flat_h += img_width;
-            img_w = 0;
-            next_img_w = 0;
-            if (img_h == img_height - 1) {
-                img_h = 0;
-                next_img_h = 0;
-            } else {
-                img_h += 1;
-                if (next_img_h < img_h) {
-                    next_img_h += img_stride_h;
-                }
-            }
-            num_rows_bottom_partial_image += 1;
-        }
-
-        if (input_flat_h < current_core_end_flat_h) {
-            TT_ASSERT(img_w == 0 && next_img_w == 0);
-            bottom_partial_left_aligned_row_width = current_core_end_flat_h - input_flat_h + 1;
-            TT_ASSERT(bottom_partial_left_aligned_row_width < img_width);
-            TT_ASSERT(next_img_h >= img_h);
-            skip_bottom_partial_left_aligned_row = (next_img_h == img_h) ? 0 : 1;
-            while(img_w < bottom_partial_left_aligned_row_width) {
-                img_w += 1;
-                if (next_img_w < img_w) {
-                    next_img_w += img_stride_w;
-                }
-            }
-            TT_ASSERT(img_w == bottom_partial_left_aligned_row_width && next_img_w >= img_w);
-            input_flat_h += bottom_partial_left_aligned_row_width;
-        }
-        cout << "   top_partial_right_aligned_row_width=" << top_partial_right_aligned_row_width << endl;
-        cout << "   skip_top_partial_right_aligned_row=" << skip_top_partial_right_aligned_row << endl;
-        cout << "   num_rows_top_partial_image=" << num_rows_top_partial_image << endl;
-        cout << "   num_skip_rows_top_partial_image=" << num_skip_rows_top_partial_image << endl;
-        cout << "   num_full_images=" << num_full_images << endl;
-        cout << "   num_rows_bottom_partial_image=" << num_rows_bottom_partial_image << endl;
-        cout << "   num_skip_rows_bottom_partial_image=" << num_skip_rows_bottom_partial_image << endl;
-        cout << "   bottom_partial_left_aligned_row_width=" << bottom_partial_left_aligned_row_width << endl;
-        cout << "   skip_bottom_partial_left_aligned_row=" << skip_bottom_partial_left_aligned_row << endl;
+        // local core
+        TT_ASSERT(v.input_flat_h == 0);
+        TT_ASSERT(v.output_flat_h < output_shard_height);
+        DownsampleReadPatternParams local_read_pattern_params = generate_downsample_read_pattern(v, img_height, img_width, img_stride_h, img_stride_w, input_shard_height, output_shard_height);
+        TT_ASSERT(v.output_flat_h == 0);
 
         // Writer runtime args
         vector<uint32_t> writer_kernel_args = {
@@ -346,15 +557,42 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
             (uint32_t) input_height_size_x,
             (uint32_t) height_y_stride,
             (uint32_t) height_x_stride,
-            top_partial_right_aligned_row_width,
-            skip_top_partial_right_aligned_row,
-            num_rows_top_partial_image,
-            num_skip_rows_top_partial_image,
-            num_full_images,
-            num_rows_bottom_partial_image,
-            num_skip_rows_bottom_partial_image,
-            bottom_partial_left_aligned_row_width,
-            skip_bottom_partial_left_aligned_row,
+
+            // halo args
+            halo_read_enabled,
+            halo_noc_x,
+            halo_noc_y,
+            halo_num_tiles,
+            halo_start_addr,
+            halo_size_bytes,
+
+            // halo read pattern args
+            halo_read_pattern_offset,
+            halo_read_pattern_params.top_partial_middle_aligned_row_width,
+            halo_read_pattern_params.skip_top_partial_middle_aligned_row,
+            halo_read_pattern_params.top_partial_right_aligned_row_width,
+            halo_read_pattern_params.skip_top_partial_right_aligned_row,
+            halo_read_pattern_params.num_rows_top_partial_image,
+            halo_read_pattern_params.num_skip_rows_top_partial_image,
+            halo_read_pattern_params.num_full_images,
+            halo_read_pattern_params.num_rows_bottom_partial_image,
+            halo_read_pattern_params.num_skip_rows_bottom_partial_image,
+            halo_read_pattern_params.bottom_partial_left_aligned_row_width,
+            halo_read_pattern_params.skip_bottom_partial_left_aligned_row,
+
+            // local read pattern args
+            local_read_pattern_offset,
+            local_read_pattern_params.top_partial_middle_aligned_row_width,
+            local_read_pattern_params.skip_top_partial_middle_aligned_row,
+            local_read_pattern_params.top_partial_right_aligned_row_width,
+            local_read_pattern_params.skip_top_partial_right_aligned_row,
+            local_read_pattern_params.num_rows_top_partial_image,
+            local_read_pattern_params.num_skip_rows_top_partial_image,
+            local_read_pattern_params.num_full_images,
+            local_read_pattern_params.num_rows_bottom_partial_image,
+            local_read_pattern_params.num_skip_rows_bottom_partial_image,
+            local_read_pattern_params.bottom_partial_left_aligned_row_width,
+            local_read_pattern_params.skip_bottom_partial_left_aligned_row,
 
             num_rows_of_input_tiles,
             num_input_tiles_in_row,
@@ -369,8 +607,7 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
             core,
             writer_kernel_args
         );
-        TT_ASSERT(input_flat_h == current_core_end_flat_h+1);
-        current_core_end_flat_h += input_shard_height;
+        prev_core = core;
     }
 
     auto override_runtime_args_callback = [
