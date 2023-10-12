@@ -310,7 +310,10 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
         0,  // left_left_halo_offset,
         0,  // left_halo_pad_i_offset          // 40
         0,  // right_halo_pad_i_offset
-        const_tensor_addr,
+        0,  // partial_first_row_skip
+        0,  // partial_top_image_skip
+        0,  // full_image_skip
+        const_tensor_addr,                     // 45
     };
 
     uint32_t writer_noc = 0;
@@ -445,12 +448,19 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
         uint32_t full_nimages = sc.num_full_images;
         uint32_t partial_bottom_image_nrows = sc.last_partial_image_num_rows;
         uint32_t partial_last_row_nsticks = sc.last_partial_left_aligned_row_width;
+        uint32_t partial_first_row_skip = sc.skip_after_partial_right_aligned_row;
+        uint32_t partial_top_image_skip = sc.skip_after_first_partial_image_row;
+        uint32_t full_image_skip = sc.skip_after_full_image;
 
         writer_rt_args[2] = partial_first_row_nsticks;
         writer_rt_args[5] = partial_top_image_nrows;
         writer_rt_args[8] = full_nimages;
         writer_rt_args[9] = partial_bottom_image_nrows;
         writer_rt_args[10] = partial_last_row_nsticks;
+
+        writer_rt_args[42] = partial_first_row_skip;
+        writer_rt_args[43] = partial_top_image_skip;
+        writer_rt_args[44] = full_image_skip;
 
         if (untilize_with_halo_helpers::left_neighbor_noc_xy.count(noc_core) > 0) {
             CoreCoord left_noc = untilize_with_halo_helpers::left_neighbor_noc_xy.at(noc_core);
