@@ -77,7 +77,7 @@ void init_neighbor_noc_xy_mapping(CoreCoord grid_size, uint32_t noc = 0) {
 
 } // namespace untilize_with_halo_helpers
 
-operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tensor& a, Tensor& output) {
+operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, Tensor& output, uint32_t pad_val) {
     Program program = Program();
 
     Device *device = a.device();
@@ -244,7 +244,7 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
 
     // const buffer with pad value (-INF)
     uint32_t const_buffer_size = input_shape[3];
-    auto const_buffer = owned_buffer::create(std::vector<bfloat16>(const_buffer_size, bfloat16(0xf7ff)));
+    auto const_buffer = owned_buffer::create(std::vector<bfloat16>(const_buffer_size, bfloat16(uint16_t(pad_val))));
     const Tensor const_tensor = Tensor(OwnedStorage{const_buffer},
                                        Shape({1, 1, 1, const_buffer_size}),
                                        DataType::BFLOAT16,
@@ -262,8 +262,6 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
     vector<uint32_t> reader_rt_args = {
         ntiles_per_block * nblocks_per_core // ntiles
     };
-
-    uint32_t pad_val_buffer_l1_addr = 0;    // TODO...
 
     TT_ASSERT(in_nhw % ncores == 0);
 
@@ -572,7 +570,7 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
     return {std::move(program), override_runtime_args_callback};
 }
 
-void UntilizeWithHaloConcat::validate(const std::vector<Tensor> &input_tensors) const {
+void UntilizeWithHalo::validate(const std::vector<Tensor> &input_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
     TT_ASSERT(input_tensor_a.buffer() != nullptr , "Operands to untilize need to be allocated in buffers on device!");
     TT_ASSERT(input_tensor_a.dtype() == DataType::BFLOAT16, "Only bloat16 dataformat supported");
@@ -582,7 +580,7 @@ void UntilizeWithHaloConcat::validate(const std::vector<Tensor> &input_tensors) 
     TT_ASSERT(input_tensor_a.volume() % TILE_HW == 0);
 }
 
-std::vector<Shape> UntilizeWithHaloConcat::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
+std::vector<Shape> UntilizeWithHalo::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
     const auto& input = input_tensors.at(0);
     const auto& input_shape = input.shape();
     Shape output_shape = input_shape;
@@ -635,7 +633,7 @@ std::vector<Shape> UntilizeWithHaloConcat::compute_output_shapes(const std::vect
     return {output_shape};
 }
 
-std::vector<Tensor> UntilizeWithHaloConcat::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
+std::vector<Tensor> UntilizeWithHalo::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
     auto shard_spec = input_tensor.shard_spec().value();
     auto output_shape = this->compute_output_shapes(input_tensors).at(0);
@@ -645,20 +643,21 @@ std::vector<Tensor> UntilizeWithHaloConcat::create_output_tensors(const std::vec
     return {create_sharded_device_tensor(this->compute_output_shapes(input_tensors).at(0), input_tensor.dtype(), Layout::ROW_MAJOR, input_tensor.device(), this->output_mem_config, shard_spec)};
 }
 
-operation::ProgramWithCallbacks UntilizeWithHaloConcat::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
+operation::ProgramWithCallbacks UntilizeWithHalo::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
     auto& output_tensor = output_tensors.at(0);
-    return {untilize_with_halo_concat_multi_core(input_tensor_a, output_tensor)};
+    return {untilize_with_halo_multi_core(input_tensor_a, output_tensor, pad_val_)};
 }
 
-tt::stl::reflection::Attributes UntilizeWithHaloConcat::attributes() const {
+tt::stl::reflection::Attributes UntilizeWithHalo::attributes() const {
     return {
+        {"pad_val", pad_val_},
         {"output_mem_config", this->output_mem_config},
     };
 }
 
-Tensor untilize_with_halo_concat(const Tensor &input_tensor_a, const MemoryConfig& mem_config) {
-    return operation::run_without_autoformat(UntilizeWithHaloConcat{mem_config}, {input_tensor_a}).at(0);
+Tensor untilize_with_halo(const Tensor &input_tensor_a, const uint32_t pad_val, const MemoryConfig& mem_config) {
+    return operation::run_without_autoformat(UntilizeWithHalo{pad_val, mem_config}, {input_tensor_a}).at(0);
 }
 
 }  // namespace tt_metal

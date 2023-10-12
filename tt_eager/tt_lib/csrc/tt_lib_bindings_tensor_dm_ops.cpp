@@ -154,8 +154,9 @@ namespace tt::tt_metal::detail{
                 "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
         )doc");
 
-        m_tensor.def("untilize_with_halo_concat", &untilize_with_halo_concat,
+        m_tensor.def("untilize_with_halo", &untilize_with_halo,
             py::arg("input").noconvert(),
+            py::arg("pad_val"),
             py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
             R"doc(
                 Untilizes input tiled data to row major format.

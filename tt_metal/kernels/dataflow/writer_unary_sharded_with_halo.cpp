@@ -157,11 +157,11 @@ void kernel_main() {
                 curr_out_l1_addr += stick_nbytes;
             }
         }
-    }
-    // padding after full image
-    for (uint32_t i = 0; i < full_image_skip; ++ i) {
-        noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
-        curr_out_l1_addr += stick_nbytes;
+        // padding after full image
+        for (uint32_t i = 0; i < full_image_skip; ++ i) {
+            noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
+            curr_out_l1_addr += stick_nbytes;
+        }
     }
 
     // DPRINT << "4" << ENDL();
