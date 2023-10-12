@@ -82,11 +82,16 @@ void kernel_main() {
 
     // DPRINT << "0" << ENDL();
 
+    const InterleavedAddrGen<false> s_pad_stick = {
+        .bank_base_address = pad_val_buffer_l1_addr,
+        .page_size = stick_nbytes
+    };
+    uint64_t padding_noc_addr = get_noc_addr(0, s_pad_stick);
+
     cb_wait_front(in_cb_id, in_nsticks);
 
     uint32_t in_l1_addr = get_read_ptr(in_cb_id);
     uint32_t out_base_l1_addr = get_write_ptr(out_cb_id);
-    uint64_t padding_noc_addr = get_noc_addr(pad_val_buffer_l1_addr);
 
     uint32_t halo_nsticks = out_w + 1 + 2 * pad_w;
 
@@ -104,7 +109,7 @@ void kernel_main() {
     // insert padding stick at the end of the row TODO
     if (partial_first_row_nsticks > 0) {
         for (uint32_t j = 0; j < pad_w; ++ j) {
-            // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
+            noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
             curr_out_l1_addr += stick_nbytes;
         }
     }
@@ -115,7 +120,7 @@ void kernel_main() {
     for (uint32_t i = 0; i < partial_top_image_nrows; ++ i) {
         // padding sticks on the left
         for (uint32_t j = 0; j < pad_w; ++ j) {
-            // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
+            noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
             curr_out_l1_addr += stick_nbytes;
         }
         // data sticks for full row
@@ -127,7 +132,7 @@ void kernel_main() {
         }
         // padding sticks on the right
         for (uint32_t j = 0; j < pad_w; ++ j) {
-            // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
+            noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
             curr_out_l1_addr += stick_nbytes;
         }
     }
@@ -140,17 +145,17 @@ void kernel_main() {
         for (uint32_t i = 0; i < pad_h; ++ i) {
             // padding sticks on the left
             for (uint32_t j = 0; j < pad_w; ++ j) {
-                // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
+                noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
                 curr_out_l1_addr += stick_nbytes;
             }
             // padding full row
             for (uint32_t j = 0; j < out_w; ++ j) {
-                // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);       // TODO
+                noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
                 curr_out_l1_addr += stick_nbytes;
             }
             // padding sticks on the right
             for (uint32_t j = 0; j < pad_w; ++ j) {
-                // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
+                noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
                 curr_out_l1_addr += stick_nbytes;
             }
         }
@@ -158,7 +163,7 @@ void kernel_main() {
         for (uint32_t i = 0; i < out_h; ++ i) {
             // padding sticks on the left
             for (uint32_t j = 0; j < pad_w; ++ j) {
-                // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
+                noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
                 curr_out_l1_addr += stick_nbytes;
             }
             // data sticks for full row
@@ -170,7 +175,7 @@ void kernel_main() {
             }
             // padding sticks on the right
             for (uint32_t j = 0; j < pad_w; ++ j) {
-                // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
+                noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
                 curr_out_l1_addr += stick_nbytes;
             }
         }
@@ -182,7 +187,7 @@ void kernel_main() {
     for (uint32_t i = 0; i < partial_bottom_image_nrows; ++ i) {
         // padding sticks on the left
         for (uint32_t j = 0; j < pad_w; ++ j) {
-            // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
+            noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
             curr_out_l1_addr += stick_nbytes;
         }
         // data sticks for full row
@@ -194,7 +199,7 @@ void kernel_main() {
         }
         // padding sticks on the right
         for (uint32_t j = 0; j < pad_w; ++ j) {
-            // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
+            noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
             curr_out_l1_addr += stick_nbytes;
         }
     }
@@ -205,7 +210,7 @@ void kernel_main() {
     // insert padding stick at the beginning of the row
     if (partial_last_row_nsticks > 0) {
         for (uint32_t j = 0; j < pad_w; ++ j) {
-            // noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);    // TODO
+            noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
             curr_out_l1_addr += stick_nbytes;
         }
     }
@@ -236,10 +241,9 @@ void kernel_main() {
                 // send padding sticks (2 * pad_w)
                 uint64_t noc_addr = get_noc_addr(right_noc_x, right_noc_y, out_l1_addr_right);
                 // TODO: may be the remote core can fill padding locally for its halo ...
-                // TODO: fix padding source...
-                // noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
+                noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
                 out_l1_addr_right += stick_nbytes;
-                // noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
+                noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
                 out_l1_addr_right += stick_nbytes;
                 // increament the nsticks to offset due to padding
                 right_core_nsticks += 2 * pad_w;
@@ -263,10 +267,9 @@ void kernel_main() {
                 // send padding sticks (2 * pad_w)
                 uint64_t noc_addr = get_noc_addr(right_right_noc_x, right_right_noc_y, out_l1_addr_right_right);
                 // TODO: may be the remote core can fill padding locally for its halo ...
-                // TODO: fix padding source...
-                // noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
+                noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
                 out_l1_addr_right_right += stick_nbytes;
-                // noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
+                noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
                 out_l1_addr_right_right += stick_nbytes;
                 // increament the nsticks to offset due to padding
                 right_right_core_nsticks += 2 * pad_w;
@@ -297,8 +300,7 @@ void kernel_main() {
                 // send padding sticks (2 * pad_h)
                 uint64_t noc_addr = get_noc_addr(left_left_noc_x, left_left_noc_y, out_l1_addr_left_left);
                 // TODO: may be the remote core can fill padding locally for its halo ...
-                // TODO: fix padding source...
-                // noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
+                noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
                 out_l1_addr_left_left += stick_nbytes;
                 // increament the nsticks to offset due to padding
                 left_left_core_nsticks += 2 * pad_h;
@@ -323,8 +325,7 @@ void kernel_main() {
                 // send padding sticks (2 * pad_h)
                 uint64_t noc_addr = get_noc_addr(left_noc_x, left_noc_y, out_l1_addr_left);
                 // TODO: may be the remote core can fill padding locally for its halo ...
-                // TODO: fix padding source...
-                // noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
+                noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
                 out_l1_addr_left += stick_nbytes;
                 // increament the nsticks to offset due to padding
                 left_core_nsticks += 2 * pad_h;

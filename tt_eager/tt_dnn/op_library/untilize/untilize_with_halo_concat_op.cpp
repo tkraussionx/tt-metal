@@ -12,6 +12,7 @@
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/detail/util.hpp"
+#include "tensor/owned_buffer_functions.hpp"
 
 using namespace tt::constants;
 
@@ -241,6 +242,17 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
         ComputeConfig{
             .compile_args = compute_args});
 
+    // const buffer with pad value (-INF)
+    uint32_t const_buffer_size = input_shape[3];
+    auto const_buffer = owned_buffer::create(std::vector<bfloat16>(const_buffer_size, bfloat16(0xf7ff)));
+    const Tensor const_tensor = Tensor(OwnedStorage{const_buffer},
+                                       Shape({1, 1, 1, const_buffer_size}),
+                                       DataType::BFLOAT16,
+                                       Layout::ROW_MAJOR)
+                                    .to(device, MemoryConfig{.memory_layout = TensorMemoryLayout::INTERLEAVED,
+                                                             .buffer_type = BufferType::L1});
+    auto const_tensor_addr = const_tensor.buffer()->address();
+
     // 1D distribution of blocks across all cores
     uint32_t ncores_full = ncores;
     // cliff core not yet supported
@@ -298,7 +310,7 @@ operation::ProgramWithCallbacks untilize_with_halo_concat_multi_core(const Tenso
         0,  // left_left_halo_offset,
         0,  // left_halo_pad_i_offset          // 40
         0,  // right_halo_pad_i_offset
-        pad_val_buffer_l1_addr,
+        const_tensor_addr,
     };
 
     uint32_t writer_noc = 0;
