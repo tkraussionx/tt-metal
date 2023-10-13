@@ -187,10 +187,12 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
                                 + (in_nsticks_per_core / in_nsticks_per_batch) * (in_w + 2);    // padding rows
     uint32_t halo_npages = (in_w + 1 + 2) * 2;  // left and right halo
     uint32_t out_cb_npages = local_npages + halo_npages;
+    uint32_t out_nsticks_per_core = local_npages + halo_npages;
     {
         log_debug(LogOp, "out_cb_pagesize: {}", out_cb_pagesize);
         log_debug(LogOp, "local_npages: {}", local_npages);
         log_debug(LogOp, "halo_npages: {}", halo_npages);
+        log_debug(LogOp, "out_nsticks_per_core: {}", out_nsticks_per_core);
     }
     auto out_cb_config = CircularBufferConfig(out_cb_npages * out_cb_pagesize, {{out_cb_id, cb_df}})
                             .set_page_size(out_cb_id, out_cb_pagesize)
@@ -412,6 +414,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
     }
 
     in_stick_start = 0;
+    uint32_t out_stick_start = 0;
     for (uint32_t i = 0; i < ncores_full; ++ i) {
         CoreCoord core = {i % ncores_x, i / ncores_x};  // logical
         CoreCoord noc_core = core;  // calculate physical
@@ -429,8 +432,8 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
         SetRuntimeArgs(program, reader_kernel_id, core, reader_rt_args);
 
         // writer rt args
-        writer_rt_args[15] = in_stick_start;
-        writer_rt_args[16] = in_stick_start + in_nsticks_per_core;
+        writer_rt_args[15] = in_stick_start;    // unused
+        writer_rt_args[16] = in_stick_start + in_nsticks_per_core;  // unused
 
         // int32_t partial_first_row_nsticks = (in_w - (in_stick_start % in_w)) % in_w;
         // int32_t batch = in_stick_start / in_hw;
@@ -440,7 +443,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
         // int32_t partial_bottom_image_nrows = rem_nsticks / in_w;
         // int32_t partial_last_row_nsticks = rem_nsticks % in_w;
 
-        ShardingConfig sc = get_specs_for_sharding_partition(in_stick_start, in_stick_start + in_nsticks_per_core, in_h, in_w, window_w, pad_h, pad_w);
+        ShardingConfig sc = get_specs_for_sharding_partition(out_stick_start, out_stick_start + out_nsticks_per_core, in_h, in_w, window_w, pad_h, pad_w);
         uint32_t partial_first_row_nsticks = sc.first_partial_right_aligned_row_width;
         uint32_t partial_top_image_nrows = sc.first_partial_image_num_rows;
         uint32_t full_nimages = sc.num_full_images;
@@ -508,6 +511,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
         if (0)
         {
             log_debug(LogOp, "++++ Core: {}", i);
+            log_debug(LogOp, "out_stick_start: {}", out_stick_start);
             log_debug(LogOp, "halo::has_left: {}", writer_rt_args[19]);
             log_debug(LogOp, "halo::has_left_left: {}", writer_rt_args[25]);
             log_debug(LogOp, "halo::has_right: {}", writer_rt_args[22]);
@@ -540,6 +544,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
         SetRuntimeArgs(program, writer_kernel_id, core, writer_rt_args);
 
         in_stick_start += in_nsticks_per_core;
+        out_stick_start += out_nsticks_per_core;
     }
     if (ncores_full < ncores) {
         // last core is the cliff core with nblocks_per_core_cliff blocks

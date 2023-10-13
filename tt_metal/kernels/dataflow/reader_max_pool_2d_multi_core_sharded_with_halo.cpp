@@ -195,11 +195,23 @@ void kernel_main() {
     uint32_t reader_i = 0;
 
     DPRINT << "partial_first_row_nsticks: " << partial_first_row_nsticks << ENDL();
+    DPRINT << "partial_first_row_skip: " << partial_first_row_skip << ENDL();
     DPRINT << "partial_top_image_nrows: " << partial_top_image_nrows << ENDL();
+    DPRINT << "partial_top_image_skip: " << partial_top_image_skip << ENDL();
     DPRINT << "full_nimages: " << full_nimages << ENDL();
+    DPRINT << "full_nimages_skip: " << full_images_skip << ENDL();
     DPRINT << "partial_bottom_image_nrows: " << partial_bottom_image_nrows << ENDL();
     DPRINT << "partial_last_row_nsticks: " << partial_last_row_nsticks << ENDL();
     DPRINT << "TOTAL nsticks = " << partial_first_row_nsticks + partial_top_image_nrows * in_w + full_nimages * in_w * in_h + partial_bottom_image_nrows * in_w + partial_last_row_nsticks << ENDL();
+
+    // DPRINT << TileSlice(in_shard_cb_id, 0, SliceRange{ .h0 = 0, .h1 = 1, .hs = 8, .w0 = 0, .w1 = 32, .ws = 1 }, true, false) << ENDL();
+    // DPRINT << TileSlice(in_shard_cb_id, 0, SliceRange{ .h0 = 1, .h1 = 2, .hs = 8, .w0 = 0, .w1 = 32, .ws = 1 }, true, false) << ENDL();
+    // DPRINT << TileSlice(in_shard_cb_id, 0, SliceRange{ .h0 = 2, .h1 = 3, .hs = 8, .w0 = 0, .w1 = 32, .ws = 1 }, true, false) << ENDL();
+    // DPRINT << TileSlice(in_shard_cb_id, 0, SliceRange{ .h0 = 3, .h1 = 4, .hs = 8, .w0 = 0, .w1 = 32, .ws = 1 }, true, false) << ENDL();
+    // DPRINT << TileSlice(in_shard_cb_id, 0, SliceRange{ .h0 = 4, .h1 = 5, .hs = 8, .w0 = 0, .w1 = 32, .ws = 1 }, true, false) << ENDL();
+    // DPRINT << TileSlice(in_shard_cb_id, 0, SliceRange{ .h0 = 5, .h1 = 6, .hs = 8, .w0 = 0, .w1 = 32, .ws = 1 }, true, false) << ENDL();
+    // DPRINT << TileSlice(in_shard_cb_id, 0, SliceRange{ .h0 = 6, .h1 = 7, .hs = 8, .w0 = 0, .w1 = 32, .ws = 1 }, true, false) << ENDL();
+    // DPRINT << TileSlice(in_shard_cb_id, 0, SliceRange{ .h0 = 7, .h1 = 8, .hs = 8, .w0 = 0, .w1 = 32, .ws = 1 }, true, false) << ENDL();
 
     // DPRINT << "HAHA 2" << ENDL();
     // section 1: partial first row
@@ -256,9 +268,9 @@ void kernel_main() {
     // }
 
     uint32_t in_l1_read_base_addr = get_read_ptr(in_shard_cb_id);
-    uint32_t out_l1_write_addr = get_write_ptr(in_cb_id);
     for (uint32_t out_stick_i = 0; out_stick_i < nsticks_per_core; ++ out_stick_i) {
         cb_reserve_back(in_cb_id, 1);
+        uint32_t out_l1_write_addr = get_write_ptr(in_cb_id);
 
         uint32_t global_out_stick_i = local_out_stick_start + out_stick_i;
         uint32_t batch_out_stick_i = global_out_stick_i % nsticks_per_batch;

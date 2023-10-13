@@ -1075,7 +1075,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
     uint32_t in_nhw_per_core_rem_mask = in_nhw_per_core - 1;    // NOTE: assuming in_nhw_per_core is power of 2
 
     // CBs
-    uint32_t multi_buffering_factor = 2;
+    uint32_t multi_buffering_factor = 1;
 
     // scalar CB as coefficient of reduce
     uint32_t in_scalar_cb_id = CB::c_in1;
@@ -1087,18 +1087,16 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
 		                                        .set_page_size(in_scalar_cb_id, in_scalar_cb_pagesize);
     auto in_scalar_cb = tt_metal::CreateCircularBuffer(program, all_cores, in_scalar_cb_config);
 
-    if (input.memory_config().is_sharded()) {
-        // incoming data is the input cb instead of raw l1/dram addr
-        auto raw_in_cb_id = CB::c_in2;
-        uint32_t raw_in_cb_npages = in_nhw_per_core;
-        uint32_t raw_in_cb_pagesize = in_nbytes_c;
-        CircularBufferConfig raw_in_cb_config = CircularBufferConfig(
-                                                    raw_in_cb_npages * raw_in_cb_pagesize,
-                                                    {{raw_in_cb_id, in_df}})
-                                                .set_page_size(raw_in_cb_id, raw_in_cb_pagesize)
-                                                .set_globally_allocated_address(input.buffer()->address());
-        auto raw_in_cb = CreateCircularBuffer(program, all_cores, raw_in_cb_config);
-    }
+    // incoming data is the input cb instead of raw l1/dram addr
+    auto raw_in_cb_id = CB::c_in2;
+    uint32_t raw_in_cb_npages = in_nhw_per_core;
+    uint32_t raw_in_cb_pagesize = in_nbytes_c;
+    CircularBufferConfig raw_in_cb_config = CircularBufferConfig(
+                                                raw_in_cb_npages * raw_in_cb_pagesize,
+                                                {{raw_in_cb_id, in_df}})
+                                            .set_page_size(raw_in_cb_id, raw_in_cb_pagesize)
+                                            .set_globally_allocated_address(input.buffer()->address());
+    auto raw_in_cb = CreateCircularBuffer(program, all_cores, raw_in_cb_config);
 
     // reader output == input to tilize
     uint32_t in_cb_id = CB::c_in0;          // input rows for "multiple (out_nelems)" output pixels
@@ -1160,6 +1158,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
 
     #if 1
     {   // debug
+        log_debug("raw_in_cb :: PS = {}, NP = {}", raw_in_cb_pagesize, raw_in_cb_npages);
         log_debug("in_cb :: PS = {}, NP = {}", in_cb_pagesize, in_cb_npages);
         log_debug("in_scalar_cb :: PS = {}, NP = {}", in_scalar_cb_pagesize, in_scalar_cb_npages);
         log_debug("in_tiled_cb :: PS = {}, NP = {}", in_tiled_cb_pagesize, in_tiled_cb_npages);

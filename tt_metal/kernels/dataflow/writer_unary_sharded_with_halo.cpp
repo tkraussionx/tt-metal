@@ -84,6 +84,15 @@ void kernel_main() {
     // 4. (out_w + pad_w * 2) * (pad_h + num full rows partial bottom image)
     // 5. (partial last row width + pad_w)
 
+    DPRINT << "partial_first_row_nsticks: " << partial_first_row_nsticks << ENDL();
+    DPRINT << "partial_first_row_skip: " << partial_first_row_skip << ENDL();
+    DPRINT << "partial_top_image_nrows: " << partial_top_image_nrows << ENDL();
+    DPRINT << "partial_top_image_skip: " << partial_top_image_skip << ENDL();
+    DPRINT << "full_nimages: " << full_nimages << ENDL();
+    DPRINT << "full_nimages_skip: " << full_image_skip << ENDL();
+    DPRINT << "partial_bottom_image_nrows: " << partial_bottom_image_nrows << ENDL();
+    DPRINT << "partial_last_row_nsticks: " << partial_last_row_nsticks << ENDL();
+
     // DPRINT << "0" << ENDL();
 
     const InterleavedAddrGen<false> s_pad_stick = {
@@ -210,12 +219,12 @@ void kernel_main() {
         for (uint32_t i = 0; i < right_core_nsticks; ++ i, ++ right_i) {
             if (right_i == right_going_halo_pad_i_offset) {
                 // send padding sticks (2 * pad_w)
-                uint64_t noc_addr = get_noc_addr(right_noc_x, right_noc_y, out_l1_addr_right);
                 // TODO: may be the remote core can fill padding locally for its halo ...
-                noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
-                out_l1_addr_right += stick_nbytes;
-                noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
-                out_l1_addr_right += stick_nbytes;
+                for (uint32_t j = 0; j < 2 * pad_w; ++ j) {
+                    uint64_t noc_addr = get_noc_addr(right_noc_x, right_noc_y, out_l1_addr_right);
+                    noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
+                    out_l1_addr_right += stick_nbytes;
+                }
                 // increament the nsticks to offset due to padding
                 right_core_nsticks += 2 * pad_w;
                 // if (i < 5) DPRINT << "P P ";
@@ -236,12 +245,12 @@ void kernel_main() {
         for (uint32_t i = 0; i < right_right_core_nsticks; ++ i, ++ right_i) {
             if (right_i == right_going_halo_pad_i_offset) {
                 // send padding sticks (2 * pad_w)
-                uint64_t noc_addr = get_noc_addr(right_right_noc_x, right_right_noc_y, out_l1_addr_right_right);
                 // TODO: may be the remote core can fill padding locally for its halo ...
-                noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
-                out_l1_addr_right_right += stick_nbytes;
-                noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
-                out_l1_addr_right_right += stick_nbytes;
+                for (uint32_t j = 0; j < 2 * pad_w; ++ j) {
+                    uint64_t noc_addr = get_noc_addr(right_right_noc_x, right_right_noc_y, out_l1_addr_right_right);
+                    noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
+                    out_l1_addr_right_right += stick_nbytes;
+                }
                 // increament the nsticks to offset due to padding
                 right_right_core_nsticks += 2 * pad_w;
                 // if (i < 5) DPRINT << "P P ";
@@ -268,13 +277,15 @@ void kernel_main() {
         // push sticks to left left neighbor
         for (uint32_t i = 0; i < left_left_core_nsticks; ++ i, ++ left_i) {
             if (left_i == left_going_halo_pad_i_offset) {
-                // send padding sticks (2 * pad_h)
-                uint64_t noc_addr = get_noc_addr(left_left_noc_x, left_left_noc_y, out_l1_addr_left_left);
+                // send padding sticks (2 * pad_w)
                 // TODO: may be the remote core can fill padding locally for its halo ...
-                noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
-                out_l1_addr_left_left += stick_nbytes;
+                for (uint32_t j = 0; j < 2 * pad_w; ++ j) {
+                    uint64_t noc_addr = get_noc_addr(left_left_noc_x, left_left_noc_y, out_l1_addr_left_left);
+                    noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
+                    out_l1_addr_left_left += stick_nbytes;
+                }
                 // increament the nsticks to offset due to padding
-                left_left_core_nsticks += 2 * pad_h;
+                left_left_core_nsticks += 2 * pad_w;
                 // if (i < 5) DPRINT << "P P ";
             } else {
                 uint64_t noc_addr = get_noc_addr(left_left_noc_x, left_left_noc_y, out_l1_addr_left_left);
@@ -293,13 +304,15 @@ void kernel_main() {
         // send sticks to left left neighbor
         for (uint32_t i = 0; i < left_core_nsticks; ++ i, ++ left_i) {
             if (left_i == left_going_halo_pad_i_offset) {
-                // send padding sticks (2 * pad_h)
-                uint64_t noc_addr = get_noc_addr(left_noc_x, left_noc_y, out_l1_addr_left);
+                // send padding sticks (2 * pad_w)
                 // TODO: may be the remote core can fill padding locally for its halo ...
-                noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
-                out_l1_addr_left += stick_nbytes;
+                for (uint32_t j = 0; j < 2 * pad_w; ++ j) {
+                    uint64_t noc_addr = get_noc_addr(left_noc_x, left_noc_y, out_l1_addr_left);
+                    noc_async_write(pad_val_buffer_l1_addr, noc_addr, stick_nbytes);
+                    out_l1_addr_left += stick_nbytes;
+                }
                 // increament the nsticks to offset due to padding
-                left_core_nsticks += 2 * pad_h;
+                left_core_nsticks += 2 * pad_w;
                 // if (i < 5) DPRINT << "P P ";
             } else {
                 uint64_t noc_addr = get_noc_addr(left_noc_x, left_noc_y, out_l1_addr_left);
