@@ -351,6 +351,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
             int32_t core = stick_id / in_nsticks_per_core;
             switch (core - i) {
                 case - 2:
+                    TT_ASSERT(false, "This case not correctly handled yet. Needs fixing");
                     ++ my_left_left_halo[i];
                     break;
                 case - 1:
@@ -380,6 +381,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
             int32_t core = stick_id / in_nsticks_per_core;
             switch (core - i) {
                 case 2:
+                    TT_ASSERT(false, "This case not correctly handled yet. Needs fixing");
                     ++ my_right_right_halo[i];
                     break;
                 case 1:
@@ -390,8 +392,8 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
             }
             ++ stick_id;
         }
-        my_right_halo_offset[i] = my_left_halo_offset[i] +
-                                    (in_nsticks_per_core /* local sticks */ + (in_nsticks_per_core / in_w) * 2 /* 2 padding sticks per row */) * in_stick_nbytes;
+        my_right_halo_offset[i] = my_left_halo_offset[i] + (halo_out_nsticks + out_nsticks_per_core) * in_stick_nbytes;
+                                    // (in_nsticks_per_core /* local sticks */ + (in_nsticks_per_core / in_w) * 2 /* 2 padding sticks per row */) * in_stick_nbytes;
         if ((in_stick_start + in_nsticks_per_core) / in_w == (in_stick_start + in_nsticks_per_core + my_right_halo[i]) / in_w) {
             my_right_right_halo_offset[i] = my_right_halo_offset[i] + my_right_halo[i] * in_stick_nbytes;
         } else {
@@ -399,7 +401,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
         }
         my_right_halo_pad_i_offset[i] = in_w - ((in_stick_start + in_nsticks_per_core) % in_w);
 
-        if (0)
+        if (1)
         {
             log_debug(LogOp, "==== Core {}", i);
             log_debug(LogOp, "in_stick_start {}", in_stick_start);
