@@ -313,7 +313,8 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
         0,  // partial_first_row_skip
         0,  // partial_top_image_skip
         0,  // full_image_skip
-        const_tensor_addr,                     // 45
+        0,  // initial_pad_nsticks             // 45
+        const_tensor_addr,
     };
 
     uint32_t writer_noc = 0;
@@ -321,6 +322,10 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
     TT_ASSERT(window_h == 3 && window_w == 3);
     // int32_t halo_in_nsticks = (in_w + (window_w / 2)) * (window_h / 2);
     int32_t halo_in_nsticks = (in_w + 1) * 1;
+    int32_t halo_out_nsticks = (in_w + 2 * pad_w) * pad_h + window_w / 2;
+
+    log_debug(LogOp, "halo_in_nsticks: {}", halo_in_nsticks);
+    log_debug(LogOp, "halo_out_nsticks: {}", halo_out_nsticks);
 
     // NOTE: Irrespective of batch boundary, always ass the left/right halo to the output shards.
     // IE: output shards ALWAYS have halo region on left and right as long as they are not the start/end of the input
@@ -443,7 +448,8 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
         // int32_t partial_bottom_image_nrows = rem_nsticks / in_w;
         // int32_t partial_last_row_nsticks = rem_nsticks % in_w;
 
-        ShardingConfig sc = get_specs_for_sharding_partition(out_stick_start, out_stick_start + out_nsticks_per_core, in_h, in_w, window_w, pad_h, pad_w);
+        // ShardingConfig sc = get_specs_for_sharding_partition(out_stick_start, out_stick_start + out_nsticks_per_core, in_h, in_w, window_w, pad_h, pad_w);
+        ShardingConfig sc = get_specs_for_sharding_partition(in_stick_start, in_stick_start + in_nsticks_per_core, in_h, in_w, window_w, pad_h, pad_w);
         uint32_t partial_first_row_nsticks = sc.first_partial_right_aligned_row_width;
         uint32_t partial_top_image_nrows = sc.first_partial_image_num_rows;
         uint32_t full_nimages = sc.num_full_images;
@@ -452,6 +458,13 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
         uint32_t partial_first_row_skip = sc.skip_after_partial_right_aligned_row;
         uint32_t partial_top_image_skip = sc.skip_after_first_partial_image_row;
         uint32_t full_image_skip = sc.skip_after_full_image;
+        uint32_t initial_pad_nsticks = 0;
+        if (partial_first_row_nsticks == 0 && partial_top_image_nrows == 0) {
+            // This is start of image. Insert initial padding worth halo size
+            initial_pad_nsticks = halo_out_nsticks;
+        }
+
+        writer_rt_args[45] = initial_pad_nsticks;
 
         writer_rt_args[2] = partial_first_row_nsticks;
         writer_rt_args[5] = partial_top_image_nrows;
