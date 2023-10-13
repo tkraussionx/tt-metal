@@ -392,7 +392,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
             }
             ++ stick_id;
         }
-        my_right_halo_offset[i] = my_left_halo_offset[i] + (halo_out_nsticks + out_nsticks_per_core) * in_stick_nbytes;
+        my_right_halo_offset[i] = my_left_halo_offset[i] + (halo_npages / 2 + local_npages) * in_stick_nbytes;
                                     // (in_nsticks_per_core /* local sticks */ + (in_nsticks_per_core / in_w) * 2 /* 2 padding sticks per row */) * in_stick_nbytes;
         if ((in_stick_start + in_nsticks_per_core) / in_w == (in_stick_start + in_nsticks_per_core + my_right_halo[i]) / in_w) {
             my_right_right_halo_offset[i] = my_right_halo_offset[i] + my_right_halo[i] * in_stick_nbytes;
