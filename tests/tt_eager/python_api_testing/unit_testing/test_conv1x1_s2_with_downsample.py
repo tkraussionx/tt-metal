@@ -29,8 +29,8 @@ import torch
 @pytest.mark.parametrize(
     "batch_size, output_channels, input_channels, input_height, input_width, stride_h, stride_w, num_cores",
     (
-        #(20, 64, 64, 16, 16, 2, 2, 20),
-        #(8, 64, 64, 56, 56, 1, 1, 98),
+        (20, 64, 64, 16, 16, 2, 2, 20),
+        (8, 64, 64, 56, 56, 1, 1, 98),
         (8, 64, 64, 56, 56, 2, 2, 98),
     ),
 )
@@ -147,57 +147,4 @@ def test_run_downsample(
     print("Passing=", passing_allclose_and_pcc)
     print("Output info=", output_info)
     passing_pcc_ds, _ = comp_pcc(out_golden, out_result, pcc=0.9998) # For LowFi we need 0.99976
-    return
     assert passing_pcc_ds
-
-    # Calculate conv result with golden result. Run Pytorch conv
-    out_golden = torch.nn.functional.conv2d(
-        A_pyt, B_pyt, stride=(stride_h, stride_w)
-    )
-
-    # Run regular matmul
-    out = ttl.tensor.matmul(A_downsampled, B_tiled)
-    out_shape = [1, 1, batch_size*output_height*output_width, output_channels]
-    assert out_shape == out.shape()
-    out = ttl.tensor.format_output_tensor(out, out.shape(), device, ttl.tensor.Layout.ROW_MAJOR)
-    out = out.reshape(batch_size, output_height, output_width, output_channels)
-    out = out.cpu()
-    assert out.layout() == ttl.tensor.Layout.ROW_MAJOR
-
-    # Copy output to host and convert tt tensor to pytorch tensor
-    out_result = out.to_torch().float()
-    out_result = torch.transpose(out_result, 2, 3)
-    out_result = torch.transpose(out_result, 1, 2)
-
-    torch.set_printoptions(
-        precision=3, sci_mode=False, linewidth=500, threshold=10000, edgeitems=32
-    )
-
-    # print(f'OUT: {out_result}')
-    # print(f'GLD: {out_golden}')
-
-    # Compare against golden
-    assert out_result.shape == out_golden.shape
-    [output_N, output_C, output_H, output_W] = out_result.shape
-    #print("Golden - ")
-    #print(out_golden.flatten())
-    #print("Result - ")
-    #print(out_result.flatten())
-    # for n in range(output_N):
-    #     for c in range(output_C):
-    #         for h in range(output_H):
-    #             for w in range(output_W):
-    #                 calculated = torch.tensor(out_result[n][c][h][w])
-    #                 golden = torch.tensor(out_golden[n][c][h][w])
-    #                 atol_delta = torch.abs(golden - calculated).item()
-    #                 rtol_delta = torch.abs(golden - calculated) / torch.abs(calculated)
-    #                 if atol_delta > 0.1 or rtol_delta > 0.1:
-    #                     print(f"Bad value at {n},{c},{h},{w} with ATOL={atol_delta} and RTOL={rtol_delta}")
-    #                     print(f"    result={calculated}, golden={golden}")
-
-    passing_allclose_and_pcc, output_info = comp_allclose_and_pcc(out_golden, out_result, rtol=1e-1, atol=1e-3, pcc=0.9999)  # For LowFi we need 0.99976
-    print("Passing=", passing_allclose_and_pcc)
-    print("Output info=", output_info)
-    passing_pcc, _ = comp_pcc(out_golden, out_result, pcc=0.9998) # For LowFi we need 0.99976
-    assert passing_pcc
-    #assert passing_allclose_and_pcc

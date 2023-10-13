@@ -6,7 +6,7 @@
 
 #include "compute_kernel_api/untilize.h"
 #include "compute_kernel_api/tilize.h"
-//#include "debug_print.h"
+#include "debug_print.h"
 
 namespace NAMESPACE {
 void MAIN {
@@ -31,8 +31,8 @@ void MAIN {
 
     untilize_init(input_cb_index, untilize_cb_index);
     if (halo_enabled) {
-        // not required
-        untilize_init_short(halo_input_cb_index);
+        // not required since cb has same data format and untilize init already configured unpacker
+        //untilize_init_short(halo_input_cb_index);
 
         // Untilize halo input
         for(uint32_t b = 0; b < halo_input_num_rows_of_tiles; ++ b) {

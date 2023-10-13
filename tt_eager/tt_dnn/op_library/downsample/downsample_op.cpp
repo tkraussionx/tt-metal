@@ -542,12 +542,13 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
             halo_input_num_rows_of_tiles = halo_num_tiles / num_input_tiles_in_row;
             halo_addr_offset = num_input_tiles_in_row * halo_start_tile_id_h * single_tile_size;
             halo_start_addr = GetCircularBufferConfig(program, input_cb).globally_allocated_address().value();
+            TT_ASSERT((halo_start_addr + halo_addr_offset) % 32 == 0); // read address should be 32 byte aligned
             auto halo_noc_coords = device->worker_core_from_logical_core(prev_core);
             halo_noc_x = halo_noc_coords.x;
             halo_noc_y = halo_noc_coords.y;
             TT_ASSERT(v.input_flat_h >= halo_start_tile_id_h * TILE_HEIGHT);
             halo_read_pattern_offset = v.input_flat_h - (halo_start_tile_id_h * TILE_HEIGHT);
-            local_read_pattern_offset = (halo_start_tile_id_h * TILE_HEIGHT) + TILE_HEIGHT;
+            local_read_pattern_offset = halo_input_num_rows_of_tiles * TILE_HEIGHT;
             halo_read_pattern_params = generate_downsample_read_pattern(v, img_height, img_width, img_stride_h, img_stride_w, input_shard_height, output_shard_height);
         }
         // local core
@@ -619,7 +620,7 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
             local_read_pattern_params.bottom_partial_left_aligned_row_width,
             local_read_pattern_params.skip_bottom_partial_left_aligned_row,
 
-            num_rows_of_input_tiles,
+            halo_input_num_rows_of_tiles + local_input_num_rows_of_tiles,
             num_input_tiles_in_row,
             num_output_tiles,
 

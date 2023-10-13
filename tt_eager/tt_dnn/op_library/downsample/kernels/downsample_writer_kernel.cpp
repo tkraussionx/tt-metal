@@ -150,6 +150,15 @@ void kernel_main() {
     constexpr uint32_t conv_act_size_c_bytes = get_compile_time_arg_val(5);
     constexpr uint32_t halo_input_cb_index = get_compile_time_arg_val(6);
 
+    // checking halo address
+    uint32_t input_cb_address = get_write_ptr(0);
+    DPRINT << "shard_input_address" << "=" << input_cb_address << ENDL();
+    DPRINT << "halo_start_addr" << "=" << halo_start_addr << ENDL();
+    DPRINT << "halo_addr_offset" << "=" << halo_addr_offset << ENDL();
+    DPRINT << "halo_read_offset" << "=" << halo_read_pattern_offset << ENDL();
+    DPRINT << "local_read_offset" << "=" << local_read_pattern_offset << ENDL();
+    DPRINT << "halo_size_bytes" << "=" << halo_size_bytes << ENDL();
+
     uint32_t img_flat_h_idx = 0;
     uint32_t reader_pattern_l1_addr = get_write_ptr(reader_pattern_cb_index);
     volatile tt_l1_ptr std::uint32_t* reader_pattern = (volatile tt_l1_ptr uint32_t*)(reader_pattern_l1_addr);
