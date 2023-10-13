@@ -91,6 +91,7 @@ void kernel_main() {
     uint32_t halo_core_noc_y = get_arg_val<uint32_t>(i); i+=1;
     uint32_t halo_num_tiles =  get_arg_val<uint32_t>(i); i+=1;
     uint32_t halo_start_addr =  get_arg_val<uint32_t>(i); i+=1;
+    uint32_t halo_addr_offset =  get_arg_val<uint32_t>(i); i+=1;
     uint32_t halo_size_bytes =  get_arg_val<uint32_t>(i); i+=1;
 
     // halo region args
@@ -160,7 +161,8 @@ void kernel_main() {
         // Push cb to compute for untilizing
         cb_reserve_back(halo_input_cb_index, halo_num_tiles);
         uint32_t halo_cb_write_addr = get_write_ptr(halo_input_cb_index);
-        noc_async_read(get_noc_addr(halo_core_noc_x, halo_core_noc_y, halo_start_addr), halo_cb_write_addr, halo_size_bytes);
+        uint32_t halo_addr = halo_start_addr + halo_addr_offset;
+        noc_async_read(get_noc_addr(halo_core_noc_x, halo_core_noc_y, halo_addr), halo_cb_write_addr, halo_size_bytes);
         noc_async_read_barrier();
         cb_push_back(halo_input_cb_index, halo_num_tiles);
         img_flat_h_idx = halo_read_pattern_offset;

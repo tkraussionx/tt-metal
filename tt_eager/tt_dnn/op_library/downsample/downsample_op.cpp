@@ -412,8 +412,8 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
     // CB to store halo data
     // hardcode to store 1 row of tiles
     uint32_t halo_input_cb_index = CB::c_intermed0;
-    uint32_t num_halo_input_tiles = num_input_tiles_in_row;
-    tt_metal::CircularBufferConfig halo_input_cb_config = tt_metal::CircularBufferConfig(num_halo_input_tiles * single_tile_size, {{halo_input_cb_index, cb_data_format}})
+    uint32_t num_halo_cb_input_tiles = num_input_tiles_in_row * 4;
+    tt_metal::CircularBufferConfig halo_input_cb_config = tt_metal::CircularBufferConfig(num_halo_cb_input_tiles * single_tile_size, {{halo_input_cb_index, cb_data_format}})
 		.set_page_size(halo_input_cb_index, single_tile_size);
     auto halo_input_cb = tt_metal::CreateCircularBuffer(program, core_range, halo_input_cb_config);
 
@@ -470,10 +470,10 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
 
     vector<uint32_t> compute_args = {
         input_cb_index,
+        halo_input_cb_index,
         untilize_cb_index,
         untilize_downsampled_cb_index,
         final_tilize_output_cb_index,
-        num_rows_of_input_tiles,
         num_input_tiles_in_row,
         num_rows_of_output_tiles,
         num_output_tiles_in_row,
@@ -519,8 +519,10 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
         uint32_t halo_noc_x = 0;
         uint32_t halo_noc_y = 0;
         uint32_t halo_start_addr = 0;
+        uint32_t halo_addr_offset = 0;
         uint32_t halo_num_tiles = 0;
         uint32_t halo_size_bytes = 0;
+        uint32_t halo_input_num_rows_of_tiles = 0;
         uint32_t halo_read_pattern_offset = 0;
         uint32_t local_read_pattern_offset = 0;
         if (v.input_flat_h != 0) {
@@ -528,15 +530,18 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
             TT_ASSERT(i != 0);
             halo_read_enabled = true;
             TT_ASSERT(v.input_flat_h < input_shard_height);
-            // get halo size
-            uint32_t halo_size_bytes = (input_shard_height - v.input_flat_h) * input_width * a.element_size();
             // get halo start tile address from height idx
             uint32_t halo_start_tile_id_h = v.input_flat_h / TILE_HEIGHT;
-            TT_ASSERT(input_shard_height - v.input_flat_h <= TILE_HEIGHT); // halo input cb is hardcoded to store only 1 row of tiles for now. TODO: allocate bigger CB
-            uint32_t halo_num_tiles = num_input_tiles_in_row;
-            TT_ASSERT(halo_num_tiles * single_tile_size == halo_size_bytes);
-            uint32_t halo_start_offset = num_input_tiles_in_row * halo_start_tile_id_h * single_tile_size;
-            uint32_t halo_start_addr = GetCircularBufferConfig(program, input_cb).globally_allocated_address().value() + halo_start_offset;
+            TT_ASSERT(input_shard_height - v.input_flat_h <= TILE_HEIGHT * 4); // halo input cb is hardcoded to store only 4 rows of tiles for now. TODO: allocate bigger CB or read in blocks
+            // get halo size
+            halo_size_bytes = (input_shard_height - (halo_start_tile_id_h * TILE_HEIGHT)) * input_width * a.element_size();
+            TT_ASSERT(halo_size_bytes % single_tile_size == 0);
+            halo_num_tiles = halo_size_bytes / single_tile_size;
+            TT_ASSERT(halo_num_tiles <= num_halo_cb_input_tiles);
+            TT_ASSERT(halo_num_tiles % num_input_tiles_in_row == 0);
+            halo_input_num_rows_of_tiles = halo_num_tiles / num_input_tiles_in_row;
+            halo_addr_offset = num_input_tiles_in_row * halo_start_tile_id_h * single_tile_size;
+            halo_start_addr = GetCircularBufferConfig(program, input_cb).globally_allocated_address().value();
             auto halo_noc_coords = device->worker_core_from_logical_core(prev_core);
             halo_noc_x = halo_noc_coords.x;
             halo_noc_y = halo_noc_coords.y;
@@ -549,7 +554,26 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
         TT_ASSERT(v.input_flat_h == 0);
         TT_ASSERT(v.output_flat_h < output_shard_height);
         DownsampleReadPatternParams local_read_pattern_params = generate_downsample_read_pattern(v, img_height, img_width, img_stride_h, img_stride_w, input_shard_height, output_shard_height);
+        uint32_t local_input_num_rows_of_tiles = num_rows_of_input_tiles;
+        if (v.input_flat_h != 0) {
+            local_input_num_rows_of_tiles = std::ceil( (double) v.input_flat_h / (double) TILE_HEIGHT);
+        }
+        TT_ASSERT(local_input_num_rows_of_tiles <= num_rows_of_input_tiles);
         TT_ASSERT(v.output_flat_h == 0);
+
+        // Compile runtime args
+        vector<uint32_t> compile_rt_kernel_args = {
+            local_input_num_rows_of_tiles,
+            halo_read_enabled,
+            halo_input_num_rows_of_tiles,
+        };
+
+        tt_metal::SetRuntimeArgs(
+            program,
+            downsample_compute_kernel_id,
+            core,
+            compile_rt_kernel_args
+        );
 
         // Writer runtime args
         vector<uint32_t> writer_kernel_args = {
@@ -564,6 +588,7 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
             halo_noc_y,
             halo_num_tiles,
             halo_start_addr,
+            halo_addr_offset,
             halo_size_bytes,
 
             // halo read pattern args
@@ -612,7 +637,10 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
 
     auto override_runtime_args_callback = [
         input_cb=input_cb,
-        final_tilize_output_cb=final_tilize_output_cb
+        final_tilize_output_cb=final_tilize_output_cb,
+        downsample_writer_kernel_id=downsample_writer_kernel_id,
+        num_cores=num_cores,
+        ncores_x_full_grid=ncores_x_full_grid
     ](
         const void* operation,
         Program& program,
@@ -628,6 +656,14 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
         input_cb_config.set_globally_allocated_address(src_buffer->address());
         auto& final_tilize_output_cb_config = GetCircularBufferConfig(program, final_tilize_output_cb);
         final_tilize_output_cb_config.set_globally_allocated_address(dst_buffer->address());
+        for (uint32_t i = 0; i < num_cores; i++) {
+            CoreCoord core = {i % ncores_x_full_grid, i / ncores_x_full_grid};
+            if (i != 0) {
+                auto runtime_args = GetRuntimeArgs(program, downsample_writer_kernel_id, core);
+                runtime_args[8] = src_buffer->address();
+                SetRuntimeArgs(program, downsample_writer_kernel_id, core, runtime_args);
+            }
+        }
     };
 
     return {.program=std::move(program), .override_runtime_arguments_callback=override_runtime_args_callback};
