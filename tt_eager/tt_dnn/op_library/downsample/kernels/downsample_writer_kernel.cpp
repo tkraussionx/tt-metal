@@ -24,16 +24,24 @@ inline uint32_t generate_reader_pattern_indices(uint32_t image_height,
                                         uint32_t num_skip_rows_bottom_partial_image,
                                         uint32_t bottom_partial_left_aligned_row_width,
                                         uint32_t skip_bottom_partial_left_aligned_row) {
-
+    DPRINT << "in generate read pattern" << ENDL();
+    if (!skip_top_partial_middle_aligned_row) {
+        for (uint32_t top_partial_middle_row_width_i = 0; top_partial_middle_row_width_i < top_partial_middle_aligned_row_width; top_partial_middle_row_width_i += stride_w) {
+            reader_pattern[reader_pattern_index] = img_flat_h_idx + top_partial_middle_row_width_i;
+            reader_pattern_index += 1;
+        }
+    }
+    img_flat_h_idx += top_partial_middle_aligned_row_width;
+    DPRINT << "top_partial_middle_aligned_row_width=" << top_partial_middle_aligned_row_width << ENDL();
     if (!skip_top_partial_right_aligned_row) {
-        for (uint32_t top_partial_row_width_i = 0; top_partial_row_width_i < top_partial_right_aligned_row_width; top_partial_row_width_i += stride_w) {
-            reader_pattern[reader_pattern_index] = top_partial_row_width_i;
+        for (uint32_t top_partial_right_row_width_i = 0; top_partial_right_row_width_i < top_partial_right_aligned_row_width; top_partial_right_row_width_i += stride_w) {
+            reader_pattern[reader_pattern_index] = img_flat_h_idx + top_partial_right_row_width_i;
             reader_pattern_index += 1;
         }
     }
 
-    img_flat_h_idx = top_partial_right_aligned_row_width;
-
+    img_flat_h_idx += top_partial_right_aligned_row_width;
+    DPRINT << "top_partial_right_aligned_row_width=" << top_partial_right_aligned_row_width << ENDL();
     uint32_t img_flat_h_idx_top_partial_image = img_flat_h_idx +  (num_skip_rows_top_partial_image * image_width);
     for (uint32_t top_partial_image_row_i = num_skip_rows_top_partial_image; top_partial_image_row_i < num_rows_top_partial_image; top_partial_image_row_i += stride_h) {
         for (uint32_t row_width_i = 0; row_width_i < image_width; row_width_i += stride_w) {
@@ -74,6 +82,7 @@ inline uint32_t generate_reader_pattern_indices(uint32_t image_height,
             reader_pattern_index += 1;
         }
     }
+    DPRINT << "done generate read pattern" << ENDL();
     return reader_pattern_index;
 }
 

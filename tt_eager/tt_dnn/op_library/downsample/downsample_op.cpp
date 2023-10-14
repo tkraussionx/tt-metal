@@ -93,7 +93,6 @@ struct ImgTrackingVars {
 };
 
 DownsampleReadPatternParams generate_downsample_read_pattern(ImgTrackingVars & v, uint32_t img_height, uint32_t img_width, uint32_t img_stride_h, uint32_t img_stride_w, uint32_t input_shard_height, uint32_t output_shard_height) {
-    cout << "img_h=" << v.img_h << ", img_w=" << v.img_w << ", next_img_h=" << v.next_img_h << ", next_img_w=" << v.img_w << endl;
     // Sanity checks at the start for local data
     TT_ASSERT(v.next_img_h >= v.img_h);
     TT_ASSERT(v.next_img_w == v.img_w); // assumption that the start is picked and not skipped by stride
@@ -108,6 +107,9 @@ DownsampleReadPatternParams generate_downsample_read_pattern(ImgTrackingVars & v
     } else {
         cout << "GENERATING READ FOR LOCAL REGION" << endl;
     }
+
+    cout << "img_h=" << v.img_h << ", img_w=" << v.img_w << ", next_img_h=" << v.next_img_h << ", next_img_w=" << v.img_w << endl;
+
 
     // constant input and output shard per core
     uint32_t input_end_flat_h = input_shard_height - 1;
@@ -166,17 +168,17 @@ DownsampleReadPatternParams generate_downsample_read_pattern(ImgTrackingVars & v
                 v.output_flat_h += std::ceil((double) top_partial_middle_aligned_row_width / (double) img_stride_w);
                 TT_ASSERT(v.output_flat_h < output_shard_height);
             }
-            while (v.img_w < top_partial_middle_aligned_row_width) {
+            uint32_t img_w_start = v.img_w;
+            while(v.img_w < img_w_start + top_partial_middle_aligned_row_width) {
                 v.img_w += 1;
                 if (v.next_img_w < v.img_w) {
                     v.next_img_w += img_stride_w;
                 }
             }
             TT_ASSERT(v.img_w < img_width-1);
-            TT_ASSERT(v.next_img_w >= v.img_w);
         }
     }
-
+    TT_ASSERT(v.next_img_w == v.img_w);
     TT_ASSERT(v.output_flat_h <= output_end_flat_h);
     TT_ASSERT(v.next_img_h >= v.img_h);
     if (v.img_w != 0) {
@@ -309,6 +311,7 @@ DownsampleReadPatternParams generate_downsample_read_pattern(ImgTrackingVars & v
     cout << "   skip_bottom_partial_left_aligned_row=" << skip_bottom_partial_left_aligned_row << endl;
     //cout << "   output_flat_h=" << v.output_flat_h << endl;
     cout << "   v.output_flat_h=" << v.output_flat_h << endl;
+    cout << "img_h=" << v.img_h << ", img_w=" << v.img_w << ", next_img_h=" << v.next_img_h << ", next_img_w=" << v.img_w << endl;
 
     // Sanity check
     TT_ASSERT(v.input_flat_h <= input_end_flat_h+1);
