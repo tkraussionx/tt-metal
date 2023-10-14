@@ -407,7 +407,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
         uint32_t partial_top_image_skip = sc.skip_after_first_partial_image_row;
         uint32_t full_image_skip = sc.skip_after_full_image;
         uint32_t initial_pad_nsticks = 0;
-        if (partial_first_row_nsticks == 0 && partial_top_image_nrows == 0) {
+        if (in_stick_start % (in_h * in_w) == 0) {
             // This is start of image. Insert initial padding worth halo size
             initial_pad_nsticks = halo_out_nsticks;
         }
@@ -500,7 +500,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
         uint32_t partial_top_image_skip = sc.skip_after_first_partial_image_row;
         uint32_t full_image_skip = sc.skip_after_full_image;
         uint32_t initial_pad_nsticks = 0;
-        if (partial_first_row_nsticks == 0 && partial_top_image_nrows == 0) {
+        if (in_stick_start % (in_h * in_w) == 0) {
             // This is start of image. Insert initial padding worth halo size
             initial_pad_nsticks = halo_out_nsticks;
         }
