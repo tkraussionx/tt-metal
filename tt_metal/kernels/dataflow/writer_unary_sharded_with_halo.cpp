@@ -100,15 +100,15 @@ void kernel_main() {
     // 4. (out_w + pad_w * 2) * (pad_h + num full rows partial bottom image)
     // 5. (partial last row width + pad_w)
 
-    DPRINT << "partial_first_row_nsticks: " << partial_first_row_nsticks << ENDL();
-    DPRINT << "partial_first_row_skip: " << partial_first_row_skip << ENDL();
-    DPRINT << "partial_top_image_nrows: " << partial_top_image_nrows << ENDL();
-    DPRINT << "partial_top_image_skip: " << partial_top_image_skip << ENDL();
-    DPRINT << "full_nimages: " << full_nimages << ENDL();
-    DPRINT << "full_nimages_skip: " << full_image_skip << ENDL();
-    DPRINT << "partial_bottom_image_nrows: " << partial_bottom_image_nrows << ENDL();
-    DPRINT << "partial_last_row_nsticks: " << partial_last_row_nsticks << ENDL();
-    DPRINT << "initial_pad_nsticks: " << initial_pad_nsticks << ENDL();
+    // DPRINT << "partial_first_row_nsticks: " << partial_first_row_nsticks << ENDL();
+    // DPRINT << "partial_first_row_skip: " << partial_first_row_skip << ENDL();
+    // DPRINT << "partial_top_image_nrows: " << partial_top_image_nrows << ENDL();
+    // DPRINT << "partial_top_image_skip: " << partial_top_image_skip << ENDL();
+    // DPRINT << "full_nimages: " << full_nimages << ENDL();
+    // DPRINT << "full_nimages_skip: " << full_image_skip << ENDL();
+    // DPRINT << "partial_bottom_image_nrows: " << partial_bottom_image_nrows << ENDL();
+    // DPRINT << "partial_last_row_nsticks: " << partial_last_row_nsticks << ENDL();
+    // DPRINT << "initial_pad_nsticks: " << initial_pad_nsticks << ENDL();
 
     // DPRINT << "0" << ENDL();
 
@@ -236,7 +236,6 @@ void kernel_main() {
     // section 5
     // partial row sticks
     for (uint32_t i = 0; i < partial_last_row_nsticks; ++ i) {
-        DPRINT << i << ": " << curr_in_l1_addr << ENDL();
         uint64_t noc_addr = get_noc_addr(curr_in_l1_addr);
         noc_async_read(noc_addr, curr_out_l1_addr, stick_nbytes);
         curr_in_l1_addr += stick_nbytes;
@@ -378,10 +377,10 @@ void kernel_main() {
 
     noc_async_write_barrier();
 
-    DPRINT << "==== PADDED OUTPUT:" << ENDL();
-    // print_sticks(out_base_l1_addr, 0, 114, 64);
-    for (uint32_t row = 0; row < 3; ++ row) {
-        DPRINT << "=== ROW " << row << ":" << ENDL();
-        print_sticks(out_base_l1_addr, 114 * row, 114, 64);
-    }
+    // DPRINT << "==== PADDED OUTPUT:" << ENDL();
+    // // print_sticks(out_base_l1_addr, 0, 114, 64);
+    // for (uint32_t row = 0; row < 3; ++ row) {
+    //     DPRINT << "=== ROW " << row << ":" << ENDL();
+    //     print_sticks(out_base_l1_addr, 114 * row, 114, 64);
+    // }
 }

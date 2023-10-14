@@ -562,7 +562,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(const Tensor& a, T
             writer_rt_args[28] = 0;
         }
 
-        if (1)
+        if (0)
         {
             log_debug(LogOp, "++++ Core: {}", i);
             log_debug(LogOp, "out_stick_start: {}", out_stick_start);
