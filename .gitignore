@@ -71,6 +71,9 @@ infra/machine_setup/inventory/
 # exclude MNIST etc model downloads
 data/
 
+# exclude venv
+venv/
+
 # exclude pytorch binaries
 *.pt
 
