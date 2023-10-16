@@ -157,6 +157,7 @@ namespace tt::tt_metal::detail{
         m_tensor.def("untilize_with_halo", &untilize_with_halo,
             py::arg("input").noconvert(),
             py::arg("pad_val"),
+            py::arg("stride") = 1,
             py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
             R"doc(
                 Untilizes input tiled data to row major format.
