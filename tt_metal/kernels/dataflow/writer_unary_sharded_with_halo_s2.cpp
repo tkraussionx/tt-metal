@@ -295,17 +295,17 @@ void kernel_main() {
 
     // NOTE: assuming the base l1 addr are the same on all cores
 
-    // // push to LL
-    // if (has_left_left) {
-    //     uint32_t to_l1_addr = out_base_l1_addr + ll_send_to_offset;
-    //     uint32_t from_l1_addr = out_base_l1_addr + ll_send_from_offset;
-    //     for (uint32_t i = 0; i < ll_send_count; ++ i) {
-    //         uint64_t noc_addr = get_noc_addr(left_left_noc_x, left_left_noc_y, to_l1_addr);
-    //         noc_async_write(from_l1_addr, noc_addr, stick_nbytes);
-    //         to_l1_addr += stick_nbytes;
-    //         from_l1_addr += stick_nbytes;
-    //     }
-    // }
+    // push to LL
+    if (has_left_left) {
+        uint32_t to_l1_addr = out_base_l1_addr + ll_send_to_offset;
+        uint32_t from_l1_addr = out_base_l1_addr + ll_send_from_offset;
+        for (uint32_t i = 0; i < ll_send_count; ++ i) {
+            uint64_t noc_addr = get_noc_addr(left_left_noc_x, left_left_noc_y, to_l1_addr);
+            noc_async_write(from_l1_addr, noc_addr, stick_nbytes);
+            to_l1_addr += stick_nbytes;
+            from_l1_addr += stick_nbytes;
+        }
+    }
 
     // push to L
     if (has_left) {
@@ -319,29 +319,29 @@ void kernel_main() {
         }
     }
 
-    // // push to R
-    // if (has_right) {
-    //     uint32_t to_l1_addr = out_base_l1_addr + r_send_to_offset;
-    //     uint32_t from_l1_addr = out_base_l1_addr + r_send_from_offset;
-    //     for (uint32_t i = 0; i < r_send_count; ++ i) {
-    //         uint64_t noc_addr = get_noc_addr(right_noc_x, right_noc_y, to_l1_addr);
-    //         noc_async_write(from_l1_addr, noc_addr, stick_nbytes);
-    //         to_l1_addr += stick_nbytes;
-    //         from_l1_addr += stick_nbytes;
-    //     }
-    // }
+    // push to R
+    if (has_right) {
+        uint32_t to_l1_addr = out_base_l1_addr + r_send_to_offset;
+        uint32_t from_l1_addr = out_base_l1_addr + r_send_from_offset;
+        for (uint32_t i = 0; i < r_send_count; ++ i) {
+            uint64_t noc_addr = get_noc_addr(right_noc_x, right_noc_y, to_l1_addr);
+            noc_async_write(from_l1_addr, noc_addr, stick_nbytes);
+            to_l1_addr += stick_nbytes;
+            from_l1_addr += stick_nbytes;
+        }
+    }
 
-    // // push to RR
-    // if (has_right_right) {
-    //     uint32_t to_l1_addr = out_base_l1_addr + rr_send_to_offset;
-    //     uint32_t from_l1_addr = out_base_l1_addr + rr_send_from_offset;
-    //     for (uint32_t i = 0; i < rr_send_count; ++ i) {
-    //         uint64_t noc_addr = get_noc_addr(right_right_noc_x, right_right_noc_y, to_l1_addr);
-    //         noc_async_write(from_l1_addr, noc_addr, stick_nbytes);
-    //         to_l1_addr += stick_nbytes;
-    //         from_l1_addr += stick_nbytes;
-    //     }
-    // }
+    // push to RR
+    if (has_right_right) {
+        uint32_t to_l1_addr = out_base_l1_addr + rr_send_to_offset;
+        uint32_t from_l1_addr = out_base_l1_addr + rr_send_from_offset;
+        for (uint32_t i = 0; i < rr_send_count; ++ i) {
+            uint64_t noc_addr = get_noc_addr(right_right_noc_x, right_right_noc_y, to_l1_addr);
+            noc_async_write(from_l1_addr, noc_addr, stick_nbytes);
+            to_l1_addr += stick_nbytes;
+            from_l1_addr += stick_nbytes;
+        }
+    }
 
     noc_async_write_barrier();
 
