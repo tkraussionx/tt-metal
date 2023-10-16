@@ -1,5 +1,6 @@
 import tt_lib as ttl
 
+
 # Conversion
 def to_torch(tt_tensor):
     tt_output = tt_tensor.cpu()
@@ -7,13 +8,11 @@ def to_torch(tt_tensor):
         tt_output = tt_output.to(ttl.tensor.Layout.ROW_MAJOR)
     return tt_output.to_torch()
 
+
 def from_torch(
     torch_tensor,
     dtype,
 ):
-    print(torch_tensor)
-    print(torch_tensor.dtype)
-    print(dtype)
     return ttl.tensor.Tensor(torch_tensor, dtype)
 
 
@@ -59,9 +58,11 @@ def reshape(*args, **kwargs):
 def permute(*args, **kwargs):
     return ttl.tensor.permute(*args, **kwargs)
 
+
 # Activations
 def softmax(input_tensor, dim):
     import torch
+
     torch_tensor = to_torch(input_tensor)
     torch_tensor = torch.softmax(torch_tensor, dim=dim)
     return from_torch(torch_tensor, dtype=input_tensor.dtype())

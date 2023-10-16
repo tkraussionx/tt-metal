@@ -1,21 +1,17 @@
 import ttnn
 import torch
 import pytest
+import tt_lib as ttl
 
 
 @pytest.mark.parametrize("m", [32])
 @pytest.mark.parametrize("k", [2 * 32])
-@pytest.mark.parametrize("n", [4 * 32])
-def test_matmul(device, m, k, n):
+def test_to_and_from(device, m, k):
     activations = ttnn.random(shape=(1, 1, m, k))
-    weights = ttnn.random(shape=(1, 1, k, n))
 
     torch_activations = ttnn.to_torch(activations)
-    torch_weights = ttnn.to_torch(weights)
-    torch_output = torch.matmul(torch_activations, torch_weights)
-
-    tt_output = ttnn.matmul(activations, weights)
-    tt_output = ttnn.to_torch(tt_output)
+    tt_output = ttnn.from_torch(torch_activations, ttl.tensor.DataType.BFLOAT16)
+    torch_output = ttnn.to_torch(tt_output)
 
     print("From torch")
     print(torch_output[0:5, 0:5])
