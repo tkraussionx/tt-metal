@@ -1460,6 +1460,11 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
             uint32_t partial_first_row_skip = sc.skip_after_partial_right_aligned_row;
             uint32_t partial_top_image_skip = sc.skip_after_first_partial_image_row;
             uint32_t full_image_skip = sc.skip_after_full_image;
+            uint32_t initial_skip = 0;
+            if ((curr_in_stick_id % (in_h * in_w) == 0) || (curr_in_stick_id % stride_h != 0)) {
+                int32_t halo_nsticks = (in_w + 2 * pad_w) * pad_h + kernel_size_w / 2;
+                initial_skip = halo_nsticks;
+            }
 
             // uint32_t partial_first_row_nsticks = (in_w - (curr_in_stick_id % in_w)) % in_w;
             // uint32_t batch = curr_in_stick_id / in_hw;
@@ -1477,6 +1482,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
             reader_rt_args[70] = full_image_skip;           // in_w + 2 * pad_h;
             reader_rt_args[71] = partial_bottom_image_nrows;
             reader_rt_args[72] = partial_last_row_nsticks;
+            reader_rt_args[73] = initial_skip;
 
             // log_debug("CORE: {},{} :: 37 = {}, 38 = {}, 39 = {}, 41 = {}", core.x, core.y, reader_rt_args[37], reader_rt_args[38], reader_rt_args[39], reader_rt_args[41]);
             SetRuntimeArgs(program, reader_kernel, core, reader_rt_args);
