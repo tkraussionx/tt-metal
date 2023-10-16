@@ -89,11 +89,13 @@ inline NewShardingConfig get_shard_specs(int32_t start_stick, int32_t end_stick,
             };
     }
     if (nsticks_per_core < pc.in_w) {
+        int32_t in_w_i = start_stick % pc.in_w;
+        int32_t in_h_i = (start_stick % (pc.in_w * pc.in_h)) % pc.in_w;
+        int32_t last_in_w_i = end_stick % pc.in_w;
+        int32_t last_in_h_i = (end_stick % (pc.in_w * pc.in_h)) % pc.in_w;
         switch(nsticks_per_core) {
             case 1:
                 // only one stick in the range. need to figure out if there are padding to be attached to it, and in which place
-                int32_t in_w_i = start_stick % pc.in_w;
-                int32_t in_h_i = (start_stick % (pc.in_w * pc.in_h)) % pc.in_w;
                 if (in_w_i == pc.in_w - 1) {
                     // this is the last stick in the row
                     // there needs to be padding sticks attached
@@ -139,8 +141,6 @@ inline NewShardingConfig get_shard_specs(int32_t start_stick, int32_t end_stick,
                 }
             case 2:
                 // two sticks in the range. figure out if there are any padding attached
-                int32_t in_w_i = start_stick % pc.in_w;
-                int32_t in_h_i = (start_stick % (pc.in_w * pc.in_h)) % pc.in_w;
                 if (in_w_i == pc.in_w - 2) {
                     // these are two last sticks of the row
                     // there needs to be padding after
@@ -215,22 +215,54 @@ inline NewShardingConfig get_shard_specs(int32_t start_stick, int32_t end_stick,
 
             case 3:
             default:
-                int32_t in_w_i = start_stick % pc.in_w;
-                int32_t in_h_i = (start_stick % (pc.in_w * pc.in_h)) % pc.in_w;
-                int32_t last_in_w_i = end_stick % pc.in_w;
-                int32_t last_in_h_i = (end_stick % (pc.in_w * pc.in_h)) % pc.in_w;
                 if (in_h_i == last_in_h_i) {
                     // all sticks belong to same row
                     if (last_in_w_i == pc.in_w - 1) {
                         // these sticks are the last in the row
                         // insert padding at end
-                        // ...
+                        if (in_h_i == pc.in_h - 1) {
+                            // this is the last row
+                            // need full padding rows
+                            return NewShardingConfig{
+                                    .first_partial_right_aligned_row_width = nsticks_per_core,
+                                    .first_partial_image_num_rows = 0,
+                                    .num_full_images = 0,
+                                    .last_partial_image_num_rows = 0,
+                                    .last_partial_left_aligned_row_width = 0,
+                                    .skip_after_partial_right_aligned_row = (int32_t) (pc.pad_h * (pc.in_w + 2 * pc.pad_w)),
+                                    .skip_after_first_partial_image_row = 0,
+                                    .skip_after_full_image = 0
+                                };
+                        } else {
+                            // just width padding needed
+                            return NewShardingConfig{
+                                    .first_partial_right_aligned_row_width = nsticks_per_core,
+                                    .first_partial_image_num_rows = 0,
+                                    .num_full_images = 0,
+                                    .last_partial_image_num_rows = 0,
+                                    .last_partial_left_aligned_row_width = 0,
+                                    .skip_after_partial_right_aligned_row = (int32_t) (2 * pc.pad_w),
+                                    .skip_after_first_partial_image_row = 0,
+                                    .skip_after_full_image = 0
+                                };
+                        }
                     } else {
                         // no padding is needed
+                        return NewShardingConfig{
+                                .first_partial_right_aligned_row_width = nsticks_per_core,
+                                .first_partial_image_num_rows = 0,
+                                .num_full_images = 0,
+                                .last_partial_image_num_rows = 0,
+                                .last_partial_left_aligned_row_width = 0,
+                                .skip_after_partial_right_aligned_row = 0,
+                                .skip_after_first_partial_image_row = 0,
+                                .skip_after_full_image = 0
+                            };
                     }
                 } else {
                     // sticks span two different rows. figure out where does the padding go.
                     // ...
+                    TT_ASSERT(false, "UNHANDLED CASES");
                 }
         }
     }
