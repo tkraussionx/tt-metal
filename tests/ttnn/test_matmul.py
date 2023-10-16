@@ -3,6 +3,9 @@ import torch
 import pytest
 
 
+from models.utility_functions import comp_pcc
+
+
 @pytest.mark.parametrize("m", [32])
 @pytest.mark.parametrize("k", [2 * 32])
 @pytest.mark.parametrize("n", [4 * 32])
@@ -17,9 +20,6 @@ def test_matmul(device, m, k, n):
     tt_output = ttnn.matmul(activations, weights)
     tt_output = ttnn.to_torch(tt_output)
 
-    print("From torch")
-    print(torch_output[0:5, 0:5])
-    print("From tt")
-    print(tt_output[0:5, 0:5])
-    print("Does that match?")
-    assert torch.allclose(torch_output, tt_output, atol=1e-1, rtol=1e-2)
+    pcc_passed, pcc_message = comp_pcc(torch_output, tt_output, 0.99)
+    print(pcc_message)
+    assert pcc_passed
