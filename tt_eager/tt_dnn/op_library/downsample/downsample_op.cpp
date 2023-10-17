@@ -336,15 +336,6 @@ DownsampleReadPatternParams generate_downsample_read_pattern(ImgTrackingVars & v
     TT_ASSERT(v.input_flat_h <= input_end_flat_h+1);
     TT_ASSERT(v.output_flat_h <= output_end_flat_h+1);
 
-    if (v.output_flat_h < output_end_flat_h+1) {
-        TT_ASSERT(current_region_is_halo_from_prev_core);
-        TT_ASSERT(v.input_flat_h == input_end_flat_h+1);
-    }
-
-    if (v.input_flat_h < input_end_flat_h+1) {
-        TT_ASSERT(!current_region_is_halo_from_prev_core);
-    }
-
     if (v.input_flat_h == input_end_flat_h + 1) {
         v.input_flat_h = 0;
     }
@@ -463,22 +454,28 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
     cout << "done input cb" << endl;
     // CB to store halo data
     // hardcode to store 1 row of tiles
-    uint32_t halo_input_cb_index = CB::c_intermed0;
-    uint32_t num_halo_cb_input_tiles = num_input_tiles_in_row  * 4;
-    tt_metal::CircularBufferConfig halo_input_cb_config = tt_metal::CircularBufferConfig(num_halo_cb_input_tiles * single_tile_size, {{halo_input_cb_index, cb_data_format}})
-		.set_page_size(halo_input_cb_index, single_tile_size);
-    auto halo_input_cb = tt_metal::CreateCircularBuffer(program, core_range, halo_input_cb_config);
+    uint32_t halo_prev_input_cb_index = CB::c_intermed0;
+    uint32_t num_halo_prev_cb_input_tiles = num_input_tiles_in_row  * 4;
+    tt_metal::CircularBufferConfig halo_prev_input_cb_config = tt_metal::CircularBufferConfig(num_halo_prev_cb_input_tiles * single_tile_size, {{halo_prev_input_cb_index, cb_data_format}})
+		.set_page_size(halo_prev_input_cb_index, single_tile_size);
+    auto halo_prev_input_cb = tt_metal::CreateCircularBuffer(program, core_range, halo_prev_input_cb_config);
+
+    uint32_t halo_next_input_cb_index = CB::c_intermed1;
+    uint32_t num_halo_next_cb_input_tiles = num_input_tiles_in_row  * 4;
+    tt_metal::CircularBufferConfig halo_next_input_cb_config = tt_metal::CircularBufferConfig(num_halo_next_cb_input_tiles * single_tile_size, {{halo_next_input_cb_index, cb_data_format}})
+		.set_page_size(halo_next_input_cb_index, single_tile_size);
+    auto halo_next_input_cb = tt_metal::CreateCircularBuffer(program, core_range, halo_next_input_cb_config);
     cout << "done halo input cb" << endl;
     // CB to store reader pattern array
     // read pattern array size == output_height
     uint32_t reader_pattern_array_size = output_shard_height;
-    uint32_t reader_pattern_array_cb_index = CB::c_intermed1;
+    uint32_t reader_pattern_array_cb_index = CB::c_intermed2;
     tt_metal::CircularBufferConfig reader_pattern_array_cb_config = tt_metal::CircularBufferConfig(reader_pattern_array_size * 4, {{reader_pattern_array_cb_index, DataFormat::Float16_b}})
 		.set_page_size(reader_pattern_array_cb_index, 4);
     auto reader_pattern_array_cb = tt_metal::CreateCircularBuffer(program, core_range, reader_pattern_array_cb_config);
         cout << "done read pattern cb" << endl;
     // untilized CB has size - [32, full width]
-    uint32_t untilize_cb_index = CB::c_intermed2;
+    uint32_t untilize_cb_index = CB::c_intermed3;
     uint32_t num_tiles_untilize_cb = num_input_tiles_in_row;
     tt_metal::CircularBufferConfig untilize_cb_config = tt_metal::CircularBufferConfig(num_tiles_untilize_cb * single_tile_size, {{untilize_cb_index, cb_data_format}})
 		.set_page_size(untilize_cb_index, single_tile_size);
@@ -486,7 +483,7 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
     cout << "done untilize cb" << endl;
 
     uint32_t num_output_tiles = num_output_tiles_in_row * num_rows_of_output_tiles;
-    uint32_t untilize_downsampled_cb_index = CB::c_intermed3;
+    uint32_t untilize_downsampled_cb_index = CB::c_intermed4;
     uint32_t num_tiles_untilize_downsampled_cb = num_output_tiles; // untilize downsampled cb size == output size per core
     tt_metal::CircularBufferConfig untilize_downsampled_cb_config = tt_metal::CircularBufferConfig(num_tiles_untilize_downsampled_cb * single_tile_size, {{untilize_downsampled_cb_index, cb_data_format}})
 		.set_page_size(untilize_downsampled_cb_index, single_tile_size);
@@ -508,7 +505,8 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
         (std::uint32_t) reader_pattern_array_cb_index,
         (std::uint32_t) a.element_size(),
         (std::uint32_t) input_shard_width_bytes,
-        (std::uint32_t) halo_input_cb_index,
+        (std::uint32_t) halo_prev_input_cb_index,
+        (std::uint32_t) halo_next_input_cb_index,
         log_base_2_of_conv_act_size_c_bytes,
         stride_h_x_image_width
     };
@@ -522,7 +520,8 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
 
     vector<uint32_t> compute_args = {
         input_cb_index,
-        halo_input_cb_index,
+        halo_prev_input_cb_index,
+        halo_next_input_cb_index,
         untilize_cb_index,
         untilize_downsampled_cb_index,
         final_tilize_output_cb_index,
@@ -541,7 +540,7 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
     // track img h, img w, across cores
     ImgTrackingVars v;
     CoreCoord prev_core = {0,0};
-
+    bool input_flat_h_is_of_current_core = true;
     for (uint32_t i = 0; i < num_cores; i++) {
         CoreCoord core = {i % num_cores_x, i / num_cores_x};
         cout << "i=" << i << endl;
@@ -549,18 +548,30 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
         uint32_t input_end_flat_h = input_shard_height - 1;
         uint32_t output_end_flat_h = output_shard_height - 1;
 
-        bool halo_read_enabled = false;
-        DownsampleReadPatternParams halo_read_pattern_params;
-        uint32_t halo_noc_x = 0;
-        uint32_t halo_noc_y = 0;
-        uint32_t halo_start_addr = 0;
-        uint32_t halo_addr_offset = 0;
-        uint32_t halo_num_tiles = 0;
-        uint32_t halo_size_bytes = 0;
-        uint32_t halo_input_num_rows_of_tiles = 0;
-        uint32_t halo_read_pattern_offset = 0;
+        bool halo_prev_read_enabled = false;
+        DownsampleReadPatternParams halo_prev_read_pattern_params;
+        uint32_t halo_prev_noc_x = 0;
+        uint32_t halo_prev_noc_y = 0;
+        uint32_t halo_prev_start_addr = 0;
+        uint32_t halo_prev_addr_offset = 0;
+        uint32_t halo_prev_num_tiles = 0;
+        uint32_t halo_prev_size_bytes = 0;
+        uint32_t halo_prev_input_num_rows_of_tiles = 0;
+        uint32_t halo_prev_read_pattern_offset = 0;
+
+        bool halo_next_read_enabled = false;
+        DownsampleReadPatternParams halo_next_read_pattern_params;
+        uint32_t halo_next_noc_x = 0;
+        uint32_t halo_next_noc_y = 0;
+        uint32_t halo_next_start_addr = 0;
+        uint32_t halo_next_addr_offset = 0;
+        uint32_t halo_next_num_tiles = 0;
+        uint32_t halo_next_size_bytes = 0;
+        uint32_t halo_next_input_num_rows_of_tiles = 0;
+        uint32_t halo_next_read_pattern_offset = 0;
         uint32_t local_read_pattern_offset = 0;
         uint32_t current_core_input_end_flat_h = input_end_flat_h;
+        uint32_t next_core_input_end_flat_h = input_end_flat_h;
         if (memory_layout == TensorMemoryLayout::BLOCK_SHARDED) {
             if (i % num_cores_x == 0) {
                 // first core in row
@@ -571,54 +582,97 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
                 // set unpadded height as end index for last core in row
                 current_core_input_end_flat_h = last_core_input_shard_height_unpadded - 1;
                 output_end_flat_h = last_core_output_shard_height_unpadded - 1;
+            } else if (i % num_cores_x == num_cores_x - 2) {
+                next_core_input_end_flat_h = last_core_input_shard_height_unpadded - 1;
             }
         } else if (i == num_cores - 1) {
             // for height sharding, set unpadded height as end index for last core
             current_core_input_end_flat_h = last_core_input_shard_height_unpadded - 1;
             output_end_flat_h = last_core_output_shard_height_unpadded - 1;
+        } else if (i == num_cores - 2) {
+            next_core_input_end_flat_h = last_core_input_shard_height_unpadded - 1;
         }
-        if (v.input_flat_h != 0) {
+        if (v.input_flat_h != 0 && !input_flat_h_is_of_current_core) {
             // halo region of previous core
             TT_ASSERT(i != 0);
-            halo_read_enabled = true;
+            if (memory_layout == TensorMemoryLayout::BLOCK_SHARDED) {
+                TT_ASSERT(prev_core.y == core.y); // for block sharding case, prev core is left core
+            }
+            halo_prev_read_enabled = true;
             TT_ASSERT(v.input_flat_h < input_shard_height);
             // get halo start tile address from height idx
-            uint32_t halo_start_tile_id_h = v.input_flat_h / TILE_HEIGHT;
+            uint32_t halo_prev_start_tile_id_h = v.input_flat_h / TILE_HEIGHT;
             TT_ASSERT(input_shard_height - v.input_flat_h <= TILE_HEIGHT * 4); // halo input cb is hardcoded to store only 4 rows of tiles for now. TODO: allocate bigger CB or read in blocks
             // get halo size
-            halo_size_bytes = (input_shard_height - (halo_start_tile_id_h * TILE_HEIGHT)) * input_shard_width * a.element_size();
-            TT_ASSERT(halo_size_bytes % single_tile_size == 0);
-            halo_num_tiles = halo_size_bytes / single_tile_size;
-            TT_ASSERT(halo_num_tiles <= num_halo_cb_input_tiles);
-            TT_ASSERT(halo_num_tiles % num_input_tiles_in_row == 0);
-            halo_input_num_rows_of_tiles = halo_num_tiles / num_input_tiles_in_row;
-            halo_addr_offset = num_input_tiles_in_row * halo_start_tile_id_h * single_tile_size;
-            halo_start_addr = GetCircularBufferConfig(program, input_cb).globally_allocated_address().value();
-            TT_ASSERT((halo_start_addr + halo_addr_offset) % 32 == 0); // read address should be 32 byte aligned
+            halo_prev_size_bytes = (input_shard_height - (halo_prev_start_tile_id_h * TILE_HEIGHT)) * input_shard_width * a.element_size();
+            TT_ASSERT(halo_prev_size_bytes % single_tile_size == 0);
+            halo_prev_num_tiles = halo_prev_size_bytes / single_tile_size;
+            TT_ASSERT(halo_prev_num_tiles <= num_halo_prev_cb_input_tiles);
+            TT_ASSERT(halo_prev_num_tiles % num_input_tiles_in_row == 0);
+            halo_prev_input_num_rows_of_tiles = halo_prev_num_tiles / num_input_tiles_in_row;
+            halo_prev_addr_offset = num_input_tiles_in_row * halo_prev_start_tile_id_h * single_tile_size;
+            halo_prev_start_addr = GetCircularBufferConfig(program, input_cb).globally_allocated_address().value();
+            TT_ASSERT((halo_prev_start_addr + halo_prev_addr_offset) % 32 == 0); // read address should be 32 byte aligned
             auto halo_noc_coords = device->worker_core_from_logical_core(prev_core);
-            halo_noc_x = halo_noc_coords.x;
-            halo_noc_y = halo_noc_coords.y;
-            TT_ASSERT(v.input_flat_h >= halo_start_tile_id_h * TILE_HEIGHT);
-            halo_read_pattern_offset = v.input_flat_h - (halo_start_tile_id_h * TILE_HEIGHT);
-            local_read_pattern_offset = halo_input_num_rows_of_tiles * TILE_HEIGHT;
-            halo_read_pattern_params = generate_downsample_read_pattern(v, img_height, img_width, img_stride_h, img_stride_w, input_end_flat_h, output_end_flat_h);
+            halo_prev_noc_x = halo_noc_coords.x;
+            halo_prev_noc_y = halo_noc_coords.y;
+            TT_ASSERT(v.input_flat_h >= halo_prev_start_tile_id_h * TILE_HEIGHT);
+            halo_prev_read_pattern_offset = v.input_flat_h - (halo_prev_start_tile_id_h * TILE_HEIGHT);
+            local_read_pattern_offset = halo_prev_input_num_rows_of_tiles * TILE_HEIGHT;
+            halo_prev_read_pattern_params = generate_downsample_read_pattern(v, img_height, img_width, img_stride_h, img_stride_w, input_end_flat_h, output_end_flat_h);
         }
         // local core
         TT_ASSERT(v.input_flat_h == 0);
         TT_ASSERT(v.output_flat_h < output_shard_height);
         DownsampleReadPatternParams local_read_pattern_params = generate_downsample_read_pattern(v, img_height, img_width, img_stride_h, img_stride_w, current_core_input_end_flat_h, output_end_flat_h);
+        TT_ASSERT(v.output_flat_h <= output_shard_height);
         uint32_t local_input_num_rows_of_tiles = num_rows_of_input_tiles;
         if (v.input_flat_h != 0) {
             local_input_num_rows_of_tiles = std::ceil( (double) v.input_flat_h / (double) TILE_HEIGHT);
+            input_flat_h_is_of_current_core = false;
+        } else {
+            input_flat_h_is_of_current_core = true; // updating flag for next core
         }
         TT_ASSERT(local_input_num_rows_of_tiles <= num_rows_of_input_tiles);
+
+        if (v.output_flat_h != 0) {
+            // need to read halo from next core
+            TT_ASSERT(i != num_cores - 1);
+            TT_ASSERT(v.input_flat_h == 0);
+            CoreCoord next_core = {(i+1)% num_cores_x, (i+1) / num_cores_x};
+            if (memory_layout == TensorMemoryLayout::BLOCK_SHARDED) {
+                TT_ASSERT(next_core.y == core.y); // for block sharding case, next core is right core
+            }
+            halo_next_read_enabled = true;
+            halo_next_read_pattern_params = generate_downsample_read_pattern(v, img_height, img_width, img_stride_h, img_stride_w, next_core_input_end_flat_h, output_end_flat_h);
+            cout << "After halo next, v.output_flat_h=" << v.output_flat_h << endl;
+            TT_ASSERT(v.output_flat_h == 0);
+            TT_ASSERT(v.input_flat_h != 0 && v.input_flat_h < input_shard_height);
+            TT_ASSERT(v.input_flat_h <= TILE_HEIGHT * 4); // halo input cb is hardcoded to store only 4 rows of tiles for now. TODO: allocate bigger CB or read in blocks
+            // get halo size
+            halo_next_size_bytes = v.input_flat_h * input_shard_width * a.element_size();
+            TT_ASSERT(halo_next_size_bytes % single_tile_size == 0);
+            halo_next_num_tiles = halo_next_size_bytes / single_tile_size;
+            TT_ASSERT(halo_next_num_tiles <= num_halo_next_cb_input_tiles);
+            TT_ASSERT(halo_next_num_tiles % num_input_tiles_in_row == 0);
+            halo_next_input_num_rows_of_tiles = halo_next_num_tiles / num_input_tiles_in_row;
+            halo_next_addr_offset = 0;
+            halo_next_start_addr = GetCircularBufferConfig(program, input_cb).globally_allocated_address().value();
+            TT_ASSERT((halo_next_start_addr + halo_next_addr_offset) % 32 == 0); // read address should be 32 byte aligned
+            auto halo_noc_coords = device->worker_core_from_logical_core(next_core);
+            halo_next_noc_x = halo_noc_coords.x;
+            halo_next_noc_y = halo_noc_coords.y;
+            halo_next_read_pattern_offset = local_input_num_rows_of_tiles * TILE_HEIGHT;
+        }
         TT_ASSERT(v.output_flat_h == 0);
 
         // Compile runtime args
         vector<uint32_t> compile_rt_kernel_args = {
             local_input_num_rows_of_tiles,
-            halo_read_enabled,
-            halo_input_num_rows_of_tiles,
+            halo_prev_read_enabled,
+            halo_prev_input_num_rows_of_tiles,
+            halo_next_read_enabled,
+            halo_next_input_num_rows_of_tiles,
         };
 
         tt_metal::SetRuntimeArgs(
@@ -635,28 +689,28 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
             (uint32_t) img_stride_h,
             (uint32_t) img_stride_w,
 
-            // halo args
-            halo_read_enabled,
-            halo_noc_x,
-            halo_noc_y,
-            halo_num_tiles,
-            halo_start_addr,
-            halo_addr_offset,
-            halo_size_bytes,
+            // halo prev args
+            halo_prev_read_enabled,
+            halo_prev_noc_x,
+            halo_prev_noc_y,
+            halo_prev_num_tiles,
+            halo_prev_start_addr,
+            halo_prev_addr_offset,
+            halo_prev_size_bytes,
 
-            // halo read pattern args
-            halo_read_pattern_offset,
-            halo_read_pattern_params.top_partial_middle_aligned_row_width,
-            halo_read_pattern_params.skip_top_partial_middle_aligned_row,
-            halo_read_pattern_params.top_partial_right_aligned_row_width,
-            halo_read_pattern_params.skip_top_partial_right_aligned_row,
-            halo_read_pattern_params.num_rows_top_partial_image,
-            halo_read_pattern_params.num_skip_rows_top_partial_image,
-            halo_read_pattern_params.num_full_images,
-            halo_read_pattern_params.num_rows_bottom_partial_image,
-            halo_read_pattern_params.num_skip_rows_bottom_partial_image,
-            halo_read_pattern_params.bottom_partial_left_aligned_row_width,
-            halo_read_pattern_params.skip_bottom_partial_left_aligned_row,
+            // halo prev read pattern args
+            halo_prev_read_pattern_offset,
+            halo_prev_read_pattern_params.top_partial_middle_aligned_row_width,
+            halo_prev_read_pattern_params.skip_top_partial_middle_aligned_row,
+            halo_prev_read_pattern_params.top_partial_right_aligned_row_width,
+            halo_prev_read_pattern_params.skip_top_partial_right_aligned_row,
+            halo_prev_read_pattern_params.num_rows_top_partial_image,
+            halo_prev_read_pattern_params.num_skip_rows_top_partial_image,
+            halo_prev_read_pattern_params.num_full_images,
+            halo_prev_read_pattern_params.num_rows_bottom_partial_image,
+            halo_prev_read_pattern_params.num_skip_rows_bottom_partial_image,
+            halo_prev_read_pattern_params.bottom_partial_left_aligned_row_width,
+            halo_prev_read_pattern_params.skip_bottom_partial_left_aligned_row,
 
             // local read pattern args
             local_read_pattern_offset,
@@ -672,7 +726,30 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
             local_read_pattern_params.bottom_partial_left_aligned_row_width,
             local_read_pattern_params.skip_bottom_partial_left_aligned_row,
 
-            halo_input_num_rows_of_tiles + local_input_num_rows_of_tiles,
+            // halo next core args
+            halo_next_read_enabled,
+            halo_next_noc_x,
+            halo_next_noc_y,
+            halo_next_num_tiles,
+            halo_next_start_addr,
+            halo_next_addr_offset,
+            halo_next_size_bytes,
+
+            // halo next read pattern args
+            halo_next_read_pattern_offset,
+            halo_next_read_pattern_params.top_partial_middle_aligned_row_width,
+            halo_next_read_pattern_params.skip_top_partial_middle_aligned_row,
+            halo_next_read_pattern_params.top_partial_right_aligned_row_width,
+            halo_next_read_pattern_params.skip_top_partial_right_aligned_row,
+            halo_next_read_pattern_params.num_rows_top_partial_image,
+            halo_next_read_pattern_params.num_skip_rows_top_partial_image,
+            halo_next_read_pattern_params.num_full_images,
+            halo_next_read_pattern_params.num_rows_bottom_partial_image,
+            halo_next_read_pattern_params.num_skip_rows_bottom_partial_image,
+            halo_next_read_pattern_params.bottom_partial_left_aligned_row_width,
+            halo_next_read_pattern_params.skip_bottom_partial_left_aligned_row,
+
+            halo_prev_input_num_rows_of_tiles + local_input_num_rows_of_tiles + halo_next_input_num_rows_of_tiles,
             num_input_tiles_in_row,
             num_output_tiles,
 
