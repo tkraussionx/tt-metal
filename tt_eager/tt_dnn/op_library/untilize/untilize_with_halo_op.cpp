@@ -24,20 +24,20 @@ const int32_t NEIGHBORHOOD_DIST = 2;    // => ncores to left and ncores to right
 
 namespace untilize_with_halo_helpers {
 
-struct PoolConfig {
-    uint32_t in_w;
-    uint32_t in_h;
-    uint32_t out_w;
-    uint32_t out_h;
-    uint32_t stride_w;
-    uint32_t stride_h;
-    uint32_t pad_w;
-    uint32_t pad_h;
-    uint32_t window_w;
-    uint32_t window_h;
-    uint32_t dilation_w;
-    uint32_t dilation_h;
-};
+// struct PoolConfig {
+//     uint32_t in_w;
+//     uint32_t in_h;
+//     uint32_t out_w;
+//     uint32_t out_h;
+//     uint32_t stride_w;
+//     uint32_t stride_h;
+//     uint32_t pad_w;
+//     uint32_t pad_h;
+//     uint32_t window_w;
+//     uint32_t window_h;
+//     uint32_t dilation_w;
+//     uint32_t dilation_h;
+// };
 
 range_t calculate_in_range(const range_t& out_range, const PoolConfig& pc) {
     // given out stick range, calculate corresponding window's center stick input coords
@@ -62,6 +62,7 @@ range_t calculate_in_range(const range_t& out_range, const PoolConfig& pc) {
     return in_range;
 }
 
+/*
 struct NewShardingConfig {
     int32_t first_partial_right_aligned_row_width;
     int32_t first_partial_image_num_rows;
@@ -366,7 +367,7 @@ inline NewShardingConfig get_shard_specs(int32_t start_stick, int32_t end_stick,
                .skip_after_first_partial_image_row = skip_after_first_partial_image_row,
                .skip_after_full_image = skip_after_full_image
            };
-}
+}*/
 
 // reader noc coords for left and right neighbors
 std::map<CoreCoord, CoreCoord> left_neighbor_noc_xy, right_neighbor_noc_xy;
@@ -469,7 +470,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
     uint32_t out_h = ((in_h + 2 * pad_h - (dilation_h * window_h - 1) - 1) / stride_h) + 1;
     uint32_t out_w = ((in_w + 2 * pad_w - (dilation_w * window_w - 1) - 1) / stride_w) + 1;
 
-    untilize_with_halo_helpers::PoolConfig pc {
+    PoolConfig pc {
         .in_w = in_w,
         .in_h = in_h,
         .out_w = out_w,
@@ -856,7 +857,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
             // calculate the total nsticks incl. padding to be sent to this neighbor
             range_t to_send = range_to_send[core][NEIGHBORHOOD_DIST + neighbor];
             bool to_print = false;  // core == 1 && neighbor == -1;
-            untilize_with_halo_helpers::NewShardingConfig sc = untilize_with_halo_helpers::get_shard_specs(to_send[0], to_send[1], pc, to_print);
+            NewShardingConfig sc = get_shard_specs(to_send[0], to_send[1], pc, to_print);
             uint32_t count = 0;
             count += sc.first_partial_right_aligned_row_width;
             count += sc.skip_after_partial_right_aligned_row;
@@ -928,8 +929,8 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
             uint32_t offset = 0;
             if (neighbor_core >= 0 && neighbor_core < ncores) {
                 bool to_print = core == 13 && neighbor == 2;
-                if (to_print) log_debug("RANGE: {} {}", in_stick_start, range_to_send[core][NEIGHBORHOOD_DIST + neighbor][0]);
-                untilize_with_halo_helpers::NewShardingConfig sc = untilize_with_halo_helpers::get_shard_specs(in_stick_start, range_to_send[core][NEIGHBORHOOD_DIST + neighbor][0], pc, to_print);
+                // if (to_print) log_debug("RANGE: {} {}", in_stick_start, range_to_send[core][NEIGHBORHOOD_DIST + neighbor][0]);
+                NewShardingConfig sc = get_shard_specs(in_stick_start, range_to_send[core][NEIGHBORHOOD_DIST + neighbor][0], pc, to_print);
                 offset += sc.first_partial_right_aligned_row_width;
                 offset += sc.skip_after_partial_right_aligned_row;
                 offset += sc.first_partial_image_num_rows * (pc.in_w + 2 * pc.pad_w);
@@ -1010,7 +1011,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
         //  + skip_after_full_images (pad)
         //  + partial_last_image_nrows (no pad) + padding per row (pad)
         //  + partial_last_row_nsticks (no pad)
-        untilize_with_halo_helpers::NewShardingConfig sc = untilize_with_halo_helpers::get_shard_specs(in_stick_start, in_stick_end, pc);
+        NewShardingConfig sc = get_shard_specs(in_stick_start, in_stick_end, pc);
         int32_t partial_first_row_nsticks = sc.first_partial_right_aligned_row_width;
         int32_t skip_after_partial_first_row = sc.skip_after_partial_right_aligned_row;
         int32_t partial_first_image_nrows = sc.first_partial_image_num_rows;
@@ -1088,25 +1089,25 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
     }
 
     // print stuff for debug
-    in_stick_start = 0;
-    for (uint32_t core = 0; core < ncores; ++ core) {
-        uint32_t in_stick_end = in_stick_start + in_nsticks_per_core;
-        log_debug("==== Core {}:", core);
-        log_debug(" in shard = [{},{})", in_stick_start, in_stick_end);
-        log_debug(" re shard = [{},{}) [{},{}) [{},{})", my_shard[core][0][0], my_shard[core][0][1],
-                                                         my_shard[core][1][0], my_shard[core][1][1],
-                                                         my_shard[core][2][0], my_shard[core][2][1]);
-        for (uint32_t neighbor = 0; neighbor < 2 * NEIGHBORHOOD_DIST + 1; ++ neighbor) {
-            log_debug(" + N {} :: recv: (count = {}, offset = {})\t send: (count = {}, from = {}, to = {}) : [{},{})", neighbor,
-                                                                  updated_count_to_receive[core][neighbor],
-                                                                  receive_at_offset_nsticks[core][neighbor],
-                                                                  updated_count_to_send[core][neighbor],
-                                                                  send_from_offset_nsticks[core][neighbor],
-                                                                  send_to_offset_nsticks[core][neighbor],
-                                                                  range_to_send[core][neighbor][0], range_to_send[core][neighbor][1]);
-        }
-        in_stick_start += in_nsticks_per_core;
-    }
+    // in_stick_start = 0;
+    // for (uint32_t core = 0; core < ncores; ++ core) {
+    //     uint32_t in_stick_end = in_stick_start + in_nsticks_per_core;
+    //     log_debug("==== Core {}:", core);
+    //     log_debug(" in shard = [{},{})", in_stick_start, in_stick_end);
+    //     log_debug(" re shard = [{},{}) [{},{}) [{},{})", my_shard[core][0][0], my_shard[core][0][1],
+    //                                                      my_shard[core][1][0], my_shard[core][1][1],
+    //                                                      my_shard[core][2][0], my_shard[core][2][1]);
+    //     for (uint32_t neighbor = 0; neighbor < 2 * NEIGHBORHOOD_DIST + 1; ++ neighbor) {
+    //         log_debug(" + N {} :: recv: (count = {}, offset = {})\t send: (count = {}, from = {}, to = {}) : [{},{})", neighbor,
+    //                                                               updated_count_to_receive[core][neighbor],
+    //                                                               receive_at_offset_nsticks[core][neighbor],
+    //                                                               updated_count_to_send[core][neighbor],
+    //                                                               send_from_offset_nsticks[core][neighbor],
+    //                                                               send_to_offset_nsticks[core][neighbor],
+    //                                                               range_to_send[core][neighbor][0], range_to_send[core][neighbor][1]);
+    //     }
+    //     in_stick_start += in_nsticks_per_core;
+    // }
 
     auto override_runtime_args_callback = [
         reader_kernel_id=reader_kernel_id,
