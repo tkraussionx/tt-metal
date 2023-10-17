@@ -108,19 +108,19 @@ void kernel_main() {
     uint32_t partial_bottom_image_skip_per_row = get_arg_val<uint32_t>(58);
     uint32_t partial_last_row_nsticks = get_arg_val<uint32_t>(59);
 
-    DPRINT << "intial_pad_nsticks: " << initial_pad_nsticks << ENDL();
-    DPRINT << "local_offset_nsticks: " << local_offset_nsticks << ENDL();
-    DPRINT << "partial_first_row_nsticks: " << partial_first_row_nsticks << ENDL();
-    DPRINT << "partial_first_row_skip: " << partial_first_row_skip << ENDL();
-    DPRINT << "partial_top_image_nrows: " << partial_top_image_nrows << ENDL();
-    DPRINT << "partial_top_image_skip_per_row: " << partial_top_image_skip_per_row << ENDL();
-    DPRINT << "partial_top_image_skip: " << partial_top_image_skip << ENDL();
-    DPRINT << "full_nimages: " << full_nimages << ENDL();
-    DPRINT << "full_image_skip_per_row: " << full_image_skip_per_row << ENDL();
-    DPRINT << "full_image_skip: " << full_image_skip << ENDL();
-    DPRINT << "partial_bottom_image_nrows: " << partial_bottom_image_nrows << ENDL();
-    DPRINT << "partial_bottom_image_skip_per_row: " << partial_bottom_image_skip_per_row << ENDL();
-    DPRINT << "partial_last_row_nsticks: " << partial_last_row_nsticks << ENDL();
+    // DPRINT << "intial_pad_nsticks: " << initial_pad_nsticks << ENDL();
+    // DPRINT << "local_offset_nsticks: " << local_offset_nsticks << ENDL();
+    // DPRINT << "partial_first_row_nsticks: " << partial_first_row_nsticks << ENDL();
+    // DPRINT << "partial_first_row_skip: " << partial_first_row_skip << ENDL();
+    // DPRINT << "partial_top_image_nrows: " << partial_top_image_nrows << ENDL();
+    // DPRINT << "partial_top_image_skip_per_row: " << partial_top_image_skip_per_row << ENDL();
+    // DPRINT << "partial_top_image_skip: " << partial_top_image_skip << ENDL();
+    // DPRINT << "full_nimages: " << full_nimages << ENDL();
+    // DPRINT << "full_image_skip_per_row: " << full_image_skip_per_row << ENDL();
+    // DPRINT << "full_image_skip: " << full_image_skip << ENDL();
+    // DPRINT << "partial_bottom_image_nrows: " << partial_bottom_image_nrows << ENDL();
+    // DPRINT << "partial_bottom_image_skip_per_row: " << partial_bottom_image_skip_per_row << ENDL();
+    // DPRINT << "partial_last_row_nsticks: " << partial_last_row_nsticks << ENDL();
 
     // DPRINT << "0" << ENDL();
 
@@ -276,22 +276,22 @@ void kernel_main() {
     uint32_t rr_send_from_offset = get_arg_val<uint32_t>(70);
     uint32_t rr_send_to_offset = get_arg_val<uint32_t>(71);
 
-    DPRINT << "has_ll: " << has_left_left << ENDL();
-    DPRINT << "has_l: " << has_left << ENDL();
-    DPRINT << "has_r: " << has_right << ENDL();
-    DPRINT << "has_rr: " << has_right_right << ENDL();
-    DPRINT << "ll_send_count: " << ll_send_count << ENDL();
-    DPRINT << "ll_send_from_offset: " << ll_send_from_offset << ENDL();
-    DPRINT << "ll_send_to_offset: " << ll_send_to_offset << ENDL();
-    DPRINT << "l_send_count: " << l_send_count << ENDL();
-    DPRINT << "l_send_from_offset: " << l_send_from_offset << ENDL();
-    DPRINT << "l_send_to_offset: " << l_send_to_offset << ENDL();
-    DPRINT << "r_send_count: " << r_send_count << ENDL();
-    DPRINT << "r_send_from_offset: " << r_send_from_offset << ENDL();
-    DPRINT << "r_send_to_offset: " << r_send_to_offset << ENDL();
-    DPRINT << "rr_send_count: " << rr_send_count << ENDL();
-    DPRINT << "rr_send_from_offset: " << rr_send_from_offset << ENDL();
-    DPRINT << "rr_send_to_offset: " << rr_send_to_offset << ENDL();
+    // DPRINT << "has_ll: " << has_left_left << ENDL();
+    // DPRINT << "has_l: " << has_left << ENDL();
+    // DPRINT << "has_r: " << has_right << ENDL();
+    // DPRINT << "has_rr: " << has_right_right << ENDL();
+    // DPRINT << "ll_send_count: " << ll_send_count << ENDL();
+    // DPRINT << "ll_send_from_offset: " << ll_send_from_offset << ENDL();
+    // DPRINT << "ll_send_to_offset: " << ll_send_to_offset << ENDL();
+    // DPRINT << "l_send_count: " << l_send_count << ENDL();
+    // DPRINT << "l_send_from_offset: " << l_send_from_offset << ENDL();
+    // DPRINT << "l_send_to_offset: " << l_send_to_offset << ENDL();
+    // DPRINT << "r_send_count: " << r_send_count << ENDL();
+    // DPRINT << "r_send_from_offset: " << r_send_from_offset << ENDL();
+    // DPRINT << "r_send_to_offset: " << r_send_to_offset << ENDL();
+    // DPRINT << "rr_send_count: " << rr_send_count << ENDL();
+    // DPRINT << "rr_send_from_offset: " << rr_send_from_offset << ENDL();
+    // DPRINT << "rr_send_to_offset: " << rr_send_to_offset << ENDL();
 
     // NOTE: assuming the base l1 addr are the same on all cores
 
@@ -345,12 +345,10 @@ void kernel_main() {
 
     noc_async_write_barrier();
 
-    DPRINT << "==== PADDED OUTPUT:" << ENDL();
-    for (uint32_t row = 0; row < 3; ++ row) {
-        DPRINT << "=== ROW " << row << ":" << ENDL();
-        print_sticks(out_base_l1_addr, 114 * row, 114, 64);
-        DPRINT << "=== ROW " << row << " END" << ENDL();
-    }
-    noc_async_read_barrier();
-    noc_async_write_barrier();
+    // DPRINT << "==== PADDED OUTPUT:" << ENDL();
+    // for (uint32_t row = 0; row < 3; ++ row) {
+    //     DPRINT << "=== ROW " << row << ":" << ENDL();
+    //     print_sticks(out_base_l1_addr, 114 * row, 114, 64);
+    //     DPRINT << "=== ROW " << row << " END" << ENDL();
+    // }
 }

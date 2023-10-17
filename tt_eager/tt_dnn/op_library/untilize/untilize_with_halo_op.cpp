@@ -880,14 +880,18 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
 
     std::map<uint32_t, std::array<uint32_t, (NEIGHBORHOOD_DIST * 2 + 1)>> updated_count_to_receive; // nsticks pushed from each neighbor
     std::map<uint32_t, std::array<uint32_t, (NEIGHBORHOOD_DIST * 2 + 1)>> receive_at_offset_nsticks;  // data is to be received at these offsets
+    std::map<uint32_t, int32_t> initial_pad_nsticks;  // any padding to be inserted at the beginning (for left most cores)
     in_stick_start = 0;
     for (uint32_t core = 0; core < ncores; ++ core) {
-        uint32_t initial_pad_nsticks = 0;
-        if (in_stick_start % (in_h * in_w) == 0) {
-            // This is start of image. Insert initial padding worth halo size
-            initial_pad_nsticks = halo_out_nsticks;
+        initial_pad_nsticks[core] = 0;
+        if (my_shard[core][0][1] - my_shard[core][0][0] < halo_in_nsticks) {
+            initial_pad_nsticks[core] = halo_out_nsticks - (my_shard[core][0][1] - my_shard[core][0][0]);
         }
-        uint32_t cumulative_count = initial_pad_nsticks;
+        // if (in_stick_start % (in_h * in_w) == 0) {
+        //     // This is start of image. Insert initial padding worth halo size
+        //     initial_pad_nsticks = halo_out_nsticks;
+        // }
+        uint32_t cumulative_count = initial_pad_nsticks[core];
         // calculate the nsticks I receive from each of my neighbors
         for (int32_t neighbor = - NEIGHBORHOOD_DIST; neighbor <= NEIGHBORHOOD_DIST; ++ neighbor) {
             int32_t neighbor_core = core + neighbor;
@@ -1016,11 +1020,11 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
         int32_t partial_last_image_nrows = sc.last_partial_image_num_rows;
         int32_t partial_last_row_nsticks = sc.last_partial_left_aligned_row_width;
 
-        uint32_t initial_pad_nsticks = 0;
-        if (in_stick_start % (in_h * in_w) == 0) {
-            // This is start of image. Insert initial padding worth halo size
-            initial_pad_nsticks = halo_out_nsticks;
-        }
+        // uint32_t initial_pad_nsticks = 0;
+        // if (in_stick_start % (in_h * in_w) == 0) {
+        //     // This is start of image. Insert initial padding worth halo size
+        //     initial_pad_nsticks = halo_out_nsticks;
+        // }
 
         // args for handling local data movement:
         //     intial_pad_nsticks
@@ -1033,7 +1037,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
         //     full_image_skip
         //     partial_bottom_image_nrows, partial_bottom_image_skip_per_row
         //     partial_last_row_nsticks
-        writer_rt_args[47] = initial_pad_nsticks;
+        writer_rt_args[47] = initial_pad_nsticks[core];
         writer_rt_args[48] = receive_at_offset_nsticks[core][NEIGHBORHOOD_DIST]; // local_offset_nsticks
         writer_rt_args[49] = partial_first_row_nsticks;
         writer_rt_args[50] = skip_after_partial_first_row;
