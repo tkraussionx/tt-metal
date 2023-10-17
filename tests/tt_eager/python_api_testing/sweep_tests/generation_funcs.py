@@ -1593,7 +1593,6 @@ def gen_dtype_layout_device_embeddings(
 
 
 def sanitize_args_embeddings(input_shapes, input_setup):
-    print(input_shapes)
     return input_setup
 
 
