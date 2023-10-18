@@ -75,8 +75,18 @@ bool send_over_eth(
 
   // Activate sender core runtime app
     run_test_app_flag = {0x1};
-    llrt::write_hex_vec_to_core(sender_device->id(), sender_core, run_test_app_flag, RUN_APP_FLAG);
-    llrt::write_hex_vec_to_core(receiver_device->id(), receiver_core, run_test_app_flag, RUN_APP_FLAG);
+    //send remote first, otherwise eth core may be blocked, very ugly for now...
+    if (receiver_device->id() == 1) {
+      llrt::write_hex_vec_to_core(1, receiver_core, run_test_app_flag, RUN_APP_FLAG);
+    } else {
+      llrt::write_hex_vec_to_core(1, sender_core, run_test_app_flag, RUN_APP_FLAG);
+    }
+    if (sender_device->id() == 0) {
+      llrt::write_hex_vec_to_core(0, sender_core, run_test_app_flag, RUN_APP_FLAG);
+    } else {
+      llrt::write_hex_vec_to_core(0, receiver_core, run_test_app_flag, RUN_APP_FLAG);
+    }
+
 
 
   bool pass = true;
@@ -200,7 +210,7 @@ TEST_F(DeviceFixture, RandomDirectSendTests) {
     {{0, {.x=9, .y=6}}, {1, {.x=9, .y=0}}}, {{1, {.x=9, .y=0}}, {0, {.x=9, .y=6}}},
     {{0, {.x=1, .y=6}}, {1, {.x=1, .y=0}}}, {{1, {.x=1, .y=0}}, {0, {.x=1, .y=6}}}
   };
-  for (int i=0; i<100; i++) {
+  for (int i=0; i<10000; i++) {
      auto it = connectivity.begin();
      std::advance(it, rand() % (connectivity.size()) );
 
