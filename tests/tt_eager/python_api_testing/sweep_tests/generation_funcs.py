@@ -1541,65 +1541,10 @@ def gen_polygamma_args(
         input_info.update({"k": k_order})
         yield input_info
 
-def gen_dtype_layout_device_embeddings(
-    input_shapes,
-    dtypes=[supported_tt_dtypes],
-    layouts=[supported_tt_layouts],
-    mem_configs=[supported_mem_configs], # mem_configs[-1] is outpu_mem_config
-):
-    # last buffer_types option is for output buffer
-    dtype_mem_config_layouts = []
-
-    for i in range(len(input_shapes)):
-        dtype_mem_config_layout = []
-
-        for dtype, layout, input_mem_config in product(
-            dtypes[i],
-            layouts[i],
-            mem_configs[i],
-        ):
-            dtype_mem_config_layout.append(
-                {"dtype": dtype, "layout": layout, "input_mem_config": input_mem_config}
-            )
-
-        dtype_mem_config_layouts.append(dtype_mem_config_layout)
-
-    result = []
-
-    for out_mem_config in mem_configs[-1]:
-        for dtype_mem_config_layout_combination in product(*dtype_mem_config_layouts):
-            out = sanitize_args_embeddings(input_shapes, dtype_mem_config_layout_combination)
-
-            if out is not None:
-                dtype = []
-                layout = []
-                input_mem_config = []
-
-                for x in dtype_mem_config_layout_combination:
-                    dtype.append(x["dtype"])
-                    layout.append(x["layout"])
-                    input_mem_config.append(x["input_mem_config"])
-
-                result.append(
-                    {
-                        "dtype": dtype,
-                        "layout": layout,
-                        "input_mem_config": input_mem_config,
-                        "output_mem_config": out_mem_config,
-                    }
-                )
-
-    return result
-
-
-def sanitize_args_embeddings(input_shapes, input_setup):
-    return input_setup
-
-
 def gen_embeddings_args(
     input_shapes,
     dtypes=[supported_tt_dtypes],
     layouts=[supported_tt_layouts],
     mem_configs=[supported_mem_configs],
 ):
-    return gen_dtype_layout_device_embeddings(input_shapes, dtypes, layouts, mem_configs)
+    return gen_dtype_layout_device(input_shapes, dtypes, layouts, mem_configs, do_sanitize_args=False)
