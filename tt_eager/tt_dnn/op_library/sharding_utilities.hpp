@@ -204,7 +204,6 @@ inline NewShardingConfig get_shard_specs(int32_t start_stick, int32_t end_stick,
 
             default:
                 if (in_h_i == last_in_h_i) {
-                    log_debug("BOTH {}, {} BELONG TO THE SAME ROW: {}", start_stick, end_stick, in_h_i);
                     // all sticks belong to same row
                     if (last_in_w_i == pc.in_w - 1) {
                         // these sticks are the last in the row
@@ -252,8 +251,6 @@ inline NewShardingConfig get_shard_specs(int32_t start_stick, int32_t end_stick,
                             };
                     }
                 } else {
-                    log_debug("THEY {}, {} BELONG TO DIFF ROWS: {} {}", start_stick, end_stick, in_h_i, last_in_h_i);
-
                     // sticks span two different rows. figure out where does the padding go.
                     // padding will go at the end of the start row
                     // find the last stick in the start row
@@ -399,7 +396,7 @@ inline NewShardingConfig get_shard_specs_with_halo(int32_t start_stick, int32_t 
     start_stick = halo_start_stick < 0 ? 0 : halo_start_stick;
     end_stick = halo_end_stick; // TODO: take care of max, which would be (in_h * in_w * nbatch + halo_nsticks)
 
-    log_debug(" -- range with halo: [{},{})", start_stick, end_stick);
+    // log_debug(" -- range with halo: [{},{})", start_stick, end_stick);
 
     int32_t curr_stick = start_stick;
 

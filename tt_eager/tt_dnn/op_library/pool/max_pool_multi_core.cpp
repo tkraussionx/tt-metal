@@ -1091,7 +1091,8 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
     // incoming data is the input cb instead of raw l1/dram addr
     // this input shard has halo and padding inserted.
     auto raw_in_cb_id = CB::c_in2;
-    uint32_t raw_in_cb_npages = in_nhw_per_core;
+    // uint32_t raw_in_cb_npages = in_nhw_per_core;
+    uint32_t raw_in_cb_npages = input.shard_spec().value().shard_shape[0];
     uint32_t raw_in_cb_pagesize = in_nbytes_c;
     CircularBufferConfig raw_in_cb_config = CircularBufferConfig(
                                                 raw_in_cb_npages * raw_in_cb_pagesize,
@@ -1129,12 +1130,16 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
     if (output.memory_config().is_sharded()) {
         uint32_t sharded_out_cb_id = CB::c_out1;            // output rows in RM
 
+        auto shard_shape = output.shard_spec().value().shard_shape;
         uint32_t sharded_out_num_pages = output.shard_spec().value().shard_shape[0];
 
         uint32_t sharded_out_cb_page_size = output.shard_spec().value().shard_shape[1] * out_nbytes;    // there is just one row of channels after reduction
         CircularBufferConfig cb_sharded_out_config = CircularBufferConfig(sharded_out_num_pages * sharded_out_cb_page_size, {{sharded_out_cb_id, out_df}})
             .set_page_size(sharded_out_cb_id, sharded_out_cb_page_size).set_globally_allocated_address(output.buffer()->address());
         cb_sharded_out = tt_metal::CreateCircularBuffer(program, all_cores, cb_sharded_out_config);
+
+        log_debug(LogOp, "OUTPUT SHARD: {} {}", shard_shape[0], shard_shape[1]);
+        log_debug(LogOp, "OUTPUT CB: {} {}", sharded_out_cb_page_size, sharded_out_num_pages);
     }
 
     uint32_t reader_indices_cb_id = CB::c_intermed1;
@@ -1478,8 +1483,8 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
             int32_t start_in_h_i = start_out_h_i * stride_h;
             int32_t start_center_in_stick_id = start_in_h_i * in_w + start_in_w_i;
 
-            // end is excl.
-            int32_t end_out_stick_id = curr_out_stick_id + out_nhw_per_core;
+            // end is incl.
+            int32_t end_out_stick_id = start_out_stick_id + out_nhw_per_core - 1;
             int32_t end_out_w_i = end_out_stick_id % out_w;
             int32_t end_out_h_i = (end_out_stick_id % out_hw) / out_w;
             int32_t end_in_w_i = end_out_w_i * stride_w;
@@ -1487,19 +1492,22 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
             int32_t end_center_in_stick_id = end_in_h_i * in_w + end_in_w_i;
 
             NewShardingConfig sc = get_shard_specs_with_halo(start_center_in_stick_id, end_center_in_stick_id, pc);
-            log_debug(LogOp, "++++ CORE: {}", i);
-            log_debug(LogOp, " + start_center_in_stick_id: {}", start_center_in_stick_id);
-            log_debug(LogOp, " + end_center_in_stick_id: {}", end_center_in_stick_id);
-            log_debug(LogOp, " + partial_first_row_nsticks: {}", sc.first_partial_right_aligned_row_width);
-            log_debug(LogOp, " + partial_top_image_nrows: {}", sc.first_partial_image_num_rows);
-            log_debug(LogOp, " + full_nimages: {}", sc.num_full_images);
-            log_debug(LogOp, " + partial_bottom_image_nrows: {}", sc.last_partial_image_num_rows);
-            log_debug(LogOp, " + partial_last_row_nsticks: {}", sc.last_partial_left_aligned_row_width);
-            log_debug(LogOp, " + skip_after_partial_right_aligned_row: {}", sc.skip_after_partial_right_aligned_row);
-            log_debug(LogOp, " + skip_after_first_partial_image_row: {}", sc.skip_after_first_partial_image_row);
-            log_debug(LogOp, " + skip_after_full_image: {}", sc.skip_after_full_image);
-            log_debug(LogOp, " + initial_skip: {}", sc.initial_skip);
-            log_debug(LogOp, " + start_stick: {}", sc.start_stick);
+            // log_debug(LogOp, "++++ CORE: {}", i);
+            // log_debug(LogOp, " + out_stick_id range: {} {}", start_out_stick_id, end_out_stick_id);
+            // log_debug(LogOp, " + end_out: {} {}", end_out_w_i, end_out_h_i);
+            // log_debug(LogOp, " + end_in: {} {}", end_in_w_i, end_in_h_i);
+            // log_debug(LogOp, " + start_center_in_stick_id: {}", start_center_in_stick_id);
+            // log_debug(LogOp, " + end_center_in_stick_id: {}", end_center_in_stick_id);
+            // log_debug(LogOp, " + partial_first_row_nsticks: {}", sc.first_partial_right_aligned_row_width);
+            // log_debug(LogOp, " + partial_top_image_nrows: {}", sc.first_partial_image_num_rows);
+            // log_debug(LogOp, " + full_nimages: {}", sc.num_full_images);
+            // log_debug(LogOp, " + partial_bottom_image_nrows: {}", sc.last_partial_image_num_rows);
+            // log_debug(LogOp, " + partial_last_row_nsticks: {}", sc.last_partial_left_aligned_row_width);
+            // log_debug(LogOp, " + skip_after_partial_right_aligned_row: {}", sc.skip_after_partial_right_aligned_row);
+            // log_debug(LogOp, " + skip_after_first_partial_image_row: {}", sc.skip_after_first_partial_image_row);
+            // log_debug(LogOp, " + skip_after_full_image: {}", sc.skip_after_full_image);
+            // log_debug(LogOp, " + initial_skip: {}", sc.initial_skip);
+            // log_debug(LogOp, " + start_stick: {}", sc.start_stick);
 
             int32_t start_top_left_in_stick_id = (start_center_in_stick_id - in_w - kernel_size_w / 2);
 

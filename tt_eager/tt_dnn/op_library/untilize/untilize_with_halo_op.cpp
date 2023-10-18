@@ -1767,13 +1767,14 @@ std::vector<Shape> UntilizeWithHalo::compute_output_shapes(const std::vector<Ten
     auto shard_shape = input.shard_spec().value().shard_shape;
     uint32_t ncores = in_nhw / shard_shape[0];
     uint32_t total_halo_nsticks = (2 * ncores - 2) * halo_nsticks;
-    uint32_t total_nsticks = total_halo_nsticks + total_data_nsticks;
+    // uint32_t total_nsticks = total_halo_nsticks + total_data_nsticks;
+    uint32_t total_nsticks = 480 * 98;
     // output_shape[0] remains same
     // output_shape[1] remains same
     // output_shape[3] remains same
     // output_shape[2] changes
     output_shape[2] = total_nsticks / nbatch;
-    output_shape[2] = ceil(output_shape[2] / ncores) * ncores;
+    output_shape[2] = ceil(total_nsticks / nbatch / ncores) * ncores;
 
     log_debug(LogOp, "output_shape: {} {} {} {}", output_shape[0], output_shape[1], output_shape[2], output_shape[3]);
     log_debug(LogOp, "derived ncores: {}", ncores);
