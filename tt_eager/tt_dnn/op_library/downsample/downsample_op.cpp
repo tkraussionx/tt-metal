@@ -115,20 +115,24 @@ struct ImgTrackingVars {
     uint32_t output_flat_h = 0; // index within sharded output
 };
 
-DownsampleReadPatternParams generate_downsample_read_pattern(ImgTrackingVars & v, uint32_t img_height, uint32_t img_width, uint32_t img_stride_h, uint32_t img_stride_w, uint32_t input_end_flat_h, uint32_t output_end_flat_h) {
+DownsampleReadPatternParams generate_downsample_read_pattern(ImgTrackingVars & v, uint32_t img_height, uint32_t img_width, uint32_t img_stride_h, uint32_t img_stride_w, uint32_t input_end_flat_h, uint32_t output_end_flat_h, bool current_region_is_halo_prev_core, bool current_region_is_halo_next_core) {
     // Sanity checks at the start for local data
     TT_ASSERT(v.next_img_h >= v.img_h);
     TT_ASSERT(v.next_img_w == v.img_w); // assumption that the start is picked and not skipped by stride
     TT_ASSERT(v.img_h < img_height);
     TT_ASSERT(v.next_img_w < img_width);
-
-    bool current_region_is_halo_from_prev_core = false;
-    if (v.input_flat_h != 0) {
-        current_region_is_halo_from_prev_core = true;
+    if (current_region_is_halo_prev_core) {
         cout << "GENERATING READ PATTERN FOR HALO REGION FROM PREVIOUS CORE" << endl;
+        TT_ASSERT(!current_region_is_halo_next_core);
+        TT_ASSERT(v.input_flat_h != 0);
         TT_ASSERT(v.output_flat_h == 0);
+    } else if (current_region_is_halo_next_core) {
+        cout << "GENERATING READ PATTERN FOR HALO REGION FROM NEXT CORE" << endl;
+        TT_ASSERT(!current_region_is_halo_prev_core);
+        TT_ASSERT(v.input_flat_h == 0);
+        TT_ASSERT(v.output_flat_h != 0);
     } else {
-        cout << "GENERATING READ FOR LOCAL REGION" << endl;
+        cout << "GENERATING READ PATTERN FOR LOCAL REGION" << endl;
     }
 
     cout << "img_h=" << v.img_h << ", img_w=" << v.img_w << ", next_img_h=" << v.next_img_h << ", next_img_w=" << v.img_w << endl;
@@ -178,7 +182,7 @@ DownsampleReadPatternParams generate_downsample_read_pattern(ImgTrackingVars & v
             // special corner case for halo region
             // middle aligned
             TT_ASSERT(input_end_flat_h - v.input_flat_h + 1 < img_width);
-            TT_ASSERT(current_region_is_halo_from_prev_core);
+            TT_ASSERT(current_region_is_halo_prev_core || current_region_is_halo_next_core);
             // top partial middle aligned
             top_partial_middle_aligned_row_width = input_end_flat_h - v.input_flat_h + 1;
             skip_top_partial_middle_aligned_row = (v.next_img_h == v.img_h) ? 0 : 1;
@@ -288,7 +292,7 @@ DownsampleReadPatternParams generate_downsample_read_pattern(ImgTrackingVars & v
     TT_ASSERT(v.img_h < img_height && v.img_w < img_width);
 
     // check if there is a bottom partial left aligned row
-    if (v.input_flat_h < input_end_flat_h && v.output_flat_h < output_end_flat_h) {
+    if (v.input_flat_h <= input_end_flat_h && v.output_flat_h <= output_end_flat_h) {
         TT_ASSERT(v.img_w == 0 && v.next_img_w == 0);
         // bottom partial left aligned row width can be split between 2 cores
         uint32_t input_remaining = input_end_flat_h - v.input_flat_h + 1;
@@ -317,20 +321,22 @@ DownsampleReadPatternParams generate_downsample_read_pattern(ImgTrackingVars & v
     }
     TT_ASSERT(v.img_h < img_height && v.img_w < img_width);
 
-    // cout << "   top_partial_middle_aligned_row_width=" << top_partial_middle_aligned_row_width << endl;
-    // cout << "   skip_top_partial_middle_aligned_row=" << skip_top_partial_middle_aligned_row << endl;
-    // cout << "   top_partial_right_aligned_row_width=" << top_partial_right_aligned_row_width << endl;
-    // cout << "   skip_top_partial_right_aligned_row=" << skip_top_partial_right_aligned_row << endl;
-    // cout << "   num_rows_top_partial_image=" << num_rows_top_partial_image << endl;
-    // cout << "   num_skip_rows_top_partial_image=" << num_skip_rows_top_partial_image << endl;
-    // cout << "   num_full_images=" << num_full_images << endl;
-    // cout << "   num_rows_bottom_partial_image=" << num_rows_bottom_partial_image << endl;
-    // cout << "   num_skip_rows_bottom_partial_image=" << num_skip_rows_bottom_partial_image << endl;
-    // cout << "   bottom_partial_left_aligned_row_width=" << bottom_partial_left_aligned_row_width << endl;
-    // cout << "   skip_bottom_partial_left_aligned_row=" << skip_bottom_partial_left_aligned_row << endl;
-    // //cout << "   output_flat_h=" << v.output_flat_h << endl;
-    // cout << "   v.output_flat_h=" << v.output_flat_h << endl;
-    // cout << "img_h=" << v.img_h << ", img_w=" << v.img_w << ", next_img_h=" << v.next_img_h << ", next_img_w=" << v.img_w << endl;
+    cout << "   top_partial_middle_aligned_row_width=" << top_partial_middle_aligned_row_width << endl;
+    cout << "   skip_top_partial_middle_aligned_row=" << skip_top_partial_middle_aligned_row << endl;
+    cout << "   top_partial_right_aligned_row_width=" << top_partial_right_aligned_row_width << endl;
+    cout << "   skip_top_partial_right_aligned_row=" << skip_top_partial_right_aligned_row << endl;
+    cout << "   num_rows_top_partial_image=" << num_rows_top_partial_image << endl;
+    cout << "   num_skip_rows_top_partial_image=" << num_skip_rows_top_partial_image << endl;
+    cout << "   num_full_images=" << num_full_images << endl;
+    cout << "   num_rows_bottom_partial_image=" << num_rows_bottom_partial_image << endl;
+    cout << "   num_skip_rows_bottom_partial_image=" << num_skip_rows_bottom_partial_image << endl;
+    cout << "   bottom_partial_left_aligned_row_width=" << bottom_partial_left_aligned_row_width << endl;
+    cout << "   skip_bottom_partial_left_aligned_row=" << skip_bottom_partial_left_aligned_row << endl;
+    cout << "   v.input_flat_h=" << v.input_flat_h << endl;
+    cout << "   v.output_flat_h=" << v.output_flat_h << endl;
+    cout << "   input_end_flat_h=" << input_end_flat_h << endl;
+    cout << "   output_end_flat_h=" << output_end_flat_h << endl;
+    //cout << "img_h=" << v.img_h << ", img_w=" << v.img_w << ", next_img_h=" << v.next_img_h << ", next_img_w=" << v.img_w << endl;
 
     // Sanity check
     TT_ASSERT(v.input_flat_h <= input_end_flat_h+1);
@@ -455,13 +461,15 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
     // CB to store halo data
     // hardcode to store 1 row of tiles
     uint32_t halo_prev_input_cb_index = CB::c_intermed0;
-    uint32_t num_halo_prev_cb_input_tiles = num_input_tiles_in_row  * 4;
+    uint32_t halo_prev_input_cb_max_rows_of_tiles = 4;
+    uint32_t num_halo_prev_cb_input_tiles = num_input_tiles_in_row  * halo_prev_input_cb_max_rows_of_tiles;
     tt_metal::CircularBufferConfig halo_prev_input_cb_config = tt_metal::CircularBufferConfig(num_halo_prev_cb_input_tiles * single_tile_size, {{halo_prev_input_cb_index, cb_data_format}})
 		.set_page_size(halo_prev_input_cb_index, single_tile_size);
     auto halo_prev_input_cb = tt_metal::CreateCircularBuffer(program, core_range, halo_prev_input_cb_config);
 
     uint32_t halo_next_input_cb_index = CB::c_intermed1;
-    uint32_t num_halo_next_cb_input_tiles = num_input_tiles_in_row  * 4;
+    uint32_t halo_next_input_cb_max_rows_of_tiles = 6;
+    uint32_t num_halo_next_cb_input_tiles = num_input_tiles_in_row  * halo_next_input_cb_max_rows_of_tiles;
     tt_metal::CircularBufferConfig halo_next_input_cb_config = tt_metal::CircularBufferConfig(num_halo_next_cb_input_tiles * single_tile_size, {{halo_next_input_cb_index, cb_data_format}})
 		.set_page_size(halo_next_input_cb_index, single_tile_size);
     auto halo_next_input_cb = tt_metal::CreateCircularBuffer(program, core_range, halo_next_input_cb_config);
@@ -602,7 +610,7 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
             TT_ASSERT(v.input_flat_h < input_shard_height);
             // get halo start tile address from height idx
             uint32_t halo_prev_start_tile_id_h = v.input_flat_h / TILE_HEIGHT;
-            TT_ASSERT(input_shard_height - v.input_flat_h <= TILE_HEIGHT * 4); // halo input cb is hardcoded to store only 4 rows of tiles for now. TODO: allocate bigger CB or read in blocks
+            TT_ASSERT(input_shard_height - v.input_flat_h <= TILE_HEIGHT * halo_prev_input_cb_max_rows_of_tiles); // halo input cb is hardcoded to store only 4 rows of tiles for now. TODO: allocate bigger CB or read in blocks
             // get halo size
             halo_prev_size_bytes = (input_shard_height - (halo_prev_start_tile_id_h * TILE_HEIGHT)) * input_shard_width * a.element_size();
             TT_ASSERT(halo_prev_size_bytes % single_tile_size == 0);
@@ -619,16 +627,23 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
             TT_ASSERT(v.input_flat_h >= halo_prev_start_tile_id_h * TILE_HEIGHT);
             halo_prev_read_pattern_offset = v.input_flat_h - (halo_prev_start_tile_id_h * TILE_HEIGHT);
             local_read_pattern_offset = halo_prev_input_num_rows_of_tiles * TILE_HEIGHT;
-            halo_prev_read_pattern_params = generate_downsample_read_pattern(v, img_height, img_width, img_stride_h, img_stride_w, input_end_flat_h, output_end_flat_h);
+            halo_prev_read_pattern_params = generate_downsample_read_pattern(v, img_height, img_width, img_stride_h, img_stride_w, input_end_flat_h, output_end_flat_h, true, false);
         }
         // local core
-        TT_ASSERT(v.input_flat_h == 0);
         TT_ASSERT(v.output_flat_h < output_shard_height);
-        DownsampleReadPatternParams local_read_pattern_params = generate_downsample_read_pattern(v, img_height, img_width, img_stride_h, img_stride_w, current_core_input_end_flat_h, output_end_flat_h);
+        uint32_t local_start_h = v.input_flat_h;
+        DownsampleReadPatternParams local_read_pattern_params = generate_downsample_read_pattern(v, img_height, img_width, img_stride_h, img_stride_w, current_core_input_end_flat_h, output_end_flat_h, false, false);
         TT_ASSERT(v.output_flat_h <= output_shard_height);
-        uint32_t local_input_num_rows_of_tiles = num_rows_of_input_tiles;
+        uint32_t local_end_h_exclusive = v.input_flat_h == 0 ? input_shard_height : v.input_flat_h;
+        uint32_t local_num_rows = local_end_h_exclusive - local_start_h;
+        TT_ASSERT(local_num_rows > 0);
+        uint32_t local_input_num_rows_of_tiles = std::ceil( (double) local_num_rows / (double) TILE_HEIGHT);
+        uint32_t local_input_offset_rows_of_tiles = local_start_h / TILE_HEIGHT;
+        if (local_start_h != 0) {
+            TT_ASSERT(local_read_pattern_offset == 0);
+            local_read_pattern_offset = local_start_h % TILE_HEIGHT;
+        }
         if (v.input_flat_h != 0) {
-            local_input_num_rows_of_tiles = std::ceil( (double) v.input_flat_h / (double) TILE_HEIGHT);
             input_flat_h_is_of_current_core = false;
         } else {
             input_flat_h_is_of_current_core = true; // updating flag for next core
@@ -644,13 +659,14 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
                 TT_ASSERT(next_core.y == core.y); // for block sharding case, next core is right core
             }
             halo_next_read_enabled = true;
-            halo_next_read_pattern_params = generate_downsample_read_pattern(v, img_height, img_width, img_stride_h, img_stride_w, next_core_input_end_flat_h, output_end_flat_h);
+            halo_next_read_pattern_params = generate_downsample_read_pattern(v, img_height, img_width, img_stride_h, img_stride_w, next_core_input_end_flat_h, output_end_flat_h, false, true);
             cout << "After halo next, v.output_flat_h=" << v.output_flat_h << endl;
             TT_ASSERT(v.output_flat_h == 0);
             TT_ASSERT(v.input_flat_h != 0 && v.input_flat_h < input_shard_height);
-            TT_ASSERT(v.input_flat_h <= TILE_HEIGHT * 4); // halo input cb is hardcoded to store only 4 rows of tiles for now. TODO: allocate bigger CB or read in blocks
+            TT_ASSERT(v.input_flat_h <= TILE_HEIGHT * halo_next_input_cb_max_rows_of_tiles); // halo next input cb is hardcoded to store only 5 rows of tiles for now. TODO: allocate bigger CB or read in blocks
+            uint32_t halo_next_end_tile_id_h = v.input_flat_h / TILE_HEIGHT;
             // get halo size
-            halo_next_size_bytes = v.input_flat_h * input_shard_width * a.element_size();
+            halo_next_size_bytes = (halo_next_end_tile_id_h+1) * TILE_HEIGHT * input_shard_width * a.element_size();
             TT_ASSERT(halo_next_size_bytes % single_tile_size == 0);
             halo_next_num_tiles = halo_next_size_bytes / single_tile_size;
             TT_ASSERT(halo_next_num_tiles <= num_halo_next_cb_input_tiles);
@@ -662,6 +678,7 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
             auto halo_noc_coords = device->worker_core_from_logical_core(next_core);
             halo_next_noc_x = halo_noc_coords.x;
             halo_next_noc_y = halo_noc_coords.y;
+            TT_ASSERT(halo_prev_input_num_rows_of_tiles == 0);
             halo_next_read_pattern_offset = local_input_num_rows_of_tiles * TILE_HEIGHT;
         }
         TT_ASSERT(v.output_flat_h == 0);
@@ -669,6 +686,7 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
         // Compile runtime args
         vector<uint32_t> compile_rt_kernel_args = {
             local_input_num_rows_of_tiles,
+            local_input_offset_rows_of_tiles,
             halo_prev_read_enabled,
             halo_prev_input_num_rows_of_tiles,
             halo_next_read_enabled,
@@ -788,11 +806,10 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
         final_tilize_output_cb_config.set_globally_allocated_address(dst_buffer->address());
         for (uint32_t i = 0; i < num_cores; i++) {
             CoreCoord core = {i % num_cores_x, i / num_cores_x};
-            if (i != 0) {
-                auto runtime_args = GetRuntimeArgs(program, downsample_writer_kernel_id, core);
-                runtime_args[8] = src_buffer->address();
-                SetRuntimeArgs(program, downsample_writer_kernel_id, core, runtime_args);
-            }
+            auto runtime_args = GetRuntimeArgs(program, downsample_writer_kernel_id, core);
+            runtime_args[8] = src_buffer->address();
+            runtime_args[39] = src_buffer->address();
+            SetRuntimeArgs(program, downsample_writer_kernel_id, core, runtime_args);
         }
     };
 

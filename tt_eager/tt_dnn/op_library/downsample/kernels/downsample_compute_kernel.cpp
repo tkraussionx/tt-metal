@@ -15,6 +15,7 @@ void MAIN {
     uint32_t i = 0;
 
     uint32_t local_input_num_rows_of_tiles = get_arg_val<uint32_t>(i); i+=1;
+    uint32_t local_input_offset_rows_of_tiles = get_arg_val<uint32_t>(i); i+=1;
     uint32_t halo_prev_enabled = get_arg_val<uint32_t>(i); i+=1;
     uint32_t halo_prev_input_num_rows_of_tiles = get_arg_val<uint32_t>(i); i+=1;
     uint32_t halo_next_enabled = get_arg_val<uint32_t>(i); i+=1;
@@ -54,6 +55,7 @@ void MAIN {
     // untilize_block(prev_core_input_cb_index, num_input_tiles_per_block, untilize_cb_index);
 
     // Untilize input
+    cb_pop_front(input_cb_index, local_input_offset_rows_of_tiles * num_input_tiles_in_row);
     for(uint32_t b = 0; b < local_input_num_rows_of_tiles; ++ b) {
 
         cb_reserve_back(untilize_cb_index, num_input_tiles_in_row);

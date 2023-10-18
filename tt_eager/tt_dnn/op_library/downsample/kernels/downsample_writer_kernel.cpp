@@ -215,6 +215,21 @@ void kernel_main() {
         noc_async_read(get_noc_addr(halo_prev_core_noc_x, halo_prev_core_noc_y, halo_prev_addr), halo_prev_cb_write_addr, halo_prev_size_bytes);
         noc_async_read_barrier();
         cb_push_back(halo_prev_input_cb_index, halo_prev_num_tiles);
+    }
+
+    if (halo_next_read_enabled) {
+        // Read # of row of tiles from next core into local cb
+        // noc_async_read_barrier
+        // Push cb to compute for untilizing
+        cb_reserve_back(halo_next_input_cb_index, halo_next_num_tiles);
+        uint32_t halo_next_cb_write_addr = get_write_ptr(halo_next_input_cb_index);
+        uint32_t halo_next_addr = halo_next_start_addr + halo_next_addr_offset;
+        noc_async_read(get_noc_addr(halo_next_core_noc_x, halo_next_core_noc_y, halo_next_addr), halo_next_cb_write_addr, halo_next_size_bytes);
+        noc_async_read_barrier();
+        cb_push_back(halo_next_input_cb_index, halo_next_num_tiles);
+    }
+
+    if (halo_prev_read_enabled) {
         img_flat_h_idx = halo_prev_read_pattern_offset;
         // generate reader pattern - halo from prev core region
         reader_pattern_index = generate_reader_pattern_indices(image_height,
@@ -238,7 +253,7 @@ void kernel_main() {
                                                                 halo_prev_skip_bottom_partial_left_aligned_row);
     }
     // halo and local data will be pushed to the same untilize cb
-    // img flat h idx is index within the concatenated halo and local data
+    // img flat h idx is index within the concatenated untilized halo and local data
     // compute reader pattern - local region
     img_flat_h_idx = local_read_pattern_offset;
     reader_pattern_index = generate_reader_pattern_indices(image_height,
@@ -262,15 +277,6 @@ void kernel_main() {
                                                             local_skip_bottom_partial_left_aligned_row);
 
     if (halo_next_read_enabled) {
-        // Read # of row of tiles from previous core into local cb
-        // noc_async_read_barrier
-        // Push cb to compute for untilizing
-        cb_reserve_back(halo_next_input_cb_index, halo_next_num_tiles);
-        uint32_t halo_next_cb_write_addr = get_write_ptr(halo_next_input_cb_index);
-        uint32_t halo_next_addr = halo_next_start_addr + halo_next_addr_offset;
-        noc_async_read(get_noc_addr(halo_next_core_noc_x, halo_next_core_noc_y, halo_next_addr), halo_next_cb_write_addr, halo_next_size_bytes);
-        noc_async_read_barrier();
-        cb_push_back(halo_next_input_cb_index, halo_next_num_tiles);
         img_flat_h_idx = halo_next_read_pattern_offset;
         // generate reader pattern - halo from prev core region
         reader_pattern_index = generate_reader_pattern_indices(image_height,
