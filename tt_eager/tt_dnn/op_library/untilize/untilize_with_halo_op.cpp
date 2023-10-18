@@ -52,6 +52,8 @@ range_t calculate_in_range(const range_t& out_range, const PoolConfig& pc) {
     }
     // end of the range
     {
+        // uint32_t out_w_i = (out_range[1] - 1) % pc.out_w;
+        // uint32_t out_h_i = (out_range[1] - 1) / pc.out_w;
         uint32_t out_w_i = out_range[1] % pc.out_w;
         uint32_t out_h_i = out_range[1] / pc.out_w;
         // corresponding window's center stick input coords:

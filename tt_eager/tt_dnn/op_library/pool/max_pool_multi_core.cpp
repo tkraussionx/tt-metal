@@ -1483,7 +1483,6 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
             int32_t start_in_h_i = start_out_h_i * stride_h;
             int32_t start_center_in_stick_id = start_in_h_i * in_w + start_in_w_i;
 
-            // end is incl.
             int32_t end_out_stick_id = start_out_stick_id + out_nhw_per_core - 1;
             int32_t end_out_w_i = end_out_stick_id % out_w;
             int32_t end_out_h_i = (end_out_stick_id % out_hw) / out_w;
