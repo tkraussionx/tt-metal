@@ -536,6 +536,45 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
         log_debug(LogOp, "in_nsticks_per_core: {}", in_nsticks_per_core);
     }
 
+    int32_t halo_in_nsticks = (in_w + (window_w / 2)) * (window_h / 2);     // input sticks to the writer
+    int32_t halo_out_nsticks = (in_w + 2 * pad_w) * pad_h + window_w / 2;   // output sticks from the writer
+
+    log_debug(LogOp, "halo_in_nsticks: {}", halo_in_nsticks);
+    log_debug(LogOp, "halo_out_nsticks: {}", halo_out_nsticks);
+
+    // For each core, calculate the desired resharding with halo and pad inserted in order to
+    // to obtain resulting **output after the pooling/downsampling op to be equally distributed across all cores**.
+    // The resulting shards with halo and pad could be different across cores.
+    // The resharding is represented as a map:
+    // map :: core -> [l_halo_start, l_halo_end) [local_start, local_end) [r_halo_start, r_halo_end)
+    // (these are global input stick indices, [0, (in_nhw - 1)])
+    // (and l_halo_end == local_start, local_end == r_halo_start)
+    // calculate this core's [left halo, local owned, right halo]. These halo data could be "anywhere".
+    std::map<uint32_t, std::array<range_t, 3>> my_shard;
+    int32_t out_stick_start = 0;   // global "output" stick (after downsample/pool)
+    int32_t pool_out_nsticks_per_core = nbatch * pc.out_h * pc.out_w / ncores;
+    uint32_t max_nsticks = 0;
+    for (uint32_t core = 0; core < ncores; ++ core) {
+        range_t out_range = {out_stick_start, out_stick_start + pool_out_nsticks_per_core};
+        range_t in_range = untilize_with_halo_helpers::calculate_in_range(out_range, pc);  // this represents the "window" center input sticks
+        int32_t l_halo_start = in_range[0] - halo_in_nsticks;
+        l_halo_start = l_halo_start < 0 ? 0 : l_halo_start;
+        int32_t r_halo_end = in_range[1] + halo_in_nsticks;
+        r_halo_end = r_halo_end > in_nhw ? in_nhw : r_halo_end;
+        my_shard[core] = {{
+            { l_halo_start, in_range[0] }, // l_halo
+            { in_range[0], in_range[1] },                   // local
+            { in_range[1], r_halo_end }  // r_halo
+        }};
+
+        max_nsticks = max_nsticks < (r_halo_end - l_halo_start) ? (r_halo_end - l_halo_start) : max_nsticks;
+
+        out_stick_start += pool_out_nsticks_per_core;
+    }
+    log_debug("MAX nsticks = {}", max_nsticks);
+
+    // CBs
+
     uint32_t src_cb_id = CB::c_in0;
     uint32_t num_input_tiles = ntiles_per_block * nblocks_per_core;
     auto src_cb_config = CircularBufferConfig(num_input_tiles * tile_size, {{src_cb_id, cb_df}})
@@ -558,7 +597,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
                                 + (in_nsticks_per_core / in_nsticks_per_batch) * (in_w + 2);    // padding rows
     // NOTE: this is always the same for all cores
     uint32_t halo_npages = (in_w + 1 + 2) * 2;  // left and right halo
-    uint32_t out_cb_npages = local_npages + halo_npages;
+    uint32_t out_cb_npages = max_nsticks;   //local_npages + halo_npages;
     uint32_t out_nsticks_per_core = local_npages + halo_npages;
     {
         log_debug(LogOp, "out_cb_pagesize: {}", out_cb_pagesize);
@@ -720,38 +759,6 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
     uint32_t writer_noc = 0;
 
     TT_ASSERT(window_h == 3 && window_w == 3);
-
-    int32_t halo_in_nsticks = (in_w + (window_w / 2)) * (window_h / 2);     // input sticks to the writer
-    int32_t halo_out_nsticks = (in_w + 2 * pad_w) * pad_h + window_w / 2;   // output sticks from the writer
-
-    log_debug(LogOp, "halo_in_nsticks: {}", halo_in_nsticks);
-    log_debug(LogOp, "halo_out_nsticks: {}", halo_out_nsticks);
-
-    // For each core, calculate the desired resharding with halo and pad inserted in order to
-    // to obtain resulting **output after the pooling/downsampling op to be equally distributed across all cores**.
-    // The resulting shards with halo and pad could be different across cores.
-    // The resharding is represented as a map:
-    // map :: core -> [l_halo_start, l_halo_end) [local_start, local_end) [r_halo_start, r_halo_end)
-    // (these are global input stick indices, [0, (in_nhw - 1)])
-    // (and l_halo_end == local_start, local_end == r_halo_start)
-    // calculate this core's [left halo, local owned, right halo]. These halo data could be "anywhere".
-    std::map<uint32_t, std::array<range_t, 3>> my_shard;
-    int32_t out_stick_start = 0;   // global "output" stick (after downsample/pool)
-    int32_t pool_out_nsticks_per_core = nbatch * pc.out_h * pc.out_w / ncores;
-    for (uint32_t core = 0; core < ncores; ++ core) {
-        range_t out_range = {out_stick_start, out_stick_start + pool_out_nsticks_per_core};
-        range_t in_range = untilize_with_halo_helpers::calculate_in_range(out_range, pc);  // this represents the "window" center input sticks
-        int32_t l_halo_start = in_range[0] - halo_in_nsticks;
-        l_halo_start = l_halo_start < 0 ? 0 : l_halo_start;
-        int32_t r_halo_end = in_range[1] + halo_in_nsticks;
-        r_halo_end = r_halo_end > in_nhw ? in_nhw : r_halo_end;
-        my_shard[core] = {{
-            { l_halo_start, in_range[0] }, // l_halo
-            { in_range[0], in_range[1] },                   // local
-            { in_range[1], r_halo_end }  // r_halo
-        }};
-        out_stick_start += pool_out_nsticks_per_core;
-    }
 
     // Calculate data shuffle config for each core using its shard size:
     // Given equally distributed input across all cores,
