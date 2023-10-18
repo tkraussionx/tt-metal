@@ -270,6 +270,8 @@ bool check_if_riscs_on_specified_core_done(chip_id_t chip_id, const CoreCoord &c
         // read a single uint32_t even though launch.run is smaller than that
         run_mailbox_read_val = read_hex_vec_from_core(chip_id, core, run_mailbox_address & ~0x3, sizeof(uint32_t));
         uint8_t run = run_mailbox_read_val[0] >> (8 * (offsetof(launch_msg_t, run) & 3));
+	std::cout <<  "reading from 0x" << std::hex << (run_mailbox_address & ~0x3) << "from core " << core.str()<<  std::endl;
+	std::cout << "read value " << std::dec << run << std::endl;
         if (run != RUN_MSG_GO && run != RUN_MSG_DONE) {
             fprintf(stderr, "Read unexpected run_mailbox value: 0x%x (expected %x or %x)\n", run, RUN_MSG_GO, RUN_MSG_DONE);
             TT_ASSERT(

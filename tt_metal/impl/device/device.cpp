@@ -205,11 +205,14 @@ bool Device::initialize(const std::vector<uint32_t>& l1_bank_remap) {
     log_info(tt::LogMetal, "Initializing device {}", this->id_);
     bool already_initialized = this->active_devices_.activate_device(this->id_);
     this->initialize_cluster();
+    std::cout << " done init cluster " << std::endl;
     this->initialize_allocator(l1_bank_remap);
     if (!already_initialized) {
         this->initialize_build();
+    std::cout << " done init build " << std::endl;
     }
     this->initialize_hardware();
+    std::cout << " done init hardware " << std::endl;
     tt_start_debug_print_server();
     llrt::watcher_attach(this, this->id(),
                          [&, this]() { return this->logical_grid_size(); },
@@ -217,6 +220,7 @@ bool Device::initialize(const std::vector<uint32_t>& l1_bank_remap) {
                          [&, this]() -> const std::set<CoreCoord>& { return this->storage_only_cores(); },
                          get_compile_outpath()
                          );
+    std::cout << " done init watcher" << std::endl;
 
     this->initialized_ = true;
     return true;

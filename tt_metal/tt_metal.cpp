@@ -395,11 +395,13 @@ void LaunchProgram(Device *device, Program &program) {
     detail::ConfigureDeviceWithProgram(device, program);
     auto device_id = device->id();
 
+    std::cout << " here 1" << std::endl;
     tt::Cluster::instance().dram_barrier(device_id);
 
     // Note: the l1_barrier below is needed to be sure writes to cores that
     // don't get the GO mailbox (eg, storage cores) have all landed
     tt::Cluster::instance().l1_barrier(device->id());
+    std::cout << " here 2" << std::endl;
 
     std::vector<CoreCoord> logical_cores_used_in_program = program.logical_cores();
     for (const auto &logical_core : logical_cores_used_in_program) {
@@ -407,6 +409,7 @@ void LaunchProgram(Device *device, Program &program) {
         auto worker_core = device->worker_core_from_logical_core(logical_core);
         tt::llrt::write_launch_msg_to_core(device->id(), worker_core, msg);
     }
+    std::cout << " here 3" << std::endl;
 
     // Wait for all cores to be done
 

@@ -297,6 +297,7 @@ TEST_F(DeviceFixture, ValidateKernelDoesNotTargetHarvestedCores) {
             tt_metal::detail::WriteToDeviceL1(this->devices_.at(id), logical_core, write_address, host_input);
         }
 
+	std::cout << " starting test " << std::endl;
         tt_metal::Program program = tt_metal::Program();
         string kernel_name = "tests/tt_metal/tt_metal/test_kernels/ping_legal_l1s.cpp";
         CoreCoord logical_target_core = CoreCoord({.x = 0, .y = 0});
@@ -311,13 +312,16 @@ TEST_F(DeviceFixture, ValidateKernelDoesNotTargetHarvestedCores) {
                 .noc = tt_metal::NOC::NOC_0,
                 .compile_args = {l1_address, intermediate_l1_addr, size_bytes}});
 
+	std::cout << " launching program " << std::endl;
         tt_metal::LaunchProgram(this->devices_.at(id), program);
+	std::cout << " launching program " << std::endl;
 
         std::vector<uint32_t> output;
         for (uint32_t bank_id = 0; bank_id < num_l1_banks; bank_id++) {
             CoreCoord logical_core = this->devices_.at(id)->logical_core_from_bank_id(bank_id);
             uint32_t read_address = l1_address + this->devices_.at(id)->l1_bank_offset_from_bank_id(bank_id);
             tt_metal::detail::ReadFromDeviceL1(this->devices_.at(id), logical_core, read_address, size_bytes, output);
+	    std::cout << " readfrom device l1 " << std::endl;
             ASSERT_TRUE(output.size() == host_input.size());
             uint32_t expected_value =
                 bank_id_to_value.at(bank_id) + 1;  // ping_legal_l1s kernel increments each value it reads

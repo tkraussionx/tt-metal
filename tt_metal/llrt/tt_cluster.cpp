@@ -357,12 +357,16 @@ void Cluster::reset_debug_print_server_buffers() const {
     }
 }
 
-void Cluster::assert_risc_reset(const chip_id_t &chip) const { this->device_->assert_risc_reset(chip); }
+void Cluster::assert_risc_reset(const chip_id_t &chip) const { this->device_->assert_risc_reset(chip);
+
+	this->device_->wait_for_non_mmio_flush();
+}
 
 void Cluster::deassert_risc_reset_at_core(const tt_cxy_pair &physical_chip_coord) const {
     const metal_SocDescriptor &soc_desc = this->get_soc_desc(physical_chip_coord.chip);
     tt_cxy_pair virtual_chip_coord = soc_desc.convert_to_umd_coordinates(physical_chip_coord);
     this->device_->deassert_risc_reset_at_core(virtual_chip_coord);
+    this->device_->wait_for_non_mmio_flush();
 }
 
 void Cluster::deassert_risc_reset(const chip_id_t &target_device_id, bool start_stagger) const {
@@ -373,6 +377,7 @@ void Cluster::deassert_risc_reset(const chip_id_t &target_device_id, bool start_
         log_debug(tt::LogLLRuntime, "Stagger start : {}", start_stagger);
         TT_ASSERT(not start_stagger, "UMD currently does not support staggered deassert of RISC reset");
         this->device_->deassert_risc_reset(target_device_id);
+	this->device_->wait_for_non_mmio_flush();
     }
 }
 
