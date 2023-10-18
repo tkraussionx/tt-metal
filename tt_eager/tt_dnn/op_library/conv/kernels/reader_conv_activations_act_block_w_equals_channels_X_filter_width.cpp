@@ -177,6 +177,7 @@ void kernel_main() {
                 //DPRINT << "waiting on read barrier" << ENDL();
                 noc_async_read_barrier();
                 //DPRINT << "done on read barrier" << ENDL();
+                DPRINT << act_block_num_tiles << ENDL();
                 cb_push_back(cb_id_act, act_block_num_tiles);
             } // for num of act blocks in inner width dim
             out_h_reset = out_h;
