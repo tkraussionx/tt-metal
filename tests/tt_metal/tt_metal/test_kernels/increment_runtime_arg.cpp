@@ -12,8 +12,8 @@ void MAIN {
 
 
     // Need pointer as well to modify arg address to test in host
-    volatile tt_l1_ptr std::uint32_t* arg_a_ptr = (volatile tt_l1_ptr uint32_t*)(TRISC_L1_ARG_BASE);
-    volatile tt_l1_ptr std::uint32_t* arg_b_ptr = (volatile tt_l1_ptr uint32_t*)(TRISC_L1_ARG_BASE + 4);
+    volatile tt_l1_ptr std::uint32_t* arg_a_ptr = (volatile tt_l1_ptr uint32_t*)(TRISC_L1_ARG_BASE_BUF0);
+    volatile tt_l1_ptr std::uint32_t* arg_b_ptr = (volatile tt_l1_ptr uint32_t*)(TRISC_L1_ARG_BASE_BUF0 + 4);
 
 
     UNPACK(arg_a_ptr[0] = arg_a + 87);

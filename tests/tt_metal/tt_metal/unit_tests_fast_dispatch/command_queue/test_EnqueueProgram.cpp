@@ -236,12 +236,12 @@ bool test_dummy_EnqueueProgram_with_runtime_args(Device* device, CommandQueue& c
 
             vector<uint32_t> dummy_kernel0_args_readback;
             tt::tt_metal::detail::ReadFromDeviceL1(
-                device, core_coord, BRISC_L1_ARG_BASE, dummy_kernel0_args.size() * sizeof(uint32_t), dummy_kernel0_args_readback);
+                device, core_coord, BRISC_L1_ARG_BASE_BUF0, dummy_kernel0_args.size() * sizeof(uint32_t), dummy_kernel0_args_readback);
             pass &= (dummy_kernel0_args == dummy_kernel0_args_readback);
 
             vector<uint32_t> dummy_kernel1_args_readback;
             tt::tt_metal::detail::ReadFromDeviceL1(
-                device, core_coord, NCRISC_L1_ARG_BASE, dummy_kernel1_args.size() * sizeof(uint32_t), dummy_kernel1_args_readback);
+                device, core_coord, NCRISC_L1_ARG_BASE_BUF0, dummy_kernel1_args.size() * sizeof(uint32_t), dummy_kernel1_args_readback);
             pass &= (dummy_kernel1_args == dummy_kernel1_args_readback);
         } while (not terminate);
     }
@@ -457,7 +457,7 @@ TEST_F(CommandQueueFixture, ComputeRuntimeArgs) {
     std::vector<uint32_t> written_args;
     CoreCoord logical_core(0,0);
     tt::tt_metal::detail::ReadFromDeviceL1(
-        this->device_, logical_core, TRISC_L1_ARG_BASE, initial_runtime_args.size() * sizeof(uint32_t), written_args);
+        this->device_, logical_core, TRISC_L1_ARG_BASE_BUF0, initial_runtime_args.size() * sizeof(uint32_t), written_args);
     for(int i=0; i<initial_runtime_args.size(); i++){
         bool got_expected_result = (written_args[i] == (initial_runtime_args[i] + increments[i]));
         EXPECT_TRUE(got_expected_result);
@@ -548,6 +548,27 @@ TEST_F(CommandQueueFixture, TestAllRuntimeArgsCorrectlySentMultiCore) {
 
     DummyProgramConfig dummy_program_config = {.cr_set = cr_set};
     EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_runtime_args(this->device_, *tt::tt_metal::detail::GLOBAL_CQ, dummy_program_config));
+}
+
+TEST_F(CommandQueueFixture, TestSendingMaxNumberOfRuntimeArgs) {
+    CoreCoord worker_grid_size = this->device_->compute_with_storage_grid_size();
+
+    CoreRange cr = {.start = {0, 0}, .end = {worker_grid_size.x - 1, worker_grid_size.y - 2}};
+    CoreRangeSet cr_set({cr});
+
+    Program program;
+    auto dummy_compute_kernel = CreateComputeKernel(program, "tt_metal/kernels/compute/blank.cpp", cr_set);
+    auto dummy_dataflow0_kernel = CreateDataMovementKernel(program, "tt_metal/kernels/dataflow/blank.cpp", cr_set, DataMovementConfig{.processor = DataMovementProcessor::RISCV_0, .noc = NOC::RISCV_0_default});
+    auto dummy_dataflow1_kernel = CreateDataMovementKernel(program, "tt_metal/kernels/dataflow/blank.cpp", cr_set, DataMovementConfig{.processor = DataMovementProcessor::RISCV_1, .noc = NOC::RISCV_1_default});
+    vector<uint32_t> max_num_runtime_args(256, 0); // 1KB of runtime args
+    SetRuntimeArgs(program, dummy_compute_kernel, cr_set, max_num_runtime_args);
+    SetRuntimeArgs(program, dummy_dataflow0_kernel, cr_set, max_num_runtime_args);
+    SetRuntimeArgs(program, dummy_dataflow1_kernel, cr_set, max_num_runtime_args);
+    EnqueueProgram(*::detail::GLOBAL_CQ, program, false);
+    std::cout << "SLEEPING" << std::endl;
+    sleep(5);
+    detail::DumpDeviceProfileResults(this->device_, {{6, 9}});
+    // Finish(*::detail::GLOBAL_CQ);
 }
 
 }  // end namespace multicore_tests

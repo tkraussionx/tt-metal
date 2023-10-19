@@ -128,13 +128,13 @@ namespace detail {
             uint32_t l1_arg_base = 0;
             switch (riscv) {
                 case RISCV::BRISC: {
-                    l1_arg_base = BRISC_L1_ARG_BASE;
+                    l1_arg_base = BRISC_L1_ARG_BASE_BUF0;
                 } break;
                 case RISCV::NCRISC: {
-                    l1_arg_base = NCRISC_L1_ARG_BASE;
+                    l1_arg_base = NCRISC_L1_ARG_BASE_BUF0;
                 } break;
                 case RISCV::COMPUTE: {
-                    l1_arg_base = TRISC_L1_ARG_BASE;
+                    l1_arg_base = TRISC_L1_ARG_BASE_BUF0;
                 }
                 break;
                 default: log_assert(false, "Unsupported {} processor does not support runtime args", riscv);

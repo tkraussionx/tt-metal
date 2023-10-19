@@ -16,7 +16,7 @@
 
 constexpr static uint32_t get_arg_addr(int arg_idx) {
     // args are 4B in size
-    return TRISC_L1_ARG_BASE + (arg_idx << 2);
+    return TRISC_L1_ARG_BASE_BUF0 + (arg_idx << 2);
 }
 
 template <typename T>

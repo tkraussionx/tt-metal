@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
         tt_metal::LaunchProgram(device, program);
 
         std::vector<uint32_t> first_kernel_result;
-        tt_metal::detail::ReadFromDeviceL1(device, core, BRISC_L1_RESULT_BASE, sizeof(int), first_kernel_result);
+        tt_metal::detail::ReadFromDeviceL1(device, core, BRISC_L1_ARG_BASE_BUF0 + RUNTIME_ARG_BUFFER_SIZE, sizeof(int), first_kernel_result);
         log_info(LogVerif, "first kernel result = {}", first_kernel_result[0]);
 
         ////////////////////////////////////////////////////////////////////////////
@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
         tt_metal::LaunchProgram(device, program);
 
         std::vector<uint32_t> second_kernel_result;
-        tt_metal::detail::ReadFromDeviceL1(device, core, BRISC_L1_RESULT_BASE, sizeof(int), second_kernel_result);
+        tt_metal::detail::ReadFromDeviceL1(device, core, BRISC_L1_ARG_BASE_BUF0 + RUNTIME_ARG_BUFFER_SIZE, sizeof(int), second_kernel_result);
         log_info(LogVerif, "second kernel result = {}", second_kernel_result[0]);
 
         ////////////////////////////////////////////////////////////////////////////

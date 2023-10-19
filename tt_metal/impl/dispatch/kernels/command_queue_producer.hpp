@@ -107,6 +107,8 @@ void produce(
         uint32_t num_reads_completed = 0;
         uint32_t num_writes_completed = 0;
 
+        // DPRINT << "PRODUCER NUM PAGES: " << num_pages << ENDL();
+
         while (num_writes_completed != num_pages) {
             // Context switch between reading in pages and sending them to the consumer.
             // These APIs are non-blocking to allow for context switching.

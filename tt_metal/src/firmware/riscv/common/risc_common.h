@@ -28,14 +28,14 @@
 #define TILE_WORD_32_BIT ((32*32*4 + 32) >> 4)
 
 #ifdef COMPILE_FOR_BRISC
-constexpr std::uint32_t L1_ARG_BASE = BRISC_L1_ARG_BASE;
-constexpr std::uint32_t L1_RESULT_BASE = BRISC_L1_RESULT_BASE;
+constexpr std::uint32_t L1_ARG_BASE = BRISC_L1_ARG_BASE_BUF0;
+constexpr std::uint32_t L1_RESULT_BASE = L1_ARG_BASE + RUNTIME_ARG_BUFFER_SIZE;
 #elif defined(COMPILE_FOR_NCRISC)
-constexpr std::uint32_t L1_ARG_BASE = NCRISC_L1_ARG_BASE;
-constexpr std::uint32_t L1_RESULT_BASE = NCRISC_L1_RESULT_BASE;
+constexpr std::uint32_t L1_ARG_BASE = NCRISC_L1_ARG_BASE_BUF0;
+constexpr std::uint32_t L1_RESULT_BASE = L1_ARG_BASE + RUNTIME_ARG_BUFFER_SIZE;
 #elif defined(COMPILE_FOR_TRISC)
-constexpr std::uint32_t L1_ARG_BASE = TRISC_L1_ARG_BASE;
-constexpr std::uint32_t L1_RESULT_BASE = TRISC_L1_ARG_BASE +1024;
+constexpr std::uint32_t L1_ARG_BASE = TRISC_L1_ARG_BASE_BUF0;
+constexpr std::uint32_t L1_RESULT_BASE = L1_ARG_BASE + RUNTIME_ARG_BUFFER_SIZE;
 #endif
 
 const uint32_t STREAM_RESTART_CHECK_MASK = (0x1 << 3) - 1;

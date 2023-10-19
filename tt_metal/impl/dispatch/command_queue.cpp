@@ -93,9 +93,9 @@ ProgramMap ConstructProgramMap(const Device* device, Program& program) {
     };
 
     static const map<RISCV, uint32_t> processor_to_l1_arg_base_addr = {
-        {RISCV::BRISC, BRISC_L1_ARG_BASE},
-        {RISCV::NCRISC, NCRISC_L1_ARG_BASE},
-        {RISCV::COMPUTE, TRISC_L1_ARG_BASE},
+        {RISCV::BRISC, BRISC_L1_ARG_BASE_BUF0},
+        {RISCV::NCRISC, NCRISC_L1_ARG_BASE_BUF0},
+        {RISCV::COMPUTE, TRISC_L1_ARG_BASE_BUF0},
     };
     // Step 1: Get transfer info for runtime args (soon to just be host data). We
     // want to send host data first because of the higher latency to pull
@@ -572,6 +572,8 @@ void send_dispatch_kernel_to_device(Device* device) {
     auto dispatch_cores = device->dispatch_cores().begin();
     CoreCoord producer_logical_core = *dispatch_cores++;
     CoreCoord consumer_logical_core = *dispatch_cores;
+
+    std::cout << "CONSUMER LOG CORE: " << consumer_logical_core.str() << std::endl;
 
     CoreCoord producer_physical_core = device->worker_core_from_logical_core(producer_logical_core);
     CoreCoord consumer_physical_core = device->worker_core_from_logical_core(consumer_logical_core);

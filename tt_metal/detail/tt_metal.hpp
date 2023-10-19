@@ -80,6 +80,7 @@ namespace tt::tt_metal{
          * | device        | The device holding the program being profiled.    | Device *        |                           | True     |
          * | program       | The program being profiled.                       | const Program & |                           | True     |
          * */
+        void DumpDeviceProfileResults(Device *device, const vector<CoreCoord>& logical_cores);
         void DumpDeviceProfileResults(Device *device, const Program &program);
 
         /**

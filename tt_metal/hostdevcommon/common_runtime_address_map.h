@@ -15,11 +15,15 @@
 */
 
 // TODO: these could be moved to even lower addresses -- 5 RISC-V hexes combined don't need 100 KB
-constexpr static std::uint32_t BRISC_L1_ARG_BASE = 101 * 1024;
-constexpr static std::uint32_t BRISC_L1_RESULT_BASE = 102 * 1024;
-constexpr static std::uint32_t NCRISC_L1_ARG_BASE = 103 * 1024;
-constexpr static std::uint32_t NCRISC_L1_RESULT_BASE = 104 * 1024;
-constexpr static std::uint32_t TRISC_L1_ARG_BASE = 105 * 1024;
+constexpr static std::uint32_t RUNTIME_ARG_BUFFER_SIZE = 1024;
+constexpr static std::uint32_t BRISC_L1_ARG_BASE_BUF0 = 101 * 1024;
+constexpr static std::uint32_t BRISC_L1_ARG_BASE_BUF1 = BRISC_L1_ARG_BASE_BUF0 + RUNTIME_ARG_BUFFER_SIZE;
+constexpr static std::uint32_t NCRISC_L1_ARG_BASE_BUF0 = BRISC_L1_ARG_BASE_BUF1 + RUNTIME_ARG_BUFFER_SIZE;
+constexpr static std::uint32_t NCRISC_L1_ARG_BASE_BUF1 = NCRISC_L1_ARG_BASE_BUF0 + RUNTIME_ARG_BUFFER_SIZE;
+constexpr static std::uint32_t TRISC_L1_ARG_BASE_BUF0 = NCRISC_L1_ARG_BASE_BUF1 + RUNTIME_ARG_BUFFER_SIZE;
+
+// We need to eventually allocate space for double-buffering TRISC as well
+// constexpr static std::uint32_t TRISC_L1_ARG_BASE_BUF0_BUF1 = TRISC_L1_ARG_BASE_BUF0 + RUNTIME_ARG_BUFFER_SIZE;
 
 // config for 32 L1 buffers is at addr BUFFER_CONFIG_BASE
 // 12 bytes for each buffer: (addr, size, size_in_tiles)

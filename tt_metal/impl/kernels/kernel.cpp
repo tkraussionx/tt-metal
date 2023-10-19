@@ -94,22 +94,22 @@ std::pair<uint64_t, uint64_t> DataMovementKernel::get_runtime_args_range() const
     std::pair<uint64_t, uint64_t> arg_base_to_result_base;
     switch (this->config_.processor) {
         case DataMovementProcessor::RISCV_0: {
-            arg_base_to_result_base = {BRISC_L1_ARG_BASE, BRISC_L1_RESULT_BASE};
+            arg_base_to_result_base = {BRISC_L1_ARG_BASE_BUF0, BRISC_L1_ARG_BASE_BUF0 + RUNTIME_ARG_BUFFER_SIZE};
         }
         break;
         case DataMovementProcessor::RISCV_1: {
-            arg_base_to_result_base = {NCRISC_L1_ARG_BASE, NCRISC_L1_RESULT_BASE};
+            arg_base_to_result_base = {NCRISC_L1_ARG_BASE_BUF0, NCRISC_L1_ARG_BASE_BUF0 + RUNTIME_ARG_BUFFER_SIZE};
         }
         break;
         default:
-            arg_base_to_result_base = {BRISC_L1_ARG_BASE, BRISC_L1_RESULT_BASE};
+            arg_base_to_result_base = {BRISC_L1_ARG_BASE_BUF0, BRISC_L1_ARG_BASE_BUF0 + RUNTIME_ARG_BUFFER_SIZE};
         break;
     }
     return arg_base_to_result_base;
 }
 
 std::pair<uint64_t, uint64_t> ComputeKernel::get_runtime_args_range() const {
-    std::pair<uint64_t, uint64_t> arg_base_to_result_base = {TRISC_L1_ARG_BASE, TRISC_L1_ARG_BASE + 1024};
+    std::pair<uint64_t, uint64_t> arg_base_to_result_base = {TRISC_L1_ARG_BASE_BUF0, TRISC_L1_ARG_BASE_BUF0 + RUNTIME_ARG_BUFFER_SIZE};
     return arg_base_to_result_base;
 }
 
@@ -117,7 +117,7 @@ void Kernel::set_runtime_args(const CoreCoord &logical_core, const std::vector<u
     auto validate_runtime_args_size = [&]() {
         uint32_t runtime_args_size = runtime_args.size() * sizeof(uint32_t);
         auto[l1_arg_base, result_base] = this->get_runtime_args_range();
-        if (l1_arg_base + runtime_args_size >= result_base) {
+        if (l1_arg_base + runtime_args_size > result_base) {
             TT_THROW(std::to_string(runtime_args_size / 1024) + "KB runtime args targeting kernel " + this->name() + " on " + logical_core.str() + " are too large.\
                 Cannot be written as they will run into memory region reserved for result. Max allowable size is " + std::to_string((result_base - l1_arg_base)/1024) + " KB.");
         }

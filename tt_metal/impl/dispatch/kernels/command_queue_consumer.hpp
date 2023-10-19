@@ -1,4 +1,5 @@
 #include "dataflow_api.h"
+#include "tools/profiler/kernel_profiler.hpp"
 
 /*
  * SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
@@ -128,7 +129,33 @@ void write_and_launch_program(
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(DISPATCH_MESSAGE_ADDR);
     *message_addr_ptr = 0;
 
-    for (uint32_t page_idx = 0; page_idx < num_pages;) {
+    // DPRINT << "CONSUMER NUM PAGES: " << num_pages << ENDL();
+    kernel_profiler::mark_time(5);
+    // for (volatile int i = 0; i < 100000000; i++);
+    for (uint32_t page_idx = 0; page_idx < num_pages - 4;) {
+        uint32_t num_to_write = min(num_pages - page_idx, producer_consumer_transfer_num_pages);
+        multicore_cb_wait_front(db_buf_switch, num_to_write);
+        uint32_t src_addr = get_read_ptr(db_buf_switch);
+        for (uint32_t i = 0; i < num_to_write; i++) {
+            write_program_page(src_addr, command_ptr);
+            src_addr += DeviceCommand::PROGRAM_PAGE_SIZE;
+        }
+        page_idx += num_to_write;
+        noc_async_write_barrier();
+        multicore_cb_pop_front(
+            producer_noc_encoding,
+            db_buf_switch,
+            l1_consumer_fifo_limit,
+            consumer_cb_size,
+            num_to_write,
+            DeviceCommand::PROGRAM_PAGE_SIZE);
+        noc_async_write_barrier();  // Flush barrier, not an ack barrier
+    }
+    kernel_profiler::mark_time(5);
+    // DPRINT << "SENT RUNTIME ARGS" << ENDL();
+
+    // DEBUG
+    for (uint32_t page_idx = num_pages - 4; page_idx < num_pages;) {
         uint32_t num_to_write = min(num_pages - page_idx, producer_consumer_transfer_num_pages);
         multicore_cb_wait_front(db_buf_switch, num_to_write);
         uint32_t src_addr = get_read_ptr(db_buf_switch);

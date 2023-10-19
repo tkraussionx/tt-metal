@@ -68,10 +68,10 @@ bool verify_result_data_movement(
         uint32_t arg_base = 0;
         switch (kernel->processor()) {
             case tt::RISCV::BRISC: {
-                arg_base = BRISC_L1_ARG_BASE;
+                arg_base = BRISC_L1_ARG_BASE_BUF0;
             } break;
             case tt::RISCV::NCRISC: {
-                arg_base = NCRISC_L1_ARG_BASE;
+                arg_base = NCRISC_L1_ARG_BASE_BUF0;
             } break;
             default: log_assert(false, "Only BRISC and NCRISC have runtime arg support");
         }
@@ -152,13 +152,13 @@ bool verify_result_compute(
         uint32_t result_base = 0;
         switch (kernel->processor()) {
             case tt::RISCV::BRISC: {
-                result_base = BRISC_L1_ARG_BASE;
+                result_base = BRISC_L1_ARG_BASE_BUF0;
             } break;
             case tt::RISCV::NCRISC: {
-                result_base = NCRISC_L1_ARG_BASE;
+                result_base = NCRISC_L1_ARG_BASE_BUF0;
             } break;
             case tt::RISCV::COMPUTE: {
-                result_base = TRISC_L1_ARG_BASE;
+                result_base = TRISC_L1_ARG_BASE_BUF0;
             } break;
             default: log_assert(false, "Unknown processor");
         }
