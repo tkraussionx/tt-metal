@@ -139,14 +139,14 @@ def test_run_max_pool(
 
     ## construct the tensor in NCHW shape
     act = torch.randn(act_shape, dtype=torch.bfloat16)
-    act = torch.zeros(act_shape, dtype=torch.bfloat16)
-    act = torch.ones(act_shape, dtype=torch.bfloat16)
-    act = torch.arange(0, volume(act_shape), dtype=torch.bfloat16).reshape(act_shape)
-    for n in range(act_shape[0]):
-        for c in range(act_shape[1]):
-            for h in range(act_shape[2]):
-                for w in range(act_shape[3]):
-                    act[n, c, h, w] = n + h + w + c + torch.rand(1) * 0.15
+    # act = torch.zeros(act_shape, dtype=torch.bfloat16)
+    # act = torch.ones(act_shape, dtype=torch.bfloat16)
+    # act = torch.arange(0, volume(act_shape), dtype=torch.bfloat16).reshape(act_shape)
+    # for n in range(act_shape[0]):
+    #     for c in range(act_shape[1]):
+    #         for h in range(act_shape[2]):
+    #             for w in range(act_shape[3]):
+    #                 act[n, c, h, w] = n + h + w + c + torch.rand(1) * 0.15
 
     ## this op expects input tensor as { N, 1, H * W, C }, so rearrange and reshape tensor
     ## but before that, make sure in_c is multiple of tile width
