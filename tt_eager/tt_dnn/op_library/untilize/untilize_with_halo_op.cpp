@@ -240,7 +240,8 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
         range_t out_range = {out_stick_start, out_stick_start + pool_out_nsticks_per_core};
         range_t in_range = untilize_with_halo_helpers::calculate_in_range(out_range, pc);  // this represents the "window" center input sticks
         int32_t l_halo_start = in_range[0] - halo_in_nsticks;
-        l_halo_start = l_halo_start < 0 ? 0 : l_halo_start;
+        int32_t batch_start = (in_range[0] / (in_h * in_w)) * (in_h * in_w);
+        l_halo_start = l_halo_start < batch_start ? batch_start : l_halo_start;
         int32_t r_halo_end = in_range[1] + halo_in_nsticks;
         r_halo_end = r_halo_end >= in_nhw ? in_nhw : r_halo_end;
         my_shard[core] = {{
@@ -253,7 +254,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
 
         out_stick_start += pool_out_nsticks_per_core;
     }
-    log_debug("MAX nsticks = {}", max_nsticks);
+    log_debug("max nsticks across all cores = {}", max_nsticks);
 
     // CBs
 
@@ -274,23 +275,18 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
     // output after concatenating halo and padding goes into this CB, as input to next op.
     uint32_t out_cb_id = CB::c_out1;
     uint32_t out_cb_pagesize = out_nbytes * in_c;
-    uint32_t local_npages = in_nsticks_per_core                                                 // data sticks
-                                + (in_nsticks_per_core / in_w) * 2                              // left/right edge padding
-                                + (in_nsticks_per_core / in_nsticks_per_batch) * (in_w + 2);    // padding rows
-    // NOTE: this is always the same for all cores
-    uint32_t halo_npages = (in_w + 1 + 2) * 2;  // left and right halo
-    uint32_t out_cb_npages = max_nsticks;   //local_npages + halo_npages;
-    uint32_t out_nsticks_per_core = local_npages + halo_npages;
-    {
-        log_debug(LogOp, "out_cb_pagesize: {}", out_cb_pagesize);
-        log_debug(LogOp, "local_npages: {}", local_npages);
-        log_debug(LogOp, "halo_npages: {}", halo_npages);
-        log_debug(LogOp, "out_nsticks_per_core: {}", out_nsticks_per_core);
-    }
+    uint32_t out_cb_npages = max_nsticks;
     auto out_cb_config = CircularBufferConfig(out_cb_npages * out_cb_pagesize, {{out_cb_id, cb_df}})
                             .set_page_size(out_cb_id, out_cb_pagesize)
                             .set_globally_allocated_address(output.buffer()->address());
     auto out_cb = CreateCircularBuffer(program, all_cores, out_cb_config);
+
+    {
+        log_debug(LogOp, "src cb: id = {}, pagesize = {}, npages = {}", src_cb_id, tile_size, num_input_tiles);
+        log_debug(LogOp, "untilize cb: id = {}, pagesize = {}, npages = {}", untilize_out_cb_id, tile_size, num_output_tiles);
+        log_debug(LogOp, "out cb: id = {}, pagesize = {}, npages = {}", out_cb_id, out_cb_pagesize, out_cb_npages);
+    }
+
 
     /** reader
      */
@@ -545,32 +541,28 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
         for (int32_t neighbor = - NEIGHBORHOOD_DIST; neighbor <= NEIGHBORHOOD_DIST; ++ neighbor) {
             // calculate the total nsticks incl. padding to be sent to this neighbor
             range_t to_send = range_to_send[core][NEIGHBORHOOD_DIST + neighbor];
-            bool to_print = false;  // core == 1 && neighbor == -1;
-            NewShardingConfig sc = get_shard_specs(to_send[0], to_send[1], pc, to_print);
+            NewShardingConfig sc = get_shard_specs(to_send[0], to_send[1], pc);
             uint32_t count = 0;
             count += sc.first_partial_right_aligned_row_width + sc.skip_after_partial_right_aligned_row;
             count += sc.first_partial_image_num_rows * (pc.in_w + 2 * pc.pad_w) + sc.skip_after_first_partial_image_row;
-            if (sc.first_partial_image_num_rows > 0) {
-                count -= 2 * pc.pad_w;
-            }
             count += sc.num_full_images * (pc.in_h * (pc.in_w + 2 * pc.pad_w) + sc.skip_after_full_image);
-            if (sc.num_full_images > 0) {
-                count -= sc.num_full_images * 2 * pc.pad_w;
-            }
             count += sc.last_partial_image_num_rows * (pc.in_w + 2 * pc.pad_w);
             count += sc.last_partial_left_aligned_row_width;
             updated_count_to_send[core][NEIGHBORHOOD_DIST + neighbor] = count;
-            if (to_print) {
-                log_debug(LogOp, "partial_first_row_nsticks: {}", sc.first_partial_right_aligned_row_width);
-                log_debug(LogOp, "partial_top_image_nrows: {}", sc.first_partial_image_num_rows);
-                log_debug(LogOp, "full_nimages: {}", sc.num_full_images);
-                log_debug(LogOp, "partial_bottom_image_nrows: {}", sc.last_partial_image_num_rows);
-                log_debug(LogOp, "partial_last_row_nsticks: {}", sc.last_partial_left_aligned_row_width);
-                log_debug(LogOp, "skip_after_partial_right_aligned_row: {}", sc.skip_after_partial_right_aligned_row);
-                log_debug(LogOp, "skip_after_first_partial_image_row: {}", sc.skip_after_first_partial_image_row);
-                log_debug(LogOp, "skip_after_full_image: {}", sc.skip_after_full_image);
-            }
+            // bool to_print = core == 12 && neighbor == 0;
+            // if (to_print) {
+            //     log_debug(LogOp, "== partial_first_row_nsticks: {}", sc.first_partial_right_aligned_row_width);
+            //     log_debug(LogOp, "== skip_after_partial_right_aligned_row: {}", sc.skip_after_partial_right_aligned_row);
+            //     log_debug(LogOp, "== partial_top_image_nrows: {}", sc.first_partial_image_num_rows);
+            //     log_debug(LogOp, "== skip_after_first_partial_image_row: {}", sc.skip_after_first_partial_image_row);
+            //     log_debug(LogOp, "== full_nimages: {}", sc.num_full_images);
+            //     log_debug(LogOp, "== skip_after_full_image: {}", sc.skip_after_full_image);
+            //     log_debug(LogOp, "== partial_bottom_image_nrows: {}", sc.last_partial_image_num_rows);
+            //     log_debug(LogOp, "== partial_last_row_nsticks: {}", sc.last_partial_left_aligned_row_width);
+            //     log_debug(LogOp, "== initial_skip: {}", sc.initial_skip);
+            // }
         }
+        in_stick_start += in_nsticks_per_core;
     }
 
     std::map<uint32_t, std::array<uint32_t, (NEIGHBORHOOD_DIST * 2 + 1)>> updated_count_to_receive; // nsticks pushed from each neighbor
@@ -578,11 +570,31 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
     std::map<uint32_t, int32_t> initial_pad_nsticks;  // any padding to be inserted at the beginning (for left most cores)
     in_stick_start = 0;
     for (uint32_t core = 0; core < ncores; ++ core) {
-        initial_pad_nsticks[core] = 0;
-        if (my_shard[core][0][1] - my_shard[core][0][0] < halo_in_nsticks) {
-            initial_pad_nsticks[core] = halo_out_nsticks - (my_shard[core][0][1] - my_shard[core][0][0]);
+        uint32_t in_stick_end = in_stick_start + in_nsticks_per_core;
+        NewShardingConfig sc = get_shard_specs_with_halo(in_stick_start, in_stick_end, pc);
+        if (0) {
+            log_debug(LogOp, "============ CORE : {}", core);
+            log_debug(LogOp, "== in_stick range: [{} {})", in_stick_start, in_stick_end);
+            log_debug(LogOp, "== partial_first_row_nsticks: {}", sc.first_partial_right_aligned_row_width);
+            log_debug(LogOp, "== skip_after_partial_right_aligned_row: {}", sc.skip_after_partial_right_aligned_row);
+            log_debug(LogOp, "== partial_top_image_nrows: {}", sc.first_partial_image_num_rows);
+            log_debug(LogOp, "== skip_after_first_partial_image_row: {}", sc.skip_after_first_partial_image_row);
+            log_debug(LogOp, "== full_nimages: {}", sc.num_full_images);
+            log_debug(LogOp, "== skip_after_full_image: {}", sc.skip_after_full_image);
+            log_debug(LogOp, "== partial_bottom_image_nrows: {}", sc.last_partial_image_num_rows);
+            log_debug(LogOp, "== partial_last_row_nsticks: {}", sc.last_partial_left_aligned_row_width);
+            log_debug(LogOp, "== initial_skip: {}", sc.initial_skip);
         }
-        uint32_t cumulative_count = initial_pad_nsticks[core];
+        // record any inital skip to be used in offset calculations
+        initial_pad_nsticks[core] = sc.initial_skip;
+        // initial_pad_nsticks[core] = 0;
+        // int32_t initial_nsticks = 0;
+        // if (my_shard[core][0][1] - my_shard[core][0][0] < halo_in_nsticks) {
+        //     // initial_pad_nsticks[core] = halo_out_nsticks - (my_shard[core][0][1] - my_shard[core][0][0]);
+        //     initial_nsticks = halo_out_nsticks - (my_shard[core][0][1] - my_shard[core][0][0]);
+        // }
+        uint32_t cumulative_count = sc.initial_skip; // initial_pad_nsticks[core];
+        // uint32_t cumulative_count = initial_nsticks;
         // calculate the nsticks I receive from each of my neighbors
         for (int32_t neighbor = - NEIGHBORHOOD_DIST; neighbor <= NEIGHBORHOOD_DIST; ++ neighbor) {
             int32_t neighbor_core = core + neighbor;
@@ -617,31 +629,31 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
             int32_t neighbor_core = core + neighbor;
             uint32_t offset = 0;
             if (neighbor_core >= 0 && neighbor_core < ncores) {
-                NewShardingConfig sc = get_shard_specs(in_stick_start, range_to_send[core][NEIGHBORHOOD_DIST + neighbor][0], pc, toprint);
+                NewShardingConfig sc = get_shard_specs(in_stick_start, range_to_send[core][NEIGHBORHOOD_DIST + neighbor][0], pc);
                 offset += sc.first_partial_right_aligned_row_width + sc.skip_after_partial_right_aligned_row;
                 offset += sc.first_partial_image_num_rows * (pc.in_w + 2 * pc.pad_w) + sc.skip_after_first_partial_image_row;
-                if (sc.first_partial_image_num_rows > 0) {
-                    offset -= 2 * pc.pad_w;
-                }
+                // if (sc.first_partial_image_num_rows > 0) {
+                //     offset -= 2 * pc.pad_w;
+                // }
                 offset += sc.num_full_images * (pc.in_h * (pc.in_w + 2 * pc.pad_w) + sc.skip_after_full_image);
-                if (sc.num_full_images > 0) {
-                    offset -= sc.num_full_images * 2 * pc.pad_w;
-                }
+                // if (sc.num_full_images > 0) {
+                //     offset -= sc.num_full_images * 2 * pc.pad_w;
+                // }
                 offset += sc.last_partial_image_num_rows * (pc.in_w + 2 * pc.pad_w);
                 offset += sc.last_partial_left_aligned_row_width;
-                if (toprint) {
-                    log_debug(LogOp, "partial_first_row_nsticks: {}", sc.first_partial_right_aligned_row_width);
-                    log_debug(LogOp, "partial_top_image_nrows: {}", sc.first_partial_image_num_rows);
-                    log_debug(LogOp, "full_nimages: {}", sc.num_full_images);
-                    log_debug(LogOp, "partial_bottom_image_nrows: {}", sc.last_partial_image_num_rows);
-                    log_debug(LogOp, "partial_last_row_nsticks: {}", sc.last_partial_left_aligned_row_width);
-                    log_debug(LogOp, "skip_after_partial_right_aligned_row: {}", sc.skip_after_partial_right_aligned_row);
-                    log_debug(LogOp, "skip_after_first_partial_image_row: {}", sc.skip_after_first_partial_image_row);
-                    log_debug(LogOp, "skip_after_full_image: {}", sc.skip_after_full_image);
-                    log_debug(LogOp, "initial_skip: {}", sc.initial_skip);
-                    log_debug(LogOp, "offset: {}", offset);
-                    log_debug(LogOp, "start_offset: {}", receive_at_offset_nsticks[core][NEIGHBORHOOD_DIST]);
-                }
+                // if (toprint) {
+                //     log_debug(LogOp, "partial_first_row_nsticks: {}", sc.first_partial_right_aligned_row_width);
+                //     log_debug(LogOp, "partial_top_image_nrows: {}", sc.first_partial_image_num_rows);
+                //     log_debug(LogOp, "full_nimages: {}", sc.num_full_images);
+                //     log_debug(LogOp, "partial_bottom_image_nrows: {}", sc.last_partial_image_num_rows);
+                //     log_debug(LogOp, "partial_last_row_nsticks: {}", sc.last_partial_left_aligned_row_width);
+                //     log_debug(LogOp, "skip_after_partial_right_aligned_row: {}", sc.skip_after_partial_right_aligned_row);
+                //     log_debug(LogOp, "skip_after_first_partial_image_row: {}", sc.skip_after_first_partial_image_row);
+                //     log_debug(LogOp, "skip_after_full_image: {}", sc.skip_after_full_image);
+                //     log_debug(LogOp, "initial_skip: {}", sc.initial_skip);
+                //     log_debug(LogOp, "offset: {}", offset);
+                //     log_debug(LogOp, "start_offset: {}", receive_at_offset_nsticks[core][NEIGHBORHOOD_DIST]);
+                // }
             }
             send_from_offset_nsticks[core][NEIGHBORHOOD_DIST + neighbor] = offset + receive_at_offset_nsticks[core][NEIGHBORHOOD_DIST];
         }
@@ -725,6 +737,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
         int32_t skip_after_full_images = sc.skip_after_full_image;
         int32_t partial_last_image_nrows = sc.last_partial_image_num_rows;
         int32_t partial_last_row_nsticks = sc.last_partial_left_aligned_row_width;
+        int32_t initial_skip = sc.initial_skip;
 
         // uint32_t initial_pad_nsticks = 0;
         // if (in_stick_start % (in_h * in_w) == 0) {
@@ -1426,28 +1439,22 @@ std::vector<Shape> UntilizeWithHalo::compute_output_shapes(const std::vector<Ten
     // Bb. right right halo:
 
     // calculate total number of sticks including all padding, excluding halo
-    uint32_t out_cb_pagesize = 2 * input_shape[3];
     uint32_t nbatch = input_shape[0];
     uint32_t in_hw = input_shape[2];
     uint32_t in_h = std::sqrt(in_hw);
     uint32_t in_w = in_h;
     uint32_t in_nhw = nbatch * in_hw;
-    uint32_t total_data_nsticks = in_nhw                        // input data sticks
-                                    + (in_h * nbatch) * 2       // 2 padding sticks per row
-                                    + nbatch * (in_w + 2)       // one padding row on top (incl. edge padding sticks) per batch.
-                                    + (in_w + 2);               // one padding row at the end
-    uint32_t halo_nsticks = in_w + 1 + 2;                       // size of halo = in_w + 1, and 2 padding for left and right edge
     // get ncores from shard shape and input shape
     // number of halos is at most 2 * ncores (largest case)
     auto shard_shape = input.shard_spec().value().shard_shape;
     uint32_t ncores = in_nhw / shard_shape[0];
-    uint32_t total_halo_nsticks = (2 * ncores - 2) * halo_nsticks;
-    // uint32_t total_nsticks = total_halo_nsticks + total_data_nsticks;
-    uint32_t total_nsticks = 480 * 98;
+
+    uint32_t total_nsticks = 1300 * 98; // TODO: use the max val after a full scan
+
     // output_shape[0] remains same
     // output_shape[1] remains same
-    // output_shape[3] remains same
     // output_shape[2] changes
+    // output_shape[3] remains same
     output_shape[2] = ceil(total_nsticks / nbatch / ncores) * ncores;
 
     log_debug(LogOp, "output_shape: {} {} {} {}", output_shape[0], output_shape[1], output_shape[2], output_shape[3]);

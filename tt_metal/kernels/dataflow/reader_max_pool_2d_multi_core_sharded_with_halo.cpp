@@ -202,7 +202,7 @@ void kernel_main() {
 
     uint32_t in_l1_read_base_addr = get_read_ptr(in_shard_cb_id);
 
-    print_pages(in_l1_read_base_addr, 64, 3 * 114, 0);
+    // print_pages(in_l1_read_base_addr, 64, 13 * 114, 0);
 
     DPRINT << "local_in_stick_start: " << (uint) local_in_stick_start << ENDL();
 
@@ -271,12 +271,14 @@ void kernel_main() {
     //     DPRINT << i << ": " << reader_indices_ptr[i] << ENDL();
     // }
 
+    uint32_t batch_offset = 0;
     for (uint32_t out_stick_i = 0; out_stick_i < nsticks_per_core; ++ out_stick_i) {
         cb_reserve_back(in_cb_id, 1);
         uint32_t out_l1_write_addr_base = get_write_ptr(in_cb_id);
         uint32_t out_l1_write_addr = out_l1_write_addr_base;
 
         uint32_t global_out_stick_i = local_out_stick_start + out_stick_i;
+        uint32_t batch_i = global_out_stick_i / nsticks_per_batch;
         uint32_t batch_out_stick_i = global_out_stick_i % nsticks_per_batch;
         int32_t out_w_i = batch_out_stick_i % out_w;
         int32_t out_h_i = batch_out_stick_i / out_w;
@@ -286,7 +288,12 @@ void kernel_main() {
         int32_t in_center_h = ((int32_t) stride_h) * out_h_i - pad_h + window_h / 2;
         DPRINT << "center: = " << (uint) in_center_w << "," << (uint) in_center_h << ENDL();
 
-        int32_t top_left_local_index = initial_skip + (in_center_w - window_w / 2) + (in_center_h - window_h / 2) * (in_w + 2 * pad_w) - start_stick;
+        if (batch_out_stick_i == 0 && out_stick_i > 0 && local_out_stick_start > 0) {
+            // this is start of a new batch, update offsets
+            batch_offset += ((in_w + 2 * pad_w) * (in_h + pad_h));
+        }
+
+        int32_t top_left_local_index = initial_skip + batch_offset + (in_center_w - window_w / 2) + (in_center_h - window_h / 2) * (in_w + 2 * pad_w) - start_stick;
         DPRINT << "top_left_index: " << (uint) top_left_local_index << ENDL();
 
         DPRINT << "sticks: ";
@@ -304,7 +311,7 @@ void kernel_main() {
         noc_async_read_barrier();
 
         // DPRINT << TileSlice(in_cb_id, 0, srt, true, false) << ENDL();
-        print_pages(out_l1_write_addr_base, 64, 10, 0);
+        // print_pages(out_l1_write_addr_base, 64, 10, 0);
 
         cb_push_back(in_cb_id, 1);
     }

@@ -108,19 +108,19 @@ void kernel_main() {
     uint32_t partial_bottom_image_skip_per_row = get_arg_val<uint32_t>(58);
     uint32_t partial_last_row_nsticks = get_arg_val<uint32_t>(59);
 
-    // DPRINT << "intial_pad_nsticks: " << initial_pad_nsticks << ENDL();
-    // DPRINT << "local_offset_nsticks: " << local_offset_nsticks << ENDL();
-    // DPRINT << "partial_first_row_nsticks: " << partial_first_row_nsticks << ENDL();
-    // DPRINT << "partial_first_row_skip: " << partial_first_row_skip << ENDL();
-    // DPRINT << "partial_top_image_nrows: " << partial_top_image_nrows << ENDL();
-    // DPRINT << "partial_top_image_skip_per_row: " << partial_top_image_skip_per_row << ENDL();
-    // DPRINT << "partial_top_image_skip: " << partial_top_image_skip << ENDL();
-    // DPRINT << "full_nimages: " << full_nimages << ENDL();
-    // DPRINT << "full_image_skip_per_row: " << full_image_skip_per_row << ENDL();
-    // DPRINT << "full_image_skip: " << full_image_skip << ENDL();
-    // DPRINT << "partial_bottom_image_nrows: " << partial_bottom_image_nrows << ENDL();
-    // DPRINT << "partial_bottom_image_skip_per_row: " << partial_bottom_image_skip_per_row << ENDL();
-    // DPRINT << "partial_last_row_nsticks: " << partial_last_row_nsticks << ENDL();
+    DPRINT << "intial_pad_nsticks: " << initial_pad_nsticks << ENDL();
+    DPRINT << "local_offset_nsticks: " << local_offset_nsticks << ENDL();
+    DPRINT << "partial_first_row_nsticks: " << partial_first_row_nsticks << ENDL();
+    DPRINT << "partial_first_row_skip: " << partial_first_row_skip << ENDL();
+    DPRINT << "partial_top_image_nrows: " << partial_top_image_nrows << ENDL();
+    DPRINT << "partial_top_image_skip_per_row: " << partial_top_image_skip_per_row << ENDL();
+    DPRINT << "partial_top_image_skip: " << partial_top_image_skip << ENDL();
+    DPRINT << "full_nimages: " << full_nimages << ENDL();
+    DPRINT << "full_image_skip_per_row: " << full_image_skip_per_row << ENDL();
+    DPRINT << "full_image_skip: " << full_image_skip << ENDL();
+    DPRINT << "partial_bottom_image_nrows: " << partial_bottom_image_nrows << ENDL();
+    DPRINT << "partial_bottom_image_skip_per_row: " << partial_bottom_image_skip_per_row << ENDL();
+    DPRINT << "partial_last_row_nsticks: " << partial_last_row_nsticks << ENDL();
 
     // DPRINT << "0" << ENDL();
 
@@ -177,13 +177,13 @@ void kernel_main() {
             curr_in_l1_addr += stick_nbytes;
             curr_out_l1_addr += stick_nbytes;
         }
-        if (i < partial_top_image_nrows - 1) {
+        // if (i < partial_top_image_nrows - 1) {
             // padding sticks on the right, left edge
             for (uint32_t j = 0; j < partial_top_image_skip_per_row; ++ j) {
                 noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
                 curr_out_l1_addr += stick_nbytes;
             }
-        }
+        // }
     }
     for (uint32_t j = 0; j < partial_top_image_skip; ++ j) {
         noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
@@ -203,13 +203,13 @@ void kernel_main() {
                 curr_in_l1_addr += stick_nbytes;
                 curr_out_l1_addr += stick_nbytes;
             }
-            if (i < in_h - 1) {
+            // if (i < in_h - 1) {
                 // padding sticks after each row except last row
                 for (uint32_t j = 0; j < full_image_skip_per_row; ++ j) {
                     noc_async_read(padding_noc_addr, curr_out_l1_addr, stick_nbytes);
                     curr_out_l1_addr += stick_nbytes;
                 }
-            }
+            // }
         }
         // padding after full image
         for (uint32_t i = 0; i < full_image_skip; ++ i) {
@@ -346,7 +346,7 @@ void kernel_main() {
     noc_async_write_barrier();
 
     DPRINT << "==== PADDED OUTPUT:" << ENDL();
-    for (uint32_t row = 0; row < 3; ++ row) {
+    for (uint32_t row = 0; row < 14; ++ row) {
         DPRINT << "=== ROW " << row << ":" << ENDL();
         print_sticks(out_base_l1_addr, 114 * row, 114, 64);
         DPRINT << "=== ROW " << row << " END" << ENDL();

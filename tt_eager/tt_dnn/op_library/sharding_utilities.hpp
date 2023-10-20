@@ -389,8 +389,11 @@ inline NewShardingConfig get_shard_specs_with_halo(int32_t start_stick, int32_t 
     int32_t halo_end_stick = end_stick + halo_nsticks_nopad;
     int32_t nsticks_with_halo = halo_end_stick - halo_start_stick;
 
+    // calculate in_start_id of my current batch
+    int32_t batch_start = (start_stick / (pc.in_h * pc.in_w)) * (pc.in_h * pc.in_w);
+
     // pad sticks before the data sticks begin, add edge pads
-    int32_t initial_skip = halo_start_stick < 0 ? ((- halo_start_stick) + 2 * pc.pad_w) : 0;
+    int32_t initial_skip = halo_start_stick < batch_start ? ((batch_start - halo_start_stick) + 2 * pc.pad_w) : 0;
 
     // start with the first valid stick incl. halo
     start_stick = halo_start_stick < 0 ? 0 : halo_start_stick;
