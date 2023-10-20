@@ -481,6 +481,7 @@ void Cluster::write_sysmem_vec(vector<uint32_t> &vec, uint64_t addr, chip_id_t s
 
 void Cluster::read_sysmem_vec(vector<uint32_t> &vec, uint64_t addr, uint32_t size, chip_id_t src_device_id) const {
     // TODO: Uplift
+    ZoneScoped;
     constexpr uint16_t channel = 0;
     this->device_->read_from_sysmem(vec, addr, channel, size, src_device_id);
 }

@@ -60,8 +60,10 @@ constexpr static std::uint32_t PROFILER_L1_BUFFER_T1 = PROFILER_L1_BUFFER_T0 + P
 constexpr static std::uint32_t PROFILER_L1_BUFFER_T2 = PROFILER_L1_BUFFER_T1 + PROFILER_L1_BUFFER_SIZE;
 constexpr static std::uint32_t PROFILER_L1_BUFFER_CONTROL = PROFILER_L1_BUFFER_T2 + PROFILER_L1_CONTROL_BUFFER_SIZE;
 constexpr static std::uint32_t PROFILER_RISC_COUNT = 5;
-constexpr static std::uint32_t PROFILER_DRAM_BUFFER_COUNT = 150;
+constexpr static std::uint32_t PROFILER_DRAM_BUFFER_COUNT = 1000;
 
+constexpr static std::uint32_t PROFILER_FULL_BUFFER_SIZE = 120 * PROFILER_DRAM_BUFFER_COUNT * PROFILER_RISC_COUNT * PROFILER_L1_BUFFER_SIZE;
+constexpr static std::uint32_t PROFILER_HUGE_PAGE_ADDRESS = 1024 * 1024 * 1024 - PROFILER_FULL_BUFFER_SIZE;
 
 constexpr static std::uint32_t L1_UNRESERVED_BASE = 120 * 1024; // Start of unreserved space
 

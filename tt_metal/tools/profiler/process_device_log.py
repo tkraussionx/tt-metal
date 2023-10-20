@@ -1027,22 +1027,22 @@ def main(setup, device_input_log, output_folder, port, no_print_stats, no_webapp
 
     # print_chrome_tracing_json(devicesData, setup)
 
-    print_stats_outfile(devicesData, setup)
-    print_rearranged_csv(devicesData, setup)
-    print_json(devicesData, setup)
+    # print_stats_outfile(devicesData, setup)
+    # print_rearranged_csv(devicesData, setup)
+    # print_json(devicesData, setup)
 
     if not no_print_stats:
         print_stats(devicesData, setup)
 
-    timelineFigs = {}
-    if not no_plots:
-        timelineFigs = generate_plots(devicesData, setup)
+    # timelineFigs = {}
+    # if not no_plots:
+        # timelineFigs = generate_plots(devicesData, setup)
 
-    if not no_artifacts:
-        generate_artifact_tarball(setup)
+    # if not no_artifacts:
+        # generate_artifact_tarball(setup)
 
-    if not no_webapp:
-        run_dashbaord_webapp(devicesData, timelineFigs, setup)
+    # if not no_webapp:
+        # run_dashbaord_webapp(devicesData, timelineFigs, setup)
 
 
 if __name__ == "__main__":

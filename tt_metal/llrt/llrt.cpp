@@ -157,10 +157,6 @@ void write_launch_msg_to_core(chip_id_t chip, CoreCoord core, launch_msg_t *msg)
     msg->mode = DISPATCH_MODE_HOST;
     TT_ASSERT(sizeof(launch_msg_t) % sizeof(uint32_t) == 0);
     tt::Cluster::instance().write_dram_vec((uint32_t *)msg, sizeof(launch_msg_t) / sizeof(uint32_t), tt_cxy_pair(chip, core), GET_MAILBOX_ADDRESS_HOST(launch));
-    if (msg->run == RUN_MSG_GO)
-    {
-        tracy::set_cpu_time();
-    }
 }
 
 void print_worker_cores(chip_id_t chip_id) {

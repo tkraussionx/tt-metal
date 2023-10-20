@@ -89,30 +89,6 @@ void Profiler::readRiscProfilerResults(
     uint32_t core_flat_id = get_flat_id(worker_core.x, worker_core.y);
     uint32_t startIndex = core_flat_id * PROFILER_RISC_COUNT * PROFILER_L1_VECTOR_SIZE;
 
-//#define DEBUG_PRINT_L1
-#ifdef DEBUG_PRINT_L1
-    vector<std::uint32_t> profile_buffer_l1;
-
-    profile_buffer_l1 = tt::llrt::read_hex_vec_from_core(
-            device_id,
-            worker_core,
-            PROFILER_L1_BUFFER_BR,
-            PROFILER_L1_BUFFER_SIZE * PROFILER_RISC_COUNT);
-
-    std::cout << worker_core.x << "," << worker_core.y <<  "," << core_flat_id << "," << startIndex <<  std::endl ;
-    for (int i= 0; i < 6; i ++)
-    {
-        std::cout << profile_buffer_l1[i] << ",";
-    }
-    std::cout <<  std::endl;
-    for (int i= 0; i < 6; i ++)
-    {
-        std::cout << profile_buffer[startIndex + i] << ",";
-    }
-    std::cout <<  std::endl;
-    std::cout <<  std::endl;
-#endif
-
     vector<std::uint32_t> control_buffer;
 
     control_buffer = tt::llrt::read_hex_vec_from_core(
@@ -123,11 +99,44 @@ void Profiler::readRiscProfilerResults(
 
     uint32_t bufferCount = control_buffer[kernel_profiler::DRAM_BUFFER_NUM];
 
+    //for (auto& i : control_buffer)
+    //{
+        //std::cout << i << ", ";
+    //}
+
+    //std::cout << std::endl;
+
     if (bufferCount > PROFILER_DRAM_BUFFER_COUNT)
     {
         bufferCount = PROFILER_DRAM_BUFFER_COUNT;
         std::cout << "DRAM Buffer for " << worker_core.x << "," << worker_core.y << " is full" << std::endl;
     }
+
+    if (bufferCount > 0)
+    {
+//#define DEBUG_PRINT_L1
+#ifdef DEBUG_PRINT_L1
+        vector<std::uint32_t> profile_buffer_l1;
+
+        profile_buffer_l1 = tt::llrt::read_hex_vec_from_core(
+                device_id,
+                worker_core,
+                PROFILER_L1_BUFFER_BR,
+                PROFILER_L1_BUFFER_SIZE * PROFILER_RISC_COUNT);
+
+        std::cout << worker_core.x << "," << worker_core.y <<  "," << core_flat_id << "," << startIndex <<  std::endl ;
+        for (int i= 0; i < 6; i ++)
+        {
+            std::cout << profile_buffer_l1[i] << ",";
+        }
+        std::cout <<  std::endl;
+        for (int i= 0; i < 6; i ++)
+        {
+            std::cout << profile_buffer[startIndex + i] << ",";
+        }
+        std::cout <<  std::endl;
+        std::cout <<  std::endl;
+#endif
     dumpDeviceResultToFile(
             device_id,
             worker_core.x,
@@ -136,20 +145,37 @@ void Profiler::readRiscProfilerResults(
             (uint64_t(control_buffer[kernel_profiler::FW_RESET_H]) << 32) | control_buffer[kernel_profiler::FW_RESET_L],
             0);
 
+    }
     for (int riscNum = 0; riscNum < PROFILER_RISC_COUNT; riscNum++) {
         for (int bufferNum = 0; bufferNum < bufferCount; bufferNum++){
-            for (int marker = kernel_profiler::FW_START; marker <= kernel_profiler::FW_END; marker++)
+
+            uint32_t buffer_shift = bufferNum * PROFILER_L1_VECTOR_SIZE * PROFILER_RISC_COUNT * 120 + startIndex;
+            uint32_t time_L_pre = 0;
+            uint32_t time_H_index = buffer_shift + riscNum * PROFILER_L1_VECTOR_SIZE + kernel_profiler::SYNC_VAL_H;
+            uint32_t time_H = profile_buffer[time_H_index];
+
+            for (int marker = kernel_profiler::SYNC_VAL_L; marker <= kernel_profiler::FW_END; marker++)
             {
-                uint32_t buffer_shift = bufferNum * PROFILER_L1_VECTOR_SIZE * PROFILER_RISC_COUNT * 120 + startIndex;
-                uint32_t time_H_index = buffer_shift + riscNum * PROFILER_L1_VECTOR_SIZE + kernel_profiler::SYNC_VAL_H;
                 uint32_t time_L_index = buffer_shift + riscNum * PROFILER_L1_VECTOR_SIZE + marker;
-                dumpDeviceResultToFile(
-                        device_id,
-                        worker_core.x,
-                        worker_core.y,
-                        riscNum,
-                        (uint64_t(profile_buffer[time_H_index]) << 32) | profile_buffer[time_L_index],
-                        marker - kernel_profiler::SYNC_VAL_L);
+                uint32_t time_L = profile_buffer[time_L_index];
+
+                // Was there an overflow
+                if (time_L_pre > time_L)
+                {
+                    time_H ++;
+                }
+                time_L_pre = time_L;
+
+                if (marker > kernel_profiler::SYNC_VAL_L)
+                {
+                    dumpDeviceResultToFile(
+                            device_id,
+                            worker_core.x,
+                            worker_core.y,
+                            riscNum,
+                            (uint64_t(time_H) << 32) | time_L,
+                            marker - kernel_profiler::SYNC_VAL_L);
+                }
             }
         }
     }
@@ -174,7 +200,7 @@ void Profiler::dumpDeviceResultToFile(
     std::filesystem::path log_path = test / DEVICE_SIDE_LOG;
     std::ofstream log_file;
 
-    std::string riscName[] = {"BRISC", "NCRISC", "TRISC0", "TRISC1", "TRISC2"};
+    std::string riscName[] = {"BRISC", "NCRISC", "TRISC_0", "TRISC_1", "TRISC_2"};
 
 
     if (device_new_log || !std::filesystem::exists(log_path))
@@ -290,9 +316,10 @@ void Profiler::dumpDeviceResults (
 #if defined(PROFILER)
     ZoneScoped;
     device_core_frequency = tt::Cluster::instance().get_device_aiclk(device_id);
-    auto dram_buffer_size = profiler_dram_buffer.size();
-    std::vector<uint32_t> profile_buffer(dram_buffer_size/sizeof(uint32_t), 0);
-    tt_metal::ReadFromBuffer(profiler_dram_buffer, profile_buffer);
+    std::vector<uint32_t> profile_buffer(PROFILER_FULL_BUFFER_SIZE/sizeof(uint32_t), 0);
+    //tt_metal::ReadFromBuffer(profiler_dram_buffer, profile_buffer);
+
+    tt::Cluster::instance().read_sysmem_vec(profile_buffer, PROFILER_HUGE_PAGE_ADDRESS, PROFILER_FULL_BUFFER_SIZE, 0);
 
     for (const auto &worker_core : worker_cores) {
         readRiscProfilerResults(

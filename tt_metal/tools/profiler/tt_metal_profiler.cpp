@@ -28,28 +28,22 @@ void InitDeviceProfiler(Device *device){
     CoreCoord start_core = {0, 0};
     CoreCoord end_core = {compute_with_storage_size.x - 1, compute_with_storage_size.y - 1};
 
-    uint32_t dram_buffer_size = PROFILER_DRAM_BUFFER_COUNT * PROFILER_RISC_COUNT * PROFILER_L1_BUFFER_SIZE * compute_with_storage_size.x * compute_with_storage_size.y;
+    //std::vector<uint32_t> zero_buffer(PROFILER_RISC_COUNT * PROFILER_L1_VECTOR_SIZE + PROFILER_L1_CONTROL_VECTOR_SIZE, 0);
+    //{
+        //ZoneScopedN("Clearing_profiler_L1");
+        //for (size_t x=start_core.x; x <= end_core.x; x++)
+        //{
+            //for (size_t y=start_core.y; y <= end_core.y; y++)
+            //{
+                //CoreCoord curr_core = {x, y};
+                //tt_metal::detail::WriteToDeviceL1(device, curr_core, PROFILER_L1_BUFFER_BR, zero_buffer);
+            //}
+        //}
+    //}
 
-    tt_metal_profiler.profiler_dram_buffer = tt_metal::Buffer(device, dram_buffer_size, dram_buffer_size, tt_metal::BufferType::DRAM);
-    dram_buffer_start_addr = tt_metal_profiler.profiler_dram_buffer.address();
+    vector<uint32_t> huge_zero_buffer(PROFILER_FULL_BUFFER_SIZE / sizeof(uint32_t), 2);
+    tt::Cluster::instance().write_sysmem_vec(huge_zero_buffer, PROFILER_HUGE_PAGE_ADDRESS, 0);
 
-    std::cout << "Profiler Buffer of size" << dram_buffer_size << " at Address: " << dram_buffer_start_addr << std::endl;
-    std::vector<uint32_t> zero_buffer(PROFILER_RISC_COUNT * PROFILER_L1_VECTOR_SIZE + PROFILER_L1_CONTROL_VECTOR_SIZE, 0);
-    {
-        ZoneScopedN("Clearing_profiler_L1");
-        for (size_t x=start_core.x; x <= end_core.x; x++)
-        {
-            for (size_t y=start_core.y; y <= end_core.y; y++)
-            {
-                CoreCoord curr_core = {x, y};
-                tt_metal::detail::WriteToDeviceL1(device, curr_core, PROFILER_L1_BUFFER_BR, zero_buffer);
-            }
-        }
-    }
-
-    std::vector<uint32_t> inputs_DRAM(dram_buffer_size/sizeof(uint32_t), 0);
-    tt_metal::WriteToBuffer(tt_metal_profiler.profiler_dram_buffer, inputs_DRAM);
-    tracy::enable_set_cpu_time();
 #endif
 }
 

@@ -41,8 +41,12 @@ bool RunCustomCycle(tt_metal::Device *device, int loop_count)
         tt_metal::ComputeConfig{.compile_args = trisc_kernel_args, .defines = kernel_defines}
         );
 
-    tt_metal::LaunchProgram(device, program);
-    tt_metal::detail::DumpDeviceProfileResults(device, program);
+    //tt_metal::LaunchProgram(device, program);
+    //if (loop_count == 21)
+    //{
+        //tt_metal::detail::DumpDeviceProfileResults(device, program);
+    //}
+    EnqueueProgram(*::detail::GLOBAL_CQ, program, false);
 
     return pass;
 }
@@ -50,8 +54,8 @@ bool RunCustomCycle(tt_metal::Device *device, int loop_count)
 int main(int argc, char **argv) {
     bool pass = true;
 
-    auto slow_dispatch_mode = getenv("TT_METAL_SLOW_DISPATCH_MODE");
-    tt::log_assert(slow_dispatch_mode, "This test only supports TT_METAL_SLOW_DISPATCH_MODE");
+    //auto slow_dispatch_mode = getenv("TT_METAL_SLOW_DISPATCH_MODE");
+    //tt::log_assert(slow_dispatch_mode, "This test only supports TT_METAL_SLOW_DISPATCH_MODE");
 
     try {
         ////////////////////////////////////////////////////////////////////////////
@@ -64,9 +68,12 @@ int main(int argc, char **argv) {
 
 
         int loop_count = 20;
-        pass &= RunCustomCycle(device, loop_count);
-        pass &= RunCustomCycle(device, loop_count);
-        pass &= RunCustomCycle(device, loop_count);
+        for (int i = 0; i < 1; i ++)
+        {
+            pass &= RunCustomCycle(device, loop_count);
+        }
+
+        Finish(*::detail::GLOBAL_CQ);
 
         pass &= tt_metal::CloseDevice(device);
 
