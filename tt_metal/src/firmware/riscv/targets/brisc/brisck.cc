@@ -46,6 +46,4 @@ void kernel_launch() {
     kernel_profiler::mark_kernel_start();
     kernel_main();
     kernel_profiler::mark_kernel_end();
-    kernel_profiler::mark_fw_end();
-    finish_BR_profiler();
 }

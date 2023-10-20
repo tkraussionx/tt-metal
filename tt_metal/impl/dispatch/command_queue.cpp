@@ -12,6 +12,7 @@
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/impl/buffers/semaphore.hpp"
 #include "tt_metal/third_party/umd/device/tt_xy_pair.h"
+#include "hostdevcommon/common_runtime_address_map.h"
 // XXXX TODO(PGK): fix include paths so device can export interfaces
 #include "tt_metal/src/firmware/riscv/common/dev_msgs.h"
 #include <algorithm> // for copy() and assign()
@@ -20,7 +21,7 @@
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 #include "tt_metal/third_party/tracy/public/tracy/TracyOpenCL.hpp"
 
-static constexpr uint32_t HUGE_PAGE_SIZE = 1024 * 1024 * 1024;
+static constexpr uint32_t HUGE_PAGE_SIZE = PROFILER_HUGE_PAGE_ADDRESS;
 
 namespace tt::tt_metal {
 
