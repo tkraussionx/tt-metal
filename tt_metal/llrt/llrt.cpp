@@ -10,6 +10,7 @@
 
 #include <unordered_set>
 #include <mutex>
+#include <fmt/ranges.h>
 
 #include "tools/cpuprof/cpuprof.h"
 // XXXX TODO(PGK): fix include paths so device can export interfaces
@@ -59,12 +60,16 @@ struct HexNameToMemVectorCache {
 // TODO: clean-up epoch_loader / epoch_binary -- a bunch of functions there should not be member functions
 ll_api::memory get_risc_binary(string path, chip_id_t chip_id, bool fw_build) {
 
+    std::string binary_key = fmt::format("{}_{}", chip_id, path);
+    // std::cout << "Chip id: " << chip_id << " path: " << path << " binary key: " << binary_key << std::endl;
     string path_to_bin = (fw_build ? get_firmware_compile_outpath(chip_id) : get_kernel_compile_outpath(chip_id)) + path;
-    if (HexNameToMemVectorCache::inst().exists(path)) {
-        // std::cout << "-- HEX2MEM CACHE HIT FOR " << path << std::endl;
-        return HexNameToMemVectorCache::inst().get(path);
+
+    if (HexNameToMemVectorCache::inst().exists(binary_key)) {
+        // std::cout << "-- HEX2MEM CACHE HIT FOR " << binary_key << std::endl;
+        return HexNameToMemVectorCache::inst().get(binary_key);
     }
 
+    // std::cout << "Chip id: " << chip_id << " path to bin: " << path_to_bin << std::endl;
     fs::path bin_file(path_to_bin);
     if (!fs::exists(bin_file)) {
         string tt_metal_home = string(getenv("TT_METAL_HOME"));
@@ -72,7 +77,7 @@ ll_api::memory get_risc_binary(string path, chip_id_t chip_id, bool fw_build) {
         path_to_bin = tt_metal_home + "/" + path_to_bin;
         fs::path bin_file_h(path_to_bin);
         if (!fs::exists(bin_file_h)) {
-            std::cout << " Error: " << bin_file.c_str() << " doesn't exist" << endl;
+            // std::cout << " Error: " << bin_file.c_str() << " doesn't exist" << endl;
             TT_ASSERT(false);
         }
     }
@@ -81,7 +86,7 @@ ll_api::memory get_risc_binary(string path, chip_id_t chip_id, bool fw_build) {
     ll_api::memory mem(hex_istream);
 
     // add this path to binary cache
-    HexNameToMemVectorCache::inst().add(path, mem);
+    HexNameToMemVectorCache::inst().add(binary_key, mem);
 
     return mem;
 }
@@ -209,20 +214,42 @@ static bool test_load_write_read_risc_binary_imp(ll_api::memory &mem, chip_id_t 
         case 4: local_init_addr = MEM_TRISC2_INIT_LOCAL_L1_BASE; break;
     }
 
-    log_debug(tt::LogLLRuntime, "hex_vec size = {}, size_in_bytes = {}", mem.size(), mem.size()*sizeof(uint32_t));
+    log_info(tt::LogLLRuntime, "hex_vec size = {}, size_in_bytes = {}", mem.size(), mem.size()*sizeof(uint32_t));
     mem.process_spans([&](std::vector<uint32_t>::const_iterator mem_ptr, uint64_t addr, uint32_t len) {
         uint64_t relo_addr = relocate_dev_addr(addr, local_init_addr);
-
+        log_info(tt::LogLLRuntime, "\twrote to address {}", relo_addr);
         tt::Cluster::instance().write_dram_vec(&*mem_ptr, len, tt_cxy_pair(chip_id, core), relo_addr);
     });
 
-    log_debug(tt::LogLLRuntime, "wrote hex to core {}", core.str().c_str());
+    log_info(tt::LogLLRuntime, "wrote hex to core {}", core.str().c_str());
 
-    if (std::getenv("TT_METAL_KERNEL_READBACK_ENABLE") != nullptr) {
+    // if (std::getenv("TT_METAL_KERNEL_READBACK_ENABLE") != nullptr) {
         ll_api::memory read_mem = read_mem_from_core(chip_id, core, mem, local_init_addr);
-        log_debug(tt::LogLLRuntime, "read hex back from the core");
+        log_info(tt::LogLLRuntime, "read hex back from the core from {}", local_init_addr);
+        bool pass = mem == read_mem;
+        if (!pass) {
+            std::cout << "---------------------------- original mem --------------------------" << std::endl;
+            for (int i = 0; i < mem.data().size(); i++) {
+                if ((i%32) == 0) {
+                    std::cout << std::endl;
+                }
+                std::cout << mem.data().at(i) << ", ";
+            }
+            std::cout << std::endl;
+
+            std::cout << "---------------------------- readback mem --------------------------" << std::endl;
+            for (int i = 0; i < read_mem.data().size(); i++) {
+                if ((i%32) == 0) {
+                    std::cout << std::endl;
+                }
+                std::cout << read_mem.data().at(i) << ", ";
+            }
+            std::cout << std::endl;
+
+            log_fatal(tt::LogLLRuntime, "binary is not read back correct!");
+        }
         return mem == read_mem;
-    }
+    // }
 
     return true;
 }
