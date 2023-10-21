@@ -47,7 +47,10 @@ void MAIN {
 
     constexpr bool spill = num_blocks > 1;
 
-    mm_init(in0_cb_id, in1_cb_id, out_cb_id);
+    bool one_time_matmul_wait = true;
+
+    mm_block_init(in0_cb_id, in1_cb_id, out_cb_id);
+    // mm_init(in0_cb_id, in1_cb_id, out_cb_id);
     for (uint32_t b = 0; b < batch; b++){
         bool enable_reload = false;
         uint32_t out_num_tiles_to_wait = out_subblock_num_tiles;
@@ -79,15 +82,16 @@ void MAIN {
 
                     if (enable_reload) {
                         // Reconfigure input
-                        copy_tile_to_dst_init_short_with_dt(mm_partials_cb_id);
+                        copy_tile_matmul_partials_init_short_with_dt(mm_partials_cb_id);                                             // nothing to be done
                         cb_wait_front(mm_partials_cb_id, out_subblock_num_tiles);
                         tile_regs_acquire();
                         for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
-                            copy_tile(mm_partials_cb_id, i, i);
+                            copy_tile_matmul_partials(mm_partials_cb_id, i, i);                                                             // seems nothing to be done
                         }
                         cb_pop_front(mm_partials_cb_id, out_subblock_num_tiles);
-                        // Reconfigure srcA back
-                        mm_init_short_with_dt(mm_partials_cb_id);
+                        // // Reconfigure srcA back
+                        mm_block_init_short_with_dt(in0_cb_id, in1_cb_id, mm_partials_cb_id);                               // done
+                        // mm_init_short_with_dt(mm_partials_cb_id);
                     } else {
                         // just acquire
                         tile_regs_acquire();
@@ -117,6 +121,7 @@ void MAIN {
                         cb_reserve_back(mm_out_cb_id, out_subblock_num_tiles);
                         tile_regs_wait();
                         for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
+                            // mm_pack_tile(i, mm_out_cb_id);                                                             // done
                             pack_tile(i, mm_out_cb_id);
                         }
                         tile_regs_release();
@@ -132,6 +137,7 @@ void MAIN {
                         cb_reserve_back(mm_partials_cb_id, out_subblock_num_tiles);
                         tile_regs_wait();
                         for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
+                            // mm_pack_tile(i, mm_partials_cb_id);                                                        // done
                             pack_tile(i, mm_partials_cb_id);
                         }
                         tile_regs_release();
