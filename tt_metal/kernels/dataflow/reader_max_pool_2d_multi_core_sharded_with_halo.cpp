@@ -301,6 +301,15 @@ void kernel_main() {
     //     DPRINT << i << ": " << reader_indices_ptr[i] << ENDL();
     // }
 
+    // the reader loop loop below reads window_w sticks in one shot becasuse they're guaranteed to be adjacent both on the src side and dst side
+    // this is because this is dilation==1 maxpool, "filter" points are adjacent
+    // num bytes in "window_w" sticks == window_w * in_nbytes_c
+    // can pass this as compile-time arg (WH has an integer mult, GS not)
+    uint32_t in_nbytes_c_times_window_w = 0;
+    for (uint32_t i = 0; i < window_w; ++ i) {
+        in_nbytes_c_times_window_w += in_nbytes_c;
+    }
+
     uint32_t counter = 0;
     while (counter < reader_i) {
         cb_reserve_back(in_cb_id, 1);
@@ -310,12 +319,11 @@ void kernel_main() {
         int32_t top_left_local_index = reader_indices_ptr[counter ++];
         uint32_t h_multiples = 0;
         for (uint32_t h = 0; h < window_h; ++ h, h_multiples += in_w_padded) {
-            for (uint32_t w = 0; w < window_w; ++ w) {
-                uint32_t stick_offset = top_left_local_index + (w + h_multiples);
-                uint32_t read_offset = in_l1_read_base_addr + (stick_offset << in_nbytes_c_log2);
-                noc_async_read_one_packet(get_noc_addr(read_offset), out_l1_write_addr, in_nbytes_c);
-                out_l1_write_addr += in_nbytes_c;
-            }
+            uint32_t stick_offset = top_left_local_index + h_multiples;
+            uint32_t read_offset = in_l1_read_base_addr + (stick_offset << in_nbytes_c_log2);
+            // coalesced read of "window_w" num of sticks in one shot becasuse they're guaranteed to be adjacent both on the src side and dst side
+            noc_async_read_one_packet(get_noc_addr(read_offset), out_l1_write_addr, in_nbytes_c_times_window_w);
+            out_l1_write_addr += in_nbytes_c_times_window_w;
         }
         // print_pages(out_l1_write_addr_base, 64, 10, 0);
         noc_async_read_barrier();
