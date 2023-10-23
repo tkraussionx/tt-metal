@@ -149,6 +149,7 @@ void Device::initialize_firmware(CoreCoord phys_core) {
         case 3: fname = "tensix_thread1/tensix_thread1.hex"; break;
         case 4: fname = "tensix_thread2/tensix_thread2.hex"; break;
         }
+        std::cout << "Initializing FW for riscv " << riscv_id << " on chip " << this->id() << " core: " << phys_core.str() << std::endl;
         llrt::test_load_write_read_risc_binary(fname, this->id(), phys_core, riscv_id, true);
     }
 }
@@ -170,6 +171,7 @@ void Device::initialize_hardware() {
             }
         }
     }
+    std::cout << "Done initializing FW for device " << this->id() << std::endl;
 
     // Barrier between L1 writes above and deassert below
     tt::Cluster::instance().l1_barrier(this->id());
