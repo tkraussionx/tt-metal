@@ -1,7 +1,7 @@
 import ttnn
 import torch
 import pytest
-from tests.ttnn.utils_for_testing import assert_with_pcc, update_process_id
+from tests.ttnn.utils_for_testing import assert_with_pcc
 import tt_lib as ttl
 
 
@@ -22,11 +22,9 @@ def test_add_scalar(device, s, h, w):
 @pytest.mark.parametrize("h", [1])
 @pytest.mark.parametrize("w", [4])
 def test_add_scalar_and_alpha(device, alpha, scalar_input_tensor_b, h, w):
-    update_process_id()
     a = ttnn.random(shape=(1, 1, h, w))
     torch_a = ttnn.to_torch(a)
     expected_pytorch_result = torch.add(torch_a, scalar_input_tensor_b, alpha=alpha)
-    expected_tt_result = ttnn.from_torch(expected_pytorch_result, ttl.tensor.DataType.BFLOAT16).cpu()
     actual_tt_result = ttnn.add(a, scalar_input_tensor_b, alpha=alpha)
     actual_pytorch_result = ttnn.to_torch(actual_tt_result)
     print(expected_pytorch_result)

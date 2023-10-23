@@ -11,12 +11,11 @@ import tt_lib as ttl
     ])
 # fmt: on
 def test_multiply_with_scalar(device, first, scalar):
-    update_process_id()
     # pad the lists with zeros to make it 32 so that it fits nicely on the device.
     first += [0.0] * (32 - len(first))
-    first_tensor = ttl.tensor.Tensor(
+    first_tensor = ttnn.Tensor(ttl.tensor.Tensor(
         first, [1, 1, 1, len(first)], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.ROW_MAJOR, device
-    )
+    ))
     torch_first_tensor = ttnn.to_torch(first_tensor)
     torch_output = torch.mul(torch_first_tensor, scalar)
     tt_output = ttnn.mul(first_tensor, scalar)

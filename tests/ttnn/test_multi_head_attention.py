@@ -20,13 +20,11 @@ def multi_head_attention(
     *,
     head_size,
 ):
-    ignored, batch_size, sequence_size, hidden_size = hidden_states.shape()
+    ignored, batch_size, sequence_size, hidden_size = hidden_states.shape
     num_heads = hidden_size // head_size
     query = hidden_states @ query_weight
     query = query + query_bias
-    print(query.shape())
     query = ttnn.reshape(query, (batch_size, sequence_size, num_heads, head_size))
-    print(query.shape())
     query = ttnn.permute(query, (0, 2, 1, 3))
     key = hidden_states @ key_weight
     key = key + key_bias
@@ -36,20 +34,20 @@ def multi_head_attention(
     value = value + value_bias
     value = ttnn.reshape(value, (batch_size, sequence_size, num_heads, head_size))
     value = ttnn.permute(value, (0, 2, 1, 3))
-    print(f"query shape: {query.shape()}")
-    print(f"key shape: {key.shape()}")
-    print(f"value shape: {value.shape()}")
+    print(f"query shape: {query.shape}")
+    print(f"key shape: {key.shape}")
+    print(f"value shape: {value.shape}")
     attention_scores = query @ key
-    print(f"attention_scores shape: {attention_scores.shape()}")
+    print(f"attention_scores shape: {attention_scores.shape}")
     attention_scores = attention_scores * (1 / (head_size**0.5))
     if attention_mask is not None:
         attention_scores = attention_scores + attention_mask
     attention_probs = ttnn.softmax(attention_scores, dim=-1)
-    print(f"attention_probs shape: {attention_probs.shape()}")
+    print(f"attention_probs shape: {attention_probs.shape}")
     context_layer = attention_probs @ value
-    print(f"context_layer shape before permute: {context_layer.shape()}")
+    print(f"context_layer shape before permute: {context_layer.shape}")
     context_layer = ttnn.permute(context_layer, (0, 2, 1, 3))
-    print(f"context_layer shape after permute: {context_layer.shape()}")
+    print(f"context_layer shape after permute: {context_layer.shape}")
     context_layer = ttnn.reshape(context_layer, (batch_size, sequence_size, hidden_size))
     self_output = context_layer @ output_weight
     self_output = self_output + output_bias
@@ -74,8 +72,8 @@ def pytorch_multi_head_attention(
     num_heads = hidden_size // head_size
     query = hidden_states @ query_weight
     query = query + query_bias
-    query = query.view(batch_size, sequence_size, num_heads, head_size)
-    query = query.permute(0, 2, 1, 3)
+    query = torch.reshape(query, (batch_size, sequence_size, num_heads, head_size))
+    query = torch.permute(query, (0, 2, 1, 3))
     key = hidden_states @ key_weight
     key = key + key_bias
     key = key.view(batch_size, sequence_size, num_heads, head_size)
@@ -171,11 +169,11 @@ def test_multi_head_attention(device, batch_size, sequence_size, num_heads, head
         head_size=head_size,
     )
 
-    assert tt_output.shape() == [
+    assert tt_output.shape == [
         1,
         batch_size,
         sequence_size,
         hidden_size,
-    ], f"Expected output shape to be {batch_size, sequence_size, hidden_size}, got {tt_output.shape()}"
+    ], f"Expected output shape to be {batch_size, sequence_size, hidden_size}, got {tt_output.shape}"
 
     assert_with_pcc(torch_output, ttnn.to_torch(tt_output), 0.9)

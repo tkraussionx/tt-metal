@@ -55,12 +55,12 @@ def test_matmul_same_shape_but_invalid(device, first, second):
     # pad the lists with zeros to make it 32 so that it fits nicely on the device.
     first += [0.0] * (32 - len(first))
     second += [0.0] * (32 - len(second))
-    first_tensor = ttl.tensor.Tensor(
+    first_tensor = ttnn.Tensor(ttl.tensor.Tensor(
         first, [1, 1, 1, len(first)], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.ROW_MAJOR, device
-    )
-    second_tensor = ttl.tensor.Tensor(
+    ))
+    second_tensor = ttnn.Tensor(ttl.tensor.Tensor(
         second, [1, 1, 1, len(second)], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.ROW_MAJOR, device
-    )
+    ))
     torch_first_tensor = ttnn.to_torch(first_tensor)
     torch_second_tensor = ttnn.to_torch(second_tensor)
     with pytest.raises(RuntimeError) as ex:
