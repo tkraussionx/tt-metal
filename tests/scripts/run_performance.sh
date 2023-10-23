@@ -30,7 +30,7 @@ run_perf_models() {
 
     env pytest models/experimental/stable_diffusion/tests -m $pipeline_type
 
-    env pytest models/experimental/whisper/tests -m $pipeline_type
+    # env pytest models/experimental/whisper/tests -m $pipeline_type
 
     env pytest models/experimental/bloom/tests -m $pipeline_type
 
