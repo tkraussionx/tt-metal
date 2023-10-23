@@ -29,7 +29,7 @@ void py_module(py::module& m_operations) {
         },
         py::arg("shape"),
         py::arg("dtype").noconvert() = DataType::BFLOAT16,
-        py::arg("layout").noconvert() = Layout::TILE,
+        py::arg("layout").noconvert() = Layout::ROW_MAJOR,
         R"doc(
             Returns a new tensor filled with zeros of shape specified by argument ``shape``.
 
@@ -49,7 +49,7 @@ void py_module(py::module& m_operations) {
         },
         py::arg("shape"),
         py::arg("dtype").noconvert() = DataType::BFLOAT16,
-        py::arg("layout").noconvert() = Layout::TILE,
+        py::arg("layout").noconvert() = Layout::ROW_MAJOR,
         R"doc(
             Returns a new tensor filled with random values of shape specified by argument ``shape``.
 
