@@ -1,8 +1,15 @@
-from ttnn.core import (
-    # to/from torch
+from ttnn.tensor import (
+    uint32,
+    float32,
+    bfloat16,
+    bfloat8_b,
+
+    Tensor,
     from_torch,
     to_torch,
+)
 
+from ttnn.core import (
     # math operations
     matmul,
     add,

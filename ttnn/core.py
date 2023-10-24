@@ -1,65 +1,12 @@
-from typing import Optional
-
 from loguru import logger
 
 import tt_lib as ttl
 
-
-class Tensor:
-    def __init__(self: "Tensor", ttl_tensor: ttl.tensor.Tensor):
-        self._tensor: ttl.tensor.Tensor = ttl_tensor
-
-    @property
-    def shape(self: "Tensor") -> tuple:
-        return self._tensor.shape()
-
-    @property
-    def dtype(self: "Tensor"):
-        return self._tensor.dtype()
-
-    def __add__(self: "Tensor", other: "Tensor") -> "Tensor":
-        return add(self, other)
-
-    def __sub__(self: "Tensor", other: "Tensor") -> "Tensor":
-        return subtract(self, other)
-
-    def __mul__(self: "Tensor", other: "Tensor") -> "Tensor":
-        return multiply(self, other)
-
-    def __matmul__(self: "Tensor", other: "Tensor") -> "Tensor":
-        return matmul(self, other)
-
-    def __getitem__(self: "Tensor", slices) -> "Tensor":
-        torch_tensor = to_torch(self)
-        torch_tensor = torch_tensor[slices]
-        return from_torch(torch_tensor, dtype=self.dtype)
-
-    def __repr__(self: "Tensor") -> str:
-        return str(self._tensor)
-
-
-uint32 = ttl.tensor.DataType.UINT32
-float32 = ttl.tensor.DataType.FLOAT32
-bfloat16 = ttl.tensor.DataType.BFLOAT16
-bfloat8_b = ttl.tensor.DataType.BFLOAT8_B
+from ttnn.tensor import Tensor, from_torch, to_torch
 
 
 def is_scalar(value):
     return isinstance(value, (int, float, complex))
-
-
-def from_torch(
-    torch_tensor: "torch.Tensor",
-    dtype: Optional["torch.dtype"]=None,
-) -> Tensor:
-    return Tensor(ttl.tensor.Tensor(torch_tensor, dtype))
-
-# Conversion
-def to_torch(tt_tensor: Tensor) -> "torch.Tensor":
-    tt_output = tt_tensor._tensor.cpu() # Move to CPU if on device
-    if tt_output.layout() != ttl.tensor.Layout.ROW_MAJOR:
-        tt_output = tt_output.to(ttl.tensor.Layout.ROW_MAJOR)
-    return tt_output.to_torch()
 
 
 def _shape_is_broadcastable(input_shape_a, input_shape_b):
@@ -163,8 +110,6 @@ def subtract(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
 
     return Tensor(ttl.tensor.sub(input_tensor_a, input_tensor_b))
 
-sub = subtract
-
 
 def multiply(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
 
@@ -191,13 +136,15 @@ def multiply(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
         return Tensor(ttl.tensor.bcast(input_tensor_a, input_tensor_b, ttl.tensor.BcastOpMath.MUL, ttl.tensor.BcastOpDim.W))
     return Tensor(ttl.tensor.mul(input_shape_a, input_tensor_b))
 
+
+sub = subtract
 mul = multiply
 
 
-ttl.tensor.Tensor.__matmul__ = matmul
-ttl.tensor.Tensor.__add__ = add
-ttl.tensor.Tensor.__sub__ = subtract
-ttl.tensor.Tensor.__mul__ = mul
+Tensor.__matmul__ = matmul
+Tensor.__add__ = add
+Tensor.__sub__ = subtract
+Tensor.__mul__ = multiply
 
 
 # Data Transformations
@@ -230,3 +177,16 @@ def softmax(input_tensor: Tensor, dim) -> Tensor:
     torch_tensor = to_torch(input_tensor)
     torch_tensor = torch.softmax(torch_tensor, dim=dim)
     return from_torch(torch_tensor, dtype=input_tensor.dtype)
+
+
+__all__ = [
+    "matmul",
+    "add",
+    "sub",
+    "subtract",
+    "mul",
+    "multiply",
+    "reshape",
+    "permute",
+    "softmax",
+]

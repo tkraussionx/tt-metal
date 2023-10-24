@@ -15,7 +15,7 @@ def test_softmax(device, h, w):
 
     activations = ttnn.from_torch(torch_activations)
     tt_output = ttnn.softmax(activations, dim=-1)
-    tt_output = ttnn.to_torch(tt_output)
+    tt_output = ttnn.to_torch(tt_output).clone() # TODO: remove clone?
 
     assert_with_pcc(torch_output, tt_output, 0.9999)
     # assert torch.allclose(torch_output, tt_output, atol=1e-1, rtol=1e-2)

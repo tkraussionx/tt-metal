@@ -14,6 +14,6 @@ def test_transpose(device, h, w):
 
     activations = ttnn.from_torch(torch_activations)
     tt_output = ttnn.permute(activations, (0, 1, 3, 2))
-    tt_output = ttnn.to_torch(tt_output).clone()
+    tt_output = ttnn.to_torch(tt_output).clone() # TODO: remove clone?
 
     assert torch.allclose(torch_output, tt_output, atol=1e-1, rtol=1e-2)
