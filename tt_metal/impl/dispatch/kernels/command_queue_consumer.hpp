@@ -23,9 +23,15 @@ void multicore_cb_wait_front(bool db_buf_switch, int32_t num_pages) {
 }
 
 void multicore_cb_pop_front(
-    uint64_t producer_noc_encoding, bool db_buf_switch, uint32_t fifo_limit, uint32_t fifo_size, uint32_t num_pages, uint32_t page_size) {
+    uint64_t producer_noc_encoding,
+    bool db_buf_switch,
+    uint32_t fifo_limit,
+    uint32_t fifo_size,
+    uint32_t num_pages,
+    uint32_t page_size) {
     volatile uint32_t* CQ_CONSUMER_CB_ACK_PTR = reinterpret_cast<volatile uint32_t*>(get_db_cb_ack_addr(db_buf_switch));
-    volatile uint32_t* CQ_CONSUMER_CB_READ_PTR = reinterpret_cast<volatile uint32_t*>(get_db_cb_rd_ptr_addr(db_buf_switch));
+    volatile uint32_t* CQ_CONSUMER_CB_READ_PTR =
+        reinterpret_cast<volatile uint32_t*>(get_db_cb_rd_ptr_addr(db_buf_switch));
 
     *CQ_CONSUMER_CB_ACK_PTR += num_pages;
     *CQ_CONSUMER_CB_READ_PTR += (page_size * num_pages) >> 4;
@@ -83,8 +89,8 @@ FORCE_INLINE void write_buffers(
     }
 }
 
-FORCE_INLINE
-void write_program_page(uint32_t page_addr, volatile uint32_t*& command_ptr) {
+template <bool multicast>
+FORCE_INLINE void write_program_page(uint32_t page_addr, volatile uint32_t*& command_ptr) {
     uint32_t num_transfers = command_ptr[0];
     command_ptr++;
     uint32_t src = page_addr;
@@ -97,8 +103,14 @@ void write_program_page(uint32_t page_addr, volatile uint32_t*& command_ptr) {
 
         // advance is false if we are sending the same data to different rectangles of workers
         bool last_transfer_in_group = command_ptr[4];
+        uint64_t dst_noc_addr = (uint64_t(dst_noc) << 32) | dst;
 
-        noc_async_write_multicast(src, (uint64_t(dst_noc) << 32) | dst, num_bytes, num_recv);
+        if constexpr (multicast) {
+            noc_async_write_multicast(src, dst_noc_addr, num_bytes, num_recv);
+        } else {
+            noc_async_write(src, dst_noc_addr, num_bytes);
+        }
+
         command_ptr += 5;
         if (last_transfer_in_group) {
             src = align(src + num_bytes, 16);
@@ -106,34 +118,23 @@ void write_program_page(uint32_t page_addr, volatile uint32_t*& command_ptr) {
     }
 }
 
-FORCE_INLINE
-void write_and_launch_program(
-    uint32_t num_pages,
-    volatile uint32_t*& command_ptr,
-    uint64_t producer_noc_encoding,
+template <bool multicast>
+FORCE_INLINE void program_page_transfer(
+    volatile tt_l1_ptr uint32_t*& command_ptr,
+    uint32_t producer_noc_encoding,
     uint32_t consumer_cb_size,
     uint32_t consumer_cb_num_pages,
     uint32_t producer_consumer_transfer_num_pages,
-    bool db_buf_switch) {
+    bool db_buf_switch,
+    uint32_t num_pages_in_transfer) {
+
     uint32_t l1_consumer_fifo_limit = get_read_ptr(db_buf_switch) + consumer_cb_size - 1;
-
-    if (not num_pages) {
-        return;
-    }
-
-    // GO signals are just data within pages, so we need to set
-    // our local 'recv' address value to 0 before we initiate
-    // any transfers
-    volatile tt_l1_ptr uint32_t* message_addr_ptr =
-        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(DISPATCH_MESSAGE_ADDR);
-    *message_addr_ptr = 0;
-
-    for (uint32_t page_idx = 0; page_idx < num_pages;) {
-        uint32_t num_to_write = min(num_pages - page_idx, producer_consumer_transfer_num_pages);
+    for (uint32_t page_idx = 0; page_idx < num_pages_in_transfer;) {
+        uint32_t num_to_write = min(num_pages_in_transfer - page_idx, producer_consumer_transfer_num_pages);
         multicore_cb_wait_front(db_buf_switch, num_to_write);
         uint32_t src_addr = get_read_ptr(db_buf_switch);
         for (uint32_t i = 0; i < num_to_write; i++) {
-            write_program_page(src_addr, command_ptr);
+            write_program_page<multicast>(src_addr, command_ptr);
             src_addr += DeviceCommand::PROGRAM_PAGE_SIZE;
         }
         page_idx += num_to_write;
@@ -149,8 +150,69 @@ void write_and_launch_program(
     }
 }
 
+FORCE_INLINE
+void write_and_launch_program(
+    uint32_t program_transfer_start_addr,
+    uint32_t num_pages,
+    volatile uint32_t*& command_ptr,
+    uint64_t producer_noc_encoding,
+    uint32_t consumer_cb_size,
+    uint32_t consumer_cb_num_pages,
+    uint32_t producer_consumer_transfer_num_pages,
+    bool db_buf_switch) {
+
+    if (not num_pages) {
+        return;
+    }
+
+    // GO signals are just data within pages, so we need to set
+    // our local 'recv' address value to 0 before we initiate
+    // any transfers
+    volatile tt_l1_ptr uint32_t* message_addr_ptr =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(DISPATCH_MESSAGE_ADDR);
+    *message_addr_ptr = 0;
+
+    volatile tt_l1_ptr uint32_t* command_ptr_fixed = command_ptr;
+    command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(program_transfer_start_addr);
+    for (uint32_t transfer_type_idx = 0; transfer_type_idx < (uint32_t) DeviceCommand::TransferType::NUM_TRANSFER_TYPES; transfer_type_idx++) {
+        uint32_t num_pages_in_transfer;
+        bool multicast = true;
+        switch (transfer_type_idx) {
+            DeviceCommand::TransferType transfer_type;
+            case (uint32_t) DeviceCommand::TransferType::RUNTIME_ARGS:
+                multicast = false;
+                num_pages_in_transfer = command_ptr_fixed[DeviceCommand::num_runtime_arg_pages_idx];
+                break;
+            case (uint32_t) DeviceCommand::TransferType::CB_CONFIGS:
+                num_pages_in_transfer = command_ptr_fixed[DeviceCommand::num_cb_config_pages_idx];
+                break;
+            case (uint32_t) DeviceCommand::TransferType::PROGRAM_PAGES:
+                num_pages_in_transfer = command_ptr_fixed[DeviceCommand::num_program_pages_idx];
+                break;
+            case (uint32_t) DeviceCommand::TransferType::GO_SIGNALS:
+                num_pages_in_transfer = command_ptr_fixed[DeviceCommand::num_go_signal_pages_idx];
+                break;
+        }
+
+        #define program_page_transfer_args \
+            command_ptr, \
+            producer_noc_encoding, \
+            consumer_cb_size, \
+            consumer_cb_num_pages, \
+            producer_consumer_transfer_num_pages, \
+            db_buf_switch, \
+            num_pages_in_transfer
+
+        if (multicast) {
+            program_page_transfer<true>(program_page_transfer_args);
+        } else {
+            program_page_transfer<false>(program_page_transfer_args);
+        }
+    }
+}
+
 FORCE_INLINE void wait_for_program_completion(
-    uint32_t num_workers, volatile tt_l1_ptr uint32_t*& command_ptr, uint32_t tensix_soft_reset_addr) {
+    uint32_t num_workers, uint32_t tensix_soft_reset_addr) {
     if (not num_workers)
         return;
 
@@ -159,6 +221,8 @@ FORCE_INLINE void wait_for_program_completion(
 
     volatile tt_l1_ptr uint32_t* message_addr_ptr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(DISPATCH_MESSAGE_ADDR);
+
+    // DPRINT << "WAIT FOR COMPLETION" << ENDL();
     while (*message_addr_ptr != num_workers)
         ;
 

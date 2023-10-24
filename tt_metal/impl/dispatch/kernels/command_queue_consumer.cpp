@@ -18,7 +18,6 @@ void kernel_main() {
     uint64_t producer_noc_encoding = uint64_t(NOC_XY_ENCODING(PRODUCER_NOC_X, PRODUCER_NOC_Y)) << 32;
     uint64_t consumer_noc_encoding = uint64_t(NOC_XY_ENCODING(my_x[0], my_y[0])) << 32;
 
-    // TODO(agrebenisan): Add wrap/dispatch functionality back in
     while (true) {
         // Wait for producer to supply a command
         db_acquire(db_semaphore_addr, consumer_noc_encoding);
@@ -39,10 +38,10 @@ void kernel_main() {
         uint32_t num_pages = command_ptr[DeviceCommand::num_pages_idx];
         uint32_t producer_consumer_transfer_num_pages = command_ptr[DeviceCommand::producer_consumer_transfer_num_pages_idx];
 
+        // DPRINT << "NUM PAGES: " << num_pages << ENDL();
         if (is_program) {
-            command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(program_transfer_start_addr);
-            write_and_launch_program(num_pages, command_ptr, producer_noc_encoding, consumer_cb_size, consumer_cb_num_pages, producer_consumer_transfer_num_pages, db_buf_switch);
-            wait_for_program_completion(num_workers, command_ptr, tensix_soft_reset_addr);
+            write_and_launch_program(program_transfer_start_addr, num_pages, command_ptr, producer_noc_encoding, consumer_cb_size, consumer_cb_num_pages, producer_consumer_transfer_num_pages, db_buf_switch);
+            wait_for_program_completion(num_workers, tensix_soft_reset_addr);
         } else {
             command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(buffer_transfer_start_addr);
             write_buffers(command_ptr, num_buffer_transfers, consumer_cb_size, consumer_cb_num_pages, producer_noc_encoding, producer_consumer_transfer_num_pages, db_buf_switch);
