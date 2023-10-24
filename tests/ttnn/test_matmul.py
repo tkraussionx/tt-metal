@@ -1,12 +1,14 @@
-import ttnn
-import torch
 import pytest
+
+import torch
+
+import ttnn
+
 from tests.ttnn.utils_for_testing import assert_with_pcc
-import tt_lib as ttl
 
 
 # fmt: off
-@pytest.mark.parametrize("d1,d2,d3,d4", [
+@pytest.mark.parametrize("n,c,h,w", [
     (1, 1, 1, 3),
     (1, 1, 3, 1),
     (3, 3, 1, 3),
@@ -15,19 +17,21 @@ import tt_lib as ttl
     (3, 1, 3, 1),
     ])
 # fmt: on
-def test_matmul_with_matched_width_height(device, d1, d2, d3, d4):
-    first_tensor = ttnn.random(shape=(d1, d2, d3, d4))
-    second_tensor = ttnn.random(shape=(d1, d2, d4, d3))
-    torch_first_tensor = ttnn.to_torch(first_tensor)
-    torch_second_tensor = ttnn.to_torch(second_tensor)
-    torch_output = torch.matmul(torch_first_tensor, torch_second_tensor)
-    tt_output = ttnn.matmul(first_tensor, second_tensor)
+def test_matmul_with_matched_width_height(device, n, c, h, w):
+    torch_input_tensor_a = torch.rand((n, c, h, w), dtype=torch.bfloat16)
+    torch_input_tensor_b = torch.rand((n, c, w, h), dtype=torch.bfloat16)
+    torch_output = torch.matmul(torch_input_tensor_a, torch_input_tensor_b)
+
+    input_tensor_a = ttnn.from_torch(torch_input_tensor_a)
+    input_tensor_b = ttnn.from_torch(torch_input_tensor_b)
+    tt_output = ttnn.matmul(input_tensor_a, input_tensor_b)
     tt_output = ttnn.to_torch(tt_output)
+
     assert_with_pcc(torch_output, tt_output, 0.99)
 
 
 # fmt: off
-@pytest.mark.parametrize("d1,d2,d3,d4", [
+@pytest.mark.parametrize("n,c,h,w", [
     (1, 1, 1, 1),
     (1, 1, 3, 3),
     (3, 3, 3, 3),
@@ -35,37 +39,39 @@ def test_matmul_with_matched_width_height(device, d1, d2, d3, d4):
     (1, 3, 3, 3)
     ])
 # fmt: on
-def test_matmul_same_shape_and_valid(device, d1, d2, d3, d4):
-    first_tensor = ttnn.random(shape=(d1, d2, d3, d4))
-    second_tensor = ttnn.random(shape=(d1, d2, d3, d4))
-    torch_first_tensor = ttnn.to_torch(first_tensor)
-    torch_second_tensor = ttnn.to_torch(second_tensor)
-    torch_output = torch.matmul(torch_first_tensor, torch_second_tensor)
-    tt_output = ttnn.matmul(first_tensor, second_tensor)
+def test_matmul_same_shape_and_valid(device, n, c, h, w):
+    torch_input_tensor_a = torch.rand((n, c, h, w), dtype=torch.bfloat16)
+    torch_input_tensor_b = torch.rand((n, c, h, w), dtype=torch.bfloat16)
+    torch_output = torch.matmul(torch_input_tensor_a, torch_input_tensor_b)
+
+    input_tensor_a = ttnn.from_torch(torch_input_tensor_a)
+    input_tensor_b = ttnn.from_torch(torch_input_tensor_b)
+    tt_output = ttnn.matmul(input_tensor_a, input_tensor_b)
     tt_output = ttnn.to_torch(tt_output)
+
     assert_with_pcc(torch_output, tt_output, 0.99)
 
 
 # fmt: off
-@pytest.mark.parametrize("first,second", [
+@pytest.mark.parametrize("input_a,input_b", [
         ([1.0,2.0,3.0],[3.0,4.0,5.0])
     ])
 # fmt: on
-def test_matmul_same_shape_but_invalid(device, first, second):
+def test_matmul_same_shape_but_invalid(device, input_a, input_b):
     # pad the lists with zeros to make it 32 so that it fits nicely on the device.
-    first += [0.0] * (32 - len(first))
-    second += [0.0] * (32 - len(second))
-    first_tensor = ttnn.Tensor(ttl.tensor.Tensor(
-        first, [1, 1, 1, len(first)], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.ROW_MAJOR, device
-    ))
-    second_tensor = ttnn.Tensor(ttl.tensor.Tensor(
-        second, [1, 1, 1, len(second)], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.ROW_MAJOR, device
-    ))
-    torch_first_tensor = ttnn.to_torch(first_tensor)
-    torch_second_tensor = ttnn.to_torch(second_tensor)
-    with pytest.raises(RuntimeError) as ex:
-        ttnn.matmul(first_tensor, second_tensor)
-    assert "The width of the first tensor must be equal to the height of the second tensor" in str(ex.value)
-    with pytest.raises(RuntimeError) as ex2:
-        torch.matmul(torch_first_tensor, torch_second_tensor)
-    assert "Expected size for first two dimensions of batch2 tensor to be: [1, 32] but got: [1, 1]." in str(ex2.value)
+    input_a += [0.0] * (32 - len(input_a))
+    input_b += [0.0] * (32 - len(input_b))
+
+    torch_input_tensor_a = torch.as_tensor(input_a, dtype=torch.bfloat16).reshape((1, 1, 1, len(input_a)))
+    torch_input_tensor_b = torch.as_tensor(input_b, dtype=torch.bfloat16).reshape((1, 1, 1, len(input_b)))
+
+    with pytest.raises(RuntimeError) as exception:
+        torch.matmul(torch_input_tensor_a, torch_input_tensor_b)
+    assert "Expected size for first two dimensions of batch2 tensor to be: [1, 32] but got: [1, 1]." in str(exception.value)
+
+    input_tensor_a = ttnn.from_torch(torch_input_tensor_a)
+    input_tensor_b = ttnn.from_torch(torch_input_tensor_b)
+
+    with pytest.raises(RuntimeError) as exception:
+        ttnn.matmul(input_tensor_a, input_tensor_b)
+    assert "The width of the first tensor must be equal to the height of the second tensor" in str(exception.value)

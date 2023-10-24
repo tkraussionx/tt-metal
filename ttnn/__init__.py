@@ -52,18 +52,9 @@ def to_torch(tt_tensor):
 
 def from_torch(
     torch_tensor,
-    dtype,
+    dtype=None,
 ):
     return Tensor(ttl.tensor.Tensor(torch_tensor, dtype))
-
-
-# TODO: delete
-def zeros(shape, **kwargs):
-    return Tensor(ttl.operations.zeros(shape, **kwargs))
-
-# TODO: delete
-def random(shape, **kwargs):
-    return Tensor(ttl.operations.random(shape, **kwargs))
 
 
 def _shape_is_broadcastable(input_shape_a, input_shape_b):
