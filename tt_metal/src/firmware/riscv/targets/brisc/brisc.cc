@@ -28,7 +28,7 @@
 #include "debug_status.h"
 #include "debug_print.h"
 
-uint8_t noc_index = NOC_INDEX;
+uint8_t noc_index;
 
 constexpr uint32_t RISCV_IC_BRISC_MASK = 0x1;
 constexpr uint32_t RISCV_IC_TRISC0_MASK = 0x2;
@@ -352,8 +352,8 @@ int main() {
         DEBUG_STATUS('G', 'W');
         while (mailboxes->launch.run != RUN_MSG_GO);
         DEBUG_STATUS('G', 'D');
-        kernel_profiler::init_profiler();
 
+        kernel_profiler::init_profiler();
         kernel_profiler::mark_fw_start();
 
         // Invalidate the i$ now the kernels have loaded and before running
@@ -362,7 +362,7 @@ int main() {
 
         run_ncrisc_trisc();
 
-        uint32_t noc_index = mailboxes->launch.brisc_noc_id;
+        noc_index = mailboxes->launch.brisc_noc_id;
 
         // Run the BRISC kernel
         DEBUG_STATUS('R');

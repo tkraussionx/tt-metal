@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
 
 
         int loop_count = 20;
-        for (int i = 0; i < 1; i ++)
+        for (int i = 0; i < 20; i ++)
         {
             pass &= RunCustomCycle(device, loop_count);
         }

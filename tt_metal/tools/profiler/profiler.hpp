@@ -41,6 +41,14 @@ struct TimerPeriod {
     steady_clock::time_point stop;
 };
 
+//Struct for holding marker data
+struct markerInfo{
+    uint32_t coreX;
+    uint32_t coreY;
+    uint32_t risc;
+    uint32_t op;
+};
+
 class Profiler {
     private:
 
@@ -91,7 +99,10 @@ class Profiler {
         ~Profiler();
 
         // Map for storing dvice data
-        std::unordered_map<uint64_t,std::list<uint64_t>> device_data;
+        std::map<uint64_t,std::list<uint64_t>> device_data;
+
+        //TracyContext
+        TracyCLCtx tracyTTCtx;
 
         //Mark the steady_clock for the start of the asked name
         void markStart(const std::string& timer_name);
@@ -114,9 +125,8 @@ class Profiler {
         //Traverse all cores on the device and dump the device profile results
         void dumpDeviceResults(int device_id, const vector<CoreCoord> &worker_cores);
 
-        Buffer profiler_dram_buffer;
-
-        TracyCLCtx tracyTTCtx;
+        //Push device results to tracy
+        void pushTracyDeviceResults(int device_id);
 };
 
 }  // namespace tt_metal

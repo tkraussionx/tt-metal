@@ -824,7 +824,6 @@ void CommandQueue::finish() {
     // Reset this value to 0 before moving on
     finish_vec.at(0) = 0;
     tt::Cluster::instance().write_sysmem_vec(finish_vec, HOST_CQ_FINISH_PTR, 0);
-    tt::tt_metal::detail::DumpDeviceProfileResults(this->device);
 }
 
 void CommandQueue::wrap() {
@@ -861,6 +860,7 @@ void Finish(CommandQueue& cq) {
     detail::DispatchStateCheck(true);
     ZoneScopedN("Finish");
     cq.finish();
+    tt::tt_metal::detail::DumpDeviceProfileResults(cq.device);
 }
 
 }  // namespace tt::tt_metal

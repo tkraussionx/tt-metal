@@ -10,7 +10,6 @@
 
 #include "tt_metal/detail/tt_metal.hpp"
 
-#include "tt_metal/third_party/tracy/public/tracy/TracyOpenCL.hpp"
 
 namespace tt {
 
@@ -84,83 +83,8 @@ void DumpDeviceProfileResults(Device *device, vector<CoreCoord>& worker_cores) {
         auto device_id = device->id();
         tt_metal_profiler.setDeviceArchitecture(device->arch());
         tt_metal_profiler.dumpDeviceResults(device_id, worker_cores);
-
-        tt_metal_profiler.tracyTTCtx->PopulateCLContext();
-
-        for (auto& data: tt_metal_profiler.device_data)
-        {
-            ZoneScopedNC("Marker",tracy::Color::Red);
-            uint64_t threadID = 100*(data.first/100);
-            uint64_t row = int(threadID / 1000000);
-            uint64_t col = int((threadID-row*1000000)/10000);
-            uint64_t risc = int ((threadID-row*1000000-col*10000)/100);
-            uint64_t markerID = data.first - threadID;
-
-            if (row == 0 && col == 0 && markerID == 1)
-            {
-                for (auto event : data.second)
-                {
-                    switch (risc)
-                    {
-                        case 0:
-                            {
-                                TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "FW", tracy::Color::Red3,threadID);
-                                {
-                                    TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "KERNEL", tracy::Color::Red2,threadID);
-                                    TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,0));
-                                }
-                                TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,1));
-                            }
-                            break;
-                        case 1:
-                            {
-                                TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "FW", tracy::Color::Green4,threadID);
-                                {
-                                    TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "KERNEL", tracy::Color::Green3,threadID);
-                                    TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,0));
-                                }
-                                TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,1));
-                            }
-                            break;
-                        case 2:
-                            {
-                                TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "FW", tracy::Color::Blue4,threadID);
-                                {
-                                    TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "KERNEL", tracy::Color::Blue3,threadID);
-                                    TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,0));
-                                }
-                                TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,1));
-                            }
-                            break;
-                        case 3:
-                            {
-                                TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "FW", tracy::Color::Purple3,threadID);
-                                {
-                                    TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "KERNEL", tracy::Color::Purple2,threadID);
-                                    TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,0));
-                                }
-                                TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,1));
-                            }
-                            break;
-                        case 4:
-                            {
-                                TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "FW", tracy::Color::Yellow4,threadID);
-                                {
-                                    TracyCLZoneC(tt_metal_profiler.tracyTTCtx, "KERNEL", tracy::Color::Yellow3,threadID);
-                                    TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,0));
-                                }
-                                TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,1));
-                            }
-                            break;
-
-                        default:
-                            break;
-                    }
-                }
-            }
-        }
-
-        TracyCLCollect(tt_metal_profiler.tracyTTCtx, tt_metal_profiler.device_data);
+        tt_metal_profiler.pushTracyDeviceResults(device_id);
+        tt_metal_profiler.device_data.clear();
     }
 #endif
 }

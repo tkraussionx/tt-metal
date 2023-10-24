@@ -13,6 +13,7 @@
 #include "tools/profiler/profiler_state.hpp"
 #include "hostdevcommon/profiler_common.h"
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
+#include "tt_metal/third_party/tracy/public/tracy/TracyOpenCL.hpp"
 
 #define HOST_SIDE_LOG "profile_log_host.csv"
 #define DEVICE_SIDE_LOG "profile_log_device.csv"
@@ -20,6 +21,7 @@
 namespace tt {
 
 namespace tt_metal {
+
 
 TimerPeriodInt Profiler::timerToTimerInt(TimerPeriod period)
 {
@@ -98,13 +100,6 @@ void Profiler::readRiscProfilerResults(
             PROFILER_L1_CONTROL_BUFFER_SIZE);
 
     uint32_t bufferCount = control_buffer[kernel_profiler::DRAM_BUFFER_NUM];
-
-    //for (auto& i : control_buffer)
-    //{
-        //std::cout << i << ", ";
-    //}
-
-    //std::cout << std::endl;
 
     if (bufferCount > PROFILER_DRAM_BUFFER_COUNT)
     {
@@ -317,9 +312,9 @@ void Profiler::dumpDeviceResults (
     ZoneScoped;
     device_core_frequency = tt::Cluster::instance().get_device_aiclk(device_id);
     std::vector<uint32_t> profile_buffer(PROFILER_FULL_BUFFER_SIZE/sizeof(uint32_t), 0);
-    //tt_metal::ReadFromBuffer(profiler_dram_buffer, profile_buffer);
 
     tt::Cluster::instance().read_sysmem_vec(profile_buffer, PROFILER_HUGE_PAGE_ADDRESS, PROFILER_FULL_BUFFER_SIZE, 0);
+    tt::Cluster::instance().write_sysmem_vec(profile_buffer, PROFILER_HUGE_PAGE_ADDRESS, 0);
 
     for (const auto &worker_core : worker_cores) {
         readRiscProfilerResults(
@@ -327,6 +322,93 @@ void Profiler::dumpDeviceResults (
             profile_buffer,
             worker_core);
     }
+#endif
+}
+
+
+void Profiler::pushTracyDeviceResults(int device_id)
+{
+#if defined(PROFILER)
+    tracyTTCtx->PopulateCLContext();
+
+    std::string riscName[] = {"BRISC", "NCRISC", "TRISC_0", "TRISC_1", "TRISC_2"};
+
+    for (auto& data: device_data)
+    {
+        ZoneScopedNC("Marker",tracy::Color::Red);
+        uint64_t threadID = 100*(data.first/100);
+        uint64_t row = int(threadID / 1000000);
+        uint64_t col = int((threadID-row*1000000)/10000);
+        uint64_t risc = int ((threadID-row*1000000-col*10000)/100);
+        uint64_t markerID = data.first - threadID;
+
+        if (row == 0 && col == 0 && markerID == 1)
+        {
+            int i = 1;
+            for (auto event : data.second)
+            {
+                switch (risc)
+                {
+                    case 0:
+                        {
+                            TracyCLZoneC(tracyTTCtx, "FW", tracy::Color::Red3,threadID);
+                            {
+                                TracyCLZoneC(tracyTTCtx, "KERNEL", tracy::Color::Red2,threadID);
+                                TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,0));
+                            }
+                            TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,1));
+                        }
+                        break;
+                    case 1:
+                        {
+                            TracyCLZoneC(tracyTTCtx, "FW", tracy::Color::Green4,threadID);
+                            {
+                                TracyCLZoneC(tracyTTCtx, "KERNEL", tracy::Color::Green3,threadID);
+                                TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,0));
+                            }
+                            TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,1));
+                        }
+                        break;
+                    case 2:
+                        {
+                            TracyCLZoneC(tracyTTCtx, "FW", tracy::Color::Blue4,threadID);
+                            {
+                                TracyCLZoneC(tracyTTCtx, "KERNEL", tracy::Color::Blue3,threadID);
+                                TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,0));
+                            }
+                            TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,1));
+                        }
+                        break;
+                    case 3:
+                        {
+                            TracyCLZoneC(tracyTTCtx, "FW", tracy::Color::Purple3,threadID);
+                            {
+                                TracyCLZoneC(tracyTTCtx, "KERNEL", tracy::Color::Purple2,threadID);
+                                TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,0));
+                            }
+                            TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,1));
+                        }
+                        break;
+                    case 4:
+                        {
+                            TracyCLZoneC(tracyTTCtx, "FW", tracy::Color::Yellow4,threadID);
+                            {
+                                TracyCLZoneC(tracyTTCtx, "KERNEL", tracy::Color::Yellow3,threadID);
+                                TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,0));
+                            }
+                            TracyCLZoneSetEvent(tracy::TTDeviceEvent(device_id,row,col,risc,1));
+                        }
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+        }
+    }
+
+    TracyCLCollect(tracyTTCtx, device_data);
+
 #endif
 }
 
