@@ -152,9 +152,14 @@ Tensor.__mul__ = multiply
 # Data Transformations
 def reshape(input_tensor: Tensor, shape) -> Tensor:
 
+    ttl_input_tensor = input_tensor._tensor
+
+    if ttl_input_tensor.layout() == ttl.tensor.Layout.ROW_MAJOR:
+        return Tensor(ttl_input_tensor.reshape(shape))
+
     try:
         w, z, y, x = shape
-        return Tensor(ttl.tensor.reshape(input_tensor._tensor, w, z, y, x))
+        return Tensor(ttl.tensor.reshape(ttl_input_tensor, w, z, y, x))
     except:
         logger.warning("Given reshape operation could not be run on the TT device. Defaulting to torch implementation")
         torch_tensor = to_torch(input_tensor)

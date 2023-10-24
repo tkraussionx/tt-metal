@@ -22,6 +22,10 @@ class Tensor:
     def dtype(self: "Tensor") -> DataType:
         return self._tensor.dtype()
 
+    @property
+    def layout(self: "Tensor") -> DataType:
+        return self._tensor.layout()
+
     def __getitem__(self: "Tensor", slices) -> "Tensor":
         torch_tensor = to_torch(self)
         torch_tensor = torch_tensor[slices]

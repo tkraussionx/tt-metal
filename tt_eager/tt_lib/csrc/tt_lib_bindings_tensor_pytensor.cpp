@@ -902,14 +902,27 @@ namespace tt::tt_metal::detail
 
                     dtype = tt_tensor.shape_without_padding()
             )doc")
-            .def("reshape", [](Tensor &self, int N, int C, int H, int W) {
-                return self.reshape(N, C, H, W);
-            }, R"doc(
-                Reshapes TT tensor
+            .def("reshape",
+                [](Tensor &self, int N, int C, int H, int W) {
+                    return self.reshape(N, C, H, W);
+                }, R"doc(
+                    Reshapes TT tensor
 
-                .. code-block:: python
+                    .. code-block:: python
 
-                    reshaped_tensor = tt_tensor.reshape(N, C, H, W)
-            )doc");
+                        reshaped_tensor = tt_tensor.reshape(N, C, H, W)
+                )doc"
+            )
+            .def("reshape",
+                [](Tensor &self, const std::vector<uint32_t>& shape) {
+                    return self.reshape(shape);
+                }, R"doc(
+                    Reshapes TT tensor
+
+                    .. code-block:: python
+
+                        reshaped_tensor = tt_tensor.reshape((4, 3, 32))
+                )doc"
+            );
     }
 }
