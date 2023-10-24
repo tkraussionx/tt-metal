@@ -42,13 +42,15 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
     *rest_of_shape_b, height_b, width_b = input_shape_b
 
     # The idea is to make the shapes "possibly" broadcastable.
-    len_diff = len(input_shape_a) - len(input_shape_b)
-    if len_diff > 0:
-        input_shape_b = [1] * len_diff + input_shape_b
-        input_tensor_b = reshape(input_tensor_b, shape=input_shape_b)
-    else:
-        input_shape_a = [1] * -len_diff + input_shape_a
-        input_tensor_a = reshape(input_tensor_a, shape=input_shape_a)
+    assert len(input_shape_a) <= 4
+    len_diff_a = 4 - len(input_shape_a)
+    input_shape_a = [1] * len_diff_a + input_shape_a
+    input_tensor_a = reshape(input_tensor_a, shape=input_shape_a)
+
+    assert len(input_shape_b) <= 4
+    len_diff_b = 4 - len(input_shape_b)
+    input_shape_b = [1] * len_diff_b + input_shape_b
+    input_tensor_b = reshape(input_tensor_b, shape=input_shape_b)
 
     # if height_a % 32 != 0 or width_a % 32 != 0:
     #     raise TypeError("The last two dimensions of the first tensor must be a multiple of 32")

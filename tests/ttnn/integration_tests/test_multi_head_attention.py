@@ -22,7 +22,7 @@ def multi_head_attention(
     *,
     head_size,
 ):
-    batch_size, _, sequence_size, hidden_size = hidden_states.shape
+    batch_size, sequence_size, hidden_size = hidden_states.shape
     num_heads = hidden_size // head_size
 
     query = hidden_states @ query_weight
@@ -119,13 +119,13 @@ def test_multi_head_attention(device, batch_size, sequence_size, num_heads, head
     torch_attention_mask = torch.zeros((1, 1, 1, sequence_size), dtype=torch.bfloat16)
     torch_attention_mask[:, :, ::2, :] = -1e9
 
-    torch_query_weight = torch.rand((1, 1, hidden_size, hidden_size), dtype=torch.bfloat16)
+    torch_query_weight = torch.rand((hidden_size, hidden_size), dtype=torch.bfloat16)
     torch_query_bias =  torch.rand((1, 1, 1, hidden_size), dtype=torch.bfloat16)
-    torch_key_weight =  torch.rand((1, 1, hidden_size, hidden_size), dtype=torch.bfloat16)
+    torch_key_weight =  torch.rand((hidden_size, hidden_size), dtype=torch.bfloat16)
     torch_key_bias =  torch.rand((1, 1, 1, hidden_size), dtype=torch.bfloat16)
-    torch_value_weight =  torch.rand((1, 1, hidden_size, hidden_size), dtype=torch.bfloat16)
+    torch_value_weight =  torch.rand((hidden_size, hidden_size), dtype=torch.bfloat16)
     torch_value_bias =  torch.rand((1, 1, 1, hidden_size), dtype=torch.bfloat16)
-    torch_output_weight =  torch.rand((1, 1, hidden_size, hidden_size), dtype=torch.bfloat16)
+    torch_output_weight =  torch.rand((hidden_size, hidden_size), dtype=torch.bfloat16)
     torch_output_bias =  torch.rand((1, 1, 1, hidden_size), dtype=torch.bfloat16)
 
     torch_output = pytorch_multi_head_attention(
@@ -149,7 +149,7 @@ def test_multi_head_attention(device, batch_size, sequence_size, num_heads, head
         hidden_size,
     ), f"Expected output shape to be {batch_size, sequence_size, hidden_size}, got {torch_output.shape}"
 
-    hidden_states = ttnn.from_torch(torch_hidden_states.reshape(batch_size, 1, sequence_size, hidden_size))
+    hidden_states = ttnn.from_torch(torch_hidden_states)
     attention_mask = ttnn.from_torch(torch_attention_mask)
 
     query_weight = ttnn.from_torch(torch_query_weight)
