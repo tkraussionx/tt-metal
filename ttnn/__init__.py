@@ -1,4 +1,4 @@
-from .core import (
+from ttnn.core import (
     # to/from torch
     from_torch,
     to_torch,
@@ -18,3 +18,5 @@ from .core import (
     # unary operations
     softmax,
 )
+
+import ttnn.experimental
