@@ -55,24 +55,26 @@ Tensor::~Tensor() {
     this->deallocate();
 }
 
-void Tensor::deallocate() {
+void Tensor::deallocate(bool force) {
     ZoneScoped;
 
     std::visit(
-        [](auto&& storage)
+        [&force](auto&& storage)
         {
             using T = std::decay_t<decltype(storage)>;
             if constexpr (std::is_same_v<T, OwnedStorage>) {
                 std::visit([](auto&& buffer) { buffer.reset(); }, storage.buffer);
             }
             else if constexpr (std::is_same_v<T, DeviceStorage>) {
-                if (storage.buffer.use_count() == 1) {
+                if (storage.buffer.use_count() == 1 or force) {
                      DeallocateBuffer(*storage.buffer);
                 }
                 storage.buffer.reset();
             }
             else if constexpr (std::is_same_v<T, BorrowedStorage>) {
-                // do nothing
+                if (force) {
+                    TT_THROW("Cannot deallocate tensor with borrowed storage!");
+                }
             }
             else {
                 raise_unsupported_storage<T>();
@@ -184,7 +186,7 @@ bool Tensor::is_allocated() const {
                 return std::visit([](auto&& buffer) -> bool { return buffer.is_allocated(); }, storage.buffer);
             }
             else if constexpr (std::is_same_v<T, DeviceStorage>) {
-                return bool(storage.buffer);
+                return bool(storage.buffer) and storage.buffer->size() > 0;
             }
             else if constexpr (std::is_same_v<T, BorrowedStorage>) {
                 return true;

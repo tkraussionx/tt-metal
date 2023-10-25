@@ -458,7 +458,7 @@ inline Tensor to_host(const Tensor &tensor) {
     if (tensor.storage_type() != StorageType::DEVICE) {
         return tensor;
     }
-    TT_ASSERT(tensor.is_allocated(), "Need DRAM buffers to be allocated!");
+    TT_ASSERT(tensor.is_allocated(), "Buffer must be allocated on device!");
     auto device_buffer = tensor.buffer();
     auto device = tensor.device();
     TT_ASSERT(device != nullptr && "Need device to be set copy data from device to host!");

@@ -36,21 +36,32 @@ class Tensor:
 
 
 def from_torch(
-    torch_tensor: "torch.Tensor",
+    tensor: "torch.Tensor",
     dtype: Optional[DataType]=None,
 ) -> Tensor:
-    return Tensor(ttl.tensor.Tensor(torch_tensor, dtype))
+    return Tensor(ttl.tensor.Tensor(tensor, dtype))
 
 
-def to_torch(tt_tensor: Tensor) -> "torch.Tensor":
-    tt_output = tt_tensor._tensor.cpu() # Move to CPU if on device
-    if tt_output.layout() != ttl.tensor.Layout.ROW_MAJOR:
-        tt_output = tt_output.to(ttl.tensor.Layout.ROW_MAJOR)
-    return tt_output.to_torch()
+def to_torch(tensor: Tensor) -> "torch.Tensor":
+    tensor = tensor._tensor.cpu() # Move to CPU if on device
+    if tensor.layout() != ttl.tensor.Layout.ROW_MAJOR:
+        tensor = tensor.to(ttl.tensor.Layout.ROW_MAJOR)
+    return tensor.to_torch()
+
+
+
+def free(self: "Tensor") -> str:
+    self._tensor.deallocate(force=True)
+
 
 __all__ = [
     "DataType",
+    "uint32",
+    "float32",
+    "bfloat16",
+    "bfloat8_b",
     "Tensor",
     "from_tensor",
     "to_tensor",
+    "free",
 ]

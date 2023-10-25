@@ -6,6 +6,7 @@ from ttnn.tensor import (
     Tensor,
     from_torch,
     to_torch,
+    free,
 )
 
 from ttnn.core import (

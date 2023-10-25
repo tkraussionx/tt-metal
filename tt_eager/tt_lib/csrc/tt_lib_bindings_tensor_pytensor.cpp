@@ -430,7 +430,7 @@ namespace tt::tt_metal::detail
             )
             .def(
                 py::init<>(
-                    [](const py::object& torch_tensor, std::optional<DataType> data_type = std::nullopt) {
+                    [](const py::object& torch_tensor, std::optional<DataType> data_type) {
                         return detail::convert_torch_tensor_to_tt_tensor(torch_tensor, data_type);
                     }
                 ),
@@ -454,11 +454,13 @@ namespace tt::tt_metal::detail
                         tt_lib.tensor.Tensor(py_tensor)
                 )doc"
             )
-            .def("deallocate", [](Tensor &self) {
-                return self.deallocate();
-            }, R"doc(
-                Dellocates all data of a tensor. This either deletes all host data or deallocates tensor data from device memory.
-            )doc"
+            .def("deallocate", [](Tensor &self, bool force) {
+                    return self.deallocate(force);
+                },
+                py::arg("force") = false,
+                R"doc(
+                    Dellocates all data of a tensor. This either deletes all host data or deallocates tensor data from device memory.
+                )doc"
             )
             .def("to", [](const Tensor &self, Device *device, const MemoryConfig &mem_config) {
                 return self.to(device, mem_config);
