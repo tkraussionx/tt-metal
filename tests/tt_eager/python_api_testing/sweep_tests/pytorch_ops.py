@@ -1103,10 +1103,22 @@ def complex_div(x, y, *args, **kwargs):
     print('torchh')
     x = Complex(x, x.shape)
     y = Complex(y, y.shape)
+    y = x.div(x1)
     print('torchy')
     print(x.metal)
     print(y.metal)
     tt_cpu = y.div(x).metal
+    print('cpu')
+    print(tt_cpu.shape)
+    return tt_cpu
+
+
+def complex_mul(x, y, *args, **kwargs):
+    print('torchh')
+    x = Complex(x, x.shape)
+    y = Complex(x.metal, y.shape) * 0.75
+
+    tt_cpu = x.mul(y).metal
     print('cpu')
     print(tt_cpu.shape)
     return tt_cpu
