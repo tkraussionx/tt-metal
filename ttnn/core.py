@@ -2,13 +2,9 @@ from loguru import logger
 
 import tt_lib as ttl
 
-from ttnn.tensor import (
-    Tensor,
-    from_torch,
-    to_torch,
-    copy_to_device,
-    copy_from_device
-)
+from ttnn.tensor import Tensor, from_torch, to_torch, copy_to_device, copy_from_device
+
+MAX_RANK = 4
 
 
 def open(device_id: int):
@@ -33,7 +29,13 @@ def close(device):
         pass
 
 
-def is_scalar(value):
+def _trim_list_to_max_rank(lst, max_rank):
+    while len(lst) > max_rank and lst[0] == 1:
+        lst.pop(0)
+    return lst
+
+
+def _is_scalar(value):
     return isinstance(value, (int, float, complex))
 
 
@@ -60,6 +62,7 @@ def _reshape_to_4D(tensor):
     shape = ([1] * num_missing_dims) + tensor.shape
     return reshape(tensor, shape=shape)
 
+
 # Math Operations
 # Should the matmal autodetect if the tensor is on device?
 #   * Should one type of operation be prefered over the other for optimizations?
@@ -71,26 +74,26 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
 
     The behavior depends on the dimensionality of the tensors as follows:
 
-    - If both arguments are 2-dimensional, the matrix-matrix product is returned in 4-dimensional.
+    - If both arguments are 2-dimensional, the matrix-matrix product is returned in 2-dimensional.
     - If the first argument is 1-dimensional and the second argument is 2-dimensional,
       a 1 is prepended to its dimension to both tensors until they become 4-dimensional
-      and will return a 4 dimensional result.
+      and will return a 1 dimensional result.
     - If the first argument is 2-dimensional and the second argument is 1-dimensional,
-      the matrix-vector product is returned in 4 dimensions.
+      the matrix-vector product is returned in 2 dimensions.
     - If both arguments are at least 1-dimensional and at least one argument is
       N-dimensional (where N > 2), then a batched matrix multiply is returned.  If the first
       argument is 1-dimensional, a 1 is prepended to its dimension for the purpose of the
-      batched matrix multiply and removed after.  If the second argument is 1-dimensional, a
+      batched matrix multiply.  If the second argument is 1-dimensional, a
       1 is appended to its dimension for the purpose of the batched matrix multiple.
       The non-matrix (i.e. batch) dimensions must be broadcastable.  For example, if :attr:`input_tensor_a` is a
-      :math:`(j \times 1 \times n \times n)` tensor and :attr:`input_tensor_b` is a :math:`(k \times n \times n)`
-      tensor, :attr:`out` will be a :math:`(j \times k \times n \times n)` tensor.
+      :math:`(j \\times 1 \\times n \\times n)` tensor and :attr:`input_tensor_b` is a :math:`(k \\times n \\times n)`
+      tensor, the result will be a :math:`(j \\times k \\times n \\times n)` tensor.
 
       Note that the broadcasting logic only looks at the batch dimensions when determining if the inputs
       are broadcastable, and not the matrix dimensions. For example, if :attr:`input_tensor_a` is a
-      :math:`(j \times 1 \times n \times m)` tensor and :attr:`input_tensor_b` is a :math:`(k \times m \times p)`
+      :math:`(j \\times 1 \\times n \\times m)` tensor and :attr:`input_tensor_b` is a :math:`(k \\times m \\times p)`
       tensor, these inputs are valid for broadcasting even though the final two dimensions (i.e. the
-      matrix dimensions) are different. :attr:`out` will be a :math:`(j \times k \times n \times p)` tensor.
+      matrix dimensions) are different. :attr:`out` will be a :math:`(j \\times k \\times n \\times p)` tensor.
 
 
     .. note::
@@ -135,11 +138,19 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
         raise RuntimeError("Expected second argument to be a tt_lib.tensor.Tensor or a scalar")
 
     # The idea is to make the shapes "possibly" broadcastable.
-    input_tensor_a = _reshape_to_4D(input_tensor_a)
-    input_tensor_b = _reshape_to_4D(input_tensor_b)
+    if len(input_shape_a) > MAX_RANK:
+        raise RuntimeError("There is currently no support for ranks greater than 4.")
 
-    input_shape_a = input_tensor_a.shape
-    input_shape_b = input_tensor_b.shape
+    expected_rank = len(input_shape_a)
+    len_diff_a = MAX_RANK - len(input_shape_a)
+    input_shape_a = [1] * len_diff_a + input_shape_a
+    input_tensor_a = reshape(input_tensor_a, shape=input_shape_a)
+
+    if len(input_shape_b) > MAX_RANK:
+        raise RuntimeError(f"There is currently no support for ranks greater than {MAX_RANK}.")
+    len_diff_b = MAX_RANK - len(input_shape_b)
+    input_shape_b = [1] * len_diff_b + input_shape_b
+    input_tensor_b = reshape(input_tensor_b, shape=input_shape_b)
 
     *_, height_a, width_a = input_shape_a
     *rest_of_shape_b, height_b, width_b = input_shape_b
@@ -150,24 +161,49 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
     # if height_b % 32 != 0 or width_b % 32 != 0:
     #     raise TypeError("The last two dimensions of the second tensor must be a multiple of 32")
 
+    out = None
     if width_a != height_b and height_a != 1 and height_b != 1:
         raise RuntimeError("The width of the first tensor must be equal to the height of the second tensor")
 
     if height_b == 1 and width_b == 1:
-        return Tensor(
+        out = Tensor(
             ttl.tensor.bcast(
                 input_tensor_a._tensor, input_tensor_b._tensor, ttl.tensor.BcastOpMath.MUL, ttl.tensor.BcastOpDim.HW
             )
         )
     elif _shape_is_broadcastable(input_shape_a, input_shape_b):
         if all(x == 1 for x in rest_of_shape_b):
-            if width_a != height_b:
+            if width_a == height_b:
+                out = Tensor(ttl.tensor.matmul(input_tensor_a._tensor, input_tensor_b._tensor))
+            elif height_a == 1 and height_b == 1:
+                # return a dot product
+                out = Tensor(
+                    ttl.tensor.bcast(
+                        input_tensor_a._tensor,
+                        input_tensor_b._tensor,
+                        ttl.tensor.BcastOpMath.MUL,
+                        ttl.tensor.BcastOpDim.H,
+                    )
+                )
+                t = ttl.tensor.reduce(
+                    out._tensor,
+                    ttl.tensor.ReduceOpMath.SUM,
+                    ttl.tensor.ReduceOpDim.W,
+                    1.0,
+                )
+                out = Tensor(t)
+                expected_rank = 0
+
+            else:
                 raise RuntimeError("The width of the first tensor must be equal to the height of the second tensor")
-            return Tensor(ttl.tensor.matmul(input_tensor_a._tensor, input_tensor_b._tensor))
         else:
-            return Tensor(ttl.tensor.bmm(input_tensor_a._tensor, input_tensor_b._tensor))
+            out = Tensor(ttl.tensor.bmm(input_tensor_a._tensor, input_tensor_b._tensor))
     else:
         raise RuntimeError("These tensors cannot be broadcasted")
+
+    if len(out.shape) != expected_rank:
+        out = reshape(out, _trim_list_to_max_rank(out.shape, expected_rank))
+    return out
 
 
 def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
@@ -203,21 +239,9 @@ def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
     if ttl_input_tensor_a.storage_type() != ttl.tensor.StorageType.DEVICE:
         raise RuntimeError("input_tensor_a must be on device!")
 
-    if is_scalar(input_tensor_b):
-        ttl_input_tensor_b = input_tensor_b
-    else:
-        input_tensor_b = _reshape_to_4D(input_tensor_b)
-        ttl_input_tensor_b = input_tensor_b._tensor
-        if ttl_input_tensor_b.storage_type() != ttl.tensor.StorageType.DEVICE:
-            raise RuntimeError("input_tensor_a must be on device!")
-
-    if not isinstance(ttl_input_tensor_a, ttl.tensor.Tensor):
-        raise TypeError("Expected first argument to be a tt_lib.tensor.Tensor")
-
-    if is_scalar(ttl_input_tensor_b):
-        output_tensor = Tensor(ttl.tensor.add_unary(ttl_input_tensor_a, ttl_input_tensor_b * alpha))
-        return reshape(output_tensor, original_shape)
-    elif not isinstance(ttl_input_tensor_b, ttl.tensor.Tensor):
+    if _is_scalar(input_tensor_b):
+        return Tensor(ttl.tensor.add_unary(input_tensor_a, input_tensor_b * alpha))
+    elif not isinstance(input_tensor_b, ttl.tensor.Tensor):
         raise TypeError("Expected second argument to be a tt_lib.tensor.Tensor or a scalar")
 
     input_shape_b = ttl_input_tensor_b.shape()
@@ -229,15 +253,21 @@ def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
 
     if height_b == 1 and width_b == 1:
         output_tensor = Tensor(
-            ttl.tensor.bcast(ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.HW)
+            ttl.tensor.bcast(
+                ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.HW
+            )
         )
     elif height_b == 1:
         output_tensor = Tensor(
-            ttl.tensor.bcast(ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.H)
+            ttl.tensor.bcast(
+                ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.H
+            )
         )
     elif width_b == 1:
         output_tensor = Tensor(
-            ttl.tensor.bcast(ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.W)
+            ttl.tensor.bcast(
+                ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.W
+            )
         )
     else:
         output_tensor = Tensor(ttl.tensor.add(ttl_input_tensor_a, ttl_input_tensor_b))
@@ -277,7 +307,7 @@ def subtract(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tens
     if not isinstance(input_tensor_a, ttl.tensor.Tensor):
         raise TypeError("Expected first argument to be a tt_lib.tensor.Tensor")
 
-    if is_scalar(input_tensor_b):
+    if _is_scalar(input_tensor_b):
         return Tensor(ttl.tensor.add_unary(input_tensor_a, input_tensor_b * alpha))
     elif not isinstance(input_tensor_b, ttl.tensor.Tensor):
         raise TypeError("Expected second argument to be a tt_lib.tensor.Tensor or a scalar")
@@ -312,7 +342,7 @@ def multiply(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
         raise TypeError("Expected first argument to be a tt_lib.tensor.Tensor")
 
     input_shape_a = input_tensor_a.shape()
-    if is_scalar(input_tensor_b):
+    if _is_scalar(input_tensor_b):
         return Tensor(ttl.tensor.add_unary(input_tensor_a, input_tensor_b))
     elif not isinstance(input_tensor_b, ttl.tensor.Tensor):
         raise TypeError("Expected second argument to be a tt_lib.tensor.Tensor or a scalar")
