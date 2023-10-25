@@ -3,13 +3,15 @@ from ttnn.tensor import (
     float32,
     bfloat16,
     bfloat8_b,
-
     Tensor,
     from_torch,
     to_torch,
 )
 
 from ttnn.core import (
+    # initialization
+    open,
+    close,
     # math operations
     matmul,
     add,
@@ -17,11 +19,9 @@ from ttnn.core import (
     subtract,
     mul,
     multiply,
-
     # data operations
     reshape,
     permute,
-
     # unary operations
     softmax,
 )

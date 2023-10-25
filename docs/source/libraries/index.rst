@@ -3,6 +3,7 @@ Libraries
 
 .. toctree::
 
+   ttnn
    tt_dnn
    tensor
    examples
