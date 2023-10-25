@@ -116,17 +116,17 @@ def test_multi_head_attention(device, batch_size, sequence_size, num_heads, head
     hidden_size = num_heads * head_size
     torch_hidden_states = torch.rand((batch_size, sequence_size, hidden_size), dtype=torch.bfloat16)
 
-    torch_attention_mask = torch.zeros((1, 1, 1, sequence_size), dtype=torch.bfloat16)
-    torch_attention_mask[:, :, ::2, :] = -1e9
+    torch_attention_mask = torch.zeros((sequence_size,), dtype=torch.bfloat16)
+    torch_attention_mask[:2] = -1e9
 
     torch_query_weight = torch.rand((hidden_size, hidden_size), dtype=torch.bfloat16)
-    torch_query_bias =  torch.rand((1, 1, 1, hidden_size), dtype=torch.bfloat16)
+    torch_query_bias =  torch.rand((hidden_size,), dtype=torch.bfloat16)
     torch_key_weight =  torch.rand((hidden_size, hidden_size), dtype=torch.bfloat16)
-    torch_key_bias =  torch.rand((1, 1, 1, hidden_size), dtype=torch.bfloat16)
+    torch_key_bias =  torch.rand((hidden_size,), dtype=torch.bfloat16)
     torch_value_weight =  torch.rand((hidden_size, hidden_size), dtype=torch.bfloat16)
-    torch_value_bias =  torch.rand((1, 1, 1, hidden_size), dtype=torch.bfloat16)
+    torch_value_bias =  torch.rand((hidden_size,), dtype=torch.bfloat16)
     torch_output_weight =  torch.rand((hidden_size, hidden_size), dtype=torch.bfloat16)
-    torch_output_bias =  torch.rand((1, 1, 1, hidden_size), dtype=torch.bfloat16)
+    torch_output_bias =  torch.rand((hidden_size,), dtype=torch.bfloat16)
 
     torch_output = pytorch_multi_head_attention(
         torch_hidden_states,
@@ -143,7 +143,6 @@ def test_multi_head_attention(device, batch_size, sequence_size, num_heads, head
     )
 
     assert torch_output.shape == (
-        1,
         batch_size,
         sequence_size,
         hidden_size,
