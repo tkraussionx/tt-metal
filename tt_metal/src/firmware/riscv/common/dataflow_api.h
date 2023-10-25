@@ -1101,6 +1101,80 @@ void noc_async_write_multicast_loopback_src(
     DEBUG_STATUS('N', 'M', 'L', 'D');
 }
 
+template <bool non_posted = true, bool linked = false, bool loopback_src = false>
+FORCE_INLINE
+void noc_async_write_multicast_v2(
+    std::uint32_t src_local_l1_addr,
+    std::uint64_t dst_noc_addr_multicast,
+    std::uint32_t size,
+    std::uint32_t num_dests) {
+
+    DEBUG_STATUS('N', 'M', 'W', 'W');
+    DEBUG_SANITIZE_NOC_MULTI_ADDR(dst_noc_addr_multicast, size);
+    DEBUG_SANITIZE_WORKER_ADDR(src_local_l1_addr, size);
+
+    constexpr bool mcast = true;
+    const uint32_t noc = noc_index;
+    constexpr uint32_t vc = NOC_MULTICAST_WRITE_VC;
+    uint32_t src_addr = src_local_l1_addr;
+    uint64_t dest_addr = dst_noc_addr_multicast;
+    uint32_t len_bytes = size;
+    uint32_t cmd_buf = NCRISC_WR_REG_CMD_BUF;
+
+    uint32_t noc_cmd_field =
+      NOC_CMD_CPY | NOC_CMD_WR |
+      NOC_CMD_VC_STATIC  |
+      NOC_CMD_STATIC_VC(vc) |
+      (mcast ? (NOC_CMD_PATH_RESERVE | NOC_CMD_BRCST_PACKET) : 0x0);
+    //   (mcast ? (NOC_CMD_BRCST_PACKET) : 0x0); // to disable path reserve
+
+    if constexpr (non_posted) {
+        noc_cmd_field |= NOC_CMD_RESP_MARKED;
+    }
+
+    if constexpr (linked) {
+        noc_cmd_field |= NOC_CMD_VC_LINKED;
+    }
+
+    // perf was improved by moving this to template vs an arg
+    if constexpr (loopback_src) {
+        noc_cmd_field |=  NOC_CMD_BRCST_SRC_INCLUDE;
+    }
+
+    while (!ncrisc_noc_fast_write_ok(noc, cmd_buf));
+    // these don't change during mcast
+    NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_CTRL, noc_cmd_field);
+    NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_RET_ADDR_MID, dest_addr >> 32); // dst x,y
+
+    // this one is at MAX_BURST_SIZE while we're in the loop
+    NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_AT_LEN_BE, NOC_MAX_BURST_SIZE);
+
+    while (len_bytes > NOC_MAX_BURST_SIZE) {
+        while (!ncrisc_noc_fast_write_ok(noc, cmd_buf));
+        NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_TARG_ADDR_LO, src_addr);
+        NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_RET_ADDR_LO, (uint32_t)dest_addr);
+        NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+        src_addr += NOC_MAX_BURST_SIZE;
+        dest_addr += NOC_MAX_BURST_SIZE;
+        len_bytes -= NOC_MAX_BURST_SIZE;
+        if constexpr (non_posted) {
+            noc_nonposted_writes_num_issued[noc] += 1;
+            noc_nonposted_writes_acked[noc] += num_dests;
+        }
+    }
+
+    // left over mcast
+    while (!ncrisc_noc_fast_write_ok(noc, cmd_buf));
+    NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_AT_LEN_BE, len_bytes); // reconfigure len_bytes for the left-over
+    NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_TARG_ADDR_LO, src_addr);
+    NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_RET_ADDR_LO, (uint32_t)dest_addr);
+    NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+    if constexpr (non_posted) {
+        noc_nonposted_writes_num_issued[noc] += 1;
+        noc_nonposted_writes_acked[noc] += num_dests;
+    }
+}
+
 /**
  * This blocking call waits for all the outstanding enqueued *noc_async_read*
  * calls issued on the current Tensix core to complete. After returning from

@@ -91,19 +91,25 @@ void kernel_main() {
                 // Now we have the block in the CB address, we can mcast to dests!
                 uint64_t in0_multicast_data_addr = in0_multicast_data_noc | l1_write_addr_in0;
 
-                // num_dests must not include source, since we are NOT really doing a local copy!
-                noc_async_write_multicast_loopback_src(local_read_addr, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores + 1);
+                // data mcast:
+                // - num_dests does include source, since we are doing a local copy!
+                // - non_posted = true, we need acks, since we do the barrier
+                // - linked = true, so that path reservation is done only once during the first packet of data multi-cast, and all subsequent packets use the same path
+                // num_dests does include source, since we are doing a local copy
+                noc_async_write_multicast_v2<true, true, true>(local_read_addr, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores + 1);
 
-                // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
-                // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
+                // valid flag mcast:
+                // Note: no need for write barrier in between data and valid, since these two multicasts are done on the same NOC & Static VC they are guaranteed to be ordered
+                // multicast the flag to destinations, num_dests must not include source, since we are NOT doing a local copy!
+                // - this transfer will set linked back to false, and release the path that was reserved during the first packet of data mcast
+                noc_async_write_multicast_v2<true, false, true>(in0_mcast_receiver_semaphore_addr, in0_mcast_receiver_semaphore_noc_addr, 4, in0_mcast_num_cores + 1);
 
-                // We should also multicast the flag to destinations
-                // num_dests must not include source, since we are NOT really doing a local copy!
-                noc_semaphore_set_multicast(in0_mcast_receiver_semaphore_addr, in0_mcast_receiver_semaphore_noc_addr, in0_mcast_num_cores);
                 local_read_addr += in0_block_size_bytes;
                 // Write barrier needed since we mcast to self, and also needed to finish sending mcast flag before we modify locally
                 noc_async_write_barrier();
+
                 cb_push_back(cb_id_in0, in0_block_num_tiles);
+
             } else {
                 // Operand 0
                 cb_reserve_back(cb_id_in0, in0_block_num_tiles);

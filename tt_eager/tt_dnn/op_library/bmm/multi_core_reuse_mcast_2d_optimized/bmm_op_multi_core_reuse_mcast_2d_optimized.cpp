@@ -329,15 +329,30 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         mm_kernel_in1_receiver_writer_other_noc_setup_defines["OUT_SHARDED"] = "1";
     }
 
+    // Parameters for last row, col, or block, need to compute here since DataMovementKernel selection depends on it
+    uint32_t last_block_h = M % per_core_M == 0 ? per_core_M : M % per_core_M;
+    uint32_t last_block_w = N % per_core_N == 0 ? per_core_N : N % per_core_N;
+    uint32_t last_block_num_nonzero_subblocks_h = (last_block_h  - 1) / out_subblock_h + 1;
+    uint32_t last_block_num_nonzero_subblocks_w = (last_block_w  - 1) / out_subblock_w + 1;
+    uint32_t last_subblock_of_last_block_h = last_block_h % out_subblock_h == 0 ? out_subblock_h : last_block_h % out_subblock_h;
+    uint32_t last_subblock_of_last_block_w = last_block_w % out_subblock_w == 0 ? out_subblock_w : last_block_w % out_subblock_w;
+    uint32_t last_block_padded_subblock_tiles_addr_skip = output_single_tile_size * (out_subblock_w - last_subblock_of_last_block_w);
+    uint32_t last_block_padded_block_tiles_w_skip =  (out_subblock_w * out_subblock_h) * (per_core_N / out_subblock_w - last_block_num_nonzero_subblocks_w);
+    uint32_t last_block_padded_block_tiles_h_skip = (per_core_M / out_subblock_h - last_block_num_nonzero_subblocks_h) * (per_core_N * out_subblock_h);
+
     auto mm_kernel_in0_sender_id = tt_metal::CreateDataMovementKernel(
         program,
         in0_address.has_value() ? "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_sender_receiver_padding_block_sharded.cpp" : "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_sender_padding.cpp",
         in0_sender,
         tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = in0_noc, .compile_args = in0_sender_compile_time_args});
 
+    std::string in1_reader_sender_kerfile = last_block_w == per_core_N ?   "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in1_sender_writer.cpp" :
+                                                            "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in1_sender_writer_padding.cpp";
+    std::cout << "per_core_M: " << per_core_M <<  ", per_core_N: " << per_core_N  << "\n in1_reader_sender = " << in1_reader_sender_kerfile << std::endl;
+
     auto mm_kernel_in1_sender_writer_id = tt_metal::CreateDataMovementKernel(
         program,
-        "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in1_sender_writer_padding.cpp",
+        in1_reader_sender_kerfile,
         in1_sender,
         tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = in1_noc, .compile_args = in1_sender_writer_compile_time_args, .defines = mm_kernel_in1_sender_writer_defines});
 
@@ -455,16 +470,6 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         auto cb_src3 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src3_config);
     }
 
-    // Parameters for last row, col, or block
-    uint32_t last_block_h = M % per_core_M == 0 ? per_core_M : M % per_core_M;
-    uint32_t last_block_w = N % per_core_N == 0 ? per_core_N : N % per_core_N;
-    uint32_t last_block_num_nonzero_subblocks_h = (last_block_h  - 1) / out_subblock_h + 1;
-    uint32_t last_block_num_nonzero_subblocks_w = (last_block_w  - 1) / out_subblock_w + 1;
-    uint32_t last_subblock_of_last_block_h = last_block_h % out_subblock_h == 0 ? out_subblock_h : last_block_h % out_subblock_h;
-    uint32_t last_subblock_of_last_block_w = last_block_w % out_subblock_w == 0 ? out_subblock_w : last_block_w % out_subblock_w;
-    uint32_t last_block_padded_subblock_tiles_addr_skip = output_single_tile_size * (out_subblock_w - last_subblock_of_last_block_w);
-    uint32_t last_block_padded_block_tiles_w_skip =  (out_subblock_w * out_subblock_h) * (per_core_N / out_subblock_w - last_block_num_nonzero_subblocks_w);
-    uint32_t last_block_padded_block_tiles_h_skip = (per_core_M / out_subblock_h - last_block_num_nonzero_subblocks_h) * (per_core_N * out_subblock_h);
 
     std::vector<KernelID> reader_kernel_ids;
     std::vector<KernelID> writer_kernel_ids;
