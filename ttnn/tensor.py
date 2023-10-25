@@ -49,6 +49,9 @@ def to_torch(tensor: Tensor) -> "torch.Tensor":
     return tensor.to_torch()
 
 
+def copy_to_device(tensor, device):
+    return Tensor(tensor._tensor.to(device))
+
 
 def free(self: "Tensor") -> str:
     self._tensor.deallocate(force=True)
@@ -63,5 +66,6 @@ __all__ = [
     "Tensor",
     "from_tensor",
     "to_tensor",
+    "copy_to_device",
     "free",
 ]

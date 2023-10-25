@@ -151,15 +151,20 @@ def test_multi_head_attention(device, batch_size, sequence_size, num_heads, head
 
     hidden_states = ttnn.from_torch(torch_hidden_states)
     attention_mask = ttnn.from_torch(torch_attention_mask)
+    attention_mask = ttnn.copy_to_device(attention_mask, device)
 
     query_weight = ttnn.from_torch(torch_query_weight)
     query_bias = ttnn.from_torch(torch_query_bias)
+    query_bias = ttnn.copy_to_device(query_bias, device)
     key_weight = ttnn.from_torch(torch_key_weight)
     key_bias = ttnn.from_torch(torch_key_bias)
+    key_bias = ttnn.copy_to_device(key_bias, device)
     value_weight = ttnn.from_torch(torch_value_weight)
     value_bias = ttnn.from_torch(torch_value_bias)
+    value_bias = ttnn.copy_to_device(value_bias, device)
     output_weight = ttnn.from_torch(torch_output_weight)
     output_bias = ttnn.from_torch(torch_output_bias)
+    output_bias = ttnn.copy_to_device(output_bias, device)
 
     tt_output = multi_head_attention(
         hidden_states,

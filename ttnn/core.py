@@ -189,37 +189,47 @@ def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
         >>> ttnn.add(a, b, alpha=2)
         tensor([1, 4])
     """
-    input_tensor_a = input_tensor_a._tensor if isinstance(input_tensor_a, Tensor) else input_tensor_a
-    input_tensor_b = input_tensor_b._tensor if isinstance(input_tensor_b, Tensor) else input_tensor_b
 
-    if not isinstance(input_tensor_a, ttl.tensor.Tensor):
-        raise TypeError("Expected first argument to be a tt_lib.tensor.Tensor")
+    ttl_input_tensor_a = input_tensor_a._tensor
+
+    if ttl_input_tensor_a.storage_type() != ttl.tensor.StorageType.DEVICE:
+        raise RuntimeError("input_tensor_a must be on device!")
 
     if is_scalar(input_tensor_b):
-        return Tensor(ttl.tensor.add_unary(input_tensor_a, input_tensor_b * alpha))
-    elif not isinstance(input_tensor_b, ttl.tensor.Tensor):
+        ttl_input_tensor_b = input_tensor_b
+    else:
+        ttl_input_tensor_b = input_tensor_b._tensor
+        if ttl_input_tensor_b.storage_type() != ttl.tensor.StorageType.DEVICE:
+            raise RuntimeError("input_tensor_a must be on device!")
+
+    if not isinstance(ttl_input_tensor_a, ttl.tensor.Tensor):
+        raise TypeError("Expected first argument to be a tt_lib.tensor.Tensor")
+
+    if is_scalar(ttl_input_tensor_b):
+        return Tensor(ttl.tensor.add_unary(ttl_input_tensor_a, ttl_input_tensor_b * alpha))
+    elif not isinstance(ttl_input_tensor_b, ttl.tensor.Tensor):
         raise TypeError("Expected second argument to be a tt_lib.tensor.Tensor or a scalar")
 
-    input_shape_b = input_tensor_b.shape()
+    input_shape_b = ttl_input_tensor_b.shape()
 
     if alpha != 1:
-        input_tensor_b = ttl.tensor.mul_unary(input_tensor_b, alpha)
+        ttl_input_tensor_b = ttl.tensor.mul_unary(ttl_input_tensor_b, alpha)
 
     *_, height_b, width_b = input_shape_b
 
     if height_b == 1 and width_b == 1:
         return Tensor(
-            ttl.tensor.bcast(input_tensor_a, input_tensor_b, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.HW)
+            ttl.tensor.bcast(ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.HW)
         )
     elif height_b == 1:
         return Tensor(
-            ttl.tensor.bcast(input_tensor_a, input_tensor_b, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.H)
+            ttl.tensor.bcast(ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.H)
         )
     elif width_b == 1:
         return Tensor(
-            ttl.tensor.bcast(input_tensor_a, input_tensor_b, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.W)
+            ttl.tensor.bcast(ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.W)
         )
-    return Tensor(ttl.tensor.add(input_tensor_a, input_tensor_b))
+    return Tensor(ttl.tensor.add(ttl_input_tensor_a, ttl_input_tensor_b))
 
 
 def subtract(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:

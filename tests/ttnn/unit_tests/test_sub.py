@@ -12,10 +12,10 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
 @pytest.mark.parametrize("w", [4 * 32])
 def test_sub_scalar(device, s, h, w):
     torch_input_tensor = torch.rand((1, 1, h, w), dtype=torch.bfloat16)
-    torch_output_tensor = torch_input_tensor + s
+    torch_output_tensor = torch_input_tensor - s
 
     input_tensor = ttnn.from_torch(torch_input_tensor)
-    output_tensor = input_tensor + s
+    output_tensor = input_tensor - s
     output_tensor = ttnn.to_torch(output_tensor)
 
     assert_with_pcc(torch_output_tensor, output_tensor, 0.99)
