@@ -52,7 +52,7 @@ def _shape_is_broadcastable(input_shape_a, input_shape_b):
 #   * Should one type of operation be prefered over the other for optimizations?
 def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
     """
-    matmul(input, other) -> Tensor
+    matmul(input_tensor_a, input_tensor_b) -> Tensor
 
     Returns the matrix product of two tensors.
 
@@ -69,13 +69,13 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
       argument is 1-dimensional, a 1 is prepended to its dimension for the purpose of the
       batched matrix multiply and removed after.  If the second argument is 1-dimensional, a
       1 is appended to its dimension for the purpose of the batched matrix multiple.
-      The non-matrix (i.e. batch) dimensions must be broadcastable.  For example, if :attr:`input` is a
-      :math:`(j \times 1 \times n \times n)` tensor and :attr:`other` is a :math:`(k \times n \times n)`
+      The non-matrix (i.e. batch) dimensions must be broadcastable.  For example, if :attr:`input_tensor_a` is a
+      :math:`(j \times 1 \times n \times n)` tensor and :attr:`input_tensor_b` is a :math:`(k \times n \times n)`
       tensor, :attr:`out` will be a :math:`(j \times k \times n \times n)` tensor.
 
       Note that the broadcasting logic only looks at the batch dimensions when determining if the inputs
-      are broadcastable, and not the matrix dimensions. For example, if :attr:`input` is a
-      :math:`(j \times 1 \times n \times m)` tensor and :attr:`other` is a :math:`(k \times m \times p)`
+      are broadcastable, and not the matrix dimensions. For example, if :attr:`input_tensor_a` is a
+      :math:`(j \times 1 \times n \times m)` tensor and :attr:`input_tensor_b` is a :math:`(k \times m \times p)`
       tensor, these inputs are valid for broadcasting even though the final two dimensions (i.e. the
       matrix dimensions) are different. :attr:`out` will be a :math:`(j \times k \times n \times p)` tensor.
 
@@ -85,8 +85,8 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
         The 1-dimensional dot product version of this function is not currently supported.
 
     Arguments:
-        input (Tensor): the first tensor to be multiplied
-        other (Tensor): the second tensor to be multiplied
+        input_tensor_a (Tensor): the first tensor to be multiplied
+        input_tensor_b (Tensor): the second tensor to be multiplied
 
     Example::
 
@@ -165,13 +165,35 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
 
 
 def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
+    """
+    add(input_tensor_a, input_tensor_b, *, alpha=1) -> Tensor
+
+    Adds :attr:`input_tensor_b`, scaled by :attr:`alpha`, to :attr:`input_tensor_a`.
+
+    .. math::
+        \mathrm{{input\_tensor\_a}}_i + \mathrm{{alpha}} \\times \mathrm{{input\_tensor\_b}}_i
+
+    Supports broadcasting.
+
+    Args:
+        * :attr:`input_tensor_a`
+        * :attr:`input_tensor_b` (Tensor or Number): the tensor or number to add to :attr:`input_tensor_a`.
+
+    Keyword args:
+        :attr:`alpha` (Number): the multiplier for :attr:`input_tensor_b`.
+
+    Example::
+
+        >>> a = ttnn.from_torch(torch.tensor((1, 2)))
+        >>> b = ttnn.from_torch(torch.tensor((0, 1)))
+        >>> ttnn.add(a, b, alpha=2)
+        tensor([1, 4])
+    """
     input_tensor_a = input_tensor_a._tensor if isinstance(input_tensor_a, Tensor) else input_tensor_a
     input_tensor_b = input_tensor_b._tensor if isinstance(input_tensor_b, Tensor) else input_tensor_b
 
     if not isinstance(input_tensor_a, ttl.tensor.Tensor):
         raise TypeError("Expected first argument to be a tt_lib.tensor.Tensor")
-
-    input_shape_a = input_tensor_a.shape()
 
     if is_scalar(input_tensor_b):
         return Tensor(ttl.tensor.add_unary(input_tensor_a, input_tensor_b * alpha))
@@ -201,13 +223,35 @@ def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
 
 
 def subtract(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
+    """
+    sub(input_tensor_a, input_tensor_b, *, alpha=1) -> Tensor
+
+    Subtracts :attr:`input_tensor_b`, scaled by :attr:`alpha`, from :attr:`input_tensor_a`.
+
+    .. math::
+        \mathrm{{input\_tensor\_a}}_i - \mathrm{{alpha}} \\times \mathrm{{input\_tensor\_b}}_i
+
+    Supports broadcasting.
+
+    Args:
+        * :attr:`input_tensor_a`
+        * :attr:`input_tensor_b` (Tensor or Number): the tensor or number to subtract from :attr:`input_tensor_a`.
+
+    Keyword args:
+        :attr:`alpha` (Number): the multiplier for :attr:`input_tensor_b`.
+
+    Example::
+
+        >>> a = ttnn.from_torch(torch.tensor((1, 2)))
+        >>> b = ttnn.from_torch(torch.tensor((0, 1)))
+        >>> ttnn.sub(a, b, alpha=2)
+        tensor([1, 0])
+    """
     input_tensor_a = input_tensor_a._tensor if isinstance(input_tensor_a, Tensor) else input_tensor_a
     input_tensor_b = input_tensor_b._tensor if isinstance(input_tensor_b, Tensor) else input_tensor_b
 
     if not isinstance(input_tensor_a, ttl.tensor.Tensor):
         raise TypeError("Expected first argument to be a tt_lib.tensor.Tensor")
-
-    input_shape_a = input_tensor_a.shape()
 
     if is_scalar(input_tensor_b):
         return Tensor(ttl.tensor.add_unary(input_tensor_a, input_tensor_b * alpha))

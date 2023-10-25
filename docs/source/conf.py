@@ -38,6 +38,7 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "sphinxcontrib.email",
+    "sphinx.ext.mathjax",
     "breathe",
 ]
 
