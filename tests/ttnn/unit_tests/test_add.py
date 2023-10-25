@@ -7,6 +7,21 @@ import ttnn
 from tests.ttnn.utils_for_testing import assert_with_pcc
 
 
+@pytest.mark.parametrize("scalar", [3])
+@pytest.mark.parametrize("size", [2 * 32])
+def test_add_1D_tensor_and_scalar(device, scalar, size):
+    torch_input_tensor = torch.rand((size, ), dtype=torch.bfloat16)
+    torch_output_tensor = torch_input_tensor + scalar
+
+    input_tensor = ttnn.from_torch(torch_input_tensor)
+    input_tensor = ttnn.copy_to_device(input_tensor, device)
+    output_tensor = input_tensor + scalar
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    assert_with_pcc(torch_output_tensor, output_tensor, 0.99)
+    assert output_tensor.shape == (size, )
+
+
 @pytest.mark.parametrize("s", [3])
 @pytest.mark.parametrize("h", [2 * 32])
 @pytest.mark.parametrize("w", [4 * 32])

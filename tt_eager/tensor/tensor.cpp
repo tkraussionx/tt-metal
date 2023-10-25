@@ -31,10 +31,9 @@ Tensor::Tensor(const Storage& storage, const Shape& shape, DataType dtype, Layou
         [&] (auto&& storage) {
             using StorageType = std::decay_t<decltype(storage)>;
             if constexpr (std::is_same_v<StorageType, OwnedStorage>) {
-                TT_ASSERT(this->shape_.rank() == 4);
+                // do nothing
             }
             else if constexpr (std::is_same_v<StorageType, DeviceStorage>) {
-                TT_ASSERT(this->shape_.rank() == 4);
                 TT_ASSERT(storage.device != nullptr);
                 tensor_impl::validate_on_device_dtype_and_layout(storage.device, dtype, layout);
             }

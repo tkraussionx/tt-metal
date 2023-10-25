@@ -382,7 +382,7 @@ inline void write_data_to_device_buffer(const BufferType<T>& data_to_write, Devi
 
     if (data_type == DataType::BFLOAT16) {
         if (memory_config.memory_layout == TensorMemoryLayout::INTERLEAVED) {
-            TT_ASSERT(shape[3] % 2 == 0, "Input tensor width must be a multiple of 2 to pack interleaved row major data");
+            TT_ASSERT(shape[-1] % 2 == 0, "Input tensor width must be a multiple of 2 to pack interleaved row major data");
         } else {
             TT_ASSERT(compute_volume(shape) % 2 == 0, "Input tensor volume must be a multiple of 2 to pack contiguous data");
         }

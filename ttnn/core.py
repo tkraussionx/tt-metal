@@ -47,6 +47,13 @@ def _shape_is_broadcastable(input_shape_a, input_shape_b):
     return all(x == y or (x == 1 and y != 1) or (x != 1 and y == 1) for x, y in zip(batch_shape_a, batch_shape_b))
 
 
+def _reshape_to_4D(tensor):
+    if len(tensor.shape) > 4:
+        raise RuntimeError("Tensor cannot have more than 4 dimensions!")
+    num_missing_dims = 4 - len(tensor.shape)
+    shape = ([1] * num_missing_dims) + tensor.shape
+    return reshape(tensor, shape=shape)
+
 # Math Operations
 # Should the matmal autodetect if the tensor is on device?
 #   * Should one type of operation be prefered over the other for optimizations?
@@ -125,15 +132,8 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
     input_shape_b = input_tensor_b.shape
 
     # The idea is to make the shapes "possibly" broadcastable.
-    assert len(input_shape_a) <= 4
-    len_diff_a = 4 - len(input_shape_a)
-    input_shape_a = [1] * len_diff_a + input_shape_a
-    input_tensor_a = reshape(input_tensor_a, shape=input_shape_a)
-
-    assert len(input_shape_b) <= 4
-    len_diff_b = 4 - len(input_shape_b)
-    input_shape_b = [1] * len_diff_b + input_shape_b
-    input_tensor_b = reshape(input_tensor_b, shape=input_shape_b)
+    input_tensor_a = _reshape_to_4D(input_tensor_a)
+    input_tensor_b = _reshape_to_4D(input_tensor_b)
 
     *_, height_a, width_a = input_shape_a
     *rest_of_shape_b, height_b, width_b = input_shape_b
@@ -190,6 +190,8 @@ def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
         tensor([1, 4])
     """
 
+    original_shape = input_tensor_a.shape
+    input_tensor_a = _reshape_to_4D(input_tensor_a)
     ttl_input_tensor_a = input_tensor_a._tensor
 
     if ttl_input_tensor_a.storage_type() != ttl.tensor.StorageType.DEVICE:
@@ -198,6 +200,7 @@ def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
     if is_scalar(input_tensor_b):
         ttl_input_tensor_b = input_tensor_b
     else:
+        input_tensor_b = _reshape_to_4D(input_tensor_b)
         ttl_input_tensor_b = input_tensor_b._tensor
         if ttl_input_tensor_b.storage_type() != ttl.tensor.StorageType.DEVICE:
             raise RuntimeError("input_tensor_a must be on device!")
@@ -206,7 +209,8 @@ def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
         raise TypeError("Expected first argument to be a tt_lib.tensor.Tensor")
 
     if is_scalar(ttl_input_tensor_b):
-        return Tensor(ttl.tensor.add_unary(ttl_input_tensor_a, ttl_input_tensor_b * alpha))
+        output_tensor = Tensor(ttl.tensor.add_unary(ttl_input_tensor_a, ttl_input_tensor_b * alpha))
+        return reshape(output_tensor, original_shape)
     elif not isinstance(ttl_input_tensor_b, ttl.tensor.Tensor):
         raise TypeError("Expected second argument to be a tt_lib.tensor.Tensor or a scalar")
 
@@ -218,18 +222,22 @@ def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
     *_, height_b, width_b = input_shape_b
 
     if height_b == 1 and width_b == 1:
-        return Tensor(
+        output_tensor = Tensor(
             ttl.tensor.bcast(ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.HW)
         )
     elif height_b == 1:
-        return Tensor(
+        output_tensor = Tensor(
             ttl.tensor.bcast(ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.H)
         )
     elif width_b == 1:
-        return Tensor(
+        output_tensor = Tensor(
             ttl.tensor.bcast(ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.ADD, ttl.tensor.BcastOpDim.W)
         )
-    return Tensor(ttl.tensor.add(ttl_input_tensor_a, ttl_input_tensor_b))
+    else:
+        output_tensor = Tensor(ttl.tensor.add(ttl_input_tensor_a, ttl_input_tensor_b))
+
+    output_tensor = reshape(output_tensor, original_shape)
+    return output_tensor
 
 
 def subtract(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
