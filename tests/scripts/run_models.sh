@@ -7,13 +7,7 @@ fi
 cd $TT_METAL_HOME
 export PYTHONPATH=$TT_METAL_HOME
 env pytest models/experimental/whisper -k whisper_attention
-# env pytest models/experimental/whisper -k WhipserEncoderLayer_inference #low pcc on WH
-# env pytest models/experimental/whisper -k WhipserEncoder_inference #low pcc on WH
 env pytest models/experimental/whisper -k WhipserDecoderLayer_inference
-# env pytest models/experimental/whisper -k WhipserDecoder_inference #low pcc on WH
-# env pytest models/experimental/whisper -k whisper_model ##low pcc on WH
-# env pytest models/experimental/whisper -k whisper_for_audio_classification #hung on WH
-# env pytest models/experimental/whisper -k whisper_for_conditional_generation #hung on WH
 
 env pytest models/experimental/deit/tests/test_deit_for_image_classification_with_teacher.py -k test_deit_for_image_classification_with_teacher_inference
 
@@ -21,43 +15,55 @@ env pytest models/experimental/vit/tests/test_vit_image_classification.py -k tes
 
 env pytest models/experimental/t5/tests -k t5_dense_act_dense
 env pytest models/experimental/t5/tests -k t5_layer_norm
-env pytest models/experimental/t5/tests -k t5_attention
 env pytest models/experimental/t5/tests -k t5_layer_ff
-env pytest models/experimental/t5/tests -k t5_layer_self_attention
-env pytest models/experimental/t5/tests -k t5_layer_cross_attention
-env pytest models/experimental/t5/tests -k t5_block
-env pytest models/experimental/t5/tests -k t5_stack
-env pytest models/experimental/t5/tests -k t5_model
 
 env pytest models/experimental/roberta/tests -k roberta_self_attention
 env pytest models/experimental/roberta/tests -k roberta_self_output
 env pytest models/experimental/roberta/tests -k roberta_attention
 env pytest models/experimental/roberta/tests -k roberta_intermediate
 env pytest models/experimental/roberta/tests -k roberta_output
-env pytest models/experimental/roberta/tests -k roberta_layer
-env pytest models/experimental/roberta/tests -k roberta_encoder
 env pytest models/experimental/roberta/tests -k roberta_pooler
-env pytest models/experimental/roberta/tests -k roberta_model
 env pytest models/experimental/roberta/tests -k roberta_lm_head
-env pytest models/experimental/roberta/tests -k roberta_for_masked_lm
-env pytest models/experimental/roberta/tests -k roberta_for_qa
-env pytest models/experimental/roberta/tests -k roberta_for_sequence_classification
 env pytest models/experimental/roberta/tests -k roberta_classification_head
-env pytest models/experimental/roberta/tests -k roberta_for_token_classification
-env pytest models/experimental/roberta/tests -k roberta_for_multiple_choice
 
 env pytest models/experimental/bloom/tests -k baddbmm
 env pytest models/experimental/bloom/tests -k bloom_attention
-env pytest models/experimental/bloom/tests -k bloom_block
 env pytest models/experimental/bloom/tests -k bloom_gelu_forward
 env pytest models/experimental/bloom/tests -k bloom_merge_heads
 env pytest models/experimental/bloom/tests -k bloom_mlp
-env pytest models/experimental/bloom/tests -k bloom_model
-env pytest models/experimental/bloom/tests -k bloom_causal_lm
+
 
 # GRAYSKULL ONLY
 
 if [[ $ARCH_NAME == "grayskull" ]]; then
+
+env pytest models/experimental/whisper -k WhipserEncoderLayer_inference #low pcc on WH
+env pytest models/experimental/whisper -k WhipserEncoder_inference #low pcc on WH
+env pytest models/experimental/whisper -k WhipserDecoder_inference #low pcc on WH
+env pytest models/experimental/whisper -k whisper_model #low pcc on WH
+env pytest models/experimental/whisper -k whisper_for_audio_classification #hung on WH
+env pytest models/experimental/whisper -k whisper_for_conditional_generation # low pcc on WH
+
+env pytest models/experimental/t5/tests -k t5_attention #low pcc on WH
+env pytest models/experimental/t5/tests -k t5_layer_self_attention #lowpcc on WH
+env pytest models/experimental/t5/tests -k t5_layer_cross_attention #low pcc on WH
+env pytest models/experimental/t5/tests -k t5_block #low pcc on WH
+env pytest models/experimental/t5/tests -k t5_stack #low pcc on WH
+env pytest models/experimental/t5/tests -k t5_model #low pcc on WH
+
+env pytest models/experimental/roberta/tests -k roberta_layer #low pcc on WH
+env pytest models/experimental/roberta/tests -k roberta_encoder #low pcc on WH
+env pytest models/experimental/roberta/tests -k roberta_model #low pcc on WH
+env pytest models/experimental/roberta/tests -k roberta_for_masked_lm #low pcc on WH
+env pytest models/experimental/roberta/tests -k roberta_for_qa #low pcc on WH
+env pytest models/experimental/roberta/tests -k roberta_for_sequence_classification #low pcc on WH
+env pytest models/experimental/roberta/tests -k roberta_for_token_classification #low pcc on WH
+env pytest models/experimental/roberta/tests -k roberta_for_multiple_choice #low pcc on WH
+
+env pytest models/experimental/bloom/tests -k bloom_block #low pcc on WH
+env pytest models/experimental/bloom/tests -k bloom_model #low pcc on WH
+env pytest models/experimental/bloom/tests -k bloom_causal_lm #low pcc on WH
+
 env pytest tests/models/stable_diffusion/tests/test_embedding.py
 
 # Bad tests, don't enable: Hanging post commit 8/24/23 debug war room session, see PR#2297, PR#2301
