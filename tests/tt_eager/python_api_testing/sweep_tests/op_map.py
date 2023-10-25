@@ -881,4 +881,8 @@ op_map = {
         "tt_lib_op": tt_lib_ops.embeddings,
         "pytorch_op": pytorch_ops.embeddings,
     },
+    "complex-div": {
+        "tt_lib_op": tt_lib_ops.complex_div,
+        "pytorch_op": pytorch_ops.complex_div,
+    },
 }

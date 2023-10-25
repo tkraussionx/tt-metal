@@ -319,6 +319,17 @@ def shapes_and_datagen(shape_dict, datagen_dict, test_args_gen, test_tt_dtypes, 
             for shapes, datagen_funcs, test_args in _gen_shapes_and_args(start_shape, end_shape, interval, _gen_bert_large_shapes):
                 yield shapes, datagen_funcs, test_args
 
+        elif method == "complex_bin":
+            assert len(start_shape) == 4
+            assert len(end_shape) == 4
+
+            def _gen_complex_bin_shapes(shape):
+                complex_shape = [1, 1, shape[2], shape[3]]
+                return [complex_shape, complex_shape]
+
+            for shapes, datagen_funcs, test_args in _gen_shapes_and_args(start_shape, end_shape, interval, _gen_complex_bin_shapes):
+                yield shapes, datagen_funcs, test_args
+
         elif method == "layernorm":
             assert (len(start_shape) == 4)
             assert (len(end_shape) == 4)

@@ -393,7 +393,8 @@ def test_level1_div(memcfg, dtype, device, function_level_defaults):
     # check abs
     x = Complex(input_shape)
     y = x.div(x)
-
+    print(x.metal.shape)
+    print(y.metal.shape)
     xtt = (
         ttl.tensor.Tensor(x.metal, dtype)
         .to(ttl.tensor.Layout.ROW_MAJOR)
