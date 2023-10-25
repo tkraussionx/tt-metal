@@ -27,9 +27,13 @@ class Tensor:
         return self._tensor.layout()
 
     def __getitem__(self: "Tensor", slices) -> "Tensor":
-        torch_tensor = to_torch(self)
-        torch_tensor = torch_tensor[slices]
-        return from_torch(torch_tensor, dtype=self.dtype)
+        device = self._tensor.device
+        tensor = copy_from_device(self)
+        tensor = to_torch(tensor)
+        tensor = tensor[slices]
+        tensor = from_torch(tensor, dtype=self.dtype)
+        tensor = copy_to_device(tensor, device)
+        return tensor
 
     def __repr__(self: "Tensor") -> str:
         return str(self._tensor)
@@ -43,14 +47,20 @@ def from_torch(
 
 
 def to_torch(tensor: Tensor) -> "torch.Tensor":
-    tensor = tensor._tensor.cpu() # Move to CPU if on device
-    if tensor.layout() != ttl.tensor.Layout.ROW_MAJOR:
-        tensor = tensor.to(ttl.tensor.Layout.ROW_MAJOR)
-    return tensor.to_torch()
+    ttl_tensor = tensor._tensor
+    if ttl_tensor.storage_type() == ttl.tensor.StorageType.DEVICE:
+        raise ValueError("Tensor cannot be on device when converting to torch!")
+    if ttl_tensor.layout() != ttl.tensor.Layout.ROW_MAJOR:
+        ttl_tensor = ttl_tensor.to(ttl.tensor.Layout.ROW_MAJOR)
+    return ttl_tensor.to_torch()
 
 
 def copy_to_device(tensor, device):
     return Tensor(tensor._tensor.to(device))
+
+
+def copy_from_device(tensor):
+    return Tensor(tensor._tensor.cpu())
 
 
 def free(self: "Tensor") -> str:
@@ -67,5 +77,6 @@ __all__ = [
     "from_tensor",
     "to_tensor",
     "copy_to_device",
+    "copy_from_device",
     "free",
 ]

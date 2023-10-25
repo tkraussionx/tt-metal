@@ -7,6 +7,7 @@ from ttnn.tensor import (
     from_torch,
     to_torch,
     copy_to_device,
+    copy_from_device,
     free,
 )
 

@@ -16,6 +16,7 @@ def test_sub_scalar(device, s, h, w):
 
     input_tensor = ttnn.from_torch(torch_input_tensor)
     output_tensor = input_tensor - s
+    output_tensor = ttnn.copy_from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor)
 
     assert_with_pcc(torch_output_tensor, output_tensor, 0.99)
@@ -31,6 +32,7 @@ def test_sub_scalar_and_alpha(device, alpha, scalar_input_tensor_b, h, w):
 
     input_tensor = ttnn.from_torch(torch_input_tensor)
     output_tensor = ttnn.sub(input_tensor, scalar_input_tensor_b, alpha=alpha)
+    output_tensor = ttnn.copy_from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor)
 
     assert_with_pcc(torch_output_tensor, output_tensor, 0.99999)
@@ -46,6 +48,7 @@ def test_sub(device, h, w):
     a = ttnn.from_torch(torch_a)
     b = ttnn.from_torch(torch_b)
     tt_output = ttnn.sub(a, b)
+    tt_output = ttnn.copy_from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
 
     assert_with_pcc(torch_output, tt_output, 0.9999)
@@ -63,6 +66,7 @@ def test_sub_4D(device, n, c, h, w):
     a = ttnn.from_torch(torch_a)
     b = ttnn.from_torch(torch_b)
     tt_output = ttnn.sub(a, b)
+    tt_output = ttnn.copy_from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
 
     assert_with_pcc(torch_output, tt_output, 0.9999)

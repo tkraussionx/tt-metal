@@ -2,7 +2,13 @@ from loguru import logger
 
 import tt_lib as ttl
 
-from ttnn.tensor import Tensor, from_torch, to_torch
+from ttnn.tensor import (
+    Tensor,
+    from_torch,
+    to_torch,
+    copy_to_device,
+    copy_from_device
+)
 
 
 def open(device_id: int):
@@ -128,12 +134,12 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
     if not isinstance(input_tensor_b, Tensor):
         raise RuntimeError("Expected second argument to be a tt_lib.tensor.Tensor or a scalar")
 
-    input_shape_a = input_tensor_a.shape
-    input_shape_b = input_tensor_b.shape
-
     # The idea is to make the shapes "possibly" broadcastable.
     input_tensor_a = _reshape_to_4D(input_tensor_a)
     input_tensor_b = _reshape_to_4D(input_tensor_b)
+
+    input_shape_a = input_tensor_a.shape
+    input_shape_b = input_tensor_b.shape
 
     *_, height_a, width_a = input_shape_a
     *rest_of_shape_b, height_b, width_b = input_shape_b
@@ -351,9 +357,13 @@ def reshape(input_tensor: Tensor, shape) -> Tensor:
         return Tensor(ttl.tensor.reshape(ttl_input_tensor, w, z, y, x))
     except:
         logger.warning("Given reshape operation could not be run on the TT device. Defaulting to torch implementation")
-        torch_tensor = to_torch(input_tensor)
-        torch_tensor = torch_tensor.reshape(shape=shape)
-        return from_torch(torch_tensor, input_tensor.dtype)
+        device = ttl_input_tensor.device()
+        tensor = copy_from_device(input_tensor)
+        tensor = to_torch(tensor)
+        tensor = tensor.reshape(shape=shape)
+        tensor = from_torch(tensor, input_tensor.dtype)
+        tensor = copy_to_device(tensor, device)
+        return tensor
 
 
 def permute(input_tensor: Tensor, order) -> Tensor:
@@ -369,9 +379,13 @@ def permute(input_tensor: Tensor, order) -> Tensor:
 def softmax(input_tensor: Tensor, dim) -> Tensor:
     import torch
 
-    torch_tensor = to_torch(input_tensor)
-    torch_tensor = torch.softmax(torch_tensor, dim=dim)
-    return from_torch(torch_tensor, dtype=input_tensor.dtype)
+    device = input_tensor._tensor.device()
+    tensor = copy_from_device(input_tensor)
+    tensor = to_torch(tensor)
+    tensor = torch.softmax(tensor, dim=dim)
+    tensor = from_torch(tensor, input_tensor.dtype)
+    tensor = copy_to_device(tensor, device)
+    return tensor
 
 
 __all__ = [
