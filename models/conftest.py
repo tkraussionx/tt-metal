@@ -5,7 +5,6 @@
 import pytest
 from PIL import Image
 import torchvision.transforms as transforms
-from pathlib import Path
 import ast
 
 
