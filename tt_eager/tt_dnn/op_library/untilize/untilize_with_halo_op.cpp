@@ -37,8 +37,6 @@ range_t calculate_in_range(const range_t& out_range, const PoolConfig& pc) {
     }
     // end of the range
     {
-        // uint32_t out_w_i = (out_range[1] - 1) % pc.out_w;
-        // uint32_t out_h_i = (out_range[1] - 1) / pc.out_w;
         uint32_t out_w_i = out_range[1] % pc.out_w;
         uint32_t out_h_i = out_range[1] / pc.out_w;
         // corresponding window's center stick input coords:
@@ -52,30 +50,52 @@ range_t calculate_in_range(const range_t& out_range, const PoolConfig& pc) {
 std::map<CoreCoord, CoreCoord> left_neighbor_core, right_neighbor_core;
 void init_neighbor_core_xy_mapping(CoreCoord grid_size, bool is_twod = false) {
     TT_ASSERT(grid_size.x == 12 && grid_size.y == 9);   // grayskull
-    for (int32_t y = 0; y < grid_size.y; ++ y) {
-        for (int32_t x = 0; x < grid_size.x; ++ x) {
-            CoreCoord core = {(uint32_t) x, (uint32_t) y};
-            // calculate left neighbor
-            int32_t left_x = x - 1, left_y = y;
-            if (left_x < 0) {
-                left_x = grid_size.x - 1;
-                left_y -= 1;
+    if (is_twod) {
+        // 2d decomposition case (block sharded)
+        // left-right neighbors are calculated along the x dim
+        // first the left neighbors (x = 0 has no left neighbor)
+        for (int32_t x = 1; x < grid_size.x; ++ x) {
+            int32_t left_x = x - 1;
+            for (int32_t y = 0; y < grid_size.y; ++ y) {
+                CoreCoord core = {(uint32_t) x, (uint32_t) y};
+                left_neighbor_core[core] = {(uint32_t) left_x, (uint32_t) y};
             }
-            if (left_y < 0) {
-                // there is no left neighbor
-            } else {
-                left_neighbor_core[core] = {(uint32_t) left_x, (uint32_t) left_y};
+        }
+        // then the neighbors (x = grid_size.x - 1 has no left neighbor)
+        for (int32_t x = 0; x < grid_size.x - 1; ++ x) {
+            int32_t right_x = x + 1;
+            for (int32_t y = 0; y < grid_size.y; ++ y) {
+                CoreCoord core = {(uint32_t) x, (uint32_t) y};
+                right_neighbor_core[core] = {(uint32_t) right_x, (uint32_t) y};
             }
-            // calculate right neighbor
-            int32_t right_x = x + 1, right_y = y;
-            if (right_x == grid_size.x) {
-                right_x = 0;
-                right_y += 1;
-            }
-            if (right_y == grid_size.y) {
-                // there is no right neighbor
-            } else {
-                right_neighbor_core[core] = {(uint32_t) right_x, (uint32_t) right_y};
+        }
+    } else {
+        // default 1d distribution case (height sharded)
+        for (int32_t y = 0; y < grid_size.y; ++ y) {
+            for (int32_t x = 0; x < grid_size.x; ++ x) {
+                CoreCoord core = {(uint32_t) x, (uint32_t) y};
+                // calculate left neighbor
+                int32_t left_x = x - 1, left_y = y;
+                if (left_x < 0) {
+                    left_x = grid_size.x - 1;
+                    left_y -= 1;
+                }
+                if (left_y < 0) {
+                    // there is no left neighbor
+                } else {
+                    left_neighbor_core[core] = {(uint32_t) left_x, (uint32_t) left_y};
+                }
+                // calculate right neighbor
+                int32_t right_x = x + 1, right_y = y;
+                if (right_x == grid_size.x) {
+                    right_x = 0;
+                    right_y += 1;
+                }
+                if (right_y == grid_size.y) {
+                    // there is no right neighbor
+                } else {
+                    right_neighbor_core[core] = {(uint32_t) right_x, (uint32_t) right_y};
+                }
             }
         }
     }
@@ -111,8 +131,6 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
     // TODO: hard coded for testing only. need to pass these args in.
     // These are the input values before inserting and padding or halo
     uint32_t nbatch = in_b;
-    // uint32_t in_h = std::sqrt(input_shape[2]);
-    // uint32_t in_w = in_h;
     TT_ASSERT(in_h * in_w == input_shape[2] || in_b * in_h * in_w == input_shape[2]);
     uint32_t in_c = input_shape[3];
     uint32_t pad_h = 1;
@@ -267,6 +285,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
                             .set_page_size(pad_cb_id, pad_cb_pagesize);
     auto pad_cb = CreateCircularBuffer(program, all_cores, pad_cb_config);
 
+    if (0)
     {
         log_debug(LogOp, "src cb: id = {}, pagesize = {}, npages = {}", src_cb_id, tile_size, num_input_tiles);
         log_debug(LogOp, "untilize cb: id = {}, pagesize = {}, npages = {}", untilize_out_cb_id, tile_size, num_output_tiles);
@@ -321,17 +340,6 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
         all_cores,
         ComputeConfig{
             .compile_args = compute_args});
-
-    // // const buffer with pad value
-    // uint32_t const_buffer_size = input_shape[3];
-    // auto const_buffer = owned_buffer::create(std::vector<bfloat16>(const_buffer_size, bfloat16(uint16_t(pad_val))));
-    // const Tensor const_tensor = Tensor(OwnedStorage{const_buffer},
-    //                                    Shape({1, 1, 1, const_buffer_size}),
-    //                                    DataType::BFLOAT16,
-    //                                    Layout::ROW_MAJOR)
-    //                                 .to(device, MemoryConfig{.memory_layout = TensorMemoryLayout::INTERLEAVED,
-    //                                                          .buffer_type = BufferType::L1});
-    // auto const_tensor_addr = const_tensor.buffer()->address();
 
     // 1D distribution of blocks across all cores
     uint32_t ncores_full = ncores;
@@ -438,11 +446,6 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
     uint32_t in_stick_start = 0;    // global input stick
     for (uint32_t core = 0; core < ncores; ++ core) {
         uint32_t in_stick_end = in_stick_start + in_nsticks_per_core;
-        // log_debug("==== Core {}: in_sticks = [{},{})", core, in_stick_start, in_stick_end);
-        // log_debug(" l_halo = [{},{})", my_shard[core][0][0], my_shard[core][0][1]);
-        // log_debug(" local ({}) = [{},{})", my_shard[core][1][1] - my_shard[core][1][0], my_shard[core][1][0], my_shard[core][1][1]);
-        // log_debug(" r_halo = [{},{})", my_shard[core][2][0], my_shard[core][2][1]);
-
         // calculate the shuffle config [excl. padding] <-- TODO: see if padding should be handled here or later
         //   - for each core in the neighborhood:
         //         calculate range to push to this core
@@ -538,18 +541,6 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
             count += sc.last_partial_image_num_rows * (pc.in_w + 2 * pc.pad_w);
             count += sc.last_partial_left_aligned_row_width;
             updated_count_to_send[core][NEIGHBORHOOD_DIST + neighbor] = count;
-            // bool to_print = core == 12 && neighbor == 0;
-            // if (to_print) {
-            //     log_debug(LogOp, "== partial_first_row_nsticks: {}", sc.first_partial_right_aligned_row_width);
-            //     log_debug(LogOp, "== skip_after_partial_right_aligned_row: {}", sc.skip_after_partial_right_aligned_row);
-            //     log_debug(LogOp, "== partial_top_image_nrows: {}", sc.first_partial_image_num_rows);
-            //     log_debug(LogOp, "== skip_after_first_partial_image_row: {}", sc.skip_after_first_partial_image_row);
-            //     log_debug(LogOp, "== full_nimages: {}", sc.num_full_images);
-            //     log_debug(LogOp, "== skip_after_full_image: {}", sc.skip_after_full_image);
-            //     log_debug(LogOp, "== partial_bottom_image_nrows: {}", sc.last_partial_image_num_rows);
-            //     log_debug(LogOp, "== partial_last_row_nsticks: {}", sc.last_partial_left_aligned_row_width);
-            //     log_debug(LogOp, "== initial_skip: {}", sc.initial_skip);
-            // }
         }
         in_stick_start += in_nsticks_per_core;
     }
@@ -557,30 +548,12 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
     std::map<uint32_t, std::array<uint32_t, (NEIGHBORHOOD_DIST * 2 + 1)>> updated_count_to_receive; // nsticks pushed from each neighbor
     std::map<uint32_t, std::array<uint32_t, (NEIGHBORHOOD_DIST * 2 + 1)>> receive_at_offset_nsticks;  // data is to be received at these offsets
     std::map<uint32_t, int32_t> initial_pad_nsticks;  // any padding to be inserted at the beginning (for left most cores)
-    // in_stick_start = 0;
     for (uint32_t core = 0; core < ncores; ++ core) {
-        // uint32_t in_stick_end = in_stick_start + in_nsticks_per_core;
-        // NewShardingConfig sc = get_shard_specs_with_halo(in_stick_start, in_stick_end, pc);
-        // if (0) {
-        //     log_debug(LogOp, "============ CORE : {}", core);
-        //     log_debug(LogOp, "== in_stick range: [{} {})", in_stick_start, in_stick_end);
-        //     log_debug(LogOp, "== partial_first_row_nsticks: {}", sc.first_partial_right_aligned_row_width);
-        //     log_debug(LogOp, "== skip_after_partial_right_aligned_row: {}", sc.skip_after_partial_right_aligned_row);
-        //     log_debug(LogOp, "== partial_top_image_nrows: {}", sc.first_partial_image_num_rows);
-        //     log_debug(LogOp, "== skip_after_first_partial_image_row: {}", sc.skip_after_first_partial_image_row);
-        //     log_debug(LogOp, "== full_nimages: {}", sc.num_full_images);
-        //     log_debug(LogOp, "== skip_after_full_image: {}", sc.skip_after_full_image);
-        //     log_debug(LogOp, "== partial_bottom_image_nrows: {}", sc.last_partial_image_num_rows);
-        //     log_debug(LogOp, "== partial_last_row_nsticks: {}", sc.last_partial_left_aligned_row_width);
-        //     log_debug(LogOp, "== initial_skip: {}", sc.initial_skip);
-        // }
         // record any inital skip to be used in offset calculations
-        // initial_pad_nsticks[core] = sc.initial_skip;
         initial_pad_nsticks[core] = 0;
         if (my_shard[core][0][1] - my_shard[core][0][0] < halo_in_nsticks) {
             initial_pad_nsticks[core] = halo_out_nsticks - (my_shard[core][0][1] - my_shard[core][0][0]);
         }
-        // uint32_t cumulative_count = sc.initial_skip;
         uint32_t cumulative_count = initial_pad_nsticks[core];
         // calculate the nsticks I receive from each of my neighbors
         for (int32_t neighbor = - NEIGHBORHOOD_DIST; neighbor <= NEIGHBORHOOD_DIST; ++ neighbor) {
@@ -593,7 +566,6 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
             receive_at_offset_nsticks[core][NEIGHBORHOOD_DIST + neighbor] = cumulative_count;
             cumulative_count += count;
         }
-        // in_stick_start += in_nsticks_per_core;
     }
 
     std::map<uint32_t, std::array<uint32_t, (NEIGHBORHOOD_DIST * 2 + 1)>> send_to_offset_nsticks;  // data is to be received at these offsets
@@ -619,28 +591,9 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
                 NewShardingConfig sc = get_shard_specs(in_stick_start, range_to_send[core][NEIGHBORHOOD_DIST + neighbor][0], pc);
                 offset += sc.first_partial_right_aligned_row_width + sc.skip_after_partial_right_aligned_row;
                 offset += sc.first_partial_image_num_rows * (pc.in_w + 2 * pc.pad_w) + sc.skip_after_first_partial_image_row;
-                // if (sc.first_partial_image_num_rows > 0) {
-                //     offset -= 2 * pc.pad_w;
-                // }
                 offset += sc.num_full_images * (pc.in_h * (pc.in_w + 2 * pc.pad_w) + sc.skip_after_full_image);
-                // if (sc.num_full_images > 0) {
-                //     offset -= sc.num_full_images * 2 * pc.pad_w;
-                // }
                 offset += sc.last_partial_image_num_rows * (pc.in_w + 2 * pc.pad_w);
                 offset += sc.last_partial_left_aligned_row_width;
-                // if (toprint) {
-                //     log_debug(LogOp, "partial_first_row_nsticks: {}", sc.first_partial_right_aligned_row_width);
-                //     log_debug(LogOp, "partial_top_image_nrows: {}", sc.first_partial_image_num_rows);
-                //     log_debug(LogOp, "full_nimages: {}", sc.num_full_images);
-                //     log_debug(LogOp, "partial_bottom_image_nrows: {}", sc.last_partial_image_num_rows);
-                //     log_debug(LogOp, "partial_last_row_nsticks: {}", sc.last_partial_left_aligned_row_width);
-                //     log_debug(LogOp, "skip_after_partial_right_aligned_row: {}", sc.skip_after_partial_right_aligned_row);
-                //     log_debug(LogOp, "skip_after_first_partial_image_row: {}", sc.skip_after_first_partial_image_row);
-                //     log_debug(LogOp, "skip_after_full_image: {}", sc.skip_after_full_image);
-                //     log_debug(LogOp, "initial_skip: {}", sc.initial_skip);
-                //     log_debug(LogOp, "offset: {}", offset);
-                //     log_debug(LogOp, "start_offset: {}", receive_at_offset_nsticks[core][NEIGHBORHOOD_DIST]);
-                // }
             }
             send_from_offset_nsticks[core][NEIGHBORHOOD_DIST + neighbor] = offset + receive_at_offset_nsticks[core][NEIGHBORHOOD_DIST];
         }
