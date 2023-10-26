@@ -64,8 +64,8 @@ def _reshape_to_4D(tensor):
 
 
 # Math Operations
-# Should the matmal autodetect if the tensor is on device?
-#   * Should one type of operation be prefered over the other for optimizations?
+
+
 def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
     """
     matmul(input_tensor_a, input_tensor_b) -> Tensor
@@ -132,10 +132,17 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
         >>> torch.matmul(tensor1, tensor2).size()
         torch.Size([10, 3, 5])
     """
+
     if not isinstance(input_tensor_a, Tensor):
-        raise RuntimeError("Expected first argument to be a tt_lib.tensor.Tensor")
+        raise RuntimeError("Expected first argument to be a ttnn.tensor.Tensor")
     if not isinstance(input_tensor_b, Tensor):
-        raise RuntimeError("Expected second argument to be a tt_lib.tensor.Tensor or a scalar")
+        raise RuntimeError("Expected second argument to be a ttnn.tensor.Tensor or a scalar")
+
+    ttl_input_tensor_a = input_tensor_a._tensor
+    ttl_input_tensor_b = input_tensor_b._tensor
+
+    if ttl_input_tensor_a.storage_type() != ttl.tensor.StorageType.DEVICE:
+        raise RuntimeError("input_tensor_a must be on device!")
 
     # The idea is to make the shapes "possibly" broadcastable.
     if len(input_shape_a) > MAX_RANK:
@@ -144,13 +151,13 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
     expected_rank = len(input_shape_a)
     len_diff_a = MAX_RANK - len(input_shape_a)
     input_shape_a = [1] * len_diff_a + input_shape_a
-    input_tensor_a = reshape(input_tensor_a, shape=input_shape_a)
+    ttl_input_tensor_a = reshape(ttl_input_tensor_a, shape=input_shape_a)
 
     if len(input_shape_b) > MAX_RANK:
         raise RuntimeError(f"There is currently no support for ranks greater than {MAX_RANK}.")
     len_diff_b = MAX_RANK - len(input_shape_b)
     input_shape_b = [1] * len_diff_b + input_shape_b
-    input_tensor_b = reshape(input_tensor_b, shape=input_shape_b)
+    ttl_input_tensor_b = reshape(ttl_input_tensor_b, shape=input_shape_b)
 
     *_, height_a, width_a = input_shape_a
     *rest_of_shape_b, height_b, width_b = input_shape_b
@@ -168,19 +175,22 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
     if height_b == 1 and width_b == 1:
         out = Tensor(
             ttl.tensor.bcast(
-                input_tensor_a._tensor, input_tensor_b._tensor, ttl.tensor.BcastOpMath.MUL, ttl.tensor.BcastOpDim.HW
+                ttl_input_tensor_a._tensor,
+                ttl_input_tensor_b._tensor,
+                ttl.tensor.BcastOpMath.MUL,
+                ttl.tensor.BcastOpDim.HW,
             )
         )
     elif _shape_is_broadcastable(input_shape_a, input_shape_b):
         if all(x == 1 for x in rest_of_shape_b):
             if width_a == height_b:
-                out = Tensor(ttl.tensor.matmul(input_tensor_a._tensor, input_tensor_b._tensor))
+                out = Tensor(ttl.tensor.matmul(ttl_input_tensor_a._tensor, ttl_input_tensor_b._tensor))
             elif height_a == 1 and height_b == 1:
                 # return a dot product
                 out = Tensor(
                     ttl.tensor.bcast(
-                        input_tensor_a._tensor,
-                        input_tensor_b._tensor,
+                        ttl_input_tensor_a._tensor,
+                        ttl_input_tensor_b._tensor,
                         ttl.tensor.BcastOpMath.MUL,
                         ttl.tensor.BcastOpDim.H,
                     )
@@ -197,7 +207,7 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
             else:
                 raise RuntimeError("The width of the first tensor must be equal to the height of the second tensor")
         else:
-            out = Tensor(ttl.tensor.bmm(input_tensor_a._tensor, input_tensor_b._tensor))
+            out = Tensor(ttl.tensor.bmm(ttl_input_tensor_a._tensor, ttl_input_tensor_b._tensor))
     else:
         raise RuntimeError("These tensors cannot be broadcasted")
 
@@ -240,10 +250,11 @@ def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
         raise RuntimeError("input_tensor_a must be on device!")
 
     if _is_scalar(input_tensor_b):
-        return Tensor(ttl.tensor.add_unary(input_tensor_a, input_tensor_b * alpha))
-    elif not isinstance(input_tensor_b, ttl.tensor.Tensor):
-        raise TypeError("Expected second argument to be a tt_lib.tensor.Tensor or a scalar")
+        return Tensor(ttl.tensor.add_unary(ttl_input_tensor_a, input_tensor_b * alpha))
+    elif not isinstance(input_tensor_b, Tensor):
+        raise TypeError("Expected second argument to be a ttnn.tensor.Tensor or a scalar")
 
+    ttl_input_tensor_b = input_tensor_b._tensor
     input_shape_b = ttl_input_tensor_b.shape()
 
     if alpha != 1:
@@ -301,68 +312,86 @@ def subtract(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tens
         >>> ttnn.sub(a, b, alpha=2)
         tensor([1, 0])
     """
-    input_tensor_a = input_tensor_a._tensor if isinstance(input_tensor_a, Tensor) else input_tensor_a
-    input_tensor_b = input_tensor_b._tensor if isinstance(input_tensor_b, Tensor) else input_tensor_b
+    ttl_input_tensor_a = input_tensor_a._tensor
 
-    if not isinstance(input_tensor_a, ttl.tensor.Tensor):
-        raise TypeError("Expected first argument to be a tt_lib.tensor.Tensor")
+    if ttl_input_tensor_a.storage_type() != ttl.tensor.StorageType.DEVICE:
+        raise RuntimeError("input_tensor_a must be on device!")
+
+    if not isinstance(input_tensor_a, Tensor):
+        raise TypeError("Expected first argument to be a ttnn.tensor.Tensor")
 
     if _is_scalar(input_tensor_b):
-        return Tensor(ttl.tensor.add_unary(input_tensor_a, input_tensor_b * alpha))
-    elif not isinstance(input_tensor_b, ttl.tensor.Tensor):
-        raise TypeError("Expected second argument to be a tt_lib.tensor.Tensor or a scalar")
+        return Tensor(ttl.tensor.add_unary(ttl_input_tensor_a, input_tensor_b * alpha))
+    elif not isinstance(input_tensor_b, Tensor):
+        raise TypeError("Expected second argument to be a ttnn.tensor.Tensor or a scalar")
 
-    input_shape_b = input_tensor_b.shape()
+    ttl_input_tensor_b = input_tensor_b._tensor
+    input_shape_b = ttl_input_tensor_a.shape()
 
     if alpha != 1:
-        input_tensor_b = ttl.tensor.mul_unary(input_tensor_b, alpha)
+        ttl_input_tensor_b = ttl.tensor.mul_unary(ttl_input_tensor_b, alpha)
 
     *_, height_b, width_b = input_shape_b
 
     if height_b == 1 and width_b == 1:
         return Tensor(
-            ttl.tensor.bcast(input_tensor_a, input_tensor_b, ttl.tensor.BcastOpMath.SUB, ttl.tensor.BcastOpDim.HW)
+            ttl.tensor.bcast(
+                ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.SUB, ttl.tensor.BcastOpDim.HW
+            )
         )
     elif height_b == 1:
         return Tensor(
-            ttl.tensor.bcast(input_tensor_a, input_tensor_b, ttl.tensor.BcastOpMath.SUB, ttl.tensor.BcastOpDim.H)
+            ttl.tensor.bcast(
+                ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.SUB, ttl.tensor.BcastOpDim.H
+            )
         )
     elif width_b == 1:
         return Tensor(
-            ttl.tensor.bcast(input_tensor_a, input_tensor_b, ttl.tensor.BcastOpMath.SUB, ttl.tensor.BcastOpDim.W)
+            ttl.tensor.bcast(
+                ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.SUB, ttl.tensor.BcastOpDim.W
+            )
         )
-    return Tensor(ttl.tensor.sub(input_tensor_a, input_tensor_b))
+    return Tensor(ttl.tensor.sub(ttl_input_tensor_a, ttl_input_tensor_b))
 
 
 def multiply(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
-    input_tensor_a = input_tensor_a._tensor if isinstance(input_tensor_a, Tensor) else input_tensor_a
-    input_tensor_b = input_tensor_b._tensor if isinstance(input_tensor_b, Tensor) else input_tensor_b
+    if not isinstance(input_tensor_a, Tensor):
+        raise TypeError("Expected first argument to be a ttnn.tensor.Tensor")
 
-    if not isinstance(input_tensor_a, ttl.tensor.Tensor):
-        raise TypeError("Expected first argument to be a tt_lib.tensor.Tensor")
+    ttl_input_tensor_a = input_tensor_a._tensor
 
-    input_shape_a = input_tensor_a.shape()
+    if ttl_input_tensor_a.storage_type() != ttl.tensor.StorageType.DEVICE:
+        raise RuntimeError("input_tensor_a must be on device!")
+
+    input_shape_a = ttl_input_tensor_a.shape()
     if _is_scalar(input_tensor_b):
-        return Tensor(ttl.tensor.add_unary(input_tensor_a, input_tensor_b))
-    elif not isinstance(input_tensor_b, ttl.tensor.Tensor):
-        raise TypeError("Expected second argument to be a tt_lib.tensor.Tensor or a scalar")
+        return Tensor(ttl.tensor.mul_unary(ttl_input_tensor_a, input_tensor_b))
+    elif not isinstance(input_tensor_b, Tensor):
+        raise TypeError("Expected second argument to be a ttnn.tensor.Tensor or a scalar")
 
-    input_shape_b = input_tensor_b.shape()
+    ttl_input_tensor_b = input_tensor_b._tensor
+    input_shape_b = ttl_input_tensor_b.shape()
     *_, height_b, width_b = input_shape_b
 
     if height_b == 1 and width_b == 1:
         return Tensor(
-            ttl.tensor.bcast(input_tensor_a, input_tensor_b, ttl.tensor.BcastOpMath.MUL, ttl.tensor.BcastOpDim.HW)
+            ttl.tensor.bcast(
+                ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.MUL, ttl.tensor.BcastOpDim.HW
+            )
         )
     elif height_b == 1:
         return Tensor(
-            ttl.tensor.bcast(input_tensor_a, input_tensor_b, ttl.tensor.BcastOpMath.MUL, ttl.tensor.BcastOpDim.H)
+            ttl.tensor.bcast(
+                ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.MUL, ttl.tensor.BcastOpDim.H
+            )
         )
     elif width_b == 1:
         return Tensor(
-            ttl.tensor.bcast(input_tensor_a, input_tensor_b, ttl.tensor.BcastOpMath.MUL, ttl.tensor.BcastOpDim.W)
+            ttl.tensor.bcast(
+                ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.MUL, ttl.tensor.BcastOpDim.W
+            )
         )
-    return Tensor(ttl.tensor.mul(input_shape_a, input_tensor_b))
+    return Tensor(ttl.tensor.mul(input_shape_a, ttl_input_tensor_b))
 
 
 sub = subtract

@@ -15,6 +15,8 @@ def test_sub_scalar(device, s, h, w):
     torch_output_tensor = torch_input_tensor - s
 
     input_tensor = ttnn.from_torch(torch_input_tensor)
+    input_tensor = ttnn.copy_to_device(input_tensor, device)
+
     output_tensor = input_tensor - s
     output_tensor = ttnn.copy_from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor)
@@ -31,6 +33,7 @@ def test_sub_scalar_and_alpha(device, alpha, scalar_input_tensor_b, h, w):
     torch_output_tensor = torch.sub(torch_input_tensor, scalar_input_tensor_b, alpha=alpha)
 
     input_tensor = ttnn.from_torch(torch_input_tensor)
+    input_tensor = ttnn.copy_to_device(input_tensor, device)
     output_tensor = ttnn.sub(input_tensor, scalar_input_tensor_b, alpha=alpha)
     output_tensor = ttnn.copy_from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor)
@@ -47,6 +50,8 @@ def test_sub(device, h, w):
 
     a = ttnn.from_torch(torch_a)
     b = ttnn.from_torch(torch_b)
+    a = ttnn.copy_to_device(a, device)
+    b = ttnn.copy_to_device(b, device)
     tt_output = ttnn.sub(a, b)
     tt_output = ttnn.copy_from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
@@ -65,6 +70,9 @@ def test_sub_4D(device, n, c, h, w):
 
     a = ttnn.from_torch(torch_a)
     b = ttnn.from_torch(torch_b)
+    a = ttnn.copy_to_device(a, device)
+    b = ttnn.copy_to_device(b, device)
+
     tt_output = ttnn.sub(a, b)
     tt_output = ttnn.copy_from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
