@@ -10,7 +10,7 @@ from ttnn.tensor import (
     to_torch,
     to_device,
     from_device,
-    dram_buffer_type,
+    DRAM_MEMORY_CONFIG,
 )
 
 
@@ -94,7 +94,8 @@ def _reshape_to_4D(tensor):
 def matmul(
     input_tensor_a: Tensor,
     input_tensor_b: Tensor,
-    output_buffer_type=dram_buffer_type,
+    *,
+    memory_config=DRAM_MEMORY_CONFIG,
     core_grid: Optional[Tuple[int, int]] = None,
 ) -> Tensor:
     """
@@ -166,8 +167,6 @@ def matmul(
     input_shape_a = input_tensor_a.shape
     input_shape_b = input_tensor_b.shape
 
-    output_memory_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, output_buffer_type)
-
     if not isinstance(input_tensor_a, Tensor):
         raise RuntimeError("Expected first argument to be a ttnn.Tensor")
     if not isinstance(input_tensor_b, Tensor):
@@ -227,7 +226,7 @@ def matmul(
                 input_tensor_b._tensor,
                 ttl.tensor.BcastOpMath.MUL,
                 ttl.tensor.BcastOpDim.H,
-                output_mem_config=output_memory_config,
+                output_mem_config=memory_config,
             )
         )
         t = ttl.tensor.reduce(
@@ -235,7 +234,7 @@ def matmul(
             ttl.tensor.ReduceOpMath.SUM,
             ttl.tensor.ReduceOpDim.W,
             1.0,
-            output_mem_config=output_memory_config,
+            output_mem_config=memory_config,
         )
         out = Tensor(t)
         expected_rank = 0
@@ -244,14 +243,14 @@ def matmul(
             if width_a == height_b:
                 out = Tensor(
                     ttl.tensor.matmul(
-                        input_tensor_a._tensor, input_tensor_b._tensor, output_mem_config=output_memory_config
+                        input_tensor_a._tensor, input_tensor_b._tensor, output_mem_config=memory_config
                     )
                 )
             else:
                 raise RuntimeError("The width of the first tensor must be equal to the height of the second tensor")
         else:
             out = Tensor(
-                ttl.tensor.bmm(input_tensor_a._tensor, input_tensor_b._tensor, output_mem_config=output_memory_config)
+                ttl.tensor.bmm(input_tensor_a._tensor, input_tensor_b._tensor, output_mem_config=memory_config)
             )
     else:
         raise RuntimeError("These tensors cannot be broadcasted")

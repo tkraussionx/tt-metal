@@ -3,8 +3,10 @@ from ttnn.tensor import (
     float32,
     bfloat16,
     bfloat8_b,
-    dram_buffer_type,
-    l1_buffer_type,
+
+    DRAM_MEMORY_CONFIG,
+    L1_MEMORY_CONFIG,
+
     Tensor,
     from_torch,
     to_torch,

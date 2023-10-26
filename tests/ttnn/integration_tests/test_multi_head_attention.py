@@ -25,7 +25,7 @@ def multi_head_attention(
     batch_size, sequence_size, hidden_size = hidden_states.shape
     num_heads = hidden_size // head_size
 
-    query = ttnn.matmul(hidden_states, query_weight, output_buffer_type=ttnn.l1_buffer_type, core_grid=(4, 4))
+    query = ttnn.matmul(hidden_states, query_weight, memory_config=ttnn.L1_MEMORY_CONFIG)
     query = query + query_bias
     query = ttnn.reshape(query, (batch_size, sequence_size, num_heads, head_size))
     query = ttnn.permute(query, (0, 2, 1, 3))
@@ -163,13 +163,13 @@ def test_multi_head_attention(device, batch_size, sequence_size, num_heads, head
     hidden_states = ttnn.to_device(hidden_states, device)
     attention_mask = ttnn.to_device(attention_mask, device)
     query_weight = ttnn.to_device(query_weight, device)
-    query_bias = ttnn.to_device(query_bias, device, ttnn.l1_buffer_type)
+    query_bias = ttnn.to_device(query_bias, device, memory_config=ttnn.L1_MEMORY_CONFIG)
     key_weight = ttnn.to_device(key_weight, device)
-    key_bias = ttnn.to_device(key_bias, device, ttnn.l1_buffer_type)
+    key_bias = ttnn.to_device(key_bias, device, memory_config=ttnn.L1_MEMORY_CONFIG)
     value_weight = ttnn.to_device(value_weight, device)
-    value_bias = ttnn.to_device(value_bias, device, ttnn.l1_buffer_type)
+    value_bias = ttnn.to_device(value_bias, device, memory_config=ttnn.L1_MEMORY_CONFIG)
     output_weight = ttnn.to_device(output_weight, device)
-    output_bias = ttnn.to_device(output_bias, device, ttnn.l1_buffer_type)
+    output_bias = ttnn.to_device(output_bias, device, memory_config=ttnn.L1_MEMORY_CONFIG)
 
     tt_output = multi_head_attention(
         hidden_states,

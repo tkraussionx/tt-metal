@@ -60,13 +60,16 @@ def to_torch(tensor: Tensor) -> "torch.Tensor":
     return ttl_tensor.to_torch()
 
 
-dram_buffer_type = ttl.tensor.BufferType.DRAM
-l1_buffer_type = ttl.tensor.BufferType.L1
+BufferType = ttl.tensor.BufferType
+TensorMemoryLayout = ttl.tensor.TensorMemoryLayout
+MemoryConfig = ttl.tensor.MemoryConfig
+DRAM_MEMORY_CONFIG = MemoryConfig(TensorMemoryLayout.INTERLEAVED, BufferType.DRAM)
+L1_MEMORY_CONFIG = MemoryConfig(TensorMemoryLayout.INTERLEAVED, BufferType.DRAM)
 
 
-def to_device(tensor, device, buffer_type=dram_buffer_type):
+def to_device(tensor, device, *, memory_config: MemoryConfig = DRAM_MEMORY_CONFIG):
     return Tensor(
-        tensor._tensor.to(device, ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, buffer_type))
+        tensor._tensor.to(device, memory_config)
     )
 
 
@@ -84,8 +87,10 @@ __all__ = [
     "float32",
     "bfloat16",
     "bfloat8_b",
-    "dram_buffer_type",
-    "l1_buffer_type",
+
+    "DRAM_MEMORY_CONFIG",
+    "L1_MEMORY_CONFIG",
+
     "Tensor",
     "from_tensor",
     "to_tensor",
