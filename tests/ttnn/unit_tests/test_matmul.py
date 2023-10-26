@@ -131,8 +131,6 @@ def test_matmul_same_shape_and_valid(device, n, c, h, w):
     input_tensor_b = ttnn.from_torch(torch_input_tensor_b)
     input_tensor_a = ttnn.copy_to_device(input_tensor_a, device)
     input_tensor_b = ttnn.copy_to_device(input_tensor_b, device)
-    input_tensor_a = ttnn.copy_to_device(input_tensor_a, device)
-    input_tensor_b = ttnn.copy_to_device(input_tensor_b, device)
     tt_output = ttnn.matmul(input_tensor_a, input_tensor_b)
     tt_output = ttnn.copy_from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
