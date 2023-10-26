@@ -94,15 +94,12 @@ void kernel_main() {
                 // data mcast:
                 // - num_dests does include source, since we are doing a local copy!
                 // - non_posted = true, we need acks, since we do the barrier
-                // - linked = true, so that path reservation is done only once during the first packet of data multi-cast, and all subsequent packets use the same path
-                // num_dests does include source, since we are doing a local copy
-                noc_async_write_multicast_v2<true, true, true>(local_read_addr, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores + 1);
+                noc_async_write_multicast_loopback_src(local_read_addr, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores + 1);
 
                 // valid flag mcast:
                 // Note: no need for write barrier in between data and valid, since these two multicasts are done on the same NOC & Static VC they are guaranteed to be ordered
-                // multicast the flag to destinations, num_dests must not include source, since we are NOT doing a local copy!
-                // - this transfer will set linked back to false, and release the path that was reserved during the first packet of data mcast
-                noc_async_write_multicast_v2<true, false, true>(in0_mcast_receiver_semaphore_addr, in0_mcast_receiver_semaphore_noc_addr, 4, in0_mcast_num_cores + 1);
+                // multicast the flag to destinations, num_dests does not include source, since we are not doing a local copy
+                noc_semaphore_set_multicast(in0_mcast_receiver_semaphore_addr, in0_mcast_receiver_semaphore_noc_addr, in0_mcast_num_cores);
 
                 local_read_addr += in0_block_size_bytes;
                 // Write barrier needed since we mcast to self, and also needed to finish sending mcast flag before we modify locally

@@ -41,7 +41,13 @@ extern CQReadInterface cq_read_interface;
 
 // Use VC 1 for unicast writes, and VC 4 for mcast writes
 #define NOC_UNICAST_WRITE_VC 1
+// valid write VC range is 0-3
+#define NOC_UNICAST_WRITE_VC_RANGE_MASK 0x3
 #define NOC_MULTICAST_WRITE_VC 4
+// TODO: change the read req default to 0 (ie different from write req)
+#define NOC_UNICAST_READ_REQ_VC 1
+// valid read req VC range is 0-3
+#define NOC_UNICAST_READ_REQ_VC_RANGE_MASK 0x3
 
 // dram channel to x/y lookup tables
 // The number of banks is generated based off device we are running on --> controlled by allocator
@@ -868,7 +874,7 @@ void noc_async_read(std::uint64_t src_noc_addr, std::uint32_t dst_local_l1_addr,
 // TODO: write docs
 // this issues only a single packet with size <= NOC_MAX_BURST_SIZE (ie maximum packet size)
 FORCE_INLINE
-void noc_async_read_one_packet(std::uint64_t src_noc_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size) {
+void noc_async_read_one_packet(std::uint64_t src_noc_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size, std::uint32_t vc=NOC_UNICAST_READ_REQ_VC) {
     /*
         Read requests - use static VC
         Read responses - assigned VCs dynamically
@@ -881,6 +887,10 @@ void noc_async_read_one_packet(std::uint64_t src_noc_addr, std::uint32_t dst_loc
     DEBUG_STATUS('N', 'A', 'R', 'W');
     DEBUG_SANITIZE_NOC_ADDR(src_noc_addr, size);
     DEBUG_SANITIZE_WORKER_ADDR(dst_local_l1_addr, size);
+
+    uint32_t noc_rd_cmd_field = NOC_CMD_CPY | NOC_CMD_RD | NOC_CMD_RESP_MARKED | NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(vc);
+
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CTRL, noc_rd_cmd_field);
 
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dst_local_l1_addr);
     NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, (uint32_t)src_noc_addr);

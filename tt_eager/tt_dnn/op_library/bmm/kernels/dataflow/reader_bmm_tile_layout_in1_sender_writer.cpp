@@ -147,6 +147,8 @@ void kernel_main() {
 
     for (uint32_t b = 0; b < batch; b++) {
         uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;
+
+        // Operand 1
         for(uint32_t block = 0; block < num_blocks; block++) {
             // Operand 1
             cb_reserve_back(cb_id_in1, in1_block_num_tiles);
@@ -160,7 +162,7 @@ void kernel_main() {
                 for(uint32_t in1_tensor_tile_id = in1_tensor_row_start_tile_id;
                         in1_tensor_tile_id < in1_tensor_row_start_tile_id + in1_block_w; in1_tensor_tile_id++) {
                     uint64_t noc_read_addr = s1.get_noc_addr(in1_tensor_tile_id);
-                    noc_async_read_one_packet(noc_read_addr, l1_write_addr_in1, in1_single_tile_size_bytes);
+                    noc_async_read_one_packet(noc_read_addr, l1_write_addr_in1, in1_single_tile_size_bytes, in1_tensor_tile_id & NOC_UNICAST_READ_REQ_VC_RANGE_MASK);
                     l1_write_addr_in1 += in1_single_tile_size_bytes;
                  }
                 in1_tensor_row_start_tile_id += in1_tensor_stride_h;
@@ -183,7 +185,7 @@ void kernel_main() {
             // - num_dests must not include source, since we are NOT really doing a local copy!
             // - non_posted = false, we're running in posted mode, we don't need acks, since we aren't doing barrier
             // - linked = true, so that path reservation is done only once during the first packet of data multi-cast, and all subsequent packets use the same path
-            noc_async_write_multicast_v2<false, true>(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores);
+            noc_async_write_multicast_v2<false, true, false>(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores);
 
             // valid flag mcast:
             // Note: no need for write barrier in between data and valid, since these two multicasts are done on the same NOC & Static VC they are guaranteed to be ordered
