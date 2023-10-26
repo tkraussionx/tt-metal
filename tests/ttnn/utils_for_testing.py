@@ -7,9 +7,12 @@ def print_comparison(message, expected_pytorch_result, actual_pytorch_result):
     messages = []
     messages.append(message)
     messages.append("Expected")
-    messages.append(str(expected_pytorch_result[0:5, 0:5, 0:5, 0:5]))
+    # TODO: handle other dimensions
+    if len(expected_pytorch_result.shape) == 4:
+        messages.append(str(expected_pytorch_result[0:5, 0:5, 0:5, 0:5]))
     messages.append("Actual")
-    messages.append(str(actual_pytorch_result[0:5, 0:5, 0:5, 0:5]))
+    if len(actual_pytorch_result.shape) == 4:
+        messages.append(str(actual_pytorch_result[0:5, 0:5, 0:5, 0:5]))
     return "\n".join(messages)
 
 

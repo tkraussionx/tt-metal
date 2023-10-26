@@ -134,9 +134,9 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
     """
 
     if not isinstance(input_tensor_a, Tensor):
-        raise RuntimeError("Expected first argument to be a ttnn.tensor.Tensor")
+        raise RuntimeError("Expected first argument to be a ttnn.Tensor")
     if not isinstance(input_tensor_b, Tensor):
-        raise RuntimeError("Expected second argument to be a ttnn.tensor.Tensor")
+        raise RuntimeError("Expected second argument to be a ttnn.Tensor")
 
     if input_tensor_a._tensor.storage_type() != ttl.tensor.StorageType.DEVICE:
         raise RuntimeError("input_tensor_a must be on device!")
@@ -242,6 +242,9 @@ def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
         tensor([1, 4])
     """
 
+    if not isinstance(input_tensor_a, Tensor):
+        raise TypeError("Expected first argument to be a ttnn.Tensor")
+
     original_shape = input_tensor_a.shape
     input_tensor_a = _reshape_to_4D(input_tensor_a)
     ttl_input_tensor_a = input_tensor_a._tensor
@@ -250,9 +253,15 @@ def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
         raise RuntimeError("input_tensor_a must be on device!")
 
     if _is_scalar(input_tensor_b):
-        return Tensor(ttl.tensor.add_unary(ttl_input_tensor_a, input_tensor_b * alpha))
-    elif not isinstance(input_tensor_b, Tensor):
-        raise TypeError("Expected second argument to be a ttnn.tensor.Tensor or a scalar")
+        output_tensor = Tensor(ttl.tensor.add_unary(ttl_input_tensor_a, input_tensor_b * alpha))
+        return reshape(output_tensor, original_shape)
+    elif isinstance(input_tensor_b, Tensor):
+        input_tensor_b = _reshape_to_4D(input_tensor_b)
+        ttl_input_tensor_b = input_tensor_b._tensor
+        if ttl_input_tensor_b.storage_type() != ttl.tensor.StorageType.DEVICE:
+            raise RuntimeError("input_tensor_a must be on device!")
+    else:
+        raise TypeError("Expected second argument to be a ttnn.Tensor or a scalar")
 
     ttl_input_tensor_b = input_tensor_b._tensor
     input_shape_b = ttl_input_tensor_b.shape()
@@ -260,7 +269,11 @@ def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
     if alpha != 1:
         ttl_input_tensor_b = ttl.tensor.mul_unary(ttl_input_tensor_b, alpha)
 
-    *_, height_b, width_b = input_shape_b
+    if len(input_shape_b) == 1:
+        height_b = 1
+        width_b, = input_shape_b
+    else:
+        *_, height_b, width_b = input_shape_b
 
     if height_b == 1 and width_b == 1:
         output_tensor = Tensor(
@@ -318,12 +331,12 @@ def subtract(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tens
         raise RuntimeError("input_tensor_a must be on device!")
 
     if not isinstance(input_tensor_a, Tensor):
-        raise TypeError("Expected first argument to be a ttnn.tensor.Tensor")
+        raise TypeError("Expected first argument to be a ttnn.Tensor")
 
     if _is_scalar(input_tensor_b):
         return Tensor(ttl.tensor.add_unary(ttl_input_tensor_a, input_tensor_b * alpha))
     elif not isinstance(input_tensor_b, Tensor):
-        raise TypeError("Expected second argument to be a ttnn.tensor.Tensor or a scalar")
+        raise TypeError("Expected second argument to be a ttnn.Tensor or a scalar")
 
     ttl_input_tensor_b = input_tensor_b._tensor
     input_shape_b = ttl_input_tensor_a.shape()
@@ -356,7 +369,7 @@ def subtract(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tens
 
 def multiply(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
     if not isinstance(input_tensor_a, Tensor):
-        raise TypeError("Expected first argument to be a ttnn.tensor.Tensor")
+        raise TypeError("Expected first argument to be a ttnn.Tensor")
 
     ttl_input_tensor_a = input_tensor_a._tensor
 
@@ -367,7 +380,7 @@ def multiply(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
     if _is_scalar(input_tensor_b):
         return Tensor(ttl.tensor.mul_unary(ttl_input_tensor_a, input_tensor_b))
     elif not isinstance(input_tensor_b, Tensor):
-        raise TypeError("Expected second argument to be a ttnn.tensor.Tensor or a scalar")
+        raise TypeError("Expected second argument to be a ttnn.Tensor or a scalar")
 
     ttl_input_tensor_b = input_tensor_b._tensor
     input_shape_b = ttl_input_tensor_b.shape()
