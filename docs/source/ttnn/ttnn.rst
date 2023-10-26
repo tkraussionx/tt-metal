@@ -6,4 +6,4 @@ TTNN
 
    operations
    tutorials
-   libraries/index.rst
+   dependencies/index.rst

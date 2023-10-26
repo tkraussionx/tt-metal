@@ -27,21 +27,6 @@ def open(device_id: int):
     return device
 
 
-# def open(device_id: int):
-#     try:
-#         device = ttl.device.CreateDevice(device_id)
-#         ttl.device.SetDefaultDevice(device)
-#         return device
-#     except RuntimeError as e:
-#         if str(e).startswith("Cannot re-initialize device"):
-#             ttl.device.CloseDevice(device)
-#             device = ttl.device.CreateDevice(device_id)
-#             ttl.device.SetDefaultDevice(device)
-#             return device
-#         else:
-#             raise
-
-
 def close(device):
     ttl.device.CloseDevice(device)
     del DEVICES[device.id()]
