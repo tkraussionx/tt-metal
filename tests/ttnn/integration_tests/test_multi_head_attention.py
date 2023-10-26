@@ -163,13 +163,13 @@ def test_multi_head_attention(device, batch_size, sequence_size, num_heads, head
     hidden_states = ttnn.copy_to_device(hidden_states, device)
     attention_mask = ttnn.copy_to_device(attention_mask, device)
     query_weight = ttnn.copy_to_device(query_weight, device)
-    query_bias = ttnn.copy_to_device(query_bias, device)
+    query_bias = ttnn.copy_to_device(query_bias, device, ttnn.l1_buffer_type)
     key_weight = ttnn.copy_to_device(key_weight, device)
-    key_bias = ttnn.copy_to_device(key_bias, device)
+    key_bias = ttnn.copy_to_device(key_bias, device, ttnn.l1_buffer_type)
     value_weight = ttnn.copy_to_device(value_weight, device)
-    value_bias = ttnn.copy_to_device(value_bias, device)
+    value_bias = ttnn.copy_to_device(value_bias, device, ttnn.l1_buffer_type)
     output_weight = ttnn.copy_to_device(output_weight, device)
-    output_bias = ttnn.copy_to_device(output_bias, device)
+    output_bias = ttnn.copy_to_device(output_bias, device, ttnn.l1_buffer_type)
 
     tt_output = multi_head_attention(
         hidden_states,
