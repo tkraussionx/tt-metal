@@ -19,10 +19,10 @@ def test_multiply_with_scalar(device, input_a, scalar):
     torch_output = torch.mul(torch_input_tensor_a, scalar)
 
     input_tensor_a = ttnn.from_torch(torch_input_tensor_a)
-    input_tensor_a = ttnn.copy_to_device(input_tensor_a, device)
+    input_tensor_a = ttnn.to_device(input_tensor_a, device)
 
     tt_output = ttnn.mul(input_tensor_a, scalar)
-    tt_output = ttnn.copy_from_device(tt_output)
+    tt_output = ttnn.from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
 
     assert_with_pcc(torch_output, tt_output, 0.99)

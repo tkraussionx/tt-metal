@@ -26,11 +26,11 @@ def test_matmul_with_matched_width_height(device, m, k, n):
 
     input_tensor_a = ttnn.from_torch(torch_input_tensor_a)
     input_tensor_b = ttnn.from_torch(torch_input_tensor_b)
-    input_tensor_a = ttnn.copy_to_device(input_tensor_a, device)
-    input_tensor_b = ttnn.copy_to_device(input_tensor_b, device)
+    input_tensor_a = ttnn.to_device(input_tensor_a, device)
+    input_tensor_b = ttnn.to_device(input_tensor_b, device)
 
     tt_output = ttnn.matmul(input_tensor_a, input_tensor_b)
-    tt_output = ttnn.copy_from_device(tt_output)
+    tt_output = ttnn.from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
 
     assert len(tt_output.shape) == len(torch_output.shape)
@@ -56,10 +56,10 @@ def test_matmul_with_matched_width_height_from_1D(device, k, n):
 
     input_tensor_a = ttnn.from_torch(torch_input_tensor_a)
     input_tensor_b = ttnn.from_torch(torch_input_tensor_b)
-    input_tensor_a = ttnn.copy_to_device(input_tensor_a, device)
-    input_tensor_b = ttnn.copy_to_device(input_tensor_b, device)
+    input_tensor_a = ttnn.to_device(input_tensor_a, device)
+    input_tensor_b = ttnn.to_device(input_tensor_b, device)
     tt_output = ttnn.matmul(input_tensor_a, input_tensor_b)
-    tt_output = ttnn.copy_from_device(tt_output)
+    tt_output = ttnn.from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
 
     assert len(tt_output.shape) == len(torch_output.shape)
@@ -77,10 +77,10 @@ def test_matmul_does_dot_product(device, w):
 
     input_tensor_a = ttnn.from_torch(torch_input_tensor_a)
     input_tensor_b = ttnn.from_torch(torch_input_tensor_b)
-    input_tensor_a = ttnn.copy_to_device(input_tensor_a, device)
-    input_tensor_b = ttnn.copy_to_device(input_tensor_b, device)
+    input_tensor_a = ttnn.to_device(input_tensor_a, device)
+    input_tensor_b = ttnn.to_device(input_tensor_b, device)
     tt_output = ttnn.matmul(input_tensor_a, input_tensor_b)
-    tt_output = ttnn.copy_from_device(tt_output)
+    tt_output = ttnn.from_device(tt_output)
 
     tt_output = ttnn.to_torch(tt_output)
 
@@ -106,10 +106,10 @@ def test_matmul_with_matched_width_height_4D(device, n, c, h, w):
 
     input_tensor_a = ttnn.from_torch(torch_input_tensor_a)
     input_tensor_b = ttnn.from_torch(torch_input_tensor_b)
-    input_tensor_a = ttnn.copy_to_device(input_tensor_a, device)
-    input_tensor_b = ttnn.copy_to_device(input_tensor_b, device)
+    input_tensor_a = ttnn.to_device(input_tensor_a, device)
+    input_tensor_b = ttnn.to_device(input_tensor_b, device)
     tt_output = ttnn.matmul(input_tensor_a, input_tensor_b)
-    tt_output = ttnn.copy_from_device(tt_output)
+    tt_output = ttnn.from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
 
     assert len(tt_output.shape) == len(torch_output.shape)
@@ -133,10 +133,10 @@ def test_matmul_same_shape_and_valid(device, n, c, h, w):
 
     input_tensor_a = ttnn.from_torch(torch_input_tensor_a)
     input_tensor_b = ttnn.from_torch(torch_input_tensor_b)
-    input_tensor_a = ttnn.copy_to_device(input_tensor_a, device)
-    input_tensor_b = ttnn.copy_to_device(input_tensor_b, device)
+    input_tensor_a = ttnn.to_device(input_tensor_a, device)
+    input_tensor_b = ttnn.to_device(input_tensor_b, device)
     tt_output = ttnn.matmul(input_tensor_a, input_tensor_b)
-    tt_output = ttnn.copy_from_device(tt_output)
+    tt_output = ttnn.from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
 
     assert len(tt_output.shape) == len(torch_output.shape)
@@ -165,8 +165,8 @@ def test_matmul_same_shape_but_invalid(device, input_a, input_b):
 
     input_tensor_a = ttnn.from_torch(torch_input_tensor_a)
     input_tensor_b = ttnn.from_torch(torch_input_tensor_b)
-    input_tensor_a = ttnn.copy_to_device(input_tensor_a, device)
-    input_tensor_b = ttnn.copy_to_device(input_tensor_b, device)
+    input_tensor_a = ttnn.to_device(input_tensor_a, device)
+    input_tensor_b = ttnn.to_device(input_tensor_b, device)
 
     with pytest.raises(RuntimeError) as exception:
         ttnn.matmul(input_tensor_a, input_tensor_b)

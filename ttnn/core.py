@@ -8,35 +8,43 @@ from ttnn.tensor import (
     Tensor,
     from_torch,
     to_torch,
-    copy_to_device,
-    copy_from_device,
+    to_device,
+    from_device,
     dram_buffer_type,
 )
 
 
 MAX_RANK = 4
 
+DEVICES = {}
+
 
 def open(device_id: int):
-    try:
-        device = ttl.device.CreateDevice(device_id)
-        ttl.device.SetDefaultDevice(device)
-        return device
-    except RuntimeError as e:
-        if str(e).startswith("Cannot re-initialize device"):
-            ttl.device.CloseDevice(device)
-            device = ttl.device.CreateDevice(device_id)
-            ttl.device.SetDefaultDevice(device)
-            return device
-        else:
-            raise
+    if device_id in DEVICES:
+        return DEVICES[device_id]
+    device = ttl.device.CreateDevice(device_id)
+    DEVICES[device_id] = device
+    return device
+
+
+# def open(device_id: int):
+#     try:
+#         device = ttl.device.CreateDevice(device_id)
+#         ttl.device.SetDefaultDevice(device)
+#         return device
+#     except RuntimeError as e:
+#         if str(e).startswith("Cannot re-initialize device"):
+#             ttl.device.CloseDevice(device)
+#             device = ttl.device.CreateDevice(device_id)
+#             ttl.device.SetDefaultDevice(device)
+#             return device
+#         else:
+#             raise
 
 
 def close(device):
-    try:
-        ttl.device.CloseDevice(device)
-    except:
-        pass
+    ttl.device.CloseDevice(device)
+    del DEVICES[device.id()]
 
 
 def _trim_list_to_max_rank(lst, max_rank):
@@ -467,11 +475,11 @@ def reshape(input_tensor: Tensor, shape) -> Tensor:
     except:
         logger.warning("Given reshape operation could not be run on the TT device. Defaulting to torch implementation")
         device = ttl_input_tensor.device()
-        tensor = copy_from_device(input_tensor)
+        tensor = from_device(input_tensor)
         tensor = to_torch(tensor)
         tensor = tensor.reshape(shape=shape)
         tensor = from_torch(tensor, input_tensor.dtype)
-        tensor = copy_to_device(tensor, device)
+        tensor = to_device(tensor, device)
         return tensor
 
 
@@ -483,11 +491,11 @@ def permute(input_tensor: Tensor, order) -> Tensor:
     except:
         logger.warning("Given permute operation could not be run on the TT device. Defaulting to torch implementation")
         device = ttl_input_tensor.device()
-        tensor = copy_from_device(input_tensor)
+        tensor = from_device(input_tensor)
         tensor = to_torch(tensor)
         tensor = tensor.permute(order)
         tensor = from_torch(tensor, input_tensor.dtype)
-        tensor = copy_to_device(tensor, device)
+        tensor = to_device(tensor, device)
         return tensor
 
 
@@ -495,11 +503,11 @@ def softmax(input_tensor: Tensor, dim) -> Tensor:
     import torch
 
     device = input_tensor._tensor.device()
-    tensor = copy_from_device(input_tensor)
+    tensor = from_device(input_tensor)
     tensor = to_torch(tensor)
     tensor = torch.softmax(tensor, dim=dim)
     tensor = from_torch(tensor, input_tensor.dtype)
-    tensor = copy_to_device(tensor, device)
+    tensor = to_device(tensor, device)
     return tensor
 
 

@@ -27,12 +27,17 @@ class Tensor:
         return self._tensor.layout()
 
     def __getitem__(self: "Tensor", slices) -> "Tensor":
-        device = self._tensor.device()
-        tensor = copy_from_device(self)
-        tensor = to_torch(tensor)
-        tensor = tensor[slices]
-        tensor = from_torch(tensor, dtype=self.dtype)
-        tensor = copy_to_device(tensor, device)
+        if self._tensor.storage_type() == ttl.tensor.StorageType.DEVICE:
+            device = self._tensor.device()
+            tensor = from_device(self)
+            tensor = to_torch(tensor)
+            tensor = tensor[slices]
+            tensor = from_torch(tensor, dtype=self.dtype)
+            tensor = to_device(tensor, device)
+        else:
+            tensor = to_torch(self)
+            tensor = tensor[slices]
+            tensor = from_torch(tensor, dtype=self.dtype)
         return tensor
 
     def __repr__(self: "Tensor") -> str:
@@ -41,7 +46,7 @@ class Tensor:
 
 def from_torch(
     tensor: "torch.Tensor",
-    dtype: Optional[DataType]=None,
+    dtype: Optional[DataType] = None,
 ) -> Tensor:
     return Tensor(ttl.tensor.Tensor(tensor, dtype))
 
@@ -58,11 +63,14 @@ def to_torch(tensor: Tensor) -> "torch.Tensor":
 dram_buffer_type = ttl.tensor.BufferType.DRAM
 l1_buffer_type = ttl.tensor.BufferType.L1
 
-def copy_to_device(tensor, device, buffer_type=dram_buffer_type):
-    return Tensor(tensor._tensor.to(device, ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, buffer_type)))
+
+def to_device(tensor, device, buffer_type=dram_buffer_type):
+    return Tensor(
+        tensor._tensor.to(device, ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, buffer_type))
+    )
 
 
-def copy_from_device(tensor):
+def from_device(tensor):
     return Tensor(tensor._tensor.cpu())
 
 
@@ -76,14 +84,12 @@ __all__ = [
     "float32",
     "bfloat16",
     "bfloat8_b",
-
     "dram_buffer_type",
     "l1_buffer_type",
-
     "Tensor",
     "from_tensor",
     "to_tensor",
-    "copy_to_device",
-    "copy_from_device",
+    "to_device",
+    "from_device",
     "free",
 ]

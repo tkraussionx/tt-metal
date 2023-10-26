@@ -120,13 +120,13 @@ def test_multi_head_attention(device, batch_size, sequence_size, num_heads, head
     torch_attention_mask[2:] = -1e9
 
     torch_query_weight = torch.rand((hidden_size, hidden_size), dtype=torch.bfloat16)
-    torch_query_bias =  torch.rand((hidden_size,), dtype=torch.bfloat16)
-    torch_key_weight =  torch.rand((hidden_size, hidden_size), dtype=torch.bfloat16)
-    torch_key_bias =  torch.rand((hidden_size,), dtype=torch.bfloat16)
-    torch_value_weight =  torch.rand((hidden_size, hidden_size), dtype=torch.bfloat16)
-    torch_value_bias =  torch.rand((hidden_size,), dtype=torch.bfloat16)
-    torch_output_weight =  torch.rand((hidden_size, hidden_size), dtype=torch.bfloat16)
-    torch_output_bias =  torch.rand((hidden_size,), dtype=torch.bfloat16)
+    torch_query_bias = torch.rand((hidden_size,), dtype=torch.bfloat16)
+    torch_key_weight = torch.rand((hidden_size, hidden_size), dtype=torch.bfloat16)
+    torch_key_bias = torch.rand((hidden_size,), dtype=torch.bfloat16)
+    torch_value_weight = torch.rand((hidden_size, hidden_size), dtype=torch.bfloat16)
+    torch_value_bias = torch.rand((hidden_size,), dtype=torch.bfloat16)
+    torch_output_weight = torch.rand((hidden_size, hidden_size), dtype=torch.bfloat16)
+    torch_output_bias = torch.rand((hidden_size,), dtype=torch.bfloat16)
 
     torch_output = pytorch_multi_head_attention(
         torch_hidden_states,
@@ -160,16 +160,16 @@ def test_multi_head_attention(device, batch_size, sequence_size, num_heads, head
     output_weight = ttnn.from_torch(torch_output_weight)
     output_bias = ttnn.from_torch(torch_output_bias)
 
-    hidden_states = ttnn.copy_to_device(hidden_states, device)
-    attention_mask = ttnn.copy_to_device(attention_mask, device)
-    query_weight = ttnn.copy_to_device(query_weight, device)
-    query_bias = ttnn.copy_to_device(query_bias, device, ttnn.l1_buffer_type)
-    key_weight = ttnn.copy_to_device(key_weight, device)
-    key_bias = ttnn.copy_to_device(key_bias, device, ttnn.l1_buffer_type)
-    value_weight = ttnn.copy_to_device(value_weight, device)
-    value_bias = ttnn.copy_to_device(value_bias, device, ttnn.l1_buffer_type)
-    output_weight = ttnn.copy_to_device(output_weight, device)
-    output_bias = ttnn.copy_to_device(output_bias, device, ttnn.l1_buffer_type)
+    hidden_states = ttnn.to_device(hidden_states, device)
+    attention_mask = ttnn.to_device(attention_mask, device)
+    query_weight = ttnn.to_device(query_weight, device)
+    query_bias = ttnn.to_device(query_bias, device, ttnn.l1_buffer_type)
+    key_weight = ttnn.to_device(key_weight, device)
+    key_bias = ttnn.to_device(key_bias, device, ttnn.l1_buffer_type)
+    value_weight = ttnn.to_device(value_weight, device)
+    value_bias = ttnn.to_device(value_bias, device, ttnn.l1_buffer_type)
+    output_weight = ttnn.to_device(output_weight, device)
+    output_bias = ttnn.to_device(output_bias, device, ttnn.l1_buffer_type)
 
     tt_output = multi_head_attention(
         hidden_states,
@@ -191,6 +191,6 @@ def test_multi_head_attention(device, batch_size, sequence_size, num_heads, head
         hidden_size,
     ], f"Expected output shape to be {batch_size, sequence_size, hidden_size}, got {tt_output.shape}"
 
-    tt_output = ttnn.copy_from_device(tt_output)
+    tt_output = ttnn.from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
     assert_with_pcc(torch_output, tt_output, 0.0)

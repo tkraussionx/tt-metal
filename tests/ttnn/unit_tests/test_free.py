@@ -16,7 +16,7 @@ def test_free(device, h, w):
         ttnn.free(input_tensor)
     assert "Cannot deallocate tensor with borrowed storage!" in str(exception.value)
 
-    input_tensor = ttnn.copy_to_device(input_tensor, device)
+    input_tensor = ttnn.to_device(input_tensor, device)
     output_tensor = input_tensor + input_tensor
 
     # Create a reference to the same storage by using reshape which will create a new flyweight
@@ -25,5 +25,5 @@ def test_free(device, h, w):
 
     ttnn.free(output_tensor)
     with pytest.raises(RuntimeError) as exception:
-        output_tensor_reference[:,:,:1]
+        output_tensor_reference[:, :, :1]
     assert "Buffer must be allocated on device!" in str(exception.value)
