@@ -1,8 +1,18 @@
+from typing import Optional, Tuple
+
 from loguru import logger
 
 import tt_lib as ttl
 
-from ttnn.tensor import Tensor, from_torch, to_torch, copy_to_device, copy_from_device
+from ttnn.tensor import (
+    Tensor,
+    from_torch,
+    to_torch,
+    copy_to_device,
+    copy_from_device,
+    dram_buffer_type,
+)
+
 
 MAX_RANK = 4
 
@@ -40,8 +50,17 @@ def _is_scalar(value):
 
 
 def _shape_is_broadcastable(input_shape_a, input_shape_b):
-    *batch_shape_a, height_a, width_a = input_shape_a
-    *batch_shape_b, height_b, width_b = input_shape_b
+
+
+    if len(input_shape_a) == 1:
+        batch_shape_a = []
+    else:
+        *batch_shape_a, _, _ = input_shape_a
+
+    if len(input_shape_b) == 1:
+        batch_shape_b = []
+    else:
+        *batch_shape_b, _, _ = input_shape_b
 
     # if width_a != height_b:
     #     return False
@@ -66,7 +85,7 @@ def _reshape_to_4D(tensor):
 # Math Operations
 
 
-def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
+def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor, output_buffer_type = dram_buffer_type, core_grid: Optional[Tuple[int, int]]=None) -> Tensor:
     """
     matmul(input_tensor_a, input_tensor_b) -> Tensor
 
@@ -133,6 +152,11 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
         torch.Size([10, 3, 5])
     """
 
+    input_shape_a = input_tensor_a.shape
+    input_shape_b = input_tensor_b.shape
+
+    output_memory_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, output_buffer_type)
+
     if not isinstance(input_tensor_a, Tensor):
         raise RuntimeError("Expected first argument to be a ttnn.Tensor")
     if not isinstance(input_tensor_b, Tensor):
@@ -141,26 +165,37 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
     if input_tensor_a._tensor.storage_type() != ttl.tensor.StorageType.DEVICE:
         raise RuntimeError("input_tensor_a must be on device!")
 
+    if input_tensor_b._tensor.storage_type() != ttl.tensor.StorageType.DEVICE:
+        raise RuntimeError("input_tensor_b must be on device!")
+
     # The idea is to make the shapes "possibly" broadcastable.
     if len(input_tensor_a.shape) > MAX_RANK:
         raise RuntimeError("There is currently no support for ranks greater than 4.")
 
-    input_shape_a = input_tensor_a.shape
-    input_shape_b = input_tensor_b.shape
-
     expected_rank = len(input_shape_a)
-    len_diff_a = MAX_RANK - len(input_shape_a)
-    input_shape_a = [1] * len_diff_a + input_shape_a
-    input_tensor_a = reshape(input_tensor_a, shape=input_shape_a)
 
     if len(input_shape_b) > MAX_RANK:
         raise RuntimeError(f"There is currently no support for ranks greater than {MAX_RANK}.")
-    len_diff_b = MAX_RANK - len(input_shape_b)
-    input_shape_b = [1] * len_diff_b + input_shape_b
-    input_tensor_b = reshape(input_tensor_b, shape=input_shape_b)
 
-    *_, height_a, width_a = input_shape_a
-    *rest_of_shape_b, height_b, width_b = input_shape_b
+    if len(input_shape_a) == 1:
+        batch_shape_a = []
+        height_a = 1
+        width_a, = input_shape_a
+    else:
+        *batch_shape_a, height_a, width_a = input_shape_a
+
+    if len(input_shape_b) == 1:
+        batch_shape_b = []
+        height_b, = input_shape_b
+        width_b = 1
+    else:
+        *batch_shape_b, height_b, width_b = input_shape_b
+
+    input_tensor_a = reshape(input_tensor_a, batch_shape_a + [height_a, width_a])
+    input_tensor_b = reshape(input_tensor_b, batch_shape_b + [height_b, width_b])
+
+    input_tensor_a = _reshape_to_4D(input_tensor_a)
+    input_tensor_b = _reshape_to_4D(input_tensor_b)
 
     # if height_a % 32 != 0 or width_a % 32 != 0:
     #     raise TypeError("The last two dimensions of the first tensor must be a multiple of 32")
@@ -169,7 +204,7 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
     #     raise TypeError("The last two dimensions of the second tensor must be a multiple of 32")
 
     out = None
-    if width_a != height_b and height_a != 1 and height_b != 1:
+    if width_a != height_b:
         raise RuntimeError("The width of the first tensor must be equal to the height of the second tensor")
 
     if height_b == 1 and width_b == 1:
@@ -179,12 +214,13 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
                 input_tensor_b._tensor,
                 ttl.tensor.BcastOpMath.MUL,
                 ttl.tensor.BcastOpDim.HW,
+                output_memory_config=output_memory_config,
             )
         )
     elif _shape_is_broadcastable(input_shape_a, input_shape_b):
-        if all(x == 1 for x in rest_of_shape_b):
+        if all(x == 1 for x in batch_shape_b):
             if width_a == height_b:
-                out = Tensor(ttl.tensor.matmul(input_tensor_a._tensor, input_tensor_b._tensor))
+                out = Tensor(ttl.tensor.matmul(input_tensor_a._tensor, input_tensor_b._tensor, output_mem_config=output_memory_config))
             elif height_a == 1 and height_b == 1:
                 # return a dot product
                 out = Tensor(
@@ -193,6 +229,7 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
                         input_tensor_b._tensor,
                         ttl.tensor.BcastOpMath.MUL,
                         ttl.tensor.BcastOpDim.H,
+                        output_mem_config=output_memory_config,
                     )
                 )
                 t = ttl.tensor.reduce(
@@ -200,6 +237,7 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
                     ttl.tensor.ReduceOpMath.SUM,
                     ttl.tensor.ReduceOpDim.W,
                     1.0,
+                    output_mem_config=output_memory_config,
                 )
                 out = Tensor(t)
                 expected_rank = 0
@@ -207,7 +245,7 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
             else:
                 raise RuntimeError("The width of the first tensor must be equal to the height of the second tensor")
         else:
-            out = Tensor(ttl.tensor.bmm(input_tensor_a._tensor, input_tensor_b._tensor))
+            out = Tensor(ttl.tensor.bmm(input_tensor_a._tensor, input_tensor_b._tensor, output_mem_config=output_memory_config))
     else:
         raise RuntimeError("These tensors cannot be broadcasted")
 
@@ -439,13 +477,19 @@ def reshape(input_tensor: Tensor, shape) -> Tensor:
 
 
 def permute(input_tensor: Tensor, order) -> Tensor:
+    ttl_input_tensor = input_tensor._tensor
+
     try:
         return Tensor(ttl.tensor.permute(input_tensor._tensor, order))
     except:
         logger.warning("Given permute operation could not be run on the TT device. Defaulting to torch implementation")
-        torch_tensor = to_torch(input_tensor)
-        torch_tensor = torch_tensor.permute(order)
-        return from_torch(torch_tensor, input_tensor.dtype)
+        device = ttl_input_tensor.device()
+        tensor = copy_from_device(input_tensor)
+        tensor = to_torch(tensor)
+        tensor = tensor.permute(order)
+        tensor = from_torch(tensor, input_tensor.dtype)
+        tensor = copy_to_device(tensor, device)
+        return tensor
 
 
 def softmax(input_tensor: Tensor, dim) -> Tensor:

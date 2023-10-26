@@ -25,7 +25,7 @@ def multi_head_attention(
     batch_size, sequence_size, hidden_size = hidden_states.shape
     num_heads = hidden_size // head_size
 
-    query = hidden_states @ query_weight
+    query = ttnn.matmul(hidden_states, query_weight, output_buffer_type=ttnn.l1_buffer_type, core_grid=(4, 4))
     query = query + query_bias
     query = ttnn.reshape(query, (batch_size, sequence_size, num_heads, head_size))
     query = ttnn.permute(query, (0, 2, 1, 3))
@@ -117,7 +117,7 @@ def test_multi_head_attention(device, batch_size, sequence_size, num_heads, head
     torch_hidden_states = torch.rand((batch_size, sequence_size, hidden_size), dtype=torch.bfloat16)
 
     torch_attention_mask = torch.zeros((sequence_size,), dtype=torch.bfloat16)
-    torch_attention_mask[:2] = -1e9
+    torch_attention_mask[2:] = -1e9
 
     torch_query_weight = torch.rand((hidden_size, hidden_size), dtype=torch.bfloat16)
     torch_query_bias =  torch.rand((hidden_size,), dtype=torch.bfloat16)

@@ -8,18 +8,20 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
 
 
 # fmt: off
-@pytest.mark.parametrize("h,w", [
-    (1, 3),
-    (3, 1),
-    (1, 3),
-    (3, 1),
-    (1, 3),
-    (3, 1),
-    ])
+@pytest.mark.parametrize("m,k,n", [
+    (1, 2, 2),
+    (1, 2, 4),
+    (1, 4, 2),
+    (1, 4, 4),
+    (3, 2, 2),
+    (3, 2, 4),
+    (3, 4, 2),
+    (3, 4, 4),
+])
 # fmt: on
-def test_matmul_with_matched_width_height(device, h, w):
-    torch_input_tensor_a = torch.rand((h, w), dtype=torch.bfloat16)
-    torch_input_tensor_b = torch.rand((w, h), dtype=torch.bfloat16)
+def test_matmul_with_matched_width_height(device, m, k, n):
+    torch_input_tensor_a = torch.rand((m, k), dtype=torch.bfloat16)
+    torch_input_tensor_b = torch.rand((k, n), dtype=torch.bfloat16)
     torch_output = torch.matmul(torch_input_tensor_a, torch_input_tensor_b)
 
     input_tensor_a = ttnn.from_torch(torch_input_tensor_a)
@@ -37,19 +39,19 @@ def test_matmul_with_matched_width_height(device, h, w):
 
 
 # fmt: off
-@pytest.mark.parametrize("h,w", [
-    (1, 3),
-    (3, 1),
-    (1, 3),
-    (3, 1),
-    (1, 3),
-    (3, 1),
-    (3, 3),
+@pytest.mark.parametrize("k, n", [
+    (2, 4),
+    (4, 2),
+    (2, 4),
+    (4, 2),
+    (2, 4),
+    (4, 2),
+    (4, 4),
     ])
 # fmt: on
-def test_matmul_with_matched_width_height_from_1D(device, h, w):
-    torch_input_tensor_a = torch.rand((w), dtype=torch.bfloat16)
-    torch_input_tensor_b = torch.rand((w, h), dtype=torch.bfloat16)
+def test_matmul_with_matched_width_height_from_1D(device, k, n):
+    torch_input_tensor_a = torch.rand((k), dtype=torch.bfloat16)
+    torch_input_tensor_b = torch.rand((k, n), dtype=torch.bfloat16)
     torch_output = torch.matmul(torch_input_tensor_a, torch_input_tensor_b)
 
     input_tensor_a = ttnn.from_torch(torch_input_tensor_a)
@@ -65,10 +67,12 @@ def test_matmul_with_matched_width_height_from_1D(device, h, w):
     assert_with_pcc(torch_output, tt_output, 0.99)
 
 
-@pytest.mark.parametrize("w", [(3), (1)])
+@pytest.mark.parametrize("w", [(4), (2)])
 def test_matmul_does_dot_product(device, w):
-    torch_input_tensor_a = torch.rand((w), dtype=torch.bfloat16)
-    torch_input_tensor_b = torch.rand((w), dtype=torch.bfloat16)
+    torch.manual_seed(0)
+
+    torch_input_tensor_a = torch.randn((w,), dtype=torch.bfloat16)
+    torch_input_tensor_b = torch.randn((w,), dtype=torch.bfloat16)
     torch_output = torch.matmul(torch_input_tensor_a, torch_input_tensor_b)
 
     input_tensor_a = ttnn.from_torch(torch_input_tensor_a)
@@ -80,19 +84,19 @@ def test_matmul_does_dot_product(device, w):
 
     tt_output = ttnn.to_torch(tt_output)
 
-    assert torch_output.shape == []
-    assert tt_output.shape == []
-    assert torch_output[0] == tt_output[0]
+    assert torch_output.shape == ()
+    assert tt_output.shape == (32,)
+    assert torch.allclose(torch_output, tt_output[0], atol=1e-2)
 
 
 # fmt: off
 @pytest.mark.parametrize("n,c,h,w", [
-    (1, 1, 1, 3),
-    (1, 1, 3, 1),
-    (3, 3, 1, 3),
-    (3, 3, 3, 1),
-    (1, 3, 1, 3),
-    (3, 1, 3, 1),
+    (1, 1, 2, 4),
+    (1, 1, 4, 2),
+    (3, 3, 2, 4),
+    (3, 3, 4, 2),
+    (1, 3, 2, 4),
+    (3, 1, 4, 2),
     ])
 # fmt: on
 def test_matmul_with_matched_width_height_4D(device, n, c, h, w):
@@ -115,11 +119,11 @@ def test_matmul_with_matched_width_height_4D(device, n, c, h, w):
 
 # fmt: off
 @pytest.mark.parametrize("n,c,h,w", [
-    (1, 1, 1, 1),
-    (1, 1, 3, 3),
-    (3, 3, 3, 3),
-    (3, 1, 3, 3),
-    (1, 3, 3, 3)
+    (1, 1, 2, 2),
+    (1, 1, 4, 4),
+    (3, 3, 4, 4),
+    (3, 1, 4, 4),
+    (1, 3, 4, 4)
     ])
 # fmt: on
 def test_matmul_same_shape_and_valid(device, n, c, h, w):

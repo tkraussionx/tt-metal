@@ -27,7 +27,7 @@ class Tensor:
         return self._tensor.layout()
 
     def __getitem__(self: "Tensor", slices) -> "Tensor":
-        device = self._tensor.device
+        device = self._tensor.device()
         tensor = copy_from_device(self)
         tensor = to_torch(tensor)
         tensor = tensor[slices]
