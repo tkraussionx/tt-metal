@@ -1130,3 +1130,17 @@ def complex_recip(x, *args, **kwargs):
 
     tt_cpu = x.recip().metal
     return tt_cpu
+
+
+
+def complex_abs(x, *args, **kwargs):
+    x = Complex(x, x.shape)
+
+    tt_cpu = x.abs()
+    return tt_cpu
+
+def complex_conj(x, *args, **kwargs):
+    x = Complex(x, x.shape)
+
+    tt_cpu = x.conj().metal
+    return tt_cpu

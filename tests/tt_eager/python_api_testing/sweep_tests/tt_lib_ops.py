@@ -2225,3 +2225,26 @@ def complex_recip(x, *args, device, dtype, layout, input_mem_config, output_mem_
     res = tt2torch_tensor(tt_res)
 
     return res
+
+
+@setup_host_and_device
+def complex_abs(x, *args, device, dtype, layout, input_mem_config, output_mem_config, **kwargs):
+    x = Complex(x, x.shape)
+    xtt = setup_tt_tensor(x.metal, device, layout[0], input_mem_config[0], dtype[0])
+
+    tt_res = ttl.tensor.complex_abs(xtt, output_mem_config)
+    res = tt2torch_tensor(tt_res)
+
+    return res
+
+
+
+@setup_host_and_device
+def complex_conj(x, *args, device, dtype, layout, input_mem_config, output_mem_config, **kwargs):
+    x = Complex(x, x.shape)
+    xtt = setup_tt_tensor(x.metal, device, layout[0], input_mem_config[0], dtype[0])
+
+    tt_res = ttl.tensor.conj(xtt, output_mem_config)
+    res = tt2torch_tensor(tt_res)
+
+    return res
