@@ -2196,9 +2196,6 @@ def complex_div(x, y, *args, device, dtype, layout, input_mem_config, output_mem
     return res
 
 
-
-
-
 @setup_host_and_device
 def complex_mul(x, y, *args, device, dtype, layout, input_mem_config, output_mem_config, **kwargs):
     print('here---')
@@ -2213,5 +2210,18 @@ def complex_mul(x, y, *args, device, dtype, layout, input_mem_config, output_mem
 
     tt_dev = ttl.tensor.complex_mul(xtt, ytt, output_mem_config)
     res = tt2torch_tensor(tt_dev)
+
+    return res
+
+
+
+@setup_host_and_device
+def complex_recip(x, *args, device, dtype, layout, input_mem_config, output_mem_config, **kwargs):
+    x = Complex(x, x.shape)
+    x = x.div(x * 0.5)
+    xtt = setup_tt_tensor(x.metal, device, layout[0], input_mem_config[0], dtype[0])
+
+    tt_res = ttl.tensor.complex_recip(xtt, output_mem_config)
+    res = tt2torch_tensor(tt_res)
 
     return res

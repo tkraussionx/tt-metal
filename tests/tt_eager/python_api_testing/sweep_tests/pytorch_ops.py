@@ -1122,3 +1122,11 @@ def complex_mul(x, y, *args, **kwargs):
     print('cpu')
     print(tt_cpu.shape)
     return tt_cpu
+
+
+def complex_recip(x, *args, **kwargs):
+    x = Complex(x, x.shape)
+    x = x.div(x * 0.5)
+
+    tt_cpu = x.recip().metal
+    return tt_cpu
