@@ -20,9 +20,9 @@ Welcome to TT-Metal documentation!
    tools/index
 
 .. toctree::
-   :caption: TT-Eager
+   :caption: TTNN
 
-   libraries/index
+   ttnn/ttnn.rst
 
 .. toctree::
    :caption: Models

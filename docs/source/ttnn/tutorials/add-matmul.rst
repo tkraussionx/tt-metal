@@ -3,4 +3,4 @@ Example Add/Matmul Operations
 
 .. toctree::
 
-   tutorials/002
+   ttnn_tutorials/002

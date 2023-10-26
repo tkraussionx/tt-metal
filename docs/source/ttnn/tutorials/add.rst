@@ -3,4 +3,4 @@ Example Add Operation
 
 .. toctree::
 
-   tutorials/001
+   ttnn_tutorials/001

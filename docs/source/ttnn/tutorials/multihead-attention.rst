@@ -3,4 +3,4 @@ Multi-Head Attention
 
 .. toctree::
 
-   tutorials/003
+   ttnn_tutorials/003

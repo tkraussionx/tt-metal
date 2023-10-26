@@ -50,8 +50,6 @@ def _is_scalar(value):
 
 
 def _shape_is_broadcastable(input_shape_a, input_shape_b):
-
-
     if len(input_shape_a) == 1:
         batch_shape_a = []
     else:
@@ -85,7 +83,12 @@ def _reshape_to_4D(tensor):
 # Math Operations
 
 
-def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor, output_buffer_type = dram_buffer_type, core_grid: Optional[Tuple[int, int]]=None) -> Tensor:
+def matmul(
+    input_tensor_a: Tensor,
+    input_tensor_b: Tensor,
+    output_buffer_type=dram_buffer_type,
+    core_grid: Optional[Tuple[int, int]] = None,
+) -> Tensor:
     """
     matmul(input_tensor_a, input_tensor_b) -> Tensor
 
@@ -180,13 +183,13 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor, output_buffer_type = 
     if len(input_shape_a) == 1:
         batch_shape_a = []
         height_a = 1
-        width_a, = input_shape_a
+        (width_a,) = input_shape_a
     else:
         *batch_shape_a, height_a, width_a = input_shape_a
 
     if len(input_shape_b) == 1:
         batch_shape_b = []
-        height_b, = input_shape_b
+        (height_b,) = input_shape_b
         width_b = 1
     else:
         *batch_shape_b, height_b, width_b = input_shape_b
@@ -207,45 +210,41 @@ def matmul(input_tensor_a: Tensor, input_tensor_b: Tensor, output_buffer_type = 
     if width_a != height_b:
         raise RuntimeError("The width of the first tensor must be equal to the height of the second tensor")
 
-    if height_b == 1 and width_b == 1:
+    if height_a == 1 and width_b == 1:  # dot product
+        input_tensor_b = reshape(input_tensor_b, input_tensor_b.shape[:-2] + [width_b, height_b])
+        # return a dot product
         out = Tensor(
             ttl.tensor.bcast(
                 input_tensor_a._tensor,
                 input_tensor_b._tensor,
                 ttl.tensor.BcastOpMath.MUL,
-                ttl.tensor.BcastOpDim.HW,
-                output_memory_config=output_memory_config,
+                ttl.tensor.BcastOpDim.H,
+                output_mem_config=output_memory_config,
             )
         )
+        t = ttl.tensor.reduce(
+            out._tensor,
+            ttl.tensor.ReduceOpMath.SUM,
+            ttl.tensor.ReduceOpDim.W,
+            1.0,
+            output_mem_config=output_memory_config,
+        )
+        out = Tensor(t)
+        expected_rank = 0
     elif _shape_is_broadcastable(input_shape_a, input_shape_b):
         if all(x == 1 for x in batch_shape_b):
             if width_a == height_b:
-                out = Tensor(ttl.tensor.matmul(input_tensor_a._tensor, input_tensor_b._tensor, output_mem_config=output_memory_config))
-            elif height_a == 1 and height_b == 1:
-                # return a dot product
                 out = Tensor(
-                    ttl.tensor.bcast(
-                        input_tensor_a._tensor,
-                        input_tensor_b._tensor,
-                        ttl.tensor.BcastOpMath.MUL,
-                        ttl.tensor.BcastOpDim.H,
-                        output_mem_config=output_memory_config,
+                    ttl.tensor.matmul(
+                        input_tensor_a._tensor, input_tensor_b._tensor, output_mem_config=output_memory_config
                     )
                 )
-                t = ttl.tensor.reduce(
-                    out._tensor,
-                    ttl.tensor.ReduceOpMath.SUM,
-                    ttl.tensor.ReduceOpDim.W,
-                    1.0,
-                    output_mem_config=output_memory_config,
-                )
-                out = Tensor(t)
-                expected_rank = 0
-
             else:
                 raise RuntimeError("The width of the first tensor must be equal to the height of the second tensor")
         else:
-            out = Tensor(ttl.tensor.bmm(input_tensor_a._tensor, input_tensor_b._tensor, output_mem_config=output_memory_config))
+            out = Tensor(
+                ttl.tensor.bmm(input_tensor_a._tensor, input_tensor_b._tensor, output_mem_config=output_memory_config)
+            )
     else:
         raise RuntimeError("These tensors cannot be broadcasted")
 
@@ -309,7 +308,7 @@ def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
 
     if len(input_shape_b) == 1:
         height_b = 1
-        width_b, = input_shape_b
+        (width_b,) = input_shape_b
     else:
         *_, height_b, width_b = input_shape_b
 
