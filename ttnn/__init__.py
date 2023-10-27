@@ -7,11 +7,15 @@ from ttnn.tensor import (
     DRAM_MEMORY_CONFIG,
     L1_MEMORY_CONFIG,
 
+    ROW_MAJOR_LAYOUT,
+    TILE_LAYOUT,
+
     Tensor,
     from_torch,
     to_torch,
     to_device,
     from_device,
+    to_layout,
     free,
 )
 

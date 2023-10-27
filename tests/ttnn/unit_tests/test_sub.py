@@ -18,6 +18,7 @@ def test_sub_scalar(device, s, h, w):
     input_tensor = ttnn.to_device(input_tensor, device)
 
     output_tensor = input_tensor - s
+    output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
     output_tensor = ttnn.from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor)
 
@@ -60,6 +61,7 @@ def test_sub(device, h, w):
     a = ttnn.to_device(a, device)
     b = ttnn.to_device(b, device)
     tt_output = ttnn.sub(a, b)
+    tt_output = ttnn.to_layout(tt_output, ttnn.ROW_MAJOR_LAYOUT)
     tt_output = ttnn.from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
 
@@ -81,6 +83,7 @@ def test_sub_4D(device, n, c, h, w):
     b = ttnn.to_device(b, device)
 
     tt_output = ttnn.sub(a, b)
+    tt_output = ttnn.to_layout(tt_output, ttnn.ROW_MAJOR_LAYOUT)
     tt_output = ttnn.from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
 

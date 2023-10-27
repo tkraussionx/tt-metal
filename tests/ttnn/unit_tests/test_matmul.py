@@ -1,5 +1,7 @@
 import pytest
 
+import time
+
 import torch
 
 import ttnn
@@ -171,3 +173,70 @@ def test_matmul_same_shape_but_invalid(device, input_a, input_b):
     with pytest.raises(RuntimeError) as exception:
         ttnn.matmul(input_tensor_a, input_tensor_b)
     assert "The width of the first tensor must be equal to the height of the second tensor" in str(exception.value)
+
+
+def test_tutorial_matmul(device):
+
+    torch.manual_seed(0)
+
+    h = 1024
+    w = 1024
+
+    torch_a = torch.randn((1, 1, h, w), dtype=torch.bfloat16)
+    torch_b = torch.randn((1, 1, w, h), dtype=torch.bfloat16)
+
+    a = ttnn.from_torch(torch_a)
+    b = ttnn.from_torch(torch_b)
+
+    a = ttnn.to_device(a, device)
+    b = ttnn.to_device(b, device)
+
+    output = a @ b
+
+    output_row = output[:1]
+
+def test_tutorial_matmul_with_tilized_inputs(device):
+
+    torch.manual_seed(0)
+
+    h = 1024
+    w = 1024
+
+    torch_a = torch.randn((1, 1, h, w), dtype=torch.bfloat16)
+    torch_b = torch.randn((1, 1, w, h), dtype=torch.bfloat16)
+
+    a = ttnn.from_torch(torch_a)
+    b = ttnn.from_torch(torch_b)
+
+    a = ttnn.to_device(a, device)
+    b = ttnn.to_device(b, device)
+
+    a = ttnn.to_layout(a, ttnn.TILE_LAYOUT)
+    b = ttnn.to_layout(b, ttnn.TILE_LAYOUT)
+
+    output = a @ b
+
+    output_row = output[:1]
+
+def test_tutorial_matmul_with_tilized_inputs_in_l1_memory(device):
+
+    torch.manual_seed(0)
+
+    h = 1024
+    w = 1024
+
+    torch_a = torch.randn((1, 1, h, w), dtype=torch.bfloat16)
+    torch_b = torch.randn((1, 1, w, h), dtype=torch.bfloat16)
+
+    a = ttnn.from_torch(torch_a)
+    b = ttnn.from_torch(torch_b)
+
+    a = ttnn.to_device(a, device, memory_config=ttnn.L1_MEMORY_CONFIG)
+    b = ttnn.to_device(b, device, memory_config=ttnn.L1_MEMORY_CONFIG)
+
+    a = ttnn.to_layout(a, ttnn.TILE_LAYOUT)
+    b = ttnn.to_layout(b, ttnn.TILE_LAYOUT)
+
+    output = ttnn.matmul(a, b, memory_config=ttnn.L1_MEMORY_CONFIG)
+
+    output_row = output[:1]

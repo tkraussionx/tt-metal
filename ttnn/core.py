@@ -10,6 +10,8 @@ from ttnn.tensor import (
     to_torch,
     to_device,
     from_device,
+    to_layout,
+    ROW_MAJOR_LAYOUT,
     DRAM_MEMORY_CONFIG,
 )
 
@@ -65,6 +67,7 @@ def _shape_is_broadcastable(input_shape_a, input_shape_b):
     return all(x == y or (x == 1 and y != 1) or (x != 1 and y == 1) for x, y in zip(batch_shape_a, batch_shape_b))
 
 
+# TODO: remove this once underlying C++ code can handle non-4D shapes
 def _reshape_to_4D(tensor):
     if len(tensor.shape) > 4:
         raise RuntimeError("Tensor cannot have more than 4 dimensions!")
@@ -481,7 +484,9 @@ def reshape(input_tensor: Tensor, shape) -> Tensor:
     except:
         logger.warning("Given reshape operation could not be run on the TT device. Defaulting to torch implementation")
         device = ttl_input_tensor.device()
-        tensor = from_device(input_tensor)
+
+        tensor = to_layout(input_tensor, ROW_MAJOR_LAYOUT)
+        tensor = from_device(tensor)
         tensor = to_torch(tensor)
         tensor = tensor.reshape(shape=shape)
         tensor = from_torch(tensor, input_tensor.dtype)
@@ -509,7 +514,8 @@ def softmax(input_tensor: Tensor, dim) -> Tensor:
     import torch
 
     device = input_tensor._tensor.device()
-    tensor = from_device(input_tensor)
+    tensor = to_layout(input_tensor, ROW_MAJOR_LAYOUT)
+    tensor = from_device(tensor)
     tensor = to_torch(tensor)
     tensor = torch.softmax(tensor, dim=dim)
     tensor = from_torch(tensor, input_tensor.dtype)

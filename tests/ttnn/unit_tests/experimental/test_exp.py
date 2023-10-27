@@ -12,13 +12,13 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
 def test(device, h, w):
     torch.manual_seed(0)
 
-    torch_activations = torch.rand((1, 1, h, w), dtype=torch.bfloat16)
-    torch_output = torch.exp(torch_activations)
+    torch_input_tensor = torch.rand((1, 1, h, w), dtype=torch.bfloat16)
+    torch_output_tensor = torch.exp(torch_input_tensor)
 
-    activations = ttnn.from_torch(torch_activations)
-    tt_output = ttnn.experimental.exp(activations)
-    tt_output = ttnn.from_device(tt_output)
-    tt_output = ttnn.to_torch(tt_output)
+    input_tensor = ttnn.from_torch(torch_input_tensor)
+    output_tensor = ttnn.experimental.exp(input_tensor)
+    output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
+    output_tensor = ttnn.from_device(output_tensor)
+    output_tensor = ttnn.to_torch(output_tensor)
 
-    assert_with_pcc(torch_output, tt_output, 0.9998)
-    # assert torch.allclose(torch_output, tt_output, atol=1e-1, rtol=1e-2)
+    assert_with_pcc(torch_output_tensor, output_tensor, 0.9998)

@@ -33,6 +33,7 @@ def test_add_scalar(device, s, h, w):
     input_tensor = ttnn.from_torch(torch_input_tensor)
     input_tensor = ttnn.to_device(input_tensor, device)
     output_tensor = input_tensor + s
+    output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
     output_tensor = ttnn.from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor)
 
@@ -50,6 +51,7 @@ def test_add_scalar_and_alpha(device, alpha, scalar_input_tensor_b, h, w):
     input_tensor = ttnn.from_torch(torch_input_tensor)
     input_tensor = ttnn.to_device(input_tensor, device)
     output_tensor = ttnn.add(input_tensor, scalar_input_tensor_b, alpha=alpha)
+    output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
     output_tensor = ttnn.from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor)
 
@@ -68,6 +70,7 @@ def test_add(device, h, w):
     b = ttnn.from_torch(torch_b)
     b = ttnn.to_device(b, device)
     tt_output = ttnn.add(a, b)
+    tt_output = ttnn.to_layout(tt_output, ttnn.ROW_MAJOR_LAYOUT)
     tt_output = ttnn.from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
 
@@ -88,6 +91,7 @@ def test_add_4D(device, n, c, h, w):
     b = ttnn.from_torch(torch_b)
     b = ttnn.to_device(b, device)
     tt_output = ttnn.add(a, b)
+    tt_output = ttnn.to_layout(tt_output, ttnn.ROW_MAJOR_LAYOUT)
     tt_output = ttnn.from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
 

@@ -10,6 +10,18 @@ bfloat16 = DataType.BFLOAT16
 bfloat8_b = DataType.BFLOAT8_B
 
 
+BufferType = ttl.tensor.BufferType
+TensorMemoryLayout = ttl.tensor.TensorMemoryLayout
+MemoryConfig = ttl.tensor.MemoryConfig
+DRAM_MEMORY_CONFIG = MemoryConfig(TensorMemoryLayout.INTERLEAVED, BufferType.DRAM)
+L1_MEMORY_CONFIG = MemoryConfig(TensorMemoryLayout.INTERLEAVED, BufferType.L1)
+
+
+Layout = ttl.tensor.Layout
+ROW_MAJOR_LAYOUT = Layout.ROW_MAJOR
+TILE_LAYOUT = Layout.TILE
+
+
 class Tensor:
     def __init__(self: "Tensor", ttl_tensor: ttl.tensor.Tensor):
         self._tensor: ttl.tensor.Tensor = ttl_tensor
@@ -29,7 +41,10 @@ class Tensor:
     def __getitem__(self: "Tensor", slices) -> "Tensor":
         if self._tensor.storage_type() == ttl.tensor.StorageType.DEVICE:
             device = self._tensor.device()
-            tensor = from_device(self)
+
+            tensor = self
+            tensor = to_layout(tensor, ROW_MAJOR_LAYOUT)
+            tensor = from_device(tensor)
             tensor = to_torch(tensor)
             tensor = tensor[slices]
             tensor = from_torch(tensor, dtype=self.dtype)
@@ -52,33 +67,45 @@ def from_torch(
 
 
 def to_torch(tensor: Tensor) -> "torch.Tensor":
+
     ttl_tensor = tensor._tensor
+
+    if ttl_tensor.layout() != ROW_MAJOR_LAYOUT:
+        raise RuntimeError("ttnn.Tensor has to be in ROW_MAJOR Layout to be convered to torch.Tensor")
+
     if ttl_tensor.storage_type() == ttl.tensor.StorageType.DEVICE:
-        raise ValueError("Tensor cannot be on device when converting to torch!")
-    if ttl_tensor.layout() != ttl.tensor.Layout.ROW_MAJOR:
-        ttl_tensor = ttl_tensor.to(ttl.tensor.Layout.ROW_MAJOR)
+        raise RuntimeError("ttnn.Tensor cannot be on device when converting to torch!")
+
+    if ttl_tensor.layout() != ROW_MAJOR_LAYOUT:
+        ttl_tensor = ttl_tensor.to(ROW_MAJOR_LAYOUT)
     return ttl_tensor.to_torch()
 
 
-BufferType = ttl.tensor.BufferType
-TensorMemoryLayout = ttl.tensor.TensorMemoryLayout
-MemoryConfig = ttl.tensor.MemoryConfig
-DRAM_MEMORY_CONFIG = MemoryConfig(TensorMemoryLayout.INTERLEAVED, BufferType.DRAM)
-L1_MEMORY_CONFIG = MemoryConfig(TensorMemoryLayout.INTERLEAVED, BufferType.L1)
-
-
 def to_device(tensor, device, *, memory_config: MemoryConfig = DRAM_MEMORY_CONFIG):
+    ttl_tensor = tensor._tensor
     return Tensor(
-        tensor._tensor.to(device, memory_config)
+        ttl_tensor.to(device, memory_config)
     )
 
 
 def from_device(tensor):
-    return Tensor(tensor._tensor.cpu())
+    ttl_tensor = tensor._tensor
+    return Tensor(ttl_tensor.cpu())
 
 
-def free(self: "Tensor") -> str:
-    self._tensor.deallocate(force=True)
+def to_layout(tensor, layout: Layout):
+    ttl_tensor = tensor._tensor
+    if ttl_tensor.layout() == layout:
+        return tensor
+    elif layout == ROW_MAJOR_LAYOUT:
+        ttl_tensor = ttl.tensor.untilize(ttl_tensor)
+    elif layout == TILE_LAYOUT:
+        ttl_tensor = ttl.tensor.tilize(ttl_tensor, output_mem_config=ttl_tensor.memory_config())
+    return Tensor(ttl_tensor)
+
+
+def free(tensor: Tensor) -> str:
+    tensor._tensor.deallocate(force=True)
 
 
 __all__ = [
@@ -91,10 +118,14 @@ __all__ = [
     "DRAM_MEMORY_CONFIG",
     "L1_MEMORY_CONFIG",
 
+    "ROW_MAJOR_LAYOUT",
+    "TILE_LAYOUT",
+
     "Tensor",
     "from_tensor",
     "to_tensor",
     "to_device",
     "from_device",
+    "to_layout",
     "free",
 ]

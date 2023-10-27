@@ -25,5 +25,5 @@ def test_free(device, h, w):
 
     ttnn.free(output_tensor)
     with pytest.raises(RuntimeError) as exception:
-        output_tensor_reference[:, :, :1]
+        print(output_tensor_reference)
     assert "Buffer must be allocated on device!" in str(exception.value)
