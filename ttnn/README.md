@@ -38,6 +38,13 @@ followed the instructions for [installing and building the software](https://git
 #### Frequently asked questions
 * What if my device hangs?
     * Try resetting the board on the command line with: `tt-smi -tr all`
+* What types are supported on device?
+    * We currently support ttnn.bfloat16, ttnn.bfloat8 and ttnn.uint32.
+* What shapes are supported on device?
+    * The last dimension of the shape multiplied by the number of bytes of the sizeof the dataype must be a multiple of four.  For example, ttnn.bloat16 would need to have the last dimension be even.
+    * TODO : address ttnn.bfloat8_b and how mantissa is stored per tile
+    * TODO : address converting from int in data type for torch tensors to ttnn.uint32
+    * TODO : mention how ttnn.blfloat32 is not supported on device
 * Is slicing available?
     * Slicing is supported.  At the moment this feature falls back to using PyTorch slicing.
     * Example:
