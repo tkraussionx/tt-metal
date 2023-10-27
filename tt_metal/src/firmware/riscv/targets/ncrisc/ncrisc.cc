@@ -61,6 +61,7 @@ int main(int argc, char *argv[]) {
       DEBUG_STATUS('D');
 
       kernel_profiler::mark_fw_end();
+      kernel_profiler::finish();
   }
 
   return 0;

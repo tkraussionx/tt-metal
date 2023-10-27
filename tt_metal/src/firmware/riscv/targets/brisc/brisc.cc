@@ -60,55 +60,6 @@ namespace kernel_profiler {
 uint32_t wIndex __attribute__((used));
 }
 
-inline __attribute__((always_inline)) void finish_BR_profiler()
-{
-#if defined(PROFILE_KERNEL) && defined(COMPILE_FOR_BRISC)
-    volatile uint32_t *profiler_control_buffer = reinterpret_cast<uint32_t*>(PROFILER_L1_BUFFER_CONTROL);
-
-    if (profiler_control_buffer[kernel_profiler::DRAM_BUFFER_NUM] < PROFILER_DRAM_BUFFER_COUNT)
-    {
-        const uint32_t NOC_ID_MASK = (1 << NOC_ADDR_NODE_ID_BITS) - 1;
-        uint32_t noc_id = noc_local_node_id() & 0xFFF;
-        uint32_t dram_noc_x = noc_id & NOC_ID_MASK;
-        uint32_t dram_noc_y = (noc_id >> NOC_ADDR_NODE_ID_BITS) & NOC_ID_MASK;
-
-        uint32_t core_flat_id = get_flat_id(dram_noc_x, dram_noc_y);
-
-        uint32_t huge_page_address =
-            PROFILER_HUGE_PAGE_ADDRESS +
-            (core_flat_id + profiler_control_buffer[kernel_profiler::DRAM_BUFFER_NUM] * 120) * PROFILER_RISC_COUNT * PROFILER_L1_BUFFER_SIZE;
-        uint64_t pcie_buffer_dst_noc_addr = get_noc_addr(0, 4, huge_page_address);
-        //volatile uint32_t *debug_buffer = reinterpret_cast<uint32_t*>(PROFILER_L1_BUFFER_BR);
-        //debug_buffer[0] = dram_noc_x;
-        //debug_buffer[1] = dram_noc_y;
-        //debug_buffer[2] = core_flat_id;
-        //debug_buffer[3] = profiler_control_buffer[kernel_profiler::DRAM_BUFFER_NUM];
-
-
-        //kernel_profiler::mark_kernel_start();
-        //noc_async_write(PROFILER_L1_BUFFER_BR, pcie_buffer_dst_noc_addr, PROFILER_RISC_COUNT * PROFILER_L1_BUFFER_SIZE);
-        //noc_async_write_barrier();
-        //kernel_profiler::mark_kernel_end();
-
-        //for (int j = 0 ; j < 3500; j++)
-        //{
-            //asm("nop");
-        //}
-        kernel_profiler::mark_fw_end();
-
-        noc_async_write(PROFILER_L1_BUFFER_BR, pcie_buffer_dst_noc_addr, PROFILER_RISC_COUNT * PROFILER_L1_BUFFER_SIZE);
-        noc_async_write_barrier();
-
-        profiler_control_buffer[kernel_profiler::DRAM_BUFFER_NUM]++;
-    }
-    else
-    {
-        profiler_control_buffer[kernel_profiler::DRAM_BUFFER_NUM] = PROFILER_DRAM_BUFFER_COUNT+1;
-    }
-
-#endif //PROFILE_KERNEL
-}
-
 void enable_power_management() {
     // Mask and Hyst taken from tb_tensix math_tests
     uint32_t pm_mask = 0xFFFF;
@@ -341,8 +292,6 @@ int main() {
 
     mailboxes->launch.run = RUN_MSG_DONE;
 
-    // Cleanup profiler buffer incase we never get the go message
-    kernel_profiler::init_profiler();
     while (1) {
 
         init_sync_registers();
@@ -355,6 +304,8 @@ int main() {
 
         kernel_profiler::init_profiler();
         kernel_profiler::mark_fw_start();
+
+        kernel_profiler::mark_fw_end();
 
         // Invalidate the i$ now the kernels have loaded and before running
         volatile tt_reg_ptr uint32_t* cfg_regs = core.cfg_regs_base(0);
@@ -382,8 +333,7 @@ int main() {
             uint64_t dispatch_addr = NOC_XY_ADDR(NOC_X(DISPATCH_CORE_X), NOC_Y(DISPATCH_CORE_Y), DISPATCH_MESSAGE_ADDR);
             noc_fast_atomic_increment(noc_index, NCRISC_AT_CMD_BUF, dispatch_addr, 1, 31 /*wrap*/, false /*linked*/);
         }
-        kernel_profiler::mark_fw_end();
-        finish_BR_profiler();
+        kernel_profiler::send_profiler_data_to_host();
     }
 
     return 0;

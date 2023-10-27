@@ -40,7 +40,7 @@ void InitDeviceProfiler(Device *device){
         //}
     //}
 
-    vector<uint32_t> huge_zero_buffer(PROFILER_FULL_BUFFER_SIZE / sizeof(uint32_t), 2);
+    vector<uint32_t> huge_zero_buffer(PROFILER_HOST_BUFFER_SIZE / sizeof(uint32_t), 2);
     tt::Cluster::instance().write_sysmem_vec(huge_zero_buffer, PROFILER_HUGE_PAGE_ADDRESS, 0);
 
 #endif

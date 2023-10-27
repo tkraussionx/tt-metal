@@ -89,93 +89,74 @@ void Profiler::readRiscProfilerResults(
 
     ZoneScoped;
     uint32_t core_flat_id = get_flat_id(worker_core.x, worker_core.y);
+    if (core_flat_id)
+        return;
     uint32_t startIndex = core_flat_id * PROFILER_RISC_COUNT * PROFILER_L1_VECTOR_SIZE;
 
     vector<std::uint32_t> control_buffer;
 
     control_buffer = tt::llrt::read_hex_vec_from_core(
+        device_id,
+        worker_core,
+        PROFILER_L1_BUFFER_CONTROL,
+        PROFILER_L1_CONTROL_BUFFER_SIZE);
+
+
+#define DEBUG_PRINT_L1
+#ifdef DEBUG_PRINT_L1
+    vector<std::uint32_t> profile_buffer_l1;
+
+    profile_buffer_l1 = tt::llrt::read_hex_vec_from_core(
             device_id,
             worker_core,
-            PROFILER_L1_BUFFER_CONTROL,
-            PROFILER_L1_CONTROL_BUFFER_SIZE);
+            PROFILER_L1_BUFFER_BR,
+            PROFILER_L1_BUFFER_SIZE);
 
-    uint32_t bufferCount = control_buffer[kernel_profiler::DRAM_BUFFER_NUM];
-
-    if (bufferCount > PROFILER_DRAM_BUFFER_COUNT)
+    std::cout << worker_core.x << "," << worker_core.y <<  "," << core_flat_id << "," << startIndex <<  std::endl ;
+    for (int i= 0; i < 6; i ++)
     {
-        bufferCount = PROFILER_DRAM_BUFFER_COUNT;
-        std::cout << "DRAM Buffer for " << worker_core.x << "," << worker_core.y << " is full" << std::endl;
+        std::cout << profile_buffer_l1[i] << ",";
     }
-
-    if (bufferCount > 0)
+    std::cout <<  std::endl;
+    for (int i= 0; i < 6; i ++)
     {
-//#define DEBUG_PRINT_L1
-#ifdef DEBUG_PRINT_L1
-        vector<std::uint32_t> profile_buffer_l1;
-
-        profile_buffer_l1 = tt::llrt::read_hex_vec_from_core(
-                device_id,
-                worker_core,
-                PROFILER_L1_BUFFER_BR,
-                PROFILER_L1_BUFFER_SIZE * PROFILER_RISC_COUNT);
-
-        std::cout << worker_core.x << "," << worker_core.y <<  "," << core_flat_id << "," << startIndex <<  std::endl ;
-        for (int i= 0; i < 6; i ++)
-        {
-            std::cout << profile_buffer_l1[i] << ",";
-        }
-        std::cout <<  std::endl;
-        for (int i= 0; i < 6; i ++)
-        {
-            std::cout << profile_buffer[startIndex + i] << ",";
-        }
-        std::cout <<  std::endl;
-        std::cout <<  std::endl;
+        std::cout << profile_buffer[startIndex + i] << ",";
+    }
+    std::cout <<  std::endl;
+    std::cout << "Control Buffer :" << control_buffer [0] << "," << control_buffer [5] << "," << std::endl;
 #endif
-    dumpDeviceResultToFile(
-            device_id,
-            worker_core.x,
-            worker_core.y,
-            0,
-            (uint64_t(control_buffer[kernel_profiler::FW_RESET_H]) << 32) | control_buffer[kernel_profiler::FW_RESET_L],
-            0);
 
-    }
     for (int riscNum = 0; riscNum < PROFILER_RISC_COUNT; riscNum++) {
-        for (int bufferNum = 0; bufferNum < bufferCount; bufferNum++){
 
-            uint32_t buffer_shift = bufferNum * PROFILER_L1_VECTOR_SIZE * PROFILER_RISC_COUNT * 120 + startIndex;
-            uint32_t time_L_pre = 0;
-            uint32_t time_H_index = buffer_shift + riscNum * PROFILER_L1_VECTOR_SIZE + kernel_profiler::SYNC_VAL_H;
-            uint32_t time_H = profile_buffer[time_H_index];
-
-            for (int marker = kernel_profiler::SYNC_VAL_L; marker <= kernel_profiler::FW_END; marker++)
+        uint32_t bufferEndIndex = control_buffer[riscNum];
+        if (bufferEndIndex > 0)
+        {
+            uint32_t bufferRiscShift = riscNum * PROFILER_L1_VECTOR_SIZE + startIndex;
+            std::cout << "Buffer end index: " << riscNum << " on core " << worker_core.x << "," << worker_core.y << "," << bufferEndIndex <<  "," << bufferRiscShift << std::endl;
+            if (bufferEndIndex > PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC)
             {
-                uint32_t time_L_index = buffer_shift + riscNum * PROFILER_L1_VECTOR_SIZE + marker;
-                uint32_t time_L = profile_buffer[time_L_index];
+                bufferEndIndex = PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC;
+            }
 
-                // Was there an overflow
-                if (time_L_pre > time_L)
-                {
-                    time_H ++;
-                }
-                time_L_pre = time_L;
+            for (int index = bufferRiscShift; index < (bufferRiscShift + bufferEndIndex); index += 2)
+            {
+                uint32_t marker = (profile_buffer[index] & 0xFFFF0000) >> 16;
+                uint32_t time_H = profile_buffer[index] & 0x0000FFFF;
+                uint32_t time_L = profile_buffer[index + 1];
 
-                if (marker > kernel_profiler::SYNC_VAL_L)
-                {
-                    dumpDeviceResultToFile(
-                            device_id,
-                            worker_core.x,
-                            worker_core.y,
-                            riscNum,
-                            (uint64_t(time_H) << 32) | time_L,
-                            marker - kernel_profiler::SYNC_VAL_L);
-                }
+                dumpDeviceResultToFile(
+                        device_id,
+                        worker_core.x,
+                        worker_core.y,
+                        riscNum,
+                        (uint64_t(time_H) << 32) | time_L,
+                        marker);
             }
         }
+            std::cout <<  std::endl;
     }
 
-    std::vector<uint32_t> zero_buffer(kernel_profiler::DRAM_BUFFER_NUM + 1, 0);
+    std::vector<uint32_t> zero_buffer(kernel_profiler::CONTROL_BUFFER_SIZE, 0);
     tt::llrt::write_hex_vec_to_core(
             device_id,
             worker_core,
@@ -311,9 +292,9 @@ void Profiler::dumpDeviceResults (
 #if defined(PROFILER)
     ZoneScoped;
     device_core_frequency = tt::Cluster::instance().get_device_aiclk(device_id);
-    std::vector<uint32_t> profile_buffer(PROFILER_FULL_BUFFER_SIZE/sizeof(uint32_t), 0);
+    std::vector<uint32_t> profile_buffer(PROFILER_HOST_BUFFER_SIZE/sizeof(uint32_t), 0);
 
-    tt::Cluster::instance().read_sysmem_vec(profile_buffer, PROFILER_HUGE_PAGE_ADDRESS, PROFILER_FULL_BUFFER_SIZE, 0);
+    tt::Cluster::instance().read_sysmem_vec(profile_buffer, PROFILER_HUGE_PAGE_ADDRESS, PROFILER_HOST_BUFFER_SIZE, 0);
     tt::Cluster::instance().write_sysmem_vec(profile_buffer, PROFILER_HUGE_PAGE_ADDRESS, 0);
 
     for (const auto &worker_core : worker_cores) {

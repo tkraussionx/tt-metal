@@ -90,5 +90,6 @@ int main(int argc, char *argv[])
         *trisc_run = RUN_SYNC_MSG_DONE;
 
         kernel_profiler::mark_fw_end();
+        kernel_profiler::finish();
     }
 }
