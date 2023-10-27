@@ -1129,7 +1129,9 @@ void noc_async_write_multicast_v2(
     uint32_t src_addr = src_local_l1_addr;
     uint64_t dest_addr = dst_noc_addr_multicast;
     uint32_t len_bytes = size;
+    // uint32_t cmd_buf = NCRISC_WR_REG_CMD_BUF;
     uint32_t cmd_buf = NCRISC_WR_REG_CMD_BUF;
+    // uint32_t cmd_buf = 3;
 
     uint32_t noc_cmd_field =
       NOC_CMD_CPY | NOC_CMD_WR |

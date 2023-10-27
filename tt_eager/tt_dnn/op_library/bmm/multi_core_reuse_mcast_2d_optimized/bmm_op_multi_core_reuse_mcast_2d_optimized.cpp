@@ -113,10 +113,10 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
     uint32_t in0_end = num_cores_r - 1;
     uint32_t in1_end = num_cores_c - 1;
 
-    tt_metal::NOC in0_noc = tt_metal::NOC::RISCV_0_default;
-    tt_metal::NOC in1_noc = tt_metal::NOC::RISCV_1_default;
-    tt_metal::NOC in0_split_noc = tt_metal::NOC::RISCV_1_default;
-    tt_metal::NOC in1_split_noc = tt_metal::NOC::RISCV_0_default;
+    tt_metal::NOC in0_noc = tt_metal::NOC::NOC_0;
+    tt_metal::NOC in1_noc = tt_metal::NOC::NOC_1;
+    tt_metal::NOC in0_split_noc = tt_metal::NOC::NOC_1;
+    tt_metal::NOC in1_split_noc = tt_metal::NOC::NOC_0;
     if (transpose_mcast) {
         std::swap(in0_sender, in1_sender);
         std::swap(in0_sender_in1_receiver, in0_receiver_in1_sender);
@@ -344,7 +344,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         program,
         in0_address.has_value() ? "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_sender_receiver_padding_block_sharded.cpp" : "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_sender_padding.cpp",
         in0_sender,
-        tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = in0_noc, .compile_args = in0_sender_compile_time_args});
+        tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = in0_noc, .compile_args = in0_sender_compile_time_args});
 
     std::string in1_reader_sender_kerfile = last_block_w == per_core_N ?   "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in1_sender_writer.cpp" :
                                                             "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in1_sender_writer_padding.cpp";
@@ -354,14 +354,14 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
         program,
         in1_reader_sender_kerfile,
         in1_sender,
-        tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = in1_noc, .compile_args = in1_sender_writer_compile_time_args, .defines = mm_kernel_in1_sender_writer_defines});
+        tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = in1_noc, .compile_args = in1_sender_writer_compile_time_args, .defines = mm_kernel_in1_sender_writer_defines});
 
     auto mm_kernel_in1_receiver_writer_id = tt_metal::CreateDataMovementKernel(
         program,
         "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in1_receiver_writer_padding.cpp",
         /* in0_sender_in1_receiver, // If not using half-half noc setup */
         (CoreRangeSet) (std::set<CoreRange>) {in0_sender_in1_receiver, in0_receiver_in1_receiver_left_half},
-        tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = in1_noc, .compile_args = in1_receiver_writer_compile_time_args, .defines = mm_kernel_in1_receiver_writer_defines});
+        tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = in1_noc, .compile_args = in1_receiver_writer_compile_time_args, .defines = mm_kernel_in1_receiver_writer_defines});
 
     KernelID mm_kernel_in0_receiver_id = 0;
     if (!in0_address.has_value()) {
@@ -370,7 +370,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0_in1(
             "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_receiver.cpp",
             /* in0_receiver_in1_sender, // If not using half-half noc setup */
             (CoreRangeSet) (std::set<CoreRange>) {in0_receiver_in1_sender, in0_receiver_in1_receiver_left_half},
-            tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = in0_noc, .compile_args = in0_receiver_compile_time_args});
+            tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = in0_noc, .compile_args = in0_receiver_compile_time_args});
     }
 
     KernelID mm_kernel_in1_receiver_writer_other_noc_setup_id = mm_kernel_in1_receiver_writer_id;

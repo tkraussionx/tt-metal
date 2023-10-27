@@ -106,7 +106,6 @@ void kernel_main() {
 
     const uint32_t in1_block_size_bytes = in1_block_num_tiles * in1_single_tile_size_bytes;
 
-    uint32_t l1_write_addr_in1;
 
 
     const InterleavedAddrGenFast<in1_is_dram> s1 = {
@@ -145,16 +144,44 @@ void kernel_main() {
         0);
     #endif
 
+    uint32_t cb_double_buf_addr[2];
+    cb_double_buf_addr[0] = get_write_ptr(cb_id_in1);
+    cb_double_buf_addr[1] = cb_double_buf_addr[0] + in1_block_size_bytes;
+    uint32_t buf_idx_for_reads = 1; // init the one because we will toggle it at the beginning of the loop
+    uint32_t buf_idx_for_mcast = 0;
+    uint32_t l1_write_addr_in1 = 0;
+    uint32_t l1_mcast_addr_in1 = 0;
+
     for (uint32_t b = 0; b < batch; b++) {
         uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;
 
-        // Operand 1
-        for(uint32_t block = 0; block < num_blocks; block++) {
-            // Operand 1
-            cb_reserve_back(cb_id_in1, in1_block_num_tiles);
-            l1_write_addr_in1 = get_write_ptr(cb_id_in1);
+        cb_reserve_back(cb_id_in1, in1_block_num_tiles);
 
-            uint64_t in1_start_address = l1_write_addr_in1; // copy start address of block, to be used for mcasting
+        buf_idx_for_reads = !buf_idx_for_reads; // toggle the buffer that we need to read into
+        l1_write_addr_in1 = cb_double_buf_addr[buf_idx_for_reads];
+
+        // Read in1 block into a buffer
+        uint32_t in1_tensor_row_start_tile_id = in1_tensor_current_block_start_tile_id;
+        for(uint32_t h = 0; h < in1_block_h; h++) {
+            for(uint32_t in1_tensor_tile_id = in1_tensor_row_start_tile_id;
+                    in1_tensor_tile_id < in1_tensor_row_start_tile_id + in1_block_w; in1_tensor_tile_id++) {
+                uint64_t noc_read_addr = s1.get_noc_addr(in1_tensor_tile_id);
+                noc_async_read_one_packet(noc_read_addr, l1_write_addr_in1, in1_single_tile_size_bytes, in1_tensor_tile_id & NOC_UNICAST_READ_REQ_VC_RANGE_MASK);
+                l1_write_addr_in1 += in1_single_tile_size_bytes;
+                }
+            in1_tensor_row_start_tile_id += in1_tensor_stride_h;
+        }
+        in1_tensor_current_block_start_tile_id += in1_tensor_next_block_stride;
+
+        for(uint32_t block = 0; block < num_blocks-1; block++) {
+            noc_async_read_barrier();
+            cb_push_back(cb_id_in1, in1_block_num_tiles);
+
+            cb_reserve_back(cb_id_in1, in1_block_num_tiles);
+            buf_idx_for_mcast = buf_idx_for_reads; // the buffer to mcast is the one we previosuly read into
+            buf_idx_for_reads = !buf_idx_for_reads; // toggle the buffer that we need to read into
+            l1_write_addr_in1 = cb_double_buf_addr[buf_idx_for_reads];
+            l1_mcast_addr_in1 = cb_double_buf_addr[buf_idx_for_mcast];
 
             // Copy in1 block into CB, as the default kernel
             uint32_t in1_tensor_row_start_tile_id = in1_tensor_current_block_start_tile_id;
@@ -169,34 +196,59 @@ void kernel_main() {
             }
             in1_tensor_current_block_start_tile_id += in1_tensor_next_block_stride;
 
-            // Barrier! make sure the reads are done
-            noc_async_read_barrier();
             #ifndef SKIP_MCAST
-
             // wait until all in1 mcast destinations have atomically incremented the in1 semaphore_addr (i.e. its value should be in0_mcast_num_dests), then reset
             // the semaphore_addr value back to zero for the next block
             noc_semaphore_wait(in1_mcast_sender_semaphore_addr_ptr, in1_mcast_num_dests);
             noc_semaphore_set(in1_mcast_sender_semaphore_addr_ptr, 0);
 
             // Now we have the block in the CB address, we can mcast to dests!
-            uint64_t in1_multicast_data_addr = in1_multicast_data_noc | in1_start_address;
+            uint64_t in1_multicast_data_addr = in1_multicast_data_noc | l1_mcast_addr_in1;
 
             // data mcast:
             // - num_dests must not include source, since we are NOT really doing a local copy!
             // - non_posted = false, we're running in posted mode, we don't need acks, since we aren't doing barrier
             // - linked = true, so that path reservation is done only once during the first packet of data multi-cast, and all subsequent packets use the same path
-            noc_async_write_multicast_v2<false, true, false>(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores);
+            noc_async_write_multicast_v2<false, true, false>(l1_mcast_addr_in1, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores);
 
             // valid flag mcast:
             // Note: no need for write barrier in between data and valid, since these two multicasts are done on the same NOC & Static VC they are guaranteed to be ordered
             // multicast the flag to destinations, num_dests must not include source, since we are NOT doing a local copy!
             // - this transfer will set linked back to false, and release the path that was reserved during the first packet of data mcast
             noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores);
-
             #endif
-
-            cb_push_back(cb_id_in1, in1_block_num_tiles);
         }
+
+        // the last read block needs to be pushed and mcast
+        noc_async_read_barrier();
+        cb_push_back(cb_id_in1, in1_block_num_tiles);
+
+        #ifndef SKIP_MCAST
+        // wait until all in1 mcast destinations have atomically incremented the in1 semaphore_addr (i.e. its value should be in0_mcast_num_dests), then reset
+        // the semaphore_addr value back to zero for the next block
+        noc_semaphore_wait(in1_mcast_sender_semaphore_addr_ptr, in1_mcast_num_dests);
+        noc_semaphore_set(in1_mcast_sender_semaphore_addr_ptr, 0);
+
+        // the last buf_idx_for_reads is the one that be mcast
+        buf_idx_for_mcast = buf_idx_for_reads; // the buffer to mcast is the one we previously read into
+        l1_mcast_addr_in1 = cb_double_buf_addr[buf_idx_for_mcast];
+
+        // Now we have the block in the CB address, we can mcast to dests!
+        uint64_t in1_multicast_data_addr = in1_multicast_data_noc | l1_mcast_addr_in1;
+
+        // data mcast:
+        // - num_dests must not include source, since we are NOT really doing a local copy!
+        // - non_posted = false, we're running in posted mode, we don't need acks, since we aren't doing barrier
+        // - linked = true, so that path reservation is done only once during the first packet of data multi-cast, and all subsequent packets use the same path
+        noc_async_write_multicast_v2<false, true, false>(l1_mcast_addr_in1, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores);
+
+        // valid flag mcast:
+        // Note: no need for write barrier in between data and valid, since these two multicasts are done on the same NOC & Static VC they are guaranteed to be ordered
+        // multicast the flag to destinations, num_dests must not include source, since we are NOT doing a local copy!
+        // - this transfer will set linked back to false, and release the path that was reserved during the first packet of data mcast
+        noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores);
+        #endif
+
         #ifdef FUSE_BIAS
             // Only read bias on first batch
             if (b == 0) {
