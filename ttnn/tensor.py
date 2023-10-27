@@ -64,7 +64,7 @@ BufferType = ttl.tensor.BufferType
 TensorMemoryLayout = ttl.tensor.TensorMemoryLayout
 MemoryConfig = ttl.tensor.MemoryConfig
 DRAM_MEMORY_CONFIG = MemoryConfig(TensorMemoryLayout.INTERLEAVED, BufferType.DRAM)
-L1_MEMORY_CONFIG = MemoryConfig(TensorMemoryLayout.INTERLEAVED, BufferType.DRAM)
+L1_MEMORY_CONFIG = MemoryConfig(TensorMemoryLayout.INTERLEAVED, BufferType.L1)
 
 
 def to_device(tensor, device, *, memory_config: MemoryConfig = DRAM_MEMORY_CONFIG):
