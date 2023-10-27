@@ -25,5 +25,5 @@ def run_all_notebooks(directory_path):
 
 if __name__ == "__main__":
     script_directory = os.path.dirname(os.path.abspath(__file__))
-    directory_path = os.path.join(script_directory, "tutorials")
+    directory_path = os.path.join(script_directory, "../tutorials")
     assert run_all_notebooks(directory_path), "Unable to run all tutorials"
