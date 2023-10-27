@@ -182,8 +182,8 @@ def test_tutorial_matmul(device):
     h = 1024
     w = 1024
 
-    torch_a = torch.randn((1, 1, h, w), dtype=torch.bfloat16)
-    torch_b = torch.randn((1, 1, w, h), dtype=torch.bfloat16)
+    torch_a = torch.randn((h, w), dtype=torch.bfloat16)
+    torch_b = torch.randn((w, h), dtype=torch.bfloat16)
 
     a = ttnn.from_torch(torch_a)
     b = ttnn.from_torch(torch_b)
@@ -202,8 +202,8 @@ def test_tutorial_matmul_with_tilized_inputs(device):
     h = 1024
     w = 1024
 
-    torch_a = torch.randn((1, 1, h, w), dtype=torch.bfloat16)
-    torch_b = torch.randn((1, 1, w, h), dtype=torch.bfloat16)
+    torch_a = torch.randn((h, w), dtype=torch.bfloat16)
+    torch_b = torch.randn((w, h), dtype=torch.bfloat16)
 
     a = ttnn.from_torch(torch_a)
     b = ttnn.from_torch(torch_b)
@@ -225,8 +225,8 @@ def test_tutorial_matmul_with_tilized_inputs_in_l1_memory(device):
     h = 1024
     w = 1024
 
-    torch_a = torch.randn((1, 1, h, w), dtype=torch.bfloat16)
-    torch_b = torch.randn((1, 1, w, h), dtype=torch.bfloat16)
+    torch_a = torch.randn((h, w), dtype=torch.bfloat16)
+    torch_b = torch.randn((w, h), dtype=torch.bfloat16)
 
     a = ttnn.from_torch(torch_a)
     b = ttnn.from_torch(torch_b)

@@ -12,7 +12,9 @@ from ttnn.tensor import (
     from_device,
     to_layout,
     ROW_MAJOR_LAYOUT,
+    TILE_LAYOUT,
     DRAM_MEMORY_CONFIG,
+    TILE_SIZE,
 )
 
 
@@ -475,8 +477,14 @@ Tensor.__mul__ = multiply
 def reshape(input_tensor: Tensor, shape) -> Tensor:
     ttl_input_tensor = input_tensor._tensor
 
-    if ttl_input_tensor.layout() == ttl.tensor.Layout.ROW_MAJOR:
+    if ttl_input_tensor.layout() == ROW_MAJOR_LAYOUT:
         return Tensor(ttl_input_tensor.reshape(shape))
+
+    elif ttl_input_tensor.layout() == TILE_LAYOUT:
+        *_, old_height, old_width = input_tensor.shape
+        *_, new_height, new_width = shape
+        if old_height % TILE_SIZE == 0 and old_width % TILE_SIZE == 0 and new_height % TILE_SIZE == 0 and new_width % TILE_SIZE == 0:
+            return Tensor(ttl_input_tensor.reshape(shape))
 
     try:
         w, z, y, x = shape

@@ -22,6 +22,9 @@ ROW_MAJOR_LAYOUT = Layout.ROW_MAJOR
 TILE_LAYOUT = Layout.TILE
 
 
+TILE_SIZE = 32
+
+
 class Tensor:
     def __init__(self: "Tensor", ttl_tensor: ttl.tensor.Tensor):
         self._tensor: ttl.tensor.Tensor = ttl_tensor
@@ -120,6 +123,8 @@ __all__ = [
 
     "ROW_MAJOR_LAYOUT",
     "TILE_LAYOUT",
+
+    "TILE_SIZE",
 
     "Tensor",
     "from_tensor",

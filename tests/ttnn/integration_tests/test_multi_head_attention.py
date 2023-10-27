@@ -191,6 +191,7 @@ def test_multi_head_attention(device, batch_size, sequence_size, num_heads, head
         hidden_size,
     ], f"Expected output shape to be {batch_size, sequence_size, hidden_size}, got {tt_output.shape}"
 
+    tt_output = ttnn.to_layout(tt_output, ttnn.ROW_MAJOR_LAYOUT)
     tt_output = ttnn.from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
     assert_with_pcc(torch_output, tt_output, 0.0)
