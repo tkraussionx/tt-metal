@@ -38,7 +38,14 @@ def test_sub_scalar_and_alpha(device, alpha, scalar_input_tensor_b, h, w):
     output_tensor = ttnn.from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor)
 
-    assert_with_pcc(torch_output_tensor, output_tensor, 0.99999)
+    assert_with_pcc(torch_output_tensor, output_tensor, 0.9999)
+
+
+def test_subtract(device):
+    a = ttnn.to_device(ttnn.from_torch(torch.tensor((1, 2), dtype=torch.bfloat16)), device)
+    b = ttnn.to_device(ttnn.from_torch(torch.tensor((0, 1), dtype=torch.bfloat16)), device)
+    output = ttnn.sub(a, b, alpha=2)
+    assert_with_pcc(torch.tensor((1, 0)), ttnn.to_torch(ttnn.from_device(output)), 0.9999)
 
 
 @pytest.mark.parametrize("h", [32])

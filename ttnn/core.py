@@ -109,44 +109,49 @@ def matmul(
       are broadcastable, and not the matrix dimensions. For example, if :attr:`input_tensor_a` is a
       :math:`(j \\times 1 \\times n \\times m)` tensor and :attr:`input_tensor_b` is a :math:`(k \\times m \\times p)`
       tensor, these inputs are valid for broadcasting even though the final two dimensions (i.e. the
-      matrix dimensions) are different. :attr:`out` will be a :math:`(j \\times k \\times n \\times p)` tensor.
+      matrix dimensions) are different. The operation will return a :math:`(j \\times k \\times n \\times p)` tensor.
 
 
     .. note::
 
-        The 1-dimensional dot product version of this function is not currently supported.
+        The 1-dimensional dot product version of this function is not currently returning the Tensor with a shape.  This is expected to be fixed in an upcomming release.
 
     Arguments:
-        input_tensor_a (Tensor): the first tensor to be multiplied
-        input_tensor_b (Tensor): the second tensor to be multiplied
+        * :attr:`input_tensor_a` (Tensor): the first tensor to be multiplied
+        * :attr:`input_tensor_b` (Tensor): the second tensor to be multiplied
 
     Example::
 
         >>> # vector x vector
-        >>> tensor1 = ttnn.from_torch(torch.randn(3))
-        >>> tensor2 = ttnn.from_torch(torch.randn(3))
-        >>> ttnn.matmul(tensor1, tensor2).size()
-        torch.Size([1, 1, 1, 3])
+        >>> tensor1 = ttnn.to_device(ttnn.from_torch(torch.randn((32), dtype=torch.bfloat16)), device)
+        >>> tensor2 = ttnn.to_device(ttnn.from_torch(torch.randn((32), dtype=torch.bfloat16)), device)
+        >>> output1 = tensor1 @ tensor2
+        >>> print(output1.shape)
+        [32]
         >>> # matrix x vector
-        >>> tensor1 = torch.randn(3, 4)
-        >>> tensor2 = torch.randn(4)
-        >>> torch.matmul(tensor1, tensor2).size()
-        torch.Size([3])
+        >>> tensor1 = ttnn.to_device(ttnn.from_torch(torch.randn((64, 32), dtype=torch.bfloat16)), device)
+        >>> tensor2 = ttnn.to_device(ttnn.from_torch(torch.randn((32), dtype=torch.bfloat16)), device)
+        >>> output1 = tensor1 @ tensor2
+        >>> print(output1.shape)
+        [64, 1]
         >>> # batched matrix x broadcasted vector
-        >>> tensor1 = torch.randn(10, 3, 4)
-        >>> tensor2 = torch.randn(4)
-        >>> torch.matmul(tensor1, tensor2).size()
-        torch.Size([10, 3])
+        >>> tensor1 = ttnn.to_device(ttnn.from_torch(torch.randn((10, 64, 32), dtype=torch.bfloat16)), device)
+        >>> tensor2 = ttnn.to_device(ttnn.from_torch(torch.randn((32), dtype=torch.bfloat16)), device)
+        >>> output1 = tensor1 @ tensor2
+        >>> print(output1.shape)
+        [10, 64, 1]
         >>> # batched matrix x batched matrix
-        >>> tensor1 = torch.randn(10, 3, 4)
-        >>> tensor2 = torch.randn(10, 4, 5)
-        >>> torch.matmul(tensor1, tensor2).size()
-        torch.Size([10, 3, 5])
+        >>> tensor1 = ttnn.to_device(ttnn.from_torch(torch.randn((10, 64, 32), dtype=torch.bfloat16)), device)
+        >>> tensor2 = ttnn.to_device(ttnn.from_torch(torch.randn((10, 32, 128), dtype=torch.bfloat16)), device)
+        >>> output1 = tensor1 @ tensor2
+        >>> print(output1.shape)
+        [10, 64, 128]
         >>> # batched matrix x broadcasted matrix
-        >>> tensor1 = torch.randn(10, 3, 4)
-        >>> tensor2 = torch.randn(4, 5)
-        >>> torch.matmul(tensor1, tensor2).size()
-        torch.Size([10, 3, 5])
+        >>> tensor1 = ttnn.to_device(ttnn.from_torch(torch.randn((10, 64, 32), dtype=torch.bfloat16)), device)
+        >>> tensor2 = ttnn.to_device(ttnn.from_torch(torch.randn((32, 128), dtype=torch.bfloat16)), device)
+        >>> output1 = tensor1 @ tensor2
+        >>> print(output1.shape)
+        [10, 64, 128]
     """
 
     input_shape_a = input_tensor_a.shape
@@ -227,9 +232,7 @@ def matmul(
         if all(x == 1 for x in batch_shape_b):
             if width_a == height_b:
                 out = Tensor(
-                    ttl.tensor.matmul(
-                        input_tensor_a._tensor, input_tensor_b._tensor, output_mem_config=memory_config
-                    )
+                    ttl.tensor.matmul(input_tensor_a._tensor, input_tensor_b._tensor, output_mem_config=memory_config)
                 )
             else:
                 raise RuntimeError("The width of the first tensor must be equal to the height of the second tensor")
@@ -265,10 +268,12 @@ def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
 
     Example::
 
-        >>> a = ttnn.from_torch(torch.tensor((1, 2)))
-        >>> b = ttnn.from_torch(torch.tensor((0, 1)))
-        >>> ttnn.add(a, b, alpha=2)
-        tensor([1, 4])
+        >>> tensor1 = ttnn.to_device(ttnn.from_torch(torch.tensor((1, 2), dtype=torch.bfloat16)), device)
+        >>> tensor2 = ttnn.to_device(ttnn.from_torch(torch.tensor((0, 1), dtype=torch.bfloat16)), device)
+        >>> output1 = ttnn.add(tensor1, tensor2, alpha=2)
+        >>> print(output1)
+        Tensor([ 1, 4], dtype=bfloat16 )
+
     """
 
     if not isinstance(input_tensor_a, Tensor):
@@ -349,51 +354,68 @@ def subtract(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tens
 
     Example::
 
-        >>> a = ttnn.from_torch(torch.tensor((1, 2)))
-        >>> b = ttnn.from_torch(torch.tensor((0, 1)))
-        >>> ttnn.sub(a, b, alpha=2)
-        tensor([1, 0])
+        >>> tensor1 = ttnn.to_device(ttnn.from_torch(torch.tensor((1, 2), dtype=torch.bfloat16)), device)
+        >>> tensor2 = ttnn.to_device(ttnn.from_torch(torch.tensor((0, 1), dtype=torch.bfloat16)), device)
+        >>> output1 = ttnn.sub(tensor1, tensor2, alpha=2)
+        >>> print(output1)
+        Tensor([ 1, 0], dtype=bfloat16 )
     """
+    if not isinstance(input_tensor_a, Tensor):
+        raise TypeError("Expected first argument to be a ttnn.Tensor")
+
+    original_shape = input_tensor_a.shape
+    input_tensor_a = _reshape_to_4D(input_tensor_a)
     ttl_input_tensor_a = input_tensor_a._tensor
 
     if ttl_input_tensor_a.storage_type() != ttl.tensor.StorageType.DEVICE:
         raise RuntimeError("input_tensor_a must be on device!")
 
-    if not isinstance(input_tensor_a, Tensor):
-        raise TypeError("Expected first argument to be a ttnn.Tensor")
-
     if _is_scalar(input_tensor_b):
-        return Tensor(ttl.tensor.add_unary(ttl_input_tensor_a, input_tensor_b * alpha))
-    elif not isinstance(input_tensor_b, Tensor):
+        output_tensor = Tensor(ttl.tensor.sub_unary(ttl_input_tensor_a, input_tensor_b * alpha))
+        return reshape(output_tensor, original_shape)
+    elif isinstance(input_tensor_b, Tensor):
+        input_tensor_b = _reshape_to_4D(input_tensor_b)
+        ttl_input_tensor_b = input_tensor_b._tensor
+        if ttl_input_tensor_b.storage_type() != ttl.tensor.StorageType.DEVICE:
+            raise RuntimeError("input_tensor_a must be on device!")
+    else:
         raise TypeError("Expected second argument to be a ttnn.Tensor or a scalar")
 
     ttl_input_tensor_b = input_tensor_b._tensor
-    input_shape_b = ttl_input_tensor_a.shape()
+    input_shape_b = ttl_input_tensor_b.shape()
 
     if alpha != 1:
         ttl_input_tensor_b = ttl.tensor.mul_unary(ttl_input_tensor_b, alpha)
 
-    *_, height_b, width_b = input_shape_b
+    if len(input_shape_b) == 1:
+        height_b = 1
+        (width_b,) = input_shape_b
+    else:
+        *_, height_b, width_b = input_shape_b
 
     if height_b == 1 and width_b == 1:
-        return Tensor(
+        output_tensor = Tensor(
             ttl.tensor.bcast(
                 ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.SUB, ttl.tensor.BcastOpDim.HW
             )
         )
     elif height_b == 1:
-        return Tensor(
+        output_tensor = Tensor(
             ttl.tensor.bcast(
                 ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.SUB, ttl.tensor.BcastOpDim.H
             )
         )
     elif width_b == 1:
-        return Tensor(
+        output_tensor = Tensor(
             ttl.tensor.bcast(
                 ttl_input_tensor_a, ttl_input_tensor_b, ttl.tensor.BcastOpMath.SUB, ttl.tensor.BcastOpDim.W
             )
         )
-    return Tensor(ttl.tensor.sub(ttl_input_tensor_a, ttl_input_tensor_b))
+    else:
+        output_tensor = Tensor(ttl.tensor.sub(ttl_input_tensor_a, ttl_input_tensor_b))
+
+    output_tensor = reshape(output_tensor, original_shape)
+    return output_tensor
 
 
 def multiply(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
