@@ -22,7 +22,9 @@ Welcome to TT-Metal documentation!
 .. toctree::
    :caption: TTNN
 
-   ttnn/ttnn.rst
+   ttnn/operations
+   ttnn/tutorials
+   ttnn/dependencies/index.rst
 
 .. toctree::
    :caption: Models
