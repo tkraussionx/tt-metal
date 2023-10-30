@@ -170,11 +170,11 @@ setup(
     packages=packages,
     package_dir={
         "": "tt_eager",
-        "ttnn": "ttnn",
         "tt_lib.tt_metal": "tt_metal",
         "tt_lib.models": "tests/models",
         "tt_lib.scripts": "scripts",
         "tt_lib.tt_eager.tt_dnn": "tt_eager/tt_dnn",
+        "ttnn": "ttnn",
     },
     include_package_data=True,
     long_description_content_type="text/markdown",

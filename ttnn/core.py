@@ -490,13 +490,13 @@ def reshape(input_tensor: Tensor, shape) -> Tensor:
         w, z, y, x = shape
         return Tensor(ttl.tensor.reshape(ttl_input_tensor, w, z, y, x))
     except:
-        logger.warning("Given reshape operation could not be run on the TT device. Defaulting to torch implementation")
+        logger.warning(f"reshape from {input_tensor.shape} to {shape} could not be run on the TT device. Defaulting to torch implementation")
         device = ttl_input_tensor.device()
 
         tensor = to_layout(input_tensor, ROW_MAJOR_LAYOUT)
         tensor = from_device(tensor)
         tensor = to_torch(tensor)
-        tensor = tensor.reshape(shape=shape)
+        tensor = tensor.reshape(shape=shape).contiguous()
         tensor = from_torch(tensor, input_tensor.dtype)
         tensor = to_device(tensor, device)
         return tensor
@@ -506,13 +506,15 @@ def permute(input_tensor: Tensor, order) -> Tensor:
     ttl_input_tensor = input_tensor._tensor
 
     try:
+        raise RuntimeError
         return Tensor(ttl.tensor.permute(input_tensor._tensor, order))
     except:
-        logger.warning("Given permute operation could not be run on the TT device. Defaulting to torch implementation")
+        logger.warning(f"permute of tensor with shape {input_tensor.shape} using order {order} could not be run on the TT device. Defaulting to torch implementation")
         device = ttl_input_tensor.device()
-        tensor = from_device(input_tensor)
+        tensor = to_layout(input_tensor, ROW_MAJOR_LAYOUT)
+        tensor = from_device(tensor)
         tensor = to_torch(tensor)
-        tensor = tensor.permute(order)
+        tensor = tensor.permute(order).contiguous()
         tensor = from_torch(tensor, input_tensor.dtype)
         tensor = to_device(tensor, device)
         return tensor

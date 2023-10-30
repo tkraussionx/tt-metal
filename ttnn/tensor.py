@@ -43,17 +43,17 @@ class Tensor:
 
     def __getitem__(self: "Tensor", slices) -> "Tensor":
         if self._tensor.storage_type() == ttl.tensor.StorageType.DEVICE:
-            device = self._tensor.device()
-
             tensor = self
             tensor = to_layout(tensor, ROW_MAJOR_LAYOUT)
             tensor = from_device(tensor)
             tensor = to_torch(tensor)
             tensor = tensor[slices]
             tensor = from_torch(tensor, dtype=self.dtype)
-            tensor = to_device(tensor, device)
         else:
-            tensor = to_torch(self)
+            tensor = self
+            if tensor.layout != ROW_MAJOR_LAYOUT:
+                raise RuntimeError("Tensor must be in ROW_MAJOR layout!")
+            tensor = to_torch(tensor)
             tensor = tensor[slices]
             tensor = from_torch(tensor, dtype=self.dtype)
         return tensor

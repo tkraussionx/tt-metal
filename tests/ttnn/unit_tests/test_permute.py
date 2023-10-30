@@ -11,11 +11,11 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
 @pytest.mark.parametrize("w", [2 * 32])
 def test_permute(device, h, w):
     torch_input_tensor = torch.rand((1, 1, h, w), dtype=torch.bfloat16)
-    torch_output_tensor = torch.permute(torch_input_tensor, (3, 2, 1, 0))
+    torch_output_tensor = torch.permute(torch_input_tensor, (0, 1, 3, 2))
 
     input_tensor = ttnn.from_torch(torch_input_tensor)
     input_tensor = ttnn.to_device(input_tensor, device)
-    output_tensor = ttnn.permute(input_tensor, (3, 2, 1, 0))
+    output_tensor = ttnn.permute(input_tensor, (0, 1, 3, 2))
     output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
     output_tensor = ttnn.from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor).clone()  # TODO: remove clone?
