@@ -71,8 +71,8 @@ def test_matmul_with_matched_width_height_from_1D(device, k, n):
 def test_matmul_does_dot_product(device, w):
     torch.manual_seed(0)
 
-    torch_input_tensor_a = torch.randn((w,), dtype=torch.bfloat16)
-    torch_input_tensor_b = torch.randn((w,), dtype=torch.bfloat16)
+    torch_input_tensor_a = torch.zeros((w,), dtype=torch.bfloat16).uniform_(-0.1, 0.1)
+    torch_input_tensor_b = torch.zeros((w,), dtype=torch.bfloat16).uniform_(-0.1, 0.1)
     torch_output = torch.matmul(torch_input_tensor_a, torch_input_tensor_b)
 
     input_tensor_a = ttnn.from_torch(torch_input_tensor_a)
