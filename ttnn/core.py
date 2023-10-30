@@ -551,16 +551,15 @@ def permute(input_tensor: Tensor, order) -> Tensor:
 
 
 def softmax(input_tensor: Tensor, dim) -> Tensor:
-    import torch
+    rank = len(input_tensor.shape)
+    if dim < 0:
+        dim = rank + dim
+    if dim != rank - 1:
+        raise RuntimeError("Softmax can operation only on the last dim")
 
-    device = input_tensor._tensor.device()
-    tensor = to_layout(input_tensor, ROW_MAJOR_LAYOUT)
-    tensor = from_device(tensor)
-    tensor = to_torch(tensor)
-    tensor = torch.softmax(tensor, dim=dim)
-    tensor = from_torch(tensor, input_tensor.dtype)
-    tensor = to_device(tensor, device)
-    return tensor
+    ttl_input_tensor = input_tensor._tensor
+    ttl_output_tensor = ttl.tensor.softmax(ttl_input_tensor)
+    return Tensor(ttl_output_tensor)
 
 
 __all__ = [

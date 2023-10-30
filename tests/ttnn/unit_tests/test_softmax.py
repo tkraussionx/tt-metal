@@ -10,14 +10,16 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
 @pytest.mark.parametrize("h", [32])
 @pytest.mark.parametrize("w", [2 * 32])
 def test_softmax(device, h, w):
-    torch_activations = torch.rand((1, 1, h, w), dtype=torch.bfloat16)
-    torch_output = F.softmax(torch_activations, dim=-1)
+    torch.manual_seed(0)
 
-    activations = ttnn.from_torch(torch_activations)
-    activations = ttnn.to_device(activations, device)
-    tt_output = ttnn.softmax(activations, dim=-1)
-    tt_output = ttnn.from_device(tt_output)
-    tt_output = ttnn.to_torch(tt_output).clone()  # TODO: remove clone?
+    torch_input_tensor = torch.zeros((1, 1, h, w), dtype=torch.bfloat16).uniform_(-1.0, 1.0)
+    torch_output_tensor = F.softmax(torch_input_tensor, dim=-1)
 
-    assert_with_pcc(torch_output, tt_output, 0.9999)
-    # assert torch.allclose(torch_output, tt_output, atol=1e-1, rtol=1e-2)
+    input_tensor = ttnn.from_torch(torch_input_tensor)
+    input_tensor = ttnn.to_device(input_tensor, device)
+    output_tensor = ttnn.softmax(input_tensor, dim=-1)
+    output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
+    output_tensor = ttnn.from_device(output_tensor)
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    assert_with_pcc(torch_output_tensor, output_tensor, 0.997)

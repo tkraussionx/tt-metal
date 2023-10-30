@@ -108,6 +108,10 @@ def pytorch_multi_head_attention(
     return self_output
 
 
+def torch_random(shape, low, high, dtype):
+    return torch.zeros(shape, dtype=dtype).uniform_(low, high)
+
+
 # Note that our reshape requires the width and height to both be multiples of 32
 # so the number of heads must be 32
 @pytest.mark.parametrize("batch_size", [1])
@@ -115,20 +119,22 @@ def pytorch_multi_head_attention(
 @pytest.mark.parametrize("num_heads", [4])
 @pytest.mark.parametrize("head_size", [32])
 def test_multi_head_attention(device, batch_size, sequence_size, num_heads, head_size):
+    torch.manual_seed(0)
+
     hidden_size = num_heads * head_size
-    torch_hidden_states = torch.randn((batch_size, sequence_size, hidden_size), dtype=torch.bfloat16)
+    torch_hidden_states = torch_random((batch_size, sequence_size, hidden_size), -0.1, 0.1, dtype=torch.bfloat16)
 
     torch_attention_mask = torch.zeros((sequence_size,), dtype=torch.bfloat16)
     torch_attention_mask[2:] = -1e9
 
-    torch_query_weight = torch.randn((hidden_size, hidden_size), dtype=torch.bfloat16)
-    torch_query_bias = torch.randn((hidden_size,), dtype=torch.bfloat16)
-    torch_key_weight = torch.randn((hidden_size, hidden_size), dtype=torch.bfloat16)
-    torch_key_bias = torch.randn((hidden_size,), dtype=torch.bfloat16)
-    torch_value_weight = torch.randn((hidden_size, hidden_size), dtype=torch.bfloat16)
-    torch_value_bias = torch.randn((hidden_size,), dtype=torch.bfloat16)
-    torch_output_weight = torch.randn((hidden_size, hidden_size), dtype=torch.bfloat16)
-    torch_output_bias = torch.randn((hidden_size,), dtype=torch.bfloat16)
+    torch_query_weight = torch_random((hidden_size, hidden_size), -0.1, 0.1, dtype=torch.bfloat16)
+    torch_query_bias = torch_random((hidden_size,), -0.1, 0.1, dtype=torch.bfloat16)
+    torch_key_weight = torch_random((hidden_size, hidden_size), -0.1, 0.1, dtype=torch.bfloat16)
+    torch_key_bias = torch_random((hidden_size,), -0.1, 0.1, dtype=torch.bfloat16)
+    torch_value_weight = torch_random((hidden_size, hidden_size), -0.1, 0.1, dtype=torch.bfloat16)
+    torch_value_bias = torch_random((hidden_size,), -0.1, 0.1, dtype=torch.bfloat16)
+    torch_output_weight = torch_random((hidden_size, hidden_size), -0.1, 0.1, dtype=torch.bfloat16)
+    torch_output_bias = torch_random((hidden_size,), -0.1, 0.1, dtype=torch.bfloat16)
 
     torch_output = pytorch_multi_head_attention(
         torch_hidden_states,
@@ -196,4 +202,5 @@ def test_multi_head_attention(device, batch_size, sequence_size, num_heads, head
     tt_output = ttnn.to_layout(tt_output, ttnn.ROW_MAJOR_LAYOUT)
     tt_output = ttnn.from_device(tt_output)
     tt_output = ttnn.to_torch(tt_output)
-    assert_with_pcc(torch_output, tt_output, 0.975)
+
+    assert_with_pcc(torch_output, tt_output, 0.9998)
