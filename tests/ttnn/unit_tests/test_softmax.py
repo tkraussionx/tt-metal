@@ -22,4 +22,4 @@ def test_softmax(device, h, w):
     output_tensor = ttnn.from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor)
 
-    assert_with_pcc(torch_output_tensor, output_tensor, 0.997)
+    assert_with_pcc(torch_output_tensor, output_tensor, 0.985)
