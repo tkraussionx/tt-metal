@@ -89,10 +89,10 @@ def matmul(
 
     The behavior depends on the dimensionality of the tensors as follows:
 
-    - If both arguments are 2-dimensional, the matrix-matrix product is returned in 2-dimensional.
+    - If both arguments are 2-dimensional, the matrix-matrix product is returned.
     - If the first argument is 1-dimensional and the second argument is 2-dimensional,
-      a 1 is prepended to its dimension to both tensors until they become 4-dimensional
-      and will return a 1 dimensional result.
+      a 1 is prepended to its dimension for the purpose of the matrix multiply.
+      After the matrix multiply, the prepended dimension is removed.
     - If the first argument is 2-dimensional and the second argument is 1-dimensional,
       the matrix-vector product is returned in 2 dimensions.
     - If both arguments are at least 1-dimensional and at least one argument is
@@ -113,7 +113,7 @@ def matmul(
 
     .. note::
 
-        The 1-dimensional dot product version of this function is not currently returning the Tensor with a shape.  This is expected to be fixed in an upcomming release.
+        The 1-dimensional dot product version of this function is currently returning the Tensor with a non-empty shape. This is expected to be fixed in an upcomming release.
 
     Arguments:
         * :attr:`input_tensor_a` (Tensor): the first tensor to be multiplied
@@ -124,32 +124,32 @@ def matmul(
         >>> # vector x vector
         >>> tensor1 = ttnn.to_device(ttnn.from_torch(torch.randn((32), dtype=torch.bfloat16)), device)
         >>> tensor2 = ttnn.to_device(ttnn.from_torch(torch.randn((32), dtype=torch.bfloat16)), device)
-        >>> output1 = tensor1 @ tensor2
-        >>> print(output1.shape)
+        >>> output = tensor1 @ tensor2
+        >>> print(output.shape)
         [32]
         >>> # matrix x vector
         >>> tensor1 = ttnn.to_device(ttnn.from_torch(torch.randn((64, 32), dtype=torch.bfloat16)), device)
         >>> tensor2 = ttnn.to_device(ttnn.from_torch(torch.randn((32), dtype=torch.bfloat16)), device)
-        >>> output1 = tensor1 @ tensor2
-        >>> print(output1.shape)
+        >>> output = tensor1 @ tensor2
+        >>> print(output.shape)
         [64, 1]
         >>> # batched matrix x broadcasted vector
         >>> tensor1 = ttnn.to_device(ttnn.from_torch(torch.randn((10, 64, 32), dtype=torch.bfloat16)), device)
         >>> tensor2 = ttnn.to_device(ttnn.from_torch(torch.randn((32), dtype=torch.bfloat16)), device)
-        >>> output1 = tensor1 @ tensor2
-        >>> print(output1.shape)
+        >>> output = tensor1 @ tensor2
+        >>> print(output.shape)
         [10, 64, 1]
         >>> # batched matrix x batched matrix
         >>> tensor1 = ttnn.to_device(ttnn.from_torch(torch.randn((10, 64, 32), dtype=torch.bfloat16)), device)
         >>> tensor2 = ttnn.to_device(ttnn.from_torch(torch.randn((10, 32, 128), dtype=torch.bfloat16)), device)
-        >>> output1 = tensor1 @ tensor2
-        >>> print(output1.shape)
+        >>> output = tensor1 @ tensor2
+        >>> print(output.shape)
         [10, 64, 128]
         >>> # batched matrix x broadcasted matrix
         >>> tensor1 = ttnn.to_device(ttnn.from_torch(torch.randn((10, 64, 32), dtype=torch.bfloat16)), device)
         >>> tensor2 = ttnn.to_device(ttnn.from_torch(torch.randn((32, 128), dtype=torch.bfloat16)), device)
-        >>> output1 = tensor1 @ tensor2
-        >>> print(output1.shape)
+        >>> output = tensor1 @ tensor2
+        >>> print(output.shape)
         [10, 64, 128]
     """
 
@@ -306,8 +306,8 @@ def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
 
         >>> tensor1 = ttnn.to_device(ttnn.from_torch(torch.tensor((1, 2), dtype=torch.bfloat16)), device)
         >>> tensor2 = ttnn.to_device(ttnn.from_torch(torch.tensor((0, 1), dtype=torch.bfloat16)), device)
-        >>> output1 = ttnn.add(tensor1, tensor2, alpha=2)
-        >>> print(output1)
+        >>> output = ttnn.add(tensor1, tensor2, alpha=2)
+        >>> print(output)
         Tensor([ 1, 4], dtype=bfloat16 )
 
     """
@@ -392,8 +392,8 @@ def subtract(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tens
 
         >>> tensor1 = ttnn.to_device(ttnn.from_torch(torch.tensor((1, 2), dtype=torch.bfloat16)), device)
         >>> tensor2 = ttnn.to_device(ttnn.from_torch(torch.tensor((0, 1), dtype=torch.bfloat16)), device)
-        >>> output1 = ttnn.sub(tensor1, tensor2, alpha=2)
-        >>> print(output1)
+        >>> output = ttnn.sub(tensor1, tensor2, alpha=2)
+        >>> print(output)
         Tensor([ 1, 0], dtype=bfloat16 )
     """
     if not isinstance(input_tensor_a, Tensor):
@@ -537,7 +537,6 @@ def permute(input_tensor: Tensor, order) -> Tensor:
     ttl_input_tensor = input_tensor._tensor
 
     try:
-        raise RuntimeError
         return Tensor(ttl.tensor.permute(input_tensor._tensor, order))
     except:
         logger.warning(f"permute of tensor with shape {input_tensor.shape} using order {order} could not be run on the TT device. Defaulting to torch implementation")

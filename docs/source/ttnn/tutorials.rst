@@ -12,5 +12,5 @@ From within the `ttnn/tutorials` directory, launch the notebooks with: `jupyter 
 .. toctree::
 
    tutorials/add.rst
-   tutorials/add-matmul.rst
+   tutorials/matmul.rst
    tutorials/multihead-attention.rst

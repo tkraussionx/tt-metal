@@ -1,5 +1,5 @@
-Example Add Operation
-=============================
+Add Operation
+=====================
 
 .. toctree::
 
