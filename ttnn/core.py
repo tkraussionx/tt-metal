@@ -84,7 +84,7 @@ def matmul(
     input_tensor_a: Tensor,
     input_tensor_b: Tensor,
     *,
-    memory_config: MemoryConfig=DRAM_MEMORY_CONFIG,
+    memory_config: MemoryConfig = DRAM_MEMORY_CONFIG,
     core_grid: Optional[Tuple[int, int]] = None,
 ) -> Tensor:
     """
@@ -205,7 +205,6 @@ def matmul(
 
     if core_grid != None:
         try:
-
             if height_a % TILE_SIZE != 0 or width_a % TILE_SIZE != 0:
                 raise TypeError("The last two dimensions of the first tensor must be a multiple of 32")
 
@@ -226,9 +225,9 @@ def matmul(
                 ttl_input_tensor_b,
                 program_config=ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
                     compute_with_storage_grid_size=core_grid,
-                    in0_block_w=in0_block_w, # k
-                    out_subblock_h=out_subblock_h, # m
-                    out_subblock_w=out_subblock_w, # n
+                    in0_block_w=in0_block_w,  # k
+                    out_subblock_h=out_subblock_h,  # m
+                    out_subblock_w=out_subblock_w,  # n
                     per_core_M=per_core_M,
                     per_core_N=per_core_N,
                     fused_activation=None,
@@ -267,7 +266,7 @@ def matmul(
 
     elif _shape_is_broadcastable(input_shape_a, input_shape_b):
         if width_a != height_b:
-                raise RuntimeError("The width of the first tensor must be equal to the height of the second tensor")
+            raise RuntimeError("The width of the first tensor must be equal to the height of the second tensor")
         if all(x == 1 for x in batch_shape_b):
             ttl_input_tensor_a = input_tensor_a._tensor
             ttl_input_tensor_b = input_tensor_b._tensor
@@ -289,7 +288,7 @@ def matmul(
     return output_tensor
 
 
-def add(input_tensor_a: Tensor, input_tensor_b: Union[Tensor, int, float], *, alpha: Union[int, float]=1) -> Tensor:
+def add(input_tensor_a: Tensor, input_tensor_b: Union[Tensor, int, float], *, alpha: Union[int, float] = 1) -> Tensor:
     """
     add(input_tensor_a: Tensor, input_tensor_b: Union[Tensor, int, float], *, alpha: Union[int, float]=1) -> Tensor
 
@@ -375,7 +374,7 @@ def add(input_tensor_a: Tensor, input_tensor_b: Union[Tensor, int, float], *, al
     return output_tensor
 
 
-def sub(input_tensor_a: Tensor, input_tensor_b: Union[Tensor, int, float], *, alpha: Union[int, float]=1) -> Tensor:
+def sub(input_tensor_a: Tensor, input_tensor_b: Union[Tensor, int, float], *, alpha: Union[int, float] = 1) -> Tensor:
     """
     sub(input_tensor_a: Tensor, input_tensor_b: Union[Tensor, int, float], *, alpha: Union[int, float]=1) -> Tensor:
 
@@ -549,7 +548,7 @@ def reshape(input_tensor: Tensor, shape: Tuple[int, ...]) -> Tensor:
         >>> tensor = ttnn.to_device(ttnn.from_torch(torch.zeros((1, 1, 64, 32), dtype=torch.bfloat16)), device)
         >>> output = ttnn.reshape(tensor, (1, 1, 32, 64))
         >>> print(output.shape)
-        (1, 1, 32, 64)
+        [1, 1, 32, 64]
 
     """
 
@@ -561,14 +560,21 @@ def reshape(input_tensor: Tensor, shape: Tuple[int, ...]) -> Tensor:
     elif ttl_input_tensor.layout() == TILE_LAYOUT:
         *_, old_height, old_width = input_tensor.shape
         *_, new_height, new_width = shape
-        if old_height % TILE_SIZE == 0 and old_width % TILE_SIZE == 0 and new_height % TILE_SIZE == 0 and new_width % TILE_SIZE == 0:
+        if (
+            old_height % TILE_SIZE == 0
+            and old_width % TILE_SIZE == 0
+            and new_height % TILE_SIZE == 0
+            and new_width % TILE_SIZE == 0
+        ):
             return Tensor(ttl_input_tensor.reshape(shape))
 
     try:
         w, z, y, x = shape
         return Tensor(ttl.tensor.reshape(ttl_input_tensor, w, z, y, x))
     except:
-        logger.warning(f"reshape from {input_tensor.shape} to {shape} could not be run on the TT device. Defaulting to torch implementation")
+        logger.warning(
+            f"reshape from {input_tensor.shape} to {shape} could not be run on the TT device. Defaulting to torch implementation"
+        )
         device = ttl_input_tensor.device()
 
         tensor = to_layout(input_tensor, ROW_MAJOR_LAYOUT)
@@ -595,7 +601,7 @@ def permute(input_tensor: Tensor, order: Tuple[int, ...]) -> Tensor:
         >>> tensor = ttnn.to_device(ttnn.from_torch(torch.zeros((1, 1, 64, 32), dtype=torch.bfloat16)), device)
         >>> output = ttnn.permute(tensor, (0, 1, 3, 2))
         >>> print(output.shape)
-        (1, 1, 32, 64)
+        [1, 1, 32, 64]
 
     """
 
@@ -604,7 +610,9 @@ def permute(input_tensor: Tensor, order: Tuple[int, ...]) -> Tensor:
     try:
         return Tensor(ttl.tensor.permute(input_tensor._tensor, order))
     except:
-        logger.warning(f"permute of tensor with shape {input_tensor.shape} using order {order} could not be run on the TT device. Defaulting to torch implementation")
+        logger.warning(
+            f"permute of tensor with shape {input_tensor.shape} using order {order} could not be run on the TT device. Defaulting to torch implementation"
+        )
         device = ttl_input_tensor.device()
         tensor = to_layout(input_tensor, ROW_MAJOR_LAYOUT)
         tensor = from_device(tensor)
@@ -629,6 +637,8 @@ def softmax(input_tensor: Tensor, dim: int) -> Tensor:
 
         >>> tensor = ttnn.to_device(ttnn.from_torch(torch.zeros((1, 1, 64, 32), dtype=torch.bfloat16)), device)
         >>> output = ttnn.softmax(tensor, -1)
+        >>> print(output[0, 0, 0, :3])
+        Tensor([ 0.0310059, 0.0310059, 0.0310059], dtype=bfloat16 )
 
     """
 

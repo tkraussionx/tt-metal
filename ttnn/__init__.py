@@ -7,13 +7,10 @@ from ttnn.tensor import (
     float32,
     bfloat16,
     bfloat8_b,
-
     DRAM_MEMORY_CONFIG,
     L1_MEMORY_CONFIG,
-
     ROW_MAJOR_LAYOUT,
     TILE_LAYOUT,
-
     Tensor,
     from_torch,
     to_torch,

@@ -178,7 +178,6 @@ def test_matmul_same_shape_but_invalid(device, input_a, input_b):
 
 
 def test_tutorial_matmul(device):
-
     torch.manual_seed(0)
 
     m = 1024
@@ -204,7 +203,6 @@ def test_tutorial_matmul(device):
 
 
 def test_tutorial_matmul_with_tilized_inputs(device):
-
     torch.manual_seed(0)
 
     m = 1024
@@ -233,7 +231,6 @@ def test_tutorial_matmul_with_tilized_inputs(device):
 
 
 def test_tutorial_matmul_with_tilized_inputs_in_l1_memory(device):
-
     torch.manual_seed(0)
 
     m = 1024
@@ -262,7 +259,6 @@ def test_tutorial_matmul_with_tilized_inputs_in_l1_memory(device):
 
 
 def test_tutorial_matmul_with_tilized_input_in_l1_memory_and_user_specified_core_grid(device):
-
     torch.manual_seed(0)
 
     m = 1024

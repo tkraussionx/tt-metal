@@ -74,7 +74,6 @@ def from_torch(
 
 
 def to_torch(tensor: Tensor) -> "torch.Tensor":
-
     ttl_tensor = tensor._tensor
 
     if ttl_tensor.layout() != ROW_MAJOR_LAYOUT:
@@ -90,9 +89,7 @@ def to_torch(tensor: Tensor) -> "torch.Tensor":
 
 def to_device(tensor, device, *, memory_config: MemoryConfig = DRAM_MEMORY_CONFIG):
     ttl_tensor = tensor._tensor
-    return Tensor(
-        ttl_tensor.to(device, memory_config)
-    )
+    return Tensor(ttl_tensor.to(device, memory_config))
 
 
 def from_device(tensor):
@@ -121,15 +118,11 @@ __all__ = [
     "float32",
     "bfloat16",
     "bfloat8_b",
-
     "DRAM_MEMORY_CONFIG",
     "L1_MEMORY_CONFIG",
-
     "ROW_MAJOR_LAYOUT",
     "TILE_LAYOUT",
-
     "TILE_SIZE",
-
     "Tensor",
     "from_tensor",
     "to_tensor",
