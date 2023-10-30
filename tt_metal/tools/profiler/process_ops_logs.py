@@ -74,6 +74,8 @@ def parse_io_data(ioString, ioType):
         if IO:
             IOList = IO.split("|")
             shapeList = IOList[0].split("_")
+            while len(shapeList) < 4:
+                shapeList = [1] + shapeList
             IODict = {
                 IO_FIELDS[0]: shapeList[0],
                 IO_FIELDS[1]: shapeList[1],

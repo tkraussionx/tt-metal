@@ -160,9 +160,9 @@ operation::ProgramWithCallbacks untilize_multi_core(const Tensor& a, Tensor& out
     // tt_start_debug_print_server(device->cluster(), {0}, {debug_core});
 
     uint32_t ntiles = a.volume() / TILE_HW;
-    uint32_t ntiles_per_block = a.shape()[3] / TILE_WIDTH;
+    uint32_t ntiles_per_block = a.shape()[-1] / TILE_WIDTH;
     uint32_t nblocks = ceil((float) ntiles / ntiles_per_block);
-    uint32_t block_size_nbytes = a.shape()[3] * a.element_size();
+    uint32_t block_size_nbytes = a.shape()[-1] * a.element_size();
 
     {
         log_debug(LogOp, "ntiles: {}", ntiles);
