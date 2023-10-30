@@ -2,7 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 from loguru import logger
 
@@ -15,6 +15,7 @@ from ttnn.tensor import (
     to_device,
     from_device,
     to_layout,
+    MemoryConfig,
     ROW_MAJOR_LAYOUT,
     TILE_LAYOUT,
     DRAM_MEMORY_CONFIG,
@@ -83,11 +84,11 @@ def matmul(
     input_tensor_a: Tensor,
     input_tensor_b: Tensor,
     *,
-    memory_config=DRAM_MEMORY_CONFIG,
+    memory_config: MemoryConfig=DRAM_MEMORY_CONFIG,
     core_grid: Optional[Tuple[int, int]] = None,
 ) -> Tensor:
     """
-    matmul(input_tensor_a, input_tensor_b) -> Tensor
+    matmul(input_tensor_a: Tensor, input_tensor_b: Tensor, *, memory_config: MemoryConfig=DRAM_MEMORY_CONFIG, core_grid: Optional[Tuple[int, int]] = None) -> Tensor
 
     Returns the matrix product of two tensors.
 
@@ -288,9 +289,9 @@ def matmul(
     return output_tensor
 
 
-def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
+def add(input_tensor_a: Tensor, input_tensor_b: Union[Tensor, int, float], *, alpha: Union[int, float]=1) -> Tensor:
     """
-    add(input_tensor_a, input_tensor_b, *, alpha=1) -> Tensor
+    add(input_tensor_a: Tensor, input_tensor_b: Union[Tensor, int, float], *, alpha: Union[int, float]=1) -> Tensor
 
     Adds :attr:`input_tensor_b`, scaled by :attr:`alpha`, to :attr:`input_tensor_a`.
 
@@ -374,9 +375,9 @@ def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
     return output_tensor
 
 
-def subtract(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
+def sub(input_tensor_a: Tensor, input_tensor_b: Union[Tensor, int, float], *, alpha: Union[int, float]=1) -> Tensor:
     """
-    sub(input_tensor_a, input_tensor_b, *, alpha=1) -> Tensor
+    sub(input_tensor_a: Tensor, input_tensor_b: Union[Tensor, int, float], *, alpha: Union[int, float]=1) -> Tensor:
 
     Subtracts :attr:`input_tensor_b`, scaled by :attr:`alpha`, from :attr:`input_tensor_a`.
 
@@ -458,7 +459,31 @@ def subtract(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tens
     return output_tensor
 
 
-def multiply(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
+def mul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
+    """
+    mul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor
+
+    Multiples :attr:`input_tensor_a` and :attr:`input_tensor_b` element-wise.
+
+    .. math::
+        \mathrm{{input\_tensor\_a}}_i + \mathrm{{input\_tensor\_b}}_i
+
+    Supports broadcasting.
+
+    Args:
+        * :attr:`input_tensor_a`
+        * :attr:`input_tensor_b` (Tensor or Number): the tensor or number to multiply with :attr:`input_tensor_a`.
+
+    Example::
+
+        >>> tensor1 = ttnn.to_device(ttnn.from_torch(torch.tensor((1, 2), dtype=torch.bfloat16)), device)
+        >>> tensor2 = ttnn.to_device(ttnn.from_torch(torch.tensor((0, 1), dtype=torch.bfloat16)), device)
+        >>> output = ttnn.mul(tensor1, tensor2)
+        >>> print(output)
+        Tensor([ 0, 2], dtype=bfloat16 )
+
+    """
+
     if not isinstance(input_tensor_a, Tensor):
         raise TypeError("Expected first argument to be a ttnn.Tensor")
 
@@ -498,18 +523,36 @@ def multiply(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
     return Tensor(ttl.tensor.mul(input_shape_a, ttl_input_tensor_b))
 
 
-sub = subtract
-mul = multiply
+subtract = sub
+multiply = mul
 
 
 Tensor.__matmul__ = matmul
 Tensor.__add__ = add
-Tensor.__sub__ = subtract
-Tensor.__mul__ = multiply
+Tensor.__sub__ = sub
+Tensor.__mul__ = mul
 
 
 # Data Transformations
-def reshape(input_tensor: Tensor, shape) -> Tensor:
+def reshape(input_tensor: Tensor, shape: Tuple[int, ...]) -> Tensor:
+    """
+    reshape(input_tensor: Tensor, shape: Tuple[int, ...]) -> Tensor
+
+    Reshape :attr:`input_tensor` into :attr:`shape`.
+
+    Args:
+        * :attr:`input_tensor`: the input tensor
+        * :attr:`shape`: the desired shape.
+
+    Example::
+
+        >>> tensor = ttnn.to_device(ttnn.from_torch(torch.zeros((1, 1, 64, 32), dtype=torch.bfloat16)), device)
+        >>> output = ttnn.reshape(tensor, (1, 1, 32, 64))
+        >>> print(output.shape)
+        (1, 1, 32, 64)
+
+    """
+
     ttl_input_tensor = input_tensor._tensor
 
     if ttl_input_tensor.layout() == ROW_MAJOR_LAYOUT:
@@ -537,7 +580,25 @@ def reshape(input_tensor: Tensor, shape) -> Tensor:
         return tensor
 
 
-def permute(input_tensor: Tensor, order) -> Tensor:
+def permute(input_tensor: Tensor, order: Tuple[int, ...]) -> Tensor:
+    """
+    permute(input_tensor: Tensor, order: Tuple[int, ...]) -> Tensor
+
+    Permutes :attr:`input_tensor` using :attr:`order`.
+
+    Args:
+        * :attr:`input_tensor`: the input tensor
+        * :attr:`order`: the desired ordering of dimensions.
+
+    Example::
+
+        >>> tensor = ttnn.to_device(ttnn.from_torch(torch.zeros((1, 1, 64, 32), dtype=torch.bfloat16)), device)
+        >>> output = ttnn.permute(tensor, (0, 1, 3, 2))
+        >>> print(output.shape)
+        (1, 1, 32, 64)
+
+    """
+
     ttl_input_tensor = input_tensor._tensor
 
     try:
@@ -554,7 +615,23 @@ def permute(input_tensor: Tensor, order) -> Tensor:
         return tensor
 
 
-def softmax(input_tensor: Tensor, dim) -> Tensor:
+def softmax(input_tensor: Tensor, dim: int) -> Tensor:
+    """
+    softmax(input_tensor: Tensor, dim: int) -> Tensor
+
+    Compute softmax over :attr:`input_tensor` along :attr:`dim`.
+
+    Args:
+        * :attr:`input_tensor`: the input tensor
+        * :attr:`dim`: the dimension along which to compute softmax.
+
+    Example::
+
+        >>> tensor = ttnn.to_device(ttnn.from_torch(torch.zeros((1, 1, 64, 32), dtype=torch.bfloat16)), device)
+        >>> output = ttnn.softmax(tensor, -1)
+
+    """
+
     rank = len(input_tensor.shape)
     if dim < 0:
         dim = rank + dim

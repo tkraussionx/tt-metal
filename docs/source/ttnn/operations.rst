@@ -6,4 +6,8 @@ Operations
 
    operations/add
    operations/sub
+   operations/mul
    operations/matmul
+   operations/reshape
+   operations/permute
+   operations/softmax
