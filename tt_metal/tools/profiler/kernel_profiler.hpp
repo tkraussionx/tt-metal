@@ -69,7 +69,7 @@ namespace kernel_profiler{
         uint32_t index = wIndex;
         buffer[index] = ((time_H & 0x0000FFFF) | (timer_id << 16));
         buffer[index+1] = time_L;
-        wIndex += 2;
+        wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
 #endif //PROFILE_KERNEL
     }
 
@@ -145,6 +145,10 @@ namespace kernel_profiler{
     inline __attribute__((always_inline)) void finish()
     {
 #if defined(PROFILE_KERNEL)
+        for (uint32_t i = 0; i < (wIndex % NOC_ALIGNMENT_FACTOR); i++)
+        {
+            mark_time(PADDING_MARKER);
+        }
         volatile uint32_t *profiler_control_buffer = reinterpret_cast<uint32_t*>(PROFILER_L1_BUFFER_CONTROL);
         profiler_control_buffer[kernel_profiler::deviceBufferEndIndex] = wIndex;
 #endif //PROFILE_KERNEL
@@ -153,6 +157,8 @@ namespace kernel_profiler{
     {
 #if defined(PROFILE_KERNEL) && defined(COMPILE_FOR_BRISC)
         volatile uint32_t *profiler_control_buffer = reinterpret_cast<uint32_t*>(PROFILER_L1_BUFFER_CONTROL);
+        volatile  uint32_t *buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(profilerBuffer);
+
         const uint32_t NOC_ID_MASK = (1 << NOC_ADDR_NODE_ID_BITS) - 1;
         uint32_t noc_id = noc_local_node_id() & 0xFFF;
         uint32_t dram_noc_x = noc_id & NOC_ID_MASK;
@@ -161,6 +167,7 @@ namespace kernel_profiler{
         uint32_t core_flat_id = get_flat_id(dram_noc_x, dram_noc_y);
 
         finish();
+
 
         int hostIndex;
         int deviceIndex;
@@ -186,14 +193,14 @@ namespace kernel_profiler{
                         pcie_buffer_dst_noc_addr,
                         profiler_control_buffer[deviceIndex] * sizeof(uint32_t));
 
+                noc_async_write_barrier();
                 profiler_control_buffer[hostIndex] = currEndIndex;
             }
             else
             {
-                profiler_control_buffer[hostIndex] = PROFILER_L1_VECTOR_SIZE+1;
+                profiler_control_buffer[hostIndex] = PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC+1;
             }
         }
-        noc_async_write_barrier();
 #endif //PROFILE_KERNEL
     }
 }

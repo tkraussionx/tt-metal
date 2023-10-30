@@ -305,7 +305,6 @@ int main() {
         kernel_profiler::init_profiler();
         kernel_profiler::mark_fw_start();
 
-        kernel_profiler::mark_fw_end();
 
         // Invalidate the i$ now the kernels have loaded and before running
         volatile tt_reg_ptr uint32_t* cfg_regs = core.cfg_regs_base(0);
@@ -333,6 +332,7 @@ int main() {
             uint64_t dispatch_addr = NOC_XY_ADDR(NOC_X(DISPATCH_CORE_X), NOC_Y(DISPATCH_CORE_Y), DISPATCH_MESSAGE_ADDR);
             noc_fast_atomic_increment(noc_index, NCRISC_AT_CMD_BUF, dispatch_addr, 1, 31 /*wrap*/, false /*linked*/);
         }
+        kernel_profiler::mark_fw_end();
         kernel_profiler::send_profiler_data_to_host();
     }
 
