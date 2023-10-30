@@ -36,12 +36,6 @@ def close(device):
     del DEVICES[device.id()]
 
 
-def _trim_list_to_max_rank(lst, max_rank):
-    while len(lst) > max_rank and lst[0] == 1:
-        lst.pop(0)
-    return lst
-
-
 def _is_scalar(value):
     return isinstance(value, (int, float, complex))
 
@@ -161,6 +155,7 @@ def matmul(
 
     input_shape_a = input_tensor_a.shape
     input_shape_b = input_tensor_b.shape
+    output_shape = input_shape_a[:-1] + input_shape_b[-1:]
 
     if not isinstance(input_tensor_a, Tensor):
         raise RuntimeError("Expected first argument to be a ttnn.Tensor")
@@ -176,8 +171,6 @@ def matmul(
     # The idea is to make the shapes "possibly" broadcastable.
     if len(input_tensor_a.shape) > MAX_RANK:
         raise RuntimeError("There is currently no support for ranks greater than 4.")
-
-    expected_rank = len(input_shape_a)
 
     if len(input_shape_b) > MAX_RANK:
         raise RuntimeError(f"There is currently no support for ranks greater than {MAX_RANK}.")
@@ -202,55 +195,93 @@ def matmul(
     input_tensor_a = _reshape_to_4D(input_tensor_a)
     input_tensor_b = _reshape_to_4D(input_tensor_b)
 
-    # if height_a % 32 != 0 or width_a % 32 != 0:
-    #     raise TypeError("The last two dimensions of the first tensor must be a multiple of 32")
-
-    # if height_b % 32 != 0 or width_b % 32 != 0:
-    #     raise TypeError("The last two dimensions of the second tensor must be a multiple of 32")
-
-    out = None
     if width_a != height_b:
         raise RuntimeError("The width of the first tensor must be equal to the height of the second tensor")
 
-    if height_a == 1 and width_b == 1:  # dot product
-        input_tensor_b = reshape(input_tensor_b, input_tensor_b.shape[:-2] + [width_b, height_b])
-        # return a dot product
-        out = Tensor(
-            ttl.tensor.bcast(
-                input_tensor_a._tensor,
-                input_tensor_b._tensor,
-                ttl.tensor.BcastOpMath.MUL,
-                ttl.tensor.BcastOpDim.H,
+    if core_grid != None:
+        try:
+
+            if height_a % TILE_SIZE != 0 or width_a % TILE_SIZE != 0:
+                raise TypeError("The last two dimensions of the first tensor must be a multiple of 32")
+
+            if height_b % TILE_SIZE != 0 or width_b % TILE_SIZE != 0:
+                raise TypeError("The last two dimensions of the second tensor must be a multiple of 32")
+
+            per_core_M = (height_a // TILE_SIZE) // core_grid[0]
+            per_core_N = (width_b // TILE_SIZE) // core_grid[1]
+
+            in0_block_w = 1
+            out_subblock_h = per_core_M
+            out_subblock_w = per_core_N
+
+            ttl_input_tensor_a = input_tensor_a._tensor
+            ttl_input_tensor_b = input_tensor_b._tensor
+            ttl_output_tensor = ttl.operations.primary.matmul(
+                ttl_input_tensor_a,
+                ttl_input_tensor_b,
+                program_config=ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+                    compute_with_storage_grid_size=core_grid,
+                    in0_block_w=in0_block_w, # k
+                    out_subblock_h=out_subblock_h, # m
+                    out_subblock_w=out_subblock_w, # n
+                    per_core_M=per_core_M,
+                    per_core_N=per_core_N,
+                    fused_activation=None,
+                ),
                 output_mem_config=memory_config,
             )
+
+            return Tensor(ttl_output_tensor)
+        except Exception as e:
+            logger.warning("Matmul with user-specified core grid failed to run. Defaulting to general implementation.")
+            logger.debug(e)
+
+    if height_a == 1 and width_b == 1:  # dot product
+        input_tensor_b = reshape(input_tensor_b, input_tensor_b.shape[:-2] + [width_b, height_b])
+
+        ttl_input_tensor_a = input_tensor_a._tensor
+        ttl_input_tensor_b = input_tensor_b._tensor
+
+        # return a dot product
+        ttl_output_tensor = ttl.tensor.bcast(
+            ttl_input_tensor_a,
+            ttl_input_tensor_b,
+            ttl.tensor.BcastOpMath.MUL,
+            ttl.tensor.BcastOpDim.H,
+            output_mem_config=memory_config,
         )
-        t = ttl.tensor.reduce(
-            out._tensor,
+        ttl_output_tensor = ttl.tensor.reduce(
+            ttl_output_tensor,
             ttl.tensor.ReduceOpMath.SUM,
             ttl.tensor.ReduceOpDim.W,
             1.0,
             output_mem_config=memory_config,
         )
-        out = Tensor(t)
-        expected_rank = 0
+        output_tensor = Tensor(ttl_output_tensor)
+        output_shape = (32,)
+
     elif _shape_is_broadcastable(input_shape_a, input_shape_b):
-        if all(x == 1 for x in batch_shape_b):
-            if width_a == height_b:
-                out = Tensor(
-                    ttl.tensor.matmul(input_tensor_a._tensor, input_tensor_b._tensor, output_mem_config=memory_config)
-                )
-            else:
+        if width_a != height_b:
                 raise RuntimeError("The width of the first tensor must be equal to the height of the second tensor")
-        else:
-            out = Tensor(
-                ttl.tensor.bmm(input_tensor_a._tensor, input_tensor_b._tensor, output_mem_config=memory_config)
+        if all(x == 1 for x in batch_shape_b):
+            ttl_input_tensor_a = input_tensor_a._tensor
+            ttl_input_tensor_b = input_tensor_b._tensor
+            output_tensor = Tensor(
+                ttl.tensor.matmul(ttl_input_tensor_a, ttl_input_tensor_b, output_mem_config=memory_config)
             )
+        else:
+            ttl_input_tensor_a = input_tensor_a._tensor
+            ttl_input_tensor_b = input_tensor_b._tensor
+            output_tensor = Tensor(
+                ttl.tensor.bmm(ttl_input_tensor_a, ttl_input_tensor_b, output_mem_config=memory_config)
+            )
+
     else:
         raise RuntimeError("These tensors cannot be broadcasted")
 
-    if len(out.shape) != expected_rank:
-        out = reshape(out, _trim_list_to_max_rank(out.shape, expected_rank))
-    return out
+    if output_tensor.shape != output_shape:
+        output_tensor = reshape(output_tensor, output_shape)
+    return output_tensor
 
 
 def add(input_tensor_a: Tensor, input_tensor_b: Tensor, *, alpha=1) -> Tensor:
