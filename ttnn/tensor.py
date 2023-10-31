@@ -53,11 +53,13 @@ class Tensor:
             tensor = self
             tensor = from_device(tensor)
             tensor = to_torch(tensor)
+            ttl.tensor.log_external_operation(tensor.__getitem__, tensor, slices)
             tensor = tensor[slices]
             tensor = from_torch(tensor, dtype=self.dtype)
         else:
             tensor = self
             tensor = to_torch(tensor)
+            ttl.tensor.log_external_operation(tensor.__getitem__, tensor, slices)
             tensor = tensor[slices]
             tensor = from_torch(tensor, dtype=self.dtype)
         return tensor
@@ -86,6 +88,7 @@ def from_torch(
         Tensor([ [1.375, -1.30469, -0.714844],
             [-0.761719, 0.53125, -0.652344]], dtype=bfloat16 )
     """
+    ttl.tensor.log_external_operation(from_torch, tensor)
     return Tensor(ttl.tensor.Tensor(tensor, dtype))
 
 
@@ -106,6 +109,7 @@ def to_torch(tensor: Tensor) -> "torch.Tensor":
                 [ 0.9023, -0.5820,  0.5312]], dtype=torch.bfloat16)
     """
     ttl_tensor = tensor._tensor
+    ttl.tensor.log_external_operation(to_torch, ttl_tensor)
 
     if ttl_tensor.layout() != ROW_MAJOR_LAYOUT:
         raise RuntimeError("ttnn.Tensor has to be in ROW_MAJOR Layout to be convered to torch.Tensor")
@@ -137,6 +141,7 @@ def to_device(tensor, device, *, memory_config: MemoryConfig = DRAM_MEMORY_CONFI
         Tensor([ 0.800781, -0.455078, -0.585938], dtype=bfloat16 )
     """
     ttl_tensor = tensor._tensor
+    ttl.tensor.log_external_operation(to_device, ttl_tensor)
     return Tensor(ttl_tensor.to(device, memory_config))
 
 
@@ -158,6 +163,7 @@ def from_device(tensor):
         Tensor([ 0.365234, 0.130859, 0.75], dtype=bfloat16 )
     """
     ttl_tensor = tensor._tensor
+    ttl.tensor.log_external_operation(from_device, ttl_tensor)
     return Tensor(ttl_tensor.cpu())
 
 

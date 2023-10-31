@@ -122,7 +122,7 @@ def torch_random(shape, low, high, dtype):
 @pytest.mark.parametrize("sequence_size", [2 * 32])
 @pytest.mark.parametrize("num_heads", [4])
 @pytest.mark.parametrize("head_size", [32])
-def test_multi_head_attention(device, batch_size, sequence_size, num_heads, head_size):
+def test_multi_head_attention(device, use_program_cache, batch_size, sequence_size, num_heads, head_size):
     torch.manual_seed(0)
 
     hidden_size = num_heads * head_size

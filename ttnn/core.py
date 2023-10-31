@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+import math
 from typing import Optional, Tuple, Union
 
 from loguru import logger
@@ -39,6 +40,10 @@ def open(device_id: int):
 def close(device):
     ttl.device.CloseDevice(device)
     del DEVICES[device.id()]
+
+
+def enable_program_cache():
+    ttl.program_cache.enable()
 
 
 def _is_scalar(value):
@@ -211,12 +216,21 @@ def matmul(
             if height_b % TILE_SIZE != 0 or width_b % TILE_SIZE != 0:
                 raise TypeError("The last two dimensions of the second tensor must be a multiple of 32")
 
-            per_core_M = (height_a // TILE_SIZE) // core_grid[0]
-            per_core_N = (width_b // TILE_SIZE) // core_grid[1]
+            per_core_M = int(math.ceil((height_a / TILE_SIZE) / core_grid[0]))
+            per_core_N = int(math.ceil(width_b / TILE_SIZE) / core_grid[1])
 
             in0_block_w = 1
-            out_subblock_h = per_core_M
-            out_subblock_w = per_core_N
+            out_subblock_h = 1
+            out_subblock_w = 1
+
+            if per_core_M % out_subblock_h != 0:
+                raise RuntimeError("Invalid matmul")
+
+            if per_core_N % out_subblock_w != 0:
+                raise RuntimeError("Invalid matmul")
+
+            if out_subblock_h * out_subblock_w > 8:
+                raise RuntimeError("Cannot have more than 8 output tiles")
 
             ttl_input_tensor_a = input_tensor_a._tensor
             ttl_input_tensor_b = input_tensor_b._tensor
@@ -224,7 +238,7 @@ def matmul(
                 ttl_input_tensor_a,
                 ttl_input_tensor_b,
                 program_config=ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
-                    compute_with_storage_grid_size=core_grid,
+                    compute_with_storage_grid_size=(core_grid[1], core_grid[0]),
                     in0_block_w=in0_block_w,  # k
                     out_subblock_h=out_subblock_h,  # m
                     out_subblock_w=out_subblock_w,  # n
@@ -572,14 +586,12 @@ def reshape(input_tensor: Tensor, shape: Tuple[int, ...]) -> Tensor:
         w, z, y, x = shape
         return Tensor(ttl.tensor.reshape(ttl_input_tensor, w, z, y, x))
     except:
-        logger.warning(
-            f"reshape from {input_tensor.shape} to {shape} could not be run on the TT device. Defaulting to torch implementation"
-        )
-        device = ttl_input_tensor.device()
 
+        device = ttl_input_tensor.device()
         tensor = to_layout(input_tensor, ROW_MAJOR_LAYOUT)
         tensor = from_device(tensor)
         tensor = to_torch(tensor)
+        ttl.tensor.log_external_operation(tensor.reshape, ttl_input_tensor, shape)
         tensor = tensor.reshape(shape=shape).contiguous()
         tensor = from_torch(tensor, input_tensor.dtype)
         tensor = to_device(tensor, device)
@@ -610,13 +622,12 @@ def permute(input_tensor: Tensor, order: Tuple[int, ...]) -> Tensor:
     try:
         return Tensor(ttl.tensor.permute(input_tensor._tensor, order))
     except:
-        logger.warning(
-            f"permute of tensor with shape {input_tensor.shape} using order {order} could not be run on the TT device. Defaulting to torch implementation"
-        )
+
         device = ttl_input_tensor.device()
         tensor = to_layout(input_tensor, ROW_MAJOR_LAYOUT)
         tensor = from_device(tensor)
         tensor = to_torch(tensor)
+        ttl.tensor.log_external_operation(tensor.permute, ttl_input_tensor, order)
         tensor = tensor.permute(order).contiguous()
         tensor = from_torch(tensor, input_tensor.dtype)
         tensor = to_device(tensor, device)

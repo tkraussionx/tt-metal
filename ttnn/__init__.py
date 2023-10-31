@@ -24,6 +24,8 @@ from ttnn.core import (
     # initialization
     open,
     close,
+    # program_cache,
+    enable_program_cache,
     # math operations
     matmul,
     add,
