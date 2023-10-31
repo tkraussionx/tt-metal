@@ -330,6 +330,20 @@ def shapes_and_datagen(shape_dict, datagen_dict, test_args_gen, test_tt_dtypes, 
             for shapes, datagen_funcs, test_args in _gen_shapes_and_args(start_shape, end_shape, interval, _gen_layernorm_shapes):
                 yield shapes, datagen_funcs, test_args
 
+
+        elif method == "groupnorm":
+            assert (len(start_shape) == 4)
+            assert (len(end_shape) == 4)
+
+            def _gen_groupnorm_shapes(shape):
+                beta = [1, shape[1], 1, 1]
+                gamma =  [1, shape[1], 1, 1]
+                return [shape, gamma, beta]
+
+            for shapes, datagen_funcs, test_args in _gen_shapes_and_args(start_shape, end_shape, interval, _gen_groupnorm_shapes):
+                yield shapes, datagen_funcs, test_args
+
+
         elif method == "add_layernorm":
             assert len(start_shape) == 4
             assert len(end_shape) == 4

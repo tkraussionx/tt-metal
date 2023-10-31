@@ -151,7 +151,7 @@ def run_groupnorm_tests(
 )
 @pytest.mark.parametrize(
     "test_id",
-    (0,),
+    (2,),
     ids=[
         "GN",
     ],

@@ -2162,3 +2162,29 @@ def rmsnorm(x, y, z, *args, device, dtype, layout, input_mem_config, output_mem_
     t1 = ttl.tensor.rmsnorm(t0, 1e-5, t1, t2, output_mem_config=output_mem_config)
 
     return tt2torch_tensor(t1)
+
+
+@setup_host_and_device
+def groupnorm(x, y, z, *args, device, dtype, layout, input_mem_config, output_mem_config, **kwargs):
+    print('enter---')
+
+    x_shape = x.shape
+    y_shape = y.shape
+    z_shape = z.shape
+
+    target_y = torch.zeros(x_shape)
+
+    target_y[:y_shape[0], :y_shape[1], :y_shape[2], :y_shape[3]] = y
+
+    target_z = torch.zeros(x_shape)
+
+    target_z[:z_shape[0], :z_shape[1], :z_shape[2], :z_shape[3]] = z
+
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = setup_tt_tensor(target_y, device, layout[1], input_mem_config[1], dtype[1])
+    t2 = setup_tt_tensor(target_z, device, layout[2], input_mem_config[2], dtype[2])
+
+    t1 = ttl.tensor.groupnorm(t0, 1, 1e-5, t1, t2, output_mem_config=output_mem_config)
+    print('ttt-------')
+    print(t1.shape())
+    return tt2torch_tensor(t1)

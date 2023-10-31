@@ -544,6 +544,16 @@ def gen_bert_qkv_args(
     return gen_dtype_layout_device(input_shapes, dtypes, layouts, mem_configs, do_sanitize_args=False)
 
 
+
+def gen_groupnorm_args(
+    input_shapes,
+    dtypes=[supported_tt_dtypes],
+    layouts=[supported_tt_layouts],
+    mem_configs=[supported_mem_configs],
+):
+    return gen_dtype_layout_device(input_shapes, dtypes, layouts, mem_configs, do_sanitize_args=False)
+
+
 def gen_permute_args(
     input_shapes,
     dtypes=[supported_tt_dtypes],

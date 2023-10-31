@@ -385,6 +385,20 @@ def groupnorm_noweights(x, *args, **kwargs):
     return torch.nn.functional.group_norm(input=x, num_groups=1, weight=None, bias=None, eps=1e-05)
 
 
+def groupnorm(x, y, z, *args, **kwargs):
+    x_shape = x.shape
+    num_channels = x_shape[1]
+
+    weight = y.reshape(num_channels)
+    bias = z.reshape(num_channels)
+
+    res =torch.nn.functional.group_norm(input=x, num_groups=1, weight=weight, bias=bias, eps=1e-05)
+    print('RES-------sjhape')
+    print(res.shape)
+    return res
+
+
+
 def add_layernorm(x, y, z, w, *args, **kwargs):
     res = x + y
 
