@@ -204,6 +204,8 @@ namespace tt::tt_metal::detail
         auto torch_shape = std::vector<std::uint32_t>(std::begin(shape), std::end(shape));
         auto tensor = frombuffer(buffer, "dtype"_a=torch_dtype);
         tensor = tensor.attr("reshape")(torch_shape);
+        tensor = tensor.attr("contiguous")();
+        tensor = tensor.attr("clone")();
         return tensor;
     }
 

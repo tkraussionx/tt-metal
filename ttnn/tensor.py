@@ -46,17 +46,17 @@ class Tensor:
         return self._tensor.layout()
 
     def __getitem__(self: "Tensor", slices) -> "Tensor":
+        if self.layout != ROW_MAJOR_LAYOUT:
+            raise RuntimeError("Tensor must be in ROW_MAJOR layout to use slicing!")
+
         if self._tensor.storage_type() == ttl.tensor.StorageType.DEVICE:
             tensor = self
-            tensor = to_layout(tensor, ROW_MAJOR_LAYOUT)
             tensor = from_device(tensor)
             tensor = to_torch(tensor)
             tensor = tensor[slices]
             tensor = from_torch(tensor, dtype=self.dtype)
         else:
             tensor = self
-            if tensor.layout != ROW_MAJOR_LAYOUT:
-                raise RuntimeError("Tensor must be in ROW_MAJOR layout!")
             tensor = to_torch(tensor)
             tensor = tensor[slices]
             tensor = from_torch(tensor, dtype=self.dtype)
@@ -82,8 +82,6 @@ def to_torch(tensor: Tensor) -> "torch.Tensor":
     if ttl_tensor.storage_type() == ttl.tensor.StorageType.DEVICE:
         raise RuntimeError("ttnn.Tensor cannot be on device when converting to torch!")
 
-    if ttl_tensor.layout() != ROW_MAJOR_LAYOUT:
-        ttl_tensor = ttl_tensor.to(ROW_MAJOR_LAYOUT)
     return ttl_tensor.to_torch()
 
 

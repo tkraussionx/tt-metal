@@ -22,7 +22,6 @@ def test_softmax(device, h, w):
     input_tensor = ttnn.from_torch(torch_input_tensor)
     input_tensor = ttnn.to_device(input_tensor, device)
     output_tensor = ttnn.softmax(input_tensor, dim=-1)
-    print(output_tensor)
     output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
     output_tensor = ttnn.from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor)
