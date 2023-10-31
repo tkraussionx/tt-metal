@@ -70,10 +70,41 @@ def from_torch(
     tensor: "torch.Tensor",
     dtype: Optional[DataType] = None,
 ) -> Tensor:
+    """
+    from_torch(tensor: torch.Tensor, dtype: Optional[DataType] = None) -> Tensor
+
+    Converts the `torch.Tensor` :attr:`tensor` into a `ttnn.Tensor`.
+
+    Args:
+        * :attr:`tensor`: the torch.Tensor
+        * :attr:`dtype`: the optional `ttnn` date type.
+
+    Example::
+
+        >>> tensor = ttnn.from_torch(torch.randn((2,3)), dtype=ttnn.bfloat16)
+        >>> print(tensor)
+        Tensor([ [1.375, -1.30469, -0.714844],
+            [-0.761719, 0.53125, -0.652344]], dtype=bfloat16 )
+    """
     return Tensor(ttl.tensor.Tensor(tensor, dtype))
 
 
 def to_torch(tensor: Tensor) -> "torch.Tensor":
+    """
+    to_torch(tensor: ttnn.Tensor) -> torch.Tensor
+
+    Converts the `ttnn.Tensor` :attr:`tensor` into a `torch.Tensor`.
+
+    Args:
+        * :attr:`tensor`: the ttnn.Tensor
+
+    Example::
+        >>> ttnn_tensor = ttnn.from_torch(torch.randn((2,3)), dtype=ttnn.bfloat16)
+        >>> torch_tensor = ttnn.to_torch(ttnn_tensor)
+        >>> print(torch_tensor)
+        tensor([[-0.3008, -0.8438,  0.3242],
+                [ 0.9023, -0.5820,  0.5312]], dtype=torch.bfloat16)
+    """
     ttl_tensor = tensor._tensor
 
     if ttl_tensor.layout() != ROW_MAJOR_LAYOUT:
@@ -86,16 +117,68 @@ def to_torch(tensor: Tensor) -> "torch.Tensor":
 
 
 def to_device(tensor, device, *, memory_config: MemoryConfig = DRAM_MEMORY_CONFIG):
+    """
+    to_device(tensor: ttnn.Tensor, device: tt_lib.device.Device, dtype: Optional[DataType] = None) -> Tensor
+
+    Copies the `ttnn.Tensor` :attr:`tensor` to the `tt_lib.device.Device`.
+    The tensor may be placed in DRAM or L1 memory.
+
+    Args:
+        * :attr:`tensor`: the ttnn.Tensor
+        * :attr:`memory_config`: the optional MemoryConfig (DRAM_MEMORY_CONFIG or L1_MEMORY_CONFIG). Defaults to DRAM_MEMORY_CONFIG.
+
+    Example::
+
+        >>> device_id = 0
+        >>> device = ttnn.open(device_id)
+        >>> tensor_on_host = ttnn.from_torch(torch.randn((10, 64, 32)), dtype=ttnn.bfloat16)
+        >>> tensor_on_device = ttnn.to_device(tensor_on_host, device, memory_config=ttnn.L1_MEMORY_CONFIG)
+        >>> print(tensor_on_device[0,0,:3])
+        Tensor([ 0.800781, -0.455078, -0.585938], dtype=bfloat16 )
+    """
     ttl_tensor = tensor._tensor
     return Tensor(ttl_tensor.to(device, memory_config))
 
 
 def from_device(tensor):
+    """
+    from_device(tensor: ttnn.Tensor) -> Tensor
+
+    Copies the `ttnn.Tensor` :attr:`tensor` to the host.
+
+    Args:
+        * :attr:`tensor`: the ttnn.Tensor
+
+    Example::
+        >>> device_id = 0
+        >>> device = ttnn.open(device_id)
+        >>> tensor_on_device = ttnn.to_device(ttnn.from_torch(torch.randn((10, 64, 32), dtype=torch.bfloat16)), device)
+        >>> tensor_on_host = ttnn.from_device(tensor_on_device)
+        >>> print(tensor_on_host[0,0,:3])
+        Tensor([ 0.365234, 0.130859, 0.75], dtype=bfloat16 )
+    """
     ttl_tensor = tensor._tensor
     return Tensor(ttl_tensor.cpu())
 
 
 def to_layout(tensor, layout: Layout):
+    """
+    to_layout(tensor: ttnn.Tensor, layout: Layout) -> Tensor
+
+    Organizes the `ttnn.Tensor` :attr:`tensor` into eiter ROW_MAJOR_LAYOUT or TILE_LAYOUT.
+
+    Args:
+        * :attr:`tensor`: the ttnn.Tensor
+        * :attr:`layout`: the layout of either ttnn.ROW_MAJOR_LAYOUT or ttnn.TILE_LAYOUT.
+
+    Example::
+        >>> device_id = 0
+        >>> device = ttnn.open(device_id)
+        >>> tensor = ttnn.to_device(ttnn.from_torch(torch.randn((10, 64, 32), dtype=torch.bfloat16)), device)
+        >>> tensor = ttnn.to_layout(tensor, layout=ttnn.TILE_LAYOUT)
+        >>> print(tensor[0,0,:3])
+        Tensor([ 1.42188, -1.25, -0.398438], dtype=bfloat16 )
+    """
     ttl_tensor = tensor._tensor
     if ttl_tensor.layout() == layout:
         return tensor
@@ -106,7 +189,22 @@ def to_layout(tensor, layout: Layout):
     return Tensor(ttl_tensor)
 
 
-def free(tensor: Tensor) -> str:
+def free(tensor: Tensor):
+    """
+    free(tensor: ttnn.Tensor)
+
+    Releases the resources for `ttnn.Tensor` :attr:`tensor` explicitly.
+
+    Args:
+        * :attr:`tensor`: the ttnn.Tensor
+
+    Example::
+        >>> device_id = 0
+        >>> device = ttnn.open(device_id)
+        >>> tensor = ttnn.to_device(ttnn.from_torch(torch.randn((10, 64, 32), dtype=torch.bfloat16)), device)
+        >>> tensor = ttnn.to_layout(tensor, layout=ttnn.TILE_LAYOUT)
+        >>> ttnn.free(tensor)
+    """
     tensor._tensor.deallocate(force=True)
 
 

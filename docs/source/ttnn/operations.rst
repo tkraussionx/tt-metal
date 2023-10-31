@@ -5,9 +5,15 @@ Operations
    :maxdepth: 1
 
    operations/add
-   operations/sub
-   operations/mul
+   operations/free
+   operations/from_device
+   operations/from_torch
    operations/matmul
-   operations/reshape
+   operations/mul
    operations/permute
+   operations/reshape
    operations/softmax
+   operations/sub
+   operations/to_device
+   operations/to_layout
+   operations/to_torch
