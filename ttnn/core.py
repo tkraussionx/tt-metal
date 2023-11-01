@@ -9,6 +9,8 @@ from loguru import logger
 
 import tt_lib as ttl
 
+from z3 import sat, Solver, Int
+
 from ttnn.tensor import (
     Tensor,
     from_torch,
@@ -210,6 +212,8 @@ def matmul(
 
     if core_grid != None:
         try:
+            s = Solver()
+
             if height_a % TILE_SIZE != 0 or width_a % TILE_SIZE != 0:
                 raise TypeError("The last two dimensions of the first tensor must be a multiple of 32")
 
@@ -222,6 +226,35 @@ def matmul(
             in0_block_w = 1
             out_subblock_h = 1
             out_subblock_w = 1
+            in0_block_w_var = Int("in0_block_w")
+            out_subblock_h_var = Int("out_subblock_h")
+            out_subblock_w_var = Int("out_subblock_w")
+
+            per_core_M_var = Int("per_core_M")
+            per_core_N_var = Int("per_core_N")
+            out_subblock_h_var = Int("out_subblock_h")
+            out_subblock_w_var = Int("out_subblock_w")
+
+            s.add(per_core_M_var == per_core_M)
+            s.add(per_core_N_var == per_core_N)
+            s.add(out_subblock_h_var == out_subblock_h)
+            s.add(out_subblock_w_var == out_subblock_w)
+            s.add(in0_block_w_var <= 4)
+            s.add(per_core_M % out_subblock_h == 0)
+            s.add(per_core_N % out_subblock_w == 0)
+            s.add(out_subblock_h * out_subblock_w <= 8)
+
+            if s.check() == sat:
+                m = s.model()
+                in0_block_w = m[in0_block_w_var].as_long()
+                out_subblock_h = m[out_subblock_h_var].as_long()
+                out_subblock_w = m[out_subblock_w_var].as_long()
+                print(f"in0_block_w={in0_block_w}, out_subblock_h={out_subblock_h}, out_subblock_w = {out_subblock_w}")
+            else:
+                print("Unable to find a solution.  Defaulting parameters for k,m,n guidance.")
+                in0_block_w = 1
+                out_subblock_h = 1
+                out_subblock_w = 1
 
             if per_core_M % out_subblock_h != 0:
                 raise RuntimeError("Invalid matmul")
@@ -586,6 +619,7 @@ def reshape(input_tensor: Tensor, shape: Tuple[int, ...]) -> Tensor:
         w, z, y, x = shape
         return Tensor(ttl.tensor.reshape(ttl_input_tensor, w, z, y, x))
     except:
+
         @ttl.tensor.decorate_external_operation
         def torch_reshape(tensor, shape):
             return tensor.reshape(shape).contiguous()
@@ -624,6 +658,7 @@ def permute(input_tensor: Tensor, order: Tuple[int, ...]) -> Tensor:
     try:
         return Tensor(ttl.tensor.permute(input_tensor._tensor, order))
     except:
+
         @ttl.tensor.decorate_external_operation
         def torch_permute(tensor, order):
             return tensor.permute(order).contiguous()

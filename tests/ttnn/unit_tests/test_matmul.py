@@ -284,3 +284,31 @@ def test_tutorial_matmul_with_tilized_input_in_l1_memory_and_user_specified_core
     output = ttnn.to_torch(output)
 
     assert_with_pcc(torch_output, output, pcc=0.999)
+
+
+def test_with_core_grid_and_solver(device):
+    torch.manual_seed(0)
+
+    m = 7
+    k = 1024
+    n = 1024
+
+    torch_a = torch.randn((m, k), dtype=torch.bfloat16)
+    torch_b = torch.randn((k, n), dtype=torch.bfloat16)
+    torch_output = torch_a @ torch_b
+
+    a = ttnn.from_torch(torch_a)
+    b = ttnn.from_torch(torch_b)
+
+    a = ttnn.to_device(a, device, memory_config=ttnn.L1_MEMORY_CONFIG)
+    b = ttnn.to_device(b, device, memory_config=ttnn.L1_MEMORY_CONFIG)
+
+    a = ttnn.to_layout(a, ttnn.TILE_LAYOUT)
+    b = ttnn.to_layout(b, ttnn.TILE_LAYOUT)
+
+    output = ttnn.matmul(a, b, memory_config=ttnn.L1_MEMORY_CONFIG, core_grid=(8, 8))
+    output = ttnn.to_layout(output, ttnn.ROW_MAJOR_LAYOUT)
+    output = ttnn.from_device(output)
+    output = ttnn.to_torch(output)
+
+    assert_with_pcc(torch_output, output, pcc=0.999)
