@@ -2172,7 +2172,7 @@ def groupnorm(x, y, z, *args, device, dtype, layout, input_mem_config, output_me
     y_shape = y.shape
     z_shape = z.shape
 
-    target_y = torch.zeros(x_shape)
+    target_y = torch.ones(x_shape)
 
     target_y[:y_shape[0], :y_shape[1], :y_shape[2], :y_shape[3]] = y
 
