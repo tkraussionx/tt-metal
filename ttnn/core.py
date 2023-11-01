@@ -586,13 +586,15 @@ def reshape(input_tensor: Tensor, shape: Tuple[int, ...]) -> Tensor:
         w, z, y, x = shape
         return Tensor(ttl.tensor.reshape(ttl_input_tensor, w, z, y, x))
     except:
+        @ttl.tensor.decorate_external_operation
+        def torch_reshape(tensor, shape):
+            return tensor.reshape(shape).contiguous()
 
         device = ttl_input_tensor.device()
         tensor = to_layout(input_tensor, ROW_MAJOR_LAYOUT)
         tensor = from_device(tensor)
         tensor = to_torch(tensor)
-        ttl.tensor.log_external_operation(tensor.reshape, ttl_input_tensor, shape)
-        tensor = tensor.reshape(shape=shape).contiguous()
+        tensor = torch_reshape(tensor, shape)
         tensor = from_torch(tensor, input_tensor.dtype)
         tensor = to_device(tensor, device)
         return tensor
@@ -622,13 +624,15 @@ def permute(input_tensor: Tensor, order: Tuple[int, ...]) -> Tensor:
     try:
         return Tensor(ttl.tensor.permute(input_tensor._tensor, order))
     except:
+        @ttl.tensor.decorate_external_operation
+        def torch_permute(tensor, order):
+            return tensor.permute(order).contiguous()
 
         device = ttl_input_tensor.device()
         tensor = to_layout(input_tensor, ROW_MAJOR_LAYOUT)
         tensor = from_device(tensor)
         tensor = to_torch(tensor)
-        ttl.tensor.log_external_operation(tensor.permute, ttl_input_tensor, order)
-        tensor = tensor.permute(order).contiguous()
+        tensor = torch_permute(tensor, order)
         tensor = from_torch(tensor, input_tensor.dtype)
         tensor = to_device(tensor, device)
         return tensor
