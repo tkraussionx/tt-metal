@@ -89,9 +89,15 @@ void DumpDeviceProfileResults(Device *device, vector<CoreCoord>& worker_cores) {
 #endif
 }
 
-void SetProfilerDir(std::string output_dir){
+void SetDeviceProfilerDir(std::string output_dir){
 #if defined(PROFILER)
-     tt_metal_profiler.setOutputDir(output_dir);
+     tt_metal_profiler.setDeviceOutputDir(output_dir);
+#endif
+}
+
+void SetHostProfilerDir(std::string output_dir){
+#if defined(PROFILER)
+     tt_metal_profiler.setHostOutputDir(output_dir);
 #endif
 }
 

@@ -13,7 +13,7 @@
 
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tensor/tensor.hpp"
-//#include "tools/profiler/profiler.hpp"
+#include "tools/profiler/profiler.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
@@ -34,7 +34,7 @@ namespace op_profiler {
     };
 
     namespace detail {
-        static const std::filesystem::path logLocationsRecord = "tt_metal/tools/profiler/logs/.locations.log";
+        static const std::filesystem::path logLocationsRecord = "./profiler/logs/.locations.log";
 
         static string replace_comma(const string& s)
         {
@@ -103,15 +103,6 @@ namespace op_profiler {
 
         }
 
-        class Profiler {
-            public:
-                void markStart(const std::string& timer_name){}
-                void markStop(const std::string& timer_name, const std::vector<std::pair<std::string,std::string>>& additional_fields = {}){}
-                void setDeviceNewLogFlag(bool new_log_flag){}
-                void setHostNewLogFlag(bool new_log_flag){}
-                void setOutputDir(const std::string& new_output_dir){}
-        };
-
         struct OpData {
             string name;
             Profiler profiler = Profiler();
@@ -179,14 +170,14 @@ namespace op_profiler {
                         bool freshTTmetalLogs = true)
                 {
                     TT_ASSERT (profileFolder != "", "Bad log folder location, folder has been setup wrong");
-                    tt::tt_metal::detail::SetProfilerDir(profileFolder + "/" + opName + "/" + to_string(callCount));
+                    tt::tt_metal::detail::SetHostProfilerDir(profileFolder + "/" + opName + "/" + to_string(callCount));
+                    tt::tt_metal::detail::SetDeviceProfilerDir(profileFolder);
                     if (freshTTmetalLogs)
                     {
                         tt::tt_metal::detail::FreshProfilerHostLog();
-                        tt::tt_metal::detail::FreshProfilerDeviceLog();
                     }
 
-                    opProfiler.setOutputDir(profileFolder + "/" + opName);
+                    opProfiler.setHostOutputDir(profileFolder + "/" + opName);
                     //If it is the first call to this op, freshen the log
                     if (callCount > 1)
                     {
@@ -257,7 +248,7 @@ namespace op_profiler {
                 {
 #if defined(PROFILER)
                     delete_logs_location_record();
-                    set_profiler_location("tt_metal/tools/profiler/logs/ops/");
+                    set_profiler_location(".profiler/logs/ops/");
 #endif
                 }
 
@@ -352,7 +343,7 @@ namespace op_profiler {
                         return;
                     }
 
-                    if (true)
+                    if (getDeviceProfilerState())
                     {
                         profileFolder = logFolderDevice;
                         tt::log_info("Device profiling detected, logs folder location changed to {}", profileFolder);
@@ -433,7 +424,7 @@ namespace op_profiler {
 
     static bool get_profiler_flag ()
     {
-        return true;
+        return getHostProfilerState();
     }
 
     static void append_input_data (const Tensor& input)
@@ -542,7 +533,7 @@ namespace op_profiler {
     static void dump_device_profiler_results (Device *device, Program &program)
     {
 #if defined(PROFILER)
-        if (true)
+        if (getDeviceProfilerState())
         {
             tt::tt_metal::detail::DumpDeviceProfileResults(device, program);
         }

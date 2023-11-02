@@ -42,7 +42,7 @@ void Profiler::dumpHostResults(const std::string& timer_name, const std::vector<
     TT_ASSERT (timer_period_ns.start != 0 , "Timer start cannot be zero on : " + timer_name);
     TT_ASSERT (timer_period_ns.stop != 0 , "Timer stop cannot be zero on : " + timer_name);
 
-    std::filesystem::path log_path = output_dir / HOST_SIDE_LOG;
+    std::filesystem::path log_path = host_output_dir / HOST_SIDE_LOG;
     std::ofstream log_file;
 
     if (host_new_log|| !std::filesystem::exists(log_path))
@@ -140,7 +140,6 @@ void Profiler::readRiscProfilerResults(
         if (bufferEndIndex > 0)
         {
             uint32_t bufferRiscShift = riscNum * PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC + startIndex;
-            std::cout << "Buffer end index: " << riscNum << " on core " << worker_core.x << "," << worker_core.y << "," << bufferEndIndex <<  "," << bufferRiscShift << std::endl;
             if (bufferEndIndex > PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC)
             {
                 bufferEndIndex = PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC;
@@ -158,10 +157,9 @@ void Profiler::readRiscProfilerResults(
                         worker_core.y,
                         riscNum,
                         (uint64_t(time_H) << 32) | time_L,
-                        marker);
+                        marker+1);
             }
         }
-            std::cout <<  std::endl;
     }
 
     std::vector<uint32_t> zero_buffer(kernel_profiler::CONTROL_BUFFER_SIZE, 0);
@@ -180,8 +178,7 @@ void Profiler::dumpDeviceResultToFile(
         uint64_t timestamp,
         uint32_t timer_id){
     ZoneScoped;
-    auto test  = std::filesystem::path("tt_metal/tools/profiler/logs");
-    std::filesystem::path log_path = test / DEVICE_SIDE_LOG;
+    std::filesystem::path log_path = device_output_dir / DEVICE_SIDE_LOG;
     std::ofstream log_file;
 
     std::string riscName[] = {"BRISC", "NCRISC", "TRISC_0", "TRISC_1", "TRISC_2"};
@@ -235,8 +232,9 @@ Profiler::Profiler()
     ZoneScopedC(tracy::Color::Green);
     host_new_log = true;
     device_new_log = true;
-    output_dir = std::filesystem::path("tt_metal/tools/profiler/logs");
-    std::filesystem::create_directories(output_dir);
+    host_output_dir = std::filesystem::path(".profiler/logs/");
+    device_output_dir = std::filesystem::path(".profiler/logs/");
+    std::filesystem::create_directories(host_output_dir);
 
     tracyTTCtx = TracyCLContext();
 #endif
@@ -246,7 +244,6 @@ Profiler::~Profiler()
 {
 #if defined(PROFILER)
     TracyCLDestroy(tracyTTCtx);
-    std::cout << "Destroy global profiler" << std::endl ;
 #endif
 }
 
@@ -279,11 +276,19 @@ void Profiler::setHostNewLogFlag(bool new_log_flag)
 #endif
 }
 
-void Profiler::setOutputDir(const std::string& new_output_dir)
+void Profiler::setDeviceOutputDir(const std::string& new_output_dir)
 {
 #if defined(PROFILER)
     std::filesystem::create_directories(new_output_dir);
-    output_dir = new_output_dir;
+    device_output_dir = new_output_dir;
+#endif
+}
+
+void Profiler::setHostOutputDir(const std::string& new_output_dir)
+{
+#if defined(PROFILER)
+    std::filesystem::create_directories(new_output_dir);
+    host_output_dir = new_output_dir;
 #endif
 }
 

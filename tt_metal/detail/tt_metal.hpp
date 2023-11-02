@@ -98,15 +98,26 @@ namespace tt::tt_metal{
         void DumpDeviceProfileResults(Device *device, vector<CoreCoord>& worker_cores);
 
         /**
-         * Set the directory for all CSV logs produced by the profiler instance in the tt-metal module
+         * Set the directory for device-side CSV logs produced by the profiler instance in the tt-metal module
          *
          * Return value: void
          *
          * | Argument     | Description                                             |  Data type  | Valid range              | required |
          * |--------------|---------------------------------------------------------|-------------|--------------------------|----------|
-         * | output_dir   | The output directory that will hold the outpu CSV logs  | std::string | Any valid directory path | No       |
+         * | output_dir   | The output directory that will hold the output CSV logs  | std::string | Any valid directory path | No       |
          * */
-        void SetProfilerDir(std::string output_dir = "");
+        void SetDeviceProfilerDir(std::string output_dir = "");
+
+        /**
+         * Set the directory for all host-side CSV logs produced by the profiler instance in the tt-metal module
+         *
+         * Return value: void
+         *
+         * | Argument     | Description                                             |  Data type  | Valid range              | required |
+         * |--------------|---------------------------------------------------------|-------------|--------------------------|----------|
+         * | output_dir   | The output directory that will hold the output CSV logs  | std::string | Any valid directory path | No       |
+         * */
+        void SetHostProfilerDir(std::string output_dir = "");
 
         /**
          * Start a fresh log for the host side profile results
@@ -253,6 +264,11 @@ namespace tt::tt_metal{
             if (detail::GLOBAL_CQ) {
                 Finish(*detail::GLOBAL_CQ);
             }
+        }
+
+        inline void DumpDeviceProfiler(Device * device)
+        {
+            tt::tt_metal::detail::DumpDeviceProfileResults(device);
         }
 
         inline void DeallocateBuffers(Device * device)

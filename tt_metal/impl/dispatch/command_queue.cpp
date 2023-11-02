@@ -860,7 +860,6 @@ void Finish(CommandQueue& cq) {
     detail::DispatchStateCheck(true);
     ZoneScopedN("Finish");
     cq.finish();
-    tt::tt_metal::detail::DumpDeviceProfileResults(cq.device);
 }
 
 }  // namespace tt::tt_metal

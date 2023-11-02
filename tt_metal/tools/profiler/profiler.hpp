@@ -68,7 +68,10 @@ class Profiler {
         int device_core_frequency;
 
         // Output Dir for Profile Logs
-        std::filesystem::path output_dir;
+        std::filesystem::path host_output_dir;
+
+        // Output Dir for device Profile Logs
+        std::filesystem::path device_output_dir;
 
         // Turn steady clock start and stop into integer start, stop and duration
         TimerPeriodInt timerToTimerInt(TimerPeriod period);
@@ -119,8 +122,11 @@ class Profiler {
         //Set the device architecture
         void setDeviceArchitecture(tt::ARCH device_arch);
 
-        //Change the output dir of the profile logs
-        void setOutputDir(const std::string& new_output_dir);
+        //Change the output dir of device profile logs
+        void setDeviceOutputDir(const std::string& new_output_dir);
+
+        //Change the output dir of host profile logs
+        void setHostOutputDir(const std::string& new_output_dir);
 
         //Traverse all cores on the device and dump the device profile results
         void dumpDeviceResults(int device_id, const vector<CoreCoord> &worker_cores);
