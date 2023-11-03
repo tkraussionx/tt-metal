@@ -23,7 +23,7 @@ from process_device_log import import_log_run_stats, generate_plots
 from process_host_log import import_host_log_run_stats
 import plot_setup
 
-OPS_LOGS_DIR = os.path.abspath("logs/ops")
+OPS_LOGS_DIR = os.path.abspath(".profiler/logs/ops")
 DEVICE_SIDE_LOG = "profile_log_device.csv"
 HOST_SIDE_LOG = "profile_log_host.csv"
 OUT_FOLDER = "output"
@@ -232,102 +232,85 @@ def parse_ops_logs(opsFolder):
     global minTime, maxDiff, maxStackSize, maxInputCount, maxOutputCount
     ops = {}
 
-    assert os.path.isdir(opsFolder), f"{opsFolder} does no exists. Use -i option to choose the correct logs dir"
-    paths = sorted(Path(opsFolder).iterdir(), key=os.path.getmtime, reverse=True)
-    assert paths, f"{opsFolder} is empty. Use -i option to choose the correct logs dir"
+    opLogPath = os.path.join(opsFolder, HOST_SIDE_LOG)
+    if not os.path.isfile(opLogPath):
+        logger.warning(f"No Logs found under {opsFolder}")
+    with open(opLogPath, "r") as csvFile:
+        csvReader = csv.DictReader(csvFile)
+        for row in csvReader:
+            try:
+                op_name = row["Name"].strip()
+                extractName = re.findall(r".*tt.*tt_metal:*\d*(.*)E*", op_name)
+                if extractName:
+                    op_name = extractName.pop()
 
-    opsDeviceFolder = os.path.normpath(opsFolder)
-    if "_device" not in opsDeviceFolder:
-        opsDeviceFolder = f"{os.path.normpath(opsFolder)}_device"
+                start_ts = int(row[" Start timer count [ns]"].strip())
+                end_ts = int(row[" Stop timer count [ns]"].strip())
+                delta_time = int(row[" Delta timer count [ns]"].strip())
 
-    for opCandidate in paths:
-        opCandidatePath = os.path.join(opsFolder, opCandidate)
-        opCandidateDevicePath = os.path.join(opsDeviceFolder, os.path.basename(os.path.normpath(opCandidate)))
-        if os.path.isdir(opCandidatePath):
-            if "unknown" in str(opCandidate).lower():
-                continue
-            opLogPath = os.path.join(opCandidatePath, HOST_SIDE_LOG)
-            if not os.path.isfile(opLogPath):
-                logger.warning(f"Skipped: {opLogPath} dir, no host side log found.")
-                continue
-            with open(opLogPath, "r") as csvFile:
-                csvReader = csv.DictReader(csvFile)
-                for row in csvReader:
-                    try:
-                        op_folder_name = row["Name"].strip()
-                        op_name = op_folder_name
-                        extractName = re.findall(r".*tt.*tt_metal:*\d*(.*)E*", op_name)
-                        if extractName:
-                            op_name = extractName.pop()
+                global_call_count = int(row[" Global Call Count"].strip())
+                call_count = int(row[" Call Count"].strip())
+                stack_size = int(row[" Stack Size"].strip())
 
-                        start_ts = int(row[" Start timer count [ns]"].strip())
-                        end_ts = int(row[" Stop timer count [ns]"].strip())
-                        delta_time = int(row[" Delta timer count [ns]"].strip())
+                inputs = parse_io_data(row[" Inputs"].strip(), "INPUT")
+                if len(inputs.keys()) > maxInputCount:
+                    maxInputCount = len(inputs.keys())
 
-                        global_call_count = int(row[" Global Call Count"].strip())
-                        call_count = int(row[" Call Count"].strip())
-                        stack_size = int(row[" Stack Size"].strip())
+                outputs = parse_io_data(row[" Outputs"].strip(), "OUTPUT")
+                if len(outputs.keys()) > maxOutputCount:
+                    maxOutputCount = len(outputs.keys())
 
-                        inputs = parse_io_data(row[" Inputs"].strip(), "INPUT")
-                        if len(inputs.keys()) > maxInputCount:
-                            maxInputCount = len(inputs.keys())
+                mathFidelity = row[" Math Fidelity"].strip()
+                parallelizationStrategy = row[" Parallelization Strategy"].strip()
+                preferredName = row[" Preferred Name"].strip().split("tt::tt_metal::")[-1]
+                metadata = row[" Meta Data"].strip()
+                op_type = row[" Type"].strip()
 
-                        outputs = parse_io_data(row[" Outputs"].strip(), "OUTPUT")
-                        if len(outputs.keys()) > maxOutputCount:
-                            maxOutputCount = len(outputs.keys())
+                if preferredName:
+                    if op_type != "tt_dnn_device":
+                        op_name += "_" + preferredName
 
-                        mathFidelity = row[" Math Fidelity"].strip()
-                        parallelizationStrategy = row[" Parallelization Strategy"].strip()
-                        preferredName = row[" Preferred Name"].strip().split("tt::tt_metal::")[-1]
-                        metadata = row[" Meta Data"].strip()
-                        op_type = row[" Type"].strip()
+                if op_name in op_flavour_to_count.keys():
+                    op_flavour_to_count[op_name] += 1
+                else:
+                    op_flavour_to_count[op_name] = 1
 
-                        if preferredName:
-                            if op_type != "tt_dnn_device":
-                                op_name += "_" + preferredName
+                if minTime == 0:
+                    minTime = start_ts
+                elif minTime > start_ts:
+                    minTime = start_ts
 
-                        op_to_folder[op_name] = op_folder_name
-                        if op_name in op_flavour_to_count.keys():
-                            op_flavour_to_count[op_name] += 1
-                        else:
-                            op_flavour_to_count[op_name] = 1
+                if maxDiff < delta_time:
+                    maxDiff = delta_time
 
-                        if minTime == 0:
-                            minTime = start_ts
-                        elif minTime > start_ts:
-                            minTime = start_ts
+                if stack_size > maxStackSize:
+                    maxStackSize = stack_size
 
-                        if maxDiff < delta_time:
-                            maxDiff = delta_time
+                timeDataDict = {
+                    "CALL COUNT": op_flavour_to_count[op_name],
+                    "_OP CALL COUNT": call_count,
+                    "OP TYPE": op_type,
+                    "GLOBAL CALL COUNT": global_call_count,
+                    "HOST START TS": start_ts,
+                    "HOST END TS": end_ts,
+                    "CALL DEPTH": stack_size,
+                    "INPUTS": inputs,
+                    "OUTPUTS": outputs,
+                    "MATH FIDELITY": mathFidelity,
+                    "PARALLELIZATION STRATEGY": parallelizationStrategy,
+                    "HOST DURATION [ns]": delta_time,
+                    "ATTRIBUTES": metadata,
+                }
 
-                        if stack_size > maxStackSize:
-                            maxStackSize = stack_size
+                append_device_time_data(opsFolder+"/tt_metal/NULL", call_count, timeDataDict)
+                # append_detail_host_time_data(opCandidatePath, call_count, timeDataDict)
 
-                        timeDataDict = {
-                            "CALL COUNT": op_flavour_to_count[op_name],
-                            "_OP CALL COUNT": call_count,
-                            "OP TYPE": op_type,
-                            "GLOBAL CALL COUNT": global_call_count,
-                            "HOST START TS": start_ts,
-                            "HOST END TS": end_ts,
-                            "CALL DEPTH": stack_size,
-                            "INPUTS": inputs,
-                            "OUTPUTS": outputs,
-                            "MATH FIDELITY": mathFidelity,
-                            "PARALLELIZATION STRATEGY": parallelizationStrategy,
-                            "HOST DURATION [ns]": delta_time,
-                            "ATTRIBUTES": metadata,
-                        }
-
-                        append_device_time_data(opCandidateDevicePath, call_count, timeDataDict)
-                        append_detail_host_time_data(opCandidatePath, call_count, timeDataDict)
-
-                        if op_name in ops.keys():
-                            ops[op_name].append(timeDataDict)
-                        else:
-                            ops[op_name] = [timeDataDict]
-                    except KeyError as e:
-                        assert False, f"CSV {opLogPath} has bad header format"
+                if op_name in ops.keys():
+                    ops[op_name].append(timeDataDict)
+                else:
+                    ops[op_name] = [timeDataDict]
+            except KeyError as e:
+                assert False, f"CSV {opLogPath} has bad header format"
     return ops
 
 
@@ -458,12 +441,12 @@ def print_ops_csv(ops, opsFolder, outputFolder, date, nameAppend):
 
     opsCSVPath = os.path.join(outFolder, f"{name}.csv")
 
-    if os.path.isdir(f"{opsFolder}_device"):
-        os.system(
-            f"mv {opsFolder} ops && mv {opsFolder}_device ops_device && tar -czf {name}.tgz ops ops_device && rm -rf ops ops_device && mv {name}.tgz {outFolder}"
-        )
-    else:
-        os.system(f"mv {opsFolder} ops && tar -czf {name}.tgz ops && rm -rf ops && mv {name}.tgz {outFolder}")
+    # if os.path.isdir(f"{opsFolder}_device"):
+        # os.system(
+            # f"mv {opsFolder} ops && mv {opsFolder}_device ops_device && tar -czf {name}.tgz ops ops_device && rm -rf ops ops_device && mv {name}.tgz {outFolder}"
+        # )
+    # else:
+        # os.system(f"mv {opsFolder} ops && tar -czf {name}.tgz ops && rm -rf ops && mv {name}.tgz {outFolder}")
 
     with open(opsCSVPath, "w") as opsCSV:
         opsWriter = csv.writer(opsCSV, delimiter=",")

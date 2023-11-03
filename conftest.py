@@ -240,6 +240,7 @@ def device_init_destroy(request):
 
     ttl.device.CloseDevice(device)
 
+
 @pytest.fixture(scope="function")
 def device(device_init_destroy):
     import tt_lib as ttl

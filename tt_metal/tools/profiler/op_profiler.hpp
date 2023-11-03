@@ -170,18 +170,21 @@ namespace op_profiler {
                         bool freshTTmetalLogs = true)
                 {
                     TT_ASSERT (profileFolder != "", "Bad log folder location, folder has been setup wrong");
-                    tt::tt_metal::detail::SetHostProfilerDir(profileFolder + "/" + opName + "/" + to_string(callCount));
-                    tt::tt_metal::detail::SetDeviceProfilerDir(profileFolder);
-                    if (freshTTmetalLogs)
-                    {
-                        tt::tt_metal::detail::FreshProfilerHostLog();
-                    }
+                    profileFolder = ".profiler/logs";
+                    tt::tt_metal::detail::SetHostProfilerDir(profileFolder + "/tt_metal");
+                    tt::tt_metal::detail::SetDeviceProfilerDir(profileFolder + "/tt_metal");
 
-                    opProfiler.setHostOutputDir(profileFolder + "/" + opName);
+                    opProfiler.setHostOutputDir(profileFolder + "/ops");
                     //If it is the first call to this op, freshen the log
-                    if (callCount > 1)
+                    if (globalCallCount > 1)
                     {
                         opProfiler.setHostNewLogFlag(false);
+                    }
+                    else
+                    {
+                        opProfiler.setHostNewLogFlag(true);
+                        tt::tt_metal::detail::FreshProfilerHostLog();
+                        tt::tt_metal::detail::FreshProfilerDeviceLog();
                     }
                 }
 

@@ -122,7 +122,7 @@ def test_split_fused_qkv_and_split_heads_test(
     device, batch, dtype, in0_mem_config, out_mem_config, request
 ):
     ttl.profiler.set_profiler_location(
-        f"tt_metal/tools/profiler/logs/BERT_large_create_qvk_heads_tm_{request.node.callspec.id}"
+        f".profiler/logs/BERT_large_create_qvk_heads_tm_{request.node.callspec.id}"
     )
     run_split_fused_qkv_and_split_heads_test(
         device, batch, dtype, in0_mem_config, out_mem_config
