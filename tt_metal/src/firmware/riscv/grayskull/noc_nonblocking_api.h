@@ -12,10 +12,13 @@
 
 ////
 
+// writes 0,1,2
 const uint32_t NCRISC_WR_CMD_BUF = 0;
-const uint32_t NCRISC_RD_CMD_BUF = 1;
-const uint32_t NCRISC_WR_REG_CMD_BUF = 2;
-const uint32_t NCRISC_AT_CMD_BUF = 3;
+const uint32_t NCRISC_WR_REG_CMD_BUF = 1;
+const uint32_t NCRISC_AT_CMD_BUF = 2;
+
+// reads 3
+const uint32_t NCRISC_RD_CMD_BUF = 3;
 
 extern uint32_t noc_reads_num_issued[NUM_NOCS];
 extern uint32_t noc_nonposted_writes_num_issued[NUM_NOCS];
@@ -215,6 +218,7 @@ inline void noc_init() {
 
     NOC_CMD_BUF_WRITE_REG(noc, NCRISC_WR_CMD_BUF, NOC_TARG_ADDR_MID, (uint32_t)(xy_local_addr >> 32));
     NOC_CMD_BUF_WRITE_REG(noc, NCRISC_WR_REG_CMD_BUF, NOC_TARG_ADDR_MID, (uint32_t)(xy_local_addr >> 32));
+    NOC_CMD_BUF_WRITE_REG(noc, NCRISC_AT_CMD_BUF, NOC_TARG_ADDR_MID, (uint32_t)(xy_local_addr >> 32));
 
     uint32_t noc_rd_cmd_field = NOC_CMD_CPY | NOC_CMD_RD | NOC_CMD_RESP_MARKED | NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(1);
 

@@ -49,6 +49,11 @@ extern CQReadInterface cq_read_interface;
 // valid read req VC range is 0-3
 #define NOC_UNICAST_READ_REQ_VC_RANGE_MASK 0x3
 
+#define NOC_WR_CMD_BUF_MIN 0
+#define NOC_WR_CMD_BUF_MAX 2
+#define NOC_RD_CMD_BUF 3
+uint32_t write_cmd_buf = NOC_WR_CMD_BUF_MIN;
+
 // dram channel to x/y lookup tables
 // The number of banks is generated based off device we are running on --> controlled by allocator
 extern uint8_t dram_bank_to_noc_x[NUM_DRAM_BANKS];
@@ -879,9 +884,10 @@ void noc_async_read_one_packet(std::uint64_t src_noc_addr, std::uint32_t dst_loc
         Read requests - use static VC
         Read responses - assigned VCs dynamically
     */
+    uint32_t cmd_buf = NOC_RD_CMD_BUF;
 
     DEBUG_STATUS('R', 'P', 'W');
-    while (!ncrisc_noc_fast_read_ok(noc_index, NCRISC_RD_CMD_BUF));
+    while (!ncrisc_noc_fast_read_ok(noc_index, cmd_buf));
     DEBUG_STATUS('R', 'P', 'D');
 
     DEBUG_STATUS('N', 'A', 'R', 'W');
@@ -890,13 +896,13 @@ void noc_async_read_one_packet(std::uint64_t src_noc_addr, std::uint32_t dst_loc
 
     uint32_t noc_rd_cmd_field = NOC_CMD_CPY | NOC_CMD_RD | NOC_CMD_RESP_MARKED | NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(vc);
 
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CTRL, noc_rd_cmd_field);
+    NOC_CMD_BUF_WRITE_REG(noc_index, cmd_buf, NOC_CTRL, noc_rd_cmd_field);
 
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dst_local_l1_addr);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, (uint32_t)src_noc_addr);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_MID, src_noc_addr >> 32);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_AT_LEN_BE, size);
-    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+    NOC_CMD_BUF_WRITE_REG(noc_index, cmd_buf, NOC_RET_ADDR_LO, dst_local_l1_addr);
+    NOC_CMD_BUF_WRITE_REG(noc_index, cmd_buf, NOC_TARG_ADDR_LO, (uint32_t)src_noc_addr);
+    NOC_CMD_BUF_WRITE_REG(noc_index, cmd_buf, NOC_TARG_ADDR_MID, src_noc_addr >> 32);
+    NOC_CMD_BUF_WRITE_REG(noc_index, cmd_buf, NOC_AT_LEN_BE, size);
+    NOC_CMD_BUF_WRITE_REG(noc_index, cmd_buf, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
     noc_reads_num_issued[noc_index] += 1;
 
     DEBUG_STATUS('N', 'A', 'R', 'D');
@@ -1090,6 +1096,34 @@ void noc_semaphore_set_multicast(
 }
 
 FORCE_INLINE
+uint32_t get_write_cmd_buf() {
+    write_cmd_buf++;
+    if (write_cmd_buf > NOC_WR_CMD_BUF_MAX) {
+        write_cmd_buf = NOC_WR_CMD_BUF_MIN;
+    }
+    return write_cmd_buf;
+}
+
+FORCE_INLINE
+void noc_semaphore_set_multicast_v2(
+    std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr_multicast, std::uint32_t num_dests) {
+    DEBUG_STATUS('N', 'S', 'M', 'W');
+    DEBUG_SANITIZE_NOC_MULTI_ADDR(dst_noc_addr_multicast, 4);
+    DEBUG_SANITIZE_WORKER_ADDR(src_local_l1_addr, 4);
+    ncrisc_noc_fast_write_any_len(
+        noc_index,
+        get_write_cmd_buf(),
+        src_local_l1_addr,
+        dst_noc_addr_multicast,
+        4 /*size in bytes*/,
+        NOC_MULTICAST_WRITE_VC,
+        true,
+        false,
+        num_dests);
+    DEBUG_STATUS('N', 'S', 'M', 'D');
+}
+
+FORCE_INLINE
 void noc_async_write_multicast_loopback_src(
     std::uint32_t src_local_l1_addr,
     std::uint64_t dst_noc_addr_multicast,
@@ -1129,7 +1163,6 @@ void noc_async_write_multicast_v2(
     uint32_t src_addr = src_local_l1_addr;
     uint64_t dest_addr = dst_noc_addr_multicast;
     uint32_t len_bytes = size;
-    uint32_t cmd_buf = NCRISC_WR_REG_CMD_BUF;
 
     uint32_t noc_cmd_field =
       NOC_CMD_CPY | NOC_CMD_WR |
@@ -1151,16 +1184,15 @@ void noc_async_write_multicast_v2(
         noc_cmd_field |=  NOC_CMD_BRCST_SRC_INCLUDE;
     }
 
-    while (!ncrisc_noc_fast_write_ok(noc, cmd_buf));
-    // these don't change during mcast
-    NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_CTRL, noc_cmd_field);
-    NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_RET_ADDR_MID, dest_addr >> 32); // dst x,y
-
-    // this one is at MAX_BURST_SIZE while we're in the loop
-    NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_AT_LEN_BE, NOC_MAX_BURST_SIZE);
-
+    uint32_t cmd_buf;
     while (len_bytes > NOC_MAX_BURST_SIZE) {
+        cmd_buf = get_write_cmd_buf();
         while (!ncrisc_noc_fast_write_ok(noc, cmd_buf));
+
+        NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_CTRL, noc_cmd_field);
+        NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_RET_ADDR_MID, dest_addr >> 32); // dst x,y
+        NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_AT_LEN_BE, NOC_MAX_BURST_SIZE);
+
         NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_TARG_ADDR_LO, src_addr);
         NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_RET_ADDR_LO, (uint32_t)dest_addr);
         NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
@@ -1171,17 +1203,49 @@ void noc_async_write_multicast_v2(
             noc_nonposted_writes_num_issued[noc] += 1;
             noc_nonposted_writes_acked[noc] += num_dests;
         }
+
     }
 
     // left over mcast
+    cmd_buf = get_write_cmd_buf();
     while (!ncrisc_noc_fast_write_ok(noc, cmd_buf));
+
+    NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_CTRL, noc_cmd_field);
+    NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_RET_ADDR_MID, dest_addr >> 32); // dst x,y
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_AT_LEN_BE, len_bytes); // reconfigure len_bytes for the left-over
+
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_TARG_ADDR_LO, src_addr);
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_RET_ADDR_LO, (uint32_t)dest_addr);
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
     if constexpr (non_posted) {
         noc_nonposted_writes_num_issued[noc] += 1;
         noc_nonposted_writes_acked[noc] += num_dests;
+    }
+}
+
+template<int cmd_buf_offset>
+FORCE_INLINE
+void noc_write_mcast_packet_with_state(uint32_t src_addr, uint32_t dest_addr) {
+    while (!ncrisc_noc_fast_write_ok(noc_index, NOC_WR_CMD_BUF_MIN+cmd_buf_offset));
+    NOC_CMD_BUF_WRITE_REG(noc_index, NOC_WR_CMD_BUF_MIN+cmd_buf_offset, NOC_TARG_ADDR_LO, src_addr);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NOC_WR_CMD_BUF_MIN+cmd_buf_offset, NOC_RET_ADDR_LO, dest_addr);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NOC_WR_CMD_BUF_MIN+cmd_buf_offset, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+}
+
+template<int packet_size>
+FORCE_INLINE
+void noc_write_mcast_packets(uint32_t src_addr, uint32_t dest_addr) {
+    static_assert(packet_size <= 3*NOC_MAX_BURST_SIZE, "Packet size is too large");
+
+    if constexpr (packet_size <= NOC_MAX_BURST_SIZE) {
+        noc_write_mcast_packet_with_state<0>(src_addr, dest_addr);
+    } else if constexpr (packet_size <= 2*NOC_MAX_BURST_SIZE) {
+        noc_write_mcast_packet_with_state<0>(src_addr, dest_addr);
+        noc_write_mcast_packet_with_state<1>(src_addr + NOC_MAX_BURST_SIZE, dest_addr + NOC_MAX_BURST_SIZE);
+    } else {
+        noc_write_mcast_packet_with_state<0>(src_addr, dest_addr);
+        noc_write_mcast_packet_with_state<1>(src_addr + NOC_MAX_BURST_SIZE, dest_addr + NOC_MAX_BURST_SIZE);
+        noc_write_mcast_packet_with_state<2>(src_addr + 2*NOC_MAX_BURST_SIZE, dest_addr + 2*NOC_MAX_BURST_SIZE);
     }
 }
 

@@ -191,7 +191,7 @@ void kernel_main() {
             // Note: no need for write barrier in between data and valid, since these two multicasts are done on the same NOC & Static VC they are guaranteed to be ordered
             // multicast the flag to destinations, num_dests must not include source, since we are NOT doing a local copy!
             // - this transfer will set linked back to false, and release the path that was reserved during the first packet of data mcast
-            noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores);
+            noc_semaphore_set_multicast_v2(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores);
 
             #endif
 
