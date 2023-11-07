@@ -145,7 +145,10 @@ void kernel_main() {
         0);
     #endif
 
-    noc_async_write_multicast_set_state<16*1024, false, true, false>(in1_multicast_data_noc);
+    constexpr uint32_t mcast_transfer_size = 16*1024;
+    // constexpr uint32_t mcast_transfer_size = 1024;
+    // linked hangs -- splitting mcast across different cmd_bufs we get a hang w/ linked? -- need to be on the same cmd_buf to turn off linked?
+    noc_async_write_multicast_set_state<mcast_transfer_size, false, true, false>(in1_multicast_data_noc);
 
     for (uint32_t b = 0; b < batch; b++) {
         uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;
@@ -188,7 +191,7 @@ void kernel_main() {
             // - non_posted = false, we're running in posted mode, we don't need acks, since we aren't doing barrier
             // - linked = true, so that path reservation is done only once during the first packet of data multi-cast, and all subsequent packets use the same path
             //noc_async_write_multicast_v2<false, true, false>(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores);
-            noc_async_write_multicast_with_state<16*1024>(in1_start_address, in1_start_address);
+            noc_async_write_multicast_with_state<mcast_transfer_size>(in1_start_address, (uint32_t)in1_start_address);
 
             // valid flag mcast:
             // Note: no need for write barrier in between data and valid, since these two multicasts are done on the same NOC & Static VC they are guaranteed to be ordered

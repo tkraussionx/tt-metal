@@ -1258,8 +1258,8 @@ void noc_async_write_multicast_one_packet_set_state(uint64_t dest_addr) {
 
 template<int transfer_size, bool non_posted = true, bool linked = false, bool loopback_src = false>
 FORCE_INLINE
-void noc_async_write_multicast_set_state(uint32_t dest_addr) {
-    static_assert(transfer_size <= 3*NOC_MAX_BURST_SIZE, "Packet size is too large");
+void noc_async_write_multicast_set_state(uint64_t dest_addr) {
+    static_assert(transfer_size <= 3*NOC_MAX_BURST_SIZE, "Transfer size must be <= 3*NOC_MAX_BURST_SIZE");
 
     if constexpr (transfer_size <= NOC_MAX_BURST_SIZE) {
         constexpr uint32_t packet_size[1] = {transfer_size};
