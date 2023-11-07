@@ -19,33 +19,32 @@ using namespace tt::constants;
 namespace tt {
 namespace tt_metal {
 
-using range_t = std::array<int32_t, 2>;
 const int32_t NEIGHBORHOOD_DIST = 2;    // => ncores to left and ncores to right
 
 namespace untilize_with_halo_helpers {
 
-range_t calculate_in_range(const range_t& out_range, const PoolConfig& pc) {
-    // given out stick range, calculate corresponding window's center stick input coords
-    range_t in_range;
-    // start of the range
-    {
-        uint32_t out_w_i = out_range[0] % pc.out_w;
-        uint32_t out_h_i = out_range[0] / pc.out_w;
-        uint32_t in_w_i = out_w_i * pc.stride_w;
-        uint32_t in_h_i = out_h_i * pc.stride_h;
-        in_range[0] = in_h_i * pc.in_w + in_w_i;
-    }
-    // end of the range
-    {
-        uint32_t out_w_i = out_range[1] % pc.out_w;
-        uint32_t out_h_i = out_range[1] / pc.out_w;
-        // corresponding window's center stick input coords:
-        uint32_t in_w_i = out_w_i * pc.stride_w;
-        uint32_t in_h_i = out_h_i * pc.stride_h;
-        in_range[1] = in_h_i * pc.in_w + in_w_i;
-    }
-    return in_range;
-}
+// range_t calculate_in_range(const range_t& out_range, const PoolConfig& pc) {
+//     // given out stick range, calculate corresponding window's center stick input coords
+//     range_t in_range;
+//     // start of the range
+//     {
+//         uint32_t out_w_i = out_range[0] % pc.out_w;
+//         uint32_t out_h_i = out_range[0] / pc.out_w;
+//         uint32_t in_w_i = out_w_i * pc.stride_w;
+//         uint32_t in_h_i = out_h_i * pc.stride_h;
+//         in_range[0] = in_h_i * pc.in_w + in_w_i;
+//     }
+//     // end of the range
+//     {
+//         uint32_t out_w_i = out_range[1] % pc.out_w;
+//         uint32_t out_h_i = out_range[1] / pc.out_w;
+//         // corresponding window's center stick input coords:
+//         uint32_t in_w_i = out_w_i * pc.stride_w;
+//         uint32_t in_h_i = out_h_i * pc.stride_h;
+//         in_range[1] = in_h_i * pc.in_w + in_w_i;
+//     }
+//     return in_range;
+// }
 
 std::map<CoreCoord, CoreCoord> left_neighbor_core, right_neighbor_core;
 void init_neighbor_core_xy_mapping(CoreCoord grid_size, bool is_twod = false) {
@@ -201,7 +200,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
     int32_t pool_out_nsticks_per_core = in_b * pc.out_h * pc.out_w / ncores;
     for (uint32_t core = 0; core < ncores; ++ core) {
         range_t out_range = {out_stick_start, out_stick_start + pool_out_nsticks_per_core};
-        range_t in_range = untilize_with_halo_helpers::calculate_in_range(out_range, pc);  // this represents the "window" center input sticks
+        range_t in_range = calculate_in_range(out_range, pc);  // this represents the "window" center input sticks
         int32_t l_halo_start = in_range[0] - halo_in_nsticks;
         int32_t batch_start = (in_range[0] / (in_h * in_w)) * (in_h * in_w);
         l_halo_start = l_halo_start < batch_start ? batch_start : l_halo_start;
@@ -1477,7 +1476,7 @@ Tensor untilize_with_halo(const Tensor &input_tensor_a, const uint32_t pad_val, 
             out_stick_start = 0;   // global "output" stick (after downsample/pool)
             for (uint32_t core = 0; core < ncores; ++ core) {
                 range_t out_range = {out_stick_start, out_stick_start + pool_out_nsticks_per_core};
-                range_t in_range = untilize_with_halo_helpers::calculate_in_range(out_range, pc);  // this represents the "window" center input sticks
+                range_t in_range = calculate_in_range(out_range, pc);  // this represents the "window" center input sticks
                 int32_t l_halo_start = in_range[0] - halo_in_nsticks;
                 int32_t batch_start = (in_range[0] / (pc.in_h * pc.in_w)) * (pc.in_h * pc.in_w);
                 l_halo_start = l_halo_start < batch_start ? batch_start : l_halo_start;

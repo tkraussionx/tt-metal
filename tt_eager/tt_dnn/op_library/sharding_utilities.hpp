@@ -19,6 +19,8 @@
 namespace tt {
 namespace tt_metal {
 
+using range_t = std::array<int32_t, 2>;
+
 struct PoolConfig {
     uint32_t in_w;
     uint32_t in_h;
@@ -33,6 +35,29 @@ struct PoolConfig {
     uint32_t dilation_w;
     uint32_t dilation_h;
 };
+
+// given out stick range, calculate corresponding window's center stick input coords
+inline range_t calculate_in_range(const range_t& out_range, const PoolConfig& pc) {
+    range_t in_range;
+    // start of the range
+    {
+        uint32_t out_w_i = out_range[0] % pc.out_w;
+        uint32_t out_h_i = out_range[0] / pc.out_w;
+        uint32_t in_w_i = out_w_i * pc.stride_w;
+        uint32_t in_h_i = out_h_i * pc.stride_h;
+        in_range[0] = in_h_i * pc.in_w + in_w_i;
+    }
+    // end of the range
+    {
+        uint32_t out_w_i = out_range[1] % pc.out_w;
+        uint32_t out_h_i = out_range[1] / pc.out_w;
+        // corresponding window's center stick input coords:
+        uint32_t in_w_i = out_w_i * pc.stride_w;
+        uint32_t in_h_i = out_h_i * pc.stride_h;
+        in_range[1] = in_h_i * pc.in_w + in_w_i;
+    }
+    return in_range;
+}
 
 struct NewShardingConfig {
     int32_t first_partial_right_aligned_row_width;
