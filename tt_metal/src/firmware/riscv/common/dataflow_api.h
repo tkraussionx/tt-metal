@@ -1112,7 +1112,7 @@ void noc_semaphore_set_multicast_v2(
     DEBUG_SANITIZE_WORKER_ADDR(src_local_l1_addr, 4);
     ncrisc_noc_fast_write_any_len(
         noc_index,
-        get_write_cmd_buf(),
+        2, // 0,1 for mcast
         src_local_l1_addr,
         dst_noc_addr_multicast,
         4 /*size in bytes*/,
@@ -1223,29 +1223,88 @@ void noc_async_write_multicast_v2(
     }
 }
 
+template<int cmd_buf_offset, int packet_size, bool non_posted = true, bool linked = false, bool loopback_src = false>
+FORCE_INLINE
+void noc_async_write_multicast_one_packet_set_state(uint64_t dest_addr) {
+
+    constexpr bool mcast = true;
+    constexpr uint32_t vc = NOC_MULTICAST_WRITE_VC;
+
+    uint32_t noc_cmd_field =
+      NOC_CMD_CPY | NOC_CMD_WR |
+      NOC_CMD_VC_STATIC  |
+      NOC_CMD_STATIC_VC(vc) |
+      (mcast ? (NOC_CMD_PATH_RESERVE | NOC_CMD_BRCST_PACKET) : 0x0);
+    //   (mcast ? (NOC_CMD_BRCST_PACKET) : 0x0); // to disable path reserve
+
+    if constexpr (non_posted) {
+        noc_cmd_field |= NOC_CMD_RESP_MARKED;
+    }
+
+    if constexpr (linked) {
+        noc_cmd_field |= NOC_CMD_VC_LINKED;
+    }
+
+    // perf was improved by moving this to template vs an arg
+    if constexpr (loopback_src) {
+        noc_cmd_field |=  NOC_CMD_BRCST_SRC_INCLUDE;
+    }
+
+    while (!ncrisc_noc_fast_write_ok(noc_index, NOC_WR_CMD_BUF_MIN+cmd_buf_offset));
+    NOC_CMD_BUF_WRITE_REG(noc_index, NOC_WR_CMD_BUF_MIN+cmd_buf_offset, NOC_CTRL, noc_cmd_field);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NOC_WR_CMD_BUF_MIN+cmd_buf_offset, NOC_RET_ADDR_MID, dest_addr >> 32); // dst x,y
+    NOC_CMD_BUF_WRITE_REG(noc_index, NOC_WR_CMD_BUF_MIN+cmd_buf_offset, NOC_AT_LEN_BE, packet_size);
+}
+
+template<int transfer_size, bool non_posted = true, bool linked = false, bool loopback_src = false>
+FORCE_INLINE
+void noc_async_write_multicast_set_state(uint32_t dest_addr) {
+    static_assert(transfer_size <= 3*NOC_MAX_BURST_SIZE, "Packet size is too large");
+
+    if constexpr (transfer_size <= NOC_MAX_BURST_SIZE) {
+        constexpr uint32_t packet_size[1] = {transfer_size};
+        noc_async_write_multicast_one_packet_set_state<0, packet_size[0], non_posted, linked, loopback_src>(dest_addr);
+
+    } else if constexpr (transfer_size <= 2*NOC_MAX_BURST_SIZE) {
+        constexpr uint32_t packet_size[2] = {NOC_MAX_BURST_SIZE,
+                                             transfer_size - NOC_MAX_BURST_SIZE};
+        noc_async_write_multicast_one_packet_set_state<0, packet_size[0], non_posted, linked, loopback_src>(dest_addr);
+        noc_async_write_multicast_one_packet_set_state<1, packet_size[1], non_posted, linked, loopback_src>(dest_addr);
+
+    } else {
+        constexpr uint32_t packet_size[3] = {NOC_MAX_BURST_SIZE,
+                                             NOC_MAX_BURST_SIZE,
+                                             transfer_size - 2*NOC_MAX_BURST_SIZE};
+        noc_async_write_multicast_one_packet_set_state<0, packet_size[0], non_posted, linked, loopback_src>(dest_addr);
+        noc_async_write_multicast_one_packet_set_state<1, packet_size[1], non_posted, linked, loopback_src>(dest_addr);
+        noc_async_write_multicast_one_packet_set_state<2, packet_size[2], non_posted, linked, loopback_src>(dest_addr);
+    }
+}
+
+
 template<int cmd_buf_offset>
 FORCE_INLINE
-void noc_write_mcast_packet_with_state(uint32_t src_addr, uint32_t dest_addr) {
+void noc_async_write_multicast_one_packet_with_state(uint32_t src_addr, uint32_t dest_addr) {
     while (!ncrisc_noc_fast_write_ok(noc_index, NOC_WR_CMD_BUF_MIN+cmd_buf_offset));
     NOC_CMD_BUF_WRITE_REG(noc_index, NOC_WR_CMD_BUF_MIN+cmd_buf_offset, NOC_TARG_ADDR_LO, src_addr);
     NOC_CMD_BUF_WRITE_REG(noc_index, NOC_WR_CMD_BUF_MIN+cmd_buf_offset, NOC_RET_ADDR_LO, dest_addr);
     NOC_CMD_BUF_WRITE_REG(noc_index, NOC_WR_CMD_BUF_MIN+cmd_buf_offset, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
 }
 
-template<int packet_size>
+template<int transfer_size>
 FORCE_INLINE
-void noc_write_mcast_packets(uint32_t src_addr, uint32_t dest_addr) {
-    static_assert(packet_size <= 3*NOC_MAX_BURST_SIZE, "Packet size is too large");
+void noc_async_write_multicast_with_state(uint32_t src_addr, uint32_t dest_addr) {
+    static_assert(transfer_size <= 3*NOC_MAX_BURST_SIZE, "Transfer size is too large");
 
-    if constexpr (packet_size <= NOC_MAX_BURST_SIZE) {
-        noc_write_mcast_packet_with_state<0>(src_addr, dest_addr);
-    } else if constexpr (packet_size <= 2*NOC_MAX_BURST_SIZE) {
-        noc_write_mcast_packet_with_state<0>(src_addr, dest_addr);
-        noc_write_mcast_packet_with_state<1>(src_addr + NOC_MAX_BURST_SIZE, dest_addr + NOC_MAX_BURST_SIZE);
+    if constexpr (transfer_size <= NOC_MAX_BURST_SIZE) {
+        noc_async_write_multicast_one_packet_with_state<0>(src_addr, dest_addr);
+    } else if constexpr (transfer_size <= 2*NOC_MAX_BURST_SIZE) {
+        noc_async_write_multicast_one_packet_with_state<0>(src_addr, dest_addr);
+        noc_async_write_multicast_one_packet_with_state<1>(src_addr + NOC_MAX_BURST_SIZE, dest_addr + NOC_MAX_BURST_SIZE);
     } else {
-        noc_write_mcast_packet_with_state<0>(src_addr, dest_addr);
-        noc_write_mcast_packet_with_state<1>(src_addr + NOC_MAX_BURST_SIZE, dest_addr + NOC_MAX_BURST_SIZE);
-        noc_write_mcast_packet_with_state<2>(src_addr + 2*NOC_MAX_BURST_SIZE, dest_addr + 2*NOC_MAX_BURST_SIZE);
+        noc_async_write_multicast_one_packet_with_state<0>(src_addr, dest_addr);
+        noc_async_write_multicast_one_packet_with_state<1>(src_addr + NOC_MAX_BURST_SIZE, dest_addr + NOC_MAX_BURST_SIZE);
+        noc_async_write_multicast_one_packet_with_state<2>(src_addr + 2*NOC_MAX_BURST_SIZE, dest_addr + 2*NOC_MAX_BURST_SIZE);
     }
 }
 
