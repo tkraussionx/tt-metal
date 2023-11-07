@@ -25,6 +25,8 @@ void kernel_main() {
     uint32_t i = 0;
     uint32_t conv_act_size_w_ = get_arg_val<uint32_t>(i); i+=1;
     uint32_t conv_act_size_h = get_arg_val<uint32_t>(i); i+=1;
+    uint32_t conv_output_size_w = get_arg_val<uint32_t>(i); i+=1;
+    uint32_t conv_output_size_h = get_arg_val<uint32_t>(i); i+=1;
     uint32_t weight_size_h = get_arg_val<uint32_t>(i); i+=1;
     uint32_t weight_size_w = get_arg_val<uint32_t>(i); i+=1;
     // uint32_t act_block_h_datums = get_arg_val<uint32_t>(i); i+=1;
