@@ -1386,6 +1386,34 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
                                                         compute_config);
     }
 
+
+    if (0) {
+        int out_nsticks = 112 * 112;
+        int ncores = 16;
+        int nsticks_per_core = out_nsticks / ncores;
+        int out_stick_start = 0;
+        PoolConfig mypc = PoolConfig{
+            .in_w = 115,
+            .in_h = 115,
+            .out_w = 112,
+            .out_h = 112,
+            .stride_w = 1,
+            .stride_h = 1,
+            .pad_w = 0,
+            .pad_h = 0,
+            .window_w = 4,
+            .window_h = 4,
+            .dilation_w = 1,
+            .dilation_h = 1,
+        };
+        for (int i = 0; i < ncores; ++ i) {
+            int out_stick_end = out_stick_start + nsticks_per_core;
+            auto [in_config, out_config] = get_inout_shard_specs(out_stick_start, out_stick_end, mypc);
+            log_debug("{}: out = [{} {}), in = [{})]", i, out_stick_start, out_stick_end, in_config.start_stick);
+            out_stick_start = out_stick_end;
+        }
+    }
+
     PoolConfig pc {
         .in_w = in_w,
         .in_h = in_h,
@@ -1500,7 +1528,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
 
             auto [in_sc, out_sc] = get_inout_shard_specs(start_out_stick_id, start_out_stick_id + out_nhw_per_core, pc);
 
-            if (1) {
+            if (0) {
                 uint32_t in_w_padded = in_w + 2 * pad_w;
                 log_debug(LogOp, "++++ CORE: {}", i);
                 log_debug(LogOp, " + out_stick_id range: {} {}", start_out_stick_id, end_out_stick_id);
@@ -1566,7 +1594,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
     }
 
     auto override_runtime_arguments_callback = [
-            reader_kernel, writer_kernel, cb_sharded_out, ncores, ncores_w
+            reader_kernel, writer_kernel, cb_sharded_out, ncores, ncores_w, raw_in_cb
         ]
     (
         const void* operation,
@@ -1576,9 +1604,11 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
         const std::vector<Tensor>& output_tensors
     ) {
         auto src_buffer = input_tensors.at(0).buffer();
-
         auto dst_buffer = output_tensors.at(0).buffer();
         bool out_sharded = output_tensors.at(0).memory_config().is_sharded();
+
+        auto& raw_in_cb_config = GetCircularBufferConfig(program, raw_in_cb);
+        raw_in_cb_config.set_globally_allocated_address(src_buffer->address());
 
         for (uint32_t i = 0; i < ncores; ++ i) {
             CoreCoord core{i % ncores_w, i / ncores_w };
