@@ -106,7 +106,7 @@ FORCE_INLINE void write_program_page(uint32_t page_addr, volatile tt_l1_ptr uint
         uint64_t dst_noc_addr = (uint64_t(dst_noc) << 32) | dst;
 
         if constexpr (multicast) {
-            noc_async_write_multicast(src, dst_noc_addr, num_bytes, num_recv);
+            noc_async_write_multicast_one_packet(src, dst_noc_addr, num_bytes, num_recv);
         } else {
             noc_async_write_one_packet(src, dst_noc_addr, num_bytes);
         }

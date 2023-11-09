@@ -1056,6 +1056,33 @@ void noc_async_write_multicast(
     DEBUG_STATUS('N', 'M', 'W', 'D');
 }
 
+FORCE_INLINE
+void noc_async_write_multicast_one_packet(
+    std::uint32_t src_local_l1_addr,
+    std::uint64_t dst_noc_addr_multicast,
+    std::uint32_t size,
+    std::uint32_t num_dests) {
+    DEBUG_STATUS('N', 'W', 'P', 'W');
+    DEBUG_SANITIZE_WORKER_ADDR(src_local_l1_addr, size);
+    DEBUG_SANITIZE_NOC_ADDR(dst_noc_addr, size);
+    while (!ncrisc_noc_fast_write_ok(noc_index, NCRISC_WR_REG_CMD_BUF));
+    DEBUG_STATUS('N', 'W', 'P', 'D');
+
+    uint32_t noc_cmd_field = NOC_CMD_CPY | NOC_CMD_WR | NOC_CMD_VC_STATIC |
+                                NOC_CMD_STATIC_VC(NOC_MULTICAST_WRITE_VC) | 0x0 |  // (linked ? NOC_CMD_VC_LINKED : 0x0)
+                                (NOC_CMD_PATH_RESERVE | NOC_CMD_BRCST_PACKET) |  // (mcast ? (NOC_CMD_PATH_RESERVE | NOC_CMD_BRCST_PACKET) : 0x0)
+                                NOC_CMD_RESP_MARKED;
+
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_CTRL, noc_cmd_field);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_TARG_ADDR_LO, src_local_l1_addr);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_RET_ADDR_LO, (uint32_t)dst_noc_addr_multicast);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_RET_ADDR_MID, dst_noc_addr_multicast >> 32);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_AT_LEN_BE,  size);
+    NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+    noc_nonposted_writes_num_issued[noc_index] += 1;
+    noc_nonposted_writes_acked[noc_index] += num_dests;  // num_dests
+}
+
 /**
  * Initiates an asynchronous write from a source address in L1 memory on the
  * Tensix core executing this function call to a rectangular destination grid.
