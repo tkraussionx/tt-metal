@@ -54,7 +54,7 @@ def run_perf_resnet(
 
     state_dict = torch_resnet50.state_dict()
     sharded = False
-    if batch_size == 8:
+    if batch_size >= 8:
         sharded = True
     tt_resnet50 = ResNet(
         Bottleneck,

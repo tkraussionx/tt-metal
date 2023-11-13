@@ -30,6 +30,7 @@ model_config = {
 
 def run_perf_resnet(
     model_location_generator,
+    batch_size,
     expected_inference_time,
     expected_compile_time,
     hf_cat_image_sample_input,
@@ -37,7 +38,6 @@ def run_perf_resnet(
     device,
 ):
     disable_persistent_kernel_cache()
-    batch_size = 1
     first_key = f"first_iter"
     second_key = f"second_iter"
     third_key = f"accuracy_loop"
@@ -48,7 +48,7 @@ def run_perf_resnet(
     image_processor = AutoImageProcessor.from_pretrained(model_name)
     inputs = image_processor(image, return_tensors="pt")
 
-    inputs = inputs["pixel_values"]
+    inputs = inputs["pixel_values"].repeat([batch_size, 1, 1, 1])
     comments = f"{list(inputs.shape)[-2]}x{list(inputs.shape)[-1]}_batchsize{batch_size}"
 
     torch_resnet50 = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
@@ -56,6 +56,8 @@ def run_perf_resnet(
 
     state_dict = torch_resnet50.state_dict()
     sharded = False
+    if batch_size >= 8:
+        sharded = True
     tt_resnet50 = ResNet(
         Bottleneck,
         [3, 4, 6, 3],
@@ -108,14 +110,15 @@ def run_perf_resnet(
             if input_image.mode == "L":
                 input_image = input_image.convert(mode="RGB")
             input = image_processor(input_image, return_tensors="pt")
-            input = input["pixel_values"]
+            input = input["pixel_values"].repeat([batch_size, 1, 1, 1])
             tt_inputs = tt_resnet50.preprocessing(input)
             tt_output = tt_resnet50(tt_inputs)
             tt_output = tt_output.to_torch().to(torch.float)
-            prediction = tt_output[0][0][0].argmax()
-            prediction = prediction.item()
-            predicted_labels.append(prediction)
-            reference_labels.append(image_examples[i].label)
+            for j in range(batch_size):
+                prediction = tt_output[j][0][0].argmax()
+                prediction = prediction.item()
+                predicted_labels.append(prediction)
+                reference_labels.append(image_examples[i].label)
         predicted_labels = np.array(predicted_labels)
         reference_labels = np.array(reference_labels)
         accuracy = np.mean(predicted_labels == reference_labels)
@@ -147,23 +150,26 @@ def run_perf_resnet(
 
 @pytest.mark.models_performance_bare_metal
 @pytest.mark.parametrize(
-    "expected_inference_time, expected_compile_time,iterations",
-    ((0.225, 33, 160),),
+    "batch_size, expected_inference_time, expected_compile_time, iterations",
+    ((16, 0.225, 33, 160),),
 )
 def test_perf_bare_metal(
     use_program_cache,
     model_location_generator,
+    batch_size,
     expected_inference_time,
     expected_compile_time,
     hf_cat_image_sample_input,
     iterations,
     device,
+    function_level_defaults,
 ):
     if is_e75(device):
         pytest.skip("Resnet is not supported on E75")
 
     run_perf_resnet(
         model_location_generator,
+        batch_size,
         expected_inference_time,
         expected_compile_time,
         hf_cat_image_sample_input,
@@ -174,23 +180,26 @@ def test_perf_bare_metal(
 
 @pytest.mark.models_performance_virtual_machine
 @pytest.mark.parametrize(
-    "expected_inference_time, expected_compile_time, iterations",
-    ((0.3, 36, 50),),
+    "batch_size, expected_inference_time, expected_compile_time, iterations",
+    ((16, 0.3, 36, 50),),
 )
 def test_perf_virtual_machine(
     use_program_cache,
     model_location_generator,
+    batch_size,
     expected_inference_time,
     expected_compile_time,
     hf_cat_image_sample_input,
     iterations,
     device,
+    function_level_defaults,
 ):
     if is_e75(device):
         pytest.skip("Resnet is not supported on E75")
 
     run_perf_resnet(
         model_location_generator,
+        batch_size,
         expected_inference_time,
         expected_compile_time,
         hf_cat_image_sample_input,

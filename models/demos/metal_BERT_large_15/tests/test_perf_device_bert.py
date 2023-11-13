@@ -50,8 +50,8 @@ def test_perf_device_virtual_machine(batch_size, test, expected_perf):
     post_processed_results = {}
     for s_col, d_col in zip(samples_cols, duration_cols):
         post_processed_results[f"AVG {s_col}"] = get_samples_per_s(results[f"AVG {d_col}"] / num_iterations, batch_size)
-        post_processed_results[f"MIN {s_col}"] = get_samples_per_s(results[f"MIN {d_col}"], batch_size)
-        post_processed_results[f"MAX {s_col}"] = get_samples_per_s(results[f"MAX {d_col}"], batch_size)
+        post_processed_results[f"MIN {s_col}"] = get_samples_per_s(results[f"MAX {d_col}"], batch_size)
+        post_processed_results[f"MAX {s_col}"] = get_samples_per_s(results[f"MIN {d_col}"], batch_size)
 
     logger.warning("This script does not currently assert for perf regressions, and prints info only")
     logger.info(
