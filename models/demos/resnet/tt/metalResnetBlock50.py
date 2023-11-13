@@ -95,7 +95,7 @@ def ResnetLinear(
                 bias=bias,
                 program_config=matmul_config,
                 output_mem_config=output_mem_config,
-                output_dtype=model_config["ACTIVATIONS_DTYPE"],
+                output_dtype=tt_lib.tensor.DataType.BFLOAT16,
                 math_fidelity=model_config["MATH_FIDELITY"],
             )
         return output
@@ -1682,7 +1682,7 @@ class ResNet(nn.Module):
                 use_multicore=True,
             )
 
-        x = self.avgpool(x, self.width_sharded_memory_config)
+        x = self.avgpool(x, self.width_sharded_memory_config, tt_lib.tensor.DataType.BFLOAT16)
 
         unpadded_shape_end = [x.shape()[0] - 1, x.shape()[1] - 1, 1 - 1, x.shape()[3] - 1]
         if self.sharded:
