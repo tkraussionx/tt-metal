@@ -592,7 +592,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_(const Tensor&
     } else {
         compute_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/conv_bmm_tilize_col_major_out_blocks.cpp";
         // Input should always be sharded in this conv; always use reader kernel for input shard with halo and padding
-        if (weight_size_h == 3 && weight_size_w == 3 && stride_h == 1) {
+        if (stride_h == 1) {
             reader_with_indices = true;
             // 2D conv
             if (weight_width_sliced) {
@@ -887,7 +887,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_(const Tensor&
 
                     // Specs for reader offsets
                     1, // window_outer
-                    3, // window_inner = 9 / 3, ie. read 3 width coalesced
+                    4, // window_inner = 9 / 3, ie. read 3 width coalesced
 
                     (uint32_t) noop_core,
 

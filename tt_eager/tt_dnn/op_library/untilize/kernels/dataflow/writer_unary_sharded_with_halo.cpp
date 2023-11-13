@@ -139,7 +139,7 @@ void kernel_main() {
     // DPRINT << "==== INPUT:" << ENDL();
     // print_sticks(in_l1_addr, 0, 128, 64);
 
-    uint32_t halo_nsticks = (in_w + 2 * pad_w) * pad_h + 1; // + 1 is (window_w / 2)
+    uint32_t halo_nsticks = ((in_w + 2 * pad_w) * pad_h * 2) + 2; // 2 for 4x4 window TODO: add window arg // + 1 is (window_w / 2)
 
     // DPRINT << "1" << ENDL();
 
@@ -271,14 +271,14 @@ void kernel_main() {
     // DPRINT << "in_l1_addr: " << in_l1_addr << ENDL();
 
     // section B (push halo to right and right right neighbors cores)
-    curr_in_l1_addr = curr_in_l1_addr - (in_w + 1) * stick_nbytes;  // rewind by (out_w + 1)
+    curr_in_l1_addr = curr_in_l1_addr - (in_w + 2) * stick_nbytes;  // rewind by (out_w + 1)
     curr_out_l1_addr = curr_out_l1_addr - halo_nsticks * stick_nbytes;  // rewind by 1 halo worth sticks, which needs to be pushed to right neighbors
     uint32_t right_i = 0;
     if (has_right) {
         // DPRINT << "HALO TO R = " << right_core_nsticks << " (" << right_noc_x << "," << right_noc_y << "): ";
         uint32_t out_l1_addr_right = out_base_l1_addr + right_core_halo_offset;
         // push sticks to right neighbor
-        for (uint32_t i = 0; i < right_core_nsticks + 2; ++ i, ++ right_i) {
+        for (uint32_t i = 0; i < right_core_nsticks + (2 * pad_w); ++ i, ++ right_i) {
             // if (right_i == right_going_halo_pad_i_offset) {
             //     // send padding sticks (2 * pad_w)
             //     // TODO: may be the remote core can fill padding locally for its halo ...
@@ -365,7 +365,7 @@ void kernel_main() {
         // these sticks belong to the right halo of the left neighbor
         uint32_t out_l1_addr_left = out_base_l1_addr + left_core_halo_offset;
         // send sticks to left left neighbor
-        for (uint32_t i = 0; i < left_core_nsticks + 2; ++ i, ++ left_i) {
+        for (uint32_t i = 0; i < left_core_nsticks + (2 * pad_w); ++ i, ++ left_i) {
             // if (left_i == left_going_halo_pad_i_offset) {
             //     // send padding sticks (2 * pad_w)
             //     // TODO: may be the remote core can fill padding locally for its halo ...

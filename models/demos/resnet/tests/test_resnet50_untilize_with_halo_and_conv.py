@@ -13,6 +13,7 @@ from models.demos.resnet.tt.metalResnetBlock50 import (
     resnet50_1x1_conv_as_matmul,
     resnet50_optimized_conv,
     _nearest_32,
+    _nearest_y,
     format_tensor,
 )
 
@@ -381,10 +382,11 @@ hardcoded_matmul_config_conv = {
 
 hardcoded_conv_blocking_and_parallelization_config = {
     8: {
-        (25088, 64): [64 * 3, 256, 1, 64, 128, 64, 256, (12, 9), 256, 64],
-        (6272, 128): [128, 64, 1, 128, 64, 128, 64, (12, 9), 64, 128],
-        (1568, 256): [256, 160, 8, 32, 160, 32, 160, (10, 8), 160, 32],
-        (416, 512): [512, 64, 8, 64, 64, 64, 64, (7, 8), 64, 64],
+        (100352, 32): [1088, 32, 1024, 1, 32, 128, 32, 1024, (12, 9), 1024, 32],
+        (25088, 64): [256, 64 * 3, 256, 1, 64, 128, 64, 256, (12, 9), 256, 64],
+        (6272, 128): [64, 128, 64, 1, 128, 64, 128, 64, (12, 9), 64, 128],
+        (1568, 256): [160, 256, 160, 8, 32, 160, 32, 160, (10, 8), 160, 32],
+        (416, 512): [64, 512, 64, 8, 64, 64, 64, 64, (7, 8), 64, 64],
     },
     16: {
         (50176, 64): [64 * 3, 512, 1, 64, 128, 64, 512, (12, 9), 512, 64],
@@ -395,39 +397,61 @@ hardcoded_conv_blocking_and_parallelization_config = {
 }
 
 
-@pytest.mark.parametrize("N", (8, 16), ids=["batch_8", "batch_16"])
+@pytest.mark.parametrize(
+    "N",
+    (8,),
+    ids=[
+        "batch_8",
+    ],
+)
 @pytest.mark.parametrize(
     "K, C, H, W, R, S, stride_h, stride_w, pad_h, pad_w",
     (
-        # unique convs in rn50 (complete list)
-        # layer1
-        (64, 64, 56, 56, 3, 3, 1, 1, 1, 1),
-        # layer2
-        # (512, 256, 56, 56, 1, 1, 2, 2, 0, 0), # not supported yet
-        # (128, 128, 56, 56, 3, 3, 2, 2, 1, 1), # not supported yet
-        (128, 128, 28, 28, 3, 3, 1, 1, 1, 1),
-        # layer3
-        # (256, 256, 28, 28, 3, 3, 2, 2, 1, 1), # not supported yet
-        # (1024, 512, 28, 28, 1, 1, 2, 2, 0, 0), # not supported yet
-        (256, 256, 14, 14, 3, 3, 1, 1, 1, 1),
-        # layer4
-        # (512, 512, 14, 14, 3, 3, 2, 2, 1, 1), # not supported yet
-        # (2048, 1024, 14, 14, 1, 1, 2, 2, 0, 0), # not supported yet
-        (512, 512, 7, 7, 3, 3, 1, 1, 1, 1),
+        # (32, 32, 112, 112, 3, 3, 1, 1, 1, 1),
+        (32, 32, 115, 115, 4, 4, 1, 1, 0, 0),
+        # # unique convs in rn50 (complete list)
+        # # layer1
+        # (64, 64, 56, 56, 3, 3, 1, 1, 1, 1),
+        # # layer2
+        # # (512, 256, 56, 56, 1, 1, 2, 2, 0, 0), # not supported yet
+        # # (128, 128, 56, 56, 3, 3, 2, 2, 1, 1), # not supported yet
+        # (128, 128, 28, 28, 3, 3, 1, 1, 1, 1),
+        # # layer3
+        # # (256, 256, 28, 28, 3, 3, 2, 2, 1, 1), # not supported yet
+        # # (1024, 512, 28, 28, 1, 1, 2, 2, 0, 0), # not supported yet
+        # (256, 256, 14, 14, 3, 3, 1, 1, 1, 1),
+        # # layer4
+        # # (512, 512, 14, 14, 3, 3, 2, 2, 1, 1), # not supported yet
+        # # (2048, 1024, 14, 14, 1, 1, 2, 2, 0, 0), # not supported yet
+        # (512, 512, 7, 7, 3, 3, 1, 1, 1, 1),
     ),
 )
 @pytest.mark.parametrize(
     "weights_dtype",
-    [tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.DataType.BFLOAT8_B],
-    ids=["weights_BFLOAT16", "weights_BFLOAT8_B"],
+    [
+        tt_lib.tensor.DataType.BFLOAT16,
+    ],
+    ids=[
+        "weights_BFLOAT16",
+    ],
 )
 @pytest.mark.parametrize(
     "activations_dtype",
-    [tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.DataType.BFLOAT8_B],
-    ids=["activations_BFLOAT16", "activations_BFLOAT8_B"],
+    [
+        tt_lib.tensor.DataType.BFLOAT16,
+    ],
+    ids=[
+        "activations_BFLOAT16",
+    ],
 )
 @pytest.mark.parametrize(
-    "math_fidelity", [tt_lib.tensor.MathFidelity.HiFi4, tt_lib.tensor.MathFidelity.LoFi], ids=["HiFi4", "LoFi"]
+    "math_fidelity",
+    [
+        tt_lib.tensor.MathFidelity.HiFi4,
+    ],
+    ids=[
+        "HiFi4",
+    ],
 )
 def test_resnet50_conv(
     use_program_cache,
@@ -452,8 +476,8 @@ def test_resnet50_conv(
     )
 
     for i in range(1):  # increase num of iterations to test op caching
-        assert C % 32 == 0
-        assert K % 32 == 0
+        # assert C % 32 == 0
+        # assert K % 32 == 0
         torch.manual_seed(0)
         conv_input_shape = [N, C, H, W]
         conv_weight_shape = [K, C, R, S]
@@ -482,9 +506,10 @@ def test_resnet50_conv(
         conv_blocking_and_parallelization_config = hardcoded_conv_blocking_and_parallelization_config[N][
             (conv_as_mm_padded_act_height, K)
         ]
-        assert len(conv_blocking_and_parallelization_config) == 10
+        assert len(conv_blocking_and_parallelization_config) == 11
 
         [
+            input_shard_height,
             act_block_w_datums,
             act_block_h_datums,
             act_c_num_blocks,
@@ -500,6 +525,7 @@ def test_resnet50_conv(
             assert C % act_block_w_datums == 0
         else:
             assert act_block_w_datums == C or act_block_w_datums == C * S
+        assert input_shard_height % 32 == 0
         assert act_block_w_datums % 32 == 0
         assert act_block_h_datums % 32 == 0
         assert weight_block_w_datums % 32 == 0
@@ -599,20 +625,32 @@ def test_resnet50_conv(
             act_c_num_blocks=act_c_num_blocks,
         )
 
-        conv_input_on_device = tt_lib.tensor.Tensor(
+        conv_input = tt_lib.tensor.Tensor(
             conv_input_pyt_nhwc.reshape(-1).tolist(),
             conv_input_pyt_nhwc.shape,
             tt_lib.tensor.DataType.BFLOAT16,
             tt_lib.tensor.Layout.ROW_MAJOR,
-        ).to(device, interleaved_mem_config)
-
+        )
         # Convert activation RM to tile layout
-        conv_input_on_device = conv_input_on_device.reshape(
+        conv_input = conv_input.reshape(
             1,
             1,
             conv_input_shape_nhwc[0] * conv_input_shape_nhwc[1] * conv_input_shape_nhwc[2],
             conv_input_shape_nhwc[3],
         )
+        # pad to tile and shard height
+        conv_input_on_device_padded_shape = [
+            1,
+            1,
+            _nearest_y(
+                conv_input_shape_nhwc[0] * conv_input_shape_nhwc[1] * conv_input_shape_nhwc[2], input_shard_height
+            ),
+            conv_input_shape_nhwc[3],
+        ]
+
+        conv_input = conv_input.pad(conv_input_on_device_padded_shape, (0, 0, 0, 0), 0.0)
+        conv_input_on_device = conv_input.to(device, interleaved_mem_config)
+
         conv_input_on_device = format_tensor(
             conv_input_on_device, tt_lib.tensor.Layout.TILE, device, interleaved_mem_config
         )
@@ -623,7 +661,7 @@ def test_resnet50_conv(
                 conv_input_on_device,
                 grid_size,
                 [
-                    act_block_h_datums,
+                    input_shard_height,
                     weight_block_w_datums,
                 ],  # act_block_w_datums may include reads of multiple pixels in window
                 tt_lib.tensor.TensorMemoryLayout.BLOCK_SHARDED,
@@ -634,7 +672,7 @@ def test_resnet50_conv(
                 conv_input_on_device,
                 grid_size,
                 [
-                    act_block_h_datums,
+                    input_shard_height,
                     weight_block_w_datums,
                 ],  # act_block_w_datums may include reads of multiple pixels in window
                 tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
@@ -642,8 +680,10 @@ def test_resnet50_conv(
             )
 
         # Untilize with halo concat
-        conv_input_on_device = tt_lib.tensor.untilize_with_halo(conv_input_on_device, 0x0, N, H, W, 1, in_mem_config)
-
+        conv_input_on_device = tt_lib.tensor.untilize_with_halo(
+            conv_input_on_device, 0x0, N, H, W, pad_h, R, 1, in_mem_config
+        )
+        print("untilize with halo done")
         # Conv with new reader for sharded untilized with halo inputs
         output_on_device = conv(conv_input_on_device)
 

@@ -24,6 +24,7 @@ inline void pad_l1_buffer_with_zeroes(uint32_t l1_addr, uint32_t pad_size_bytes)
 }
 
 void kernel_main() {
+    DPRINT << "reader start" << ENDL();
     uint32_t i = 0;
     uint32_t act_addr_dram_base  = get_arg_val<uint32_t>(i); i+=1;
     uint32_t act_dram_noc_x = get_arg_val<uint32_t>(i); i+=1;

@@ -103,6 +103,746 @@ void init_neighbor_core_xy_mapping(CoreCoord grid_size, bool is_twod = false) {
 
 } // namespace untilize_with_halo_helpers
 
+std::vector<uint16_t> get_neighbour_core_send_configs(uint16_t curr_in_stick, uint16_t curr_in_stick_offset, std::pair<uint16_t, uint16_t> neighbour_core_in_shard_start_end) {
+    std::vector<uint16_t> neighbour_send_configs;
+    // check if current core needs to send data to neighbour
+    uint16_t neighbour_req_input_shard_start_stick  = neighbour_core_in_shard_start_end.first;
+    uint16_t neighbour_req_input_shard_end_stick  = neighbour_core_in_shard_start_end.second;
+    TT_ASSERT(neighbour_req_input_shard_end_stick >= neighbour_req_input_shard_start_stick);
+    // check if data needs to be sent to end (right) of neighour data i.e. neighbour core is either left or left-left core
+    if (neighbour_req_input_shard_end_stick >= curr_in_stick) {
+        uint16_t neighbour_send_count_nsticks = neighbour_req_input_shard_end_stick - curr_in_stick + 1;
+        TT_ASSERT(neighbour_send_count_nsticks <= neighbour_req_input_shard_end_stick - neighbour_req_input_shard_start_stick + 1);
+        uint16_t neighbour_send_dst_offset_nsticks = neighbour_req_input_shard_end_stick - neighbour_send_count_nsticks + 1;
+        uint16_t neighbour_send_src_offset_nsticks = curr_in_stick_offset;
+        neighbour_send_configs = {neighbour_send_count_nsticks, neighbour_send_src_offset_nsticks, neighbour_send_dst_offset_nsticks};
+    }
+}
+std::vector<UntilizeWithHaloReaderConfigs> get_untilize_with_halo_reader_configs(std::vector<uint16_t> reader_indices_full,
+                                                                                std::vector<uint16_t> pad_indices_full,
+                                                                                const uint32_t &num_cores,
+                                                                                const uint32_t &in_b,
+                                                                                const uint32_t &in_h,
+                                                                                const uint32_t &in_w,
+                                                                                const uint32_t& pad_h,
+                                                                                const uint32_t& pad_w,
+                                                                                const uint32_t& window_h,
+                                                                                const uint32_t& window_w,
+                                                                                const uint32_t& stride_h,
+                                                                                const uint32_t& stride_w) {
+    std::vector<UntilizeWithHaloReaderConfigs> untilize_with_halo_reader_configs;
+    uint32_t input_flat_height = in_b * in_h * in_w;
+    TT_ASSERT(input_flat_height % num_cores == 0);
+    uint32_t input_shard_height = input_flat_height / num_cores;
+    TT_ASSERT(input_shard_height % TILE_HEIGHT == 0);
+
+    // "out" here refers to the output of the op succeeding untilize with halo
+    uint32_t out_h = ((in_h + (2 * pad_h) - window_h) / stride_h) + 1;
+    uint32_t out_w = ((in_w + (2 * pad_w) - window_w) / stride_w) + 1;
+    uint32_t output_flat_height = in_b * out_h * out_w;
+    TT_ASSERT(output_flat_height % num_cores == 0);
+
+    // Compute output shard size
+    uint32_t output_shard_height = output_flat_height / num_cores;
+
+    // Map output shards to required input
+    uint16_t out_shard_start_stick = 0; // global shard stick index of output of op succeeding untilize with halo op (conv or pool)
+    // the required input shard refers to the outptut shard that untilize with halo will produce
+    std::vector<std::pair<uint16_t, uint16_t>> req_input_shard_start_end; // required input shard i.e. output of untilize with halo
+    for(uint32_t core_i = 0; core_i < num_cores; core_i++) {
+        // output is mapped to top left of input filter window
+        uint16_t req_input_shard_start_stick = reader_indices_full[out_shard_start_stick];
+        uint16_t req_input_shard_end_stick = reader_indices_full[out_shard_start_stick + output_shard_height - 1];
+        // add halo sticks
+        uint16_t halo_nsticks =  ((window_h-1) * in_w) + (window_w-1);
+        req_input_shard_end_stick += halo_nsticks;
+        req_input_shard_start_end.push_back({req_input_shard_start_stick, req_input_shard_end_stick});
+        out_shard_start_stick += output_shard_height;
+    }
+
+    uint16_t input_shard_stick = 0; // global shard stick index of current core's input shard of untilize with halo
+    // Add halo and calculate left and right data shuffling given required input shard
+    for(uint32_t core_i = 0; core_i < num_cores; core_i++) {
+        std::vector<uint16_t> reader_indices_local_data;
+        std::vector<uint16_t> pad_indices;
+        std::vector<uint32_t> left_send_configs;
+        std::vector<uint32_t> right_halo_send_configs;
+        std::vector<uint32_t> left_left_send_configs;
+        std::vector<uint32_t> right_right_send_configs;
+        if (core_i >= 2) {
+
+        }
+        if (core_i >= 1) {
+            // check left core
+        }
+
+
+
+        if(req_input_shard_start_stick < input_shard_start_stick) {
+
+        }
+    }
+
+
+    for(uint32_t core_i = 0; core_i < num_cores; core_i++) {
+
+
+        TT_ASSERT(out_start_stick < reader_indices_full.size());
+        uint16_t in_start_stick = reader_indices_full[out_start_stick];
+
+
+    }
+
+
+
+}
+operation::ProgramWithCallbacks untilize_with_halo_multi_core_4x4_s1(const Tensor& input, Tensor& output, uint32_t pad_val, uint32_t in_b, uint32_t in_h, uint32_t in_w, uint32_t pad, uint32_t window, uint32_t max_out_nsticks_per_core, const PoolConfig& pc) {
+    Program program = Program();
+
+    Device *device = input.device();
+    Buffer *src_buffer = input.buffer();
+    Buffer *dst_buffer = output.buffer();
+    TT_ASSERT(dst_buffer != nullptr, "Output buffer should be allocated on device!");
+
+    Shape input_shape = input.shape();
+    Shape output_shape = output.shape();
+
+    DataFormat in_df = datatype_to_dataformat_converter(input.dtype());
+    DataFormat out_df = datatype_to_dataformat_converter(output.dtype());
+    uint32_t out_nbytes = datum_size(out_df);
+
+    uint32_t in_tile_size = tt_metal::detail::TileSize(in_df);
+    uint32_t out_tile_size = tt_metal::detail::TileSize(out_df);
+
+    uint32_t ntiles = input.volume() / TILE_HW;
+    uint32_t ntiles_per_block = input_shape[3] / TILE_WIDTH;
+    uint32_t nblocks = ceil((float) ntiles / ntiles_per_block);
+    uint32_t block_size_nbytes = input_shape[3] * output.element_size();
+
+    // TODO: hard coded for testing only. need to pass these args in.
+    // These are the input values before inserting and padding or halo
+    //TT_ASSERT(in_h * in_w == input_shape[2] || in_b * in_h * in_w == input_shape[2]);
+    uint32_t in_c = input_shape[3];
+
+    if (1) {
+        log_debug(LogOp, "ntiles: {}", ntiles);
+        log_debug(LogOp, "ntiles_per_block: {}", ntiles_per_block);
+        log_debug(LogOp, "nblocks: {}", nblocks);
+        log_debug(LogOp, "in_b: {}", in_b);
+        log_debug(LogOp, "in_h: {}", pc.in_h);
+        log_debug(LogOp, "in_w: {}", pc.in_w);
+        log_debug(LogOp, "in_c: {}", in_c);
+        log_debug(LogOp, "pad_h: {}", pc.pad_h);
+        log_debug(LogOp, "pad_w: {}", pc.pad_w);
+        log_debug(LogOp, "window_h: {}", pc.window_h);
+        log_debug(LogOp, "window_w: {}", pc.window_w);
+        log_debug(LogOp, "stride_h: {}", pc.stride_h);
+        log_debug(LogOp, "stride_w: {}", pc.stride_w);
+    }
+
+    auto grid_size = device->compute_with_storage_grid_size();
+
+    untilize_with_halo_helpers::init_neighbor_core_xy_mapping(grid_size);
+
+    int32_t ncores_x = grid_size.x;     // distributing data to cores row-wise
+    CoreRangeSet all_cores = input.shard_spec().value().shard_grid;
+    int32_t ncores = 0;
+    for (const auto& core_range : all_cores.ranges()) {
+        ncores += core_range.size();
+    }
+    CoreRangeSet core_range_cliff = CoreRangeSet({});
+    uint32_t nblocks_per_core = input.shard_spec().value().shard_shape[0] / TILE_HEIGHT;
+    uint32_t nblocks_per_core_cliff = 0;
+
+    uint32_t in_hw = pc.in_h * pc.in_w;
+    uint32_t in_nhw = in_b * in_hw;
+    uint32_t in_stick_nbytes = in_c * out_nbytes;
+    uint32_t in_nsticks = in_nhw;
+    uint32_t in_nsticks_per_batch = in_hw;
+    TT_ASSERT(input_shape[2] % ncores == 0);
+    uint32_t in_nsticks_per_core = input_shape[2] / ncores;
+
+    int32_t halo_in_nsticks = (pc.in_w * (pc.window_h / 2)) + (pc.window_w / 2);     // input sticks to the writer
+    int32_t halo_out_nsticks = halo_in_nsticks;
+
+    if (1) {
+        log_debug(LogOp, "shard_shape: {},{}", input.shard_spec().value().shard_shape[0], input.shard_spec().value().shard_shape[1]);
+        log_debug(LogOp, "ncores: {}", ncores);
+        log_debug(LogOp, "ncores_x: {}", ncores_x);
+        log_debug(LogOp, "nblocks_per_core: {}", nblocks_per_core);
+        log_debug(LogOp, "nblocks_per_core_cliff: {}", nblocks_per_core_cliff);
+        log_debug(LogOp, "in_hw: {}", in_hw);
+        log_debug(LogOp, "in_nhw: {}", in_nhw);
+        log_debug(LogOp, "in_stick_nbytes: {}", in_stick_nbytes);
+        log_debug(LogOp, "in_nsticks_per_batch: {}", in_nsticks_per_batch);
+        log_debug(LogOp, "in_nsticks_per_core: {}", in_nsticks_per_core);
+        log_debug(LogOp, "halo_in_nsticks: {}", halo_in_nsticks);
+        log_debug(LogOp, "halo_out_nsticks: {}", halo_out_nsticks);
+        log_debug(LogOp, "max nsticks across all cores = {}", max_out_nsticks_per_core);
+    }
+
+    // For each core, calculate the desired resharding with halo and pad inserted in order to
+    // to obtain resulting **output after the pooling/downsampling op to be equally distributed across all cores**.
+    // The resulting shards with halo and pad could be different across cores.
+    // The resharding is represented as a map:
+    // map :: core -> [l_halo_start, l_halo_end) [local_start, local_end) [r_halo_start, r_halo_end)
+    // (these are global input stick indices, [0, (in_nhw - 1)])
+    // (and l_halo_end == local_start, local_end == r_halo_start)
+    // calculate this core's [left halo, local owned, right halo]. These halo data could be "anywhere".
+    std::map<uint32_t, std::array<range_t, 3>> my_shard;
+    int32_t out_stick_start = 0;   // global "output" stick (after downsample/pool)
+    int32_t pool_out_nsticks_per_core = in_b * pc.out_h * pc.out_w / ncores;
+    for (uint32_t core = 0; core < ncores; ++ core) {
+        range_t out_range = {out_stick_start, out_stick_start + pool_out_nsticks_per_core};
+        range_t in_range = untilize_with_halo_helpers::calculate_in_range(out_range, pc);  // this represents the "window" center input sticks
+        int32_t l_halo_start = in_range[0] - halo_in_nsticks;
+        int32_t batch_start = (in_range[0] / (in_h * in_w)) * (in_h * in_w);
+        l_halo_start = l_halo_start < batch_start ? batch_start : l_halo_start;
+        int32_t r_halo_end = in_range[1] + halo_in_nsticks;
+        r_halo_end = r_halo_end >= in_nhw ? in_nhw : r_halo_end;
+        my_shard[core] = {{
+            { l_halo_start, in_range[0] }, // l_halo
+            { in_range[0], in_range[1] },                   // local
+            { in_range[1], r_halo_end }  // r_halo
+        }};
+        out_stick_start += pool_out_nsticks_per_core;
+    }
+
+    // CBs
+
+    uint32_t src_cb_id = CB::c_in0;
+    uint32_t num_input_tiles = ntiles_per_block * nblocks_per_core;
+    auto src_cb_config = CircularBufferConfig(num_input_tiles * in_tile_size, {{src_cb_id, in_df}})
+                            .set_page_size(src_cb_id, in_tile_size)
+                            .set_globally_allocated_address(input.buffer()->address());
+    auto src_cb = CreateCircularBuffer(program, all_cores, src_cb_config);
+
+    // output of untilize from compute kernel goes into this CB
+    uint32_t untilize_out_cb_id = CB::c_out0;
+    uint32_t num_output_tiles = ntiles_per_block * nblocks_per_core;
+    auto untilize_out_cb_config = CircularBufferConfig(num_output_tiles * out_tile_size, {{untilize_out_cb_id, out_df}})
+                                    .set_page_size(untilize_out_cb_id, out_tile_size);
+    auto untilize_out_cb = CreateCircularBuffer(program, all_cores, untilize_out_cb_config);
+
+    // output after concatenating halo and padding goes into this CB, as input to next op.
+    uint32_t out_cb_id = CB::c_out1;
+    uint32_t out_cb_pagesize = out_nbytes * in_c;
+    uint32_t out_cb_npages = max_out_nsticks_per_core;
+    auto out_cb_config = CircularBufferConfig(out_cb_npages * out_cb_pagesize, {{out_cb_id, out_df}})
+                            .set_page_size(out_cb_id, out_cb_pagesize)
+                            .set_globally_allocated_address(output.buffer()->address());
+    auto out_cb = CreateCircularBuffer(program, all_cores, out_cb_config);
+
+    // CB for pad val buffer (stick sized)
+    uint32_t pad_cb_id = CB::c_in1;
+    uint32_t pad_cb_pagesize = in_stick_nbytes;
+    uint32_t pad_cb_npages = 1;
+    auto pad_cb_config = CircularBufferConfig(pad_cb_pagesize * pad_cb_npages, {{pad_cb_id, out_df}})
+                            .set_page_size(pad_cb_id, pad_cb_pagesize);
+    auto pad_cb = CreateCircularBuffer(program, all_cores, pad_cb_config);
+
+    if (0) {
+        log_debug(LogOp, "src cb: id = {}, pagesize = {}, npages = {}", src_cb_id, in_tile_size, num_input_tiles);
+        log_debug(LogOp, "untilize cb: id = {}, pagesize = {}, npages = {}", untilize_out_cb_id, out_tile_size, num_output_tiles);
+        log_debug(LogOp, "out cb: id = {}, pagesize = {}, npages = {}", out_cb_id, out_cb_pagesize, out_cb_npages);
+    }
+
+    /** reader
+     */
+
+    std::vector<uint32_t> reader_ct_args = {
+        (std::uint32_t) src_cb_id
+    };
+
+    KernelID reader_kernel_id = CreateKernel(
+        program,
+        "tt_eager/tt_dnn/op_library/sharded/kernels/dataflow/reader_unary_sharded.cpp",
+        all_cores,
+        DataMovementConfig{
+            .processor = DataMovementProcessor::RISCV_1,
+            .noc = NOC::RISCV_1_default,
+            .compile_args = reader_ct_args});
+
+    /** writer
+     */
+    std::vector<uint32_t> writer_ct_args = {
+        (std::uint32_t) untilize_out_cb_id,
+        (std::uint32_t) out_cb_id,
+        (std::uint32_t) pad_cb_id,
+        (std::uint32_t) pad_val,
+        (std::uint32_t) in_c    // stick len
+    };
+    KernelID writer_kernel_id = CreateKernel(
+        program,
+        "tt_eager/tt_dnn/op_library/untilize/kernels/dataflow/writer_unary_sharded_with_halo_s2.cpp",
+        all_cores,
+        DataMovementConfig{
+            .processor = DataMovementProcessor::RISCV_0,
+            .noc = NOC::RISCV_0_default,
+            .compile_args = writer_ct_args});
+
+    /** compute
+     */
+    TT_ASSERT(core_range_cliff.ranges().size() == 0);
+    vector<uint32_t> compute_args = {
+        (uint32_t) nblocks_per_core,    // per_core_block_cnt
+        (uint32_t) ntiles_per_block,    // per_block_ntiles
+    };
+    KernelID untilize_kernel_id = CreateKernel(
+        program,
+        "tt_eager/tt_dnn/op_library/untilize/kernels/compute/untilize.cpp",
+        all_cores,
+        ComputeConfig{
+            .compile_args = compute_args});
+
+    // 1D distribution of blocks across all cores
+    uint32_t ncores_full = ncores;
+    // cliff core not yet supported
+    TT_ASSERT(nblocks_per_core_cliff == 0);
+
+    // reader runtime args
+    vector<uint32_t> reader_rt_args = {
+        ntiles_per_block * nblocks_per_core // ntiles
+    };
+
+    TT_ASSERT(in_nhw % ncores == 0);
+
+    // writer inserts halo and padding where needed
+    vector<uint32_t> writer_rt_args = {
+        ntiles_per_block * nblocks_per_core,  // in_nsticks,                     // 0
+        in_nsticks_per_core,  // UNUSED
+        0,  // partial_first_row_nsticks,
+        pc.pad_w,
+        pc.in_w,
+        0,  // partial_top_image_nrows,        // 5
+        pc.pad_h,
+        pc.in_h,
+        0,  // full_nimages,
+        0,  // partial_bottom_image_nrows,
+        0,  // partial_last_row_nsticks,       // 10
+        0,  // halo_for_left_left_nsticks,
+        0,  // halo_for_left_nsticks,
+        0,  // halo_for_right_nsticks,
+        0,  // halo_for_right_right_nsticks,
+        0,  // local_in_stick_start,           // 15
+        0,  // local_in_stick_end,
+        in_nsticks_per_batch,
+        in_nsticks_per_core,
+        0,  // has_left,
+        0,  // left_noc_x,                     // 20
+        0,  // left_noc_y,
+        0,  // has_right,
+        0,  // right_noc_x,
+        0,  // right_noc_y,
+        0,  // has_left_left,                  // 25
+        0,  // left_left_noc_x,
+        0,  // left_left_noc_y,
+        0,  // has_right_right,
+        0,  // right_right_noc_x,
+        0,  // right_right_noc_y,              // 30
+        in_stick_nbytes,
+        0,  // left_left_nsticks,
+        0,  // left_nsticks,
+        0,  // right_nsticks,
+        0,  // right_right_nsticks,            // 35
+        0,  // right_right_halo_offset,
+        0,  // right_halo_offset,
+        0,  // left_halo_offset,
+        0,  // left_left_halo_offset,
+        0,  // left_halo_pad_i_offset          // 40
+        0,  // right_halo_pad_i_offset
+        0,  // partial_first_row_skip
+        0,  // partial_top_image_skip
+        0,  // full_image_skip
+        0,  // initial_pad_nsticks             // 45
+        0,  // UNUSED const_tensor_addr,
+        // sharding config
+        0,
+        0,
+        0,
+        0,                                     // 50
+        0,
+        0,
+        0,
+        0,
+        0,                                     // 55
+        0,
+        0,
+        0,
+        0,
+        // halo config
+        0,                                     // 60
+        0,
+        0,
+        0,
+        0,
+        0,                                     // 65
+        0,
+        0,
+        0,
+        0,
+        0,                                     // 70
+        0,
+    };
+
+    uint32_t writer_noc = 0;
+
+    TT_ASSERT(pc.window_h == 3 && pc.window_w == 3);
+
+    // Calculate data shuffle config for each core using its shard size:
+    // Given equally distributed input across all cores,
+    // for each core, identify the data to be scattered across its neighborhood:
+    // construct the map (subset of alltoallv primitive)
+    // map :: core -> [ll_start, ll_end] [l_start, l_end] [start, end] [r_start, r_end] [rr_start, rr_end]
+    // where, ll_end == l_start, l_end == start, end == r_start, r_end == rr_start
+    std::map<uint32_t, std::array<uint32_t, (NEIGHBORHOOD_DIST * 2 + 1)>> count_to_send;    // nsticks to push to each neighbor
+    std::map<uint32_t, std::array<range_t, (NEIGHBORHOOD_DIST * 2 + 1)>> range_to_send;     // range to push to each neighbor
+    uint32_t in_stick_start = 0;    // global input stick
+    for (uint32_t core = 0; core < ncores; ++ core) {
+        uint32_t in_stick_end = in_stick_start + in_nsticks_per_core;
+        // calculate the shuffle config [excl. padding] <-- TODO: see if padding should be handled here or later
+        //   - for each core in the neighborhood:
+        //         calculate range to push to this core
+
+        // first, cores on the left neighborhood (starting left->right):
+        uint32_t count = 0;
+        int32_t range_start = 0, range_end = 0;
+        for (int32_t l_neighbor = NEIGHBORHOOD_DIST; l_neighbor > 0; -- l_neighbor) {
+            int32_t l_core = core - l_neighbor;
+            if (l_core >= 0) {  // this is a valid neighbor
+                count = 0;
+                // see if this neighbor needs anything from me
+                // neighbor's right halo end > in_stick_start
+                uint32_t stick = in_stick_start;
+                range_start = stick;
+                while (stick < my_shard[l_core][2][1]) {
+                    ++ count;
+                    ++ stick;
+                }
+                range_end = stick;
+                count_to_send[core][NEIGHBORHOOD_DIST - l_neighbor] = count;
+                range_to_send[core][NEIGHBORHOOD_DIST - l_neighbor] = { range_start, range_end };
+            }
+        }
+
+        // check if there is data to keep local:
+        // that is, if my full new shard range (incl. halos) intersects with my current shard
+        count = 0;
+        range_start = 0, range_end = 0;
+        int32_t my_shard_start = my_shard[core][0][0];
+        int32_t my_shard_end = my_shard[core][2][1];
+        if (my_shard_end > in_stick_start && my_shard_start < in_stick_end) {
+            uint32_t stick = in_stick_start < my_shard_start ? my_shard_start : in_stick_start;
+            range_start = stick;
+            while (stick < my_shard_end && stick < in_stick_end) {
+                ++ count;
+                ++ stick;
+            }
+            range_end = stick;
+        }
+        count_to_send[core][NEIGHBORHOOD_DIST] = count; // keep local
+        range_to_send[core][NEIGHBORHOOD_DIST] = { range_start, range_end }; // keep local
+
+        // cores on the right neighborhood (starting left->right)
+        range_start = 0, range_end = 0;
+        for (int32_t r_neighbor = 1; r_neighbor <= NEIGHBORHOOD_DIST; ++ r_neighbor) {
+            int32_t r_core = core + r_neighbor;
+            if (r_core < ncores) {  // this is a valid neighbor
+                count = 0;
+                // see if this neighbor needs anything from me
+                // neighbor's left halo start < in_stick_end
+                uint32_t stick = my_shard[r_core][0][0];
+                stick = stick < in_stick_start ? in_stick_start : stick;
+                range_start = stick;
+                while (stick < in_stick_end) {
+                    ++ count;
+                    ++ stick;
+                }
+                range_end = stick;
+                count_to_send[core][NEIGHBORHOOD_DIST + r_neighbor] = count;
+                range_to_send[core][NEIGHBORHOOD_DIST + r_neighbor] = { range_start, range_end };
+            }
+        }
+
+        in_stick_start += in_nsticks_per_core;
+    }
+
+    std::map<uint32_t, std::array<uint32_t, (NEIGHBORHOOD_DIST * 2 + 1)>> count_to_receive; // nsticks pushed from each neighbor
+    for (uint32_t core = 0; core < ncores; ++ core) {
+        // calculate the nsticks I receive from each of my neighbors
+        for (int32_t neighbor = - NEIGHBORHOOD_DIST; neighbor <= NEIGHBORHOOD_DIST; ++ neighbor) {
+            int32_t neighbor_core = core + neighbor;
+            uint32_t count = 0;
+            if (neighbor_core >= 0 && neighbor_core < ncores) {
+                count = count_to_send[neighbor_core][NEIGHBORHOOD_DIST - neighbor];
+            }
+            count_to_receive[core][NEIGHBORHOOD_DIST + neighbor] = count;
+        }
+    }
+
+    std::map<uint32_t, std::array<uint32_t, (NEIGHBORHOOD_DIST * 2 + 1)>> updated_count_to_send;    // nsticks to push to each neighbor
+    for (uint32_t core = 0; core < ncores; ++ core) {
+        // for each core, calculate the offsets where data is to be pushed to
+        // the push will be from locally constructed re-sharded data, so no additional need to insert padding when pushing.
+        for (int32_t neighbor = - NEIGHBORHOOD_DIST; neighbor <= NEIGHBORHOOD_DIST; ++ neighbor) {
+            // calculate the total nsticks incl. padding to be sent to this neighbor
+            range_t to_send = range_to_send[core][NEIGHBORHOOD_DIST + neighbor];
+            NewShardingConfig sc = get_shard_specs(to_send[0], to_send[1], pc);
+            uint32_t count = 0;
+            count += sc.first_partial_right_aligned_row_width + sc.skip_after_partial_right_aligned_row;
+            count += sc.first_partial_image_num_rows * (pc.in_w + 2 * pc.pad_w) + sc.skip_after_first_partial_image_row;
+            count += sc.num_full_images * (pc.in_h * (pc.in_w + 2 * pc.pad_w) + sc.skip_after_full_image);
+            count += sc.last_partial_image_num_rows * (pc.in_w + 2 * pc.pad_w);
+            count += sc.last_partial_left_aligned_row_width;
+            updated_count_to_send[core][NEIGHBORHOOD_DIST + neighbor] = count;
+        }
+        in_stick_start += in_nsticks_per_core;
+    }
+
+    std::map<uint32_t, std::array<uint32_t, (NEIGHBORHOOD_DIST * 2 + 1)>> updated_count_to_receive; // nsticks pushed from each neighbor
+    std::map<uint32_t, std::array<uint32_t, (NEIGHBORHOOD_DIST * 2 + 1)>> receive_at_offset_nsticks;  // data is to be received at these offsets
+    std::map<uint32_t, int32_t> initial_pad_nsticks;  // any padding to be inserted at the beginning (for left most cores)
+    for (uint32_t core = 0; core < ncores; ++ core) {
+        // record any inital skip to be used in offset calculations
+        initial_pad_nsticks[core] = 0;
+        if (my_shard[core][0][1] - my_shard[core][0][0] < halo_in_nsticks) {
+            initial_pad_nsticks[core] = halo_out_nsticks - (my_shard[core][0][1] - my_shard[core][0][0]);
+        }
+        uint32_t cumulative_count = initial_pad_nsticks[core];
+        // calculate the nsticks I receive from each of my neighbors
+        for (int32_t neighbor = - NEIGHBORHOOD_DIST; neighbor <= NEIGHBORHOOD_DIST; ++ neighbor) {
+            int32_t neighbor_core = core + neighbor;
+            uint32_t count = 0;
+            if (neighbor_core >= 0 && neighbor_core < ncores) {
+                count = updated_count_to_send[neighbor_core][NEIGHBORHOOD_DIST - neighbor];
+            }
+            updated_count_to_receive[core][NEIGHBORHOOD_DIST + neighbor] = count;
+            receive_at_offset_nsticks[core][NEIGHBORHOOD_DIST + neighbor] = cumulative_count;
+            cumulative_count += count;
+        }
+    }
+
+    std::map<uint32_t, std::array<uint32_t, (NEIGHBORHOOD_DIST * 2 + 1)>> send_to_offset_nsticks;  // data is to be received at these offsets
+    for (uint32_t core = 0; core < ncores; ++ core) {
+        for (int32_t neighbor = - NEIGHBORHOOD_DIST; neighbor <= NEIGHBORHOOD_DIST; ++ neighbor) {
+            int32_t neighbor_core = core + neighbor;
+            uint32_t offset = 0;
+            if (neighbor_core >= 0 && neighbor_core < ncores) {
+                offset = receive_at_offset_nsticks[neighbor_core][NEIGHBORHOOD_DIST - neighbor];
+            }
+            send_to_offset_nsticks[core][NEIGHBORHOOD_DIST + neighbor] = offset;
+        }
+    }
+
+    std::map<uint32_t, std::array<uint32_t, (NEIGHBORHOOD_DIST * 2 + 1)>> send_from_offset_nsticks; // after adding pad etc, the offset to start send data from
+    in_stick_start = 0;
+    for (uint32_t core = 0; core < ncores; ++ core) {
+        for (int32_t neighbor = - NEIGHBORHOOD_DIST; neighbor <= NEIGHBORHOOD_DIST; ++ neighbor) {
+            bool toprint = core == 1 && neighbor == 2;
+            int32_t neighbor_core = core + neighbor;
+            uint32_t offset = 0;
+            if (neighbor_core >= 0 && neighbor_core < ncores) {
+                NewShardingConfig sc = get_shard_specs(in_stick_start, range_to_send[core][NEIGHBORHOOD_DIST + neighbor][0], pc);
+                offset += sc.first_partial_right_aligned_row_width + sc.skip_after_partial_right_aligned_row;
+                offset += sc.first_partial_image_num_rows * (pc.in_w + 2 * pc.pad_w) + sc.skip_after_first_partial_image_row;
+                offset += sc.num_full_images * (pc.in_h * (pc.in_w + 2 * pc.pad_w) + sc.skip_after_full_image);
+                offset += sc.last_partial_image_num_rows * (pc.in_w + 2 * pc.pad_w);
+                offset += sc.last_partial_left_aligned_row_width;
+            }
+            send_from_offset_nsticks[core][NEIGHBORHOOD_DIST + neighbor] = offset + receive_at_offset_nsticks[core][NEIGHBORHOOD_DIST];
+        }
+        in_stick_start += in_nsticks_per_core;
+    }
+
+    // Calculate all information needed to copy locally owned data to output shard.
+    in_stick_start = 0;
+    for (uint32_t core = 0; core < ncores; ++ core) {
+        CoreCoord core_coord = {core % ncores_x, core / ncores_x};  // logical
+
+        // set reader rt args
+        SetRuntimeArgs(program, reader_kernel_id, core_coord, reader_rt_args);
+
+        // for each core, identify its sections with padding for the data it locally owns
+        // that is, compute the sharding config
+        uint32_t in_stick_end = in_stick_start + in_nsticks_per_core;
+
+        // left neighbor args
+        if (untilize_with_halo_helpers::left_neighbor_core.count(core_coord) > 0) {
+            CoreCoord left_core = untilize_with_halo_helpers::left_neighbor_core.at(core_coord);
+            CoreCoord left_noc = device->worker_core_from_logical_core(left_core);
+            writer_rt_args[19] = 1;
+            writer_rt_args[20] = left_noc.x;
+            writer_rt_args[21] = left_noc.y;
+            if (untilize_with_halo_helpers::left_neighbor_core.count(left_core) > 0) {
+                CoreCoord left_left_core = untilize_with_halo_helpers::left_neighbor_core.at(left_core);
+                CoreCoord left_left_noc = device->worker_core_from_logical_core(left_left_core);
+                writer_rt_args[25] = 1;
+                writer_rt_args[26] = left_left_noc.x;
+                writer_rt_args[27] = left_left_noc.y;
+            } else {
+                // no left-left neighbor
+                writer_rt_args[25] = 0;
+            }
+        } else {
+            // no left neighbors
+            writer_rt_args[19] = 0;
+            writer_rt_args[25] = 0;
+        }
+        // right neighbor args
+        if (untilize_with_halo_helpers::right_neighbor_core.count(core_coord) > 0) {
+            CoreCoord right_core = untilize_with_halo_helpers::right_neighbor_core.at(core_coord);
+            CoreCoord right_noc = device->worker_core_from_logical_core(right_core);
+            writer_rt_args[22] = 1;
+            writer_rt_args[23] = right_noc.x;
+            writer_rt_args[24] = right_noc.y;
+            if (untilize_with_halo_helpers::right_neighbor_core.count(right_core) > 0) {
+                CoreCoord right_right_core = untilize_with_halo_helpers::right_neighbor_core.at(right_core);
+                CoreCoord right_right_noc = device->worker_core_from_logical_core(right_right_core);
+                writer_rt_args[28] = 1;
+                writer_rt_args[29] = right_right_noc.x;
+                writer_rt_args[30] = right_right_noc.y;
+            } else {
+                // no right-right neighbor
+                writer_rt_args[28] = 0;
+            }
+        } else {
+            // no right neighbors
+            writer_rt_args[22] = 0;
+            writer_rt_args[28] = 0;
+        }
+
+        // logically insert padding into locally owned data and generate the sharding config
+        // information to calculate for a core:
+        //  + partial_first_row_nsticks (no pad)
+        //  + skip_after_partial_first_row (pad)
+        //  + partial_first_image_nrows (no pad) + padding per row (pad)
+        //  + skip_after_partial_first_image (pad)
+        //  + full_nimages (no pad) + padding per row (pad) + padding per image (pad)
+        //  + skip_after_full_images (pad)
+        //  + partial_last_image_nrows (no pad) + padding per row (pad)
+        //  + partial_last_row_nsticks (no pad)
+        NewShardingConfig sc = get_shard_specs(in_stick_start, in_stick_end, pc);
+        int32_t partial_first_row_nsticks = sc.first_partial_right_aligned_row_width;
+        int32_t skip_after_partial_first_row = sc.skip_after_partial_right_aligned_row;
+        int32_t partial_first_image_nrows = sc.first_partial_image_num_rows;
+        int32_t skip_after_partial_first_image = sc.skip_after_first_partial_image_row;
+        int32_t full_nimages = sc.num_full_images;
+        int32_t skip_after_full_images = sc.skip_after_full_image;
+        int32_t partial_last_image_nrows = sc.last_partial_image_num_rows;
+        int32_t partial_last_row_nsticks = sc.last_partial_left_aligned_row_width;
+        int32_t initial_skip = sc.initial_skip;
+
+        // args for handling local data movement:
+        //     intial_pad_nsticks
+        //     receive_at_offset_nsticks[core][NEIGHBORHOOD_DIST]; // local_offset_nsticks
+        //     partial_first_row_nsticks
+        //     partial_first_row_skip
+        //     partial_top_image_nrows, partial_top_image_skip_per_row
+        //     partial_top_image_skip
+        //     full_nimages, full_image_skip_per_row
+        //     full_image_skip
+        //     partial_bottom_image_nrows, partial_bottom_image_skip_per_row
+        //     partial_last_row_nsticks
+        writer_rt_args[47] = initial_pad_nsticks[core];
+        writer_rt_args[48] = receive_at_offset_nsticks[core][NEIGHBORHOOD_DIST]; // local_offset_nsticks
+        writer_rt_args[49] = partial_first_row_nsticks;
+        writer_rt_args[50] = skip_after_partial_first_row;
+        writer_rt_args[51] = partial_first_image_nrows;
+        writer_rt_args[52] = partial_first_image_nrows > 0 ? 2 * pc.pad_w : 0;                          // partial_top_image_skip_per_row
+        writer_rt_args[53] = partial_first_image_nrows > 0 ? pc.pad_h * (pc.in_w + 2 * pc.pad_w) : 0;   // skip_after_partial_first_image
+        writer_rt_args[54] = full_nimages;
+        writer_rt_args[55] = full_nimages > 0 ? 2 * pc.pad_w : 0;                          // full_nimage_skip_per_row
+        writer_rt_args[56] = full_nimages > 0 ? pc.pad_h * (pc.in_w + 2 * pc.pad_w) : 0;   // full_image_skip
+        writer_rt_args[57] = partial_last_image_nrows;
+        writer_rt_args[58] = partial_last_image_nrows > 0 ? 2 * pc.pad_w : 0;                          // partial_bottom_image_skip_per_row
+        writer_rt_args[59] = partial_last_row_nsticks;
+
+        // args for handling remote data shuffle:
+        //     NEIGHBORHOOD_DIST
+        //     ll_send_count
+        //     ll_send_from_offset
+        //     ll_send_at_offset
+        //     l_send_count
+        //     l_send_from_offset
+        //     l_send_at_offset
+        //     r_send_count
+        //     r_send_from_offset
+        //     r_send_at_offset
+        //     rr_send_count
+        //     rr_send_from_offset
+        //     rr_send_at_offset
+        // LL
+        writer_rt_args[60] = updated_count_to_send[core][0];
+        writer_rt_args[61] = send_from_offset_nsticks[core][0] * in_stick_nbytes;
+        writer_rt_args[62] = send_to_offset_nsticks[core][0] * in_stick_nbytes;
+        // L
+        writer_rt_args[63] = updated_count_to_send[core][1];
+        writer_rt_args[64] = send_from_offset_nsticks[core][1] * in_stick_nbytes;
+        writer_rt_args[65] = send_to_offset_nsticks[core][1] * in_stick_nbytes;
+        // R
+        writer_rt_args[66] = updated_count_to_send[core][3];
+        writer_rt_args[67] = send_from_offset_nsticks[core][3] * in_stick_nbytes;
+        writer_rt_args[68] = send_to_offset_nsticks[core][3] * in_stick_nbytes;
+        // RR
+        writer_rt_args[69] = updated_count_to_send[core][4];
+        writer_rt_args[70] = send_from_offset_nsticks[core][4] * in_stick_nbytes;
+        writer_rt_args[71] = send_to_offset_nsticks[core][4] * in_stick_nbytes;
+
+        SetRuntimeArgs(program, writer_kernel_id, core_coord, writer_rt_args);
+
+        in_stick_start += in_nsticks_per_core;
+    }
+
+    // print stuff for debug
+    if (0) {
+        in_stick_start = 0;
+        for (uint32_t core = 0; core < ncores; ++ core) {
+            uint32_t in_stick_end = in_stick_start + in_nsticks_per_core;
+            log_debug("==== Core {}:", core);
+            log_debug(" in shard = [{},{})", in_stick_start, in_stick_end);
+            log_debug(" re shard = [{},{}) [{},{}) [{},{})", my_shard[core][0][0], my_shard[core][0][1],
+                                                            my_shard[core][1][0], my_shard[core][1][1],
+                                                            my_shard[core][2][0], my_shard[core][2][1]);
+            for (uint32_t neighbor = 0; neighbor < 2 * NEIGHBORHOOD_DIST + 1; ++ neighbor) {
+                log_debug(" + N {} :: recv: (count = {}, offset = {})\t send: (count = {}, from = {}, to = {}) : [{},{})", neighbor,
+                                                                    updated_count_to_receive[core][neighbor],
+                                                                    receive_at_offset_nsticks[core][neighbor],
+                                                                    updated_count_to_send[core][neighbor],
+                                                                    send_from_offset_nsticks[core][neighbor],
+                                                                    send_to_offset_nsticks[core][neighbor],
+                                                                    range_to_send[core][neighbor][0], range_to_send[core][neighbor][1]);
+            }
+            in_stick_start += in_nsticks_per_core;
+        }
+    }
+
+
+    auto override_runtime_arguments_callback = [
+        reader_kernel_id=reader_kernel_id,
+        writer_kernel_id=writer_kernel_id,
+        src_cb=src_cb,
+        out_cb=out_cb
+    ](
+        const void* operation,
+        Program& program,
+        const std::vector<Tensor>& input_tensors,
+        const std::vector<std::optional<const Tensor>>& optional_input_tensors,
+        const std::vector<Tensor>& output_tensors
+    ) {
+        auto src_buffer = input_tensors.at(0).buffer();
+        auto dst_buffer = output_tensors.at(0).buffer();
+
+        auto& src_cb_config = GetCircularBufferConfig(program, src_cb);
+        src_cb_config.set_globally_allocated_address(src_buffer->address());
+
+        auto& output_cb_config = GetCircularBufferConfig(program, out_cb);
+        output_cb_config.set_globally_allocated_address(dst_buffer->address());
+    };
+
+    return {.program=std::move(program), .override_runtime_arguments_callback=override_runtime_arguments_callback};
+}
+
+
 // The case of stride = 2
 operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& input, Tensor& output, uint32_t pad_val, uint32_t in_b, uint32_t in_h, uint32_t in_w, uint32_t max_out_nsticks_per_core, const PoolConfig& pc) {
     Program program = Program();
@@ -750,7 +1490,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
 }
 
 // The case with stride = 1
-operation::ProgramWithCallbacks untilize_with_halo_multi_core_s1(const Tensor& a, Tensor& output, uint32_t pad_val, const uint32_t &in_b, const uint32_t &in_h, const uint32_t &in_w, const uint32_t &max_out_nsticks_per_core) {
+operation::ProgramWithCallbacks untilize_with_halo_multi_core_s1(const Tensor& a, Tensor& output, uint32_t pad_val, const uint32_t &in_b, const uint32_t &in_h, const uint32_t &in_w, const uint32_t &pad, const uint32_t &window, const uint32_t &max_out_nsticks_per_core) {
     Program program = Program();
 
     Device *device = a.device();
@@ -806,10 +1546,10 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s1(const Tensor& a
     // TODO: hard coded for now. need to pass these args in.
     uint32_t nbatch = in_b;
     uint32_t in_c = shard_shape[1]; // input_shape[3];  // this is per core row
-    uint32_t pad_h = 1;
-    uint32_t pad_w = 1;
-    uint32_t window_h = 3;
-    uint32_t window_w = 3;
+    uint32_t pad_h = pad;
+    uint32_t pad_w = pad;
+    uint32_t window_h = window;
+    uint32_t window_w = window;
 
     uint32_t nblocks_per_core = shard_shape[0] / TILE_HEIGHT;
     uint32_t nblocks_per_core_cliff = 0;
@@ -822,7 +1562,8 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s1(const Tensor& a
         in_nsticks = shard_shape[0] * ncores;
     }
     uint32_t in_nsticks_per_batch = in_hw;
-    uint32_t in_nsticks_per_core = in_nsticks / ncores;
+    TT_ASSERT(a.shape()[2] % ncores == 0);
+    uint32_t in_nsticks_per_core = a.shape()[2] / ncores;
 
     if (1) {
         log_debug(LogOp, "ntiles: {}", ntiles);
@@ -943,9 +1684,9 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s1(const Tensor& a
         ntiles_per_block * nblocks_per_core // ntiles
     };
 
-    if (a.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED) {
-        TT_ASSERT(in_nhw % ncores == 0);
-    }
+    // if (a.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED) {
+    //     TT_ASSERT(in_nhw % ncores == 0);
+    // }
 
     vector<uint32_t> writer_rt_args = {
         ntiles_per_block * nblocks_per_core,  // in_nsticks,                     // 0
@@ -999,7 +1740,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s1(const Tensor& a
 
     uint32_t writer_noc = 0;
 
-    TT_ASSERT(window_h == 3 && window_w == 3);
+    //TT_ASSERT(window_h == 3 && window_w == 3);
     int32_t halo_in_nsticks = (in_w + (window_w / 2)) * (window_h / 2);
     int32_t halo_out_nsticks = (in_w + 2 * pad_w) * pad_h + window_w / 2;
 
@@ -1098,8 +1839,10 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s1(const Tensor& a
                                     + partial_last_row_nsticks;
 
         // NOTE: this is always the same for all cores
-        uint32_t halo_nsticks = (in_w + window_w / 2 + 2 * pad_w);  // left or right halo
-        uint32_t out_nsticks_per_core = local_nsticks + 2 * halo_nsticks;
+        // for 4x4 (even) window and 0 padding, right halo only
+        uint32_t halo_nsticks = in_w * (window_h - 1) + (window_w - 2);
+        //uint32_t halo_nsticks = (in_w + window_w / 2 + 2 * pad_w);  // left or right halo
+        uint32_t out_nsticks_per_core = local_nsticks + halo_nsticks;
 
         my_right_halo_offset[i] = my_left_halo_offset[i] + (((initial_pad_nsticks > 0) ? initial_pad_nsticks : halo_nsticks) + local_nsticks) * in_stick_nbytes;
         if ((in_stick_start + in_nsticks_per_core) / in_w == (in_stick_start + in_nsticks_per_core + my_right_halo[i]) / in_w) {
@@ -1315,7 +2058,7 @@ std::vector<Shape> UntilizeWithHalo::compute_output_shapes(const std::vector<Ten
 
     // get ncores from shard shape and input shape
     auto shard_shape = input.shard_spec().value().shard_shape;
-    uint32_t ncores = in_nhw / shard_shape[0];
+    uint32_t ncores = input.shard_spec().value().num_cores();
     if (input.memory_config().memory_layout == TensorMemoryLayout::BLOCK_SHARDED) {
         auto core_range = *(input.shard_spec().value().shard_grid.ranges().begin());
         ncores = core_range.end.x - core_range.start.x + 1;
@@ -1348,12 +2091,12 @@ std::vector<Tensor> UntilizeWithHalo::create_output_tensors(const std::vector<Te
     DataType output_dtype = input_tensor.dtype() == DataType::BFLOAT8_B ? DataType::BFLOAT16 : input_tensor.dtype();
     auto shard_spec = input_tensor.shard_spec().value();
     auto output_shape = this->compute_output_shapes(input_tensors).at(0);
-    uint32_t ncores = input_tensor.shape()[0] * input_tensor.shape()[2] / shard_spec.shard_shape[0];
+    uint32_t ncores = shard_spec.num_cores();
     if (input_tensor.memory_config().memory_layout == TensorMemoryLayout::BLOCK_SHARDED) {
         auto core_range = *(input_tensor.shard_spec().value().shard_grid.ranges().begin());
         ncores = core_range.end.x - core_range.start.x + 1;
     }
-    shard_spec.shard_shape[0] = output_shape[0] * div_up(output_shape[2], ncores);
+    shard_spec.shard_shape[0] = div_up(output_shape[0] * output_shape[2], ncores);
     shard_spec.halo = true;
     // log_debug(LogOp, "derived ncores: {}", ncores);
     return {create_sharded_device_tensor(output_shape, output_dtype, Layout::ROW_MAJOR, input_tensor.device(), this->output_mem_config, shard_spec)};
@@ -1365,7 +2108,7 @@ operation::ProgramWithCallbacks UntilizeWithHalo::create_program(const std::vect
     switch (stride_) {
         case 1:
             log_debug(LogOp, "Using stride 1 kernel");
-            return { untilize_with_halo_multi_core_s1(input_tensor_a, output_tensor, pad_val_, this->in_b, this->in_h, this->in_w, this->max_out_nsticks_per_core_) };
+            return { untilize_with_halo_multi_core_s1(input_tensor_a, output_tensor, pad_val_, this->in_b, this->in_h, this->in_w, this->pad, this->window, this->max_out_nsticks_per_core_) };
         case 2:
             log_debug(LogOp, "Using stride 2 kernel");
             return { untilize_with_halo_multi_core_s2(input_tensor_a, output_tensor, pad_val_, in_b, in_h, in_w, max_out_nsticks_per_core_, pc_) };
@@ -1387,14 +2130,14 @@ tt::stl::reflection::Attributes UntilizeWithHalo::attributes() const {
     };
 }
 
-Tensor untilize_with_halo(const Tensor &input_tensor_a, const uint32_t pad_val, const uint32_t &in_b, const uint32_t &in_h, const uint32_t &in_w, const uint32_t stride, const MemoryConfig& mem_config) {
+Tensor untilize_with_halo(const Tensor &input_tensor_a, const uint32_t pad_val, const uint32_t &in_b, const uint32_t &in_h, const uint32_t &in_w, const uint32_t& pad, const uint32_t& window, const uint32_t stride, const MemoryConfig& mem_config) {
     TT_ASSERT(input_tensor_a.memory_config().is_sharded()); // TODO: Remove from validate?
 
     // TODO: Pass these attributes in instead of hardcoding
-    uint32_t pad_h = 1;
-    uint32_t pad_w = 1;
-    uint32_t window_h = 3;
-    uint32_t window_w = 3;
+    uint32_t pad_h = pad;
+    uint32_t pad_w = pad;
+    uint32_t window_h = window;
+    uint32_t window_w = window;
     uint32_t dilation_h = 1;
     uint32_t dilation_w = 1;
 
@@ -1402,7 +2145,7 @@ Tensor untilize_with_halo(const Tensor &input_tensor_a, const uint32_t pad_val, 
     uint32_t ncores = all_cores.num_cores();
 
     // TODO: Uplift to support different num of sticks per core
-    uint32_t in_nsticks_per_core = (in_b * in_h * in_w) / ncores;
+    uint32_t in_nsticks_per_core = input_tensor_a.shape()[2] / ncores;
     // NOTE: This is always the same for all cores
     uint32_t halo_out_nsticks = (in_w + window_w / 2 + 2 * pad_w);  // left or right halo
 
@@ -1493,7 +2236,7 @@ Tensor untilize_with_halo(const Tensor &input_tensor_a, const uint32_t pad_val, 
     }
     log_debug("max nsticks across all cores = {}", max_out_nsticks_per_core);
 
-    return operation::run_without_autoformat(UntilizeWithHalo{pad_val, in_b, in_h, in_w, max_out_nsticks_per_core, stride, pc, mem_config}, {input_tensor_a}).at(0);
+    return operation::run_without_autoformat(UntilizeWithHalo{pad_val, in_b, in_h, in_w, pad, window, max_out_nsticks_per_core, stride, pc, mem_config}, {input_tensor_a}).at(0);
 }
 
 }  // namespace tt_metal

@@ -8,6 +8,54 @@ from ..utils import _nearest_32, _nearest_y
 import torch
 
 
+def compute_conv_output_shape(conv_params, x_shape):
+    H = x_shape[1]
+    W = x_shape[2]
+    K, C, R, S, U, V, P_H, P_W, dilation, groups = [conv_params[i] for i in range(10)]
+    OH = ((int)((H - R + 2 * P_H) / U)) + 1
+    OW = ((int)((W - S + 2 * P_W) / V)) + 1
+    return [x_shape[0], OH, OW, K]
+
+
+def generate_conv_reader_and_pad_indices(conv_params, input_nhwc_shape):
+    assert len(conv_params) == 10
+    output_channels, input_channels, filter_h, filter_w, stride_h, stride_w, pad_h, pad_w, dilation, groups = [
+        conv_params[i] for i in range(10)
+    ]
+    assert dilation == 1 and groups == 1
+    assert len(input_nhwc_shape) == 4
+    input_n, input_h, input_w, input_c = [input_nhwc_shape[i] for i in range(4)]
+    # indices in the following arrays are channel/stick indices
+    reader_indices = []
+    pad_indices = []
+
+    # image padding
+    padded_input_h = input_h + (2 * pad_h)
+    padded_input_w = input_w + (2 * pad_w)
+
+    # output image size
+    [output_n, output_h, output_w, output_c] = compute_conv_output_shape(conv_params, input_nhwc_shape)
+    assert input_n == output_n
+
+    # trace the padded image with conv filter window
+    for n in range(input_n):
+        for oh in range(output_h):
+            for ow in range(output_w):
+                ih = oh * stride_h
+                iw = ow * stride_w
+                for fh in range(filter_h):
+                    for fw in range(filter_w):
+                        channel_idx = (n * padded_input_h * padded_input_w) + (ih * padded_input_w) + iw
+                        reader_indices.append(channel_idx)
+                        if ih < pad_h or iw < pad_w or ih >= input_h + pad_h or iw >= input_w + pad_w:
+                            pad_indices.append(channel_idx)
+                        iw += 1  # TODO: add support for dilation > 1
+                    ih += 1
+                    iw -= filter_w
+    print("Reader indices - ", reader_indices)
+    print("Pad indices - ", pad_indices)
+
+
 def conv(weight: List[Union[int, float]], conv_params, device, bias=None):
     """
     Returns a function that performs a Convolution.

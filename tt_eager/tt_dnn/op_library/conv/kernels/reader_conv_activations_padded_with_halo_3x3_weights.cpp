@@ -8,6 +8,7 @@
 
 
 void kernel_main() {
+    DPRINT << "reader start" << ENDL();
     uint32_t i = 0;
     uint32_t conv_act_size_w = get_arg_val<uint32_t>(i); i+=1;
     uint32_t conv_act_size_h = get_arg_val<uint32_t>(i); i+=1;
@@ -129,7 +130,7 @@ void kernel_main() {
             reader_offsets_ptr[reader_offset_idx++] = reader_offset++;
         }
         // -1 to go back to previous reader_offset
-        reader_offset += conv_act_size_w - 1; // Assuming (weight_size_w - 1) / 2 == pad_w
+        reader_offset += conv_act_size_w; // Assuming (weight_size_w - 1) / 2 == pad_w
     }
 
 
@@ -138,7 +139,7 @@ void kernel_main() {
     // currently works for the case of num_coalesced_reads == weight_size_w since these reads are contiguous on both src/dst side
     // we check if window_inner == weight_size_w to make sure coalescing is legal along full window_inner so the loop can be removed
     constexpr bool coalesce_window_inner_reads = true;
-    constexpr uint32_t num_coalesced_reads = 3;
+    constexpr uint32_t num_coalesced_reads = 4;
     const uint32_t coalesced_read_bytes = num_coalesced_reads * conv_act_c_read_bytes;
     // we want to have the check hoisted out because in act_block_h_datums loop it would be to expensive (unless we make it ifdef)
     if (coalesce_window_inner_reads and window_inner == num_coalesced_reads) {
@@ -192,4 +193,6 @@ void kernel_main() {
         }
 
     }
+
+    DPRINT << "reader done" << ENDL();
 }

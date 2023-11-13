@@ -17,6 +17,7 @@ from tt_lib.fused_ops.average_pool import run_avg_pool_on_device_wrapper as TtAv
 from tt_lib.fused_ops.max_pool import run_max_pool_on_device_wrapper as TtMaxPool
 from tt_lib.fused_ops.max_pool import compute_max_pool_shape
 from tt_lib.fused_ops.conv import (
+    compute_conv_output_shape,
     resnet50_first_conv,
     resnet50_1x1_conv_as_matmul,
     resnet50_optimized_conv,
@@ -146,15 +147,6 @@ def unpad_from_zero(x, desired_shape):
         )
         x = x.to_torch().to(torch.float)
     return x
-
-
-def compute_conv_output_shape(conv_params, x_shape):
-    H = x_shape[1]
-    W = x_shape[2]
-    K, C, R, S, U, V, P_H, P_W, dilation, groups = [conv_params[i] for i in range(10)]
-    OH = ((int)((H - R + 2 * P_H) / U)) + 1
-    OW = ((int)((W - S + 2 * P_W) / V)) + 1
-    return [x_shape[0], OH, OW, K]
 
 
 # hardcoding matmul config for 1x1 convs

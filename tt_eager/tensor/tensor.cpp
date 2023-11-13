@@ -285,6 +285,9 @@ Tensor create_sharded_device_tensor(const Shape& shape, DataType data_type, Layo
     } else {
         TT_ASSERT("Unsupported sharding scheme");
     }
+    cout << "total_height = " << total_height << endl;
+    cout << "num_shards = " << num_shards << endl;
+    cout << "num_cores = " << num_cores << endl;
 
     TT_ASSERT(num_shards == num_cores, "Number of shards must match number of cores");
 

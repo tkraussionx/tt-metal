@@ -61,6 +61,8 @@ struct UntilizeWithHalo {
     const uint32_t in_b;
     const uint32_t in_h;
     const uint32_t in_w;
+    const uint32_t pad;
+    const uint32_t window;
     const int32_t max_out_nsticks_per_core_;
     const uint32_t stride_;
     const PoolConfig pc_;
@@ -72,7 +74,19 @@ struct UntilizeWithHalo {
     operation::ProgramWithCallbacks create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const;
     tt::stl::reflection::Attributes attributes() const;
 };
-Tensor untilize_with_halo(const Tensor &a, const uint32_t pad_val, const uint32_t &in_b, const uint32_t &in_h, const uint32_t &in_w, const uint32_t stride = 1, const MemoryConfig& mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
+Tensor untilize_with_halo(const Tensor &a, const uint32_t pad_val, const uint32_t &in_b, const uint32_t &in_h, const uint32_t &in_w, const uint32_t& pad, const uint32_t& window, const uint32_t stride = 1, const MemoryConfig& mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
+
+struct UntilizeWithHaloReaderConfigs {
+    std::vector<uint16_t> reader_indices_local_data;
+    std::vector<uint16_t> pad_indices;
+    std::vector<uint32_t> left_data_send_configs;
+    std::vector<uint32_t> right_data_send_configs;
+    std::vector<uint32_t> left_left_data_send_configs;
+    std::vector<uint32_t> right_right_data_send_configs;
+};
+
+// Helper function to compute reader configs for each core's sharded input
+std::vector<UntilizeWithHaloReaderConfigs> get_untilize_with_halo_reader_configs(const uint32_t &num_cores, const uint32_t &in_b, const uint32_t &in_h, const uint32_t &in_w, const uint32_t& pad_h, const uint32_t& pad_w, const uint32_t& window_h, const uint32_t& window_w);
 
 namespace untilize_helpers {
 uint32_t get_num_cores(CoreCoord grid_size, uint32_t nblocks);
