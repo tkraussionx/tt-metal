@@ -12,6 +12,7 @@
 #include <thread>
 #include <utility>
 #include <fstream>
+#include <future>
 
 
 #include "build_kernels_for_riscv/build_kernels_for_riscv.hpp"

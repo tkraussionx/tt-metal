@@ -65,9 +65,13 @@ uint16_t get_binary_code_size16(const ll_api::memory& mem, int riscv_id);
 // CoreCoord core --> NOC coordinates ("functional workers" from the SOC descriptor)
 // NOC coord is also synonymous to routing / physical coord
 // dram_channel id (0..7) for GS is also mapped to NOC coords in the SOC descriptor
-void write_hex_vec_to_core(chip_id_t chip, const CoreCoord &core, std::vector<uint32_t> hex_vec, uint64_t addr, bool small_access = false);
+inline void write_hex_vec_to_core(chip_id_t chip, const CoreCoord &core, std::vector<uint32_t> hex_vec, uint64_t addr, bool small_access = false) { tt::Cluster::instance().write_dram_vec(hex_vec, tt_cxy_pair(chip, core), addr, small_access); }
 
-std::vector<std::uint32_t> read_hex_vec_from_core(chip_id_t chip, const CoreCoord &core, uint64_t addr, uint32_t size);
+inline std::vector<std::uint32_t> read_hex_vec_from_core(chip_id_t chip, const CoreCoord &core, uint64_t addr, uint32_t size) {
+    vector<std::uint32_t> read_hex_vec;
+    tt::Cluster::instance().read_dram_vec(read_hex_vec, tt_cxy_pair(chip, core), addr, size);
+    return read_hex_vec;
+}
 
 void write_launch_msg_to_core(chip_id_t chip, CoreCoord core, launch_msg_t *msg);
 

@@ -7,6 +7,7 @@
 #include "debug_tools.hpp"
 #include "device_data.hpp"
 #include "noc/noc_parameters.h"
+#include "common/executor.hpp"
 #include "tt_metal/detail/program.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/host_api.hpp"
@@ -435,6 +436,7 @@ EnqueueProgramCommand::EnqueueProgramCommand(
 }
 
 const DeviceCommand EnqueueProgramCommand::assemble_device_command(uint32_t host_data_src) {
+    ZoneScopedN("Assemble EP command");
     DeviceCommand command;
     command.set_num_workers(this->program_to_dev_map.num_workers);
 
@@ -547,33 +549,50 @@ void EnqueueProgramCommand::process() {
 
     const DeviceCommand cmd = this->assemble_device_command(system_memory_temporary_storage_address);
 
+    ZoneScopedN("Process EP command");
     uint32_t data_size_in_bytes = cmd.get_data_size();
     const uint32_t cmd_size = DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + data_size_in_bytes;
-    this->writer.cq_reserve_back(this->device, cmd_size);
-    this->writer.cq_write(this->device, cmd.get_desc().data(), DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, write_ptr);
+    {
+        ZoneScopedN("Reserve back");
+        this->writer.cq_reserve_back(this->device, cmd_size);
+    }
+    {
+        ZoneScopedN("Writing command");
+        this->writer.cq_write(this->device, cmd.get_desc().data(), DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, write_ptr);
+    }
 
     uint32_t start_addr = system_memory_temporary_storage_address;
     constexpr static uint32_t padding_alignment = 16;
-    for (const auto kernel_id : this->program.kernel_ids()) {
-        const Kernel* kernel = detail::GetKernel(program, kernel_id);
-        for (const auto& [_, core_runtime_args] : kernel->runtime_args()) {
-            this->writer.cq_write(this->device, core_runtime_args.data(), core_runtime_args.size() * sizeof(uint32_t), system_memory_temporary_storage_address);
-            system_memory_temporary_storage_address = align(system_memory_temporary_storage_address + core_runtime_args.size() * sizeof(uint32_t), padding_alignment);
+    {
+        ZoneScopedN("Writing runtime args");
+        for (const auto kernel_id : this->program.kernel_ids()) {
+            const Kernel* kernel = detail::GetKernel(program, kernel_id);
+            for (const auto& core_and_runtime_args : kernel->runtime_args()) {
+                const auto& core_runtime_args = core_and_runtime_args.second;
+                this->writer.cq_write(this->device, core_runtime_args.data(), core_runtime_args.size() * sizeof(uint32_t), system_memory_temporary_storage_address);
+                system_memory_temporary_storage_address = align(system_memory_temporary_storage_address + core_runtime_args.size() * sizeof(uint32_t), padding_alignment);
+            }
         }
     }
 
     system_memory_temporary_storage_address = start_addr + align(system_memory_temporary_storage_address - start_addr, DeviceCommand::PROGRAM_PAGE_SIZE);
 
     array<uint32_t, 4> cb_data;
-    for (const shared_ptr<CircularBuffer>& cb : program.circular_buffers()) {
-        for (const auto buffer_index : cb->buffer_indices()) {
-            cb_data = {cb->address() >> 4, cb->size() >> 4, cb->num_pages(buffer_index), cb->size() / cb->num_pages(buffer_index) >> 4};
-            this->writer.cq_write(this->device, cb_data.data(), padding_alignment, system_memory_temporary_storage_address);
-            system_memory_temporary_storage_address += padding_alignment;
+    {
+        ZoneScopedN("Writing cb config data");
+        for (const shared_ptr<CircularBuffer>& cb : program.circular_buffers()) {
+            for (const auto buffer_index : cb->buffer_indices()) {
+                cb_data = {cb->address() >> 4, cb->size() >> 4, cb->num_pages(buffer_index), cb->size() / cb->num_pages(buffer_index) >> 4};
+                this->writer.cq_write(this->device, cb_data.data(), padding_alignment, system_memory_temporary_storage_address);
+                system_memory_temporary_storage_address += padding_alignment;
+            }
         }
     }
 
-    this->writer.cq_push_back(this->device, cmd_size);
+    {
+        ZoneScopedN("Cq pushback");
+        this->writer.cq_push_back(this->device, cmd_size);
+    }
 }
 
 EnqueueCommandType EnqueueProgramCommand::type() { return this->type_; }

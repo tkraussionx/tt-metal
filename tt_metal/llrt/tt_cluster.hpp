@@ -110,7 +110,7 @@ class Cluster {
 
     // Returns connected ethernet core on the other chip
     std::tuple<chip_id_t, CoreCoord> get_connected_ethernet_core(std::tuple<chip_id_t, CoreCoord> eth_core) const;
-
+    std::unique_ptr<tt_device> device_;
    private:
     Cluster();
     ~Cluster();
@@ -126,7 +126,7 @@ class Cluster {
     ARCH arch_;
     TargetDevice target_type_;
 
-    std::unique_ptr<tt_device> device_;
+
     // Need to hold reference to cluster descriptor to detect total number of devices available in cluster
     // UMD static APIs `detect_available_device_ids` and `detect_number_of_chips` only returns number of MMIO mapped
     // devices

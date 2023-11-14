@@ -405,6 +405,7 @@ void Cluster::read_dram_vec(
 
 void Cluster::write_dram_vec(
     const std::uint32_t *mem_ptr, uint32_t len, tt_cxy_pair dram_core, uint64_t addr, bool small_access) const {
+    ZoneScopedN("Write dram vec");
     int chip_id = dram_core.chip;
     const metal_SocDescriptor &soc_desc = this->get_soc_desc(chip_id);
     if (tt::llrt::OptionsG.get_watcher_enabled()) {
