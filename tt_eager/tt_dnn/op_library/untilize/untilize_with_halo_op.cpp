@@ -628,8 +628,8 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_s2(const Tensor& i
         //     full_image_skip
         //     partial_bottom_image_nrows, partial_bottom_image_skip_per_row
         //     partial_last_row_nsticks
-        writer_rt_args[47] = initial_pad_nsticks[core];
-        writer_rt_args[48] = receive_at_offset_nsticks[core][NEIGHBORHOOD_DIST]; // local_offset_nsticks
+        writer_rt_args[47] = initial_pad_nsticks[i];
+        writer_rt_args[48] = receive_at_offset_nsticks[i][NEIGHBORHOOD_DIST]; // local_offset_nsticks
         uint32_t partial_first_row_nbytes = partial_first_row_nsticks * in_stick_nbytes;
         writer_rt_args[49] = partial_first_row_nbytes;
         writer_rt_args[47] = initial_pad_nsticks[i];
