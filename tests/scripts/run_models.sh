@@ -35,7 +35,115 @@ export PYTHONPATH=$TT_METAL_HOME
 
 # env pytest models/demos/metal_BERT_large_15/tests/test_bert_batch_dram.py
 env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
-env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo_squadv2
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo
+# env pytest models/demos/metal_BERT_large_15/tests/test_demo.py::test_demo_squadv2
 
 # env pytest models/experimental/t5/tests -k t5_dense_act_dense
 # env pytest models/experimental/t5/tests -k t5_layer_norm
