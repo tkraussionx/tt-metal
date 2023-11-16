@@ -109,10 +109,10 @@ inline void pack_matmul_subblock(uint32_t cb_id, uint32_t out_subblock_num_tiles
     cb_push_back(cb_id, out_subblock_num_tiles);
 }
 
-inline void pack_matmul_subblock_out_of_order(uint32_t cb_id, uint32_t out_subblock_num_tiles, uint32_t &idx) {
+inline void pack_matmul_subblock_v2(uint32_t cb_id, uint32_t out_subblock_num_tiles) {
     tile_regs_wait();
-    for (uint32_t i = 0; i < out_subblock_num_tiles; ++i, ++idx) {
-        pack_tile(i, cb_id, idx);
+    for (uint32_t i = 0; i < out_subblock_num_tiles; ++i) {
+        pack_tile(i, cb_id);
     }
     tile_regs_release();
 }
@@ -193,6 +193,8 @@ void MAIN {
 
             uint32_t curr_matmul_out_cb = matmul_partials_cb;
             cb_reserve_back(curr_matmul_out_cb, out_block_num_tiles);
+            uint16_t partials_cb_write_ptr;
+            PACK( partials_cb_write_ptr = cb_interface[curr_matmul_out_cb].fifo_wr_tile_ptr );
             uint32_t tile_idx = 0;
             for(uint32_t in0_block_w_i = 0; in0_block_w_i < in0_num_blocks_w; ++in0_block_w_i) {
                 bool last_out = (in0_block_w_i == in0_num_blocks_w - 1);
@@ -231,7 +233,7 @@ void MAIN {
                             // cb_wait_front(matmul_partials_cb, out_subblock_num_tiles);
                             tile_regs_acquire();
                             for (uint32_t i = 0; i < out_subblock_num_tiles; ++i) {
-                                copy_tile(matmul_partials_cb, tile_idx + i, i);
+                                copy_tile(matmul_partials_cb, tile_idx++, i);
                             }
                             // cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
                             // Reconfigure srcA back
@@ -272,15 +274,17 @@ void MAIN {
                         }
                         #endif
                         tile_regs_commit();
-                        pack_matmul_subblock_out_of_order(curr_matmul_out_cb, out_subblock_num_tiles, tile_idx);
+                        pack_matmul_subblock_v2(curr_matmul_out_cb, out_subblock_num_tiles);
                         in1_index_subblock_offset += out_subblock_w;
                     } // for in1_num_subblocks
                     in0_index_subblock_offset += in0_subblock_num_tiles;
                 }
 
                 if constexpr (spill) enable_reload = true;
-                tile_idx = 0;
-
+                if (!last_out) {
+                    PACK( cb_interface[curr_matmul_out_cb].fifo_wr_tile_ptr = partials_cb_write_ptr );
+                    tile_idx = 0;
+                }
                 cb_pop_front(mm_in0_cb_id, in0_block_num_tiles);
                 cb_pop_front(in1_cb_id, in1_block_num_tiles);
             } // for in0_num_blocks_w
