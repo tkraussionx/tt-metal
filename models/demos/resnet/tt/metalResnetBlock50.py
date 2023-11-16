@@ -23,6 +23,7 @@ from tt_lib.fused_ops.conv import (
     resnet50_1x1_conv_s2_as_downsample_and_matmul,
 )
 from models.utility_functions import _nearest_32
+from tracy import Profiler as TracyProfiler
 
 hardcoded_matmul_config_linear = {
     8: tt_lib.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
@@ -1046,6 +1047,7 @@ class ResNet(nn.Module):
         batch_size=1,
         model_config=None,
         sharded=False,
+        tracyProfiler=None,
     ) -> None:
         super().__init__()
         self.device = device
@@ -1295,6 +1297,7 @@ class ResNet(nn.Module):
             batch_size=batch_size,
         )  # num_classes = 1000
         # self.fc = nn.Linear(512 * block.expansion, num_classes)
+        self.tracyProfiler = tracyProfiler
 
     def _make_layer(
         self,
@@ -1532,11 +1535,17 @@ class ResNet(nn.Module):
         last_layer_shape = layers[-1].conv3_output_shape
         return layers, last_layer_shape
 
-    def preprocessing(self, x: torch.Tensor) -> tt_lib.tensor:
+    def preprocessing(self, x: torch.Tensor, tracyProfiler) -> tt_lib.tensor:
         extra_padding_for_32B_alignment = 25
+        tracyProfiler.start("Torch Pad")
         x = torch.nn.functional.pad(x, (3, 4 + extra_padding_for_32B_alignment, 3, 3, 0, 1))
+        tracyProfiler.end()
+        tracyProfiler.start("Permute")
         x = torch.permute(x, (0, 2, 3, 1))
+        tracyProfiler.end()
+        tracyProfiler.start("ttlib tensor")
         x = tt_lib.tensor.Tensor(x, tt_lib.tensor.DataType.BFLOAT16)
+        tracyProfiler.end()
         return x
 
     def forward(self, x: tt_lib.tensor) -> tt_lib.tensor:
@@ -1551,6 +1560,8 @@ class ResNet(nn.Module):
 
         x = x.to(self.device, self.memory_config)  # to l1
         # re-shape back to original shape (N, H, W, C)
+        self.tracyProfiler.start("Op Run to CPU")
+        self.tracyProfiler.start("Op Run")
         x = x.reshape(
             original_A_cl_host_shape[0],
             original_A_cl_host_shape[1],
@@ -1725,6 +1736,7 @@ class ResNet(nn.Module):
         x = self.fc(x)
         x = format_tensor(x, tt_lib.tensor.Layout.ROW_MAJOR, self.device, self.memory_config)
         x = x.reshape(self.batch_size, x.shape()[1], (int)(x.shape()[2] / self.batch_size), x.shape()[3])
+        self.tracyProfiler.end()
         x = x.cpu()
         desired_shape = [x.shape()[0], x.shape()[1], 1, 1000]
         x = x.unpad(
@@ -1732,4 +1744,5 @@ class ResNet(nn.Module):
         )
 
         # x = x.to_torch().to(torch.float)
+        self.tracyProfiler.end()
         return x

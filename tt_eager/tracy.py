@@ -4,8 +4,11 @@
 
 import importlib.machinery
 import sys
+import os
 import io
 import random
+from inspect import getframeinfo, stack
+import time
 
 from loguru import logger
 import seaborn as sns
@@ -79,8 +82,12 @@ def tracy_marker_func(frame, event, args):
 
 class Profiler:
     def __init__(self):
+        caller = getframeinfo(stack()[1][0])
         self.doProfile = tracy_state.doPartial and sys.gettrace() is None and sys.getprofile() is None
         self.doLine = tracy_state.doLine
+        self.zoneStart = 0
+        self.fileName = caller.filename
+        self.lineNo = caller.lineno
 
     def enable(self):
         if self.doProfile:
@@ -96,6 +103,16 @@ class Profiler:
             while not stop_tracy_zone(color=plotColorFour):
                 pass
 
+    def start(self, zone_name):
+        if self.doProfile:
+            self.zoneStart += 1
+            start_tracy_zone(self.fileName, zone_name, self.lineNo)
+
+    def end(self):
+        if self.doProfile and self.zoneStart > 0:
+            stop_tracy_zone(color=plotColorThree)
+            self.zoneStart -= 1
+
 
 def runctx(cmd, globals, locals, partialProfile):
     if not partialProfile:
@@ -107,6 +124,11 @@ def runctx(cmd, globals, locals, partialProfile):
         sys.setprofile(None)
         while not stop_tracy_zone(color=plotColorFour):
             pass
+
+
+def start_server():
+    os.system("generated/profiler/tracy/tracy_capture -o run.tracy -f &")
+    time.sleep(0.1)
 
 
 def main():
