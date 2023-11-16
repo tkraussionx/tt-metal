@@ -109,6 +109,14 @@ inline void pack_matmul_subblock(uint32_t cb_id, uint32_t out_subblock_num_tiles
     cb_push_back(cb_id, out_subblock_num_tiles);
 }
 
+inline void pack_matmul_subblock_out_of_order(uint32_t cb_id, uint32_t out_subblock_num_tiles, uint32_t &idx) {
+    tile_regs_wait();
+    for (uint32_t i = 0; i < out_subblock_num_tiles; ++i, ++idx) {
+        pack_tile(i, cb_id, idx);
+    }
+    tile_regs_release();
+}
+
 namespace NAMESPACE {
 void MAIN {
 
@@ -129,6 +137,8 @@ void MAIN {
     constexpr uint32_t out_subblock_num_tiles = get_compile_time_arg_val(13); // out_subblock_h * out_subblock_w;
     constexpr bool tilize_in0                 = get_compile_time_arg_val(14);
     constexpr bool untilize_out               = get_compile_time_arg_val(15);
+
+    constexpr uint32_t out_block_num_tiles    = in0_num_subblocks * in1_num_subblocks * out_subblock_num_tiles;
 
     constexpr uint32_t out_block_w = in1_block_w;
     constexpr bool spill = in0_num_blocks_w > 1;
@@ -182,6 +192,8 @@ void MAIN {
             #endif
 
             uint32_t curr_matmul_out_cb = matmul_partials_cb;
+            cb_reserve_back(curr_matmul_out_cb, out_block_num_tiles);
+            uint32_t tile_idx = 0;
             for(uint32_t in0_block_w_i = 0; in0_block_w_i < in0_num_blocks_w; ++in0_block_w_i) {
                 bool last_out = (in0_block_w_i == in0_num_blocks_w - 1);
                 if constexpr (tilize_in0) {
@@ -216,12 +228,12 @@ void MAIN {
                             // Reconfigure input
                             copy_tile_to_dst_init_short();
                             unpack_reconfig_data_format_srca(in1_cb_id, matmul_partials_cb);
-                            cb_wait_front(matmul_partials_cb, out_subblock_num_tiles);
+                            // cb_wait_front(matmul_partials_cb, out_subblock_num_tiles);
                             tile_regs_acquire();
                             for (uint32_t i = 0; i < out_subblock_num_tiles; ++i) {
-                                copy_tile(matmul_partials_cb, i, i);
+                                copy_tile(matmul_partials_cb, tile_idx + i, i);
                             }
-                            cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
+                            // cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
                             // Reconfigure srcA back
                             mm_init_short();
                             unpack_reconfig_data_format_srca(matmul_partials_cb, in1_cb_id);
@@ -234,13 +246,15 @@ void MAIN {
                         uint32_t dst_index = 0;
                         uint32_t in0_index_h_offset = 0;
                         for (uint32_t h = 0; h < out_subblock_h; ++h) {
+                            uint32_t in0_index_offset = in0_index_subblock_offset + in0_index_h_offset;
                             for (uint32_t w = 0; w < out_subblock_w; ++w) {
                                 uint32_t in1_index_inner_dim_offset = 0;
+                                uint32_t in1_index_offset = in1_index_subblock_offset + w;
                                 for (uint32_t inner_dim = 0; inner_dim < in0_block_w; ++inner_dim) {
                                     matmul_tiles(mm_in0_cb_id,                    // in0_cb
                                                  in1_cb_id,                                                     // in1_cb
-                                                 in0_index_subblock_offset + in0_index_h_offset + inner_dim,    // in0 tile
-                                                 in1_index_subblock_offset + in1_index_inner_dim_offset + w,    // in1 tile
+                                                 in0_index_offset + inner_dim,    // in0 tile
+                                                 in1_index_offset + in1_index_inner_dim_offset,    // in1 tile
                                                  dst_index,                                                     // dst
                                                  false);
                                     in1_index_inner_dim_offset += in1_block_w;
@@ -258,17 +272,21 @@ void MAIN {
                         }
                         #endif
                         tile_regs_commit();
-                        pack_matmul_subblock(curr_matmul_out_cb, out_subblock_num_tiles);
+                        pack_matmul_subblock_out_of_order(curr_matmul_out_cb, out_subblock_num_tiles, tile_idx);
                         in1_index_subblock_offset += out_subblock_w;
                     } // for in1_num_subblocks
                     in0_index_subblock_offset += in0_subblock_num_tiles;
                 }
 
                 if constexpr (spill) enable_reload = true;
+                tile_idx = 0;
 
                 cb_pop_front(mm_in0_cb_id, in0_block_num_tiles);
                 cb_pop_front(in1_cb_id, in1_block_num_tiles);
             } // for in0_num_blocks_w
+
+            cb_push_back(curr_matmul_out_cb, out_block_num_tiles);
+
             #ifdef FUSE_BIAS
             #ifdef PACK_RELU
             // if last block we pack the final result with relu enabled

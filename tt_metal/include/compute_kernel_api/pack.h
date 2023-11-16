@@ -47,6 +47,11 @@ ALWI void pack_tile(uint32_t ifrom_dst, uint32_t icb)
     PACK((  llk_pack<false, SYNC, false >(ifrom_dst, icb)  ));
 }
 
+ALWI void pack_tile(uint32_t ifrom_dst, uint32_t icb, uint32_t icb_idx)
+{
+    PACK((  llk_pack<true, SYNC, false >(ifrom_dst, icb, icb_idx)  ));
+}
+
 ALWI void matmul_pack_tile(uint32_t ifrom_dst, uint32_t icb, uint32_t ntiles)
 {
     #ifdef ARCH_GRAYSKULL
