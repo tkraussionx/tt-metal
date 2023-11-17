@@ -99,22 +99,19 @@ inline void tilize_in(
 
 #endif
 
+template<bool pack_only=false>
 inline void pack_matmul_subblock(uint32_t cb_id, uint32_t out_subblock_num_tiles) {
-    cb_reserve_back(cb_id, out_subblock_num_tiles);
+    if constexpr(!pack_only) {
+        cb_reserve_back(cb_id, out_subblock_num_tiles);
+    }
     tile_regs_wait();
     for (uint32_t i = 0; i < out_subblock_num_tiles; ++i) {
         pack_tile(i, cb_id);
     }
     tile_regs_release();
-    cb_push_back(cb_id, out_subblock_num_tiles);
-}
-
-inline void pack_matmul_subblock_v2(uint32_t cb_id, uint32_t out_subblock_num_tiles) {
-    tile_regs_wait();
-    for (uint32_t i = 0; i < out_subblock_num_tiles; ++i) {
-        pack_tile(i, cb_id);
+    if constexpr(!pack_only) {
+        cb_push_back(cb_id, out_subblock_num_tiles);
     }
-    tile_regs_release();
 }
 
 namespace NAMESPACE {
@@ -191,10 +188,9 @@ void MAIN {
             }
             #endif
 
-            uint32_t curr_matmul_out_cb = matmul_partials_cb;
-            cb_reserve_back(curr_matmul_out_cb, out_block_num_tiles);
+            cb_reserve_back(matmul_partials_cb, out_block_num_tiles);
             uint16_t partials_cb_write_ptr;
-            PACK( partials_cb_write_ptr = cb_interface[curr_matmul_out_cb].fifo_wr_tile_ptr );
+            PACK( partials_cb_write_ptr = cb_interface[matmul_partials_cb].fifo_wr_tile_ptr );
             uint32_t tile_idx = 0;
             for(uint32_t in0_block_w_i = 0; in0_block_w_i < in0_num_blocks_w; ++in0_block_w_i) {
                 bool last_out = (in0_block_w_i == in0_num_blocks_w - 1);
@@ -209,10 +205,8 @@ void MAIN {
                     tilize_in(in0_cb_id, in0_subblock_h, in0_block_w, in0_num_subblocks, tilized_in0_cb_id);
                     mm_init_short();
                     unpack_reconfig_data_format_srca(in0_cb_id, in1_cb_id);
-                    cb_wait_front(tilized_in0_cb_id, in0_block_num_tiles);
-                } else {
-                    cb_wait_front(in0_cb_id, in0_block_num_tiles);
                 }
+                cb_wait_front(mm_in0_cb_id, in0_block_num_tiles);
                 cb_wait_front(in1_cb_id, in1_block_num_tiles);
 
                 if (last_out) {
@@ -220,7 +214,6 @@ void MAIN {
                     // if last block we pack the final result with relu enabled
                     PACK(( llk_pack_relu_config(ReluType::ZERO_RELU) ));
                     #endif
-                    curr_matmul_out_cb = mm_out_cb_id;
                 }
                 uint32_t in0_index_subblock_offset = 0;
                 for (uint32_t in0_subblock_i = 0; in0_subblock_i < in0_num_subblocks; ++in0_subblock_i) {
@@ -230,12 +223,10 @@ void MAIN {
                             // Reconfigure input
                             copy_tile_to_dst_init_short();
                             unpack_reconfig_data_format_srca(in1_cb_id, matmul_partials_cb);
-                            // cb_wait_front(matmul_partials_cb, out_subblock_num_tiles);
                             tile_regs_acquire();
                             for (uint32_t i = 0; i < out_subblock_num_tiles; ++i) {
                                 copy_tile(matmul_partials_cb, tile_idx++, i);
                             }
-                            // cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
                             // Reconfigure srcA back
                             mm_init_short();
                             unpack_reconfig_data_format_srca(matmul_partials_cb, in1_cb_id);
@@ -274,22 +265,27 @@ void MAIN {
                         }
                         #endif
                         tile_regs_commit();
-                        pack_matmul_subblock_v2(curr_matmul_out_cb, out_subblock_num_tiles);
+                        pack_matmul_subblock<true>(matmul_partials_cb, out_subblock_num_tiles);
                         in1_index_subblock_offset += out_subblock_w;
                     } // for in1_num_subblocks
                     in0_index_subblock_offset += in0_subblock_num_tiles;
                 }
 
-                if constexpr (spill) enable_reload = true;
-                if (!last_out) {
-                    PACK( cb_interface[curr_matmul_out_cb].fifo_wr_tile_ptr = partials_cb_write_ptr );
-                    tile_idx = 0;
+                if constexpr (spill) {
+                    enable_reload = true;
+                    if (!last_out) {
+                        PACK( cb_interface[matmul_partials_cb].fifo_wr_tile_ptr = partials_cb_write_ptr );
+                        tile_idx = 0;
+                    }
                 }
                 cb_pop_front(mm_in0_cb_id, in0_block_num_tiles);
                 cb_pop_front(in1_cb_id, in1_block_num_tiles);
             } // for in0_num_blocks_w
 
-            cb_push_back(curr_matmul_out_cb, out_block_num_tiles);
+            cb_push_back(matmul_partials_cb, out_block_num_tiles);
+            if constexpr(mm_out_cb_id != matmul_partials_cb) {
+                cb_push_back(mm_out_cb_id, out_block_num_tiles);
+            }
 
             #ifdef FUSE_BIAS
             #ifdef PACK_RELU
@@ -298,15 +294,11 @@ void MAIN {
             #endif
             add_bcast_rows_init_short();
             unpack_reconfig_data_format(in1_cb_id, matmul_partials_cb, mm_in0_cb_id, bias_cb_id);
+            cb_wait_front(bias_cb_id, bias_ntiles_w);
+            cb_wait_front(matmul_partials_cb, out_block_num_tiles);
             for (uint32_t in0_subblock_i = 0; in0_subblock_i < in0_num_subblocks; ++in0_subblock_i) {
                 uint32_t in1_index_subblock_offset = 0;
                 for (uint32_t in1_subblock_i = 0; in1_subblock_i < in1_num_subblocks; ++in1_subblock_i) {
-                    // if bias is to be added, add it to the data in dst before packing into the out cb
-                    // reconfig unpacker df for src B
-                    // unpack_reconfig_data_format(out_for_bias_cb_id, bias_cb_id);
-                    // bcast add data from bias_cb_id
-                    cb_wait_front(bias_cb_id, bias_ntiles_w);
-                    cb_wait_front(matmul_partials_cb, out_subblock_num_tiles);
                     // reconfig packer df for out
                     // pack_reconfig_data_format(out_cb_id);
                     tile_regs_acquire();
