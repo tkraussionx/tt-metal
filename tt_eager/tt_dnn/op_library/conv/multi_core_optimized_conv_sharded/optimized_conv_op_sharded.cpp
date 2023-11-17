@@ -555,10 +555,12 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_(const Tensor&
             weights_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
         }
     }
+    bool act_height_blocked_1d = !weight_width_sliced && num_blocks_act_h_per_core > 1;
+    bool act_height_blocked_1d_no_spill = act_height_blocked_1d && act_subblock_h_ntiles == act_block_h_ntiles;
 
     bool read_3x3_window_in_inner_loop = false;
     uint32_t num_weight_cb_tiles = weight_block_h_ntiles * weight_block_w_ntiles / conv_act_c_blocks;
-    bool fully_buffer_weights = false;
+
     uint32_t num_act_cb_tiles = act_block_h_ntiles * act_block_w_ntiles / conv_act_c_blocks;
     // TODO: This flag should be set in kernel logic but need this for create_CB
     if (a.memory_config().is_sharded() && weight_size_h == 3 && weight_size_w == 3 && stride_h == 1 && weight_width_sliced) {
@@ -567,12 +569,11 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_(const Tensor&
         read_3x3_window_in_inner_loop = true;
         num_weight_cb_tiles *= weight_size_h * weight_size_w;
         num_act_cb_tiles *= weight_size_h * weight_size_w;
-    } else if (num_blocks_act_h_per_core > 1) {
-        fully_buffer_weights = true;
     }
+
     uint32_t num_cb0_tilized_tiles = num_act_cb_tiles;
 
-    if (fully_buffer_weights) {
+    if (act_height_blocked_1d) {
         num_weight_cb_tiles *= window_outer;
     } else if (per_core_weight_matrix_width_ntiles < 8) {
         num_weight_cb_tiles = num_weight_cb_tiles * 2;
@@ -581,7 +582,10 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_(const Tensor&
         num_weight_cb_tiles = weight_block_h_ntiles * weight_block_w_ntiles * num_blocks_weight_w * num_blocks_act_w;
     }
     // std::cout << "num_act_cb_tiles = " << num_act_cb_tiles << std::endl;
-    if (conv_act_size_c / conv_act_c_blocks < 256) {
+    if (act_height_blocked_1d_no_spill) {
+        num_cb0_tilized_tiles *= window_outer;
+        num_act_cb_tiles *= window_outer;
+    } else if (conv_act_size_c / conv_act_c_blocks < 256) {
         num_act_cb_tiles = num_act_cb_tiles * 2; // double buffered
         // std::cout << "num_act_cb_tiles (post DB) = " << num_act_cb_tiles << std::endl;
     }
@@ -625,7 +629,11 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_(const Tensor&
         // TODO: Add support for sharded rn50_first_conv
         TT_ASSERT(false, "Sharded input is not supported for resnet-50 first conv yet!");
     } else {
-        compute_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/conv_bmm_tilize_col_major_out_blocks.cpp";
+        if (act_height_blocked_1d_no_spill) {
+            compute_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/conv_bmm_tilize_col_major_out_blocks_no_spill.cpp";
+        } else {
+            compute_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/conv_bmm_tilize_col_major_out_blocks.cpp";
+        }
         // Input should always be sharded in this conv; always use reader kernel for input shard with halo and padding
         if (weight_size_h == 3 && weight_size_w == 3 && stride_h == 1) {
             reader_with_indices = true;
