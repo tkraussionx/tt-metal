@@ -165,7 +165,7 @@ def test_generate_all_configs_and_references(conv_params, batch_size, input_chw_
     # print(f"src start idx:  {src_start_idx}")
     print("Validate reshards")
     validate_untilize_with_halo_kernel_configs(
-        golden_conv_input_shards,
+        golden_input_shards,
         input_tensor,
         tensor_metadata,
         req_conv_input_shard_start_end,
