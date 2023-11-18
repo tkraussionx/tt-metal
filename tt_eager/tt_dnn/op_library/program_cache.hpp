@@ -28,10 +28,10 @@ struct ProgramCache {
         auto program_hash = op.compute_program_hash(input_tensors, optional_input_tensors);
 
         auto cache_hit = this->cache_.count(program_hash) > 0;
-        if (op.get_type_name() == "tt::tt_metal::OptimizedConv") {
-            tt::log_debug(tt::LogOp, "Induced cache miss for optimized conv");
-            cache_hit = false;
-        }
+        // if (op.get_type_name() == "tt::tt_metal::OptimizedConv") {
+        //     tt::log_debug(tt::LogOp, "Induced cache miss for optimized conv");
+        //     cache_hit = false;
+        // }
 
         if (cache_hit) {
             tt::log_debug(tt::LogOp, "Program Cache: HIT - Getting program from the cache with hash \"{}\"", program_hash);
