@@ -49,6 +49,43 @@ uint32_t get_read_ptr(bool db_buf_switch) {
 
 inline uint32_t min(uint32_t a, uint32_t b) { return (a < b) ? a : b; }
 
+template <bool one_packet, bool flat_write>
+FORCE_INLINE void write_buffer(
+    uint32_t producer_consumer_transfer_num_pages,
+    uint32_t num_pages,
+    bool db_buf_switch,
+    uint64_t producer_noc_encoding,
+    uint32_t l1_consumer_fifo_limit,
+    uint32_t consumer_cb_size,
+    const Buffer& buffer) {
+    uint32_t num_to_write;
+    for (uint32_t id = 0; id < num_pages;) {
+        num_to_write = min(num_pages - id, producer_consumer_transfer_num_pages);
+        multicore_cb_wait_front(db_buf_switch, num_to_write);
+        uint32_t src_addr = get_read_ptr(db_buf_switch);
+        if constexpr (flat_write) {
+            static_assert(not one_packet);
+            buffer.noc_async_write_flat_buffer(src_addr, id, num_to_write, 0);
+        } else {
+            if constexpr (one_packet) {
+                buffer.noc_async_write_buffer_one_packet(src_addr, id, num_to_write, 0);
+            } else {
+                buffer.noc_async_write_buffer(src_addr, id, num_to_write, 0);
+            }
+        }
+        noc_async_write_barrier();
+        multicore_cb_pop_front(
+            producer_noc_encoding,
+            db_buf_switch,
+            l1_consumer_fifo_limit,
+            consumer_cb_size,
+            num_to_write,
+            buffer.page_size());
+        noc_async_write_barrier();
+        id += num_to_write;
+    }
+}
+
 FORCE_INLINE void write_buffers(
     volatile tt_l1_ptr uint32_t* command_ptr,
     uint32_t num_destinations,
@@ -64,25 +101,17 @@ FORCE_INLINE void write_buffers(
         const uint32_t dst_buf_type = command_ptr[5];
         Buffer buffer((BufferType)dst_buf_type, bank_base_address, page_size);
 
-        uint32_t num_to_write;
         uint32_t src_addr = *reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_db_cb_rd_ptr_addr(db_buf_switch)) << 4;
         uint32_t l1_consumer_fifo_limit = src_addr + consumer_cb_size - 1;
 
-        for (uint32_t id = 0; id < num_pages;) {
-            num_to_write = min(num_pages - id, producer_consumer_transfer_num_pages);
-            multicore_cb_wait_front(db_buf_switch, num_to_write);
-            uint32_t src_addr = get_read_ptr(db_buf_switch);
-            buffer.noc_async_write_buffer(src_addr, id, num_to_write, 0);
-            noc_async_write_barrier();
-            multicore_cb_pop_front(
-                producer_noc_encoding,
-                db_buf_switch,
-                l1_consumer_fifo_limit,
-                consumer_cb_size,
-                num_to_write,
-                page_size);
-            noc_async_write_barrier();
-            id += num_to_write;
+        if (buffer.buftype() == BufferType::SYSTEM_MEMORY) {
+            write_buffer<false, true>(producer_consumer_transfer_num_pages, num_pages, db_buf_switch, producer_noc_encoding, l1_consumer_fifo_limit, consumer_cb_size, buffer);
+        } else {
+            if (page_size < NOC_MAX_BURST_SIZE) {
+                write_buffer<true, false>(producer_consumer_transfer_num_pages, num_pages, db_buf_switch, producer_noc_encoding, l1_consumer_fifo_limit, consumer_cb_size, buffer);
+            } else {
+                write_buffer<false, false>(producer_consumer_transfer_num_pages, num_pages, db_buf_switch, producer_noc_encoding, l1_consumer_fifo_limit, consumer_cb_size, buffer);
+            }
         }
     }
 }
@@ -93,6 +122,7 @@ FORCE_INLINE void write_program_page(uint32_t page_addr, volatile tt_l1_ptr uint
     command_ptr++;
     uint32_t src = page_addr;
 
+    uint32_t unicast_vc = NOC_UNICAST_WRITE_VC_START;
     for (uint32_t i = 0; i < num_transfers; i++) {
         uint32_t num_bytes = command_ptr[0];
         uint32_t dst = command_ptr[1];
@@ -106,7 +136,8 @@ FORCE_INLINE void write_program_page(uint32_t page_addr, volatile tt_l1_ptr uint
         if constexpr (multicast) {
             noc_async_write_multicast(src, dst_noc_addr, num_bytes, num_recv);
         } else {
-            noc_async_write_one_packet(src, dst_noc_addr, num_bytes);
+            noc_async_write_one_packet(src, dst_noc_addr, num_bytes, unicast_vc);
+            unicast_vc = (unicast_vc + 1) & (NUM_NOC_UNICAST_WRITE_VCS - 1);
         }
 
         command_ptr += 5;

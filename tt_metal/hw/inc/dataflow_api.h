@@ -38,7 +38,9 @@ extern CBInterface cb_interface[NUM_CIRCULAR_BUFFERS];
 extern CQReadInterface cq_read_interface;
 
 // Use VC 1 for unicast writes, and VC 4 for mcast writes
-#define NOC_UNICAST_WRITE_VC 1
+#define NOC_UNICAST_WRITE_VC_START 1
+#define NUM_NOC_UNICAST_WRITE_VCS 4
+
 #define NOC_MULTICAST_WRITE_VC 4
 
 inline uint32_t align(uint32_t addr, uint32_t alignment) { return ((addr - 1) | (alignment - 1)) + 1; }
@@ -630,7 +632,7 @@ struct InterleavedAddrGenFast {
         DEBUG_STATUS('N', 'W', 'T', 'D');
 
         uint32_t noc_cmd_field = NOC_CMD_CPY | NOC_CMD_WR | NOC_CMD_VC_STATIC |
-                                 NOC_CMD_STATIC_VC(NOC_UNICAST_WRITE_VC) | 0x0 |  // (linked ? NOC_CMD_VC_LINKED : 0x0)
+                                 NOC_CMD_STATIC_VC(NOC_UNICAST_WRITE_VC_START) | 0x0 |  // (linked ? NOC_CMD_VC_LINKED : 0x0)
                                  0x0 |  // (mcast ? (NOC_CMD_PATH_RESERVE | NOC_CMD_BRCST_PACKET) : 0x0)
                                  NOC_CMD_RESP_MARKED;
 
@@ -772,7 +774,7 @@ struct InterleavedPow2AddrGenFast {
         DEBUG_STATUS('N', 'W', 'P', 'D');
 
         uint32_t noc_cmd_field = NOC_CMD_CPY | NOC_CMD_WR | NOC_CMD_VC_STATIC |
-                                 NOC_CMD_STATIC_VC(NOC_UNICAST_WRITE_VC) | 0x0 |  // (linked ? NOC_CMD_VC_LINKED : 0x0)
+                                 NOC_CMD_STATIC_VC(NOC_UNICAST_WRITE_VC_START) | 0x0 |  // (linked ? NOC_CMD_VC_LINKED : 0x0)
                                  0x0 |  // (mcast ? (NOC_CMD_PATH_RESERVE | NOC_CMD_BRCST_PACKET) : 0x0)
                                  NOC_CMD_RESP_MARKED;
 
@@ -1029,7 +1031,7 @@ void noc_async_read_inc_num_issued(std::uint32_t num_issued_reads_inc) {
 // TODO: write docs
 // this issues only a single packet with size <= NOC_MAX_BURST_SIZE (ie maximum packet size)
 FORCE_INLINE
-void noc_async_write_one_packet(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr, std::uint32_t size) {
+void noc_async_write_one_packet(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr, std::uint32_t size, uint32_t vc = NOC_UNICAST_WRITE_VC_START) {
 
     DEBUG_STATUS('N', 'W', 'P', 'W');
     DEBUG_SANITIZE_WORKER_ADDR(src_local_l1_addr, size);
@@ -1038,7 +1040,7 @@ void noc_async_write_one_packet(std::uint32_t src_local_l1_addr, std::uint64_t d
     DEBUG_STATUS('N', 'W', 'P', 'D');
 
     uint32_t noc_cmd_field = NOC_CMD_CPY | NOC_CMD_WR | NOC_CMD_VC_STATIC |
-                                NOC_CMD_STATIC_VC(NOC_UNICAST_WRITE_VC) | 0x0 |  // (linked ? NOC_CMD_VC_LINKED : 0x0)
+                                NOC_CMD_STATIC_VC(vc) | 0x0 |  // (linked ? NOC_CMD_VC_LINKED : 0x0)
                                 0x0 |  // (mcast ? (NOC_CMD_PATH_RESERVE | NOC_CMD_BRCST_PACKET) : 0x0)
                                 NOC_CMD_RESP_MARKED;
 
@@ -1064,7 +1066,7 @@ void noc_async_write_one_packet_set_state(std::uint64_t dst_noc_addr, std::uint3
     DEBUG_STATUS('N', 'W', 'P', 'D');
 
     uint32_t noc_cmd_field = NOC_CMD_CPY | NOC_CMD_WR | NOC_CMD_VC_STATIC |
-                                NOC_CMD_STATIC_VC(NOC_UNICAST_WRITE_VC) | 0x0 |  // (linked ? NOC_CMD_VC_LINKED : 0x0)
+                                NOC_CMD_STATIC_VC(NOC_UNICAST_WRITE_VC_START) | 0x0 |  // (linked ? NOC_CMD_VC_LINKED : 0x0)
                                 0x0 |  // (mcast ? (NOC_CMD_PATH_RESERVE | NOC_CMD_BRCST_PACKET) : 0x0)
                                 (non_posted ? NOC_CMD_RESP_MARKED : 0x0);
 
@@ -1125,7 +1127,7 @@ FORCE_INLINE void noc_async_read_tile(
  * | size              | Size of data transfer in bytes | uint32_t | 0..1MB                                                    | True     |
  */
 FORCE_INLINE
-void noc_async_write(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr, std::uint32_t size) {
+void noc_async_write(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr, std::uint32_t size, uint32_t vc = NOC_UNICAST_WRITE_VC_START) {
     DEBUG_STATUS('N', 'A', 'W', 'W');
     DEBUG_SANITIZE_NOC_ADDR(dst_noc_addr, size);
     DEBUG_SANITIZE_WORKER_ADDR(src_local_l1_addr, size);
@@ -1135,7 +1137,7 @@ void noc_async_write(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr
         src_local_l1_addr,
         dst_noc_addr,
         size,
-        NOC_UNICAST_WRITE_VC,
+        vc,
         false,
         false,
         1);
@@ -1164,7 +1166,7 @@ void noc_semaphore_set_remote(std::uint32_t src_local_l1_addr, std::uint64_t dst
         src_local_l1_addr,
         dst_noc_addr,
         4 /* size in bytes */,
-        NOC_UNICAST_WRITE_VC,
+        NOC_UNICAST_WRITE_VC_START,
         false,
         false,
         1);
@@ -1527,34 +1529,60 @@ class Buffer {
     void set_type(const BufferType type) {
         this->type = type;
         switch (type) {
-            case BufferType::DRAM:          this->get_noc_addr_helper = get_dram_noc_addr; break;
-            case BufferType::L1:            this->get_noc_addr_helper = get_l1_noc_addr; break;
-            case BufferType::SYSTEM_MEMORY: this->get_noc_addr_helper = get_system_memory_noc_addr; break;
+            case BufferType::DRAM: {
+                this->get_noc_addr_helper = get_dram_noc_addr;
+                break;
+            }
+            case BufferType::L1: {
+                this->get_noc_addr_helper = get_l1_noc_addr;
+                break;
+            }
+            case BufferType::SYSTEM_MEMORY: {
+                this->get_noc_addr_helper = get_system_memory_noc_addr;
+                break;
+            }
         }
     }
-    uint64_t get_noc_addr(const uint32_t id, const uint32_t offset = 0) {
+
+    uint64_t get_noc_addr(const uint32_t id, const uint32_t offset = 0) const {
         return this->get_noc_addr_helper(id, this->page_size_, this->bank_base_address, offset);
     }
 
    public:
 
     Buffer(const BufferType type, const uint32_t bank_base_address, const uint32_t page_size) {
-        this->set_type(type);
-        this->bank_base_address = bank_base_address;
         this->page_size_ = page_size;
+        this->bank_base_address = bank_base_address;
+        this->set_type(type);
     }
 
-    uint32_t page_size() { return this->page_size_; }
+    BufferType buftype() const {
+        return this->type;
+    }
 
-    void noc_async_write_buffer(uint32_t src, const uint32_t id, const uint32_t num_pages, const uint32_t offset) {
-        if (this->type == BufferType::SYSTEM_MEMORY) {
-            noc_async_write(src, this->get_noc_addr(id, offset), this->page_size_ * num_pages);
-        } else {
-            for (uint32_t i = 0; i < num_pages; i++) {
-                uint64_t address = this->get_noc_addr(id + i, offset);
-                noc_async_write(src, address, this->page_size_);
-                src += this->page_size_;
-            }
+    uint32_t page_size() const { return this->page_size_; }
+
+    void noc_async_write_flat_buffer(uint32_t src, const uint32_t id, const uint32_t num_pages, const uint32_t offset) const {
+        noc_async_write(src, this->get_noc_addr(id, offset), this->page_size_ * num_pages);
+    }
+
+    void noc_async_write_buffer(uint32_t src, const uint32_t id, const uint32_t num_pages, const uint32_t offset) const {
+        uint32_t vc = NOC_UNICAST_WRITE_VC_START;
+        for (uint32_t i = 0; i < num_pages; i++) {
+            uint64_t address = this->get_noc_addr(id + i, offset);
+            noc_async_write(src, address, this->page_size_, vc);
+            vc = (vc + 1) & (NUM_NOC_UNICAST_WRITE_VCS - 1);
+            src += this->page_size_;
+        }
+    }
+
+    void noc_async_write_buffer_one_packet(uint32_t src, const uint32_t id, const uint32_t num_pages, const uint32_t offset) const {
+        uint32_t vc = NOC_UNICAST_WRITE_VC_START;
+        for (uint32_t i = 0; i < num_pages; i++) {
+            uint64_t address = this->get_noc_addr(id + i, offset);
+            noc_async_write_one_packet(src, address, this->page_size_, vc);
+            vc = (vc + 1) & (NUM_NOC_UNICAST_WRITE_VCS - 1);
+            src += this->page_size_;
         }
     }
 
