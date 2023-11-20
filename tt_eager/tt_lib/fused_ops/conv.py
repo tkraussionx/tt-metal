@@ -184,7 +184,7 @@ def resnet50_optimized_conv(
     weight_block_w = (int)(weight_block_shape_hw[1] / 32)
     out_subblock_h = (int)(outsubblock_shape_hw[0] / 32)
     out_subblock_w = (int)(outsubblock_shape_hw[1] / 32)
-    assert out_subblock_h * out_subblock_w <= 8
+    assert out_subblock_h * out_subblock_w <= 16
 
     assert dilation == 1 and groups == 1
 

@@ -305,7 +305,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_(const Tensor&
     // out
     uint32_t out_dram_addr = dst_dram_buffer->address();
     uint32_t out_subblock_num_tiles = out_subblock_h_ntiles * out_subblock_w_ntiles;
-    TT_ASSERT(out_subblock_num_tiles <= 8, "Need to ensure that matmul partials fit in dst");
+    TT_ASSERT(out_subblock_num_tiles <= 16, "Need to ensure that matmul partials fit in dst");
 
     // act
     uint32_t act_dram_addr = src0_dram_buffer->address();

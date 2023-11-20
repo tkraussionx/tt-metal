@@ -105,7 +105,7 @@ inline void pack_matmul_subblock(uint32_t cb_id, uint32_t out_subblock_num_tiles
     for (uint32_t i = 0; i < out_subblock_num_tiles; ++i) {
         pack_tile(i, cb_id);
     }
-    tile_regs_release();
+    tile_regs_release<DstSync::SyncFull>();
     cb_push_back(cb_id, out_subblock_num_tiles);
 }
 
@@ -182,7 +182,7 @@ void MAIN {
             // if last block we pack the final result with relu enabled
             PACK(( llk_pack_relu_config(ReluType::ZERO_RELU) ));
             #endif
-            tile_regs_acquire();
+            tile_regs_acquire<DstSync::SyncFull>();
             for(uint32_t in0_block_w_i = 0; in0_block_w_i < in0_num_blocks_w; ++in0_block_w_i) {
                 cb_wait_front(mm_in0_cb_id, in0_block_num_tiles);
                 cb_wait_front(in1_cb_id, in1_block_num_tiles);
@@ -224,7 +224,7 @@ void MAIN {
                 SFPU_OP_FUNC_ACTIVATION
             }
             #endif
-            tile_regs_commit();
+            tile_regs_commit<DstSync::SyncFull>();
             pack_matmul_subblock(matmul_partials_cb, out_block_num_tiles);
             if constexpr(mm_out_cb_id != matmul_partials_cb) {
                 cb_push_back(mm_out_cb_id, out_block_num_tiles);
@@ -244,7 +244,7 @@ void MAIN {
                 for (uint32_t in1_subblock_i = 0; in1_subblock_i < in1_num_subblocks; ++in1_subblock_i) {
                     // reconfig packer df for out
                     // pack_reconfig_data_format(out_cb_id);
-                    tile_regs_acquire();
+                    tile_regs_acquire<DstSync::SyncFull>();
                     uint32_t i = 0;
                     for (uint32_t h = 0; h < out_subblock_h; ++ h) {
                         uint32_t bcast_tile_i = bias_block_offset + in1_index_subblock_offset;
@@ -254,19 +254,14 @@ void MAIN {
                             ++ i;
                         }
                     }
-                    // if SFPU fusion is not enabled, then we commit right away
-                    #ifndef SFPU_OP_INIT_ACTIVATION
-                    tile_regs_commit();
-                    #endif
-                    // do not pop front bias as it may be used again for subsequent blocks
-                    cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
-
                     #ifdef SFPU_OP_INIT_ACTIVATION
                     for (uint32_t i = 0; i < out_subblock_num_tiles; ++ i) {
                         SFPU_OP_FUNC_ACTIVATION
                     }
-                    tile_regs_commit();
                     #endif
+                    tile_regs_commit<DstSync::SyncFull>();
+                    // do not pop front bias as it may be used again for subsequent blocks
+                    cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
 
                     pack_matmul_subblock(untilize_mode_out_cb_id, out_subblock_num_tiles);
                     in1_index_subblock_offset += out_subblock_w;

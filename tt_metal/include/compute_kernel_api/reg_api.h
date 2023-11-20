@@ -34,8 +34,9 @@ ALWI void acquire_dst(tt::DstMode mode) {
 }
 
 // new APIs, TODO: migrate all kernels to these
+template <DstSync Dst = DstSync::SyncHalf>
 ALWI void tile_regs_acquire() {
-    MATH(( llk_math_wait_for_dest_available<SYNC>()  ));
+    MATH(( llk_math_wait_for_dest_available<Dst>()  ));
 }
 
 ALWI void tile_regs_wait() {
@@ -62,12 +63,14 @@ ALWI void release_dst(tt::DstMode mode) {
 }
 
 // new APIs, TODO: migrate all kernels to these
+template <DstSync Dst = DstSync::SyncHalf>
 ALWI void tile_regs_commit() {
-    MATH(( llk_math_dest_section_done<SYNC>()  ));
+    MATH(( llk_math_dest_section_done<Dst>()  ));
 }
 
+template <DstSync Dst = DstSync::SyncHalf>
 ALWI void tile_regs_release() {
-    PACK(( llk_pack_dest_section_done<SYNC>()  ));
+    PACK(( llk_pack_dest_section_done<Dst>()  ));
 }
 
 } // namespace ckernel

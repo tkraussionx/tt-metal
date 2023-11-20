@@ -311,19 +311,14 @@ void MAIN {
                             ++ i;
                         }
                     }
-                    // if SFPU fusion is not enabled, then we commit right away
-                    #ifndef SFPU_OP_INIT_ACTIVATION
-                    tile_regs_commit();
-                    #endif
-                    // do not pop front bias as it may be used again for subsequent blocks
-                    cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
-
                     #ifdef SFPU_OP_INIT_ACTIVATION
                     for (uint32_t i = 0; i < out_subblock_num_tiles; ++ i) {
                         SFPU_OP_FUNC_ACTIVATION
                     }
-                    tile_regs_commit();
                     #endif
+                    tile_regs_commit();
+                    // do not pop front bias as it may be used again for subsequent blocks
+                    cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
 
                     pack_matmul_subblock(untilize_mode_out_cb_id, out_subblock_num_tiles);
                     in1_index_subblock_offset += out_subblock_w;
