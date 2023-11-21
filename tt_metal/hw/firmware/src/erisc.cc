@@ -35,7 +35,7 @@ volatile uint32_t *RtosTable =
 void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
     rtos_context_switch_ptr = (void (*)())RtosTable[0];
 
-    noc_init();
+    //noc_init();
 
     int32_t src_addr = eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE;
     int32_t dst_addr = eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE;

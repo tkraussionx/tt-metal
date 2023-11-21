@@ -6,14 +6,47 @@
 #include "eth_l1_address_map.h"
 #include "risc_common.h"
 #include "tt_eth_api.h"
-#include "noc_nonblocking_api.h"
+#include "ethernet/noc_nonblocking_api.h"
+#include "circular_buffer.h"
 
 #define FORCE_INLINE inline __attribute__((always_inline))
+
+
+extern uint32_t __erisc_jump_table;
+void (*rtos_context_switch_ptr)();
+volatile uint32_t *RtosTable =
+    (volatile uint32_t *)&__erisc_jump_table;  // Rtos Jump Table. Runtime application needs rtos function handles.;
 
 inline void RISC_POST_STATUS(uint32_t status) {
     volatile uint32_t *ptr = (volatile uint32_t *)(NOC_CFG(ROUTER_CFG_2));
     ptr[0] = status;
 }
+
+constexpr static uint32_t get_arg_addr(int arg_idx) {
+      // args are 4B in size
+      #if defined(COMPILE_FOR_ERISC)
+          return eth_l1_mem::address_map::ERISC_L1_ARG_BASE + (arg_idx << 2);
+      #else
+          return L1_ARG_BASE + (arg_idx << 2);
+      #endif
+  }
+
+  /**
+   * Returns the value of an argument from kernel_args array provided during
+   * kernel creation using CreateKernel calls.
+   *
+   * | Argument              | Description                        | Type                  | Valid Range | Required |
+   * |-----------------------|------------------------------------|-----------------------|-------------|----------|
+   * | arg_idx               | The index of the argument          | uint32_t              | 0 to 255    | True     |
+   * | T (template argument) | Data type of the returned argument | Any 4-byte sized type | N/A         | True     |
+   */
+  template <typename T>
+  FORCE_INLINE T get_arg_val(int arg_idx) {
+      // only 4B args are supported (eg int32, uint32)
+      static_assert("Error: only 4B args are supported" && sizeof(T) == 4);
+      return *((volatile tt_l1_ptr T*)(get_arg_addr(arg_idx)));
+  }
+
 struct erisc_info_t {
     volatile uint32_t num_bytes;
     volatile uint32_t mode;
@@ -31,20 +64,19 @@ struct erisc_info_t {
 
 volatile erisc_info_t *erisc_info = (erisc_info_t *)(eth_l1_mem::address_map::ERISC_APP_SYNC_INFO_BASE);
 volatile uint32_t *flag_disable = (uint32_t *)(eth_l1_mem::address_map::LAUNCH_ERISC_APP_FLAG);
-
-extern uint32_t __erisc_jump_table;
-void (*rtos_context_switch_ptr)();
-volatile uint32_t *RtosTable =
-    (volatile uint32_t *)&__erisc_jump_table;  // Rtos Jump Table. Runtime application needs rtos function handles.;
-
-void __attribute__((section("code_l1"))) risc_context_switch() {
-    ncrisc_noc_full_sync();
-    rtos_context_switch_ptr();
-    ncrisc_noc_counters_init();
-}
-
 constexpr static uint32_t NUM_BYTES_PER_SEND = 16;  // internal optimization, requires testing
 constexpr static uint32_t NUM_BYTES_PER_SEND_LOG2 = 4;
+
+void __attribute__((section("code_l1"))) risc_context_switch() {
+  erisc_info->num_bytes = 123;
+        RISC_POST_STATUS(0xdeadCAFE);
+    ncrisc_noc_full_sync();
+        RISC_POST_STATUS(0xdeadCAF0);
+    rtos_context_switch_ptr();
+        RISC_POST_STATUS(0xdeadCAF1);
+    ncrisc_noc_counters_init();
+        RISC_POST_STATUS(0xdeadCAF2);
+}
 
 FORCE_INLINE
 void reset_erisc_info() {
@@ -102,6 +134,7 @@ FORCE_INLINE
 void eth_wait_for_receiver_done() {
     eth_send_packet(0, ((uint32_t)(&(erisc_info->bytes_sent))) >> 4, ((uint32_t)(&(erisc_info->bytes_sent))) >> 4, 1);
     while (erisc_info->bytes_received != erisc_info->bytes_sent) {
+  risc_context_switch();
     }
 }
 
@@ -120,6 +153,7 @@ void eth_wait_for_receiver_done() {
 FORCE_INLINE
 void eth_wait_for_bytes(uint32_t num_bytes) {
     while (erisc_info->bytes_sent != num_bytes) {
+  risc_context_switch();
     }
 }
 
