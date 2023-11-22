@@ -396,7 +396,6 @@ bool eth_hung_kernels(
 }  // namespace unit_tests::erisc::kernels
 
 TEST_F(N300DeviceFixture, EthKernelsDirectSendChip0ToChip1) {
-    GTEST_SKIP();
     const auto& device_0 = devices_.at(0);
     const auto& device_1 = devices_.at(1);
 
@@ -441,7 +440,6 @@ TEST_F(N300DeviceFixture, EthKernelsDirectSendChip0ToChip1) {
 }
 
 TEST_F(N300DeviceFixture, EthKernelsDirectSendChip1ToChip0) {
-    GTEST_SKIP();
     const auto& device_0 = devices_.at(0);
     const auto& device_1 = devices_.at(1);
 
@@ -486,7 +484,6 @@ TEST_F(N300DeviceFixture, EthKernelsDirectSendChip1ToChip0) {
 }
 
 TEST_F(N300DeviceFixture, EthKernelsBidirectionalDirectSend) {
-    GTEST_SKIP();
     const auto& device_0 = devices_.at(0);
     const auto& device_1 = devices_.at(1);
 
@@ -570,9 +567,40 @@ TEST_F(N300DeviceFixture, EthKernelsBidirectionalDirectSend) {
             sender_core));
     }
 }
+TEST_F(N300DeviceFixture, EthKernelsRepeatedDirectSends) {
+   const auto& device_0 = devices_.at(0);
+   const auto& device_1 = devices_.at(1);
+
+   const size_t src_eth_l1_byte_address = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
+   const size_t dst_eth_l1_byte_address = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
+
+   for (const auto& sender_core : device_0->get_active_ethernet_cores()) {
+            CoreCoord receiver_core = std::get<1>(device_0->get_connected_ethernet_core(sender_core));
+          for (int i = 0; i < 10; i++) {
+              ASSERT_TRUE(unit_tests::erisc::kernels::eth_direct_sender_receiver_kernels(
+                        device_0,
+                        device_1,
+                        WORD_SIZE,
+                        src_eth_l1_byte_address + WORD_SIZE * i,
+                        dst_eth_l1_byte_address + WORD_SIZE * i,
+                        sender_core,
+                        receiver_core));
+            }
+          for (int i = 0; i < 10; i++) {
+              ASSERT_TRUE(unit_tests::erisc::kernels::eth_direct_sender_receiver_kernels(
+                        device_1,
+                        device_0,
+                        WORD_SIZE,
+                        src_eth_l1_byte_address + WORD_SIZE * i,
+                        dst_eth_l1_byte_address + WORD_SIZE * i,
+                        receiver_core,
+                        sender_core));
+            }
+        }
+}
+
 
 TEST_F(N300DeviceFixture, EthKernelsRandomDirectSendTests) {
-    GTEST_SKIP();
     srand(0);
     const auto& device_0 = devices_.at(0);
     const auto& device_1 = devices_.at(1);
