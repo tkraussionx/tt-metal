@@ -153,7 +153,7 @@ void eth_wait_for_receiver_done() {
 FORCE_INLINE
 void eth_wait_for_bytes(uint32_t num_bytes) {
     while (erisc_info->bytes_sent != num_bytes) {
-  risc_context_switch();
+  //risc_context_switch();
     }
 }
 
