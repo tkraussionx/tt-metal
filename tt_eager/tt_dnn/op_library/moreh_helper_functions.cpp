@@ -89,7 +89,7 @@ KernelHandle CreateReadKernel(
     const std::variant<CoreCoord, CoreRange, CoreRangeSet> &core_spec,
     const std::vector<uint32_t> &compile_args,
     std::map<string, string> defines) {
-    return tt_metal::CreateDataMovementKernel(
+    return tt_metal::CreateKernel(
         program,
         file_name,
         core_spec,
@@ -106,7 +106,7 @@ KernelHandle CreateWriteKernel(
     const std::variant<CoreCoord, CoreRange, CoreRangeSet> &core_spec,
     const std::vector<uint32_t> &compile_args,
     std::map<string, string> defines) {
-    return tt_metal::CreateDataMovementKernel(
+    return tt_metal::CreateKernel(
         program,
         file_name,
         core_spec,
