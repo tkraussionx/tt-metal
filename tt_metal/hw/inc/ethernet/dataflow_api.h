@@ -5,12 +5,16 @@
 
 #include "eth_l1_address_map.h"
 #include "risc_common.h"
+#if __has_include("generated_bank_to_noc_coord_mapping.h")
+#include "generated_bank_to_noc_coord_mapping.h"
+#endif
 #include "tt_eth_api.h"
 #include "ethernet/noc_nonblocking_api.h"
 #include "circular_buffer.h"
 
 #define FORCE_INLINE inline __attribute__((always_inline))
 
+extern uint8_t noc_index;
 
 extern uint32_t __erisc_jump_table;
 void (*rtos_context_switch_ptr)();
@@ -22,6 +26,7 @@ inline void RISC_POST_STATUS(uint32_t status) {
     ptr[0] = status;
 }
 
+//////////////  COMMON DATFLOW ////////////
 constexpr static uint32_t get_arg_addr(int arg_idx) {
       // args are 4B in size
       #if defined(COMPILE_FOR_ERISC)
@@ -46,6 +51,32 @@ constexpr static uint32_t get_arg_addr(int arg_idx) {
       static_assert("Error: only 4B args are supported" && sizeof(T) == 4);
       return *((volatile tt_l1_ptr T*)(get_arg_addr(arg_idx)));
   }
+FORCE_INLINE
+std::uint64_t get_noc_addr(std::uint32_t noc_x, std::uint32_t noc_y, std::uint32_t addr) {
+    /*
+        Get an encoding which contains tensix core and address you want to
+        write to via the noc multicast
+    */
+
+    return NOC_XY_ADDR(NOC_X(noc_x), NOC_Y(noc_y), addr);
+}
+
+FORCE_INLINE
+void noc_async_read(std::uint64_t src_noc_addr, std::uint32_t dst_local_l1_addr, std::uint32_t size) {
+    /*
+        Read requests - use static VC
+        Read responses - assigned VCs dynamically
+    */
+    //ncrisc_noc_fast_read_any_len(noc_index, NCRISC_RD_CMD_BUF, src_noc_addr, dst_local_l1_addr, size);
+    ncrisc_noc_fast_read_any_len(noc_index, NCRISC_SMALL_TXN_CMD_BUF, src_noc_addr, dst_local_l1_addr, size, NCRISC_RD_DEF_TRID);
+}
+
+FORCE_INLINE
+void noc_async_read_barrier() {
+    while (!ncrisc_noc_reads_flushed(noc_index, NCRISC_RD_DEF_TRID));
+}
+
+///////// ETH DATAFLOW ////////////
 
 struct erisc_info_t {
     volatile uint32_t num_bytes;
@@ -134,7 +165,7 @@ FORCE_INLINE
 void eth_wait_for_receiver_done() {
     eth_send_packet(0, ((uint32_t)(&(erisc_info->bytes_sent))) >> 4, ((uint32_t)(&(erisc_info->bytes_sent))) >> 4, 1);
     while (erisc_info->bytes_received != erisc_info->bytes_sent) {
-  risc_context_switch();
+  //risc_context_switch();
     }
 }
 

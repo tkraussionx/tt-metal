@@ -61,7 +61,7 @@ bool reader_kernel_no_send(
         eth_l1_byte_address);
     auto eth_reader_kernel = tt_metal::CreateKernel(
         program,
-        "tt_metal/kernels/dataflow/unit_tests/erisc/direct_reader_dram_to_l1.cpp",
+        "tests/tt_metal/tt_metal/test_kernels/dataflow/unit_tests/erisc/direct_reader_dram_to_l1.cpp",
         eth_reader_core,
         tt_metal::experimental::EthernetConfig{.eth_mode = tt_metal::Eth::SENDER, .noc = tt_metal::NOC::NOC_0});
 
@@ -86,13 +86,18 @@ bool reader_kernel_no_send(
             (uint32_t)dram_noc_xy.y,
             (uint32_t)byte_size,
             (uint32_t)eth_l1_byte_address,
+            (uint32_t)eth_l1_byte_address,
         });
 
     tt_metal::detail::LaunchProgram(device, program);
 
-    std::vector<uint32_t> readback_vec;
     // tt_metal::ReadFromBuffer(l1_buffer, dest_core_data);
-    tt_metal::detail::ReadFromDeviceL1(device, eth_reader_core, eth_l1_byte_address, byte_size, readback_vec);
+    //tt_metal::detail::ReadFromDeviceL1(device, eth_reader_core, eth_l1_byte_address, byte_size, readback_vec);
+    auto readback_vec = llrt::read_hex_vec_from_core(
+        device->id(),
+        device->ethernet_core_from_logical_core(eth_reader_core),
+        eth_l1_byte_address,
+        byte_size);
     pass &= (readback_vec == inputs);
     for (const auto& v : readback_vec) {
         std::cout << v << std::endl;
@@ -101,6 +106,19 @@ bool reader_kernel_no_send(
         std::cout << "Mismatch at Core: " << eth_reader_core.str() << std::endl;
     }
     return pass;
+}
+TEST_F(N300DeviceFixture, EthKernelsNocReadNoSend) {
+    const auto& device_0 = devices_.at(0);
+
+    const size_t src_eth_l1_byte_address = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
+
+    for (const auto& sender_core : device_0->get_active_ethernet_cores()) {
+        ASSERT_TRUE(unit_tests::erisc::kernels::reader_kernel_no_send(
+            device_0,
+            WORD_SIZE,
+            src_eth_l1_byte_address,
+            sender_core));
+    }
 }
 
 bool eth_direct_sender_receiver_kernels(

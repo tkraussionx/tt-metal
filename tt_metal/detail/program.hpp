@@ -19,6 +19,7 @@ namespace tt::tt_metal::detail{
     }
 
     inline Kernel *GetKernel(const Program &program, KernelID kernel_id) {
+      std::cout << " program " << program.kernels_.size() << std::endl;
         return program.kernels_.at(kernel_id);
     }
 

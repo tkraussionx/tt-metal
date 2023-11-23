@@ -223,6 +223,7 @@ namespace detail {
             for (const auto &logical_core : logical_cores) {
                 launch_msg_t *msg = &program.kernels_on_core(logical_core)->launch_msg;
                 auto physical_core = device->physical_core_from_logical_core(logical_core, core_type);
+              std::cout << " sending msg to physical core " << physical_core.str() << std::endl;
                 not_done_cores.insert(physical_core);
                 tt::llrt::write_launch_msg_to_core(device->id(), physical_core, msg);
             }
@@ -251,10 +252,12 @@ namespace detail {
             for (const auto &logical_core : logical_cores) {
                 KernelGroup *kernel_group = program.kernels_on_core(logical_core);
                 CoreCoord physical_core = device->physical_core_from_logical_core(logical_core, core_type);
+                std::cout << " configuer device " << physical_core.str() << std::endl;
 
                 ConfigureKernelGroup(
                     program, kernel_group, device, logical_core);  // PROF_BEGIN("CONF_KERN") PROF_END("CONF_KERN")
                 // TODO: add support for CB for ethernet cores
+                std::cout << " configuer device " << physical_core.str() << std::endl;
                 if (core_type == CoreType::WORKER) {
                     // CircularBufferConfigVec -- common across all kernels, so written once to the core
                     llrt::CircularBufferConfigVec circular_buffer_config_vec =

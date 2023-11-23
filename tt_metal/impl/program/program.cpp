@@ -207,6 +207,7 @@ struct KernelGroupInt {
             break;
         case RISCV::ERISC:
             this->erisc_id = static_cast<KernelID>(kernel_idx);
+            std::cout << " kernel erisc id " << this->erisc_id.value_or(0) << std::endl;
             break;
         default:
             TT_ASSERT(false, "Unsupported kernel processor!");
