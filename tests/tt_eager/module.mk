@@ -17,6 +17,7 @@ TT_EAGER_TESTS += \
 		 tests/tt_eager/ops/test_reduce_op \
 		 tests/tt_eager/ops/test_bcast_op \
 		 tests/tt_eager/ops/test_bmm_op \
+		 tests/tt_eager/ops/test_matmul_op \
 		 tests/tt_eager/ops/test_pad_op \
 		 tests/tt_eager/ops/test_tilize_op \
 		 tests/tt_eager/ops/test_tilize_zero_padding \

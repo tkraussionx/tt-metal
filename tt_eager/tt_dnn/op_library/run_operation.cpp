@@ -16,6 +16,7 @@
 #include "tt_metal/tools/profiler/op_profiler.hpp"
 #include "tt_numpy/functions.hpp"
 #include "tt_stl/reflection.hpp"
+#include "tests/tt_metal/tt_metal/perf_microbenchmark/common/util_device_profiler.hpp"
 
 namespace tt::tt_metal::operation {
 
@@ -38,6 +39,13 @@ static Device* get_device(const std::vector<Tensor>& input_tensors, const std::v
 }
 
 }  // namespace detail
+
+
+std::vector<uint64_t> g_t0_to_any_riscfw_end;
+
+std::vector<uint64_t> get_cycles() {
+    return g_t0_to_any_riscfw_end;
+}
 
 namespace detail {
 
@@ -112,6 +120,7 @@ std::vector<Tensor> run_without_program_cache(
         ::detail::LaunchProgram(device, program);
     }
 
+    g_t0_to_any_riscfw_end.push_back(get_t0_to_any_riscfw_end_cycle(device, program));
     return output_tensors;
 }
 
