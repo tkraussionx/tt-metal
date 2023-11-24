@@ -20,6 +20,7 @@
 #include "tt_metal/impl/program/program.hpp"
 #include "noc/noc_parameters.h"
 
+#include<optional>
 
 namespace tt::tt_metal {
 
@@ -99,9 +100,11 @@ class EnqueueWriteBufferCommand : public Command {
     SystemMemoryWriter& writer;
     const void* src;
     static constexpr EnqueueCommandType type_ = EnqueueCommandType::ENQUEUE_WRITE_BUFFER;
-
+    std::optional<uint32_t> bank_id;
+    std::optional<uint32_t> page_id;
    public:
     EnqueueWriteBufferCommand(Device* device, Buffer& buffer, const void* src, SystemMemoryWriter& writer);
+    EnqueueWriteBufferCommand(Device* device, Buffer& buffer, const void* src, SystemMemoryWriter& writer, const uint32_t & bank_id, const uint32_t & page_id);
 
     const DeviceCommand assemble_device_command(uint32_t src_address);
 

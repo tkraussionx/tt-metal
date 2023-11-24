@@ -73,7 +73,7 @@ inline std::vector< std::vector<uint32_t> > core_to_host_pages(
         int j_offset = 0;
         std::array<uint32_t, 2> shard_in_pages = {shard_shape[0]/page_shape[0], shard_shape[1]/page_shape[1]};
 
-
+        std::cout << "Host pages: ";
         for(int shard_idx=0; shard_idx<num_shards; shard_idx++){
             int host_idx = 0;
             for(int i=i_offset; i<(shard_in_pages[1] + i_offset); i++){
@@ -82,6 +82,7 @@ inline std::vector< std::vector<uint32_t> > core_to_host_pages(
                     auto host_page = i*tensor2d_size[0] + j;
                     ret_vec[shard_idx][host_idx] = host_page;
                     host_idx++;
+                    std::cout << host_page << " ";
                 }
             }
             if(((shard_idx + 1) % (tensor2d_size[0]/shard_in_pages[0])) == 0){
@@ -92,14 +93,14 @@ inline std::vector< std::vector<uint32_t> > core_to_host_pages(
                 j_offset += shard_in_pages[0];
             }
         }
+        std::cout << std::endl;
 
 
     }
     return ret_vec;
 }
 
-
-//#define DEBUG_SHARD_PRINT
+#define DEBUG_SHARD_PRINT
 std::string Buffer::get_shard_info() const {
     std::string ret_str = "Shard info for buffer \n";
 
@@ -120,7 +121,7 @@ std::string Buffer::get_shard_info() const {
         ret_str += "Core " + core.str()  + "\n";
         ret_str += "Host pages on core: ";
         for(auto host_page_id: core_host_page_indices_[core_index]){
-            ret_str+= host_page_id + " ";
+            ret_str+= std::to_string(host_page_id) + " ";
         }
         ret_str += "\n";
         ret_str += "Bank id for core: " + std::to_string(core_bank_indices_[core_index]) +  "\n";
@@ -186,6 +187,7 @@ Buffer::Buffer(Device *device, uint64_t size, uint64_t page_size, const BufferTy
 
     #ifdef DEBUG_SHARD_PRINT
         if(shard_parameters.has_value()){
+            TT_ASSERT(is_sharded(buffer_layout));
             this->print_shard_info();
             //this->log_shard_info();
         }
