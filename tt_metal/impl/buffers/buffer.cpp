@@ -35,6 +35,16 @@ void validate_buffer_size_and_page_size(uint64_t size, uint64_t page_size, const
         TT_ASSERT(shard_parameters != std::nullopt , "Sharded buffers must have a core grid assigned");
         TT_ASSERT(shard_parameters.value().element_size != std::nullopt, "Sharded buffers must specifiy element size");
         TT_ASSERT(shard_parameters.value().tensor2d_size != std::nullopt, "Sharded buffers must specifiy tensor size in pages");
+        if(buffer_layout == TensorMemoryLayout::HEIGHT_SHARDED){
+            TT_ASSERT(shard_parameters.value().shard_shape[0] == shard_parameters.value().page_shape[0],
+            "Height sharded buffer requires shard_shape's height to be page_height"
+            );
+        }
+        else if(buffer_layout == TensorMemoryLayout::WIDTH_SHARDED){
+            TT_ASSERT(shard_parameters.value().shard_shape[1] == shard_parameters.value().page_shape[1],
+            "Width sharded buffer requires shard_shape's width to be page_width"
+            );
+        }
 
     }
 }
@@ -57,7 +67,7 @@ inline std::vector< std::vector<uint32_t> > core_to_host_pages(
     if( layout == TensorMemoryLayout::WIDTH_SHARDED){
         for(int i =0 ; i<num_shards; i++){
             for(int j=0; j<pages_per_shard; j++){
-                ret_vec[i][j]= j*num_shards + i;
+                ret_vec[i][j]= i + j*tensor2d_size[0];
             }
         }
     }
@@ -73,7 +83,6 @@ inline std::vector< std::vector<uint32_t> > core_to_host_pages(
         int j_offset = 0;
         std::array<uint32_t, 2> shard_in_pages = {shard_shape[0]/page_shape[0], shard_shape[1]/page_shape[1]};
 
-        std::cout << "Host pages: ";
         for(int shard_idx=0; shard_idx<num_shards; shard_idx++){
             int host_idx = 0;
             for(int i=i_offset; i<(shard_in_pages[1] + i_offset); i++){
@@ -82,7 +91,6 @@ inline std::vector< std::vector<uint32_t> > core_to_host_pages(
                     auto host_page = i*tensor2d_size[0] + j;
                     ret_vec[shard_idx][host_idx] = host_page;
                     host_idx++;
-                    std::cout << host_page << " ";
                 }
             }
             if(((shard_idx + 1) % (tensor2d_size[0]/shard_in_pages[0])) == 0){
@@ -93,14 +101,13 @@ inline std::vector< std::vector<uint32_t> > core_to_host_pages(
                 j_offset += shard_in_pages[0];
             }
         }
-        std::cout << std::endl;
 
 
     }
     return ret_vec;
 }
 
-#define DEBUG_SHARD_PRINT
+//#define DEBUG_SHARD_PRINT
 std::string Buffer::get_shard_info() const {
     std::string ret_str = "Shard info for buffer \n";
 

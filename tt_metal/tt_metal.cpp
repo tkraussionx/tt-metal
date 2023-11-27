@@ -86,7 +86,7 @@ inline void SetRuntimeArgs(const Program &program, KernelHandle kernel_id, const
 
 }  // namespace
 
-#define DEBUG_PRINT_SHARD
+//#define DEBUG_PRINT_SHARD
 
 namespace detail {
 

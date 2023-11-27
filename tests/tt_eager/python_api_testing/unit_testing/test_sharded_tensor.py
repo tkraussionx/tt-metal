@@ -27,7 +27,7 @@ def print_tiles(tiled_tensor, num_tiles_height, num_tiles_width):
         tiles = torch.chunk(row, int(num_tiles_width), dim=3)
         col_idx = 0
         for tile in tiles:
-            tile_idx = row_idx * num_tiles_height + col_idx
+            tile_idx = row_idx * num_tiles_width + col_idx
             print("Trip Tile " + str(int(tile_idx)) + " with shape " + str(tile.shape))
             print(tile)
             col_idx = col_idx + 1
@@ -38,7 +38,7 @@ def print_tiles(tiled_tensor, num_tiles_height, num_tiles_width):
     "tt_dtype",
     [
         ttl.tensor.DataType.UINT32,
-        #        ttl.tensor.DataType.BFLOAT16,
+        ttl.tensor.DataType.BFLOAT16,
         #        ttl.tensor.DataType.BFLOAT8_B,
     ],
 )
@@ -46,21 +46,16 @@ def print_tiles(tiled_tensor, num_tiles_height, num_tiles_width):
     "tensor_shape, shard_scheme, shard_shape, compute_grid",
     [
         ([1, 4, 64, 64], ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, (64, 64), (0, 3)),
-        #        ([1, 1, 128, 256], ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED, (64, 64), (1, 3)),
-        #        ([1, 1, 100352, 64], ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, (1024, 64), None),
-        #        ([1, 1, 256, 32], ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED, (32, 32), None),
-        #        ([1, 1, 128, 64], ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED, (32, 64), None),
-        #        ([1, 1, 100352, 64], ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED, (2048, 32), None),
-        #        ([1, 1, 2048, 64], ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED, (1024, 64), None),
-        #        ([1, 1, 64, 64], ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED, (32, 64), None),
+        ([1, 1, 128, 256], ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED, (64, 64), (1, 3)),
+        ([1, 1, 100352, 64], ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, (1024, 64), None),
+        ([1, 1, 256, 32], ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED, (32, 32), None),
+        ([1, 1, 128, 64], ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED, (32, 64), None),
+        ([1, 1, 100352, 64], ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED, (2048, 32), None),
     ],
 )
 @pytest.mark.parametrize(
     "shard_orientation",
-    [
-        ttl.tensor.ShardOrientation.ROW_MAJOR,
-        #        ttl.tensor.ShardOrientation.COL_MAJOR
-    ],
+    [ttl.tensor.ShardOrientation.ROW_MAJOR, ttl.tensor.ShardOrientation.COL_MAJOR],
 )
 def test_tensor_conversion_between_torch_and_tt_tile(
     tt_dtype, device, tensor_shape, shard_scheme, shard_shape, compute_grid, shard_orientation
@@ -107,10 +102,10 @@ def test_tensor_conversion_between_torch_and_tt_tile(
 
     torch_tensor_after_round_trip = tt_tensor.to_torch()
 
-    # print("input tensor ")
-    # print_tiles(torch_tensor, num_tiles_height, num_tiles_width)
-    # print("torch_tensor_after_round_trip")
-    # print_tiles(torch_tensor_after_round_trip, num_tiles_height, num_tiles_width)
+    #    print("input tensor ")
+    #    print_tiles(torch_tensor, num_tiles_height, num_tiles_width)
+    #    print("torch_tensor_after_round_trip")
+    #    print_tiles(torch_tensor_after_round_trip, num_tiles_height, num_tiles_width)
 
     assert torch_tensor.dtype == torch_tensor_after_round_trip.dtype
     assert torch_tensor.shape == torch_tensor_after_round_trip.shape

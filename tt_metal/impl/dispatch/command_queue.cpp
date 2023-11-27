@@ -399,12 +399,6 @@ const DeviceCommand EnqueueWriteBufferCommand::assemble_device_command(uint32_t 
     DeviceCommand command;
     uint32_t num_pages = this->buffer.num_pages();
     uint32_t buffer_address = this->buffer.address();
-//    if(is_sharded(this->buffer.buffer_layout())){
-//        TT_ASSERT(this->bank_id.has_value());
-//        TT_ASSERT(this->page_id.has_value());
-//        num_pages = 1;
-//        buffer_address = this->buffer.page_address(this->bank_id.value(), this->page_id.value());
-//    }
 
     uint32_t padded_page_size = this->buffer.page_size();
     if (this->buffer.page_size() != this->buffer.size()) {
@@ -770,22 +764,46 @@ void CommandQueue::enqueue_command(Command& command, bool blocking) {
     }
 }
 
+//void print_page(const void * ptr, const uint32_t & page_index,
+//                const uint32_t & page_size){
+//    uint32_t num_words_per_page = page_size/sizeof(uint32_t);
+//    std::cout << "Printing page: " << page_index << " 0x";
+//    uint32_t * page_ptr = (uint32_t *)ptr;
+//    for(uint32_t word_idx = 0; word_idx < num_words_per_page ; word_idx++){
+//        std::cout << std::hex << page_ptr[word_idx] << std::dec;
+//    }
+//    std::cout << std::endl;
+//}
+
 //TODO: Currently converting page ordering from interleaved to sharded and then doing contiguious read/write
 // Look into modifying command to do read/write of a page at a time to avoid doing copy
-void convert_interleaved_to_sharded_host(void * host, const Buffer& buffer){
-    auto num_pages = buffer.num_pages();
-    auto page_size = buffer.page_size();
+void convert_interleaved_to_sharded_on_host(const void * host, const int & num_pages,
+                                        const int & page_size,
+                                        const std::vector<uint32_t> & page_map,
+                                        bool read=false){
     const uint32_t size_in_bytes = num_pages * page_size;
-    std::vector<char> char_array(size_in_bytes);
-    memcpy((char *)char_array.data(), (char*)host, size_in_bytes);
 
-    auto dev_page_ids = buffer.dev_page_to_host_page_mapping();
+    std::vector<char> temp_array(size_in_bytes);
+    memcpy((char *)temp_array.data(), (char*)host, size_in_bytes);
+
+    const void * dst = host;
+    std::set <uint32_t> pages_seen;
     for(uint32_t host_page_id = 0; host_page_id < num_pages; host_page_id++){
-        auto dev_page_id = dev_page_ids[host_page_id];
-        memcpy((char* )host + dev_page_id*page_size,
-                char_array.data() + host_page_id*page_size,
+        auto dev_page_id = page_map[host_page_id];
+        TT_ASSERT(pages_seen.count(dev_page_id) == 0);
+        pages_seen.insert(dev_page_id);
+        if(read){
+            memcpy((char* )dst + host_page_id*page_size,
+                temp_array.data() + dev_page_id*page_size,
                 page_size
                 );
+        }
+        else{
+            memcpy((char* )dst + dev_page_id*page_size,
+                temp_array.data() + host_page_id*page_size,
+                page_size
+                );
+        }
     }
 }
 
@@ -825,7 +843,10 @@ void CommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blocking)
 
 
     if(is_sharded(buffer.buffer_layout())){
-        convert_interleaved_to_sharded_host(dst, buffer );
+        convert_interleaved_to_sharded_on_host(dst, buffer.num_pages(),
+                                        buffer.page_size(),
+                                        buffer.dev_page_to_host_page_mapping(),
+                                        true);
     }
 }
 
@@ -839,8 +860,9 @@ void CommandQueue::enqueue_write_buffer(Buffer& buffer, const void* src, bool bl
         "Buffer pages must fit within the command queue data section");
 
     if(is_sharded(buffer.buffer_layout())){
-        // TODO use multiple write commands of indiividual pages such that we don't need intermediate buffer
-        convert_interleaved_to_sharded_host((char *)src, buffer);
+        convert_interleaved_to_sharded_on_host(src, buffer.num_pages(),
+                                    buffer.page_size(),
+                                    buffer.dev_page_to_host_page_mapping());
     }
 
 
@@ -960,6 +982,22 @@ void EnqueueWriteBuffer(CommandQueue& cq, Buffer& buffer, vector<uint32_t>& src,
     // TODO(agrebenisan): Move to deprecated
     detail::DispatchStateCheck(true);
     cq.enqueue_write_buffer(buffer, src.data(), blocking);
+}
+
+void print_pages(uint32_t * src, uint32_t num_words, uint32_t num_words_per_page){
+    uint32_t page_idx = 0;
+    for(uint32_t word_idx = 0; word_idx < num_words ; word_idx++){
+        if(word_idx % num_words_per_page == 0){
+            if(word_idx != 0)
+                std::cout << std::endl;
+            std::cout << "Printing page: " << page_idx << " 0x";
+            page_idx++;
+        }
+        std::cout << std::hex << src[word_idx] << std::dec;
+    }
+    std::cout << std::endl;
+
+
 }
 
 void EnqueueReadBuffer(CommandQueue& cq, Buffer& buffer, void* dst, bool blocking) {
