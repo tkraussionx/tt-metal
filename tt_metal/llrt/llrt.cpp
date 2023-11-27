@@ -322,6 +322,12 @@ static bool check_if_riscs_on_specified_core_done(chip_id_t chip_id, const CoreC
     return get_mailbox_is_done(GET_MAILBOX_ADDRESS_HOST(launch.run));
 }
 
+static bool check_if_riscs_on_specified_eth_core_done(chip_id_t chip_id, const CoreCoord &core, int run_state) {
+
+    const auto &readback_vec = read_hex_vec_from_core(chip_id, core, eth_l1_mem::address_map::LAUNCH_ERISC_APP_FLAG, sizeof(uint32_t));
+    return (readback_vec[0] == 0);
+}
+
 void wait_until_cores_done(chip_id_t device_id,
                            int run_state,
                            std::unordered_set<CoreCoord>& not_done_phys_cores) {
@@ -344,7 +350,7 @@ void wait_until_cores_done(chip_id_t device_id,
             bool is_done = false;
             if (is_ethernet_core(phys_core, device_id)) {
                 // TODO: add same RUN_MSG_DONE check for eth cores
-                is_done = true;
+                is_done = llrt::internal_::check_if_riscs_on_specified_eth_core_done(device_id, phys_core, run_state);
             } else {
                 is_done = llrt::internal_::check_if_riscs_on_specified_core_done(device_id, phys_core, run_state);
             }

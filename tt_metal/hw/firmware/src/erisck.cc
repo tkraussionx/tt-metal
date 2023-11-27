@@ -48,7 +48,10 @@ void erisc_init() {
 }
 
 void __attribute__((__section__("erisc_l1_code"))) kernel_launch() {
+    rtos_context_switch_ptr = (void (*)())RtosTable[0];
     RISC_POST_STATUS(0x12345678);
+    ncrisc_noc_init();
+    erisc_init();
     kernel_main();
     RISC_POST_STATUS(0x12345679);
     disable_erisc_app();

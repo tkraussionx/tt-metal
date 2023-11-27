@@ -205,13 +205,13 @@ bool eth_direct_sender_receiver_kernels(
         // TODO: needed to ensure binaries get sent to remote chip first
         // will be removed when context switching is added to Task 2
         if (sender_device->id() == 0) {
-            sleep(1);
+           // sleep(1);
         }
         tt_metal::detail::LaunchProgram(sender_device, sender_program);
     });
     std::thread th2 = std::thread([&] {
         if (receiver_device->id() == 0) {
-            sleep(1);
+          //  sleep(1);
         }
         tt_metal::detail::LaunchProgram(receiver_device, receiver_program);
     });
@@ -588,7 +588,6 @@ TEST_F(N300DeviceFixture, EthKernelsBidirectionalDirectSend) {
 }
 
 TEST_F(N300DeviceFixture, EthKernelsRandomDirectSendTests) {
-    GTEST_SKIP();
     srand(0);
     const auto& device_0 = devices_.at(0);
     const auto& device_1 = devices_.at(1);

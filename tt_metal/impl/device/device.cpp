@@ -229,8 +229,8 @@ void Device::initialize_and_launch_firmware() {
     for (const auto &eth_core: this->ethernet_cores()) {
              CoreCoord physical_core = this->ethernet_core_from_logical_core(eth_core);
              std::vector<uint32_t> zero_vec(eth_l1_mem::address_map::ERISC_APP_SYNC_INFO_SIZE / sizeof(uint32_t), 0);
-      //       std::cout << " init vector  "<< zero_vec.size() << std::endl;
-        //     std::cout << " writing to " << physical_core.str() << std::endl;
+             std::cout << " init vector  "<< zero_vec.size() << std::endl;
+             std::cout << " writing to " << physical_core.str() << std::endl;
 
               llrt::write_hex_vec_to_core(this->id(), physical_core, zero_vec, eth_l1_mem::address_map::ERISC_APP_SYNC_INFO_BASE);
          }

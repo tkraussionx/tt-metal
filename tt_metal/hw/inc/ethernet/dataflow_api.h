@@ -165,7 +165,7 @@ FORCE_INLINE
 void eth_wait_for_receiver_done() {
     eth_send_packet(0, ((uint32_t)(&(erisc_info->bytes_sent))) >> 4, ((uint32_t)(&(erisc_info->bytes_sent))) >> 4, 1);
     while (erisc_info->bytes_received != erisc_info->bytes_sent) {
-  //risc_context_switch();
+  risc_context_switch();
     }
 }
 
@@ -184,7 +184,7 @@ void eth_wait_for_receiver_done() {
 FORCE_INLINE
 void eth_wait_for_bytes(uint32_t num_bytes) {
     while (erisc_info->bytes_sent != num_bytes) {
-  //risc_context_switch();
+   risc_context_switch();
     }
 }
 
