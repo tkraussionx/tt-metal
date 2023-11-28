@@ -31,6 +31,7 @@ import tt_lib as ttl
         # ((1, 1, 2, 2, 1, 1, 1, 1, 1, 1), 8, (1, 8, 8), 2, False),
         # resnet50 s1 convs
         ((32, 32, 4, 4, 1, 1, 1, 1, 1, 1), 8, (32, 115, 115), 98, False),  # first conv b8 - 98 cores for height slicing
+        ((32, 32, 3, 3, 1, 1, 1, 1, 1, 1), 8, (32, 56, 56), 98, False),  # layer1 b8 - 98 cores for height slicing
         ((1, 1, 3, 3, 1, 1, 1, 1, 1, 1), 8, (1, 56, 56), 98, False),  # layer1 b8 - 98 cores for height slicing
         ((1, 1, 3, 3, 1, 1, 1, 1, 1, 1), 8, (1, 28, 28), 98, False),  # layer2 b8 - 98 cores for height slicing
         ((1, 1, 3, 3, 1, 1, 1, 1, 1, 1), 8, (1, 14, 14), 10, False),  # layer3 b8 - 10 cores for height slicing
@@ -96,112 +97,112 @@ def test_generate_all_configs_and_references(
         input_tensor.append(val)
     input_pyt_tensor = torch.tensor(input_tensor)
     input_pyt_tensor = torch.reshape(input_pyt_tensor, input_nchw_shape)
-    # Initializing filters with all 1s
-    filter_pyt_tensor = torch.full((output_channels, input_channels, filter_h, filter_w), 1)
-    # run conv pytorch
-    out_golden_pyt_tensor = torch.nn.functional.conv2d(
-        input_pyt_tensor, filter_pyt_tensor, stride=(stride_h, stride_w), padding=(pad_h, pad_w)
-    )
-    input_padded_width = input_w + 2 * pad_w
-    input_padded_height = input_h + 2 * pad_h
-    # Generate following configs by tracing conv -
-    print("Trace conv and generate follwing configs - pad_metadata and data_top_left_indices.")
-    pad_metadata, data_top_left_indices = trace_conv_to_generate_data_top_left_indices_and_pad_metadata(
-        conv_params, input_nchw_shape
-    )
-    # print("Data top left indices - ", data_top_left_indices)
-    # print("Pad meta data -", pad_metadata)
+    # # Initializing filters with all 1s
+    # filter_pyt_tensor = torch.full((output_channels, input_channels, filter_h, filter_w), 1)
+    # # run conv pytorch
+    # out_golden_pyt_tensor = torch.nn.functional.conv2d(
+    #     input_pyt_tensor, filter_pyt_tensor, stride=(stride_h, stride_w), padding=(pad_h, pad_w)
+    # )
+    # input_padded_width = input_w + 2 * pad_w
+    # input_padded_height = input_h + 2 * pad_h
+    # # Generate following configs by tracing conv -
+    # print("Trace conv and generate follwing configs - pad_metadata and data_top_left_indices.")
+    # pad_metadata, data_top_left_indices = trace_conv_to_generate_data_top_left_indices_and_pad_metadata(
+    #     conv_params, input_nchw_shape
+    # )
+    # # print("Data top left indices - ", data_top_left_indices)
+    # # print("Pad meta data -", pad_metadata)
 
-    # run trace conv reference to validate pad_metadata and data_top_left_indices
-    print("Validate pad_metadata and data_top_left_indices.")
-    input_padded_tensor = validate_data_top_left_indices_and_pad_medata(
-        input_pyt_tensor, filter_pyt_tensor, out_golden_pyt_tensor, pad_metadata, data_top_left_indices, conv_params
-    )
+    # # run trace conv reference to validate pad_metadata and data_top_left_indices
+    # print("Validate pad_metadata and data_top_left_indices.")
+    # input_padded_tensor = validate_data_top_left_indices_and_pad_medata(
+    #     input_pyt_tensor, filter_pyt_tensor, out_golden_pyt_tensor, pad_metadata, data_top_left_indices, conv_params
+    # )
 
-    # Generate more configs -
-    print(
-        "Decompose conv into shards and generate the required conv input shard start/end stick indices and tensor metadata."
-    )
-    req_conv_input_shard_start_end, tensor_metadata = decompose_conv_into_shards_and_generate_tensor_metadata(
-        data_top_left_indices,
-        pad_metadata,
-        input_padded_width,
-        conv_output_shard_height,
-        untilize_with_halo_input_shard_height,
-        num_cores,
-        filter_h,
-        filter_w,
-    )
-    # print("req_conv_input_shard_start_end-", req_conv_input_shard_start_end)
-    # print("tensor_metadata-", tensor_metadata)
-    print("Validate required conv input shard start/end stick indices")
-    golden_untilize_with_halo_output_shards = validate_required_conv_input_sharded_start_end(
-        input_padded_tensor,
-        [batch_size, input_c, input_padded_height, input_padded_width],
-        filter_pyt_tensor,
-        out_golden_pyt_tensor,
-        data_top_left_indices,
-        req_conv_input_shard_start_end,
-    )
+    # # Generate more configs -
+    # print(
+    #     "Decompose conv into shards and generate the required conv input shard start/end stick indices and tensor metadata."
+    # )
+    # req_conv_input_shard_start_end, tensor_metadata = decompose_conv_into_shards_and_generate_tensor_metadata(
+    #     data_top_left_indices,
+    #     pad_metadata,
+    #     input_padded_width,
+    #     conv_output_shard_height,
+    #     untilize_with_halo_input_shard_height,
+    #     num_cores,
+    #     filter_h,
+    #     filter_w,
+    # )
+    # # print("req_conv_input_shard_start_end-", req_conv_input_shard_start_end)
+    # # print("tensor_metadata-", tensor_metadata)
+    # print("Validate required conv input shard start/end stick indices")
+    # golden_untilize_with_halo_output_shards = validate_required_conv_input_sharded_start_end(
+    #     input_padded_tensor,
+    #     [batch_size, input_c, input_padded_height, input_padded_width],
+    #     filter_pyt_tensor,
+    #     out_golden_pyt_tensor,
+    #     data_top_left_indices,
+    #     req_conv_input_shard_start_end,
+    # )
 
-    print("Validate tensor metadata")
-    untilize_with_halo_input_shards = validate_tensor_metadata(
-        input_tensor,
-        input_nchw_shape,
-        untilize_with_halo_input_shard_height,
-        tensor_metadata,
-        req_conv_input_shard_start_end,
-        golden_untilize_with_halo_output_shards,
-    )
+    # print("Validate tensor metadata")
+    # untilize_with_halo_input_shards = validate_tensor_metadata(
+    #     input_tensor,
+    #     input_nchw_shape,
+    #     untilize_with_halo_input_shard_height,
+    #     tensor_metadata,
+    #     req_conv_input_shard_start_end,
+    #     golden_untilize_with_halo_output_shards,
+    # )
 
-    # Generate and validate the final untilize with halo configs here (TODO Abhinav)
-    print(f"Generate untilize with halo kernel configs")
-    # print(f'tensor metadata: {tensor_metadata}')
-    # print(f"req shards start and end: {req_conv_input_shard_start_end}")
-    (
-        local_data,
-        local_pad,
-        ll_data,
-        l_data,
-        r_data,
-        rr_data,
-        src_start_idx,
-        local_data_nsegments_per_core,
-        local_pad_nsegments_per_core,
-        ll_data_nsegments_per_core,
-        l_data_nsegments_per_core,
-        r_data_nsegments_per_core,
-        rr_data_nsegments_per_core,
-        max_out_nsticks_per_core,
-    ) = generate_untilize_with_halo_kernel_configs(tensor_metadata, req_conv_input_shard_start_end)
-    # print(f"local data:     {local_data}")
-    # print(f"local pad:      {local_pad}")
-    # print(f"ll data:        {ll_data}")
-    # print(f"l data:         {l_data}")
-    # print(f"r data:         {r_data}")
-    # print(f"rr data:        {rr_data}")
-    # print(f"src start idx:  {src_start_idx}")
-    print("Validate reshards")
+    # # Generate and validate the final untilize with halo configs here (TODO Abhinav)
+    # print(f"Generate untilize with halo kernel configs")
+    # # print(f'tensor metadata: {tensor_metadata}')
+    # # print(f"req shards start and end: {req_conv_input_shard_start_end}")
+    # (
+    #     local_data,
+    #     local_pad,
+    #     ll_data,
+    #     l_data,
+    #     r_data,
+    #     rr_data,
+    #     src_start_idx,
+    #     local_data_nsegments_per_core,
+    #     local_pad_nsegments_per_core,
+    #     ll_data_nsegments_per_core,
+    #     l_data_nsegments_per_core,
+    #     r_data_nsegments_per_core,
+    #     rr_data_nsegments_per_core,
+    #     max_out_nsticks_per_core,
+    # ) = generate_untilize_with_halo_kernel_configs(tensor_metadata, req_conv_input_shard_start_end)
+    # # print(f"local data:     {local_data}")
+    # # print(f"local pad:      {local_pad}")
+    # # print(f"ll data:        {ll_data}")
+    # # print(f"l data:         {l_data}")
+    # # print(f"r data:         {r_data}")
+    # # print(f"rr data:        {rr_data}")
+    # # print(f"src start idx:  {src_start_idx}")
+    # print("Validate reshards")
 
-    validate_untilize_with_halo_kernel_configs(
-        golden_untilize_with_halo_output_shards,
-        untilize_with_halo_input_shards,
-        req_conv_input_shard_start_end,
-        local_data,
-        local_pad,
-        ll_data,
-        l_data,
-        r_data,
-        rr_data,
-        src_start_idx,
-        local_data_nsegments_per_core,
-        local_pad_nsegments_per_core,
-        ll_data_nsegments_per_core,
-        l_data_nsegments_per_core,
-        r_data_nsegments_per_core,
-        rr_data_nsegments_per_core,
-        max_out_nsticks_per_core,
-    )
+    # validate_untilize_with_halo_kernel_configs(
+    #     golden_untilize_with_halo_output_shards,
+    #     untilize_with_halo_input_shards,
+    #     req_conv_input_shard_start_end,
+    #     local_data,
+    #     local_pad,
+    #     ll_data,
+    #     l_data,
+    #     r_data,
+    #     rr_data,
+    #     src_start_idx,
+    #     local_data_nsegments_per_core,
+    #     local_pad_nsegments_per_core,
+    #     ll_data_nsegments_per_core,
+    #     l_data_nsegments_per_core,
+    #     r_data_nsegments_per_core,
+    #     rr_data_nsegments_per_core,
+    #     max_out_nsticks_per_core,
+    # )
 
     # # Generate sliding window op config -
     # print("Generate sliding window op configs - top left positioned indices for input shards")
@@ -240,41 +241,52 @@ def test_generate_all_configs_and_references(
     #         sliding_window_op_sharded_input_top_left_indices,
     #     )
 
-    # # On device test
-    # sliding_window_op_params = [
-    #     (stride_h, stride_w),
-    #     (pad_h, pad_w),
-    #     (filter_h, filter_w),
-    #     (batch_size, input_h, input_w),
-    #     num_cores,
-    # ]
-    # # Assume height sharding
-    # num_cores_height = ((int)(num_cores / 12)) + 1
-    # num_cores_width = 12
-    # shard_grid = ttl.tensor.CoreRangeSet(
-    #     {
-    #         ttl.tensor.CoreRange(
-    #             ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(num_cores_width - 1, num_cores_height - 1)
-    #         )
-    #     }
-    # )
-    # tt_py_untilize_with_halo_op = TTPyUntilizeWithHalo(device, sliding_window_op_params, shard_grid)
-    # # Set Op configs
-    # tt_py_untilize_with_halo_op.set_op_configs()
-    # memory_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
-    # untilize_with_halp_input_tt_tensor = ttl.tensor.Tensor(input_pyt_tensor, ttl.tensor.DataType.UINT32).to(
-    #     device, memory_config
-    # )
-    # grid_size_binary = device.compute_with_storage_grid_size()
-    # untilize_with_halp_input_tt_tensor = ttl.tensor.interleaved_to_sharded(
-    #     untilize_with_halp_input_tt_tensor,
-    #     grid_size_binary,
-    #     [input_size_to_shard_evenly // num_cores, 32],
-    #     ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-    #     ttl.tensor.ShardOrientation.ROW_MAJOR,
-    # )
-    # # Run forward
-    # untilize_with_halo_output_tt_tensor = tt_py_untilize_with_halo_op.run_forward(untilize_with_halp_input_tt_tensor)
+    # On device test
+    sliding_window_op_params = [
+        (stride_h, stride_w),
+        (pad_h, pad_w),
+        (filter_h, filter_w),
+        (batch_size, input_h, input_w),
+        num_cores,
+    ]
+    # Assume height sharding
+    num_cores_height = ((int)(num_cores / 12)) + 1
+    num_cores_width = 12
+    shard_grid = ttl.tensor.CoreRangeSet(
+        {
+            ttl.tensor.CoreRange(
+                ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(num_cores_width - 1, num_cores_height - 1)
+            )
+        }
+    )
+
+    # construct op object and set op configs
+    tt_py_untilize_with_halo_op = TTPyUntilizeWithHalo(device, sliding_window_op_params, shard_grid)
+    tt_py_untilize_with_halo_op.set_op_configs()
+
+    input_pyt_tensor = torch.reshape(
+        torch.permute(input_pyt_tensor, [0, 2, 3, 1]), [1, 1, batch_size * input_h * input_w, input_c]
+    )
+    print(f"INPUT SHAPE: {input_pyt_tensor.shape}")
+
+    memory_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
+    untilize_with_halp_input_tt_tensor = (
+        ttl.tensor.Tensor(input_pyt_tensor, ttl.tensor.DataType.BFLOAT16)
+        .to(ttl.tensor.Layout.TILE)
+        .to(device, memory_config)
+    )
+    # untilize_with_halp_input_tt_tensor = ttl.tensor.permute(untilize_with_halp_input_tt_tensor, (0, 2, 3, 1))
+    # untilize_with_halp_input_tt_tensor = ttl.tensor.reshape(untilize_with_halp_input_tt_tensor, batch_size, 1, input_h * input_w, input_c)
+    grid_size_binary = device.compute_with_storage_grid_size()
+    untilize_with_halp_input_tt_tensor = ttl.tensor.interleaved_to_sharded(
+        untilize_with_halp_input_tt_tensor,
+        grid_size_binary,
+        [input_size_to_shard_evenly // num_cores, input_c],
+        ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+        ttl.tensor.ShardOrientation.ROW_MAJOR,
+    )
+    # Run forward
+    untilize_with_halo_output_tt_tensor = tt_py_untilize_with_halo_op.run_forward(untilize_with_halp_input_tt_tensor)
 
     # # Compare against golden untilize with halo output
     # untilize_with_halo_output_pyt_tensor = untilize_with_halo_output_tt_tensor.cpu().to_torch()

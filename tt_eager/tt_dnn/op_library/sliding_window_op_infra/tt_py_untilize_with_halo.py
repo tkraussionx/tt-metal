@@ -98,7 +98,9 @@ class TTPyUntilizeWithHalo(TTPyOp):
         def gen_config_tt_tensors(config_list_uint16):
             if len(config_list_uint16) == 0:
                 # return dummy tensor
-                return ttl.tensor.Tensor([0], [1, 1, 1, 1], ttl.tensor.DataType.FLOAT32, ttl.tensor.Layout.ROW_MAJOR)
+                return ttl.tensor.Tensor(
+                    [0.0, 0.0], [1, 1, 1, 2], ttl.tensor.DataType.BFLOAT16, ttl.tensor.Layout.ROW_MAJOR, self.device
+                )
             config_list = []
             for i in range(0, len(config_list_uint16), 2):
                 pstr = struct.pack("HH", config_list_uint16[i], config_list_uint16[i + 1])
