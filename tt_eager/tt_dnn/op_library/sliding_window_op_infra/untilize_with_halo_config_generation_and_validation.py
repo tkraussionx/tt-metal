@@ -286,7 +286,7 @@ def validate_required_conv_input_sharded_start_end(
     #     assert passing_pcc
 
     # We have validated conv_input_shards, return it so it can be used for supsequent references as golden reference
-    print(f"conv_input_shards: {conv_input_shards}")
+    # print(f"conv_input_shards: {conv_input_shards}")
     return conv_input_shards
 
 

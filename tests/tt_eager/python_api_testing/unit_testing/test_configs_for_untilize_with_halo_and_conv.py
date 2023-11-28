@@ -297,6 +297,23 @@ def test_generate_all_configs_and_references(
     # Compare against golden untilize with halo output
     untilize_with_halo_output_pyt_tensor = untilize_with_halo_output_tt_tensor.cpu().to_torch()
     # print(f'OUTPUT: {untilize_with_halo_output_pyt_tensor}')
+
+    ## make each golden shard same size as max shard size
+    max_out_shard_nsticks = 0
+    for _, (start, end) in req_conv_input_shard_start_end:
+        size = end - start + 1
+        if max_out_shard_nsticks < size:
+            max_out_shard_nsticks = size
+    print(f"MAX_OUT_SHARD_NSTICKS: {max_out_shard_nsticks}")
+    for i in range(len(golden_untilize_with_halo_output_shards)):
+        start, end = req_conv_input_shard_start_end[i][1]
+        pad_size = max_out_shard_nsticks - (end - start + 1)
+        pad_vec = numpy.full([pad_size, input_c], 0)
+        print(f"{golden_untilize_with_halo_output_shards[i].shape}")
+        golden_untilize_with_halo_output_shards[i] = numpy.append(
+            golden_untilize_with_halo_output_shards[i], pad_vec, axis=0
+        )
+        print(f"{golden_untilize_with_halo_output_shards[i].shape}")
     golden_untilize_with_halo_output = [
         item
         for sublist_outer in golden_untilize_with_halo_output_shards
@@ -304,10 +321,18 @@ def test_generate_all_configs_and_references(
         for item in sublist
     ]
     golden_untilize_with_halo_output_pyt_tensor = torch.Tensor(golden_untilize_with_halo_output)
+    print(f"GOLDEN SHAPE: {golden_untilize_with_halo_output_pyt_tensor.shape}")
+
+    # print(f'OUTPUT SHAPE: {untilize_with_halo_output_pyt_tensor.shape}')
+    untilize_with_halo_output_pyt_tensor = torch.reshape(untilize_with_halo_output_pyt_tensor, (-1,))
+    # print(f'OUTPUT SHAPE: {untilize_with_halo_output_pyt_tensor.shape}')
     print(f"GOLDEN: {golden_untilize_with_halo_output_pyt_tensor}")
+    print(f"GOLDEN: {torch.sum(golden_untilize_with_halo_output_pyt_tensor)}")
+    print(f"OUTPUT: {untilize_with_halo_output_pyt_tensor}")
+    print(f"OUTPUT: {torch.sum(untilize_with_halo_output_pyt_tensor)}")
     passing_allclose_and_pcc, output_info = comp_allclose_and_pcc(
         golden_untilize_with_halo_output_pyt_tensor,
-        untilize_with_halo_output_pyt_tensor.reshape(-1),
+        untilize_with_halo_output_pyt_tensor,
         rtol=1e-1,
         atol=1e-3,
         pcc=0.9999,
