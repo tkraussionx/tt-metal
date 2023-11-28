@@ -70,6 +70,8 @@ def test_generate_all_configs_and_references(
         conv_params[i] for i in range(10)
     ]
 
+    torch.set_printoptions(threshold=10000, edgeitems=50, linewidth=400)
+
     # Construct conv inputs and filters and run pytorch conv for golden reference
     # unpadded raw tensor
     input_tensor = []
@@ -95,55 +97,59 @@ def test_generate_all_configs_and_references(
     # Inserting sequential integer data
     for val in range(1, input_volume + 1):
         input_tensor.append(val)
-    input_pyt_tensor = torch.tensor(input_tensor)
+    input_pyt_tensor = torch.tensor(input_tensor, dtype=torch.bfloat16)
+    # input_pyt_tensor = torch.rand(input_volume, dtype=torch.bfloat16)
     input_pyt_tensor = torch.reshape(input_pyt_tensor, input_nchw_shape)
-    # # Initializing filters with all 1s
-    # filter_pyt_tensor = torch.full((output_channels, input_channels, filter_h, filter_w), 1)
-    # # run conv pytorch
-    # out_golden_pyt_tensor = torch.nn.functional.conv2d(
-    #     input_pyt_tensor, filter_pyt_tensor, stride=(stride_h, stride_w), padding=(pad_h, pad_w)
-    # )
-    # input_padded_width = input_w + 2 * pad_w
-    # input_padded_height = input_h + 2 * pad_h
-    # # Generate following configs by tracing conv -
-    # print("Trace conv and generate follwing configs - pad_metadata and data_top_left_indices.")
-    # pad_metadata, data_top_left_indices = trace_conv_to_generate_data_top_left_indices_and_pad_metadata(
-    #     conv_params, input_nchw_shape
-    # )
+    # Initializing filters with all 1s
+    # filter_pyt_tensor = torch.full((output_channels, input_channels, filter_h, filter_w), 1., dtype=torch.bfloat16)
+    filter_pyt_tensor = torch.rand((output_channels, input_channels, filter_h, filter_w), dtype=torch.bfloat16)
+    # run conv pytorch
+    out_golden_pyt_tensor = torch.nn.functional.conv2d(
+        input_pyt_tensor, filter_pyt_tensor, stride=(stride_h, stride_w), padding=(pad_h, pad_w)
+    )
+    # print(f'output golden pyt tensor: {out_golden_pyt_tensor}')
+    input_padded_width = input_w + 2 * pad_w
+    input_padded_height = input_h + 2 * pad_h
+    # Generate following configs by tracing conv -
+    print("Trace conv and generate follwing configs - pad_metadata and data_top_left_indices.")
+    pad_metadata, data_top_left_indices = trace_conv_to_generate_data_top_left_indices_and_pad_metadata(
+        conv_params, input_nchw_shape
+    )
     # # print("Data top left indices - ", data_top_left_indices)
     # # print("Pad meta data -", pad_metadata)
 
-    # # run trace conv reference to validate pad_metadata and data_top_left_indices
-    # print("Validate pad_metadata and data_top_left_indices.")
-    # input_padded_tensor = validate_data_top_left_indices_and_pad_medata(
-    #     input_pyt_tensor, filter_pyt_tensor, out_golden_pyt_tensor, pad_metadata, data_top_left_indices, conv_params
-    # )
+    # run trace conv reference to validate pad_metadata and data_top_left_indices
+    print("Validate pad_metadata and data_top_left_indices.")
+    input_padded_tensor = validate_data_top_left_indices_and_pad_medata(
+        input_pyt_tensor, filter_pyt_tensor, out_golden_pyt_tensor, pad_metadata, data_top_left_indices, conv_params
+    )
+    # print (f'input_padded_tensor: {input_padded_tensor}')
 
-    # # Generate more configs -
-    # print(
-    #     "Decompose conv into shards and generate the required conv input shard start/end stick indices and tensor metadata."
-    # )
-    # req_conv_input_shard_start_end, tensor_metadata = decompose_conv_into_shards_and_generate_tensor_metadata(
-    #     data_top_left_indices,
-    #     pad_metadata,
-    #     input_padded_width,
-    #     conv_output_shard_height,
-    #     untilize_with_halo_input_shard_height,
-    #     num_cores,
-    #     filter_h,
-    #     filter_w,
-    # )
-    # # print("req_conv_input_shard_start_end-", req_conv_input_shard_start_end)
-    # # print("tensor_metadata-", tensor_metadata)
-    # print("Validate required conv input shard start/end stick indices")
-    # golden_untilize_with_halo_output_shards = validate_required_conv_input_sharded_start_end(
-    #     input_padded_tensor,
-    #     [batch_size, input_c, input_padded_height, input_padded_width],
-    #     filter_pyt_tensor,
-    #     out_golden_pyt_tensor,
-    #     data_top_left_indices,
-    #     req_conv_input_shard_start_end,
-    # )
+    # Generate more configs -
+    print(
+        "Decompose conv into shards and generate the required conv input shard start/end stick indices and tensor metadata."
+    )
+    req_conv_input_shard_start_end, tensor_metadata = decompose_conv_into_shards_and_generate_tensor_metadata(
+        data_top_left_indices,
+        pad_metadata,
+        input_padded_width,
+        conv_output_shard_height,
+        untilize_with_halo_input_shard_height,
+        num_cores,
+        filter_h,
+        filter_w,
+    )
+    # print("req_conv_input_shard_start_end-", req_conv_input_shard_start_end)
+    # print("tensor_metadata-", tensor_metadata)
+    print("Validate required conv input shard start/end stick indices")
+    golden_untilize_with_halo_output_shards = validate_required_conv_input_sharded_start_end(
+        input_padded_tensor,
+        [batch_size, input_c, input_padded_height, input_padded_width],
+        filter_pyt_tensor,
+        out_golden_pyt_tensor,
+        data_top_left_indices,
+        req_conv_input_shard_start_end,
+    )
 
     # print("Validate tensor metadata")
     # untilize_with_halo_input_shards = validate_tensor_metadata(
@@ -155,7 +161,7 @@ def test_generate_all_configs_and_references(
     #     golden_untilize_with_halo_output_shards,
     # )
 
-    # # Generate and validate the final untilize with halo configs here (TODO Abhinav)
+    # # Generate and validate the final untilize with halo configs here
     # print(f"Generate untilize with halo kernel configs")
     # # print(f'tensor metadata: {tensor_metadata}')
     # # print(f"req shards start and end: {req_conv_input_shard_start_end}")
@@ -288,20 +294,27 @@ def test_generate_all_configs_and_references(
     # Run forward
     untilize_with_halo_output_tt_tensor = tt_py_untilize_with_halo_op.run_forward(untilize_with_halp_input_tt_tensor)
 
-    # # Compare against golden untilize with halo output
-    # untilize_with_halo_output_pyt_tensor = untilize_with_halo_output_tt_tensor.cpu().to_torch()
-    # golden_untilize_with_halo_output = [item for sublist in golden_untilize_with_halo_output_shards for item in sublist]
-    # golden_untilize_with_halo_output_pyt_tensor = torch.Tensor(golden_untilize_with_halo_output)
-    # passing_allclose_and_pcc, output_info = comp_allclose_and_pcc(
-    #     golden_untilize_with_halo_output_pyt_tensor,
-    #     untilize_with_halo_output_pyt_tensor,
-    #     rtol=1e-1,
-    #     atol=1e-3,
-    #     pcc=0.9999,
-    # )
-    # print("Passing=", passing_allclose_and_pcc)
-    # print("Output info=", output_info)
-    # passing_pcc, _ = comp_pcc(
-    #     golden_untilize_with_halo_output_pyt_tensor, untilize_with_halo_output_pyt_tensor, pcc=0.999
-    # )
-    # assert passing_pcc
+    # Compare against golden untilize with halo output
+    untilize_with_halo_output_pyt_tensor = untilize_with_halo_output_tt_tensor.cpu().to_torch()
+    # print(f'OUTPUT: {untilize_with_halo_output_pyt_tensor}')
+    golden_untilize_with_halo_output = [
+        item
+        for sublist_outer in golden_untilize_with_halo_output_shards
+        for sublist in sublist_outer
+        for item in sublist
+    ]
+    golden_untilize_with_halo_output_pyt_tensor = torch.Tensor(golden_untilize_with_halo_output)
+    print(f"GOLDEN: {golden_untilize_with_halo_output_pyt_tensor}")
+    passing_allclose_and_pcc, output_info = comp_allclose_and_pcc(
+        golden_untilize_with_halo_output_pyt_tensor,
+        untilize_with_halo_output_pyt_tensor.reshape(-1),
+        rtol=1e-1,
+        atol=1e-3,
+        pcc=0.9999,
+    )
+    print("Passing=", passing_allclose_and_pcc)
+    print("Output info=", output_info)
+    passing_pcc, _ = comp_pcc(
+        golden_untilize_with_halo_output_pyt_tensor, untilize_with_halo_output_pyt_tensor, pcc=0.999
+    )
+    assert passing_pcc

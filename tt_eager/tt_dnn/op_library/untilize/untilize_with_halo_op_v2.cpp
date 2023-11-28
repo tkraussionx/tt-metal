@@ -163,12 +163,14 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
                             .set_page_size(src_cb_id, in_tile_size)
                             .set_globally_allocated_address(*src_buffer);
     auto src_cb = CreateCircularBuffer(program, all_cores, src_cb_config);
+    log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}", src_cb_id, input_ntiles, in_tile_size);
 
     // output of untilize from compute kernel goes into this CB
     uint32_t output_ntiles = ntiles_per_block * nblocks_per_core;
     auto untilize_out_cb_config = CircularBufferConfig(output_ntiles * out_tile_size, {{untilize_out_cb_id, out_df}})
                                     .set_page_size(untilize_out_cb_id, out_tile_size);
     auto untilize_out_cb = CreateCircularBuffer(program, all_cores, untilize_out_cb_config);
+    log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}", untilize_out_cb_id, output_ntiles, out_tile_size);
 
     // output shard, after inserting halo and padding, goes into this CB as input to next op.
     uint32_t out_cb_pagesize = out_stick_nbytes;
@@ -177,6 +179,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
                             .set_page_size(out_cb_id, out_cb_pagesize)
                             .set_globally_allocated_address(*dst_buffer);
     auto out_cb = CreateCircularBuffer(program, all_cores, out_cb_config);
+    log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}", out_cb_id, out_cb_npages, out_cb_pagesize);
 
     // CB for pad val buffer (stick sized)
     uint32_t pad_cb_pagesize = out_stick_nbytes;
@@ -184,6 +187,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
     auto pad_cb_config = CircularBufferConfig(pad_cb_pagesize * pad_cb_npages, {{pad_cb_id, out_df}})
                             .set_page_size(pad_cb_id, pad_cb_pagesize);
     auto pad_cb = CreateCircularBuffer(program, all_cores, pad_cb_config);
+    log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}", pad_cb_id, pad_cb_npages, pad_cb_pagesize);
 
     // Additional CBs for sharded data kernel configs
     // //
@@ -196,17 +200,18 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
     uint32_t rr_data_ss_cb_id = CB::c_in7;
 
     // DataFormat kernel_config_df = DataFormat::UInt16;
-    DataFormat kernel_config_df = DataFormat::UInt32;
+    // DataFormat kernel_config_df = DataFormat::UInt32;
+    DataFormat kernel_config_df = DataFormat::RawUInt32;
+    uint32_t config_nbytes = datum_size(kernel_config_df);
     uint32_t pagesize = 0;
-
-    // TODO: Create the following CBs conditionally, only when corresponding data exists
 
     // local_pad_start_and_size
     // pagesize = *std::max(local_pad_nsegments_per_core.cbegin(), local_pad_nsegments_per_core.cend());
-    pagesize = untilize_with_halo_v2_helpers::my_max(local_pad_nsegments_per_core);
+    pagesize = config_nbytes * untilize_with_halo_v2_helpers::my_max(local_pad_nsegments_per_core);
     bool local_pad_ss_exists = pagesize > 0;
     CircularBufferID local_pad_ss_cb = 0;
     if (local_pad_ss_exists) {
+        log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}", local_pad_ss_cb_id, 1, pagesize);
         Buffer *local_pad_ss_buffer = local_pad_start_and_size.buffer();
         auto local_pad_ss_cb_config = CircularBufferConfig(pagesize * 1, {{local_pad_ss_cb_id, kernel_config_df}})
                                         .set_page_size(local_pad_ss_cb_id, pagesize)
@@ -216,10 +221,11 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
 
     // ll_data_start_and_size
     // pagesize = *std::max(ll_data_nsegments_per_core.cbegin(), ll_data_nsegments_per_core.cend());
-    pagesize = untilize_with_halo_v2_helpers::my_max(ll_data_nsegments_per_core);
+    pagesize = config_nbytes * untilize_with_halo_v2_helpers::my_max(ll_data_nsegments_per_core);
     bool ll_data_ss_exists = pagesize > 0;
     CircularBufferID ll_data_ss_cb = 0;
     if (ll_data_ss_exists) {
+        log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}", ll_data_ss_cb_id, 1, pagesize);
         Buffer *ll_data_ss_buffer = ll_data_start_and_size.buffer();
         auto ll_data_ss_cb_config = CircularBufferConfig(pagesize * 1, {{ll_data_ss_cb_id, kernel_config_df}})
                                         .set_page_size(ll_data_ss_cb_id, pagesize)
@@ -229,10 +235,11 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
 
     // l_data_start_and_size
     // pagesize = *std::max(l_data_nsegments_per_core.cbegin(), l_data_nsegments_per_core.cend());
-    pagesize = untilize_with_halo_v2_helpers::my_max(l_data_nsegments_per_core);
+    pagesize = config_nbytes * untilize_with_halo_v2_helpers::my_max(l_data_nsegments_per_core);
     bool l_data_ss_exists = pagesize > 0;
     CircularBufferID l_data_ss_cb = 0;
     if (l_data_ss_exists) {
+        log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}", l_data_ss_cb_id, 1, pagesize);
         Buffer *l_data_ss_buffer = l_data_start_and_size.buffer();
         auto l_data_ss_cb_config = CircularBufferConfig(pagesize * 1, {{l_data_ss_cb_id, kernel_config_df}})
                                         .set_page_size(l_data_ss_cb_id, pagesize)
@@ -242,10 +249,11 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
 
     // local_data_start_and_size
     // pagesize = *std::max(local_data_nsegments_per_core.cbegin(), local_data_nsegments_per_core.cend());
-    pagesize = untilize_with_halo_v2_helpers::my_max(local_data_nsegments_per_core);
+    pagesize = config_nbytes * untilize_with_halo_v2_helpers::my_max(local_data_nsegments_per_core);
     bool local_data_ss_exists = pagesize > 0;
     CircularBufferID local_data_ss_cb = 0;
     if (local_data_ss_exists) {
+        log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}", local_data_ss_cb_id, 1, pagesize);
         Buffer *local_data_ss_buffer = local_data_start_and_size.buffer();
         auto local_data_ss_cb_config = CircularBufferConfig(pagesize * 1, {{local_data_ss_cb_id, kernel_config_df}})
                                         .set_page_size(local_data_ss_cb_id, pagesize)
@@ -255,10 +263,11 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
 
     // r_data_start_and_size
     // pagesize = *std::max(r_data_nsegments_per_core.cbegin(), r_data_nsegments_per_core.cend());
-    pagesize = untilize_with_halo_v2_helpers::my_max(r_data_nsegments_per_core);
+    pagesize = config_nbytes * untilize_with_halo_v2_helpers::my_max(r_data_nsegments_per_core);
     bool r_data_ss_exists = pagesize > 0;
     CircularBufferID r_data_ss_cb = 0;
     if (r_data_ss_exists) {
+        log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}", r_data_ss_cb_id, 1, pagesize);
         Buffer *r_data_ss_buffer = r_data_start_and_size.buffer();
         auto r_data_ss_cb_config = CircularBufferConfig(pagesize * 1, {{r_data_ss_cb_id, kernel_config_df}})
                                         .set_page_size(r_data_ss_cb_id, pagesize)
@@ -268,10 +277,11 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
 
     // rr_data_start_and_size
     // pagesize = *std::max(rr_data_nsegments_per_core.cbegin(), rr_data_nsegments_per_core.cend());
-    pagesize = untilize_with_halo_v2_helpers::my_max(rr_data_nsegments_per_core);
+    pagesize = config_nbytes * untilize_with_halo_v2_helpers::my_max(rr_data_nsegments_per_core);
     bool rr_data_ss_exists = pagesize > 0;
     CircularBufferID rr_data_ss_cb = 0;
     if (rr_data_ss_exists) {
+        log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}", rr_data_ss_cb_id, 1, pagesize);
         Buffer *rr_data_ss_buffer = rr_data_start_and_size.buffer();
         auto rr_data_ss_cb_config = CircularBufferConfig(pagesize * 1, {{rr_data_ss_cb_id, kernel_config_df}})
                                         .set_page_size(rr_data_ss_cb_id, pagesize)
@@ -292,6 +302,8 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
             .processor = DataMovementProcessor::RISCV_1,
             .noc = NOC::RISCV_1_default,
             .compile_args = reader_ct_args});
+
+    log_debug(LogOp, "AAAA");
 
     // writer kernel
     std::vector<uint32_t> writer_ct_args = {
@@ -316,6 +328,8 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
             .noc = NOC::RISCV_0_default,
             .compile_args = writer_ct_args});
 
+    log_debug(LogOp, "BBBB");
+
     // compute kernel
     std::vector<uint32_t> compute_ct_args = {
         nblocks_per_core,
@@ -330,6 +344,8 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
     // runtime args for reader
     std::vector<uint32_t> reader_rt_args = { ntiles_per_block * nblocks_per_core };
     SetRuntimeArgs(program, reader_kernel_id, all_cores, reader_rt_args);
+
+    log_debug(LogOp, "CCCC");
 
     // runtime args for writer
     std::vector<uint32_t> writer_rt_args = {
@@ -418,6 +434,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
         writer_rt_args[23] = rr_data_nsegments_per_core[core];
     }
 
+    log_debug(LogOp, "EEEE");
 
     auto override_runtime_arguments_callback = [
         reader_kernel_id=reader_kernel_id,

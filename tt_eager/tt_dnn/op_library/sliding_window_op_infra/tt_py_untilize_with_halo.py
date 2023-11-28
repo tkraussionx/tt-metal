@@ -147,7 +147,7 @@ class TTPyUntilizeWithHalo(TTPyOp):
         return
 
     def run_forward(self, x):
-        x = ttl.tensor.untilize_with_halo_v2(
+        return ttl.tensor.untilize_with_halo_v2(
             x,
             self.local_pad_tensor,
             self.ll_data_tensor,

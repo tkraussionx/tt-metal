@@ -61,7 +61,7 @@ void kernel_main() {
     constexpr uint32_t pad_stick_len        = get_compile_time_arg_val(10); // pad stick size in nelems (post untilize)
     constexpr uint32_t stick_nbytes         = get_compile_time_arg_val(11); // stick size in bytes (post untilize)
 
-    constexpr nbytes = 2;   // TODO: pass this in
+    constexpr uint32_t nbytes = 2;   // TODO: pass this in
 
     static_assert(stick_nbytes <= NOC_MAX_BURST_SIZE); // stick_nbytes used in noc_async_read_one_packet
 
