@@ -52,6 +52,7 @@ inline uint32_t min(uint32_t a, uint32_t b) { return (a < b) ? a : b; }
 FORCE_INLINE void write_buffers(
     volatile tt_l1_ptr uint32_t* command_ptr,
     uint32_t num_destinations,
+    uint32_t num_cores,
     uint32_t consumer_cb_size,
     uint32_t consumer_cb_num_pages,
     uint64_t producer_noc_encoding,
@@ -59,33 +60,148 @@ FORCE_INLINE void write_buffers(
     bool db_buf_switch) {
     for (uint32_t i = 0; i < num_destinations; i++) {
         const uint32_t bank_base_address = command_ptr[1];
-        const uint32_t num_pages = command_ptr[2];
+        uint32_t num_pages = command_ptr[2];
         const uint32_t page_size = command_ptr[3];
         const uint32_t dst_buf_type = command_ptr[5];
-        Buffer buffer((BufferType)dst_buf_type, bank_base_address, page_size);
+
+
 
         uint32_t num_to_write;
         uint32_t src_addr = *reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_db_cb_rd_ptr_addr(db_buf_switch)) << 4;
         uint32_t l1_consumer_fifo_limit = src_addr + consumer_cb_size - 1;
-
-        for (uint32_t id = 0; id < num_pages;) {
-            num_to_write = min(num_pages - id, producer_consumer_transfer_num_pages);
-            multicore_cb_wait_front(db_buf_switch, num_to_write);
-            uint32_t src_addr = get_read_ptr(db_buf_switch);
-            buffer.noc_async_write_buffer(src_addr, id, num_to_write, 0);
-            noc_async_write_barrier();
-            multicore_cb_pop_front(
-                producer_noc_encoding,
-                db_buf_switch,
-                l1_consumer_fifo_limit,
-                consumer_cb_size,
-                num_to_write,
-                page_size);
-            noc_async_write_barrier();
-            id += num_to_write;
+        if((BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY){
+            num_cores = 1;
+        }
+        uint32_t total_num_written = 0;
+        for(uint32_t core_id = 0; core_id < num_cores; core_id++){
+            uint32_t core_id_x = 1;
+            uint32_t core_id_y = 1;
+            if(num_cores > 1){
+                num_pages = command_ptr[6+core_id*3];
+                core_id_x = command_ptr[7+core_id*3];
+                core_id_y = command_ptr[8+core_id*3];
+            }
+            DPRINT << "PROD CONSUMER TNP: " << producer_consumer_transfer_num_pages << ENDL();
+            DPRINT << "NUM PAGES: " << num_pages << ENDL();
+            for (uint32_t id = 0; id < num_pages;) {
+                uint32_t src_addr = get_read_ptr(db_buf_switch);
+                uint32_t num_pages_left_in_consumer_cb = (l1_consumer_fifo_limit + 1 - src_addr) / page_size;
+                num_to_write = min(num_pages - id, producer_consumer_transfer_num_pages);
+                num_to_write = min(num_to_write, num_pages_left_in_consumer_cb);
+                DPRINT << "l1_consumer_fifo_limit: " << l1_consumer_fifo_limit + 1 << ENDL();
+                DPRINT << "SRC ADDR: " << src_addr << ENDL();
+                DPRINT << "NUM PAGES LEFT IN CONSUMER CB: " << num_pages_left_in_consumer_cb << ENDL();
+                DPRINT << "CONSUMER: writing " << DEC() <<  num_to_write << " pages " << ENDL();
+                multicore_cb_wait_front(db_buf_switch, num_to_write);
+                if((BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY){
+                    Buffer buffer((BufferType)dst_buf_type, bank_base_address, page_size);
+                    buffer.noc_async_write_buffer(src_addr, total_num_written, num_to_write, 0);
+                }
+                else{
+                    ShardedBuffer buffer_sharded(page_size, bank_base_address) ;
+                    buffer_sharded.noc_async_write_buffer(src_addr, num_to_write, id, core_id_x, core_id_y);
+                }
+                noc_async_write_barrier();
+                if(num_to_write > 0){
+                    DPRINT << "CONSUMER WRITING " << num_to_write << " PAGES TO MULTICORE_CB " << ENDL();
+                    uint32_t * ptr = (uint32_t *)src_addr;
+                    for (uint32_t i = 0; i < num_to_write; i++) {
+                        if((BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY){
+                            DPRINT << "CONSUMER WRITING TO SYSTEM_MEMORY : PAGE: " << i << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
+                        }else{
+                            DPRINT << "CONSUMER WRITING TO SHARDED_BUFFER : PAGE: " << i << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
+                        }
+                    }
+                }
+                multicore_cb_pop_front(
+                    producer_noc_encoding,
+                    db_buf_switch,
+                    l1_consumer_fifo_limit,
+                    consumer_cb_size,
+                    num_to_write,
+                    page_size);
+                noc_async_write_barrier();
+                id += num_to_write;
+                total_num_written += num_to_write;
+            }
         }
     }
 }
+
+FORCE_INLINE void write_buffers_sharded(
+    volatile tt_l1_ptr uint32_t* command_ptr,
+    uint32_t num_cores,
+    uint32_t num_destinations,
+    uint32_t consumer_cb_size,
+    uint32_t consumer_cb_num_pages,
+    uint64_t producer_noc_encoding,
+    uint32_t producer_consumer_transfer_num_pages,
+    bool db_buf_switch) {
+    for (uint32_t i = 0; i < num_destinations; i++) {
+        const uint32_t bank_base_address = command_ptr[1];
+        const uint32_t page_size = command_ptr[3];
+        const uint32_t src_buf_type = command_ptr[4];
+        const uint32_t dst_buf_type = command_ptr[5];
+        uint32_t index_offset = 6;
+        uint32_t num_pages_written_total = 0;
+
+        uint32_t src_addr = *reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_db_cb_rd_ptr_addr(db_buf_switch)) << 4;
+        uint32_t l1_consumer_fifo_limit = src_addr + consumer_cb_size - 1;
+
+        for(uint32_t core_id = 0; core_id < num_cores; core_id++){
+            const uint32_t num_pages = command_ptr[6+core_id*3];
+            const uint32_t core_id_x = command_ptr[7+core_id*3];
+            const uint32_t core_id_y = command_ptr[8+core_id*3];
+
+            uint32_t num_to_write;
+            for (uint32_t id = 0; id < num_pages;) {
+
+                uint32_t src_addr = get_read_ptr(db_buf_switch);
+                uint32_t num_pages_left_in_consumer_cb = (l1_consumer_fifo_limit + 1 - src_addr) / 4096;
+                num_to_write = min(num_pages - id, producer_consumer_transfer_num_pages);
+                num_to_write = min(num_to_write, num_pages_left_in_consumer_cb);
+                DPRINT << "l1_consumer_fifo_limit: " << l1_consumer_fifo_limit + 1 << ENDL();
+                DPRINT << "SRC ADDR: " << src_addr << ENDL();
+                DPRINT << "NUM PAGES LEFT IN CONSUMER CB: " << num_pages_left_in_consumer_cb << ENDL();
+                DPRINT << "CONSUMER: writing " << DEC() <<  num_to_write << " pages " << ENDL();
+                multicore_cb_wait_front(db_buf_switch, num_to_write);
+                if((BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY){
+                    Buffer buffer((BufferType)dst_buf_type, bank_base_address, page_size);
+                    buffer.noc_async_write_buffer(src_addr, num_pages_written_total, num_to_write, 0);
+                }
+                else{
+                    ShardedBuffer buffer_sharded(page_size, bank_base_address) ;
+                    // DPRINT << "CORE ID X: " << core_id_x << ", CORE ID Y: " << core_id_y << ENDL();
+                    buffer_sharded.noc_async_write_buffer(src_addr, num_to_write, id, core_id_x, core_id_y);
+                }
+                if(num_to_write > 0){
+                    DPRINT << "CONSUMER WRITING " << num_to_write << " PAGES TO MULTICORE_CB " << ENDL();
+                    uint32_t * ptr = (uint32_t *)src_addr;
+                    for (uint32_t i = 0; i < num_to_write; i++) {
+                        if((BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY){
+                            DPRINT << "CONSUMER WRITING TO SYSTEM_MEMORY : PAGE: " << i << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
+                        }else{
+                            DPRINT << "CONSUMER WRITING TO SHARDED_BUFFER : PAGE: " << i << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
+                        }
+                    }
+                }
+                noc_async_write_barrier();
+                multicore_cb_pop_front(
+                    producer_noc_encoding,
+                    db_buf_switch,
+                    l1_consumer_fifo_limit,
+                    consumer_cb_size,
+                    num_to_write,
+                    page_size);
+                noc_async_write_barrier();
+                id += num_to_write;
+                num_pages_written_total += num_to_write;
+            }
+        }
+    }
+
+}
+
 
 template <bool multicast>
 FORCE_INLINE void write_program_page(uint32_t page_addr, volatile tt_l1_ptr uint32_t*& command_ptr, bool last_page) {

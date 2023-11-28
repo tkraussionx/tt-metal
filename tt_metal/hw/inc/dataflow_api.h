@@ -23,6 +23,7 @@
 
 #include "debug/status.h"
 #include "debug/sanitize_noc.h"
+#include "debug/dprint.h"
 
 extern uint8_t noc_index;
 
@@ -408,6 +409,14 @@ uint64_t get_l1_noc_addr(const uint32_t id, const uint32_t page_size, const uint
     addr = mulsi3(id >> LOG_BASE_2_OF_NUM_L1_BANKS, align(page_size, 32)) + bank_base_address + offset;
 #endif
 
+    addr += bank_to_l1_offset[bank_id];
+    uint32_t noc_xy = l1_bank_to_noc_xy[noc_index][bank_id];
+    uint64_t noc_addr = get_noc_addr_helper(noc_xy, addr);
+    return noc_addr;
+}
+
+uint64_t get_l1_noc_addr_single_bank(uint32_t addr){
+    const uint32_t bank_id = 0; // first bank of any core
     addr += bank_to_l1_offset[bank_id];
     uint32_t noc_xy = l1_bank_to_noc_xy[noc_index][bank_id];
     uint64_t noc_addr = get_noc_addr_helper(noc_xy, addr);
@@ -1538,6 +1547,7 @@ class Buffer {
         }
     }
     uint64_t get_noc_addr(const uint32_t id, const uint32_t offset = 0) {
+        uint64_t noc_addr = this->get_noc_addr_helper(id, this->page_size_, this->bank_base_address, offset);
         return this->get_noc_addr_helper(id, this->page_size_, this->bank_base_address, offset);
     }
 
@@ -1564,14 +1574,82 @@ class Buffer {
     }
 
     void noc_async_read_buffer(uint32_t dst, const uint32_t id, const uint32_t num_pages, const uint32_t offset) {
+        //DPRINT << "SYSTEM_BUFFER: IN NOC ASYNC READ BUFFER at page " << id <<  ENDL();
         if (this->type == BufferType::SYSTEM_MEMORY) {
             noc_async_read(this->get_noc_addr(id, offset), dst, this->page_size_ * num_pages);
+            //noc_async_read_barrier();
+            //uint32_t * ptr = (uint32_t *)dst;
+            //for (uint32_t i = 0; i < num_pages; i++) {
+            //    DPRINT << "SYSTEM_BUFFER: page: " << i+id << " first element of page " << DEC() << ptr[i*this->page_size_/4] << ENDL();
+            //}
         } else {
             for (uint32_t i = 0; i < num_pages; i++) {
                 uint64_t address = this->get_noc_addr(id + i, offset);
                 noc_async_read(address, dst, this->page_size_);
                 dst += this->page_size_;
             }
+        }
+    }
+};
+
+#define NUM_ENTRIES_PER_SHARD 4
+class ShardedBuffer {
+   private:
+    uint32_t page_size_;
+    uint32_t l1_addr_;
+    uint64_t get_noc_addr_(uint32_t core_id_x, uint32_t core_id_y, const uint32_t & l1_offset) {
+        uint64_t noc_addr =  get_noc_addr(core_id_x, core_id_y, this->l1_addr_ + l1_offset);
+        return noc_addr;
+    }
+
+   public:
+
+    ShardedBuffer(uint32_t page_size, uint32_t addr) {
+        this->page_size_ = page_size;
+        this->l1_addr_ = addr;
+    }
+
+    uint32_t page_size() { return this->page_size_; }
+
+    void noc_async_write_buffer(uint32_t src, const uint32_t num_pages, const uint32_t page_id, uint32_t core_id_x, uint32_t core_id_y) {
+
+        //DPRINT << "SHARDBUFFER WRITE: core " << core_id_x << " , " << core_id_y <<  " writing " << num_pages << " with page size " << this->page_size_ << ENDL();
+        uint32_t offset = page_id * this->page_size_;
+        for (uint32_t i = 0; i < num_pages; i++) {
+            uint64_t address = this->get_noc_addr_(core_id_x, core_id_y, offset);
+            noc_async_write(src, address, this->page_size_);
+            //noc_async_write_barrier();
+            //DPRINT << "SHARDEDBUFFER WRITE: page " << DEC() << i <<
+            //    " noc_addr " << HEX() << address <<
+            //    " at core " << core_id_x << "," <<
+            //    core_id_y <<  ENDL();
+            //constexpr uint32_t debug_addr = get_compile_time_arg_val(0);
+            //noc_async_read(address, debug_addr, sizeof(uint32_t));
+            //noc_async_read_barrier();
+            //uint32_t *ptr = (uint32_t *)debug_addr;
+            //DPRINT << "SHARDBUFFER WRITE in debug_addr: first element of page " << DEC() << ptr[0] << ENDL();
+            src += this->page_size_;
+            offset += this->page_size_;
+        }
+    }
+
+    void noc_async_read_buffer(uint32_t dst, const uint32_t num_pages, const uint32_t page_id, uint32_t core_id_x, uint32_t core_id_y) {
+        //DPRINT << "SHARDBUFFER READ: core " << core_id_x << " , " << core_id_y <<  " reading " << num_pages << " with page size " << this->page_size_ << ENDL();
+        uint32_t offset = page_id * this->page_size_;
+
+        for (uint32_t i = 0; i < num_pages; i++) {
+            uint64_t address = this->get_noc_addr_(core_id_x, core_id_y, offset);
+
+            noc_async_read(address, dst, this->page_size_);
+            //noc_async_read_barrier();
+            //uint32_t *ptr = (uint32_t *)dst;
+            //DPRINT << "SHARDEDBUFFER READ: page " << DEC() << i <<
+            //    " noc_addr " << HEX() << address <<
+            //    " at core " << core_id_x << "," <<
+            //    core_id_y <<  ENDL();
+            //DPRINT << "SHARDBUFFER READ: first element of page " << DEC() << ptr[0] << ENDL();
+            dst += this->page_size_;
+            offset += this->page_size_;
         }
     }
 };

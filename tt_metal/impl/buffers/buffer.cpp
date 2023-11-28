@@ -35,16 +35,16 @@ void validate_buffer_size_and_page_size(uint64_t size, uint64_t page_size, const
         TT_ASSERT(shard_parameters != std::nullopt , "Sharded buffers must have a core grid assigned");
         TT_ASSERT(shard_parameters.value().element_size != std::nullopt, "Sharded buffers must specifiy element size");
         TT_ASSERT(shard_parameters.value().tensor2d_size != std::nullopt, "Sharded buffers must specifiy tensor size in pages");
-        if(buffer_layout == TensorMemoryLayout::HEIGHT_SHARDED){
-            TT_ASSERT(shard_parameters.value().shard_shape[0] == shard_parameters.value().page_shape[0],
-            "Height sharded buffer requires shard_shape's height to be page_height"
-            );
-        }
-        else if(buffer_layout == TensorMemoryLayout::WIDTH_SHARDED){
-            TT_ASSERT(shard_parameters.value().shard_shape[1] == shard_parameters.value().page_shape[1],
-            "Width sharded buffer requires shard_shape's width to be page_width"
-            );
-        }
+//        if(buffer_layout == TensorMemoryLayout::HEIGHT_SHARDED){
+//            TT_ASSERT(shard_parameters.value().shard_shape[0] == shard_parameters.value().page_shape[0],
+//            "Height sharded buffer requires shard_shape's height to be page_height"
+//            );
+//        }
+//        else if(buffer_layout == TensorMemoryLayout::WIDTH_SHARDED){
+//            TT_ASSERT(shard_parameters.value().shard_shape[1] == shard_parameters.value().page_shape[1],
+//            "Width sharded buffer requires shard_shape's width to be page_width"
+//            );
+//        }
 
     }
 }
@@ -106,6 +106,7 @@ inline std::vector< std::vector<uint32_t> > core_to_host_pages(
     }
     return ret_vec;
 }
+
 
 //#define DEBUG_SHARD_PRINT
 std::string Buffer::get_shard_info() const {
@@ -306,6 +307,15 @@ uint64_t Buffer::page_address(uint32_t bank_id, uint32_t page_index) const {
     }
     auto offset = (round_up(this->page_size_, ADDRESS_ALIGNMENT) * pages_offset_within_bank);
     return base_page_address + offset;
+}
+
+uint64_t Buffer::core_address(uint32_t core_id) const {
+    TT_ASSERT(is_sharded(this->buffer_layout()));
+    auto bank_id = this->core_bank_indices_[core_id];
+    auto first_page = this->core_host_page_indices_[core_id][0];
+    auto page_id = this->dev_page_to_host_page_mapping_[first_page];
+    std::cout << "in core_address calc, bank_id " << bank_id << " page_id " << page_id << std::endl;
+    return this->page_address(bank_id, page_id);
 }
 
 void Buffer::deallocate() {
