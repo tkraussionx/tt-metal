@@ -69,7 +69,7 @@ class Command {
     Command() {}
     virtual void process(){};
     virtual EnqueueCommandType type() = 0;
-    virtual const DeviceCommand assemble_device_command(uint32_t buffer_size) = 0;
+    virtual const DeviceCommand assemble_device_command(uint32_t command_address, uint32_t buffer_size) = 0;
 };
 
 class EnqueueReadBufferCommand : public Command {
@@ -84,7 +84,7 @@ class EnqueueReadBufferCommand : public Command {
     uint32_t read_buffer_addr;
     EnqueueReadBufferCommand(Device* device, Buffer& buffer, void* dst, SystemMemoryWriter& writer);
 
-    const DeviceCommand assemble_device_command(uint32_t dst);
+    const DeviceCommand assemble_device_command(uint32_t command_address, uint32_t dst);
 
     void process();
 
@@ -103,7 +103,7 @@ class EnqueueWriteBufferCommand : public Command {
    public:
     EnqueueWriteBufferCommand(Device* device, Buffer& buffer, const void* src, SystemMemoryWriter& writer);
 
-    const DeviceCommand assemble_device_command(uint32_t src_address);
+    const DeviceCommand assemble_device_command(uint32_t command_address, uint32_t src_address);
 
     void process();
 
@@ -123,7 +123,7 @@ class EnqueueProgramCommand : public Command {
    public:
     EnqueueProgramCommand(Device*, Buffer&, ProgramMap&, SystemMemoryWriter&, const Program& program, bool stall);
 
-    const DeviceCommand assemble_device_command(uint32_t);
+    const DeviceCommand assemble_device_command(uint32_t command_address, uint32_t);
 
     void process();
 
@@ -142,7 +142,7 @@ class FinishCommand : public Command {
    public:
     FinishCommand(Device* device, SystemMemoryWriter& writer);
 
-    const DeviceCommand assemble_device_command(uint32_t);
+    const DeviceCommand assemble_device_command(uint32_t command_address, uint32_t);
 
     void process();
 
@@ -158,7 +158,7 @@ class EnqueueWrapCommand : public Command {
    public:
     EnqueueWrapCommand(Device* device, SystemMemoryWriter& writer);
 
-    const DeviceCommand assemble_device_command(uint32_t);
+    const DeviceCommand assemble_device_command(uint32_t command_address, uint32_t);
 
     void process();
 

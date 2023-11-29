@@ -311,8 +311,8 @@ EnqueueReadBufferCommand::EnqueueReadBufferCommand(
     this->device = device;
 }
 
-const DeviceCommand EnqueueReadBufferCommand::assemble_device_command(uint32_t dst_address) {
-    DeviceCommand command;
+const DeviceCommand EnqueueReadBufferCommand::assemble_device_command(uint32_t command_address, uint32_t dst_address) {
+    DeviceCommand command(this->device->id(), command_address);
 
     uint32_t padded_page_size = align(this->buffer.page_size(), 32);
     uint32_t data_size_in_bytes = padded_page_size * this->buffer.num_pages();
@@ -355,7 +355,7 @@ void EnqueueReadBufferCommand::process() {
     uint32_t write_ptr = this->writer.cq_write_interface.fifo_wr_ptr << 4;
     uint32_t system_memory_temporary_storage_address = write_ptr + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
     this->read_buffer_addr = system_memory_temporary_storage_address;
-    const auto cmd = this->assemble_device_command(system_memory_temporary_storage_address);
+    const auto cmd = this->assemble_device_command(write_ptr, system_memory_temporary_storage_address);
 
     uint32_t num_pages = this->buffer.size() / this->buffer.page_size();
     uint32_t padded_page_size = align(this->buffer.page_size(), 32);
@@ -363,7 +363,6 @@ void EnqueueReadBufferCommand::process() {
     uint32_t cmd_size = DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + data_size_in_bytes;
 
     this->writer.cq_reserve_back(cmd_size);
-    this->writer.cq_write(cmd.get_desc().data(), DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, write_ptr);
     this->writer.cq_push_back(cmd_size);
 }
 
@@ -380,8 +379,8 @@ EnqueueWriteBufferCommand::EnqueueWriteBufferCommand(
     this->device = device;
 }
 
-const DeviceCommand EnqueueWriteBufferCommand::assemble_device_command(uint32_t src_address) {
-    DeviceCommand command;
+const DeviceCommand EnqueueWriteBufferCommand::assemble_device_command(uint32_t command_address, uint32_t src_address) {
+    DeviceCommand command(this->device->id(), command_address);
 
     uint32_t padded_page_size = this->buffer.page_size();
     if (this->buffer.page_size() != this->buffer.size()) {
@@ -426,12 +425,12 @@ void EnqueueWriteBufferCommand::process() {
     uint32_t write_ptr = this->writer.cq_write_interface.fifo_wr_ptr << 4;
     uint32_t system_memory_temporary_storage_address = write_ptr + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
 
-    const auto cmd = this->assemble_device_command(system_memory_temporary_storage_address);
+    const auto cmd = this->assemble_device_command(write_ptr, system_memory_temporary_storage_address);
     uint32_t data_size_in_bytes = cmd.get_data_size();
 
     uint32_t cmd_size = DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + data_size_in_bytes;
     this->writer.cq_reserve_back(cmd_size);
-    this->writer.cq_write(cmd.get_desc().data(), DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, write_ptr);
+    // this->writer.cq_write(cmd.get_desc().data(), DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, write_ptr);
 
     if (this->buffer.page_size() % 32 != 0 and this->buffer.page_size() != this->buffer.size()) {
         // If page size is not 32B-aligned, we cannot do a contiguous write
@@ -462,8 +461,9 @@ EnqueueProgramCommand::EnqueueProgramCommand(
     this->device = device;
 }
 
-const DeviceCommand EnqueueProgramCommand::assemble_device_command(uint32_t host_data_src) {
-    DeviceCommand command;
+const DeviceCommand EnqueueProgramCommand::assemble_device_command(uint32_t command_address, uint32_t host_data_src) {
+    ZoneScopedN("Assembling device command");
+    DeviceCommand command(this->device->id(), command_address);
     command.set_num_workers(this->program_to_dev_map.num_workers);
 
     auto populate_program_data_transfer_instructions =
@@ -573,32 +573,38 @@ void EnqueueProgramCommand::process() {
     uint32_t write_ptr = this->writer.cq_write_interface.fifo_wr_ptr << 4;
     uint32_t system_memory_temporary_storage_address = write_ptr + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
 
-    const DeviceCommand cmd = this->assemble_device_command(system_memory_temporary_storage_address);
+    const DeviceCommand cmd = this->assemble_device_command(write_ptr, system_memory_temporary_storage_address);
 
     uint32_t data_size_in_bytes = cmd.get_data_size();
     const uint32_t cmd_size = DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + data_size_in_bytes;
     this->writer.cq_reserve_back(cmd_size);
-    this->writer.cq_write(cmd.get_desc().data(), DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, write_ptr);
-
-    uint32_t start_addr = system_memory_temporary_storage_address;
-    constexpr static uint32_t padding_alignment = 16;
-    for (size_t kernel_id = 0; kernel_id < this->program.num_kernels(); kernel_id++) {
-        Kernel* kernel = detail::GetKernel(program, kernel_id);
-        for (const auto& c: kernel->cores_with_runtime_args()) {
-            const auto & core_runtime_args = kernel->runtime_args(c);
-            this->writer.cq_write(core_runtime_args.data(), core_runtime_args.size() * sizeof(uint32_t), system_memory_temporary_storage_address);
-            system_memory_temporary_storage_address = align(system_memory_temporary_storage_address + core_runtime_args.size() * sizeof(uint32_t), padding_alignment);
-        }
+    {
+        ZoneScopedN("Writing device command");
+        // this->writer.cq_write(cmd.get_desc().data(), DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, write_ptr);
     }
 
-    system_memory_temporary_storage_address = start_addr + align(system_memory_temporary_storage_address - start_addr, DeviceCommand::PROGRAM_PAGE_SIZE);
+    {
+        ZoneScopedN("Writing host data");
+        uint32_t start_addr = system_memory_temporary_storage_address;
+        constexpr static uint32_t padding_alignment = 16;
+        for (size_t kernel_id = 0; kernel_id < this->program.num_kernels(); kernel_id++) {
+            Kernel* kernel = detail::GetKernel(program, kernel_id);
+            for (const auto& c: kernel->cores_with_runtime_args()) {
+                const auto & core_runtime_args = kernel->runtime_args(c);
+                this->writer.cq_write(core_runtime_args.data(), core_runtime_args.size() * sizeof(uint32_t), system_memory_temporary_storage_address);
+                system_memory_temporary_storage_address = align(system_memory_temporary_storage_address + core_runtime_args.size() * sizeof(uint32_t), padding_alignment);
+            }
+        }
 
-    array<uint32_t, 4> cb_data;
-    for (const shared_ptr<CircularBuffer>& cb : program.circular_buffers()) {
-        for (const auto buffer_index : cb->buffer_indices()) {
-            cb_data = {cb->address() >> 4, cb->size() >> 4, cb->num_pages(buffer_index), cb->size() / cb->num_pages(buffer_index) >> 4};
-            this->writer.cq_write(cb_data.data(), padding_alignment, system_memory_temporary_storage_address);
-            system_memory_temporary_storage_address += padding_alignment;
+        system_memory_temporary_storage_address = start_addr + align(system_memory_temporary_storage_address - start_addr, DeviceCommand::PROGRAM_PAGE_SIZE);
+
+        array<uint32_t, 4> cb_data;
+        for (const shared_ptr<CircularBuffer>& cb : program.circular_buffers()) {
+            for (const auto buffer_index : cb->buffer_indices()) {
+                cb_data = {cb->address() >> 4, cb->size() >> 4, cb->num_pages(buffer_index), cb->size() / cb->num_pages(buffer_index) >> 4};
+                this->writer.cq_write(cb_data.data(), padding_alignment, system_memory_temporary_storage_address);
+                system_memory_temporary_storage_address += padding_alignment;
+            }
         }
     }
 
@@ -610,19 +616,18 @@ EnqueueCommandType EnqueueProgramCommand::type() { return this->type_; }
 // FinishCommand section
 FinishCommand::FinishCommand(Device* device, SystemMemoryWriter& writer) : writer(writer) { this->device = device; }
 
-const DeviceCommand FinishCommand::assemble_device_command(uint32_t) {
-    DeviceCommand command;
+const DeviceCommand FinishCommand::assemble_device_command(uint32_t command_address, uint32_t) {
+    DeviceCommand command(this->device->id(), command_address);
     command.finish();
     return command;
 }
 
 void FinishCommand::process() {
     uint32_t write_ptr = this->writer.cq_write_interface.fifo_wr_ptr << 4;
-    const auto cmd = this->assemble_device_command(0);
     uint32_t cmd_size = DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
-
     this->writer.cq_reserve_back(cmd_size);
-    this->writer.cq_write(cmd.get_desc().data(), DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, write_ptr);
+    this->assemble_device_command(write_ptr, 0);
+    // this->writer.cq_write(cmd.get_desc().data(), DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, write_ptr);
     this->writer.cq_push_back(cmd_size);
 }
 
@@ -633,8 +638,8 @@ EnqueueWrapCommand::EnqueueWrapCommand(Device* device, SystemMemoryWriter& write
     this->device = device;
 }
 
-const DeviceCommand EnqueueWrapCommand::assemble_device_command(uint32_t) {
-    DeviceCommand command;
+const DeviceCommand EnqueueWrapCommand::assemble_device_command(uint32_t command_address, uint32_t) {
+    DeviceCommand command(this->device->id(), command_address);
     return command;
 }
 

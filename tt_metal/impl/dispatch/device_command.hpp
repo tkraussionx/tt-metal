@@ -9,7 +9,7 @@
 
 class DeviceCommand {
    public:
-    DeviceCommand();
+    DeviceCommand(uint32_t device_id, uint32_t command_address);
 
     enum class TransferType : uint8_t { RUNTIME_ARGS, CB_CONFIGS, PROGRAM_PAGES, GO_SIGNALS, NUM_TRANSFER_TYPES };
 
@@ -102,7 +102,8 @@ class DeviceCommand {
     const std::array<uint32_t, NUM_ENTRIES_IN_DEVICE_COMMAND>& get_desc() const;
 
    private:
-    std::array<uint32_t, DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND> desc;
+    std::array<uint32_t, DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND>* desc_ptr;
+    std::array<uint32_t, DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND>& desc;
     uint32_t buffer_transfer_idx;
     uint32_t program_transfer_idx;
 };

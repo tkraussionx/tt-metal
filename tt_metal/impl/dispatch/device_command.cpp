@@ -6,8 +6,13 @@
 
 #include "tt_metal/common/logger.hpp"
 #include "tt_metal/common/assert.hpp"
+#include "tt_metal/llrt/tt_cluster.hpp"
 
-DeviceCommand::DeviceCommand() {
+DeviceCommand::DeviceCommand(uint32_t device_id, uint32_t command_address): desc_ptr(
+
+    // Place the std array directly on top of our command address
+    new (((uint32_t*) tt::Cluster::instance().host_dma_address(0, device_id, 0)) + command_address) (std::array<uint32_t, DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND>)
+), desc(*desc_ptr) {
     for (uint32_t idx = 0; idx < DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER; idx++) {
         this->desc[idx] = 0;
     }
