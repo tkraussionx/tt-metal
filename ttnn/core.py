@@ -98,7 +98,7 @@ def matmul(
     dtype: Optional[DataType] = None,
     core_grid: Optional[Tuple[int, int]] = None,
 ) -> Tensor:
-    """
+    r"""
     matmul(input_tensor_a: Tensor, input_tensor_b: Tensor, *, memory_config: MemoryConfig=DRAM_MEMORY_CONFIG, core_grid: Optional[Tuple[int, int]] = None) -> Tensor
 
     Returns the matrix product of two tensors.
@@ -367,7 +367,7 @@ def linear(
     core_grid: Optional[Tuple[int, int]] = None,
     activation: Optional[str] = None,
 ) -> Tensor:
-    """
+    r"""
     linear(input_tensor_a: Tensor, input_tensor_b: Tensor, *, bias: Optional[Tensor] = None, memory_config: MemoryConfig=DRAM_MEMORY_CONFIG, dtype: Optional[DataType] = None, core_grid: Optional[Tuple[int, int]] = None, activation: Optional[str] = None) -> Tensor
 
     Returns the linear transformation of the inputs
@@ -560,7 +560,7 @@ def linear(
 
 
 def add(input_tensor_a: Tensor, input_tensor_b: Union[Tensor, int, float], *, alpha: Union[int, float] = 1) -> Tensor:
-    """
+    r"""
     add(input_tensor_a: Tensor, input_tensor_b: Union[Tensor, int, float], *, alpha: Union[int, float]=1) -> Tensor
 
     Adds :attr:`input_tensor_b`, scaled by :attr:`alpha`, to :attr:`input_tensor_a` and returns the tensor with the same layout as :attr:`input_tensor_a`
@@ -646,7 +646,7 @@ def add(input_tensor_a: Tensor, input_tensor_b: Union[Tensor, int, float], *, al
 
 
 def sub(input_tensor_a: Tensor, input_tensor_b: Union[Tensor, int, float], *, alpha: Union[int, float] = 1) -> Tensor:
-    """
+    r"""
     sub(input_tensor_a: Tensor, input_tensor_b: Union[Tensor, int, float], *, alpha: Union[int, float]=1) -> Tensor:
 
     Subtracts :attr:`input_tensor_b`, scaled by :attr:`alpha`, from :attr:`input_tensor_a`.
@@ -730,7 +730,7 @@ def sub(input_tensor_a: Tensor, input_tensor_b: Union[Tensor, int, float], *, al
 
 
 def mul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
-    """
+    r"""
     mul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor
 
     Multiples :attr:`input_tensor_a` and :attr:`input_tensor_b` element-wise.
@@ -808,7 +808,7 @@ def mul(input_tensor_a: Tensor, input_tensor_b: Tensor) -> Tensor:
 
 
 def tanh(input_tensor: Tensor) -> Tensor:
-    """
+    r"""
     mul(input_tensor: Tensor) -> Tensor
 
     Applies tanh to :attr:`input_tensor` element-wise.
@@ -857,7 +857,7 @@ Tensor.__rmul__ = mul
 
 # Data Transformations
 def reshape(input_tensor: Tensor, shape: Tuple[int, ...]) -> Tensor:
-    """
+    r"""
     reshape(input_tensor: Tensor, shape: Tuple[int, ...]) -> Tensor
 
     Reshape :attr:`input_tensor` into :attr:`shape`.
@@ -926,7 +926,7 @@ def reshape(input_tensor: Tensor, shape: Tuple[int, ...]) -> Tensor:
 
 
 def permute(input_tensor: Tensor, order: Tuple[int, ...]) -> Tensor:
-    """
+    r"""
     permute(input_tensor: Tensor, order: Tuple[int, ...]) -> Tensor
 
     Permutes :attr:`input_tensor` using :attr:`order`.
@@ -970,7 +970,7 @@ def permute(input_tensor: Tensor, order: Tuple[int, ...]) -> Tensor:
 
 
 def softmax(input_tensor: Tensor, dim: int) -> Tensor:
-    """
+    r"""
     softmax(input_tensor: Tensor, dim: int) -> Tensor
 
     Compute softmax over :attr:`input_tensor` along :attr:`dim`.
@@ -1006,7 +1006,7 @@ def embedding(
     layout: Layout = ROW_MAJOR_LAYOUT,
     memory_config: MemoryConfig = DRAM_MEMORY_CONFIG,
 ):
-    """
+    r"""
     embedding(input_tensor: ttnn.Tensor, weights: ttnn.Tensor) -> None
 
     Retrieves word embeddings using input_tensor. The input_tensor is a list of indices, and the embedding matrix, and the output is the corresponding word embeddings.
