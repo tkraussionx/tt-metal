@@ -203,19 +203,39 @@ def construct_utwh_output_shards(
     input_nchw_padded_shape,
     # config to construct shards
     req_conv_input_shard_start_end,
+    # num of cores which slices nhw
+    num_cores_nhw,
+    # grid size (num_cores_w, num_cores_h)
+    grid_size,
 ):
+    assert num_cores_nhw == len(req_conv_input_shard_end)
+    num_cores_w, num_cores_h = grid_size
+    block_sharding = num_cores_nhw == num_cores_w
     # reshape input padded tensor to 2d shape - [nhw, c]
     assert len(input_nchw_padded_shape) == 4
     input_n, input_c, input_padded_height, input_padded_width = [input_nchw_padded_shape[i] for i in range(4)]
     input_2d_padded_tensor = np.reshape(
         input_padded_tensor, (input_n * input_padded_height * input_padded_width, input_c)
     )
+    num_slices_c = 1
+    input_c_sliced = input_c
+    if block_sharding:
+        assert input_c % num_cores_h == 0
+        num_slices_c = num_cores_h
+        input_c_sliced = (int)(input_c / num_cores_h)
     utwh_output_shards = []
-    for item in req_conv_input_shard_start_end:
-        req_conv_input_shard_start, req_conv_input_shard_end = item[1]
-        req_conv_input_shard_size = req_conv_input_shard_end - req_conv_input_shard_start + 1
-        assert req_conv_input_shard_size <= 65535  # max uint16 value
-        utwh_output_shards.append(input_2d_padded_tensor[req_conv_input_shard_start : req_conv_input_shard_end + 1, :])
+    for slice_idx_c in range(num_slices_c):
+        input_c_start = slice_idx_c * input_c_sliced
+        input_c_end = input_c_start + input_c_sliced
+        for item in req_conv_input_shard_start_end:
+            req_conv_input_shard_start, req_conv_input_shard_end = item[1]
+            req_conv_input_shard_size = req_conv_input_shard_end - req_conv_input_shard_start + 1
+            assert req_conv_input_shard_size <= 65535  # max uint16 value
+            utwh_output_shards.append(
+                input_2d_padded_tensor[
+                    req_conv_input_shard_start : req_conv_input_shard_end + 1, input_c_start:input_c_end
+                ]
+            )
     return utwh_output_shards
 
 
