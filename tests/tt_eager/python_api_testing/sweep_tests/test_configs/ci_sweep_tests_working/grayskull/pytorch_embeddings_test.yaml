@@ -22,11 +22,11 @@ test-list:
           - input-1:
             data-layout: ["TILE"]
             data-type: ["UINT32"]
-            buffer-type: ["DRAM"]
+            buffer-type: ["DRAM", "SYSTEM_MEMORY"]
           - input-2:
             data-layout: ["TILE"]
-            data-type: ["BFLOAT16"]
-            buffer-type: ["DRAM"]
+            data-type: ["BFLOAT16", "BFLOAT8_B"]
+            buffer-type: ["DRAM", "SYSTEM_MEMORY"]
         out-buffer-type: ["DRAM"]
       env:
         TT_METAL_SLOW_DISPATCH_MODE: ["", "1"]
