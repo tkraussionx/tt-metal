@@ -208,7 +208,6 @@ namespace kernel_profiler{
                         profiler_control_buffer[deviceIndex] * sizeof(uint32_t));
 
                 //TODO(MO): This can go after for loop
-                noc_async_write_barrier();
                 profiler_control_buffer[hostIndex] = currEndIndex;
             }
             else
@@ -216,6 +215,7 @@ namespace kernel_profiler{
                 profiler_control_buffer[hostIndex] = PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC+1;
             }
         }
+        noc_async_write_barrier();
 #endif //PROFILE_KERNEL
     }
 }

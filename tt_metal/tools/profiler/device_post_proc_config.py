@@ -111,10 +111,10 @@ class default_setup(metaclass=MergeMetaclass):
 
     riscs = [
         "BRISC",
-        "NCRISC",
-        "TRISC_0",
-        "TRISC_1",
-        "TRISC_2",
+        # "NCRISC",
+        # "TRISC_0",
+        # "TRISC_1",
+        # "TRISC_2",
         # "TENSIX",
     ]
 

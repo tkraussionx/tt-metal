@@ -136,6 +136,7 @@ FORCE_INLINE void program_page_transfer(
             src_addr += DeviceCommand::PROGRAM_PAGE_SIZE;
         }
         page_idx += num_to_write;
+
         noc_async_write_barrier();
         multicore_cb_pop_front(
             producer_noc_encoding,
@@ -162,6 +163,8 @@ void write_and_launch_program(
     if (not num_pages) {
         return;
     }
+    // kernel_profiler::mark_fw_start();
+    // kernel_profiler::mark_kernel_start();
 
     // GO signals are just data within pages, so we need to set
     // our local 'recv' address value to 0 before we initiate
@@ -198,10 +201,14 @@ void write_and_launch_program(
             program_page_transfer<false>(command_ptr, producer_noc_encoding, consumer_cb_size, consumer_cb_num_pages, producer_consumer_transfer_num_pages, db_buf_switch, num_pages_in_transfer);
         }
     }
+    // kernel_profiler::mark_kernel_end();
+    // kernel_profiler::mark_fw_end();
+    // kernel_profiler::send_profiler_data_to_dram();
 }
 
 FORCE_INLINE void wait_for_program_completion(
     uint32_t num_workers, uint32_t tensix_soft_reset_addr) {
+
     if (not num_workers)
         return;
 

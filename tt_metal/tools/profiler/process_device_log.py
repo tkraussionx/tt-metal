@@ -22,7 +22,10 @@ from tt_metal.tools.profiler.common import PROFILER_ARTIFACTS_DIR
 import tt_metal.tools.profiler.device_post_proc_config as device_post_proc_config
 import tt_metal.tools.profiler.dummy_refresh as dummy_refresh
 
-intrestingCores = [(0, 0), (6, 9), (0, 9)]
+workers = [(4, 4)]  # [(0, 0), (2, 2), (4, 4), (5, 5)]
+dispatchers = [(6, 9)]  # [(0, 9), (6, 9)]
+
+intrestingCores = workers + dispatchers
 
 
 def coreCompare(core):
