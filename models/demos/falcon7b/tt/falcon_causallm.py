@@ -6,6 +6,8 @@ import torch
 import pytest
 from torch import nn
 from typing import Optional, Tuple
+from loguru import logger
+
 
 import tt_lib
 
@@ -39,6 +41,7 @@ class TtFalconCausalLM(TtFalconModelShared):
         )
         self.model_config = model_config
 
+        logger.info("Causal - Loading weights...")
         lm_head_str = f"lm_head.weight"
         if tt_cache_path is not None:
             self.lm_head_weights = tt_lib.tensor.load_tensor(
@@ -51,6 +54,7 @@ class TtFalconCausalLM(TtFalconModelShared):
                 tt_memory_config=self.model_config["LM_HEAD_MM_WEIGHTS_MEMCFG"],
                 tt_dtype=self.model_config["LM_HEAD_MM_WEIGHTS_DTYPE"],
             )
+        logger.info("Causal - Loading weights finished")
 
     def forward(
         self,
@@ -62,6 +66,7 @@ class TtFalconCausalLM(TtFalconModelShared):
         layer_past_len: int = 0,
         use_cache: bool = False,
     ) -> tt_lib.tensor.Tensor:
+        logger.info("Causal - forward ...")
         hidden_states, presents = super().forward(
             input_embeddings=input_embeddings,
             attention_mask=attention_mask,
@@ -71,7 +76,7 @@ class TtFalconCausalLM(TtFalconModelShared):
             layer_past_len=layer_past_len,
             use_cache=use_cache,
         )
-
+        logger.info("Causal - matmul ...")
         lm_logits = tt_lib.tensor.falcon_lm_head_matmul(
             hidden_states,
             self.lm_head_weights,

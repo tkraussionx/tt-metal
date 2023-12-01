@@ -5,6 +5,8 @@
 import torch
 from abc import abstractmethod
 from typing import Optional, Tuple
+from loguru import logger
+
 
 import tt_lib
 
@@ -41,12 +43,12 @@ class TtFalconModelShared(torch.nn.Module):
         self.model_config = model_config
 
         # So far on CPU until we add embeddings support on device
+        logger.info("Model - Loading embeddings...")
         self.embeddings = torch.nn.Embedding(config.vocab_size, config.hidden_size)
-        self.embeddings.weight = torch.nn.Parameter(
-            state_dict[f"{base_url}.word_embeddings.weight"]
-        )
-
+        self.embeddings.weight = torch.nn.Parameter(state_dict[f"{base_url}.word_embeddings.weight"])
+        logger.info("Model - Loading embeddings finished")
         # stack all decoders
+        logger.info("Model - Loading layers...")
         self.layers = torch.nn.ModuleList(
             [
                 TtFalconDecoderLayer(
@@ -68,21 +70,13 @@ class TtFalconModelShared(torch.nn.Module):
         layernorm_weights_str = f"{layer_name}.ln_f.weight"
         layernorm_bias_str = f"{layer_name}.ln_f.bias"
         if tt_cache_path is not None:
-
             self.layernorm_gamma = tt_lib.tensor.load_tensor(
-                str(
-                    tt_cache_path
-                    / f"{layernorm_weights_str}_{self.model_config['LN_F_WEIGHTS_DTYPE'].name}.bin"
-                )
+                str(tt_cache_path / f"{layernorm_weights_str}_{self.model_config['LN_F_WEIGHTS_DTYPE'].name}.bin")
             ).to(device, self.model_config["LN_F_WEIGHTS_MEMCFG"])
             self.layernorm_beta = tt_lib.tensor.load_tensor(
-                str(
-                    tt_cache_path
-                    / f"{layernorm_bias_str}_{self.model_config['LN_F_BIAS_DTYPE'].name}.bin"
-                )
+                str(tt_cache_path / f"{layernorm_bias_str}_{self.model_config['LN_F_BIAS_DTYPE'].name}.bin")
             ).to(device, self.model_config["LN_F_BIAS_MEMCFG"])
         else:
-
             self.layernorm_gamma = pad_by_zero(
                 self.state_dict[layernorm_weights_str],
                 device,
@@ -96,9 +90,9 @@ class TtFalconModelShared(torch.nn.Module):
                 tt_dtype=self.model_config["LN_F_BIAS_DTYPE"],
             )[0]
         self.layernorm_eps = config.layer_norm_epsilon
+        logger.info("Model - Loading layers finished")
 
     def model_preprocessing(self, llm_mode, input_ids, kv_cache_len, num_input_tokens):
-
         assert input_ids.dim() == 2
         batch_size, sequence_size = input_ids.shape
 
@@ -129,14 +123,11 @@ class TtFalconModelShared(torch.nn.Module):
             )
 
             tt_attention_mask = torch2tt_tensor(
-                (attention_mask_bool_padded * -1e3).expand(
-                    -1, self.config.num_attention_heads, -1, -1
-                ),
+                (attention_mask_bool_padded * -1e3).expand(-1, self.config.num_attention_heads, -1, -1),
                 self.device,
                 tt_memory_config=self.model_config["ATTN_MASK_MEMCFG"],
                 tt_dtype=self.model_config["ATTN_MASK_DTYPE"],
             )
-
 
         elif llm_mode == "decode":
             assert batch_size % 32 == 0, "For decode, batch_size must be multiple of 32!"
@@ -152,28 +143,25 @@ class TtFalconModelShared(torch.nn.Module):
             attention_mask_bool = torch.zeros(batch_size, 1, sequence_size, num_input_tokens, dtype=bool)
             attention_mask_bool[:, :, :, -1] = True
 
-            num_max_tokens = nearest_32(kv_cache_len + 1) # Potentially, num_max_tokens must be provided as a separate argument
+            num_max_tokens = nearest_32(
+                kv_cache_len + 1
+            )  # Potentially, num_max_tokens must be provided as a separate argument
             attention_mask_bool_padded = torch.cat(
                 (
                     attention_mask_bool,
                     torch.ones(batch_size, 1, sequence_size, num_max_tokens - num_input_tokens, dtype=bool),
-
                 ),
                 dim=-1,
             )
             tt_attention_mask = torch2tt_tensor(
-                (attention_mask_bool_padded.transpose(0, 2) * -1e3).expand(
-                    -1, self.config.num_attention_heads, -1, -1
-                ),
+                (attention_mask_bool_padded.transpose(0, 2) * -1e3).expand(-1, self.config.num_attention_heads, -1, -1),
                 self.device,
                 tt_memory_config=self.model_config["ATTN_MASK_MEMCFG"],
                 tt_dtype=self.model_config["ATTN_MASK_DTYPE"],
             )
 
         else:
-            raise NotImplementedError(
-                f"Llm mode {llm_mode} is not supported! Must be one of prefill or decode."
-            )
+            raise NotImplementedError(f"Llm mode {llm_mode} is not supported! Must be one of prefill or decode.")
 
         return tt_embeddings, tt_attention_mask
 
