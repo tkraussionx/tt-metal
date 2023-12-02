@@ -4,6 +4,7 @@
 
 #include "eth_l1_address_map.h"
 #include "ethernet/dataflow_api.h"
+#include "generated_bank_to_noc_coord_mapping.h"
 #include "noc_nonblocking_api.h"
 #include "noc_parameters.h"
 #include "risc_attribs.h"
