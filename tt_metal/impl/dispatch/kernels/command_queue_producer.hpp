@@ -114,7 +114,8 @@ void produce(
         }
 
         uint32_t total_reads_issued = 0;
-
+        uint32_t total_num_writes_completed = 0;
+        uint32_t total_num_reads_completed = 0;
         for(uint32_t core_id = 0; core_id < num_cores; core_id++){
             uint32_t core_id_x = 1;
             uint32_t core_id_y = 1;
@@ -129,40 +130,52 @@ void produce(
             //uint32_t num_pages_left_in_consumer_cb = (l1_consumer_fifo_limit + 1 - dst_addr) / page_size;
             uint32_t num_to_write = min(num_pages, producer_consumer_transfer_num_pages); // This must be a bigger number for perf.
             //num_to_write = min(num_to_write, num_pages_left_in_consumer_cb);
-            uint32_t num_reads_issued = 0;
-            uint32_t num_reads_completed = 0;
-            uint32_t num_writes_completed = 0;
+            uint32_t num_reads_issued_core = 0;
+            uint32_t num_reads_completed_core = 0;
+            uint32_t num_writes_completed_core = 0;
 
-            while (num_writes_completed != num_pages) {
+            while (num_writes_completed_core != num_pages) {
                 // Context switch between reading in pages and sending them to the consumer.
                 // These APIs are non-blocking to allow for context switching.
-                if (cb_producer_space_available(num_to_read) and num_reads_issued < num_pages) {
+                DPRINT << "NUM TO READ " << num_to_read << ENDL();
+                DPRINT << "NUM READS ISSUED CORE " << num_reads_issued_core << ENDL();
+                DPRINT << "NUM WRITES COMPLETED CORE " << num_writes_completed_core << ENDL();
+                DPRINT << "TOTAL NUM READS ISSUED  " << total_reads_issued << ENDL();
+                DPRINT << "TOTAL NUM WRITES COMPLETED " << total_num_writes_completed << ENDL();
+                DPRINT << "CB_PRODUCER_SPACE_AVAILABLE " << (uint32_t)cb_producer_space_available(num_to_read) << ENDL();
+                DPRINT << "NUM_PAGES " << num_pages << ENDL();
+                if (cb_producer_space_available(num_to_read) and num_reads_issued_core < num_pages) {
                     uint32_t l1_write_ptr = get_write_ptr(0);
-
+                    //DPRINT << "GOT WRITE PTR " << ENDL();
                     if((BufferType)src_buf_type == BufferType::SYSTEM_MEMORY){
                         Buffer src_buffer((BufferType)src_buf_type, bank_base_address, page_size);
                         src_buffer.noc_async_read_buffer(l1_write_ptr, total_reads_issued, num_to_read, 0);
 
                     }else{
                         ShardedBuffer src_buffer(page_size, bank_base_address);
-                        src_buffer.noc_async_read_buffer(l1_write_ptr, num_to_read, num_reads_issued, core_id_x, core_id_y);
+                        src_buffer.noc_async_read_buffer(l1_write_ptr, num_to_read, num_reads_issued_core, core_id_x, core_id_y);
                     }
+                    //DPRINT << "FINISHED WRITE " << ENDL();
                     cb_push_back(0, num_to_read);
-                    num_reads_issued += num_to_read;
+                    DPRINT << "FINISHED PUSH_BACK " << ENDL();
+                    num_reads_issued_core += num_to_read;
                     total_reads_issued += num_to_read;
-                    uint32_t num_pages_left = num_pages - num_reads_issued;
+                    uint32_t num_pages_left = num_pages - num_reads_issued_core;
                     num_to_read = min(num_pages_left, fraction_of_producer_cb_num_pages);
                 }
+                DPRINT << "FINISHED READ_CB_SECTION " << ENDL();
 
                 uint32_t dst_addr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_db_cb_wr_ptr_addr(db_buf_switch))[0] << 4;
+                DPRINT << "FINISHED GETTING DST_ADDR " << ENDL();
                 uint32_t num_pages_left_in_consumer_cb = (l1_consumer_fifo_limit + 1 - dst_addr) / page_size;
                 DPRINT << "NUM_PAGES_LEFT_IN_CONSUMER_CB_WITH_DST_ADDR " << num_pages_left_in_consumer_cb << ENDL();
+
                 num_to_write = min(num_to_write, num_pages_left_in_consumer_cb);
 
-                if (num_reads_issued > num_writes_completed and cb_consumer_space_available(db_buf_switch, num_to_write)) {
-                    if (num_writes_completed == num_reads_completed) {
+                if (num_reads_issued_core > num_writes_completed_core and cb_consumer_space_available(db_buf_switch, num_to_write)) {
+                    if (num_writes_completed_core == num_reads_completed_core) {
                         noc_async_read_barrier();
-                        num_reads_completed = num_reads_issued;
+                        num_reads_completed_core = num_reads_issued_core;
                     }
 
                     uint64_t dst_noc_addr = consumer_noc_encoding | dst_addr;
@@ -187,8 +200,9 @@ void produce(
                         }
                     }
 
-                    num_writes_completed += num_to_write;
-                    num_to_write = min(num_pages - num_writes_completed, producer_consumer_transfer_num_pages);
+                    num_writes_completed_core += num_to_write;
+                    total_num_writes_completed += num_to_write;
+                    num_to_write = min(num_pages - num_writes_completed_core, producer_consumer_transfer_num_pages);
                 }
             }
         }
