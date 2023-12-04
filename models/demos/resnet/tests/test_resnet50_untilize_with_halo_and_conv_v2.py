@@ -547,7 +547,9 @@ def test_resnet50_conv(
             tt_lib.tensor.Layout.ROW_MAJOR,
         ).to(device, interleaved_mem_config)
 
+        print("OLD CONV")
         output_on_device = conv(conv_input_on_device)
+        print("DONE OLD CONV")
 
         # convert tiled output to RM
         assert output_on_device.layout() == tt_lib.tensor.Layout.TILE
@@ -562,7 +564,9 @@ def test_resnet50_conv(
         )
 
         # Copy to host
+        print("OLD CONV res to cpu")
         out = output_on_device.cpu()
+        print("DONE OLD CONV res to cpu")
         assert out.layout() == tt_lib.tensor.Layout.ROW_MAJOR
 
         out_result = out.to_torch()
@@ -597,6 +601,7 @@ def test_resnet50_conv(
             grid_size,
             num_cores_nhw,
         ]
+        print("SETTING UP CONV")
         conv = TTPyConv(
             sliding_window_op_params,
             conv_weight_pyt.reshape(-1).tolist(),
@@ -617,6 +622,7 @@ def test_resnet50_conv(
             math_fidelity=math_fidelity,
             act_c_num_blocks=act_c_num_blocks,
         )
+        print("DONE SETTING UP CONV")
 
         conv_input = tt_lib.tensor.Tensor(
             conv_input_pyt_nhwc.reshape(-1).tolist(),
@@ -666,11 +672,16 @@ def test_resnet50_conv(
             )
 
         # Untilize with halo concat
+        print("SETTING UP UNTILIZE")
         tt_py_untilize_with_halo_op = TTPyUntilizeWithHalo(device, sliding_window_op_params)
+        print("DONE SETTING UP UNTILIZE")
+        print("UNTILIZE")
         conv_input_on_device = tt_py_untilize_with_halo_op(conv_input_on_device)
+        print("DONE UNTILIZE")
 
         # Conv with new reader for sharded untilized with halo inputs
         output_on_device = conv(conv_input_on_device)
+        print("DONE CONV")
 
         # Convert sharded output to tiled interleaved
         output_on_device = tt_lib.tensor.sharded_to_interleaved(output_on_device, interleaved_mem_config)

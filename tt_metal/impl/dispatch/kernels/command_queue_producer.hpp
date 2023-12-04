@@ -191,10 +191,10 @@ void produce(
                         uint32_t * ptr = (uint32_t *)l1_read_ptr;
                         for (uint32_t i = 0; i < num_to_write; i++) {
                             if((BufferType)src_buf_type == BufferType::SYSTEM_MEMORY){
-                                DPRINT << "WRITING PAGE TO SYSTEM MEMORY : " << hack_val++ << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
+                                //DPRINT << "WRITING PAGE TO SYSTEM MEMORY : " << hack_val++ << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
                             }
                             else{
-                                DPRINT << "WRITING PAGE TO SHARDED BUFFER : " << hack_val++ << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
+                                //DPRINT << "WRITING PAGE TO SHARDED BUFFER : " << hack_val++ << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
 
                             }
                         }
@@ -240,7 +240,7 @@ void produce_sharded(
             const uint32_t core_id_y = command_ptr[8+core_id*3];
             uint32_t fraction_of_producer_cb_num_pages = consumer_cb_num_pages / 2;
             uint32_t num_to_read = min(num_pages, fraction_of_producer_cb_num_pages);
-            DPRINT << "PRODUCER: core_id_x " << DEC() << core_id_x << " core_id_y " << core_id_y << " num_pages " << num_pages << ENDL();
+            //DPRINT << "PRODUCER: core_id_x " << DEC() << core_id_x << " core_id_y " << core_id_y << " num_pages " << num_pages << ENDL();
             uint32_t num_to_write = min(num_pages, producer_consumer_transfer_num_pages); // This must be a bigger number for perf.
             uint32_t num_reads_completed_core = 0;
             uint32_t num_writes_completed_core = 0;
@@ -265,7 +265,7 @@ void produce_sharded(
                         DPRINT << "PRODUCER:  NUM_READS_ISSUED " << num_writes_completed_core << ENDL();
                         uint32_t * ptr = (uint32_t *)l1_write_ptr;
                         for (uint32_t i = 0; i < num_to_write; i++) {
-                            DPRINT << "PRODUCER WRITING TO CB : PAGE: " << i << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
+                            //DPRINT << "PRODUCER WRITING TO CB : PAGE: " << i << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
                         }
                     }
 
@@ -294,7 +294,7 @@ void produce_sharded(
                         DPRINT << "PRODUCER:  NUM_WRITES COMPLETED " << num_writes_completed_core << ENDL();
                         uint32_t * ptr = (uint32_t *)l1_read_ptr;
                         for (uint32_t i = 0; i < num_to_write; i++) {
-                            DPRINT << "PRODUCER WRITING TO NOC : PAGE: " << i << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
+                            //DPRINT << "PRODUCER WRITING TO NOC : PAGE: " << i << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
                         }
                     }
 

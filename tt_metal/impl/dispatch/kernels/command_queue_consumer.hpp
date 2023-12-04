@@ -91,7 +91,7 @@ FORCE_INLINE void write_buffers(
                 DPRINT << "l1_consumer_fifo_limit: " << l1_consumer_fifo_limit + 1 << ENDL();
                 DPRINT << "SRC ADDR: " << src_addr << ENDL();
                 DPRINT << "NUM PAGES LEFT IN CONSUMER CB: " << num_pages_left_in_consumer_cb << ENDL();
-                DPRINT << "CONSUMER: waiting for multicore CB " << DEC() <<  num_to_write << " pages " << ENDL();
+                //DPRINT << "CONSUMER: waiting for multicore CB " << DEC() <<  num_to_write << " pages " << ENDL();
                 multicore_cb_wait_front(db_buf_switch, num_to_write);
                 if((BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY){
                     Buffer buffer((BufferType)dst_buf_type, bank_base_address, page_size);
@@ -102,15 +102,15 @@ FORCE_INLINE void write_buffers(
                     buffer_sharded.noc_async_write_buffer(src_addr, num_to_write, id, core_id_x, core_id_y);
                 }
                 noc_async_write_barrier();
-                DPRINT << "CONSUMER: wrote " << DEC() <<  num_to_write << " pages " << ENDL();
+                //DPRINT << "CONSUMER: wrote " << DEC() <<  num_to_write << " pages " << ENDL();
                 if(num_to_write > 0){
                     DPRINT << "CONSUMER WRITING " << num_to_write << " PAGES TO MULTICORE_CB " << ENDL();
                     uint32_t * ptr = (uint32_t *)src_addr;
                     for (uint32_t i = 0; i < num_to_write; i++) {
                         if((BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY){
-                            DPRINT << "CONSUMER WRITING TO SYSTEM_MEMORY : PAGE: " << i << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
+                            //DPRINT << "CONSUMER WRITING TO SYSTEM_MEMORY : PAGE: " << i << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
                         }else{
-                            DPRINT << "CONSUMER WRITING TO SHARDED_BUFFER : PAGE: " << i << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
+                            //DPRINT << "CONSUMER WRITING TO SHARDED_BUFFER : PAGE: " << i << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
                         }
                     }
                 }
@@ -164,7 +164,7 @@ FORCE_INLINE void write_buffers_sharded(
                 DPRINT << "l1_consumer_fifo_limit: " << l1_consumer_fifo_limit + 1 << ENDL();
                 DPRINT << "SRC ADDR: " << src_addr << ENDL();
                 DPRINT << "NUM PAGES LEFT IN CONSUMER CB: " << num_pages_left_in_consumer_cb << ENDL();
-                DPRINT << "CONSUMER: writing " << DEC() <<  num_to_write << " pages " << ENDL();
+                //DPRINT << "CONSUMER: writing " << DEC() <<  num_to_write << " pages " << ENDL();
                 multicore_cb_wait_front(db_buf_switch, num_to_write);
                 if((BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY){
                     Buffer buffer((BufferType)dst_buf_type, bank_base_address, page_size);
@@ -180,9 +180,9 @@ FORCE_INLINE void write_buffers_sharded(
                     uint32_t * ptr = (uint32_t *)src_addr;
                     for (uint32_t i = 0; i < num_to_write; i++) {
                         if((BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY){
-                            DPRINT << "CONSUMER WRITING TO SYSTEM_MEMORY : PAGE: " << i << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
+                            //DPRINT << "CONSUMER WRITING TO SYSTEM_MEMORY : PAGE: " << i << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
                         }else{
-                            DPRINT << "CONSUMER WRITING TO SHARDED_BUFFER : PAGE: " << i << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
+                            //DPRINT << "CONSUMER WRITING TO SHARDED_BUFFER : PAGE: " << i << " FIRST ELEMENT " << DEC() << ptr[i*page_size/4] << ENDL();
                         }
                     }
                 }
