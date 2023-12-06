@@ -468,14 +468,14 @@ void tt_await_debug_print_server() {
 
 // The print server is not valid without alive Cluster and tt_device
 void tt_start_debug_print_server(
-    std::function<CoreCoord ()>get_grid_size,
-    std::function<CoreCoord (CoreCoord)>worker_from_logical
-) {
+    const chip_id_t& device_id,
+    std::function<CoreCoord()> get_grid_size,
+    std::function<CoreCoord(CoreCoord)> worker_from_logical) {
     if (tt::llrt::OptionsG.get_dprint_enabled()) {
         TT_FATAL(DebugPrintServerContext::inst == nullptr, "Multiple print servers not allowed");
         TT_FATAL(DebugPrintServerContext::ProfilerIsRunning == false, "Device side profiler is running, cannot start print server");
 
-        tt::Cluster::instance().reset_debug_print_server_buffers();
+        tt::Cluster::instance().reset_debug_print_server_buffers(device_id);
 
         // A set of all valid worker cores, used for checking the user input.
         auto compare_coords = [](const CoreCoord& a, const CoreCoord& b){

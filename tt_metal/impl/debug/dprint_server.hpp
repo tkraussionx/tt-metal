@@ -40,9 +40,9 @@ This call is not thread safe, and there is only one instance of print server sup
 
 */
 void tt_start_debug_print_server(
-    std::function<CoreCoord ()>get_grid_size,
-    std::function<CoreCoord (CoreCoord)>worker_from_logical
-);
+    const chip_id_t &device_id,
+    std::function<CoreCoord()> get_grid_size,
+    std::function<CoreCoord(CoreCoord)> worker_from_logical);
 
 /*
 @brief Stops the print server thread. This call is optional.

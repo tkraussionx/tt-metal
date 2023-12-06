@@ -261,9 +261,9 @@ bool Device::initialize(const std::vector<uint32_t>& l1_bank_remap) {
     }
 
     tt_start_debug_print_server(
+        this->id(),
         [&, this]() { return this->logical_grid_size(); },
-        [&, this](CoreCoord core) { return this->worker_core_from_logical_core(core); }
-    );
+        [&, this](CoreCoord core) { return this->worker_core_from_logical_core(core); });
     llrt::watcher_init(this->id(),
                        [&, this]() { return this->logical_grid_size(); },
                        [&, this](CoreCoord core) { return this->worker_core_from_logical_core(core); }
