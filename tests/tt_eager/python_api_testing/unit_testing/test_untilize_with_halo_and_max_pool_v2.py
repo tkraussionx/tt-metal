@@ -34,6 +34,7 @@ def volume(shape):
     "act_shape",  ## NCHW
     (
         (  ## Only resnet shapes supported for now in untilize with halo + maxpool
+            [1, 64, 32, 32],
             [1, 64, 112, 112],
             [4, 64, 112, 112],
             [8, 64, 112, 112],

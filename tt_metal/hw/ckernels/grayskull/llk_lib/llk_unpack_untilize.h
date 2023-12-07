@@ -13,6 +13,8 @@
 #include "cunpack_common.h"
 #include "ckernel_globals.h"
 
+#include "debug/dprint.h"
+
 using namespace ckernel;
 using namespace ckernel::unpacker;
 
@@ -223,6 +225,8 @@ inline void llk_unpack_untilize_pass(std::uint32_t operand, std::uint32_t block_
 }
 
 inline void llk_unpack_untilize(std::uint32_t operand, std::uint32_t block_c_tiles) {
+    DPRINT << "IN" << ENDL();
     llk_unpack_untilize_pass<true>(operand, block_c_tiles);
+    DPRINT << "HERE" << ENDL();
     llk_unpack_untilize_pass<false>(operand, block_c_tiles);
 }

@@ -5,6 +5,17 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 
+inline void print_pages(uint32_t l1_addr, uint32_t pagelen, uint32_t npages, uint32_t start = 0) {
+    volatile tt_l1_ptr uint16_t* ptr = reinterpret_cast<volatile tt_l1_ptr uint16_t*>(l1_addr) + start * pagelen;
+    for (uint32_t page = 0; page < npages; ++ page) {
+        DPRINT << start + page << ": ";
+        for (uint32_t j = 0; j < pagelen; ++ j, ++ ptr) {
+            DPRINT << BF16(*ptr) << " ";
+        }
+        DPRINT << ENDL();
+    }
+}
+
 void kernel_main() {
 
     // Constexpr
@@ -42,6 +53,7 @@ void kernel_main() {
     auto write_tiles = [&] (const uint32_t& num_tiles, const uint32_t& width_size) {
         cb_wait_front(cb_id_out0, num_tiles);
         uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
+        print_pages(l1_read_addr, width_size >> 1, tile_height);
         for (uint32_t k = 0; k < tile_height; k++) {
             uint64_t dst_noc_addr = base_dst_noc_addr[k];
             noc_async_write(l1_read_addr, dst_noc_addr, width_size);
