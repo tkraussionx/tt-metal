@@ -127,6 +127,9 @@ class Cluster {
     // Returns connected ethernet core on the other chip
     std::tuple<chip_id_t, CoreCoord> get_connected_ethernet_core(std::tuple<chip_id_t, CoreCoord> eth_core) const;
 
+    // Returns chip id from chip ethernet coordinates
+    chip_id_t& get_chip_id_from_chip_ethernet_coord(eth_coord_t ethernet_coord) const;
+
    private:
     Cluster();
     ~Cluster();
@@ -161,6 +164,10 @@ class Cluster {
     std::unordered_map<chip_id_t, std::set<chip_id_t>> devices_grouped_by_assoc_mmio_device_;
     // Save mapping of device id to associated MMIO device id for fast lookup
     std::unordered_map<chip_id_t, chip_id_t> device_to_mmio_device_;
+
+
+    // Map of chip ethernet coordinates to chip ids
+    std::unordered_map<eth_coord_t, chip_id_t> chip_eth_coord_to_chip_id_;
 
     tt_device_dram_address_params dram_address_params = {
         DRAM_BARRIER_BASE

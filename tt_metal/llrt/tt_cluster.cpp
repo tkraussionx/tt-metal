@@ -113,6 +113,12 @@ void Cluster::generate_cluster_descriptor() {
             this->device_to_mmio_device_[device_id] = closest_mmio_device_id;
         }
     }
+
+    // Populate map of ethernet coord to chip ids
+    const auto chip_locations = this->cluster_desc_->get_chip_locations();
+    for (const auto &[chip_id, eth_coord] : chip_locations) {
+      this->chip_eth_coord_to_chip_id_.insert({eth_coord, chip_id});
+    }
 }
 
 void Cluster::initialize_device_drivers() {
@@ -617,6 +623,11 @@ std::tuple<chip_id_t, CoreCoord> Cluster::get_connected_ethernet_core(std::tuple
         this->cluster_desc_->get_chip_and_channel_of_remote_ethernet_core(std::get<0>(eth_core), eth_chan);
     return std::make_tuple(
         std::get<0>(connected_eth_core), soc_desc.chan_to_logical_eth_core_map.at(std::get<1>(connected_eth_core)));
+}
+
+chip_id_t& Cluster::get_chip_id_from_chip_ethernet_coord(eth_coord_t ethernet_coord) const {
+  TT_ASSERT(this->chip_eth_coord_to_chip_id_.find(ethernet_coord) != this->chip_eth_coord_to_chip_id_.end());
+  return this->chip_eth_coord_to_chip_id_.at(ethernet_coord);
 }
 
 }  // namespace tt
