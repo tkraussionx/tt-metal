@@ -166,7 +166,7 @@ void MAIN {
     tilize_in(in0_pretilize_cb_id, in0_subblock_h, in0_block_w, in0_num_subblocks, tilized_in0_cb_id);
     // TODO: unpack_reconfig_data_format_srca(in0_pretilize_cb_id, in1_cb_id) doesn't work if in0 is BFLOATB_B and in1 is BFLOAT16
     mm_block_init_short();
-    unpack_reconfig_data_format_srca(in1_cb_id);
+    unpack_reconfig_data_format_srca(in0_pretilize_cb_id, in1_cb_id);
     #endif
 
     // in1 num blocks w is the outer loop. Output blocks are computed in col major order.

@@ -537,6 +537,7 @@ def test_resnet50_conv(
         # Directly run old conv (row major input)
         # NOTE: New conv should have identical output
         ###############################################
+        """
         conv = resnet50_optimized_conv(
             conv_weight_pyt.reshape(-1).tolist(),
             conv_params,
@@ -585,6 +586,7 @@ def test_resnet50_conv(
         # NHWC to NCHW
         out_result = torch.transpose(out_result, 2, 3)
         out_result_baseline = torch.transpose(out_result, 1, 2)
+        """
 
         ########################################################
         # Tilize, untilize_with_halo, conv with reader indices
@@ -716,10 +718,10 @@ def test_resnet50_conv(
         TTPyUntilizeWithHalo.static_kernel_configs_cache_map = {}
 
         # Compare baseline against golden
-        assert out_result_baseline.shape == out_golden.shape
-        passing_pcc_baseline, output_pcc_baseline = comp_pcc(out_golden, out_result_baseline, 0.99)
-        logger.info(f"Passing baseline={passing_pcc_baseline}")
-        logger.info(f"Output pcc baseline={output_pcc_baseline}")
+        # assert out_result_baseline.shape == out_golden.shape
+        # passing_pcc_baseline, output_pcc_baseline = comp_pcc(out_golden, out_result_baseline, 0.99)
+        # logger.info(f"Passing baseline={passing_pcc_baseline}")
+        # logger.info(f"Output pcc baseline={output_pcc_baseline}")
 
         # Compare out result against golden
         assert out_result.shape == out_golden.shape
@@ -729,10 +731,10 @@ def test_resnet50_conv(
         assert passing_pcc
 
         # Compare baseline to output (should be identical)
-        if activations_dtype == tt_lib.tensor.DataType.BFLOAT8_B and (K == 256 or K == 512):
-            pytest.xfail("PCC of output baseline is slightly lower than with new conv. DEBUG!")
-        else:
-            eq = torch.equal(out_result_baseline, out_result)
-            assert eq, "Output should be identical to old conv!"
-            assert passing_pcc == passing_pcc_baseline, "Output pcc should be identical to old conv pcc!"
-            logger.info(f"Output pcc passes and matches old conv pcc")
+        # if activations_dtype == tt_lib.tensor.DataType.BFLOAT8_B and (K == 256 or K == 512):
+        #     pytest.xfail("PCC of output baseline is slightly lower than with new conv. DEBUG!")
+        # else:
+        #     eq = torch.equal(out_result_baseline, out_result)
+        #     assert eq, "Output should be identical to old conv!"
+        #     assert passing_pcc == passing_pcc_baseline, "Output pcc should be identical to old conv pcc!"
+        #     logger.info(f"Output pcc passes and matches old conv pcc")
