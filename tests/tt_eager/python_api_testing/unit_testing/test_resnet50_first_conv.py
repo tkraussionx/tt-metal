@@ -200,6 +200,7 @@ def test_resnet50_first_conv(
             A_cl_device,
             B_tiled,
             bias_device,
+            None,
             [R, padded_S, stride_h, stride_w, 0, 0],
             K,
             untilize_out,
