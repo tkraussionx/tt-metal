@@ -1398,6 +1398,12 @@ class ResNet(nn.Module):
         )  # num_classes = 1000
         # self.fc = nn.Linear(512 * block.expansion, num_classes)
 
+    def __del__(self):
+        # Need to clear global static configs for each Resnet run
+        TTPyConv.static_kernel_configs_cache_map = {}
+        TTPyMaxPool.static_kernel_configs_cache_map = {}
+        TTPyUntilizeWithHalo.static_kernel_configs_cache_map = {}
+
     def _make_layer(
         self,
         block: Bottleneck,

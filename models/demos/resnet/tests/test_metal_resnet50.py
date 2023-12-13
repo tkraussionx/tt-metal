@@ -202,7 +202,3 @@ def test_run_resnet50_inference(
         passing_pcc, _ = comp_pcc(torch_output, tt_output, pcc=valid_pcc)
         assert passing_pcc
         # assert passing # fails because of torch.allclose
-
-        TTPyConv.static_kernel_configs_cache_map = {}
-        TTPyMaxPool.static_kernel_configs_cache_map = {}
-        TTPyUntilizeWithHalo.static_kernel_configs_cache_map = {}
