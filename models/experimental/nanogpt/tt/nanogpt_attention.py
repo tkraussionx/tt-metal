@@ -6,17 +6,18 @@ import torch
 import torch.nn as nn
 import tt_lib
 import math
-from tt_lib.fallback_ops import fallback_ops
-from models.helper_funcs import Linear
 
+# from models.helper_funcs import Linear
 from models.utility_functions import (
     tt_to_torch_tensor,
     torch_to_tt_tensor_rm,
 )
+from models.experimental.nanogpt.nanogpt_helper_funcs import format_tensor, unpad_from_zero
+from models.helper_funcs import Linear
 
 
 class TtCausalSelfAttention(nn.Module):
-    def __init__(self, config, state_dict, base_address, device):
+    def __init__(self, config, base_address, device, tt_cache_path, dtype):
         super().__init__()
         assert config.n_embd % config.n_head == 0
 
@@ -24,29 +25,39 @@ class TtCausalSelfAttention(nn.Module):
         self.block_size = 1024
 
         self.device = device
+        self.out_mem_config_l1 = tt_lib.tensor.MemoryConfig(
+            tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1
+        )
+
         # Get the weights
-        self.tt_weight_c_attn = state_dict[f"{base_address}.c_attn.weight"]
-        self.tt_weight_c_proj = state_dict[f"{base_address}.c_proj.weight"]
+        self.tt_weight_c_attn = tt_lib.tensor.load_tensor(
+            tt_cache_path + base_address + ".c_attn.weight" + str(dtype) + ".bin"
+        ).to(self.device, self.out_mem_config_l1)
 
-        # Push weights to Ttp device
-        self.tt_weight_c_attn = torch_to_tt_tensor_rm(self.tt_weight_c_attn, self.device)
-
-        self.tt_weight_c_proj = torch_to_tt_tensor_rm(self.tt_weight_c_proj, self.device)
+        self.tt_weight_c_proj = tt_lib.tensor.load_tensor(
+            tt_cache_path + base_address + ".c_proj.weight" + str(dtype) + ".bin"
+        ).to(self.device, self.out_mem_config_l1)
 
         self.tt_weight_c_attn = tt_lib.tensor.transpose(self.tt_weight_c_attn, -2, -1)
         self.tt_weight_c_proj = tt_lib.tensor.transpose(self.tt_weight_c_proj, -2, -1)
 
         # Load biases
-        self.tt_bias_c_attn = torch_to_tt_tensor_rm(state_dict[f"{base_address}.c_attn.bias"], self.device)
+        self.tt_bias_c_attn = tt_lib.tensor.load_tensor(
+            tt_cache_path + base_address + ".c_attn.bias" + str(dtype) + ".bin"
+        ).to(self.device, self.out_mem_config_l1)
 
-        self.tt_bias_c_proj = torch_to_tt_tensor_rm(state_dict[f"{base_address}.c_proj.bias"], self.device)
+        self.tt_bias_c_proj = tt_lib.tensor.load_tensor(
+            tt_cache_path + base_address + ".c_proj.bias" + str(dtype) + ".bin"
+        ).to(self.device, self.out_mem_config_l1)
 
         self.n_head = self.config.n_head
         self.n_embd = self.config.n_embd
 
+        temp_bias = tt_lib.tensor.tril(tt_lib.tensor.ones([1, 1, self.block_size, self.block_size]))
+        temp_bias = tt_to_torch_tensor(temp_bias)
         self.register_buffer(
             "bias",
-            torch.tril(torch.ones(self.block_size, self.block_size)).view(1, 1, self.block_size, self.block_size),
+            temp_bias,
         )
 
         self.c_attn = Linear(
@@ -54,16 +65,18 @@ class TtCausalSelfAttention(nn.Module):
             3 * config.n_embd,
             self.tt_weight_c_attn,
             self.tt_bias_c_attn,
+            output_mem_config=self.out_mem_config_l1,
         )
         self.c_proj = Linear(
             self.config.n_embd,
             self.config.n_embd,
             self.tt_weight_c_proj,
             self.tt_bias_c_proj,
+            output_mem_config=self.out_mem_config_l1,
         )
 
     def const_tensor(self, shape, value):
-        return tt_lib.tensor.full(shape, value)
+        return tt_lib.tensor.full(shape, value, output_mem_config=self.out_mem_config_l1)
 
     def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
         (
@@ -73,47 +86,66 @@ class TtCausalSelfAttention(nn.Module):
             C,
         ) = x.shape()  # batch size, sequence length, embedding dimensionality (n_embd)
 
+        desired_x1_shape = x.shape().copy()
         x1 = self.c_attn(x)
 
-        pt_x1 = tt_to_torch_tensor(x1)
+        desired_x1_shape[-1] = self.tt_weight_c_attn.shape()[-2]
+
+        pt_x1 = unpad_from_zero(x1, desired_x1_shape)
         pt_x1 = pt_x1.squeeze(0)
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
         q, k, v = pt_x1.split(self.n_embd, dim=2)
 
         k = torch_to_tt_tensor_rm(k, self.device)
-        k = fallback_ops.reshape(k, B, T, self.n_head, C // self.n_head)
-        k = tt_lib.tensor.transpose(k, 1, 2)
+        k = tt_lib.tensor.reshape(k, B, T, self.n_head, C // self.n_head)
+        k = tt_lib.tensor.transpose(k, 1, 2, output_mem_config=self.out_mem_config_l1)
 
         q = torch_to_tt_tensor_rm(q, self.device)
-        q = fallback_ops.reshape(q, B, T, self.n_head, C // self.n_head)
-        q = tt_lib.tensor.transpose(q, 1, 2)
+        q = tt_lib.tensor.reshape(q, B, T, self.n_head, C // self.n_head)
+        q = tt_lib.tensor.transpose(q, 1, 2, output_mem_config=self.out_mem_config_l1)
 
         v = torch_to_tt_tensor_rm(v, self.device)
-
-        v = fallback_ops.reshape(v, B, T, self.n_head, C // self.n_head)
-        v = tt_lib.tensor.transpose(v, 1, 2)
+        v = tt_lib.tensor.reshape(v, B, T, self.n_head, C // self.n_head)
+        v = tt_lib.tensor.transpose(v, 1, 2, output_mem_config=self.out_mem_config_l1)
 
         # manual implementation of attention
-        key_layer_transposed = tt_lib.tensor.transpose(k, -2, -1)
-        att = tt_lib.tensor.bmm(q, key_layer_transposed)
+        k = format_tensor(k, tt_lib.tensor.Layout.TILE, self.device, self.out_mem_config_l1)
+        q = format_tensor(q, tt_lib.tensor.Layout.TILE, self.device, self.out_mem_config_l1)
+        v = format_tensor(v, tt_lib.tensor.Layout.TILE, self.device, self.out_mem_config_l1)
+
+        key_layer_transposed = tt_lib.tensor.transpose(k, -2, -1, output_mem_config=self.out_mem_config_l1)
+
+        att = tt_lib.tensor.bmm(q, key_layer_transposed, output_mem_config=self.out_mem_config_l1)
+
+        desired_att_shape = key_layer_transposed.shape().copy()
+        desired_att_shape[-1] = desired_att_shape[-2] = T
 
         const_att = self.const_tensor(att.shape(), 1.0 / math.sqrt(k.shape()[-1]))
 
-        att = tt_lib.tensor.mul(att, const_att)
+        const_att = format_tensor(const_att, tt_lib.tensor.Layout.TILE, self.device, self.out_mem_config_l1)
 
-        att = tt_to_torch_tensor(att)
+        att = tt_lib.tensor.mul(att, const_att, output_mem_config=self.out_mem_config_l1)
+
+        att = unpad_from_zero(att, desired_att_shape)
         att = att.masked_fill(self.bias[:, :, :T, :T] == 0, float("-inf"))
 
-        tt_att = torch_to_tt_tensor_rm(att, self.device, put_on_device=False)
+        tt_att = torch_to_tt_tensor_rm(att, self.device, put_on_device=True)
 
-        tt_att = fallback_ops.softmax(tt_att, dim=-1)
+        tt_att = format_tensor(tt_att, tt_lib.tensor.Layout.TILE, self.device, self.out_mem_config_l1)
 
-        tt_y = tt_lib.tensor.bmm(tt_att, v)
+        tt_att = tt_lib.tensor.softmax(tt_att, output_mem_config=self.out_mem_config_l1)
+
+        tt_y = tt_lib.tensor.bmm(tt_att, v, output_mem_config=self.out_mem_config_l1)
+
+        tt_y = format_tensor(tt_y, tt_lib.tensor.Layout.TILE, self.device, self.out_mem_config_l1)
 
         tt_y = tt_lib.tensor.transpose(tt_y, 1, -2)
-        tt_y = fallback_ops.reshape(tt_y, 1, B, T, C)
+
+        tt_y = tt_lib.tensor.reshape(tt_y, 1, B, T, C)
 
         # output projection
+        tt_y = format_tensor(tt_y, tt_lib.tensor.Layout.TILE, self.device, self.out_mem_config_l1)
+
         x2 = self.c_proj(tt_y)
         return x2

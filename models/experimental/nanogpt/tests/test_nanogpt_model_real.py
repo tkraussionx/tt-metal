@@ -2,7 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
+import tt_lib
 import pytest
 
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
@@ -13,27 +13,33 @@ import models.experimental.nanogpt.tt.nanogpt_model as nanogpt_model
 from models.utility_functions import tt_to_torch_tensor, comp_allclose, comp_pcc
 
 
-
+@pytest.mark.parametrize(
+    "dtype",
+    (tt_lib.tensor.DataType.BFLOAT16,),
+)
 @pytest.mark.parametrize(
     "pcc, prompt",
-    ((0.99, "Hello, my dog is a little"),),
+    ((0.98, "Hello, my dog is a little"),),
 )
-def test_nanogpt_model_real(device, pcc, prompt, reset_seeds):
-
+def test_nanogpt_model_real(device, pcc, prompt, dtype, reset_seeds):
     # Prepare input
     model_hf = GPT2LMHeadModel.from_pretrained("gpt2")
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-    sd = model_hf.state_dict()
+
     model_hf.eval()
 
-    inputs = tokenizer(prompt, return_tensors="pt", padding=False)
+    prompt = 8 * [prompt]
+    tokenizer.add_special_tokens({"pad_token": "0"})
+    inputs = tokenizer(prompt, return_tensors="pt", padding=True)
 
     pt_model = model_hf
     pt_out = pt_model.forward(inputs.input_ids)
 
     config = model_hf.config
 
-    tt_model = nanogpt_model.TtGPT(config, sd, device)
+    tt_cache_path = "/mnt/MLPerf/tt_dnn-models/tt/NanoGPT/gpt2/"
+
+    tt_model = nanogpt_model.TtGPT(config, device, tt_cache_path, dtype)
 
     tt_out = tt_model.forward(inputs.input_ids)
 
