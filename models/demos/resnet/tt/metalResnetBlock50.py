@@ -1253,8 +1253,10 @@ class Bottleneck:
             self.model_config["ACTIVATIONS_DTYPE"],
             self.out_in_place,
         )
-        # if self.module_input_shape[0] == 20 and self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64:
-        out = tt_lib.tensor.move_sharded(out)
+        if (
+            self.module_input_shape[0] == 20
+        ):  # and self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64:
+            out = tt_lib.tensor.move_sharded(out)
         return out
 
     def run_layer2_m1(self, x: torch.Tensor) -> torch.Tensor:
