@@ -1202,26 +1202,26 @@ class Bottleneck:
 
                 self.downsample_or_noop = downsample_conv_op_wrapper(self.downsample_conv_on_tt)
 
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+    def run_layer1_m1(self, x: torch.Tensor) -> torch.Tensor:
         # logger.info("This module input shape - ", self.module_input_shape)
         # conv1 is 1x1 conv
         # logger.info("Running conv1")
         out = self.conv1(x)
 
-        if not (self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64):
-            ds_out = self.downsample_or_noop(x)
-            if self.deallocate:
-                x.deallocate()
+        # if not (self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64):
+        #     ds_out = self.downsample_or_noop(x)
+        #     if self.deallocate:
+        #         x.deallocate()
 
-        assert self.conv_halo
+        # assert self.conv_halo
         if self.conv_halo:
             out = self.tt_py_untilize_with_halo_op(out)
-            if self.deallocate and (
-                self.module_input_shape[0] == 20
-                and self.module_input_shape[1] == 56
-                and self.module_input_shape[3] == 256
-            ):
-                out = tt_lib.tensor.move_sharded(out)
+            # if self.deallocate and (
+            #     self.module_input_shape[0] == 20
+            #     and self.module_input_shape[1] == 56
+            #     and self.module_input_shape[3] == 256
+            # ):
+            #     out = tt_lib.tensor.move_sharded(out)
         else:
             out = format_tensor(out, tt_lib.tensor.Layout.ROW_MAJOR, self.device, self.memory_config)
             out = out.reshape(
@@ -1237,10 +1237,10 @@ class Bottleneck:
         # logger.info("Running conv3")
         out = self.conv3(out)
 
-        if self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64:
-            ds_out = self.downsample_or_noop(x)
-            if self.deallocate:
-                x.deallocate()
+        # if self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64:
+        ds_out = self.downsample_or_noop(x)
+        if self.deallocate:
+            x.deallocate()
 
         fused_activations = [tt_lib.tensor.FusibleActivation.RELU]
 
@@ -1253,8 +1253,120 @@ class Bottleneck:
             self.model_config["ACTIVATIONS_DTYPE"],
             self.out_in_place,
         )
-        if self.module_input_shape[0] == 20 and self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64:
+        # if self.module_input_shape[0] == 20 and self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64:
+        out = tt_lib.tensor.move_sharded(out)
+        return out
+
+    def run_layer2_m1(self, x: torch.Tensor) -> torch.Tensor:
+        # logger.info("This module input shape - ", self.module_input_shape)
+        # conv1 is 1x1 conv
+        # logger.info("Running conv1")
+        out = self.conv1(x)
+
+        # if not (self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64):
+        ds_out = self.downsample_or_noop(x)
+        if self.deallocate:
+            x.deallocate()
+        # print("deallocate:", self.deallocate)
+        # assert self.conv_halo
+        if self.conv_halo:
+            out = self.tt_py_untilize_with_halo_op(out)
+            # if self.deallocate and (
+            #     self.module_input_shape[0] == 20
+            #     and self.module_input_shape[1] == 56
+            #     and self.module_input_shape[3] == 256
+            # ):
+            #     print("MOVING SHARDED OUT")
             out = tt_lib.tensor.move_sharded(out)
+        else:
+            out = format_tensor(out, tt_lib.tensor.Layout.ROW_MAJOR, self.device, self.memory_config)
+            out = out.reshape(
+                self.conv1_output_shape[0],
+                self.conv1_output_shape[1],
+                self.conv1_output_shape[2],
+                self.conv1_output_shape[3],
+            )
+
+        # logger.info("Running conv2")
+        out = self.conv2(out)
+        # conv3 is 1x1 conv
+        # logger.info("Running conv3")
+        out = self.conv3(out)
+
+        # if self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64:
+        #     ds_out = self.downsample_or_noop(x)
+        #     if self.deallocate:
+        #         x.deallocate()
+
+        fused_activations = [tt_lib.tensor.FusibleActivation.RELU]
+
+        # logger.info("Running eltwise add")
+        out = tt_lib.tensor.add_without_autoformat(
+            out,
+            ds_out,
+            fused_activations,
+            self.out_memory_config,
+            self.model_config["ACTIVATIONS_DTYPE"],
+            self.out_in_place,
+        )
+        # if self.module_input_shape[0] == 20 and self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64:
+        #    out = tt_lib.tensor.move_sharded(out)
+        return out
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        # logger.info("This module input shape - ", self.module_input_shape)
+        # conv1 is 1x1 conv
+        # logger.info("Running conv1")
+        out = self.conv1(x)
+
+        # if not (self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64):
+        ds_out = self.downsample_or_noop(x)
+        if self.deallocate:
+            x.deallocate()
+        # print("deallocate:", self.deallocate)
+        # assert self.conv_halo
+        if self.conv_halo:
+            out = self.tt_py_untilize_with_halo_op(out)
+            # if self.deallocate and (
+            #     self.module_input_shape[0] == 20
+            #     and self.module_input_shape[1] == 56
+            #     and self.module_input_shape[3] == 256
+            # ):
+            #     print("MOVING SHARDED OUT")
+            #     out = tt_lib.tensor.move_sharded(out)
+        else:
+            out = format_tensor(out, tt_lib.tensor.Layout.ROW_MAJOR, self.device, self.memory_config)
+            out = out.reshape(
+                self.conv1_output_shape[0],
+                self.conv1_output_shape[1],
+                self.conv1_output_shape[2],
+                self.conv1_output_shape[3],
+            )
+
+        # logger.info("Running conv2")
+        out = self.conv2(out)
+        # conv3 is 1x1 conv
+        # logger.info("Running conv3")
+        out = self.conv3(out)
+
+        # if self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64:
+        #     ds_out = self.downsample_or_noop(x)
+        #     if self.deallocate:
+        #         x.deallocate()
+
+        fused_activations = [tt_lib.tensor.FusibleActivation.RELU]
+
+        # logger.info("Running eltwise add")
+        out = tt_lib.tensor.add_without_autoformat(
+            out,
+            ds_out,
+            fused_activations,
+            self.out_memory_config,
+            self.model_config["ACTIVATIONS_DTYPE"],
+            self.out_in_place,
+        )
+        # if self.module_input_shape[0] == 20 and self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64:
+        #    out = tt_lib.tensor.move_sharded(out)
         return out
 
 
@@ -1949,11 +2061,11 @@ class ResNet(nn.Module):
         if self.batch_size == 20:
             x = tt_lib.tensor.move_sharded(x)
 
-        x = self.layer1_module1(x)
+        x = self.layer1_module1.run_layer1_m1(x)
         x = self.layer1_module2(x)
         x = self.layer1_module3(x)
 
-        x = self.layer2_module1(x)
+        x = self.layer2_module1.run_layer2_m1(x)
         x = self.layer2_module2(x)
         x = self.layer2_module3(x)
         x = self.layer2_module4(x)
