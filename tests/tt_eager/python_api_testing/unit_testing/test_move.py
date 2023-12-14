@@ -20,24 +20,34 @@ def run_move_op(test_id, shape, layout, dtype, in0_mem_config, output_mem_config
     """
     torch.manual_seed(1234)
 
+    create_dummy_tensor = True
     # Dummy tensor to shift input tensor in memory
     if test_id == 0:
         dummy_shape = [1, 1, 32, 32]
     elif test_id == 1:
         dummy_shape = shape  # This will allow output and input buffers to not overlap
+    elif test_id == 2:
+        create_dummy_tensor = False  # For no op move
     else:
         raise NotImplementedError(f"Unknown test id: {test_id}!")
 
-    dummy_tensor = torch.randn(dummy_shape)
-    tt_dummy_tensor = ttl.tensor.Tensor(dummy_tensor, dtype).to(layout).to(device, in0_mem_config)
+    if create_dummy_tensor:
+        dummy_tensor = torch.randn(dummy_shape)
+        tt_dummy_tensor = ttl.tensor.Tensor(dummy_tensor, dtype).to(layout).to(device, in0_mem_config)
 
     torch_tensor = torch.randn(shape)
     tt_tensor = ttl.tensor.Tensor(torch_tensor, dtype).to(layout).to(device, in0_mem_config)
 
-    # Free up dummy tensor from memory to make available to move
-    tt_dummy_tensor.deallocate()
+    if create_dummy_tensor:
+        # Free up dummy tensor from memory to make available to move
+        tt_dummy_tensor.deallocate()
 
     output = ttl.tensor.move(tt_tensor, output_mem_config)
+
+    if test_id == 2:
+        # to trigger no-op move issue
+        torch_tensor2 = torch.zeros(shape)
+        tt_tensor2 = ttl.tensor.Tensor(torch_tensor2, dtype).to(layout).to(device, in0_mem_config)
 
     tt_host_rm = output.cpu().to(ttl.tensor.Layout.ROW_MAJOR)
     pyt_got_back_rm = tt_host_rm.to_torch()
@@ -83,8 +93,11 @@ if is_wormhole_b0():
     ids=["BFLOAT8_B-TILE", "BFLOAT16-RM", "BFLOAT16-TILE"],
 )
 @pytest.mark.parametrize("shape", shapes)
-@pytest.mark.parametrize("test_id", (0, 1), ids=["overlap", "non_overlap"])
+@pytest.mark.parametrize("test_id", (0, 1, 2), ids=["overlap", "non_overlap", "no_op_move"])
 def test_move_op(test_id, shape, layout, dtype, in0_mem_config, output_mem_config, device):
+    if test_id == 2 and in0_mem_config != output_mem_config:
+        # no op move is within same memory space
+        pytest.skip()
     run_move_op(test_id, shape, layout, dtype, in0_mem_config, output_mem_config, device)
 
 
