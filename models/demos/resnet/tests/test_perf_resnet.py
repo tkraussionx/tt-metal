@@ -116,6 +116,7 @@ def run_perf_resnet(
         (2, 0.017, 28),
         (8, 0.020, 28),
         (16, 0.020, 28),
+        (20, 0.020, 28),
     ),
 )
 def test_perf_bare_metal(
@@ -146,6 +147,7 @@ def test_perf_bare_metal(
         (2, 0.099, 36),
         (8, 0.099, 36),
         (16, 0.099, 36),
+        (20, 0.099, 36),
     ),
 )
 def test_perf_virtual_machine(
