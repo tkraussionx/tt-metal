@@ -285,7 +285,7 @@ namespace tt::tt_metal{
             {
                 std::lock_guard<std::mutex> lock(cq_creation_mutex);
                 if (not command_queues[id] or (command_queues[id] and command_queues[id]->device != device)) {
-                    command_queues[device->id()] = std::make_unique<CommandQueue>(device);
+                    command_queues[device->id()] = std::make_unique<CommandQueue>(device, id);
                 }
             }
             return *(command_queues[id]);
@@ -313,6 +313,7 @@ namespace tt::tt_metal{
         inline void GenerateDeviceHeaders(Device *device,
                                           const std::string &path)
         {
+
             // Basic Allocator generates number of banks which may not be power of 2, so we could just pad and alias for now
             const size_t num_dram_banks = device->num_banks(BufferType::DRAM);
             const size_t num_dram_banks_pow2 = std::pow(2, std::ceil(std::log2(num_dram_banks)));
@@ -354,10 +355,6 @@ namespace tt::tt_metal{
                 }
             }
 
-            auto dispatch_cores = device->dispatch_cores().begin();
-            CoreCoord producer_logical_core = *dispatch_cores++;
-            CoreCoord consumer_logical_core = *dispatch_cores;
-
             // Create valid PCIe address ranges
             // This implementation assumes contiguous ranges and aggregates the ranges into one bounds check
             // TODO: consider checking multiple ranges to detect straddling transactions
@@ -377,8 +374,7 @@ namespace tt::tt_metal{
                 soc_d.get_dram_cores(),
                 soc_d.get_physical_ethernet_cores(),
                 soc_d.grid_size,
-                harvested_rows,
-                {device->worker_core_from_logical_core(consumer_logical_core)});
+                harvested_rows);
         }
 
         inline void CheckDataMovementConfig(Program &program, const std::string &file_name, const CoreRangeSet &core_ranges) {
@@ -439,69 +435,76 @@ namespace tt::tt_metal{
             );
         }
 
-        // Sending dispatch kernel. TODO(agrebenisan): Needs a refactor
-        inline void SendDispatchKernelToDevice(Device *device) {
+        inline void SendDispatchKernelsToDevice(Device *device) {
             ZoneScoped;
 
             Program dispatch_program = CreateProgram();
-            auto dispatch_cores = device->dispatch_cores().begin();
-            CoreCoord producer_logical_core = *dispatch_cores++;
-            CoreCoord consumer_logical_core = *dispatch_cores;
 
-            CoreCoord producer_physical_core = device->worker_core_from_logical_core(producer_logical_core);
-            CoreCoord consumer_physical_core = device->worker_core_from_logical_core(consumer_logical_core);
+            const uint32_t fifo_size = DeviceCommand::HUGE_PAGE_SIZE / device->producer_cores().size();
+            uint32_t fifo_start = CQ_START;
+            TT_ASSERT(device->producer_cores().size() == device->consumer_cores().size(), "There must be the same number of producers as there are consumers");
+            TT_ASSERT(device->producer_cores().size() > 0, "There must be at least 1 producer/consumer core");
+            TT_ASSERT(device->producer_cores().size() < 3, "There can be at most 2 hardware command queues on a given device");
 
-            std::map<string, string> producer_defines = {
-                {"IS_DISPATCH_KERNEL", ""},
-                {"CONSUMER_NOC_X", std::to_string(consumer_physical_core.x)},
-                {"CONSUMER_NOC_Y", std::to_string(consumer_physical_core.y)},
-            };
-            std::map<string, string> consumer_defines = {
-                {"PRODUCER_NOC_X", std::to_string(producer_physical_core.x)},
-                {"PRODUCER_NOC_Y", std::to_string(producer_physical_core.y)},
-            };
-            std::vector<uint32_t> dispatch_compile_args = {tt::Cluster::instance().get_tensix_soft_reset_addr()};
-            tt::tt_metal::CreateKernel(
-                dispatch_program,
-                "tt_metal/impl/dispatch/kernels/command_queue_producer.cpp",
-                producer_logical_core,
-                tt::tt_metal::DataMovementConfig {
-                    .processor = tt::tt_metal::DataMovementProcessor::RISCV_0,
-                    .noc = tt::tt_metal::NOC::RISCV_0_default,
-                    .compile_args = dispatch_compile_args,
-                    .defines = producer_defines});
+            vector<int> dummy;
+            std::transform(
+                device->producer_cores().begin(), device->producer_cores().end(),
+                device->consumer_cores().begin(), std::back_inserter(dummy),
+                [&device, &dispatch_program, &fifo_size, &fifo_start](const CoreCoord& producer_logical_core, const CoreCoord& consumer_logical_core) {
 
-            tt::tt_metal::CreateKernel(
-                dispatch_program,
-                "tt_metal/impl/dispatch/kernels/command_queue_consumer.cpp",
-                consumer_logical_core,
-                tt::tt_metal::DataMovementConfig {
-                    .processor = tt::tt_metal::DataMovementProcessor::RISCV_0,
-                    .noc = tt::tt_metal::NOC::RISCV_0_default,
-                    .compile_args = dispatch_compile_args,
-                    .defines = consumer_defines});
+                    CoreCoord producer_physical_core = device->worker_core_from_logical_core(producer_logical_core);
+                    CoreCoord consumer_physical_core = device->worker_core_from_logical_core(consumer_logical_core);
+                    std::cout << "PROD LOG: " << producer_logical_core.str() << ", CONS LOG: " << consumer_logical_core.str() << std::endl;
+                    std::cout << "PROD PHYS: " << producer_physical_core.str() << ", CONS PHYS: " << consumer_physical_core.str() << std::endl;
+                    std::cout << std::endl;
 
-            tt::tt_metal::CreateSemaphore(dispatch_program, producer_logical_core, 2);
-            tt::tt_metal::CreateSemaphore(dispatch_program, consumer_logical_core, 0);
+                    std::map<string, string> producer_defines = {
+                        {"CONSUMER_NOC_X", std::to_string(consumer_physical_core.x)},
+                        {"CONSUMER_NOC_Y", std::to_string(consumer_physical_core.y)},
+                    };
+                    std::map<string, string> consumer_defines = {
+                        {"PRODUCER_NOC_X", std::to_string(producer_physical_core.x)},
+                        {"PRODUCER_NOC_Y", std::to_string(producer_physical_core.y)},
+                    };
 
-            CompileProgram(device, dispatch_program);
-            ConfigureDeviceWithProgram(device, dispatch_program);
+                    // TODO(agrebenisan): Use different NOCs for different command queues
+                    tt::tt_metal::CreateKernel(
+                        dispatch_program,
+                        "tt_metal/impl/dispatch/kernels/command_queue_producer.cpp",
+                        producer_logical_core,
+                        tt::tt_metal::DataMovementConfig {
+                            .processor = tt::tt_metal::DataMovementProcessor::RISCV_0,
+                            .noc = tt::tt_metal::NOC::RISCV_0_default,
+                            .defines = producer_defines});
 
-            uint32_t fifo_addr = (HOST_CQ_FINISH_PTR + 32) >> 4;
-            vector<uint32_t> fifo_addr_vector = {fifo_addr};
-            WriteToDeviceL1(device, producer_logical_core, CQ_READ_PTR, fifo_addr_vector);
-            WriteToDeviceL1(device, producer_logical_core, CQ_WRITE_PTR, fifo_addr_vector);
+                    tt::tt_metal::CreateKernel(
+                        dispatch_program,
+                        "tt_metal/impl/dispatch/kernels/command_queue_consumer.cpp",
+                        consumer_logical_core,
+                        tt::tt_metal::DataMovementConfig {
+                            .processor = tt::tt_metal::DataMovementProcessor::RISCV_0,
+                            .noc = tt::tt_metal::NOC::RISCV_0_default,
+                            .defines = consumer_defines});
 
-            tt::Cluster::instance().l1_barrier(device->id());
+                    tt::tt_metal::CreateSemaphore(dispatch_program, producer_logical_core, 2);
+                    tt::tt_metal::CreateSemaphore(dispatch_program, consumer_logical_core, 0);
 
-            const std::tuple<uint32_t, uint32_t> tlb_data = tt::Cluster::instance().get_tlb_data(tt_cxy_pair(device->id(), device->worker_core_from_logical_core(*device->dispatch_cores().begin()))).value();
-            auto [tlb_offset, tlb_size] = tlb_data;
+                    CompileProgram(device, dispatch_program);
+                    ConfigureDeviceWithProgram(device, dispatch_program);
 
-            launch_msg_t msg = dispatch_program.kernels_on_core(producer_logical_core)->launch_msg;
+                    uint32_t fifo_addr = fifo_start >> 4;
+                    vector<uint32_t> fifo_addr_vector = {fifo_addr};
+                    WriteToDeviceL1(device, producer_logical_core, CQ_READ_PTR, fifo_addr_vector);
+                    WriteToDeviceL1(device, producer_logical_core, CQ_WRITE_PTR, fifo_addr_vector);
 
-            // TODO(pkeller): Should use detail::LaunchProgram once we have a mechanism to avoid running all RISCs
-            tt::llrt::write_launch_msg_to_core(device->id(), producer_physical_core, &msg);
-            tt::llrt::write_launch_msg_to_core(device->id(), consumer_physical_core, &msg);
+                    tt::Cluster::instance().l1_barrier(device->id());
+                    launch_msg_t msg = dispatch_program.kernels_on_core(producer_logical_core)->launch_msg;
+
+                    tt::llrt::write_launch_msg_to_core(device->id(), producer_physical_core, &msg);
+                    tt::llrt::write_launch_msg_to_core(device->id(), consumer_physical_core, &msg);
+                    fifo_start += fifo_size;
+                    return 0;
+                });
         }
 
     }

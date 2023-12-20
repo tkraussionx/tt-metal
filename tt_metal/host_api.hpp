@@ -60,7 +60,7 @@ size_t GetNumPCIeDevices();
  * |----------------|------------------------------------------------------------------|-----------------|-----------------------------------------------------|----------|
  * | device_id      | ID of device to target                                           | chip_id_t (int) | 0 to (GetNumAvailableDevices - 1)     | Yes      |
  * */
-Device *CreateDevice(chip_id_t device_id, const std::vector<uint32_t>& l1_bank_remap = {});
+Device *CreateDevice(chip_id_t device_id, const std::vector<uint32_t>& l1_bank_remap = {}, uint32_t num_cq_hw_resources = 1);
 
 /**
  * Resets device and closes device

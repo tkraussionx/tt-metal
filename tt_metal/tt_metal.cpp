@@ -561,7 +561,7 @@ size_t GetNumPCIeDevices() {
 #endif
 }
 
-Device *CreateDevice(chip_id_t device_id, const std::vector<uint32_t>& l1_bank_remap) {
+Device *CreateDevice(chip_id_t device_id, const std::vector<uint32_t>& l1_bank_remap, uint32_t num_cq_hw_resources) {
     Device * dev = new Device(device_id, l1_bank_remap);
     return dev;
 }

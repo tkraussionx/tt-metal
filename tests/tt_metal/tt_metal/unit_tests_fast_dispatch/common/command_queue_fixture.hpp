@@ -63,7 +63,7 @@ class MultiCommandQueueFixture : public ::testing::Test {
     size_t num_devices_;
 };
 
-class MultiCommandQueueFixture : public ::testing::Test {
+class MultiCommandQueueMultiDeviceFixture : public ::testing::Test {
    protected:
     void SetUp() override {
         auto slow_dispatch = getenv("TT_METAL_SLOW_DISPATCH_MODE");
@@ -72,8 +72,6 @@ class MultiCommandQueueFixture : public ::testing::Test {
             GTEST_SKIP();
         }
         arch_ = tt::get_arch_from_string(tt::test_utils::get_env_arch_name());
-
-        num_devices_ = tt::tt_metal::GetNumAvailableDevices();
 
         for (unsigned int id = 0; id < num_devices_; id++) {
             auto* device = tt::tt_metal::CreateDevice(id);
@@ -90,4 +88,25 @@ class MultiCommandQueueFixture : public ::testing::Test {
     std::vector<tt::tt_metal::Device*> devices_;
     tt::ARCH arch_;
     size_t num_devices_;
+};
+
+class MultiCommandQueueSingleDeviceFixture : public ::testing::Test {
+   protected:
+    void SetUp() override {
+        auto slow_dispatch = getenv("TT_METAL_SLOW_DISPATCH_MODE");
+        if (slow_dispatch) {
+            TT_THROW("This suite can only be run with fast dispatch or TT_METAL_SLOW_DISPATCH_MODE unset");
+            GTEST_SKIP();
+        }
+        arch_ = tt::get_arch_from_string(tt::test_utils::get_env_arch_name());
+        uint32_t num_cq_hw_resources = 2;
+        device_ = tt::tt_metal::CreateDevice(0, {}, num_cq_hw_resources);
+    }
+
+    void TearDown() override {
+        tt::tt_metal::CloseDevice(device_);
+    }
+
+    tt::tt_metal::Device* device_;
+    tt::ARCH arch_;
 };

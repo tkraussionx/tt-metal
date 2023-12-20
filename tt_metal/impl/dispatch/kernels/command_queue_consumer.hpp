@@ -233,8 +233,7 @@ void write_and_launch_program(
     }
 }
 
-FORCE_INLINE void wait_for_program_completion(
-    uint32_t num_workers, uint32_t tensix_soft_reset_addr) {
+FORCE_INLINE void wait_for_program_completion(uint32_t num_workers) {
     if (not num_workers)
         return;
 

@@ -73,14 +73,15 @@ class Command {
 class EnqueueReadBufferCommand : public Command {
    private:
     Device* device;
-    SystemMemoryWriter& writer;
+    CommandQueueWriter& writer;
+    const uint32_t command_queue_channel;
     void* dst;
     static constexpr EnqueueCommandType type_ = EnqueueCommandType::ENQUEUE_READ_BUFFER;
 
    public:
     Buffer& buffer;
     uint32_t read_buffer_addr;
-    EnqueueReadBufferCommand(Device* device, Buffer& buffer, void* dst, SystemMemoryWriter& writer);
+    EnqueueReadBufferCommand(Device* device, Buffer& buffer, void* dst, CommandQueueWriter& writer, const uint32_t command_queue_channel);
 
     const DeviceCommand assemble_device_command(uint32_t dst);
 
@@ -94,11 +95,12 @@ class EnqueueWriteBufferCommand : public Command {
     Device* device;
     Buffer& buffer;
 
-    SystemMemoryWriter& writer;
+    CommandQueueWriter& writer;
+    const uint32_t command_queue_channel;
     const void* src;
     static constexpr EnqueueCommandType type_ = EnqueueCommandType::ENQUEUE_WRITE_BUFFER;
    public:
-    EnqueueWriteBufferCommand(Device* device, Buffer& buffer, const void* src, SystemMemoryWriter& writer);
+    EnqueueWriteBufferCommand(Device* device, Buffer& buffer, const void* src, CommandQueueWriter& writer, const uint32_t command_queue_channel);
 
     const DeviceCommand assemble_device_command(uint32_t src_address);
 
@@ -113,12 +115,13 @@ class EnqueueProgramCommand : public Command {
     Buffer& buffer;
     ProgramMap& program_to_dev_map;
     const Program& program;
-    SystemMemoryWriter& writer;
+    CommandQueueWriter& writer;
+    const uint32_t command_queue_channel;
     bool stall;
     static constexpr EnqueueCommandType type_ = EnqueueCommandType::ENQUEUE_PROGRAM;
 
    public:
-    EnqueueProgramCommand(Device*, Buffer&, ProgramMap&, SystemMemoryWriter&, const Program& program, bool stall);
+    EnqueueProgramCommand(Device*, Buffer&, ProgramMap&, CommandQueueWriter&, const Program& program, bool stall, const uint32_t command_queue_channel);
 
     const DeviceCommand assemble_device_command(uint32_t);
 
@@ -133,11 +136,12 @@ class EnqueueProgramCommand : public Command {
 class FinishCommand : public Command {
    private:
     Device* device;
-    SystemMemoryWriter& writer;
+    CommandQueueWriter& writer;
+    const uint32_t command_queue_channel;
     static constexpr EnqueueCommandType type_ = EnqueueCommandType::FINISH;
 
    public:
-    FinishCommand(Device* device, SystemMemoryWriter& writer);
+    FinishCommand(Device* device, CommandQueueWriter& writer, const uint32_t command_queue_channel);
 
     const DeviceCommand assemble_device_command(uint32_t);
 
@@ -149,11 +153,12 @@ class FinishCommand : public Command {
 class EnqueueWrapCommand : public Command {
    private:
     Device* device;
-    SystemMemoryWriter& writer;
+    CommandQueueWriter& writer;
+    const uint32_t command_queue_channel;
     static constexpr EnqueueCommandType type_ = EnqueueCommandType::WRAP;
 
    public:
-    EnqueueWrapCommand(Device* device, SystemMemoryWriter& writer);
+    EnqueueWrapCommand(Device* device, CommandQueueWriter& writer, const uint32_t command_queue_channel);
 
     const DeviceCommand assemble_device_command(uint32_t);
 
@@ -169,11 +174,13 @@ namespace detail{
 
 class CommandQueue {
    public:
-    CommandQueue(Device* device);
+    CommandQueue(Device* device, uint32_t command_queue_channel);
 
     ~CommandQueue();
 
    private:
+    uint32_t command_queue_channel;
+
     Device* device;
 
     // thread processing_thread;

@@ -16,110 +16,112 @@ inline uint32_t get_cq_rd_ptr(chip_id_t chip_id) {
     return recv;
 }
 
-struct SystemMemoryCQWriteInterface {
+struct CQWriteInterface {
     // Equation for fifo size is
     // | fifo_wr_ptr + command size B - fifo_rd_ptr |
     // Space available would just be fifo_limit - fifo_size
-    SystemMemoryCQWriteInterface() {
-        this->fifo_wr_ptr = CQ_START >> 4;  // In 16B words
+    const uint32_t fifo_size;
+    const uint32_t fifo_limit;  // Last possible FIFO address
+    uint32_t fifo_wr_ptr;
+    bool fifo_wr_toggle;
+
+    CQWriteInterface(const uint32_t fifo_size, const uint32_t fifo_limit, const uint32_t fifo_wr_ptr): fifo_size(fifo_size), fifo_limit(fifo_limit) {
+        this->fifo_wr_ptr = fifo_wr_ptr;  // In 16B words
         this->fifo_wr_toggle =
             0;  // This is used for the edge case where we wrap and our read pointer has not yet moved
     }
-
-    const uint32_t fifo_size = ((DeviceCommand::HUGE_PAGE_SIZE)-CQ_START) >> 4;
-    const uint32_t fifo_limit = ((DeviceCommand::HUGE_PAGE_SIZE) >> 4) - 1;  // Last possible FIFO address
-
-    uint32_t fifo_wr_ptr;
-    bool fifo_wr_toggle;
 };
 
-class SystemMemoryWriter {
+
+class CommandQueueWriter {
    private:
     chip_id_t device_id;
-    // Data required for fast writes to write pointer location
-    // in prefetch core's L1
-    // const std::tuple<uint32_t, uint32_t> tlb_data;
     const uint32_t m_dma_buf_size;
     const std::function<void(uint32_t, uint32_t, const uint8_t*, uint32_t)> fast_write_callable;
-    const std::set<CoreCoord> dispatch_cores;
-    const std::function<CoreCoord (CoreCoord)>worker_from_logical_callable;
-    uint32_t byte_addr;
+    const std::function<CoreCoord (CoreCoord)> worker_from_logical_callable;
+    vector<uint32_t> producer_core_wr_ptr_addrs;
     char* hugepage_start;
+    vector<CQWriteInterface> cq_write_interfaces;
 
    public:
-    SystemMemoryCQWriteInterface cq_write_interface;
-    SystemMemoryWriter(chip_id_t device_id, const std::set<CoreCoord> &dev_dispatch_cores, const std::function<CoreCoord (CoreCoord)> &worker_from_logical) :
+    CommandQueueWriter(chip_id_t device_id, const std::set<CoreCoord>& producer_cores, const std::function<CoreCoord (CoreCoord)> &worker_from_logical) :
         device_id(device_id),
         m_dma_buf_size(tt::Cluster::instance().get_m_dma_buf_size(device_id)),
         hugepage_start(
             (char*) tt::Cluster::instance().host_dma_address(0, tt::Cluster::instance().get_associated_mmio_device(device_id), tt::Cluster::instance().get_assigned_channel_for_device(device_id))),
         fast_write_callable(
             tt::Cluster::instance().get_fast_pcie_static_tlb_write_callable(device_id)),
-        dispatch_cores(dev_dispatch_cores),
         worker_from_logical_callable(worker_from_logical) {
 
-        const std::tuple<uint32_t, uint32_t> tlb_data = tt::Cluster::instance().get_tlb_data(tt_cxy_pair(device_id, this->worker_from_logical_callable(*this->dispatch_cores.begin()))).value();
-        auto [tlb_offset, tlb_size] = tlb_data;
-        this->byte_addr = tlb_offset + CQ_WRITE_PTR % tlb_size;
+        TT_ASSERT(producer_cores.size() < 3, "Can have at most 2 hardware CQs");
+        TT_ASSERT(producer_cores.size() > 0, "Need to have at least one producer");
+        size_t num_hw_cqs = producer_cores.size();
+
+        const uint32_t fifo_size = DeviceCommand::HUGE_PAGE_SIZE / num_hw_cqs;
+        auto producer_core_iterator = producer_cores.begin();
+        for (uint32_t i = 0; i < num_hw_cqs; i++) {
+            const std::tuple<uint32_t, uint32_t> tlb_data = tt::Cluster::instance().get_tlb_data(tt_cxy_pair(device_id, this->worker_from_logical_callable(*producer_core_iterator))).value();
+            auto [tlb_offset, tlb_size] = tlb_data;
+            this->producer_core_wr_ptr_addrs.push_back(tlb_offset + CQ_WRITE_PTR % tlb_size);
+            uint32_t fifo_limit = (i + 1) * fifo_size - 1;
+            uint32_t fifo_wr_ptr = (i * fifo_size + CQ_WRITE_PTR) >> 4;
+            cq_write_interfaces.push_back(CQWriteInterface(fifo_size, fifo_limit, fifo_wr_ptr));
+            producer_core_iterator++;
+        }
     }
 
-    void cq_reserve_back(uint32_t cmd_size_B) const {
-        uint32_t cmd_size_16B =
-            (((cmd_size_B - 1) | 31) + 1) >> 4;  // Terse way to find next multiple of 32 in 16B words
+    void cq_reserve_back(const uint32_t cq_channel, uint32_t cmd_size_B) const {
+        uint32_t cmd_size_16B = align(cmd_size_B, 32);
 
         uint32_t rd_ptr_and_toggle;
         uint32_t rd_ptr;
         uint32_t rd_toggle;
+        const CQWriteInterface& cq_write_interface = this->cq_write_interfaces[cq_channel];
         do {
             rd_ptr_and_toggle = get_cq_rd_ptr(this->device_id);
             rd_ptr = rd_ptr_and_toggle & 0x7fffffff;
             rd_toggle = rd_ptr_and_toggle >> 31;
 
         } while (
-            this->cq_write_interface
-                .fifo_wr_ptr<rd_ptr and this->cq_write_interface.fifo_wr_ptr + cmd_size_16B> rd_ptr or
+            cq_write_interface
+                .fifo_wr_ptr < rd_ptr and cq_write_interface.fifo_wr_ptr + cmd_size_16B> rd_ptr or
 
             // This is the special case where we wrapped our wr ptr and our rd ptr
             // has not yet moved
-            (rd_toggle != this->cq_write_interface.fifo_wr_toggle and this->cq_write_interface.fifo_wr_ptr == rd_ptr));
+            (rd_toggle != cq_write_interface.fifo_wr_toggle and cq_write_interface.fifo_wr_ptr == rd_ptr));
     }
 
-    // Ideally, data should be an array or pointer, but vector for time-being
-    // TODO ALMEET: MEASURE THIS
     void cq_write(const void* data, uint32_t size_in_bytes, uint32_t write_ptr) const {
-        // There is a 50% overhead if hugepage_start is not made static.
-        // Eventually when we want to have multiple hugepages, we may need to template
-        // the sysmem writer to get this optimization.
-        /*static*/ char* hugepage_start = this->hugepage_start;
-        void* user_scratchspace = hugepage_start + write_ptr;
+        void* user_scratchspace = this->hugepage_start + write_ptr;
         memcpy(user_scratchspace, data, size_in_bytes);
     }
 
-    void send_write_ptr() const {
-        static CoreCoord dispatch_core =
-            this->worker_from_logical_callable(*this->dispatch_cores.begin());
+    uint32_t get_wr_ptr(const uint32_t cq_channel) const {
+        return this->cq_write_interfaces[cq_channel].fifo_wr_ptr << 4;
+    }
 
+    void send_write_ptr(const uint32_t cq_channel) const {
+        const CQWriteInterface& cq_write_interface = this->cq_write_interfaces[cq_channel];
         uint32_t write_ptr_and_toggle =
-            this->cq_write_interface.fifo_wr_ptr | (this->cq_write_interface.fifo_wr_toggle << 31);
-        this->fast_write_callable(this->byte_addr, 4, (uint8_t*)&write_ptr_and_toggle, this->m_dma_buf_size);
+            cq_write_interface.fifo_wr_ptr | (cq_write_interface.fifo_wr_toggle << 31);
+        this->fast_write_callable(this->producer_core_wr_ptr_addrs[cq_channel], 4, (uint8_t*)&write_ptr_and_toggle, this->m_dma_buf_size);
         tt_driver_atomics::sfence();
     }
 
-    void cq_push_back(uint32_t push_size_B) {
+    void cq_push_back(const uint32_t cq_channel, uint32_t push_size_B) {
         // All data needs to be 32B aligned
-        uint32_t push_size_16B =
-            (((push_size_B - 1) | 31) + 1) >> 4;  // Terse way to find next multiple of 32 in 16B words
+        uint32_t push_size_16B = align(push_size_B, 32);
 
-        this->cq_write_interface.fifo_wr_ptr += push_size_16B;
-
-        if (this->cq_write_interface.fifo_wr_ptr > this->cq_write_interface.fifo_limit) {
-            this->cq_write_interface.fifo_wr_ptr = CQ_START >> 4;
+        CQWriteInterface& cq_write_interface = this->cq_write_interfaces[cq_channel];
+        cq_write_interface.fifo_wr_ptr += push_size_16B;
+        if (cq_write_interface.fifo_wr_ptr > cq_write_interface.fifo_limit) {
+            cq_write_interface.fifo_wr_ptr = CQ_START >> 4;
 
             // Flip the toggle
-            this->cq_write_interface.fifo_wr_toggle = not this->cq_write_interface.fifo_wr_toggle;
+            cq_write_interface.fifo_wr_toggle = not cq_write_interface.fifo_wr_toggle;
         }
 
         // Notify dispatch core
-        this->send_write_ptr();
+        this->send_write_ptr(cq_channel);
     }
 };

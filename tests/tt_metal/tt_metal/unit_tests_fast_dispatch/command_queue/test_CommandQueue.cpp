@@ -17,7 +17,20 @@ using namespace tt::tt_metal;
 
 namespace host_tests {
 
-TEST_F(MultiCommandQueueFixture, TestAccessCommandQueue) {
+namespace single_device_tests {
+
+TEST_F(MultiCommandQueueSingleDeviceFixture, TestFinishOnTwoCqs) {
+    CommandQueue cq0(this->device_, 0);
+    CommandQueue cq1(this->device_, 1);
+
+    Finish(cq0);
+    // Finish(cq1);
+}
+
+}
+
+namespace multi_device_tests {
+TEST_F(MultiCommandQueueMultiDeviceFixture, TestAccessCommandQueue) {
     for (unsigned int device_id = 0; device_id < num_devices_; device_id++) {
         EXPECT_NO_THROW(detail::GetCommandQueue(devices_[device_id]));
     }
@@ -36,7 +49,7 @@ TEST(FastDispatchHostSuite, TestCannotAccessCommandQueueForClosedDevice) {
     EXPECT_ANY_THROW(detail::GetCommandQueue(device));
 }
 
-TEST_F(MultiCommandQueueFixture, TestDirectedLoopbackToUniqueHugepage) {
+TEST_F(MultiCommandQueueMultiDeviceFixture, TestDirectedLoopbackToUniqueHugepage) {
     std::unordered_map<chip_id_t, std::vector<uint32_t>> golden_data;
 
     const uint32_t byte_size = 2048 * 16;
@@ -62,5 +75,9 @@ TEST_F(MultiCommandQueueFixture, TestDirectedLoopbackToUniqueHugepage) {
         EXPECT_EQ(readback_data, golden_data.at(device_id));
     }
 }
+}
+
+
+
 
 }   // namespace host_tests

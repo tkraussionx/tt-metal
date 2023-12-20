@@ -6,6 +6,45 @@
 #include "tt_metal/hostdevcommon/common_values.hpp"
 #include "risc_attribs.h"
 
+extern CQReadInterface cq_read_interface;
+
+// Command queue APIs
+FORCE_INLINE
+void cq_wait_front() {
+    DEBUG_STATUS('N', 'Q', 'W');
+    uint32_t write_ptr_and_toggle;
+    uint32_t write_ptr;
+    uint32_t write_toggle;
+    do {
+        write_ptr_and_toggle = *get_cq_write_ptr();
+        write_ptr = write_ptr_and_toggle & 0x7fffffff;
+        write_toggle = write_ptr_and_toggle >> 31;
+    } while (cq_read_interface.fifo_rd_ptr == write_ptr and cq_read_interface.fifo_rd_toggle == write_toggle);
+    DEBUG_STATUS('N', 'Q', 'D');
+}
+
+FORCE_INLINE
+void notify_host_of_cq_read_pointer() {
+    // These are the PCIE core coordinates
+    constexpr static uint64_t pcie_address = (uint64_t(NOC_XY_ENCODING(PCIE_NOC_X, PCIE_NOC_Y)) << 32) | HOST_CQ_READ_PTR;  // For now, we are writing to host hugepages at offset
+    uint32_t rd_ptr_and_toggle = cq_read_interface.fifo_rd_ptr | (cq_read_interface.fifo_rd_toggle << 31);;
+    volatile tt_l1_ptr uint32_t* rd_ptr_addr = get_cq_read_ptr();
+    rd_ptr_addr[0] = rd_ptr_and_toggle;
+    noc_async_write(CQ_READ_PTR, pcie_address, 4);
+    noc_async_write_barrier();
+}
+
+FORCE_INLINE
+void cq_pop_front(uint32_t cmd_size_B) {
+    // First part of equation aligns to nearest multiple of 32, and then we shift to make it a 16B addr. Both
+    // host and device are consistent in updating their pointers in this way, so they won't get out of sync. The
+    // alignment is necessary because we can only read/write from/to 32B aligned addrs in host<->dev communication.
+    uint32_t cmd_size_16B = align(cmd_size_B, 32) >> 4;
+    cq_read_interface.fifo_rd_ptr += cmd_size_16B;
+
+    notify_host_of_cq_read_pointer();
+}
+
 FORCE_INLINE
 bool cb_producer_space_available(int32_t num_pages) {
     uint32_t operand = 0;

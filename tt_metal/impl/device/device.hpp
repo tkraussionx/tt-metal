@@ -129,8 +129,10 @@ class Device {
     // Set of logical storage only core coordinates
     const std::set<CoreCoord> &storage_only_cores() const { return this->storage_only_cores_; }
 
+    const std::set<CoreCoord> &producer_cores() const { return this->producer_cores_; }
+    const std::set<CoreCoord> &consumer_cores() const { return this->consumer_cores_; }
+
     // Set of logical dispatch core coordinates
-    const std::set<CoreCoord> &dispatch_cores() const { return this->dispatch_cores_; }
 
     // Set of logical ethernet core coordinates
     // core.x represents connectivity to one other chip, i.e. cores with <x> all connect to same chip
@@ -184,13 +186,14 @@ class Device {
     JitBuildStateSet kernel_build_states_;
 
     // SystemMemoryWriter is the interface to the hardware command queue
-    std::unique_ptr<SystemMemoryWriter> sysmem_writer;
+    std::unique_ptr<CommandQueueWriter> sysmem_writer;
     // Allows access to sysmem_writer
     friend class CommandQueue;
 
-    std::set<CoreCoord> compute_cores;
+    std::set<CoreCoord> compute_cores_;
     std::set<CoreCoord> storage_only_cores_;
-    std::set<CoreCoord> dispatch_cores_;
+    std::set<CoreCoord> producer_cores_;
+    std::set<CoreCoord> consumer_cores_;
     std::set<CoreCoord> ethernet_cores_;
 };
 

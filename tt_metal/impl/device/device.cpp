@@ -90,24 +90,19 @@ void Device::initialize_allocator(const std::vector<uint32_t>& l1_bank_remap) {
     for (const auto& core: soc_desc.physical_cores) {
         config.core_type_from_noc_coord_table.insert({core.first, AllocCoreType::Invalid});
     }
-    for (const auto& core : soc_desc.compute_with_storage_cores) {
-        const auto logical_coord = get_core_coord_from_relative(core, this->logical_grid_size());
-        this->compute_cores.insert(logical_coord);
-        const auto noc_coord = this->worker_core_from_logical_core(logical_coord);
-        config.core_type_from_noc_coord_table[noc_coord] = AllocCoreType::ComputeAndStore;
-    }
-    for (const auto& core : soc_desc.storage_cores) {
-        const auto logical_coord = get_core_coord_from_relative(core, this->logical_grid_size());
-        this->storage_only_cores_.insert(logical_coord);
-        const auto noc_coord = this->worker_core_from_logical_core(logical_coord);
-        config.core_type_from_noc_coord_table[noc_coord] = AllocCoreType::StorageOnly;
-    }
-    for (const auto& core : soc_desc.dispatch_cores) {
-        const auto logical_coord = get_core_coord_from_relative(core, this->logical_grid_size());
-        this->dispatch_cores_.insert(logical_coord);
-        const auto noc_coord = this->worker_core_from_logical_core(logical_coord);
-        config.core_type_from_noc_coord_table[noc_coord] = AllocCoreType::Dispatch;
-    }
+
+    auto extract_core_info_from_soc_desc = [&config, this](AllocCoreType alloc_core_type, const vector<RelativeCoreCoord>& soc_cores, set<CoreCoord>& cores) {
+        for (const auto& core : soc_cores) {
+            const auto logical_coord = get_core_coord_from_relative(core, this->logical_grid_size());
+            cores.insert(logical_coord);
+            const auto noc_coord = this->worker_core_from_logical_core(logical_coord);
+            config.core_type_from_noc_coord_table[noc_coord] = alloc_core_type;
+        }
+    };
+    extract_core_info_from_soc_desc(AllocCoreType::ComputeAndStore, soc_desc.compute_with_storage_cores, this->compute_cores_);
+    extract_core_info_from_soc_desc(AllocCoreType::StorageOnly, soc_desc.storage_cores, this->storage_only_cores_);
+    extract_core_info_from_soc_desc(AllocCoreType::Dispatch, soc_desc.producer_cores, this->producer_cores_);
+    extract_core_info_from_soc_desc(AllocCoreType::Dispatch, soc_desc.consumer_cores, this->consumer_cores_);
     for (const auto &core : soc_desc.get_logical_ethernet_cores()) {
         this->ethernet_cores_.insert(core);
     }
@@ -294,20 +289,25 @@ bool Device::initialize(const std::vector<uint32_t>& l1_bank_remap) {
 
     // Create system memory writer for this device to have an associated interface to hardware command queue (i.e. hugepage)
     if (std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr) {
-        this->sysmem_writer = std::make_unique<SystemMemoryWriter>(
+        this->sysmem_writer = std::make_unique<CommandQueueWriter>(
             this->id_,
-            this->dispatch_cores(),
+            this->producer_cores(),
             [&, this](CoreCoord core) { return this->worker_core_from_logical_core(core); }
         );
 
+        chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->id_);
+        uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->id_);
         std::vector<uint32_t> pointers(CQ_START / sizeof(uint32_t), 0);
         pointers[0] = CQ_START >> 4;
 
-        chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->id_);
-        uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->id_);
-        tt::Cluster::instance().write_sysmem(pointers.data(), pointers.size() * sizeof(uint32_t), 0, mmio_device_id, channel);
+        // TODO(agrebenisan): Remove this hard-coding!! This is just to speed up progress
+        const uint32_t hugepage_size = 1024 * 1024 * 1024;
+        uint32_t cq_channel_size = hugepage_size / (this->producer_cores().size());
+        for (size_t i = 0; i < this->producer_cores().size(); i++) {
+            tt::Cluster::instance().write_sysmem(pointers.data(), pointers.size() * sizeof(uint32_t), i * cq_channel_size, mmio_device_id, channel);
+        }
 
-        detail::SendDispatchKernelToDevice(this);
+        detail::SendDispatchKernelsToDevice(this);
     }
 
     return true;

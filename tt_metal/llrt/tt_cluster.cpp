@@ -163,7 +163,7 @@ void Cluster::get_metal_desc_from_tt_desc(
 }
 
 void Cluster::open_driver(chip_id_t mmio_device_id, const std::set<chip_id_t> &controlled_device_ids, const bool &skip_driver_allocs) {
-    const std::string sdesc_path = get_soc_description_file(this->arch_, this->target_type_);
+    const std::string sdesc_path = get_soc_description_file(this->arch_, this->target_type_, 2);
 
     std::unique_ptr<tt_device> device_driver;
     if (this->target_type_ == TargetDevice::Silicon) {

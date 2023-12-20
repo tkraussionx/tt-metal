@@ -88,8 +88,11 @@ dispatch_and_banking:
     storage_cores: # Relative Only
       [[1, -1],[2, -1],[3, -1],[4, -1],[5, -1],[7, -1],[8, -1],[9, -1],[10, -1],[11, -1]]
 
-    dispatch_cores: # Relative Only
-      [[0, -1],[6, -1]]
+    producer_cores: # Relative Only
+      [[0, -1]]
+
+    consumer_cores: # Relative Only
+      [[6, -1]]
 
   E75:
     l1_bank_size:

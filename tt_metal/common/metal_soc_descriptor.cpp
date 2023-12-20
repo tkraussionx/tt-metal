@@ -308,15 +308,26 @@ void metal_SocDescriptor::load_dispatch_and_banking_config(uint32_t harvesting_m
 
     // dispatch_cores are a subset of worker cores
     // they have already been parsed as CoreType::WORKER and saved into `cores` map when parsing `functional_workers`
-    for (const auto& core_node : config["dispatch_cores"]) {
+    for (const auto& core_node : config["producer_cores"]) {
         RelativeCoreCoord coord = {};
         if (core_node.IsSequence()) {
             // Logical coord
             coord = RelativeCoreCoord({.x = core_node[0].as<int>(), .y = core_node[1].as<int>()});
         } else {
-            TT_THROW("Only logical relative coords supported for dispatch_cores cores");
+            TT_THROW("Only logical relative coords supported for producer_cores cores");
         }
-        this->dispatch_cores.push_back(coord);
+        this->producer_cores.push_back(coord);
+    }
+
+    for (const auto& core_node : config["consumer_cores"]) {
+        RelativeCoreCoord coord = {};
+        if (core_node.IsSequence()) {
+            // Logical coord
+            coord = RelativeCoreCoord({.x = core_node[0].as<int>(), .y = core_node[1].as<int>()});
+        } else {
+            TT_THROW("Only logical relative coords supported for consumer_cores cores");
+        }
+        this->consumer_cores.push_back(coord);
     }
 }
 

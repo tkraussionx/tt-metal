@@ -20,7 +20,8 @@ struct metal_SocDescriptor : public tt_SocDescriptor {
     CoreCoord compute_with_storage_grid_size;
     std::vector<RelativeCoreCoord> compute_with_storage_cores;  // saved as CoreType::WORKER
     std::vector<RelativeCoreCoord> storage_cores;               // saved as CoreType::WORKER
-    std::vector<RelativeCoreCoord> dispatch_cores;              // saved as CoreType::WORKER
+    std::vector<RelativeCoreCoord> producer_cores;
+    std::vector<RelativeCoreCoord> consumer_cores;
     std::vector<CoreCoord> logical_ethernet_cores;
     int l1_bank_size;
     uint32_t dram_core_size;
