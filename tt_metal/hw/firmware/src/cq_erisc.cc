@@ -27,7 +27,7 @@
 #include "circular_buffer.h"
 
 #include "debug/status.h"
-// #include "debug/dprint.h"
+#include "debug/dprint.h"
 
 
 // constexpr uint32_t RISCV_IC_BRISC_MASK = 0x1;
@@ -191,6 +191,7 @@ CBInterface cb_interface[NUM_CIRCULAR_BUFFERS] __attribute__((used));
 
 int main() {
 
+    DPRINT << 12345 << ENDL();
     // DEBUG_STATUS('I');
 
     // int32_t num_words = ((uint)__ldm_data_end - (uint)__ldm_data_start) >> 2;

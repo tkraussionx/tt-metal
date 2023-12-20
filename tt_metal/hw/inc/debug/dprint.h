@@ -23,7 +23,7 @@
 */
 
 #include <cstdint>
-#if defined(COMPILE_FOR_NCRISC) | defined(COMPILE_FOR_BRISC)
+#if defined(COMPILE_FOR_NCRISC) | defined(COMPILE_FOR_BRISC) | defined(COMPILE_FOR_CQ_ERISC)
 // TODO(AP): this ifdef doesn't seem to make sense given we include risc_common.h
 // The issue is some files included inside risc_common.h only apply to NC/BRISCS
 // But moving this ifdef inside of the header breaks other code

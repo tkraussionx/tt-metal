@@ -234,12 +234,15 @@ void Device::initialize_and_launch_firmware() {
 
     std::cout << "Sleep..." << std::endl;
     sleep(2);
-    vector<uint32_t> bleh = {0};
-    CoreCoord phys_debug_core = this->ethernet_core_from_logical_core({0, 0});
-    tt_cxy_pair debug_core = {0, phys_debug_core.x, phys_debug_core.y};
-    tt::Cluster::instance().read_core(bleh.data(), 4, debug_core, 100 * 1024, false);
+    const metal_SocDescriptor &soc_desc = tt::Cluster::instance().get_soc_desc(this->id_);
+    for (const auto &core : soc_desc.get_logical_ethernet_cores()) {
+        CoreCoord ethernet_core = this->ethernet_core_from_logical_core(core);
+        tt_cxy_pair debug_core = {0, ethernet_core.x, ethernet_core.y};
+        vector<uint32_t> bleh = {0};
+        tt::Cluster::instance().read_core(bleh.data(), 4, debug_core, 100 * 1024, false);
+        std::cout << "Debug val for core " << debug_core.str() << ": " << bleh[0] << std::endl;
+    }
     // ::detail::ReadFromDeviceL1(this, this->ethernet_core_from_logical_core({0, 0}), 100 * 1024, 4, bleh);
-    std::cout << "Debug val for core " << debug_core.str() << ": " << bleh[0] << std::endl;
 
     while(true);
 
