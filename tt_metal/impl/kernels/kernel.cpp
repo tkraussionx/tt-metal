@@ -93,6 +93,7 @@ void ComputeKernel::process_defines(const std::function<void (const string& defi
 }
 
 void EthernetKernel::process_defines(const std::function<void (const string& define, const string &value)>callback) const {
+    Kernel::process_defines(callback);
     callback("NOC_INDEX", std::to_string(this->config_.noc));
 }
 
@@ -244,7 +245,7 @@ void DataMovementKernel::generate_binaries(Device *device, JitBuildOptions& buil
 
 void EthernetKernel::generate_binaries(Device *device, JitBuildOptions& build_options) const {
     detail::GenerateDeviceHeaders(device, build_options.path);
-    jit_build(device->build_kernel_state(JitBuildProcessorType::ETHERNET, 0), this, this->kernel_path_file_name_);
+    jit_build(device->build_kernel_state(JitBuildProcessorType::CQ_ETHERNET, 0), this, this->kernel_path_file_name_);
 }
 
 void ComputeKernel::generate_binaries(Device *device, JitBuildOptions& build_options) const {

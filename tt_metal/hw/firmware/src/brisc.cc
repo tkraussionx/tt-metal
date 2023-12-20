@@ -229,7 +229,7 @@ inline void deassert_ncrisc_trisc()
     // Below sets ncrisc to go so we can wait until it is cleared on first iteration
     mailboxes->slave_sync.all = RUN_SYNC_MSG_ALL_SLAVES_DONE;
 
-    uint16_t fw_size16 = mailboxes->launch.ncrisc_kernel_size16;
+    uint16_t fw_size16 = mailboxes->launch.iram_kernel_size16;
     ncrisc_kernel_start_offset16 = fw_size16;
 
     l1_to_ncrisc_iram_copy(MEM_NCRISC_INIT_IRAM_L1_BASE >> 4, MEM_MOVER_VIEW_IRAM_BASE_ADDR, fw_size16);
@@ -316,7 +316,7 @@ int main() {
         // Always copy ncrisc even if its size is 0 (save branch)...
         l1_to_ncrisc_iram_copy((MEM_NCRISC_INIT_IRAM_L1_BASE >> 4) + ncrisc_kernel_start_offset16,
                                MEM_MOVER_VIEW_IRAM_BASE_ADDR + ncrisc_kernel_start_offset16,
-                               mailboxes->launch.ncrisc_kernel_size16);
+                               mailboxes->launch.iram_kernel_size16);
 
         // Invalidate the i$ now the kernels have loaded and before running
         volatile tt_reg_ptr uint32_t* cfg_regs = core.cfg_regs_base(0);

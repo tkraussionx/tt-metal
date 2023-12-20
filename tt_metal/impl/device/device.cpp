@@ -126,7 +126,7 @@ void Device::initialize_build() {
     auto init_helper = [this] (bool is_fw) -> JitBuildStateSet {
         std::vector<std::shared_ptr<JitBuildState>> build_states;
 
-        build_states.resize(arch() == tt::ARCH::GRAYSKULL ? 5 : 6);
+        build_states.resize(arch() == tt::ARCH::GRAYSKULL ? 5 : 7 - 1);
 
         build_states[build_processor_type_to_index(JitBuildProcessorType::DATA_MOVEMENT).first + 0] =
             std::make_shared<JitBuildDataMovement>(this->build_env_, 0, is_fw);
@@ -140,8 +140,10 @@ void Device::initialize_build() {
             std::make_shared<JitBuildCompute>(this->build_env_, 2, is_fw);
 
         if (arch() != tt::ARCH::GRAYSKULL) {
-            build_states[build_processor_type_to_index(JitBuildProcessorType::ETHERNET).first + 0] =
-                std::make_shared<JitBuildEthernet>(this->build_env_, 0, is_fw);
+            // build_states[build_processor_type_to_index(JitBuildProcessorType::ETHERNET).first + 0] =
+            //     std::make_shared<JitBuildEthernet>(this->build_env_, 0, is_fw);
+            build_states[build_processor_type_to_index(JitBuildProcessorType::CQ_ETHERNET).first + 0 - 1] =
+                std::make_shared<JitBuildCommandQueueEthernet>(this->build_env_, 0, is_fw);
         }
 
        return build_states;
@@ -166,7 +168,7 @@ void Device::initialize_firmware(CoreCoord phys_core, launch_msg_t *launch_msg) 
         ll_api::memory binary_mem = llrt::get_risc_binary(firmware_build_states_[riscv_id]->get_target_out_path(""));
         uint32_t kernel_size16 = llrt::get_binary_code_size16(binary_mem, riscv_id);
         if (riscv_id == 1) {
-            launch_msg->ncrisc_kernel_size16 = kernel_size16;
+            launch_msg->iram_kernel_size16 = kernel_size16;
         }
         log_debug(LogDevice, "RISC {} fw binary size: {} in bytes", riscv_id, kernel_size16 * 16);
         llrt::test_load_write_read_risc_binary(binary_mem, this->id(), phys_core, riscv_id);
@@ -182,7 +184,7 @@ void Device::initialize_and_launch_firmware() {
         .brisc_watcher_kernel_id = 0,
         .ncrisc_watcher_kernel_id = 0,
         .triscs_watcher_kernel_id = 0,
-        .ncrisc_kernel_size16 = 0,
+        .iram_kernel_size16 = 0,
         .mode = DISPATCH_MODE_HOST,
         .brisc_noc_id = 0,
         .enable_brisc = 0,
@@ -196,6 +198,7 @@ void Device::initialize_and_launch_firmware() {
     CoreCoord grid_size = this->logical_grid_size();
     std::unordered_set<CoreCoord> not_done_cores;
 
+    std::cout << "TENSIX FIRMWARE" << std::endl;
     for (uint32_t y = 0; y < grid_size.y; y++) {
         for (uint32_t x = 0; x < grid_size.x; x++) {
             CoreCoord logical_core(x, y);
@@ -207,12 +210,38 @@ void Device::initialize_and_launch_firmware() {
         }
     }
 
+    if (arch() != tt::ARCH::GRAYSKULL) {
+        std::cout << "ETHERNET FIRMWARE" << std::endl;
+        const metal_SocDescriptor &soc_desc = tt::Cluster::instance().get_soc_desc(this->id_);
+        for (const auto &core : soc_desc.get_logical_ethernet_cores()) {
+            CoreCoord ethernet_core = this->ethernet_core_from_logical_core(core);
+            // this->initialize_firmware(ethernet_core, &launch_msg);
+            ll_api::memory binary_mem = llrt::get_risc_binary(firmware_build_states_[5]->get_target_out_path(""));
+            uint32_t kernel_size16 = llrt::get_binary_code_size16(binary_mem, 5);
+            llrt::test_load_write_read_risc_binary(binary_mem, this->id(), ethernet_core, 5);
+            not_done_cores.insert(ethernet_core);
+        }
+        // std::cout << "WROTE ETHERNET FIRMWARE TO DEVICE" << std::endl;
+        // while(true);
+    }
+
     // Barrier between L1 writes above and deassert below
     tt::Cluster::instance().l1_barrier(this->id());
 
     // Deassert worker cores
-    for(const auto& worker_core : not_done_cores)
-        tt::Cluster::instance().deassert_risc_reset_at_core(tt_cxy_pair(this->id(), worker_core));
+    for(const auto& not_done_core : not_done_cores)
+        tt::Cluster::instance().deassert_risc_reset_at_core(tt_cxy_pair(this->id(), not_done_core));
+
+    std::cout << "Sleep..." << std::endl;
+    sleep(2);
+    vector<uint32_t> bleh = {0};
+    CoreCoord phys_debug_core = this->ethernet_core_from_logical_core({0, 0});
+    tt_cxy_pair debug_core = {0, phys_debug_core.x, phys_debug_core.y};
+    tt::Cluster::instance().read_core(bleh.data(), 4, debug_core, 100 * 1024, false);
+    // ::detail::ReadFromDeviceL1(this, this->ethernet_core_from_logical_core({0, 0}), 100 * 1024, 4, bleh);
+    std::cout << "Debug val for core " << debug_core.str() << ": " << bleh[0] << std::endl;
+
+    while(true);
 
     // Wait until fw init is done, ensures the next launch msg doesn't get
     // written while fw is still in init
@@ -298,7 +327,15 @@ bool Device::close() {
         }
     }
 
-    this->clear_l1_state();
+    if (arch() != tt::ARCH::GRAYSKULL) {
+        const metal_SocDescriptor &soc_desc = tt::Cluster::instance().get_soc_desc(this->id_);
+        for (const auto &core : soc_desc.get_logical_ethernet_cores()) {
+            CoreCoord ethernet_core = this->ethernet_core_from_logical_core(core);
+            tt::Cluster::instance().assert_risc_reset_at_core(tt_cxy_pair(this->id(), ethernet_core));
+        }
+    }
+
+    // this->clear_l1_state();
     tt::Cluster::instance().l1_barrier(id_);
     allocator::clear(*this->allocator_);
 
@@ -474,11 +511,13 @@ pair<int, int> Device::build_processor_type_to_index(JitBuildProcessorType t) co
     constexpr int DataMovementBuildCount = 2;
     constexpr int ComputeBuildCount = 3;
     constexpr int EthernetBuildCount = 1;
+    constexpr int CommandQueueEthernetBuildCount = 1;
 
     switch (t) {
     case JitBuildProcessorType::DATA_MOVEMENT: return pair<int, int>(0, DataMovementBuildCount);
     case JitBuildProcessorType::COMPUTE: return pair<int, int>(DataMovementBuildCount, ComputeBuildCount);
     case JitBuildProcessorType::ETHERNET: return pair<int, int>(DataMovementBuildCount + ComputeBuildCount, EthernetBuildCount);
+    case JitBuildProcessorType::CQ_ETHERNET: return pair<int, int>(DataMovementBuildCount + ComputeBuildCount + EthernetBuildCount, CommandQueueEthernetBuildCount);
     default: TT_ASSERT("Bad processor type: {}", static_cast<std::underlying_type<JitBuildProcessorType>::type>(t));
     }
 
@@ -492,7 +531,13 @@ const JitBuildState& Device::build_firmware_state(JitBuildProcessorType t, int i
 }
 
 const JitBuildState& Device::build_kernel_state(JitBuildProcessorType t, int i) const {
-    return *(this->kernel_build_states_[build_processor_type_to_index(t).first + i]);
+    switch (t) {
+        case JitBuildProcessorType::CQ_ETHERNET:
+            i = -1; break;
+        default:
+            break;
+    }
+    return *(this->kernel_build_states_.at(build_processor_type_to_index(t).first + i));
 }
 
 const JitBuildStateSubset Device::build_kernel_states(JitBuildProcessorType t) const {

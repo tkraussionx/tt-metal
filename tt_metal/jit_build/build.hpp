@@ -23,7 +23,8 @@ class JitBuildSettings;
 enum class JitBuildProcessorType {
     DATA_MOVEMENT,
     COMPUTE,
-    ETHERNET
+    ETHERNET,
+    CQ_ETHERNET
 };
 
 // The build environment
@@ -33,6 +34,7 @@ class JitBuildEnv {
     friend class JitBuildState;
     friend class JitBuildDataMovement;
     friend class JitBuildCompute;
+    friend class JitBuildCommandQueueEthernet;
     friend class JitBuildEthernet;
 
   public:
@@ -137,6 +139,13 @@ class JitBuildCompute : public JitBuildState {
   private:
   public:
     JitBuildCompute(const JitBuildEnv& env, int which, bool is_fw = false);
+};
+
+class JitBuildCommandQueueEthernet : public JitBuildState {
+  private:
+  public:
+    JitBuildCommandQueueEthernet(const JitBuildEnv& env, int which, bool is_fw = false);
+    void pre_compile(const string& kernel_in_path, const string& op_out_path) const;
 };
 
 class JitBuildEthernet : public JitBuildState {

@@ -149,12 +149,12 @@ KernelGroup::KernelGroup(
         // If both brisc and ncrisc set the noc, then this is safe due to prior correctness validation
         this->launch_msg.enable_ncrisc = true;
         this->launch_msg.brisc_noc_id = 1 - std::get<DataMovementConfig>(kernel->config()).noc;
-        this->launch_msg.ncrisc_kernel_size16 = kernel->get_binary_size16();
+        this->launch_msg.iram_kernel_size16 = kernel->get_binary_size16();
         this->launch_msg.ncrisc_watcher_kernel_id = program.get_kernel(ncrisc_id.value())->get_watcher_kernel_id();
     } else {
         this->launch_msg.ncrisc_watcher_kernel_id = 0;
         this->launch_msg.enable_ncrisc = false;
-        this->launch_msg.ncrisc_kernel_size16 = 0;
+        this->launch_msg.iram_kernel_size16 = 0;
     }
 
     if (trisc_id) {

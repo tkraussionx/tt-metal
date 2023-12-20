@@ -738,12 +738,19 @@ void send_dispatch_kernel_to_device(Device* device) {
     // TT-metal, don't like the fact that I'm writing this from scratch
 
     Program dispatch_program = CreateProgram();
-    auto dispatch_cores = device->dispatch_cores().begin();
-    CoreCoord producer_logical_core = *dispatch_cores++;
-    CoreCoord consumer_logical_core = *dispatch_cores;
 
-    CoreCoord producer_physical_core = device->worker_core_from_logical_core(producer_logical_core);
-    CoreCoord consumer_physical_core = device->worker_core_from_logical_core(consumer_logical_core);
+    CoreCoord producer_logical_core = {0, 0};
+    CoreCoord consumer_logical_core = {0, 1};
+
+    // auto dispatch_cores = device->dispatch_cores().begin();
+    // CoreCoord producer_logical_core = *dispatch_cores++;
+    // CoreCoord consumer_logical_core = *dispatch_cores;
+
+    CoreCoord producer_physical_core = device->ethernet_core_from_logical_core(producer_logical_core);
+    CoreCoord consumer_physical_core = device->ethernet_core_from_logical_core(consumer_logical_core);
+
+    std::cout << "PRODUCER: " << producer_physical_core.str() << std::endl;
+    std::cout << "CONSUMER: " << consumer_physical_core.str() << std::endl;
 
     std::map<string, string> producer_defines = {
         {"IS_DISPATCH_KERNEL", ""},
@@ -755,15 +762,14 @@ void send_dispatch_kernel_to_device(Device* device) {
         {"PRODUCER_NOC_Y", std::to_string(producer_physical_core.y)},
     };
 
-
     std::vector<uint32_t> dispatch_compile_args = {DEVICE_DATA.TENSIX_SOFT_RESET_ADDR};
 
     tt::tt_metal::CreateKernel(
         dispatch_program,
         "tt_metal/impl/dispatch/kernels/command_queue_producer.cpp",
         producer_logical_core,
-        tt::tt_metal::DataMovementConfig {
-            .processor = tt::tt_metal::DataMovementProcessor::RISCV_0,
+        tt::tt_metal::experimental::EthernetConfig {
+            .eth_mode = Eth::COMMAND_QUEUE,
             .noc = tt::tt_metal::NOC::RISCV_0_default,
             .compile_args = dispatch_compile_args,
             .defines = producer_defines});
@@ -772,8 +778,8 @@ void send_dispatch_kernel_to_device(Device* device) {
         dispatch_program,
         "tt_metal/impl/dispatch/kernels/command_queue_consumer.cpp",
         consumer_logical_core,
-        tt::tt_metal::DataMovementConfig {
-            .processor = tt::tt_metal::DataMovementProcessor::RISCV_0,
+        tt::tt_metal::experimental::EthernetConfig {
+            .eth_mode = Eth::COMMAND_QUEUE,
             .noc = tt::tt_metal::NOC::RISCV_0_default,
             .compile_args = dispatch_compile_args,
             .defines = consumer_defines});

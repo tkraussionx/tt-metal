@@ -253,6 +253,12 @@ bool test_load_write_read_risc_binary(ll_api::memory &mem, chip_id_t chip_id, co
         case 3: local_init_addr = MEM_TRISC1_INIT_LOCAL_L1_BASE; break;
         case 4: local_init_addr = MEM_TRISC2_INIT_LOCAL_L1_BASE; break;
         case 5: local_init_addr = eth_l1_mem::address_map::FIRMWARE_BASE; break;
+        case 6: local_init_addr = MEM_ERISC_FIRMWARE_BASE; break;
+        default: TT_FATAL("Invalid riscv_id");
+    }
+    if (riscv_id == 6) {
+        // std::cout << "local init addr: " << local_init_addr << std::endl;
+        // while(true);
     }
 
     log_debug(tt::LogLLRuntime, "hex_vec size = {}, size_in_bytes = {}", mem.size(), mem.size()*sizeof(uint32_t));
@@ -328,7 +334,7 @@ void wait_until_cores_done(chip_id_t device_id,
             for (const auto &core : not_done_phys_cores) {
                 not_done_cores_str += (core.str() + " ");
             }
-            log_debug(tt::LogMetal, not_done_cores_str.c_str());
+            // log_debug(tt::LogMetal, not_done_cores_str.c_str());
         }
 
         for (auto it = not_done_phys_cores.begin(); it != not_done_phys_cores.end(); ) {

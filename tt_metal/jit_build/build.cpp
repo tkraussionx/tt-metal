@@ -296,6 +296,50 @@ JitBuildCompute::JitBuildCompute(const JitBuildEnv& env, int which, bool is_fw) 
     finish_init();
 }
 
+JitBuildCommandQueueEthernet::JitBuildCommandQueueEthernet(const JitBuildEnv& env, int which, bool is_fw) : JitBuildState(env, which, is_fw)
+{
+    this->target_name_ = "cq_erisc";
+
+    this->out_path_ = this->is_fw_ ? env_.out_firmware_root_ : env_.out_kernel_root_;
+
+    this->cflags_ = env_.cflags_ + "-Os -fno-tree-loop-distribute-patterns ";
+
+    this->includes_ = env_.includes_ +
+        "-I " + env_.root_ + "tt_metal/hw/firmware/src " +
+        "-I " + env_.root_ + "tt_metal/hw/ckernels/" + env.arch_name_ + "/metal/common " +
+        "-I " + env_.root_ + "tt_metal/hw/ckernels/" + env.arch_name_ + "/metal/llk_io ";
+
+    this->defines_ = env_.defines_ + "-DCOMPILE_FOR_CQ_ERISC ";
+    if (this->is_fw_) {
+        this->defines_ += "-DLOADING_NOC=0 ";
+    }
+
+    this->srcs_.push_back("tt_metal/hw/firmware/src/risc_common.cc");
+    this->srcs_.push_back("tt_metal/hw/toolchain/substitutes.cpp");
+    this->srcs_.push_back("tt_metal/hw/firmware/src/" + env_.aliased_arch_name_ + "/noc.c");
+
+    this->lflags_ = env_.lflags_ + "-Os ";
+    if (this->is_fw_) {
+        this->srcs_.push_back("tt_metal/hw/toolchain/tmu-crt0.S");
+        this->srcs_.push_back("tt_metal/hw/firmware/src/cq_erisc.cc");
+    } else {
+        this->srcs_.push_back("tt_metal/hw/toolchain/tmu-crt0k.S");
+        this->srcs_.push_back("tt_metal/hw/firmware/src/cq_erisck.cc");
+    }
+
+    this->lflags_ +=
+        "-T" + env_.root_ + "build/hw/toolchain/cq_erisc.ld ";
+
+    this->process_defines_at_compile = true;
+
+    finish_init();
+}
+
+void JitBuildCommandQueueEthernet::pre_compile(const string& kernel_in_path, const string& op_out_path) const
+{
+    copy_kernel(kernel_in_path, op_out_path);
+}
+
 JitBuildEthernet::JitBuildEthernet(const JitBuildEnv& env, int which, bool is_fw) : JitBuildState(env, which, is_fw)
 {
     this->target_name_ = "erisc";
@@ -522,6 +566,7 @@ void jit_build(const JitBuildState& build,
     const std::string tracyPrefix = "jit_build";
 
     if (settings != nullptr) {
+        std::cout << "Full kernel name: " << settings->get_full_kernel_name() << std::endl;
         build.pre_compile(kernel_in_path, settings->get_full_kernel_name());
     }
 

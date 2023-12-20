@@ -26,7 +26,7 @@ enum debug_sanitize_which_riscv {
     DebugSanitizeErisc = 5,
 };
 
-#if defined(COMPILE_FOR_BRISC) || defined(COMPILE_FOR_NCRISC) || defined(COMPILE_FOR_ERISC)
+#if defined(COMPILE_FOR_BRISC) || defined(COMPILE_FOR_NCRISC) || defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_CQ_ERISC)
 
 #if defined(WATCHER_ENABLED)
 

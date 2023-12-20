@@ -597,7 +597,11 @@ KernelHandle CreateKernel(Program &program, const std::string &file_name, const 
                                 kernel = new ComputeKernel(file_name, core_ranges, cfg);
                             }
                             else if constexpr (std::is_same_v<T, experimental::EthernetConfig>) {
-                                kernel = new EthernetKernel(file_name, core_ranges, cfg);
+                                // if (cfg.eth_mode == Eth::COMMAND_QUEUE) {
+
+                                // } else {
+                                    kernel = new EthernetKernel(file_name, core_ranges, cfg);
+                                // }
                             }
                             return detail::AddKernel(program, kernel);
                         },

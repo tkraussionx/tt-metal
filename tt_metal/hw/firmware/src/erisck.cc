@@ -23,7 +23,6 @@
 
 
 CBInterface cb_interface[NUM_CIRCULAR_BUFFERS];
-CQReadInterface cq_read_interface;
 
 void ApplicationHandler(void) __attribute__((__section__(".init")));
 

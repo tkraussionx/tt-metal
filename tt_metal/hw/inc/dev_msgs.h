@@ -42,7 +42,7 @@ struct launch_msg_t {  // must be cacheline aligned
     volatile uint16_t brisc_watcher_kernel_id;
     volatile uint16_t ncrisc_watcher_kernel_id;
     volatile uint16_t triscs_watcher_kernel_id;
-    volatile uint16_t ncrisc_kernel_size16; // size in 16 byte units
+    volatile uint16_t iram_kernel_size16; // size in 16 byte units
     volatile uint8_t mode;
     volatile uint8_t brisc_noc_id;
     volatile uint8_t enable_brisc;

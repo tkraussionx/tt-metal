@@ -134,7 +134,16 @@ void Cluster::initialize_device_drivers() {
 void Cluster::assert_risc_reset() {
     for (const auto &[mmio_device_id, controlled_devices] : this->devices_grouped_by_assoc_mmio_device_) {
         this->get_driver(mmio_device_id).assert_risc_reset();
+
+        if (arch() != tt::ARCH::GRAYSKULL) {
+            const metal_SocDescriptor &soc_desc = this->get_soc_desc(mmio_device_id);
+            for (const CoreCoord& ethernet_core: soc_desc.get_physical_ethernet_cores()) {
+                tt_cxy_pair ethernet_cxy_pair = {(size_t)mmio_device_id, ethernet_core.x, ethernet_core.y};
+                this->get_driver(mmio_device_id).assert_risc_reset_at_core(ethernet_cxy_pair);
+            }
+        }
     }
+
 }
 
 void Cluster::get_metal_desc_from_tt_desc(

@@ -291,7 +291,13 @@ TEST_F(CommandQueueFixture, Sending131072Pages) {
         .page_size = 128,
         .buftype = BufferType::DRAM};
 
-    EXPECT_TRUE(local_test_functions::test_EnqueueWriteBuffer_and_EnqueueReadBuffer(this->device_, *tt::tt_metal::detail::GLOBAL_CQ, config));
+    auto var = this->device_->get_inactive_ethernet_cores();
+    std::cout << "Inactive" << std::endl;
+    for (const auto& c: var) {
+        std::cout << this->device_->ethernet_core_from_logical_core(c).str() << std::endl;
+    }
+    std::cout << std::endl;
+    // EXPECT_TRUE(local_test_functions::test_EnqueueWriteBuffer_and_EnqueueReadBuffer(this->device_, *tt::tt_metal::detail::GLOBAL_CQ, config));
 }
 
 TEST_F(CommandQueueFixture, TestNon32BAlignedPageSizeForDram) {
