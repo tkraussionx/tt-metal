@@ -216,6 +216,7 @@ void Device::initialize_and_launch_firmware() {
         for (const auto &core : soc_desc.get_logical_ethernet_cores()) {
             CoreCoord ethernet_core = this->ethernet_core_from_logical_core(core);
             // this->initialize_firmware(ethernet_core, &launch_msg);
+            std::cout << "TARGET PATH: " << firmware_build_states_[5]->get_target_out_path("") << std::endl;
             ll_api::memory binary_mem = llrt::get_risc_binary(firmware_build_states_[5]->get_target_out_path(""));
             uint32_t kernel_size16 = llrt::get_binary_code_size16(binary_mem, 5);
             llrt::test_load_write_read_risc_binary(binary_mem, this->id(), ethernet_core, 5);
@@ -232,25 +233,25 @@ void Device::initialize_and_launch_firmware() {
     for(const auto& not_done_core : not_done_cores)
         tt::Cluster::instance().deassert_risc_reset_at_core(tt_cxy_pair(this->id(), not_done_core));
 
-    std::cout << "Sleep..." << std::endl;
-    sleep(2);
-    const metal_SocDescriptor &soc_desc = tt::Cluster::instance().get_soc_desc(this->id_);
-    for (const auto &core : soc_desc.get_logical_ethernet_cores()) {
-        CoreCoord ethernet_core = this->ethernet_core_from_logical_core(core);
-        tt_cxy_pair debug_core = {0, ethernet_core.x, ethernet_core.y};
-        vector<uint32_t> bleh = {0};
-        tt::Cluster::instance().read_core(bleh.data(), 4, debug_core, 100 * 1024, false);
-        std::cout << "Debug val for core " << debug_core.str() << ": " << bleh[0] << std::endl;
-    }
-    // ::detail::ReadFromDeviceL1(this, this->ethernet_core_from_logical_core({0, 0}), 100 * 1024, 4, bleh);
-
-    while(true);
-
     // Wait until fw init is done, ensures the next launch msg doesn't get
     // written while fw is still in init
     log_debug("Waiting for firmware init complete");
     llrt::internal_::wait_until_cores_done(this->id(), RUN_MSG_INIT, not_done_cores);
     log_debug("Firmware init complete");
+
+    std::cout << "Sleep..." << std::endl;
+    sleep(2);
+    const metal_SocDescriptor &soc_desc = tt::Cluster::instance().get_soc_desc(this->id_);
+    for (const auto &core : soc_desc.get_logical_ethernet_cores()) {
+        CoreCoord ethernet_core = this->ethernet_core_from_logical_core(core);
+        tt_cxy_pair debug_core = {(size_t)this->id_, ethernet_core.x, ethernet_core.y};
+        vector<uint32_t> bleh = {0};
+        tt::Cluster::instance().read_core(bleh.data(), 4, debug_core, 100 * 1024, false);
+        std::cout << "Debug val for core " << debug_core.str() << ": " << bleh[0] << std::endl;
+    }
+
+    while(true);
+
 }
 
 void Device::clear_l1_state() {

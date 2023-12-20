@@ -191,7 +191,7 @@ CBInterface cb_interface[NUM_CIRCULAR_BUFFERS] __attribute__((used));
 
 int main() {
 
-    DPRINT << 12345 << ENDL();
+    // DPRINT << 12345 << ENDL();
     // DEBUG_STATUS('I');
 
     // int32_t num_words = ((uint)__ldm_data_end - (uint)__ldm_data_start) >> 2;
@@ -199,7 +199,10 @@ int main() {
 
     reinterpret_cast<volatile tt_l1_ptr uint32_t*>(100 * 1024)[0] = 50;
 
-    while(true);
+    // #pragma unroll
+    // for (volatile int i = 0; i < 100; i++);
+
+    // while(true);
     /*
     risc_init();
     // device_setup();

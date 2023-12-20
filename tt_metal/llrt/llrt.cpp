@@ -252,25 +252,20 @@ bool test_load_write_read_risc_binary(ll_api::memory &mem, chip_id_t chip_id, co
         case 2: local_init_addr = MEM_TRISC0_INIT_LOCAL_L1_BASE; break;
         case 3: local_init_addr = MEM_TRISC1_INIT_LOCAL_L1_BASE; break;
         case 4: local_init_addr = MEM_TRISC2_INIT_LOCAL_L1_BASE; break;
-        case 5: local_init_addr = eth_l1_mem::address_map::FIRMWARE_BASE; break;
-        case 6: local_init_addr = MEM_ERISC_INIT_LOCAL_L1_BASE; break;
+        // case 5: local_init_addr = eth_l1_mem::address_map::FIRMWARE_BASE; break;
+        case 5: local_init_addr = MEM_ERISC_INIT_LOCAL_L1_BASE; break;
         default: TT_FATAL("Invalid riscv_id");
-    }
-    if (riscv_id == 6) {
-        // std::cout << "local init addr: " << local_init_addr << std::endl;
-        // while(true);
     }
 
     log_debug(tt::LogLLRuntime, "hex_vec size = {}, size_in_bytes = {}", mem.size(), mem.size()*sizeof(uint32_t));
     mem.process_spans([&](std::vector<uint32_t>::const_iterator mem_ptr, uint64_t addr, uint32_t len_words) {
 
-        // std::cout << std::hex << "before addr: " << addr << std::endl;
+        std::cout << "before addr: " << addr;
         uint64_t relo_addr = relocate_dev_addr(addr, local_init_addr);
-        // std::cout << std::hex << "after addr: " << addr << std::endl;
+        std::cout << ", after addr: " << relo_addr << std::endl;
         // std::cout << std::endl;
 
         uint32_t bytes = len_words * sizeof(uint32_t);
-        if (relo_addr != 36928 or bytes != 1664) return;
 
         std::cout << "Writing firmware to core " << core.str() << ", bytes: " << bytes << ", addr: " << relo_addr << std::endl;
 
