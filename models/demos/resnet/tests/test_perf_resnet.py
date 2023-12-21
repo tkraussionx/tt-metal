@@ -77,7 +77,7 @@ def run_perf_resnet(
 
         logger.info(f"resnet50 {comments}")
 
-        for iter in range(0, 10):
+        for iter in range(0, 100):
             profiler.start(f"{iter}_key")
             _ = tt_resnet50(tt_inputs).cpu()
             profiler.end(f"{iter}_key")
@@ -90,9 +90,9 @@ def run_perf_resnet(
 
     # ensuring inference time fluctuations is not noise
     inference_sum = 0
-    for iter in range(5, 10):
+    for iter in range(5, 100):
         inference_sum += profiler.get(f"{iter}_key")
-    inference_time_avg = inference_sum / 5.0
+    inference_time_avg = inference_sum / 95.0
 
     cpu_time = profiler.get(cpu_key)
     compile_time = first_iter_time - inference_time_avg
