@@ -73,7 +73,7 @@ std::vector<Tensor> Downsample::create_output_tensors(const std::vector<Tensor> 
 operation::ProgramWithCallbacks Downsample::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
     auto& output_tensor = output_tensors.at(0);
-    return {downsample_single_core(input_tensor_a, downsample_params, output_tensor)};
+    return {downsample_multi_core(input_tensor_a, downsample_params, output_tensor)};
 }
 
 Tensor downsample(const Tensor &input_tensor_a, std::array<uint32_t, 5> downsample_params, std::optional<DataType> output_dtype) {
@@ -356,7 +356,7 @@ DownsampleReadPatternParams generate_downsample_read_pattern(ImgTrackingVars & v
                                     .skip_bottom_partial_left_aligned_row=skip_bottom_partial_left_aligned_row};
 }
 
-operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::array<uint32_t, 5> downsample_params, Tensor& output) {
+operation::ProgramWithCallbacks downsample_multi_core(const Tensor &a, std::array<uint32_t, 5> downsample_params, Tensor& output) {
 
     tt_metal::Program program = tt_metal::CreateProgram();
 

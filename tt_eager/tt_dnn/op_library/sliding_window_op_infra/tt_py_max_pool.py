@@ -3,9 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from tt_eager.tt_dnn.op_library.sliding_window_op_infra.tt_py_op import TTPyOp
-from tt_eager.tt_dnn.op_library.sliding_window_op_infra.untilize_with_halo_config_generation_and_validation import (
-    trace_conv_to_generate_data_top_left_indices_and_pad_metadata,
-    decompose_conv_into_shards_and_generate_tensor_metadata,
+from tt_eager.tt_dnn.op_library.sliding_window_op_infra.halo_config_generation_for_sliding_window_op import (
+    trace_sliding_window_op_to_generate_data_top_left_indices_and_pad_metadata,
+    decompose_sliding_window_op_into_shards_and_generate_tensor_metadata,
 )
 from tt_eager.tt_dnn.op_library.sliding_window_op_infra.sliding_window_op_config_generation_and_validation import (
     generate_sliding_window_op_sharded_input_top_left_indices,
@@ -78,11 +78,17 @@ class TTPyMaxPool(TTPyOp):
 
             input_padded_width = input_w + 2 * pad_w
 
-            pad_metadata, data_top_left_indices = trace_conv_to_generate_data_top_left_indices_and_pad_metadata(
+            (
+                pad_metadata,
+                data_top_left_indices,
+            ) = trace_sliding_window_op_to_generate_data_top_left_indices_and_pad_metadata(
                 (1, 1, filter_h, filter_w, stride_h, stride_w, pad_h, pad_w, 1, 1), input_nchw_shape
             )
 
-            req_conv_input_shard_start_end, tensor_metadata = decompose_conv_into_shards_and_generate_tensor_metadata(
+            (
+                req_conv_input_shard_start_end,
+                tensor_metadata,
+            ) = decompose_sliding_window_op_into_shards_and_generate_tensor_metadata(
                 data_top_left_indices,
                 pad_metadata,
                 input_padded_width,

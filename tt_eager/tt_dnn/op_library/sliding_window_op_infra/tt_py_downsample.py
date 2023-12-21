@@ -29,7 +29,7 @@ def _get_hash_from_sliding_window_op_params(sliding_window_op_params):
     return f"{stride_h}_{stride_w}_{pad_h}_{pad_w}_{filter_h}_{filter_w}_{batch_size}_{input_h}_{input_w}_{num_cores_w}_{num_cores_h}_{num_cores_nhw}"
 
 
-class TTPyUntilizeWithHalo(TTPyOp):
+class TTPyDownsample(TTPyOp):
     # cache map for kernel configs corresponding to unique sliding window op params
     # sliding window op params: tuple(stride_hw: tuple(int, int), pad_hw: tuple(int, int), window_hw: tuple(int, int), input_nhw: tuple(int, int, int), num_cores_nhw: int)
     static_kernel_configs_cache_map = {}
@@ -39,8 +39,8 @@ class TTPyUntilizeWithHalo(TTPyOp):
         self.device = device
         sliding_window_op_params_hash = _get_hash_from_sliding_window_op_params(sliding_window_op_params)
         self.set_op_configs(device, sliding_window_op_params_hash, sliding_window_op_params)
-        assert sliding_window_op_params_hash in TTPyUntilizeWithHalo.static_kernel_configs_cache_map
-        utwh_kernel_configs = TTPyUntilizeWithHalo.static_kernel_configs_cache_map[sliding_window_op_params_hash]
+        assert sliding_window_op_params_hash in TTPyDownsample.static_kernel_configs_cache_map
+        utwh_kernel_configs = TTPyDownsample.static_kernel_configs_cache_map[sliding_window_op_params_hash]
 
         ncores_w, ncores_h = sliding_window_op_params[4]
         ncores_nhw = sliding_window_op_params[5]
@@ -58,7 +58,7 @@ class TTPyUntilizeWithHalo(TTPyOp):
 
         def utwh_(activation):
             # print("sliding_window_op_params=", self.sliding_window_op_params)
-            return ttl.tensor.untilize_with_halo_v2(
+            return ttl.tensor.downsample_v2(
                 activation,
                 utwh_kernel_configs["local_pad_tensor"],
                 utwh_kernel_configs["ll_data_tensor"],
@@ -239,6 +239,9 @@ class TTPyUntilizeWithHalo(TTPyOp):
             # print("gen local data config tt tensor")
             local_data_tensor = gen_config_tt_tensors_uint16(local_data)
             # print("gen local pad config tt tensor")
+            assert (
+                len(local_pad) == 0
+            )  # There is no padding for downsample. TODO: clean this up. No need to create config tensor for padding
             local_pad_tensor = gen_config_tt_tensors_uint16(local_pad)
             # print("gen ll data config tt tensor")
             ll_data_tensor = gen_config_tt_tensors_uint16(ll_data)

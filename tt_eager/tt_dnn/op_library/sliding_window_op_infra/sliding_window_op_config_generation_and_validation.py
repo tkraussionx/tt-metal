@@ -138,3 +138,43 @@ def validate_max_pool_sharded_input_top_left_indices(
         assert passing_pcc
         pool_output_shard_start += output_shard_size
     assert pool_output_shard_start == output_n * output_h * output_w
+
+
+def validate_downsample_sharded_input_top_left_indices(
+    ds_input_shards,
+    out_golden_pyt_tensor,
+    downsample_sharded_input_top_left_indices,
+):
+    output_n = out_golden_pyt_tensor.size()[0]
+    output_c = out_golden_pyt_tensor.size()[1]
+    output_h = out_golden_pyt_tensor.size()[2]
+    output_w = out_golden_pyt_tensor.size()[3]
+    # permute output golden pytorch tensor from nchw to nhwc shape
+    out_golden_pyt_tensor_nhwc = torch.permute(out_golden_pyt_tensor, (0, 2, 3, 1))
+    # reshape nhwc to 2d shape = [nhw, c]
+    out_golden_pyt_tensor_nhwc = torch.reshape(out_golden_pyt_tensor_nhwc, (output_n * output_h * output_w, output_c))
+    ds_output_shard_start = 0
+    for shard_idx, local_top_left_indices in enumerate(downsample_sharded_input_top_left_indices):
+        assert shard_idx < len(ds_input_shards)
+        ds_input_shard = ds_input_shards[shard_idx]
+        ds_shard_output = []
+        output_shard_size = len(local_top_left_indices)
+        ds_output_shard_end = ds_output_shard_start + output_shard_size
+        for local_output_idx, local_input_top_left_idx in enumerate(local_top_left_indices):
+            assert local_input_top_left_idx < len(ds_input_shard)
+            ds_shard_output.extend(ds_input_shard[local_input_top_left_idx, :])
+        output_pyt_shard = torch.tensor(ds_shard_output).reshape((output_shard_size, output_c))
+        # compare output shard with golden output pytorch tensor
+        assert (
+            output_pyt_shard.size() == out_golden_pyt_tensor_nhwc[ds_output_shard_start:ds_output_shard_end, :].size()
+        )
+        # print("out_golden_shard=", out_golden_pyt_tensor.reshape(-1)[conv_output_shard_start : conv_output_shard_end + 1])
+        # print("out_shard=", output_pyt_shard)
+        passing_pcc, output_pcc = comp_equal(
+            out_golden_pyt_tensor_nhwc[ds_output_shard_start:ds_output_shard_end, :], output_pyt_shard
+        )
+        # print("Passing=", passing_pcc)
+        # print("Output pcc=", output_pcc)
+        assert passing_pcc
+        ds_output_shard_start += output_shard_size
+    assert ds_output_shard_start == output_n * output_h * output_w

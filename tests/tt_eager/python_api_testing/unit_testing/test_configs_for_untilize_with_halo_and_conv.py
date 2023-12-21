@@ -7,15 +7,17 @@ import torch
 import numpy
 from loguru import logger
 
-from tt_eager.tt_dnn.op_library.sliding_window_op_infra.untilize_with_halo_config_generation_and_validation import (
-    trace_conv_to_generate_data_top_left_indices_and_pad_metadata,
+from tt_eager.tt_dnn.op_library.sliding_window_op_infra.halo_config_generation_for_sliding_window_op import (
+    trace_sliding_window_op_to_generate_data_top_left_indices_and_pad_metadata,
+    decompose_sliding_window_op_into_shards_and_generate_tensor_metadata,
+    generate_untilize_with_halo_kernel_configs,
+)
+from tt_eager.tt_dnn.op_library.sliding_window_op_infra.halo_config_validation_for_conv_op import (
     construct_input_padded_tensor,
     validate_input_padded_tensor_and_data_top_left_indices_and_pad_metadata,
-    decompose_conv_into_shards_and_generate_tensor_metadata,
     construct_utwh_output_shards,
     validate_utwh_output_shards_and_req_conv_input_shard_start_end,
     validate_tensor_metadata,
-    generate_untilize_with_halo_kernel_configs,
     validate_untilize_with_halo_kernel_configs,
 )
 from tt_eager.tt_dnn.op_library.sliding_window_op_infra.sliding_window_op_config_generation_and_validation import (
@@ -120,7 +122,7 @@ def test_generate_all_configs_and_references(
     input_padded_height = input_h + 2 * pad_h
     # Generate following configs by tracing conv -
     logger.info("Trace conv and generate following configs - pad_metadata and data_top_left_indices.")
-    pad_metadata, data_top_left_indices = trace_conv_to_generate_data_top_left_indices_and_pad_metadata(
+    pad_metadata, data_top_left_indices = trace_sliding_window_op_to_generate_data_top_left_indices_and_pad_metadata(
         conv_params, input_nchw_shape
     )
 
@@ -142,7 +144,10 @@ def test_generate_all_configs_and_references(
     logger.info(
         "Decompose conv into shards and generate the required conv input shard start/end stick indices and tensor metadata."
     )
-    req_conv_input_shard_start_end, tensor_metadata = decompose_conv_into_shards_and_generate_tensor_metadata(
+    (
+        req_conv_input_shard_start_end,
+        tensor_metadata,
+    ) = decompose_sliding_window_op_into_shards_and_generate_tensor_metadata(
         data_top_left_indices,
         pad_metadata,
         input_padded_width,

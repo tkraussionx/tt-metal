@@ -4,7 +4,7 @@
 
 import numpy as np
 
-from tt_eager.tt_dnn.op_library.sliding_window_op_infra.untilize_with_halo_config_generation_and_validation import (
+from tt_eager.tt_dnn.op_library.sliding_window_op_infra.sliding_window_op_halo_config_generation_and_validation import (
     NEIGHBORHOOD_DIST,
     generate_untilize_with_halo_kernel_configs,
 )
