@@ -75,10 +75,14 @@ def run_perf_resnet(
 
         tt_inputs = tt_resnet50.preprocessing(inputs)
 
+        logger.info(f"resnet50 {comments}")
+
         for iter in range(0, 10):
             profiler.start(f"{iter}_key")
             _ = tt_resnet50(tt_inputs).cpu()
             profiler.end(f"{iter}_key")
+            tt_time = profiler.get(f"{iter}_key")
+            logger.info(f"inference time for iter {iter}::: {tt_time}")
 
         # enable_persistent_kernel_cache()
 
