@@ -366,7 +366,7 @@ def validate_tensor_metadata(
     return unpadded_input_tensor_shards
 
 
-NEIGHBORHOOD_DIST = 2  ## ll, l, r, rr
+NEIGHBORHOOD_DIST = 4  ## ll, l, r, rr
 
 
 ## Function to generate the untilize with halo writer kernel config using the tensor metadata and required shard start/end information.
@@ -441,6 +441,7 @@ def generate_untilize_with_halo_kernel_configs(tensor_metadata: list, resharded_
             else:  ## data stick
                 ## the neighbor core of dst_core_id this data stick is coming from (src_core_id): ll, l, local, r or rr
                 neighbor_idx = NEIGHBORHOOD_DIST + (dst_core_id - src_core_id)
+                # print(f'neighbor_idx: {neighbor_idx}')
                 assert neighbor_idx >= 0 and neighbor_idx < 2 * NEIGHBORHOOD_DIST + 1
 
                 if curr_segment_size > 0:

@@ -45,7 +45,7 @@ def volume(shape):
 )
 @pytest.mark.parametrize(
     "kernel_size",
-    ((3, 3),),
+    ((3, 3), (2, 2)),
 )
 @pytest.mark.parametrize(
     "padding",
@@ -98,13 +98,12 @@ def test_run_max_pool(
         logger.info("Current maxpool writer needs nchannels to be 64!")
         pytest.skip()
 
+    logger.info(f"output shape: {in_h} {in_w}")
+    logger.info(f"output shape: {out_h} {out_w}")
+
     interleaved_mem_config = ttl.tensor.MemoryConfig(
         ttl.tensor.TensorMemoryLayout.INTERLEAVED,
         ttl.tensor.BufferType.DRAM if act_shape[0] > 8 else ttl.tensor.BufferType.L1,
-    )
-    sharded_mem_config = ttl.tensor.MemoryConfig(
-        ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-        ttl.tensor.BufferType.L1,
     )
 
     assert out_mem_config.is_sharded() and in_mem_config.is_sharded()
@@ -137,28 +136,18 @@ def test_run_max_pool(
 
     ncores_nhw = 1
     grid_size = (1, 1)
-    shard_grid = ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(0, 0))})
     in_nhw = in_n * in_h * in_w
     out_nhw = in_n * out_h * out_w
+    out_nhw_padded = math.ceil(out_nhw / 32.0) * 32
+    logger.info(f"out_nhw: {out_nhw}, out_nhw_padded: {out_nhw_padded}")
+
     ## NOTE: these should match the max_pool op code for now. Hardcoded Resnet shapes only.
     if out_nhw == 1024:
         ncores_nhw = 32
         grid_size = (12, 3)
-        shard_grid = ttl.tensor.CoreRangeSet(
-            {
-                ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(11, 1)),
-                ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 2), ttl.tensor.CoreCoord(7, 2)),
-            }
-        )
     elif out_nhw == 2048 or out_nhw == 4096 or out_nhw == 8192 or out_nhw == 16384 or out_nhw == 32768:
         ncores_nhw = 64
-        grid_size = (12, 6)
-        shard_grid = ttl.tensor.CoreRangeSet(
-            {
-                ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(11, 4)),
-                ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 5), ttl.tensor.CoreCoord(3, 5)),
-            }
-        )
+        grid_size = (8, 8)
     elif (
         out_nhw == 3136
         or out_nhw == 6272
@@ -171,12 +160,9 @@ def test_run_max_pool(
             pytest.skip("Unsupported grid size for WH")
         ncores_nhw = 98
         grid_size = (12, 9)
-        shard_grid = ttl.tensor.CoreRangeSet(
-            {
-                ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(11, 7)),
-                ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 8), ttl.tensor.CoreCoord(1, 8)),
-            }
-        )
+    elif out_nhw == 3249:
+        ncores_nhw = 98
+        grid_size = (12, 9)
     else:
         assert False
 
@@ -189,11 +175,9 @@ def test_run_max_pool(
         ncores_nhw,
     ]
 
-    pad_val = 0xF7FF
+    print(f"sliding window op params: {sliding_window_op_params}")
 
-    shard_spec = ttl.tensor.ShardSpec(
-        shard_grid, [in_nhw // ncores_nhw, act_padded.shape[-1]], ttl.tensor.ShardOrientation.ROW_MAJOR, False
-    )
+    pad_val = 0xF7FF
 
     ttact_tilize = (
         ttl.tensor.Tensor(
@@ -202,18 +186,16 @@ def test_run_max_pool(
             dtype,
             ttl.tensor.Layout.ROW_MAJOR,
         )
-        .to(ttl.tensor.Layout.TILE)
-        .to(device, sharded_mem_config, shard_spec)
-        # .to(device, interleaved_mem_config)
+        # .to(ttl.tensor.Layout.TILE)
+        .to(device, interleaved_mem_config)
     )
-    ttact_sharded = ttact_tilize
-    # ttact_sharded = ttl.tensor.interleaved_to_sharded(
-    #     ttact_tilize,
-    #     grid_size,
-    #     [in_nhw // ncores_nhw, act_padded.shape[-1]],
-    #     ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-    #     ttl.tensor.ShardOrientation.ROW_MAJOR,
-    # )
+    ttact_sharded = ttl.tensor.interleaved_to_sharded(
+        ttact_tilize,
+        grid_size,
+        [in_nhw // ncores_nhw, act_padded.shape[-1]],
+        ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+        ttl.tensor.ShardOrientation.ROW_MAJOR,
+    )
     assert in_h * in_w == act_shape_padded[-2]
     assert kernel_w == kernel_h and stride_w == stride_h and pad_w == pad_h and dilation_w == dilation_h
 
@@ -237,7 +219,7 @@ def test_run_max_pool(
     TTPyUntilizeWithHalo.static_kernel_configs_cache_map = {}
 
     out_shape_padded = out_padded.shape()
-    out_pytorch_padded = out_padded.to_torch().reshape(out_shape_padded)  ## N, 1, HW, C
+    out_pytorch_padded = out_padded.to_torch().reshape(tuple(out_shape_padded))  ## N, 1, HW, C
     out_pytorch = out_pytorch_padded[:, :, :, :in_c]
     out_pytorch = torch.permute(out_pytorch, (0, 3, 1, 2))  ## N, C, 1, HW
 
@@ -250,6 +232,8 @@ def test_run_max_pool(
         return_indices=False,
         ceil_mode=False,
     )(act)
+
+    logger.info(f"golden shape: {golden_pytorch.shape}")
 
     ## test for equivalance
     out_pytorch = out_pytorch.reshape(golden_pytorch.shape)

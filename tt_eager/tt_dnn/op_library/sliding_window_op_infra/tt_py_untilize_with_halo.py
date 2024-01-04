@@ -12,6 +12,7 @@ from tt_eager.tt_dnn.op_library.sliding_window_op_infra.untilize_with_halo_confi
 from tt_lib.utils import _nearest_y
 from tt_eager.tt_dnn.op_library.sliding_window_op_infra.sliding_window_op_utils import (
     get_sliding_window_op_output_shard_nhw_size,
+    get_sliding_window_op_output_shard_nhw_size_rm,
 )
 import tt_lib as ttl
 import torch
@@ -34,11 +35,11 @@ class TTPyUntilizeWithHalo(TTPyOp):
     # sliding window op params: tuple(stride_hw: tuple(int, int), pad_hw: tuple(int, int), window_hw: tuple(int, int), input_nhw: tuple(int, int, int), num_cores_nhw: int)
     static_kernel_configs_cache_map = {}
 
-    def __init__(self, device, sliding_window_op_params, pad_val=0x0):
+    def __init__(self, device, sliding_window_op_params, pad_val=0x0, use_rm_opt=False):
         self.sliding_window_op_params = sliding_window_op_params
         self.device = device
         sliding_window_op_params_hash = _get_hash_from_sliding_window_op_params(sliding_window_op_params)
-        self.set_op_configs(device, sliding_window_op_params_hash, sliding_window_op_params)
+        self.set_op_configs(device, sliding_window_op_params_hash, sliding_window_op_params, use_rm_opt)
         assert sliding_window_op_params_hash in TTPyUntilizeWithHalo.static_kernel_configs_cache_map
         utwh_kernel_configs = TTPyUntilizeWithHalo.static_kernel_configs_cache_map[sliding_window_op_params_hash]
 
@@ -87,7 +88,7 @@ class TTPyUntilizeWithHalo(TTPyOp):
 
     # override abstract methods from base class TTPyOp
     @classmethod
-    def set_op_configs(cls, device, sliding_window_op_params_hash, sliding_window_op_params):
+    def set_op_configs(cls, device, sliding_window_op_params_hash, sliding_window_op_params, use_rm_opt=False):
         if sliding_window_op_params_hash not in cls.static_kernel_configs_cache_map:
             # TODO: nitika - clean up params data structure
             assert len(sliding_window_op_params) == 6
@@ -105,9 +106,15 @@ class TTPyUntilizeWithHalo(TTPyOp):
             pad_metadata, data_top_left_indices = trace_conv_to_generate_data_top_left_indices_and_pad_metadata(
                 sliding_window_op_all_params, input_nchw_shape
             )
-            sliding_window_output_shard_nhw_size = get_sliding_window_op_output_shard_nhw_size(
-                num_cores_nhw, input_n, input_h, input_w, stride_h, stride_w, pad_h, pad_w, window_h, window_w
-            )
+            if use_rm_opt:
+                ## generated output is RM, so no need to have each core multiple of 32
+                sliding_window_output_shard_nhw_size = get_sliding_window_op_output_shard_nhw_size_rm(
+                    num_cores_nhw, input_n, input_h, input_w, stride_h, stride_w, pad_h, pad_w, window_h, window_w
+                )
+            else:
+                sliding_window_output_shard_nhw_size = get_sliding_window_op_output_shard_nhw_size(
+                    num_cores_nhw, input_n, input_h, input_w, stride_h, stride_w, pad_h, pad_w, window_h, window_w
+                )
             untilize_w_halo_input_nhw_size_to_shard_evenly = _nearest_y(input_n * input_h * input_w, num_cores_nhw * 32)
             untilize_with_halo_input_shard_nhw_size = (int)(
                 untilize_w_halo_input_nhw_size_to_shard_evenly / num_cores_nhw
