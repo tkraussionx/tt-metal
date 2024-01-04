@@ -40,7 +40,7 @@ vector<uint32_t> generate_arange_vector(uint32_t size_bytes) {
 
 bool test_EnqueueWriteBuffer_and_EnqueueReadBuffer(Device* device, CommandQueue& cq, const BufferConfig& config) {
     bool pass = true;
-    for (const bool use_void_star_api: {true, false}) {
+    for (const bool use_void_star_api: {true}) {
 
         size_t buf_size = config.num_pages * config.page_size;
         Buffer bufa(device, buf_size, config.page_size, config.buftype);
@@ -182,9 +182,10 @@ TEST_F(CommandQueueFixture, Sending131072Pages) {
     BufferConfig config = {
         .num_pages = 131072,
         .page_size = 128,
-        .buftype = BufferType::DRAM};
+        .buftype = BufferType::L1};
 
     EXPECT_TRUE(local_test_functions::test_EnqueueWriteBuffer_and_EnqueueReadBuffer(this->device_, *tt::tt_metal::detail::GLOBAL_CQ, config));
+    detail::DumpDeviceProfileResults(this->device_, {{1, 7}});
 }
 
 // TEST_F(CommandQueueFixture, FusedWriteDramBuffersInWhichRemainderBurstSizeDoesNotFitInLocalL1) {

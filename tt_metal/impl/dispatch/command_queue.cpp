@@ -714,6 +714,11 @@ void send_dispatch_kernel_to_device(Device* device) {
 
     launch_msg_t msg = dispatch_program.kernels_on_core(producer_logical_core)->launch_msg;
 
+    std::cout << "PRODUCER LOGICAL: " << producer_logical_core.str() << std::endl;
+    std::cout << "CONSUMER LOGICAL: " << consumer_logical_core.str() << std::endl;
+    std::cout << "PRODUCER PHYSICAL: " << producer_physical_core.str() << std::endl;
+    std::cout << "CONSUMER PHYSICAL: " << consumer_physical_core.str() << std::endl;
+
     // TODO(pkeller): Should use detail::LaunchProgram once we have a mechanism to avoid running all RISCs
     tt::llrt::write_launch_msg_to_core(device->id(), producer_physical_core, &msg);
     tt::llrt::write_launch_msg_to_core(device->id(), consumer_physical_core, &msg);

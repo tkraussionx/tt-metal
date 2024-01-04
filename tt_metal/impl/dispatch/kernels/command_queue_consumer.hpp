@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "dataflow_api.h"
+#include "tools/profiler/kernel_profiler.hpp"
 
 static constexpr uint32_t PROGRAM_CB_ID = 0;
 
@@ -57,6 +58,7 @@ FORCE_INLINE void write_buffers(
     uint64_t producer_noc_encoding,
     uint32_t producer_consumer_transfer_num_pages,
     bool db_buf_switch) {
+    kernel_profiler::mark_time(5);
     for (uint32_t i = 0; i < num_destinations; i++) {
         const uint32_t bank_base_address = command_ptr[1];
         const uint32_t num_pages = command_ptr[2];
@@ -85,6 +87,7 @@ FORCE_INLINE void write_buffers(
             id += num_to_write;
         }
     }
+    kernel_profiler::mark_time(6);
 }
 
 template <bool multicast>
