@@ -5,21 +5,21 @@
 #include <cstdint>
 #include "dataflow_api.h"
 
-#include "debug/dprint.h"
+// #include "debug/dprint.h"
 // SliceRange srt = SliceRange{ .h0 = 0, .h1 = 32, .hs = 8, .w0 = 0, .w1 = 32, .ws = 8 };
 // SliceRange srr = SliceRange{ .h0 = 0, .h1 = 1, .hs = 8, .w0 = 0, .w1 = 32, .ws = 1 };
 // SliceRange srr2 = SliceRange{ .h0 = 0, .h1 = 1, .hs = 8, .w0 = 0, .w1 = 64, .ws = 2 };
 
-inline void print_pages(uint32_t l1_addr, uint32_t pagelen, uint32_t npages, uint32_t start = 0) {
-    volatile tt_l1_ptr uint16_t* ptr = reinterpret_cast<volatile tt_l1_ptr uint16_t*>(l1_addr) + start * pagelen;
-    for (uint32_t page = 0; page < npages; ++ page) {
-        DPRINT << start + page << ": ";
-        for (uint32_t j = 0; j < pagelen; ++ j, ++ ptr) {
-            DPRINT << BF16(*ptr) << " ";
-        }
-        DPRINT << ENDL();
-    }
-}
+// inline void print_pages(uint32_t l1_addr, uint32_t pagelen, uint32_t npages, uint32_t start = 0) {
+//     volatile tt_l1_ptr uint16_t* ptr = reinterpret_cast<volatile tt_l1_ptr uint16_t*>(l1_addr) + start * pagelen;
+//     for (uint32_t page = 0; page < npages; ++ page) {
+//         DPRINT << start + page << ": ";
+//         for (uint32_t j = 0; j < pagelen; ++ j, ++ ptr) {
+//             DPRINT << BF16(*ptr) << " ";
+//         }
+//         DPRINT << ENDL();
+//     }
+// }
 
 /**
  * Max-pool 2D.
@@ -49,8 +49,7 @@ void kernel_main() {
     for (uint32_t stick = 0; stick < nsticks_per_core_by_nblocks; ++ stick) {
         // DPRINT << "W ait: " << stick << ENDL();
 
-        // cb_wait_front(out_cb_id, out_nelems * out_ntiles_c);
-        cb_wait_front(out_cb_id, 1);
+        cb_wait_front(out_cb_id, out_nelems * out_ntiles_c);
         uint32_t out_l1_read_addr = get_read_ptr(out_cb_id);
 
         // print_pages(out_l1_read_addr, 32, 2);
@@ -94,8 +93,7 @@ void kernel_main() {
         noc_async_write_barrier();
 
         // kernel_profiler::mark_time(14);
-        // cb_pop_front(out_cb_id, out_nelems * out_ntiles_c);
-        cb_pop_front(out_cb_id, 1);
+        cb_pop_front(out_cb_id, out_nelems * out_ntiles_c);
 
         // DPRINT << "W ritten: " << stick << ENDL();
     }

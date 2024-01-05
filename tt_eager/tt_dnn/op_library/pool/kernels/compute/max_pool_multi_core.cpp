@@ -10,7 +10,7 @@
 #include "compute_kernel_api/pack_untilize.h"
 // #include "tools/profiler/kernel_profiler.hpp"
 
-#define DEBUG_PRINT 1
+#define DEBUG_PRINT 0
 
 #if DEBUG_PRINT == 1
     #include "debug/dprint.h"
@@ -63,10 +63,6 @@ inline void tilize(uint32_t out_nelems,
         cb_wait_front(in_cb_id, 1);
         cb_reserve_back(out_cb_id, in_ntiles_hwc);
         tilize_block(in_cb_id, in_ntiles_hwc, out_cb_id);  // TODO: need to ensure the ordering for reduction when in_ntiles_hw > 1
-        UNPACK(( DPRINT << "IN 0" << ENDL() ));
-        print_tile_rows(out_cb_id, 10, 0, true);
-        UNPACK(( DPRINT << "IN 1" << ENDL() ));
-        print_tile_rows(out_cb_id, 10, 1, true);
         cb_push_back(out_cb_id, in_ntiles_hwc);
         cb_pop_front(in_cb_id, 1);
     }
@@ -82,10 +78,6 @@ inline void reduce_h_orig(uint32_t out_nelems,
                      uint32_t out_ntiles_c,
                      uint32_t out_cb_id) {
     cb_wait_front(in_cb_id, in_ntiles_hwc * out_nelems);
-    // UNPACK(( DPRINT << "IN 0" << ENDL() ));
-    // print_tile_rows(in_cb_id, 10, 0, true);
-    // UNPACK(( DPRINT << "IN 1" << ENDL() ));
-    // print_tile_rows(in_cb_id, 10, 1, true);
     cb_reserve_back(out_cb_id, out_ntiles_c * out_nelems);
     reduce_init_delta<false>(PoolType::MAX, ReduceDim::REDUCE_COL, out_cb_id);
     uint32_t base_tile_id = 0;
@@ -102,8 +94,6 @@ inline void reduce_h_orig(uint32_t out_nelems,
         base_tile_id += in_ntiles_hw;
     }
     reduce_revert_delta(out_cb_id);
-    UNPACK(( DPRINT << "OUT:" << ENDL() ));
-    print_tile_rows(out_cb_id, 10, 0, true);
     cb_push_back(out_cb_id, out_ntiles_c * out_nelems);
     cb_pop_front(in_cb_id, in_ntiles_hwc * out_nelems);
 }
@@ -116,13 +106,9 @@ inline void reduce_h(uint32_t out_nelems,
                      uint32_t out_ntiles_c,
                      uint32_t out_cb_id) {
     cb_wait_front(in_cb_id, in_ntiles_hwc * out_nelems);
-    // UNPACK(( DPRINT << "IN 0" << ENDL() ));
-    // print_tile_rows(in_cb_id, 10, 0, true);
-    // UNPACK(( DPRINT << "IN 1" << ENDL() ));
-    // print_tile_rows(in_cb_id, 10, 1, true);
     reduce_init_delta_no_pack<false>(PoolType::MAX, ReduceDim::REDUCE_COL);
     pack_untilize_dst_init_short<in_ntiles_c>();
-    cb_reserve_back(out_cb_id, 1);
+    cb_reserve_back(out_cb_id, out_ntiles_c * out_nelems);
     tile_regs_acquire();
     for (uint32_t c_i = 0; c_i < in_ntiles_c * out_nelems; ++c_i) {
         // add to accumulator all the in_ntiles_hw in a column of tiles
@@ -133,11 +119,7 @@ inline void reduce_h(uint32_t out_nelems,
     pack_untilize_dst<in_ntiles_c>(out_cb_id);
     tile_regs_release();
     pack_untilize_uninit();
-    UNPACK(( DPRINT << "OUT 0" << ENDL() ));
-    print_tile_rows(out_cb_id, 32, 0, false);
-    // UNPACK(( DPRINT << "OUT 1" << ENDL() ));
-    // print_tile_rows(out_cb_id, 32, 1, false);
-    cb_push_back(out_cb_id, 1);
+    cb_push_back(out_cb_id, out_ntiles_c * out_nelems);
     cb_pop_front(in_cb_id, in_ntiles_hwc * out_nelems);
 }
 
