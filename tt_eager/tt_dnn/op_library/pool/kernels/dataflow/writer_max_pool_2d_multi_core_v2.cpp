@@ -54,42 +54,42 @@ void kernel_main() {
 
         // print_pages(out_l1_read_addr, 32, 2);
 
-        noc_async_write(out_l1_read_addr, out_noc_addr, 128);
-        out_noc_addr += 128;
+        // noc_async_write(out_l1_read_addr, out_noc_addr, 128);
+        // out_noc_addr += 128;
 
-        // for (uint32_t out_elem_i = 0; out_elem_i < out_nelems; ++ out_elem_i) {
-        //     // Write as tiled tensor, need to handle each face.
-        //     // NOTE: this assumes that the stick size is 64 (2 tiles width)
+        for (uint32_t out_elem_i = 0; out_elem_i < out_nelems; ++ out_elem_i) {
+            // Write as tiled tensor, need to handle each face.
+            // NOTE: this assumes that the stick size is 64 (2 tiles width)
 
-        //     // tile 0
-        //     // face 0
-        //     // write 16 elements from face0 // 32B
-        //     noc_async_write(out_l1_read_addr, out_noc_addr, 32);
-        //     out_noc_addr += 32;
+            // tile 0
+            // face 0
+            // write 16 elements from face0 // 32B
+            noc_async_write(out_l1_read_addr, out_noc_addr, 32);
+            out_noc_addr += 32;
 
-        //     // face 1
-        //     out_l1_read_addr += 512; // go to face 1
-        //     noc_async_write(out_l1_read_addr, out_noc_addr, 32);
-        //     out_noc_addr += 32;
+            // face 1
+            out_l1_read_addr += 512; // go to face 1
+            noc_async_write(out_l1_read_addr, out_noc_addr, 32);
+            out_noc_addr += 32;
 
-        //     // go to tile 1
-        //     out_l1_read_addr += 512 + 1024;
+            // go to tile 1
+            out_l1_read_addr += 512 + 1024;
 
-        //     // face 0
-        //     // write 16 elements from face0 // 32B
-        //     noc_async_write(out_l1_read_addr, out_noc_addr, 32);
-        //     out_noc_addr += 32;
+            // face 0
+            // write 16 elements from face0 // 32B
+            noc_async_write(out_l1_read_addr, out_noc_addr, 32);
+            out_noc_addr += 32;
 
-        //     // face 1
-        //     out_l1_read_addr += 512; // go to face 1
-        //     noc_async_write(out_l1_read_addr, out_noc_addr, 32);
-        //     out_noc_addr += 32;
+            // face 1
+            out_l1_read_addr += 512; // go to face 1
+            noc_async_write(out_l1_read_addr, out_noc_addr, 32);
+            out_noc_addr += 32;
 
-        //     // go to next tile in the block (next channel)
-        //     out_l1_read_addr += 512 + 1024;
+            // go to next tile in the block (next channel)
+            out_l1_read_addr += 512 + 1024;
 
-        //     ++ out_row_id;
-        // }
+            ++ out_row_id;
+        }
         noc_async_write_barrier();
 
         // kernel_profiler::mark_time(14);
