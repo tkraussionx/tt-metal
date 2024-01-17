@@ -1004,4 +1004,12 @@ op_map = {
         "tt_lib_op": ttnn_ops.layernorm_noweights,
         "pytorch_op": pytorch_ops.ttnn_layernorm_noweights,
     },
+    "ttnn-attention_softmax": {
+        "tt_lib_op": ttnn_ops.attention_softmax,
+        "pytorch_op": pytorch_ops.attention_softmax,
+    },
+    "ttnn-transformer_concatenate_heads": {
+        "tt_lib_op": ttnn_ops.transformer_concatenate_heads,
+        "pytorch_op": pytorch_ops.transformer_concatenate_heads,
+    },
 }

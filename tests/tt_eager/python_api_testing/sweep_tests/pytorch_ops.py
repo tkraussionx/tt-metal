@@ -2,6 +2,8 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+import ttnn
+
 import torch
 from tt_lib.utils import (
     _nearest_32 as nearest_32,
@@ -1153,4 +1155,20 @@ def ttnn_layernorm_weights_bias_residual(x, y, z, w, *args, **kwargs):
 def ttnn_layernorm_noweights(x, *args, **kwargs):
     w = x.shape[1]
     torch_output_tensor = torch.nn.functional.layer_norm(x, normalized_shape=[w])
+    return torch_output_tensor
+
+
+def attention_softmax(x, y, *args, **kwargs):
+    torch_output_tensor = ttnn.transformer._torch_attention_softmax(
+        x,
+        head_size=None,
+        attention_mask=None,
+    )
+
+    return torch_output_tensor
+
+
+def transformer_concatenate_heads(x, *args, **kwargs):
+    torch_output_tensor = ttnn.transformer._torch_concatenate_heads(x)
+
     return torch_output_tensor
