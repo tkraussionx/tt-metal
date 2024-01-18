@@ -108,21 +108,17 @@ void kernel_main() {
         uint32_t restart = command_ptr[DeviceCommand::restart_idx];
         uint32_t is_program = command_ptr[DeviceCommand::is_program_buffer_idx];
 
-        DPRINT << "RESTART: " << restart << ENDL();
-        DPRINT << "Finish: " << finish << ENDL();
-        DPRINT << "data size : " << data_size << ENDL();
-        DPRINT << "is program : " << is_program << ENDL();
-        DPRINT << ENDL();
-
         // Restarts the read/write pointers
         if (restart) {
-            // Restart read/write pointer
+            // Restart read/write pointers
             uint32_t new_issue_queue_size = issue_queue_size;
+            reinterpret_cast<volatile tt_l1_ptr uint32_t*>(CQ_ISSUE_WRITE_PTR)[0] = issue_queue_start_addr >> 4;
             setup_issue_queue_read_interface(issue_queue_start_addr, new_issue_queue_size);
-            reinterpret_cast<volatile tt_l1_ptr uint32_t*>(CQ_ISSUE_WRITE_PTR)[0] = issue_queue_start_addr;
-            while (db_semaphore_addr[0] == 0)
-                ;  // Check that there is space in the consumer
+            notify_host_of_issue_queue_read_pointer<host_issue_queue_read_ptr_addr>();
+            wait_consumer_space_available(db_semaphore_addr);
             relay_command(db_buf_switch, consumer_noc_encoding);
+            update_producer_consumer_sync_semaphores(producer_noc_encoding, consumer_noc_encoding, db_semaphore_addr);
+            db_buf_switch = false; // Restart the db buf switch as well
             continue;
         } else if ((DeviceCommand::WrapRegion)wrap == DeviceCommand::WrapRegion::ISSUE) {
             // Basically popfront without the extra conditional
@@ -134,21 +130,14 @@ void kernel_main() {
 
 
         program_local_cb(producer_cb_num_pages, page_size, producer_cb_size);
-        while (db_semaphore_addr[0] == 0)
-            ;  // Check that there is space in the consumer
+        wait_consumer_space_available(db_semaphore_addr);
         program_consumer_cb(db_buf_switch, consumer_noc_encoding, consumer_cb_num_pages, page_size, consumer_cb_size);
         relay_command(db_buf_switch, consumer_noc_encoding);
         if (stall) {
-            while (*db_semaphore_addr != 2)
-                ;
+            wait_consumer_idle(db_semaphore_addr);
         }
-        // Decrement the semaphore value
-        noc_semaphore_inc(producer_noc_encoding | uint32_t(db_semaphore_addr), -1);  // Two's complement addition
-        noc_async_write_barrier();
 
-        // Notify the consumer
-        noc_semaphore_inc(consumer_noc_encoding | get_semaphore(0), 1);
-        noc_async_write_barrier();  // Barrier for now
+        update_producer_consumer_sync_semaphores(producer_noc_encoding, consumer_noc_encoding, db_semaphore_addr);
 
         // Fetch data and send to the consumer
         produce(

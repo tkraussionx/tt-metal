@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_metal/impl/dispatch/kernels/command_queue_consumer.hpp"
+#include "debug/dprint.h"
 
 // The read interface for the issue region is set up on the device, the write interface belongs to host
 // Opposite for completion region where device sets up the write interface and host owns read interface
@@ -32,6 +33,7 @@ void kernel_main() {
 
     while (true) {
         // Wait for producer to supply a command
+        DPRINT << "cons db acquire" << ENDL();
         db_acquire(db_semaphore_addr, consumer_noc_encoding);
 
         // For each instruction, we need to jump to the relevant part of the device command
@@ -56,7 +58,11 @@ void kernel_main() {
         if (restart) {
             cq_write_interface.completion_fifo_wr_ptr = completion_queue_start_addr >> 4;     // Head to the beginning of the completion region
             cq_write_interface.completion_fifo_wr_toggle = 0;
-            finish = true; // Need to notify the host that we have successfully restarted
+            db_buf_switch = false;
+            noc_semaphore_inc(producer_noc_encoding | get_semaphore(0), 1);
+            noc_async_write_barrier(); // Barrier for now
+            notify_host_complete<host_finish_addr>();
+            continue;
         } else if ((DeviceCommand::WrapRegion)wrap == DeviceCommand::WrapRegion::COMPLETION) {
             cq_write_interface.completion_fifo_wr_ptr = completion_queue_start_addr >> 4;     // Head to the beginning of the completion region
             cq_write_interface.completion_fifo_wr_toggle = not cq_write_interface.completion_fifo_wr_toggle;

@@ -18,6 +18,27 @@ inline __attribute__((always_inline)) volatile uint32_t* get_cq_issue_write_ptr(
 }
 
 FORCE_INLINE
+void wait_consumer_idle(volatile tt_l1_ptr uint32_t* db_semaphore_addr) {
+    while (*db_semaphore_addr != 2);
+}
+
+FORCE_INLINE
+void wait_consumer_space_available(volatile tt_l1_ptr uint32_t* db_semaphore_addr) {
+    while (*db_semaphore_addr == 0);
+}
+
+FORCE_INLINE
+void update_producer_consumer_sync_semaphores(uint64_t producer_noc_encoding, uint64_t consumer_noc_encoding, volatile tt_l1_ptr uint32_t* db_semaphore_addr) {
+    // Decrement the semaphore value
+    noc_semaphore_inc(producer_noc_encoding | uint32_t(db_semaphore_addr), -1);  // Two's complement addition
+    noc_async_write_barrier();
+
+    // Notify the consumer
+    noc_semaphore_inc(consumer_noc_encoding | get_semaphore(0), 1);
+    noc_async_write_barrier();  // Barrier for now
+}
+
+FORCE_INLINE
 void issue_queue_wait_front() {
     DEBUG_STATUS('N', 'Q', 'W');
     uint32_t issue_write_ptr_and_toggle;

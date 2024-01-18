@@ -30,25 +30,26 @@ TEST_F(CommandQueueFixture, TestEnqueueRestart) {
     tt_cxy_pair physical_consumer_core(this->device_->id(), this->device_->worker_core_from_logical_core(cq.consumer_core));
     tt::Cluster::instance().read_core(&starting_completion_read_ptr, 4, physical_consumer_core, CQ_COMPLETION_READ_PTR, false);
     tt::Cluster::instance().read_core(&starting_completion_write_ptr, 4, physical_consumer_core, CQ_COMPLETION_WRITE_PTR, false);
-
-    std::cout << "starting_issue_read_ptr: " << starting_issue_read_ptr << ", starting_issue_write_ptr: " << starting_issue_write_ptr << std::endl;
-    std::cout << "starting_completion_read_ptr: " << starting_completion_read_ptr << ", starting_completion_write_ptr: " << starting_completion_write_ptr << std::endl;
-    sleep(1);
-
-    std::cout << "Enqueuing program" << std::endl;
     EnqueueProgram(cq, program, false);
     tt::DprintServerAwait();
-    std::cout << "Enqueued program" << std::endl;
     Finish(cq);
     tt::DprintServerAwait();
-    std::cout << "Finished" << std::endl;
-    std::cout << "Restarting" << std::endl;
     ::detail::EnqueueRestart(cq);
     tt::DprintServerAwait();
-    std::cout << "Restarted" << std::endl;
 
     // Assert that the device and system memory pointers successfully
     // restarted
-    vector<uint32_t> result;
-    ::detail::ReadFromDeviceL1(this->device_, cq.producer_core, 0, 4, result);
+    uint32_t ending_issue_read_ptr;
+    uint32_t ending_issue_write_ptr;
+    tt::Cluster::instance().read_core(&ending_issue_read_ptr, 4, physical_producer_core, CQ_ISSUE_READ_PTR, false);
+    tt::Cluster::instance().read_core(&ending_issue_write_ptr, 4, physical_producer_core, CQ_ISSUE_WRITE_PTR, false);
+
+    uint32_t ending_completion_read_ptr;
+    uint32_t ending_completion_write_ptr;
+    tt::Cluster::instance().read_core(&ending_completion_read_ptr, 4, physical_consumer_core, CQ_COMPLETION_READ_PTR, false);
+    tt::Cluster::instance().read_core(&ending_completion_write_ptr, 4, physical_consumer_core, CQ_COMPLETION_WRITE_PTR, false);
+    EXPECT_EQ(starting_issue_read_ptr, ending_issue_read_ptr);
+    EXPECT_EQ(starting_issue_write_ptr, ending_issue_write_ptr);
+    EXPECT_EQ(starting_completion_read_ptr, ending_completion_read_ptr);
+    EXPECT_EQ(starting_completion_write_ptr, ending_completion_write_ptr);
 }
