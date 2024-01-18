@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_metal/impl/dispatch/kernels/command_queue_producer.hpp"
+#include "debug/dprint.h"
 
 static constexpr uint32_t COMMAND_START_ADDR =
     L1_UNRESERVED_BASE;  // Space between UNRESERVED_BASE -> data_start is for commands
@@ -64,7 +65,7 @@ void kernel_main() {
     constexpr uint32_t issue_queue_start_addr = get_compile_time_arg_val(1);
 
     // Only the issue queue size is a runtime argument
-    uint32_t issue_queue_size = get_arg_val<uint32_t>(0);
+    constexpr uint32_t issue_queue_size = get_compile_time_arg_val(2);
 
     setup_issue_queue_read_interface(issue_queue_start_addr, issue_queue_size);
 
@@ -104,14 +105,33 @@ void kernel_main() {
         uint32_t producer_consumer_transfer_num_pages = command_ptr[DeviceCommand::producer_consumer_transfer_num_pages_idx];
         uint32_t sharded_buffer_num_cores = command_ptr[DeviceCommand::sharded_buffer_num_cores_idx];
         uint32_t finish = command_ptr[DeviceCommand::finish_idx];
+        uint32_t restart = command_ptr[DeviceCommand::restart_idx];
+        uint32_t is_program = command_ptr[DeviceCommand::is_program_buffer_idx];
 
-        if ((DeviceCommand::WrapRegion)wrap == DeviceCommand::WrapRegion::ISSUE) {
+        DPRINT << "RESTART: " << restart << ENDL();
+        DPRINT << "Finish: " << finish << ENDL();
+        DPRINT << "data size : " << data_size << ENDL();
+        DPRINT << "is program : " << is_program << ENDL();
+        DPRINT << ENDL();
+
+        // Restarts the read/write pointers
+        if (restart) {
+            // Restart read/write pointer
+            uint32_t new_issue_queue_size = issue_queue_size;
+            setup_issue_queue_read_interface(issue_queue_start_addr, new_issue_queue_size);
+            reinterpret_cast<volatile tt_l1_ptr uint32_t*>(CQ_ISSUE_WRITE_PTR)[0] = issue_queue_start_addr;
+            while (db_semaphore_addr[0] == 0)
+                ;  // Check that there is space in the consumer
+            relay_command(db_buf_switch, consumer_noc_encoding);
+            continue;
+        } else if ((DeviceCommand::WrapRegion)wrap == DeviceCommand::WrapRegion::ISSUE) {
             // Basically popfront without the extra conditional
             cq_read_interface.issue_fifo_rd_ptr = cq_read_interface.issue_fifo_limit - cq_read_interface.issue_fifo_size;  // Head to beginning of command queue
             cq_read_interface.issue_fifo_rd_toggle = not cq_read_interface.issue_fifo_rd_toggle;
             notify_host_of_issue_queue_read_pointer<host_issue_queue_read_ptr_addr>();
             continue;
         }
+
 
         program_local_cb(producer_cb_num_pages, page_size, producer_cb_size);
         while (db_semaphore_addr[0] == 0)

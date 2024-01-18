@@ -53,6 +53,7 @@ class DeviceCommand {
     static constexpr uint32_t data_size_idx = 16;
     static constexpr uint32_t producer_consumer_transfer_num_pages_idx = 17;
     static constexpr uint32_t sharded_buffer_num_cores_idx = 18;
+    static constexpr uint32_t restart_idx = 19;
 
     // Denotes which portion of the command queue needs to be wrapped
     enum class WrapRegion : uint8_t {
@@ -61,9 +62,11 @@ class DeviceCommand {
         COMPLETION = 2
     };
 
-    void wrap(WrapRegion wrap_region);
+    void set_restart();
 
-    void finish();
+    void set_wrap(WrapRegion wrap_region);
+
+    void set_finish();
 
     void set_num_workers(const uint32_t num_workers);
 
