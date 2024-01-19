@@ -143,6 +143,12 @@ std::vector<Shape> OptimizedConv::compute_output_shapes(const std::vector<Tensor
         auto shape_c = output_channels;
         auto padded_shape_w = round_up(shape_w, TILE_HEIGHT);
         auto padded_shape_c = round_up(this->output_channels, TILE_WIDTH);
+        if (this->output_mem_config.is_sharded()) {
+            if (this->output_mem_config.memory_layout ==  TensorMemoryLayout::BLOCK_SHARDED) {
+                uint32_t num_cores_nhw = this->parallelization_config.grid_size.x;
+                padded_shape_w = round_up(shape_w, TILE_HEIGHT * num_cores_nhw);
+            } // TODO: add support for height sharded
+        }
         auto output_padding = Padding({{0, 0}, {0, 0}, {0, (padded_shape_w - shape_w)}, {0, (padded_shape_c - shape_c)}}, Padding::PadValue::Any);
         auto output_tensor_shape = Shape({1, 1, padded_shape_w, padded_shape_c}, output_padding);
         return {output_tensor_shape};

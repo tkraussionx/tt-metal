@@ -830,6 +830,13 @@ class TTPyCompositeConv(TTPyOp):
     def copy_output_from_device_with_sharded_api(self, conv_output_on_device):
         conv_output = conv_output_on_device.cpu().to(ttl.tensor.Layout.ROW_MAJOR)
 
+        conv_output_shape_2d_end = [
+            0,
+            0,
+            (self.conv_output_shape[0] * self.conv_output_shape[1] * self.conv_output_shape[2]) - 1,
+            self.conv_output_shape[3] - 1,
+        ]
+        conv_output = conv_output.unpad([0, 0, 0, 0], conv_output_shape_2d_end)
         conv_output = conv_output.reshape(
             self.conv_output_shape[0],
             self.conv_output_shape[1],

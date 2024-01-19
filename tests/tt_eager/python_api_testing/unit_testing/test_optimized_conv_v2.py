@@ -180,7 +180,7 @@ def test_optimized_conv_v2(
 
     # Copy sharded output on host
     # out is in row major layout and NHWC shape
-    out = conv.copy_output_from_device(output_on_device)
+    out = conv.copy_output_from_device_with_sharded_api(output_on_device)
 
     assert out.layout() == tt_lib.tensor.Layout.ROW_MAJOR
 
