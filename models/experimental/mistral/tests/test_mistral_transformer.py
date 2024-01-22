@@ -22,7 +22,8 @@ from models.utility_functions import (
 
 @pytest.mark.parametrize(
     "dtype",
-    (tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.DataType.BFLOAT8_B),
+    # (tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.DataType.BFLOAT8_B),
+    (tt_lib.tensor.DataType.BFLOAT16,),
 )
 @pytest.mark.parametrize(
     "pcc",

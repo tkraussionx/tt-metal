@@ -16,6 +16,7 @@ from models.experimental.mistral.mistral_helper_funcs import (
 )
 from models.utility_functions import torch_to_tt_tensor_rm
 from typing import Optional
+from loguru import logger
 
 
 def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0) -> torch.Tensor:
@@ -84,6 +85,7 @@ class TtTransformer(nn.Module):
     ):
         seqlen = input_ids.shape[-1]
         bsz = input_ids.shape[0]
+        logger.info("embeddings...")
         h = self.tok_embeddings(input_ids)
         input_ids = torch_to_tt_tensor_rm(input_ids, self.device, put_on_device=False)
         freqs_cis = self.freqs_cis[positions]
@@ -92,6 +94,7 @@ class TtTransformer(nn.Module):
         bcast_freq_xq, bcast_freq_xk = get_freqs_cis(
             freqs_cis, query_shape, key_shape, self.device, self.output_mem_config
         )
+        logger.info("masking...")
 
         mask: Optional[torch.Tensor] = None
         if input_ids.shape()[-1] > 1:
@@ -112,12 +115,15 @@ class TtTransformer(nn.Module):
 
         positions = torch_to_tt_tensor_rm(positions, self.device, put_on_device=False)
         h = torch_to_tt_tensor_rm(h, self.device, put_on_device=False)
+        logger.info("formatting...")
         h = format_tensor(h, tt_lib.tensor.Layout.TILE, self.device, self.output_mem_config)
+        logger.info("layers...")
         for layer in self.layers:
             h = layer(h, bcast_freq_xq, bcast_freq_xk, positions, mask, seqlen)
 
         bcast_freq_xq.deallocate()
         bcast_freq_xk.deallocate()
+        logger.info("normalizing / linear...")
         output = self.output(self.norm(h))
         desired_output_shape = list(output.shape())
         desired_output_shape[2] = seqlen
