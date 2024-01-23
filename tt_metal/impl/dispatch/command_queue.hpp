@@ -27,28 +27,6 @@ using std::weak_ptr;
 using std::tuple;
 using std::unique_ptr;
 
-struct transfer_info {
-    uint32_t size_in_bytes;
-    uint32_t dst;
-    uint32_t dst_noc_encoding;
-    uint32_t num_receivers;
-    bool last_transfer_in_group;
-    bool linked;
-};
-
-struct ProgramMap {
-    uint32_t num_workers;
-    vector<uint32_t> program_pages;
-    vector<transfer_info> program_page_transfers;
-    vector<transfer_info> runtime_arg_page_transfers;
-    vector<transfer_info> cb_config_page_transfers;
-    vector<transfer_info> go_signal_page_transfers;
-    vector<uint32_t> num_transfers_in_program_pages;
-    vector<uint32_t> num_transfers_in_runtime_arg_pages;
-    vector<uint32_t> num_transfers_in_cb_config_pages;
-    vector<uint32_t> num_transfers_in_go_signal_pages;
-};
-
 // Only contains the types of commands which are enqueued onto the device
 enum class EnqueueCommandType { ENQUEUE_READ_BUFFER, ENQUEUE_WRITE_BUFFER, ENQUEUE_PROGRAM, FINISH, ENQUEUE_WRAP, ENQUEUE_RESTART, INVALID };
 
@@ -57,8 +35,6 @@ string EnqueueCommandTypeToString(EnqueueCommandType ctype);
 // TEMPORARY! TODO(agrebenisan): need to use proper macro based on loading noc
 #define NOC_X(x) x
 #define NOC_Y(y) y
-
-uint32_t get_noc_unicast_encoding(CoreCoord coord);
 
 class Trace;
 class CommandQueue;
@@ -254,14 +230,14 @@ class EnqueueProgramCommand : public Command {
     uint32_t command_queue_id;
     Device* device;
     Buffer& buffer;
-    ProgramMap& program_to_dev_map;
+    tt::tt_metal::detail::ProgramMap& program_to_dev_map;
     const Program& program;
     SystemMemoryManager& manager;
     bool stall;
     std::optional<std::reference_wrapper<Trace>> trace = {};
 
    public:
-    EnqueueProgramCommand(uint32_t command_queue_id, Device*, Buffer&, ProgramMap&, SystemMemoryManager&, const Program& program, bool stall, std::optional<std::reference_wrapper<Trace>> trace);
+    EnqueueProgramCommand(uint32_t command_queue_id, Device*, Buffer&, tt::tt_metal::detail::ProgramMap&, SystemMemoryManager&, const Program& program, bool stall, std::optional<std::reference_wrapper<Trace>> trace);
 
     const DeviceCommand assemble_device_command(uint32_t src_address);
 
@@ -349,33 +325,12 @@ class CommandQueue {
     CoreCoord completion_queue_writer_core;
 
    private:
+    set<uint64_t> program_ids;
     uint32_t id;
     uint32_t size_B;
 
-
     SystemMemoryManager& manager;
-
     Device* device;
-
-    map<uint64_t, unique_ptr<Buffer>>& program_to_buffer(const chip_id_t chip_id) {
-        static map<chip_id_t, map<uint64_t, unique_ptr<Buffer>>> chip_to_program_to_buffer;
-        if (chip_to_program_to_buffer.count(chip_id)) {
-            return chip_to_program_to_buffer[chip_id];
-        }
-        map<uint64_t, unique_ptr<Buffer>> dummy;
-        chip_to_program_to_buffer.emplace(chip_id, std::move(dummy));
-        return chip_to_program_to_buffer[chip_id];
-    }
-
-    map<uint64_t, ProgramMap>& program_to_dev_map(const chip_id_t chip_id) {
-        static map<chip_id_t, map<uint64_t, ProgramMap>> chip_to_program_to_dev_map;
-        if (chip_to_program_to_dev_map.count(chip_id)) {
-            return chip_to_program_to_dev_map[chip_id];
-        }
-        map<uint64_t, ProgramMap> dummy;
-        chip_to_program_to_dev_map.emplace(chip_id, std::move(dummy));
-        return chip_to_program_to_dev_map[chip_id];
-    };
 
     void enqueue_command(Command& command, bool blocking);
 

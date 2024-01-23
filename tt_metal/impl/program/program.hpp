@@ -27,6 +27,30 @@ namespace detail{
     KernelHandle AddKernel ( Program & program, Kernel * kernel);
     Kernel *GetKernel(const Program &program, KernelHandle kernel_id);
     std::shared_ptr<CircularBuffer> GetCircularBuffer(const Program &program, CBHandle id);
+
+    struct transfer_info {
+        uint32_t size_in_bytes;
+        uint32_t dst;
+        uint32_t dst_noc_encoding;
+        uint32_t num_receivers;
+        bool last_transfer_in_group;
+        bool linked;
+    };
+
+    struct ProgramMap {
+        uint32_t num_workers;
+        vector<uint32_t> program_pages;
+        vector<transfer_info> program_page_transfers;
+        vector<transfer_info> runtime_arg_page_transfers;
+        vector<transfer_info> cb_config_page_transfers;
+        vector<transfer_info> go_signal_page_transfers;
+        vector<uint32_t> num_transfers_in_program_pages;
+        vector<uint32_t> num_transfers_in_runtime_arg_pages;
+        vector<uint32_t> num_transfers_in_cb_config_pages;
+        vector<uint32_t> num_transfers_in_go_signal_pages;
+    };
+
+
 }
 
 struct KernelGroup {
@@ -100,7 +124,15 @@ class Program {
 
     void allocate_circular_buffers();
 
+    tt::tt_metal::detail::ProgramMap& get_program_map(Device* device) { return program_map_[device]; }
+    Buffer& get_program_buffer(Device* device) { return program_buffer_[device]; }
+
    private:
+
+    std::map<Device*, tt::tt_metal::detail::ProgramMap> program_map_;
+
+    std::map<Device*, Buffer> program_buffer_;
+
     struct CircularBufferAllocator {
         CircularBufferAllocator(const CoreRange &core_range_) : core_range(core_range_) {}
 
