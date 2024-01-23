@@ -12,13 +12,21 @@ class DeviceCommand {
    public:
     DeviceCommand();
 
-    enum class TransferType : uint8_t { RUNTIME_ARGS, CB_CONFIGS, PROGRAM_PAGES, GO_SIGNALS, NUM_TRANSFER_TYPES };
+    enum class TransferType : uint8_t {
+        RUNTIME_ARGS,
+        CB_CONFIGS,
+        PROGRAM_MULTICAST_PAGES,
+        PROGRAM_UNICAST_PAGES,
+        GO_SIGNALS_MULTICAST,
+        GO_SIGNALS_UNICAST,
+        NUM_TRANSFER_TYPES
+    };
 
     // Constants
     //TODO: investigate other num_cores
     static constexpr uint32_t MAX_HUGEPAGE_SIZE = 1 << 30; // 1GB;
     static constexpr uint32_t NUM_MAX_CORES = 108; //12 x 9
-    static constexpr uint32_t NUM_ENTRIES_IN_COMMAND_HEADER = 20;
+    static constexpr uint32_t NUM_ENTRIES_IN_COMMAND_HEADER = 21;
     static constexpr uint32_t NUM_ENTRIES_IN_DEVICE_COMMAND = 5632;
     static constexpr uint32_t NUM_BYTES_IN_DEVICE_COMMAND = NUM_ENTRIES_IN_DEVICE_COMMAND * sizeof(uint32_t);
     static constexpr uint32_t PROGRAM_PAGE_SIZE = 2048;
@@ -26,7 +34,7 @@ class DeviceCommand {
     static constexpr uint32_t NUM_POSSIBLE_BUFFER_TRANSFERS = 2;
 
     // Ensure any changes to this device command have asserts modified/extended
-    static_assert(NUM_ENTRIES_IN_COMMAND_HEADER == 20);
+    static_assert(NUM_ENTRIES_IN_COMMAND_HEADER == 21);
     static_assert((NUM_BYTES_IN_DEVICE_COMMAND % 32) == 0);
 
     // Command header
@@ -44,11 +52,13 @@ class DeviceCommand {
     static constexpr uint32_t num_pages_idx = 11;
     static constexpr uint32_t num_runtime_arg_pages_idx = 12;
     static constexpr uint32_t num_cb_config_pages_idx = 13;
-    static constexpr uint32_t num_program_pages_idx = 14;
-    static constexpr uint32_t num_go_signal_pages_idx = 15;
-    static constexpr uint32_t data_size_idx = 16;
-    static constexpr uint32_t producer_consumer_transfer_num_pages_idx = 17;
-    static constexpr uint32_t sharded_buffer_num_cores_idx = 18;
+    static constexpr uint32_t num_program_multicast_pages_idx = 14;
+    static constexpr uint32_t num_program_unicast_pages_idx = 15;
+    static constexpr uint32_t num_go_signal_multicast_pages_idx = 16;
+    static constexpr uint32_t num_go_signal_unicast_pages_idx = 17;
+    static constexpr uint32_t data_size_idx = 18;
+    static constexpr uint32_t producer_consumer_transfer_num_pages_idx = 19;
+    static constexpr uint32_t sharded_buffer_num_cores_idx = 20;
 
     // Denotes which portion of the command queue needs to be wrapped
     enum class WrapRegion : uint8_t {

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "dataflow_api.h"
+#include "debug/dprint.h"
 #include "tt_metal/impl/dispatch/kernels/command_queue_common.hpp"
 
 CQWriteInterface cq_write_interface;
@@ -210,6 +211,12 @@ FORCE_INLINE void write_program_page(uint32_t page_addr, volatile tt_l1_ptr uint
         if constexpr (multicast) {
             noc_async_write_multicast_one_packet_no_path_reserve(src, dst_noc_addr, num_bytes, num_recv);
         } else {
+            DPRINT << " DPRINT: num transfers " << num_transfers << ENDL();
+            DPRINT << " DPRINT writing to dst " << HEX() << dst_noc << " 0x" << dst << " " << DEC() << num_bytes
+                   << ENDL();
+            uint32_t* src_data = (uint32_t*)(src);
+            DPRINT << " DPRINT DATA " << src_data[0] << " " << src_data[4] << HEX() << " from "
+                   << "0x" << src << ENDL();
             noc_async_write_one_packet(src, dst_noc_addr, num_bytes);
         }
 
@@ -287,13 +294,22 @@ void write_and_launch_program(
             case (uint32_t) DeviceCommand::TransferType::CB_CONFIGS:
                 num_pages_in_transfer = command_ptr_fixed[DeviceCommand::num_cb_config_pages_idx];
                 break;
-            case (uint32_t) DeviceCommand::TransferType::PROGRAM_PAGES:
-                num_pages_in_transfer = command_ptr_fixed[DeviceCommand::num_program_pages_idx];
+            case (uint32_t)DeviceCommand::TransferType::PROGRAM_MULTICAST_PAGES:
+                num_pages_in_transfer = command_ptr_fixed[DeviceCommand::num_program_multicast_pages_idx];
                 break;
-            case (uint32_t) DeviceCommand::TransferType::GO_SIGNALS:
-                num_pages_in_transfer = command_ptr_fixed[DeviceCommand::num_go_signal_pages_idx];
+            case (uint32_t)DeviceCommand::TransferType::PROGRAM_UNICAST_PAGES:
+                multicast = false;
+                num_pages_in_transfer = command_ptr_fixed[DeviceCommand::num_program_unicast_pages_idx];
+                break;
+            case (uint32_t)DeviceCommand::TransferType::GO_SIGNALS_MULTICAST:
+                num_pages_in_transfer = command_ptr_fixed[DeviceCommand::num_go_signal_multicast_pages_idx];
+                break;
+            case (uint32_t)DeviceCommand::TransferType::GO_SIGNALS_UNICAST:
+                multicast = false;
+                num_pages_in_transfer = command_ptr_fixed[DeviceCommand::num_go_signal_unicast_pages_idx];
                 break;
         }
+        DPRINT << "  DPRINT num pages in transfer " << num_pages_in_transfer << " " << transfer_type_idx << ENDL();
 
         if (multicast) {
             program_page_transfer<true>(command_ptr, producer_noc_encoding, consumer_cb_size, consumer_cb_num_pages, producer_consumer_transfer_num_pages, db_buf_switch, num_pages_in_transfer);
