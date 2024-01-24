@@ -15,62 +15,50 @@ def convolution_layer(input_tensor, weight, bias, kernel_size=3, stride=1, paddi
 
 # Example usage
 batch_size = 4
-# input_channels = 3
 input_channels = 16
-output_channels = 16
+output_channels = 32
 input_height = 1056
 input_width = 160
-# input_height = 528
-# input_width = 80
 # Initialize input tensor, weight, and bias
 input_tensor = torch.randn((batch_size, input_channels, input_height, input_width))
 input_tensor[:, 3:, :, :] = 0
-# kernel_size = 3
 weight = torch.randn((output_channels, input_channels, 3, 3))
 weight[:, 3:, :, :] = 0
 print("the shape of the weight is: ", weight.size())
 print("some random check: ", weight[1, 2, 1, 1])
-bias = torch.randn((output_channels,))
+
+conv_bias_shape = [1, 1, 1, output_channels]
+bias = torch.randn(conv_bias_shape).float()
 # Specify kernel size
 # Apply convolution layer with bias and kernel size
-conv_result = convolution_layer(input_tensor, weight, bias, stride=1, padding=1)
+bias_torch = bias
+conv_result = convolution_layer(input_tensor, weight, bias.reshape(-1), stride=1, padding=1)
 # Print the result shape
 print("Convolution Result Shape:", conv_result.shape)
 
 
-# input_tensor = ttnn.from_torch(input_tensor, ttnn.bfloat16)
-# input_tensor = conv.copy_input_to_device(input_tensor)
 import ttnn
 
 device_id = 0
 device = ttnn.open(device_id)
 
-# weight = torch.randn(output_channels, input_channels, 3, 3)
-# bias = torch.randn((output_channels,))
-# conv = ttnn.Conv2D(16, 64, (3, 3))
-tt_weight_tensor = ttnn.from_torch(weight, ttnn.bfloat16)
-# tt_weight_tensor = ttnn.to_device(tt_weight_tensor, device)#conv.copy_input_to_device(input=tt_weight_tensor)
-import ttnn
-
-# input_channels=3
 input_channels = 16
-output_channels = 16
+output_channels = 32
 kernel_size = (3, 3)
 stride = (1, 1)
 padding = (0, 0)
-dtype = activations_dtype = ttnn.bfloat16
+dtype = activations_dtype = ttnn.bfloat8_b
 device = device
 use_1d_systolic_array = True
 batch_size = 4
 input_height = 1056
 input_width = 160
 reader_patterns_cache = {}
+weights_dtype = ttnn.bfloat8_b
+bias_tt = ttnn.from_torch(bias_torch, weights_dtype if weights_dtype != ttnn.bfloat8_b else ttnn.float32)
+tt_weight_tensor = ttnn.from_torch(weight, weights_dtype if weights_dtype != ttnn.bfloat8_b else ttnn.float32)
 weight = tt_weight_tensor
-bias = None
 math_fidelity = ttnn.MathFidelity.LoFi
-weights_dtype = ttnn.bfloat16
-# weights_dtype=ttnn.bfloat8_b
-
 
 conv = ttnn.Conv2D(
     input_channels,
@@ -86,7 +74,7 @@ conv = ttnn.Conv2D(
     input_width=input_width,
     reader_patterns_cache=reader_patterns_cache,
     weight=tt_weight_tensor,
-    bias=None,
+    bias=bias_tt,
     math_fidelity=math_fidelity,
     weights_dtype=weights_dtype,
 )
