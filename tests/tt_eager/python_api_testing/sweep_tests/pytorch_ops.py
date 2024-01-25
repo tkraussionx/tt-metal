@@ -1154,3 +1154,19 @@ def ttnn_layernorm_noweights(x, *args, **kwargs):
     w = x.shape[1]
     torch_output_tensor = torch.nn.functional.layer_norm(x, normalized_shape=[w])
     return torch_output_tensor
+
+
+def mse_sum(x, y, *args, **kwargs):
+    loss = torch.nn.MSELoss(reduction="sum")
+    pt_mse_output = loss(x.to(torch.float32), y.to(torch.float32))
+    print("pytorch")
+    print(pt_mse_output)
+    return pt_mse_output
+
+
+def mse(x, y, *args, **kwargs):
+    loss = torch.nn.MSELoss(reduction="none")
+    pt_mse_output = loss(x.to(torch.float32), y.to(torch.float32))
+    print("pytorch")
+    print(pt_mse_output)
+    return pt_mse_output

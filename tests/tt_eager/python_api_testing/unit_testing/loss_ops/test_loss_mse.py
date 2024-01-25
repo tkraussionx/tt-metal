@@ -86,6 +86,8 @@ class TestMSELoss:
         ref_data = torch.randn(input_shapes).bfloat16()
         pred_data = torch.randn(input_shapes).bfloat16()
 
+        print(input_shapes)
+
         ref_tensor = (
             tt_lib.tensor.Tensor(ref_data, tt_lib.tensor.DataType.BFLOAT16).to(tt_lib.tensor.Layout.TILE).to(device)
         )
@@ -105,5 +107,6 @@ class TestMSELoss:
             pt_mse_output, torch.tensor(tt_mse_output[0, 0, 0, 0]), atol=4, rtol=1e-1
         )
 
+        print(input_shapes)
         logger.info(comp_out_a)
         assert comp_pass_a

@@ -1004,4 +1004,12 @@ op_map = {
         "tt_lib_op": ttnn_ops.layernorm_noweights,
         "pytorch_op": pytorch_ops.ttnn_layernorm_noweights,
     },
+    "mse-sum": {
+        "tt_lib_op": tt_lib_ops.mse_sum,
+        "pytorch_op": pytorch_ops.mse_sum,
+    },
+    "mse": {
+        "tt_lib_op": tt_lib_ops.mse,
+        "pytorch_op": pytorch_ops.mse,
+    },
 }
