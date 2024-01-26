@@ -1170,3 +1170,11 @@ def mse(x, y, *args, **kwargs):
     print("pytorch")
     print(pt_mse_output)
     return pt_mse_output
+
+
+def mse_mean(x, y, *args, **kwargs):
+    loss = torch.nn.MSELoss(reduction="mean")
+    pt_mse_output = loss(x.to(torch.float32), y.to(torch.float32))
+    print("pytorch")
+    print(pt_mse_output)
+    return pt_mse_output

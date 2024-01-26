@@ -1012,4 +1012,8 @@ op_map = {
         "tt_lib_op": tt_lib_ops.mse,
         "pytorch_op": pytorch_ops.mse,
     },
+    "mse-mean": {
+        "tt_lib_op": tt_lib_ops.mse_mean,
+        "pytorch_op": pytorch_ops.mse_mean,
+    },
 }
