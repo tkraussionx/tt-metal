@@ -1016,4 +1016,16 @@ op_map = {
         "tt_lib_op": tt_lib_ops.mse_mean,
         "pytorch_op": pytorch_ops.mse_mean,
     },
+    "mae-sum": {
+        "tt_lib_op": tt_lib_ops.mae_sum,
+        "pytorch_op": pytorch_ops.mae_sum,
+    },
+    "mae": {
+        "tt_lib_op": tt_lib_ops.mae,
+        "pytorch_op": pytorch_ops.mae,
+    },
+    "mae-mean": {
+        "tt_lib_op": tt_lib_ops.mae_mean,
+        "pytorch_op": pytorch_ops.mae_mean,
+    },
 }

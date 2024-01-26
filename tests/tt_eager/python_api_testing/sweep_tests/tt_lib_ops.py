@@ -2341,3 +2341,47 @@ def mse_mean(x, y, *args, device, dtype, layout, input_mem_config, output_mem_co
     print(tt_result)
 
     return tt_result
+
+
+@setup_host_and_device
+def mae_sum(x, y, *args, device, dtype, layout, input_mem_config, output_mem_config, **kwargs):
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = setup_tt_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
+
+    tt_result = ttl.tensor.maeloss(t0, t1, ttl.tensor.LossReductionMode.SUM, output_mem_config=output_mem_config)
+    tt_result = tt2torch_tensor(tt_result)
+
+    tt_result = torch.tensor(tt_result[0, 0, 0, 0])
+    print("tt")
+    print(tt_result)
+
+    return tt_result
+
+
+@setup_host_and_device
+def mae(x, y, *args, device, dtype, layout, input_mem_config, output_mem_config, **kwargs):
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = setup_tt_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
+
+    tt_result = ttl.tensor.maeloss(t0, t1, ttl.tensor.LossReductionMode.NONE, output_mem_config=output_mem_config)
+    tt_result = tt2torch_tensor(tt_result)
+
+    print("tt")
+    print(tt_result)
+
+    return tt_result
+
+
+@setup_host_and_device
+def mae_mean(x, y, *args, device, dtype, layout, input_mem_config, output_mem_config, **kwargs):
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = setup_tt_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
+
+    tt_result = ttl.tensor.maeloss(t0, t1, ttl.tensor.LossReductionMode.MEAN, output_mem_config=output_mem_config)
+    tt_result = tt2torch_tensor(tt_result)
+
+    tt_result = torch.tensor(tt_result[0, 0, 0, 0])
+    print("tt")
+    print(tt_result)
+
+    return tt_result

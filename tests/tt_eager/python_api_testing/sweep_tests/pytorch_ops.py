@@ -1178,3 +1178,27 @@ def mse_mean(x, y, *args, **kwargs):
     print("pytorch")
     print(pt_mse_output)
     return pt_mse_output
+
+
+def mae_sum(x, y, *args, **kwargs):
+    loss = torch.nn.L1Loss(reduction="sum")
+    pt_mse_output = loss(x.to(torch.float32), y.to(torch.float32))
+    print("pytorch")
+    print(pt_mse_output)
+    return pt_mse_output
+
+
+def mae(x, y, *args, **kwargs):
+    loss = torch.nn.L1Loss(reduction="none")
+    pt_mse_output = loss(x.to(torch.float32), y.to(torch.float32))
+    print("pytorch")
+    print(pt_mse_output)
+    return pt_mse_output
+
+
+def mae_mean(x, y, *args, **kwargs):
+    loss = torch.nn.L1Loss(reduction="mean")
+    pt_mse_output = loss(x.to(torch.float32), y.to(torch.float32))
+    print("pytorch")
+    print(pt_mse_output)
+    return pt_mse_output
