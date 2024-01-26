@@ -1,10 +1,7 @@
-name: "[post-commit] all - Fast dispatch post-commit main build and unit tests"
+name: "cleanup-workflow"
 
 on:
   workflow_dispatch:
-  push:
-    branches: ["main"]
-  workflow_call:
 
 jobs:
   build-and-unit-tests-fast-dispatch:
