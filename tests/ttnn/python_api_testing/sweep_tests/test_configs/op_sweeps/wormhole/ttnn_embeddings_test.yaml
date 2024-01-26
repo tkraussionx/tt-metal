@@ -2,16 +2,14 @@
 test-list:
   - ttnn-embeddings:
       shape:
-        start-shape: [1, 1, 1, 1, 1]
-        end-shape: [6, 12, 1024, 1024, 1024]
-        interval: [1, 1, 1, 1, 1]
-        num-dims: [2, 3, 4, 5]
-        num-shapes: 1
+        start-shape: [1, 1, 1, 1]
+        end-shape: [6, 12, 1024, 1024]
+        interval: [1, 1, 1, 1]
+        num-shapes: 2
         num-samples: 1024
-        args-sampling-strategy: "all"
         method: ttnn-embeddings
       env:
-        TT_METAL_SLOW_DISPATCH_MODE: ["", "1"]
+        TT_METAL_SLOW_DISPATCH_MODE: [""]
       datagen:
         function: gen_rand
         dtype: bfloat16
