@@ -538,8 +538,8 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
     bool fully_buffer_weights = false;
     uint32_t num_act_cb_tiles = act_block_h_ntiles * act_block_w_ntiles / conv_act_c_blocks;
     // TODO: This flag should be set in kernel logic but need this for create_CB
-    if (a.memory_config().is_sharded() and weight_size_h == 3 and weight_size_w == 3 and (stride_h == 1 or stride_h == 2) and weight_width_sliced) {
-        // If conv_act_c_blocks > 1 and we have 2D conv with sharded input, we always read entire 3x3 window before pushing in reader/writer
+    if (a.memory_config().is_sharded() and weight_size_h == 3 and weight_size_w == 3 and (stride_h == 1 or stride_h == 2) and weight_width_sliced and conv_act_size_c / conv_act_c_blocks < 160) {
+        // If conv_act_c_blocks > 1 and we have 2D conv with sharded input and we have small C, we always read entire 3x3 window before pushing in reader/writer
         // TODO: Generalize this to not make this assumption
         read_3x3_window_in_inner_loop = true;
         num_weight_cb_tiles *= weight_size_h * weight_size_w;
@@ -553,10 +553,12 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
         num_weight_cb_tiles *= window_outer;
     } else if (per_core_weight_matrix_width_ntiles < 5 && per_core_out_matrix_height_ntiles < 22) {
         num_weight_cb_tiles = num_weight_cb_tiles * 2;
+        cout << "double buffered act" << endl;
     }
 
     if (conv_act_size_c / conv_act_c_blocks < 160 && per_core_out_matrix_height_ntiles < 22) {
         num_act_cb_tiles = num_act_cb_tiles * 2; // double buffered
+        cout << "double buffered weight" << endl;
     }
 
     uint32_t writer_output_block_num_tiles = out_block_h_ntiles * weight_block_w_ntiles;
@@ -598,7 +600,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
     if (weight_size_h == weight_size_w and weight_size_w > 1 and (stride_h == 1 or stride_h == 2)) {
         // 2D conv
         if (weight_width_sliced) {
-            assert(read_3x3_window_in_inner_loop == true);
+            //assert(read_3x3_window_in_inner_loop == true);
             reader_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/reader_conv_activations_2d_mcast_padded_with_halo_3x3_weights_v2.cpp";
             writer_mcast_sender_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_2d_mcast_sender_conv_weights_tiled_col_to_rm_blocks.cpp";
             writer_mcast_receiver_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/writer_tiled_out_2d_mcast_receiver_conv_weights_tiled_col_to_rm_blocks.cpp";
@@ -611,7 +613,9 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
             }
 
             // For 2D convs, pre-tilize input and round robin self-mcast tilized act matrix to other cores
-            tilize_in0 = false;
+            if (read_3x3_window_in_inner_loop) {
+                tilize_in0 = false;
+            }
         }
         // 1D conv
         else {
