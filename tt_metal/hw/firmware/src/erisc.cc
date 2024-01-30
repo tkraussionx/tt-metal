@@ -84,8 +84,6 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
     rtos_context_switch_ptr = (void (*)())RtosTable[0];
 
     risc_init();
-    kernel_profiler::init_profiler(0,0,0);
-    kernel_profiler::mark_fw_start();
     noc_init();
 
     for (uint32_t n = 0; n < NUM_NOCS; n++) {
@@ -113,9 +111,9 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
 
     while (routing_info->routing_enabled) {
         // FD: assume that no more host -> remote writes are pending
+        kernel_profiler::init_profiler(0,0,0);
+        kernel_profiler::mark_fw_start();
         if (erisc_info->launch_user_kernel == 1) {
-            kernel_profiler::init_profiler();
-            kernel_profiler::mark_time(CC_MAIN_START);
             kernel_init();
             kernel_profiler::mark_time(CC_MAIN_END);
         }
@@ -229,6 +227,8 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
         } else {
             internal_::risc_context_switch();
         }
+        kernel_profiler::mark_fw_end();
+        kernel_profiler::send_profiler_data_to_dram();
     }
     internal_::disable_erisc_app();
     kernel_profiler::mark_fw_end();
