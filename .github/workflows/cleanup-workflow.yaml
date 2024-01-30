@@ -2,7 +2,6 @@ name: "cleanup-workflow"
 
 on:
   workflow_dispatch:
-  push:
 
 jobs:
   build-and-unit-tests-fast-dispatch:
