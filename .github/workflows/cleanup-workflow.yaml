@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         runner-info: [
-          {arch: grayskull, runs-on: ["tt-metal-ci-vm4"]},
+          {arch: grayskull, runs-on: ["tt-metal-ci-vm-4"]},
           # N150
           {arch: wormhole_b0, runs-on: ["tt-metal-ci-vm-32"]},
           # N300
