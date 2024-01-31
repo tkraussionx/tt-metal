@@ -75,6 +75,14 @@ void DeviceModule(py::module &m_device) {
         +------------------+------------------------+-----------------------+-------------+----------+
     )doc");
 
+    m_device.def("GetNumAvailableDevices", &GetNumAvailableDevices, R"doc(
+        Returns number of Tenstorrent devices that can be targeted.
+    )doc");
+
+    m_device.def("GetNumPCIeDevices", &GetNumPCIeDevices, R"doc(
+        Returns number of Tenstorrent devices that are connected to host via PCIe and can be targeted.
+    )doc");
+
     m_device.def("SetDefaultDevice", &AutoFormat::SetDefaultDevice, R"doc(
         Sets the default device to use for ops when inputs aren't on device.
 
