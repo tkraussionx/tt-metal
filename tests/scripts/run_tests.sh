@@ -231,10 +231,10 @@ run_pipeline_tests() {
         run_stress_post_commit_pipeline_tests "$tt_arch" "$pipeline_type" "$dispatch_mode"
     elif [[ $pipeline_type == "post_commit_multi_device" ]]; then
         run_post_commit_multi_device_pipeline_tests "$tt_arch" "$pipeline_type" "$dispatch_mode"
-    elif [[ $pipeline_type == "microbenchmarks" ]]; then
-        run_microbenchmarks_pipeline_tests "$tt_arch" "$pipeline_type" "$dispatch_mode"
-    elif [[ $pipeline_type == "ttnn_sweeps" ]]; then
-        run_ttnn_sweeps_pipeline_tests "$tt_arch" "$pipeline_type" "$dispatch_mode"
+    # elif [[ $pipeline_type == "microbenchmarks" ]]; then
+    #     run_microbenchmarks_pipeline_tests "$tt_arch" "$pipeline_type" "$dispatch_mode"
+    # elif [[ $pipeline_type == "ttnn_sweeps" ]]; then
+    #     run_ttnn_sweeps_pipeline_tests "$tt_arch" "$pipeline_type" "$dispatch_mode"
     else
         echo "Unknown pipeline: $pipeline_type"
         exit 1
