@@ -506,7 +506,7 @@ def tanhshrink(x, *args, **kwargs):
 
 
 def signbit(x, *args, **kwargs):
-    return torch.signbit(x)
+    return x.int()
 
 
 def sin(x, *args, **kwargs):

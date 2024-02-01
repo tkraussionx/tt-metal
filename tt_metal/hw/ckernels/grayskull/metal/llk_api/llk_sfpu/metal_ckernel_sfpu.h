@@ -221,17 +221,42 @@ inline void calculate_signbit()
     for (int d = 0; d < ITERATIONS; d++)
     {
         vFloat val = dst_reg[0];
-
-        v_if (val <= -0.0f) {
-            val = 1.0f;
-        } v_elseif (val >= 0.0f) {
-            val = 0.0f;
+        vFloat x = 0.0f;
+        vUInt result = 0;
+        v_if (val <= 0.0f) {
+            val = val;
         }
         v_endif;
+        int flag = 1;
+        while(flag == 1)
+        {
+            v_if( val>=100.0f)
+            {
+                result +=100;
+                val -=100.0f;
+            }
+            v_elseif( val >=10.0f)
+            {
+                result += 10;
+                val = val -10.0f;
+            }
+            v_elseif( val >=1.0f)
+            {
+                result +=1;
+                val -=1.0f;
+            }
+            v_else
+            {
+                flag=0;
+                break;
+            }
 
-        dst_reg[0] = val;
+            v_endif;
+        }
+        // x = result;
+        dst_reg[0] = result;
 
-       dst_reg++;
+        dst_reg++;
     }
 
 }
