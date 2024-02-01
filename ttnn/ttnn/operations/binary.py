@@ -9,8 +9,7 @@ import sys
 
 import tt_lib as ttl
 
-import ttnn.core as ttnn
-from ttnn.decorators import register_operation
+import ttnn
 
 
 THIS_MODULE = sys.modules[__name__]
@@ -19,7 +18,7 @@ __all__ = []
 
 
 def register_ttl_binary_function(name, ttl_binary_function, doc):
-    def _torch_unary(input_tensor: ttnn.Tensor, parameter, **_):
+    def _torch_binary(input_tensor: ttnn.Tensor, parameter, **_):
         import torch
 
         name_to_torch_function = {"pow": torch.pow}
@@ -27,19 +26,27 @@ def register_ttl_binary_function(name, ttl_binary_function, doc):
         input_tensor = ttnn.to_torch(input_tensor)
         return torch_function(input_tensor, parameter)
 
-    @register_operation(torch_function=_torch_unary, name=f"ttnn.{name}")
+    def _binary_validate_input_tensors(operation_name, input_tensor, *args, **kwargs):
+        ttnn.validate_input_tensor(
+            operation_name,
+            input_tensor,
+            ranks=(2, 3, 4),
+            dtypes=(ttnn.bfloat16, ttnn.bfloat8_b),
+            layouts=(ttnn.TILE_LAYOUT,),
+            can_be_on_device=True,
+            can_be_on_cpu=False,
+        )
+
+    @ttnn.register_operation(
+        name=f"ttnn.{name}",
+        validate_input_tensors=_binary_validate_input_tensors,
+        torch_function=_torch_binary,
+    )
     def binary_function(
         input_tensor: ttnn.Tensor, parameter: float, *, memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG
     ) -> ttnn.Tensor:
         original_shape = input_tensor.shape
         input_tensor = ttnn.unsqueeze_to_4D(input_tensor)
-        ttl_input_tensor = input_tensor.value
-
-        if not isinstance(input_tensor, ttnn.Tensor):
-            raise TypeError("Expected first argument to be a ttnn.Tensor")
-
-        if not ttnn.has_storage_type_of(input_tensor, ttnn.DEVICE_STORAGE_TYPE):
-            raise RuntimeError("input_tensor must be on device!")
         ttl_input_tensor = input_tensor.value
 
         ttl_output_tensor = ttl_binary_function(ttl_input_tensor, parameter, output_mem_config=memory_config)
@@ -49,7 +56,7 @@ def register_ttl_binary_function(name, ttl_binary_function, doc):
         return output_tensor
 
     binary_function.__name__ = f"ttnn.{name}"
-    binary_function.__doc__ = doc
+    binary_function.__doc__ = doc + binary_function.__doc__
 
     setattr(THIS_MODULE, name, binary_function)
 
@@ -87,6 +94,28 @@ def _is_scalar(value):
     return isinstance(value, (int, float, complex))
 
 
+def _add_validate_input_tensors(operation_name, input_tensor_a, input_tensor_b, *args, **kwargs):
+    ttnn.validate_input_tensor(
+        operation_name,
+        input_tensor_a,
+        ranks=(2, 3, 4),
+        dtypes=(ttnn.bfloat16, ttnn.bfloat8_b),
+        layouts=(ttnn.TILE_LAYOUT,),
+        can_be_on_device=True,
+        can_be_on_cpu=False,
+    )
+    ttnn.validate_input_tensor(
+        operation_name,
+        input_tensor_b,
+        ranks=(2, 3, 4),
+        dtypes=(ttnn.bfloat16, ttnn.bfloat8_b),
+        layouts=(ttnn.TILE_LAYOUT,),
+        can_be_on_device=True,
+        can_be_on_cpu=False,
+        can_be_a_scalar=True,
+    )
+
+
 def _torch_add(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, **_):
     input_shape_a = input_tensor_a.shape
     slices = [slice(0, dim) for dim in input_shape_a]
@@ -106,7 +135,7 @@ def _torch_add(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, **_):
     return input_tensor_a + input_tensor_b
 
 
-@register_operation(torch_function=_torch_add, name="ttnn.add")
+@ttnn.register_operation(name="ttnn.add", validate_input_tensors=_add_validate_input_tensors, torch_function=_torch_add)
 def add(
     input_tensor_a: ttnn.Tensor,
     input_tensor_b: Union[ttnn.Tensor, int, float],
@@ -115,12 +144,12 @@ def add(
     memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG,
 ) -> ttnn.Tensor:
     r"""
-    add(input_tensor_a: ttnn.Tensor, input_tensor_b: Union[ttnn.Tensor, int, float], *, alpha: Union[int, float]=1) -> ttnn.Tensor
+    add(input_tensor_a: ttnn.Tensor, input_tensor_b: Union[ttnn.Tensor, int, float], *, alpha: Union[int, float]=1, memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG) -> ttnn.Tensor:
 
     Adds :attr:`input_tensor_b`, scaled by :attr:`alpha`, to :attr:`input_tensor_a` and returns the tensor with the same layout as :attr:`input_tensor_a`
 
     .. math::
-        \mathrm{{input\_tensor\_a}}_i + \mathrm{{alpha}} \\times \mathrm{{input\_tensor\_b}}_i
+        \mathrm{{input\_tensor\_a}}_i + \mathrm{{alpha}} \times \mathrm{{input\_tensor\_b}}_i
 
     Supports broadcasting.
 
@@ -235,6 +264,28 @@ def add(
     return output_tensor
 
 
+def _sub_validate_input_tensors(operation_name, input_tensor_a, input_tensor_b, *args, **kwargs):
+    ttnn.validate_input_tensor(
+        operation_name,
+        input_tensor_a,
+        ranks=(2, 3, 4),
+        dtypes=(ttnn.bfloat16, ttnn.bfloat8_b),
+        layouts=(ttnn.TILE_LAYOUT,),
+        can_be_on_device=True,
+        can_be_on_cpu=False,
+    )
+    ttnn.validate_input_tensor(
+        operation_name,
+        input_tensor_b,
+        ranks=(2, 3, 4),
+        dtypes=(ttnn.bfloat16, ttnn.bfloat8_b),
+        layouts=(ttnn.TILE_LAYOUT,),
+        can_be_on_device=True,
+        can_be_on_cpu=False,
+        can_be_a_scalar=True,
+    )
+
+
 def _torch_sub(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, **_):
     input_shape_a = input_tensor_a.shape
     slices = [slice(0, dim) for dim in input_shape_a]
@@ -254,7 +305,7 @@ def _torch_sub(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, **_):
     return input_tensor_a - input_tensor_b
 
 
-@register_operation(torch_function=_torch_sub, name="ttnn.sub")
+@ttnn.register_operation(name="ttnn.sub", validate_input_tensors=_sub_validate_input_tensors, torch_function=_torch_sub)
 def sub(
     input_tensor_a: ttnn.Tensor,
     input_tensor_b: Union[ttnn.Tensor, int, float],
@@ -263,12 +314,12 @@ def sub(
     memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG,
 ) -> ttnn.Tensor:
     r"""
-    sub(input_tensor_a: ttnn.Tensor, input_tensor_b: Union[ttnn.Tensor, int, float], *, alpha: Union[int, float]=1) -> ttnn.Tensor:
+    sub(input_tensor_a: ttnn.Tensor, input_tensor_b: Union[ttnn.Tensor, int, float], *, alpha: Union[int, float]=1, memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG) -> ttnn.Tensor
 
     Subtracts :attr:`input_tensor_b`, scaled by :attr:`alpha`, from :attr:`input_tensor_a`.
 
     .. math::
-        \mathrm{{input\_tensor\_a}}_i - \mathrm{{alpha}} \\times \mathrm{{input\_tensor\_b}}_i
+        \mathrm{{input\_tensor\_a}}_i - \mathrm{{alpha}} \times \mathrm{{input\_tensor\_b}}_i
 
     Supports broadcasting.
 
@@ -290,7 +341,7 @@ def sub(
     if not isinstance(input_tensor_a, ttnn.Tensor):
         raise TypeError("Expected first argument to be a ttnn.Tensor")
 
-    original_shape = tuple(input_tensor_a.shape)
+    original_shape = input_tensor_a.shape
     input_tensor_a = ttnn.unsqueeze_to_4D(input_tensor_a)
     ttl_input_tensor_a = input_tensor_a.value
 
@@ -374,6 +425,28 @@ def sub(
     return output_tensor
 
 
+def _mul_validate_input_tensors(operation_name, input_tensor_a, input_tensor_b, *args, **kwargs):
+    ttnn.validate_input_tensor(
+        operation_name,
+        input_tensor_a,
+        ranks=(2, 3, 4),
+        dtypes=(ttnn.bfloat16, ttnn.bfloat8_b),
+        layouts=(ttnn.TILE_LAYOUT,),
+        can_be_on_device=True,
+        can_be_on_cpu=False,
+    )
+    ttnn.validate_input_tensor(
+        operation_name,
+        input_tensor_b,
+        ranks=(2, 3, 4),
+        dtypes=(ttnn.bfloat16, ttnn.bfloat8_b),
+        layouts=(ttnn.TILE_LAYOUT,),
+        can_be_on_device=True,
+        can_be_on_cpu=False,
+        can_be_a_scalar=True,
+    )
+
+
 def _torch_mul(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, **_):
     input_shape_a = input_tensor_a.shape
     slices = [slice(0, dim) for dim in input_shape_a]
@@ -393,12 +466,15 @@ def _torch_mul(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, **_):
     return input_tensor_a * input_tensor_b
 
 
-@register_operation(torch_function=_torch_mul, name="ttnn.mul")
+@ttnn.register_operation(name="ttnn.mul", validate_input_tensors=_mul_validate_input_tensors, torch_function=_torch_mul)
 def mul(
-    input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG
+    input_tensor_a: ttnn.Tensor,
+    input_tensor_b: ttnn.Tensor,
+    *,
+    memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG,
 ) -> ttnn.Tensor:
     r"""
-    mul(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor) -> ttnn.Tensor
+    mul(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG) -> ttnn.Tensor
 
     Multiples :attr:`input_tensor_a` and :attr:`input_tensor_b` element-wise.
 
@@ -506,7 +582,6 @@ def mul(
 
 subtract = sub
 multiply = mul
-
 
 ttnn.Tensor.__add__ = add
 ttnn.Tensor.__radd__ = add

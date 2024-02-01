@@ -466,6 +466,8 @@ but in general retaining the data.
 
 .. autofunction:: tt_lib.tensor.clone
 
+.. autofunction:: tt_lib.tensor.typecast
+
 .. autofunction:: tt_lib.tensor.copy
 
 Tensor creation operations
@@ -590,6 +592,10 @@ These operations are currently not supported on TT accelerator device and will e
 .. autoclass:: tt_lib.fallback_ops.binary_bitwise_left_shift
 
 .. autoclass:: tt_lib.fallback_ops.binary_bitwise_right_shift
+
+.. autoclass:: tt_lib.fallback_ops.torch_argmax
+
+.. autoclass:: tt_lib.fallback_ops.torch_argmin
 
 Experimental Operations
 =======================

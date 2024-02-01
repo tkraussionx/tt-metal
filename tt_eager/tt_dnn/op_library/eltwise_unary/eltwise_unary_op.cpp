@@ -307,11 +307,8 @@ const operation::Hash EltwiseUnary::compute_program_hash(const std::vector<Tenso
         typeid(*this).hash_code(),
         compute_volume(input_shape),
         input_tensor.dtype(),
-        input_tensor.memory_config().memory_layout,
-        input_tensor.memory_config().buffer_type,
-        this->output_mem_config.memory_layout,
-        this->output_mem_config.buffer_type
-        );
+        input_tensor.memory_config(),
+        this->output_mem_config);
     for (const auto& unary_with_param_op : this->op_chain) {
         hash = tt::stl::hash::hash_objects(hash, unary_with_param_op.op_type);
         if (unary_with_param_op.param.has_value()) {
@@ -326,6 +323,44 @@ template<BcastOpMath OP>
 Tensor tie_binop_to_unary(const Tensor& input_tensor, float value, const MemoryConfig& output_mem_config) {
   Tensor t_value = mk_tiled_scalar(value);
   return bcast(input_tensor, t_value, OP, BcastOpDim::HW);
+}
+
+Tensor lte_unary(
+    const Tensor& input_tensor,
+    float value,
+    const MemoryConfig& output_mem_config)  {
+    return ltz(sub_unary_sfpu(input_tensor,value,output_mem_config),output_mem_config);
+}
+Tensor lte_unary(
+    float value,
+    const Tensor& input_tensor,
+    const MemoryConfig& output_mem_config)  {
+    return ltz(sub_unary_sfpu(value,input_tensor,output_mem_config),output_mem_config);
+}
+Tensor gte_unary(
+    const Tensor& input_tensor,
+    float value,
+    const MemoryConfig& output_mem_config) {
+    return gtz(sub_unary_sfpu(input_tensor,value,output_mem_config),output_mem_config);
+}
+Tensor gte_unary(
+    float value,
+    const Tensor& input_tensor,
+    const MemoryConfig& output_mem_config) {
+    return gtz(sub_unary_sfpu(value,input_tensor,output_mem_config),output_mem_config);
+}
+Tensor eq_unary(
+    const Tensor& input_tensor,
+    float value,
+    const MemoryConfig& output_mem_config) {
+    return eqz(sub_unary_sfpu(input_tensor,value,output_mem_config),output_mem_config);
+}
+
+Tensor eq_unary(
+    float value,
+    const Tensor& input_tensor,
+    const MemoryConfig& output_mem_config) {
+        return eq_unary(input_tensor,value,output_mem_config);
 }
 
 Tensor div_unary(const Tensor& input_tensor, float value, const MemoryConfig& output_mem_config) {
