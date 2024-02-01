@@ -629,7 +629,7 @@ void TensorModule(py::module &m_tensor) {
     )doc");
 
     // TMs
-    m_tensor.def("split_last_dim_two_chunks_tiled", &split_last_dim_two_chunks_tiled, py::arg("input").noconvert(), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
+    m_tensor.def("split_last_dim_two_chunks_tiled", py::overload_cast<const Tensor &,const MemoryConfig &>(&split_last_dim_two_chunks_tiled), py::arg("input").noconvert(), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
         Splits a tensor's last dimension in two equal sized chunks. This assumes the last dim is tile sized.
 
         .. csv-table::
@@ -640,7 +640,7 @@ void TensorModule(py::module &m_tensor) {
 
     )doc");
 
-    m_tensor.def("split_dim_two_chunks_tiled", &split_dim_two_chunks_tiled, py::arg("input").noconvert(), py::arg("dim").noconvert(), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
+    m_tensor.def("split_dim_two_chunks_tiled", py::overload_cast<const Tensor &,uint, const MemoryConfig &>(&split_dim_two_chunks_tiled), py::arg("input").noconvert(), py::arg("dim").noconvert(), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
         Splits a tensor's last or penultimate dimension in two equal sized chunks. This assumes the last dim is tile sized and penultimate dimension is also tile sized.
 
         .. csv-table::

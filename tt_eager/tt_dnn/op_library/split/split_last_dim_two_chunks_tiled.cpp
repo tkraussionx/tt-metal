@@ -268,29 +268,35 @@ operation::ProgramWithCallbacks SplitLastDimTwoChunksTiled::create_program(
     return split_last_dim_two_chunks_tiled(input_tensor, output_tensors, this->output_mem_config);
 }
 
-std::vector<Tensor> impl_split_last_dim_two_chunks_tiled(const Tensor &input_tensor, const MemoryConfig &mem_config);
+std::vector<Tensor> impl_split_last_dim_two_chunks_tiled(const Tensor &input_tensor, uint32_t num_chunks, const MemoryConfig &mem_config);
 
-std::vector<Tensor> split_last_dim_two_chunks_tiled(const Tensor &input_tensor, const MemoryConfig &mem_config) {
+std::vector<Tensor> split_last_dim_two_chunks_tiled(const Tensor &input_tensor, uint32_t num_chunks, const MemoryConfig &mem_config) {
     const auto shape = input_tensor.shape();
     const bool pre_post_reshape = shape[0] > 1;
 
     if (!pre_post_reshape) {
-        return impl_split_last_dim_two_chunks_tiled(input_tensor, mem_config);
+        TT_FATAL( shape[-1]%num_chunks == 0, "tensor size needs padding; it is not compatible into number of chunks requested");
+        return impl_split_last_dim_two_chunks_tiled(input_tensor, num_chunks, mem_config);
     }
 
     const int W = 1, Z = shape[0] * shape[1], Y = shape[2], X = shape[3];
     const Tensor &reshaped_tensor = reshape(input_tensor, 1, -1, Y, X, mem_config);
 
-    auto part_reshaped = impl_split_last_dim_two_chunks_tiled(reshaped_tensor, mem_config);
+    auto part_reshaped = impl_split_last_dim_two_chunks_tiled(reshaped_tensor, num_chunks, mem_config);
 
     std::vector<Tensor> results;
     results.reserve(part_reshaped.size());
-    for (auto &part : part_reshaped) results.emplace_back(reshape(part, -1, shape[1], Y, X / 2, mem_config));
+    for (auto &part : part_reshaped) results.emplace_back(reshape(part, -1, shape[1], Y, X / num_chunks, mem_config));
 
     return results;
 }
 
-std::vector<Tensor> impl_split_last_dim_two_chunks_tiled(const Tensor &input_tensor, const MemoryConfig &mem_config) {
+std::vector<Tensor> split_last_dim_two_chunks_tiled(
+    const Tensor &a, const MemoryConfig &output_mem_config) {
+        return split_last_dim_two_chunks_tiled(a,2,output_mem_config);
+}
+
+std::vector<Tensor> impl_split_last_dim_two_chunks_tiled(const Tensor &input_tensor, uint32_t num_chunks, const MemoryConfig &mem_config) {
     SplitLastDimTwoChunksTiled op(mem_config);
 
     auto input_shape = input_tensor.shape();
@@ -302,19 +308,24 @@ std::vector<Tensor> impl_split_last_dim_two_chunks_tiled(const Tensor &input_ten
 }
 
 std::vector<Tensor> split_dim_two_chunks_tiled(
-    const Tensor &input_tensor, uint dim /* = 3 */, const MemoryConfig &mem_config /* = default */) {
+    const Tensor &input_tensor, uint dim /* = 3 */,uint32_t num_chunks, const MemoryConfig &mem_config /* = default */) {
     TT_ASSERT(dim == 3 || dim == 2, "split is possible along dim 2 or 3 only");
     if (dim == 3) {
-        return split_last_dim_two_chunks_tiled(input_tensor, mem_config);
+        return split_last_dim_two_chunks_tiled(input_tensor, num_chunks, mem_config);
     }
     Tensor ref_input_tensor = transpose(input_tensor, dim, 3, mem_config);
-    auto transposed_result = split_last_dim_two_chunks_tiled(ref_input_tensor, mem_config);
+    auto transposed_result = split_last_dim_two_chunks_tiled(ref_input_tensor,num_chunks,mem_config);
     std::vector<Tensor> results;
     results.reserve(transposed_result.size());
     for (Tensor &t : transposed_result) {
         results.emplace_back(transpose(t, dim, 3, mem_config));
     }
     return results;
+}
+
+std::vector<Tensor> split_dim_two_chunks_tiled(
+    const Tensor &a, uint dim, const MemoryConfig &output_mem_config) {
+        return split_dim_two_chunks_tiled(a,dim,2,output_mem_config);
 }
 
 }  // namespace tt_metal

@@ -8,7 +8,9 @@
 
 #include "tt_dnn/op_library/run_operation.hpp"
 #include "tt_eager/tt_dnn/op_library/work_split.hpp"
+#include "tt_eager/tt_dnn/op_library/concat/concat_op.hpp"
 #include "tt_eager/tt_dnn/op_library/reshape/reshape_op.hpp"
+#include "tt_eager/tt_dnn/op_library/split/split_last_dim_two_chunks_tiled.hpp"
 #include "tt_eager/tt_dnn/op_library/composite/composite_ops.hpp"
 #include "tt_dnn/op_library/math.hpp"
 
@@ -41,25 +43,36 @@ Tensor groupnorm(
     }
 
     TT_ASSERT(group_size == 1 && "group norm size is only supported for size = 1");
+
+    auto normalize_chunk = [beta,gamma,output_mem_config](Tensor& chunk_a) -> Tensor {
+        Shape shape = chunk_a.shape();
+        Tensor ar = reshape(const_cast<Tensor&>(chunk_a),shape[0],1,shape[1]*shape[2],shape[3],output_mem_config);
+        Tensor group_norm_1 = normalize_hw(ar,output_mem_config);
+        Tensor output = reshape (group_norm_1,shape[0],shape[1],shape[2],shape[3],output_mem_config);
+        if (gamma.has_value() && beta.has_value()) {
+            output = mac(output,gamma.value(),beta.value(),output_mem_config);
+        } else {
+            if (gamma.has_value()) {
+                output = mul(output,gamma.value()); //gamma_t);
+            } else if (beta.has_value()) {
+                output = add(output,beta.value());
+            }
+        }
+        return output;
+    };
+
+
     /**
      * shortcut when group size = 1 we use layernorm with transpose and non-transpose
      */
-
-    Shape shape = a.shape();
-    Tensor ar = reshape(const_cast<Tensor&>(a),shape[0],1,shape[1]*shape[2],shape[3],output_mem_config);
-    Tensor group_norm_1 = normalize_hw(ar,output_mem_config);
-    Tensor output = reshape (group_norm_1,shape[0],shape[1],shape[2],shape[3],output_mem_config);
-    if (gamma.has_value() && beta.has_value()) {
-        output = mac(output,gamma.value(),beta.value(),output_mem_config);
-    } else {
-        if (gamma.has_value()) {
-            output = mul(output,gamma.value()); //gamma_t);
-        } else if (beta.has_value()) {
-            output = add(output,beta.value());
-        }
-    }
-    return output;
+    std::vector<Tensor> chunked_outputs;
+    std::vector<Tensor> chunked_inputs = split_last_dim_two_chunks_tiled(a, group_size,output_mem_config);
+    std::transform(chunked_inputs.begin(),chunked_inputs.end(),std::back_inserter(chunked_outputs),normalize_chunk);
+    Tensor cat_output = concat(chunked_outputs,0,output_mem_config);
+    return cat_output;
 }
+
+
 
 }  // namespace tt_metal
 
