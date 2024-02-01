@@ -85,13 +85,12 @@ void RunTimeOptions::ParseDPrintCoreRange(const char* env_var) {
     char *str = std::getenv(env_var);
     vector<CoreCoord> cores;
 
-    // Check if "all" is specified, rather than a range of cores.
-    if (str == "all") {
-        dprint_all_cores = true;
-        return;
-    }
     if (str != nullptr) {
-        if (isdigit(str[0])) {
+        // Check if "all" is specified, rather than a range of cores.
+        if (strcmp(str, "all") == 0) {
+            dprint_all_cores = true;
+            return;
+        } else if (isdigit(str[0])) {
             // Assume this is a single core
             uint32_t x, y;
             if (sscanf(str, "%d,%d", &x, &y) != 2) {
