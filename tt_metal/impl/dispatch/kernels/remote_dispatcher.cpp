@@ -72,8 +72,7 @@ void kernel_main() {
 
         if (finish) {
             // relay command to remote signaller
-            while (db_tx_semaphore_addr[0] == 0)
-                ;  // Check that there is space in the remote signaller
+            wait_consumer_space_available(db_tx_semaphore_addr);    // Check that there is space in the remote signaller
             const tt_l1_ptr db_cb_config_t *signaller_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, db_tx_buf_switch);
             uint32_t consumer_cb_num_pages = header->consumer_cb_num_pages;
             uint32_t page_size = header->page_size;
