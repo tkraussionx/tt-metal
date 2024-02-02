@@ -4,8 +4,10 @@
 
 #include <cstdint>
 #include "dataflow_api.h"
-
+#include "debug/dprint.h"
 void kernel_main() {
+    erisc_info->unused_arg0 = 0x3;
+    DPRINT<<'a'<<ENDL();
     const uint32_t src_addr = get_arg_val<uint32_t>(0);
     const uint32_t dst_addr = get_arg_val<uint32_t>(1);
     const uint32_t local_eth_l1_src_addr = get_arg_val<uint32_t>(2);
@@ -75,6 +77,7 @@ void kernel_main() {
         eth_noc_async_write_barrier();
         // num_transfers = num_devices - 1
         for (uint32_t i = 0; i < num_transfers; ++i) {
+            DPRINT<<i<<ENDL();
             eth_send_bytes(local_eth_l1_src_addr, remote_eth_l1_dst_addr, num_bytes, num_bytes_per_send, num_bytes_per_send_word_size);
             eth_wait_for_remote_receiver_done_and_get_local_receiver_data(
                 sender_semaphore_addr_ptr,
@@ -83,6 +86,7 @@ void kernel_main() {
                 local_eth_l1_src_addr,
                 num_bytes
             );
+            DPRINT<<i+num_transfers<<ENDL();
         }
 
     };
@@ -107,4 +111,6 @@ void kernel_main() {
         const uint32_t rem_num_bytes_per_send_word_size = rem_num_bytes_per_send >> 4;
         get_and_send_data(page_idx, curr_idx, col_idx, rem_num_pages, rem_num_bytes, rem_num_bytes_per_send, rem_num_bytes_per_send_word_size);
     }
+    DPRINT<<'b'<<ENDL();
+    erisc_info->unused_arg0 = 0x4;
 }

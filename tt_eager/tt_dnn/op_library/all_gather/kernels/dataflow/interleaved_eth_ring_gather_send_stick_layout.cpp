@@ -6,6 +6,8 @@
 #include "dataflow_api.h"
 
 void kernel_main() {
+    erisc_info->unused_arg0 = 0x3;
+
     const uint32_t src_addr = get_arg_val<uint32_t>(0);
     const uint32_t dst_addr = get_arg_val<uint32_t>(1);
     const uint32_t local_eth_l1_src_addr = get_arg_val<uint32_t>(2);
@@ -91,4 +93,6 @@ void kernel_main() {
         const uint32_t rem_num_bytes_per_send_word_size = rem_num_bytes_per_send >> 4;
         get_and_send_data(page_idx, rem_num_pages, rem_num_bytes, rem_num_bytes_per_send, rem_num_bytes_per_send_word_size);
     }
+    erisc_info->unused_arg0 = 0x4;
+
 }

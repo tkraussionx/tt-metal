@@ -41,6 +41,7 @@ operation::ProgramWithCallbacks all_gather_multi_core(const Tensor& input_tensor
     }
     auto eth_sender_core = device->get_ethernet_sockets(receiver_device_id)[sender_socket_idx];
     auto eth_receiver_core = device->get_ethernet_sockets(sender_device_id)[receiver_socket_idx];
+    std::cout<<device->id()<<" "<<device->ethernet_core_from_logical_core(eth_sender_core).str()<<" " <<device->ethernet_core_from_logical_core(eth_receiver_core).str()<<std::endl;
     uint32_t bytes_per_chunk = 0, pages_per_chunk = 0, num_full_chunks = 0, rem_bytes = 0, rem_pages = 0;
     if (input_tensor.buffer()->size() > MAX_BUFFER) {
         bytes_per_chunk = round_down(MAX_BUFFER, input_tensor.buffer()->page_size());

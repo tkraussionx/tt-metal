@@ -4,7 +4,7 @@
 
 #include <cstdint>
 #include "dataflow_api.h"
-
+#include "debug/dprint.h"
 /**
  * Any two RISC processors cannot use the same CMD_BUF
  * non_blocking APIs shouldn't be mixed with slow noc.h APIs
@@ -12,6 +12,8 @@
  * */
 
 void kernel_main() {
+    erisc_info->unused_arg0 = 0x2;
+    DPRINT<<'x'<<ENDL();
     const uint32_t dst_addr = get_arg_val<uint32_t>(0);
     const uint32_t local_eth_l1_src_addr = get_arg_val<uint32_t>(1);
     const uint32_t sem_addr = get_arg_val<uint32_t>(2);
@@ -74,4 +76,6 @@ void kernel_main() {
     if (rem_num_pages > 0) {
         get_and_sync_data(rem_num_pages, rem_num_bytes);
     }
+    DPRINT<<'y'<<ENDL();
+    erisc_info->unused_arg0 = 0x3;
 }

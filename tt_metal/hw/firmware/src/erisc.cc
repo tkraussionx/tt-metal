@@ -53,6 +53,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
     ncrisc_noc_full_sync();
     while (erisc_info->routing_enabled) {
         if (erisc_info->launch_user_kernel == 1) {
+            erisc_info->unused_arg0 = 0x1;
             kernel_profiler::mark_time(CC_MAIN_START);
             kernel_init();
             kernel_profiler::mark_time(CC_MAIN_END);
