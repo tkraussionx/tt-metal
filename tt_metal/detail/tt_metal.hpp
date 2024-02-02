@@ -540,15 +540,25 @@ namespace tt::tt_metal{
                         CoreCoord completion_q_physical_core = get_physical_core_coordinate(completion_q_writer_location, CoreType::WORKER);
 
                         CoreCoord consumer_physical_core = completion_q_physical_core;
+                        CoreCoord producer_physical_core = issue_q_physical_core;
                         if (device_id != device->id()) {
                             // This means the issue queue and completion queue interfaces that service a remote device are being set up
-                            // the issue queue interface needs to send fast dispatch packets to the "src" ethernet core
+                            // the issue queue reader needs to send fast dispatch packets to the "src" ethernet core and
+                            // the completion queue writer receives packets from the "dst" ethernet core
                             CoreCoord logical_eth_router_src = tt::Cluster::instance().get_eth_core_for_dispatch_core(
                                 issue_q_reader_location, EthRouterMode::FD_SRC, device_id);
                             consumer_physical_core = device->ethernet_core_from_logical_core(logical_eth_router_src);
 
                             tt::Cluster::instance().configure_eth_core_for_dispatch_core(
                                 issue_q_reader_location, EthRouterMode::FD_SRC, device_id);
+
+                            CoreCoord logical_eth_router_dst = tt::Cluster::instance().get_eth_core_for_dispatch_core(
+                                completion_q_writer_location, EthRouterMode::FD_DST, device_id);
+                            producer_physical_core = device->ethernet_core_from_logical_core(logical_eth_router_dst);
+                            tt::Cluster::instance().configure_eth_core_for_dispatch_core(
+                                completion_q_writer_location, EthRouterMode::FD_DST, device_id);
+                            std::cout << "Remote issue q location: " << issue_q_reader_location.str() << " physical " << issue_q_physical_core.str() << std::endl;
+                            std::cout << "Remote completion q location: " << completion_q_writer_location.str() << " physical " << completion_q_physical_core.str() << std::endl;
                         }
 
                         std::map<string, string> producer_defines = {
@@ -558,8 +568,8 @@ namespace tt::tt_metal{
                         };
                         std::map<string, string> consumer_defines = {
                             {"DISPATCH_KERNEL", "1"},
-                            {"PRODUCER_NOC_X", std::to_string(issue_q_physical_core.x)},
-                            {"PRODUCER_NOC_Y", std::to_string(issue_q_physical_core.y)},
+                            {"PRODUCER_NOC_X", std::to_string(producer_physical_core.x)},
+                            {"PRODUCER_NOC_Y", std::to_string(producer_physical_core.y)},
                         };
 
                         // Address in sysmem for CQ to write back its read ptr to
@@ -586,7 +596,6 @@ namespace tt::tt_metal{
                         std::vector<uint32_t> consumer_compile_args = {host_completion_queue_write_ptr_addr, completion_queue_start_addr, completion_queue_size, host_finish_addr, consumer_cmd_base_addr, consumer_data_buff_size};
 
                         std::string issue_q_reader_kernel = (device_id == device->id()) ? "tt_metal/impl/dispatch/kernels/command_queue_producer.cpp" : "tt_metal/impl/dispatch/kernels/remote_issue_queue_reader.cpp";
-
                         tt::tt_metal::CreateKernel(
                             *command_queue_program_ptr,
                             issue_q_reader_kernel,
@@ -600,21 +609,18 @@ namespace tt::tt_metal{
                         uint32_t num_command_slots = (device_id == device->id()) ? num_tensix_command_slots : num_eth_command_slots;
                         tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, issue_q_reader_location, num_command_slots);
 
-                        // Currently remote device dispatch completion queue interface has not been brought up
-                        // This will be updated with https://github.com/tenstorrent-metal/tt-metal/issues/3949
-                        if (device_id == device->id()) {
-                            tt::tt_metal::CreateKernel(
-                                *command_queue_program_ptr,
-                                "tt_metal/impl/dispatch/kernels/command_queue_consumer.cpp",
-                                completion_q_writer_location,
-                                tt::tt_metal::DataMovementConfig {
-                                    .processor = tt::tt_metal::DataMovementProcessor::RISCV_0,
-                                    .noc = tt::tt_metal::NOC::RISCV_0_default,
-                                    .compile_args = consumer_compile_args,
-                                    .defines = consumer_defines});
+                        std::string completion_q_writer_kernel = (device_id == device->id()) ? "tt_metal/impl/dispatch/kernels/command_queue_consumer.cpp" : "tt_metal/impl/dispatch/kernels/remote_completion_queue_writer.cpp";
+                        tt::tt_metal::CreateKernel(
+                            *command_queue_program_ptr,
+                            completion_q_writer_kernel,
+                            completion_q_writer_location,
+                            tt::tt_metal::DataMovementConfig {
+                                .processor = tt::tt_metal::DataMovementProcessor::RISCV_0,
+                                .noc = tt::tt_metal::NOC::RISCV_0_default,
+                                .compile_args = consumer_compile_args,
+                                .defines = consumer_defines});
 
-                            tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, completion_q_writer_location, 0);
-                        }
+                        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, completion_q_writer_location, 0);
                     }
                 }
             } else {
@@ -634,6 +640,10 @@ namespace tt::tt_metal{
                 CoreCoord dispatch_physical_core = get_physical_core_coordinate(dispatch_location, CoreType::WORKER);
                 CoreCoord remote_signaller_physical_core = get_physical_core_coordinate(remote_signaller_location, CoreType::WORKER);
 
+                std::cout << "Remote processor location: " << remote_processor_location.str() << " physical " << remote_processor_physical_core.str() << std::endl;
+                std::cout << "Remote dispatcher location: " << dispatch_location.str() << " physical " << dispatch_physical_core.str() << std::endl;
+                std::cout << "Remote signaller location: " << remote_signaller_location.str() << " physical " << remote_signaller_physical_core.str() << std::endl;
+
                 // Set up the dst router to receive commands on the forward path
                 CoreCoord logical_eth_router_dst = tt::Cluster::instance().get_eth_core_for_dispatch_core(
                     remote_processor_location, EthRouterMode::FD_DST, mmio_device_id);
@@ -643,7 +653,7 @@ namespace tt::tt_metal{
                 tt::Cluster::instance().write_core(&dst_router_sem_value, sizeof(uint32_t), tt_cxy_pair(device->id(), physical_eth_router_dst), eth_l1_mem::address_map::SEMAPHORE_BASE);
                 tt::Cluster::instance().configure_eth_core_for_dispatch_core(remote_processor_location, EthRouterMode::FD_DST, mmio_device_id);
 
-                // Set up the src router on remote device to send commands on the return path
+                // Set up the src router on remote device to send fast dispatch packets on the return path to MMIO device
                 CoreCoord logical_eth_router_src = tt::Cluster::instance().get_eth_core_for_dispatch_core(
                     remote_signaller_location, EthRouterMode::FD_SRC, mmio_device_id);
                 CoreCoord physical_eth_router_src = device->ethernet_core_from_logical_core(logical_eth_router_src);
