@@ -13,7 +13,6 @@ void RunCustomCycle(tt_metal::Device *device, int loop_count)
     CoreCoord start_core = {0, 0};
     CoreCoord end_core = {compute_with_storage_size.x - 1, compute_with_storage_size.y - 1};
     CoreRange all_cores{.start=start_core, .end=end_core};
-    auto eth_cores =  device->get_active_ethernet_cores();
     tt_metal::Program program = tt_metal::CreateProgram();
 
     constexpr int loop_size = 200;
