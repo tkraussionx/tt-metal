@@ -12,7 +12,6 @@ from models.experimental.mistral.tt.mistral_configuration import TtModelArgs
 from models.experimental.mistral.reference.model import Transformer
 from models.experimental.mistral.reference.model import FeedForward
 from models.experimental.functional_mistral.tt.ttnn_functional_feed_forward import feed_forward
-from models.experimental.functional_mistral.tt.mistral_utility import custom_preprocessor
 from models.utility_functions import skip_for_wormhole_b0
 
 from tests.ttnn.utils_for_testing import assert_with_pcc
@@ -41,14 +40,14 @@ def test_mistral_feed_forward_inference(model_location_generator, device, reset_
     parameters = preprocess_model_parameters(
         initialize_model=lambda: ref_model,
         device=device,
-        custom_preprocessor=custom_preprocessor,
     )
 
     input = torch.rand(1, 11, 4096)
     reference_ouput = reference_model(input)
 
-    ttnn_input = ttnn.from_torch(input, dtype=ttnn.bfloat16, device=device, layout=ttnn.TILE_LAYOUT)
-
+    ttnn_input = ttnn.to_layout(
+        ttnn.to_device(ttnn.from_torch(input, dtype=ttnn.bfloat16), device), layout=ttnn.TILE_LAYOUT
+    )
     output = feed_forward(
         model_args,
         ttnn_input,
