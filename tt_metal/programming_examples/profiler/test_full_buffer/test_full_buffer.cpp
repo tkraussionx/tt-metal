@@ -7,12 +7,15 @@
 
 using namespace tt;
 
-void RunCustomCycle(tt_metal::Device *device, int loop_count)
+void RunCustomCycle(tt_metal::Device *device, int loop_count, bool fast_dispatch)
 {
     CoreCoord compute_with_storage_size = device->compute_with_storage_grid_size();
     CoreCoord start_core = {0, 0};
     CoreCoord end_core = {compute_with_storage_size.x - 1, compute_with_storage_size.y - 1};
     CoreRange all_cores{.start=start_core, .end=end_core};
+
+    auto eth_cores =  device->get_active_ethernet_cores();
+
     tt_metal::Program program = tt_metal::CreateProgram();
 
     constexpr int loop_size = 200;
@@ -42,21 +45,15 @@ void RunCustomCycle(tt_metal::Device *device, int loop_count)
             (CoreCoord){core.x,core.y},
             tt_metal::experimental::EthernetConfig{.eth_mode = tt_metal::Eth::SENDER, .noc = tt_metal::NOC::NOC_0, .defines = kernel_defines});
     }
-
-    if (!fastDispatch)
+    if (fast_dispatch)
     {
-        tt_metal::detail::LaunchProgram(device, program);
+        EnqueueProgram(device->command_queue(), program, false);
     }
     else
     {
-        for (int i = 0; i < fastDispatch; i++)
-        {
-            EnqueueProgram(device->command_queue(), program, false);
-        }
+        tt_metal::detail::LaunchProgram(device, program);
     }
 
-    EnqueueProgram(tt_metal::detail::GetCommandQueue(device), program, false);
-    tt_metal::detail::DumpDeviceProfileResults(device);
 }
 
 int main(int argc, char **argv) {
@@ -70,9 +67,14 @@ int main(int argc, char **argv) {
         tt_metal::Device *device =
             tt_metal::CreateDevice(device_id);
 
+        tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
+        const auto USE_FAST_DISPATCH = std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr;
+
         constexpr int device_loop_count = 5;
 
-        RunCustomCycle(device, device_loop_count);
+        RunCustomCycle(device, device_loop_count, USE_FAST_DISPATCH);
+        tt_metal::detail::DumpDeviceProfileResults(device);
+        tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
 
         pass &= tt_metal::CloseDevice(device);
 
