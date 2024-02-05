@@ -154,7 +154,6 @@ def test_bloom(model_name, batch_size, sequence_size):
 
     config = bloom.configuration_bloom.BloomConfig.from_pretrained(model_name)
     model = bloom.modeling_bloom.BloomModel.from_pretrained(model_name, config=config).eval()
-    model = model.to(torch.bfloat16)
 
     torch_input_ids = torch.randint(0, config.vocab_size, (batch_size, sequence_size)).to(torch.int32)
     torch_attention_mask = torch_random((batch_size, sequence_size), 0, 2, dtype=torch.int64)
@@ -177,7 +176,7 @@ def test_bloom(model_name, batch_size, sequence_size):
         parameters=parameters,
     )
 
-    assert_with_pcc(torch_output, output, pcc=0.99)
+    assert_with_pcc(torch_output, output, pcc=0.9999)
 
 
 @skip_for_wormhole_b0()

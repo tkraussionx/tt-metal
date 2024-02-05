@@ -12,16 +12,42 @@
 class CommonFixture: public ::testing::Test {
 public:
     // A function to run a program, according to which dispatch mode is set.
-    void RunProgram(Device* device, Program& program) {
+    void RunProgram(tt::tt_metal::Device* device, Program& program) {
         if (this->slow_dispatch_) {
-            // Slow dispatch uses LaunchProgram
             tt::tt_metal::detail::LaunchProgram(device, program);
         } else {
-            // Fast Dispatch uses the command queue
             CommandQueue& cq = tt::tt_metal::detail::GetCommandQueue(device);
             EnqueueProgram(cq, program, false);
             Finish(cq);
         }
+    }
+    void WriteBuffer(tt::tt_metal::Device* device, tt::tt_metal::Buffer &in_buffer, std::vector<uint32_t> &src_vec){
+        if (this->slow_dispatch_) {
+            tt::tt_metal::detail::WriteToBuffer(in_buffer, src_vec);
+        } else {
+            CommandQueue& cq = tt::tt_metal::detail::GetCommandQueue(device);
+            EnqueueWriteBuffer(cq, in_buffer, src_vec, false);
+        }
+    }
+    void ReadBuffer(tt::tt_metal::Device* device, tt::tt_metal::Buffer &out_buffer, std::vector<uint32_t> &dst_vec){
+        if (this->slow_dispatch_) {
+            tt::tt_metal::detail::ReadFromBuffer(out_buffer, dst_vec);
+        } else {
+            CommandQueue& cq = tt::tt_metal::detail::GetCommandQueue(device);
+            EnqueueReadBuffer(cq, out_buffer, dst_vec, true);
+        }
+    }
+
+    // Not complete or in use..
+    template <typename T>
+    bool MoveTilesToDRAM(tt::tt_metal::Device *device, std::vector<uint32_t> tensor, int tiles_r, int tiles_c, T buffer){
+        if (this->slow_dispatch_) {
+            tt::log_info(tt::LogTest, "Moves tiles to DRAM in slow dispatch mode");
+
+        } else {
+            tt::log_info(tt::LogTest, "Moves tiles to DRAM in fast dispatch mode");
+        }
+        return move_tiles_to_dram(device, tensor, tiles_r, tiles_c, buffer);
     }
 
 protected:
@@ -53,9 +79,11 @@ protected:
             auto* device = tt::tt_metal::CreateDevice(id);
             devices_.push_back(device);
         }
+        tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
     }
 
     void TearDown() override {
+        tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
         // Close all opened devices
         for (unsigned int id = 0; id < devices_.size(); id++) {
             tt::tt_metal::CloseDevice(devices_.at(id));
