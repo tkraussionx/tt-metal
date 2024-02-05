@@ -41,16 +41,20 @@ void __attribute__((section("code_l1"))) risc_init() {
     }
 }
 void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
+    erisc_info->unused_arg0 = 0x212;
     kernel_profiler::init_profiler();
     rtos_context_switch_ptr = (void (*)())RtosTable[0];
 
     risc_init();
     noc_init();
+    erisc_info->unused_arg0 = 0x213;
 
     for (uint32_t n = 0; n < NUM_NOCS; n++) {
         noc_local_state_init(n);
     }
+    erisc_info->unused_arg0 = 0x214;
     ncrisc_noc_full_sync();
+    erisc_info->unused_arg0 = 0x215;
     while (erisc_info->routing_enabled) {
         if (erisc_info->launch_user_kernel == 1) {
             erisc_info->unused_arg0 = 0x1;

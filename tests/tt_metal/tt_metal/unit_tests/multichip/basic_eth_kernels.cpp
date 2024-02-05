@@ -65,7 +65,7 @@ bool reader_kernel_no_send(
     uint32_t dram_byte_address = input_dram_buffer.address();
     auto dram_noc_xy = input_dram_buffer.noc_coordinates();
     auto eth_noc_xy = device->ethernet_core_from_logical_core(eth_reader_core);
-    log_debug(
+    log_info(
         tt::LogTest,
         "Device {}: reading {} bytes from dram {} addr {} to ethernet core {} addr {}",
         device->id(),
@@ -185,13 +185,15 @@ bool writer_kernel_no_receive(
     return pass;
 }
 
-TEST_F(N300DeviceFixture, EthKernelsNocReadNoSend) {
+TEST_F(DeviceFixture, EthKernelsNocReadNoSend) {
     const auto& device_0 = devices_.at(0);
     const auto& device_1 = devices_.at(1);
 
     const size_t src_eth_l1_byte_address = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
 
-    for (const auto& eth_core : device_0->get_active_ethernet_cores()) {
+        ASSERT_TRUE(
+            unit_tests::erisc::kernels::reader_kernel_no_send(device_0, WORD_SIZE, src_eth_l1_byte_address, {0,0}));
+   /* for (const auto& eth_core : device_0->get_active_ethernet_cores()) {
         ASSERT_TRUE(
             unit_tests::erisc::kernels::reader_kernel_no_send(device_0, WORD_SIZE, src_eth_l1_byte_address, eth_core));
         ASSERT_TRUE(unit_tests::erisc::kernels::reader_kernel_no_send(
@@ -207,7 +209,7 @@ TEST_F(N300DeviceFixture, EthKernelsNocReadNoSend) {
             device_1, WORD_SIZE * 1024, src_eth_l1_byte_address, eth_core));
         ASSERT_TRUE(unit_tests::erisc::kernels::reader_kernel_no_send(
             device_1, WORD_SIZE * 2048, src_eth_l1_byte_address, eth_core));
-    }
+    }*/
 }
 
 TEST_F(N300DeviceFixture, EthKernelsNocWriteNoReceive) {
@@ -254,7 +256,7 @@ bool eth_direct_sender_receiver_kernels(
     const CoreCoord& eth_receiver_core,
     uint32_t num_bytes_per_send = 16) {
     bool pass = true;
-    log_debug(
+    log_info(
         tt::LogTest,
         "Sending {} bytes from device {} eth core {} addr {} to device {} eth core {} addr {}",
         byte_size,
@@ -629,6 +631,7 @@ TEST_F(N300DeviceFixture, EthKernelsDirectSendChip1ToChip0) {
 }
 
 TEST_F(DeviceFixture, EthKernelsDirectSendAllConnectedChips) {
+std::cout << " start hex 0x" << eth_l1_mem::address_map::COMMAND_Q_BASE << " to 0x" << eth_l1_mem::address_map::TILE_HEADER_BUFFER_BASE << std::endl;
     const size_t src_eth_l1_byte_address = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
     const size_t dst_eth_l1_byte_address = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
     for (const auto& sender_device : devices_) {

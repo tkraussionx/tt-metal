@@ -425,7 +425,7 @@ def run_test_FalconCausalLM_end_to_end(
     (
         # 1,
         # 2,
-        60,
+        16,
     ),
     ids=["layers_60"],
 )

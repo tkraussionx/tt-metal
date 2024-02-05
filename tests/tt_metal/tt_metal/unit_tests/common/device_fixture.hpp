@@ -29,7 +29,9 @@ class DeviceFixture : public ::testing::Test {
             GTEST_SKIP();
         }
 
-        for (unsigned int id = 0; id < num_devices_; id++) {
+        std::vector<int> chip_ids = {0,1};
+        for (const auto &id: chip_ids) {
+       // for (unsigned int id = 0; id < num_devices_; id++) {
             auto* device = tt::tt_metal::CreateDevice(id);
             devices_.push_back(device);
         }
