@@ -555,10 +555,11 @@ namespace tt::tt_metal{
                             CoreCoord logical_eth_router_dst = tt::Cluster::instance().get_eth_core_for_dispatch_core(
                                 completion_q_writer_location, EthRouterMode::FD_DST, device_id);
                             producer_physical_core = device->ethernet_core_from_logical_core(logical_eth_router_dst);
-                            tt::Cluster::instance().configure_eth_core_for_dispatch_core(
-                                completion_q_writer_location, EthRouterMode::FD_DST, device_id);
+                            tt::Cluster::instance().configure_eth_core_for_dispatch_core(completion_q_writer_location, EthRouterMode::FD_DST, device_id);
                             std::cout << "Remote issue q location: " << issue_q_reader_location.str() << " physical " << issue_q_physical_core.str() << std::endl;
+                            std::cout << "SRC on MMIO: " <<  logical_eth_router_src.str() << " physical " << consumer_physical_core.str() << std::endl;
                             std::cout << "Remote completion q location: " << completion_q_writer_location.str() << " physical " << completion_q_physical_core.str() << std::endl;
+                            std::cout << "DST on MMIO: " <<  logical_eth_router_dst.str() << " physical " << producer_physical_core.str() << std::endl;
                         }
 
                         std::map<string, string> producer_defines = {
@@ -648,6 +649,7 @@ namespace tt::tt_metal{
                 CoreCoord logical_eth_router_dst = tt::Cluster::instance().get_eth_core_for_dispatch_core(
                     remote_processor_location, EthRouterMode::FD_DST, mmio_device_id);
                 CoreCoord physical_eth_router_dst = device->ethernet_core_from_logical_core(logical_eth_router_dst);
+                std::cout << "DST on remote: " << logical_eth_router_dst.str() << " physical " << physical_eth_router_dst.str() << std::endl;
                 // TODO (abhullar / aliu): there is no API to configure ethernet semaphores used for FD so manually write initial semaphore value
                 uint32_t dst_router_sem_value = num_eth_command_slots;
                 tt::Cluster::instance().write_core(&dst_router_sem_value, sizeof(uint32_t), tt_cxy_pair(device->id(), physical_eth_router_dst), eth_l1_mem::address_map::SEMAPHORE_BASE);
@@ -658,6 +660,7 @@ namespace tt::tt_metal{
                     remote_signaller_location, EthRouterMode::FD_SRC, mmio_device_id);
                 CoreCoord physical_eth_router_src = device->ethernet_core_from_logical_core(logical_eth_router_src);
                 tt::Cluster::instance().configure_eth_core_for_dispatch_core(remote_signaller_location, EthRouterMode::FD_SRC, mmio_device_id);
+                std::cout << "SRC on remote: " << logical_eth_router_src.str() << " physical " << physical_eth_router_src.str() << std::endl;
 
                 std::vector<uint32_t> processor_compile_args = {
                     cmd_start_tensix,

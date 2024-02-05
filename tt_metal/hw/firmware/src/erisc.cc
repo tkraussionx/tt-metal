@@ -61,6 +61,9 @@ void multicore_eth_cb_pop_front(
 FORCE_INLINE
 void eth_db_acquire(volatile uint32_t *semaphore, uint64_t noc_encoding) {
     while (semaphore[0] == 0 and routing_info->routing_enabled and erisc_info->launch_user_kernel == 0) {
+        // Without this context switch a src router on R chip of N300 may get configured for FD
+        //  and block L chip of N300 from sending config for dst router on R because the path to the dst router is through the src router
+        internal_::risc_context_switch();
     }
 }
 
@@ -100,6 +103,11 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
     volatile tt_l1_ptr uint32_t *eth_db_semaphore_addr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(0));
 
+    volatile tt_l1_ptr uint32_t *relay_x_sem =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(1));
+    volatile tt_l1_ptr uint32_t *relay_y_sem =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(2));
+
     static constexpr uint32_t command_start_addr = eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE;
     static constexpr uint32_t data_buffer_size = MEM_ETH_SIZE - (DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND * sizeof(uint32_t)) - eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE;
 
@@ -125,6 +133,8 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             if (routing_info->routing_enabled == 0) {
                 break;
             }
+            relay_x_sem[0] = routing_info->relay_src_x;
+            relay_y_sem[0] = routing_info->relay_src_y;
             noc_semaphore_inc(
                 ((uint64_t)eth_router_noc_encoding << 32) | uint32_t(eth_db_semaphore_addr),
                 -1);  // Two's complement addition
@@ -162,6 +172,8 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             if (routing_info->routing_enabled == 0) {
                 break;
             }
+            relay_x_sem[0] = routing_info->relay_dst_x;
+            relay_y_sem[0] = routing_info->relay_dst_y;
 
             volatile tt_l1_ptr uint32_t *command_ptr =
                 reinterpret_cast<volatile tt_l1_ptr uint32_t *>(command_start_addr);
