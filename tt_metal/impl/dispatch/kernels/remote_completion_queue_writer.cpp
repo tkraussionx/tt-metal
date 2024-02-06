@@ -25,6 +25,9 @@ void kernel_main() {
 
     volatile tt_l1_ptr uint32_t* db_semaphore_addr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(0));
 
+    volatile tt_l1_ptr uint32_t* debug_cmd_counter = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(1));
+    debug_cmd_counter[0] = 0;
+
     uint32_t producer_noc_encoding = uint32_t(NOC_XY_ENCODING(PRODUCER_NOC_X, PRODUCER_NOC_Y));
     uint32_t consumer_noc_encoding = uint32_t(NOC_XY_ENCODING(my_x[0], my_y[0]));
 
@@ -39,14 +42,47 @@ void kernel_main() {
 
         volatile tt_l1_ptr uint32_t* command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(command_start_addr);
         volatile tt_l1_ptr CommandHeader* header = (CommandHeader*)command_ptr;
-        uint32_t finish = header->finish;
+        uint32_t buffer_transfer_start_addr = command_start_addr + (DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER * sizeof(uint32_t));
+        volatile tt_l1_ptr uint32_t *buffer_transfer_command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(buffer_transfer_start_addr);
+        uint32_t is_program = header->is_program_buffer;
+        uint32_t data_size = header->data_size;
+        const uint32_t dst_buf_type = buffer_transfer_command_ptr[5];
+        bool reading_buffer = (!is_program) & (data_size > 0 & (BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY);
 
+        debug_cmd_counter[0] = debug_cmd_counter[0] + 1;
+
+        uint32_t wrap = header->wrap;
+        if ((DeviceCommand::WrapRegion)wrap == DeviceCommand::WrapRegion::COMPLETION) {
+            cq_write_interface.completion_fifo_wr_ptr = completion_queue_start_addr >> 4;     // Head to the beginning of the completion region
+            cq_write_interface.completion_fifo_wr_toggle = not cq_write_interface.completion_fifo_wr_toggle;
+            notify_host_of_completion_queue_write_pointer<host_completion_queue_write_ptr_addr>();
+            noc_async_write_barrier(); // Barrier for now
+        } else if (reading_buffer) {
+            db_cb_config_t* db_cb_config = get_local_db_cb_config(CQ_CONSUMER_CB_BASE, db_buf_switch);
+            const db_cb_config_t* eth_db_cb_config = get_remote_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, db_buf_switch);
+            uint32_t num_buffer_transfers = header->num_buffer_transfers;
+            bool is_sharded = (bool) (header->buffer_type == (uint32_t)DeviceCommand::BufferType::SHARDED);
+            uint32_t sharded_buffer_num_cores = header->sharded_buffer_num_cores;
+            uint32_t producer_consumer_transfer_num_pages = header->consumer_router_transfer_num_pages;
+            write_buffers<host_completion_queue_write_ptr_addr>(
+                db_cb_config,
+                eth_db_cb_config,
+                command_ptr,
+                completion_queue_start_addr,
+                num_buffer_transfers,
+                is_sharded,
+                sharded_buffer_num_cores,
+                producer_noc_encoding,
+                producer_consumer_transfer_num_pages);
+        }
+
+        uint32_t finish = header->finish;
         if (finish) {
             notify_host_complete<host_finish_addr>();
         }
 
         // notify producer that it has completed a command
-        noc_semaphore_inc((uint64_t(producer_noc_encoding) << 32) | get_semaphore(0), 1);
+        noc_semaphore_inc((uint64_t(producer_noc_encoding) << 32) | eth_get_semaphore(0), 1);
         db_buf_switch = not db_buf_switch;
         noc_async_write_barrier(); // Barrier for now
     }
