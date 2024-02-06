@@ -28,10 +28,10 @@ using std::unique_ptr;
 std::mutex finish_mutex;
 std::condition_variable finish_cv;
 
-#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 namespace tt::tt_metal {
 
 uint32_t get_noc_unicast_encoding(CoreCoord coord) { return NOC_XY_ENCODING(NOC_X(coord.x), NOC_Y(coord.y)); }
+#include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 
 EnqueueRestartCommand::EnqueueRestartCommand(
     uint32_t command_queue_id, Device* device, SystemMemoryManager& manager, uint32_t event) :
