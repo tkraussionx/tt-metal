@@ -541,14 +541,14 @@ namespace tt::tt_metal{
                             // This means the issue queue and completion queue interfaces that service a remote device are being set up
                             // the issue queue reader needs to send fast dispatch packets to the "src" ethernet core and
                             // the completion queue writer receives packets from the "dst" ethernet core
-                            CoreCoord logical_eth_router_src = tt::Cluster::instance().get_eth_core_for_dispatch_core(
+                            tt_cxy_pair logical_eth_router_src = tt::Cluster::instance().get_eth_core_for_dispatch_core(
                                 issue_q_reader_location, EthRouterMode::FD_SRC, device_id);
                             consumer_physical_core = device->ethernet_core_from_logical_core(logical_eth_router_src);
 
                             tt::Cluster::instance().configure_eth_core_for_dispatch_core(
                                 issue_q_reader_location, EthRouterMode::FD_SRC, device_id);
 
-                            CoreCoord logical_eth_router_dst = tt::Cluster::instance().get_eth_core_for_dispatch_core(
+                            tt_cxy_pair logical_eth_router_dst = tt::Cluster::instance().get_eth_core_for_dispatch_core(
                                 completion_q_writer_location, EthRouterMode::FD_DST, device_id);
                             producer_physical_core = device->ethernet_core_from_logical_core(logical_eth_router_dst);
                             tt::Cluster::instance().configure_eth_core_for_dispatch_core(completion_q_writer_location, EthRouterMode::FD_DST, device_id);
@@ -590,7 +590,7 @@ namespace tt::tt_metal{
                         uint32_t completion_queue_start_addr = CQ_START + issue_queue_size + get_absolute_cq_offset(channel, cq_id, cq_size);
                         uint32_t completion_queue_size = (cq_size - CQ_START) - issue_queue_size;
                         uint32_t host_finish_addr = HOST_CQ_FINISH_PTR + get_absolute_cq_offset(channel, cq_id, cq_size);
-                        std::vector<uint32_t> consumer_compile_args = {host_completion_queue_write_ptr_addr, completion_queue_start_addr, completion_queue_size, host_finish_addr, consumer_cmd_base_addr, consumer_data_buff_size};
+                        std::vector<uint32_t> consumer_compile_args = {host_completion_queue_write_ptr_addr, completion_queue_start_addr, completion_queue_size, host_finish_addr, cmd_start_tensix, consumer_data_buffer_size_tensix};
 
                         std::string issue_q_reader_kernel = (device_id == device->id()) ? "tt_metal/impl/dispatch/kernels/command_queue_producer.cpp" : "tt_metal/impl/dispatch/kernels/remote_issue_queue_reader.cpp";
                         tt::tt_metal::CreateKernel(
@@ -649,6 +649,9 @@ namespace tt::tt_metal{
                 // TODO (abhullar / aliu): there is no API to configure ethernet semaphores used for FD so manually write initial semaphore value
                 uint32_t dst_router_sem_value = num_eth_command_slots;
                 tt::Cluster::instance().write_core(&dst_router_sem_value, sizeof(uint32_t), tt_cxy_pair(device->id(), physical_eth_router_dst), eth_l1_mem::address_map::SEMAPHORE_BASE);
+
+                tt::Cluster::instance().write_core(&dst_router_sem_value, sizeof(uint32_t), tt_cxy_pair(mmio_device_id, CoreCoord(9, 6)), eth_l1_mem::address_map::SEMAPHORE_BASE);
+
                 tt::Cluster::instance().configure_eth_core_for_dispatch_core(remote_processor_location, EthRouterMode::FD_DST, mmio_device_id);
 
                 // Set up the src router on remote device to send fast dispatch packets on the return path to MMIO device
