@@ -29,6 +29,7 @@
 #include "tt_dnn/op_library/moreh_arange/moreh_arange_op.hpp"
 #include "tt_dnn/op_library/moreh_sgd/moreh_sgd_op.hpp"
 #include "tt_dnn/op_library/groupnorm/groupnorm_op.hpp"
+#include "tt_dnn/op_library/prod/prod_op.hpp"
 
 namespace py = pybind11;
 
@@ -503,6 +504,13 @@ void py_module(py::module& m_primary) {
         R"doc(
         "Performs a moreh_linear_backward operation.
     )doc");
+    m_primary.def(
+        "prod",
+        &prod,
+        py::arg("input").noconvert(),
+        py::kw_only(),
+        py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        "Performs product operation. Returns an output tensor.");
 
     // moreh_matmul
     m_primary.def(

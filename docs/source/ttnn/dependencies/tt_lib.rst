@@ -690,6 +690,8 @@ Other Operations
 
 .. autofunction:: tt_lib.tensor.concat
 
+.. autofunction:: tt_lib.tensor.prod
+
 .. autofunction:: tt_lib.tensor.sum
 
 .. autofunction:: tt_lib.tensor.log_sigmoid
