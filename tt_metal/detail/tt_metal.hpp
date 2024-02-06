@@ -485,15 +485,11 @@ namespace tt::tt_metal{
                         WriteToDeviceL1(device, issue_q_logical_core, CQ_ISSUE_READ_PTR, issue_queue_read_ptr);
                         WriteToDeviceL1(device, issue_q_logical_core, CQ_ISSUE_WRITE_PTR, issue_queue_read_ptr);
 
-                        // Currently remote device dispatch completion queue interface has not been brought up
-                        // This will be updated with https://github.com/tenstorrent-metal/tt-metal/issues/3949
-                        if (device_id == device->id()) {
-                            uint32_t completion_queue_start_addr = CQ_START + issue_queue_size + get_absolute_cq_offset(curr_channel, cq_id, curr_cq_size);
-                            uint32_t completion_queue_start_addr_16B = completion_queue_start_addr >> 4;
-                            vector<uint32_t> completion_queue_wr_ptr = {completion_queue_start_addr_16B};
-                            WriteToDeviceL1(device, completion_q_logical_core, CQ_COMPLETION_READ_PTR, completion_queue_wr_ptr);
-                            WriteToDeviceL1(device, completion_q_logical_core, CQ_COMPLETION_WRITE_PTR, completion_queue_wr_ptr);
-                        }
+                        uint32_t completion_queue_start_addr = CQ_START + issue_queue_size + get_absolute_cq_offset(curr_channel, cq_id, curr_cq_size);
+                        uint32_t completion_queue_start_addr_16B = completion_queue_start_addr >> 4;
+                        vector<uint32_t> completion_queue_wr_ptr = {completion_queue_start_addr_16B};
+                        WriteToDeviceL1(device, completion_q_logical_core, CQ_COMPLETION_READ_PTR, completion_queue_wr_ptr);
+                        WriteToDeviceL1(device, completion_q_logical_core, CQ_COMPLETION_WRITE_PTR, completion_queue_wr_ptr);
                     }
                 }
             }
