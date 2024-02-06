@@ -54,14 +54,10 @@ void kernel_main() {
             header->num_pages = 0;
         }
 
-        //relay_command<cmd_base_addr, consumer_cmd_base_addr, consumer_data_buffer_size>(tx_buf_switch, ((uint64_t)eth_consumer_noc_encoding << 32));
-        uint64_t consumer_command_slot_addr = ((uint64_t)eth_consumer_noc_encoding << 32) | eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE;
-        noc_async_write(cmd_base_addr, consumer_command_slot_addr, DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND);
-        noc_async_write_barrier();
-
+        relay_command<consumer_cmd_base_addr, consumer_data_buffer_size>(command_start_addr, tx_buf_switch, ((uint64_t)eth_consumer_noc_encoding << 32));
         num_relayed[0] = num_relayed[0] + 1;
 
-        update_producer_consumer_sync_semaphores(((uint64_t)signaller_noc_encoding << 32), ((uint64_t)eth_consumer_noc_encoding << 32), tx_semaphore_addr, get_semaphore(0));
+        update_producer_consumer_sync_semaphores(((uint64_t)signaller_noc_encoding << 32), ((uint64_t)eth_consumer_noc_encoding << 32), tx_semaphore_addr, eth_get_semaphore(0));
 
         if (reading_buffer) {
             tt_l1_ptr db_cb_config_t *db_cb_config = get_local_db_cb_config(CQ_CONSUMER_CB_BASE, db_rx_buf_switch);

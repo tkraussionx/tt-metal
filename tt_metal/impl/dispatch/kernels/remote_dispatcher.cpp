@@ -90,7 +90,7 @@ void kernel_main() {
                 consumer_cb_num_pages,
                 page_size,
                 consumer_cb_size);
-            relay_command<cmd_base_addr, signaller_cmd_base_addr, signaller_data_buffer_size>(db_tx_buf_switch, ((uint64_t)signaller_noc_encoding << 32));
+            relay_command<signaller_cmd_base_addr, signaller_data_buffer_size>(command_start_addr, db_tx_buf_switch, ((uint64_t)signaller_noc_encoding << 32));
 
             update_producer_consumer_sync_semaphores(((uint64_t)dispatcher_noc_encoding << 32), ((uint64_t)signaller_noc_encoding << 32), db_tx_semaphore_addr, get_semaphore(0));
 

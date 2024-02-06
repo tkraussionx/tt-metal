@@ -103,8 +103,10 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
     volatile tt_l1_ptr uint32_t *eth_db_semaphore_addr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(0));
 
-    volatile tt_l1_ptr uint32_t *num_relayed =
-        reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(1));
+    volatile tt_l1_ptr uint32_t *num_relayed = reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(1));
+    volatile tt_l1_ptr uint32_t *num_rxed = reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(2));
+    num_relayed[0] = 0;
+    num_rxed[0] = 0;
 
     static constexpr uint32_t command_start_addr = eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE;
     static constexpr uint32_t data_buffer_size = MEM_ETH_SIZE - (DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND * sizeof(uint32_t)) - eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE;
@@ -169,12 +171,15 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             // Poll until FD_SRC router sends FD packet
             // Each FD packet comprises of command header followed by command data
             internal_::wait_for_fd_packet();
+            // num_rxed[0] = num_rxed[0] + 1;
             if (erisc_info->launch_user_kernel == 1) {
                 continue;
             }
+            // num_rxed[0] = num_rxed[0] + 1;
             if (routing_info->routing_enabled == 0) {
                 break;
             }
+            // num_rxed[0] = num_rxed[0] + 1;
 
             volatile tt_l1_ptr uint32_t *command_ptr =
                 reinterpret_cast<volatile tt_l1_ptr uint32_t *>(command_start_addr);
@@ -182,9 +187,11 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
 
             // Block until consumer can accept new command
             // `num_pages_transferred` tracks whether the remote command processor received all the data
+            num_rxed[0] = num_rxed[0] + 1;
             while (eth_db_semaphore_addr[0] == 0 and num_pages_transferred == 0) {
                 internal_::risc_context_switch();
             } // Check that there is space in consumer to send command
+            // num_rxed[0] = num_rxed[0] + 1;
 
             // Send the full command header
             constexpr uint32_t consumer_cmd_base_addr = L1_UNRESERVED_BASE;
@@ -201,7 +208,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
                 consumer_cb_num_pages,
                 page_size,
                 consumer_cb_size);
-            relay_command<command_start_addr, consumer_cmd_base_addr, consumer_data_buffer_size>(db_buf_switch, ((uint64_t)relay_dst_noc_encoding << 32));
+            relay_command<consumer_cmd_base_addr, consumer_data_buffer_size>(command_start_addr, db_buf_switch, ((uint64_t)relay_dst_noc_encoding << 32));
             num_relayed[0] = num_relayed[0] + 1;
 
             update_producer_consumer_sync_semaphores(((uint64_t)eth_router_noc_encoding << 32), ((uint64_t)relay_dst_noc_encoding << 32), eth_db_semaphore_addr, get_semaphore(0));

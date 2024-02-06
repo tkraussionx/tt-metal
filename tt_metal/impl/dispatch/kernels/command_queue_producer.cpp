@@ -69,7 +69,7 @@ void kernel_main() {
             setup_issue_queue_read_interface(issue_queue_start_addr, issue_queue_size);
             notify_host_of_issue_queue_read_pointer<host_issue_queue_read_ptr_addr>();
             wait_consumer_space_available(db_semaphore_addr);
-            relay_command<command_start_addr, consumer_cmd_base_addr, consumer_data_buffer_size>(db_buf_switch, consumer_noc_encoding);
+            relay_command<consumer_cmd_base_addr, consumer_data_buffer_size>(command_start_addr, db_buf_switch, consumer_noc_encoding);
             update_producer_consumer_sync_semaphores(producer_noc_encoding, consumer_noc_encoding, db_semaphore_addr, get_semaphore(0));
             db_buf_switch = false; // Resteart the db buf switch as well
             continue;
@@ -84,7 +84,7 @@ void kernel_main() {
             consumer_cb_num_pages,
             page_size,
             consumer_cb_size);
-        relay_command<command_start_addr, consumer_cmd_base_addr, consumer_data_buffer_size>(db_buf_switch, consumer_noc_encoding);
+        relay_command<consumer_cmd_base_addr, consumer_data_buffer_size>(command_start_addr, db_buf_switch, consumer_noc_encoding);
         if (stall) {
             wait_consumer_idle(db_semaphore_addr);
         }

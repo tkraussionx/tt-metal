@@ -27,6 +27,14 @@ void kernel_main() {
     volatile tt_l1_ptr uint32_t* db_semaphore_addr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(0));  // Should be initialized to num command slots by host (1 for remote cq)
 
+    volatile tt_l1_ptr uint32_t* num_cmds_relayed =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(1));
+
+    volatile tt_l1_ptr uint32_t* num_cmds_rxed =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(2));
+    num_cmds_rxed[0] = 0;
+    num_cmds_relayed[0] = 0;
+
     bool db_buf_switch = false; //TODO: toggle db buf switch when adding double buffering on eth core
     while (true) {
 
@@ -52,6 +60,7 @@ void kernel_main() {
         uint32_t producer_consumer_transfer_num_pages = header->producer_router_transfer_num_pages;
         uint32_t sharded_buffer_num_cores = header->sharded_buffer_num_cores;
         uint32_t wrap = header->wrap;
+        uint32_t restart = header->restart;
 
         db_cb_config_t* db_cb_config = get_local_db_cb_config(CQ_CONSUMER_CB_BASE, db_buf_switch);
         const db_cb_config_t* eth_db_cb_config =
@@ -66,6 +75,7 @@ void kernel_main() {
         }
 
         program_local_cb(data_section_addr, producer_cb_num_pages, page_size, producer_cb_size);
+        num_cmds_rxed[0] = num_cmds_rxed[0] + 1;
         wait_consumer_space_available(db_semaphore_addr);
         program_consumer_cb<command_start_addr, data_buffer_size, consumer_cmd_base_addr, consumer_data_buffer_size>(
             db_cb_config,
@@ -75,8 +85,8 @@ void kernel_main() {
             consumer_cb_num_pages,
             page_size,
             consumer_cb_size);
-        relay_command<command_start_addr, consumer_cmd_base_addr, consumer_data_buffer_size>(
-            db_buf_switch, ((uint64_t)eth_consumer_noc_encoding << 32));
+        relay_command<consumer_cmd_base_addr, consumer_data_buffer_size>(command_start_addr, db_buf_switch, ((uint64_t)eth_consumer_noc_encoding << 32));
+        num_cmds_relayed[0] = num_cmds_relayed[0] + 1;
 
         update_producer_consumer_sync_semaphores(((uint64_t)producer_noc_encoding << 32), ((uint64_t)eth_consumer_noc_encoding << 32), db_semaphore_addr, uint32_t(eth_get_semaphore(0)));
 

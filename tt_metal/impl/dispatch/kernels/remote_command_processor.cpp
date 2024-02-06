@@ -57,7 +57,7 @@ void kernel_main() {
             page_size,
             consumer_cb_size);
 
-        relay_command<cmd_base_addr, dispatcher_cmd_base_addr, dispatcher_data_buffer_size>(db_tx_buf_switch, ((uint64_t)dispatcher_noc_encoding << 32));
+        relay_command<dispatcher_cmd_base_addr, dispatcher_data_buffer_size>(cmd_base_addr, db_tx_buf_switch, ((uint64_t)dispatcher_noc_encoding << 32));
         num_relayed[0] = num_relayed[0] + 1;
         uint32_t stall = header->stall;
         if (stall) {

@@ -173,8 +173,8 @@ bool cb_consumer_space_available(db_cb_config_t* db_cb_config, int32_t num_pages
     return free_space_pages >= num_pages;
 }
 
-template <uint32_t cmd_base_addr, uint32_t consumer_cmd_base_addr, uint32_t consumer_data_buffer_size>
-FORCE_INLINE void relay_command(bool db_buf_switch, uint64_t consumer_noc_encoding) {
+template <uint32_t consumer_cmd_base_addr, uint32_t consumer_data_buffer_size>
+FORCE_INLINE void relay_command(uint32_t cmd_base_addr, bool db_buf_switch, uint64_t consumer_noc_encoding) {
     /*
         Relays the current command to the consumer.
     */
