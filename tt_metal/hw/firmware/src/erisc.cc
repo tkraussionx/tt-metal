@@ -103,10 +103,8 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
     volatile tt_l1_ptr uint32_t *eth_db_semaphore_addr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(0));
 
-    volatile tt_l1_ptr uint32_t *relay_x_sem =
+    volatile tt_l1_ptr uint32_t *num_relayed =
         reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(1));
-    volatile tt_l1_ptr uint32_t *relay_y_sem =
-        reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(2));
 
     static constexpr uint32_t command_start_addr = eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE;
     static constexpr uint32_t data_buffer_size = MEM_ETH_SIZE - (DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND * sizeof(uint32_t)) - eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE;
@@ -133,8 +131,6 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             if (routing_info->routing_enabled == 0) {
                 break;
             }
-            relay_x_sem[0] = routing_info->relay_src_x;
-            relay_y_sem[0] = routing_info->relay_src_y;
             noc_semaphore_inc(
                 ((uint64_t)eth_router_noc_encoding << 32) | uint32_t(eth_db_semaphore_addr),
                 -1);  // Two's complement addition
@@ -147,6 +143,12 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             uint32_t producer_consumer_transfer_num_pages = header->producer_router_transfer_num_pages;
             command_ptr += DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER;
 
+            if (num_buffer_transfers == 0) {
+                 // send cmd even if there is no data associated
+                internal_::send_fd_packets();
+                num_relayed[0] = num_relayed[0] + 1;
+            }
+
             for (uint32_t i = 0; i < num_buffer_transfers; i++) {
                 const uint32_t num_pages = command_ptr[2];
                 uint32_t num_pages_tunneled = 0;
@@ -154,6 +156,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
                     uint32_t num_to_write = min(num_pages, producer_consumer_transfer_num_pages);
                     multicore_eth_cb_wait_front(eth_db_cb_config, num_to_write);
                     // contains device command, maybe just send pages, and send cmd once at the start
+                    num_relayed[0] = num_relayed[0] + 1;
                     internal_::send_fd_packets();
                     multicore_eth_cb_pop_front(
                         eth_db_cb_config, remote_db_cb_config, ((uint64_t)relay_src_noc_encoding << 32), num_to_write);
@@ -172,8 +175,6 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             if (routing_info->routing_enabled == 0) {
                 break;
             }
-            relay_x_sem[0] = routing_info->relay_dst_x;
-            relay_y_sem[0] = routing_info->relay_dst_y;
 
             volatile tt_l1_ptr uint32_t *command_ptr =
                 reinterpret_cast<volatile tt_l1_ptr uint32_t *>(command_start_addr);
@@ -201,6 +202,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
                 page_size,
                 consumer_cb_size);
             relay_command<command_start_addr, consumer_cmd_base_addr, consumer_data_buffer_size>(db_buf_switch, ((uint64_t)relay_dst_noc_encoding << 32));
+            num_relayed[0] = num_relayed[0] + 1;
 
             update_producer_consumer_sync_semaphores(((uint64_t)eth_router_noc_encoding << 32), ((uint64_t)relay_dst_noc_encoding << 32), eth_db_semaphore_addr, get_semaphore(0));
 

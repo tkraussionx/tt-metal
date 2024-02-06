@@ -17,6 +17,10 @@ void kernel_main() {
     volatile tt_l1_ptr uint32_t* db_tx_semaphore_addr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(1));  // Should be num command slots in the remote signaller
 
+    volatile tt_l1_ptr uint32_t* num_cmds_returned =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(2));
+    num_cmds_returned[0] = 0;
+
     uint32_t producer_noc_encoding = uint32_t(NOC_XY_ENCODING(PRODUCER_NOC_X, PRODUCER_NOC_Y));
     uint32_t dispatcher_noc_encoding = uint32_t(NOC_XY_ENCODING(my_x[0], my_y[0]));
     uint32_t signaller_noc_encoding = uint32_t(NOC_XY_ENCODING(SIGNALLER_NOC_X, SIGNALLER_NOC_Y));
@@ -71,7 +75,7 @@ void kernel_main() {
         }
 
         if (finish) {
-            // relay command to remote signaller
+            // Relay command to remote signaller
             wait_consumer_space_available(db_tx_semaphore_addr);    // Check that there is space in the remote signaller
             const tt_l1_ptr db_cb_config_t *signaller_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, db_tx_buf_switch);
             uint32_t consumer_cb_num_pages = header->consumer_cb_num_pages;
@@ -89,15 +93,33 @@ void kernel_main() {
 
             update_producer_consumer_sync_semaphores(((uint64_t)dispatcher_noc_encoding << 32), ((uint64_t)signaller_noc_encoding << 32), db_tx_semaphore_addr, get_semaphore(0));
 
-            // if (reading_buffer) {
-                // Command is requesting to read data back from device, need to transfer buffer data to the remote signaller
-                // read_remote_buffers();
-            // }
+            num_cmds_returned[0] = num_cmds_returned[0] + 1;
+            if (reading_buffer) {
+                // Command is requesting to read data back from device, need to read buffer data and transfer to the remote signaller
+                // Use same API as prefetcher core to produce data for remote signaller, src buffer will either be in DRAM or L1
+                uint32_t num_buffer_transfers = header->num_buffer_transfers;
+                uint32_t is_sharded = (bool) (header->buffer_type == (uint32_t)DeviceCommand::BufferType::SHARDED);
+                uint32_t sharded_buffer_num_cores = header->sharded_buffer_num_cores;
+                const tt_l1_ptr db_cb_config_t *remote_consumer_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, db_tx_buf_switch); // CB between dispatcher and signaller
+                produce<signaller_cmd_base_addr, signaller_data_buffer_size>(
+                    command_ptr,
+                    num_buffer_transfers,
+                    is_sharded,
+                    sharded_buffer_num_cores,
+                    consumer_cb_size,   // use consumer metadata because dispatcher is "consumer" from the command's pov but is the "producer" for return path to completion queue via signaller
+                    consumer_cb_num_pages,  // use consumer metadata because dispatcher is "consumer" from the command's pov but is the "producer" for return path to completion queue via signaller
+                    ((uint64_t)signaller_noc_encoding << 32),
+                    producer_consumer_transfer_num_pages,
+                    db_tx_buf_switch,
+                    db_cb_config,
+                    remote_consumer_db_cb_config
+                );
+            }
             db_tx_buf_switch = not db_tx_buf_switch;
         }
 
-        // notify producer that it has completed a command
-        noc_semaphore_inc(((uint64_t)producer_noc_encoding << 32) | get_semaphore(0), 1);
+        // notify remote command processor that it has completed a command
+        noc_semaphore_inc(((uint64_t)producer_noc_encoding << 32) | get_semaphore(1), 1);
         db_rx_buf_switch = not db_rx_buf_switch;
         noc_async_write_barrier(); // Barrier for now
     }
