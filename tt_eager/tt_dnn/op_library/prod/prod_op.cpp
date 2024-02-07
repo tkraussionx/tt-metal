@@ -12,10 +12,10 @@
 #include "tt_metal/tools/profiler/op_profiler.hpp"
 
 namespace tt {
-
 using namespace constants;
 namespace operations {
 namespace primary {
+
 
 inline bool is_1d_tensor(const Tensor& tensor) {
     const auto& shape = tensor.shape().without_padding();
@@ -27,7 +27,7 @@ void Prod_op::validate(const std::vector<Tensor>& input_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
     // const auto& input_tensor_b = input_tensors.at(1);
 
-    TT_ASSERT(is_1d_tensor(input_tensor_a));
+    //TT_ASSERT(is_1d_tensor(input_tensor_a));
     // TT_ASSERT(is_1d_tensor(input_tensor_b));
 
     const auto& a_shape_wo_padding = input_tensor_a.shape().without_padding();
@@ -64,11 +64,16 @@ std::vector<Tensor> Prod_op::create_output_tensors(const std::vector<Tensor>& in
 operation::ProgramWithCallbacks Prod_op::create_program(
     const std::vector<Tensor>& input_tensors, std::vector<Tensor>& output_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
-    // const auto& input_tensor_b = input_tensors.at(1);
     auto& output_tensor = output_tensors.at(0);
     return prod_single_core(input_tensor_a, output_tensor);
 }
 
-}  // namespace primary
-}  // namespace operations
-}  // namespace tt
+Tensor prod(const Tensor& input, const MemoryConfig& output_mem_config ) {
+    return operation::run(Prod_op{.output_mem_config = output_mem_config}, {input}).at(0);
+
+}
+
+
+}
+}
+}

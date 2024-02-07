@@ -508,7 +508,6 @@ void py_module(py::module& m_primary) {
         "prod",
         &prod,
         py::arg("input").noconvert(),
-        py::kw_only(),
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         "Performs product operation. Returns an output tensor.");
 

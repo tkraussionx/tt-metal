@@ -10,17 +10,15 @@
 
 namespace tt {
 
-namespace operations {
+namespace operations{
 
-namespace primary {
+namespace primary{
 
+using namespace constants;
 using namespace tt_metal;
-
 /*
  * prod product
  */
-operation::ProgramWithCallbacks prod_single_core(
-    const Tensor &input_tensor_a, Tensor &output_tensor);
 
 struct Prod_op {
     const MemoryConfig output_mem_config;
@@ -38,17 +36,12 @@ struct Prod_op {
     }
 };
 
-inline Tensor prod(
-    const Tensor &input_tensor_a,
-    const MemoryConfig &mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) {
-    return operation::run(
-               Prod_op{.output_mem_config = mem_config, .output_dtype = input_tensor_a.dtype()},
-               {input_tensor_a})
-        .at(0);
+operation::ProgramWithCallbacks prod_single_core(const Tensor &input_tensor_a, const Tensor &output_tensor);
+
+Tensor prod(
+    const Tensor &input,
+    const MemoryConfig &mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
 }
 
-}  // namespace primary
-
-}  // namespace operations
-
-}  // namespace tt
+}
+}
