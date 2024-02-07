@@ -39,7 +39,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             2,
             64,
             1280,
-            2,
+            2,  # checked for debugging
         ),
         (
             1,
@@ -96,7 +96,7 @@ def test_basic_transformer_block_256x256(device, model_name, N, C, H, W, index):
     ttnn_output = ttnn.from_device(ttnn_output)
     ttnn_output = ttnn.to_torch(ttnn_output)
 
-    assert_with_pcc(torch_output.unsqueeze(0), ttnn_output, pcc=0.85)  # Keeping low PCC for the test to pass
+    assert_with_pcc(torch_output.unsqueeze(0), ttnn_output, pcc=0.99)
 
 
 @skip_for_wormhole_b0()
@@ -124,7 +124,7 @@ def test_basic_transformer_block_256x256(device, model_name, N, C, H, W, index):
             256,
             1280,
             2,
-        ),
+        ),  # checked for debugging
         (
             1,
             2,
@@ -178,4 +178,4 @@ def test_basic_transformer_block_512x512(device, model_name, N, C, H, W, index):
     ttnn_output = ttnn.from_device(ttnn_output)
     ttnn_output = ttnn.to_torch(ttnn_output)
 
-    assert_with_pcc(torch_output.unsqueeze(0), ttnn_output, pcc=0.85)  # Keeping low PCC for the test to pass
+    assert_with_pcc(torch_output.unsqueeze(0), ttnn_output, pcc=0.99)
