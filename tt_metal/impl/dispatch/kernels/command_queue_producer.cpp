@@ -26,6 +26,9 @@ void kernel_main() {
     volatile tt_l1_ptr uint32_t* db_semaphore_addr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(0));  // Should be initialized to 2 by host
 
+    volatile tt_l1_ptr uint32_t* debug =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(1));
+
     bool db_buf_switch = false;
     while (true) {
 
@@ -86,7 +89,7 @@ void kernel_main() {
             consumer_cb_size);
         relay_command<consumer_cmd_base_addr, consumer_data_buffer_size>(command_start_addr, db_buf_switch, consumer_noc_encoding);
         if (stall) {
-            wait_consumer_idle(db_semaphore_addr);
+            wait_consumer_idle<2>(db_semaphore_addr);
         }
 
         update_producer_consumer_sync_semaphores(producer_noc_encoding, consumer_noc_encoding, db_semaphore_addr, get_semaphore(0));
@@ -103,7 +106,8 @@ void kernel_main() {
             producer_consumer_transfer_num_pages,
             db_buf_switch,
             db_cb_config,
-            remote_db_cb_config);
+            remote_db_cb_config,
+            debug);
 
         issue_queue_pop_front<host_issue_queue_read_ptr_addr>(DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + data_size);
 

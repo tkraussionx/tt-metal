@@ -27,9 +27,9 @@ void setup_issue_queue_read_interface(const uint32_t issue_region_rd_ptr, const 
     cq_read_interface.issue_fifo_rd_toggle = 0;
 }
 
-FORCE_INLINE
-void wait_consumer_idle(volatile tt_l1_ptr uint32_t* db_semaphore_addr) {
-    while (*db_semaphore_addr != NUM_COMMAND_SLOTS);
+template <uint32_t num_command_slots>
+FORCE_INLINE void wait_consumer_idle(volatile tt_l1_ptr uint32_t* db_semaphore_addr) {
+    while (*db_semaphore_addr != num_command_slots);
 }
 
 FORCE_INLINE
@@ -196,7 +196,8 @@ void produce(
     uint32_t producer_consumer_transfer_num_pages,
     bool db_buf_switch,
     db_cb_config_t* db_cb_config,
-    const db_cb_config_t* remote_db_cb_config) {
+    const db_cb_config_t* remote_db_cb_config,
+    volatile tt_l1_ptr uint32_t* debug) {
     /*
         This API prefetches data from host memory and writes data to the consumer core. On the consumer,
         we partition the data space into 2 via double-buffering. There are two command slots, and two
@@ -241,6 +242,7 @@ void produce(
         while (num_writes_completed != num_pages) {
             // Context switch between reading in pages and sending them to the consumer.
             // These APIs are non-blocking to allow for context switching.
+            debug[0] = debug[0] + 1;
             if (cb_producer_space_available(num_to_read) and num_reads_issued < num_pages) {
                 uint32_t l1_write_ptr = get_write_ptr(0);
                 buffer.noc_async_read_buffer(l1_write_ptr, src_page_id, num_to_read);
@@ -252,11 +254,13 @@ void produce(
                 num_to_read = min(num_pages_left, fraction_of_producer_cb_num_pages);
             }
 
+            debug[0] = debug[0] + 1;
             if (num_reads_issued > num_writes_completed and cb_consumer_space_available(db_cb_config, num_to_write)) {
                 if (num_writes_completed == num_reads_completed) {
                     noc_async_read_barrier();
                     num_reads_completed = num_reads_issued;
                 }
+                debug[0] = debug[0] + 1;
 
                 uint32_t dst_addr = (db_cb_config->wr_ptr_16B << 4);
                 uint64_t dst_noc_addr = consumer_noc_encoding | dst_addr;
@@ -270,6 +274,7 @@ void produce(
                 num_to_write = min(num_pages - num_writes_completed, producer_consumer_transfer_num_pages);
             }
         }
+        debug[0] = debug[0] + 1;
         command_ptr += DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION;
     }
 }
@@ -377,7 +382,8 @@ void transfer(
     uint32_t consumer_cb_size,
     uint32_t l1_consumer_fifo_limit_16B,
     uint64_t consumer_noc_encoding,
-    uint32_t producer_consumer_transfer_num_pages) {
+    uint32_t producer_consumer_transfer_num_pages,
+    volatile tt_l1_ptr uint32_t* readback_point) {
     /*
         This API sends data from circular buffer in its L1 and writes data to the consumer core. On the consumer,
         we partition the data space into 2 via double-buffering. There are two command slots, and two
@@ -397,7 +403,9 @@ void transfer(
 
         while (num_transfers_completed != num_pages) {
             // Wait for data to be received in local CB
+            readback_point[0] = readback_point[0] + 1;
             multicore_cb_wait_front(db_cb_config, num_to_transfer);
+            readback_point[0] = readback_point[0] + 1;
             uint32_t src_addr = (db_cb_config->rd_ptr_16B) << 4;
             // Transfer data to consumer CB
             uint32_t dst_addr = (db_cb_config->wr_ptr_16B << 4);

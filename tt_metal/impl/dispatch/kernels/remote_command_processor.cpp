@@ -28,8 +28,12 @@ void kernel_main() {
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(2));
     num_relayed[0] = 0;
 
+    volatile tt_l1_ptr uint32_t* debug =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(3));
+    debug[0] = 0;
+
     constexpr bool rx_buf_switch = false;   // atm only one slot to receive commands from ethernet
-    bool db_tx_buf_switch = false;
+    constexpr bool db_tx_buf_switch = false;
     while (true) {
         // Wait for ethernet router to supply a command
         db_acquire(rx_semaphore_addr, ((uint64_t)processor_noc_encoding << 32));
@@ -61,7 +65,7 @@ void kernel_main() {
         num_relayed[0] = num_relayed[0] + 1;
         uint32_t stall = header->stall;
         if (stall) {
-            wait_consumer_idle(db_tx_semaphore_addr);
+            wait_consumer_idle<1>(db_tx_semaphore_addr);
         }
 
         update_producer_consumer_sync_semaphores(((uint64_t)processor_noc_encoding << 32), ((uint64_t)dispatcher_noc_encoding << 32), db_tx_semaphore_addr, get_semaphore(0));
@@ -83,12 +87,13 @@ void kernel_main() {
             consumer_cb_size,
             (get_db_buf_addr<dispatcher_cmd_base_addr, dispatcher_data_buffer_size>(db_tx_buf_switch) + consumer_cb_size) >> 4,
             ((uint64_t)dispatcher_noc_encoding << 32),
-            producer_consumer_transfer_num_pages);
+            producer_consumer_transfer_num_pages,
+            debug);
 
         // Notify producer ethernet router that it has completed transferring a command
         noc_semaphore_inc(((uint64_t)producer_noc_encoding << 32) | eth_get_semaphore(0), 1);
         noc_async_write_barrier(); // Barrier for now
 
-        db_tx_buf_switch = not db_tx_buf_switch;
+        // db_tx_buf_switch = not db_tx_buf_switch;
     }
 }

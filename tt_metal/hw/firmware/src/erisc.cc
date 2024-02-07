@@ -107,6 +107,8 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
     volatile tt_l1_ptr uint32_t *num_rxed = reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(2));
     num_relayed[0] = 0;
     num_rxed[0] = 0;
+    volatile tt_l1_ptr uint32_t *debug = reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(3));
+    debug[0] = 0;
 
     static constexpr uint32_t command_start_addr = eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE;
     static constexpr uint32_t data_buffer_size = MEM_ETH_SIZE - (DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND * sizeof(uint32_t)) - eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE;
@@ -154,14 +156,18 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             for (uint32_t i = 0; i < num_buffer_transfers; i++) {
                 const uint32_t num_pages = command_ptr[2];
                 uint32_t num_pages_tunneled = 0;
+                debug[0] = 39;
                 while (num_pages_tunneled != num_pages) {
+                    debug[0] = debug[0] + 1;
                     uint32_t num_to_write = min(num_pages, producer_consumer_transfer_num_pages);
                     multicore_eth_cb_wait_front(eth_db_cb_config, num_to_write);
+                    debug[0] = debug[0] + 1;
                     // contains device command, maybe just send pages, and send cmd once at the start
                     num_relayed[0] = num_relayed[0] + 1;
                     internal_::send_fd_packets();
                     multicore_eth_cb_pop_front(
                         eth_db_cb_config, remote_db_cb_config, ((uint64_t)relay_src_noc_encoding << 32), num_to_write);
+                    debug[0] = debug[0] + 1;
                     num_pages_tunneled += num_to_write;
                 }
             }

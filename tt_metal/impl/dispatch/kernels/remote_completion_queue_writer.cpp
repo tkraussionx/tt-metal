@@ -28,6 +28,9 @@ void kernel_main() {
     volatile tt_l1_ptr uint32_t* debug_cmd_counter = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(1));
     debug_cmd_counter[0] = 0;
 
+    volatile tt_l1_ptr uint32_t* debug_stepper = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(2));
+    debug_stepper[0] = 0;
+
     uint32_t producer_noc_encoding = uint32_t(NOC_XY_ENCODING(PRODUCER_NOC_X, PRODUCER_NOC_Y));
     uint32_t consumer_noc_encoding = uint32_t(NOC_XY_ENCODING(my_x[0], my_y[0]));
 
@@ -37,6 +40,8 @@ void kernel_main() {
         // Wait for eth producer to supply a command
         db_acquire(db_semaphore_addr,  ((uint64_t)consumer_noc_encoding << 32));
 
+        debug_stepper[0] = 39;
+
         // For each instruction, we need to jump to the relevant part of the device command
         uint32_t command_start_addr = get_command_slot_addr<cmd_base_address, consumer_data_buffer_size>(db_buf_switch);
 
@@ -45,11 +50,12 @@ void kernel_main() {
         uint32_t buffer_transfer_start_addr = command_start_addr + (DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER * sizeof(uint32_t));
         volatile tt_l1_ptr uint32_t *buffer_transfer_command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(buffer_transfer_start_addr);
         uint32_t is_program = header->is_program_buffer;
-        uint32_t data_size = header->data_size;
+        uint32_t num_pages = header->num_pages;
         const uint32_t dst_buf_type = buffer_transfer_command_ptr[5];
-        bool reading_buffer = (!is_program) & (data_size > 0 & (BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY);
+        bool reading_buffer = (!is_program) & (num_pages > 0 & (BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY);
 
         debug_cmd_counter[0] = debug_cmd_counter[0] + 1;
+        debug_stepper[0] = 399;
 
         uint32_t wrap = header->wrap;
         if ((DeviceCommand::WrapRegion)wrap == DeviceCommand::WrapRegion::COMPLETION) {
@@ -76,13 +82,18 @@ void kernel_main() {
                 producer_consumer_transfer_num_pages);
         }
 
+        debug_stepper[0] = 3999;
+
         uint32_t finish = header->finish;
         if (finish) {
+            debug_stepper[0] = 39999;
             notify_host_complete<host_finish_addr>();
+            debug_stepper[0] = 399999;
         }
 
         // notify producer that it has completed a command
         noc_semaphore_inc((uint64_t(producer_noc_encoding) << 32) | eth_get_semaphore(0), 1);
         noc_async_write_barrier(); // Barrier for now
+        // debug_stepper[0] = 399999;
     }
 }
