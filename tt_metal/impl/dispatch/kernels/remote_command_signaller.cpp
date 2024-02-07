@@ -51,16 +51,8 @@ void kernel_main() {
         const uint32_t dst_buf_type = buffer_transfer_command_ptr[5];
         bool reading_buffer = (!is_program) & (num_pages > 0 & (BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY);
 
-        uint32_t num_buffer_transfers = header->num_buffer_transfers;
-        if (!reading_buffer) {
-            // Received this command just to signal that it finished
-            // This is hacky(!) but here we clear out cmd metadata so ethernet routers and completion queue write interface do not expect incoming data
-            header->num_buffer_transfers = 0;
-            header->num_pages = 0;
-        } else {
-            readback_point[0] = 39;
-        }
-
+        // TODO: Currently only finish, wrap and readback comamnds are sent back to MMIO
+        //  when every command has an event and is sent back then we need to ensure that the routers don't expect any cmd data to be incoming
         relay_command<consumer_cmd_base_addr, consumer_data_buffer_size>(command_start_addr, tx_buf_switch, ((uint64_t)eth_consumer_noc_encoding << 32));
         num_relayed[0] = num_relayed[0] + 1;
 
@@ -88,6 +80,7 @@ void kernel_main() {
             // Use consumer_cb_size_idx because this kernel is on the return path but device command sets up producer/consumer from fwd path pov
             uint32_t producer_cb_size = header->consumer_cb_size;
             uint32_t consumer_router_transfer_num_pages = header->consumer_router_transfer_num_pages;
+            uint32_t num_buffer_transfers = header->num_buffer_transfers;
             transfer(
                 rx_db_cb_config,
                 tx_db_cb_config,

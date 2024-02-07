@@ -45,6 +45,7 @@ void kernel_main() {
         uint32_t finish = header->finish;      // Whether to notify the host that we have finished
         uint32_t is_program = header->is_program_buffer;
         uint32_t num_pages = header->num_pages;
+        bool wrap_completion = bool((DeviceCommand::WrapRegion)header->wrap == DeviceCommand::WrapRegion::COMPLETION);
 
         const uint32_t dst_buf_type = buffer_transfer_command_ptr[5];
         bool reading_buffer = (!is_program) & (num_pages > 0 & (BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY);
@@ -78,7 +79,7 @@ void kernel_main() {
                 producer_consumer_transfer_num_pages);
         }
 
-        if (finish | reading_buffer) {
+        if (finish | reading_buffer | wrap_completion) {
             // Relay command to remote signaller
             wait_consumer_space_available(db_tx_semaphore_addr);    // Check that there is space in the remote signaller
             relay_command<signaller_cmd_base_addr, signaller_data_buffer_size>(command_start_addr, db_tx_buf_switch, ((uint64_t)signaller_noc_encoding << 32));
