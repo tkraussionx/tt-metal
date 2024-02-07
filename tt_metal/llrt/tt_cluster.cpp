@@ -805,7 +805,7 @@ void Cluster::configure_eth_core_for_dispatch_core(
         routing_info.relay_dst_y = physical_dispatch_core.y;
     }
 
-    log_debug(
+    log_info(
         tt::LogDevice,
         "Configuring chip {} internal routing {} for: dispatch core {} <---> eth core {} ",
         eth_core.chip,
@@ -835,6 +835,7 @@ void Cluster::set_internal_routing_info_for_ethernet_cores(bool enable_internal_
                 tt_cxy_pair eth_phys_core(chip_id, ethernet_core_from_logical_core(chip_id, eth_core));
                 if (chip_id == assoc_mmio_device and not enable_internal_routing) {
                     // Disable internal ethernet routing for mmio devices
+                    // std::cout << "Disabling internal eth routing for " << eth_phys_core.str() << std::endl;
                     write_core(
                         (void *)&routing_info_disabled,
                         sizeof(routing_info_t),
@@ -843,6 +844,7 @@ void Cluster::set_internal_routing_info_for_ethernet_cores(bool enable_internal_
                         false);
                 } else if (chip_id != assoc_mmio_device and enable_internal_routing) {
                     // Enable internal ethernet routing for non-mmio devices
+                    // std::cout << "Enabling internal eth routing for " << eth_phys_core.str() << std::endl;
                     std::vector<uint32_t> enable_vec = {1};
                     write_core(
                         enable_vec.data(),
@@ -850,6 +852,7 @@ void Cluster::set_internal_routing_info_for_ethernet_cores(bool enable_internal_
                         eth_phys_core,
                         routing_info_addr,
                         false);
+                    // std::cout << "\t\tDone Enabling internal eth routing for " << eth_phys_core.str() << std::endl;
 
                 } else {
                     continue;
@@ -861,6 +864,7 @@ void Cluster::set_internal_routing_info_for_ethernet_cores(bool enable_internal_
                 tt_cxy_pair eth_phys_core(chip_id, ethernet_core_from_logical_core(chip_id, eth_core));
                 if (chip_id != assoc_mmio_device and not enable_internal_routing) {
                     // Disable internal ethernet routing for non-mmio devices
+                    // std::cout << "Disabling internal eth routing for " << eth_phys_core.str() << std::endl;
                     write_core(
                         (void *)&routing_info_disabled,
                         sizeof(routing_info_t),
@@ -869,6 +873,7 @@ void Cluster::set_internal_routing_info_for_ethernet_cores(bool enable_internal_
                         false);
                 } else if (chip_id == assoc_mmio_device and enable_internal_routing) {
                     // Enable internal ethernet routing for mmio devices
+                    // std::cout << "Enabling internal eth routing for " << eth_phys_core.str() << std::endl;
                     std::vector<uint32_t> enable_vec = {1};
                     write_core(
                         enable_vec.data(),

@@ -46,6 +46,8 @@ void kernel_main() {
         noc_async_read(src_noc_addr, command_start_addr, min(DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, issue_queue_size - rd_ptr));
         noc_async_read_barrier();
 
+        num_cmds_rxed[0] = num_cmds_rxed[0] + 1;
+
         // Producer information
         volatile tt_l1_ptr uint32_t* command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(command_start_addr);
         volatile tt_l1_ptr CommandHeader* header = (CommandHeader*)command_ptr;
@@ -75,7 +77,6 @@ void kernel_main() {
             get_remote_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, false);
 
         program_local_cb(data_section_addr, producer_cb_num_pages, page_size, producer_cb_size);
-        num_cmds_rxed[0] = num_cmds_rxed[0] + 1;
         wait_consumer_space_available(db_semaphore_addr);
         program_consumer_cb<command_start_addr, data_buffer_size, consumer_cmd_base_addr, consumer_data_buffer_size>(
             db_cb_config,

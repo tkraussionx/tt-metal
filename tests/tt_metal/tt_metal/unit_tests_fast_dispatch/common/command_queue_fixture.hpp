@@ -13,6 +13,7 @@ class CommandQueueFixture : public ::testing::Test {
    protected:
     tt::ARCH arch_;
     Device* device_;
+    Device *mmio_device_;
     uint32_t pcie_id;
 
     void SetUp() override {
@@ -23,13 +24,16 @@ class CommandQueueFixture : public ::testing::Test {
         }
         this->arch_ = tt::get_arch_from_string(tt::test_utils::get_env_arch_name());
 
-        const int device_id = 0;
-        this->device_ = tt::tt_metal::CreateDevice(device_id);
+        this->mmio_device_ = tt::tt_metal::CreateDevice(0);
 
-        this->pcie_id = 0;
+        const int device_id = 1;
+        this->device_ = tt::tt_metal::CreateDevice(device_id);
+        tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
     }
 
     void TearDown() override {
+        tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
+        tt::tt_metal::CloseDevice(this->mmio_device_);
         tt::tt_metal::CloseDevice(this->device_);
     }
 };
@@ -51,6 +55,7 @@ class CommandQueueMultiDeviceFixture : public ::testing::Test {
             auto* device = tt::tt_metal::CreateDevice(id);
             devices_.push_back(device);
         }
+        // while (true) {}
         tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
     }
 

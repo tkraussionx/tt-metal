@@ -76,6 +76,7 @@ void kernel_main() {
         uint32_t producer_cb_size = header->router_cb_size;
         // producer_consumer_transfer_num_pages is the total number of data pages that were sent from the router
         uint32_t producer_consumer_transfer_num_pages = header->producer_router_transfer_num_pages;
+        debug[0] = 0;
         transfer(
             rx_db_cb_config,
             tx_db_cb_config,

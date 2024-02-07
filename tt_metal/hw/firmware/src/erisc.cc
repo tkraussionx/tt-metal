@@ -193,21 +193,21 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             for (uint32_t i = 0; i < num_buffer_transfers; i++) {
                 const uint32_t num_pages = command_ptr[2];
                 uint32_t num_pages_tunneled = 0;
-                debug[0] = 39;
+                debug[0] = debug[0] + i; // 0 // 5
                 while (num_pages_tunneled != num_pages) {
-                    debug[0] = debug[0] + 1;
+                    debug[0] = debug[0] + 1; // 1 // 6
                     uint32_t num_to_write = min(num_pages, producer_consumer_transfer_num_pages);
                     multicore_eth_cb_wait_front(eth_db_cb_config, num_to_write);
-                    debug[0] = debug[0] + 1;
+                    debug[0] = debug[0] + 1; // 2 // 7
                     // contains device command, maybe just send pages, and send cmd once at the start
                     num_relayed[0] = num_relayed[0] + 1;
                     internal_::send_fd_packets();
                     multicore_eth_cb_pop_front(
                         eth_db_cb_config, remote_src_db_cb_config, ((uint64_t)relay_src_noc_encoding << 32), num_to_write);
-                    debug[0] = debug[0] + 1;
+                    debug[0] = debug[0] + 1; // 3 // 8
                     num_pages_tunneled += num_to_write;
                 }
-                debug[0] = debug[0] + 1;
+                debug[0] = debug[0] + 1; // 4 // 9
             }
             noc_semaphore_inc(((uint64_t)relay_src_noc_encoding << 32) | get_semaphore(0), 1);
             noc_async_write_barrier();  // Barrier for now
@@ -244,22 +244,25 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             // The consumer is the remote command processor which acts like a producer from the perspective of the dispatch core
             uint32_t consumer_cb_num_pages = header->producer_cb_num_pages;
             uint32_t consumer_cb_size = header->producer_cb_size;
-            eth_program_consumer_cb<command_start_addr, data_buffer_size, consumer_cmd_base_addr, consumer_data_buffer_size>(
-                eth_db_cb_config,
-                remote_dst_db_cb_config,
-                db_buf_switch,
-                ((uint64_t)relay_dst_noc_encoding << 32),
-                consumer_cb_num_pages,
-                page_size,
-                consumer_cb_size);
-            relay_command<consumer_cmd_base_addr, consumer_data_buffer_size>(command_start_addr, db_buf_switch, ((uint64_t)relay_dst_noc_encoding << 32));
-            num_relayed[0] = num_relayed[0] + 1;
+            if (num_pages_transferred == 0) {   // new command
+                eth_program_consumer_cb<command_start_addr, data_buffer_size, consumer_cmd_base_addr, consumer_data_buffer_size>(
+                    eth_db_cb_config,
+                    remote_dst_db_cb_config,
+                    db_buf_switch,
+                    ((uint64_t)relay_dst_noc_encoding << 32),
+                    consumer_cb_num_pages,
+                    page_size,
+                    consumer_cb_size);
+                relay_command<consumer_cmd_base_addr, consumer_data_buffer_size>(command_start_addr, db_buf_switch, ((uint64_t)relay_dst_noc_encoding << 32));
+                num_relayed[0] = num_relayed[0] + 1;
 
-            update_producer_consumer_sync_semaphores(((uint64_t)eth_router_noc_encoding << 32), ((uint64_t)relay_dst_noc_encoding << 32), eth_db_semaphore_addr, get_semaphore(0));
+                update_producer_consumer_sync_semaphores(((uint64_t)eth_router_noc_encoding << 32), ((uint64_t)relay_dst_noc_encoding << 32), eth_db_semaphore_addr, get_semaphore(0));
+            }
 
             // Send the data that was in this packet
             uint32_t total_num_pages = header->num_pages;
             uint32_t num_pages_to_tx = 0;
+            debug[0] = total_num_pages;
             if (num_pages_transferred < total_num_pages) {
                 uint32_t src_addr = eth_db_cb_config->rd_ptr_16B << 4;
                 uint64_t dst_noc_addr = ((uint64_t)relay_dst_noc_encoding << 32) | (eth_db_cb_config->wr_ptr_16B << 4);
@@ -269,6 +272,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
                 const uint32_t num_pages = command_ptr[2];
                 // producer_consumer_transfer_num_pages is the total num of data pages that could fit in a FD packet
                 num_pages_to_tx = min(num_pages, producer_consumer_transfer_num_pages);
+                debug[0] = debug[0] + num_pages_to_tx;
 
                 noc_async_write(src_addr, dst_noc_addr, page_size * num_pages_to_tx);
                 uint32_t l1_consumer_fifo_limit_16B =
@@ -280,11 +284,12 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
                     l1_consumer_fifo_limit_16B,
                     num_pages_to_tx
                 );
+                num_pages_transferred += num_pages_to_tx;
             }
-            num_pages_transferred += num_pages_to_tx;
             if (num_pages_transferred == total_num_pages) {
                 // Done sending all data associated with this command, reset `num_pages_transferred` for next command
                 num_pages_transferred = 0;
+                // debug[0] = 3118;
             }
 
             // Signal to FD_SRC router that packet has been processed

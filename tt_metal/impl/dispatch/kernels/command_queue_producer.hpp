@@ -395,6 +395,7 @@ void transfer(
 
     command_ptr += DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER;
 
+    readback_point[0] = 0;
     for (uint32_t i = 0; i < num_srcs; i++) {
         const uint32_t num_pages = command_ptr[2];
         const uint32_t page_size = command_ptr[3];
@@ -429,6 +430,7 @@ void transfer(
             num_transfers_completed += num_to_transfer;
             num_to_transfer = min(num_pages - num_transfers_completed, producer_consumer_transfer_num_pages);
         }
+        readback_point[0] = readback_point[0] + 1;
         command_ptr += DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION;
     }
 }
