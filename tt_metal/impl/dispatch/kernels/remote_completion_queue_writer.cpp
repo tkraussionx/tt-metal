@@ -40,7 +40,7 @@ void kernel_main() {
         // Wait for eth producer to supply a command
         db_acquire(db_semaphore_addr,  ((uint64_t)consumer_noc_encoding << 32));
 
-        debug_stepper[0] = 39;
+        // debug_stepper[0] = 39;
 
         // For each instruction, we need to jump to the relevant part of the device command
         uint32_t command_start_addr = get_command_slot_addr<cmd_base_address, consumer_data_buffer_size>(db_buf_switch);
@@ -55,7 +55,7 @@ void kernel_main() {
         bool reading_buffer = (!is_program) & (num_pages > 0 & (BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY);
 
         debug_cmd_counter[0] = debug_cmd_counter[0] + 1;
-        debug_stepper[0] = 399;
+        // debug_stepper[0] = 399;
 
         uint32_t wrap = header->wrap;
         if ((DeviceCommand::WrapRegion)wrap == DeviceCommand::WrapRegion::COMPLETION) {
@@ -64,16 +64,19 @@ void kernel_main() {
             notify_host_of_completion_queue_write_pointer<host_completion_queue_write_ptr_addr>();
             noc_async_write_barrier(); // Barrier for now
         } else if (reading_buffer) {
-            db_cb_config_t* db_cb_config = get_local_db_cb_config(CQ_CONSUMER_CB_BASE, db_buf_switch);
-            const db_cb_config_t* eth_db_cb_config = get_remote_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, db_buf_switch);
+            uint32_t buffer_transfer_start_addr = command_start_addr + (DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER * sizeof(uint32_t));
+            volatile tt_l1_ptr uint32_t *buffer_transfer_command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(buffer_transfer_start_addr);
+            db_cb_config_t* db_cb_config = get_local_db_cb_config(CQ_CONSUMER_CB_BASE, true);
+            const db_cb_config_t* eth_db_cb_config = get_remote_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, false);
             uint32_t num_buffer_transfers = header->num_buffer_transfers;
             bool is_sharded = (bool) (header->buffer_type == (uint32_t)DeviceCommand::BufferType::SHARDED);
             uint32_t sharded_buffer_num_cores = header->sharded_buffer_num_cores;
             uint32_t producer_consumer_transfer_num_pages = header->consumer_router_transfer_num_pages;
+            debug_stepper[0] = ((db_cb_config->rd_ptr_16B) << 4);
             write_buffers<host_completion_queue_write_ptr_addr>(
                 db_cb_config,
                 eth_db_cb_config,
-                command_ptr,
+                buffer_transfer_command_ptr,
                 completion_queue_start_addr,
                 num_buffer_transfers,
                 is_sharded,
@@ -82,13 +85,11 @@ void kernel_main() {
                 producer_consumer_transfer_num_pages);
         }
 
-        debug_stepper[0] = 3999;
-
         uint32_t finish = header->finish;
         if (finish) {
-            debug_stepper[0] = 39999;
+            // debug_stepper[0] = 39999;
             notify_host_complete<host_finish_addr>();
-            debug_stepper[0] = 399999;
+            // debug_stepper[0] = 399999;
         }
 
         // notify producer that it has completed a command
