@@ -25,14 +25,13 @@ void MAIN {
 
     binary_op_init_common(tt::CB::c_in0, tt::CB::c_intermed0, tt::CB::c_out0);
 
-    // cb_wait_front(tt::CB::c_in2, 1); // scaler tile from the reader
-    for (uint32_t t = 0; t < num_tiles; t++) {
-        cb_reserve_back(tt::CB::c_out0, 1);
+    for (uint32_t t = 0; t < num_tiles; t = t+2) {
+        cb_reserve_back(tt::CB::c_out0, 2);
         for(uint32_t tile_index = 0; tile_index < per_core_block_dim; ++tile_index) {
             ACQ();
-            cb_wait_front(tt::CB::c_in0, 1);
+            cb_wait_front(tt::CB::c_in0, 2);
             copy_tile_init();
-            copy_tile(tt::CB::c_in0, 0, 0);
+            copy_tile(tt::CB::c_in0, 1, 0);
             cb_reserve_back(tt::CB::c_intermed0, 1);
             pack_tile(0, tt::CB::c_intermed0);
             cb_push_back(tt::CB::c_intermed0, 1);
@@ -43,11 +42,11 @@ void MAIN {
             mul_tiles(tt::CB::c_in0, tt::CB::c_intermed0, 0, 0, 0);
             pack_tile(0, tt::CB::c_out0);
 
-            cb_pop_front(tt::CB::c_in0, 1);
+            cb_pop_front(tt::CB::c_in0, 2);
             cb_pop_front(tt::CB::c_intermed0, 1);
             REL();
         }
-        cb_push_back(tt::CB::c_out0, 1);
+        cb_push_back(tt::CB::c_out0, 2);
         REL();
 }
 }
