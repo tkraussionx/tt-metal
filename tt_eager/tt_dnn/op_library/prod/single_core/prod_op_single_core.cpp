@@ -190,7 +190,7 @@ namespace primary {
         core,
         tt_metal::WriterDataMovementConfig{.compile_args = writer_compile_time_args});
 
-    std::cout << "Number of tiles " << num_tiles << std::endl;
+    std::cout << "Number of tiles " << num_tiles << "num_input_tiles ::" << num_input_tiles << "num_output_tiles :: " << num_output_tiles << " single_tile_size :: " <<single_tile_size <<std::endl;
     vector<uint32_t> compute_kernel_args = {
         num_tiles, // per_core_block_cnt
         1 // per_core_block_size
