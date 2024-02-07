@@ -18,7 +18,7 @@ namespace tt {
 namespace operations {
 namespace primary {
 
-operation::ProgramWithCallbacks moreh_softmax_backward_c_large(const Tensor &output, const Tensor &output_grad, Tensor &input_grad, uint32_t dim, const CoreRange core_range, const MorehSoftmaxBackwardOp op) {
+operation::ProgramWithCallbacks moreh_softmax_backward_c_large(const Tensor &output, const Tensor &output_grad, const Tensor &input_grad, uint32_t dim, const CoreRange core_range, const MorehSoftmaxBackwardOp op) {
     log_info(LogTest, "Large tensor algorithm selected");
 
     // split work
@@ -67,6 +67,16 @@ operation::ProgramWithCallbacks moreh_softmax_backward_c_large(const Tensor &out
     std::map<string, string> reader_defines;
     std::map<string, string> writer_defines;
 
+    std::map<string, string> compute_defines;
+    if (op == MorehSoftmaxBackwardOp::SOFTMAX) compute_defines["SOFTMAX"] = "1";
+    else compute_defines["SOFTMIN"] = "1";
+
+    if (op == MorehSoftmaxBackwardOp::LOGSOFTMAX) {
+        compute_defines["LOG"] = 1;
+        reader_defines["LOG"] = 1;
+    }
+
+
     auto reader_kernel_id = CreateReadKernel(
         program, "tt_eager/tt_dnn/op_library/moreh_softmax_backward/kernels/reader_moreh_softmax_backward_c.cpp", all_cores, {y_is_dram, dy_is_dram}, reader_defines);
     auto writer_kernel_id = CreateWriteKernel(
@@ -83,10 +93,6 @@ operation::ProgramWithCallbacks moreh_softmax_backward_c_large(const Tensor &out
         inner_size = C * Wt * Ht;
         dim_size = N;
     }
-
-    std::map<string, string> compute_defines;
-    if (op == MorehSoftmaxBackwardOp::SOFTMAX) compute_defines["SOFTMAX"] = "1";
-    else compute_defines["SOFTMIN"] = "1";
 
     // create compute kernel
     CreateComputeKernel(

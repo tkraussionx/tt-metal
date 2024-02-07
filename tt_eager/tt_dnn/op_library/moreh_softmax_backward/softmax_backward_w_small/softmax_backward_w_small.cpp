@@ -42,7 +42,7 @@ bool is_moreh_softmax_backward_w_small_available(const Tensor &tensor) {
     return (L1_UNRESERVED_BASE + cb_usage <= L1_512KB);
 }
 
-operation::ProgramWithCallbacks moreh_softmax_backward_w_small(const Tensor &output, const Tensor &output_grad, Tensor &input_grad, const CoreRange core_range, const MorehSoftmaxBackwardOp op) {
+operation::ProgramWithCallbacks moreh_softmax_backward_w_small(const Tensor &output, const Tensor &output_grad, const Tensor &input_grad, const CoreRange core_range, const MorehSoftmaxBackwardOp op) {
     log_info(LogTest, "Small tensor algorithm selected");
 
     // split work
@@ -97,6 +97,10 @@ operation::ProgramWithCallbacks moreh_softmax_backward_w_small(const Tensor &out
     std::map<string, string> compute_defines;
     if (op == MorehSoftmaxBackwardOp::SOFTMAX) compute_defines["SOFTMAX"] = "1";
     else compute_defines["SOFTMIN"] = "1";
+
+    if (op == MorehSoftmaxBackwardOp::LOGSOFTMAX) {
+        compute_defines["LOG"] = 1;
+    }
 
     // create compute kernel
     CreateComputeKernel(

@@ -18,7 +18,7 @@ namespace tt {
 namespace operations {
 namespace primary {
 
-operation::ProgramWithCallbacks moreh_softmax_w_large(const Tensor &input, Tensor &output, const CoreRange core_range, const MorehSoftmaxOp op) {
+operation::ProgramWithCallbacks moreh_softmax_w_large(const Tensor &input, const Tensor &output, const CoreRange core_range, const MorehSoftmaxOp op) {
     log_info(LogTest, "Large tensor algorithm selected");
     // split work
     auto shape = input.shape();
@@ -68,8 +68,12 @@ operation::ProgramWithCallbacks moreh_softmax_w_large(const Tensor &input, Tenso
         program, "tt_eager/tt_dnn/op_library/moreh_softmax/kernels/writer_moreh_softmax_w.cpp", all_cores, {dst_is_dram}, writer_defines);
 
     std::map<string, string> compute_defines;
-    if (op == MorehSoftmaxOp::SOFTMAX) compute_defines["SOFTMAX"] = "1";
+    if (op == MorehSoftmaxOp::SOFTMAX || op == MorehSoftmaxOp::LOGSOFTMAX) compute_defines["SOFTMAX"] = "1";
     else compute_defines["SOFTMIN"] = "1";
+
+    if (op == MorehSoftmaxOp::LOGSOFTMAX) {
+        compute_defines["LOG"] = "1";
+    }
 
     // create compute kernel
     CreateComputeKernel(
