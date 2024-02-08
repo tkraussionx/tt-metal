@@ -81,7 +81,8 @@ def test_upsample_multi_core(device, input_shape, scale_h, scale_w):
     ## permute to N H W C
     tt_input = input.permute(0, 2, 3, 1)
 
-    grid_size = (1, 8)  ## ttnn uses (y, x) convention
+    # grid_size = (1, 8)  ## ttnn uses (y, x) convention
+    grid_size = (2, 12)  ## ttnn uses (y, x) convention
 
     in_shard_shape = [batch_size * h * w // (grid_size[1] * grid_size[0]), c]  ## y, x
     out_shard_shape = [batch_size * h * w * scale_h * scale_w // (grid_size[1] * grid_size[0]), c]
