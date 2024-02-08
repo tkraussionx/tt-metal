@@ -111,10 +111,10 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
 
     while (routing_info->routing_enabled) {
         // FD: assume that no more host -> remote writes are pending
-        kernel_profiler::init_profiler(0,0,0);
-        kernel_profiler::mark_fw_start();
         if (erisc_info->launch_user_kernel == 1) {
+            kernel_profiler::mark_fw_start();
             kernel_init();
+            kernel_profiler::mark_fw_end();
         }
         if (my_routing_mode == EthRouterMode::FD_SRC) {
             eth_db_acquire(eth_db_semaphore_addr, ((uint64_t)eth_router_noc_encoding << 32));
@@ -226,8 +226,6 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
         } else {
             internal_::risc_context_switch();
         }
-        kernel_profiler::mark_fw_end();
-        kernel_profiler::send_profiler_data_to_dram();
     }
     internal_::disable_erisc_app();
 }

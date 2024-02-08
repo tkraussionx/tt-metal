@@ -30,13 +30,14 @@ void kernel_main() {
 
     setup_completion_queue_write_interface(completion_queue_start_addr, completion_queue_size);
 
+    DeviceProfilerFlush;
     while (true) {
-        kernel_profiler::init_profiler();
-        kernel_profiler::mark_fw_start();
-        kernel_profiler::mark_kernel_start();
-
-        // Wait for producer to supply a command
-        db_acquire(db_semaphore_addr, consumer_noc_encoding);
+        DeviceZoneScopedN("CQ-CONSUMER-MAIN");
+        {
+            DeviceZoneScopedN("CQ-CONSUMER-PROD-SEM-ACQ");
+            // Wait for producer to supply a command
+            db_acquire(db_semaphore_addr, consumer_noc_encoding);
+        }
 
         // For each instruction, we need to jump to the relevant part of the device command
         uint32_t command_start_addr = get_command_slot_addr<cmd_base_address, consumer_data_buffer_size>(db_buf_switch);
@@ -65,11 +66,13 @@ void kernel_main() {
         completion_queue_reserve_back(completion_data_size);
         write_event(uint32_t(&header->event));
         if ((DeviceCommand::WrapRegion)wrap == DeviceCommand::WrapRegion::COMPLETION) {
+            DeviceZoneScopedN("CQ-CONSUMER-WRAP-COMPLETION");
             cq_write_interface.completion_fifo_wr_ptr = completion_queue_start_addr >> 4;     // Head to the beginning of the completion region
             cq_write_interface.completion_fifo_wr_toggle = not cq_write_interface.completion_fifo_wr_toggle;
             notify_host_of_completion_queue_write_pointer<host_completion_queue_write_ptr_addr>();
             noc_async_write_barrier(); // Barrier for now
         } else if (restart) {
+            DeviceZoneScopedN("CQ-CONSUMER-WRAP-RESETART");
             completion_queue_size = header->new_completion_queue_size;
             setup_completion_queue_write_interface(completion_queue_start_addr, completion_queue_size);
             db_buf_switch = false;
@@ -77,6 +80,7 @@ void kernel_main() {
             notify_host_of_completion_queue_write_pointer<host_completion_queue_write_ptr_addr>();
             noc_async_write_barrier(); // Barrier for now
         } else if (is_program) {
+            DeviceZoneScopedN("CQ-CONSUMER-WRAP-IS-PROG");
             write_and_launch_program(
                 db_cb_config,
                 remote_db_cb_config,
@@ -87,6 +91,7 @@ void kernel_main() {
                 producer_consumer_transfer_num_pages);
             wait_for_program_completion(num_workers);
         } else {
+            DeviceZoneScopedN("CQ-CONSUMER-WRITE-BUFFER");
             command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(buffer_transfer_start_addr);
             write_buffers(
                 db_cb_config,
@@ -100,18 +105,17 @@ void kernel_main() {
         }
 
         if (finish) {
+            DeviceZoneScopedN("CQ-CONSUMER-FINISH");
             notify_host_complete<host_finish_addr>();
         }
 
         completion_queue_push_back<completion_queue_start_addr, host_completion_queue_write_ptr_addr>(completion_data_size);
         if (not restart) {
+            DeviceZoneScopedN("CQ-CONSUMER-NOT-FINISH");
             // notify producer that it has completed a command
             noc_semaphore_inc(producer_noc_encoding | get_semaphore(0), 1);
             db_buf_switch = not db_buf_switch;
             noc_async_write_barrier(); // Barrier for now
         }
-        kernel_profiler::mark_kernel_end();
-        kernel_profiler::mark_fw_end();
-        kernel_profiler::send_profiler_data_to_dram();
     }
 }
