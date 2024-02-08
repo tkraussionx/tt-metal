@@ -276,6 +276,9 @@ If you are using a machine with bare metal machine specs, please use
     addressed. You must explicitly state what you are doing in each commit even
     if it's just cosmetic.
 
+- The `--no-verify` git commit option can be useful for personal development
+  if you are experimenting or don't have an issue to target yet.
+
 ### Code reviews
 
 - A PR must be opened for any code change with the following criteria:
