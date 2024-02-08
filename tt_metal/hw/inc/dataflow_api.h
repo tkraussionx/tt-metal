@@ -133,12 +133,13 @@ inline __attribute__((always_inline)) constexpr static std::uint32_t MUL_WITH_TI
  * | num_tiles | The number of tiles to be pushed     | uint32_t | It must be less or equal than the size of the CB (the total number of tiles that fit into the CB) | True     |
  */
 FORCE_INLINE
-void cb_push_back(const int32_t operand, const int32_t num_pages) {
+void cb_push_back(const int32_t operand, const int32_t num_tiles) {
 
-    uint32_t num_words = num_pages * cb_interface[operand].fifo_page_size;
+    // In tilized circular buffer, 1 page == 1 tile
+    uint32_t num_words = num_tiles * cb_interface[operand].fifo_page_size;
 
-    volatile tt_reg_ptr uint32_t* pages_received_ptr = get_cb_tiles_received_ptr(operand);
-    pages_received_ptr[0] += num_pages;
+    volatile tt_reg_ptr uint32_t* tiles_received_ptr = get_cb_tiles_received_ptr(operand);
+    tiles_received_ptr[0] += num_tiles;
 
     cb_interface[operand].fifo_wr_ptr += num_words;
 
@@ -173,11 +174,11 @@ void cb_push_back(const int32_t operand, const int32_t num_pages) {
  * | num_tiles | The number of tiles to be popped     | uint32_t | It must be less or equal than the size of the CB (the total number of tiles that fit into the CB) | True     |
  */
 FORCE_INLINE
-void cb_pop_front(int32_t operand, int32_t num_pages) {
+void cb_pop_front(int32_t operand, int32_t num_tiles) {
     volatile tt_reg_ptr uint32_t* pages_acked_ptr = get_cb_tiles_acked_ptr(operand);
-    pages_acked_ptr[0] += num_pages;
+    pages_acked_ptr[0] += num_tiles;
 
-    uint32_t num_words = num_pages * cb_interface[operand].fifo_page_size;
+    uint32_t num_words = num_tiles * cb_interface[operand].fifo_page_size;
 
     cb_interface[operand].fifo_rd_ptr += num_words;
 
