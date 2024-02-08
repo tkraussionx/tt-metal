@@ -38,7 +38,7 @@ void MAIN {
             if (once)
             {
                 cb_reserve_back(tt::CB::c_intermed0, 1);
-                copy_tile_init();
+                copy_tile_to_dst_init_short();
                 copy_tile(tt::CB::c_in0, 0, 0); // copy from c_in[0] to DST[0]
                 pack_tile(0, tt::CB::c_intermed0);
                 cb_push_back(tt::CB::c_intermed0, 1);
@@ -48,6 +48,7 @@ void MAIN {
             mul_tiles_init();
             if (once)
             {
+                cb_wait_front(tt::CB::c_intermed0, 1);
                 mul_tiles(tt::CB::c_intermed0, tt::CB::c_intermed0, 0, 0, 0);
                 once = false;
             }
@@ -58,7 +59,6 @@ void MAIN {
             if (last_tile)
             {
                 pack_tile(0, tt::CB::c_out0);
-                //cb_pop_front(tt::CB::c_intermed0, 1);
             }
             else
             {
@@ -68,7 +68,6 @@ void MAIN {
                 cb_push_back(tt::CB::c_intermed0, 1);
             }
             cb_pop_front(tt::CB::c_in0, 1);
-            //cb_pop_front(tt::CB::c_intermed0, 1);
             REL();
         }
         cb_push_back(tt::CB::c_out0, 1);
