@@ -125,7 +125,7 @@ Sending real data into DRAM
 Send in a randomly-generated FP16 vector that will act as our input data
 tensor.
 
-We use a non-blocking call so we can continue setting up our program.
+We call EnqueueWriteBuffer in non-blocking mode so we can continue setting up our program.
 
 Setting runtime arguments for the data movement kernel
 ------------------------------------------------------
