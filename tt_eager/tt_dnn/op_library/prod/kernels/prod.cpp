@@ -40,38 +40,37 @@ void MAIN {
                 cb_reserve_back(tt::CB::c_intermed0, 1);
                 copy_tile_to_dst_init_short();
                 copy_tile(tt::CB::c_in0, 0, 0); // copy from c_in[0] to DST[0]
-                pack_tile(0, tt::CB::c_intermed0);
-                cb_push_back(tt::CB::c_intermed0, 1);
+                if (num_tiles == 1)
+                    pack_tile(0, tt::CB::c_out0);
+                else
+                {
+                    pack_tile(0, tt::CB::c_intermed0);
+                    cb_push_back(tt::CB::c_intermed0, 1);
+                }
             }
             REL();
             ACQ();
             mul_tiles_init();
-            if (once)
-            {
-                cb_wait_front(tt::CB::c_intermed0, 1);
-                mul_tiles(tt::CB::c_intermed0, tt::CB::c_intermed0, 0, 0, 0);
-                once = false;
-            }
-            else
+            if (!once)
             {
                 mul_tiles(tt::CB::c_in0, tt::CB::c_intermed0, 0, 0, 0);
+                if (last_tile)
+                {
+                    pack_tile(0, tt::CB::c_out0);
+                }
+                else
+                {
+                    cb_pop_front(tt::CB::c_intermed0, 1);
+                    cb_reserve_back(tt::CB::c_intermed0, 1);
+                    pack_tile(0, tt::CB::c_intermed0);
+                    cb_push_back(tt::CB::c_intermed0, 1);
+                }
             }
-            if (last_tile)
-            {
-                pack_tile(0, tt::CB::c_out0);
-            }
-            else
-            {
-                cb_pop_front(tt::CB::c_intermed0, 1);
-                cb_reserve_back(tt::CB::c_intermed0, 1);
-                pack_tile(0, tt::CB::c_intermed0);
-                cb_push_back(tt::CB::c_intermed0, 1);
-            }
+            once = false;
             cb_pop_front(tt::CB::c_in0, 1);
             REL();
         }
         cb_push_back(tt::CB::c_out0, 1);
-        REL();
 }
 }
 }

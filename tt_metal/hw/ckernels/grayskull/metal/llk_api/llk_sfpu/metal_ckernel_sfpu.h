@@ -478,6 +478,24 @@ inline void calculate_sign()
     }
 }
 
+template <bool APPROXIMATION_MODE, int ITERATIONS>
+inline void calculate_tiled_prod()
+{
+    do {
+        vFloat result = 1.0f;
+        #pragma GCC unroll 0
+        for (int d = 0; d < ITERATIONS; d++) {
+            vFloat v = dst_reg[0];
+            result *= v;
+            dst_reg[0] = result;
+            dst_reg++;
+        }
+        vFloat v = dst_reg[0];
+        result *= v;
+        dst_reg[0] = result;
+        dst_reg++;
+    } while ( false );
+}
 
 } // namespace sfpu
 } // namespace ckernel

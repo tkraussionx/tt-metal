@@ -73,7 +73,8 @@ enum class UnaryOpType {
     ADD_UNARY_SFPU = 55,
     SUB_UNARY_SFPU = 56,
     MUL_UNARY_SFPU = 57,
-    DIV_UNARY_SFPU = 58
+    DIV_UNARY_SFPU = 58,
+    TILED_PROD = 59
 };
 
 template <typename T>
@@ -252,6 +253,7 @@ constexpr auto isnan = make_eltwise_unary<UnaryOpType::ISNAN>{};
 constexpr auto sign = make_eltwise_unary<UnaryOpType::SIGN>{};
 constexpr auto signbit = make_eltwise_unary<UnaryOpType::SIGNBIT>{};
 constexpr auto square = make_eltwise_unary<UnaryOpType::SQUARE>{};
+constexpr auto tiled_prod = make_eltwise_unary<UnaryOpType::TILED_PROD>{};
 constexpr auto atan = make_eltwise_unary<UnaryOpType::ATAN>{};
 constexpr auto eqz = make_eltwise_unary<UnaryOpType::EQZ>{};
 constexpr auto nez = make_eltwise_unary<UnaryOpType::NEZ>{};

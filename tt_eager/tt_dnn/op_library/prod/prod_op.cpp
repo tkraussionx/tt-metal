@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_dnn/op_library/prod/prod_op.hpp"
+#include "tt_eager/tt_dnn/op_library/eltwise_unary/eltwise_unary_op.hpp"
 
 #include <algorithm>
 #include <optional>
@@ -69,8 +70,8 @@ operation::ProgramWithCallbacks Prod_op::create_program(
 }
 
 Tensor prod(const Tensor& input, const MemoryConfig& output_mem_config ) {
-    return operation::run(Prod_op{.output_mem_config = output_mem_config}, {input}).at(0);
-
+    // return operation::run(Prod_op{.output_mem_config = output_mem_config}, {input}).at(0);
+    return tiled_prod( operation::run(Prod_op{.output_mem_config = output_mem_config}, {input}).at(0), output_mem_config);
 }
 
 

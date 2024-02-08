@@ -692,6 +692,8 @@ Other Operations
 
 .. autofunction:: tt_lib.tensor.prod
 
+.. autofunction:: tt_lib.tensor.tiled_prod
+
 .. autofunction:: tt_lib.tensor.sum
 
 .. autofunction:: tt_lib.tensor.log_sigmoid
