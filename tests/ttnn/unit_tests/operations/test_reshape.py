@@ -10,7 +10,7 @@ start = time.time()
 x = torch.rand((3, 224, 224), dtype=torch.bfloat16)
 x = ttnn.from_torch(x)
 x = ttnn.to_device(x, device, memory_config=ttnn.L1_MEMORY_CONFIG)
-x = ttnn.to_layout(x, ttnn.ROW_MAJOR_LAYOUT)
+# x = ttnn.to_layout(x, ttnn.ROW_MAJOR_LAYOUT)
 # output = ttnn.reshape(x,(224, 3, 224))
 output = ttnn.reshape(x, (224, 224, 3))
 # a or b cannot be reshaped because they are in TILE_LAYOUT. Only ROW_MAJOR_LAYOUT can be reshaped
