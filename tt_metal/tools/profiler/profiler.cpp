@@ -55,26 +55,6 @@ void DeviceProfiler::readRiscProfilerResults(
         riscEndIndices.push_back(kernel_profiler::HOST_BUFFER_END_INDEX_T0);
         riscEndIndices.push_back(kernel_profiler::HOST_BUFFER_END_INDEX_T1);
         riscEndIndices.push_back(kernel_profiler::HOST_BUFFER_END_INDEX_T2);
-
-        //std::cout << worker_core.x << "," << worker_core.y  << "," << coreFlatID << "," <<  output_dram_buffer.address() << std::endl
-            //<< control_buffer[kernel_profiler::NOC_X] << "," << control_buffer[kernel_profiler::NOC_Y]
-            //<< "," << control_buffer[kernel_profiler::FLAT_ID]
-            //<< "," << control_buffer[kernel_profiler::DRAM_PROFILER_ADDRESS]
-            //<< "," << control_buffer[kernel_profiler::RUN_COUNTER]
-            //<< "," << control_buffer[kernel_profiler::HOST_BUFFER_END_INDEX_BR]
-            //<< "," << control_buffer[kernel_profiler::DEVICE_BUFFER_END_INDEX_BR]<< std::endl;
-
-        //vector<std::uint32_t> profile_buffer_L1;
-        //profile_buffer_L1 = tt::llrt::read_hex_vec_from_core(
-                //device_id,
-                //worker_core,
-                //PROFILER_L1_BUFFER_BR,
-                //kernel_profiler::CUSTOM_MARKERS * sizeof(uint32_t));
-        //for (int i = kernel_profiler::ID_HH; i < kernel_profiler::CUSTOM_MARKERS; i++)
-        //{
-             //std::cout << profile_buffer_L1[i] << ",";
-        //}
-        //std::cout << std::endl<< std::endl;
     }
     else
     {
@@ -443,9 +423,6 @@ void DeviceProfiler::pushTracyDeviceResults(std::pair<uint32_t,CoreCoord> device
             TracyTTCollect(device_core_data[device_core].tracyContext, device_core_data[device_core].data);
         }
     }
-    device_core_data[device_core].data.clear();
-    device_core_data[device_core].runCounter = 0;
-
 #endif
 }
 

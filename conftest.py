@@ -276,6 +276,7 @@ def device(device_init_destroy):
     device = ttl.device.GetDefaultDevice()
     yield device
     ttl.device.DeallocateBuffers(device)
+    ttl.device.DumpDeviceProfiler(device)
 
 
 @pytest.fixture(scope="function")
