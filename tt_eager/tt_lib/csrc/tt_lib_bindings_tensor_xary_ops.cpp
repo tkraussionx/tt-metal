@@ -12,6 +12,7 @@
 namespace tt::tt_metal::detail {
     void TensorModuleXaryOPs( py::module & m_tensor){
 
+#if 0
         // *** eltwise binary ***
 
         detail::bind_binary_op(m_tensor, "add", add, R"doc(Perform an eltwise-binary add (``{0} + {1}``) on two tensors.)doc");
@@ -42,7 +43,7 @@ namespace tt::tt_metal::detail {
 
             Auto formatting is disabled. Both input tensors must have TILE layout. Output tensor will have TILE layout.)doc"
         );
-
+#endif
 
         // *** eltwise unary ***
         detail::bind_unary_op(m_tensor, "identity", identity, R"doc(Returns a copy of same tensor ``input``; useful for profiling the SFPU.

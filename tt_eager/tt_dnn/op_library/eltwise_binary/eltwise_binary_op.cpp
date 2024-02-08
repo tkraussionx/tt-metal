@@ -107,7 +107,7 @@ namespace tt {
 namespace tt_metal {
 
 
-void EltwiseBinary::validate(const std::vector<Tensor>& input_tensors) const {
+void EltwiseBinary::validate_with_output_tensors(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<Tensor>>& output_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
     const auto& input_tensor_b = input_tensors.at(1);
     TT_FATAL(input_tensor_a.shape() == input_tensor_b.shape(), "Input shapes must be the same!");
@@ -157,6 +157,11 @@ void EltwiseBinary::validate(const std::vector<Tensor>& input_tensors) const {
             TT_FATAL(this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED);
         }
     }
+
+    if ( !output_tensors.empty() ) {
+        const Tensor& output = output_tensors.at(0).value();
+        TT_FATAL( output.shape() == input_tensor_a.shape(), "input tensors and output tensors should be of same shape");
+    }
 }
 
 std::vector<Shape> EltwiseBinary::compute_output_shapes(
@@ -166,11 +171,17 @@ std::vector<Shape> EltwiseBinary::compute_output_shapes(
 }
 
 std::vector<Tensor> EltwiseBinary::create_output_tensors(
-    const std::vector<Tensor>& input_tensors) const {
+    const std::vector<Tensor>& input_tensors,
+    const std::vector<std::optional<Tensor>>& output_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
     const auto& input_tensor_b = input_tensors.at(1);
+
+    if(!output_tensors.empty() && output_tensors.at(0).has_value()){
+        return {output_tensors.at(0).value()};
+    }
+
     if (this->in_place) {
-        return {};
+        return {input_tensor_a};
     }
     if (this->output_mem_config.is_sharded()) {
         ShardSpec shard_spec{.grid=CoreRangeSet({}), .shape={0, 0}};
@@ -191,7 +202,7 @@ std::vector<Tensor> EltwiseBinary::create_output_tensors(
         mem_config.shard_spec = shard_spec;
         return {create_sharded_device_tensor(this->compute_output_shapes(input_tensors).at(0), this->output_dtype, Layout::TILE, input_tensor_a.device(), mem_config)};
     }
-    return operation::generic_create_output_tensors(*this, input_tensors, this->output_dtype, Layout::TILE, this->output_mem_config);
+    return {operation::generic_create_output_tensors(*this, input_tensors, this->output_dtype, Layout::TILE, this->output_mem_config)};
 }
 
 operation::ProgramWithCallbacks EltwiseBinary::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {

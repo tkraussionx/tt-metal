@@ -84,8 +84,9 @@ void bind_binary_op(py::module_ &module, std::string op_name, Func &&f, std::str
         bind_op_with_mem_config_and_dtype<mem_config_arg, dtype_arg>(module, op_name, f, docstring,
             py::arg(arg_name[0].c_str()).noconvert(),
             py::arg(arg_name[1].c_str()).noconvert(),
-            py::arg(fused_activations_name.c_str()) = default_fused_activations
-        );
+            py::arg(fused_activations_name.c_str()) = default_fused_activations,
+                                                                     std::nullopt,
+            std::nullopt  );
 
     } else {
         bind_op_with_mem_config_and_dtype<mem_config_arg, dtype_arg>(module, op_name, f, docstring,
