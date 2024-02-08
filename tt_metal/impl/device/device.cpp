@@ -345,7 +345,7 @@ bool Device::close() {
         }
     }
 
-    this->clear_l1_state();
+   // this->clear_l1_state();
     tt::Cluster::instance().l1_barrier(id_);
     allocator::clear(*this->allocator_);
 

@@ -26,7 +26,7 @@ class CommandQueueFixture : public ::testing::Test {
 
         this->mmio_device_ = tt::tt_metal::CreateDevice(0);
 
-        const int device_id = 1;
+        const int device_id =7;
         this->device_ = tt::tt_metal::CreateDevice(device_id);
         tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
     }
@@ -51,7 +51,9 @@ class CommandQueueMultiDeviceFixture : public ::testing::Test {
 
         num_devices_ = tt::tt_metal::GetNumAvailableDevices();
 
-        for (unsigned int id = 0; id < num_devices_; id++) {
+       std::vector<int> chip_ids = {0,7};
+       for (const auto &id: chip_ids) {
+///        for (unsigned int id = 0; id < num_devices_; id++) {
             auto* device = tt::tt_metal::CreateDevice(id);
             devices_.push_back(device);
         }

@@ -157,6 +157,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
 
     uint32_t num_pages_transferred = 0;
 
+    erisc_info->unused_arg0 = 210;
     while (routing_info->routing_enabled) {
         // FD: assume that no more host -> remote writes are pending
         if (erisc_info->launch_user_kernel == 1) {
@@ -221,6 +222,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             }
             // num_rxed[0] = num_rxed[0] + 1;
             if (routing_info->routing_enabled == 0) {
+              erisc_info->unused_arg1 = 213;
                 break;
             }
             // num_rxed[0] = num_rxed[0] + 1;
@@ -233,10 +235,14 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             // `num_pages_transferred` tracks whether the remote command processor received all the data
             num_rxed[0] = num_rxed[0] + 1;
             while (eth_db_semaphore_addr[0] == 0 and num_pages_transferred == 0) {
+              erisc_info->unused_arg1 = 214;
+              erisc_info->unused_arg2 = eth_db_semaphore_addr[0];
+              erisc_info->unused_arg0 = num_pages_transferred;
                 internal_::risc_context_switch();
             } // Check that there is space in consumer to send command
             // num_rxed[0] = num_rxed[0] + 1;
 
+              erisc_info->unused_arg1 = 215;
             // Send the full command header
             constexpr uint32_t consumer_cmd_base_addr = L1_UNRESERVED_BASE;
             constexpr uint32_t consumer_data_buffer_size = (MEM_L1_SIZE - (DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND * sizeof(uint32_t)) - L1_UNRESERVED_BASE);
@@ -259,6 +265,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
                 update_producer_consumer_sync_semaphores(((uint64_t)eth_router_noc_encoding << 32), ((uint64_t)relay_dst_noc_encoding << 32), eth_db_semaphore_addr, get_semaphore(0));
             }
 
+              erisc_info->unused_arg1 = 216;
             // Send the data that was in this packet
             uint32_t total_num_pages = header->num_pages;
             uint32_t num_pages_to_tx = 0;
@@ -274,6 +281,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
                 num_pages_to_tx = min(num_pages, producer_consumer_transfer_num_pages);
                 debug[0] = debug[0] + num_pages_to_tx;
 
+              erisc_info->unused_arg1 = 217;
                 noc_async_write(src_addr, dst_noc_addr, page_size * num_pages_to_tx);
                 uint32_t l1_consumer_fifo_limit_16B =
                     (get_db_buf_addr<consumer_cmd_base_addr, consumer_data_buffer_size>(db_buf_switch) + consumer_cb_size) >> 4;

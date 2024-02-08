@@ -6,6 +6,7 @@
 #include "risc_attribs.h"
 #include "tt_metal/hostdevcommon/common_values.hpp"
 #include "tt_metal/impl/dispatch/kernels/command_queue_common.hpp"
+#include "debug/dprint.h"
 
 CQReadInterface cq_read_interface;
 
@@ -304,6 +305,7 @@ void produce_for_eth_src_router(
 
     bool sharded = sharded_buffer_num_cores > 1;
 
+    DPRINT << " DPRINT cqp, num srcs " << num_srcs << ENDL();
     for (uint32_t i = 0; i < num_srcs; i++) {
         const uint32_t bank_base_address = command_ptr[0];
         const uint32_t num_pages = command_ptr[2];
@@ -397,16 +399,19 @@ void transfer(
 
     readback_point[0] = 0;
     for (uint32_t i = 0; i < num_srcs; i++) {
+        DPRINT << " DPRINT " << " transfer: " << i << ENDL();
         const uint32_t num_pages = command_ptr[2];
         const uint32_t page_size = command_ptr[3];
 
         uint32_t num_to_transfer = min(num_pages, producer_consumer_transfer_num_pages); // This must be a bigger number for perf.
+        DPRINT << " DPRINT taking min" << num_pages << " " << producer_consumer_transfer_num_pages << ENDL();
         uint32_t num_transfers_completed = 0;
 
         while (num_transfers_completed != num_pages) {
             // Wait for data to be received in local CB
             readback_point[0] = readback_point[0] + 1;
             multicore_cb_wait_front(rx_db_cb_config, num_to_transfer);
+
             readback_point[0] = readback_point[0] + 1;
             uint32_t src_addr = (tx_db_cb_config->rd_ptr_16B) << 4;
             // Transfer data to consumer CB

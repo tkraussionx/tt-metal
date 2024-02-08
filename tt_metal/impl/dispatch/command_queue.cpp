@@ -947,6 +947,8 @@ const DeviceCommand EnqueueProgramCommand::assemble_device_command(uint32_t host
 
     // This needs to be quite small, since programs are small
     command.set_producer_consumer_transfer_num_pages(DeviceCommand::SYNC_NUM_PAGES);
+    command.set_producer_router_transfer_num_pages(DeviceCommand::SYNC_NUM_PAGES);
+    command.set_consumer_router_transfer_num_pages(DeviceCommand::SYNC_NUM_PAGES);
 
     return command;
 }
@@ -1308,7 +1310,7 @@ void CommandQueue::wait_finish() {
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->device->id());
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device->id());
 
-    sleep(4);
+    sleep(2);
     uint32_t num_bytes_in_cmd_header = DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER * sizeof(uint32_t);
 
     std::vector<uint32_t> cq_header(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);

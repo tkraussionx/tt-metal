@@ -103,6 +103,7 @@ void send_fd_packets() {
         ((uint32_t)(&(routing_info->fd_buffer_msgs_sent))) >> 4,
         1);
     // There should always be a valid cmd here, since eth_db_acquire completed
+    erisc_info->unused_arg0 += 1;
     while (routing_info->fd_buffer_msgs_sent != 0) {
         // TODO: add timer to restrict this
         risc_context_switch();
@@ -122,6 +123,7 @@ void wait_for_fd_packet() {
 FORCE_INLINE
 void ack_fd_packet() {
     routing_info->fd_buffer_msgs_sent = 0;
+    erisc_info->unused_arg0 += 1;
     eth_send_packet(
         0,
         ((uint32_t)(&(routing_info->fd_buffer_msgs_sent))) >> 4,
