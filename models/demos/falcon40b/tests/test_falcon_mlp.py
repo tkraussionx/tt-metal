@@ -7,9 +7,7 @@ import pytest
 from loguru import logger
 
 import tt_lib
-from models.demos.falcon40b.reference.hf_modeling_falcon import (
-    FalconForCausalLM,
-)
+from models.demos.falcon40b.reference.hf_modeling_falcon import FalconForCausalLM, FalconConfig
 from models.demos.falcon40b.tt.falcon_mlp import TtFalconMLP
 from models.demos.falcon40b.tt.model_config import (
     get_model_config,
@@ -46,7 +44,8 @@ def run_test_FalconMLP_inference(
 ):
     model_name = model_location_generator(model_version, model_subdir="Falcon")
 
-    hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_name, low_cpu_mem_usage=True)
+    config = FalconConfig.from_pretrained(model_name, num_hidden_layers=1)
+    hugging_face_reference_model = FalconForCausalLM(config)
     hugging_face_reference_model.eval()
     configuration = hugging_face_reference_model.config
     state_dict = hugging_face_reference_model.state_dict()
