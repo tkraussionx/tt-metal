@@ -120,9 +120,11 @@ struct EltwiseUnary {
     const std::vector<UnaryWithParam> op_chain;
     const MemoryConfig output_mem_config;
 
-    void validate(const std::vector<Tensor>& input_tensors) const;
-    std::vector<Shape> compute_output_shapes(const std::vector<Tensor>& input_tensors) const;
-    std::vector<Tensor> create_output_tensors(const std::vector<Tensor>& input_tensors) const;
+    void validate_with_output_tensors(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<Tensor>>& output_tensors) const;
+    std::vector<Shape> compute_output_shapes(const std::vector<Tensor> &input_tensors) const;
+    std::vector<Tensor> create_output_tensors(const std::vector<Tensor> &input_tensors,
+                                              const std::vector<std::optional<Tensor>>& output_tensors) const;
+
     operation::ProgramWithCallbacks create_program(
         const std::vector<Tensor>& input_tensors, std::vector<Tensor>& output_tensors) const;
     UnaryOpParallelizationStrategy get_parallelization_strategy(const std::vector<Tensor>& input_tensors) const;
@@ -135,7 +137,8 @@ struct EltwiseUnary {
     const operation::Hash compute_program_hash(const std::vector<Tensor>& input_tensors) const;
 };
 
-Tensor eltwise_unary(const EltwiseUnary& op, const Tensor& input_tensor);
+Tensor eltwise_unary(const EltwiseUnary& op, const Tensor& input_tensor,
+                         const std::vector<std::optional<Tensor>>& output_tensors);
 
 operation::ProgramWithCallbacks eltwise_unary_multi_core(
     const Tensor& a, Tensor& output, const std::vector<UnaryWithParam> op_chain);
@@ -145,13 +148,28 @@ operation::ProgramWithCallbacks eltwise_unary_single_core(
 inline Tensor run_eltwise_unary(
     const Tensor& input_tensor,
     std::vector<UnaryWithParam> ops_chain,
-    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) {
+    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+    std::optional<std::reference_wrapper<const Tensor>> output_tensors = std::nullopt
+                                ) {
     TT_FATAL(ops_chain.size() > 0, "At least 1 unary op must be specified");
     Shape pad_shape = AutoFormat::pad_to_tile_shape(input_tensor.shape());
     FormatParams input_format_params = {.pad_shape = pad_shape, .pad_value = 0.0, .target_layout = Layout::TILE};
-    return operation::run_with_autoformat(
-               EltwiseUnary{ops_chain, output_mem_config}, {input_tensor}, {input_format_params}, {Layout::TILE})
-        .at(0);
+    if ( output_tensors.has_value() ) {
+        return operation::run_with_autoformat(
+                                              EltwiseUnary{ops_chain, output_mem_config},
+                                              {input_tensor},
+                                              {input_format_params},
+                                              {Layout::TILE},
+                                              {output_tensors.value()})
+            .at(0);
+    } else {
+        return operation::run_with_autoformat(
+                                              EltwiseUnary{ops_chain, output_mem_config},
+                                              {input_tensor},
+                                              {input_format_params},
+                                              {Layout::TILE})
+            .at(0);
+    }
 }
 
 template <UnaryOpType unary_op_type, typename T = float>

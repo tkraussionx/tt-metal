@@ -253,13 +253,17 @@ namespace tt {
 
 namespace tt_metal {
 
-void EltwiseUnary::validate(const std::vector<Tensor> &input_tensors) const {
+void EltwiseUnary::validate_with_output_tensors(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<Tensor>>& output_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
     TT_FATAL(input_tensor_a.storage_type() == StorageType::DEVICE, "Operands to eltwise unary need to be on device!");
     TT_FATAL(input_tensor_a.buffer() != nullptr , "Operands to eltwise unary need to be allocated in buffers on device!");
     TT_FATAL((input_tensor_a.layout() == Layout::TILE), "Inputs to eltwise unary must be tilized");
     TT_FATAL(input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED, "Eltwise unary does not currently support sharding");
     TT_FATAL(this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED, "Eltwise unary does not currently support sharding");
+
+    if ( !output_tensors.empty() ) {
+        TT_FATAL(output_tensors.at(0).value().shape() == input_tensor_a.shape(),"input and output tensor shapes must be matching");
+    }
 }
 
 std::vector<Shape> EltwiseUnary::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
@@ -267,9 +271,13 @@ std::vector<Shape> EltwiseUnary::compute_output_shapes(const std::vector<Tensor>
     return {input_tensor.shape()};
 }
 
-std::vector<Tensor> EltwiseUnary::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
+std::vector<Tensor> EltwiseUnary::create_output_tensors(const std::vector<Tensor> &input_tensors,
+                                                        const std::vector<std::optional<Tensor>>& output_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
-    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor.dtype(), Layout::TILE, this->output_mem_config);
+    if ( !output_tensors.empty() ) {
+        return {output_tensors.at(0).value()};
+    }
+    return {operation::generic_create_output_tensors(*this, input_tensors, input_tensor.dtype(), Layout::TILE, this->output_mem_config)};
 }
 
 operation::ProgramWithCallbacks EltwiseUnary::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
