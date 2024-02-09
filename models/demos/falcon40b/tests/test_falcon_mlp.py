@@ -121,7 +121,10 @@ def test_FalconMLP_inference(
 ):
     model_config = get_model_config(model_config_str)
     compute_grid_size = pcie_devices[0].compute_with_storage_grid_size()
-    if len(pcie_devices) < model_config["NUM_DEVICES"]:
+    if len(pcie_devices) == 1:
+        print(f"Running fractures sequentially on 1 device")
+        pcie_devices = pcie_devices * 4
+    elif len(pcie_devices) < model_config["NUM_DEVICES"]:
         pytest.skip(f"Requires at least {model_config['NUM_DEVICES']} devices to run")
     if compute_grid_size.x < model_config["MAX_GRID_SIZE"][0] or compute_grid_size.y < model_config["MAX_GRID_SIZE"][1]:
         pytest.skip(f"Requires grid size of at least {model_config['MAX_GRID_SIZE']} to run")
