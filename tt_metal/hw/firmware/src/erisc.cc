@@ -187,7 +187,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
 
             if (num_buffer_transfers == 0) {
                  // send cmd even if there is no data associated
-                internal_::send_fd_packets();
+                internal_::send_fd_packets(1); // TODO: AL, is this right?
                 num_relayed[0] = num_relayed[0] + 1;
             }
 
@@ -202,7 +202,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
                     debug[0] = debug[0] + 1; // 2 // 7
                     // contains device command, maybe just send pages, and send cmd once at the start
                     num_relayed[0] = num_relayed[0] + 1;
-                    internal_::send_fd_packets();
+                    internal_::send_fd_packets(i + 1); // AL: increment since idx to msg sent
                     multicore_eth_cb_pop_front(
                         eth_db_cb_config, remote_src_db_cb_config, ((uint64_t)relay_src_noc_encoding << 32), num_to_write);
                     debug[0] = debug[0] + 1; // 3 // 8
@@ -215,7 +215,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
         } else if (routing_info->routing_mode == EthRouterMode::FD_DST) {
             // Poll until FD_SRC router sends FD packet
             // Each FD packet comprises of command header followed by command data
-            internal_::wait_for_fd_packet();
+            internal_::wait_for_fd_packet(1);
             // num_rxed[0] = num_rxed[0] + 1;
             if (erisc_info->launch_user_kernel == 1) {
                 continue;
@@ -236,7 +236,6 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             num_rxed[0] = num_rxed[0] + 1;
             while (eth_db_semaphore_addr[0] == 0 and num_pages_transferred == 0) {
               erisc_info->unused_arg1 = 214;
-              erisc_info->unused_arg2 = eth_db_semaphore_addr[0];
               erisc_info->unused_arg0 = num_pages_transferred;
                 internal_::risc_context_switch();
             } // Check that there is space in consumer to send command
@@ -265,7 +264,9 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
                 update_producer_consumer_sync_semaphores(((uint64_t)eth_router_noc_encoding << 32), ((uint64_t)relay_dst_noc_encoding << 32), eth_db_semaphore_addr, get_semaphore(0));
             }
 
+            uint32_t num_buffer_transfers = header->num_buffer_transfers;
               erisc_info->unused_arg1 = 216;
+              erisc_info->unused_arg2 = 300 + num_buffer_transfers;
             // Send the data that was in this packet
             uint32_t total_num_pages = header->num_pages;
             uint32_t num_pages_to_tx = 0;

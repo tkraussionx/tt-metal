@@ -116,6 +116,7 @@ bool test_dummy_EnqueueProgram_with_cbs(Device* device, CommandQueue& cq, DummyP
     // sleep(1);
     // std::cout << "done sleeping" << std::endl;
     Finish(cq);
+    std::cout << "calling set interal false " << std::endl;
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
 
     // uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(device->id());

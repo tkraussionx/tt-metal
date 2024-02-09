@@ -90,13 +90,13 @@ FORCE_INLINE
 void disable_erisc_app() { flag_disable[0] = 0; }
 
 FORCE_INLINE
-void send_fd_packets() {
+void send_fd_packets(uint32_t buffer_transaction_id) {
     eth_send_packet(
         0,
         (eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE) >> 4,
         ((eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE)) >> 4,
         (eth_l1_mem::address_map::ERISC_APP_RESERVED_SIZE) >> 4);
-    routing_info->fd_buffer_msgs_sent = 1;
+    routing_info->fd_buffer_msgs_sent = buffer_transaction_id;
     eth_send_packet(
         0,
         ((uint32_t)(&(routing_info->fd_buffer_msgs_sent))) >> 4,
@@ -111,10 +111,10 @@ void send_fd_packets() {
 }
 
 FORCE_INLINE
-void wait_for_fd_packet() {
+void wait_for_fd_packet(uint32_t buffer_transaction_id) {
     // There may not be a valid cmd here, since DST router is always polling
     // This should only happen on cluster close
-    while (routing_info->fd_buffer_msgs_sent != 1 && routing_info->routing_enabled && erisc_info->launch_user_kernel == 0) {
+    while (routing_info->fd_buffer_msgs_sent != buffer_transaction_id && routing_info->routing_enabled && erisc_info->launch_user_kernel == 0) {
         // TODO: add timer to restrict this
         risc_context_switch();
     }

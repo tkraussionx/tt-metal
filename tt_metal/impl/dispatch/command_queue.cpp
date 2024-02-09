@@ -947,8 +947,8 @@ const DeviceCommand EnqueueProgramCommand::assemble_device_command(uint32_t host
 
     // This needs to be quite small, since programs are small
     command.set_producer_consumer_transfer_num_pages(DeviceCommand::SYNC_NUM_PAGES);
-    command.set_producer_router_transfer_num_pages(DeviceCommand::SYNC_NUM_PAGES);
-    command.set_consumer_router_transfer_num_pages(DeviceCommand::SYNC_NUM_PAGES);
+   // command.set_producer_router_transfer_num_pages(DeviceCommand::SYNC_NUM_PAGES);
+   // command.set_consumer_router_transfer_num_pages(DeviceCommand::SYNC_NUM_PAGES);
 
     return command;
 }
@@ -1346,7 +1346,8 @@ void CommandQueue::wait_finish() {
     std::cout << "Debug step in local SRC: " << debug_slot_l_src << std::endl;
 
     std::cout << "Setting internal routing false" << std::endl;
-    tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
+    // AL: no need to do this
+    //tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
     std::cout << "Done setting internal routing false" << std::endl;
 
     tt_cxy_pair remote_processor_location = dispatch_core_manager::get(1).remote_processor_core(device->id(), channel, 0);

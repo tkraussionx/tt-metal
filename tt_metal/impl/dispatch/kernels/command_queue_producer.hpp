@@ -305,7 +305,7 @@ void produce_for_eth_src_router(
 
     bool sharded = sharded_buffer_num_cores > 1;
 
-    DPRINT << " DPRINT cqp, num srcs " << num_srcs << ENDL();
+    DPRINT << " DPRINT local command q producer, num srcs " << num_srcs << ENDL();
     for (uint32_t i = 0; i < num_srcs; i++) {
         const uint32_t bank_base_address = command_ptr[0];
         const uint32_t num_pages = command_ptr[2];
@@ -399,12 +399,12 @@ void transfer(
 
     readback_point[0] = 0;
     for (uint32_t i = 0; i < num_srcs; i++) {
-        DPRINT << " DPRINT " << " transfer: " << i << ENDL();
+        DPRINT << " DPRINT " << " transfer: " << i << " out of num srcs " << num_srcs << ENDL();
         const uint32_t num_pages = command_ptr[2];
         const uint32_t page_size = command_ptr[3];
 
         uint32_t num_to_transfer = min(num_pages, producer_consumer_transfer_num_pages); // This must be a bigger number for perf.
-        DPRINT << " DPRINT taking min" << num_pages << " " << producer_consumer_transfer_num_pages << ENDL();
+        DPRINT << " DPRINT taking min" << DEC() << num_pages << " " << producer_consumer_transfer_num_pages << ENDL();
         uint32_t num_transfers_completed = 0;
 
         while (num_transfers_completed != num_pages) {

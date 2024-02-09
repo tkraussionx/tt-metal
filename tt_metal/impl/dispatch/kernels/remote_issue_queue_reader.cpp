@@ -63,7 +63,7 @@ void kernel_main() {
         uint32_t sharded_buffer_num_cores = header->sharded_buffer_num_cores;
         uint32_t wrap = header->wrap;
         uint32_t restart = header->restart;
-        DPRINT << " DPRINT remote issue queue " << header->producer_router_transfer_num_pages << ENDL();
+        DPRINT << " DPRINT remote issue queue " << DEC() << header->producer_router_transfer_num_pages << ENDL();
 
         if ((DeviceCommand::WrapRegion)wrap == DeviceCommand::WrapRegion::ISSUE) {
             // Basically popfront without the extra conditional
