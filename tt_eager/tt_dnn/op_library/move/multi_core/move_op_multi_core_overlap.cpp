@@ -19,7 +19,7 @@ namespace tt {
 namespace tt_metal {
 
 std::vector<CoreRange> get_multicast_regions(const Device *device, const CoreRangeSet &all_cores, const CoreCoord &logical_controller) {
-    TT_ASSERT(0 < all_cores.ranges().size() <= 2);
+    TT_ASSERT(0 < all_cores.ranges().size() and all_cores.ranges().size() <= 2);
     CoreCoord logical_zero = {0, 0};
     TT_ASSERT(logical_controller == logical_zero);
 
@@ -29,8 +29,7 @@ std::vector<CoreRange> get_multicast_regions(const Device *device, const CoreRan
         CoreRange right_block = CoreRange{CoreCoord{logical_controller.x + 1, logical_controller.y}, controller_core_range.end};
         CoreRange remaining_stick = CoreRange{
             CoreCoord{logical_controller.x, logical_controller.y + 1},
-            CoreCoord{logical_controller.x, controller_core_range.end.y}
-        };
+            CoreCoord{logical_controller.x, controller_core_range.end.y}};
 
         logical_core_ranges.push_back(right_block);
         logical_core_ranges.push_back(remaining_stick);
