@@ -57,13 +57,14 @@ void kernel_main() {
         uint32_t producer_cb_size = header->producer_cb_size;
         uint32_t consumer_cb_size = header->router_cb_size;
         uint32_t producer_cb_num_pages = header->producer_cb_num_pages;
-        uint32_t consumer_cb_num_pages = header->router_cb_num_pages;
+        uint32_t consumer_cb_num_pages = header->router_cb_num_pages; // AL: is this zero?
         uint32_t num_pages = header->num_pages;
         uint32_t producer_consumer_transfer_num_pages = header->producer_router_transfer_num_pages;
         uint32_t sharded_buffer_num_cores = header->sharded_buffer_num_cores;
         uint32_t wrap = header->wrap;
         uint32_t restart = header->restart;
-        DPRINT << " DPRINT remote issue queue " << DEC() << header->producer_router_transfer_num_pages << ENDL();
+        DPRINT << " DPRINT remote issue queue " << DEC() << header->producer_router_transfer_num_pages <<
+          " router cb num pages " << header->router_cb_num_pages << ENDL();
 
         if ((DeviceCommand::WrapRegion)wrap == DeviceCommand::WrapRegion::ISSUE) {
             // Basically popfront without the extra conditional
@@ -79,6 +80,7 @@ void kernel_main() {
 
         program_local_cb(data_section_addr, producer_cb_num_pages, page_size, producer_cb_size);
         wait_consumer_space_available(db_semaphore_addr);
+        DPRINT << " DPRINT local command q producer,  space available at  " << HEX() <<(uint32_t)db_semaphore_addr<< DEC()<<ENDL();
         program_consumer_cb<command_start_addr, data_buffer_size, consumer_cmd_base_addr, consumer_data_buffer_size>(
             db_cb_config,
             eth_db_cb_config,

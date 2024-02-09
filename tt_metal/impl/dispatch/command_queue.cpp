@@ -947,8 +947,8 @@ const DeviceCommand EnqueueProgramCommand::assemble_device_command(uint32_t host
 
     // This needs to be quite small, since programs are small
     command.set_producer_consumer_transfer_num_pages(DeviceCommand::SYNC_NUM_PAGES);
-   // command.set_producer_router_transfer_num_pages(DeviceCommand::SYNC_NUM_PAGES);
-   // command.set_consumer_router_transfer_num_pages(DeviceCommand::SYNC_NUM_PAGES);
+    command.set_producer_router_transfer_num_pages(DeviceCommand::SYNC_NUM_PAGES);
+    command.set_consumer_router_transfer_num_pages(DeviceCommand::SYNC_NUM_PAGES);
 
     return command;
 }
