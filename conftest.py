@@ -282,10 +282,13 @@ def device(device_init_destroy):
 def pcie_devices(request):
     import tt_lib as ttl
 
-    num_devices = ttl.device.GetNumPCIeDevices()
-
-    # Get only physical devices
-    devices = ttl.device.CreateDevices([i for i in range(num_devices)])
+    try:
+        num_devices = ttl.device.GetNumPCIeDevices()
+        # Get only physical devices
+        devices = ttl.device.CreateDevices([i for i in range(num_devices)])
+    except AttributeError:
+        num_devices = 1
+        devices = [ttl.device.GetDefaultDevice()]
 
     yield [devices[i] for i in range(num_devices)]
 
