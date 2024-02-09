@@ -141,7 +141,7 @@ class DeviceProfiler {
         DeviceProfiler();
 
         //DRAM buffer for device side results
-        Buffer output_dram_buffer;
+        std::shared_ptr<tt::tt_metal::Buffer> output_dram_buffer = nullptr;
 
 
         //Set the device side file flag

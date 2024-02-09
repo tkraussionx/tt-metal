@@ -276,7 +276,6 @@ DeviceProfiler::DeviceProfiler()
     output_dir = std::filesystem::path(string(PROFILER_RUNTIME_ROOT_DIR) + string(PROFILER_LOGS_DIR_NAME));
     std::filesystem::create_directories(output_dir);
 
-    TracySetCpuTime();
 
 #endif
 }
@@ -313,43 +312,52 @@ void DeviceProfiler::dumpResults (
     ZoneScoped;
     auto device_id = device->id();
     device_core_frequency = tt::Cluster::instance().get_device_aiclk(device_id);
-    std::vector<uint32_t> profile_buffer(output_dram_buffer.size()/sizeof(uint32_t), 0);
 
-    tt_metal::detail::ReadFromBuffer(output_dram_buffer, profile_buffer);
+    if (output_dram_buffer != nullptr)
+    {
+        std::vector<uint32_t> profile_buffer(output_dram_buffer->size()/sizeof(uint32_t), 0);
 
-    for (const auto &worker_core : worker_cores) {
-        std::pair<uint32_t, CoreCoord> device_core = {device_id, worker_core};
-        auto tracyCtx = TracyTTContext();
-        if (device_core_data.find(device_core) == device_core_data.end())
-        {
-            device_core_data.emplace(
-                    device_core,
-                    (CoreTracyData){
-                        (std::map<uint32_t, std::map<tracy::TTDeviceEvent, uint64_t, tracy::TTDeviceEvent_cmp>>){},
-                        tracyCtx,
-                        false
-                    }
-                );
+        tt_metal::detail::ReadFromBuffer(output_dram_buffer, profile_buffer);
+
+        for (const auto &worker_core : worker_cores) {
+            std::pair<uint32_t, CoreCoord> device_core = {device_id, worker_core};
+            auto tracyCtx = TracyTTContext();
+            if (device_core_data.find(device_core) == device_core_data.end())
+            {
+                device_core_data.emplace(
+                        device_core,
+                        (CoreTracyData){
+                            (std::map<uint32_t, std::map<tracy::TTDeviceEvent, uint64_t, tracy::TTDeviceEvent_cmp>>){},
+                            tracyCtx,
+                            false
+                        }
+                    );
+            }
+            readRiscProfilerResults(
+                device_id,
+                profile_buffer,
+                worker_core);
+
         }
-        readRiscProfilerResults(
-            device_id,
-            profile_buffer,
-            worker_core);
 
+        for (const auto &worker_core : worker_cores) {
+            std::pair<uint32_t, CoreCoord> device_core = {device_id, worker_core};
+            if (!device_core_data[device_core].data.empty())
+            {
+                pushTracyDeviceResults(device_core);
+
+                device_core_data[device_core].data.clear();
+                device_core_data[device_core].runCounter = 0;
+
+                std::string tracyTTCtxName = fmt::format("Device: {}, Core ({},{})", device_id, worker_core.x, worker_core.y);
+                TracyTTContextName(device_core_data[device_core].tracyContext, tracyTTCtxName.c_str(), tracyTTCtxName.size());
+            }
+        }
     }
+    else
+    {
 
-    for (const auto &worker_core : worker_cores) {
-        std::pair<uint32_t, CoreCoord> device_core = {device_id, worker_core};
-        if (!device_core_data[device_core].data.empty())
-        {
-            pushTracyDeviceResults(device_core);
-
-            device_core_data[device_core].data.clear();
-            device_core_data[device_core].runCounter = 0;
-
-            std::string tracyTTCtxName = fmt::format("Device: {}, Core ({},{})", device_id, worker_core.x, worker_core.y);
-            TracyTTContextName(device_core_data[device_core].tracyContext, tracyTTCtxName.c_str(), tracyTTCtxName.size());
-        }
+        log_warning("DRAM profiler buffer is not initialized");
     }
 #endif
 }

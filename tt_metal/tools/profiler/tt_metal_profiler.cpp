@@ -10,6 +10,8 @@
 
 #include "tt_metal/detail/tt_metal.hpp"
 
+#include "tt_metal/third_party/tracy/public/tracy/TracyTTDevice.hpp"
+
 namespace tt {
 
 namespace tt_metal {
@@ -31,6 +33,7 @@ void InitDeviceProfiler(Device *device){
 #if defined(PROFILER)
     ZoneScoped;
 
+    TracySetCpuTime();
     auto device_id = device->id();
     uint32_t dramBankCount = tt::Cluster::instance().get_soc_desc(device_id).get_num_dram_channels();
     uint32_t coreCountPerDram = tt::Cluster::instance().get_soc_desc(device_id).profiler_ceiled_core_count_perf_dram_bank;
@@ -39,7 +42,7 @@ void InitDeviceProfiler(Device *device){
         PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC * PROFILER_RISC_COUNT * coreCountPerDram;
 
 
-    if (tt_metal_device_profiler.output_dram_buffer.size() == 0 )
+    if (tt_metal_device_profiler.output_dram_buffer == nullptr )
     {
         tt::tt_metal::InterleavedBufferConfig dram_config{
                     .device= device,
@@ -51,7 +54,7 @@ void InitDeviceProfiler(Device *device){
     }
 
     std::vector<uint32_t> control_buffer(PROFILER_L1_CONTROL_VECTOR_SIZE, 0);
-    control_buffer[kernel_profiler::DRAM_PROFILER_ADDRESS] = tt_metal_device_profiler.output_dram_buffer.address();
+    control_buffer[kernel_profiler::DRAM_PROFILER_ADDRESS] = tt_metal_device_profiler.output_dram_buffer->address();
 
     const metal_SocDescriptor& soc_d = tt::Cluster::instance().get_soc_desc(device_id);
     auto ethCores = soc_d.get_physical_ethernet_cores() ;
@@ -76,7 +79,7 @@ void InitDeviceProfiler(Device *device){
         }
     }
 
-    std::vector<uint32_t> inputs_DRAM(tt_metal_device_profiler.output_dram_buffer.size()/sizeof(uint32_t), 0);
+    std::vector<uint32_t> inputs_DRAM(tt_metal_device_profiler.output_dram_buffer->size()/sizeof(uint32_t), 0);
     tt_metal::detail::WriteToBuffer(tt_metal_device_profiler.output_dram_buffer, inputs_DRAM);
 
 #endif

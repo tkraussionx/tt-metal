@@ -155,8 +155,8 @@ def load_device_data(opCandidatePath):
                 "end": {"core": "ANY", "risc": "TRISC_2", "timerID": 3},
             },
             "ER_KERNEL_START->ER_KERNEL_END": {
-                "across": "device",
-                "type": "session_first_last",
+                "across": "ops",
+                "type": "op_first_last",
                 "start": {"core": "ANY", "risc": "ERISC", "timerID": 2},
                 "end": {"core": "ANY", "risc": "ERISC", "timerID": 3},
             },
@@ -194,6 +194,7 @@ def append_device_time_data(call_count, timeDataDict, devicesData):
             t0_kernel_delta_time_ns = 0
             t1_kernel_delta_time_ns = 0
             t2_kernel_delta_time_ns = 0
+            er_kernel_delta_time_ns = 0
 
             if "BR_KERNEL_START->BR_KERNEL_END" in deviceLevelStats.keys():
                 br_kernel_delta_time_ns = (
@@ -214,6 +215,10 @@ def append_device_time_data(call_count, timeDataDict, devicesData):
             if "T2_KERNEL_START->T2_KERNEL_END" in deviceLevelStats.keys():
                 t2_kernel_delta_time_ns = (
                     deviceLevelStats["T2_KERNEL_START->T2_KERNEL_END"]["stats"]["Average"] * 1000 / freq
+                )
+            if "ER_KERNEL_START->ER_KERNEL_END" in deviceLevelStats.keys():
+                er_kernel_delta_time_ns = (
+                    deviceLevelStats["ER_KERNEL_START->ER_KERNEL_END"]["stats"]["Average"] * 1000 / freq
                 )
         else:
             res = False
