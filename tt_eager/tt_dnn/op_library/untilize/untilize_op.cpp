@@ -30,7 +30,7 @@ void Untilize::validate(const std::vector<Tensor> &input_tensors) const {
 
     if (input_tensor_a.memory_config().is_sharded()) {
         if (this->output_mem_config.is_sharded()) {
-            TT_FATAL(this->output_mem_config == input_tensor_a.memory_config());
+            TT_FATAL(this->output_mem_config.memory_layout == input_tensor_a.memory_config().memory_layout);
         }
         if (input_tensor_a.memory_config().memory_layout != TensorMemoryLayout::HEIGHT_SHARDED) {
             TT_FATAL(input_tensor_a.shard_spec().value().grid.ranges().size() == 1);
@@ -147,8 +147,8 @@ void UntilizeWithUnpadding::validate(const std::vector<Tensor> &input_tensors) c
                 TT_FATAL(input_tensor_a.shape()[i] == output_shape[i]);
             }
             if (output_mem_config.is_sharded()) {
-                TT_FATAL(this->output_mem_config == input_tensor_a.memory_config());
-                TT_ASSERT(input_tensor_a.shape()[-1] == output_shape[-1]);
+                TT_FATAL(this->output_mem_config.memory_layout == input_tensor_a.memory_config().memory_layout);
+                TT_FATAL(input_tensor_a.shape()[-1] == output_shape[-1]);
             } else {
                 TT_FATAL(this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED);
                 TT_FATAL(input_tensor_a.volume() / (input_tensor_a.shape()[-2] * input_tensor_a.shape()[-1]) == 1, "Can only write unbatched output interleaved");
@@ -224,7 +224,7 @@ Tensor untilize_with_unpadding(const Tensor &input_tensor_a, const Shape &output
             log_warning("Perf warning: Untilize with unpadding called on already untilized tensor of target shape");
             return AutoFormat::move_tensor_to_mem_config(input_tensor_a, output_mem_config);
         } else {
-            TT_ASSERT(false, "Cannot untilize and unpad input which is not tilized");
+            TT_FATAL(false, "Cannot untilize and unpad input which is not tilized");
         }
     }
     return operation::run_without_autoformat(UntilizeWithUnpadding{output_tensor_start, output_tensor_end, output_mem_config}, {input_tensor_a}).at(0);

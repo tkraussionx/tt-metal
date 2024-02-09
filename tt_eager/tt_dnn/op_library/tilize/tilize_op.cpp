@@ -41,7 +41,7 @@ void Tilize::validate(const std::vector<Tensor> &input_tensors) const {
 
     if (input_tensor_a.memory_config().is_sharded()) {
         TT_FATAL(input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED);
-        TT_FATAL(this->output_mem_config == input_tensor_a.memory_config());
+        TT_FATAL(this->output_mem_config.memory_layout == input_tensor_a.memory_config().memory_layout);
         TT_FATAL(this->use_multicore == true);
         TT_FATAL(input_tensor_a.shard_spec().value().orientation == ShardOrientation::ROW_MAJOR);
     } else {
@@ -116,7 +116,7 @@ void TilizeWithValPadding::validate(const std::vector<Tensor> &input_tensors) co
 
     if (input_tensor_a.memory_config().is_sharded()) {
         TT_FATAL(input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::WIDTH_SHARDED);
-        TT_FATAL(this->output_mem_config == input_tensor_a.memory_config());
+        TT_FATAL(this->output_mem_config.memory_layout == input_tensor_a.memory_config().memory_layout);
         for (uint32_t i = 0; i < input_tensor_a.shape().rank(); i++) {
             if (i != input_tensor_a.shape().rank() - 2) {
                 TT_FATAL(input_tensor_a.shape()[i] == this->output_tensor_shape[i]);
@@ -179,7 +179,7 @@ Tensor tilize_with_val_padding(const Tensor &input_tensor_a, const Shape &output
             log_warning("Perf warning: tilize with padding called on already tilized tensor of target shape.");
             return input_tensor_a;
         } else {
-            TT_ASSERT(false, "Cannot tilize and pad tensor that is already tilized");
+            TT_FATAL(false, "Cannot tilize and pad tensor that is already tilized");
         }
     }
     return operation::run_without_autoformat(TilizeWithValPadding{output_tensor_shape, input_tensor_start, pad_value, output_mem_config, output_dtype.value_or(input_tensor_a.dtype())}, {input_tensor_a}).at(0);
