@@ -498,7 +498,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
     }
     uint32_t bias_ntiles_per_core = bias_ntiles / num_weight_slices_width;
 
-    CoreRange all_cores = {CoreCoord(0, 0), CoreCoord(num_cores_x - 1, num_cores_y - 1)};
+    CoreRange all_cores(CoreCoord(0, 0), CoreCoord(num_cores_x - 1, num_cores_y - 1));
     assert(total_active_num_cores >= num_cores_x);
     uint32_t num_active_cores_x = num_cores_x;
     uint32_t num_active_cores_y_with_full_x = total_active_num_cores / num_cores_x;
@@ -506,29 +506,32 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
     assert((num_active_cores_x * num_active_cores_y_with_full_x) + num_active_cores_x_last_y == total_active_num_cores);
 
     std::set<CoreRange> all_active_cores_set;
-    all_active_cores_set.insert((CoreRange) {CoreCoord(0, 0), CoreCoord(num_active_cores_x - 1, num_active_cores_y_with_full_x - 1)});
+    all_active_cores_set.insert(CoreRange(CoreCoord(0, 0), CoreCoord(num_active_cores_x - 1, num_active_cores_y_with_full_x - 1)));
     if (num_active_cores_x_last_y > 0) {
-        all_active_cores_set.insert((CoreRange) {CoreCoord(0, num_active_cores_y_with_full_x), CoreCoord(num_active_cores_x_last_y - 1, num_active_cores_y_with_full_x)});
+    all_active_cores_set.insert(CoreRange(
+        CoreCoord(0, num_active_cores_y_with_full_x),
+        CoreCoord(num_active_cores_x_last_y - 1, num_active_cores_y_with_full_x)));
     }
     CoreRangeSet all_active_cores(all_active_cores_set);
     std::set<CoreRange> noop_cores_set;
     if (total_noop_cores > 0) {
         assert(total_noop_cores == (num_cores_x - num_active_cores_x_last_y));
-        noop_cores_set.insert((CoreRange) {CoreCoord(num_active_cores_x_last_y, num_active_cores_y_with_full_x), CoreCoord(num_cores_x - 1, num_active_cores_y_with_full_x)});
-
+        noop_cores_set.insert(CoreRange(
+            CoreCoord(num_active_cores_x_last_y, num_active_cores_y_with_full_x),
+            CoreCoord(num_cores_x - 1, num_active_cores_y_with_full_x)));
     }
     CoreRangeSet noop_cores(noop_cores_set);
 
     // Mcast cores
     // If total_num_cores, there is no mcasting
-    CoreCoord top_left_core = {(std::size_t) 0, (std::size_t) 0};
+    CoreCoord top_left_core = {(std::size_t)0, (std::size_t)0};
     CoreCoord top_left_core_plus_one = {(std::size_t) 1, (std::size_t) 1};
     CoreCoord bottom_right_core = {(std::size_t) num_cores_x - 1, (std::size_t) num_cores_y - 1};
     auto top_left_core_physical = device->worker_core_from_logical_core(top_left_core);
     auto top_left_core_plus_one_physical = device->worker_core_from_logical_core(top_left_core_plus_one);
     auto bottom_right_core_physical = device->worker_core_from_logical_core(bottom_right_core);
 
-    CoreRange mcast_sender_cores{top_left_core, top_left_core}; // If single core, this kernel doesn't do mcasting
+    CoreRange mcast_sender_cores(top_left_core, top_left_core);  // If single core, this kernel doesn't do mcasting
     CoreRangeSet mcast_receiver_cores{{}};
     uint32_t weights_mcast_sender_semaphore;
     uint32_t weights_mcast_receiver_semaphore;
@@ -538,7 +541,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
     // 2D mcast
     if (weight_width_sliced) {
         mcast_sender_cores = {top_left_core, CoreCoord(0, num_cores_y - 1)};
-        mcast_receiver_cores = {{{CoreCoord(1, 0), bottom_right_core}}};
+        mcast_receiver_cores = CoreRangeSet({CoreRange(CoreCoord(1, 0), bottom_right_core)});
         weights_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
         weights_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
     // 1D mcast
@@ -546,9 +549,9 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
         if (total_num_cores > 1) {
             std::set<CoreRange> mcast_receiver_set;
             if (num_cores_x > 1) {
-                mcast_receiver_set.insert({CoreCoord(1, 0), CoreCoord(num_cores_x - 1, 0)});
+                mcast_receiver_set.insert(CoreRange(CoreCoord(1, 0), CoreCoord(num_cores_x - 1, 0)));
             } if (num_cores_y > 1) {
-                mcast_receiver_set.insert({CoreCoord(0, 1), bottom_right_core});
+                mcast_receiver_set.insert(CoreRange(CoreCoord(0, 1), bottom_right_core));
             }
             mcast_receiver_cores = mcast_receiver_set;
             weights_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
@@ -836,7 +839,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
     for(uint32_t core_i = 0; core_i < total_num_cores; core_i++) {
         uint32_t core_x_i = core_i % num_cores_x;
         uint32_t core_y_i = core_i / num_cores_x;
-        CoreRange core = {CoreCoord(core_x_i, core_y_i), CoreCoord(core_x_i, core_y_i)};
+        CoreRange core(CoreCoord(core_x_i, core_y_i), CoreCoord(core_x_i, core_y_i));
         bool noop_core = false;
         for (const auto & noop_core_range : noop_cores.ranges()) {
             if (noop_core_range.contains(core)) {
@@ -891,7 +894,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
         if (weight_width_sliced) {
             auto shard_shape = a.shard_spec().value().shape;
             uint32_t tilized_act_tile_size = tt_metal::detail::TileSize(tilized_act_df);
-            CoreCoord bottom_core = {(std::size_t) core_x_i, (std::size_t) num_cores_y - 1};
+            CoreCoord bottom_core((std::size_t)core_x_i, (std::size_t)num_cores_y - 1);
             auto bottom_core_physical = device->worker_core_from_logical_core(bottom_core);
 
             bool reader_is_noc_0 = reader_noc == NOC::NOC_0;
@@ -1017,7 +1020,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
         // Mcast sender
         // 2D mcast
         if (weight_width_sliced) {
-            CoreCoord right_core = {(std::size_t) num_cores_x - 1, (std::size_t) core_y_i};
+            CoreCoord right_core((std::size_t)num_cores_x - 1, (std::size_t)core_y_i);
             auto right_core_physical = device->worker_core_from_logical_core(right_core);
             // sender
             if (core_x_i == 0) {
@@ -1130,7 +1133,7 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
         for(uint32_t core_i = 0; core_i < total_num_cores; core_i++) {
             uint32_t core_x_i = core_i % num_cores_x;
             uint32_t core_y_i = core_i / num_cores_x;
-            CoreCoord core = {core_x_i, core_y_i};
+            CoreCoord core(core_x_i, core_y_i);
 
             if (!src_a_is_sharded) {
                 auto &runtime_args = GetRuntimeArgs(program, reader_kernel_ids[core_i], core);

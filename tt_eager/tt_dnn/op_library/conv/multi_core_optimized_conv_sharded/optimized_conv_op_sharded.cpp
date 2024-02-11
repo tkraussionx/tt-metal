@@ -504,16 +504,21 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_(const Tensor&
     // cout << "Core range 1 - (0,0) to (" << num_active_cores_x - 1 << "," << num_active_cores_y_with_full_x - 1 << ")" << endl;
 
     std::set<CoreRange> all_active_cores_set;
-    all_active_cores_set.insert((CoreRange) {CoreCoord(0, 0), CoreCoord(num_active_cores_x - 1, num_active_cores_y_with_full_x - 1)});
+    all_active_cores_set.insert(
+        CoreRange(CoreCoord(0, 0), CoreCoord(num_active_cores_x - 1, num_active_cores_y_with_full_x - 1)));
     if (num_active_cores_x_last_y > 0) {
-        all_active_cores_set.insert((CoreRange) {CoreCoord(0, num_active_cores_y_with_full_x), CoreCoord(num_active_cores_x_last_y - 1, num_active_cores_y_with_full_x)});
+        all_active_cores_set.insert(CoreRange(
+            CoreCoord(0, num_active_cores_y_with_full_x),
+            CoreCoord(num_active_cores_x_last_y - 1, num_active_cores_y_with_full_x)));
         // cout << "Core range 2 - (0," << num_active_cores_y_with_full_x << ") to (" << num_active_cores_x_last_y - 1 << "," << num_active_cores_y_with_full_x << ")" << endl;
     }
     CoreRangeSet all_active_cores(all_active_cores_set);
     std::set<CoreRange> noop_cores_set;
     if (total_noop_cores > 0) {
         assert(total_noop_cores == (num_cores_x - num_active_cores_x_last_y));
-        noop_cores_set.insert((CoreRange) {CoreCoord(num_active_cores_x_last_y, num_active_cores_y_with_full_x), CoreCoord(num_cores_x - 1, num_active_cores_y_with_full_x)});
+        noop_cores_set.insert(CoreRange(
+            CoreCoord(num_active_cores_x_last_y, num_active_cores_y_with_full_x),
+            CoreCoord(num_cores_x - 1, num_active_cores_y_with_full_x)));
         // cout << "Noop core range - (" << num_active_cores_x_last_y << "," << num_active_cores_y_with_full_x << ") to (" << num_cores_x - 1 << "," << num_active_cores_y_with_full_x << ")" << endl;
 
     }
