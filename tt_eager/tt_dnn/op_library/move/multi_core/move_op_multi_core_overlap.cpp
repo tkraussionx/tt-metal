@@ -112,7 +112,9 @@ operation::ProgramWithCallbacks move_multi_core_with_overlap(const Tensor &input
 
     std::vector<CoreRange> noc_multicast_regions;
     for (const auto &logical_cr : logical_multicast_regions) {
-        CoreRange noc_cr = {device->worker_core_from_logical_core(logical_cr.start), device->worker_core_from_logical_core(logical_cr.end)};
+        CoreRange noc_cr(
+            device->worker_core_from_logical_core(logical_cr.start),
+            device->worker_core_from_logical_core(logical_cr.end));
         noc_multicast_regions.push_back(std::move(noc_cr));
     }
 
