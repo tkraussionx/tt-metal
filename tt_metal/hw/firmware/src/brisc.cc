@@ -348,6 +348,7 @@ int main() {
         kernel_profiler::mark_time(CC_MAIN_END);
 
         // Notify dispatcher core that it has completed
+        DPRINT << " DPRINT: worker core " << DISPATCH_CORE_X << " " << DISPATCH_CORE_Y << ENDL();
         if (mailboxes->launch.mode == DISPATCH_MODE_DEV) {
             uint64_t dispatch_addr = NOC_XY_ADDR(NOC_X(DISPATCH_CORE_X), NOC_Y(DISPATCH_CORE_Y), DISPATCH_MESSAGE_ADDR);
             noc_fast_atomic_increment(noc_index, NCRISC_AT_CMD_BUF, dispatch_addr, 1, 31 /*wrap*/, false /*linked*/);

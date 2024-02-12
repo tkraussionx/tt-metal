@@ -44,7 +44,6 @@ void multicore_eth_cb_wait_front(db_cb_config_t *eth_db_cb_config, int32_t num_p
         pages_received = uint16_t(eth_db_cb_config->recv - eth_db_cb_config->ack);
         internal_::risc_context_switch(); // AL: hopefully we can remove this...
         erisc_info->unused_arg1 = 0x02130000 + pages_received;
-        erisc_info->unused_arg2 = 0x02130000 + num_pages;
     } while (pages_received < num_pages);
     DEBUG_STATUS('C', 'R', 'B', 'D');
 }
@@ -158,7 +157,6 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
     const db_cb_config_t *remote_src_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, false);
     const db_cb_config_t *remote_dst_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, true);
 
-    uint32_t num_pages_transferred = 0;
 
     erisc_info->unused_arg0 = 210;
     while (routing_info->routing_enabled) {
@@ -169,6 +167,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             kernel_profiler::mark_time(CC_MAIN_END);
         }
         if (my_routing_mode == EthRouterMode::FD_SRC) {
+          // TODO: EnqueueRead is sending garbage data
             eth_db_acquire(eth_db_semaphore_addr, ((uint64_t)eth_router_noc_encoding << 32));
             if (erisc_info->launch_user_kernel == 1) {
                 continue;
@@ -198,6 +197,8 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             for (uint32_t i = 0; i < num_buffer_transfers; i++) {
                 erisc_info->unused_arg1 = i;
                 const uint32_t num_pages = command_ptr[2];
+                erisc_info->unused_arg2 = 800 + num_pages *10 + num_buffer_transfers;
+                erisc_info->unused_arg2 = (uint32_t) (&command_ptr[2]);
                 uint32_t num_pages_tunneled = 0;
                 debug[0] = debug[0] + i; // 0 // 5
                 erisc_info->unused_arg1 = 300 + i;
@@ -205,19 +206,19 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
                     debug[0] = debug[0] + 1; // 1 // 6
                     uint32_t num_to_write = min(num_pages, producer_consumer_transfer_num_pages);
                     erisc_info->unused_arg1 = num_to_write;
-                    erisc_info->unused_arg2 = num_pages;
                     multicore_eth_cb_wait_front(eth_db_cb_config, num_to_write);
                     erisc_info->unused_arg1 = 400 + i;
                     debug[0] = debug[0] + 1; // 2 // 7
                     // contains device command, maybe just send pages, and send cmd once at the start
                     num_relayed[0] = num_relayed[0] + 1;
-                    internal_::send_fd_packets(i + 1); // AL: increment since idx to msg sent
+                    internal_::send_fd_packets(1); // AL: increment since idx to msg sent
                     erisc_info->unused_arg1 = 500 + i;
                     multicore_eth_cb_pop_front(
                         eth_db_cb_config, remote_src_db_cb_config, ((uint64_t)relay_src_noc_encoding << 32), num_to_write);
                     debug[0] = debug[0] + 1; // 3 // 8
                     num_pages_tunneled += num_to_write;
                 }
+                command_ptr += DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION;
                 debug[0] = debug[0] + 1; // 4 // 9
             }
             noc_semaphore_inc(((uint64_t)relay_src_noc_encoding << 32) | get_semaphore(0), 1);
@@ -244,9 +245,9 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             // Block until consumer can accept new command
             // `num_pages_transferred` tracks whether the remote command processor received all the data
             num_rxed[0] = num_rxed[0] + 1;
-            while (eth_db_semaphore_addr[0] == 0 and num_pages_transferred == 0) {
+            while (eth_db_semaphore_addr[0] == 0) {
               erisc_info->unused_arg1 = 214;
-              erisc_info->unused_arg0 = num_pages_transferred;
+              erisc_info->unused_arg1 = 700 + eth_db_semaphore_addr[0];
                 internal_::risc_context_switch();
             } // Check that there is space in consumer to send command
             // num_rxed[0] = num_rxed[0] + 1;
@@ -260,7 +261,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             uint32_t consumer_cb_num_pages = header->producer_cb_num_pages;
             uint32_t consumer_cb_size = header->producer_cb_size;
             uint32_t num_buffer_transfers = header->num_buffer_transfers;
-            if (num_pages_transferred == 0) {   // new command
+            //if (num_pages_transferred == 0) {   // new command
                 eth_program_consumer_cb<command_start_addr, data_buffer_size, consumer_cmd_base_addr, consumer_data_buffer_size>(
                     eth_db_cb_config,
                     remote_dst_db_cb_config,
@@ -273,29 +274,39 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
                 num_relayed[0] = num_relayed[0] + 1;
 
                 update_producer_consumer_sync_semaphores(((uint64_t)eth_router_noc_encoding << 32), ((uint64_t)relay_dst_noc_encoding << 32), eth_db_semaphore_addr, get_semaphore(0));
-            }
+         //   }
 
               erisc_info->unused_arg1 = 216;
-              erisc_info->unused_arg2 = 300 + num_buffer_transfers;
             // Send the data that was in this packet
             uint32_t total_num_pages = header->num_pages;
             uint32_t num_pages_to_tx = 0;
             debug[0] = total_num_pages;
-           // for (uint32_t i = 0; i < num_buffer_transfers; i++) {
+            command_ptr += DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER; // jump to buffer transfer region
+            if (num_buffer_transfers ==0) {
+                internal_::ack_fd_packet();
+            }
+            erisc_info->unused_arg0 = 210;
+            for (uint32_t i = 0; i < num_buffer_transfers; i++) {
+            uint32_t num_pages_transferred = 0;
               //internal_::wait_for_fd_packet(1+1);
-              if (num_pages_transferred < total_num_pages) {
-                // AL: change to while loop?
+              const uint32_t num_pages = command_ptr[2];
+              erisc_info->unused_arg2 = 800 + num_pages *10 + num_buffer_transfers;
+                erisc_info->unused_arg2 = (uint32_t) (&command_ptr[2]);
+              while (num_pages_transferred != num_pages) {
+                if(num_pages_transferred != 0) {
+                  while (routing_info->fd_buffer_msgs_sent != 1) {
+                    // maybe contesxt switch
+                  }
+                }
                 uint32_t src_addr = eth_db_cb_config->rd_ptr_16B << 4;
                 uint64_t dst_noc_addr = ((uint64_t)relay_dst_noc_encoding << 32) | (eth_db_cb_config->wr_ptr_16B << 4);
 
                 uint32_t producer_consumer_transfer_num_pages = header->producer_router_transfer_num_pages;
-                command_ptr += DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER; // jump to buffer transfer region
-                const uint32_t num_pages = command_ptr[2];
                 // producer_consumer_transfer_num_pages is the total num of data pages that could fit in a FD packet
                 num_pages_to_tx = min(num_pages, producer_consumer_transfer_num_pages);
                 debug[0] = debug[0] + num_pages_to_tx;
 
-              erisc_info->unused_arg1 = 217;
+              erisc_info->unused_arg2 = src_addr;
                 noc_async_write(src_addr, dst_noc_addr, page_size * num_pages_to_tx);
                 uint32_t l1_consumer_fifo_limit_16B =
                     (get_db_buf_addr<consumer_cmd_base_addr, consumer_data_buffer_size>(db_buf_switch) + consumer_cb_size) >> 4;
@@ -306,16 +317,17 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
                     l1_consumer_fifo_limit_16B,
                     num_pages_to_tx
                 );
-              }
-                num_pages_transferred += num_pages_to_tx;
-              if (num_pages_transferred == total_num_pages) {
-                // Done sending all data associated with this command, reset `num_pages_transferred` for next command
-                  num_pages_transferred = 0;
-                  // debug[0] = 3118;
-               }
-                // Signal to FD_SRC router that packet has been processed
                 internal_::ack_fd_packet();
-          //  }
+                num_pages_transferred += num_pages_to_tx;
+              }
+              command_ptr += DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION; // jump to buffer transfer region
+              //if (num_pages_transferred == total_num_pages) {
+                // Done sending all data associated with this command, reset `num_pages_transferred` for next command
+                //  num_pages_transferred = 0;
+                  // debug[0] = 3118;
+               //}
+                // Signal to FD_SRC router that packet has been processed
+            }
 
         } else {
             internal_::risc_context_switch();

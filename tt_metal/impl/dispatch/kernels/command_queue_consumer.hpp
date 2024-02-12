@@ -5,6 +5,7 @@
 
 #include "dataflow_api.h"
 #include "tt_metal/impl/dispatch/kernels/command_queue_common.hpp"
+#include "debug/dprint.h"
 
 CQWriteInterface cq_write_interface;
 
@@ -217,8 +218,10 @@ FORCE_INLINE void write_program_page(uint32_t page_addr, volatile tt_l1_ptr uint
         uint32_t num_recv = command_ptr[3];
         bool last_transfer_in_group = command_ptr[4];
 
+        uint32_t * src_data = (uint32_t*)src;
         uint64_t dst_noc_addr = (uint64_t(dst_noc) << 32) | dst;
 
+        DPRINT << " DPRINT: dumping program binaries " << HEX()<< src_data[0]  << " " << src_data[1] << DEC() << ENDL();
         if constexpr (multicast) {
             noc_async_write_multicast_one_packet_no_path_reserve(src, dst_noc_addr, num_bytes, num_recv);
         } else {

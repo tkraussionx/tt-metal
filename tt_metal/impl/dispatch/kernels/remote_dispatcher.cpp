@@ -4,6 +4,7 @@
 
 #include "tt_metal/impl/dispatch/kernels/command_queue_consumer.hpp"
 #include "tt_metal/impl/dispatch/kernels/command_queue_producer.hpp"
+#include "debug/dprint.h"
 
 // Dispatches fast dispatch commands to worker cores. Currently only runs on remote devices
 void kernel_main() {
@@ -57,6 +58,7 @@ void kernel_main() {
         if (is_program) {
             uint32_t program_transfer_start_addr = buffer_transfer_start_addr + ((DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION * DeviceCommand::NUM_POSSIBLE_BUFFER_TRANSFERS) * sizeof(uint32_t));
             uint32_t num_workers = header->num_workers;  // If num_workers > 0, it means we are launching a program
+            DPRINT << " DPRINT, remote dispatcher: write and launch program " << ENDL();
             write_and_launch_program(
                 rx_db_cb_config,
                 remote_producer_db_cb_config,
@@ -65,7 +67,10 @@ void kernel_main() {
                 command_ptr,
                 ((uint64_t)producer_noc_encoding << 32),
                 producer_consumer_transfer_num_pages);
+            DPRINT << " DPRINT, remote dispatcher: waiting for program " << ENDL();
+            DPRINT << " DPRINT, remote dispatcher: my x and y "<< DISPATCH_CORE_X << " " << DISPATCH_CORE_Y<< ENDL();
             wait_for_program_completion(num_workers);
+            DPRINT << " DPRINT, remote dispatcher: done wait for program " << ENDL();
         } else if (!reading_buffer) {
             uint32_t num_buffer_transfers = header->num_buffer_transfers;   // How many WriteBuffer commands we are running
             uint32_t sharded_buffer_num_cores = header->sharded_buffer_num_cores;
@@ -79,6 +84,7 @@ void kernel_main() {
                 producer_consumer_transfer_num_pages);
         }
 
+        DPRINT << " DPRINT, remote dispatcher: return path " << (uint32_t)finish << " " << (uint32_t)reading_buffer << " " << (uint32_t) wrap_completion << ENDL();
         if (finish | reading_buffer | wrap_completion) {
             // Relay command to remote signaller
             wait_consumer_space_available(db_tx_semaphore_addr);    // Check that there is space in the remote signaller
