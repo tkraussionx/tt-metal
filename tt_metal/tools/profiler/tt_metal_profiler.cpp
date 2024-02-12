@@ -101,18 +101,15 @@ void DumpDeviceProfileResults(Device *device) {
 void DumpDeviceProfileResults(Device *device, std::vector<CoreCoord> &worker_cores){
 #if defined(PROFILER)
     ZoneScoped;
-    const auto USE_FAST_DISPATCH = std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr;
-    if (USE_FAST_DISPATCH)
-    {
-        Finish(tt_metal::detail::GetCommandQueue(device));
-    }
-    TT_FATAL(DprintServerIsRunning() == false, "Debug print server is running, cannot dump device profiler data");
     if (getDeviceProfilerState())
     {
-        ProfileTTMetalScope profile_this = ProfileTTMetalScope("DumpDeviceProfileResults");
-        //TODO: (MO) This global is temporary need to update once the new interface is in
-        if (std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr) {
+        const auto USE_FAST_DISPATCH = std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr;
+        if (USE_FAST_DISPATCH)
+        {
             Finish(device->command_queue());
+        }
+        TT_FATAL(DprintServerIsRunning() == false, "Debug print server is running, cannot dump device profiler data");
+        ProfileTTMetalScope profile_this = ProfileTTMetalScope("DumpDeviceProfileResults");
         auto device_id = device->id();
         tt_metal_device_profiler.setDeviceArchitecture(device->arch());
         tt_metal_device_profiler.dumpResults(device, worker_cores);

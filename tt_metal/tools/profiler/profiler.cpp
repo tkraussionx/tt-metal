@@ -157,7 +157,7 @@ void DeviceProfiler::readRiscProfilerResults(
                                 (uint64_t(time_H) << 32) | time_L);
 
 
-                        if (riscNum == 0 && marker == 1)
+                        if ((riscNum == 0 && (marker == 1 || marker == 11 || marker == 13 || marker == 5 || marker == 7 || marker == 9)))
                         {
                             TT_ASSERT (runCounterRead == device_core_data[deviceCore].runCounter, fmt::format("Unexpected run id, expected {}, read {}. In core {},{}", device_core_data[deviceCore].runCounter, runCounterRead, worker_core.x, worker_core.y));
                             device_core_data[deviceCore].runCounter ++;
@@ -209,7 +209,7 @@ void DeviceProfiler::dumpResultToFile(
     std::string riscName[] = {"BRISC", "NCRISC", "TRISC_0", "TRISC_1", "TRISC_2", "ERISC"};
 
     tracy::TTDeviceEvent event = tracy::TTDeviceEvent(runID, device_id, core.x, core.y, risc_num, timer_id);
-    if (timer_id > PROFILER_L1_GUARANTEED_MARKER_COUNT)
+    if (timer_id > 20)
     {
         customMarkerCount ++;
         event.marker = (uint64_t(customMarkerCount) << 32 ) | timer_id;
@@ -217,7 +217,7 @@ void DeviceProfiler::dumpResultToFile(
 
     if (device_core_data[deviceCore].data.find (runID) != device_core_data[deviceCore].data.end())
     {
-        TT_ASSERT (device_core_data[deviceCore].data[runID].find (event) == device_core_data[deviceCore].data[runID].end(), "Unexpexted marker ID repeat");
+        TT_ASSERT (device_core_data[deviceCore].data[runID].find (event) == device_core_data[deviceCore].data[runID].end(), "Unexpexted marker ID {} repeat", event.marker);
         device_core_data[deviceCore].data[runID].emplace(event,timestamp);
     }
     else
@@ -384,7 +384,8 @@ void DeviceProfiler::pushTracyDeviceResults(std::pair<uint32_t,CoreCoord> device
         {
             uint64_t threadID = data.first.get_thread_id();
             uint64_t markerID = data.first.marker;
-            if (markerID > PROFILER_L1_GUARANTEED_MARKER_COUNT)
+            uint64_t actualMarkerID = (markerID << 32) >> 32;
+            if (actualMarkerID > 20)
             {
                 if (customMarkers.find (threadID) != customMarkers.end())
                 {
@@ -404,21 +405,22 @@ void DeviceProfiler::pushTracyDeviceResults(std::pair<uint32_t,CoreCoord> device
             uint64_t col = data.first.core_x;
             uint64_t risc = data.first.risc;
             uint64_t markerID = data.first.marker;
+            uint64_t actualMarkerID = (markerID << 32) >> 32;
             uint64_t runID = data.first.run_num;
 
-            if (markerID == 1 )
+            if (actualMarkerID == 1 )
             {
                 TracyTTZoneTransient(device_core_data[device_core].tracyContext, FWScope, fmt::format("{} FW",riscName[risc]).c_str(), FWColors[risc], true, threadID);
                 {
                     TracyTTZoneTransient(device_core_data[device_core].tracyContext, KernelScope, fmt::format("{} Kernel",riscName[risc]).c_str(), KernelColors[risc], true, threadID);
                     for (auto &customMarker : customMarkers[threadID])
                     {
-                        uint64_t actualMarkerID = (customMarker.marker << 32) >> 32;
+                        uint64_t actualCustomMarkerID = (customMarker.marker << 32) >> 32;
                         TracyTTZoneTransient(
                                 device_core_data[device_core].tracyContext,
                                 customMarkerScope,
-                                fmt::format("{}",actualMarkerID).c_str(),
-                                customColors[actualMarkerID % (sizeof(customColors) / sizeof(uint32_t))],
+                                fmt::format("{}",actualCustomMarkerID).c_str(),
+                                customColors[actualCustomMarkerID % (sizeof(customColors) / sizeof(uint32_t))],
                                 true,
                                 threadID);
                         customMarkerScope.SetEvent(tracy::TTDeviceEvent(runID,device_id,col,row,risc,customMarker.marker));
@@ -427,6 +429,14 @@ void DeviceProfiler::pushTracyDeviceResults(std::pair<uint32_t,CoreCoord> device
                     KernelScope.SetEvent(tracy::TTDeviceEvent(runID,device_id,col,row,risc,1));
                 }
                 FWScope.SetEvent(tracy::TTDeviceEvent(runID,device_id,col,row,risc,0));
+            }
+            else if ((actualMarkerID > 4) && (actualMarkerID < 21))
+            {
+                if ((actualMarkerID % 2) == 1)
+                {
+                    TracyTTZoneTransient(device_core_data[device_core].tracyContext, CustomScope, fmt::format("{}->{}",actualMarkerID, actualMarkerID+1).c_str(), customColors[actualMarkerID % (sizeof(customColors) / sizeof(uint32_t))], true, threadID);
+                    CustomScope.SetEvent(tracy::TTDeviceEvent(runID,device_id,col,row,risc,markerID));
+                }
             }
             TracyTTCollect(device_core_data[device_core].tracyContext, device_core_data[device_core].data);
         }

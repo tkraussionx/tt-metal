@@ -66,12 +66,12 @@ namespace kernel_profiler{
 #if defined(COMPILE_FOR_ERISC)
         volatile uint32_t *eriscBuffer = reinterpret_cast<uint32_t*>(eth_l1_mem::address_map::PROFILER_L1_BUFFER_ER);
 
-        for (int i = ID_HH; i < FW_START; i ++)
+        for (int i = ID_HH; i < GUARANTEED_MARKER_1_H; i ++)
         {
             eriscBuffer[i] = 0;
         }
 
-        for (int i = FW_START; i < CUSTOM_MARKERS; i ++)
+        for (int i = GUARANTEED_MARKER_1_H; i < CUSTOM_MARKERS; i ++)
         {
         //TODO(MO): Clean up magic numbers
             eriscBuffer[i] = 0x80000000;
@@ -90,7 +90,7 @@ namespace kernel_profiler{
         volatile uint32_t *trisc1Buffer = reinterpret_cast<uint32_t*>(PROFILER_L1_BUFFER_T1);
         volatile uint32_t *trisc2Buffer = reinterpret_cast<uint32_t*>(PROFILER_L1_BUFFER_T2);
 
-        for (int i = ID_HH; i < FW_START; i ++)
+        for (int i = ID_HH; i < GUARANTEED_MARKER_1_H; i ++)
         {
             briscBuffer[i] = 0;
             ncriscBuffer[i] = 0;
@@ -99,7 +99,7 @@ namespace kernel_profiler{
             trisc2Buffer[i] = 0;
         }
 
-        for (int i = FW_START; i < CUSTOM_MARKERS; i ++)
+        for (int i = GUARANTEED_MARKER_1_H; i < CUSTOM_MARKERS; i ++)
         {
         //TODO(MO): Clean up magic numbers
             briscBuffer[i] = 0x80000000;
@@ -127,31 +127,8 @@ namespace kernel_profiler{
 #endif //PROFILE_KERNEL
     }
 
-    inline __attribute__((always_inline)) void mark_time(uint32_t timer_id)
-    {
-#if defined(PROFILE_KERNEL)
-        //TODO(MO): Add drop counter to control register
-        if (wIndex < PROFILER_L1_VECTOR_SIZE)
-        {
-#if defined(COMPILE_FOR_NCRISC) | defined(COMPILE_FOR_BRISC) | defined(COMPILE_FOR_ERISC)
-            uint32_t time_L = reg_read(RISCV_DEBUG_REG_WALL_CLOCK_L);
-            uint32_t time_H = reg_read(RISCV_DEBUG_REG_WALL_CLOCK_H);
-#else
-            uint32_t time_L = ckernel::reg_read(RISCV_DEBUG_REG_WALL_CLOCK_L);
-            uint32_t time_H = ckernel::reg_read(RISCV_DEBUG_REG_WALL_CLOCK_H);
-#endif
-            volatile uint32_t *buffer = reinterpret_cast<uint32_t*>(profilerBuffer);
-            uint32_t index = wIndex;
 
-            //TODO(MO): Clean up magic numbers
-            buffer[index] = 0x80000000 | ((buffer[ID_LH] & 0x7FF) << 20) | ((timer_id & 0xFF) << 12) | (time_H & 0xFFF);
-            buffer[index+1] = time_L;
-            wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
-        }
-#endif //PROFILE_KERNEL
-    }
-
-    inline __attribute__((always_inline)) void mark_time_guaranteed_event(uint32_t index)
+    inline __attribute__((always_inline)) void mark_time_at_index(uint32_t index, uint32_t timer_id)
     {
 #if defined(PROFILE_KERNEL)
 #if defined(COMPILE_FOR_NCRISC) | defined(COMPILE_FOR_BRISC) | defined(COMPILE_FOR_ERISC)
@@ -164,11 +141,18 @@ namespace kernel_profiler{
         volatile uint32_t *buffer = reinterpret_cast<uint32_t*>(profilerBuffer);
 
         //TODO(MO): Clean up magic numbers
-        buffer[index] = 0x80000000 | ((buffer[ID_LH] & 0x7FF) << 20) | ((((index - FW_START + 2) >> 1) & 0xFF) << 12) | (time_H & 0xFFF);
+        buffer[index] = 0x80000000 | ((buffer[ID_LH] & 0x7FF) << 20) | ((timer_id & 0xFF) << 12) | (time_H & 0xFFF);
         buffer[index+1] = time_L;
 #endif //PROFILE_KERNEL
     }
 
+    inline __attribute__((always_inline)) void mark_time(uint32_t timer_id)
+    {
+#if defined(PROFILE_KERNEL)
+        mark_time_at_index(wIndex, timer_id);
+        wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
+#endif //PROFILE_KERNEL
+    }
 
     inline __attribute__((always_inline)) void mark_time_once(uint32_t timer_id, bool * one_time)
     {
@@ -195,28 +179,41 @@ namespace kernel_profiler{
     inline __attribute__((always_inline)) void mark_fw_start()
     {
 #if defined(PROFILE_KERNEL)
-        mark_time_guaranteed_event(FW_START);
+        mark_time_at_index(GUARANTEED_MARKER_1_H, FW_START);
 #endif //PROFILE_KERNEL
     }
 
     inline __attribute__((always_inline)) void mark_fw_end()
     {
 #if defined(PROFILE_KERNEL)
-        mark_time_guaranteed_event(FW_END);
+        mark_time_at_index(GUARANTEED_MARKER_4_H, FW_END);
 #endif //PROFILE_KERNEL
     }
 
     inline __attribute__((always_inline)) void mark_kernel_start()
     {
 #if defined(PROFILE_KERNEL)
-        mark_time_guaranteed_event(KERNEL_START);
+        mark_time_at_index(GUARANTEED_MARKER_2_H, KERNEL_START);
 #endif //PROFILE_KERNEL
     }
 
     inline __attribute__((always_inline)) void mark_kernel_end()
     {
 #if defined(PROFILE_KERNEL)
-        mark_time_guaranteed_event(KERNEL_END);
+        mark_time_at_index(GUARANTEED_MARKER_3_H, KERNEL_END);
+#endif //PROFILE_KERNEL
+    }
+
+    inline __attribute__((always_inline)) void mark_cq_consumer_start()
+    {
+#if defined(PROFILE_KERNEL)
+        mark_time_at_index(GUARANTEED_MARKER_1_H, CQ_CONSUME_START);
+#endif //PROFILE_KERNEL
+    }
+    inline __attribute__((always_inline)) void mark_cq_consumer_end()
+    {
+#if defined(PROFILE_KERNEL)
+        mark_time_at_index(GUARANTEED_MARKER_4_H, CQ_CONSUME_END);
 #endif //PROFILE_KERNEL
     }
 

@@ -32,8 +32,7 @@ void kernel_main() {
 
     while (true) {
         kernel_profiler::init_profiler();
-        kernel_profiler::mark_fw_start();
-        kernel_profiler::mark_kernel_start();
+        kernel_profiler::mark_cq_consumer_start();
 
         // Wait for producer to supply a command
         db_acquire(db_semaphore_addr, consumer_noc_encoding);
@@ -110,8 +109,7 @@ void kernel_main() {
             db_buf_switch = not db_buf_switch;
             noc_async_write_barrier(); // Barrier for now
         }
-        kernel_profiler::mark_kernel_end();
-        kernel_profiler::mark_fw_end();
+        kernel_profiler::mark_cq_consumer_end();
         kernel_profiler::send_profiler_data_to_dram();
     }
 }

@@ -12,11 +12,22 @@ namespace kernel_profiler{
     enum BufferIndex {
         ID_HH, ID_HL,
         ID_LH, ID_LL,
-        FW_START, FW_START_L,
-        KERNEL_START, KERNEL_START_L,
-        KERNEL_END, KERNEL_END_L,
-        FW_END, FW_END_L,
+        GUARANTEED_MARKER_1_H, GUARANTEED_MARKER_1_L,
+        GUARANTEED_MARKER_2_H, GUARANTEED_MARKER_2_L,
+        GUARANTEED_MARKER_3_H, GUARANTEED_MARKER_3_L,
+        GUARANTEED_MARKER_4_H, GUARANTEED_MARKER_4_L,
         CUSTOM_MARKERS};
+
+    enum GuaranteedMarkers {
+        FW_START = 1,
+        KERNEL_START,
+        KERNEL_END,
+        FW_END,
+        CQ_CONSUME_START,
+        CQ_CONSUME_END,
+        CQ_PRODUCE_START,
+        CQ_PRODUCE_END
+        };
 
     enum ControlBuffer
     {
