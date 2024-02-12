@@ -26,7 +26,9 @@ from models.utility_functions import (
     "pcc",
     ((0.99),),
 )
-def test_mistral_transformer_block_inference(pcc, model_location_generator, device, dtype, reset_seeds):
+def test_mistral_transformer_block_inference(
+    pcc, model_location_generator, get_tt_cache_path, device, dtype, reset_seeds
+):
     mistral_path = model_location_generator("mistral-7B-v0.1", model_subdir="Mistral")
     state_dict = torch.load(mistral_path / "consolidated.00.pth")
     base_address = f"layers.0."
@@ -42,7 +44,7 @@ def test_mistral_transformer_block_inference(pcc, model_location_generator, devi
     output_mem_config = tt_lib.tensor.MemoryConfig(
         tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
     )
-    tt_cache_path = "/mnt/MLPerf/tt_dnn-models/tt/Mistral/"
+    tt_cache_path = str(get_tt_cache_path("mistral-7B-v0.1", model_subdir="mistral")) + "/"
 
     tt_model = TtTransformerBlock(
         args=model_args,

@@ -28,7 +28,7 @@ from models.utility_functions import (
     "pcc",
     ((0.99),),
 )
-def test_mistral_transformer_inference(pcc, model_location_generator, device, dtype, reset_seeds):
+def test_mistral_transformer_inference(pcc, model_location_generator, get_tt_cache_path, device, dtype, reset_seeds):
     prompts = [
         "This is a sample text for single layer execution ",
     ]
@@ -47,7 +47,7 @@ def test_mistral_transformer_inference(pcc, model_location_generator, device, dt
     reference_model = Transformer(args=model_args)
     reference_model.load_state_dict(state_dict)
 
-    tt_cache_path = "/mnt/MLPerf/tt_dnn-models/tt/Mistral/"
+    tt_cache_path = str(get_tt_cache_path("mistral-7B-v0.1", model_subdir="mistral")) + "/"
 
     tt_model = TtTransformer(
         args=model_args,
