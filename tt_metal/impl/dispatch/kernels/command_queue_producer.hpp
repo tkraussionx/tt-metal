@@ -359,7 +359,8 @@ void produce_for_eth_src_router(
                 uint64_t dst_noc_addr = eth_consumer_noc_encoding | dst_addr;
                 uint32_t l1_read_ptr = get_read_ptr(0);
                 noc_async_write(l1_read_ptr, dst_noc_addr, page_size * num_to_write);
-                DPRINT << " DPRINT local command q producer,  cb_push_back  " << num_to_write<< ENDL();
+                DPRINT << " DPRINT local command q producer,  cb_push_back  " << num_to_write << ENDL();
+                DPRINT << " DPRINT local command q producer sending from " << l1_read_ptr << " to " << dst_addr << ENDL();
                 multicore_cb_push_back(
                     db_cb_config,
                     eth_db_cb_config,
@@ -400,13 +401,26 @@ void transfer(
         writing to the consumer.
     */
 
+    volatile tt_l1_ptr CommandHeader* header = (CommandHeader*)command_ptr;
+    bool is_program = header->is_program_buffer;
+
     command_ptr += DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER;
 
     readback_point[0] = 0;
     for (uint32_t i = 0; i < num_srcs; i++) {
         DPRINT << " DPRINT " << " transfer: " << i << " out of num srcs " << num_srcs << ENDL();
+        const uint32_t bank_base_address = command_ptr[0];
         const uint32_t num_pages = command_ptr[2];
         const uint32_t page_size = command_ptr[3];
+        const uint32_t src_buf_type = command_ptr[4];
+        const uint32_t src_page_index = command_ptr[6];
+        uint32_t src_page_id = src_page_index;
+
+        Buffer buffer;
+        bool send_cached_program_data = is_program & ((BufferType)src_buf_type == BufferType::DRAM);
+        if (send_cached_program_data) {
+            buffer.init((BufferType)src_buf_type, bank_base_address, page_size);
+        }
 
         uint32_t num_to_transfer = min(num_pages, producer_consumer_transfer_num_pages); // This must be a bigger number for perf.
         DPRINT << " DPRINT taking min" << DEC() << num_pages << " " << producer_consumer_transfer_num_pages << ENDL();
@@ -415,13 +429,19 @@ void transfer(
         while (num_transfers_completed != num_pages) {
             // Wait for data to be received in local CB
             readback_point[0] = readback_point[0] + 1;
-            multicore_cb_wait_front(rx_db_cb_config, num_to_transfer);
+            uint32_t src_addr = (tx_db_cb_config->rd_ptr_16B) << 4;
+            if (send_cached_program_data) {
+                buffer.noc_async_read_buffer(src_addr, src_page_id, num_to_transfer);
+            } else {
+                multicore_cb_wait_front(rx_db_cb_config, num_to_transfer);
+            }
 
             readback_point[0] = readback_point[0] + 1;
-            uint32_t src_addr = (tx_db_cb_config->rd_ptr_16B) << 4;
+
             // Transfer data to consumer CB
             uint32_t dst_addr = (tx_db_cb_config->wr_ptr_16B << 4);
             uint64_t dst_noc_addr = consumer_noc_encoding | dst_addr;
+            DPRINT << "DPRINT transfer i " << i << " from " << src_addr << " to " << dst_addr << ENDL();
             noc_async_write(src_addr, dst_noc_addr, page_size * num_to_transfer);
             multicore_cb_push_back( // this should be the other db config
                 tx_db_cb_config,
@@ -430,15 +450,18 @@ void transfer(
                 l1_consumer_fifo_limit_16B,
                 num_to_transfer);
             noc_async_write_barrier();
-            multicore_cb_pop_front(
-                rx_db_cb_config,
-                remote_producer_db_cb_config,
-                producer_noc_encoding,
-                l1_producer_fifo_limit_16B,
-                num_to_transfer,
-                rx_db_cb_config->page_size_16B);
+            if (not send_cached_program_data) {
+                multicore_cb_pop_front(
+                    rx_db_cb_config,
+                    remote_producer_db_cb_config,
+                    producer_noc_encoding,
+                    l1_producer_fifo_limit_16B,
+                    num_to_transfer,
+                    rx_db_cb_config->page_size_16B);
+            }
             num_transfers_completed += num_to_transfer;
             num_to_transfer = min(num_pages - num_transfers_completed, producer_consumer_transfer_num_pages);
+            tx_db_cb_config->rd_ptr_16B += page_size * num_to_transfer;
         }
         readback_point[0] = readback_point[0] + 1;
         command_ptr += DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION;

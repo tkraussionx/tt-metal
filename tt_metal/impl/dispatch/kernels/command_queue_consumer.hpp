@@ -222,6 +222,8 @@ FORCE_INLINE void write_program_page(uint32_t page_addr, volatile tt_l1_ptr uint
         uint64_t dst_noc_addr = (uint64_t(dst_noc) << 32) | dst;
 
         DPRINT << " DPRINT: dumping program binaries " << HEX()<< src_data[0]  << " " << src_data[1] << DEC() << ENDL();
+        DPRINT << "DPRINT: write program page src addr: " << page_addr << ENDL();
+        DPRINT << "DPRINT DST NOC: " << dst_noc << ENDL();
         if constexpr (multicast) {
             noc_async_write_multicast_one_packet_no_path_reserve(src, dst_noc_addr, num_bytes, num_recv);
         } else {

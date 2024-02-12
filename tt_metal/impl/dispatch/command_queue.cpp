@@ -119,6 +119,9 @@ ProgramMap ConstructProgramMap(const Device* device, Program& program) {
             CoreCoord physical_end = device->physical_core_from_logical_core(core_range.end, core_type);
 
             uint32_t dst_noc_multicast_encoding = get_noc_multicast_encoding(physical_start, physical_end);
+            std::cout << "Dst noc multicast encoding: " << dst_noc_multicast_encoding
+                      << " physical start " << physical_start.str()
+                      << " physical end " << physical_end.str() << std::endl;
 
             uint32_t num_receivers = core_range.size();
             dst_noc_multicast_info.push_back(std::make_pair(dst_noc_multicast_encoding, num_receivers));
@@ -228,6 +231,7 @@ ProgramMap ConstructProgramMap(const Device* device, Program& program) {
                 const Kernel* kernel = detail::GetKernel(program, kernel_id);
 
                 for (const ll_api::memory& kernel_bin : kernel->binaries(device->id())) {
+                    std::cout << "Kernel binary: " << kernel_bin.data().at(0) << " " << kernel_bin.data().at(1) << std::endl;
                     kernel_bin.process_spans([&](vector<uint32_t>::const_iterator mem_ptr, uint64_t dst, uint32_t len) {
                         std::copy(mem_ptr, mem_ptr + len, program_pages.begin() + program_page_idx);
 
@@ -1276,8 +1280,12 @@ void CommandQueue::enqueue_program(Program& program, std::optional<std::referenc
             std::make_unique<Buffer>(
                 this->device, program_data_size_in_bytes, DeviceCommand::PROGRAM_PAGE_SIZE, BufferType::DRAM));
 
-        std::cout << "Enqueue write buffer" << std::endl;
         this->enqueue_write_buffer(*program_to_buffer.at(program_id), program_pages.data(), false);
+
+        // std::vector<uint32_t> readback;
+        // readback.resize(program_data_size_in_bytes/sizeof(uint32_t));
+        // this->enqueue_read_buffer(*program_to_buffer.at(program_id), readback.data(), true);
+        // std::cout << "BINARY DATA READBACK FROM REMOTE: " << readback[0] << " " << readback[1] << std::endl;
 
         map<uint64_t, ProgramMap>& program_to_dev_map = this->program_to_dev_map(device->id());
         program_to_dev_map.emplace(program_id, std::move(program_to_device_map));
