@@ -20,61 +20,26 @@ fi
 cd $TT_METAL_HOME
 export PYTHONPATH=$TT_METAL_HOME
 
-case ${1} in
-  --api)
-    D0="$(date +%s)"
-    ./tests/scripts/run_python_api_unit_tests.sh
-    D1=$[$(date +%s)-${D0}]
-    echo "4697: run_python_api_unit_tests time: ${D1}"
-    ;;
+START="$(date +%s)"
+./tests/scripts/run_python_api_unit_tests.sh
+D1=$[$(date +%s)-${START}]
+echo "4697: run_python_api_unit_tests time: ${D1}"
 
-  --metal)
-    D1="$(date +%s)"
-    env python tests/scripts/run_tt_metal.py --dispatch-mode fast
-    D2=$[$(date +%s)-${D1}]
-    echo "4697: run_python_api_unit_tests time: ${D2}"
-    ;;
+START="$(date +%s)"
+env python tests/scripts/run_tt_metal.py --dispatch-mode fast
+D2=$[$(date +%s)-${START}]
+echo "4697: run_tt_metal time: ${D2}"
 
-  --eager)
-    D2="$(date +%s)"
-    env python tests/scripts/run_tt_eager.py --dispatch-mode fast
-    D3=$[$(date +%s)-${D2}]
-    echo "4697: run_python_api_unit_tests time: ${D3}"
-    ;;
+START="$(date +%s)"
+env python tests/scripts/run_tt_eager.py --dispatch-mode fast
+D3=$[$(date +%s)-${START}]
+echo "4697: run_tt_eager time: ${D3}"
 
-  --unit)
-    D3="$(date +%s)"
-    ./build/test/tt_metal/unit_tests_fast_dispatch
-    D4=$[$(date +%s)-${D3}]
-    echo "4697: run_python_api_unit_tests time: ${D4}"
-    ;;
+START="$(date +%s)"
+./build/test/tt_metal/unit_tests_fast_dispatch
+D4=$[$(date +%s)-${START}]
+echo "4697: unit_tests_fast_dispatch time: ${D4}"
 
-  --full)
-    START="$(date +%s)"
-    ./tests/scripts/run_python_api_unit_tests.sh
-    D1=$[$(date +%s)-${START}]
-    echo "4697: run_python_api_unit_tests time: ${D1}"
-
-    START="$(date +%s)"
-    env python tests/scripts/run_tt_metal.py --dispatch-mode fast
-    D2=$[$(date +%s)-${START}]
-    echo "4697: run_python_api_unit_tests time: ${D2}"
-
-    START="$(date +%s)"
-    env python tests/scripts/run_tt_eager.py --dispatch-mode fast
-    D3=$[$(date +%s)-${START}]
-    echo "4697: run_python_api_unit_tests time: ${D3}"
-
-    START="$(date +%s)"
-    ./build/test/tt_metal/unit_tests_fast_dispatch
-    D4=$[$(date +%s)-${START}]
-    echo "4697: run_python_api_unit_tests time: ${D4}"
-    ;;
-  *)
-    echo "Unknown option: $1"
-    exit 1
-    ;;
-esac
 
 echo "Checking docs build..."
 
