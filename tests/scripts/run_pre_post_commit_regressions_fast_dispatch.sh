@@ -21,7 +21,7 @@ cd $TT_METAL_HOME
 export PYTHONPATH=$TT_METAL_HOME
 
 START="$(date +%s)"
-./tests/scripts/run_python_api_unit_tests.sh
+./tests/scripts/run_python_api_unit_tests.sh $1
 D1=$[$(date +%s)-${START}]
 echo "4697: run_python_api_unit_tests time: ${D1}"
 

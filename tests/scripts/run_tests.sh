@@ -327,7 +327,7 @@ main() {
 
     available_dispatch_modes=("fast" "slow" "fast-multi-queue-single-device")
     available_tt_archs=("grayskull" "wormhole_b0")
-    available_fast_dispatch_test_modes=("full", "api", "metal", "eager", "unit")
+    available_fast_dispatch_test_modes=("full", "bert", "falcon", "resnet", "bert_p1")
 
     # Validate arguments
     if [[ ! " ${available_tt_archs[*]} " =~ " $tt_arch " ]]; then
@@ -338,7 +338,7 @@ main() {
         echo "Invalid dispatch_mode argument. Must be an available dispatch_mode."
         exit 1
     fi
-    if [[ ! " ${available_fast_dispatch_test_modes[*]} " =~ " $fast-dispatch_test-mode " ]]; then
+    if [[ ! "${available_fast_dispatch_test_modes[*]}" =~ "${fast_dispatch_test_mode}" ]]; then
         echo "Invalid fast_dispatch_test_mode argument. Must be an available fast_dispatch_test_mode."
         exit 1
     fi
