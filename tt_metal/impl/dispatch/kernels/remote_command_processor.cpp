@@ -68,6 +68,7 @@ void kernel_main() {
             consumer_cb_size);
 
         relay_command<dispatcher_cmd_base_addr, dispatcher_data_buffer_size>(cmd_base_addr, db_tx_buf_switch, ((uint64_t)dispatcher_noc_encoding << 32));
+        DPRINT << "RCP sent command" << ENDL();
         num_relayed[0] = num_relayed[0] + 1;
         uint32_t stall = header->stall;
         if (stall) {
@@ -81,6 +82,7 @@ void kernel_main() {
         // producer_consumer_transfer_num_pages is the total number of data pages that were sent from the router
         uint32_t producer_consumer_transfer_num_pages = header->producer_router_transfer_num_pages;
         debug[0] = 0;
+        // get_db_buf_addr is set up to get address of first CQ slot only because currently remote FD does not have any cmd double buffering
         transfer(
             rx_db_cb_config,
             tx_db_cb_config,
@@ -90,12 +92,13 @@ void kernel_main() {
             num_buffer_transfers,
             page_size,
             producer_cb_size,
-            (get_db_buf_addr<producer_cmd_base_addr, producer_data_buffer_size>(rx_buf_switch) + producer_cb_size) >> 4,
+            (get_db_buf_addr<producer_cmd_base_addr, producer_data_buffer_size>(false) + producer_cb_size) >> 4,
             ((uint64_t)producer_noc_encoding << 32),
             consumer_cb_size,
-            (get_db_buf_addr<dispatcher_cmd_base_addr, dispatcher_data_buffer_size>(db_tx_buf_switch) + consumer_cb_size) >> 4,
+            (get_db_buf_addr<dispatcher_cmd_base_addr, dispatcher_data_buffer_size>(false) + consumer_cb_size) >> 4,
             ((uint64_t)dispatcher_noc_encoding << 32),
             producer_consumer_transfer_num_pages,
+            (get_db_buf_addr<cmd_base_addr, data_buffer_size>(false) + consumer_cb_size) >> 4,
             debug);
 
         DPRINT << " DPRINT " << " done transfer " << ENDL();

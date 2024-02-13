@@ -81,6 +81,7 @@ void kernel_main() {
             uint32_t producer_cb_size = header->consumer_cb_size;
             uint32_t consumer_router_transfer_num_pages = header->consumer_router_transfer_num_pages;
             uint32_t num_buffer_transfers = header->num_buffer_transfers;
+            // get_db_buf_addr is set up to get address of first CQ slot only because currently remote FD does not have any cmd double buffering
             transfer(
                 rx_db_cb_config,
                 tx_db_cb_config,
@@ -90,12 +91,13 @@ void kernel_main() {
                 num_buffer_transfers,
                 page_size,
                 producer_cb_size,
-                (get_db_buf_addr<producer_cmd_base_addr, producer_data_buffer_size>(db_rx_buf_switch) + producer_cb_size) >> 4,
+                (get_db_buf_addr<producer_cmd_base_addr, producer_data_buffer_size>(false) + producer_cb_size) >> 4,
                 ((uint64_t)producer_noc_encoding << 32),
                 consumer_cb_size,
-                (get_db_buf_addr<consumer_cmd_base_addr, consumer_data_buffer_size>(tx_buf_switch) + consumer_cb_size) >> 4,
+                (get_db_buf_addr<consumer_cmd_base_addr, consumer_data_buffer_size>(false) + consumer_cb_size) >> 4,
                 ((uint64_t)eth_consumer_noc_encoding << 32),
                 consumer_router_transfer_num_pages,
+                (get_db_buf_addr<cmd_base_addr, data_buffer_size>(false) + producer_cb_size) >> 4,
                 readback_point);
             readback_point[0] = readback_point[0] + 1;
         }
