@@ -55,7 +55,7 @@ def preprocess_conv2d(weight, bias, ttnn_module_args):
         weight=weight,
         bias=bias,
         reader_patterns_cache=None,
-        conv_blocking_and_parallelization_config_override=None,
+        # conv_blocking_and_parallelization_config_override=None,
         move_weights_to_device=False,
         device=None,
     )
