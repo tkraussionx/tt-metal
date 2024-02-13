@@ -4,6 +4,7 @@
 
 import torch
 import random
+from random import choice
 from itertools import permutations, product
 from functools import lru_cache
 import tt_lib as ttl
@@ -1700,5 +1701,4 @@ def gen_rand_avoid(size, ranges, low=0, high=100):
         lower = r[0]
         substitute = choice([i for i in range(low, high) if i not in r])
         res = torch.where((res >= lower) & (res <= upper), substitute, res)
-
     return res
