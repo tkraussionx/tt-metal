@@ -7,38 +7,24 @@ on:
       - 'mchiou/4697**'
 
 jobs:
-  build-and-unit-tests-dispatch:
-    strategy:
-      # Do not fail-fast because we need to ensure all tests go to completion
-      # so we try not to get hanging machines
-      fail-fast: false
-      matrix:
-        runner-info: [
-          {arch: grayskull, runs-on: ["grayskull"]},
-          # N150
-          {arch: wormhole_b0, runs-on: ["wormhole_b0", "multi-chip-num-pcie-1", "multi-chip-num-chips-1"]},
-          # N300
-          {arch: wormhole_b0, runs-on: ["wormhole_b0", "multi-chip-num-pcie-1", "multi-chip-num-chips-2"]},
-        ]
-    env:
-      TT_METAL_ENV: ${{ vars.TT_METAL_ENV }}
-      ARCH_NAME: ${{ matrix.runner-info.arch }}
-      TT_METAL_SLOW_DISPATCH_MODE: 1
-    environment: dev
-    runs-on: ${{ matrix.runner-info.runs-on }}
-    steps:
-      - uses: tenstorrent-metal/metal-workflows/.github/actions/checkout-with-submodule-lfs@main
-      - name: Set up dynamic env vars for build
-        run: |
-          echo "TT_METAL_HOME=$(pwd)" >> $GITHUB_ENV
-      - name: Build tt-metal and libs
-        run: make build
-        # run: echo "make build"
-      - name: Build tt-metal CPP tests
-        run: make tests
-        # run: echo "make tests"
-      - name: Run pre/post regression tests
-        timeout-minutes: 120
-        run: |
-          source build/python_env/bin/activate
-          ./tests/scripts/run_tests.sh --tt-arch $ARCH_NAME --pipeline-type post_commit --dispatch-mode slow
+  static-checks:
+    uses: ./.github/workflows/all-static-checks.yaml
+    secrets: inherit
+  build-and-unit-tests:
+    uses: ./.github/workflows/build-and-unit-tests.yaml
+    secrets: inherit
+  build-and-test-measure-perf:
+    uses: ./.github/workflows/perf-models.yaml
+    secrets: inherit
+  build-and-test-measure-perf-device:
+    uses: ./.github/workflows/perf-device-models.yaml
+    secrets: inherit
+  build-and-unit-tests-fast-dispatch:
+    uses: ./.github/workflows/fast-dispatch-build-and-unit-tests.yaml
+    secrets: inherit
+  run-profiler-regression:
+    uses: ./.github/workflows/run-profiler-regression.yaml
+    secrets: inherit
+  run-eager-package-main:
+    uses: ./.github/workflows/eager-package-main.yaml
+    secrets: inherit
