@@ -7,24 +7,24 @@ on:
       - 'mchiou/4697**'
 
 jobs:
-  static-checks:
-    uses: ./.github/workflows/all-static-checks.yaml
-    secrets: inherit
-  build-and-unit-tests:
-    uses: ./.github/workflows/build-and-unit-tests.yaml
-    secrets: inherit
-  build-and-test-measure-perf:
-    uses: ./.github/workflows/perf-models.yaml
-    secrets: inherit
-  build-and-test-measure-perf-device:
-    uses: ./.github/workflows/perf-device-models.yaml
-    secrets: inherit
+  # static-checks:
+  #   uses: ./.github/workflows/all-static-checks.yaml
+  #   secrets: inherit
+  # build-and-unit-tests:
+  #   uses: ./.github/workflows/build-and-unit-tests.yaml
+  #   secrets: inherit
+  # build-and-test-measure-perf:
+  #   uses: ./.github/workflows/perf-models.yaml
+  #   secrets: inherit
+  # build-and-test-measure-perf-device:
+  #   uses: ./.github/workflows/perf-device-models.yaml
+  #   secrets: inherit
   build-and-unit-tests-fast-dispatch:
     uses: ./.github/workflows/fast-dispatch-build-and-unit-tests.yaml
     secrets: inherit
-  run-profiler-regression:
-    uses: ./.github/workflows/run-profiler-regression.yaml
-    secrets: inherit
-  run-eager-package-main:
-    uses: ./.github/workflows/eager-package-main.yaml
-    secrets: inherit
+  # run-profiler-regression:
+  #   uses: ./.github/workflows/run-profiler-regression.yaml
+  #   secrets: inherit
+  # run-eager-package-main:
+  #   uses: ./.github/workflows/eager-package-main.yaml
+  #   secrets: inherit
