@@ -10,11 +10,11 @@ namespace NAMESPACE {
     void MAIN {
         for (int i = 0; i < LOOP_COUNT; i ++)
         {
-            kernel_profiler::mark_time(21);
 //Max unroll size
-#pragma GCC unroll 65534
+//#pragma GCC unroll 65534
             for (int j = 0 ; j < LOOP_SIZE; j++)
             {
+                DeviceZoneScopedN("TEST_FULL_BUFFER_COMPUTE");
                 asm("nop");
             }
         }

@@ -27,9 +27,10 @@ void kernel_main() {
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(0));  // Should be initialized to 2 by host
 
     bool db_buf_switch = false;
+
+    DeviceProfilerFlush;
     while (true) {
-        kernel_profiler::init_profiler();
-        kernel_profiler::mark_time(11);
+        DeviceZoneScopedN("CQ-PRODUCER-MAIN");
         issue_queue_wait_front();
         uint32_t rd_ptr = (cq_read_interface.issue_fifo_rd_ptr << 4);
         uint64_t src_noc_addr = pcie_core_noc_encoding | rd_ptr;
@@ -110,7 +111,5 @@ void kernel_main() {
 
         db_buf_switch = not db_buf_switch;
 
-        kernel_profiler::mark_time(12);
-        kernel_profiler::send_profiler_data_to_dram();
     }
 }

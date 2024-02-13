@@ -23,10 +23,16 @@ namespace kernel_profiler{
         KERNEL_START,
         KERNEL_END,
         FW_END,
-        CQ_CONSUME_START,
-        CQ_CONSUME_END,
-        CQ_PRODUCE_START,
-        CQ_PRODUCE_END
+        CQ_CONSUMER_START,
+        CQ_CONSUMER_END,
+        CQ_PRODUCER_START,
+        CQ_PRODUCER_END,
+        ETH_FD_SRC_START,
+        ETH_FD_SRC_END,
+        ETH_FD_DST_START,
+        ETH_FD_DST_END,
+        ETH_CTX_SW_START,
+        ETH_CTX_SW_END,
         };
 
     enum ControlBuffer

@@ -30,6 +30,7 @@ CBInterface cb_interface[NUM_CIRCULAR_BUFFERS] __attribute__((used));
 
 namespace kernel_profiler {
 uint32_t wIndex __attribute__((used));
+uint32_t stackSize __attribute__((used)) = 0;
 }
 
 extern "C" void ncrisc_resume(void);
@@ -47,14 +48,12 @@ int main(int argc, char *argv[]) {
   mailboxes->ncrisc_halt.resume_addr = (uint32_t)ncrisc_resume;
 
   // Cleanup profiler buffer incase we never get the go message
-  kernel_profiler::init_profiler();
   while (1) {
 
+      DeviceZoneScopedN("NCRISC_FW");
       DEBUG_STATUS('W');
       notify_brisc_and_halt(RUN_SYNC_MSG_DONE);
 
-      kernel_profiler::init_profiler();
-      kernel_profiler::mark_fw_start();
 
       setup_cb_read_write_interfaces(0, mailboxes->launch.max_cb_index, true, true);
 
@@ -62,8 +61,6 @@ int main(int argc, char *argv[]) {
       kernel_init();
       DEBUG_STATUS('D');
 
-      kernel_profiler::mark_fw_end();
-      kernel_profiler::finish();
   }
 
   return 0;

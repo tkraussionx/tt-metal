@@ -111,15 +111,12 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
 
     while (routing_info->routing_enabled) {
         // FD: assume that no more host -> remote writes are pending
-        kernel_profiler::init_profiler(0,0,0);
-        kernel_profiler::mark_time(5);
         if (erisc_info->launch_user_kernel == 1) {
             kernel_profiler::mark_fw_start();
             kernel_init();
             kernel_profiler::mark_fw_end();
         }
         if (my_routing_mode == EthRouterMode::FD_SRC) {
-            //kernel_profiler::mark_time(5);
             eth_db_acquire(eth_db_semaphore_addr, ((uint64_t)eth_router_noc_encoding << 32));
             if (erisc_info->launch_user_kernel == 1) {
                 continue;
@@ -154,9 +151,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             }
             noc_semaphore_inc(((uint64_t)relay_src_noc_encoding << 32) | get_semaphore(0), 1);
             noc_async_write_barrier();  // Barrier for now
-            //kernel_profiler::mark_time(6);
         } else if (routing_info->routing_mode == EthRouterMode::FD_DST) {
-            //kernel_profiler::mark_time(7);
             // Poll until FD_SRC router sends FD packet
             // Each FD packet comprises of command header followed by command data
             internal_::wait_for_fd_packet();
@@ -228,14 +223,9 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
 
             // Signal to FD_SRC router that packet has been processed
             internal_::ack_fd_packet();
-            //kernel_profiler::mark_time(8);
         } else {
-            //kernel_profiler::mark_time(9);
             internal_::risc_context_switch();
-            //kernel_profiler::mark_time(10);
         }
-        kernel_profiler::mark_time(6);
-        kernel_profiler::send_profiler_data_to_dram();
     }
     internal_::disable_erisc_app();
 }
