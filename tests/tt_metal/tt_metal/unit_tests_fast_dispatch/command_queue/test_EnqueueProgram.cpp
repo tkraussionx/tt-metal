@@ -65,7 +65,6 @@ bool cb_config_successful(Device* device, const DummyProgramMultiCBConfig & prog
             auto [core_coord, terminate_] = core_range_generator();
 
             terminate = terminate_;
-            std::cout << "Reading from " << core_coord.str() << " in device " << device->id() << std::endl;
             tt::tt_metal::detail::ReadFromDeviceL1(
                 device, core_coord, CIRCULAR_BUFFER_CONFIG_BASE, cb_config_buffer_size, cb_config_vector);
 
@@ -75,11 +74,8 @@ bool cb_config_successful(Device* device, const DummyProgramMultiCBConfig & prog
                 uint32_t cb_num_pages = program_config.cb_config_vector[i].num_pages;
                 uint32_t cb_size = cb_num_pages * program_config.cb_config_vector[i].page_size;
                 bool addr_match = cb_config_vector.at(index) == ((cb_addr) >> 4);
-                std::cout << "Expected addr: " << ((cb_addr) >> 4) << " got " << cb_config_vector.at(index) << std::endl;
                 bool size_match = cb_config_vector.at(index + 1) == (cb_size >> 4);
-                std::cout << "Expected size: " << ((cb_size) >> 4) << " got " << cb_config_vector.at(index + 1) << std::endl;
                 bool num_pages_match = cb_config_vector.at(index + 2) == cb_num_pages;
-                std::cout << "Expected num pages: " << (cb_num_pages) << " got " << cb_config_vector.at(index + 2) << std::endl;
                 pass &= (addr_match and size_match and num_pages_match);
 
                 cb_addr += cb_size;
@@ -112,28 +108,8 @@ bool test_dummy_EnqueueProgram_with_cbs(Device* device, CommandQueue& cq, DummyP
     initialize_dummy_kernels(program, program_config.cr_set);
     EnqueueProgram(cq, program, false);
 
-    // std::cout << "starting to sleep" << std::endl;
-     sleep(1);
-    // std::cout << "done sleeping" << std::endl;
     Finish(cq);
-    std::cout << "calling set interal false " << std::endl;
     tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
-
-    // uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(device->id());
-    // uint8_t cq_id = 0;
-    // tt_cxy_pair remote_dispatcher_location = dispatch_core_manager::get(1).command_dispatcher_core(device->id(), channel, cq_id);
-    // CoreCoord remote_dispatcher_physical_core = tt::get_physical_core_coordinate(remote_dispatcher_location, CoreType::WORKER);
-    // std::vector<uint32_t> remote_dispatcher_header(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
-    // uint32_t num_bytes_in_cmd_header = DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER * sizeof(uint32_t);
-    // tt::Cluster::instance().read_core(remote_dispatcher_header.data(), num_bytes_in_cmd_header, tt_cxy_pair(remote_dispatcher_location.chip, remote_dispatcher_physical_core), L1_UNRESERVED_BASE);
-    // tt::test_utils::print_vector_fixed_numel_per_row(remote_dispatcher_header, 32);
-
-    // std::vector<uint32_t> remote_dispatcher_header2(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
-    // uint32_t cons_data_buffer_size = get_consumer_data_buffer_size(false);
-    // uint32_t second_slot_addr = L1_UNRESERVED_BASE + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + cons_data_buffer_size;
-    // tt::Cluster::instance().read_core(remote_dispatcher_header2.data(), num_bytes_in_cmd_header, tt_cxy_pair(remote_dispatcher_location.chip, remote_dispatcher_physical_core), second_slot_addr);
-    // tt::test_utils::print_vector_fixed_numel_per_row(remote_dispatcher_header2, 32);
-
 
     return cb_config_successful(device, program_config);
 
@@ -158,6 +134,11 @@ bool test_dummy_EnqueueProgram_with_cbs_update_size(Device* device, CommandQueue
 
     initialize_dummy_kernels(program, program_config.cr_set);
     EnqueueProgram(cq, program, false);
+    if (not device->is_mmio_capable()) {
+        // ensure that the write is flushed before doing host readback in `cb_config_successful` when tunneling to remote device
+        Finish(cq);
+    }
+
     auto pass_1 = cb_config_successful(device, program_config);
 
     DummyProgramMultiCBConfig program_config_2 = program_config;
@@ -190,6 +171,8 @@ bool test_dummy_EnqueueProgram_with_sems(Device* device, CommandQueue& cq, const
 
     EnqueueProgram(cq, program, false);
     Finish(cq);
+
+    tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
 
     vector<uint32_t> sem_vector;
     uint32_t sem_buffer_size = program_config.num_sems * L1_ALIGNMENT;
@@ -342,8 +325,6 @@ TEST_F(CommandQueueFixture, TestSingleCbConfigCorrectlySentSingleCore) {
 
     DummyProgramMultiCBConfig config = {.cr_set = cr_set, .cb_config_vector = {cb_config} };
 
-    std::cout << "Target device is " << this->device_->id() << std::endl;
-
     EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_cbs(this->device_, tt::tt_metal::detail::GetCommandQueue(device_), config));
 }
 
@@ -403,6 +384,9 @@ TEST_F(CommandQueueFixture, TestMultiCBSharedAddressSpaceSentSingleCore) {
     EnqueueProgram(tt::tt_metal::detail::GetCommandQueue(device_), program, false);
 
     Finish(tt::tt_metal::detail::GetCommandQueue(device_));
+
+    tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
+
     vector<uint32_t> cb_config_vector;
     uint32_t cb_config_buffer_size = NUM_CIRCULAR_BUFFERS * UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG * sizeof(uint32_t);
 
@@ -443,7 +427,7 @@ TEST_F(CommandQueueFixture, TestSingleSemaphoreConfigCorrectlySentSingleCore) {
     CoreRange cr = {.start = {0, 0}, .end = {0, 0}};
     CoreRangeSet cr_set({cr});
 
-    DummyProgramConfig config = {.cr_set = cr_set, .num_sems = 1};
+    DummyProgramConfig config = {.cr_set = cr_set, .num_sems = NUM_SEMAPHORES};
 
     EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_sems(this->device_, tt::tt_metal::detail::GetCommandQueue(device_), config));
 }
