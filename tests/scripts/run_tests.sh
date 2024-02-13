@@ -6,6 +6,7 @@ set -eo pipefail
 default_tt_arch="grayskull"
 default_pipeline_type="post_commit"
 default_dispatch_mode="fast"
+default_fast_dispatch_test_mode="full"
 
 assert_requested_module_matches() {
     local actual=$1
@@ -60,6 +61,7 @@ run_post_commit_pipeline_tests() {
     local tt_arch=$1
     local pipeline_type=$2
     local dispatch_mode=$3
+    local fast_dispatch_test_mode=$4
 
     # Switch to modules only soon
     # run_module_tests "$tt_arch" "llrt" "$pipeline_type"
@@ -205,12 +207,13 @@ run_pipeline_tests() {
     local tt_arch=$1
     local pipeline_type=$2
     local dispatch_mode=$3
+    local fast_dispatch_test_mode=$4
 
     # Add your logic here for pipeline-specific tests
     echo "Running tests for pipeline: $pipeline_type with tt-arch: $tt_arch"
     # Call the appropriate module tests based on pipeline
     if [[ $pipeline_type == "post_commit" ]]; then
-        run_post_commit_pipeline_tests "$tt_arch" "$pipeline_type" "$dispatch_mode"
+        run_post_commit_pipeline_tests "$tt_arch" "$pipeline_type" "$dispatch_mode" "$fast_dispatch_test_mode"
     elif [[ $pipeline_type == "frequent_models" ]]; then
         run_frequent_models_pipeline_tests "$tt_arch" "$pipeline_type" "$dispatch_mode"
     elif [[ $pipeline_type == "frequent_api" ]]; then
@@ -303,6 +306,10 @@ main() {
                 pipeline_type=$2
                 shift
                 ;;
+            --fast-dispatch-test-mode)
+                fast_dispatch_test_mode=$2
+                shift
+                ;;
             *)
                 echo "Unknown option: $1"
                 exit 1
@@ -315,9 +322,12 @@ main() {
     tt_arch=${tt_arch:-$default_tt_arch}
     dispatch_mode=${dispatch_mode:-$default_dispatch_mode}
     pipeline_type=${pipeline_type:-$default_pipeline_type}
+    fast_dispatch_test_mode=${fast_dispatch_test_mode:-$default_fast_dispatch_test_mode}
+
 
     available_dispatch_modes=("fast" "slow" "fast-multi-queue-single-device")
     available_tt_archs=("grayskull" "wormhole_b0")
+    available_fast_dispatch_test_modes=("full", "api", "metal", "eager", "unit")
 
     # Validate arguments
     if [[ ! " ${available_tt_archs[*]} " =~ " $tt_arch " ]]; then
@@ -328,6 +338,10 @@ main() {
         echo "Invalid dispatch_mode argument. Must be an available dispatch_mode."
         exit 1
     fi
+    if [[ ! " ${available_fast_dispatch_test_modes[*]} " =~ " $fast-dispatch_test-mode " ]]; then
+        echo "Invalid fast_dispatch_test_mode argument. Must be an available fast_dispatch_test_mode."
+        exit 1
+    fi
 
     validate_and_set_env_vars "$tt_arch" "$dispatch_mode"
     set_up_chdir
@@ -336,7 +350,7 @@ main() {
         # Module invocation
         run_module_tests "$tt_arch" "$module" "$pipeline_type"
     elif [[ -n $pipeline_type ]]; then
-        run_pipeline_tests "$tt_arch" "$pipeline_type" "$dispatch_mode"
+        run_pipeline_tests "$tt_arch" "$pipeline_type" "$dispatch_mode" "$fast_dispatch_test_mode"
     else
         echo "You must have at least a module or pipeline_type specified"
         exit 1
