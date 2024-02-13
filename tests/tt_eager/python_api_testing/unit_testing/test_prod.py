@@ -27,7 +27,7 @@ def get_tensors(input_shape, output_shape, device):
     torch_input = torch.randint(1, 5, input_shape, dtype=cpu_dtype)
     torch_output = torch.randint(1, 5, output_shape, dtype=cpu_dtype)
 
-    # torch_input[:, :, :, :].fill_(2)
+    # torch_input[:, :, :, :].fill_(1.005)
     # torch_input[:, 1, :, :].fill_(5.0)
     # torch_input[:, 2, :, :].fill_(4.0)
     # torch_input[:, 3, :, :].fill_(3.0)
@@ -65,15 +65,15 @@ def test_prod(shapes, device):
 
     (tt_input, tt_output, torch_input) = get_tensors(shapes, shapes, device)
 
-    torch_output = torch.prod(torch_input)
+    # torch_output = torch.prod(torch_input)
 
     cpu_layout = ttl.tensor.Layout.ROW_MAJOR
     tt_output_cpu = ttl.operations.primary.prod(tt_input).cpu().to(cpu_layout).unpad_from_tile(output_shape).to_torch()
     N, C, H, W = tt_output_cpu.shape
     torch.set_printoptions(threshold=10000, precision=5, sci_mode=False)
-    # print(tt_output_cpu)
-    print(tt_output_cpu[N - 1 : N, C - 1 : C, H - 4 :, W - 16 :])  # Slice the required result
-    print(torch_output)
+    print(tt_output_cpu)
+    # print(tt_output_cpu[N - 1 : N, C - 1 : C, H - 4 :, W - 16 :])  # Slice the required result
+    # print(torch_output)
 
     # # test for equivalance
     # # TODO(Dongjin) : check while changing rtol after enabling fp32_dest_acc_en

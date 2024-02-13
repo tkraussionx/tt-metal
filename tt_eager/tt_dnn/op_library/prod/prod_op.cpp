@@ -9,6 +9,7 @@
 #include <optional>
 
 #include "tt_metal/common/constants.hpp"
+#include <tt_eager/tt_numpy/functions.hpp>
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/tools/profiler/op_profiler.hpp"
 
@@ -71,7 +72,9 @@ operation::ProgramWithCallbacks Prod_op::create_program(
 
 Tensor prod(const Tensor& input, const MemoryConfig& output_mem_config ) {
     // return operation::run(Prod_op{.output_mem_config = output_mem_config}, {input}).at(0);
-    return tiled_prod( operation::run(Prod_op{.output_mem_config = output_mem_config}, {input}).at(0), output_mem_config);
+    Tensor result =  tiled_prod( operation::run(Prod_op{.output_mem_config = output_mem_config}, {input}).at(0), output_mem_config);
+    // return result;
+    return tt::numpy::prod_result_computation<bfloat16>(result, result.dtype(), result.layout(), result.device(), output_mem_config);
 }
 
 
