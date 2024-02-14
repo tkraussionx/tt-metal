@@ -166,7 +166,6 @@ static Tensor prod_result_computation(const Tensor& input_tensor, DataType data_
 			  const MemoryConfig& output_mem_config = MemoryConfig{.memory_layout=tt::tt_metal::TensorMemoryLayout::INTERLEAVED}) {
     const Shape& s_a = input_tensor.shape();
     auto owned_buffer = tt_metal::owned_buffer::create<T>(tt_metal::compute_volume(s_a)); //ouput
-    auto index = 0;
     auto device_buffer = input_tensor.buffer();
     uint32_t size_in_bytes = device_buffer->size();
     auto data_vec = tt::tt_metal::tensor_impl::read_data_from_device<T>(input_tensor, size_in_bytes);
@@ -174,26 +173,46 @@ static Tensor prod_result_computation(const Tensor& input_tensor, DataType data_
     const Shape input_tensor_strides = input_tensor.strides();
     auto result = static_cast<T>(1.0f);
     std::cout<<"Values to be multiplied (4*16)"<<endl;
-    for(uint32_t i = 0; i < s_a[0]; i++) {
-        for(int32_t j = 0; j < s_a[1]; j++) {
-            for(int32_t k = 0; k < s_a[2]; k++) {
-                for(int32_t l = 0; l < s_a[3]; l++) {
-                    auto input_index = l + input_tensor_strides[2] * k + input_tensor_strides[1] * j + input_tensor_strides[0] * i;
-		            if(i==s_a[0]-1 && j==s_a[1]-1 && k>=s_a[2]-4 && l>=s_a[3]-16){ //to access 4*16
-                        std::cout<<"input_buffer value at position "<<i<<" "<<j<<" "<<k<<" "<<l<<" of tensor = "<<input_buffer[input_index]<<endl;
-                        result = result * input_buffer[input_index];
-                        owned_buffer[index++] = static_cast<T>(0.0f);
-                    }else{
-                        owned_buffer[index++] = static_cast<T>(0.0f);
+    // if(layout == Layout::ROW_MAJOR){
+    //     for(uint32_t i = 0; i < s_a[0]; i++) {
+    //         for(int32_t j = 0; j < s_a[1]; j++) {
+    //             for(int32_t k = 0; k < s_a[2]; k++) {
+    //                 for(int32_t l = 0; l < s_a[3]; l++) {
+    //                     auto input_index = l + input_tensor_strides[2] * k + input_tensor_strides[1] * j + input_tensor_strides[0] * i;
+	// 	                if(i==s_a[0]-1 && j==s_a[1]-1 && k>=s_a[2]-4 && l>=s_a[3]-16){ //to access 4*16
+    //                         std::cout<<"input_buffer["<<input_index<<"] at position "<<i<<" "<<j<<" "<<k<<" "<<l<<" of tensor = "<<input_buffer[input_index]<<endl;
+    //                         result = result * input_buffer[input_index];
+    //                         owned_buffer[input_index] = static_cast<T>(0.0f);
+    //                     }else{
+    //                         owned_buffer[input_index] = static_cast<T>(0.0f);
+    //                     }
+    //                     // owned_buffer[input_index] = input_buffer[input_index]; //output = input
+    //                 }
+	//             }
+	//         }
+    //     }
+    // }else{//tile layout
+        for(uint32_t i = 0; i < s_a[0]; i++) {
+            for(int32_t j = 0; j < s_a[1]; j++) {
+                for(int32_t k = 0; k < s_a[2]; k++) {
+                    for(int32_t l = 0; l < s_a[3]; l++) {
+                        auto input_index = l + input_tensor_strides[2] * k + input_tensor_strides[1] * j + input_tensor_strides[0] * i;
+		                if(i==s_a[0]-1 && j==s_a[1]-1 && k>=s_a[2]-2 && l>=s_a[3]-32){ //to access 2*32
+                            std::cout<<"input_buffer["<<input_index<<"] at position "<<i<<" "<<j<<" "<<k<<" "<<l<<" of tensor = "<<input_buffer[input_index]<<endl;
+                            result = result * input_buffer[input_index];
+                            owned_buffer[input_index] = static_cast<T>(0.0f);
+                        }else{
+                            owned_buffer[input_index] = static_cast<T>(0.0f);
+                        }
+                        // owned_buffer[input_index] = input_buffer[input_index]; //output = input
                     }
-                    // owned_buffer[index++] = input_buffer[input_index]; //output = input
-                }
+	            }
 	        }
-	    }
-    }
+        }
+    // }
     std::cout<<"result = "<<result<<endl;
     owned_buffer[0] = result; //store the result at the first position of the tensor,and the rest of the values as 0.0f
-    auto output = Tensor(OwnedStorage{owned_buffer}, s_a, data_type, Layout::TILE).to(layout);
+    auto output = Tensor(OwnedStorage{owned_buffer}, s_a, data_type, layout).to(layout);
     if (device != nullptr) {
         output = output.to(device, output_mem_config);
     }
