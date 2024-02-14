@@ -65,6 +65,7 @@ void kernel_main() {
         uint32_t restart = header->restart;
         DPRINT << " DPRINT remote issue queue " << DEC() << header->producer_router_transfer_num_pages <<
           " router cb num pages " << header->router_cb_num_pages << ENDL();
+        DPRINT << "FWD path? " << header->fwd_path << ENDL();
 
         if ((DeviceCommand::WrapRegion)wrap == DeviceCommand::WrapRegion::ISSUE) {
             // Basically popfront without the extra conditional
@@ -91,6 +92,7 @@ void kernel_main() {
             consumer_cb_size);
         relay_command<consumer_cmd_base_addr, consumer_data_buffer_size>(command_start_addr, db_buf_switch, ((uint64_t)eth_consumer_noc_encoding << 32));
         num_cmds_relayed[0] = num_cmds_relayed[0] + 1;
+        DPRINT << "IQR sent command" << ENDL();
 
         update_producer_consumer_sync_semaphores(((uint64_t)producer_noc_encoding << 32), ((uint64_t)eth_consumer_noc_encoding << 32), db_semaphore_addr, uint32_t(eth_get_semaphore(0)));
 
@@ -107,6 +109,7 @@ void kernel_main() {
             db_cb_config,
             eth_db_cb_config);
 
+        DPRINT << "IQR done" << ENDL();
         issue_queue_pop_front<host_issue_queue_read_ptr_addr>(DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + data_size);
 
     }

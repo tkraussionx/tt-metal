@@ -115,13 +115,36 @@ bool test_EnqueueWriteBuffer_and_EnqueueReadBuffer(Device* device, CommandQueue&
             EnqueueWriteBuffer(cq, bufa, src, false);
         }
         vector<uint32_t> result;
+        // Finish(cq);
+        // detail::ReadFromBuffer(bufa, result);
+
         if (use_void_star_api) {
             result.resize(buf_size / sizeof(uint32_t));
             EnqueueReadBuffer(cq, bufa, result.data(), true);
         } else {
             EnqueueReadBuffer(cq, bufa, result, true);
         }
+
+        if (src.size() != result.size()) {
+            std::cout << "Src is " << src.size() << " but result is " << result.size() << std::endl;
+        } else {
+            int first_wrong = -1;
+            for (int i = 0; i < src.size(); i++) {
+                if (src.at(i) != result.at(i)) {
+                    if (first_wrong == -1) {
+                        first_wrong = i;
+                    }
+                    // std::cout << "index " << i << " src is " << src.at(i) << " but result is " << result.at(i) << std::endl;
+                }
+            }
+            if (first_wrong != -1) {
+                std::cout << "First wrong value " << first_wrong << std::endl;
+            }
+        }
         pass &= (src == result);
+        // if (pass) {
+        //     std::cout << "GOT FIRST PASS" << std::endl;
+        // }
     }
 
     return pass;
@@ -281,6 +304,7 @@ TEST_F(CommandQueueFixture, WriteOneTileAcrossAllDramBanksTwiceRoundRobin) {
     EXPECT_TRUE(local_test_functions::test_EnqueueWriteBuffer_and_EnqueueReadBuffer(this->device_, tt::tt_metal::detail::GetCommandQueue(device_), config));
 }
 
+// Not working
 TEST_F(CommandQueueFixture, Sending131072Pages) {
     // Was a failing case where we used to accidentally program cb num pages to be total
     // pages instead of cb num pages.
@@ -318,7 +342,8 @@ TEST_F(CommandQueueFixture, TestPageSizeTooLarge) {
 TEST_F(CommandQueueFixture, TestWrapHostHugepageOnEnqueueReadBuffer) {
     uint32_t page_size = 2048;
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device_->id());
-    uint32_t command_queue_size = tt::Cluster::instance().get_host_channel_size(this->device_->id(), channel);
+    chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->device_->id());
+    uint32_t command_queue_size = tt::Cluster::instance().get_host_channel_size(mmio_device_id, channel);
     uint32_t command_issue_region_size = command_queue_size * 0.75;
 
     uint32_t max_command_size = command_issue_region_size - CQ_START;
@@ -334,7 +359,8 @@ TEST_F(CommandQueueFixture, TestWrapHostHugepageOnEnqueueReadBuffer) {
 TEST_F(CommandQueueFixture, TestIssueMultipleReadWriteCommandsForOneBuffer) {
     uint32_t page_size = 2048;
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device_->id());
-    uint32_t command_queue_size = tt::Cluster::instance().get_host_channel_size(this->device_->id(), channel);
+    chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->device_->id());
+    uint32_t command_queue_size = tt::Cluster::instance().get_host_channel_size(mmio_device_id, channel);
     uint32_t num_pages = command_queue_size / page_size;
 
     TestBufferConfig config = {.num_pages = num_pages, .page_size = page_size, .buftype = BufferType::DRAM};
@@ -349,7 +375,8 @@ TEST_F(CommandQueueFixture, TestWrapCompletionQOnInsufficientSpace) {
 
     // Using default 75-25 issue and completion queue split
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device_->id());
-    uint32_t command_queue_size = tt::Cluster::instance().get_host_channel_size(this->device_->id(), channel);
+    chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->device_->id());
+    uint32_t command_queue_size = tt::Cluster::instance().get_host_channel_size(mmio_device_id, channel);
     uint32_t command_completion_region_size = command_queue_size * 0.25;
 
     uint32_t first_buffer_size = tt::round_up(command_completion_region_size * 0.95, large_page_size);

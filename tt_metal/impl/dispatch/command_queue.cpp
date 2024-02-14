@@ -409,6 +409,7 @@ ProgramMap ConstructProgramMap(const Device* device, Program& program) {
 
     for (const Semaphore& semaphore : program.semaphores()) {
         program_pages[program_page_idx] = semaphore.initial_value();
+        std::cout << "program pages at " << program_page_idx << " has " << semaphore.initial_value() << std::endl;
         program_page_idx += 4;
     }
 
@@ -574,6 +575,7 @@ const DeviceCommand EnqueueReadInterleavedBufferCommand::create_buffer_transfer_
 const DeviceCommand EnqueueReadBufferCommand::assemble_device_command(uint32_t dst_address) {
     uint32_t padded_page_size = align(this->buffer.page_size(), 32);
     uint32_t num_pages = this->pages_to_read;
+    std::cout << "DST ADDRESS FOR EQRB " << dst_address << std::endl;
     DeviceCommand command = this->create_buffer_transfer_instruction(dst_address, padded_page_size, num_pages);
 
     // Targeting fast dispatch on remote device means commands have to be tunneled through ethernet
@@ -606,13 +608,13 @@ const DeviceCommand EnqueueReadBufferCommand::assemble_device_command(uint32_t d
     bool route_through_ethernet = not device->is_mmio_capable();
     if (route_through_ethernet) {
         uint32_t router_cb_num_pages = get_consumer_data_buffer_size(true) / padded_page_size;
-        uint32_t router_tx_num_pages = 1;
-        if (router_cb_num_pages >= DeviceCommand::SYNC_NUM_PAGES) {
-            router_cb_num_pages = (router_cb_num_pages / DeviceCommand::SYNC_NUM_PAGES) * DeviceCommand::SYNC_NUM_PAGES;
-            router_tx_num_pages = router_cb_num_pages / DeviceCommand::SYNC_NUM_PAGES;
-        }
-        command.set_producer_router_transfer_num_pages(router_tx_num_pages);
-        command.set_consumer_router_transfer_num_pages(router_tx_num_pages);
+        // uint32_t router_tx_num_pages = 1;
+        // if (router_cb_num_pages >= DeviceCommand::SYNC_NUM_PAGES) {
+        //     router_cb_num_pages = (router_cb_num_pages / DeviceCommand::SYNC_NUM_PAGES) * DeviceCommand::SYNC_NUM_PAGES;
+        //     router_tx_num_pages = router_cb_num_pages / DeviceCommand::SYNC_NUM_PAGES;
+        // }
+        command.set_producer_router_transfer_num_pages(router_cb_num_pages);
+        command.set_consumer_router_transfer_num_pages(router_cb_num_pages);
 
         uint32_t router_cb_size = router_cb_num_pages * padded_page_size;
         TT_ASSERT(padded_page_size <= router_cb_size, "Page is too large to fit in router buffer");
@@ -754,13 +756,13 @@ const DeviceCommand EnqueueWriteBufferCommand::assemble_device_command(uint32_t 
     bool route_through_ethernet = not device->is_mmio_capable();
     if (route_through_ethernet) {
         uint32_t router_cb_num_pages = get_consumer_data_buffer_size(true) / padded_page_size;
-        uint32_t router_tx_num_pages = 1;
-        if (router_cb_num_pages >= DeviceCommand::SYNC_NUM_PAGES) {
-            router_cb_num_pages = (router_cb_num_pages / DeviceCommand::SYNC_NUM_PAGES) * DeviceCommand::SYNC_NUM_PAGES;
-            router_tx_num_pages = router_cb_num_pages / DeviceCommand::SYNC_NUM_PAGES;
-        }
-        command.set_producer_router_transfer_num_pages(router_tx_num_pages);
-        command.set_consumer_router_transfer_num_pages(router_tx_num_pages);
+        // uint32_t router_tx_num_pages = 1;
+        // if (router_cb_num_pages >= DeviceCommand::SYNC_NUM_PAGES) {
+        //     router_cb_num_pages = (router_cb_num_pages / DeviceCommand::SYNC_NUM_PAGES) * DeviceCommand::SYNC_NUM_PAGES;
+        //     router_tx_num_pages = router_cb_num_pages / DeviceCommand::SYNC_NUM_PAGES;
+        // }
+        command.set_producer_router_transfer_num_pages(router_cb_num_pages);    // can get rid of this and use router_cb_num_pages instead
+        command.set_consumer_router_transfer_num_pages(router_cb_num_pages);
 
         uint32_t router_cb_size = router_cb_num_pages * padded_page_size;
         TT_ASSERT(padded_page_size <= router_cb_size, "Page is too large to fit in router buffer");
@@ -770,6 +772,35 @@ const DeviceCommand EnqueueWriteBufferCommand::assemble_device_command(uint32_t 
     }
 
     command.set_data_size(padded_page_size * num_pages);
+
+    std::cout << "Enqueue Write Buffer Command" << std::endl;
+    std::cout << "wrap: " << command.packet.header.wrap
+              << " finish: " << command.packet.header.finish
+              << " num_workers: " << command.packet.header.num_workers
+              << " num_buffer_transfers: " << command.packet.header.num_buffer_transfers
+              << " is_program_buffer: " << command.packet.header.is_program_buffer
+              << " stall: " << command.packet.header.stall
+              << " page_size: " << command.packet.header.page_size
+              << " producer_cb_size: " << command.packet.header.producer_cb_size
+              << " router_cb_size: " << command.packet.header.router_cb_size
+              << " consumer_cb_size: " << command.packet.header.consumer_cb_size
+              << " num_pages: " << command.packet.header.num_pages
+              << " num_runtime_arg_pages: " << command.packet.header.num_runtime_arg_pages
+              << " num_cb_config_pages: " << command.packet.header.num_cb_config_pages
+              << " num_program_multicast_pages: " << command.packet.header.num_program_multicast_pages
+              << " num_program_unicast_pages: " << command.packet.header.num_program_unicast_pages
+              << " data_size: " << command.packet.header.data_size
+              << " producer_consumer_transfer_num_pages: " << command.packet.header.producer_consumer_transfer_num_pages
+              << " producer_router_transfer_num_pages: " << command.packet.header.producer_router_transfer_num_pages
+              << " consumer_router_transfer_num_pages: " << command.packet.header.consumer_router_transfer_num_pages
+              << " buffer_type: " << command.packet.header.buffer_type
+              << " sharded_buffer_num_cores: " << command.packet.header.sharded_buffer_num_cores
+              << " restart: " << command.packet.header.restart
+              << " new_issue_queue_size: " << command.packet.header.new_issue_queue_size
+              << " new_completion_queue_size: " << command.packet.header.new_completion_queue_size << std::endl;
+
+
+
     return command;
 }
 
@@ -860,6 +891,7 @@ const DeviceCommand EnqueueProgramCommand::assemble_device_command(uint32_t host
     command.set_page_size(DeviceCommand::PROGRAM_PAGE_SIZE);
     command.set_num_pages(DeviceCommand::TransferType::RUNTIME_ARGS, num_runtime_arg_pages);
     command.set_num_pages(DeviceCommand::TransferType::CB_CONFIGS, num_cb_config_pages);
+    std::cout << "Number of multicast pages: " << num_program_multicast_binary_pages << std::endl;
     command.set_num_pages(DeviceCommand::TransferType::PROGRAM_MULTICAST_PAGES, num_program_multicast_binary_pages);
     command.set_num_pages(DeviceCommand::TransferType::PROGRAM_UNICAST_PAGES, num_program_unicast_binary_pages);
     command.set_num_pages(DeviceCommand::TransferType::GO_SIGNALS_MULTICAST, num_go_signal_multicast_pages);
@@ -872,7 +904,7 @@ const DeviceCommand EnqueueProgramCommand::assemble_device_command(uint32_t host
 
     const uint32_t page_index_offset = 0;
     if (num_host_data_pages) {
-        std::cout << "Adding buffer tx for program" << std::endl;
+        std::cout << "Adding buffer tx for program from sysmem" << std::endl;
         command.add_buffer_transfer_interleaved_instruction(
             host_data_src,
             dummy_dst_addr,
@@ -895,7 +927,7 @@ const DeviceCommand EnqueueProgramCommand::assemble_device_command(uint32_t host
     }
 
     if (num_cached_pages) {
-        std::cout << "Adding buffer tx for program" << std::endl;
+        std::cout << "Adding buffer tx for program from dram" << std::endl;
         command.add_buffer_transfer_interleaved_instruction(
             this->buffer.address(),
             dummy_dst_addr,
@@ -1285,7 +1317,13 @@ void CommandQueue::enqueue_program(Program& program, std::optional<std::referenc
         // std::vector<uint32_t> readback;
         // readback.resize(program_data_size_in_bytes/sizeof(uint32_t));
         // this->enqueue_read_buffer(*program_to_buffer.at(program_id), readback.data(), true);
-        // std::cout << "BINARY DATA READBACK FROM REMOTE: " << readback[0] << " " << readback[1] << std::endl;
+
+        // std::cout << "READING BACK" << std::endl;
+        // for (int i = 0; i < readback.size(); i++) {
+        //     if (program_pages.at(i) != readback.at(i)) {
+        //         std::cout << "Expected " << program_pages.at(i) << " but got " << readback.at(i) << std::endl;
+        //     }
+        // }
 
         map<uint64_t, ProgramMap>& program_to_dev_map = this->program_to_dev_map(device->id());
         program_to_dev_map.emplace(program_id, std::move(program_to_device_map));
@@ -1328,183 +1366,183 @@ void CommandQueue::wait_finish() {
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->device->id());
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device->id());
 
-    sleep(2);
-    uint32_t num_bytes_in_cmd_header = DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER * sizeof(uint32_t);
+    // sleep(2);
+    // uint32_t num_bytes_in_cmd_header = DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER * sizeof(uint32_t);
 
-    std::vector<uint32_t> cq_header(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
-    tt::Cluster::instance().read_sysmem(cq_header.data(), num_bytes_in_cmd_header, CQ_START, mmio_device_id, channel);
-    tt::test_utils::print_vector_fixed_numel_per_row(cq_header, 32);
+    // std::vector<uint32_t> cq_header(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
+    // tt::Cluster::instance().read_sysmem(cq_header.data(), num_bytes_in_cmd_header, CQ_START, mmio_device_id, channel);
+    // tt::test_utils::print_vector_fixed_numel_per_row(cq_header, 32);
 
-    tt_cxy_pair issue_q_reader_location = dispatch_core_manager::get(1).issue_queue_reader_core(this->device->id(), channel, 0);
-    CoreCoord issue_q_physical_core = tt::get_physical_core_coordinate(issue_q_reader_location, CoreType::WORKER);
-    uint32_t issue_cmds_sent;
-    tt::Cluster::instance().read_core(&issue_cmds_sent, sizeof(uint32_t), tt_cxy_pair(issue_q_reader_location.chip, issue_q_physical_core), SEMAPHORE_BASE + 1 * L1_ALIGNMENT);
-    std::cout << "Issue queue reader sent: " << issue_cmds_sent << std::endl;
+    // tt_cxy_pair issue_q_reader_location = dispatch_core_manager::get(1).issue_queue_reader_core(this->device->id(), channel, 0);
+    // CoreCoord issue_q_physical_core = tt::get_physical_core_coordinate(issue_q_reader_location, CoreType::WORKER);
+    // uint32_t issue_cmds_sent;
+    // tt::Cluster::instance().read_core(&issue_cmds_sent, sizeof(uint32_t), tt_cxy_pair(issue_q_reader_location.chip, issue_q_physical_core), SEMAPHORE_BASE + 1 * L1_ALIGNMENT);
+    // std::cout << "Issue queue reader sent: " << issue_cmds_sent << std::endl;
 
-    std::vector<uint32_t> issue_q_header(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
-    tt::Cluster::instance().read_core(issue_q_header.data(), num_bytes_in_cmd_header, tt_cxy_pair(issue_q_reader_location.chip, issue_q_physical_core), L1_UNRESERVED_BASE);
-    tt::test_utils::print_vector_fixed_numel_per_row(issue_q_header, 32);
+    // std::vector<uint32_t> issue_q_header(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
+    // tt::Cluster::instance().read_core(issue_q_header.data(), num_bytes_in_cmd_header, tt_cxy_pair(issue_q_reader_location.chip, issue_q_physical_core), L1_UNRESERVED_BASE);
+    // tt::test_utils::print_vector_fixed_numel_per_row(issue_q_header, 32);
 
-    uint32_t issue_cmds_rxed;
-    tt::Cluster::instance().read_core(&issue_cmds_rxed, sizeof(uint32_t), tt_cxy_pair(issue_q_reader_location.chip, issue_q_physical_core), SEMAPHORE_BASE + 2 * L1_ALIGNMENT);
-    std::cout << "Issue queue reader rxed: " << issue_cmds_rxed << std::endl;
+    // uint32_t issue_cmds_rxed;
+    // tt::Cluster::instance().read_core(&issue_cmds_rxed, sizeof(uint32_t), tt_cxy_pair(issue_q_reader_location.chip, issue_q_physical_core), SEMAPHORE_BASE + 2 * L1_ALIGNMENT);
+    // std::cout << "Issue queue reader rxed: " << issue_cmds_rxed << std::endl;
 
-    tt_cxy_pair src_eth_router_location = tt::Cluster::instance().get_eth_core_for_dispatch_core(issue_q_reader_location, EthRouterMode::FD_SRC, this->device->id());
-    CoreCoord physical_src_eth_router = tt::get_physical_core_coordinate(src_eth_router_location, CoreType::ETH);
-    uint32_t src_cmds_sent;
-    tt::Cluster::instance().read_core(&src_cmds_sent, sizeof(uint32_t), tt_cxy_pair(src_eth_router_location.chip, physical_src_eth_router), eth_l1_mem::address_map::SEMAPHORE_BASE + 1 * L1_ALIGNMENT);
-    std::cout << "Num commands SRC sent: " << src_cmds_sent << std::endl;
+    // tt_cxy_pair src_eth_router_location = tt::Cluster::instance().get_eth_core_for_dispatch_core(issue_q_reader_location, EthRouterMode::FD_SRC, this->device->id());
+    // CoreCoord physical_src_eth_router = tt::get_physical_core_coordinate(src_eth_router_location, CoreType::ETH);
+    // uint32_t src_cmds_sent;
+    // tt::Cluster::instance().read_core(&src_cmds_sent, sizeof(uint32_t), tt_cxy_pair(src_eth_router_location.chip, physical_src_eth_router), eth_l1_mem::address_map::SEMAPHORE_BASE + 1 * L1_ALIGNMENT);
+    // std::cout << "Num commands SRC sent: " << src_cmds_sent << std::endl;
 
-    std::vector<uint32_t> local_src_header(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
-    tt::Cluster::instance().read_core(local_src_header.data(), num_bytes_in_cmd_header, tt_cxy_pair(src_eth_router_location.chip, physical_src_eth_router), eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE);
-    tt::test_utils::print_vector_fixed_numel_per_row(local_src_header, 32);
+    // std::vector<uint32_t> local_src_header(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
+    // tt::Cluster::instance().read_core(local_src_header.data(), num_bytes_in_cmd_header, tt_cxy_pair(src_eth_router_location.chip, physical_src_eth_router), eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE);
+    // tt::test_utils::print_vector_fixed_numel_per_row(local_src_header, 32);
 
-    uint32_t debug_slot_l_src;
-    tt::Cluster::instance().read_core(&debug_slot_l_src, sizeof(uint32_t), tt_cxy_pair(src_eth_router_location.chip, physical_src_eth_router), eth_l1_mem::address_map::SEMAPHORE_BASE + 3 * L1_ALIGNMENT);
-    std::cout << "Debug step in local SRC: " << debug_slot_l_src << std::endl;
+    // uint32_t debug_slot_l_src;
+    // tt::Cluster::instance().read_core(&debug_slot_l_src, sizeof(uint32_t), tt_cxy_pair(src_eth_router_location.chip, physical_src_eth_router), eth_l1_mem::address_map::SEMAPHORE_BASE + 3 * L1_ALIGNMENT);
+    // std::cout << "Debug step in local SRC: " << debug_slot_l_src << std::endl;
 
-    std::cout << "Setting internal routing false" << std::endl;
-    // AL: no need to do this
-    //tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
-    std::cout << "Done setting internal routing false" << std::endl;
+    // std::cout << "Setting internal routing false" << std::endl;
+    // // AL: no need to do this
+    // //tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
+    // std::cout << "Done setting internal routing false" << std::endl;
 
-    tt_cxy_pair remote_processor_location = dispatch_core_manager::get(1).remote_processor_core(device->id(), channel, 0);
-    CoreCoord remote_processor_physical_core = tt::get_physical_core_coordinate(remote_processor_location, CoreType::WORKER);
+    // tt_cxy_pair remote_processor_location = dispatch_core_manager::get(1).remote_processor_core(device->id(), channel, 0);
+    // CoreCoord remote_processor_physical_core = tt::get_physical_core_coordinate(remote_processor_location, CoreType::WORKER);
 
-    tt_cxy_pair dst_eth_router_location = tt::Cluster::instance().get_eth_core_for_dispatch_core(remote_processor_location, EthRouterMode::FD_DST, mmio_device_id);
-    CoreCoord physical_dst_eth_router = tt::get_physical_core_coordinate(dst_eth_router_location, CoreType::ETH);
-    uint32_t num_cmds_dst_sent;
-    tt::Cluster::instance().read_core(&num_cmds_dst_sent, sizeof(uint32_t), tt_cxy_pair(dst_eth_router_location.chip, physical_dst_eth_router), eth_l1_mem::address_map::SEMAPHORE_BASE + 1 * L1_ALIGNMENT);
-    std::cout << "Num commands DST sent: " << num_cmds_dst_sent << std::endl;
+    // tt_cxy_pair dst_eth_router_location = tt::Cluster::instance().get_eth_core_for_dispatch_core(remote_processor_location, EthRouterMode::FD_DST, mmio_device_id);
+    // CoreCoord physical_dst_eth_router = tt::get_physical_core_coordinate(dst_eth_router_location, CoreType::ETH);
+    // uint32_t num_cmds_dst_sent;
+    // tt::Cluster::instance().read_core(&num_cmds_dst_sent, sizeof(uint32_t), tt_cxy_pair(dst_eth_router_location.chip, physical_dst_eth_router), eth_l1_mem::address_map::SEMAPHORE_BASE + 1 * L1_ALIGNMENT);
+    // std::cout << "Num commands DST sent: " << num_cmds_dst_sent << std::endl;
 
-    uint32_t debug_slot_r_dst;
-    tt::Cluster::instance().read_core(&debug_slot_r_dst, sizeof(uint32_t), tt_cxy_pair(dst_eth_router_location.chip, physical_dst_eth_router), eth_l1_mem::address_map::SEMAPHORE_BASE + 3 * L1_ALIGNMENT);
-    std::cout << "Debug step in remote DST: " << debug_slot_r_dst << std::endl;
+    // uint32_t debug_slot_r_dst;
+    // tt::Cluster::instance().read_core(&debug_slot_r_dst, sizeof(uint32_t), tt_cxy_pair(dst_eth_router_location.chip, physical_dst_eth_router), eth_l1_mem::address_map::SEMAPHORE_BASE + 3 * L1_ALIGNMENT);
+    // std::cout << "Debug step in remote DST: " << debug_slot_r_dst << std::endl;
 
-    std::vector<uint32_t> remote_dst_header(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
-    tt::Cluster::instance().read_core(remote_dst_header.data(), num_bytes_in_cmd_header, tt_cxy_pair(dst_eth_router_location.chip, physical_dst_eth_router), eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE);
-    tt::test_utils::print_vector_fixed_numel_per_row(remote_dst_header, 32);
+    // std::vector<uint32_t> remote_dst_header(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
+    // tt::Cluster::instance().read_core(remote_dst_header.data(), num_bytes_in_cmd_header, tt_cxy_pair(dst_eth_router_location.chip, physical_dst_eth_router), eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE);
+    // tt::test_utils::print_vector_fixed_numel_per_row(remote_dst_header, 32);
 
-    uint32_t num_cmds_processor_sent;
-    tt::Cluster::instance().read_core(&num_cmds_processor_sent, sizeof(uint32_t), tt_cxy_pair(remote_processor_location.chip, remote_processor_physical_core), SEMAPHORE_BASE + 2 * L1_ALIGNMENT);
-    std::cout << "Num commands processor sent: " << num_cmds_processor_sent << std::endl;
+    // uint32_t num_cmds_processor_sent;
+    // tt::Cluster::instance().read_core(&num_cmds_processor_sent, sizeof(uint32_t), tt_cxy_pair(remote_processor_location.chip, remote_processor_physical_core), SEMAPHORE_BASE + 2 * L1_ALIGNMENT);
+    // std::cout << "Num commands processor sent: " << num_cmds_processor_sent << std::endl;
 
-    uint32_t rcp_debug;
-    tt::Cluster::instance().read_core(&rcp_debug, sizeof(uint32_t), tt_cxy_pair(remote_processor_location.chip, remote_processor_physical_core), SEMAPHORE_BASE + 3 * L1_ALIGNMENT);
-    std::cout << "Remote cmd processor debug slot: " << rcp_debug << std::endl;
+    // uint32_t rcp_debug;
+    // tt::Cluster::instance().read_core(&rcp_debug, sizeof(uint32_t), tt_cxy_pair(remote_processor_location.chip, remote_processor_physical_core), SEMAPHORE_BASE + 3 * L1_ALIGNMENT);
+    // std::cout << "Remote cmd processor debug slot: " << rcp_debug << std::endl;
 
-    std::cout << "RCP cmd: " << std::endl;
-    std::vector<uint32_t> remote_processor_header(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
-    tt::Cluster::instance().read_core(remote_processor_header.data(), num_bytes_in_cmd_header, tt_cxy_pair(remote_processor_location.chip, remote_processor_physical_core), L1_UNRESERVED_BASE);
-    tt::test_utils::print_vector_fixed_numel_per_row(remote_processor_header, 32);
+    // std::cout << "RCP cmd: " << std::endl;
+    // std::vector<uint32_t> remote_processor_header(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
+    // tt::Cluster::instance().read_core(remote_processor_header.data(), num_bytes_in_cmd_header, tt_cxy_pair(remote_processor_location.chip, remote_processor_physical_core), L1_UNRESERVED_BASE);
+    // tt::test_utils::print_vector_fixed_numel_per_row(remote_processor_header, 32);
 
-    tt_cxy_pair dispatch_location = dispatch_core_manager::get(1).command_dispatcher_core(this->device->id(), channel, 0);
-    CoreCoord dispatch_physical_core = get_physical_core_coordinate(dispatch_location, CoreType::WORKER);
-    uint32_t num_cmds_dispatcher_sent;
-    tt::Cluster::instance().read_core(&num_cmds_dispatcher_sent, sizeof(uint32_t), tt_cxy_pair(dispatch_location.chip, dispatch_physical_core), SEMAPHORE_BASE + 2 * L1_ALIGNMENT);
-    std::cout << "Num commands dispatcher sent back: " << num_cmds_dispatcher_sent << std::endl;
+    // tt_cxy_pair dispatch_location = dispatch_core_manager::get(1).command_dispatcher_core(this->device->id(), channel, 0);
+    // CoreCoord dispatch_physical_core = get_physical_core_coordinate(dispatch_location, CoreType::WORKER);
+    // uint32_t num_cmds_dispatcher_sent;
+    // tt::Cluster::instance().read_core(&num_cmds_dispatcher_sent, sizeof(uint32_t), tt_cxy_pair(dispatch_location.chip, dispatch_physical_core), SEMAPHORE_BASE + 2 * L1_ALIGNMENT);
+    // std::cout << "Num commands dispatcher sent back: " << num_cmds_dispatcher_sent << std::endl;
 
-    uint32_t readback_slot;
-    tt::Cluster::instance().read_core(&readback_slot, sizeof(uint32_t), tt_cxy_pair(dispatch_location.chip, dispatch_physical_core), SEMAPHORE_BASE + 3 * L1_ALIGNMENT);
-    std::cout << "Remote dispatcher readback point: " << readback_slot << std::endl;
+    // uint32_t readback_slot;
+    // tt::Cluster::instance().read_core(&readback_slot, sizeof(uint32_t), tt_cxy_pair(dispatch_location.chip, dispatch_physical_core), SEMAPHORE_BASE + 3 * L1_ALIGNMENT);
+    // std::cout << "Remote dispatcher readback point: " << readback_slot << std::endl;
 
-    std::vector<uint32_t> remote_dispatcher_cb_config(112 / sizeof(uint32_t));
-    tt::Cluster::instance().read_core(remote_dispatcher_cb_config.data(), 112, tt_cxy_pair(dispatch_location.chip, dispatch_physical_core), CQ_CONSUMER_CB_BASE);
-    std::cout << "Remote dispatcher cb config: " << std::endl;
-    tt::test_utils::print_vector_fixed_numel_per_row(remote_dispatcher_cb_config, 32);
+    // std::vector<uint32_t> remote_dispatcher_cb_config(112 / sizeof(uint32_t));
+    // tt::Cluster::instance().read_core(remote_dispatcher_cb_config.data(), 112, tt_cxy_pair(dispatch_location.chip, dispatch_physical_core), CQ_CONSUMER_CB_BASE);
+    // std::cout << "Remote dispatcher cb config: " << std::endl;
+    // tt::test_utils::print_vector_fixed_numel_per_row(remote_dispatcher_cb_config, 32);
 
-    // std::vector<uint32_t> remote_dispatch_data0((2* 2048) / sizeof(uint32_t));
-    // tt::Cluster::instance().read_core(remote_dispatch_data0.data(), (2 * 2048), tt_cxy_pair(dispatch_location.chip, dispatch_physical_core), L1_UNRESERVED_BASE + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND);
-    // std::cout << "Remote dispatcher data slot 0: " << std::endl;
-    // tt::test_utils::print_vector_fixed_numel_per_row(remote_dispatch_data0, 32);
+    // // std::vector<uint32_t> remote_dispatch_data0((2* 2048) / sizeof(uint32_t));
+    // // tt::Cluster::instance().read_core(remote_dispatch_data0.data(), (2 * 2048), tt_cxy_pair(dispatch_location.chip, dispatch_physical_core), L1_UNRESERVED_BASE + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND);
+    // // std::cout << "Remote dispatcher data slot 0: " << std::endl;
+    // // tt::test_utils::print_vector_fixed_numel_per_row(remote_dispatch_data0, 32);
 
-    // std::vector<uint32_t> remote_dispatch_data1((2* 2048) / sizeof(uint32_t));
-    // tt::Cluster::instance().read_core(remote_dispatch_data1.data(), (2 * 2048), tt_cxy_pair(dispatch_location.chip, dispatch_physical_core), L1_UNRESERVED_BASE + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + get_consumer_data_buffer_size(false) + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND);
-    // std::cout << "Remote dispatcher data slot 1: " << std::endl;
-    // tt::test_utils::print_vector_fixed_numel_per_row(remote_dispatch_data1, 32);
+    // // std::vector<uint32_t> remote_dispatch_data1((2* 2048) / sizeof(uint32_t));
+    // // tt::Cluster::instance().read_core(remote_dispatch_data1.data(), (2 * 2048), tt_cxy_pair(dispatch_location.chip, dispatch_physical_core), L1_UNRESERVED_BASE + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + get_consumer_data_buffer_size(false) + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND);
+    // // std::cout << "Remote dispatcher data slot 1: " << std::endl;
+    // // tt::test_utils::print_vector_fixed_numel_per_row(remote_dispatch_data1, 32);
 
-    std::cout << "Printing cmd slots in remote dispatch" << std::endl;
-    std::vector<uint32_t> remote_dispatch_header0(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
-    tt::Cluster::instance().read_core(remote_dispatch_header0.data(), num_bytes_in_cmd_header, tt_cxy_pair(dispatch_location.chip, dispatch_physical_core), L1_UNRESERVED_BASE);
-    tt::test_utils::print_vector_fixed_numel_per_row(remote_dispatch_header0, 32);
+    // std::cout << "Printing cmd slots in remote dispatch" << std::endl;
+    // std::vector<uint32_t> remote_dispatch_header0(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
+    // tt::Cluster::instance().read_core(remote_dispatch_header0.data(), num_bytes_in_cmd_header, tt_cxy_pair(dispatch_location.chip, dispatch_physical_core), L1_UNRESERVED_BASE);
+    // tt::test_utils::print_vector_fixed_numel_per_row(remote_dispatch_header0, 32);
 
-    // std::vector<uint32_t> remote_dispatch_header1(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
-    // uint32_t second_slot_addr = L1_UNRESERVED_BASE + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + get_consumer_data_buffer_size(false);
-    // std::cout << "Second cmd slot addr: " << second_slot_addr << std::endl;
-    // tt::Cluster::instance().read_core(remote_dispatch_header1.data(), num_bytes_in_cmd_header, tt_cxy_pair(dispatch_location.chip, dispatch_physical_core), second_slot_addr);
-    // tt::test_utils::print_vector_fixed_numel_per_row(remote_dispatch_header1, 32);
+    // // std::vector<uint32_t> remote_dispatch_header1(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
+    // // uint32_t second_slot_addr = L1_UNRESERVED_BASE + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + get_consumer_data_buffer_size(false);
+    // // std::cout << "Second cmd slot addr: " << second_slot_addr << std::endl;
+    // // tt::Cluster::instance().read_core(remote_dispatch_header1.data(), num_bytes_in_cmd_header, tt_cxy_pair(dispatch_location.chip, dispatch_physical_core), second_slot_addr);
+    // // tt::test_utils::print_vector_fixed_numel_per_row(remote_dispatch_header1, 32);
 
 
-    tt_cxy_pair remote_signaller_location = dispatch_core_manager::get(1).remote_signaller_core(this->device->id(), channel, 0);
-    CoreCoord remote_signaller_physical_core = get_physical_core_coordinate(remote_signaller_location, CoreType::WORKER);
-    uint32_t num_cmds_signaller_sent;
-    tt::Cluster::instance().read_core(&num_cmds_signaller_sent, sizeof(uint32_t), tt_cxy_pair(remote_signaller_location.chip, remote_signaller_physical_core), SEMAPHORE_BASE + 2 * L1_ALIGNMENT);
-    std::cout << "Num commands signaller sent back: " << num_cmds_signaller_sent << std::endl;
+    // tt_cxy_pair remote_signaller_location = dispatch_core_manager::get(1).remote_signaller_core(this->device->id(), channel, 0);
+    // CoreCoord remote_signaller_physical_core = get_physical_core_coordinate(remote_signaller_location, CoreType::WORKER);
+    // uint32_t num_cmds_signaller_sent;
+    // tt::Cluster::instance().read_core(&num_cmds_signaller_sent, sizeof(uint32_t), tt_cxy_pair(remote_signaller_location.chip, remote_signaller_physical_core), SEMAPHORE_BASE + 2 * L1_ALIGNMENT);
+    // std::cout << "Num commands signaller sent back: " << num_cmds_signaller_sent << std::endl;
 
-    std::cout << "Printing cmd slots in remote signaller" << std::endl;
-    std::vector<uint32_t> remote_signal_header0(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
-    tt::Cluster::instance().read_core(remote_signal_header0.data(), num_bytes_in_cmd_header, tt_cxy_pair(remote_signaller_location.chip, remote_signaller_physical_core), L1_UNRESERVED_BASE);
-    tt::test_utils::print_vector_fixed_numel_per_row(remote_signal_header0, 32);
+    // std::cout << "Printing cmd slots in remote signaller" << std::endl;
+    // std::vector<uint32_t> remote_signal_header0(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
+    // tt::Cluster::instance().read_core(remote_signal_header0.data(), num_bytes_in_cmd_header, tt_cxy_pair(remote_signaller_location.chip, remote_signaller_physical_core), L1_UNRESERVED_BASE);
+    // tt::test_utils::print_vector_fixed_numel_per_row(remote_signal_header0, 32);
 
-    // std::vector<uint32_t> remote_signal_header1(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
-    // std::cout << "Second cmd slot addr signaller: " << second_slot_addr << std::endl;
-    // tt::Cluster::instance().read_core(remote_signal_header1.data(), num_bytes_in_cmd_header, tt_cxy_pair(remote_signaller_location.chip, remote_signaller_physical_core), second_slot_addr);
-    // tt::test_utils::print_vector_fixed_numel_per_row(remote_signal_header1, 32);
+    // // std::vector<uint32_t> remote_signal_header1(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
+    // // std::cout << "Second cmd slot addr signaller: " << second_slot_addr << std::endl;
+    // // tt::Cluster::instance().read_core(remote_signal_header1.data(), num_bytes_in_cmd_header, tt_cxy_pair(remote_signaller_location.chip, remote_signaller_physical_core), second_slot_addr);
+    // // tt::test_utils::print_vector_fixed_numel_per_row(remote_signal_header1, 32);
 
-    std::vector<uint32_t> signaller_cb_config(112 / sizeof(uint32_t));
-    tt::Cluster::instance().read_core(signaller_cb_config.data(), 112, tt_cxy_pair(remote_signaller_location.chip, remote_signaller_physical_core), CQ_CONSUMER_CB_BASE);
-    std::cout << "Remote signaller cb config: " << std::endl;
-    tt::test_utils::print_vector_fixed_numel_per_row(signaller_cb_config, 32);
+    // std::vector<uint32_t> signaller_cb_config(112 / sizeof(uint32_t));
+    // tt::Cluster::instance().read_core(signaller_cb_config.data(), 112, tt_cxy_pair(remote_signaller_location.chip, remote_signaller_physical_core), CQ_CONSUMER_CB_BASE);
+    // std::cout << "Remote signaller cb config: " << std::endl;
+    // tt::test_utils::print_vector_fixed_numel_per_row(signaller_cb_config, 32);
 
-    uint32_t signal_readback_slot;
-    tt::Cluster::instance().read_core(&signal_readback_slot, sizeof(uint32_t), tt_cxy_pair(remote_signaller_location.chip, remote_signaller_physical_core), SEMAPHORE_BASE + 3 * L1_ALIGNMENT);
-    std::cout << "Remote signaller num rxed: " << signal_readback_slot << std::endl;
+    // uint32_t signal_readback_slot;
+    // tt::Cluster::instance().read_core(&signal_readback_slot, sizeof(uint32_t), tt_cxy_pair(remote_signaller_location.chip, remote_signaller_physical_core), SEMAPHORE_BASE + 3 * L1_ALIGNMENT);
+    // std::cout << "Remote signaller num rxed: " << signal_readback_slot << std::endl;
 
-    // std::vector<uint32_t> remote_signal_data0((2* 2048) / sizeof(uint32_t));
-    // tt::Cluster::instance().read_core(remote_signal_data0.data(), (2 * 2048), tt_cxy_pair(remote_signaller_location.chip, remote_signaller_physical_core), L1_UNRESERVED_BASE + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND);
-    // std::cout << "Remote signaller data slot 0: " << std::endl;
-    // tt::test_utils::print_vector_fixed_numel_per_row(remote_signal_data0, 32);
+    // // std::vector<uint32_t> remote_signal_data0((2* 2048) / sizeof(uint32_t));
+    // // tt::Cluster::instance().read_core(remote_signal_data0.data(), (2 * 2048), tt_cxy_pair(remote_signaller_location.chip, remote_signaller_physical_core), L1_UNRESERVED_BASE + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND);
+    // // std::cout << "Remote signaller data slot 0: " << std::endl;
+    // // tt::test_utils::print_vector_fixed_numel_per_row(remote_signal_data0, 32);
 
-    tt_cxy_pair logical_eth_router_remote_src = tt::Cluster::instance().get_eth_core_for_dispatch_core(
-        remote_signaller_location, EthRouterMode::FD_SRC, mmio_device_id);
-    CoreCoord physical_eth_router_remote_src = device->ethernet_core_from_logical_core(logical_eth_router_remote_src);
-    uint32_t num_cmds_r_src_sent;
-    tt::Cluster::instance().read_core(&num_cmds_r_src_sent, sizeof(uint32_t), tt_cxy_pair(logical_eth_router_remote_src.chip, physical_eth_router_remote_src), eth_l1_mem::address_map::SEMAPHORE_BASE + 1 * L1_ALIGNMENT);
-    std::cout << "Num commands Remote SRC sent: " << num_cmds_r_src_sent << std::endl;
+    // tt_cxy_pair logical_eth_router_remote_src = tt::Cluster::instance().get_eth_core_for_dispatch_core(
+    //     remote_signaller_location, EthRouterMode::FD_SRC, mmio_device_id);
+    // CoreCoord physical_eth_router_remote_src = device->ethernet_core_from_logical_core(logical_eth_router_remote_src);
+    // uint32_t num_cmds_r_src_sent;
+    // tt::Cluster::instance().read_core(&num_cmds_r_src_sent, sizeof(uint32_t), tt_cxy_pair(logical_eth_router_remote_src.chip, physical_eth_router_remote_src), eth_l1_mem::address_map::SEMAPHORE_BASE + 1 * L1_ALIGNMENT);
+    // std::cout << "Num commands Remote SRC sent: " << num_cmds_r_src_sent << std::endl;
 
-    uint32_t debug_slot_r_src;
-    tt::Cluster::instance().read_core(&debug_slot_r_src, sizeof(uint32_t), tt_cxy_pair(logical_eth_router_remote_src.chip, physical_eth_router_remote_src), eth_l1_mem::address_map::SEMAPHORE_BASE + 3 * L1_ALIGNMENT);
-    std::cout << "Debug step in Remote SRC: " << debug_slot_r_src << std::endl;
+    // uint32_t debug_slot_r_src;
+    // tt::Cluster::instance().read_core(&debug_slot_r_src, sizeof(uint32_t), tt_cxy_pair(logical_eth_router_remote_src.chip, physical_eth_router_remote_src), eth_l1_mem::address_map::SEMAPHORE_BASE + 3 * L1_ALIGNMENT);
+    // std::cout << "Debug step in Remote SRC: " << debug_slot_r_src << std::endl;
 
-    tt_cxy_pair completion_q_writer_location = dispatch_core_manager::get(1).completion_queue_writer_core(this->device->id(), channel, 0);
-    tt_cxy_pair logical_eth_router_dst_mmio = tt::Cluster::instance().get_eth_core_for_dispatch_core(
-        completion_q_writer_location, EthRouterMode::FD_DST, this->device->id());
-    CoreCoord mmio_dst_router_physical = device->ethernet_core_from_logical_core(logical_eth_router_dst_mmio);
+    // tt_cxy_pair completion_q_writer_location = dispatch_core_manager::get(1).completion_queue_writer_core(this->device->id(), channel, 0);
+    // tt_cxy_pair logical_eth_router_dst_mmio = tt::Cluster::instance().get_eth_core_for_dispatch_core(
+    //     completion_q_writer_location, EthRouterMode::FD_DST, this->device->id());
+    // CoreCoord mmio_dst_router_physical = device->ethernet_core_from_logical_core(logical_eth_router_dst_mmio);
 
-    uint32_t num_cmds_l_dst_rxed;
-    tt::Cluster::instance().read_core(&num_cmds_l_dst_rxed, sizeof(uint32_t), tt_cxy_pair(logical_eth_router_dst_mmio.chip, mmio_dst_router_physical), eth_l1_mem::address_map::SEMAPHORE_BASE + 2 * L1_ALIGNMENT);
-    std::cout << "Num commands Local DST rxed: " << num_cmds_l_dst_rxed << std::endl;
+    // uint32_t num_cmds_l_dst_rxed;
+    // tt::Cluster::instance().read_core(&num_cmds_l_dst_rxed, sizeof(uint32_t), tt_cxy_pair(logical_eth_router_dst_mmio.chip, mmio_dst_router_physical), eth_l1_mem::address_map::SEMAPHORE_BASE + 2 * L1_ALIGNMENT);
+    // std::cout << "Num commands Local DST rxed: " << num_cmds_l_dst_rxed << std::endl;
 
-    uint32_t num_cmds_l_dst_sent;
-    tt::Cluster::instance().read_core(&num_cmds_l_dst_sent, sizeof(uint32_t), tt_cxy_pair(logical_eth_router_dst_mmio.chip, mmio_dst_router_physical), eth_l1_mem::address_map::SEMAPHORE_BASE + 1 * L1_ALIGNMENT);
-    std::cout << "Num commands Local DST sent: " << num_cmds_l_dst_sent << std::endl;
+    // uint32_t num_cmds_l_dst_sent;
+    // tt::Cluster::instance().read_core(&num_cmds_l_dst_sent, sizeof(uint32_t), tt_cxy_pair(logical_eth_router_dst_mmio.chip, mmio_dst_router_physical), eth_l1_mem::address_map::SEMAPHORE_BASE + 1 * L1_ALIGNMENT);
+    // std::cout << "Num commands Local DST sent: " << num_cmds_l_dst_sent << std::endl;
 
-    std::vector<uint32_t> local_dst_router_header(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
-    tt::Cluster::instance().read_core(local_dst_router_header.data(), num_bytes_in_cmd_header, tt_cxy_pair(logical_eth_router_dst_mmio.chip, mmio_dst_router_physical), eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE);
-    tt::test_utils::print_vector_fixed_numel_per_row(local_dst_router_header, 32);
+    // std::vector<uint32_t> local_dst_router_header(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
+    // tt::Cluster::instance().read_core(local_dst_router_header.data(), num_bytes_in_cmd_header, tt_cxy_pair(logical_eth_router_dst_mmio.chip, mmio_dst_router_physical), eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE);
+    // tt::test_utils::print_vector_fixed_numel_per_row(local_dst_router_header, 32);
 
-    CoreCoord completion_q_physical_core = get_physical_core_coordinate(completion_q_writer_location, CoreType::WORKER);
-    uint32_t num_cmd_completion_q_saw;
-    tt::Cluster::instance().read_core(&num_cmd_completion_q_saw, sizeof(uint32_t), tt_cxy_pair(completion_q_writer_location.chip, completion_q_physical_core), SEMAPHORE_BASE + 1 * L1_ALIGNMENT);
-    std::cout << "Num commands completion queue writer saw: " << num_cmd_completion_q_saw << std::endl;
+    // CoreCoord completion_q_physical_core = get_physical_core_coordinate(completion_q_writer_location, CoreType::WORKER);
+    // uint32_t num_cmd_completion_q_saw;
+    // tt::Cluster::instance().read_core(&num_cmd_completion_q_saw, sizeof(uint32_t), tt_cxy_pair(completion_q_writer_location.chip, completion_q_physical_core), SEMAPHORE_BASE + 1 * L1_ALIGNMENT);
+    // std::cout << "Num commands completion queue writer saw: " << num_cmd_completion_q_saw << std::endl;
 
-    uint32_t completion_q_stepper;
-    tt::Cluster::instance().read_core(&completion_q_stepper, sizeof(uint32_t), tt_cxy_pair(completion_q_writer_location.chip, completion_q_physical_core), SEMAPHORE_BASE + 2 * L1_ALIGNMENT);
-    std::cout << "Completion queue stepper: " << completion_q_stepper << std::endl;
+    // uint32_t completion_q_stepper;
+    // tt::Cluster::instance().read_core(&completion_q_stepper, sizeof(uint32_t), tt_cxy_pair(completion_q_writer_location.chip, completion_q_physical_core), SEMAPHORE_BASE + 2 * L1_ALIGNMENT);
+    // std::cout << "Completion queue stepper: " << completion_q_stepper << std::endl;
 
-    std::vector<uint32_t> completion_q_header(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
-    tt::Cluster::instance().read_core(completion_q_header.data(), num_bytes_in_cmd_header, tt_cxy_pair(completion_q_writer_location.chip, completion_q_physical_core), L1_UNRESERVED_BASE);
-    tt::test_utils::print_vector_fixed_numel_per_row(completion_q_header, 32);
+    // std::vector<uint32_t> completion_q_header(DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER);
+    // tt::Cluster::instance().read_core(completion_q_header.data(), num_bytes_in_cmd_header, tt_cxy_pair(completion_q_writer_location.chip, completion_q_physical_core), L1_UNRESERVED_BASE);
+    // tt::test_utils::print_vector_fixed_numel_per_row(completion_q_header, 32);
 
     // std::vector<uint32_t> comp_q_data0((2* 2048) / sizeof(uint32_t));
     // tt::Cluster::instance().read_core(comp_q_data0.data(), (2 * 2048), tt_cxy_pair(completion_q_writer_location.chip, completion_q_physical_core), L1_UNRESERVED_BASE + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND);
@@ -1532,7 +1570,11 @@ void CommandQueue::wait_finish() {
     // Reset this value to 0 before moving on
     finish = 0;
     tt::Cluster::instance().write_sysmem(&finish, 4, HOST_CQ_FINISH_PTR + finish_addr_offset, mmio_device_id, channel);
-    std::cout << "exiting finish" << std::endl;
+
+    uint32_t new_finish;
+    tt::Cluster::instance().read_sysmem(&new_finish, 4, HOST_CQ_FINISH_PTR + finish_addr_offset, mmio_device_id, channel);
+
+    std::cout << "exiting finish new finish is " << new_finish << std::endl;
 }
 
 void CommandQueue::finish() {

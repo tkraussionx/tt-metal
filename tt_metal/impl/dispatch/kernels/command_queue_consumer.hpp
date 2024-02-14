@@ -134,6 +134,7 @@ FORCE_INLINE void write_buffers(
             multicore_cb_wait_front(db_cb_config, num_to_write);
             uint32_t src_addr = (db_cb_config->rd_ptr_16B) << 4;
             buffer.noc_async_write_buffer(src_addr, page_id, num_to_write);
+            // DPRINT << "Wrote " << num_to_write << " pages starting from page " << page_id << " from " << src_addr << ENDL();
             noc_async_writes_flushed();
             multicore_cb_pop_front(
                 db_cb_config,
@@ -173,7 +174,8 @@ FORCE_INLINE void write_remote_buffers(
 
         uint32_t num_to_write;
         uint32_t src_addr = (db_cb_config->rd_ptr_16B) << 4;
-        uint32_t l1_consumer_fifo_limit = src_addr + (db_cb_config->total_size_16B << 4) - 1;
+        uint32_t l1_consumer_fifo_limit = src_addr + (db_cb_config->total_size_16B << 4);
+        DPRINT << "RD-Write-Buffer-l1_consumer_fifo_limit_16B " << (l1_consumer_fifo_limit >> 4) << ENDL();
 
         Buffer buffer;
         if (not(sharded)) {
@@ -190,13 +192,14 @@ FORCE_INLINE void write_remote_buffers(
             num_to_write = min(end_page_id - page_id, producer_consumer_transfer_num_pages);
             multicore_cb_wait_front(db_cb_config, num_to_write);
             uint32_t src_addr = (db_cb_config->rd_ptr_16B) << 4;
+            // DPRINT << "Remote_buff_writer_sending_from " << src_addr << ENDL();
             buffer.noc_async_write_buffer(src_addr, page_id, num_to_write);
             noc_async_writes_flushed();
             multicore_cb_pop_front(
                 db_cb_config,
                 remote_producer_db_cb_config,
                 producer_noc_encoding,
-                l1_consumer_fifo_limit,
+                (l1_consumer_fifo_limit >> 4),
                 num_to_write,
                 db_cb_config->page_size_16B);
             page_id += num_to_write;
@@ -302,6 +305,7 @@ void write_and_launch_program(
                 break;
             case (uint32_t) DeviceCommand::TransferType::PROGRAM_MULTICAST_PAGES:
                 num_pages_in_transfer = header->num_program_multicast_pages;
+                DPRINT << "Num pages in transfer " << num_pages_in_transfer << ENDL();
                 break;
             case (uint32_t) DeviceCommand::TransferType::PROGRAM_UNICAST_PAGES:
                 multicast = false;

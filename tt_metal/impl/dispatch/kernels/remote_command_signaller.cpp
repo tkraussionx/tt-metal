@@ -4,6 +4,7 @@
 
 #include "tt_metal/impl/dispatch/kernels/command_queue_consumer.hpp"
 #include "tt_metal/impl/dispatch/kernels/command_queue_producer.hpp"
+#include "debug/dprint.h"
 
 // Dispatches fast dispatch commands to worker cores. Currently only runs on remote devices
 void kernel_main() {
@@ -35,12 +36,14 @@ void kernel_main() {
         // Wait for dispatcher to supply a command
         // Received command is either finished running or is a host request to read from device buffer
         db_acquire(db_rx_semaphore_addr, ((uint64_t)signaller_noc_encoding << 32));
+        DPRINT << "RS got command" << ENDL();
 
         readback_point[0] = readback_point[0] + 1;
 
         uint32_t command_start_addr = get_command_slot_addr<cmd_base_addr, data_buffer_size>(db_rx_buf_switch);
         volatile tt_l1_ptr uint32_t* command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(command_start_addr);
         volatile tt_l1_ptr CommandHeader* header = (CommandHeader*)command_ptr;
+        header->fwd_path = 0; // hacky
 
         wait_consumer_space_available(tx_semaphore_addr);   // Check that there is space in the eth router
 
@@ -55,6 +58,7 @@ void kernel_main() {
         //  when every command has an event and is sent back then we need to ensure that the routers don't expect any cmd data to be incoming
         relay_command<consumer_cmd_base_addr, consumer_data_buffer_size>(command_start_addr, tx_buf_switch, ((uint64_t)eth_consumer_noc_encoding << 32));
         num_relayed[0] = num_relayed[0] + 1;
+        DPRINT << "RS RELAYED COMMAND" << ENDL();
 
         update_producer_consumer_sync_semaphores(((uint64_t)signaller_noc_encoding << 32), ((uint64_t)eth_consumer_noc_encoding << 32), tx_semaphore_addr, eth_get_semaphore(0));
 
@@ -82,7 +86,7 @@ void kernel_main() {
             uint32_t consumer_router_transfer_num_pages = header->consumer_router_transfer_num_pages;
             uint32_t num_buffer_transfers = header->num_buffer_transfers;
             // get_db_buf_addr is set up to get address of first CQ slot only because currently remote FD does not have any cmd double buffering
-            transfer(
+            transfer<false>(
                 rx_db_cb_config,
                 tx_db_cb_config,
                 dispatcher_db_cb_config,
@@ -103,6 +107,7 @@ void kernel_main() {
         }
 
         // Notify to dispatcher that is has completed a command
+        DPRINT << "RS done" << ENDL();
         noc_semaphore_inc(((uint64_t)producer_noc_encoding << 32) | get_semaphore(1), 1);
         noc_async_write_barrier(); // Barrier for now
         // db_rx_buf_switch = not db_rx_buf_switch;

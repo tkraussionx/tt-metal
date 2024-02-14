@@ -40,6 +40,8 @@ void kernel_main() {
         // Wait for eth producer to supply a command
         db_acquire(db_semaphore_addr,  ((uint64_t)consumer_noc_encoding << 32));
 
+        DPRINT << "CQW got command" << ENDL();
+
         // debug_stepper[0] = 39;
 
         // For each instruction, we need to jump to the relevant part of the device command
@@ -93,6 +95,7 @@ void kernel_main() {
         }
 
         // notify producer that it has completed a command
+        DPRINT << "CQW done command" << ENDL();
         noc_semaphore_inc((uint64_t(producer_noc_encoding) << 32) | eth_get_semaphore(0), 1);
         noc_async_write_barrier(); // Barrier for now
         // debug_stepper[0] = 399999;

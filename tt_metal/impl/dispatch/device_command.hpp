@@ -40,6 +40,7 @@ struct CommandHeader {
     uint32_t restart = 0;
     uint32_t new_issue_queue_size = 0;
     uint32_t new_completion_queue_size = 0;
+    uint32_t fwd_path = 1;
 };
 
 class DeviceCommand {
@@ -173,6 +174,13 @@ class DeviceCommand {
 
     void* data() const;
 
+    struct packet_ {
+        CommandHeader header;
+        std::array<uint32_t, DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND - DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER> data;
+    };
+
+    packet_ packet;
+
    private:
     uint32_t buffer_transfer_idx;
     uint32_t program_transfer_idx;
@@ -188,10 +196,10 @@ class DeviceCommand {
         );
     void add_buffer_transfer_instruction_postamble();
 
-    struct packet_ {
-        CommandHeader header;
-        std::array<uint32_t, DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND - DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER> data;
-    };
+    // struct packet_ {
+    //     CommandHeader header;
+    //     std::array<uint32_t, DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND - DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER> data;
+    // };
 
-    packet_ packet;
+    // packet_ packet;
 };

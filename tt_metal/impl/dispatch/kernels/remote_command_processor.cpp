@@ -43,7 +43,7 @@ void kernel_main() {
 
     while (true) {
         // Wait for ethernet router to supply a command
-        DPRINT << " DPRINT " << " acquire here " << ENDL();
+        // DPRINT << " DPRINT " << " acquire here " << ENDL();
         db_acquire(rx_semaphore_addr, ((uint64_t)processor_noc_encoding << 32));
 
         // For each instruction, we need to jump to the relevant part of the device command
@@ -51,9 +51,9 @@ void kernel_main() {
         volatile tt_l1_ptr uint32_t* command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(command_start_addr);
         volatile tt_l1_ptr CommandHeader* header = (CommandHeader*)command_ptr;
 
-        DPRINT << " DPRINT " << " wait here " << ENDL();
+        // DPRINT << " DPRINT " << " wait here " << ENDL();
         wait_consumer_space_available(db_tx_semaphore_addr); // Check that there is space in the dispatcher
-        DPRINT << " DPRINT " << " done here " << ENDL();
+        // DPRINT << " DPRINT " << " done here " << ENDL();
 
         uint32_t consumer_cb_num_pages = header->consumer_cb_num_pages;
         uint32_t page_size = header->page_size;
@@ -83,7 +83,11 @@ void kernel_main() {
         uint32_t producer_consumer_transfer_num_pages = header->producer_router_transfer_num_pages;
         debug[0] = 0;
         // get_db_buf_addr is set up to get address of first CQ slot only because currently remote FD does not have any cmd double buffering
-        transfer(
+
+        DPRINT << "db_buff_addr: " << get_db_buf_addr<cmd_base_addr, data_buffer_size>(false) << ENDL();
+        DPRINT << "header_producer_cb_size " << header->producer_cb_size << ENDL();
+
+        transfer<true>(
             rx_db_cb_config,
             tx_db_cb_config,
             eth_db_cb_config,
@@ -98,10 +102,10 @@ void kernel_main() {
             (get_db_buf_addr<dispatcher_cmd_base_addr, dispatcher_data_buffer_size>(false) + consumer_cb_size) >> 4,
             ((uint64_t)dispatcher_noc_encoding << 32),
             producer_consumer_transfer_num_pages,
-            (get_db_buf_addr<cmd_base_addr, data_buffer_size>(false) + consumer_cb_size) >> 4,
+            (get_db_buf_addr<cmd_base_addr, data_buffer_size>(false) + header->producer_cb_size) >> 4,
             debug);
 
-        DPRINT << " DPRINT " << " done transfer " << ENDL();
+        DPRINT << " RCP done " << ENDL();
         // Notify producer ethernet router that it has completed transferring a command
         noc_semaphore_inc(((uint64_t)producer_noc_encoding << 32) | eth_get_semaphore(0), 1);
         noc_async_write_barrier(); // Barrier for now

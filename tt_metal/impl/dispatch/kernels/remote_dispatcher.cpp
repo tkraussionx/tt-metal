@@ -35,6 +35,7 @@ void kernel_main() {
     while (true) {
         // Wait for producer to supply a command
         db_acquire(db_rx_semaphore_addr, ((uint64_t)dispatcher_noc_encoding << 32));
+        DPRINT << "RD got command" << ENDL();
 
         // For each instruction, we need to jump to the relevant part of the device command
         uint32_t command_start_addr = get_command_slot_addr<cmd_base_addr, data_buffer_size>(db_rx_buf_switch);
@@ -54,7 +55,7 @@ void kernel_main() {
         tt_l1_ptr db_cb_config_t *rx_db_cb_config = get_local_db_cb_config(CQ_CONSUMER_CB_BASE, true);
         const tt_l1_ptr db_cb_config_t *remote_producer_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, false);
 
-        uint32_t producer_consumer_transfer_num_pages = header->producer_consumer_transfer_num_pages;
+        uint32_t producer_consumer_transfer_num_pages = header->producer_router_transfer_num_pages;
         if (is_program) {
             uint32_t program_transfer_start_addr = buffer_transfer_start_addr + ((DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION * DeviceCommand::NUM_POSSIBLE_BUFFER_TRANSFERS) * sizeof(uint32_t));
             uint32_t num_workers = header->num_workers;  // If num_workers > 0, it means we are launching a program
@@ -130,10 +131,12 @@ void kernel_main() {
                     signaller_db_cb_config,
                     readback_point
                 );
+                DPRINT << "RD: done producing data" << ENDL();
                 readback_point[0] = readback_point[0] + 1;
             }
         }
 
+        DPRINT << "RD: done" << ENDL();
         // notify remote command processor that it has completed a command
         noc_semaphore_inc(((uint64_t)producer_noc_encoding << 32) | get_semaphore(1), 1);
         // db_rx_buf_switch = not db_rx_buf_switch;
