@@ -9,16 +9,14 @@ import pytest
 import json
 from pathlib import Path
 from ttnn.model_preprocessing import preprocess_model_parameters
-from models.experimental.mistral.tt.mistral_configuration import TtModelArgs
-from models.experimental.mistral.reference.model import Transformer
-from models.experimental.mistral.reference.tokenizer import Tokenizer
+from models.experimental.functional_mistral.tt.mistral_configuration import TtModelArgs
+from models.experimental.functional_mistral.reference.model import Transformer
+from models.experimental.functional_mistral.reference.tokenizer import Tokenizer
 from models.experimental.functional_mistral.tt.ttnn_functional_transformer import mistral_transformer
-from models.utility_functions import skip_for_wormhole_b0
 
 from tests.ttnn.utils_for_testing import assert_with_pcc
 
 
-@skip_for_wormhole_b0()
 @pytest.mark.parametrize(
     "batch_size",
     (
