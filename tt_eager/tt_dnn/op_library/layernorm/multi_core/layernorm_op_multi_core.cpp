@@ -754,7 +754,6 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
     }
     if (rms_norm) {
         compute_defines["RMSNORM"] = "1";
-        std::cout<<'a'<<std::endl;
     }
     // compute kernel compile time args
     std::vector<uint32_t> top_row_compute_compile_time_args = {
