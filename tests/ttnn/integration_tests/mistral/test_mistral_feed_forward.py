@@ -2,6 +2,11 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from loguru import logger
+from time import time
+from operator import mul
+from functools import reduce
+
 import torch
 import ttnn
 from ttnn.model_preprocessing import preprocess_model_parameters
@@ -40,17 +45,35 @@ def test_mistral_feed_forward_inference(model_location_generator, device, reset_
         device=device,
     )
 
-    input = torch.rand(1, 11, 4096)
+    input = torch.rand(1, 11, dim)
     reference_ouput = reference_model(input)
+
+    ttnn.enable_program_cache()
 
     ttnn_input = ttnn.to_layout(
         ttnn.to_device(ttnn.from_torch(input, dtype=ttnn.bfloat16), device), layout=ttnn.TILE_LAYOUT
     )
+
+    logger.info("Kernel compilation pass...")
     output = feed_forward(
         model_args,
         ttnn_input,
         parameters=parameters,
     )
+
+    logger.info("Performance timing pass...")
+    start = time()
+    output = feed_forward(
+        model_args,
+        ttnn_input,
+        parameters=parameters,
+    )
+    duration = time() - start
+    bytes_per_element = {"BFLOAT16": 2, "BFLOAT8_B": 1, "FLOAT32": 4, "UINT16": 2, "UINT32": 4}
+    tensor_bytes = lambda x: reduce(mul, x.shape, 1) * bytes_per_element[x.dtype.name]
+    total_dram_bytes = sum(tensor_bytes(x.weight) for x in parameters.values())
+    dram_gb_per_sec = total_dram_bytes / 1024**3 / duration
+    logger.info(f"End-to-end duration: {duration * 1000:.1f} ms = {dram_gb_per_sec:.2f} GB/s DRAM weight utilization")
 
     output = ttnn.to_layout(output, ttnn.ROW_MAJOR_LAYOUT)
     output = ttnn.from_device(output)
