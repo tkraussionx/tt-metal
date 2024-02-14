@@ -45,13 +45,24 @@ def test_mistral_feed_forward_inference(model_location_generator, device, reset_
         device=device,
     )
 
-    input = torch.rand(1, 11, dim)
+    # ttnn is happy with 2d weight tensors but tt_lib functions need tensors to be 4d
+    for v in parameters.values():
+        if len(v.weight.shape) < 4:
+            new_shape = tuple([1] * (4 - len(v.weight.shape)) + list(v.weight.shape))
+            v.weight = ttnn.reshape(v.weight, new_shape)
+
+    input = torch.rand(1, 1, 11, dim)
     reference_ouput = reference_model(input)
 
     ttnn.enable_program_cache()
 
     ttnn_input = ttnn.to_layout(
-        ttnn.to_device(ttnn.from_torch(input, dtype=ttnn.bfloat16), device), layout=ttnn.TILE_LAYOUT
+        ttnn.to_device(
+            ttnn.from_torch(input, dtype=ttnn.bfloat16),
+            device,
+            memory_config=ttnn.L1_MEMORY_CONFIG,
+        ),
+        layout=ttnn.TILE_LAYOUT,
     )
 
     logger.info("Kernel compilation pass...")
