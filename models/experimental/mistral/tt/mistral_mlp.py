@@ -5,7 +5,6 @@
 import torch
 from torch import nn
 import tt_lib
-
 from models.utility_functions import torch2tt_tensor
 
 
@@ -97,7 +96,7 @@ class TtMistralMLP(nn.Module):
         w2_out = tt_lib.operations.primary.matmul_1d(
             w2_in,
             self.w2_weights,
-            # program_config=self.model_config["FF2_MM_PROGCFG"],
+            program_config=self.model_config["FF2_MM_PROGCFG"],
             output_mem_config=self.model_config["FF2_MM_OUTPUT_MEMCFG"],
             output_dtype=self.model_config["FF2_MM_OUTPUT_DTYPE"],
         )

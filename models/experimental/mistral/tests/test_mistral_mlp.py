@@ -15,9 +15,6 @@ from models.utility_functions import (
     comp_pcc,
     comp_allclose,
 )
-from models.experimental.mistral.tt.model_config import (
-    get_model_config,
-)
 
 
 @pytest.mark.parametrize(
@@ -28,7 +25,7 @@ from models.experimental.mistral.tt.model_config import (
     "pcc",
     ((0.99),),
 )
-def test_mistral_mlp_inference(pcc, model_config, model_location_generator, get_tt_cache_path, device, reset_seeds):
+def test_mistral_mlp_inference(pcc, model_config, model_location_generator, device):
     dtype = model_config.split("-")[0]
     mistral_path = Path(model_location_generator("mistral-7B-v0.1", model_subdir="mistral"))
     state_dict = torch.load(mistral_path / "consolidated.00.pth")

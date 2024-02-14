@@ -16,6 +16,8 @@ OP_KEYS = (
     "FF2_MM_OUTPUT",
     "FF3_MM_WEIGHTS",  # up proj
     "FF3_MM_OUTPUT",
+    # Mistral RMSNorm
+    "RMS_NORM_WEIGHTS",
     # TODO Clean old falcon keys
     # Inputs
     "INPUT",
@@ -101,11 +103,9 @@ def get_model_config(model_config_str, num_devices=1):
     BFP8_DTYPE = ttl.tensor.DataType.BFLOAT8_B
 
     # Set default dtype and mem_config based on model_config_str
-    if model_config_str in ("BFLOAT16-DRAM", "BFLOAT16-L1"):
+    if model_config_str in ("BFLOAT16-DRAM", "BFLOAT16-L1", "BFLOAT8-DRAM", "BFLOAT8-L1"):
         dtype_str, mem_config_str = model_config_str.split("-")
-        # TODO: Set default memcfg for BFLOAT16-L1 to L1
-        # mem_config = DRAM_MEMCFG if mem_config_str == "DRAM" else L1_MEMCFG
-        mem_config = DRAM_MEMCFG
+        mem_config = DRAM_MEMCFG if mem_config_str == "DRAM" else L1_MEMCFG
         dtype = ttl.tensor.DataType.BFLOAT16 if dtype_str == "BFLOAT16" else ttl.tensor.DataType.BFLOAT8_B
     else:
         raise NotImplementedError(f"Model config {model_config_str} is not supported!")
@@ -163,23 +163,13 @@ def get_model_config(model_config_str, num_devices=1):
         mcast_in0=True,
     )
 
-    # M = 32
-    # K = 14336
-    # N = 4096
-
-    # per_core_M = M / TILE_HEIGHT = 32/32 = 1
-    # per_core_N = N/ grids / TILE_WIDTH = 4096/64/32 = 2
-
-    # in0_block_w = K / TILE_WIDTH % 2 = 14336/32 / 2 = 7 -> 1
-    # out_subblock_h = per_core_m = 1 / 4 = 1
-    # out_subblock_w = 2
     model_config["FF2_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
         compute_with_storage_grid_size=compute_with_storage_grid_size,
         in0_block_w=1,  # 14336 / TILE_WIDTH=32 / Grid_Size
         out_subblock_h=1,
-        out_subblock_w=2,  # 8#2, # 4096 / TILE_WIDTH=32 / Grid_Size
+        out_subblock_w=2,  # 4096 / TILE_WIDTH=32 / Grid_Size
         per_core_M=1,  # M / TILE_HEIGHT = 32 / 32
-        per_core_N=2,  # 128,#2,
+        per_core_N=2,  # N / Tile_Width / Grid_Size
         fuse_batch=True,
         fused_activation=None,
         mcast_in0=True,
