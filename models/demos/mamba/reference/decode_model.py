@@ -20,24 +20,37 @@ Glossary:
 
 """
 from __future__ import annotations
+import math
 import json
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from dataclasses import dataclass
 from einops import rearrange, repeat, einsum
 
-from models.demos.mamba.reference.args import ModelArgs
 
-from typing import Literal
+@dataclass
+class ModelArgs:
+    d_model: int
+    n_layer: int
+    vocab_size: int
+    d_state: int = 16
+    expand: int = 2
+    dt_rank: Union[int, str] = "auto"
+    d_conv: int = 4
+    pad_vocab_size_multiple: int = 8
+    conv_bias: bool = True
+    bias: bool = False
+    batch_size: int = 1
 
-MambaPretrainedModelName = Literal[
-    "state-spaces/mamba-2.8b-slimpj",
-    "state-spaces/mamba-2.8b",
-    "state-spaces/mamba-1.4b",
-    "state-spaces/mamba-790m",
-    "state-spaces/mamba-370m",
-    "state-spaces/mamba-130m",
-]
+    def __post_init__(self):
+        self.d_inner = int(self.expand * self.d_model)
+
+        if self.dt_rank == "auto":
+            self.dt_rank = math.ceil(self.d_model / 16)
+
+        if self.vocab_size % self.pad_vocab_size_multiple != 0:
+            self.vocab_size += self.pad_vocab_size_multiple - self.vocab_size % self.pad_vocab_size_multiple
 
 
 class MambaDecode(nn.Module):
@@ -77,7 +90,7 @@ class MambaDecode(nn.Module):
         return logits
 
     @staticmethod
-    def from_pretrained(pretrained_model_name: MambaPretrainedModelName):
+    def from_pretrained(pretrained_model_name: str):
         """Load pretrained weights from HuggingFace into model.
 
         Args:
@@ -98,14 +111,10 @@ class MambaDecode(nn.Module):
 
         def load_config_hf(model_name):
             resolved_archive_file = cached_file(model_name, CONFIG_NAME, _raise_exceptions_for_missing_entries=False)
-            if not resolved_archive_file:
-                raise RuntimeError("Unable to load Mamba archive file from HF")
             return json.load(open(resolved_archive_file))
 
         def load_state_dict_hf(model_name, device=None, dtype=None):
             resolved_archive_file = cached_file(model_name, WEIGHTS_NAME, _raise_exceptions_for_missing_entries=False)
-            if not resolved_archive_file:
-                raise RuntimeError("Unable to load Mamba weights archive file from HF")
             return torch.load(resolved_archive_file, weights_only=True, map_location="cpu")
 
         config_data = load_config_hf(pretrained_model_name)
@@ -286,7 +295,7 @@ class MambaBlock(nn.Module):
         y = einsum(x, C[:, -1], "b d_in n, b n -> b d_in")
 
         y = y.unsqueeze(1)
-        y = y + u*D
+        y = y + u * D
 
         self.prev_hidden_states = x
         return y
