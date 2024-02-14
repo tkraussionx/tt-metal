@@ -8,16 +8,14 @@ from ttnn.model_preprocessing import preprocess_model_parameters
 
 import json
 from pathlib import Path
-from models.experimental.mistral.tt.mistral_configuration import TtModelArgs
-from models.experimental.mistral.reference.model import Transformer
-from models.experimental.mistral.reference.model import FeedForward
+from models.experimental.functional_mistral.tt.mistral_configuration import TtModelArgs
+from models.experimental.functional_mistral.reference.model import Transformer
+from models.experimental.functional_mistral.reference.model import FeedForward
 from models.experimental.functional_mistral.tt.ttnn_functional_feed_forward import feed_forward
-from models.utility_functions import skip_for_wormhole_b0
 
 from tests.ttnn.utils_for_testing import assert_with_pcc
 
 
-@skip_for_wormhole_b0()
 def test_mistral_feed_forward_inference(model_location_generator, device, reset_seeds):
     model_path = model_location_generator("mistral-7B-v0.1", model_subdir="Mistral")
     transformer = Transformer.from_folder(Path(model_path), n_layers=1, max_batch_size=1, is_whole_model=False)

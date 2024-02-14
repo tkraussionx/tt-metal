@@ -8,17 +8,15 @@ import tt_lib
 import json
 from pathlib import Path
 from ttnn.model_preprocessing import preprocess_model_parameters
-from models.experimental.mistral.tt.mistral_configuration import TtModelArgs
-from models.experimental.mistral.reference.model import Transformer
-from models.experimental.mistral.reference.model import TransformerBlock
-from models.experimental.mistral.mistral_helper_funcs import get_freqs_cis
+from models.experimental.functional_mistral.tt.mistral_configuration import TtModelArgs
+from models.experimental.functional_mistral.reference.model import Transformer
+from models.experimental.functional_mistral.reference.model import TransformerBlock
+from models.experimental.functional_mistral.mistral_helper_funcs import get_freqs_cis
 from models.experimental.functional_mistral.tt.ttnn_functional_transformer_block import transformer_block
-from models.utility_functions import skip_for_wormhole_b0
 
 from tests.ttnn.utils_for_testing import assert_with_pcc
 
 
-@skip_for_wormhole_b0()
 def test_mistral_transformer_block_inference(model_location_generator, device, reset_seeds):
     model_path = model_location_generator("mistral-7B-v0.1", model_subdir="Mistral")
     transformer = Transformer.from_folder(Path(model_path), n_layers=1, max_batch_size=1, is_whole_model=False)
