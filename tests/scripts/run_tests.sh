@@ -68,7 +68,7 @@ run_post_commit_pipeline_tests() {
     if [[ $dispatch_mode == "slow" ]]; then
         ./tests/scripts/run_pre_post_commit_regressions_slow_dispatch.sh
     elif [[ $dispatch_mode == "fast" ]]; then
-        ./tests/scripts/run_pre_post_commit_regressions_fast_dispatch.sh
+        ./tests/scripts/run_pre_post_commit_regressions_fast_dispatch.sh ${fast_dispatch_test_mode}
     elif [[ $dispatch_mode == "fast-multi-queue-single-device" ]]; then
         TT_METAL_NUM_HW_CQS=2 ./build/test/tt_metal/unit_tests_fast_dispatch_single_chip_multi_queue --gtest_filter=MultiCommandQueueSingleDeviceFixture.*
     fi

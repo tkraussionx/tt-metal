@@ -33,14 +33,16 @@ fi
 
 if [[ "$ARCH_NAME" != "wormhole_b0" ]]; then
   # TODO(arakhmati): Run ttnn tests only on graskull until the issue with ttnn.reshape on wormhole is resolved
-  D0="$(date +%s)"
-  env pytest $TT_METAL_HOME/tests/ttnn/unit_tests
-  D1=$[$(date +%s)-${D0}]
-  echo "4697: $ARCH_NAME run_python_api_unit_tests unit_tests: ${D1}"
+
 
   # Tests for tensors in L1
 
   if [[ "$1" == "bert_p1" || "$1" == "full" ]]; then
+    D0="$(date +%s)"
+    env pytest $TT_METAL_HOME/tests/ttnn/unit_tests
+    D1=$[$(date +%s)-${D0}]
+    echo "4697: $ARCH_NAME run_python_api_unit_tests unit_tests: ${D1}"
+
     D0="$(date +%s)"
     pytest $TT_METAL_HOME/models/experimental/bert_large_performant/unit_tests/test_bert_large*matmul* -k in0_L1-in1_L1-bias_L1-out_L1
     pytest $TT_METAL_HOME/models/experimental/bert_large_performant/unit_tests/test_bert_large*bmm* -k in0_L1-in1_L1-out_L1
