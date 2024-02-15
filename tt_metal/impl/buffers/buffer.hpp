@@ -108,6 +108,7 @@ struct ShardSpecBuffer {
     }
 };
 
+bool operator == (const ShardSpecBuffer& a, const ShardSpecBuffer& b);
 
 struct BufferConfig {
     Device *device;
@@ -296,7 +297,6 @@ class Buffer {
     std::vector<uint32_t> dev_page_to_host_page_mapping_;
     std::unordered_map<CoreCoord, uint32_t> core_to_core_id_;
 };
-
 }  // namespace tt_metal
 
 }  // namespace tt

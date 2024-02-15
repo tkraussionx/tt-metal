@@ -362,6 +362,10 @@ bool operator!=(const ShardSpec& spec_a, const ShardSpec& spec_b) {
     return not (spec_a == spec_b);
 }
 
+bool operator==(const ShardSpecBuffer& a, const ShardSpecBuffer& b) {
+    return a.tensor_shard_spec == b.tensor_shard_spec and
+           a.page_shape        == b.page_shape        and
+           a.tensor2d_shape    == b.tensor2d_shape;
+}
 }  // namespace tt_metal
-
 }  // namespace tt

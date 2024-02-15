@@ -4,9 +4,7 @@
 
 #include <atomic>
 #include <memory>
-
 #include "tt_metal/common/assert.hpp"
-
 template<typename T>
 class LockFreeQueue {
     private:

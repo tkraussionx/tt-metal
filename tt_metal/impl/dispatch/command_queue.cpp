@@ -831,7 +831,6 @@ void HWCommandQueue::enqueue_write_buffer(std::shared_ptr<const Buffer> buffer, 
 void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src, bool blocking) {
 
     ZoneScopedN("HWCommandQueue_write_buffer");
-
     // TODO(agrebenisan): Fix these asserts after implementing multi-core CQ
     // TODO (abhullar): Use eth mem l1 size when issue queue interface kernel is on ethernet core
     TT_ASSERT(
@@ -1013,13 +1012,15 @@ void HWCommandQueue::finish() {
     if (tt::llrt::OptionsG.get_test_mode_enabled()) {
         while (this->num_issued_commands > this->num_completed_commands) {
             if (DPrintServerHangDetected()) {
+                // DPrint Server hang. Mark state and early exit
                 this->exit_condition = true;
-                TT_THROW("Command Queue could not finish: device hang due to unanswered DPRINT WAIT.");
+                this->dprint_server_hang = true;
+                return;
             } else if (tt::llrt::watcher_server_killed_due_to_error()) {
+                // Illegal NOC txn killed wathcer. Mark state and early exit
                 this->exit_condition = true;
-                TT_THROW(
-                    "Command Queue could not finish: device hang due to illegal NoC transaction. See build/watcher.log "
-                    "for details.");
+                this->illegal_noc_txn_hang = true;
+                return;
             }
         }
     } else {
@@ -1049,6 +1050,14 @@ void HWCommandQueue::restart() {
 
     // Reset the manager
     this->manager.reset(this->id);
+}
+
+volatile bool HWCommandQueue::is_dprint_server_hung() {
+    return dprint_server_hang;
+}
+
+volatile bool HWCommandQueue::is_noc_hung() {
+    return illegal_noc_txn_hang;
 }
 
 Trace::Trace(HWCommandQueue& command_queue): command_queue(command_queue) {
@@ -1186,6 +1195,8 @@ void Finish(CommandQueue& cq) {
         .type = EnqueueCommandType::FINISH,
         .blocking = true
     });
+    TT_ASSERT(!(cq.device() -> hw_command_queue(cq.id()).is_dprint_server_hung()), "Command Queue could not finish: device hang due to unanswered DPRINT WAIT.");
+    TT_ASSERT(!(cq.device() -> hw_command_queue(cq.id()).is_noc_hung()),  "Command Queue could not finish: device hang due to illegal NoC transaction. See build/watcher.log for details.");
 }
 
 void FinishImpl(CommandQueue& cq) {
@@ -1238,6 +1249,19 @@ void EnqueueRestart(CommandQueue& cq) {
 
 }
 
+BufferMetadata& BufferMetadata::operator=(const Buffer& other) {
+    this -> device = other.device();
+    this -> size = other.size();
+    this -> address = other.address();
+    this -> page_size = other.page_size();
+    this -> buf_type = other.buffer_type();
+    this -> buf_layout = other.buffer_layout();
+    if (is_sharded(other.buffer_layout())) {
+        this -> shard_spec = other.shard_spec();
+    }
+    return *this;
+}
+
 CommandQueue::CommandQueue(Device* device, uint32_t id) : device_ptr(device), cq_id(id) {
     if (async_mode()) {
         start_worker();
@@ -1256,12 +1280,16 @@ HWCommandQueue& CommandQueue::hw_command_queue() {
 }
 
 void CommandQueue::wait_until_empty() {
-    log_trace(LogDispatch, "CQ{} WFI start", cq_id);
-    // Insert a flush token to push all prior commands to completion
-    // Necessary to avoid implementing a peek and pop on the lock-free queue
-    this->worker_queue.push(CommandInterface{
+    log_trace(tt::LogDispatch, "CQ{} WFI start", cq_id);
+    // Insert a token command to flush all prior commands
+    CommandInterface command = CommandInterface{
         .type = EnqueueCommandType::FLUSH
-    });
+    };
+
+    if (sanitize_commands) {
+        track_command_metadata(command);
+    }
+    this->worker_queue.push(command);
     while (true) {
         if (this->worker_queue.empty()) {
             break;
@@ -1279,6 +1307,16 @@ void CommandQueue::set_mode(const CommandQueueMode& mode_) {
         wait_until_empty();
         stop_worker();
     }
+}
+
+void CommandQueue::enable_command_sanitization() {
+    sanitize_commands = true;
+}
+
+void CommandQueue::disable_command_sanitization() {
+    // Wait to ensure that commands before this call are snooped
+    wait_until_empty();
+    sanitize_commands = false;
 }
 
 void CommandQueue::start_worker() {
@@ -1300,6 +1338,64 @@ void CommandQueue::stop_worker() {
     tt::log_debug(tt::LogDispatch, "CQ{} stopped worker thread", cq_id);
 }
 
+void CommandQueue::sanitize_command(std::shared_ptr<CommandInterface> command) {
+    TT_ASSERT(num_cmds_popped <= num_cmds_pushed, "Exceeded Software Command Queue size when popping commands.");
+    debug_mtx.lock();
+    if (command -> buffer.has_value()) {
+        auto& buffer_variant = *(command -> buffer);
+        std::visit([this, &command](auto&& command_interface_field) {
+            using T = std::decay_t<decltype(command_interface_field)>;
+            TT_ASSERT(command_id_to_buffer_map.find(num_cmds_popped) != command_id_to_buffer_map.end(), "Command popped from SW queue contains a buffer, which was not recorded in command_id_to_buffer_map");
+            if constexpr (std::is_same_v<T, std::reference_wrapper<Buffer>>) {
+                TT_ASSERT(command_id_to_buffer_map.at(num_cmds_popped) == command_interface_field.get(), "Mismatch between command pushed by main thread and command popped by worker. The command attributes may be getting modified post asynchronous push");
+            }
+            else if constexpr (std::is_same_v<T, std::shared_ptr<Buffer>>) {
+                TT_ASSERT(command_id_to_buffer_map.at(num_cmds_popped) == *command_interface_field, "Mismatch between command pushed by main thread and command popped by worker. The command attributes may be getting modified post asynchronous push");
+            }
+        }, buffer_variant);
+    }
+
+    if (command -> src.has_value()) {
+        const void* src_ptr = *(command -> src);
+        std::vector<uint32_t> src_data = {};
+        src_data.reserve(command_id_to_buffer_map.at(num_cmds_popped).size / sizeof(uint32_t));
+        TT_ASSERT(src_ptr, "Worker thread sees deallocated source data.");
+        std::memcpy(src_data.data(), src_ptr, command_id_to_buffer_map.at(num_cmds_popped).size);
+        TT_ASSERT(src_data.size() == command_id_to_src_data_map.at(num_cmds_popped).size()
+                  and src_data == command_id_to_src_data_map.at(num_cmds_popped), "Mismatch between src data pushed by main thread and src data popped by worker.");
+    }
+    debug_mtx.unlock();
+    num_cmds_popped++;
+}
+
+void CommandQueue::track_command_metadata(const CommandInterface& command) {
+    if (command.buffer.has_value()) {
+        auto& buffer_variant = *command.buffer;
+        std::visit ( [this, &command](auto&& command_interface_field) {
+            using T = std::decay_t<decltype(command_interface_field)>;
+            BufferMetadata buf_md;
+            if constexpr (std::is_same_v<T, std::reference_wrapper<Buffer>>) {
+                buf_md = command_interface_field.get();
+            }
+            else if constexpr (std::is_same_v<T, std::shared_ptr<Buffer>>) {
+                buf_md = *command_interface_field;
+            }
+            debug_mtx.lock();
+            this -> command_id_to_buffer_map.insert(std::make_pair(num_cmds_pushed, buf_md));
+            debug_mtx.unlock();
+        }, buffer_variant);
+    }
+    if (command.src.has_value()) {
+        const void* src_ptr = *(command.src);
+        std::vector<uint32_t> src_data = {};
+        src_data.reserve(command_id_to_buffer_map.at(num_cmds_pushed).size / sizeof(uint32_t));
+        TT_ASSERT(src_ptr, "Command has a nullptr used for src");
+        std::memcpy(src_data.data(), src_ptr, command_id_to_buffer_map.at(num_cmds_pushed).size);
+        this -> command_id_to_src_data_map.insert(std::make_pair(num_cmds_pushed, src_data));
+    }
+    num_cmds_pushed++;
+}
+
 void CommandQueue::run_worker() {
     // forever loop checking for commands in the worker queue
     while (true) {
@@ -1309,7 +1405,10 @@ void CommandQueue::run_worker() {
             }
             std::this_thread::yield();
         } else {
-            auto command = this->worker_queue.pop();
+            std::shared_ptr<CommandInterface> command(this->worker_queue.pop());
+            if (sanitize_commands) {
+                sanitize_command(command);
+            }
             run_command_impl(*command);
         }
     }
@@ -1318,7 +1417,10 @@ void CommandQueue::run_worker() {
 void CommandQueue::run_command(const CommandInterface& command) {
     log_trace(LogDispatch, "CQ{} received {} in {} mode", cq_id, command.type, async_mode() ? "ASYNC" : "PASSTHROUGH");
     if (async_mode()) {
-        this->worker_queue.push(command);
+        if (sanitize_commands) {
+            track_command_metadata(command);
+        }
+        this -> worker_queue.push(command);
         if (command.blocking.has_value() and *command.blocking == true) {
             wait_until_empty();
         }
@@ -1359,6 +1461,19 @@ void CommandQueue::run_command_impl(const CommandInterface& command) {
     // log_trace(LogDispatch, "CQ{} running {} complete", cq_id, command.type);
 }
 
+bool operator == (const BufferMetadata& a, const Buffer& b) {
+    bool equal = a.device     == b.device()        and
+                 a.size       == b.size()          and
+                 a.address    == b.address()       and
+                 a.page_size  == b.page_size()     and
+                 a.buf_type   == b.buffer_type()   and
+                 a.buf_layout == b.buffer_layout();
+
+    if (equal and is_sharded(b.buffer_layout())) {
+        equal = equal and (a.shard_spec == b.shard_spec());
+    }
+    return equal;
+}
 }  // namespace tt::tt_metal
 
 std::ostream& operator<<(std::ostream& os, EnqueueCommandType const& type) {
