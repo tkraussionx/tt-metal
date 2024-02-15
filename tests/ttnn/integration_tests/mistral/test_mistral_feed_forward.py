@@ -52,17 +52,13 @@ def test_mistral_feed_forward_inference(model_location_generator, device, reset_
             v.weight = ttnn.reshape(v.weight, new_shape)
 
     input = torch.rand(1, 1, 11, dim)
-    reference_ouput = reference_model(input)
+    reference_output = reference_model(input)
 
     ttnn.enable_program_cache()
 
-    ttnn_input = ttnn.to_layout(
-        ttnn.to_device(
-            ttnn.from_torch(input, dtype=ttnn.bfloat16),
-            device,
-            memory_config=ttnn.L1_MEMORY_CONFIG,
-        ),
-        layout=ttnn.TILE_LAYOUT,
+    #   mem_cfg = ttnn.create_sharded_memory_config((8, 8), (32, 4096//64), ttnn.ShardStrategy.WIDTH)
+    ttnn_input = ttnn.from_torch(
+        input, dtype=ttnn.bfloat16, device=device, layout=ttnn.TILE_LAYOUT, memory_config=ttnn.L1_MEMORY_CONFIG
     )
 
     logger.info("Kernel compilation pass...")
@@ -90,4 +86,4 @@ def test_mistral_feed_forward_inference(model_location_generator, device, reset_
     output = ttnn.from_device(output)
     output = ttnn.to_torch(output)
 
-    assert_with_pcc(reference_ouput, output.to(reference_ouput.dtype), 0.99)
+    assert_with_pcc(reference_output, output.to(reference_output.dtype), 0.99)
