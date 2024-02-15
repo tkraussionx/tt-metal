@@ -20,6 +20,6 @@ inline pair<Buffer, vector<uint32_t>> EnqueueWriteBuffer_prior_to_wrap(Device* d
     vector<uint32_t> src = create_random_vector_of_bfloat16(
       buf_size, 100, std::chrono::system_clock::now().time_since_epoch().count());
 
-    EnqueueWriteBuffer(cq, buffer, src, false);
+    EnqueueWriteBuffer(cq, buffer, src, true);
     return std::make_pair(std::move(buffer), src);
 }

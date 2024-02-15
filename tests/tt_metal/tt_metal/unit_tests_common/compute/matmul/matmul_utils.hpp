@@ -147,7 +147,9 @@ inline bool move_tiles_to_dram(tt_metal::Device *device, std::vector<uint32_t> t
             start_index += tile_size;
         }
     }
-
-    EnqueueWriteBuffer(cq, buffer, tiles, false);
+    bool block = (cq.get_mode() == CommandQueue::CommandQueueMode::ASYNC);
+    // If running in ASYNC SW queue mode, we need to ensure that the following call is blocking (behaves the same was as Passthrough Mode)
+    // If not, the tiles vector will go out of scope before its pushed, causing a segfault
+    EnqueueWriteBuffer(cq, buffer, tiles, block);
     return pass;
 }

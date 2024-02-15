@@ -426,7 +426,8 @@ class HWCommandQueue {
 
     CoreCoord issue_queue_reader_core;
     CoreCoord completion_queue_writer_core;
-
+    volatile bool is_dprint_server_hung();
+    volatile bool is_noc_hung();
    private:
     uint32_t id;
     uint32_t size_B;
@@ -436,6 +437,8 @@ class HWCommandQueue {
     bool stall_before_read;
 
     volatile bool exit_condition;
+    volatile bool dprint_server_hang = false;
+    volatile bool illegal_noc_txn_hang = false;
     volatile uint32_t num_issued_commands;
     volatile uint32_t num_completed_commands;
     detail::IssuedReadMap issued_reads;
@@ -483,6 +486,17 @@ struct CommandInterface {
     std::optional<std::reference_wrapper<Trace>> trace;
 };
 
+struct BufferMetadata {
+    Device* device = nullptr;
+    uint32_t size = 0;
+    uint32_t address = 0;
+    uint32_t page_size = 0;
+    BufferType buf_type = BufferType::DRAM;
+    TensorMemoryLayout buf_layout = TensorMemoryLayout::INTERLEAVED;
+    std::optional<ShardSpecBuffer> shard_spec;
+    BufferMetadata& operator=(const Buffer &other);
+};
+
 class CommandQueue {
    public:
     enum class CommandQueueMode {
@@ -511,6 +525,14 @@ class CommandQueue {
     // Reference to the underlying hardware command queue, non-const because side-effects are allowed
     HWCommandQueue& hw_command_queue();
 
+    void enable_command_sanitization();
+    void disable_command_sanitization();
+
+    static CommandQueueMode get_mode() {
+        // Envvar is used for bringup and debug only. Will be removed in the future and should not be relied on in production.
+        int value = parse_env<int>("TT_METAL_CQ_ASYNC_MODE", static_cast<int>(CommandQueueMode::PASSTHROUGH));
+        return static_cast<CommandQueue::CommandQueueMode>(value);
+    }
    private:
     enum class CommandQueueState {
         IDLE = 0,
@@ -524,6 +546,13 @@ class CommandQueue {
     uint32_t cq_id;
     Device* device_ptr;
 
+    bool sanitize_commands = false;
+    std::map<uint32_t, BufferMetadata> command_id_to_buffer_map = {};
+    std::map<uint32_t, Program> command_id_to_program_map = {};
+    std::map<uint32_t, std::vector<uint32_t>> command_id_to_src_data_map = {};
+    uint32_t num_cmds_pushed = 0;
+    uint32_t num_cmds_popped = 0;
+
     void start_worker();
     void stop_worker();
     void run_worker();
@@ -532,13 +561,12 @@ class CommandQueue {
     bool async_mode() { return this->mode == CommandQueueMode::ASYNC; }
     bool passthrough_mode() { return this->mode == CommandQueueMode::PASSTHROUGH; }
 
-    static CommandQueueMode get_mode() {
-        // Envvar is used for bringup and debug only. Will be removed in the future and should not be relied on in production.
-        int value = parse_env<int>("TT_METAL_CQ_ASYNC_MODE", static_cast<int>(CommandQueueMode::PASSTHROUGH));
-        return static_cast<CommandQueue::CommandQueueMode>(value);
-    }
+    void track_command_metadata(const CommandInterface& command);
+    void sanitize_command(std::shared_ptr<CommandInterface> command);
+    std::mutex debug_mtx;
 };
 
+bool operator == (const BufferMetadata& a, const Buffer& b);
 } // namespace tt::tt_metal
 
 std::ostream& operator<<(std::ostream& os, EnqueueCommandType const& type);

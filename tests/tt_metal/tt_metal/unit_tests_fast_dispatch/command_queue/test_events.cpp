@@ -19,8 +19,9 @@ TEST_F(CommandQueueFixture, TestEventsWrittenToCompletionQueueInOrder) {
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->device_->id());
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device_->id());
     constexpr uint32_t completion_queue_event_alignment = 32;
+
+    Buffer buf(this->device_, page_size, page_size, BufferType::DRAM);
     for (size_t i = 0; i < num_buffers; i++) {
-        Buffer buf(this->device_, page_size, page_size, BufferType::DRAM);
         EnqueueWriteBuffer(*this->cmd_queue, buf, page, false);
     }
     Finish(*this->cmd_queue);
