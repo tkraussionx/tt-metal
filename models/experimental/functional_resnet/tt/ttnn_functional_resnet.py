@@ -22,30 +22,21 @@ class BasicBlock:
         identity = x
 
         # Relu and bn1 are fused with conv1
-        out = self.conv1(x)
+        conv1 = self.conv1(x)
 
         # Relu and bn2 are fused with conv1
-        out = self.conv2(out)
+        conv2 = self.conv2(conv1)
+        ttnn.deallocate(conv1)
 
         if self.downsample is not None:
             identity = self.downsample(x)
+            ttnn.deallocate(x)
 
-        # out = ttnn.add(out, identity, memory_config=ttnn.get_memory_config(out))
-        # out = ttnn.to_memory_config(out, memory_config=ttnn.DRAM_MEMORY_CONFIG)
-        # out = self.relu(out)
+        out = ttnn.add_and_apply_activation(
+            conv2, identity, activation="relu", memory_config=ttnn.get_memory_config(conv2)
+        )
+        ttnn.deallocate(conv2)
+        if x != identity:
+            ttnn.deallocate(identity)
 
         return out
-
-    def torch_call(self, torch_input_tensor):
-        input_tensor = torch.permute(torch_input_tensor, (0, 2, 3, 1))
-        input_tensor = ttnn.from_torch(input_tensor, dtype=ttnn.bfloat16)
-
-        input_tensor = self.conv1.copy_input_to_device(input_tensor)
-        output_tensor = self(input_tensor)
-        output_tensor = self.conv2.copy_output_from_device(output_tensor)
-
-        output_tensor = ttnn.to_torch(output_tensor)
-        output_tensor = torch.permute(output_tensor, (0, 3, 1, 2))
-        output_tensor = torch.reshape(output_tensor, torch_input_tensor.shape)
-        output_tensor = output_tensor.to(torch_input_tensor.dtype)
-        return output_tensor

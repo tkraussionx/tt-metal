@@ -87,7 +87,7 @@ def run_conv(
     tt_bias_tensor = ttnn.from_torch(
         torch_bias_tensor, weights_dtype if weights_dtype != ttnn.bfloat8_b else ttnn.float32
     )
-    conv = ttnn.Conv2D(
+    conv = ttnn.Conv2d(
         input_channels,
         output_channels,
         kernel_size=(filter_height, filter_width),
@@ -107,6 +107,7 @@ def run_conv(
         conv_blocking_and_parallelization_config_override=config_override,
         use_shallow_conv_variant=use_shallow_conv_variant,
         enable_auto_formatting=enable_auto_formatting,
+        deallocate_activation=True,
     )
 
     assert "conv" in reader_patterns_cache and "halo" in reader_patterns_cache
@@ -216,7 +217,7 @@ def run_conv_with_split(
                 torch_bias_zeroes_tensor, weights_dtype if weights_dtype != ttnn.bfloat8_b else ttnn.float32
             )
         convs.append(
-            ttnn.Conv2D(
+            ttnn.Conv2d(
                 split_input_channels,
                 output_channels,
                 kernel_size=(filter_height, filter_width),

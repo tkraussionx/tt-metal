@@ -23,12 +23,12 @@ namespace ckernel {
  */
 ALWI void tilize_init(uint32_t icb, uint32_t block, uint32_t ocb = 16)
 {
-    MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE>(0, 0, icb) ));
+    MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE>(false /*transpose of faces*/, false /*transpose within 16x16 face*/, icb) ));
 
     MATH(( llk_math_pack_sync_init<SyncHalf>() ));
 
-    PACK(( llk_pack_init(ocb) ));
     PACK(( llk_pack_hw_configure_disaggregated<false>(ocb) ));
+    PACK(( llk_pack_init(ocb) ));
     PACK(( llk_setup_outputs() ));
     PACK(( llk_pack_dest_init<SyncHalf, DstTileFaceLayout::RowMajor, false>(ocb) ));
 
@@ -43,7 +43,6 @@ ALWI void tilize_init(uint32_t icb, uint32_t block, uint32_t ocb = 16)
  */
 ALWI void tilizeA_B_reduce_init(uint32_t icb0, uint32_t icb1_scaler, uint32_t block, uint32_t ocb = 16)
 {
-    #ifdef ARCH_GRAYSKULL
     UNPACK(( llk_setup_operands() ));
     UNPACK(( llk_unpack_tilizeA_B_hw_configure_disaggregated(icb0, icb1_scaler) ));
     UNPACK(( llk_unpack_tilizeA_B_init(icb0, icb1_scaler, block) ));
@@ -51,11 +50,10 @@ ALWI void tilizeA_B_reduce_init(uint32_t icb0, uint32_t icb1_scaler, uint32_t bl
     MATH(( llk_math_reduce_init<REDUCE_OP, REDUCE_DIM, MATH_FIDELITY>() ));
     MATH(( llk_math_pack_sync_init<SYNC>() ));
 
-    PACK(( llk_pack_init(ocb) ));
     PACK(( llk_pack_hw_configure_disaggregated<false>(ocb) ));
+    PACK(( llk_pack_init(ocb) ));
     PACK(( llk_setup_outputs() ));
     PACK(( llk_pack_dest_init<SYNC, DstTileFaceLayout::RowMajor, false>(ocb) ));
-    #endif
 }
 #endif
 
@@ -64,7 +62,7 @@ ALWI void tilizeA_B_reduce_init(uint32_t icb0, uint32_t icb1_scaler, uint32_t bl
  */
 ALWI void tilize_init_short(uint32_t icb, uint32_t block)
 {
-    MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE>(0, 0, icb) ));
+    MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE>(false /*transpose of faces*/, false /*transpose within 16x16 face*/, icb) ));
     UNPACK(( llk_unpack_tilize_init(icb, block) ));
 }
 
@@ -75,9 +73,7 @@ ALWI void tilize_init_unpack(uint32_t icb, uint32_t block)
 
 ALWI void tilizeA_B_init_unpack(uint32_t icb0, uint32_t icb1, uint32_t block)
 {
-    #ifdef ARCH_GRAYSKULL
     UNPACK(( llk_unpack_tilizeA_B_init(icb0, icb1, block) ));
-    #endif
 }
 
 /**
@@ -85,9 +81,23 @@ ALWI void tilizeA_B_init_unpack(uint32_t icb0, uint32_t icb1, uint32_t block)
  */
 ALWI void tilize_init_short_with_dt(uint32_t icb, uint32_t block) {
 
-    MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE>(0, 0, icb) ));
-    UNPACK(( llk_unpack_reconfig_data_format_srca(1, 0) ));
+    MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE>(false /*transpose of faces*/, false /*transpose within 16x16 face*/, icb) ));
+    // This reconfig call does a reconfig for unpack even if previous data format
+    // is same as new operand data format, which might cause less perf
+    UNPACK(( llk_unpack_reconfig_data_format_srca(icb) ));
     UNPACK(( llk_unpack_tilize_init(icb, block) ));
+}
+
+/**
+ * Re-initialize for the tilize operation. This also reconfigure the unpacker with CB data type.
+ */
+ALWI void tilize_init_short_with_dt(uint32_t old_icb, uint32_t new_icb, uint32_t block) {
+
+    MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE>(false /*transpose of faces*/, false /*transpose within 16x16 face*/, new_icb) ));
+    // This reconfig call checks if old operand has different data format to
+    // new operand idx, otherwise no reconfig call occurs
+    UNPACK(( llk_unpack_reconfig_data_format_srca(old_icb, new_icb) ));
+    UNPACK(( llk_unpack_tilize_init(new_icb, block) ));
 }
 
 /**
@@ -103,8 +113,8 @@ ALWI void tilize_block(uint32_t icb, uint32_t block, uint32_t ocb)
         PACK(( llk_packer_wait_for_math_done() ));
 
         // Datacopy
-        MATH(( llk_math_eltwise_unary_datacopy<A2D, BroadcastType::NONE, SyncHalf>(0) ));
-        PACK(( llk_pack<false, SYNC, false >(0, ocb)  ));
+        MATH(( llk_math_eltwise_unary_datacopy<A2D, BroadcastType::NONE, SyncHalf>(0 /*dst index*/) ));
+        PACK(( llk_pack<false, SYNC, false >(0 /*tile index*/, ocb)  ));
 
         // Release dest
         MATH(( llk_math_dest_section_done<SYNC>() ));
@@ -119,9 +129,7 @@ ALWI void unpack_tilize_block(uint32_t icb, uint32_t block)
 
 ALWI void unpack_tilizeA_B_block(uint32_t icb0, uint32_t icb1, uint32_t block, uint32_t tile_idx_b)
 {
-    #ifdef ARCH_GRAYSKULL
     UNPACK(( llk_unpack_tilizeA_B_block(icb0, icb1, block, tile_idx_b) ));
-    #endif
 }
 
 /**
@@ -135,9 +143,9 @@ ALWI void tilize_uninit()
 /**
  * Uninitialize the tilize operation along with re-configuring unpacker with the CB data types.
  */
-ALWI void tilize_uninit_with_dt() {
+ALWI void tilize_uninit_with_dt(uint32_t old_icb = 0, uint32_t new_icb = 1) {
     UNPACK(( llk_unpack_tilize_uninit() ));
-    UNPACK(( llk_unpack_reconfig_data_format(0, 1, 0, 0) ));
+    UNPACK(( llk_unpack_reconfig_data_format(old_icb, new_icb) ));
 }
 
 

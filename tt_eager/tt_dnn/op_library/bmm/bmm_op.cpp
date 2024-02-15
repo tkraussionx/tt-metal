@@ -298,8 +298,8 @@ void Matmul::validate(const std::vector<Tensor>& input_tensors, const std::vecto
     // This requires sweeping across shapes with different dtypes/dataformats; for now, ignore dtype assertions here and uplift to actual matmul/bmm implementations
     TT_FATAL(input_tensor_a.dtype() == tt::tt_metal::DataType::BFLOAT16 || input_tensor_a.dtype() == tt::tt_metal::DataType::BFLOAT8_B, "Unsupported data format");
     TT_FATAL(input_tensor_a.storage_type() == StorageType::DEVICE and input_tensor_b.storage_type() == StorageType::DEVICE, "Operands to matmul need to be on device!");
-    TT_FATAL(input_tensor_a.device() == input_tensor_b.device(), "Operands to matmul need to be on the same device!");
     TT_FATAL(input_tensor_a.buffer() != nullptr and input_tensor_b.buffer() != nullptr, "Operands to matmul need to be allocated in buffers on device!");
+    TT_FATAL(input_tensor_a.device() == input_tensor_b.device(), "Operands to matmul need to be on the same device!");
 }
 
 std::vector<Shape> Matmul::compute_output_shapes(const std::vector<Tensor>& input_tensors) const {
@@ -573,8 +573,8 @@ void Matmul::validate(
 
     TT_FATAL(input_tensor_a.dtype() == tt::tt_metal::DataType::BFLOAT16 || input_tensor_a.dtype() == tt::tt_metal::DataType::BFLOAT8_B, "Unsupported data format");
     TT_FATAL(input_tensor_a.storage_type() == StorageType::DEVICE and input_tensor_b.storage_type() == StorageType::DEVICE, "Operands to matmul need to be on device!");
-    TT_FATAL(input_tensor_a.device() == input_tensor_b.device(), "Operands to matmul need to be on the same device!");
     TT_FATAL(input_tensor_a.buffer() != nullptr and input_tensor_b.buffer() != nullptr, "Operands to matmul need to be allocated in buffers on device!");
+    TT_FATAL(input_tensor_a.device() == input_tensor_b.device(), "Operands to matmul need to be on the same device!");
 
 
     TT_FATAL(optional_input_tensors.size() == 1);
@@ -789,7 +789,7 @@ std::vector<Tensor> Matmul::create_output_tensors(const std::vector<Tensor>& inp
                     uint32_t num_blocks_total = num_blocks_y * num_blocks_x;
                     uint32_t num_cores = num_blocks_x * num_blocks_y;
                     CoreRangeSet all_cores = num_cores_to_corerange_set(num_cores, program_config.compute_with_storage_grid_size, true);
-                    ShardSpec shard_spec = ShardSpec{.grid=all_cores, .shape={per_core_M * TILE_HEIGHT, per_core_N * TILE_WIDTH}, .orientation=ShardOrientation::ROW_MAJOR};
+                    ShardSpec shard_spec = ShardSpec{all_cores, {per_core_M * TILE_HEIGHT, per_core_N * TILE_WIDTH}, ShardOrientation::ROW_MAJOR};
                     auto mem_config = this->output_mem_config;
                     mem_config.shard_spec = shard_spec;
                     return {create_sharded_device_tensor(this->compute_output_shapes(input_tensors).at(0), this->output_dtype, Layout::TILE, input_tensor_a.device(), mem_config)};
@@ -808,13 +808,13 @@ std::vector<Tensor> Matmul::create_output_tensors(const std::vector<Tensor>& inp
                     CoreRangeSet all_cores({});
                     ShardOrientation shard_orientation;
                     if (program_config.transpose_mcast) {
-                        all_cores = CoreRangeSet({CoreRange{.start={0, 0}, .end={num_blocks_y - 1, num_blocks_x - 1}}});
+                        all_cores = CoreRangeSet({CoreRange({0, 0}, {num_blocks_y - 1, num_blocks_x - 1})});
                         shard_orientation = ShardOrientation::COL_MAJOR;
                     } else {
-                        all_cores = CoreRangeSet({CoreRange{.start={0, 0}, .end={num_blocks_x - 1, num_blocks_y - 1}}});
+                        all_cores = CoreRangeSet({CoreRange({0, 0}, {num_blocks_x - 1, num_blocks_y - 1})});
                         shard_orientation = ShardOrientation::ROW_MAJOR;
                     }
-                    ShardSpec shard_spec = ShardSpec{.grid=all_cores, .shape={per_core_M * TILE_HEIGHT, per_core_N * TILE_WIDTH}, .orientation=shard_orientation};
+                    ShardSpec shard_spec = ShardSpec{all_cores, {per_core_M * TILE_HEIGHT, per_core_N * TILE_WIDTH}, shard_orientation};
                     auto mem_config = this->output_mem_config;
                     mem_config.shard_spec = shard_spec;
                     return {create_sharded_device_tensor(this->compute_output_shapes(input_tensors).at(0), this->output_dtype, Layout::TILE, input_tensor_a.device(), mem_config)};
@@ -838,7 +838,7 @@ std::vector<Tensor> Matmul::create_output_tensors(const std::vector<Tensor>& inp
                     }
 
                     CoreRangeSet all_cores = num_cores_to_corerange_set(num_cores, program_config.compute_with_storage_grid_size, shard_orientation==ShardOrientation::ROW_MAJOR);
-                    ShardSpec shard_spec = ShardSpec{.grid=all_cores, .shape={per_core_M * TILE_HEIGHT, per_core_N * TILE_WIDTH}, .orientation=shard_orientation};
+                    ShardSpec shard_spec = ShardSpec{all_cores, {per_core_M * TILE_HEIGHT, per_core_N * TILE_WIDTH}, shard_orientation};
                     auto mem_config = this->output_mem_config;
                     mem_config.shard_spec = shard_spec;
                     return {create_sharded_device_tensor(this->compute_output_shapes(input_tensors).at(0), this->output_dtype, Layout::TILE, input_tensor_a.device(), mem_config)};
