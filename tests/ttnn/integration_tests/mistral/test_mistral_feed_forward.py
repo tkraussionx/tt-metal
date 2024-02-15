@@ -45,18 +45,15 @@ def test_mistral_feed_forward_inference(model_location_generator, device, reset_
         device=device,
     )
 
-    # ttnn is happy with 2d weight tensors but tt_lib functions need tensors to be 4d
+    # Not sure why preprocess_model_parameters doesn't do this
     for v in parameters.values():
-        if len(v.weight.shape) < 4:
-            new_shape = tuple([1] * (4 - len(v.weight.shape)) + list(v.weight.shape))
-            v.weight = ttnn.reshape(v.weight, new_shape)
+        v.weight = ttnn.unsqueeze_to_4D(v.weight)
 
     input = torch.rand(1, 1, 11, dim)
     reference_output = reference_model(input)
 
     ttnn.enable_program_cache()
 
-    #   mem_cfg = ttnn.create_sharded_memory_config((8, 8), (32, 4096//64), ttnn.ShardStrategy.WIDTH)
     ttnn_input = ttnn.from_torch(
         input, dtype=ttnn.bfloat16, device=device, layout=ttnn.TILE_LAYOUT, memory_config=ttnn.L1_MEMORY_CONFIG
     )
