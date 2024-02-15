@@ -426,6 +426,8 @@ class HWCommandQueue {
 
     CoreCoord issue_queue_reader_core;
     CoreCoord completion_queue_writer_core;
+    volatile bool dprint_server_hang = false;
+    volatile bool illegal_noc_txn_hang = false;
 
    private:
     uint32_t id;
@@ -507,7 +509,6 @@ class CommandQueue {
 
     std::unique_ptr<std::thread> worker_thread;
     CommandQueueState worker_state = CommandQueueState::IDLE;
-
     LockFreeQueue<CommandQueueInterface> worker_queue;
     uint32_t cq_id;
     Device* device_ptr;

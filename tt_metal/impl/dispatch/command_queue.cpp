@@ -1014,12 +1014,12 @@ void HWCommandQueue::finish() {
         while (this->num_issued_commands > this->num_completed_commands) {
             if (DPrintServerHangDetected()) {
                 this->exit_condition = true;
-                TT_THROW("Command Queue could not finish: device hang due to unanswered DPRINT WAIT.");
+                this->dprint_server_hang = true;
+                return;
             } else if (tt::llrt::watcher_server_killed_due_to_error()) {
                 this->exit_condition = true;
-                TT_THROW(
-                    "Command Queue could not finish: device hang due to illegal NoC transaction. See build/watcher.log "
-                    "for details.");
+                this->illegal_noc_txn_hang = true;
+                return;
             }
         }
     } else {
@@ -1204,8 +1204,11 @@ void EnqueueProgramImpl(CommandQueue& cq, std::variant < std::reference_wrapper<
 void Finish(CommandQueue& cq) {
     detail::DispatchStateCheck(true);
     cq.run_command(CommandQueueInterface{
-        .type = EnqueueCommandType::FINISH
+        .type = EnqueueCommandType::FINISH,
+        .blocking = true
     });
+    TT_ASSERT(!(cq.device() -> hw_command_queue(cq.id()).dprint_server_hang), "Command Queue could not finish: device hang due to unanswered DPRINT WAIT.");
+    TT_ASSERT(!(cq.device() -> hw_command_queue(cq.id()).illegal_noc_txn_hang),  "Command Queue could not finish: device hang due to illegal NoC transaction. See build/watcher.log for details.");
 }
 
 void FinishImpl(CommandQueue& cq) {
@@ -1321,19 +1324,13 @@ void CommandQueue::stop_worker() {
 void CommandQueue::run_worker() {
     // forever loop checking for commands in the worker queue
     while (true) {
-        // if (worker_queue.empty()) {
-        //     std::this_thread::sleep_for(std::chrono::microseconds(10));
-        //     continue;
-        // } else {
-        //     run_command_impl(*worker_queue.pop());
-        // }
         if (worker_queue.empty()) {
             // log_info("CQ{} worker queue is empty", cq_id);
             if (worker_state == CommandQueueState::TERMINATE) {
                 break;
             }
         } else {
-            auto command = worker_queue.pop();
+            std::shared_ptr<CommandQueueInterface> command(worker_queue.pop());
             if (command->token.has_value()) {
                 // acts like a flush
             } else {
@@ -1347,6 +1344,11 @@ void CommandQueue::run_command(const CommandQueueInterface& command) {
     tt::log_debug(tt::LogDispatch, "CQ{} received command {} in {} mode", cq_id, command.type, async_mode ? "ASYNC" : "NORMAL");
     if (async_mode) {
         worker_queue.push(command);
+        if (command.blocking) {
+            // Caller is meant to block on command. Thus we should wait for completion after launching command
+            // asynchronously to SW cmd queue.
+            wait_until_empty();
+        }
     } else {
         run_command_impl(command);
     }

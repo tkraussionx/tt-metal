@@ -148,6 +148,6 @@ inline bool move_tiles_to_dram(tt_metal::Device *device, std::vector<uint32_t> t
         }
     }
 
-    EnqueueWriteBuffer(cq, buffer, tiles, false);
+    EnqueueWriteBuffer(cq, buffer, tiles, true);
     return pass;
 }
