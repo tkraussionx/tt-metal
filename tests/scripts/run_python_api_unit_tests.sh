@@ -6,7 +6,7 @@ if [[ -z "$TT_METAL_HOME" ]]; then
   echo "Must provide TT_METAL_HOME in environment" 1>&2
   exit 1
 fi
-if [[ "$1" == "resnet"  || "$1" == "full" ]]; then
+if [[ "$1" == "bert"  || "$1" == "full" ]]; then
   if [[ ! -z "$TT_METAL_SLOW_DISPATCH_MODE" ]]; then
       D0="$(date +%s)"
       env pytest $(find $TT_METAL_HOME/tests/tt_eager/python_api_testing/unit_testing/ -name 'test_*.py' -a ! -name 'test_untilize_with_halo_and_max_pool.py') -vvv
@@ -18,10 +18,18 @@ if [[ "$1" == "resnet"  || "$1" == "full" ]]; then
       D0="$(date +%s)"
   #   # Need to remove move for time being since failing
       env pytest $TT_METAL_HOME/tests/tt_eager/python_api_testing/unit_testing/ -vvv
+      D1=$[$(date +%s)-${D0}]
+      echo "4697: $ARCH_NAME run_python_api_unit_tests fast dispatch unit tests 1 time: ${D1}"
+
+      D0="$(date +%s)"
       env pytest $(find $TT_METAL_HOME/tests/tt_eager/python_api_testing/sweep_tests/pytests/ -name 'test_*.py' -a ! -name 'test_sweep_conv_with_address_map.py' -a ! -name 'test_move.py') -vvv
+      D1=$[$(date +%s)-${D0}]
+      echo "4697: $ARCH_NAME run_python_api_unit_tests fast dispatch sweep tests 2 time: ${D1}"
+
+      D0="$(date +%s)"
       env pytest $TT_METAL_HOME/tests/tt_eager/python_api_testing/sweep_tests/pytests/tt_dnn/test_move.py -k input_L1 -vvv
       D1=$[$(date +%s)-${D0}]
-      echo "4697: $ARCH_NAME run_python_api_unit_tests fast dispatch unit/sweep tests time: ${D1}"
+      echo "4697: $ARCH_NAME run_python_api_unit_tests fast dispatch sweep tests 3 time: ${D1}"
 
   fi
 fi
@@ -37,7 +45,7 @@ if [[ "$ARCH_NAME" != "wormhole_b0" ]]; then
 
   # Tests for tensors in L1
 
-  if [[ "$1" == "bert_p1" || "$1" == "full" ]]; then
+  if [[ "$1" == "falcon" || "$1" == "full" ]]; then
     D0="$(date +%s)"
     env pytest $TT_METAL_HOME/tests/ttnn/unit_tests
     D1=$[$(date +%s)-${D0}]
@@ -56,9 +64,7 @@ if [[ "$ARCH_NAME" != "wormhole_b0" ]]; then
     pytest $TT_METAL_HOME/models/experimental/bert_large_performant/unit_tests/test_bert_large_matmuls_and_bmms_with_mixed_precision.py::test_bert_large_bmm -k "pre_softmax_bmm and batch_9"
     D1=$[$(date +%s)-${D0}]
     echo "4697: $ARCH_NAME run_python_api_unit_tests mixed precision time: ${D1}"
-  fi
 
-  if [[ "$1" == "bert"  || "$1" == "full" ]]; then
     # # BERT TMs
     D0="$(date +%s)"
     pytest $TT_METAL_HOME/models/experimental/bert_large_performant/unit_tests/test_bert_large_split_query_key_value_and_split_heads.py -k "in0_L1-out_L1 and batch_9"
@@ -78,17 +84,13 @@ if [[ "$ARCH_NAME" != "wormhole_b0" ]]; then
     pytest $TT_METAL_HOME/models/experimental/bert_large_performant/unit_tests/fused_ops/test_bert_large_fused_softmax.py -k "in0_L1 and batch_9"
     D1=$[$(date +%s)-${D0}]
     echo "4697: $ARCH_NAME run_python_api_unit_tests Fused ops unit tests time: ${D1}"
-  fi
 
-  if [[ "$1" == "resnet"  || "$1" == "full" ]]; then
-  # # Resnet18 tests with conv on cpu and with conv on device
+    # # Resnet18 tests with conv on cpu and with conv on device
     D0="$(date +%s)"
     pytest $TT_METAL_HOME/models/demos/resnet/tests/test_resnet18.py
     D1=$[$(date +%s)-${D0}]
     echo "4697: $ARCH_NAME run_python_api_unit_tests Resnet18 tests time: ${D1}"
-  fi
 
-  if [[ "$1" == "falcon"  || "$1" == "full" ]]; then
     # # Falcon tests
     D0="$(date +%s)"
     pytest $TT_METAL_HOME/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "seq_len_128 and in0_BFLOAT16-in1_BFLOAT8_B-out_BFLOAT16-weights_DRAM"
