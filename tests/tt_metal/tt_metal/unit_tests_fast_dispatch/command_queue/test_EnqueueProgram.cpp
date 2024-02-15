@@ -291,7 +291,6 @@ namespace compiler_workaround_hardware_bug_tests {
 
 TEST_F(CommandQueueFixture, TestArbiterDoesNotHang) {
     Program program;
-
     CoreRange cr({0, 0}, {0, 0});
     CoreRangeSet cr_set({cr});
     // Add an NCRISC blank manually, but in compile program, the BRISC blank will be
@@ -317,14 +316,18 @@ TEST_F(CommandQueueFixture, TestAsyncCommandQueue) {
     auto dummy_reader_kernel = CreateKernel(
         program, "tests/tt_metal/tt_metal/test_kernels/dataflow/unit_tests/command_queue/arbiter_hang.cpp", cr_set, DataMovementConfig{.processor = DataMovementProcessor::RISCV_1, .noc = NOC::RISCV_1_default});
 
-    this->cmd_queue->set_mode(CommandQueue::CommandQueueMode::ASYNC);
+    // Use the default command queue provided by the device. This is needed in async mode
+    auto& command_queue = this->device_->command_queue();
+    auto current_mode = CommandQueue::get_mode();
+    command_queue.set_mode(CommandQueue::CommandQueueMode::ASYNC);
 
     // Use scoper timer to benchmark time for pushing 2 commands
     {
         tt::ScopedTimer timer("AsyncCommandQueue");
-        EnqueueProgram(*this->cmd_queue, program, false);
-        Finish(*this->cmd_queue);
+        EnqueueProgram(command_queue, program, false);
+        Finish(command_queue);
     }
+    command_queue.set_mode(current_mode);
 }
 
 }
