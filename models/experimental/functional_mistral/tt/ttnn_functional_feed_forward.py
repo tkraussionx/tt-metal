@@ -4,6 +4,7 @@
 
 import ttnn
 import tt_lib
+from loguru import logger
 
 
 def feed_forward(config, x: ttnn.Tensor, *, parameters):
@@ -15,16 +16,15 @@ def feed_forward(config, x: ttnn.Tensor, *, parameters):
     w1 = parameters.w1.weight
     w2 = parameters.w2.weight
     w3 = parameters.w3.weight
-    dim = w1.shape[-2]
-    expanded_dim = w1.shape[-1]
-    mul_memory_config = ttnn.create_sharded_memory_config(
-        (8, 8), (dim // 8, expanded_dim // 8), ttnn.ShardStrategy.WIDTH
-    )
+    rows = x.shape.padded()[-2]
+    expanded_dim = w1.shape.padded()[-1]
+    memory_config = ttnn.create_sharded_memory_config((8, 8), (rows, expanded_dim // (8 * 8)), ttnn.ShardStrategy.WIDTH)
+    silu = tt_lib.tensor.FusibleActivation.SILU
 
-    w1_out = ff1(x, w1, silu=True)
-    w3_out = ff1(x, w3, silu=False)
-    w2_in = ttnn.mul(w1_out, w3_out, memory_config=mul_memory_config)
-    w2_out = ff2(w2_in, w2)
+    w1_out = matmul_1d(x, w1, act=silu, memory_config=memory_config)
+    w3_out = matmul_1d(x, w3, act=None, memory_config=memory_config)
+    w2_in = ttnn.mul(w1_out, w3_out, memory_config=memory_config)
+    w2_out = matmul_1d(w2_in, w2)
 
     return w2_out
 
@@ -50,51 +50,60 @@ def validate_input_tensors(operation_name, x: ttnn.Tensor, w: ttnn.Tensor, **kwa
     )
 
 
-@ttnn.register_operation(name="ff1", validate_input_tensors=validate_input_tensors)
-def ff1(x, w, silu):
-    mem = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.WIDTH_SHARDED, tt_lib.tensor.BufferType.L1)
-    prog = tt_lib.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+def matmul_1d_config(m, k, n, grid=(8, 8), act=None):
+    grid_size = grid[0] * grid[1]
+    tile_width = 32
+    tile_height = 32
+
+    per_core_m = m // tile_height
+    per_core_k = k // tile_width // grid_size
+    per_core_n = n // tile_width // grid_size
+
+    # find the largest value between 1 and 8 that is a factor of per_core_n
+    # e.g. if per_core_n is 14, then out_subblock_w = 7
+    out_subblock_w = max([i for i in range(1, 9) if per_core_n % i == 0])
+
+    # find the largest value that is a factor of per_core_m such that
+    # out_subblock_w * out_subblock_h <= 8
+    out_subblock_h = max([i for i in range(1, 9) if per_core_m % i == 0 and i * out_subblock_w <= 8])
+
+    # logger.debug(f"x={x.shape}, w={w.shape}, grid={grid}: per_core_m={per_core_m}, per_core_k={per_core_k}, per_core_n={per_core_n}, out_subblock_w={out_subblock_w}, out_subblock_h={out_subblock_h}")
+
+    return tt_lib.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
         compute_with_storage_grid_size=(8, 8),
-        in0_block_w=2,  # K = 4096 / TILE_WIDTH=32 / Grid_Size
-        out_subblock_h=1,  # Must be divisible by per_core_M
-        out_subblock_w=7,  # Must be divisible by per_core_N, out_subblock_w * out_subblock_h <= 8
-        per_core_M=1,  # M = 4096 / TILE_HEIGHT=32 / 32
-        per_core_N=7,  # N = 14336 / TILE_WIDTH=32 / Grid_Size=64
+        in0_block_w=per_core_k,
+        out_subblock_h=out_subblock_h,
+        out_subblock_w=out_subblock_w,
+        per_core_M=per_core_m,
+        per_core_N=per_core_n,
         fuse_batch=True,
-        fused_activation=tt_lib.tensor.FusibleActivation.SILU if silu else None,
+        fused_activation=act,
         mcast_in0=True,
     )
-    dtype = tt_lib.tensor.DataType.BFLOAT16
+
+
+@ttnn.register_operation(name="matmul_1d", validate_input_tensors=validate_input_tensors)
+def matmul_1d(
+    x,
+    w,
+    act=None,
+    grid=(8, 8),
+    memory_config=tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1),
+    prog=None,
+    output_dtype=None,
+):
+    if prog is None:
+        m = x.shape.padded()[-2]
+        k = x.shape.padded()[-1]
+        n = w.shape.padded()[-1]
+        prog = matmul_1d_config(m, k, n, grid=grid, act=act)
+    if output_dtype is None:
+        output_dtype = x.value.dtype()
 
     ttl_x = x.value
     ttl_w = w.value
     ttl_o = tt_lib.operations.primary.matmul_1d(
-        ttl_x, ttl_w, program_config=prog, output_mem_config=mem, output_dtype=dtype
-    )
-    output_tensor = ttnn.Tensor(ttl_o)
-    return output_tensor
-
-
-@ttnn.register_operation(name="ff2", validate_input_tensors=validate_input_tensors)
-def ff2(x, w):
-    mem = tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1)
-    prog = tt_lib.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-        compute_with_storage_grid_size=(8, 8),
-        in0_block_w=7,  # 14336 / TILE_WIDTH=32 / Grid_Size
-        out_subblock_h=1,
-        out_subblock_w=2,  # 8#2, # 4096 / TILE_WIDTH=32 / Grid_Size
-        per_core_M=1,  # M / TILE_HEIGHT = 32 / 32
-        per_core_N=2,  # 128,#2,
-        fuse_batch=True,  # True,
-        fused_activation=None,
-        mcast_in0=True,
-    )
-    dtype = tt_lib.tensor.DataType.BFLOAT16
-
-    ttl_x = x.value
-    ttl_w = w.value
-    ttl_o = tt_lib.operations.primary.matmul_1d(
-        ttl_x, ttl_w, program_config=prog, output_mem_config=mem, output_dtype=dtype
+        ttl_x, ttl_w, program_config=prog, output_mem_config=memory_config, output_dtype=output_dtype
     )
     output_tensor = ttnn.Tensor(ttl_o)
     return output_tensor
