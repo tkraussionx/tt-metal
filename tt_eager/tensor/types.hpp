@@ -208,6 +208,10 @@ using OwnedBuffer = std::variant<
     owned_buffer::Buffer<uint32_t>,
     owned_buffer::Buffer<float>,
     owned_buffer::Buffer<bfloat16>>;
+
+// HostBufferMemTypes supports all types included in OwnedBuffer as well as void*
+static_assert(std::variant_size_v<OwnedBuffer> + 1 == std::variant_size_v<tt::tt_metal::HostBufferMemTypes>,
+                  "The data types supported in OwnedBuffer must match those in OwnedBufferMemTypes.");
 struct OwnedStorage {
     OwnedBuffer buffer;
 
