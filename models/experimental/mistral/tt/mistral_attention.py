@@ -239,9 +239,6 @@ class TtMistralAttention(nn.Module):
                 wv,
             )
 
-            print(f"debug: x.dtype = {x.dtype()}")
-            print(f"debug: xq.dtype = {xq.dtype()}")
-            print(f"debug: wq.dtype = {wq.dtype()}")
             ###
             # Reshape and rotary embeddings
             ###
@@ -291,6 +288,7 @@ class TtMistralAttention(nn.Module):
 
             q_heads = tt_lib.tensor.transpose(q_heads, 1, 2)
             k_heads = tt_lib.tensor.transpose(k_heads, 1, 2)
+
             # q_heads = tt_lib.tensor.permute(q_heads, (0, 2, 1, 3))
             # k_heads = tt_lib.tensor.permute(k_heads, (0, 2, 1, 3))
 

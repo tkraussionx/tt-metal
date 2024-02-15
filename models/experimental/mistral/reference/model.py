@@ -126,6 +126,11 @@ class Attention(nn.Module):
         self.cache_k[:bsz].scatter_(dim=1, index=scatter_pos, src=xk[:, -self.sliding_window :])
         self.cache_v[:bsz].scatter_(dim=1, index=scatter_pos, src=xv[:, -self.sliding_window :])
 
+        # positions = [0].. 1D [0,1]
+        # src = [32,1,8,64]
+        # index = [32,1,8,64] -> [None, -1, :, :] [32,1,8,64] + [32,1,8,64]
+        # self = [32,4096,8,64]
+
         if positions.shape[0] > 1:
             # prefill
             key, value = repeat_kv(xk, xv, self.repeats)
