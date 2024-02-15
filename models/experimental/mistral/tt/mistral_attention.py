@@ -23,7 +23,7 @@ from models.experimental.mistral.tt.mistral_common import (
 )
 
 
-class TtMistralAttention:
+class TtMistralAttention(nn.Module):
     def __init__(self, devices, state_dict, base_url, layer_num, model_config, configuration):
         super().__init__()
 
@@ -34,8 +34,8 @@ class TtMistralAttention:
         self.hidden_size = configuration.dim
         self.n_heads = configuration.n_heads
         self.head_dim = self.hidden_size // self.n_heads
-        self.max_seq_len = configuration.max_seq_len
-        self.max_batch_size = configuration.max_batch_size
+        self.max_seq_len = 4096  # TODO: configuration.max_seq_len
+        self.max_batch_size = 32  # TODO: configuration.max_batch_size
         self.n_kv_heads = configuration.n_kv_heads
         self.sliding_window = configuration.sliding_window
 
@@ -44,12 +44,18 @@ class TtMistralAttention:
 
         self.model_config = model_config
 
+        self.oldest = 0
+
         layer_name = f"{base_url}.{layer_num}"
 
-        wq_str = f"{layer_name}.attention.wq.weight"
-        wk_str = f"{layer_name}.attention.wk.weight"
-        wv_str = f"{layer_name}.attention.wv.weight"
-        wo_str = f"{layer_name}.attention.wo.weight"
+        wq_str = f"wq.weight"
+        wk_str = f"wk.weight"
+        wv_str = f"wv.weight"
+        wo_str = f"wo.weight"
+        # wq_str = f"{layer_name}.attention.wq.weight"
+        # wk_str = f"{layer_name}.attention.wk.weight"
+        # wv_str = f"{layer_name}.attention.wv.weight"
+        # wo_str = f"{layer_name}.attention.wo.weight"
 
         # when splitting the devices, we need to make sure that the number of heads is divisible by the number of devices
         assert self.n_heads % self.num_devices == 0
@@ -69,6 +75,8 @@ class TtMistralAttention:
                     -1,
                 ),
                 self.devices[i],
+                tt_memory_config=self.model_config["WQ_MM_WEIGHTS_MEMCFG"],
+                tt_dtype=self.model_config["WQ_MM_WEIGHTS_DTYPE"],
             )
             wk = torch2tt_tensor(
                 torch.transpose(
@@ -77,6 +85,8 @@ class TtMistralAttention:
                     -1,
                 ),
                 self.devices[i],
+                tt_memory_config=self.model_config["WK_MM_WEIGHTS_MEMCFG"],
+                tt_dtype=self.model_config["WK_MM_WEIGHTS_DTYPE"],
             )
             wv = torch2tt_tensor(
                 torch.transpose(
@@ -85,6 +95,8 @@ class TtMistralAttention:
                     -1,
                 ),
                 self.devices[i],
+                tt_memory_config=self.model_config["WV_MM_WEIGHTS_MEMCFG"],
+                tt_dtype=self.model_config["WV_MM_WEIGHTS_DTYPE"],
             )
 
             wo = torch2tt_tensor(
@@ -94,6 +106,8 @@ class TtMistralAttention:
                     -1,
                 ),
                 self.devices[i],
+                tt_memory_config=self.model_config["WO_MM_WEIGHTS_MEMCFG"],
+                tt_dtype=self.model_config["WO_MM_WEIGHTS_DTYPE"],
             )
 
             cache_k = torch.zeros(
@@ -167,9 +181,13 @@ class TtMistralAttention:
         xs, rot_mats, attn_masks = [], [], []
         for i in range(self.num_devices):
             device = self.devices[i]
+            # TODO get dtype and set X accordingly (don't hardcode)
             xs.append(torch2tt_tensor(x.clone(), device))
             rot_mats.append(torch2tt_tensor(rot_mat.clone(), device))
             attn_masks.append(torch2tt_tensor(attn_mask.clone(), device))
+            # xs.append(torch2tt_tensor(x.clone(), device, tt_dtype=tt_lib.tensor.DataType.BFLOAT8_B))
+            # rot_mats.append(torch2tt_tensor(rot_mat.clone(), device, tt_dtype=tt_lib.tensor.DataType.BFLOAT8_B))
+            # attn_masks.append(torch2tt_tensor(attn_mask.clone(), device, tt_dtype=tt_lib.tensor.DataType.BFLOAT8_B))
         return (
             xs,
             start_pos,
@@ -221,32 +239,60 @@ class TtMistralAttention:
                 wv,
             )
 
+            print(f"debug: x.dtype = {x.dtype()}")
+            print(f"debug: xq.dtype = {xq.dtype()}")
+            print(f"debug: wq.dtype = {wq.dtype()}")
             ###
             # Reshape and rotary embeddings
             ###
 
-            xqkv_fused = tt_lib.tensor.concat([xq, xk, xv], dim=-1)
+            xqkv_fused = tt_lib.tensor.concat(
+                [xq, xk, xv],
+                dim=-1,
+                # output_mem_config=self.model_config["FUSED_QKV_MM_WEIGHTS_MEMCFG"],
+            )
             (
                 q_heads,  # [seqlen, n_heads, bsz, head_dim]
                 k_heads,  # [seqlen, n_kv_heads, bsz, head_dim]
                 v_heads,  # [seqlen, n_kv_heads, bsz, head_dim]
             ) = tt_lib.tensor.nlp_create_qkv_heads(
-                xqkv_fused, num_heads=self.n_local_heads, num_kv_heads=self.n_local_kv_heads, transpose_k_heads=False
+                xqkv_fused,
+                num_heads=self.n_local_heads,
+                num_kv_heads=self.n_local_kv_heads,
+                transpose_k_heads=False,
+                # output_mem_config=self.model_config["CREATE_QKV_HEADS_OUTPUT_MEMCFG"],
             )
+
+            # TODO Transpose and permute OPs complain if dtype != BFLOAT16. Avoid typecast
+            # q_heads = tt_lib.tensor.typecast(q_heads, tt_lib.tensor.DataType.BFLOAT16)
+            # k_heads = tt_lib.tensor.typecast(k_heads, tt_lib.tensor.DataType.BFLOAT16)
 
             # Have to put bsz back in dim 1 to match rot_mat shape
             q_heads = tt_lib.tensor.transpose(q_heads, 1, 2)
             k_heads = tt_lib.tensor.transpose(k_heads, 1, 2)
+            # q_heads = tt_lib.tensor.permute(q_heads, (0, 2, 1, 3))
+            # k_heads = tt_lib.tensor.permute(k_heads, (0, 2, 1, 3))
 
+            # q_heads = tt_lib.tensor.typecast(q_heads, tt_lib.tensor.DataType.BFLOAT8_B)
+            # k_heads = tt_lib.tensor.typecast(k_heads, tt_lib.tensor.DataType.BFLOAT8_B)
             q_heads = tt_lib.tensor.bmm(
-                q_heads, rot_mat  # [seqlen, bsz, n_heads, head_dim]  # [1, bsz, head_dim, head_dim]
+                q_heads,
+                rot_mat,  # [seqlen, bsz, n_heads, head_dim]  # [1, bsz, head_dim, head_dim]
+                # output_mem_config=self.model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"],
             )
             k_heads = tt_lib.tensor.bmm(
-                k_heads, rot_mat  # [seqlen, bsz, n_kv_heads, head_dim]  # [1, bsz, head_dim, head_dim]
+                k_heads,
+                rot_mat,  # [seqlen, bsz, n_kv_heads, head_dim]  # [1, bsz, head_dim, head_dim]
+                # output_mem_config=self.model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"],
             )
+
+            # q_heads = tt_lib.tensor.typecast(q_heads, tt_lib.tensor.DataType.BFLOAT16)
+            # k_heads = tt_lib.tensor.typecast(k_heads, tt_lib.tensor.DataType.BFLOAT16)
 
             q_heads = tt_lib.tensor.transpose(q_heads, 1, 2)
             k_heads = tt_lib.tensor.transpose(k_heads, 1, 2)
+            # q_heads = tt_lib.tensor.permute(q_heads, (0, 2, 1, 3))
+            # k_heads = tt_lib.tensor.permute(k_heads, (0, 2, 1, 3))
 
             ###
             # KV update
@@ -278,7 +324,7 @@ class TtMistralAttention:
             # k_heads, [seqlen, n_kv_heads, bsz, head_dim]
             # v_heads [seqlen, n_kv_heads, bsz, head_dim]
             # keys, [max_batch_size, n_kv_heads // self.num_devices, sliding_window, head_dim]
-
+            """
             if start_pos < self.sliding_window:
                 keys[:bsz, :, start_pos, :] = tt_lib.tensor.transpose(k_heads, 0, 3)
                 values[:bsz, :, start_pos, :] = tt_lib.tensor.transpose(v_heads, 0, 3)
@@ -287,9 +333,12 @@ class TtMistralAttention:
                 keys[:bsz, :, self.sliding_window - 1, :] = tt_lib.tensor.transpose(k_heads, 0, 3)
                 values[:bsz, :, : self.sliding_window - 1, :] = values[:bsz, :, 1:]
                 values[:bsz, :, self.sliding_window - 1, :] = tt_lib.tensor.transpose(v_heads, 0, 3)
-
-            # tt_lib.tensor.update_cache(keys, k_heads, start_pos)
-            # tt_lib.tensor.update_cache(values, v_heads, start_pos)
+            """
+            if start_pos < self.sliding_window:
+                self.oldest = start_pos
+            tt_lib.tensor.update_cache(keys, k_heads, self.oldest)
+            tt_lib.tensor.update_cache(values, v_heads, self.oldest)
+            self.oldest = self.oldest % self.sliding_window
 
             keys = tt_lib.tensor.unpad(
                 layer_past[0],

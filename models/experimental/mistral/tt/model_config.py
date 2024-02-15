@@ -33,19 +33,23 @@ OP_KEYS = (
     "SIN_CACHED_WEIGHTS",
     "COS_CACHED_WEIGHTS",
     # Attention
+    "WQ_MM_WEIGHTS",
+    "WK_MM_WEIGHTS",
+    "WV_MM_WEIGHTS",
+    "WO_MM_WEIGHTS",
     "FUSED_QKV_MM_WEIGHTS",
-    "FUSED_QKV_MM_OUTPUT",
     "CREATE_QKV_HEADS_OUTPUT",
     "ROTARY_EMBEDDING_OUTPUT",
+    "PRE_SOFTMAX_MM_OUTPUT",
+    "POST_SOFTMAX_MM_OUTPUT",
+    "CONCAT_HEADS_OUTPUT",
+    "FUSED_QKV_MM_OUTPUT",
     "K_CACHE_SLICE_OUTPUT",
     "V_CACHE_SLICE_OUTPUT",
     "K_TRANSPOSED_OUTPUT",
-    "PRE_SOFTMAX_MM_OUTPUT",
     "PRE_SOFTMAX_SCALE_OUTPUT",
     "PRE_SOFTMAX_MASK_OUTPUT",
     "SOFTMAX_OUTPUT",
-    "POST_SOFTMAX_MM_OUTPUT",
-    "CONCAT_HEADS_OUTPUT",
     "SELFOUT_MM_WEIGHTS",
     "SELFOUT_MM_OUTPUT",
     # Decoder Cont
@@ -121,9 +125,10 @@ def get_model_config(model_config_str, num_devices=1):
 
     # Matmul Weights must always be BFP8_B
     # Override defaults for certain configs
-    for key in model_config.keys():
-        if "MM_WEIGHTS_DTYPE" in key:
-            model_config[key] = BFP8_DTYPE
+    # TODO How to handle this for Mistral?
+    # for key in model_config.keys():
+    #     if "MM_WEIGHTS_DTYPE" in key:
+    #         model_config[key] = BFP8_DTYPE
 
     if model_config_str in ("BFLOAT16-L1", "BFLOAT8-L1"):
         model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"] = L1_MEMCFG
