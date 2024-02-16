@@ -66,7 +66,7 @@ def gather_rotary_emb(rot_emb_matrix, position_ids):
     """
     Gather the rotary embeddings for a given position_ids
     """
-    batch_size, seqlen = position_ids.shape
+    seqlen, batch_size = position_ids.shape
     emb_size, _, dhead = rot_emb_matrix.shape
     position_ids = position_ids.view(-1).unsqueeze(-1).unsqueeze(-1).expand(-1, dhead, dhead)
     rot_emb = rot_emb_matrix.gather(0, position_ids).view(batch_size, seqlen, dhead, dhead)

@@ -87,8 +87,11 @@ def test_mistral_attention_inference(
         configuration=model_args,
     )
     generation_start_pos = 0
-    generation_length = 1
+    generation_length = 12
     all_tests_pass = True
+
+    cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
+    freqs_cis = torch.complex(cos, sin)
 
     # TODO Update start_pos (check llama test for reference)
     for i in range(generation_length):
@@ -108,12 +111,13 @@ def test_mistral_attention_inference(
         tt_output_torch = tt2torch_tensor(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
 
         # empty_tensor = torch.zeros((start_pos+1, 64))
-        cos, sin = precompute_freqs(model_args.head_dim, 1)
-        freqs_cis = torch.complex(cos, sin)
+        # cos, sin = precompute_freqs(model_args.head_dim, 1)
+        # freqs_cis = torch.complex(cos, sin)
+        freqs_cis_i = freqs_cis[start_pos, :].unsqueeze(0)
         positions = torch.tensor([start_pos])
         # mask = torch.randn(1, 1)
 
-        reference_output = reference_model(pt_attention_input, freqs_cis, positions, mask=None)
+        reference_output = reference_model(pt_attention_input, freqs_cis_i, positions, mask=None)
 
         passing, pcc_message = comp_pcc(reference_output, tt_output_torch, pcc)
 

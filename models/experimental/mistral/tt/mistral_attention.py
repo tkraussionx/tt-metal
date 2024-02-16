@@ -34,8 +34,8 @@ class TtMistralAttention(nn.Module):
         self.hidden_size = configuration.dim
         self.n_heads = configuration.n_heads
         self.head_dim = self.hidden_size // self.n_heads
-        self.max_seq_len = 4096  # TODO: configuration.max_seq_len
-        self.max_batch_size = 32  # TODO: configuration.max_batch_size
+        self.max_seq_len = configuration.max_seq_len
+        self.max_batch_size = configuration.max_batch_size
         self.n_kv_heads = configuration.n_kv_heads
         self.sliding_window = configuration.sliding_window
 
@@ -139,7 +139,7 @@ class TtMistralAttention(nn.Module):
     def get_rotation_mat(self, dhead, end, start_pos, seqlen, batch):
         cos, sin = tt_precompute_freqs(dhead, end)
         rot_mat = freqs_to_rotation_matrix(cos, sin)
-        position_ids = torch.ones(seqlen, batch, dtype=torch.long) * start_pos
+        position_ids = torch.ones(batch, seqlen, dtype=torch.long) * start_pos
         rot_emb = tt_gather_rotary_emb(rot_mat, position_ids)
         return rot_emb
 
@@ -364,6 +364,7 @@ class TtMistralAttention(nn.Module):
             ###
             # Attention
             ###
+
             keys = tt_lib.tensor.transpose(keys, -1, -2)  #  [batch, num_kv_heads, dhead, cache_len + seqlen]
             attn = tt_lib.operations.primary.transformers.group_attn_matmul(
                 q_heads,

@@ -211,7 +211,9 @@ class TtModelArgs:
     norm_eps: float
     vocab_size: int
 
-    max_batch_size: int = 0
+    max_batch_size: int = 32
+    max_seq_len: int = 4096
+
     FALLBACK_SOFTMAX: bool = False
     FALLBACK_EMPTY: bool = False
     FALLBACK_SCATTER: bool = True
