@@ -7,7 +7,7 @@ import pytest
 from loguru import logger
 
 import tt_lib
-from models.demos.falcon40b.reference.hf_modeling_falcon import (
+from transformers import (
     FalconForCausalLM,
 )
 from models.demos.falcon40b.tt.falcon_causallm import TtFalconCausalLM
@@ -22,19 +22,19 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor, nearest_32, skip_for_grayskull
 
 
-class PytorchFalconCausalLM(torch.nn.Module):
+class PytorchFalconCausalLM:
     def __init__(self, hf_reference_model, num_layers):
-        super().__init__()
         self.model = hf_reference_model
         self.model.transformer.h = self.model.transformer.h[:num_layers]
 
         # Disable dropout
         self.model.eval()
 
-    def forward(self, input_ids, past_key_values, use_cache):
+    def __call__(self, input_ids, past_key_values, attention_mask, use_cache):
         result = self.model(
             input_ids=input_ids,
             past_key_values=past_key_values,
+            attention_mask=attention_mask,
             use_cache=use_cache,
             return_dict=False,
         )
@@ -101,6 +101,9 @@ def run_test_FalconCausalLM_inference(
         assert batch % 32 == 0, "For decode, batch must be multiple of 32!"
         assert q_len == 1, "For decode, q_len must be 1!"
 
+        attention_mask = torch.ones(batch, 1, q_len, kv_len)
+        attention_mask[:, :, :, -1] = 0
+
         past_key_values = ()
         tt_layer_past = ()
         for i in range(num_layers):
@@ -149,7 +152,7 @@ def run_test_FalconCausalLM_inference(
     # Prepare output -----------------------------------------------------------------------
     pytorch_FalconCausalLM = PytorchFalconCausalLM(hugging_face_reference_model, num_layers)
     pytorch_out, pytorch_layer_present = pytorch_FalconCausalLM(
-        input_ids=model_input, past_key_values=past_key_values, use_cache=use_cache
+        input_ids=model_input, past_key_values=past_key_values, attention_mask=attention_mask, use_cache=use_cache
     )
 
     # NOTE: Passing in pytorch tensor here instead of ll buda tensor
@@ -277,6 +280,7 @@ def run_test_FalconCausalLM_inference(
         logger.info("Falcon CausalLM Passed!")
     else:
         logger.warning("Falcon CausalLM Failed!")
+        assert does_pass
 
 
 @skip_for_grayskull("Requires eth connected devices to run")
@@ -299,7 +303,7 @@ def run_test_FalconCausalLM_inference(
 )
 @pytest.mark.parametrize(
     "model_config_str, out_pcc, cache_pcc, token_pcc",
-    [("BFLOAT8_B-SHARDED", 0.89, 0.99, 0.99), ("BFLOAT16-SHARDED", 0.92, 0.99, 0.99)],
+    [("BFLOAT8_B-SHARDED", 0.88, 0.99, 0.99), ("BFLOAT16-SHARDED", 0.92, 0.99, 0.99)],
 )
 def test_FalconCausalLM_inference(
     model_version,

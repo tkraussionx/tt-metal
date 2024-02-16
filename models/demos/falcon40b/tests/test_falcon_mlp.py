@@ -6,8 +6,7 @@ import torch
 import pytest
 from loguru import logger
 
-import tt_lib
-from models.demos.falcon40b.reference.hf_modeling_falcon import (
+from transformers import (
     FalconForCausalLM,
 )
 from models.demos.falcon40b.tt.falcon_mlp import TtFalconMLP
@@ -20,15 +19,14 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor, skip_for_grayskull
 
 
-class PytorchFalconMLPModel(torch.nn.Module):
+class PytorchFalconMLPModel:
     def __init__(self, hf_reference_model, layer_num):
-        super().__init__()
         self.mlp = hf_reference_model.transformer.h[layer_num].mlp
 
         # Disable dropout
         self.mlp.eval()
 
-    def forward(self, x):
+    def __call__(self, x):
         result = self.mlp(x)
         return result
 

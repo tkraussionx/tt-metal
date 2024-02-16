@@ -20,8 +20,8 @@ pytest==7.2.2
 pytest-timeout==2.2.0
 jsbeautifier==1.14.7
 datasets==2.9.0
-torchvision==0.14.1+cpu
-transformers==4.28.1
+torchvision==0.17.0+cpu
+transformers==4.37.2
 xlsxwriter==3.0.8
 tiktoken==0.3.3
 tqdm==4.65.0
@@ -35,6 +35,7 @@ accelerate==0.27.2
 ftfy==6.1.1
 gitpython==3.1.32
 einops==0.6.1
+networkx==3.1.0
 # Pin to this because evaluate 0.4.0 will download the latest multiprocess as a
 # transitive dep, which uses dill >=0.3.7, however many packages require
 # dill < 0.3.7

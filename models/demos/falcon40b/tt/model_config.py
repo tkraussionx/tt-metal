@@ -567,38 +567,3 @@ def get_model_config(model_config_str):
     # logger.debug(f"Falcon model config: \n{pretty_print_model_config(model_config)}")
 
     return model_config
-
-
-model_config_entries = {
-    "_name_or_path": "tiiuae/falcon-40b-instruct",
-    "alibi": False,
-    "apply_residual_connection_post_layernorm": False,
-    "architectures": ["FalconForCausalLM"],
-    "attention_dropout": 0.0,
-    "auto_map": {
-        "AutoConfig": "configuration_falcon.FalconConfig",
-        "AutoModel": "modeling_falcon.FalconModel",
-        "AutoModelForCausalLM": "modeling_falcon.FalconForCausalLM",
-        "AutoModelForQuestionAnswering": "modeling_falcon.FalconForQuestionAnswering",
-        "AutoModelForSequenceClassification": "modeling_falcon.FalconForSequenceClassification",
-        "AutoModelForTokenClassification": "modeling_falcon.FalconForTokenClassification",
-    },
-    "bias": False,
-    "bos_token_id": 11,
-    "eos_token_id": 11,
-    "hidden_dropout": 0.0,
-    "hidden_size": 8192,
-    "initializer_range": 0.02,
-    "layer_norm_epsilon": 1e-05,
-    "model_type": "falcon",
-    "multi_query": True,
-    "new_decoder_architecture": True,
-    "num_attention_heads": 128,
-    "num_hidden_layers": 60,
-    "num_kv_heads": 8,
-    "parallel_attn": True,
-    "torch_dtype": "bfloat16",
-    "transformers_version": "4.28.1",
-    "use_cache": True,
-    "vocab_size": 65024,
-}

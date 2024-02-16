@@ -169,26 +169,29 @@ class TtFalconModelShared:
                 for i in range(len(self.devices))
             ]
 
-            attention_mask_bool = torch.zeros(batch_size, 1, sequence_size, num_input_tokens, dtype=bool)
-            attention_mask_bool[:, :, :, -1] = True
+            attention_mask = torch.ones(batch_size, 1, sequence_size, num_input_tokens)
+            attention_mask[:, :, :, -1] = 0
 
             num_max_tokens = nearest_32(
                 kv_cache_len + 1
             )  # Potentially, num_max_tokens must be provided as a separate argument
-            attention_mask_bool_padded = torch.cat(
-                (
-                    attention_mask_bool,
-                    torch.ones(batch_size, 1, sequence_size, num_max_tokens - num_input_tokens, dtype=bool),
-                ),
-                dim=-1,
+
+            attention_mask_padded = torch.nn.functional.pad(
+                attention_mask, (0, num_max_tokens - num_input_tokens, 0, 0), "replicate"
             )
-            attention_mask_bool_padded = torch.chunk(
-                (attention_mask_bool_padded.transpose(0, 2) * -1e3).expand(-1, self.config.num_attention_heads, -1, -1),
+            # From transformers/modeling_attn_mask_utils.py
+            # _prepare_4d_causal_attention_mask function
+            inverted_mask_padded = 1.0 - attention_mask_padded
+            attention_mask = inverted_mask_padded.masked_fill(
+                inverted_mask_padded.to(torch.bool), torch.finfo(embeddings[0].dtype).min
+            )
+            attention_mask_padded = torch.chunk(
+                attention_mask_padded.transpose(0, 2).expand(-1, self.config.num_attention_heads, -1, -1),
                 len(self.devices),
                 1,
             )
             tt_attention_mask = [
-                torch2tt_tensor(attention_mask_bool_padded[i], None, tt_dtype=self.model_config["ATTN_MASK_DTYPE"])
+                torch2tt_tensor(attention_mask_padded[i], None, tt_dtype=self.model_config["ATTN_MASK_DTYPE"])
                 for i in range(len(self.devices))
             ]
 

@@ -7,7 +7,7 @@ import pytest
 from loguru import logger
 
 import tt_lib
-from models.demos.falcon40b.reference.hf_modeling_falcon import (
+from transformers import (
     FalconForCausalLM,
 )
 from models.demos.falcon40b.tt.falcon_causallm import TtFalconCausalLM
@@ -121,6 +121,9 @@ def run_test_FalconCausalLM_end_to_end(
         assert batch % 32 == 0, "For decode, batch must be multiple of 32!"
         assert q_len == 1, "For decode, q_len must be 1!"
 
+        attention_mask = torch.ones(batch, 1, q_len, kv_len)
+        attention_mask[:, :, :, -1] = 0
+
         past_key_values = ()
         tt_layer_past = ()
         tt_layer_past_host = ()
@@ -172,7 +175,7 @@ def run_test_FalconCausalLM_end_to_end(
     logger.info("Running HF reference model")
     profiler.start("hugging_face_reference_model")
     pytorch_out, pytorch_layer_present = pytorch_FalconCausalLM(
-        input_ids=model_input, past_key_values=past_key_values, use_cache=use_cache
+        input_ids=model_input, past_key_values=past_key_values, attention_mask=attention_mask, use_cache=use_cache
     )
     profiler.end("hugging_face_reference_model")
     logger.info("Done running HF reference model")
@@ -398,7 +401,7 @@ def run_test_FalconCausalLM_end_to_end(
 )
 @pytest.mark.parametrize(
     "num_layers, out_pcc, cache_pcc, token_pcc",
-    ((1, 0.89, 0.99, 0.99), (2, 0.60, 0.95, 0.82), (60, 0.66, 0.90, 0.08)),
+    ((1, 0.88, 0.99, 0.99), (2, 0.57, 0.95, 0.82), (60, 0.77, 0.90, 0.08)),
     ids=["layers_1", "layers_2", "layers_60"],
 )
 @pytest.mark.parametrize(

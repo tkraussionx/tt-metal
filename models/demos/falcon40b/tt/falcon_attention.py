@@ -33,7 +33,7 @@ def generate_cos_sin_cache(
         device=inv_freq.device,
         dtype=inv_freq.dtype,
     )
-    freqs = torch.einsum("i,j->ij", t, inv_freq)
+    freqs = torch.outer(t, inv_freq)
     # Different from paper, but it uses a different permutation in order to obtain the same calculation
     emb = torch.cat((freqs, freqs), dim=-1)
 

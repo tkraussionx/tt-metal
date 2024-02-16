@@ -9,7 +9,7 @@ from loguru import logger
 
 from transformers import AutoTokenizer
 
-from models.falcon40b.reference.hf_modeling_falcon import FalconForCausalLM
+from transformers import FalconForCausalLM
 import time
 
 falcon1b = "tiiuae/falcon-rw-1b"

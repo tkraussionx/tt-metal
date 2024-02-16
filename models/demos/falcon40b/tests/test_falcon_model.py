@@ -6,7 +6,7 @@ import torch
 import pytest
 from loguru import logger
 import tt_lib
-from models.demos.falcon40b.reference.hf_modeling_falcon import (
+from transformers import (
     FalconForCausalLM,
 )
 from models.demos.falcon40b.tt.falcon_model import TtFalconModel
@@ -19,17 +19,17 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor, nearest_32, skip_for_grayskull
 
 
-class PytorchFalconModel(torch.nn.Module):
+class PytorchFalconModel:
     def __init__(self, hf_reference_model, num_layers):
-        super().__init__()
         self.model = hf_reference_model.transformer
         self.model.h = self.model.h[:num_layers]
         self.model.eval()
 
-    def forward(self, input_ids, past_key_values, use_cache):
+    def __call__(self, input_ids, past_key_values, attention_mask, use_cache):
         result = self.model(
             input_ids=input_ids,
             past_key_values=past_key_values,
+            attention_mask=attention_mask,
             use_cache=use_cache,
             return_dict=False,
         )
@@ -119,6 +119,9 @@ def run_test_FalconModel_inference(
         past_key_values = ()
         tt_layer_past = ()
         tt_layer_past_host = ()
+
+        attention_mask = torch.ones(batch, 1, q_len, kv_len)
+        attention_mask[:, :, :, -1] = 0
         for i in range(num_layers):
             k_cache = torch.rand(batch, num_kv_heads, kv_cache_len, head_dim)
             v_cache = torch.rand(batch, num_kv_heads, kv_cache_len, head_dim)
@@ -166,7 +169,7 @@ def run_test_FalconModel_inference(
     # Prepare output -----------------------------------------------------------------------
     pytorch_FalconModel = PytorchFalconModel(hugging_face_reference_model, num_layers)
     pytorch_out, pytorch_layer_present = pytorch_FalconModel(
-        input_ids=model_input, past_key_values=past_key_values, use_cache=use_cache
+        input_ids=model_input, past_key_values=past_key_values, attention_mask=attention_mask, use_cache=use_cache
     )
     # NOTE: Passing in pytorch tensor here instead of ll buda tensor
     # since we don't yet have embedding support on device

@@ -7,9 +7,10 @@ import pytest
 from loguru import logger
 
 import tt_lib
-from models.demos.falcon40b.reference.hf_modeling_falcon import (
+from transformers import (
     FalconForCausalLM,
 )
+from transformers.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from models.demos.falcon40b.tt.falcon_attention import TtFalconAttention
 from models.demos.falcon40b.tt.model_config import (
     get_model_config,
@@ -21,7 +22,7 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor
 
 
-class PytorchFalconAttentionModel(torch.nn.Module):
+class PytorchFalconAttentionModel:
     def __init__(self, hf_reference_model, layer_num):
         super().__init__()
         self.attention = hf_reference_model.transformer.h[layer_num].self_attention
@@ -29,11 +30,12 @@ class PytorchFalconAttentionModel(torch.nn.Module):
         # Disable dropout
         self.attention.eval()
 
-    def forward(self, x, alibi, attention_mask, layer_past, use_cache):
+    def __call__(self, x, alibi, attention_mask, position_ids, layer_past, use_cache):
         result = self.attention(
             hidden_states=x,
             alibi=alibi,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             layer_past=layer_past,
             use_cache=use_cache,
         )
@@ -97,20 +99,21 @@ def run_test_FalconAttention_inference(
         q_len, kv_len = seq_len, kv_cache_len + 1
         assert batch % 32 == 0, "For decode, batch must be multiple of 32!"
         assert q_len == 1, "For decode, q_len must be 1!"
+        position_ids = torch.LongTensor([kv_cache_len])
 
         attention_input = (torch.rand(batch, q_len, configuration.hidden_size) * 2) - 1
         # attention_input = (torch.rand(batch, q_len, 4544) * 2) - 1
-        attention_mask_bool = torch.zeros(batch, 1, q_len, kv_len, dtype=bool)
-        attention_mask_bool[:, :, :, -1] = True
+        attention_mask = torch.ones(batch, 1, q_len, kv_len)
+        attention_mask[:, :, :, -1] = 0
+        attention_mask = _prepare_4d_causal_attention_mask(
+            attention_mask, (batch, q_len), attention_input, kv_cache_len
+        )
+
         k_cache = torch.rand(batch, configuration.num_kv_heads, kv_cache_len, head_dim)
         v_cache = torch.rand(batch, configuration.num_kv_heads, kv_cache_len, head_dim)
         layer_past = (
-            torch.repeat_interleave(
-                k_cache, configuration.num_attention_heads // configuration.num_kv_heads, 1
-            ).flatten(0, 1),
-            torch.repeat_interleave(
-                v_cache, configuration.num_attention_heads // configuration.num_kv_heads, 1
-            ).flatten(0, 1),
+            torch.repeat_interleave(k_cache, configuration.num_attention_heads // configuration.num_kv_heads, 1),
+            torch.repeat_interleave(v_cache, configuration.num_attention_heads // configuration.num_kv_heads, 1),
         )
 
         tt_attention_input_host = torch2tt_tensor(
@@ -121,17 +124,9 @@ def run_test_FalconAttention_inference(
             tt_attention_input.append(tt_attention_input_host.to(device, model_config["LN_ATTN_OUTPUT_MEMCFG"]))
 
         kv_len_padded = nearest_32(kv_len)
-        attention_mask_bool_padded = torch.cat(
-            (
-                attention_mask_bool,
-                torch.ones(batch, 1, q_len, kv_len_padded - kv_len, dtype=bool),
-            ),
-            dim=-1,
-        )
-        attention_mask_bool_padded = torch.chunk(
-            (attention_mask_bool_padded.transpose(0, 2) * -100000).expand(
-                -1, configuration.num_attention_heads, -1, -1
-            ),
+        attention_mask_padded = torch.nn.functional.pad(attention_mask, (0, kv_len_padded - kv_len, 0, 0), "replicate")
+        attention_mask_padded = torch.chunk(
+            (attention_mask_padded.transpose(0, 2)).expand(-1, configuration.num_attention_heads, -1, -1),
             len(devices),
             1,
         )
@@ -145,7 +140,7 @@ def run_test_FalconAttention_inference(
         for i in range(len(devices)):
             tt_attention_mask.append(
                 torch2tt_tensor(
-                    attention_mask_bool_padded[i],
+                    attention_mask_padded[i],
                     devices[i],
                     tt_memory_config=attention_mask_memconfig,
                     tt_dtype=model_config["ATTN_MASK_DTYPE"],
@@ -188,7 +183,8 @@ def run_test_FalconAttention_inference(
     pytorch_out, pytorch_layer_present = pytorch_FalconAttention_model(
         attention_input,
         alibi=None,
-        attention_mask=attention_mask_bool,
+        attention_mask=attention_mask,
+        position_ids=position_ids,
         layer_past=layer_past,
         use_cache=use_cache,
     )
@@ -229,10 +225,10 @@ def run_test_FalconAttention_inference(
     tt_layer_present = (
         torch.repeat_interleave(
             tt_layer_present[0][:, :, :kv_len, :], configuration.num_attention_heads // configuration.num_kv_heads, 1
-        ).flatten(0, 1),
+        ),
         torch.repeat_interleave(
             tt_layer_present[1][:, :, :kv_len, :], configuration.num_attention_heads // configuration.num_kv_heads, 1
-        ).flatten(0, 1),
+        ),
     )
 
     # check outputs ----------------------------------------------------------------------
@@ -245,7 +241,9 @@ def run_test_FalconAttention_inference(
     does_pass = does_pass and does_pass2
 
     does_pass2, output_pcc = comp_pcc(
-        pytorch_layer_present[0][:, kv_len - 1 : kv_len, :], tt_layer_present[0][:, kv_len - 1 : kv_len, :], token_pcc
+        pytorch_layer_present[0][:, :, kv_len - 1 : kv_len, :],
+        tt_layer_present[0][:, :, kv_len - 1 : kv_len, :],
+        token_pcc,
     )
     logger.info(f"K Cache new token: {output_pcc}")
 
@@ -257,7 +255,9 @@ def run_test_FalconAttention_inference(
     does_pass = does_pass and does_pass2
 
     does_pass2, output_pcc = comp_pcc(
-        pytorch_layer_present[1][:, kv_len - 1 : kv_len, :], tt_layer_present[1][:, kv_len - 1 : kv_len, :], token_pcc
+        pytorch_layer_present[1][:, :, kv_len - 1 : kv_len, :],
+        tt_layer_present[1][:, :, kv_len - 1 : kv_len, :],
+        token_pcc,
     )
     logger.info(f"V Cache new token: {output_pcc}")
 
