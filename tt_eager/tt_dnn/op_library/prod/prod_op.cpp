@@ -44,9 +44,7 @@ operation::ProgramWithCallbacks Prod_op::create_program(
 }
 
 Tensor prod(const Tensor& input, const MemoryConfig& output_mem_config ) {
-    // return operation::run(Prod_op{.output_mem_config = output_mem_config}, {input}).at(0);
-    Tensor result =  tiled_prod( operation::run(Prod_op{.output_mem_config = output_mem_config}, {input}).at(0), output_mem_config);
-    // return result;
+    Tensor result = tiled_prod( operation::run(Prod_op{.output_mem_config = output_mem_config}, {input}).at(0), output_mem_config);
     return tt::numpy::prod_result_computation<bfloat16>(result, result.dtype(), result.layout(), result.device(), output_mem_config);
 }
 
