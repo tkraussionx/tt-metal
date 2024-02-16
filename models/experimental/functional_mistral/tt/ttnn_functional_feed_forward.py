@@ -3,51 +3,44 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import ttnn
-import tt_lib
 from loguru import logger
 
 
-def feed_forward(config, x: ttnn.Tensor, *, parameters):
-    """
-    silu_out = ttnn.silu(x @ parameters.w1.weight)
-    x = silu_out * (x @ parameters.w3.weight)
-    return x @ parameters.w2.weight
-    """
-    w1 = parameters.w1.weight
-    w2 = parameters.w2.weight
-    w3 = parameters.w3.weight
-    rows = x.shape.padded()[-2]
-    expanded_dim = w1.shape.padded()[-1]
-    memory_config = ttnn.create_sharded_memory_config((8, 8), (rows, expanded_dim // (8 * 8)), ttnn.ShardStrategy.WIDTH)
-    silu = tt_lib.tensor.FusibleActivation.SILU
+class MistralMLP:
+    def __init__(self, input_shape, parameters, grid=(8, 8)):
+        """Set up the configs ahead of time as this takes 30-50us"""
+        self.w1 = parameters.w1.weight
+        self.w2 = parameters.w2.weight
+        self.w3 = parameters.w3.weight
 
-    w1_out = matmul_1d(x, w1, act=silu, memory_config=memory_config)
-    w3_out = matmul_1d(x, w3, act=None, memory_config=memory_config)
-    w2_in = ttnn.mul(w1_out, w3_out, memory_config=memory_config)
-    w2_out = matmul_1d(w2_in, w2)
+        rows = input_shape.padded()[-2]
+        self.p1 = matmul_1d_config(
+            m=rows,
+            k=self.w1.shape.padded()[-2],
+            n=self.w1.shape.padded()[-1],
+            grid=grid,
+            act=ttnn.ttl.tensor.FusibleActivation.SILU,
+        )
+        self.p3 = matmul_1d_config(
+            m=rows, k=self.w3.shape.padded()[-2], n=self.w3.shape.padded()[-1], grid=grid, act=None
+        )
+        self.p2 = matmul_1d_config(
+            m=rows, k=self.w2.shape.padded()[-2], n=self.w2.shape.padded()[-1], grid=grid, act=None
+        )
+        self.shard = ttnn.create_sharded_memory_config(
+            grid, (rows, self.w1.shape.padded()[-1] // (grid[0] * grid[1])), ttnn.ShardStrategy.WIDTH
+        )
+        self.interleave = ttnn.ttl.tensor.MemoryConfig(
+            ttnn.ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttnn.ttl.tensor.BufferType.L1
+        )
 
-    return w2_out
-
-
-def validate_input_tensors(operation_name, x: ttnn.Tensor, w: ttnn.Tensor, **kwargs):
-    ttnn.validate_input_tensor(
-        operation_name,
-        x,
-        ranks=(4,),
-        dtypes=(ttnn.bfloat16, ttnn.bfloat8_b),
-        layouts=(ttnn.TILE_LAYOUT,),
-        can_be_on_device=True,
-        can_be_on_cpu=False,
-    )
-    ttnn.validate_input_tensor(
-        operation_name,
-        w,
-        ranks=(4,),
-        dtypes=(ttnn.bfloat16, ttnn.bfloat8_b),
-        layouts=(ttnn.TILE_LAYOUT,),
-        can_be_on_device=True,
-        can_be_on_cpu=False,
-    )
+    def __call__(self, x):
+        matmul_1d = ttnn.ttl.operations.primary.matmul_1d
+        w1_out = matmul_1d(x, self.w1, program_config=self.p1, output_mem_config=self.shard)
+        w3_out = matmul_1d(x, self.w3, program_config=self.p3, output_mem_config=self.shard)
+        w2_in = ttnn.mul(w1_out, w3_out, memory_config=self.shard)
+        w2_out = matmul_1d(w2_in, self.w2, program_config=self.p2, output_mem_config=self.interleave)
+        return w2_out
 
 
 def matmul_1d_config(m, k, n, grid=(8, 8), act=None):
@@ -67,10 +60,8 @@ def matmul_1d_config(m, k, n, grid=(8, 8), act=None):
     # out_subblock_w * out_subblock_h <= 8
     out_subblock_h = max([i for i in range(1, 9) if per_core_m % i == 0 and i * out_subblock_w <= 8])
 
-    # logger.debug(f"x={x.shape}, w={w.shape}, grid={grid}: per_core_m={per_core_m}, per_core_k={per_core_k}, per_core_n={per_core_n}, out_subblock_w={out_subblock_w}, out_subblock_h={out_subblock_h}")
-
-    return tt_lib.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-        compute_with_storage_grid_size=(8, 8),
+    return ttnn.ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+        compute_with_storage_grid_size=grid,
         in0_block_w=per_core_k,
         out_subblock_h=out_subblock_h,
         out_subblock_w=out_subblock_w,
@@ -80,30 +71,3 @@ def matmul_1d_config(m, k, n, grid=(8, 8), act=None):
         fused_activation=act,
         mcast_in0=True,
     )
-
-
-@ttnn.register_operation(name="matmul_1d", validate_input_tensors=validate_input_tensors)
-def matmul_1d(
-    x,
-    w,
-    act=None,
-    grid=(8, 8),
-    memory_config=tt_lib.tensor.MemoryConfig(tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1),
-    prog=None,
-    output_dtype=None,
-):
-    if prog is None:
-        m = x.shape.padded()[-2]
-        k = x.shape.padded()[-1]
-        n = w.shape.padded()[-1]
-        prog = matmul_1d_config(m, k, n, grid=grid, act=act)
-    if output_dtype is None:
-        output_dtype = x.value.dtype()
-
-    ttl_x = x.value
-    ttl_w = w.value
-    ttl_o = tt_lib.operations.primary.matmul_1d(
-        ttl_x, ttl_w, program_config=prog, output_mem_config=memory_config, output_dtype=output_dtype
-    )
-    output_tensor = ttnn.Tensor(ttl_o)
-    return output_tensor

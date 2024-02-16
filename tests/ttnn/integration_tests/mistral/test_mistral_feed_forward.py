@@ -16,7 +16,7 @@ from pathlib import Path
 from models.experimental.functional_mistral.tt.mistral_configuration import TtModelArgs
 from models.experimental.functional_mistral.reference.model import Transformer
 from models.experimental.functional_mistral.reference.model import FeedForward
-from models.experimental.functional_mistral.tt.ttnn_functional_feed_forward import feed_forward
+from models.experimental.functional_mistral.tt.ttnn_functional_feed_forward import MistralMLP
 
 from tests.ttnn.utils_for_testing import assert_with_pcc
 
@@ -59,20 +59,14 @@ def test_mistral_feed_forward_inference(model_location_generator, device, reset_
     )
 
     logger.info("Kernel compilation pass...")
-    output = feed_forward(
-        model_args,
-        ttnn_input,
-        parameters=parameters,
-    )
+    feed_forward = MistralMLP(input_shape=ttnn_input.shape, parameters=parameters, grid=(8, 8))
+    output = feed_forward(ttnn_input)
 
     logger.info("Performance timing pass...")
     start = time()
-    output = feed_forward(
-        model_args,
-        ttnn_input,
-        parameters=parameters,
-    )
+    output = feed_forward(ttnn_input)
     duration = time() - start
+
     bytes_per_element = {"BFLOAT16": 2, "BFLOAT8_B": 1, "FLOAT32": 4, "UINT16": 2, "UINT32": 4}
     tensor_bytes = lambda x: reduce(mul, x.shape, 1) * bytes_per_element[x.dtype.name]
     total_dram_bytes = sum(tensor_bytes(x.weight) for x in parameters.values())
