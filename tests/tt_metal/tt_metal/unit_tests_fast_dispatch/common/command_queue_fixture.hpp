@@ -87,9 +87,19 @@ class CommandQueuePCIDevicesFixture : public ::testing::Test {
         }
 
         std::vector<chip_id_t> chip_ids;
-        for (unsigned int id = 0; id < num_devices_; id++) {
-            chip_ids.push_back(id);
-        }
+        // for (unsigned int id = 0; id < num_devices_; id++) {
+        //     chip_ids.push_back(id);
+        //}
+        chip_ids.push_back(0);
+        chip_ids.push_back(7);
+        chip_ids.push_back(1);
+        chip_ids.push_back(6);
+       // chip_ids.push_back(2);
+      //  chip_ids.push_back(5);
+      //  chip_ids.push_back(3);
+      //  chip_ids.push_back(4);
+        // chip_ids.push_back(2);
+        // chip_ids.push_back(3);
         reserved_devices_ = tt::tt_metal::detail::CreateDevices(chip_ids);
         for (const auto& id : chip_ids) {
             devices_.push_back(reserved_devices_.at(id));

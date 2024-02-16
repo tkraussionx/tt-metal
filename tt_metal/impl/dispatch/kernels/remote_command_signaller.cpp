@@ -37,7 +37,9 @@ void kernel_main() {
         volatile tt_l1_ptr CommandHeader* header = (CommandHeader*)command_ptr;
         header->fwd_path = 0; // hacky
 
+        DPRINT << " DPRINT: remote signaller, waiting for space 0x" << HEX() << (uint32_t)tx_semaphore_addr << ENDL();
         wait_consumer_space_available(tx_semaphore_addr);   // Check that there is space in the eth router
+        DPRINT << " DPRINT: remote signaller, done waiting for space " << ENDL();
 
         uint32_t buffer_transfer_start_addr = command_start_addr + (DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER * sizeof(uint32_t));
         volatile tt_l1_ptr uint32_t * buffer_transfer_command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(buffer_transfer_start_addr);
@@ -55,8 +57,11 @@ void kernel_main() {
 
         relay_command<cmd_base_addr, consumer_cmd_base_addr, consumer_data_buffer_size>(tx_buf_switch, ((uint64_t)eth_consumer_noc_encoding << 32));
 
+        DPRINT << " DPRINT: remote signaller, incrememting " << eth_get_semaphore(0) << ENDL();
         update_producer_consumer_sync_semaphores(((uint64_t)signaller_noc_encoding << 32), ((uint64_t)eth_consumer_noc_encoding << 32), tx_semaphore_addr, eth_get_semaphore(0));
 
+        DPRINT << " DPRINT: remote signaller, done incrememting " << eth_get_semaphore(0) << " at " << DEC()
+               << CONSUMER_NOC_X << " " << CONSUMER_NOC_Y << ENDL();
         if (reading_buffer) {
             tt_l1_ptr db_cb_config_t *rx_db_cb_config = get_local_db_cb_config(CQ_CONSUMER_CB_BASE, true);
             tt_l1_ptr db_cb_config_t *tx_db_cb_config = get_local_db_cb_config(CQ_CONSUMER_CB_BASE, false);

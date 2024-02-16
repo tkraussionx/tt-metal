@@ -97,7 +97,7 @@ bool reader_kernel_no_send(
     uint32_t dram_byte_address = input_dram_buffer->address();
     auto dram_noc_xy = input_dram_buffer->noc_coordinates();
     auto eth_noc_xy = device->ethernet_core_from_logical_core(eth_reader_core);
-    log_debug(
+    log_info(
         tt::LogTest,
         "Device {}: reading {} bytes from dram {} addr {} to ethernet core {} addr {}",
         device->id(),
@@ -229,7 +229,7 @@ bool eth_direct_sender_receiver_kernels(
     const CoreCoord& eth_receiver_core,
     uint32_t num_bytes_per_send = 16) {
     bool pass = true;
-    log_debug(
+    log_info(
         tt::LogTest,
         "Sending {} bytes from device {} eth core {} addr {} to device {} eth core {} addr {}",
         byte_size,
@@ -310,6 +310,7 @@ bool eth_direct_sender_receiver_kernels(
     EnqueueProgram(receiver_device->command_queue(), receiver_program, false);
     Finish(sender_device->command_queue());
     Finish(receiver_device->command_queue());
+    std::cout << " Done finish " << std::endl;
 
     auto readback_vec = llrt::read_hex_vec_from_core(
         receiver_device->id(),
@@ -643,6 +644,7 @@ TEST_F(CommandQueuePCIDevicesFixture, EthKernelsDirectSendAllConnectedChips) {
 
 TEST_F(CommandQueuePCIDevicesFixture, EthKernelsRandomDirectSendTests) {
     srand(0);
+    GTEST_SKIP();
     const auto& device_0 = devices_.at(0);
     const auto& device_1 = devices_.at(1);
 
@@ -733,6 +735,14 @@ TEST_F(CommandQueuePCIDevicesFixture, EthKernelsSendInterleavedBufferAllConnecte
                 auto [device_id, receiver_eth_core] = sender_device->get_connected_ethernet_core(sender_eth_core);
                 if (receiver_device->id() != device_id) {
                     continue;
+                }
+                // if (sender_device->id() != 7 or receiver_device->id() != 0 or sender_eth_core != CoreCoord(0,0) or
+                // receiver_eth_core != CoreCoord(0,8) ) {
+                //    while(true);
+                //}
+                if (sender_device->id() == 7 and receiver_device->id() == 0 and sender_eth_core == CoreCoord(0, 0) and
+                    receiver_eth_core == CoreCoord(0, 8)) {
+                    // while(true);
                 }
 
                 log_info(

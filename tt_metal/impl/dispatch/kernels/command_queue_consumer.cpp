@@ -4,6 +4,8 @@
 
 #include "tt_metal/impl/dispatch/kernels/command_queue_consumer.hpp"
 
+#include "debug/dprint.h"
+
 // The read interface for the issue region is set up on the device, the write interface belongs to host
 // Opposite for completion region where device sets up the write interface and host owns read interface
 void setup_completion_queue_write_interface(const uint32_t completion_region_wr_ptr, const uint32_t completion_region_size) {
@@ -60,12 +62,16 @@ void kernel_main() {
         uint32_t completion_data_size = header->completion_data_size;
         completion_queue_reserve_back(completion_data_size);
         write_event(uint32_t(&header->event));
+
+        DPRINT << " DEBUG : got cmd ";
         if ((DeviceCommand::WrapRegion)wrap == DeviceCommand::WrapRegion::COMPLETION) {
+            DPRINT << " wrap " << ENDL();
             cq_write_interface.completion_fifo_wr_ptr = completion_queue_start_addr >> 4;     // Head to the beginning of the completion region
             cq_write_interface.completion_fifo_wr_toggle = not cq_write_interface.completion_fifo_wr_toggle;
             notify_host_of_completion_queue_write_pointer<host_completion_queue_write_ptr_addr>();
             noc_async_write_barrier(); // Barrier for now
         } else if (restart) {
+            DPRINT << " restart " << ENDL();
             completion_queue_size = header->new_completion_queue_size;
             setup_completion_queue_write_interface(completion_queue_start_addr, completion_queue_size);
             db_buf_switch = false;
@@ -73,6 +79,7 @@ void kernel_main() {
             notify_host_of_completion_queue_write_pointer<host_completion_queue_write_ptr_addr>();
             noc_async_write_barrier(); // Barrier for now
         } else if (is_program) {
+            DPRINT << " program " << ENDL();
             write_and_launch_program(
                 db_cb_config,
                 remote_db_cb_config,
@@ -83,6 +90,7 @@ void kernel_main() {
                 producer_consumer_transfer_num_pages);
             wait_for_program_completion(num_workers);
         } else {
+            DPRINT << " write buffer " << ENDL();
             command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(buffer_transfer_start_addr);
             write_buffers(
                 db_cb_config,

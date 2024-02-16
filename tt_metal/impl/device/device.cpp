@@ -363,6 +363,7 @@ void Device::compile_command_queue_programs() {
                 uint32_t host_finish_addr = HOST_CQ_FINISH_PTR + get_absolute_cq_offset(channel, cq_id, cq_size);
                 std::vector<uint32_t> consumer_compile_args = {host_completion_queue_write_ptr_addr, completion_queue_start_addr, completion_queue_size, host_finish_addr, cmd_start_tensix, consumer_data_buffer_size_tensix};
 
+                std::cout << " completion q/writer " << completion_q_physical_core.str() << std::endl;
                 std::string issue_q_reader_kernel = (device_id == this->id()) ? "tt_metal/impl/dispatch/kernels/command_queue_producer.cpp" : "tt_metal/impl/dispatch/kernels/remote_issue_queue_reader.cpp";
 
                 tt::tt_metal::CreateKernel(
@@ -410,6 +411,9 @@ void Device::compile_command_queue_programs() {
         CoreCoord dispatch_physical_core = get_physical_core_coordinate(dispatch_location, CoreType::WORKER);
         CoreCoord remote_signaller_physical_core = get_physical_core_coordinate(remote_signaller_location, CoreType::WORKER);
 
+        std::cout << " remote command procesoor " << remote_processor_physical_core.str() << std::endl;
+        std::cout << " remote dispatcher " << dispatch_physical_core.str() << std::endl;
+        std::cout << "  remote signaller " << remote_signaller_physical_core.str() << std::endl;
         // Set up the dst router to receive fast dispatch packets
         tt_cxy_pair logical_eth_router_remote_dst = tt::Cluster::instance().get_eth_core_for_dispatch_core(remote_processor_location, EthRouterMode::FD_DST, mmio_device_id);
         CoreCoord physical_eth_router_remote_dst = this->ethernet_core_from_logical_core(logical_eth_router_remote_dst);

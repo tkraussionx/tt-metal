@@ -246,6 +246,7 @@ FORCE_INLINE void eth_program_consumer_cb(
 
 FORCE_INLINE
 void eth_tunnel_src_forward_one_cmd() {
+  erisc_info->unused_arg0 += 1;
     volatile tt_l1_ptr uint32_t *eth_db_semaphore_addr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(0));
 
@@ -321,10 +322,12 @@ void eth_tunnel_src_forward_one_cmd() {
     }
     noc_semaphore_inc(((uint64_t)relay_src_noc_encoding << 32) | get_semaphore(0), 1);
     noc_async_write_barrier();  // Barrier for now
+  erisc_info->unused_arg0 += 100;
 }
 
 FORCE_INLINE
 void eth_tunnel_dst_forward_one_cmd() {
+  erisc_info->unused_arg0 += 1;
     /*
     // Debug: stall forever if no valid fd cmd
     // TODO: turn into watcher assert
@@ -439,6 +442,7 @@ void eth_tunnel_dst_forward_one_cmd() {
         }
         command_ptr += DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION;  // jump to buffer transfer region
     }
+  erisc_info->unused_arg0 += 100;
 }
 
 FORCE_INLINE

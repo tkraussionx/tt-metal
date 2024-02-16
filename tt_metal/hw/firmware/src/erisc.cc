@@ -56,6 +56,9 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
     }
 
     router_init();
+    erisc_info->unused_arg0 = 100000;
+    erisc_info->unused_arg1 = 200000;
+    erisc_info->unused_arg2 = 300000;
 
     while (routing_info->routing_enabled) {
         // FD: assume that no more host -> remote writes are pending
