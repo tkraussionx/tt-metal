@@ -11,8 +11,8 @@ void RunCustomCycle(tt_metal::Device *device, int loop_count, bool fast_dispatch
 {
     CoreCoord compute_with_storage_size = device->compute_with_storage_grid_size();
     CoreCoord start_core = {0, 0};
-    //CoreCoord end_core = {0, 0};
-    CoreCoord end_core = {compute_with_storage_size.x - 1, compute_with_storage_size.y - 1};
+    CoreCoord end_core = {0, 0};
+    //CoreCoord end_core = {compute_with_storage_size.x - 1, compute_with_storage_size.y - 1};
     CoreRange all_cores{.start=start_core, .end=end_core};
 
     tt_metal::Program program = tt_metal::CreateProgram();
@@ -27,15 +27,15 @@ void RunCustomCycle(tt_metal::Device *device, int loop_count, bool fast_dispatch
         program, "tt_metal/programming_examples/profiler/test_full_buffer/kernels/full_buffer.cpp",
         all_cores,
         tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = tt_metal::NOC::RISCV_0_default, .defines = kernel_defines});
-    tt_metal::KernelHandle ncrisc_kernel = tt_metal::CreateKernel(
-        program, "tt_metal/programming_examples/profiler/test_full_buffer/kernels/full_buffer.cpp",
-        all_cores,
-        tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = tt_metal::NOC::RISCV_1_default, .defines = kernel_defines});
-    vector<uint32_t> trisc_kernel_args = {};
-    tt_metal::KernelHandle trisc_kernel = tt_metal::CreateKernel(
-        program, "tt_metal/programming_examples/profiler/test_full_buffer/kernels/full_buffer_compute.cpp",
-        all_cores,
-        tt_metal::ComputeConfig{.compile_args = trisc_kernel_args, .defines = kernel_defines});
+    //tt_metal::KernelHandle ncrisc_kernel = tt_metal::CreateKernel(
+        //program, "tt_metal/programming_examples/profiler/test_full_buffer/kernels/full_buffer.cpp",
+        //all_cores,
+        //tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = tt_metal::NOC::RISCV_1_default, .defines = kernel_defines});
+    //vector<uint32_t> trisc_kernel_args = {};
+    //tt_metal::KernelHandle trisc_kernel = tt_metal::CreateKernel(
+        //program, "tt_metal/programming_examples/profiler/test_full_buffer/kernels/full_buffer_compute.cpp",
+        //all_cores,
+        //tt_metal::ComputeConfig{.compile_args = trisc_kernel_args, .defines = kernel_defines});
 
     if (fast_dispatch)
     {

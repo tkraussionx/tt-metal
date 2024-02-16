@@ -39,13 +39,6 @@ struct TimerPeriod {
     steady_clock::time_point stop;
 };
 
-struct CoreTracyData
-{
-    std::map<uint32_t, std::map<tracy::TTDeviceEvent, uint64_t, tracy::TTDeviceEvent_cmp>> data;
-    TracyTTCtx tracyContext;
-    bool contextPopulated;
-    uint32_t runCounter;
-};
 
 class HostProfiler {
     private:
@@ -105,8 +98,11 @@ class DeviceProfiler {
         // Global custom marker counter
         uint32_t customMarkerCount = 0;
 
-        // Device-Core run data
-        std::map<std::pair<uint16_t,CoreCoord>, CoreTracyData> device_core_data;
+        // Device-Core tracy context
+        std::map<std::pair<uint16_t,CoreCoord>, TracyTTCtx> device_tracy_contexts;
+
+        // Device-Core tracy context
+        std::vector<tracy::TTDeviceEvent> device_events;
 
         // Hash to zone source locations
         std::unordered_map<uint16_t, std::string> hash_to_zone_src_locations;
@@ -141,7 +137,7 @@ class DeviceProfiler {
                 const CoreCoord &worker_core);
 
         //Push device results to tracy
-        void pushTracyDeviceResults(std::pair<uint32_t,CoreCoord> device_core);
+        void pushTracyDeviceResults();
 
         //Track the smallest timestamp dumped to file
         void firstTimestamp(uint64_t timestamp);
