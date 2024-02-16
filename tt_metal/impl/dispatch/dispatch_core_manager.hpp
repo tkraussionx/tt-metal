@@ -28,6 +28,7 @@ struct dispatch_core_types_t {
     // TODO (abhullar): consider renaming these when supporting GH #3953 and #3954
     std::optional<tt_cxy_pair> remote_processor = std::nullopt;    // Receives fast dispatch commands from ethernet router and relays to command_dispatcher
     std::optional<tt_cxy_pair> remote_signaller = std::nullopt;    // Transmits data from command_dispatcher to ethernet router to send fast dispatch results off chip
+    std::optional<tt_cxy_pair> eth_tunneler = std::nullopt;    // Transmits data from command_dispatcher to ethernet router to send fast dispatch results off chip
 };
 
 class dispatch_core_manager {

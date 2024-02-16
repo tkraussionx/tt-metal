@@ -5,7 +5,7 @@
 #include "tt_metal/impl/dispatch/kernels/cq_prefetcher.hpp"
 #include "debug/dprint.h"
 
-template <PullAndRelayType pull_type, PullAndRelayType push_type>
+template <PullAndRelayType pull_type, PullAndRelayType push_type, uint32_t eth_buffer_id=0>
 FORCE_INLINE
 void program_pull_and_push_config(
     volatile tt_l1_ptr uint32_t* buffer_transfer_ptr,
@@ -40,7 +40,7 @@ void program_pull_and_push_config(
         src_pr_cfg.cb_buff_cfg.remote_noc_encoding = pull_noc_encoding;
         src_pr_cfg.cb_buff_cfg.local_multicore_cb_cfg = local_multicore_cb_cfg;
         src_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg = remote_multicore_cb_cfg;
-        uint32_t l1_remote_fifo_limit_16B = (get_cb_start_address<true>() + remote_cb_size) >> 4;
+        uint32_t l1_remote_fifo_limit_16B = (get_cb_start_address<true, eth_buffer_id>() + remote_cb_size) >> 4;
         src_pr_cfg.cb_buff_cfg.fifo_limit_16B = l1_remote_fifo_limit_16B;
     }
     src_pr_cfg.num_pages_to_read = num_pages_to_read;
@@ -53,7 +53,7 @@ void program_pull_and_push_config(
         dst_pr_cfg.cb_buff_cfg.remote_noc_encoding = push_noc_encoding;
         dst_pr_cfg.cb_buff_cfg.local_multicore_cb_cfg = local_multicore_cb_cfg;
         dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg = remote_multicore_cb_cfg;
-        uint32_t l1_remote_fifo_limit_16B = (get_cb_start_address<true>() + remote_cb_size) >> 4;
+        uint32_t l1_remote_fifo_limit_16B = (get_cb_start_address<true, eth_buffer_id>() + remote_cb_size) >> 4;
         dst_pr_cfg.cb_buff_cfg.fifo_limit_16B = l1_remote_fifo_limit_16B;
     }
     dst_pr_cfg.page_size = page_size;
@@ -77,6 +77,11 @@ void kernel_main() {
     constexpr tt::PullAndPushConfig pull_and_push_config = (tt::PullAndPushConfig)get_compile_time_arg_val(12);
 
     constexpr bool read_from_issue_queue = (pull_and_push_config == tt::PullAndPushConfig::LOCAL or pull_and_push_config == tt::PullAndPushConfig::PUSH_TO_REMOTE);
+
+    constexpr uint32_t issue_cmd_eth_src_base =  eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
+    constexpr uint32_t issue_cmd_eth_dst_base = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
+    constexpr uint32_t completion_cmd_eth_src_base = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + eth_l1_mem::address_map::ERISC_L1_TUNNEL_BUFFER_SIZE;
+    constexpr uint32_t completion_cmd_eth_dst_base = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + eth_l1_mem::address_map::ERISC_L1_TUNNEL_BUFFER_SIZE;
 
     setup_issue_queue_read_interface(issue_queue_start_addr, issue_queue_size);
     setup_completion_queue_write_interface(completion_queue_start_addr, completion_queue_size);
@@ -133,10 +138,17 @@ void kernel_main() {
             noc_async_read(src_noc_addr, command_start_addr, min(DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, issue_queue_size - rd_ptr));
             // DPRINT << "BARRIER" << ENDL();
         } else {
+          // should only be PullAndPushConfig::REMOTE_PULL_AND_PUSH or PullAndPushConfig::PULL_FROM_REMOTE
             DPRINT << "WAIT FOR DST TO GET CMD" << ENDL();
             db_acquire(pull_semaphore_addr, my_noc_encoding); // dst routers increments this semaphore when cmd is available in the dst router
             DPRINT << "DONE WAIT FOR DST TO GET CMD" << ENDL();
-            uint64_t src_noc_addr = pull_noc_encoding | eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE;
+            uint64_t src_noc_addr;
+            if (pull_and_push_config == tt::PullAndPushConfig::REMOTE_PULL_AND_PUSH) {
+                src_noc_addr = pull_noc_encoding |  issue_cmd_eth_dst_base;
+            } else if (pull_and_push_config == tt::PullAndPushConfig::PULL_FROM_REMOTE) {
+                src_noc_addr = pull_noc_encoding |  completion_cmd_eth_dst_base;
+            }
+            // getting command from dst router
             noc_async_read(src_noc_addr, command_start_addr, DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND); // read in cmd header only
             debug[0] = 109;
         }
@@ -204,19 +216,33 @@ void kernel_main() {
         if constexpr (pull_and_push_config == tt::PullAndPushConfig::REMOTE_PULL_AND_PUSH or pull_and_push_config == tt::PullAndPushConfig::PULL_FROM_REMOTE) { // signal to dst ethernet router that command was pulled in and data can be sent
             DPRINT << "Signal to dst router that we can consume data" << ENDL();
 
-            volatile db_cb_config_t* remote_multicore_cb_cfg = get_remote_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, db_buf_switch);
+              volatile db_cb_config_t* remote_multicore_cb_cfg;
+                if (pull_and_push_config == tt::PullAndPushConfig::REMOTE_PULL_AND_PUSH) {
+                    remote_multicore_cb_cfg = get_remote_db_cb_config(eth_l1_mem::address_map::ISSUE_CQ_CB_BASE, db_buf_switch);
+                    // Program the CB on the DST router because we may need to pull in data from DST
+                    program_remote_sync_cb<true, 0>(
+                        local_multicore_cb_cfg,
+                        remote_multicore_cb_cfg,
+                        pull_noc_encoding,
+                        consumer_cb_num_pages,
+                        page_size,
+                        consumer_cb_size
+                    );
+                } else {
+                    remote_multicore_cb_cfg = get_remote_db_cb_config(eth_l1_mem::address_map::COMPLETION_CQ_CB_BASE, db_buf_switch);
+                    // Program the CB on the DST router because we may need to pull in data from DST
+                    program_remote_sync_cb<true, 1>(
+                        local_multicore_cb_cfg,
+                        remote_multicore_cb_cfg,
+                        pull_noc_encoding,
+                        consumer_cb_num_pages,
+                        page_size,
+                        consumer_cb_size
+                    );
+                }
 
-            // Program the CB on the DST router because we may need to pull in data from DST
-            program_remote_sync_cb<true>(
-                local_multicore_cb_cfg,
-                remote_multicore_cb_cfg,
-                pull_noc_encoding,
-                consumer_cb_num_pages,
-                page_size,
-                consumer_cb_size
-            );
 
-            noc_semaphore_inc(pull_noc_encoding | eth_get_semaphore(0), 1);
+            noc_semaphore_inc(pull_noc_encoding | eth_get_semaphore(1), 1);
             noc_async_write_barrier(); // Barrier for now
         }
 
@@ -225,10 +251,10 @@ void kernel_main() {
             debug[0] = num_buffer_transfers + 10;
             if (num_buffer_transfers == 1) { // reading data from buffer on device and sending to host
                 volatile tt_l1_ptr uint32_t* buffer_transfer_ptr = command_ptr + DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER;
-                volatile db_cb_config_t* remote_multicore_cb_cfg = get_remote_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, db_buf_switch);
+                volatile db_cb_config_t* remote_multicore_cb_cfg = get_remote_db_cb_config(eth_l1_mem::address_map::COMPLETION_CQ_CB_BASE, db_buf_switch);
 
                 // Command requested data from device, pull from eth router cb and write to host buffer
-                program_pull_and_push_config<PullAndRelayType::CIRCULAR_BUFFER, PullAndRelayType::BUFFER>(
+                program_pull_and_push_config<PullAndRelayType::CIRCULAR_BUFFER, PullAndRelayType::BUFFER, 1>(
                     buffer_transfer_ptr,
                     src_pr_cfg,
                     dst_pr_cfg,
@@ -265,41 +291,74 @@ void kernel_main() {
             if ( (pull_and_push_config == tt::PullAndPushConfig::PUSH_TO_REMOTE and (BufferType)src_buf_type == BufferType::SYSTEM_MEMORY) or (pull_and_push_config == tt::PullAndPushConfig::REMOTE_PULL_AND_PUSH and (BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY) ) {
                 // read from buffer and write to cb on eth core
 
-                volatile db_cb_config_t* remote_multicore_cb_cfg = get_remote_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, db_buf_switch);
+              volatile db_cb_config_t* remote_multicore_cb_cfg;
+              uint32_t num_pages_to_read = producer_cb_num_pages / 2;
+                if (pull_and_push_config == tt::PullAndPushConfig::PUSH_TO_REMOTE) {
+                    remote_multicore_cb_cfg = get_remote_db_cb_config(eth_l1_mem::address_map::ISSUE_CQ_CB_BASE, db_buf_switch);
+                    debug[0] = 112;
+                    DPRINT << "Programming remote CB" << ENDL();
+                    program_remote_sync_cb<true, 0>(
+                        local_multicore_cb_cfg,
+                        remote_multicore_cb_cfg,
+                        push_noc_encoding,
+                        consumer_cb_num_pages,
+                        page_size,
+                        consumer_cb_size
+                    );
+                    program_pull_and_push_config<PullAndRelayType::BUFFER, PullAndRelayType::CIRCULAR_BUFFER, 0>(
+                        buffer_transfer_ptr,
+                        src_pr_cfg,
+                        dst_pr_cfg,
+                        page_size,
+                        num_pages_to_read,
+                        producer_consumer_transfer_num_pages,
+                        pull_noc_encoding,
+                        push_noc_encoding,
+                        consumer_cb_size,
+                        local_multicore_cb_cfg,
+                        remote_multicore_cb_cfg
+                    );
+                } else {
+                    remote_multicore_cb_cfg = get_remote_db_cb_config(eth_l1_mem::address_map::COMPLETION_CQ_CB_BASE, db_buf_switch);
+                    debug[0] = 112;
+                    DPRINT << "Programming remote CB" << ENDL();
+                    program_remote_sync_cb<true, 1>(
+                        local_multicore_cb_cfg,
+                        remote_multicore_cb_cfg,
+                        push_noc_encoding,
+                        consumer_cb_num_pages,
+                        page_size,
+                        consumer_cb_size
+                    );
+                    program_pull_and_push_config<PullAndRelayType::BUFFER, PullAndRelayType::CIRCULAR_BUFFER, 1>(
+                        buffer_transfer_ptr,
+                        src_pr_cfg,
+                        dst_pr_cfg,
+                        page_size,
+                        num_pages_to_read,
+                        producer_consumer_transfer_num_pages,
+                        pull_noc_encoding,
+                        push_noc_encoding,
+                        consumer_cb_size,
+                        local_multicore_cb_cfg,
+                        remote_multicore_cb_cfg
+                    );
 
-                debug[0] = 112;
-                DPRINT << "Programming remote CB" << ENDL();
-                program_remote_sync_cb<true>(
-                    local_multicore_cb_cfg,
-                    remote_multicore_cb_cfg,
-                    push_noc_encoding,
-                    consumer_cb_num_pages,
-                    page_size,
-                    consumer_cb_size
-                );
+                }
 
-                uint32_t num_pages_to_read = producer_cb_num_pages / 2;
-                program_pull_and_push_config<PullAndRelayType::BUFFER, PullAndRelayType::CIRCULAR_BUFFER>(
-                    buffer_transfer_ptr,
-                    src_pr_cfg,
-                    dst_pr_cfg,
-                    page_size,
-                    num_pages_to_read,
-                    producer_consumer_transfer_num_pages,
-                    pull_noc_encoding,
-                    push_noc_encoding,
-                    consumer_cb_size,
-                    local_multicore_cb_cfg,
-                    remote_multicore_cb_cfg
-                );
 
                 DPRINT << "Read from src buffer and write to cb" << ENDL();
+
 
                 if (pull_and_push_config == tt::PullAndPushConfig::REMOTE_PULL_AND_PUSH) {
                     header->fwd_path = 0;
                 }
 
-                relay_command<command_start_addr, eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE, consumer_data_buffer_size>(db_buf_switch, push_noc_encoding);
+                if constexpr(pull_and_push_config == tt::PullAndPushConfig::PUSH_TO_REMOTE) {
+                    relay_command<command_start_addr, issue_cmd_eth_src_base, consumer_data_buffer_size>(db_buf_switch, push_noc_encoding);
+                } else {
+                    relay_command<command_start_addr, completion_cmd_eth_src_base, consumer_data_buffer_size>(db_buf_switch, push_noc_encoding);
+                }
                 debug[0] = 113;
                 update_producer_consumer_sync_semaphores(my_noc_encoding, push_noc_encoding, push_semaphore_addr, eth_get_semaphore(0));
                 debug[0] = 114;
@@ -309,18 +368,18 @@ void kernel_main() {
 
             } else if ( pull_and_push_config == tt::PullAndPushConfig::PUSH_TO_REMOTE and (BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY ) {
                 DPRINT << "sending read cmd to src router" << ENDL();
-                relay_command<command_start_addr, eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE, consumer_data_buffer_size>(db_buf_switch, push_noc_encoding);
+                relay_command<command_start_addr, issue_cmd_eth_src_base, consumer_data_buffer_size>(db_buf_switch, push_noc_encoding);
                 update_producer_consumer_sync_semaphores(my_noc_encoding, push_noc_encoding, push_semaphore_addr, eth_get_semaphore(0));
                 DPRINT << "done sending rd to src eth" << ENDL();
             } else if ( pull_and_push_config == tt::PullAndPushConfig::REMOTE_PULL_AND_PUSH and  (BufferType)src_buf_type == BufferType::SYSTEM_MEMORY ) {
 
-                volatile db_cb_config_t* remote_multicore_cb_cfg = get_remote_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, db_buf_switch);
+                volatile db_cb_config_t* remote_multicore_cb_cfg = get_remote_db_cb_config(eth_l1_mem::address_map::ISSUE_CQ_CB_BASE, db_buf_switch);
 
                 // remote pull and relay
                 // doing a write so we pull from eth router cb and write to buffer
                 DPRINT << "Read from eth cb and write to dst buffer - pull sem is " << pull_semaphore_addr[0] << ENDL();
 
-                program_pull_and_push_config<PullAndRelayType::CIRCULAR_BUFFER, PullAndRelayType::BUFFER>(
+                program_pull_and_push_config<PullAndRelayType::CIRCULAR_BUFFER, PullAndRelayType::BUFFER, 0>(
                     buffer_transfer_ptr,
                     src_pr_cfg,
                     dst_pr_cfg,
@@ -341,7 +400,7 @@ void kernel_main() {
                 // done doing the write now we have to send the write buffer cmd back to the src router
                 header->num_buffer_transfers = 0; // make sure src router doesn't expect any data incoming
                 header->fwd_path = 0;
-                relay_command<command_start_addr, eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE, consumer_data_buffer_size>(db_buf_switch, push_noc_encoding);
+                relay_command<command_start_addr, completion_cmd_eth_src_base, consumer_data_buffer_size>(db_buf_switch, push_noc_encoding);
                 update_producer_consumer_sync_semaphores(my_noc_encoding, push_noc_encoding, push_semaphore_addr, eth_get_semaphore(0));
             }
         } else {
@@ -350,7 +409,11 @@ void kernel_main() {
                 header->fwd_path = 0;
             }
             // send command to src router
-            relay_command<command_start_addr, eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE, consumer_data_buffer_size>(db_buf_switch, push_noc_encoding);
+            if constexpr(pull_and_push_config == tt::PullAndPushConfig::PUSH_TO_REMOTE) {
+                relay_command<command_start_addr, issue_cmd_eth_src_base, consumer_data_buffer_size>(db_buf_switch, push_noc_encoding);
+            } else {
+                relay_command<command_start_addr, completion_cmd_eth_src_base, consumer_data_buffer_size>(db_buf_switch, push_noc_encoding);
+            }
             update_producer_consumer_sync_semaphores(my_noc_encoding, push_noc_encoding, push_semaphore_addr, eth_get_semaphore(0));
         }
 
