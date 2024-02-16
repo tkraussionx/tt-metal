@@ -66,17 +66,18 @@ using namespace tt::test_utils::df;
 bool RunWriteBWTest(
     tt_metal::Device* sender_device,
     tt_metal::Device* receiver_device,
-    const size_t& byte_size,
-    const size_t& src_eth_l1_byte_address,
-    const size_t& dst_eth_l1_byte_address,
+    const uint32_t size_in_bytes,
+    const size_t src_eth_l1_byte_address,
+    const size_t dst_eth_l1_byte_address,
     const CoreCoord& eth_sender_core,
     const CoreCoord& eth_receiver_core,
-    uint32_t num_bytes_per_send) {
+    const uint32_t num_loops,
+    uint32_t num_bytes_per_send = 16) {
     bool pass = true;
     log_debug(
         tt::LogTest,
         "Sending {} bytes from device {} eth core {} addr {} to device {} eth core {} addr {}",
-        byte_size,
+        size_in_bytes,
         sender_device->id(),
         eth_sender_core.str(),
         src_eth_l1_byte_address,
@@ -84,7 +85,7 @@ bool RunWriteBWTest(
         eth_receiver_core.str(),
         dst_eth_l1_byte_address);
     // Generate inputs
-    auto inputs = generate_uniform_random_vector<uint32_t>(0, 100, byte_size / sizeof(uint32_t));
+    auto inputs = generate_uniform_random_vector<uint32_t>(0, 100, size_in_bytes / sizeof(uint32_t));
     llrt::write_hex_vec_to_core(
         sender_device->id(),
         sender_device->ethernet_core_from_logical_core(eth_sender_core),
@@ -120,7 +121,8 @@ bool RunWriteBWTest(
         {
             (uint32_t)src_eth_l1_byte_address,
             (uint32_t)dst_eth_l1_byte_address,
-            (uint32_t)byte_size,
+            (uint32_t)size_in_bytes,
+            (uint32_t)num_loops
         });
 
     ////////////////////////////////////////////////////////////////////////////
@@ -130,17 +132,21 @@ bool RunWriteBWTest(
 
     auto eth_receiver_kernel = tt_metal::CreateKernel(
         receiver_program,
-        "tests/tt_metal/tt_metal/test_kernels/dataflow/unit_tests/erisc/eth_l1_direct_receive.cpp",
+        "tests/tt_metal/tt_metal/test_kernels/dataflow/unit_tests/erisc/eth_l1_direct_receive_looping.cpp",
         eth_receiver_core,
         tt_metal::experimental::EthernetConfig{
-            .eth_mode = tt_metal::Eth::RECEIVER, .noc = tt_metal::NOC::NOC_0});  // probably want to use NOC_1 here
+            .eth_mode = tt_metal::Eth::RECEIVER, .noc = tt_metal::NOC::NOC_0,
+            .compile_args = {uint32_t(num_bytes_per_send), uint32_t(num_bytes_per_send >> 4)}});  // probably want to use NOC_1 here
 
     tt_metal::SetRuntimeArgs(
         receiver_program,
         eth_receiver_kernel,
         eth_receiver_core,
         {
-            (uint32_t)byte_size,
+            (uint32_t)src_eth_l1_byte_address,
+            (uint32_t)dst_eth_l1_byte_address,
+            (uint32_t)(size_in_bytes),
+            (uint32_t)num_loops
         });
 
     ////////////////////////////////////////////////////////////////////////////
@@ -150,16 +156,21 @@ bool RunWriteBWTest(
     tt::tt_metal::detail::CompileProgram(sender_device, sender_program);
     tt::tt_metal::detail::CompileProgram(receiver_device, receiver_program);
 
-    EnqueueProgram(sender_device->command_queue(), sender_program, false);
-    EnqueueProgram(receiver_device->command_queue(), receiver_program, false);
-    Finish(sender_device->command_queue());
-    Finish(receiver_device->command_queue());
+    std::thread th2 = std::thread([&] {
+        tt_metal::detail::LaunchProgram(receiver_device, receiver_program);
+    });
+    std::thread th1 = std::thread([&] {
+        tt_metal::detail::LaunchProgram(sender_device, sender_program);
+    });
+
+    th1.join();
+    th2.join();
 
     auto readback_vec = llrt::read_hex_vec_from_core(
         receiver_device->id(),
         receiver_device->ethernet_core_from_logical_core(eth_receiver_core),
         dst_eth_l1_byte_address,
-        byte_size);
+        size_in_bytes);
     pass &= (readback_vec == inputs);
     if (not pass) {
         std::cout << "Mismatch at Core: " << eth_receiver_core.str() << std::endl;
@@ -176,13 +187,18 @@ TEST_F(N300DeviceFixture, N300WriteBandwidthTest) {
 
     auto const& active_eth_cores = device_0->get_active_ethernet_cores();
     assert (active_eth_cores.size() > 0);
-    const auto eth_sender_core_iter = active_eth_cores.begin();
+    auto eth_sender_core_iter = active_eth_cores.begin();
+    assert (eth_sender_core_iter != active_eth_cores.end());
+    eth_sender_core_iter++;
     assert (eth_sender_core_iter != active_eth_cores.end());
     const auto& eth_sender_core = *eth_sender_core_iter;
     auto [device_id, eth_receiver_core] = device_0->get_connected_ethernet_core(eth_sender_core);
 
-    for (uint32_t bytes_per_send : {16, 64}) {
-        std::cout << "BW TEST: " << 64 << ", bytes_per_send: " << bytes_per_send << std::endl;
+    std::cout << "SENDER CORE: (x=" << eth_sender_core.x << ", y=" << eth_sender_core.y << ")" << std::endl;
+    std::cout << "RECEIVER CORE: (x=" << eth_receiver_core.x << ", y=" << eth_receiver_core.y << ")" << std::endl;
+
+    for (uint32_t num_loops : {1, 8, 32, 512}) {
+        std::cout << "BW TEST: " << 64 << ", num_loops: " << num_loops << std::endl;
         RunWriteBWTest(
             device_0,
             device_1,
@@ -191,11 +207,11 @@ TEST_F(N300DeviceFixture, N300WriteBandwidthTest) {
             dst_eth_l1_byte_address,
             eth_sender_core,
             eth_receiver_core,
-            bytes_per_send);
+            num_loops);
     }
 
-    for (uint32_t bytes_per_send : {16, 64, 128, 256, 520, 1040}) {
-        std::cout << "BW TEST: " << 1040 << ", bytes_per_send: " << bytes_per_send << std::endl;
+    for (uint32_t num_loops : {1, 8, 32, 512}) {
+        std::cout << "BW TEST: " << 1040 << ", num_loops: " << num_loops << std::endl;
         RunWriteBWTest(
             device_0,
             device_1,
@@ -204,11 +220,11 @@ TEST_F(N300DeviceFixture, N300WriteBandwidthTest) {
             dst_eth_l1_byte_address,
             eth_sender_core,
             eth_receiver_core,
-            bytes_per_send);
+            num_loops);
     }
 
-    for (uint32_t bytes_per_send : {16, 64, 128, 256, 520, 1040, 2080}) {
-        std::cout << "BW TEST: " << 2080 << ", bytes_per_send: " << bytes_per_send << std::endl;
+    for (uint32_t num_loops : {1, 8, 32, 512}) {
+        std::cout << "BW TEST: " << 2080 << ", num_loops: " << num_loops << std::endl;
         RunWriteBWTest(
             device_0,
             device_1,
@@ -217,12 +233,12 @@ TEST_F(N300DeviceFixture, N300WriteBandwidthTest) {
             dst_eth_l1_byte_address,
             eth_sender_core,
             eth_receiver_core,
-            bytes_per_send);
+            num_loops);
     }
 
 
-    for (uint32_t bytes_per_send : {16, 64, 128, 256, 520, 1040, 2080, 4160}) {
-        std::cout << "BW TEST: " << 4160 << ", bytes_per_send: " << bytes_per_send << std::endl;
+    for (uint32_t num_loops : {1, 8, 32, 512}) {
+        std::cout << "BW TEST: " << 4160 << ", num_loops: " << num_loops << std::endl;
         RunWriteBWTest(
             device_0,
             device_1,
@@ -231,11 +247,11 @@ TEST_F(N300DeviceFixture, N300WriteBandwidthTest) {
             dst_eth_l1_byte_address,
             eth_sender_core,
             eth_receiver_core,
-            bytes_per_send);
+            num_loops);
     }
 
-    for (uint32_t bytes_per_send : {16, 64, 128, 256, 520, 1040, 2080, 4160, 8192, 16384}) {
-        std::cout << "BW TEST: " << 16384 << ", bytes_per_send: " << bytes_per_send << std::endl;
+    for (uint32_t num_loops : {1, 8, 32, 512}) {
+        std::cout << "BW TEST: " << 16384 << ", num_loops: " << num_loops << std::endl;
         RunWriteBWTest(
             device_0,
             device_1,
@@ -244,11 +260,11 @@ TEST_F(N300DeviceFixture, N300WriteBandwidthTest) {
             dst_eth_l1_byte_address,
             eth_sender_core,
             eth_receiver_core,
-            bytes_per_send);
+            num_loops);
     }
 
-    for (uint32_t bytes_per_send : {16, 64, 128, 256, 520, 1040, 2080, 4160, 8192, 16384, 32768}) {
-        std::cout << "BW TEST: " << 32768 << ", bytes_per_send: " << bytes_per_send << std::endl;
+    for (uint32_t num_loops : {1, 8, 32, 512}) {
+        std::cout << "BW TEST: " << 32768 << ", num_loops: " << num_loops << std::endl;
         RunWriteBWTest(
             device_0,
             device_1,
@@ -257,11 +273,11 @@ TEST_F(N300DeviceFixture, N300WriteBandwidthTest) {
             dst_eth_l1_byte_address,
             eth_sender_core,
             eth_receiver_core,
-            bytes_per_send);
+            num_loops);
     }
 
-    for (uint32_t bytes_per_send : {16, 64, 128, 256, 520, 1040, 2080, 4160, 8192, 16384, 32768}) {
-        std::cout << "BW TEST: " << 65535 << ", bytes_per_send: " << bytes_per_send << std::endl;
+    for (uint32_t num_loops : {1, 8, 32, 512}) {
+        std::cout << "BW TEST: " << 65535 << ", num_loops: " << num_loops << std::endl;
         RunWriteBWTest(
             device_0,
             device_1,
@@ -270,7 +286,7 @@ TEST_F(N300DeviceFixture, N300WriteBandwidthTest) {
             dst_eth_l1_byte_address,
             eth_sender_core,
             eth_receiver_core,
-            bytes_per_send);
+            num_loops);
     }
 
 }

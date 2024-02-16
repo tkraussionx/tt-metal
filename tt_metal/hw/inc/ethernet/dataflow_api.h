@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include "dev_msgs.h"
 #include "eth_l1_address_map.h"
 #include "risc_common.h"
@@ -19,15 +20,23 @@ inline void RISC_POST_STATUS(uint32_t status) {
     ptr[0] = status;
 }
 
+struct eth_word_t {
+    volatile uint32_t bytes_sent;
+    uint32_t reserved_0;
+    uint32_t reserved_1;
+    uint32_t reserved_2;
+};
+
 struct erisc_info_t {
     volatile uint32_t launch_user_kernel;
     volatile uint32_t unused_arg0;
     volatile uint32_t unused_arg1;
     volatile uint32_t unused_arg2;
-    volatile uint32_t user_buffer_bytes_sent;
-    uint32_t reserved_0_;
-    uint32_t reserved_1_;
-    uint32_t reserved_2_;
+    eth_word_t per_channel_user_bytes_send[8];
+    // volatile uint32_t user_buffer_bytes_sent;
+    // uint32_t reserved_0_;
+    // uint32_t reserved_1_;
+    // uint32_t reserved_2_;
     volatile uint32_t fast_dispatch_buffer_msgs_sent;
     uint32_t reserved_3_;
     uint32_t reserved_4_;
@@ -50,7 +59,17 @@ volatile uint32_t *RtosTable =
     (volatile uint32_t *)&__erisc_jump_table;  // Rtos Jump Table. Runtime application needs rtos function handles.;
 
 FORCE_INLINE
-void reset_erisc_info() { erisc_info->user_buffer_bytes_sent = 0; }
+void reset_erisc_info() {
+    // assert(channel < 4);
+    erisc_info->per_channel_user_bytes_send[0].bytes_sent = 0;
+    erisc_info->per_channel_user_bytes_send[1].bytes_sent = 0;
+    erisc_info->per_channel_user_bytes_send[2].bytes_sent = 0;
+    erisc_info->per_channel_user_bytes_send[3].bytes_sent = 0;
+    erisc_info->per_channel_user_bytes_send[4].bytes_sent = 0;
+    erisc_info->per_channel_user_bytes_send[5].bytes_sent = 0;
+    erisc_info->per_channel_user_bytes_send[6].bytes_sent = 0;
+    erisc_info->per_channel_user_bytes_send[7].bytes_sent = 0;
+}
 
 namespace internal_ {
 
@@ -132,9 +151,10 @@ void wait_for_fd_packet() {
 FORCE_INLINE
 void ack_fd_packet() {
     routing_info->fd_buffer_msgs_sent = 0;
+    uint32_t addr = ((uint32_t)(&(routing_info->fd_buffer_msgs_sent))) >> 4;
     internal_::eth_send_packet(
         0,
-        ((uint32_t)(&(routing_info->fd_buffer_msgs_sent))) >> 4,
+        addr,
         ((uint32_t)(&(routing_info->fd_buffer_msgs_sent))) >> 4,
         1);
 }
@@ -232,8 +252,33 @@ void eth_send_bytes(
             0, ((num_bytes_sent + src_addr) >> 4), ((num_bytes_sent + dst_addr) >> 4), num_bytes_per_send_word_size);
         num_bytes_sent += num_bytes_per_send;
     }
-    erisc_info->user_buffer_bytes_sent += num_bytes;
+    erisc_info->per_channel_user_bytes_send[0].bytes_sent += num_bytes;
 }
+
+FORCE_INLINE
+void eth_send_bytes_over_channel(
+    uint32_t src_addr,
+    uint32_t dst_addr,
+    uint32_t num_bytes,
+    uint32_t channel,
+    uint32_t num_bytes_per_send = 16,
+    uint32_t num_bytes_per_send_word_size = 1) {
+    // assert(channel < 4);
+    uint32_t num_bytes_sent = 0;
+    while (num_bytes_sent < num_bytes) {
+        internal_::eth_send_packet(
+            0, ((num_bytes_sent + src_addr) >> 4), ((num_bytes_sent + dst_addr) >> 4), num_bytes_per_send_word_size);
+        num_bytes_sent += num_bytes_per_send;
+    }
+    erisc_info->per_channel_user_bytes_send[channel].bytes_sent = num_bytes;
+    uint32_t addr = ((uint32_t)(&(erisc_info->per_channel_user_bytes_send[channel].bytes_sent))) >> 4;
+    internal_::eth_send_packet(
+        0,
+        addr,
+        addr,
+    1);
+}
+
 
 /**
  * A blocking call that waits for receiver to acknowledge that all data sent with eth_send_bytes since the last
@@ -248,11 +293,36 @@ FORCE_INLINE
 void eth_wait_for_receiver_done() {
     internal_::eth_send_packet(
         0,
-        ((uint32_t)(&(erisc_info->user_buffer_bytes_sent))) >> 4,
-        ((uint32_t)(&(erisc_info->user_buffer_bytes_sent))) >> 4,
+        ((uint32_t)(&(erisc_info->per_channel_user_bytes_send[0].bytes_sent))) >> 4,
+        ((uint32_t)(&(erisc_info->per_channel_user_bytes_send[0].bytes_sent))) >> 4,
         1);
-    while (erisc_info->user_buffer_bytes_sent != 0) {
+    while (erisc_info->per_channel_user_bytes_send[0].bytes_sent != 0) {
         run_routing();
+    }
+}
+
+FORCE_INLINE
+void eth_is_receiver_channel_send_acked(uint32_t channel) {
+    return erisc_info->per_channel_user_bytes_send[channel].bytes_sent != 0;
+}
+
+FORCE_INLINE
+void eth_wait_for_receiver_channel_done(uint32_t channel) {
+    // assert(channel < 4);
+    // internal_::eth_send_packet(
+    //     0,
+    //     ((uint32_t)(&(erisc_info->per_channel_user_bytes_send[channel].bytes_sent))) >> 4,
+    //     ((uint32_t)(&(erisc_info->per_channel_user_bytes_send[channel].bytes_sent))) >> 4,
+    //     1);
+    uint32_t count = 0;
+    uint32_t max = 100000;
+
+    while (!eth_is_receiver_channel_send_acked(channel)) {
+        count++;
+        if (count > max) {
+            count = 0;
+            run_routing();
+        }
     }
 }
 
@@ -282,8 +352,8 @@ void eth_wait_for_remote_receiver_done_and_get_local_receiver_data(
 ) {
     internal_::eth_send_packet(
         0,
-        ((uint32_t)(&(erisc_info->user_buffer_bytes_sent))) >> 4,
-        ((uint32_t)(&(erisc_info->user_buffer_bytes_sent))) >> 4,
+        ((uint32_t)(&(erisc_info->per_channel_user_bytes_send[0].bytes_sent))) >> 4,
+        ((uint32_t)(&(erisc_info->per_channel_user_bytes_send[0].bytes_sent))) >> 4,
         1);
     eth_noc_semaphore_wait(sender_semaphore_addr_ptr, 1);
     noc_async_read(receiver_data_noc_addr, local_eth_l1_curr_src_addr, size);
@@ -293,7 +363,7 @@ void eth_wait_for_remote_receiver_done_and_get_local_receiver_data(
         eth_noc_async_write_barrier();
     }
     noc_semaphore_inc(receiver_semaphore_noc_addr, 1);
-    while (erisc_info->user_buffer_bytes_sent != 0) {
+    while (erisc_info->per_channel_user_bytes_send[0].bytes_sent != 0) {
         internal_::risc_context_switch();
     }
 }
@@ -311,8 +381,29 @@ void eth_wait_for_remote_receiver_done_and_get_local_receiver_data(
  */
 FORCE_INLINE
 void eth_wait_for_bytes(uint32_t num_bytes) {
-    while (erisc_info->user_buffer_bytes_sent != num_bytes) {
+    while (erisc_info->per_channel_user_bytes_send[0].bytes_sent != num_bytes) {
         run_routing();
+    }
+}
+FORCE_INLINE
+void eth_wait_for_bytes_on_channel(uint32_t num_bytes, uint32_t channel) {
+    // assert(channel < 4);
+    uint32_t count = 0;
+    uint32_t poll_count = 1000000;
+    uint32_t num_bytes_sent = erisc_info->per_channel_user_bytes_send[channel].bytes_sent;
+    while (num_bytes_sent != num_bytes) {
+        uint32_t received_this_iter = erisc_info->per_channel_user_bytes_send[channel].bytes_sent;
+        if (received_this_iter != num_bytes_sent) {
+            // We are currently in the process of receiving data on this channel, so we just just wait a
+            // bit longer instead of initiating a context switch
+            num_bytes_sent = received_this_iter;
+        } else {
+            count++;
+            if (count > poll_count) {
+                count = 0;
+                // run_routing();
+            }
+        }
     }
 }
 
@@ -327,10 +418,20 @@ void eth_wait_for_bytes(uint32_t num_bytes) {
  */
 FORCE_INLINE
 void eth_receiver_done() {
-    erisc_info->user_buffer_bytes_sent = 0;
+    erisc_info->per_channel_user_bytes_send[0].bytes_sent = 0;
     internal_::eth_send_packet(
         0,
-        ((uint32_t)(&(erisc_info->user_buffer_bytes_sent))) >> 4,
-        ((uint32_t)(&(erisc_info->user_buffer_bytes_sent))) >> 4,
+        ((uint32_t)(&(erisc_info->per_channel_user_bytes_send[0].bytes_sent))) >> 4,
+        ((uint32_t)(&(erisc_info->per_channel_user_bytes_send[0].bytes_sent))) >> 4,
+        1);
+}
+FORCE_INLINE
+void eth_receiver_channel_done(uint32_t channel) {
+    // assert(channel < 4);
+    erisc_info->per_channel_user_bytes_send[channel].bytes_sent = 0;
+    internal_::eth_send_packet(
+        0,
+        ((uint32_t)(&(erisc_info->per_channel_user_bytes_send[channel].bytes_sent))) >> 4,
+        ((uint32_t)(&(erisc_info->per_channel_user_bytes_send[channel].bytes_sent))) >> 4,
         1);
 }
