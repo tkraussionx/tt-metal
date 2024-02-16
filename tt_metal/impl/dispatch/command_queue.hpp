@@ -539,6 +539,7 @@ class CommandQueue {
         RUNNING = 1,
         TERMINATE = 2,
     };
+
     CommandQueueMode mode = CommandQueue::get_mode();
     CommandQueueState worker_state = CommandQueueState::IDLE;
     std::unique_ptr<std::thread> worker_thread;
@@ -546,7 +547,7 @@ class CommandQueue {
     uint32_t cq_id;
     Device* device_ptr;
 
-    bool sanitize_commands = false;
+    bool sanitize_commands = true;
     std::map<uint32_t, BufferMetadata> command_id_to_buffer_map = {};
     std::map<uint32_t, Program> command_id_to_program_map = {};
     std::map<uint32_t, std::vector<uint32_t>> command_id_to_src_data_map = {};
