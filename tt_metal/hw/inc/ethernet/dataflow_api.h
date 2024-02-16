@@ -28,15 +28,12 @@ struct eth_word_t {
 };
 
 struct erisc_info_t {
+    static constexpr uint8_t MAX_CONCURRENT_TRANSACTIONS = 8;
     volatile uint32_t launch_user_kernel;
     volatile uint32_t unused_arg0;
     volatile uint32_t unused_arg1;
     volatile uint32_t unused_arg2;
-    eth_word_t per_channel_user_bytes_send[8];
-    // volatile uint32_t user_buffer_bytes_sent;
-    // uint32_t reserved_0_;
-    // uint32_t reserved_1_;
-    // uint32_t reserved_2_;
+    eth_word_t per_channel_user_bytes_send[MAX_CONCURRENT_TRANSACTIONS];
     volatile uint32_t fast_dispatch_buffer_msgs_sent;
     uint32_t reserved_3_;
     uint32_t reserved_4_;
@@ -302,12 +299,13 @@ void eth_wait_for_receiver_done() {
 }
 
 FORCE_INLINE
-void eth_is_receiver_channel_send_acked(uint32_t channel) {
+bool eth_is_receiver_channel_send_acked(uint32_t channel) {
     return erisc_info->per_channel_user_bytes_send[channel].bytes_sent != 0;
 }
 
 FORCE_INLINE
 void eth_wait_for_receiver_channel_done(uint32_t channel) {
+
     // assert(channel < 4);
     // internal_::eth_send_packet(
     //     0,
@@ -401,7 +399,7 @@ void eth_wait_for_bytes_on_channel(uint32_t num_bytes, uint32_t channel) {
             count++;
             if (count > poll_count) {
                 count = 0;
-                // run_routing();
+                run_routing();
             }
         }
     }

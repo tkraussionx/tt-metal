@@ -72,14 +72,20 @@ bool RunWriteBWTest(
     std::string const& receiver_kernel_path,
     tt_metal::Device* sender_device,
     tt_metal::Device* receiver_device,
+
+    bool source_is_dram,
+    bool dest_is_dram,
+
     const uint32_t size_in_bytes,
     const size_t src_eth_l1_byte_address,
     const size_t dst_eth_l1_byte_address,
     const CoreCoord& eth_sender_core,
     const CoreCoord& eth_receiver_core,
-    const uint32_t num_loops,
-    const uint32_t num_sends_per_sync,
-    uint32_t num_bytes_per_send = 16) {
+    const uint32_t num_messages_to_send,
+    const uint32_t max_num_transaction_buffers,
+    uint32_t num_bytes_per_send = 16
+
+    ) {
     bool pass = true;
     log_debug(
         tt::LogTest,
@@ -121,11 +127,11 @@ bool RunWriteBWTest(
             .eth_mode = tt_metal::Eth::SENDER,
             .noc = tt_metal::NOC::NOC_0,
             .compile_args = {
-                uint32_t(num_bytes_per_send), uint32_t(num_bytes_per_send >> 4),
-                //
-                (uint32_t)size_in_bytes,
-                (uint32_t)num_loops,
-                (uint32_t)num_sends_per_sync
+                uint32_t(num_bytes_per_send),         // 0
+                uint32_t(num_bytes_per_send >> 4),    // 1
+                uint32_t(num_messages_to_send),       // 2
+                uint32_t(max_num_transaction_buffers),// 3
+                uint32_t(source_is_dram)              // 4
                 }
             // .compile_args = {uint32_t(256), uint32_t(256 >> 4)}
             });
@@ -135,15 +141,15 @@ bool RunWriteBWTest(
         eth_sender_kernel,
         eth_sender_core,
         {
-            (uint32_t)src_eth_l1_byte_address,
-            (uint32_t)dst_eth_l1_byte_address,
-            (uint32_t)size_in_bytes,
-            (uint32_t)num_loops,
-            (uint32_t)num_sends_per_sync
+            uint32_t(src_eth_l1_byte_address),
+            uint32_t(dst_eth_l1_byte_address)//,
+            // uint32_t(size_in_bytes),
+            // uint32_t(num_messages_to_send),
+            // uint32_t(max_num_transaction_buffers)
         });
 
     ////////////////////////////////////////////////////////////////////////////
-    //                      Receiver Device
+    //                           Receiver Device
     ////////////////////////////////////////////////////////////////////////////
     tt_metal::Program receiver_program = tt_metal::Program();
 
@@ -154,10 +160,12 @@ bool RunWriteBWTest(
         eth_receiver_core,
         tt_metal::experimental::EthernetConfig{
             .eth_mode = tt_metal::Eth::RECEIVER, .noc = tt_metal::NOC::NOC_0,
-            .compile_args = {uint32_t(num_bytes_per_send), uint32_t(num_bytes_per_send >> 4),
-                (uint32_t)size_in_bytes,
-                (uint32_t)num_loops,
-                (uint32_t)num_sends_per_sync
+            .compile_args = {
+                uint32_t(num_bytes_per_send),         // 0
+                uint32_t(num_bytes_per_send >> 4),    // 1
+                uint32_t(num_messages_to_send),       // 2
+                uint32_t(max_num_transaction_buffers),// 3
+                uint32_t(dest_is_dram)                // 4
             }});  // probably want to use NOC_1 here
             // .compile_args = {uint32_t(256), uint32_t(256 >> 4)}});  // probably want to use NOC_1 here
 
@@ -166,11 +174,11 @@ bool RunWriteBWTest(
         eth_receiver_kernel,
         eth_receiver_core,
         {
-            (uint32_t)src_eth_l1_byte_address,
-            (uint32_t)dst_eth_l1_byte_address,
-            (uint32_t)(size_in_bytes),
-            (uint32_t)num_loops,
-            (uint32_t)num_sends_per_sync
+            uint32_t(src_eth_l1_byte_address),
+            uint32_t(dst_eth_l1_byte_address)//,
+            // uint32_t(size_in_bytes),
+            // uint32_t(num_messages_to_send),
+            // uint32_t(max_num_transaction_buffers)
         });
 
     ////////////////////////////////////////////////////////////////////////////
@@ -180,6 +188,8 @@ bool RunWriteBWTest(
     tt::tt_metal::detail::CompileProgram(sender_device, sender_program);
     tt::tt_metal::detail::CompileProgram(receiver_device, receiver_program);
 
+    std::cout << "Running..." << std::endl;
+
     std::thread th2 = std::thread([&] {
         tt_metal::detail::LaunchProgram(receiver_device, receiver_program);
     });
@@ -188,7 +198,9 @@ bool RunWriteBWTest(
     });
 
     th2.join();
+    std::cout << "receiver done" << std::endl;
     th1.join();
+    std::cout << "sender done" << std::endl;
 
     auto readback_vec = llrt::read_hex_vec_from_core(
         receiver_device->id(),
@@ -210,10 +222,13 @@ int main(int argc, char** argv) {
     // argv[2]: num_loops
     assert (argc == 6);
     const uint32_t buffer_size_bytes = std::stoi(argv[1]);
-    const uint32_t num_loops = std::stoi(argv[2]);
-    const uint32_t num_sends_per_sync = std::stoi(argv[3]);
+    const uint32_t num_messages_to_send = std::stoi(argv[2]);
+    const uint32_t max_num_transaction_buffers = std::stoi(argv[3]);
     std::string const& sender_kernel_path = argv[4];
     std::string const& receiver_kernel_path = argv[5];
+
+    bool source_is_dram = true;
+    bool dest_is_dram = true;
 
     N300TestDevice test_fixture;
 
@@ -234,19 +249,21 @@ int main(int argc, char** argv) {
     // std::cout << "SENDER CORE: (x=" << eth_sender_core.x << ", y=" << eth_sender_core.y << ")" << std::endl;
     // std::cout << "RECEIVER CORE: (x=" << eth_receiver_core.x << ", y=" << eth_receiver_core.y << ")" << std::endl;
 
-    // std::cout << "BW TEST: " << 64 << ", num_loops: " << num_loops << std::endl;
+    // std::cout << "BW TEST: " << 64 << ", num_messages_to_send: " << num_messages_to_send << std::endl;
     RunWriteBWTest(
         sender_kernel_path,
         receiver_kernel_path,
         device_0,
         device_1,
+        source_is_dram,
+        dest_is_dram,
         buffer_size_bytes,
         src_eth_l1_byte_address,
         dst_eth_l1_byte_address,
         eth_sender_core,
         eth_receiver_core,
-        num_loops,
-        num_sends_per_sync,
+        num_messages_to_send,
+        max_num_transaction_buffers,
         buffer_size_bytes);
 
     test_fixture.TearDown();
