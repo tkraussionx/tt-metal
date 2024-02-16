@@ -14,17 +14,17 @@ class MistralMLP:
         self.w3 = parameters.w3.weight
 
         rows = input_shape.padded()[-2]
-        self.p1 = matmul_1d_config(
+        self.ff_silu = matmul_1d_config(
             m=rows,
             k=self.w1.shape.padded()[-2],
             n=self.w1.shape.padded()[-1],
             grid=grid,
             act=ttnn.ttl.tensor.FusibleActivation.SILU,
         )
-        self.p3 = matmul_1d_config(
+        self.ff_none = matmul_1d_config(
             m=rows, k=self.w3.shape.padded()[-2], n=self.w3.shape.padded()[-1], grid=grid, act=None
         )
-        self.p2 = matmul_1d_config(
+        self.ff2 = matmul_1d_config(
             m=rows, k=self.w2.shape.padded()[-2], n=self.w2.shape.padded()[-1], grid=grid, act=None
         )
         self.shard = ttnn.create_sharded_memory_config(
@@ -36,11 +36,17 @@ class MistralMLP:
 
     def __call__(self, x):
         matmul_1d = ttnn.ttl.operations.primary.matmul_1d
-        w1_out = matmul_1d(x, self.w1, program_config=self.p1, output_mem_config=self.shard)
-        w3_out = matmul_1d(x, self.w3, program_config=self.p3, output_mem_config=self.shard)
+        w1_out = matmul_1d(x, self.w1, program_config=self.ff_silu, output_mem_config=self.shard)
+        w3_out = matmul_1d(x, self.w3, program_config=self.ff_none, output_mem_config=self.shard)
         w2_in = ttnn.mul(w1_out, w3_out, memory_config=self.shard)
-        w2_out = matmul_1d(w2_in, self.w2, program_config=self.p2, output_mem_config=self.interleave)
+        w2_out = matmul_1d(w2_in, self.w2, program_config=self.ff2, output_mem_config=self.interleave)
         return w2_out
+
+
+def feed_forward(config, x, parameters):
+    """Lower performance but maches functional paradigm"""
+    mlp = MistralMLP(input_shape=x.shape, parameters=parameters)
+    return mlp(x)
 
 
 def matmul_1d_config(m, k, n, grid=(8, 8), act=None):
