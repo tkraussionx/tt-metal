@@ -50,14 +50,12 @@ def preprocess_conv2d(weight, bias, ttnn_module_args):
     if bias is not None:
         bias = ttnn.from_torch(torch.reshape(bias, (1, 1, 1, -1)), dtype=ttnn.bfloat16)
 
-    conv = ttnn.Conv2D(
+    conv = ttnn.Conv2d(
         **ttnn_module_args,
         weight=weight,
         bias=bias,
         reader_patterns_cache=None,
-        conv_blocking_and_parallelization_config_override=None,
         move_weights_to_device=False,
-        device=None,
     )
 
     parameters = {}
@@ -208,7 +206,7 @@ def convert_torch_model_to_ttnn_model(
                     convert_to_ttnn=convert_to_ttnn,
                     custom_preprocessor=custom_preprocessor,
                     name=f"{name}.{index}" if name else f"{index}",
-                    ttnn_module_args=ttnn_module_args.get(child_name, index) if ttnn_module_args is not None else None,
+                    ttnn_module_args=ttnn_module_args[index] if ttnn_module_args is not None else None,
                 )
                 for index, child in enumerate(model.children())
             ]
@@ -253,12 +251,14 @@ def convert_torch_model_to_ttnn_model(
 
     parameters = {}
     for child_name, child in named_children:
+        if child_name.isdigit():
+            child_name = int(child_name)
         child_parameters = convert_torch_model_to_ttnn_model(
             child,
             convert_to_ttnn=convert_to_ttnn,
             custom_preprocessor=custom_preprocessor,
             name=f"{name}.{child_name}" if name else child_name,
-            ttnn_module_args=ttnn_module_args.get(child_name, None) if ttnn_module_args is not None else None,
+            ttnn_module_args=ttnn_module_args[child_name] if ttnn_module_args is not None else None,
         )
         if child_parameters:
             parameters[child_name] = child_parameters
@@ -382,7 +382,7 @@ class MaxPool2dArgs(ModuleArgs):
         return super().__repr__()
 
 
-def infer_ttnn_module_args(*, model, run_model):
+def infer_ttnn_module_args(*, model, run_model, device):
     if run_model is None:
         return None
 
@@ -427,6 +427,9 @@ def infer_ttnn_module_args(*, model, run_model):
                         dtype=ttnn.bfloat16,
                         weights_dtype=ttnn.bfloat16,
                         use_1d_systolic_array=True,
+                        enable_auto_formatting=False,
+                        conv_blocking_and_parallelization_config_override={},
+                        device=device,
                     )
                 elif isinstance(operation.module, torch.nn.MaxPool2d):
                     ttnn_module_args[module_name] = MaxPool2dArgs(
@@ -440,9 +443,11 @@ def infer_ttnn_module_args(*, model, run_model):
                         dtype=ttnn.bfloat16,
                     )
                 else:
-                    ttnn_submodule_args = _infer_ttnn_module_args(operation.graph)
-                    if ttnn_submodule_args:
-                        ttnn_module_args[module_name] = ttnn_submodule_args
+                    ttnn_module_args[module_name] = _infer_ttnn_module_args(operation.graph)
+
+                if module_name.isdigit():
+                    ttnn_module_args[int(module_name)] = ttnn_module_args[module_name]
+
         return make_dot_access_dict(ttnn_module_args, ignore_types=(ModuleArgs,))
 
     ttnn_module_args = _infer_ttnn_module_args(graph)
@@ -463,14 +468,14 @@ def merge_ttnn_module_args_into_parameters(parameters: dict, ttnn_module_args: d
 
 
 def _initialize_model_and_preprocess_parameters(
-    *, initialize_model, run_model, convert_to_ttnn, custom_preprocessor, prefix
+    *, initialize_model, run_model, convert_to_ttnn, custom_preprocessor, device, prefix
 ):
     model = initialize_model()
     if model.training:
         logger.warning("Putting the model in eval mode")
         model.eval()
 
-    ttnn_module_args = infer_ttnn_module_args(model=model, run_model=run_model)
+    ttnn_module_args = infer_ttnn_module_args(model=model, run_model=run_model, device=device)
     parameters = convert_torch_model_to_ttnn_model(
         model,
         convert_to_ttnn=convert_to_ttnn,
@@ -513,17 +518,21 @@ def preprocess_model(
         * :attr:`reader_patterns_cache`: Cache for reader patterns. It's useful for avoiding recomputation of reader patterns when the same model is used multiple times.
     """
 
+    if model_name is None and not ttnn.TTNN_ENABLE_MODEL_CACHE:
+        logger.warning("ttnn: model cache can be enabled using TTNN_ENABLE_MODEL_CACHE=True")
+
     if convert_to_ttnn is None:
 
         def convert_to_ttnn(model, full_name):
             return True
 
-    if model_name is None:
+    if model_name is None or not ttnn.TTNN_ENABLE_MODEL_CACHE:
         model = _initialize_model_and_preprocess_parameters(
             initialize_model=initialize_model,
             run_model=run_model,
             convert_to_ttnn=convert_to_ttnn,
             custom_preprocessor=custom_preprocessor,
+            device=device,
             prefix=prefix,
         )
 
@@ -561,6 +570,7 @@ def preprocess_model(
                 run_model=run_model,
                 convert_to_ttnn=convert_to_ttnn,
                 custom_preprocessor=custom_preprocessor,
+                device=device,
                 prefix=prefix,
             )
 
@@ -580,19 +590,18 @@ def preprocess_model(
         model = move_to_device(model, device)
         logger.info(f"Moved model weights to device")
 
-    def _convert_configs_to_modules(model):
+    def _convert_ttnn_module_args_to_modules(model):
         if isinstance(model, ParameterDict):
             if "ttnn_module_args" in model:
                 if isinstance(model.ttnn_module_args, Conv2dArgs):
                     if isinstance(model.weight, torch.Tensor):
                         return model
-                    return ttnn.Conv2D(
+                    return ttnn.Conv2d(
                         **model.ttnn_module_args,
                         weight=model.weight,
                         bias=model.bias if "bias" in model else None,
                         reader_patterns_cache=reader_patterns_cache,
                         using_parameters_cache=True,
-                        device=device,
                     )
                 elif isinstance(model.ttnn_module_args, MaxPool2dArgs):
                     return ttnn.MaxPool2d(
@@ -603,13 +612,15 @@ def preprocess_model(
                 else:
                     raise RuntimeError(f"Unsupported ttnn module args: {type(model.ttnn_module_args)}")
             else:
-                return make_parameter_dict({name: _convert_configs_to_modules(value) for name, value in model.items()})
+                return make_parameter_dict(
+                    {name: _convert_ttnn_module_args_to_modules(value) for name, value in model.items()}
+                )
         elif isinstance(model, ParameterList):
-            return ParameterList([_convert_configs_to_modules(value) for value in model])
+            return ParameterList([_convert_ttnn_module_args_to_modules(value) for value in model])
         else:
             return model
 
-    model = _convert_configs_to_modules(model)
+    model = _convert_ttnn_module_args_to_modules(model)
 
     return model
 

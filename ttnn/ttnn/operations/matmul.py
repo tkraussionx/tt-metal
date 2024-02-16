@@ -117,6 +117,11 @@ def matmul(
         * :attr:`input_tensor_a` (ttnn.Tensorensor): the first tensor to be multiplied
         * :attr:`input_tensor_b` (ttnn.Tensor): the second tensor to be multiplied
 
+    Keyword Arguments:
+        * :attr:`memory_config` (ttnn.MemoryConfig): the memory configuration of the output tensor. Defaults to ttnn.DRAM_MEMORY_CONFIG
+        * :attr:`dtype` (ttnn.DataType): the data type of the output tensor. Defaults to None
+        * :attr:`core_grid` (Tuple[int, int]): the grid on which to distribute the sharded tensor on (writes to the cores L1s). Defaults to None
+
     Example::
 
         >>> # vector x vector
@@ -299,26 +304,32 @@ def matmul(
                 output_dtype=dtype,
             )
         else:
-            ttl_output_tensor = ttl.operations.primary.matmul(
-                ttl_input_tensor_a,
-                ttl_input_tensor_b,
-                program_config=ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
-                    compute_with_storage_grid_size=(core_grid[1], core_grid[0]),
-                    in0_block_w=in0_block_w,  # k
-                    out_subblock_h=out_subblock_h,  # m
-                    out_subblock_w=out_subblock_w,  # n
-                    per_core_M=per_core_M,
-                    per_core_N=per_core_N,
-                    transpose_mcast=False,
-                    fused_activation=None,
-                ),
-                output_mem_config=memory_config,
-                output_dtype=dtype,
-            )
+            try:
+                ttl_output_tensor = ttl.operations.primary.matmul(
+                    ttl_input_tensor_a,
+                    ttl_input_tensor_b,
+                    program_config=ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+                        compute_with_storage_grid_size=(core_grid[1], core_grid[0]),
+                        in0_block_w=in0_block_w,  # k
+                        out_subblock_h=out_subblock_h,  # m
+                        out_subblock_w=out_subblock_w,  # n
+                        per_core_M=per_core_M,
+                        per_core_N=per_core_N,
+                        transpose_mcast=False,
+                        fused_activation=None,
+                    ),
+                    output_mem_config=memory_config,
+                    output_dtype=dtype,
+                )
+            except Exception as e:
+                raise RuntimeError(f"ttnn.matmul: ttl.operations.primary.matmul failed. {e}")
 
         output_tensor = ttnn.Tensor(ttl_output_tensor)
 
     elif height_a == 1 and width_b == 1:  # dot product
+        if dtype != input_tensor_a.dtype:
+            raise RuntimeError("dtype is not supported for dot product")
+
         ttl_input_tensor_a = input_tensor_a.value
         ttl_input_tensor_b = input_tensor_b.value
 
@@ -341,6 +352,8 @@ def matmul(
         output_shape = (32,)
 
     elif _shape_is_broadcastable(input_shape_a, input_shape_b):
+        if dtype != input_tensor_a.dtype:
+            raise RuntimeError("dtype is not supported for matmul without core grid")
         if width_a != height_b:
             raise RuntimeError("The width of the first tensor must be equal to the height of the second tensor")
         if all(x == 1 for x in batch_shape_b):
@@ -450,6 +463,13 @@ def linear(
     Arguments:
         * :attr:`input_tensor_a` (ttnn.Tensor): the first tensor to be multiplied
         * :attr:`input_tensor_b` (ttnn.Tensor): the second tensor to be multiplied
+
+    Keyword Arguments:
+        * :attr:`bias` (Optional[ttnn.Tensor]): the bias tensor to be added. Defaults to None
+        * :attr:`memory_config` (ttnn.MemoryConfig): the memory configuration of the output tensor. Defaults to ttnn.DRAM_MEMORY_CONFIG
+        * :attr:`dtype` (Optional[ttnn.DataType]): the data type of the output tensor. Defaults to None
+        * :attr:`core_grid` (Optional[Tuple[int, int]]): the grid on which to distribute the sharded tensor on (writes to the cores L1s). Defaults to None
+        * :attr:`activation` (Optional[str]): the activation function to be applied. Defaults to None
 
     Example::
         >>> # batched matrix x broadcasted matrix
@@ -592,30 +612,32 @@ def linear(
             else:
                 raise RuntimeError(f"{activation} is not supported as activation function")
 
-            ttl_output_tensor = ttl.operations.primary.matmul(
-                ttl_input_tensor_a,
-                ttl_input_tensor_b,
-                bias=ttl_bias,
-                program_config=ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
-                    compute_with_storage_grid_size=(core_grid[1], core_grid[0]),
-                    in0_block_w=in0_block_w,  # k
-                    out_subblock_h=out_subblock_h,  # m
-                    out_subblock_w=out_subblock_w,  # n
-                    per_core_M=per_core_M,
-                    per_core_N=per_core_N,
-                    transpose_mcast=False,
-                    fused_activation=fused_activation,
-                ),
-                output_mem_config=memory_config,
-                output_dtype=dtype,
-            )
+            try:
+                ttl_output_tensor = ttl.operations.primary.matmul(
+                    ttl_input_tensor_a,
+                    ttl_input_tensor_b,
+                    bias=ttl_bias,
+                    program_config=ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+                        compute_with_storage_grid_size=(core_grid[1], core_grid[0]),
+                        in0_block_w=in0_block_w,  # k
+                        out_subblock_h=out_subblock_h,  # m
+                        out_subblock_w=out_subblock_w,  # n
+                        per_core_M=per_core_M,
+                        per_core_N=per_core_N,
+                        transpose_mcast=False,
+                        fused_activation=fused_activation,
+                    ),
+                    output_mem_config=memory_config,
+                    output_dtype=dtype,
+                )
+            except Exception as e:
+                raise RuntimeError(f"ttnn.linear: ttl.operations.primary.matmul failed. {e}")
 
         output_tensor = ttnn.Tensor(ttl_output_tensor)
 
     else:
         if activation is not None:
             raise RuntimeError("activation must be None")
-
         ttl_bias = bias.value if bias is not None else None
         ttl_output_tensor = ttl.operations.primary.matmul(
             ttl_input_tensor_a,

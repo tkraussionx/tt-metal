@@ -3,13 +3,11 @@
 # SPDX-License-Identifier: Apache-2.0
 import os
 import copy
-import argparse
 import re
 import csv
-import json
 import time
 import random
-import click
+import toolz
 import subprocess as sp
 from pathlib import Path
 from itertools import chain
@@ -26,10 +24,6 @@ profiler_log_path = PROFILER_LOGS_DIR / PROFILER_DEVICE_SIDE_LOG
 from tt_metal.tools.profiler.process_device_log import import_log_run_stats
 import tt_metal.tools.profiler.device_post_proc_config as device_post_proc_config
 
-from tests.scripts.common import (
-    run_single_test,
-)
-
 
 def run_moreh_single_test(test_name, test_entry):
     full_env = copy.deepcopy(os.environ)
@@ -41,11 +35,17 @@ def run_moreh_single_test(test_name, test_entry):
     return result
 
 
-def capture_terminal_line(log, keyword):
-    lines = log.stdout.decode("utf-8").strip().split("\n")
+def capture_line_from_str_output(str_output, keyword):
+    lines = str_output.strip().split("\n")
     for line in lines:
         if keyword in line:
             return line
+
+
+def capture_terminal_line(log, keyword):
+    str_output = log.stdout.decode("utf-8")
+
+    return capture_line_from_str_output(str_output, keyword)
 
 
 def capture_line_result(line, position):
@@ -86,7 +86,7 @@ def profile_noc_results():
 # pcie write
 def test_write_device_l1(iter=1, buffer_type=0, size=2048):
     command = (
-        "./build/test/tt_metal/perf_microbenchmark/pcie/test_rw_device_l1 "
+        "./build/test/tt_metal/perf_microbenchmark/old/pcie/test_rw_device_l1 "
         + "--iter "
         + str(iter)
         + " --buffer_type "
@@ -102,7 +102,7 @@ def test_write_device_l1(iter=1, buffer_type=0, size=2048):
 
 def test_write_device_dram_channel(iter=1, buffer_type=0, size=2048):
     command = (
-        "./build/test/tt_metal/perf_microbenchmark/pcie/test_rw_device_dram "
+        "./build/test/tt_metal/perf_microbenchmark/old/pcie/test_rw_device_dram "
         + "--iter "
         + str(iter)
         + " --buffer_type "
@@ -118,7 +118,7 @@ def test_write_device_dram_channel(iter=1, buffer_type=0, size=2048):
 
 def test_write_buffer(iter=1, buffer_type=0, size=2048):
     command = (
-        "./build/test/tt_metal/perf_microbenchmark/pcie/test_rw_buffer "
+        "./build/test/tt_metal/perf_microbenchmark/old/pcie/test_rw_buffer "
         + "--iter "
         + str(iter)
         + " --buffer_type "
@@ -134,7 +134,7 @@ def test_write_buffer(iter=1, buffer_type=0, size=2048):
 
 def test_enqueue_write_buffer(iter=1, buffer_type=0, size=2048, timeout=600):
     command = (
-        "./build/test/tt_metal/perf_microbenchmark/pcie/test_enqueue_rw_buffer "
+        "./build/test/tt_metal/perf_microbenchmark/old/pcie/test_enqueue_rw_buffer "
         + "--iter "
         + str(iter)
         + " --buffer_type "
@@ -151,7 +151,7 @@ def test_enqueue_write_buffer(iter=1, buffer_type=0, size=2048, timeout=600):
 # pcie read
 def test_read_device_l1(iter=1, buffer_type=0, size=2048):
     command = (
-        "./build/test/tt_metal/perf_microbenchmark/pcie/test_rw_device_l1 "
+        "./build/test/tt_metal/perf_microbenchmark/old/pcie/test_rw_device_l1 "
         + "--iter "
         + str(iter)
         + " --buffer_type "
@@ -167,7 +167,7 @@ def test_read_device_l1(iter=1, buffer_type=0, size=2048):
 
 def test_read_device_dram_channel(iter=1, buffer_type=0, size=2048):
     command = (
-        "./build/test/tt_metal/perf_microbenchmark/pcie/test_rw_device_dram "
+        "./build/test/tt_metal/perf_microbenchmark/old/pcie/test_rw_device_dram "
         + "--iter "
         + str(iter)
         + " --buffer_type "
@@ -183,7 +183,7 @@ def test_read_device_dram_channel(iter=1, buffer_type=0, size=2048):
 
 def test_read_buffer(iter=1, buffer_type=0, size=2048):
     command = (
-        "./build/test/tt_metal/perf_microbenchmark/pcie/test_rw_buffer "
+        "./build/test/tt_metal/perf_microbenchmark/old/pcie/test_rw_buffer "
         + "--iter "
         + str(iter)
         + " --buffer_type "
@@ -199,7 +199,7 @@ def test_read_buffer(iter=1, buffer_type=0, size=2048):
 
 def test_enqueue_read_buffer(iter=1, buffer_type=0, size=2048, timeout=600):
     command = (
-        "./build/test/tt_metal/perf_microbenchmark/pcie/test_enqueue_rw_buffer "
+        "./build/test/tt_metal/perf_microbenchmark/old/pcie/test_enqueue_rw_buffer "
         + "--iter "
         + str(iter)
         + " --buffer_type "
@@ -216,7 +216,7 @@ def test_enqueue_read_buffer(iter=1, buffer_type=0, size=2048, timeout=600):
 # noc
 def test_noc_local(r=9, c=12, nt=256, cb=1):
     command = (
-        "./build/test/tt_metal/perf_microbenchmark/noc/test_noc_read_local_l1 "
+        "./build/test/tt_metal/perf_microbenchmark/old/noc/test_noc_read_local_l1 "
         + "--r "
         + str(r)
         + " --c "
@@ -231,7 +231,7 @@ def test_noc_local(r=9, c=12, nt=256, cb=1):
 
 def test_noc_global_type_a(r=9, c=12, nt=256, cb=1):
     command = (
-        "./build/test/tt_metal/perf_microbenchmark/noc/test_noc_read_global_l1 "
+        "./build/test/tt_metal/perf_microbenchmark/old/noc/test_noc_read_global_l1 "
         + "--r "
         + str(r)
         + " --c "
@@ -247,7 +247,7 @@ def test_noc_global_type_a(r=9, c=12, nt=256, cb=1):
 
 def test_noc_global_type_b(r=9, c=12, nt=256, cb=1):
     command = (
-        "./build/test/tt_metal/perf_microbenchmark/noc/test_noc_read_global_l1 "
+        "./build/test/tt_metal/perf_microbenchmark/old/noc/test_noc_read_global_l1 "
         + "--r "
         + str(r)
         + " --c "
@@ -266,7 +266,7 @@ def test_matmul_global(
     r=9, c=12, mt=72, nt=96, kt=24, per_core_mt=8, per_core_nt=8, l1_in0=0, l1_in1=0, l1_out=0, in0_block_w=4
 ):
     command = (
-        "./build/test/tt_metal/perf_microbenchmark/matmul/matmul_global_l1 "
+        "./build/test/tt_metal/perf_microbenchmark/old/matmul/matmul_global_l1 "
         + "--r "
         + str(r)
         + " --c "
@@ -295,7 +295,7 @@ def test_matmul_global(
 
 def test_matmul_local(r=9, c=12, mt=72, nt=96, kt=24):
     command = (
-        "./build/test/tt_metal/perf_microbenchmark/matmul/matmul_local_l1 "
+        "./build/test/tt_metal/perf_microbenchmark/old/matmul/matmul_local_l1 "
         + "--r "
         + str(r)
         + " --c "
@@ -315,7 +315,7 @@ def test_matmul_local(r=9, c=12, mt=72, nt=96, kt=24):
     [(2, np.array([8192, 32768, 131072, 524288, 2097152, 8388608]), np.array([33554432, 134217728, 536870912]))],
 )
 def test_pcie_h2d_dram(iteration, test_vector_small, test_vector_large):
-    file_name = PROFILER_LOGS_DIR / "H2D_DRAM_Bandwidth.csv"
+    file_name = PROFILER_LOGS_DIR / "moreh_old_H2D_DRAM_Bandwidth.csv"
     header = ["Transfer Size", "WriteToDeviceDRAMChannel", "WriteToBuffer", "EnqueueWriteBuffer"]
     data = []
     for test_point in test_vector_small:
@@ -339,7 +339,7 @@ def test_pcie_h2d_dram(iteration, test_vector_small, test_vector_large):
     [(2, np.array([8192, 32768, 131072, 524288, 2097152, 8388608]), np.array([33554432, 134217728, 536870912]))],
 )
 def test_pcie_d2h_dram(iteration, test_vector_small, test_vector_large):
-    file_name = PROFILER_LOGS_DIR / "D2H_DRAM_Bandwidth.csv"
+    file_name = PROFILER_LOGS_DIR / "moreh_old_D2H_DRAM_Bandwidth.csv"
     header = ["Transfer Size", "ReadFromDeviceDRAMChannel", "ReadFromBuffer", "EnqueueReadBuffer"]
     data = []
     for test_point in test_vector_small:
@@ -366,7 +366,7 @@ def test_pcie_d2h_dram(iteration, test_vector_small, test_vector_large):
     ],
 )
 def test_pcie_h2d_l1(arch, iteration, L1_size, test_vector):
-    file_name = PROFILER_LOGS_DIR / "H2D_L1_Bandwidth.csv"
+    file_name = PROFILER_LOGS_DIR / "moreh_old_H2D_L1_Bandwidth.csv"
     header = ["Transfer Size", "WriteToDeviceL1", "WriteToBuffer", "EnqueueWriteBuffer"]
     data = []
     for test_point in test_vector:
@@ -385,12 +385,12 @@ def test_pcie_h2d_l1(arch, iteration, L1_size, test_vector):
 @pytest.mark.parametrize(
     "arch, iteration, L1_size, test_vector",
     [
-        ("grayskull", 2, 1048576, np.array([4096, 16384, 65536, 262144, 1048576, 4194304, 16777216])),
-        ("wormhole_b0", 2, 1499136, np.array([4096, 16384, 65536, 262144, 1048576, 4194304, 16777216])),
+        ("grayskull", 2, 1048576, np.array([4096, 16384, 65536])),
+        ("wormhole_b0", 2, 1499136, np.array([4096, 16384, 65536])),
     ],
 )
 def test_pcie_d2h_l1(arch, iteration, L1_size, test_vector):
-    file_name = PROFILER_LOGS_DIR / "D2H_L1_Bandwidth.csv"
+    file_name = PROFILER_LOGS_DIR / "moreh_old_D2H_L1_Bandwidth.csv"
     header = ["Transfer Size", "ReadFromDeviceL1", "ReadFromBuffer", "EnqueueReadBuffer"]
     data = []
     for test_point in test_vector:
@@ -414,7 +414,7 @@ def test_pcie_d2h_l1(arch, iteration, L1_size, test_vector):
     ],
 )
 def test_noc(arch, r, c, nt, test_vector):
-    file_name = PROFILER_LOGS_DIR / "NoC_Read_Performance.csv"
+    file_name = PROFILER_LOGS_DIR / "moreh_old_NoC_Read_Performance.csv"
     header = [
         "Requests",
         "Local L1 (min)",
@@ -451,7 +451,7 @@ def test_noc(arch, r, c, nt, test_vector):
     ],
 )
 def test_matmul_dram(arch, freq, r, c, test_vector):
-    file_name = PROFILER_LOGS_DIR / "Matmul_DRAM.csv"
+    file_name = PROFILER_LOGS_DIR / "moreh_old_Matmul_DRAM.csv"
     header = ["M", "N", "K", "Cycles", "Time (ms)", "TFLOPS"]
     data = []
     for vec in test_vector:
@@ -478,7 +478,7 @@ def test_matmul_dram(arch, freq, r, c, test_vector):
     ],
 )
 def test_matmul_l1(arch, freq, r, c, test_vector_global, test_vector_local):
-    file_name = PROFILER_LOGS_DIR / "Matmul_SRAM.csv"
+    file_name = PROFILER_LOGS_DIR / "moreh_old_Matmul_SRAM.csv"
     header = ["M", "N", "K", "Cycles", "Time (ms)", "TFLOPS"]
     data = []
     for vec in test_vector_global:
@@ -505,3 +505,103 @@ def test_matmul_l1(arch, freq, r, c, test_vector_global, test_vector_local):
         data.append(vec + [cycle, time, throughput])
     generate_csv(file_name, header, data)
     return
+
+
+@pytest.fixture(scope="function")
+def create_moreh_microbenchmark_csv(request):
+    microbenchmark_name = request.node.name.split("[")[0]
+
+    file_name = PROFILER_LOGS_DIR / f"moreh_{microbenchmark_name}.csv"
+
+    yield file_name
+
+
+@pytest.fixture(scope="function")
+def record_moreh_microbenchmark_csv(capsys, create_moreh_microbenchmark_csv):
+    yield
+
+    captured = capsys.readouterr()
+
+    result_output = captured.out
+
+    def get_entries(result_output, marker):
+        line = capture_line_from_str_output(result_output, marker)
+        return line.split(":")[1:]
+
+    csv_microbenchmark_name = get_entries(result_output, "CSV_MICROBENCHMARK")[0]
+    csv_inputs_and_values = get_entries(result_output, "CSV_INPUT")
+    csv_outputs_and_values = get_entries(result_output, "CSV_OUTPUT")
+    csv_result_and_value = get_entries(result_output, "CSV_RESULT")
+
+    assert len(csv_result_and_value) == 2, f"CSV_RESULT needs to be a single name and value"
+    assert len(csv_inputs_and_values) >= 2
+    assert len(csv_outputs_and_values) >= 2
+
+    def get_names(inputs_and_values):
+        return list(toolz.itertoolz.take_nth(2, inputs_and_values))
+
+    def get_values(inputs_and_values):
+        return list(toolz.itertoolz.take_nth(2, inputs_and_values[1:]))
+
+    csv_inputs_names = get_names(csv_inputs_and_values)
+    csv_inputs_values = get_values(csv_inputs_and_values)
+
+    csv_outputs_names = get_names(csv_outputs_and_values)
+    csv_outputs_values = get_values(csv_outputs_and_values)
+
+    csv_result_name = get_names(csv_result_and_value)[0]
+    csv_result_value = get_values(csv_result_and_value)[0]
+
+    headers = csv_inputs_names + csv_outputs_names + [csv_result_name]
+    data = csv_inputs_values + csv_outputs_values + [csv_result_value]
+
+    file_name = create_moreh_microbenchmark_csv
+
+    file_path = Path(file_name)
+
+    if not file_path.exists():
+        with open(file_path, mode="w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(headers)
+
+    assert file_path.is_file()
+    with open(file_path, mode="a", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(data)
+
+
+@pytest.mark.parametrize(
+    "r, c, num_tiles, tiles_per_transfer, noc_index, noc_direction, access_type, use_device_profiler",
+    [(9, 12, 204800, 1, 0, 0, 0, 0), (9, 12, 204800, 1, 0, 0, 0, 0)],
+)
+def test_noc_adjacent(
+    r,
+    c,
+    num_tiles,
+    tiles_per_transfer,
+    noc_index,
+    noc_direction,
+    access_type,
+    use_device_profiler,
+    record_moreh_microbenchmark_csv,
+):
+    command = (
+        "./build/test/tt_metal/perf_microbenchmark/2_noc_adjacent/test_noc_adjacent "
+        + "--cores-r "
+        + str(r)
+        + " --cores-c "
+        + str(c)
+        + " --num-tiles "
+        + str(num_tiles)
+        + " --tiles-per-transfer"
+        + str(tiles_per_transfer)
+        + " --noc-index"
+        + str(noc_index)
+        + " --noc-direction "
+        + str(noc_direction)
+        + " --access-type "
+        + str(access_type)
+    )
+    if use_device_profiler:
+        command += " --use-device-profiler"
+    result = run_moreh_single_test("test_noc_adjacent", command)

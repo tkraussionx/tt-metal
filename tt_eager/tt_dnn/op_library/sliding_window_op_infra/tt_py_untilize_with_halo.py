@@ -27,11 +27,14 @@ class TTPyUntilizeWithHalo(TTPyOp):
         sliding_window_op_params: SlidingWindowOpParamsWithParallelConfig,
         halo_reader_patterns_cache,
         pad_val=0x0,
+        is_out_tiled=True,
     ):
         self.sliding_window_op_params = sliding_window_op_params
         self.device = device
         sliding_window_op_params_hash = get_hash_from_sliding_window_op_params(sliding_window_op_params)
-        self.set_op_configs(device, sliding_window_op_params_hash, sliding_window_op_params, halo_reader_patterns_cache)
+        self.set_op_configs(
+            device, sliding_window_op_params_hash, sliding_window_op_params, halo_reader_patterns_cache, is_out_tiled
+        )
         assert sliding_window_op_params_hash in halo_reader_patterns_cache
         utwh_kernel_configs = halo_reader_patterns_cache[sliding_window_op_params_hash]
 
@@ -81,7 +84,12 @@ class TTPyUntilizeWithHalo(TTPyOp):
 
     # override abstract methods from base class TTPyOp
     def set_op_configs(
-        self, device, sliding_window_op_params_hash, sliding_window_op_params, halo_reader_patterns_cache
+        self,
+        device,
+        sliding_window_op_params_hash,
+        sliding_window_op_params,
+        halo_reader_patterns_cache,
+        is_out_tiled=True,
     ):
         if sliding_window_op_params_hash not in halo_reader_patterns_cache:
             stride_h = sliding_window_op_params.stride_h
@@ -106,9 +114,24 @@ class TTPyUntilizeWithHalo(TTPyOp):
                 sliding_window_op_all_params, input_nchw_shape
             )
             sliding_window_output_shard_nhw_size = get_sliding_window_op_output_shard_nhw_size(
-                num_cores_nhw, input_n, input_h, input_w, stride_h, stride_w, pad_h, pad_w, window_h, window_w
+                num_cores_nhw,
+                input_n,
+                input_h,
+                input_w,
+                stride_h,
+                stride_w,
+                pad_h,
+                pad_w,
+                window_h,
+                window_w,
+                is_out_tiled,
             )
-            untilize_w_halo_input_nhw_size_to_shard_evenly = _nearest_y(input_n * input_h * input_w, num_cores_nhw * 32)
+            if is_out_tiled:
+                untilize_w_halo_input_nhw_size_to_shard_evenly = _nearest_y(
+                    input_n * input_h * input_w, num_cores_nhw * 32
+                )
+            else:
+                untilize_w_halo_input_nhw_size_to_shard_evenly = _nearest_y(input_n * input_h * input_w, num_cores_nhw)
             untilize_with_halo_input_shard_nhw_size = (int)(
                 untilize_w_halo_input_nhw_size_to_shard_evenly / num_cores_nhw
             )
@@ -160,24 +183,30 @@ class TTPyUntilizeWithHalo(TTPyOp):
 
             block_sharding = num_cores_nhw == num_cores_w
             if not block_sharding:
-                assert num_cores_w == 12
-                num_cores_height_excluding_remainder_last_row = num_cores_nhw // num_cores_w
-                assert num_cores_h >= num_cores_height_excluding_remainder_last_row
-                core_range_1 = ttl.tensor.CoreRange(
-                    ttl.tensor.CoreCoord(0, 0),
-                    ttl.tensor.CoreCoord(num_cores_w - 1, num_cores_height_excluding_remainder_last_row - 1),
-                )
-                num_cores_last = num_cores_nhw % num_cores_w
-                core_range_2 = None
-                if num_cores_last > 0:
-                    assert num_cores_h == num_cores_height_excluding_remainder_last_row + 1
-                    core_range_2 = ttl.tensor.CoreRange(
-                        ttl.tensor.CoreCoord(0, num_cores_height_excluding_remainder_last_row),
-                        ttl.tensor.CoreCoord(num_cores_last - 1, num_cores_height_excluding_remainder_last_row),
+                assert num_cores_w == 12 or num_cores_w == 8
+                if num_cores_nhw >= num_cores_w:
+                    num_cores_height_excluding_remainder_last_row = num_cores_nhw // num_cores_w
+                    assert num_cores_h >= num_cores_height_excluding_remainder_last_row
+                    core_range_1 = ttl.tensor.CoreRange(
+                        ttl.tensor.CoreCoord(0, 0),
+                        ttl.tensor.CoreCoord(num_cores_w - 1, num_cores_height_excluding_remainder_last_row - 1),
                     )
-                    shard_grid = ttl.tensor.CoreRangeSet({core_range_1, core_range_2})
+                    num_cores_last = num_cores_nhw % num_cores_w
+                    if num_cores_last > 0:
+                        assert num_cores_h == num_cores_height_excluding_remainder_last_row + 1
+                        core_range_2 = ttl.tensor.CoreRange(
+                            ttl.tensor.CoreCoord(0, num_cores_height_excluding_remainder_last_row),
+                            ttl.tensor.CoreCoord(num_cores_last - 1, num_cores_height_excluding_remainder_last_row),
+                        )
+                        shard_grid = ttl.tensor.CoreRangeSet({core_range_1, core_range_2})
+                    else:
+                        assert num_cores_h == num_cores_height_excluding_remainder_last_row
+                        shard_grid = ttl.tensor.CoreRangeSet({core_range_1})
                 else:
-                    assert num_cores_h == num_cores_height_excluding_remainder_last_row
+                    core_range_1 = ttl.tensor.CoreRange(
+                        ttl.tensor.CoreCoord(0, 0),
+                        ttl.tensor.CoreCoord(num_cores_nhw - 1, 0),
+                    )
                     shard_grid = ttl.tensor.CoreRangeSet({core_range_1})
             else:
                 core_range = ttl.tensor.CoreRange(

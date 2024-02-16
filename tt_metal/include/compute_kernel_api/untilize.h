@@ -20,11 +20,11 @@ namespace ckernel {
  */
 ALWI void untilize_init(uint32_t icb, uint32_t ocb = 16)
 {
-    MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE>(0, 0, icb) ));
+    MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE>(false /*transpose of faces*/, false /*transpose within 16x16 face*/, icb) ));
     MATH(( llk_math_pack_sync_init<SyncHalf>() ));
 
-    PACK(( llk_pack_init() ));
     PACK(( llk_pack_hw_configure_disaggregated<false>(ocb) ));
+    PACK(( llk_pack_init(ocb) ));
     PACK(( llk_setup_outputs() ));
     PACK(( llk_pack_dest_init<SyncHalf, DstTileFaceLayout::RowMajor, false>() ));
 
@@ -38,7 +38,7 @@ ALWI void untilize_init(uint32_t icb, uint32_t ocb = 16)
  */
 ALWI void untilize_init_short(uint32_t icb)
 {
-    MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE>(0, 0, icb) ));
+    MATH(( llk_math_eltwise_unary_datacopy_init<A2D, BroadcastType::NONE>(false /*transpose of faces*/, false /*transpose within 16x16 face*/, icb) ));
     UNPACK(( llk_unpack_untilize_init(icb) ));
 }
 

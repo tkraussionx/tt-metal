@@ -77,7 +77,7 @@ def test_performance(device, use_program_cache, model_name, batch_size, sequence
                 decoder_attention_mask=decoder_attention_mask,
                 parameters=parameters,
             )
-            tt_output = ttnn.to_device(tt_output, device)
+            tt_output = ttnn.to_torch(tt_output)
         end = time.time()
 
         duration = end - start

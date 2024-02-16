@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 
 # SPDX-License-Identifier: Apache-2.0
-
+import ttnn
 import torch
 from tt_lib.utils import (
     _nearest_32 as nearest_32,
@@ -1317,3 +1317,28 @@ def clamp_bw(x, y, scalar, *args, **kwargs):
     pyt_y.backward(gradient=grad_data)
 
     return in_data.grad
+
+
+def attention_softmax_nomask(x, *args, **kwargs):
+    torch_output_tensor = ttnn.transformer._torch_attention_softmax(
+        x,
+        head_size=None,
+        attention_mask=None,
+    )
+
+    return torch_output_tensor
+
+
+def attention_softmax(x, y, *args, scalar, **kwargs):
+    y[y <= 0.50] = 0
+    y[y > 0.50] = 1
+    if scalar < 0:
+        scalar = -scalar
+
+    torch_output_tensor = ttnn.transformer._torch_attention_softmax(
+        x,
+        head_size=None,
+        attention_mask=y,
+    )
+
+    return torch_output_tensor

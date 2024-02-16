@@ -99,6 +99,7 @@ def determine_parallel_config(
     input_height,
     input_width,
     sliding_window_op_params,
+    device,
     config_override={},
 ):
     output_height, output_width = compute_conv_output_height_width(input_height, input_width, sliding_window_op_params)
@@ -107,8 +108,8 @@ def determine_parallel_config(
     conv_out_2d_matrix_height = _nearest_32(conv_out_2d_matrix_height)
     conv_out_2d_matrix_height_ntiles = (int)(conv_out_2d_matrix_height / 32)
     conv_out_2d_matrix_width_ntiles = (int)(_nearest_32(output_channels) / 32)
-    # max grid size of grayskull is (12,9). TODO: pass this as an argument
-    max_grid_size = {"x": 12, "y": 9}
+    device_grid_size = device.compute_with_storage_grid_size()
+    max_grid_size = {"x": device_grid_size.x, "y": device_grid_size.y}
     if is_1d_systolic:
         max_num_cores = max_grid_size["x"] * max_grid_size["y"]
         actual_num_cores = find_closest_largest_divisor(conv_out_2d_matrix_height_ntiles, max_num_cores)
@@ -120,7 +121,7 @@ def determine_parallel_config(
         ]  # for 1d systolic array, we don't need to provide actual grid size because tensor sharding deterimines that automatically
         num_cores_nhw = actual_num_cores
         grid_size = [
-            max_grid_size["x"],
+            max_grid_size["x"] if num_cores_nhw >= max_grid_size["x"] else num_cores_nhw,
             math.ceil(num_cores_nhw / max_grid_size["x"]),
         ]  # for 1d systolic array, grid size is the tightest bound of num_cores_nhw as a rectangle (x,y)
     else:
@@ -345,8 +346,10 @@ class TTPyCompositeConv(TTPyOp):
         move_weights_to_device=True,
         use_shallow_conv_variant=False,
         enable_auto_formatting=False,
+        deallocate_activation=True,
     ):
         self.enable_auto_formatting = enable_auto_formatting
+        self.deallocate_activation = deallocate_activation
         self.use_shallow_conv_variant = use_shallow_conv_variant
         if reader_patterns_cache is None:
             reader_patterns_cache = {}
@@ -385,6 +388,7 @@ class TTPyCompositeConv(TTPyOp):
             input_height,
             input_width,
             sliding_window_op_params,
+            device,
             config_override=conv_blocking_and_parallelization_config_override,
         )
 
@@ -666,7 +670,7 @@ class TTPyCompositeConv(TTPyOp):
                 bias_untiled = bias_untiled.to_torch()
                 bias_ = ttl.tensor.Tensor(bias_untiled, weights_dtype).to(ttl.tensor.Layout.TILE)
                 bias_on_device = bias_.to(device) if move_weights_to_device else bias_
-                self.bias = bias_on_device
+            self.bias = bias_on_device
         else:
             self.weight = weight
             self.bias = bias
@@ -695,13 +699,15 @@ class TTPyCompositeConv(TTPyOp):
         def composite_conv(activation):
             # assert(activation.layout() == ttl.tensor.Layout.ROW_MAJOR)
             utwh_output = self.tt_py_untilize_with_halo_op(activation)
-            activation.deallocate()
+            if self.deallocate_activation:
+                activation.deallocate()
             return conv_(utwh_output)
 
         def composite_conv_with_move_utwh_output(activation):
             # assert(activation.layout() == ttl.tensor.Layout.ROW_MAJOR)
             utwh_output = self.tt_py_untilize_with_halo_op(activation)
-            activation.deallocate()
+            if self.deallocate_activation:
+                activation.deallocate()
             move_output = ttl.tensor.move_sharded(utwh_output)
             utwh_output.deallocate()
             return conv_(move_output)

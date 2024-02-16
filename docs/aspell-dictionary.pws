@@ -1,4 +1,4 @@
-personal_ws-1.1 en 484 
+personal_ws-1.1 en 490
 ABI
 ADDI
 API
@@ -49,6 +49,7 @@ DataMovementConfig
 DataMovementProcessor
 DataType
 DeallocateBuffer
+DeviceOperation
 DeviceStorage
 DstMode
 DumpDeviceProfileResults
@@ -207,6 +208,7 @@ cpp
 cpu
 cq
 cref
+csrc
 cstdint
 csv
 ctl
@@ -261,6 +263,7 @@ gdb
 gdb's
 gelu
 genindex
+getitem
 gez
 grayskull
 grey
@@ -331,6 +334,7 @@ ne
 networkx
 nez
 noc
+noconvert
 nodebias
 nof
 nop
@@ -362,6 +366,7 @@ profiler
 ptr
 pwd
 py
+pybindings
 pytest
 pytorch
 qkv
@@ -422,6 +427,7 @@ srcb
 stderr
 stdout
 storages
+str
 struct
 submodule
 subvec
