@@ -304,13 +304,12 @@ int main() {
     while (1) {
         DeviceZoneScopedN("BRISC-FW");
         {
-            DeviceZoneScopedN("BRISC-INIT");
             init_sync_registers();
             assert_just_ncrisc_reset();
         }
 
         {
-            DeviceZoneScopedN("BRISC-GO-MSG-WAIT");
+            //DeviceZoneScopedN("BRISC-GO-MSG-WAIT");
             // Wait...
             DEBUG_STATUS('G', 'W');
             while (mailboxes->launch.run != RUN_MSG_GO);
@@ -318,7 +317,7 @@ int main() {
         }
 
         {
-            DeviceZoneScopedN("BRISC-RUN");
+            //DeviceZoneScopedN("BRISC-RUN");
 
             // Always copy ncrisc even if its size is 0 (save branch)...
             l1_to_ncrisc_iram_copy((MEM_NCRISC_INIT_IRAM_L1_BASE >> 4) + ncrisc_kernel_start_offset16,

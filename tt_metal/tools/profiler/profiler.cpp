@@ -370,6 +370,12 @@ void DeviceProfiler::pushTracyDeviceResults()
         }
 
     }
+
+    for (auto& device_core: device_tracy_contexts)
+    {
+        device_core.second->Collect();
+    }
+    device_events.clear();
 #endif
 }
 
