@@ -23,6 +23,24 @@ void eth_setup_handshake(std::uint32_t handshake_register_address, bool is_sende
     }
 }
 
+template <bool src_is_dram>
+void read_chunk(
+    uint32_t eth_l1_buffer_address_base,
+    uint32_t num_pages,
+    uint32_t page_size,
+    const InterleavedAddrGen<src_is_dram> &source_address_generator
+)
+{
+    uint32_t local_eth_l1_curr_src_addr = eth_l1_buffer_address_base;
+    for (uint32_t curr_idx = 0; curr_idx < num_pages; ++curr_idx) {
+        // read source address
+        uint64_t src_noc_addr = get_noc_addr(curr_idx, source_address_generator);
+        noc_async_read(src_noc_addr, local_eth_l1_curr_src_addr, page_size);
+        // read dest addr
+        local_eth_l1_curr_src_addr += page_size;
+    }
+}
+
 #define EMULATE_DRAM_READ_CYCLES 1
 #if EMULATE_DRAM_READ_CYCLES == 1
 static uint32_t timestamp_H = 0;
@@ -57,21 +75,26 @@ FORCE_INLINE bool emulated_dram_read_cycles_finished() { return cycles_since_las
 
 #endif
 
-template <uint8_t CHANNEL_WRAP_MASK>
+template <uint8_t NUM_CHANNELS>
 FORCE_INLINE uint8_t get_next_buffer_channel_pointer(uint8_t pointer) {
-    return pointer = (pointer + 1) & CHANNEL_WRAP_MASK;
+    if constexpr (NUM_CHANNELS % 2 == 0) {
+        constexpr uint8_t CHANNEL_WRAP_MASK = NUM_CHANNELS - 1;
+        return pointer = (pointer + 1) & CHANNEL_WRAP_MASK;
+    } else {
+        pointer = (pointer + 1);
+        return pointer == NUM_CHANNELS ? 0 : pointer;
+    }
 }
 
-template <uint8_t CHANNEL_WRAP_MASK>
+template <uint8_t MAX_NUM_CHANNELS>
 FORCE_INLINE  bool buffer_pool_full(
     const uint8_t noc_reader_buffer_wrptr,
     const uint8_t noc_reader_buffer_ackptr,
     const uint8_t eth_sender_rdptr,
     const uint8_t eth_sender_ackptr) {
-    return (get_next_buffer_channel_pointer<CHANNEL_WRAP_MASK>(noc_reader_buffer_wrptr) == eth_sender_ackptr);
+    return (get_next_buffer_channel_pointer<MAX_NUM_CHANNELS>(noc_reader_buffer_wrptr) == eth_sender_ackptr);
 }
 
-template <uint8_t CHANNEL_WRAP_MASK>
 FORCE_INLINE  bool is_noc_read_in_progress(const uint8_t noc_reader_buffer_wrptr, const uint8_t noc_reader_buffer_ackptr) {
     return noc_reader_buffer_wrptr != noc_reader_buffer_ackptr;
 }
@@ -103,7 +126,7 @@ FORCE_INLINE  bool buffer_available_for_eth_send(
 //    -> Receiver may not have acknowledged the previous send to this buffer
 //       so we'd have to wait in that case
 
-template <int MAX_NUM_CHANNELS, int CHANNEL_WRAP_MASK>
+template <int MAX_NUM_CHANNELS>
 FORCE_INLINE  bool eth_send_data_sequence(
     std::array<uint32_t, MAX_NUM_CHANNELS> &transaction_channel_sender_buffer_addresses,
     std::array<uint32_t, MAX_NUM_CHANNELS> &transaction_channel_receiver_buffer_addresses,
@@ -116,11 +139,11 @@ FORCE_INLINE  bool eth_send_data_sequence(
     uint8_t noc_reader_buffer_ackptr,
     uint8_t &eth_sender_rdptr,
     uint8_t &eth_sender_ackptr) {
-    static_assert(MAX_NUM_CHANNELS % 2 == 0, "Only even number of channels supported.");
     bool did_something = false;
     bool data_ready_for_send = buffer_available_for_eth_send(
         noc_reader_buffer_wrptr, noc_reader_buffer_ackptr, eth_sender_rdptr, eth_sender_ackptr);
     if (data_ready_for_send) {
+        kernel_profiler::mark_time(14);
         // Queue up another send
         uint32_t sender_buffer_address = transaction_channel_sender_buffer_addresses[eth_sender_rdptr];
         uint32_t receiver_buffer_address = transaction_channel_receiver_buffer_addresses[eth_sender_rdptr];
@@ -131,14 +154,14 @@ FORCE_INLINE  bool eth_send_data_sequence(
             eth_sender_rdptr,
             num_bytes_per_send,
             num_bytes_per_send_word_size);
-        eth_sender_rdptr = get_next_buffer_channel_pointer<CHANNEL_WRAP_MASK>(eth_sender_rdptr);
+        eth_sender_rdptr = get_next_buffer_channel_pointer<MAX_NUM_CHANNELS>(eth_sender_rdptr);
         did_something = true;
     }
 
     return did_something;
-}
+}\
 
-template <uint8_t CHANNEL_WRAP_MASK>
+template <uint8_t MAX_NUM_CHANNELS>
 FORCE_INLINE  bool eth_check_receiver_ack_sequence(
     const uint8_t noc_reader_buffer_wrptr,
     const uint8_t noc_reader_buffer_ackptr,
@@ -150,10 +173,9 @@ FORCE_INLINE  bool eth_check_receiver_ack_sequence(
     if (eth_sends_unacknowledged) {
         bool transimission_acked_by_receiver = eth_is_receiver_channel_send_acked(eth_sender_ackptr);
         if (transimission_acked_by_receiver) {
+            kernel_profiler::mark_time(15);
             num_eth_sends_acked++;
-            eth_sender_ackptr = get_next_buffer_channel_pointer<CHANNEL_WRAP_MASK>(eth_sender_ackptr);
-
-            // Semaphore update for worker
+            eth_sender_ackptr = get_next_buffer_channel_pointer<MAX_NUM_CHANNELS>(eth_sender_ackptr);
 
             did_something = true;
         }
@@ -162,7 +184,7 @@ FORCE_INLINE  bool eth_check_receiver_ack_sequence(
     return did_something;
 }
 
-template <uint8_t MAX_NUM_CHANNELS, uint8_t CHANNEL_WRAP_MASK>
+template <uint8_t MAX_NUM_CHANNELS, bool src_is_dram>
 FORCE_INLINE  bool noc_read_data_sequence(
     std::array<uint32_t, MAX_NUM_CHANNELS> &transaction_channel_sender_buffer_addresses,
     uint32_t num_bytes_per_send,
@@ -170,12 +192,14 @@ FORCE_INLINE  bool noc_read_data_sequence(
     uint8_t &noc_reader_buffer_wrptr,
     const uint8_t eth_sender_rdptr,
     const uint8_t eth_sender_ackptr,
-    const uint8_t noc_index) {
-    static_assert(MAX_NUM_CHANNELS % 2 == 0, "Only even number of channels supported.");
+    const uint8_t noc_index,
+    const InterleavedAddrGen<src_is_dram> &source_address_generator,
+    const uint32_t page_size,
+    const uint32_t num_pages) {
     bool did_something = false;
 
     bool noc_read_is_in_progress =
-        is_noc_read_in_progress<CHANNEL_WRAP_MASK>(noc_reader_buffer_wrptr, noc_reader_buffer_ackptr);
+        is_noc_read_in_progress(noc_reader_buffer_wrptr, noc_reader_buffer_ackptr);
     if (noc_read_is_in_progress) {
 #if EMULATE_DRAM_READ_CYCLES == 1
         bool read_finished = emulated_dram_read_cycles_finished();
@@ -183,7 +207,8 @@ FORCE_INLINE  bool noc_read_data_sequence(
         bool read_finished = ncrisc_noc_reads_flushed(noc_index);
 #endif
         if (read_finished) {
-            noc_reader_buffer_ackptr = get_next_buffer_channel_pointer<CHANNEL_WRAP_MASK>(noc_reader_buffer_ackptr);
+            kernel_profiler::mark_time(13);
+            noc_reader_buffer_ackptr = get_next_buffer_channel_pointer<MAX_NUM_CHANNELS>(noc_reader_buffer_ackptr);
             noc_read_is_in_progress = false;
             did_something = true;
         }
@@ -192,20 +217,27 @@ FORCE_INLINE  bool noc_read_data_sequence(
     if (!noc_read_is_in_progress) {
         // We can only If a noc read is in progress, we can't issue another noc read
 
-        bool next_buffer_available = !buffer_pool_full<CHANNEL_WRAP_MASK>(
+        bool next_buffer_available = !buffer_pool_full<MAX_NUM_CHANNELS>(
             noc_reader_buffer_wrptr, noc_reader_buffer_ackptr, eth_sender_rdptr, eth_sender_ackptr);
         // Really we should be able to assert on this second condition but I don't yet know how to
         // propagate that info to host (especially on erisc... TODO(snijjar))
         // next_buffer_available = next_buffer_available && channels_active[noc_reader_buffer_wrptr] == 0;
         if (next_buffer_available) {
+            kernel_profiler::mark_time(12);
 // Queue up another read
 #if EMULATE_DRAM_READ_CYCLES == 1
             issue_read_chunk();
 #else
 // non blocking - issues noc_async_read
 // issue_read_chunk(noc_reader_buffer_wrptr, ...);
+        read_chunk(
+            transaction_channel_sender_buffer_addresses[noc_reader_buffer_wrptr], // eth_l1_buffer_address_base
+            num_pages,
+            page_size,
+            source_address_generator
+        );
 #endif
-            noc_reader_buffer_wrptr = get_next_buffer_channel_pointer<CHANNEL_WRAP_MASK>(noc_reader_buffer_wrptr);
+            noc_reader_buffer_wrptr = get_next_buffer_channel_pointer<MAX_NUM_CHANNELS>(noc_reader_buffer_wrptr);
 
             did_something = true;
         }
@@ -213,6 +245,8 @@ FORCE_INLINE  bool noc_read_data_sequence(
 
     return did_something;
 }
+
+#define ENABLE_L1_BUFFER_OVERLAP 1
 
 template <int8_t MAX_CONCURRENT_TRANSACTIONS>
 void initialize_transaction_buffer_addresses(
@@ -226,10 +260,14 @@ void initialize_transaction_buffer_addresses(
     for (uint32_t i = 0; i < MAX_CONCURRENT_TRANSACTIONS; i++) {
         transaction_channel_sender_buffer_addresses[i] = sender_buffer_address;
         transaction_channel_receiver_buffer_addresses[i] = receiver_buffer_address;
-        // sender_buffer_address += num_bytes_per_send;
-        // receiver_buffer_address += num_bytes_per_send;
+        #if ENABLE_L1_BUFFER_OVERLAP == 0
+        sender_buffer_address += num_bytes_per_send;
+        receiver_buffer_address += num_bytes_per_send;
+        #endif
     }
 }
+
+
 
 void kernel_main() {
     // COMPILE TIME ARGS
@@ -238,16 +276,19 @@ void kernel_main() {
     constexpr std::uint32_t total_num_message_sends = get_compile_time_arg_val(2);
     constexpr std::uint32_t NUM_TRANSACTION_BUFFERS = get_compile_time_arg_val(3);
     constexpr bool src_is_dram = get_compile_time_arg_val(4) == 1;
+
     constexpr uint32_t MAX_NUM_CHANNELS = NUM_TRANSACTION_BUFFERS;
-    constexpr uint32_t CHANNEL_WRAP_MASK = (MAX_NUM_CHANNELS - 1);
 
     // COMPILE TIME ARG VALIDATION
-    static_assert(MAX_NUM_CHANNELS % 2 == 0, "Only even number of channels supported.");
     static_assert(MAX_NUM_CHANNELS > 1, "Implementation currently doesn't support single buffering");
 
     // RUNTIME ARGS
     std::uint32_t local_eth_l1_src_addr = get_arg_val<uint32_t>(0);
     std::uint32_t remote_eth_l1_dst_addr = get_arg_val<uint32_t>(1);
+
+    std::uint32_t src_addr = get_arg_val<uint32_t>(2);
+    std::uint32_t page_size = get_arg_val<uint32_t>(3);
+    std::uint32_t num_pages = get_arg_val<uint32_t>(4);
 
     uint8_t noc_reader_buffer_ackptr = 0;
     uint8_t noc_reader_buffer_wrptr = 0;
@@ -260,6 +301,9 @@ void kernel_main() {
 
     // const InterleavedAddrGenFast<src_is_dram> s = {
     //     .bank_base_address = src_addr, .page_size = page_size, .data_format = df};
+
+    const InterleavedAddrGen<src_is_dram> source_address_generator = {
+        .bank_base_address = src_addr, .page_size = page_size};
 
     kernel_profiler::mark_time(10);
 
@@ -276,22 +320,25 @@ void kernel_main() {
     uint32_t eth_sends_completed = 0;
 
     kernel_profiler::mark_time(11);
+    constexpr uint32_t SWITCH_INTERVAL = 100000;
+    uint32_t count = 0;
     while (eth_sends_completed < total_num_message_sends) {
         bool did_something = false;
 
-        kernel_profiler::mark_time(12);
-        did_something = noc_read_data_sequence<MAX_NUM_CHANNELS, CHANNEL_WRAP_MASK>(
+        did_something = noc_read_data_sequence<MAX_NUM_CHANNELS>(
                             transaction_channel_sender_buffer_addresses,
                             num_bytes_per_send,
                             noc_reader_buffer_ackptr,
                             noc_reader_buffer_wrptr,
                             eth_sender_rdptr,
                             eth_sender_ackptr,
-                            noc_index) ||
+                            noc_index,
+                            source_address_generator,
+                            page_size,
+                            num_pages) ||
                         did_something;
 
-        kernel_profiler::mark_time(13);
-        did_something = eth_send_data_sequence<MAX_NUM_CHANNELS, CHANNEL_WRAP_MASK>(
+        did_something = eth_send_data_sequence<MAX_NUM_CHANNELS>(
                             transaction_channel_sender_buffer_addresses,
                             transaction_channel_receiver_buffer_addresses,
                             local_eth_l1_src_addr,
@@ -305,8 +352,7 @@ void kernel_main() {
                             eth_sender_ackptr) ||
                         did_something;
 
-        kernel_profiler::mark_time(14);
-        did_something = eth_check_receiver_ack_sequence<CHANNEL_WRAP_MASK>(
+        did_something = eth_check_receiver_ack_sequence<MAX_NUM_CHANNELS>(
                             noc_reader_buffer_wrptr,
                             noc_reader_buffer_ackptr,
                             eth_sender_rdptr,
@@ -314,11 +360,15 @@ void kernel_main() {
                             eth_sends_completed) ||
                         did_something;
 
-        kernel_profiler::mark_time(15);
         if (!did_something) {
-            run_routing();
+            if (count++ > SWITCH_INTERVAL) {
+                count = 0;
+                kernel_profiler::mark_time(15);
+                run_routing();
+            } else {
+                count++;
+            }
         }
-        kernel_profiler::mark_time(16);
     }
-    kernel_profiler::mark_time(17);
+    kernel_profiler::mark_time(16);
 }
