@@ -424,24 +424,14 @@ void run_routing() {
     // TODO: maybe split into two FWs? or this may be better to sometimes allow each eth core to do both send and
     // receive of fd packets
     if (my_routing_mode == EthRouterMode::FD_SRC) {
-        volatile tt_l1_ptr uint32_t *eth_db_semaphore_addr =
-            reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(0));
-        if (eth_db_semaphore_addr[0] != 0) {
-            eth_tunnel_src_forward_one_cmd();
-        }
-
+        internal_::risc_context_switch();
     } else if (my_routing_mode == EthRouterMode::FD_DST) {
-        if (routing_info->fd_buffer_msgs_sent == 1) {
-            eth_tunnel_dst_forward_one_cmd();
-        }
+        internal_::risc_context_switch();
     } else if (my_routing_mode == EthRouterMode::SD) {
         // slow dispatch mode
         internal_::risc_context_switch();
     } else {
-        while (true) {
-            // Debug: stall forever if routing mode is invalid
-            // TODO: turn into watcher assert
-            RISC_POST_STATUS(0x02130213);
-        }
+      // TODO: Allan currently not writing mode properly
+        internal_::risc_context_switch();
     }
 }

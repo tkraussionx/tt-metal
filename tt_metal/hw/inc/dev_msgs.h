@@ -119,6 +119,7 @@ enum EthRouterMode : uint32_t {
     FD_SRC = 0,
     FD_DST = 1,
     SD = 2,
+    BI_DIR_TUNNELING = 3,
 };
 
 struct routing_info_t {

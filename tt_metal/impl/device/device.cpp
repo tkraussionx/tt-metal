@@ -317,7 +317,8 @@ void Device::compile_command_queue_programs() {
 
                     tt::Cluster::instance().write_core(&accept_cmd_sem_value, sizeof(uint32_t), tt_cxy_pair(this->id(), consumer_physical_core), eth_l1_mem::address_map::SEMAPHORE_BASE);
 
-                    tt::Cluster::instance().configure_eth_core_for_dispatch_core(issue_q_reader_location, EthRouterMode::FD_SRC, device_id);
+                    // TODO: ALLAN add compile args
+//                    tt::Cluster::instance().configure_eth_core_for_dispatch_core(issue_q_reader_location, EthRouterMode::FD_SRC, device_id);
 
                     tt_cxy_pair logical_eth_router_dst = tt::Cluster::instance().get_eth_core_for_dispatch_core(
                         completion_q_writer_location, EthRouterMode::FD_DST, device_id);
@@ -325,7 +326,8 @@ void Device::compile_command_queue_programs() {
 
                     tt::Cluster::instance().write_core(&num_eth_command_slots, sizeof(uint32_t), tt_cxy_pair(this->id(), producer_physical_core), eth_l1_mem::address_map::SEMAPHORE_BASE);
 
-                    tt::Cluster::instance().configure_eth_core_for_dispatch_core(completion_q_writer_location, EthRouterMode::FD_DST, device_id);
+                    // TODO: ALLAN add compile args
+                   // tt::Cluster::instance().configure_eth_core_for_dispatch_core(completion_q_writer_location, EthRouterMode::FD_DST, device_id);
                 }
 
                 std::map<string, string> producer_defines = {
@@ -364,6 +366,7 @@ void Device::compile_command_queue_programs() {
                 uint32_t host_finish_addr = HOST_CQ_FINISH_PTR + get_absolute_cq_offset(channel, cq_id, cq_size);
                 std::vector<uint32_t> consumer_compile_args = {host_completion_queue_write_ptr_addr, completion_queue_start_addr, completion_queue_size, host_finish_addr, cmd_start_tensix, consumer_data_buffer_size_tensix};
 
+                std::cout << " chip issue queue reader kernel " << this->id() << issue_q_physical_core.str() << std::endl;
                 std::string issue_q_reader_kernel = (device_id == this->id()) ? "tt_metal/impl/dispatch/kernels/command_queue_producer.cpp" : "tt_metal/impl/dispatch/kernels/remote_issue_queue_reader.cpp";
 
                 tt::tt_metal::CreateKernel(
@@ -379,6 +382,7 @@ void Device::compile_command_queue_programs() {
                 uint32_t num_command_slots = (device_id == this->id()) ? num_tensix_command_slots : num_eth_command_slots;
                 tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, issue_q_reader_location, num_command_slots);
 
+                std::cout << " chip completion q kernel " << this->id() << completion_q_physical_core.str() << std::endl;
                 std::string completion_q_writer_kernel = (device_id == this->id()) ?
                     "tt_metal/impl/dispatch/kernels/command_queue_consumer.cpp" : "tt_metal/impl/dispatch/kernels/remote_completion_queue_writer.cpp";
 
@@ -418,7 +422,8 @@ void Device::compile_command_queue_programs() {
         // TODO (abhullar / aliu): there is no API to configure ethernet semaphores used for FD so manually write initial semaphore value
         tt::Cluster::instance().write_core(&num_eth_command_slots, sizeof(uint32_t), tt_cxy_pair(this->id(), physical_eth_router_remote_dst), eth_l1_mem::address_map::SEMAPHORE_BASE);
 
-        tt::Cluster::instance().configure_eth_core_for_dispatch_core(remote_processor_location, EthRouterMode::FD_DST, mmio_device_id);
+                    // TODO: ALLAN add compile args
+     //   tt::Cluster::instance().configure_eth_core_for_dispatch_core(remote_processor_location, EthRouterMode::FD_DST, mmio_device_id);
 
         // Set up the src router on remote device to send fast dispatch packets on the return path to MMIO device
         CoreCoord logical_eth_router_remote_src = tt::Cluster::instance().get_eth_core_for_dispatch_core(
@@ -426,7 +431,8 @@ void Device::compile_command_queue_programs() {
         CoreCoord physical_eth_router_remote_src = this->ethernet_core_from_logical_core(logical_eth_router_remote_src);
         tt::Cluster::instance().write_core(&accept_cmd_sem_value, sizeof(uint32_t), tt_cxy_pair(this->id(), physical_eth_router_remote_src), eth_l1_mem::address_map::SEMAPHORE_BASE);
 
-        tt::Cluster::instance().configure_eth_core_for_dispatch_core(remote_signaller_location, EthRouterMode::FD_SRC, mmio_device_id);
+                    // TODO: ALLAN add compile args
+      //  tt::Cluster::instance().configure_eth_core_for_dispatch_core(remote_signaller_location, EthRouterMode::FD_SRC, mmio_device_id);
 
         std::vector<uint32_t> processor_compile_args = {
             cmd_start_tensix,
@@ -447,6 +453,7 @@ void Device::compile_command_queue_programs() {
             {"DISPATCHER_NOC_Y", std::to_string(dispatch_physical_core.y)},
         };
 
+        std::cout << " remote chip command processor kernel " << this->id() << remote_processor_physical_core.str() << std::endl;
         tt::tt_metal::CreateKernel(
             *command_queue_program_ptr,
             "tt_metal/impl/dispatch/kernels/remote_command_processor.cpp",
@@ -506,6 +513,7 @@ void Device::compile_command_queue_programs() {
             {"CONSUMER_NOC_Y", std::to_string(physical_eth_router_remote_src.y)},
         };
 
+        std::cout << " remote chip command signaller kernel " << this->id() << remote_signaller_physical_core.str() << std::endl;
         tt::tt_metal::CreateKernel(
             *command_queue_program_ptr,
             "tt_metal/impl/dispatch/kernels/remote_command_signaller.cpp",
