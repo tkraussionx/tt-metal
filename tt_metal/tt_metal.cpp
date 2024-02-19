@@ -69,19 +69,9 @@ std::optional<uint32_t> get_semaphore_address(const Program &program, const Core
 }
 
 
-inline void SetRuntimeArgs(const Program &program, KernelHandle kernel_id, const CoreCoord &c, const std::vector<uint32_t> &runtime_args)
-{
-    detail::GetKernel(program, kernel_id)->set_runtime_args(c, runtime_args);
-}
-
-
 inline void SetRuntimeArgs(const Program &program, KernelHandle kernel_id, const CoreRange &core_range, const std::vector<uint32_t> &runtime_args)
 {
-    for (auto x = core_range.start.x; x <= core_range.end.x; x++) {
-        for (auto y = core_range.start.y; y <= core_range.end.y; y++) {
-            SetRuntimeArgs(program, kernel_id, CoreCoord(x,y), runtime_args);
-        }
-    }
+    detail::GetKernel(program, kernel_id)->set_runtime_args(core_range, runtime_args);
 }
 
 }  // namespace
@@ -704,10 +694,12 @@ void SetRuntimeArgs(const Program &program, KernelHandle kernel_id, const std::v
         [&](auto&& core_spec)
         {
             using T = std::decay_t<decltype(core_spec)>;
-            if constexpr (std::is_same_v<T, CoreRange> || std::is_same_v<T, CoreCoord> ) {
+
+            if constexpr (std::is_same_v<T, CoreRange>) {
                 SetRuntimeArgs(program, kernel_id, core_spec, runtime_args);
-            }
-            else if constexpr (std::is_same_v<T, CoreRangeSet>) {
+            } else if constexpr (std::is_same_v<T, CoreCoord>) {
+                SetRuntimeArgs(program, kernel_id, CoreRange(core_spec), runtime_args);
+            } else if constexpr (std::is_same_v<T, CoreRangeSet>) {
                 for (const auto& core_range : core_spec.ranges()) {
                     SetRuntimeArgs(program, kernel_id, core_range, runtime_args);
                 }

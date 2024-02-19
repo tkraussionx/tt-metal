@@ -51,6 +51,18 @@ struct KernelGroup {
     CoreType get_core_type() const;
 };
 
+struct RuntimeArgsGroup {
+    std::vector<uint32_t> runtime_args;
+    CoreRange core_range;
+    unsigned int dst;
+    CoreType core_type;
+
+    RuntimeArgsGroup(std::vector<uint32_t> runtime_args, CoreRange core_range, unsigned int dst, CoreType core_type)
+        : runtime_args(runtime_args), core_range(core_range), dst(dst), core_type(core_type) {
+    }
+};
+
+
 class Program {
     friend class KernelGroup;
 

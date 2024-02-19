@@ -228,9 +228,12 @@ void write_and_launch_program(
         bool multicast = true;
         switch (transfer_type_idx) {
             DeviceCommand::TransferType transfer_type;
-            case (uint32_t) DeviceCommand::TransferType::RUNTIME_ARGS:
+            case (uint32_t) DeviceCommand::TransferType::RUNTIME_ARGS_MULTICAST:
+                num_pages_in_transfer = header->num_runtime_arg_multicast_pages;
+                break;
+            case (uint32_t) DeviceCommand::TransferType::RUNTIME_ARGS_UNICAST:
                 multicast = false;
-                num_pages_in_transfer = header->num_runtime_arg_pages;
+                num_pages_in_transfer = header->num_runtime_arg_unicast_pages;
                 break;
             case (uint32_t) DeviceCommand::TransferType::CB_CONFIGS:
                 num_pages_in_transfer = header->num_cb_config_pages;

@@ -65,7 +65,12 @@ void DeviceCommand::set_buffer_type(const DeviceCommand::BufferType buffer_type)
 
 void DeviceCommand::set_num_pages(const DeviceCommand::TransferType transfer_type, const uint32_t num_pages) {
     switch (transfer_type) {
-        case DeviceCommand::TransferType::RUNTIME_ARGS: this->packet.header.num_runtime_arg_pages = num_pages; break;
+        case DeviceCommand::TransferType::RUNTIME_ARGS_MULTICAST:
+            this->packet.header.num_runtime_arg_multicast_pages = num_pages;
+            break;
+        case DeviceCommand::TransferType::RUNTIME_ARGS_UNICAST:
+            this->packet.header.num_runtime_arg_unicast_pages = num_pages;
+            break;
         case DeviceCommand::TransferType::CB_CONFIGS: this->packet.header.num_cb_config_pages = num_pages; break;
         case DeviceCommand::TransferType::PROGRAM_MULTICAST_PAGES:
             this->packet.header.num_program_multicast_pages = num_pages;

@@ -29,7 +29,8 @@ struct CommandHeader {
     uint32_t router_cb_num_pages = 0;
     uint32_t consumer_cb_num_pages = 0;
     uint32_t num_pages = 0;
-    uint32_t num_runtime_arg_pages = 0;
+    uint32_t num_runtime_arg_multicast_pages = 0;
+    uint32_t num_runtime_arg_unicast_pages = 0;
     uint32_t num_cb_config_pages = 0;
     uint32_t num_program_multicast_pages = 0;
     uint32_t num_program_unicast_pages = 0;
@@ -54,7 +55,8 @@ class DeviceCommand {
     DeviceCommand();
 
     enum class TransferType : uint8_t {
-        RUNTIME_ARGS,
+        RUNTIME_ARGS_MULTICAST,
+        RUNTIME_ARGS_UNICAST,
         CB_CONFIGS,
         PROGRAM_MULTICAST_PAGES,
         PROGRAM_UNICAST_PAGES,

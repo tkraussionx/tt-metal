@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_metal/impl/kernels/kernel.hpp"
+#include "core_coord.h"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "jit_build/build.hpp"
 #include "llrt/llrt.hpp"
@@ -38,7 +39,10 @@ Kernel::Kernel(const std::string &kernel_path_file_name, const CoreRangeSet &cor
             }
         }
     }
-    this->core_to_runtime_args_ = { max_x+1, std::vector< std::vector<uint32_t > > (max_y+1, std::vector<uint32_t>() ) };
+    this->runtime_args_group_id_ = 0;
+    this->core_to_runtime_args_group_id_ = { max_x+1, std::vector<uint32_t>(max_y+1, this->runtime_args_group_id_)};
+    this->group_to_runtime_args_ = {(max_x+1)*(max_y+1), std::vector<uint32_t>()}; // Worst case, every core is in it's own group.
+    this->runtime_args_group_to_core_range_ = {(max_x+1)*(max_y+1), CoreRange({0, 0}, {0, 0})}; // Worst case, every core is in it's own group.
 }
 
 std::string Kernel::name() const {
@@ -144,15 +148,30 @@ std::string Kernel::compute_hash() const {
 
 void Kernel::update_runtime_arg( const CoreCoord &logical_core, size_t idx, uint32_t value){
     ZoneScoped;
-    auto & v = this->core_to_runtime_args_[logical_core.x][logical_core.y];
+    auto &runtime_args_group_id_ = this->core_to_runtime_args_group_id_[logical_core.x][logical_core.y];
+    auto & v = this->group_to_runtime_args_[runtime_args_group_id_];
     TT_ASSERT( idx < v.size(), "Runtime arg offset {} for Core {} out of bounds", idx, logical_core.str());
     v[idx] = value;
 }
 
 std::vector<uint32_t>& Kernel::runtime_args(const CoreCoord &logical_core) {
+
+    // KCM Note: This assert was flawed before, and it's still flawed. The 2D vectors here are initialized to max size of core range, so this only checks that
+    // core being looked up isn't bigger than the "end" of the core range, and not less than the start of the core range.
     // TODO (abhullar): Should this check only be enabled in debug mode?
-    TT_FATAL( logical_core.x < this->core_to_runtime_args_.size() && logical_core.y < this->core_to_runtime_args_[logical_core.x].size(), "Cannot get runtime args for kernel {} that is not placed on core {}", this->name(), logical_core.str());
-    return this->core_to_runtime_args_[logical_core.x][logical_core.y];
+    TT_FATAL( logical_core.x < this->core_to_runtime_args_group_id_.size() && logical_core.y < this->core_to_runtime_args_group_id_[logical_core.x].size(), "Cannot get runtime args for kernel {} that is not placed on core {}", this->name(), logical_core.str());
+    auto &runtime_args_group_id_ = this->core_to_runtime_args_group_id_[logical_core.x][logical_core.y];
+    return this->group_to_runtime_args_[runtime_args_group_id_];
+}
+
+std::vector<uint32_t>& Kernel::runtime_args(uint32_t rt_args_group_id) {
+    TT_ASSERT(rt_args_group_id < this->group_to_runtime_args_.size(), "Runtime args group ID {} out of bounds!", rt_args_group_id);
+    return this->group_to_runtime_args_[rt_args_group_id];
+}
+
+CoreRange& Kernel::get_runtime_args_group_core_range(uint32_t rt_args_group_id) {
+    TT_ASSERT(rt_args_group_id < this->runtime_args_group_to_core_range_.size(), "Runtime args group ID {} out of bounds!", rt_args_group_id);
+    return this->runtime_args_group_to_core_range_[rt_args_group_id];
 }
 
 std::pair<uint64_t, uint64_t> DataMovementKernel::get_runtime_args_range() const {
@@ -184,12 +203,13 @@ std::pair<uint64_t, uint64_t> ComputeKernel::get_runtime_args_range() const {
     return arg_base_to_result_base;
 }
 
-void Kernel::set_runtime_args(const CoreCoord &logical_core, const std::vector<uint32_t> &runtime_args) {
+
+void Kernel::set_runtime_args(const CoreRange &core_range, const std::vector<uint32_t> &runtime_args) {
     auto validate_runtime_args_size = [&]() {
         uint32_t runtime_args_size = runtime_args.size() * sizeof(uint32_t);
         auto[l1_arg_base, result_base] = this->get_runtime_args_range();
         if (l1_arg_base + runtime_args_size >= result_base) {
-            TT_THROW(std::to_string(runtime_args_size / 1024) + "KB runtime args targeting kernel " + this->name() + " on " + logical_core.str() + " are too large.\
+            TT_THROW(std::to_string(runtime_args_size / 1024) + "KB runtime args targeting kernel " + this->name() + " on " + std::to_string(core_range.size()) + " cores are too large.\
                 Cannot be written as they will run into memory region reserved for result. Max allowable size is " + std::to_string((result_base - l1_arg_base)/1024) + " KB.");
         }
     };
@@ -198,10 +218,31 @@ void Kernel::set_runtime_args(const CoreCoord &logical_core, const std::vector<u
     //                  Should this check only be enabled in debug mode?
     // TT_FATAL(this->is_on_logical_core(logical_core), "Cannot set runtime args for core {} since kernel {} is not placed on it!", logical_core.str(), this->name());
     validate_runtime_args_size();
-    auto &set_rt_args = this->core_to_runtime_args_[logical_core.x][logical_core.y];
-    TT_ASSERT(set_rt_args.empty() or set_rt_args.size() == runtime_args.size(), "Illegal Runtime Args: Number of runtime args cannot be modified!");
-    set_rt_args = runtime_args;
-    this->core_with_runtime_args_.insert( logical_core );
+
+    // KCM - New code to set RT Args by Group ID, record which groupID is used per core, and increment groupID for the next group.
+    // FIXME - Don't love this, consider other ideas.
+    for (auto x = core_range.start.x; x <= core_range.end.x; x++) {
+        for (auto y = core_range.start.y; y <= core_range.end.y; y++) {
+            auto logical_core = CoreCoord(x,y);
+            this->core_with_runtime_args_.insert( logical_core );
+            // log_info(tt::LogMetal, "KCM {} - setting runtime_args_group_id_: {} ({} args) for core: {} proc: {}", __FUNCTION__, runtime_args_group_id_, runtime_args.size(), logical_core.str(), this->processor());
+
+            auto &set_rt_args_new = this->group_to_runtime_args_[runtime_args_group_id_];
+            TT_ASSERT(set_rt_args_new.empty() or set_rt_args_new.size() == runtime_args.size(), "Illegal Runtime Args: Number of runtime args cannot be modified!");
+            set_rt_args_new = runtime_args;
+
+            auto &set_rt_args_group_id = this->core_to_runtime_args_group_id_[x][y];
+            TT_ASSERT(set_rt_args_group_id == 0, "Illegal Runtime Args: Group ID cannot be modified!");
+            set_rt_args_group_id = runtime_args_group_id_;
+
+            this->runtime_args_group_to_core_range_[runtime_args_group_id_] = core_range;
+        }
+    }
+
+    // Do we even need a runtime_args_group_id?
+    // FIXME - Is this safe? What about calling same set_runtime_args() multiple times on same set of cores, which looked like it was supported?
+    // Increment the RT Args Group ID.
+    runtime_args_group_id_++;
 }
 
 void DataMovementKernel::set_build_options(JitBuildOptions& build_options) const {

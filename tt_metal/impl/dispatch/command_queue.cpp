@@ -10,6 +10,7 @@
 
 #include "debug_tools.hpp"
 #include "dev_msgs.h"
+#include "device_command.hpp"
 #include "llrt/watcher.hpp"
 #include "logger.hpp"
 #include "noc/noc_parameters.h"
@@ -435,8 +436,10 @@ const DeviceCommand EnqueueProgramCommand::assemble_device_command(uint32_t host
     // info
     constexpr static uint32_t dummy_dst_addr = 0;
     constexpr static uint32_t dummy_buffer_type = 0;
-    uint32_t num_runtime_arg_pages =
+    uint32_t num_runtime_arg_multicast_pages =
         program.program_device_map.num_transfers_in_runtime_arg_pages.at(PageTransferType::MULTICAST).size();
+    uint32_t num_runtime_arg_unicast_pages =
+        program.program_device_map.num_transfers_in_runtime_arg_pages.at(PageTransferType::UNICAST).size();
     uint32_t num_cb_config_pages =
         program.program_device_map.num_transfers_in_cb_config_pages.at(PageTransferType::MULTICAST).size();
     uint32_t num_program_multicast_binary_pages =
@@ -447,13 +450,14 @@ const DeviceCommand EnqueueProgramCommand::assemble_device_command(uint32_t host
         program.program_device_map.num_transfers_in_go_signal_pages.at(PageTransferType::MULTICAST).size();
     uint32_t num_go_signal_unicast_pages =
         program.program_device_map.num_transfers_in_go_signal_pages.at(PageTransferType::UNICAST).size();
-    uint32_t num_host_data_pages = num_runtime_arg_pages + num_cb_config_pages;
+    uint32_t num_host_data_pages = num_runtime_arg_multicast_pages + num_runtime_arg_unicast_pages + num_cb_config_pages;
     uint32_t num_cached_pages = num_program_multicast_binary_pages + num_go_signal_multicast_pages +
                                 num_program_unicast_binary_pages + num_go_signal_unicast_pages;
     uint32_t total_num_pages = num_host_data_pages + num_cached_pages;
 
     command.set_page_size(DeviceCommand::PROGRAM_PAGE_SIZE);
-    command.set_num_pages(DeviceCommand::TransferType::RUNTIME_ARGS, num_runtime_arg_pages);
+    command.set_num_pages(DeviceCommand::TransferType::RUNTIME_ARGS_MULTICAST, num_runtime_arg_multicast_pages);
+    command.set_num_pages(DeviceCommand::TransferType::RUNTIME_ARGS_UNICAST, num_runtime_arg_unicast_pages);
     command.set_num_pages(DeviceCommand::TransferType::CB_CONFIGS, num_cb_config_pages);
     command.set_num_pages(DeviceCommand::TransferType::PROGRAM_MULTICAST_PAGES, num_program_multicast_binary_pages);
     command.set_num_pages(DeviceCommand::TransferType::PROGRAM_UNICAST_PAGES, num_program_unicast_binary_pages);
@@ -476,10 +480,16 @@ const DeviceCommand EnqueueProgramCommand::assemble_device_command(uint32_t host
             page_index_offset,
             page_index_offset);
 
-        if (num_runtime_arg_pages) {
+        if (num_runtime_arg_multicast_pages) {
             populate_program_data_transfer_instructions(
                 program.program_device_map.num_transfers_in_runtime_arg_pages.at(PageTransferType::MULTICAST),
                 program.program_device_map.runtime_arg_page_transfers.at(PageTransferType::MULTICAST));
+        }
+
+        if (num_runtime_arg_unicast_pages) {
+            populate_program_data_transfer_instructions(
+                program.program_device_map.num_transfers_in_runtime_arg_pages.at(PageTransferType::UNICAST),
+                program.program_device_map.runtime_arg_page_transfers.at(PageTransferType::UNICAST));
         }
 
         if (num_cb_config_pages) {

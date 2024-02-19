@@ -473,7 +473,7 @@ TEST_F(CommandQueueFixture, ComputeRuntimeArgs) {
 
 
     std::vector<uint32_t> initial_runtime_args = {101, 202};
-    SetRuntimeArgs(program, 0, cr_set, initial_runtime_args);
+    SetRuntimeArgs(program, compute_kernel_id, cr_set, initial_runtime_args);
     EnqueueProgram(*this->cmd_queue, program, false);
     Finish(*this->cmd_queue);
 
@@ -487,6 +487,46 @@ TEST_F(CommandQueueFixture, ComputeRuntimeArgs) {
         EXPECT_TRUE(got_expected_result);
     }
 }
+
+
+TEST_F(CommandQueueFixture, ComputeRuntimeArgsFullGridMulticast) {
+
+    Program program;
+    CoreCoord worker_grid_size = this->device_->compute_with_storage_grid_size();
+    CoreRange cr({0, 0}, {worker_grid_size.x - 1, worker_grid_size.y - 1});
+    CoreRangeSet cr_set({cr});
+
+    auto compute_kernel_id = CreateKernel(
+        program,
+        "tests/tt_metal/tt_metal/test_kernels/compute/increment_runtime_arg.cpp",
+        cr_set,
+        tt::tt_metal::ComputeConfig{});
+
+    std::vector<uint32_t> initial_runtime_args = {101, 202};
+    SetRuntimeArgs(program, compute_kernel_id, cr_set, initial_runtime_args);
+    EnqueueProgram(*this->cmd_queue, program, false);
+    Finish(*this->cmd_queue);
+
+    bool do_verify = true;
+    if (do_verify) {
+        std::vector<uint32_t> increments = {87, 216};
+        std::vector<uint32_t> written_args;
+
+        for (const CoreRange& core_range : cr_set.ranges()) {
+            CoresInCoreRangeGenerator core_range_generator(core_range, worker_grid_size);
+            bool terminate;
+            do {
+                auto [core_coord, terminate_] = core_range_generator();
+                tt::tt_metal::detail::ReadFromDeviceL1(this->device_, core_coord, TRISC_L1_ARG_BASE, initial_runtime_args.size() * sizeof(uint32_t), written_args);
+                for(int i=0; i<initial_runtime_args.size(); i++){
+                    EXPECT_TRUE(written_args[i] == (initial_runtime_args[i] + increments[i]));
+                }
+                terminate = terminate_;
+            } while (not terminate);
+        }
+    }
+}
+
 
 TEST_F(CommandQueueFixture, TestRuntimeArgsCorrectlySentSingleCore) {
     CoreRange cr({0, 0}, {0, 0});

@@ -770,34 +770,68 @@ ProgramDeviceMap ConstructProgramDeviceMap(const Device* device, Program& progra
             }
         };
 
-    // Step 1: Get transfer info for runtime args (soon to just be host data). We
-    // want to send host data first because of the higher latency to pull
-    // in host data.
+    // Split Runtime Args by multicast/unicast, program multicast transfers first then unicast
+    // FIXME - Can compress this code a bit if we use a map.
+    std::vector<RuntimeArgsGroup> rt_args_multicast;
+    std::vector<RuntimeArgsGroup> rt_args_unicast;
+
     for (size_t kernel_id = 0; kernel_id < program.num_kernels(); kernel_id++) {
         Kernel* kernel = detail::GetKernel(program, kernel_id);
-        uint32_t dst = processor_to_l1_arg_base_addr.at(kernel->processor());
-        const auto& kernel_core_type = kernel->get_kernel_core_type();
-        for (const auto& core_coord : kernel->cores_with_runtime_args()) {
-            CoreCoord physical_core =
-                device->physical_core_from_logical_core(core_coord, kernel->get_kernel_core_type());
-            const auto& runtime_args = kernel->runtime_args(core_coord);
-            uint32_t num_bytes = runtime_args.size() * sizeof(uint32_t);
-            uint32_t dst_noc = get_noc_unicast_encoding(physical_core);
+        for (auto group_id = 0; group_id < kernel->get_num_runtime_args_groups(); group_id++) {
 
-            // Only one receiver per set of runtime arguments
-            src = update_program_page_transfers(
-                src,
-                num_bytes,
-                dst,
-                runtime_arg_page_transfers.at(PageTransferType::MULTICAST),
-                num_transfers_in_runtime_arg_pages.at(PageTransferType::MULTICAST),
-                {{dst_noc, 1}});
+            const auto& core_range = kernel->get_runtime_args_group_core_range(group_id);
+            const auto& args = kernel->runtime_args(group_id);
+            const auto& dst = processor_to_l1_arg_base_addr.at(kernel->processor());
+            const auto& core_type = kernel->get_kernel_core_type();
+
+            if (kernel->get_kernel_core_type() == CoreType::WORKER && (core_range.size() > 1)) {
+                rt_args_multicast.emplace_back(RuntimeArgsGroup(args, core_range, dst, core_type));
+            } else {
+                rt_args_unicast.emplace_back(RuntimeArgsGroup(args, core_range, dst, core_type));
+            }
         }
     }
 
-    // Cleanup step of separating runtime arg pages from program pages
+    // Step 1a (Multicast): Get transfer info for runtime args (soon to just be host data). We
+    // want to send host data first because of the higher latency to pull in host data.
+    for (const auto& rt_args_group : rt_args_multicast) {
+        vector<pair<uint32_t, uint32_t>> dst_noc_multicast_info = extract_dst_noc_multicast_info({rt_args_group.core_range}, rt_args_group.core_type);
+        src = update_program_page_transfers(
+            src,
+            rt_args_group.runtime_args.size() * sizeof(uint32_t),
+            rt_args_group.dst,
+            runtime_arg_page_transfers.at(PageTransferType::MULTICAST),
+            num_transfers_in_runtime_arg_pages.at(PageTransferType::MULTICAST),
+            dst_noc_multicast_info);
+    }
+
+    // Cleanup step of separating multicast runtime arg pages from unicast.
     if (num_transfers_within_page) {
         num_transfers_in_runtime_arg_pages.at(PageTransferType::MULTICAST).push_back(num_transfers_within_page);
+        num_transfers_within_page = 0;
+    }
+
+    // Step 1b (Unicast)
+    for (const auto& rt_args_group : rt_args_unicast) {
+        for (auto y = rt_args_group.core_range.start.y; y <= rt_args_group.core_range.end.y; y++) {
+            for (auto x = rt_args_group.core_range.start.x; x <= rt_args_group.core_range.end.x; x++) {
+                CoreCoord physical_core = device->physical_core_from_logical_core(CoreCoord({x, y}), rt_args_group.core_type);
+                uint32_t dst_noc = get_noc_unicast_encoding(physical_core);
+                // Only one receiver per set of runtime arguments
+                src = update_program_page_transfers(
+                    src,
+                    rt_args_group.runtime_args.size() * sizeof(uint32_t),
+                    rt_args_group.dst,
+                    runtime_arg_page_transfers.at(PageTransferType::UNICAST),
+                    num_transfers_in_runtime_arg_pages.at(PageTransferType::UNICAST),
+                    {{dst_noc, 1}});
+            }
+        }
+    }
+
+    // Cleanup step of separating unicast runtime arg pages from program pages
+    if (num_transfers_within_page) {
+        num_transfers_in_runtime_arg_pages.at(PageTransferType::UNICAST).push_back(num_transfers_within_page);
         num_transfers_within_page = 0;
     }
 
@@ -837,7 +871,7 @@ ProgramDeviceMap ConstructProgramDeviceMap(const Device* device, Program& progra
             TT_ASSERT(false, "Constructing command for unsupported core type");
         }
     }
-    // Enqueue program binaries and go siggals in this order:
+    // Enqueue program binaries and go signals in this order:
     // - Multicast Program Binaries
     // - Unicast Program Binaries
     // - Multicast Go Signals
