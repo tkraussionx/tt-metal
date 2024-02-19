@@ -155,7 +155,7 @@ FORCE_INLINE  bool eth_send_data_sequence(
     bool data_ready_for_send = buffer_available_for_eth_send(
         noc_reader_buffer_wrptr, noc_reader_buffer_ackptr, eth_sender_rdptr, eth_sender_ackptr);
     if (data_ready_for_send) {
-        kernel_profiler::mark_time(14);
+        // kernel_profiler::mark_time(14);
         // Queue up another send
         uint32_t sender_buffer_address = transaction_channel_sender_buffer_addresses[eth_sender_rdptr];
         uint32_t receiver_buffer_address = transaction_channel_receiver_buffer_addresses[eth_sender_rdptr];
@@ -185,10 +185,35 @@ FORCE_INLINE  bool eth_check_receiver_ack_sequence(
     if (eth_sends_unacknowledged) {
         bool transimission_acked_by_receiver = eth_is_receiver_channel_send_acked(eth_sender_ackptr);
         if (transimission_acked_by_receiver) {
-            kernel_profiler::mark_time(15);
+            // kernel_profiler::mark_time(15);
             num_eth_sends_acked++;
             eth_sender_ackptr = get_next_buffer_channel_pointer<MAX_NUM_CHANNELS>(eth_sender_ackptr);
 
+            did_something = true;
+        }
+    }
+
+    return did_something;
+}
+
+template <uint8_t MAX_NUM_CHANNELS>
+FORCE_INLINE  bool noc_read_ack_check_sequence(
+    uint8_t &noc_reader_buffer_ackptr,
+    uint8_t &noc_reader_buffer_wrptr,
+    const uint8_t noc_index) {
+    bool did_something = false;
+
+    bool noc_read_is_in_progress =
+        is_noc_read_in_progress(noc_reader_buffer_wrptr, noc_reader_buffer_ackptr);
+    if (noc_read_is_in_progress) {
+#if EMULATE_DRAM_READ_CYCLES == 1
+        bool read_finished = emulated_dram_read_cycles_finished();
+#else
+        bool read_finished = ncrisc_noc_reads_flushed(noc_index);
+#endif
+        if (read_finished) {
+            // kernel_profiler::mark_time(13);
+            noc_reader_buffer_ackptr = get_next_buffer_channel_pointer<MAX_NUM_CHANNELS>(noc_reader_buffer_ackptr);
             did_something = true;
         }
     }
@@ -215,20 +240,6 @@ FORCE_INLINE  bool noc_read_data_sequence(
 
     bool noc_read_is_in_progress =
         is_noc_read_in_progress(noc_reader_buffer_wrptr, noc_reader_buffer_ackptr);
-    if (noc_read_is_in_progress) {
-#if EMULATE_DRAM_READ_CYCLES == 1
-        bool read_finished = emulated_dram_read_cycles_finished();
-#else
-        bool read_finished = ncrisc_noc_reads_flushed(noc_index);
-#endif
-        if (read_finished) {
-            kernel_profiler::mark_time(13);
-            noc_reader_buffer_ackptr = get_next_buffer_channel_pointer<MAX_NUM_CHANNELS>(noc_reader_buffer_ackptr);
-            noc_read_is_in_progress = false;
-            did_something = true;
-        }
-    }
-
     bool more_data_to_read = page_index < num_pages;
     if (!noc_read_is_in_progress && more_data_to_read) {
         // We can only If a noc read is in progress, we can't issue another noc read
@@ -239,22 +250,22 @@ FORCE_INLINE  bool noc_read_data_sequence(
         // propagate that info to host (especially on erisc... TODO(snijjar))
         // next_buffer_available = next_buffer_available && channels_active[noc_reader_buffer_wrptr] == 0;
         if (next_buffer_available) {
-            kernel_profiler::mark_time(12);
-// Queue up another read
-#if EMULATE_DRAM_READ_CYCLES == 1
+            // kernel_profiler::mark_time(12);
+            // Queue up another read
+            #if EMULATE_DRAM_READ_CYCLES == 1
             issue_read_chunk();
-#else
-// non blocking - issues noc_async_read
-// issue_read_chunk(noc_reader_buffer_wrptr, ...);
-        read_chunk<src_is_dram>(
-            transaction_channel_sender_buffer_addresses[noc_reader_buffer_wrptr], // eth_l1_buffer_address_base
-            num_pages,
-            num_pages_per_l1_buffer,
-            page_size,
-            page_index,
-            source_address_generator
-        );
-#endif
+            #else
+            // non blocking - issues noc_async_read
+            // issue_read_chunk(noc_reader_buffer_wrptr, ...);
+            read_chunk<src_is_dram>(
+                transaction_channel_sender_buffer_addresses[noc_reader_buffer_wrptr], // eth_l1_buffer_address_base
+                num_pages,
+                num_pages_per_l1_buffer,
+                page_size,
+                page_index,
+                source_address_generator
+            );
+            #endif
             noc_reader_buffer_wrptr = get_next_buffer_channel_pointer<MAX_NUM_CHANNELS>(noc_reader_buffer_wrptr);
 
             did_something = true;
@@ -306,9 +317,6 @@ void kernel_main() {
     std::uint32_t src_addr = get_arg_val<uint32_t>(2);
     std::uint32_t page_size = get_arg_val<uint32_t>(3);
     std::uint32_t num_pages = get_arg_val<uint32_t>(4);
-    std::uint64_t *precomputed_source_addresses_buffer_address = reinterpret_cast<uint64_t*>(get_arg_val<uint32_t>(5));
-    std::uint32_t precomputed_source_addresses_buffer_size = get_arg_val<uint32_t>(6);
-
 
     uint8_t noc_reader_buffer_ackptr = 0;
     uint8_t noc_reader_buffer_wrptr = 0;
@@ -346,6 +354,11 @@ void kernel_main() {
     uint32_t num_pages_per_l1_buffer = num_bytes_per_send / page_size;
     while (eth_sends_completed < total_num_message_sends) {
         bool did_something = false;
+
+        did_something = noc_read_ack_check_sequence<MAX_NUM_CHANNELS>(
+                            noc_reader_buffer_ackptr,
+                            noc_reader_buffer_wrptr,
+                            noc_index);
 
         did_something = noc_read_data_sequence<MAX_NUM_CHANNELS,src_is_dram>(
                             transaction_channel_sender_buffer_addresses,
@@ -387,7 +400,7 @@ void kernel_main() {
         if (!did_something) {
             if (count++ > SWITCH_INTERVAL) {
                 count = 0;
-                kernel_profiler::mark_time(15);
+                // kernel_profiler::mark_time(15);
                 run_routing();
             } else {
                 count++;

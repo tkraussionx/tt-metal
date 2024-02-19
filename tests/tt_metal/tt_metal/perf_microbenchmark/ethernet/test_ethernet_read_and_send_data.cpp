@@ -130,7 +130,6 @@ bool RunWriteBWTest(
     auto inputs = generate_uniform_random_vector<uint32_t>(0, 100, input_buffer_size_bytes / sizeof(uint32_t));
 
     // Clear expected value at ethernet L1 address
-    std::vector<uint32_t> all_zeros(inputs.size(), 0);
 
     BankedConfig test_config =
         BankedConfig{
@@ -146,7 +145,24 @@ bool RunWriteBWTest(
 
     bool input_is_dram = test_config.input_buffer_type == BufferType::DRAM;
     tt_metal::detail::WriteToBuffer(input_buffer, inputs);
-    uint32_t dram_buf_base_addr = input_buffer->address();
+    uint32_t dram_input_buf_base_addr = input_buffer->address();
+
+    ////////////////////////////////////////////////////////////////////////////
+    //   EMPTY INITIALIZE THE OUTPUT CB
+    ////////////////////////////////////////////////////////////////////////////
+
+    // Clear expected value at ethernet L1 address
+    std::vector<uint32_t> all_zeros(inputs.size(), 0);
+
+    auto output_buffer =
+            CreateBuffer(
+                InterleavedBufferConfig{receiver_device, test_config.size_bytes, test_config.page_size_bytes, test_config.input_buffer_type});
+
+    bool output_is_dram = test_config.output_buffer_type == BufferType::DRAM;
+    tt_metal::detail::WriteToBuffer(output_buffer, all_zeros);
+    uint32_t dram_output_buffer_base_addr = output_buffer->address();
+
+
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Sender Device
@@ -181,7 +197,7 @@ bool RunWriteBWTest(
         {
             uint32_t(src_eth_l1_byte_address),
             uint32_t(dst_eth_l1_byte_address),
-            uint32_t(dram_buf_base_addr),
+            uint32_t(dram_input_buf_base_addr),
             uint32_t(input_buffer_page_size),
             uint32_t(num_pages),
             uint32_t(precomputed_source_addresses_buffer_address),
@@ -203,7 +219,7 @@ bool RunWriteBWTest(
                 uint32_t(num_bytes_per_send),         // 0
                 uint32_t(num_bytes_per_send >> 4),    // 1
                 uint32_t(num_messages_to_send),       // 2
-                uint32_t(eth_max_concurrent_sends),// 3
+                uint32_t(eth_max_concurrent_sends),   // 3
                 uint32_t(dest_is_dram)                // 4
             }});  // probably want to use NOC_1 here
             // .compile_args = {uint32_t(256), uint32_t(256 >> 4)}});  // probably want to use NOC_1 here
@@ -213,9 +229,18 @@ bool RunWriteBWTest(
         eth_receiver_kernel,
         eth_receiver_core,
         {
+            uint32_t(dst_eth_l1_byte_address),
             uint32_t(src_eth_l1_byte_address),
-            uint32_t(dst_eth_l1_byte_address)
+            dram_output_buffer_base_addr,
+            input_buffer_page_size,
+            num_pages
         });
+
+    std::cout << "dram_output_buffer_base_addr: " << dram_output_buffer_base_addr << std::endl;
+    std::cout << "dram_input_buf_base_addr: " << dram_input_buf_base_addr << std::endl;
+    std::cout << "input_buffer_page_size: " << input_buffer_page_size << std::endl;
+    std::cout << "num_pages: " << num_pages << std::endl;
+
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Compile and Execute Application
@@ -238,17 +263,21 @@ bool RunWriteBWTest(
     th1.join();
     std::cout << "sender done" << std::endl;
 
-    auto readback_vec = llrt::read_hex_vec_from_core(
-        receiver_device->id(),
-        receiver_device->ethernet_core_from_logical_core(eth_receiver_core),
-        dst_eth_l1_byte_address,
-        input_buffer_size_bytes);
-    pass &= (readback_vec == inputs);
+    std::vector<uint32_t> readback_data_vec = std::vector<uint32_t>(all_zeros.size(), -1); // init to 0 data for easier debug
+    tt_metal::detail::ReadFromBuffer(output_buffer, readback_data_vec);
+    pass &= (readback_data_vec == inputs);
+    TT_ASSERT(std::any_of(inputs.begin(), inputs.end(), [](uint32_t x) { return x != 0; }), "Input buffer expected to not be all 0");
     if (not pass) {
-        std::cout << "Mismatch at Core: " << eth_receiver_core.str() << std::endl;
-        std::cout << readback_vec[0] << std::endl;
+        std::cout << "Mismatch output mismatch" << std::endl;
+        std::size_t num_printed_mismatches = 0;
+        for (size_t i = 0; i < readback_data_vec.size() && num_printed_mismatches < 64; i++) {
+            if (readback_data_vec[i] != inputs[i]) {
+                std::cout << "[" << i << "]: expected " << inputs[i] << " got " << readback_data_vec[i] << std::endl;
+                num_printed_mismatches++;
+            }
+        }
+        std::cout << readback_data_vec[0] << std::endl;
     }
-    return true; // TODO(snijjar): Fix
     return pass;
 }
 
@@ -296,7 +325,7 @@ int main(int argc, char** argv) {
     // std::cout << "RECEIVER CORE: (x=" << eth_receiver_core.x << ", y=" << eth_receiver_core.y << ")" << std::endl;
 
     // std::cout << "BW TEST: " << 64 << ", num_messages_to_send: " << num_messages_to_send << std::endl;
-    RunWriteBWTest(
+    bool success = RunWriteBWTest(
         sender_kernel_path,
         receiver_kernel_path,
         device_0,
@@ -316,5 +345,7 @@ int main(int argc, char** argv) {
         );
 
     test_fixture.TearDown();
+
+    return success ? 0 : -1;
 
 }

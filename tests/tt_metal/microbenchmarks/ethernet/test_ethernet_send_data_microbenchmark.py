@@ -12,7 +12,7 @@ import tt_metal.tools.profiler.device_post_proc_config as device_post_proc_confi
 
 
 def report_results(test_case_name, total_data_transferred):
-    print("repoting results...")
+    print("reporting results...")
     setup = device_post_proc_config.default_setup()
     setup.timerAnalysis = {
         "LATENCY": {
@@ -117,21 +117,22 @@ def test_ethernet_send_data_microbenchmark_concurrent(num_messages_to_send, buff
 
 
 @pytest.mark.parametrize(
-    "input_buffer_size_bytes", [1024, 2048, 4096, 16384, 64 * 1024, 128 * 1024, 256 * 1024, 16711680, 680 * 32768]
+    "input_buffer_size_bytes",
+    [1024, 2048, 4096, 16384, 64 * 1024, 128 * 1024, 256 * 1024, 835584, 16711680, 680 * 32768],
 )
 @pytest.mark.parametrize(
     "eth_buffer_size_bytes",
-    [1024, 2048, 4096, 8192, 16 * 1024, 32 * 1024, 50 * 1024],
+    [1024, 2048, 4096, 8192, 12 * 1024, 16 * 1024, 14 * 1024, 20 * 1024, 32 * 1024, 50 * 1024],
 )
 @pytest.mark.parametrize("num_transaction_buffers", [1, 2, 3, 4, 6, 8])
 @pytest.mark.parametrize("input_buffer_page_size", [1024, 2048, 4096, 8192])
-@pytest.mark.parametrize("precomputed_address_buffer_size", [0, 16, 32])
+# @pytest.mark.parametrize("precomputed_address_buffer_size", [0, 16, 32])
 def test_ethernet_send_data_microbenchmark_concurrent_with_dram_read(
     input_buffer_size_bytes,
     eth_buffer_size_bytes,
     num_transaction_buffers,
-    input_buffer_page_size,
-    precomputed_address_buffer_size,
+    input_buffer_page_size  # ,
+    # precomputed_address_buffer_size,
 ):
     if eth_buffer_size_bytes < input_buffer_page_size:
         pytest.skip("eth_buffer_size_bytes < input_buffer_page_size")
@@ -165,7 +166,7 @@ def test_ethernet_send_data_microbenchmark_concurrent_with_dram_read(
             {input_buffer_size_bytes} \
             {1} \
             {1} \
-            {precomputed_address_buffer_size} \
+            0 \
             "
         # > /dev/null 2>&1"
     )
@@ -177,8 +178,75 @@ def test_ethernet_send_data_microbenchmark_concurrent_with_dram_read(
     test_string_name += f"{input_buffer_page_size}_"
     test_string_name += f"{num_transaction_buffers}_"
     test_string_name += f"{eth_buffer_size_bytes}_"
-    test_string_name += f"{input_buffer_size_bytes}_"
-    test_string_name += f"{precomputed_address_buffer_size}"
+    test_string_name += f"{input_buffer_size_bytes}"  # _"
+    # test_string_name += f"{precomputed_address_buffer_size}"
+    return report_results(test_string_name, input_buffer_size_bytes)
+
+
+@pytest.mark.parametrize(
+    "input_buffer_size_bytes",
+    [1024, 2048, 4096, 16384, 64 * 1024, 128 * 1024, 256 * 1024, 835584, 16711680, 680 * 32768],
+)
+@pytest.mark.parametrize(
+    "eth_buffer_size_bytes",
+    [1024, 2048, 4096, 8192, 12 * 1024, 16 * 1024, 14 * 1024, 20 * 1024, 32 * 1024, 50 * 1024],
+)
+@pytest.mark.parametrize("num_transaction_buffers", [1, 2, 3, 4, 6, 8])
+@pytest.mark.parametrize("input_buffer_page_size", [1024, 2048, 4096, 8192])
+# @pytest.mark.parametrize("precomputed_address_buffer_size", [0, 16, 32])
+def test_ethernet_send_data_microbenchmark_concurrent_with_dram_read_and_write(
+    input_buffer_size_bytes,
+    eth_buffer_size_bytes,
+    num_transaction_buffers,
+    input_buffer_page_size  # ,
+    # precomputed_address_buffer_size,
+):
+    if eth_buffer_size_bytes < input_buffer_page_size:
+        pytest.skip("eth_buffer_size_bytes < input_buffer_page_size")
+        return
+
+    if input_buffer_size_bytes < input_buffer_page_size:
+        pytest.skip("input_buffer_size_bytes < input_buffer_page_size")
+        return
+
+    test_string_name = f"test_ethernet_send_data_microbenchmark - \
+            input_buffer_page_size: {input_buffer_page_size}, \
+                num_transaction_buffers: {num_transaction_buffers}, \
+                    eth_buffer_size_bytes: {eth_buffer_size_bytes} \
+                        input_buffer_size_bytes: {input_buffer_size_bytes}"
+    print(
+        f"test_ethernet_send_data_microbenchmark - \
+            input_buffer_page_size: {input_buffer_page_size}, \
+                num_transaction_buffers: {num_transaction_buffers}, \
+                    eth_buffer_size_bytes: {eth_buffer_size_bytes} \
+                        input_buffer_size_bytes: {input_buffer_size_bytes}"
+    )
+    os.system(f"rm -rf {os.environ['TT_METAL_HOME']}/generated/profiler/.logs/profile_log_device.csv")
+    rc = os.system(
+        f"TT_METAL_SLOW_DISPATCH_MODE=1 TT_METAL_DEVICE_PROFILER=1 \
+            {os.environ['TT_METAL_HOME']}/build/test/tt_metal/perf_microbenchmark/ethernet/test_ethernet_read_and_send_data \
+            \"tests/tt_metal/tt_metal/test_kernels/dataflow/unit_tests/erisc/eth_l1_forward_local_chip_data_looping_multi_channel.cpp\" \
+            \"tests/tt_metal/tt_metal/test_kernels/dataflow/unit_tests/erisc/eth_non_blocking_receive_fwd_to_dram.cpp\" \
+            {eth_buffer_size_bytes} \
+            {num_transaction_buffers} \
+            {input_buffer_page_size} \
+            {input_buffer_size_bytes} \
+            {1} \
+            {1} \
+            0 \
+            "
+        # > /dev/null 2>&1"
+    )
+    if rc != 0:
+        print("Error in running the test")
+        assert False
+
+    test_string_name = f"test_ethernet_send_data_microbenchmark_concurrent_with_dram_read_"
+    test_string_name += f"{input_buffer_page_size}_"
+    test_string_name += f"{num_transaction_buffers}_"
+    test_string_name += f"{eth_buffer_size_bytes}_"
+    test_string_name += f"{input_buffer_size_bytes}"  # _"
+    # test_string_name += f"{precomputed_address_buffer_size}"
     return report_results(test_string_name, input_buffer_size_bytes)
 
 
