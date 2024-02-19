@@ -254,7 +254,8 @@ def test_run_ethernet_send_data_microbenchmark_sweep():
     input_buffer_size_bytes = [16384, 64 * 1024, 256 * 1024, 16711680]  # , 680*32768]
     eth_buffer_size_bytes = [8192, 16 * 1024, 32 * 1024, 50 * 1024]
     # num_transaction_buffers = [1, 2, 3, 4, 8]
-    num_transaction_buffers = [2, 3, 4, 8]
+    # num_transaction_buffers = [2, 3, 4, 8]
+    num_transaction_buffers = [3, 4, 8]
     input_buffer_page_size = [1024, 2048, 4096]
 
     recorded_throughput_slow_mode = {}
@@ -279,7 +280,7 @@ def test_run_ethernet_send_data_microbenchmark_sweep():
                     successful = False
                     while not successful and attempts < max_attempts:
                         try:
-                            throughput = test_ethernet_send_data_microbenchmark_concurrent_with_dram_read(
+                            throughput = test_ethernet_send_data_microbenchmark_concurrent_with_dram_read_and_write(
                                 input_size_bytes, eth_l1_buffer_size, max_concurrent_transfers, page_size
                             )
                             successful = True
@@ -334,3 +335,13 @@ def test_run_ethernet_send_data_microbenchmark_sweep():
                         row += f"|{throughput:<{COLUMN_WIDTH}.2f}"
 
                 print(row)
+
+    print(f"##############################################")
+    print(f"page_size,input_size_bytes,eth_l1_buffer_size,num_concurrent_transfers,throughput(GBps)")
+    for page_size, throughputs_input_size_bytes in recorded_throughputs.items():
+        for input_size_bytes, throughputs_eth_1l_buf_size_bytes in throughputs_input_size_bytes.items():
+            for eth_l1_buffer_size, throughputs_max_concurrent_transfers in throughputs_eth_1l_buf_size_bytes.items():
+                for num_concurrent_transfers, throughput in throughputs_max_concurrent_transfers.items():
+                    print(
+                        f"{page_size},{input_size_bytes},{eth_l1_buffer_size},{num_concurrent_transfers},{throughput}"
+                    )

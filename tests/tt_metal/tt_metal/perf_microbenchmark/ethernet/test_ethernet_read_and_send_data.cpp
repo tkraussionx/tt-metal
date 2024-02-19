@@ -145,7 +145,7 @@ bool RunWriteBWTest(
 
     bool input_is_dram = test_config.input_buffer_type == BufferType::DRAM;
     tt_metal::detail::WriteToBuffer(input_buffer, inputs);
-    uint32_t dram_input_buf_base_addr = input_buffer->address();
+    const uint32_t dram_input_buf_base_addr = input_buffer->address();
 
     ////////////////////////////////////////////////////////////////////////////
     //   EMPTY INITIALIZE THE OUTPUT CB
@@ -156,11 +156,11 @@ bool RunWriteBWTest(
 
     auto output_buffer =
             CreateBuffer(
-                InterleavedBufferConfig{receiver_device, test_config.size_bytes, test_config.page_size_bytes, test_config.input_buffer_type});
+                InterleavedBufferConfig{receiver_device, test_config.size_bytes, test_config.page_size_bytes, test_config.output_buffer_type});
 
     bool output_is_dram = test_config.output_buffer_type == BufferType::DRAM;
     tt_metal::detail::WriteToBuffer(output_buffer, all_zeros);
-    uint32_t dram_output_buffer_base_addr = output_buffer->address();
+    const uint32_t dram_output_buffer_base_addr = output_buffer->address();
 
 
 
@@ -302,15 +302,9 @@ int main(int argc, char** argv) {
     std::cout << "precomputed_source_addresses_buffer_size: " << precomputed_source_addresses_buffer_size << std::endl;
     const auto& device_0 = test_fixture.devices_.at(0);
     const auto& device_1 = test_fixture.devices_.at(1);
-    const size_t precomputed_source_addresses_buffer_address =
-        precomputed_source_addresses_buffer_size == 0 ? (size_t)nullptr:
-        eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE % 16 == 0 ? eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE :
-            eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + 16 - (eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE % 8);
-    // const size_t precomputed_source_addresses_buffer_size = 32;
-    const size_t src_eth_l1_byte_address = precomputed_source_addresses_buffer_size == 0 ?
-        eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE :
-        precomputed_source_addresses_buffer_address + (precomputed_source_addresses_buffer_size * sizeof(std::size_t));
-    const size_t dst_eth_l1_byte_address = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + precomputed_source_addresses_buffer_size;
+    const size_t precomputed_source_addresses_buffer_address = (size_t)nullptr;
+    const size_t src_eth_l1_byte_address = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + 32;
+    const size_t dst_eth_l1_byte_address = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + 32;
 
     auto const& active_eth_cores = device_0->get_active_ethernet_cores();
     assert (active_eth_cores.size() > 0);

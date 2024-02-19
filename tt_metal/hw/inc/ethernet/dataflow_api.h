@@ -389,7 +389,7 @@ void eth_wait_for_bytes(uint32_t num_bytes) {
     }
 }
 FORCE_INLINE
-void eth_wait_for_bytes_on_channel(uint32_t num_bytes, uint32_t channel) {
+void eth_wait_for_bytes_on_channel(uint32_t num_bytes, uint8_t channel) {
     // assert(channel < 4);
     uint32_t count = 0;
     uint32_t poll_count = 1000000;
@@ -404,7 +404,7 @@ void eth_wait_for_bytes_on_channel(uint32_t num_bytes, uint32_t channel) {
             count++;
             if (count > poll_count) {
                 count = 0;
-                // run_routing();
+                run_routing();
             }
         }
     }

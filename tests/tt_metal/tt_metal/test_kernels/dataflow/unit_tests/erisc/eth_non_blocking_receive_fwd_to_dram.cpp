@@ -6,6 +6,8 @@
 #include <array>
 #include "dataflow_api.h"
 
+#define DONT_STRIDE_IN_ETH_BUFFER 0
+
 /**
  * Any two RISC processors cannot use the same CMD_BUF
  * non_blocking APIs shouldn't be mixed with slow noc.h APIs
@@ -38,7 +40,6 @@ FORCE_INLINE uint8_t get_next_buffer_channel_pointer(uint8_t pointer) {
         return pointer == NUM_CHANNELS ? 0 : pointer;
     }
 }
-
 
 
 FORCE_INLINE  bool is_noc_write_in_progress(const uint8_t noc_writer_buffer_wrptr, const uint8_t noc_writer_buffer_ackptr) {
@@ -106,10 +107,10 @@ FORCE_INLINE  bool eth_check_data_received_sequence(
 // Initiate DRAM write -> advances  write pointer
 template <bool dest_is_dram>
 void write_chunk(
-    uint32_t eth_l1_buffer_address_base,
-    uint32_t num_pages,
-    uint32_t num_pages_per_l1_buffer,
-    uint32_t page_size,
+    const uint32_t eth_l1_buffer_address_base,
+    const uint32_t num_pages,
+    const uint32_t num_pages_per_l1_buffer,
+    const uint32_t page_size,
     uint32_t &page_index,
     const InterleavedAddrGen<dest_is_dram> &dest_address_generator
 )
@@ -153,13 +154,13 @@ void initialize_transaction_buffer_addresses(
     uint32_t sender_buffer_base_address,
     uint32_t receiver_buffer_base_address,
     uint32_t num_bytes_per_send,
-    std::array<uint32_t, MAX_CONCURRENT_TRANSACTIONS> &transaction_channel_sender_buffer_addresses,
-    std::array<uint32_t, MAX_CONCURRENT_TRANSACTIONS> &transaction_channel_receiver_buffer_addresses) {
+    std::array<uint32_t, MAX_CONCURRENT_TRANSACTIONS> &transaction_channel_remote_buffer_addresses,
+    std::array<uint32_t, MAX_CONCURRENT_TRANSACTIONS> &transaction_channel_local_buffer_addresses) {
     uint32_t sender_buffer_address = sender_buffer_base_address;
     uint32_t receiver_buffer_address = receiver_buffer_base_address;
     for (uint32_t i = 0; i < MAX_CONCURRENT_TRANSACTIONS; i++) {
-        transaction_channel_sender_buffer_addresses[i] = sender_buffer_address;
-        transaction_channel_receiver_buffer_addresses[i] = receiver_buffer_address;
+        transaction_channel_remote_buffer_addresses[i] = sender_buffer_address;
+        transaction_channel_local_buffer_addresses[i] = receiver_buffer_address;
         #if ENABLE_L1_BUFFER_OVERLAP == 0
         sender_buffer_address += num_bytes_per_send;
         receiver_buffer_address += num_bytes_per_send;
@@ -179,11 +180,11 @@ void kernel_main() {
     // Handshake first before timestamping to make sure we aren't measuring any
     // dispatch/setup times for the kernels on both sides of the link.
 
-    std::uint32_t local_eth_l1_src_addr = get_arg_val<uint32_t>(0);
-    std::uint32_t remote_eth_l1_dst_addr = get_arg_val<uint32_t>(1);
-    std::uint32_t dest_addr = get_arg_val<uint32_t>(2);
-    std::uint32_t page_size = get_arg_val<uint32_t>(3);
-    std::uint32_t num_pages = get_arg_val<uint32_t>(4);
+    const std::uint32_t local_eth_l1_src_addr = get_arg_val<uint32_t>(0);
+    const std::uint32_t remote_eth_l1_dst_addr = get_arg_val<uint32_t>(1);
+    const std::uint32_t dest_addr = get_arg_val<uint32_t>(2);
+    const std::uint32_t page_size = get_arg_val<uint32_t>(3);
+    const std::uint32_t num_pages = get_arg_val<uint32_t>(4);
     eth_setup_handshake(remote_eth_l1_dst_addr, false);
 
     const InterleavedAddrGen<dest_is_dram> dest_address_generator = {
@@ -192,25 +193,26 @@ void kernel_main() {
     kernel_profiler::mark_time(80);
 
     std::array<uint32_t, MAX_NUM_CHANNELS> transaction_channel_local_buffer_addresses;
-    std::array<uint32_t, MAX_NUM_CHANNELS> transaction_channel_receiver_buffer_addresses;
+    std::array<uint32_t, MAX_NUM_CHANNELS> transaction_channel_remote_buffer_addresses;
     initialize_transaction_buffer_addresses<MAX_NUM_CHANNELS>(
-        local_eth_l1_src_addr,
         remote_eth_l1_dst_addr,
+        local_eth_l1_src_addr,
         num_bytes_per_send,
-        transaction_channel_local_buffer_addresses,
-        transaction_channel_receiver_buffer_addresses);
+        transaction_channel_remote_buffer_addresses,
+        transaction_channel_local_buffer_addresses);
 
-    uint32_t count = 0;
     uint32_t page_index = 0;
-    uint32_t num_pages_per_l1_buffer = num_bytes_per_send / page_size;
+    const uint32_t num_pages_per_l1_buffer = num_bytes_per_send / page_size;
     uint32_t j = 0;
+    bool write_in_flight = false;
     for (uint32_t i = 0; i < total_num_message_sends; i++) {
+    // while(page_index < num_pages) {
         // for (uint32_t j = 0; j < num_sends_per_loop; j++) {
         // kernel_profiler::mark_time(90);
         eth_wait_for_bytes_on_channel(num_bytes_per_send, j);
 
         // kernel_profiler::mark_time(91);
-        while(!ncrisc_noc_nonposted_writes_flushed(noc_index)) {}
+        while(write_in_flight and !ncrisc_noc_nonposted_writes_flushed(noc_index)) {}
         write_chunk<dest_is_dram>(
             transaction_channel_local_buffer_addresses[j],
             num_pages,
@@ -219,13 +221,14 @@ void kernel_main() {
             page_index,
             dest_address_generator
         );
+        write_in_flight = true;
         eth_receiver_channel_done(j);
         // kernel_profiler::mark_time(92);
         // }
         j = get_next_buffer_channel_pointer<MAX_NUM_CHANNELS>(j);
     }
 
-    while(!ncrisc_noc_nonposted_writes_flushed(noc_index)) {}
+    while(write_in_flight && !ncrisc_noc_nonposted_writes_flushed(noc_index)) {}
     kernel_profiler::mark_time(81);
 
     kernel_profiler::mark_time(100);
