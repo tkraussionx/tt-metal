@@ -37,6 +37,7 @@ bool ncrisc_enabled_g;
 bool trisc_enabled_g;
 bool lazy_g;
 bool time_just_finish_g;
+bool rt_args_multicast_g;
 
 void init(int argc, char **argv) {
     std::vector<std::string> input_args(argv, argv + argc);
@@ -58,6 +59,8 @@ void init(int argc, char **argv) {
         log_info(LogTest, "  -t: disable trisc kernels (default enabled)");
         log_info(LogTest, "  -f: time just the finish call (use w/ lazy mode) (default disabled)");
         log_info(LogTest, "  -z: enable dispatch lazy mode (default disabled)");
+        log_info(LogTest, "  -m: use corerange/multicast for runtime args (default disabled)");
+
         exit(0);
     }
 
@@ -70,6 +73,7 @@ void init(int argc, char **argv) {
     n_args_g = test_args::get_command_option_uint32(input_args, "-a", 0);
     n_sems_g = test_args::get_command_option_uint32(input_args, "-S", 0);
     lazy_g = test_args::has_command_option(input_args, "-z");
+    rt_args_multicast_g = test_args::has_command_option(input_args, "-m");
     time_just_finish_g = test_args::has_command_option(input_args, "-f");
     kernel_cycles_g = test_args::get_command_option_uint32(input_args, "-r", 0);
     if (kernel_size_g < MIN_KERNEL_SIZE_BYTES) {
@@ -97,10 +101,15 @@ void init(int argc, char **argv) {
 }
 
 void set_runtime_args(Program& program, tt_metal::KernelHandle kernel_id, vector<uint32_t>& args) {
-    for (int core_idx_y = workers_g.start.y; core_idx_y < workers_g.end.y; core_idx_y++) {
-        for (int core_idx_x = workers_g.start.x; core_idx_x < workers_g.end.x; core_idx_x++) {
-            CoreCoord core = {(std::size_t)core_idx_x, (std::size_t)core_idx_y};
-            tt_metal::SetRuntimeArgs(program, kernel_id, core, args);
+    if (rt_args_multicast_g) {
+        CoreRangeSet cr_set({workers_g});
+        tt_metal::SetRuntimeArgs(program, kernel_id, cr_set, args);
+    } else {
+        for (int core_idx_y = workers_g.start.y; core_idx_y <= workers_g.end.y; core_idx_y++) {
+            for (int core_idx_x = workers_g.start.x; core_idx_x <= workers_g.end.x; core_idx_x++) {
+                CoreCoord core = {(std::size_t)core_idx_x, (std::size_t)core_idx_y};
+                tt_metal::SetRuntimeArgs(program, kernel_id, core, args);
+            }
         }
     }
 }
@@ -193,10 +202,11 @@ int main(int argc, char **argv) {
         log_info(LogTest, "Args: {}", n_args_g);
         log_info(LogTest, "Sems: {}", n_sems_g);
         log_info(LogTest, "Lazy: {}", lazy_g);
+        log_info(LogTest, "ArgsMcast: {}", rt_args_multicast_g);
 
         std::chrono::duration<double> elapsed_seconds = (end-start);
         log_info(LogTest, "Ran in {}us", elapsed_seconds.count() * 1000 * 1000);
-        log_info(LogTest, "Ran in {}us per iteration", elapsed_seconds.count() * 1000 * 1000 / iterations_g);
+        log_info(LogTest, "Ran in {:.2f}us per iteration", elapsed_seconds.count() * 1000 * 1000 / iterations_g);
 
         pass &= tt_metal::CloseDevice(device);
     } catch (const std::exception& e) {
