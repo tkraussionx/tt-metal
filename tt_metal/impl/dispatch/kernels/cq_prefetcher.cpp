@@ -3,11 +3,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_metal/impl/dispatch/kernels/cq_prefetcher.hpp"
+#include "debug/dprint.h"
 
 void kernel_main() {
+    bool db_buf_switch = false;
     constexpr uint32_t host_issue_queue_read_ptr_addr = get_compile_time_arg_val(0);
     constexpr uint32_t issue_queue_start_addr = get_compile_time_arg_val(1);
-    uint32_t issue_queue_size = get_compile_time_arg_val(2); // not constexpr since can change
+    constexpr uint32_t issue_queue_size = get_compile_time_arg_val(2);
     constexpr uint32_t command_start_addr = get_compile_time_arg_val(3);
     constexpr uint32_t data_section_addr = get_compile_time_arg_val(4);
     constexpr uint32_t data_buffer_size = get_compile_time_arg_val(5);
@@ -20,8 +22,8 @@ void kernel_main() {
     // Initialize the producer/consumer DB semaphore
     // This represents how many buffers the producer can write to.
     // At the beginning, it can write to two different buffers.
-    uint64_t producer_noc_encoding = uint64_t(NOC_XY_ENCODING(my_x[0], my_y[0])) << 32;
-    uint64_t consumer_noc_encoding = uint64_t(NOC_XY_ENCODING(CONSUMER_NOC_X, CONSUMER_NOC_Y)) << 32;
+    uint64_t my_noc_encoding = uint64_t(NOC_XY_ENCODING(my_x[0], my_y[0])) << 32;
+    uint64_t remote_noc_encoding = uint64_t(NOC_XY_ENCODING(CONSUMER_NOC_X, CONSUMER_NOC_Y)) << 32;
     uint64_t pcie_core_noc_encoding = uint64_t(NOC_XY_ENCODING(PCIE_NOC_X, PCIE_NOC_Y)) << 32;
 
     volatile tt_l1_ptr uint32_t* db_semaphore_addr =
@@ -29,16 +31,46 @@ void kernel_main() {
 
     PullAndRelayCfg src_pr_cfg;
     PullAndRelayCfg dst_pr_cfg;
-    while(true);
 
-    bool db_buf_switch = false;
+    volatile db_cb_config_t* local_multicore_cb_cfg = get_local_db_cb_config(CQ_CONSUMER_CB_BASE, db_buf_switch);
+    volatile db_cb_config_t* remote_multicore_cb_cfg = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, db_buf_switch);
+
+    constexpr uint32_t remote_cb_num_pages = (MEM_L1_SIZE - L1_UNRESERVED_BASE - DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND * 2) / DeviceCommand::PROGRAM_PAGE_SIZE;
+    constexpr uint32_t remote_cb_size = remote_cb_num_pages * DeviceCommand::PROGRAM_PAGE_SIZE;
+
+    // Dispatch core has a constant CB
+    program_consumer_cb<consumer_cmd_base_addr, consumer_data_buffer_size, consumer_cmd_base_addr, consumer_data_buffer_size>(
+        local_multicore_cb_cfg,
+        remote_multicore_cb_cfg,
+        remote_noc_encoding,
+        remote_cb_num_pages,
+        DeviceCommand::PROGRAM_PAGE_SIZE,
+        remote_cb_size);
+
+    // Set up dispatch core CB
+    dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, db_buf_switch);
+    // dst_pr_cfg.cb_size_16B = consumer_data_buffer_size >> 4;
+    // dst_pr_cfg.cb_num_pages = command_data_buffer_size / DeviceCommand::PROGRAM_PAGE_SIZE;
+    // dst_pr_cfg.cb_fifo_limit_16B = ...;
+    dst_pr_cfg.cb_buff_cfg.remote_noc_encoding = remote_noc_encoding;
+    // dst_pr_cfg.local_multicore_cb_cfg = 0;
+
+    DPRINT << "REMOTE CB DATA" << ENDL();
+    DPRINT << "num_pages: " << dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg->num_pages << ENDL();
+    DPRINT << "page_size_16B: " << dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg->page_size_16B << ENDL();
+    DPRINT << "total_size_16B: " << dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg->total_size_16B << ENDL();
+    DPRINT << "rd_ptr_16B: " << dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg->rd_ptr_16B << ENDL();
+    DPRINT << "wr_ptr_16B: " << dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg->wr_ptr_16B << ENDL();
+
     while (true) {
         if constexpr (src_in_host_memory) {
+            DPRINT << "WAIT FRONT"<< ENDL();
             issue_queue_wait_front();
             uint32_t rd_ptr = (cq_read_interface.issue_fifo_rd_ptr << 4);
             uint64_t src_noc_addr = pcie_core_noc_encoding | rd_ptr;
             noc_async_read(src_noc_addr, command_start_addr, min(DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, issue_queue_size - rd_ptr));
             noc_async_read_barrier();
+            DPRINT << "GOT MY COMMAND" << ENDL();
         } else { // erisc, need some form of enum instead of just bool
             while(true);
         }
@@ -71,18 +103,20 @@ void kernel_main() {
         }
         program_local_cb(data_section_addr, producer_cb_num_pages, page_size, producer_cb_size);
         wait_consumer_space_available(db_semaphore_addr);
-        relay_command<command_start_addr, consumer_cmd_base_addr, consumer_data_buffer_size>(db_buf_switch, consumer_noc_encoding);
+        relay_command<command_start_addr, consumer_cmd_base_addr, consumer_data_buffer_size>(db_buf_switch, remote_noc_encoding);
         if (stall) {
             wait_consumer_idle<2>(db_semaphore_addr);
         }
 
         // This should be cleaned up, logic kind of awkward
+        DPRINT << "is_program: " << (uint32_t)is_program << ENDL();
+        while(true);
         if (is_program) {
-            update_producer_consumer_sync_semaphores(producer_noc_encoding, consumer_noc_encoding, db_semaphore_addr, get_semaphore(0));
+            update_producer_consumer_sync_semaphores(pcie_core_noc_encoding, remote_noc_encoding, db_semaphore_addr, get_semaphore(0));
             pull_and_relay<PullAndRelayType::BUFFER, PullAndRelayType::CIRCULAR_BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages);
         } else {
             pull_and_relay<PullAndRelayType::BUFFER, PullAndRelayType::CIRCULAR_BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages);
-            update_producer_consumer_sync_semaphores(producer_noc_encoding, consumer_noc_encoding, db_semaphore_addr, get_semaphore(0));
+            update_producer_consumer_sync_semaphores(pcie_core_noc_encoding, remote_noc_encoding, db_semaphore_addr, get_semaphore(0));
         }
 
         // Need some synch mechanism for dispatch core to update completion queue

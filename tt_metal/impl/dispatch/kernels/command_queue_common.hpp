@@ -41,10 +41,14 @@ tt_l1_ptr db_cb_config_t* get_local_db_cb_config(uint32_t base_addr, bool db_buf
 }
 
 // Remote refers to any other core on the same chip
-tt_l1_ptr const db_cb_config_t* get_remote_db_cb_config(uint32_t base_addr, bool db_buf_switch) {
+tt_l1_ptr db_cb_config_t* get_remote_db_cb_config(uint32_t base_addr, bool db_buf_switch) {
     // TODO: remove multiply here
-    const db_cb_config_t* db_cb_config = (db_cb_config_t*)(base_addr + (db_buf_switch * l1_db_cb_addr_offset));
+    db_cb_config_t* db_cb_config = (db_cb_config_t*)(base_addr + (db_buf_switch * l1_db_cb_addr_offset));
     return db_cb_config;
+}
+
+uint32_t get_cb_start_address() {
+    return L1_UNRESERVED_BASE + 2 * DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
 }
 
 FORCE_INLINE

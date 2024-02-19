@@ -108,35 +108,34 @@ void program_local_cb(uint32_t data_section_addr, uint32_t num_pages, uint32_t p
     cb_interface[cb_id].fifo_page_size = page_size >> 4;
 }
 
-// template <uint32_t producer_cmd_base_addr, uint32_t producer_data_buffer_size, uint32_t consumer_cmd_base_addr, uint32_t consumer_data_buffer_size>
-// FORCE_INLINE
-// void program_consumer_cb(
-//     db_cb_config_t* db_cb_config,
-//     const db_cb_config_t* remote_db_cb_config,
-//     bool db_buf_switch,
-//     uint64_t consumer_noc_encoding,
-//     uint32_t num_pages,
-//     uint32_t page_size,
-//     uint32_t cb_size) {
-//     /*
-//         This API programs the double-buffered CB space of the consumer. This API should be called
-//         before notifying the consumer that data is available.
-//     */
-//     uint32_t cb_start_rd_addr = get_db_buf_addr<producer_cmd_base_addr, producer_data_buffer_size>(db_buf_switch);
-//     uint32_t cb_start_wr_addr = get_db_buf_addr<consumer_cmd_base_addr, consumer_data_buffer_size>(db_buf_switch);
+template <uint32_t producer_cmd_base_addr, uint32_t producer_data_buffer_size, uint32_t consumer_cmd_base_addr, uint32_t consumer_data_buffer_size>
+FORCE_INLINE
+void program_consumer_cb(
+    volatile db_cb_config_t* db_cb_config,
+    volatile db_cb_config_t* remote_db_cb_config,
+    uint64_t consumer_noc_encoding,
+    uint32_t num_pages,
+    uint32_t page_size,
+    uint32_t cb_size) {
+    /*
+        This API programs the double-buffered CB space of the consumer. This API should be called
+        before notifying the consumer that data is available.
+    */
+    uint32_t cb_start_rd_addr = get_cb_start_address();
+    uint32_t cb_start_wr_addr = cb_start_rd_addr;
 
-//     db_cb_config->ack = 0;
-//     db_cb_config->recv = 0;
-//     db_cb_config->num_pages = num_pages;
-//     db_cb_config->page_size_16B = page_size >> 4;
-//     db_cb_config->total_size_16B = cb_size >> 4;
-//     db_cb_config->rd_ptr_16B = cb_start_rd_addr >> 4;
-//     db_cb_config->wr_ptr_16B = cb_start_wr_addr >> 4;
+    db_cb_config->ack = 0;
+    db_cb_config->recv = 0;
+    db_cb_config->num_pages = num_pages;
+    db_cb_config->page_size_16B = page_size >> 4;
+    db_cb_config->total_size_16B = cb_size >> 4;
+    db_cb_config->rd_ptr_16B = cb_start_rd_addr >> 4;
+    db_cb_config->wr_ptr_16B = cb_start_wr_addr >> 4;
 
-//     noc_async_write(
-//         (uint32_t)(db_cb_config), consumer_noc_encoding | (uint32_t)(remote_db_cb_config), sizeof(db_cb_config_t));
-//     noc_async_write_barrier();  // barrier for now
-// }
+    noc_async_write(
+        (uint32_t)(db_cb_config), consumer_noc_encoding | (uint32_t)(remote_db_cb_config), sizeof(db_cb_config_t));
+    noc_async_write_barrier();  // barrier for now
+}
 
 FORCE_INLINE
 bool cb_producer_space_available(int32_t num_pages) {
@@ -199,7 +198,7 @@ struct PullAndRelayCircularBuffer {
 
 struct PullAndRelayBuffer {
     uint32_t page_id;
-    // Buffer buffer;
+    Buffer buffer;
 };
 
 struct PullAndRelayCfg {
@@ -207,10 +206,8 @@ struct PullAndRelayCfg {
     uint32_t num_pages,
              page_size;
 
-    union {
-        PullAndRelayCircularBuffer cb_buff_cfg;
-        PullAndRelayBuffer buff_cfg;
-    };
+    PullAndRelayCircularBuffer cb_buff_cfg;
+    PullAndRelayBuffer buff_cfg;
 
     union {
         uint32_t num_pages_to_read, num_pages_to_write;
@@ -245,7 +242,7 @@ void pull_and_relay(
                     buffers when our src is in system memory, or we are pulling in
                     data from local chip SRAM/DRAM.
                 */
-                // src_pr_cfg.buff_cfg.buffer.noc_async_read_buffer(get_write_ptr(0), src_pr_cfg.buff_cfg.page_id, num_pages_to_read);
+                src_pr_cfg.buff_cfg.buffer.noc_async_read_buffer(get_write_ptr(0), src_pr_cfg.buff_cfg.page_id, num_pages_to_read);
             }
 
             cb_push_back(0, num_pages_to_read);
