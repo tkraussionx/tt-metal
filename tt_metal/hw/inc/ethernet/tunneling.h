@@ -32,10 +32,6 @@ struct erisc_info_t {
 
 // Routing info, initialized by erisc.cc
 // TODO: turn into extern
-uint32_t relay_src_noc_encoding;
-uint32_t relay_dst_noc_encoding;
-uint32_t eth_router_noc_encoding;
-EthRouterMode my_routing_mode;
 
 erisc_info_t *erisc_info = (erisc_info_t *)(eth_l1_mem::address_map::ERISC_APP_SYNC_INFO_BASE);
 routing_info_t *routing_info = (routing_info_t *)(eth_l1_mem::address_map::ERISC_APP_ROUTING_INFO_BASE);
@@ -51,25 +47,11 @@ volatile uint32_t *RtosTable =
 void (*rtos_context_switch_ptr)();
 
 // FD configs
-bool db_buf_switch = false;
-db_cb_config_t *eth_db_cb_config = get_local_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, false);
-const db_cb_config_t *remote_src_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, false);
-const db_cb_config_t *remote_dst_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, true);
+// Sempahore(0) syncing on src e.g. remote issue q reader, remote signaller
+// Sempahore(1) syncing on dst e.g. remote command processor, remote completion writer
 
-volatile tt_l1_ptr uint32_t *eth_db_semaphore_addr =
-    reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(0));
-
-static constexpr uint32_t command_start_addr = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
 static constexpr uint32_t data_buffer_size = eth_l1_mem::address_map::ERISC_L1_TUNNEL_BUFFER_SIZE -
                                              (DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND * sizeof(uint32_t));
-
-void __attribute__((section("code_l1"))) router_init() {
-    relay_src_noc_encoding = uint32_t(NOC_XY_ENCODING(routing_info->relay_src_x, routing_info->relay_src_y));
-    relay_dst_noc_encoding = uint32_t(NOC_XY_ENCODING(routing_info->relay_dst_x, routing_info->relay_dst_y));
-
-    eth_router_noc_encoding = uint32_t(NOC_XY_ENCODING(my_x[0], my_y[0]));
-    my_routing_mode = (EthRouterMode)routing_info->routing_mode;
-}
 
 namespace internal_ {
 FORCE_INLINE
@@ -127,20 +109,20 @@ FORCE_INLINE
 void disable_erisc_app() { flag_disable[0] = 0; }
 
 FORCE_INLINE
-void send_fd_packets() {
+void send_fd_packets(uint8_t buffer_id) {
     internal_::eth_send_packet(
         0,
-        (eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE) >> 4,
-        ((eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE)) >> 4,
+        (eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + buffer_id * eth_l1_mem::address_map::ERISC_L1_TUNNEL_BUFFER_SIZE) >> 4,
+        (eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + buffer_id * eth_l1_mem::address_map::ERISC_L1_TUNNEL_BUFFER_SIZE) >> 4,
         (eth_l1_mem::address_map::ERISC_L1_TUNNEL_BUFFER_SIZE) >> 4);
-    routing_info->fd_buffer_msgs_sent = 1;
+    routing_info->fd_buffer_msgs[buffer_id].bytes_sent = 1;
     internal_::eth_send_packet(
         0,
-        ((uint32_t)(&(routing_info->fd_buffer_msgs_sent))) >> 4,
-        ((uint32_t)(&(routing_info->fd_buffer_msgs_sent))) >> 4,
+        ((uint32_t)(&(routing_info->fd_buffer_msgs[buffer_id].bytes_sent))) >> 4,
+        ((uint32_t)(&(routing_info->fd_buffer_msgs[buffer_id].bytes_sent))) >> 4,
         1);
     // There should always be a valid cmd here, since eth_db_acquire completed
-    while (routing_info->fd_buffer_msgs_sent != 0) {
+    while (routing_info->fd_buffer_msgs[buffer_id].bytes_sent != 0) {
         // routing_info->routing_enabled && erisc_info->launch_user_kernel == 0){
         // TODO: add timer to restrict this
         risc_context_switch();
@@ -148,23 +130,23 @@ void send_fd_packets() {
 }
 
 FORCE_INLINE
-void wait_for_fd_packet() {
+void wait_for_fd_packet(uint8_t buffer_id) {
     // There may not be a valid cmd here, since DST router is always polling
     // This should only happen on cluster close
-    while (routing_info->fd_buffer_msgs_sent != 1 && routing_info->routing_enabled &&
-           erisc_info->launch_user_kernel == 0) {
+    while (routing_info->fd_buffer_msgs[buffer_id].bytes_sent != 1 && routing_info->routing_enabled) {
         // TODO: add timer to restrict this
         risc_context_switch();
     }
 }
 
 FORCE_INLINE
-void ack_fd_packet() {
-    routing_info->fd_buffer_msgs_sent = 0;
+void ack_fd_packet(uint8_t buffer_id) {
+    erisc_info->unused_arg1 += 1;
+    routing_info->fd_buffer_msgs[buffer_id].bytes_sent = 0;
     internal_::eth_send_packet(
         0,
-        ((uint32_t)(&(routing_info->fd_buffer_msgs_sent))) >> 4,
-        ((uint32_t)(&(routing_info->fd_buffer_msgs_sent))) >> 4,
+        ((uint32_t)(&(routing_info->fd_buffer_msgs[buffer_id].bytes_sent))) >> 4,
+        ((uint32_t)(&(routing_info->fd_buffer_msgs[buffer_id].bytes_sent))) >> 4,
         1);
 }
 
@@ -196,7 +178,7 @@ void multicore_eth_cb_pop_front(
 
 FORCE_INLINE
 void eth_db_acquire(volatile uint32_t *semaphore, uint64_t noc_encoding) {
-    while (semaphore[0] == 0 and routing_info->routing_enabled and erisc_info->launch_user_kernel == 0) {
+    while (semaphore[0] == 0 and routing_info->routing_enabled) {
         // Without this context switch a src router on R chip of N300 may get configured for FD
         //  and block L chip of N300 from sending config for dst router on R because the path to the dst router is
         //  through the src router
@@ -244,8 +226,10 @@ FORCE_INLINE void eth_program_consumer_cb(
     noc_async_write_barrier();  // barrier for now
 }
 
+// Implement yielding if SENDER is not ISSUE, this may help with devices getting commands first
+template<uint8_t buffer_id, uint8_t other_buffer_id, bool sender_is_issue_path>
 FORCE_INLINE
-void eth_tunnel_src_forward_one_cmd() {
+void eth_tunnel_src_forward_one_cmd(db_cb_config_t *eth_db_cb_config, uint32_t relay_noc_encoding) {
     volatile tt_l1_ptr uint32_t *eth_db_semaphore_addr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(0));
 
@@ -258,14 +242,10 @@ void eth_tunnel_src_forward_one_cmd() {
         }
     }*/
     bool db_buf_switch = false;
-    db_cb_config_t *eth_db_cb_config = get_local_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, false);
     const db_cb_config_t *remote_src_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, false);
     const db_cb_config_t *remote_dst_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, true);
-
-    noc_semaphore_inc(
-        ((uint64_t)eth_router_noc_encoding << 32) | uint32_t(eth_db_semaphore_addr),
-        -1);  // Two's complement addition
-    noc_async_write_barrier();
+    constexpr uint32_t command_start_addr = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + buffer_id * eth_l1_mem::address_map::ERISC_L1_TUNNEL_BUFFER_SIZE;
+    uint32_t eth_router_noc_encoding = uint32_t(NOC_XY_ENCODING(my_x[0], my_y[0]));
 
     volatile tt_l1_ptr uint32_t *command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t *>(command_start_addr);
     volatile tt_l1_ptr CommandHeader *header = (CommandHeader *)command_ptr;
@@ -275,9 +255,37 @@ void eth_tunnel_src_forward_one_cmd() {
     bool issue_path = header->issue_path;
     command_ptr += DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER;
 
+    erisc_info->unused_arg2 = 2158889;
     // send cmd even if there is no data associated
-    internal_::send_fd_packets();
+    //internal_::send_fd_packets(buffer_id);
+    internal_::eth_send_packet(
+        0,
+        (eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + buffer_id * eth_l1_mem::address_map::ERISC_L1_TUNNEL_BUFFER_SIZE) >> 4,
+        (eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + buffer_id * eth_l1_mem::address_map::ERISC_L1_TUNNEL_BUFFER_SIZE) >> 4,
+        (eth_l1_mem::address_map::ERISC_L1_TUNNEL_BUFFER_SIZE) >> 4);
+    routing_info->fd_buffer_msgs[buffer_id].bytes_sent = 1;
+    internal_::eth_send_packet(
+        0,
+        ((uint32_t)(&(routing_info->fd_buffer_msgs[buffer_id].bytes_sent))) >> 4,
+        ((uint32_t)(&(routing_info->fd_buffer_msgs[buffer_id].bytes_sent))) >> 4,
+        1);
+    // There should always be a valid cmd here, since eth_db_acquire completed
+    while (routing_info->fd_buffer_msgs[buffer_id].bytes_sent != 0) {
+        // routing_info->routing_enabled && erisc_info->launch_user_kernel == 0){
+        // TODO: add timer to restrict this
+        if(routing_info->fd_buffer_msgs[other_buffer_id].bytes_sent == 1) {
+            return;
+        }
+        internal_::risc_context_switch();
+    }
+    ///////////////////////////////////////////////////////////
+    noc_semaphore_inc(
+        ((uint64_t)eth_router_noc_encoding << 32) | uint32_t(eth_db_semaphore_addr),
+        -1);  // Two's complement addition
+    noc_async_write_barrier();
 
+
+    erisc_info->unused_arg2 = 2158888;
     for (uint32_t i = 0; i < num_buffer_transfers; i++) {
         const uint32_t num_pages = command_ptr[2];
         const uint32_t src_buf_type = command_ptr[4];
@@ -296,22 +304,26 @@ void eth_tunnel_src_forward_one_cmd() {
 
         uint32_t num_pages_tunneled = 0;
         while (num_pages_tunneled != num_pages) {
+            erisc_info->unused_arg2 = 12340000 + num_pages_tunneled + 100* num_to_write;
             multicore_eth_cb_wait_front(eth_db_cb_config, num_to_write);
-            internal_::send_fd_packets();
-            erisc_info->unused_arg1 = 500 + i;
+            erisc_info->unused_arg2 = 2158886;
+            internal_::send_fd_packets(buffer_id);
+            erisc_info->unused_arg2 = 2158885;
             multicore_eth_cb_pop_front(
-                eth_db_cb_config, remote_src_db_cb_config, ((uint64_t)relay_src_noc_encoding << 32), num_to_write);
+                eth_db_cb_config, remote_src_db_cb_config, ((uint64_t)relay_noc_encoding << 32), num_to_write);
             num_pages_tunneled += num_to_write;
             num_to_write = min(num_pages - num_pages_tunneled, router_transfer_num_pages);
         }
         command_ptr += DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION;
     }
-    noc_semaphore_inc(((uint64_t)relay_src_noc_encoding << 32) | get_semaphore(0), 1);
+    noc_semaphore_inc(((uint64_t)relay_noc_encoding << 32) | get_semaphore(0), 1);
     noc_async_write_barrier();  // Barrier for now
 }
 
+// Implement yielding if SENDER is not ISSUE, this may help with devices getting commands first
+template <uint8_t buffer_id, uint8_t other_buffer_id, bool sender_is_issue_path>
 FORCE_INLINE
-void eth_tunnel_dst_forward_one_cmd() {
+void eth_tunnel_dst_forward_one_cmd(db_cb_config_t *eth_db_cb_config, uint32_t relay_noc_encoding) {
     /*
     // Debug: stall forever if no valid fd cmd
     // TODO: turn into watcher assert
@@ -321,20 +333,26 @@ void eth_tunnel_dst_forward_one_cmd() {
         }
     }*/
     volatile tt_l1_ptr uint32_t *eth_db_semaphore_addr =
-        reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(0));
+        reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(1));
 
     bool db_buf_switch = false;
-    db_cb_config_t *eth_db_cb_config = get_local_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, false);
     const db_cb_config_t *remote_src_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, false);
     const db_cb_config_t *remote_dst_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, true);
+    uint32_t eth_router_noc_encoding = uint32_t(NOC_XY_ENCODING(my_x[0], my_y[0]));
+    constexpr uint32_t command_start_addr = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + buffer_id * eth_l1_mem::address_map::ERISC_L1_TUNNEL_BUFFER_SIZE;
+
     volatile tt_l1_ptr uint32_t *command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t *>(command_start_addr);
     volatile tt_l1_ptr CommandHeader *header = (CommandHeader *)command_ptr;
 
     // Block until consumer can accept new command
     // `num_pages_transferred` tracks whether the remote command processor received all the data
     while (eth_db_semaphore_addr[0] == 0) {
+      //  if(eth_src_db_semaphore_addr[0] != 0 && !sender_is_issue_path) {
+       //     return;
+      //  }
         internal_::risc_context_switch();
     }  // Check that there is space in consumer to send command
+    erisc_info->unused_arg2 = 21500002;
 
     // Send the full command header
     constexpr uint32_t consumer_cmd_base_addr = L1_UNRESERVED_BASE;
@@ -348,16 +366,16 @@ void eth_tunnel_dst_forward_one_cmd() {
         eth_db_cb_config,
         remote_dst_db_cb_config,
         db_buf_switch,
-        ((uint64_t)relay_dst_noc_encoding << 32),
+        ((uint64_t)relay_noc_encoding << 32),
         consumer_cb_num_pages,
         page_size,
         consumer_cb_size);
     relay_command<command_start_addr, consumer_cmd_base_addr, consumer_data_buffer_size>(
-        db_buf_switch, ((uint64_t)relay_dst_noc_encoding << 32));
+        db_buf_switch, ((uint64_t)relay_noc_encoding << 32));
 
     update_producer_consumer_sync_semaphores(
         ((uint64_t)eth_router_noc_encoding << 32),
-        ((uint64_t)relay_dst_noc_encoding << 32),
+        ((uint64_t)relay_noc_encoding << 32),
         eth_db_semaphore_addr,
         get_semaphore(0));
 
@@ -365,13 +383,15 @@ void eth_tunnel_dst_forward_one_cmd() {
     bool is_program = header->is_program_buffer;
     bool issue_path = header->issue_path;
     command_ptr += DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER;  // jump to buffer transfer region
-    internal_::ack_fd_packet(); // ack the cmd
+    erisc_info->unused_arg2 = 21599999;
+    internal_::ack_fd_packet(buffer_id); // ack the cmd
     uint32_t router_transfer_num_pages = header->router_transfer_num_pages;
     uint32_t l1_consumer_fifo_limit_16B =
         (get_db_buf_addr<consumer_cmd_base_addr, consumer_data_buffer_size>(db_buf_switch) + consumer_cb_size) >> 4;
     uint32_t local_cb_size_16B = header->router_cb_size >> 4;
     uint32_t local_fifo_limit_16B =
         (get_db_buf_addr<command_start_addr, data_buffer_size>(db_buf_switch) >> 4) + local_cb_size_16B;
+    erisc_info->unused_arg2 = 99999990 + num_buffer_transfers;
     for (uint32_t i = 0; i < num_buffer_transfers; i++) {
         const uint32_t num_pages = command_ptr[2];
         const uint32_t src_buf_type = command_ptr[4];
@@ -389,22 +409,26 @@ void eth_tunnel_dst_forward_one_cmd() {
         uint32_t num_pages_to_tx = min(num_pages, router_transfer_num_pages);
         uint32_t num_pages_transferred = 0;
 
+        erisc_info->unused_arg2 = 2159997;
         while (num_pages_transferred != num_pages) {
             // there is data to tx
-            while (routing_info->fd_buffer_msgs_sent != 1) {
+            //erisc_info->unused_arg2 = 43210000 + num_pages_transferred + 100* num_pages_to_tx;
+            erisc_info->unused_arg2 = relay_noc_encoding;
+            while (routing_info->fd_buffer_msgs[buffer_id].bytes_sent != 1) {
                 // maybe contesxt switch
                 internal_::risc_context_switch();
             }
+            erisc_info->unused_arg2 = 2159995;
             uint32_t src_addr = eth_db_cb_config->rd_ptr_16B << 4;
-            uint64_t dst_noc_addr = ((uint64_t)relay_dst_noc_encoding << 32) | (eth_db_cb_config->wr_ptr_16B << 4);
+            uint64_t dst_noc_addr = ((uint64_t)relay_noc_encoding << 32) | (eth_db_cb_config->wr_ptr_16B << 4);
             while (!cb_consumer_space_available(eth_db_cb_config, num_pages_to_tx)) // noc stall so don't need to switch to base FW
                 ;
             noc_async_write(src_addr, dst_noc_addr, page_size * num_pages_to_tx);
-            internal_::ack_fd_packet();
+            internal_::ack_fd_packet(buffer_id);
             multicore_cb_push_back(
                 eth_db_cb_config,
                 remote_dst_db_cb_config,
-                ((uint64_t)relay_dst_noc_encoding << 32),
+                ((uint64_t)relay_noc_encoding << 32),
                 l1_consumer_fifo_limit_16B,
                 num_pages_to_tx);
             eth_db_cb_config->rd_ptr_16B += eth_db_cb_config->page_size_16B * num_pages_to_tx;
@@ -420,18 +444,9 @@ void eth_tunnel_dst_forward_one_cmd() {
 
 FORCE_INLINE
 void run_routing() {
-    router_init();
+    //router_init();
     // TODO: maybe split into two FWs? or this may be better to sometimes allow each eth core to do both send and
     // receive of fd packets
-    if (my_routing_mode == EthRouterMode::FD_SRC) {
-        internal_::risc_context_switch();
-    } else if (my_routing_mode == EthRouterMode::FD_DST) {
-        internal_::risc_context_switch();
-    } else if (my_routing_mode == EthRouterMode::SD) {
-        // slow dispatch mode
-        internal_::risc_context_switch();
-    } else {
       // TODO: Allan currently not writing mode properly
         internal_::risc_context_switch();
-    }
 }

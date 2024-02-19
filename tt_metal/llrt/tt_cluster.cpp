@@ -859,10 +859,11 @@ tt_cxy_pair Cluster::get_eth_core_for_dispatch_core(
       // Check for connected chip id since one chip can be bi directional tunneling to multiple chips
         const auto connected_tunnel_chip_id =
             std::get<0>(this->get_connected_ethernet_core(std::make_tuple(local_chip_id, eth_core)));
-        if (router_mode == EthRouterMode::BI_DIR_TUNNELING and connected_tunnel_chip_id == connected_chip_id) {
+        if (router_mode == mode and connected_tunnel_chip_id == connected_chip_id) {
             return tt_cxy_pair(local_chip_id, eth_core);
         }
     }
+    std::cout << " logical dispatch core " << logical_dispatch_core.str() << " mode " << (uint32_t)mode << " " << connected_chip_id << std::endl;
     TT_ASSERT(false, "Cluster does not contain requested eth routing core");
     return {};
 }
@@ -901,9 +902,10 @@ void Cluster::configure_eth_core_for_dispatch_core(
     write_core((void *)&routing_info, sizeof(routing_info_t), eth_phys_core, routing_info_addr, false);
 }*/
 
-// TODO: Can chnage to write one bit
+// TODO: ALLAN Can change to write one bit
 void Cluster::set_internal_routing_info_for_ethernet_cores(bool enable_internal_routing) const {
     const uint32_t routing_info_addr = eth_l1_mem::address_map::ERISC_APP_ROUTING_INFO_BASE;
+    std::cout << " callling set internal routing " << enable_internal_routing << std::endl;
     // TODO: initialize devices if user does not
     // Must initialize remote chips first, then mmio chips since once mmio chips are doing fd routing
     // we do not always context switch to base FW
@@ -915,7 +917,16 @@ void Cluster::set_internal_routing_info_for_ethernet_cores(bool enable_internal_
         .relay_src_y = 0xffffffff,
         .relay_dst_x = 0xffffffff,
         .relay_dst_y = 0xffffffff,
-        .fd_buffer_msgs_sent = 0};
+      };
+    const routing_info_t routing_info_enabled = {
+        .routing_enabled = 1,
+        .routing_mode = EthRouterMode::SD,
+        .connected_chip_id = 0,
+        .relay_src_x = 0xffffffff,
+        .relay_src_y = 0xffffffff,
+        .relay_dst_x = 0xffffffff,
+        .relay_dst_y = 0xffffffff,
+      };
     for (const auto &[assoc_mmio_device, devices] : this->devices_grouped_by_assoc_mmio_device_) {
         for (const auto &chip_id : devices) {
             for (const auto &[eth_core, routing_info] : this->device_eth_routing_info_.at(chip_id)) {
@@ -930,10 +941,9 @@ void Cluster::set_internal_routing_info_for_ethernet_cores(bool enable_internal_
                         false);
                 } else if (chip_id != assoc_mmio_device and enable_internal_routing) {
                     // Enable internal ethernet routing for non-mmio devices
-                    std::vector<uint32_t> enable_vec = {1};
                     write_core(
-                        enable_vec.data(),
-                        enable_vec.size() * sizeof(uint32_t),
+                        (void *)&routing_info_enabled,
+                        sizeof(routing_info_t),
                         eth_phys_core,
                         routing_info_addr,
                         false);
@@ -956,10 +966,9 @@ void Cluster::set_internal_routing_info_for_ethernet_cores(bool enable_internal_
                         false);
                 } else if (chip_id == assoc_mmio_device and enable_internal_routing) {
                     // Enable internal ethernet routing for mmio devices
-                    std::vector<uint32_t> enable_vec = {1};
                     write_core(
-                        enable_vec.data(),
-                        enable_vec.size() * sizeof(uint32_t),
+                        (void *)&routing_info_enabled,
+                        sizeof(routing_info_t),
                         eth_phys_core,
                         routing_info_addr,
                         false);

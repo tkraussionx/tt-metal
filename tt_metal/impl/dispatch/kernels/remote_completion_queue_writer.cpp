@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_metal/impl/dispatch/kernels/command_queue_consumer.hpp"
+#include "debug/dprint.h"
 
 // The read interface for the issue region is set up on the device, the write interface belongs to host
 // Opposite for completion region where device sets up the write interface and host owns read interface
@@ -28,12 +29,14 @@ void kernel_main() {
     uint32_t producer_noc_encoding = uint32_t(NOC_XY_ENCODING(PRODUCER_NOC_X, PRODUCER_NOC_Y));
     uint32_t consumer_noc_encoding = uint32_t(NOC_XY_ENCODING(my_x[0], my_y[0]));
 
+    DPRINT<<" DPRINT, remote completion q writer my producer x and y " << PRODUCER_NOC_X << " " << PRODUCER_NOC_Y << ENDL();
     setup_completion_queue_write_interface(completion_queue_start_addr, completion_queue_size);
 
     while (true) {
         // Wait for eth producer to supply a command
+        DPRINT<< " DPRINT remote completion q writer wait for cmd " << HEX() << (uint32_t)db_semaphore_addr << ENDL();
         db_acquire(db_semaphore_addr,  ((uint64_t)consumer_noc_encoding << 32));
-
+        DPRINT<< " DPRINT remote completion q writer got cmd " << ENDL();
         // For each instruction, we need to jump to the relevant part of the device command
         uint32_t command_start_addr = get_command_slot_addr<cmd_base_address, consumer_data_buffer_size>(db_buf_switch);
 
@@ -60,7 +63,7 @@ void kernel_main() {
             uint32_t buffer_transfer_start_addr = command_start_addr + (DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER * sizeof(uint32_t));
             volatile tt_l1_ptr uint32_t *buffer_transfer_command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(buffer_transfer_start_addr);
             db_cb_config_t* db_cb_config = get_local_db_cb_config(CQ_CONSUMER_CB_BASE, true);
-            const db_cb_config_t* eth_db_cb_config = get_remote_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, false);
+            const db_cb_config_t* eth_db_cb_config = get_remote_db_cb_config(eth_l1_mem::address_map::COMPLETION_CQ_CB_BASE, false);
             uint32_t num_buffer_transfers = header->num_buffer_transfers;
             bool is_sharded = (bool) (header->buffer_type == (uint32_t)DeviceCommand::BufferType::SHARDED);
             uint32_t sharded_buffer_num_cores = header->sharded_buffer_num_cores;
@@ -84,7 +87,8 @@ void kernel_main() {
         completion_queue_push_back<completion_queue_start_addr, host_completion_queue_write_ptr_addr>(completion_data_size);
 
         // notify producer that it has completed a command
-        noc_semaphore_inc((uint64_t(producer_noc_encoding) << 32) | eth_get_semaphore(0), 1);
+        DPRINT<<" DPRINT, remote completion q writer eth get semaphore 1 " << HEX() << (uint32_t)eth_get_semaphore(1) << ENDL();
+        noc_semaphore_inc((uint64_t(producer_noc_encoding) << 32) | eth_get_semaphore(1), 1);
         noc_async_write_barrier(); // Barrier for now
     }
 }

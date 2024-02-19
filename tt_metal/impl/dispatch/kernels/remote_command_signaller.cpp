@@ -37,7 +37,9 @@ void kernel_main() {
         volatile tt_l1_ptr CommandHeader* header = (CommandHeader*)command_ptr;
         header->issue_path = 0; // signal to routers that they are on the servicing commands returning to MMIO device
 
+        DPRINT<< " DPRINT remote command signaller wait space in eth router " << HEX() << (uint32_t)db_rx_semaphore_addr << ENDL();
         wait_consumer_space_available(tx_semaphore_addr);   // Check that there is space in the eth router
+        DPRINT<< " DPRINT remote command signaller done wait space in router " << ENDL();
 
         uint32_t buffer_transfer_start_addr = command_start_addr + (DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER * sizeof(uint32_t));
         volatile tt_l1_ptr uint32_t * buffer_transfer_command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(buffer_transfer_start_addr);
@@ -61,7 +63,7 @@ void kernel_main() {
             tt_l1_ptr db_cb_config_t *rx_db_cb_config = get_local_db_cb_config(CQ_CONSUMER_CB_BASE, true);
             tt_l1_ptr db_cb_config_t *tx_db_cb_config = get_local_db_cb_config(CQ_CONSUMER_CB_BASE, false);
             const tt_l1_ptr db_cb_config_t *dispatcher_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, false);
-            const tt_l1_ptr db_cb_config_t *eth_db_cb_config = get_remote_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, false);
+            const tt_l1_ptr db_cb_config_t *eth_db_cb_config = get_remote_db_cb_config(eth_l1_mem::address_map::COMPLETION_CQ_CB_BASE, false);
 
             uint32_t consumer_cb_num_pages = header->router_cb_num_pages;
             uint32_t page_size = header->page_size;

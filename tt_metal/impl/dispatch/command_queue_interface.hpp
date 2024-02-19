@@ -14,10 +14,14 @@
 using namespace tt::tt_metal;
 
 // Starting L1 address of commands
-template <CoreType core_type>
 inline uint32_t get_command_start_l1_address() {
-    static_assert(core_type == CoreType::WORKER or core_type == CoreType::ETH);
-    return core_type == CoreType::ETH ? eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE : L1_UNRESERVED_BASE;
+    return L1_UNRESERVED_BASE;
+}
+
+template <CQTunnelPath cq_tunnel_path>
+inline uint32_t get_eth_command_start_l1_address() {
+    static_assert(cq_tunnel_path == CQTunnelPath::ISSUE or cq_tunnel_path == CQTunnelPath::COMPLETION);
+    return eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + uint8_t(cq_tunnel_path) * eth_l1_mem::address_map::ERISC_L1_TUNNEL_BUFFER_SIZE;
 }
 
 // Where issue queue interface core pulls in data (follows command)

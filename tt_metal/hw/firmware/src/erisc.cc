@@ -55,7 +55,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
         internal_::risc_context_switch();
     }
 
-    router_init();
+   // router_init();
 
     while (routing_info->routing_enabled) {
         // FD: assume that no more host -> remote writes are pending
@@ -64,30 +64,6 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             kernel_profiler::mark_time(CC_MAIN_START);
             kernel_init();
             kernel_profiler::mark_time(CC_MAIN_END);
-        }
-        if (my_routing_mode == EthRouterMode::FD_SRC) {
-            volatile tt_l1_ptr uint32_t *eth_db_semaphore_addr =
-                reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(0));
-            eth_db_acquire(eth_db_semaphore_addr, ((uint64_t)eth_router_noc_encoding << 32));
-            if (erisc_info->launch_user_kernel == 1) {
-                continue;
-            }
-            if (routing_info->routing_enabled == 0) {
-                break;
-            }
-            eth_tunnel_src_forward_one_cmd();
-        } else if (routing_info->routing_mode == EthRouterMode::FD_DST) {
-            // Poll until FD_SRC router sends FD packet
-            // Each FD packet comprises of command header followed by command data
-            internal_::wait_for_fd_packet();
-            if (erisc_info->launch_user_kernel == 1) {
-                continue;
-            }
-            if (routing_info->routing_enabled == 0) {
-                break;
-            }
-
-            eth_tunnel_dst_forward_one_cmd();
         } else {
             internal_::risc_context_switch();
         }

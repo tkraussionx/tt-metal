@@ -320,13 +320,14 @@ const DeviceCommand EnqueueWriteBufferCommand::assemble_device_command(uint32_t 
         command.set_router_transfer_num_pages(router_cb_num_pages);
 
         uint32_t router_cb_size = router_cb_num_pages * padded_page_size;
+        std::cout << " enqueue write program route through eth, router data buffer size " << std::dec << router_data_buffer_size << " router cb num pages " << router_cb_num_pages << " tensix consumer dat abuffer size " << tensix_consumer_data_buffer_size << std::endl;
         TT_ASSERT(padded_page_size <= router_cb_size, "Page is too large to fit in router buffer");
 
         command.set_router_cb_size(router_cb_size);
         command.set_router_cb_num_pages(router_cb_num_pages);
 
         uint32_t router_consumer_multiple = tensix_consumer_data_buffer_size / router_data_buffer_size;
-        consumer_cb_num_pages = router_cb_num_pages * router_consumer_multiple;
+        consumer_cb_num_pages = router_cb_num_pages * 12;
     } else {
         consumer_cb_num_pages = tensix_consumer_data_buffer_size / padded_page_size;
         uint32_t producer_consumer_tx_num_pages = 1;

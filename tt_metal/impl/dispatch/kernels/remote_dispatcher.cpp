@@ -44,6 +44,9 @@ void kernel_main() {
         const tt_l1_ptr db_cb_config_t *remote_producer_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, false);
 
         uint32_t router_transfer_num_pages = header->router_transfer_num_pages;
+
+        DPRINT << " DPRINT : dispatcher is program " << (uint32_t)is_program << ENDL();
+        DPRINT << " DPRINT : dispatcher is program " << (uint32_t)is_program << ENDL();
         if (is_program) {
             uint32_t program_transfer_start_addr = buffer_transfer_start_addr + ((DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION * DeviceCommand::NUM_POSSIBLE_BUFFER_TRANSFERS) * sizeof(uint32_t));
             uint32_t num_workers = header->num_workers;  // If num_workers > 0, it means we are launching a program

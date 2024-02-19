@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_metal/impl/dispatch/kernels/command_queue_producer.hpp"
+#include "debug/dprint.h"
 
 // Receives fast dispatch packets from ethernet router and forwards them to dispatcher kernel
 void kernel_main() {
@@ -31,12 +32,14 @@ void kernel_main() {
 
     db_cb_config_t *rx_db_cb_config = get_local_db_cb_config(CQ_CONSUMER_CB_BASE, true);
     db_cb_config_t *tx_db_cb_config = get_local_db_cb_config(CQ_CONSUMER_CB_BASE, false);
-    const db_cb_config_t *eth_db_cb_config = get_remote_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, false);
+    const db_cb_config_t *eth_db_cb_config = get_remote_db_cb_config(eth_l1_mem::address_map::ISSUE_CQ_CB_BASE, false);
     const db_cb_config_t *dispatcher_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, true);
 
     while (true) {
         // Wait for ethernet router to supply a command
+        DPRINT << " DPRINT : remote command processor acquire " << ENDL();
         db_acquire(rx_semaphore_addr, ((uint64_t)processor_noc_encoding << 32));
+        DPRINT << " DPRINT : remote command processor done acquire " << ENDL();
 
         // For each instruction, we need to jump to the relevant part of the device command
         uint32_t command_start_addr = get_command_slot_addr<cmd_base_addr, data_buffer_size>(rx_buf_switch);
@@ -44,6 +47,7 @@ void kernel_main() {
         volatile tt_l1_ptr CommandHeader* header = (CommandHeader*)command_ptr;
 
         wait_consumer_space_available(db_tx_semaphore_addr); // Check that there is space in the dispatcher
+        DPRINT << " DPRINT : remote command processor connsumer space avilable " << ENDL();
 
         uint32_t consumer_cb_num_pages = header->consumer_cb_num_pages;
         uint32_t page_size = header->page_size;
@@ -89,7 +93,7 @@ void kernel_main() {
             (get_db_buf_addr<cmd_base_addr, data_buffer_size>(false) + header->producer_cb_size) >> 4);
 
         // Notify producer ethernet router that it has completed transferring a command
-        noc_semaphore_inc(((uint64_t)producer_noc_encoding << 32) | eth_get_semaphore(0), 1);
+        noc_semaphore_inc(((uint64_t)producer_noc_encoding << 32) | eth_get_semaphore(1), 1);
         noc_async_write_barrier(); // Barrier for now
     }
 }

@@ -93,6 +93,7 @@ void ComputeKernel::process_defines(const std::function<void (const string& defi
 }
 
 void EthernetKernel::process_defines(const std::function<void (const string& define, const string &value)>callback) const {
+    Kernel::process_defines(callback);
     callback("NOC_INDEX", std::to_string(this->config_.noc));
 }
 
