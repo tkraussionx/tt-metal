@@ -3,33 +3,41 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import ttnn
+import tt_lib
 from loguru import logger
 
 
 class MistralMLP:
-    def __init__(self, input_shape, parameters, grid=(8, 8)):
+    def __init__(self, input_shape, parameters, grid=ttnn.CoreGrid(8, 8)):
         """Set up the configs ahead of time as this takes 30-50us"""
         self.w1 = parameters.w1.weight
         self.w2 = parameters.w2.weight
         self.w3 = parameters.w3.weight
 
-        rows = input_shape.padded()[-2]
+        rows = input_shape.with_tile_padding()[-2]
         self.ff_silu = matmul_1d_config(
             m=rows,
-            k=self.w1.shape.padded()[-2],
-            n=self.w1.shape.padded()[-1],
+            k=self.w1.shape.with_tile_padding()[-2],
+            n=self.w1.shape.with_tile_padding()[-1],
             grid=grid,
             act=ttnn.ttl.tensor.FusibleActivation.SILU,
         )
         self.ff_none = matmul_1d_config(
-            m=rows, k=self.w3.shape.padded()[-2], n=self.w3.shape.padded()[-1], grid=grid, act=None
+            m=rows,
+            k=self.w3.shape.with_tile_padding()[-2],
+            n=self.w3.shape.with_tile_padding()[-1],
+            grid=grid,
+            act=None,
         )
         self.ff2 = matmul_1d_config(
-            m=rows, k=self.w2.shape.padded()[-2], n=self.w2.shape.padded()[-1], grid=grid, act=None
+            m=rows,
+            k=self.w2.shape.with_tile_padding()[-2],
+            n=self.w2.shape.with_tile_padding()[-1],
+            grid=grid,
+            act=None,
         )
-        self.shard = ttnn.create_sharded_memory_config(
-            grid, (rows, self.w1.shape.padded()[-1] // (grid[0] * grid[1])), ttnn.ShardStrategy.WIDTH
-        )
+        shard_shape = ttnn.ShardShape(rows, self.w1.shape.with_tile_padding()[-1] // grid.num_cores)
+        self.shard = ttnn.create_sharded_memory_config(grid, shard_shape, ttnn.ShardStrategy.WIDTH)
         self.interleave = ttnn.ttl.tensor.MemoryConfig(
             ttnn.ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttnn.ttl.tensor.BufferType.L1
         )
@@ -49,14 +57,13 @@ def feed_forward(config, x, parameters):
     return mlp(x)
 
 
-def matmul_1d_config(m, k, n, grid=(8, 8), act=None):
-    grid_size = grid[0] * grid[1]
+def matmul_1d_config(m, k, n, grid=ttnn.CoreGrid(8, 8), act=None):
     tile_width = 32
     tile_height = 32
 
     per_core_m = m // tile_height
-    per_core_k = k // tile_width // grid_size
-    per_core_n = n // tile_width // grid_size
+    per_core_k = k // tile_width // grid.num_cores
+    per_core_n = n // tile_width // grid.num_cores
 
     # find the largest value between 1 and 8 that is a factor of per_core_n
     # e.g. if per_core_n is 14, then out_subblock_w = 7
@@ -67,7 +74,7 @@ def matmul_1d_config(m, k, n, grid=(8, 8), act=None):
     out_subblock_h = max([i for i in range(1, 9) if per_core_m % i == 0 and i * out_subblock_w <= 8])
 
     return ttnn.ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-        compute_with_storage_grid_size=grid,
+        compute_with_storage_grid_size=tt_lib.tensor.CoreCoord(grid.x, grid.y),
         in0_block_w=per_core_k,
         out_subblock_h=out_subblock_h,
         out_subblock_w=out_subblock_w,

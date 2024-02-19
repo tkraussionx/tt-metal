@@ -6,13 +6,14 @@ from loguru import logger
 from time import time
 from operator import mul
 from functools import reduce
+import json
+from pathlib import Path
 
+import pytest
 import torch
 import ttnn
 from ttnn.model_preprocessing import preprocess_model_parameters
 
-import json
-from pathlib import Path
 from models.experimental.functional_mistral.tt.mistral_configuration import TtModelArgs
 from models.experimental.functional_mistral.reference.model import Transformer
 from models.experimental.functional_mistral.reference.model import FeedForward
@@ -21,7 +22,8 @@ from models.experimental.functional_mistral.tt.ttnn_functional_feed_forward impo
 from tests.ttnn.utils_for_testing import assert_with_pcc
 
 
-def test_mistral_feed_forward_inference(model_location_generator, device, reset_seeds):
+@pytest.mark.parametrize("dtype", ["BFLOAT16", "BFLOAT8_B"])
+def test_mistral_feed_forward_inference(model_location_generator, device, reset_seeds, dtype):
     model_path = model_location_generator("mistral-7B-v0.1", model_subdir="Mistral")
     transformer = Transformer.from_folder(Path(model_path), n_layers=1, max_batch_size=1, is_whole_model=False)
 
@@ -40,14 +42,27 @@ def test_mistral_feed_forward_inference(model_location_generator, device, reset_
     reference_model = FeedForward(args=model_args)
     reference_model.load_state_dict(state_dict)
 
-    parameters = preprocess_model_parameters(
-        initialize_model=lambda: ref_model,
-        device=device,
+    # unsqueeze in pytorch to avoid multiple roundtrips to ttnn and back
+    unsqueeze_to_4D = lambda v: v[[None for _ in range(4 - v.dim())]]
+    ttnn_dtype = {"BFLOAT16": ttnn.bfloat16, "BFLOAT8_B": ttnn.bfloat8_b}[dtype]
+    parameters = {
+        k: ttnn.from_torch(
+            unsqueeze_to_4D(v.transpose(1, 0)),
+            dtype=ttnn_dtype,
+            device=device,
+            layout=ttnn.TILE_LAYOUT,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        )
+        for k, v in state_dict.items()
+    }
+    parameters = ttnn.model_preprocessing.make_parameter_dict(
+        {k.split(".weight")[0]: {"weight": v} for k, v in parameters.items()}
     )
+    print(parameters)
 
     # Not sure why preprocess_model_parameters doesn't do this
-    for v in parameters.values():
-        v.weight = ttnn.unsqueeze_to_4D(v.weight)
+    # for v in parameters.values():
+    #     v.weight = ttnn.unsqueeze_to_4D(v.weight)
 
     input = torch.rand(1, 1, 11, dim)
     reference_output = reference_model(input)
@@ -68,7 +83,7 @@ def test_mistral_feed_forward_inference(model_location_generator, device, reset_
         )
 
     logger.info("Kernel compilation pass...")
-    mlp = MistralMLP(input_shape=ttnn_input.shape, parameters=parameters, grid=(8, 8))
+    mlp = MistralMLP(input_shape=ttnn_input.shape, parameters=parameters, grid=ttnn.CoreGrid(8, 8))
     output = mlp(ttnn_input)
 
     logger.info("Performance timing pass (MistralMLP)...")
