@@ -23,6 +23,9 @@
 #include "hostdevcommon/common_values.hpp"
 #include "risc_attribs.h"
 #include "third_party/umd/device/tt_silicon_driver_common.hpp"
+#ifndef COMPILE_FOR_ERISC
+#include "debug/dprint.h"
+#endif
 
 extern uint8_t noc_index;
 
@@ -146,6 +149,12 @@ void cb_push_back(const int32_t operand, const int32_t num_pages) {
     // producer always writes into contiguous memory, it cannot wrap
     if (cb_interface[operand].fifo_wr_ptr >= cb_interface[operand].fifo_limit) {
         // TODO: change this to fifo_wr_ptr
+        #ifndef COMPILE_FOR_ERISC
+        if (cb_interface[operand].fifo_wr_ptr > cb_interface[operand].fifo_limit) {
+            DPRINT << "BAD STATE" << ENDL();
+            while(true);
+        }
+        #endif
         cb_interface[operand].fifo_wr_ptr -= cb_interface[operand].fifo_size;
     }
 }

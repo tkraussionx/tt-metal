@@ -358,6 +358,8 @@ void Device::compile_command_queue_programs() {
                     consumer_cmd_base_addr,
                     consumer_data_buff_size};
 
+                std::cout << "DATA SECTION ADDR TENSIX: " << data_section_addr_tensix << std::endl;
+
                 uint32_t host_completion_queue_write_ptr_addr = HOST_CQ_COMPLETION_WRITE_PTR + get_absolute_cq_offset(channel, cq_id, cq_size);
                 uint32_t completion_queue_start_addr = CQ_START + issue_queue_size + get_absolute_cq_offset(channel, cq_id, cq_size);
                 uint32_t completion_queue_size = (cq_size - CQ_START) - issue_queue_size;

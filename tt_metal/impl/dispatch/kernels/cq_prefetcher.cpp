@@ -17,6 +17,8 @@ void kernel_main() {
     constexpr uint32_t consumer_data_buffer_size = get_compile_time_arg_val(7);
     constexpr uint32_t src_in_host_memory = true;//get_compile_time_arg_val(8);
 
+    DPRINT << "DATA SECTION ADDR: " << data_section_addr << ENDL();
+
     setup_issue_queue_read_interface(issue_queue_start_addr, issue_queue_size);
 
     // Initialize the producer/consumer DB semaphore
@@ -121,6 +123,7 @@ void kernel_main() {
             update_producer_consumer_sync_semaphores(my_noc_encoding, remote_noc_encoding, db_semaphore_addr, get_semaphore(0));
             pull_and_relay<PullAndRelayType::BUFFER, PullAndRelayType::CIRCULAR_BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages);
         } else {
+            DPRINT << "ABOUT TO RELAY" << ENDL();
             volatile tt_l1_ptr uint32_t* buffer_transfer_ptr = command_ptr + DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER;
             uint32_t src_bank_base_address = buffer_transfer_ptr[0];
             uint32_t dst_bank_base_address = buffer_transfer_ptr[1];
@@ -131,10 +134,11 @@ void kernel_main() {
             uint32_t dst_page_index = buffer_transfer_ptr[7];
             src_pr_cfg.buff_cfg.buffer.init((BufferType)src_buf_type, src_bank_base_address, page_size);
             src_pr_cfg.buff_cfg.page_id = src_page_index;
+            src_pr_cfg.num_pages_to_read = producer_cb_num_pages / 2;
             dst_pr_cfg.buff_cfg.buffer.init((BufferType)dst_buf_type, dst_bank_base_address, page_size);
             dst_pr_cfg.buff_cfg.page_id = dst_page_index;
+            dst_pr_cfg.num_pages_to_write = producer_consumer_transfer_num_pages;
             pull_and_relay<PullAndRelayType::BUFFER, PullAndRelayType::BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages);
-            // DPRINT << "UPDATE SEMS" << ENDL();
             update_producer_consumer_sync_semaphores(my_noc_encoding, remote_noc_encoding, db_semaphore_addr, get_semaphore(0));
         }
 

@@ -20,8 +20,11 @@ inline uint32_t get_command_start_l1_address(bool use_eth_l1) {
 
 // Where issue queue interface core pulls in data (follows command)
 inline uint32_t get_data_section_l1_address(bool use_eth_l1) {
-    uint32_t l1_base = use_eth_l1 ? eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE : L1_UNRESERVED_BASE;
-    return l1_base + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
+    if (use_eth_l1) {
+        return eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
+    } else {
+        return L1_UNRESERVED_BASE + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
+    }
 }
 
 inline uint32_t get_cq_data_buffer_size(bool use_eth_l1) {
