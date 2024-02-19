@@ -123,10 +123,15 @@ def test_ethernet_send_data_microbenchmark_concurrent(num_messages_to_send, buff
     "eth_buffer_size_bytes",
     [1024, 2048, 4096, 8192, 16 * 1024, 32 * 1024, 50 * 1024],
 )
-@pytest.mark.parametrize("num_transaction_buffers", [1, 2, 3, 4, 8])
+@pytest.mark.parametrize("num_transaction_buffers", [1, 2, 3, 4, 6, 8])
 @pytest.mark.parametrize("input_buffer_page_size", [1024, 2048, 4096, 8192])
+@pytest.mark.parametrize("precomputed_address_buffer_size", [0, 16, 32])
 def test_ethernet_send_data_microbenchmark_concurrent_with_dram_read(
-    input_buffer_size_bytes, eth_buffer_size_bytes, num_transaction_buffers, input_buffer_page_size
+    input_buffer_size_bytes,
+    eth_buffer_size_bytes,
+    num_transaction_buffers,
+    input_buffer_page_size,
+    precomputed_address_buffer_size,
 ):
     if eth_buffer_size_bytes < input_buffer_page_size:
         pytest.skip("eth_buffer_size_bytes < input_buffer_page_size")
@@ -160,6 +165,7 @@ def test_ethernet_send_data_microbenchmark_concurrent_with_dram_read(
             {input_buffer_size_bytes} \
             {1} \
             {1} \
+            {precomputed_address_buffer_size} \
             "
         # > /dev/null 2>&1"
     )
@@ -171,7 +177,8 @@ def test_ethernet_send_data_microbenchmark_concurrent_with_dram_read(
     test_string_name += f"{input_buffer_page_size}_"
     test_string_name += f"{num_transaction_buffers}_"
     test_string_name += f"{eth_buffer_size_bytes}_"
-    test_string_name += f"{input_buffer_size_bytes}"
+    test_string_name += f"{input_buffer_size_bytes}_"
+    test_string_name += f"{precomputed_address_buffer_size}"
     return report_results(test_string_name, input_buffer_size_bytes)
 
 

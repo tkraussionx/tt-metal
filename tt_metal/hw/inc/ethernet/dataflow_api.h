@@ -389,7 +389,7 @@ void eth_wait_for_bytes_on_channel(uint32_t num_bytes, uint32_t channel) {
     uint32_t count = 0;
     uint32_t poll_count = 1000000;
     uint32_t num_bytes_sent = erisc_info->per_channel_user_bytes_send[channel].bytes_sent;
-    while (num_bytes_sent != num_bytes) {
+    while (num_bytes_sent == 0) {
         uint32_t received_this_iter = erisc_info->per_channel_user_bytes_send[channel].bytes_sent;
         if (received_this_iter != num_bytes_sent) {
             // We are currently in the process of receiving data on this channel, so we just just wait a

@@ -7,6 +7,14 @@
 
 #include "dataflow_api.h"
 
+#define ENABLE_L1_BUFFER_OVERLAP 0
+// #define ENABLE_L1_BUFFER_OVERLAP 1
+// #define EMULATE_DRAM_READ_CYCLES 1
+#define EMULATE_DRAM_READ_CYCLES 0
+#define ENABLE_PRECOMPUTING_SOURCE_ADDRESSES 0
+// #define DONT_STRIDE_IN_ETH_BUFFER 1
+#define DONT_STRIDE_IN_ETH_BUFFER 0
+
 void eth_setup_handshake(std::uint32_t handshake_register_address, bool is_sender) {
     if (is_sender) {
         eth_send_bytes(handshake_register_address, handshake_register_address, 16);
@@ -27,21 +35,25 @@ template <bool src_is_dram>
 void read_chunk(
     uint32_t eth_l1_buffer_address_base,
     uint32_t num_pages,
+    uint32_t num_pages_per_l1_buffer,
     uint32_t page_size,
+    uint32_t &page_index,
     const InterleavedAddrGen<src_is_dram> &source_address_generator
 )
 {
     uint32_t local_eth_l1_curr_src_addr = eth_l1_buffer_address_base;
-    for (uint32_t curr_idx = 0; curr_idx < num_pages; ++curr_idx) {
+    uint32_t end_page_index = std::min(page_index + num_pages_per_l1_buffer, num_pages);
+    for (; page_index < end_page_index; ++page_index) {
         // read source address
-        uint64_t src_noc_addr = get_noc_addr(curr_idx, source_address_generator);
+        uint64_t src_noc_addr = get_noc_addr(page_index, source_address_generator);
         noc_async_read(src_noc_addr, local_eth_l1_curr_src_addr, page_size);
         // read dest addr
+        #if DONT_STRIDE_IN_ETH_BUFFER == 0
         local_eth_l1_curr_src_addr += page_size;
+        #endif
     }
 }
 
-#define EMULATE_DRAM_READ_CYCLES 1
 #if EMULATE_DRAM_READ_CYCLES == 1
 static uint32_t timestamp_H = 0;
 static uint32_t timestamp_L = 0;
@@ -159,7 +171,7 @@ FORCE_INLINE  bool eth_send_data_sequence(
     }
 
     return did_something;
-}\
+}
 
 template <uint8_t MAX_NUM_CHANNELS>
 FORCE_INLINE  bool eth_check_receiver_ack_sequence(
@@ -195,7 +207,10 @@ FORCE_INLINE  bool noc_read_data_sequence(
     const uint8_t noc_index,
     const InterleavedAddrGen<src_is_dram> &source_address_generator,
     const uint32_t page_size,
-    const uint32_t num_pages) {
+    const uint32_t num_pages_per_l1_buffer,
+    const uint32_t num_pages,
+    uint32_t &page_index
+    ) {
     bool did_something = false;
 
     bool noc_read_is_in_progress =
@@ -214,7 +229,8 @@ FORCE_INLINE  bool noc_read_data_sequence(
         }
     }
 
-    if (!noc_read_is_in_progress) {
+    bool more_data_to_read = page_index < num_pages;
+    if (!noc_read_is_in_progress && more_data_to_read) {
         // We can only If a noc read is in progress, we can't issue another noc read
 
         bool next_buffer_available = !buffer_pool_full<MAX_NUM_CHANNELS>(
@@ -230,10 +246,12 @@ FORCE_INLINE  bool noc_read_data_sequence(
 #else
 // non blocking - issues noc_async_read
 // issue_read_chunk(noc_reader_buffer_wrptr, ...);
-        read_chunk(
+        read_chunk<src_is_dram>(
             transaction_channel_sender_buffer_addresses[noc_reader_buffer_wrptr], // eth_l1_buffer_address_base
             num_pages,
+            num_pages_per_l1_buffer,
             page_size,
+            page_index,
             source_address_generator
         );
 #endif
@@ -246,7 +264,6 @@ FORCE_INLINE  bool noc_read_data_sequence(
     return did_something;
 }
 
-#define ENABLE_L1_BUFFER_OVERLAP 1
 
 template <int8_t MAX_CONCURRENT_TRANSACTIONS>
 void initialize_transaction_buffer_addresses(
@@ -289,6 +306,9 @@ void kernel_main() {
     std::uint32_t src_addr = get_arg_val<uint32_t>(2);
     std::uint32_t page_size = get_arg_val<uint32_t>(3);
     std::uint32_t num_pages = get_arg_val<uint32_t>(4);
+    std::uint64_t *precomputed_source_addresses_buffer_address = reinterpret_cast<uint64_t*>(get_arg_val<uint32_t>(5));
+    std::uint32_t precomputed_source_addresses_buffer_size = get_arg_val<uint32_t>(6);
+
 
     uint8_t noc_reader_buffer_ackptr = 0;
     uint8_t noc_reader_buffer_wrptr = 0;
@@ -322,10 +342,12 @@ void kernel_main() {
     kernel_profiler::mark_time(11);
     constexpr uint32_t SWITCH_INTERVAL = 100000;
     uint32_t count = 0;
+    uint32_t page_index = 0;
+    uint32_t num_pages_per_l1_buffer = num_bytes_per_send / page_size;
     while (eth_sends_completed < total_num_message_sends) {
         bool did_something = false;
 
-        did_something = noc_read_data_sequence<MAX_NUM_CHANNELS>(
+        did_something = noc_read_data_sequence<MAX_NUM_CHANNELS,src_is_dram>(
                             transaction_channel_sender_buffer_addresses,
                             num_bytes_per_send,
                             noc_reader_buffer_ackptr,
@@ -335,7 +357,9 @@ void kernel_main() {
                             noc_index,
                             source_address_generator,
                             page_size,
-                            num_pages) ||
+                            num_pages_per_l1_buffer,
+                            num_pages,
+                            page_index) ||
                         did_something;
 
         did_something = eth_send_data_sequence<MAX_NUM_CHANNELS>(

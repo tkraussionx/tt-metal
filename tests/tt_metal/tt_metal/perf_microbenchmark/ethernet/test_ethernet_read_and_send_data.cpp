@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <limits>
 #include <random>
 
 #include "tt_metal/common/core_coord.h"
@@ -88,6 +89,9 @@ bool RunWriteBWTest(
     const size_t src_eth_l1_byte_address,
     const size_t dst_eth_l1_byte_address,
 
+    const size_t precomputed_source_addresses_buffer_address,
+    const size_t precomputed_source_addresses_buffer_size,
+
     const uint32_t eth_l1_staging_buffer_size,
     const uint32_t eth_max_concurrent_sends,
     const uint32_t input_buffer_page_size,
@@ -95,7 +99,7 @@ bool RunWriteBWTest(
     bool source_is_dram,
     bool dest_is_dram
 
-    ) {
+) {
     // number of bytes to send per eth send (given that eth l1 buf size not
     // guaranteed to be multiple of page size, we won't send the left over
     // bytes at the end
@@ -103,6 +107,8 @@ bool RunWriteBWTest(
     const uint32_t num_bytes_per_send = pages_per_send * input_buffer_page_size;
     const uint32_t num_pages = ((input_buffer_size_bytes - 1) / input_buffer_page_size) + 1;  // includes padding
     const uint32_t num_messages_to_send = ((input_buffer_size_bytes - 1) / num_bytes_per_send) + 1;
+
+    TT_ASSERT(precomputed_source_addresses_buffer_address < std::numeric_limits<uint32_t>::max(), "precomputed_source_addresses_buffer_address is too large");
 
     bool pass = true;
     log_debug(
@@ -147,6 +153,10 @@ bool RunWriteBWTest(
     ////////////////////////////////////////////////////////////////////////////
     tt_metal::Program sender_program = tt_metal::Program();
 
+    uint32_t num_pages_per_l1_buffer = num_bytes_per_send / input_buffer_page_size;
+    TT_ASSERT(num_messages_to_send * num_pages_per_l1_buffer >= num_pages);
+    std::cout << "eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE: " << eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE << std::endl;
+    std::cout << "src_eth_l1_byte_address: " << src_eth_l1_byte_address << std::endl;
     auto eth_sender_kernel = tt_metal::CreateKernel(
         sender_program,
         sender_kernel_path,
@@ -173,7 +183,9 @@ bool RunWriteBWTest(
             uint32_t(dst_eth_l1_byte_address),
             uint32_t(dram_buf_base_addr),
             uint32_t(input_buffer_page_size),
-            uint32_t(num_pages)
+            uint32_t(num_pages),
+            uint32_t(precomputed_source_addresses_buffer_address),
+            uint32_t(precomputed_source_addresses_buffer_size)
         });
 
     ////////////////////////////////////////////////////////////////////////////
@@ -245,7 +257,7 @@ int main(int argc, char** argv) {
     // argv[0]: program
     // argv[1]: buffer_size_bytes
     // argv[2]: num_loops
-    assert (argc == 9);
+    assert (argc == 10);
     std::string const& sender_kernel_path = argv[1];
     std::string const& receiver_kernel_path = argv[2];
     const uint32_t eth_l1_staging_buffer_size = std::stoi(argv[3]);
@@ -254,13 +266,22 @@ int main(int argc, char** argv) {
     const uint32_t input_buffer_size_bytes = std::stoi(argv[6]);
     const bool source_is_dram = std::stoi(argv[7]) == 1;
     const bool dest_is_dram = std::stoi(argv[8]) == 1;
+    const uint32_t precomputed_source_addresses_buffer_size = std::stoi(argv[9]);
 
     N300TestDevice test_fixture;
 
+    std::cout << "precomputed_source_addresses_buffer_size: " << precomputed_source_addresses_buffer_size << std::endl;
     const auto& device_0 = test_fixture.devices_.at(0);
     const auto& device_1 = test_fixture.devices_.at(1);
-    const size_t src_eth_l1_byte_address = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
-    const size_t dst_eth_l1_byte_address = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
+    const size_t precomputed_source_addresses_buffer_address =
+        precomputed_source_addresses_buffer_size == 0 ? (size_t)nullptr:
+        eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE % 16 == 0 ? eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE :
+            eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + 16 - (eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE % 8);
+    // const size_t precomputed_source_addresses_buffer_size = 32;
+    const size_t src_eth_l1_byte_address = precomputed_source_addresses_buffer_size == 0 ?
+        eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE :
+        precomputed_source_addresses_buffer_address + (precomputed_source_addresses_buffer_size * sizeof(std::size_t));
+    const size_t dst_eth_l1_byte_address = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE + precomputed_source_addresses_buffer_size;
 
     auto const& active_eth_cores = device_0->get_active_ethernet_cores();
     assert (active_eth_cores.size() > 0);
@@ -284,6 +305,8 @@ int main(int argc, char** argv) {
         eth_receiver_core,
         src_eth_l1_byte_address,
         dst_eth_l1_byte_address,
+        precomputed_source_addresses_buffer_address,
+        precomputed_source_addresses_buffer_size,
         eth_l1_staging_buffer_size,
         eth_max_concurrent_sends,
         input_buffer_page_size,
