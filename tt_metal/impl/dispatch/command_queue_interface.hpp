@@ -17,14 +17,14 @@ using namespace tt::tt_metal;
 template <CoreType core_type>
 inline uint32_t get_command_start_l1_address() {
     static_assert(core_type == CoreType::WORKER or core_type == CoreType::ETH);
-    return core_type == CoreType::ETH ? eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE : L1_UNRESERVED_BASE;
+    return core_type == CoreType::ETH ? eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE : L1_UNRESERVED_BASE;
 }
 
 // Where issue queue interface core pulls in data (follows command)
 template <CoreType core_type>
 inline uint32_t get_data_section_l1_address() {
     static_assert(core_type == CoreType::WORKER or core_type == CoreType::ETH);
-    uint32_t l1_base = (core_type == CoreType::ETH) ? eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE : L1_UNRESERVED_BASE;
+    uint32_t l1_base = (core_type == CoreType::ETH) ? eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE : L1_UNRESERVED_BASE;
     return l1_base + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
 }
 
@@ -42,11 +42,11 @@ inline uint32_t get_tensix_consumer_data_buffer_size() {
 
 // Space available in bytes in ethernet router core
 inline uint32_t get_router_data_buffer_size() {
-    if constexpr (eth_l1_mem::address_map::ERISC_APP_RESERVED_SIZE < (DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND * sizeof(uint32_t))) {
+    if constexpr (eth_l1_mem::address_map::ERISC_L1_TUNNEL_BUFFER_SIZE < (DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND * sizeof(uint32_t))) {
         // Grayskull should not be calling this API
         return 0;
     } else {
-        return eth_l1_mem::address_map::ERISC_APP_RESERVED_SIZE - (DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND * sizeof(uint32_t));
+        return eth_l1_mem::address_map::ERISC_L1_TUNNEL_BUFFER_SIZE - (DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND * sizeof(uint32_t));
     }
 }
 

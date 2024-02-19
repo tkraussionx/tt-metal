@@ -13,6 +13,9 @@ namespace eth_l1_mem {
 
 struct address_map {
 
+  static constexpr std::int32_t MAX_SIZE = 256 * 1024;
+  static constexpr std::int32_t MAX_L1_LOADING_SIZE = 1 * 256 * 1024;
+
   // Sizes
   static constexpr std::int32_t FIRMWARE_SIZE = 32 * 1024;
   static constexpr std::int32_t COMMAND_Q_SIZE = 4 * 1024;
@@ -48,11 +51,13 @@ struct address_map {
 
   static constexpr std::int32_t ERISC_L1_ARG_BASE = CQ_CONSUMER_CB_BASE + 7 * L1_ALIGNMENT;
 
-  static constexpr std::int32_t ERISC_APP_RESERVED_BASE = TILE_HEADER_BUFFER_BASE + 1024;
-  static constexpr std::int32_t ERISC_APP_RESERVED_SIZE = 53 * 1024;
-  static constexpr std::int32_t ERISC_L1_UNRESERVED_BASE = ERISC_APP_RESERVED_BASE + ERISC_APP_RESERVED_SIZE;
+  static constexpr std::int32_t ERISC_L1_UNRESERVED_BASE = TILE_HEADER_BUFFER_BASE + 1024;
+  static constexpr std::int32_t ERISC_L1_UNRESERVED_SIZE = MAX_L1_LOADING_SIZE - ERISC_L1_UNRESERVED_BASE;
 
   static constexpr std::int32_t LAUNCH_ERISC_APP_FLAG = L1_EPOCH_Q_BASE + 4;
+
+  // BIDIR Tunneling Kernel Space
+  static constexpr std::int32_t ERISC_L1_TUNNEL_BUFFER_SIZE = ERISC_L1_UNRESERVED_BASE / 2;
 
   // TODO: risky, is there a check for FW size we can add?
   static constexpr std::int32_t PRINT_BUFFER_ER = COMMAND_Q_BASE - 204;
@@ -61,9 +66,6 @@ struct address_map {
       static_assert(A == B, "Not equal");
       static constexpr bool _cResult = (A == B);
   };
-
-  static constexpr std::int32_t MAX_SIZE = 256 * 1024;
-  static constexpr std::int32_t MAX_L1_LOADING_SIZE = 1 * 256 * 1024;
 
   static constexpr std::int32_t RISC_LOCAL_MEM_BASE = 0xffb00000; // Actaul local memory address as seen from risc firmware
                                                                    // As part of the init risc firmware will copy local memory data from

@@ -59,8 +59,8 @@ const db_cb_config_t *remote_dst_db_cb_config = get_remote_db_cb_config(CQ_CONSU
 volatile tt_l1_ptr uint32_t *eth_db_semaphore_addr =
     reinterpret_cast<volatile tt_l1_ptr uint32_t *>(eth_get_semaphore(0));
 
-static constexpr uint32_t command_start_addr = eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE;
-static constexpr uint32_t data_buffer_size = eth_l1_mem::address_map::ERISC_APP_RESERVED_SIZE -
+static constexpr uint32_t command_start_addr = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
+static constexpr uint32_t data_buffer_size = eth_l1_mem::address_map::ERISC_L1_TUNNEL_BUFFER_SIZE -
                                              (DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND * sizeof(uint32_t));
 
 void __attribute__((section("code_l1"))) router_init() {
@@ -130,9 +130,9 @@ FORCE_INLINE
 void send_fd_packets() {
     internal_::eth_send_packet(
         0,
-        (eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE) >> 4,
-        ((eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE)) >> 4,
-        (eth_l1_mem::address_map::ERISC_APP_RESERVED_SIZE) >> 4);
+        (eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE) >> 4,
+        ((eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE)) >> 4,
+        (eth_l1_mem::address_map::ERISC_L1_TUNNEL_BUFFER_SIZE) >> 4);
     routing_info->fd_buffer_msgs_sent = 1;
     internal_::eth_send_packet(
         0,

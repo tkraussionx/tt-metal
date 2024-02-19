@@ -172,8 +172,7 @@ std::pair<uint64_t, uint64_t> DataMovementKernel::get_runtime_args_range() const
 }
 
 std::pair<uint64_t, uint64_t> EthernetKernel::get_runtime_args_range() const {
-    // TODO: get this from eth l1 map
-    std::pair<uint64_t, uint64_t> arg_base_to_result_base = {eth_l1_mem::address_map::ERISC_L1_ARG_BASE, eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE};
+    std::pair<uint64_t, uint64_t> arg_base_to_result_base = {eth_l1_mem::address_map::ERISC_L1_ARG_BASE, eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE};
     return arg_base_to_result_base;
 }
 
