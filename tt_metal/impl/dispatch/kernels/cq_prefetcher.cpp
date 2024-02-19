@@ -29,6 +29,8 @@ void kernel_main() {
     volatile tt_l1_ptr uint32_t* db_semaphore_addr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(0));  // Should be initialized to 2 by host
 
+    DPRINT << "SEM INIT: " << db_semaphore_addr[0] << ENDL();
+
     PullAndRelayCfg src_pr_cfg;
     PullAndRelayCfg dst_pr_cfg;
 
@@ -55,22 +57,24 @@ void kernel_main() {
     dst_pr_cfg.cb_buff_cfg.remote_noc_encoding = remote_noc_encoding;
     // dst_pr_cfg.local_multicore_cb_cfg = 0;
 
-    DPRINT << "REMOTE CB DATA" << ENDL();
-    DPRINT << "num_pages: " << dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg->num_pages << ENDL();
-    DPRINT << "page_size_16B: " << dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg->page_size_16B << ENDL();
-    DPRINT << "total_size_16B: " << dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg->total_size_16B << ENDL();
-    DPRINT << "rd_ptr_16B: " << dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg->rd_ptr_16B << ENDL();
-    DPRINT << "wr_ptr_16B: " << dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg->wr_ptr_16B << ENDL();
-
+    // DPRINT << "REMOTE CB DATA" << ENDL();
+    // DPRINT << "num_pages: " << dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg->num_pages << ENDL();
+    // DPRINT << "page_size_16B: " << dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg->page_size_16B << ENDL();
+    // DPRINT << "total_size_16B: " << dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg->total_size_16B << ENDL();
+    // DPRINT << "rd_ptr_16B: " << dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg->rd_ptr_16B << ENDL();
+    // DPRINT << "wr_ptr_16B: " << dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg->wr_ptr_16B << ENDL();
+    DPRINT << "MY_X: " << (uint32_t) my_x[0] << ", MY_Y: " << (uint32_t) my_y[0] << ENDL();
     while (true) {
         if constexpr (src_in_host_memory) {
-            DPRINT << "WAIT FRONT"<< ENDL();
+            DPRINT << "WAIT FRONT" << ENDL();
             issue_queue_wait_front();
+            DPRINT << "DONE WAITING" << ENDL();
             uint32_t rd_ptr = (cq_read_interface.issue_fifo_rd_ptr << 4);
             uint64_t src_noc_addr = pcie_core_noc_encoding | rd_ptr;
+            // DPRINT << "READING FROM " << rd_ptr << ENDL();
             noc_async_read(src_noc_addr, command_start_addr, min(DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, issue_queue_size - rd_ptr));
             noc_async_read_barrier();
-            DPRINT << "GOT MY COMMAND" << ENDL();
+            // DPRINT << "BARRIER" << ENDL();
         } else { // erisc, need some form of enum instead of just bool
             while(true);
         }
@@ -101,23 +105,40 @@ void kernel_main() {
             notify_host_of_issue_queue_read_pointer<host_issue_queue_read_ptr_addr>();
             continue;
         }
+        // DPRINT << "PROGRAM LOCAL CB" << ENDL();
         program_local_cb(data_section_addr, producer_cb_num_pages, page_size, producer_cb_size);
+        // DPRINT << "WAIT CONSUMER SPACE" << ENDL();
         wait_consumer_space_available(db_semaphore_addr);
         relay_command<command_start_addr, consumer_cmd_base_addr, consumer_data_buffer_size>(db_buf_switch, remote_noc_encoding);
         if (stall) {
+            DPRINT << "WAIT CONSUMER IDLE" << ENDL();
             wait_consumer_idle<2>(db_semaphore_addr);
         }
 
         // This should be cleaned up, logic kind of awkward
-        DPRINT << "is_program: " << (uint32_t)is_program << ENDL();
-        while(true);
+        // DPRINT << "is_program: " << (uint32_t)is_program << ENDL();
         if (is_program) {
-            update_producer_consumer_sync_semaphores(pcie_core_noc_encoding, remote_noc_encoding, db_semaphore_addr, get_semaphore(0));
+            update_producer_consumer_sync_semaphores(my_noc_encoding, remote_noc_encoding, db_semaphore_addr, get_semaphore(0));
             pull_and_relay<PullAndRelayType::BUFFER, PullAndRelayType::CIRCULAR_BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages);
         } else {
-            pull_and_relay<PullAndRelayType::BUFFER, PullAndRelayType::CIRCULAR_BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages);
-            update_producer_consumer_sync_semaphores(pcie_core_noc_encoding, remote_noc_encoding, db_semaphore_addr, get_semaphore(0));
+            volatile tt_l1_ptr uint32_t* buffer_transfer_ptr = command_ptr + DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER;
+            uint32_t src_bank_base_address = buffer_transfer_ptr[0];
+            uint32_t dst_bank_base_address = buffer_transfer_ptr[1];
+            uint32_t num_pages = buffer_transfer_ptr[2];
+            uint32_t src_buf_type = buffer_transfer_ptr[4];
+            uint32_t dst_buf_type = buffer_transfer_ptr[5];
+            uint32_t src_page_index = buffer_transfer_ptr[6];
+            uint32_t dst_page_index = buffer_transfer_ptr[7];
+            src_pr_cfg.buff_cfg.buffer.init((BufferType)src_buf_type, src_bank_base_address, page_size);
+            src_pr_cfg.buff_cfg.page_id = src_page_index;
+            dst_pr_cfg.buff_cfg.buffer.init((BufferType)dst_buf_type, dst_bank_base_address, page_size);
+            dst_pr_cfg.buff_cfg.page_id = dst_page_index;
+            pull_and_relay<PullAndRelayType::BUFFER, PullAndRelayType::BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages);
+            // DPRINT << "UPDATE SEMS" << ENDL();
+            update_producer_consumer_sync_semaphores(my_noc_encoding, remote_noc_encoding, db_semaphore_addr, get_semaphore(0));
         }
+
+        // DPRINT << "Done data movement" << ENDL();
 
         // Need some synch mechanism for dispatch core to update completion queue
         issue_queue_pop_front<host_issue_queue_read_ptr_addr>(DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + issue_data_size);

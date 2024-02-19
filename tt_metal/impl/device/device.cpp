@@ -292,6 +292,7 @@ void Device::compile_command_queue_programs() {
     if (this->is_mmio_capable()) {
         for (const chip_id_t &device_id : tt::Cluster::instance().get_devices_controlled_by_mmio_device(this->id())) {
             // TODO (abhullar): allow for multiple cqs on remote device, atm device initialization asserts one cq for the remote device
+            if (device_id != this->id()) continue;
             uint8_t num_hw_cqs = device_id == this->id() ? this->num_hw_cqs() : 1;
             uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(device_id);
             uint32_t cq_size = tt::Cluster::instance().get_host_channel_size(this->id(), channel) / num_hw_cqs;

@@ -6,6 +6,7 @@
 #include "risc_attribs.h"
 #include "tt_metal/hostdevcommon/common_values.hpp"
 #include "tt_metal/impl/dispatch/kernels/command_queue_common.hpp"
+#include "debug/dprint.h"
 
 CQReadInterface cq_read_interface;
 
@@ -29,7 +30,10 @@ void setup_issue_queue_read_interface(const uint32_t issue_region_rd_ptr, const 
 
 template <uint32_t num_command_slots>
 FORCE_INLINE void wait_consumer_idle(volatile tt_l1_ptr uint32_t* db_semaphore_addr) {
-    while (*db_semaphore_addr != num_command_slots);
+    while (*db_semaphore_addr != num_command_slots) {
+        DPRINT << "SEM: "<< *db_semaphore_addr << ENDL();
+        for (volatile int i = 0; i < 100000000; i++);
+    }
 }
 
 FORCE_INLINE
@@ -228,6 +232,7 @@ void pull_and_relay(
 
     uint32_t num_pages_to_read = min(num_pages, src_pr_cfg.num_pages_to_read);
     uint32_t num_pages_to_write = min(num_pages, dst_pr_cfg.num_pages_to_write);
+
     while (num_writes_completed != num_pages) {
         if (cb_producer_space_available(num_pages_to_read) and num_reads_issued < num_pages) {
             if constexpr (src_type == PullAndRelayType::CIRCULAR_BUFFER) {
@@ -243,11 +248,11 @@ void pull_and_relay(
                     data from local chip SRAM/DRAM.
                 */
                 src_pr_cfg.buff_cfg.buffer.noc_async_read_buffer(get_write_ptr(0), src_pr_cfg.buff_cfg.page_id, num_pages_to_read);
+                src_pr_cfg.buff_cfg.page_id += num_pages_to_read;
             }
 
             cb_push_back(0, num_pages_to_read);
             num_reads_issued += num_pages_to_read;
-            src_pr_cfg.buff_cfg.page_id += num_pages_to_read;
             num_pages_to_read = min(num_pages - num_reads_issued, src_pr_cfg.num_pages_to_read);
         }
 
@@ -268,16 +273,18 @@ void pull_and_relay(
                 noc_async_write(get_read_ptr(0), dst_noc_addr, dst_pr_cfg.page_size * num_pages_to_write);
                 multicore_cb_push_back(
                     dst_pr_cfg.cb_buff_cfg.local_multicore_cb_cfg,  dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg, dst_pr_cfg.cb_buff_cfg.remote_noc_encoding, dst_pr_cfg.cb_buff_cfg.cb_fifo_limit_16B, num_pages_to_write);
-                noc_async_write_barrier();
-                cb_pop_front(0, num_pages_to_write);
-                num_writes_completed += num_pages_to_write;
-                num_pages_to_write = min(num_pages - num_writes_completed, dst_pr_cfg.num_pages_to_write);
             } else if constexpr (dst_type == PullAndRelayType::BUFFER) {
                 /*
                     In this case, we are writing data directly to a buffer.
                 */
                 // static_assert(false);
+                dst_pr_cfg.buff_cfg.buffer.noc_async_write_buffer(get_read_ptr(0), dst_pr_cfg.buff_cfg.page_id, num_pages_to_write);
+                dst_pr_cfg.buff_cfg.page_id += num_pages_to_write;
             }
+            noc_async_write_barrier();
+            cb_pop_front(0, num_pages_to_write);
+            num_writes_completed += num_pages_to_write;
+            num_pages_to_write = min(num_pages - num_writes_completed, dst_pr_cfg.num_pages_to_write);
         }
     }
 }
