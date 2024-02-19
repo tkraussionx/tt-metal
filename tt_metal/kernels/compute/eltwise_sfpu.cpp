@@ -7,16 +7,24 @@
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/eltwise_unary/eltwise_unary.h"
 #include "compute_kernel_api/eltwise_unary/sfpu_split_includes.h"
+#include "debug/dprint.h"
 
 namespace NAMESPACE {
 void MAIN {
+
+    // DPRINT << 1 << ENDL();
+
     uint32_t per_core_block_cnt = get_compile_time_arg_val(0);
     uint32_t per_core_block_dim = get_compile_time_arg_val(1);
 
     kernel_profiler::mark_time(9997);
 
+
+    // DPRINT << 1 << ENDL();
+
     init_sfpu(tt::CB::c_in0);
     for (uint32_t block_index = 0; block_index < per_core_block_cnt; block_index++) {
+        DPRINT << block_index << ENDL();
         cb_reserve_back(tt::CB::c_out0, per_core_block_dim);
         for(uint32_t tile_index = 0; tile_index < per_core_block_dim; ++tile_index) {
             acquire_dst(tt::DstMode::Half);
@@ -30,6 +38,8 @@ void MAIN {
             SFPU_OP_CHAIN_0
             #endif
 
+    // DPRINT << 1 << ENDL();
+
             pack_tile(0, tt::CB::c_out0);
 
             cb_pop_front(tt::CB::c_in0, 1);
@@ -38,6 +48,7 @@ void MAIN {
         }
         cb_push_back(tt::CB::c_out0, per_core_block_dim);
     }
+    // DPRINT << 1 << ENDL();
 
     kernel_profiler::mark_time(9998);
 

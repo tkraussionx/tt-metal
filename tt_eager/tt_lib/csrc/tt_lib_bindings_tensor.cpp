@@ -5,6 +5,7 @@
 #include "tt_lib_bindings.hpp"
 #include "tt_dnn/op_library/downsample/downsample_op.hpp"
 #include "tt_dnn/op_library/eltwise_binary/eltwise_binary_op.hpp"
+#include "tt_dnn/op_library/my_op/my_op.hpp"
 #include "tt_dnn/op_library/conv/conv_op.hpp"
 #include "tt_dnn/op_library/conv/optimized_conv_op.hpp"
 #include "tt_dnn/op_library/softmax/softmax_op.hpp"
@@ -360,6 +361,8 @@ void TensorModule(py::module &m_tensor) {
         +-------------------+-----------------------------------------------------------------------------------+---------------+-------------+----------+
     )doc");
 
+    // WRITE HERE
+
     m_tensor.def("conv", &conv, R"doc(
         Perform a conv ``A x B`` with two tensors
         This op tilizes tensor A and untilizes the output
@@ -374,6 +377,13 @@ void TensorModule(py::module &m_tensor) {
         | conv_params  | Conv parameters list: kernel size H, kernel size W ,stride H,stride W,pad H,pad W          |Vector<int>|             | Yes      |
         +--------------+--------------------------------------------------------------------------------------------+-----------+-------------+----------+
     )doc");
+
+    m_tensor.def(
+        "myop",
+        &my_op,
+        py::arg("input_tensor_a").noconvert(),
+        py::arg("input_tensor_b").noconvert(),
+        R"doc(My op that does -1 * (a + b))doc");
 
     py::class_<OptimizedConvParallelizationConfig>(m_tensor, "OptimizedConvParallelizationConfig")
         .def(

@@ -6,6 +6,7 @@ PROGRAMMING_EXAMPLES_LDFLAGS = -ltt_metal -ldl -lstdc++fs -pthread -lyaml-cpp
 
 include $(TT_METAL_HOME)/tt_metal/programming_examples/loopback/module.mk
 include $(TT_METAL_HOME)/tt_metal/programming_examples/eltwise_binary/module.mk
+include $(TT_METAL_HOME)/tt_metal/programming_examples/my_eltwise_binary/module.mk
 include $(TT_METAL_HOME)/tt_metal/programming_examples/eltwise_sfpu/module.mk
 include $(TT_METAL_HOME)/tt_metal/programming_examples/profiler/module.mk
 include $(TT_METAL_HOME)/tt_metal/programming_examples/matmul_single_core/module.mk
@@ -21,6 +22,7 @@ PROFILER_TESTS += \
 
 programming_examples: programming_examples/loopback \
                       programming_examples/eltwise_binary \
+                      programming_examples/my_eltwise_binary \
                       programming_examples/eltwise_sfpu \
                       programming_examples/matmul_single_core \
                       programming_examples/matmul_multi_core \
@@ -30,6 +32,7 @@ programming_examples: programming_examples/loopback \
 
 programming_examples/loopback: $(PROGRAMMING_EXAMPLES_TESTDIR)/loopback;
 programming_examples/eltwise_binary: $(PROGRAMMING_EXAMPLES_TESTDIR)/eltwise_binary;
+programming_examples/my_eltwise_binary: $(PROGRAMMING_EXAMPLES_TESTDIR)/my_eltwise_binary;
 programming_examples/eltwise_sfpu: $(PROGRAMMING_EXAMPLES_TESTDIR)/eltwise_sfpu;
 programming_examples/matmul_single_core: $(PROGRAMMING_EXAMPLES_TESTDIR)/matmul_single_core;
 programming_examples/matmul_multi_core: $(PROGRAMMING_EXAMPLES_TESTDIR)/matmul_multi_core;
