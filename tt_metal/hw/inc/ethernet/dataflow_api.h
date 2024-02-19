@@ -72,8 +72,13 @@ namespace internal_ {
 
 FORCE_INLINE
 void eth_send_packet(uint32_t q_num, uint32_t src_word_addr, uint32_t dest_word_addr, uint32_t num_words) {
+    uint32_t count = 0;
     while (eth_txq_reg_read(q_num, ETH_TXQ_CMD) != 0) {
-        risc_context_switch();
+        if (count > 1000000) {
+            count = 0;
+            risc_context_switch();
+        }
+        count++;
     }
     eth_txq_reg_write(q_num, ETH_TXQ_TRANSFER_START_ADDR, src_word_addr << 4);
     eth_txq_reg_write(q_num, ETH_TXQ_DEST_ADDR, dest_word_addr << 4);
@@ -399,7 +404,7 @@ void eth_wait_for_bytes_on_channel(uint32_t num_bytes, uint32_t channel) {
             count++;
             if (count > poll_count) {
                 count = 0;
-                run_routing();
+                // run_routing();
             }
         }
     }
