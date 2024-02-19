@@ -40,9 +40,12 @@ void py_module(py::module& m_primary) {
     auto m_transformers = m_primary.def_submodule("transformers", "Primary transformers operations");
     transformers::py_module(m_transformers);
 
-    py::class_<MatmulProgramConfig>(m_primary, "MatmulProgramConfig");
+    py::class_<MatmulProgramConfig>(m_primary, "MatmulProgramConfig")
+        .def("__repr__", [](const MatmulProgramConfig& config) { return fmt::format("{}", config); });
 
-    py::class_<MatmulDefaultProgramConfig>(m_primary, "MatmulDefaultProgramConfig").def(py::init<>());
+    py::class_<MatmulDefaultProgramConfig>(m_primary, "MatmulDefaultProgramConfig")
+        .def(py::init<>())
+        .def("__repr__", [](const MatmulDefaultProgramConfig& config) { return fmt::format("{}", config); });
 
     py::class_<MatmulMultiCoreReuseProgramConfig>(m_primary, "MatmulMultiCoreReuseProgramConfig")
         .def(
@@ -53,10 +56,20 @@ void py_module(py::module& m_primary) {
             py::arg("out_subblock_h").noconvert(),
             py::arg("out_subblock_w").noconvert(),
             py::arg("per_core_M").noconvert(),
-            py::arg("per_core_N").noconvert());
+            py::arg("per_core_N").noconvert())
+        .def("__repr__", [](const MatmulMultiCoreReuseProgramConfig& config) { return fmt::format("{}", config); });
+
     py::class_<MatmulMultiCoreReuseMultiCastProgramConfig>(m_primary, "MatmulMultiCoreReuseMultiCastProgramConfig")
         .def(
-            py::init<CoreCoord, std::size_t, std::size_t, std::size_t, std::size_t, std::size_t, bool, std::optional<UnaryWithParam>>(),
+            py::init<
+                CoreCoord,
+                std::size_t,
+                std::size_t,
+                std::size_t,
+                std::size_t,
+                std::size_t,
+                bool,
+                std::optional<UnaryWithParam>>(),
             py::kw_only(),
             py::arg("compute_with_storage_grid_size"),
             py::arg("in0_block_w").noconvert(),
@@ -65,13 +78,24 @@ void py_module(py::module& m_primary) {
             py::arg("per_core_M").noconvert(),
             py::arg("per_core_N").noconvert(),
             py::arg("transpose_mcast").noconvert(),
-            py::arg("fused_activation")
-        )
-        .def_readwrite("fused_activation", &MatmulMultiCoreReuseMultiCastProgramConfig::fused_activation);
+            py::arg("fused_activation"))
+        .def_readwrite("fused_activation", &MatmulMultiCoreReuseMultiCastProgramConfig::fused_activation)
+        .def("__repr__", [](const MatmulMultiCoreReuseMultiCastProgramConfig& config) {
+            return fmt::format("{}", config);
+        });
 
     py::class_<MatmulMultiCoreReuseMultiCast1DProgramConfig>(m_primary, "MatmulMultiCoreReuseMultiCast1DProgramConfig")
         .def(
-            py::init<CoreCoord, std::size_t, std::size_t, std::size_t, std::size_t, std::size_t, bool, std::optional<UnaryWithParam>, bool>(),
+            py::init<
+                CoreCoord,
+                std::size_t,
+                std::size_t,
+                std::size_t,
+                std::size_t,
+                std::size_t,
+                bool,
+                std::optional<UnaryWithParam>,
+                bool>(),
             py::kw_only(),
             py::arg("compute_with_storage_grid_size"),
             py::arg("in0_block_w").noconvert(),
@@ -82,7 +106,10 @@ void py_module(py::module& m_primary) {
             py::arg("fuse_batch").noconvert(),
             py::arg("fused_activation"),
             py::arg("mcast_in0").noconvert())
-        .def_readwrite("fused_activation", &MatmulMultiCoreReuseMultiCast1DProgramConfig::fused_activation);
+        .def_readwrite("fused_activation", &MatmulMultiCoreReuseMultiCast1DProgramConfig::fused_activation)
+        .def("__repr__", [](const MatmulMultiCoreReuseMultiCast1DProgramConfig& config) {
+            return fmt::format("{}", config);
+        });
 
     m_primary.def(
         "get_mcast_1d_config",
@@ -197,6 +224,55 @@ void py_module(py::module& m_primary) {
            const bool packer_l1_acc) {
             return matmul(
                 input_tensor_a, input_tensor_b, bias, program_config, out_mem_config, output_dtype, math_fidelity, fp32_dest_acc_en, math_approx_mode, packer_l1_acc);
+        },
+        py::arg("input_tensor_a").noconvert(),
+        py::arg("input_tensor_b").noconvert(),
+        py::kw_only(),
+        py::arg("bias").noconvert() = std::nullopt,
+        py::arg("program_config").noconvert() = MatmulDefaultProgramConfig(),
+        py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("output_dtype").noconvert() = std::nullopt,
+        py::arg("math_fidelity").noconvert() = MathFidelity::LoFi,
+        py::arg("fp32_dest_acc_en").noconvert() = false,
+        py::arg("math_approx_mode").noconvert() = true,
+        py::arg("packer_l1_acc").noconvert() = false,
+        R"doc(
+            Perform a matrix multiplication ``input_tensor_a x input_tensor_b``.
+
+            .. csv-table::
+                :header: "Argument", "Description", "Data type", "Valid range", "Required"
+
+                "input_tensor_a",    "First tensor to multiply",                               "Tensor",                                     "Tensor of shape [B_a, C_a, M, K]",                               "Yes"
+                "input_tensor_b",    "Second tensor to multiply",                              "Tensor",                                     "Tensor of shape [B_b, C_b, K, N]",                               "Yes"
+                "bias",              "Bias to add",                                            "Tensor",                                     "Tensor of shape [1, 1, 1, N]",                                   "Yes"
+                "program_config",    "",                                                       "MatmulDefaultProgramConfig", "",                                                               "Yes"
+                "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig",                               "Default is interleaved in DRAM",                                 "No"
+                "output_dtype",      "Output Data Type",                                       "DataType",                                   "By default it will be set to the data type of `input_tensor_a`", "No"
+        )doc");
+
+    m_primary.def(
+        "matmul",
+        [](const Tensor& input_tensor_a,
+           const Tensor& input_tensor_b,
+           std::optional<const Tensor> bias,
+           const MatmulMultiCoreReuseProgramConfig& program_config,
+           const MemoryConfig& out_mem_config,
+           std::optional<DataType> output_dtype,
+           const MathFidelity math_fidelity,
+           const bool fp32_dest_acc_en,
+           const bool math_approx_mode,
+           const bool packer_l1_acc) {
+            return matmul(
+                input_tensor_a,
+                input_tensor_b,
+                bias,
+                program_config,
+                out_mem_config,
+                output_dtype,
+                math_fidelity,
+                fp32_dest_acc_en,
+                math_approx_mode,
+                packer_l1_acc);
         },
         py::arg("input_tensor_a").noconvert(),
         py::arg("input_tensor_b").noconvert(),
