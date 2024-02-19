@@ -254,6 +254,18 @@ FORCE_INLINE void program_page_transfer(
 }
 
 FORCE_INLINE
+void reset_dispatch_message_addr() {
+    /*
+        GO signals are just data within pages, so we need to set
+        our local 'recv' address value to 0 before we initiate
+        any transfers
+    */
+    volatile tt_l1_ptr uint32_t* message_addr_ptr =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(DISPATCH_MESSAGE_ADDR);
+    *message_addr_ptr = 0;
+}
+
+FORCE_INLINE
 void write_and_launch_program(
     db_cb_config_t* db_cb_config,
     const db_cb_config_t* remote_db_cb_config,
@@ -265,13 +277,6 @@ void write_and_launch_program(
     if (not num_pages) {
         return;
     }
-
-    // GO signals are just data within pages, so we need to set
-    // our local 'recv' address value to 0 before we initiate
-    // any transfers
-    volatile tt_l1_ptr uint32_t* message_addr_ptr =
-        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(DISPATCH_MESSAGE_ADDR);
-    *message_addr_ptr = 0;
 
     volatile tt_l1_ptr CommandHeader* header = (CommandHeader*)command_ptr;
     command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(program_transfer_start_addr);

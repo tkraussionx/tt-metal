@@ -22,15 +22,8 @@ static constexpr uint32_t l1_db_cb_addr_offset = sizeof(db_cb_config_t);
 template <uint32_t cmd_base_address, uint32_t data_buffer_size>
 FORCE_INLINE uint32_t get_command_slot_addr(bool db_buf_switch) {
     static constexpr uint32_t command0_start = cmd_base_address;
-    static constexpr uint32_t command1_start = command0_start + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + data_buffer_size;
+    static constexpr uint32_t command1_start = cmd_base_address + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
     return (not db_buf_switch) ? command0_start : command1_start;
-}
-
-template <uint32_t cmd_base_address, uint32_t data_buffer_size>
-FORCE_INLINE uint32_t get_db_buf_addr(bool db_buf_switch) {
-    static constexpr uint32_t buf0_start = cmd_base_address + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
-    static constexpr uint32_t buf1_start = buf0_start + data_buffer_size + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
-    return (not db_buf_switch) ? buf0_start : buf1_start;
 }
 
 FORCE_INLINE
@@ -56,8 +49,8 @@ tt_l1_ptr const db_cb_config_t* get_remote_db_cb_config(uint32_t base_addr, bool
 
 FORCE_INLINE
 void multicore_cb_push_back(
-    db_cb_config_t* db_cb_config,
-    const db_cb_config_t* remote_db_cb_config,
+    volatile db_cb_config_t* db_cb_config,
+    const volatile db_cb_config_t* remote_db_cb_config,
     uint64_t consumer_noc_encoding,
     uint32_t consumer_fifo_16b_limit,
     uint32_t num_to_write) {
