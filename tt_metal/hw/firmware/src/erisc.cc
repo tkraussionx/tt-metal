@@ -12,6 +12,7 @@
 #include "tt_metal/impl/dispatch/device_command.hpp"
 #include "tt_metal/impl/dispatch/kernels/command_queue_common.hpp"
 #include "tt_metal/impl/dispatch/kernels/cq_prefetcher.hpp"
+#include "debug/dprint.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -148,6 +149,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
     const db_cb_config_t *remote_src_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, false);
     const db_cb_config_t *remote_dst_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, true);
 
+    erisc_info->unused_arg0 = 39;
 
     while (routing_info->routing_enabled) {
         // FD: assume that no more host -> remote writes are pending
@@ -158,15 +160,16 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
             kernel_profiler::mark_time(CC_MAIN_END);
         }
         if (my_routing_mode == EthRouterMode::FD_SRC) {
-
-            /*
+            // DPRINT << "SRC waiting " << eth_db_semaphore_addr[0] << ENDL();
             eth_db_acquire(eth_db_semaphore_addr, ((uint64_t)eth_router_noc_encoding << 32));
+            // DPRINT << "SRC done waiting " << eth_db_semaphore_addr[0] << ENDL();
             if (erisc_info->launch_user_kernel == 1) {
                 continue;
             }
             if (routing_info->routing_enabled == 0) {
                 break;
             }
+            // DPRINT << "SRC handle cmd " << eth_db_semaphore_addr[0] << ENDL();
             noc_semaphore_inc(
                 ((uint64_t)eth_router_noc_encoding << 32) | uint32_t(eth_db_semaphore_addr),
                 -1);  // Two's complement addition
@@ -176,15 +179,20 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
                 reinterpret_cast<volatile tt_l1_ptr uint32_t *>(command_start_addr);
             volatile tt_l1_ptr CommandHeader *header = (CommandHeader *)command_ptr;
             uint32_t num_buffer_transfers = header->num_buffer_transfers;
-            uint32_t producer_consumer_transfer_num_pages = header->producer_router_transfer_num_pages;
+            uint32_t producer_consumer_transfer_num_pages = header->producer_consumer_transfer_num_pages;
             bool is_program = header->is_program_buffer;
             bool fwd_path = header->fwd_path;
             command_ptr += DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER;
 
+            // DPRINT << "SRC got" << ENDL();
+
             // send cmd even if there is no data associated
             internal_::send_fd_packets(); // TODO: AL, is this right?
+            erisc_info->unused_arg0 = erisc_info->unused_arg0 + 1;
+            // DPRINT << "SRC2DST" << ENDL();
 
             for (uint32_t i = 0; i < num_buffer_transfers; i++) {
+                // erisc_info->unused_arg0 = 109;
                 const uint32_t num_pages = command_ptr[2];
                 const uint32_t src_buf_type = command_ptr[4];
                 const uint32_t dst_buf_type = command_ptr[5];
@@ -194,6 +202,7 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
                 bool tunnel_data = (read_from_sysmem) | (write_to_sysmem & !fwd_path & !is_program);
 
                 if (!tunnel_data) {
+                    // erisc_info->unused_arg0 = 500;
                     continue;
                 }
 
@@ -201,9 +210,15 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
 
                 uint32_t num_pages_tunneled = 0;
                 while (num_pages_tunneled != num_pages) {
+                    // DPRINT << "SRC waiting for " << num_to_write << ENDL();
                     multicore_eth_cb_wait_front(eth_db_cb_config, num_to_write);
+                    if (erisc_info->unused_arg0 == 40) {
+                        volatile tt_l1_ptr uint32_t* rd_ptr = (volatile uint32_t*)121856;
+                        uint32_t rd_val = rd_ptr[0];
+                        erisc_info->unused_arg1 = rd_val;
+                    }
                     internal_::send_fd_packets(); // AL: increment since idx to msg sent
-                    erisc_info->unused_arg1 = 500 + i;
+                    erisc_info->unused_arg0 = erisc_info->unused_arg0 + 1;
                     multicore_eth_cb_pop_front(
                         eth_db_cb_config, remote_src_db_cb_config, ((uint64_t)relay_src_noc_encoding << 32), num_to_write);
                     num_pages_tunneled += num_to_write;
@@ -211,105 +226,49 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
                 }
                 command_ptr += DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION;
             }
+
+            // DPRINT << "SRCD" << ENDL();
             noc_semaphore_inc(((uint64_t)relay_src_noc_encoding << 32) | get_semaphore(0), 1);
             noc_async_write_barrier();  // Barrier for now
-            */
+            // erisc_info->unused_arg1 = routing_info->relay_src_x;
+            // erisc_info->unused_arg2 = routing_info->relay_src_y;
+
         } else if (routing_info->routing_mode == EthRouterMode::FD_DST) {
-            /*
+
             // Poll until FD_SRC router sends FD packet
             // Each FD packet comprises of command header followed by command data
             internal_::wait_for_fd_packet();
             if (erisc_info->launch_user_kernel == 1) {
                 continue;
             }
+            // DPRINT << "DST FROM SRC" << ENDL();
             if (routing_info->routing_enabled == 0) {
                 break;
             }
+            // DPRINT << "DST routing enabled" << ENDL();
 
-            volatile tt_l1_ptr uint32_t *command_ptr =
-                reinterpret_cast<volatile tt_l1_ptr uint32_t *>(command_start_addr);
-            volatile tt_l1_ptr CommandHeader *header = (CommandHeader *)command_ptr;
+            // tell pull_and_relay core that command is available
 
-            // Block until consumer can accept new command
-            // `num_pages_transferred` tracks whether the remote command processor received all the data
+            // DPRINT << "DST GOT" << ENDL();
+
+            // initially 1
+            // after update_producer_consumer_sync_semaphores goes to 0
+            // at some point pull_and_relay will set it to 1
+            update_producer_consumer_sync_semaphores(((uint64_t)eth_router_noc_encoding << 32), ((uint64_t)relay_dst_noc_encoding << 32), eth_db_semaphore_addr, get_semaphore(1));
+
+            // DPRINT << "DST INFORMED" << ENDL();
+
             while (eth_db_semaphore_addr[0] == 0) {
                 internal_::risc_context_switch();
-            } // Check that there is space in consumer to send command
+            } // pull_and_relay is working on the command
 
-            // Send the full command header
-            constexpr uint32_t consumer_cmd_base_addr = L1_UNRESERVED_BASE;
-            constexpr uint32_t consumer_data_buffer_size = (MEM_L1_SIZE - (DeviceCommand::NUM_ENTRIES_IN_DEVICE_COMMAND * sizeof(uint32_t)) - L1_UNRESERVED_BASE);
-            uint32_t page_size = header->page_size;
-            uint32_t consumer_cb_num_pages = header->producer_cb_num_pages;
-            uint32_t consumer_cb_size = header->producer_cb_size;
-            uint32_t num_buffer_transfers = header->num_buffer_transfers;
+            // DPRINT << "REMOTE PP&P INFORMED" << ENDL();
 
-            eth_program_consumer_cb<command_start_addr, data_buffer_size, consumer_cmd_base_addr, consumer_data_buffer_size>(
-                eth_db_cb_config,
-                remote_dst_db_cb_config,
-                db_buf_switch,
-                ((uint64_t)relay_dst_noc_encoding << 32),
-                consumer_cb_num_pages,
-                page_size,
-                consumer_cb_size);
-            relay_command<command_start_addr, consumer_cmd_base_addr, consumer_data_buffer_size>(db_buf_switch, ((uint64_t)relay_dst_noc_encoding << 32));
+            internal_::ack_fd_packet(); // pull and relay is done with the data
+            erisc_info->unused_arg0 = erisc_info->unused_arg0 + 1;
 
-            update_producer_consumer_sync_semaphores(((uint64_t)eth_router_noc_encoding << 32), ((uint64_t)relay_dst_noc_encoding << 32), eth_db_semaphore_addr, get_semaphore(0));
+            // DPRINT << "DST ACK" << ENDL();
 
-            // Send the data that was in this packet
-            bool is_program = header->is_program_buffer;
-            bool fwd_path = header->fwd_path;
-            command_ptr += DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER; // jump to buffer transfer region
-            internal_::ack_fd_packet();
-            uint32_t producer_consumer_transfer_num_pages = header->producer_router_transfer_num_pages;
-            uint32_t l1_consumer_fifo_limit_16B =
-                (get_db_buf_addr<consumer_cmd_base_addr, consumer_data_buffer_size>(db_buf_switch) + consumer_cb_size) >> 4;
-            uint32_t local_cb_size_16B = header->router_cb_size >> 4;
-            uint32_t local_fifo_limit_16B = (get_db_buf_addr<command_start_addr, data_buffer_size>(db_buf_switch) >> 4) + local_cb_size_16B;
-            for (uint32_t i = 0; i < num_buffer_transfers; i++) {
-                const uint32_t num_pages = command_ptr[2];
-                const uint32_t src_buf_type = command_ptr[4];
-                const uint32_t dst_buf_type = command_ptr[5];
-
-                bool read_from_sysmem = (BufferType)src_buf_type == BufferType::SYSTEM_MEMORY;
-                bool write_to_sysmem = (BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY;
-                bool tunnel_data = (read_from_sysmem) | (write_to_sysmem & !is_program & !fwd_path);
-
-                if (!tunnel_data) {
-                    continue;
-                }
-
-                // producer_consumer_transfer_num_pages is the total num of data pages that could fit in a FD packet
-                uint32_t num_pages_to_tx = min(num_pages, producer_consumer_transfer_num_pages);
-                uint32_t num_pages_transferred = 0;
-
-              while (num_pages_transferred != num_pages) {
-                while (routing_info->fd_buffer_msgs_sent != 1) {
-                    // maybe context switch
-                    internal_::risc_context_switch();
-                }
-                uint32_t src_addr = eth_db_cb_config->rd_ptr_16B << 4;
-                uint64_t dst_noc_addr = ((uint64_t)relay_dst_noc_encoding << 32) | (eth_db_cb_config->wr_ptr_16B << 4);
-                while (!cb_consumer_space_available(eth_db_cb_config, num_pages_to_tx));
-                noc_async_write(src_addr, dst_noc_addr, page_size * num_pages_to_tx);
-                internal_::ack_fd_packet();
-                multicore_cb_push_back(
-                    eth_db_cb_config,
-                    remote_dst_db_cb_config,
-                    ((uint64_t)relay_dst_noc_encoding << 32),
-                    l1_consumer_fifo_limit_16B,
-                    num_pages_to_tx
-                );
-                eth_db_cb_config->rd_ptr_16B += eth_db_cb_config->page_size_16B * num_pages_to_tx;
-                if (eth_db_cb_config->rd_ptr_16B >= local_fifo_limit_16B) {
-                    eth_db_cb_config->rd_ptr_16B -= local_cb_size_16B;
-                }
-                num_pages_transferred += num_pages_to_tx;
-                num_pages_to_tx = min(num_pages - num_pages_transferred, producer_consumer_transfer_num_pages);
-              }
-              command_ptr += DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION; // jump to buffer transfer region
-            }
-            */
         } else {
             internal_::risc_context_switch();
         }

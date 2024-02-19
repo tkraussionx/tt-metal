@@ -47,8 +47,14 @@ tt_l1_ptr db_cb_config_t* get_remote_db_cb_config(uint32_t base_addr, bool db_bu
     return db_cb_config;
 }
 
-uint32_t get_cb_start_address() {
-    return L1_UNRESERVED_BASE + 2 * DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
+
+template <uint32_t eth_cb>
+FORCE_INLINE uint32_t get_cb_start_address() {
+    if constexpr (eth_cb) {
+        return eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
+    } else {
+        return L1_UNRESERVED_BASE + 2 * DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
+    }
 }
 
 FORCE_INLINE

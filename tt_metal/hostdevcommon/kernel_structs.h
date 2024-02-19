@@ -180,6 +180,10 @@ enum class OpCode : uint8_t
 
 };
 
+enum class PullAndRelayType : uint8_t {
+    BUFFER = 0,
+    CIRCULAR_BUFFER = 1
+};
 
 constexpr std::uint32_t NUM_MAX_IN_BUFFERS_PER_CORE = HlkOperand::in7 - HlkOperand::in0 + 1;
 constexpr std::uint32_t NUM_MAX_PARAM_BUFFERS_PER_CORE = HlkOperand::param7 - HlkOperand::param0 + 1;
