@@ -59,14 +59,8 @@ def test_mistral_feed_forward_inference(model_location_generator, device, reset_
         {k.split(".weight")[0]: {"weight": v} for k, v in parameters.items()}
     )
 
-    input = torch.rand(1, 1, 11, dim)
+    input = torch.randn(1, 1, 11, dim)
     reference_output = reference_model(input)
-
-    ttnn.enable_program_cache()
-
-    ttnn_input = ttnn.from_torch(
-        input, dtype=ttnn.bfloat16, device=device, layout=ttnn.TILE_LAYOUT, memory_config=ttnn.L1_MEMORY_CONFIG
-    )
 
     def show_duration(duration_sec):
         bytes_per_element = {"BFLOAT16": 2, "BFLOAT8_B": 1, "FLOAT32": 4, "UINT16": 2, "UINT32": 4}
@@ -78,29 +72,27 @@ def test_mistral_feed_forward_inference(model_location_generator, device, reset_
         )
 
     logger.info("Kernel compilation pass...")
-    mlp = MistralMLP(input_shape=ttnn_input.shape, parameters=parameters, grid=ttnn.CoreGrid(8, 8))
-    output = mlp(ttnn_input)
-
-    logger.info("Performance timing pass (MistralMLP)...")
-    start = time()
-    output = mlp(ttnn_input)
-    duration = time() - start
-    show_duration(duration)
-
-    output = ttnn.to_layout(output, ttnn.ROW_MAJOR_LAYOUT)
-    output = ttnn.from_device(output)
-    output = ttnn.to_torch(output)
-
-    assert_with_pcc(reference_output, output.to(reference_output.dtype), 0.99)
+    ttnn.enable_program_cache()
+    ttnn_input = ttnn.from_torch(
+        input, dtype=ttnn.bfloat16, device=device, layout=ttnn.TILE_LAYOUT, memory_config=ttnn.L1_MEMORY_CONFIG
+    )
+    feed_forward(model_args, ttnn_input, parameters)
 
     logger.info("Performance timing pass (feed_forward)...")
     start = time()
-    output = feed_forward(model_args, ttnn_input, parameters)
-    duration = time() - start
+    for _ in range(10):
+        output = feed_forward(model_args, ttnn_input, parameters)
+    duration = (time() - start) / 10
     show_duration(duration)
-
-    output = ttnn.to_layout(output, ttnn.ROW_MAJOR_LAYOUT)
-    output = ttnn.from_device(output)
     output = ttnn.to_torch(output)
+    assert_with_pcc(reference_output, output.to(reference_output.dtype), 0.99)
 
+    logger.info("Performance timing pass (MistralMLP)...")
+    mlp = MistralMLP(input_shape=ttnn_input.shape, parameters=parameters, grid=ttnn.CoreGrid(8, 8))
+    start = time()
+    for _ in range(10):
+        output = mlp(ttnn_input)
+    duration = (time() - start) / 10
+    show_duration(duration)
+    output = ttnn.to_torch(output)
     assert_with_pcc(reference_output, output.to(reference_output.dtype), 0.99)
