@@ -33,17 +33,17 @@ OP_KEYS = (
     "SIN_CACHED_WEIGHTS",
     "COS_CACHED_WEIGHTS",
     # Attention
-    "WQ_MM_WEIGHTS",
-    "WK_MM_WEIGHTS",
-    "WV_MM_WEIGHTS",
+    # "WQ_MM_WEIGHTS",
+    # "WK_MM_WEIGHTS",
+    # "WV_MM_WEIGHTS",
     "WO_MM_WEIGHTS",
     "FUSED_QKV_MM_WEIGHTS",
+    "FUSED_QKV_MM_OUTPUT",
     "CREATE_QKV_HEADS_OUTPUT",
     "ROTARY_EMBEDDING_OUTPUT",
     "PRE_SOFTMAX_MM_OUTPUT",
     "POST_SOFTMAX_MM_OUTPUT",
     "CONCAT_HEADS_OUTPUT",
-    "FUSED_QKV_MM_OUTPUT",
     "K_CACHE_SLICE_OUTPUT",
     "V_CACHE_SLICE_OUTPUT",
     "K_TRANSPOSED_OUTPUT",
@@ -191,6 +191,70 @@ def get_model_config(model_config_str, num_devices=1):
         fused_activation=None,
         mcast_in0=True,
     )
+
+    model_config["QKV_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+        compute_with_storage_grid_size=(7, 1),
+        in0_block_w=32,
+        out_subblock_h=1,
+        out_subblock_w=3,
+        per_core_M=1,
+        per_core_N=9,
+        fuse_batch=True,
+        fused_activation=None,
+        mcast_in0=True,
+    )
+
+    model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
+        ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+        ttl.tensor.BufferType.L1,
+        ttl.tensor.ShardSpec(
+            ttl.tensor.CoreRangeSet(
+                {
+                    ttl.tensor.CoreRange(
+                        ttl.tensor.CoreCoord(0, 0),
+                        ttl.tensor.CoreCoord(7, 0),
+                    ),
+                }
+            ),
+            [
+                32,
+                288,
+            ],
+            ttl.tensor.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+
+    HEIGHT_SHARDED_MEMCFG = ttl.tensor.MemoryConfig(
+        ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, ttl.tensor.BufferType.L1
+    )
+
+    model_config["QHEADS_MEMCFG"] = ttl.tensor.MemoryConfig(
+        ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+        ttl.tensor.BufferType.L1,
+        ttl.tensor.ShardSpec(
+            ttl.tensor.CoreRangeSet(
+                {
+                    ttl.tensor.CoreRange(
+                        ttl.tensor.CoreCoord(0, 0),
+                        ttl.tensor.CoreCoord(7, 3),
+                    ),
+                }
+            ),
+            [
+                32,
+                128,
+            ],
+            ttl.tensor.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+
+    model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"] = HEIGHT_SHARDED_MEMCFG
+
+    model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"] = HEIGHT_SHARDED_MEMCFG
+
+    model_config["CREATE_QKV_HEADS_OUTPUT_MEMCFG"] = HEIGHT_SHARDED_MEMCFG
 
     # uncomment if need to see all the configs
     logger.debug(f"Falcon model config: \n{pretty_print_model_config(model_config)}")
