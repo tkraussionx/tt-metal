@@ -11,7 +11,7 @@ import tt_lib
 
 from models.demos.falcon40b.tt.falcon_attention import TtFalconAttention
 from models.demos.falcon40b.tt.falcon_mlp import TtFalconMLP
-from models.utility_functions import pad_by_zero
+from models.utility_functions import pad_by_zero, torch2tt_tensor, tt2torch_tensor
 
 
 class TtFalconDecoderLayer:
@@ -173,12 +173,23 @@ class TtFalconDecoderLayer:
                     hidden_states[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
                 )
             )
-        replicated_hidden_states = tt_lib.tensor.all_gather(
-            replicated_hidden_states,
-            num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
-            dim=3,
-            output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+        # TODO: Remove hack
+        # replicated_hidden_states = tt_lib.tensor.all_gather(
+        #     replicated_hidden_states,
+        #     num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
+        #     dim=3,
+        #     output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+        # )
+        replicated_hidden_states_hack = torch2tt_tensor(
+            torch.concat([tt2torch_tensor(i) for i in replicated_hidden_states], dim=-1),
+            None,
+            tt_memory_config=self.model_config["DEFAULT_MEMCFG"],
+            tt_dtype=self.model_config["DEFAULT_DTYPE"],
         )
+        for i in range(len(replicated_hidden_states)):
+            replicated_hidden_states[i] = replicated_hidden_states_hack.to(
+                self.devices[i], self.model_config["DEFAULT_MEMCFG"]
+            )
         for i in range(len(replicated_hidden_states)):
             replicated_hidden_states[i] = tt_lib.tensor.interleaved_to_sharded(
                 replicated_hidden_states[i], sharded_mem_config=self.model_config["DECODER_ALL_GATHER_OUTPUT_MEMCFG"]
@@ -229,7 +240,7 @@ class TtFalconDecoderLayer:
         output = []
 
         # Add attn output to residiual first in place to save memory
-        # Note that this is only correct in inference when dropout is disableds
+        # Note that this is only correct in inference when dropout is disabled
         for i in range(len(residual)):
             output.append(
                 tt_lib.tensor.add_without_autoformat(

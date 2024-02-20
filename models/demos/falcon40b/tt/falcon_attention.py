@@ -303,6 +303,7 @@ class TtFalconAttention:
                     output_dtype=self.model_config["FUSED_QKV_MM_OUTPUT_DTYPE"],
                 )
             )
+
         ###########
         ### TMs ###
         ###########
@@ -408,6 +409,7 @@ class TtFalconAttention:
                 )
                 query_layer[i].deallocate(True)
                 key_layer_transposed[i].deallocate(True)
+
         ###############
         ### SOFTMAX ###
         ###############
@@ -479,6 +481,7 @@ class TtFalconAttention:
                 )
             attn_weights[i].deallocate(True)
             value_layer[i].deallocate(True)
+
         #########################
         ### ATTENTION SELFOUT ###
         #########################
@@ -492,12 +495,21 @@ class TtFalconAttention:
                 attn_output[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
             )
 
-        attn_output = tt_lib.tensor.all_gather(
-            attn_output,
-            dim=3,
-            num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
-            output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+        # TODO: Remove hack
+        # attn_output = tt_lib.tensor.all_gather(
+        #     attn_output,
+        #     dim=3,
+        #     num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
+        #     output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+        # )
+        attn_output_hack = torch2tt_tensor(
+            torch.concat([tt2torch_tensor(i) for i in attn_output], dim=-1),
+            None,
+            tt_memory_config=self.model_config["DEFAULT_MEMCFG"],
+            tt_dtype=self.model_config["DEFAULT_DTYPE"],
         )
+        for i in range(len(attn_output)):
+            attn_output[i] = attn_output_hack.to(self.devices[i], self.model_config["DEFAULT_MEMCFG"])
 
         for i in range(len(attn_output)):
             attn_output[i] = tt_lib.tensor.interleaved_to_sharded(

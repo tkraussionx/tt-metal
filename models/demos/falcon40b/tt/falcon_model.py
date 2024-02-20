@@ -12,6 +12,7 @@ from models.demos.falcon40b.tt.falcon_decoder import TtFalconDecoderLayer
 from models.demos.falcon40b.tt.falcon_attention import generate_cos_sin_cache
 from models.utility_functions import (
     torch2tt_tensor,
+    tt2torch_tensor,
     pad_by_zero,
     nearest_32,
 )
@@ -44,9 +45,16 @@ class TtFalconModelShared:
 
         # So far on CPU until we add embeddings support on device
         self.embeddings = torch.nn.Embedding(config.vocab_size, config.hidden_size)
-        self.embeddings.weight = torch.nn.Parameter(
-            torch.load(str(tt_cache_path / "embedding.pt"), map_location=torch.device("cpu"))
-        )
+        word_embeddings_path = tt_cache_path / "embedding.pt"
+        if (word_embeddings_path).exists():
+            self.embeddings.weight = torch.nn.Parameter(
+                torch.load(word_embeddings_path, map_location=torch.device("cpu"))
+            )
+        else:
+            embed_weights = state_dict["transformer.word_embeddings.weight"]
+            torch.save(embed_weights, word_embeddings_path)
+            self.embeddings.weight = torch.nn.Parameter(embed_weights)
+
         if use_global_cos_sin_cache:
             global_cos_sin_cache = generate_cos_sin_cache(
                 devices,
@@ -228,12 +236,21 @@ class TtFalconModelShared:
             layer_output[i] = tt_lib.tensor.sharded_to_interleaved(
                 layer_output[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
             )
-        layer_output = tt_lib.tensor.all_gather(
-            layer_output,
-            dim=3,
-            num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
-            output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+        # TODO: Remove hack
+        # layer_output = tt_lib.tensor.all_gather(
+        #     layer_output,
+        #     dim=3,
+        #     num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
+        #     output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+        # )
+        layer_output_hack = torch2tt_tensor(
+            torch.concat([tt2torch_tensor(i) for i in layer_output], dim=-1),
+            None,
+            tt_memory_config=self.model_config["DEFAULT_MEMCFG"],
+            tt_dtype=self.model_config["DEFAULT_DTYPE"],
         )
+        for i in range(len(layer_output)):
+            layer_output[i] = layer_output_hack.to(self.devices[i], self.model_config["DEFAULT_MEMCFG"])
         for i in range(len(layer_output)):
             layer_output[i] = tt_lib.tensor.interleaved_to_sharded(
                 layer_output[i], sharded_mem_config=self.model_config["FINAL_ALL_GATHER_OUTPUT_MEMCFG"]

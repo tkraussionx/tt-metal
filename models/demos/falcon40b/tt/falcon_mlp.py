@@ -7,7 +7,7 @@ from torch import nn
 import tt_lib
 
 from typing import List
-from models.utility_functions import torch2tt_tensor
+from models.utility_functions import torch2tt_tensor, tt2torch_tensor
 
 
 class TtFalconMLP:
@@ -111,12 +111,21 @@ class TtFalconMLP:
             hidden_states[i] = tt_lib.tensor.sharded_to_interleaved(
                 hidden_states[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
             )
-        hidden_states = tt_lib.tensor.all_gather(
-            hidden_states,
-            dim=3,
-            num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
-            output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+        # TODO: Remove hack
+        # hidden_states = tt_lib.tensor.all_gather(
+        #     hidden_states,
+        #     dim=3,
+        #     num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
+        #     output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+        # )
+        hidden_states_hack = torch2tt_tensor(
+            torch.concat([tt2torch_tensor(i) for i in hidden_states], dim=-1),
+            None,
+            tt_memory_config=self.model_config["DEFAULT_MEMCFG"],
+            tt_dtype=self.model_config["DEFAULT_DTYPE"],
         )
+        for i in range(len(hidden_states)):
+            hidden_states[i] = hidden_states_hack.to(self.devices[i], self.model_config["DEFAULT_MEMCFG"])
         for i in range(len(hidden_states)):
             hidden_states[i] = tt_lib.tensor.interleaved_to_sharded(
                 hidden_states[i], sharded_mem_config=self.model_config["MLP_ALL_GATHER_OUTPUT_MEMCFG"]
