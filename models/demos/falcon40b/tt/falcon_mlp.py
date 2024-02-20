@@ -96,13 +96,7 @@ class TtFalconMLP:
 
     def __call__(self, x: List[tt_lib.tensor.Tensor]) -> List[tt_lib.tensor.Tensor]:
         hidden_states = []
-        num_shards = len(x)
-
-        assert num_shards == len(self.devices)
-        # check if all devices are the same
-        same_device = all(self.devices[i] == self.devices[i + 1] for i in range(num_shards - 1))
-
-        for i in range(num_shards):
+        for i in range(len(x)):
             hidden_states.append(
                 tt_lib.operations.primary.matmul_1d(
                     x[i],
@@ -113,53 +107,28 @@ class TtFalconMLP:
                 )
             )
             x[i].deallocate(True)
-
-        if same_device:
-            concat_hidden_states = tt_lib.tensor.concat(hidden_states, 3)
-            for i in range(num_shards):
-                hidden_states[i].deallocate(True)
-
-            mlp_output = []
-            for i in range(num_shards):
-                mlp_output.append(
-                    tt_lib.operations.primary.matmul_1d(
-                        concat_hidden_states,
-                        self.dense_4h_to_h_weights[i],
-                        program_config=self.model_config["DENSE_4H_TO_H_MM_PROGCFG"],
-                        output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
-                        output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
-                    )
-                )
-
-            concat_hidden_states.deallocate(True)
-        else:
-            for i in range(len(hidden_states)):
-                hidden_states[i] = tt_lib.tensor.sharded_to_interleaved(
-                    hidden_states[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
-                )
-            hidden_states = tt_lib.tensor.all_gather(
-                hidden_states,
-                dim=3,
-                num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
-                output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+        for i in range(len(hidden_states)):
+            hidden_states[i] = tt_lib.tensor.sharded_to_interleaved(
+                hidden_states[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
             )
-            for i in range(len(hidden_states)):
-                hidden_states[i] = tt_lib.tensor.interleaved_to_sharded(
-                    hidden_states[i], sharded_mem_config=self.model_config["MLP_ALL_GATHER_OUTPUT_MEMCFG"]
-                )
-
-            mlp_output = []
-            for i in range(num_shards):
-                mlp_output.append(
-                    tt_lib.operations.primary.matmul_1d(
-                        hidden_states[i],
-                        self.dense_4h_to_h_weights[i],
-                        program_config=self.model_config["DENSE_4H_TO_H_MM_PROGCFG"],
-                        output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
-                        output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
-                    )
-                )
-                hidden_states.deallocate(True)
+        hidden_states = tt_lib.tensor.all_gather(
+            hidden_states,
+            dim=3,
+            num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
+            output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+        )
+        for i in range(len(hidden_states)):
+            hidden_states[i] = tt_lib.tensor.interleaved_to_sharded(
+                hidden_states[i], sharded_mem_config=self.model_config["MLP_ALL_GATHER_OUTPUT_MEMCFG"]
+            )
+        for i in range(len(hidden_states)):
+            hidden_states[i] = tt_lib.operations.primary.matmul_1d(
+                hidden_states[i],
+                self.dense_4h_to_h_weights[i],
+                program_config=self.model_config["DENSE_4H_TO_H_MM_PROGCFG"],
+                output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
+                output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
+            )
 
         # return TT Tensor
-        return mlp_output
+        return hidden_states
