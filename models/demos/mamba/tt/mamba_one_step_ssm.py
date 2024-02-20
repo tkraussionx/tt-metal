@@ -2,70 +2,75 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
+from dataclasses import dataclass
 
+import torch
+from torch import nn
 import tt_lib
 
 from models.utility_functions import torch2tt_tensor
 from models.helper_funcs import Linear
-from models.demos.mamba.reference.args import ModelArgs
 
 
-class TtMambaSSM(torch.nn.Module):
+@dataclass
+class TtMambaArgs:
+    d_inner: int
+    dt_rank: int
+    d_state: int
+
+
+class TtMambaSSM(nn.Module):
     def __init__(
         self,
-        args: ModelArgs,
-        device: tt_lib.device,
+        args: TtMambaArgs,
+        device,
         state_dict,
+        base_url,
+        layer_num,
+        hidden_size: int,
+        model_config,
+        tt_cache_path,
     ):
         super().__init__()
 
         self.state_dict = state_dict
         self.device = device
+        self.hidden_size = hidden_size
+        self.model_config = model_config
         self.args = args
 
+        layer_name = f"{base_url}.{layer_num}"
+
+        # dense_h_to_4h_str = f"{layer_name}.mlp.dense_h_to_4h.weight"
+        # dense_4h_to_h_str = f"{layer_name}.mlp.dense_4h_to_h.weight"
+
         """
-        We need to split up the x_proj weights because in the reference
-        implementation they perform the linear operation for dt, B, and C in a
-        single step. Here we can't do that because it would involve fallback op
-        slicing, so we break up the weights ahead of time and do the linear ops
-        separately.
+        We need to split up the x_proj weights because in the reference implementation they perform the linear operation for dt, B, and C in
+        a single step. Here we can't do that because it would involve fallback op slicing, so we break up the weights ahead of time and do the
+        linear ops separately.
         """
-        x_proj_weight_name = "mixer.x_proj.weight"
+        x_proj_weight_name = f"{layer_name}.x_proj.weight"
         self.delta_t_proj_weights = torch2tt_tensor(
-            self.state_dict[x_proj_weight_name][: self.args.dt_rank, :],
+            self.state_dict[x_proj_weight_name][:, : self.args.dt_rank],
             self.device,
             tt_memory_config=tt_lib.tensor.MemoryConfig(
                 tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
             ),
-            tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
+            tt_dtype=tt_lib.tensor.DataType.FLOAT16,
         )
         self.delta_t_proj = Linear(self.args.d_inner, self.args.dt_rank, self.delta_t_proj_weights, bias=None)
 
         self.BC_proj_weights = torch2tt_tensor(
-            self.state_dict[x_proj_weight_name][self.args.dt_rank :, :],
+            self.state_dict[x_proj_weight_name][:, self.args.dt_rank :],
             self.device,
             tt_memory_config=tt_lib.tensor.MemoryConfig(
                 tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
             ),
-            tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
+            tt_dtype=tt_lib.tensor.DataType.FLOAT16,
         )
         self.BC_proj = Linear(self.args.d_inner, self.args.d_state * 2, self.BC_proj_weights, bias=None)
 
-        self.C_proj_weights = torch2tt_tensor(
-            self.state_dict[x_proj_weight_name][(self.args.dt_rank + self.args.d_state) :, :],
-            self.device,
-            tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
-            tt_memory_config=tt_lib.tensor.MemoryConfig(
-                tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
-            ),
-            tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
-        )
-
-        self.B_proj = Linear(self.args.d_inner, self.args.d_state, self.B_proj_weights, bias=None)
-        self.C_proj = Linear(self.args.d_inner, self.args.d_state, self.C_proj_weights, bias=None)
-
-        A_weight_name = "mixer.A_log"
+        A_weight_name = f"{layer_name}.A_log"
         self.A = self.state_dict[A_weight_name]
         self.A = -torch.exp(self.A.float())  # (2E, N)
         self.A = self.A.repeat(self.args.batch_size, 1).reshape(
@@ -77,32 +82,17 @@ class TtMambaSSM(torch.nn.Module):
             tt_memory_config=tt_lib.tensor.MemoryConfig(
                 tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
             ),
-            tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
+            tt_dtype=tt_lib.tensor.DataType.FLOAT16,
         )
-
-        D_weight_name = "mixer.D"
-        self.D = torch2tt_tensor(
-            self.state_dict[D_weight_name].repeat(self.args.batch_size, 1).reshape(
-                self.args.batch_size, 1, -1, self.args.d_inner
-            ),
-            self.device,
-            tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
-            tt_memory_config=tt_lib.tensor.MemoryConfig(
-                tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
-            ),
-            tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
-        )
-        self.D = tt_lib.tensor.permute(self.D, [0, 2, 3, 1])
-        
-        dt_proj_weight_name = "mixer.dt_proj.weight"
-        dt_proj_bias_name = "mixer.dt_proj.bias"
+        dt_proj_weight_name = f"{layer_name}.dt_proj.weight"
+        dt_proj_bias_name = f"{layer_name}.dt_proj.bias"
         self.dt_proj_weights = torch2tt_tensor(
             self.state_dict[dt_proj_weight_name],
             self.device,
             tt_memory_config=tt_lib.tensor.MemoryConfig(
                 tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
             ),
-            tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
+            tt_dtype=tt_lib.tensor.DataType.FLOAT16,
         )
         self.dt_proj_bias = torch2tt_tensor(
             self.state_dict[dt_proj_bias_name],
@@ -110,9 +100,9 @@ class TtMambaSSM(torch.nn.Module):
             tt_memory_config=tt_lib.tensor.MemoryConfig(
                 tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
             ),
-            tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
+            tt_dtype=tt_lib.tensor.DataType.FLOAT16,
         )
-        self.dt_proj = Linear(self.args.dt_rank, self.args.d_inner, self.dt_proj_weights, bias=self.dt_proj_bias)
+        self.dt_proj = Linear(self.args.d_rank, self.d_inner, self.dt_proj_weights, bias=self.dt_proj_bias)
 
         prev_hidden_states = torch.zeros((args.batch_size, 1, args.d_inner, args.d_state))
         self.tt_hidden_state = torch2tt_tensor(
@@ -121,7 +111,7 @@ class TtMambaSSM(torch.nn.Module):
             tt_memory_config=tt_lib.tensor.MemoryConfig(
                 tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
             ),
-            tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
+            tt_dtype=tt_lib.tensor.DataType.FLOAT16,
         )
 
     def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
@@ -163,10 +153,7 @@ class TtMambaSSM(torch.nn.Module):
         self.tt_hidden_state = tt_lib.tensor.add(delta_A_h, delta_B_x)
         self.output = tt_lib.tensor.bmm(self.tt_hidden_state, C)
         C.deallocate()
-        x = tt_lib.tensor.mul(self.D, x)
         self.output = tt_lib.tensor.add(self.output, x)
         x.deallocate()
-
         self.output = tt_lib.tensor.permute(self.output, [0, 3, 1, 2])
-
         return self.output
