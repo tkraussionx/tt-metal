@@ -305,7 +305,7 @@ void eth_wait_for_receiver_done() {
 
 FORCE_INLINE
 bool eth_is_receiver_channel_send_acked(uint32_t channel) {
-    return erisc_info->per_channel_user_bytes_send[channel].bytes_sent != 0;
+    return erisc_info->per_channel_user_bytes_send[channel].bytes_sent == 0;
 }
 
 FORCE_INLINE
@@ -388,6 +388,12 @@ void eth_wait_for_bytes(uint32_t num_bytes) {
         run_routing();
     }
 }
+
+FORCE_INLINE
+bool eth_bytes_are_available_on_channel(uint8_t channel) {
+    return erisc_info->per_channel_user_bytes_send[channel].bytes_sent != 0;
+}
+
 FORCE_INLINE
 void eth_wait_for_bytes_on_channel(uint32_t num_bytes, uint8_t channel) {
     // assert(channel < 4);
