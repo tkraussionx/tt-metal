@@ -13,29 +13,9 @@ class MistralMLP:
         self.w1 = parameters.w1.weight
         self.w2 = parameters.w2.weight
         self.w3 = parameters.w3.weight
+        self.grid = grid
 
         rows = input_shape.with_tile_padding()[-2]
-        self.ff_silu = matmul_1d_config(
-            m=rows,
-            k=self.w1.shape.with_tile_padding()[-2],
-            n=self.w1.shape.with_tile_padding()[-1],
-            grid=grid,
-            act=ttnn.ttl.tensor.FusibleActivation.SILU,
-        )
-        self.ff_none = matmul_1d_config(
-            m=rows,
-            k=self.w3.shape.with_tile_padding()[-2],
-            n=self.w3.shape.with_tile_padding()[-1],
-            grid=grid,
-            act=None,
-        )
-        self.ff2 = matmul_1d_config(
-            m=rows,
-            k=self.w2.shape.with_tile_padding()[-2],
-            n=self.w2.shape.with_tile_padding()[-1],
-            grid=grid,
-            act=None,
-        )
         shard_shape = ttnn.ShardShape(rows, self.w1.shape.with_tile_padding()[-1] // grid.num_cores)
         self.shard = ttnn.create_sharded_memory_config(grid, shard_shape, ttnn.ShardStrategy.WIDTH)
         self.interleave = ttnn.ttl.tensor.MemoryConfig(
@@ -43,11 +23,12 @@ class MistralMLP:
         )
 
     def __call__(self, x):
-        matmul_1d = ttnn.ttl.operations.primary.matmul_1d
-        w1_out = matmul_1d(x, self.w1, program_config=self.ff_silu, output_mem_config=self.shard)
-        w3_out = matmul_1d(x, self.w3, program_config=self.ff_none, output_mem_config=self.shard)
+        w1_out = ttnn.matmul(
+            x, self.w1, activation="silu", core_grid=self.grid, use_1d_systolic_array=True, memory_config=self.shard
+        )
+        w3_out = ttnn.matmul(x, self.w3, core_grid=self.grid, use_1d_systolic_array=True, memory_config=self.shard)
         w2_in = ttnn.mul(w1_out, w3_out, memory_config=self.shard)
-        w2_out = matmul_1d(w2_in, self.w2, program_config=self.ff2, output_mem_config=self.interleave)
+        w2_out = ttnn.matmul(w2_in, self.w2, core_grid=self.grid, use_1d_systolic_array=True, memory_config=self.shard)
         return w2_out
 
 
