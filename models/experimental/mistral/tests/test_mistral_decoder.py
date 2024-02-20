@@ -97,8 +97,7 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
         tt_decode_input = pt_decode_input.clone()
         start_pos = generation_start_pos + i
 
-        decode_input, start_pos, rot_mat, attn_mask = tt_model.prepare_inputs(tt_decode_input, start_pos)
-
+        decode_input, start_pos, rot_mat, attn_mask = tt_model.prepare_inputs(tt_decode_input, start_pos, cos, sin)
         # Run TT model
         tt_out = tt_model(decode_input, rot_mat, start_pos, attn_mask)
         # tt_output = tt_model(tt_input, bcast_freq_xq, bcast_freq_xk, tt_position, mask, seqlen)

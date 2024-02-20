@@ -46,6 +46,7 @@ class TtTransformerBlock(nn.Module):
         self.dim = args.dim
         self.max_batch_size = args.max_batch_size
         self.n_kv_heads = args.n_kv_heads
+        self.current = 0
         self.sliding_window = args.sliding_window
 
         self.layer_num = layer_num
@@ -84,15 +85,15 @@ class TtTransformerBlock(nn.Module):
         )
 
     # TODO function taken from mistral_attention.py. Move to mistral_common.py
-    def get_rotation_mat(self, dhead, end, start_pos, seqlen, batch):
-        cos, sin = tt_precompute_freqs(dhead, end)
+    def get_rotation_mat(self, cos, sin, start_pos, seqlen, batch):
+        # cos, sin = tt_precompute_freqs(dhead, end)
         rot_mat = freqs_to_rotation_matrix(cos, sin)
         position_ids = torch.ones(batch, seqlen, dtype=torch.long) * start_pos
         rot_emb = tt_gather_rotary_emb(rot_mat, position_ids)
         return rot_emb
 
     # TODO function taken from mistral_attention.py. Move to mistral_common.py
-    def prepare_inputs(self, x, start_pos):
+    def prepare_inputs(self, x, start_pos, cos, sin):
         """
         Prepare inputs for decode mode. Assume that current token is at
         start_pos, and KV cache has valid data up to start_pos.
@@ -106,14 +107,17 @@ class TtTransformerBlock(nn.Module):
         seq_len = x.size(1)
         assert seq_len == 1, "Only supporting decode mode"
         x = x.transpose(0, 1).unsqueeze(1)  # [seq_len, 1, batch, hidden_dim]
-        rot_mat = self.get_rotation_mat(
-            dhead=self.head_dim, end=self.max_seq_len * 2, start_pos=start_pos, seqlen=seq_len, batch=batch
-        )
+        rot_mat = self.get_rotation_mat(cos, sin, start_pos=start_pos, seqlen=seq_len, batch=batch)
 
         padded_layer_past_len = min(nearest_32(start_pos + 1), self.sliding_window)
+        self.current = self.current % self.sliding_window
         attn_mask = torch.zeros(seq_len, 1, batch, padded_layer_past_len)
-        # attn_mask[:, :, :, : start_pos + 1] = -1e9
-        attn_mask[:, :, :, start_pos + 1 :] = torch.finfo(attn_mask.dtype).min
+
+        if start_pos < self.sliding_window:
+            attn_mask[:, :, :, self.current + 1 :] = torch.finfo(attn_mask.dtype).min
+        else:
+            attn_mask[:, :, :, : self.current] = torch.finfo(attn_mask.dtype).min
+            attn_mask[:, :, :, self.sliding_window - self.current :] = torch.finfo(attn_mask.dtype).min
         attn_mask = attn_mask.expand(-1, self.n_local_heads, -1, -1)
 
         # TODO: mask out >sliding_window prev tokens
