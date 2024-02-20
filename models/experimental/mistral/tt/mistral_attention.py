@@ -44,7 +44,7 @@ class TtMistralAttention(nn.Module):
 
         self.model_config = model_config
 
-        self.oldest = 0
+        self.current = 0
 
         layer_name = f"{base_url}.{layer_num}"
 
@@ -127,14 +127,14 @@ class TtMistralAttention(nn.Module):
             self.wo_list.append(wo)
             self.layer_past_list.append(layer_past)
 
-    def get_rotation_mat(self, dhead, end, start_pos, seqlen, batch):
-        cos, sin = tt_precompute_freqs(dhead, end)
+    def get_rotation_mat(self, cos, sin, start_pos, seqlen, batch):
+        # cos, sin = tt_precompute_freqs(dhead, end)
         rot_mat = freqs_to_rotation_matrix(cos, sin)
         position_ids = torch.ones(batch, seqlen, dtype=torch.long) * start_pos
         rot_emb = tt_gather_rotary_emb(rot_mat, position_ids)
         return rot_emb
 
-    def prepare_inputs(self, x, start_pos):
+    def prepare_inputs(self, x, start_pos, cos, sin):
         """
         Prepare inputs for decode mode. Assume that current token is at
         start_pos, and KV cache has valid data up to start_pos.
@@ -148,14 +148,17 @@ class TtMistralAttention(nn.Module):
         seq_len = x.size(1)
         assert seq_len == 1, "Only supporting decode mode"
         x = x.transpose(0, 1).unsqueeze(1)  # [seq_len, 1, batch, hidden_dim]
-        rot_mat = self.get_rotation_mat(
-            dhead=self.head_dim, end=self.max_seq_len * 2, start_pos=start_pos, seqlen=seq_len, batch=batch
-        )
+        rot_mat = self.get_rotation_mat(cos, sin, start_pos=start_pos, seqlen=seq_len, batch=batch)
 
         padded_layer_past_len = min(nearest_32(start_pos + 1), self.sliding_window)
+        self.current = self.current % self.sliding_window
         attn_mask = torch.zeros(seq_len, 1, batch, padded_layer_past_len)
-        # attn_mask[:, :, :, : start_pos + 1] = -1e9
-        attn_mask[:, :, :, start_pos + 1 :] = torch.finfo(attn_mask.dtype).min
+
+        if start_pos < self.sliding_window:
+            attn_mask[:, :, :, self.current + 1 :] = torch.finfo(attn_mask.dtype).min
+        else:
+            attn_mask[:, :, :, : self.current] = torch.finfo(attn_mask.dtype).min
+            attn_mask[:, :, :, self.sliding_window - self.current :] = torch.finfo(attn_mask.dtype).min
         attn_mask = attn_mask.expand(-1, self.n_local_heads, -1, -1)
 
         # TODO: mask out >sliding_window prev tokens
@@ -165,7 +168,6 @@ class TtMistralAttention(nn.Module):
         # start_pos: int
         # rot_mat: [1, bsz, head_dim, head_dim]
         # attn_mask: [seq_len, n_heads, batch, padded_layer_past_len]
-        print("ROT MAT SIZE", rot_mat.size())
         assert x.size() == (seq_len, 1, batch, self.hidden_size)
         assert rot_mat.size() == (1, batch, self.head_dim, self.head_dim)
         assert attn_mask.size() == (seq_len, self.n_local_heads, batch, padded_layer_past_len)
@@ -267,11 +269,8 @@ class TtMistralAttention(nn.Module):
             # v_heads [seqlen, n_kv_heads, bsz, head_dim]
             # keys, [max_batch_size, n_kv_heads // self.num_devices, sliding_window, head_dim]
 
-            if start_pos < self.sliding_window:
-                self.oldest = start_pos
-            tt_lib.tensor.update_cache(keys, k_heads, self.oldest)
-            tt_lib.tensor.update_cache(values, v_heads, self.oldest)
-            self.oldest = self.oldest % self.sliding_window
+            tt_lib.tensor.update_cache(keys, k_heads, self.current)
+            tt_lib.tensor.update_cache(values, v_heads, self.current)
 
             k_heads.deallocate()
             v_heads.deallocate()
@@ -341,12 +340,10 @@ class TtMistralAttention(nn.Module):
                 # output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
             )  # seqlen, n_heads, batch, cache_len + seqlen
 
-            print("GQA DONE")
-
             scale = 1 / math.sqrt(self.head_dim)
             attn = tt_lib.tensor.mul_unary(attn, scale)
+            # print("scale2", attn.shape(), attn_mask.shape(), attn, attn_mask)
             attn = tt_lib.tensor.add(attn, attn_mask)
-            print("PRE SOFT MAX")
             attn = tt_lib.tensor.softmax(attn)
 
             print("GQA2:", attn.shape(), values.shape())
@@ -369,7 +366,7 @@ class TtMistralAttention(nn.Module):
                 # output_mem_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"],
             )  # seqlen, 1, batch, hidden_size
 
-            print("DENSE SHAPES", attn_output.shape(), wo.shape())
+            # print("DENSE SHAPES", attn_output.shape(), wo.shape())
             dense_out = tt_lib.operations.primary.matmul_1d(
                 attn_output,
                 wo,

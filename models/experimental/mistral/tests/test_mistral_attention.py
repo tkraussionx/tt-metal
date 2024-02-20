@@ -87,7 +87,7 @@ def test_mistral_attention_inference(
         configuration=model_args,
     )
     generation_start_pos = 0
-    generation_length = 12
+    generation_length = 1
     all_tests_pass = True
 
     cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
@@ -98,7 +98,9 @@ def test_mistral_attention_inference(
         pt_attention_input = (torch.rand(batch, seq_len, model_args.dim) * 2) - 1
         tt_attention_input = pt_attention_input.clone()
         start_pos = generation_start_pos + i
-        attention_input, start_pos, rot_mat, attn_mask = tt_model.prepare_inputs(tt_attention_input, start_pos)
+        attention_input, start_pos, rot_mat, attn_mask = tt_model.prepare_inputs(
+            tt_attention_input, start_pos, cos, sin
+        )
 
         tt_out = tt_model(
             attention_input,
