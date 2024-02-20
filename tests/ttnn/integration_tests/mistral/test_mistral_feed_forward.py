@@ -58,11 +58,6 @@ def test_mistral_feed_forward_inference(model_location_generator, device, reset_
     parameters = ttnn.model_preprocessing.make_parameter_dict(
         {k.split(".weight")[0]: {"weight": v} for k, v in parameters.items()}
     )
-    print(parameters)
-
-    # Not sure why preprocess_model_parameters doesn't do this
-    # for v in parameters.values():
-    #     v.weight = ttnn.unsqueeze_to_4D(v.weight)
 
     input = torch.rand(1, 1, 11, dim)
     reference_output = reference_model(input)
