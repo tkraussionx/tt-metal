@@ -49,7 +49,7 @@ run_tracy_test(){
     source build/python_env/bin/activate
     export PYTHONPATH=$TT_METAL_HOME
 
-    python -m tracy -r -p -m pytest -svvv $TT_METAL_HOME/tests/tt_eager/python_api_testing/sweep_tests/pytests/tt_dnn/test_matmul.py::test_run_matmul_test[BFLOAT16-input_shapes0]
+    python -m tracy -r -v -p -m pytest -svvv $TT_METAL_HOME/tests/tt_eager/python_api_testing/sweep_tests/pytests/tt_dnn/test_matmul.py::test_run_matmul_test[BFLOAT16-input_shapes0]
 
     ls $PROFILER_ARTIFACTS_DIR/.logs/tracy_profile_log_host.csv
     ls $PROFILER_ARTIFACTS_DIR/.logs/tracy_profile_log_host.tracy
@@ -66,7 +66,7 @@ elif [[ $1 == "TRACY" ]]; then
 elif [[ $1 == "POST_PROC" ]]; then
     run_post_proc_test
 else
-    run_profiling_test
+    #run_profiling_test
     run_tracy_test
-    run_post_proc_test
+    #run_post_proc_test
 fi
