@@ -70,6 +70,7 @@ else
     while [ $counter -le 100 ]
     do
         echo $counter
+        run_profiling_test
         run_tracy_test
         ((counter++))
     done
