@@ -31,7 +31,6 @@ class MistralMLP:
 
 
 def feed_forward(config, x, parameters, grid=ttnn.CoreGrid(8, 8)):
-    """Lower performance but maches functional paradigm"""
     w1 = parameters.w1.weight
     w2 = parameters.w2.weight
     w3 = parameters.w3.weight
