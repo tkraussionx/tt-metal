@@ -143,6 +143,8 @@ def get_model_config(model_config_str, num_devices=1):
         model_config["FF3_MM_OUTPUT_MEMCFG"] = L1_MEMCFG
         model_config["FF2_MM_OUTPUT_MEMCFG"] = L1_MEMCFG
         model_config["FF1_FF3_MUL_OUTPUT_MEMCFG"] = L1_MEMCFG
+    else:
+        model_config["FF1_FF3_MUL_OUTPUT_MEMCFG"] = DRAM_MEMCFG
 
     # FF1 & FF3 Matmul Config Variables
     # TODO: N300 currently would only have 8x7 available until dispatch moved to eth core

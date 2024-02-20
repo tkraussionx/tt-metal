@@ -46,16 +46,14 @@ class TtMistralAttention(nn.Module):
 
         self.oldest = 0
 
-        layer_name = f"{base_url}.{layer_num}"
-
-        wq_str = f"wq.weight"
-        wk_str = f"wk.weight"
-        wv_str = f"wv.weight"
-        wo_str = f"wo.weight"
-        # wq_str = f"{layer_name}.attention.wq.weight"
-        # wk_str = f"{layer_name}.attention.wk.weight"
-        # wv_str = f"{layer_name}.attention.wv.weight"
-        # wo_str = f"{layer_name}.attention.wo.weight"
+        if layer_num:
+            layer_name = f"{base_url}.{layer_num}.attention."
+        else:
+            layer_name = base_url
+        wq_str = f"{layer_name}wq.weight"
+        wk_str = f"{layer_name}wk.weight"
+        wv_str = f"{layer_name}wv.weight"
+        wo_str = f"{layer_name}wo.weight"
 
         # when splitting the devices, we need to make sure that the number of heads is divisible by the number of devices
         assert self.n_heads % self.num_devices == 0
@@ -127,6 +125,7 @@ class TtMistralAttention(nn.Module):
             self.wo_list.append(wo)
             self.layer_past_list.append(layer_past)
 
+    # TODO Move to mistral_common.py
     def get_rotation_mat(self, dhead, end, start_pos, seqlen, batch):
         cos, sin = tt_precompute_freqs(dhead, end)
         rot_mat = freqs_to_rotation_matrix(cos, sin)
@@ -134,6 +133,7 @@ class TtMistralAttention(nn.Module):
         rot_emb = tt_gather_rotary_emb(rot_mat, position_ids)
         return rot_emb
 
+    # TODO Move to mistral_common.py
     def prepare_inputs(self, x, start_pos):
         """
         Prepare inputs for decode mode. Assume that current token is at

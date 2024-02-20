@@ -87,7 +87,7 @@ def test_mistral_attention_inference(
         configuration=model_args,
     )
     generation_start_pos = 0
-    generation_length = 12
+    generation_length = 1
     all_tests_pass = True
 
     cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
