@@ -67,6 +67,12 @@ elif [[ $1 == "POST_PROC" ]]; then
     run_post_proc_test
 else
     #run_profiling_test
-    run_tracy_test
+    counter=1
+    while [ $counter -le 100 ]
+    do
+        echo $counter
+        run_tracy_test
+        ((counter++))
+    done
     #run_post_proc_test
 fi
