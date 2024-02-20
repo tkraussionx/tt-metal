@@ -13,15 +13,8 @@ run_profiling_test(){
     source build/python_env/bin/activate
     export PYTHONPATH=$TT_METAL_HOME
 
-    TT_METAL_DEVICE_PROFILER=1 pytest $PROFILER_TEST_SCRIPTS_ROOT/test_device_profiler.py -vvv
+    pytest -svvv $TT_METAL_HOME/tests/tt_eager/python_api_testing/sweep_tests/pytests/tt_dnn/test_composite.py::test_run_eltwise_composite_test[lerp_binary-input_shapes0]
 
-    remove_default_log_locations
-
-    $PROFILER_SCRIPTS_ROOT/profile_this.py -c "pytest -svvv $TT_METAL_HOME/tests/tt_eager/python_api_testing/sweep_tests/pytests/tt_dnn/test_composite.py::test_run_eltwise_composite_test[lerp_binary-input_shapes0]"
-
-    python -m tracy -r -v -p -m pytest -svvv $TT_METAL_HOME/tests/tt_eager/python_api_testing/sweep_tests/pytests/tt_dnn/test_composite.py::test_run_eltwise_composite_test[lerp_binary-input_shapes0]
-
-    remove_default_log_locations
 }
 
 
