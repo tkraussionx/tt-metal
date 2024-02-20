@@ -9,6 +9,9 @@ from tt_lib.utils import (
     tilize as tilize_util,
     untilize as untilize_util,
 )
+from tests.tt_eager.python_api_testing.sweep_tests.reference_optimizer import (
+    lamb_optimizer_kernel,
+)
 
 ################################################
 ################# Helper-Funcs #################
@@ -741,6 +744,14 @@ def addalpha(x, y, *args, alpha, **kwargs):
     return torch.add(x, y, alpha=alpha)
 
 
+def lamb_optimizer(x, y, z, w, *args, beta1, beta2, step_size, eps, weight_decay, **kwargs):
+    exp_avg_out, exp_avg_sq_out, param = lamb_optimizer_kernel.lamb_kernel(
+        x, y, z, w, beta1=beta1, beta2=beta2, step_size=step_size, eps=eps, weight_decay=weight_decay
+    )
+
+    return [exp_avg_out, exp_avg_sq_out, param]
+
+
 def repeat_interleave(x, *args, repeat, dim, **kwargs):
     return torch.repeat_interleave(x, repeats=repeat, dim=dim)
 
@@ -1069,7 +1080,7 @@ def embeddings(x, y, *args, **kwargs):
     x_ref = torch.clamp(x_ref, min=0, max=y.shape[-2] - 1)
 
     batch_size = x_shape[0]
-    num_rows = x_shape[2]
+    num_rows = x_shape[3]
     num_embeddings = y_shape[2]
     embedding_dim = y_shape[3]
 

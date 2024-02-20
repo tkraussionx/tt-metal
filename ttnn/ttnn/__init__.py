@@ -54,7 +54,7 @@ from ttnn.types import (
     Tensor,
 )
 
-from ttnn.device import Device, open, close
+from ttnn.device import Device, open_device, close_device, manage_device
 
 from ttnn.core import (
     has_storage_type_of,
@@ -114,6 +114,25 @@ from ttnn.operations.others import (
     upsample,
 )
 
+from ttnn.operations.creation import (
+    ones,
+    ones_like,
+    zeros,
+    zeros_like,
+    full,
+    full_like,
+)
+
+from ttnn.operations.reduction import (
+    std,
+    var,
+)
+
+from ttnn.operations.losses import (
+    l1_loss,
+    mse_loss,
+)
+
 from ttnn.operations.data_movement import (
     concat,
     pad,
@@ -153,6 +172,13 @@ from ttnn.operations.binary import (
     subtract,
     mul,
     multiply,
+    ldexp,
+    logical_and,
+    logical_or,
+    logical_xor,
+    logaddexp,
+    logaddexp2,
+    xlogy,
     add_and_apply_activation,
     add_and_apply_activation_,
 )
@@ -171,6 +197,7 @@ from ttnn.operations.relational import (
     lte,
     eq,
     ne,
+    isclose,
 )
 
 from ttnn.operations.activation import (
@@ -193,6 +220,7 @@ from ttnn.operations.activation import (
     softshrink,
     softsign,
     swish,
+    softplus,
 )
 
 from ttnn.operations.math import (
@@ -217,6 +245,10 @@ from ttnn.operations.math import (
     erfinv,
     exp2,
     expm1,
+    atan2,
+    hypot,
+    squared_difference,
+    lerp,
 )
 
 from ttnn.operations.normalization import (

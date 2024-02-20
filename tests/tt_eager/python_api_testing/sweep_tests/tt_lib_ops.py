@@ -748,6 +748,45 @@ def eltwise_addalpha(
 
 
 @setup_host_and_device
+def lamb_optimizer(
+    x,
+    y,
+    z,
+    w,
+    *args,
+    beta1,  # 0.9
+    beta2,  # 0.999
+    step_size,  # 1e-3
+    eps,  # 1e-6
+    weight_decay,  # 0.01
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = setup_tt_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
+    t2 = setup_tt_tensor(z, device, layout[2], input_mem_config[2], dtype[2])
+    t3 = setup_tt_tensor(w, device, layout[3], input_mem_config[3], dtype[3])
+
+    t4 = ttl.tensor.lamb_optimizer(
+        t0,
+        t1,
+        t2,
+        t3,
+        beta1=beta1,
+        beta2=beta2,
+        step_size=step_size,
+        eps=eps,
+        weight_decay=weight_decay,
+    )
+
+    return [tt2torch_tensor(t4[0]), tt2torch_tensor(t4[1]), tt2torch_tensor(t4[2])]
+
+
+@setup_host_and_device
 def eltwise_heaviside(
     x,
     *args,
@@ -2168,7 +2207,7 @@ def embeddings(x, y, *args, device, dtype, layout, input_mem_config, output_mem_
     y_shape = y.shape
 
     batch_size = x_shape[0]
-    num_rows = x_shape[2]
+    num_rows = x_shape[3]
     embedding_dim = y_shape[3]
 
     x_ref = x.detach().clone()
@@ -2178,7 +2217,7 @@ def embeddings(x, y, *args, device, dtype, layout, input_mem_config, output_mem_
 
     t1 = ttl.tensor.Tensor(y, dtype[1]).to(device, input_mem_config[1])
 
-    t2 = ttl.tensor.embeddings(t0, t1, False, False, output_mem_config=output_mem_config)
+    t2 = ttl.tensor.embeddings(t0, t1, False, output_mem_config=output_mem_config)
 
     tt_data = t2.cpu().to_torch()
 

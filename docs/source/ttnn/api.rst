@@ -1,6 +1,17 @@
 APIs
 ####
 
+Device
+******
+
+.. toctree::
+   :maxdepth: 1
+
+   ttnn/open_device
+   ttnn/close_device
+   ttnn/manage_device
+
+
 Tensor
 ******
 
@@ -79,6 +90,13 @@ Pointwise Binary
    ttnn/mul
    ttnn/sub
    ttnn/pow
+   ttnn/ldexp
+   ttnn/logical_and
+   ttnn/logical_or
+   ttnn/logical_xor
+   ttnn/logaddexp
+   ttnn/logaddexp2
+   ttnn/xlogy
    ttnn/add_and_apply_activation
    ttnn/add_and_apply_activation_
 
@@ -100,6 +118,7 @@ Pointwise Relational
    ttnn/lte
    ttnn/eq
    ttnn/ne
+   ttnn/isclose
 
 Pointwise Math
 ==============
@@ -128,6 +147,10 @@ Pointwise Math
    ttnn/erfinv
    ttnn/exp2
    ttnn/expm1
+   ttnn/atan2
+   ttnn/hypot
+   ttnn/lerp
+   ttnn/squared_difference
 
 Activation
 ==========
@@ -154,6 +177,29 @@ Activation
    ttnn/softsign
    ttnn/swish
    ttnn/hardsigmoid
+   ttnn/softplus
+
+Tensor Creation
+===============
+
+.. toctree::
+   :maxdepth: 1
+
+   ttnn/ones
+   ttnn/ones_like
+   ttnn/zeros
+   ttnn/zeros_like
+   ttnn/full
+   ttnn/full_like
+
+Losses
+======
+
+.. toctree::
+   :maxdepth: 1
+
+   ttnn/l1_loss
+   ttnn/mse_loss
 
 Reduction
 =========
@@ -162,6 +208,8 @@ Reduction
    :maxdepth: 1
 
    ttnn/mean
+   ttnn/std
+   ttnn/var
 
 Data Movement
 =============
