@@ -59,12 +59,13 @@ def _get_subblock_sizes(m_tiles_per_core, n_tiles_per_core):
     raise RuntimeError(f"Unable to find subblock sizes for m_size={m_tiles_per_core} and n_size={n_tiles_per_core}")
 
 
-_SUPPORTED_ACTIVATIONS = ["gelu", "relu"]
+_SUPPORTED_ACTIVATIONS = ["gelu", "relu", "silu"]
 
 
 _ACTIVATION_TO_FUSED_ACTIVATION = {
     "gelu": (ttnn.ttl.tensor.FusibleActivation.GELU, True),
     "relu": ttnn.ttl.tensor.FusibleActivation.RELU,
+    "silu": ttnn.ttl.tensor.FusibleActivation.SILU,
 }
 
 
@@ -366,6 +367,7 @@ def _matmul(
         activation_to_function = {
             "gelu": ttnn.gelu,
             "relu": ttnn.relu,
+            "silu": ttnn.silu,
         }
         output_tensor = activation_to_function[activation](output_tensor)
 
