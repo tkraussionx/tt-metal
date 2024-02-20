@@ -249,13 +249,13 @@ FORCE_INLINE  bool noc_read_data_sequence(
         // propagate that info to host (especially on erisc... TODO(snijjar))
         // next_buffer_available = next_buffer_available && channels_active[noc_reader_buffer_wrptr] == 0;
         if (next_buffer_available) {
-            // kernel_profiler::mark_time(12);
             // Queue up another read
+            // non blocking - issues noc_async_read
+            // issue_read_chunk(noc_reader_buffer_wrptr, ...);
+            // kernel_profiler::mark_time(12);
             #if EMULATE_DRAM_READ_CYCLES == 1
             issue_read_chunk();
             #else
-            // non blocking - issues noc_async_read
-            // issue_read_chunk(noc_reader_buffer_wrptr, ...);
             read_chunk<src_is_dram>(
                 transaction_channel_sender_buffer_addresses[noc_reader_buffer_wrptr], // eth_l1_buffer_address_base
                 num_pages,
@@ -357,7 +357,7 @@ void kernel_main() {
         did_something = noc_read_ack_check_sequence<MAX_NUM_CHANNELS>(
                             noc_reader_buffer_ackptr,
                             noc_reader_buffer_wrptr,
-                            noc_index);
+                            noc_index) || did_something;
 
         did_something = noc_read_data_sequence<MAX_NUM_CHANNELS,src_is_dram>(
                             transaction_channel_sender_buffer_addresses,
@@ -371,8 +371,7 @@ void kernel_main() {
                             page_size,
                             num_pages_per_l1_buffer,
                             num_pages,
-                            page_index) ||
-                        did_something;
+                            page_index) || did_something;
 
         did_something = eth_send_data_sequence<MAX_NUM_CHANNELS>(
                             transaction_channel_sender_buffer_addresses,

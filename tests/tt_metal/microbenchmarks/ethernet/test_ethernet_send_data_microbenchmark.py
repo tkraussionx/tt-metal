@@ -189,9 +189,9 @@ def test_ethernet_send_data_microbenchmark_concurrent_with_dram_read(
 )
 @pytest.mark.parametrize(
     "eth_buffer_size_bytes",
-    [1024, 2048, 4096, 8192, 12 * 1024, 16 * 1024, 14 * 1024, 20 * 1024, 32 * 1024, 50 * 1024],
+    [1024, 2048, 4096, 8192, 12 * 1024, 16 * 1024, 14 * 1024, 20 * 1024, 24 * 1024, 32 * 1024, 50 * 1024],
 )
-@pytest.mark.parametrize("num_transaction_buffers", [1, 2, 3, 4, 6, 8])
+@pytest.mark.parametrize("num_transaction_buffers", [1, 2, 3, 4, 5, 6, 8])
 @pytest.mark.parametrize("input_buffer_page_size", [1024, 2048, 4096, 8192])
 # @pytest.mark.parametrize("precomputed_address_buffer_size", [0, 16, 32])
 def test_ethernet_send_data_microbenchmark_concurrent_with_dram_read_and_write(
