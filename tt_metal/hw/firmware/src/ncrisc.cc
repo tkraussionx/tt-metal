@@ -47,7 +47,6 @@ int main(int argc, char *argv[]) {
 
   mailboxes->ncrisc_halt.resume_addr = (uint32_t)ncrisc_resume;
 
-  kernel_profiler::init_profiler();
   // Cleanup profiler buffer incase we never get the go message
   while (1) {
       DEBUG_STATUS('W');

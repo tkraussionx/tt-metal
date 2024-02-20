@@ -344,6 +344,8 @@ void DeviceProfiler::dumpResults (
             }
         }
 
+        std::sort (device_events.begin(), device_events.end());
+
         pushTracyDeviceResults();
     }
     else
@@ -369,11 +371,6 @@ void DeviceProfiler::pushTracyDeviceResults()
             device_tracy_contexts[device_core]->PushEndZone(event);
         }
 
-    }
-
-    for (auto& device_core: device_tracy_contexts)
-    {
-        device_core.second->Collect();
     }
     device_events.clear();
 #endif

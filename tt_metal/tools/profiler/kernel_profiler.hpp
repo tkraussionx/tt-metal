@@ -261,34 +261,39 @@ namespace kernel_profiler{
                 (hostIndex <= kernel_profiler::HOST_BUFFER_END_INDEX_T2) && (deviceIndex <= kernel_profiler::DEVICE_BUFFER_END_INDEX_T2);
                 hostIndex++, deviceIndex++)
         {
-            uint32_t currEndIndex =
-                profiler_control_buffer[deviceIndex] +
-                profiler_control_buffer[hostIndex];
-
-            uint32_t dram_offset =
-                (core_flat_id % profiler_core_count_per_dram) * PROFILER_RISC_COUNT * PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC +
-                hostIndex * PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC +
-                profiler_control_buffer[hostIndex] * sizeof(uint32_t);
-
-            const InterleavedAddrGen<true> s = {
-                .bank_base_address = dram_profiler_address,
-                .page_size = pageSize
-            };
-
-            if ( currEndIndex <= PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC)
+            if (profiler_control_buffer[deviceIndex])
             {
-                uint64_t dram_bank_dst_noc_addr = s.get_noc_addr(core_flat_id / profiler_core_count_per_dram, dram_offset);
+                uint32_t currEndIndex =
+                    profiler_control_buffer[deviceIndex] +
+                    profiler_control_buffer[hostIndex];
 
-                noc_async_write(
-                        PROFILER_L1_BUFFER_BR + hostIndex * PROFILER_L1_BUFFER_SIZE,
-                        dram_bank_dst_noc_addr,
-                        profiler_control_buffer[deviceIndex] * sizeof(uint32_t));
+                uint32_t dram_offset =
+                    (core_flat_id % profiler_core_count_per_dram) * PROFILER_RISC_COUNT * PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC +
+                    hostIndex * PROFILER_FULL_HOST_BUFFER_SIZE_PER_RISC +
+                    profiler_control_buffer[hostIndex] * sizeof(uint32_t);
 
-                profiler_control_buffer[hostIndex] = currEndIndex;
-            }
-            else
-            {
-                profiler_control_buffer[hostIndex] = PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC+1;
+                const InterleavedAddrGen<true> s = {
+                    .bank_base_address = dram_profiler_address,
+                    .page_size = pageSize
+                };
+
+                if ( currEndIndex <= PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC)
+                {
+                    uint64_t dram_bank_dst_noc_addr = s.get_noc_addr(core_flat_id / profiler_core_count_per_dram, dram_offset);
+
+                    noc_async_write(
+                            PROFILER_L1_BUFFER_BR + hostIndex * PROFILER_L1_BUFFER_SIZE,
+                            dram_bank_dst_noc_addr,
+                            profiler_control_buffer[deviceIndex] * sizeof(uint32_t));
+
+                    profiler_control_buffer[hostIndex] = currEndIndex;
+                }
+                else
+                {
+                    profiler_control_buffer[hostIndex] = PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC+1;
+                }
+
+                profiler_control_buffer[deviceIndex] = 0;
             }
         }
         noc_async_write_barrier();
@@ -318,9 +323,9 @@ namespace kernel_profiler{
                 }
                 if (wIndex < (PROFILER_L1_VECTOR_SIZE - stackSize))
                 {
-                    mark_time(timer_id);
                     stackSize += PROFILER_L1_MARKER_UINT32_SIZE;
                     start_marked = true;
+                    mark_time(timer_id);
                 }
 #endif
             }
@@ -330,8 +335,8 @@ namespace kernel_profiler{
 #if defined(PROFILE_KERNEL)
                 if (start_marked)
                 {
-                    stackSize -= PROFILER_L1_MARKER_UINT32_SIZE;
                     mark_time((timer_id & 0xFFFF) | (1<<16));
+                    stackSize -= PROFILER_L1_MARKER_UINT32_SIZE;
                     start_marked = false;
                     if (!stackSize)
                     {
