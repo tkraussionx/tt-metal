@@ -11,16 +11,9 @@ import tt_lib
 
 from models.utility_functions import (
     torch2tt_tensor,
-    tt2torch_tensor,
-    pad_by_zero,
     nearest_32,
 )
-from models.experimental.mistral.tt.mistral_common import (
-    precompute_freqs as tt_precompute_freqs,
-    freqs_to_rotation_matrix,
-    gather_rotary_emb as tt_gather_rotary_emb,
-    tt_all_reduce,
-)
+from models.experimental.mistral.tt.mistral_common import tt_all_reduce
 
 
 class TtMistralAttention(nn.Module):
@@ -127,14 +120,7 @@ class TtMistralAttention(nn.Module):
         self.tt_sin_cached = None
         self.tt_cos_cached = None
 
-    def get_rotation_mat(self, cos, sin, start_pos, seqlen, batch):
-        # cos, sin = tt_precompute_freqs(dhead, end)
-        rot_mat = freqs_to_rotation_matrix(cos, sin)
-        position_ids = torch.ones(batch, seqlen, dtype=torch.long) * start_pos
-        rot_emb = tt_gather_rotary_emb(rot_mat, position_ids)
-        return rot_emb
-
-    def prepare_inputs(self, x, start_pos, cos, sin):
+    def prepare_inputs(self, x, start_pos):
         """
         Prepare inputs for decode mode. Assume that current token is at
         start_pos, and KV cache has valid data up to start_pos.
@@ -148,7 +134,6 @@ class TtMistralAttention(nn.Module):
         seq_len = x.size(1)
         assert seq_len == 1, "Only supporting decode mode"
         x = x.transpose(0, 1).unsqueeze(1)  # [seq_len, 1, batch, hidden_dim]
-        rot_mat = self.get_rotation_mat(cos, sin, start_pos=start_pos, seqlen=seq_len, batch=batch)
 
         padded_layer_past_len = min(nearest_32(start_pos + 1), self.sliding_window)
         self.current = start_pos % self.sliding_window
@@ -161,45 +146,33 @@ class TtMistralAttention(nn.Module):
             attn_mask[:, :, :, self.sliding_window - self.current :] = torch.finfo(attn_mask.dtype).min
         attn_mask = attn_mask.expand(-1, self.n_local_heads, -1, -1)
 
-        # TODO: mask out >sliding_window prev tokens
-
         # expected shapes:
         # x: (seq_len, 1, batch, hidden_dim)
         # start_pos: int
-        # rot_mat: [1, bsz, head_dim, head_dim]
         # attn_mask: [seq_len, n_heads, batch, padded_layer_past_len]
         assert x.size() == (seq_len, 1, batch, self.hidden_size)
-        assert rot_mat.size() == (1, batch, self.head_dim, self.head_dim)
         assert attn_mask.size() == (seq_len, self.n_local_heads, batch, padded_layer_past_len)
 
-        xs, rot_mats, attn_masks = [], [], []
+        xs, attn_masks = [], []
         for i in range(self.num_devices):
             device = self.devices[i]
             xs.append(torch2tt_tensor(x.clone(), device))
-            rot_mats.append(torch2tt_tensor(rot_mat.clone(), device))
             attn_masks.append(torch2tt_tensor(attn_mask.clone(), device))
-
-            self.tt_sin_cached = torch2tt_tensor(sin.clone(), device)
-            self.tt_cos_cached = torch2tt_tensor(cos.clone(), device)
-            print("COS SHAPE", self.tt_sin_cached.shape(), self.tt_sin_cached.shape())
 
         return (
             xs,
             start_pos,
-            rot_mats,
             attn_masks,
         )
 
     def forward(
         self,
         xs: tt_lib.tensor.Tensor,
-        rot_mats: tt_lib.tensor.Tensor,
         start_pos: int,
         attn_masks: tt_lib.tensor.Tensor,
     ) -> tt_lib.tensor.Tensor:
         """
         x: (seq_len, 1, batch, hidden_dim)
-        rot_mat: ???
         start_pos: the length of the KV cache. Same as current token's index.
         attn_mask: (seq_len, n_heads, batch, cache_len + seqlen
         """
@@ -208,7 +181,6 @@ class TtMistralAttention(nn.Module):
         for i in range(self.num_devices):
             x = xs[i]
             bsz = x.shape()[2]
-            rot_mat = rot_mats[i]
             attn_mask = attn_masks[i]
             device = self.devices[i]
             wqkv = self.wqkv_list[i]
@@ -246,38 +218,10 @@ class TtMistralAttention(nn.Module):
 
             print("HEADS DONE")
 
-            # Have to put bsz back in dim 1 to match rot_mat shape
-            q_heads = tt_lib.tensor.transpose(q_heads, 1, 2)
-            k_heads = tt_lib.tensor.transpose(k_heads, 1, 2)
+            q_heads = tt_lib.tensor.rotary_embedding(q_heads, self.tt_cos_cached[i], self.tt_sin_cached[i], start_pos)
 
-            q_heads = tt_lib.tensor.bmm(
-                q_heads,
-                rot_mat,  # [seqlen, bsz, n_heads, head_dim]  # [1, bsz, head_dim, head_dim]
-                # output_mem_config=self.model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"],
-            )
-            k_heads = tt_lib.tensor.bmm(
-                k_heads,
-                rot_mat,  # [seqlen, bsz, n_kv_heads, head_dim]  # [1, bsz, head_dim, head_dim]
-                # output_mem_config=self.model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"],
-            )
+            k_heads = tt_lib.tensor.rotary_embedding(k_heads, self.tt_cos_cached[i], self.tt_sin_cached[i], start_pos)
 
-            q_heads = tt_lib.tensor.transpose(
-                q_heads, 1, 2
-            )  # , output_mem_config=self.model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"],)
-            k_heads = tt_lib.tensor.transpose(k_heads, 1, 2)
-            """
-            q_heads = tt_lib.tensor.rotary_embedding(
-                    q_heads,
-                    self.tt_cos_cached,
-                    self.tt_sin_cached,
-                    start_pos)
-
-            k_heads = tt_lib.tensor.rotary_embedding(
-                    k_heads,
-                    self.tt_cos_cached,
-                    self.tt_sin_cached,
-                    start_pos)
-            """
             print("ROT DONE")
             ###
             # KV update
@@ -363,7 +307,6 @@ class TtMistralAttention(nn.Module):
 
             scale = 1 / math.sqrt(self.head_dim)
             attn = tt_lib.tensor.mul_unary(attn, scale)
-            # print("scale2", attn.shape(), attn_mask.shape(), attn, attn_mask)
             attn = tt_lib.tensor.add(attn, attn_mask)
             attn = tt_lib.tensor.softmax(attn)
 

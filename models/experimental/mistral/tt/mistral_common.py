@@ -28,6 +28,47 @@ def tt_all_reduce(tensors, output_mem_config=None):
     return res
 
 
+def generate_cos_sin_cache(
+    tt_devices,
+    head_dim,
+    base_url,
+    max_position_embeddings=2048,
+    base=10000,
+    model_config=None,
+):
+    inv_freq = 1.0 / (base ** (torch.arange(0, head_dim, 2).float() / head_dim))
+
+    t = torch.arange(
+        max_position_embeddings,
+        device=inv_freq.device,
+        dtype=inv_freq.dtype,
+    )
+    freqs = torch.einsum("i,j->ij", t, inv_freq)
+    # Different from paper, but it uses a different permutation in order to obtain the same calculation
+    emb = torch.cat((freqs, freqs), dim=-1)
+
+    tt_cos_cached_host = torch2tt_tensor(
+        emb.cos()[None, None, :, :],
+        None,
+        tt_memory_config=model_config["COS_CACHED_WEIGHTS_MEMCFG"],
+        tt_dtype=model_config["COS_CACHED_WEIGHTS_DTYPE"],
+    )
+    tt_cos_cached = [
+        tt_cos_cached_host.to(tt_device, model_config["COS_CACHED_WEIGHTS_MEMCFG"]) for tt_device in tt_devices
+    ]
+    tt_sin_cached_host = torch2tt_tensor(
+        emb.sin()[None, None, :, :],
+        None,
+        tt_memory_config=model_config["SIN_CACHED_WEIGHTS_MEMCFG"],
+        tt_dtype=model_config["SIN_CACHED_WEIGHTS_DTYPE"],
+    )
+    tt_sin_cached = [
+        tt_sin_cached_host.to(tt_device, model_config["SIN_CACHED_WEIGHTS_MEMCFG"]) for tt_device in tt_devices
+    ]
+
+    return tt_cos_cached, tt_sin_cached
+
+
 def precompute_freqs(dim: int, end: int, theta: float = 10000.0):
     """
     Precompute the frequency tensor for sine and cosine values with given dimensions.

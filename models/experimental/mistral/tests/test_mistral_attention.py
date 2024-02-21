@@ -8,7 +8,7 @@ from loguru import logger
 import json
 
 from models.experimental.mistral.tt.mistral_attention import TtMistralAttention
-from models.experimental.mistral.tt.mistral_common import precompute_freqs
+from models.experimental.mistral.tt.mistral_common import precompute_freqs, generate_cos_sin_cache
 from models.experimental.mistral.tt.model_config import TtModelArgs, get_model_config
 from models.experimental.mistral.reference.model import Attention
 from models.utility_functions import torch_to_tt_tensor_rm, tt2torch_tensor
@@ -98,18 +98,22 @@ def test_mistral_attention_inference(
     cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
     freqs_cis = torch.complex(cos, sin)
 
+    tt_model.tt_cos_cached, tt_model.tt_sin_cached = generate_cos_sin_cache(
+        devices, model_args.head_dim, "", model_args.max_seq_len * 2, 1000, tt_model.model_config
+    )
+
     # TODO Update start_pos (check llama test for reference)
     for i in range(generation_length):
         pt_attention_input = (torch.rand(batch, seq_len, model_args.dim) * 2) - 1
         tt_attention_input = pt_attention_input.clone()
         start_pos = generation_start_pos + i
-        attention_input, start_pos, rot_mat, attn_mask = tt_model.prepare_inputs(
-            tt_attention_input, start_pos, cos, sin
+        attention_input, start_pos, attn_mask = tt_model.prepare_inputs(
+            tt_attention_input,
+            start_pos,
         )
 
         tt_out = tt_model(
             attention_input,
-            rot_mat,
             start_pos,
             attn_mask,
         )
