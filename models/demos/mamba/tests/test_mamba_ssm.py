@@ -54,6 +54,8 @@ def test_mamba_ssm_inference(
     reference_output = PytorchMambaSSM(reference_model, LAYER_NUM)(input)
 
     mamba_block = reference_model.layers[LAYER_NUM].mixer
+    assert not isinstance(mamba_block, torch.Tensor), "Expected torch.Module"
+
     model = TtMambaSSM(reference_model.args, device, mamba_block.state_dict())
     model_output = model(input)
 
