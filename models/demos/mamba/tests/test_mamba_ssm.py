@@ -7,9 +7,7 @@ import pytest
 from loguru import logger
 
 import tt_lib
-from models.demos.mamba.reference.decode_model import (
-    MambaDecode,
-)
+from models.demos.mamba.reference.decode_model import MambaDecode, MambaPretrainedModelName
 from models.demos.mamba.tt.mamba_one_step_ssm import TtMambaSSM
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_allclose,
@@ -28,7 +26,22 @@ class PytorchMambaSSM(torch.nn.Module):
         return result
 
 
-def run_test_MambaSSM_inference(device: tt_lib.device, model_version: str, batch: int, pcc: float):
+@pytest.mark.parametrize(
+    "model_version, batch, pcc",
+    (
+        (
+            "state-spaces/mamba-370m",
+            1,
+            0.98,
+        ),
+    ),
+)
+def test_mamba_ssm_inference(
+    model_version: MambaPretrainedModelName,
+    batch,
+    pcc: float,
+    device: tt_lib.device,
+):
     torch.manual_seed(0)
 
     LAYER_NUM = 0
@@ -51,22 +64,3 @@ def run_test_MambaSSM_inference(device: tt_lib.device, model_version: str, batch
     if not does_pass:
         logger.warning("Mamba SSM output failed")
         assert does_pass, f"PCC value is lower than {pcc}"
-
-
-@pytest.mark.parametrize(
-    "model_version, batch, pcc",
-    (
-        (
-            "state-spaces/mamba-370m",
-            1,
-            0.98,
-        ),
-    ),
-)
-def test_MambaSSM_inference(
-    model_version,
-    batch,
-    pcc: float,
-    device: tt_lib.device,
-):
-    run_test_MambaSSM_inference(device, model_version, batch, pcc)
