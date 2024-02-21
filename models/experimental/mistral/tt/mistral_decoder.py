@@ -31,6 +31,8 @@ class TtTransformerBlock(nn.Module):
         base_address=None,
         layer_num=None,
         model_config=None,
+        tt_cos_cached=None,
+        tt_sin_cached=None,
     ):
         super().__init__()
 
@@ -64,6 +66,8 @@ class TtTransformerBlock(nn.Module):
             layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
             model_config=model_config,
             configuration=args,
+            tt_cos_cached=tt_cos_cached,
+            tt_sin_cached=tt_sin_cached,
         )
         self.feed_forward = TtMistralMLP(
             device=devices[0],  # TODO Should we update MLP code to support multiple devices when scaling up?

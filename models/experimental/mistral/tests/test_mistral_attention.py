@@ -83,13 +83,20 @@ def test_mistral_attention_inference(
     batch = 32
     seq_len = 1
 
+    model_config = get_model_config(model_config)
+
+    tt_cos_cached, tt_sin_cached = generate_cos_sin_cache(
+        devices, model_args.head_dim, "", model_args.max_seq_len * 2, 10000, model_config
+    )
     tt_model = TtMistralAttention(
         devices,
         state_dict,
         base_url=base_address,
         layer_num=None,
-        model_config=get_model_config(model_config),
+        model_config=model_config,
         configuration=model_args,
+        tt_cos_cached=tt_cos_cached,
+        tt_sin_cached=tt_sin_cached,
     )
     generation_start_pos = 0
     generation_length = iterations
@@ -97,10 +104,6 @@ def test_mistral_attention_inference(
 
     cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
     freqs_cis = torch.complex(cos, sin)
-
-    tt_model.tt_cos_cached, tt_model.tt_sin_cached = generate_cos_sin_cache(
-        devices, model_args.head_dim, "", model_args.max_seq_len * 2, 10000, tt_model.model_config
-    )
 
     # TODO Update start_pos (check llama test for reference)
     for i in range(generation_length):

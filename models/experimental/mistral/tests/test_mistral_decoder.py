@@ -68,6 +68,10 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
     else:
         raise ValueError(f"Invalid memory configuration {mem_config_str}")
 
+    model_config = get_model_config(model_config)
+    tt_cos_cached, tt_sin_cached = generate_cos_sin_cache(
+        devices, model_args.head_dim, "", model_args.max_seq_len * 2, 10000, model_config
+    )
     # Initialize TT model
     tt_model = TtTransformerBlock(
         args=model_args,
@@ -75,7 +79,9 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
         state_dict=state_dict,
         base_address=base_address,
         layer_num=None,  # single layer
-        model_config=get_model_config(model_config),
+        model_config=model_config,
+        tt_cos_cached=tt_cos_cached,
+        tt_sin_cached=tt_sin_cached,
     )
 
     generation_start_pos = 0
@@ -87,11 +93,6 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
 
     cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
     freqs_cis = torch.complex(cos, sin)
-
-    # Generate attn cos/sin cache
-    tt_model.attention.tt_cos_cached, tt_model.attention.tt_sin_cached = generate_cos_sin_cache(
-        devices, model_args.head_dim, "", model_args.max_seq_len * 2, 10000, tt_model.model_config
-    )
 
     # TODO Update start_pos (check llama test for reference)
     for i in range(generation_length):

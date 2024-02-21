@@ -17,7 +17,9 @@ from models.experimental.mistral.tt.mistral_common import tt_all_reduce
 
 
 class TtMistralAttention(nn.Module):
-    def __init__(self, devices, state_dict, base_url, layer_num, model_config, configuration):
+    def __init__(
+        self, devices, state_dict, base_url, layer_num, model_config, configuration, tt_cos_cached, tt_sin_cached
+    ):
         super().__init__()
 
         self.state_dict = state_dict
@@ -117,8 +119,8 @@ class TtMistralAttention(nn.Module):
             self.wqkv_list.append(wqkv)
             self.wo_list.append(wo)
             self.layer_past_list.append(layer_past)
-        self.tt_sin_cached = None
-        self.tt_cos_cached = None
+        self.tt_sin_cached = tt_sin_cached
+        self.tt_cos_cached = tt_cos_cached
 
     def forward(
         self,
