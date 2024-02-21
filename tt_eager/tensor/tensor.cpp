@@ -54,16 +54,16 @@ Tensor::~Tensor() {
 
 void Tensor::deallocate(bool force) {
     ZoneScoped;
-
+    // std::cout << "Deallocating tensor" << std::endl;
     std::visit(
         [&force](auto&& storage) {
             using T = std::decay_t<decltype(storage)>;
             if constexpr (std::is_same_v<T, OwnedStorage>) {
-                std::visit([](auto&& buffer) { buffer.reset(); }, storage.buffer);
+                // std::visit([](auto&& buffer) { buffer.reset(); }, storage.buffer);
             } else if constexpr (std::is_same_v<T, DeviceStorage>) {
-                if (storage.buffer.use_count() == 1 or force) {
-                    DeallocateBuffer(*storage.buffer);
-                }
+                // if (storage.buffer.use_count() == 1 or force) {
+                //     DeallocateBuffer(*storage.buffer);
+                // }
                 storage.buffer.reset();
             } else if constexpr (std::is_same_v<T, BorrowedStorage>) {
                 if (force) {
@@ -95,7 +95,9 @@ Tensor Tensor::cpu(bool blocking) const {
     if (storage_type() == StorageType::OWNED) {
         return *this;
     }
-    return tensor_impl::to_host_wrapper(*this, blocking);
+    auto rval = tensor_impl::to_host_wrapper(*this, blocking);
+    // std::cout << "CPU call done" << std::endl;
+    return rval;
 }
 
 Tensor Tensor::cpu_sharded() const {
@@ -180,7 +182,9 @@ Tensor Tensor::unpad_from_tile(const Shape &output_tensor_shape) const {
     TT_ASSERT(this->shape()[2] - TILE_HEIGHT < output_tensor_shape[2] && this->shape()[3] - TILE_WIDTH < output_tensor_shape[3], "Last 2 dims of output must be within range to have been padded to input");
     Shape output_tensor_start = {0, 0, 0, 0};
     Shape output_tensor_end = {output_tensor_shape[0] - 1, output_tensor_shape[1] - 1, output_tensor_shape[2] - 1, output_tensor_shape[3] - 1};
-    return this->unpad(output_tensor_start, output_tensor_end);
+    auto rval = this->unpad(output_tensor_start, output_tensor_end);
+    std::cout << "Unpad call done" << std::endl;
+    return rval;
 }
 
 uint32_t Tensor::element_size() const {

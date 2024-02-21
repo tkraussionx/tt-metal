@@ -15,7 +15,9 @@
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 #include "tt_stl/concepts.hpp"
 
+#include <chrono>
 #include <optional>
+#include <thread>
 #include "tensor/tensor_impl_wrapper.hpp"
 namespace tt {
 
@@ -417,7 +419,9 @@ DeviceBuffer allocate_buffer_on_device(
 
 template <typename T>
 inline void read_data_from_device_buffer(CommandQueue &cq, DeviceBuffer device_buffer, void* host_buffer_data, bool blocking) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
     EnqueueReadBuffer(cq, device_buffer, host_buffer_data, blocking);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
 }
 
 template <typename T>
@@ -428,13 +432,19 @@ inline void read_data_from_device_buffer(DeviceBuffer device_buffer, vector<T>& 
 }
 
 template <typename T, template <typename> typename BufferType>
-inline void write_data_to_device_buffer(CommandQueue & cq, const BufferType<T>& host_buffer, DeviceBuffer device_buffer) {
+inline void write_data_to_device_buffer(CommandQueue & cq, const BufferType<T>& host_buffer, DeviceBuffer device_buffer, bool writing_owned_storage) {
     ZoneScoped;
     // TODO(arakhmati): can we use generators in this function to go from `data_to_write` to `uint32_data`?
     // And effectively get rid of any additional allocation
-
-    EnqueueWriteBuffer( cq, device_buffer, host_buffer.data(), false);
-
+    if (writing_owned_storage) {
+        EnqueueWriteBuffer( cq, device_buffer, host_buffer.get_vec(), false);
+    }
+    else {
+        auto init_cq_mode = cq.get_mode();
+        cq.set_mode(CommandQueue::CommandQueueMode::PASSTHROUGH);
+        EnqueueWriteBuffer(cq, device_buffer, host_buffer.data(), false);
+        cq.set_mode(init_cq_mode);
+    }
 }
 
 template <typename T, template <typename> typename BufferType>
@@ -449,19 +459,19 @@ inline void write_data_to_device_buffer(const BufferType<T>& host_buffer, Buffer
 
 template <typename T, template<typename> typename BufferType>
 inline DeviceBuffer initialize_data_on_device(const BufferType<T>& data_to_write, Device* device, const Shape& shape,
-            DataType data_type, Layout layout, const MemoryConfig& memory_config, std::optional<ShardSpecBuffer> shard_spec) {
+            DataType data_type, Layout layout, const MemoryConfig& memory_config, std::optional<ShardSpecBuffer> shard_spec, bool writing_owned_storage) {
     ZoneScoped;
     TT_ASSERT(device != nullptr);
     auto packed_size_in_bytes = packed_buffer_size_bytes<T>(data_to_write.size());
 
-    auto device_buffer = allocate_buffer_on_device(packed_size_in_bytes, device, shape, data_type, layout, memory_config, shard_spec);
+    auto device_buffer = allocate_buffer_on_device(packed_size_in_bytes, device, shape, data_type, layout, memory_config, shard_spec); // Make this a command as well
     const char *TT_METAL_SLOW_DISPATCH_MODE = std::getenv("TT_METAL_SLOW_DISPATCH_MODE");
     if (TT_METAL_SLOW_DISPATCH_MODE == nullptr) {
-        write_data_to_device_buffer<T>(device->command_queue(), data_to_write, device_buffer);
+        write_data_to_device_buffer<T>(device->command_queue(), data_to_write, device_buffer, writing_owned_storage);
     } else {
         write_data_to_device_buffer<T>(data_to_write, *device_buffer);
     }
-
+    // std::cout << "Data written" << std::endl;
     return device_buffer;
 }
 
@@ -477,6 +487,7 @@ inline DeviceBuffer to_device_buffer(const Storage& storage, Device* device, con
             }
             if constexpr (std::is_same_v<StorageType, OwnedStorage>) {
                 auto data_to_write = owned_buffer::get_as<T>(storage.buffer);
+                bool writing_owned_storage = true;
                 TT_ASSERT(
                     compute_buffer_size(shape, data_type) == data_to_write.size(),
                     fmt::format("Tensor buffer size and number of data elements does not match: {} != {}", compute_buffer_size(shape, data_type), data_to_write.size())
@@ -486,7 +497,7 @@ inline DeviceBuffer to_device_buffer(const Storage& storage, Device* device, con
                         (shape[-2] % tt::constants::TILE_HEIGHT == 0 && shape[-1] % tt::constants::TILE_WIDTH == 0),
                         "Tensor shape incompatible for specified layout");
                 }
-                return initialize_data_on_device<T>(data_to_write, device, shape, data_type, layout, memory_config,  shard_spec);
+                return initialize_data_on_device<T>(data_to_write, device, shape, data_type, layout, memory_config,  shard_spec, writing_owned_storage);
             }
             else if constexpr (std::is_same_v<StorageType, DeviceStorage>) {
                 TT_THROW("Device storage doesn't support to_device_buffer");
@@ -496,6 +507,7 @@ inline DeviceBuffer to_device_buffer(const Storage& storage, Device* device, con
                     std::is_same_v<T, float> or std::is_same_v<T, bfloat16> or std::is_same_v<T, std::uint32_t> or
                     std::is_same_v<T, std::uint16_t>) {
                     auto data_to_write = borrowed_buffer::get_as<T>(storage.buffer);
+                    bool writing_owned_storage = false;
                     TT_ASSERT(
                         compute_buffer_size(shape, data_type) == data_to_write.size(),
                         fmt::format("Tensor buffer size and number of data elements does not match: {} != {}", compute_buffer_size(shape, data_type), data_to_write.size())
@@ -505,7 +517,7 @@ inline DeviceBuffer to_device_buffer(const Storage& storage, Device* device, con
                             (shape[-2] % tt::constants::TILE_HEIGHT == 0 && shape[-1] % tt::constants::TILE_WIDTH == 0),
                             "Tensor shape incompatible for specified layout");
                     }
-                    return initialize_data_on_device<T>(data_to_write, device, shape, data_type, layout, memory_config,  shard_spec);
+                    return initialize_data_on_device<T>(data_to_write, device, shape, data_type, layout, memory_config,  shard_spec, writing_owned_storage);
                 } else {
                     TT_THROW("Borrowed storage doesn't support this data type");
                 }
@@ -535,11 +547,13 @@ inline Tensor to_host(const Tensor &tensor, bool blocking = true) {
     const char *TT_METAL_SLOW_DISPATCH_MODE = std::getenv("TT_METAL_SLOW_DISPATCH_MODE");
     if (TT_METAL_SLOW_DISPATCH_MODE == nullptr) {
         data_vec.resize(size_in_bytes / sizeof(T));
+        // std::cout << "calling read from device" << std::endl;
         read_data_from_device_buffer<T>(device->command_queue(), device_buffer, data_vec.data(), blocking);
+        // std::cout << "done" << std::endl;
     } else {
         read_data_from_device_buffer<T>(device_buffer, data_vec);
     }
-
+    // std::cout << "Read done in main thread" << std::endl;
     auto output_buffer = owned_buffer::create<T>(std::move(data_vec));
     return Tensor(OwnedStorage{output_buffer}, tensor.shape(), tensor.dtype(), tensor.layout());
 }

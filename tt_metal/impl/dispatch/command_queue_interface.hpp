@@ -273,8 +273,12 @@ class SystemMemoryManager {
         //  so channel offset needs to be subtracted to get address relative to channel
         // TODO: Reconsider offset sysmem offset calculations based on https://github.com/tenstorrent-metal/tt-metal/issues/4757
         void* user_scratchspace = this->cq_sysmem_start + (write_ptr - this->channel_offset);
-
+        // std::cout << "Memcpy into: "<< user_scratchspace << std::endl;
         memcpy(user_scratchspace, data, size_in_bytes);
+        // for (int i = 0 ; i < 35; i++) {
+        //      std::cout << *(reinterpret_cast<uint32_t*>(user_scratchspace) + i) << " ";
+        // }
+        // std::cout << std::endl;
     }
 
     void send_issue_queue_write_ptr(const uint8_t cq_id) const {

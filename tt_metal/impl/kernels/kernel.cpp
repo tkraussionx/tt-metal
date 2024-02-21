@@ -275,6 +275,12 @@ void DataMovementKernel::read_binaries(Device *device) {
 
     binaries.push_back(binary_mem);
     this->set_binaries(device->id(), std::move(binaries));
+    // std::cout << "Kernel Binaries" << std::endl;
+    // for (const auto it : this->binaries_[device -> id()]) {
+    //     for (const auto& word : it.data())
+    //         std::cout << word << " ";
+    // }
+    // std::cout << std::endl;
 }
 
 void EthernetKernel::read_binaries(Device *device) {

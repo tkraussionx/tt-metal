@@ -253,6 +253,10 @@ void SetRuntimeArgs(const Program &program, KernelHandle kernel, const std::vect
  */
 std::vector<uint32_t>& GetRuntimeArgs(const Program &program, KernelHandle kernel_id, const CoreCoord &logical_core);
 
+void EnqueueAllocateBuffer(CommandQueue& cq, Buffer* buffer, bool bottom_up, bool blocking);
+
+void EnqueueDeallocateBuffer(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer, bool blocking);
+
 /**
  * Reads a buffer from the device
  *
@@ -307,7 +311,7 @@ void EnqueueWriteBuffer(CommandQueue& cq, std::variant<std::reference_wrapper<Bu
  * | src          | The memory we are writing to the device                                | const void*                         |                                    | Yes      |
  * | blocking     | Whether or not this is a blocking operation                            | bool                                |                                    | Yes      |
  */
-void EnqueueWriteBuffer(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer, const void* src, bool blocking);
+void EnqueueWriteBuffer(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer, HostBufferMemTypes src, bool blocking);
 
 /**
  * Writes a program to the device and launches it

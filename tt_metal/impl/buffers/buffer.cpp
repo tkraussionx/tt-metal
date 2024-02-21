@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_metal/impl/buffers/buffer.hpp"
+#include "host_api.hpp"
 #include "tt_metal/impl/allocator/allocator.hpp"
 #include "tt_metal/hostdevcommon/common_values.hpp"
 #include "tt_metal/common/math.hpp"
@@ -236,6 +237,7 @@ Buffer &Buffer::operator=(Buffer &&other) {
 void Buffer::allocate() {
     TT_ASSERT(this->device_ != nullptr);
     // L1 buffers are allocated top down!
+    lck.lock();
     bool bottom_up = this->buffer_type_ == BufferType::DRAM;
     if(is_sharded(this->buffer_layout_)){
         this->address_ = allocator::allocate_buffer(*this->device_->allocator_, this->size_,
@@ -245,6 +247,7 @@ void Buffer::allocate() {
     else{
         this->address_ = allocator::allocate_buffer(*this->device_->allocator_, this->size_, this->page_size_, this->buffer_type_, bottom_up, std::nullopt);
     }
+    lck.unlock();
 
 }
 
@@ -321,12 +324,17 @@ uint64_t Buffer::core_address(uint32_t core_id) const {
 }
 
 void Buffer::deallocate() {
-    if (this->device_ == nullptr or not this->device_->initialized_ or this->size_ == 0) {
+    if (this->device_ == nullptr or not this->device_->initialized_ or this->size_ == 0 or this->deallocated_on_device) {
         return;
     }
-    this->size_ = 0;
-    TT_ASSERT(this->device_->allocator_ != nullptr, "Expected allocator to be initialized!");
-    allocator::deallocate_buffer(*this->device_->allocator_, this->address_, this->buffer_type_);
+    // std::cout << "Deallocating buffer in main thread: " << this << std::endl;
+    // Construct a shadow buffer with the exact same attributes as the current buffer.
+    // This will be asynchronously passed to the SW command queue, which will deallocate the device buffer after
+    // running all consumers of this buffer.
+    // To avoid double deallocation, the shadow buffer will not be deallocated on device in its destructor.
+    std::shared_ptr<Buffer> shadow_buffer = std::make_shared<Buffer>(std::move(*this));
+    shadow_buffer -> deallocated_on_device = true;
+    EnqueueDeallocateBuffer(shadow_buffer->device_->command_queue(), shadow_buffer, false);
 }
 
 Buffer::~Buffer() {
