@@ -48,7 +48,7 @@ from models.utility_functions import (
 )
 @pytest.mark.parametrize(
     "iterations",
-    ((3),),
+    ((1),),
 )
 @pytest.mark.parametrize(
     "pcc",

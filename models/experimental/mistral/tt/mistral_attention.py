@@ -124,6 +124,8 @@ class TtMistralAttention(nn.Module):
             self.wqkv_list.append(wqkv)
             self.wo_list.append(wo)
             self.layer_past_list.append(layer_past)
+        self.tt_sin_cached = None
+        self.tt_cos_cached = None
 
     def get_rotation_mat(self, cos, sin, start_pos, seqlen, batch):
         # cos, sin = tt_precompute_freqs(dhead, end)
@@ -149,7 +151,7 @@ class TtMistralAttention(nn.Module):
         rot_mat = self.get_rotation_mat(cos, sin, start_pos=start_pos, seqlen=seq_len, batch=batch)
 
         padded_layer_past_len = min(nearest_32(start_pos + 1), self.sliding_window)
-        self.current = self.current % self.sliding_window
+        self.current = start_pos % self.sliding_window
         attn_mask = torch.zeros(seq_len, 1, batch, padded_layer_past_len)
 
         if start_pos < self.sliding_window:
@@ -176,6 +178,10 @@ class TtMistralAttention(nn.Module):
             xs.append(torch2tt_tensor(x.clone(), device))
             rot_mats.append(torch2tt_tensor(rot_mat.clone(), device))
             attn_masks.append(torch2tt_tensor(attn_mask.clone(), device))
+
+            self.tt_sin_cached = torch2tt_tensor(sin.clone(), device)
+            self.tt_cos_cached = torch2tt_tensor(cos.clone(), device)
+            print("COS SHAPE", self.tt_sin_cached.shape(), self.tt_sin_cached.shape())
 
         return (
             xs,
@@ -219,6 +225,7 @@ class TtMistralAttention(nn.Module):
                 # output_dtype=self.model_config["FUSED_QKV_MM_OUTPUT_DTYPE"],
             )
 
+            print("MATMUL DONE")
             ###
             # Reshape and rotary embeddings
             ###
@@ -236,6 +243,8 @@ class TtMistralAttention(nn.Module):
             )
 
             xqkv_fused.deallocate()
+
+            print("HEADS DONE")
 
             # Have to put bsz back in dim 1 to match rot_mat shape
             q_heads = tt_lib.tensor.transpose(q_heads, 1, 2)
@@ -256,7 +265,20 @@ class TtMistralAttention(nn.Module):
                 q_heads, 1, 2
             )  # , output_mem_config=self.model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"],)
             k_heads = tt_lib.tensor.transpose(k_heads, 1, 2)
+            """
+            q_heads = tt_lib.tensor.rotary_embedding(
+                    q_heads,
+                    self.tt_cos_cached,
+                    self.tt_sin_cached,
+                    start_pos)
 
+            k_heads = tt_lib.tensor.rotary_embedding(
+                    k_heads,
+                    self.tt_cos_cached,
+                    self.tt_sin_cached,
+                    start_pos)
+            """
+            print("ROT DONE")
             ###
             # KV update
             ###
@@ -296,6 +318,7 @@ class TtMistralAttention(nn.Module):
                 # output_mem_config=self.model_config["DEFAULT_MEMCFG"],
             )
 
+            print("KV UPDATE DONE")
             ###
             # Attention
             ###
@@ -364,7 +387,7 @@ class TtMistralAttention(nn.Module):
                 # output_mem_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"],
             )  # seqlen, 1, batch, hidden_size
 
-            # print("DENSE SHAPES", attn_output.shape(), wo.shape())
+            print("DENSE SHAPES", attn_output.shape(), wo.shape())
             dense_out = tt_lib.operations.primary.matmul_1d(
                 attn_output,
                 wo,
