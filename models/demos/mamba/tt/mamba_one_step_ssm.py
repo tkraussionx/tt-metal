@@ -25,9 +25,11 @@ class TtMambaSSM(torch.nn.Module):
         self.args = args
 
         """
-        We need to split up the x_proj weights because in the reference implementation they perform the linear operation for dt, B, and C in
-        a single step. Here we can't do that because it would involve fallback op slicing, so we break up the weights ahead of time and do the
-        linear ops separately.
+        We need to split up the x_proj weights because in the reference
+        implementation they perform the linear operation for dt, B, and C in a
+        single step. Here we can't do that because it would involve fallback op
+        slicing, so we break up the weights ahead of time and do the linear ops
+        separately.
         """
         x_proj_weight_name = "x_proj.weight"
         self.delta_t_proj_weights = torch2tt_tensor(
@@ -36,7 +38,7 @@ class TtMambaSSM(torch.nn.Module):
             tt_memory_config=tt_lib.tensor.MemoryConfig(
                 tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
             ),
-            tt_dtype=tt_lib.tensor.DataType.FLOAT16,
+            tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
         )
         self.delta_t_proj = Linear(self.args.d_inner, self.args.dt_rank, self.delta_t_proj_weights, bias=None)
 
@@ -46,7 +48,7 @@ class TtMambaSSM(torch.nn.Module):
             tt_memory_config=tt_lib.tensor.MemoryConfig(
                 tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
             ),
-            tt_dtype=tt_lib.tensor.DataType.FLOAT16,
+            tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
         )
         self.BC_proj = Linear(self.args.d_inner, self.args.d_state * 2, self.BC_proj_weights, bias=None)
 
@@ -62,7 +64,7 @@ class TtMambaSSM(torch.nn.Module):
             tt_memory_config=tt_lib.tensor.MemoryConfig(
                 tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
             ),
-            tt_dtype=tt_lib.tensor.DataType.FLOAT16,
+            tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
         )
         dt_proj_weight_name = "dt_proj.weight"
         dt_proj_bias_name = f"dt_proj.bias"
@@ -72,7 +74,7 @@ class TtMambaSSM(torch.nn.Module):
             tt_memory_config=tt_lib.tensor.MemoryConfig(
                 tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
             ),
-            tt_dtype=tt_lib.tensor.DataType.FLOAT16,
+            tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
         )
         self.dt_proj_bias = torch2tt_tensor(
             self.state_dict[dt_proj_bias_name],
@@ -80,7 +82,7 @@ class TtMambaSSM(torch.nn.Module):
             tt_memory_config=tt_lib.tensor.MemoryConfig(
                 tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
             ),
-            tt_dtype=tt_lib.tensor.DataType.FLOAT16,
+            tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
         )
         self.dt_proj = Linear(self.args.dt_rank, self.args.d_inner, self.dt_proj_weights, bias=self.dt_proj_bias)
 
@@ -91,7 +93,7 @@ class TtMambaSSM(torch.nn.Module):
             tt_memory_config=tt_lib.tensor.MemoryConfig(
                 tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
             ),
-            tt_dtype=tt_lib.tensor.DataType.FLOAT16,
+            tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
         )
 
     def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
