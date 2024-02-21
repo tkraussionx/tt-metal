@@ -34,32 +34,32 @@ namespace kernel_profiler{
     extern uint32_t stackSize;
 
 #if defined(COMPILE_FOR_BRISC)
-    const uint32_t profilerBuffer = PROFILER_L1_BUFFER_BR;
-    const uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_BR;
+    constexpr uint32_t profilerBuffer = PROFILER_L1_BUFFER_BR;
+    constexpr uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_BR;
     volatile tt_l1_ptr uint32_t *profiler_control_buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_CONTROL);
 #elif defined(COMPILE_FOR_ERISC)
-    const uint32_t profilerBuffer = eth_l1_mem::address_map::PROFILER_L1_BUFFER_ER;
-    const uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_ER;
+    constexpr uint32_t profilerBuffer = eth_l1_mem::address_map::PROFILER_L1_BUFFER_ER;
+    constexpr uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_ER;
     volatile tt_l1_ptr uint32_t *profiler_control_buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(eth_l1_mem::address_map::PROFILER_L1_BUFFER_CONTROL);
 #elif defined(COMPILE_FOR_NCRISC)
-    const uint32_t profilerBuffer = PROFILER_L1_BUFFER_NC;
-    const uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_NC;
+    constexpr uint32_t profilerBuffer = PROFILER_L1_BUFFER_NC;
+    constexpr uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_NC;
     volatile tt_l1_ptr uint32_t *profiler_control_buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_CONTROL);
 #elif COMPILE_FOR_TRISC == 0
-    const uint32_t profilerBuffer = PROFILER_L1_BUFFER_T0;
-    const uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_T0;
+    constexpr uint32_t profilerBuffer = PROFILER_L1_BUFFER_T0;
+    constexpr uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_T0;
     volatile tt_l1_ptr uint32_t *profiler_control_buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_CONTROL);
 #elif COMPILE_FOR_TRISC == 1
-    const uint32_t profilerBuffer = PROFILER_L1_BUFFER_T1;
-    const uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_T1;
+    constexpr uint32_t profilerBuffer = PROFILER_L1_BUFFER_T1;
+    constexpr uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_T1;
     volatile tt_l1_ptr uint32_t *profiler_control_buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_CONTROL);
 #elif COMPILE_FOR_TRISC == 2
-    const uint32_t profilerBuffer = PROFILER_L1_BUFFER_T2;
-    const uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_T2;
+    constexpr uint32_t profilerBuffer = PROFILER_L1_BUFFER_T2;
+    constexpr uint32_t deviceBufferEndIndex = DEVICE_BUFFER_END_INDEX_T2;
     volatile tt_l1_ptr uint32_t *profiler_control_buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(PROFILER_L1_BUFFER_CONTROL);
 #endif
 
-    void init_profiler(uint16_t briscKernelID = 0, uint16_t ncriscKernelID = 0, uint16_t triscsKernelID = 0)
+    inline __attribute__((always_inline)) void init_profiler(uint16_t briscKernelID = 0, uint16_t ncriscKernelID = 0, uint16_t triscsKernelID = 0)
     {
 #if defined(PROFILE_KERNEL)
         wIndex = CUSTOM_MARKERS;
@@ -139,6 +139,23 @@ namespace kernel_profiler{
 #endif //PROFILE_KERNEL
     }
 
+    inline __attribute__((always_inline)) void mark_time_at_index_inlined(uint32_t index, uint32_t timer_id)
+    {
+#if defined(PROFILE_KERNEL)
+#if defined(COMPILE_FOR_NCRISC) | defined(COMPILE_FOR_BRISC) | defined(COMPILE_FOR_ERISC)
+        uint32_t time_L = reg_read(RISCV_DEBUG_REG_WALL_CLOCK_L);
+        uint32_t time_H = reg_read(RISCV_DEBUG_REG_WALL_CLOCK_H);
+#else
+        uint32_t time_L = ckernel::reg_read(RISCV_DEBUG_REG_WALL_CLOCK_L);
+        uint32_t time_H = ckernel::reg_read(RISCV_DEBUG_REG_WALL_CLOCK_H);
+#endif
+        volatile tt_l1_ptr uint32_t *buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(profilerBuffer);
+
+        //TODO(MO): Clean up magic numbers
+        buffer[index] = 0x80000000 | ((timer_id & 0x7FFFF) << 12) | (time_H & 0xFFF);
+        buffer[index+1] = time_L;
+#endif //PROFILE_KERNEL
+    }
 
     PROFILER_INLINE void mark_time_at_index(uint32_t index, uint32_t timer_id)
     {
@@ -202,7 +219,7 @@ namespace kernel_profiler{
 #endif //PROFILE_KERNEL
     }
 
-    void finish_profiler()
+    inline __attribute__((always_inline)) void finish_profiler()
     {
 #if defined(PROFILE_KERNEL)
         risc_finished_profiling();
@@ -312,20 +329,20 @@ namespace kernel_profiler{
     {
         private:
             uint32_t timer_id;
-            bool start_marked;
+            bool start_marked = false;
         public:
             PROFILER_INLINE profileScope (uint32_t timer_id_arg) : timer_id(timer_id_arg)
             {
 #if defined(PROFILE_KERNEL)
-                if (!stackSize)
-                {
-                    init_profiler();
-                }
                 if (wIndex < (PROFILER_L1_VECTOR_SIZE - stackSize))
                 {
                     stackSize += PROFILER_L1_MARKER_UINT32_SIZE;
                     start_marked = true;
-                    mark_time(timer_id);
+                    volatile tt_l1_ptr uint32_t *buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(kernel_profiler::profilerBuffer);
+                    volatile tt_reg_ptr uint32_t *p_reg = reinterpret_cast<volatile tt_reg_ptr uint32_t *> (RISCV_DEBUG_REG_WALL_CLOCK_L);
+                    buffer[wIndex] = 0x80000000 | ((timer_id & 0x7FFFF) << 12) | (p_reg[1] & 0xFFF);
+                    buffer[wIndex+1] = p_reg[0];
+                    wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
                 }
 #endif
             }
@@ -335,13 +352,13 @@ namespace kernel_profiler{
 #if defined(PROFILE_KERNEL)
                 if (start_marked)
                 {
-                    mark_time((timer_id & 0xFFFF) | (1<<16));
-                    stackSize -= PROFILER_L1_MARKER_UINT32_SIZE;
+                    volatile tt_l1_ptr uint32_t *buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(kernel_profiler::profilerBuffer);
+                    volatile tt_reg_ptr uint32_t *p_reg = reinterpret_cast<volatile tt_reg_ptr uint32_t *> (RISCV_DEBUG_REG_WALL_CLOCK_L);
+                    buffer[wIndex] = 0x80000000 | (((timer_id & 0xFFFF) | (1<<16) & 0x7FFFF) << 12) | (p_reg[1] & 0xFFF);
+                    buffer[wIndex+1] = p_reg[0];
+                    wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
                     start_marked = false;
-                    if (!stackSize)
-                    {
-                        finish_profiler();
-                    }
+                    stackSize -= PROFILER_L1_MARKER_UINT32_SIZE;
                 }
 #endif
             }
@@ -369,15 +386,79 @@ constexpr uint32_t Hash16_CT( const char ( &s )[ N ] ) {
 
 #ifdef PROFILE_KERNEL
 
-#define DeviceZoneScoped DO_PRAGMA(message(PROFILER_MSG_NAME("no-name"))); kernel_profiler::profileScope zone = kernel_profiler::profileScope(Hash16_CT(PROFILER_MSG_NAME("no-name")));
-
 #define DeviceZoneScopedN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); kernel_profiler::profileScope zone = kernel_profiler::profileScope(Hash16_CT(PROFILER_MSG_NAME(name)));
+
+#define DeviceZoneScopedMainN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = Hash16_CT(PROFILER_MSG_NAME(name));\
+    auto constexpr start_index = kernel_profiler::GUARANTEED_MARKER_1_H;\
+    auto constexpr end_index = kernel_profiler::GUARANTEED_MARKER_2_H;\
+    struct profileScopeInline\
+    {\
+            inline __attribute__((always_inline)) profileScopeInline ()\
+            {\
+                kernel_profiler::init_profiler();\
+                volatile tt_l1_ptr uint32_t *buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(kernel_profiler::profilerBuffer);\
+                volatile tt_reg_ptr uint32_t *p_reg = reinterpret_cast<volatile tt_reg_ptr uint32_t *> (RISCV_DEBUG_REG_WALL_CLOCK_L);\
+                buffer[start_index] = 0x80000000 | ((hash & 0x7FFFF) << 12) | (p_reg[1] & 0xFFF);\
+                buffer[start_index+1] = p_reg[0];\
+            }\
+            inline __attribute__((always_inline))  ~profileScopeInline ()\
+            {\
+                volatile tt_l1_ptr uint32_t *buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(kernel_profiler::profilerBuffer);\
+                volatile tt_reg_ptr uint32_t *p_reg = reinterpret_cast<volatile tt_reg_ptr uint32_t *> (RISCV_DEBUG_REG_WALL_CLOCK_L);\
+                buffer[end_index] = 0x80000000 | (((hash & 0xFFFF) | (1<<16) & 0x7FFFF) << 12) | (p_reg[1] & 0xFFF);\
+                buffer[end_index+1] = p_reg[0];\
+                kernel_profiler::finish_profiler();\
+            }\
+    };\
+    profileScopeInline zone = profileScopeInline();
+
+#define DeviceZoneScopedMainChildN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = Hash16_CT(PROFILER_MSG_NAME(name));\
+    auto constexpr start_index = kernel_profiler::GUARANTEED_MARKER_3_H;\
+    auto constexpr end_index = kernel_profiler::GUARANTEED_MARKER_4_H;\
+    struct profileScopeInline\
+    {\
+            inline __attribute__((always_inline)) profileScopeInline ()\
+            {\
+                volatile tt_l1_ptr uint32_t *buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(kernel_profiler::profilerBuffer);\
+                volatile tt_reg_ptr uint32_t *p_reg = reinterpret_cast<volatile tt_reg_ptr uint32_t *> (RISCV_DEBUG_REG_WALL_CLOCK_L);\
+                buffer[start_index] = 0x80000000 | ((hash & 0x7FFFF) << 12) | (p_reg[1] & 0xFFF);\
+                buffer[start_index+1] = p_reg[0];\
+            }\
+            inline __attribute__((always_inline))  ~profileScopeInline ()\
+            {\
+                volatile tt_l1_ptr uint32_t *buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(kernel_profiler::profilerBuffer);\
+                volatile tt_reg_ptr uint32_t *p_reg = reinterpret_cast<volatile tt_reg_ptr uint32_t *> (RISCV_DEBUG_REG_WALL_CLOCK_L);\
+                buffer[end_index] = 0x80000000 | (((hash & 0xFFFF) | (1<<16) & 0x7FFFF) << 12) | (p_reg[1] & 0xFFF);\
+                buffer[end_index+1] = p_reg[0];\
+            }\
+    };\
+    profileScopeInline zone = profileScopeInline();
+
+#define DeviceZoneScopedMainChildChildN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = Hash16_CT(PROFILER_MSG_NAME(name));\
+    auto constexpr start_index = kernel_profiler::GUARANTEED_MARKER_5_H;\
+    auto constexpr end_index = kernel_profiler::GUARANTEED_MARKER_6_H;\
+    struct profileScopeInline\
+    {\
+            inline __attribute__((always_inline)) profileScopeInline ()\
+            {\
+                volatile tt_l1_ptr uint32_t *buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(kernel_profiler::profilerBuffer);\
+                volatile tt_reg_ptr uint32_t *p_reg = reinterpret_cast<volatile tt_reg_ptr uint32_t *> (RISCV_DEBUG_REG_WALL_CLOCK_L);\
+                buffer[start_index] = 0x80000000 | ((hash & 0x7FFFF) << 12) | (p_reg[1] & 0xFFF);\
+                buffer[start_index+1] = p_reg[0];\
+            }\
+            inline __attribute__((always_inline))  ~profileScopeInline ()\
+            {\
+                volatile tt_l1_ptr uint32_t *buffer = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(kernel_profiler::profilerBuffer);\
+                volatile tt_reg_ptr uint32_t *p_reg = reinterpret_cast<volatile tt_reg_ptr uint32_t *> (RISCV_DEBUG_REG_WALL_CLOCK_L);\
+                buffer[end_index] = 0x80000000 | (((hash & 0xFFFF) | (1<<16) & 0x7FFFF) << 12) | (p_reg[1] & 0xFFF);\
+                buffer[end_index+1] = p_reg[0];\
+            }\
+    };\
+    profileScopeInline zone = profileScopeInline();
 
 #define DeviceProfilerFlush kernel_profiler::flush_profiler();
 
 #else
-
-#define DeviceZoneScoped
 
 #define DeviceZoneScopedN( name )
 

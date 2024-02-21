@@ -5,14 +5,12 @@
 #include <cstdint>
 
 void kernel_main() {
-    for (int i = 0; i < LOOP_COUNT; i ++)
+//Max unroll size
+#if defined(COMPILE_FOR_NCRISC)
+#pragma GCC unroll 65534
+    for (int j = 0 ; j < 100; j++)
     {
         DeviceZoneScopedN("TEST-FULL-BUFFER");
-//Max unroll size
-#pragma GCC unroll 65534
-        for (int j = 0 ; j < LOOP_SIZE; j++)
-        {
-            asm("nop");
-        }
     }
+#endif
 }

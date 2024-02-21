@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
   while (1) {
       DEBUG_STATUS('W');
       notify_brisc_and_halt(RUN_SYNC_MSG_DONE);
-      DeviceZoneScopedN("NCRISC_FW");
+      DeviceZoneScopedMainN("NCRISC_FW");
 
 
       setup_cb_read_write_interfaces(0, mailboxes->launch.max_cb_index, true, true);

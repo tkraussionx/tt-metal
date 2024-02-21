@@ -8,27 +8,5 @@
 
 namespace NAMESPACE {
     void MAIN {
-        for (int i = 0; i < LOOP_COUNT; i ++)
-        {
-            DeviceZoneScopedN("TEST_FULL_BUFFER_COMPUTE");
-            {
-                DeviceZoneScopedN("TEST_FULL_BUFFER_COMPUTE");
-                {
-                    DeviceZoneScopedN("TEST_FULL_BUFFER_COMPUTE");
-                    {
-                        DeviceZoneScopedN("TEST_FULL_BUFFER_COMPUTE");
-                        {
-                            DeviceZoneScopedN("TEST_FULL_BUFFER_COMPUTE");
-                            {
-                                DeviceZoneScopedN("TEST_FULL_BUFFER_COMPUTE");
-                                {
-                                    DeviceZoneScopedN("TEST_FULL_BUFFER_COMPUTE");
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 } // NAMESPACE
