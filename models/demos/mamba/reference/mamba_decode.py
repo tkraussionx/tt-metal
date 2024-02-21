@@ -69,25 +69,29 @@ def generate_through_decode(
     return output_completions
 
 
-from model import Mamba, ModelArgs
+def test_decode():
+    from model import Mamba
 
-# One of:
-#     'state-spaces/mamba-2.8b-slimpj'
-#     'state-spaces/mamba-2.8b'
-#     'state-spaces/mamba-1.4b'
-#     'state-spaces/mamba-790m'
-#     'state-spaces/mamba-370m'
-#     'state-spaces/mamba-130m'
-pretrained_model_name = "state-spaces/mamba-370m"
+    # One of:
+    #     'state-spaces/mamba-2.8b-slimpj'
+    #     'state-spaces/mamba-2.8b'
+    #     'state-spaces/mamba-1.4b'
+    #     'state-spaces/mamba-790m'
+    #     'state-spaces/mamba-370m'
+    #     'state-spaces/mamba-130m'
+    pretrained_model_name = "state-spaces/mamba-370m"
 
-model = Mamba.from_pretrained(pretrained_model_name)
-tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
-print("Output from selective scan:")
-print(generate_through_selective_scan(model, tokenizer, "Mamba is the"))
+    model = Mamba.from_pretrained(pretrained_model_name)
+    tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
+    print("Output from selective scan:")
+    print(generate_through_selective_scan(model, tokenizer, "Mamba is the"))
+
+    from decode_model import MambaDecode
+
+    model_decode = MambaDecode.from_pretrained(pretrained_model_name)
+    print("Output from decode only mode:")
+    print(generate_through_decode(model_decode, tokenizer, "Mamba is the"))
 
 
-from decode_model import MambaDecode
-
-model_decode = MambaDecode.from_pretrained(pretrained_model_name)
-print("Output from decode only mode:")
-print(generate_through_decode(model_decode, tokenizer, "Mamba is the"))
+if __name__ == "__main__":
+    test_decode()
