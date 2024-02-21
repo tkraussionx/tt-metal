@@ -33,3 +33,31 @@ TEST_F(CommandQueueFixture, TestEventsWrittenToCompletionQueueInOrder) {
         EXPECT_EQ(event, i);
     }
 }
+
+
+
+// Simplest test - can we insert just RercordEvent cmd and it finish?
+TEST_F(CommandQueueFixture, TestEnqueueRecordEventBasic) {
+    size_t num_events = 10;
+    for (size_t i = 0; i < num_events; i++) {
+        Event event;
+        EnqueueQueueRecordEvent(*this->cmd_queue, event);
+        log_info(tt::LogTest, "Done recording event. Got Event(event_id: {} cq_id: {})", event.event_id, event.cq_id);
+        EXPECT_EQ(event.event_id, i);
+        EXPECT_EQ(event.cq_id, this->cmd_queue->id());
+    }
+    Finish(*this->cmd_queue);
+}
+
+// More complicated test, many events, to make sure issue queue wrap works.
+TEST_F(CommandQueueFixture, TestEnqueueRecordEventIssueQueueWrap) {
+    size_t num_events = 100000; // Enough to wrap issue queue. 768MB and cmds are 22KB each, so 35k cmds.
+    for (size_t i = 0; i < num_events; i++) {
+        Event event;
+        EnqueueQueueRecordEvent(*this->cmd_queue, event);
+        log_info(tt::LogTest, "Done recording event. Got Event(event_id: {} cq_id: {})", event.event_id, event.cq_id);
+        EXPECT_EQ(event.event_id, i);
+        EXPECT_EQ(event.cq_id, this->cmd_queue->id());
+    }
+    Finish(*this->cmd_queue);
+}

@@ -648,6 +648,35 @@ void EnqueueCompletionWrapCommand::process() {
     this->manager.issue_queue_push_back(wrap_packet_size_bytes, detail::LAZY_COMMAND_QUEUE_MODE, this->command_queue_id);
 }
 
+
+EnqueueRecordEventCommand::EnqueueRecordEventCommand(
+    uint32_t command_queue_id, Device* device, SystemMemoryManager& manager, uint32_t event):
+    command_queue_id(command_queue_id), device(device), manager(manager), event(event) {
+    // log_info(tt::LogMetal, "KCM inside {} with cq_id: {} event: {}", __FUNCTION__, command_queue_id, event);
+}
+
+
+const DeviceCommand EnqueueRecordEventCommand::assemble_device_command(uint32_t) {
+    DeviceCommand command;
+    // log_info(tt::LogMetal, "KCM inside EnqueueRecordEventCommand::{} for event_id: {}", __FUNCTION__, this->event);
+    // Issue data could be runtime args carrying a memory address to read, for WaitForEvent.
+    command.set_issue_data_size(0); // No extra data just CMD.
+    command.set_completion_data_size(align(EVENT_PADDED_SIZE, 32));
+    command.set_event(this->event);
+    return command;
+}
+
+// KCM - Referenced EnqueueCompletionWrapCommand::process() / EnqueueWriteBufferCommand:process() when creating this.
+// This assembles command, reserves space in issue queue, writes it to issue queue, and does something with completion queue.
+void EnqueueRecordEventCommand::process() {
+    uint32_t write_ptr = this->manager.get_issue_queue_write_ptr(this->command_queue_id);
+    const DeviceCommand cmd = this->assemble_device_command(0); // KCM FIXME - Don't think addr needed, record doesn't do any extra reading/writing.
+    uint32_t cmd_size = DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
+    this->manager.issue_queue_reserve_back(cmd_size, this->command_queue_id);
+    this->manager.cq_write(cmd.data(), DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, write_ptr);
+    this->manager.issue_queue_push_back(cmd_size, detail::LAZY_COMMAND_QUEUE_MODE, this->command_queue_id);
+}
+
 // HWCommandQueue section
 HWCommandQueue::HWCommandQueue(Device* device, uint32_t id) : manager(device->sysmem_manager()), completion_queue_thread{} {
     ZoneScopedN("CommandQueue_constructor");
@@ -904,6 +933,30 @@ void HWCommandQueue::enqueue_program(
     this->manager.next_completion_queue_push_back(align(EVENT_PADDED_SIZE, 32), this->id);
 }
 
+void HWCommandQueue::enqueue_record_event(std::reference_wrapper<Event> event) {
+    ZoneScopedN("HWCommandQueue_enqueue_record_event");
+    uint32_t command_size = DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
+
+    // Update Event struct for caller
+    auto &event_ref = event.get();
+    event_ref.cq_id = this->id;
+    event_ref.event_id = this->manager.get_next_event(this->id);
+    event_ref.device = this->device;
+
+    log_info(tt::LogMetal, "KCM Starting {} for event_id: {} w/ issue_queue_wrptr: {} command_size: {} issue_queue_size: {}",
+        __FUNCTION__, event_ref.event_id, this->manager.get_issue_queue_write_ptr(this->id), command_size, this->manager.get_issue_queue_size(this->id));
+
+    if ((this->manager.get_issue_queue_write_ptr(this->id)) + command_size >= this->manager.get_issue_queue_size(this->id)) {
+        log_info(tt::LogMetal, "KCM Issuing wrap for {} !!!!!", __FUNCTION__);
+        this->issue_wrap();
+    }
+
+    auto command = EnqueueRecordEventCommand(this->id, this->device, this->manager, event_ref.event_id);
+    this->enqueue_command(command, false);
+    this->manager.next_completion_queue_push_back(align(EVENT_PADDED_SIZE, 32), this->id);
+}
+
+
 void HWCommandQueue::copy_into_user_space(uint32_t event, uint32_t read_ptr, chip_id_t mmio_device_id, uint16_t channel) {
     const auto& [buffer_layout, page_size, padded_page_size, dev_page_to_host_page_mapping, dst, dst_offset, num_pages_read, cur_host_page_id] =
         this->issued_reads.at(event);
@@ -1144,6 +1197,32 @@ void EnqueueProgramImpl(CommandQueue& cq, std::variant < std::reference_wrapper<
     }, program);
 }
 
+
+// TODO - What chips and cores should it be sent to?  Do we have this information as state somewhere?
+// Should be able to do this without programs, I think.
+void EnqueueQueueRecordEvent(CommandQueue& cq, Event &event) {
+
+    // log_info(tt::LogMetal, "KCM Starting {} with Event(event_id: {} cq_id: {})", __FUNCTION__, event.event_id, event.cq_id);
+    TT_ASSERT(cq.id() == 0, "EnqueueQueueRecordEvent only supported on first command queue on device for time being.");
+    TT_ASSERT(event.event_id == -1, "EnqueueQueueRecordEvent expected to be given an uninitialized event");
+    TT_ASSERT(event.cq_id == -1, "EnqueueQueueRecordEvent expected to be given an uninitialized event");
+
+    // Insert the Event into the CQ
+    detail::DispatchStateCheck(true);
+    cq.run_command(CommandInterface{
+        .type = EnqueueCommandType::ENQUEUE_RECORD_EVENT,
+        .blocking = false,
+        .event = event,
+    });
+
+    // log_info(tt::LogMetal, "KCM Finished {} and returning Event w/ event_id: {} cq_id: {}", __FUNCTION__, event.event_id, event.cq_id);
+}
+
+void EnqueueRecordEventImpl(CommandQueue& cq, std::reference_wrapper<Event> event) {
+    cq.hw_command_queue().enqueue_record_event(event);
+}
+
+
 void Finish(CommandQueue& cq) {
     detail::DispatchStateCheck(true);
     cq.run_command(CommandInterface{
@@ -1280,7 +1359,7 @@ void CommandQueue::run_command(const CommandInterface& command) {
 }
 
 void CommandQueue::run_command_impl(const CommandInterface& command) {
-    log_trace(LogDispatch, "CQ{} running {}", this->cq_id, command.type);
+    log_debug(LogDispatch, "CQ{} running {}", this->cq_id, command.type);
     switch (command.type) {
         case EnqueueCommandType::ENQUEUE_READ_BUFFER:
             TT_ASSERT(command.dst.has_value(), "Must provide a dst!");
@@ -1298,6 +1377,10 @@ void CommandQueue::run_command_impl(const CommandInterface& command) {
             TT_ASSERT(command.program.has_value(), "Must provide a program!");
             TT_ASSERT(command.blocking.has_value(), "Must specify blocking value!");
             EnqueueProgramImpl(*this, command.program.value(), command.blocking.value(), command.trace);
+            break;
+        case EnqueueCommandType::ENQUEUE_RECORD_EVENT:
+            TT_ASSERT(command.event.has_value(), "Must provide an event!");
+            EnqueueRecordEventImpl(*this, *command.event); // FIXME - Do we need to specify cores here, or can be calculated from state lower down?
             break;
         case EnqueueCommandType::FINISH:
             FinishImpl(*this);
