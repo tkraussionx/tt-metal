@@ -53,8 +53,9 @@ def test_mamba_ssm_inference(
 
     reference_output = PytorchMambaSSM(reference_model, LAYER_NUM)(input)
 
-    # mamba_block = reference_model.layers[LAYER_NUM].mixer
-    model_output = torch.rand(batch, d_in)
+    mamba_block = reference_model.layers[LAYER_NUM].mixer
+    model = TtMambaSSM(reference_model.args, device, mamba_block.state_dict())
+    model_output = model(input)
 
     logger.info(comp_allclose(reference_output, model_output))
 
