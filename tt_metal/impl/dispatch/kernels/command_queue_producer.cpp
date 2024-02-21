@@ -28,13 +28,22 @@ void kernel_main() {
 
     bool db_buf_switch = false;
     while (true) {
+        if (num_commands_in_trace) {
+            uint32_t command_addr = command_start_addr;
+            uint32_t trace_dram_bank_base_addr;
+            for (; id < id + NUM_DRAM_BANKS; id++) {
+                uint64_t page_addr = get_dram_noc_addr(id, DeviceCommand::PROGRAM_PAGE_SIZE, trace_dram_bank_base_addr);
+                noc_async_read(page_addr, command_addr, DeviceCommand::PROGRAM_PAGE_SIZE);
+                command_addr += DeviceCommand::PROGRAM_PAGE_SIZE;
+            }
+        } else {
 
-        issue_queue_wait_front();
-        uint32_t rd_ptr = (cq_read_interface.issue_fifo_rd_ptr << 4);
-        uint64_t src_noc_addr = pcie_core_noc_encoding | rd_ptr;
-        noc_async_read(src_noc_addr, command_start_addr, min(DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, issue_queue_size - rd_ptr));
+            issue_queue_wait_front();
+            uint32_t rd_ptr = (cq_read_interface.issue_fifo_rd_ptr << 4);
+            uint64_t src_noc_addr = pcie_core_noc_encoding | rd_ptr;
+            noc_async_read(src_noc_addr, command_start_addr, min(DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, issue_queue_size - rd_ptr));
+        }
         noc_async_read_barrier();
-
         // Producer information
         volatile tt_l1_ptr uint32_t* command_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(command_start_addr);
         volatile tt_l1_ptr CommandHeader* header = (CommandHeader*)command_ptr;
@@ -53,6 +62,15 @@ void kernel_main() {
         bool is_sharded = (bool) (header->buffer_type == (uint32_t)DeviceCommand::BufferType::SHARDED);
         uint32_t sharded_buffer_num_cores = header->sharded_buffer_num_cores;
         uint32_t restart = header->restart;
+        uint32_t trace = header->trace;
+
+        if (trace) {
+            set_num_commands_in_trace
+            id = 0;
+            continue;
+        }
+
+
 
         db_cb_config_t* db_cb_config = get_local_db_cb_config(CQ_CONSUMER_CB_BASE, db_buf_switch);
         const db_cb_config_t* remote_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, db_buf_switch);
@@ -105,7 +123,11 @@ void kernel_main() {
             db_cb_config,
             remote_db_cb_config);
 
-        issue_queue_pop_front<host_issue_queue_read_ptr_addr>(DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + data_size);
+        if (num_commands_in_trace) {
+            num_commands_in_trace--;
+        } else {
+            issue_queue_pop_front<host_issue_queue_read_ptr_addr>(DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + data_size);
+        }
 
         db_buf_switch = not db_buf_switch;
     }
