@@ -33,7 +33,7 @@ class TtMambaSSM(torch.nn.Module):
         """
         x_proj_weight_name = "x_proj.weight"
         self.delta_t_proj_weights = torch2tt_tensor(
-            self.state_dict[x_proj_weight_name][:, : self.args.dt_rank],
+            self.state_dict[x_proj_weight_name][: self.args.dt_rank, :],
             self.device,
             tt_memory_config=tt_lib.tensor.MemoryConfig(
                 tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
@@ -43,7 +43,7 @@ class TtMambaSSM(torch.nn.Module):
         self.delta_t_proj = Linear(self.args.d_inner, self.args.dt_rank, self.delta_t_proj_weights, bias=None)
 
         self.BC_proj_weights = torch2tt_tensor(
-            self.state_dict[x_proj_weight_name][:, self.args.dt_rank :],
+            self.state_dict[x_proj_weight_name][self.args.dt_rank :, :],
             self.device,
             tt_memory_config=tt_lib.tensor.MemoryConfig(
                 tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
