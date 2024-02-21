@@ -7,7 +7,7 @@ import pytest
 from loguru import logger
 import json
 from pathlib import Path
-from models.experimental.mistral.tt.mistral_common import precompute_freqs, generate_cos_sin_cache
+from models.experimental.mistral.tt.mistral_common import precompute_freqs, generate_cos_sin_cache, prepare_inputs
 from models.experimental.mistral.tt.mistral_decoder import TtTransformerBlock
 from models.experimental.mistral.tt.model_config import TtModelArgs, get_model_config
 from models.experimental.mistral.reference.model import TransformerBlock
@@ -88,8 +88,9 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
     cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
     freqs_cis = torch.complex(cos, sin)
 
-    tt_model.tt_cos_cached, tt_model.tt_sin_cached = generate_cos_sin_cache(
-        devices, model_args.head_dim, "", model_args.max_seq_len * 2, 1000, tt_model.model_config
+    # Generate attn cos/sin cache
+    tt_model.attention.tt_cos_cached, tt_model.attention.tt_sin_cached = generate_cos_sin_cache(
+        devices, model_args.head_dim, "", model_args.max_seq_len * 2, 10000, tt_model.model_config
     )
 
     # TODO Update start_pos (check llama test for reference)
@@ -101,9 +102,17 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
         tt_decode_input = pt_decode_input.clone()
         start_pos = generation_start_pos + i
 
-        decode_input, start_pos, attn_mask = tt_model.prepare_inputs(tt_decode_input, start_pos)
+        decode_input, start_pos, attn_mask, current_pos = prepare_inputs(
+            tt_decode_input,
+            start_pos,
+            tt_model.hidden_size,
+            tt_model.n_local_heads,
+            tt_model.sliding_window,
+            tt_model.devices,
+            tt_model.num_devices,
+        )
         # Run TT model
-        tt_out = tt_model(decode_input, start_pos, attn_mask)
+        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask)
         # tt_output = tt_model(tt_input, bcast_freq_xq, bcast_freq_xk, tt_position, mask, seqlen)
 
         tt_output_torch = tt2torch_tensor(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]

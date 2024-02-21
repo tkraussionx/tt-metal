@@ -16,9 +16,9 @@ from models.utility_functions import (
 
 from models.experimental.mistral.tt.mistral_common import (
     precompute_freqs as tt_precompute_freqs,
-    freqs_to_rotation_matrix,
-    gather_rotary_emb as tt_gather_rotary_emb,
-    tt_all_reduce,
+    # freqs_to_rotation_matrix,
+    # gather_rotary_emb as tt_gather_rotary_emb,
+    # tt_all_reduce,
 )
 
 
@@ -84,73 +84,12 @@ class TtTransformerBlock(nn.Module):
             model_config=model_config,
         )
 
-    # TODO function taken from mistral_attention.py. Move to mistral_common.py
-    def get_rotation_mat(self, cos, sin, start_pos, seqlen, batch):
-        # cos, sin = tt_precompute_freqs(dhead, end)
-        rot_mat = freqs_to_rotation_matrix(cos, sin)
-        position_ids = torch.ones(batch, seqlen, dtype=torch.long) * start_pos
-        rot_emb = tt_gather_rotary_emb(rot_mat, position_ids)
-        return rot_emb
-
-    # TODO function taken from mistral_attention.py. Move to mistral_common.py
-    def prepare_inputs(self, x, start_pos, cos, sin):
-        """
-        Prepare inputs for decode mode. Assume that current token is at
-        start_pos, and KV cache has valid data up to start_pos.
-        x: (batch, seq, hidden_dim)
-        start_pos: int
-        """
-        assert x.size(2) == self.hidden_size
-        assert len(x.size()) == 3
-
-        batch = x.size(0)
-        seq_len = x.size(1)
-        assert seq_len == 1, "Only supporting decode mode"
-        x = x.transpose(0, 1).unsqueeze(1)  # [seq_len, 1, batch, hidden_dim]
-        rot_mat = self.get_rotation_mat(cos, sin, start_pos=start_pos, seqlen=seq_len, batch=batch)
-
-        padded_layer_past_len = min(nearest_32(start_pos + 1), self.sliding_window)
-        self.current = self.current % self.sliding_window
-        attn_mask = torch.zeros(seq_len, 1, batch, padded_layer_past_len)
-
-        if start_pos < self.sliding_window:
-            attn_mask[:, :, :, self.current + 1 :] = torch.finfo(attn_mask.dtype).min
-        else:
-            attn_mask[:, :, :, : self.current] = torch.finfo(attn_mask.dtype).min
-            attn_mask[:, :, :, self.sliding_window - self.current :] = torch.finfo(attn_mask.dtype).min
-        attn_mask = attn_mask.expand(-1, self.n_local_heads, -1, -1)
-
-        # TODO: mask out >sliding_window prev tokens
-
-        # expected shapes:
-        # x: (seq_len, 1, batch, hidden_dim)
-        # start_pos: int
-        # rot_mat: [1, bsz, head_dim, head_dim]
-        # attn_mask: [seq_len, n_heads, batch, padded_layer_past_len]
-        assert x.size() == (seq_len, 1, batch, self.hidden_size)
-        assert rot_mat.size() == (1, batch, self.head_dim, self.head_dim)
-        assert attn_mask.size() == (seq_len, self.n_local_heads, batch, padded_layer_past_len)
-
-        xs, rot_mats, attn_masks = [], [], []
-        for i in range(self.num_devices):
-            device = self.devices[i]
-            xs.append(torch2tt_tensor(x.clone(), device))
-            rot_mats.append(torch2tt_tensor(rot_mat.clone(), device))
-            attn_masks.append(torch2tt_tensor(attn_mask.clone(), device))
-
-        return (
-            xs,
-            start_pos,
-            rot_mats,
-            attn_masks,
-        )
-
     def forward(
         self,
         # x: tt_lib.tensor.Tensor,
         xs: tt_lib.tensor.Tensor,
-        rot_mats: tt_lib.tensor.Tensor,
         start_pos: int,
+        current_pos: int,
         attn_masks: Optional[tt_lib.tensor.Tensor],
         # bcast_freq_xq: tt_lib.tensor.complex_tensor,
         # bcast_freq_xk: tt_lib.tensor.complex_tensor,
@@ -162,8 +101,8 @@ class TtTransformerBlock(nn.Module):
         attn_norm = [self.attention_norm(xs[0])]
         r = self.attention.forward(
             attn_norm,
-            rot_mats,
             start_pos,
+            current_pos,
             attn_masks,
         )
         # Attn takes a list of inputs (assuming multiple devices) and returns multiple outputs

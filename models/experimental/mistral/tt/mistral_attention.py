@@ -37,7 +37,7 @@ class TtMistralAttention(nn.Module):
 
         self.model_config = model_config
 
-        self.current = 0
+        # self.current = 0
 
         if layer_num:
             layer_name = f"{base_url}.{layer_num}.attention."
@@ -120,55 +120,11 @@ class TtMistralAttention(nn.Module):
         self.tt_sin_cached = None
         self.tt_cos_cached = None
 
-    def prepare_inputs(self, x, start_pos):
-        """
-        Prepare inputs for decode mode. Assume that current token is at
-        start_pos, and KV cache has valid data up to start_pos.
-        x: (batch, seq, hidden_dim)
-        start_pos: int
-        """
-        assert x.size(2) == self.hidden_size
-        assert len(x.size()) == 3
-
-        batch = x.size(0)
-        seq_len = x.size(1)
-        assert seq_len == 1, "Only supporting decode mode"
-        x = x.transpose(0, 1).unsqueeze(1)  # [seq_len, 1, batch, hidden_dim]
-
-        padded_layer_past_len = min(nearest_32(start_pos + 1), self.sliding_window)
-        self.current = start_pos % self.sliding_window
-        attn_mask = torch.zeros(seq_len, 1, batch, padded_layer_past_len)
-
-        if start_pos < self.sliding_window:
-            attn_mask[:, :, :, self.current + 1 :] = torch.finfo(attn_mask.dtype).min
-        else:
-            attn_mask[:, :, :, : self.current] = torch.finfo(attn_mask.dtype).min
-            attn_mask[:, :, :, self.sliding_window - self.current :] = torch.finfo(attn_mask.dtype).min
-        attn_mask = attn_mask.expand(-1, self.n_local_heads, -1, -1)
-
-        # expected shapes:
-        # x: (seq_len, 1, batch, hidden_dim)
-        # start_pos: int
-        # attn_mask: [seq_len, n_heads, batch, padded_layer_past_len]
-        assert x.size() == (seq_len, 1, batch, self.hidden_size)
-        assert attn_mask.size() == (seq_len, self.n_local_heads, batch, padded_layer_past_len)
-
-        xs, attn_masks = [], []
-        for i in range(self.num_devices):
-            device = self.devices[i]
-            xs.append(torch2tt_tensor(x.clone(), device))
-            attn_masks.append(torch2tt_tensor(attn_mask.clone(), device))
-
-        return (
-            xs,
-            start_pos,
-            attn_masks,
-        )
-
     def forward(
         self,
         xs: tt_lib.tensor.Tensor,
         start_pos: int,
+        current_pos: int,
         attn_masks: tt_lib.tensor.Tensor,
     ) -> tt_lib.tensor.Tensor:
         """
@@ -233,8 +189,8 @@ class TtMistralAttention(nn.Module):
             # v_heads [seqlen, n_kv_heads, bsz, head_dim]
             # keys, [max_batch_size, n_kv_heads // self.num_devices, sliding_window, head_dim]
 
-            tt_lib.tensor.update_cache(keys, k_heads, self.current)
-            tt_lib.tensor.update_cache(values, v_heads, self.current)
+            tt_lib.tensor.update_cache(keys, k_heads, current_pos)  # self.current)
+            tt_lib.tensor.update_cache(values, v_heads, current_pos)  # self.current)
 
             k_heads.deallocate()
             v_heads.deallocate()
