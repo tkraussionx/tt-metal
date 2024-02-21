@@ -21,8 +21,10 @@ inline void RISC_POST_STATUS(uint32_t status) {
 }
 
 struct eth_word_t {
+    // Do not reorder fields without also updating the corresponding APIs that use
+    // any of them
     volatile uint32_t bytes_sent;
-    uint32_t reserved_0;
+    volatile uint32_t receiver_ack;
     uint32_t reserved_1;
     uint32_t reserved_2;
 };
@@ -59,17 +61,33 @@ FORCE_INLINE
 void reset_erisc_info() {
     // assert(channel < 4);
     erisc_info->per_channel_user_bytes_send[0].bytes_sent = 0;
+    erisc_info->per_channel_user_bytes_send[0].receiver_ack = 0;
     erisc_info->per_channel_user_bytes_send[1].bytes_sent = 0;
+    erisc_info->per_channel_user_bytes_send[1].receiver_ack = 0;
     erisc_info->per_channel_user_bytes_send[2].bytes_sent = 0;
+    erisc_info->per_channel_user_bytes_send[2].receiver_ack = 0;
     erisc_info->per_channel_user_bytes_send[3].bytes_sent = 0;
+    erisc_info->per_channel_user_bytes_send[3].receiver_ack = 0;
     erisc_info->per_channel_user_bytes_send[4].bytes_sent = 0;
+    erisc_info->per_channel_user_bytes_send[4].receiver_ack = 0;
     erisc_info->per_channel_user_bytes_send[5].bytes_sent = 0;
+    erisc_info->per_channel_user_bytes_send[5].receiver_ack = 0;
     erisc_info->per_channel_user_bytes_send[6].bytes_sent = 0;
+    erisc_info->per_channel_user_bytes_send[6].receiver_ack = 0;
     erisc_info->per_channel_user_bytes_send[7].bytes_sent = 0;
+    erisc_info->per_channel_user_bytes_send[7].receiver_ack = 0;
 }
 
 namespace internal_ {
 
+/**
+ *
+ * Return value: None
+ *
+ * | Argument          | Description                                             | Type     | Valid Range | Required |
+ * |-------------------|---------------------------------------------------------|----------|-------------|----------|
+ * | num_words         | number of eth link words (16B)                          | uint32_t | 0..1MB      | True     |
+ */
 FORCE_INLINE
 void eth_send_packet(uint32_t q_num, uint32_t src_word_addr, uint32_t dest_word_addr, uint32_t num_words) {
     uint32_t count = 0;
@@ -273,6 +291,7 @@ void eth_send_bytes_over_channel(
         num_bytes_sent += num_bytes_per_send;
     }
     erisc_info->per_channel_user_bytes_send[channel].bytes_sent = num_bytes;
+    erisc_info->per_channel_user_bytes_send[channel].receiver_ack = 0;
     uint32_t addr = ((uint32_t)(&(erisc_info->per_channel_user_bytes_send[channel].bytes_sent))) >> 4;
     internal_::eth_send_packet(
         0,
@@ -305,6 +324,11 @@ void eth_wait_for_receiver_done() {
 
 FORCE_INLINE
 bool eth_is_receiver_channel_send_acked(uint32_t channel) {
+    return erisc_info->per_channel_user_bytes_send[channel].receiver_ack != 0;
+}
+
+FORCE_INLINE
+bool eth_is_receiver_channel_send_done(uint32_t channel) {
     return erisc_info->per_channel_user_bytes_send[channel].bytes_sent == 0;
 }
 
@@ -320,7 +344,7 @@ void eth_wait_for_receiver_channel_done(uint32_t channel) {
     uint32_t count = 0;
     uint32_t max = 100000;
 
-    while (!eth_is_receiver_channel_send_acked(channel)) {
+    while (!eth_is_receiver_channel_send_done(channel)) {
         count++;
         if (count > max) {
             count = 0;
@@ -434,13 +458,91 @@ void eth_receiver_done() {
         ((uint32_t)(&(erisc_info->per_channel_user_bytes_send[0].bytes_sent))) >> 4,
         1);
 }
+
+
 FORCE_INLINE
 void eth_receiver_channel_done(uint32_t channel) {
     // assert(channel < 4);
     erisc_info->per_channel_user_bytes_send[channel].bytes_sent = 0;
+    erisc_info->per_channel_user_bytes_send[channel].receiver_ack = 0;
     internal_::eth_send_packet(
         0,
         ((uint32_t)(&(erisc_info->per_channel_user_bytes_send[channel].bytes_sent))) >> 4,
         ((uint32_t)(&(erisc_info->per_channel_user_bytes_send[channel].bytes_sent))) >> 4,
         1);
 }
+
+FORCE_INLINE
+void eth_clear_sender_channel_ack(uint32_t channel) {
+    // assert(channel < 4);
+    erisc_info->per_channel_user_bytes_send[channel].receiver_ack = 0;
+}
+
+FORCE_INLINE
+void eth_receiver_channel_ack(uint32_t channel) {
+    // assert(channel < 4);
+    erisc_info->per_channel_user_bytes_send[channel].receiver_ack = 1;
+    internal_::eth_send_packet(
+        0,
+        ((uint32_t)(&(erisc_info->per_channel_user_bytes_send[channel].receiver_ack))) >> 4,
+        ((uint32_t)(&(erisc_info->per_channel_user_bytes_send[channel].receiver_ack))) >> 4,
+        1);
+}
+
+
+// TODO(snijjar): add a variant with queue size as a template parameter
+template<typename T = uint8_t>
+class QueueIndexPointer {
+   public:
+    QueueIndexPointer(uint8_t queue_size) : ptr(0), size(queue_size), wrap_around(queue_size * 2) {
+        // FWASSERT(queue_size < 128);
+    }
+
+    [[nodiscard("index was called without consuming the result. Did you mean to call it?")]]
+    T index() const { return this->ptr >= this->size ? this->ptr - this->size : this->ptr; }
+    [[nodiscard("raw_index was called without consuming the result. Did you mean to call it?")]]
+    inline uint8_t raw_index() const {
+        return this->ptr;
+    }
+    [[nodiscard("distance was called without consuming the result. Did you mean to call it?")]]
+    inline static T distance(QueueIndexPointer ptr, QueueIndexPointer ackptr) {
+        // FWASSERT(ptr.size == ackptr.size);
+        return ackptr.ptr > ptr.ptr ? (ptr.wrap_around - ackptr.ptr) + ptr.ptr : ptr.ptr - ackptr.ptr;
+    }
+    [[nodiscard("full was called without consuming the result. Did you mean to call it?")]]
+    inline static T full(QueueIndexPointer ptr, QueueIndexPointer ackptr) {
+        // FWASSERT(ptr.size == ackptr.size);
+        return distance(ptr.ptr, ackptr.ptr) >= ptr.size;
+    }
+    [[nodiscard("empty was called without consuming the result. Did you mean to call it?")]]
+    inline static T empty(QueueIndexPointer ptr, QueueIndexPointer ackptr) {
+        // FWASSERT(ptr.size == ackptr.size);
+        return ptr.ptr == ackptr.ptr;
+    }
+    inline void increment() {
+        this->ptr = this->next_pointer();
+    }
+    [[nodiscard("next_index was called without consuming the result. Did you mean to call it?")]]
+    inline QueueIndexPointer next_index() const {
+        return QueueIndexPointer(this->next_pointer(), this->size);
+    }
+    // Compares indices since the raw index is not visible to the user
+    inline bool operator==(const QueueIndexPointer &other) const {
+        return this->ptr == other.ptr;
+    }
+    inline bool operator!=(const QueueIndexPointer &other) const {
+        return this->ptr != other.ptr;
+    }
+
+  private:
+    inline uint8_t next_pointer() {
+        uint8_t next_ptr = (this->ptr + 1);
+        next_ptr = next_ptr == wrap_around ? 0 : next_ptr;
+        return next_ptr;
+    }
+    QueueIndexPointer(uint32_t ptr, uint8_t queue_size) :
+        ptr(ptr), size(queue_size), wrap_around(queue_size * 2) {}
+    T ptr;
+    T size;
+    T wrap_around;
+};
