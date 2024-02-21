@@ -246,8 +246,13 @@ bool RunWriteBWTest(
     //                      Compile and Execute Application
     ////////////////////////////////////////////////////////////////////////////
 
+    try {
     tt::tt_metal::detail::CompileProgram(sender_device, sender_program);
     tt::tt_metal::detail::CompileProgram(receiver_device, receiver_program);
+    } catch (std::exception& e) {
+        std::cout << "Failed compile: " << e.what() << std::endl;
+        throw e;
+    }
 
     std::cout << "Running..." << std::endl;
 
@@ -276,7 +281,7 @@ bool RunWriteBWTest(
                 num_printed_mismatches++;
             }
         }
-        std::cout << readback_data_vec[0] << std::endl;
+        std::cout << "... (remaining mismatches omitted)" << std::endl;
     }
     return pass;
 }
@@ -319,24 +324,32 @@ int main(int argc, char** argv) {
     // std::cout << "RECEIVER CORE: (x=" << eth_receiver_core.x << ", y=" << eth_receiver_core.y << ")" << std::endl;
 
     // std::cout << "BW TEST: " << 64 << ", num_messages_to_send: " << num_messages_to_send << std::endl;
-    bool success = RunWriteBWTest(
-        sender_kernel_path,
-        receiver_kernel_path,
-        device_0,
-        device_1,
-        eth_sender_core,
-        eth_receiver_core,
-        src_eth_l1_byte_address,
-        dst_eth_l1_byte_address,
-        precomputed_source_addresses_buffer_address,
-        precomputed_source_addresses_buffer_size,
-        eth_l1_staging_buffer_size,
-        eth_max_concurrent_sends,
-        input_buffer_page_size,
-        input_buffer_size_bytes,
-        source_is_dram,
-        dest_is_dram
-        );
+    bool success = false;
+    try {
+        success = RunWriteBWTest(
+            sender_kernel_path,
+            receiver_kernel_path,
+            device_0,
+            device_1,
+            eth_sender_core,
+            eth_receiver_core,
+            src_eth_l1_byte_address,
+            dst_eth_l1_byte_address,
+            precomputed_source_addresses_buffer_address,
+            precomputed_source_addresses_buffer_size,
+            eth_l1_staging_buffer_size,
+            eth_max_concurrent_sends,
+            input_buffer_page_size,
+            input_buffer_size_bytes,
+            source_is_dram,
+            dest_is_dram
+            );
+    } catch (std::exception& e) {
+        std::cout << "Caught exception: " << e.what() << std::endl;
+        test_fixture.TearDown();
+        return -1;
+    }
+
 
     test_fixture.TearDown();
 
