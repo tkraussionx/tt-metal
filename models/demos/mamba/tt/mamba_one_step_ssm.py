@@ -8,7 +8,6 @@ import tt_lib
 
 from models.utility_functions import torch2tt_tensor
 from models.helper_funcs import Linear
-
 from models.demos.mamba.reference.args import ModelArgs
 
 
@@ -16,11 +15,11 @@ class TtMambaSSM(torch.nn.Module):
     def __init__(
         self,
         args: ModelArgs,
-        device,
-        state_dict,
-        base_url,
-        layer_num,
+        device: tt_lib.device,
+        base_url: str,
+        layer_num: int,
         hidden_size: int,
+        state_dict,
     ):
         super().__init__()
 
@@ -30,9 +29,6 @@ class TtMambaSSM(torch.nn.Module):
         self.args = args
 
         layer_name = f"{base_url}.{layer_num}"
-
-        # dense_h_to_4h_str = f"{layer_name}.mlp.dense_h_to_4h.weight"
-        # dense_4h_to_h_str = f"{layer_name}.mlp.dense_4h_to_h.weight"
 
         """
         We need to split up the x_proj weights because in the reference implementation they perform the linear operation for dt, B, and C in
@@ -143,7 +139,10 @@ class TtMambaSSM(torch.nn.Module):
         self.tt_hidden_state = tt_lib.tensor.add(delta_A_h, delta_B_x)
         self.output = tt_lib.tensor.bmm(self.tt_hidden_state, C)
         C.deallocate()
+
         self.output = tt_lib.tensor.add(self.output, x)
         x.deallocate()
+
         self.output = tt_lib.tensor.permute(self.output, [0, 3, 1, 2])
+
         return self.output
