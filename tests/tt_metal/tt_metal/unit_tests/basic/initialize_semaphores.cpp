@@ -118,3 +118,26 @@ TEST_F(DeviceFixture, InitializeIllegalSemaphores) {
             devices_.at(id), program, core_range);
     }
 }
+
+TEST_F(DeviceFixture, InitializeLegalSemaphoresOnEthCore) {
+    const auto &eth_cores = devices_[0]->get_active_ethernet_cores();
+    if (eth_cores.size() == 0) {
+            GTEST_SKIP();
+    }
+    for (unsigned int id = 0; id < num_devices_; id++) {
+        tt_metal::Program program = tt_metal::CreateProgram();
+        CoreRange core_range = {.start = {0, 0}, .end = {0, 1}};
+        unit_tests::initialize_semaphores::initialize_and_compile_program(devices_.at(id), program, core_range);
+        unit_tests::initialize_semaphores::create_and_read_max_num_semaphores(devices_.at(id), program, core_range);
+    }
+}
+
+TEST_F(DeviceFixture, InitializeIllegalSemaphoresOnEthCore) {
+    for (unsigned int id = 0; id < num_devices_; id++) {
+        tt_metal::Program program = tt_metal::CreateProgram();
+        CoreRange core_range = {.start = {0, 0}, .end = {0, 1}};
+        unit_tests::initialize_semaphores::initialize_and_compile_program(devices_.at(id), program, core_range);
+        unit_tests::initialize_semaphores::try_creating_more_than_max_num_semaphores(
+            devices_.at(id), program, core_range);
+    }
+}

@@ -632,7 +632,7 @@ void UpdateDynamicCircularBufferAddress(Program &program, CBHandle cb_handle, co
     detail::GetCircularBuffer(program, cb_handle)->config().set_globally_allocated_address(buffer);
 }
 
-uint32_t CreateSemaphore(Program &program, const std::variant<CoreRange,CoreRangeSet> &core_spec, uint32_t initial_value) {
+uint32_t CreateSemaphore(Program &program, const std::variant<CoreRange,CoreRangeSet> &core_spec, uint32_t initial_value, CoreType core_type) {
     return std::visit(
         [&](auto&& c) -> uint32_t
         {

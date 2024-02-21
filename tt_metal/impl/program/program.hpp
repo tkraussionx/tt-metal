@@ -82,9 +82,9 @@ class Program {
 
     const std::vector<std::shared_ptr<CircularBuffer>> circular_buffers_on_corerange(const CoreRange &cr) const;
 
-    auto semaphores_on_core(const CoreCoord &core) const;
+    auto semaphores_on_core(const CoreCoord &core, CoreType core_type) const;
 
-    size_t num_semaphores ( const CoreCoord & core ) const;
+    size_t num_semaphores ( const CoreCoord & core, CoreType core_type ) const;
     size_t num_semaphores () const;
     uint32_t semaphore_address ( uint32_t sem_index ) const;
     void init_semaphores ( const Device & device, const CoreCoord &logical_core ) const;
