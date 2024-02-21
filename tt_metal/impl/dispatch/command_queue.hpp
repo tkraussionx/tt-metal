@@ -29,7 +29,7 @@ using std::tuple;
 using std::unique_ptr;
 
 // Only contains the types of commands which are enqueued onto the device
-enum class EnqueueCommandType { ENQUEUE_READ_BUFFER, ENQUEUE_WRITE_BUFFER, ENQUEUE_PROGRAM, FINISH, ENQUEUE_WRAP, ENQUEUE_RESTART, FLUSH, INVALID };
+enum class EnqueueCommandType { ENQUEUE_READ_BUFFER, ENQUEUE_WRITE_BUFFER, ALLOCATE_BUFFER, DEALLOCATE_BUFFER, ENQUEUE_PROGRAM, FINISH, ENQUEUE_WRAP, ENQUEUE_RESTART, FLUSH, INVALID };
 
 string EnqueueCommandTypeToString(EnqueueCommandType ctype);
 
@@ -428,6 +428,8 @@ class HWCommandQueue {
     CoreCoord completion_queue_writer_core;
     volatile bool is_dprint_server_hung();
     volatile bool is_noc_hung();
+    void enqueue_write_buffer(std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<const Buffer>> buffer, HostBufferMemTypes src, bool blocking);
+    void enqueue_write_buffer(const Buffer& buffer, const void* src, bool blocking);
    private:
     uint32_t id;
     uint32_t size_B;
@@ -455,8 +457,7 @@ class HWCommandQueue {
 
     void enqueue_read_buffer(std::shared_ptr<Buffer> buffer, void* dst, bool blocking);
     void enqueue_read_buffer(Buffer& buffer, void* dst, bool blocking);
-    void enqueue_write_buffer(std::shared_ptr<const Buffer> buffer, const void* src, bool blocking);
-    void enqueue_write_buffer(const Buffer& buffer, const void* src, bool blocking);
+
     void enqueue_program(Program& program, std::optional<std::reference_wrapper<Trace>> trace, bool blocking);
     void finish();
     void issue_wrap();
@@ -470,6 +471,8 @@ class HWCommandQueue {
     friend void EnqueueProgramImpl(CommandQueue& cq, std::variant < std::reference_wrapper<Program>, std::shared_ptr<Program> > program, bool blocking, std::optional<std::reference_wrapper<Trace>> trace);
     friend void EnqueueReadBufferImpl(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer, void* dst, bool blocking);
     friend void EnqueueWriteBufferImpl(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer, const void* src, bool blocking);
+    friend void EnqueueAllocateBufferImpl(std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer, bool bottom_up);
+    friend void EnqueueDeallocateBufferImpl(std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer);
     friend void FinishImpl(CommandQueue & cq);
     friend class Trace;
 };
@@ -480,10 +483,12 @@ struct CommandInterface {
     EnqueueCommandType type;
     std::optional<bool> blocking;
     std::optional<std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>>> buffer;
+    std::optional<Buffer*> buffer_to_allocate;
     std::optional<std::variant<std::reference_wrapper<Program>, std::shared_ptr<Program>>> program;
-    std::optional<const void*> src;
+    std::optional<HostBufferMemTypes> src;
     std::optional<void*> dst;
     std::optional<std::reference_wrapper<Trace>> trace;
+    std::optional<bool> bottom_up;
 };
 
 struct BufferMetadata {
@@ -539,6 +544,12 @@ class CommandQueue {
         RUNNING = 1,
         TERMINATE = 2,
     };
+<<<<<<< HEAD
+=======
+    CommandQueueMode mode = CommandQueue::get_mode();
+    std::unique_ptr<std::thread> worker_thread;
+    CommandQueueState worker_state = CommandQueueState::IDLE;
+>>>>>>> #0: WIP changes to make Async SW queues default
 
     CommandQueueMode mode = CommandQueue::get_mode();
     CommandQueueState worker_state = CommandQueueState::IDLE;
@@ -565,6 +576,8 @@ class CommandQueue {
     void track_command_metadata(const CommandInterface& command);
     void sanitize_command(std::shared_ptr<CommandInterface> command);
     std::mutex debug_mtx;
+    std::atomic<std::size_t> worker_thread_id = -1;
+    std::atomic<std::size_t> main_thread_id = -1;
 };
 
 bool operator == (const BufferMetadata& a, const Buffer& b);

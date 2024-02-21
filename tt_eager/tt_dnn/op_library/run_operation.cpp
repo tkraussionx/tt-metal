@@ -206,6 +206,7 @@ std::vector<Tensor> run_device_operation(
             return program;
         };
     } else {
+        // std:cout << "Running device operation" << std::endl;
         get_or_create_program = [](const DeviceOperation& operation,
                                    const std::vector<Tensor>& input_tensors,
                                    const std::vector<std::optional<const Tensor>>& optional_input_tensors,
@@ -233,6 +234,7 @@ std::vector<Tensor> run_device_operation(
                     }
                 }
                 if (USE_FAST_DISPATCH) {
+                    // std::cout << "Running operation" << std::endl;
 #ifndef TTNN_ENABLE_LOGGING
                     EnqueueProgram(device->command_queue(), program, false);
 #else
@@ -384,7 +386,6 @@ std::vector<Tensor> run_with_autoformat(
     }
 
     auto output_tensors = run(operation, formatted_input_tensors, formatted_optional_input_tensors);
-
     TT_ASSERT(output_tensors.size() == output_shapes.size());
 
     formatted_input_tensors.clear();

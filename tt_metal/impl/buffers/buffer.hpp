@@ -6,13 +6,16 @@
 
 #include "common/tt_backend_api_types.hpp"
 #include "common/core_coord.h"
+#include "common/bfloat16.hpp"
 #include "hostdevcommon/common_values.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/tt_stl/concepts.hpp"
 #include "tt_metal/tt_stl/reflection.hpp"
+#include <atomic>
 #include <map>
+#include <mutex>
 #include <optional>
-
+#include <iostream>
 
 namespace tt {
 
@@ -154,13 +157,15 @@ class Buffer {
     Buffer& operator=(Buffer &&other);
 
     ~Buffer();
-
+    std::mutex lck;
     Device *device() const { return device_; }
 
     uint32_t size() const { return static_cast<uint32_t>(size_); }
 
     // Returns address of buffer in the first bank
     uint32_t address() const { return static_cast<uint32_t>(address_); }
+
+    void set_address(uint32_t address) { address_ = address; }
 
     uint32_t page_size() const { return page_size_; }
 
@@ -271,6 +276,9 @@ class Buffer {
         auto core_id = core_to_core_id_.at(core);
         return dev_pages_in_shard(core_id);
     }
+    void set_deallocate_flag() {
+        deallocated_on_device = true;
+    }
 
     std::string get_shard_info() const;
     void print_shard_info() const;
@@ -296,7 +304,15 @@ class Buffer {
     std::vector<uint32_t> dev_page_to_core_mapping_;
     std::vector<uint32_t> dev_page_to_host_page_mapping_;
     std::unordered_map<CoreCoord, uint32_t> core_to_core_id_;
+    bool deallocated_on_device = false;
 };
+
+using HostBufferMemTypes = std::variant<
+    const std::shared_ptr<std::vector<uint16_t>>,
+    const std::shared_ptr<std::vector<uint32_t>>,
+    const std::shared_ptr<std::vector<float>>,
+    const std::shared_ptr<std::vector<bfloat16>>,
+    const void*>;
 }  // namespace tt_metal
 
 }  // namespace tt

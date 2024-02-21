@@ -15,6 +15,7 @@
 
 #include "third_party/magic_enum/magic_enum.hpp"
 
+#include <chrono>
 #include <limits>
 
 using namespace tt::constants;
@@ -167,7 +168,7 @@ Tensor reduce(const Tensor &input_tensor, ReduceOpMath reduce_math, ReduceOpDim 
 
     if (is_multicore_hw) {
         Device * device;
-
+        std::cout << "Running multicore hw" << std::endl;
         // Get the device
         if (input_tensor.storage_type() != StorageType::DEVICE) {
             device = AutoFormat::GetDefaultDevice();
@@ -181,8 +182,10 @@ Tensor reduce(const Tensor &input_tensor, ReduceOpMath reduce_math, ReduceOpDim 
             formatted_input_tensor = AutoFormat::format_input_tensor(input_tensor, device, input_tensor_pad_shape, pad_value, Layout::TILE);
         }
         const Tensor output_tensor = operation::run_without_autoformat(Reduce{reduce_math, ReduceOpDim::W, 1.0, output_mem_config, output_dtype.value_or(input_tensor.dtype())}, {formatted_input_tensor}).at(0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(3000));
         return operation::run_without_autoformat(Reduce{reduce_math, ReduceOpDim::H, scaler, output_mem_config, output_dtype.value_or(input_tensor.dtype())}, {output_tensor}).at(0);
     } else {
+        std::cout << "Running single core HW" << std::endl;
         return operation::run_with_autoformat(Reduce{reduce_math, reduce_dim, scaler, output_mem_config, output_dtype.value_or(input_tensor.dtype())}, {input_tensor}, {}, pad_value).at(0);
     }
 }

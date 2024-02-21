@@ -98,7 +98,9 @@ def test_level1_is_real(memcfg, dtype, device, function_level_defaults):
     # check real
     x = Complex(input_shape)
     x = x.add(x.conj())
+    print("Pushing tensor")
     xtt = ttl.tensor.Tensor(x.metal, dtype).to(ttl.tensor.Layout.ROW_MAJOR).to(device, memcfg)
+    print("Done pushing tensor")
     tt_dev = ttl.tensor.is_real(xtt, memcfg)
     tt_dev = tt_dev.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
     tt_cpu = x.is_real()

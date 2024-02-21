@@ -378,8 +378,8 @@ class CoreRangeSet {
       return {{min_x, min_y},{max_x, max_y}};
     }
 
-  private:
-    std::set<CoreRange> ranges_;
+  // private:
+  std::set<CoreRange> ranges_;
 };
 
 const inline bool operator==(const CoreRangeSet &a, const CoreRangeSet &b) {

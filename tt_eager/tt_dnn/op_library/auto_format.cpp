@@ -23,6 +23,7 @@ namespace tt_metal {
 
 Tensor AutoFormat::move_tensor_to_device(const Tensor &input, Device * device, const MemoryConfig& mem_config) {
     if (input.storage_type() != StorageType::DEVICE) {
+        // std::cout << "calling move_tensor_to_device" << std::endl;
         return data_transfer_to_device(input, device, mem_config);
     } else {
         return input;
@@ -44,6 +45,7 @@ Tensor AutoFormat::format_input_tensor(const Tensor &input, Device * device, con
     bool convert_layout = input.layout() != target_layout;
 
     if (!pad_input && !convert_layout) {
+        // std::cout << "Moving tensor to device" << std::endl;
         return AutoFormat::move_tensor_to_device(input, device);
     }
 
@@ -94,7 +96,7 @@ Tensor AutoFormat::format_input_tensor(const Tensor &input, Device * device, con
     if(convert_layout) {
         formatted_input = layout_conversion_on_host(formatted_input, target_layout);
     }
-
+    // std::cout << "Moving tensor to device" << std::endl;
     return AutoFormat::move_tensor_to_device(formatted_input, device, mem_config);
 }
 
