@@ -28,6 +28,17 @@ from einops import rearrange, repeat, einsum
 
 from models.demos.mamba.reference.args import ModelArgs
 
+from typing import Literal
+
+MambaPretrainedModelName = Literal[
+    "state-spaces/mamba-2.8b-slimpj",
+    "state-spaces/mamba-2.8b",
+    "state-spaces/mamba-1.4b",
+    "state-spaces/mamba-790m",
+    "state-spaces/mamba-370m",
+    "state-spaces/mamba-130m",
+]
+
 
 class MambaDecode(nn.Module):
     def __init__(self, args: ModelArgs):
@@ -66,7 +77,7 @@ class MambaDecode(nn.Module):
         return logits
 
     @staticmethod
-    def from_pretrained(pretrained_model_name: str):
+    def from_pretrained(pretrained_model_name: MambaPretrainedModelName):
         """Load pretrained weights from HuggingFace into model.
 
         Args:
@@ -87,10 +98,14 @@ class MambaDecode(nn.Module):
 
         def load_config_hf(model_name):
             resolved_archive_file = cached_file(model_name, CONFIG_NAME, _raise_exceptions_for_missing_entries=False)
+            if not resolved_archive_file:
+                raise RuntimeError("Unable to load Mamba archive file from HF")
             return json.load(open(resolved_archive_file))
 
         def load_state_dict_hf(model_name, device=None, dtype=None):
             resolved_archive_file = cached_file(model_name, WEIGHTS_NAME, _raise_exceptions_for_missing_entries=False)
+            if not resolved_archive_file:
+                raise RuntimeError("Unable to load Mamba weights archive file from HF")
             return torch.load(resolved_archive_file, weights_only=True, map_location="cpu")
 
         config_data = load_config_hf(pretrained_model_name)
