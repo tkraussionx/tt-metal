@@ -229,10 +229,11 @@ class Transformer(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
+        freqs_cis_i,
         positions: torch.Tensor,
     ):
-        h = self.tok_embeddings(input_ids)
-        freqs_cis = self.freqs_cis[positions]
+        h = input_ids  # self.tok_embeddings(input_ids)
+        freqs_cis = freqs_cis_i  # [positions]
 
         mask: Optional[torch.Tensor] = None
         if input_ids.shape[1] > 1:
