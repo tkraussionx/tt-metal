@@ -2,41 +2,31 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-from dataclasses import dataclass
-
 import torch
-from torch import nn
+
 import tt_lib
 
 from models.utility_functions import torch2tt_tensor
 from models.helper_funcs import Linear
 
-
-@dataclass
-class TtMambaArgs:
-    d_inner: int
-    dt_rank: int
-    d_state: int
+from models.demos.mamba.reference.args import ModelArgs
 
 
-class TtMambaSSM(nn.Module):
+class TtMambaSSM(torch.nn.Module):
     def __init__(
         self,
-        args: TtMambaArgs,
+        args: ModelArgs,
         device,
         state_dict,
         base_url,
         layer_num,
         hidden_size: int,
-        model_config,
-        tt_cache_path,
     ):
         super().__init__()
 
         self.state_dict = state_dict
         self.device = device
         self.hidden_size = hidden_size
-        self.model_config = model_config
         self.args = args
 
         layer_name = f"{base_url}.{layer_num}"
@@ -102,7 +92,7 @@ class TtMambaSSM(nn.Module):
             ),
             tt_dtype=tt_lib.tensor.DataType.FLOAT16,
         )
-        self.dt_proj = Linear(self.args.d_rank, self.d_inner, self.dt_proj_weights, bias=self.dt_proj_bias)
+        self.dt_proj = Linear(self.args.dt_rank, self.args.d_inner, self.dt_proj_weights, bias=self.dt_proj_bias)
 
         prev_hidden_states = torch.zeros((args.batch_size, 1, args.d_inner, args.d_state))
         self.tt_hidden_state = torch2tt_tensor(

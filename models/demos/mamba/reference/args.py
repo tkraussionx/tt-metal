@@ -17,7 +17,6 @@ class ModelArgs:
     conv_bias: bool = True
     bias: bool = False
     batch_size: int = 1
-    eps: float = 1e-5
 
     def __post_init__(self):
         self.d_inner = int(self.expand * self.d_model)
