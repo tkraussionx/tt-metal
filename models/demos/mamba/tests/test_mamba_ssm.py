@@ -49,7 +49,7 @@ def test_mamba_ssm_inference(
     reference_model = MambaDecode.from_pretrained(model_version)
 
     d_in = reference_model.args.d_model * reference_model.args.expand
-    input = torch.ones(batch, 1, d_in)
+    input = torch.rand(batch, 1, d_in)
 
     reference_output = PytorchMambaSSM(reference_model, LAYER_NUM)(input)
 
@@ -58,6 +58,7 @@ def test_mamba_ssm_inference(
 
     model = TtMambaSSM(reference_model.args, device, mamba_block.state_dict())
     model_output = model(input)
+    # model_output = reference_output
 
     logger.info(comp_allclose(reference_output, model_output))
 
