@@ -20,15 +20,13 @@ Glossary:
 
 """
 from __future__ import annotations
-import math
 import json
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dataclasses import dataclass
 from einops import rearrange, repeat, einsum
 
-from .args import ModelArgs
+from models.demos.mamba.reference.args import ModelArgs
 
 
 class MambaDecode(nn.Module):
