@@ -460,16 +460,18 @@ def get_model_config(model_config_str):
         # MLP
         model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"] = WIDTH_SHARDED_MEMCFG
         model_config["DENSE_H_TO_4H_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-            compute_with_storage_grid_size=(8, 4),
+            compute_with_storage_grid_size=(8, 4),  # use 8 * 4 = 32 cores
             # compute_with_storage_grid_size=(8, 8),
-            in0_block_w=8,
-            out_subblock_h=1,
-            out_subblock_w=8,
-            per_core_M=1,
-            per_core_N=8,
+            in0_block_w=8,  # 1 in block ?
+            out_subblock_h=1,  # does this mean we have 1 sub-block per block/Mt?
+            out_subblock_w=8,  # does this mean we have 1 sub-block per block/Kt since it's the same as per_core_N?
+            per_core_M=1,  # in tiles; for b/seq-len = 32, this means every core processes all rows/tokens
+            per_core_N=8,  # in tiles; for H = 8192 = 256 Tiles, this means every core processes 8 tiles of columns
             fuse_batch=True,
             fused_activation=[ttl.tensor.FusibleActivation.GELU, True],
             mcast_in0=True,
+            # per_core_M * out_subblock_h = num tiles of out dim -2
+            # per_core_N * out_subblock_w = num tiles of out dim -1
         )
         model_config["MLP_ALL_GATHER_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
             ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,

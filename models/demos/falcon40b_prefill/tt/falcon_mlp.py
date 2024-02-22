@@ -8,6 +8,10 @@ import tt_lib
 
 from typing import List
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor
+from models.demos.falcon40b_prefill.tt.model_utils import (
+    matmul_1d_config_from_tensor_shapes,
+    memcfg_1d_width_sharded_from_tensor_shape,
+)
 
 
 class TtFalconMLP:
@@ -115,12 +119,20 @@ class TtFalconMLP:
             #     x[i],
             #     output_mem_config=self.model_config["DEFAULT_MEMCFG"]
             # )
+            mm_pgm_config = matmul_1d_config_from_tensor_shapes(
+                in0_shape=x[i].shape(),
+                in1_shape=self.dense_h_to_4h_weights[i].shape(),
+                act=[tt_lib.tensor.FusibleActivation.GELU, True],
+            )
+            print(mm_pgm_config)
             hidden_states.append(
                 tt_lib.operations.primary.matmul_1d(
                     x[i],
                     self.dense_h_to_4h_weights[i],
-                    program_config=self.model_config["DENSE_H_TO_4H_MM_PROGCFG"],
-                    output_mem_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
+                    # program_config=self.model_config["DENSE_H_TO_4H_MM_PROGCFG"],
+                    program_config=mm_pgm_config,
+                    # output_mem_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
+                    output_mem_config=memcfg_1d_width_sharded_from_tensor_shape(x[i].shape()),
                     # output_mem_config=self.model_config["DEFAULT_MEMCFG"],  # FUNCTIONAL
                     output_dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
                 )
@@ -140,17 +152,25 @@ class TtFalconMLP:
 
             # FUNCTIONAL: comment out
             concat_hidden_states = tt_lib.tensor.interleaved_to_sharded(
-                concat_hidden_states, sharded_mem_config=self.model_config["MLP_ALL_GATHER_OUTPUT_MEMCFG"]
+                concat_hidden_states,
+                # sharded_mem_config=self.model_config["MLP_ALL_GATHER_OUTPUT_MEMCFG"],
+                sharded_mem_config=memcfg_1d_width_sharded_from_tensor_shape(concat_hidden_states.shape()),
             )
 
             mlp_output = []
             for i in range(num_shards):
+                mm_pgm_config = matmul_1d_config_from_tensor_shapes(
+                    in0_shape=concat_hidden_states.shape(), in1_shape=self.dense_4h_to_h_weights[i].shape()
+                )
+                print(mm_pgm_config)
                 mlp_output.append(
                     tt_lib.operations.primary.matmul_1d(
                         concat_hidden_states,
                         self.dense_4h_to_h_weights[i],
-                        program_config=self.model_config["DENSE_4H_TO_H_MM_PROGCFG"],
-                        output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
+                        program_config=mm_pgm_config,
+                        # program_config=self.model_config["DENSE_4H_TO_H_MM_PROGCFG"],
+                        # output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
+                        output_mem_config=memcfg_1d_width_sharded_from_tensor_shape(concat_hidden_states.shape()),
                         # output_mem_config=self.model_config["DEFAULT_MEMCFG"],  # FUNCTIONAL
                         output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
                     )
@@ -158,6 +178,7 @@ class TtFalconMLP:
 
             concat_hidden_states.deallocate(True)
         else:
+            assert False, "Not supported for prefill yet."
             hidden_states = tt_lib.tensor.all_gather(
                 hidden_states,
                 dim=3,

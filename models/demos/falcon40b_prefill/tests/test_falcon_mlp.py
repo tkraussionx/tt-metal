@@ -16,6 +16,7 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_pcc,
 )
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor, skip_for_grayskull
+from models.demos.falcon40b_prefill.tt.model_utils import memcfg_1d_width_sharded_from_tensor_shape
 
 
 class PytorchFalconMLPModel(torch.nn.Module):
@@ -93,7 +94,8 @@ def run_test_FalconMLP_inference(
     tt_mlp_input_host = torch2tt_tensor(mlp_input, None, tt_dtype=model_config["LN_MLP_OUTPUT_DTYPE"])
     tt_mlp_input = []
     for device in devices:
-        tt_mlp_input.append(tt_mlp_input_host.to(device, model_config["LN_MLP_OUTPUT_MEMCFG"]))
+        memcfg = memcfg_1d_width_sharded_from_tensor_shape(tt_mlp_input_host.shape())
+        tt_mlp_input.append(tt_mlp_input_host.to(device, memcfg))
 
     tt_out = tt_FalconMLP_model(tt_mlp_input)
     tt_out = torch.concat([tt2torch_tensor(tt_o) for tt_o in tt_out], -1)
