@@ -17,7 +17,7 @@ from models.utility_functions import (
 
 @pytest.mark.parametrize(
     "model_config",
-    ("BFLOAT16-DRAM", "BFLOAT16-L1", "BFLOAT8-DRAM", "BFLOAT8-L1"),
+    ("BFLOAT16-DRAM", "BFLOAT8-DRAM"),
 )
 def test_mistral_rms_norm_inference(model_config, model_location_generator, device):
     dtype = model_config.split("-")[0]

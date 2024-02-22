@@ -33,19 +33,23 @@ OP_KEYS = (
     "SIN_CACHED_WEIGHTS",
     "COS_CACHED_WEIGHTS",
     # Attention
+    # "WQ_MM_WEIGHTS",
+    # "WK_MM_WEIGHTS",
+    # "WV_MM_WEIGHTS",
+    "WO_MM_WEIGHTS",
     "FUSED_QKV_MM_WEIGHTS",
     "FUSED_QKV_MM_OUTPUT",
     "CREATE_QKV_HEADS_OUTPUT",
     "ROTARY_EMBEDDING_OUTPUT",
+    "PRE_SOFTMAX_MM_OUTPUT",
+    "POST_SOFTMAX_MM_OUTPUT",
+    "CONCAT_HEADS_OUTPUT",
     "K_CACHE_SLICE_OUTPUT",
     "V_CACHE_SLICE_OUTPUT",
     "K_TRANSPOSED_OUTPUT",
-    "PRE_SOFTMAX_MM_OUTPUT",
     "PRE_SOFTMAX_SCALE_OUTPUT",
     "PRE_SOFTMAX_MASK_OUTPUT",
     "SOFTMAX_OUTPUT",
-    "POST_SOFTMAX_MM_OUTPUT",
-    "CONCAT_HEADS_OUTPUT",
     "SELFOUT_MM_WEIGHTS",
     "SELFOUT_MM_OUTPUT",
     # Decoder Cont
@@ -121,9 +125,10 @@ def get_model_config(model_config_str, num_devices=1):
 
     # Matmul Weights must always be BFP8_B
     # Override defaults for certain configs
-    for key in model_config.keys():
-        if "MM_WEIGHTS_DTYPE" in key:
-            model_config[key] = BFP8_DTYPE
+    # TODO How to handle this for Mistral?
+    # for key in model_config.keys():
+    #     if "MM_WEIGHTS_DTYPE" in key:
+    #         model_config[key] = BFP8_DTYPE
 
     if model_config_str in ("BFLOAT16-L1", "BFLOAT8-L1"):
         model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"] = L1_MEMCFG
@@ -138,6 +143,8 @@ def get_model_config(model_config_str, num_devices=1):
         model_config["FF3_MM_OUTPUT_MEMCFG"] = L1_MEMCFG
         model_config["FF2_MM_OUTPUT_MEMCFG"] = L1_MEMCFG
         model_config["FF1_FF3_MUL_OUTPUT_MEMCFG"] = L1_MEMCFG
+    else:
+        model_config["FF1_FF3_MUL_OUTPUT_MEMCFG"] = DRAM_MEMCFG
 
     # FF1 & FF3 Matmul Config Variables
     # TODO: N300 currently would only have 8x7 available until dispatch moved to eth core
@@ -187,6 +194,70 @@ def get_model_config(model_config_str, num_devices=1):
         mcast_in0=True,
     )
 
+    model_config["QKV_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+        compute_with_storage_grid_size=(7, 1),
+        in0_block_w=32,
+        out_subblock_h=1,
+        out_subblock_w=3,
+        per_core_M=1,
+        per_core_N=9,
+        fuse_batch=True,
+        fused_activation=None,
+        mcast_in0=True,
+    )
+
+    model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
+        ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+        ttl.tensor.BufferType.L1,
+        ttl.tensor.ShardSpec(
+            ttl.tensor.CoreRangeSet(
+                {
+                    ttl.tensor.CoreRange(
+                        ttl.tensor.CoreCoord(0, 0),
+                        ttl.tensor.CoreCoord(7, 0),
+                    ),
+                }
+            ),
+            [
+                32,
+                288,
+            ],
+            ttl.tensor.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+
+    HEIGHT_SHARDED_MEMCFG = ttl.tensor.MemoryConfig(
+        ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, ttl.tensor.BufferType.L1
+    )
+
+    model_config["QHEADS_MEMCFG"] = ttl.tensor.MemoryConfig(
+        ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+        ttl.tensor.BufferType.L1,
+        ttl.tensor.ShardSpec(
+            ttl.tensor.CoreRangeSet(
+                {
+                    ttl.tensor.CoreRange(
+                        ttl.tensor.CoreCoord(0, 0),
+                        ttl.tensor.CoreCoord(7, 3),
+                    ),
+                }
+            ),
+            [
+                32,
+                128,
+            ],
+            ttl.tensor.ShardOrientation.ROW_MAJOR,
+            False,
+        ),
+    )
+
+    model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"] = HEIGHT_SHARDED_MEMCFG
+
+    model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"] = HEIGHT_SHARDED_MEMCFG
+
+    model_config["CREATE_QKV_HEADS_OUTPUT_MEMCFG"] = HEIGHT_SHARDED_MEMCFG
+
     # uncomment if need to see all the configs
     logger.debug(f"Falcon model config: \n{pretty_print_model_config(model_config)}")
 
@@ -206,7 +277,9 @@ class TtModelArgs:
     norm_eps: float
     vocab_size: int
 
-    max_batch_size: int = 0
+    max_batch_size: int = 32
+    max_seq_len: int = 4096
+
     FALLBACK_SOFTMAX: bool = False
     FALLBACK_EMPTY: bool = False
     FALLBACK_SCATTER: bool = True
