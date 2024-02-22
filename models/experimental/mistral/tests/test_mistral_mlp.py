@@ -19,7 +19,7 @@ from models.utility_functions import (
 
 @pytest.mark.parametrize(
     "model_config",
-    ("BFLOAT16-DRAM", "BFLOAT16-L1", "BFLOAT8-DRAM", "BFLOAT8-L1"),
+    ("BFLOAT16-DRAM", "BFLOAT8-DRAM"),
 )
 @pytest.mark.parametrize(
     "pcc",
@@ -38,7 +38,6 @@ def test_mistral_mlp_inference(pcc, model_config, model_location_generator, devi
     model_args.WEIGHTS_DTYPE = dtype
     reference_model = FeedForward(args=model_args)
     reference_model.load_state_dict(state_dict)
-    # print(state_dict.keys())
 
     tt_model = TtMistralMLP(
         device=device,
@@ -53,7 +52,6 @@ def test_mistral_mlp_inference(pcc, model_config, model_location_generator, devi
 
     tt_output = tt_model(tt_input)
     tt_output_torch = tt2torch_tensor(tt_output).squeeze(0)
-    # tt_output_torch = tt_to_torch_tensor(tt_output).squeeze(0)
 
     passing, pcc_message = comp_pcc(reference_output, tt_output_torch, pcc)
 

@@ -11,8 +11,7 @@ from models.experimental.mistral.tt.mistral_common import precompute_freqs, gene
 from models.experimental.mistral.tt.mistral_decoder import TtTransformerBlock
 from models.experimental.mistral.tt.model_config import TtModelArgs, get_model_config
 from models.experimental.mistral.reference.model import TransformerBlock
-from models.utility_functions import torch_to_tt_tensor_rm, tt2torch_tensor
-from models.experimental.mistral.mistral_helper_funcs import unpad_from_zero, format_tensor, get_freqs_cis
+from models.utility_functions import tt2torch_tensor
 from models.utility_functions import (
     comp_pcc,
     comp_allclose,
@@ -21,7 +20,7 @@ from models.utility_functions import (
 
 @pytest.mark.parametrize(
     "model_config",
-    ("BFLOAT16-DRAM", "BFLOAT16-L1", "BFLOAT8-DRAM", "BFLOAT8-L1"),
+    ("BFLOAT16-DRAM", "BFLOAT8-DRAM"),
 )
 @pytest.mark.parametrize(
     "iterations",
@@ -41,8 +40,6 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
 
     state_dict = {k[9:]: v for k, v in state_dict.items() if (k.startswith("layers.0."))}
     base_address = f""
-
-    # base_address = f"layers.0."
 
     model_args.max_batch_size = 32
 

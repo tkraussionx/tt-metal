@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 
 # SPDX-License-Identifier: Apache-2.0
-import tt_lib
 import torch
 import tt_lib
 import pytest
@@ -13,7 +12,6 @@ from models.experimental.mistral.tt.mistral_model import TtTransformer
 from models.experimental.mistral.tt.model_config import TtModelArgs, get_model_config
 from models.experimental.mistral.reference.model import Transformer
 from models.experimental.mistral.reference.tokenizer import Tokenizer
-from models.experimental.mistral.mistral_helper_funcs import unpad_from_zero
 from models.utility_functions import tt2torch_tensor
 from models.utility_functions import (
     comp_pcc,

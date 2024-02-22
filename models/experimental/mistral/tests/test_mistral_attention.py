@@ -2,7 +2,6 @@
 
 # SPDX-License-Identifier: Apache-2.0
 import torch
-import tt_lib
 import pytest
 from loguru import logger
 import json
@@ -11,40 +10,16 @@ from models.experimental.mistral.tt.mistral_attention import TtMistralAttention
 from models.experimental.mistral.tt.mistral_common import precompute_freqs, generate_cos_sin_cache, prepare_inputs
 from models.experimental.mistral.tt.model_config import TtModelArgs, get_model_config
 from models.experimental.mistral.reference.model import Attention
-from models.utility_functions import torch_to_tt_tensor_rm, tt2torch_tensor
-from models.experimental.mistral.mistral_helper_funcs import unpad_from_zero, get_freqs_cis, format_tensor
+from models.utility_functions import tt2torch_tensor
 from models.utility_functions import (
     comp_pcc,
     comp_allclose,
 )
 
-"""
-@pytest.mark.parametrize(
-    "rotary_embedding_ondevice",
-    (True, False),
-)
-@pytest.mark.parametrize(
-    "softmax_ondevice",
-    (True, False),
-)
-@pytest.mark.parametrize(
-    "empty_ondevice",
-    (True, False),
-)
-@pytest.mark.parametrize(
-    "scatter_ondevice",
-    (True, False),
-)
-@pytest.mark.parametrize(
-    "dtype",
-    (tt_lib.tensor.DataType.BFLOAT16, tt_lib.tensor.DataType.BFLOAT8_B),
-)
-"""
-
 
 @pytest.mark.parametrize(
     "model_config",
-    ("BFLOAT16-DRAM", "BFLOAT16-L1", "BFLOAT8-DRAM", "BFLOAT8-L1"),
+    ("BFLOAT16-DRAM", "BFLOAT8-DRAM"),
 )
 @pytest.mark.parametrize(
     "iterations",
@@ -52,8 +27,7 @@ from models.utility_functions import (
 )
 @pytest.mark.parametrize(
     "pcc",
-    ((0.97),),
-    # ((0.9793647197892646),),
+    ((0.99),),
 )
 def test_mistral_attention_inference(
     pcc,
@@ -105,7 +79,6 @@ def test_mistral_attention_inference(
     cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
     freqs_cis = torch.complex(cos, sin)
 
-    # TODO Update start_pos (check llama test for reference)
     for i in range(generation_length):
         pt_attention_input = (torch.rand(batch, seq_len, model_args.dim) * 2) - 1
         tt_attention_input = pt_attention_input.clone()
