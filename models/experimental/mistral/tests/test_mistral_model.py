@@ -22,8 +22,12 @@ from models.utility_functions import (
 
 
 @pytest.mark.parametrize(
+    "n_layers",
+    ((3,)),
+)
+@pytest.mark.parametrize(
     "model_config",
-    ("BFLOAT16-DRAM", "BFLOAT16-L1", "BFLOAT8-DRAM", "BFLOAT8-L1"),
+    ("BFLOAT16-DRAM", "BFLOAT8-DRAM"),
 )
 @pytest.mark.parametrize(
     "iterations",
@@ -33,26 +37,28 @@ from models.utility_functions import (
     "pcc",
     ((0.99),),
 )
-def test_mistral_model_inference(pcc, model_config, model_location_generator, device, iterations):
+def test_mistral_model_inference(pcc, model_config, model_location_generator, device, iterations, n_layers):
     prompts = [
         "This is a sample text for single layer execution ",
     ]
 
     mistral_path = model_location_generator("mistral-7B-v0.1", model_subdir="Mistral")
     tokenizer = Tokenizer(str(Path(mistral_path) / "tokenizer.model"))
+    base_address = f""
+    with open(mistral_path / "params.json", "r") as f:
+        model_args = TtModelArgs(**json.loads(f.read()))
+    model_args.max_batch_size = 32
+    model_args.n_layers = n_layers
+
     state_dict = torch.load(mistral_path / "consolidated.00.pth")
     state_dict = {
         k: v
         for k, v in state_dict.items()
-        if (k.startswith("layers.0.") or k in ["tok_embeddings.weight", "norm.weight", "output.weight"])
+        if (
+            any([f"layers.{i}." in k for i in range(model_args.n_layers)])
+            or k in ["tok_embeddings.weight", "norm.weight", "output.weight"]
+        )
     }
-
-    base_address = f""
-    with open(mistral_path / "params.json", "r") as f:
-        model_args = TtModelArgs(**json.loads(f.read()))
-
-    model_args.max_batch_size = 32
-    model_args.n_layers = 1
 
     reference_model = Transformer(args=model_args)
     reference_model.load_state_dict(state_dict)

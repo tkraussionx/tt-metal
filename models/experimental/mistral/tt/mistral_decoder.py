@@ -102,6 +102,8 @@ class TtTransformerBlock(nn.Module):
         # seqlen: int,
     ) -> tt_lib.tensor.Tensor:
         # TODO We're passign a list of inputs + rot_mat + start_pos + attn mask (for each device)
+        if not isinstance(xs, list):
+            xs = [xs]
         attn_norm = [self.attention_norm(xs[0])]
         r = self.attention.forward(
             attn_norm,
