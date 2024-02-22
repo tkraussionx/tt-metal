@@ -24,6 +24,7 @@ class TtFalconMLP:
         hidden_size: int,
         model_config,
         tt_cache_path,
+        emulate_per_device_fracture,
     ):
         super().__init__()
 
@@ -31,16 +32,18 @@ class TtFalconMLP:
         self.devices = devices
         self.hidden_size = hidden_size
         self.model_config = model_config
+        self.emulate_per_device_fracture = emulate_per_device_fracture
 
         layer_name = f"{base_url}.{layer_num}"
 
         dense_h_to_4h_str = f"{layer_name}.mlp.dense_h_to_4h.weight"
         dense_4h_to_h_str = f"{layer_name}.mlp.dense_4h_to_h.weight"
 
-        num_devices = len(devices)
+        self.num_devices_to_emulate = len(devices) if not emulate_per_device_fracture else 1
+        self.original_num_devices = num_devices = self.model_config["NUM_DEVICES"]
         self.dense_h_to_4h_weights = []
         self.dense_4h_to_h_weights = []
-        for i in range(num_devices):
+        for i in range(self.num_devices_to_emulate):
             dense_h_to_4h_path = (
                 tt_cache_path
                 / f"{dense_h_to_4h_str}_{i}_{num_devices}_{self.model_config['DENSE_H_TO_4H_MM_WEIGHTS_DTYPE'].name}.bin"
@@ -109,12 +112,16 @@ class TtFalconMLP:
         hidden_states = []
         num_shards = len(x)
 
-        assert num_shards == len(self.devices)
+        print(f"num_shards: {num_shards}")
+        print(f"x[0] shape: {x[0].shape()}")
+        print(f"self.dense_h_to_4h_weights[0] dim: {self.dense_h_to_4h_weights[0].shape()}")
+
+        assert num_shards == self.num_devices_to_emulate
         # check if all devices are the same
         same_device = all(self.devices[i] == self.devices[i + 1] for i in range(num_shards - 1))
 
         for i in range(num_shards):
-            # FUNCTIONAL: comment in
+            # # FUNCTIONAL: comment in
             # x[i] = tt_lib.tensor.sharded_to_interleaved( # FUNCTIONAL
             #     x[i],
             #     output_mem_config=self.model_config["DEFAULT_MEMCFG"]
@@ -146,7 +153,12 @@ class TtFalconMLP:
             )
 
         if same_device:
+            if (
+                self.emulate_per_device_fracture
+            ):  # we'd be concatenating/gathering all fractures here; need to fake this for single fracture emulation
+                hidden_states = hidden_states * self.original_num_devices
             concat_hidden_states = tt_lib.tensor.concat(hidden_states, 3)
+            print(f"concat_hidden_states shape: {concat_hidden_states.shape()}")
             for i in range(num_shards):
                 hidden_states[i].deallocate(True)
 
