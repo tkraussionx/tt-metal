@@ -28,11 +28,10 @@ void kernel_main() {
 
     bool db_buf_switch = false;
 
-    DeviceProfilerFlush;
     while (true) {
-        DeviceZoneScopedN("CQ-PRODUCER-MAIN");
+        DeviceZoneScopedMainN("CQ-PRODUCER-MAIN");
         {
-            DeviceZoneScopedN("CQ-WAIT-FRONT");
+            DeviceZoneScopedMainChildN("CQ-WAIT-FRONT");
             issue_queue_wait_front();
         }
         uint32_t rd_ptr = (cq_read_interface.issue_fifo_rd_ptr << 4);

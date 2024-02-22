@@ -30,11 +30,10 @@ void kernel_main() {
 
     setup_completion_queue_write_interface(completion_queue_start_addr, completion_queue_size);
 
-    DeviceProfilerFlush;
     while (true) {
-        DeviceZoneScopedN("CQ-CONSUMER-MAIN");
+        DeviceZoneScopedMainN("CQ-CONSUMER-MAIN");
         {
-            DeviceZoneScopedN("CQ-CONSUMER-PROD-SEM-ACQ");
+            DeviceZoneScopedMainChildN("CQ-CONSUMER-PROD-SEM-ACQ");
             // Wait for producer to supply a command
             db_acquire(db_semaphore_addr, consumer_noc_encoding);
         }
