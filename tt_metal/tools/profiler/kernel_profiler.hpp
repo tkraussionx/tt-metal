@@ -298,35 +298,6 @@ namespace kernel_profiler{
         stackSize = 0;
     }
 
-    class profileScope
-    {
-        private:
-            uint32_t timer_id;
-            bool start_marked = false;
-        public:
-            PROFILER_INLINE profileScope (uint32_t timer_id_arg) : timer_id(timer_id_arg)
-            {
-                if (wIndex < (PROFILER_L1_VECTOR_SIZE - stackSize))
-                {
-                    stackSize += PROFILER_L1_MARKER_UINT32_SIZE;
-                    start_marked = true;
-                    mark_time_at_index_inlined(wIndex, timer_id);
-                    wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
-                }
-            }
-
-            PROFILER_INLINE ~profileScope ()
-            {
-                if (start_marked)
-                {
-                    mark_time_at_index_inlined(wIndex, get_end_timer_id(timer_id));
-                    wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
-                    start_marked = false;
-                    stackSize -= PROFILER_L1_MARKER_UINT32_SIZE;
-                }
-            }
-    };
-
     constexpr uint32_t Hash32_CT( const char * str, size_t n, uint32_t basis = UINT32_C( 2166136261 ) ) {
         return n == 0 ? basis : Hash32_CT( str + 1, n - 1, ( basis ^ str[ 0 ] ) * UINT32_C( 16777619 ) );
     }
@@ -336,6 +307,33 @@ namespace kernel_profiler{
         auto res = Hash32_CT( s, N - 1 );
         return ((res & 0xFFFF) ^ ((res & 0xFFFF0000) >> 16)) & 0xFFFF;
     }
+
+    template<uint32_t timer_id>
+    struct profileScope
+    {
+        bool start_marked = false;
+        PROFILER_INLINE profileScope ()
+        {
+            if (wIndex < (PROFILER_L1_VECTOR_SIZE - stackSize))
+            {
+                stackSize += PROFILER_L1_MARKER_UINT32_SIZE;
+                start_marked = true;
+                mark_time_at_index_inlined(wIndex, timer_id);
+                wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
+            }
+        }
+
+        PROFILER_INLINE ~profileScope ()
+        {
+            if (start_marked)
+            {
+                mark_time_at_index_inlined(wIndex, get_end_timer_id(timer_id));
+                wIndex += PROFILER_L1_MARKER_UINT32_SIZE;
+                start_marked = false;
+                stackSize -= PROFILER_L1_MARKER_UINT32_SIZE;
+            }
+        }
+    };
 
     template<uint32_t timer_id, uint32_t index>
     struct profileScopeGuaranteed
@@ -377,7 +375,7 @@ namespace kernel_profiler{
 
 #ifdef PROFILE_KERNEL
 
-#define DeviceZoneScopedN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); kernel_profiler::profileScope zone = kernel_profiler::profileScope(kernel_profiler::Hash16_CT(PROFILER_MSG_NAME(name)));
+#define DeviceZoneScopedN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = kernel_profiler::Hash16_CT(PROFILER_MSG_NAME(name)); kernel_profiler::profileScope<hash> zone = kernel_profiler::profileScope<hash>();
 
 #define DeviceZoneScopedMainN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = kernel_profiler::Hash16_CT(PROFILER_MSG_NAME(name)); kernel_profiler::profileScopeGuaranteed<hash, 0> zone = kernel_profiler::profileScopeGuaranteed<hash, 0>();
 

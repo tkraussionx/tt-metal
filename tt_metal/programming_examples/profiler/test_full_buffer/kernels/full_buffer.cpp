@@ -9,5 +9,6 @@ void kernel_main() {
 #pragma GCC unroll 65534
     for (int j = 0 ; j < 3; j++)
     {
+        DeviceZoneScopedN("TEST-FULL");
     }
 }
