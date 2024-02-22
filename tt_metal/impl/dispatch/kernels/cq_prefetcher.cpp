@@ -5,6 +5,61 @@
 #include "tt_metal/impl/dispatch/kernels/cq_prefetcher.hpp"
 #include "debug/dprint.h"
 
+template <PullAndRelayType pull_type, PullAndRelayType push_type>
+FORCE_INLINE
+void program_pull_and_push_config(
+    volatile tt_l1_ptr uint32_t* buffer_transfer_ptr,
+    PullAndRelayCfg& src_pr_cfg,
+    PullAndRelayCfg& dst_pr_cfg,
+    uint32_t page_size,
+    uint32_t num_pages_to_read,
+    uint32_t num_pages_to_write,
+    uint64_t pull_noc_encoding,
+    uint64_t push_noc_encoding,
+    uint32_t remote_cb_size,
+    volatile db_cb_config_t* local_multicore_cb_cfg,
+    volatile db_cb_config_t* remote_multicore_cb_cfg) {
+    /*
+        Set up src_pr_cfg and dst_pr_cfg
+    */
+    uint32_t src_bank_base_address = buffer_transfer_ptr[0];
+    uint32_t dst_bank_base_address = buffer_transfer_ptr[1];
+    uint32_t num_pages = buffer_transfer_ptr[2];
+    uint32_t src_buf_type = buffer_transfer_ptr[4];
+    uint32_t dst_buf_type = buffer_transfer_ptr[5];
+    uint32_t src_page_index = buffer_transfer_ptr[6];
+    uint32_t dst_page_index = buffer_transfer_ptr[7];
+
+    static_assert(pull_type == PullAndRelayType::CIRCULAR_BUFFER or pull_type == PullAndRelayType::BUFFER);
+    static_assert(push_type == PullAndRelayType::CIRCULAR_BUFFER or push_type == PullAndRelayType::BUFFER);
+
+    if constexpr (pull_type == PullAndRelayType::BUFFER) {
+        src_pr_cfg.buff_cfg.buffer.init((BufferType)src_buf_type, src_bank_base_address, page_size);
+        src_pr_cfg.buff_cfg.page_id = src_page_index;
+    } else {
+        src_pr_cfg.cb_buff_cfg.remote_noc_encoding = pull_noc_encoding;
+        src_pr_cfg.cb_buff_cfg.local_multicore_cb_cfg = local_multicore_cb_cfg;
+        src_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg = remote_multicore_cb_cfg;
+        uint32_t l1_remote_fifo_limit_16B = (get_cb_start_address<true>() + remote_cb_size) >> 4;
+        src_pr_cfg.cb_buff_cfg.fifo_limit_16B = l1_remote_fifo_limit_16B;
+    }
+    src_pr_cfg.num_pages_to_read = num_pages_to_read;
+    src_pr_cfg.page_size = page_size;
+
+    if constexpr (push_type == PullAndRelayType::BUFFER) {
+        dst_pr_cfg.buff_cfg.buffer.init((BufferType)dst_buf_type, dst_bank_base_address, page_size);
+        dst_pr_cfg.buff_cfg.page_id = dst_page_index;
+    } else { // pushing data to circular buffer
+        dst_pr_cfg.cb_buff_cfg.remote_noc_encoding = push_noc_encoding;
+        dst_pr_cfg.cb_buff_cfg.local_multicore_cb_cfg = local_multicore_cb_cfg;
+        dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg = remote_multicore_cb_cfg;
+        uint32_t l1_remote_fifo_limit_16B = (get_cb_start_address<true>() + remote_cb_size) >> 4;
+        dst_pr_cfg.cb_buff_cfg.fifo_limit_16B = l1_remote_fifo_limit_16B;
+    }
+    dst_pr_cfg.page_size = page_size;
+    dst_pr_cfg.num_pages_to_write = num_pages_to_write;
+}
+
 void kernel_main() {
     bool db_buf_switch = false;
     constexpr uint32_t host_issue_queue_read_ptr_addr = get_compile_time_arg_val(0);
@@ -170,30 +225,22 @@ void kernel_main() {
             debug[0] = num_buffer_transfers + 10;
             if (num_buffer_transfers == 1) { // reading data from buffer on device and sending to host
                 volatile tt_l1_ptr uint32_t* buffer_transfer_ptr = command_ptr + DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER;
-                uint32_t src_bank_base_address = buffer_transfer_ptr[0];
-                uint32_t dst_bank_base_address = buffer_transfer_ptr[1];
-                uint32_t num_pages = buffer_transfer_ptr[2];
-                uint32_t src_buf_type = buffer_transfer_ptr[4];
-                uint32_t dst_buf_type = buffer_transfer_ptr[5];
-                uint32_t src_page_index = buffer_transfer_ptr[6];
-                uint32_t dst_page_index = buffer_transfer_ptr[7];
-
                 volatile db_cb_config_t* remote_multicore_cb_cfg = get_remote_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, db_buf_switch);
 
-                // doing a write so we pull from eth router cb and write to buffer
-                src_pr_cfg.cb_buff_cfg.local_multicore_cb_cfg = local_multicore_cb_cfg;
-                src_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg = remote_multicore_cb_cfg;
-                src_pr_cfg.cb_buff_cfg.remote_noc_encoding = pull_noc_encoding;
-                uint32_t l1_consumer_fifo_limit_16B = (get_cb_start_address<true>() + consumer_cb_size) >> 4;
-                src_pr_cfg.cb_buff_cfg.fifo_limit_16B = l1_consumer_fifo_limit_16B;
-                src_pr_cfg.num_pages_to_read = producer_consumer_transfer_num_pages;
-                src_pr_cfg.page_size = page_size;
-
-                dst_pr_cfg.buff_cfg.buffer.init((BufferType)dst_buf_type, dst_bank_base_address, page_size);
-                dst_pr_cfg.buff_cfg.page_id = dst_page_index;
-
-                dst_pr_cfg.page_size = page_size;
-                dst_pr_cfg.num_pages_to_write = producer_consumer_transfer_num_pages;
+                // Command requested data from device, pull from eth router cb and write to host buffer
+                program_pull_and_push_config<PullAndRelayType::CIRCULAR_BUFFER, PullAndRelayType::BUFFER>(
+                    buffer_transfer_ptr,
+                    src_pr_cfg,
+                    dst_pr_cfg,
+                    page_size,
+                    producer_consumer_transfer_num_pages,
+                    producer_consumer_transfer_num_pages,
+                    pull_noc_encoding,
+                    push_noc_encoding,
+                    consumer_cb_size,
+                    local_multicore_cb_cfg,
+                    remote_multicore_cb_cfg
+                );
 
                 DPRINT << "Read from eth cb and write to sysmem buffer - pull sem is " << pull_semaphore_addr[0] << ENDL();
 
@@ -212,13 +259,8 @@ void kernel_main() {
             pull_and_relay<PullAndRelayType::BUFFER, PullAndRelayType::CIRCULAR_BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages);
         } else if (num_buffer_transfers == 1) {
             volatile tt_l1_ptr uint32_t* buffer_transfer_ptr = command_ptr + DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER;
-            uint32_t src_bank_base_address = buffer_transfer_ptr[0];
-            uint32_t dst_bank_base_address = buffer_transfer_ptr[1];
-            uint32_t num_pages = buffer_transfer_ptr[2];
             uint32_t src_buf_type = buffer_transfer_ptr[4];
             uint32_t dst_buf_type = buffer_transfer_ptr[5];
-            uint32_t src_page_index = buffer_transfer_ptr[6];
-            uint32_t dst_page_index = buffer_transfer_ptr[7];
 
             if ( (pull_and_push_config == tt::PullAndPushConfig::PUSH_TO_REMOTE and (BufferType)src_buf_type == BufferType::SYSTEM_MEMORY) or (pull_and_push_config == tt::PullAndPushConfig::REMOTE_PULL_AND_PUSH and (BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY) ) {
                 // read from buffer and write to cb on eth core
@@ -226,7 +268,7 @@ void kernel_main() {
                 volatile db_cb_config_t* remote_multicore_cb_cfg = get_remote_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, db_buf_switch);
 
                 debug[0] = 112;
-                DPRINT << "Programming consumer CB" << ENDL();
+                DPRINT << "Programming remote CB" << ENDL();
                 program_remote_sync_cb<true>(
                     local_multicore_cb_cfg,
                     remote_multicore_cb_cfg,
@@ -236,20 +278,20 @@ void kernel_main() {
                     consumer_cb_size
                 );
 
-                src_pr_cfg.buff_cfg.buffer.init((BufferType)src_buf_type, src_bank_base_address, page_size);
-                src_pr_cfg.buff_cfg.page_id = src_page_index;
-                src_pr_cfg.num_pages_to_read = producer_cb_num_pages / 2;
-
-                src_pr_cfg.page_size = page_size;
-
-                dst_pr_cfg.cb_buff_cfg.remote_noc_encoding = push_noc_encoding;
-                dst_pr_cfg.cb_buff_cfg.local_multicore_cb_cfg = local_multicore_cb_cfg;
-                dst_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg = remote_multicore_cb_cfg;
-                uint32_t l1_consumer_fifo_limit_16B = (get_cb_start_address<true>() + consumer_cb_size) >> 4;
-                dst_pr_cfg.cb_buff_cfg.fifo_limit_16B = l1_consumer_fifo_limit_16B;
-
-                dst_pr_cfg.page_size = page_size;
-                dst_pr_cfg.num_pages_to_write = producer_consumer_transfer_num_pages;
+                uint32_t num_pages_to_read = producer_cb_num_pages / 2;
+                program_pull_and_push_config<PullAndRelayType::BUFFER, PullAndRelayType::CIRCULAR_BUFFER>(
+                    buffer_transfer_ptr,
+                    src_pr_cfg,
+                    dst_pr_cfg,
+                    page_size,
+                    num_pages_to_read,
+                    producer_consumer_transfer_num_pages,
+                    pull_noc_encoding,
+                    push_noc_encoding,
+                    consumer_cb_size,
+                    local_multicore_cb_cfg,
+                    remote_multicore_cb_cfg
+                );
 
                 DPRINT << "Read from src buffer and write to cb" << ENDL();
 
@@ -276,21 +318,21 @@ void kernel_main() {
 
                 // remote pull and relay
                 // doing a write so we pull from eth router cb and write to buffer
-                src_pr_cfg.cb_buff_cfg.local_multicore_cb_cfg = local_multicore_cb_cfg;
-                src_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg = remote_multicore_cb_cfg;
-                src_pr_cfg.cb_buff_cfg.remote_noc_encoding = pull_noc_encoding;
-                uint32_t l1_consumer_fifo_limit_16B = (get_cb_start_address<true>() + consumer_cb_size) >> 4;
-                src_pr_cfg.cb_buff_cfg.fifo_limit_16B = l1_consumer_fifo_limit_16B;
-                src_pr_cfg.num_pages_to_read = producer_consumer_transfer_num_pages;
-                src_pr_cfg.page_size = page_size;
-
-                dst_pr_cfg.buff_cfg.buffer.init((BufferType)dst_buf_type, dst_bank_base_address, page_size);
-                dst_pr_cfg.buff_cfg.page_id = dst_page_index;
-
-                dst_pr_cfg.page_size = page_size;
-                dst_pr_cfg.num_pages_to_write = producer_consumer_transfer_num_pages;
-
                 DPRINT << "Read from eth cb and write to dst buffer - pull sem is " << pull_semaphore_addr[0] << ENDL();
+
+                program_pull_and_push_config<PullAndRelayType::CIRCULAR_BUFFER, PullAndRelayType::BUFFER>(
+                    buffer_transfer_ptr,
+                    src_pr_cfg,
+                    dst_pr_cfg,
+                    page_size,
+                    producer_consumer_transfer_num_pages,
+                    producer_consumer_transfer_num_pages,
+                    pull_noc_encoding,
+                    push_noc_encoding,
+                    consumer_cb_size,
+                    local_multicore_cb_cfg,
+                    remote_multicore_cb_cfg
+                );
 
                 pull_and_relay<PullAndRelayType::CIRCULAR_BUFFER, PullAndRelayType::BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages); // write all the data
 
