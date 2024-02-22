@@ -58,7 +58,7 @@ void kernel_main() {
         constexpr uint32_t remote_cb_size = remote_cb_num_pages * DeviceCommand::PROGRAM_PAGE_SIZE;
 
         // Dispatch core has a constant CB
-        program_consumer_cb<false>(
+        program_remote_sync_cb<false>(
             local_multicore_cb_cfg,
             dispatch_multicore_cb_cfg,
             dispatch_noc_encoding,
@@ -148,6 +148,19 @@ void kernel_main() {
 
         if constexpr (pull_and_push_config == tt::PullAndPushConfig::REMOTE_PULL_AND_PUSH or pull_and_push_config == tt::PullAndPushConfig::PULL_FROM_REMOTE) { // signal to dst ethernet router that command was pulled in and data can be sent
             DPRINT << "Signal to dst router that we can consume data" << ENDL();
+
+            volatile db_cb_config_t* remote_multicore_cb_cfg = get_remote_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, db_buf_switch);
+
+            // Program the CB on the DST router because we may need to pull in data from DST
+            program_remote_sync_cb<true>(
+                local_multicore_cb_cfg,
+                remote_multicore_cb_cfg,
+                pull_noc_encoding,
+                consumer_cb_num_pages,
+                page_size,
+                consumer_cb_size
+            );
+
             noc_semaphore_inc(pull_noc_encoding | eth_get_semaphore(0), 1);
             noc_async_write_barrier(); // Barrier for now
         }
@@ -165,13 +178,14 @@ void kernel_main() {
                 uint32_t src_page_index = buffer_transfer_ptr[6];
                 uint32_t dst_page_index = buffer_transfer_ptr[7];
 
+                volatile db_cb_config_t* remote_multicore_cb_cfg = get_remote_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, db_buf_switch);
+
                 // doing a write so we pull from eth router cb and write to buffer
+                src_pr_cfg.cb_buff_cfg.local_multicore_cb_cfg = local_multicore_cb_cfg;
+                src_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg = remote_multicore_cb_cfg;
                 src_pr_cfg.cb_buff_cfg.remote_noc_encoding = pull_noc_encoding;
                 uint32_t l1_consumer_fifo_limit_16B = (get_cb_start_address<true>() + consumer_cb_size) >> 4;
                 src_pr_cfg.cb_buff_cfg.fifo_limit_16B = l1_consumer_fifo_limit_16B;
-                // how to program the local cb when there is only one cb data slot
-                src_pr_cfg.cb_buff_cfg.remote_rd_addr_16B = (get_cb_start_address<true>() >> 4);
-                src_pr_cfg.cb_buff_cfg.remote_total_size_16B = consumer_cb_size >> 4;
                 src_pr_cfg.num_pages_to_read = producer_consumer_transfer_num_pages;
                 src_pr_cfg.page_size = page_size;
 
@@ -184,10 +198,6 @@ void kernel_main() {
                 DPRINT << "Read from eth cb and write to sysmem buffer - pull sem is " << pull_semaphore_addr[0] << ENDL();
 
                 pull_and_relay<PullAndRelayType::CIRCULAR_BUFFER, PullAndRelayType::BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages); // write all the data
-            }
-            uint32_t finish = header->finish;
-            if (finish) {
-                notify_host_complete<host_finish_addr>();
             }
             completion_queue_push_back<completion_queue_start_addr, host_completion_queue_write_ptr_addr>(completion_data_size);
             continue;
@@ -217,7 +227,7 @@ void kernel_main() {
 
                 debug[0] = 112;
                 DPRINT << "Programming consumer CB" << ENDL();
-                program_consumer_cb<true>(
+                program_remote_sync_cb<true>(
                     local_multicore_cb_cfg,
                     remote_multicore_cb_cfg,
                     push_noc_encoding,
@@ -262,14 +272,15 @@ void kernel_main() {
                 DPRINT << "done sending rd to src eth" << ENDL();
             } else if ( pull_and_push_config == tt::PullAndPushConfig::REMOTE_PULL_AND_PUSH and  (BufferType)src_buf_type == BufferType::SYSTEM_MEMORY ) {
 
+                volatile db_cb_config_t* remote_multicore_cb_cfg = get_remote_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, db_buf_switch);
+
                 // remote pull and relay
                 // doing a write so we pull from eth router cb and write to buffer
+                src_pr_cfg.cb_buff_cfg.local_multicore_cb_cfg = local_multicore_cb_cfg;
+                src_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg = remote_multicore_cb_cfg;
                 src_pr_cfg.cb_buff_cfg.remote_noc_encoding = pull_noc_encoding;
                 uint32_t l1_consumer_fifo_limit_16B = (get_cb_start_address<true>() + consumer_cb_size) >> 4;
                 src_pr_cfg.cb_buff_cfg.fifo_limit_16B = l1_consumer_fifo_limit_16B;
-                // how to program the local cb when there is only one cb data slot
-                src_pr_cfg.cb_buff_cfg.remote_rd_addr_16B = (get_cb_start_address<true>() >> 4);
-                src_pr_cfg.cb_buff_cfg.remote_total_size_16B = consumer_cb_size >> 4;
                 src_pr_cfg.num_pages_to_read = producer_consumer_transfer_num_pages;
                 src_pr_cfg.page_size = page_size;
 

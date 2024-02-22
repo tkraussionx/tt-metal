@@ -51,7 +51,7 @@ void multicore_eth_cb_wait_front(db_cb_config_t *eth_db_cb_config, int32_t num_p
 FORCE_INLINE
 void multicore_eth_cb_pop_front(
     db_cb_config_t *eth_db_cb_config,
-    const db_cb_config_t *remote_db_cb_config,
+    const volatile db_cb_config_t *remote_db_cb_config,
     uint64_t producer_noc_encoding,
     uint32_t num_pages) {
     eth_db_cb_config->ack += num_pages;
@@ -67,43 +67,6 @@ void eth_db_acquire(volatile uint32_t *semaphore, uint64_t noc_encoding) {
         //  and block L chip of N300 from sending config for dst router on R because the path to the dst router is through the src router
         internal_::risc_context_switch();
     }
-}
-
-template <uint32_t producer_cmd_base_addr, uint32_t producer_data_buffer_size, uint32_t consumer_cmd_base_addr, uint32_t consumer_data_buffer_size>
-FORCE_INLINE
-void eth_program_consumer_cb(
-    db_cb_config_t* db_cb_config,
-    const db_cb_config_t* remote_db_cb_config,
-    bool db_buf_switch,
-    uint64_t consumer_noc_encoding,
-    uint32_t num_pages,
-    uint32_t page_size,
-    uint32_t cb_size) {
-    // This sets up multi-core CB where the writer is an eth core and consumer is tensix core
-    // The data is at different L1 addresses in the producer and consumer
-    //  but both producer and consumer use the read pointer to determine location of data in their local L1
-    // Producer uses the read pointer when sending to consumer and uses the write pointer to determine L1 address of data in consumer
-    // Consumer uses the read pointer to read in data
-    // To account for differences in data location, the consumer is sent cb config with the "correct" rd pointer from its POV
-    //  and after sending, producer sets it back to its local L1 address
-
-    uint32_t cb_start_producer_addr = 0;//get_db_buf_addr<producer_cmd_base_addr, producer_data_buffer_size>(db_buf_switch);
-    uint32_t cb_start_consumer_addr = 0;//get_db_buf_addr<consumer_cmd_base_addr, consumer_data_buffer_size>(db_buf_switch);
-
-    db_cb_config->ack = 0;
-    db_cb_config->recv = 0;
-    db_cb_config->num_pages = num_pages;
-    db_cb_config->page_size_16B = page_size >> 4;
-    db_cb_config->total_size_16B = cb_size >> 4;
-    db_cb_config->rd_ptr_16B = cb_start_consumer_addr >> 4;    // first set the rd_ptr to value that conumer needs to see
-    db_cb_config->wr_ptr_16B = cb_start_consumer_addr >> 4;
-
-    noc_async_write(
-        (uint32_t)(db_cb_config), consumer_noc_encoding | (uint32_t)(remote_db_cb_config), sizeof(db_cb_config_t));
-    noc_async_write_barrier();  // barrier for now
-    // db cb config has been sent to consumer, now read address can be set to expected value for eth producer
-    db_cb_config->rd_ptr_16B = cb_start_producer_addr >> 4;
-    noc_async_write_barrier();  // barrier for now
 }
 
 void __attribute__((section("code_l1"))) risc_init() {
@@ -146,10 +109,11 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
 
     bool db_buf_switch = false;
     db_cb_config_t *eth_db_cb_config = get_local_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, false);
-    const db_cb_config_t *remote_src_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, false);
-    const db_cb_config_t *remote_dst_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, true);
+    volatile db_cb_config_t *remote_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, false);
+    // const db_cb_config_t *remote_dst_db_cb_config = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, true);
 
-    erisc_info->unused_arg0 = 39;
+    erisc_info->unused_arg0 = 0;
+    erisc_info->unused_arg1 = 0;
 
     while (routing_info->routing_enabled) {
         // FD: assume that no more host -> remote writes are pending
@@ -212,15 +176,10 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
                 while (num_pages_tunneled != num_pages) {
                     // DPRINT << "SRC waiting for " << num_to_write << ENDL();
                     multicore_eth_cb_wait_front(eth_db_cb_config, num_to_write);
-                    if (erisc_info->unused_arg0 == 40) {
-                        volatile tt_l1_ptr uint32_t* rd_ptr = (volatile uint32_t*)121856;
-                        uint32_t rd_val = rd_ptr[0];
-                        erisc_info->unused_arg1 = rd_val;
-                    }
                     internal_::send_fd_packets(); // AL: increment since idx to msg sent
-                    erisc_info->unused_arg0 = erisc_info->unused_arg0 + 1;
+                    erisc_info->unused_arg1 = erisc_info->unused_arg1 + 1;
                     multicore_eth_cb_pop_front(
-                        eth_db_cb_config, remote_src_db_cb_config, ((uint64_t)relay_src_noc_encoding << 32), num_to_write);
+                        eth_db_cb_config, remote_db_cb_config, ((uint64_t)relay_src_noc_encoding << 32), num_to_write);
                     num_pages_tunneled += num_to_write;
                     num_to_write = min(num_pages - num_pages_tunneled, producer_consumer_transfer_num_pages);
                 }
@@ -251,24 +210,80 @@ void __attribute__((section("erisc_l1_code"))) ApplicationHandler(void) {
 
             // DPRINT << "DST GOT" << ENDL();
 
-            // initially 1
-            // after update_producer_consumer_sync_semaphores goes to 0
-            // at some point pull_and_relay will set it to 1
-            update_producer_consumer_sync_semaphores(((uint64_t)eth_router_noc_encoding << 32), ((uint64_t)relay_dst_noc_encoding << 32), eth_db_semaphore_addr, get_semaphore(1));
 
             // DPRINT << "DST INFORMED" << ENDL();
+            volatile tt_l1_ptr uint32_t *command_ptr =
+                reinterpret_cast<volatile tt_l1_ptr uint32_t *>(command_start_addr);
+            volatile tt_l1_ptr CommandHeader *header = (CommandHeader *)command_ptr;
+            uint32_t num_buffer_transfers = header->num_buffer_transfers;
+            uint32_t producer_consumer_transfer_num_pages = header->producer_consumer_transfer_num_pages;
+            uint32_t consumer_cb_num_pages = header->consumer_cb_num_pages;
+            uint32_t consumer_cb_size = header->consumer_cb_size;
+            uint32_t page_size = header->page_size;
+            bool is_program = header->is_program_buffer;
+            bool fwd_path = header->fwd_path;
+            command_ptr += DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER;
 
+            // Initially 1
+            // After update_producer_consumer_sync_semaphores goes to 0
+            // At some point pull_and_relay will set it to 1 once it reads in the command
+            update_producer_consumer_sync_semaphores(((uint64_t)eth_router_noc_encoding << 32), ((uint64_t)relay_dst_noc_encoding << 32), eth_db_semaphore_addr, get_semaphore(1));
+
+            // Wait until push and pull kernel has read in the command
+            // Before pull and push kernel signal to DST router that it has read in a command, it also programs the DST router CB
             while (eth_db_semaphore_addr[0] == 0) {
                 internal_::risc_context_switch();
-            } // pull_and_relay is working on the command
+            }
 
-            // DPRINT << "REMOTE PP&P INFORMED" << ENDL();
-
-            internal_::ack_fd_packet(); // pull and relay is done with the data
+            // Ack because pull and push kernel signalled that it got the command
+            internal_::ack_fd_packet();
             erisc_info->unused_arg0 = erisc_info->unused_arg0 + 1;
 
-            // DPRINT << "DST ACK" << ENDL();
+            uint32_t l1_consumer_fifo_limit_16B = (get_cb_start_address<true>() + consumer_cb_size) >> 4;
 
+            for (uint32_t i = 0; i < num_buffer_transfers; i++) {
+                const uint32_t num_pages = command_ptr[2];
+                const uint32_t src_buf_type = command_ptr[4];
+                const uint32_t dst_buf_type = command_ptr[5];
+
+                bool read_from_sysmem = (BufferType)src_buf_type == BufferType::SYSTEM_MEMORY;
+                bool write_to_sysmem = (BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY;
+                bool tunnel_data = (read_from_sysmem) | (write_to_sysmem & !is_program & !fwd_path);
+
+                if (!tunnel_data) {
+                    continue;
+                }
+
+                // producer_consumer_transfer_num_pages is the total num of data pages that could fit in a FD packet
+                uint32_t num_pages_to_signal = min(num_pages, producer_consumer_transfer_num_pages);
+                uint32_t num_pages_transferred = 0;
+
+                while (num_pages_transferred != num_pages) {
+                    while (routing_info->fd_buffer_msgs_sent != 1) { // wait for SRC router to send data
+                        internal_::risc_context_switch();
+                    }
+
+                    erisc_info->unused_arg1 = erisc_info->unused_arg1 + 1;
+
+                    while (not cb_consumer_space_available(eth_db_cb_config, num_pages_to_signal)); // noc stall so don't need to switch to base FW --> do we need this?
+                    multicore_cb_push_back( // signal to pull and push kernel that data is ready
+                        eth_db_cb_config,
+                        remote_db_cb_config,
+                        ((uint64_t)relay_dst_noc_encoding << 32),
+                        l1_consumer_fifo_limit_16B,
+                        num_pages_to_signal);
+                    // wait for pull and push kernel to pick up the data
+                    while (eth_db_cb_config->ack != eth_db_cb_config->recv) {
+                        internal_::risc_context_switch();
+                    }
+
+                    internal_::ack_fd_packet(); // signal to SRC router that more data can be sent
+
+                    num_pages_transferred += num_pages_to_signal;
+                    num_pages_to_signal = min(num_pages - num_pages_transferred, producer_consumer_transfer_num_pages);
+                }
+                command_ptr += DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION;  // jump to buffer transfer region
+            }
         } else {
             internal_::risc_context_switch();
         }

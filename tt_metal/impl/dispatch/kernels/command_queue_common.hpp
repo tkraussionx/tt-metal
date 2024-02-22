@@ -76,7 +76,7 @@ void multicore_cb_push_back(
 }
 
 FORCE_INLINE
-void multicore_cb_wait_front(db_cb_config_t* db_cb_config, int32_t num_pages) {
+void multicore_cb_wait_front(volatile db_cb_config_t* db_cb_config, int32_t num_pages) {
     DEBUG_STATUS('C', 'R', 'B', 'W');
 
     uint16_t pages_received;
@@ -87,8 +87,8 @@ void multicore_cb_wait_front(db_cb_config_t* db_cb_config, int32_t num_pages) {
 }
 
 void multicore_cb_pop_front(
-    db_cb_config_t* db_cb_config,
-    const db_cb_config_t* remote_db_cb_config,
+    volatile db_cb_config_t* db_cb_config,
+    const volatile db_cb_config_t* remote_db_cb_config,
     uint64_t producer_noc_encoding,
     uint32_t consumer_fifo_limit_16B,
     uint32_t num_to_write,

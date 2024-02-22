@@ -200,7 +200,7 @@ void program_local_cb(uint32_t data_section_addr, uint32_t num_pages, uint32_t p
 
 template <uint32_t eth_cb>
 FORCE_INLINE
-void program_consumer_cb(
+void program_remote_sync_cb(
     volatile db_cb_config_t* db_cb_config,
     volatile db_cb_config_t* remote_db_cb_config,
     uint64_t consumer_noc_encoding,
@@ -276,8 +276,6 @@ FORCE_INLINE void relay_command(bool db_buf_switch, uint64_t consumer_noc_encodi
 struct PullAndRelayCircularBuffer {
     uint64_t remote_noc_encoding;
     uint32_t fifo_limit_16B;
-    uint32_t remote_rd_addr_16B; // todo this prob not needed
-    uint32_t remote_total_size_16B; // todo this prob not needed
     volatile tt_l1_ptr db_cb_config_t* local_multicore_cb_cfg;
     volatile tt_l1_ptr db_cb_config_t* remote_multicore_cb_cfg;
 };
@@ -335,33 +333,26 @@ void pull_and_relay(
                     In this case, we are pulling from a circular buffer. We pull from
                     circular buffers typically when our src is an erisc core.
                 */
-                uint64_t my_noc_encoding = uint64_t(NOC_XY_ENCODING(my_x[0], my_y[0])) << 32;
-                volatile tt_l1_ptr uint32_t *pull_semaphore_addr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(1));
 
-                db_acquire(pull_semaphore_addr, my_noc_encoding); // wait until dst router signals that data is ready
-                // uint32_t src_addr = (src_pr_cfg.cb_buff_cfg.local_multicore_cb_cfg->rd_ptr_16B << 4);
-                uint32_t src_addr = (src_pr_cfg.cb_buff_cfg.remote_rd_addr_16B << 4);
+                // wait for dst router to push data
+                multicore_cb_wait_front(src_pr_cfg.cb_buff_cfg.local_multicore_cb_cfg, num_pages_to_read);
+
+                uint32_t src_addr = (src_pr_cfg.cb_buff_cfg.local_multicore_cb_cfg->rd_ptr_16B << 4);
                 uint64_t src_noc_addr = src_pr_cfg.cb_buff_cfg.remote_noc_encoding | src_addr;
-                DPRINT << "Reading from " << src_addr << " num pages: " << num_pages_to_write << ENDL();
-                // debug[0] = src_addr;
-                // debug2[0] = get_write_ptr(0);
-                noc_async_read(src_noc_addr, get_write_ptr(0), src_pr_cfg.page_size * num_pages_to_read);
 
-                noc_async_read(src_pr_cfg.cb_buff_cfg.remote_noc_encoding | 98416, (uint32_t)debug2, 4);
+                noc_async_read(src_noc_addr, get_write_ptr(0), src_pr_cfg.page_size * num_pages_to_read);
                 noc_async_read_barrier();
 
-                if (get_write_ptr(0) == 145408) {
-                    volatile tt_l1_ptr uint32_t* rd_ptr = (volatile uint32_t*)get_write_ptr(0);
-                    int32_t rd_val = rd_ptr[0];
-                    debug[0] = get_write_ptr(0);
-                    // debug2[0] = rd_val;
-                }
+                multicore_cb_pop_front(
+                    src_pr_cfg.cb_buff_cfg.local_multicore_cb_cfg,
+                    src_pr_cfg.cb_buff_cfg.remote_multicore_cb_cfg,
+                    src_pr_cfg.cb_buff_cfg.remote_noc_encoding,
+                    src_pr_cfg.cb_buff_cfg.fifo_limit_16B,
+                    num_pages_to_read,
+                    src_pr_cfg.cb_buff_cfg.local_multicore_cb_cfg->page_size_16B
+                ); // is noc_semaphore_set_remote guranteed to land?
 
-                uint32_t page_size_16B = (src_pr_cfg.page_size >> 4);
-                src_pr_cfg.cb_buff_cfg.remote_rd_addr_16B += page_size_16B * num_pages_to_read;
-                if (src_pr_cfg.cb_buff_cfg.remote_rd_addr_16B >= src_pr_cfg.cb_buff_cfg.fifo_limit_16B) {
-                    src_pr_cfg.cb_buff_cfg.remote_rd_addr_16B -= src_pr_cfg.cb_buff_cfg.remote_total_size_16B;
-                }
+
 
             } else if constexpr (src_type == PullAndRelayType::BUFFER) {
                 /*
@@ -392,12 +383,6 @@ void pull_and_relay(
                 //     debug2[0] = rd_val;
                 // }
 
-                if constexpr (src_type == PullAndRelayType::CIRCULAR_BUFFER) {
-                    // signal to eth router that data has been read
-                    DPRINT << "signal dst router that data read" << ENDL();
-                    noc_semaphore_inc(src_pr_cfg.cb_buff_cfg.remote_noc_encoding | eth_get_semaphore(0), 1);
-                    noc_async_write_barrier();
-                }
             }
 
             if constexpr (dst_type == PullAndRelayType::CIRCULAR_BUFFER) {
