@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 # SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 
 # SPDX-License-Identifier: Apache-2.0
@@ -68,4 +66,3 @@ def test_mistral_mlp_inference(pcc, model_config, model_location_generator, devi
         logger.warning("Mistral_feed_Forward Failed!")
 
     assert passing, f"Mistral_Feed_forward output does not meet PCC requirement {pcc}: {pcc_message}."
->>>>>>> #5337: Added updated ttlib version of mistral RMS layernorm. Minor fix to mistral mlp
