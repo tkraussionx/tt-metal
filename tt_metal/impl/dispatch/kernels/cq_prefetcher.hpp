@@ -287,6 +287,11 @@ struct PullAndRelayBuffer {
     Buffer buffer;
 };
 
+enum class PullAndRelayType : uint8_t {
+    BUFFER = 0,
+    CIRCULAR_BUFFER = 1
+};
+
 struct PullAndRelayCfg {
 
     uint32_t num_pages,
@@ -300,14 +305,14 @@ struct PullAndRelayCfg {
     };
 };
 
-template <tt::PullAndRelayType src_type, tt::PullAndRelayType dst_type>
+template <PullAndRelayType src_type, PullAndRelayType dst_type>
 void pull_and_relay(
     PullAndRelayCfg& src_pr_cfg,
     PullAndRelayCfg& dst_pr_cfg,
     uint32_t num_pages
 ) {
-    static_assert(src_type == tt::PullAndRelayType::CIRCULAR_BUFFER or src_type == tt::PullAndRelayType::BUFFER);
-    static_assert(dst_type == tt::PullAndRelayType::CIRCULAR_BUFFER or dst_type == tt::PullAndRelayType::BUFFER);
+    static_assert(src_type == PullAndRelayType::CIRCULAR_BUFFER or src_type == PullAndRelayType::BUFFER);
+    static_assert(dst_type == PullAndRelayType::CIRCULAR_BUFFER or dst_type == PullAndRelayType::BUFFER);
 
     uint32_t num_reads_issued, num_reads_completed, num_writes_completed;
     num_reads_issued = num_reads_completed = num_writes_completed = 0;
@@ -325,7 +330,7 @@ void pull_and_relay(
     // DPRINT << "READ PTR BEFORE RELAY: " << get_read_ptr(0) << ENDL();
     while (num_writes_completed != num_pages) {
         if (cb_producer_space_available(num_pages_to_read) and num_reads_issued < num_pages) {
-            if constexpr (src_type == tt::PullAndRelayType::CIRCULAR_BUFFER) {
+            if constexpr (src_type == PullAndRelayType::CIRCULAR_BUFFER) {
                 /*
                     In this case, we are pulling from a circular buffer. We pull from
                     circular buffers typically when our src is an erisc core.
@@ -358,7 +363,7 @@ void pull_and_relay(
                     src_pr_cfg.cb_buff_cfg.remote_rd_addr_16B -= src_pr_cfg.cb_buff_cfg.remote_total_size_16B;
                 }
 
-            } else if constexpr (src_type == tt::PullAndRelayType::BUFFER) {
+            } else if constexpr (src_type == PullAndRelayType::BUFFER) {
                 /*
                     In this case, we are pulling from a buffer. We pull from
                     buffers when our src is in system memory, or we are pulling in
@@ -375,7 +380,7 @@ void pull_and_relay(
             num_pages_to_read = min(num_pages - num_reads_issued, src_pr_cfg.num_pages_to_read);
         }
 
-        if (num_reads_issued > num_writes_completed and ( (dst_type == tt::PullAndRelayType::CIRCULAR_BUFFER and cb_consumer_space_available(dst_pr_cfg.cb_buff_cfg.local_multicore_cb_cfg, num_pages_to_write)) or (dst_type == tt::PullAndRelayType::BUFFER) ) ) {
+        if (num_reads_issued > num_writes_completed and ( (dst_type == PullAndRelayType::CIRCULAR_BUFFER and cb_consumer_space_available(dst_pr_cfg.cb_buff_cfg.local_multicore_cb_cfg, num_pages_to_write)) or (dst_type == PullAndRelayType::BUFFER) ) ) {
             if (num_writes_completed == num_reads_completed) {
                 noc_async_read_barrier();
                 num_reads_completed = num_reads_issued;
@@ -387,7 +392,7 @@ void pull_and_relay(
                 //     debug2[0] = rd_val;
                 // }
 
-                if constexpr (src_type == tt::PullAndRelayType::CIRCULAR_BUFFER) {
+                if constexpr (src_type == PullAndRelayType::CIRCULAR_BUFFER) {
                     // signal to eth router that data has been read
                     DPRINT << "signal dst router that data read" << ENDL();
                     noc_semaphore_inc(src_pr_cfg.cb_buff_cfg.remote_noc_encoding | eth_get_semaphore(0), 1);
@@ -395,7 +400,7 @@ void pull_and_relay(
                 }
             }
 
-            if constexpr (dst_type == tt::PullAndRelayType::CIRCULAR_BUFFER) {
+            if constexpr (dst_type == PullAndRelayType::CIRCULAR_BUFFER) {
                 /*
                     In this case, we are relaying data down to a downstream core, usually for
                     the purpose of further relay.
@@ -414,7 +419,7 @@ void pull_and_relay(
                     );
                     DPRINT << "Done push back" << ENDL();
                 // }
-            } else if constexpr (dst_type == tt::PullAndRelayType::BUFFER) {
+            } else if constexpr (dst_type == PullAndRelayType::BUFFER) {
                 /*
                     In this case, we are writing data directly to a buffer.
                 */

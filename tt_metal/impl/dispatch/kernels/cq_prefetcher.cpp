@@ -19,13 +19,9 @@ void kernel_main() {
     constexpr uint32_t data_buffer_size = get_compile_time_arg_val(9);
     constexpr uint32_t consumer_cmd_base_addr = get_compile_time_arg_val(10);
     constexpr uint32_t consumer_data_buffer_size = get_compile_time_arg_val(11);
-    constexpr uint32_t push_to_router = get_compile_time_arg_val(12);
-    constexpr uint32_t pull_from_router = get_compile_time_arg_val(13);
-    constexpr tt::PullAndRelayType pull_type = (tt::PullAndRelayType)get_compile_time_arg_val(14);
-    constexpr tt::PullAndRelayType push_type = (tt::PullAndRelayType)get_compile_time_arg_val(15);
+    constexpr tt::PullAndPushConfig pull_and_push_config = (tt::PullAndPushConfig)get_compile_time_arg_val(12);
 
-    static_assert(pull_type == tt::PullAndRelayType::CIRCULAR_BUFFER or pull_type == tt::PullAndRelayType::BUFFER);
-    static_assert(push_type == tt::PullAndRelayType::CIRCULAR_BUFFER or push_type == tt::PullAndRelayType::BUFFER);
+    constexpr bool read_from_issue_queue = (pull_and_push_config == tt::PullAndPushConfig::LOCAL or pull_and_push_config == tt::PullAndPushConfig::PUSH_TO_REMOTE);
 
     setup_issue_queue_read_interface(issue_queue_start_addr, issue_queue_size);
     setup_completion_queue_write_interface(completion_queue_start_addr, completion_queue_size);
@@ -55,8 +51,8 @@ void kernel_main() {
     volatile db_cb_config_t* local_multicore_cb_cfg = get_local_db_cb_config(CQ_CONSUMER_CB_BASE, db_buf_switch);
     volatile db_cb_config_t* dispatch_multicore_cb_cfg = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE, db_buf_switch);
 
-    // if its pull_and_relay on R chip then we can program the dispatcher cb with program page size as well only need to have dynamic cb when pushing data to src eth router
-    if constexpr (not push_to_router and push_type != tt::PullAndRelayType::BUFFER) {
+    // TODO: Need to support this for REMOTE_PULL_AND_PUSH to allow sending programs to dispatch core
+    if constexpr (pull_and_push_config == tt::PullAndPushConfig::LOCAL) {
         // DPRINT << "Programming cb for programs on dispatch core" << ENDL();
         constexpr uint32_t remote_cb_num_pages = (MEM_L1_SIZE - L1_UNRESERVED_BASE - DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND * 2) / DeviceCommand::PROGRAM_PAGE_SIZE;
         constexpr uint32_t remote_cb_size = remote_cb_num_pages * DeviceCommand::PROGRAM_PAGE_SIZE;
@@ -73,7 +69,7 @@ void kernel_main() {
 
     DPRINT << "MY_X: " << (uint32_t) my_x[0] << ", MY_Y: " << (uint32_t) my_y[0] << ENDL();
     while (true) {
-        if constexpr (pull_type == tt::PullAndRelayType::BUFFER) {
+        if constexpr (read_from_issue_queue) {
             DPRINT << "WAIT FRONT" << ENDL();
             issue_queue_wait_front();
             DPRINT << "DONE WAITING" << ENDL();
@@ -108,24 +104,28 @@ void kernel_main() {
         bool is_program = header->is_program_buffer;
         DeviceCommand::WrapRegion wrap = (DeviceCommand::WrapRegion)header->wrap;
 
-        if (wrap == DeviceCommand::WrapRegion::ISSUE and push_type != tt::PullAndRelayType::BUFFER) { // don't wrap issue queue on the completion path
-            // Basically popfront without the extra conditional
-            cq_read_interface.issue_fifo_rd_ptr = cq_read_interface.issue_fifo_limit - cq_read_interface.issue_fifo_size;  // Head to beginning of command queue
-            cq_read_interface.issue_fifo_rd_toggle = not cq_read_interface.issue_fifo_rd_toggle;
-            notify_host_of_issue_queue_read_pointer<host_issue_queue_read_ptr_addr>();
-            continue;
+        if constexpr (read_from_issue_queue) { // don't wrap issue queue on completion path
+            if (wrap == DeviceCommand::WrapRegion::ISSUE) {
+                // Basically popfront without the extra conditional
+                cq_read_interface.issue_fifo_rd_ptr = cq_read_interface.issue_fifo_limit - cq_read_interface.issue_fifo_size;  // Head to beginning of command queue
+                cq_read_interface.issue_fifo_rd_toggle = not cq_read_interface.issue_fifo_rd_toggle;
+                notify_host_of_issue_queue_read_pointer<host_issue_queue_read_ptr_addr>();
+                continue; // issue wraps are not relayed forward
+            }
         }
+
         // DPRINT << "PROGRAM LOCAL CB" << ENDL();
         program_local_cb(data_section_addr, producer_cb_num_pages, page_size, producer_cb_size);
 
-        if constexpr (push_type == tt::PullAndRelayType::CIRCULAR_BUFFER) {
+        if constexpr (pull_and_push_config != tt::PullAndPushConfig::PULL_FROM_REMOTE) { // completion queue writer for R chip does not relay commands/data
             DPRINT << "WAIT CONSUMER SPACE push sem " << push_semaphore_addr[0] << ENDL();
             wait_consumer_space_available(push_semaphore_addr);
             debug[0] = 110;
         }
 
-        if constexpr (not push_to_router and push_type != tt::PullAndRelayType::BUFFER) {
-            if (stall) { // update this logic!! for remote sync with remote dispatch core
+        // TODO: update this to work for remote pull and push when enqueuing programs is supported
+        if constexpr (pull_and_push_config == tt::PullAndPushConfig::LOCAL) {
+            if (stall) {
                 DPRINT << "WAIT CONSUMER IDLE" << ENDL();
                 debug[0] = 111;
                 wait_consumer_idle<2>(push_semaphore_addr);
@@ -133,7 +133,7 @@ void kernel_main() {
         }
 
         uint32_t completion_data_size = header->completion_data_size;
-        if constexpr (push_type == tt::PullAndRelayType::BUFFER) {
+        if constexpr (pull_and_push_config == tt::PullAndPushConfig::PULL_FROM_REMOTE) {
             DPRINT << "Pull and push to the completion queue" << ENDL();
             completion_queue_reserve_back(completion_data_size);
             write_event(uint32_t(&header->event));
@@ -146,15 +146,13 @@ void kernel_main() {
             }
         }
 
-        if constexpr (pull_from_router) {
-            // signal to eth router that it can send data
+        if constexpr (pull_and_push_config == tt::PullAndPushConfig::REMOTE_PULL_AND_PUSH or pull_and_push_config == tt::PullAndPushConfig::PULL_FROM_REMOTE) { // signal to dst ethernet router that command was pulled in and data can be sent
             DPRINT << "Signal to dst router that we can consume data" << ENDL();
             noc_semaphore_inc(pull_noc_encoding | eth_get_semaphore(0), 1);
             noc_async_write_barrier(); // Barrier for now
         }
 
-
-        if constexpr (push_type == tt::PullAndRelayType::BUFFER) {
+        if constexpr (pull_and_push_config == tt::PullAndPushConfig::PULL_FROM_REMOTE) {
             DPRINT << "num buffer transfers " << num_buffer_transfers << ENDL();
             debug[0] = num_buffer_transfers + 10;
             if (num_buffer_transfers == 1) { // reading data from buffer on device and sending to host
@@ -185,7 +183,7 @@ void kernel_main() {
 
                 DPRINT << "Read from eth cb and write to sysmem buffer - pull sem is " << pull_semaphore_addr[0] << ENDL();
 
-                pull_and_relay<tt::PullAndRelayType::CIRCULAR_BUFFER, tt::PullAndRelayType::BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages); // write all the data
+                pull_and_relay<PullAndRelayType::CIRCULAR_BUFFER, PullAndRelayType::BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages); // write all the data
             }
             uint32_t finish = header->finish;
             if (finish) {
@@ -197,15 +195,11 @@ void kernel_main() {
 
         // This should be cleaned up, logic kind of awkward
 
-        bool issue_q_reader = ((uint32_t) my_x[0] == 6 and (uint32_t) my_y[0] == 10)  and ((uint32_t)PUSH_NOC_X == 1 and (uint32_t)PUSH_NOC_Y == 6);
-        bool remote_p_and_p = ((uint32_t) my_x[0] == 2 and (uint32_t) my_y[0] == 10)  and ((uint32_t)PULL_NOC_X == 1 and (uint32_t)PULL_NOC_Y == 0);
-        bool completion_q_writer = ((uint32_t) my_x[0] == 7 and (uint32_t) my_y[0] == 10)  and ((uint32_t)PULL_NOC_X == 9 and (uint32_t)PULL_NOC_Y == 6);
-
         if (is_program) {
             relay_command<command_start_addr, consumer_cmd_base_addr, consumer_data_buffer_size>(db_buf_switch, dispatch_noc_encoding);
             update_producer_consumer_sync_semaphores(my_noc_encoding, dispatch_noc_encoding, push_semaphore_addr, get_semaphore(0));
             while (true); // TODO: SUPPORT ME
-            pull_and_relay<tt::PullAndRelayType::BUFFER, tt::PullAndRelayType::CIRCULAR_BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages);
+            pull_and_relay<PullAndRelayType::BUFFER, PullAndRelayType::CIRCULAR_BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages);
         } else if (num_buffer_transfers == 1) {
             volatile tt_l1_ptr uint32_t* buffer_transfer_ptr = command_ptr + DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER;
             uint32_t src_bank_base_address = buffer_transfer_ptr[0];
@@ -216,11 +210,7 @@ void kernel_main() {
             uint32_t src_page_index = buffer_transfer_ptr[6];
             uint32_t dst_page_index = buffer_transfer_ptr[7];
 
-            // DPRINT << "my x: " << (uint32_t)my_x[0] << " my y: " << (uint32_t)my_y[0] << ENDL();
-            // DPRINT << "push x: " << (uint32_t)PUSH_NOC_X << " push y: " << (uint32_t)PUSH_NOC_Y << ENDL();
-            // DPRINT << "pull x: " << (uint32_t)PULL_NOC_X << " push y: " << (uint32_t)PULL_NOC_Y << ENDL();
-
-            if ( (issue_q_reader and (BufferType)src_buf_type == BufferType::SYSTEM_MEMORY) or (remote_p_and_p and (BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY) ) {
+            if ( (pull_and_push_config == tt::PullAndPushConfig::PUSH_TO_REMOTE and (BufferType)src_buf_type == BufferType::SYSTEM_MEMORY) or (pull_and_push_config == tt::PullAndPushConfig::REMOTE_PULL_AND_PUSH and (BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY) ) {
                 // read from buffer and write to cb on eth core
 
                 volatile db_cb_config_t* remote_multicore_cb_cfg = get_remote_db_cb_config(eth_l1_mem::address_map::CQ_CONSUMER_CB_BASE, db_buf_switch);
@@ -253,7 +243,7 @@ void kernel_main() {
 
                 DPRINT << "Read from src buffer and write to cb" << ENDL();
 
-                if (remote_p_and_p) {
+                if (pull_and_push_config == tt::PullAndPushConfig::REMOTE_PULL_AND_PUSH) {
                     header->fwd_path = 0;
                 }
 
@@ -261,16 +251,16 @@ void kernel_main() {
                 debug[0] = 113;
                 update_producer_consumer_sync_semaphores(my_noc_encoding, push_noc_encoding, push_semaphore_addr, eth_get_semaphore(0));
                 debug[0] = 114;
-                pull_and_relay<tt::PullAndRelayType::BUFFER, tt::PullAndRelayType::CIRCULAR_BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages);
+                pull_and_relay<PullAndRelayType::BUFFER, PullAndRelayType::CIRCULAR_BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages);
                 debug[0] = 115;
                 DPRINT << "DONE RELAY TO SRC ETH" << ENDL();
 
-            } else if ( issue_q_reader and (BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY ) {
+            } else if ( pull_and_push_config == tt::PullAndPushConfig::PUSH_TO_REMOTE and (BufferType)dst_buf_type == BufferType::SYSTEM_MEMORY ) {
                 DPRINT << "sending read cmd to src router" << ENDL();
                 relay_command<command_start_addr, eth_l1_mem::address_map::ERISC_APP_RESERVED_BASE, consumer_data_buffer_size>(db_buf_switch, push_noc_encoding);
                 update_producer_consumer_sync_semaphores(my_noc_encoding, push_noc_encoding, push_semaphore_addr, eth_get_semaphore(0));
                 DPRINT << "done sending rd to src eth" << ENDL();
-            } else if ( remote_p_and_p and  (BufferType)src_buf_type == BufferType::SYSTEM_MEMORY ) {
+            } else if ( pull_and_push_config == tt::PullAndPushConfig::REMOTE_PULL_AND_PUSH and  (BufferType)src_buf_type == BufferType::SYSTEM_MEMORY ) {
 
                 // remote pull and relay
                 // doing a write so we pull from eth router cb and write to buffer
@@ -291,7 +281,7 @@ void kernel_main() {
 
                 DPRINT << "Read from eth cb and write to dst buffer - pull sem is " << pull_semaphore_addr[0] << ENDL();
 
-                pull_and_relay<tt::PullAndRelayType::CIRCULAR_BUFFER, tt::PullAndRelayType::BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages); // write all the data
+                pull_and_relay<PullAndRelayType::CIRCULAR_BUFFER, PullAndRelayType::BUFFER>(src_pr_cfg, dst_pr_cfg, num_pages); // write all the data
 
                 DPRINT << "DONE WRITE R BUFFER" << ENDL();
 
@@ -303,7 +293,7 @@ void kernel_main() {
             }
         } else {
             // not a program, and no buffer transfers
-            if (remote_p_and_p) {
+            if (pull_and_push_config == tt::PullAndPushConfig::REMOTE_PULL_AND_PUSH) {
                 header->fwd_path = 0;
             }
             // send command to src router
@@ -313,12 +303,11 @@ void kernel_main() {
 
         // DPRINT << "Done data movement" << ENDL();
 
-        // Need some synch mechanism for dispatch core to update completion queue
-        if constexpr (pull_type == tt::PullAndRelayType::BUFFER) {
+        if constexpr (read_from_issue_queue) {
             issue_queue_pop_front<host_issue_queue_read_ptr_addr>(DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + issue_data_size);
         }
 
-        if constexpr (not push_to_router) {
+        if constexpr (pull_and_push_config == tt::PullAndPushConfig::LOCAL) { // update this because remote pull and push needs to swap between cmd slots on the remote dispatcher
             db_buf_switch = not db_buf_switch; // only one cmd slot on ethernet core
         }
     }

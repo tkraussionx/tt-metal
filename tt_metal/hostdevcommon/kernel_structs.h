@@ -180,9 +180,11 @@ enum class OpCode : uint8_t
 
 };
 
-enum class PullAndRelayType : uint8_t {
-    BUFFER = 0,
-    CIRCULAR_BUFFER = 1
+enum class PullAndPushConfig : uint8_t {
+    LOCAL = 0,
+    PUSH_TO_REMOTE = 1,
+    REMOTE_PULL_AND_PUSH = 2,
+    PULL_FROM_REMOTE = 3
 };
 
 constexpr std::uint32_t NUM_MAX_IN_BUFFERS_PER_CORE = HlkOperand::in7 - HlkOperand::in0 + 1;

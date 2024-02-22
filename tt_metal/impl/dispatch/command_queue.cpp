@@ -787,8 +787,6 @@ void HWCommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blockin
         unpadded_dst_offset += pages_to_read * buffer.page_size();
     }
 
-    std::cout << "got to end of host enqueue rd buffer" << std::endl;
-
     if (blocking) {
         this->finish();
     }
@@ -813,7 +811,6 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
         convert_interleaved_to_sharded_on_host(src, buffer);
     }
 
-    std::cout << "ENQUEUING WR BUFFER" << std::endl;
     uint32_t padded_page_size = align(buffer.page_size(), 32);
     uint32_t total_pages_to_write = buffer.num_pages();
     const uint32_t command_issue_limit = this->manager.get_issue_queue_limit(this->id);
@@ -976,27 +973,11 @@ void HWCommandQueue::read_completion_queue() {
         }
         std::this_thread::sleep_for(std::chrono::microseconds(10));
     }
-    std::cout << "Done reading the completion queue" << std::endl;
 }
 
 void HWCommandQueue::finish() {
     ZoneScopedN("HWCommandQueue_finish");
     tt::log_debug(tt::LogDispatch, "Finish for command queue {}", this->id);
-
-    // sleep(4);
-
-    // // std::cout << "Setting internal routing false" << std::endl;
-    // // tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
-    // // std::cout << "Done setting internal routing false" << std::endl;
-
-    // uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device->id());
-    // tt_cxy_pair remote_processor_location = dispatch_core_manager::get(1).remote_processor_core(this->device->id(), channel, 0);
-    // CoreCoord remote_processor_physical_core = tt::get_physical_core_coordinate(remote_processor_location, CoreType::WORKER);
-
-    // uint32_t debug_val;
-    // tt::Cluster::instance().read_core(&debug_val, sizeof(uint32_t), tt_cxy_pair(remote_processor_location.chip, remote_processor_physical_core), SEMAPHORE_BASE + 2 * L1_ALIGNMENT);
-
-    // std::cout << "debug value: " << debug_val << std::endl;
 
     if (tt::llrt::OptionsG.get_test_mode_enabled()) {
         while (this->num_issued_commands > this->num_completed_commands) {

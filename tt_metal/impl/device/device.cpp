@@ -363,10 +363,9 @@ void Device::compile_command_queue_programs() {
 
                 uint32_t consumer_cmd_base_addr =  (device_id != this->id()) ? cmd_start_eth : cmd_start_tensix; // device is MMIO capable but current device_id being set up is remote
                 uint32_t consumer_data_buff_size = (device_id != this->id()) ? consumer_data_buffer_size_eth : consumer_data_buffer_size_tensix; // device is MMIO capable but current device_id being set up is remote
-                uint32_t push_to_router = uint32_t(device_id != this->id());
-                uint32_t pull_from_router = false;
-                uint32_t prefetch_pull_type = (uint32_t)tt::PullAndRelayType::BUFFER;
-                uint32_t prefetch_push_type = (uint32_t)tt::PullAndRelayType::CIRCULAR_BUFFER;
+
+                tt::PullAndPushConfig pull_and_push_config = (device_id != this->id()) ? tt::PullAndPushConfig::PUSH_TO_REMOTE : tt::PullAndPushConfig::LOCAL;
+
                 std::vector<uint32_t> producer_compile_args = {
                     host_issue_queue_read_ptr_addr,
                     issue_queue_start_addr,
@@ -380,10 +379,8 @@ void Device::compile_command_queue_programs() {
                     producer_data_buffer_size_tensix,
                     consumer_cmd_base_addr,
                     consumer_data_buff_size,
-                    push_to_router,
-                    pull_from_router,
-                    prefetch_pull_type,
-                    prefetch_push_type};
+                    (uint32_t)pull_and_push_config
+                };
 
                 std::string pull_and_push_kernel = "tt_metal/impl/dispatch/kernels/cq_prefetcher.cpp";
 
@@ -442,10 +439,7 @@ void Device::compile_command_queue_programs() {
                         producer_data_buffer_size_tensix,
                         consumer_cmd_base_addr,
                         consumer_data_buff_size,
-                        (uint32_t)false, // push_to_router,
-                        (uint32_t)true, // pull_from_router,
-                        (uint32_t)tt::PullAndRelayType::CIRCULAR_BUFFER, // pull_type,
-                        (uint32_t)tt::PullAndRelayType::BUFFER // push_type
+                        (uint32_t)tt::PullAndPushConfig::PULL_FROM_REMOTE
                     };
 
                     std::cout << "Programming " << completion_q_writer_location.str() << " with cq prefetcher " << std::endl;
@@ -501,10 +495,6 @@ void Device::compile_command_queue_programs() {
         std::cout << "DST router (R): " << physical_eth_router_remote_dst.str() << std::endl;
         std::cout << "SRC router (R): " << physical_eth_router_remote_src.str() << std::endl;
 
-        uint32_t push_to_router = true;
-        uint32_t pull_from_router = true;
-        uint32_t prefetch_pull_type = (uint32_t)tt::PullAndRelayType::CIRCULAR_BUFFER;
-        uint32_t prefetch_push_type = (uint32_t)tt::PullAndRelayType::CIRCULAR_BUFFER;
         std::vector<uint32_t> remote_pull_and_push_compile_args = {
             0, // host_issue_queue_read_ptr_addr,
             0, // issue_queue_start_addr,
@@ -518,10 +508,8 @@ void Device::compile_command_queue_programs() {
             producer_data_buffer_size_tensix,
             cmd_start_tensix,
             consumer_data_buffer_size_tensix,
-            push_to_router,
-            pull_from_router,
-            prefetch_pull_type,
-            prefetch_push_type};
+            (uint32_t)tt::PullAndPushConfig::REMOTE_PULL_AND_PUSH
+        };
 
         std::map<string, string> remote_pull_and_push_defines = {
             {"DISPATCH_KERNEL", "1"},
@@ -548,31 +536,6 @@ void Device::compile_command_queue_programs() {
         // second semaphore is between processor and dispatcher to detect whether dispatcher can accept commands
         tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, remote_processor_location, 0);
 
-        // std::vector<uint32_t> dispatcher_compile_args = {
-        //     cmd_start_tensix, consumer_data_buffer_size_tensix, cmd_start_tensix, consumer_data_buffer_size_tensix};
-
-        // std::map<string, string> dispatcher_defines = {
-        //     {"DISPATCH_KERNEL", "1"},
-        //     {"PRODUCER_NOC_X", std::to_string(remote_processor_physical_core.x)},
-        //     {"PRODUCER_NOC_Y", std::to_string(remote_processor_physical_core.y)},
-        //     {"SIGNALLER_NOC_X", std::to_string(remote_signaller_physical_core.x)},
-        //     {"SIGNALLER_NOC_Y", std::to_string(remote_signaller_physical_core.y)},
-        // };
-
-        // tt::tt_metal::CreateKernel(
-        //     *command_queue_program_ptr,
-        //     "tt_metal/impl/dispatch/kernels/cq_dispatcher.cpp",
-        //     dispatch_location,
-        //     tt::tt_metal::DataMovementConfig {
-        //         .processor = tt::tt_metal::DataMovementProcessor::RISCV_0,
-        //         .noc = tt::tt_metal::NOC::RISCV_0_default,
-        //         .compile_args = dispatcher_compile_args,
-        //         .defines = dispatcher_defines});
-
-        // First semaphore is between processor and dispatcher to signal whether the latter can receive commands
-        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_location, 0);
-        // second semaphore is between dispatcher and remote completion signaller to signal if the former can send data
-        tt::tt_metal::CreateSemaphore(*command_queue_program_ptr, dispatch_location, num_eth_command_slots);
     }
     detail::CompileProgram(this, *command_queue_program_ptr);
     this->command_queue_programs.push_back(std::move(command_queue_program_ptr));
