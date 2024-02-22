@@ -37,8 +37,8 @@ void kernel_launch() {
     noc_local_state_init(noc_index);
 
     {
-        //DeviceZoneScopedN("BRISC-KERNEL");
-        DeviceZoneScopedMainChildN("BRISC-KERNEL");
+        DeviceZoneScopedN("BRISC-KERNEL");
+        //DeviceZoneScopedMainChildN("BRISC-KERNEL");
         kernel_main();
     }
 #endif

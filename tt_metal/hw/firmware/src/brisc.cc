@@ -304,10 +304,10 @@ int main() {
     while (1) {
         DeviceZoneScopedMainN("BRISC-FW");
         {
-            //DeviceZoneScopedMainChildN("BRISC-INIT");
+            DeviceZoneScopedMainChildN("BRISC-INIT");
         }
         {
-            //DeviceZoneScopedMainChildChildN("BRISC-INIT-SECOND");
+            DeviceZoneScopedMainChildChildN("BRISC-INIT-SECOND");
         }
             init_sync_registers();
             assert_just_ncrisc_reset();

@@ -6,11 +6,9 @@
 
 void kernel_main() {
 //Max unroll size
-#if defined(COMPILE_FOR_NCRISC)
 #pragma GCC unroll 65534
-    for (int j = 0 ; j < 100; j++)
+    for (int j = 0 ; j < 300; j++)
     {
         DeviceZoneScopedN("TEST-FULL-BUFFER");
     }
-#endif
 }

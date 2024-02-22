@@ -18,7 +18,7 @@
 #ifdef PROFILER_KERNEL_FORCE_INLINE
 #define PROFILER_INLINE inline __attribute__((always_inline))
 #else
-#define PROFILER_INLINE
+#define PROFILER_INLINE __attribute__((noinline))
 #endif
 
 #ifdef PROFILE_KERNEL
