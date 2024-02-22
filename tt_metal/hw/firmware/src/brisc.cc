@@ -304,7 +304,7 @@ int main() {
     while (1) {
         DeviceZoneScopedMainN("BRISC-FW");
         {
-            DeviceZoneScopedMainChildN("BRISC-INIT");
+            DeviceZoneScopedMainChildN("BRISC-INIT-FIRST");
         }
         {
             DeviceZoneScopedMainChildChildN("BRISC-INIT-SECOND");

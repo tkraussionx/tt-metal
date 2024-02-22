@@ -141,7 +141,7 @@ namespace kernel_profiler{
 
     constexpr uint32_t get_end_timer_id (uint32_t timer_id)
     {
-        return ((timer_id & 0xFFFF) | (1<<16) & 0x7FFFF);
+        return ((timer_id & 0xFFFF) | ((1<<16) & 0x7FFFF));
     }
     inline __attribute__((always_inline)) void mark_time_at_index_inlined(uint32_t index, uint32_t timer_id)
     {
@@ -351,17 +351,45 @@ namespace kernel_profiler{
 #endif
             }
     };
+
+    constexpr uint32_t Hash32_CT( const char * str, size_t n, uint32_t basis = UINT32_C( 2166136261 ) ) {
+        return n == 0 ? basis : Hash32_CT( str + 1, n - 1, ( basis ^ str[ 0 ] ) * UINT32_C( 16777619 ) );
+    }
+
+    template< size_t N >
+    constexpr uint32_t Hash16_CT( const char ( &s )[ N ] ) {
+        auto res = Hash32_CT( s, N - 1 );
+        return ((res & 0xFFFF) ^ ((res & 0xFFFF0000) >> 16)) & 0xFFFF;
+    }
+
+    template<uint32_t timer_id, uint32_t index>
+    struct profileScopeGuaranteed
+    {
+        static constexpr uint32_t start_index = (2 * index * PROFILER_L1_MARKER_UINT32_SIZE) + GUARANTEED_MARKER_1_H;
+        static constexpr uint32_t  end_index = (2 * index * PROFILER_L1_MARKER_UINT32_SIZE) + GUARANTEED_MARKER_2_H;
+
+        static_assert (start_index < CUSTOM_MARKERS);
+        static_assert (end_index < CUSTOM_MARKERS);
+
+        inline __attribute__((always_inline)) profileScopeGuaranteed ()
+        {
+            if constexpr  (index == 0)
+            {
+                init_profiler();
+            }
+            mark_time_at_index_inlined(start_index, timer_id);
+        }
+        inline __attribute__((always_inline))  ~profileScopeGuaranteed ()
+        {
+            mark_time_at_index_inlined(end_index, get_end_timer_id(timer_id));
+            if constexpr  (index == 0)
+            {
+                finish_profiler();
+            }
+        }
+    };
 }
 
-constexpr uint32_t Hash32_CT( const char * str, size_t n, uint32_t basis = UINT32_C( 2166136261 ) ) {
-    return n == 0 ? basis : Hash32_CT( str + 1, n - 1, ( basis ^ str[ 0 ] ) * UINT32_C( 16777619 ) );
-}
-
-template< size_t N >
-constexpr uint32_t Hash16_CT( const char ( &s )[ N ] ) {
-    auto res = Hash32_CT( s, N - 1 );
-    return ((res & 0xFFFF) ^ ((res & 0xFFFF0000) >> 16)) & 0xFFFF;
-}
 
 #define DO_PRAGMA(x) _Pragma (#x)
 
@@ -374,57 +402,13 @@ constexpr uint32_t Hash16_CT( const char ( &s )[ N ] ) {
 
 #ifdef PROFILE_KERNEL
 
-#define DeviceZoneScopedN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); kernel_profiler::profileScope zone = kernel_profiler::profileScope(Hash16_CT(PROFILER_MSG_NAME(name)));
+#define DeviceZoneScopedN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); kernel_profiler::profileScope zone = kernel_profiler::profileScope(kernel_profiler::Hash16_CT(PROFILER_MSG_NAME(name)));
 
-#define DeviceZoneScopedMainN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = Hash16_CT(PROFILER_MSG_NAME(name));\
-    auto constexpr start_index = kernel_profiler::GUARANTEED_MARKER_1_H;\
-    auto constexpr end_index = kernel_profiler::GUARANTEED_MARKER_2_H;\
-    struct profileScopeInline\
-    {\
-            inline __attribute__((always_inline)) profileScopeInline ()\
-            {\
-                kernel_profiler::init_profiler();\
-                mark_time_at_index_inlined(start_index, hash);\
-            }\
-            inline __attribute__((always_inline))  ~profileScopeInline ()\
-            {\
-                mark_time_at_index_inlined(end_index, kernel_profiler::get_end_timer_id(hash));\
-                kernel_profiler::finish_profiler();\
-            }\
-    };\
-    profileScopeInline zone = profileScopeInline();
+#define DeviceZoneScopedMainN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = kernel_profiler::Hash16_CT(PROFILER_MSG_NAME(name)); kernel_profiler::profileScopeGuaranteed<hash, 0> zone = kernel_profiler::profileScopeGuaranteed<hash, 0>();
 
-#define DeviceZoneScopedMainChildN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = Hash16_CT(PROFILER_MSG_NAME(name));\
-    auto constexpr start_index = kernel_profiler::GUARANTEED_MARKER_3_H;\
-    auto constexpr end_index = kernel_profiler::GUARANTEED_MARKER_4_H;\
-    struct profileScopeInline\
-    {\
-            inline __attribute__((always_inline)) profileScopeInline ()\
-            {\
-                mark_time_at_index_inlined(start_index, hash);\
-            }\
-            inline __attribute__((always_inline))  ~profileScopeInline ()\
-            {\
-                mark_time_at_index_inlined(end_index, kernel_profiler::get_end_timer_id(hash));\
-            }\
-    };\
-    profileScopeInline zone = profileScopeInline();
+#define DeviceZoneScopedMainChildN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = kernel_profiler::Hash16_CT(PROFILER_MSG_NAME(name));kernel_profiler::profileScopeGuaranteed<hash, 1> zone = kernel_profiler::profileScopeGuaranteed<hash, 1>();
 
-#define DeviceZoneScopedMainChildChildN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = Hash16_CT(PROFILER_MSG_NAME(name));\
-    auto constexpr start_index = kernel_profiler::GUARANTEED_MARKER_5_H;\
-    auto constexpr end_index = kernel_profiler::GUARANTEED_MARKER_6_H;\
-    struct profileScopeInline\
-    {\
-            inline __attribute__((always_inline)) profileScopeInline ()\
-            {\
-                mark_time_at_index_inlined(start_index, hash);\
-            }\
-            inline __attribute__((always_inline))  ~profileScopeInline ()\
-            {\
-                mark_time_at_index_inlined(end_index, kernel_profiler::get_end_timer_id(hash));\
-            }\
-    };\
-    profileScopeInline zone = profileScopeInline();
+#define DeviceZoneScopedMainChildChildN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = kernel_profiler::Hash16_CT(PROFILER_MSG_NAME(name));kernel_profiler::profileScopeGuaranteed<hash, 2> zone = kernel_profiler::profileScopeGuaranteed<hash, 2>();
 
 #define DeviceProfilerFlush kernel_profiler::flush_profiler();
 
