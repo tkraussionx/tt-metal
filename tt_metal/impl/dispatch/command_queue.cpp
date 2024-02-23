@@ -1025,6 +1025,7 @@ void HWCommandQueue::read_completion_queue() {
                     }
                     this->manager.completion_queue_pop_front(align(EVENT_PADDED_SIZE, 32), this->id);
                 }
+                this->manager.set_last_completed_event(this->id, event);
             }
             this->num_completed_commands += num_events_to_read;
         } else if (this->exit_condition) {
@@ -1222,6 +1223,15 @@ void EnqueueRecordEventImpl(CommandQueue& cq, std::reference_wrapper<Event> even
     cq.hw_command_queue().enqueue_record_event(event);
 }
 
+void EventSynchronize(Event& event) {
+    detail::DispatchStateCheck(true);
+
+    while (event.device->sysmem_manager().get_last_completed_event(event.cq_id) < event.event_id) {
+        std::this_thread::sleep_for(std::chrono::microseconds(10));
+    }
+
+    log_info(tt::LogMetal, "Host synchronized with cq_id: {} on event_id: {}", event.cq_id, event.event_id);
+}
 
 void Finish(CommandQueue& cq) {
     detail::DispatchStateCheck(true);

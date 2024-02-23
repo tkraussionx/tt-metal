@@ -140,6 +140,7 @@ class SystemMemoryManager {
     uint32_t cq_size;
     uint32_t channel_offset;
     vector<int> cq_to_event;
+    vector<int> cq_to_last_completed_event;
     vector<std::mutex> cq_to_event_locks;
 
    public:
@@ -173,6 +174,7 @@ class SystemMemoryManager {
 
             this->cq_interfaces.push_back(SystemMemoryCQInterface(channel, cq_id, this->cq_size));
             this->cq_to_event.push_back(0);
+            this->cq_to_last_completed_event.push_back(0); // KCM FIXME - this should be -1 maybe but then consider signedness
         }
         vector<std::mutex> temp_mutexes(num_hw_cqs);
         cq_to_event_locks.swap(temp_mutexes);
@@ -183,6 +185,15 @@ class SystemMemoryManager {
         uint32_t next_event = this->cq_to_event[cq_id]++;
         cq_to_event_locks[cq_id].unlock();
         return next_event;
+    }
+
+    void set_last_completed_event(const uint8_t cq_id, const uint32_t event_id) {
+        this->cq_to_last_completed_event[cq_id] = event_id;
+    }
+
+    uint32_t get_last_completed_event(const uint8_t cq_id) {
+        uint32_t last_completed_event = this->cq_to_last_completed_event[cq_id];
+        return last_completed_event;
     }
 
     void reset(const uint8_t cq_id) {

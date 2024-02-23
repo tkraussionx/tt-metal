@@ -61,3 +61,22 @@ TEST_F(CommandQueueFixture, TestEnqueueRecordEventIssueQueueWrap) {
     }
     Finish(*this->cmd_queue);
 }
+
+// Test where Host synchronously waits for event to be completed.
+TEST_F(CommandQueueFixture, TestEnqueueRecordEventAndSynchronize) {
+    size_t num_events = 100;
+    size_t num_events_between_sync = 10;
+    for (size_t i = 0; i < num_events; i++) {
+        Event event;
+        EnqueueQueueRecordEvent(*this->cmd_queue, event);
+        log_info(tt::LogTest, "Done recording event. Got Event(event_id: {} cq_id: {})", event.event_id, event.cq_id);
+        EXPECT_EQ(event.event_id, i);
+        EXPECT_EQ(event.cq_id, this->cmd_queue->id());
+
+        // Host synchronize every N number of events.
+        if (i > 0 && ((i % num_events_between_sync) == 0)) {
+            EventSynchronize(event);
+        }
+    }
+    Finish(*this->cmd_queue);
+}
