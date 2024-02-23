@@ -387,6 +387,12 @@ namespace kernel_profiler{
 
 #else
 
+#define DeviceZoneScopedMainN( name )
+
+#define DeviceZoneScopedMainChildN( name )
+
+#define DeviceZoneScopedMainChildChildN( name )
+
 #define DeviceZoneScopedN( name )
 
 #define DeviceProfilerFlush

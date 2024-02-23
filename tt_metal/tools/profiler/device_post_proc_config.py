@@ -8,78 +8,84 @@ from tt_metal.tools.profiler.common import PROFILER_LOGS_DIR, PROFILER_DEVICE_SI
 
 class default_setup(metaclass=MergeMetaclass):
     timerAnalysis = {
-        "T0 -> BRISC FW start": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"risc": "BRISC", "timerID": 0},
-            "end": {"risc": "BRISC", "timerID": 1},
-        },
-        "TRISC0 kernel start -> TRISC0 kernel end": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"risc": "TRISC_0", "timerID": 2},
-            "end": {"risc": "TRISC_0", "timerID": 3},
-        },
-        "TRISC1 kernel start -> TRISC1 kernel end": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"risc": "TRISC_1", "timerID": 2},
-            "end": {"risc": "TRISC_1", "timerID": 3},
-        },
-        "TRISC2 kernel start -> TRISC2 kernel end": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"risc": "TRISC_2", "timerID": 2},
-            "end": {"risc": "TRISC_2", "timerID": 3},
-        },
-        "BRISC kernel start -> BRISC kernel end": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"risc": "BRISC", "timerID": 2},
-            "end": {"risc": "BRISC", "timerID": 3},
-        },
+        # "T0 -> BRISC FW start": {
+        # "across": "core",
+        # "type": "adjacent",
+        # "start": {"risc": "BRISC", "timerID": 0},
+        # "end": {"risc": "BRISC", "timerID": 1},
+        # },
+        # "TRISC0 kernel start -> TRISC0 kernel end": {
+        # "across": "core",
+        # "type": "adjacent",
+        # "start": {"risc": "TRISC_0", "timerID": 2},
+        # "end": {"risc": "TRISC_0", "timerID": 3},
+        # },
+        # "TRISC1 kernel start -> TRISC1 kernel end": {
+        # "across": "core",
+        # "type": "adjacent",
+        # "start": {"risc": "TRISC_1", "timerID": 2},
+        # "end": {"risc": "TRISC_1", "timerID": 3},
+        # },
+        # "TRISC2 kernel start -> TRISC2 kernel end": {
+        # "across": "core",
+        # "type": "adjacent",
+        # "start": {"risc": "TRISC_2", "timerID": 2},
+        # "end": {"risc": "TRISC_2", "timerID": 3},
+        # },
+        # "BRISC kernel start -> BRISC kernel end": {
+        # "across": "core",
+        # "type": "adjacent",
+        # "start": {"risc": "BRISC", "timerID": 2},
+        # "end": {"risc": "BRISC", "timerID": 3},
+        # },
         "NCRISC kernel start -> NCRISC kernel end": {
             "across": "core",
             "type": "adjacent",
-            "start": {"risc": "NCRISC", "timerID": 2},
-            "end": {"risc": "NCRISC", "timerID": 3},
+            "start": {"risc": "NCRISC", "zoneName": "NCRISC-FW"},
+            "end": {"risc": "NCRISC", "zoneName": "NCRISC-FW"},
         },
-        "ANY RISC FW start -> ANY RISC FW end": {
-            "across": "core",
-            "type": "launch_first_last",
-            "start": {"risc": "ANY", "timerID": 1},
-            "end": {"risc": "ANY", "timerID": 4},
-        },
-        "ANY RISC FW end -> BRISC FW start": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"risc": "ANY", "timerID": 4},
-            "end": {"risc": "BRISC", "timerID": 1},
-        },
-        "T0 -> ANY RISC FW end": {
-            "across": "core",
-            "type": "session_first_last",
-            "start": {"risc": "BRISC", "timerID": 0},
-            "end": {"risc": "ANY", "timerID": 4},
-        },
-        "BRISC FW start -> ANY RISC FW end-model": {
-            "across": "core",
-            "type": "session_first_last",
-            "start": {"risc": "ANY", "timerID": 1},
-            "end": {"risc": "ANY", "timerID": 4},
-        },
-        "BRISC FW start -> ANY RISC FW end-op": {
+        "FW_START->FW_END": {
             "across": "ops",
             "type": "op_first_last",
-            "start": {"core": "ANY", "risc": "ANY", "timerID": 1},
-            "end": {"core": "ANY", "risc": "ANY", "timerID": 4},
+            "start": {"core": "ANY", "risc": "ANY", "zoneName": "BRISC-FW"},
+            "end": {"core": "ANY", "risc": "ANY", "zoneName": "BRISC-FW"},
         },
-        "T0 -> ANY CORE ANY RISC FW end": {
-            "across": "device",
-            "type": "session_first_last",
-            "start": {"core": "ANY", "risc": "ANY", "timerID": 1},
-            "end": {"core": "ANY", "risc": "ANY", "timerID": 4},
-        },
+        # "ANY RISC FW start -> ANY RISC FW end": {
+        # "across": "core",
+        # "type": "launch_first_last",
+        # "start": {"risc": "ANY", "timerID": 1},
+        # "end": {"risc": "ANY", "timerID": 4},
+        # },
+        # "ANY RISC FW end -> BRISC FW start": {
+        # "across": "core",
+        # "type": "adjacent",
+        # "start": {"risc": "ANY", "timerID": 4},
+        # "end": {"risc": "BRISC", "timerID": 1},
+        # },
+        # "T0 -> ANY RISC FW end": {
+        # "across": "core",
+        # "type": "session_first_last",
+        # "start": {"risc": "BRISC", "timerID": 0},
+        # "end": {"risc": "ANY", "timerID": 4},
+        # },
+        # "BRISC FW start -> ANY RISC FW end-model": {
+        # "across": "core",
+        # "type": "session_first_last",
+        # "start": {"risc": "ANY", "timerID": 1},
+        # "end": {"risc": "ANY", "timerID": 4},
+        # },
+        # "BRISC FW start -> ANY RISC FW end-op": {
+        # "across": "ops",
+        # "type": "op_first_last",
+        # "start": {"core": "ANY", "risc": "ANY", "timerID": 1},
+        # "end": {"core": "ANY", "risc": "ANY", "timerID": 4},
+        # },
+        # "T0 -> ANY CORE ANY RISC FW end": {
+        # "across": "device",
+        # "type": "session_first_last",
+        # "start": {"core": "ANY", "risc": "ANY", "timerID": 1},
+        # "end": {"core": "ANY", "risc": "ANY", "timerID": 4},
+        # },
     }
 
     riscsData = {

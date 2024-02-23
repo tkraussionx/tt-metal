@@ -165,7 +165,7 @@ void DeviceProfiler::firstTimestamp(uint64_t timestamp)
 }
 
 void DeviceProfiler::dumpResultToFile(
-        uint32_t runID,
+        uint32_t run_id,
         int device_id,
         CoreCoord core,
         int core_flat,
@@ -197,7 +197,7 @@ void DeviceProfiler::dumpResultToFile(
         source_line = stoi(source_line_str);
     }
 
-    tracy::TTDeviceEvent event = tracy::TTDeviceEvent(runID, device_id, core.x, core.y, risc_num, timer_id, timestamp, source_line, source_file, zone_name, zone_phase);
+    tracy::TTDeviceEvent event = tracy::TTDeviceEvent(run_id, device_id, core.x, core.y, risc_num, timer_id, timestamp, source_line, source_file, zone_name, zone_phase);
 
     device_events.push_back(event);
 
@@ -215,16 +215,16 @@ void DeviceProfiler::dumpResultToFile(
         log_file.open(log_path, std::ios_base::app);
     }
 
-    log_file << fmt::format("{:5},{:4},{:3},{:3},{:>7},{:7},{:>25},{:>6},{:15},{:6},{}",
-            runID,
+    log_file << fmt::format("{:5},{:4},{:3},{:3},{:>7},{:7},{:15},{:>25},{:>6},{:6},{}",
+            run_id,
             device_id,
             core.x,
             core.y,
             tracy::riscName[risc_num],
             timer_id,
+            timestamp,
             zone_name,
             magic_enum::enum_name(zone_phase),
-            timestamp,
             source_line,
             source_file
             );
