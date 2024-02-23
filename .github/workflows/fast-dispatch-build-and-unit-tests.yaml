@@ -14,12 +14,12 @@ jobs:
       fail-fast: false
       matrix:
         runner-info: [
-          {arch: grayskull, runs-on: ["grayskull"], fast-dispatch-test-mode: "bert"},
-          {arch: grayskull, runs-on: ["grayskull"], fast-dispatch-test-mode: "falcon"},
+          # E150
+          {arch: grayskull, runs-on: ["grayskull"]},
           # N150
-          {arch: wormhole_b0, runs-on: ["wormhole_b0", "multi-chip-num-pcie-1", "multi-chip-num-chips-1"], fast-dispatch-test-mode: "full"},
+          {arch: wormhole_b0, runs-on: ["wormhole_b0", "multi-chip-num-pcie-1", "multi-chip-num-chips-1"]},
           # N300
-          {arch: wormhole_b0, runs-on: ["wormhole_b0", "multi-chip-num-pcie-1", "multi-chip-num-chips-2"], fast-dispatch-test-mode: "full"},
+          {arch: wormhole_b0, runs-on: ["wormhole_b0", "multi-chip-num-pcie-1", "multi-chip-num-chips-2"]},
         ]
     env:
       TT_METAL_ENV: ${{ vars.TT_METAL_ENV }}
@@ -48,7 +48,12 @@ jobs:
       fail-fast: false
       matrix:
         runner-info: [
+          # E150
           {arch: grayskull, runs-on: ["grayskull"]},
+          # N150
+          {arch: wormhole_b0, runs-on: ["wormhole_b0", "multi-chip-num-pcie-1", "multi-chip-num-chips-1"]},
+          # N300
+          {arch: wormhole_b0, runs-on: ["wormhole_b0", "multi-chip-num-pcie-1", "multi-chip-num-chips-2"]},
         ]
     env:
       TT_METAL_ENV: ${{ vars.TT_METAL_ENV }}
