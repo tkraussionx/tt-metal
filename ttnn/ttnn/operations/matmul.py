@@ -57,9 +57,9 @@ _SUPPORTED_ACTIVATIONS = ["gelu", "relu", "silu"]
 
 
 _ACTIVATION_TO_FUSED_ACTIVATION = {
-    "gelu": (ttnn.ttl.tensor.FusibleActivation.GELU, True),
-    "relu": ttnn.ttl.tensor.FusibleActivation.RELU,
-    "silu": ttnn.ttl.tensor.FusibleActivation.SILU,
+    "gelu": (ttnn.experimental.tensor.FusibleActivation.GELU, True),
+    "relu": ttnn.experimental.tensor.FusibleActivation.RELU,
+    "silu": ttnn.experimental.tensor.FusibleActivation.SILU,
 }
 
 
