@@ -6,7 +6,7 @@ import torch
 import pytest
 from loguru import logger
 
-import tt_lib
+import ttnn
 from models.demos.falcon40b_prefill.reference.hf_modeling_falcon import FalconForCausalLM, FalconConfig
 from models.demos.falcon40b_prefill.tt.falcon_mlp import TtFalconMLP
 from models.demos.falcon40b_prefill.tt.model_config import (
@@ -81,14 +81,18 @@ def run_test_FalconMLP_inference(
         emulate_per_device_fracture,
     )
 
-    tt_mlp_input_host = torch2tt_tensor(mlp_input, None, tt_dtype=model_config["LN_MLP_OUTPUT_DTYPE"])
+    tt_mlp_input_host = ttnn.from_torch(mlp_input, layout=ttnn.TILE_LAYOUT, dtype=model_config["LN_MLP_OUTPUT_DTYPE"])
     tt_mlp_input = []
     for device in devices:
-        memcfg = memcfg_1d_width_sharded_from_tensor_shape(tt_mlp_input_host.shape())
-        tt_mlp_input.append(tt_mlp_input_host.to(device, memcfg))
+        # mem_cfg = ttnn.L1_MEMORY_CONFIG
+        mem_cfg = ttnn.DRAM_MEMORY_CONFIG
+        tt_mlp_input.append(ttnn.to_device(tt_mlp_input_host, device=device, memory_config=mem_cfg))
 
     tt_out = tt_FalconMLP_model(tt_mlp_input)
-    tt_out = torch.concat([tt2torch_tensor(tt_o) for tt_o in tt_out], -1)
+    if len(tt_out) > 1:
+        tt_out = torch.concat([ttnn.to_torch(tt_o) for tt_o in tt_out], -1)
+    else:
+        tt_out = ttnn.to_torch(tt_out[0])  # all in one matmuls
 
     # check outputs ----------------------------------------------------------------------
     if emulate_per_device_fracture:
@@ -115,7 +119,7 @@ def run_test_FalconMLP_inference(
         #     1,
         #     False,
         # ),
-        ("tiiuae/falcon-40b-instruct", "prefill", 1, 256, False),
+        ("tiiuae/falcon-40b-instruct", "prefill", 1, 2048, False),
     ],
 )
 @pytest.mark.parametrize(

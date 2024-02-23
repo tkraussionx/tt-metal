@@ -5,6 +5,7 @@
 import torch
 from torch import nn
 import tt_lib
+import ttnn
 
 from typing import List
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor
@@ -40,68 +41,100 @@ class TtFalconMLP:
         dense_4h_to_h_str = f"{layer_name}.mlp.dense_4h_to_h.weight"
 
         self.num_devices_to_emulate = len(devices) if not emulate_per_device_fracture else 1
-        self.original_num_devices = num_devices = self.model_config["NUM_DEVICES"]
+        self.original_num_devices = num_devices = (
+            len(devices) if not emulate_per_device_fracture else self.model_config["NUM_DEVICES"]
+        )
         self.dense_h_to_4h_weights = []
         self.dense_4h_to_h_weights = []
+
         for i in range(self.num_devices_to_emulate):
             dense_h_to_4h_path = (
                 tt_cache_path
-                / f"{dense_h_to_4h_str}_{i}_{num_devices}_{self.model_config['DENSE_H_TO_4H_MM_WEIGHTS_DTYPE'].name}.bin"
+                / f"{dense_h_to_4h_str}_{i}_{num_devices}_{self.model_config['DENSE_H_TO_4H_MM_WEIGHTS_DTYPE'].name}.pt"
             )
             if (dense_h_to_4h_path).exists():
-                self.dense_h_to_4h_weights.append(
-                    tt_lib.tensor.load_tensor(str(dense_h_to_4h_path)).to(
-                        devices[i], self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"]
-                    )
-                )
+                shard = torch.load(str(dense_h_to_4h_path))
+                print("loaded shard with shape", shard.shape)
             else:
-                dense_h_to_4h_weights_host = torch2tt_tensor(
-                    torch.transpose(
-                        torch.chunk(self.state_dict[dense_h_to_4h_str], num_devices)[i],
-                        -2,
-                        -1,
-                    ),
-                    None,
-                    tt_memory_config=self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"],
-                    tt_dtype=self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_DTYPE"],
+                shard = torch.transpose(
+                    torch.chunk(self.state_dict[dense_h_to_4h_str], num_devices)[i],
+                    -2,
+                    -1,
                 )
-                self.dense_h_to_4h_weights.append(
-                    dense_h_to_4h_weights_host.to(devices[i], self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_MEMCFG"])
-                )
-                tt_lib.tensor.dump_tensor(
-                    str(dense_h_to_4h_path),
-                    dense_h_to_4h_weights_host,
-                )
+                torch.save(shard, str(dense_h_to_4h_path))
+                print("chunked up and saved shard with shape", shard.shape)
+            # what we want: dtype=self.model_config["DENSE_H_TO_4H_MM_WEIGHTS_DTYPE"]
+            tt_shard = ttnn.from_torch(shard, layout=ttnn.TILE_LAYOUT, device=devices[i], dtype=ttnn.bfloat8_b)
+            self.dense_h_to_4h_weights.append(tt_shard)
+
             dense_4h_to_h_path = (
                 tt_cache_path
-                / f"{dense_4h_to_h_str}_{i}_{num_devices}_{self.model_config['DENSE_4H_TO_H_MM_WEIGHTS_DTYPE'].name}.bin"
+                / f"{dense_4h_to_h_str}_{i}_{num_devices}_{self.model_config['DENSE_4H_TO_H_MM_WEIGHTS_DTYPE'].name}.pt"
             )
             if (dense_4h_to_h_path).exists():
-                self.dense_4h_to_h_weights.append(
-                    tt_lib.tensor.load_tensor(str(dense_4h_to_h_path)).to(
-                        devices[i], self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"]
-                    )
-                )
+                shard = torch.load(str(dense_4h_to_h_path))
             else:
-                dense_4h_to_h_weights_host = torch2tt_tensor(
-                    torch.transpose(
-                        torch.chunk(self.state_dict[dense_4h_to_h_str], num_devices)[i],
-                        -2,
-                        -1,
-                    ),
-                    None,
-                    tt_memory_config=self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"],
-                    tt_dtype=self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_DTYPE"],
+                shard = torch.transpose(
+                    torch.chunk(self.state_dict[dense_4h_to_h_str], num_devices)[i],
+                    -2,
+                    -1,
                 )
-                self.dense_4h_to_h_weights.append(
-                    dense_4h_to_h_weights_host.to(devices[i], self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_MEMCFG"])
-                )
-                tt_lib.tensor.dump_tensor(
-                    str(dense_4h_to_h_path),
-                    dense_4h_to_h_weights_host,
-                )
+                torch.save(shard, str(dense_4h_to_h_path))
+            # self.model_config["DENSE_4H_TO_H_MM_WEIGHTS_DTYPE"]
+            tt_shard = ttnn.from_torch(shard, layout=ttnn.TILE_LAYOUT, device=devices[i], dtype=ttnn.bfloat8_b)
+            self.dense_4h_to_h_weights.append(tt_shard)
 
-    def __call__(self, x: List[tt_lib.tensor.Tensor]) -> List[tt_lib.tensor.Tensor]:
+    def __call__(self, x: List[ttnn.Tensor]) -> List[ttnn.Tensor]:
+        return self.fwd_linear(x)
+
+    def fwd_linear(self, x: List[ttnn.Tensor]) -> List[ttnn.Tensor]:
+        hidden_states = []
+        num_shards = len(x)
+
+        assert num_shards == self.num_devices_to_emulate
+
+        for i in range(num_shards):
+            hidden_states.append(
+                ttnn.linear(
+                    x[i],
+                    self.dense_h_to_4h_weights[i],
+                    activation="gelu",
+                    memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                    # memory_config=ttnn.L1_MEMORY_CONFIG,
+                    dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
+                    core_grid=ttnn.CoreGrid(8, 8),
+                )
+            )
+            ttnn.deallocate(x[i])
+
+        if (
+            self.emulate_per_device_fracture
+        ):  # we'd be concatenating/gathering all fractures here; need to fake this for single fracture emulation -> this is to emulate perf but will produce bad output!
+            hidden_states = hidden_states * self.original_num_devices
+        concat_hidden_states = ttnn.concat(hidden_states, dim=3)
+        for i in range(num_shards):
+            ttnn.deallocate(hidden_states[i])
+
+        mlp_output = []
+        for i in range(num_shards):
+            # FF2
+            mlp_output.append(
+                ttnn.linear(
+                    concat_hidden_states,
+                    self.dense_4h_to_h_weights[i],
+                    memory_config=ttnn.ttnn.DRAM_MEMORY_CONFIG,
+                    # memory_config=ttnn.L1_MEMORY_CONFIG,
+                    dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
+                    core_grid=ttnn.CoreGrid(8, 8),
+                )
+            )
+
+        ttnn.deallocate(concat_hidden_states)
+
+        # return TT Tensor
+        return mlp_output
+
+    def __call__archive(self, x: List[tt_lib.tensor.Tensor]) -> List[tt_lib.tensor.Tensor]:
         # print("x")
         # x_print = x[0].cpu()
         # print(tt2torch_tensor(x_print))
@@ -121,36 +154,49 @@ class TtFalconMLP:
         same_device = all(self.devices[i] == self.devices[i + 1] for i in range(num_shards - 1))
 
         for i in range(num_shards):
-            # # FUNCTIONAL: comment in
-            # x[i] = tt_lib.tensor.sharded_to_interleaved( # FUNCTIONAL
-            #     x[i],
-            #     output_mem_config=self.model_config["DEFAULT_MEMCFG"]
-            # )
-            mm_pgm_config = matmul_1d_config_from_tensor_shapes(
-                in0_shape=x[i].shape(),
-                in1_shape=self.dense_h_to_4h_weights[i].shape(),
-                act=[tt_lib.tensor.FusibleActivation.GELU, True],
+            # FUNCTIONAL: comment in
+            x[i] = tt_lib.tensor.sharded_to_interleaved(  # FUNCTIONAL
+                x[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
             )
-            print(mm_pgm_config)
+
+            # FF1
+
+            # mm_pgm_config = matmul_1d_config_from_tensor_shapes(
+            #     in0_shape=x[i].shape(),
+            #     in1_shape=self.dense_h_to_4h_weights[i].shape(),
+            #     act=[tt_lib.tensor.FusibleActivation.GELU, True],
+            # )
+            # print(mm_pgm_config)
+            # hidden_states.append(
+            #     tt_lib.operations.primary.matmul_1d(
+            #         x[i],
+            #         self.dense_h_to_4h_weights[i],
+            #         # program_config=self.model_config["DENSE_H_TO_4H_MM_PROGCFG"],
+            #         program_config=mm_pgm_config,
+            #         # output_mem_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
+            #         output_mem_config=memcfg_1d_width_sharded_from_tensor_shape(x[i].shape()),
+            #         # output_mem_config=self.model_config["DEFAULT_MEMCFG"],  # FUNCTIONAL
+            #         output_dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
+            #     )
+            # )
+
+            # DEBUG: use matmul instead of matmul_1d
             hidden_states.append(
-                tt_lib.operations.primary.matmul_1d(
+                tt_lib.tensor.falcon_dense_h_to_4h_matmul(
                     x[i],
                     self.dense_h_to_4h_weights[i],
-                    # program_config=self.model_config["DENSE_H_TO_4H_MM_PROGCFG"],
-                    program_config=mm_pgm_config,
-                    # output_mem_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
-                    output_mem_config=memcfg_1d_width_sharded_from_tensor_shape(x[i].shape()),
-                    # output_mem_config=self.model_config["DEFAULT_MEMCFG"],  # FUNCTIONAL
+                    fused_activation=[tt_lib.tensor.FusibleActivation.GELU, True],
+                    output_mem_config=self.model_config["DEFAULT_MEMCFG"],
                     output_dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
                 )
             )
             x[i].deallocate(True)
 
-        # FUNCTIONAL: comment out
-        for i in range(len(hidden_states)):
-            hidden_states[i] = tt_lib.tensor.sharded_to_interleaved(
-                hidden_states[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
-            )
+        # # FUNCTIONAL: comment out
+        # for i in range(len(hidden_states)):
+        #     hidden_states[i] = tt_lib.tensor.sharded_to_interleaved(
+        #         hidden_states[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
+        #     )
 
         if same_device:
             if (
@@ -162,28 +208,40 @@ class TtFalconMLP:
             for i in range(num_shards):
                 hidden_states[i].deallocate(True)
 
-            # FUNCTIONAL: comment out
-            concat_hidden_states = tt_lib.tensor.interleaved_to_sharded(
-                concat_hidden_states,
-                # sharded_mem_config=self.model_config["MLP_ALL_GATHER_OUTPUT_MEMCFG"],
-                sharded_mem_config=memcfg_1d_width_sharded_from_tensor_shape(concat_hidden_states.shape()),
-            )
+            # # FUNCTIONAL: comment out
+            # concat_hidden_states = tt_lib.tensor.interleaved_to_sharded(
+            #     concat_hidden_states,
+            #     # sharded_mem_config=self.model_config["MLP_ALL_GATHER_OUTPUT_MEMCFG"],
+            #     sharded_mem_config=memcfg_1d_width_sharded_from_tensor_shape(concat_hidden_states.shape()),
+            # )
 
             mlp_output = []
             for i in range(num_shards):
-                mm_pgm_config = matmul_1d_config_from_tensor_shapes(
-                    in0_shape=concat_hidden_states.shape(), in1_shape=self.dense_4h_to_h_weights[i].shape()
-                )
-                print(mm_pgm_config)
+                # FF2
+
+                # DEBUG: use matmul instead of matmul_1d
+                # mm_pgm_config = matmul_1d_config_from_tensor_shapes(
+                #     in0_shape=concat_hidden_states.shape(), in1_shape=self.dense_4h_to_h_weights[i].shape()
+                # )
+                # print(mm_pgm_config)
+                # mlp_output.append(
+                #     tt_lib.operations.primary.matmul_1d(
+                #         concat_hidden_states,
+                #         self.dense_4h_to_h_weights[i],
+                #         program_config=mm_pgm_config,
+                #         # program_config=self.model_config["DENSE_4H_TO_H_MM_PROGCFG"],
+                #         # output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
+                #         output_mem_config=memcfg_1d_width_sharded_from_tensor_shape(concat_hidden_states.shape()),
+                #         # output_mem_config=self.model_config["DEFAULT_MEMCFG"],  # FUNCTIONAL
+                #         output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
+                #     )
+                # )
+
                 mlp_output.append(
-                    tt_lib.operations.primary.matmul_1d(
+                    tt_lib.tensor.falcon_dense_4h_to_h_matmul(
                         concat_hidden_states,
                         self.dense_4h_to_h_weights[i],
-                        program_config=mm_pgm_config,
-                        # program_config=self.model_config["DENSE_4H_TO_H_MM_PROGCFG"],
-                        # output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
-                        output_mem_config=memcfg_1d_width_sharded_from_tensor_shape(concat_hidden_states.shape()),
-                        # output_mem_config=self.model_config["DEFAULT_MEMCFG"],  # FUNCTIONAL
+                        output_mem_config=self.model_config["DEFAULT_MEMCFG"],
                         output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
                     )
                 )
@@ -214,6 +272,72 @@ class TtFalconMLP:
                     )
                 )
                 hidden_states.deallocate(True)
+
+        # return TT Tensor
+        return mlp_output
+
+    def fwd_single_dev_sharded_matmul_1d(self, x: List[tt_lib.tensor.Tensor]) -> List[tt_lib.tensor.Tensor]:
+        hidden_states = []
+        num_shards = len(x)
+
+        assert num_shards == self.num_devices_to_emulate
+
+        for i in range(num_shards):
+            # FF1
+            mm_pgm_config = matmul_1d_config_from_tensor_shapes(
+                in0_shape=x[i].shape(),
+                in1_shape=self.dense_h_to_4h_weights[i].shape(),
+                act=[tt_lib.tensor.FusibleActivation.GELU, True],
+            )
+            print(mm_pgm_config)
+            hidden_states.append(
+                tt_lib.operations.primary.matmul_1d(
+                    x[i],
+                    self.dense_h_to_4h_weights[i],
+                    program_config=mm_pgm_config,
+                    output_mem_config=memcfg_1d_width_sharded_from_tensor_shape(x[i].shape()),
+                    output_dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
+                )
+            )
+
+            x[i].deallocate(True)
+
+        for i in range(len(hidden_states)):
+            hidden_states[i] = tt_lib.tensor.sharded_to_interleaved(
+                hidden_states[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
+            )
+
+        if (
+            self.emulate_per_device_fracture
+        ):  # we'd be concatenating/gathering all fractures here; need to fake this for single fracture emulation
+            hidden_states = hidden_states * self.original_num_devices
+        concat_hidden_states = tt_lib.tensor.concat(hidden_states, 3)
+        print(f"concat_hidden_states shape: {concat_hidden_states.shape()}")
+        for i in range(num_shards):
+            hidden_states[i].deallocate(True)
+
+        concat_hidden_states = tt_lib.tensor.interleaved_to_sharded(
+            concat_hidden_states,
+            sharded_mem_config=memcfg_1d_width_sharded_from_tensor_shape(concat_hidden_states.shape()),
+        )
+
+        mlp_output = []
+        for i in range(num_shards):
+            # FF2
+            mm_pgm_config = matmul_1d_config_from_tensor_shapes(
+                in0_shape=concat_hidden_states.shape(), in1_shape=self.dense_4h_to_h_weights[i].shape()
+            )
+            mlp_output.append(
+                tt_lib.operations.primary.matmul_1d(
+                    concat_hidden_states,
+                    self.dense_4h_to_h_weights[i],
+                    program_config=mm_pgm_config,
+                    output_mem_config=memcfg_1d_width_sharded_from_tensor_shape(concat_hidden_states.shape()),
+                    output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
+                )
+            )
+
+        concat_hidden_states.deallocate(True)
 
         # return TT Tensor
         return mlp_output

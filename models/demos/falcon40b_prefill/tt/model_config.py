@@ -298,27 +298,27 @@ def get_model_config(model_config_str):
             out_data_format=model_config["LN_MLP_OUTPUT_DTYPE"],
             inplace=True,
         )
-        # model_config["LN_MLP_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
-        #     ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
-        #     ttl.tensor.BufferType.L1,
-        #     ttl.tensor.ShardSpec(
-        #         ttl.tensor.CoreRangeSet(
-        #             {
-        #                 ttl.tensor.CoreRange(
-        #                     ttl.tensor.CoreCoord(0, 0),
-        #                     ttl.tensor.CoreCoord(7, 3),
-        #                 ),
-        #             }
-        #         ),
-        #         [
-        #             32,
-        #             # 64,
-        #             256,
-        #         ],
-        #         ttl.tensor.ShardOrientation.ROW_MAJOR,
-        #         False,
-        #     ),
-        # )
+        model_config["LN_MLP_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
+            ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+            ttl.tensor.BufferType.L1,
+            ttl.tensor.ShardSpec(
+                ttl.tensor.CoreRangeSet(
+                    {
+                        ttl.tensor.CoreRange(
+                            ttl.tensor.CoreCoord(0, 0),
+                            ttl.tensor.CoreCoord(7, 3),
+                        ),
+                    }
+                ),
+                [
+                    32,
+                    # 64,
+                    256,
+                ],
+                ttl.tensor.ShardOrientation.ROW_MAJOR,
+                False,
+            ),
+        )
         # ATTN
         model_config["FUSED_QKV_MM_INPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
             ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
@@ -457,55 +457,55 @@ def get_model_config(model_config_str):
             fused_activation=None,
             mcast_in0=True,
         )
-        # # MLP
+        # MLP
         model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"] = WIDTH_SHARDED_MEMCFG
-        # model_config["DENSE_H_TO_4H_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-        #     compute_with_storage_grid_size=(8, 4), # use 8 * 4 = 32 cores
-        #     # compute_with_storage_grid_size=(8, 8),
-        #     in0_block_w=8, # 1 in block ?
-        #     out_subblock_h=1, # does this mean we have 1 sub-block per block/Mt?
-        #     out_subblock_w=8, # does this mean we have 1 sub-block per block/Kt since it's the same as per_core_N?
-        #     per_core_M=1, # in tiles; for b/seq-len = 32, this means every core processes all rows/tokens
-        #     per_core_N=8, # in tiles; for H = 8192 = 256 Tiles, this means every core processes 8 tiles of columns
-        #     fuse_batch=True,
-        #     fused_activation=[ttl.tensor.FusibleActivation.GELU, True],
-        #     mcast_in0=True,
-        #     # per_core_M * out_subblock_h = num tiles of out dim -2
-        #     # per_core_N * out_subblock_w = num tiles of out dim -1
-        # )
-        # model_config["MLP_ALL_GATHER_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
-        #     ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
-        #     ttl.tensor.BufferType.L1,
-        #     ttl.tensor.ShardSpec(
-        #         ttl.tensor.CoreRangeSet(
-        #             {
-        #                 ttl.tensor.CoreRange(
-        #                     ttl.tensor.CoreCoord(0, 0),
-        #                     ttl.tensor.CoreCoord(7, 3),
-        #                 ),
-        #             }
-        #         ),
-        #         [
-        #             32,
-        #             1024,
-        #         ],
-        #         ttl.tensor.ShardOrientation.ROW_MAJOR,
-        #         False,
-        #     ),
-        # )
+        model_config["DENSE_H_TO_4H_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+            compute_with_storage_grid_size=(8, 4),  # use 8 * 4 = 32 cores
+            # compute_with_storage_grid_size=(8, 8),
+            in0_block_w=8,  # 1 in block ?
+            out_subblock_h=1,  # does this mean we have 1 sub-block per block/Mt?
+            out_subblock_w=8,  # does this mean we have 1 sub-block per block/Kt since it's the same as per_core_N?
+            per_core_M=1,  # in tiles; for b/seq-len = 32, this means every core processes all rows/tokens
+            per_core_N=8,  # in tiles; for H = 8192 = 256 Tiles, this means every core processes 8 tiles of columns
+            fuse_batch=True,
+            fused_activation=[ttl.tensor.FusibleActivation.GELU, True],
+            mcast_in0=True,
+            # per_core_M * out_subblock_h = num tiles of out dim -2
+            # per_core_N * out_subblock_w = num tiles of out dim -1
+        )
+        model_config["MLP_ALL_GATHER_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
+            ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+            ttl.tensor.BufferType.L1,
+            ttl.tensor.ShardSpec(
+                ttl.tensor.CoreRangeSet(
+                    {
+                        ttl.tensor.CoreRange(
+                            ttl.tensor.CoreCoord(0, 0),
+                            ttl.tensor.CoreCoord(7, 3),
+                        ),
+                    }
+                ),
+                [
+                    32,
+                    1024,
+                ],
+                ttl.tensor.ShardOrientation.ROW_MAJOR,
+                False,
+            ),
+        )
         model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"] = WIDTH_SHARDED_MEMCFG
-        # model_config["DENSE_4H_TO_H_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-        #     compute_with_storage_grid_size=(8, 4),
-        #     # compute_with_storage_grid_size=(8, 8),
-        #     in0_block_w=32,
-        #     out_subblock_h=1,
-        #     out_subblock_w=2,
-        #     per_core_M=1,
-        #     per_core_N=2,
-        #     fuse_batch=True,
-        #     fused_activation=None,
-        #     mcast_in0=True,
-        # )
+        model_config["DENSE_4H_TO_H_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+            compute_with_storage_grid_size=(8, 4),
+            # compute_with_storage_grid_size=(8, 8),
+            in0_block_w=32,
+            out_subblock_h=1,
+            out_subblock_w=2,
+            per_core_M=1,
+            per_core_N=2,
+            fuse_batch=True,
+            fused_activation=None,
+            mcast_in0=True,
+        )
 
         model_config["FINAL_ALL_GATHER_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
             ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
