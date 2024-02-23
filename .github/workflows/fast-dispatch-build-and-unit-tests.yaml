@@ -7,7 +7,7 @@ on:
   workflow_call:
 
 jobs:
-  build-and-unit-tests-fast-dispatch-unit-and-sweep-tests:
+  unit-and-sweep:
     strategy:
       # Do not fail-fast because we need to ensure all tests go to completion
       # so we try not to get hanging machines
@@ -41,7 +41,7 @@ jobs:
           source build/python_env/bin/activate
           ./tests/scripts/run_python_unit_tests.sh
 
-  build-and-unit-tests-fast-dispatch-model-and-cpp-tests:
+  model-and-cpp:
     strategy:
       # Do not fail-fast because we need to ensure all tests go to completion
       # so we try not to get hanging machines
