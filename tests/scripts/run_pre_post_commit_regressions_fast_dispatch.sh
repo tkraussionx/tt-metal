@@ -28,8 +28,5 @@ env python tests/scripts/run_tt_eager.py --dispatch-mode fast
 
 # build docs
 echo "Checking docs build..."
-
-cd $TT_METAL_HOME/docs
-python -m pip install -r requirements-docs.txt
-make clean
-make html
+# Build docs
+./tests/scripts/run_build_docs.sh
