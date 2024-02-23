@@ -20,11 +20,8 @@ fi
 cd $TT_METAL_HOME
 export PYTHONPATH=$TT_METAL_HOME
 
-# calls this
-./tests/scripts/run_python_unit_tests.sh
+./tests/scripts/run_python_api_unit_tests.sh
 
-# calls everything else
-./tests/scripts/run_python_model_tests.sh
 env python tests/scripts/run_tt_metal.py --dispatch-mode fast
 env python tests/scripts/run_tt_eager.py --dispatch-mode fast
 ./build/test/tt_metal/unit_tests_fast_dispatch
