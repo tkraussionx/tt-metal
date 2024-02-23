@@ -77,7 +77,7 @@ jobs:
         run: |
           source build/python_env/bin/activate
           cd $TT_METAL_HOME
-          echo "PYTHONPATH=${TT_METAL_HOME}
+          export PYTHONPATH=$TT_METAL_HOME
           env pytest $(find $TT_METAL_HOME/tests/tt_eager/python_api_testing/sweep_tests/pytests/ -name 'test_*.py' -a ! -name 'test_sweep_conv_with_address_map.py' -a ! -name 'test_move.py') -vvv
           env pytest $TT_METAL_HOME/tests/tt_eager/python_api_testing/sweep_tests/pytests/tt_dnn/test_move.py -k input_L1 -vvv
       - name: Model tests
@@ -85,21 +85,27 @@ jobs:
         run: |
           source build/python_env/bin/activate
           cd $TT_METAL_HOME
-          echo "PYTHONPATH=${TT_METAL_HOME}"
+          export PYTHONPATH=$TT_METAL_HOME
           ./tests/scripts/run_python_model_tests.sh
       - name: tt-metal and tt-eager tests
         timeout-minutes: 120
         run: |
           source build/python_env/bin/activate
           cd $TT_METAL_HOME
-          echo "PYTHONPATH=${TT_METAL_HOME}"
+          export PYTHONPATH=$TT_METAL_HOME
           env python tests/scripts/run_tt_metal.py --dispatch-mode fast
           env python tests/scripts/run_tt_eager.py --dispatch-mode fast
-          ./build/test/tt_metal/unit_tests_fast_dispatch
-      - name: Run pre/post regression tests
+      - name: Run pre/post C++ regression tests
         timeout-minutes: 120
         run: |
           source build/python_env/bin/activate
           cd $TT_METAL_HOME
-          echo "PYTHONPATH=${TT_METAL_HOME}"
+          export PYTHONPATH=$TT_METAL_HOME
+          ./build/test/tt_metal/unit_tests_fast_dispatch
+      - name: Build Docs
+        timeout-minutes: 120
+        run: |
+          source build/python_env/bin/activate
+          cd $TT_METAL_HOME
+          export PYTHONPATH=$TT_METAL_HOME
           ./build/test/tt_metal/unit_tests_fast_dispatch
