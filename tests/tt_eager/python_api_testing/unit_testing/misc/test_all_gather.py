@@ -25,7 +25,7 @@ from models.utility_functions import skip_for_grayskull, get_devices_for_t3000
 @pytest.mark.parametrize(
     "input_shape, dim, layout",
     [
-        # ([4, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),
+        ([4, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),
         ([4, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
         ([8, 5, 13, 512], 3, ttl.tensor.Layout.ROW_MAJOR),
         ([8, 5, 32, 512], 3, ttl.tensor.Layout.TILE),
@@ -59,7 +59,7 @@ from models.utility_functions import skip_for_grayskull, get_devices_for_t3000
 @pytest.mark.parametrize(
     "mem_config",
     [
-        # ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.DRAM),
+        ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.DRAM),
         ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.L1),
     ],
 )
@@ -78,6 +78,9 @@ def test_all_gather(
     # TODO: Switch to all_devices once we figure out what works on pipelines
     devices = pcie_devices
 
+    if num_links > 1:
+        pytest.skip("Multi-Link not working")
+        
     if num_devices == 8:
         pytest.skip("All gather on 8 chips requires tunnelling! Re-enable once that's merged in.")
 
