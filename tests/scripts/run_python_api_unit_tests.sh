@@ -7,6 +7,8 @@ if [[ -z "$TT_METAL_HOME" ]]; then
   exit 1
 fi
 
+# Execute TT Eager unit and sweep tests here
 ./tests/scripts/run_python_unit_tests.sh
 
+# Execute python model tests here
 ./tests/scripts/run_python_model_tests.sh
