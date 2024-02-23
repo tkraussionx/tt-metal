@@ -28,5 +28,4 @@ env python tests/scripts/run_tt_eager.py --dispatch-mode fast
 
 # build docs
 echo "Checking docs build..."
-# Build docs
 ./tests/scripts/run_build_docs.sh
