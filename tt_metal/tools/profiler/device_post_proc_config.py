@@ -7,85 +7,64 @@ from tt_metal.tools.profiler.common import PROFILER_LOGS_DIR, PROFILER_DEVICE_SI
 
 
 class default_setup(metaclass=MergeMetaclass):
+    riscs = [
+        "BRISC",
+        "NCRISC",
+        "TRISC_0",
+        "TRISC_1",
+        "TRISC_2",
+        "ERISC",
+    ]
+
     timerAnalysis = {
-        # "T0 -> BRISC FW start": {
-        # "across": "core",
-        # "type": "adjacent",
-        # "start": {"risc": "BRISC", "timerID": 0},
-        # "end": {"risc": "BRISC", "timerID": 1},
-        # },
-        # "TRISC0 kernel start -> TRISC0 kernel end": {
-        # "across": "core",
-        # "type": "adjacent",
-        # "start": {"risc": "TRISC_0", "timerID": 2},
-        # "end": {"risc": "TRISC_0", "timerID": 3},
-        # },
-        # "TRISC1 kernel start -> TRISC1 kernel end": {
-        # "across": "core",
-        # "type": "adjacent",
-        # "start": {"risc": "TRISC_1", "timerID": 2},
-        # "end": {"risc": "TRISC_1", "timerID": 3},
-        # },
-        # "TRISC2 kernel start -> TRISC2 kernel end": {
-        # "across": "core",
-        # "type": "adjacent",
-        # "start": {"risc": "TRISC_2", "timerID": 2},
-        # "end": {"risc": "TRISC_2", "timerID": 3},
-        # },
-        # "BRISC kernel start -> BRISC kernel end": {
-        # "across": "core",
-        # "type": "adjacent",
-        # "start": {"risc": "BRISC", "timerID": 2},
-        # "end": {"risc": "BRISC", "timerID": 3},
-        # },
-        "NCRISC kernel start -> NCRISC kernel end": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"risc": "NCRISC", "zoneName": "NCRISC-FW"},
-            "end": {"risc": "NCRISC", "zoneName": "NCRISC-FW"},
-        },
         "FW_START->FW_END": {
             "across": "ops",
             "type": "op_first_last",
-            "start": {"core": "ANY", "risc": "ANY", "zoneName": "BRISC-FW"},
-            "end": {"core": "ANY", "risc": "ANY", "zoneName": "BRISC-FW"},
+            "start": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-FW" for risc in riscs]},
+            "end": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-FW" for risc in riscs]},
         },
-        # "ANY RISC FW start -> ANY RISC FW end": {
-        # "across": "core",
-        # "type": "launch_first_last",
-        # "start": {"risc": "ANY", "timerID": 1},
-        # "end": {"risc": "ANY", "timerID": 4},
-        # },
-        # "ANY RISC FW end -> BRISC FW start": {
-        # "across": "core",
-        # "type": "adjacent",
-        # "start": {"risc": "ANY", "timerID": 4},
-        # "end": {"risc": "BRISC", "timerID": 1},
-        # },
-        # "T0 -> ANY RISC FW end": {
-        # "across": "core",
-        # "type": "session_first_last",
-        # "start": {"risc": "BRISC", "timerID": 0},
-        # "end": {"risc": "ANY", "timerID": 4},
-        # },
-        # "BRISC FW start -> ANY RISC FW end-model": {
-        # "across": "core",
-        # "type": "session_first_last",
-        # "start": {"risc": "ANY", "timerID": 1},
-        # "end": {"risc": "ANY", "timerID": 4},
-        # },
-        # "BRISC FW start -> ANY RISC FW end-op": {
-        # "across": "ops",
-        # "type": "op_first_last",
-        # "start": {"core": "ANY", "risc": "ANY", "timerID": 1},
-        # "end": {"core": "ANY", "risc": "ANY", "timerID": 4},
-        # },
-        # "T0 -> ANY CORE ANY RISC FW end": {
-        # "across": "device",
-        # "type": "session_first_last",
-        # "start": {"core": "ANY", "risc": "ANY", "timerID": 1},
-        # "end": {"core": "ANY", "risc": "ANY", "timerID": 4},
-        # },
+        "KERNEL_START->KERNEL_END": {
+            "across": "ops",
+            "type": "op_first_last",
+            "start": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-KERNEL" for risc in riscs]},
+            "end": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-KERNEL" for risc in riscs]},
+        },
+        "BR_KERNEL_START->BR_KERNEL_END": {
+            "across": "ops",
+            "type": "op_first_last",
+            "start": {"core": "ANY", "risc": "BRISC", "zoneName": "BRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "BRISC", "zoneName": "BRISC-KERNEL"},
+        },
+        "NC_KERNEL_START->NC_KERNEL_END": {
+            "across": "ops",
+            "type": "op_first_last",
+            "start": {"core": "ANY", "risc": "NCRISC", "zoneName": "NCRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "NCRISC", "zoneName": "NCRISC-KERNEL"},
+        },
+        "T0_KERNEL_START->T0_KERNEL_END": {
+            "across": "ops",
+            "type": "op_first_last",
+            "start": {"core": "ANY", "risc": "TRISC_0", "zoneName": "TRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "TRISC_0", "zoneName": "TRISC-KERNEL"},
+        },
+        "T1_KERNEL_START->T1_KERNEL_END": {
+            "across": "ops",
+            "type": "op_first_last",
+            "start": {"core": "ANY", "risc": "TRISC_1", "zoneName": "TRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "TRISC_1", "zoneName": "TRISC-KERNEL"},
+        },
+        "T2_KERNEL_START->T2_KERNEL_END": {
+            "across": "ops",
+            "type": "op_first_last",
+            "start": {"core": "ANY", "risc": "TRISC_2", "zoneName": "TRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "TRISC_2", "zoneName": "TRISC-KERNEL"},
+        },
+        "ER_KERNEL_START->ER_KERNEL_END": {
+            "across": "ops",
+            "type": "op_first_last",
+            "start": {"core": "ANY", "risc": "ERISC", "zoneName": "ERISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "ERISC", "zoneName": "ERISC-KERNEL"},
+        },
     }
 
     riscsData = {
@@ -96,15 +75,6 @@ class default_setup(metaclass=MergeMetaclass):
         "TRISC_2": {"color": "light:gray"},
         "TENSIX": {"color": "light:b"},
     }
-
-    riscs = [
-        "BRISC",
-        "NCRISC",
-        "TRISC_0",
-        "TRISC_1",
-        "TRISC_2",
-        # "TENSIX",
-    ]
 
     timerIDLabels = [(0, "Start"), (1, "Firmware Start"), (2, "Kernel start"), (3, "Kernel End"), (4, "Firmware End")]
 

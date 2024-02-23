@@ -364,11 +364,11 @@ void DeviceProfiler::pushTracyDeviceResults()
 
         if (event.zone_phase == tracy::TTDeviceEventPhase::begin)
         {
-            device_tracy_contexts[device_core]->PushStartZone(event);
+            TracyTTPushStartZone(device_tracy_contexts[device_core], event);
         }
         else if (event.zone_phase == tracy::TTDeviceEventPhase::end)
         {
-            device_tracy_contexts[device_core]->PushEndZone(event);
+            TracyTTPushEndZone(device_tracy_contexts[device_core], event);
         }
 
     }

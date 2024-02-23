@@ -445,16 +445,42 @@ def determine_conditions(timerID, metaData, analysis):
     currRisc = analysis["end"]["risc"]
     currEnd = (timerID["zoneName"],) + translate_metaData(metaData, currCore, currRisc)
 
-    desStart = (
-        analysis["start"]["zoneName"],
-        analysis["start"]["core"] if "core" in analysis["start"].keys() else None,
-        analysis["start"]["risc"],
-    )
-    desEnd = (
-        analysis["end"]["zoneName"],
-        analysis["end"]["core"] if "core" in analysis["end"].keys() else None,
-        analysis["end"]["risc"],
-    )
+    if type(analysis["start"]["zoneName"]) == list:
+        desStart = [
+            (
+                zoneName,
+                analysis["start"]["core"] if "core" in analysis["start"].keys() else None,
+                analysis["start"]["risc"],
+            )
+            for zoneName in analysis["start"]["zoneName"]
+        ]
+    else:
+        desStart = [
+            (
+                analysis["start"]["zoneName"],
+                analysis["start"]["core"] if "core" in analysis["start"].keys() else None,
+                analysis["start"]["risc"],
+            )
+        ]
+
+    if type(analysis["end"]["zoneName"]) == list:
+        desEnd = [
+            (
+                zoneName,
+                analysis["end"]["core"] if "core" in analysis["end"].keys() else None,
+                analysis["end"]["risc"],
+            )
+            for zoneName in analysis["end"]["zoneName"]
+        ]
+    else:
+        desEnd = [
+            (
+                analysis["end"]["zoneName"],
+                analysis["end"]["core"] if "core" in analysis["end"].keys() else None,
+                analysis["end"]["risc"],
+            )
+        ]
+
     return currStart, currEnd, desStart, desEnd
 
 
@@ -464,7 +490,7 @@ def first_last_analysis(timeseries, analysis):
     for index, (timerID, timestamp, *metaData) in enumerate(timeseries):
         currStart, currEnd, desStart, desEnd = determine_conditions(timerID, metaData, analysis)
         if not startFound:
-            if currStart == desStart:
+            if currStart in desStart:
                 startFound = (index, timerID, timestamp)
                 break
 
@@ -473,7 +499,7 @@ def first_last_analysis(timeseries, analysis):
         for i in range(len(timeseries) - 1, startIndex, -1):
             timerID, timestamp, *metaData = timeseries[i]
             currStart, currEnd, desStart, desEnd = determine_conditions(timerID, metaData, analysis)
-            if currEnd == desEnd:
+            if currEnd in desEnd:
                 durations.append(
                     dict(start=startTS, end=timestamp, durationType=(startID, timerID), diff=timestamp - startTS)
                 )
@@ -497,16 +523,16 @@ def adjacent_LF_analysis(riscData, analysis):
     for timerID, timestamp, *metaData in timeseries:
         currStart, currEnd, desStart, desEnd = determine_conditions(timerID, metaData, analysis)
         if not startFound:
-            if currStart == desStart:
+            if currStart in desStart:
                 startFound = (timerID, timestamp)
         else:
-            if currEnd == desEnd:
+            if currEnd in desEnd:
                 startID, startTS = startFound
                 durations.append(
                     dict(start=startTS, end=timestamp, durationType=(startID, timerID), diff=timestamp - startTS)
                 )
                 startFound = None
-            elif currStart == desStart:
+            elif currStart in desStart:
                 startFound = (timerID, timestamp)
 
     return durations

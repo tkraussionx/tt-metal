@@ -175,15 +175,6 @@ namespace kernel_profiler{
         }
     }
 
-    PROFILER_INLINE void mark_time_once(uint32_t timer_id, bool * one_time)
-    {
-        if (*one_time)
-        {
-            mark_time(timer_id);
-        }
-        *one_time = false;
-    }
-
     PROFILER_INLINE void mark_BR_fw_first_start()
     {
         uint32_t time_L = reg_read(RISCV_DEBUG_REG_WALL_CLOCK_L);
@@ -193,7 +184,7 @@ namespace kernel_profiler{
         profiler_control_buffer[FW_RESET_H] = time_H;
     }
 
-    PROFILER_INLINE void risc_finished_profiling()
+    inline __attribute__((always_inline)) void risc_finished_profiling()
     {
         for (uint32_t i = 0; i < (wIndex % NOC_ALIGNMENT_FACTOR); i++)
         {
@@ -293,11 +284,6 @@ namespace kernel_profiler{
 #endif
     }
 
-    PROFILER_INLINE void flush_profiler()
-    {
-        stackSize = 0;
-    }
-
     constexpr uint32_t Hash32_CT( const char * str, size_t n, uint32_t basis = UINT32_C( 2166136261 ) ) {
         return n == 0 ? basis : Hash32_CT( str + 1, n - 1, ( basis ^ str[ 0 ] ) * UINT32_C( 16777619 ) );
     }
@@ -383,8 +369,6 @@ namespace kernel_profiler{
 
 #define DeviceZoneScopedMainChildChildN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = kernel_profiler::Hash16_CT(PROFILER_MSG_NAME(name));kernel_profiler::profileScopeGuaranteed<hash, 2> zone = kernel_profiler::profileScopeGuaranteed<hash, 2>();
 
-#define DeviceProfilerFlush kernel_profiler::flush_profiler();
-
 #else
 
 #define DeviceZoneScopedMainN( name )
@@ -394,7 +378,5 @@ namespace kernel_profiler{
 #define DeviceZoneScopedMainChildChildN( name )
 
 #define DeviceZoneScopedN( name )
-
-#define DeviceProfilerFlush
 
 #endif
