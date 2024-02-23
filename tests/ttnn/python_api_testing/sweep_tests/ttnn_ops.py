@@ -661,3 +661,131 @@ def transformer_concatenate_heads(
     t1 = ttnn.transformer.concatenate_heads(t0, memory_config=output_mem_config)
 
     return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def abs(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.abs(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def acos(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.acos(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def acosh(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.acosh(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def asin(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.asin(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def asinh(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.asinh(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def atan(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.atan(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def atan2(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.atan2(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def atanh(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.atanh(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)

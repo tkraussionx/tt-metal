@@ -1240,4 +1240,36 @@ op_map = {
         "tt_lib_op": ttnn_ops.transformer_concatenate_heads,
         "pytorch_op": pytorch_ops.transformer_concatenate_heads,
     },
+    "ttnn-abs": {
+        "tt_lib_op": ttnn_ops.abs,
+        "pytorch_op": pytorch_ops.abs,
+    },
+    "ttnn-acos": {
+        "tt_lib_op": ttnn_ops.acos,
+        "pytorch_op": pytorch_ops.acos,
+    },
+    "ttnn-acosh": {
+        "tt_lib_op": ttnn_ops.acosh,
+        "pytorch_op": pytorch_ops.acosh,
+    },
+    "ttnn-asin": {
+        "tt_lib_op": ttnn_ops.asin,
+        "pytorch_op": pytorch_ops.asin,
+    },
+    "ttnn-asinh": {
+        "tt_lib_op": ttnn_ops.asinh,
+        "pytorch_op": pytorch_ops.asinh,
+    },
+    "ttnn-atan": {
+        "tt_lib_op": ttnn_ops.atan,
+        "pytorch_op": pytorch_ops.atan,
+    },
+    "ttnn-atan2": {
+        "tt_lib_op": ttnn_ops.atan2,
+        "pytorch_op": pytorch_ops.atan2,
+    },
+    "ttnn-atanh": {
+        "tt_lib_op": ttnn_ops.atanh,
+        "pytorch_op": pytorch_ops.atanh,
+    },
 }
