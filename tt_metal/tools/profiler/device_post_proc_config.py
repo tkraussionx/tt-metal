@@ -76,14 +76,7 @@ class default_setup(metaclass=MergeMetaclass):
         "TENSIX": {"color": "light:b"},
     }
 
-    timerIDLabels = [(0, "Start"), (1, "Firmware Start"), (2, "Kernel start"), (3, "Kernel End"), (4, "Firmware End")]
-
     displayStats = ["Count", "Average", "Max", "Median", "Min", "Sum", "Range"]
-
-    plotBaseHeight = 200
-    plotPerCoreHeight = 100
-
-    webappPort = 8050
 
     cycleRange = None
     # Example
@@ -107,87 +100,48 @@ class default_setup(metaclass=MergeMetaclass):
     deviceTarball = "device_perf_results.tgz"
 
 
-class test_matmul_multi_core_multi_dram(default_setup):
-    timerAnalysis = {
-        "Compute~": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"risc": "NCRISC", "timerID": 6},
-            "end": {"risc": "BRISC", "timerID": 5},
-        }
-    }
-
-
-class test_matmul_multi_core_multi_dram_in0_mcast(default_setup):
-    timerAnalysis = {
-        "NCRISC start sender -> BRISC kernel end": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"risc": "NCRISC", "timerID": 10},
-            "end": {"risc": "BRISC", "timerID": 3},
-        },
-        "NCRISC start reciever -> BRISC kernel end": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"risc": "NCRISC", "timerID": 7},
-            "end": {"risc": "BRISC", "timerID": 3},
-        },
-    }
-
-
-class test_matmul_multi_core_multi_dram_in1_mcast(default_setup):
-    timerAnalysis = {
-        "NCRISC start sender -> BRISC kernel end": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"risc": "NCRISC", "timerID": 20},
-            "end": {"risc": "BRISC", "timerID": 3},
-        },
-        "NCRISC start reciever -> BRISC kernel end": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"risc": "NCRISC", "timerID": 16},
-            "end": {"risc": "BRISC", "timerID": 3},
-        },
-    }
-
-
-class test_matmul_multi_core_multi_dram_in0_mcast_in1_mcast(default_setup):
-    timerAnalysis = {
-        "NC_in0_s_in1_r -> B_end": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"risc": "NCRISC", "timerID": 24},
-            "end": {"risc": "BRISC", "timerID": 3},
-        },
-        "NC_in0_s_in1_s -> B_end": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"risc": "NCRISC", "timerID": 29},
-            "end": {"risc": "BRISC", "timerID": 3},
-        },
-        "NC_in0_r_in1_r -> B_end": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"risc": "NCRISC", "timerID": 34},
-            "end": {"risc": "BRISC", "timerID": 3},
-        },
-        "NC_in0_r_in1_s -> B_end": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"risc": "NCRISC", "timerID": 39},
-            "end": {"risc": "BRISC", "timerID": 3},
-        },
-    }
-
-
 class test_multi_op(default_setup):
     timerAnalysis = {
         "BRISC KERNEL_START->KERNEL_END": {
             "across": "core",
             "type": "adjacent",
-            "start": {"core": "ANY", "risc": "BRISC", "timerID": 2},
-            "end": {"core": "ANY", "risc": "BRISC", "timerID": 3},
+            "start": {"core": "ANY", "risc": "BRISC", "zoneName": "BRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "BRISC", "zoneName": "BRISC-KERNEL"},
+        },
+    }
+
+
+class test_custom_cycle_count(default_setup):
+    timerAnalysis = {
+        "BRISC KERNEL_START->KERNEL_END": {
+            "across": "core",
+            "type": "adjacent",
+            "start": {"core": "ANY", "risc": "BRISC", "zoneName": "BRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "BRISC", "zoneName": "BRISC-KERNEL"},
+        },
+        "NCRISC KERNEL_START->KERNEL_END": {
+            "across": "core",
+            "type": "adjacent",
+            "start": {"core": "ANY", "risc": "NCRISC", "zoneName": "NCRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "NCRISC", "zoneName": "NCRISC-KERNEL"},
+        },
+        "TRISC_0 KERNEL_START->KERNEL_END": {
+            "across": "core",
+            "type": "adjacent",
+            "start": {"core": "ANY", "risc": "TRISC_0", "zoneName": "TRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "TRISC_0", "zoneName": "TRISC-KERNEL"},
+        },
+        "TRISC_1 KERNEL_START->KERNEL_END": {
+            "across": "core",
+            "type": "adjacent",
+            "start": {"core": "ANY", "risc": "TRISC_1", "zoneName": "TRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "TRISC_1", "zoneName": "TRISC-KERNEL"},
+        },
+        "TRISC_2 KERNEL_START->KERNEL_END": {
+            "across": "core",
+            "type": "adjacent",
+            "start": {"core": "ANY", "risc": "TRISC_2", "zoneName": "TRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "TRISC_2", "zoneName": "TRISC-KERNEL"},
         },
     }
 
@@ -197,44 +151,9 @@ class test_full_buffer(default_setup):
         "Marker Repeat": {
             "across": "core",
             "type": "adjacent",
-            "start": {"risc": "ANY", "timerID": 5},
-            "end": {"risc": "ANY", "timerID": 5},
+            "start": {"risc": "ANY", "zoneName": "TEST-FULL"},
+            "end": {"risc": "ANY", "zoneName": "TEST-FULL"},
         }
-    }
-
-
-class test_custom_cycle_count(default_setup):
-    timerAnalysis = {
-        "BRISC KERNEL_START->KERNEL_END": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"core": "ANY", "risc": "BRISC", "timerID": 2},
-            "end": {"core": "ANY", "risc": "BRISC", "timerID": 3},
-        },
-        "NCRISC KERNEL_START->KERNEL_END": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"core": "ANY", "risc": "NCRISC", "timerID": 2},
-            "end": {"core": "ANY", "risc": "NCRISC", "timerID": 3},
-        },
-        "TRISC_0 KERNEL_START->KERNEL_END": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"core": "ANY", "risc": "TRISC_0", "timerID": 2},
-            "end": {"core": "ANY", "risc": "TRISC_0", "timerID": 3},
-        },
-        "TRISC_1 KERNEL_START->KERNEL_END": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"core": "ANY", "risc": "TRISC_1", "timerID": 2},
-            "end": {"core": "ANY", "risc": "TRISC_1", "timerID": 3},
-        },
-        "TRISC_2 KERNEL_START->KERNEL_END": {
-            "across": "core",
-            "type": "adjacent",
-            "start": {"core": "ANY", "risc": "TRISC_2", "timerID": 2},
-            "end": {"core": "ANY", "risc": "TRISC_2", "timerID": 3},
-        },
     }
 
 

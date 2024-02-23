@@ -367,15 +367,11 @@ namespace kernel_profiler{
 
 #define DeviceZoneScopedMainChildN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = kernel_profiler::Hash16_CT(PROFILER_MSG_NAME(name));kernel_profiler::profileScopeGuaranteed<hash, 1> zone = kernel_profiler::profileScopeGuaranteed<hash, 1>();
 
-#define DeviceZoneScopedMainChildChildN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = kernel_profiler::Hash16_CT(PROFILER_MSG_NAME(name));kernel_profiler::profileScopeGuaranteed<hash, 2> zone = kernel_profiler::profileScopeGuaranteed<hash, 2>();
-
 #else
 
 #define DeviceZoneScopedMainN( name )
 
 #define DeviceZoneScopedMainChildN( name )
-
-#define DeviceZoneScopedMainChildChildN( name )
 
 #define DeviceZoneScopedN( name )
 

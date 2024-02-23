@@ -316,7 +316,7 @@ def is_new_op_device(tsCore, coreOpMap):
     isNewOp = False
     isNewOpFinished = False
     if core[1] != NON_COMPUTE_ROW:
-        if timerID != 0:
+        if timerID["id"] != 0:
             appendTs = True
         if risc == "BRISC" and timerID["zoneName"] == "BRISC-FW" and timerID["zonePhase"] == "begin":
             assert (
