@@ -41,7 +41,7 @@ jobs:
           source build/python_env/bin/activate
           ./tests/scripts/run_python_unit_tests.sh
 
-  build-and-unit-tests-fast-dispatch-unit-and-sweep-tests:
+  build-and-unit-tests-fast-dispatch-model-and-cpp-tests:
     strategy:
       # Do not fail-fast because we need to ensure all tests go to completion
       # so we try not to get hanging machines
