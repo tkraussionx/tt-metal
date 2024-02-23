@@ -6,6 +6,7 @@ if [[ -z "$TT_METAL_HOME" ]]; then
   echo "Must provide TT_METAL_HOME in environment" 1>&2
   exit 1
 fi
+
 if [[ "$1" == "bert"  || "$1" == "full" ]]; then
   if [[ ! -z "$TT_METAL_SLOW_DISPATCH_MODE" ]]; then
       D0="$(date +%s)"
@@ -33,6 +34,8 @@ if [[ "$1" == "bert"  || "$1" == "full" ]]; then
 
   fi
 fi
+
+
 # This must run in slow dispatch mode
 # pytest -svv $TT_METAL_HOME/tests/python_api_testing/sweep_tests/pytests/test_sweep_conv_with_address_map.py
 
@@ -41,8 +44,6 @@ fi
 
 if [[ "$ARCH_NAME" != "wormhole_b0" ]]; then
   # TODO(arakhmati): Run ttnn tests only on graskull until the issue with ttnn.reshape on wormhole is resolved
-
-
   # Tests for tensors in L1
 
   if [[ "$1" == "falcon" || "$1" == "full" ]]; then

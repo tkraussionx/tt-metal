@@ -20,27 +20,16 @@ fi
 cd $TT_METAL_HOME
 export PYTHONPATH=$TT_METAL_HOME
 
-START="$(date +%s)"
-./tests/scripts/run_python_api_unit_tests.sh ${1}
-D1=$[$(date +%s)-${START}]
-echo "4697: run_python_api_unit_tests time: ${D1}"
+# calls this
+./tests/scripts/run_python_unit_tests.sh
 
-START="$(date +%s)"
+# calls everything else
+./tests/scripts/run_python_model_tests.sh
 env python tests/scripts/run_tt_metal.py --dispatch-mode fast
-D2=$[$(date +%s)-${START}]
-echo "4697: run_tt_metal time: ${D2}"
-
-START="$(date +%s)"
 env python tests/scripts/run_tt_eager.py --dispatch-mode fast
-D3=$[$(date +%s)-${START}]
-echo "4697: run_tt_eager time: ${D3}"
-
-START="$(date +%s)"
 ./build/test/tt_metal/unit_tests_fast_dispatch
-D4=$[$(date +%s)-${START}]
-echo "4697: unit_tests_fast_dispatch time: ${D4}"
 
-
+# build docs
 echo "Checking docs build..."
 
 cd $TT_METAL_HOME/docs
