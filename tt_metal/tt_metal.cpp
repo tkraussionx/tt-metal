@@ -8,6 +8,7 @@
 #include <unordered_set>
 #include <string>
 
+#include "impl/dispatch/command_queue.hpp"
 #include "tt_metal/host_api.hpp"
 #include "impl/debug/dprint_server.hpp"
 #include "dev_msgs.h"
@@ -583,6 +584,7 @@ size_t GetNumPCIeDevices() {
 
 Device *CreateDevice(chip_id_t device_id, const uint8_t num_hw_cqs, const std::vector<uint32_t>& l1_bank_remap) {
     Device * dev = new Device(device_id, num_hw_cqs, l1_bank_remap);
+    std::cout << "Device Created" << std::endl;
     return dev;
 }
 
@@ -642,6 +644,7 @@ void UpdateDynamicCircularBufferAddress(Program &program, CBHandle cb_handle, co
         TT_FATAL("Only L1 buffers can have an associated circular buffer!");
     }
     detail::GetCircularBuffer(program, cb_handle)->config().set_globally_allocated_address(buffer);
+    detail::GetCircularBuffer(program, cb_handle)->assign_global_address();
 }
 
 uint32_t CreateSemaphore(Program &program, const std::variant<CoreRange,CoreRangeSet> &core_spec, uint32_t initial_value) {
@@ -726,8 +729,16 @@ void SetRuntimeArgs(const Program &program, KernelHandle kernel, const std::vect
         k->set_runtime_args(core_spec[i], runtime_args[i]);
 }
 
+void SetRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::vector<std::variant<Buffer*, uint32_t>>&& runtime_args_vec) {
+    EnqueueSetRuntimeArgs(cq, kernel, core_coord, std::move(runtime_args_vec), false);
+}
+
 std::vector<uint32_t> & GetRuntimeArgs(const Program &program, KernelHandle kernel_id, const CoreCoord &logical_core) {
     return detail::GetKernel(program, kernel_id)->runtime_args(logical_core);
+}
+
+void UpdateRuntimeArgs(CommandQueue &cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::vector<uint32_t> &update_idx, std::vector<std::variant<Buffer *, uint32_t>> &runtime_args_vec) {
+    EnqueueUpdateRuntimeArgs(cq, kernel, core_coord, update_idx, runtime_args_vec, false);
 }
 
 }  // namespace tt_metal

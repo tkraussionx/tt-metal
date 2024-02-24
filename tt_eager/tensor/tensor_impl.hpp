@@ -423,9 +423,8 @@ DeviceBuffer allocate_buffer_on_device(
 
 template <typename T>
 inline void read_data_from_device_buffer(CommandQueue &cq, DeviceBuffer device_buffer, void* host_buffer_data, bool blocking) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    EnqueueReadBuffer(cq, device_buffer, host_buffer_data, blocking);
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    std::cout << "reading from: " << device_buffer -> address() << std::endl;
+    EnqueueReadBuffer(cq, device_buffer, host_buffer_data, true);
 }
 
 template <typename T>
@@ -441,13 +440,17 @@ inline void write_data_to_device_buffer(CommandQueue & cq, const BufferType<T>& 
     // TODO(arakhmati): can we use generators in this function to go from `data_to_write` to `uint32_data`?
     // And effectively get rid of any additional allocation
     if (writing_owned_storage) {
+        // std::cout << "Writing owned" << std::endl;
         EnqueueWriteBuffer( cq, device_buffer, host_buffer.get_vec(), false);
+        // std::cout << "Done Writing owned" << std::endl;
     }
     else {
+        // std::cout << "Writing borrowed" << std::endl;
         auto init_cq_mode = cq.get_mode();
         cq.set_mode(CommandQueue::CommandQueueMode::PASSTHROUGH);
         EnqueueWriteBuffer(cq, device_buffer, host_buffer.data(), false);
         cq.set_mode(init_cq_mode);
+        // std::cout << "Done Writing borrowed" << std::endl;
     }
 }
 
@@ -473,7 +476,9 @@ inline DeviceBuffer initialize_data_on_device(const BufferType<T>& data_to_write
     if (TT_METAL_SLOW_DISPATCH_MODE == nullptr) {
         write_data_to_device_buffer<T>(device->command_queue(), data_to_write, device_buffer, writing_owned_storage);
     } else {
+        std::cout << "Writing data to device " << std::endl;
         write_data_to_device_buffer<T>(data_to_write, *device_buffer);
+        std::cout << "done" << std::endl;
     }
     // std::cout << "Data written" << std::endl;
     return device_buffer;

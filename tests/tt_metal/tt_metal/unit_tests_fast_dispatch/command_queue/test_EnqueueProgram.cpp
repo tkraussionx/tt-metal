@@ -291,7 +291,7 @@ namespace compiler_workaround_hardware_bug_tests {
 
 TEST_F(CommandQueueFixture, TestArbiterDoesNotHang) {
     Program program;
-
+    auto& command_queue = this->device_->command_queue();
     CoreRange cr({0, 0}, {0, 0});
     CoreRangeSet cr_set({cr});
     // Add an NCRISC blank manually, but in compile program, the BRISC blank will be
@@ -299,8 +299,8 @@ TEST_F(CommandQueueFixture, TestArbiterDoesNotHang) {
     auto dummy_reader_kernel = CreateKernel(
         program, "tests/tt_metal/tt_metal/test_kernels/dataflow/unit_tests/command_queue/arbiter_hang.cpp", cr_set, DataMovementConfig{.processor = DataMovementProcessor::RISCV_1, .noc = NOC::RISCV_1_default});
 
-    EnqueueProgram(*this->cmd_queue, program, false);
-    Finish(*this->cmd_queue);
+    EnqueueProgram(command_queue, program, false);
+    Finish(command_queue);
 }
 
 }
@@ -314,16 +314,17 @@ TEST_F(CommandQueueFixture, TestAsyncCommandQueue) {
     CoreRangeSet cr_set({cr});
     // Add an NCRISC blank manually, but in compile program, the BRISC blank will be
     // added separately
+    auto& command_queue = this->device_->command_queue();
     auto dummy_reader_kernel = CreateKernel(
         program, "tests/tt_metal/tt_metal/test_kernels/dataflow/unit_tests/command_queue/arbiter_hang.cpp", cr_set, DataMovementConfig{.processor = DataMovementProcessor::RISCV_1, .noc = NOC::RISCV_1_default});
-
-    this->cmd_queue->set_mode(CommandQueue::CommandQueueMode::ASYNC);
+    std::cout << "Creating async mode " << std::endl;
+    command_queue.set_mode(CommandQueue::CommandQueueMode::ASYNC);
 
     // Use scoper timer to benchmark time for pushing 2 commands
     {
         tt::ScopedTimer timer("AsyncCommandQueue");
-        EnqueueProgram(*this->cmd_queue, program, false);
-        Finish(*this->cmd_queue);
+        EnqueueProgram(command_queue, program, false);
+        Finish(command_queue);
     }
 }
 
@@ -339,7 +340,7 @@ TEST_F(CommandQueueFixture, TestSingleCbConfigCorrectlySentSingleCore) {
 
     DummyProgramMultiCBConfig config = {.cr_set = cr_set, .cb_config_vector = {cb_config} };
 
-    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_cbs(this->device_, *this->cmd_queue, config));
+    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_cbs(this->device_, this->device_->command_queue(), config));
 }
 
 TEST_F(CommandQueueFixture, TestMultiCbSeqConfigCorrectlySentSingleCore) {
@@ -354,7 +355,7 @@ TEST_F(CommandQueueFixture, TestMultiCbSeqConfigCorrectlySentSingleCore) {
 
     DummyProgramMultiCBConfig config = {.cr_set = cr_set, .cb_config_vector = {cb_config_0, cb_config_1, cb_config_2, cb_config_3}};
 
-    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_cbs(this->device_, *this->cmd_queue, config));
+    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_cbs(this->device_, this->device_->command_queue(), config));
 }
 
 TEST_F(CommandQueueFixture, TestMultiCbRandomConfigCorrectlySentSingleCore) {
@@ -369,7 +370,7 @@ TEST_F(CommandQueueFixture, TestMultiCbRandomConfigCorrectlySentSingleCore) {
 
     DummyProgramMultiCBConfig config = {.cr_set = cr_set, .cb_config_vector = {cb_config_0, cb_config_1, cb_config_2, cb_config_3}};
 
-    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_cbs(this->device_, *this->cmd_queue, config));
+    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_cbs(this->device_, this->device_->command_queue(), config));
 }
 
 TEST_F(CommandQueueFixture, TestMultiCBSharedAddressSpaceSentSingleCore) {
@@ -395,9 +396,9 @@ TEST_F(CommandQueueFixture, TestMultiCBSharedAddressSpaceSentSingleCore) {
     auto cb = CreateCircularBuffer(program, cr_set, cb_config);
 
     local_test_functions::initialize_dummy_kernels(program, cr_set);
-    EnqueueProgram(*this->cmd_queue, program, false);
+    EnqueueProgram(this->device_->command_queue(), program, false);
 
-    Finish(*this->cmd_queue);
+    Finish(this->device_->command_queue());
     vector<uint32_t> cb_config_vector;
     uint32_t cb_config_buffer_size = NUM_CIRCULAR_BUFFERS * UINT32_WORDS_PER_CIRCULAR_BUFFER_CONFIG * sizeof(uint32_t);
 
@@ -431,7 +432,7 @@ TEST_F(CommandQueueFixture, TestSingleCbConfigCorrectlyUpdateSizeSentSingleCore)
 
     DummyProgramMultiCBConfig config = {.cr_set = cr_set, .cb_config_vector = {cb_config}};
 
-    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_cbs_update_size(this->device_, *this->cmd_queue, config));
+    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_cbs_update_size(this->device_, this->device_->command_queue(), config));
 }
 
 TEST_F(CommandQueueFixture, TestSingleSemaphoreConfigCorrectlySentSingleCore) {
@@ -440,7 +441,7 @@ TEST_F(CommandQueueFixture, TestSingleSemaphoreConfigCorrectlySentSingleCore) {
 
     DummyProgramConfig config = {.cr_set = cr_set, .num_sems = 1};
 
-    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_sems(this->device_, *this->cmd_queue, config));
+    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_sems(this->device_, this->device_->command_queue(), config));
 }
 
 TEST_F(CommandQueueFixture, TestAutoInsertedBlankBriscKernelInDeviceDispatchMode) {
@@ -454,8 +455,8 @@ TEST_F(CommandQueueFixture, TestAutoInsertedBlankBriscKernelInDeviceDispatchMode
         program, "tt_metal/kernels/dataflow/blank.cpp", cr_set,
         DataMovementConfig{.processor = DataMovementProcessor::RISCV_1, .noc = NOC::RISCV_1_default});
 
-    EnqueueProgram(*this->cmd_queue, program, false);
-    Finish(*this->cmd_queue);
+    EnqueueProgram(this->device_->command_queue(), program, false);
+    Finish(this->device_->command_queue());
 }
 
 TEST_F(CommandQueueFixture, ComputeRuntimeArgs) {
@@ -474,8 +475,8 @@ TEST_F(CommandQueueFixture, ComputeRuntimeArgs) {
 
     std::vector<uint32_t> initial_runtime_args = {101, 202};
     SetRuntimeArgs(program, 0, cr_set, initial_runtime_args);
-    EnqueueProgram(*this->cmd_queue, program, false);
-    Finish(*this->cmd_queue);
+    EnqueueProgram(this->device_->command_queue(), program, false);
+    Finish(this->device_->command_queue());
 
     std::vector<uint32_t> increments = {87, 216};
     std::vector<uint32_t> written_args;
@@ -493,7 +494,7 @@ TEST_F(CommandQueueFixture, TestRuntimeArgsCorrectlySentSingleCore) {
     CoreRangeSet cr_set({cr});
 
     DummyProgramConfig dummy_program_config = {.cr_set = cr_set};
-    local_test_functions::test_dummy_EnqueueProgram_with_runtime_args(this->device_, *this->cmd_queue, dummy_program_config);
+    local_test_functions::test_dummy_EnqueueProgram_with_runtime_args(this->device_, this->device_->command_queue(), dummy_program_config);
 }
 
 }  // end namespace single_core_tests
@@ -514,7 +515,7 @@ TEST_F(CommandQueueFixture, TestAllCbConfigsCorrectlySentMultiCore) {
     DummyProgramMultiCBConfig config = {
         .cr_set = cr_set, .cb_config_vector = cb_config_vector};
 
-    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_cbs(this->device_, *this->cmd_queue, config));
+    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_cbs(this->device_, this->device_->command_queue(), config));
 }
 
 TEST_F(CommandQueueFixture, TestAllCbConfigsCorrectlySentUpdateSizeMultiCore) {
@@ -531,7 +532,7 @@ TEST_F(CommandQueueFixture, TestAllCbConfigsCorrectlySentUpdateSizeMultiCore) {
     DummyProgramMultiCBConfig config = {
         .cr_set = cr_set, .cb_config_vector = cb_config_vector  };
 
-    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_cbs_update_size(this->device_, *this->cmd_queue, config));
+    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_cbs_update_size(this->device_, this->device_->command_queue(), config));
 }
 
 
@@ -550,7 +551,7 @@ TEST_F(CommandQueueFixture, TestMultiCbConfigsCorrectlySentUpdateSizeMultiCore) 
     DummyProgramMultiCBConfig config = {
         .cr_set = cr_set, .cb_config_vector = cb_config_vector  };
 
-    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_cbs_update_size(this->device_, *this->cmd_queue, config));
+    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_cbs_update_size(this->device_, this->device_->command_queue(), config));
 }
 
 TEST_F(CommandQueueFixture, TestAllSemConfigsCorrectlySentMultiCore) {
@@ -561,7 +562,7 @@ TEST_F(CommandQueueFixture, TestAllSemConfigsCorrectlySentMultiCore) {
 
     DummyProgramConfig config = {.cr_set = cr_set, .num_sems = NUM_SEMAPHORES};
 
-    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_sems(this->device_, *this->cmd_queue, config));
+    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_sems(this->device_, this->device_->command_queue(), config));
 }
 
 TEST_F(CommandQueueFixture, TestAllRuntimeArgsCorrectlySentMultiCore) {
@@ -571,7 +572,7 @@ TEST_F(CommandQueueFixture, TestAllRuntimeArgsCorrectlySentMultiCore) {
     CoreRangeSet cr_set({cr});
 
     DummyProgramConfig dummy_program_config = {.cr_set = cr_set};
-    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_runtime_args(this->device_, *this->cmd_queue, dummy_program_config));
+    EXPECT_TRUE(local_test_functions::test_dummy_EnqueueProgram_with_runtime_args(this->device_, this->device_->command_queue(), dummy_program_config));
 }
 
 }  // end namespace multicore_tests

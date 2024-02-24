@@ -116,6 +116,7 @@ operation::ProgramWithCallbacks Reduce::create_program(const std::vector<Tensor>
     auto& output_tensor = output_tensors.at(0);
 
     auto parallelization_strategy = this->get_parallelization_strategy(input_tensors);
+    std::cout << "strategy : " << static_cast<int>(parallelization_strategy) << std::endl;
 
     switch (parallelization_strategy){
         case ReduceOpParallelizationStrategy::MULTI_CORE_H:
@@ -182,7 +183,6 @@ Tensor reduce(const Tensor &input_tensor, ReduceOpMath reduce_math, ReduceOpDim 
             formatted_input_tensor = AutoFormat::format_input_tensor(input_tensor, device, input_tensor_pad_shape, pad_value, Layout::TILE);
         }
         const Tensor output_tensor = operation::run_without_autoformat(Reduce{reduce_math, ReduceOpDim::W, 1.0, output_mem_config, output_dtype.value_or(input_tensor.dtype())}, {formatted_input_tensor}).at(0);
-        std::this_thread::sleep_for(std::chrono::milliseconds(3000));
         return operation::run_without_autoformat(Reduce{reduce_math, ReduceOpDim::H, scaler, output_mem_config, output_dtype.value_or(input_tensor.dtype())}, {output_tensor}).at(0);
     } else {
         std::cout << "Running single core HW" << std::endl;

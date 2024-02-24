@@ -287,9 +287,9 @@ bool assign_runtime_args_to_program(
     int out_subblock_w,
     int per_core_M,
     int per_core_N,
-    uint32_t in0_dram_addr,
-    uint32_t in1_dram_addr,
-    uint32_t out_dram_addr) {
+    std::shared_ptr<Buffer> in0_dram_buf,
+    std::shared_ptr<Buffer> in1_dram_buf,
+    std::shared_ptr<Buffer> out_dram_buf) {
     bool pass = true;
     uint32_t single_tile_size = 2 * 1024;
 
@@ -300,16 +300,16 @@ bool assign_runtime_args_to_program(
     uint32_t dram_buffer_size_out =
         single_tile_size * M * N;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
 
-    TT_FATAL(in0_dram_addr + dram_buffer_size_act < 1024 * 1024 * 1024);
-    TT_FATAL(in1_dram_addr + dram_buffer_size_weights < 1024 * 1024 * 1024);
-    TT_FATAL(out_dram_addr + dram_buffer_size_out < 1024 * 1024 * 1024);
+    // TT_FATAL(in0_dram_addr + dram_buffer_size_act < 1024 * 1024 * 1024);
+    // TT_FATAL(in1_dram_addr + dram_buffer_size_weights < 1024 * 1024 * 1024);
+    // TT_FATAL(out_dram_addr + dram_buffer_size_out < 1024 * 1024 * 1024);
 
     for (int core_idx_y = 0; core_idx_y < num_cores_r; core_idx_y++) {
         for (int core_idx_x = 0; core_idx_x < num_cores_c; core_idx_x++) {
             CoreCoord core = {(std::size_t)core_idx_x, (std::size_t)core_idx_y};
 
-            std::vector<uint32_t> mm_reader_args = {
-                (std::uint32_t)in0_dram_addr,                // in0_tensor_addr
+            std::vector<std::variant<Buffer*, uint32_t>> mm_reader_args = {
+                in0_dram_buf.get(),                // in0_tensor_addr
                 (std::uint32_t)K * per_core_M * core_idx_y,  // in0_tensor_start_tile_id
                 (std::uint32_t)1,                            // in0_tensor_stride_w
                 (std::uint32_t)K,                            // in0_tensor_stride_h
@@ -319,7 +319,7 @@ bool assign_runtime_args_to_program(
                 (std::uint32_t)per_core_M,                   // in0_block_h
                 (std::uint32_t)in0_block_w * per_core_M,     // in0_block_num_tiles
 
-                (std::uint32_t)in1_dram_addr,                // in1_tensor_addr
+                in1_dram_buf.get(),                // in1_tensor_addr
                 (std::uint32_t)per_core_N * core_idx_x,      // in1_tensor_start_tile_id
                 (std::uint32_t)1,                            // in1_tensor_stride_w
                 (std::uint32_t)N,                            // in1_tensor_stride_h
@@ -332,8 +332,8 @@ bool assign_runtime_args_to_program(
                 (std::uint32_t)K / in0_block_w               // num_blocks
             };
 
-            std::vector<uint32_t> writer_args = {
-                (std::uint32_t)out_dram_addr,                                          // out_tensor_addr
+            std::vector<std::variant<Buffer*, uint32_t>> writer_args = {
+                out_dram_buf.get(),                                          // out_tensor_addr
                 (std::uint32_t)core_idx_x * per_core_N + core_idx_y * per_core_M * N,  // out_tensor_start_tile_id
                 (std::uint32_t)1,                                                      // out_tensor_stride_w
                 (std::uint32_t)N,                                                      // out_tensor_stride_h
@@ -347,8 +347,8 @@ bool assign_runtime_args_to_program(
                 (std::uint32_t)(per_core_M / out_subblock_h),      // out_num_subblocks_h
             };
 
-            tt_metal::SetRuntimeArgs(program, mm_reader_kernel, core, mm_reader_args);
-            tt_metal::SetRuntimeArgs(program, unary_writer_kernel, core, writer_args);
+            tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(mm_reader_kernel), core, std::move(mm_reader_args));
+            tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(unary_writer_kernel), core, std::move(writer_args));
         }
     }
     return pass;
@@ -427,7 +427,10 @@ bool matmul_multi_core_multi_dram(CommonFixture *fixture, tt_metal::Device *devi
     log_info(LogTest, "Copying inputs to dram complete");
 
     auto out_buffer = std::make_shared<Buffer>(device, M * N * sizeof(uint32_t) * 32 * 32, 1024 * 2, BufferType::DRAM);
-    uint32_t out_dram_addr = out_buffer->address();
+
+    program.add_global_buffer(activation_buffer);
+    program.add_global_buffer(weight_buffer);
+    program.add_global_buffer(out_buffer);
 
     log_info(LogTest, "Writing kernel runtime args to device");
     pass &= unit_tests_common::matmul::test_matmul_multi_core_X_dram::assign_runtime_args_to_program(
@@ -445,9 +448,9 @@ bool matmul_multi_core_multi_dram(CommonFixture *fixture, tt_metal::Device *devi
         out_subblock_w,
         per_core_M,
         per_core_N,
-        activation_buffer->address(),
-        weight_buffer->address(),
-        out_dram_addr);
+        activation_buffer,
+        weight_buffer,
+        out_buffer);
     log_info(LogTest, "Writing kernel runtime args to device complete");
 
     log_info(LogTest, "Running Matmul {} core test", num_cores_r * num_cores_c);

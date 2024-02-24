@@ -325,6 +325,7 @@ def test_layernorm_sharded_mix_precision_rm(
 def test_layernorm_1d_sharded_mix_precision_rm(
     test_id, in_dtype, out_dtype, cb_dtype, gamma_beta_mem_config, out_mem_config, shard_orientation, device
 ):
+    print("Running test")
     torch.manual_seed(1234)
     in0_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
 

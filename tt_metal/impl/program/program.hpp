@@ -5,6 +5,7 @@
 #pragma once
 
 #include <bitset>
+#include <memory>
 #include <optional>
 
 #include "tt_metal/impl/buffers/buffer.hpp"
@@ -76,9 +77,11 @@ class Program {
     const std::vector< Semaphore > & semaphores() const { return semaphores_; }
 
     KernelGroup * kernels_on_core(const CoreCoord &core);
-
+    std::vector<std::shared_ptr<Buffer>> global_bufs = {};
     std::vector<KernelGroup>& get_kernel_groups();
-
+    std::vector<std::shared_ptr<Kernel>> get_kernels() const { return kernels_; }
+    std::shared_ptr<CircularBuffer> get_circular_buffer(CBHandle cb_id) const;
+    inline void add_global_buffer(std::shared_ptr<Buffer> buf) { global_bufs.push_back(buf); }
     const std::vector<std::shared_ptr<CircularBuffer>> circular_buffers_on_core(const CoreCoord &core) const;
 
     const std::vector<std::shared_ptr<CircularBuffer>> circular_buffers_on_corerange(const CoreRange &cr) const;
@@ -170,7 +173,6 @@ class Program {
     std::shared_ptr<Kernel> get_kernel(KernelHandle kernel_id) const;
 
     CBHandle add_circular_buffer(const CoreRangeSet &core_range_set, const CircularBufferConfig &config);
-    std::shared_ptr<CircularBuffer> get_circular_buffer(CBHandle cb_id) const;
 
     void add_semaphore(const CoreRangeSet & crs, uint32_t address, uint32_t init_value);
 

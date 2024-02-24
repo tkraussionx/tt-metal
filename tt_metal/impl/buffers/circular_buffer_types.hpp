@@ -95,6 +95,7 @@ class CircularBufferConfig {
         this->globally_allocated_address_ = buffer.address();
         this->dynamic_cb_ = true;
         this->max_size_ = buffer.size();
+        this->shadow_global_buffer = &buffer;
         return *this;
     }
 
@@ -107,7 +108,7 @@ class CircularBufferConfig {
     }
 
     const std::array<std::optional<uint32_t>, NUM_CIRCULAR_BUFFERS> &page_sizes() const { return this->page_sizes_; }
-
+    const Buffer* shadow_global_buffer;
    private:
     void set_config(const std::map<uint8_t, tt::DataFormat> &data_format_spec) {
         if (data_format_spec.size() > NUM_CIRCULAR_BUFFERS) {

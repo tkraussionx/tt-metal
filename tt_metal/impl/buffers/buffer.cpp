@@ -237,18 +237,25 @@ Buffer &Buffer::operator=(Buffer &&other) {
 void Buffer::allocate() {
     TT_ASSERT(this->device_ != nullptr);
     // L1 buffers are allocated top down!
-    lck.lock();
-    bool bottom_up = this->buffer_type_ == BufferType::DRAM;
-    if(is_sharded(this->buffer_layout_)){
-        this->address_ = allocator::allocate_buffer(*this->device_->allocator_, this->size_,
-                                                this->page_size_, this->buffer_type_, bottom_up,
-                                                this->num_cores());
-    }
-    else{
-        this->address_ = allocator::allocate_buffer(*this->device_->allocator_, this->size_, this->page_size_, this->buffer_type_, bottom_up, std::nullopt);
-    }
-    lck.unlock();
 
+    bool bottom_up = this->buffer_type_ == BufferType::DRAM;
+    EnqueueAllocateBuffer(this -> device_ -> command_queue(), *(this -> device_ -> allocator_),
+                         this -> size_, this -> page_size_, this -> buffer_type_,
+                         this -> buffer_layout_, this -> num_cores(), &(this -> address_), bottom_up, false);
+
+    // if(is_sharded(this->buffer_layout_)){
+    //     this->address_ = allocator::allocate_buffer(*this->device_->allocator_, this->size_,
+    //                                             this->page_size_, this->buffer_type_, bottom_up,
+    //                                             this->num_cores());
+    // }
+    // else{
+    //     this->address_ = allocator::allocate_buffer(*this->device_->allocator_, this->size_, this->page_size_, this->buffer_type_, bottom_up, std::nullopt);
+    // }
+    // std::cout << "Allocated Buffer at: " << this->address_ << std::endl;
+}
+
+void Buffer::address(uint32_t* addr_to_copy) {
+    // EnqueueGetBufferAddr(this -> device_ -> command_queue(), addr_to_copy, &(this -> address_), true);
 }
 
 uint32_t Buffer::dram_channel_from_bank_id(uint32_t bank_id) const {
@@ -338,6 +345,7 @@ void Buffer::deallocate() {
 }
 
 Buffer::~Buffer() {
+    // std::cout << "Deallocating buffer at addr: " << address_ << std::endl;
     this->deallocate();
 }
 

@@ -541,15 +541,15 @@ bool Device::initialize(const std::vector<uint32_t>& l1_bank_remap) {
     log_info(tt::LogMetal, "Initializing device {}", this->id_);
     bool already_initialized = this->active_devices_.activate_device(this->id_);
     this->initialize_cluster();
-    // std::cout << "CLuster init" << std::endl;
+    std::cout << "CLuster init" << std::endl;
     this->initialize_allocator(l1_bank_remap);
-    // std::cout << "Allocator init" << std::endl;
+    std::cout << "Allocator init" << std::endl;
     this->initialize_build();
-    // std::cout << "Build init" << std::endl;
+    std::cout << "Build init" << std::endl;
     if (!already_initialized) {
-        // std::cout << "building fw" << std::endl;
+        std::cout << "building fw" << std::endl;
         this->build_firmware();
-        // std::cout << "Built fw" << std::endl;
+        std::cout << "Built fw" << std::endl;
     }
 
     DprintServerAttach(this);
@@ -572,9 +572,9 @@ bool Device::initialize(const std::vector<uint32_t>& l1_bank_remap) {
 
     // Create system memory writer for this device to have an associated interface to hardware command queue (i.e. hugepage)
     if (std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr) {
-        // std::cout << "Buiilding cmd q" << std::endl;
+        std::cout << "Buiilding cmd q" << std::endl;
         this->initialize_command_queue();
-        // std::cout << "done" << std::endl;
+        std::cout << "done" << std::endl;
     } else {
         TT_ASSERT(this->num_hw_cqs() == 1, "num_hw_cqs must be 1 in slow dispatch");
     }

@@ -26,9 +26,10 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
     uint32_t Wt = W/TILE_WIDTH;
     uint32_t Ht = H/TILE_HEIGHT;
     uint32_t HtWt = Ht * Wt;
-
+    std::cout << "Creating prog for: reduce_multi_core_h" << std::endl;
     tt_metal::Program program = tt_metal::CreateProgram();
-
+    program.add_global_buffer(a.device_buffer());
+    program.add_global_buffer(output.device_buffer());
     tt::DataFormat src0_cb_data_format = tt_metal::datatype_to_dataformat_converter(a.dtype());
     uint32_t src0_single_tile_size = tt_metal::detail::TileSize(src0_cb_data_format);
     tt::DataFormat scaler_cb_data_format = DataFormat::Float16_b;
@@ -73,6 +74,7 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
         tt_metal::CircularBufferConfig cb_src1_config = tt_metal::CircularBufferConfig(num_shard_tiles * src0_single_tile_size, {{src1_cb_index, src0_cb_data_format}})
             .set_page_size(src1_cb_index, src0_single_tile_size).set_globally_allocated_address(*a.buffer());
         cb_src1 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src1_config);
+        program.get_circular_buffer(cb_src1)->assign_global_address();
     } else {
         uint32_t num_input_tiles = 2;
         tt_metal::CircularBufferConfig cb_src0_config = tt_metal::CircularBufferConfig(num_input_tiles * src0_single_tile_size, {{src0_cb_index, src0_cb_data_format}})
@@ -92,6 +94,7 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
         tt_metal::CircularBufferConfig cb_output_config = tt_metal::CircularBufferConfig(num_output_tiles * dst_single_tile_size, {{output_cb_index, dst_cb_data_format}})
             .set_page_size(output_cb_index, dst_single_tile_size).set_globally_allocated_address(*output.buffer());;
         cb_output = tt_metal::CreateCircularBuffer(program, all_cores, cb_output_config);
+        program.get_circular_buffer(cb_output)->assign_global_address();
     } else {
         uint32_t num_output_tiles = 2;
         tt_metal::CircularBufferConfig cb_output_config = tt_metal::CircularBufferConfig(num_output_tiles * dst_single_tile_size, {{output_cb_index, dst_cb_data_format}})
@@ -192,7 +195,7 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
         uint32_t shard_Wt = num_cols_per_core_group_1 / NC;
         uint32_t shard_row_size = shard_Wt * src0_single_tile_size;
         uint32_t shard_batch_size = shard_row_size * Ht;
-        vector<uint32_t> reader_rt_args = {
+        std::vector<std::variant<Buffer*, uint32_t>> reader_rt_args = {
             num_cols_per_core_group_1 * Ht,
             shard_Wt,
             Ht,
@@ -201,22 +204,36 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
             shard_batch_size,
             packed_scaler_value
         };
-        tt_metal::SetRuntimeArgs(
-            program,
-            reader_kernel_id,
-            all_cores,
-            reader_rt_args
-        );
+        for (const auto& core_range : all_cores.ranges()) {
+            for (auto x = core_range.start.x; x <= core_range.end.x; x++) {
+                for (auto y = core_range.start.y; y <= core_range.end.y; y++) {
+                    auto reader_args = reader_rt_args;
+                    tt_metal::SetRuntimeArgs(
+                        device -> command_queue(),
+                        program.get_kernels().at(reader_kernel_id),
+                        CoreCoord(x, y),
+                        std::move(reader_args)
+                    );
+                }
+            }
+        }
 
-        vector<uint32_t> writer_rt_args = {
+        std::vector<std::variant<Buffer*, uint32_t>> writer_rt_args = {
             num_cols_per_core_group_1
         };
-        tt_metal::SetRuntimeArgs(
-            program,
-            writer_kernel_id,
-            all_cores,
-            writer_rt_args
-        );
+        for (const auto& core_range : all_cores.ranges()) {
+            for (auto x = core_range.start.x; x <= core_range.end.x; x++) {
+                for (auto y = core_range.start.y; y <= core_range.end.y; y++) {
+                    auto writer_args = reader_rt_args;
+                    tt_metal::SetRuntimeArgs(
+                        device -> command_queue(),
+                        program.get_kernels().at(writer_kernel_id),
+                        CoreCoord(x, y),
+                        std::move(writer_args)
+                    );
+                }
+            }
+        }
     } else {
         for (uint32_t i = 0, num_cols_read = 0; i < num_cores; i++){
             CoreCoord core = {i / num_cores_y, i % num_cores_y};
@@ -228,23 +245,26 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
             } else {
                 TT_ASSERT(false, "Core not in specified core ranges");
             }
+            std::vector<std::variant<Buffer*, uint32_t>> reader_rt_args = {
+                a.buffer(),
+                num_cols_read / Wt * HtWt + num_cols_read % Wt,
+                num_cols_read % Wt,
+                num_cols_per_core
+            };
+            std::vector<std::variant<Buffer*, uint32_t>> write_rt_args = {
+                output.buffer(),
+                num_cols_per_core, // number of tiles to write
+                num_cols_read // output tile start index
+            };
+
             tt_metal::SetRuntimeArgs(
-                program, reader_kernel_id, core,
-                {
-                    a.buffer()->address(),
-                    num_cols_read / Wt * HtWt + num_cols_read % Wt,
-                    num_cols_read % Wt,
-                    num_cols_per_core
-                }
+                device -> command_queue(), program.get_kernels().at(reader_kernel_id), core,
+                std::move(reader_rt_args)
             );
 
             tt_metal::SetRuntimeArgs(
-                program, writer_kernel_id, core,
-                {
-                    output.buffer()->address(),
-                    num_cols_per_core, // number of tiles to write
-                    num_cols_read // output tile start index
-                }
+                device -> command_queue(), program.get_kernels().at(writer_kernel_id), core,
+               std::move(write_rt_args)
             );
             num_cols_read += num_cols_per_core;
         }
@@ -271,7 +291,10 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
 
         bool src_sharded = input_tensors.at(0).memory_config().is_sharded();
         bool out_sharded = output_tensors.at(0).memory_config().is_sharded();
-
+        Device* device = src_buffer->device();
+        std::vector<uint32_t> update_idx = {0};
+        std::vector<std::variant<Buffer*, uint32_t>> runtime_args_src = {src_buffer};
+        std::vector<std::variant<Buffer*, uint32_t>> runtime_args_dst = {dst_buffer};
         if (src_sharded && out_sharded) {
             UpdateDynamicCircularBufferAddress(program, cb_src1, *src_buffer);
             UpdateDynamicCircularBufferAddress(program, cb_output, *dst_buffer);
@@ -280,13 +303,11 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
                 CoreCoord core = {i / num_cores_y, i % num_cores_y};
 
                 {
-                    auto &runtime_args = GetRuntimeArgs(program, reader_kernel_id, core);
-                    runtime_args[0] = src_buffer->address();
+                    EnqueueUpdateRuntimeArgs(device->command_queue(), program.get_kernels().at(reader_kernel_id), core, update_idx, runtime_args_src, false);
                 }
 
                 {
-                    auto &runtime_args = GetRuntimeArgs(program, writer_kernel_id, core);
-                    runtime_args[0] = dst_buffer->address();
+                    EnqueueUpdateRuntimeArgs(device->command_queue(), program.get_kernels().at(writer_kernel_id), core, update_idx, runtime_args_dst, false);
                 }
             }
         }

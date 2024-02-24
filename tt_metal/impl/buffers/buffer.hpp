@@ -165,6 +165,8 @@ class Buffer {
     // Returns address of buffer in the first bank
     uint32_t address() const { return static_cast<uint32_t>(address_); }
 
+    void address(uint32_t* addr_to_copy);
+
     void set_address(uint32_t address) { address_ = address; }
 
     uint32_t page_size() const { return page_size_; }

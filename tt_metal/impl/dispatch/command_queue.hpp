@@ -29,7 +29,7 @@ using std::tuple;
 using std::unique_ptr;
 
 // Only contains the types of commands which are enqueued onto the device
-enum class EnqueueCommandType { ENQUEUE_READ_BUFFER, ENQUEUE_WRITE_BUFFER, ALLOCATE_BUFFER, DEALLOCATE_BUFFER, ENQUEUE_PROGRAM, FINISH, ENQUEUE_WRAP, ENQUEUE_RESTART, FLUSH, INVALID };
+enum class EnqueueCommandType { ENQUEUE_READ_BUFFER, ENQUEUE_WRITE_BUFFER, ALLOCATE_BUFFER, DEALLOCATE_BUFFER, GET_BUF_ADDR, SET_RUNTIME_ARGS, UPDATE_RUNTIME_ARGS, ENQUEUE_PROGRAM, FINISH, ENQUEUE_WRAP, ENQUEUE_RESTART, FLUSH, INVALID };
 
 string EnqueueCommandTypeToString(EnqueueCommandType ctype);
 
@@ -417,6 +417,23 @@ class thread_safe_map {
 typedef thread_safe_map<IssuedReadData, issued_read_mutex> IssuedReadMap;
 }
 
+struct AllocBufferMetadata {
+    std::reference_wrapper<Allocator> allocator;
+    uint64_t size;
+    uint64_t page_size;
+    BufferType buffer_type;
+    TensorMemoryLayout buffer_layout;
+    uint32_t num_cores;
+    uint64_t* address;
+    bool bottom_up;
+};
+
+struct RuntimeArgsMetadata {
+    CoreCoord core_coord;
+    std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec;
+    std::shared_ptr<Kernel> kernel;
+    std::vector<uint32_t> update_idx;
+};
 
 class HWCommandQueue {
    public:
@@ -471,24 +488,25 @@ class HWCommandQueue {
     friend void EnqueueProgramImpl(CommandQueue& cq, std::variant < std::reference_wrapper<Program>, std::shared_ptr<Program> > program, bool blocking, std::optional<std::reference_wrapper<Trace>> trace);
     friend void EnqueueReadBufferImpl(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer, void* dst, bool blocking);
     friend void EnqueueWriteBufferImpl(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer, const void* src, bool blocking);
-    friend void EnqueueAllocateBufferImpl(std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer, bool bottom_up);
+    friend void EnqueueAllocateBufferImpl(AllocBufferMetadata alloc_md);
     friend void EnqueueDeallocateBufferImpl(std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer);
+    friend void EnqueueGetBufferAddrImpl(void* dst_buf_addr, const Buffer* buffer);
     friend void FinishImpl(CommandQueue & cq);
     friend class Trace;
 };
-
 
 // Common interface for all command queue types
 struct CommandInterface {
     EnqueueCommandType type;
     std::optional<bool> blocking;
     std::optional<std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>>> buffer;
-    std::optional<Buffer*> buffer_to_allocate;
     std::optional<std::variant<std::reference_wrapper<Program>, std::shared_ptr<Program>>> program;
+    std::optional<AllocBufferMetadata> alloc_md;
+    std::optional<RuntimeArgsMetadata> runtime_args_md;
+    std::optional<const Buffer*> shadow_buffer;
     std::optional<HostBufferMemTypes> src;
     std::optional<void*> dst;
     std::optional<std::reference_wrapper<Trace>> trace;
-    std::optional<bool> bottom_up;
 };
 
 struct BufferMetadata {

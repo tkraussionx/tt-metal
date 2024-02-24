@@ -94,6 +94,8 @@ bool flatten(CommonFixture *fixture, tt_metal::Device *device, uint32_t num_tile
 
     auto dram_src_noc_xy = src_dram_buffer->noc_coordinates();
     auto dram_dst_noc_xy = dst_dram_buffer->noc_coordinates();
+    program.add_global_buffer(src_dram_buffer);
+    program.add_global_buffer(dst_dram_buffer);
 
     // input CB is larger than the output CB, to test the backpressure from the output CB all the way into the input CB
     // CB_out size = 1 forces the serialization of packer and writer kernel, generating backpressure to math kernel, input CB and reader
@@ -146,25 +148,33 @@ bool flatten(CommonFixture *fixture, tt_metal::Device *device, uint32_t num_tile
     ////////////////////////////////////////////////////////////////////////////
     fixture->WriteBuffer(device, src_dram_buffer, src_vec);
 
-    tt_metal::SetRuntimeArgs(
-        program,
-        flatten_kernel,
-        core,
-        {dram_buffer_src_addr,
+    std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec1 = {
+        src_dram_buffer.get(),
         (std::uint32_t)dram_src_noc_xy.x,
         (std::uint32_t)dram_src_noc_xy.y,
         num_tiles_r,
         num_tiles_c,
-        num_bytes_per_tensor_row});
+        num_bytes_per_tensor_row
+    };
 
-    tt_metal::SetRuntimeArgs(
-        program,
-        unary_writer_kernel,
-        core,
-        {dram_buffer_dst_addr,
+    std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec2 = {
+        dst_dram_buffer.get(),
         (std::uint32_t)dram_dst_noc_xy.x,
         (std::uint32_t)dram_dst_noc_xy.y,
-        num_tiles * 32});
+        num_tiles * 32
+    };
+
+    tt_metal::SetRuntimeArgs(
+        device->command_queue(),
+        program.get_kernels().at(flatten_kernel),
+        core,
+        std::move(runtime_args_vec1));
+
+    tt_metal::SetRuntimeArgs(
+        device->command_queue(),
+        program.get_kernels().at(unary_writer_kernel),
+        core,
+        std::move(runtime_args_vec2));
 
     fixture->RunProgram(device, program);
 

@@ -98,6 +98,7 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         tt_metal::CircularBufferConfig src0_cb_config = tt_metal::CircularBufferConfig(cb0_num_input_tiles * in0_single_tile_size, {{src0_cb_index, in0_data_format}})
 		    .set_page_size(src0_cb_index, in0_single_tile_size).set_globally_allocated_address(*src0_buffer);
         cb_src0 = tt_metal::CreateCircularBuffer(program, all_device_cores, src0_cb_config);
+        program.get_circular_buffer(cb_src0)->assign_global_address();
     } else {
         uint32_t cb0_num_input_tiles = in0_block_w; // TODO: Generalize; double buffer and add blocking along inner dim if we have Mt > 1
         tt_metal::CircularBufferConfig src0_cb_config = tt_metal::CircularBufferConfig(cb0_num_input_tiles * in0_single_tile_size, {{src0_cb_index, in0_data_format}})
@@ -121,6 +122,7 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         tt_metal::CircularBufferConfig cb_src2_config = tt_metal::CircularBufferConfig(cb2_num_input_tiles * in1_single_tile_size, {{src2_cb_index, in1_data_format}})
 		    .set_page_size(src2_cb_index, in1_single_tile_size).set_globally_allocated_address(*src1_buffer);
         cb_src2 = tt_metal::CreateCircularBuffer(program, all_device_cores, cb_src2_config);
+        program.get_circular_buffer(cb_src2)->assign_global_address();
     }
 
     // Intermediate CBs for handling untilizing, copying rows, and tilizing to output CB
@@ -143,6 +145,7 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         tt_metal::CircularBufferConfig cb_output_config = tt_metal::CircularBufferConfig(num_output_tiles * output_single_tile_size, {{output_cb_index, output_data_format}})
 		    .set_page_size(output_cb_index, output_single_tile_size).set_globally_allocated_address(*dst_buffer);
         cb_output = tt_metal::CreateCircularBuffer(program, all_device_cores, cb_output_config);
+        program.get_circular_buffer(cb_output)->assign_global_address();
     } else {
         uint32_t num_output_tiles = MtNt; // TODO: Should be MtNt if Mt > 1? Or, produce one Nt at a time and double buffer?
         tt_metal::CircularBufferConfig cb_output_config = tt_metal::CircularBufferConfig(num_output_tiles * output_single_tile_size, {{output_cb_index, output_data_format}})
@@ -334,11 +337,20 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         CoreCoord top_left_core_physical = device->worker_core_from_logical_core(top_left_core);
         CoreCoord bottom_right_core_physical = device->worker_core_from_logical_core(bottom_right_core);
 
+        // uint32_t src0_addr, src1_addr, dst_addr;
+        // src0_buffer->address(&src0_addr);
+        // src1_buffer->address(&src1_addr);
+        // dst_buffer->address(&dst_addr);
+
+        // std::cout << "--- program input0 address: " << src0_addr << std::endl;
+        // std::cout << "--- program input1 address: " << src1_addr << std::endl;
+        // std::cout << "--- program output address: " << dst_addr << std::endl;
+
         // Default reader runtime args
-        std::vector<uint32_t> reader_runtime_args = {
+        std::vector<std::variant<Buffer*, uint32_t>> reader_runtime_args = {
             0, // 0: has_work_for_mcast_kv_heads
             0, // 1: has_work_for_q_heads
-            src1_buffer->address(),
+            src1_buffer,
             Mt,
             Nt,
             KV_HEADS,
@@ -379,10 +391,10 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         reader_runtime_args.insert(reader_runtime_args.end(), in1_mcast_sender_noc_y.begin(), in1_mcast_sender_noc_y.end());
 
         // Default writer runtime args
-        std::vector<uint32_t> writer_runtime_args = {
+         std::vector<std::variant<Buffer*, uint32_t>> writer_runtime_args = {
             0, // 0: has_work_for_q_heads
-            src0_buffer->address(),
-            dst_buffer->address(),
+            src0_buffer,
+            dst_buffer,
             Mt,
             Kt,
             Nt,
@@ -402,7 +414,7 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         };
 
         // Default compute runtime args
-        std::vector<uint32_t> compute_runtime_args = {
+        std::vector<std::variant<Buffer*, uint32_t>> compute_runtime_args = {
             0, // 0: has_work_for_q_heads
             0, // 1: batch,
             Mt,
@@ -432,9 +444,9 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         uint32_t g1_numcores = core_group_1.num_cores();
         uint32_t g2_numcores = core_group_2.num_cores();
 
-        std::vector<std::vector<uint32_t>> all_reader_runtime_args = { cores.size(), reader_runtime_args };
-        std::vector<std::vector<uint32_t>> all_writer_runtime_args = { cores.size(), writer_runtime_args };
-        std::vector<std::vector<uint32_t>> all_compute_runtime_args = { cores.size(), compute_runtime_args };
+        std::vector<std::vector<std::variant<Buffer*, uint32_t>>> all_reader_runtime_args = { cores.size(), reader_runtime_args };
+        std::vector<std::vector<std::variant<Buffer*, uint32_t>>> all_writer_runtime_args = { cores.size(), writer_runtime_args };
+        std::vector<std::vector<std::variant<Buffer*, uint32_t>>> all_compute_runtime_args = { cores.size(), compute_runtime_args };
 
         // Set runtime args
         uint32_t num_output_blocks_per_core;
@@ -475,10 +487,21 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
 
             num_blocks_written += num_output_blocks_per_core;
         }
-
-        SetRuntimeArgs(program, reader_id, cores, all_reader_runtime_args);
-        SetRuntimeArgs(program, writer_id, cores, all_writer_runtime_args);
-        SetRuntimeArgs(program, compute_kernel_id, cores, all_compute_runtime_args);
+        for (size_t i = 0; i < cores.size(); i++) {
+            SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(reader_id), cores[i], std::move(all_reader_runtime_args[i]));
+            SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(writer_id), cores[i], std::move(all_writer_runtime_args[i]));
+            SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(compute_kernel_id), cores[i], std::move(all_compute_runtime_args[i]));
+        }
+        // for (const auto& set : all_cores.ranges()) {
+        //     for (auto x = set.start.x; x <= set.end.x; x++) {
+        //         for (auto y = set.start.y; y <= set.end.y; y++) {
+        //             tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(unary_reader_kernel_id), CoreCoord(x, y), std::move(runtime_args_vec1));
+        //         }
+        //     }
+        // }
+        // SetRuntimeArgs(program, reader_id, cores, all_reader_runtime_args);
+        // SetRuntimeArgs(program, writer_id, cores, all_writer_runtime_args);
+        // SetRuntimeArgs(program, compute_kernel_id, cores, all_compute_runtime_args);
 
         // Update dynamic CBs (which is most of them)
         if (in0_is_sharded) {

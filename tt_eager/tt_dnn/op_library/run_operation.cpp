@@ -179,6 +179,7 @@ std::vector<Tensor> run_device_operation(
                                    const std::vector<Tensor>& input_tensors,
                                    const std::vector<std::optional<const Tensor>>& optional_input_tensors,
                                    std::vector<Tensor>& output_tensors) -> std::reference_wrapper<Program> {
+            // std::this_thread::sleep_for(std::chrono::milliseconds(3000));
             auto&& [program_with_callbacks, cache_hit] =
                 program_cache::get_or_create(operation, input_tensors, optional_input_tensors, output_tensors);
             TT_ASSERT(program_with_callbacks.supports_program_cache());
@@ -211,6 +212,8 @@ std::vector<Tensor> run_device_operation(
                                    const std::vector<Tensor>& input_tensors,
                                    const std::vector<std::optional<const Tensor>>& optional_input_tensors,
                                    std::vector<Tensor>& output_tensors) -> std::shared_ptr<Program> {
+                                    std::cout << "Creating program" << std::endl;
+            // std::this_thread::sleep_for(std::chrono::milliseconds(3000));
             auto program_with_callbacks =
                 operation.create_program(input_tensors, optional_input_tensors, output_tensors);
             return std::make_shared<Program>(std::move(program_with_callbacks.program));
@@ -218,6 +221,7 @@ std::vector<Tensor> run_device_operation(
     }
 
     operation.validate(input_tensors, optional_input_tensors, optional_output_tensors);
+    std::cout << "Creating output tensors" << std::endl;
     auto output_tensors = operation.create_output_tensors(input_tensors, optional_output_tensors);
     auto program = get_or_create_program(operation, input_tensors, optional_input_tensors, output_tensors);
 
@@ -234,7 +238,7 @@ std::vector<Tensor> run_device_operation(
                     }
                 }
                 if (USE_FAST_DISPATCH) {
-                    // std::cout << "Running operation" << std::endl;
+                    std::cout << "Running operation" << std::endl;
 #ifndef TTNN_ENABLE_LOGGING
                     EnqueueProgram(device->command_queue(), program, false);
 #else
