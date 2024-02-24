@@ -39,13 +39,14 @@ void write_chunk(
     }
 }
 
-template <bool dest_is_dram>
-bool receiver_eth_notify_workers_payload_available_sequence(
-    std::array<uint32_t, erisc_info_t::MAX_CONCURRENT_TRANSACTIONS> &transaction_channel_receiver_buffer_addresses,
-    QueueIndexPointer<uint8_t> &noc_writer_buffer_wrptr,
-    QueueIndexPointer<uint8_t> &noc_writer_buffer_ackptr,
-    const QueueIndexPointer<uint8_t> eth_receiver_wrptr,
-    const QueueIndexPointer<uint8_t> eth_receiver_ackptr,
+
+template <uint32_t MAX_NUM_CHANNELS, bool dest_is_dram>
+bool eth_initiate_noc_write_sequence(
+    std::array<uint32_t, MAX_NUM_CHANNELS> &transaction_channel_receiver_buffer_addresses,
+    erisc::datamover::QueueIndexPointer<uint8_t> &noc_writer_buffer_wrptr,
+    erisc::datamover::QueueIndexPointer<uint8_t> &noc_writer_buffer_ackptr,
+    const erisc::datamover::QueueIndexPointer<uint8_t> eth_receiver_wrptr,
+    const erisc::datamover::QueueIndexPointer<uint8_t> eth_receiver_ackptr,
 
     const uint32_t num_pages,
     const uint32_t num_pages_per_l1_buffer,
@@ -53,14 +54,14 @@ bool receiver_eth_notify_workers_payload_available_sequence(
     uint32_t &page_index,
     const InterleavedAddrGen<dest_is_dram> &dest_address_generator) {
     bool did_something = false;
-    bool noc_write_is_in_progress = receiver_is_noc_write_in_progress(noc_writer_buffer_wrptr, noc_writer_buffer_ackptr);
+    bool noc_write_is_in_progress = erisc::datamover::deprecated::receiver_is_noc_write_in_progress(noc_writer_buffer_wrptr, noc_writer_buffer_ackptr);
 
     if (!noc_write_is_in_progress) {
         bool next_payload_received = noc_writer_buffer_wrptr != eth_receiver_wrptr;
         if (next_payload_received) {
             // Can initialize a new write if data is at this buffer location (eth num_bytes != 0)
             // and the receiver ackptr != next write pointer
-            // DPRINT << "rx: accepting payload, sending receive ack on channel " << (uint32_t)noc_writer_buffer_wrptr << "\n";
+            // // DPRINT << "rx: accepting payload, sending receive ack on channel " << (uint32_t)noc_writer_buffer_wrptr << "\n";
             write_chunk<dest_is_dram>(
                 transaction_channel_receiver_buffer_addresses[noc_writer_buffer_wrptr.index()],
                 num_pages,
@@ -92,26 +93,26 @@ void kernel_main() {
     const std::uint32_t dest_addr = get_arg_val<uint32_t>(2);
     const std::uint32_t page_size = get_arg_val<uint32_t>(3);
     const std::uint32_t num_pages = get_arg_val<uint32_t>(4);
-    eth_setup_handshake(remote_eth_l1_dst_addr, false);
+    erisc::datamover::eth_setup_handshake(remote_eth_l1_dst_addr, false);
 
     const InterleavedAddrGen<dest_is_dram> dest_address_generator = {
         .bank_base_address = dest_addr, .page_size = page_size};
 
-    QueueIndexPointer<uint8_t> noc_writer_buffer_ackptr(MAX_NUM_CHANNELS);
-    QueueIndexPointer<uint8_t> noc_writer_buffer_wrptr(MAX_NUM_CHANNELS);
-    QueueIndexPointer<uint8_t> eth_receiver_rdptr(MAX_NUM_CHANNELS);
-    QueueIndexPointer<uint8_t> eth_receiver_ackptr(MAX_NUM_CHANNELS);
+    erisc::datamover::QueueIndexPointer<uint8_t> noc_writer_buffer_ackptr(MAX_NUM_CHANNELS);
+    erisc::datamover::QueueIndexPointer<uint8_t> noc_writer_buffer_wrptr(MAX_NUM_CHANNELS);
+    erisc::datamover::QueueIndexPointer<uint8_t> eth_receiver_rdptr(MAX_NUM_CHANNELS);
+    erisc::datamover::QueueIndexPointer<uint8_t> eth_receiver_ackptr(MAX_NUM_CHANNELS);
 
     kernel_profiler::mark_time(80);
 
-    std::array<uint32_t, erisc_info_t::MAX_CONCURRENT_TRANSACTIONS> transaction_channel_remote_buffer_addresses;
-    initialize_transaction_buffer_addresses(
+    std::array<uint32_t, NUM_TRANSACTION_BUFFERS> transaction_channel_remote_buffer_addresses;
+    erisc::datamover::initialize_transaction_buffer_addresses<NUM_TRANSACTION_BUFFERS>(
         MAX_NUM_CHANNELS,
         remote_eth_l1_dst_addr,
         num_bytes_per_send,
         transaction_channel_remote_buffer_addresses);
-    std::array<uint32_t, erisc_info_t::MAX_CONCURRENT_TRANSACTIONS> transaction_channel_local_buffer_addresses;
-    initialize_transaction_buffer_addresses(
+    std::array<uint32_t, NUM_TRANSACTION_BUFFERS> transaction_channel_local_buffer_addresses;
+    erisc::datamover::initialize_transaction_buffer_addresses<NUM_TRANSACTION_BUFFERS>(
         MAX_NUM_CHANNELS,
         local_eth_l1_src_addr,
         num_bytes_per_send,
@@ -133,12 +134,12 @@ void kernel_main() {
         bool did_something = false;
         // kernel_profiler::mark_time(90);
 
-        bool received = receiver_eth_accept_payload_sequence(
+        bool received = erisc::datamover::deprecated::receiver_eth_accept_payload_sequence(
                             noc_writer_buffer_wrptr, noc_writer_buffer_ackptr, eth_receiver_rdptr, eth_receiver_ackptr);
         num_receives_acked = received ? num_receives_acked + 1 : num_receives_acked;
         did_something = received || did_something;
 
-        did_something = receiver_eth_notify_workers_payload_available_sequence<dest_is_dram>(
+        did_something = eth_initiate_noc_write_sequence<MAX_NUM_CHANNELS, dest_is_dram>(
                             transaction_channel_local_buffer_addresses,
                             noc_writer_buffer_wrptr,
                             noc_writer_buffer_ackptr,
@@ -152,12 +153,12 @@ void kernel_main() {
                             dest_address_generator) ||
                         did_something;
 
-        did_something = receiver_noc_read_worker_completion_check_sequence(
+        did_something = erisc::datamover::deprecated::receiver_noc_read_worker_completion_check_sequence(
                             noc_writer_buffer_wrptr, noc_writer_buffer_ackptr, noc_index) ||
                         did_something;
 
         did_something =
-            receiver_eth_send_ack_to_sender_sequence(
+            erisc::datamover::deprecated::receiver_eth_send_ack_to_sender_sequence(
                 noc_writer_buffer_wrptr, noc_writer_buffer_ackptr, eth_receiver_rdptr, eth_receiver_ackptr, num_eth_sends_acked) ||
             did_something;
 

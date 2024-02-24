@@ -20,7 +20,11 @@ inline void RISC_POST_STATUS(uint32_t status) {
     ptr[0] = status;
 }
 
-struct eth_word_t {
+// TODO(snijjar): Is there a better place to put this? It may be arch specific
+static constexpr std::size_t ETH_WORD_ALIGN_T = 16;
+using eth_word_t = uint8_t[ETH_WORD_ALIGN_T];
+
+struct eth_channel_sync_t {
     // Do not reorder fields without also updating the corresponding APIs that use
     // any of them
     volatile uint32_t bytes_sent;
@@ -35,7 +39,7 @@ struct erisc_info_t {
     volatile uint32_t unused_arg0;
     volatile uint32_t unused_arg1;
     volatile uint32_t unused_arg2;
-    eth_word_t per_channel_user_bytes_send[MAX_CONCURRENT_TRANSACTIONS];
+    eth_channel_sync_t per_channel_user_bytes_send[MAX_CONCURRENT_TRANSACTIONS];
     volatile uint32_t fast_dispatch_buffer_msgs_sent;
     uint32_t reserved_3_;
     uint32_t reserved_4_;

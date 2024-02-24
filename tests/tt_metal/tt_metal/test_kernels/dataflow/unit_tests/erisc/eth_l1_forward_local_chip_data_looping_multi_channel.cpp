@@ -40,14 +40,14 @@ void read_chunk(
 }
 
 
-template <bool src_is_dram>
+template <uint8_t MAX_CONCURRENT_TRANSACTIONS, bool src_is_dram>
 FORCE_INLINE  bool noc_read_data_sequence(
-    std::array<uint32_t, erisc_info_t::MAX_CONCURRENT_TRANSACTIONS> &transaction_channel_sender_buffer_addresses,
+    std::array<uint32_t, MAX_CONCURRENT_TRANSACTIONS> &transaction_channel_sender_buffer_addresses,
     uint32_t num_bytes_per_send,
-    QueueIndexPointer<uint8_t> &noc_reader_buffer_wrptr,
-    QueueIndexPointer<uint8_t> &noc_reader_buffer_ackptr,
-    const QueueIndexPointer<uint8_t> eth_sender_rdptr,
-    const QueueIndexPointer<uint8_t> eth_sender_ackptr,
+    erisc::datamover::QueueIndexPointer<uint8_t> &noc_reader_buffer_wrptr,
+    erisc::datamover::QueueIndexPointer<uint8_t> &noc_reader_buffer_ackptr,
+    const erisc::datamover::QueueIndexPointer<uint8_t> eth_sender_rdptr,
+    const erisc::datamover::QueueIndexPointer<uint8_t> eth_sender_ackptr,
     const uint8_t noc_index,
     const InterleavedAddrGen<src_is_dram> &source_address_generator,
     const uint32_t page_size,
@@ -58,11 +58,11 @@ FORCE_INLINE  bool noc_read_data_sequence(
     bool did_something = false;
 
     bool noc_read_is_in_progress =
-        sender_is_noc_read_in_progress(noc_reader_buffer_wrptr, noc_reader_buffer_ackptr);
+        erisc::datamover::deprecated::sender_is_noc_read_in_progress(noc_reader_buffer_wrptr, noc_reader_buffer_ackptr);
     bool more_data_to_read = page_index < num_pages;
     if (!noc_read_is_in_progress && more_data_to_read) {
         // We can only If a noc read is in progress, we can't issue another noc read
-        bool next_buffer_available = !sender_buffer_pool_full(
+        bool next_buffer_available = !erisc::datamover::deprecated::sender_buffer_pool_full(
             noc_reader_buffer_wrptr, noc_reader_buffer_ackptr, eth_sender_rdptr, eth_sender_ackptr);
         // Really we should be able to assert on this second condition but I don't yet know how to
         // propagate that info to host (especially on erisc... TODO(snijjar))
@@ -118,14 +118,14 @@ void kernel_main() {
     std::uint32_t page_size = get_arg_val<uint32_t>(3);
     std::uint32_t num_pages = get_arg_val<uint32_t>(4);
 
-    QueueIndexPointer<uint8_t> noc_reader_buffer_ackptr(MAX_NUM_CHANNELS);
-    QueueIndexPointer<uint8_t> noc_reader_buffer_wrptr(MAX_NUM_CHANNELS);
-    QueueIndexPointer<uint8_t> eth_sender_rdptr(MAX_NUM_CHANNELS);
-    QueueIndexPointer<uint8_t> eth_sender_ackptr(MAX_NUM_CHANNELS);
+    erisc::datamover::QueueIndexPointer<uint8_t> noc_reader_buffer_ackptr(MAX_NUM_CHANNELS);
+    erisc::datamover::QueueIndexPointer<uint8_t> noc_reader_buffer_wrptr(MAX_NUM_CHANNELS);
+    erisc::datamover::QueueIndexPointer<uint8_t> eth_sender_rdptr(MAX_NUM_CHANNELS);
+    erisc::datamover::QueueIndexPointer<uint8_t> eth_sender_ackptr(MAX_NUM_CHANNELS);
 
     // Handshake with the other erisc first so we don't include dispatch time
     // in our measurements
-    eth_setup_handshake(remote_eth_l1_dst_addr, true);
+    erisc::datamover::eth_setup_handshake(remote_eth_l1_dst_addr, true);
 
     // const InterleavedAddrGenFast<src_is_dram> s = {
     //     .bank_base_address = src_addr, .page_size = page_size, .data_format = df};
@@ -136,14 +136,14 @@ void kernel_main() {
     kernel_profiler::mark_time(10);
 
     // SETUP DATASTRUCTURES
-    std::array<uint32_t, erisc_info_t::MAX_CONCURRENT_TRANSACTIONS> transaction_channel_sender_buffer_addresses;
-    std::array<uint32_t, erisc_info_t::MAX_CONCURRENT_TRANSACTIONS> transaction_channel_receiver_buffer_addresses;\
-    initialize_transaction_buffer_addresses(
+    std::array<uint32_t, MAX_NUM_CHANNELS> transaction_channel_sender_buffer_addresses;
+    std::array<uint32_t, MAX_NUM_CHANNELS> transaction_channel_receiver_buffer_addresses;\
+    erisc::datamover::initialize_transaction_buffer_addresses<MAX_NUM_CHANNELS>(
         MAX_NUM_CHANNELS,
         local_eth_l1_src_addr,
         num_bytes_per_send,
         transaction_channel_sender_buffer_addresses);
-    initialize_transaction_buffer_addresses(
+    erisc::datamover::initialize_transaction_buffer_addresses<MAX_NUM_CHANNELS>(
         MAX_NUM_CHANNELS,
         remote_eth_l1_dst_addr,
         num_bytes_per_send,
@@ -163,12 +163,12 @@ void kernel_main() {
     while (eth_sends_completed < total_num_message_sends) {
         bool did_something = false;
 
-        did_something = sender_noc_receive_payload_ack_check_sequence(
+        did_something = erisc::datamover::deprecated::sender_noc_receive_payload_ack_check_sequence(
                             noc_reader_buffer_wrptr,
                             noc_reader_buffer_ackptr,
                             noc_index) || did_something;
 
-        did_something = noc_read_data_sequence<src_is_dram>(
+        did_something = noc_read_data_sequence<MAX_NUM_CHANNELS, src_is_dram>(
                             transaction_channel_sender_buffer_addresses,
                             num_bytes_per_send,
                             noc_reader_buffer_wrptr,
@@ -182,7 +182,7 @@ void kernel_main() {
                             num_pages,
                             page_index) || did_something;
 
-        bool sent_eth_data = sender_eth_send_data_sequence(
+        bool sent_eth_data = erisc::datamover::deprecated::sender_eth_send_data_sequence(
                             transaction_channel_sender_buffer_addresses,
                             transaction_channel_receiver_buffer_addresses,
                             local_eth_l1_src_addr,
@@ -198,7 +198,7 @@ void kernel_main() {
         did_something = sent_eth_data || did_something;
 
 
-        did_something = sender_eth_check_receiver_ack_sequence(
+        did_something = erisc::datamover::deprecated::sender_eth_check_receiver_ack_sequence(
                             noc_reader_buffer_wrptr,
                             noc_reader_buffer_ackptr,
                             eth_sender_rdptr,
