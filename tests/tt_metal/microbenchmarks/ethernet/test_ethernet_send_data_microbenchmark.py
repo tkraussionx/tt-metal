@@ -250,12 +250,84 @@ def test_ethernet_send_data_microbenchmark_concurrent_with_dram_read_and_write(
     return report_results(test_string_name, input_buffer_size_bytes)
 
 
+@pytest.mark.parametrize(
+    "input_buffer_size_bytes",
+    [1024, 2048, 4096, 16384, 64 * 1024, 128 * 1024, 256 * 1024, 835584, 16711680, 680 * 32768],
+)
+@pytest.mark.parametrize(
+    "eth_buffer_size_bytes",
+    [1024, 2048, 4096, 8192, 12 * 1024, 16 * 1024, 14 * 1024, 20 * 1024, 24 * 1024, 32 * 1024, 50 * 1024],
+)
+@pytest.mark.parametrize("num_transaction_buffers", [1, 2, 3, 4, 5, 6, 8])
+@pytest.mark.parametrize("input_buffer_page_size", [1024, 2048, 4096, 8192])
+# @pytest.mark.parametrize("precomputed_address_buffer_size", [0, 16, 32])
+def test_descoupled_worker_and_erisc_data_mover_single_direction(
+    input_buffer_size_bytes,
+    eth_buffer_size_bytes,
+    num_transaction_buffers,
+    input_buffer_page_size  # ,
+    # precomputed_address_buffer_size,
+):
+    if eth_buffer_size_bytes < input_buffer_page_size:
+        pytest.skip("eth_buffer_size_bytes < input_buffer_page_size")
+        return
+
+    if input_buffer_size_bytes < input_buffer_page_size:
+        pytest.skip("input_buffer_size_bytes < input_buffer_page_size")
+        return
+
+    if num_transaction_buffers > 1:
+        pytest.skip("This unit test doesn't support multi-channel yet")
+
+    test_string_name = f"test_ethernet_send_data_microbenchmark - \
+            input_buffer_page_size: {input_buffer_page_size}, \
+                num_transaction_buffers: {num_transaction_buffers}, \
+                    eth_buffer_size_bytes: {eth_buffer_size_bytes} \
+                        input_buffer_size_bytes: {input_buffer_size_bytes}"
+    print(
+        f"test_ethernet_send_data_microbenchmark - \
+            input_buffer_page_size: {input_buffer_page_size}, \
+                num_transaction_buffers: {num_transaction_buffers}, \
+                    eth_buffer_size_bytes: {eth_buffer_size_bytes} \
+                        input_buffer_size_bytes: {input_buffer_size_bytes}"
+    )
+    os.system(f"rm -rf {os.environ['TT_METAL_HOME']}/generated/profiler/.logs/profile_log_device.csv")
+    rc = os.system(
+        f"TT_METAL_SLOW_DISPATCH_MODE=1 TT_METAL_DEVICE_PROFILER=1 \
+            {os.environ['TT_METAL_HOME']}/build/test/tt_metal/perf_microbenchmark/ethernet/test_workers_and_erisc_datamover_unidirectional \
+            \"tests/tt_metal/tt_metal/test_kernels/dataflow/unit_tests/erisc/erisc_datamover_sender_worker_reader.cpp\" \
+            \"tests/tt_metal/tt_metal/test_kernels/dataflow/unit_tests/erisc/erisc_datamover_sender_worker_sender.cpp\" \
+            \"tests/tt_metal/tt_metal/test_kernels/dataflow/unit_tests/erisc/erisc_datamover_receiver_worker_reader.cpp\" \
+            \"tests/tt_metal/tt_metal/test_kernels/dataflow/unit_tests/erisc/erisc_datamover_receiver_worker_sender.cpp\" \
+            {eth_buffer_size_bytes} \
+            {num_transaction_buffers} \
+            {input_buffer_page_size} \
+            {input_buffer_size_bytes} \
+            {1} \
+            {1} \
+            0 \
+            "
+        # > /dev/null 2>&1"
+    )
+    if rc != 0:
+        print("Error in running the test")
+        assert False
+
+    test_string_name = f"test_ethernet_send_data_microbenchmark_concurrent_with_dram_read_"
+    test_string_name += f"{input_buffer_page_size}_"
+    test_string_name += f"{num_transaction_buffers}_"
+    test_string_name += f"{eth_buffer_size_bytes}_"
+    test_string_name += f"{input_buffer_size_bytes}"  # _"
+    # test_string_name += f"{precomputed_address_buffer_size}"
+    return report_results(test_string_name, input_buffer_size_bytes)
+
+
 def test_run_ethernet_send_data_microbenchmark_sweep():
     input_buffer_size_bytes = [16384, 64 * 1024, 256 * 1024, 16711680]  # , 680*32768]
-    eth_buffer_size_bytes = [8192, 16 * 1024, 32 * 1024, 50 * 1024]
+    eth_buffer_size_bytes = [8192, 12 * 1024, 14 * 1024, 16 * 1024]
     # num_transaction_buffers = [1, 2, 3, 4, 8]
     # num_transaction_buffers = [2, 3, 4, 8]
-    num_transaction_buffers = [3, 4, 8]
+    num_transaction_buffers = [3, 5, 6, 7]
     input_buffer_page_size = [1024, 2048, 4096]
 
     recorded_throughput_slow_mode = {}
@@ -266,6 +338,11 @@ def test_run_ethernet_send_data_microbenchmark_sweep():
         for input_size_bytes in input_buffer_size_bytes:
             for eth_l1_buffer_size in eth_buffer_size_bytes:
                 for max_concurrent_transfers in num_transaction_buffers:
+                    if max_concurrent_transfers > 1 and (
+                        eth_l1_buffer_size * (max_concurrent_transfers - 1) > input_size_bytes
+                    ):
+                        continue
+
                     if eth_buffer_size_bytes < input_buffer_page_size:
                         continue
 
@@ -278,10 +355,15 @@ def test_run_ethernet_send_data_microbenchmark_sweep():
                     attempts = 0
                     max_attempts = 10
                     successful = False
+                    throughput = -1
                     while not successful and attempts < max_attempts:
                         try:
                             throughput = test_ethernet_send_data_microbenchmark_concurrent_with_dram_read_and_write(
                                 input_size_bytes, eth_l1_buffer_size, max_concurrent_transfers, page_size
+                            )
+
+                            os.system(
+                                f'echo "{page_size},{input_size_bytes},{eth_l1_buffer_size},{num_concurrent_transfers},{throughput}\n" >> throughputs.txt'
                             )
                             successful = True
                         except:
