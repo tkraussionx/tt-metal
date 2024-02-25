@@ -59,14 +59,14 @@ def test_mamba_ssm_inference(
     model = TtMambaSSM(reference_model.args, device, residual_block.state_dict())
     input = input.unsqueeze(1)
     tt_input = torch2tt_tensor(
-                    input, 
-                    device,
-                    tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
-                    tt_memory_config=tt_lib.tensor.MemoryConfig(
-                            tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
-                        ),
-                    tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
-                )
+        input,
+        device,
+        tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
+        tt_memory_config=tt_lib.tensor.MemoryConfig(
+            tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
+        ),
+        tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
+    )
     tt_output = model(tt_input)
     tt_output = tt2torch_tensor(tt_output).squeeze(1)
     logger.info(comp_allclose(reference_output, tt_output))
