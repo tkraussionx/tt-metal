@@ -11,6 +11,7 @@ from models.helper_funcs import Linear
 from models.demos.mamba.reference.args import ModelArgs
 from models.demos.mamba.tt.mamba_one_step_ssm import TtMambaSSM
 
+
 class TtMambaBlock(torch.nn.Module):
     def __init__(
         self,
@@ -24,7 +25,6 @@ class TtMambaBlock(torch.nn.Module):
         self.device = device
         self.args = args
 
-        
         in_proj_weight_name = "mixer.in_proj.weight"
         self.ssm_in_proj_weights = torch2tt_tensor(
             self.state_dict[in_proj_weight_name][: self.args.d_inner, :],
@@ -62,11 +62,15 @@ class TtMambaBlock(torch.nn.Module):
 
         conv1d_weight_name = "mixer.conv1d.weight"
         self.conv1d_weights = []
-        #conv1d_weights (2E, 1, 4)->(2E, 1)->(2E, 1, 1)->(1, 1, 2E)
+        # conv1d_weights (2E, 1, 4)->(2E, 1)->(2E, 1, 1)->(1, 1, 2E)
         for i in range(4):
             self.conv1d_weights.append(
                 torch2tt_tensor(
-                    self.state_dict[conv1d_weight_name][:,:,i].unsqueeze(-1).permute(1, 2, 0).repeat(self.args.batch_size, 1, 1).view(self.args.batch_size, 1, 1, self.args.d_inner),
+                    self.state_dict[conv1d_weight_name][:, :, i]
+                    .unsqueeze(-1)
+                    .permute(1, 2, 0)
+                    .repeat(self.args.batch_size, 1, 1)
+                    .view(self.args.batch_size, 1, 1, self.args.d_inner),
                     self.device,
                     tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
                     tt_memory_config=tt_lib.tensor.MemoryConfig(
@@ -78,7 +82,9 @@ class TtMambaBlock(torch.nn.Module):
 
         conv1d_bias_name = "mixer.conv1d.bias"
         self.conv1d_bias = torch2tt_tensor(
-            self.state_dict[conv1d_bias_name].repeat(self.args.batch_size, 1).view(self.args.batch_size, 1, 1, self.args.d_inner),
+            self.state_dict[conv1d_bias_name]
+            .repeat(self.args.batch_size, 1)
+            .view(self.args.batch_size, 1, 1, self.args.d_inner),
             self.device,
             tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
             tt_memory_config=tt_lib.tensor.MemoryConfig(
@@ -100,7 +106,7 @@ class TtMambaBlock(torch.nn.Module):
                     tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
                 )
             )
-        self.tt_ssm = TtMambaSSM(self.args,self.device,self.state_dict)
+        self.tt_ssm = TtMambaSSM(self.args, self.device, self.state_dict)
 
     def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
         res = self.mlp_proj(x)

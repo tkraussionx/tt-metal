@@ -11,6 +11,7 @@ from models.helper_funcs import Linear
 from models.demos.mamba.reference.args import ModelArgs
 from models.demos.mamba.tt.mamba_block import TtMambaBlock
 
+
 class TtResidualBlock(torch.nn.Module):
     def __init__(
         self,
@@ -24,7 +25,6 @@ class TtResidualBlock(torch.nn.Module):
         self.device = device
         self.args = args
 
-        
         rms_norm_weight_name = "norm.weight"
         self.rms_norm_weights = torch2tt_tensor(
             self.state_dict[rms_norm_weight_name],
@@ -35,8 +35,8 @@ class TtResidualBlock(torch.nn.Module):
             ),
             tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
         )
-        
-        self.tt_mamba_block = TtMambaBlock(self.args,self.device,self.state_dict)
+
+        self.tt_mamba_block = TtMambaBlock(self.args, self.device, self.state_dict)
 
     def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
         mamba_input = tt_lib.tensor.rmsnorm(x, self.args.eps, self.rms_norm_weights)
