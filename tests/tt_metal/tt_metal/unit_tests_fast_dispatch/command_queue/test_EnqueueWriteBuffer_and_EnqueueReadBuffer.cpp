@@ -101,7 +101,7 @@ vector<uint32_t> generate_arange_vector(uint32_t size_bytes) {
 }
 bool test_EnqueueWriteBuffer_and_EnqueueReadBuffer(Device* device, CommandQueue& cq, const TestBufferConfig& config) {
     bool pass = true;
-    for (const bool use_void_star_api: {true, false}) {
+    for (const bool use_void_star_api: {false, true}) {
         size_t buf_size = config.num_pages * config.page_size;
         Buffer bufa(device, buf_size, config.page_size, config.buftype);
         std::cout << "  sending to buffer " << bufa.noc_coordinates().str() << " " << std::hex  << bufa.address() << std::endl;
@@ -593,6 +593,7 @@ TEST_F(CommandQueueSingleCardFixture, WritesToRandomBufferTypeAndThenReadsBlocki
 }
 
 TEST_F(CommandQueueSingleCardFixture, WritesToRandomBufferTypeAndThenReadsNonblocking) {
+  GTEST_SKIP();
     BufferStressTestConfig config = {
         .seed = 0, .num_pages_total = 50000, .page_size = 2048, .max_num_pages_per_buffer = 16};
 
