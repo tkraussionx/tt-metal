@@ -698,9 +698,7 @@ const DeviceCommand EnqueueWaitForEventCommand::assemble_device_command(uint32_t
     log_info(tt::LogMetal, "KCM inside EnqueueWaitForEventCommand w/ SyncEvent(event_id: {} event_sync_core: {})", this->sync_event.event_id, event_sync_core.str());
 
     // Tell Kernel that this is a sync event, what addr and value to sync on.
-    command.set_is_event_sync(true);
-    command.set_event_sync_core_x(event_sync_core.x);
-    command.set_event_sync_core_y(event_sync_core.y);
+    command.set_event_sync_xy_ena(event_sync_core.x, event_sync_core.y, true);
     command.set_event_sync_event_id(this->sync_event.event_id);
 
     return command;

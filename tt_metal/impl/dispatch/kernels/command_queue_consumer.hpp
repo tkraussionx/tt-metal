@@ -309,7 +309,10 @@ FORCE_INLINE void record_last_completed_event(uint32_t event_id) {
 }
 
 // Cross CQ sync by waiting for a given CQ to have completed up to a certain event id.
-FORCE_INLINE void wait_for_event(uint32_t event_id, uint32_t noc_x, uint32_t noc_y) {
+FORCE_INLINE void wait_for_event(uint32_t event_sync_xy_ena, uint32_t event_id) {
+
+    uint8_t noc_x = (event_sync_xy_ena >> 16) & 0xFF;
+    uint8_t noc_y = (event_sync_xy_ena >> 8) & 0xFF;
 
     uint64_t src_noc_addr = get_noc_addr(noc_x, noc_y, CQ_COMPLETION_LAST_EVENT); // Addr to read
 
@@ -318,13 +321,13 @@ FORCE_INLINE void wait_for_event(uint32_t event_id, uint32_t noc_x, uint32_t noc
         noc_async_read(src_noc_addr, CQ_COMPLETION_16B_SCRATCH, 4);
         noc_async_read_barrier();
         DPRINT << "(x=" << (uint32_t) my_x[0] << ",y=" << (uint32_t) my_y[0] << ") - " << "wait_for_event()" << " attempts: " << attempts;
-        DPRINT << " for event_id: " << event_id << " got event_id: " << *get_16b_scratch_l1() << " from NOC_XY: " << noc_x << "," << noc_y << ENDL();
+        DPRINT << " for event_id: " << event_id << " got event_id: " << *get_16b_scratch_l1() << " from NOC_XY: " <<  (uint32_t) noc_x << "," <<  (uint32_t) noc_y << ENDL();
         if (attempts++ > 100) break; // Debug only, remove before merge. For hang testing.
     } while (*get_16b_scratch_l1() < event_id);
 
     DPRINT << "(x=" << (uint32_t) my_x[0] << ",y=" << (uint32_t) my_y[0] << ") - " << "KCM wait_for_event() Finished ";
     DPRINT << " w/ last_completed_event_id: " << *get_16b_scratch_l1() << " sync_event_id: " << event_id;
-    DPRINT << " from NOC_XY: " << noc_x << "," << noc_y << ENDL();
+    DPRINT << " from NOC_XY: " << (uint32_t) noc_x << "," <<  (uint32_t) noc_y << ENDL();
 }
 
 template <uint32_t host_finish_addr>
