@@ -53,7 +53,7 @@ class TtMambaSSM(torch.nn.Module):
         self.BC_proj = Linear(self.args.d_inner, self.args.d_state * 2, self.BC_proj_weights, bias=None)
 
         self.C_proj_weights = torch2tt_tensor(
-            self.state_dict[x_proj_weight_name][(self.args.dt_rank+self.args.d_state):, :],
+            self.state_dict[x_proj_weight_name][(self.args.dt_rank + self.args.d_state) :, :],
             self.device,
             tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
             tt_memory_config=tt_lib.tensor.MemoryConfig(
@@ -64,7 +64,7 @@ class TtMambaSSM(torch.nn.Module):
 
         self.B_proj = Linear(self.args.d_inner, self.args.d_state, self.B_proj_weights, bias=None)
         self.C_proj = Linear(self.args.d_inner, self.args.d_state, self.C_proj_weights, bias=None)
-    
+
         A_weight_name = "mixer.A_log"
         self.A = self.state_dict[A_weight_name]
         self.A = -torch.exp(self.A.float())  # (2E, N)
