@@ -9,6 +9,7 @@ from loguru import logger
 import tt_lib
 from models.demos.mamba.reference.decode_model import MambaDecode, MambaPretrainedModelName
 from models.demos.mamba.tt.mamba_one_step_ssm import TtMambaSSM
+from models.utility_functions import torch2tt_tensor, tt2torch_tensor
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_allclose,
     comp_pcc,
@@ -47,22 +48,36 @@ def test_mamba_ssm_inference(
     LAYER_NUM = 0
 
     reference_model = MambaDecode.from_pretrained(model_version)
+    reference_model.args.batch_size = batch
 
     d_in = reference_model.args.d_model * reference_model.args.expand
-    input = torch.rand(batch, 1, d_in)
+    #input = torch.zeros(batch, 1, d_in)
+    input = torch.load("after_silu.pt").squeeze(1).to(torch.float32)
+    #input = torch.FloatTensor(batch, 1, d_in).uniform_(-0.00001, 0.000151).to(torch.float32)
+    #breakpoint()
 
     reference_output = PytorchMambaSSM(reference_model, LAYER_NUM)(input)
+    #reference_output = torch.load("output_pytorch.pt")
 
-    mamba_block = reference_model.layers[LAYER_NUM].mixer
-    assert not isinstance(mamba_block, torch.Tensor), "Expected torch.Module"
+    residual_block = reference_model.layers[LAYER_NUM]
+    assert not isinstance(residual_block, torch.Tensor), "Expected torch.Module"
 
-    model = TtMambaSSM(reference_model.args, device, mamba_block.state_dict())
-    model_output = model(input)
-    # model_output = reference_output
+    model = TtMambaSSM(reference_model.args, device, residual_block.state_dict())
+    input = input.unsqueeze(1)
+    tt_input = torch2tt_tensor(
+                    input, 
+                    device,
+                    tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
+                    tt_memory_config=tt_lib.tensor.MemoryConfig(
+                            tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
+                        ),
+                    tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
+                )
+    tt_output = model(tt_input)
+    tt_output = tt2torch_tensor(tt_output).squeeze(1)
+    logger.info(comp_allclose(reference_output, tt_output))
 
-    logger.info(comp_allclose(reference_output, model_output))
-
-    does_pass, output_pcc = comp_pcc(reference_output, model_output, pcc)
+    does_pass, output_pcc = comp_pcc(reference_output, tt_output, pcc)
     logger.info(f"PCC value: {output_pcc}")
 
     if not does_pass:
