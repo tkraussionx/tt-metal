@@ -235,8 +235,8 @@ class MambaBlock(nn.Module):
         y = y * F.silu(res)
 
         output = self.out_proj(y)
-        output = output.squeeze(1)
-        return output
+        
+        return output.squeeze(1)
 
     def ssm(self, x):
         """Runs the SSM. See:
@@ -286,7 +286,7 @@ class MambaBlock(nn.Module):
         y = einsum(x, C[:, -1], "b d_in n, b n -> b d_in")
 
         y = y.unsqueeze(1)
-        y = y + u * D
+        y = y + u*D
 
         self.prev_hidden_states = x
         return y
