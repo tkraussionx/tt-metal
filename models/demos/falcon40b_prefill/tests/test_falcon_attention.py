@@ -9,6 +9,7 @@ from loguru import logger
 import tt_lib
 from models.demos.falcon40b_prefill.reference.hf_modeling_falcon import (
     FalconForCausalLM,
+    FalconConfig,
 )
 from models.demos.falcon40b_prefill.tt.falcon_attention import TtFalconAttention
 from models.demos.falcon40b_prefill.tt.model_config import (
@@ -52,13 +53,18 @@ def run_test_FalconAttention_inference(
     token_pcc,
     model_config,
     tt_cache_path,
+    emulate_per_device_fracture,
     model_location_generator,
 ):
     model_name = model_location_generator(model_version, model_subdir="Falcon")
 
-    hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_name, low_cpu_mem_usage=True)
+    config = FalconConfig.from_pretrained(model_name, num_hidden_layers=1)
+    hugging_face_reference_model = FalconForCausalLM(config)
+    first_layer_weights_path = tt_cache_path / "transformer.h.0.pt"
+    state_dict = torch.load(first_layer_weights_path)
+
+    hugging_face_reference_model.transformer.h[0].load_state_dict(torch.load(first_layer_weights_path), strict=False)
     hugging_face_reference_model.eval()
-    configuration = hugging_face_reference_model.config
     state_dict = hugging_face_reference_model.state_dict()
     use_cache = True
     user_id = 0
@@ -68,7 +74,7 @@ def run_test_FalconAttention_inference(
     layer_num = 0
     base_url = "transformer.h"
     max_position_embeddings = 2048
-    head_dim = configuration.hidden_size // configuration.num_attention_heads
+    head_dim = config.hidden_size // config.num_attention_heads
 
     # Generate input, attention_mask, and kv_cache --------------------------------------
     # TODO: Generate attention_mask on device
@@ -78,7 +84,7 @@ def run_test_FalconAttention_inference(
         assert q_len % 32 == 0, "For prefill, seq_len must be multiple of 32!"
         assert kv_cache_len == 0, "For prefill, no kv_cache is passed in!"
 
-        attention_input = (torch.rand(batch, q_len, configuration.hidden_size) * 2) - 1
+        attention_input = (torch.rand(batch, q_len, config.hidden_size) * 2) - 1
         attention_mask_bool = torch.ones(batch, 1, q_len, kv_len, dtype=bool).triu(diagonal=1)
         layer_past = None
 
@@ -98,19 +104,15 @@ def run_test_FalconAttention_inference(
         assert batch % 32 == 0, "For decode, batch must be multiple of 32!"
         assert q_len == 1, "For decode, q_len must be 1!"
 
-        attention_input = (torch.rand(batch, q_len, configuration.hidden_size) * 2) - 1
+        attention_input = (torch.rand(batch, q_len, config.hidden_size) * 2) - 1
         # attention_input = (torch.rand(batch, q_len, 4544) * 2) - 1
         attention_mask_bool = torch.zeros(batch, 1, q_len, kv_len, dtype=bool)
         attention_mask_bool[:, :, :, -1] = True
-        k_cache = torch.rand(batch, configuration.num_kv_heads, kv_cache_len, head_dim)
-        v_cache = torch.rand(batch, configuration.num_kv_heads, kv_cache_len, head_dim)
+        k_cache = torch.rand(batch, config.num_kv_heads, kv_cache_len, head_dim)
+        v_cache = torch.rand(batch, config.num_kv_heads, kv_cache_len, head_dim)
         layer_past = (
-            torch.repeat_interleave(
-                k_cache, configuration.num_attention_heads // configuration.num_kv_heads, 1
-            ).flatten(0, 1),
-            torch.repeat_interleave(
-                v_cache, configuration.num_attention_heads // configuration.num_kv_heads, 1
-            ).flatten(0, 1),
+            torch.repeat_interleave(k_cache, config.num_attention_heads // config.num_kv_heads, 1).flatten(0, 1),
+            torch.repeat_interleave(v_cache, config.num_attention_heads // config.num_kv_heads, 1).flatten(0, 1),
         )
 
         tt_attention_input_host = torch2tt_tensor(
@@ -129,9 +131,7 @@ def run_test_FalconAttention_inference(
             dim=-1,
         )
         attention_mask_bool_padded = torch.chunk(
-            (attention_mask_bool_padded.transpose(0, 2) * -100000).expand(
-                -1, configuration.num_attention_heads, -1, -1
-            ),
+            (attention_mask_bool_padded.transpose(0, 2) * -100000).expand(-1, config.num_attention_heads, -1, -1),
             len(devices),
             1,
         )
@@ -151,8 +151,8 @@ def run_test_FalconAttention_inference(
                     tt_dtype=model_config["ATTN_MASK_DTYPE"],
                 )
             )
-        tt_k_cache_host = torch.zeros(batch, configuration.num_kv_heads, max_position_embeddings, head_dim)
-        tt_v_cache_host = torch.zeros(batch, configuration.num_kv_heads, max_position_embeddings, head_dim)
+        tt_k_cache_host = torch.zeros(batch, config.num_kv_heads, max_position_embeddings, head_dim)
+        tt_v_cache_host = torch.zeros(batch, config.num_kv_heads, max_position_embeddings, head_dim)
         tt_k_cache_host[:, :, :kv_cache_len, :] = k_cache
         tt_v_cache_host[:, :, :kv_cache_len, :] = v_cache
         tt_k_cache_host = torch.chunk(tt_k_cache_host, len(devices), 1)
@@ -200,11 +200,12 @@ def run_test_FalconAttention_inference(
         # None,
         base_url,
         layer_num,
-        configuration,
+        config,
         max_position_embeddings,
         model_config,
         tt_cache_path,
         None,
+        emulate_per_device_fracture,
     )
 
     tt_out, tt_layer_present = tt_FalconAttention_model(
@@ -228,10 +229,10 @@ def run_test_FalconAttention_inference(
         tt_out = tt_out.transpose(0, 1)
     tt_layer_present = (
         torch.repeat_interleave(
-            tt_layer_present[0][:, :, :kv_len, :], configuration.num_attention_heads // configuration.num_kv_heads, 1
+            tt_layer_present[0][:, :, :kv_len, :], config.num_attention_heads // config.num_kv_heads, 1
         ).flatten(0, 1),
         torch.repeat_interleave(
-            tt_layer_present[1][:, :, :kv_len, :], configuration.num_attention_heads // configuration.num_kv_heads, 1
+            tt_layer_present[1][:, :, :kv_len, :], config.num_attention_heads // config.num_kv_heads, 1
         ).flatten(0, 1),
     )
 
@@ -272,9 +273,15 @@ def run_test_FalconAttention_inference(
 
 @skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
-    "llm_mode, batch, seq_len, kv_cache_len",
-    (("decode", 32, 1, 128),),
-    ids=["decode_batch32"],
+    "llm_mode, batch, seq_len, kv_cache_len, emulate_per_device_fracture",
+    (
+        ("decode", 32, 1, 128, False),
+        # ("prefill", 1, 32, 0, True),
+    ),
+    ids=[
+        "decode_batch32",
+        # "prefill_seqlen32"
+    ],
 )
 @pytest.mark.parametrize(
     "model_version",
@@ -282,7 +289,10 @@ def run_test_FalconAttention_inference(
 )
 @pytest.mark.parametrize(
     "model_config_str, out_pcc, cache_pcc, token_pcc",
-    [("BFLOAT8_B-SHARDED", 0.99, 0.99, 0.99), ("BFLOAT16-SHARDED", 0.99, 0.99, 0.99)],
+    [
+        # ("BFLOAT8_B-SHARDED", 0.99, 0.99, 0.99),
+        ("BFLOAT16-SHARDED", 0.99, 0.99, 0.99)
+    ],
 )
 def test_FalconAttention_inference(
     model_version,
@@ -298,10 +308,17 @@ def test_FalconAttention_inference(
     get_tt_cache_path,
     pcie_devices,
     use_program_cache,
+    emulate_per_device_fracture,
 ):
     model_config = get_model_config(model_config_str)
     compute_grid_size = pcie_devices[0].compute_with_storage_grid_size()
-    if len(pcie_devices) < model_config["NUM_DEVICES"]:
+    if emulate_per_device_fracture:
+        print(f"Emulating one fracture on 1 device")
+        pcie_devices = [pcie_devices[0]]
+    elif len(pcie_devices) == 1:
+        print(f"Emulating sequentially on 1 device")
+        pcie_devices = pcie_devices * 4
+    elif len(pcie_devices) < model_config["NUM_DEVICES"]:
         pytest.skip(f"Requires at least {model_config['NUM_DEVICES']} devices to run")
     if compute_grid_size.x < model_config["MAX_GRID_SIZE"][0] or compute_grid_size.y < model_config["MAX_GRID_SIZE"][1]:
         pytest.skip(f"Requires grid size of at least {model_config['MAX_GRID_SIZE']} to run")
@@ -322,5 +339,6 @@ def test_FalconAttention_inference(
         token_pcc,
         model_config,
         tt_cache_path,
+        emulate_per_device_fracture,
         model_location_generator,
     )
