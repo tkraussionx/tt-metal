@@ -79,6 +79,21 @@ class TtMambaSSM(torch.nn.Module):
             ),
             tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
         )
+
+        D_weight_name = "mixer.D"
+        self.D = torch2tt_tensor(
+            self.state_dict[D_weight_name].repeat(self.args.batch_size, 1).reshape(
+                self.args.batch_size, 1, -1, self.args.d_inner
+            ),
+            self.device,
+            tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
+            tt_memory_config=tt_lib.tensor.MemoryConfig(
+                tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
+            ),
+            tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
+        )
+        self.D = tt_lib.tensor.permute(self.D, [0, 2, 3, 1])
+        
         dt_proj_weight_name = "mixer.dt_proj.weight"
         dt_proj_bias_name = "mixer.dt_proj.bias"
         self.dt_proj_weights = torch2tt_tensor(
@@ -148,7 +163,7 @@ class TtMambaSSM(torch.nn.Module):
         self.tt_hidden_state = tt_lib.tensor.add(delta_A_h, delta_B_x)
         self.output = tt_lib.tensor.bmm(self.tt_hidden_state, C)
         C.deallocate()
-
+        x = tt_lib.tensor.mul(self.D, x)
         self.output = tt_lib.tensor.add(self.output, x)
         x.deallocate()
 
