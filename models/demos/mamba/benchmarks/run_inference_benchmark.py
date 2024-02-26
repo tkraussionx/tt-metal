@@ -14,7 +14,7 @@ class InferenceBenchmarkResult:
     sequence: str
 
 
-MODEL_VERSION = "state-spaces/mamba-2.8b"
+MODEL_VERSION = "state-spaces/mamba-370m"
 
 
 def create_model(model_type: str):
@@ -51,7 +51,7 @@ def create_model(model_type: str):
         raise RuntimeError(f"Invalid model type: {model_type}")
 
 
-def run_inference_benchmark(model_type: str, prompt: str = "Mamba is a", sequence_length: int = 128):
+def run_inference_benchmark(model_type: str, prompt: str = "Mamba is the", sequence_length: int = 64):
 
     torch.manual_seed(0)
 
@@ -82,7 +82,7 @@ def run_inference_benchmark(model_type: str, prompt: str = "Mamba is a", sequenc
 def main():
     parser = argparse.ArgumentParser(description="Run inference benchmarks on set of supported models")
     parser.add_argument("--model", required=True, choices=["cpu", "gpu"], help="The model under test")
-    parser.add_argument("--genlen", default=128, type=int, help="Sequence generation length")
+    parser.add_argument("--genlen", default=64, type=int, help="Sequence generation length")
     args = parser.parse_args()
 
     res = run_inference_benchmark(model_type=args.model, sequence_length=args.genlen)
