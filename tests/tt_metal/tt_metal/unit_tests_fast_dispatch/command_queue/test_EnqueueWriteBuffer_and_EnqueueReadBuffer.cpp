@@ -593,7 +593,6 @@ TEST_F(CommandQueueSingleCardFixture, WritesToRandomBufferTypeAndThenReadsBlocki
 }
 
 TEST_F(CommandQueueSingleCardFixture, WritesToRandomBufferTypeAndThenReadsNonblocking) {
-  GTEST_SKIP();
     BufferStressTestConfig config = {
         .seed = 0, .num_pages_total = 50000, .page_size = 2048, .max_num_pages_per_buffer = 16};
 
