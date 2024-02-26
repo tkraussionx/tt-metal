@@ -115,14 +115,14 @@ def load_device_data(opCandidatePath):
             "FW_START->FW_END": {
                 "across": "ops",
                 "type": "op_first_last",
-                "start": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-FW" for risc in setup.riscs]},
-                "end": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-FW" for risc in setup.riscs]},
+                "start": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-FW" for risc in setup.riscTypes]},
+                "end": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-FW" for risc in setup.riscTypes]},
             },
             "KERNEL_START->KERNEL_END": {
                 "across": "ops",
                 "type": "op_first_last",
-                "start": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-KERNEL" for risc in setup.riscs]},
-                "end": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-KERNEL" for risc in setup.riscs]},
+                "start": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-KERNEL" for risc in setup.riscTypes]},
+                "end": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-KERNEL" for risc in setup.riscTypes]},
             },
             "BR_KERNEL_START->BR_KERNEL_END": {
                 "across": "ops",

@@ -16,18 +16,25 @@ class default_setup(metaclass=MergeMetaclass):
         "ERISC",
     ]
 
+    riscTypes = [
+        "BRISC",
+        "NCRISC",
+        "TRISC",
+        "ERISC",
+    ]
+
     timerAnalysis = {
         "FW_START->FW_END": {
             "across": "ops",
             "type": "op_first_last",
-            "start": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-FW" for risc in riscs]},
-            "end": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-FW" for risc in riscs]},
+            "start": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-FW" for risc in riscTypes]},
+            "end": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-FW" for risc in riscTypes]},
         },
         "KERNEL_START->KERNEL_END": {
             "across": "ops",
             "type": "op_first_last",
-            "start": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-KERNEL" for risc in riscs]},
-            "end": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-KERNEL" for risc in riscs]},
+            "start": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-KERNEL" for risc in riscTypes]},
+            "end": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-KERNEL" for risc in riscTypes]},
         },
         "BR_KERNEL_START->BR_KERNEL_END": {
             "across": "ops",
