@@ -14,51 +14,62 @@ class InferenceBenchmarkResult:
     sequence: str
 
 
-MODEL_VERISON = "state-spaces/mamba-370m"
+MODEL_VERSION = "state-spaces/mamba-2.8b"
 
 
-def run_inference_benchmark(model_type: str, sequence_length: int = 128):
-
-    tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
-
+def create_model(model_type: str):
     if model_type == "cpu":
 
         from models.demos.mamba.reference.decode_model import MambaDecode
 
-        model = MambaDecode.from_pretrained(MODEL_VERISON)
+        model = MambaDecode.from_pretrained(MODEL_VERSION)
+        model.eval()
 
-        def generate_cpu(input):
+        def generate_cpu(inputs):
             with torch.no_grad():
-                next_token_logits = model(input)
+                next_token_logits = model(inputs)
                 return next_token_logits
 
-        generate = generate_cpu
+        return generate_cpu
 
     elif model_type == "gpu":
-        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
 
         from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel
 
-        model = MambaLMHeadModel.from_pretrained(device="cuda")
+        model = MambaLMHeadModel.from_pretrained(MODEL_VERSION, device="cuda")
+        model.eval()
 
-        def generate_gpu(input):
+        def generate_gpu(inputs):
             with torch.no_grad():
-                next_token_logits = model(input)
-                return next_token_logits
+                inputs = inputs.unsqueeze(1).to(device="cuda")
+                next_token_logits = model(inputs).logits
+                return next_token_logits.squeeze(1)
 
-        generate = generate_gpu
+        return generate_gpu
 
     else:
         raise RuntimeError(f"Invalid model type: {model_type}")
 
-    sequence = tokenizer("_", return_tensors="pt").input_ids
+
+def run_inference_benchmark(model_type: str, prompt: str = "Mamba is a", sequence_length: int = 128):
+
+    torch.manual_seed(0)
+
+    tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
+    model = create_model(model_type)
+
+    sequence = tokenizer(prompt, return_tensors="pt").input_ids
+    tokens_in_prompt = len(sequence[0])
+
+    for idx in range(tokens_in_prompt - 1):
+        model(sequence[:, idx])
 
     start = time.time()
-    for idx in range(sequence_length):
-        next_token_logits = generate(sequence[:, idx])
-        probs = torch.nn.functional.softmax(next_token_logits, dim=-1)
+    for idx in range(tokens_in_prompt - 1, tokens_in_prompt + sequence_length):
+        logits = model(sequence[:, idx])
+        probs = torch.nn.functional.softmax(logits, dim=-1)
         next_token = torch.argmax(probs, dim=-1).unsqueeze(-1)
-        sequence = torch.cat([sequence, next_token], dim=1)
+        sequence = torch.cat([sequence, next_token.to(device="cpu")], dim=1)
     end = time.time()
 
     return InferenceBenchmarkResult(
@@ -70,7 +81,7 @@ def run_inference_benchmark(model_type: str, sequence_length: int = 128):
 
 def main():
     parser = argparse.ArgumentParser(description="Run inference benchmarks on set of supported models")
-    parser.add_argument("--model", required=True, choices=["cpu"], help="The mode under test")
+    parser.add_argument("--model", required=True, choices=["cpu", "gpu"], help="The model under test")
     parser.add_argument("--genlen", default=128, type=int, help="Sequence generation length")
     args = parser.parse_args()
 
