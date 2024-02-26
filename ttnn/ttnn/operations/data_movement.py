@@ -413,4 +413,59 @@ def repeat_interleave(input_tensor: ttnn.Tensor, repeats: Union[ttnn.Tensor, int
         return ttnn.from_torch(output_tensor, device=device, dtype=dtype, layout=layout)
 
 
+def _torch_downsample(input_tensor: ttnn.Tensor, scale_factor: [float, float], **_):
+    import torch
+
+    input_tensor = ttnn.from_device(input_tensor)
+    input_tensor = ttnn.to_layout(input_tensor, ttnn.ROW_MAJOR_LAYOUT)
+    input_tensor = ttnn.to_torch(input_tensor)
+
+    return torch.nn.functional.upsample(input_tensor, scale_factor=scale_factor)
+
+
+def _downsample_validate_input_tensors(operation_name, input_tensor, *args, **kwargs):
+    ttnn.validate_input_tensor(
+        operation_name,
+        input_tensor,
+        ranks=(2, 3, 4),
+        dtypes=(ttnn.bfloat16, ttnn.bfloat8_b),
+        layouts=(
+            ttnn.ROW_MAJOR_LAYOUT,
+            ttnn.TILE_LAYOUT,
+        ),
+        can_be_on_device=True,
+        can_be_on_cpu=False,
+    )
+
+
+@ttnn.register_operation(
+    name="ttnn.downsample",
+    validate_input_tensors=_downsample_validate_input_tensors,
+    torch_function=_torch_downsample,
+)
+def downsample(
+    input_tensor: ttnn.Tensor,
+    # parameters: ttnn.DownsampleParameters,
+    parameters,
+    dtype,
+) -> ttnn.Tensor:
+    r"""
+    download a given multi-channel 2D (spatial) data.
+    The input data is assumed to be of the form N x H x W x C.
+    input data must be in sharded format.
+
+    The algorithms available for upsampling are 'nearest' for now.
+
+    Args:
+        * :attr:`input_tensor`: the input tensor
+        * :attr:`parameters`: []
+    """
+
+    ttl_input_tensor = input_tensor.value
+    dtype = ttnn.bfloat16
+    output_tensor = ttl.tensor.downsample(ttl_input_tensor, parameters, dtype)
+    output_tensor = ttnn.Tensor(output_tensor)
+    return output_tensor
+
+
 __all__ = []

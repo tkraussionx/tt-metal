@@ -137,6 +137,7 @@ from ttnn.operations.data_movement import (
     permute,
     split,
     repeat_interleave,
+    downsample,
 )
 
 from ttnn.operations.unary import (
