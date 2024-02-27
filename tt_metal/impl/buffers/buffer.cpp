@@ -237,25 +237,8 @@ Buffer &Buffer::operator=(Buffer &&other) {
 void Buffer::allocate() {
     TT_ASSERT(this->device_ != nullptr);
     // L1 buffers are allocated top down!
-
     bool bottom_up = this->buffer_type_ == BufferType::DRAM;
-    EnqueueAllocateBuffer(this -> device_ -> command_queue(), *(this -> device_ -> allocator_),
-                         this -> size_, this -> page_size_, this -> buffer_type_,
-                         this -> buffer_layout_, this -> num_cores(), &(this -> address_), bottom_up, false);
-
-    // if(is_sharded(this->buffer_layout_)){
-    //     this->address_ = allocator::allocate_buffer(*this->device_->allocator_, this->size_,
-    //                                             this->page_size_, this->buffer_type_, bottom_up,
-    //                                             this->num_cores());
-    // }
-    // else{
-    //     this->address_ = allocator::allocate_buffer(*this->device_->allocator_, this->size_, this->page_size_, this->buffer_type_, bottom_up, std::nullopt);
-    // }
-    // std::cout << "Allocated Buffer at: " << this->address_ << std::endl;
-}
-
-void Buffer::address(uint32_t* addr_to_copy) {
-    // EnqueueGetBufferAddr(this -> device_ -> command_queue(), addr_to_copy, &(this -> address_), true);
+    AllocateBuffer(this, bottom_up);
 }
 
 uint32_t Buffer::dram_channel_from_bank_id(uint32_t bank_id) const {
@@ -334,11 +317,10 @@ void Buffer::deallocate() {
     if (this->device_ == nullptr or not this->device_->initialized_ or this->size_ == 0) {
         return;
     }
-    EnqueueDeallocateBuffer(this->device_->command_queue(), *(this->device_->allocator_), this->address_, this->buffer_type_, false);
+    DeallocateBuffer(this);
 }
 
 Buffer::~Buffer() {
-    // std::cout << "Deallocating buffer at addr: " << address_ << std::endl;
     this->deallocate();
 }
 

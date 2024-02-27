@@ -1185,16 +1185,10 @@ void EnqueueGetBufferAddr(CommandQueue& cq, uint32_t* dst_buf_addr, const Buffer
 void EnqueueGetBufferAddrImpl(void* dst_buf_addr, const Buffer* buffer) {
     *(static_cast<uint32_t*>(dst_buf_addr)) = buffer -> address();
 }
-
-void EnqueueAllocateBuffer(CommandQueue& cq, Allocator& allocator, uint64_t size, uint64_t page_size, BufferType buffer_type, TensorMemoryLayout buffer_layout, uint32_t num_cores, uint64_t* address, bool bottom_up, bool blocking) {
+void EnqueueAllocateBuffer(CommandQueue& cq, Buffer* buffer, bool bottom_up, bool blocking) {
     auto alloc_md = AllocBufferMetadata {
-        .allocator = allocator,
-        .size = size,
-        .page_size = page_size,
-        .buffer_type = buffer_type,
-        .buffer_layout = buffer_layout,
-        .num_cores = num_cores,
-        .address_copy_on_host = address,
+        .buffer = buffer,
+        .allocator = *(buffer->device()->allocator_),
         .bottom_up = bottom_up,
     };
     cq.run_command(CommandInterface {
@@ -1205,15 +1199,19 @@ void EnqueueAllocateBuffer(CommandQueue& cq, Allocator& allocator, uint64_t size
 }
 
 void EnqueueAllocateBufferImpl(AllocBufferMetadata alloc_md) {
-    if(is_sharded(alloc_md.buffer_layout)) {
-        *(alloc_md.address_copy_on_host) = allocator::allocate_buffer(alloc_md.allocator, alloc_md.size, alloc_md.page_size, alloc_md.buffer_type, alloc_md.bottom_up, alloc_md.num_cores);
+    Buffer* buffer = alloc_md.buffer;
+    uint32_t allocated_addr;
+    if(is_sharded(buffer->buffer_layout())) {
+        allocated_addr = allocator::allocate_buffer(*(buffer->device()->allocator_), buffer->size(), buffer->page_size(), buffer->buffer_type(), alloc_md.bottom_up, buffer->num_cores());
     }
     else {
-        *(alloc_md.address_copy_on_host) = allocator::allocate_buffer(alloc_md.allocator, alloc_md.size, alloc_md.page_size, alloc_md.buffer_type, alloc_md.bottom_up, std::nullopt);
+        allocated_addr = allocator::allocate_buffer(*(buffer->device()->allocator_), buffer->size(), buffer->page_size(), buffer->buffer_type(), alloc_md.bottom_up, std::nullopt);
     }
+    buffer->set_address(static_cast<uint64_t>(allocated_addr));
 }
 
 void EnqueueDeallocateBuffer(CommandQueue& cq, Allocator& allocator, uint32_t device_address, BufferType buffer_type, bool blocking) {
+    // Need to explictly pass in relevant buffer attributes here, since the Buffer* ptr can be deallocated a this point
     auto alloc_md = AllocBufferMetadata {
         .allocator = allocator,
         .buffer_type = buffer_type,
@@ -1463,6 +1461,7 @@ void CommandQueue::disable_command_sanitization() {
 }
 
 void CommandQueue::start_worker() {
+    std::cout << "starting worker" << std::endl;
     if (this->worker_state == CommandQueueState::RUNNING) {
         return;  // worker already running, exit
     }
@@ -1472,6 +1471,7 @@ void CommandQueue::start_worker() {
 }
 
 void CommandQueue::stop_worker() {
+    std::cout << "stopping worker" << std::endl;
     if (this->worker_state == CommandQueueState::IDLE) {
         return;  // worker already stopped, exit
     }

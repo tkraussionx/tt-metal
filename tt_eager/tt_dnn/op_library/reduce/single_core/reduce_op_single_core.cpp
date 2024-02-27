@@ -27,7 +27,6 @@ operation::ProgramWithCallbacks reduce_single_core(const Tensor &a, Tensor& outp
         scaler = sqrt(scaler);
 
     uint32_t num_tensor_tiles = NC*H*W / TILE_HW;
-    std::cout << "Running single core reduce" << std::endl;
     tt_metal::Program program = tt_metal::CreateProgram();
 
     CoreRange core({0, 0}, {0, 0});

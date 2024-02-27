@@ -510,9 +510,9 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
             num_blocks_written += num_output_blocks_per_core;
         }
 
-        SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(reader_id), cores, all_reader_runtime_args);
-        SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(writer_id), cores, all_writer_runtime_args);
-        SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(compute_kernel_id), cores, all_compute_runtime_args);
+        SetRuntimeArgs(device, program.get_kernels().at(reader_id), cores, all_reader_runtime_args);
+        SetRuntimeArgs(device, program.get_kernels().at(writer_id), cores, all_writer_runtime_args);
+        SetRuntimeArgs(device, program.get_kernels().at(compute_kernel_id), cores, all_compute_runtime_args);
 
         // Update dynamic CBs (which is most of them)
         if (in0_is_sharded) {

@@ -166,7 +166,6 @@ void DeviceCommand::add_buffer_transfer_sharded_instruction(
     const std::vector<uint32_t> num_pages_in_shard,
     const std::vector<uint32_t> core_id_x,
     const std::vector<uint32_t> core_id_y) {
-        std::cout << "Sharded cmd" << std::endl;
     this->add_buffer_transfer_instruction_preamble(
         src, dst, num_pages, padded_page_size, src_buf_type, dst_buf_type, src_page_index, dst_page_index);
 

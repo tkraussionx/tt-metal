@@ -182,7 +182,7 @@ void create_and_run_row_pipeline(tt_metal::Device* device, const PipelineRowConf
         if (core_id == 0) {
             *receiver_runtime_args = {src_address, (uint32_t)src_noc_xy.x, (uint32_t)src_noc_xy.y, (uint32_t)num_tiles, (uint32_t)num_repetitions};
             SetRuntimeArgs(
-                device->command_queue(),
+                device,
                 program.get_kernels().at(receiver_kernels.at(core_id)),
                 core,
                 receiver_runtime_args);
@@ -195,7 +195,7 @@ void create_and_run_row_pipeline(tt_metal::Device* device, const PipelineRowConf
                  (uint32_t)receiver_semaphore_addr,
                  (uint32_t)num_repetitions};
             SetRuntimeArgs(
-                device->command_queue(),
+                device,
                 program.get_kernels().at(receiver_kernels.at(core_id)),
                 core,
                 receiver_runtime_args);
@@ -204,7 +204,7 @@ void create_and_run_row_pipeline(tt_metal::Device* device, const PipelineRowConf
         if (core_id == num_cores - 1) {
             *sender_runtime_args = {dst_address, (uint32_t)dst_noc_xy.x, (uint32_t)dst_noc_xy.y, (uint32_t)num_tiles, (uint32_t)num_repetitions};
             SetRuntimeArgs(
-                device->command_queue(),
+                device,
                 program.get_kernels().at(sender_kernels.at(core_id)),
                 core,
                 sender_runtime_args);
@@ -218,7 +218,7 @@ void create_and_run_row_pipeline(tt_metal::Device* device, const PipelineRowConf
                  (uint32_t)l1_valid_value_addr,
                  (uint32_t)num_repetitions};
             SetRuntimeArgs(
-                device->command_queue(),
+                device,
                 program.get_kernels().at(sender_kernels.at(core_id)),
                 core,
                 sender_runtime_args);

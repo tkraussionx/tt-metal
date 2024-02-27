@@ -211,7 +211,7 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
             for (auto x = core_range.start.x; x <= core_range.end.x; x++) {
                 for (auto y = core_range.start.y; y <= core_range.end.y; y++) {
                     tt_metal::SetRuntimeArgs(
-                        device -> command_queue(),
+                        device,
                         p_with_call.program.get_kernels().at(reader_kernel_id),
                         CoreCoord(x, y),
                         reader_rt_args
@@ -228,7 +228,7 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
             for (auto x = core_range.start.x; x <= core_range.end.x; x++) {
                 for (auto y = core_range.start.y; y <= core_range.end.y; y++) {
                     tt_metal::SetRuntimeArgs(
-                        device -> command_queue(),
+                        device,
                         p_with_call.program.get_kernels().at(writer_kernel_id),
                         CoreCoord(x, y),
                         writer_rt_args
@@ -262,12 +262,12 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
             };
 
             tt_metal::SetRuntimeArgs(
-                device -> command_queue(), p_with_call.program.get_kernels().at(reader_kernel_id), core,
+                device, p_with_call.program.get_kernels().at(reader_kernel_id), core,
                 reader_rt_args
             );
 
             tt_metal::SetRuntimeArgs(
-                device -> command_queue(), p_with_call.program.get_kernels().at(writer_kernel_id), core,
+                device, p_with_call.program.get_kernels().at(writer_kernel_id), core,
                writer_rt_args
             );
             num_cols_read += num_cols_per_core;

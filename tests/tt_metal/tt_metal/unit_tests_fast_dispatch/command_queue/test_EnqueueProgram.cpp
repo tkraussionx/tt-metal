@@ -326,6 +326,7 @@ TEST_F(CommandQueueFixture, TestAsyncCommandQueue) {
         EnqueueProgram(command_queue, program, false);
         Finish(command_queue);
     }
+    command_queue.set_mode(CommandQueue::CommandQueueMode::PASSTHROUGH);
 }
 
 }

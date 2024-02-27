@@ -67,7 +67,7 @@ static void RunTest(WatcherFixture* fixture, Device* device) {
         dram_buffer_size};
 
     tt_metal::SetRuntimeArgs(
-        device->command_queue(),
+        device,
         program.get_kernels().at(dram_copy_kernel),
         core,
         runtime_args);

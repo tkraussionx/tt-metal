@@ -186,7 +186,7 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
                 curr_idx_h + curr_idx_w
             };
             tt_metal::SetRuntimeArgs(
-                device -> command_queue(),
+                device,
                 program.get_kernels().at(unary_reader_kernel_id),
                 core,
                 runtime_args_vec1);
@@ -229,7 +229,7 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
             std::shared_ptr<RuntimeArgs> runtime_args_vec2 = std::make_shared<RuntimeArgs>();
             *runtime_args_vec2 = {src_buffer, num_units_per_row, shard_height, shard_width, curr_idx_w, curr_idx_h};
             tt_metal::SetRuntimeArgs(
-                device -> command_queue(),
+                device,
                 program.get_kernels().at(unary_reader_kernel_id),
                 core,
                 runtime_args_vec2);
@@ -241,9 +241,9 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
         }
          std::shared_ptr<RuntimeArgs> runtime_args_vec3 = std::make_shared<RuntimeArgs>();
          *runtime_args_vec3 = {curr_num_units_per_shard};
-        tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(unary_writer_kernel_id), core, runtime_args_vec3);
+        tt_metal::SetRuntimeArgs(device, program.get_kernels().at(unary_writer_kernel_id), core, runtime_args_vec3);
         if (convert_df) {
-            tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(compute_kernel_id), core, runtime_args_vec3);
+            tt_metal::SetRuntimeArgs(device, program.get_kernels().at(compute_kernel_id), core, runtime_args_vec3);
         }
     }
 
@@ -414,7 +414,7 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
     for (const auto& set : all_cores.ranges()) {
         for (auto x = set.start.x; x <= set.end.x; x++) {
             for (auto y = set.start.y; y <= set.end.y; y++) {
-                tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(unary_reader_kernel_id), CoreCoord(x, y), runtime_args_vec1);
+                tt_metal::SetRuntimeArgs(device, program.get_kernels().at(unary_reader_kernel_id), CoreCoord(x, y), runtime_args_vec1);
             }
         }
     }
@@ -464,7 +464,7 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
             };
 
             tt_metal::SetRuntimeArgs(
-                device -> command_queue(),
+                device,
                 program.get_kernels().at(unary_writer_kernel_id),
                 core,
                 runtime_args_vec2);
@@ -504,7 +504,7 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
             std::shared_ptr<RuntimeArgs> runtime_args_vec3 =std::make_shared<RuntimeArgs>();
             *runtime_args_vec3 = {dst_buffer, num_units_per_row, shard_height, shard_width, curr_idx_w, curr_idx_h};
             tt_metal::SetRuntimeArgs(
-                device -> command_queue(),
+                device,
                 program.get_kernels().at(unary_writer_kernel_id),
                 core,
                 runtime_args_vec3);

@@ -189,13 +189,13 @@ bool matmul_single_core(CommonFixture *fixture, tt_metal::Device *device, int M,
     fixture->WriteBuffer(device, src1_dram_buffer, weights);
 
     tt_metal::SetRuntimeArgs(
-        device->command_queue(),
+        device,
         program.get_kernels().at(mm_reader_kernel),
         core,
         mm_reader_rt_args);
 
     tt_metal::SetRuntimeArgs(
-        device->command_queue(),
+        device,
         program.get_kernels().at(unary_writer_kernel),
         core,
         writer_rt_args);

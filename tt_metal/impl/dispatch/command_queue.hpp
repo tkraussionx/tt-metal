@@ -418,13 +418,9 @@ typedef thread_safe_map<IssuedReadData, issued_read_mutex> IssuedReadMap;
 }
 
 struct AllocBufferMetadata {
+    Buffer* buffer;
     std::reference_wrapper<Allocator> allocator;
-    uint64_t size;
-    uint64_t page_size;
     BufferType buffer_type;
-    TensorMemoryLayout buffer_layout;
-    uint32_t num_cores;
-    uint64_t* address_copy_on_host;
     uint32_t device_address;
     bool bottom_up;
 };
@@ -555,6 +551,7 @@ class CommandQueue {
     static CommandQueueMode get_mode_from_env_var() {
         // Envvar is used for bringup and debug only. Will be removed in the future and should not be relied on in production.
         int value = parse_env<int>("TT_METAL_CQ_ASYNC_MODE", static_cast<int>(CommandQueueMode::PASSTHROUGH));
+        std::cout << "Setting Async mode: " << value << std::endl;
         return static_cast<CommandQueue::CommandQueueMode>(value);
     }
     static CommandQueueMode get_mode() {

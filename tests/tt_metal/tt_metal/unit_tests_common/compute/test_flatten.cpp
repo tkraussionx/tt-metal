@@ -167,13 +167,13 @@ bool flatten(CommonFixture *fixture, tt_metal::Device *device, uint32_t num_tile
     };
 
     tt_metal::SetRuntimeArgs(
-        device->command_queue(),
+        device,
         program.get_kernels().at(flatten_kernel),
         core,
         runtime_args_vec1);
 
     tt_metal::SetRuntimeArgs(
-        device->command_queue(),
+        device,
         program.get_kernels().at(unary_writer_kernel),
         core,
         runtime_args_vec2);

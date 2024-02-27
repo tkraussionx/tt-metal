@@ -116,7 +116,6 @@ operation::ProgramWithCallbacks Reduce::create_program(const std::vector<Tensor>
     auto& output_tensor = output_tensors.at(0);
 
     auto parallelization_strategy = this->get_parallelization_strategy(input_tensors);
-    std::cout << "strategy : " << static_cast<int>(parallelization_strategy) << std::endl;
 
     switch (parallelization_strategy){
         case ReduceOpParallelizationStrategy::MULTI_CORE_H:

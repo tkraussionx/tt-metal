@@ -36,7 +36,7 @@ static void RunTest(DPrintFixture* fixture, Device* device) {
         std::shared_ptr<RuntimeArgs> runtime_args = std::make_shared<RuntimeArgs>();
         *runtime_args = {test_number};
         SetRuntimeArgs(
-            device->command_queue(),
+            device,
             program.get_kernels().at(brisc_print_kernel_id),
             core,
             runtime_args
