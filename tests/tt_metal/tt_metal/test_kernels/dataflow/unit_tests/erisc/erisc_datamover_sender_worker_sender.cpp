@@ -6,7 +6,8 @@
 
 #include "dataflow_api.h"
 #include "debug/dprint.h"
-// #include "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_ring_gather_utils.hpp"
+#include "noc_nonblocking_api.h"
+#include "noc_parameters.h"
 
 FORCE_INLINE void send_chunk(
     const uint32_t max_pages_per_chunk,
@@ -14,7 +15,10 @@ FORCE_INLINE void send_chunk(
     uint32_t& num_pages_sent,
     const uint32_t& cb_id,
     const uint32_t& page_size,
-    uint64_t remote_l1_write_addr) {
+    uint64_t remote_l1_write_addr,
+    volatile tt_l1_ptr uint32_t* writer_send_semaphore_addr_ptr
+    ) {
+
     const uint32_t num_pages_this_chunk = std::min(total_pages_to_send - num_pages_sent, max_pages_per_chunk);
     for (uint32_t i = 0; i < num_pages_this_chunk; ++i) {
         cb_wait_front(cb_id, 1);
@@ -69,16 +73,21 @@ void kernel_main() {
     DPRINT << " sws: noc_index " << (uint32_t)noc_index << "\n";
     DPRINT << " sws: my_x[0],my_y[0] " << (uint32_t)my_x[0] << "," << (uint32_t)my_y[0] << "\n";
     DPRINT << " sws: my_x[1],my_y[1] " << (uint32_t)my_x[1] << "," << (uint32_t)my_y[1] << "\n";
+
+    uint32_t old_val_NIU_SLV_CMD_ACCEPTED = NOC_STATUS_READ_REG(noc_index, NIU_SLV_REQ_ACCEPTED);
+    uint32_t old_val_NIU_SLV_ATOMIC_RESP_SENT = NOC_STATUS_READ_REG(noc_index, NIU_SLV_ATOMIC_RESP_SENT);
+    uint32_t old_val_NIU_SLV_POSTED_ATOMIC_RECEIVED = NOC_STATUS_READ_REG(noc_index, NIU_SLV_POSTED_ATOMIC_RECEIVED);
+    uint32_t old_val_NIU_SLV_NONPOSTED_ATOMIC_SENT = NOC_STATUS_READ_REG(noc_index, NIU_SLV_NONPOSTED_ATOMIC_RECEIVED);
+
+    bool diffed_NIU_SLV_CMD_ACCEPTED = false;
+    bool diffed_NIU_SLV_ATOMIC_RESP_SENT = false;
+    bool diffed_NIU_SLV_POSTED_ATOMIC_RECEIVED = false;
+    bool diffed_NIU_SLV_NONPOSTED_ATOMIC_SENT = false;
     while (num_pages_sent < total_pages_to_send) {
-        DPRINT << " sws: page " << num_pages_sent << " waiting for semaphore at " << writer_send_sem_addr << "\n";
         noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
-        DPRINT << " sws: got semaphore signal from sender erisc\n";
+
         noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
-        DPRINT << " sws: sending chunk to " << eth_l1_base_addr <<"\n";
-        send_chunk(num_pages_per_send, total_pages_to_send, num_pages_sent, cb_id_in0, page_size, eth_l1_sender_base_noc_addr);
-        DPRINT << " sws: incrementing erisc's semaphore at " << eth_sender_l1_sem_addr << "\n";
+        send_chunk(num_pages_per_send, total_pages_to_send, num_pages_sent, cb_id_in0, page_size, eth_l1_sender_base_noc_addr, writer_send_semaphore_addr_ptr);
         noc_semaphore_inc(eth_l1_sender_semaphore_addr, 1);
     }
-    DPRINT << " sws: DONE\n";
-    ncrisc_noc_full_sync();
 }

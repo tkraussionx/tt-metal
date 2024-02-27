@@ -22,13 +22,15 @@ void kernel_main() {
         "\n\tnum_pages_total="<<num_pages_total<<
         "\n\tpage_size="<<page_size << "\n";
 
-    // num_transfers = num_devices - 1
+    DPRINT << " rws: noc_index " << (uint32_t)noc_index << "\n";
+    DPRINT << " rws: my_x[0],my_y[0] " << (uint32_t)my_x[0] << "," << (uint32_t)my_y[0] << "\n";
+    DPRINT << " rws: my_x[1],my_y[1] " << (uint32_t)my_x[1] << "," << (uint32_t)my_y[1] << "\n";
     for (uint32_t p = 0; p < num_pages_total; ++p) {
         DPRINT << "rws: cb_wait_front\n";
         cb_wait_front(cb_id_in0, 1);
         uint32_t l1_read_addr = get_read_ptr(cb_id_in0);
+        DPRINT << *reinterpret_cast<uint32_t*>(l1_read_addr) << "\n";
         uint64_t dst_noc_addr = get_noc_addr(p, dest_addr_generator);
-        DPRINT << "rws: noc_async_write page " << p << " to dram base address " << dst_addr << "\n";
         noc_async_write(l1_read_addr, dst_noc_addr, page_size);
         DPRINT << "rws: write barrier complete\n";
         noc_async_write_barrier();
@@ -36,6 +38,7 @@ void kernel_main() {
         cb_pop_front(cb_id_in0, 1);
     }
 
-    DPRINT << "rws: DONE\n";
-    ncrisc_noc_full_sync();
+    // DPRINT << "rws: DONE\n";
+    // ncrisc_noc_full_sync();
+    // DPRINT << "rws: DONE DONE\n";
 }

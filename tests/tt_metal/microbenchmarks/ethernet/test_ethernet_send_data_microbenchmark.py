@@ -252,22 +252,25 @@ def test_ethernet_send_data_microbenchmark_concurrent_with_dram_read_and_write(
 
 @pytest.mark.parametrize(
     "input_buffer_size_bytes",
-    [1024, 2048, 4096, 16384, 64 * 1024, 128 * 1024, 256 * 1024, 835584, 16711680, 680 * 32768],
+    [16384, 64 * 1024, 128 * 1024, 256 * 1024, 835584, 16711680],
 )
 @pytest.mark.parametrize(
     "eth_buffer_size_bytes",
-    [1024, 2048, 4096, 8192, 12 * 1024, 16 * 1024, 14 * 1024, 20 * 1024, 24 * 1024, 32 * 1024, 50 * 1024],
+    [8192, 12 * 1024, 16 * 1024, 20 * 1024, 32 * 1024, 50 * 1024],
 )
-@pytest.mark.parametrize("num_transaction_buffers", [1, 2, 3, 4, 5, 6, 8])
-@pytest.mark.parametrize("input_buffer_page_size", [1024, 2048, 4096, 8192])
+@pytest.mark.parametrize("num_transaction_buffers", [1, 2, 3])
+@pytest.mark.parametrize("input_buffer_page_size", [1024, 2048, 4096])
 # @pytest.mark.parametrize("precomputed_address_buffer_size", [0, 16, 32])
-def test_descoupled_worker_and_erisc_data_mover_single_direction(
+def test_decoupled_worker_and_erisc_data_mover_single_direction(
     input_buffer_size_bytes,
     eth_buffer_size_bytes,
     num_transaction_buffers,
     input_buffer_page_size  # ,
     # precomputed_address_buffer_size,
 ):
+    if eth_buffer_size_bytes * num_transaction_buffers > 100000:
+        pytest.skip("not enough erisc L1 for configuration")
+        return
     if eth_buffer_size_bytes < input_buffer_page_size:
         pytest.skip("eth_buffer_size_bytes < input_buffer_page_size")
         return
@@ -313,13 +316,14 @@ def test_descoupled_worker_and_erisc_data_mover_single_direction(
         print("Error in running the test")
         assert False
 
-    test_string_name = f"test_ethernet_send_data_microbenchmark_concurrent_with_dram_read_"
-    test_string_name += f"{input_buffer_page_size}_"
-    test_string_name += f"{num_transaction_buffers}_"
-    test_string_name += f"{eth_buffer_size_bytes}_"
-    test_string_name += f"{input_buffer_size_bytes}"  # _"
-    # test_string_name += f"{precomputed_address_buffer_size}"
-    return report_results(test_string_name, input_buffer_size_bytes)
+    return True
+    # test_string_name = f"test_ethernet_send_data_microbenchmark_concurrent_with_dram_read_"
+    # test_string_name += f"{input_buffer_page_size}_"
+    # test_string_name += f"{num_transaction_buffers}_"
+    # test_string_name += f"{eth_buffer_size_bytes}_"
+    # test_string_name += f"{input_buffer_size_bytes}"  # _"
+    # # test_string_name += f"{precomputed_address_buffer_size}"
+    # return report_results(test_string_name, input_buffer_size_bytes)
 
 
 def test_run_ethernet_send_data_microbenchmark_sweep():

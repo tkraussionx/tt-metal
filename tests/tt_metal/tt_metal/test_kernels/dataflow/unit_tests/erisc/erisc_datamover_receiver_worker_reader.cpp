@@ -65,10 +65,12 @@ void kernel_main() {
     const uint64_t eth_receiver_l1_semaphore_noc_addr =
         get_noc_addr(receiver_erisc_datamover_noc_x, receiver_erisc_datamover_noc_y, eth_receiver_l1_sem_addr);
 
+    DPRINT << " rwr: noc_index " << (uint32_t)noc_index << "\n";
+    DPRINT << " rwr: my_x[0],my_y[0] " << (uint32_t)my_x[0] << "," << (uint32_t)my_y[0] << "\n";
+    DPRINT << " rwr: my_x[1],my_y[1] " << (uint32_t)my_x[1] << "," << (uint32_t)my_y[1] << "\n";
     uint32_t num_pages_read = 0;
     while (num_pages_read < total_pages_to_read) {
-        uint64_t eth_receiver_l1_curr_noc_addr = eth_receiver_l1_base_noc_addr;
-        DPRINT << " rwr: page " << num_pages_read << " waiting for semaphore at " << (uint32_t)eth_receiver_l1_base_addr << "\n";
+        DPRINT << " rwr: page " << num_pages_read << " waiting for semaphore at " << (uint32_t)receiver_read_sem_addr << "\n";
         noc_semaphore_wait(receiver_read_semaphore_addr_ptr, 1);
         DPRINT << " rwr: got semaphore signal from sender erisc\n";
         noc_semaphore_set(receiver_read_semaphore_addr_ptr, 0);
@@ -86,5 +88,4 @@ void kernel_main() {
         noc_semaphore_inc(eth_receiver_l1_semaphore_noc_addr, 1);
     }
 
-    DPRINT << "rwr: DONE\n";
 }

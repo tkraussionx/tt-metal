@@ -136,12 +136,10 @@ bool RunWriteBWTest(
         receiver_device->id(),
         eth_receiver_core.str(),
         dst_eth_l1_byte_address);
-    std::cout << "num_messages_to_send: " << num_messages_to_send << std::endl;
     // Generate inputs
     ////////////////////////////////////////////////////////////////////////////
     //   SETUP THE INPUT CB
     ////////////////////////////////////////////////////////////////////////////
-    std::cout << "Generating vector" << std::endl;
     auto inputs = generate_uniform_random_vector<uint32_t>(0, 100, input_buffer_size_bytes / sizeof(uint32_t));
 
     // Clear expected value at ethernet L1 address
@@ -201,7 +199,7 @@ bool RunWriteBWTest(
     //                               Device 0
     ////////////////////////////////////////////////////////////////////////////
     tt_metal::Program sender_program = tt_metal::Program();
-    uint32_t chip0_worker_semaphores_base_address = tt::tt_metal::CreateSemaphore(sender_program, chip0_sender_worker_core, 1);
+    uint32_t chip0_worker_semaphores_base_address = tt::tt_metal::CreateSemaphore(sender_program, chip0_sender_worker_core, 0);
 
     chip0_edm_args.push_back(chip0_sender_channels_offset);
 
@@ -276,9 +274,6 @@ bool RunWriteBWTest(
 
     uint32_t num_pages_per_l1_buffer = num_bytes_per_send / input_buffer_page_size;
     TT_ASSERT(num_messages_to_send * num_pages_per_l1_buffer >= num_pages);
-    std::cout << "eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE: "
-              << eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE << std::endl;
-    std::cout << "src_eth_l1_byte_address: " << src_eth_l1_byte_address << std::endl;
 
     auto eth_sender_kernel = tt_metal::CreateKernel(
         sender_program,
@@ -315,7 +310,7 @@ bool RunWriteBWTest(
         };
     // TODO
     std::vector<uint32_t> chip0_sender_worker_reader_runtime_args{
-        chip0_sender_erisc_sender_buffer_address};
+        dram_input_buf_base_addr};
 
     CBHandle cb_src0_sender_workers = CreateCircularBuffer(sender_program, chip0_sender_worker_core, cb_src0_config);
     auto device_0_edm_sender_worker_reader_kernel = tt_metal::CreateKernel(
@@ -332,21 +327,17 @@ bool RunWriteBWTest(
         chip0_sender_worker_core,
         tt_metal::DataMovementConfig {
             .processor = DataMovementProcessor::RISCV_1,
-            .noc = tt_metal::NOC::RISCV_1_default,
+            .noc = tt_metal::NOC::NOC_0,//  ::RISCV_1_default,
             .compile_args = chip0_sender_worker_sender_compile_args});
 
-    std::cout << "A" << std::endl;
     tt_metal::SetRuntimeArgs(sender_program, eth_sender_kernel, eth_sender_core, chip0_edm_args);
-    std::cout << "B" << std::endl;
     tt_metal::SetRuntimeArgs(
         sender_program,
         device_0_edm_sender_worker_sender_kernel,
         chip0_sender_worker_core,
         chip0_sender_worker_sender_runtime_args);
-    std::cout << "C" << std::endl;
     tt_metal::SetRuntimeArgs(
         sender_program, device_0_edm_sender_worker_reader_kernel, chip0_sender_worker_core, chip0_sender_worker_reader_runtime_args);
-    std::cout << "D" << std::endl;
 
     ////////////////////////////////////////////////////////////////////////////
     //                              Device 1
@@ -476,9 +467,7 @@ bool RunWriteBWTest(
     TT_ASSERT(chip1_eth_receiver_l1_sem_addr != 0);
 
 
-    std::cout << "E" << std::endl;
     tt_metal::SetRuntimeArgs(receiver_program, eth_receiver_kernel, eth_receiver_core, chip1_edm_args);
-    std::cout << "F" << std::endl;
     std::vector<uint32_t> chip1_receiver_worker_sender_compile_args{
         dest_is_dram,  //
         num_pages,     //
@@ -488,7 +477,6 @@ bool RunWriteBWTest(
         chip1_eth_receiver_l1_base_addr,  //
         chip1_eth_receiver_l1_sem_addr    //
     };
-    std::cout << "G" << std::endl;
     std::vector<uint32_t> chip1_receiver_worker_receiver_runtime_args{
         num_pages_per_l1_buffer,
         num_pages,
@@ -496,7 +484,6 @@ bool RunWriteBWTest(
         (uint32_t)receiver_device->ethernet_core_from_logical_core(eth_receiver_core).x,
         (uint32_t)receiver_device->ethernet_core_from_logical_core(eth_receiver_core).y,
         chip1_worker_semaphores_base_address};
-    std::cout << "H" << std::endl;
 
     CBHandle cb_src0_receiver_workers = CreateCircularBuffer(receiver_program, chip1_receiver_worker_core, cb_src0_config);
     auto device_1_edm_receiver_worker_receiver_kernel = tt_metal::CreateKernel(
@@ -507,7 +494,6 @@ bool RunWriteBWTest(
             .processor = tt_metal::DataMovementProcessor::RISCV_0,
             .noc = tt_metal::NOC::RISCV_0_default,
             .compile_args = chip1_receiver_worker_receiver_compile_args});
-    std::cout << "I" << std::endl;
     auto device_1_edm_receiver_worker_sender_kernel = tt_metal::CreateKernel(
         receiver_program,
         receiver_side_writer_worker_kernel_path,
@@ -516,24 +502,16 @@ bool RunWriteBWTest(
             .processor = tt_metal::DataMovementProcessor::RISCV_1,
             .noc = tt_metal::NOC::RISCV_1_default,
             .compile_args = chip1_receiver_worker_sender_compile_args});
-    std::cout << "J" << std::endl;
     tt_metal::SetRuntimeArgs(
         receiver_program,
         device_1_edm_receiver_worker_receiver_kernel,
         chip1_receiver_worker_core,
         chip1_receiver_worker_receiver_runtime_args);
-    std::cout << "K" << std::endl;
     tt_metal::SetRuntimeArgs(
         receiver_program,
         device_1_edm_receiver_worker_sender_kernel,
         chip1_receiver_worker_core,
         chip1_receiver_worker_sender_runtime_args);
-    std::cout << "L" << std::endl;
-
-    std::cout << "dram_output_buffer_base_addr: " << dram_output_buffer_base_addr << std::endl;
-    std::cout << "dram_input_buf_base_addr: " << dram_input_buf_base_addr << std::endl;
-    std::cout << "input_buffer_page_size: " << input_buffer_page_size << std::endl;
-    std::cout << "num_pages: " << num_pages << std::endl;
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Compile and Execute Application
@@ -553,9 +531,7 @@ bool RunWriteBWTest(
     std::thread th1 = std::thread([&] { tt_metal::detail::LaunchProgram(sender_device, sender_program); });
 
     th2.join();
-    std::cout << "receiver done" << std::endl;
     th1.join();
-    std::cout << "sender done" << std::endl;
 
     std::vector<uint32_t> readback_data_vec =
         std::vector<uint32_t>(all_zeros.size(), -1);  // init to 0 data for easier debug
@@ -597,7 +573,6 @@ int main(int argc, char** argv) {
 
     N300TestDevice test_fixture;
 
-    std::cout << "precomputed_source_addresses_buffer_size: " << precomputed_source_addresses_buffer_size << std::endl;
     const auto& device_0 = test_fixture.devices_.at(0);
     const auto& device_1 = test_fixture.devices_.at(1);
     const size_t precomputed_source_addresses_buffer_address = (size_t) nullptr;
@@ -613,10 +588,6 @@ int main(int argc, char** argv) {
     const auto& eth_sender_core = *eth_sender_core_iter;
     auto [device_id, eth_receiver_core] = device_0->get_connected_ethernet_core(eth_sender_core);
 
-    // std::cout << "SENDER CORE: (x=" << eth_sender_core.x << ", y=" << eth_sender_core.y << ")" << std::endl;
-    // std::cout << "RECEIVER CORE: (x=" << eth_receiver_core.x << ", y=" << eth_receiver_core.y << ")" << std::endl;
-
-    // std::cout << "BW TEST: " << 64 << ", num_messages_to_send: " << num_messages_to_send << std::endl;
     bool success = false;
     try {
         success = RunWriteBWTest(

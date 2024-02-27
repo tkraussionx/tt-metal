@@ -38,6 +38,4 @@ void kernel_main() {
         cb_push_back(cb_id_in0, 1);
     }
 
-    DPRINT << "swr: DONE\n";
-    ncrisc_noc_full_sync();
 }
