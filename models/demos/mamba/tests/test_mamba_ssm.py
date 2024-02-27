@@ -33,7 +33,7 @@ class PytorchMambaSSM(torch.nn.Module):
         (
             "state-spaces/mamba-370m",
             1,
-            0.98,
+            0.99,
         ),
     ),
 )
@@ -51,11 +51,8 @@ def test_mamba_ssm_inference(
     reference_model.args.batch_size = batch
 
     d_in = reference_model.args.d_model * reference_model.args.expand
-    #input = torch.zeros(batch, 1, d_in)
-    input = torch.load("after_silu.pt").squeeze(1).to(torch.float32)
-    #input = torch.FloatTensor(batch, 1, d_in).uniform_(-0.00001, 0.000151).to(torch.float32)
-    #breakpoint()
-
+    input = torch.rand(batch, 1, d_in)
+    
     reference_output = PytorchMambaSSM(reference_model, LAYER_NUM)(input)
     #reference_output = torch.load("output_pytorch.pt")
 

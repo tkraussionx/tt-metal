@@ -32,8 +32,8 @@ class PytorchResidualBlock(torch.nn.Module):
     (
         (
             "state-spaces/mamba-370m",
-            32,
-            0.94,
+            1,
+            0.99,
         ),
     ),
 )
@@ -51,7 +51,7 @@ def test_residual_block_inference(
     reference_model.args.batch_size = batch
 
     d_model = reference_model.args.d_model
-    input = torch.rand(batch, d_model)
+    input = torch.rand(batch, 1, d_model)
     tt_input = input.clone()
 
     reference_output = PytorchResidualBlock(reference_model, LAYER_NUM)(input)
@@ -60,7 +60,7 @@ def test_residual_block_inference(
     assert not isinstance(residual_block, torch.Tensor), "Expected torch.Module"
 
     model = TtResidualBlock(reference_model.args, device, residual_block.state_dict())
-    tt_input = tt_input.unsqueeze(1).unsqueeze(1)
+    tt_input = tt_input.unsqueeze(1)
     tt_input = torch2tt_tensor(
                     tt_input, 
                     device,
@@ -71,7 +71,7 @@ def test_residual_block_inference(
                     tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
                 )
     tt_output = model(tt_input)
-    tt_output = tt2torch_tensor(tt_output).squeeze(1).squeeze(1)
+    tt_output = tt2torch_tensor(tt_output).squeeze(1)
     logger.info(comp_allclose(reference_output, tt_output))
 
     does_pass, output_pcc = comp_pcc(reference_output, tt_output, pcc)
