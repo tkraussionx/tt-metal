@@ -102,7 +102,9 @@ def pretty_print_model_config(model_config):
 
 
 def get_model_config(model_config_str, num_devices=1):
-    assert model_config_str in ACCEPTABLE_MODEL_CONFIG_STRS
+    assert (
+        model_config_str in ACCEPTABLE_MODEL_CONFIG_STRS
+    ), f"Model config {model_config_str} is not in {ACCEPTABLE_MODEL_CONFIG_STRS}"
     DRAM_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
     L1_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
     BFP8_DTYPE = ttnn.bfloat8_b
@@ -261,7 +263,7 @@ def get_model_config(model_config_str, num_devices=1):
     model_config["CREATE_QKV_HEADS_OUTPUT_MEMCFG"] = HEIGHT_SHARDED_MEMCFG
 
     # uncomment if need to see all the configs
-    logger.debug(f"Falcon model config: \n{pretty_print_model_config(model_config)}")
+    # logger.debug(f"Falcon model config: \n{pretty_print_model_config(model_config)}")
 
     return model_config
 
