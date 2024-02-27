@@ -286,11 +286,7 @@ class MambaBlock(nn.Module):
         y = einsum(x, C[:, -1], "b d_in n, b n -> b d_in")
 
         y = y.unsqueeze(1)
-<<<<<<< HEAD
-        y = y + u * D
-=======
         y = y + u*D
->>>>>>> 5559ca20c... Updated one step ssm to consider D parameter
 
         self.prev_hidden_states = x
         return y

@@ -32,7 +32,7 @@ class PytorchMambaSSM(torch.nn.Module):
         (
             "state-spaces/mamba-370m",
             1,
-            0.98,
+            0.99,
         ),
     ),
 )
@@ -50,7 +50,7 @@ def test_mamba_ssm_inference(
 
     d_in = reference_model.args.d_model * reference_model.args.expand
     input = torch.rand(batch, 1, d_in)
-
+    
     reference_output = PytorchMambaSSM(reference_model, LAYER_NUM)(input)
 
     residual_block = reference_model.layers[LAYER_NUM]
