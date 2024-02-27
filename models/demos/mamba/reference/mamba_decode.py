@@ -1,7 +1,7 @@
 import torch
 from transformers import AutoTokenizer
 import torch.nn.functional as F
-
+import tt_lib
 
 def generate_through_selective_scan(
     model, tokenizer, prompt: str, n_tokens_to_gen: int = 51, sample: bool = False, top_k: int = None
@@ -46,28 +46,27 @@ def generate_through_decode(
     for token_n in range(promt_plus_generated_n_tokens):
         with torch.no_grad():
             indices_to_input = input_ids
-            next_token_logits = model(indices_to_input[:, token_n])
+            next_token_logits = model(indices_to_input[:, token_n].unsqueeze(1))
 
         probs = F.softmax(next_token_logits, dim=-1)
-        (batch, vocab_size) = probs.shape
+        (batch, _, vocab_size) = probs.shape
 
         if top_k is not None:
             (values, indices) = torch.topk(probs, k=top_k)
             probs[probs < values[:, -1, None]] = 0
-            probs = probs / probs.sum(axis=1, keepdims=True)
+            probs = probs / probs.sum(axis=-1, keepdims=True)
 
         if sample:
             next_indices = torch.multinomial(probs, num_samples=1)
         else:
             next_indices = torch.argmax(probs, dim=-1)[:, None]
-
+        next_indices = next_indices.squeeze(1)
         if token_n >= prompt_token_counts - 1:
             input_ids = torch.cat([input_ids, next_indices], dim=1)
 
     output_completions = [tokenizer.decode(output.tolist()) for output in input_ids][0]
 
     return output_completions
-
 
 def test_decode():
     from model import Mamba
@@ -91,6 +90,15 @@ def test_decode():
     model_decode = MambaDecode.from_pretrained(pretrained_model_name)
     print("Output from decode only mode:")
     print(generate_through_decode(model_decode, tokenizer, "Mamba is the"))
+
+    from models.demos.mamba.tt.full_model import MambaTT
+    tt_device = tt_lib.device.CreateDevice(0)
+    tt_lib.device.SetDefaultDevice(tt_device)
+    tt_device = tt_lib.device.GetDefaultDevice()
+    hf_reference_model = MambaDecode.from_pretrained(pretrained_model_name)
+    tt_model_decode = MambaTT(hf_reference_model, 48, tt_device)
+    print("Output from decode only mode through metal:")
+    print(generate_through_decode(tt_model_decode, tokenizer, "Mamba is the"))
 
 
 if __name__ == "__main__":
