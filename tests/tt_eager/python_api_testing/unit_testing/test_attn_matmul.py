@@ -36,12 +36,9 @@ def test_attn_matmul(in0_dtype, in1_dtype, out_dtype, device):
     for input_shape_a, input_shape_b in generate_input_shapes():
         input_tensor_a = torch.randn(input_shape_a).bfloat16()
         input_tensor_b = torch.randn(input_shape_b).bfloat16()
-        print("Pushing tensor")
         tt_input_tensor_a = ttl.tensor.Tensor(input_tensor_a, in0_dtype).to(ttl.tensor.Layout.TILE).to(device)
         tt_input_tensor_b = ttl.tensor.Tensor(input_tensor_b, in1_dtype).to(ttl.tensor.Layout.TILE).to(device)
-        print("tensors pushed")
         compute_grid_size = device.compute_with_storage_grid_size()
-        print("Running op")
         tt_output_tensor_on_device = ttl.operations.primary.transformers.attn_matmul(
             tt_input_tensor_a,
             tt_input_tensor_b,
@@ -51,17 +48,10 @@ def test_attn_matmul(in0_dtype, in1_dtype, out_dtype, device):
             ),
             output_dtype=out_dtype,
         )
-        print("Op ran")
-        print("Reading to CPU")
         tt_output_tensor = tt_output_tensor_on_device.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
-        print("Have tensor")
         golden_output_tensor = (input_tensor_a.transpose(0, 2) @ input_tensor_b).transpose(0, 2)
 
         allclose, output = comp_pcc(tt_output_tensor, golden_output_tensor)
-        print("Device tensor")
-        print(tt_output_tensor)
-        print("Golden Tensor")
-        print(golden_output_tensor)
         assert allclose, f"FAILED: {output}"
 
 

@@ -148,7 +148,8 @@ bool flatten(CommonFixture *fixture, tt_metal::Device *device, uint32_t num_tile
     ////////////////////////////////////////////////////////////////////////////
     fixture->WriteBuffer(device, src_dram_buffer, src_vec);
 
-    std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec1 = {
+    std::shared_ptr<tt_metal::RuntimeArgs> runtime_args_vec1 = std::make_shared<tt_metal::RuntimeArgs>();
+    *runtime_args_vec1 = {
         src_dram_buffer.get(),
         (std::uint32_t)dram_src_noc_xy.x,
         (std::uint32_t)dram_src_noc_xy.y,
@@ -157,7 +158,8 @@ bool flatten(CommonFixture *fixture, tt_metal::Device *device, uint32_t num_tile
         num_bytes_per_tensor_row
     };
 
-    std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec2 = {
+    std::shared_ptr<tt_metal::RuntimeArgs> runtime_args_vec2 = std::make_shared<tt_metal::RuntimeArgs>();
+    *runtime_args_vec2 = {
         dst_dram_buffer.get(),
         (std::uint32_t)dram_dst_noc_xy.x,
         (std::uint32_t)dram_dst_noc_xy.y,
@@ -168,13 +170,13 @@ bool flatten(CommonFixture *fixture, tt_metal::Device *device, uint32_t num_tile
         device->command_queue(),
         program.get_kernels().at(flatten_kernel),
         core,
-        std::move(runtime_args_vec1));
+        runtime_args_vec1);
 
     tt_metal::SetRuntimeArgs(
         device->command_queue(),
         program.get_kernels().at(unary_writer_kernel),
         core,
-        std::move(runtime_args_vec2));
+        runtime_args_vec2);
 
     fixture->RunProgram(device, program);
 

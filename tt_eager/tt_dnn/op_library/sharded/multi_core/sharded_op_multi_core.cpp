@@ -22,7 +22,7 @@ namespace tt_metal {
 operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
     const Tensor& input, Tensor& output, const CoreCoord& grid_size) {
     tt_metal::Program program{};
-    std::cout << "Running interleaved to sharded program" << std::endl;
+    // std::cout << "Running interleaved to sharded program" << std::endl;
     uint32_t num_units, num_units_per_shard, input_unit_size, output_unit_size, num_units_per_shard_width,
         num_units_per_shard_height, num_units_offset, num_units_per_row, num_units_per_shard_height_last,
         num_units_per_shard_width_last;
@@ -176,7 +176,8 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
                 }
             }
             curr_num_units_per_shard = shard_height * shard_width;
-            std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec1 = {
+            std::shared_ptr<RuntimeArgs> runtime_args_vec1 = std::make_shared<RuntimeArgs>();
+            *runtime_args_vec1 = {
                 src_buffer,
                 shard_height,
                 shard_width,
@@ -188,7 +189,7 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
                 device -> command_queue(),
                 program.get_kernels().at(unary_reader_kernel_id),
                 core,
-                std::move(runtime_args_vec1));
+                runtime_args_vec1);
             curr_idx_w += num_units_per_shard_width;
             if (curr_idx_w == num_units_per_row) {
                 curr_idx_w = 0;
@@ -225,23 +226,24 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
                     }
                 }
             }
-            std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec2 = {src_buffer, num_units_per_row, shard_height, shard_width, curr_idx_w, curr_idx_h};
+            std::shared_ptr<RuntimeArgs> runtime_args_vec2 = std::make_shared<RuntimeArgs>();
+            *runtime_args_vec2 = {src_buffer, num_units_per_row, shard_height, shard_width, curr_idx_w, curr_idx_h};
             tt_metal::SetRuntimeArgs(
                 device -> command_queue(),
                 program.get_kernels().at(unary_reader_kernel_id),
                 core,
-                std::move(runtime_args_vec2));
+                runtime_args_vec2);
             curr_idx_w += input_unit_size;
             if (curr_idx_w == num_units_per_row) {
                 curr_idx_w = 0;
                 curr_idx_h += num_units_per_shard_height;
             }
         }
-         std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec3 = {curr_num_units_per_shard};
-         std::vector<std::variant<Buffer*, uint32_t>> runtime_args = runtime_args_vec3;
-        tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(unary_writer_kernel_id), core, std::move(runtime_args));
+         std::shared_ptr<RuntimeArgs> runtime_args_vec3 = std::make_shared<RuntimeArgs>();
+         *runtime_args_vec3 = {curr_num_units_per_shard};
+        tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(unary_writer_kernel_id), core, runtime_args_vec3);
         if (convert_df) {
-            tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(compute_kernel_id), core, std::move(runtime_args_vec3));
+            tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(compute_kernel_id), core, runtime_args_vec3);
         }
     }
 
@@ -260,13 +262,13 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
         // uint32_t src_addr;
         // src_buffer->address(&src_addr);
         std::vector<uint32_t> update_idx = {0};
-        std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec3 = {src_buffer};
+        std::shared_ptr<RuntimeArgs> runtime_args_vec3 = std::make_shared<RuntimeArgs>();
+        *runtime_args_vec3 = {src_buffer};
         Device* device = src_buffer->device();
         for (const auto& core : cores) {
             {
                 EnqueueUpdateRuntimeArgs(device->command_queue(), program.get_kernels().at(unary_reader_kernel_id), core, update_idx, runtime_args_vec3, false);
-                // auto& runtime_args = GetRuntimeArgs(program, unary_reader_kernel_id, core);
-                // runtime_args[0] = src_addr;
+
             }
         }
         UpdateDynamicCircularBufferAddress(program, cb_output, *dst_buffer);
@@ -278,7 +280,7 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
 operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
     const Tensor& input, Tensor& output, const CoreCoord& grid_size) {
     tt_metal::Program program{};
-    std::cout << "Running sharded to interleaved program" << std::endl;
+    // std::cout << "Running sharded to interleaved program" << std::endl;
     program.add_global_buffer(input.device_buffer());
     program.add_global_buffer(output.device_buffer());
     auto src_buffer = input.buffer();
@@ -407,12 +409,12 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
             tt_metal::ComputeConfig{.compile_args = compute_kernel_args});
     }
 
-    std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec1 = {num_units_per_shard};
+    std::shared_ptr<RuntimeArgs> runtime_args_vec1 = std::make_shared<RuntimeArgs>();
+    *runtime_args_vec1 = {num_units_per_shard};
     for (const auto& set : all_cores.ranges()) {
         for (auto x = set.start.x; x <= set.end.x; x++) {
             for (auto y = set.start.y; y <= set.end.y; y++) {
-                std::vector<std::variant<Buffer*, uint32_t>> runtime_args = runtime_args_vec1;
-                tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(unary_reader_kernel_id), CoreCoord(x, y), std::move(runtime_args));
+                tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(unary_reader_kernel_id), CoreCoord(x, y), runtime_args_vec1);
             }
         }
     }
@@ -449,22 +451,23 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
                     }
                 }
             }
-            std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec2 = {
-                 dst_buffer,
-                 num_units_per_shard_height,
-                 num_units_per_shard_width,
-                 shard_height,
-                 shard_width,
-                 num_units_offset,
-                 num_units_per_shard,
-                 curr_idx_h + curr_idx_w
-                };
+            std::shared_ptr<RuntimeArgs> runtime_args_vec2 =std::make_shared<RuntimeArgs>();
+            *runtime_args_vec2 = {
+                dst_buffer,
+                num_units_per_shard_height,
+                num_units_per_shard_width,
+                shard_height,
+                shard_width,
+                num_units_offset,
+                num_units_per_shard,
+                curr_idx_h + curr_idx_w
+            };
 
             tt_metal::SetRuntimeArgs(
                 device -> command_queue(),
                 program.get_kernels().at(unary_writer_kernel_id),
                 core,
-                std::move(runtime_args_vec2));
+                runtime_args_vec2);
             curr_idx_w += num_units_per_shard_width;
             if (curr_idx_w >= num_units_per_row) {
                 curr_idx_w = 0;
@@ -498,12 +501,13 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
                     }
                 }
             }
-            std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec3 = {dst_buffer, num_units_per_row, shard_height, shard_width, curr_idx_w, curr_idx_h};
+            std::shared_ptr<RuntimeArgs> runtime_args_vec3 =std::make_shared<RuntimeArgs>();
+            *runtime_args_vec3 = {dst_buffer, num_units_per_row, shard_height, shard_width, curr_idx_w, curr_idx_h};
             tt_metal::SetRuntimeArgs(
                 device -> command_queue(),
                 program.get_kernels().at(unary_writer_kernel_id),
                 core,
-                std::move(runtime_args_vec3));
+                runtime_args_vec3);
             curr_idx_w += output_unit_size;
             if (curr_idx_w >= num_units_per_row) {
                 curr_idx_w = 0;
@@ -524,7 +528,8 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
         auto shard_spec = input_tensors.at(0).shard_spec().value();
         auto all_cores = shard_spec.grid;
         std::vector<uint32_t> update_idx = {0};
-        std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec3 = {dst_buffer};
+        std::shared_ptr<RuntimeArgs> runtime_args_vec3 = std::make_shared<RuntimeArgs>();
+        *runtime_args_vec3 = {dst_buffer};
         Device* device = src_buffer->device();
 
         for (const auto& core : cores) {

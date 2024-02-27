@@ -34,10 +34,8 @@ static void RunTest(WatcherFixture* fixture, Device* device) {
                             .buffer_type = tt_metal::BufferType::DRAM
                             };
     auto input_dram_buffer = CreateBuffer(dram_config);
-    uint32_t input_dram_buffer_addr = input_dram_buffer->address();
 
     auto output_dram_buffer = CreateBuffer(dram_config);
-    uint32_t output_dram_buffer_addr = output_dram_buffer->address();
 
     auto input_dram_noc_xy = input_dram_buffer->noc_coordinates();
     auto output_dram_noc_xy = output_dram_buffer->noc_coordinates();
@@ -58,18 +56,21 @@ static void RunTest(WatcherFixture* fixture, Device* device) {
     // Write runtime args - update to a core that doesn't exist
     output_dram_noc_xy.x = 16;
     output_dram_noc_xy.y = 16;
-    tt_metal::SetRuntimeArgs(
-        program,
-        dram_copy_kernel,
-        core,
-        {l1_buffer_addr,
-        input_dram_buffer_addr,
+    std::shared_ptr<RuntimeArgs> runtime_args = std::make_shared<RuntimeArgs>();
+    *runtime_args = {l1_buffer_addr,
+        input_dram_buffer.get(),
         (std::uint32_t)input_dram_noc_xy.x,
         (std::uint32_t)input_dram_noc_xy.y,
-        output_dram_buffer_addr,
+        output_dram_buffer.get(),
         (std::uint32_t)output_dram_noc_xy.x,
         (std::uint32_t)output_dram_noc_xy.y,
-        dram_buffer_size});
+        dram_buffer_size};
+
+    tt_metal::SetRuntimeArgs(
+        device->command_queue(),
+        program.get_kernels().at(dram_copy_kernel),
+        core,
+        runtime_args);
 
     // Run the kernel, expect an exception here
     try {
@@ -87,6 +88,7 @@ static void RunTest(WatcherFixture* fixture, Device* device) {
     expected[7] = '0' + device->id();
     expected[18] = '0' + phys_core.x;
     expected[22] = '0' + phys_core.y;
+    uint32_t output_dram_buffer_addr = output_dram_buffer->address();
     string addr = fmt::format("{:08x}", output_dram_buffer_addr);
     expected.replace(99, addr.length(), addr);
 

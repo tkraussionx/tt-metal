@@ -424,13 +424,14 @@ struct AllocBufferMetadata {
     BufferType buffer_type;
     TensorMemoryLayout buffer_layout;
     uint32_t num_cores;
-    uint64_t* address;
+    uint64_t* address_copy_on_host;
+    uint32_t device_address;
     bool bottom_up;
 };
 
 struct RuntimeArgsMetadata {
     CoreCoord core_coord;
-    std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec;
+    std::shared_ptr<RuntimeArgs> runtime_args_vec;
     std::shared_ptr<Kernel> kernel;
     std::vector<uint32_t> update_idx;
 };
@@ -489,7 +490,7 @@ class HWCommandQueue {
     friend void EnqueueReadBufferImpl(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer, void* dst, bool blocking);
     friend void EnqueueWriteBufferImpl(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer, const void* src, bool blocking);
     friend void EnqueueAllocateBufferImpl(AllocBufferMetadata alloc_md);
-    friend void EnqueueDeallocateBufferImpl(std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer);
+    friend void EnqueueDeallocateBufferImpl(AllocBufferMetadata alloc_md);
     friend void EnqueueGetBufferAddrImpl(void* dst_buf_addr, const Buffer* buffer);
     friend void FinishImpl(CommandQueue & cq);
     friend class Trace;
@@ -551,10 +552,14 @@ class CommandQueue {
     void enable_command_sanitization();
     void disable_command_sanitization();
 
-    static CommandQueueMode get_mode() {
+    static CommandQueueMode get_mode_from_env_var() {
         // Envvar is used for bringup and debug only. Will be removed in the future and should not be relied on in production.
         int value = parse_env<int>("TT_METAL_CQ_ASYNC_MODE", static_cast<int>(CommandQueueMode::PASSTHROUGH));
         return static_cast<CommandQueue::CommandQueueMode>(value);
+    }
+    static CommandQueueMode get_mode() {
+        // Get the current mode for the CQ.
+        return mode;
     }
    private:
     enum class CommandQueueState {
@@ -562,14 +567,8 @@ class CommandQueue {
         RUNNING = 1,
         TERMINATE = 2,
     };
-<<<<<<< HEAD
-=======
-    CommandQueueMode mode = CommandQueue::get_mode();
-    std::unique_ptr<std::thread> worker_thread;
-    CommandQueueState worker_state = CommandQueueState::IDLE;
->>>>>>> #0: WIP changes to make Async SW queues default
-
-    CommandQueueMode mode = CommandQueue::get_mode();
+    // Initialize Command Queue Mode based on the env-var. This will be default, unless the user excplictly sets the mode using set_mode.
+    inline static CommandQueueMode mode = CommandQueue::get_mode_from_env_var();
     CommandQueueState worker_state = CommandQueueState::IDLE;
     std::unique_ptr<std::thread> worker_thread;
     LockFreeQueue<CommandInterface> worker_queue;

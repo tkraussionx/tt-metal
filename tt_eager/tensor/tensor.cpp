@@ -54,18 +54,18 @@ Tensor::~Tensor() {
 
 void Tensor::deallocate(bool force) {
     ZoneScoped;
-    // std::cout << "Deallocating tensor" << std::endl;
     std::visit(
         [&force](auto&& storage) {
             using T = std::decay_t<decltype(storage)>;
+            // Decrement ref count of Owned and Device buffers during tensor destruction.
+            // This will free up memory when Command Queues are in Passthrough mode.
+            // Device Buffer Deallocation will happen in the destructor (don't need to explicitly deallocate here).
             if constexpr (std::is_same_v<T, OwnedStorage>) {
-                // std::visit([](auto&& buffer) { buffer.reset(); }, storage.buffer);
+                std::visit([](auto&& buffer) { buffer.reset(); }, storage.buffer);
             } else if constexpr (std::is_same_v<T, DeviceStorage>) {
-                // if (storage.buffer.use_count() == 1 or force) {
-                //     DeallocateBuffer(*storage.buffer);
-                // }
                 storage.buffer.reset();
-            } else if constexpr (std::is_same_v<T, BorrowedStorage>) {
+            }
+            else if constexpr (std::is_same_v<T, BorrowedStorage>) {
                 if (force) {
                     TT_THROW("Cannot deallocate tensor with borrowed storage!");
                 }

@@ -60,26 +60,27 @@ static void RunTest(WatcherFixture* fixture, Device* device) {
     auto l1_buffer = CreateBuffer(l1_config);
 
     // Write runtime args
+    std::shared_ptr<RuntimeArgs> runtime_args = std::make_shared<RuntimeArgs>();
+    *runtime_args = { delay_cycles, l1_buffer.get()};
     for (uint32_t x = xy_start.x; x <= xy_end.x; x++) {
         for (uint32_t y = xy_start.y; y <= xy_end.y; y++) {
-            const std::vector<uint32_t> args = { delay_cycles, l1_buffer->address() };
             SetRuntimeArgs(
-                program,
-                brisc_kid,
+                device->command_queue(),
+                program.get_kernels().at(brisc_kid),
                 CoreCoord{x, y},
-                args
+                runtime_args
             );
             SetRuntimeArgs(
-                program,
-                ncrisc_kid,
+                device->command_queue(),
+                program.get_kernels().at(ncrisc_kid),
                 CoreCoord{x, y},
-                args
+                runtime_args
             );
             SetRuntimeArgs(
-                program,
-                trisc_kid,
+                device->command_queue(),
+                program.get_kernels().at(trisc_kid),
                 CoreCoord{x, y},
-                args
+                runtime_args
             );
         }
     }

@@ -60,6 +60,9 @@ bool matmul_tile(CommonFixture *fixture, tt_metal::Device *device, const MatmulT
     auto src1_dram_buffer = CreateBuffer(dram_config);
     auto dst_dram_buffer = CreateBuffer(dram_config);
 
+    program.add_global_buffer(src0_dram_buffer);
+    program.add_global_buffer(src1_dram_buffer);
+    program.add_global_buffer(dst_dram_buffer);
     uint32_t num_input_tiles = 2 * M;
 
     auto dram_src0_noc_xy = src0_dram_buffer->noc_coordinates();
@@ -92,7 +95,7 @@ bool matmul_tile(CommonFixture *fixture, tt_metal::Device *device, const MatmulT
         auto cb_src2 = tt_metal::CreateCircularBuffer(program, core, cb_src2_config);
     }
     uint32_t ouput_cb_index = 16;
-    vector<uint32_t> reader_l1_args;
+    std::shared_ptr<RuntimeArgs> reader_l1_args = std::make_shared<RuntimeArgs>();
     if (cfg.M > 1 || cfg.N > 1 || cfg.K > 1){
         uint32_t intermediate_cb_index = 24;
         std::map<uint8_t, tt::DataFormat> partials_and_out_data_format_spec = {
@@ -106,11 +109,11 @@ bool matmul_tile(CommonFixture *fixture, tt_metal::Device *device, const MatmulT
             .set_page_size(intermediate_cb_index, single_tile_size);
         auto cb_output = tt_metal::CreateCircularBuffer(program, core, cb_output_config);
 
-        reader_l1_args = {
-            src0_dram_buffer->address(),
+        *reader_l1_args = {
+            src0_dram_buffer.get(),
             (std::uint32_t)dram_src0_noc_xy.x,
             (std::uint32_t)dram_src0_noc_xy.y,
-            src1_dram_buffer->address(),
+            src1_dram_buffer.get(),
             (std::uint32_t)dram_src1_noc_xy.x,
             (std::uint32_t)dram_src1_noc_xy.y,
             (std::uint32_t)K,
@@ -126,11 +129,11 @@ bool matmul_tile(CommonFixture *fixture, tt_metal::Device *device, const MatmulT
             .set_page_size(ouput_cb_index, single_tile_size);
         auto cb_output = tt_metal::CreateCircularBuffer(program, core, cb_output_config);
 
-        reader_l1_args = {
-            src0_dram_buffer->address(),
+        *reader_l1_args = {
+            src0_dram_buffer.get(),
             (std::uint32_t)dram_src0_noc_xy.x,
             (std::uint32_t)dram_src0_noc_xy.y,
-            src1_dram_buffer->address(),
+            src1_dram_buffer.get(),
             (std::uint32_t)dram_src1_noc_xy.x,
             (std::uint32_t)dram_src1_noc_xy.y,
             1,
@@ -168,33 +171,36 @@ bool matmul_tile(CommonFixture *fixture, tt_metal::Device *device, const MatmulT
         fixture->WriteBuffer(device, src2_dram_buffer, bias);
 
         auto dram_src2_noc_xy = src2_dram_buffer->noc_coordinates();
-        vector<uint32_t> bias_args = {
-            src2_dram_buffer->address(),
+        RuntimeArgs bias_args = {
+            src2_dram_buffer.get(),
             (std::uint32_t)dram_src2_noc_xy.x,
             (std::uint32_t)dram_src2_noc_xy.y,
             (std::uint32_t)N,
             (std::uint32_t)(N * single_tile_size)
         };
 
-        for (uint32_t arg: bias_args) {
-            reader_l1_args.push_back(arg);
+        for (const auto& arg: bias_args) {
+            (*reader_l1_args).push_back(arg);
         }
     }
 
     tt_metal::SetRuntimeArgs(
-        program,
-        mm_reader_kernel,
+        device->command_queue(),
+        program.get_kernels().at(mm_reader_kernel),
         core,
         reader_l1_args);
 
-    tt_metal::SetRuntimeArgs(
-        program,
-        unary_writer_kernel,
-        core,
-        {dst_dram_buffer->address(),
+    std::shared_ptr<RuntimeArgs> writer_args = std::make_shared<RuntimeArgs>();
+    *writer_args = {dst_dram_buffer.get(),
         (std::uint32_t)dram_dst_noc_xy.x,
         (std::uint32_t)dram_dst_noc_xy.y,
-        num_tiles}); // this is M * N in the multi_tile case !!
+        num_tiles};
+
+    tt_metal::SetRuntimeArgs(
+        device->command_queue(),
+        program.get_kernels().at(unary_writer_kernel),
+        core,
+        writer_args); // this is M * N in the multi_tile case !!
 
     fixture->RunProgram(device, program);
 

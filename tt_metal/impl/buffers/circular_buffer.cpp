@@ -93,7 +93,7 @@ uint32_t CircularBuffer::address() const {
 }
 
 void CircularBuffer::assign_global_address () {
-    std::cout << "Assinging global addr to CB" << std::endl;
+    // std::cout << "Assinging global addr to CB" << std::endl;
     EnqueueGetBufferAddr(config_.shadow_global_buffer->device()->command_queue(), &globally_allocated_address_, config_.shadow_global_buffer, false);
 }
 

@@ -65,6 +65,10 @@ bool matmul_single_core(CommonFixture *fixture, tt_metal::Device *device, int M,
     auto src1_dram_buffer = CreateBuffer(weights_config);
     auto dst_dram_buffer = CreateBuffer(dst_config);
 
+    program.add_global_buffer(src0_dram_buffer);
+    program.add_global_buffer(src1_dram_buffer);
+    program.add_global_buffer(dst_dram_buffer);
+
     auto dram_src0_noc_xy = src0_dram_buffer->noc_coordinates();
     auto dram_src1_noc_xy = src1_dram_buffer->noc_coordinates();
     auto dram_dst_noc_xy = dst_dram_buffer->noc_coordinates();
@@ -95,11 +99,12 @@ bool matmul_single_core(CommonFixture *fixture, tt_metal::Device *device, int M,
         .set_page_size(ouput_cb_index, single_tile_size);
     auto cb_output = tt_metal::CreateCircularBuffer(program, cores, cb_output_config);
 
-    std::vector<uint32_t> mm_reader_rt_args{
-        src0_dram_buffer->address(),
+    std::shared_ptr<tt_metal::RuntimeArgs> mm_reader_rt_args = std::make_shared<RuntimeArgs>();
+    *mm_reader_rt_args = {
+        src0_dram_buffer.get(),
         (std::uint32_t)dram_src0_noc_xy.x,
         (std::uint32_t)dram_src0_noc_xy.y,
-        src1_dram_buffer->address(),
+        src1_dram_buffer.get(),
         (std::uint32_t)dram_src1_noc_xy.x,
         (std::uint32_t)dram_src1_noc_xy.y,
         (std::uint32_t)(K/in0_block_w), // num_blocks
@@ -108,8 +113,9 @@ bool matmul_single_core(CommonFixture *fixture, tt_metal::Device *device, int M,
         (std::uint32_t)(M * in0_block_w * single_tile_size), // input 0 block bytes
         (std::uint32_t)(N * in0_block_w * single_tile_size)}; // input 1 block bytes
 
-    std::vector<uint32_t> writer_rt_args{
-        dst_dram_buffer->address(),
+   std::shared_ptr<tt_metal::RuntimeArgs> writer_rt_args = std::make_shared<RuntimeArgs>();
+   *writer_rt_args = {
+        dst_dram_buffer.get(),
         (std::uint32_t)dram_dst_noc_xy.x,
         (std::uint32_t)dram_dst_noc_xy.y,
         (std::uint32_t)out_subblock_h, // num tiles per sub block m
@@ -183,14 +189,14 @@ bool matmul_single_core(CommonFixture *fixture, tt_metal::Device *device, int M,
     fixture->WriteBuffer(device, src1_dram_buffer, weights);
 
     tt_metal::SetRuntimeArgs(
-        program,
-        mm_reader_kernel,
+        device->command_queue(),
+        program.get_kernels().at(mm_reader_kernel),
         core,
         mm_reader_rt_args);
 
     tt_metal::SetRuntimeArgs(
-        program,
-        unary_writer_kernel,
+        device->command_queue(),
+        program.get_kernels().at(unary_writer_kernel),
         core,
         writer_rt_args);
 

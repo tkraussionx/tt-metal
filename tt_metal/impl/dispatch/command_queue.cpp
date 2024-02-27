@@ -93,7 +93,6 @@ const DeviceCommand EnqueueReadShardedBufferCommand::create_buffer_transfer_inst
 
     TT_ASSERT(is_sharded(this->buffer.buffer_layout()));
     uint32_t buffer_address = this->buffer.address();
-    // std::cout << "reading sharded buffer addr " << buffer_address << std::endl;
     uint32_t dst_page_index = 0;
 
     uint32_t num_cores = this->buffer.num_cores();
@@ -135,7 +134,6 @@ const DeviceCommand EnqueueReadInterleavedBufferCommand::create_buffer_transfer_
 
     uint32_t buffer_address = this->buffer.address();
     uint32_t dst_page_index = 0;
-    // std::cout << "reading buffer addr " << buffer_address << std::endl;
     command.add_buffer_transfer_interleaved_instruction(
         buffer_address,
         dst_address,
@@ -250,8 +248,6 @@ const DeviceCommand EnqueueWriteInterleavedBufferCommand::create_buffer_transfer
     TT_ASSERT(not is_sharded(this->buffer.buffer_layout()));
 
     uint32_t buffer_address = this->buffer.address();
-    // std::cout << "writing to buffer: " << buffer_address << std::endl;
-    // std::cout << "Buffer addrs: " << buffer_address << std::endl;
     uint32_t src_page_index = 0;
     command.add_buffer_transfer_interleaved_instruction(
         src_address,
@@ -315,10 +311,6 @@ const DeviceCommand EnqueueWriteBufferCommand::assemble_device_command(uint32_t 
     }
 
     DeviceCommand command = this->create_buffer_transfer_instruction(src_address, padded_page_size, num_pages);
-    // std::cout << "Src addr: " << src_address << " " <<  padded_page_size << " "  << num_pages << std::endl;
-    // for (int i = 0; i < DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND / 4; i++) {
-    //     std::cout << *(reinterpret_cast<uint32_t*>(command.data()) + i) << " ";
-    // }
     // Targeting fast dispatch on remote device means commands have to be tunneled through ethernet
     // Even when targeting fast dispatch on remote device, commands are tunneled through ethernet to consumer tensix cores
     constexpr bool cmd_consumer_on_ethernet = false;
@@ -328,15 +320,12 @@ const DeviceCommand EnqueueWriteBufferCommand::assemble_device_command(uint32_t 
         producer_consumer_tx_num_pages = consumer_cb_num_pages / DeviceCommand::SYNC_NUM_PAGES;
         consumer_cb_num_pages = producer_consumer_tx_num_pages * DeviceCommand::SYNC_NUM_PAGES; // want num pages to be previous multiple of SYNC_NUM_PAGES
     }
-    // std::cout << "Consumer cb num pages: " << producer_consumer_tx_num_pages << " " << consumer_cb_num_pages << std::endl;
     command.set_producer_consumer_transfer_num_pages(producer_consumer_tx_num_pages);
 
     uint32_t consumer_cb_size = consumer_cb_num_pages * padded_page_size;
-    // std::cout << "Consumer cb_size: " << consumer_cb_size << std::endl;
     TT_ASSERT(padded_page_size <= consumer_cb_size, "Page is too large to fit in consumer buffer");
     uint32_t producer_cb_num_pages = consumer_cb_num_pages * 2;
     uint32_t producer_cb_size = producer_cb_num_pages * padded_page_size;
-    // std::cout << "Producer cb size: " << producer_cb_size << " " << producer_cb_num_pages << std::endl;
     command.set_page_size(padded_page_size);
     command.set_producer_cb_size(producer_cb_size);
     command.set_consumer_cb_size(consumer_cb_size);
@@ -347,7 +336,6 @@ const DeviceCommand EnqueueWriteBufferCommand::assemble_device_command(uint32_t 
     // Targeting fast dispatch on remote device means commands have to be tunneled through ethernet
     bool route_through_ethernet = not device->is_mmio_capable();
     if (route_through_ethernet) {
-        // std::cout << "Routing through eth" << std::endl;
         uint32_t router_cb_num_pages = get_consumer_data_buffer_size(true) / padded_page_size;
         uint32_t router_tx_num_pages = 1;
         if (router_cb_num_pages >= DeviceCommand::SYNC_NUM_PAGES) {
@@ -363,18 +351,10 @@ const DeviceCommand EnqueueWriteBufferCommand::assemble_device_command(uint32_t 
         command.set_router_cb_size(router_cb_size);
         command.set_router_cb_num_pages(router_cb_num_pages);
     }
-    // std::cout << "Issue data size: " << padded_page_size * num_pages << std::endl;
-    // std::cout << "Completion data size: " << align(EVENT_PADDED_SIZE, 32) << std::endl;
-    // std::cout << "Event: " << this -> event << std::endl;
+
     command.set_issue_data_size(padded_page_size * num_pages);
     command.set_completion_data_size(align(EVENT_PADDED_SIZE, 32));
     command.set_event(this->event);
-
-    // std::cout << "Assembled Command: " << std::endl;
-    // for (int i = 0; i < DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND / 4; i++) {
-    //     std::cout << *(reinterpret_cast<uint32_t*>(command.data()) + i) << " ";
-    // }
-
     return command;
 }
 
@@ -387,13 +367,9 @@ void EnqueueWriteBufferCommand::process() {
 
     uint32_t cmd_size = DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + data_size_in_bytes;
     this->manager.issue_queue_reserve_back(cmd_size, this->command_queue_id);
-    // std::cout << "Writing command" << std::endl;
 
-    // std::cout << std::endl;
-    // std::vector<uint32_t> vec(data_size_in_bytes / 4, 1065369472);
     this->manager.cq_write(cmd.data(), DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, write_ptr);
     uint32_t unpadded_src_offset = this->dst_page_index * this->buffer.page_size();
-    // std::cout << "Writing data " << std::endl;
     if (this->buffer.page_size() % 32 != 0 and this->buffer.page_size() != this->buffer.size()) {
         // If page size is not 32B-aligned, we cannot do a contiguous write
         uint32_t src_address_offset = unpadded_src_offset;
@@ -410,11 +386,6 @@ void EnqueueWriteBufferCommand::process() {
         this->manager.cq_write(
             (char*)this->src + unpadded_src_offset, data_size_in_bytes, system_memory_temporary_storage_address);
     }
-    // for (int i = 0 ; i < size_in_bytes / 4; i++) {
-        //     std::cout << *(reinterpret_cast<uint32_t*>(user_scratchspace) + i) << " ";
-        // }
-    // std::cout << "wrote command to: " << system_memory_temporary_storage_address << std::endl;
-    // std::cout << "Command  written" << std::endl;
     this->manager.issue_queue_push_back(cmd_size, detail::LAZY_COMMAND_QUEUE_MODE, this->command_queue_id);
 }
 
@@ -590,17 +561,11 @@ void EnqueueProgramCommand::process() {
     const uint32_t cmd_size = DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + data_size_in_bytes;
     this->manager.issue_queue_reserve_back(cmd_size, this->command_queue_id);
     this->manager.cq_write(cmd.data(), DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, write_ptr);
-    // std::cout << "Writing command: " << std::endl;
 
-    // for (int i = 0; i < 35; i++) {
-    //     std::cout << *(reinterpret_cast<uint32_t*>(cmd.data()) + i) << " ";
-    // }
-    // std::cout << std::endl;
     bool tracing = this->trace.has_value();
     vector<uint32_t> trace_host_data;
     uint32_t start_addr = system_memory_temporary_storage_address;
     constexpr static uint32_t padding_alignment = 16;
-    // std::cout << "Writing runtime args" << std::endl;
     for (size_t kernel_id = 0; kernel_id < this->program.num_kernels(); kernel_id++) {
         Kernel* kernel = detail::GetKernel(program, kernel_id);
         for (const auto& c : kernel->cores_with_runtime_args()) {
@@ -609,11 +574,7 @@ void EnqueueProgramCommand::process() {
                 core_runtime_args.data(),
                 core_runtime_args.size() * sizeof(uint32_t),
                 system_memory_temporary_storage_address);
-            // std::cout << "Writing these runtime args to core: "  << c.str() << std::endl;
-            // for (int i = 0; i < core_runtime_args.size(); i++) {
-            //     std::cout <<  *(reinterpret_cast<const uint32_t*>(core_runtime_args.data()) + i) << " ";
-            // }
-            // std::cout << std::endl;
+
             system_memory_temporary_storage_address = align(
                 system_memory_temporary_storage_address + core_runtime_args.size() * sizeof(uint32_t),
                 padding_alignment);
@@ -629,7 +590,6 @@ void EnqueueProgramCommand::process() {
         start_addr + align(system_memory_temporary_storage_address - start_addr, DeviceCommand::PROGRAM_PAGE_SIZE);
 
     array<uint32_t, 4> cb_data;
-    // std::cout << "Writing CB" << std::endl;
     for (const shared_ptr<CircularBuffer>& cb : program.circular_buffers()) {
         for (const auto buffer_index : cb->buffer_indices()) {
             cb_data = {
@@ -638,11 +598,6 @@ void EnqueueProgramCommand::process() {
                 cb->num_pages(buffer_index),
                 cb->size() / cb->num_pages(buffer_index) >> 4};
             this->manager.cq_write(cb_data.data(), padding_alignment, system_memory_temporary_storage_address);
-            // std::cout << "Writing CB data: " << std::endl;
-            // for (int i = 0; i < padding_alignment; i++) {
-            //     std::cout <<  *(reinterpret_cast<uint32_t*>(cb_data.data()) + i) << " ";
-            // }
-            // std::cout << std::endl;
             system_memory_temporary_storage_address += padding_alignment;
             if (tracing) {
                 // No need to resize since cb_data size is guaranteed to be 16 bytes
@@ -768,7 +723,6 @@ template <typename T>
 void HWCommandQueue::enqueue_command(T& command, bool blocking) {
     command.process();
     this->num_issued_commands++;
-    // std::cout << "Cmd: " << num_issued_commands << std::endl;
     if (blocking) {
         this->finish();
     }
@@ -805,9 +759,7 @@ void convert_interleaved_to_sharded_on_host(const void* host, const Buffer& buff
 }
 
 void HWCommandQueue::enqueue_read_buffer(std::shared_ptr<Buffer> buffer, void* dst, bool blocking) {
-    // std::cout << "worker thread calling enqueue" << std::endl;
     this->enqueue_read_buffer(*buffer, dst, blocking);
-    // std::cout << "done" << std::endl;
 }
 
 // Read buffer command is enqueued in the issue region and device writes requested buffer data into the completion region
@@ -867,9 +819,7 @@ void HWCommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blockin
     }
 
     if (blocking) {
-        std::cout << "waiting for complete" << std::endl;
         this->finish();
-        std::cout << "Done" << std::endl;
     }
 }
 
@@ -881,7 +831,6 @@ void HWCommandQueue::enqueue_write_buffer(std::variant<std::reference_wrapper<Bu
         std::visit ([this, &buffer, &blocking, &data](auto&& b) {
             using type_buf = std::decay_t<decltype(b)>;
             if constexpr (std::is_same_v<T, const void*>) {
-                // std::cout << "Using regular ptr: " <<  std::endl;
                 if constexpr (std::is_same_v<type_buf, std::shared_ptr<const Buffer>>) {
                     this->enqueue_write_buffer(*b, data, blocking);
                 } else if constexpr (std::is_same_v<type_buf, std::reference_wrapper<Buffer>>) {
@@ -889,7 +838,6 @@ void HWCommandQueue::enqueue_write_buffer(std::variant<std::reference_wrapper<Bu
                 }
             } else {
                 if constexpr (std::is_same_v<type_buf, std::shared_ptr<const Buffer>>) {
-                    // std::cout << "Using  vector: " << data.use_count() << std::endl;
                     this->enqueue_write_buffer(*b, data.get() -> data(), blocking);
                 } else if constexpr (std::is_same_v<type_buf, std::reference_wrapper<Buffer>>) {
                     this -> enqueue_write_buffer(b.get(), data.get() -> data(), blocking);
@@ -916,7 +864,6 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
     uint32_t total_pages_to_write = buffer.num_pages();
     const uint32_t command_issue_limit = this->manager.get_issue_queue_limit(this->id);
     uint32_t dst_page_index = 0;
-    // std::cout << "total pages to write: " << total_pages_to_write << std::endl;
     while (total_pages_to_write > 0) {
         int32_t num_pages_available =
             (int32_t(command_issue_limit - this->manager.get_issue_queue_write_ptr(this->id)) -
@@ -966,7 +913,6 @@ void HWCommandQueue::enqueue_program(
     // data to land in DRAM first
     bool stall;
     if (not program.loaded_onto_device) {
-        std::cout << "Sending program to: " << program.buffer -> address() << std::endl;
         this->enqueue_write_buffer(*program.buffer, program.program_device_map.program_pages.data(), false);
         stall = true;
         program.loaded_onto_device = true;
@@ -996,7 +942,6 @@ void HWCommandQueue::enqueue_program(
         this->manager.get_next_event(this->id),
         stall,
         trace);
-    // std::cout << "enqueing command" << std::endl;
     this->enqueue_command(command, blocking);
     this->manager.next_completion_queue_push_back(align(EVENT_PADDED_SIZE, 32), this->id);
 }
@@ -1097,13 +1042,7 @@ void HWCommandQueue::finish() {
             }
         }
     } else {
-        int count = 0;
-        while (this->num_issued_commands > this->num_completed_commands) {
-            if (count % 2 and count < 200) {
-                // std::cout << num_issued_commands << " " << num_completed_commands << std::endl;
-            }
-            count++;
-        };
+        while (this->num_issued_commands > this->num_completed_commands);
     }
 }
 
@@ -1170,7 +1109,7 @@ void Trace::create_replay() {
     }
 }
 
-void EnqueueUpdateRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::vector<uint32_t> &update_idx, std::vector<std::variant<Buffer*, uint32_t>> &runtime_args_vec, bool blocking) {
+void EnqueueUpdateRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::vector<uint32_t> &update_idx, std::shared_ptr<RuntimeArgs> runtime_args_vec, bool blocking) {
     auto runtime_args_md = RuntimeArgsMetadata {
             .core_coord = core_coord,
             .runtime_args_vec = runtime_args_vec,
@@ -1186,9 +1125,9 @@ void EnqueueUpdateRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> ke
 
 void EnqueueUpdateRuntimeArgsImpl (const RuntimeArgsMetadata& runtime_args_md) {
     std::vector<uint32_t> resolved_runtime_args = {};
-    resolved_runtime_args.reserve(runtime_args_md.runtime_args_vec.size());
+    resolved_runtime_args.reserve((*runtime_args_md.runtime_args_vec).size());
 
-    for (const auto& arg : runtime_args_md.runtime_args_vec) {
+    for (const auto& arg : *(runtime_args_md.runtime_args_vec)) {
         std::visit([&resolved_runtime_args] (auto&& a) {
             using T = std::decay_t<decltype(a)>;
             if constexpr (std::is_same_v<T, Buffer*>) {
@@ -1204,10 +1143,10 @@ void EnqueueUpdateRuntimeArgsImpl (const RuntimeArgsMetadata& runtime_args_md) {
     }
 }
 
-void EnqueueSetRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec, bool blocking) {
+void EnqueueSetRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::shared_ptr<RuntimeArgs> runtime_args_vec, bool blocking) {
     auto runtime_args_md = RuntimeArgsMetadata {
             .core_coord = core_coord,
-            .runtime_args_vec = std::move(runtime_args_vec),
+            .runtime_args_vec = runtime_args_vec,
             .kernel = kernel,
     };
     cq.run_command( CommandInterface {
@@ -1219,9 +1158,9 @@ void EnqueueSetRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kerne
 
 void EnqueueSetRuntimeArgsImpl(const RuntimeArgsMetadata& runtime_args_md) {
     std::vector<uint32_t> resolved_runtime_args = {};
-    resolved_runtime_args.reserve(runtime_args_md.runtime_args_vec.size());
+    resolved_runtime_args.reserve((*runtime_args_md.runtime_args_vec).size());
 
-    for (const auto& arg : runtime_args_md.runtime_args_vec) {
+    for (const auto& arg : *(runtime_args_md.runtime_args_vec)) {
         std::visit([&resolved_runtime_args] (auto&& a) {
             using T = std::decay_t<decltype(a)>;
             if constexpr (std::is_same_v<T, Buffer*>) {
@@ -1248,7 +1187,6 @@ void EnqueueGetBufferAddrImpl(void* dst_buf_addr, const Buffer* buffer) {
 }
 
 void EnqueueAllocateBuffer(CommandQueue& cq, Allocator& allocator, uint64_t size, uint64_t page_size, BufferType buffer_type, TensorMemoryLayout buffer_layout, uint32_t num_cores, uint64_t* address, bool bottom_up, bool blocking) {
-    // std::cout << "Allocating buffer: " << buffer << std::endl;
     auto alloc_md = AllocBufferMetadata {
         .allocator = allocator,
         .size = size,
@@ -1256,7 +1194,7 @@ void EnqueueAllocateBuffer(CommandQueue& cq, Allocator& allocator, uint64_t size
         .buffer_type = buffer_type,
         .buffer_layout = buffer_layout,
         .num_cores = num_cores,
-        .address = address,
+        .address_copy_on_host = address,
         .bottom_up = bottom_up,
     };
     cq.run_command(CommandInterface {
@@ -1268,35 +1206,28 @@ void EnqueueAllocateBuffer(CommandQueue& cq, Allocator& allocator, uint64_t size
 
 void EnqueueAllocateBufferImpl(AllocBufferMetadata alloc_md) {
     if(is_sharded(alloc_md.buffer_layout)) {
-        *(alloc_md.address) = allocator::allocate_buffer(alloc_md.allocator, alloc_md.size, alloc_md.page_size, alloc_md.buffer_type, alloc_md.bottom_up, alloc_md.num_cores);
+        *(alloc_md.address_copy_on_host) = allocator::allocate_buffer(alloc_md.allocator, alloc_md.size, alloc_md.page_size, alloc_md.buffer_type, alloc_md.bottom_up, alloc_md.num_cores);
     }
     else {
-        *(alloc_md.address) = allocator::allocate_buffer(alloc_md.allocator, alloc_md.size, alloc_md.page_size, alloc_md.buffer_type, alloc_md.bottom_up, std::nullopt);
+        *(alloc_md.address_copy_on_host) = allocator::allocate_buffer(alloc_md.allocator, alloc_md.size, alloc_md.page_size, alloc_md.buffer_type, alloc_md.bottom_up, std::nullopt);
     }
-    // std::cout << "Allocated Buffer at: " << *(alloc_md.address) << std::endl;
 }
 
-void EnqueueDeallocateBuffer(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer, bool blocking) {
+void EnqueueDeallocateBuffer(CommandQueue& cq, Allocator& allocator, uint32_t device_address, BufferType buffer_type, bool blocking) {
+    auto alloc_md = AllocBufferMetadata {
+        .allocator = allocator,
+        .buffer_type = buffer_type,
+        .device_address = device_address,
+    };
     cq.run_command(CommandInterface{
         .type = EnqueueCommandType::DEALLOCATE_BUFFER,
         .blocking = blocking,
-        .buffer = buffer,
+        .alloc_md = alloc_md,
     });
 }
 
-void EnqueueDeallocateBufferImpl(std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer) {
-    // std::cout << "Dealloc start" << std::endl;
-    std::visit ([] (auto&& b) {
-        using T = std::decay_t<decltype(b)>;
-        if constexpr (std::is_same_v<T, std::shared_ptr<Buffer>>) {
-            // std::cout << "Deallocated Buffer at: " << b -> address() << std::endl;
-            b->set_deallocate_flag();
-            b->lck.lock();
-            allocator::deallocate_buffer(*(b-> device()->allocator_), b->address(), b -> buffer_type());
-            b->lck.unlock();
-        }
-    }, buffer);
-    // std::cout << "Dealloc complete" << std::endl;
+void EnqueueDeallocateBufferImpl(AllocBufferMetadata alloc_md) {
+    allocator::deallocate_buffer(alloc_md.allocator, alloc_md.device_address, alloc_md.buffer_type);
 }
 
 void EnqueueReadBuffer(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer, vector<uint32_t>& dst, bool blocking){
@@ -1326,25 +1257,13 @@ void EnqueueWriteBuffer(CommandQueue& cq, std::variant<std::reference_wrapper<Bu
 }
 
 void EnqueueReadBuffer(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer, void* dst, bool blocking) {
-    // std::visit ( [&cq, dst, blocking](auto&& b) {
-    //      using T = std::decay_t<decltype(b)>;
-    //      if constexpr (std::is_same_v<T, std::reference_wrapper<Buffer>>) {
-    //         std::cout << "Using ref" << std::endl;
-    //      } else {
-    //         std::cout << "using ptr: " << b.get() << std::endl;
-    //      }
-    // }, buffer);
-
-    // std::cout << "reading buffer" << std::endl;
     detail::DispatchStateCheck(true);
-    // std::cout << "Making command" << std::endl;
     cq.run_command(CommandInterface{
         .type = EnqueueCommandType::ENQUEUE_READ_BUFFER,
         .blocking = blocking,
         .buffer = buffer,
         .dst = dst
     });
-    // std::cout << "Done making command" << std::endl;
 }
 
 void EnqueueReadBufferImpl(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer, void* dst, bool blocking) {
@@ -1358,15 +1277,6 @@ void EnqueueReadBufferImpl(CommandQueue& cq, std::variant<std::reference_wrapper
 
 void EnqueueWriteBuffer(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer,
                                           HostBufferMemTypes src, bool blocking) {
-    // std::cout << "Src seen by main: " << std::endl;;
-    // std::visit ([] (auto&& data) {
-    //     if constexpr (std::is_same_v<std::shared_ptr<void>,  std::decay_t<decltype(data)>>) {
-    //         for( int i = 0; i < 35; i++) {
-    //             std::cout << reinterpret_cast<uint32_t*>(data.get())[i] << " ";
-    //         }
-    //     }
-    // }, src);
-    // std::cout << std::endl;
     detail::DispatchStateCheck(true);
     cq.run_command(CommandInterface{
         .type = EnqueueCommandType::ENQUEUE_WRITE_BUFFER,
@@ -1387,7 +1297,6 @@ void EnqueueWriteBufferImpl(CommandQueue& cq, std::variant<std::reference_wrappe
 }
 
 void EnqueueProgram(CommandQueue& cq, std::variant < std::reference_wrapper<Program>, std::shared_ptr<Program> > program, bool blocking, std::optional<std::reference_wrapper<Trace>> trace) {
-    std::cout << "prog sent to q" << std::endl;
     detail::DispatchStateCheck(true);
     TT_ASSERT(cq.id() == 0, "EnqueueProgram only supported on first command queue on device for time being.");
     cq.run_command(CommandInterface{
@@ -1416,7 +1325,6 @@ void EnqueueProgramImpl(CommandQueue& cq, std::variant < std::reference_wrapper<
             cq.hw_command_queue().enqueue_program(*program, trace, blocking);
         }
     }, program);
-    // std::cout << "Program complete" << std::endl;
 }
 
 void Finish(CommandQueue& cq) {
@@ -1482,7 +1390,6 @@ void EnqueueRestart(CommandQueue& cq) {
 BufferMetadata& BufferMetadata::operator=(const Buffer& other) {
     this -> device = other.device();
     this -> size = other.size();
-    // std::cout << "MD SIZE: " << size << "OTHER SIZE: " << other.size() << std::endl;
     this -> address = other.address();
     this -> page_size = other.page_size();
     this -> buf_type = other.buffer_type();
@@ -1530,14 +1437,16 @@ void CommandQueue::wait_until_empty() {
 
 void CommandQueue::set_mode(const CommandQueueMode& mode_) {
     if (this -> mode == mode_) {
+        // Do nothing if requested mode matches current CQ mode.
         return;
     }
     this->mode = mode_;
     if (async_mode()) {
+        // Record parent thread-id and start worker.
         main_thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
-        stop_worker();
         start_worker();
     } else if (passthrough_mode()) {
+        // Wait for all cmds sent in async mode to complete and stop worker.
         this->wait_until_empty();
         this->stop_worker();
     }
@@ -1652,7 +1561,6 @@ void CommandQueue::run_worker() {
     // Track the worker thread id, for cases where a command calls a sub command.
     // This is to detect cases where commands may be nested.
     worker_thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
-    std::cout << "Worker ID: " << worker_thread_id << std::endl;
     while (true) {
         if (this->worker_queue.empty()) {
             if (this->worker_state == CommandQueueState::TERMINATE) {
@@ -1661,15 +1569,11 @@ void CommandQueue::run_worker() {
             std::this_thread::yield();
         } else {
             std::shared_ptr<CommandInterface> command(this->worker_queue.pop());
-            // std::cout << "data ptr: " <<  command.get() << std::endl;
             // if (sanitize_commands) {
             //     sanitize_command(command);
             // }
-            // std::cout << "Popped command: " << command.use_count() << std::endl;
             run_command_impl(*command);
-            // std::cout << "Cmd done running" << std::endl;
             if (sanitize_commands) {
-                // std::cout << "Sanitizing command" << std::endl;
                 sanitize_command(command);
             }
         }
@@ -1689,7 +1593,6 @@ void CommandQueue::run_command(const CommandInterface& command) {
             }
         }
         else {
-            // std::cout << "Pushing command through PT " << std::hash<std::thread::id>{}(std::this_thread::get_id()) << " " << main_thread_id << " " << worker_thread_id << std::endl;
             TT_ASSERT(std::hash<std::thread::id>{}(std::this_thread::get_id()) == worker_thread_id, "Only main thread or worker thread can run commands through the SW command queue");
             run_command_impl(command);
         }
@@ -1725,7 +1628,7 @@ void CommandQueue::run_command_impl(const CommandInterface& command) {
             break;
         case EnqueueCommandType::DEALLOCATE_BUFFER:
             // std::cout << "enqueue dealloc" << std::endl;
-            EnqueueDeallocateBufferImpl(command.buffer.value());
+            EnqueueDeallocateBufferImpl(command.alloc_md.value());
             // std::cout << "Dealloc done" << std::endl;
             break;
         case EnqueueCommandType::GET_BUF_ADDR:

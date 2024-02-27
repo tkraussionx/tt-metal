@@ -331,17 +331,10 @@ uint64_t Buffer::core_address(uint32_t core_id) const {
 }
 
 void Buffer::deallocate() {
-    if (this->device_ == nullptr or not this->device_->initialized_ or this->size_ == 0 or this->deallocated_on_device) {
+    if (this->device_ == nullptr or not this->device_->initialized_ or this->size_ == 0) {
         return;
     }
-    // std::cout << "Deallocating buffer in main thread: " << this << std::endl;
-    // Construct a shadow buffer with the exact same attributes as the current buffer.
-    // This will be asynchronously passed to the SW command queue, which will deallocate the device buffer after
-    // running all consumers of this buffer.
-    // To avoid double deallocation, the shadow buffer will not be deallocated on device in its destructor.
-    std::shared_ptr<Buffer> shadow_buffer = std::make_shared<Buffer>(std::move(*this));
-    shadow_buffer -> deallocated_on_device = true;
-    EnqueueDeallocateBuffer(shadow_buffer->device_->command_queue(), shadow_buffer, false);
+    EnqueueDeallocateBuffer(this->device_->command_queue(), *(this->device_->allocator_), this->address_, this->buffer_type_, false);
 }
 
 Buffer::~Buffer() {

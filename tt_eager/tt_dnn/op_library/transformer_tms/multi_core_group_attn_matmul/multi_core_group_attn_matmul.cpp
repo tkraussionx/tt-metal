@@ -36,6 +36,9 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
     tt_metal::Buffer *src0_buffer = a.buffer();
     tt_metal::Buffer *src1_buffer = b.buffer();
     tt_metal::Buffer *dst_buffer = output.buffer();
+    // program.add_global_buffer(a.device_buffer());
+    // program.add_global_buffer(b.device_buffer());
+    // program.add_global_buffer(output.device_buffer());
     TT_ASSERT(dst_buffer != nullptr, "Output buffer should be allocated on device!");
 
     // This should allocate a DRAM buffer on the device
@@ -347,7 +350,7 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         // std::cout << "--- program output address: " << dst_addr << std::endl;
 
         // Default reader runtime args
-        std::vector<std::variant<Buffer*, uint32_t>> reader_runtime_args = {
+        RuntimeArgs reader_runtime_args = {
             0, // 0: has_work_for_mcast_kv_heads
             0, // 1: has_work_for_q_heads
             src1_buffer,
@@ -391,7 +394,7 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         reader_runtime_args.insert(reader_runtime_args.end(), in1_mcast_sender_noc_y.begin(), in1_mcast_sender_noc_y.end());
 
         // Default writer runtime args
-         std::vector<std::variant<Buffer*, uint32_t>> writer_runtime_args = {
+         RuntimeArgs writer_runtime_args = {
             0, // 0: has_work_for_q_heads
             src0_buffer,
             dst_buffer,
@@ -414,7 +417,7 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         };
 
         // Default compute runtime args
-        std::vector<std::variant<Buffer*, uint32_t>> compute_runtime_args = {
+        RuntimeArgs compute_runtime_args = {
             0, // 0: has_work_for_q_heads
             0, // 1: batch,
             Mt,
@@ -444,13 +447,32 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         uint32_t g1_numcores = core_group_1.num_cores();
         uint32_t g2_numcores = core_group_2.num_cores();
 
-        std::vector<std::vector<std::variant<Buffer*, uint32_t>>> all_reader_runtime_args = { cores.size(), reader_runtime_args };
-        std::vector<std::vector<std::variant<Buffer*, uint32_t>>> all_writer_runtime_args = { cores.size(), writer_runtime_args };
-        std::vector<std::vector<std::variant<Buffer*, uint32_t>>> all_compute_runtime_args = { cores.size(), compute_runtime_args };
-
         // Set runtime args
         uint32_t num_output_blocks_per_core;
+        std::vector<std::shared_ptr<RuntimeArgs>> all_reader_runtime_args;
+        all_reader_runtime_args.resize(cores.size());
+        std::vector<std::shared_ptr<RuntimeArgs>> all_writer_runtime_args;
+        all_writer_runtime_args.resize(cores.size());
+        std::vector<std::shared_ptr<RuntimeArgs>> all_compute_runtime_args;
+        all_compute_runtime_args.resize(cores.size());
+
+        for (int i = 0; i < cores.size(); i++) {
+            std::shared_ptr<RuntimeArgs> curr_reader_runtime_args = std::make_shared<RuntimeArgs>();
+            std::shared_ptr<RuntimeArgs> curr_writer_runtime_args = std::make_shared<RuntimeArgs>();
+            std::shared_ptr<RuntimeArgs> curr_compute_runtime_args = std::make_shared<RuntimeArgs>();
+            *curr_reader_runtime_args = reader_runtime_args;
+            *curr_writer_runtime_args = writer_runtime_args;
+            *curr_compute_runtime_args = compute_runtime_args;
+            all_reader_runtime_args[i] = (curr_reader_runtime_args);
+            all_writer_runtime_args[i] = (curr_writer_runtime_args);
+            all_compute_runtime_args[i] = (curr_compute_runtime_args);
+        }
+
         for (uint32_t i = 0, num_blocks_written = 0; i < num_cores; i++){
+            auto curr_reader_runtime_args = all_reader_runtime_args[i];
+            auto curr_writer_runtime_args = all_writer_runtime_args[i];
+            auto curr_compute_runtime_args = all_compute_runtime_args[i];
+
             const CoreCoord &core = cores.at(i);
 
             if (i < g1_numcores) {
@@ -467,41 +489,30 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
             uint32_t mcast_num_cores_for_core = mcast_num_cores - (uint32_t) (i < mcast_num_cores); // if sender is not part of mcast grid, send to full grid
 
             // Update core dependent runtime args
-            all_reader_runtime_args[i][0] = has_work_for_mcast_kv_heads;
-            all_reader_runtime_args[i][1] = has_work_for_q_heads;
-            all_reader_runtime_args[i][8] = num_output_blocks_per_core;
+            (*curr_reader_runtime_args)[0] = has_work_for_mcast_kv_heads;
+            (*curr_reader_runtime_args)[1] = has_work_for_q_heads;
+            (*curr_reader_runtime_args)[8] = num_output_blocks_per_core;
             // If Q_HEADS < 32, have all cores participate in receiving; std::min is needed for cases where mcast grid is > num_active_cores and non-active cores are turned off and don't receive
-            all_reader_runtime_args[i][24] = Q_HEADS < TILE_HEIGHT ? std::min(mcast_num_cores_for_core, num_active_cores - 1) : mcast_num_dests - 1;
-            all_reader_runtime_args[i][25] = mcast_num_cores_for_core;
-            all_reader_runtime_args[i][30] = i;
+            (*curr_reader_runtime_args)[24] = Q_HEADS < TILE_HEIGHT ? std::min(mcast_num_cores_for_core, num_active_cores - 1) : mcast_num_dests - 1;
+            (*curr_reader_runtime_args)[25] = mcast_num_cores_for_core;
+            (*curr_reader_runtime_args)[30] = i;
 
-            all_writer_runtime_args[i][0] = has_work_for_q_heads;
-            all_writer_runtime_args[i][7] = num_output_blocks_per_core;
-            all_writer_runtime_args[i][8] = num_blocks_written * MtKt;
-            all_writer_runtime_args[i][9] = num_blocks_written * MtNt;
+            (*curr_writer_runtime_args)[0] = has_work_for_q_heads;
+            (*curr_writer_runtime_args)[7] = num_output_blocks_per_core;
+            (*curr_writer_runtime_args)[8] = num_blocks_written * MtKt;
+            (*curr_writer_runtime_args)[9] = num_blocks_written * MtNt;
 
-            all_compute_runtime_args[i][0] = has_work_for_q_heads;
-            all_compute_runtime_args[i][1] = num_output_blocks_per_core;
-            all_compute_runtime_args[i][3] = kv_heads_id * in1_block_num_tiles_per_kv_heads;
-            all_compute_runtime_args[i][4] = (KV_HEADS - kv_heads_id) * in1_block_num_tiles_per_kv_heads;
+            (*curr_compute_runtime_args)[0] = has_work_for_q_heads;
+            (*curr_compute_runtime_args)[1] = num_output_blocks_per_core;
+            (*curr_compute_runtime_args)[3] = kv_heads_id * in1_block_num_tiles_per_kv_heads;
+            (*curr_compute_runtime_args)[4] = (KV_HEADS - kv_heads_id) * in1_block_num_tiles_per_kv_heads;
 
             num_blocks_written += num_output_blocks_per_core;
         }
-        for (size_t i = 0; i < cores.size(); i++) {
-            SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(reader_id), cores[i], std::move(all_reader_runtime_args[i]));
-            SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(writer_id), cores[i], std::move(all_writer_runtime_args[i]));
-            SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(compute_kernel_id), cores[i], std::move(all_compute_runtime_args[i]));
-        }
-        // for (const auto& set : all_cores.ranges()) {
-        //     for (auto x = set.start.x; x <= set.end.x; x++) {
-        //         for (auto y = set.start.y; y <= set.end.y; y++) {
-        //             tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(unary_reader_kernel_id), CoreCoord(x, y), std::move(runtime_args_vec1));
-        //         }
-        //     }
-        // }
-        // SetRuntimeArgs(program, reader_id, cores, all_reader_runtime_args);
-        // SetRuntimeArgs(program, writer_id, cores, all_writer_runtime_args);
-        // SetRuntimeArgs(program, compute_kernel_id, cores, all_compute_runtime_args);
+
+        SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(reader_id), cores, all_reader_runtime_args);
+        SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(writer_id), cores, all_writer_runtime_args);
+        SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(compute_kernel_id), cores, all_compute_runtime_args);
 
         // Update dynamic CBs (which is most of them)
         if (in0_is_sharded) {
@@ -547,7 +558,6 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         const std::vector<Tensor>& output_tensors
     ) {
         const auto& output_tensor = output_tensors.at(0);
-
         set_runtime_args(program, input_tensors.at(0), input_tensors.at(1), output_tensor);
     };
 

@@ -225,6 +225,7 @@ void FreeList::update_lowest_occupied_address(uint64_t address) {
     }
 }
 
+
 std::optional<uint64_t> FreeList::allocate(uint64_t size_bytes, bool bottom_up, uint64_t address_limit) {
     uint64_t alloc_size = size_bytes < this->min_allocation_size_ ? this->min_allocation_size_ : size_bytes;
     alloc_size = this->align(alloc_size);

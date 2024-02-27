@@ -151,16 +151,20 @@ operation::ProgramWithCallbacks multi_core_attn_matmul(const Tensor &a, const Te
         } else if (core_group_2.core_coord_in_core_ranges(core)) {
             num_output_blocks_per_core = num_output_blocks_per_core_group_2;
         } else {
-            std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec4 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-            std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec5 = {0, 0, 0, 0};
-            std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec6 = {0, 0, 0};
-            tt_metal::SetRuntimeArgs(device -> command_queue(), p_with_call.program.get_kernels().at(reader_id), core, std::move(runtime_args_vec4));
-            tt_metal::SetRuntimeArgs(device -> command_queue(), p_with_call.program.get_kernels().at(eltwise_binary_kernel_id), core, std::move(runtime_args_vec5));
-            tt_metal::SetRuntimeArgs(device -> command_queue(), p_with_call.program.get_kernels().at(writer_id), core, std::move(runtime_args_vec6));
+            std::shared_ptr<RuntimeArgs> runtime_args_vec4 = std::make_shared<RuntimeArgs>();
+            *runtime_args_vec4 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            std::shared_ptr<RuntimeArgs> runtime_args_vec5 = std::make_shared<RuntimeArgs>();
+            *runtime_args_vec5 = {0, 0, 0, 0};
+            std::shared_ptr<RuntimeArgs> runtime_args_vec6 = std::make_shared<RuntimeArgs>();
+            *runtime_args_vec6 = {0, 0, 0};
+            tt_metal::SetRuntimeArgs(device -> command_queue(), p_with_call.program.get_kernels().at(reader_id), core, runtime_args_vec4);
+            tt_metal::SetRuntimeArgs(device -> command_queue(), p_with_call.program.get_kernels().at(eltwise_binary_kernel_id), core, runtime_args_vec5);
+            tt_metal::SetRuntimeArgs(device -> command_queue(), p_with_call.program.get_kernels().at(writer_id), core, runtime_args_vec6);
             continue;
         }
 
-        std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec1 = {
+        std::shared_ptr<RuntimeArgs> runtime_args_vec1 = std::make_shared<RuntimeArgs>();
+        *runtime_args_vec1 = {
                 src0_buffer,
                 src1_buffer,
                 Mt,
@@ -174,13 +178,15 @@ operation::ProgramWithCallbacks multi_core_attn_matmul(const Tensor &a, const Te
                 0, // itileB_start; always read in same in1 per core TODO: multi-cast
             };
 
-        std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec2 = {
+        std::shared_ptr<RuntimeArgs> runtime_args_vec2 = std::make_shared<RuntimeArgs>();
+        *runtime_args_vec2 = {
                 1, // B
                 1, // Mt
                 Kt, // Kt
                 num_output_blocks_per_core * MtNt, // Nt
         };
-        std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec3 = {
+        std::shared_ptr<RuntimeArgs> runtime_args_vec3 = std::make_shared<RuntimeArgs>();
+        *runtime_args_vec3 = {
                     dst_buffer,
                     num_output_blocks_per_core * MtNt,
                     num_blocks_written * MtNt,
@@ -273,15 +279,19 @@ operation::ProgramWithCallbacks multi_core_attn_matmul(const Tensor &a, const Te
             } else if (core_group_2.core_coord_in_core_ranges(core)) {
                 num_output_blocks_per_core = num_output_blocks_per_core_group_2;
             } else {
-                std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec4 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-                std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec5 = {0, 0, 0, 0};
-                std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec6 = {0, 0, 0};
-                tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(reader_id), core, std::move(runtime_args_vec4));
-                tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(eltwise_binary_kernel_id), core, std::move(runtime_args_vec5));
-                tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(writer_id), core, std::move(runtime_args_vec6));
+                std::shared_ptr<RuntimeArgs> runtime_args_vec4 = std::make_shared<RuntimeArgs>();
+                *runtime_args_vec4 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                std::shared_ptr<RuntimeArgs> runtime_args_vec5 = std::make_shared<RuntimeArgs>();
+                *runtime_args_vec5 = {0, 0, 0, 0};
+                std::shared_ptr<RuntimeArgs> runtime_args_vec6 = std::make_shared<RuntimeArgs>();
+                *runtime_args_vec6 = {0, 0, 0};
+                tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(reader_id), core, runtime_args_vec4);
+                tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(eltwise_binary_kernel_id), core, runtime_args_vec5);
+                tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(writer_id), core, runtime_args_vec6);
                 continue;
             }
-            std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec1 = {
+            std::shared_ptr<RuntimeArgs> runtime_args_vec1 = std::make_shared<RuntimeArgs>();
+            *runtime_args_vec1 = {
                         src_dram_buffer_a,
                         src_dram_buffer_b,
                         Mt,
@@ -295,14 +305,16 @@ operation::ProgramWithCallbacks multi_core_attn_matmul(const Tensor &a, const Te
                         0, // itileB_start; always read in same in1 per core TODO: multi-cast
             };
 
-            std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec2 = {
+            std::shared_ptr<RuntimeArgs> runtime_args_vec2 = std::make_shared<RuntimeArgs>();
+            *runtime_args_vec2 = {
                         1, // B
                         1, // Mt
                         Kt, // Kt
                         num_output_blocks_per_core * MtNt // Nt
             };
 
-            std::vector<std::variant<Buffer*, uint32_t>> runtime_args_vec3= {
+            std::shared_ptr<RuntimeArgs> runtime_args_vec3 = std::make_shared<RuntimeArgs>();
+            *runtime_args_vec3 = {
                         dst_dram_buffer,
                         num_output_blocks_per_core * MtNt,
                         num_blocks_written * MtNt
@@ -310,7 +322,7 @@ operation::ProgramWithCallbacks multi_core_attn_matmul(const Tensor &a, const Te
 
             tt_metal::SetRuntimeArgs(
                 device -> command_queue(), program.get_kernels().at(reader_id), core,
-                std::move(runtime_args_vec1)
+                runtime_args_vec1
             );
 
 
@@ -318,13 +330,13 @@ operation::ProgramWithCallbacks multi_core_attn_matmul(const Tensor &a, const Te
                 device -> command_queue(),
                 program.get_kernels().at(eltwise_binary_kernel_id),
                 core,
-                std::move(runtime_args_vec2)
+                runtime_args_vec2
             );
 
             tt_metal::SetRuntimeArgs(
                 device -> command_queue(), program.get_kernels().at(writer_id),
                 core,
-                std::move(runtime_args_vec3)
+                runtime_args_vec3
             );
             num_blocks_written += num_output_blocks_per_core;
         }

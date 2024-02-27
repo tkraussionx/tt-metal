@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <memory>
 #include <random>
 
 #include "tests/tt_metal/tt_metal/unit_tests_common/common/common_fixture.hpp"
@@ -216,7 +217,9 @@ bool matmul_multi_core_single_dram(tt_metal::Device *device){
             auto weights = pack_bfloat16_vec_into_uint32_vec(weights_tile_layout);
             pass &= tt_metal::detail::WriteToDeviceDRAMChannel(device, dram_src1_channel_id, dram_buffer_src1_addr, weights);
 
-            std::vector<uint32_t> mm_reader_args = {
+            std::shared_ptr<tt_metal::RuntimeArgs> mm_reader_args = std::make_shared<tt_metal::RuntimeArgs>();
+            std::shared_ptr<tt_metal::RuntimeArgs> writer_args = std::make_shared<tt_metal::RuntimeArgs>();
+            *mm_reader_args = {
                 (std::uint32_t) dram_buffer_src0_addr,
                 (std::uint32_t) dram_src0_noc_xy.x,
                 (std::uint32_t) dram_src0_noc_xy.y,
@@ -229,7 +232,7 @@ bool matmul_multi_core_single_dram(tt_metal::Device *device){
                 (std::uint32_t) per_core_M * in0_block_w * single_tile_size, // input 0 block bytes
                 (std::uint32_t) per_core_N * in0_block_w * single_tile_size};
 
-            std::vector<uint32_t> writer_args = {
+            *writer_args = {
                 (std::uint32_t) dram_buffer_dst_addr,
                 (std::uint32_t) dram_dst_noc_xy.x,
                 (std::uint32_t) dram_dst_noc_xy.y,
@@ -241,8 +244,8 @@ bool matmul_multi_core_single_dram(tt_metal::Device *device){
                 (std::uint32_t) out_subblock_h * out_subblock_w * single_tile_size * (per_core_N/out_subblock_w), // bytes offset to next row of sub-blocks
                 (std::uint32_t) out_subblock_w * single_tile_size};
 
-            tt_metal::SetRuntimeArgs(program, mm_reader_kernel, core, mm_reader_args);
-            tt_metal::SetRuntimeArgs(program, unary_writer_kernel, core, writer_args);
+            tt_metal::SetRuntimeArgs(device->command_queue(), program.get_kernels().at(mm_reader_kernel), core, mm_reader_args);
+            tt_metal::SetRuntimeArgs(device->command_queue(), program.get_kernels().at(unary_writer_kernel), core, writer_args);
         }
     }
 
@@ -308,7 +311,8 @@ bool assign_runtime_args_to_program(
         for (int core_idx_x = 0; core_idx_x < num_cores_c; core_idx_x++) {
             CoreCoord core = {(std::size_t)core_idx_x, (std::size_t)core_idx_y};
 
-            std::vector<std::variant<Buffer*, uint32_t>> mm_reader_args = {
+            std::shared_ptr<tt_metal::RuntimeArgs> mm_reader_args = std::make_shared<tt_metal::RuntimeArgs>();
+            *mm_reader_args = {
                 in0_dram_buf.get(),                // in0_tensor_addr
                 (std::uint32_t)K * per_core_M * core_idx_y,  // in0_tensor_start_tile_id
                 (std::uint32_t)1,                            // in0_tensor_stride_w
@@ -332,7 +336,8 @@ bool assign_runtime_args_to_program(
                 (std::uint32_t)K / in0_block_w               // num_blocks
             };
 
-            std::vector<std::variant<Buffer*, uint32_t>> writer_args = {
+            std::shared_ptr<tt_metal::RuntimeArgs> writer_args = std::make_shared<tt_metal::RuntimeArgs>();
+            *writer_args = {
                 out_dram_buf.get(),                                          // out_tensor_addr
                 (std::uint32_t)core_idx_x * per_core_N + core_idx_y * per_core_M * N,  // out_tensor_start_tile_id
                 (std::uint32_t)1,                                                      // out_tensor_stride_w
@@ -344,11 +349,11 @@ bool assign_runtime_args_to_program(
                 (std::uint32_t)out_subblock_h,                     // out_subblock_h
                 (std::uint32_t)(out_subblock_w * out_subblock_h),  // out_subblocks_w * out_subblocks_h
                 (std::uint32_t)(per_core_N / out_subblock_w),      // out_num_subblocks_w
-                (std::uint32_t)(per_core_M / out_subblock_h),      // out_num_subblocks_h
+                (std::uint32_t)(per_core_M / out_subblock_h)       // out_num_subblocks_h
             };
 
-            tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(mm_reader_kernel), core, std::move(mm_reader_args));
-            tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(unary_writer_kernel), core, std::move(writer_args));
+            tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(mm_reader_kernel), core, mm_reader_args);
+            tt_metal::SetRuntimeArgs(device -> command_queue(), program.get_kernels().at(unary_writer_kernel), core, writer_args);
         }
     }
     return pass;

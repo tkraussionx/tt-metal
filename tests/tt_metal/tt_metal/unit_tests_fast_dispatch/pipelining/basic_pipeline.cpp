@@ -177,44 +177,51 @@ void create_and_run_row_pipeline(tt_metal::Device* device, const PipelineRowConf
         auto sender_semaphore_addr = sems[core].at(0);
         auto receiver_semaphore_addr = sems[core].at(1);
         auto l1_valid_value_addr = sems[core].at(2);
-
+        std::shared_ptr<tt_metal::RuntimeArgs> receiver_runtime_args = std::make_shared<tt_metal::RuntimeArgs>();
+        std::shared_ptr<tt_metal::RuntimeArgs> sender_runtime_args = std::make_shared<tt_metal::RuntimeArgs>();
         if (core_id == 0) {
+            *receiver_runtime_args = {src_address, (uint32_t)src_noc_xy.x, (uint32_t)src_noc_xy.y, (uint32_t)num_tiles, (uint32_t)num_repetitions};
             SetRuntimeArgs(
-                program,
-                receiver_kernels.at(core_id),
+                device->command_queue(),
+                program.get_kernels().at(receiver_kernels.at(core_id)),
                 core,
-                {src_address, (uint32_t)src_noc_xy.x, (uint32_t)src_noc_xy.y, (uint32_t)num_tiles, (uint32_t)num_repetitions});
+                receiver_runtime_args);
         } else {
-            SetRuntimeArgs(
-                program,
-                receiver_kernels.at(core_id),
-                core,
-                {(uint32_t)device->worker_core_from_logical_core(cores[core_id - 1]).x,
+            *receiver_runtime_args = {
+                 (uint32_t)device->worker_core_from_logical_core(cores[core_id - 1]).x,
                  (uint32_t)device->worker_core_from_logical_core(cores[core_id - 1]).y,
                  (uint32_t)num_tiles,
                  (uint32_t)sender_semaphore_addr,
                  (uint32_t)receiver_semaphore_addr,
-                 (uint32_t)num_repetitions});
+                 (uint32_t)num_repetitions};
+            SetRuntimeArgs(
+                device->command_queue(),
+                program.get_kernels().at(receiver_kernels.at(core_id)),
+                core,
+                receiver_runtime_args);
         }
 
         if (core_id == num_cores - 1) {
+            *sender_runtime_args = {dst_address, (uint32_t)dst_noc_xy.x, (uint32_t)dst_noc_xy.y, (uint32_t)num_tiles, (uint32_t)num_repetitions};
             SetRuntimeArgs(
-                program,
-                sender_kernels.at(core_id),
+                device->command_queue(),
+                program.get_kernels().at(sender_kernels.at(core_id)),
                 core,
-                {dst_address, (uint32_t)dst_noc_xy.x, (uint32_t)dst_noc_xy.y, (uint32_t)num_tiles, (uint32_t)num_repetitions});
+                sender_runtime_args);
         } else {
-            SetRuntimeArgs(
-                program,
-                sender_kernels.at(core_id),
-                core,
-                {(uint32_t)device->worker_core_from_logical_core(cores[core_id + 1]).x,
+            *sender_runtime_args = {
+                 (uint32_t)device->worker_core_from_logical_core(cores[core_id + 1]).x,
                  (uint32_t)device->worker_core_from_logical_core(cores[core_id + 1]).y,
                  (uint32_t)num_tiles,
                  (uint32_t)sender_semaphore_addr,
                  (uint32_t)receiver_semaphore_addr,
                  (uint32_t)l1_valid_value_addr,
-                 (uint32_t)num_repetitions});
+                 (uint32_t)num_repetitions};
+            SetRuntimeArgs(
+                device->command_queue(),
+                program.get_kernels().at(sender_kernels.at(core_id)),
+                core,
+                sender_runtime_args);
         }
     }
 

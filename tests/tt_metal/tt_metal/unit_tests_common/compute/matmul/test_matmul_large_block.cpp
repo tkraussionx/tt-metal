@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <memory>
 #include <random>
 
 #include "tests/tt_metal/tt_metal/unit_tests_common/common/common_fixture.hpp"
@@ -168,15 +169,20 @@ bool matmul_large_block(CommonFixture *fixture, tt_metal::Device *device, bool a
     auto src1_dram_buffer = CreateBuffer(weights_config);
     auto dst_dram_buffer = CreateBuffer(dst_config);
 
+    program.add_global_buffer(src0_dram_buffer);
+    program.add_global_buffer(src1_dram_buffer);
+    program.add_global_buffer(dst_dram_buffer);
+
     auto dram_src0_noc_xy = src0_dram_buffer->noc_coordinates();
     auto dram_src1_noc_xy = src1_dram_buffer->noc_coordinates();
     auto dram_dst_noc_xy = dst_dram_buffer->noc_coordinates();
 
-    std::vector<uint32_t> mm_reader_rt_args{
-        src0_dram_buffer->address(),
+    std::shared_ptr<RuntimeArgs> mm_reader_rt_args = std::make_shared<tt_metal::RuntimeArgs>();
+    *mm_reader_rt_args = {
+        src0_dram_buffer.get(),
         (std::uint32_t)dram_src0_noc_xy.x,
         (std::uint32_t)dram_src0_noc_xy.y,
-        src1_dram_buffer->address(),
+        src1_dram_buffer.get(),
         (std::uint32_t)dram_src1_noc_xy.x,
         (std::uint32_t)dram_src1_noc_xy.y,
         (std::uint32_t)(K/in0_block_w), // num_blocks
@@ -186,20 +192,20 @@ bool matmul_large_block(CommonFixture *fixture, tt_metal::Device *device, bool a
         N * in0_block_w * single_tile_size}; // input 1 block bytes
 
 
-    std::vector<uint32_t> writer_rt_args;
+    std::shared_ptr<RuntimeArgs> writer_rt_args = std::make_shared<tt_metal::RuntimeArgs>();
     string writer_kernel;
     if (output_rm) {
         writer_kernel = "tt_metal/kernels/dataflow/writer_unary.cpp";
-        writer_rt_args = {
-            dst_dram_buffer->address(),
+        *writer_rt_args = {
+            dst_dram_buffer.get(),
             (std::uint32_t)dram_dst_noc_xy.x,
             (std::uint32_t)dram_dst_noc_xy.y,
             uint(M * N)
         };
     } else {
         writer_kernel = "tests/tt_metal/tt_metal/test_kernels/dataflow/writer_unswizzle.cpp";
-        writer_rt_args = {
-            dst_dram_buffer->address(),
+        *writer_rt_args = {
+            dst_dram_buffer.get(),
             (std::uint32_t)dram_dst_noc_xy.x,
             (std::uint32_t)dram_dst_noc_xy.y,
             (std::uint32_t)out_subblock_h, // num tiles per sub block m
@@ -296,14 +302,14 @@ bool matmul_large_block(CommonFixture *fixture, tt_metal::Device *device, bool a
     fixture->WriteBuffer(device, src1_dram_buffer, weights);
 
     tt_metal::SetRuntimeArgs(
-        program,
-        mm_reader_kernel,
+        device->command_queue(),
+        program.get_kernels().at(mm_reader_kernel),
         core,
         mm_reader_rt_args);
 
     tt_metal::SetRuntimeArgs(
-        program,
-        unary_writer_kernel,
+        device->command_queue(),
+        program.get_kernels().at(unary_writer_kernel),
         core,
         writer_rt_args);
 

@@ -5,6 +5,7 @@
 #pragma once
 
 #include "tensor/borrowed_buffer_functions.hpp"
+#include "tensor/owned_buffer.hpp"
 #include "tensor/owned_buffer_functions.hpp"
 #include "tensor/tensor.hpp"
 #include "tensor/tensor_utils.hpp"
@@ -423,7 +424,6 @@ DeviceBuffer allocate_buffer_on_device(
 
 template <typename T>
 inline void read_data_from_device_buffer(CommandQueue &cq, DeviceBuffer device_buffer, void* host_buffer_data, bool blocking) {
-    std::cout << "reading from: " << device_buffer -> address() << std::endl;
     EnqueueReadBuffer(cq, device_buffer, host_buffer_data, true);
 }
 
@@ -439,18 +439,20 @@ inline void write_data_to_device_buffer(CommandQueue & cq, const BufferType<T>& 
     ZoneScoped;
     // TODO(arakhmati): can we use generators in this function to go from `data_to_write` to `uint32_data`?
     // And effectively get rid of any additional allocation
-    if (writing_owned_storage) {
-        // std::cout << "Writing owned" << std::endl;
-        EnqueueWriteBuffer( cq, device_buffer, host_buffer.get_vec(), false);
-        // std::cout << "Done Writing owned" << std::endl;
+    if (CommandQueue::get_mode() == CommandQueue::CommandQueueMode::ASYNC) {
+        if (!writing_owned_storage) {
+            uint32_t borrowed_buf_size_words = device_buffer->num_pages() * device_buffer->page_size() / sizeof(uint32_t);
+            const uint32_t* borrowed_buf_base = static_cast<const uint32_t*>(host_buffer.data());
+            std::vector<uint32_t> owned_copy_vec(borrowed_buf_base, borrowed_buf_base + borrowed_buf_size_words);
+            owned_buffer::Buffer<uint32_t> owned_copy(std::make_shared<std::vector<uint32_t>>(owned_copy_vec));
+            EnqueueWriteBuffer( cq, device_buffer, owned_copy.get_vec(), false);
+        }
+        else {
+            EnqueueWriteBuffer( cq, device_buffer, host_buffer.get_vec(), false);
+        }
     }
     else {
-        // std::cout << "Writing borrowed" << std::endl;
-        auto init_cq_mode = cq.get_mode();
-        cq.set_mode(CommandQueue::CommandQueueMode::PASSTHROUGH);
         EnqueueWriteBuffer(cq, device_buffer, host_buffer.data(), false);
-        cq.set_mode(init_cq_mode);
-        // std::cout << "Done Writing borrowed" << std::endl;
     }
 }
 

@@ -13,7 +13,6 @@
 #include "tt_metal/tt_stl/reflection.hpp"
 #include <atomic>
 #include <map>
-#include <mutex>
 #include <optional>
 #include <iostream>
 
@@ -157,7 +156,6 @@ class Buffer {
     Buffer& operator=(Buffer &&other);
 
     ~Buffer();
-    std::mutex lck;
     Device *device() const { return device_; }
 
     uint32_t size() const { return static_cast<uint32_t>(size_); }
@@ -278,9 +276,6 @@ class Buffer {
         auto core_id = core_to_core_id_.at(core);
         return dev_pages_in_shard(core_id);
     }
-    void set_deallocate_flag() {
-        deallocated_on_device = true;
-    }
 
     std::string get_shard_info() const;
     void print_shard_info() const;
@@ -306,7 +301,6 @@ class Buffer {
     std::vector<uint32_t> dev_page_to_core_mapping_;
     std::vector<uint32_t> dev_page_to_host_page_mapping_;
     std::unordered_map<CoreCoord, uint32_t> core_to_core_id_;
-    bool deallocated_on_device = false;
 };
 
 using HostBufferMemTypes = std::variant<

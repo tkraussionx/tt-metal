@@ -33,11 +33,13 @@ static void RunTest(DPrintFixture* fixture, Device* device) {
 
     // A lambda to run the program w/ a given test number (used in the printing).
     auto run_program = [&](uint32_t test_number) {
+        std::shared_ptr<RuntimeArgs> runtime_args = std::make_shared<RuntimeArgs>();
+        *runtime_args = {test_number};
         SetRuntimeArgs(
-            program,
-            brisc_print_kernel_id,
+            device->command_queue(),
+            program.get_kernels().at(brisc_print_kernel_id),
             core,
-            {test_number}
+            runtime_args
         );
         fixture->RunProgram(device, program);
     };

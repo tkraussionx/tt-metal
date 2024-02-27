@@ -584,7 +584,6 @@ size_t GetNumPCIeDevices() {
 
 Device *CreateDevice(chip_id_t device_id, const uint8_t num_hw_cqs, const std::vector<uint32_t>& l1_bank_remap) {
     Device * dev = new Device(device_id, num_hw_cqs, l1_bank_remap);
-    std::cout << "Device Created" << std::endl;
     return dev;
 }
 
@@ -703,6 +702,7 @@ void DeallocateBuffer(Buffer &buffer) { buffer.deallocate(); }
 
 void SetRuntimeArgs(const Program &program, KernelHandle kernel_id, const std::variant<CoreCoord,CoreRange,CoreRangeSet> &core_spec, const std::vector<uint32_t> &runtime_args) {
     ZoneScoped;
+    TT_ASSERT(CommandQueue::get_mode() == CommandQueue::CommandQueueMode::PASSTHROUGH, "This variant of SetRuntimeArgs can only be called when Asyncrhonous SW Command Queues are disabled.");
     std::visit(
         [&](auto&& core_spec)
         {
@@ -723,21 +723,53 @@ void SetRuntimeArgs(const Program &program, KernelHandle kernel_id, const std::v
 void SetRuntimeArgs(const Program &program, KernelHandle kernel, const std::vector< CoreCoord > & core_spec, const std::vector< std::vector<uint32_t> > &runtime_args)
 {
     ZoneScoped;
+    TT_ASSERT(CommandQueue::get_mode() == CommandQueue::CommandQueueMode::PASSTHROUGH, "This variant of SetRuntimeArgs can only be called when Asyncrhonous SW Command Queues are disabled.");
     TT_FATAL( core_spec.size() == runtime_args.size(), "Mistmatch between number of cores {} and number of runtime args {} getting updated", core_spec.size(), runtime_args.size());
     Kernel * k = detail::GetKernel(program, kernel);
     for (size_t i = 0; i < core_spec.size(); i++)
         k->set_runtime_args(core_spec[i], runtime_args[i]);
 }
 
-void SetRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::vector<std::variant<Buffer*, uint32_t>>&& runtime_args_vec) {
-    EnqueueSetRuntimeArgs(cq, kernel, core_coord, std::move(runtime_args_vec), false);
+void SetRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kernel, const std::variant<CoreCoord, CoreRange,CoreRangeSet> &core_spec, std::shared_ptr<RuntimeArgs> runtime_args_vec) {
+    std::visit([&](auto&& core_spec) {
+            using T = std::decay_t<decltype(core_spec)>;
+            if constexpr (std::is_same_v<T, CoreCoord>) {
+                EnqueueSetRuntimeArgs(cq, kernel, core_spec, runtime_args_vec, false);
+            }
+            else if constexpr (std::is_same_v<T, CoreRange>) {
+                for (auto x = core_spec.start.x; x <= core_spec.end.x; x++) {
+                    for (auto y = core_spec.start.y; y <= core_spec.end.y; y++) {
+                        EnqueueSetRuntimeArgs(cq, kernel, CoreCoord(x, y), runtime_args_vec, false);
+                    }
+                }
+            }
+            else if constexpr (std::is_same_v<T, CoreRangeSet>) {
+                for (const auto& core_range : core_spec.ranges()) {
+                    for (auto x = core_range.start.x; x <= core_range.end.x; x++) {
+                        for (auto y = core_range.start.y; y <= core_range.end.y; y++) {
+                            EnqueueSetRuntimeArgs(cq, kernel, CoreCoord(x, y), runtime_args_vec, false);
+                        }
+                    }
+
+                }
+            }
+        },
+        core_spec
+    );
+}
+
+void SetRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kernel, const std::vector< CoreCoord > & core_spec, const std::vector<std::shared_ptr<RuntimeArgs>> runtime_args) {
+    for (size_t i = 0; i < core_spec.size(); i++) {
+        EnqueueSetRuntimeArgs(cq, kernel, core_spec[i], runtime_args[i], false);
+    }
 }
 
 std::vector<uint32_t> & GetRuntimeArgs(const Program &program, KernelHandle kernel_id, const CoreCoord &logical_core) {
+    TT_ASSERT(CommandQueue::get_mode() == CommandQueue::CommandQueueMode::PASSTHROUGH, "GetRuntimeArgs can only be called when Asyncrhonous SW Command Queues are disabled.");
     return detail::GetKernel(program, kernel_id)->runtime_args(logical_core);
 }
 
-void UpdateRuntimeArgs(CommandQueue &cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::vector<uint32_t> &update_idx, std::vector<std::variant<Buffer *, uint32_t>> &runtime_args_vec) {
+void UpdateRuntimeArgs(CommandQueue &cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::vector<uint32_t> &update_idx, std::shared_ptr<std::vector<std::variant<Buffer*, uint32_t>>> runtime_args_vec) {
     EnqueueUpdateRuntimeArgs(cq, kernel, core_coord, update_idx, runtime_args_vec, false);
 }
 
