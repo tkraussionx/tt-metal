@@ -116,19 +116,32 @@ def test_group_attn_matmul(
 @pytest.mark.parametrize(
     "M, K, N, num_cores",
     [
-        [32, 8192, 1152, 8],
+        # [32, 8192, 1152, 8],
+        [32, 8192, 16256, 32],
     ],
 )
-@pytest.mark.parametrize("activations_dtype", [ttl.tensor.DataType.BFLOAT16])
+@pytest.mark.parametrize("activations_dtype", [ttl.tensor.DataType.BFLOAT8_B])
 @pytest.mark.parametrize("weights_dtype", [ttl.tensor.DataType.BFLOAT8_B])
 def test_sharded_matmul_1d_in0(
-    device, in0_sharded, out_sharded, M, K, N, num_cores, activations_dtype, weights_dtype, function_level_defaults
+    pcie_devices,
+    in0_sharded,
+    out_sharded,
+    M,
+    K,
+    N,
+    num_cores,
+    activations_dtype,
+    weights_dtype,
+    function_level_defaults,
 ):
-    grid_size = (8, 1)
+    # grid_size = (8, 1)
+    grid_size = (8, 4)
+    num_devices = 4
+    devices = pcie_devices[:num_devices]
 
     in0_shape = [1, 1, M, K]
-    in1_shape = [1, 1, K, N]
-    bias_shape = [1, 1, 1, N]
+    in1_shape = [1, 1, K, 4 * N]
+    bias_shape = [1, 1, 1, 4 * N]
 
     interleaved_mem_config = ttl.tensor.MemoryConfig(
         memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
@@ -143,46 +156,69 @@ def test_sharded_matmul_1d_in0(
     in1 = torch.randn(in1_shape).bfloat16().float()
     bias = torch.randn(bias_shape).bfloat16().float()
 
-    in0_t = torch2tt_tensor(in0, device, tt_memory_config=interleaved_mem_config, tt_dtype=activations_dtype)
-    in1_t = torch2tt_tensor(in1, device, tt_memory_config=interleaved_mem_config, tt_dtype=weights_dtype)
-    bias_t = pad_by_zero(bias, device, tt_memory_config=interleaved_mem_config, tt_dtype=weights_dtype)[0]
+    in1_slices = torch.chunk(in1, num_devices, dim=-1)
+
+    in0_t = []
+    in1_t = []
+    for i in range(num_devices):
+        in0_temp = torch2tt_tensor(in0, devices[i], tt_memory_config=interleaved_mem_config, tt_dtype=activations_dtype)
+
+        if in0_sharded:
+            in0_temp = ttl.tensor.interleaved_to_sharded(
+                in0_temp,
+                grid_size,
+                [M, K // num_cores],
+                ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+                ttl.tensor.ShardOrientation.ROW_MAJOR,
+            )
+        in0_t.append(in0_temp)
+
+        in1_t.append(
+            torch2tt_tensor(in1_slices[i], devices[i], tt_memory_config=interleaved_mem_config, tt_dtype=weights_dtype)
+        )
+    # bias_t = pad_by_zero(bias, device, tt_memory_config=interleaved_mem_config, tt_dtype=weights_dtype)[0]
 
     output_mem_config = sharded_mem_config if out_sharded else interleaved_mem_config
 
-    if in0_sharded:
-        in0_t = ttl.tensor.interleaved_to_sharded(
-            in0_t,
-            grid_size,
-            [M, K // num_cores],
-            ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
-            ttl.tensor.ShardOrientation.ROW_MAJOR,
-        )
-
+    # program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+    #     compute_with_storage_grid_size=(8, 1),
+    #     in0_block_w=32,
+    #     out_subblock_h=1,
+    #     out_subblock_w=5,
+    #     per_core_M=1,
+    #     per_core_N=5,
+    #     fuse_batch=True,
+    #     fused_activation=None,
+    #     mcast_in0=True,
+    # )
     program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-        compute_with_storage_grid_size=(8, 1),
-        in0_block_w=32,
+        compute_with_storage_grid_size=(8, 4),
+        in0_block_w=8,
         out_subblock_h=1,
-        out_subblock_w=5,
+        out_subblock_w=4,
         per_core_M=1,
-        per_core_N=5,
+        per_core_N=16,
         fuse_batch=True,
         fused_activation=None,
         mcast_in0=True,
     )
-    output_t = ttl.operations.primary.matmul_1d(
-        in0_t,
-        in1_t,
-        bias=bias_t,
-        program_config=program_config,
-        output_mem_config=output_mem_config,
-        output_dtype=activations_dtype,
-    )
-    if out_sharded:
-        output_t = ttl.tensor.sharded_to_interleaved(output_t, interleaved_mem_config)
+    output_t = []
+    for i in range(num_devices):
+        output_t.append(
+            ttl.operations.primary.matmul_1d(
+                in0_t[i],
+                in1_t[i],
+                program_config=program_config,
+                output_mem_config=output_mem_config,
+                output_dtype=activations_dtype,
+            )
+        )
+    # if out_sharded:
+    #    output_t = ttl.tensor.sharded_to_interleaved(output_t, interleaved_mem_config)
 
-    pt_out = in0 @ in1 + bias
+    pt_out = in0 @ in1
 
-    tt_out = tt2torch_tensor(output_t)
+    tt_out = torch.cat([tt2torch_tensor(out_t) for out_t in output_t], -1)
 
     passing, output = comp_pcc(pt_out, tt_out)
     logger.info(output)

@@ -91,6 +91,7 @@ class TtFalconCausalLM(TtFalconModelShared):
         )
 
         lm_logits = []
+        breakpoint()
         for i in range(len(hidden_states)):
             lm_logits.append(
                 tt_lib.operations.primary.matmul_1d(
@@ -103,5 +104,6 @@ class TtFalconCausalLM(TtFalconModelShared):
                 )
             )
             hidden_states[i].deallocate(True)
+        breakpoint()
 
         return lm_logits, presents
