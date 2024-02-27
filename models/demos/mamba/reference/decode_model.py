@@ -211,7 +211,6 @@ class MambaBlock(nn.Module):
             mamba_inner_ref(), https://github.com/state-spaces/mamba/blob/main/mamba_ssm/ops/selective_scan_interface.py#L311
 
         """
-        x = x.unsqueeze(1)  # (b, d) -> (b, 1, d)
 
         (b, l, d) = x.shape
 
@@ -236,7 +235,7 @@ class MambaBlock(nn.Module):
 
         output = self.out_proj(y)
         
-        return output.squeeze(1)
+        return output
 
     def ssm(self, x):
         """Runs the SSM. See:
