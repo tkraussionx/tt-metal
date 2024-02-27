@@ -26,3 +26,30 @@ def resnet_basic_block(x, *, parameters):
         ttnn.deallocate(identity)
 
     return out
+
+
+def resnet_bottleneck_block(x, *, parameters):
+    identity = x
+
+    # Relu and bn1 are fused with conv1
+    conv1 = parameters.conv1(x)
+
+    # Relu and bn2 are fused with conv1
+    conv2 = parameters.conv2(conv1)
+    ttnn.deallocate(conv1)
+
+    # Relu and bn3 are fused with conv2
+    conv3 = parameters.conv3(conv2)
+    ttnn.deallocate(conv2)
+
+    if "downsample" in parameters and parameters.downsample is not None:
+        identity = parameters.downsample(x)
+        ttnn.deallocate(x)
+
+    identity = ttnn.reshape(identity, conv3.shape)
+    out = ttnn.add_and_apply_activation(conv3, identity, activation="relu", memory_config=ttnn.DRAM_MEMORY_CONFIG)
+    ttnn.deallocate(conv3)
+    if x is not identity:
+        ttnn.deallocate(identity)
+
+    return out

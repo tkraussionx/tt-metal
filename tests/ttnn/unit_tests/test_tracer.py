@@ -7,6 +7,7 @@ import pytest
 import networkx as nx
 import torch
 import transformers
+import torchvision
 
 import ttnn
 from ttnn.tracer import trace, visualize, get_graph, to_networkx
@@ -53,6 +54,20 @@ def test_torch_bert(show_modules):
 
     last_hidden_state = output.last_hidden_state
     visualize(last_hidden_state, show_modules=show_modules)
+
+
+@skip_for_wormhole_b0()
+@pytest.mark.parametrize("show_modules", [True, False])
+def test_torch_resnet50(show_modules):
+    torch.manual_seed(0)
+    torch_model = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V1).eval()
+
+    with trace():
+        torch_input_tensor = torch.rand((8, 3, 224, 224), dtype=torch.float32)
+        torch_output_tensor = torch_model(torch_input_tensor)
+
+    output = torch_output_tensor[0]
+    visualize(output, file_name="resnet50.svg", show_modules=show_modules)
 
 
 @skip_for_wormhole_b0()

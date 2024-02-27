@@ -21,7 +21,7 @@ from ttnn.model_preprocessing import (
 from tests.ttnn.utils_for_testing import assert_with_pcc
 from models.utility_functions import skip_for_wormhole_b0, pad_and_fold_conv_activation_for_unity_stride
 
-from models.experimental.functional_resnet.tt.ttnn_functional_resnet import resnet_basic_block
+from models.experimental.functional_resnet.tt.ttnn_functional_resnet import resnet_basic_block, resnet_bottleneck_block
 
 
 def update_ttnn_module_args(ttnn_module_args):
@@ -268,6 +268,108 @@ def test_resnet(device):
 
     output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
     output_tensor = ttnn.reshape(output_tensor, (8, 1, 49, 512))
+    output_tensor = ttnn.to_layout(output_tensor, ttnn.TILE_LAYOUT)
+    output_tensor = ttnn.global_avg_pool2d(output_tensor)
+    output_tensor = output_tensor @ parameters.fc.weight + parameters.fc.bias
+
+    output_tensor = ttnn.to_torch(output_tensor)
+    output_tensor = torch.reshape(output_tensor, (8, 1000))
+
+    # The check below doesn't work yet
+    # assert_with_pcc(torch_output_tensor, output_tensor, pcc=0.999)
+
+
+@skip_for_wormhole_b0()
+def test_resnet50(device):
+    torch.manual_seed(0)
+
+    torch_model = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V1).eval()
+
+    torch_input_tensor = torch.rand((8, 3, 224, 224), dtype=torch.float32)
+    torch_output_tensor = torch_model(torch_input_tensor)
+
+    def custom_preprocessor(model, name, ttnn_module_args, convert_to_ttnn):
+        parameters = {}
+        if isinstance(model, torchvision.models.resnet.Bottleneck):
+            # import pdb; pdb.set_trace()
+            ttnn_module_args.conv1["activation"] = "relu"  # Fuse relu with conv1
+
+            conv1_weight, conv1_bias = fold_batch_norm2d_into_conv2d(model.conv1, model.bn1)
+            conv2_weight, conv2_bias = fold_batch_norm2d_into_conv2d(model.conv2, model.bn2)
+            conv3_weight, conv3_bias = fold_batch_norm2d_into_conv2d(model.conv3, model.bn3)
+
+            update_ttnn_module_args(ttnn_module_args.conv1)
+            update_ttnn_module_args(ttnn_module_args.conv2)
+            update_ttnn_module_args(ttnn_module_args.conv3)
+
+            parameters["conv1"] = preprocess_conv2d(conv1_weight, conv1_bias, ttnn_module_args.conv1)
+            parameters["conv2"] = preprocess_conv2d(conv2_weight, conv2_bias, ttnn_module_args.conv2)
+            parameters["conv3"] = preprocess_conv2d(conv3_weight, conv3_bias, ttnn_module_args.conv3)
+
+            if model.downsample is not None:
+                downsample_weight, downsample_bias = fold_batch_norm2d_into_conv2d(
+                    model.downsample[0], model.downsample[1]
+                )
+                update_ttnn_module_args(ttnn_module_args.downsample[0])
+                parameters["downsample"] = preprocess_conv2d(
+                    downsample_weight, downsample_bias, ttnn_module_args.downsample[0]
+                )
+                ttnn_module_args["downsample"] = ttnn_module_args.downsample[0]
+
+        elif isinstance(model, torchvision.models.resnet.ResNet):
+            ttnn_module_args.conv1["activation"] = "relu"  # Fuse relu with conv1
+            conv1_weight, conv1_bias = fold_batch_norm2d_into_conv2d(model.conv1, model.bn1)
+            parameters["conv1"]: ttnn.Conv2d = fold_conv7s2_into_conv4s1(
+                conv1_weight, conv1_bias, ttnn_module_args.conv1
+            )
+
+            return preprocess_remaining_children_and_parameters(
+                model,
+                name=name,
+                convert_to_ttnn=convert_to_ttnn,
+                custom_preprocessor=custom_preprocessor,
+                parameters=parameters,
+                ttnn_module_args=ttnn_module_args,
+                already_preprocessed_children={"conv1", "bn1", "relu1"},
+            )
+
+        return parameters
+
+    reader_patterns_cache = {}
+    parameters = preprocess_model(
+        initialize_model=lambda: torch_model,
+        run_model=lambda model: model(torch_input_tensor),
+        reader_patterns_cache=reader_patterns_cache,
+        custom_preprocessor=custom_preprocessor,
+        device=device,
+    )
+    breakpoint()
+
+    input_tensor = pad_and_fold_conv_activation_for_unity_stride(
+        torch_input_tensor, *torch_model.conv1.padding, *torch_model.conv1.stride
+    )
+
+    input_tensor = torch.permute(input_tensor, (0, 2, 3, 1))
+    input_tensor = ttnn.from_torch(input_tensor, dtype=ttnn.bfloat16)
+
+    output_tensor = parameters.conv1.copy_input_to_device(input_tensor)
+    output_tensor = parameters.conv1(output_tensor)
+    output_tensor = parameters.maxpool(output_tensor)
+    output_tensor = ttnn.to_memory_config(output_tensor, ttnn.DRAM_MEMORY_CONFIG)
+    output_tensor = ttnn.to_layout(output_tensor, ttnn.TILE_LAYOUT)
+
+    for basic_block_parameters in parameters.layer1.values():
+        output_tensor = resnet_bottleneck_block(output_tensor, parameters=basic_block_parameters)
+    for basic_block_parameters in parameters.layer2.values():
+        output_tensor = resnet_bottleneck_block(output_tensor, parameters=basic_block_parameters)
+    for basic_block_parameters in parameters.layer3.values():
+        output_tensor = resnet_bottleneck_block(output_tensor, parameters=basic_block_parameters)
+    for basic_block_parameters in parameters.layer4.values():
+        output_tensor = resnet_bottleneck_block(output_tensor, parameters=basic_block_parameters)
+
+    output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
+    breakpoint()
+    output_tensor = ttnn.reshape(output_tensor, (8, 1, 49, 2048))
     output_tensor = ttnn.to_layout(output_tensor, ttnn.TILE_LAYOUT)
     output_tensor = ttnn.global_avg_pool2d(output_tensor)
     output_tensor = output_tensor @ parameters.fc.weight + parameters.fc.bias
