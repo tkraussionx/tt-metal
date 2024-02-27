@@ -207,7 +207,7 @@ void DeviceProfiler::dumpResultToFile(
     {
         log_file.open(log_path);
         log_file << "ARCH: " << get_string_lowercase(device_architecture) << ", CHIP_FREQ[MHz]: " << device_core_frequency << std::endl;
-        log_file << "Run ID, PCIe slot, core_x, core_y, RISC processor type, timer_id, time[cycles since reset], zone name, zone phase, source line, source file" << std::endl;
+        log_file << "PCIe slot, core_x, core_y, RISC processor type, timer_id, time[cycles since reset], Run ID, zone name, zone phase, source line, source file" << std::endl;
         new_log = false;
     }
     else
@@ -215,14 +215,14 @@ void DeviceProfiler::dumpResultToFile(
         log_file.open(log_path, std::ios_base::app);
     }
 
-    log_file << fmt::format("{:5},{:4},{:3},{:3},{:>7},{:7},{:15},{:>25},{:>6},{:6},{}",
-            run_id,
+    log_file << fmt::format("{:4},{:3},{:3},{:>7},{:7},{:15},{:5},{:>25},{:>6},{:6},{}",
             device_id,
             core.x,
             core.y,
             tracy::riscName[risc_num],
             timer_id,
             timestamp,
+            run_id,
             zone_name,
             magic_enum::enum_name(zone_phase),
             source_line,

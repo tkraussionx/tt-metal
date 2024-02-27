@@ -214,22 +214,21 @@ def import_device_profile_log(
                 devicesData.update(dict(deviceInfo=dict(arch=arch, freq=freq)))
 
             elif lineCount > 1:
-                startCol = 0
-                runID = int(row[startCol].strip())
-                chipID = int(row[startCol + 1].strip())
-                core = (int(row[startCol + 2].strip()), int(row[startCol + 3].strip()))
+                chipID = int(row[0].strip())
+                core = (int(row[1].strip()), int(row[2].strip()))
                 if intrestingCores and core not in intrestingCores:
                     continue
-                risc = row[startCol + 4].strip()
-                timerID = {}
-                timerID["id"] = int(row[startCol + 5].strip())
+                risc = row[3].strip()
+                timerID = {"id": int(row[4].strip()), "zoneName": "", "zonePhase": "", "srcLine": "", "srcFile": ""}
                 if ignoreMarkers and timerID in ignoreMarkers:
                     continue
-                timeData = int(row[startCol + 6].strip())
-                timerID["zoneName"] = row[startCol + 7].strip()
-                timerID["zonePhase"] = row[startCol + 8].strip()
-                timerID["srcLine"] = int(row[startCol + 9].strip())
-                timerID["srcFile"] = row[startCol + 10].strip()
+                timeData = int(row[5].strip())
+                if len(row) > 6:
+                    runID = int(row[6].strip())
+                    timerID["zoneName"] = row[7].strip()
+                    timerID["zonePhase"] = row[8].strip()
+                    timerID["srcLine"] = int(row[9].strip())
+                    timerID["srcFile"] = row[10].strip()
 
                 if chipID in devicesData["devices"].keys():
                     if core in devicesData["devices"][chipID]["cores"].keys():
@@ -385,7 +384,8 @@ def core_to_device_timeseries(devicesData):
             if appendTs:
                 if isNewOp:
                     ops.append({"timeseries": []})
-                ops[-1]["timeseries"].append(ts)
+                if len(ops) > 0:
+                    ops[-1]["timeseries"].append(ts)
             if isNewOpFinished:
                 coreOpMap = {}
 
