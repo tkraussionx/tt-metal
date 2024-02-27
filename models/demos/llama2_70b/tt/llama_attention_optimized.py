@@ -20,13 +20,14 @@ from models.demos.llama2_70b.tt.llama_common import (
 
 
 class TtLlamaAttention_optimized(torch.nn.Module):
-    def __init__(self, devices, state_dict, base_url, layer_num, model_config, configuration):
+    def __init__(self, devices, state_dict, base_url, layer_num, model_config, configuration, emulated=False):
         super().__init__()
 
         self.state_dict = state_dict
         self.devices = devices
         self.num_devices = len(devices)
         self.model_config = model_config
+        self.emulated = emulated
 
         self.hidden_size = configuration.dim
         self.n_heads = configuration.n_heads
@@ -172,7 +173,15 @@ class TtLlamaAttention_optimized(torch.nn.Module):
         xs, rot_mats, attn_masks = [], [], []
         for i in range(self.num_devices):
             device = self.devices[i]
-            xs.append(torch2tt_tensor(x.clone(), device))
+            xs.append(
+                torch2tt_tensor(
+                    x.clone(),
+                    device,
+                    tt_layout=tt_lib.tensor.Layout.TILE,
+                    tt_memory_config=self.model_config["LN_ATTN_OUTPUT_MEMCFG"],
+                    tt_dtype=self.model_config["WORD_EMBEDDING_OUTPUT_DTYPE"],
+                )
+            )
             rot_mats.append(torch2tt_tensor(rot_mat.clone(), device))
 
             # Put attn_mask on the device with the sharded config
@@ -423,13 +432,16 @@ class TtLlamaAttention_optimized(torch.nn.Module):
                 attn_output[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
             )
         # All gather input to dense
-        # dense_output_replicated = tt_all_gather_torch(attn_output, dim=-1)
-        attn_output = tt_lib.tensor.all_gather(
-            attn_output,
-            dim=3,
-            num_links=1,
-            output_mem_config=self.model_config["DEFAULT_MEMCFG"],
-        )
+        if self.emulated:
+            attn_output = tt_all_gather_torch(attn_output, dim=-1)
+        else:
+            attn_output = tt_lib.tensor.all_gather(
+                attn_output,
+                dim=3,
+                num_links=1,
+                output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+            )
+
         for i in range(len(attn_output)):
             attn_output[i] = tt_lib.tensor.interleaved_to_sharded(
                 attn_output[i], sharded_mem_config=self.model_config["ATTN_ALL_GATHER_OUTPUT_MEMCFG"]
