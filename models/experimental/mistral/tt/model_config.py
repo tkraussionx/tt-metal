@@ -16,6 +16,7 @@ OP_KEYS = (
     "FF2_MM_OUTPUT",
     "FF3_MM_WEIGHTS",  # up proj
     "FF3_MM_OUTPUT",
+    "FF1_FF3_MUL_OUTPUT",
     # LayerNorm
     "LAYERNORM_WEIGHTS",
     "LAYERNORM_BIAS",
@@ -26,16 +27,18 @@ OP_KEYS = (
     # Attention
     "WO_MM_WEIGHTS",
     "FUSED_QKV_MM_WEIGHTS",
+    "PAST_K",
+    "PAST_V",
     # "CREATE_QKV_HEADS_OUTPUT",
     # "PRE_SOFTMAX_MM_OUTPUT",
     # "POST_SOFTMAX_MM_OUTPUT",
-    "KEYS_OUTPUT_MEMCFG",
-    "VALUES_OUTPUT_MEMCFG",
+    "KEYS_OUTPUT",
+    "VALUES_OUTPUT",
     "K_TRANSPOSED_OUTPUT",
-    # Manual
     "KV_CACHE",
     "ATTN_ACT",
     "ATTN_MASK",
+    "OUTPUT_MM_WEIGHTS",
 )
 
 NO_MEMCFG = ()
@@ -111,8 +114,8 @@ def get_model_config(model_config_str, num_devices=1):
     # model_config["KV_CACHE_MEMCFG"] = L1_MEMCFG
     model_config["ATTN_ACT_MEMCFG"] = L1_MEMCFG
     model_config["ATTN_MASK_MEMCFG"] = L1_MEMCFG
-    # else:
-    # model_config["FF1_FF3_MUL_OUTPUT_MEMCFG"] = DRAM_MEMCFG
+    # model_config["PAST_K_MEMCFG"] = L1_MEMCFG
+    # model_config["PAST_V_MEMCFG"] = L1_MEMCFG
 
     # FF1 & FF3 Matmul Config Variables
     # TODO: N300 currently would only have 8x7 available until dispatch moved to eth core

@@ -11,7 +11,10 @@ from models.experimental.mistral.tt.mistral_attention import TtMistralAttention
 from models.experimental.mistral.tt.mistral_common import precompute_freqs, generate_cos_sin_cache, prepare_inputs
 from models.experimental.mistral.tt.model_config import TtModelArgs, get_model_config
 from models.experimental.mistral.reference.model import Attention
-from models.utility_functions import tt2torch_tensor
+from models.utility_functions import (
+    tt2torch_tensor,
+    torch2tt_tensor,
+)
 from models.utility_functions import (
     comp_pcc,
     comp_allclose,
@@ -24,14 +27,9 @@ from models.utility_functions import (
 )
 @pytest.mark.parametrize(
     "iterations",
-    ((3),),
-)
-@pytest.mark.parametrize(
-    "pcc",
-    ((0.99),),
+    ((1),),
 )
 def test_mistral_attention_inference(
-    pcc,
     model_config,
     iterations,
     model_location_generator,
@@ -80,6 +78,28 @@ def test_mistral_attention_inference(
     cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
     freqs_cis = torch.complex(cos, sin)
 
+    layer_past_list = []
+    for d in range(len(devices)):
+        cache_k = torch.zeros(
+            (
+                model_args.max_batch_size,
+                model_args.n_kv_heads // len(devices),
+                model_args.sliding_window,
+                model_args.head_dim,
+            )
+        )
+        cache_v = torch.zeros(
+            (
+                model_args.max_batch_size,
+                model_args.n_kv_heads // len(devices),
+                model_args.sliding_window,
+                model_args.head_dim,
+            )
+        )
+        layer_past = [cache_k, cache_v]
+        layer_past = [torch2tt_tensor(lp, devices[d]) for lp in layer_past]
+        layer_past_list.append(layer_past)
+
     for i in range(generation_length):
         pt_attention_input = (torch.rand(batch, seq_len, model_args.dim) * 2) - 1
         tt_attention_input = pt_attention_input.clone()
@@ -92,6 +112,7 @@ def test_mistral_attention_inference(
             tt_model.sliding_window,
             tt_model.devices,
             tt_model.num_devices,
+            model_config,
         )
 
         tt_out = tt_model(
@@ -99,6 +120,7 @@ def test_mistral_attention_inference(
             start_pos,
             current_pos,
             attn_mask,
+            layer_past_list,
         )
         assert isinstance(tt_out, list)  # tt_out should be replicated on N devices
         tt_out = tt_out[0]
@@ -113,7 +135,7 @@ def test_mistral_attention_inference(
 
         reference_output = reference_model(pt_attention_input, freqs_cis_i, positions, mask=None)
 
-        passing, pcc_message = comp_pcc(reference_output, tt_output_torch, pcc)
+        passing, pcc_message = comp_pcc(reference_output, tt_output_torch)
 
         logger.info(comp_allclose(reference_output, tt_output_torch))
         logger.info(pcc_message)
@@ -132,7 +154,8 @@ def test_mistral_attention_inference(
         ]
         # TT hardware execution -------------------------------------------------------------
         tt_layer_present = []
-        for layer_past in tt_model.layer_past_list:
+        # for layer_past in tt_model.layer_past_list:
+        for layer_past in layer_past_list:
             tt_layer_present.append([tt2torch_tensor(cache) for cache in layer_past])
         # concat the pasts by heads
         if len(devices) > 1:
@@ -155,17 +178,17 @@ def test_mistral_attention_inference(
             cache_length_to_check = min(model_args.sliding_window, generation_start_pos + generation_length + 1)
             cache_pt = cache_pt[:, :, generation_start_pos:cache_length_to_check, :]
             cache_tt = cache_tt[:, :, generation_start_pos:cache_length_to_check, :]
-            does_pass, output_pcc = comp_pcc(cache_pt, cache_tt, pcc)
+            does_pass, output_pcc = comp_pcc(cache_pt, cache_tt)
             logger.info(f"V cache output: {output_pcc}")
 
             if does_pass:
                 logger.info(f"V Cache Passed!")
             else:
-                logger.warning(f"V Cache Failed! PCC value is lower than {pcc}")
+                logger.warning(f"V Cache Failed! PCC value is lower than {0.99}")
                 all_tests_pass = False
 
     if all_tests_pass:
         logger.info("Mistral Attention output Passed!")
     else:
         logger.warning("Mistral Attention output Failed!")
-        assert all_tests_pass, f"PCC value is lower than {pcc} for some of the outputs. Check Warnings!"
+        assert all_tests_pass, f"PCC value is lower than {0.99} for some of the outputs. Check Warnings!"

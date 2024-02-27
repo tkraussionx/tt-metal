@@ -6,6 +6,8 @@ import torch
 import math
 import tt_lib
 
+from typing import Tuple
+
 from models.utility_functions import (
     torch2tt_tensor,
     nearest_32,
@@ -91,29 +93,28 @@ class TtMistralAttention(torch.nn.Module):
                 tt_dtype=self.model_config["WO_MM_WEIGHTS_DTYPE"],
             )
 
-            cache_k = torch.zeros(
-                (
-                    self.max_batch_size,
-                    self.n_kv_heads // self.num_devices,
-                    self.sliding_window,
-                    self.head_dim,
-                )
-            )
-            cache_v = torch.zeros(
-                (
-                    self.max_batch_size,
-                    self.n_kv_heads // self.num_devices,
-                    self.sliding_window,
-                    self.head_dim,
-                )
-            )
-            layer_past = [cache_k, cache_v]
-            layer_past = [torch2tt_tensor(lp, self.devices[i]) for lp in layer_past]
-
+            # cache_k = torch.zeros(
+            #     (
+            #         self.max_batch_size,
+            #         self.n_kv_heads // self.num_devices,
+            #         self.sliding_window,
+            #         self.head_dim,
+            #     )
+            # )
+            # cache_v = torch.zeros(
+            #     (
+            #         self.max_batch_size,
+            #         self.n_kv_heads // self.num_devices,
+            #         self.sliding_window,
+            #         self.head_dim,
+            #     )
+            # )
+            # layer_past = [cache_k, cache_v]
+            # layer_past = [torch2tt_tensor(lp, self.devices[i]) for lp in layer_past]
             # add to the list
             self.wqkv_list.append(wqkv)
             self.wo_list.append(wo)
-            self.layer_past_list.append(layer_past)
+            # self.layer_past_list.append(layer_past)
         self.tt_sin_cached = tt_sin_cached
         self.tt_cos_cached = tt_cos_cached
 
@@ -123,6 +124,7 @@ class TtMistralAttention(torch.nn.Module):
         start_pos: int,
         current_pos: int,
         attn_masks: tt_lib.tensor.Tensor,
+        layer_past: Tuple[tt_lib.tensor.Tensor],
     ) -> tt_lib.tensor.Tensor:
         """
         x: (seq_len, 1, batch, hidden_dim)
@@ -138,7 +140,7 @@ class TtMistralAttention(torch.nn.Module):
             device = self.devices[i]
             wqkv = self.wqkv_list[i]
             wo = self.wo_list[i]
-            layer_past = self.layer_past_list[i]
+            # TODO layer_past only works for a single device
 
             # QKV matmuls
             xqkv_fused = tt_lib.operations.primary.matmul_1d(
@@ -184,7 +186,7 @@ class TtMistralAttention(torch.nn.Module):
                     padded_layer_past_len - 1,
                     self.head_dim - 1,
                 ],
-                # output_mem_config=self.model_config["KEYS_MEMCFG"],
+                output_mem_config=self.model_config["KEYS_OUTPUT_MEMCFG"],
             )
             values = tt_lib.tensor.unpad(
                 layer_past[1],
@@ -195,7 +197,7 @@ class TtMistralAttention(torch.nn.Module):
                     padded_layer_past_len - 1,
                     self.head_dim - 1,
                 ],
-                # output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+                output_mem_config=self.model_config["VALUES_OUTPUT_MEMCFG"],
             )
 
             # Attention

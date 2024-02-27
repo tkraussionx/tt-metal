@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import torch
 import tt_lib
-from typing import Optional
+from typing import Optional, Tuple
 from models.experimental.mistral.tt.mistral_attention import TtMistralAttention
 from models.experimental.mistral.tt.mistral_mlp import TtMistralMLP
 from models.experimental.mistral.tt.mistral_rms_norm import TtRMSNorm
@@ -50,7 +50,7 @@ class TtTransformerBlock(torch.nn.Module):
             devices=devices,
             state_dict=state_dict,
             base_url=f"{base_address}attention.",
-            layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
+            layer_num=layer_num,
             model_config=model_config,
             configuration=args,
             tt_cos_cached=tt_cos_cached,
@@ -81,6 +81,7 @@ class TtTransformerBlock(torch.nn.Module):
         start_pos: int,
         current_pos: int,
         attn_masks: Optional[tt_lib.tensor.Tensor],
+        layer_past: Tuple[tt_lib.tensor.Tensor],
     ) -> tt_lib.tensor.Tensor:
         # TODO Consider updating the remaining rms_norm and MLP modules to support multi-device
         if not isinstance(xs, list):
@@ -93,6 +94,7 @@ class TtTransformerBlock(torch.nn.Module):
             start_pos,
             current_pos,
             attn_masks,
+            layer_past,
         )
         # Attention also returns multiple outputs (multi-device support)
         h = tt_lib.tensor.add(xs[0], r[0])

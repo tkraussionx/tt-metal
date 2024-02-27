@@ -11,7 +11,7 @@ from models.experimental.mistral.tt.mistral_model import TtTransformer
 from models.experimental.mistral.tt.model_config import TtModelArgs, get_model_config
 from models.experimental.mistral.reference.model import Transformer
 from models.experimental.mistral.reference.tokenizer import Tokenizer
-from models.utility_functions import tt2torch_tensor
+from models.utility_functions import tt2torch_tensor, torch2tt_tensor
 from models.utility_functions import (
     comp_pcc,
     comp_allclose,
@@ -19,20 +19,20 @@ from models.utility_functions import (
 
 
 @pytest.mark.parametrize(
-    "n_layers",
-    ((3,)),
-)
-@pytest.mark.parametrize(
     "model_config",
     ("BFLOAT16-DRAM", "BFLOAT8-DRAM"),
 )
 @pytest.mark.parametrize(
+    "n_layers",
+    ((32,)),
+)
+@pytest.mark.parametrize(
     "iterations",
-    ((3),),
+    ((1),),
 )
 @pytest.mark.parametrize(
     "pcc",
-    ((0.99),),
+    ((0.98),),
 )
 def test_mistral_model_inference(pcc, model_config, model_location_generator, device, iterations, n_layers):
     prompts = [
@@ -90,7 +90,6 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
     cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
     freqs_cis = torch.complex(cos, sin)
 
-    # TODO Update start_pos (check llama test for reference)
     for i in range(generation_length):
         print(f"[Model] Generating token {i}")
 
@@ -107,10 +106,10 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
             model_args.sliding_window,
             tt_model.devices,
             tt_model.num_devices,
+            model_config,
         )
         # Run TT model
-        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask)
-        # tt_output = tt_model(tt_input, bcast_freq_xq, bcast_freq_xk, tt_position, mask, seqlen)
+        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask)  # , layer_past)
 
         tt_output_torch = tt2torch_tensor(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
 

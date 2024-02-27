@@ -10,7 +10,7 @@ from models.experimental.mistral.tt.mistral_common import precompute_freqs, gene
 from models.experimental.mistral.tt.mistral_decoder import TtTransformerBlock
 from models.experimental.mistral.tt.model_config import TtModelArgs, get_model_config
 from models.experimental.mistral.reference.model import TransformerBlock
-from models.utility_functions import tt2torch_tensor
+from models.utility_functions import tt2torch_tensor, torch2tt_tensor
 from models.utility_functions import (
     comp_pcc,
     comp_allclose,
@@ -25,11 +25,7 @@ from models.utility_functions import (
     "iterations",
     ((3),),
 )
-@pytest.mark.parametrize(
-    "pcc",
-    ((0.99),),
-)
-def test_mistral_decoder_inference(pcc, model_config, model_location_generator, device, iterations):
+def test_mistral_decoder_inference(model_config, model_location_generator, device, iterations):
     dtype_str, mem_config_str = model_config.split("-")
     model_config = get_model_config(model_config)
 
@@ -76,7 +72,29 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
     cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
     freqs_cis = torch.complex(cos, sin)
 
-    # TODO Update start_pos (check llama test for reference)
+    layer_past_dev_list = []
+    # Generate past KV cache
+    for d in range(len(devices)):
+        cache_k = torch.zeros(
+            (
+                model_args.max_batch_size,
+                model_args.n_kv_heads // len(devices),
+                model_args.sliding_window,
+                model_args.head_dim,
+            )
+        )
+        cache_v = torch.zeros(
+            (
+                model_args.max_batch_size,
+                model_args.n_kv_heads // len(devices),
+                model_args.sliding_window,
+                model_args.head_dim,
+            )
+        )
+        layer_past = [cache_k, cache_v]
+        layer_past = [torch2tt_tensor(lp, devices[d]) for lp in layer_past]
+        layer_past_dev_list.append(layer_past)
+
     for i in range(generation_length):
         print(f"[Decoder] Generating token {i}")
 
@@ -93,10 +111,10 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
             tt_model.sliding_window,
             tt_model.devices,
             tt_model.num_devices,
+            model_config,
         )
         # Run TT model
-        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask)
-        # tt_output = tt_model(tt_input, bcast_freq_xq, bcast_freq_xk, tt_position, mask, seqlen)
+        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask, layer_past_dev_list)
 
         tt_output_torch = tt2torch_tensor(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
 
@@ -107,7 +125,7 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
         # mask = tt2torch_tensor(attn_mask[0])
         ref_output = reference_model(pt_decode_input, freqs_cis_i, positions, mask=None)  # mask)
 
-        passing, pcc_message = comp_pcc(ref_output, tt_output_torch, pcc)
+        passing, pcc_message = comp_pcc(ref_output, tt_output_torch)
 
         logger.info(comp_allclose(ref_output, tt_output_torch))
         logger.info(pcc_message)
@@ -122,4 +140,4 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
         logger.info(f"All {generation_length} Mistral decode iterations Passed!")
     else:
         logger.warning("One or more iterations of Mistral decode Failed!")
-        assert all_tests_pass, f"PCC value is lower than {pcc} for some of the outputs. Check Warnings!"
+        assert all_tests_pass, f"PCC value is lower than {0.99} for some of the outputs. Check Warnings!"

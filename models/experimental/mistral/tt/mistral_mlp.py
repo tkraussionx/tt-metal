@@ -69,6 +69,8 @@ class TtMistralMLP(nn.Module):
         w1_out = tt_lib.operations.primary.matmul_1d(
             x,
             self.w1_weights,
+            # fp32_dest_acc_en=True,
+            # packer_l1_acc=True,
             program_config=self.model_config["FF1_MM_PROGCFG"],  # specifies fused silu activation
             output_mem_config=self.model_config["FF1_MM_OUTPUT_MEMCFG"],
             output_dtype=self.model_config["FF1_MM_OUTPUT_DTYPE"],
