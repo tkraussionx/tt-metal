@@ -11,13 +11,11 @@ class TtRMSNorm(nn.Module):
         device,
         base_address,
         state_dict,
-        model_config,
         eps: float = 1e-05,
     ):
         super().__init__()
         self.device = device
         self.eps = eps
-        self.model_config = model_config
         self.state_dict = state_dict
 
         rmsNorm_weight = f"{base_address}weight"
@@ -31,5 +29,4 @@ class TtRMSNorm(nn.Module):
 
     def forward(self, x: ttnn.Tensor) -> ttnn.Tensor:
         x = ttnn.rms_norm(x, weight=self.weight, epsilon=self.eps)
-        # x = rms_decomp(x, self.weight, self.eps)
         return x
