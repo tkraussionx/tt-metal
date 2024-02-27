@@ -73,8 +73,8 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
     auto src_buffer = input.buffer();
 
     auto dst_buffer = output.buffer();
-    // program.add_global_buffer(input.device_buffer());
-    // program.add_global_buffer(output.device_buffer());
+    program.add_global_buffer(input.device_buffer());
+    program.add_global_buffer(output.device_buffer());
 
     auto all_cores = shard_spec.grid;
     uint32_t num_cores_x = grid_size.x;
@@ -265,6 +265,8 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
         std::shared_ptr<RuntimeArgs> runtime_args_vec3 = std::make_shared<RuntimeArgs>();
         *runtime_args_vec3 = {src_buffer};
         Device* device = src_buffer->device();
+        program.add_global_buffer(input_tensors.at(0).device_buffer());
+        program.add_global_buffer(output_tensors.at(0).device_buffer());
         for (const auto& core : cores) {
             {
                 EnqueueUpdateRuntimeArgs(device->command_queue(), program.get_kernels().at(unary_reader_kernel_id), core, update_idx, runtime_args_vec3, false);
@@ -531,7 +533,8 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
         std::shared_ptr<RuntimeArgs> runtime_args_vec3 = std::make_shared<RuntimeArgs>();
         *runtime_args_vec3 = {dst_buffer};
         Device* device = src_buffer->device();
-
+        program.add_global_buffer(input_tensors.at(0).device_buffer());
+        program.add_global_buffer(output_tensors.at(0).device_buffer());
         for (const auto& core : cores) {
             {
                 EnqueueUpdateRuntimeArgs(device->command_queue(), program.get_kernels().at(unary_writer_kernel_id), core, update_idx, runtime_args_vec3, false);

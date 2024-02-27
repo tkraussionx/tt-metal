@@ -36,9 +36,9 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
     tt_metal::Buffer *src0_buffer = a.buffer();
     tt_metal::Buffer *src1_buffer = b.buffer();
     tt_metal::Buffer *dst_buffer = output.buffer();
-    // program.add_global_buffer(a.device_buffer());
-    // program.add_global_buffer(b.device_buffer());
-    // program.add_global_buffer(output.device_buffer());
+    program.add_global_buffer(a.device_buffer());
+    program.add_global_buffer(b.device_buffer());
+    program.add_global_buffer(output.device_buffer());
     TT_ASSERT(dst_buffer != nullptr, "Output buffer should be allocated on device!");
 
     // This should allocate a DRAM buffer on the device
@@ -558,6 +558,9 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         const std::vector<Tensor>& output_tensors
     ) {
         const auto& output_tensor = output_tensors.at(0);
+        program.add_global_buffer(input_tensors.at(0).device_buffer());
+        program.add_global_buffer(input_tensors.at(1).device_buffer());
+        program.add_global_buffer(output_tensor.device_buffer());
         set_runtime_args(program, input_tensors.at(0), input_tensors.at(1), output_tensor);
     };
 

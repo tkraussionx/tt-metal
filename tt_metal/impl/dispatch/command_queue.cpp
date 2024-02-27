@@ -1316,11 +1316,13 @@ void EnqueueProgramImpl(CommandQueue& cq, std::variant < std::reference_wrapper<
             program.get().allocate_circular_buffers();
             detail::ValidateCircularBufferRegion(program, device);
             cq.hw_command_queue().enqueue_program(program, trace, blocking);
+            program.get().global_bufs = {};
         } else if constexpr (std::is_same_v<T, std::shared_ptr<Program>>) {
             detail::CompileProgram(device, *program);
             program->allocate_circular_buffers();
             detail::ValidateCircularBufferRegion(*program, device);
             cq.hw_command_queue().enqueue_program(*program, trace, blocking);
+            program->global_bufs = {};
         }
     }, program);
 }
