@@ -6,7 +6,7 @@ import torch
 import pytest
 from torch import nn
 from typing import Optional, Tuple
-
+import ttnn
 import tt_lib
 
 from models.demos.falcon40b_prefill.tt.falcon_attention import TtFalconAttention
@@ -48,6 +48,7 @@ class TtFalconDecoderLayer:
             model_config=model_config,
             tt_cache_path=tt_cache_path,
             global_cos_sin_cache=global_cos_sin_cache,
+            emulate_per_device_fracture=False,
         )
 
         self.mlp = TtFalconMLP(
@@ -58,6 +59,7 @@ class TtFalconDecoderLayer:
             hidden_size=config.hidden_size,
             model_config=model_config,
             tt_cache_path=tt_cache_path,
+            emulate_per_device_fracture=False,
         )
 
         layer_name = f"{base_url}.{layer_num}"
@@ -173,16 +175,19 @@ class TtFalconDecoderLayer:
                     hidden_states[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
                 )
             )
-        replicated_hidden_states = tt_lib.tensor.all_gather(
-            replicated_hidden_states,
-            num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
-            dim=3,
-            output_mem_config=self.model_config["DEFAULT_MEMCFG"],
-        )
+
+        output = []
         for i in range(len(replicated_hidden_states)):
-            replicated_hidden_states[i] = tt_lib.tensor.interleaved_to_sharded(
-                replicated_hidden_states[i], sharded_mem_config=self.model_config["DECODER_ALL_GATHER_OUTPUT_MEMCFG"]
+            concat_hidden_states = tt_lib.tensor.concat(replicated_hidden_states, 3)
+            output.append(
+                tt_lib.tensor.interleaved_to_sharded(
+                    concat_hidden_states, sharded_mem_config=self.model_config["DECODER_ALL_GATHER_OUTPUT_MEMCFG"]
+                )
             )
+
+        for i in range(4):
+            replicated_hidden_states[i].deallocate(True)
+        replicated_hidden_states = output
 
         attn_ln_output = []
         mlp_ln_output = []
@@ -243,14 +248,15 @@ class TtFalconDecoderLayer:
 
         # MLP
         # mlp will deallocate layernorm_output
-        mlp_output = self.mlp(mlp_ln_output)
+        ttnn_tensors = [ttnn.Tensor(tt_lib_tensor) for tt_lib_tensor in mlp_ln_output]
+        mlp_output = self.mlp(ttnn_tensors)
 
         # dropout_add
         # For inference, this is just add
         for i in range(len(output)):
             output[i] = tt_lib.tensor.add_without_autoformat(
                 output[i],
-                mlp_output[i],
+                mlp_output[i].value,
                 output_mem_config=self.model_config["DROPOUT_ADD_OUTPUT_MEMCFG"],
                 in_place=True,
             )

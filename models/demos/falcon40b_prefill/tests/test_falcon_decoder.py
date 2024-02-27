@@ -7,9 +7,7 @@ import pytest
 from loguru import logger
 
 import tt_lib
-from models.demos.falcon40b_prefill.reference.hf_modeling_falcon import (
-    FalconForCausalLM,
-)
+from models.demos.falcon40b_prefill.reference.hf_modeling_falcon import FalconForCausalLM, FalconConfig
 from models.demos.falcon40b_prefill.tt.falcon_decoder import TtFalconDecoderLayer
 from models.demos.falcon40b_prefill.tt.model_config import (
     get_model_config,
@@ -55,10 +53,12 @@ def run_test_FalconDecoder_inference(
     model_location_generator,
 ):
     model_name = model_location_generator(model_version, model_subdir="Falcon")
+    configuration = FalconConfig.from_pretrained(model_name, num_hidden_layers=1)
+    hugging_face_reference_model = FalconForCausalLM(configuration)
+    first_layer_weights_path = tt_cache_path / "transformer.h.0.pt"
+    state_dict = torch.load(first_layer_weights_path)
+    hugging_face_reference_model.transformer.h[0].load_state_dict(torch.load(first_layer_weights_path), strict=False)
 
-    hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_name, low_cpu_mem_usage=True)
-    hugging_face_reference_model.eval()
-    configuration = hugging_face_reference_model.config
     state_dict = hugging_face_reference_model.state_dict()
 
     # Prepare input ========================================================================
@@ -82,15 +82,62 @@ def run_test_FalconDecoder_inference(
         attention_mask_bool = torch.ones(batch, 1, q_len, kv_len, dtype=bool).triu(diagonal=1)
         layer_past = None
 
-        tt_decoder_input = torch2tt_tensor(decoder_input.unsqueeze(1), device)
-        tt_attention_mask = torch2tt_tensor(
-            (attention_mask_bool * -100000).expand(-1, configuration.n_head, -1, -1),
-            device,
+        tt_decoder_input_host = torch.chunk(decoder_input.unsqueeze(1), len(devices), -1)
+        tt_decoder_input = []
+        for i in range(len(devices)):
+            tt_decoder_input.append(
+                torch2tt_tensor(
+                    tt_decoder_input_host[i],
+                    devices[i],
+                    tt_layout=tt_lib.tensor.Layout.TILE,
+                    tt_memory_config=model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"],
+                    tt_dtype=model_config["WORD_EMBEDDING_OUTPUT_DTYPE"],
+                )
+            )
+
+        tt_attention_mask = []
+        tt_attention_mask_host = torch.chunk(
+            (attention_mask_bool * -100000).expand(-1, configuration.num_attention_heads, -1, -1),
+            len(devices),
+            1,
         )
-        tt_k_cache = torch.zeros(batch, max_position_embeddings, head_dim)
-        tt_v_cache = torch.zeros(batch, max_position_embeddings, head_dim)
-        tt_k_cache = torch2tt_tensor(tt_k_cache.unsqueeze(1), device)
-        tt_v_cache = torch2tt_tensor(tt_v_cache.unsqueeze(1), device)
+        for i in range(len(devices)):
+            tt_attention_mask.append(
+                torch2tt_tensor(
+                    tt_attention_mask_host[i],
+                    devices[i],
+                    tt_memory_config=attention_mask_memconfig,
+                    tt_dtype=model_config["ATTN_MASK_DTYPE"],
+                )
+            )
+
+        tt_k_cache_host = torch.zeros(batch, max_position_embeddings, head_dim)
+        tt_v_cache_host = torch.zeros(batch, max_position_embeddings, head_dim)
+        tt_k_cache_host = torch.chunk(tt_k_cache.unsqueeze(1), len(devices), 1)
+        tt_v_cache_host = torch.chunk(tt_v_cache.unsqueeze(1), len(devices), 1)
+
+        tt_k_cache = []
+        tt_v_cache = []
+        for j in range(len(devices)):
+            tt_k_cache.append(
+                torch2tt_tensor(
+                    tt_k_cache_host[j],
+                    devices[j],
+                    tt_lib.tensor.Layout.TILE,
+                    model_config["KV_CACHE_MEMCFG"],
+                    model_config["KV_CACHE_DTYPE"],
+                )
+            )
+            tt_v_cache.append(
+                torch2tt_tensor(
+                    tt_v_cache_host[j],
+                    devices[j],
+                    tt_lib.tensor.Layout.TILE,
+                    model_config["KV_CACHE_MEMCFG"],
+                    model_config["KV_CACHE_DTYPE"],
+                )
+            )
+
         tt_layer_past = (tt_k_cache, tt_v_cache)
 
     elif llm_mode == "decode":
@@ -276,6 +323,8 @@ def run_test_FalconDecoder_inference(
 @skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
     "llm_mode, batch, seq_len, kv_cache_len",
+    # (("prefill", 1, 128, 0),),
+    # ids=["prefill"],
     (("decode", 32, 1, 128),),
     ids=["decode_batch32"],
 )
@@ -305,8 +354,11 @@ def test_FalconDecoder_inference(
 ):
     model_config = get_model_config(model_config_str)
     compute_grid_size = pcie_devices[0].compute_with_storage_grid_size()
-    if len(pcie_devices) < model_config["NUM_DEVICES"]:
-        pytest.skip(f"Requires at least {model_config['NUM_DEVICES']} devices to run")
+    if len(pcie_devices) == 1:
+        print(f"Emulating sequentially on 1 device")
+        pcie_devices = pcie_devices * 4
+    # if len(pcie_devices) < model_config["NUM_DEVICES"]:
+    #     pytest.skip(f"Requires at least {model_config['NUM_DEVICES']} devices to run")
     if compute_grid_size.x < model_config["MAX_GRID_SIZE"][0] or compute_grid_size.y < model_config["MAX_GRID_SIZE"][1]:
         pytest.skip(f"Requires grid size of at least {model_config['MAX_GRID_SIZE']} to run")
     tt_cache_path = get_tt_cache_path(

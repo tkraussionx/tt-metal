@@ -83,6 +83,20 @@ def run_test_FalconDecoder_inference(
         layer_past = None
 
         tt_decoder_input = torch2tt_tensor(decoder_input.unsqueeze(1), device)
+
+        tt_decoder_input_host = torch.chunk(decoder_input.unsqueeze(1), len(devices), -1)
+        tt_decoder_input = []
+        for i in range(len(devices)):
+            tt_decoder_input.append(
+                torch2tt_tensor(
+                    tt_decoder_input_host[i],
+                    devices[i],
+                    tt_layout=tt_lib.tensor.Layout.TILE,
+                    tt_memory_config=model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"],
+                    tt_dtype=model_config["WORD_EMBEDDING_OUTPUT_DTYPE"],
+                )
+            )
+
         tt_attention_mask = torch2tt_tensor(
             (attention_mask_bool * -100000).expand(-1, configuration.n_head, -1, -1),
             device,
