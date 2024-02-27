@@ -404,7 +404,7 @@ def run_falcon_demo_kv(
     logger.info(f"total inference time: {round(measurements['inference_total'], 5)} s")
     logger.info(f"inference throughput prefill: {round(measurements['inference_throughput_prefill'], 5)} 1/s")
     logger.info(
-        f"inference throughput prefill | seq_len={num_input_tokens}: {round(measurements['inference_throughput_prefill']*num_input_tokens, 5)} tok/sec"
+        f"inference throughput prefill | seq_len={num_input_tokens}: {round(measurements['inference_throughput_prefill']*max_seq_len, 5)} tok/sec"
     )
     logger.info(f"inference throughput decode: {round(measurements['inference_throughput_decode'], 5)} 1/s")
     logger.info(
@@ -429,7 +429,7 @@ def test_demo(
         model_version="tiiuae/falcon-7b-instruct",
         batch_size=32,
         num_layers=32,
-        max_seq_len=1024,
+        max_seq_len=2048,
         model_config=get_model_config("BFLOAT16-DRAM"),
         model_location_generator=model_location_generator,
         device=device,
