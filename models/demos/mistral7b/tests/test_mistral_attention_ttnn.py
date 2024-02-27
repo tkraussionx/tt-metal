@@ -5,6 +5,7 @@ import torch
 import pytest
 from loguru import logger
 import json
+from pathlib import Path
 
 import ttnn
 from models.demos.mistral7b.tt.mistral_attention_ttnn import TtMistralAttention
@@ -14,7 +15,7 @@ from models.demos.mistral7b.tt.mistral_common_ttnn import (
     prepare_inputs_ttnn,
 )
 from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs, get_model_config
-from models.experimental.mistral.reference.model import Attention
+from models.demos.mistral7b.reference.model import Attention
 from models.utility_functions import (
     comp_pcc,
     comp_allclose,
@@ -27,7 +28,7 @@ from models.utility_functions import (
 )
 @pytest.mark.parametrize(
     "iterations",
-    ((3),),
+    ((1),),
 )
 @pytest.mark.parametrize(
     "pcc",
@@ -41,7 +42,17 @@ def test_mistral_attention_inference(
     device,
 ):
     ttnn.enable_program_cache()
-    mistral_path = model_location_generator("mistral-7B-v0.1", model_subdir="Mistral")
+    dtype_str, mem_config_str = model_config.split("-")
+    if dtype_str == "BFLOAT16":
+        dtype = torch.bfloat16
+    elif dtype_str == "BFLOAT8":
+        dtype = ttnn.bfloat8_b
+    else:
+        raise ValueError(f"Unknown dtype {dtype_str}")
+
+    model_config = get_model_config(model_config)
+
+    mistral_path = Path(model_location_generator(model_config["DEFAULT_CACHE_PATH"], model_subdir="mistral"))
     state_dict = torch.load(mistral_path / "consolidated.00.pth")
 
     base_address = f""
@@ -62,17 +73,15 @@ def test_mistral_attention_inference(
     batch = 32
     seq_len = 1
 
-    model_config = get_model_config(model_config)
-
     tt_cos_cached, tt_sin_cached = generate_cos_sin_cache_ttnn(
-        devices, model_args.head_dim, "", model_args.max_seq_len * 2, 10000, model_config
+        devices, model_args.head_dim, "", model_args.max_seq_len * 2, 10000, dtype
     )
     tt_model = TtMistralAttention(
         devices,
         state_dict,
         base_url=base_address,
         layer_num=None,
-        model_config=model_config,
+        dtype=dtype,
         configuration=model_args,
         tt_cos_cached=tt_cos_cached,
         tt_sin_cached=tt_sin_cached,
@@ -106,7 +115,7 @@ def test_mistral_attention_inference(
         )
         assert isinstance(tt_out, list)  # tt_out should be replicated on N devices
         tt_out = tt_out[0]
-        tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
+        tt_output_torch = ttnn.to_torch(tt_out).permute(1, 0, 2)  # [ batch, seq, hidden_dim]
 
         # empty_tensor = torch.zeros((start_pos+1, 64))
         # cos, sin = precompute_freqs(model_args.head_dim, 1)

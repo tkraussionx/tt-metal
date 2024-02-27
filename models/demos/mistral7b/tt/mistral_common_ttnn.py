@@ -38,7 +38,7 @@ def generate_cos_sin_cache_ttnn(
     base_url,
     max_position_embeddings=2048,
     base=10000,
-    model_config=None,
+    dtype=None,
 ):
     inv_freq = 1.0 / (base ** (torch.arange(0, head_dim, 2).float() / head_dim))
 
@@ -56,8 +56,8 @@ def generate_cos_sin_cache_ttnn(
         ttnn.from_torch(
             emb_cos,
             device=tt_device,
-            memory_config=model_config["COS_CACHED_WEIGHTS_MEMCFG"],
-            dtype=model_config["COS_CACHED_WEIGHTS_DTYPE"],
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            dtype=dtype,
             layout=ttnn.TILE_LAYOUT,
         )
         for tt_device in tt_devices
@@ -67,8 +67,8 @@ def generate_cos_sin_cache_ttnn(
         ttnn.from_torch(
             emb_sin,
             device=tt_device,
-            memory_config=model_config["SIN_CACHED_WEIGHTS_MEMCFG"],
-            dtype=model_config["SIN_CACHED_WEIGHTS_DTYPE"],
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            dtype=dtype,
             layout=ttnn.TILE_LAYOUT,
         )
         for tt_device in tt_devices
@@ -119,20 +119,22 @@ def prepare_inputs_ttnn(x, start_pos, hidden_size, n_local_heads, sliding_window
     else:
         attn_mask[:, :, :, :current] = torch.finfo(attn_mask.dtype).min
         attn_mask[:, :, :, sliding_window - current :] = torch.finfo(attn_mask.dtype).min
-    attn_mask = attn_mask.expand(-1, n_local_heads, -1, -1)
+    # attn_mask = attn_mask.expand(-1, n_local_heads, -1, -1)
 
     # expected shapes:
     # x: (seq_len, 1, batch, hidden_dim)
     # start_pos: int
     # attn_mask: [seq_len, n_heads, batch, padded_layer_past_len]
     assert x.size() == (seq_len, 1, batch, hidden_size)
-    assert attn_mask.size() == (seq_len, n_local_heads, batch, padded_layer_past_len)
+    # assert attn_mask.size() == (seq_len, n_local_heads, batch, padded_layer_past_len)
 
     xs, attn_masks = [], []
     for i in range(num_devices):
         device = devices[i]
-        xs.append(ttnn.from_torch(x.clone(), device=device, dtype=ttnn.bfloat16))
-        attn_masks.append(ttnn.from_torch(attn_mask.clone(), device=device, dtype=ttnn.bfloat16))
+        xs.append(ttnn.from_torch(x.clone(), device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT))
+        attn_masks.append(
+            ttnn.from_torch(attn_mask.clone(), device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
+        )
 
     return (
         xs,

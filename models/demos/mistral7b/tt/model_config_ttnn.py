@@ -93,7 +93,7 @@ def pretty_print_model_config(model_config):
     for key, val in model_config.items():
         if key.endswith("MEMCFG"):
             print_str.append(f"{key}: {val.buffer_type}")
-        elif key.endswith("DTYPE") or key.endswith("BOOL") or key.endswith("PROGCFG"):
+        elif key.endswith("DTYPE") or key.endswith("BOOL") or key.endswith("PROGCFG") or key == "DEFAULT_CACHE_PATH":
             print_str.append(f"{key}: {val}")
         else:
             raise NotImplementedError(f"Unknown key: {key}")
@@ -102,7 +102,9 @@ def pretty_print_model_config(model_config):
 
 
 def get_model_config(model_config_str, num_devices=1):
-    assert model_config_str in ACCEPTABLE_MODEL_CONFIG_STRS
+    assert (
+        model_config_str in ACCEPTABLE_MODEL_CONFIG_STRS
+    ), f"Model config {model_config_str} is not in {ACCEPTABLE_MODEL_CONFIG_STRS}"
     DRAM_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
     L1_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
     BFP8_DTYPE = ttnn.bfloat8_b
@@ -120,6 +122,7 @@ def get_model_config(model_config_str, num_devices=1):
         "DEFAULT_DTYPE": dtype,
         "DEFAULT_MEMCFG": mem_config,
         "MOVE_DECODER_OUTPUT_BOOL": False,
+        "DEFAULT_CACHE_PATH": "/proj_sw/user_dev/hf_data/mistral/mistral-7B-v0.1",
     }  # DEFAULT_MEMCFG also used to determine banking for ttl.device.InitializeDevice
     model_config.update({f"{key}_MEMCFG": mem_config for key in OP_KEYS if key not in NO_MEMCFG})
     model_config.update({f"{key}_DTYPE": dtype for key in OP_KEYS if key not in NO_DTYPE})
@@ -260,7 +263,7 @@ def get_model_config(model_config_str, num_devices=1):
     model_config["CREATE_QKV_HEADS_OUTPUT_MEMCFG"] = HEIGHT_SHARDED_MEMCFG
 
     # uncomment if need to see all the configs
-    logger.debug(f"Falcon model config: \n{pretty_print_model_config(model_config)}")
+    # logger.debug(f"Falcon model config: \n{pretty_print_model_config(model_config)}")
 
     return model_config
 
