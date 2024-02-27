@@ -41,6 +41,8 @@ class TtRMSNorm(nn.Module):
         self.weight = torch2tt_tensor(
             self.state_dict[rmsNorm_weight].unsqueeze(0).expand(32, -1),
             self.device,
+            #     tt_memory_config=self.model_config["LAYERNORM_WEIGHTS_MEMCFG"],
+            #     tt_dtype=self.model_config["LAYERNORM_WEIGHTS_DTYPE"],
         )
 
     def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:

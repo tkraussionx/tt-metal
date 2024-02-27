@@ -9,79 +9,39 @@ from dataclasses import dataclass
 
 
 OP_KEYS = (
-    # Mistral OP keys
+    # MLP
     "FF1_MM_WEIGHTS",  # gate_proj
     "FF1_MM_OUTPUT",
     "FF2_MM_WEIGHTS",  # down proj
     "FF2_MM_OUTPUT",
     "FF3_MM_WEIGHTS",  # up proj
     "FF3_MM_OUTPUT",
-    # Mistral RMSNorm
-    "RMS_NORM_WEIGHTS",
-    # TODO Clean old falcon keys
-    # Inputs
-    "INPUT",
-    "ATTN_MASK",
-    # Embeddings
-    "WORD_EMBEDDING_WEIGHTS",
-    "WORD_EMBEDDING_OUTPUT",
-    # Decoder
-    "INPUT_LAYERNORM_WEIGHTS",
-    "INPUT_LAYERNORM_BIAS",
-    "INPUT_LAYERNORM_OUTPUT",
+    # LayerNorm
+    "LAYERNORM_WEIGHTS",
+    "LAYERNORM_BIAS",
+    "LAYERNORM_OUTPUT",
     # Rotary
     "SIN_CACHED_WEIGHTS",
     "COS_CACHED_WEIGHTS",
     # Attention
-    # "WQ_MM_WEIGHTS",
-    # "WK_MM_WEIGHTS",
-    # "WV_MM_WEIGHTS",
     "WO_MM_WEIGHTS",
     "FUSED_QKV_MM_WEIGHTS",
-    "FUSED_QKV_MM_OUTPUT",
-    "CREATE_QKV_HEADS_OUTPUT",
-    "ROTARY_EMBEDDING_OUTPUT",
-    "PRE_SOFTMAX_MM_OUTPUT",
-    "POST_SOFTMAX_MM_OUTPUT",
-    "CONCAT_HEADS_OUTPUT",
-    "K_CACHE_SLICE_OUTPUT",
-    "V_CACHE_SLICE_OUTPUT",
+    # "CREATE_QKV_HEADS_OUTPUT",
+    # "PRE_SOFTMAX_MM_OUTPUT",
+    # "POST_SOFTMAX_MM_OUTPUT",
+    "KEYS_OUTPUT_MEMCFG",
+    "VALUES_OUTPUT_MEMCFG",
     "K_TRANSPOSED_OUTPUT",
-    "PRE_SOFTMAX_SCALE_OUTPUT",
-    "PRE_SOFTMAX_MASK_OUTPUT",
-    "SOFTMAX_OUTPUT",
-    "SELFOUT_MM_WEIGHTS",
-    "SELFOUT_MM_OUTPUT",
-    # Decoder Cont
-    "PARALLEL_ATTN_ADD_OUTPUT",
-    "DROPOUT_ADD_OUTPUT",
-    # Model
-    "LN_F_WEIGHTS",
-    "LN_F_BIAS",
-    "LN_F_OUTPUT",
-    # LM Head
-    "LM_HEAD_MM_WEIGHTS",
-    "LM_HEAD_MM_OUTPUT",
+    # Manual
+    "KV_CACHE",
+    "ATTN_ACT",
+    "ATTN_MASK",
 )
 
-NO_MEMCFG = ("SOFTMAX_OUTPUT",)
+NO_MEMCFG = ()
 
 NO_DTYPE = (
-    # Decoder
-    "INPUT_LAYERNORM_OUTPUT",
-    # Attention
-    "ROTARY_EMBEDDING_OUTPUT",
-    "CREATE_QKV_HEADS_OUTPUT",
-    "K_TRANSPOSED_OUTPUT",
-    "PRE_SOFTMAX_SCALE_OUTPUT",
-    "PRE_SOFTMAX_MASK_OUTPUT",
-    "SOFTMAX_OUTPUT",
-    "CONCAT_HEADS_OUTPUT",
-    # Decoder Cont
-    "PARALLEL_ATTN_ADD_OUTPUT",
-    "DROPOUT_ADD_OUTPUT",
-    # Model
-    "LN_F_OUTPUT",
+    # "CONCAT_HEADS_OUTPUT",
 )
 
 ACCEPTABLE_MODEL_CONFIG_STRS = ("BFLOAT16-DRAM", "BFLOAT16-L1", "BFLOAT8-DRAM", "BFLOAT8-L1")
@@ -94,6 +54,8 @@ def pretty_print_model_config(model_config):
             print_str.append(f"{key}: {val.buffer_type}")
         elif key.endswith("DTYPE") or key.endswith("BOOL") or key.endswith("PROGCFG"):
             print_str.append(f"{key}: {val}")
+        elif key.endswith("CACHE_PATH"):
+            continue
         else:
             raise NotImplementedError(f"Unknown key: {key}")
 
@@ -130,21 +92,27 @@ def get_model_config(model_config_str, num_devices=1):
         if "MM_WEIGHTS_DTYPE" in key:
             model_config[key] = BFP8_DTYPE
 
-    if model_config_str in ("BFLOAT16-L1", "BFLOAT8-L1"):
-        model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"] = L1_MEMCFG
-        model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"] = L1_MEMCFG
-        model_config["V_CACHE_SLICE_OUTPUT_MEMCFG"] = L1_MEMCFG
-        model_config["K_TRANSPOSED_OUTPUT_MEMCFG"] = L1_MEMCFG
-        model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"] = L1_MEMCFG
-        model_config["PRE_SOFTMAX_SCALE_OUTPUT_MEMCFG"] = L1_MEMCFG
-        model_config["PRE_SOFTMAX_MASK_OUTPUT_MEMCFG"] = L1_MEMCFG
-        model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"] = L1_MEMCFG
-        model_config["FF1_MM_OUTPUT_MEMCFG"] = L1_MEMCFG
-        model_config["FF3_MM_OUTPUT_MEMCFG"] = L1_MEMCFG
-        model_config["FF2_MM_OUTPUT_MEMCFG"] = L1_MEMCFG
-        model_config["FF1_FF3_MUL_OUTPUT_MEMCFG"] = L1_MEMCFG
-    else:
-        model_config["FF1_FF3_MUL_OUTPUT_MEMCFG"] = DRAM_MEMCFG
+    # Force the following to L1
+    # if model_config_str in ("BFLOAT16-L1", "BFLOAT8-L1"):
+    model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"] = L1_MEMCFG
+    model_config["KEYS_OUTPUT_MEMCFG"] = L1_MEMCFG
+    model_config["VALUES_OUTPUT_MEMCFG"] = L1_MEMCFG
+    # model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"] = L1_MEMCFG
+    # model_config["V_CACHE_SLICE_OUTPUT_MEMCFG"] = L1_MEMCFG
+    model_config["K_TRANSPOSED_OUTPUT_MEMCFG"] = L1_MEMCFG
+    model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"] = L1_MEMCFG
+    model_config["PRE_SOFTMAX_SCALE_OUTPUT_MEMCFG"] = L1_MEMCFG
+    model_config["PRE_SOFTMAX_MASK_OUTPUT_MEMCFG"] = L1_MEMCFG
+    model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"] = L1_MEMCFG
+    model_config["FF1_MM_OUTPUT_MEMCFG"] = L1_MEMCFG
+    model_config["FF3_MM_OUTPUT_MEMCFG"] = L1_MEMCFG
+    model_config["FF2_MM_OUTPUT_MEMCFG"] = L1_MEMCFG
+    model_config["FF1_FF3_MUL_OUTPUT_MEMCFG"] = L1_MEMCFG
+    # model_config["KV_CACHE_MEMCFG"] = L1_MEMCFG
+    model_config["ATTN_ACT_MEMCFG"] = L1_MEMCFG
+    model_config["ATTN_MASK_MEMCFG"] = L1_MEMCFG
+    # else:
+    # model_config["FF1_FF3_MUL_OUTPUT_MEMCFG"] = DRAM_MEMCFG
 
     # FF1 & FF3 Matmul Config Variables
     # TODO: N300 currently would only have 8x7 available until dispatch moved to eth core
@@ -259,7 +227,7 @@ def get_model_config(model_config_str, num_devices=1):
     model_config["CREATE_QKV_HEADS_OUTPUT_MEMCFG"] = HEIGHT_SHARDED_MEMCFG
 
     # uncomment if need to see all the configs
-    # logger.debug(f"Falcon model config: \n{pretty_print_model_config(model_config)}")
+    logger.debug(f"Falcon model config: \n{pretty_print_model_config(model_config)}")
 
     return model_config
 
@@ -290,30 +258,3 @@ class TtModelArgs:
         out_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
     else:
         out_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
-
-
-# model_config_entries = {
-#   "architectures": [
-#     "MistralForCausalLM"
-#   ],
-#   "bos_token_id": 1,
-#   "eos_token_id": 2,
-#   "hidden_act": "silu",
-#   "hidden_size": 4096, # dim
-#   "initializer_range": 0.02,
-#   "intermediate_size": 14336,
-#   "max_position_embeddings": 32768,
-#   "model_type": "mistral",
-#   "num_attention_heads": 32, #n_heads
-#   "num_hidden_layers": 32, # n_layers
-#   "head_dim": 128, # hidden_size / n_heads = 4096 / 32 = 128
-#   "num_key_value_heads": 8, #n_kv_heads
-#   "rms_norm_eps": 1e-05, # norm_eps
-#   "rope_theta": 10000.0,
-#   "sliding_window": 4096, # sliding window
-#   "tie_word_embeddings": False,
-#   "torch_dtype": "bfloat16",
-#   "transformers_version": "4.34.0.dev0",
-#   "use_cache": True,
-#   "vocab_size": 32000 # vocab size
-# }

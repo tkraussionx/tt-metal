@@ -106,7 +106,7 @@ def freqs_to_rotation_matrix(cos_freqs, sin_freqs):
     return rot_emb_matrix
 
 
-def prepare_inputs(x, start_pos, hidden_size, n_local_heads, sliding_window, devices, num_devices):
+def prepare_inputs(x, start_pos, hidden_size, n_local_heads, sliding_window, devices, num_devices, model_config):
     """
     Prepare inputs for decode mode. Assume that current token is at
     start_pos, and KV cache has valid data up to start_pos.
@@ -142,8 +142,8 @@ def prepare_inputs(x, start_pos, hidden_size, n_local_heads, sliding_window, dev
     xs, attn_masks = [], []
     for i in range(num_devices):
         device = devices[i]
-        xs.append(torch2tt_tensor(x.clone(), device))
-        attn_masks.append(torch2tt_tensor(attn_mask.clone(), device))
+        xs.append(torch2tt_tensor(x.clone(), device, tt_memory_config=model_config["ATTN_ACT_MEMCFG"]))
+        attn_masks.append(torch2tt_tensor(attn_mask.clone(), device, tt_memory_config=model_config["ATTN_MASK_MEMCFG"]))
 
     return (
         xs,
