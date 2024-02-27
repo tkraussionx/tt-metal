@@ -20,6 +20,8 @@ from tt_lib.utils import (
     convert_weights_2d_matrix,
 )
 
+from ttnn.types import ShardOrientation
+
 from tests.ttnn.utils_for_testing import assert_with_pcc
 from models.utility_functions import skip_for_wormhole_b0
 
@@ -41,7 +43,7 @@ max_grid_size = (9, 12)
 
 def get_sharded_config(input_2d_height):
     max_nshards = min(input_2d_height, max_grid_size[0] * max_grid_size[1])
-    nshards = max_nshards
+    nshards = input_2d_height
     while nshards > 0:
         if input_2d_height % nshards == 0:
             break
@@ -91,9 +93,9 @@ def get_block_sharded_config(batch_size, height, num_channels):
     [
         # [2, 256, 28, 28],
         (8, 64, 64, 56, 56, 2, 2, 98, (12, 9), True),
-        # (8, 256, 256, 56, 56, 2, 2, 98, (12, 9), True),
-        # (8, 512, 512, 28, 28, 2, 2, 80, (10, 8), False),
-        # (8, 1024, 1024, 14, 14, 2, 2, 56, (7, 8), False),
+        (8, 256, 256, 56, 56, 2, 2, 98, (12, 9), True),
+        (8, 512, 512, 28, 28, 2, 2, 80, (10, 8), False),
+        (8, 1024, 1024, 14, 14, 2, 2, 56, (7, 8), False),
     ],
 )
 # @pytest.mark.parametrize("scale_h", [2])
@@ -134,7 +136,7 @@ def test_downsample_multi_core(
         buffer_type=ttl.tensor.BufferType.L1,
     )
     A_cl_host = ttnn.to_layout(A_cl_host, ttnn.TILE_LAYOUT)
-    A_interleaved = A_cl_host  # ttnn.to_memory_config(A_cl_host, memory_config=mem_config)
+    A_interleaved = ttnn.to_memory_config(A_cl_host, memory_config=mem_config)
     print(f"A_interleaved shape: {A_interleaved.shape}")
     input_2d_height = A_interleaved.shape[2]
     input_2d_width = A_interleaved.shape[3]
@@ -147,13 +149,11 @@ def test_downsample_multi_core(
     input_shard_width = input_2d_width if height_sharded else ((int)(input_2d_width / grid_size[1]))
 
     sharded_memory_layout = ttnn.ShardStrategy.HEIGHT if height_sharded else ttnn.ShardStrategy.BLOCK
-    sharded_memory_orientation = (
-        ttnn.ShardOrientation.ROW_MAJOR if height_sharded else ttnn.ShardOrientation.COLUMN_MAJOR
-    )
-
     # sharded_memory_orientation = (
-    #     ttl.tensor.ShardOrientation.ROW_MAJOR if height_sharded else ttl.tensor.ShardOrientation.COL_MAJOR
+    #    ttnn.ShardOrientation.ROW_MAJOR if height_sharded else ttnn.ShardOrientation.COLUMN_MAJOR
     # )
+
+    sharded_memory_orientation = ShardOrientation.ROW_MAJOR if height_sharded else ShardOrientation.COLUMN_MAJOR
 
     print(f"grid_size={grid_size}")
     print(f"shard_memory_layout={sharded_memory_layout}")
@@ -199,26 +199,47 @@ def test_downsample_multi_core(
     print("done")
     # abhinav_grid_size = get_sharded_config(input_2d_width, input_2d_height, ttnn.ShardStrategy.HEIGHT if height_sharded else ttnn.ShardStrategy.BLOCK)
     # print(f"abhinav_grid_size --> {abhinav_grid_size}&& tn grid size --> {tn_grid_size}")
-    tn_grid_size = (
-        get_sharded_config(input_shard_height) if height_sharded else get_block_sharded_config(1, input_shard_height, 1)
-    )
+    # tn_grid_size = (
+    #     get_sharded_config(input_shard_height) if height_sharded else get_block_sharded_config(1, input_shard_height, 1)
+    # )
     # in_sharded_memory = ttnn.create_sharded_memory_config(
     #     tn_grid_size, in_shard_shape, sharded_memory_layout, sharded_memory_orientation
     # )
 
     print(f"tn_grid_size --> {tn_grid_size}")
+    num_cores_nhw = num_cores
+    num_cores_w = grid_size[0]
+    num_cores_h = grid_size[1]
+    if height_sharded and num_cores_nhw % num_cores_w > 0:
+        assert num_cores_h * num_cores_w > num_cores_nhw
+        first_range_num_cores_h = num_cores_nhw // num_cores_w
+        assert num_cores_nhw % num_cores_w < num_cores_w
+
+        tn_grid_size = [
+            ttnn.CoreGrid(x=num_cores_w, y=first_range_num_cores_h),
+            ttnn.CoreGrid(x=(num_cores_nhw % num_cores_w), y=first_range_num_cores_h + 1),
+        ]
+    else:
+        if height_sharded:
+            assert num_cores_nhw == num_cores_h * num_cores_w
+        tn_grid_size = ttnn.CoreGrid(x=num_cores_w, y=num_cores_h)
+        # tn_grid_size = ttnn.CoreGrid(y = num_cores_w, x= num_cores_h)
+
+    print(f"tn_grid_size --> {tn_grid_size}")
     in_sharded_memory = ttnn.create_sharded_memory_config(
-        # [batch_size, input_2d_height, input_2d_width, input_channels],
-        [input_shard_height, input_shard_width],
+        # [input_2d_height, input_2d_width],
+        # [input_shard_height, input_shard_width],
+        [input_shard_height, input_shard_width] if height_sharded else [input_shard_width, input_shard_height],
         tn_grid_size,
         sharded_memory_layout,
-        use_height_and_width_as_shard_shape=height_sharded,
+        sharded_memory_orientation,
+        use_height_and_width_as_shard_shape=True,
     )
 
     A_sharded = ttnn.to_memory_config(A_interleaved, memory_config=in_sharded_memory)
     downsample_params = [batch_size, input_height, input_width, stride_h, stride_w]
     A_downampled_sharded = ttnn.downsample(A_sharded, downsample_params, dtype=dtype)  # output_dtype=dtype)
-    return
+    """
     output_tensor = ttnn.to_torch(A_downampled_sharded)
 
     write_to_file("actual.txt", tt_input)
@@ -239,7 +260,7 @@ def test_downsample_multi_core(
 
     print("done")
 
-    """
+
     scale_factor = (scale_h, scale_w, 1)
     input_tensor = ttnn.from_torch(tt_input, device=device, layout=ttnn.TILE_LAYOUT)
     input_tensor = ttnn.reshape(input_tensor, (1, 1, batch_size * h * w , c))
