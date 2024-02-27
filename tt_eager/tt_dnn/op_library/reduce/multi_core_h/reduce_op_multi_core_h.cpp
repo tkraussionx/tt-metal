@@ -29,8 +29,8 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
     std::cout << "Creating prog for: reduce_multi_core_h" << std::endl;
     // tt_metal::Program program = tt_metal::CreateProgram();
     operation::ProgramWithCallbacks p_with_call;
-    p_with_call.program.add_global_buffer(a.device_buffer());
-    p_with_call.program.add_global_buffer(output.device_buffer());
+    // p_with_call.program.add_global_buffer(a.device_buffer());
+    // p_with_call.program.add_global_buffer(output.device_buffer());
     tt::DataFormat src0_cb_data_format = tt_metal::datatype_to_dataformat_converter(a.dtype());
     uint32_t src0_single_tile_size = tt_metal::detail::TileSize(src0_cb_data_format);
     tt::DataFormat scaler_cb_data_format = DataFormat::Float16_b;

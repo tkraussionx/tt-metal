@@ -73,8 +73,8 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
     auto src_buffer = input.buffer();
 
     auto dst_buffer = output.buffer();
-    program.add_global_buffer(input.device_buffer());
-    program.add_global_buffer(output.device_buffer());
+    // program.add_global_buffer(input.device_buffer());
+    // program.add_global_buffer(output.device_buffer());
 
     auto all_cores = shard_spec.grid;
     uint32_t num_cores_x = grid_size.x;
