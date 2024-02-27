@@ -156,7 +156,6 @@ class TtFalconAttention:
         self.devices = devices
         self.state_dict = state_dict
         self.model_config = model_config
-        self.temperature = 0.92
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -263,7 +262,6 @@ class TtFalconAttention:
         assert not output_attentions
 
         if llm_mode == "prefill":
-            assert False, "Not supported"
             batch = hidden_states[0].shape()[0]
             q_len = hidden_states[0].shape()[2]
             assert layer_past is not None
@@ -320,6 +318,7 @@ class TtFalconAttention:
         query_layer = []
         key_layer = []
         value_layer = []
+        breakpoint()
         for i in range(len(fused_query_key_value)):
             q_layer, k_layer, v_layer = tt_lib.tensor.nlp_create_qkv_heads(
                 fused_query_key_value[i],
@@ -332,6 +331,7 @@ class TtFalconAttention:
             key_layer.append(k_layer)
             value_layer.append(v_layer)
             fused_query_key_value[i].deallocate(True)
+        breakpoint()
 
         #########################
         ### ROTARY EMBEDDINGS ###
@@ -373,6 +373,7 @@ class TtFalconAttention:
                 )
             for i in range(len(key_layer)):
                 key_layer[i] = tt_lib.tensor.interleaved_to_sharded(key_layer[i], sharded_mem_config=kv_cache_memcfg)
+        breakpoint()
 
         ######################
         ### PRE-SOFTMAX MM ###
@@ -414,8 +415,6 @@ class TtFalconAttention:
         ###############
         ### SOFTMAX ###
         ###############
-        # Is this needed
-        # attn_weights = tt_lib.tensor.mul_unary(attn_weights, 1 / self.temperature)
         softmax_progcfg = self.model_config["SOFTMAX_PROGCFG"]
         if llm_mode == "decode":
             softmax_progcfg.block_w = padded_layer_past_len // 32

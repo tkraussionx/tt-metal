@@ -313,7 +313,7 @@ def test_sharded_matmul_1d_in0_multi_chip(
 @pytest.mark.parametrize(
     "batch, seq_len, head_dim, num_q_heads, num_kv_heads, read_from_input_tensor_kv",
     (
-        (32, 1, 64, 16, 1, False),
+        (128, 1, 64, 16, 1, False),
         (32, 1, 64, 16, 1, True),
     ),
 )
