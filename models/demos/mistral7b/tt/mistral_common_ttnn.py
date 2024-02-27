@@ -38,7 +38,7 @@ def generate_cos_sin_cache_ttnn(
     base_url,
     max_position_embeddings=2048,
     base=10000,
-    model_config=None,
+    dtype=None,
 ):
     inv_freq = 1.0 / (base ** (torch.arange(0, head_dim, 2).float() / head_dim))
 
@@ -56,8 +56,8 @@ def generate_cos_sin_cache_ttnn(
         ttnn.from_torch(
             emb_cos,
             device=tt_device,
-            memory_config=model_config["COS_CACHED_WEIGHTS_MEMCFG"],
-            dtype=model_config["COS_CACHED_WEIGHTS_DTYPE"],
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            dtype=dtype,
             layout=ttnn.TILE_LAYOUT,
         )
         for tt_device in tt_devices
@@ -67,8 +67,8 @@ def generate_cos_sin_cache_ttnn(
         ttnn.from_torch(
             emb_sin,
             device=tt_device,
-            memory_config=model_config["SIN_CACHED_WEIGHTS_MEMCFG"],
-            dtype=model_config["SIN_CACHED_WEIGHTS_DTYPE"],
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            dtype=dtype,
             layout=ttnn.TILE_LAYOUT,
         )
         for tt_device in tt_devices

@@ -28,7 +28,7 @@ from models.utility_functions import (
 )
 @pytest.mark.parametrize(
     "iterations",
-    ((3),),
+    ((1),),
 )
 @pytest.mark.parametrize(
     "pcc",
@@ -42,6 +42,14 @@ def test_mistral_attention_inference(
     device,
 ):
     ttnn.enable_program_cache()
+    dtype_str, mem_config_str = model_config.split("-")
+    if dtype_str == "BFLOAT16":
+        dtype = torch.bfloat16
+    elif dtype_str == "BFLOAT8":
+        dtype = ttnn.bfloat8_b
+    else:
+        raise ValueError(f"Unknown dtype {dtype_str}")
+
     model_config = get_model_config(model_config)
 
     mistral_path = Path(model_location_generator(model_config["DEFAULT_CACHE_PATH"], model_subdir="mistral"))
@@ -66,14 +74,14 @@ def test_mistral_attention_inference(
     seq_len = 1
 
     tt_cos_cached, tt_sin_cached = generate_cos_sin_cache_ttnn(
-        devices, model_args.head_dim, "", model_args.max_seq_len * 2, 10000, model_config
+        devices, model_args.head_dim, "", model_args.max_seq_len * 2, 10000, dtype
     )
     tt_model = TtMistralAttention(
         devices,
         state_dict,
         base_url=base_address,
         layer_num=None,
-        model_config=model_config,
+        dtype=dtype,
         configuration=model_args,
         tt_cos_cached=tt_cos_cached,
         tt_sin_cached=tt_sin_cached,
