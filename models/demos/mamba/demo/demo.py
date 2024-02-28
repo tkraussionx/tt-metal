@@ -27,8 +27,8 @@ def get_tt_metal_model(version: MambaPretrainedModelName):
 
 
 def get_tokenizer():
-    tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
-    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b", padding=True)
+    tokenizer.pad_token_id = tokenizer.eos_token_id
     return tokenizer
 
 
@@ -43,7 +43,7 @@ def display_tokens(tokens: List[str]):
 def run_demo(
     prompts: List[str],
     model_type: str,
-    model_version: MambaPretrainedModelName = "state-spaces/mamba-130m",
+    model_version: MambaPretrainedModelName = "state-spaces/mamba-370m",
     generated_sequence_length: int = 32,
     display: bool = True,
 ):
@@ -66,7 +66,7 @@ def run_demo(
             next_token = torch.argmax(probs, dim=-1)
             sequences = torch.cat([sequences, next_token], dim=1)
 
-            decoded = tokenizer.batch_decode(sequences)
+            decoded = tokenizer.batch_decode(sequences, skip_special_tokens=True)
             all_decoded_sequences.append(decoded)
 
             if display:
