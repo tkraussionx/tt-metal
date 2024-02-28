@@ -372,7 +372,18 @@ class TtFalconAttention:
         print(f"K cache update")
         if llm_mode == "prefill":
             # tt_lib.tensor.fill_cache(layer_past[0], key_layer, user_id)
-            pass  # TODO: Implement fill_cache
+
+            key_layer_interleaved = []
+            for i in range(len(key_layer)):  # TODO: remove and use sharded inputs for matmul
+                key_layer_interleaved.append(
+                    tt_lib.tensor.sharded_to_interleaved(
+                        key_layer[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
+                    )
+                )
+            key_cache = tt_lib.tensor.concat(key_layer_interleaved, 1)
+            for i in range(len(key_layer_interleaved)):  # TODO: remove and use sharded inputs for matmul
+                key_layer_interleaved[i].deallocate(True)
+
         elif llm_mode == "decode":
             kv_cache_memcfg = self.model_config["KV_CACHE_SLICE_OUTPUT_MEMCFG"]
             if kv_cache_memcfg.is_sharded():
@@ -416,17 +427,56 @@ class TtFalconAttention:
                 )
             )
             key_layer[i].deallocate(True)
+
+        # Q * KˆT MM
         attn_weights = []
         if llm_mode == "prefill":
-            # TODO: concat query layer and key layer transposed and then do matmul
-            pre_softmax_mm_output_memcfg = memcfg_for_seqlen(
-                self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"], rows_dim
-            )
-            attn_weights = tt_lib.tensor.matmul(
-                query_layer,
-                key_layer_transposed,
-                output_mem_config=pre_softmax_mm_output_memcfg,
-            )
+            for i in range(len(query_layer)):  # TODO: remove and use sharded inputs for matmul
+                query_layer[i] = tt_lib.tensor.sharded_to_interleaved(
+                    query_layer[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
+                )
+            for i in range(len(key_layer_transposed)):  # TODO: remove and use sharded inputs for matmul
+                key_layer_transposed[i] = tt_lib.tensor.sharded_to_interleaved(
+                    key_layer_transposed[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
+                )
+
+            pre_softmax_mm_output_memcfg = self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"]
+            pre_softmax_mm_output_shard_shape = pre_softmax_mm_output_memcfg.shard_spec.shape
+            pre_softmax_mm_output_shard_shape[-2] = pre_softmax_mm_output_shard_shape[-2] * q_len
+            pre_softmax_mm_output_memcfg.shard_spec.shape = pre_softmax_mm_output_shard_shape
+
+            print(f"Before Q*KˆT")
+            for i in range(len(query_layer)):
+                attn_weights.append(
+                    # tt_lib.tensor.matmul(
+                    tt_lib.operations.primary.matmul(
+                        query_layer[i],
+                        key_layer_transposed[i],
+                        # compute_with_storage_grid_size=self.devices[i].compute_with_storage_grid_size(),
+                        # output_mem_config=pre_softmax_mm_output_memcfg,
+                        output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+                        output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
+                    )
+                )
+                query_layer[i].deallocate(True)
+                key_layer_transposed[i].deallocate(True)
+
+            print(f"After Q*KˆT")
+            print(f"len(attn_weights): {len(attn_weights)}")
+
+            print(f"pre_softmax_mm_output_memcfg shard shape: {pre_softmax_mm_output_memcfg.shard_spec.shape}")
+            print(f"attn_weights[0] shape: {attn_weights[0].shape()}")
+
+            for i in range(len(attn_weights)):  # TODO: remove this and use as output memcfg above
+                attn_weights[i] = tt_lib.tensor.interleaved_to_sharded(
+                    attn_weights[i], sharded_mem_config=pre_softmax_mm_output_memcfg
+                )
+
+            # attn_weights = tt_lib.tensor.matmul(
+            #     query_layer,
+            #     key_layer_transposed,
+            #     output_mem_config=pre_softmax_mm_output_memcfg,
+            # )
 
         elif llm_mode == "decode":
             for i in range(len(query_layer)):
@@ -448,14 +498,25 @@ class TtFalconAttention:
         # Is this needed
         # attn_weights = tt_lib.tensor.mul_unary(attn_weights, 1 / self.temperature)
         softmax_progcfg = self.model_config["SOFTMAX_PROGCFG"]
-        if llm_mode == "decode":
+        if llm_mode == "prefill":
+            softmax_progcfg.block_w = q_len // 32
+            # softmax_progcfg.block_h = q_len // 32
+        elif llm_mode == "decode":
             softmax_progcfg.block_w = padded_layer_past_len // 32
         for i in range(len(attn_weights)):
+            print(f"softmax_progcfg block_w: {softmax_progcfg.block_w}")
+            # print(f"softmax_progcfg block_h: {softmax_progcfg.block_h}")
+            print(f"attn_weights shape: {attn_weights[i].shape()}")
+            print(f"attn_weights len: {len(attn_weights)}")
+            print(f"attention_mask shape: {attention_mask[i].shape()}")
+            print(f"attention_mask len: {len(attention_mask)}")
+            print(f"self.scalar: {self.scalar}")
             attn_weights[i] = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
                 attn_weights[i],
                 self.scalar,
                 attention_mask[i],
-                program_config=self.model_config["SOFTMAX_PROGCFG"],
+                # program_config=self.model_config["SOFTMAX_PROGCFG"], # TODO: why don't we use the updated softmax_progcfg here?!
+                program_config=softmax_progcfg,
                 is_causal_mask=True,
             )
 
@@ -464,7 +525,19 @@ class TtFalconAttention:
         ######################
         print(f"V cache udpate")
         if llm_mode == "prefill":
-            tt_lib.tensor.fill_cache(layer_past[1], value_layer, user_id)
+            # TODO Implement fill_cache
+            # tt_lib.tensor.fill_cache(layer_past[1], value_layer, user_id)
+
+            value_layer_interleaved = []
+            for i in range(len(value_layer)):  # TODO: remove and use sharded inputs for matmul
+                value_layer_interleaved.append(
+                    tt_lib.tensor.sharded_to_interleaved(
+                        value_layer[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
+                    )
+                )
+            value_cache = tt_lib.tensor.concat(value_layer_interleaved, 1)
+            for i in range(len(value_layer_interleaved)):  # TODO: remove and use sharded inputs for matmul
+                value_layer_interleaved[i].deallocate(True)
 
         elif llm_mode == "decode":
             # Update kv_cache in place
@@ -499,20 +572,53 @@ class TtFalconAttention:
             post_softmax_mm_output_memcfg = memcfg_for_seqlen(
                 self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"], rows_dim
             )
-            attn_output = tt_lib.tensor.matmul(
-                attn_weights,
-                value_layer,
-                output_mem_config=post_softmax_mm_output_memcfg,
-            )
+            # attn_output = tt_lib.tensor.matmul(
+            #     attn_weights,
+            #     value_layer,
+            #     output_mem_config=post_softmax_mm_output_memcfg,
+            # )
+
+            for i in range(len(attn_weights)):  # TODO: remove and use sharded inputs for matmul
+                attn_weights[i] = tt_lib.tensor.sharded_to_interleaved(
+                    attn_weights[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
+                )
+            for i in range(len(value_layer)):  # TODO: remove and use sharded inputs for matmul
+                value_layer[i] = tt_lib.tensor.sharded_to_interleaved(
+                    value_layer[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
+                )
+
+            for i in range(len(attn_weights)):
+                attn_output.append(
+                    tt_lib.operations.primary.matmul(
+                        attn_weights[i],
+                        value_layer[i],
+                        # output_mem_config=post_softmax_mm_output_memcfg,
+                        output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+                        output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
+                    )
+                )
+            attn_weights[i].deallocate(True)
+            value_layer[i].deallocate(True)
+
+            print(f"post_softmax_mm_output_memcfg shard shape: {post_softmax_mm_output_memcfg.shard_spec.shape}")
+            print(f"attn_output[0] shape: {attn_output[0].shape()}")
+
+            for i in range(len(attn_output)):  # TODO: remove this and use as output memcfg above
+                attn_output[i] = tt_lib.tensor.interleaved_to_sharded(
+                    attn_output[i], sharded_mem_config=post_softmax_mm_output_memcfg
+                )
 
         elif llm_mode == "decode":
+            post_softmax_mm_output_memcfg = memcfg_for_seqlen(
+                self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"], rows_dim
+            )
             for i in range(len(attn_weights)):
                 attn_output.append(
                     tt_lib.operations.primary.transformers.group_attn_matmul(
                         attn_weights[i],
                         value_layer[i],
                         compute_with_storage_grid_size=self.devices[i].compute_with_storage_grid_size(),
-                        output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                        output_mem_config=post_softmax_mm_output_memcfg,
                         output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
                     )
                 )
@@ -573,4 +679,7 @@ class TtFalconAttention:
                 output_mem_config=selfout_mm_output_memcfg,
                 output_dtype=self.model_config["SELFOUT_MM_OUTPUT_DTYPE"],
             )
+
+        # TODO: remove when fill_kv in here
+        layer_present = ([key_cache], [value_cache])
         return attn_output, layer_present

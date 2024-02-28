@@ -98,24 +98,36 @@ def run_test_FalconAttention_inference(
         for device in devices:
             tt_attention_input.append(tt_attention_input_host.to(device, ln_attn_output_memcfg))
 
-        tt_attention_mask_host = torch2tt_tensor(
+        attention_mask_chunked = torch.chunk(
             (attention_mask_bool * -100000).expand(-1, config.num_attention_heads, -1, -1),
-            None,
-            tt_dtype=model_config["ATTN_MASK_DTYPE"],
+            len(devices),
+            1,
         )
 
         print(f"before attn mask memcfg")
         attn_mask_memcfg = model_config["ATTN_MASK_MEMCFG"]
         attn_mask_shard_shape = attn_mask_memcfg.shard_spec.shape
         attn_mask_shard_shape[-1] = seq_len
-        attn_mask_shard_shape[-2] = seq_len // 32  # height sharded for 32 cores
+        attn_mask_shard_shape[-2] = seq_len
         attn_mask_memcfg.shard_spec.shape = attn_mask_shard_shape
 
-        attn_mask_memcfg = model_config["DEFAULT_MEMCFG"]
+        # attn_mask_memcfg = model_config["DEFAULT_MEMCFG"]
+
+        attn_mask_memcfg = model_config["ATTN_MASK_MEMCFG"]
+
+        print(f"attention_mask_chunked shape: {attention_mask_chunked[0].shape}")
+        print(f"attn_mask_memcfg shard shape: {attn_mask_memcfg.shard_spec.shape}")
 
         tt_attention_mask = []
         for i in range(len(devices)):
-            tt_attention_mask.append(tt_attention_mask_host.to(devices[i], attn_mask_memcfg))
+            tt_attention_mask.append(
+                torch2tt_tensor(
+                    attention_mask_chunked[i],
+                    devices[i],
+                    tt_memory_config=attn_mask_memcfg,
+                    tt_dtype=model_config["ATTN_MASK_DTYPE"],
+                )
+            )
         print(f"after attn mask memcfg")
 
         tt_k_cache = torch.zeros(batch, max_position_embeddings, head_dim)
@@ -170,6 +182,9 @@ def run_test_FalconAttention_inference(
             attn_mask_shard_shape = attn_mask_memcfg.shard_spec.shape
             attn_mask_shard_shape[-1] = kv_len_padded
             attn_mask_memcfg.shard_spec.shape = attn_mask_shard_shape
+
+        print(f"attention_mask_bool shape: {attention_mask_bool_padded[0].shape}")
+        print(f"attn_mask_memcfg shard shape: {attn_mask_memcfg.shard_spec.shape}")
 
         for i in range(len(devices)):
             tt_attention_mask.append(
@@ -307,11 +322,13 @@ def run_test_FalconAttention_inference(
         # ("decode", 32, 1, 128, False),
         # ("decode", 64, 1, 128, False),
         ("prefill", 1, 32, 0, False),
+        # ("prefill", 1, 64, 0, False),
     ),
     ids=[
         # "decode_batch32",
         #  "decode_batch64",
-        "prefill_seqlen32"
+        "prefill_seqlen32",
+        # "prefill_seqlen64"
     ],
 )
 @pytest.mark.parametrize(
