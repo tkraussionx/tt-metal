@@ -2,8 +2,10 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from pathlib import Path
 import torch
 import ttnn
+from models.demos.mistral7b.mistral_helper_funcs import from_torch_cached
 
 
 class TtMistralMLP(torch.nn.Module):
@@ -22,21 +24,27 @@ class TtMistralMLP(torch.nn.Module):
         self.model_config = model_config
         self.grid = grid
 
-        torch_weight = lambda name: torch.transpose(self.state_dict[f"{base_address}{name}.weight"], -2, -1)
+        torch_weight = lambda name: torch.transpose(self.state_dict[f"{name}.weight"], -2, -1)
+        cache_name = lambda name: Path(model_config["DEFAULT_WEIGHT_PATH"]) / (
+            base_address + f".feed_forward.{name}.bin"
+        )
 
-        self.w1 = ttnn.from_torch(
+        self.w1 = from_torch_cached(
+            cache_name("w1"),
             torch_weight("w1"),
             layout=ttnn.TILE_LAYOUT,
             device=self.device,
             dtype=self.model_config["FF1_MM_WEIGHTS_DTYPE"],
         )
-        self.w2 = ttnn.from_torch(
+        self.w2 = from_torch_cached(
+            cache_name("w2"),
             torch_weight("w2"),
             layout=ttnn.TILE_LAYOUT,
             device=self.device,
             dtype=self.model_config["FF2_MM_WEIGHTS_DTYPE"],
         )
-        self.w3 = ttnn.from_torch(
+        self.w3 = from_torch_cached(
+            cache_name("w3"),
             torch_weight("w3"),
             layout=ttnn.TILE_LAYOUT,
             device=self.device,

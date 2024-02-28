@@ -123,6 +123,8 @@ def get_model_config(model_config_str, num_devices=1):
         "DEFAULT_MEMCFG": mem_config,
         "MOVE_DECODER_OUTPUT_BOOL": False,
         "DEFAULT_CACHE_PATH": "/proj_sw/user_dev/hf_data/mistral/mistral-7B-v0.1",
+        "DEFAULT_WEIGHT_PATH": "/proj_sw/user_dev/hf_data/mistral/"
+        + {ttnn.bfloat16: "tensor_cache_bf16", ttnn.bfloat8_b: "tensor_cache_bfp8"}[dtype],
     }  # DEFAULT_MEMCFG also used to determine banking for ttl.device.InitializeDevice
     model_config.update({f"{key}_MEMCFG": mem_config for key in OP_KEYS if key not in NO_MEMCFG})
     model_config.update({f"{key}_DTYPE": dtype for key in OP_KEYS if key not in NO_DTYPE})

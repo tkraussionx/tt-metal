@@ -2,17 +2,19 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+import json
+from typing import List
+from pathlib import Path
 import torch
 import torch.nn as nn
-from typing import List
-from models.experimental.mistral.tt.mistral_transformer import TtTransformer
+from loguru import logger
 from sentencepiece import SentencePieceProcessor
-from pathlib import Path
-from models.utility_functions import tt_to_torch_tensor
 import tt_lib
-import json
-from models.experimental.mistral.tt.mistral_configuration import TtModelArgs
 from tt_lib.utils import pad_weight
+import ttnn
+from models.utility_functions import tt_to_torch_tensor
+from models.demos.mistral7b.tt.mistral_model_ttnn import TtTransformer
+from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs
 
 
 class Tokenizer:

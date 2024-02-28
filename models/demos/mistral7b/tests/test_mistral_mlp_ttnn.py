@@ -30,10 +30,10 @@ def test_mistral_mlp_inference(model_config, model_location_generator, device):
     mistral_path = Path(model_location_generator(model_config["DEFAULT_CACHE_PATH"], model_subdir="mistral"))
     state_dict = torch.load(mistral_path / "consolidated.00.pth")
 
-    base_address = f""
     with open(mistral_path / "params.json", "r") as f:
         model_args = TtModelArgs(**json.loads(f.read()))
     state_dict = {k[22:]: v for k, v in state_dict.items() if (k.startswith("layers.0.feed_forward"))}
+    base_address = "layers.0"
 
     model_args.max_batch_size = 1
     model_args.WEIGHTS_DTYPE = dtype
