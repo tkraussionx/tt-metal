@@ -93,14 +93,17 @@ def run_test_FalconAttention_inference(
         assert q_len % 32 == 0, "For prefill, seq_len must be multiple of 32!"
         assert kv_cache_len == 0, "For prefill, no kv_cache is passed in!"
 
+        # 1, 128, 8192
         attention_input = (torch.rand(batch, q_len, configuration.hidden_size) * 2) - 1
         attention_mask_bool = torch.ones(batch, 1, q_len, kv_len, dtype=bool).triu(diagonal=1)
         layer_past = None
 
+        # 1, 1, 128, 8192
         tt_attention_input_host = torch2tt_tensor(
             attention_input.unsqueeze(1), None, tt_dtype=model_config["LN_ATTN_OUTPUT_DTYPE"]
         )
         tt_attention_input = []
+        # shard_spec: 32 cores (0, 0) ->  (7, 3) (x, y), per core is: (128, 256)
         for device in devices:
             tt_attention_input.append(tt_attention_input_host.to(device, model_config["LN_ATTN_OUTPUT_MEMCFG"]))
 
@@ -368,6 +371,7 @@ def test_FalconAttention_inference(
     use_program_cache,
 ):
     input_shape = [batch, seq_len]
+    # change seq_len to 32 and it should work
     model_config = get_model_config(model_config_str, llm_mode, input_shape, num_devices)
     compute_grid_size = pcie_devices[0].compute_with_storage_grid_size()
     if compute_grid_size.x < model_config["MAX_GRID_SIZE"][0] or compute_grid_size.y < model_config["MAX_GRID_SIZE"][1]:
