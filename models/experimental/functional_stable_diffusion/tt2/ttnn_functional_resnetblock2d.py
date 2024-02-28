@@ -15,6 +15,7 @@ from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_utility
     pre_process_input,
     post_process_output,
 )
+import time
 
 
 def torch_to_ttnn(input, device, layout=ttnn.TILE_LAYOUT):
@@ -253,6 +254,7 @@ class resnetBlock2D:
         dtype: Optional[ttnn.DataType] = None,
         group_norm_sharded_config=None,
     ):
+        # time.sleep(3)
         # breakpoint()
         assert self.group_norm_on_device == (group_norm_sharded_config is not None)
         if non_linearity == "mish":
@@ -288,6 +290,7 @@ class resnetBlock2D:
                 ),
             )
             print("Done group norm. Convert to tile layout.")
+            # return hidden_states
             hidden_states = ttnn.to_layout(hidden_states, ttnn.TILE_LAYOUT, use_multicore=True)
             print("done tile layout")
             group_norm_output_sharded_mem_config = ttnn.get_memory_config(hidden_states)

@@ -127,7 +127,7 @@ def test_resnet_block_2d_256x256(
 def test_resnet_block_2d_512x512(
     device, batch_size, in_channels, input_height, input_width, index1, index2, block_name, out_channels
 ):
-    load_from_disk = False
+    load_from_disk = True
     if not load_from_disk:
         # setup pytorch model
         pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", torch_dtype=torch.float32)
@@ -207,20 +207,8 @@ def test_resnet_block_2d_512x512(
             "grid_size": resnet_block.conv1s[0].conv.grid_size,
         },
     )
-    # ttnn_output = resnetBlock2D(
-    #     input,
-    #     temb=temb,
-    #     temb_channels=temb_channels,
-    #     time_embedding_norm=time_embedding_norm,
-    #     in_channels=in_channels,
-    #     out_channels=out_channels,
-    #     use_in_shortcut=use_in_shortcut,
-    #     groups=groups,
-    #     output_scale_factor=output_scale_factor,
-    #     parameters=parameters,
-    #     device=device,
-    #     reader_patterns_cache=reader_patterns_cache,
-    # )
+
+    print("HEREEEEE")
     ttnn_output = ttnn_to_torch(ttnn_output)
 
     assert_with_pcc(torch_output, ttnn_output, pcc=0.99)
