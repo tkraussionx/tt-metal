@@ -419,8 +419,6 @@ def test_resnet_50(device):
     output_tensor = parameters.conv1(output_tensor)
     output_tensor = parameters.maxpool(output_tensor)
 
-    breakpoint()
-
     """
     1st bottolneck layer. all the blocks implemented by ttnn
     """
@@ -438,6 +436,8 @@ def test_resnet_50(device):
     for bottolneck_block_parameters in list(parameters.layer2.values()):
         logger.debug(f"parameters 2nd block {bottolneck_block_parameters}")
         output_tensor = resnet_bottleneck_block(output_tensor, bottolneck_block_parameters, device)
+
+    breakpoint()
 
     """
     3rd bottolneck layer. 1st block implemented by torch rest by ttnn
