@@ -10,6 +10,7 @@ from typing import Tuple
 
 from models.utility_functions import (
     torch2tt_tensor,
+    tt2torch_tensor,
     nearest_32,
 )
 from models.experimental.mistral.tt.mistral_common import tt_all_reduce
@@ -93,28 +94,28 @@ class TtMistralAttention(torch.nn.Module):
                 tt_dtype=self.model_config["WO_MM_WEIGHTS_DTYPE"],
             )
 
-            # cache_k = torch.zeros(
-            #     (
-            #         self.max_batch_size,
-            #         self.n_kv_heads // self.num_devices,
-            #         self.sliding_window,
-            #         self.head_dim,
-            #     )
-            # )
-            # cache_v = torch.zeros(
-            #     (
-            #         self.max_batch_size,
-            #         self.n_kv_heads // self.num_devices,
-            #         self.sliding_window,
-            #         self.head_dim,
-            #     )
-            # )
-            # layer_past = [cache_k, cache_v]
+            cache_k = torch.zeros(
+                (
+                    self.max_batch_size,
+                    self.n_kv_heads // self.num_devices,
+                    self.sliding_window,
+                    self.head_dim,
+                )
+            )
+            cache_v = torch.zeros(
+                (
+                    self.max_batch_size,
+                    self.n_kv_heads // self.num_devices,
+                    self.sliding_window,
+                    self.head_dim,
+                )
+            )
+            layer_past = [cache_k, cache_v]
             # layer_past = [torch2tt_tensor(lp, self.devices[i]) for lp in layer_past]
             # add to the list
             self.wqkv_list.append(wqkv)
             self.wo_list.append(wo)
-            # self.layer_past_list.append(layer_past)
+            self.layer_past_list.append(layer_past)
         self.tt_sin_cached = tt_sin_cached
         self.tt_cos_cached = tt_cos_cached
 
@@ -124,7 +125,7 @@ class TtMistralAttention(torch.nn.Module):
         start_pos: int,
         current_pos: int,
         attn_masks: tt_lib.tensor.Tensor,
-        layer_past: Tuple[tt_lib.tensor.Tensor],
+        # layer_past: Tuple[tt_lib.tensor.Tensor],
     ) -> tt_lib.tensor.Tensor:
         """
         x: (seq_len, 1, batch, hidden_dim)
@@ -140,6 +141,12 @@ class TtMistralAttention(torch.nn.Module):
             device = self.devices[i]
             wqkv = self.wqkv_list[i]
             wo = self.wo_list[i]
+            # Send past KV from host to device
+            layer_past = (
+                torch2tt_tensor(self.layer_past_list[i][0], self.devices[i]),
+                torch2tt_tensor(self.layer_past_list[i][1], self.devices[i]),
+            )
+            # layer_past = self.layer_past_list[i]
             # TODO layer_past only works for a single device
 
             # QKV matmuls
@@ -171,8 +178,10 @@ class TtMistralAttention(torch.nn.Module):
             # KV update
             keys = layer_past[0]  # [max_batch_size, n_kv_heads // self.num_devices, sliding_window, head_dim]
             values = layer_past[1]
-            tt_lib.tensor.update_cache(keys, k_heads, current_pos)
-            tt_lib.tensor.update_cache(values, v_heads, current_pos)
+            tt_lib.tensor.update_cache(layer_past[0], k_heads, current_pos)
+            tt_lib.tensor.update_cache(layer_past[1], v_heads, current_pos)
+            # tt_lib.tensor.update_cache(keys, k_heads, current_pos)
+            # tt_lib.tensor.update_cache(values, v_heads, current_pos)
 
             k_heads.deallocate()
             v_heads.deallocate()
@@ -199,6 +208,9 @@ class TtMistralAttention(torch.nn.Module):
                 ],
                 output_mem_config=self.model_config["VALUES_OUTPUT_MEMCFG"],
             )
+
+            # Send updated KV back to host
+            layer_past = [tt2torch_tensor(lp) for lp in layer_past]
 
             # Attention
             keys = tt_lib.tensor.transpose(keys, -1, -2)  #  [batch, num_kv_heads, dhead, cache_len + seqlen]
