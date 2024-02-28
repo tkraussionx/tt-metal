@@ -71,10 +71,10 @@ def run_test_FalconAttention_inference(
 
     model_name = model_location_generator(model_version, model_subdir="Falcon")
 
-    hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_name, low_cpu_mem_usage=True)
-    hugging_face_reference_model.eval()
-    configuration = hugging_face_reference_model.config
-    state_dict = hugging_face_reference_model.state_dict()
+    # hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_name, low_cpu_mem_usage=True)
+    # hugging_face_reference_model.eval()
+    # configuration = hugging_face_reference_model.config
+    # state_dict = hugging_face_reference_model.state_dict()
     use_cache = True
     user_id = 0
 
@@ -242,19 +242,20 @@ def run_test_FalconAttention_inference(
         raise NotImplementedError(f"Llm mode {llm_mode} is not supported! Must be one of prefill or decode.")
 
     # PyTorch output --------------------------------------------------------------------
-    pytorch_FalconAttention_model = PytorchFalconAttentionModel(hugging_face_reference_model, layer_num)
-    pytorch_out, pytorch_layer_present = pytorch_FalconAttention_model(
-        attention_input,
-        alibi=None,
-        attention_mask=attention_mask_bool,
-        layer_past=layer_past,
-        use_cache=use_cache,
-    )
+    # pytorch_FalconAttention_model = PytorchFalconAttentionModel(hugging_face_reference_model, layer_num)
+    # pytorch_out, pytorch_layer_present = pytorch_FalconAttention_model(
+    #    attention_input,
+    #    alibi=None,
+    #    attention_mask=attention_mask_bool,
+    #    layer_past=layer_past,
+    #    use_cache=use_cache,
+    # )
 
     # TT hardware execution -------------------------------------------------------------
     tt_FalconAttention_model = TtFalconAttention(
         devices,
-        state_dict,
+        # state_dict,
+        None,
         base_url,
         layer_num,
         configuration,

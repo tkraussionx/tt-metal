@@ -369,6 +369,7 @@ class TtFalconAttention:
             raise NotImplementedError(f"Llm mode {llm_mode} is not supported! Must be one of prefill or decode.")
 
         # Reshard
+        breakpoint()
         if self.model_config["LN_ATTN_OUTPUT_MEMCFG"] != self.model_config["FUSED_QKV_MM_INPUT_MEMCFG"]:
             for i in range(len(hidden_states)):
                 hidden_states[i] = tt_lib.tensor.sharded_to_interleaved(
@@ -378,6 +379,7 @@ class TtFalconAttention:
                 hidden_states[i] = tt_lib.tensor.interleaved_to_sharded(
                     hidden_states[i], sharded_mem_config=self.model_config["FUSED_QKV_MM_INPUT_MEMCFG"]
                 )
+        breakpoint()
 
         #################
         ### FUSED QKV ###
@@ -394,6 +396,7 @@ class TtFalconAttention:
                     compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
                 )
             )
+        breakpoint()
 
         ###########
         ### TMs ###
@@ -432,6 +435,7 @@ class TtFalconAttention:
                 query_layer.append(q_layer)
                 key_layer.append(k_layer)
                 value_layer.append(v_layer)
+            breakpoint()
 
             for i in range(len(query_layer)):
                 query_layer[i] = tt_lib.tensor.interleaved_to_sharded(
@@ -443,6 +447,7 @@ class TtFalconAttention:
                 value_layer[i] = tt_lib.tensor.interleaved_to_sharded(
                     value_layer[i], sharded_mem_config=self.model_config["CREATE_KV_HEADS_OUTPUT_MEMCFG"]
                 )
+            breakpoint()
         elif llm_mode == "decode":
             for i in range(len(fused_query_key_value)):
                 q_layer, k_layer, v_layer = tt_lib.tensor.nlp_create_qkv_heads(
@@ -466,6 +471,7 @@ class TtFalconAttention:
         elif llm_mode == "decode":
             query_layer = self.rotary_embedding(query_layer, layer_past_len)
             key_layer = self.rotary_embedding(key_layer, layer_past_len)
+        breakpoint()
 
         ######################
         ### K CACHE UPDATE ###
@@ -498,6 +504,7 @@ class TtFalconAttention:
                 )
             for i in range(len(key_layer)):
                 key_layer[i] = tt_lib.tensor.interleaved_to_sharded(key_layer[i], sharded_mem_config=kv_cache_memcfg)
+        breakpoint()
 
         ######################
         ### PRE-SOFTMAX MM ###
@@ -514,6 +521,7 @@ class TtFalconAttention:
                 )
             )
             key_layer[i].deallocate(True)
+        breakpoint()
 
         if llm_mode == "prefill":
             attn_weights = self.prefill_grouped_attention_matmul_for_4_chips(
@@ -611,6 +619,7 @@ class TtFalconAttention:
                 )
             attn_weights[i].deallocate(True)
             value_layer[i].deallocate(True)
+        breakpoint()
 
         #########################
         ### ATTENTION SELFOUT ###
@@ -620,10 +629,12 @@ class TtFalconAttention:
                 attn_output[i],
                 output_mem_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"],
             )
+        breakpoint()
         for i in range(len(attn_output)):
             attn_output[i] = tt_lib.tensor.sharded_to_interleaved(
                 attn_output[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
             )
+        breakpoint()
 
         attn_output = tt_lib.tensor.all_gather(
             attn_output,
@@ -631,6 +642,7 @@ class TtFalconAttention:
             num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
             output_mem_config=self.model_config["DEFAULT_MEMCFG"],
         )
+        breakpoint()
 
         for i in range(len(attn_output)):
             attn_output[i] = tt_lib.tensor.interleaved_to_sharded(
@@ -645,4 +657,5 @@ class TtFalconAttention:
                 output_dtype=self.model_config["SELFOUT_MM_OUTPUT_DTYPE"],
                 compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
             )
+        breakpoint()
         return attn_output, layer_present
