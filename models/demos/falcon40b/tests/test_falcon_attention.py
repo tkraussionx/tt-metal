@@ -54,12 +54,6 @@ def run_test_FalconAttention_inference(
     tt_cache_path,
     model_location_generator,
 ):
-    model_name = model_location_generator(model_version, model_subdir="Falcon")
-
-    # hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_name, low_cpu_mem_usage=True)
-    # hugging_face_reference_model.eval()
-    # configuration = hugging_face_reference_model.config
-    # state_dict = hugging_face_reference_model.state_dict()
     class Temp:
         @property
         def hidden_size(self):
@@ -74,6 +68,13 @@ def run_test_FalconAttention_inference(
             return 8
 
     configuration = Temp()
+
+    model_name = model_location_generator(model_version, model_subdir="Falcon")
+
+    hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_name, low_cpu_mem_usage=True)
+    hugging_face_reference_model.eval()
+    configuration = hugging_face_reference_model.config
+    state_dict = hugging_face_reference_model.state_dict()
     use_cache = True
     user_id = 0
 
@@ -103,7 +104,7 @@ def run_test_FalconAttention_inference(
         for device in devices:
             tt_attention_input.append(tt_attention_input_host.to(device, model_config["LN_ATTN_OUTPUT_MEMCFG"]))
 
-        attention_mask_bool = torch.chunk(
+        attention_mask_bool_chunks = torch.chunk(
             (attention_mask_bool * -100000).expand(-1, configuration.num_attention_heads, -1, -1),
             len(devices),
             1,
@@ -118,7 +119,7 @@ def run_test_FalconAttention_inference(
         for i in range(len(devices)):
             tt_attention_mask.append(
                 torch2tt_tensor(
-                    attention_mask_bool[i],
+                    attention_mask_bool_chunks[i],
                     devices[i],
                     tt_memory_config=attention_mask_memconfig,
                     tt_dtype=model_config["ATTN_MASK_DTYPE"],
@@ -241,20 +242,19 @@ def run_test_FalconAttention_inference(
         raise NotImplementedError(f"Llm mode {llm_mode} is not supported! Must be one of prefill or decode.")
 
     # PyTorch output --------------------------------------------------------------------
-    # pytorch_FalconAttention_model = PytorchFalconAttentionModel(hugging_face_reference_model, layer_num)
-    # pytorch_out, pytorch_layer_present = pytorch_FalconAttention_model(
-    #     attention_input,
-    #     alibi=None,
-    #     attention_mask=attention_mask_bool,
-    #     layer_past=layer_past,
-    #     use_cache=use_cache,
-    # )
+    pytorch_FalconAttention_model = PytorchFalconAttentionModel(hugging_face_reference_model, layer_num)
+    pytorch_out, pytorch_layer_present = pytorch_FalconAttention_model(
+        attention_input,
+        alibi=None,
+        attention_mask=attention_mask_bool,
+        layer_past=layer_past,
+        use_cache=use_cache,
+    )
 
     # TT hardware execution -------------------------------------------------------------
     tt_FalconAttention_model = TtFalconAttention(
         devices,
-        # state_dict,
-        None,
+        state_dict,
         base_url,
         layer_num,
         configuration,
@@ -293,38 +293,43 @@ def run_test_FalconAttention_inference(
     )
 
     # check outputs ----------------------------------------------------------------------
-    # does_pass, output_pcc = comp_pcc(pytorch_out, tt_out, out_pcc)
-    # logger.info(f"Output: {output_pcc}")
+    does_pass, output_pcc = comp_pcc(pytorch_out, tt_out, out_pcc)
+    logger.info(f"Output: {output_pcc}")
 
-    # does_pass2, output_pcc = comp_pcc(pytorch_layer_present[0], tt_layer_present[0], cache_pcc)
-    # logger.info(f"K Cache: {output_pcc}")
+    does_pass2, output_pcc = comp_pcc(pytorch_layer_present[0], tt_layer_present[0], cache_pcc)
+    logger.info(f"K Cache: {output_pcc}")
 
-    # does_pass = does_pass and does_pass2
+    does_pass = does_pass and does_pass2
 
-    # does_pass2, output_pcc = comp_pcc(
-    #     pytorch_layer_present[0][:, kv_len - 1 : kv_len, :], tt_layer_present[0][:, kv_len - 1 : kv_len, :], token_pcc
-    # )
-    # logger.info(f"K Cache new token: {output_pcc}")
+    does_pass2, output_pcc = comp_pcc(pytorch_layer_present[1], tt_layer_present[1], cache_pcc)
+    logger.info(f"V Cache: {output_pcc}")
 
-    # does_pass = does_pass and does_pass2
+    does_pass = does_pass and does_pass2
 
-    # does_pass2, output_pcc = comp_pcc(pytorch_layer_present[1], tt_layer_present[1], cache_pcc)
-    # logger.info(f"V Cache: {output_pcc}")
+    if llm_mode == "decode":
+        does_pass2, output_pcc = comp_pcc(
+            pytorch_layer_present[0][:, kv_len - 1 : kv_len, :],
+            tt_layer_present[0][:, kv_len - 1 : kv_len, :],
+            token_pcc,
+        )
+        logger.info(f"K Cache new token: {output_pcc}")
 
-    # does_pass = does_pass and does_pass2
+        does_pass = does_pass and does_pass2
 
-    # does_pass2, output_pcc = comp_pcc(
-    #     pytorch_layer_present[1][:, kv_len - 1 : kv_len, :], tt_layer_present[1][:, kv_len - 1 : kv_len, :], token_pcc
-    # )
-    # logger.info(f"V Cache new token: {output_pcc}")
+        does_pass2, output_pcc = comp_pcc(
+            pytorch_layer_present[1][:, kv_len - 1 : kv_len, :],
+            tt_layer_present[1][:, kv_len - 1 : kv_len, :],
+            token_pcc,
+        )
+        logger.info(f"V Cache new token: {output_pcc}")
 
-    # does_pass = does_pass and does_pass2
+        does_pass = does_pass and does_pass2
 
-    # if does_pass:
-    #     logger.info("Falcon Attention output Passed!")
-    # else:
-    #     logger.warning("Falcon Attention output Failed!")
-    #     assert does_pass
+    if does_pass:
+        logger.info("Falcon Attention output Passed!")
+    else:
+        logger.warning("Falcon Attention output Failed!")
+        assert does_pass
 
 
 @skip_for_grayskull("Requires eth connected devices to run")
