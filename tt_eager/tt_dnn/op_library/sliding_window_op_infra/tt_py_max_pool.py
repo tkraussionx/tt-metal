@@ -54,20 +54,17 @@ class TTPyMaxPool(TTPyOp):
 
         conv_parallel_config = determine_parallel_config(
             True,
-            sliding_window_op_params.batch_size,
             0,
             0,
-            sliding_window_op_params.input_h,
-            sliding_window_op_params.input_w,
             sliding_window_op_params,
             device,
             config_override=parallel_config_override,
         )
         self.grid_size = (conv_parallel_config.grid_size.x, conv_parallel_config.grid_size.y)
         self.ncores_nhw = conv_parallel_config.num_cores_nhw
-        self.shard_grid, shard_layout = calculate_shard_grid(self.grid_size, self.ncores_nhw)
+        self.shard_grid, self.shard_layout = calculate_shard_grid(self.grid_size, self.ncores_nhw)
         assert (
-            shard_layout == ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED
+            self.shard_layout == ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED
         ), "TTPyMaxPool currently only supports height sharding"
 
         if isinstance(sliding_window_op_params, SlidingWindowOpParams):
@@ -181,10 +178,10 @@ class TTPyMaxPool(TTPyOp):
             )
             shard_orientation = ttl.tensor.ShardOrientation.ROW_MAJOR
             shard_halo = False
-            shard_spec = ttl.tensor.ShardSpec(self.shard_grid, [1, output_shard_height], shard_orientation, shard_halo)
-            mem_config = ttl.tensor.MemoryConfig(
-                ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, ttl.tensor.BufferType.L1, shard_spec
+            shard_spec = ttl.tensor.ShardSpec(
+                self.shard_grid, [1, reader_indices_tt_tensor.shape()[-1]], shard_orientation, shard_halo
             )
+            mem_config = ttl.tensor.MemoryConfig(self.shard_layout, ttl.tensor.BufferType.L1, shard_spec)
             reader_indices_sharded_tensor = reader_indices_tt_tensor.to(self.device, mem_config)
 
             reader_patterns_cache[sliding_window_op_params_hash] = reader_indices_sharded_tensor
@@ -268,7 +265,7 @@ class TTPyMaxPool(TTPyOp):
             act_reshaped,
             self.grid_size,
             shard_shape,
-            ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+            self.shard_layout,
             ttl.tensor.ShardOrientation.ROW_MAJOR,
         )
         act_reshaped.deallocate()
