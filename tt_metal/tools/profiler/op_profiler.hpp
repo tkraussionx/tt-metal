@@ -515,7 +515,7 @@ namespace op_profiler {
         for (size_t kernel_id = 0; kernel_id < program.num_kernels(); kernel_id++) {
             auto kernel = tt::tt_metal::detail::GetKernel(program, kernel_id);
             if (kernel->processor() == RISCV::COMPUTE) {
-                ComputeKernel * compute_kernel = static_cast<ComputeKernel*>(kernel);
+                ComputeKernel * compute_kernel = static_cast<ComputeKernel*>(kernel.get());
                 MathFidelity math_fidelity = std::get<ComputeConfig>(compute_kernel->config()).math_fidelity;
                 detail::operationProfiler.append_math_fidelity(fmt::format("{}", magic_enum::enum_name(math_fidelity)));
             }
