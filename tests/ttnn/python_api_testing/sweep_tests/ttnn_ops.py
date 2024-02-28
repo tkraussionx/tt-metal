@@ -789,3 +789,262 @@ def atanh(
     t1 = ttnn.atanh(t0)
 
     return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def cos(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.cos(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def cosh(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.cosh(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def exp(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.exp(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def exp2(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.exp2(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def expm1(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.expm1(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def elu(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.elu(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def erf(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.erf(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def erfc(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.erfc(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def erfinv(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tenxsor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.erfinv(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def hardsigmoid(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.hardsigmoid(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def deg2rad(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.deg2rad(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def hardshrink(
+    x,
+    *args,
+    _lambda,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.hardshrink(t0, _lambda)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def clone(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.clone(t0, input_mem_config[0], dtype[0])
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def cbrt(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.cbrt(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def digamma(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.digamma(t0)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)
+
+
+def clip(
+    x,
+    *args,
+    low,
+    high,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = ttnn.clip(t0, low, high)
+
+    return ttnn_tensor_to_torch(t1, output_mem_config)

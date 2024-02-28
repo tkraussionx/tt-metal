@@ -1,6 +1,6 @@
 ---
 test-list:
-  - ttnn-abs:
+  - ttnn-exp:
       shape:
         start-shape: [1, 1, 32, 32]
         end-shape: [6, 12, 256, 256]
@@ -25,4 +25,4 @@ test-list:
         data-type: ["BFLOAT16"]
         buffer-type: ["DRAM"]
         out-buffer-type: ["DRAM"]
-      output-file: eltwise_abs_sweep.csv
+      output-file: eltwise_exp_sweep.csv
