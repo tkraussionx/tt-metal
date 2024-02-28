@@ -81,7 +81,6 @@ class TtTransformerBlock(torch.nn.Module):
         start_pos: int,
         current_pos: int,
         attn_masks: Optional[tt_lib.tensor.Tensor],
-        layer_past: Tuple[tt_lib.tensor.Tensor],
     ) -> tt_lib.tensor.Tensor:
         # TODO Consider updating the remaining rms_norm and MLP modules to support multi-device
         if not isinstance(xs, list):
@@ -94,7 +93,6 @@ class TtTransformerBlock(torch.nn.Module):
             start_pos,
             current_pos,
             attn_masks,
-            layer_past,
         )
         # Attention also returns multiple outputs (multi-device support)
         h = tt_lib.tensor.add(xs[0], r[0])

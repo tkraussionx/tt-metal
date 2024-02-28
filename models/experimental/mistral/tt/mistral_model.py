@@ -84,44 +84,8 @@ class TtTransformer(nn.Module):
         attn_masks: Optional[tt_lib.tensor.Tensor],
         # layer_past: Tuple[tt_lib.tensor.Tensor],
     ):
-        # We're sending past KV from host to device before each layer computes, and deallocating it after it finishes
-        # TODO Scale to multi-chip to fit all past-KV into devices
         for i, layer in enumerate(self.layers):
-            cache_k = torch.zeros(
-                (
-                    self.args.max_batch_size,
-                    self.args.n_kv_heads // len(self.devices),
-                    self.args.sliding_window,
-                    self.args.head_dim,
-                )
-            )
-            cache_v = torch.zeros(
-                (
-                    self.args.max_batch_size,
-                    self.args.n_kv_heads // len(self.devices),
-                    self.args.sliding_window,
-                    self.args.head_dim,
-                )
-            )
-            layer_past = tuple(
-                [
-                    torch2tt_tensor(
-                        cache_k,
-                        self.devices[0],
-                        tt_memory_config=self.model_config["PAST_K_MEMCFG"],
-                        tt_dtype=self.model_config["PAST_K_DTYPE"],
-                    ),
-                    torch2tt_tensor(
-                        cache_v,
-                        self.devices[0],
-                        tt_memory_config=self.model_config["PAST_V_MEMCFG"],
-                        tt_dtype=self.model_config["PAST_V_DTYPE"],
-                    ),
-                ]
-            )
-            xs = layer(xs, start_pos, current_pos, attn_masks, layer_past)
-            layer_past[0].deallocate()
-            layer_past[1].deallocate()
+            xs = layer(xs, start_pos, current_pos, attn_masks)  # , layer_past)
         output = self.output(self.norm(xs))
         xs.deallocate()
         return output
