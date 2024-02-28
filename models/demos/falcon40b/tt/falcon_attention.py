@@ -146,6 +146,7 @@ class TtFalconAttention:
         model_config=None,
         tt_cache_path=None,
         global_cos_sin_cache=None,
+        emulate_per_device_fracture=False,
     ):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -263,10 +264,10 @@ class TtFalconAttention:
         assert not output_attentions
 
         if llm_mode == "prefill":
-            assert False, "Not supported"
+            # assert False, "Not supported"
             batch = hidden_states[0].shape()[0]
             q_len = hidden_states[0].shape()[2]
-            assert layer_past is not None
+            assert layer_past is None
         elif llm_mode == "decode":
             batch = hidden_states[0].shape()[2]
             q_len = hidden_states[0].shape()[0]
@@ -301,10 +302,8 @@ class TtFalconAttention:
                     program_config=self.model_config["QKV_MM_PROGCFG"],
                     output_mem_config=self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
                     output_dtype=self.model_config["FUSED_QKV_MM_OUTPUT_DTYPE"],
-                    compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
                 )
             )
-
         ###########
         ### TMs ###
         ###########
@@ -410,7 +409,6 @@ class TtFalconAttention:
                 )
                 query_layer[i].deallocate(True)
                 key_layer_transposed[i].deallocate(True)
-
         ###############
         ### SOFTMAX ###
         ###############
@@ -495,17 +493,31 @@ class TtFalconAttention:
                 attn_output[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
             )
 
-        attn_output = tt_lib.tensor.all_gather(
-            attn_output,
-            dim=3,
-            num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
-            output_mem_config=self.model_config["DEFAULT_MEMCFG"],
-        )
+        # attn_output = tt_lib.tensor.all_gather(
+        #     attn_output,
+        #     dim=3,
+        #     num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
+        #     output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+        # )
 
-        for i in range(len(attn_output)):
-            attn_output[i] = tt_lib.tensor.interleaved_to_sharded(
-                attn_output[i], sharded_mem_config=self.model_config["ATTN_ALL_GATHER_OUTPUT_MEMCFG"]
+        # for i in range(len(attn_output)):
+        #     attn_output[i] = tt_lib.tensor.interleaved_to_sharded(
+        #         attn_output[i], sharded_mem_config=self.model_config["ATTN_ALL_GATHER_OUTPUT_MEMCFG"]
+        #     )
+
+        num_fractures = len(attn_output)
+        attn_output_concat_list = []
+        for i in range(num_fractures):
+            attn_output_concat = tt_lib.tensor.concat(attn_output, 3)
+            attn_output_concat_list.append(
+                tt_lib.tensor.interleaved_to_sharded(
+                    attn_output_concat, sharded_mem_config=self.model_config["ATTN_ALL_GATHER_OUTPUT_MEMCFG"]
+                )
             )
+        for i in range(num_fractures):
+            attn_output[i].deallocate(True)
+        attn_output = attn_output_concat_list
+
         for i in range(len(attn_output)):
             attn_output[i] = tt_lib.operations.primary.matmul_1d(
                 attn_output[i],
@@ -513,6 +525,5 @@ class TtFalconAttention:
                 program_config=self.model_config["SELFOUT_MM_PROGCFG"],
                 output_mem_config=self.model_config["SELFOUT_MM_OUTPUT_MEMCFG"],
                 output_dtype=self.model_config["SELFOUT_MM_OUTPUT_DTYPE"],
-                compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
             )
         return attn_output, layer_present

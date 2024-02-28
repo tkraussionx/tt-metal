@@ -235,21 +235,29 @@ class TtFalconModelShared:
             layer_output[i] = tt_lib.tensor.sharded_to_interleaved(
                 layer_output[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
             )
-        layer_output = tt_lib.tensor.all_gather(
-            layer_output,
-            dim=3,
-            num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
-            output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+
+        concat_layer_output = tt_lib.tensor.concat(
+            layer_output, 3, output_mem_config=self.model_config["DEFAULT_MEMCFG"]
         )
-        for i in range(len(layer_output)):
-            layer_output[i] = tt_lib.tensor.interleaved_to_sharded(
-                layer_output[i], sharded_mem_config=self.model_config["FINAL_ALL_GATHER_OUTPUT_MEMCFG"]
-            )
+        concat_layer_output = tt_lib.tensor.interleaved_to_sharded(
+            concat_layer_output, sharded_mem_config=self.model_config["FINAL_ALL_GATHER_OUTPUT_MEMCFG"]
+        )
+
+        # layer_output = tt_lib.tensor.all_gather(
+        #     layer_output,
+        #     dim=3,
+        #     num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
+        #     output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+        # )
+        # for i in range(len(layer_output)):
+        #     layer_output[i] = tt_lib.tensor.interleaved_to_sharded(
+        #         layer_output[i], sharded_mem_config=self.model_config["FINAL_ALL_GATHER_OUTPUT_MEMCFG"]
+        #     )
 
         # apply final norm layer
         for i in range(len(layer_output)):
             layer_output[i] = tt_lib.operations.primary.layernorm(
-                layer_output[i],
+                concat_layer_output,
                 self.layernorm_eps,
                 self.layernorm_gamma[i],
                 self.layernorm_beta[i],

@@ -173,23 +173,35 @@ class TtFalconDecoderLayer:
                     hidden_states[i], output_mem_config=self.model_config["DEFAULT_MEMCFG"]
                 )
             )
-        replicated_hidden_states = tt_lib.tensor.all_gather(
-            replicated_hidden_states,
-            num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
-            dim=3,
-            output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+
+        replicated_hidden_states = tt_lib.tensor.concat(
+            replicated_hidden_states, 3, output_mem_config=self.model_config["DEFAULT_MEMCFG"]
         )
-        for i in range(len(replicated_hidden_states)):
-            replicated_hidden_states[i] = tt_lib.tensor.interleaved_to_sharded(
-                replicated_hidden_states[i], sharded_mem_config=self.model_config["DECODER_ALL_GATHER_OUTPUT_MEMCFG"]
-            )
+        replicated_hidden_states = tt_lib.tensor.interleaved_to_sharded(
+            replicated_hidden_states, sharded_mem_config=self.model_config["DECODER_ALL_GATHER_OUTPUT_MEMCFG"]
+        )
+
+        # for i in range(len(hidden_states)):
+        #     hidden_states[i].deallocate(True)
+
+        # replicated_hidden_states = tt_lib.tensor.all_gather(
+        #     replicated_hidden_states,
+        #     num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
+        #     dim=3,
+        #     output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+        # )
+
+        # for i in range(len(replicated_hidden_states)):
+        #     replicated_hidden_states[i] = tt_lib.tensor.interleaved_to_sharded(
+        #         replicated_hidden_states[i], sharded_mem_config=self.model_config["DECODER_ALL_GATHER_OUTPUT_MEMCFG"]
+        #     )
 
         attn_ln_output = []
         mlp_ln_output = []
-        for i in range(len(replicated_hidden_states)):
+        for i in range(4):
             attn_ln_output.append(
                 tt_lib.operations.primary.layernorm(
-                    replicated_hidden_states[i],
+                    replicated_hidden_states,
                     self.layernorm_eps,
                     self.ln_attn_gamma[i],
                     self.ln_attn_beta[i],
@@ -198,10 +210,10 @@ class TtFalconDecoderLayer:
                 )
             )
         # mlp_ln is in place, no need to deallocate original
-        for i in range(len(replicated_hidden_states)):
+        for i in range(4):
             mlp_ln_output.append(
                 tt_lib.operations.primary.layernorm(
-                    replicated_hidden_states[i],
+                    replicated_hidden_states,
                     self.layernorm_eps,
                     self.ln_mlp_gamma[i],
                     self.ln_mlp_beta[i],
