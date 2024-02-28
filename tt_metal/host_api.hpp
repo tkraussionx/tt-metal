@@ -236,12 +236,37 @@ void SetRuntimeArgs(const Program &program, KernelHandle kernel, const std::vari
  * | program      | The program containing kernels, circular buffers, semaphores           | const Program &                                        |                                                                            | Yes      |
  * | kernel_id    | ID of the kernel that will receive the runtime args                    | KernelHandle (uint64_t)                                |                                                                            | Yes      |
  * | core_spec    | Location of Tensix core(s) where the runtime args will be written      | const std::vector<CoreCoord> &                         | Any set of logical Tensix core coordinates on which the kernel is placed   | Yes      |
- * | runtime_args | The runtime args to be written                                         | const std::vector< vector<uint32_t> > &                | outer vector size must be equal to size of core_spec vector                | Yes      |
+ * | runtime_args | The runtime args to be written                                         | const std::vector< vector<uint32_t> > &                | Outer vector size must be equal to size of core_spec vector                | Yes      |
  */
 void SetRuntimeArgs(const Program &program, KernelHandle kernel, const std::vector< CoreCoord > & core_spec, const std::vector< std::vector<uint32_t> > &runtime_args);
 
-void SetRuntimeArgs(Device* device, const std::shared_ptr<Kernel> kernel, const std::variant<CoreCoord, CoreRange,CoreRangeSet> &core_spec, std::shared_ptr<RuntimeArgs> runtime_args_vec);
+/**
+ * Set runtime args for a kernel that are sent to the specified cores using the command queue. This API must be used when Asynchronous Command Queue Mode is enabled.
+ *
+ * Return value: void
+ *
+ * | Argument     | Description                                                            | Type                                                   | Valid Range                                                                | Required |
+ * |--------------|------------------------------------------------------------------------|--------------------------------------------------------|----------------------------------------------------------------------------|----------|
+ * | device       | The device that runtime args are being written to.                     | Device*                                                |                                                                            | Yes      |
+ * | kernel       | The kernel that will recieve these runtime args.                       | std::shared_ptr<Kernel>                                |                                                                            | Yes      |
+ * | core_spec    | Location of Tensix core(s) where the runtime args will be written      | const std::variant<CoreCoord,CoreRange,CoreRangeSet> & | Any set of logical Tensix core coordinates on which the kernel is placed   | Yes      |
+ * | runtime_args | The runtime args to be written                                         | std::shared_ptr<RuntimeArgs>                           |                                                                            | Yes      |
+*/
+void SetRuntimeArgs(Device* device, const std::shared_ptr<Kernel> kernel, const std::variant<CoreCoord, CoreRange,CoreRangeSet> &core_spec, std::shared_ptr<RuntimeArgs> runtime_args);
+
+/**
+ * Set multiple runtime arguments of a kernel using the command queue. Each core can have distinct arguments. This API must be used when Asynchronous Command Queue Mode is enabled.
+ *
+ * Return value: void
+ * | Argument     | Description                                                            | Type                                                   | Valid Range                                                                | Required |
+ * |--------------|------------------------------------------------------------------------|--------------------------------------------------------|----------------------------------------------------------------------------|----------|
+ * | device       | The device that runtime args are being written to.                     | Device*                                                |                                                                            | Yes      |
+ * | kernel       | The kernel that will recieve these runtime args.                       | std::shared_ptr<Kernel>                                |                                                                            | Yes      |
+ * | core_spec    | Location of Tensix core(s) where the runtime args will be written      | const std::vector< CoreCoord > &                       | Any set of logical Tensix core coordinates on which the kernel is placed   | Yes      |
+ * | runtime_args | The runtime args to be written                                         | const std::vector<std::shared_ptr<RuntimeArgs>>        | Outer vector size must be equal to size of core_spec vector                | Yes      |
+ */
 void SetRuntimeArgs(Device* device, const std::shared_ptr<Kernel> kernel, const std::vector< CoreCoord > & core_spec, const std::vector<std::shared_ptr<RuntimeArgs>> runtime_args);
+
 /**
  * Get the runtime args for a kernel.
  *
@@ -255,19 +280,21 @@ void SetRuntimeArgs(Device* device, const std::shared_ptr<Kernel> kernel, const 
  */
 std::vector<uint32_t>& GetRuntimeArgs(const Program &program, KernelHandle kernel_id, const CoreCoord &logical_core);
 
-void EnqueueAllocateBuffer(CommandQueue& cq, Buffer* buffer, bool bottom_up, bool blocking);
+/**
+ * Update specific entries of the runtime args vector for a kernel using the command queue. This API must be used when Asynchronous Command Queue Mode is enabled.
+ *
+ * Return Value: void
+ *
+ * | Argument     | Description                                                            | Type                          | Valid Range                                                  | Required |
+ * |--------------|------------------------------------------------------------------------|-------------------------------|--------------------------------------------------------------|----------|
+ * | cq           | The command queue used to send the runtime args update                 | CommandQueue &                |                                                              | Yes      |
+ * | kernel       | The kernel for which the runtime args must be updated                  | std::shared_ptr<Kernel>       |                                                              | Yes      |
+ * | core_coord   | The core receiving the runtime args update                             | const CoreCoord &             | A single core running the kernel                             | Yes      |
+ * | update_idx   | The runtime arg vector indices that must be updated                    | std::vector<uint32_t> &       | Each index in this vector must be less than num runtime args | Yes      |
+ * | runtime_args | Updated runtime args                                                   | std::shared_ptr<RuntimeArgs>  | 1:1 Mapping between each entry and the indices in update_idx | Yes      |
+ */
+void UpdateRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::vector<uint32_t> &update_idx, std::shared_ptr<RuntimeArgs> runtime_args);
 
-void EnqueueDeallocateBuffer(CommandQueue& cq, Allocator& allocator, uint32_t device_address, BufferType buffer_type, bool blocking);
-
-void AllocateBuffer(Buffer* buffer, bool bottom_up);
-void DeallocateBuffer(Buffer *buffer);
-void EnqueueGetBufferAddr(CommandQueue& cq, uint32_t* dst_buf_addr, const Buffer* buffer, bool blocking);
-void GetBufferAddress(const Buffer* Buffer, uint32_t* address_on_host);
-void EnqueueSetRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::shared_ptr<RuntimeArgs> runtime_args_vec, bool blocking);
-
-void EnqueueUpdateRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::vector<uint32_t> &update_idx, std::shared_ptr<RuntimeArgs> runtime_args_vec, bool blocking);
-
-void UpdateRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::vector<uint32_t> &update_idx, std::shared_ptr<RuntimeArgs> runtime_args_vec);
 /**
  * Reads a buffer from the device
  *
@@ -319,7 +346,7 @@ void EnqueueWriteBuffer(CommandQueue& cq, std::variant<std::reference_wrapper<Bu
  * |--------------|------------------------------------------------------------------------|-------------------------------------|------------------------------------|----------|
  * | cq           | The command queue object which dispatches the command to the hardware  | CommandQueue &                      |                                    | Yes      |
  * | buffer       | The device buffer we are writing to                                    | Buffer & or std::shared_ptr<Buffer> |                                    | Yes      |
- * | src          | The memory we are writing to the device                                | const void*                         |                                    | Yes      |
+ * | src          | The memory we are writing to the device                                | HostBufferMemTypes                  |                                    | Yes      |
  * | blocking     | Whether or not this is a blocking operation                            | bool                                |                                    | Yes      |
  */
 void EnqueueWriteBuffer(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer, HostBufferMemTypes src, bool blocking);
@@ -329,13 +356,13 @@ void EnqueueWriteBuffer(CommandQueue& cq, std::variant<std::reference_wrapper<Bu
  *
  * Return value: void
  *
- * | Argument     | Description                                                            | Type                          | Valid Range                        | Required |
- * |--------------|------------------------------------------------------------------------|-------------------------------|------------------------------------|----------|
- * | cq           | The command queue object which dispatches the command to the hardware  | CommandQueue &              |                                    | Yes      |
- * | program      | The program that will be executed on the device that cq is bound to    | Program &                     |                                    | Yes      |
- * | blocking     | Whether or not this is a blocking operation                            | bool                          |                                    | Yes      |
- * | trace        | The trace object which represents the history of previously issued     | optional<reference_wrapper<Trace>>                       |                                    | Yes      |
- * |              | commands                                                               |                               |                                    |          |
+ * | Argument     | Description                                                            | Type                               | Valid Range                        | Required |
+ * |--------------|------------------------------------------------------------------------|------------------------------------|------------------------------------|----------|
+ * | cq           | The command queue object which dispatches the command to the hardware  | CommandQueue &                     |                                    | Yes      |
+ * | program      | The program that will be executed on the device that cq is bound to    | Program &                          |                                    | Yes      |
+ * | blocking     | Whether or not this is a blocking operation                            | bool                               |                                    | Yes      |
+ * | trace        | The trace object which represents the history of previously issued     | optional<reference_wrapper<Trace>> |                                    | Yes      |
+ * |              | commands                                                               |                                    |                                    |          |
  */
 void EnqueueProgram(CommandQueue& cq, std::variant<std::reference_wrapper<Program>, std::shared_ptr<Program> > program, bool blocking, std::optional<std::reference_wrapper<Trace>> trace = {});
 
@@ -346,7 +373,7 @@ void EnqueueProgram(CommandQueue& cq, std::variant<std::reference_wrapper<Progra
  *
  * | Argument     | Description                                                            | Type                          | Valid Range                        | Required |
  * |--------------|------------------------------------------------------------------------|-------------------------------|------------------------------------|----------|
- * | cq           | The command queue object which dispatches the command to the hardware  | CommandQueue &              |                                    | Yes      |
+ * | cq           | The command queue object which dispatches the command to the hardware  | CommandQueue &                |                                    | Yes      |
  */
 void Finish(CommandQueue& cq);
 

@@ -186,7 +186,7 @@ bool matmul_tile(CommonFixture *fixture, tt_metal::Device *device, const MatmulT
 
     tt_metal::SetRuntimeArgs(
         device,
-        program.get_kernels().at(mm_reader_kernel),
+        tt_metal::detail::GetKernel(program, mm_reader_kernel),
         core,
         reader_l1_args);
 
@@ -198,7 +198,7 @@ bool matmul_tile(CommonFixture *fixture, tt_metal::Device *device, const MatmulT
 
     tt_metal::SetRuntimeArgs(
         device,
-        program.get_kernels().at(unary_writer_kernel),
+        tt_metal::detail::GetKernel(program, unary_writer_kernel),
         core,
         writer_args); // this is M * N in the multi_tile case !!
 

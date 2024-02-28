@@ -37,7 +37,7 @@ static void RunTest(DPrintFixture* fixture, Device* device) {
         *runtime_args = {test_number};
         SetRuntimeArgs(
             device,
-            program.get_kernels().at(brisc_print_kernel_id),
+            tt_metal::detail::GetKernel(program, brisc_print_kernel_id),
             core,
             runtime_args
         );

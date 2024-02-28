@@ -567,7 +567,7 @@ void EnqueueProgramCommand::process() {
     uint32_t start_addr = system_memory_temporary_storage_address;
     constexpr static uint32_t padding_alignment = 16;
     for (size_t kernel_id = 0; kernel_id < this->program.num_kernels(); kernel_id++) {
-        Kernel* kernel = detail::GetKernel(program, kernel_id);
+        auto kernel = detail::GetKernel(program, kernel_id);
         for (const auto& c : kernel->cores_with_runtime_args()) {
             const auto& core_runtime_args = kernel->runtime_args(c);
             this->manager.cq_write(
@@ -1452,18 +1452,7 @@ void CommandQueue::set_mode(const CommandQueueMode& mode_) {
     }
 }
 
-void CommandQueue::enable_command_sanitization() {
-    sanitize_commands = true;
-}
-
-void CommandQueue::disable_command_sanitization() {
-    // Wait to ensure that commands before this call are snooped
-    wait_until_empty();
-    sanitize_commands = false;
-}
-
 void CommandQueue::start_worker() {
-    std::cout << "starting worker" << std::endl;
     if (this->worker_state == CommandQueueState::RUNNING) {
         return;  // worker already running, exit
     }
@@ -1473,7 +1462,6 @@ void CommandQueue::start_worker() {
 }
 
 void CommandQueue::stop_worker() {
-    std::cout << "stopping worker" << std::endl;
     if (this->worker_state == CommandQueueState::IDLE) {
         return;  // worker already stopped, exit
     }
@@ -1481,81 +1469,6 @@ void CommandQueue::stop_worker() {
     this->worker_thread->join();
     this->worker_state = CommandQueueState::IDLE;
     tt::log_debug(tt::LogDispatch, "CQ{} stopped worker thread", this->cq_id);
-}
-
-void CommandQueue::sanitize_command(std::shared_ptr<CommandInterface> command) {
-    // TT_ASSERT(num_cmds_popped <= num_cmds_pushed, "Exceeded Software Command Queue size when popping commands.");
-    // debug_mtx.lock();
-    // if (command -> buffer.has_value()) {
-    //     auto& buffer_variant = *(command -> buffer);
-    //     std::visit([this, &command](auto&& command_interface_field) {
-    //         using T = std::decay_t<decltype(command_interface_field)>;
-    //         TT_ASSERT(command_id_to_buffer_map.find(num_cmds_popped) != command_id_to_buffer_map.end(), "Command popped from SW queue contains a buffer, which was not recorded in command_id_to_buffer_map");
-    //         if constexpr (std::is_same_v<T, std::reference_wrapper<Buffer>>) {
-    //             TT_ASSERT(command_id_to_buffer_map.at(num_cmds_popped) == command_interface_field.get(), "Mismatch between command pushed by main thread and command popped by worker. The command attributes may be getting modified post asynchronous push");
-    //         }
-    //         else if constexpr (std::is_same_v<T, std::shared_ptr<Buffer>>) {
-    //             TT_ASSERT(command_id_to_buffer_map.at(num_cmds_popped) == *command_interface_field, "Mismatch between command pushed by main thread and command popped by worker. The command attributes may be getting modified post asynchronous push");
-    //         }
-    //     }, buffer_variant);
-    // }
-    // if (command->buffer_to_allocate.has_value()) {
-
-    // }
-    // if (command -> src.has_value()) {
-        // std::cout << "Checking src data " << *(command -> src) << std::endl;
-        // const void* src_ptr = *(*(command -> src));
-        // std::vector<uint32_t> src_data = {};
-        // // std::cout << "Buf size: " << command_id_to_buffer_map.at(num_cmds_popped).size << std::endl;
-        // src_data.resize(command_id_to_buffer_map.at(num_cmds_popped).size / sizeof(uint32_t));
-        // TT_ASSERT(src_ptr, "Worker thread sees deallocated source data.");
-        // std::memcpy(src_data.data(), src_ptr, command_id_to_buffer_map.at(num_cmds_popped).size);
-        // TT_ASSERT(src_data.size() == command_id_to_src_data_map.at(num_cmds_popped).size()
-        //           and src_data == command_id_to_src_data_map.at(num_cmds_popped), "Mismatch between src data pushed by main thread and src data popped by worker.");
-
-        // std::cout << "Sizes: " << src_data.size() << " " << command_id_to_src_data_map.at(num_cmds_popped).size() << std::endl;
-        // for (int i = 0; i < 35; i ++) {
-        //     std::cout << command_id_to_src_data_map.at(num_cmds_popped).at(i) << " " << src_data.at(i) << std::endl;
-        // }
-        // std::cout << "Vectors match: " << (src_data == command_id_to_src_data_map.at(num_cmds_popped)) << std::endl;
-    // }
-    // debug_mtx.unlock();
-    // num_cmds_popped++;
-}
-
-void CommandQueue::track_command_metadata(const CommandInterface& command) {
-    // if (command.buffer.has_value()) {
-    //     auto& buffer_variant = *command.buffer;
-    //     std::visit ( [this, &command](auto&& command_interface_field) {
-    //         using T = std::decay_t<decltype(command_interface_field)>;
-    //         BufferMetadata buf_md;
-    //         if constexpr (std::is_same_v<T, std::reference_wrapper<Buffer>>) {
-    //             buf_md = command_interface_field.get();
-    //         }
-    //         else if constexpr (std::is_same_v<T, std::shared_ptr<Buffer>>) {
-    //             buf_md = *command_interface_field;
-    //         }
-    //         debug_mtx.lock();
-    //         this -> command_id_to_buffer_map.insert(std::make_pair(num_cmds_pushed, buf_md));
-    //         debug_mtx.unlock();
-    //     }, buffer_variant);
-    // }
-    // if (command.buffer_to_allocate.has_value()) {
-    //     TT_ASSERT(!command.buffer.has_value(), "Cannot specify buffer_to_allocate and buffer in the same command.");
-    //     BufferMetadata buf_md = *(command.buffer_to_allocate.value());
-    //     debug_mtx.lock();
-    //     this -> command_id_to_buffer_map.insert(std::make_pair(num_cmds_pushed, buf_md));
-    //     debug_mtx.unlock();
-    // }
-    // if (command.src.has_value()) {
-        // const void* src_ptr = *(*(command.src));
-        // std::vector<uint32_t> src_data = {};
-        // src_data.resize(command_id_to_buffer_map.at(num_cmds_pushed).size / sizeof(uint32_t));
-        // TT_ASSERT(src_ptr, "Command has a nullptr used for src");
-        // std::memcpy(src_data.data(), src_ptr, command_id_to_buffer_map.at(num_cmds_pushed).size);
-        // this -> command_id_to_src_data_map.insert(std::make_pair(num_cmds_pushed, src_data));
-    // }
-    // num_cmds_pushed++;
 }
 
 void CommandQueue::run_worker() {
@@ -1568,16 +1481,10 @@ void CommandQueue::run_worker() {
             if (this->worker_state == CommandQueueState::TERMINATE) {
                 break;
             }
-            std::this_thread::yield();
+            std::this_thread::sleep_for(std::chrono::microseconds(10));
         } else {
             std::shared_ptr<CommandInterface> command(this->worker_queue.pop());
-            // if (sanitize_commands) {
-            //     sanitize_command(command);
-            // }
             run_command_impl(*command);
-            if (sanitize_commands) {
-                sanitize_command(command);
-            }
         }
     }
 }
@@ -1585,9 +1492,6 @@ void CommandQueue::run_worker() {
 void CommandQueue::run_command(const CommandInterface& command) {
     log_trace(LogDispatch, "CQ{} received {} in {} mode", this->cq_id, command.type, this->async_mode() ? "ASYNC" : "PASSTHROUGH");
     if (this->async_mode()) {
-        if (sanitize_commands) {
-            track_command_metadata(command);
-        }
         if (std::hash<std::thread::id>{}(std::this_thread::get_id()) == main_thread_id) {
             this -> worker_queue.push(command);
             if (command.blocking.has_value() and *command.blocking == true) {
@@ -1608,52 +1512,36 @@ void CommandQueue::run_command_impl(const CommandInterface& command) {
     log_trace(LogDispatch, "CQ{} running {}", this->cq_id, command.type);
     switch (command.type) {
         case EnqueueCommandType::ENQUEUE_READ_BUFFER:
-            // std::cout << "enqueue read" << std::endl;
             TT_ASSERT(command.dst.has_value(), "Must provide a dst!");
             TT_ASSERT(command.buffer.has_value(), "Must provide a buffer!");
             TT_ASSERT(command.blocking.has_value(), "Must specify blocking value!");
             EnqueueReadBufferImpl(*this, command.buffer.value(), command.dst.value(), command.blocking.value());
-            // std::cout << "read is done" << std::endl;
             break;
         case EnqueueCommandType::ENQUEUE_WRITE_BUFFER:
-            // std::cout << "enqueue write" << std::endl;
             TT_ASSERT(command.src.has_value(), "Must provide a src!");
             TT_ASSERT(command.buffer.has_value(), "Must provide a buffer!");
             TT_ASSERT(command.blocking.has_value(), "Must specify blocking value!");
             EnqueueWriteBufferImpl(*this, command.buffer.value(), command.src.value(), command.blocking.value());
-            // std::cout << "write is done" << std::endl;
             break;
         case EnqueueCommandType::ALLOCATE_BUFFER:
-            // std::cout << "enqueue alloc" << std::endl;
             EnqueueAllocateBufferImpl(command.alloc_md.value());
-            // std::cout << "Alloc is done" << std::endl;
             break;
         case EnqueueCommandType::DEALLOCATE_BUFFER:
-            // std::cout << "enqueue dealloc" << std::endl;
             EnqueueDeallocateBufferImpl(command.alloc_md.value());
-            // std::cout << "Dealloc done" << std::endl;
             break;
         case EnqueueCommandType::GET_BUF_ADDR:
-            // std::cout << "enqueue get addr" << std::endl;
             EnqueueGetBufferAddrImpl(command.dst.value(), command.shadow_buffer.value());
-            // std::cout << "done enqueue get addr" << std::endl;
             break;
         case EnqueueCommandType::SET_RUNTIME_ARGS:
-            // std::cout << "setting runtime args" << std::endl;
             EnqueueSetRuntimeArgsImpl(command.runtime_args_md.value());
-            // std::cout << "done setting runtime args" << std::endl;
             break;
         case EnqueueCommandType::UPDATE_RUNTIME_ARGS:
-            // std::cout << "updating runtime args" << std::endl;
             EnqueueUpdateRuntimeArgsImpl(command.runtime_args_md.value());
-            // std::cout << "done" << std::endl;
             break;
         case EnqueueCommandType::ENQUEUE_PROGRAM:
-            // std::cout << "enqueue prog" << std::endl;
             TT_ASSERT(command.program.has_value(), "Must provide a program!");
             TT_ASSERT(command.blocking.has_value(), "Must specify blocking value!");
             EnqueueProgramImpl(*this, command.program.value(), command.blocking.value(), command.trace);
-            // std::cout << "prog is done" << std::endl;
             break;
         case EnqueueCommandType::FINISH:
             FinishImpl(*this);
@@ -1664,7 +1552,7 @@ void CommandQueue::run_command_impl(const CommandInterface& command) {
         default:
             TT_THROW("Invalid command type");
     }
-    // log_trace(LogDispatch, "CQ{} running {} complete", this->cq_id, command.type);
+    log_trace(LogDispatch, "CQ{} running {} complete", this->cq_id, command.type);
 }
 
 bool operator == (const BufferMetadata& a, const Buffer& b) {

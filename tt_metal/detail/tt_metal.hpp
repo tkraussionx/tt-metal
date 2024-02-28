@@ -288,6 +288,12 @@ namespace tt::tt_metal{
             LAZY_COMMAND_QUEUE_MODE = lazy;
         }
 
+        void AllocateBuffer(Buffer* buffer, bool bottom_up);
+
+        void DeallocateBuffer(Buffer *buffer);
+
+        void GetBufferAddress(const Buffer* Buffer, uint32_t* address_on_host);
+
         inline void DeallocateBuffers(Device * device)
         {
             device->deallocate_buffers();

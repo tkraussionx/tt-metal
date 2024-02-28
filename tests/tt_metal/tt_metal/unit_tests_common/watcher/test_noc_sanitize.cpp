@@ -68,7 +68,7 @@ static void RunTest(WatcherFixture* fixture, Device* device) {
 
     tt_metal::SetRuntimeArgs(
         device,
-        program.get_kernels().at(dram_copy_kernel),
+        tt_metal::detail::GetKernel(program, dram_copy_kernel),
         core,
         runtime_args);
 

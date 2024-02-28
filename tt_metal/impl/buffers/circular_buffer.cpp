@@ -7,7 +7,7 @@
 #include "host_api.hpp"
 #include "llrt/llrt.hpp"
 #include "tt_metal/impl/buffers/buffer.hpp"
-
+#include "tt_metal/detail/tt_metal.hpp"
 namespace tt {
 
 namespace tt_metal {
@@ -93,7 +93,7 @@ uint32_t CircularBuffer::address() const {
 }
 
 void CircularBuffer::assign_global_address () {
-    GetBufferAddress(config_.shadow_global_buffer, &globally_allocated_address_);
+    detail::GetBufferAddress(config_.shadow_global_buffer, &globally_allocated_address_);
 }
 
 }  // namespace tt_metal

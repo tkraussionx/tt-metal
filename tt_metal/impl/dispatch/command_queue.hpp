@@ -484,7 +484,7 @@ class HWCommandQueue {
     friend Trace BeginTrace(CommandQueue& cq);
     friend void EnqueueProgramImpl(CommandQueue& cq, std::variant < std::reference_wrapper<Program>, std::shared_ptr<Program> > program, bool blocking, std::optional<std::reference_wrapper<Trace>> trace);
     friend void EnqueueReadBufferImpl(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer, void* dst, bool blocking);
-    friend void EnqueueWriteBufferImpl(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer, const void* src, bool blocking);
+    friend void EnqueueWriteBufferImpl(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer, HostBufferMemTypes src, bool blocking);
     friend void EnqueueAllocateBufferImpl(AllocBufferMetadata alloc_md);
     friend void EnqueueDeallocateBufferImpl(AllocBufferMetadata alloc_md);
     friend void EnqueueGetBufferAddrImpl(void* dst_buf_addr, const Buffer* buffer);
@@ -545,13 +545,9 @@ class CommandQueue {
     // Reference to the underlying hardware command queue, non-const because side-effects are allowed
     HWCommandQueue& hw_command_queue();
 
-    void enable_command_sanitization();
-    void disable_command_sanitization();
-
     static CommandQueueMode get_mode_from_env_var() {
         // Envvar is used for bringup and debug only. Will be removed in the future and should not be relied on in production.
         int value = parse_env<int>("TT_METAL_CQ_ASYNC_MODE", static_cast<int>(CommandQueueMode::PASSTHROUGH));
-        std::cout << "Setting Async mode: " << value << std::endl;
         return static_cast<CommandQueue::CommandQueueMode>(value);
     }
     static CommandQueueMode get_mode() {
@@ -587,12 +583,18 @@ class CommandQueue {
     bool async_mode() { return this->mode == CommandQueueMode::ASYNC; }
     bool passthrough_mode() { return this->mode == CommandQueueMode::PASSTHROUGH; }
 
-    void track_command_metadata(const CommandInterface& command);
-    void sanitize_command(std::shared_ptr<CommandInterface> command);
-    std::mutex debug_mtx;
     std::atomic<std::size_t> worker_thread_id = -1;
     std::atomic<std::size_t> main_thread_id = -1;
 };
+
+// Primitives used to place host only operations on the SW Command Queue.
+// These are used in functions exposed through tt_metal.hpp or host_api.hpp
+void EnqueueAllocateBuffer(CommandQueue& cq, Buffer* buffer, bool bottom_up, bool blocking);
+void EnqueueDeallocateBuffer(CommandQueue& cq, Allocator& allocator, uint32_t device_address, BufferType buffer_type, bool blocking);
+void EnqueueGetBufferAddr(CommandQueue& cq, uint32_t* dst_buf_addr, const Buffer* buffer, bool blocking);
+void EnqueueSetRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::shared_ptr<RuntimeArgs> runtime_args_vec, bool blocking);
+void EnqueueUpdateRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::vector<uint32_t> &update_idx, std::shared_ptr<RuntimeArgs> runtime_args_vec, bool blocking);
+
 
 bool operator == (const BufferMetadata& a, const Buffer& b);
 } // namespace tt::tt_metal

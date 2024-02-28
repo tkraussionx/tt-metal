@@ -318,6 +318,7 @@ TEST_F(CommandQueueFixture, TestAsyncCommandQueue) {
     auto dummy_reader_kernel = CreateKernel(
         program, "tests/tt_metal/tt_metal/test_kernels/dataflow/unit_tests/command_queue/arbiter_hang.cpp", cr_set, DataMovementConfig{.processor = DataMovementProcessor::RISCV_1, .noc = NOC::RISCV_1_default});
     std::cout << "Creating async mode " << std::endl;
+    auto current_mode = CommandQueue::get_mode();
     command_queue.set_mode(CommandQueue::CommandQueueMode::ASYNC);
 
     // Use scoper timer to benchmark time for pushing 2 commands
@@ -326,7 +327,7 @@ TEST_F(CommandQueueFixture, TestAsyncCommandQueue) {
         EnqueueProgram(command_queue, program, false);
         Finish(command_queue);
     }
-    command_queue.set_mode(CommandQueue::CommandQueueMode::PASSTHROUGH);
+    command_queue.set_mode(current_mode);
 }
 
 }

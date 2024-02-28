@@ -97,7 +97,6 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
             .set_page_size(out_cb_index, output_page_size)
             .set_globally_allocated_address(*output.buffer());
     auto cb_output = tt_metal::CreateCircularBuffer(program, all_cores, output_cb_out_config);
-    program.get_circular_buffer(cb_output)->assign_global_address();
     bool src_is_dram = src_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
 
     tt_metal::KernelHandle unary_reader_kernel_id;
@@ -187,7 +186,7 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
             };
             tt_metal::SetRuntimeArgs(
                 device,
-                program.get_kernels().at(unary_reader_kernel_id),
+                tt_metal::detail::GetKernel(program, unary_reader_kernel_id),
                 core,
                 runtime_args_vec1);
             curr_idx_w += num_units_per_shard_width;
@@ -230,7 +229,7 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
             *runtime_args_vec2 = {src_buffer, num_units_per_row, shard_height, shard_width, curr_idx_w, curr_idx_h};
             tt_metal::SetRuntimeArgs(
                 device,
-                program.get_kernels().at(unary_reader_kernel_id),
+                tt_metal::detail::GetKernel(program, unary_reader_kernel_id),
                 core,
                 runtime_args_vec2);
             curr_idx_w += input_unit_size;
@@ -241,9 +240,9 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
         }
          std::shared_ptr<RuntimeArgs> runtime_args_vec3 = std::make_shared<RuntimeArgs>();
          *runtime_args_vec3 = {curr_num_units_per_shard};
-        tt_metal::SetRuntimeArgs(device, program.get_kernels().at(unary_writer_kernel_id), core, runtime_args_vec3);
+        tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, unary_writer_kernel_id), core, runtime_args_vec3);
         if (convert_df) {
-            tt_metal::SetRuntimeArgs(device, program.get_kernels().at(compute_kernel_id), core, runtime_args_vec3);
+            tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, compute_kernel_id), core, runtime_args_vec3);
         }
     }
 
@@ -264,12 +263,14 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
         std::vector<uint32_t> update_idx = {0};
         std::shared_ptr<RuntimeArgs> runtime_args_vec3 = std::make_shared<RuntimeArgs>();
         *runtime_args_vec3 = {src_buffer};
+        program.add_global_buffer(input_tensors.at(0).device_buffer());
+        program.add_global_buffer(output_tensors.at(0).device_buffer());
         Device* device = src_buffer->device();
         program.add_global_buffer(input_tensors.at(0).device_buffer());
         program.add_global_buffer(output_tensors.at(0).device_buffer());
         for (const auto& core : cores) {
             {
-                EnqueueUpdateRuntimeArgs(device->command_queue(), program.get_kernels().at(unary_reader_kernel_id), core, update_idx, runtime_args_vec3, false);
+                UpdateRuntimeArgs(device->command_queue(), tt_metal::detail::GetKernel(program, unary_reader_kernel_id), core, update_idx, runtime_args_vec3);
 
             }
         }
@@ -354,8 +355,6 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
             .set_page_size(src0_cb_index, input_page_size)
             .set_globally_allocated_address(*input.buffer());
     auto cb_src0 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src0_config);
-    program.get_circular_buffer(cb_src0) -> assign_global_address();
-    // cb_src0.assign_global_address();
     if (convert_df) {
         out_cb_index = CB::c_out0;
         uint32_t output_page_size = round_up_to_mul32(output_unit_size);
@@ -416,7 +415,8 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
     for (const auto& set : all_cores.ranges()) {
         for (auto x = set.start.x; x <= set.end.x; x++) {
             for (auto y = set.start.y; y <= set.end.y; y++) {
-                tt_metal::SetRuntimeArgs(device, program.get_kernels().at(unary_reader_kernel_id), CoreCoord(x, y), runtime_args_vec1);
+                // tt_metal::detail::GetKernel(program, unary_reader_kernel_id)
+                tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, unary_reader_kernel_id), CoreCoord(x, y), runtime_args_vec1);
             }
         }
     }
@@ -467,7 +467,7 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
 
             tt_metal::SetRuntimeArgs(
                 device,
-                program.get_kernels().at(unary_writer_kernel_id),
+                tt_metal::detail::GetKernel(program, unary_writer_kernel_id),
                 core,
                 runtime_args_vec2);
             curr_idx_w += num_units_per_shard_width;
@@ -507,7 +507,7 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
             *runtime_args_vec3 = {dst_buffer, num_units_per_row, shard_height, shard_width, curr_idx_w, curr_idx_h};
             tt_metal::SetRuntimeArgs(
                 device,
-                program.get_kernels().at(unary_writer_kernel_id),
+                tt_metal::detail::GetKernel(program, unary_writer_kernel_id),
                 core,
                 runtime_args_vec3);
             curr_idx_w += output_unit_size;
@@ -537,9 +537,7 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
         program.add_global_buffer(output_tensors.at(0).device_buffer());
         for (const auto& core : cores) {
             {
-                EnqueueUpdateRuntimeArgs(device->command_queue(), program.get_kernels().at(unary_writer_kernel_id), core, update_idx, runtime_args_vec3, false);
-                // auto& runtime_args = GetRuntimeArgs(program, unary_writer_kernel_id, core);
-                // runtime_args[0] = dst_addr;
+                UpdateRuntimeArgs(device->command_queue(), tt_metal::detail::GetKernel(program, unary_writer_kernel_id), core, update_idx, runtime_args_vec3);
             }
         }
         UpdateDynamicCircularBufferAddress(program, cb_src0, *src_buffer);

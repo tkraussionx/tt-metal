@@ -158,9 +158,9 @@ operation::ProgramWithCallbacks multi_core_attn_matmul(const Tensor &a, const Te
             *runtime_args_vec5 = {0, 0, 0, 0};
             std::shared_ptr<RuntimeArgs> runtime_args_vec6 = std::make_shared<RuntimeArgs>();
             *runtime_args_vec6 = {0, 0, 0};
-            tt_metal::SetRuntimeArgs(device, p_with_call.program.get_kernels().at(reader_id), core, runtime_args_vec4);
-            tt_metal::SetRuntimeArgs(device, p_with_call.program.get_kernels().at(eltwise_binary_kernel_id), core, runtime_args_vec5);
-            tt_metal::SetRuntimeArgs(device, p_with_call.program.get_kernels().at(writer_id), core, runtime_args_vec6);
+            tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(p_with_call.program, reader_id), core, runtime_args_vec4);
+            tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(p_with_call.program, eltwise_binary_kernel_id), core, runtime_args_vec5);
+            tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(p_with_call.program, writer_id), core, runtime_args_vec6);
             continue;
         }
 
@@ -194,19 +194,19 @@ operation::ProgramWithCallbacks multi_core_attn_matmul(const Tensor &a, const Te
         };
 
         tt_metal::SetRuntimeArgs(
-            device, p_with_call.program.get_kernels().at(reader_id), core,
+            device, tt_metal::detail::GetKernel(p_with_call.program, reader_id), core,
             std::move(runtime_args_vec1)
         );
 
 
         tt_metal::SetRuntimeArgs(
-            device, p_with_call.program.get_kernels().at(eltwise_binary_kernel_id),
+            device, tt_metal::detail::GetKernel(p_with_call.program, eltwise_binary_kernel_id),
             core,
             std::move(runtime_args_vec2)
         );
 
         tt_metal::SetRuntimeArgs(
-            device, p_with_call.program.get_kernels().at(writer_id),
+            device, tt_metal::detail::GetKernel(p_with_call.program, writer_id),
             core,
             std::move(runtime_args_vec3)
         );
@@ -286,9 +286,9 @@ operation::ProgramWithCallbacks multi_core_attn_matmul(const Tensor &a, const Te
                 *runtime_args_vec5 = {0, 0, 0, 0};
                 std::shared_ptr<RuntimeArgs> runtime_args_vec6 = std::make_shared<RuntimeArgs>();
                 *runtime_args_vec6 = {0, 0, 0};
-                tt_metal::SetRuntimeArgs(device, program.get_kernels().at(reader_id), core, runtime_args_vec4);
-                tt_metal::SetRuntimeArgs(device, program.get_kernels().at(eltwise_binary_kernel_id), core, runtime_args_vec5);
-                tt_metal::SetRuntimeArgs(device, program.get_kernels().at(writer_id), core, runtime_args_vec6);
+                tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, reader_id), core, runtime_args_vec4);
+                tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, eltwise_binary_kernel_id), core, runtime_args_vec5);
+                tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, writer_id), core, runtime_args_vec6);
                 continue;
             }
             std::shared_ptr<RuntimeArgs> runtime_args_vec1 = std::make_shared<RuntimeArgs>();
@@ -322,20 +322,20 @@ operation::ProgramWithCallbacks multi_core_attn_matmul(const Tensor &a, const Te
             };
 
             tt_metal::SetRuntimeArgs(
-                device, program.get_kernels().at(reader_id), core,
+                device, tt_metal::detail::GetKernel(program, reader_id), core,
                 runtime_args_vec1
             );
 
 
             tt_metal::SetRuntimeArgs(
                 device,
-                program.get_kernels().at(eltwise_binary_kernel_id),
+                tt_metal::detail::GetKernel(program, eltwise_binary_kernel_id),
                 core,
                 runtime_args_vec2
             );
 
             tt_metal::SetRuntimeArgs(
-                device, program.get_kernels().at(writer_id),
+                device, tt_metal::detail::GetKernel(program, writer_id),
                 core,
                 runtime_args_vec3
             );

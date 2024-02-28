@@ -101,7 +101,6 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         tt_metal::CircularBufferConfig src0_cb_config = tt_metal::CircularBufferConfig(cb0_num_input_tiles * in0_single_tile_size, {{src0_cb_index, in0_data_format}})
 		    .set_page_size(src0_cb_index, in0_single_tile_size).set_globally_allocated_address(*src0_buffer);
         cb_src0 = tt_metal::CreateCircularBuffer(program, all_device_cores, src0_cb_config);
-        program.get_circular_buffer(cb_src0)->assign_global_address();
     } else {
         uint32_t cb0_num_input_tiles = in0_block_w; // TODO: Generalize; double buffer and add blocking along inner dim if we have Mt > 1
         tt_metal::CircularBufferConfig src0_cb_config = tt_metal::CircularBufferConfig(cb0_num_input_tiles * in0_single_tile_size, {{src0_cb_index, in0_data_format}})
@@ -125,7 +124,6 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         tt_metal::CircularBufferConfig cb_src2_config = tt_metal::CircularBufferConfig(cb2_num_input_tiles * in1_single_tile_size, {{src2_cb_index, in1_data_format}})
 		    .set_page_size(src2_cb_index, in1_single_tile_size).set_globally_allocated_address(*src1_buffer);
         cb_src2 = tt_metal::CreateCircularBuffer(program, all_device_cores, cb_src2_config);
-        program.get_circular_buffer(cb_src2)->assign_global_address();
     }
 
     // Intermediate CBs for handling untilizing, copying rows, and tilizing to output CB
@@ -148,7 +146,6 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         tt_metal::CircularBufferConfig cb_output_config = tt_metal::CircularBufferConfig(num_output_tiles * output_single_tile_size, {{output_cb_index, output_data_format}})
 		    .set_page_size(output_cb_index, output_single_tile_size).set_globally_allocated_address(*dst_buffer);
         cb_output = tt_metal::CreateCircularBuffer(program, all_device_cores, cb_output_config);
-        program.get_circular_buffer(cb_output)->assign_global_address();
     } else {
         uint32_t num_output_tiles = MtNt; // TODO: Should be MtNt if Mt > 1? Or, produce one Nt at a time and double buffer?
         tt_metal::CircularBufferConfig cb_output_config = tt_metal::CircularBufferConfig(num_output_tiles * output_single_tile_size, {{output_cb_index, output_data_format}})
@@ -510,9 +507,9 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
             num_blocks_written += num_output_blocks_per_core;
         }
 
-        SetRuntimeArgs(device, program.get_kernels().at(reader_id), cores, all_reader_runtime_args);
-        SetRuntimeArgs(device, program.get_kernels().at(writer_id), cores, all_writer_runtime_args);
-        SetRuntimeArgs(device, program.get_kernels().at(compute_kernel_id), cores, all_compute_runtime_args);
+        SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, reader_id), cores, all_reader_runtime_args);
+        SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, writer_id), cores, all_writer_runtime_args);
+        SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, compute_kernel_id), cores, all_compute_runtime_args);
 
         // Update dynamic CBs (which is most of them)
         if (in0_is_sharded) {

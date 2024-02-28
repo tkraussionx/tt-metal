@@ -218,8 +218,8 @@ bool run_sfpu_all_same_buffer(CommandQueue & cq, const SfpuConfig& test_config) 
 
             terminate = terminate_;
 
-            SetRuntimeArgs(cq.device(), program.get_kernels().at(writer_kernel), core_coord, writer_rt_args);
-            SetRuntimeArgs(cq.device(), program.get_kernels().at(reader_kernel), core_coord, reader_rt_args);
+            SetRuntimeArgs(cq.device(), tt_metal::detail::GetKernel(program, writer_kernel), core_coord, writer_rt_args);
+            SetRuntimeArgs(cq.device(), tt_metal::detail::GetKernel(program, reader_kernel), core_coord, reader_rt_args);
         } while (not terminate);
     }
 

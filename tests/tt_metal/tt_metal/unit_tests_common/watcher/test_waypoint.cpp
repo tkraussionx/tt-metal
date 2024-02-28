@@ -66,19 +66,19 @@ static void RunTest(WatcherFixture* fixture, Device* device) {
         for (uint32_t y = xy_start.y; y <= xy_end.y; y++) {
             SetRuntimeArgs(
                 device,
-                program.get_kernels().at(brisc_kid),
+                tt_metal::detail::GetKernel(program, brisc_kid),
                 CoreCoord{x, y},
                 runtime_args
             );
             SetRuntimeArgs(
                 device,
-                program.get_kernels().at(ncrisc_kid),
+                tt_metal::detail::GetKernel(program, ncrisc_kid),
                 CoreCoord{x, y},
                 runtime_args
             );
             SetRuntimeArgs(
                 device,
-                program.get_kernels().at(trisc_kid),
+                tt_metal::detail::GetKernel(program, trisc_kid),
                 CoreCoord{x, y},
                 runtime_args
             );

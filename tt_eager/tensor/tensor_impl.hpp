@@ -441,14 +441,16 @@ inline void write_data_to_device_buffer(CommandQueue & cq, const BufferType<T>& 
     // And effectively get rid of any additional allocation
     if (CommandQueue::get_mode() == CommandQueue::CommandQueueMode::ASYNC) {
         if (!writing_owned_storage) {
+            // When writing borrowed storage asynchronously, we have no control over when host memory is deallocated by the main thread.
+            // To ensure that worker threads enqueues the correct buffer, make a copy and caputre it in an owned buffer.
             uint32_t borrowed_buf_size_words = device_buffer->num_pages() * device_buffer->page_size() / sizeof(uint32_t);
             const uint32_t* borrowed_buf_base = static_cast<const uint32_t*>(host_buffer.data());
             std::vector<uint32_t> owned_copy_vec(borrowed_buf_base, borrowed_buf_base + borrowed_buf_size_words);
             owned_buffer::Buffer<uint32_t> owned_copy(std::make_shared<std::vector<uint32_t>>(owned_copy_vec));
-            EnqueueWriteBuffer( cq, device_buffer, owned_copy.get_vec(), false);
+            EnqueueWriteBuffer( cq, device_buffer, owned_copy.get_ptr(), false);
         }
         else {
-            EnqueueWriteBuffer( cq, device_buffer, host_buffer.get_vec(), false);
+            EnqueueWriteBuffer( cq, device_buffer, host_buffer.get_ptr(), false);
         }
     }
     else {
@@ -478,11 +480,8 @@ inline DeviceBuffer initialize_data_on_device(const BufferType<T>& data_to_write
     if (TT_METAL_SLOW_DISPATCH_MODE == nullptr) {
         write_data_to_device_buffer<T>(device->command_queue(), data_to_write, device_buffer, writing_owned_storage);
     } else {
-        std::cout << "Writing data to device " << std::endl;
         write_data_to_device_buffer<T>(data_to_write, *device_buffer);
-        std::cout << "done" << std::endl;
     }
-    // std::cout << "Data written" << std::endl;
     return device_buffer;
 }
 
@@ -558,13 +557,10 @@ inline Tensor to_host(const Tensor &tensor, bool blocking = true) {
     const char *TT_METAL_SLOW_DISPATCH_MODE = std::getenv("TT_METAL_SLOW_DISPATCH_MODE");
     if (TT_METAL_SLOW_DISPATCH_MODE == nullptr) {
         data_vec.resize(size_in_bytes / sizeof(T));
-        // std::cout << "calling read from device" << std::endl;
         read_data_from_device_buffer<T>(device->command_queue(), device_buffer, data_vec.data(), blocking);
-        // std::cout << "done" << std::endl;
     } else {
         read_data_from_device_buffer<T>(device_buffer, data_vec);
     }
-    // std::cout << "Read done in main thread" << std::endl;
     auto output_buffer = owned_buffer::create<T>(std::move(data_vec));
     return Tensor(OwnedStorage{output_buffer}, tensor.shape(), tensor.dtype(), tensor.layout());
 }

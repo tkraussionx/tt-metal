@@ -27,7 +27,7 @@ namespace tt_metal {
 namespace detail{
     void ValidateCircularBufferRegion(const Program &program, const Device *device);
     KernelHandle AddKernel ( Program & program, std::shared_ptr<Kernel> kernel);
-    Kernel *GetKernel(const Program &program, KernelHandle kernel_id);
+    std::shared_ptr<Kernel> GetKernel(const Program &program, KernelHandle kernel_id);
     std::shared_ptr<CircularBuffer> GetCircularBuffer(const Program &program, CBHandle id);
 }
 
@@ -166,7 +166,7 @@ class Program {
     friend void detail::ValidateCircularBufferRegion(const Program &program, const Device *device);
 
     friend KernelHandle detail::AddKernel(Program &program, std::shared_ptr<Kernel> kernel);
-    friend Kernel *detail::GetKernel(const Program &program, KernelHandle kernel_id);
+    friend std::shared_ptr<Kernel> detail::GetKernel(const Program &program, KernelHandle kernel_id);
 
     friend uint32_t CreateSemaphore(Program &program, const std::variant<CoreRange,CoreRangeSet> &core_spec, uint32_t initial_value);
     KernelHandle add_kernel(std::shared_ptr<Kernel> kernel);

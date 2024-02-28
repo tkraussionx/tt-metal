@@ -244,8 +244,8 @@ bool matmul_multi_core_single_dram(tt_metal::Device *device){
                 (std::uint32_t) out_subblock_h * out_subblock_w * single_tile_size * (per_core_N/out_subblock_w), // bytes offset to next row of sub-blocks
                 (std::uint32_t) out_subblock_w * single_tile_size};
 
-            tt_metal::SetRuntimeArgs(device, program.get_kernels().at(mm_reader_kernel), core, mm_reader_args);
-            tt_metal::SetRuntimeArgs(device, program.get_kernels().at(unary_writer_kernel), core, writer_args);
+            tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, mm_reader_kernel), core, mm_reader_args);
+            tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, unary_writer_kernel), core, writer_args);
         }
     }
 
@@ -352,8 +352,8 @@ bool assign_runtime_args_to_program(
                 (std::uint32_t)(per_core_M / out_subblock_h)       // out_num_subblocks_h
             };
 
-            tt_metal::SetRuntimeArgs(device, program.get_kernels().at(mm_reader_kernel), core, mm_reader_args);
-            tt_metal::SetRuntimeArgs(device, program.get_kernels().at(unary_writer_kernel), core, writer_args);
+            tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, mm_reader_kernel), core, mm_reader_args);
+            tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, unary_writer_kernel), core, writer_args);
         }
     }
     return pass;

@@ -75,7 +75,6 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
         tt_metal::CircularBufferConfig cb_src1_config = tt_metal::CircularBufferConfig(num_shard_tiles * src0_single_tile_size, {{src1_cb_index, src0_cb_data_format}})
             .set_page_size(src1_cb_index, src0_single_tile_size).set_globally_allocated_address(*a.buffer());
         cb_src1 = tt_metal::CreateCircularBuffer(p_with_call.program, all_cores, cb_src1_config);
-        p_with_call.program.get_circular_buffer(cb_src1)->assign_global_address();
     } else {
         uint32_t num_input_tiles = 2;
         tt_metal::CircularBufferConfig cb_src0_config = tt_metal::CircularBufferConfig(num_input_tiles * src0_single_tile_size, {{src0_cb_index, src0_cb_data_format}})
@@ -95,7 +94,6 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
         tt_metal::CircularBufferConfig cb_output_config = tt_metal::CircularBufferConfig(num_output_tiles * dst_single_tile_size, {{output_cb_index, dst_cb_data_format}})
             .set_page_size(output_cb_index, dst_single_tile_size).set_globally_allocated_address(*output.buffer());;
         cb_output = tt_metal::CreateCircularBuffer(p_with_call.program, all_cores, cb_output_config);
-        p_with_call.program.get_circular_buffer(cb_output)->assign_global_address();
     } else {
         uint32_t num_output_tiles = 2;
         tt_metal::CircularBufferConfig cb_output_config = tt_metal::CircularBufferConfig(num_output_tiles * dst_single_tile_size, {{output_cb_index, dst_cb_data_format}})
@@ -212,7 +210,7 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
                 for (auto y = core_range.start.y; y <= core_range.end.y; y++) {
                     tt_metal::SetRuntimeArgs(
                         device,
-                        p_with_call.program.get_kernels().at(reader_kernel_id),
+                        tt_metal::detail::GetKernel(p_with_call.program, reader_kernel_id),
                         CoreCoord(x, y),
                         reader_rt_args
                     );
@@ -229,7 +227,7 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
                 for (auto y = core_range.start.y; y <= core_range.end.y; y++) {
                     tt_metal::SetRuntimeArgs(
                         device,
-                        p_with_call.program.get_kernels().at(writer_kernel_id),
+                        tt_metal::detail::GetKernel(p_with_call.program, writer_kernel_id),
                         CoreCoord(x, y),
                         writer_rt_args
                     );
@@ -262,12 +260,12 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
             };
 
             tt_metal::SetRuntimeArgs(
-                device, p_with_call.program.get_kernels().at(reader_kernel_id), core,
+                device, tt_metal::detail::GetKernel(p_with_call.program, reader_kernel_id), core,
                 reader_rt_args
             );
 
             tt_metal::SetRuntimeArgs(
-                device, p_with_call.program.get_kernels().at(writer_kernel_id), core,
+                device, tt_metal::detail::GetKernel(p_with_call.program, writer_kernel_id), core,
                writer_rt_args
             );
             num_cols_read += num_cols_per_core;
@@ -309,11 +307,11 @@ operation::ProgramWithCallbacks reduce_multi_core_h(const Tensor &a, Tensor& out
                 CoreCoord core = {i / num_cores_y, i % num_cores_y};
 
                 {
-                    EnqueueUpdateRuntimeArgs(device->command_queue(), program.get_kernels().at(reader_kernel_id), core, update_idx, runtime_args_src, false);
+                    UpdateRuntimeArgs(device->command_queue(), tt_metal::detail::GetKernel(program, reader_kernel_id), core, update_idx, runtime_args_src);
                 }
 
                 {
-                    EnqueueUpdateRuntimeArgs(device->command_queue(), program.get_kernels().at(writer_kernel_id), core, update_idx, runtime_args_dst, false);
+                    UpdateRuntimeArgs(device->command_queue(), tt_metal::detail::GetKernel(program, writer_kernel_id), core, update_idx, runtime_args_dst);
                 }
             }
         }

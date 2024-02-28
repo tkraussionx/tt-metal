@@ -9,7 +9,7 @@
 #include "tt_metal/common/math.hpp"
 #include "common/assert.hpp"
 #include "tt_metal/impl/device/device.hpp"
-
+#include "tt_metal/detail/tt_metal.hpp"
 #include "llrt/llrt.hpp"
 
 namespace tt {
@@ -238,7 +238,7 @@ void Buffer::allocate() {
     TT_ASSERT(this->device_ != nullptr);
     // L1 buffers are allocated top down!
     bool bottom_up = this->buffer_type_ == BufferType::DRAM;
-    AllocateBuffer(this, bottom_up);
+    detail::AllocateBuffer(this, bottom_up);
 }
 
 uint32_t Buffer::dram_channel_from_bank_id(uint32_t bank_id) const {
@@ -317,7 +317,7 @@ void Buffer::deallocate() {
     if (this->device_ == nullptr or not this->device_->initialized_ or this->size_ == 0) {
         return;
     }
-    DeallocateBuffer(this);
+    detail::DeallocateBuffer(this);
 }
 
 Buffer::~Buffer() {

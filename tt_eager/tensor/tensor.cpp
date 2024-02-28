@@ -96,7 +96,6 @@ Tensor Tensor::cpu(bool blocking) const {
         return *this;
     }
     auto rval = tensor_impl::to_host_wrapper(*this, blocking);
-    // std::cout << "CPU call done" << std::endl;
     return rval;
 }
 
@@ -183,7 +182,6 @@ Tensor Tensor::unpad_from_tile(const Shape &output_tensor_shape) const {
     Shape output_tensor_start = {0, 0, 0, 0};
     Shape output_tensor_end = {output_tensor_shape[0] - 1, output_tensor_shape[1] - 1, output_tensor_shape[2] - 1, output_tensor_shape[3] - 1};
     auto rval = this->unpad(output_tensor_start, output_tensor_end);
-    std::cout << "Unpad call done" << std::endl;
     return rval;
 }
 
