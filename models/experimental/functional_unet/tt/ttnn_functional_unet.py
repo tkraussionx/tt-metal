@@ -23,11 +23,13 @@ class UNet:
 
         # Relu and bn2 are fused with conv1
         out = self.c1_2(out)
+        out = ttnn.to_layout(out, layout=ttnn.ROW_MAJOR_LAYOUT)
         out = self.p1(out)
 
-        # out = ttnn.add(out, identity, memory_config=ttnn.get_memory_config(out))
+        out = ttnn.to_layout(out, layout=ttnn.TILE_LAYOUT)
+        out = ttnn.add(out, identity, memory_config=ttnn.get_memory_config(out))
         # out = ttnn.to_memory_config(out, memory_config=ttnn.DRAM_MEMORY_CONFIG)
-        # out = self.relu(out)
+        out = self.relu(out)
 
         return out
 
@@ -43,6 +45,7 @@ class UNet:
         output_tensor = ttnn.to_torch(output_tensor)
         print("the shape before change is: ", output_tensor.size())
         output_tensor = torch.permute(output_tensor, (0, 3, 1, 2))
+        output_tensor = output_tensor.reshape(2, 16, 528, 80)
         print("the shape after change is: ", output_tensor.size())
         print(" torch_input_tensor.shape: ", torch_input_tensor.shape)
         # output_tensor = torch.reshape(output_tensor, torch_input_tensor.shape)

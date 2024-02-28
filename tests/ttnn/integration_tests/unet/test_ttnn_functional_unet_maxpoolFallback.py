@@ -42,7 +42,7 @@ def custom_preprocessor(model, name, ttnn_module_args):
         ttnn_module_args.c1["activation"] = "relu"  # Fuse relu with conv1
         ttnn_module_args.c1_2["activation"] = "relu"  # Fuse relu with conv1
         ttnn_module_args.c1["deallocate_activation"] = True
-        ttnn_module_args.c1_2["deallocate_activation"] = True
+        ttnn_module_args.c1_2["deallocate_activation"] = False
         ttnn_module_args.c1["conv_blocking_and_parallelization_config_override"] = {"act_block_h": 64}
         ttnn_module_args.c1_2["conv_blocking_and_parallelization_config_override"] = {"act_block_h": 64}
 
@@ -54,7 +54,7 @@ def custom_preprocessor(model, name, ttnn_module_args):
         ttnn_module_args.c2_2["weights_dtype"] = ttnn.bfloat8_b
         ttnn_module_args.c2["activation"] = "relu"  # Fuse relu with conv2
         ttnn_module_args.c2_2["activation"] = "relu"  # Fuse relu with conv2
-        ttnn_module_args.c2["deallocate_activation"] = True
+        ttnn_module_args.c2["deallocate_activation"] = False
         ttnn_module_args.c2_2["deallocate_activation"] = True
         ttnn_module_args.c2["conv_blocking_and_parallelization_config_override"] = None
         ttnn_module_args.c2_2["conv_blocking_and_parallelization_config_override"] = None
@@ -235,8 +235,15 @@ def custom_preprocessor(model, name, ttnn_module_args):
         update_ttnn_module_args(ttnn_module_args.c8_3)
         update_ttnn_module_args(ttnn_module_args.output_layer)
 
-        parameters["c1"] = preprocess_conv2d(conv1_weight, conv1_bias, ttnn_module_args.c1)
+        parameters["c1"], c1_parallel_config = preprocess_conv2d(
+            conv1_weight, conv1_bias, ttnn_module_args.c1, return_parallel_config=True
+        )
         parameters["c1_2"] = preprocess_conv2d(conv1_2_weight, conv1_2_bias, ttnn_module_args.c1_2)
+        parameters["p1"] = {}
+        ttnn_module_args.p1["parallel_config_override"] = {
+            "grid_size": (c1_parallel_config.grid_size.x, c1_parallel_config.grid_size.y),
+            "num_cores_nhw": c1_parallel_config.num_cores_nhw,
+        }
         parameters["c2"] = preprocess_conv2d(conv2_weight, conv2_bias, ttnn_module_args.c2)
         parameters["c2_2"] = preprocess_conv2d(conv2_2_weight, conv2_2_bias, ttnn_module_args.c2_2)
         parameters["c3"] = preprocess_conv2d(conv3_weight, conv3_bias, ttnn_module_args.c3)

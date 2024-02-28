@@ -7,7 +7,10 @@ import pytest
 import torch
 import torch.nn as nn
 
-from torchview import draw_graph
+try:
+    from torchview import draw_graph
+except:
+    draw_graph = None
 
 from ttnn.model_preprocessing import preprocess_model, preprocess_conv2d, fold_batch_norm2d_into_conv2d
 
@@ -45,9 +48,15 @@ def custom_preprocessor(model, name, ttnn_module_args):
         update_ttnn_module_args(ttnn_module_args.c1)
         update_ttnn_module_args(ttnn_module_args.c1_2)
 
-        parameters["c1"] = preprocess_conv2d(conv1_weight, conv1_bias, ttnn_module_args.c1)
+        parameters["c1"], c1_parallel_config = preprocess_conv2d(
+            conv1_weight, conv1_bias, ttnn_module_args.c1, return_parallel_config=True
+        )
         parameters["c1_2"] = preprocess_conv2d(conv2_weight, conv2_bias, ttnn_module_args.c1_2)
         parameters["p1"] = {}
+        ttnn_module_args.p1["parallel_config_override"] = {
+            "grid_size": (c1_parallel_config.grid_size.x, c1_parallel_config.grid_size.y),
+            "num_cores_nhw": c1_parallel_config.num_cores_nhw,
+        }
 
         # print("parameters['p1']: ", parameters["p1"])
 
@@ -155,20 +164,21 @@ output_tensor = model(input_tensor)
 print("\n\n\n")
 print("output_tensor size is: ", output_tensor.size())
 print("\n\n\n")
-model_graph = draw_graph(
-    model,
-    # input_size=(1, 3, 1056, 160),
-    input_size=(2, 3, 1056, 160),
-    dtypes=[torch.float32],
-    expand_nested=True,
-    graph_name="unetSeqEdit2",
-    depth=2,
-    directory=".",
-)
-model_graph.visual_graph.render(format="pdf")
+if draw_graph is not None:
+    model_graph = draw_graph(
+        model,
+        # input_size=(1, 3, 1056, 160),
+        input_size=(2, 3, 1056, 160),
+        dtypes=[torch.float32],
+        expand_nested=True,
+        graph_name="unetSeqEdit2",
+        depth=2,
+        directory=".",
+    )
+    model_graph.visual_graph.render(format="pdf")
 
 device_id = 0
-device = ttnn.open(device_id)
+device = ttnn.open_device(device_id=device_id)
 
 torch.manual_seed(0)
 
