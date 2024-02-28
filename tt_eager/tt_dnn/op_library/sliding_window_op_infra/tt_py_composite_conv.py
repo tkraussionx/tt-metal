@@ -823,10 +823,12 @@ class TTPyCompositeConv(TTPyOp):
     def __call__(self, activation):
         # print("Going to run conv with input shape-", self.input_tensor_shape)
         # print("with output shape = ", self.conv_output_shape)
-        if self.enable_auto_formatting:
+        already_sharded = True
+        if self.enable_auto_formatting and not activation.is_sharded():
+            already_sharded = False
             activation = self.conv_input_interleaved_to_sharded(activation)
         activation = self.conv(activation)
-        if self.enable_auto_formatting:
+        if self.enable_auto_formatting and not already_sharded:
             activation = self.conv_output_sharded_to_interleaved(activation)
         return activation
 

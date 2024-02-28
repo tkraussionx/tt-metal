@@ -465,13 +465,16 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
     tt_metal::CircularBufferConfig halo_prev_input_cb_config = tt_metal::CircularBufferConfig(num_halo_prev_cb_input_tiles * input_single_tile_size, {{halo_prev_input_cb_index, input_cb_data_format}})
 		.set_page_size(halo_prev_input_cb_index, input_single_tile_size);
     auto halo_prev_input_cb = tt_metal::CreateCircularBuffer(program, core_range, halo_prev_input_cb_config);
+    log_debug(LogOp, "CB {}: PS = {} NP = {}", halo_prev_input_cb_index, input_single_tile_size, num_halo_prev_cb_input_tiles);
 
     uint32_t halo_next_input_cb_index = CB::c_in2;
-    uint32_t halo_next_input_cb_max_rows_of_tiles = 33; // TODO: Remove hardcoding
-    uint32_t num_halo_next_cb_input_tiles = num_input_tiles_in_row  * halo_next_input_cb_max_rows_of_tiles;
+    uint32_t halo_next_input_cb_max_rows_of_tiles = 20; // TODO: Remove hardcoding
+    uint32_t num_halo_next_cb_input_tiles = num_input_tiles_in_row; //  * halo_next_input_cb_max_rows_of_tiles;
     tt_metal::CircularBufferConfig halo_next_input_cb_config = tt_metal::CircularBufferConfig(num_halo_next_cb_input_tiles * input_single_tile_size, {{halo_next_input_cb_index, input_cb_data_format}})
 		.set_page_size(halo_next_input_cb_index, input_single_tile_size);
     auto halo_next_input_cb = tt_metal::CreateCircularBuffer(program, core_range, halo_next_input_cb_config);
+    log_debug(LogOp, "CB {}: PS = {} NP = {}", halo_next_input_cb_index, input_single_tile_size, num_halo_next_cb_input_tiles);
+
     // CB to store reader pattern array
     // read pattern array size == output_height
     uint32_t reader_pattern_array_size = output_shard_height;
@@ -479,6 +482,8 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
     tt_metal::CircularBufferConfig reader_pattern_array_cb_config = tt_metal::CircularBufferConfig(reader_pattern_array_size * 4, {{reader_pattern_array_cb_index, DataFormat::Float16_b}})
 		.set_page_size(reader_pattern_array_cb_index, 4);
     auto reader_pattern_array_cb = tt_metal::CreateCircularBuffer(program, core_range, reader_pattern_array_cb_config);
+    log_debug(LogOp, "CB {}: PS = 4 NP = {}", reader_pattern_array_cb_index, reader_pattern_array_size);
+
     // untilized CB has size - [32, full width]
     uint32_t untilize_cb_index = CB::c_intermed2;
     uint32_t num_tiles_untilize_cb = num_input_tiles_in_row;
@@ -493,6 +498,7 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
     tt_metal::CircularBufferConfig untilize_downsampled_cb_config = tt_metal::CircularBufferConfig(num_tiles_untilize_downsampled_cb * untilized_single_tile_size, {{untilize_downsampled_cb_index, untilized_cb_data_format}})
 		.set_page_size(untilize_downsampled_cb_index, untilized_single_tile_size);
     auto untilize_downsampled_cb = tt_metal::CreateCircularBuffer(program, core_range, untilize_downsampled_cb_config);
+    log_debug(LogOp, "CB {}: PS = {} NP = {}", untilize_downsampled_cb_index, untilized_single_tile_size, num_tiles_untilize_downsampled_cb);
 
     uint32_t final_tilize_output_cb_index = CB::c_out0;
     uint32_t num_tiles_final_tilize_output_cb = num_output_tiles; // final output cb size == output size per core
@@ -500,6 +506,7 @@ operation::ProgramWithCallbacks downsample_single_core(const Tensor &a, std::arr
 		.set_page_size(final_tilize_output_cb_index, output_single_tile_size);
     final_tilize_output_cb_config = final_tilize_output_cb_config.set_globally_allocated_address(*output.buffer());
     auto final_tilize_output_cb = tt_metal::CreateCircularBuffer(program, core_range, final_tilize_output_cb_config);
+    log_debug(LogOp, "CB {}: PS = {} NP = {}", final_tilize_output_cb_index, output_single_tile_size, num_tiles_final_tilize_output_cb);
 
     uint32_t log_base_2_of_conv_act_size_c_bytes = (uint32_t) std::log2((float) input_shard_width_bytes);
     uint32_t stride_h_x_image_width = img_stride_h * img_width;

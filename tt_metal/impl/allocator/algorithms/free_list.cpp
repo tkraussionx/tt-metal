@@ -428,8 +428,8 @@ FreeList::~FreeList() {
 
 void FreeList::dump_block(const Block *block, std::ofstream &out) const {
     auto alloc_status = this->is_allocated(block) ? "Y" : "N";
-    out << ",,,Address (KB):," << (block->address + this->offset_bytes_) / 1024 << "\n"
-        << ",,,Size (KB):," << (block->size) / 1024 << "\n"
+    out << ",,,Address (B):," << (block->address + this->offset_bytes_) << "\n"
+        << ",,,Size (B):," << (block->size) << "\n"
         << ",,,Allocated (Y/N):," << alloc_status << "\n";
 }
 

@@ -28,25 +28,27 @@ def resnet_basic_block(x, *, parameters):
     return out
 
 
-def resnet_bottleneck_block(x, parameters):
+def resnet_bottleneck_block(x, parameters, device=None):
     identity = x
 
     conv1 = parameters.conv1(x)
     conv2 = parameters.conv2(conv1)
-    ttnn.deallocate(conv1)
+    if conv1.value.is_allocated():
+        ttnn.deallocate(conv1)
     conv3 = parameters.conv3(conv2)
     ttnn.deallocate(conv2)
 
+    if device is not None:
+        ttnn.dump_device_memory_state(device)
+
     if "downsample" in parameters and parameters.downsample is not None:
-        x = ttnn.to_memory_config(x, ttnn.DRAM_MEMORY_CONFIG)
         identity = parameters.downsample(x)
         ttnn.deallocate(x)
 
     conv3 = ttnn.reshape(conv3, identity.shape)
-    out = ttnn.add_and_apply_activation(conv3, identity, activation="relu", memory_config=ttnn.DRAM_MEMORY_CONFIG)
+    out = ttnn.add_and_apply_activation(conv3, identity, activation="relu")  ##, memory_config=ttnn.DRAM_MEMORY_CONFIG)
     ttnn.deallocate(conv3)
 
-    # ttnn.deallocate(conv3)
     if x is not identity:
         ttnn.deallocate(identity)
 
