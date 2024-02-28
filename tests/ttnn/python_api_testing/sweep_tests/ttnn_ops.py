@@ -761,6 +761,7 @@ def atan(
 
 def atan2(
     x,
+    y,
     *args,
     device,
     dtype,
@@ -770,9 +771,11 @@ def atan2(
     **kwargs,
 ):
     t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttnn.atan2(t0)
+    t1 = setup_ttnn_tensor(y, device, layout[0], input_mem_config[0], dtype[0])
 
-    return ttnn_tensor_to_torch(t1, output_mem_config)
+    t2 = ttnn.atan2(t0, t1)
+
+    return ttnn_tensor_to_torch(t2, output_mem_config)
 
 
 def atanh(
@@ -874,6 +877,7 @@ def expm1(
 def elu(
     x,
     *args,
+    alpha,
     device,
     dtype,
     layout,
@@ -882,7 +886,7 @@ def elu(
     **kwargs,
 ):
     t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttnn.elu(t0)
+    t1 = ttnn.elu(t0, alpha)
 
     return ttnn_tensor_to_torch(t1, output_mem_config)
 
@@ -929,7 +933,7 @@ def erfinv(
     output_mem_config,
     **kwargs,
 ):
-    t0 = setup_ttnn_tenxsor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
     t1 = ttnn.erfinv(t0)
 
     return ttnn_tensor_to_torch(t1, output_mem_config)
