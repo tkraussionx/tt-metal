@@ -184,17 +184,24 @@ FORCE_INLINE void relay_command(bool db_buf_switch, uint64_t consumer_noc_encodi
 
 template <uint32_t consumer_cmd_base_addr, uint32_t consumer_data_buffer_size>
 void produce(
-    volatile tt_l1_ptr uint32_t* command_ptr,
-    uint32_t num_srcs,
-    bool sharded,
-    uint32_t sharded_buffer_num_cores,
+    // volatile tt_l1_ptr uint32_t* command_ptr,
+    // uint32_t num_srcs,
+    // bool sharded,
+    // uint32_t sharded_buffer_num_cores,
     uint32_t producer_cb_size,
     uint32_t producer_cb_num_pages,
     uint64_t consumer_noc_encoding,
     uint32_t producer_consumer_transfer_num_pages,
     bool db_buf_switch,
     db_cb_config_t* db_cb_config,
-    const db_cb_config_t* remote_db_cb_config) {
+    const db_cb_config_t* remote_db_cb_config,
+    const uint32_t bank_base_address,
+    const uint32_t num_pages,
+    const uint32_t page_size,
+    const uint32_t src_buf_type,
+    const uint32_t src_page_index,
+    Buffer& buffer
+    ) {
     /*
         This API prefetches data from host memory and writes data to the consumer core. On the consumer,
         we partition the data space into 2 via double-buffering. There are two command slots, and two
@@ -205,70 +212,49 @@ void produce(
     uint32_t consumer_cb_size = (db_cb_config->total_size_16B << 4);
     uint32_t consumer_cb_num_pages = db_cb_config->num_pages;
 
-    command_ptr += DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER;
     uint32_t l1_consumer_fifo_limit_16B =
         (get_db_buf_addr<consumer_cmd_base_addr, consumer_data_buffer_size>(db_buf_switch) + consumer_cb_size) >> 4;
 
+    uint32_t fraction_of_producer_cb_num_pages = consumer_cb_num_pages / 2;
 
-    for (uint32_t i = 0; i < num_srcs; i++) {
-        const uint32_t bank_base_address = command_ptr[0];
-        const uint32_t num_pages = command_ptr[2];
-        const uint32_t page_size = command_ptr[3];
-        const uint32_t src_buf_type = command_ptr[4];
-        const uint32_t src_page_index = command_ptr[6];
+    uint32_t num_to_read = min(num_pages, fraction_of_producer_cb_num_pages);
+    uint32_t num_to_write = min(num_pages, producer_consumer_transfer_num_pages); // This must be a bigger number for perf.
+    uint32_t num_reads_issued = 0;
+    uint32_t num_reads_completed = 0;
+    uint32_t num_writes_completed = 0;
+    uint32_t src_page_id = src_page_index;
 
+    while (num_writes_completed != num_pages) {
+        // Context switch between reading in pages and sending them to the consumer.
+        // These APIs are non-blocking to allow for context switching.
+        if (cb_producer_space_available(num_to_read) and num_reads_issued < num_pages) {
+            uint32_t l1_write_ptr = get_write_ptr(0);
+            buffer.noc_async_read_buffer(l1_write_ptr, src_page_id, num_to_read);
+            cb_push_back(0, num_to_read);
+            num_reads_issued += num_to_read;
+            src_page_id += num_to_read;
 
-        uint32_t fraction_of_producer_cb_num_pages = consumer_cb_num_pages / 2;
-
-        uint32_t num_to_read = min(num_pages, fraction_of_producer_cb_num_pages);
-        uint32_t num_to_write = min(num_pages, producer_consumer_transfer_num_pages); // This must be a bigger number for perf.
-        uint32_t num_reads_issued = 0;
-        uint32_t num_reads_completed = 0;
-        uint32_t num_writes_completed = 0;
-        uint32_t src_page_id = src_page_index;
-
-        Buffer buffer;
-        if ((BufferType)src_buf_type == BufferType::SYSTEM_MEMORY or not(sharded)) {
-            buffer.init((BufferType)src_buf_type, bank_base_address, page_size);
-        }
-        else{
-            buffer.init_sharded(page_size, sharded_buffer_num_cores, bank_base_address,
-                            command_ptr + COMMAND_PTR_SHARD_IDX);
+            uint32_t num_pages_left = num_pages - num_reads_issued;
+            num_to_read = min(num_pages_left, fraction_of_producer_cb_num_pages);
         }
 
-        while (num_writes_completed != num_pages) {
-            // Context switch between reading in pages and sending them to the consumer.
-            // These APIs are non-blocking to allow for context switching.
-            if (cb_producer_space_available(num_to_read) and num_reads_issued < num_pages) {
-                uint32_t l1_write_ptr = get_write_ptr(0);
-                buffer.noc_async_read_buffer(l1_write_ptr, src_page_id, num_to_read);
-                cb_push_back(0, num_to_read);
-                num_reads_issued += num_to_read;
-                src_page_id += num_to_read;
-
-                uint32_t num_pages_left = num_pages - num_reads_issued;
-                num_to_read = min(num_pages_left, fraction_of_producer_cb_num_pages);
+        if (num_reads_issued > num_writes_completed and cb_consumer_space_available(db_cb_config, num_to_write)) {
+            if (num_writes_completed == num_reads_completed) {
+                noc_async_read_barrier();
+                num_reads_completed = num_reads_issued;
             }
 
-            if (num_reads_issued > num_writes_completed and cb_consumer_space_available(db_cb_config, num_to_write)) {
-                if (num_writes_completed == num_reads_completed) {
-                    noc_async_read_barrier();
-                    num_reads_completed = num_reads_issued;
-                }
-
-                uint32_t dst_addr = (db_cb_config->wr_ptr_16B << 4);
-                uint64_t dst_noc_addr = consumer_noc_encoding | dst_addr;
-                uint32_t l1_read_ptr = get_read_ptr(0);
-                noc_async_write(l1_read_ptr, dst_noc_addr, page_size * num_to_write);
-                multicore_cb_push_back(
-                    db_cb_config, remote_db_cb_config, consumer_noc_encoding, l1_consumer_fifo_limit_16B, num_to_write);
-                noc_async_write_barrier();
-                cb_pop_front(0, num_to_write);
-                num_writes_completed += num_to_write;
-                num_to_write = min(num_pages - num_writes_completed, producer_consumer_transfer_num_pages);
-            }
+            uint32_t dst_addr = (db_cb_config->wr_ptr_16B << 4);
+            uint64_t dst_noc_addr = consumer_noc_encoding | dst_addr;
+            uint32_t l1_read_ptr = get_read_ptr(0);
+            noc_async_write(l1_read_ptr, dst_noc_addr, page_size * num_to_write);
+            multicore_cb_push_back(
+                db_cb_config, remote_db_cb_config, consumer_noc_encoding, l1_consumer_fifo_limit_16B, num_to_write);
+            noc_async_write_barrier();
+            cb_pop_front(0, num_to_write);
+            num_writes_completed += num_to_write;
+            num_to_write = min(num_pages - num_writes_completed, producer_consumer_transfer_num_pages);
         }
-        command_ptr += DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION;
     }
 }
 

@@ -80,18 +80,37 @@ void kernel_main() {
         update_producer_consumer_sync_semaphores(producer_noc_encoding, consumer_noc_encoding, db_semaphore_addr, get_semaphore(0));
 
         // Fetch data and send to the consumer
-        produce<consumer_cmd_base_addr, consumer_data_buffer_size>(
-            command_ptr,
-            num_buffer_transfers,
-            is_sharded,
-            sharded_buffer_num_cores,
-            producer_cb_size,
-            producer_cb_num_pages,
-            consumer_noc_encoding,
-            producer_consumer_transfer_num_pages,
-            db_buf_switch,
-            db_cb_config,
-            remote_db_cb_config);
+        volatile tt_l1_ptr uint32_t* buffer_transfer_ptr = command_ptr + DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER;
+        for (uint32_t src = 0; src < num_buffer_transfers; src++) {
+            const uint32_t bank_base_address = buffer_transfer_ptr[0];
+            const uint32_t num_pages = buffer_transfer_ptr[2];
+            const uint32_t page_size = buffer_transfer_ptr[3];
+            const uint32_t src_buf_type = buffer_transfer_ptr[4];
+            const uint32_t src_page_index = buffer_transfer_ptr[6];
+            Buffer buffer;
+            if ((BufferType)src_buf_type == BufferType::SYSTEM_MEMORY or not(is_sharded)) {
+                buffer.init((BufferType)src_buf_type, bank_base_address, page_size);
+            }
+            else{
+                buffer.init_sharded(page_size, sharded_buffer_num_cores, bank_base_address,
+                                command_ptr + COMMAND_PTR_SHARD_IDX);
+            }
+            produce<consumer_cmd_base_addr, consumer_data_buffer_size>(
+                producer_cb_size,
+                producer_cb_num_pages,
+                consumer_noc_encoding,
+                producer_consumer_transfer_num_pages,
+                db_buf_switch,
+                db_cb_config,
+                remote_db_cb_config,
+                bank_base_address,
+                num_pages,
+                page_size,
+                src_buf_type,
+                src_page_index,
+                buffer);
+            buffer_transfer_ptr += DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION;
+        }
 
         issue_queue_pop_front<host_issue_queue_read_ptr_addr>(DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + data_size);
 
