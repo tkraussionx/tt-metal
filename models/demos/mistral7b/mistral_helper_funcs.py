@@ -24,6 +24,9 @@ def from_torch_cached(filename, torch_tensor, device=None, dtype=None, memory_co
         tensor = ttnn.from_torch(torch_tensor, dtype=dtype, memory_config=memory_config, layout=layout)
         Path(filename).parent.mkdir(parents=True, exist_ok=True)
         ttnn.dump_tensor(filename, tensor)
+        # ensure shared cache files and dir are world-writeable
+        Path(filename).parent.chmod(0o777)
+        Path(filename).chmod(0o777)
     tensor = ttnn.to_device(tensor, device)
     return tensor
 
