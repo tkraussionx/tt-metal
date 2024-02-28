@@ -744,6 +744,23 @@ std::shared_ptr<Buffer> CreateBuffer(const std::variant<InterleavedBufferConfig,
 
 void DeallocateBuffer(Buffer &buffer) { buffer.deallocate(); }
 
+void AssignGlobalBufferToProgram(std::shared_ptr<Buffer> buffer, std::variant<std::reference_wrapper<Program>, std::shared_ptr<Program>> program) {
+    if (buffer->device()->sw_command_queues_.size() == 0) {
+        std::visit([&buffer] (auto&& p) {
+            using program_type = std::decay_t<decltype(p)>;
+            if constexpr (std::is_same_v<program_type, std::reference_wrapper<Program>>) {
+                p.get().add_global_buffer(buffer);
+            }
+            else {
+                p->add_global_buffer(buffer);
+            }
+        }, program);
+    }
+    else {
+        EnqueueAddBufferToProgram(buffer-> device()->command_queue(), buffer, program, false);
+    }
+}
+
 void SetRuntimeArgs(const Program &program, KernelHandle kernel_id, const std::variant<CoreCoord,CoreRange,CoreRangeSet> &core_spec, const std::vector<uint32_t> &runtime_args) {
     ZoneScoped;
     TT_ASSERT(CommandQueue::get_mode() == CommandQueue::CommandQueueMode::PASSTHROUGH, "This variant of SetRuntimeArgs can only be called when Asyncrhonous SW Command Queues are disabled for Fast Dispatch.");

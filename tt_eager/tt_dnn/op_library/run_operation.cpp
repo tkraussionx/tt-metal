@@ -231,6 +231,7 @@ std::vector<Tensor> run_device_operation(
             auto device = detail::get_device(input_tensors, optional_input_tensors);
             using T = std::decay_t<decltype(program)>;
             if constexpr (std::is_same_v<T, std::reference_wrapper<Program>> || std::is_same_v<T, std::shared_ptr<Program>> ) {
+
                 if (!operation::skip_profile) {
                     auto do_profile = op_profiler::get_profiler_flag();
                     if (do_profile) {
@@ -238,7 +239,17 @@ std::vector<Tensor> run_device_operation(
                     }
                 }
                 if (USE_FAST_DISPATCH) {
-                    // std::cout << "Running operation" << std::endl;
+                    // Program will temporarily own the input buffers. This is required, since with Async command queues, the input
+                    // tensor can preemptively be deallocted on device, unless program maintains explicit ownership.
+                    // This invocation of the program will give up ownership once its enqueued.
+                    for (const auto& input_tensor: input_tensors) {
+                        AssignGlobalBufferToProgram(input_tensor.device_buffer(), program);
+                    }
+                    for (auto& optional_input_tensor : optional_input_tensors) {
+                        if (optional_input_tensor.has_value()) {
+                            AssignGlobalBufferToProgram(optional_input_tensor.value().device_buffer(), program);
+                        }
+                    }
 #ifndef TTNN_ENABLE_LOGGING
                     EnqueueProgram(device->command_queue(), program, false);
 #else

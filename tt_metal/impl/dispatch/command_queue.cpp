@@ -1109,6 +1109,32 @@ void Trace::create_replay() {
     }
 }
 
+void EnqueueAddBufferToProgram(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer, std::variant<std::reference_wrapper<Program>, std::shared_ptr<Program>> program, bool blocking) {
+    cq.run_command(CommandInterface{
+        .type = EnqueueCommandType::ADD_BUFFER_TO_PROGRAM,
+        .blocking = blocking,
+        .buffer = buffer,
+        .program = program,
+    });
+}
+
+void EnqueueAddBufferToProgramImpl(const std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer, std::variant<std::reference_wrapper<Program>, std::shared_ptr<Program>> program) {
+    std::visit([program] (auto&& b) {
+        using buffer_type = std::decay_t<decltype(b)>;
+        if constexpr (std::is_same_v<buffer_type, std::shared_ptr<Buffer>>) {
+            std::visit([&b] (auto&& p) {
+                using program_type = std::decay_t<decltype(p)>;
+                if constexpr (std::is_same_v<program_type, std::reference_wrapper<Program>>) {
+                    p.get().add_global_buffer(b);
+                }
+                else {
+                    p->add_global_buffer(b);
+                }
+            }, program);
+        }
+    }, buffer);
+}
+
 void EnqueueUpdateRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::vector<uint32_t> &update_idx, std::shared_ptr<RuntimeArgs> runtime_args_vec, bool blocking) {
     auto runtime_args_md = RuntimeArgsMetadata {
             .core_coord = core_coord,
@@ -1316,13 +1342,15 @@ void EnqueueProgramImpl(CommandQueue& cq, std::variant < std::reference_wrapper<
             program.get().allocate_circular_buffers();
             detail::ValidateCircularBufferRegion(program, device);
             cq.hw_command_queue().enqueue_program(program, trace, blocking);
-            program.get().global_bufs = {};
+            // Program relinquishes ownership of all global buffers its using, once its been enqueued. Avoid mem leaks on device.
+            program.get().global_bufs.clear();
         } else if constexpr (std::is_same_v<T, std::shared_ptr<Program>>) {
             detail::CompileProgram(device, *program);
             program->allocate_circular_buffers();
             detail::ValidateCircularBufferRegion(*program, device);
             cq.hw_command_queue().enqueue_program(*program, trace, blocking);
-            program->global_bufs = {};
+            // Program relinquishes ownership of all global buffers its using, once its been enqueued. Avoid mem leaks on device.
+            program->global_bufs.clear();
         }
     }, program);
 }
@@ -1537,6 +1565,9 @@ void CommandQueue::run_command_impl(const CommandInterface& command) {
             break;
         case EnqueueCommandType::UPDATE_RUNTIME_ARGS:
             EnqueueUpdateRuntimeArgsImpl(command.runtime_args_md.value());
+            break;
+        case EnqueueCommandType::ADD_BUFFER_TO_PROGRAM:
+            EnqueueAddBufferToProgramImpl(command.buffer.value(), command.program.value());
             break;
         case EnqueueCommandType::ENQUEUE_PROGRAM:
             TT_ASSERT(command.program.has_value(), "Must provide a program!");

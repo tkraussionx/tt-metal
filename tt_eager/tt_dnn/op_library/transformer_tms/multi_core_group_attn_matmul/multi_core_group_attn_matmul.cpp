@@ -19,7 +19,7 @@ namespace transformers {
 
 operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, const Tensor &b, Tensor& output, std::optional<const uint32_t> num_tokens, std::optional<const bool> transpose_hw, const uint32_t out_subblock_w, CoreCoord compute_with_storage_grid_size, const bool row_major) {
 
-    tt_metal::Program program{};
+    operation::ProgramWithCallbacks p_with_call;
 
     const auto& ashape = a.shape(), bshape = b.shape();
 
@@ -36,9 +36,9 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
     tt_metal::Buffer *src0_buffer = a.buffer();
     tt_metal::Buffer *src1_buffer = b.buffer();
     tt_metal::Buffer *dst_buffer = output.buffer();
-    program.add_global_buffer(a.device_buffer());
-    program.add_global_buffer(b.device_buffer());
-    program.add_global_buffer(output.device_buffer());
+    // AssignGlobalBufferToProgram(a.device_buffer(), p_with_call.program);
+    // AssignGlobalBufferToProgram(b.device_buffer(), p_with_call.program);
+    // AssignGlobalBufferToProgram(output.device_buffer(), p_with_call.program);
     TT_ASSERT(dst_buffer != nullptr, "Output buffer should be allocated on device!");
 
     // This should allocate a DRAM buffer on the device
@@ -73,8 +73,8 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
     const uint32_t bfloat16_row_bytes = ONE_ROW_BFLOAT16_BYTES * out_block_w; // TODO: Generalize
 
     // Mcast args
-    auto in1_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, all_device_cores, INVALID);
-    auto in1_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, all_device_cores, INVALID);
+    auto in1_mcast_sender_semaphore = tt_metal::CreateSemaphore(p_with_call.program, all_device_cores, INVALID);
+    auto in1_mcast_receiver_semaphore = tt_metal::CreateSemaphore(p_with_call.program, all_device_cores, INVALID);
 
     // Only first 32 of cores mcast KV heads to match num_rows_in_one_tile in reader kernel, so these coordinates are static if we cache on compute_with_storage_grid_size
     // TODO: If this is not the case, then we should set reader_runtime_args to max possible size and update sender noc coordinates based on input
@@ -100,12 +100,12 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         uint32_t cb0_num_input_tiles = a.shard_spec().value().numel() / TILE_HW; // Should be full MtKt and C should be 1
         tt_metal::CircularBufferConfig src0_cb_config = tt_metal::CircularBufferConfig(cb0_num_input_tiles * in0_single_tile_size, {{src0_cb_index, in0_data_format}})
 		    .set_page_size(src0_cb_index, in0_single_tile_size).set_globally_allocated_address(*src0_buffer);
-        cb_src0 = tt_metal::CreateCircularBuffer(program, all_device_cores, src0_cb_config);
+        cb_src0 = tt_metal::CreateCircularBuffer(p_with_call.program, all_device_cores, src0_cb_config);
     } else {
         uint32_t cb0_num_input_tiles = in0_block_w; // TODO: Generalize; double buffer and add blocking along inner dim if we have Mt > 1
         tt_metal::CircularBufferConfig src0_cb_config = tt_metal::CircularBufferConfig(cb0_num_input_tiles * in0_single_tile_size, {{src0_cb_index, in0_data_format}})
 		    .set_page_size(src0_cb_index, in0_single_tile_size);
-        cb_src0 = tt_metal::CreateCircularBuffer(program, all_device_cores, src0_cb_config);
+        cb_src0 = tt_metal::CreateCircularBuffer(p_with_call.program, all_device_cores, src0_cb_config);
     }
 
     // CB for interleaved/sharded KV heads for mcasting; mcasts to same CB
@@ -114,7 +114,7 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
     uint32_t cb1_num_input_tiles = 2 * in1_block_num_tiles;
     tt_metal::CircularBufferConfig cb_src1_config = tt_metal::CircularBufferConfig(cb1_num_input_tiles * in1_single_tile_size, {{src1_cb_index, in1_data_format}})
 		.set_page_size(src1_cb_index, in1_single_tile_size);
-    auto cb_src1 = tt_metal::CreateCircularBuffer(program, all_device_cores, cb_src1_config);
+    auto cb_src1 = tt_metal::CreateCircularBuffer(p_with_call.program, all_device_cores, cb_src1_config);
 
     // CB for sharded KV heads
     CBHandle cb_src2 = 0;  // unused if KV heads is interleaved
@@ -123,7 +123,7 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         uint32_t cb2_num_input_tiles = b.shard_spec().value().numel() / TILE_HW; // Should be full CKtNt and batch must be 32
         tt_metal::CircularBufferConfig cb_src2_config = tt_metal::CircularBufferConfig(cb2_num_input_tiles * in1_single_tile_size, {{src2_cb_index, in1_data_format}})
 		    .set_page_size(src2_cb_index, in1_single_tile_size).set_globally_allocated_address(*src1_buffer);
-        cb_src2 = tt_metal::CreateCircularBuffer(program, all_device_cores, cb_src2_config);
+        cb_src2 = tt_metal::CreateCircularBuffer(p_with_call.program, all_device_cores, cb_src2_config);
     }
 
     // Intermediate CBs for handling untilizing, copying rows, and tilizing to output CB
@@ -131,12 +131,12 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
     uint32_t cb_intermed0_index = CB::c_intermed0;
     tt_metal::CircularBufferConfig cb_interm0_config = tt_metal::CircularBufferConfig(interm_cb_num_tiles * interm_single_tile_size, {{cb_intermed0_index, interm_data_format}})
 		.set_page_size(cb_intermed0_index, interm_single_tile_size);
-    auto cb_interm0 = tt_metal::CreateCircularBuffer(program, all_device_cores, cb_interm0_config);
+    auto cb_interm0 = tt_metal::CreateCircularBuffer(p_with_call.program, all_device_cores, cb_interm0_config);
 
     uint32_t cb_intermed1_index = CB::c_intermed1;
     tt_metal::CircularBufferConfig cb_interm1_config = tt_metal::CircularBufferConfig(MtNt * interm_single_tile_size, {{cb_intermed1_index, interm_data_format}})
 		.set_page_size(cb_intermed1_index, interm_single_tile_size);
-    auto cb_interm1 = tt_metal::CreateCircularBuffer(program, all_device_cores, cb_interm1_config);
+    auto cb_interm1 = tt_metal::CreateCircularBuffer(p_with_call.program, all_device_cores, cb_interm1_config);
 
     // CB for output (if sharded, full num tiles per core)
     uint32_t output_cb_index = CB::c_out0; // output operands start at index 16
@@ -145,12 +145,12 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         uint32_t num_output_tiles = output.shard_spec().value().numel() / TILE_HW; // Should be full MtNt and C should be 1
         tt_metal::CircularBufferConfig cb_output_config = tt_metal::CircularBufferConfig(num_output_tiles * output_single_tile_size, {{output_cb_index, output_data_format}})
 		    .set_page_size(output_cb_index, output_single_tile_size).set_globally_allocated_address(*dst_buffer);
-        cb_output = tt_metal::CreateCircularBuffer(program, all_device_cores, cb_output_config);
+        cb_output = tt_metal::CreateCircularBuffer(p_with_call.program, all_device_cores, cb_output_config);
     } else {
         uint32_t num_output_tiles = MtNt; // TODO: Should be MtNt if Mt > 1? Or, produce one Nt at a time and double buffer?
         tt_metal::CircularBufferConfig cb_output_config = tt_metal::CircularBufferConfig(num_output_tiles * output_single_tile_size, {{output_cb_index, output_data_format}})
 		    .set_page_size(output_cb_index, output_single_tile_size);
-        cb_output = tt_metal::CreateCircularBuffer(program, all_device_cores, cb_output_config);
+        cb_output = tt_metal::CreateCircularBuffer(p_with_call.program, all_device_cores, cb_output_config);
     }
 
     const uint32_t src0_is_dram = src0_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
@@ -188,7 +188,7 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
     const bool reader_noc_is_NOC_0 = reader_noc == tt_metal::NOC::NOC_0;
     tt_metal::NOC writer_noc = reader_noc_is_NOC_0 ? tt_metal::NOC::NOC_1 : tt_metal::NOC::NOC_0;
     auto reader_id = tt_metal::CreateKernel(
-        program,
+        p_with_call.program,
         "tt_eager/tt_dnn/op_library/transformer_tms/kernels/dataflow/reader_mcast_transformer_group_attn_matmul.cpp",
         all_device_cores,
         tt_metal::DataMovementConfig{
@@ -200,7 +200,7 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
     );
 
     auto writer_id = tt_metal::CreateKernel(
-        program,
+        p_with_call.program,
         "tt_eager/tt_dnn/op_library/transformer_tms/kernels/dataflow/writer_transformer_group_attn_matmul.cpp",
         all_device_cores,
         tt_metal::DataMovementConfig{
@@ -219,7 +219,7 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
     }; // bmm compute kernel the B, Mt, Nt are just 3 for loops that technically act as 1 large loop, so only set Nt for simplicity
 
     auto compute_kernel_id = tt_metal::CreateKernel(
-        program,
+        p_with_call.program,
         "tt_eager/tt_dnn/op_library/transformer_tms/kernels/compute/transformer_group_attn_matmul.cpp",
         all_device_cores,
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .compile_args = compute_args}
@@ -542,7 +542,7 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         }
     };
 
-    set_runtime_args(program, a, b, output);
+    set_runtime_args(p_with_call.program, a, b, output);
 
     auto override_runtime_arguments_callback = [
             set_runtime_args
@@ -555,14 +555,14 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(const Tensor &a, co
         const std::vector<Tensor>& output_tensors
     ) {
         const auto& output_tensor = output_tensors.at(0);
-        program.add_global_buffer(input_tensors.at(0).device_buffer());
-        program.add_global_buffer(input_tensors.at(1).device_buffer());
-        program.add_global_buffer(output_tensor.device_buffer());
+        // AssignGlobalBufferToProgram(input_tensors.at(0).device_buffer(), program);
+        // AssignGlobalBufferToProgram(input_tensors.at(1).device_buffer(), program);
+        // AssignGlobalBufferToProgram(output_tensor.device_buffer(), program);
         set_runtime_args(program, input_tensors.at(0), input_tensors.at(1), output_tensor);
     };
-
-    return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};
-}
+    p_with_call.override_runtime_arguments_callback = override_runtime_arguments_callback;
+    return p_with_call;
+    }
 
 }  // namespace transformers
 }  // namespace primary
