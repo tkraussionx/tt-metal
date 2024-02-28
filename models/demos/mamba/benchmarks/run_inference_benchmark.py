@@ -1,6 +1,7 @@
 import time
 import argparse
 from dataclasses import dataclass
+from typing import List
 
 import torch
 
@@ -11,17 +12,12 @@ MODEL_VERSION = "state-spaces/mamba-370m"
 
 @dataclass
 class InferenceBenchmarkResult:
-    total_time: float
+    total_time_ms: float
     tokens_per_s: float
     sequence: str
 
 
 class MambaDecodeWrapper(torch.nn.Module):
-
-    @dataclass
-    class Result:
-        logits: torch.Tensor
-
     def __init__(self, model_version):
         super().__init__()
 
@@ -29,20 +25,17 @@ class MambaDecodeWrapper(torch.nn.Module):
 
         self.decode = MambaDecode.from_pretrained(model_version)
 
-    def forward(self, inputs):
-        x = inputs.squeeze(0)
-        return MambaDecodeWrapper.Result(self.decode(x).unsqueeze(1))
+    def forward(self, x):
+        return self.decode(x)
 
 
 def create_model(model_type: str):
     if model_type == "cpu":
-        model = MambaDecodeWrapper(MODEL_VERSION)
-        device = "cpu"
+        return MambaDecodeWrapper(MODEL_VERSION), "cpu"
     elif model_type == "gpu":
         from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel
 
-        model = MambaLMHeadModel.from_pretrained(MODEL_VERSION, device="cuda")
-        device = "cuda"
+        return MambaLMHeadModel.from_pretrained(MODEL_VERSION, device="cuda"), "cuda"
     else:
         raise RuntimeError(f"Invalid model type: {model_type}")
 
@@ -50,7 +43,6 @@ def create_model(model_type: str):
 
 
 def run_inference_benchmark(model_type: str, prompt: str = "Mamba is the", sequence_length: int = 64):
-
     torch.random.manual_seed(0)
 
     tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
@@ -60,33 +52,28 @@ def run_inference_benchmark(model_type: str, prompt: str = "Mamba is the", seque
     tokens_in_prompt = len(sequence)
 
     @torch.inference_mode()
-    def decode(prompt: list[torch.Tensor]) -> list[torch.Tensor]:
-        for idx in range(len(prompt) - 1):
-            model(prompt[idx])
-
-        sequence = [*prompt]
-        for idx in range(sequence_length):
-            logits = model(sequence[-1]).logits
-            probs = torch.nn.functional.softmax(logits, dim=-1)
-            next_token = torch.argmax(probs, dim=-1)
-            sequence.append(next_token)
-        return sequence
+    def decode(prompt: List[torch.Tensor]) -> List[torch.Tensor]:
+        result = [*prompt]
+        for idx in range(sequence_length + len(prompt)):
+            logits = model(result[idx])
+            if idx >= len(prompt) - 1:
+                probs = torch.nn.functional.softmax(logits, dim=-1)
+                next_token = torch.argmax(probs, dim=-1)
+                result.append(next_token)
+        return result
 
     print("Warming up...")
-    decode(sequence)
+    out = decode(sequence)
     print("Done warming up")
 
-    start = time.process_time()
-    result = decode(sequence)
-    end = time.process_time()
-
-    result = torch.cat(result, dim=1)
-    assert result.shape[1] == tokens_in_prompt + sequence_length
+    start = time.time()
+    decode(sequence)
+    end = time.time()
 
     return InferenceBenchmarkResult(
-        total_time=1000.0 * (end - start),
+        total_time_ms=1000.0 * (end - start),
         tokens_per_s=float(tokens_in_prompt + sequence_length) / (end - start),
-        sequence=tokenizer.batch_decode(result),
+        sequence=tokenizer.batch_decode(torch.cat(out, dim=1)),
     )
 
 
