@@ -1,3 +1,4 @@
+import time
 import argparse
 from typing import List
 
@@ -59,8 +60,11 @@ def run_demo(
     sequences: torch.Tensor = tokenizer(prompts, return_tensors="pt", truncation=True, padding=True).input_ids
 
     all_decoded_sequences = []
+    count = 0
+    start = time.time()
     for idx in range(generated_sequence_length + sequences.shape[1]):
         logits = model(sequences[:, idx].unsqueeze(1))
+        count += sequences.shape[0]
         if idx >= sequences.shape[1] - 1:
             probs = torch.nn.functional.softmax(logits, dim=-1)
             next_token = torch.argmax(probs, dim=-1)
@@ -71,6 +75,7 @@ def run_demo(
 
             if display:
                 display_tokens(decoded)
+                print(f"Current throughput: {count / (time.time() - start):.2f} tok/s")
 
     return all_decoded_sequences
 
