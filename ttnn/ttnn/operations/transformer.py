@@ -140,7 +140,7 @@ def split_query_key_value_and_split_heads(
     if kv_input_tensor is not None:
         batch_size, sequence_size, hidden_size = input_tensor.shape
         _, sequence_size_padded, hidden_size_padded = input_tensor.shape.with_tile_padding()
-        if kv_input_tensor.shape != (batch_size, sequence_size, hidden_size * 2):
+        if kv_input_tensor.shape.with_tile_padding() != (batch_size, sequence_size, hidden_size * 2):
             raise RuntimeError(
                 "kv_input_tensor must be of shape (batch_size, sequence_size, hidden_size * 2) when input_tensor is of shape (batch_size, sequence_size, hidden_size)"
             )
