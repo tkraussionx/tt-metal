@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+
+# SPDX-License-Identifier: Apache-2.0
+
 import torch
 import pytest
 from loguru import logger
@@ -12,7 +16,7 @@ from models.demos.mamba.reference.decode_model import MambaPretrainedModelName
     "model_version, genlen",
     (("state-spaces/mamba-370m", 4),),
 )
-def test_cpu_reference_model_decode_vs_selective_scan(
+def test_demo(
     model_version: MambaPretrainedModelName,
     genlen: int,
 ):
