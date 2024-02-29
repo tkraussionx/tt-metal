@@ -31,6 +31,7 @@ class TtLlamaModel_optimized(nn.Module):
         emulated=False,
         n_layers_per_group=None,
         cache_path=None,
+        start_layer_idx=0,
     ):
         super().__init__()
 
@@ -71,7 +72,7 @@ class TtLlamaModel_optimized(nn.Module):
                 devices,
                 state_dict,
                 base_url,
-                i,
+                start_layer_idx + i,
                 model_config,
                 configuration,
                 batch,
