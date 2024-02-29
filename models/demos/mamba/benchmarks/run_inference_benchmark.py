@@ -15,6 +15,8 @@ class InferenceBenchmarkResult:
     total_time_ms: float
     tokens_per_s: float
     sequence: str
+    model_version: str
+    model_type: str
 
 
 class MambaDecodeWrapper(torch.nn.Module):
@@ -50,13 +52,16 @@ def create_model(model_type: str):
         raise RuntimeError(f"Invalid model type: {model_type}")
 
 
-def run_inference_benchmark(model_type: str, prompt: str = "Mamba is the", sequence_length: int = 64):
+def run_inference_benchmark(model_type: str, prompt: str = "Mamba is the", sequence_length: int = 64, batch: int = 1):
+    print(f"Running benchmark on '{model_type.upper()}' using prompt '{prompt}'")
     torch.random.manual_seed(0)
 
     tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
     model, device = create_model(model_type)
 
-    sequence = tokenizer(prompt, return_tensors="pt").input_ids.to(device=device).split(1, dim=1)
+    prompts = [prompt for idx in range(batch)]
+
+    sequence = tokenizer(prompts, return_tensors="pt").input_ids.to(device=device).split(1, dim=1)
     tokens_in_prompt = len(sequence)
 
     @torch.inference_mode()
@@ -80,8 +85,10 @@ def run_inference_benchmark(model_type: str, prompt: str = "Mamba is the", seque
 
     return InferenceBenchmarkResult(
         total_time_ms=1000.0 * (end - start),
-        tokens_per_s=float(tokens_in_prompt + sequence_length) / (end - start),
-        sequence=tokenizer.batch_decode(torch.cat(out, dim=1)),
+        tokens_per_s=float(batch * (tokens_in_prompt + sequence_length)) / (end - start),
+        sequence=tokenizer.batch_decode(torch.cat(out, dim=1))[0],
+        model_version=MODEL_VERSION,
+        model_type=model_type,
     )
 
 
@@ -89,9 +96,10 @@ def main():
     parser = argparse.ArgumentParser(description="Run inference benchmarks on set of supported models")
     parser.add_argument("--model", required=True, choices=["cpu", "gpu"], help="The model under test")
     parser.add_argument("--genlen", default=64, type=int, help="Sequence generation length")
+    parser.add_argument("--batch", default=1, type=int, help="Batch size")
     args = parser.parse_args()
 
-    res = run_inference_benchmark(model_type=args.model, sequence_length=args.genlen)
+    res = run_inference_benchmark(model_type=args.model, sequence_length=args.genlen, batch=args.batch)
     print(res)
 
 
