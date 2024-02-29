@@ -95,7 +95,7 @@ def pretty_print_model_config(model_config):
 def get_model_config(model_config_str, llm_mode, num_devices):
     assert model_config_str in ACCEPTABLE_MODEL_CONFIG_STRS
     assert llm_mode == "decode"
-    assert num_devices in (4,)
+    assert num_devices in (4, 8)
 
     DRAM_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
     L1_MEMCFG = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
