@@ -24,6 +24,13 @@ def _torch_pad(input_tensor: ttnn.Tensor, padding, value):
     return torch.nn.functional.pad(input_tensor, pad=torch_padding, mode="constant", value=value)
 
 
+def _fallback_pad(input_tensor: ttnn.Tensor, padding, value):
+    output_tensor = _torch_pad(input_tensor, padding, value)
+    return ttnn.from_torch(
+        output_tensor, dtype=input_tensor.dtype, device=input_tensor.device, layout=input_tensor.layout
+    )
+
+
 def _pad_validate_input_tensors(operation_name, input_tensor, *args, **kwargs):
     ttnn.validate_input_tensor(
         operation_name,
@@ -40,11 +47,18 @@ def _pad_validate_input_tensors(operation_name, input_tensor, *args, **kwargs):
     name="ttnn.pad",
     validate_input_tensors=_pad_validate_input_tensors,
     torch_function=_torch_pad,
+    fallback=_fallback_pad,
 )
-def pad(input_tensor: ttnn.Tensor, padding: Tuple[Tuple[int, int], ...], value: Union[int, float]) -> ttnn.Tensor:
+def pad(
+    input_tensor: ttnn.Tensor,
+    padding: Tuple[Tuple[int, int], ...],
+    value: Union[int, float],
+    *,
+    memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG,
+) -> ttnn.Tensor:
     r"""
 
-    pad(input_tensor: ttnn.Tensor, padding: Tuple[Tuple[int, int], ...], value: Union[int, float]) -> ttnn.Tensor
+    pad(input_tensor: ttnn.Tensor, padding: Tuple[Tuple[int, int], ...], value: Union[int, float], *, memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG) -> ttnn.Tensor
 
     Pad tensor with constant value.
 
@@ -54,12 +68,34 @@ def pad(input_tensor: ttnn.Tensor, padding: Tuple[Tuple[int, int], ...], value: 
         * :attr:`input_tensor`: input tensor
         * :attr:`padding`: padding to apply. Each element of padding should be a tuple of 2 integers, with the first integer specifying the number of values to add before the tensor and the second integer specifying the number of values to add after the tensor.
         * :attr:`value`: value to pad with
+        * :attr:`memory_config`: the memory configuration to use for the operation
 
     """
+    original_intended_input_shape = input_tensor.shape
+    original_rank = len(input_tensor.shape)
+    if original_rank < 4:
+        input_tensor = ttnn.unsqueeze_to_4D(input_tensor)
+        padding = tuple((0, 0) for _ in range(4 - original_rank)) + padding
 
-    output_tensor = _torch_pad(input_tensor, padding, value)
-    output_tensor = ttnn.from_torch(
-        output_tensor, dtype=input_tensor.dtype, device=input_tensor.device, layout=input_tensor.layout
+    input_shape_with_tile_paddin = input_tensor.shape.with_tile_padding()
+
+    pad_start = tuple(start for start, _ in padding)
+    if sum(pad_start) != 0:
+        raise RuntimeError("ttnn.pad: padding start must be 0 currently")
+    padded_shape = tuple(dim + end for dim, (_, end) in zip(input_shape_with_tile_paddin, padding))
+
+    ttl_input_tensor = input_tensor.value
+    ttl_output_tensor = ttl.tensor.pad(
+        ttl_input_tensor, padded_shape, pad_start, value, output_mem_config=memory_config, use_multicore=True
+    )
+
+    output_tensor = ttnn.Tensor(ttl_output_tensor)
+    while len(output_tensor.shape) > original_rank:
+        output_tensor = ttnn.squeeze(output_tensor, dim=0)
+
+    # keep original intended shape intact
+    output_tensor = ttnn.reshape(
+        output_tensor, shape=ttnn.Shape(original_intended_input_shape, output_tensor.shape.with_tile_padding())
     )
     return output_tensor
 
