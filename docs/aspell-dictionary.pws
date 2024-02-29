@@ -1,4 +1,4 @@
-personal_ws-1.1 en 521
+personal_ws-1.1 en 522
 ABI
 ADDI
 API
@@ -57,10 +57,13 @@ ENDL
 ETH
 EltwiseUnary
 EnqueueProgram
+EnqueueRecordEvent
+EnqueueWaitForEvent
 EnqueueReadBuffer
 EnqueueWriteBuffer
 Enum
 Enums
+EventSynchronize
 FW
 FileCopyrightText
 GGGG
@@ -314,6 +317,7 @@ itile
 iw
 iy
 jupyter
+kv
 labelled
 ld
 ldexp

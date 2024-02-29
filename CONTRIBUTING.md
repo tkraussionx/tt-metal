@@ -12,7 +12,8 @@ Table of Contents
       * [Setting logger level](#setting-logger-level)
       * [Building and viewing the documentation locally](#building-and-viewing-the-documentation-locally)
       * [Cleaning the dev environment with make nuke](#cleaning-the-dev-environment-with-make-nuke)
-   * [Running tests on tt-metal](#running-tests-on-tt-metal)
+   * [Tests in tt-metal](#running-tests-on-tt-metal)
+      * [Adding post-commit tests](#adding-post-commit-tests)
       * [Running pre/post-commit regressions](#running-prepost-commit-regressions)
       * [Running model performance tests](#running-model-performance-tests)
    * [Debugging tips](#debugging-tips)
@@ -151,12 +152,18 @@ the built Python dev environment stored at `build/python_env/`.
 To delete absolutely everything including the Python environment, use `make
 nuke`.
 
-## Running tests on tt-metal
+## Tests in tt-metal
 
 Ensure you're in a developer environment with necessary environment variables
 set as documentating in the [developing section](#developing-tt-metal).
 
 This includes the environment variables, Python dev environment etc.
+
+### Adding Post Commit Tests
+
+Make sure to add post-commit tests in the at the lowest two levels of the tests directory to make sure tests are executed on the workflows.
+
+New shell scripts added above the lowest two levels may not be executed on the post-commit workflows!
 
 ### Running pre/post-commit regressions
 
@@ -207,10 +214,16 @@ If you are using a machine with bare metal machine specs, please use
   - In the kernel: `#include "debug/dprint.h"`
   - To print in the kernel : `DPRINT << <variable to print> << ENDL();`
 - To use GDB to debug the C++ python binding itself:
-  - Build with debug symbols `make build config=debug`
+  - Build with debug symbols `make build CONFIG=debug`
   - Ensure the python file you wish to debug, is standalone and has a main function
   - Run `gdb --args python <python file> `
   - You can add breakpoints for future loaded libraries
+- To log the compile time arguments passed with `-D` during the kernel build phase:
+  - Run with Watcher enabled. Please refer to the [Watcher documentation](docs/source/tools/watcher.rst)
+  - Files with the kernel configurations will be automatically generated. For example: `built/0/kernels/kernel_args.csv`
+- To examine the compile time arguments of a kernel:
+  - Within your kernel, assign the arguments to **constexpr** like this: `constexpr uint32_t in1_mcast_sender_noc_y = get_compile_time_arg_val(0);`
+  - Run `dump-constexprs.py` script on the generated ELF file. E.g. `python tt_metal/tools/dump-consts.py built/0/kernels/command_queue_producer/1129845549852061924/brisc/brisc.elf --function kernel_main`
 
 ## Contribution standards
 

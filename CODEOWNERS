@@ -33,6 +33,7 @@ conftest.py @tt-rkim
 tests/scripts/run_pre_post_commit_regressions.sh @tt-rkim
 tests/scripts/run_tests.sh @tt-rkim
 tests/scripts/run_pre_post_commit_regressions_multi_device.sh @tt-rkim @aliuTT @tt-aho @TT-BrianLiu
+tests/scripts/run_pre_post_commit_regressions_fast_dispatch.sh @tt-rkim @TT-billteng @ttmchiou
 
 # metal - base
 # tt_metal/tt_metal.cpp @abhullar-tt @TT-billteng
@@ -116,6 +117,7 @@ models/conv_on_device_utils*.py @tt-nshanker
 models/bert_large_performant @tt-aho @TT-BrianLiu
 models/metal_BERT_large_11 @tt-aho @TT-BrianLiu
 functional_*/ @eyonland @arakhmati @cfjchu @xanderchin
+models/demos @eyonland @arakhmati @cfjchu @xanderchin
 
 # docs
 docs/source/ttnn/dependencies/tt_lib.rst @eyonland @arakhmati @cfjchu @xanderchin

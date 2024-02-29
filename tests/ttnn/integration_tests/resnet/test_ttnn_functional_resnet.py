@@ -233,6 +233,23 @@ def test_resnet(device):
                 already_preprocessed_children={"conv1", "bn1", "relu1"},
             )
 
+            for child_name, child in tuple(model.named_children()) + named_parameters:
+                if child_name in {"conv1", "bn1"}:
+                    continue
+                parameters[child_name] = convert_torch_model_to_ttnn_model(
+                    child,
+                    name=name,
+                    convert_to_ttnn=convert_to_ttnn,
+                    custom_preprocessor=custom_preprocessor,
+                    ttnn_module_args=ttnn_module_args.get(child_name, None),
+                )
+                if child_name == "maxpool":
+                    ttnn_module_args.maxpool["parallel_config_override"] = {
+                        "grid_size": parameters["conv1"]["parallel_config"],
+                        "ncores_nhw": parameters["conv1"]["num_cores_nhw"],
+                    }
+                    # update_ttnn_module_args(ttnn_module_args.maxpool)
+
         return parameters
 
     reader_patterns_cache = {}
