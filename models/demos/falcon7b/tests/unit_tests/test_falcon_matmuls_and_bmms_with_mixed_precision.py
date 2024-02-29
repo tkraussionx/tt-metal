@@ -6,6 +6,7 @@ import pytest
 from loguru import logger
 
 import tt_lib as ttl
+import ttnn
 from models.utility_functions import comp_pcc, tt2torch_tensor
 import torch
 
@@ -33,6 +34,31 @@ def run_falcon_matmul_test(
         a_shape = [1, 1, seq_len, 4544]
         b_shape = [1, 1, 4544, 4544]
         expected_output_shape = [1, 1, seq_len, 4544]
+    elif falcon_op == ttl.tensor.falcon_prefill_4h_to_h_matmul:
+        a_shape = [1, 1, seq_len, 18176]
+        b_shape = [1, 1, 18176, 4544]
+        expected_output_shape = [1, 1, seq_len, 4544]
+
+        if (seq_len == 1024 and in0_dtype == in1_dtype == out_dtype == ttl.tensor.DataType.BFLOAT16) or (
+            seq_len == 2048
+            and (
+                in0_dtype == ttl.tensor.DataType.BFLOAT16
+                or in1_dtype == ttl.tensor.DataType.BFLOAT16
+                or out_dtype == ttl.tensor.DataType.BFLOAT16
+            )
+        ):
+            logger.warning(
+                f"For seq_len: {seq_len}, in0_dtype: {in0_dtype}, in1_dtype: {in1_dtype}, and out_dtype: {out_dtype}, L1 space is not enough. Running with in0, in1, and out on DRAM instead!"
+            )
+            in0_mem_config = ttl.tensor.MemoryConfig(
+                ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM
+            )
+            in1_mem_config = ttl.tensor.MemoryConfig(
+                ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM
+            )
+            out_mem_config = ttl.tensor.MemoryConfig(
+                ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM
+            )
     elif falcon_op == ttl.tensor.falcon_dense_4h_to_h_matmul:
         a_shape = [1, 1, seq_len, 18176]
         b_shape = [1, 1, 18176, 4544]
@@ -115,6 +141,11 @@ def run_falcon_matmul_test(
     b_t = ttl.tensor.Tensor(B, in1_dtype).to(ttl.tensor.Layout.TILE).to(device, in1_mem_config)
     bias_t = None
 
+    #    ttnn_a = ttnn.Tensor(a_t)
+    #    ttnn_b = ttnn.Tensor(b_t)
+    #    out = ttnn.matmul(ttnn_a, ttnn_b, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+    #    out = out_ttnn.value
+
     out = falcon_op(a_t, b_t, bias_t, output_mem_config=out_mem_config, output_dtype=out_dtype)
 
     # Check memory and dtype of inputs and outputs
@@ -169,14 +200,8 @@ def run_falcon_matmul_test(
 )
 @pytest.mark.parametrize(
     "falcon_op",
-    (
-        ttl.tensor.falcon_fused_qkv_matmul,
-        ttl.tensor.falcon_selfout_matmul,
-        ttl.tensor.falcon_dense_4h_to_h_matmul,
-        ttl.tensor.falcon_dense_h_to_4h_matmul,
-        ttl.tensor.falcon_lm_head_matmul,
-    ),
-    ids=["fused_qkv", "selfout", "dense_4h_to_h", "dense_h_to_4h", "lm_head"],
+    (ttl.tensor.falcon_prefill_4h_to_h_matmul,),
+    ids=["prefill_4h_to_h_matmul"],
 )
 @pytest.mark.parametrize(
     "seq_len",

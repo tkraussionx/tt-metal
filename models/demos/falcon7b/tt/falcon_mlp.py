@@ -11,14 +11,7 @@ from models.utility_functions import torch2tt_tensor
 
 class TtFalconMLP(nn.Module):
     def __init__(
-        self,
-        device,
-        state_dict,
-        base_url,
-        layer_num,
-        hidden_size: int,
-        model_config,
-        tt_cache_path,
+        self, device, state_dict, base_url, layer_num, hidden_size: int, model_config, tt_cache_path, llm_mode
     ):
         super().__init__()
 
@@ -26,6 +19,7 @@ class TtFalconMLP(nn.Module):
         self.device = device
         self.hidden_size = hidden_size
         self.model_config = model_config
+        self.llm_mode = llm_mode
 
         layer_name = f"{base_url}.{layer_num}"
 
@@ -89,6 +83,7 @@ class TtFalconMLP(nn.Module):
             )
 
     def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
+        # print("Calling hto4h")
         hidden_states = tt_lib.tensor.falcon_dense_h_to_4h_matmul(
             x,
             self.dense_h_to_4h_weights,
@@ -98,13 +93,21 @@ class TtFalconMLP(nn.Module):
         )
         x.deallocate()
 
-        hidden_states = tt_lib.tensor.falcon_dense_4h_to_h_matmul(
-            hidden_states,
-            self.dense_4h_to_h_weights,
-            output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
-            output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
-            packer_l1_acc=True,
-        )
+        if self.llm_mode == "prefill":
+            hidden_states = tt_lib.tensor.falcon_prefill_4h_to_h_matmul(
+                hidden_states,
+                self.dense_4h_to_h_weights,
+                output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
+                output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
+            )
+        else:
+            hidden_states = tt_lib.tensor.falcon_dense_4h_to_h_matmul(
+                hidden_states,
+                self.dense_4h_to_h_weights,
+                output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
+                output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
+                packer_l1_acc=True
+            )
 
         # return TT Tensor
         return hidden_states

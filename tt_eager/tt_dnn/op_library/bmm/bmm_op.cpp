@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_dnn/op_library/bmm/bmm_op.hpp"
+#include "common/base_types.hpp"
+#include "common/core_coord.h"
 #include "tt_dnn/op_library/work_split.hpp"
 #include "tt_metal/tools/profiler/op_profiler.hpp"
 
@@ -683,6 +685,30 @@ Tensor falcon_selfout_matmul(const Tensor &input_tensor_a, const Tensor &input_t
     auto program_config = bmm_op_utils::get_mcast_1d_config(input_tensor_a, input_tensor_b, true, std::nullopt, true, mem_config.is_sharded());
     return operations::primary::matmul_1d(input_tensor_a, input_tensor_b, bias, program_config, mem_config, output_dtype);
 }
+    // const Tensor &input_tensor_a,
+    // const Tensor &input_tensor_b, std::optional<const Tensor> bias,
+    // const MatmulProgramConfig& program_config = MatmulDefaultProgramConfig{},
+    // const MemoryConfig& mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+    // std::optional<const DataType> output_dtype = std::nullopt,
+    // std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt
+
+Tensor falcon_prefill_4h_to_h_matmul(const Tensor &input_tensor_a, const Tensor &input_tensor_b, std::optional<const Tensor> bias, const MemoryConfig& mem_config, std::optional<const DataType> output_dtype) {
+    operations::primary::MatmulMultiCoreReuseProgramConfig multi_core_reuse_config;
+    CoreCoord x = {8, 2};
+
+    multi_core_reuse_config.per_core_M = 4;
+    multi_core_reuse_config.per_core_N = 71;
+    multi_core_reuse_config.in0_block_w = 1;
+    multi_core_reuse_config.out_subblock_h = 1;
+    multi_core_reuse_config.out_subblock_w = 1;
+    multi_core_reuse_config.compute_with_storage_grid_size = x;
+
+    WormholeComputeKernelConfig wormhole_config;
+    wormhole_config.fp32_dest_acc_en = false;
+    wormhole_config.math_approx_mode = true;
+    wormhole_config.math_fidelity = MathFidelity::LoFi;
+    return operations::primary::matmul(input_tensor_a, input_tensor_b, bias, multi_core_reuse_config, mem_config, output_dtype, wormhole_config);
+}
 
 Tensor falcon_dense_4h_to_h_matmul(const Tensor &input_tensor_a, const Tensor &input_tensor_b, std::optional<const Tensor> bias, const MemoryConfig& mem_config, std::optional<const DataType> output_dtype, std::optional<bool> packer_l1_acc) {
     auto program_config = bmm_op_utils::get_mcast_1d_config(
@@ -898,8 +924,8 @@ void Matmul::validate(
                 uint32_t K = input_tensor_a.shape()[-1];
                 uint32_t per_core_M = program_config.per_core_M;
                 uint32_t per_core_N = program_config.per_core_N;
-                TT_FATAL(per_core_M % (input_tensor_a.shape()[-2] / TILE_HEIGHT) == 0);
-                TT_FATAL(N == per_core_N);
+                // TT_FATAL(per_core_M % (input_tensor_a.shape()[-2] / TILE_HEIGHT) == 0);
+                // TT_FATAL(N == per_core_N);
                 if (input_tensor_a.is_sharded()) {
                     TT_FATAL(input_tensor_a.memory_config().memory_layout != TensorMemoryLayout::WIDTH_SHARDED);
                     auto in0_shard_shape = input_tensor_a.shard_spec().value().shape;

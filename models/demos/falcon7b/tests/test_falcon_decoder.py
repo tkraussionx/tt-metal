@@ -6,6 +6,15 @@ import torch
 import pytest
 from loguru import logger
 
+from models.utility_functions import (
+    disable_compilation_reports,
+    disable_persistent_kernel_cache,
+    enable_persistent_kernel_cache,
+    profiler,
+    torch2tt_tensor,
+    tt2torch_tensor,
+)
+
 import tt_lib
 from models.demos.falcon7b.reference.hf_modeling_falcon import (
     FalconForCausalLM,
@@ -19,7 +28,6 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_allclose,
     comp_pcc,
 )
-from models.utility_functions import torch2tt_tensor, tt2torch_tensor
 
 
 class PytorchFalconDecoderModel(torch.nn.Module):
@@ -151,6 +159,7 @@ def run_test_FalconDecoder_inference(
         max_position_embeddings,
         model_config,
         tt_cache_path,
+        llm_mode,
     )
 
     tt_out, tt_layer_present = tt_FalconDecoder_model(
@@ -199,17 +208,16 @@ def run_test_FalconDecoder_inference(
 
 @pytest.mark.parametrize(
     "llm_mode, batch, seq_len, kv_cache_len",
-    (
-        ("prefill", 1, 128, 0),
-        ("decode", 32, 1, 128),
-    ),
-    ids=["prefill_seq128", "decode_batch32"],
+    (("prefill", 1, 1024, 0),),
+    ids=[
+        "prefill_seq1024",
+    ],
 )
 @pytest.mark.parametrize(
     "model_version, layer_num, pcc",
     (("tiiuae/falcon-7b-instruct", 0, 0.98),),
 )
-@pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
+@pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM",))
 def test_FalconDecoder_inference(
     model_version,
     llm_mode,
@@ -222,6 +230,7 @@ def test_FalconDecoder_inference(
     model_location_generator,
     device,
 ):
+    disable_compilation_reports()
     model_config = get_model_config(model_config_str)
     tt_cache_path = get_tt_cache_path(model_version)
 

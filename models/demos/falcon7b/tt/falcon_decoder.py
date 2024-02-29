@@ -25,6 +25,7 @@ class TtFalconDecoderLayer(nn.Module):
         max_position_embeddings,
         model_config,
         tt_cache_path,
+        llm_mode,
     ):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -34,6 +35,7 @@ class TtFalconDecoderLayer(nn.Module):
         self.layer_num = layer_num
         self.max_position_embeddings = max_position_embeddings
         self.model_config = model_config
+        self.llm_mode = llm_mode
 
         assert config.parallel_attn, "Path for config.parallel_attn=False is not implemented in TtFalconDecoderLayer!"
 
@@ -57,6 +59,7 @@ class TtFalconDecoderLayer(nn.Module):
             hidden_size=config.hidden_size,
             model_config=model_config,
             tt_cache_path=tt_cache_path,
+            llm_mode=self.llm_mode,
         )
 
         layer_name = f"{base_url}.{layer_num}"

@@ -13,7 +13,6 @@
 
 #include "compute_kernel_api/eltwise_unary/sfpu_split_includes.h"
 
-
 namespace NAMESPACE {
 
 FORCE_INLINE void reload_from_cb_to_dst(uint32_t in0_cb_id, uint32_t in1_cb_id, uint32_t mm_partials_cb_id, uint32_t out_subblock_num_tiles, uint32_t out_subblock_w, uint32_t out_subblock_h, uint32_t in0_block_w) {
