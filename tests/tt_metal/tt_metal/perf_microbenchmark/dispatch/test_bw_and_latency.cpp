@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <functional>
 #include <random>
+#include <thread>
+#include <pthread.h>
 
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
@@ -15,6 +17,7 @@ constexpr uint32_t DEFAULT_ITERATIONS = 1000;
 constexpr uint32_t DEFAULT_WARMUP_ITERATIONS = 2;
 constexpr uint32_t DEFAULT_PAGE_SIZE = 2048;
 constexpr uint32_t DEFAULT_BATCH_SIZE_K = 512;
+constexpr uint32_t DEFAULT_OVERALL_ITERATIONS = 1;
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Test dispatch program performance
@@ -23,8 +26,10 @@ constexpr uint32_t DEFAULT_BATCH_SIZE_K = 512;
 //////////////////////////////////////////////////////////////////////////////////////////
 using namespace tt;
 
+string device_id_g;
 uint32_t iterations_g = DEFAULT_ITERATIONS;
 uint32_t warmup_iterations_g = DEFAULT_WARMUP_ITERATIONS;
+uint32_t overall_iterations_g = DEFAULT_OVERALL_ITERATIONS;
 CoreRange worker_g = {{0, 0}, {0, 0}};;
 CoreCoord src_worker_g = {0, 0};
 uint32_t page_size_g;
@@ -36,6 +41,57 @@ bool lazy_g;
 bool time_just_finish_g;
 bool read_one_packet_g;
 bool page_size_as_runtime_arg_g; // useful particularly on GS multi-dram tests (multiply)
+bool parallel_test_mode_g;
+
+#define MAX_DEVICES 8
+vector<float> all_perf_results[MAX_DEVICES]; // 8 is the max number of devices we can have in a box (for now...), this vector stores Latency/BW results for each device
+
+std::mutex global_mutex;
+bool all_pass = true;
+
+// Function to calculate the median of a vector of floats
+float calculateMedian(const std::vector<float>& vec) {
+    std::vector<float> sortedVec = vec;
+    std::sort(sortedVec.begin(), sortedVec.end());
+
+    size_t size = sortedVec.size();
+    if (size % 2 == 0) {
+        return (sortedVec[size / 2 - 1] + sortedVec[size / 2]) / 2.0;
+    } else {
+        return sortedVec[size / 2];
+    }
+}
+
+// Function to calculate the average of a vector of floats
+float calculateAverage(const std::vector<float>& vec) {
+    if (vec.empty()) {
+        return 0.0;
+    }
+
+    float sum = 0.0;
+    for (float value : vec) {
+        sum += value;
+    }
+    return sum / vec.size();
+}
+
+// Function to calculate the standard deviation of a vector of floats
+float calculateStdDev(const std::vector<float>& vec) {
+    if (vec.size() <= 1) {
+        return 0.0;
+    }
+
+    float mean = calculateAverage(vec);
+    float variance = 0.0;
+
+    for (float value : vec) {
+        float diff = value - mean;
+        variance += diff * diff;
+    }
+
+    variance /= (vec.size() - 1);
+    return std::sqrt(variance);
+}
 
 void init(int argc, char **argv) {
     std::vector<std::string> input_args(argv, argv + argc);
@@ -43,6 +99,10 @@ void init(int argc, char **argv) {
     if (test_args::has_command_option(input_args, "-h") ||
         test_args::has_command_option(input_args, "--help")) {
         log_info(LogTest, "Usage:");
+        log_info(LogTest, "  -h: print this help message");
+        log_info(LogTest, "  -d: device ID to run this on (default {}), or a list of devices separated by commas (e.g. 0,1,2,3)", 0);
+        log_info(LogTest, "  -parallel: run the test on all the devices in parallel, ");
+        log_info(LogTest, "  -oi: overall iterations to run, used to calculate average performance numbers (default {}), ", DEFAULT_OVERALL_ITERATIONS);
         log_info(LogTest, "  -w: warm-up iterations before starting timer (default {}), ", DEFAULT_WARMUP_ITERATIONS);
         log_info(LogTest, "  -i: iterations (default {})", DEFAULT_ITERATIONS);
         log_info(LogTest, "  -bs: batch size in K of data to xfer in one iteration (default {}K)", DEFAULT_BATCH_SIZE_K);
@@ -61,8 +121,10 @@ void init(int argc, char **argv) {
         exit(0);
     }
 
+    device_id_g = test_args::get_command_option(input_args, "-d", "0");
     uint32_t core_x = test_args::get_command_option_uint32(input_args, "-rx", 1);
     uint32_t core_y = test_args::get_command_option_uint32(input_args, "-ry", 0);
+    overall_iterations_g = test_args::get_command_option_uint32(input_args, "-oi", DEFAULT_OVERALL_ITERATIONS);
     warmup_iterations_g = test_args::get_command_option_uint32(input_args, "-w", DEFAULT_WARMUP_ITERATIONS);
     iterations_g = test_args::get_command_option_uint32(input_args, "-i", DEFAULT_ITERATIONS);
     lazy_g = test_args::has_command_option(input_args, "-z");
@@ -76,6 +138,7 @@ void init(int argc, char **argv) {
     page_size_g = test_args::get_command_option_uint32(input_args, "-p", DEFAULT_PAGE_SIZE);
     page_size_as_runtime_arg_g = test_args::has_command_option(input_args, "-psrta");
     read_one_packet_g = test_args::has_command_option(input_args, "-o");
+    parallel_test_mode_g = test_args::has_command_option(input_args, "-parallel");
     if (read_one_packet_g && page_size_g > 8192) {
         log_info(LogTest, "Page size must be <= 8K for read_one_packet\n");
         exit(-1);
@@ -86,13 +149,47 @@ void init(int argc, char **argv) {
     src_worker_g = {src_core_x, src_core_y};
 }
 
-int main(int argc, char **argv) {
-    init(argc, argv);
+void print_common_test_args() {
+    string src_mem;
+    switch (source_mem_g) {
+    case 0:
+    default:
+        src_mem = "FROM_PCIE";
+        break;
+    case 1:
+        src_mem = "FROM_DRAM";
+        break;
+    case 2:
+        src_mem = "FROM_L1";
+        break;
+    case 3:
+        src_mem = "FROM_ALL_DRAMS";
+        break;
+    case 4:
+        src_mem = "FROM_L1_TO_HOST";
+        log_info(LogTest, "Test Parameters - Host bw test overriding page_count to 1");
+        break;
+    case 5:
+        src_mem = "FROM_HOST_TO_L1";
+        log_info(LogTest, "Test Parameters - Host bw test overriding page_count to 1");
+        break;
+    }
 
+    if (source_mem_g != 4) {
+        log_info(LogTest, "Test Parameter - Using API: {}", read_one_packet_g ? "noc_async_read_one_packet" : "noc_async_read");
+        log_info(LogTest, "Test Parameter - Lazy: {}", lazy_g);
+        log_info(LogTest, "Test Parameter - Page size ({}): {}", page_size_as_runtime_arg_g ? "runtime arg" : "compile time define", page_size_g);
+        log_info(LogTest, "Test Parameter - Size per iteration: {}", page_count_g * page_size_g);
+    }
+    log_info(LogTest, "Test Parameter - Iterations: {}", iterations_g);
+}
+
+void test_runner (uint64_t device_id, tt_metal::Device *device) {
     bool pass = true;
+    float bw = 0;
+
     try {
-        int device_id = 0;
-        tt_metal::Device *device = tt_metal::CreateDevice(device_id);
+        log_info(LogTest, "\tDevice {} - Running on CPU {}", device_id, sched_getcpu());
 
         CommandQueue& cq = device->command_queue();
 
@@ -144,7 +241,6 @@ int main(int argc, char **argv) {
         case 4:
             {
                 src_mem = "FROM_L1_TO_HOST";
-                log_info(LogTest, "Host bw test overriding page_count to 1");
                 CoreCoord w = device->physical_core_from_logical_core(src_worker_g, CoreType::WORKER);
                 page_count_g = 1;
                 noc_addr_x = w.x;
@@ -154,7 +250,6 @@ int main(int argc, char **argv) {
         case 5:
             {
                 src_mem = "FROM_HOST_TO_L1";
-                log_info(LogTest, "Host bw test overriding page_count to 1");
                 CoreCoord w = device->physical_core_from_logical_core(src_worker_g, CoreType::WORKER);
                 page_count_g = 1;
                 noc_addr_x = w.x;
@@ -193,23 +288,16 @@ int main(int argc, char **argv) {
         }
 
         CoreCoord w = device->physical_core_from_logical_core(worker_g.start, CoreType::WORKER);
-        log_info(LogTest, "Master core: {}", w.str());
+        log_info(LogTest, "\tDevice {} - Master core: {}", device_id, w.str());
         if (source_mem_g == 3) {
-            log_info(LogTest, "Reading: {}", src_mem);
+            log_info(LogTest, "\tDevice {} - Reading: {}", device_id, src_mem);
         } else if (source_mem_g == 4) {
-            log_info(LogTest, "Reading: {} - core ({}, {})", src_mem, w.x, w.y);
+            log_info(LogTest, "\tDevice {} - Reading: {} - core ({}, {})", device_id, src_mem, w.x, w.y);
         } else if (source_mem_g == 5) {
-            log_info(LogTest, "Writing: {} - core ({}, {})", src_mem, w.x, w.y);
+            log_info(LogTest, "\tDevice {} - Writing: {} - core ({}, {})", device_id, src_mem, w.x, w.y);
         } else {
-            log_info(LogTest, "Reading: {} - core ({}, {})", src_mem, noc_addr_x, noc_addr_y);
+            log_info(LogTest, "\tDevice {} - Reading: {} - core ({}, {})", device_id, src_mem, noc_addr_x, noc_addr_y);
         }
-        if (source_mem_g != 4) {
-            log_info(LogTest, "Using API: {}", read_one_packet_g ? "noc_async_read_one_packet" : "noc_async_read");
-            log_info(LogTest, "Lazy: {}", lazy_g);
-            log_info(LogTest, "Page size ({}): {}", page_size_as_runtime_arg_g ? "runtime arg" : "compile time define", page_size_g);
-            log_info(LogTest, "Size per iteration: {}", page_count_g * page_size_g);
-        }
-        log_info(LogTest, "Iterations: {}", iterations_g);
 
         std::chrono::duration<double> elapsed_seconds;
         if (source_mem_g < 4) {
@@ -255,28 +343,119 @@ int main(int argc, char **argv) {
             elapsed_seconds = (end-start);
         }
 
-        log_info(LogTest, "Ran in {}us", std::chrono::duration_cast<std::chrono::microseconds>(elapsed_seconds).count());
+        log_info(LogTest, "\tDevice {} - Ran in {} us", device_id, std::chrono::duration_cast<std::chrono::microseconds>(elapsed_seconds).count());
         if (latency_g) {
-            log_info(LogTest, "Latency: {} us",
-                (float)std::chrono::duration_cast<std::chrono::microseconds>(elapsed_seconds).count() / (page_count_g * iterations_g));
+            float latency = (float)std::chrono::duration_cast<std::chrono::microseconds>(elapsed_seconds).count() / (page_count_g * iterations_g);
+            log_info(LogTest, "\tDevice {} - Latency: {} us", device_id, latency);
+            all_perf_results[device_id].push_back(latency);
         } else {
-            float bw = (float)page_count_g * (float)page_size_g * (float)iterations_g / (elapsed_seconds.count() * 1024.0 * 1024.0 * 1024.0);
+            bw = (float)page_count_g * (float)page_size_g * (float)iterations_g / (elapsed_seconds.count() * 1024.0 * 1024.0);
             std::stringstream ss;
             ss << std::fixed << std::setprecision(3) << bw;
-            log_info(LogTest, "BW: {} GB/s", ss.str());
+            log_info(LogTest, "\tDevice {} - BW: {} MB/s", device_id, ss.str());
+            all_perf_results[device_id].push_back(bw);
         }
-
-        pass &= tt_metal::CloseDevice(device);
     } catch (const std::exception& e) {
         pass = false;
         log_fatal(e.what());
     }
 
     if (pass) {
-        log_info(LogTest, "Test Passed");
+        log_info(LogTest, "\tDevice {} - Test Passed", device_id);
+    } else {
+        log_fatal(LogTest, "\tDevice {} - Test Failed\n", device_id);
+    }
+
+    global_mutex.lock();
+    all_pass &= pass;
+    global_mutex.unlock();
+}
+
+int main(int argc, char **argv) {
+    init(argc, argv);
+
+    // uint32_t deploy_cpus[4] = {16, 17, 24, 25};
+    // uint32_t deploy_cpus[4] = {24, 25, 16, 17};
+    vector<pair<uint32_t, tt_metal::Device *>> tested_devices;
+    uint32_t num_devices;
+
+    // Parse the device ID string into a vector of device ID and device pointers
+    vector<uint32_t> device_id_list;
+    test_args::split_string_into_vector(device_id_list, device_id_g, ",");
+
+    for (uint32_t device_id : device_id_list) {
+        tt_metal::Device *device = tt_metal::CreateDevice(device_id);
+        tested_devices.push_back({device_id, device});
+    }
+    num_devices = tested_devices.size();
+
+    // Print out the test parameters common to all devices
+    print_common_test_args();
+
+    // Run the Test
+    for (uint32_t i=0; i<overall_iterations_g; i++) {
+        log_info(LogTest, "Overall Iteration {}", i);
+
+        vector<std::thread> all_threads;
+        cpu_set_t cpus;
+
+        for (const auto &pair : tested_devices) {
+            uint32_t device_id = pair.first;
+            tt_metal::Device *device = pair.second;
+
+            if (parallel_test_mode_g) {
+                log_info(LogTest, "Starting thread {}", device_id);
+                std::thread t = std::thread(test_runner, device_id, device);
+                all_threads.push_back(move(t));
+
+                // Set the affinity of the thread to the CPU, used for potentially tweaking the performance
+                // CPU_ZERO(&cpus);
+                // CPU_SET(deploy_cpus[device_id], &cpus);
+                // pthread_setaffinity_np(t.native_handle(), sizeof(cpu_set_t), &cpus);
+            } else {
+                test_runner(device_id, device);
+            }
+        }
+
+        for (std::thread &t : all_threads) {
+            t.join();
+        }
+    }
+
+    for (auto &pair : tested_devices) {
+        uint32_t device_id = pair.first;
+        tt_metal::Device *device = pair.second;
+
+        string perf_metric = latency_g ? "Latency" : "BW";
+
+        // Take all the performance results and print them out as a string for each device
+        string all_perf_results_str = "";
+        for (float i=0; i<all_perf_results[device_id].size(); i++) {
+            std::stringstream ss;
+            ss << std::fixed << std::setprecision(3) << all_perf_results[device_id][i];
+            all_perf_results_str += ss.str();
+            if (i != all_perf_results[device_id].size() - 1) {
+                all_perf_results_str += ", ";
+            }
+        }
+        log_info(LogTest, "");
+        log_info(LogTest, "Device {} - All recorded {}: [{}]", device_id, perf_metric, all_perf_results_str);
+
+        // Print out the median, average, and standard deviation of the performance results for each device
+        log_info(LogTest, "Device {} - Median {}: {} MB/s, Avg {}: {} MB/s, StdDev: {} MB/s", device_id,
+            perf_metric, calculateMedian(all_perf_results[device_id]),
+            perf_metric, calculateAverage(all_perf_results[device_id]),
+            calculateStdDev(all_perf_results[device_id])
+        );
+
+        tt_metal::CloseDevice(device);
+    }
+
+    if (all_pass) {
+        log_info(LogTest, "All tests PASSED");
         return 0;
     } else {
-        log_fatal(LogTest, "Test Failed\n");
+        log_fatal(LogTest, "Some tests FAILED");
         return 1;
     }
 }
