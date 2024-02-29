@@ -102,7 +102,7 @@ void OptimizedConv::validate(const std::vector<Tensor>& input_tensors, const std
     if (this->output_mem_config.is_sharded()) {
         TT_FATAL(!this->untilize_out);
         uint32_t out_block_h_ntiles = block_config.out_block_h_ntiles;
-        auto [act_matrix_shape, act_matrix_shape_unpadded] = optimized_conv_op_utils::compute_opt_conv_activation_as_mm_shape(input_tensor_a.shape(), conv_params, out_block_h_ntiles, extra_padding_for_32B_alignment);
+        //auto [act_matrix_shape, act_matrix_shape_unpadded] = optimized_conv_op_utils::compute_opt_conv_activation_as_mm_shape(input_tensor_a.shape(), conv_params, out_block_h_ntiles, extra_padding_for_32B_alignment);
         uint32_t out_width_ntiles = this->compute_output_shapes(input_tensors).at(0)[-1] / TILE_WIDTH;
         if(this->output_mem_config.memory_layout == TensorMemoryLayout::HEIGHT_SHARDED) {
             TT_FATAL(this->parallelization_config.per_core_weight_matrix_width_ntiles == out_width_ntiles);
@@ -206,6 +206,119 @@ operation::ProgramWithCallbacks OptimizedConv::create_program(const std::vector<
     } else {
         return multi_core_optimized_conv_(input_tensor_a, input_tensor_b, this->input_tensor_shape, input_tensor_bias, conv_params, output_channels, untilize_out, has_bias, fuse_relu, math_fidelity, parallelization_config, block_config, extra_padding_for_32B_alignment, output_tensor);
     }
+}
+
+#if 0
+void analyze_op(OperationSpec& op_spec, OperationAnalysis& op_analysis, const ExecutionConfig& exec_config) {
+    // Calculate output dimensions: relevant for window/stride based OPs (conv, maxpool, downsample)
+    op_spec.output_height = std::floor((op_spec.in0_height - op_spec.filter_height + 2 * op_spec.pad) / op_spec.stride + 1);
+    op_spec.output_width = std::floor((op_spec.in0_width - op_spec.filter_width + 2 * op_spec.pad) / op_spec.stride + 1);
+
+    // deduct the FW launch latency to get more accurate kernel execution time
+    op_analysis.measured_nano_sec -= exec_config.fw_launch_latency_nano_sec;
+
+    // compute the amout of data that needs to be consumed on in0 (Bytes)
+    if (op_spec.op_code == "OptimizedConv" || op_spec.op_code == "MaxPool" || op_spec.op_code == "Downsample") {
+        // filter window is only relevant for maxpool/convs, it's 1x1, s1 for all ohter OPs
+        // for each output we gather a filter window of data from input0
+        // for strided OPs, the output is smaller than input, so we need to read less data (eg, downsample)
+        op_analysis.in0_read_bytes = op_spec.output_height * op_spec.output_width * op_spec.in0_channels * op_spec.batch_size * exec_config.row_major_act_bytes_per_datum;
+        op_analysis.in0_read_bytes *= op_spec.filter_height * op_spec.filter_width;
+    } else {
+        // other OPs modeled as reading full input
+        // for eltwise binary OPs, we read both inputs but the each input and output is limited to 32 B/c because unpacker's 64 B/c is split across in0/in1, so each input and output get 32 B/c
+        op_analysis.in0_read_bytes = op_spec.in0_height * op_spec.in0_width * op_spec.in0_channels * op_spec.batch_size * exec_config.tile_act_bytes_per_datum;
+    }
+
+    if (op_spec.op_code == "Matmul" || op_spec.op_code == "OptimizedConv") {
+        // Calculate number of mul/add operations
+        // TODO: add bias modeling
+        long long num_mul_adds_per_elem = op_spec.in0_channels * op_spec.filter_height * op_spec.filter_width * 2; // 1 multiply and 1 add per element
+        op_analysis.num_mul_adds = num_mul_adds_per_elem * op_spec.output_height * op_spec.output_width * op_spec.output_channels * op_spec.batch_size;
+
+        op_analysis.ideal_dev_clock_cycles = std::ceil(((float)op_analysis.num_mul_adds / (float)(exec_config.device_num_rows * exec_config.device_num_cols * exec_config.tensix_mul_adds_per_cycle_lofi)) * (float)exec_config.num_fidelity_phases);
+        op_analysis.weights_bytes = op_spec.filter_height * op_spec.filter_width * op_spec.in0_channels * op_spec.output_channels * exec_config.weights_bytes_per_datum;
+    } else {
+        // eltwise and data movement OPs
+        op_analysis.weights_bytes = 0;
+        op_analysis.num_mul_adds = 0; // not modeled for eltwise and data movement OPs
+        // divide in0_read_bytes by 32B/c , the ideal BW unpackerA / single NOC can achieve
+        op_analysis.ideal_dev_clock_cycles = (float)op_analysis.in0_read_bytes / (32 * exec_config.device_num_rows * exec_config.device_num_cols);
+    }
+
+    // common for all OPs
+    op_analysis.ideal_dev_nano_sec = std::ceil((float)op_analysis.ideal_dev_clock_cycles / (float)exec_config.frequency_GHZ);
+    op_analysis.dev_util_pct = ((float)op_analysis.ideal_dev_nano_sec / (float)op_analysis.measured_nano_sec) * 100;
+}
+#endif
+
+operation::OpPerformanceModel OptimizedConv::create_op_performance_model(const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<Tensor> &output_tensors) const {
+    const auto& input_tensor_a_shape = this->input_tensor_shape;
+    uint32_t batch_size = input_tensor_a_shape[0];
+    uint32_t conv_activation_h = input_tensor_a_shape[1];
+    uint32_t conv_activation_w = input_tensor_a_shape[2];
+    uint32_t conv_activation_c = input_tensor_a_shape[3];
+
+    // TODO: clean up here
+    uint32_t filter_h = (uint32_t) conv_params[0];
+    uint32_t filter_w = (uint32_t) conv_params[1];
+    uint32_t stride_h = (uint32_t) conv_params[2];
+    uint32_t stride_w = (uint32_t) conv_params[3];
+    uint32_t pad_h = (uint32_t) conv_params[4];
+    uint32_t pad_w = (uint32_t) conv_params[5];
+
+    int DATUM_SIZE = 2;
+    int output_DATUM_SIZE = 2;
+    int num_cores = 9 * 12;
+    int tensix_mul_adds_per_cycle_lofi = 2048;
+    int num_fidelity_phases = 4;
+    int weights_bytes_per_datum = 2;
+    float frequency_GHZ = 1.200;
+
+    /*
+    uint32_t conv_act_size_h = ashape[1];
+    uint32_t conv_act_size_w = ashape[2];
+    uint32_t conv_act_size_c = ashape[3];
+    uint32_t weight_size_h = (uint32_t) conv_params[0];
+    uint32_t weight_size_w = (uint32_t) conv_params[1];
+    uint32_t stride_h = (uint32_t) conv_params[2];
+    uint32_t stride_w = (uint32_t) conv_params[3];
+    uint32_t pad_h = (uint32_t) conv_params[4];
+    uint32_t pad_w = (uint32_t) conv_params[5];
+    */
+
+    // Calculate output dimensions: relevant for window/stride based OPs (conv, maxpool, downsample)
+    int output_height = std::floor((conv_activation_h - filter_h + 2 * pad_h) / stride_h + 1);
+    int output_width = std::floor((conv_activation_w - filter_w + 2 * pad_w) / stride_w + 1);
+    //int output_height = output_tensors.at(0).shape.at(1);
+    //int output_height = output_tensors.at(0).shape.at(2);
+
+    int in0_read_bytes = output_height * output_width * conv_activation_c * batch_size * DATUM_SIZE;
+    in0_read_bytes *= filter_h * filter_w;
+
+    // Calculate number of mul/add operations
+    // TODO: add bias modeling
+    int64_t num_mul_adds_per_elem = conv_activation_c * filter_h * filter_w * 2; // 1 multiply and 1 add per element
+    int64_t num_mul_adds = num_mul_adds_per_elem * output_height * output_width * this->output_channels * batch_size;
+
+    int64_t ideal_dev_clock_cycles = std::ceil(((float)num_mul_adds / (float)(num_cores * tensix_mul_adds_per_cycle_lofi)) * (float)num_fidelity_phases);
+
+    int weights_bytes = filter_h * filter_w * conv_activation_c * this->output_channels * weights_bytes_per_datum;
+
+    // common for all OPs
+    float ideal_dev_nano_sec = std::ceil((float)ideal_dev_clock_cycles / (float)frequency_GHZ);
+
+    //TODO: float dev_util_pct = ((float)ideal_dev_nano_sec / (float)measured_nano_sec) * 100;
+
+    int output_bytes = output_height * output_width * this->output_channels * batch_size * output_DATUM_SIZE;
+
+    operation::OpPerformanceModel result;
+    result.ideal_cycle_count = ideal_dev_clock_cycles;
+    result.ideal_nano_sec = ideal_dev_nano_sec;
+    result.inputs_bytes = {in0_read_bytes, weights_bytes};
+    result.outputs_bytes = {output_bytes};
+
+    return result;
 }
 
 }  // namespace tt_metal
