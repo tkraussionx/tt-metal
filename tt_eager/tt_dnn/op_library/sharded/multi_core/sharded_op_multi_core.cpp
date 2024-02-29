@@ -174,16 +174,21 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
                 }
             }
             curr_num_units_per_shard = shard_height * shard_width;
+            std::shared_ptr<RuntimeArgs> runtime_args_vec1 = std::make_shared<RuntimeArgs>();
+            *runtime_args_vec1 = {
+                src_buffer,
+                shard_height,
+                shard_width,
+                num_units_offset,
+                curr_num_units_per_shard,
+                curr_idx_h + curr_idx_w
+            };
+
             tt_metal::SetRuntimeArgs(
-                program,
-                unary_reader_kernel_id,
+                device,
+                tt_metal::detail::GetKernel(program, unary_reader_kernel_id),
                 core,
-                {src_buffer->address(),
-                 shard_height,
-                 shard_width,
-                 num_units_offset,
-                 curr_num_units_per_shard,
-                 curr_idx_h + curr_idx_w});
+                runtime_args_vec1);
             curr_idx_w += num_units_per_shard_width;
             if (curr_idx_w == num_units_per_row) {
                 curr_idx_w = 0;
@@ -220,20 +225,24 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(
                     }
                 }
             }
-            tt_metal::SetRuntimeArgs(
-                program,
-                unary_reader_kernel_id,
+            std::shared_ptr<RuntimeArgs> runtime_args_vec2 = std::make_shared<RuntimeArgs>();
+            *runtime_args_vec2 = {src_buffer, num_units_per_row, shard_height, shard_width, curr_idx_w, curr_idx_h};
+           tt_metal::SetRuntimeArgs(
+                device,
+                tt_metal::detail::GetKernel(program, unary_reader_kernel_id),
                 core,
-                {src_buffer->address(), num_units_per_row, shard_height, shard_width, curr_idx_w, curr_idx_h});
+                runtime_args_vec2);
             curr_idx_w += input_unit_size;
             if (curr_idx_w == num_units_per_row) {
                 curr_idx_w = 0;
                 curr_idx_h += num_units_per_shard_height;
             }
         }
-        tt_metal::SetRuntimeArgs(program, unary_writer_kernel_id, core, {curr_num_units_per_shard});
+        std::shared_ptr<RuntimeArgs> runtime_args_vec3 = std::make_shared<RuntimeArgs>();
+        *runtime_args_vec3 = {curr_num_units_per_shard};
+        tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, unary_writer_kernel_id), core, runtime_args_vec3);
         if (convert_df) {
-            tt_metal::SetRuntimeArgs(program, compute_kernel_id, core, {curr_num_units_per_shard});
+            tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, compute_kernel_id), core, runtime_args_vec3);
         }
     }
 
@@ -385,8 +394,16 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
             all_cores,
             tt_metal::ComputeConfig{.compile_args = compute_kernel_args});
     }
-
-    tt_metal::SetRuntimeArgs(program, unary_reader_kernel_id, all_cores, {num_units_per_shard});
+    std::shared_ptr<RuntimeArgs> runtime_args_vec1 = std::make_shared<RuntimeArgs>();
+    *runtime_args_vec1 = {num_units_per_shard};
+    for (const auto& set : all_cores.ranges()) {
+        for (auto x = set.start.x; x <= set.end.x; x++) {
+            for (auto y = set.start.y; y <= set.end.y; y++) {
+                // tt_metal::detail::GetKernel(program, unary_reader_kernel_id)
+                tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, unary_reader_kernel_id), CoreCoord(x, y), runtime_args_vec1);
+            }
+        }
+    }
 
     uint32_t curr_idx_h = 0, curr_idx_w = 0;
     const auto cores = grid_to_cores(num_cores, num_cores_x, num_cores_y, rm_orientation);
@@ -419,18 +436,24 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
                     }
                 }
             }
+            std::shared_ptr<RuntimeArgs> runtime_args_vec2 =std::make_shared<RuntimeArgs>();
+            *runtime_args_vec2 = {
+                dst_buffer,
+                num_units_per_shard_height,
+                num_units_per_shard_width,
+                shard_height,
+                shard_width,
+                num_units_offset,
+                num_units_per_shard,
+                curr_idx_h + curr_idx_w
+            };
+
             tt_metal::SetRuntimeArgs(
-                program,
-                unary_writer_kernel_id,
+                device,
+                tt_metal::detail::GetKernel(program, unary_writer_kernel_id),
                 core,
-                {dst_buffer->address(),
-                 num_units_per_shard_height,
-                 num_units_per_shard_width,
-                 shard_height,
-                 shard_width,
-                 num_units_offset,
-                 num_units_per_shard,
-                 curr_idx_h + curr_idx_w});
+                runtime_args_vec2);
+
             curr_idx_w += num_units_per_shard_width;
             if (curr_idx_w >= num_units_per_row) {
                 curr_idx_w = 0;
@@ -465,11 +488,13 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
                 }
             }
 
+            std::shared_ptr<RuntimeArgs> runtime_args_vec3 =std::make_shared<RuntimeArgs>();
+            *runtime_args_vec3 = {dst_buffer, num_units_per_row, shard_height, shard_width, curr_idx_w, curr_idx_h};
             tt_metal::SetRuntimeArgs(
-                program,
-                unary_writer_kernel_id,
+                device,
+                tt_metal::detail::GetKernel(program, unary_writer_kernel_id),
                 core,
-                {dst_buffer->address(), num_units_per_row, shard_height, shard_width, curr_idx_w, curr_idx_h});
+                runtime_args_vec3);
             curr_idx_w += output_unit_size;
             if (curr_idx_w >= num_units_per_row) {
                 curr_idx_w = 0;
@@ -635,19 +660,22 @@ operation::ProgramWithCallbacks reshard_multi_core(
     for(auto core: cores){
         auto page_range_vector = output_core_to_page_range_pair.at(core);
         uint32_t num_ranges = page_range_vector.size();
-        std::vector<uint32_t> runtime_args = {input.buffer()->address(), 0, num_ranges};
+        std::shared_ptr<RuntimeArgs> runtime_args = std::make_shared<RuntimeArgs>();
+        *runtime_args = {input.buffer(), 0, num_ranges};
         uint32_t num_output_pages = 0;
         for (uint32_t range_id = 0; range_id < num_ranges; range_id++) {
             auto physical_input_core = device->worker_core_from_logical_core(page_range_vector[range_id].core);
-            runtime_args.push_back(physical_input_core.x);
-            runtime_args.push_back(physical_input_core.y);
-            runtime_args.push_back(page_range_vector[range_id].range.start * unit_size * units_per_page); //start addr_offset
-            runtime_args.push_back((page_range_vector[range_id].range.end - page_range_vector[range_id].range.start)*unit_size * units_per_page); //size
+            (*runtime_args).push_back(physical_input_core.x);
+            (*runtime_args).push_back(physical_input_core.y);
+            (*runtime_args).push_back(page_range_vector[range_id].range.start * unit_size * units_per_page); //start addr_offset
+            (*runtime_args).push_back((page_range_vector[range_id].range.end - page_range_vector[range_id].range.start)*unit_size * units_per_page); //size
             num_output_pages += page_range_vector[range_id].range.end - page_range_vector[range_id].range.start;
         }
-        runtime_args[1] = num_output_pages;
-        tt_metal::SetRuntimeArgs(program, unary_reader_kernel_id, core, runtime_args);
-        tt_metal::SetRuntimeArgs(program, unary_writer_kernel_id, core, {num_output_pages});
+        (*runtime_args)[1] = num_output_pages;
+        tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, unary_reader_kernel_id), core, runtime_args);
+        std::shared_ptr<RuntimeArgs> runtime_args2 = std::make_shared<RuntimeArgs>();
+        *runtime_args2 = {num_output_pages};
+        tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, unary_writer_kernel_id), core, runtime_args2);
     }
 
     auto override_runtime_arguments_callback = [unary_reader_kernel_id, unary_writer_kernel_id, page_size, cb_dst0](
@@ -669,19 +697,22 @@ operation::ProgramWithCallbacks reshard_multi_core(
         for (const auto& core : cores) {
             auto page_range_vector = output_core_to_page_range_pair.at(core);
             uint32_t num_ranges = page_range_vector.size();
-            std::vector<uint32_t> runtime_args = {src_buffer->address(), 0, num_ranges};
+            std::shared_ptr<RuntimeArgs> runtime_args = std::make_shared<RuntimeArgs>();
+            *runtime_args = {src_buffer, 0, num_ranges};
             uint32_t num_output_pages = 0;
             for (uint32_t range_id = 0; range_id < num_ranges; range_id++) {
                 auto physical_input_core = device->worker_core_from_logical_core(page_range_vector[range_id].core);
-                runtime_args.push_back(physical_input_core.x);
-                runtime_args.push_back(physical_input_core.y);
-                runtime_args.push_back(page_range_vector[range_id].range.start * page_size);
-                runtime_args.push_back((page_range_vector[range_id].range.end - page_range_vector[range_id].range.start)*page_size);
+                (*runtime_args).push_back(physical_input_core.x);
+                (*runtime_args).push_back(physical_input_core.y);
+                (*runtime_args).push_back(page_range_vector[range_id].range.start * page_size);
+                (*runtime_args).push_back((page_range_vector[range_id].range.end - page_range_vector[range_id].range.start)*page_size);
                 num_output_pages += page_range_vector[range_id].range.end - page_range_vector[range_id].range.start;
             }
-            runtime_args[1] = num_output_pages;
-            tt_metal::SetRuntimeArgs(program, unary_reader_kernel_id, core, runtime_args);
-            tt_metal::SetRuntimeArgs(program, unary_writer_kernel_id, core, {num_output_pages});
+            (*runtime_args)[1] = num_output_pages;
+            tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, unary_reader_kernel_id), core, runtime_args);
+            std::shared_ptr<RuntimeArgs> runtime_args2 = std::make_shared<RuntimeArgs>();
+            *runtime_args2 = {num_output_pages};
+            tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, unary_writer_kernel_id), core, runtime_args2);
             UpdateDynamicCircularBufferAddress(program, cb_dst0, *dst_buffer);
         }
     };
