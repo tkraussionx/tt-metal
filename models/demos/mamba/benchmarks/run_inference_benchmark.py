@@ -1,7 +1,11 @@
+# SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+
+# SPDX-License-Identifier: Apache-2.0
+
 import time
 import argparse
 from dataclasses import dataclass
-from typing import List
+from typing import List, Tuple
 
 import torch
 
@@ -20,6 +24,11 @@ class InferenceBenchmarkResult:
 
 
 class MambaDecodeWrapper(torch.nn.Module):
+    """
+    A thin wrapper around the MambaDecode model to hide implementation specific
+    details that are not used in this script.
+    """
+
     def __init__(self, model_version):
         super().__init__()
 
@@ -32,6 +41,11 @@ class MambaDecodeWrapper(torch.nn.Module):
 
 
 class MambaGPUWrapper(torch.nn.Module):
+    """
+    A thin wrapper around the MambaLMHeadModel model to hide implementation specific
+    details that are not used in this script.
+    """
+
     def __init__(self, model_version):
         super().__init__()
 
@@ -43,7 +57,7 @@ class MambaGPUWrapper(torch.nn.Module):
         return self.decode(x).logits
 
 
-def create_model(model_type: str):
+def create_model(model_type: str) -> Tuple[torch.nn.Module, str]:
     if model_type == "cpu":
         return MambaDecodeWrapper(MODEL_VERSION), "cpu"
     elif model_type == "gpu":
@@ -52,14 +66,25 @@ def create_model(model_type: str):
         raise RuntimeError(f"Invalid model type: {model_type}")
 
 
-def run_inference_benchmark(model_type: str, prompt: str = "Mamba is the", sequence_length: int = 64, batch: int = 1):
-    print(f"Running benchmark on '{model_type.upper()}' using prompt '{prompt}'")
+def run_inference_benchmark(
+    model_type: str, prompt: str = "Mamba is the", sequence_length: int = 64, batch: int = 1
+) -> InferenceBenchmarkResult:
+    """
+    Run inference benchmark on the desired model type (implementation),
+    prompt, and generated sequence length. If batch > 1, we replicate the
+    prompt across each batch.
+
+    This function returns a report containing the benchmark results.
+    """
+
     torch.random.manual_seed(0)
+
+    print(f"Running benchmark on '{model_type.upper()}' using prompt '{prompt}'")
 
     tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
     model, device = create_model(model_type)
 
-    prompts = [prompt for idx in range(batch)]
+    prompts = [prompt for _ in range(batch)]
 
     sequence = tokenizer(prompts, return_tensors="pt").input_ids.to(device=device).split(1, dim=1)
     tokens_in_prompt = len(sequence)
