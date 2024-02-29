@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S python3 -m pdb
 
 # SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 
@@ -56,6 +56,9 @@ OPS_CSV_HEADER = [
     "INPUTS",
     "OUTPUTS",
     "CALL DEPTH",
+    "PM IDEAL CYCLES",
+    "PM REQ I BW",
+    "PM REQ O BW",
 ]
 
 SORT_KEY = OPS_CSV_HEADER[2]
@@ -272,81 +275,85 @@ def parse_ops_logs(opsFolder):
             with open(opLogPath, "r") as csvFile:
                 csvReader = csv.DictReader(csvFile)
                 for row in csvReader:
-                    try:
-                        op_folder_name = row["Name"].strip()
-                        op_name = op_folder_name
-                        extractName = re.findall(r".*tt.*tt_metal:*\d*(.*)E*", op_name)
-                        if extractName:
-                            op_name = extractName.pop()
+                    op_folder_name = row["Name"].strip()
+                    op_name = op_folder_name
+                    extractName = re.findall(r".*tt.*tt_metal:*\d*(.*)E*", op_name)
+                    if extractName:
+                        op_name = extractName.pop()
 
-                        start_ts = int(row[" Start timer count [ns]"].strip())
-                        end_ts = int(row[" Stop timer count [ns]"].strip())
-                        delta_time = int(row[" Delta timer count [ns]"].strip())
+                    start_ts = int(row[" Start timer count [ns]"].strip())
+                    end_ts = int(row[" Stop timer count [ns]"].strip())
+                    delta_time = int(row[" Delta timer count [ns]"].strip())
 
-                        global_call_count = int(row[" Global Call Count"].strip())
-                        call_count = int(row[" Call Count"].strip())
-                        stack_size = int(row[" Stack Size"].strip())
+                    global_call_count = int(row[" Global Call Count"].strip())
+                    call_count = int(row[" Call Count"].strip())
+                    stack_size = int(row[" Stack Size"].strip())
 
-                        inputs = parse_io_data(row[" Inputs"].strip(), "INPUT")
-                        if len(inputs.keys()) > maxInputCount:
-                            maxInputCount = len(inputs.keys())
+                    inputs = parse_io_data(row[" Inputs"].strip(), "INPUT")
+                    if len(inputs.keys()) > maxInputCount:
+                        maxInputCount = len(inputs.keys())
 
-                        outputs = parse_io_data(row[" Outputs"].strip(), "OUTPUT")
-                        if len(outputs.keys()) > maxOutputCount:
-                            maxOutputCount = len(outputs.keys())
+                    outputs = parse_io_data(row[" Outputs"].strip(), "OUTPUT")
+                    if len(outputs.keys()) > maxOutputCount:
+                        maxOutputCount = len(outputs.keys())
 
-                        mathFidelity = row[" Math Fidelity"].strip()
-                        parallelizationStrategy = row[" Parallelization Strategy"].strip()
-                        preferredName = row[" Preferred Name"].strip().split("tt::tt_metal::")[-1]
-                        metadata = row[" Meta Data"].strip()
-                        op_type = row[" Type"].strip()
+                    pm_ideal_cycles = row[" PM Ideal Cycles"].strip()
+                    pm_req_input_bw = row[" PM Req I BW"].strip()
+                    pm_req_output_bw = row[" PM Req O BW"].strip()
 
-                        if preferredName:
-                            if op_type != "tt_dnn_device":
-                                op_name += "_" + preferredName
+                    mathFidelity = row[" Math Fidelity"].strip()
+                    parallelizationStrategy = row[" Parallelization Strategy"].strip()
+                    preferredName = row[" Preferred Name"].strip().split("tt::tt_metal::")[-1]
+                    metadata = row[" Meta Data"].strip()
+                    op_type = row[" Type"].strip()
 
-                        op_to_folder[op_name] = op_folder_name
-                        if op_name in op_flavour_to_count.keys():
-                            op_flavour_to_count[op_name] += 1
-                        else:
-                            op_flavour_to_count[op_name] = 1
+                    if preferredName:
+                        if op_type != "tt_dnn_device":
+                            op_name += "_" + preferredName
 
-                        if minTime == 0:
-                            minTime = start_ts
-                        elif minTime > start_ts:
-                            minTime = start_ts
+                    op_to_folder[op_name] = op_folder_name
+                    if op_name in op_flavour_to_count.keys():
+                        op_flavour_to_count[op_name] += 1
+                    else:
+                        op_flavour_to_count[op_name] = 1
 
-                        if maxDiff < delta_time:
-                            maxDiff = delta_time
+                    if minTime == 0:
+                        minTime = start_ts
+                    elif minTime > start_ts:
+                        minTime = start_ts
 
-                        if stack_size > maxStackSize:
-                            maxStackSize = stack_size
+                    if maxDiff < delta_time:
+                        maxDiff = delta_time
 
-                        timeDataDict = {
-                            "CALL COUNT": op_flavour_to_count[op_name],
-                            "_OP CALL COUNT": call_count,
-                            "OP TYPE": op_type,
-                            "GLOBAL CALL COUNT": global_call_count,
-                            "HOST START TS": start_ts,
-                            "HOST END TS": end_ts,
-                            "CALL DEPTH": stack_size,
-                            "INPUTS": inputs,
-                            "OUTPUTS": outputs,
-                            "MATH FIDELITY": mathFidelity,
-                            "PARALLELIZATION STRATEGY": parallelizationStrategy,
-                            "HOST DURATION [ns]": delta_time,
-                            "ATTRIBUTES": metadata,
-                        }
+                    if stack_size > maxStackSize:
+                        maxStackSize = stack_size
 
-                        append_device_time_data(opCandidateDevicePath, call_count, timeDataDict)
-                        append_detail_host_time_data(opCandidatePath, call_count, timeDataDict)
+                    timeDataDict = {
+                        "CALL COUNT": op_flavour_to_count[op_name],
+                        "_OP CALL COUNT": call_count,
+                        "OP TYPE": op_type,
+                        "GLOBAL CALL COUNT": global_call_count,
+                        "HOST START TS": start_ts,
+                        "HOST END TS": end_ts,
+                        "CALL DEPTH": stack_size,
+                        "INPUTS": inputs,
+                        "OUTPUTS": outputs,
+                        "MATH FIDELITY": mathFidelity,
+                        "PM IDEAL CYCLES": pm_ideal_cycles,
+                        "PM REQ I BW": pm_req_input_bw,
+                        "PM REQ O BW": pm_req_output_bw,
+                        "PARALLELIZATION STRATEGY": parallelizationStrategy,
+                        "HOST DURATION [ns]": delta_time,
+                        "ATTRIBUTES": metadata,
+                    }
 
-                        if op_name in ops.keys():
-                            ops[op_name].append(timeDataDict)
-                        else:
-                            ops[op_name] = [timeDataDict]
-                    except KeyError as e:
-                        assert False, f"CSV {opLogPath} has bad header format"
+                    append_device_time_data(opCandidateDevicePath, call_count, timeDataDict)
+                    append_detail_host_time_data(opCandidatePath, call_count, timeDataDict)
+
+                    if op_name in ops.keys():
+                        ops[op_name].append(timeDataDict)
+                    else:
+                        ops[op_name] = [timeDataDict]
     return ops
 
 

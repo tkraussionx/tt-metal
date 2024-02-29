@@ -46,6 +46,33 @@ struct ProgramWithCallbacks {
     }
 };
 
+struct OpPerformanceModel {
+    int ideal_cycle_count = 1;
+    float ideal_nano_sec = 1;
+    std::vector<int> inputs_bytes;
+    std::vector<int> outputs_bytes;
+    int get_ideal_cycle_count() const {
+        return ideal_cycle_count;
+    }
+    int get_ideal_compute_ns() const {
+        return ideal_nano_sec;
+    }
+    std::vector<float> get_input_bws() const {
+        std::vector<float> input_bws(inputs_bytes.size());
+        TT_ASSERT(this->ideal_nano_sec > 0);
+        std::transform(inputs_bytes.cbegin(), inputs_bytes.cend(), input_bws.begin(),
+                   [this](float c) { return (float)c / this->ideal_nano_sec; });
+        return input_bws;
+    }
+    std::vector<float> get_output_bws() const {
+        std::vector<float> output_bws(outputs_bytes.size());
+        TT_ASSERT(this->ideal_nano_sec > 0);
+        std::transform(outputs_bytes.cbegin(), outputs_bytes.cend(), output_bws.begin(),
+                   [this](float c) { return (float)c / this->ideal_nano_sec; });
+        return output_bws;
+    }
+};
+
 struct ProfilerInfo {
     std::optional<std::string> preferred_name;
     std::optional<std::string> parallelization_strategy;
@@ -148,6 +175,20 @@ template <class T>
 constexpr bool implements_create_program_with_optional_input_tensors() {
     return std::experimental::is_detected_v<
         has_create_program_with_optional_input_tensors_t,
+        T,
+        const std::vector<Tensor>&,
+        const std::vector<std::optional<const Tensor>>&,
+        std::vector<Tensor>&>;
+}
+
+template <class T, class... Args>
+using has_create_op_performance_model_t =
+    decltype(std::declval<T>().create_op_performance_model(std::declval<Args>()...));
+
+template <class T>
+constexpr bool implements_create_op_performance_model() {
+    return std::experimental::is_detected_v<
+        has_create_op_performance_model_t,
         T,
         const std::vector<Tensor>&,
         const std::vector<std::optional<const Tensor>>&,
@@ -284,6 +325,14 @@ struct DeviceOperation final {
             this->type_erased_storage, input_tensors, optional_input_tensors, output_tensors);
     }
 
+    inline OpPerformanceModel create_op_performance_model(
+        const std::vector<Tensor>& input_tensors,
+        const std::vector<std::optional<const Tensor>>& optional_input_tensors,
+        std::vector<Tensor>& output_tensors) const {
+        return this->create_op_performance_model_impl_(
+            this->type_erased_storage, input_tensors, optional_input_tensors, output_tensors);
+    }
+
     inline void override_runtime_arguments(
         OverrideRuntimeArgumentsCallback& override_runtime_arguments_callback,
         Program& program,
@@ -405,6 +454,18 @@ struct DeviceOperation final {
                     static_assert(tt::stl::concepts::always_false_v<T>, "Operation doesn't implement create_program");
                 }
             }},
+        create_op_performance_model_impl_{
+            [](const storage_t& storage,
+               const std::vector<Tensor>& input_tensors,
+               const std::vector<std::optional<const Tensor>>& optional_input_tensors,
+               std::vector<Tensor>& output_tensors) -> OpPerformanceModel {
+                const auto& operation = *reinterpret_cast<const std::decay_t<T>*>(&storage);
+                if constexpr (detail::implements_create_op_performance_model<T>()) {
+                    return operation.create_op_performance_model(input_tensors, optional_input_tensors, output_tensors);
+                } else {
+                    return {0}; // TODO: Return default opmodel
+                }
+            }},
         override_runtime_arguments_impl_{
             [](const storage_t& storage,
                OverrideRuntimeArgumentsCallback& override_runtime_arguments_callback,
@@ -483,6 +544,11 @@ struct DeviceOperation final {
     const std::vector<Shape> (*compute_output_shapes_impl_)(const storage_t& value, const std::vector<Tensor>&);
     const std::vector<Tensor> (*create_output_tensors_impl_)(const storage_t& value, const std::vector<Tensor>&, const std::vector<std::optional<Tensor>>&);
     ProgramWithCallbacks (*create_program_impl_)(
+        const storage_t& value,
+        const std::vector<Tensor>&,
+        const std::vector<std::optional<const Tensor>>&,
+        std::vector<Tensor>&);
+    OpPerformanceModel (*create_op_performance_model_impl_)(
         const storage_t& value,
         const std::vector<Tensor>&,
         const std::vector<std::optional<const Tensor>>&,
