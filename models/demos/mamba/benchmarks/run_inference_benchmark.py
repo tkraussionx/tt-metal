@@ -29,17 +29,25 @@ class MambaDecodeWrapper(torch.nn.Module):
         return self.decode(x)
 
 
+class MambaGPUWrapper(torch.nn.Module):
+    def __init__(self, model_version):
+        super().__init__()
+
+        from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel
+
+        self.decode = MambaLMHeadModel.from_pretrained(model_version, device="cuda")
+
+    def forward(self, x):
+        return self.decode(x).logits
+
+
 def create_model(model_type: str):
     if model_type == "cpu":
         return MambaDecodeWrapper(MODEL_VERSION), "cpu"
     elif model_type == "gpu":
-        from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel
-
-        return MambaLMHeadModel.from_pretrained(MODEL_VERSION, device="cuda"), "cuda"
+        return MambaGPUWrapper(MODEL_VERSION), "cuda"
     else:
         raise RuntimeError(f"Invalid model type: {model_type}")
-
-    return model, device
 
 
 def run_inference_benchmark(model_type: str, prompt: str = "Mamba is the", sequence_length: int = 64):
