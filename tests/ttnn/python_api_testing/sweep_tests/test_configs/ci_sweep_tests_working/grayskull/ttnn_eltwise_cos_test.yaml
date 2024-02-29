@@ -15,8 +15,8 @@ test-list:
         function: gen_rand
         dtype: bfloat16
         args:
-        low: 0
-        high: 6.283185307179586
+          low: 0
+          high: 6.283185307179586
       comparison:
         function: comp_pcc
       args-gen: gen_dtype_layout_device
