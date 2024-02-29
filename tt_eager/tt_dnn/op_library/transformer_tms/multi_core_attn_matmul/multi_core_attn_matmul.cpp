@@ -194,17 +194,22 @@ operation::ProgramWithCallbacks multi_core_attn_matmul(const Tensor &a, const Te
         } else if (core_group_2.core_coord_in_core_ranges(core)) {
             num_output_blocks_per_core = num_output_blocks_per_core_group_2;
         } else {
-            tt_metal::SetRuntimeArgs(program, reader_id, core, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
-            tt_metal::SetRuntimeArgs(program, eltwise_binary_kernel_id, core, {0, 0, 0, 0});
-            tt_metal::SetRuntimeArgs(program, writer_id, core, {0, 0, 0});
+            std::shared_ptr<RuntimeArgs> runtime_args_vec4 = std::make_shared<RuntimeArgs>();
+            *runtime_args_vec4 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            std::shared_ptr<RuntimeArgs> runtime_args_vec5 = std::make_shared<RuntimeArgs>();
+            *runtime_args_vec5 = {0, 0, 0, 0};
+            std::shared_ptr<RuntimeArgs> runtime_args_vec6 = std::make_shared<RuntimeArgs>();
+            *runtime_args_vec6 = {0, 0, 0};
+            tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, reader_id), core, runtime_args_vec4);
+            tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, eltwise_binary_kernel_id), core, runtime_args_vec5);
+            tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, writer_id), core, runtime_args_vec6);
             continue;
         }
 
-        tt_metal::SetRuntimeArgs(
-            program, reader_id, core,
-            {
-                src0_addr,
-                src1_addr,
+        std::shared_ptr<RuntimeArgs> runtime_args_vec1 = std::make_shared<RuntimeArgs>();
+        *runtime_args_vec1 = {
+                src0_buffer,
+                src1_buffer,
                 Mt,
                 Kt,
                 Nt,
@@ -214,31 +219,35 @@ operation::ProgramWithCallbacks multi_core_attn_matmul(const Tensor &a, const Te
                 num_output_blocks_per_core,
                 num_blocks_written * MtKt, // itileA_start
                 0, // itileB_start; always read in same in1 per core TODO: multi-cast
-            }
-        );
+            };
 
-
-        tt_metal::SetRuntimeArgs(
-            program,
-            eltwise_binary_kernel_id,
-            core,
-            {
+        std::shared_ptr<RuntimeArgs> runtime_args_vec2 = std::make_shared<RuntimeArgs>();
+        *runtime_args_vec2 = {
                 1, // B
                 1, // Mt
                 Kt, // Kt
                 num_output_blocks_per_core * MtNt, // Nt
-            }
-        );
+        };
+        std::shared_ptr<RuntimeArgs> runtime_args_vec3 = std::make_shared<RuntimeArgs>();
+        *runtime_args_vec3 = {
+                    dst_buffer,
+                    num_output_blocks_per_core * MtNt,
+                    num_blocks_written * MtNt,
+        };
 
         tt_metal::SetRuntimeArgs(
-            program,
-            writer_id,
+            device, tt_metal::detail::GetKernel(program, reader_id), core,
+            std::move(runtime_args_vec1)
+        );
+        tt_metal::SetRuntimeArgs(
+            device, tt_metal::detail::GetKernel(program, eltwise_binary_kernel_id),
             core,
-            {
-                dst_addr,
-                num_output_blocks_per_core * MtNt,
-                num_blocks_written * MtNt,
-            }
+            std::move(runtime_args_vec2)
+        );
+        tt_metal::SetRuntimeArgs(
+            device, tt_metal::detail::GetKernel(program, writer_id),
+            core,
+            std::move(runtime_args_vec3)
         );
         num_blocks_written += num_output_blocks_per_core;
     }
@@ -269,7 +278,7 @@ operation::ProgramWithCallbacks multi_core_attn_matmul(const Tensor &a, const Te
         auto src_dram_buffer_b = input_tensors.at(1).buffer();
 
         auto dst_dram_buffer = output_tensors.at(0).buffer();
-
+        tt_metal::Device *device = input_tensors.at(0).device();
         auto ashape = input_tensors.at(0).shape();
         auto bshape = input_tensors.at(1).shape();
 
@@ -309,51 +318,64 @@ operation::ProgramWithCallbacks multi_core_attn_matmul(const Tensor &a, const Te
             } else if (core_group_2.core_coord_in_core_ranges(core)) {
                 num_output_blocks_per_core = num_output_blocks_per_core_group_2;
             } else {
-                tt_metal::SetRuntimeArgs(program, reader_id, core, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
-                tt_metal::SetRuntimeArgs(program, eltwise_binary_kernel_id, core, {0, 0, 0, 0});
-                tt_metal::SetRuntimeArgs(program, writer_id, core, {0, 0, 0});
+                std::shared_ptr<RuntimeArgs> runtime_args_vec4 = std::make_shared<RuntimeArgs>();
+                *runtime_args_vec4 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                std::shared_ptr<RuntimeArgs> runtime_args_vec5 = std::make_shared<RuntimeArgs>();
+                *runtime_args_vec5 = {0, 0, 0, 0};
+                std::shared_ptr<RuntimeArgs> runtime_args_vec6 = std::make_shared<RuntimeArgs>();
+                *runtime_args_vec6 = {0, 0, 0};
+                tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, reader_id), core, runtime_args_vec4);
+                tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, eltwise_binary_kernel_id), core, runtime_args_vec5);
+                tt_metal::SetRuntimeArgs(device, tt_metal::detail::GetKernel(program, writer_id), core, runtime_args_vec6);
                 continue;
             }
 
+            std::shared_ptr<RuntimeArgs> runtime_args_vec1 = std::make_shared<RuntimeArgs>();
+            *runtime_args_vec1 = {
+                        src_dram_buffer_a,
+                        src_dram_buffer_b,
+                        Mt,
+                        Kt,
+                        Nt,
+                        MtKt,
+                        in1_KtNt_skip, // Skip to get next batch for in1 after reading in0 Kt
+                        in1_KtNt_stride * num_rows_in_one_tile, // itileB stride; skips 32 * KtNt in bshape[0] for one block of MtNt
+                        num_output_blocks_per_core,
+                        num_blocks_written * MtKt, // itileA_start
+                        0, // itileB_start; always read in same in1 per core TODO: multi-cast
+            };
+
+            std::shared_ptr<RuntimeArgs> runtime_args_vec2 = std::make_shared<RuntimeArgs>();
+            *runtime_args_vec2 = {
+                        1, // B
+                        1, // Mt
+                        Kt, // Kt
+                        num_output_blocks_per_core * MtNt // Nt
+            };
+
+            std::shared_ptr<RuntimeArgs> runtime_args_vec3 = std::make_shared<RuntimeArgs>();
+            *runtime_args_vec3 = {
+                        dst_dram_buffer,
+                        num_output_blocks_per_core * MtNt,
+                        num_blocks_written * MtNt
+            };
             tt_metal::SetRuntimeArgs(
-                program, reader_id, core,
-                {
-                    src_dram_buffer_a->address(),
-                    src_dram_buffer_b->address(),
-                    Mt,
-                    Kt,
-                    Nt,
-                    MtKt,
-                    in1_KtNt_skip, // Skip to get next batch for in1 after reading in0 Kt
-                    in1_KtNt_stride * num_rows_in_one_tile, // itileB stride; skips 32 * KtNt in bshape[0] for one block of MtNt
-                    num_output_blocks_per_core,
-                    num_blocks_written * MtKt, // itileA_start
-                    0, // itileB_start; always read in same in1 per core TODO: multi-cast
-                }
+                device, tt_metal::detail::GetKernel(program, reader_id), core,
+                runtime_args_vec1
             );
 
 
             tt_metal::SetRuntimeArgs(
-                program,
-                eltwise_binary_kernel_id,
+                device,
+                tt_metal::detail::GetKernel(program, eltwise_binary_kernel_id),
                 core,
-                {
-                    1, // B
-                    1, // Mt
-                    Kt, // Kt
-                    num_output_blocks_per_core * MtNt, // Nt
-                }
+                runtime_args_vec2
             );
 
             tt_metal::SetRuntimeArgs(
-                program,
-                writer_id,
+                device, tt_metal::detail::GetKernel(program, writer_id),
                 core,
-                {
-                    dst_dram_buffer->address(),
-                    num_output_blocks_per_core * MtNt,
-                    num_blocks_written * MtNt,
-                }
+                runtime_args_vec3
             );
             num_blocks_written += num_output_blocks_per_core;
         }
