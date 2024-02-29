@@ -10,27 +10,6 @@ import ttnn
 from models.utility_functions import tt_to_torch_tensor, torch_to_tt_tensor_rm, tt2torch_tensor
 
 
-def from_torch_cached(filename, torch_tensor, device=None, dtype=None, memory_config=None, layout=None):
-    try:
-        tensor = ttnn.load_tensor(filename)
-        if tuple(tensor.shape) != tuple(torch_tensor.shape):
-            logger.warning(
-                f"Cached file {filename} has shape {tensor.shape}, expected {torch_tensor.shape}, regenerating cache"
-            )
-            raise RuntimeError
-    # ttnn.load_tensor throws RuntimeError, not FileNotFoundError but anticipating a fix for that here
-    except (FileNotFoundError, RuntimeError):
-        logger.info(f"Generating cache for {filename} of shape {torch_tensor.shape}")
-        tensor = ttnn.from_torch(torch_tensor, dtype=dtype, memory_config=memory_config, layout=layout)
-        Path(filename).parent.mkdir(parents=True, exist_ok=True)
-        ttnn.dump_tensor(filename, tensor)
-        # ensure shared cache files and dir are world-writeable
-        Path(filename).parent.chmod(0o777)
-        Path(filename).chmod(0o777)
-    tensor = ttnn.to_device(tensor, device)
-    return tensor
-
-
 def Linear(
     in_features: int,
     out_features: int,

@@ -5,7 +5,6 @@
 from pathlib import Path
 import torch
 import ttnn
-from models.demos.mistral7b.mistral_helper_funcs import from_torch_cached
 
 
 class TtMistralMLP(torch.nn.Module):
@@ -25,31 +24,19 @@ class TtMistralMLP(torch.nn.Module):
         self.grid = grid
 
         torch_weight = lambda name: torch.transpose(self.state_dict[f"{name}.weight"], -2, -1)
-        cache_name = lambda name: Path(model_config["DEFAULT_WEIGHT_PATH"]) / (
-            base_address + f".feed_forward.{name}.bin"
+        cache_name = lambda name: Path(model_config["DEFAULT_WEIGHT_PATH"]) / (base_address + f".feed_forward.{name}")
+        as_tensor = lambda name, dtype_name: ttnn.as_tensor(
+            torch_weight(name),
+            dtype=self.model_config[dtype_name],
+            device=self.device,
+            layout=ttnn.TILE_LAYOUT,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            cache_file_name=cache_name(name),
         )
 
-        self.w1 = from_torch_cached(
-            cache_name("w1"),
-            torch_weight("w1"),
-            layout=ttnn.TILE_LAYOUT,
-            device=self.device,
-            dtype=self.model_config["FF1_MM_WEIGHTS_DTYPE"],
-        )
-        self.w2 = from_torch_cached(
-            cache_name("w2"),
-            torch_weight("w2"),
-            layout=ttnn.TILE_LAYOUT,
-            device=self.device,
-            dtype=self.model_config["FF2_MM_WEIGHTS_DTYPE"],
-        )
-        self.w3 = from_torch_cached(
-            cache_name("w3"),
-            torch_weight("w3"),
-            layout=ttnn.TILE_LAYOUT,
-            device=self.device,
-            dtype=self.model_config["FF3_MM_WEIGHTS_DTYPE"],
-        )
+        self.w1 = as_tensor("w1", "FF1_MM_WEIGHTS_DTYPE")
+        self.w2 = as_tensor("w2", "FF2_MM_WEIGHTS_DTYPE")
+        self.w3 = as_tensor("w3", "FF3_MM_WEIGHTS_DTYPE")
 
     def forward(self, x: ttnn.Tensor) -> ttnn.Tensor:
         """
