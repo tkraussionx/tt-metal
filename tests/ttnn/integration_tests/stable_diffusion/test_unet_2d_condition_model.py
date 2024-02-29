@@ -116,6 +116,7 @@ def test_unet_2d_condition_model_256x256(device, batch_size, in_channels, input_
 def test_unet_2d_condition_model_512x512(device, batch_size, in_channels, input_height, input_width):
     # setup pytorch model
     torch.manual_seed(0)
+
     pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4", torch_dtype=torch.float32)
 
     model = pipe.unet

@@ -175,14 +175,14 @@ def test_resnet_block_2d_512x512(
     torch_output = resnet(input, temb.squeeze(0).squeeze(0))
     reader_patterns_cache = {}
     resnet_block = resnetBlock2D(
-        device, parameters, reader_patterns_cache, batch_size, input_height, input_width, group_norm_on_device=True
+        device, parameters, reader_patterns_cache, batch_size, input_height, input_width, group_norm_on_device=False
     )
 
     input = ttnn.from_torch(input, ttnn.bfloat16)
     input = ttnn.to_layout(input, ttnn.TILE_LAYOUT)
     input = ttnn.to_device(input, device, memory_config=ttnn.L1_MEMORY_CONFIG)
     input = ttnn.reshape(input, (1, 1, batch_size * input_height * input_width, in_channels))
-    input = ttnn.to_memory_config(input, resnet_block.conv1s[0].conv.input_sharded_memory_config)
+    # input = ttnn.to_memory_config(input, resnet_block.conv1s[0].conv.input_sharded_memory_config)
 
     temb = ttnn.from_torch(temb, ttnn.bfloat16)
     temb = ttnn.to_layout(temb, ttnn.TILE_LAYOUT)
@@ -195,20 +195,28 @@ def test_resnet_block_2d_512x512(
         out_channels=out_channels,
         temb_channels=temb_channels,
         use_in_shortcut=use_in_shortcut,
-        # eps=resnet_eps,
+        eps=1e-6,
         groups=groups,
         time_embedding_norm=time_embedding_norm,
         non_linearity="silu",
         output_scale_factor=output_scale_factor,
         # pre_norm=resnet_pre_norm,
-        group_norm_sharded_config={
-            "shard_strategy": resnet_block.conv1s[0].conv.input_shard_scheme,
-            "shard_orientation": resnet_block.conv1s[0].conv.input_shard_orientation,
-            "grid_size": resnet_block.conv1s[0].conv.grid_size,
-        },
+        # group_norm_sharded_config={
+        #     "shard_strategy": resnet_block.conv1s[0].conv.input_shard_scheme,
+        #     "shard_orientation": resnet_block.conv1s[0].conv.input_shard_orientation,
+        #     "grid_size": resnet_block.conv1s[0].conv.grid_size,
+        # },
     )
-
-    print("HEREEEEE")
+    ttnn_output = ttnn.to_memory_config(ttnn_output, ttnn.L1_MEMORY_CONFIG)
     ttnn_output = ttnn_to_torch(ttnn_output)
-
+    ttnn_output = torch.reshape(
+        ttnn_output,
+        (
+            batch_size,
+            input_height,
+            input_width,
+            out_channels if out_channels is not None else in_channels,
+        ),
+    )
+    ttnn_output = torch.permute(ttnn_output, (0, 3, 1, 2))
     assert_with_pcc(torch_output, ttnn_output, pcc=0.99)
