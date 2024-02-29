@@ -425,12 +425,12 @@ inline void read_data_from_device_buffer(DeviceBuffer device_buffer, vector<T>& 
 
 template <typename T, template <typename> typename BufferType>
 inline void write_data_to_device_buffer(
-    CommandQueue & cq, const BufferType<T>& host_buffer, DeviceBuffer device_buffer, bool writing_owned_storage) {
+    CommandQueue & cq, const BufferType<T>& host_buffer, DeviceBuffer device_buffer) {
     ZoneScoped;
     // TODO(arakhmati): can we use generators in this function to go from `data_to_write` to `uint32_data`?
     // And effectively get rid of any additional allocation
     if (CommandQueue::get_mode() == CommandQueue::CommandQueueMode::ASYNC) {
-        if (!writing_owned_storage) {
+        if constexpr (std::is_same_v<BufferType<T>, borrowed_buffer::Buffer<T>>) {
             // When writing borrowed storage asynchronously, we have no control over when host memory is deallocated by the main thread.
             // To ensure that worker threads enqueues the correct buffer, make a copy and caputre it in an owned buffer.
             uint32_t borrowed_buf_size_words = device_buffer->num_pages() * device_buffer->page_size() / sizeof(uint32_t);
@@ -439,7 +439,7 @@ inline void write_data_to_device_buffer(
             owned_buffer::Buffer<uint32_t> owned_copy(std::make_shared<std::vector<uint32_t>>(owned_copy_vec));
             EnqueueWriteBuffer( cq, device_buffer, owned_copy.get_ptr(), false);
         }
-        else {
+        else if constexpr (std::is_same_v<BufferType<T>, owned_buffer::Buffer<T>>) {
             EnqueueWriteBuffer( cq, device_buffer, host_buffer.get_ptr(), false);
         }
     }
@@ -458,6 +458,7 @@ inline void write_data_to_device_buffer(const BufferType<T>& host_buffer, Buffer
     ::detail::WriteToBuffer(device_buffer, uint32_data);
 }
 
+
 template <typename T, template <typename> typename BufferType>
 inline DeviceBuffer initialize_data_on_device(
     BufferType<T>& data_to_write,
@@ -467,7 +468,6 @@ inline DeviceBuffer initialize_data_on_device(
     Layout layout,
     const MemoryConfig& memory_config,
     std::optional<ShardSpecBuffer> shard_spec,
-    bool writing_owned_storage,
     std::optional<std::reference_wrapper<CommandQueue>> queue = std::nullopt) {
     ZoneScoped;
     TT_ASSERT(device != nullptr);
@@ -478,7 +478,7 @@ inline DeviceBuffer initialize_data_on_device(
     const char* TT_METAL_SLOW_DISPATCH_MODE = std::getenv("TT_METAL_SLOW_DISPATCH_MODE");
     if (TT_METAL_SLOW_DISPATCH_MODE == nullptr) {
         write_data_to_device_buffer<T>(
-            queue.has_value() ? queue.value().get() : device->command_queue(), data_to_write, device_buffer, writing_owned_storage);
+            queue.has_value() ? queue.value().get() : device->command_queue(), data_to_write, device_buffer);
     } else {
         write_data_to_device_buffer<T>(data_to_write, *device_buffer);
     }
@@ -503,7 +503,6 @@ inline DeviceBuffer to_device_buffer(
             }
             if constexpr (std::is_same_v<StorageType, OwnedStorage>) {
                 auto data_to_write = owned_buffer::get_as<T>(storage.buffer);
-                bool writing_owned_storage = true;
                 TT_ASSERT(
                     compute_buffer_size(shape, data_type) == data_to_write.size(),
                     fmt::format(
@@ -516,7 +515,7 @@ inline DeviceBuffer to_device_buffer(
                         "Tensor shape incompatible for specified layout");
                 }
                 return initialize_data_on_device<T>(
-                    data_to_write, device, shape, data_type, layout, memory_config, shard_spec, writing_owned_storage);
+                    data_to_write, device, shape, data_type, layout, memory_config, shard_spec);
             }
             else if constexpr (std::is_same_v<StorageType, DeviceStorage>) {
                 TT_THROW("Device storage doesn't support to_device_buffer");
@@ -525,7 +524,6 @@ inline DeviceBuffer to_device_buffer(
                     std::is_same_v<T, float> or std::is_same_v<T, bfloat16> or std::is_same_v<T, std::uint32_t> or
                     std::is_same_v<T, std::uint16_t>) {
                     auto data_to_write = borrowed_buffer::get_as<T>(storage.buffer);
-                    bool writing_owned_storage = false;
                     TT_ASSERT(
                         compute_buffer_size(shape, data_type) == data_to_write.size(),
                         fmt::format(
@@ -538,7 +536,7 @@ inline DeviceBuffer to_device_buffer(
                             "Tensor shape incompatible for specified layout");
                     }
                     return initialize_data_on_device<T>(
-                        data_to_write, device, shape, data_type, layout, memory_config, shard_spec, writing_owned_storage);
+                        data_to_write, device, shape, data_type, layout, memory_config, shard_spec);
 
                 } else {
                     TT_THROW("Borrowed storage doesn't support this data type");
