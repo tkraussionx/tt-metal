@@ -575,6 +575,186 @@ def get_model_config(model_config_str, llm_mode, num_devices):
             mcast_in0=True,
         )
 
+        if num_devices == 8:
+            model_config["ALL_GATHER_NUM_LINKS"] = 1
+            # Embeddings is on 32 cores
+            model_config["WORD_EMBEDDING_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
+                ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+                ttl.tensor.BufferType.L1,
+                ttl.tensor.ShardSpec(
+                    ttl.tensor.CoreRangeSet(
+                        {
+                            ttl.tensor.CoreRange(
+                                ttl.tensor.CoreCoord(0, 0),
+                                ttl.tensor.CoreCoord(7, 3),
+                            ),
+                        }
+                    ),
+                    [
+                        32,
+                        32,
+                    ],
+                    ttl.tensor.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            )
+            # WIDTH sharded 8 cores; N = 1105, per_core_N = 5 so output is still across 8 cores
+            model_config["QKV_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                compute_with_storage_grid_size=(8, 1),
+                in0_block_w=32,
+                out_subblock_h=1,
+                out_subblock_w=1,
+                per_core_M=1,
+                per_core_N=5,
+                fuse_batch=True,
+                fused_activation=None,
+                mcast_in0=True,
+            )
+            # WIDTH sharded 8 cores; N = 1105 so output is 144 per core (rounded up to nearest TILE)
+            model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
+                ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+                ttl.tensor.BufferType.L1,
+                ttl.tensor.ShardSpec(
+                    ttl.tensor.CoreRangeSet(
+                        {
+                            ttl.tensor.CoreRange(
+                                ttl.tensor.CoreCoord(0, 0),
+                                ttl.tensor.CoreCoord(7, 0),
+                            ),
+                        }
+                    ),
+                    [
+                        32,
+                        144,
+                    ],
+                    ttl.tensor.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            )
+            # Minimum width is 1152 to produce 16 Q heads and 2 KV heads (head_dim = 64)
+            model_config["CREATE_QKV_HEADS_INPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
+                ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+                ttl.tensor.BufferType.L1,
+                ttl.tensor.ShardSpec(
+                    ttl.tensor.CoreRangeSet(
+                        {
+                            ttl.tensor.CoreRange(
+                                ttl.tensor.CoreCoord(0, 0),
+                                ttl.tensor.CoreCoord(0, 0),
+                            ),
+                        }
+                    ),
+                    [
+                        32,
+                        1152,
+                    ],
+                    ttl.tensor.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            )
+            # 16 Q heads so 16 cores of work
+            model_config["SOFTMAX_PROGCFG"] = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
+                compute_with_storage_grid_size=(8, 2),
+                subblock_w=1,
+                block_h=1,
+                block_w=1,  # Dynamic
+                math_fidelity=ttl.tensor.MathFidelity.HiFi4,
+                im_data_format=ttl.tensor.DataType.BFLOAT16,
+            )
+            # WIDTH sharded 32 cores; N = 1024, per_core_N = 1 so output is still across 32 cores
+            model_config["SELFOUT_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                compute_with_storage_grid_size=(8, 4),
+                in0_block_w=8,
+                out_subblock_h=1,
+                out_subblock_w=1,
+                per_core_M=1,
+                per_core_N=1,
+                fuse_batch=True,
+                fused_activation=None,
+                mcast_in0=True,
+            )
+            # WIDTH sharded 32 cores; N = 4096, per_core_N = 4 so output is still across 32 cores
+            model_config[
+                "DENSE_H_TO_4H_MM_PROGCFG"
+            ] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                compute_with_storage_grid_size=(8, 4),
+                in0_block_w=8,
+                out_subblock_h=1,
+                out_subblock_w=4,
+                per_core_M=1,
+                per_core_N=4,
+                fuse_batch=True,
+                fused_activation=[ttl.tensor.FusibleActivation.GELU, True],
+                mcast_in0=True,
+            )
+            # WIDTH sharded 32 cores; N = 1024, per_core_N = 1 so output is still across 32 cores
+            model_config[
+                "DENSE_4H_TO_H_MM_PROGCFG"
+            ] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                compute_with_storage_grid_size=(8, 4),
+                in0_block_w=32,
+                out_subblock_h=1,
+                out_subblock_w=1,
+                per_core_M=1,
+                per_core_N=1,
+                fuse_batch=True,
+                fused_activation=None,
+                mcast_in0=True,
+            )
+            # Output of MLP, ATTN, and residual is on 32 cores
+            model_config["PARALLEL_ATTN_ADD_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
+                ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+                ttl.tensor.BufferType.L1,
+                ttl.tensor.ShardSpec(
+                    ttl.tensor.CoreRangeSet(
+                        {
+                            ttl.tensor.CoreRange(
+                                ttl.tensor.CoreCoord(0, 0),
+                                ttl.tensor.CoreCoord(7, 3),
+                            ),
+                        }
+                    ),
+                    [
+                        32,
+                        32,
+                    ],
+                    ttl.tensor.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            )
+            model_config["DROPOUT_ADD_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
+                ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+                ttl.tensor.BufferType.L1,
+                ttl.tensor.ShardSpec(
+                    ttl.tensor.CoreRangeSet(
+                        {
+                            ttl.tensor.CoreRange(
+                                ttl.tensor.CoreCoord(0, 0),
+                                ttl.tensor.CoreCoord(7, 3),
+                            ),
+                        }
+                    ),
+                    [
+                        32,
+                        32,
+                    ],
+                    ttl.tensor.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            )
+            # WIDTH sharded 32 cores; N = 8128, per_core_N = 8 (rounded up) so output is still across 32 cores
+            model_config["LM_HEAD_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                compute_with_storage_grid_size=(8, 4),
+                in0_block_w=8,
+                out_subblock_h=1,
+                out_subblock_w=4,
+                per_core_M=1,
+                per_core_N=8,
+                fuse_batch=True,
+                fused_activation=None,
+                mcast_in0=True,
+            )
+
     # uncomment if need to see all the configs
     # logger.debug(f"Falcon model config: \n{pretty_print_model_config(model_config)}")
 
