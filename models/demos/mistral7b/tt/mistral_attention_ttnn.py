@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from pathlib import Path
 import torch
 import math
 from torch import nn
@@ -17,7 +18,18 @@ from models.utility_functions import (
 
 
 class TtMistralAttention(nn.Module):
-    def __init__(self, devices, state_dict, base_url, layer_num, dtype, configuration, tt_cos_cached, tt_sin_cached):
+    def __init__(
+        self,
+        devices,
+        state_dict,
+        base_address,
+        model_config,
+        layer_num,
+        dtype,
+        configuration,
+        tt_cos_cached,
+        tt_sin_cached,
+    ):
         super().__init__()
 
         self.state_dict = state_dict
@@ -40,9 +52,13 @@ class TtMistralAttention(nn.Module):
         # self.current = 0
 
         if layer_num:
-            layer_name = f"{base_url}.{layer_num}.attention."
+            layer_name = f"{base_address}.{layer_num}.attention."
+            cache_name = lambda name: Path(model_config["DEFAULT_WEIGHT_PATH"]) / (f"{layer_name}{name}")
         else:
-            layer_name = base_url
+            layer_name = base_address
+            cache_name = lambda name: Path(model_config["DEFAULT_WEIGHT_PATH"]) / (
+                f"{base_address}.{layer_num}.attention.{name}"
+            )
         wq_str = f"{layer_name}wq.weight"
         wk_str = f"{layer_name}wk.weight"
         wv_str = f"{layer_name}wv.weight"
@@ -57,7 +73,7 @@ class TtMistralAttention(nn.Module):
         self.layer_past_list = []
 
         for i in range(self.num_devices):
-            wqkv = ttnn.from_torch(
+            wqkv = ttnn.as_tensor(
                 torch.concat(
                     [
                         torch.transpose(
@@ -82,9 +98,10 @@ class TtMistralAttention(nn.Module):
                 dtype=self.dtype,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 layout=ttnn.TILE_LAYOUT,
+                cache_file_name=cache_name("wqkv"),
             )
 
-            wo = ttnn.from_torch(
+            wo = ttnn.as_tensor(
                 torch.transpose(
                     torch.chunk(self.state_dict[wo_str], self.num_devices, dim=-1)[i],
                     -2,
@@ -94,6 +111,7 @@ class TtMistralAttention(nn.Module):
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 dtype=self.dtype,
                 layout=ttnn.TILE_LAYOUT,
+                cache_file_name=cache_name("wo"),
             )
 
             cache_k = torch.zeros(
