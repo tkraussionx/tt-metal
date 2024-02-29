@@ -34,14 +34,15 @@ def test_mistral_rms_norm_inference(model_config, model_location_generator, devi
         model_args = TtModelArgs(**json.loads(f.read()))
 
     state_dict = {k[24:]: v for k, v in state_dict.items() if (k.startswith("layers.0.attention_norm."))}
-    base_address = f""  # f"layers.0.attention_norm."
+    base_address = "layers.0.attention_norm"
     reference_model = RMSNorm(dim=model_args.dim)
     reference_model.load_state_dict(state_dict)
 
     tt_model = TtRMSNorm(
         device=device,
-        base_address=base_address,
         state_dict=state_dict,
+        base_address=base_address,
+        model_config=model_config,
     )
     input = torch.rand(1, 32, 4096)
     reference_output = reference_model(input)
