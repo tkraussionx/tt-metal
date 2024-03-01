@@ -106,10 +106,15 @@ class ChannelBuffer final {
             WorkerXY worker_xy = this->worker_coords[i];
             uint64_t worker_semaphore_address =
                 get_noc_addr((uint32_t)worker_xy.x, (uint32_t)worker_xy.y, this->worker_semaphore_l1_address);
+            DPRINT << "EDM 1 semaphore inc at x=" << (uint32_t)worker_xy.x << ", y=" << (uint32_t)worker_xy.y
+                   << ", addr=" << (uint32_t)worker_semaphore_l1_address << "\n";
             noc_semaphore_inc(worker_semaphore_address, 1);
         }
     }
 
+    [[nodiscard]] FORCE_INLINE uint32_t local_semaphore_value() const {
+        return *this->local_semaphore_address;
+    }
     [[nodiscard]] FORCE_INLINE bool is_local_semaphore_full() const {
         return *(this->local_semaphore_address) == this->num_workers;
     }
@@ -221,7 +226,7 @@ void eth_setup_handshake(std::uint32_t handshake_register_address, bool is_sende
         eth_wait_for_receiver_done();
     } else {
         eth_wait_for_bytes(16);
-        eth_receiver_done();
+        eth_receiver_channel_done(0);
     }
 }
 
@@ -267,6 +272,7 @@ FORCE_INLINE bool sender_eth_send_data_sequence(ChannelBuffer &sender_buffer_cha
                 sender_buffer_channel.get_current_payload_size(),
                 sender_buffer_channel.get_current_payload_size() >> ETH_BYTES_TO_WORDS_SHIFT);
             sender_buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_ETH);
+            DPRINT << "SENDER sending payload over eth. -> WAITING_FOR_ETH\n";
             did_something = true;
         }
     }
@@ -285,7 +291,11 @@ FORCE_INLINE bool sender_notify_workers_if_buffer_available_sequence(
 
         if (!sender_buffer_channel.all_messages_moved()) {
             sender_buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_WORKER);
+            DPRINT << "SENDER notified workers of buffer available. -> WAITING_FOR_WORKER\n";
+            DPRINT << "SENDER " << num_senders_complete << " messages done\n";
+
         } else {
+            DPRINT << "SENDER notified workers of buffer available. -> DONE\n";
             sender_buffer_channel.goto_state(ChannelBuffer::DONE);
             num_senders_complete++;
         }
@@ -309,6 +319,7 @@ FORCE_INLINE bool sender_eth_check_receiver_ack_sequence(ChannelBuffer &sender_b
             eth_clear_sender_channel_ack(sender_buffer_channel.get_eth_transaction_channel());
             sender_buffer_channel.increment_messages_moved();
             sender_buffer_channel.goto_state(ChannelBuffer::SIGNALING_WORKER);
+            DPRINT << "SENDER got ack from receiver. -> SIGNALING_WORKER\n";
 
             did_something = true;
         }
@@ -331,6 +342,7 @@ FORCE_INLINE bool sender_noc_receive_payload_ack_check_sequence(ChannelBuffer &s
             // We can clear the semaphore, and wait for space on receiver
             sender_channel_buffer.clear_local_semaphore();
             sender_channel_buffer.goto_state(ChannelBuffer::READY_FOR_ETH_TRANSFER);
+            DPRINT << "SENDER received payload from workers. -> READY_FOR_ETH_TRANSFER\n";
             did_something = true;
         }
     }
@@ -354,6 +366,7 @@ bool receiver_eth_accept_payload_sequence(ChannelBuffer &buffer_channel) {
         eth_bytes_are_available_on_channel(buffer_channel.get_eth_transaction_channel())) {
         eth_receiver_channel_ack(buffer_channel.get_eth_transaction_channel());
         buffer_channel.goto_state(ChannelBuffer::SIGNALING_WORKER);
+        DPRINT << "RECEIVER accepting eth payload. -> SIGNALING_WORKER\n";
         did_something = true;
     }
 
@@ -368,6 +381,7 @@ FORCE_INLINE bool receiver_eth_notify_workers_payload_available_sequence(Channel
 
     if (buffer_channel.is_ready_to_signal_workers()) {
         buffer_channel.increment_worker_semaphores();
+        DPRINT << "RECEIVER notifying workers of payload available. -> WAITING_FOR_WORKER\n";
         buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_WORKER);
         did_something = true;
     }
@@ -395,8 +409,10 @@ FORCE_INLINE bool receiver_noc_read_worker_completion_check_sequence(
         buffer_channel.clear_local_semaphore();
 
         if (!buffer_channel.all_messages_moved()) {
+            DPRINT << "RECEIVER got worker completion signal. -> WAITING_FOR_ETH\n";
             buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_ETH);
         } else {
+            DPRINT << "RECEIVER got worker completion signal. -> DONE\n";
             buffer_channel.goto_state(ChannelBuffer::DONE);
             num_receivers_complete++;
         }

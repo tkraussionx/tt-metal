@@ -38,7 +38,7 @@ void eth_setup_handshake2(std::uint32_t handshake_register_address, bool is_send
         DPRINT << "eth_wait_for_bytes\n";
         eth_wait_for_bytes(16);
         DPRINT << "wait eth_receiver_done\n";
-        eth_receiver_done();
+        eth_receiver_channel_done(0);
     }
 }
 
@@ -57,8 +57,6 @@ void kernel_main() {
     uint32_t args_offset = 0;
     uint32_t handshake_addr = get_arg_val<uint32_t>(args_offset++);
 
-    DPRINT << "EDM handshaking with other eth. enable_sender_side " << (uint32_t)enable_sender_side << "\n";
-
     kernel_profiler::mark_time(80);
 
     uint8_t sender_channels_start = get_arg_val<uint32_t>(args_offset++);
@@ -75,21 +73,18 @@ void kernel_main() {
         // TODO(snijjar): we can consider computing this instead using a helper in erisc_datamover_api.h
         // The erisc's local l1 copy of the semaphore workers remotely increment
         uint32_t sender_semaphores_base_address = get_arg_val<uint32_t>(args_offset++);
+        // worker's semaphore L1 address
         uint32_t worker_semaphore_address = get_arg_val<uint32_t>(args_offset++);
         uint32_t sender_num_workers = get_arg_val<uint32_t>(args_offset++);
-        DPRINT << "EDM arg (" << (uint32_t)enable_sender_side
-               << "): \tsender_num_messages_to_send=" << sender_num_messages_to_send << "\n";
-        DPRINT << "EDM arg (" << (uint32_t)enable_sender_side << "): \tsender_channel_size=" << sender_channel_size
+        DPRINT << "EDM arg (1): \tsender_num_messages_to_send=" << sender_num_messages_to_send << "\n";
+        DPRINT << "EDM arg (1): \tsender_channel_size=" << sender_channel_size
                << "\n";
-        DPRINT << "EDM arg (" << (uint32_t)enable_sender_side
-               << "): \tsender_semaphores_base_address=" << sender_semaphores_base_address << "\n";
-        DPRINT << "EDM arg (" << (uint32_t)enable_sender_side
-               << "): \tworker_semaphore_address=" << worker_semaphore_address << "\n";
-        DPRINT << "EDM arg (" << (uint32_t)enable_sender_side << "): \tsender_num_workers=" << sender_num_workers
+        DPRINT << "EDM arg (1): \tsender_semaphores_base_address=" << sender_semaphores_base_address << "\n";
+        DPRINT << "EDM arg (1): \tworker_semaphore_address=" << worker_semaphore_address << "\n";
+        DPRINT << "EDM arg (1): \tsender_num_workers=" << sender_num_workers
                << "\n";
         uint32_t workers_xy_list_addr = get_arg_addr(args_offset);
-        DPRINT << "EDM arg (" << (uint32_t)enable_sender_side
-               << "): \tsender workers_xy_list_addr=" << workers_xy_list_addr << "\n";
+        DPRINT << "EDM arg (1): \tsender workers_xy_list_addr=" << workers_xy_list_addr << "\n";
         args_offset += sender_num_workers;
         new (&sender_buffer_channels[sender_channels_start + channel]) erisc::datamover::ChannelBuffer(
             sender_channels_start + channel,
@@ -121,19 +116,15 @@ void kernel_main() {
         uint32_t receiver_semaphores_base_address = get_arg_val<uint32_t>(args_offset++);
         uint32_t worker_semaphore_address = get_arg_val<uint32_t>(args_offset++);
         uint32_t receiver_num_workers = get_arg_val<uint32_t>(args_offset++);
-        DPRINT << "EDM arg (" << (uint32_t)enable_sender_side
-               << "): \treceiver_num_messages_to_send=" << receiver_num_messages_to_send << "\n";
-        DPRINT << "EDM arg (" << (uint32_t)enable_sender_side << "): \treceiver_channel_size=" << receiver_channel_size
+        DPRINT << "EDM arg (0): \treceiver_num_messages_to_send=" << receiver_num_messages_to_send << "\n";
+        DPRINT << "EDM arg (0): \treceiver_channel_size=" << receiver_channel_size
                << "\n";
-        DPRINT << "EDM arg (" << (uint32_t)enable_sender_side
-               << "): \treceiver_semaphores_base_address=" << receiver_semaphores_base_address << "\n";
-        DPRINT << "EDM arg (" << (uint32_t)enable_sender_side
-               << "): \tworker_semaphore_address=" << worker_semaphore_address << "\n";
-        DPRINT << "EDM arg (" << (uint32_t)enable_sender_side << "): \treceiver_num_workers=" << receiver_num_workers
+        DPRINT << "EDM arg (0): \treceiver_semaphores_base_address=" << receiver_semaphores_base_address << "\n";
+        DPRINT << "EDM arg (0): \tworker_semaphore_address=" << worker_semaphore_address << "\n";
+        DPRINT << "EDM arg (0): \treceiver_num_workers=" << receiver_num_workers
                << "\n";
         uint32_t workers_xy_list_addr = get_arg_addr(args_offset);
-        DPRINT << "EDM arg (" << (uint32_t)enable_sender_side
-               << "): \treceiver workers_xy_list_addr=" << workers_xy_list_addr << "\n";
+        DPRINT << "EDM arg (0): \treceiver workers_xy_list_addr=" << workers_xy_list_addr << "\n";
         args_offset += receiver_num_workers;
         new (&receiver_buffer_channels[receiver_channels_start + channel]) erisc::datamover::ChannelBuffer(
             receiver_channels_start + channel,
@@ -151,6 +142,7 @@ void kernel_main() {
     // Handshake with other erisc to make sure it's safe to start sending/receiving
     // Chose an arbitrary ordering mechanism to guarantee one of the erisc's will always be "sender" and the other
     // will always be "receiver" (only for handshake purposes)
+    DPRINT << "EDM handshaking with other eth. enable_sender_side " << (uint32_t)enable_sender_side << "\n";
     bool act_as_sender_in_handshake =
         (sender_channels_start < receiver_channels_start || receiver_num_channels == 0) && sender_num_channels > 0;
     erisc::datamover::eth_setup_handshake(handshake_addr, enable_sender_side);
@@ -164,20 +156,33 @@ void kernel_main() {
     uint32_t num_receivers_complete = !enable_receiver_side ? receiver_num_channels : 0;
     uint32_t curr_sender = 0;
     uint32_t curr_receiver = 0;
-    DPRINT << "EDM arg (" << (uint32_t)enable_sender_side << "): \tNOC_INDEX " << (uint32_t)noc_index << "\n";
-    DPRINT << "EDM arg (" << (uint32_t)enable_sender_side << "): \tnum_senders_complete " << num_senders_complete
-           << "\n";
-    DPRINT << "EDM arg (" << (uint32_t)enable_sender_side << "): \tsender_num_channels " << sender_num_channels << "\n";
-    DPRINT << "EDM arg (" << (uint32_t)enable_sender_side << "): \tnum_receivers_complete " << num_receivers_complete
-           << "\n";
-    DPRINT << "EDM arg (" << (uint32_t)enable_sender_side << "): \treceiver_num_channels " << receiver_num_channels
-           << "\n";
+    if (enable_sender_side) {
+        DPRINT << "EDM arg (1): \tNOC_INDEX " << (uint32_t)noc_index << "\n";
+        DPRINT << "EDM arg (1): \tmy_x,my_y " << (uint32_t)((my_x[0] << 16) | my_y[0]) << "\n";
+        DPRINT << "EDM arg (1): \tnum_senders_complete " << num_senders_complete
+            << "\n";
+        DPRINT << "EDM arg (1): \tsender_num_channels " << sender_num_channels << "\n";
+        DPRINT << "EDM arg (1): \tnum_receivers_complete " << num_receivers_complete
+            << "\n";
+        DPRINT << "EDM arg (1): \treceiver_num_channels " << receiver_num_channels
+            << "\n";
+    } else {
+        DPRINT << "EDM arg (0): \tNOC_INDEX " << (uint32_t)noc_index << "\n";
+        DPRINT << "EDM arg (0): \tmy_x,my_y " << (uint32_t)((my_x[0] << 16) | my_y[0]) << "\n";
+        DPRINT << "EDM arg (0): \tnum_senders_complete " << num_senders_complete
+            << "\n";
+        DPRINT << "EDM arg (0): \tsender_num_channels " << sender_num_channels << "\n";
+        DPRINT << "EDM arg (0): \tnum_receivers_complete " << num_receivers_complete
+            << "\n";
+        DPRINT << "EDM arg (0): \treceiver_num_channels " << receiver_num_channels
+            << "\n";
+    }
     while ((enable_sender_side && num_senders_complete != sender_num_channels) ||
            (enable_receiver_side && num_receivers_complete != receiver_num_channels)) {
-        DPRINT << "EDM arg (" << (uint32_t)enable_sender_side << "): \tnum_receivers_complete "
-               << num_receivers_complete << "\n";
-        DPRINT << "EDM arg (" << (uint32_t)enable_sender_side << "):\tnum_senders_complete " << num_senders_complete
-               << "\n";
+        // DPRINT << "EDM arg (" << (uint32_t)enable_sender_side << "): \tnum_receivers_complete "
+        //        << num_receivers_complete << "\n";
+        // DPRINT << "EDM arg (" << (uint32_t)enable_sender_side << "):\tnum_senders_complete " << num_senders_complete
+        //        << "\n";
         bool did_something = false;
 
         // Note, may want to interleave the sender and receiver calls to reduce latency for each

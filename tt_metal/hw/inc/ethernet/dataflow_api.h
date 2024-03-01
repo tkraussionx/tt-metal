@@ -103,7 +103,7 @@ FORCE_INLINE
 void eth_send_packet(uint32_t q_num, uint32_t src_word_addr, uint32_t dest_word_addr, uint32_t num_words) {
     uint32_t count = 0;
     while (eth_txq_reg_read(q_num, ETH_TXQ_CMD) != 0) {
-        if (count > 1000000) {
+        if (count > 10000) {
             count = 0;
             risc_context_switch();
         }
@@ -432,11 +432,11 @@ void eth_wait_for_receiver_channel_done(uint32_t channel) {
     uint32_t max = 100000;
 
     while (!eth_is_receiver_channel_send_done(channel)) {
-        count++;
-        if (count > max) {
-            count = 0;
+        // count++;
+        // if (count > max) {
+        //     count = 0;
             run_routing();
-        }
+        // }
     }
 }
 
@@ -503,11 +503,11 @@ void eth_wait_for_bytes_on_channel(uint32_t num_bytes, uint8_t channel) {
             // bit longer instead of initiating a context switch
             num_bytes_sent = received_this_iter;
         } else {
-            count++;
-            if (count > poll_count) {
-                count = 0;
+            // count++;
+            // if (count > poll_count) {
+            //     count = 0;
                 run_routing();
-            }
+            // }
         }
     }
 }
