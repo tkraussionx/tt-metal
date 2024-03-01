@@ -999,9 +999,9 @@ def clone(
     **kwargs,
 ):
     t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
-    t1 = ttnn.clone(t0, input_mem_config[0], dtype[0])
+    t1 = ttnn.clone(t0, memory_config_to_ttnn(output_mem_config), dtype[0])
 
-    return ttnn_tensor_to_torch(t1, memory_config=memory_config_to_ttnn(output_mem_config))
+    return ttnn_tensor_to_torch(t1)
 
 
 def cbrt(
