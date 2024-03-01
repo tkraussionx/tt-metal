@@ -96,7 +96,7 @@ class resnetBlock2D:
         batch_size,
         input_height,
         input_width,
-        group_norm_on_device=False,
+        group_norm_on_device=True,
     ):
         self.device = device
         self.parameters = parameters
@@ -262,9 +262,7 @@ class resnetBlock2D:
         down=False,
         use_in_shortcut: Optional[bool] = None,
         dtype: Optional[ttnn.DataType] = None,
-        group_norm_sharded_config=None,
     ):
-        assert self.group_norm_on_device == (group_norm_sharded_config is not None)
         if non_linearity == "mish":
             assert False, "Mish is not implemented!"
         else:
@@ -280,7 +278,7 @@ class resnetBlock2D:
             input_tensor = ttnn.to_memory_config(input_tensor, self.expected_input_sharded_memory_config)
         hidden_states = input_tensor
 
-        if group_norm_sharded_config is not None:
+        if self.group_norm_on_device:
             self.parameters.norm1.weight = pad_group_norm_weight(self.parameters.norm1.weight, groups, in_channels)
             self.parameters.norm1.bias = pad_group_norm_weight(self.parameters.norm1.bias, groups, in_channels)
 
@@ -325,7 +323,7 @@ class resnetBlock2D:
         elif down:
             assert False, "Down block within residual block is not implemented"
 
-        if group_norm_sharded_config is None:
+        if not self.group_norm_on_device:
             hidden_states = pre_process_input(self.device, hidden_states)
             print("THIS IS REGULAR RESNETBLOCK")
         else:
@@ -347,7 +345,7 @@ class resnetBlock2D:
                 output_tensor_end_width_dim += split_input_channels
             hidden_states = split_hidden_states
         if conv1_split_chunks == 1:
-            if group_norm_sharded_config is not None:
+            if self.group_norm_on_device:
                 # breakpoint()
                 hidden_states = ttnn.to_memory_config(hidden_states, self.conv1s[0].conv.input_sharded_memory_config)
                 # breakpoint()
@@ -391,7 +389,7 @@ class resnetBlock2D:
             temb = ttnn.reshape(temb, (self.conv1s[0].batch_size, 1, 1, out_channels))
             hidden_states = hidden_states + temb
 
-        if group_norm_sharded_config is not None:
+        if self.group_norm_on_device:
             self.parameters.norm2.weight = pad_group_norm_weight(self.parameters.norm2.weight, groups, out_channels)
             self.parameters.norm2.bias = pad_group_norm_weight(self.parameters.norm2.bias, groups, out_channels)
 
@@ -430,7 +428,7 @@ class resnetBlock2D:
             )
         hidden_states = nonlinearity(hidden_states)
 
-        if group_norm_sharded_config is not None:
+        if self.group_norm_on_device:
             hidden_states = ttnn.to_memory_config(hidden_states, self.conv2.conv.input_sharded_memory_config)
             hidden_states = self.conv2(hidden_states)
             # hidden_states = ttnn.to_memory_config(hidden_states, ttnn.L1_MEMORY_CONFIG)
@@ -462,7 +460,7 @@ class resnetBlock2D:
         output_sc_recip = ttnn.from_torch(
             torch.full([1, 1, 1, 1], output_sc_recip), layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat8_b
         )
-        if group_norm_sharded_config is None:
+        if not self.group_norm_on_device:
             input_tensor = ttnn.to_memory_config(input_tensor, ttnn.DRAM_MEMORY_CONFIG)
             input_tensor = ttnn.to_layout(input_tensor, ttnn.ROW_MAJOR_LAYOUT)
             assert hidden_states.shape[1] == input_tensor.shape[3]
@@ -471,8 +469,11 @@ class resnetBlock2D:
             )
             input_tensor = ttnn.permute(input_tensor, (0, 3, 1, 2))
             input_tensor = ttnn.to_layout(input_tensor, ttnn.TILE_LAYOUT)
-        output_tensor = ttnn.add(input_tensor, hidden_states)
+        output_tensor = ttnn.add(input_tensor, hidden_states, memory_config=ttnn.L1_MEMORY_CONFIG)
         output_sc_recip = ttnn.to_device(output_sc_recip, self.device, memory_config=ttnn.L1_MEMORY_CONFIG)
-        output_tensor = ttnn.mul(output_tensor, output_sc_recip)
-
+        breakpoint()
+        output_tensor = ttnn.mul(output_tensor, output_sc_recip, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+        breakpoint()
+        ttnn.deallocate(input_tensor)
+        ttnn.deallocate(hidden_states)
         return output_tensor

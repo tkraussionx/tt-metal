@@ -121,6 +121,7 @@ class cross_attention:
                 dtype=ttnn.bfloat16,
                 core_grid=ttnn.CoreGrid(y=8, x=8),
             )
+            ttnn.dump_device_memory_state(self.device)
             query, key, value = ttnn.transformer.split_query_key_value_and_split_heads(
                 qkv_out,
                 memory_config=ttnn.L1_MEMORY_CONFIG,
