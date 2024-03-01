@@ -78,7 +78,6 @@ class TtTransformer(nn.Module):
 
         # output = self.output(self.norm(xs))
         xs = self.norm(xs)
-        print("SHAPES!", xs.shape, self.output_weight.shape)
-        output = ttnn.linear(xs, self.output_weight)
+        output = ttnn.linear(xs, self.output_weight, core_grid=ttnn.CoreGrid(8, 8))
         ttnn.deallocate(xs)
         return output
