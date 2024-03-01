@@ -112,7 +112,8 @@ class TtMistralAttention(nn.Module):
                 (
                     self.max_batch_size,
                     self.n_kv_heads // self.num_devices,
-                    self.sliding_window,
+                    # self.sliding_window,
+                    32,  # TODO Update the initial cache size when scaling up
                     self.head_dim,
                 )
             )
@@ -120,7 +121,8 @@ class TtMistralAttention(nn.Module):
                 (
                     self.max_batch_size,
                     self.n_kv_heads // self.num_devices,
-                    self.sliding_window,
+                    # self.sliding_window,
+                    32,  # TODO Update the initial cache size when scaling up
                     self.head_dim,
                 )
             )
@@ -202,6 +204,7 @@ class TtMistralAttention(nn.Module):
 
             ttnn.experimental.tensor.update_cache(keys, k_heads, current_pos)  # self.current)
             ttnn.experimental.tensor.update_cache(values, v_heads, current_pos)  # self.current)
+            self.layer_past_list[i] = [keys, values]
 
             ttnn.deallocate(k_heads)
             ttnn.deallocate(v_heads)
@@ -296,8 +299,8 @@ class TtMistralAttention(nn.Module):
             )  # seqlen, n_heads, batch, dhead
 
             ttnn.deallocate(attn)
-            ttnn.deallocate(keys)
-            ttnn.deallocate(values)
+            # ttnn.deallocate(keys)
+            # ttnn.deallocate(values)
             ttnn.deallocate(q_heads)
 
             attn_output = ttnn.transformer.concatenate_heads(attn_output, memory_config=ttnn.L1_MEMORY_CONFIG)
