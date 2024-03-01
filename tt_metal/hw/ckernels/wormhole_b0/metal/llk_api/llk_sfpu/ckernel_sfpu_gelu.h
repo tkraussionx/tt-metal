@@ -92,8 +92,8 @@ void gelu_init() {
     vConstFloatPrgm0 = 0.5f;
     if constexpr (APPROXIMATION_MODE) {
         // // >= 3.0f
-        // lreg2_hi=0.49995;//37ff
-        // lreg6_hi=0.0f;//7c00
+        // lreg2_hi=0.502;//3804
+        // lreg6_hi=-0.008f;//a018
         // // 2.0f -> 3.0f
         // lreg2_lo= 0.5411f;//3854
         // lreg6_lo= -0.1283f;//B01B
@@ -117,8 +117,8 @@ void gelu_init() {
         _sfpu_load_imm32_(1,0x38E138F3);
         _sfpu_load_imm32_(5,0xB437B479);
 
-        _sfpu_load_imm32_(2,0x37ff3854);
-        _sfpu_load_imm32_(6,0x7c00b01b);
+        _sfpu_load_imm32_(2,0x38043854);
+        _sfpu_load_imm32_(6,0xa018b01b);
     }
 }
 
