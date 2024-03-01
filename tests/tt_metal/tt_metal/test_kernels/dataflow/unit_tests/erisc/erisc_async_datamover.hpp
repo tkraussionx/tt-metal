@@ -88,10 +88,17 @@ class ChannelBuffer final {
         total_num_messages_to_move(total_num_messages_to_move),
         state(is_sender_side ? STATE::WAITING_FOR_WORKER : STATE::WAITING_FOR_ETH),
         is_sender_side(is_sender_side) {
+
         clear_local_semaphore();
-        if (is_sender_side) {
-            // Tell the sender side workers that we're ready to accept data on this channel
-            increment_worker_semaphores();
+
+        if (total_num_messages_to_move != 0) {
+            if (is_sender_side) {
+                // Tell the sender side workers that we're ready to accept data on this channel
+                // Even if we have no messages to
+                increment_worker_semaphores();
+            }
+        } else {
+            goto_state(STATE::DONE);
         }
     };
 
@@ -148,6 +155,7 @@ class ChannelBuffer final {
     [[nodiscard]] FORCE_INLINE std::size_t get_buffer_address() const { return this->address; }
 
     FORCE_INLINE void increment_messages_moved() { this->num_messages_moved++; }
+    FORCE_INLINE uint32_t get_num_messages_moved() { return this->num_messages_moved; }
 
     [[nodiscard]] FORCE_INLINE bool all_messages_moved() {
         return this->num_messages_moved == this->total_num_messages_to_move;
@@ -292,7 +300,7 @@ FORCE_INLINE bool sender_notify_workers_if_buffer_available_sequence(
         if (!sender_buffer_channel.all_messages_moved()) {
             sender_buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_WORKER);
             DPRINT << "SENDER notified workers of buffer available. -> WAITING_FOR_WORKER\n";
-            DPRINT << "SENDER " << num_senders_complete << " messages done\n";
+            DPRINT << "SENDER " << sender_buffer_channel.get_num_messages_moved() << " messages done\n";
 
         } else {
             DPRINT << "SENDER notified workers of buffer available. -> DONE\n";

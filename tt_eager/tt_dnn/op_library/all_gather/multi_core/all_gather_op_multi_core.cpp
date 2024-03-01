@@ -221,7 +221,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
 
         uint32_t bytes_per_chunk = 0, pages_per_chunk = 0, num_full_chunks = 0, rem_bytes = 0, rem_pages = 0;
         uint32_t link_size_bytes = pages_per_link.at(i) * input_tensor.buffer()->page_size();
-        if (pages_per_link.at(i) > max_pages_per_chunk) {
+        if (pages_per_link.at(i) >= max_pages_per_chunk) {
             bytes_per_chunk = max_buffer_per_chunk;
             pages_per_chunk = max_pages_per_chunk;
             num_full_chunks = link_size_bytes / bytes_per_chunk;

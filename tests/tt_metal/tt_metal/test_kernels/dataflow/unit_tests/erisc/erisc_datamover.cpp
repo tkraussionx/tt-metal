@@ -61,6 +61,7 @@ void kernel_main() {
 
     uint8_t sender_channels_start = get_arg_val<uint32_t>(args_offset++);
     uint32_t sender_num_channels = get_arg_val<uint32_t>(args_offset++);
+    uint8_t num_senders_with_no_work = 0;
     DPRINT << "EDM args(" << (uint32_t)enable_sender_side << "): sender_channels_start "
            << (uint32_t)sender_channels_start << "\n";
     DPRINT << "EDM args(" << (uint32_t)enable_sender_side << "): sender_num_channels " << sender_num_channels << "\n";
@@ -97,11 +98,15 @@ void kernel_main() {
             (volatile tt_l1_ptr uint32_t *const)sender_semaphores_base_address,
             (const erisc::datamover::WorkerXY *)workers_xy_list_addr,
             true);
+        if (sender_num_messages_to_send == 0) {
+            num_senders_with_no_work++;
+        }
     }
 
     // Receiver args
     uint8_t receiver_channels_start = get_arg_val<uint32_t>(args_offset++);
     uint32_t receiver_num_channels = get_arg_val<uint32_t>(args_offset++);
+    uint8_t num_receivers_with_no_work = 0;
     DPRINT << "EDM args(" << (uint32_t)enable_sender_side << "): receiver_channels_start "
            << (uint32_t)receiver_channels_start << "\n";
     DPRINT << "EDM args(" << (uint32_t)enable_sender_side << "): receiver_num_channels " << receiver_num_channels
@@ -137,6 +142,10 @@ void kernel_main() {
             (volatile tt_l1_ptr uint32_t *const)receiver_semaphores_base_address,
             (const erisc::datamover::WorkerXY *)workers_xy_list_addr,
             false);
+
+        if (receiver_num_messages_to_send == 0) {
+            num_receivers_with_no_work++;
+        }
     }
 
     // Handshake with other erisc to make sure it's safe to start sending/receiving
@@ -152,8 +161,8 @@ void kernel_main() {
     constexpr uint32_t SWITCH_INTERVAL = 100000;
     uint32_t did_nothing_count = 0;
 
-    uint32_t num_senders_complete = !enable_sender_side ? sender_num_channels : 0;
-    uint32_t num_receivers_complete = !enable_receiver_side ? receiver_num_channels : 0;
+    uint32_t num_senders_complete = !enable_sender_side ? sender_num_channels : num_senders_with_no_work;
+    uint32_t num_receivers_complete = !enable_receiver_side ? receiver_num_channels : num_receivers_with_no_work;
     uint32_t curr_sender = 0;
     uint32_t curr_receiver = 0;
     if (enable_sender_side) {
