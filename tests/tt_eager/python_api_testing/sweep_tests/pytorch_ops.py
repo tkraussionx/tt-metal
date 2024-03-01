@@ -1735,3 +1735,10 @@ def transformer_concatenate_heads(x, *args, **kwargs):
     torch_output_tensor = ttnn.transformer._torch_concatenate_heads(x)
 
     return torch_output_tensor
+
+
+def ref_ldexp(input, other):
+    input = torch.as_tensor(input)
+    other = torch.as_tensor(other)
+    ldexp = torch.ldexp(input, other)
+    return ldexp

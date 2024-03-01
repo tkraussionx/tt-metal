@@ -1296,6 +1296,10 @@ op_map = {
         "tt_lib_op": ttnn_ops.erf,
         "pytorch_op": pytorch_ops.erf,
     },
+    "ttnn-erfc": {
+        "tt_lib_op": ttnn_ops.erfc,
+        "pytorch_op": pytorch_ops.erfc,
+    },
     "ttnn-elu": {
         "tt_lib_op": ttnn_ops.elu,
         "pytorch_op": pytorch_ops.elu,
@@ -1331,5 +1335,21 @@ op_map = {
     "ttnn-clip": {
         "tt_lib_op": ttnn_ops.clip,
         "pytorch_op": pytorch_ops.clip,
+    },
+    "ttnn-ldexp": {
+        "tt_lib_op": ttnn_ops.ldexp,
+        "pytorch_op": pytorch_ops.ldexp,
+    },
+    "ttnn-logical_xor": {
+        "tt_lib_op": ttnn_ops.logical_xor,
+        "pytorch_op": pytorch_ops.logical_xor,
+    },
+    "ttnn-logical_or": {
+        "tt_lib_op": ttnn_ops.logical_or,
+        "pytorch_op": pytorch_ops.logical_or,
+    },
+    "ttnn-logical_and": {
+        "tt_lib_op": ttnn_ops.logical_and,
+        "pytorch_op": pytorch_ops.logical_and,
     },
 }
