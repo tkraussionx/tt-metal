@@ -117,7 +117,7 @@ namespace tt::tt_metal{
         // - Loads all kernel binaries into L1s of assigned Tensix cores
         // - Configures circular buffers (inits regs with buffer data)
         // - Takes the device out of reset
-        bool ConfigureDeviceWithProgram(Device *device, Program &program);
+        bool ConfigureDeviceWithProgram(Device *device, Program &program, bool fd_bootloader_mode = false);
 
 
         /**

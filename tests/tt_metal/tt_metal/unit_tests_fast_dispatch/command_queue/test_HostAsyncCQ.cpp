@@ -197,7 +197,7 @@ namespace host_command_queue_tests {
 
 TEST_F(CommandQueueFixture, TestAsyncCommandQueueSanityAndProfile) {
     auto& command_queue = this->device_->command_queue();
-    auto current_mode = CommandQueue::get_mode();
+    auto current_mode = CommandQueue::default_mode();
     command_queue.set_mode(CommandQueue::CommandQueueMode::ASYNC);
     Program program;
 
@@ -219,7 +219,7 @@ TEST_F(CommandQueueFixture, TestAsyncCommandQueueSanityAndProfile) {
 TEST_F(CommandQueueFixture, TestAsyncBufferRW) {
     // Test Async Enqueue Read and Write + Get Addr + Buffer Allocation and Deallocation
     auto& command_queue = this->device_->command_queue();
-    auto current_mode = CommandQueue::get_mode();
+    auto current_mode = CommandQueue::default_mode();
     command_queue.set_mode(CommandQueue::CommandQueueMode::ASYNC);
     Program program; /* Dummy program that helps keep track of buffers */
     std::vector<Buffer> buffer_objects;
@@ -278,7 +278,7 @@ TEST_F(CommandQueueFixture, TestAsyncBufferRW) {
 TEST_F(CommandQueueFixture, TestAsyncSetAndUpdateRuntimeArgs) {
     // Test Asynchronous buffer allocation and SetRuntimeArgs API
     auto& command_queue = this->device_->command_queue();
-    auto current_mode = CommandQueue::get_mode();
+    auto current_mode = CommandQueue::default_mode();
     command_queue.set_mode(CommandQueue::CommandQueueMode::ASYNC);
 
     uint32_t buf_size = 4096;
@@ -330,8 +330,8 @@ TEST_F(CommandQueueFixture, TestAsyncSetAndUpdateRuntimeArgs) {
     std::vector<uint32_t> writer_update_idx = {0, 1};
     std::vector<uint32_t> reader_update_idx = {0};
     // Asynchronously update the runtime args based on (potentially unallocated) buffer addrs
-    UpdateRuntimeArgs(this->device_->command_queue(), detail::GetKernel(program, writer), core, writer_update_idx, writer_runtime_args);
-    UpdateRuntimeArgs(this->device_->command_queue(), detail::GetKernel(program, reader), core, reader_update_idx, reader_runtime_args);
+    UpdateRuntimeArgs(this->device_, detail::GetKernel(program, writer), core, writer_update_idx, writer_runtime_args);
+    UpdateRuntimeArgs(this->device_, detail::GetKernel(program, reader), core, reader_update_idx, reader_runtime_args);
     Finish(this->device_->command_queue());
 
     resolved_writer_args = detail::GetKernel(program, writer)->runtime_args(core);
@@ -347,7 +347,7 @@ TEST_F(CommandQueueFixture, TestAsyncSetAndUpdateRuntimeArgs) {
 
 TEST_F(CommandQueueFixture, TestAsyncFlattenStress){
     auto& command_queue = this->device_->command_queue();
-    auto current_mode = CommandQueue::get_mode();
+    auto current_mode = CommandQueue::default_mode();
     command_queue.set_mode(CommandQueue::CommandQueueMode::ASYNC);
     uint32_t num_tiles_r = 2;
     uint32_t num_tiles_c = 2;

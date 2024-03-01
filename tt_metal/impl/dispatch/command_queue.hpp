@@ -561,7 +561,7 @@ class CommandQueue {
     ~CommandQueue();
 
     // Command queue constructor
-    CommandQueue(Device* device, uint32_t id);
+    CommandQueue(Device* device, uint32_t id, CommandQueueMode mode = CommandQueue::default_mode());
 
     // Trace queue constructor
     CommandQueue(Trace* trace);
@@ -581,13 +581,19 @@ class CommandQueue {
 
     // API for setting/getting the mode of the command queue
     void set_mode(const CommandQueueMode& mode);
-    static CommandQueueMode get_mode() { return mode; }
+    CommandQueueMode get_mode() const { return this->mode; }
 
     // Reference to the underlying hardware command queue, non-const because side-effects are allowed
     HWCommandQueue& hw_command_queue();
 
     // The empty state of the worker queue
     bool empty() const { return this->worker_queue.empty(); }
+
+    static CommandQueueMode default_mode() {
+        // Envvar is used for bringup and debug only. Will be removed in the future and should not be relied on in production.
+        static int value = parse_env<int>("TT_METAL_CQ_ASYNC_MODE", static_cast<int>(CommandQueueMode::PASSTHROUGH));
+        return static_cast<CommandQueue::CommandQueueMode>(value);
+    }
 
    private:
     enum class CommandQueueState {
@@ -600,14 +606,8 @@ class CommandQueue {
     friend void EnqueueTraceImpl(CommandQueue& cq);
     friend uint32_t InstantiateTrace(Trace& trace, CommandQueue& cq);
 
-    static CommandQueueMode default_mode() {
-        // Envvar is used for bringup and debug only. Will be removed in the future and should not be relied on in production.
-        int value = parse_env<int>("TT_METAL_CQ_ASYNC_MODE", static_cast<int>(CommandQueueMode::PASSTHROUGH));
-        return static_cast<CommandQueue::CommandQueueMode>(value);
-    }
-
     // Initialize Command Queue Mode based on the env-var. This will be default, unless the user excplictly sets the mode using set_mode.
-    inline static CommandQueueMode mode = CommandQueue::default_mode();
+    CommandQueueMode mode;
     CommandQueueState worker_state;
     std::unique_ptr<std::thread> worker_thread;
     WorkerQueue worker_queue;
@@ -625,7 +625,7 @@ class CommandQueue {
     bool passthrough_mode() { return this->mode == CommandQueueMode::PASSTHROUGH; }
 
     std::atomic<std::size_t> worker_thread_id = -1;
-    std::atomic<std::size_t> main_thread_id = -1;
+    std::atomic<std::size_t> parent_thread_id = -1;
 };
 
 // Primitives used to place host only operations on the SW Command Queue.

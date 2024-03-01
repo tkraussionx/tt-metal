@@ -77,9 +77,9 @@ class Program {
     const std::vector< Semaphore > & semaphores() const { return semaphores_; }
 
     KernelGroup * kernels_on_core(const CoreCoord &core);
-    std::vector<std::shared_ptr<Buffer>> global_bufs = {};
     std::vector<KernelGroup>& get_kernel_groups();
-    inline void add_global_buffer(std::shared_ptr<Buffer> buf) { global_bufs.push_back(buf); }
+    inline void add_buffer(std::shared_ptr<Buffer> buf) { owned_buffer_pool.push_back(buf); }
+    inline void release_buffers() { owned_buffer_pool = {}; }
     const std::vector<std::shared_ptr<CircularBuffer>> circular_buffers_on_core(const CoreCoord &core) const;
 
     const std::vector<std::shared_ptr<CircularBuffer>> circular_buffers_on_corerange(const CoreRange &cr) const;
@@ -105,6 +105,9 @@ class Program {
     void allocate_circular_buffers();
 
    private:
+    // Buffers temporarily owned by the program
+    std::vector<std::shared_ptr<Buffer>> owned_buffer_pool = {};
+
     ProgramDeviceMap program_device_map;
 
     // The buffer that holds the kernel/binaries/etc for this program

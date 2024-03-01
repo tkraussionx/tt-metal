@@ -212,7 +212,7 @@ inline void write_data_to_device_buffer(
     ZoneScoped;
     // TODO(arakhmati): can we use generators in this function to go from `data_to_write` to `uint32_data`?
     // And effectively get rid of any additional allocation
-    if (CommandQueue::get_mode() == CommandQueue::CommandQueueMode::ASYNC) {
+    if (CommandQueue::default_mode() == CommandQueue::CommandQueueMode::ASYNC) {
         if constexpr (std::is_same_v<BufferType<T>, borrowed_buffer::Buffer<T>>) {
             // When writing borrowed storage asynchronously, we have no control over when host memory is deallocated by the main thread.
             // To ensure that worker threads enqueues the correct buffer, make a copy and caputre it in an owned buffer.
