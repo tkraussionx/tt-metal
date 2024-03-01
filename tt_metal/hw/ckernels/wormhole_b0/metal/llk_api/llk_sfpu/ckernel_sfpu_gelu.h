@@ -22,7 +22,6 @@ namespace sfpu
 template <int ITERATIONS>
 inline void calculate_gelu_appx()
 {
-    constexpr int lut_mode = 0; // SFPLUTFP32_MOD0_FP16_6ENTRY_TABLE1
     vUInt l0 = l_reg[LRegs::LReg0];
     vUInt l1 = l_reg[LRegs::LReg1];
     vUInt l2 = l_reg[LRegs::LReg2];
@@ -41,16 +40,19 @@ inline void calculate_gelu_appx()
         // result = half_in * result + half_in;
 
         //dst_reg[0] = result;
-
         vFloat in = dst_reg[0];
-        vFloat half = vConstFloatPrgm0;
-        vFloat half_in = in * half;
-        vFloat result = lut2_sign(in, l0, l1, l2, l4, l5, l6, lut_mode);
-        result = half_in + result;
+        v_if (in < -5.0f) {
+            dst_reg[0] = 0.0F;
+        } v_else {
+            vFloat half = vConstFloatPrgm0;
+            vFloat half_in = in * half;
+            vFloat result = lut2_sign(in, l0, l1, l2, l4, l5, l6);
+            result = half_in + result;
+            dst_reg[0] = result;
+            dst_reg++;
+        }
+        v_endif;
 
-        dst_reg[0] = result;
-
-        dst_reg++;
 
         // dst_reg++;
         //TTI_SFPLOAD(3, 0, 1/*load addr mode*/,0);    // load from dest
@@ -89,12 +91,12 @@ template <bool APPROXIMATION_MODE>
 void gelu_init() {
     vConstFloatPrgm0 = 0.5f;
     if constexpr (APPROXIMATION_MODE) {
-        // // >= 4.0f
-        // lreg2_hi=0.50;//3800
+        // // >= 3.0f
+        // lreg2_hi=0.49995;//37ff
         // lreg6_hi=0.0f;//7c00
-        // // 2.0f -> 4.0f
-        // lreg2_lo= 0.5199f;//3828
-        // lreg6_lo= -0.0798f;//AD18
+        // // 2.0f -> 3.0f
+        // lreg2_lo= 0.5411f;//3854
+        // lreg6_lo= -0.1283f;//B01B
         // // 1.5f -> 2.0f
         // lreg1_hi= .6099f; //38E1
         // lreg5_hi= -.2635f; //B437
@@ -115,8 +117,8 @@ void gelu_init() {
         _sfpu_load_imm32_(1,0x38E138F3);
         _sfpu_load_imm32_(5,0xB437B479);
 
-        _sfpu_load_imm32_(2,0x38003828);
-        _sfpu_load_imm32_(6,0x7c00ad1b);
+        _sfpu_load_imm32_(2,0x37ff3854);
+        _sfpu_load_imm32_(6,0x7c00b01b);
     }
 }
 
