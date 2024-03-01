@@ -207,8 +207,8 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
         // number of pages that can fit in a single ethernet L1 buffer (not the number of pages sent to this channel)
         std::vector<uint32_t> pages_per_eth_l1_buffer;
         pages_per_buffer.reserve(all_gather_buffer_params::num_buffers);
-        std::cout << "all_gather_buffer_params::eth_buffer_size=" << all_gather_buffer_params::eth_buffer_size << std::endl;
-        std::cout << "input_tensor.buffer()->page_size()=" << input_tensor.buffer()->page_size() << std::endl;
+        // std::cout << "all_gather_buffer_params::eth_buffer_size=" << all_gather_buffer_params::eth_buffer_size << std::endl;
+        // std::cout << "input_tensor.buffer()->page_size()=" << input_tensor.buffer()->page_size() << std::endl;
         uint32_t pages_per_eth_l1_sender_buffer = all_gather_buffer_params::eth_buffer_size / input_tensor.buffer()->page_size();
         for(uint32_t b = 0; b < all_gather_buffer_params::num_buffers; ++b) {
             pages_per_buffer.push_back((pages_per_link.at(i) / all_gather_buffer_params::num_buffers));
@@ -366,7 +366,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                 // }
             // }
 
-            std::cout << "sws " << b << " pages = " << num_full_chunks_per_worker.at(b) * pages_per_chunk + rem_pages_per_worker.at(b) << std::endl;
+            // std::cout << "sws " << b << " pages = " << num_full_chunks_per_worker.at(b) * pages_per_chunk + rem_pages_per_worker.at(b) << std::endl;
 
             // Sender Worker Kernels
             std::vector<uint32_t> worker_reader_sender_ct_args = {
@@ -568,7 +568,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                 device->ethernet_core_from_logical_core(eth_sender_core).x <<
                 ",y=" << device->ethernet_core_from_logical_core(eth_sender_core).y << "(" <<
                 eth_sender_core.x << "," << eth_sender_core.y << ") logical" << std::endl;
-            std::cout << ss.str();
+            // std::cout << ss.str();
         }
         auto eth_sender_kernel = tt_metal::CreateKernel(
             program,
@@ -583,7 +583,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
             for (auto arg : eth_sender_rt_args) {
                 ss << "\t" << arg << std::endl;
             }
-            std::cout << ss.str();
+            // std::cout << ss.str();
         }
 
         {
@@ -592,7 +592,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
             for (auto arg : eth_receiver_rt_args) {
                 ss << "\t" << arg << std::endl;
             }
-            std::cout << ss.str();
+            // std::cout << ss.str();
         }
 
         tt_metal::SetRuntimeArgs(
@@ -613,7 +613,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                 device->ethernet_core_from_logical_core(eth_receiver_core).x <<
                 ",y=" << device->ethernet_core_from_logical_core(eth_receiver_core).y << "(" <<
                 eth_receiver_core.x << "," << eth_receiver_core.y << ") logical" << std::endl;
-            std::cout << ss.str();
+            // std::cout << ss.str();
         }
         auto eth_receiver_kernel = tt_metal::CreateKernel(
             program,
