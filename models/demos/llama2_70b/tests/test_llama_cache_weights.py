@@ -32,9 +32,7 @@ def run_cache_model(
     devices,
     batch,
     seq_len,
-    pcc,
     model_config,
-    optimized,
     n_layers,
     n_devices,
     emulated=False,
@@ -49,14 +47,13 @@ def run_cache_model(
         device = devices[0]
         devices = [device for _ in range(n_devices)]  # Emulate fracturing on N chips
     else:
-        ckpt_dir = "/home/llama-data-repacked-2/llama-2-70b/"
-        tokenizer_path = "/home/llama-data/tokenizer.model"
-        cache_path = Path("/home/llama-data-cache/weights-cache")
+        ckpt_dir = model_config["DEFAULT_CKPT_DIR"]
+        tokenizer_path = model_config["DEFAULT_TOKENIZER_PATH"]
+        cache_path = model_config["DEFAULT_CACHE_PATH"]
 
     print(f"Running emulated: {emulated}")
 
     max_seq_len = 4096
-
     layer_group_size = 4
     n_layers = 80
 
@@ -121,31 +118,29 @@ def run_cache_model(
 
 
 @pytest.mark.parametrize(
-    "batch, seq_len, n_layers, n_devices",
-    ((32, 1, 4, 4),),
+    "n_layers",
+    ((4, 10, 20)),
 )
 @pytest.mark.parametrize(
-    "model_version, pcc, optimized, emulated",
+    "batch, seq_len, n_devices, emulated",
     (
-        ("llama-2-70B", 0.98, True, True),
-        ("llama-2-70B", 0.98, True, False),
+        (32, 1, 4, False),
+        (32, 1, 8, False),
+        (32, 1, 4, True),
+        (32, 1, 8, True),
     ),
 )
 @pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM",))
 def test_cache_model(
-    model_version,
     batch,
     seq_len,
-    pcc,
     model_config_str,
-    optimized,
     n_layers,
     n_devices,
     pcie_devices,
     emulated,
 ):
     model_config = get_model_config(model_config_str, num_devices=n_devices)
-    # tt_cache_path = get_tt_cache_path(model_version)
     compute_grid_size = pcie_devices[0].compute_with_storage_grid_size()
     if len(pcie_devices) < n_devices and not emulated:
         pytest.skip(f"Requires at {n_devices} devices to run")
@@ -156,9 +151,7 @@ def test_cache_model(
         pcie_devices[:n_devices],
         batch,
         seq_len,
-        pcc,
         model_config,
-        optimized,
         n_layers,
         n_devices,
         emulated,
