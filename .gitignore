@@ -10,6 +10,10 @@ tt_build
 tt_debug
 build
 
+*.bin
+*.lock
+hf_data/*
+
 /llk_out/
 /out/
 

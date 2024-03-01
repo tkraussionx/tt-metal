@@ -1,0 +1,19 @@
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/test_falcon_decoder.py"
+
+Unit test
+pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "seq_len_1024 and in0_BFLOAT16-in1_BFLOAT8_B-out_BFLOAT16-weights_DRAM"
+
+pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "seq_len_1024 and in0_BFLOAT16-in1_BFLOAT16-out_BFLOAT16-weights_DRAM"
+
+// My op experimentation
+// seq_len 512
+pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "seq_len_512 and in0_BFLOAT16-in1_BFLOAT16-out_BFLOAT16-weights_DRAM"
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k \"seq_len_512 and in0_BFLOAT16-in1_BFLOAT16-out_BFLOAT16-weights_DRAM\""
+
+// seq_len 1024
+pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "seq_len_1024 and in0_BFLOAT16-in1_BFLOAT16-out_BFLOAT16-weights_DRAM"
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k \"seq_len_1024 and in0_BFLOAT16-in1_BFLOAT16-out_BFLOAT16-weights_DRAM\""
+
+
+
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k \"seq_len_1024 and in0_BFLOAT16-in1_BFLOAT16-out_BFLOAT16-weights_DRAM\""
