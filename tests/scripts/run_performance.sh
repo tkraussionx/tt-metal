@@ -53,6 +53,10 @@ run_perf_models() {
 run_device_perf_models() {
     local pipeline_type=$1
 
+    env pytest models/demos/ttnn_falcon7b/tests -m $pipeline_type
+
+    env pytest models/demos/bert/tests -m $pipeline_type
+
     env pytest models/demos/resnet/tests -m $pipeline_type
 
     env pytest models/demos/metal_BERT_large_11/tests -m $pipeline_type
