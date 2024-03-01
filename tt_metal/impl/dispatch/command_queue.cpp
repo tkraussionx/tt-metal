@@ -1188,10 +1188,10 @@ void EnqueueAddBufferToProgramImpl(const std::variant<std::reference_wrapper<Buf
             std::visit([&b] (auto&& p) {
                 using program_type = std::decay_t<decltype(p)>;
                 if constexpr (std::is_same_v<program_type, std::reference_wrapper<Program>>) {
-                    p.get().add_global_buffer(b);
+                    p.get().add_buffer(b);
                 }
                 else {
-                    p->add_global_buffer(b);
+                    p->add_buffer(b);
                 }
             }, program);
         }
@@ -1406,14 +1406,14 @@ void EnqueueProgramImpl(CommandQueue& cq, std::variant < std::reference_wrapper<
             detail::ValidateCircularBufferRegion(program, device);
             cq.hw_command_queue().enqueue_program(program, trace, blocking);
             // Program relinquishes ownership of all global buffers its using, once its been enqueued. Avoid mem leaks on device.
-            program.get().global_bufs.clear();
+            program.get().release_buffers();
         } else if constexpr (std::is_same_v<T, std::shared_ptr<Program>>) {
             detail::CompileProgram(device, *program);
             program->allocate_circular_buffers();
             detail::ValidateCircularBufferRegion(*program, device);
             cq.hw_command_queue().enqueue_program(*program, trace, blocking);
             // Program relinquishes ownership of all global buffers its using, once its been enqueued. Avoid mem leaks on device.
-            program->global_bufs.clear();
+            program->release_buffers();
         }
     }, program);
 }
@@ -1520,7 +1520,7 @@ void EnqueueTrace(Trace& trace, bool blocking) {
 CommandQueue::CommandQueue(Device* device, uint32_t id) : device_ptr(device), cq_id(id) {
     if (this->async_mode()) {
         // The main program thread launches the Command Queue
-        main_thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
+        parent_thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
         this->start_worker();
     }
 }
@@ -1560,7 +1560,7 @@ void CommandQueue::set_mode(const CommandQueueMode& mode_) {
     this->mode = mode_;
     if (async_mode()) {
         // Record parent thread-id and start worker.
-        main_thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
+        parent_thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
         start_worker();
     } else if (passthrough_mode()) {
         // Wait for all cmds sent in async mode to complete and stop worker.
@@ -1609,7 +1609,7 @@ void CommandQueue::run_worker() {
 void CommandQueue::run_command(const CommandInterface& command) {
     log_trace(LogDispatch, "CQ{} received {} in {} mode", this->cq_id, command.type, this->async_mode() ? "ASYNC" : "PASSTHROUGH");
     if (this->async_mode()) {
-        if (std::hash<std::thread::id>{}(std::this_thread::get_id()) == main_thread_id) {
+        if (std::hash<std::thread::id>{}(std::this_thread::get_id()) == parent_thread_id) {
             this -> worker_queue.push(command);
             if (command.blocking.has_value() and *command.blocking == true) {
                 this->wait_until_empty();

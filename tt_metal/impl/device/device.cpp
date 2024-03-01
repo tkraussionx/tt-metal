@@ -804,6 +804,10 @@ CommandQueue& Device::command_queue(size_t cq_id) {
     TT_FATAL(this->is_initialized(), "Device has not been initialized, did you forget to call InitializeDevice?");
     return *sw_command_queues_[cq_id];
 }
+
+bool Device::using_slow_dispatch() const {
+    return this->sw_command_queues_.size() == 0;
+}
 }  // namespace tt_metal
 
 }  // namespace tt

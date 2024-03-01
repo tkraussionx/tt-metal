@@ -280,7 +280,7 @@ void SetRuntimeArgs(const Program &program, KernelHandle kernel, const std::vect
  * | core_spec    | Location of Tensix core(s) where the runtime args will be written      | const std::variant<CoreCoord,CoreRange,CoreRangeSet> & | Any set of logical Tensix core coordinates on which the kernel is placed   | Yes      |
  * | runtime_args | The runtime args to be written                                         | std::shared_ptr<RuntimeArgs>                           |                                                                            | Yes      |
 */
-void SetRuntimeArgs(Device* device, const std::shared_ptr<Kernel> kernel, const std::variant<CoreCoord, CoreRange,CoreRangeSet> &core_spec, std::shared_ptr<RuntimeArgs> runtime_args);
+void SetRuntimeArgs(Device* device, const std::shared_ptr<Kernel> kernel, const std::variant<CoreCoord, CoreRange, CoreRangeSet> &core_spec, std::shared_ptr<RuntimeArgs> runtime_args);
 
 /**
  * Set multiple runtime arguments of a kernel using the command queue. Each core can have distinct arguments. This API must be used when Asynchronous Command Queue Mode is enabled.

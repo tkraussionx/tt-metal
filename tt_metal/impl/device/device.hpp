@@ -174,6 +174,7 @@ class Device {
     SystemMemoryManager& sysmem_manager() { return *sysmem_manager_; }
     HWCommandQueue& hw_command_queue(size_t cq_id = 0);
     CommandQueue& command_queue(size_t cq_id = 0);
+    bool using_slow_dispatch() const;
     void check_allocator_is_initialized() const;
 
     // Checks that the given arch is on the given pci_slot and that it's responding

@@ -588,7 +588,7 @@ class CommandQueue {
     bool passthrough_mode() { return this->mode == CommandQueueMode::PASSTHROUGH; }
 
     std::atomic<std::size_t> worker_thread_id = -1;
-    std::atomic<std::size_t> main_thread_id = -1;
+    std::atomic<std::size_t> parent_thread_id = -1;
 };
 
 // Primitives used to place host only operations on the SW Command Queue.

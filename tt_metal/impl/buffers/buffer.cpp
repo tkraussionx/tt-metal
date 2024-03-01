@@ -261,6 +261,10 @@ void Buffer::deallocate() {
     if (this->device_ == nullptr or not this->device_->initialized_ or this->size_ == 0) {
         return;
     }
+    // Mark as deallocated
+    this->size_ = 0;
+    TT_ASSERT(this->device_->allocator_ != nullptr, "Expected allocator to be initialized!");
+    // Asynchronously deallocate
     detail::DeallocateBuffer(this);
 }
 
