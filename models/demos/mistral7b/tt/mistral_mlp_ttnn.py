@@ -38,8 +38,6 @@ class TtMistralMLP(torch.nn.Module):
         self.w1 = as_tensor("w1", "FF1_MM_WEIGHTS_DTYPE")
         self.w2 = as_tensor("w2", "FF2_MM_WEIGHTS_DTYPE")
         self.w3 = as_tensor("w3", "FF3_MM_WEIGHTS_DTYPE")
-        ff1_output_shape = ttnn.Shape([x.shape.with_tile_padding()[-2], self.w1.shape.with_tile_padding()[-1]])
-        self.shard = ttnn.create_sharded_memory_config(ff1_output_shape, self.grid, ttnn.ShardStrategy.WIDTH)
 
     def forward(self, x: ttnn.Tensor) -> ttnn.Tensor:
         """
@@ -48,11 +46,14 @@ class TtMistralMLP(torch.nn.Module):
         w3 -> up_proj
         HF reference: self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         """
+        ff1_output_shape = ttnn.Shape([x.shape.with_tile_padding()[-2], self.w1.shape.with_tile_padding()[-1]])
+        shard = ttnn.create_sharded_memory_config(ff1_output_shape, self.grid, ttnn.ShardStrategy.WIDTH)
+
         w1_out = ttnn.linear(
-            x, self.w1, activation="silu", core_grid=self.grid, use_1d_systolic_array=True, memory_config=self.shard
+            x, self.w1, activation="silu", core_grid=self.grid, use_1d_systolic_array=True, memory_config=shard
         )
-        w3_out = ttnn.linear(x, self.w3, core_grid=self.grid, use_1d_systolic_array=True, memory_config=self.shard)
-        w2_in = ttnn.mul(w1_out, w3_out, memory_config=self.shard)
+        w3_out = ttnn.linear(x, self.w3, core_grid=self.grid, use_1d_systolic_array=True, memory_config=shard)
+        w2_in = ttnn.mul(w1_out, w3_out, memory_config=shard)
         w2_out = ttnn.linear(
             w2_in, self.w2, core_grid=self.grid, use_1d_systolic_array=True, memory_config=ttnn.L1_MEMORY_CONFIG
         )
