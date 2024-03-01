@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 
 # SPDX-License-Identifier: Apache-2.0
+from time import time
 import torch
 import pytest
 from loguru import logger
@@ -32,7 +33,7 @@ from models.utility_functions import (
 )
 @pytest.mark.parametrize(
     "iterations",
-    (1, 3),
+    (1, 3, 11),
 )
 @pytest.mark.parametrize(
     "pcc",
@@ -103,7 +104,9 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
     freqs_cis = torch.complex(cos, sin)
 
     # TODO Update start_pos (check llama test for reference)
+    times = []
     for i in range(generation_length):
+        start = time()
         print(f"[Model] Generating token {i}")
 
         # input = torch.randn(1, 32, 4096)
@@ -143,6 +146,13 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
         else:
             logger.warning("Mistral Model Block Failed!")
             all_tests_pass = False
+        duration = time() - start
+        if i > 0:  # skip initial step
+            times.append(duration)
+        logger.info(f"Time taken for token {i}: {duration:.2f} seconds")
+
+    if times:
+        logger.info(f"Average tokens/s/user: {1/(sum(times)/len(times)):.2f}")
 
     if all_tests_pass:
         logger.info(f"All {generation_length} Mistral decode iterations Passed!")
