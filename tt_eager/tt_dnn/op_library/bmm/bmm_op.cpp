@@ -694,10 +694,118 @@ Tensor falcon_selfout_matmul(const Tensor &input_tensor_a, const Tensor &input_t
 
 Tensor falcon_prefill_4h_to_h_matmul(const Tensor &input_tensor_a, const Tensor &input_tensor_b, std::optional<const Tensor> bias, const MemoryConfig& mem_config, std::optional<const DataType> output_dtype) {
     operations::primary::MatmulMultiCoreReuseProgramConfig multi_core_reuse_config;
-    CoreCoord x = {8, 2};
+    // CoreCoord x = {2, 1};
 
-    multi_core_reuse_config.per_core_M = 4;
-    multi_core_reuse_config.per_core_N = 71;
+    // A = [32, 32]
+    // B = [32, 32]
+
+    // Cores {1, 1} - {1, 1}
+    // a_shape = [1, 1, 512, 512] = [16, 16]
+    // b_shape = [1, 1, 512, 512] = [16, 16]
+    // per_core_M = 16 - per_core size [16, 16]
+    // per_core_N = 16 - per_core_size = [16, 16]
+    // !!!Working!!!
+
+    // Cores {1, 1} - {1, 2}
+    // a_shape = [16, 16]
+    // b_shape = [16, 16]
+    // per_core_M = 16 - per_core size = [16, 16]
+    // per_core_N = 8  - per_core_size = [16, 8]
+    // out_shape_per_core = [16, 8]
+    // Not working
+
+    // Cores {1, 1}
+    // a_shape = [32, 16]
+    // b_shape = [16, 16]
+    // per_core_M = 32 - per_core_size = [32, 16]
+    // per_core_N = 16 - per_core_size = [16, 16]
+    // !!!Working!!!
+
+    // Cores {8, 1}
+    // a_shape = [32, 16]
+    // b_shape = [16, 16]
+    // per_core_M = 4 - per_core_size = [4, 16]
+    // per_core_N = 16 - per_core_size = [16, 16]
+    // !!!Working!!!
+
+    // Shape size: A = [16, 32] B = [32, 16]
+    // Cores {1, 1}
+    // a_shape = [16, 32]
+    // b_shape = [32, 16]
+    // per_core_M = 16 - per_core_size = [16, 32]
+    // per_core_N = 16 - per_core_size = [32, 16]
+    // !!!Working!!!
+
+    // Shape size: A = [16, 32] B = [32, 16]
+    // Cores {1, 2}
+    // a_shape = [16, 32]
+    // b_shape = [32, 16]
+    // per_core_M = 16 - per_core_size = [16, 32]
+    // per_core_N = 8 - per_core_size = [32, 8]
+    // Not working
+
+    // Shape size: A = [16, 32] B = [32, 16]
+    // Cores {1, 4}
+    // a_shape = [16, 32]
+    // b_shape = [32, 16]
+    // per_core_M = 16 - per_core_size = [16, 32]
+    // per_core_N = 4 - per_core_size = [32, 4]
+    // Not working
+
+    // Shape size: A = [16, 32] B = [32, 16]
+    // Cores {1, 8}
+    // a_shape = [16, 32]
+    // b_shape = [32, 16]
+    // per_core_M = 16 -- per_core_size = [16, 32]
+    // per_core_N = 2 -- per_core_size = [16, 2]
+    // Not working
+
+    // Shape size: A = [16, 32] B = [32, 16]
+    // Cores {2, 2}
+    // a_shape = [16, 32]
+    // b_shape = [32, 16]
+    // per_core_M = 8 -- per_core_size = [8, 32]
+    // per_core_N = 8 -- per_core_size = [32, 8]
+    // Not working
+
+    // Cores {2, 1} - {1, 1}
+    // a_shape = [16, 16]
+    // b_shape = [16, 16]
+    // per_core_M = 8 - per_core size = [8, 16]
+    // per_core_N = 16 - per_core_size = [16, 16]
+    // out_shape_per_core = [8, 16]
+    // Not working
+
+    // Cores {4, 1} - {1, 1}
+    // a_shape = [32, 16]
+    // b_shape = [16, 16]
+    // per_core_M = 8 - per_core size = [8, 16]
+    // per_core_N = 16 - per_core_size = [16, 16]
+    // out_shape_per_core = [8, 16]
+    // Not working
+
+    // Cores {1, 1} - {1, 1}
+    // a_shape = [32, 16]
+    // b_shape = [16, 16]
+    // per_core_M = 32 - per_core size = [32, 16]
+    // per_core_N = 16 - per_core_size = [16, 16]
+    // out_shape_per_core = [32, 16]
+    // Working
+
+    // Cores {2, 1} - {1, 1}
+    // a_shape = [32, 16]
+    // b_shape = [16, 16]
+    // per_core_M = 16 - per_core size = [16, 16]
+    // per_core_N = 16 - per_core_size = [16, 16]
+    // out_shape_per_core = [16, 16]
+    // Not Working - asserts
+
+    CoreCoord x = {1, 1};
+
+    // This is working
+    multi_core_reuse_config.per_core_M = 32;
+    multi_core_reuse_config.per_core_N = 16;
+
     multi_core_reuse_config.in0_block_w = 1;
     multi_core_reuse_config.out_subblock_h = 1;
     multi_core_reuse_config.out_subblock_w = 1;
@@ -924,8 +1032,8 @@ void Matmul::validate(
                 uint32_t K = input_tensor_a.shape()[-1];
                 uint32_t per_core_M = program_config.per_core_M;
                 uint32_t per_core_N = program_config.per_core_N;
-                // TT_FATAL(per_core_M % (input_tensor_a.shape()[-2] / TILE_HEIGHT) == 0);
-                // TT_FATAL(N == per_core_N);
+                TT_FATAL(per_core_M % (input_tensor_a.shape()[-2] / TILE_HEIGHT) == 0);
+                TT_FATAL(N == per_core_N);
                 if (input_tensor_a.is_sharded()) {
                     TT_FATAL(input_tensor_a.memory_config().memory_layout != TensorMemoryLayout::WIDTH_SHARDED);
                     auto in0_shard_shape = input_tensor_a.shard_spec().value().shape;

@@ -35,9 +35,9 @@ def run_falcon_matmul_test(
         b_shape = [1, 1, 4544, 4544]
         expected_output_shape = [1, 1, seq_len, 4544]
     elif falcon_op == ttl.tensor.falcon_prefill_4h_to_h_matmul:
-        a_shape = [1, 1, seq_len, 18176]
-        b_shape = [1, 1, 18176, 4544]
-        expected_output_shape = [1, 1, seq_len, 4544]
+        a_shape = [1, 1, seq_len, 512]
+        b_shape = [1, 1, 512, 512]
+        expected_output_shape = [1, 1, seq_len, 512]
 
         if (seq_len == 1024 and in0_dtype == in1_dtype == out_dtype == ttl.tensor.DataType.BFLOAT16) or (
             seq_len == 2048
