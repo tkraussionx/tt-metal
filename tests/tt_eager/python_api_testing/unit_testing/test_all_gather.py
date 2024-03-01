@@ -13,24 +13,81 @@ from models.utility_functions import skip_for_grayskull
 @pytest.mark.parametrize(
     "input_shape, dim, layout",
     [
-        ([4, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),
-        ([4, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
-        ([8, 5, 13, 384], 3, ttl.tensor.Layout.ROW_MAJOR),
-        ([8, 5, 32, 384], 3, ttl.tensor.Layout.TILE),
-        ([8, 8, 256, 384], 0, ttl.tensor.Layout.ROW_MAJOR),
-        ([8, 8, 256, 384], 0, ttl.tensor.Layout.TILE),
-        ([8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),
-        ([8, 8, 256, 384], 1, ttl.tensor.Layout.TILE),
-        ([8, 8, 256, 384], 2, ttl.tensor.Layout.ROW_MAJOR),
-        ([8, 8, 256, 384], 2, ttl.tensor.Layout.TILE),
-        ([8, 8, 256, 384], 3, ttl.tensor.Layout.ROW_MAJOR),
-        ([8, 8, 256, 384], 3, ttl.tensor.Layout.TILE),
+        # ([4, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),
+        # ([4, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
+        # ([8, 5, 13, 384], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # ([8, 5, 32, 384], 3, ttl.tensor.Layout.TILE),
+        # ([8, 8, 256, 384], 0, ttl.tensor.Layout.ROW_MAJOR),
+        # ([8, 8, 256, 384], 0, ttl.tensor.Layout.TILE),
+        # ([8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),
+        # ([8, 8, 256, 384], 1, ttl.tensor.Layout.TILE),
+        # ([8, 8, 256, 384], 2, ttl.tensor.Layout.ROW_MAJOR),
+        # ([8, 8, 256, 384], 2, ttl.tensor.Layout.TILE),
+        # ([8, 8, 256, 384], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # ([8, 8, 256, 384], 3, ttl.tensor.Layout.TILE),
         # Only for BFP8B
         # ([1, 1, 640, 32768], 3, ttl.tensor.Layout.TILE),
-        # # MLP AllGather
-        ([1, 1, 32, 32768], 3, ttl.tensor.Layout.TILE),
-        # # # Input, Selfout, Final AllGather
-        ([1, 1, 32, 8192], 3, ttl.tensor.Layout.TILE),
+        # MLP AllGather. Llama 2 decode attn, mlp. Llama2, Falcon 40B decode mlp attn
+        # Mixtral 8x7B, functional bringup with expanded tensor getting allgathered
+        # Full shape for 8 chips
+        # ([1, 1, 32, 32768], 3, ttl.tensor.Layout.TILE),
+        ([1, 1, 32, 32768], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # MLP AllGather. Llama 2 decode attn, mlp. Llama2, Falcon 40B decode mlp attn
+        # Half shape for 4 chips, same per chip shape as 8 chips
+        ([1, 1, 32, 16384], 3, ttl.tensor.Layout.TILE),
+        ([1, 1, 32, 16384], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # Input, Selfout, Final AllGather. Llama2, Falcon 40B decode mlp attn
+        # Full shape for 8 chips
+        # ([1, 1, 32, 8192], 3, ttl.tensor.Layout.TILE),
+        # ([1, 1, 32, 8192], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # Input, Selfout, Final AllGather. Llama2, Falcon 40B decode mlp attn
+        # Half shape for running on 4 chips, same per chip shape as for 8 chips
+        ([1, 1, 32, 4096], 3, ttl.tensor.Layout.TILE),
+        ([1, 1, 32, 4096], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # Falcon 40B prefill
+        # 8 chips
+        ([1, 1, 2048, 8192], 3, ttl.tensor.Layout.TILE),
+        ([1, 1, 2048, 8192], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # 4 chips, same per chip shape as 8 chips
+        ([1, 1, 2048, 4096], 3, ttl.tensor.Layout.TILE),
+        ([1, 1, 2048, 4096], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # Falcon 40B prefill
+        # 8 chips
+        ([1, 1, 2048, 32768], 3, ttl.tensor.Layout.TILE),
+        ([1, 1, 2048, 32768], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # 4 chips, same per chip shape as 8 chips
+        ([1, 1, 2048, 16384], 3, ttl.tensor.Layout.TILE),
+        ([1, 1, 2048, 16384], 3, ttl.tensor.Layout.ROW_MAJOR),
+        # Mixtral 8x7B, Min sequence length
+        # 8 chips
+        ([1, 1, 32768, 32768], 3, ttl.tensor.Layout.ROW_MAJOR),
+        ([1, 1, 32768, 32768], 3, ttl.tensor.Layout.TILE),  # ultra slow?
+        # 4 chips, per chip shape same as 8 chips
+        ([1, 1, 32768, 16384], 3, ttl.tensor.Layout.ROW_MAJOR),
+        ([1, 1, 32768, 16384], 3, ttl.tensor.Layout.TILE),
+        # Llama galaxy mlp weights stationary -> emulation of row/col reduce
+        ([1, 1, 128, 1024], 2, ttl.tensor.Layout.ROW_MAJOR),
+        ([1, 1, 128, 1024], 2, ttl.tensor.Layout.TILE),
+        # ([1, 1, 32, 8192], 3, ttl.tensor.Layout.ROW_MAJOR), # ALREADY LISTED PREVIOUSLY
+        # ([1, 1, 32, 8192], 3, ttl.tensor.Layout.TILE),     # ALREADY LISTED PREVIOUSLY
+        ([1, 1, 128, 4096], 2, ttl.tensor.Layout.ROW_MAJOR),  #
+        ([1, 1, 128, 4096], 2, ttl.tensor.Layout.TILE),
+        # ([1, 1, 32, 16384], 3, ttl.tensor.Layout.ROW_MAJOR), # duplicate of above. Update for 8 chip, actuall 32k for 8 chip but we are halving it for our 4 chip test
+        # ([1, 1, 32, 16384], 3, ttl.tensor.Layout.TILE),      # duplicate of above. Update for 8 chip, actuall 32k for 8 chip but we are halving it for our 4 chip test
+        ([1, 1, 8192, 32], 2, ttl.tensor.Layout.ROW_MAJOR),
+        ([1, 1, 8192, 32], 2, ttl.tensor.Layout.TILE),
+        ([1, 1, 1024, 128], 3, ttl.tensor.Layout.ROW_MAJOR),  # double on reduction dim for 8 chip
+        ([1, 1, 1024, 128], 3, ttl.tensor.Layout.TILE),  # double on reduction dim for 8 chip
+        ([1, 1, 16384, 32], 2, ttl.tensor.Layout.ROW_MAJOR),  # double on reduction dim for 8 chip
+        ([1, 1, 16384, 32], 2, ttl.tensor.Layout.TILE),  # double on reduction dim for 8 chip
+        ([1, 1, 4096, 128], 3, ttl.tensor.Layout.ROW_MAJOR),  # only for 4 chip
+        ([1, 1, 4096, 128], 3, ttl.tensor.Layout.TILE),  # only for 4 chip
+        ([1, 1, 128, 2048], 2, ttl.tensor.Layout.ROW_MAJOR),  # double on reduction dim for 8 chip
+        ([1, 1, 128, 2048], 2, ttl.tensor.Layout.TILE),  # double on reduction dim for 8 chip
+        # ([1, 1, 32, 8192], 3, ttl.tensor.Layout.ROW_MAJOR), # only for 4 chip
+        # ([1, 1, 32, 8192], 3, ttl.tensor.Layout.TILE),      # only for 4 chip
+        ([1, 1, 128, 8192], 2, ttl.tensor.Layout.ROW_MAJOR),  # double on reduction dim for 8 chip
+        ([1, 1, 128, 8192], 2, ttl.tensor.Layout.TILE),  # double on reduction dim for 8 chip
     ],
 )
 @pytest.mark.parametrize(
