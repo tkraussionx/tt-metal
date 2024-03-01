@@ -34,6 +34,7 @@ from models.utility_functions import (
     ((0.99),),
 )
 def test_mistral_decoder_inference(pcc, model_config, model_location_generator, device, iterations):
+    ttnn.enable_program_cache()
     dtype_str, mem_config_str = model_config.split("-")
     if dtype_str == "BFLOAT16":
         dtype = ttnn.bfloat16

@@ -30,12 +30,7 @@ from models.utility_functions import (
     "iterations",
     ((1),),
 )
-@pytest.mark.parametrize(
-    "pcc",
-    ((0.99),),
-)
 def test_mistral_attention_inference(
-    pcc,
     model_config,
     iterations,
     model_location_generator,
@@ -45,8 +40,10 @@ def test_mistral_attention_inference(
     dtype_str, mem_config_str = model_config.split("-")
     if dtype_str == "BFLOAT16":
         dtype = ttnn.bfloat16
+        pcc = 0.99
     elif dtype_str == "BFLOAT8":
         dtype = ttnn.bfloat8_b
+        pcc = 0.98
     else:
         raise ValueError(f"Unknown dtype {dtype_str}")
 

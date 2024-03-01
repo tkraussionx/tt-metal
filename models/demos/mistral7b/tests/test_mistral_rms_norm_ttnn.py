@@ -21,6 +21,7 @@ from models.utility_functions import (
     ("BFLOAT16-DRAM", "BFLOAT8-DRAM"),
 )
 def test_mistral_rms_norm_inference(model_config, model_location_generator, device):
+    ttnn.enable_program_cache()
     dtype = model_config.split("-")[0]
     if dtype == "BFLOAT8":
         dtype = ttnn.bfloat8_b

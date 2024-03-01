@@ -39,6 +39,7 @@ from models.utility_functions import (
     ((0.99),),
 )
 def test_mistral_model_inference(pcc, model_config, model_location_generator, device, iterations, n_layers):
+    ttnn.enable_program_cache()
     prompts = [
         "This is a sample text for single layer execution ",
     ]
