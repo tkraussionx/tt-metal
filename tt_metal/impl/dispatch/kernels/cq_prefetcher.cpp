@@ -114,7 +114,11 @@ void kernel_main() {
     volatile db_cb_config_t* local_dispatch_multicore_cb_cfg = get_local_db_cb_config(CQ_DISPATCHER_CB_CONFIG_BASE);
     volatile db_cb_config_t* dispatch_multicore_cb_cfg = get_remote_db_cb_config(CQ_CONSUMER_CB_BASE);
 
+#if defined(COMPILE_FOR_IDLE_ERISC)
+    constexpr uint32_t dispatch_cb_num_pages = (MEM_ETH_SIZE - L1_UNRESERVED_BASE - DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND * 2) / DeviceCommand::PROGRAM_PAGE_SIZE / DeviceCommand::SYNC_NUM_PAGES * DeviceCommand::SYNC_NUM_PAGES;
+#else
     constexpr uint32_t dispatch_cb_num_pages = (MEM_L1_SIZE - L1_UNRESERVED_BASE - DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND * 2) / DeviceCommand::PROGRAM_PAGE_SIZE / DeviceCommand::SYNC_NUM_PAGES * DeviceCommand::SYNC_NUM_PAGES;
+#endif
     constexpr uint32_t dispatch_cb_size = dispatch_cb_num_pages * DeviceCommand::PROGRAM_PAGE_SIZE;
 
     if constexpr (pull_and_push_config == tt::PullAndPushConfig::LOCAL or pull_and_push_config == tt::PullAndPushConfig::REMOTE_PULL_AND_PUSH) {
@@ -136,6 +140,9 @@ void kernel_main() {
 
     while (true) {
         if constexpr (read_from_issue_queue) {
+#if defined(COMPILE_FOR_IDLE_ERISC)
+            uint32_t heartbeat = 0;
+#endif
             // we will also need to poll the program event buffer
             while (not issue_queue_space_available()) {
                 if constexpr (pull_and_push_config == tt::PullAndPushConfig::LOCAL) {
@@ -143,6 +150,9 @@ void kernel_main() {
                         program_event_buffer.write_events<write_to_completion_queue>(); // write number of events in program event buffer
                     }
                 }
+#if defined(COMPILE_FOR_IDLE_ERISC)
+                RISC_POST_HEARTBEAT(heartbeat);
+#endif
             }
 
             uint32_t rd_ptr = (cq_read_interface.issue_fifo_rd_ptr << 4);
