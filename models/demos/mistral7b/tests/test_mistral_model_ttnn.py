@@ -24,7 +24,7 @@ from models.utility_functions import (
 
 @pytest.mark.parametrize(
     "n_layers",
-    ((1, 3, 16, 32)),
+    (1, 3, 16, 32),
 )
 @pytest.mark.parametrize(
     "model_config",
@@ -32,7 +32,7 @@ from models.utility_functions import (
 )
 @pytest.mark.parametrize(
     "iterations",
-    ((3),),
+    (1, 3),
 )
 @pytest.mark.parametrize(
     "pcc",
