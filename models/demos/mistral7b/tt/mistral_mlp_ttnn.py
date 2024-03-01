@@ -12,8 +12,8 @@ class TtMistralMLP(torch.nn.Module):
         self,
         device,
         state_dict,
-        base_address,
         model_config,
+        layer_num,
         grid=ttnn.CoreGrid(8, 8),
     ):
         super().__init__()
@@ -23,8 +23,9 @@ class TtMistralMLP(torch.nn.Module):
         self.model_config = model_config
         self.grid = grid
 
-        torch_weight = lambda name: torch.transpose(self.state_dict[f"{name}.weight"], -2, -1)
-        cache_name = lambda name: Path(model_config["DEFAULT_WEIGHT_PATH"]) / (base_address + f".feed_forward.{name}")
+        base_name = f"layers.{layer_num}.feed_forward"
+        torch_weight = lambda name: torch.transpose(self.state_dict[f"{base_name}.{name}.weight"], -2, -1)
+        cache_name = lambda name: Path(model_config["DEFAULT_WEIGHT_PATH"]) / (base_name + f".feed_forward.{name}")
         as_tensor = lambda name, dtype_name: ttnn.as_tensor(
             torch_weight(name),
             dtype=self.model_config[dtype_name],

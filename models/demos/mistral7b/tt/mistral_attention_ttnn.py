@@ -22,7 +22,6 @@ class TtMistralAttention(nn.Module):
         self,
         devices,
         state_dict,
-        base_address,
         model_config,
         layer_num,
         dtype,
@@ -51,18 +50,13 @@ class TtMistralAttention(nn.Module):
 
         # self.current = 0
 
-        if layer_num:
-            layer_name = f"{base_address}.{layer_num}.attention."
-            cache_name = lambda name: Path(model_config["DEFAULT_WEIGHT_PATH"]) / (f"{layer_name}{name}")
-        else:
-            layer_name = base_address
-            cache_name = lambda name: Path(model_config["DEFAULT_WEIGHT_PATH"]) / (
-                f"{base_address}.{layer_num}.attention.{name}"
-            )
-        wq_str = f"{layer_name}wq.weight"
-        wk_str = f"{layer_name}wk.weight"
-        wv_str = f"{layer_name}wv.weight"
-        wo_str = f"{layer_name}wo.weight"
+        layer_name = f"layers.{layer_num}.attention"
+        cache_name = lambda name: Path(model_config["DEFAULT_WEIGHT_PATH"]) / (f"{layer_name}.{name}")
+
+        wq_str = f"{layer_name}.wq.weight"
+        wk_str = f"{layer_name}.wk.weight"
+        wv_str = f"{layer_name}.wv.weight"
+        wo_str = f"{layer_name}.wo.weight"
 
         # when splitting the devices, we need to make sure that the number of heads is divisible by the number of devices
         assert self.n_heads % self.num_devices == 0
@@ -167,12 +161,10 @@ class TtMistralAttention(nn.Module):
             ###
             # QKV matmuls
             ###
-            print("MATMUL START")
             xqkv_fused = ttnn.linear(
                 x, wqkv, core_grid=ttnn.CoreGrid(8, 8), memory_config=ttnn.L1_MEMORY_CONFIG, dtype=self.dtype
             )
 
-            print("MATMUL DONE")
             ###
             # Reshape and rotary embeddings
             ###
@@ -190,8 +182,6 @@ class TtMistralAttention(nn.Module):
 
             ttnn.deallocate(xqkv_fused)
 
-            print("HEADS DONE")
-
             q_heads = ttnn.experimental.tensor.rotary_embedding(
                 q_heads, self.tt_cos_cached[i], self.tt_sin_cached[i], start_pos
             )
@@ -200,7 +190,6 @@ class TtMistralAttention(nn.Module):
                 k_heads, self.tt_cos_cached[i], self.tt_sin_cached[i], start_pos
             )
 
-            print("ROT DONE")
             ###
             # KV update
             ###
@@ -240,7 +229,6 @@ class TtMistralAttention(nn.Module):
                 output_mem_config=ttnn.L1_MEMORY_CONFIG,
             )
 
-            print("KV UPDATE DONE")
             ###
             # Attention
             ###
@@ -298,7 +286,6 @@ class TtMistralAttention(nn.Module):
                 use_height_and_width_as_shard_shape=True,
             ))
             """
-            print("GQA2:", attn.shape, values.shape)
 
             attn_output = ttnn.experimental.operations.primary.transformers.group_attn_matmul(
                 attn,
@@ -316,7 +303,6 @@ class TtMistralAttention(nn.Module):
             attn_output = ttnn.transformer.concatenate_heads(attn_output, memory_config=ttnn.L1_MEMORY_CONFIG)
             # seqlen, 1, batch, hidden_size
 
-            print("DENSE SHAPES", attn_output.shape, wo.shape)
             dense_out = ttnn.linear(
                 attn_output, wo, core_grid=ttnn.CoreGrid(8, 8), memory_config=ttnn.L1_MEMORY_CONFIG
             )  # seqlen, 1, batch, hidden_size

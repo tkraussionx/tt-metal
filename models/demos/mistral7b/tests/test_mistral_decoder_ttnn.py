@@ -36,7 +36,7 @@ from models.utility_functions import (
 def test_mistral_decoder_inference(pcc, model_config, model_location_generator, device, iterations):
     dtype_str, mem_config_str = model_config.split("-")
     if dtype_str == "BFLOAT16":
-        dtype = torch.bfloat16
+        dtype = ttnn.bfloat16
     elif dtype_str == "BFLOAT8":
         dtype = ttnn.bfloat8_b
     else:
@@ -48,13 +48,13 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
     with open(mistral_path / "params.json", "r") as f:
         model_args = TtModelArgs(**json.loads(f.read()))
 
-    state_dict = {k[9:]: v for k, v in state_dict.items() if (k.startswith("layers.0."))}
-    base_address = f""
+    # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
+    partial_state_dict = {k[9:]: v for k, v in state_dict.items() if (k.startswith("layers.0."))}
 
     model_args.max_batch_size = 32
 
     reference_model = TransformerBlock(args=model_args)
-    reference_model.load_state_dict(state_dict)
+    reference_model.load_state_dict(partial_state_dict)
 
     # TODO Scale the model (mixtral) to multiple devices when T3000 is available
     devices = [
@@ -70,8 +70,7 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
         devices=devices,
         dtype=dtype,
         state_dict=state_dict,
-        base_address=base_address,
-        layer_num=None,  # single layer
+        layer_num=0,
         model_config=model_config,
         tt_cos_cached=tt_cos_cached,
         tt_sin_cached=tt_sin_cached,

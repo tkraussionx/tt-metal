@@ -16,7 +16,6 @@ class TtTransformerBlock(torch.nn.Module):
         devices=None,
         dtype=None,
         state_dict=None,
-        base_address=None,
         layer_num=None,
         model_config=None,
         tt_cos_cached=None,
@@ -50,7 +49,7 @@ class TtTransformerBlock(torch.nn.Module):
         self.attention = TtMistralAttention(
             devices=devices,
             state_dict=state_dict,
-            base_url=f"{base_address}attention.",
+            model_config=model_config,
             layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
             dtype=dtype,
             configuration=args,
@@ -60,18 +59,22 @@ class TtTransformerBlock(torch.nn.Module):
         self.feed_forward = TtMistralMLP(
             device=devices[0],  # TODO Consider updating MLP code to support multiple devices when scaling up
             state_dict=state_dict,
-            base_address=f"{base_address}feed_forward.",
             model_config=model_config,
+            layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
         )
         self.attention_norm = TtRMSNorm(
             device=devices[0],
-            base_address=f"{base_address}attention_norm.",
             state_dict=state_dict,
+            model_config=model_config,
+            layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
+            weight_key="attention_norm",
         )
         self.ffn_norm = TtRMSNorm(
             device=devices[0],
-            base_address=f"{base_address}ffn_norm.",
             state_dict=state_dict,
+            model_config=model_config,
+            layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
+            weight_key="ffn_norm",
         )
 
     def forward(

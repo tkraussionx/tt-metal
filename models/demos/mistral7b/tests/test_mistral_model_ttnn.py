@@ -44,7 +44,7 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
     ]
     dtype_str, mem_config_str = model_config.split("-")
     if dtype_str == "BFLOAT16":
-        dtype = torch.bfloat16
+        dtype = ttnn.bfloat16
     elif dtype_str == "BFLOAT8":
         dtype = ttnn.bfloat8_b
     else:
@@ -53,7 +53,7 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
 
     mistral_path = Path(model_location_generator(model_config["DEFAULT_CACHE_PATH"], model_subdir="mistral"))
     tokenizer = Tokenizer(str(Path(mistral_path) / "tokenizer.model"))
-    base_address = f""
+
     with open(mistral_path / "params.json", "r") as f:
         model_args = TtModelArgs(**json.loads(f.read()))
     model_args.max_batch_size = 32
@@ -85,8 +85,8 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
         devices=devices,
         dtype=dtype,
         state_dict=state_dict,
-        base_address=base_address,
         model_config=model_config,
+        layers=list(range(model_args.n_layers)),
         tt_cos_cached=tt_cos_cached,
         tt_sin_cached=tt_sin_cached,
     )

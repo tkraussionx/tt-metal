@@ -11,8 +11,9 @@ class TtRMSNorm(nn.Module):
         self,
         device,
         state_dict,
-        base_address,
         model_config,
+        layer_num,
+        weight_key,
         eps: float = 1e-05,
     ):
         super().__init__()
@@ -20,8 +21,13 @@ class TtRMSNorm(nn.Module):
         self.eps = eps
         self.state_dict = state_dict
 
-        torch_weight = self.state_dict["weight"].unsqueeze(0).expand(32, -1)
-        cache_name = Path(model_config["DEFAULT_WEIGHT_PATH"]) / (base_address + ".weight")
+        if layer_num is None:
+            weight_name = f"{weight_key}.weight"
+        else:
+            weight_name = f"layers.{layer_num}.{weight_key}.weight"
+
+        torch_weight = self.state_dict[weight_name].unsqueeze(0).expand(32, -1)
+        cache_name = Path(model_config["DEFAULT_WEIGHT_PATH"]) / weight_name
 
         self.weight = ttnn.as_tensor(
             torch_weight,

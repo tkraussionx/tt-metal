@@ -58,12 +58,13 @@ def test_mistral_attention_inference(
     base_address = f""
     with open(mistral_path / "params.json", "r") as f:
         model_args = TtModelArgs(**json.loads(f.read()))
-    if True:
-        state_dict = {k[19:]: v for k, v in state_dict.items() if (k.startswith("layers.0.attention."))}
+
+    # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
+    partial_state_dict = {k[19:]: v for k, v in state_dict.items() if (k.startswith("layers.0.attention."))}
 
     model_args.max_batch_size = 32
     reference_model = Attention(args=model_args)
-    reference_model.load_state_dict(state_dict)
+    reference_model.load_state_dict(partial_state_dict)
 
     # TODO Scale the model (mixtral) to multiple devices when T3000 is available
     devices = [
@@ -79,9 +80,8 @@ def test_mistral_attention_inference(
     tt_model = TtMistralAttention(
         devices,
         state_dict,
-        base_address=base_address,
         model_config=model_config,
-        layer_num=None,
+        layer_num=0,
         dtype=dtype,
         configuration=model_args,
         tt_cos_cached=tt_cos_cached,

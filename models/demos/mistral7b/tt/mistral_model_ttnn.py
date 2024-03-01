@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from pathlib import Path
 import ttnn
 import torch
 import torch.nn as nn
@@ -15,14 +16,14 @@ from typing import Optional
 class TtTransformer(nn.Module):
     def __init__(
         self,
-        args=None,
-        dtype=None,
-        devices=None,
-        state_dict=None,
-        base_address=None,
-        model_config=None,
-        tt_cos_cached=None,
-        tt_sin_cached=None,
+        args,
+        dtype,
+        devices,
+        state_dict,
+        model_config,
+        layers,
+        tt_cos_cached,
+        tt_sin_cached,
     ):
         super().__init__()
         self.args = args
@@ -30,7 +31,6 @@ class TtTransformer(nn.Module):
         self.n_layers = args.n_layers
         self.devices = devices
         self.num_devices = len(devices)
-        self.base_address = base_address
         assert self.vocab_size > 0
 
         self.layers = torch.nn.ModuleList(
@@ -40,23 +40,30 @@ class TtTransformer(nn.Module):
                     devices=self.devices,
                     dtype=dtype,
                     state_dict=state_dict,
-                    base_address=f"layers.{i}.",
                     model_config=model_config,
+                    layer_num=i,
                     tt_cos_cached=tt_cos_cached,
                     tt_sin_cached=tt_sin_cached,
                 )
-                for i in range(args.n_layers)
+                for i in layers
             ]
         )
         self.norm = TtRMSNorm(
             device=devices[0],
-            base_address=f"norm.",
             state_dict=state_dict,
+            model_config=model_config,
+            layer_num=None,
+            weight_key="norm",
         )
         self.state_dict = state_dict
 
-        self.output_weight = ttnn.from_torch(
-            self.state_dict["output.weight"].permute(1, 0), device=devices[0], layout=ttnn.TILE_LAYOUT
+        self.output_weight = ttnn.as_tensor(
+            self.state_dict["output.weight"].permute(1, 0),
+            device=devices[0],
+            layout=ttnn.TILE_LAYOUT,
+            dtype=model_config["LM_HEAD_MM_WEIGHTS_DTYPE"],
+            memory_config=model_config["LM_HEAD_MM_WEIGHTS_MEMCFG"],
+            cache_file_name=Path(model_config["DEFAULT_WEIGHT_PATH"]) / "output.weight",
         )
 
     def forward(
