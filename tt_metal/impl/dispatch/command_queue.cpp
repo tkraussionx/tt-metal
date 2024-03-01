@@ -1141,6 +1141,9 @@ void Trace::validate() {
         if (cmd.blocking.has_value()) {
             TT_FATAL(cmd.blocking.value() == false, "Blocking commands are not supported in traces");
         }
+        if (this->supported_commands.find(cmd.type) == this->supported_commands.end()) {
+            TT_THROW("Unsupported command type for tracing");
+        }
     }
 }
 
@@ -1151,6 +1154,9 @@ uint32_t Trace::next_trace_id() {
 
 uint32_t Trace::instantiate(CommandQueue& cq) {
     uint32_t trace_id = next_trace_id();
+    TT_FATAL(this->instances.find(trace_id) == this->instances.end(), "Trace ID " + std::to_string(trace_id) + " already exists");
+    this->instances.insert(trace_id);
+
     cq.trace_ptr = this;
 
     // Stage the trace commands into device DRAM that the command queue will read from
@@ -1159,11 +1165,30 @@ uint32_t Trace::instantiate(CommandQueue& cq) {
     // - commit the DRAM buffer via an enqueue WB command
     // - map the trace id to the DRAM buffer for later enqueue Trace
 
-    if (trace_instances.count(trace_id)) {
-        TT_THROW("Trace ID " + std::to_string(trace_id) + " already exists");
+    this->history.clear();
+    for (const auto& cmd : this->queue().worker_queue) {
+        TT_FATAL(this->supported_commands.find(cmd.type) != this->supported_commands.end(), "Unsupported command type found in trace");
+        cq.run_command(cmd);
     }
+    cq.wait_until_empty();
 
-    trace_instances.insert(trace_id);
+    std::vector<uint32_t> trace_data;
+
+    SystemMemoryManager& manager = cq.hw_command_queue().manager;
+    uint32_t data_size = 0;
+    for (const auto& node : this->history) {
+        trace_data.insert(trace_data.end(), node.data.begin(), node.data.end());
+        data_size += num_data_bytes;
+    }
+    TT_FATAL(data_size == this->num_data_bytes, "Data size mismatch in trace");
+
+    // Commit the trace buffer to device DRAM in a blocking fashion
+    // TODO: pin the trace buffer in memory through trace memory mgmt
+    auto trace_buffer = std::make_shared<Buffer>(
+        cq.device(), this->num_data_bytes, DeviceCommand::PROGRAM_PAGE_SIZE, BufferType::DRAM, TensorMemoryLayout::INTERLEAVED);
+
+    // EnqueueWriteBuffer(cq, trace_buffer, trace_data, true);
+
     return trace_id;
 }
 
@@ -1352,7 +1377,7 @@ uint32_t InstantiateTrace(Trace& trace, CommandQueue& cq) {
 void EnqueueTrace(CommandQueue& cq, uint32_t trace_id, bool blocking) {
     detail::DispatchStateCheck(true);
     TT_ASSERT(cq.trace(), "A trace has not been instantiated on this command queue yet!");
-    if (cq.trace()->trace_instances.count(trace_id) == 0) {
+    if (cq.trace()->instances.count(trace_id) == 0) {
         TT_THROW("Trace instance " + std::to_string(trace_id) + " does not exist");
     }
     cq.run_command(CommandInterface{

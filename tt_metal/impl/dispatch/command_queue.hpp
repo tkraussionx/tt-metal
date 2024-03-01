@@ -358,10 +358,16 @@ class Trace {
         EnqueueCommandType command_type;
         uint32_t num_data_bytes;
     };
+
+    // List of supported commands for tracing
+    const std::unordered_set<EnqueueCommandType> supported_commands = {
+        EnqueueCommandType::ENQUEUE_PROGRAM,
+    };
+
     bool trace_complete;
     vector<TraceNode> history;
     uint32_t num_data_bytes;
-    std::set<uint32_t> trace_instances;
+    std::set<uint32_t> instances;
     std::unique_ptr<CommandQueue> cq;
     static uint32_t next_trace_id();
     void record(const TraceNode& trace_node);
@@ -372,9 +378,9 @@ class Trace {
     friend CommandQueue& BeginTrace(Trace& trace);
     friend void EndTrace(Trace& trace);
     friend void EnqueueTrace(CommandQueue& cq, uint32_t trace_id, bool blocking);
+    friend void EnqueueWriteBuffer(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer> > buffer, std::vector<uint32_t>& src, bool blocking);
 
-   public:
-    Trace();
+    public : Trace();
     CommandQueue& queue() const { return *cq; };
     uint32_t instantiate(CommandQueue& cq);  // return a unique trace id
 };
