@@ -718,11 +718,7 @@ class TTPyCompositeConv(TTPyOp):
             )
             conv_reader_indices_sharded_tensor = (
                 conv_reader_indices_tt_tensor.to(device, mem_config)
-<<<<<<< HEAD
                 if move_weights_to_device
-=======
-                if self.move_weights_to_device
->>>>>>> #0: still debugging, now fails in layer3
                 else conv_reader_indices_tt_tensor
             )
 
