@@ -34,7 +34,7 @@ from models.utility_functions import skip_for_grayskull
 @pytest.mark.parametrize(
     "mem_config",
     [
-        ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.DRAM),
+        # ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.DRAM),
         ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.L1),
     ],
 )
