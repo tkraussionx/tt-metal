@@ -17,8 +17,12 @@ def unet_reshard(
     sharded_memory_config,
     use_reshard=True,
     interleaved_memory_config=ttnn.L1_MEMORY_CONFIG,
+    tilize=False,
     dtype=None,
 ):
+    if ttnn_tensor.memory_config() == sharded_memory_config:
+        return ttnn_tensor
+
     if use_reshard:
         return ttnn.to_memory_config(
             ttnn_tensor,
@@ -26,13 +30,66 @@ def unet_reshard(
         )
     else:
         ttl_tensor = ttnn_tensor
-        ttl_tensor = ttl.tensor.sharded_to_interleaved(ttl_tensor, interleaved_memory_config, dtype)
+        if ttl_tensor.is_sharded():
+            i = ttl_tensor
+            ttl_tensor = ttl.tensor.sharded_to_interleaved(ttl_tensor, interleaved_memory_config)
+            ttnn.deallocate(i)
+        if tilize:
+            i = ttl_tensor
+            ttl_tensor = ttnn.to_layout(ttl_tensor, layout=ttnn.TILE_LAYOUT, dtype=dtype)
+            ttnn.deallocate(i)
         ttl_tensor = ttl.tensor.interleaved_to_sharded(
             ttl_tensor,
             sharded_memory_config,
             dtype,
         )
         return ttl_tensor
+
+
+def unet_concat(ttnn_tensors, dim=-1):
+    assert len(ttnn_tensors) > 0
+    assert dim < 0
+    rank = len(ttnn_tensors[0].shape)
+    ttlib_tensors = ttnn_tensors
+    all_sharded = all(t.is_sharded() for t in ttlib_tensors)
+    output_mem_config = ttlib_tensors[0].memory_config()
+    if all_sharded:
+        for i in range(1, len(ttlib_tensors)):
+            t = ttlib_tensors[i]
+            t_mem_config = t.memory_config()
+            t_shard_shape = t_mem_config.shard_spec.shape
+            output_shard_shape = output_mem_config.shard_spec.shape
+            output_shard_shape[dim] += t_shard_shape[dim]
+            output_mem_config.shard_spec.shape = output_shard_shape
+
+            reshard_shape = output_shard_shape
+            reshard_shape[dim] = t_shard_shape[dim]
+            if reshard_shape != t_shard_shape:
+                t_mem_config.shard_spec.shape = reshard_shape
+                t_mem_config.shard_spec.grid = output_mem_config.shard_spec.grid
+                t_mem_config.shard_spec.orientation = output_mem_config.shard_spec.orientation
+                ttlib_tensors[i] = unet_reshard(t, t_mem_config, use_reshard=False)
+    else:
+        for i in range(len(ttlib_tensors)):
+            if ttlib_tensors[i].is_sharded():
+                ttlib_tensors[i] = ttl.tensor.sharded_to_interleaved(ttlib_tensors[i], ttnn.L1_MEMORY_CONFIG)
+
+    dim = dim + 4 - rank
+    return ttl.tensor.concat(ttlib_tensors, dim=dim, output_mem_config=output_mem_config)
+
+
+def unet_spill():
+    # dram_memory_config = ttl.tensor.MemoryConfig(
+    #    ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+    #    #output_tensor.value.memory_config().memory_layout,
+    #    ttl.tensor.BufferType.DRAM,
+    #    output_tensor.value.memory_config().shard_spec,
+    # )
+    # ttl.tensor.clone(ttl_tensor, memory_config, dtype)
+    # save_c1_2_out = ttnn.Tensor(ttl.tensor.clone(output_tensor.value, dram_memory_config))
+    # save_c1_2_out = ttnn.Tensor(ttl.tensor.move(output_tensor.value, out_mem_config=dram_memory_config))
+    # save_c1_2_out = ttnn.Tensor(ttl.tensor.move_sharded(output_tensor.value, out_mem_config=dram_memory_config))
+    pass
 
 
 class UNet:
@@ -74,28 +131,28 @@ class UNet:
         profiler.tracy_message("c1")
         output_tensor = self.c1(input_tensor)
         output_tensor = self.c1_2(output_tensor)
-        save_c1_2_out = ttl.tensor.sharded_to_interleaved(output_tensor, ttnn.DRAM_MEMORY_CONFIG)
+        save_c1_2_out = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
         output_tensor = self.p1(output_tensor)
 
         profiler.tracy_message("c2")
         output_tensor = unet_reshard(output_tensor, self.c2.conv.input_sharded_memory_config, use_reshard=False)
         output_tensor = self.c2(output_tensor)
         output_tensor = self.c2_2(output_tensor)
-        save_c2_2_out = ttl.tensor.sharded_to_interleaved(output_tensor, ttnn.DRAM_MEMORY_CONFIG)
+        save_c2_2_out = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
         output_tensor = self.p2(output_tensor)
 
         profiler.tracy_message("c3")
         output_tensor = unet_reshard(output_tensor, self.c3.conv.input_sharded_memory_config, use_reshard=False)
         output_tensor = self.c3(output_tensor)
         output_tensor = self.c3_2(output_tensor)
-        save_c3_2_out = ttl.tensor.sharded_to_interleaved(output_tensor, ttnn.DRAM_MEMORY_CONFIG)
+        save_c3_2_out = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
         output_tensor = self.p3(output_tensor)
 
         profiler.tracy_message("c4")
         output_tensor = unet_reshard(output_tensor, self.c4.conv.input_sharded_memory_config, use_reshard=False)
         output_tensor = self.c4(output_tensor)
         output_tensor = self.c4_2(output_tensor)
-        save_c4_2_out = ttl.tensor.sharded_to_interleaved(output_tensor, ttnn.DRAM_MEMORY_CONFIG)
+        save_c4_2_out = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
         output_tensor = self.p4(output_tensor)
 
         profiler.tracy_message("bnc")
@@ -111,12 +168,14 @@ class UNet:
         output_tensor = ttnn.reshape(output_tensor, (1, 1, 5280, 64))
 
         profiler.tracy_message("concat1")
-        output_tensor = ttl.tensor.sharded_to_interleaved(output_tensor, ttnn.L1_MEMORY_CONFIG)
-        output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.TILE_LAYOUT)
-        output_tensor = ttnn.concat([output_tensor, save_c4_2_out], dim=3)
+        output_tensor = unet_concat([output_tensor, save_c4_2_out], dim=-1)
 
         profiler.tracy_message("c5")
-        output_tensor = ttl.tensor.interleaved_to_sharded(output_tensor, self.c5.conv.input_sharded_memory_config)
+        output_tensor = unet_reshard(
+            output_tensor,
+            self.c5.conv.input_sharded_memory_config,
+            use_reshard=False,
+        )
         output_tensor = self.c5(output_tensor)
         output_tensor = self.c5_2(output_tensor)
         output_tensor = self.c5_3(output_tensor)
@@ -128,12 +187,14 @@ class UNet:
         output_tensor = ttnn.reshape(output_tensor, (1, 1, 21120, 32))
 
         profiler.tracy_message("concat2")
-        output_tensor = ttl.tensor.sharded_to_interleaved(output_tensor, ttnn.L1_MEMORY_CONFIG)
-        output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.TILE_LAYOUT)
-        output_tensor = ttnn.concat([output_tensor, save_c3_2_out], dim=3)
+        output_tensor = unet_concat([output_tensor, save_c3_2_out], dim=-1)
 
         profiler.tracy_message("c6")
-        output_tensor = ttl.tensor.interleaved_to_sharded(output_tensor, self.c6.conv.input_sharded_memory_config)
+        output_tensor = unet_reshard(
+            output_tensor,
+            self.c6.conv.input_sharded_memory_config,
+            use_reshard=False,
+        )
         output_tensor = self.c6(output_tensor)
         output_tensor = self.c6_2(output_tensor)
         output_tensor = self.c6_3(output_tensor)
@@ -145,13 +206,16 @@ class UNet:
         output_tensor = ttnn.reshape(output_tensor, (1, 1, 84480, 32))
 
         profiler.tracy_message("concat3")
-        output_tensor = ttl.tensor.sharded_to_interleaved(output_tensor, ttnn.L1_MEMORY_CONFIG)
-        output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.TILE_LAYOUT)
-        output_tensor = ttnn.concat([output_tensor, save_c2_2_out], dim=3)
-        output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.TILE_LAYOUT)
+        output_tensor = unet_concat([output_tensor, save_c2_2_out], dim=-1)
 
         profiler.tracy_message("c7")
-        output_tensor = ttl.tensor.interleaved_to_sharded(output_tensor, self.c7.conv.input_sharded_memory_config)
+        output_tensor = unet_reshard(
+            output_tensor,
+            self.c7.conv.input_sharded_memory_config,
+            tilize=True,
+            use_reshard=False,
+            dtype=ttnn.bfloat8_b,
+        )
         output_tensor = self.c7(output_tensor)
         output_tensor = self.c7_2(output_tensor)
         output_tensor = self.c7_3(output_tensor)
@@ -163,12 +227,16 @@ class UNet:
         output_tensor = ttnn.reshape(output_tensor, (1, 1, 160 * 1056 * 2, 16))
 
         profiler.tracy_message("concat4")
-        output_tensor = ttl.tensor.sharded_to_interleaved(output_tensor, ttnn.L1_MEMORY_CONFIG)
-        output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.TILE_LAYOUT)
-        output_tensor = ttnn.concat([output_tensor, save_c1_2_out], dim=3)
+        output_tensor = unet_concat([output_tensor, save_c1_2_out], dim=-1)
 
         profiler.tracy_message("c8")
-        output_tensor = ttl.tensor.interleaved_to_sharded(output_tensor, self.c8.conv.input_sharded_memory_config)
+        output_tensor = unet_reshard(
+            output_tensor,
+            self.c8.conv.input_sharded_memory_config,
+            tilize=True,
+            use_reshard=False,
+            dtype=ttnn.bfloat8_b,
+        )
         output_tensor = self.c8(output_tensor)
         output_tensor = self.c8_2(output_tensor)
         output_tensor = self.c8_3(output_tensor)
