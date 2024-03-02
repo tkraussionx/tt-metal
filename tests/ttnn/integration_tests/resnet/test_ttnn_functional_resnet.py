@@ -512,6 +512,7 @@ def test_resnet_50(device):
     """
     for bottleneck_block_parameters in list(parameters.layer3.values()):
         logger.debug(f"parameters 3rd block {bottleneck_block_parameters}")
+        breakpoint()
         output_tensor = resnet_bottleneck_block(output_tensor, bottleneck_block_parameters)
 
     """

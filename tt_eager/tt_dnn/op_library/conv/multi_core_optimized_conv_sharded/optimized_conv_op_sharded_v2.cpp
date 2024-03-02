@@ -78,6 +78,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
         // incoming data is the input cb instead of raw l1/dram addr
         cb_sharded_act_config.set_globally_allocated_address(*input.buffer());
         cb_sharded_act = tt_metal::CreateCircularBuffer(program, core, cb_sharded_act_config);
+        log_debug(LogOp, "CBID: {}, PS: {}, NP: {}, TOTAL: {}", sharded_act_cb, shard_shape[1] * num_bytes_for_df, shard_shape[0], shard_shape[0] * shard_shape[1] * num_bytes_for_df);
 
         if (weight_width_sliced) {
             // For 2D convs, each core creates and tilizes full input matrix then mcasts round robin style
@@ -88,11 +89,13 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
             CircularBufferConfig cb_act_config = CircularBufferConfig(num_cb0_tiles * tilized_act_tile_size, {{act_cb, tilized_act_df}})
             .set_page_size(act_cb, tilized_act_tile_size);
             auto cb_act = tt_metal::CreateCircularBuffer(program, core, cb_act_config);
+            log_debug(LogOp, "CBID: {}, PS: {}, NP: {}, TOTAL: {}", act_cb, tilized_act_tile_size, num_cb0_tiles, num_cb0_tiles * tilized_act_tile_size);
 
             // num_cb0_tilized_tiles is single buffered
             CircularBufferConfig cb_act_row_major_bfloat16_config = CircularBufferConfig(num_cb0_tilized_tiles * act_tile_size, {{act_cb_row_major_bfloat16, act_df}})
             .set_page_size(act_cb_row_major_bfloat16, act_tile_size);
             auto cb_act_row_major_bfloat16 = tt_metal::CreateCircularBuffer(program, core, cb_act_row_major_bfloat16_config);
+            log_debug(LogOp, "CBID: {}, PS: {}, NP: {}, TOTAL: {}", act_cb_row_major_bfloat16, act_tile_size, num_cb0_tilized_tiles, num_cb0_tilized_tiles * act_tile_size);
         } else {
             // For 1D convs, locally create act matrix in act_cb, which is always ROW_MAJOR BFLOAT16
             // Then, tilize input in compute
@@ -105,11 +108,13 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
                 CircularBufferConfig cb_act_config = CircularBufferConfig(num_cb0_tiles * act_tile_size, {{act_cb_second_reader, act_df}})
                 .set_page_size(act_cb_second_reader, act_tile_size);
                 auto cb_act = tt_metal::CreateCircularBuffer(program, core, cb_act_config);
+                log_debug(LogOp, "CBID: {}, PS: {}, NP: {}, TOTAL: {}", act_cb_second_reader, act_tile_size, num_cb0_tiles, num_cb0_tiles * act_tile_size);
             }
 
             CircularBufferConfig cb_act_config = CircularBufferConfig(num_cb0_tiles * act_tile_size, {{act_cb, act_df}})
             .set_page_size(act_cb, act_tile_size);
             auto cb_act = tt_metal::CreateCircularBuffer(program, core, cb_act_config);
+            log_debug(LogOp, "CBID: {}, PS: {}, NP: {}, TOTAL: {}", act_cb, act_tile_size, num_cb0_tiles, num_cb0_tiles * act_tile_size);
         }
     } else {
         TT_ASSERT(false, "Input must be sharded!");
@@ -118,23 +123,27 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
     CircularBufferConfig cb_weight_config = CircularBufferConfig(num_cb1_tiles * weight_tile_size, {{weight_cb, weight_df}})
 		.set_page_size(weight_cb, weight_tile_size);
     auto cb_weight = tt_metal::CreateCircularBuffer(program, core, cb_weight_config);
+    log_debug(LogOp, "CBID: {}, PS: {}, NP: {}, TOTAL: {}", weight_cb, weight_tile_size, num_cb1_tiles, num_cb1_tiles * weight_tile_size);
 
     // Used for placing tilized activations
     CircularBufferConfig cb_src0_tilized_config = CircularBufferConfig(num_cb0_tilized_tiles * tilized_act_tile_size, {{tilize_mode_tilized_act_cb, tilized_act_df}})
 		.set_page_size(tilize_mode_tilized_act_cb, tilized_act_tile_size);
     auto cb_src0_tilized = tt_metal::CreateCircularBuffer(program, core, cb_src0_tilized_config);
+    log_debug(LogOp, "CBID: {}, PS: {}, NP: {}, TOTAL: {}", tilize_mode_tilized_act_cb, tilized_act_tile_size, num_cb0_tilized_tiles, num_cb0_tilized_tiles * tilized_act_tile_size);
 
     CBHandle cb_output = 0;
     if (untilize_out) {
         CircularBufferConfig cb_matmul_partials_config = CircularBufferConfig(num_output_tiles * out_tile_size, {{matmul_partials_cb, out_df}})
 		    .set_page_size(matmul_partials_cb, out_tile_size);
         auto cb_matmul_partials = tt_metal::CreateCircularBuffer(program, core, cb_matmul_partials_config);
+        log_debug(LogOp, "CBID: {}, PS: {}, NP: {}, TOTAL: {}", matmul_partials_cb, out_tile_size, num_output_tiles, num_output_tiles * out_tile_size);
 
         // Supposed to be a small CB only responsible for reorganizing
         // the output blocks to fill the whole "per core output block width"
         CircularBufferConfig cb_reblock_config = CircularBufferConfig(num_reblock_cb_tiles * out_tile_size, {{untilize_mode_reblock_cb, out_df}})
 		    .set_page_size(untilize_mode_reblock_cb, out_tile_size);
         auto cb_reblock = tt_metal::CreateCircularBuffer(program, core, cb_reblock_config);
+        log_debug(LogOp, "CBID: {}, PS: {}, NP: {}, TOTAL: {}", untilize_mode_reblock_cb, out_tile_size, num_reblock_cb_tiles, num_reblock_cb_tiles * out_tile_size);
 
         CircularBufferConfig cb_output_config = CircularBufferConfig(num_writer_output_tiles * out_tile_size, {{out0_cb, out_df}})
 		    .set_page_size(out0_cb, out_tile_size);
@@ -142,6 +151,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
             cb_output_config = cb_output_config.set_globally_allocated_address(*output.buffer());
         }
         cb_output = tt_metal::CreateCircularBuffer(program, core, cb_output_config);
+        log_debug(LogOp, "CBID: {}, PS: {}, NP: {}, TOTAL: {}", out0_cb, out_tile_size, num_writer_output_tiles, num_writer_output_tiles * out_tile_size);
     } else {
         CoreRangeSet cores(std::set<CoreRange>({core}));
         std::map<uint8_t, tt::DataFormat> cb_output_data_format_spec = {
@@ -155,6 +165,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
             cb_matmul_partials_config = cb_matmul_partials_config.set_globally_allocated_address(*output.buffer());
         }
         cb_output = tt_metal::CreateCircularBuffer(program, cores, cb_matmul_partials_config);
+        log_debug(LogOp, "CBID: {}, PS: {}, NP: {}, TOTAL: {}", out0_cb, out_tile_size, num_output_tiles, num_output_tiles * out_tile_size);
     }
 
     if (with_bias) {
@@ -164,8 +175,7 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
         CircularBufferConfig cb_bias_config = CircularBufferConfig(bias_ntiles * bias_pagesize, {{bias_cb, bias_df}})
 		    .set_page_size(bias_cb, bias_pagesize);
         auto cb_bias = tt_metal::CreateCircularBuffer(program, core, cb_bias_config);
-
-        log_debug("BIAS CBs: {} {} {}", bias_cb, bias_ntiles, bias_pagesize);
+        log_debug(LogOp, "CBID: {}, PS: {}, NP: {}, TOTAL: {}", bias_cb, bias_pagesize, bias_ntiles, bias_ntiles * bias_pagesize);
     }
 
     return {cb_sharded_act, cb_output};
