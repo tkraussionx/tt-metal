@@ -157,8 +157,8 @@ class UNet:
         )
         output_tensor = self.c3(output_tensor)
         output_tensor = self.c3_2(output_tensor)
-        save_c3_2_out = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
-        # save_c3_2_out = ttnn.Tensor(ttl.tensor.sharded_to_interleaved(output_tensor.value, ttnn.DRAM_MEMORY_CONFIG))
+        # save_c3_2_out = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
+        save_c3_2_out = ttnn.Tensor(ttl.tensor.sharded_to_interleaved(output_tensor.value, ttnn.DRAM_MEMORY_CONFIG))
         output_tensor = self.p3(output_tensor)
 
         output_tensor = unet_reshard(
@@ -168,8 +168,8 @@ class UNet:
         )
         output_tensor = self.c4(output_tensor)
         output_tensor = self.c4_2(output_tensor)
-        save_c4_2_out = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
-        # save_c4_2_out = ttnn.Tensor(ttl.tensor.sharded_to_interleaved(output_tensor.value, ttnn.DRAM_MEMORY_CONFIG))
+        # save_c4_2_out = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
+        save_c4_2_out = ttnn.Tensor(ttl.tensor.sharded_to_interleaved(output_tensor.value, ttnn.DRAM_MEMORY_CONFIG))
         output_tensor = self.p4(output_tensor)
 
         output_tensor = unet_reshard(
@@ -187,6 +187,7 @@ class UNet:
         output_tensor = ttnn.reshape(output_tensor, (1, 1, 5280, 64))
 
         output_tensor = unet_concat([output_tensor, save_c4_2_out], dim=-1)
+        # ttnn.deallocate(save_c4_2_out)
 
         output_tensor = unet_reshard(
             output_tensor,
@@ -203,6 +204,7 @@ class UNet:
         output_tensor = ttnn.reshape(output_tensor, (1, 1, 21120, 32))
 
         output_tensor = unet_concat([output_tensor, save_c3_2_out], dim=-1)
+        # ttnn.deallocate(save_c3_2_out)
 
         output_tensor = unet_reshard(
             output_tensor,
@@ -219,6 +221,7 @@ class UNet:
         output_tensor = ttnn.reshape(output_tensor, (1, 1, 84480, 32))
 
         output_tensor = unet_concat([output_tensor, save_c2_2_out], dim=-1)
+        # ttnn.deallocate(save_c2_2_out)
 
         output_tensor = unet_reshard(
             output_tensor,
@@ -237,6 +240,10 @@ class UNet:
         output_tensor = ttnn.reshape(output_tensor, (1, 1, 160 * 1056 * 2, 16))
 
         output_tensor = unet_concat([output_tensor, save_c1_2_out], dim=-1)
+        # ttnn.deallocate(save_c1_2_out)
+
+        # breakpoint()
+
         output_tensor = unet_reshard(
             output_tensor,
             self.c8.get_expected_memory_config(output_tensor.shape),
@@ -244,10 +251,39 @@ class UNet:
             use_reshard=False,
             dtype=ttnn.bfloat8_b,
         )
+
+        # print(f'MOVING output_tensor')
+        # # output_tensor = ttnn.reallocate(output_tensor)
+        # output_tensor = ttnn.experimental.tensor.move_sharded(output_tensor)
+        # print(f'MOVED')
+
+        # ttnn.deallocate(output_tensor)
+
+        # sharded_mem_config = output_tensor.value.memory_config()
+        # output_tensor = ttnn.to_memory_config(output_tensor, ttnn.DRAM_MEMORY_CONFIG)
+        # output_tensor = ttnn.to_memory_config(output_tensor, sharded_mem_config)
+
+        ttnn.dump_device_memory_state(device)
+
+        breakpoint()
+
+        mem_config = ttnn.get_memory_config(output_tensor)
+        output_tensor = ttnn.to_memory_config(output_tensor, ttnn.DRAM_MEMORY_CONFIG)
+        output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
+        padded_shape = mem_config.shard_spec.shape
+        mem_config.shard_spec.shape = [padded_shape[0], 48]
+
+        ttnn.dump_device_memory_state(device)
+
+        output_tensor = ttnn.to_memory_config(output_tensor, mem_config)
+
+        ttnn.dump_device_memory_state(device)
+
         output_tensor = self.c8(output_tensor)
         output_tensor = self.c8_2(output_tensor)
         output_tensor = self.c8_3(output_tensor)
-        output_tensor = self.output_layer(output_tensor)
+
+        # output_tensor = self.output_layer(output_tensor)
         output_tensor = self.output_layer.copy_output_from_device(output_tensor)
         output_tensor = ttnn.to_torch(output_tensor)
         output_tensor = torch.permute(output_tensor, (0, 3, 1, 2))

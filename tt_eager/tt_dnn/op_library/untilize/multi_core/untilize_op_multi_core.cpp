@@ -642,12 +642,16 @@ operation::ProgramWithCallbacks untilize_with_unpadding_multi_core(const Tensor 
         src0_cb_config = src0_cb_config.set_globally_allocated_address(*a.buffer());
     }
     auto cb_src0 = tt_metal::CreateCircularBuffer(program, all_cores, src0_cb_config);
+    log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}, total = {}", src0_cb_index, num_input_tiles, input_single_tile_size, input_single_tile_size * num_input_tiles);
+
+    uint32_t multi_buffering_factor = 1;
 
     uint32_t output_cb_index = CB::c_out0;
-    uint32_t num_output_tiles = out_sharded ? ntiles_per_batch * 2 : ntiles_per_block * 2;
+    uint32_t num_output_tiles = (out_sharded ? ntiles_per_batch : ntiles_per_block) * multi_buffering_factor;
     tt_metal::CircularBufferConfig output_cb_config = tt_metal::CircularBufferConfig(num_output_tiles * output_single_tile_size, {{output_cb_index, output_cb_data_format}})
         .set_page_size(output_cb_index, output_single_tile_size);
     auto cb_output = tt_metal::CreateCircularBuffer(program, all_cores, output_cb_config);
+    log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}, total = {}", output_cb_index, num_output_tiles, output_single_tile_size, output_single_tile_size * num_output_tiles);
 
     CBHandle cb_sharded_output = 0;
     uint32_t sharded_output_cb_index = CB::c_out1;
@@ -655,6 +659,7 @@ operation::ProgramWithCallbacks untilize_with_unpadding_multi_core(const Tensor 
         tt_metal::CircularBufferConfig sharded_output_cb_config = tt_metal::CircularBufferConfig(num_output_rows_unpadded * block_row_size, {{sharded_output_cb_index, output_cb_data_format}})
             .set_page_size(sharded_output_cb_index, block_row_size).set_globally_allocated_address(*output.buffer());
         cb_sharded_output = tt_metal::CreateCircularBuffer(program, all_cores, sharded_output_cb_config);
+        log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}, total = {}", sharded_output_cb_index, num_output_rows_unpadded, block_row_size, block_row_size * num_output_rows_unpadded);
     }
 
     Buffer *src0_buffer = a.buffer();

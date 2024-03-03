@@ -138,7 +138,7 @@ inline Tensor move_sharded(Tensor& input_tensor, std::optional<MemoryConfig>& me
     shard_mem_config.shard_spec = shard_spec;
     auto output_tensor = create_sharded_device_tensor(input_shape, input_dtype, input_layout, input_tensor.device(), shard_mem_config);
     if (input_tensor.buffer()->address() == output_tensor.buffer()->address()) {
-        TT_FATAL(false, "No space to move the tensor. Move op's input address == output address. No-op move unsupported.");
+        TT_FATAL(false, "No space to move the tensor. Move op's input address == output address == {}. No-op move unsupported.", input_tensor.buffer()->address());
     }
     MoveOpParallelizationStrategy move_op_parallelization_strategy = MoveOpParallelizationStrategy::MULTI_CORE_SHARDED;
     auto output = operation::run(Move{output_mem_config, move_op_parallelization_strategy}, {input_tensor, output_tensor}).at(0);

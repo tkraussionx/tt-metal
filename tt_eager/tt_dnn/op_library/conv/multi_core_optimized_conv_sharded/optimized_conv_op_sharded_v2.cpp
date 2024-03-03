@@ -322,7 +322,8 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
     }
 
     // Normal matrix shape check
-    TT_ASSERT(act_matrix_width == weight_matrix_height, "The width of tensor a needs to match the height of tensor b");
+    log_debug(LogOp, "act_matrix_shape_unpadded: {}, act_matrix_shape: {}, weight_matrix_shape: {}", act_matrix_shape_unpadded, act_matrix_shape, b.shape());
+    TT_ASSERT(act_matrix_width == weight_matrix_height, "The width of tensor a ({}) needs to match the height of tensor b ({})", act_matrix_width, weight_matrix_height);
 
     // Tile size divisibility checks
     TT_ASSERT(act_matrix_height % TILE_HEIGHT == 0, "Height of activation matrix needs to be divisible by 32");

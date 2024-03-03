@@ -48,6 +48,9 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
     Tensor& output_tensor) {
     Program program = CreateProgram();
 
+    auto program_id = program.get_id();
+    log_debug(LogOp, "Created Program with ID: {}", program_id);
+
     Device *device = input_tensor.device();
     Buffer *src_buffer = input_tensor.buffer();
     Buffer *dst_buffer = output_tensor.buffer();
@@ -109,7 +112,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
                             .set_page_size(src_cb_id, in_page_size)
                             .set_globally_allocated_address(*src_buffer);
     auto src_cb = CreateCircularBuffer(program, all_cores, src_cb_config);
-    log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}", src_cb_id, input_npages, in_page_size);
+    log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}, total = {}", src_cb_id, input_npages, in_page_size, input_npages * in_page_size);
 
     uint32_t input_to_writer_cb_id = src_cb_id;
     if (!skip_untilize) {
@@ -120,7 +123,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
         auto untilize_out_cb_config = CircularBufferConfig(output_ntiles * out_tile_size, {{untilize_out_cb_id, out_df}})
                                         .set_page_size(untilize_out_cb_id, out_tile_size);
         auto untilize_out_cb = CreateCircularBuffer(program, all_cores, untilize_out_cb_config);
-        log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}", untilize_out_cb_id, output_ntiles, out_tile_size);
+        log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}, total = {}", untilize_out_cb_id, output_ntiles, out_tile_size, output_ntiles * out_tile_size);
     }
 
     // output shard, after inserting halo and padding, goes into this CB as input to next op.
@@ -130,7 +133,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
                             .set_page_size(out_cb_id, out_cb_pagesize)
                             .set_globally_allocated_address(*dst_buffer);
     auto out_cb = CreateCircularBuffer(program, all_cores, out_cb_config);
-    log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}", out_cb_id, out_cb_npages, out_cb_pagesize);
+    log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}, total = {}", out_cb_id, out_cb_npages, out_cb_pagesize, out_cb_npages * out_cb_pagesize);
 
     // CB for pad val buffer (stick sized)
     uint32_t pad_cb_pagesize = out_stick_nbytes;
@@ -138,7 +141,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
     auto pad_cb_config = CircularBufferConfig(pad_cb_pagesize * pad_cb_npages, {{pad_cb_id, out_df}})
                             .set_page_size(pad_cb_id, pad_cb_pagesize);
     auto pad_cb = CreateCircularBuffer(program, all_cores, pad_cb_config);
-    log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}", pad_cb_id, pad_cb_npages, pad_cb_pagesize);
+    log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}, total = {}", pad_cb_id, pad_cb_npages, pad_cb_pagesize, pad_cb_npages * pad_cb_pagesize);
 
     // Additional CBs for sharded data kernel configs
     uint32_t padding_config_cb_id = CB::c_in2;
@@ -176,6 +179,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
             .set_page_size(padding_config_cb_id, padding_config_buffer->page_size())
             .set_globally_allocated_address(*padding_config_buffer);
     CBHandle padding_config_cb = CreateCircularBuffer(program, all_cores, padding_config_cb_config);
+    log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}, total = {}", padding_config_cb_id, padding_config_buffer->size() / padding_config_buffer->page_size(), padding_config_buffer->page_size(), padding_config_buffer->size());
 
     Buffer* local_config_buffer = local_config.buffer();
     auto local_config_cb_config =
@@ -183,6 +187,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
             .set_page_size(local_config_cb_id, local_config_buffer->page_size())
             .set_globally_allocated_address(*local_config_buffer);
     CBHandle local_config_cb = CreateCircularBuffer(program, all_cores, local_config_cb_config);
+    log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}, total = {}", local_config_cb_id, local_config_buffer->size() / local_config_buffer->page_size(), local_config_buffer->page_size(), local_config_buffer->size());
 
     Buffer* remote_config_buffer = remote_config.buffer();
     auto remote_config_cb_config =
@@ -190,6 +195,7 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core_v2(
             .set_page_size(remote_config_cb_id, remote_config_buffer->page_size())
             .set_globally_allocated_address(*remote_config_buffer);
     CBHandle remote_config_cb = CreateCircularBuffer(program, all_cores, remote_config_cb_config);
+    log_debug(LogOp, "CB {} :: npages = {}, pagesize = {}, total = {}", remote_config_cb_id, remote_config_buffer->size() / remote_config_buffer->page_size(), remote_config_buffer->page_size(), remote_config_buffer->size());
 
     bool const is_block_sharded = input_tensor.memory_config().memory_layout == TensorMemoryLayout::BLOCK_SHARDED;
 

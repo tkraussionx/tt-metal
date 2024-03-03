@@ -690,11 +690,16 @@ class TTPyCompositeConv(TTPyOp):
         if not using_parameters_cache:
             weights_shape = [K, C, R, S]
             weights_channels_padded_shape = [
+                ## _nearest_y(K, 16),
                 _nearest_32(K),
                 padded_input_channels,
                 R,
                 S,
             ]
+            print(f"============================ weights_shape = {weights_shape} ============================")
+            print(
+                f"============================ weights_channels_padded_shape = {weights_channels_padded_shape} ============================"
+            )
             if weights_dtype is None:
                 weights_dtype = weight.dtype()
             weights_untiled_dtype = (
