@@ -594,7 +594,8 @@ class CommandQueue {
         static int value = parse_env<int>("TT_METAL_CQ_ASYNC_MODE", static_cast<int>(CommandQueueMode::PASSTHROUGH));
         return static_cast<CommandQueue::CommandQueueMode>(value);
     }
-
+    // Determine if any CQ is using Async mode
+    static bool async_mode_set() { return num_async_cqs > 0; }
    private:
     enum class CommandQueueState {
         IDLE = 0,
@@ -626,6 +627,9 @@ class CommandQueue {
 
     std::atomic<std::size_t> worker_thread_id = -1;
     std::atomic<std::size_t> parent_thread_id = -1;
+    // Track the number of CQs using async vs pt mode
+    inline static uint32_t num_async_cqs = 0;
+    inline static uint32_t num_pt_cqs = 0;
 };
 
 // Primitives used to place host only operations on the SW Command Queue.

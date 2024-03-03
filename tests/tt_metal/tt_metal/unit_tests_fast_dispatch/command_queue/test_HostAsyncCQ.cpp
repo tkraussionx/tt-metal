@@ -124,7 +124,7 @@ bool flatten(Device *device, uint32_t num_tiles_r = 5, uint32_t num_tiles_c = 5)
     );
 
     // Inside the loop, run async runtime functions
-    for (int i = 0; i < 500; i++) {
+    for (int i = 0; i < 1000; i++) {
         // Create Device Buffers Asynchronously
         auto src_dram_buffer = CreateBuffer(dram_config);
         auto dst_dram_buffer = CreateBuffer(dram_config);
@@ -286,7 +286,6 @@ TEST_F(CommandQueueFixture, TestAsyncSetAndUpdateRuntimeArgs) {
     uint32_t page_size = 4096;
     CoreCoord core = {0, 0};
     // Initialize kernels in program
-    vector<uint32_t> compute_kernel_args = {};
     Program program;
     auto reader = CreateKernel(
         program,
@@ -386,6 +385,32 @@ TEST_F(CommandQueueFixture, TestAsyncCBAllocation) {
     Finish(this->device_->command_queue());
     // Addresses should match
     EXPECT_EQ(cb_ptr->address(), l1_buffer_2->address());
+    command_queue.set_mode(current_mode);
+}
+
+TEST_F(CommandQueueFixture, TestAsyncAssertForDeprecatedAPI) {
+    auto& command_queue = this->device_->command_queue();
+    auto current_mode = CommandQueue::default_mode();
+    command_queue.set_mode(CommandQueue::CommandQueueMode::ASYNC);
+    Program program;
+    CoreCoord core = {0, 0};
+    uint32_t buf_size = 4096;
+    uint32_t page_size = 4096;
+    auto dummy_kernel = CreateKernel(
+        program,
+        "tt_metal/kernels/dataflow/reader_binary_diff_lengths.cpp",
+        core,
+        DataMovementConfig{.processor = DataMovementProcessor::RISCV_0, .noc = NOC::RISCV_0_default});
+    auto src0 = std::make_shared<Buffer>(this->device_, buf_size, page_size, BufferType::DRAM);
+    std::vector<uint32_t> runtime_args = {src0->address()};
+    try {
+        SetRuntimeArgs(program, dummy_kernel, core, runtime_args);
+    }
+    catch (std::runtime_error &e) {
+        std::string expected = "This variant of SetRuntimeArgs can only be called when Asyncrhonous SW Command Queues are disabled for Fast Dispatch.";
+        const string error = string(e.what());
+        EXPECT_TRUE(error.find(expected) != std::string::npos);
+    }
     command_queue.set_mode(current_mode);
 }
 

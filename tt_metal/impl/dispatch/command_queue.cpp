@@ -1550,9 +1550,12 @@ CommandQueue::CommandQueue(Device* device, uint32_t id, CommandQueueMode mode) :
     mode(mode),
     worker_state(CommandQueueState::IDLE) {
     if (this->async_mode()) {
+        num_async_cqs++;
         // The main program thread launches the Command Queue
         parent_thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
         this->start_worker();
+    } else if (this->passthrough_mode()) {
+        num_pt_cqs++;
     }
 }
 
@@ -1599,16 +1602,20 @@ void CommandQueue::wait_until_empty() {
 
 void CommandQueue::set_mode(const CommandQueueMode& mode_) {
     TT_ASSERT(not this->trace_mode(), "Cannot change mode of a trace command queue, copy to a non-trace command queue instead!");
-    if (this -> mode == mode_) {
+    if (this->mode == mode_) {
         // Do nothing if requested mode matches current CQ mode.
         return;
     }
     this->mode = mode_;
     if (this->async_mode()) {
+        num_async_cqs++;
+        num_pt_cqs--;
         // Record parent thread-id and start worker.
         parent_thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
         start_worker();
     } else if (this->passthrough_mode()) {
+        num_pt_cqs++;
+        num_async_cqs--;
         // Wait for all cmds sent in async mode to complete and stop worker.
         this->wait_until_empty();
         this->stop_worker();
