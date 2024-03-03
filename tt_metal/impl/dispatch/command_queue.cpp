@@ -1690,21 +1690,29 @@ void CommandQueue::run_command_impl(const CommandInterface& command) {
             EnqueueWriteBufferImpl(*this, command.buffer.value(), command.src.value(), command.blocking.value());
             break;
         case EnqueueCommandType::ALLOCATE_BUFFER:
+            TT_ASSERT(command.alloc_md.has_value(), "Must provide buffer allocation metdata!");
             EnqueueAllocateBufferImpl(command.alloc_md.value());
             break;
         case EnqueueCommandType::DEALLOCATE_BUFFER:
+            TT_ASSERT(command.alloc_md.has_value(), "Must provide buffer allocation metdata!");
             EnqueueDeallocateBufferImpl(command.alloc_md.value());
             break;
         case EnqueueCommandType::GET_BUF_ADDR:
+            TT_ASSERT(command.dst.has_value(), "Must provide a dst address!");
+            TT_ASSERT(command.shadow_buffer.has_value(), "Must provide a shadow buffer!");
             EnqueueGetBufferAddrImpl(command.dst.value(), command.shadow_buffer.value());
             break;
         case EnqueueCommandType::SET_RUNTIME_ARGS:
+            TT_ASSERT(command.runtime_args_md.has_value(), "Must provide RuntimeArgs Metdata!");
             EnqueueSetRuntimeArgsImpl(command.runtime_args_md.value());
             break;
         case EnqueueCommandType::UPDATE_RUNTIME_ARGS:
+            TT_ASSERT(command.runtime_args_md.has_value(), "Must provide RuntimeArgs Metdata!");
             EnqueueUpdateRuntimeArgsImpl(command.runtime_args_md.value());
             break;
         case EnqueueCommandType::ADD_BUFFER_TO_PROGRAM:
+            TT_ASSERT(command.buffer.has_value(), "Must provide a buffer!");
+            TT_ASSERT(command.program.has_value(), "Must provide a program!");
             EnqueueAddBufferToProgramImpl(command.buffer.value(), command.program.value());
             break;
         case EnqueueCommandType::ENQUEUE_PROGRAM:
