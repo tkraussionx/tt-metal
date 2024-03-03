@@ -184,6 +184,7 @@ def custom_preprocessor(model, name, ttnn_module_args):
         ttnn_module_args.c8["conv_blocking_and_parallelization_config_override"] = {"act_block_h": 32}
         ttnn_module_args.c8_2["conv_blocking_and_parallelization_config_override"] = {"act_block_h": 32}
         ttnn_module_args.c8_3["conv_blocking_and_parallelization_config_override"] = {"act_block_h": 32}
+        ttnn_module_args.c8["reallocate_halo_output"] = True
 
         ttnn_module_args.output_layer["math_fidelity"] = ttnn.MathFidelity.LoFi
         ttnn_module_args.output_layer["dtype"] = ttnn.bfloat8_b
@@ -193,7 +194,6 @@ def custom_preprocessor(model, name, ttnn_module_args):
         ttnn_module_args.output_layer["deallocate_activation"] = True
 
         conv1_weight, conv1_bias = fold_batch_norm2d_into_conv2d(model.c1, model.b1)
-        print("model output weights for c1: ", type(conv1_weight))
         conv1_2_weight, conv1_2_bias = fold_batch_norm2d_into_conv2d(model.c1_2, model.b1_2)
         conv2_weight, conv2_bias = fold_batch_norm2d_into_conv2d(model.c2, model.b2)
         conv2_2_weight, conv2_2_bias = fold_batch_norm2d_into_conv2d(model.c2_2, model.b2_2)
@@ -213,6 +213,7 @@ def custom_preprocessor(model, name, ttnn_module_args):
         conv7_2_weight, conv7_2_bias = fold_batch_norm2d_into_conv2d(model.c7_2, model.b7_2)
         conv7_3_weight, conv7_3_bias = fold_batch_norm2d_into_conv2d(model.c7_3, model.b7_3)
         conv8_weight, conv8_bias = fold_batch_norm2d_into_conv2d(model.c8, model.b8)
+        print("weights shape for c8: ", conv8_weight.shape)
         conv8_2_weight, conv8_2_bias = fold_batch_norm2d_into_conv2d(model.c8_2, model.b8_2)
         conv8_3_weight, conv8_3_bias = fold_batch_norm2d_into_conv2d(model.c8_3, model.b8_3)
 

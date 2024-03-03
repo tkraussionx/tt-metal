@@ -242,8 +242,6 @@ class UNet:
         output_tensor = unet_concat([output_tensor, save_c1_2_out], dim=-1)
         # ttnn.deallocate(save_c1_2_out)
 
-        # breakpoint()
-
         output_tensor = unet_reshard(
             output_tensor,
             self.c8.get_expected_memory_config(output_tensor.shape),
@@ -272,6 +270,8 @@ class UNet:
         output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
         padded_shape = mem_config.shard_spec.shape
         mem_config.shard_spec.shape = [padded_shape[0], 48]
+
+        # output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat8_b)
 
         ttnn.dump_device_memory_state(device)
 

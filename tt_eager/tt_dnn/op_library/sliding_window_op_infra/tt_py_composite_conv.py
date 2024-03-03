@@ -745,6 +745,9 @@ class TTPyCompositeConv(TTPyOp):
             self.bias = bias
             weight_on_device = weight
             bias_on_device = bias
+        print(
+            f"============================ weight_on_device shape = {weight_on_device.shape()} ============================"
+        )
 
         def downsample_if_needed(activation):
             use_downsample = False
@@ -756,6 +759,12 @@ class TTPyCompositeConv(TTPyOp):
             return activation
 
         def conv_(activation):
+            print(
+                f"============================ CONV :: activation shape = {activation.shape()}, mem_config = {activation.memory_config()}"
+            )
+            print(
+                f"============================ CONV :: self.weight shape = {self.weight.shape()}, mem_config = {self.weight.memory_config()}"
+            )
             return ttl.tensor.optimized_conv(
                 activation,
                 self.weight,
@@ -782,6 +791,7 @@ class TTPyCompositeConv(TTPyOp):
             # assert(activation.layout() == ttl.tensor.Layout.ROW_MAJOR)
             utwh_output = self.tt_py_untilize_with_halo_op(activation)
             activation.deallocate()
+            ttl.device.DumpDeviceMemoryState(self.device)
             return conv_(utwh_output)
 
         def composite_conv(activation):
@@ -791,10 +801,34 @@ class TTPyCompositeConv(TTPyOp):
 
         def composite_conv_with_move_utwh_output_with_deallocate_input(activation):
             # assert(activation.layout() == ttl.tensor.Layout.ROW_MAJOR)
+            breakpoint()
             utwh_output = self.tt_py_untilize_with_halo_op(activation)
             activation.deallocate()
             move_output = ttl.tensor.move_sharded(utwh_output)
             utwh_output.deallocate()
+
+            ttl.device.DumpDeviceMemoryState(self.device)
+
+            out_mem_config = move_output.memory_config()
+            out_shape = move_output.shape()
+            out_shape = [out_shape[0], out_shape[1], out_shape[2], _nearest_y(out_shape[3], 32)]
+            # interleaved_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
+            # move_output = ttl.tensor.sharded_to_interleaved(move_output, interleaved_mem_config)
+            # move_output = move_output.to(self.device, interleaved_mem_config)
+            move_output = move_output.cpu()
+
+            ttl.device.DumpDeviceMemoryState(self.device)
+
+            # move_output = move_output.pad(out_shape, (0, 0, 0, 0), 0)
+            # move_output = move_output[:, :, :, 32]
+
+            shard_shape = out_mem_config.shard_spec.shape
+            out_mem_config.shard_spec.shape = [shard_shape[0], move_output.shape()[-1]]
+            # move_output = ttl.tensor.to_mem_config(move_output, out_mem_config)
+            move_output = move_output.to(self.device, out_mem_config)  # , out_mem_config.shard_spec)
+
+            ttl.device.DumpDeviceMemoryState(self.device)
+
             return conv_(move_output)
 
         def composite_conv_with_move_utwh_output(activation):
