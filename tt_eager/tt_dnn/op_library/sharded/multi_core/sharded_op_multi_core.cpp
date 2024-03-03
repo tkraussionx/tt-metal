@@ -252,11 +252,14 @@ operation::ProgramWithCallbacks interleaved_to_sharded_multi_core(const Tensor& 
 
         auto shard_spec = output_tensors.at(0).shard_spec().value();
         auto all_cores = shard_spec.grid;
+        std::vector<uint32_t> update_idx = {0};
+        std::shared_ptr<RuntimeArgs> runtime_args_vec3 = std::make_shared<RuntimeArgs>();
+        *runtime_args_vec3 = {src_buffer};
+        Device* device = src_buffer->device();
 
         for (const auto& core : cores) {
             {
-                auto& runtime_args = GetRuntimeArgs(program, unary_reader_kernel_id, core);
-                runtime_args[0] = src_buffer->address();
+                UpdateRuntimeArgs(device, tt_metal::detail::GetKernel(program, unary_reader_kernel_id), core, update_idx, runtime_args_vec3);
             }
         }
         UpdateDynamicCircularBufferAddress(program, cb_output, *dst_buffer);
@@ -505,10 +508,13 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(const Tensor& 
         auto shard_spec = input_tensors.at(0).shard_spec().value();
         auto all_cores = shard_spec.grid;
 
+        std::vector<uint32_t> update_idx = {0};
+        std::shared_ptr<RuntimeArgs> runtime_args_vec3 = std::make_shared<RuntimeArgs>();
+        *runtime_args_vec3 = {src_buffer};
+        Device* device = src_buffer->device();
         for (const auto& core : cores) {
             {
-                auto& runtime_args = GetRuntimeArgs(program, unary_writer_kernel_id, core);
-                runtime_args[0] = dst_buffer->address();
+                UpdateRuntimeArgs(device, tt_metal::detail::GetKernel(program, unary_reader_kernel_id), core, update_idx, runtime_args_vec3);
             }
         }
         UpdateDynamicCircularBufferAddress(program, cb_src0, *src_buffer);
