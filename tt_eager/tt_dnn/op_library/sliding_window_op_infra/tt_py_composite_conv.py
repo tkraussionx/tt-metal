@@ -801,7 +801,7 @@ class TTPyCompositeConv(TTPyOp):
 
         def composite_conv_with_move_utwh_output_with_deallocate_input(activation):
             # assert(activation.layout() == ttl.tensor.Layout.ROW_MAJOR)
-            breakpoint()
+            # breakpoint()
             utwh_output = self.tt_py_untilize_with_halo_op(activation)
             activation.deallocate()
             move_output = ttl.tensor.move_sharded(utwh_output)

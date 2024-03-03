@@ -239,7 +239,9 @@ class UNet:
         output_tensor = ttnn.upsample(output_tensor, 2)
         output_tensor = ttnn.reshape(output_tensor, (1, 1, 160 * 1056 * 2, 16))
 
-        output_tensor = unet_concat([output_tensor, save_c1_2_out], dim=-1)
+        output_tensor = ttnn.to_memory_config(output_tensor, ttnn.DRAM_MEMORY_CONFIG)
+        output_tensor = ttnn.concat([output_tensor, save_c1_2_out], dim=3)
+        # output_tensor = unet_concat([output_tensor, save_c1_2_out], dim=3)
         # ttnn.deallocate(save_c1_2_out)
 
         output_tensor = unet_reshard(
@@ -261,25 +263,27 @@ class UNet:
         # output_tensor = ttnn.to_memory_config(output_tensor, ttnn.DRAM_MEMORY_CONFIG)
         # output_tensor = ttnn.to_memory_config(output_tensor, sharded_mem_config)
 
-        ttnn.dump_device_memory_state(device)
+        # mem_config = ttnn.get_memory_config(output_tensor)
+        # output_tensor = ttnn.to_memory_config(output_tensor, ttnn.DRAM_MEMORY_CONFIG)
+        # output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
+        # padded_shape = mem_config.shard_spec.shape
+        # mem_config.shard_spec.shape = [padded_shape[0], 48]
 
-        breakpoint()
+        # # output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat8_b)
 
-        mem_config = ttnn.get_memory_config(output_tensor)
-        output_tensor = ttnn.to_memory_config(output_tensor, ttnn.DRAM_MEMORY_CONFIG)
-        output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
-        padded_shape = mem_config.shard_spec.shape
-        mem_config.shard_spec.shape = [padded_shape[0], 48]
+        # ttnn.dump_device_memory_state(device)
 
-        # output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat8_b)
+        # output_tensor = ttnn.to_memory_config(output_tensor, mem_config)
 
-        ttnn.dump_device_memory_state(device)
-
-        output_tensor = ttnn.to_memory_config(output_tensor, mem_config)
-
-        ttnn.dump_device_memory_state(device)
+        # ttnn.dump_device_memory_state(device)
 
         output_tensor = self.c8(output_tensor)
+
+        # ttnn.dump_device_memory_state(device)
+        # breakpoint()
+
+        output_tensor = ttnn.experimental.tensor.move_sharded(output_tensor)
+
         output_tensor = self.c8_2(output_tensor)
         output_tensor = self.c8_3(output_tensor)
 
