@@ -7,7 +7,7 @@
 void kernel_main() {
     constexpr bool sender_is_issue_path = get_compile_time_arg_val(0);
 
-    uint32_t consumer_noc_encoding = uint32_t(NOC_XY_ENCODING(CONSUMER_NOC_X, CONSUMER_NOC_Y));  // soon to be unified
+    uint32_t consumer_noc_encoding = uint32_t(NOC_XY_ENCODING(CONSUMER_NOC_X, CONSUMER_NOC_Y));
     uint32_t producer_noc_encoding = uint32_t(NOC_XY_ENCODING(PRODUCER_NOC_X, PRODUCER_NOC_Y));
 
     volatile tt_l1_ptr uint32_t *eth_src_db_semaphore_addr =
