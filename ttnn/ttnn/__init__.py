@@ -43,6 +43,8 @@ from ttnn.types import (
     float32,
     MemoryConfig,
     MathFidelity,
+    WormholeComputeKernelConfig,
+    GrayskullComputeKernelConfig,
     DRAM_MEMORY_CONFIG,
     L1_MEMORY_CONFIG,
     L1_BLOCK_SHARDED_MEMORY_CONFIG,
@@ -136,6 +138,9 @@ from ttnn.operations.creation import (
 from ttnn.operations.reduction import (
     std,
     var,
+    max,
+    min,
+    sum,
 )
 
 from ttnn.operations.losses import (
@@ -194,6 +199,8 @@ from ttnn.operations.binary import (
     add_and_apply_activation_,
     nextafter,
     polyval,
+    maximum,
+    minimum,
 )
 
 from ttnn.operations.ternary import (
