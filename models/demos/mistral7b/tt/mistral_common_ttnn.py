@@ -3,13 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
-from typing import Tuple
-
-# import tt_lib
 import ttnn
-from models.utility_functions import (
-    nearest_32,
-)
+from models.utility_functions import nearest_32
 
 
 def tt_all_reduce(tensors, output_mem_config=None):
@@ -35,7 +30,6 @@ def tt_all_reduce(tensors, output_mem_config=None):
 def generate_cos_sin_cache_ttnn(
     tt_devices,
     head_dim,
-    base_url,
     max_position_embeddings=2048,
     base=10000,
     dtype=None,
@@ -95,7 +89,7 @@ def precompute_freqs(dim: int, end: int, theta: float = 10000.0):
     return torch.cos(freqs), torch.sin(freqs)
 
 
-def prepare_inputs_ttnn(x, start_pos, hidden_size, n_local_heads, sliding_window, devices, num_devices):
+def prepare_inputs_ttnn(x, start_pos, hidden_size, sliding_window, device):
     """
     Prepare inputs for decode mode. Assume that current token is at
     start_pos, and KV cache has valid data up to start_pos.
@@ -128,17 +122,12 @@ def prepare_inputs_ttnn(x, start_pos, hidden_size, n_local_heads, sliding_window
     assert x.size() == (seq_len, 1, batch, hidden_size)
     # assert attn_mask.size() == (seq_len, n_local_heads, batch, padded_layer_past_len)
 
-    xs, attn_masks = [], []
-    for i in range(num_devices):
-        device = devices[i]
-        xs.append(ttnn.from_torch(x.clone(), device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT))
-        attn_masks.append(
-            ttnn.from_torch(attn_mask.clone(), device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
-        )
+    x = ttnn.from_torch(x, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
+    attn_mask = ttnn.from_torch(attn_mask, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
 
     return (
-        xs,
+        x,
         start_pos,
-        attn_masks,
+        attn_mask,
         current,
     )

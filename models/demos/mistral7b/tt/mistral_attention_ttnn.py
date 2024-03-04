@@ -2,11 +2,9 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-from pathlib import Path
+from typing import List
 import torch
-import math
 from torch import nn
-from typing import Optional, Tuple
 
 import ttnn
 
@@ -14,15 +12,13 @@ from models.utility_functions import (
     nearest_32,
 )
 
-# from models.experimental.mistral.tt.mistral_common import tt_all_reduce
-
 
 class TtMistralAttention(nn.Module):
     def __init__(
         self,
         devices,
         state_dict,
-        model_config,
+        weight_cache_path,
         layer_num,
         dtype,
         configuration,
@@ -48,10 +44,8 @@ class TtMistralAttention(nn.Module):
 
         self.dtype = dtype
 
-        # self.current = 0
-
         layer_name = f"layers.{layer_num}.attention"
-        cache_name = lambda name: Path(model_config["DEFAULT_WEIGHT_PATH"]) / (f"{layer_name}.{name}")
+        cache_name = lambda name: weight_cache_path / (f"{layer_name}.{name}")
 
         wq_str = f"{layer_name}.wq.weight"
         wk_str = f"{layer_name}.wk.weight"
@@ -141,10 +135,10 @@ class TtMistralAttention(nn.Module):
 
     def forward(
         self,
-        xs: ttnn.Tensor,
+        xs: List[ttnn.Tensor],
         start_pos: int,
         current_pos: int,
-        attn_masks: ttnn.Tensor,
+        attn_masks: List[ttnn.Tensor],
     ) -> ttnn.Tensor:
         """
         x: (seq_len, 1, batch, hidden_dim)
@@ -266,7 +260,7 @@ class TtMistralAttention(nn.Module):
                 q_heads,
                 keys,
                 compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-                output_mem_config=ttnn.L1_MEMORY_CONFIG,  # ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1), #self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                output_mem_config=ttnn.L1_MEMORY_CONFIG,
                 output_dtype=ttnn.bfloat16,  # Must be BFLOAT16
             )  # seqlen, n_heads, batch, cache_len + seqlen
 
@@ -299,8 +293,6 @@ class TtMistralAttention(nn.Module):
             )  # seqlen, n_heads, batch, dhead
 
             ttnn.deallocate(attn)
-            # ttnn.deallocate(keys)
-            # ttnn.deallocate(values)
             ttnn.deallocate(q_heads)
 
             attn_output = ttnn.transformer.concatenate_heads(attn_output, memory_config=ttnn.L1_MEMORY_CONFIG)

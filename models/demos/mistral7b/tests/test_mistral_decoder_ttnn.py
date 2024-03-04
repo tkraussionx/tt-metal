@@ -57,22 +57,18 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
     reference_model = TransformerBlock(args=model_args)
     reference_model.load_state_dict(partial_state_dict)
 
-    # TODO Scale the model (mixtral) to multiple devices when T3000 is available
-    devices = [
-        device,
-    ]
-
+    # Helper function supports multiple devices but we only use one
     tt_cos_cached, tt_sin_cached = generate_cos_sin_cache_ttnn(
-        devices, model_args.head_dim, "", model_args.max_seq_len * 2, 10000, dtype
+        [device], model_args.head_dim, model_args.max_seq_len * 2, 10000, dtype
     )
     # Initialize TT model
     tt_model = TtTransformerBlock(
         args=model_args,
-        devices=devices,
+        device=device,
         dtype=dtype,
         state_dict=state_dict,
         layer_num=0,
-        model_config=model_config,
+        weight_cache_path=Path(model_config["DEFAULT_WEIGHT_PATH"]),
         tt_cos_cached=tt_cos_cached,
         tt_sin_cached=tt_sin_cached,
     )
@@ -100,10 +96,8 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
             tt_decode_input,
             start_pos,
             tt_model.hidden_size,
-            tt_model.n_local_heads,
             tt_model.sliding_window,
-            tt_model.devices,
-            tt_model.num_devices,
+            tt_model.device,
         )
         # Run TT model
         tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask)
@@ -115,8 +109,7 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
         positions = torch.tensor([start_pos])
 
         # Reference model
-        # mask = tt2torch_tensor(attn_mask[0])
-        ref_output = reference_model(pt_decode_input, freqs_cis_i, positions, mask=None)  # mask)
+        ref_output = reference_model(pt_decode_input, freqs_cis_i, positions, mask=None)
 
         passing, pcc_message = comp_pcc(ref_output, tt_output_torch, pcc)
 

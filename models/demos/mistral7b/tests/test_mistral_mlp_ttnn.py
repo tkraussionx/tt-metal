@@ -44,8 +44,9 @@ def test_mistral_mlp_inference(model_config, model_location_generator, device):
     tt_model = TtMistralMLP(
         device=device,
         state_dict=state_dict,
-        model_config=model_config,
+        weight_cache_path=Path(model_config["DEFAULT_WEIGHT_PATH"]),
         layer_num=0,
+        dtype=dtype,
     )
     torch_input = torch.randn(1, 1, 17, 4096)
     reference_output = reference_model(torch_input)

@@ -63,21 +63,17 @@ def test_mistral_attention_inference(
     reference_model = Attention(args=model_args)
     reference_model.load_state_dict(partial_state_dict)
 
-    # TODO Scale the model (mixtral) to multiple devices when T3000 is available
-    devices = [
-        device,
-    ]
-
     batch = 32
     seq_len = 1
 
+    # We are using just one device
     tt_cos_cached, tt_sin_cached = generate_cos_sin_cache_ttnn(
-        devices, model_args.head_dim, "", model_args.max_seq_len * 2, 10000, dtype
+        [device], model_args.head_dim, model_args.max_seq_len * 2, 10000, dtype
     )
     tt_model = TtMistralAttention(
-        devices,
+        [device],
         state_dict,
-        model_config=model_config,
+        weight_cache_path=Path(model_config["DEFAULT_WEIGHT_PATH"]),
         layer_num=0,
         dtype=dtype,
         configuration=model_args,
@@ -99,19 +95,18 @@ def test_mistral_attention_inference(
             tt_attention_input,
             start_pos,
             tt_model.hidden_size,
-            tt_model.n_local_heads,
             tt_model.sliding_window,
-            tt_model.devices,
-            tt_model.num_devices,
+            device,
         )
 
         tt_out = tt_model(
-            attention_input,
+            [attention_input],
             start_pos,
             current_pos,
-            attn_mask,
+            [attn_mask],
         )
-        assert isinstance(tt_out, list)  # tt_out should be replicated on N devices
+        # multi-device attention module returns replicated output
+        assert isinstance(tt_out, list)
         tt_out = tt_out[0]
         tt_output_torch = ttnn.to_torch(tt_out).permute(1, 0, 2)  # [ batch, seq, hidden_dim]
 
@@ -145,18 +140,10 @@ def test_mistral_attention_inference(
         tt_layer_present = []
         for layer_past in tt_model.layer_past_list:
             tt_layer_present.append([ttnn.to_torch(cache) for cache in layer_past])
-        # concat the pasts by heads
-        if len(devices) > 1:
-            tt_layer_present = [
-                torch.cat([tt_cache for tt_cache in tt_cache_head], dim=1) for tt_cache_head in zip(*tt_layer_present)
-            ]
-        else:
-            tt_layer_present = tt_layer_present[0]
+
+        tt_layer_present = tt_layer_present[0]
 
         for i, (cache_pt, cache_tt) in enumerate(zip(pytorch_layer_present, tt_layer_present)):
-            # print("CACHE PT", cache_pt, cache_pt.shape) #[32, 8, 4096, 128]
-            # print("CACHE TT", cache_tt, cache_tt.shape) #[32, 8, 4096, 128]
-
             if i == 0:
                 logger.info(
                     f"Skipping K cache comparison, since tt_lib rot_embed op does a different permutation from reference PyTorch code"

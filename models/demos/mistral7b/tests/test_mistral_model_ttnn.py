@@ -74,20 +74,17 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
     reference_model = Transformer(args=model_args)
     reference_model.load_state_dict(state_dict)
 
-    # TODO Scale the model (mixtral) to multiple devices when T3000 is available
-    devices = [
-        device,
-    ]
-
+    # Helper function supports multiple devices but we are only using one in this demo
     tt_cos_cached, tt_sin_cached = generate_cos_sin_cache_ttnn(
-        devices, model_args.head_dim, "", model_args.max_seq_len * 2, 10000, dtype
+        [device], model_args.head_dim, model_args.max_seq_len * 2, 10000, dtype
     )
+
     tt_model = TtTransformer(
         args=model_args,
-        devices=devices,
+        device=device,
         dtype=dtype,
         state_dict=state_dict,
-        model_config=model_config,
+        weight_cache_path=Path(model_config["DEFAULT_WEIGHT_PATH"]),
         layers=list(range(model_args.n_layers)),
         tt_cos_cached=tt_cos_cached,
         tt_sin_cached=tt_sin_cached,
@@ -118,11 +115,10 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
             tt_decode_input,
             start_pos,
             model_args.dim,
-            model_args.n_heads // len(devices),
             model_args.sliding_window,
-            tt_model.devices,
-            tt_model.num_devices,
+            tt_model.device,
         )
+
         # Run TT model
         tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask)
         # tt_output = tt_model(tt_input, bcast_freq_xq, bcast_freq_xk, tt_position, mask, seqlen)
