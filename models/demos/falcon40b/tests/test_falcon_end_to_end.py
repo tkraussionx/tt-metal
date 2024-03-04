@@ -7,9 +7,7 @@ import pytest
 from loguru import logger
 
 import tt_lib
-from models.demos.falcon40b.reference.hf_modeling_falcon import (
-    FalconForCausalLM,
-)
+from models.demos.falcon40b.reference.hf_modeling_falcon import FalconForCausalLM, FalconConfig
 from models.demos.falcon40b.tt.falcon_causallm import TtFalconCausalLM
 
 # TODO: Remove this?
@@ -35,6 +33,8 @@ from models.utility_functions import (
     skip_for_grayskull,
 )
 
+from models.demos.falcon40b.tt.model_config import model_config_entries
+
 
 # TODO: Replace this with actual Falcon application-level tests
 def run_test_FalconCausalLM_end_to_end(
@@ -56,6 +56,12 @@ def run_test_FalconCausalLM_end_to_end(
     model_name = model_location_generator(model_version, model_subdir="Falcon")
 
     profiler.start("hugging_face_model_setup")
+
+    # uncomment to run the whole model
+    # configuration = FalconConfig(**model_config_entries)
+    # state_dict = None
+    # profiler.end("hugging_face_model_setup")
+
     hugging_face_reference_model = FalconForCausalLM.from_pretrained(
         model_name, low_cpu_mem_usage=True, num_hidden_layers=num_layers
     )
@@ -63,6 +69,7 @@ def run_test_FalconCausalLM_end_to_end(
     configuration = hugging_face_reference_model.config
     state_dict = hugging_face_reference_model.state_dict()
     pytorch_FalconCausalLM = PytorchFalconCausalLM(hugging_face_reference_model, num_layers)
+
     profiler.end("hugging_face_model_setup")
 
     # Prepare input ------------------------------------------------------------------------
@@ -325,6 +332,10 @@ def run_test_FalconCausalLM_end_to_end(
     elif llm_mode == "decode":
         tt_out = torch.cat([tt2torch_tensor(tt_o).squeeze(1) for tt_o in tt_out], -1)
         tt_out = tt_out.transpose(0, 1)
+
+    # uncomment to run the whole model
+    # pytorch_out = torch.load("out.pt")
+    # pytorch_layer_present = torch.load("out.pt")
 
     # check outputs ----------------------------------------------------------------------
     does_pass, output_pcc = comp_pcc(pytorch_out, tt_out, out_pcc)
