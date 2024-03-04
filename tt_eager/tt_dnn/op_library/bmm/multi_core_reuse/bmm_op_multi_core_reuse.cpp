@@ -2,6 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "common/logger.hpp"
+#include "common/tt_backend_api_types.hpp"
+#include "tensix_types.h"
 #include "tt_dnn/op_library/bmm/bmm_op.hpp"
 #include "tt_dnn/op_library/work_split.hpp"
 #include "tt_dnn/op_library/operation.hpp"
@@ -34,7 +37,8 @@ tt_metal::operation::ProgramWithCallbacks create_program(
     uint32_t in0_CB_size = in0_CB_tiles * single_tile_size;
     uint32_t in1_block_tiles = per_core_N * in0_block_w;
     uint32_t in1_CB_tiles = in1_block_tiles * 2; // double buffer
-    uint32_t in1_CB_size = in1_CB_tiles * single_tile_size;
+    uint32_t tile_size_bfp8 = tt_metal::detail::TileSize(tt::DataFormat::Bfp8_b);
+    uint32_t in1_CB_size = in1_CB_tiles * tile_size_bfp8;
     uint32_t out_block_tiles = per_core_M * per_core_N;
     uint32_t out_CB_tiles = out_block_tiles; // No double buffer
     uint32_t out_CB_size = out_CB_tiles * single_tile_size;
@@ -67,7 +71,8 @@ tt_metal::operation::ProgramWithCallbacks create_program(
         out_subblock_h, // out_subblock_h
         out_subblock_w, // out_subblock_w
         out_subblock_num_tiles, // out_subblock_num_tiles
-        B // batch
+        B, // batch
+        out_block_tiles
     };
 
     uint32_t num_blocks_read = 0;
@@ -83,8 +88,9 @@ tt_metal::operation::ProgramWithCallbacks create_program(
 	auto cb_src0 = tt_metal::CreateCircularBuffer(program, all_cores, src0_cb_config);
 
 	uint32_t src1_cb_index = 1;
-	tt_metal::CircularBufferConfig src1_cb_config = tt_metal::CircularBufferConfig(in1_CB_size, {{src1_cb_index, cb_data_format}})
-		.set_page_size(src1_cb_index, single_tile_size);
+    tt::DataFormat cb1_df = tt::DataFormat::Bfp8_b;
+	tt_metal::CircularBufferConfig src1_cb_config = tt_metal::CircularBufferConfig(in1_CB_size, {{src1_cb_index, cb1_df}})
+		.set_page_size(src1_cb_index, tile_size_bfp8);
 	auto cb_src1 = tt_metal::CreateCircularBuffer(program, all_cores, src1_cb_config);
 
 	uint32_t output_cb_index = 16; // output operands start at index 16
@@ -121,11 +127,12 @@ tt_metal::operation::ProgramWithCallbacks create_program(
     // Create compute kernel
     auto mm_kernel_id = tt_metal::CreateKernel(
         program,
-        "tt_eager/tt_dnn/op_library/bmm/kernels/compute/bmm_large_block_zm.cpp",
+        "tt_eager/tt_dnn/op_library/bmm/kernels/compute/bmm_large_block_zm_fused_bias_activation.cpp",
         all_cores,
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .compile_args = compute_kernel_args}
     );
 
+    log_info("Cores y: {}, Cores x: {}", num_blocks_y, num_blocks_x);
     for(int output_idx_y = 0; output_idx_y < num_blocks_y; output_idx_y++) {
         for(int output_idx_x = 0; output_idx_x < num_blocks_x; output_idx_x++) {
             int core_idx_x = num_blocks_read % num_cores_x;
@@ -242,7 +249,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse(const Tensor &a, const T
 
     tt::DataFormat cb_data_format = tt_metal::datatype_to_dataformat_converter(a.dtype());
     uint32_t single_tile_size = tt_metal::detail::TileSize(cb_data_format);
-    MathFidelity math_fidelity = MathFidelity::HiFi4;
+    MathFidelity math_fidelity = MathFidelity::LoFi;
 
     tt_metal::Buffer *in0_buffer = a.buffer();
     tt_metal::Buffer *in1_buffer = b.buffer();
@@ -259,8 +266,8 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse(const Tensor &a, const T
     uint32_t in0_block_w = 2;
     uint32_t out_subblock_h = 4;
     uint32_t out_subblock_w = 2;
-    uint32_t per_core_M = 16;
-    uint32_t per_core_N = 16;
+    uint32_t per_core_M = 8;
+    uint32_t per_core_N = 10;
 
     TT_ASSERT(Mt % per_core_M == 0);
     TT_ASSERT(Nt % per_core_N == 0);
@@ -273,6 +280,7 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse(const Tensor &a, const T
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
 
     uint32_t num_blocks_total = (Mt / per_core_M) * (Nt / per_core_N);
+    log_info("NumBlocksTotal: {}, num_cores {}", num_blocks_total, num_cores_x * num_cores_y);
     TT_ASSERT(num_blocks_total <= num_cores_x * num_cores_y);
 
     ////////////////////////////////////////////////////////////////////////////

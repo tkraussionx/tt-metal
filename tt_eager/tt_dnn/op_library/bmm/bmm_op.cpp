@@ -5,6 +5,7 @@
 #include "tt_dnn/op_library/bmm/bmm_op.hpp"
 #include "common/base_types.hpp"
 #include "common/core_coord.h"
+#include "tt_dnn/op_library/run_operation.hpp"
 #include "tt_dnn/op_library/work_split.hpp"
 #include "tt_metal/tools/profiler/op_profiler.hpp"
 
@@ -236,6 +237,7 @@ tt::operations::primary::MatmulMultiCoreReuseMultiCast1DProgramConfig get_mcast_
     uint32_t K = input_tensor_a.shape()[-1];
     uint32_t N = input_tensor_b.shape()[-1];
     uint32_t per_core_M, per_core_N;
+
     if (mcast_in0) {
         per_core_M = M / TILE_HEIGHT;
         per_core_N = div_up(div_up(N, grid_size.x * grid_size.y), TILE_WIDTH);
@@ -243,6 +245,10 @@ tt::operations::primary::MatmulMultiCoreReuseMultiCast1DProgramConfig get_mcast_
         per_core_M = div_up(div_up(M, grid_size.x * grid_size.y), TILE_HEIGHT);
         per_core_N = N / TILE_WIDTH;
     }
+
+    // per_core_M = 32;
+    // per_core_N = 2;
+
     uint32_t in0_block_w = K / TILE_WIDTH % 2 == 0 ? 2 : 1;
     // TODO: Replace with get_matmul_subblock_params
     uint32_t out_subblock_h, out_subblock_w;
@@ -693,7 +699,7 @@ Tensor falcon_selfout_matmul(const Tensor &input_tensor_a, const Tensor &input_t
     // std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt
 
 Tensor falcon_prefill_4h_to_h_matmul(const Tensor &input_tensor_a, const Tensor &input_tensor_b, std::optional<const Tensor> bias, const MemoryConfig& mem_config, std::optional<const DataType> output_dtype) {
-    operations::primary::MatmulMultiCoreReuseProgramConfig multi_core_reuse_config;
+    // operations::primary::MatmulMultiCoreReuseProgramConfig multi_core_reuse_config;
     // CoreCoord x = {2, 1};
 
     // A = [32, 32]
@@ -800,22 +806,39 @@ Tensor falcon_prefill_4h_to_h_matmul(const Tensor &input_tensor_a, const Tensor 
     // out_shape_per_core = [16, 16]
     // Not Working - asserts
 
-    CoreCoord x = {1, 1};
+    // CoreCoord x = {1, 1};
 
-    // This is working
-    multi_core_reuse_config.per_core_M = 32;
-    multi_core_reuse_config.per_core_N = 16;
+    // // This is working
+    // multi_core_reuse_config.per_core_M = 32;
+    // multi_core_reuse_config.per_core_N = 16;
 
-    multi_core_reuse_config.in0_block_w = 1;
-    multi_core_reuse_config.out_subblock_h = 1;
-    multi_core_reuse_config.out_subblock_w = 1;
-    multi_core_reuse_config.compute_with_storage_grid_size = x;
+    // multi_core_reuse_config.in0_block_w = 1;
+    // multi_core_reuse_config.out_subblock_h = 1;
+    // multi_core_reuse_config.out_subblock_w = 1;
+    // multi_core_reuse_config.compute_with_storage_grid_size = x;
 
-    WormholeComputeKernelConfig wormhole_config;
-    wormhole_config.fp32_dest_acc_en = false;
-    wormhole_config.math_approx_mode = true;
-    wormhole_config.math_fidelity = MathFidelity::LoFi;
-    return operations::primary::matmul(input_tensor_a, input_tensor_b, bias, multi_core_reuse_config, mem_config, output_dtype, wormhole_config);
+    // WormholeComputeKernelConfig wormhole_config;
+    // wormhole_config.fp32_dest_acc_en = false;
+    // wormhole_config.math_approx_mode = true;
+    // wormhole_config.math_fidelity = MathFidelity::LoFi;
+
+    return operation::run(Matmul{.bcast_batch=true, .output_mem_config=mem_config, .output_dtype=output_dtype.value_or(input_tensor_a.dtype())}, {input_tensor_a, input_tensor_b}, {std::nullopt}).at(0);
+    // return operation::run_with_autoformat(Matmul{.bcast_batch=true, .output_mem_config=mem_config, .output_dtype=output_dtype.value_or(input_tensor_a.dtype())}, {input_tensor_a, input_tensor_b}, {std::nullopt}).at(0);
+    // return operations::primary::matmul(input_tensor_a, input_tensor_b, bias, multi_core_reuse_config, mem_config, output_dtype, wormhole_config);
+    //  {
+    //  auto program_config = bmm_op_utils::get_mcast_1d_config(
+    //      input_tensor_a, input_tensor_b, true, std::nullopt, true, mem_config.is_sharded());
+    // std::optional<const DeviceComputeKernelConfig> config = std::nullopt;
+    // auto compute_kernel_config = init_device_compute_kernel_config(input_tensor_a.device()->arch(), config, MathFidelity::LoFi, true, false, true);
+    // return operations::primary::matmul_1d(
+    //     input_tensor_a,
+    //     input_tensor_b,
+    //     bias,
+    //     program_config,
+    //     mem_config,
+    //     output_dtype,
+    //     compute_kernel_config);
+    // }
 }
 
 Tensor falcon_dense_4h_to_h_matmul(const Tensor &input_tensor_a, const Tensor &input_tensor_b, std::optional<const Tensor> bias, const MemoryConfig& mem_config, std::optional<const DataType> output_dtype, std::optional<bool> packer_l1_acc) {
