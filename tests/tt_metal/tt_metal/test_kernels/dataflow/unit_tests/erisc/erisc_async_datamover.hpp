@@ -94,7 +94,6 @@ class ChannelBuffer final {
         if (total_num_messages_to_move != 0) {
             if (is_sender_side) {
                 // Tell the sender side workers that we're ready to accept data on this channel
-                // Even if we have no messages to
                 increment_worker_semaphores();
             }
         } else {
@@ -113,7 +112,7 @@ class ChannelBuffer final {
             WorkerXY worker_xy = this->worker_coords[i];
             uint64_t worker_semaphore_address =
                 get_noc_addr((uint32_t)worker_xy.x, (uint32_t)worker_xy.y, this->worker_semaphore_l1_address);
-            DPRINT << "EDM 1 semaphore inc at x=" << (uint32_t)worker_xy.x << ", y=" << (uint32_t)worker_xy.y
+            DPRINT << "EDM " << eth_transaction_channel << " semaphore inc at x=" << (uint32_t)worker_xy.x << ", y=" << (uint32_t)worker_xy.y
                    << ", addr=" << (uint32_t)worker_semaphore_l1_address << "\n";
             noc_semaphore_inc(worker_semaphore_address, 1);
         }
@@ -145,7 +144,7 @@ class ChannelBuffer final {
     }
     [[nodiscard]] FORCE_INLINE bool is_done() const { return this->state == STATE::DONE; }
 
-    [[nodiscard]] FORCE_INLINE uint8_t get_eth_transaction_channel() const { return this->eth_transaction_channel; }
+    [[nodiscard]] FORCE_INLINE uint32_t get_eth_transaction_channel() const { return this->eth_transaction_channel; }
     [[nodiscard]] FORCE_INLINE std::size_t get_remote_eth_buffer_address() const {
         return this->remote_eth_buffer_address;
     }
@@ -155,7 +154,6 @@ class ChannelBuffer final {
     [[nodiscard]] FORCE_INLINE std::size_t get_buffer_address() const { return this->address; }
 
     FORCE_INLINE void increment_messages_moved() { this->num_messages_moved++; }
-    FORCE_INLINE uint32_t get_num_messages_moved() { return this->num_messages_moved; }
 
     [[nodiscard]] FORCE_INLINE bool all_messages_moved() {
         return this->num_messages_moved == this->total_num_messages_to_move;
@@ -300,7 +298,6 @@ FORCE_INLINE bool sender_notify_workers_if_buffer_available_sequence(
         if (!sender_buffer_channel.all_messages_moved()) {
             sender_buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_WORKER);
             DPRINT << "SENDER notified workers of buffer available. -> WAITING_FOR_WORKER\n";
-            DPRINT << "SENDER " << sender_buffer_channel.get_num_messages_moved() << " messages done\n";
 
         } else {
             DPRINT << "SENDER notified workers of buffer available. -> DONE\n";
@@ -374,7 +371,7 @@ bool receiver_eth_accept_payload_sequence(ChannelBuffer &buffer_channel) {
         eth_bytes_are_available_on_channel(buffer_channel.get_eth_transaction_channel())) {
         eth_receiver_channel_ack(buffer_channel.get_eth_transaction_channel());
         buffer_channel.goto_state(ChannelBuffer::SIGNALING_WORKER);
-        DPRINT << "RECEIVER accepting eth payload. -> SIGNALING_WORKER\n";
+        DPRINT << "RECEIVER channel " << buffer_channel.get_eth_transaction_channel() << " accepting eth payload. -> SIGNALING_WORKER\n";
         did_something = true;
     }
 
@@ -388,8 +385,8 @@ FORCE_INLINE bool receiver_eth_notify_workers_payload_available_sequence(Channel
     bool did_something = false;
 
     if (buffer_channel.is_ready_to_signal_workers()) {
+        DPRINT << "RECEIVER " << buffer_channel.get_eth_transaction_channel() << "notifying workers of payload available. -> WAITING_FOR_WORKER\n";
         buffer_channel.increment_worker_semaphores();
-        DPRINT << "RECEIVER notifying workers of payload available. -> WAITING_FOR_WORKER\n";
         buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_WORKER);
         did_something = true;
     }
@@ -417,10 +414,10 @@ FORCE_INLINE bool receiver_noc_read_worker_completion_check_sequence(
         buffer_channel.clear_local_semaphore();
 
         if (!buffer_channel.all_messages_moved()) {
-            DPRINT << "RECEIVER got worker completion signal. -> WAITING_FOR_ETH\n";
+            DPRINT << "RECEIVER " << buffer_channel.get_eth_transaction_channel() << " got worker completion signal. -> WAITING_FOR_ETH\n";
             buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_ETH);
         } else {
-            DPRINT << "RECEIVER got worker completion signal. -> DONE\n";
+            DPRINT << "RECEIVER " << buffer_channel.get_eth_transaction_channel() << "got worker completion signal. -> DONE\n";
             buffer_channel.goto_state(ChannelBuffer::DONE);
             num_receivers_complete++;
         }
