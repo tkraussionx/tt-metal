@@ -5,6 +5,7 @@
 import torch
 import pytest
 from loguru import logger
+from pathlib import Path
 
 import scipy
 from sklearn.metrics import top_k_accuracy_score
@@ -60,18 +61,17 @@ def run_test_LlamaModel_inference(
     n_layers,
     n_devices,
     emulated=False,
-    # tt_cache_path,
-    # model_location_generator,
 ):
-    # model_name = model_location_generator(model_version, model_subdir="Llama2")
     if emulated:
         ckpt_dir = "/proj_sw/user_dev/llama-data-repacked-2/llama-2-70b/"
         tokenizer_path = "/proj_sw/user_dev/llama-data/tokenizer.model"
+        cache_path = Path("/proj_sw/user_dev/llama-data-cache/weights-cache")
         device = devices[0]
         devices = [device for _ in range(n_devices)]  # Emulate fracturing on N chips
     else:
-        ckpt_dir = "/home/llama-data-repacked-2/llama-2-70b/"
-        tokenizer_path = "/home/llama-data/tokenizer.model"
+        ckpt_dir = model_config["DEFAULT_CKPT_DIR"]
+        tokenizer_path = model_config["DEFAULT_TOKENIZER_PATH"]
+        cache_path = model_config["DEFAULT_CACHE_PATH"]
 
     max_seq_len = 4096
     hugging_face_reference_model = Llama.build(
@@ -94,11 +94,24 @@ def run_test_LlamaModel_inference(
     hidden_dim = configuration.dim
     head_dim = hidden_dim // n_heads
 
+    print(f"Running optimized: {optimized}")
+    print(f"Running emulated: {emulated}")
+
     # PyTorch model --------------------------------------------------------------------
     pytorch_model = PytorchLlamaModel(hugging_face_reference_model)
     # TT model -------------------------------------------------------------
     if optimized:
-        tt_model = TtLlamaModel_optimized(devices, state_dict, base_url, n_layers, model_config, configuration, batch)
+        tt_model = TtLlamaModel_optimized(
+            devices,
+            state_dict,
+            base_url,
+            n_layers,
+            model_config,
+            configuration,
+            batch,
+            emulated=emulated,
+            cache_path=cache_path,
+        )
     else:
         tt_model = TtLlamaModel(devices, state_dict, base_url, n_layers, model_config, configuration, batch)
 
@@ -209,25 +222,29 @@ def run_test_LlamaModel_inference(
 
 
 @pytest.mark.parametrize(
-    "batch, seq_len, n_layers, n_devices",
+    "pcc, n_layers",
     (
-        (32, 1, 1, 4),
-        (32, 1, 2, 4),
-        (32, 1, 4, 4),
-        (32, 1, 5, 4),
-        (32, 1, 8, 4),
-        (32, 1, 10, 4),
-        (32, 1, 20, 4),
-        (32, 1, 40, 4),
+        (0.999, 1),
+        (0.998, 2),
+        (0.99, 4),
+        (0.98, 8),
+        (0.96, 10),
+        (0.94, 20),
+        (0.92, 40),
+        (0.90, 80),
     ),
 )
 @pytest.mark.parametrize(
-    "model_version, pcc, optimized",
-    (("llama-2-70B", 0.98, True),),
+    "batch, seq_len, optimized, n_devices, emulated",
+    (
+        (32, 1, True, 4, False),
+        (32, 1, True, 8, False),
+        (32, 1, True, 4, True),
+        (32, 1, True, 8, True),
+    ),
 )
 @pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM",))
 def test_LlamaModel_inference(
-    model_version,
     batch,
     seq_len,
     pcc,
@@ -235,13 +252,12 @@ def test_LlamaModel_inference(
     optimized,
     n_layers,
     n_devices,
-    # model_location_generator,
     pcie_devices,
+    emulated,
 ):
     model_config = get_model_config(model_config_str, num_devices=n_devices)
-    # tt_cache_path = get_tt_cache_path(model_version)
     compute_grid_size = pcie_devices[0].compute_with_storage_grid_size()
-    if len(pcie_devices) < n_devices:
+    if len(pcie_devices) < n_devices and not emulated:
         pytest.skip(f"Requires at {n_devices} devices to run")
     if compute_grid_size.x < model_config["MAX_GRID_SIZE"][0] or compute_grid_size.y < model_config["MAX_GRID_SIZE"][1]:
         pytest.skip(f"Requires grid size of at least {model_config['MAX_GRID_SIZE']} to run")
@@ -254,7 +270,6 @@ def test_LlamaModel_inference(
         model_config,
         optimized,
         n_layers,
-        n_devices
-        # tt_cache_path,
-        # model_location_generator,
+        n_devices,
+        emulated,
     )

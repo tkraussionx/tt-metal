@@ -5,6 +5,7 @@
 import torch
 import pytest
 from loguru import logger
+from pathlib import Path
 
 import tt_lib
 
@@ -79,18 +80,17 @@ def run_test_LlamaDecoder_inference(
     optimized,
     n_devices,
     emulated=False,
-    # tt_cache_path,
-    # model_location_generator,
 ):
-    # model_name = model_location_generator(model_version, model_subdir="Falcon")
     if emulated:
         ckpt_dir = "/proj_sw/user_dev/llama-data-repacked-2/llama-2-70b/"
         tokenizer_path = "/proj_sw/user_dev/llama-data/tokenizer.model"
+        cache_path = Path("/proj_sw/user_dev/llama-data-cache/weights-cache")
         device = devices[0]
         devices = [device for _ in range(n_devices)]  # Emulate fracturing on N chips
     else:
-        ckpt_dir = "/home/llama-data-repacked-2/llama-2-70b/"
-        tokenizer_path = "/home/llama-data/tokenizer.model"
+        ckpt_dir = model_config["DEFAULT_CKPT_DIR"]
+        tokenizer_path = model_config["DEFAULT_TOKENIZER_PATH"]
+        cache_path = model_config["DEFAULT_CACHE_PATH"]
 
     max_seq_len = 4096
     hugging_face_reference_model = Llama.build(
@@ -109,12 +109,23 @@ def run_test_LlamaDecoder_inference(
     hidden_dim = configuration.dim
     head_dim = hidden_dim // n_heads
 
+    print(f"Running optimized: {optimized}")
+    print(f"Running emulated: {emulated}")
+
     # PyTorch model --------------------------------------------------------------------
     pytorch_LlamaDecoder_model = PytorchLlamaDecoderModel(hugging_face_reference_model, layer_num)
     # TT model -------------------------------------------------------------
     if optimized:
         tt_LlamaDecoder_model = TtLlamaDecoder_optimized(
-            devices, state_dict, base_url, layer_num, model_config, configuration, batch, emulated=emulated
+            devices,
+            state_dict,
+            base_url,
+            layer_num,
+            model_config,
+            configuration,
+            batch,
+            emulated=emulated,
+            cache_path=cache_path,
         )
     else:
         tt_LlamaDecoder_model = TtLlamaDecoder(
@@ -125,7 +136,7 @@ def run_test_LlamaDecoder_inference(
         for device in devices:
             tt_lib.device.Synchronize(device)
 
-    generation_start_pos = 0
+    generation_start_pos = 1
     generation_length = 20
     all_tests_pass = True
     for i in range(generation_length):
@@ -212,17 +223,16 @@ def run_test_LlamaDecoder_inference(
 
 
 @pytest.mark.parametrize(
-    "model_version, batch, seq_len, pcc, optimized, n_devices, emulated",
+    "batch, seq_len, pcc, optimized, n_devices, emulated",
     (
-        ("llama-2-70B", 32, 1, 0.98, True, 4, False),
-        ("llama-2-70B", 32, 1, 0.98, True, 8, False),
-        ("llama-2-70B", 32, 1, 0.98, True, 4, True),
-        ("llama-2-70B", 32, 1, 0.98, True, 8, True),
+        (32, 1, 0.998, True, 4, False),
+        (32, 1, 0.998, True, 8, False),
+        (32, 1, 0.998, True, 4, True),
+        (32, 1, 0.998, True, 8, True),
     ),
 )
 @pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM",))
 def test_LlamaDecoder_inference(
-    model_version,
     batch,
     seq_len,
     pcc,
@@ -247,7 +257,5 @@ def test_LlamaDecoder_inference(
         model_config,
         optimized,
         n_devices,
-        # tt_cache_path,
-        # model_location_generator,
         emulated=emulated,
     )

@@ -32,9 +32,7 @@ def run_cache_model(
     devices,
     batch,
     seq_len,
-    pcc,
     model_config,
-    optimized,
     n_layers,
     n_devices,
     emulated=False,
@@ -45,13 +43,15 @@ def run_cache_model(
     if emulated:
         ckpt_dir = "/proj_sw/user_dev/llama-data-repacked-2/llama-2-70b/"
         tokenizer_path = "/proj_sw/user_dev/llama-data/tokenizer.model"
+        cache_path = Path("/proj_sw/user_dev/llama-data-cache/weights-cache")
         device = devices[0]
         devices = [device for _ in range(n_devices)]  # Emulate fracturing on N chips
     else:
-        ckpt_dir = "/home/llama-data-repacked-2/llama-2-70b/"
-        tokenizer_path = "/home/llama-data/tokenizer.model"
+        ckpt_dir = model_config["DEFAULT_CKPT_DIR"]
+        tokenizer_path = model_config["DEFAULT_TOKENIZER_PATH"]
+        cache_path = model_config["DEFAULT_CACHE_PATH"]
 
-    max_seq_len = 4096
+    print(f"Running emulated: {emulated}")
 
     layer_group_size = 3
     n_layers = 12
@@ -89,7 +89,6 @@ def run_cache_model(
         hidden_dim = configuration.dim
         head_dim = hidden_dim // n_heads
 
-        CACHE_PATH = Path("/home/llama-data-cache/weights-cache-2")
         # TT model -------------------------------------------------------------
         # Create TT model which caches weights as it inits
         tt_model = TtLlamaModel_optimized(
@@ -100,7 +99,7 @@ def run_cache_model(
             model_config,
             configuration,
             batch,
-            cache_path=CACHE_PATH,
+            cache_path=cache_path,
             emulated=emulated,
             start_layer_idx=start_layer_idx,
         )
@@ -116,30 +115,31 @@ def run_cache_model(
 
 
 @pytest.mark.parametrize(
-    "batch, seq_len, n_layers, n_devices",
-    ((32, 1, 4, 4),),
+    "n_layers",
+    ((4, 10, 20)),
 )
 @pytest.mark.parametrize(
-    "model_version, pcc, optimized",
-    (("llama-2-70B", 0.98, True),),
+    "batch, seq_len, n_devices, emulated",
+    (
+        (32, 1, 4, False),
+        (32, 1, 8, False),
+        (32, 1, 4, True),
+        (32, 1, 8, True),
+    ),
 )
 @pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM",))
 def test_cache_model(
-    model_version,
     batch,
     seq_len,
-    pcc,
     model_config_str,
-    optimized,
     n_layers,
     n_devices,
-    # model_location_generator,
     pcie_devices,
+    emulated,
 ):
     model_config = get_model_config(model_config_str, num_devices=n_devices)
-    # tt_cache_path = get_tt_cache_path(model_version)
     compute_grid_size = pcie_devices[0].compute_with_storage_grid_size()
-    if len(pcie_devices) < n_devices:
+    if len(pcie_devices) < n_devices and not emulated:
         pytest.skip(f"Requires at {n_devices} devices to run")
     if compute_grid_size.x < model_config["MAX_GRID_SIZE"][0] or compute_grid_size.y < model_config["MAX_GRID_SIZE"][1]:
         pytest.skip(f"Requires grid size of at least {model_config['MAX_GRID_SIZE']} to run")
@@ -148,11 +148,8 @@ def test_cache_model(
         pcie_devices[:n_devices],
         batch,
         seq_len,
-        pcc,
         model_config,
-        optimized,
         n_layers,
-        n_devices
-        # tt_cache_path,
-        # model_location_generator,
+        n_devices,
+        emulated,
     )
