@@ -376,7 +376,6 @@ void Device::compile_command_queue_programs() {
     uint32_t producer_data_buffer_size_tensix = get_cq_data_buffer_size(false);
     uint32_t consumer_data_buffer_size_tensix = get_cq_data_buffer_size(false);
 
-    // TODO: change these
     uint32_t issue_path_cmd_start_eth = get_eth_command_start_l1_address(SyncCBConfigRegion::ROUTER_ISSUE);
     uint32_t completion_path_cmd_start_eth = get_eth_command_start_l1_address(SyncCBConfigRegion::ROUTER_COMPLETION);
 
@@ -433,7 +432,7 @@ void Device::compile_command_queue_programs() {
                         {"PRODUCER_NOC_X", std::to_string(issue_q_physical_core.x)},
                         {"PRODUCER_NOC_Y", std::to_string(issue_q_physical_core.y)},
                     };
-                    std::vector<uint32_t> eth_tunneller_compile_args = {true}; // TODO: what is this? SENDER is ISSUE?
+                    std::vector<uint32_t> eth_tunneller_compile_args = {true};
                     std::string command_q_tunneller_kernel = "tt_metal/impl/dispatch/kernels/command_queue_bidirectional_tunneller.cpp";
                     tt::tt_metal::CreateKernel(
                         *command_queue_program_ptr,
