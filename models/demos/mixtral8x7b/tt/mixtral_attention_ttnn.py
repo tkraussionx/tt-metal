@@ -318,6 +318,6 @@ class TtMixtralAttention(nn.Module):
 
         # return the sum of the outputs
         if len(dense_outputs) > 1:
-            return None  # tt_all_reduce(dense_outputs)
+            return ttnn.experimental.tensor.all_gather(dense_outputs)
         else:
             return dense_outputs

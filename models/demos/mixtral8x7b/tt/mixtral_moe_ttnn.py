@@ -15,6 +15,7 @@ class TtMoeLayer(nn.Module):
         self.gates = [self.gate.to_device(device) for device in self.devices]
 
     def forward(self, inputs: ttnn.Tensor):
+        output_BO = []
         for i in range(self.devices):
             device_i = self.devices[i]
             input_i_BH = inputs.to_device(device_i)
@@ -50,4 +51,20 @@ class TtMoeLayer(nn.Module):
             weights_b1 = ttnn.from_torch(weights_b1_torch, dtype=ttnn.bfloat16, device=device_i)
 
             results_bO = weights_b1 * expert_i_HO(input_i_bH)
-            return results_bO, batch_ids_b
+
+            # create output tensor with results_bO at batch positions batch_ids_b
+            output_i_BO_torch = torch.zeros_like(inputs)
+            results_bO_torch = ttnn.to_torch(results_bO)
+            output_i_BO_torch[batch_ids_b_torch] = results_bO_torch
+            output_i_BO = ttnn.from_torch(output_i_BO_torch, dtype=ttnn.bfloat16, device=device_i)
+
+            output_BO.append(output_i_BO)
+
+        output_BO = ttnn.experimental.tensor.all_gather(output_BO)
+
+        # sum on each device
+        for i in range(self.devices):
+            device_i = self.devices[i]
+            output_BO[i] = ttnn.sum(output_BO[i])
+
+        return output_BO
