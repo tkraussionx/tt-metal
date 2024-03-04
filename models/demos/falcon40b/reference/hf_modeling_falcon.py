@@ -29,7 +29,7 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss, Linear
 from torch.nn import functional as F
 
 from transformers.modeling_outputs import (
@@ -719,7 +719,7 @@ class FalconPreTrainedModel(PreTrainedModel):
     FALCON_START_DOCSTRING,
 )
 class FalconModel(FalconPreTrainedModel):
-    def __init__(self, config: FalconConfig):
+    def __init__(self, config: FalconConfig, layer_num: int = None):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
@@ -730,7 +730,13 @@ class FalconModel(FalconPreTrainedModel):
         self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
 
         # Transformer blocks
-        self.h = nn.ModuleList([FalconDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        if layer_num is not None:
+            module_list = [Linear(1, 1) for _ in range(layer_num)]
+            module_list.append(FalconDecoderLayer(config))
+            module_list += [Linear(1, 1) for _ in range(layer_num + 1, config.num_hidden_layers)]
+            self.h = nn.ModuleList(module_list)
+        else:
+            self.h = nn.ModuleList([FalconDecoderLayer(config) for _ in range(config.num_hidden_layers)])
 
         # Final Layer Norm
         self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
@@ -941,9 +947,9 @@ class FalconModel(FalconPreTrainedModel):
 class FalconForCausalLM(FalconPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config: FalconConfig):
+    def __init__(self, config: FalconConfig, layer_num: int = None):
         super().__init__(config)
-        self.transformer = FalconModel(config)
+        self.transformer = FalconModel(config, layer_num=layer_num)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
