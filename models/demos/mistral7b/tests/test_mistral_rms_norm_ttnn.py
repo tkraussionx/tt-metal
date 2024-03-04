@@ -42,7 +42,7 @@ def test_mistral_rms_norm_inference(model_config, model_location_generator, devi
     tt_model = TtRMSNorm(
         device=device,
         state_dict=state_dict,
-        model_config=model_config,
+        weight_cache_path=Path(model_config["DEFAULT_WEIGHT_PATH"]),
         layer_num=0,
         weight_key="attention_norm",
     )

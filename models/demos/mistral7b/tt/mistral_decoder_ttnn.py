@@ -12,20 +12,20 @@ from models.demos.mistral7b.tt.mistral_rms_norm_ttnn import TtRMSNorm
 class TtTransformerBlock(torch.nn.Module):
     def __init__(
         self,
-        args=None,
-        devices=None,
-        dtype=None,
-        state_dict=None,
-        layer_num=None,
-        model_config=None,
-        tt_cos_cached=None,
-        tt_sin_cached=None,
+        args,
+        device,
+        dtype,
+        state_dict,
+        layer_num,
+        weight_cache_path,
+        tt_cos_cached,
+        tt_sin_cached,
     ):
         super().__init__()
 
         self.state_dict = state_dict
-        self.devices = devices
-        self.num_devices = len(devices)
+        self.device = device
+        self.num_devices = 1
 
         self.args = args
         self.hidden_size = args.dim
@@ -42,65 +42,60 @@ class TtTransformerBlock(torch.nn.Module):
         self.n_local_heads = self.n_heads // self.num_devices
         self.n_local_kv_heads = self.n_kv_heads // self.num_devices
 
-        self.model_config = model_config
-
-        self.oldest = 0
-
         self.attention = TtMistralAttention(
-            devices=devices,
+            devices=[device],
             state_dict=state_dict,
-            model_config=model_config,
-            layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
+            weight_cache_path=weight_cache_path,
+            layer_num=layer_num,
             dtype=dtype,
             configuration=args,
             tt_cos_cached=tt_cos_cached,
             tt_sin_cached=tt_sin_cached,
         )
         self.feed_forward = TtMistralMLP(
-            device=devices[0],  # TODO Consider updating MLP code to support multiple devices when scaling up
+            device=device,
             state_dict=state_dict,
-            model_config=model_config,
-            layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
+            weight_cache_path=weight_cache_path,
+            layer_num=layer_num,
+            dtype=dtype,
         )
         self.attention_norm = TtRMSNorm(
-            device=devices[0],
+            device=device,
             state_dict=state_dict,
-            model_config=model_config,
-            layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
+            weight_cache_path=weight_cache_path,
+            layer_num=layer_num,
             weight_key="attention_norm",
         )
         self.ffn_norm = TtRMSNorm(
-            device=devices[0],
+            device=device,
             state_dict=state_dict,
-            model_config=model_config,
-            layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
+            weight_cache_path=weight_cache_path,
+            layer_num=layer_num,
             weight_key="ffn_norm",
         )
 
     def forward(
         self,
-        xs: ttnn.Tensor,
+        x: ttnn.Tensor,
         start_pos: int,
         current_pos: int,
         attn_masks: Optional[ttnn.Tensor],
     ) -> ttnn.Tensor:
-        # TODO Consider updating the remaining rms_norm and MLP modules to support multi-device
-        if not isinstance(xs, list):
-            xs = [xs]
-
-        # Attention module expects a list of inputs, start_pos, attn mask (multi-device support)
-        attn_norm = [self.attention_norm(xs[0])]
+        attn_norm = self.attention_norm(x)
+        # Attention module expects a list of inputs, attn masks (multi-device support)
         r = self.attention.forward(
-            attn_norm,
+            [attn_norm],
             start_pos,
             current_pos,
-            attn_masks,
+            [attn_masks],
         )
         # Attention also returns multiple outputs (multi-device support)
-        r[0] = ttnn.reshape(r[0], (1, 1, 32, 4096))
-        h = ttnn.experimental.tensor.add(xs[0], r[0])
-        ttnn.deallocate(xs[0])
-        ttnn.deallocate(r[0])
+        assert len(r) == 1, "Multiple devices not yet supported"
+        r = r[0]
+        r = ttnn.reshape(r, (1, 1, 32, 4096))
+        h = ttnn.experimental.tensor.add(x, r)
+        ttnn.deallocate(x)
+        ttnn.deallocate(r)
         r = self.feed_forward.forward(self.ffn_norm(h))
         out = ttnn.experimental.tensor.add(h, r)
         ttnn.deallocate(h)

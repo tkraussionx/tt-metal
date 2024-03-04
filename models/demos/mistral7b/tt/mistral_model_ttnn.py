@@ -2,11 +2,9 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-from pathlib import Path
 import ttnn
 import torch
 import torch.nn as nn
-from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs
 from models.demos.mistral7b.tt.mistral_decoder_ttnn import TtTransformerBlock
 from models.demos.mistral7b.tt.mistral_rms_norm_ttnn import TtRMSNorm
 import ttnn
@@ -18,9 +16,9 @@ class TtTransformer(nn.Module):
         self,
         args,
         dtype,
-        devices,
+        device,
         state_dict,
-        model_config,
+        weight_cache_path,
         layers,
         tt_cos_cached,
         tt_sin_cached,
@@ -29,18 +27,17 @@ class TtTransformer(nn.Module):
         self.args = args
         self.vocab_size = args.vocab_size
         self.n_layers = args.n_layers
-        self.devices = devices
-        self.num_devices = len(devices)
+        self.device = device
         assert self.vocab_size > 0
 
         self.layers = torch.nn.ModuleList(
             [
                 TtTransformerBlock(
                     args=args,
-                    devices=self.devices,
+                    device=device,
                     dtype=dtype,
                     state_dict=state_dict,
-                    model_config=model_config,
+                    weight_cache_path=weight_cache_path,
                     layer_num=i,
                     tt_cos_cached=tt_cos_cached,
                     tt_sin_cached=tt_sin_cached,
@@ -49,9 +46,9 @@ class TtTransformer(nn.Module):
             ]
         )
         self.norm = TtRMSNorm(
-            device=devices[0],
+            device=device,
             state_dict=state_dict,
-            model_config=model_config,
+            weight_cache_path=weight_cache_path,
             layer_num=None,
             weight_key="norm",
         )
@@ -59,24 +56,24 @@ class TtTransformer(nn.Module):
 
         self.output_weight = ttnn.as_tensor(
             self.state_dict["output.weight"].permute(1, 0),
-            device=devices[0],
+            device=device,
             layout=ttnn.TILE_LAYOUT,
-            dtype=model_config["LM_HEAD_MM_WEIGHTS_DTYPE"],
-            memory_config=model_config["LM_HEAD_MM_WEIGHTS_MEMCFG"],
-            cache_file_name=Path(model_config["DEFAULT_WEIGHT_PATH"]) / "output.weight",
+            dtype=dtype,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            cache_file_name=weight_cache_path / "output.weight",
         )
 
     def forward(
         self,
-        xs: ttnn.Tensor,
+        x: ttnn.Tensor,
         start_pos: int,
         current_pos: int,
         attn_masks: Optional[ttnn.Tensor],
     ):
         for layer in self.layers:
-            xs = layer(xs, start_pos, current_pos, attn_masks)
+            x = layer(x, start_pos, current_pos, attn_masks)
 
-        xs = self.norm(xs)
-        output = ttnn.linear(xs, self.output_weight, core_grid=ttnn.CoreGrid(8, 8))
-        ttnn.deallocate(xs)
+        x = self.norm(x)
+        output = ttnn.linear(x, self.output_weight, core_grid=ttnn.CoreGrid(8, 8))
+        ttnn.deallocate(x)
         return output

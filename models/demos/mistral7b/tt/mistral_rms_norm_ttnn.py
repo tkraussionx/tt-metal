@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 
 # SPDX-License-Identifier: Apache-2.0
-from pathlib import Path
 import torch.nn as nn
 import ttnn
 
@@ -11,7 +10,7 @@ class TtRMSNorm(nn.Module):
         self,
         device,
         state_dict,
-        model_config,
+        weight_cache_path,
         layer_num,
         weight_key,
         eps: float = 1e-05,
@@ -27,7 +26,7 @@ class TtRMSNorm(nn.Module):
             weight_name = f"layers.{layer_num}.{weight_key}.weight"
 
         torch_weight = self.state_dict[weight_name].unsqueeze(0).expand(32, -1)
-        cache_name = Path(model_config["DEFAULT_WEIGHT_PATH"]) / weight_name
+        cache_name = weight_cache_path / weight_name
 
         self.weight = ttnn.as_tensor(
             torch_weight,
