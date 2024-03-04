@@ -343,7 +343,7 @@ def run_test_FalconDecoder_inference(
 )
 @pytest.mark.parametrize(
     "layer_num",
-    ((0,)),
+    ((range(60))),
 )
 @pytest.mark.parametrize(
     "model_config_str, out_pcc, cache_pcc, token_pcc",
