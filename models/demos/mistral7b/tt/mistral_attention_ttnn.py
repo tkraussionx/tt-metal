@@ -113,7 +113,7 @@ class TtMistralAttention(nn.Module):
                     self.max_batch_size,
                     self.n_kv_heads // self.num_devices,
                     # self.sliding_window,
-                    32,  # TODO Update the initial cache size when scaling up
+                    512,  # TODO Update the initial cache size when scaling up (Target = window size == 4096)
                     self.head_dim,
                 )
             )
@@ -122,7 +122,7 @@ class TtMistralAttention(nn.Module):
                     self.max_batch_size,
                     self.n_kv_heads // self.num_devices,
                     # self.sliding_window,
-                    32,  # TODO Update the initial cache size when scaling up
+                    512,  # TODO Update the initial cache size when scaling up (Target = window size == 4096)
                     self.head_dim,
                 )
             )
@@ -179,7 +179,7 @@ class TtMistralAttention(nn.Module):
                 num_heads=self.n_local_heads,
                 num_kv_heads=self.n_local_kv_heads,
                 transpose_k_heads=False,
-                output_mem_config=ttnn.L1_MEMORY_CONFIG,
+                output_mem_config=ttnn.DRAM_MEMORY_CONFIG,  # ttnn.L1_MEMORY_CONFIG,
             )
 
             ttnn.deallocate(xqkv_fused)
@@ -238,6 +238,7 @@ class TtMistralAttention(nn.Module):
 
             keys = ttnn.permute(keys, (0, 1, 3, 2))  #  [batch, num_kv_heads, dhead, cache_len + seqlen]
 
+            """
             q_heads = ttnn.to_memory_config(
                 q_heads,
                 memory_config=ttnn.create_sharded_memory_config(
@@ -261,16 +262,18 @@ class TtMistralAttention(nn.Module):
                     use_height_and_width_as_shard_shape=True,
                 ),
             )
+            """
 
             attn = ttnn.experimental.operations.primary.transformers.group_attn_matmul(
                 q_heads,
                 keys,
                 compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-                output_mem_config=ttnn.L1_MEMORY_CONFIG,  # ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1), #self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                # output_mem_config=ttnn.L1_MEMORY_CONFIG,
                 output_dtype=ttnn.bfloat16,  # Must be BFLOAT16
             )  # seqlen, n_heads, batch, cache_len + seqlen
 
             attn = ttnn.transformer.attention_softmax_(attn, head_size=self.head_dim, attention_mask=attn_mask)
+
             """
             attn = ttnn.to_memory_config(attn, memory_config=ttnn.create_sharded_memory_config(
                 (32, padded_layer_past_len),
@@ -294,7 +297,7 @@ class TtMistralAttention(nn.Module):
                 attn,
                 values,
                 compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-                output_mem_config=ttnn.L1_MEMORY_CONFIG,  # ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1), #self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                # output_mem_config=ttnn.L1_MEMORY_CONFIG,
                 output_dtype=ttnn.bfloat16,
             )  # seqlen, n_heads, batch, dhead
 
