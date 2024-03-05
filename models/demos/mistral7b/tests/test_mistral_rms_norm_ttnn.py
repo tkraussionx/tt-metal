@@ -4,10 +4,8 @@
 import torch
 import pytest
 from loguru import logger
-import json
-from pathlib import Path
 import ttnn
-from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs, get_model_config
+from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs
 from models.demos.mistral7b.tt.mistral_rms_norm_ttnn import TtRMSNorm
 from models.demos.mistral7b.reference.model import RMSNorm
 from models.utility_functions import (
@@ -27,12 +25,9 @@ def test_mistral_rms_norm_inference(model_config, model_location_generator, devi
         dtype = ttnn.bfloat8_b
     elif dtype == "BFLOAT16":
         dtype = ttnn.bfloat16
-    model_config = get_model_config(model_config)
 
-    mistral_path = Path(model_location_generator(model_config["DEFAULT_CACHE_PATH"], model_subdir="mistral"))
-    state_dict = torch.load(mistral_path / "consolidated.00.pth")
-    with open(mistral_path / "params.json", "r") as f:
-        model_args = TtModelArgs(**json.loads(f.read()))
+    model_args = TtModelArgs()
+    state_dict = torch.load(model_args.consolidated_weights_path)
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
     partial_state_dict = {k[24:]: v for k, v in state_dict.items() if (k.startswith("layers.0.attention_norm."))}
@@ -42,7 +37,7 @@ def test_mistral_rms_norm_inference(model_config, model_location_generator, devi
     tt_model = TtRMSNorm(
         device=device,
         state_dict=state_dict,
-        weight_cache_path=Path(model_config["DEFAULT_WEIGHT_PATH"]),
+        weight_cache_path=model_args.weight_cache_path(dtype),
         layer_num=0,
         weight_key="attention_norm",
     )

@@ -4,8 +4,6 @@
 import torch
 import pytest
 from loguru import logger
-import json
-from pathlib import Path
 import ttnn
 from models.demos.mistral7b.tt.mistral_common_ttnn import (
     precompute_freqs,
@@ -13,7 +11,7 @@ from models.demos.mistral7b.tt.mistral_common_ttnn import (
     prepare_inputs_ttnn,
 )
 from models.demos.mistral7b.tt.mistral_decoder_ttnn import TtTransformerBlock
-from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs, get_model_config
+from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs
 from models.demos.mistral7b.reference.model import TransformerBlock
 from models.utility_functions import (
     comp_pcc,
@@ -42,12 +40,9 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
         dtype = ttnn.bfloat8_b
     else:
         raise ValueError(f"Unknown dtype {dtype_str}")
-    model_config = get_model_config(model_config)
 
-    mistral_path = Path(model_location_generator(model_config["DEFAULT_CACHE_PATH"], model_subdir="mistral"))
-    state_dict = torch.load(mistral_path / "consolidated.00.pth")
-    with open(mistral_path / "params.json", "r") as f:
-        model_args = TtModelArgs(**json.loads(f.read()))
+    model_args = TtModelArgs()
+    state_dict = torch.load(model_args.consolidated_weights_path)
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
     partial_state_dict = {k[9:]: v for k, v in state_dict.items() if (k.startswith("layers.0."))}
@@ -68,7 +63,7 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
         dtype=dtype,
         state_dict=state_dict,
         layer_num=0,
-        weight_cache_path=Path(model_config["DEFAULT_WEIGHT_PATH"]),
+        weight_cache_path=model_args.weight_cache_path(dtype),
         tt_cos_cached=tt_cos_cached,
         tt_sin_cached=tt_sin_cached,
     )
