@@ -3,12 +3,11 @@ from typing import List
 
 import torch
 import torch.nn.functional as F
-from simple_parsing.helpers import Serializable
 from torch import nn
 
 
 @dataclasses.dataclass
-class MoeArgs(Serializable):
+class MoeArgs:
     num_experts: int
     num_experts_per_tok: int
 

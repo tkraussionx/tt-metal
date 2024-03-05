@@ -31,27 +31,6 @@ from typing import Optional, Tuple
 from models.demos.mixtral8x7b.reference.moe import MoeArgs, MoeLayer
 
 
-@dataclass
-class ModelArgs:
-    dim: int
-    n_layers: int
-    head_dim: int
-    hidden_dim: int
-    n_heads: int
-    n_kv_heads: int
-    sliding_window: int
-    norm_eps: float
-    vocab_size: int
-
-    max_batch_size: int = 0
-    # For rotary embeddings. If not set, will be infered from sliding window.
-    rope_theta: Optional[float] = None
-    # If this is set, use sliding window attention rotating cache.
-    sliding_window: Optional[int] = None
-    # If this is set, we will use MoE layers instead of dense layers.
-    moe: Optional[MoeArgs] = None
-
-
 def repeat_kv(keys: torch.Tensor, values: torch.Tensor, repeats: int):
     keys = torch.repeat_interleave(keys, repeats=repeats, dim=2)
     values = torch.repeat_interleave(values, repeats=repeats, dim=2)
@@ -87,7 +66,7 @@ def apply_rotary_emb(
 
 
 class Attention(nn.Module):
-    def __init__(self, args: ModelArgs):
+    def __init__(self, args):
         super().__init__()
         self.args = args
 
@@ -162,7 +141,7 @@ class Attention(nn.Module):
 
 
 class FeedForward(nn.Module):
-    def __init__(self, args: ModelArgs):
+    def __init__(self, args):
         super().__init__()
 
         self.w1 = nn.Linear(args.dim, args.hidden_dim, bias=False)
@@ -188,7 +167,7 @@ class RMSNorm(torch.nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, args: ModelArgs):
+    def __init__(self, args):
         super().__init__()
         self.n_heads = args.n_heads
         self.dim = args.dim
@@ -224,7 +203,7 @@ def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0) -> torch.Te
 
 
 class Transformer(nn.Module):
-    def __init__(self, args: ModelArgs):
+    def __init__(self, args):
         super().__init__()
         self.args = args
         self.vocab_size = args.vocab_size
