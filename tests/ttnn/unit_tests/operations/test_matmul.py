@@ -7,7 +7,7 @@ import torch
 import ttnn
 
 from tests.ttnn.utils_for_testing import assert_with_pcc
-from models.utility_functions import skip_for_wormhole_b0
+from models.utility_functions import skip_for_grayskull, is_wormhole_b0
 
 
 # fmt: off
@@ -498,3 +498,107 @@ def test_falcon_query_key_value_matmul(device, batch_size, m_size, k_size, n_siz
 
     output_tensor = ttnn.to_torch(output_tensor)
     assert_with_pcc(torch_output_tensor, output_tensor, pcc=0.996)
+
+
+# @skip_for_grayskull("GS does not support fp32")
+@pytest.mark.parametrize("packer_l1_acc", [True, False], ids=["pack_l1", "no_pack_l1"])
+@pytest.mark.parametrize("fp32_acc_mode", [True, False], ids=["fp32", "no_fp32"])
+@pytest.mark.parametrize("batch", [16, 96])
+@pytest.mark.parametrize("in0_sharded", [False], ids=["in0_unsharded"])
+@pytest.mark.parametrize("out_sharded", [False], ids=["out_unsharded"])
+@pytest.mark.parametrize("M", [32, 128])
+@pytest.mark.parametrize("N", [1024])
+@pytest.mark.parametrize("activations_dtype", [ttnn.bfloat8_b])
+@pytest.mark.parametrize("weights_dtype", [ttnn.bfloat8_b])
+def test_matmul_1d_fp32_acc_l1(
+    device,
+    packer_l1_acc,
+    fp32_acc_mode,
+    batch,
+    in0_sharded,
+    out_sharded,
+    M,
+    N,
+    activations_dtype,
+    weights_dtype,
+):
+    grid_size = (8, 4)
+    compute_grid_size = device.compute_with_storage_grid_size()
+    if grid_size[0] > compute_grid_size.x or grid_size[1] > compute_grid_size.y:
+        pytest.skip(f"Need {grid_size} grid size to run this test but core grid is {compute_grid_size}")
+    if activations_dtype != weights_dtype and is_wormhole_b0():
+        pytest.skip("WH does not work with mixed precision")
+    num_cores = grid_size[0] * grid_size[1]
+    K = 128
+    in0_shape = [batch, 1, M, K]
+    in1_shape = [1, 1, K, N]
+    bias_shape = [1, 1, 1, N]
+
+    interleaved_mem_config = ttnn.experimental.tensor.MemoryConfig(
+        memory_layout=ttnn.experimental.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttnn.experimental.tensor.BufferType.L1,
+    )
+    sharded_mem_config = ttnn.experimental.tensor.MemoryConfig(
+        memory_layout=ttnn.experimental.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+        buffer_type=ttnn.experimental.tensor.BufferType.L1,
+    )
+
+    in0 = torch.randn(in0_shape).bfloat16().float()
+    in1 = torch.randn(in1_shape).bfloat16().float()
+    bias = torch.randn(bias_shape).bfloat16().float()
+
+    in0_t = ttnn.from_torch(in0, device, tt_memory_config=interleaved_mem_config, tt_dtype=activations_dtype)
+    in1_t = ttnn.from_torch(in1, device, tt_memory_config=interleaved_mem_config, tt_dtype=weights_dtype)
+    bias_t = ttnn.experimental.pad_by_zero(
+        bias, device, tt_memory_config=interleaved_mem_config, tt_dtype=weights_dtype
+    )[0]
+
+    output_mem_config = sharded_mem_config if out_sharded else interleaved_mem_config
+
+    if in0_sharded:
+        in0_t = ttnn.experimental.tensor.interleaved_to_sharded(
+            in0_t,
+            grid_size,
+            [M, K // num_cores],
+            ttnn.experimental.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+            ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+        )
+
+    per_core_M = M // 32
+
+    program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+        compute_with_storage_grid_size=grid_size,
+        in0_block_w=1,
+        out_subblock_h=1,
+        out_subblock_w=1,
+        per_core_M=per_core_M,
+        per_core_N=1,
+        fuse_batch=False,
+        fused_activation=None,
+        mcast_in0=True,
+    )
+
+    compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+        math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
+        math_approx_mode=True,
+        fp32_dest_acc_en=fp32_acc_mode,
+        packer_l1_acc=packer_l1_acc,
+    )
+
+    output_t = ttnn.experimental.operations.primary.matmul_1d(
+        in0_t,
+        in1_t,
+        bias=bias_t,
+        program_config=program_config,
+        output_mem_config=output_mem_config,
+        output_dtype=activations_dtype,
+        compute_kernel_config=compute_kernel_config,
+    )
+    if out_sharded:
+        output_t = ttnn.experimental.tensor.sharded_to_interleaved(output_t, interleaved_mem_config)
+    pt_out = in0 @ in1 + bias
+
+    tt_out = ttnn.from_torchch(output_t)
+
+    tt_out = ttnn.to_torch(tt_out)
+    assert_with_pcc(pt_out, tt_out, pcc=0.996)
