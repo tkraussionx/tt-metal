@@ -61,8 +61,8 @@ class TTPyMaxPool(TTPyOp):
             device,
             config_override=parallel_config_override,
         )
-        self.grid_size = (conv_parallel_config.grid_size.x, conv_parallel_config.grid_size.y)
-        self.ncores_nhw = conv_parallel_config.num_cores_nhw
+        self.grid_size = (8, 8)  # (conv_parallel_config.grid_size.x, conv_parallel_config.grid_size.y)
+        self.ncores_nhw = 64  # conv_parallel_config.num_cores_nhw
         self.shard_grid, self.shard_layout = calculate_shard_grid(self.grid_size, self.ncores_nhw)
         assert (
             self.shard_layout == ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED

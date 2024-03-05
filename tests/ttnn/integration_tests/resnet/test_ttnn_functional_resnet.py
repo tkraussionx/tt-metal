@@ -406,7 +406,6 @@ def test_bottleneck_block_with_downsample(device):
     assert_with_pcc(torch_output_tensor, output_tensor, pcc=0.98)
 
 
-@skip_for_wormhole_b0()
 def test_resnet_50(device):
     torch.manual_seed(0)
 

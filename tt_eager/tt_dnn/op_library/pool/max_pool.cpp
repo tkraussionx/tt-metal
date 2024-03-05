@@ -84,7 +84,7 @@ std::vector<Tensor> MaxPool::create_output_tensors(const std::vector<Tensor> &in
         uint32_t nbatch = in_n_;
         uint32_t out_hw = this->out_h_ * this->out_w_;
         uint32_t out_nhw = out_hw * nbatch;
-        uint32_t ncores = max_pool_helpers::get_num_cores(input.device()->compute_with_storage_grid_size(), out_nhw, nbatch);
+        uint32_t ncores = 64;//max_pool_helpers::get_num_cores(input.device()->compute_with_storage_grid_size(), out_nhw, nbatch);
         uint32_t out_nhw_per_core = out_nhw / ncores;
         CoreRangeSet shard_grid = num_cores_to_corerange_set(ncores, input.device()->compute_with_storage_grid_size(), true);
         std::array<uint32_t, 2> shard_shape = {out_nhw_per_core, input.shape()[-1]};
