@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import ttnn
-from typing import List
+import time
 
 
 class TtMoeLayer(nn.Module):
@@ -11,19 +11,23 @@ class TtMoeLayer(nn.Module):
         self.experts = experts
         self.args = moe_args
         self.devices = devices
-        self.gate = ttnn.from_torch(
-            state_dict["gate.weight"].permute(1, 0),
-            dtype=ttnn.bfloat16,
-            device=self.devices[0],
-            layout=ttnn.TILE_LAYOUT,
-        )
-        self.gates_H8 = [ttnn.to_device(self.gate, device) for device in self.devices]
+        self.gates_H8 = [
+            ttnn.from_torch(
+                state_dict["gate.weight"].permute(1, 0),
+                dtype=ttnn.bfloat16,
+                device=device,
+                layout=ttnn.TILE_LAYOUT,
+            )
+            for device in self.devices
+        ]
 
-    def forward(self, inputs: ttnn.Tensor):
+    def forward(self, inputs):
         output_BS1O = []
+        start_time = time.time()
         for i in range(len(self.devices)):
+            print(f"started device {i}, time: {time.time() - start_time} ")
             device_i = self.devices[i]
-            input_i_BSH = ttnn.to_device(inputs, device_i)
+            input_i_BSH = inputs[i]
             expert_i_HO = self.experts[i]
             gate_logits_BS8 = ttnn.matmul(input_i_BSH, self.gates_H8[i], core_grid=ttnn.CoreGrid(8, 8))
             # TODO: falling back to pytorch for now
@@ -85,14 +89,15 @@ class TtMoeLayer(nn.Module):
             )
 
             output_BS1O.append(output_i_BS1O)
-        """
+            print(f"finished device {i}, time: {time.time() - start_time} ")
         # all gather
-        output_BS1O = ttnn.experimental.tensor.all_gather(output_BS1O, dim=3, num_links=2)
-        print("output_BSO", output_BS.shape)
+        print("started ALL GATHER, time: {time.time() - start_time} ")
+        output_BS1O = ttnn.experimental.tensor.all_gather(output_BS1O, dim=2, num_links=1)
+        print("finished ALL GATHER, time: {time.time() - start_time}  : output_BSO", output_BS1O[0].shape)
 
         # sum on each device
         for i in range(self.devices):
-            device_i = self.devices[i]
-            output_BS1O[i] = ttnn.sum(output_BS1O[i])
-        """
+            output_BS1O[i] = ttnn.experimental.tensor.reduce(
+                output_BS1O[i], ttnn.experimental.tensor.ReduceOpMath.SUM, ttnn.experimental.tensor.ReduceOpDim.H, 1.0
+            )
         return output_BS1O

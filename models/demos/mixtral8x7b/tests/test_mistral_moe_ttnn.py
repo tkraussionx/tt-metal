@@ -35,8 +35,11 @@ from models.utility_functions import (
     "pcc",
     ((0.99,)),
 )
-def test_mistral_moe_inference(pcc, model_config, model_location_generator, device, iterations):
+def test_mistral_moe_inference(pcc, model_config, iterations):
     ttnn.enable_program_cache()
+
+    # TODO Scale the model (mixtral) to multiple devices when T3000 is available
+    devices = [ttnn.open_device(device_id=i) for i in range(8)]
     dtype_str, mem_config_str = model_config.split("-")
     if dtype_str == "BFLOAT16":
         dtype = ttnn.bfloat16
@@ -44,7 +47,7 @@ def test_mistral_moe_inference(pcc, model_config, model_location_generator, devi
         dtype = ttnn.bfloat8_b
     else:
         raise ValueError(f"Unknown dtype {dtype_str}")
-    mistral_path = "/proj_sw/user_dev/mixtral-data/Mixtral-8x7B-v0.1/"
+    mistral_path = "/proj_sw/user_dev/hf_data/mistral/Mixtral-8x7B-v0.1/"
     state_dict = {}
     for i in range(1):
         state_dict_i = torch.load(mistral_path + f"consolidated.{str(i).zfill(2)}.pt")
@@ -76,10 +79,7 @@ def test_mistral_moe_inference(pcc, model_config, model_location_generator, devi
     model_args.moe = True
     model_args.num_experts = 8
     model_args.num_experts_per_tok = 2
-    # TODO Scale the model (mixtral) to multiple devices when T3000 is available
-    devices = [
-        device,
-    ] * 8
+
     state_dict = None
     # Initialize TT model
     tt_model = TtMoeLayer(
@@ -116,16 +116,19 @@ def test_mistral_moe_inference(pcc, model_config, model_location_generator, devi
 
         # input = torch.randn(1, 32, 4096)
         pt_decode_input = (torch.rand(batch, seqlen, model_args.dim) * 2) - 1
-        tt_decode_input = ttnn.from_torch(
-            pt_decode_input,
-            device=device,
-            dtype=ttnn.bfloat16,
-            memory_config=ttnn.L1_MEMORY_CONFIG,
-            layout=ttnn.TILE_LAYOUT,
-        )
+        tt_decode_input = [
+            ttnn.from_torch(
+                pt_decode_input,
+                device=device,
+                dtype=ttnn.bfloat16,
+                memory_config=ttnn.L1_MEMORY_CONFIG,
+                layout=ttnn.TILE_LAYOUT,
+            )
+            for device in devices
+        ]
         # Run TT model
-        tt_out = tt_model(tt_decode_input)
-        tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [batch, seq, hidden_dim]
+        tt_out = tt_model(tt_decode_input)[0]
+        tt_output_torch = ttnn.to_torch(tt_out).squeeze(2)  # [batch, seq, hidden_dim]
 
         # Reference model
         ref_output = reference_model(pt_decode_input)
@@ -138,7 +141,7 @@ def test_mistral_moe_inference(pcc, model_config, model_location_generator, devi
         if passing:
             logger.info("Mistral MOE Passed!")
         else:
-            logger.warning("Mistral MOEFailed!")
+            logger.warning("Mistral MOE Failed!")
             all_tests_pass = False
 
     if all_tests_pass:
