@@ -14,6 +14,4 @@ fi
 # Execute python model tests here
 ./tests/scripts/run_python_model_tests.sh
 
-sleep 2
-
-# tt-smi -wr wait all -er
+tt-smi -wr wait all -er
