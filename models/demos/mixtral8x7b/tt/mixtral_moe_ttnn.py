@@ -12,9 +12,12 @@ class TtMoeLayer(nn.Module):
         self.args = moe_args
         self.devices = devices
         self.gate = ttnn.from_torch(
-            state_dict["gate.weight"], dtype=ttnn.bfloat16, device=self.devices[0], layout=ttnn.TILE_LAYOUT
+            state_dict["gate.weight"].permute(1, 0),
+            dtype=ttnn.bfloat16,
+            device=self.devices[0],
+            layout=ttnn.TILE_LAYOUT,
         )
-        self.gates_H8 = [ttnn.to_device(self.gate.clone(), device) for device in self.devices]
+        self.gates_H8 = [ttnn.to_device(self.gate, device) for device in self.devices]
 
     def forward(self, inputs: ttnn.Tensor):
         output_BS1O = []
@@ -28,31 +31,37 @@ class TtMoeLayer(nn.Module):
             weights_BSK, selected_experts_BSK = torch.topk(gate_logits_BS8_torch, self.args.num_experts_per_tok)
             weights_BSK = ttnn.from_torch(weights_BSK, dtype=ttnn.bfloat16, device=device_i, layout=ttnn.TILE_LAYOUT)
             # only choose i-th index
-            selected_experts_0_B1 = ttnn.from_torch(
+            selected_experts_0_1B = ttnn.from_torch(
                 selected_experts_BSK[:, :, 0], dtype=ttnn.bfloat16, device=device_i, layout=ttnn.TILE_LAYOUT
             )
-            selected_experts_1_B1 = ttnn.from_torch(
+            selected_experts_1_1B = ttnn.from_torch(
                 selected_experts_BSK[:, :, 1], dtype=ttnn.bfloat16, device=device_i, layout=ttnn.TILE_LAYOUT
             )
             weights_BSK = ttnn.softmax(weights_BSK, dim=2)
-
-            head_pos_B1 = ttnn.eq(selected_experts_0_B1, selected_experts_1_B1)  # ttnn.eq(selected_experts_1_B1, i)
-            batch_ids_B1 = ttnn.logical_or(
-                ttnn.eq(selected_experts_0_B1, selected_experts_1_B1), selected_experts_0_B1
-            )  # , ttnn.eq(selected_experts_1_B1, i))
+            comp = ttnn.Tensor(
+                ttnn.experimental.tensor.full(
+                    ttnn.Shape([32, 32]),
+                    i,
+                ).value
+            )
+            comp = ttnn.to_layout(comp, layout=ttnn.TILE_LAYOUT)
+            comp = ttnn.to_device(comp, device=device_i)
+            head_pos_1B = ttnn.eq(selected_experts_1_1B, comp)
+            batch_ids_1B = ttnn.logical_or(ttnn.eq(selected_experts_0_1B, comp), head_pos_1B)
 
             # send to host
             weights_BSK_torch = ttnn.to_torch(weights_BSK)
-            batch_ids_B1_torch = ttnn.to_torch(batch_ids_B1)
+            batch_ids_1B_torch = ttnn.to_torch(batch_ids_1B)
             input_i_BSH_torch = ttnn.to_torch(input_i_BSH)
-            head_pos_B1_torch = ttnn.to_torch(head_pos_B1)
+            head_pos_1B_torch = ttnn.to_torch(head_pos_1B)
 
             # convert batch_ids to list of indices
-            batch_ids_1b_torch = batch_ids_B1_torch.view(-1).nonzero().view(-1)
+            batch_ids_1b_torch = batch_ids_1B_torch.view(-1).nonzero().view(-1)
             # slice input
             input_i_bSH_torch = input_i_BSH_torch[batch_ids_1b_torch, :, :]
             # slice weights
-            weights_bS_torch = weights_BSK_torch[batch_ids_1b_torch, :, 0]  # head_pos_B1_torch[batch_ids_b_torch]]
+            head_pos_1b_torch = head_pos_1B_torch[batch_ids_1b_torch].to(dtype=torch.int64)
+            weights_bS_torch = weights_BSK_torch[batch_ids_1b_torch, :, head_pos_1b_torch]
 
             # send to device
             batch_ids_b = ttnn.from_torch(

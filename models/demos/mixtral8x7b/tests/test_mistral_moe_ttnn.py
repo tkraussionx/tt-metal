@@ -86,14 +86,14 @@ def test_mistral_moe_inference(pcc, model_config, model_location_generator, devi
         experts=[
             TtMixtralMLP(
                 device=devices[i],  # TODO Consider updating MLP code to support multiple devices when scaling up
-                state_dict=state_dict,
+                state_dict=partial_state_dict,
                 args=model_args,
                 layer_num=None,
                 expert_num=i,
             )
             for i in range(8)
         ],
-        state_dict=state_dict,
+        state_dict=partial_state_dict,
         # layer_num=layer_num,
         moe_args=model_args,
         devices=devices,
@@ -109,8 +109,6 @@ def test_mistral_moe_inference(pcc, model_config, model_location_generator, devi
 
     seqlen = 1
     batch = 32
-
-    exit()
 
     # TODO Update start_pos (check llama test for reference)
     for i in range(iterations):

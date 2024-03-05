@@ -40,19 +40,19 @@ class TtMixtralMLP(torch.nn.Module):
         # self.w2 = as_tensor("w2", "FF2_MM_WEIGHTS_DTYPE")
         # self.w3 = as_tensor("w3", "FF3_MM_WEIGHTS_DTYPE")
         self.w1 = ttnn.from_torch(
-            self.state_dict[f"experts.{expert_num}.w1.weight"],
+            self.state_dict[f"experts.{expert_num}.w1.weight"].permute(1, 0),
             dtype=ttnn.bfloat16,
             device=self.device,
             layout=ttnn.TILE_LAYOUT,
         )
         self.w2 = ttnn.from_torch(
-            self.state_dict[f"experts.{expert_num}.w2.weight"],
+            self.state_dict[f"experts.{expert_num}.w2.weight"].permute(1, 0),
             dtype=ttnn.bfloat16,
             device=self.device,
             layout=ttnn.TILE_LAYOUT,
         )
         self.w3 = ttnn.from_torch(
-            self.state_dict[f"experts.{expert_num}.w3.weight"],
+            self.state_dict[f"experts.{expert_num}.w3.weight"].permute(1, 0),
             dtype=ttnn.bfloat16,
             device=self.device,
             layout=ttnn.TILE_LAYOUT,
