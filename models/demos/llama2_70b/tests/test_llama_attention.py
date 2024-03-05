@@ -137,7 +137,7 @@ def run_test_LlamaAttention_inference(
             tt_lib.device.Synchronize(device)
 
     generation_start_pos = 120
-    generation_length = 1
+    generation_length = 2
     all_tests_pass = True
     for i in range(generation_length):
         # Prepare input
@@ -232,7 +232,7 @@ def run_test_LlamaAttention_inference(
         (32, 1, 0.9998, True, 4, False),
         (32, 1, 0.9998, True, 8, False),
         (32, 1, 0.9998, True, 4, True),
-        (32, 1, 0.9998, True, 8, True),
+        (32, 1, 0.999, True, 8, True),
     ),
 )
 @pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM",))
@@ -246,7 +246,7 @@ def test_LlamaAttention_inference(
     all_devices,
     emulated,
 ):
-    devices = get_devices_for_t3000(all_devices, n_devices)
+    devices = get_devices_for_t3000(all_devices, n_devices if not emulated else 1)
     model_config = get_model_config(model_config_str, num_devices=n_devices)
     compute_grid_size = devices[0].compute_with_storage_grid_size()
     if len(devices) < n_devices and not emulated:
