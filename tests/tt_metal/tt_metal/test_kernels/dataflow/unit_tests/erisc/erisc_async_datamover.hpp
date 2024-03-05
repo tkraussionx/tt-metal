@@ -57,7 +57,6 @@ class ChannelBuffer final {
         local_semaphore_address(0),
         worker_coords(0),
         address(0),
-        remote_eth_buffer_address(0),
         size_in_bytes(0),
         worker_semaphore_l1_address(0),
         num_workers(0),
@@ -72,7 +71,6 @@ class ChannelBuffer final {
         uint32_t worker_semaphore_l1_address,
         uint32_t num_workers,
         uint32_t total_num_messages_to_move,
-        uint32_t remote_eth_buffer_address,
         volatile tt_l1_ptr uint32_t *const local_semaphore_address,
         tt_l1_ptr const WorkerXY *worker_coords,
         bool is_sender_side) :
@@ -80,7 +78,6 @@ class ChannelBuffer final {
         local_semaphore_address(local_semaphore_address),
         worker_coords(worker_coords),
         address(address),
-        remote_eth_buffer_address(remote_eth_buffer_address),
         size_in_bytes(size_in_bytes),
         worker_semaphore_l1_address(worker_semaphore_l1_address),
         num_workers(num_workers),
@@ -112,8 +109,8 @@ class ChannelBuffer final {
             WorkerXY worker_xy = this->worker_coords[i];
             uint64_t worker_semaphore_address =
                 get_noc_addr((uint32_t)worker_xy.x, (uint32_t)worker_xy.y, this->worker_semaphore_l1_address);
-            DPRINT << "EDM " << eth_transaction_channel << " semaphore inc at x=" << (uint32_t)worker_xy.x << ", y=" << (uint32_t)worker_xy.y
-                   << ", addr=" << (uint32_t)worker_semaphore_l1_address << "\n";
+            // DPRINT << "EDM " << eth_transaction_channel << " semaphore inc at x=" << (uint32_t)worker_xy.x << ", y=" << (uint32_t)worker_xy.y
+            //        << ", addr=" << (uint32_t)worker_semaphore_l1_address << "\n";
             noc_semaphore_inc(worker_semaphore_address, 1);
         }
     }
@@ -146,7 +143,8 @@ class ChannelBuffer final {
 
     [[nodiscard]] FORCE_INLINE uint32_t get_eth_transaction_channel() const { return this->eth_transaction_channel; }
     [[nodiscard]] FORCE_INLINE std::size_t get_remote_eth_buffer_address() const {
-        return this->remote_eth_buffer_address;
+        return this->address;
+        // return this->remote_eth_buffer_address;
     }
     [[nodiscard]] FORCE_INLINE std::size_t get_size_in_bytes() const { return this->size_in_bytes; }
     [[nodiscard]] FORCE_INLINE std::size_t get_current_payload_size() const { return this->get_size_in_bytes(); }
@@ -164,7 +162,6 @@ class ChannelBuffer final {
     volatile tt_l1_ptr uint32_t *const local_semaphore_address;
     WorkerXY const *const worker_coords;
     std::size_t const address;
-    std::size_t const remote_eth_buffer_address;
     std::size_t const size_in_bytes;
     // Even for multiple workers, this address will be the same
     std::size_t const worker_semaphore_l1_address;
@@ -226,7 +223,7 @@ class QueueIndexPointer {
     uint8_t wrap_around;
 };
 
-void eth_setup_handshake(std::uint32_t handshake_register_address, bool is_sender) {
+FORCE_INLINE void eth_setup_handshake(std::uint32_t handshake_register_address, bool is_sender) {
     if (is_sender) {
         eth_send_bytes(handshake_register_address, handshake_register_address, 16);
         eth_wait_for_receiver_done();
@@ -237,7 +234,7 @@ void eth_setup_handshake(std::uint32_t handshake_register_address, bool is_sende
 }
 
 template <uint32_t NUM_CHANNELS>
-void initialize_transaction_buffer_addresses(
+FORCE_INLINE void initialize_transaction_buffer_addresses(
     uint32_t max_concurrent_transactions,
     uint32_t first_buffer_base_address,
     uint32_t num_bytes_per_send,
@@ -262,10 +259,10 @@ void initialize_transaction_buffer_addresses(
 FORCE_INLINE bool sender_eth_send_data_sequence(ChannelBuffer &sender_buffer_channel) {
     bool did_something = false;
     bool data_ready_for_send = sender_buffer_channel.is_ready_for_eth_transfer();
-    if (data_ready_for_send) {
-        bool consumer_ready_to_accept =
-            eth_is_receiver_channel_send_done(sender_buffer_channel.get_eth_transaction_channel());
-        if (consumer_ready_to_accept) {
+    if (data_ready_for_send && eth_is_receiver_channel_send_done(sender_buffer_channel.get_eth_transaction_channel())) {
+        // bool consumer_ready_to_accept =
+        //     eth_is_receiver_channel_send_done(sender_buffer_channel.get_eth_transaction_channel());
+        // if (consumer_ready_to_accept) {
             // kernel_profiler::mark_time(14);
             // Queue up another send
             // because eth word size is 16B. -> 4bits shift to get words from bytes
@@ -278,9 +275,9 @@ FORCE_INLINE bool sender_eth_send_data_sequence(ChannelBuffer &sender_buffer_cha
                 sender_buffer_channel.get_current_payload_size(),
                 sender_buffer_channel.get_current_payload_size() >> ETH_BYTES_TO_WORDS_SHIFT);
             sender_buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_ETH);
-            DPRINT << "SENDER sending payload over eth. -> WAITING_FOR_ETH\n";
+            // DPRINT << "SENDER " << sender_buffer_channel.get_eth_transaction_channel() << " sending payload over eth. -> WAITING_FOR_ETH\n";
             did_something = true;
-        }
+        // }
     }
 
     return did_something;
@@ -295,15 +292,17 @@ FORCE_INLINE bool sender_notify_workers_if_buffer_available_sequence(
     if (ready_to_notify_workers_that_buffer_is_available) {
         sender_buffer_channel.increment_worker_semaphores();
 
-        if (!sender_buffer_channel.all_messages_moved()) {
-            sender_buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_WORKER);
-            DPRINT << "SENDER notified workers of buffer available. -> WAITING_FOR_WORKER\n";
+        // if (!sender_buffer_channel.all_messages_moved()) {
+        //     sender_buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_WORKER);
+        //     // DPRINT << "SENDER " << sender_buffer_channel.get_eth_transaction_channel() << " notified workers of buffer available. -> WAITING_FOR_WORKER\n";
 
-        } else {
-            DPRINT << "SENDER notified workers of buffer available. -> DONE\n";
-            sender_buffer_channel.goto_state(ChannelBuffer::DONE);
-            num_senders_complete++;
-        }
+        // } else {
+        //     // DPRINT << "SENDER notified workers of buffer available. -> DONE\n";
+        //     sender_buffer_channel.goto_state(ChannelBuffer::DONE);
+        //     num_senders_complete++;
+        // }
+        sender_buffer_channel.goto_state(sender_buffer_channel.all_messages_moved() ? ChannelBuffer::DONE : ChannelBuffer::WAITING_FOR_WORKER);
+        num_senders_complete += sender_buffer_channel.all_messages_moved();
         did_something = true;
     }
 
@@ -319,12 +318,12 @@ FORCE_INLINE bool sender_eth_check_receiver_ack_sequence(ChannelBuffer &sender_b
             eth_is_receiver_channel_send_acked(sender_buffer_channel.get_eth_transaction_channel()) ||
             eth_is_receiver_channel_send_done(sender_buffer_channel.get_eth_transaction_channel());
         if (transimission_acked_by_receiver) {
-            kernel_profiler::mark_time(15);
+            // kernel_profiler::mark_time(15);
 
             eth_clear_sender_channel_ack(sender_buffer_channel.get_eth_transaction_channel());
             sender_buffer_channel.increment_messages_moved();
             sender_buffer_channel.goto_state(ChannelBuffer::SIGNALING_WORKER);
-            DPRINT << "SENDER got ack from receiver. -> SIGNALING_WORKER\n";
+            // DPRINT << "SENDER " << sender_buffer_channel.get_eth_transaction_channel() << " got ack from receiver. -> SIGNALING_WORKER\n";
 
             did_something = true;
         }
@@ -340,16 +339,16 @@ FORCE_INLINE bool sender_noc_receive_payload_ack_check_sequence(ChannelBuffer &s
     bool did_something = false;
 
     bool noc_read_is_in_progress = sender_channel_buffer.is_waiting_for_workers_core();
-    if (noc_read_is_in_progress) {
-        bool read_finished = sender_channel_buffer.is_local_semaphore_full();
-        if (read_finished) {
+    if (noc_read_is_in_progress && sender_channel_buffer.is_local_semaphore_full()) {
+        // bool read_finished =
+        // if (read_finished) {
             // kernel_profiler::mark_time(13);
             // We can clear the semaphore, and wait for space on receiver
             sender_channel_buffer.clear_local_semaphore();
             sender_channel_buffer.goto_state(ChannelBuffer::READY_FOR_ETH_TRANSFER);
-            DPRINT << "SENDER received payload from workers. -> READY_FOR_ETH_TRANSFER\n";
+            // DPRINT << "SENDER " << sender_channel_buffer.get_eth_transaction_channel() << " received payload from workers. -> READY_FOR_ETH_TRANSFER\n";
             did_something = true;
-        }
+        // }
     }
 
     return did_something;
@@ -363,7 +362,7 @@ FORCE_INLINE bool sender_noc_receive_payload_ack_check_sequence(ChannelBuffer &s
  * If payload received, notify (send ack to) sender so sender knows it can free up its local buffer
  *
  */
-bool receiver_eth_accept_payload_sequence(ChannelBuffer &buffer_channel) {
+FORCE_INLINE bool receiver_eth_accept_payload_sequence(ChannelBuffer &buffer_channel) {
     bool did_something = false;
     bool waiting_for_next_payload_from_sender = buffer_channel.is_waiting_for_remote_eth_core();
 
@@ -371,7 +370,7 @@ bool receiver_eth_accept_payload_sequence(ChannelBuffer &buffer_channel) {
         eth_bytes_are_available_on_channel(buffer_channel.get_eth_transaction_channel())) {
         eth_receiver_channel_ack(buffer_channel.get_eth_transaction_channel());
         buffer_channel.goto_state(ChannelBuffer::SIGNALING_WORKER);
-        DPRINT << "RECEIVER channel " << buffer_channel.get_eth_transaction_channel() << " accepting eth payload. -> SIGNALING_WORKER\n";
+        // DPRINT << "RECEIVER channel " << buffer_channel.get_eth_transaction_channel() << " accepting eth payload. -> SIGNALING_WORKER\n";
         did_something = true;
     }
 
@@ -385,7 +384,7 @@ FORCE_INLINE bool receiver_eth_notify_workers_payload_available_sequence(Channel
     bool did_something = false;
 
     if (buffer_channel.is_ready_to_signal_workers()) {
-        DPRINT << "RECEIVER " << buffer_channel.get_eth_transaction_channel() << "notifying workers of payload available. -> WAITING_FOR_WORKER\n";
+        // DPRINT << "RECEIVER " << buffer_channel.get_eth_transaction_channel() << "notifying workers of payload available. -> WAITING_FOR_WORKER\n";
         buffer_channel.increment_worker_semaphores();
         buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_WORKER);
         did_something = true;
@@ -410,21 +409,21 @@ FORCE_INLINE bool receiver_noc_read_worker_completion_check_sequence(
     if (can_notify_sender_of_buffer_available) {
         eth_receiver_channel_done(buffer_channel.get_eth_transaction_channel());
         buffer_channel.increment_messages_moved();
-        buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_ETH);
+        // buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_ETH);
         buffer_channel.clear_local_semaphore();
 
-        if (!buffer_channel.all_messages_moved()) {
-            DPRINT << "RECEIVER " << buffer_channel.get_eth_transaction_channel() << " got worker completion signal. -> WAITING_FOR_ETH\n";
-            buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_ETH);
-        } else {
-            DPRINT << "RECEIVER " << buffer_channel.get_eth_transaction_channel() << "got worker completion signal. -> DONE\n";
-            buffer_channel.goto_state(ChannelBuffer::DONE);
-            num_receivers_complete++;
-        }
+        // if (!buffer_channel.all_messages_moved()) {
+        //     DPRINT << "RECEIVER " << buffer_channel.get_eth_transaction_channel() << " got worker completion signal. -> WAITING_FOR_ETH\n";
+        //     buffer_channel.goto_state(ChannelBuffer::WAITING_FOR_ETH);
+        // } else {
+        //     DPRINT << "RECEIVER " << buffer_channel.get_eth_transaction_channel() << "got worker completion signal. -> DONE\n";
+        // }
+        buffer_channel.goto_state(buffer_channel.all_messages_moved() ? ChannelBuffer::DONE : ChannelBuffer::WAITING_FOR_ETH);
+        num_receivers_complete += buffer_channel.all_messages_moved();
 
         did_something = true;
 
-        kernel_profiler::mark_time(13);
+        // kernel_profiler::mark_time(13);
     }
 
     return did_something;
@@ -597,7 +596,7 @@ FORCE_INLINE bool receiver_noc_read_worker_completion_check_sequence(
         if (writes_finished) {
             // DPRINT << "rx: accepting payload, sending receive ack on channel " << (uint32_t)noc_writer_buffer_ackptr
             // << "\n";
-            kernel_profiler::mark_time(13);
+            // kernel_profiler::mark_time(13);
             noc_writer_buffer_ackptr.increment();
 
             did_something = true;

@@ -8,6 +8,7 @@
 #include "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_ring_gather_utils.hpp"
 
 void kernel_main() {
+    DPRINT << "swr : START pre\n";
     const uint32_t src_addr = get_arg_val<uint32_t>(0);
     const uint32_t dst_addr = get_arg_val<uint32_t>(1);
 
@@ -35,7 +36,9 @@ void kernel_main() {
     constexpr uint32_t input_start_ring_idx = get_compile_time_arg_val(21);
     constexpr uint32_t sem_addr = get_compile_time_arg_val(22);
     constexpr bool is_clockwise_direction = get_compile_time_arg_val(23) == 1;
+    constexpr uint32_t ID = get_compile_time_arg_val(24);
 
+    // DPRINT << "swr " << ID << ": START\n";
     constexpr uint32_t cb_id_in0 = tt::CB::c_in0;
 
     #ifdef RM_INTERLEAVED
@@ -69,10 +72,12 @@ void kernel_main() {
 
     if constexpr(num_full_chunks > 0) {
         for (uint32_t c = 0; c < num_full_chunks; ++c) {
+            // DPRINT << "swr " << ID << ": read_chunk\n";
             read_chunk(input_page_idx, cb_id_in0, s, num_pages, page_size);
         }
     }
     if constexpr(rem_num_pages > 0) {
+        // DPRINT << "swr " << ID << ": read_chunk\n";
         read_chunk(input_page_idx, cb_id_in0, s, rem_num_pages, page_size);
     }
 
@@ -124,26 +129,32 @@ void kernel_main() {
         row_idx = row_start_idx;
         if constexpr(num_full_chunks > 0) {
             for (uint32_t c = 0; c < num_full_chunks; ++c) {
+                // DPRINT << "swr " << ID << ": noc_semaphore_wait_min\n";
                 noc_semaphore_wait_min(sender_semaphore_addr_ptr, sem_idx);
                 sem_idx++;
+                // DPRINT << "swr " << ID << ": read_chunk\n";
                 read_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, num_pages, page_size);
+                // DPRINT << "swr " << ID << ": done read_chunk\n";
             }
         }
         if constexpr(rem_num_pages > 0) {
+            // DPRINT << "swr " << ID << ": noc_semaphore_wait_min\n";
             noc_semaphore_wait_min(sender_semaphore_addr_ptr, sem_idx);
             sem_idx++;
+            // DPRINT << "swr " << ID << ": read_chunk\n";
             read_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, rem_num_pages, page_size);
+            // DPRINT << "swr " << ID << ": done read_chunk\n";
         }
     }
     // TODO: Debug why this is needed, or else readback from host seems to happen before kernels have finished?
     // This can go on either worker sender core
     // This doesn't work just calling the regular barriers that use the set noc_index
 
-    DPRINT << "swr : DONE\n";
+    DPRINT << "swr " << ID << ": DONE\n";
     // while (!ncrisc_noc_reads_flushed(noc_index));
     // for (uint32_t n = 0; n < NUM_NOCS; n++) {
     //     while (!ncrisc_noc_reads_flushed(n));
     // }
     ncrisc_noc_full_sync();
-    DPRINT << "swr : DONE DONE\n";
+    DPRINT << "swr " << ID << ": DONE DONE\n";
 }
