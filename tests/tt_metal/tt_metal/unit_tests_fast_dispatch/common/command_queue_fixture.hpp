@@ -81,6 +81,7 @@ class CommandQueueSingleCardFixture : public ::testing::Test {
         arch_ = tt::get_arch_from_string(tt::test_utils::get_env_arch_name());
 
         const chip_id_t mmio_device_id = 0;
+        std::cout << " =create devices " << std::endl;
         reserved_devices_ = tt::tt_metal::detail::CreateDevices({mmio_device_id});
         for (const auto &[id, device] : reserved_devices_) {
             devices_.push_back(device);

@@ -772,6 +772,25 @@ void Cluster::set_internal_routing_info_for_ethernet_cores(bool enable_internal_
         .src_sent_valid_cmd = 0,
         .dst_acked_valid_cmd = 0,
       };
+    std::vector<tt_cxy_pair> all_cores = {{0,1,6}, {0,9,6}, {1,1,0}, {1,9,0}};
+    for (const auto& cxy: all_cores) {
+        std::cout << " readback "<< " core " << cxy.str() <<" 0x18020 " << std::endl;
+        if (this->cluster_desc_->get_number_of_chips() == 8) {
+          std::vector<uint32_t> readback_vec;
+          read_core(readback_vec, 48, cxy, 0x18020);
+        for (const auto& vec: readback_vec) {
+            std::cout << vec << std::endl;
+        }
+        }
+        std::cout << " readback "<< " core " << cxy.str() << " 0x9004 " << std::endl;
+        if (this->cluster_desc_->get_number_of_chips() == 8) {
+          std::vector<uint32_t> readback_vec;
+          read_core(readback_vec, 4, cxy, 0x9004);
+        for (const auto& vec: readback_vec) {
+            std::cout << vec << std::endl;
+        }
+        }
+    }
     for (const auto &[assoc_mmio_device, devices] : this->devices_grouped_by_assoc_mmio_device_) {
         for (const auto &chip_id : devices) {
             for (const auto &[eth_core, routing_info] : this->device_eth_routing_info_.at(chip_id)) {

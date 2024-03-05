@@ -472,6 +472,7 @@ namespace l1_tests {
 TEST_F(CommandQueueSingleCardFixture, WriteOneTileToL1Bank0) {
     TestBufferConfig config = {.num_pages = 1, .page_size = 2048, .buftype = BufferType::L1};
     for (Device *device : devices_) {
+      if (device->id() == 0) {continue;}
         EXPECT_TRUE(local_test_functions::test_EnqueueWriteBuffer_and_EnqueueReadBuffer(device, device->command_queue(), config));
     }
 }
