@@ -762,6 +762,7 @@ void Device::initialize_command_queue() {
             }
         }
     }
+    tt::Cluster::instance().l1_barrier(this->id());
 }
 
 bool Device::initialize(const std::vector<uint32_t>& l1_bank_remap) {
