@@ -83,8 +83,6 @@ class TtLlamaModel_optimized(nn.Module):
                 cache_path=cache_path,
                 kv_cache_dir=kv_unique_dir,
                 emulated=emulated,
-                cache_path=cache_path,
-                kv_cache_dir=kv_unique_dir,
             )
             for i in range(n_layers)
         ]
