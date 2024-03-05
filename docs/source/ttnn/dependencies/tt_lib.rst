@@ -932,6 +932,30 @@ Backward Operations
 
 .. autofunction:: tt_lib.tensor.atanh_bw
 
+.. autofunction:: tt_lib.tensor.asin_bw
+
+.. autofunction:: tt_lib.tensor.asinh_bw
+
+.. autofunction:: tt_lib.tensor.cosh_bw
+
+.. autofunction:: tt_lib.tensor.cos_bw
+
+.. autofunction:: tt_lib.tensor.acosh_bw
+
+.. autofunction:: tt_lib.tensor.acos_bw
+
+.. autofunction:: tt_lib.tensor.leaky_relu_bw
+
+.. autofunction:: tt_lib.tensor.hardtanh_bw
+
+.. autofunction:: tt_lib.tensor.angle_bw
+
+.. autofunction:: tt_lib.tensor.sin_bw
+
+.. autofunction:: tt_lib.tensor.sinh_bw
+
+.. autofunction:: tt_lib.tensor.celu_bw
+
 Loss Functions
 ==============
 

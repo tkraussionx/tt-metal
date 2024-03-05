@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <pybind11/operators.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -35,6 +36,19 @@ void py_module(py::module& module) {
     auto PyShape = py::class_<ttnn::Shape>(module, "Shape");
     PyShape.def(py::init<tt::tt_metal::Shape>());
 
+    PyShape.def_property_readonly("value", [](const Shape& self) { return self.value(); });
+    PyShape.def("__len__", [](const Shape& self) { return self.rank(); });
+    PyShape.def("__getitem__", [](const Shape& self, std::int64_t index) { return self[index]; });
+    PyShape.def("__iter__", [](const Shape& self) { return py::iter(py::cast(self.value().without_padding())); });
+    PyShape.def(pybind11::self == pybind11::self);
+    PyShape.def("__repr__", [](const Shape& self) {
+        std::stringstream ss;
+        ss << self;
+        return ss.str();
+    });
+    PyShape.def_property_readonly("rank", [](const Shape& self) -> std::size_t { return self.rank(); });
+    PyShape.def("with_tile_padding", [](const Shape& self) { return self.with_tile_padding(); });
+
     [&PyShape]<auto... Ns>(std::index_sequence<Ns...>) {
         (
             [&PyShape]() {
@@ -51,44 +65,16 @@ void py_module(py::module& module) {
                         py::arg("shape"),
                         py::arg("padded_shape"));
 
-                    PyShape.def("__eq__", [](const Shape& self, const std::array<uint32_t, Ns>& other) {
-                        return Shape{self.value().without_padding()} == Shape{tt::tt_metal::Shape{other}};
-                    });
+                    PyShape.def(pybind11::self == std::array<uint32_t, Ns>{});
                 }
             }(),
             ...);
     }(std::make_index_sequence<8>());
 
-    PyShape.def_property_readonly("value", [](const Shape& self) { return self.value(); });
-    PyShape.def("__len__", [](const Shape& self) { return self.rank(); });
-    PyShape.def("__getitem__", [](const Shape& self, std::int64_t index) { return self[index]; });
-    PyShape.def("__iter__", [](const Shape& self) { return py::iter(py::cast(self.value().without_padding())); });
-    PyShape.def("__eq__", [](const Shape& self, const Shape& other) { return self == other; });
-    PyShape.def("__eq__", [](const Shape& self, const py::none) { return false; });
-    PyShape.def("__repr__", [](const Shape& self) {
-        std::stringstream ss;
-        ss << self;
-        return ss.str();
-    });
-    PyShape.def_property_readonly("rank", [](const Shape& self) -> std::size_t { return self.rank(); });
-    PyShape.def("with_tile_padding", [](const Shape& self) { return self.with_tile_padding(); });
-
     py::class_<TensorWrapper>(module, "Tensor")
         .def(py::init<tt::tt_metal::Tensor>())
         .def_property_readonly("value", [](const TensorWrapper& self) -> auto& { return self.value; })
-        .def(
-            "__repr__",
-            [](const TensorWrapper& self) {
-                if (self.value.is_allocated()) {
-                    return self.value.write_to_string(Layout::ROW_MAJOR, true);
-                } else {
-                    return fmt::format(
-                        "Tensor(shape={}, dtype={}, layout={})",
-                        self.value.ttnn_shape(),
-                        self.value.dtype(),
-                        self.value.layout());
-                }
-            })
+        .def("__repr__", [](const TensorWrapper& self) { return self.value.write_to_string(); })
         .def_property_readonly("shape", [](const TensorWrapper& self) { return py::cast(Shape{self.value.shape()}); })
         .def_property_readonly("dtype", [](const TensorWrapper& self) { return self.value.dtype(); })
         .def_property_readonly("layout", [](const TensorWrapper& self) { return self.value.layout(); })

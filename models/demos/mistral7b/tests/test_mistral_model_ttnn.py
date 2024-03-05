@@ -73,8 +73,7 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
         )
     }
 
-    # TODO Update the prompt
-    prompts = [""] * 32
+    prompts = ["1, 2, 3, 4, "] * 32
 
     encoded_prompts = [tokenizer.encode(prompt) for prompt in prompts]
 
@@ -154,27 +153,28 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
             # mask = tt2torch_tensor(attn_mask[0])
             ref_output = reference_model(pt_decode_input, freqs_cis_i, positions)  # mask)
 
-        print(f"encoded_prompts[0] = {len(encoded_prompts[0])}")
+        # While in "prefill" mode, use the prompt tokens as the output
         if i in range(len(encoded_prompts[0])):
-            all_outputs.append(tokenizer.decode([encoded_prompts[0][i]]))
+            all_outputs.append(encoded_prompts[0][i])  # Update list of TT outputs
             if run_ref_pt:
-                all_outputs_ref.append(tokenizer.decode([encoded_prompts[0][i]]))
+                all_outputs_ref.append(encoded_prompts[0][i])  # Update list of ref outputs
 
-            print("Prefilling...")
             tt_decode_input = embd(encoded_prompts_tensor[:, i]).view(batch, seqlen, -1)
             if run_ref_pt:
                 pt_decode_input = embd(encoded_prompts_tensor[:, i]).view(batch, seqlen, -1)
         else:
             # Decode the generated token and save it to print out later
-            tt_out_tok = torch.argmax(tt_output_torch, dim=-1).squeeze(1)
+            tt_out_tok = torch.argmax(tt_output_torch, dim=-1)
             tt_decode_input = embd(tt_out_tok)
-            all_outputs.append(tokenizer.decode(tt_out_tok.tolist()[0]))
+            all_outputs.append(tt_out_tok.squeeze(1).tolist()[0])  # Update generated token to list of TT outputs
             if run_ref_pt:
-                pt_out_tok = torch.argmax(ref_output, dim=-1).squeeze(1)
-                pt_decode_input = embd(pt_out_tok)
-                all_outputs_ref.append(tokenizer.decode(pt_out_tok.tolist()[0]))
+                pt_out_tok = torch.argmax(ref_output, dim=-1)
+                pt_decode_input = embd(tt_out_tok)
+                all_outputs_ref.append(
+                    pt_out_tok.squeeze(1).tolist()[0]
+                )  # Update generated token to list of ref outputs
 
-        # Measure PCC
+        # Measure PCC if also running reference model
         if run_ref_pt:
             passing, pcc_message = comp_pcc(ref_output, tt_output_torch, pcc)
 
@@ -187,11 +187,10 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
                 logger.warning("Mistral Model Failed!")
                 all_tests_pass = False
 
-        # TODO Space decoding is currently not working as expected
-        # TODO print All 32 users
-        print("[User 0] TT generation: ", "".join(all_outputs))
+        # TODO print all 32 users
+        print("[User 0] TT generation: ", "".join(tokenizer.decode(all_outputs)))
         if run_ref_pt:
-            print("[User 0] Ref generation: ", "".join(all_outputs_ref))
+            print("[User 0] Ref generation: ", "".join(tokenizer.decode(all_outputs_ref)))
 
     if run_ref_pt:
         if all_tests_pass:
