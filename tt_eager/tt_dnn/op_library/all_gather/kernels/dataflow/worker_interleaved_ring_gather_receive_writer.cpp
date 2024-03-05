@@ -61,18 +61,18 @@ void kernel_main() {
     uint32_t col_idx = col_start_idx;
     uint32_t row_idx = row_start_idx;
 
-    DPRINT << "rws START\n";
+    // DPRINT << "rws START\n";
     for (uint32_t i = 0; i < num_transfers; ++i) {
-        DPRINT << "rws TRANSFER " << i << "\n";
+        // DPRINT << "rws TRANSFER " << i << "\n";
         if constexpr (num_full_chunks > 0) {
             for (uint32_t c = 0; c < num_full_chunks; ++c) {
-                DPRINT << "rws WRITE FULL CHUNK " << i << "\n";
+                // DPRINT << "rws WRITE FULL CHUNK " << i << "\n";
                 write_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, num_pages, page_size);
                 noc_semaphore_inc(worker_send_reader_semaphore_noc_addr, 1);
             }
         }
         if constexpr (rem_num_pages > 0) {
-            DPRINT << "rws WRITE PARTIAL CHUNK " << i << "\n";
+            // DPRINT << "rws WRITE PARTIAL CHUNK " << i << "\n";
             write_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, rem_num_pages, page_size);
             noc_semaphore_inc(worker_send_reader_semaphore_noc_addr, 1);
         }
@@ -121,6 +121,7 @@ void kernel_main() {
     }
 
 
+    DPRINT << "rws DONE\n";
     for (uint32_t n = 0; n < NUM_NOCS; n++) {
         while (!ncrisc_noc_nonposted_writes_sent(n)) {
             // DPRINT << "NOC_STATUS_READ_REG(noc, NIU_MST_NONPOSTED_WR_REQ_SENT)=" << (uint32_t)NOC_STATUS_READ_REG(n, NIU_MST_NONPOSTED_WR_REQ_SENT) << "\n";
@@ -134,5 +135,5 @@ void kernel_main() {
         }
     }
     // ncrisc_noc_full_sync();
-    DPRINT << "rws DONE\n";
+    DPRINT << "rws DONE DONE\n";
 }

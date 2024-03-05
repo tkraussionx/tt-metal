@@ -17,11 +17,11 @@ namespace tt_metal {
 namespace all_gather_buffer_params {
     constexpr bool enable_bidirectional = true;
     constexpr uint32_t erisc_handshake_address = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
-    constexpr uint32_t num_buffers = 4;
+    constexpr uint32_t num_buffers = 6;
     constexpr uint32_t semaphore_size = 32; // TODO: Remove this once dedicated semaphore space for user kernels are added
     constexpr uint32_t semaphore_offset = semaphore_size * num_buffers; // TODO: Remove this once dedicated semaphore space for user kernels are added
     constexpr uint32_t eth_buffer_size = std::min<uint32_t>(16*1024, round_down((eth_l1_mem::address_map::MAX_L1_LOADING_SIZE - eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE - semaphore_offset) / num_buffers, 32));
-    static_assert(eth_buffer_size == 16*1024);
+    // static_assert(eth_buffer_size == 16*1024);
     constexpr uint32_t eth_sem_l1_byte_address = erisc_handshake_address + 16;
     constexpr uint32_t eth_buffer_l1_byte_address = eth_sem_l1_byte_address + semaphore_offset;
     static_assert(num_buffers <= eth_l1_mem::address_map::MAX_NUM_CHANNELS);

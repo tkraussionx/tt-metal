@@ -60,29 +60,29 @@ void kernel_main() {
     // Used to signal eth sender that data is available. This is different per writer core
     const uint64_t eth_l1_sender_semaphore_addr = get_noc_addr(eth_sender_noc_x, eth_sender_noc_y, eth_sender_l1_sem_addr);
 
-    DPRINT << "sws: num_full_chunks=" << num_full_chunks << "\n";
-    DPRINT << "sws: rem_num_pages=" << rem_num_pages << "\n";
-    DPRINT << "sws: eth_sender_noc_x=" << eth_sender_noc_x << ", eth_sender_noc_y=" << eth_sender_noc_y << "\n";
-    DPRINT << "sws: my_x,my_y=" << (uint32_t)((my_x[0] << 16) | my_y[0]) << "\n";
+    // DPRINT << "sws: num_full_chunks=" << num_full_chunks << "\n";
+    // DPRINT << "sws: rem_num_pages=" << rem_num_pages << "\n";
+    // DPRINT << "sws: eth_sender_noc_x=" << eth_sender_noc_x << ", eth_sender_noc_y=" << eth_sender_noc_y << "\n";
+    // DPRINT << "sws: my_x,my_y=" << (uint32_t)((my_x[0] << 16) | my_y[0]) << "\n";
     if constexpr(num_full_chunks > 0) {
         for (uint32_t c = 0; c < num_full_chunks; ++c) {
-            DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " WAITING FOR SEMAPHORE at " << (uint32_t)writer_send_semaphore_addr_ptr << "\n";
+            // DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " WAITING FOR SEMAPHORE at " << (uint32_t)writer_send_semaphore_addr_ptr << "\n";
             noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
             noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
             // TODO: Might be better to split this?
-            DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " SEND CHUNK\n";
+            // DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " SEND CHUNK\n";
             write_and_send_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, num_pages, page_size, eth_l1_sender_base_noc_addr);
-            DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " noc_semaphore_inc to " << (uint32_t)eth_l1_sender_semaphore_addr << "\n";
+            // DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " noc_semaphore_inc to " << (uint32_t)eth_l1_sender_semaphore_addr << "\n";
             noc_semaphore_inc(eth_l1_sender_semaphore_addr, 1);
         }
     }
     if constexpr(rem_num_pages > 0) {
-        DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " WAITING FOR SEMAPHORE at " << (uint32_t)writer_send_semaphore_addr_ptr << "\n";
+        // DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " WAITING FOR SEMAPHORE at " << (uint32_t)writer_send_semaphore_addr_ptr << "\n";
         noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
         noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
-        DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " rem_num_pages sendign chunks\n";
+        // DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " rem_num_pages sendign chunks\n";
         write_and_send_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, rem_num_pages, page_size, eth_l1_sender_base_noc_addr);
-        DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " rem_num_pages noc_semaphore_inc " << (uint32_t)eth_l1_sender_semaphore_addr << "\n";
+        // DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " rem_num_pages noc_semaphore_inc " << (uint32_t)eth_l1_sender_semaphore_addr << "\n";
         noc_semaphore_inc(eth_l1_sender_semaphore_addr, 1);
     }
 
@@ -90,22 +90,22 @@ void kernel_main() {
     for (uint32_t i = 1; i < num_transfers; ++i) {
         if constexpr(num_full_chunks > 0) {
             for (uint32_t c = 0; c < num_full_chunks; ++c) {
-                DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " WAITING FOR SEMAPHORE at " << (uint32_t)writer_send_semaphore_addr_ptr << "\n";
+                // DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " WAITING FOR SEMAPHORE at " << (uint32_t)writer_send_semaphore_addr_ptr << "\n";
                 noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
                 noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
-                DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " rem_num_pages sendign chunks\n";
+                // DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " rem_num_pages sendign chunks\n";
                 send_chunk(cb_id_in0, num_pages, page_size, eth_l1_sender_base_noc_addr);
-                DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " rem_num_pages noc_semaphore_inc\n";
+                // DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " rem_num_pages noc_semaphore_inc\n";
                 noc_semaphore_inc(eth_l1_sender_semaphore_addr, 1);
             }
         }
         if constexpr(rem_num_pages > 0) {
-            DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " WAITING FOR SEMAPHORE at " << (uint32_t)writer_send_semaphore_addr_ptr << "\n";
+            // DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " WAITING FOR SEMAPHORE at " << (uint32_t)writer_send_semaphore_addr_ptr << "\n";
             noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
             noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
-            DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " rem_num_pages sendign chunks\n";
+            // DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " rem_num_pages sendign chunks\n";
             send_chunk(cb_id_in0, rem_num_pages, page_size, eth_l1_sender_base_noc_addr);
-            DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " rem_num_pages noc_semaphore_inc\n";
+            // DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " rem_num_pages noc_semaphore_inc\n";
             noc_semaphore_inc(eth_l1_sender_semaphore_addr, 1);
         }
     }

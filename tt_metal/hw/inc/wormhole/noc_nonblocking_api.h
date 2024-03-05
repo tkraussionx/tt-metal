@@ -123,11 +123,11 @@ inline __attribute__((always_inline)) void ncrisc_noc_blitz_write_setup(uint32_t
 }
 
 inline __attribute__((always_inline)) bool ncrisc_noc_nonposted_writes_sent(uint32_t noc) {
-  return (NOC_STATUS_READ_REG(noc, NIU_MST_NONPOSTED_WR_REQ_SENT) == noc_nonposted_writes_num_issued[noc]);
+  return (NOC_STATUS_READ_REG(noc, NIU_MST_NONPOSTED_WR_REQ_SENT) >= noc_nonposted_writes_num_issued[noc]);
 }
 
 inline __attribute__((always_inline)) bool ncrisc_noc_nonposted_writes_flushed(uint32_t noc) {
-  return (NOC_STATUS_READ_REG(noc, NIU_MST_WR_ACK_RECEIVED) == noc_nonposted_writes_acked[noc]);
+  return (NOC_STATUS_READ_REG(noc, NIU_MST_WR_ACK_RECEIVED) >= noc_nonposted_writes_acked[noc]);
 }
 
 inline __attribute__((always_inline)) void noc_init() {

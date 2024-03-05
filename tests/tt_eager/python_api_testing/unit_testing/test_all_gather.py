@@ -13,24 +13,24 @@ from models.utility_functions import skip_for_grayskull
 @pytest.mark.parametrize(
     "input_shape, dim, layout",
     [
-        # ([4, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),
-        # ([4, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
-        # ([8, 5, 13, 384], 3, ttl.tensor.Layout.ROW_MAJOR),
-        # ([8, 5, 32, 384], 3, ttl.tensor.Layout.TILE),
-        # ([8, 8, 256, 384], 0, ttl.tensor.Layout.ROW_MAJOR),
-        # ([8, 8, 256, 384], 0, ttl.tensor.Layout.TILE),
-        # ([8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),
-        # ([8, 8, 256, 384], 1, ttl.tensor.Layout.TILE),
-        # ([8, 8, 256, 384], 2, ttl.tensor.Layout.ROW_MAJOR),
-        # ([8, 8, 256, 384], 2, ttl.tensor.Layout.TILE),
-        # ([8, 8, 256, 384], 3, ttl.tensor.Layout.ROW_MAJOR),
-        # ([8, 8, 256, 384], 3, ttl.tensor.Layout.TILE),
+        ([4, 1, 33, 256], 0, ttl.tensor.Layout.ROW_MAJOR),
+        ([4, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
+        ([8, 5, 13, 384], 3, ttl.tensor.Layout.ROW_MAJOR),
+        ([8, 5, 32, 384], 3, ttl.tensor.Layout.TILE),
+        ([8, 8, 256, 384], 0, ttl.tensor.Layout.ROW_MAJOR),
+        ([8, 8, 256, 384], 0, ttl.tensor.Layout.TILE),
+        ([8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),
+        ([8, 8, 256, 384], 1, ttl.tensor.Layout.TILE),
+        ([8, 8, 256, 384], 2, ttl.tensor.Layout.ROW_MAJOR),
+        ([8, 8, 256, 384], 2, ttl.tensor.Layout.TILE),
+        ([8, 8, 256, 384], 3, ttl.tensor.Layout.ROW_MAJOR),
+        ([8, 8, 256, 384], 3, ttl.tensor.Layout.TILE),
         # Only for BFP8B
         # ([1, 1, 640, 32768], 3, ttl.tensor.Layout.TILE),
         # MLP AllGather. Llama 2 decode attn, mlp. Llama2, Falcon 40B decode mlp attn
         # Mixtral 8x7B, functional bringup with expanded tensor getting allgathered
         # Full shape for 8 chips
-        # ([1, 1, 32, 32768], 3, ttl.tensor.Layout.TILE),
+        ([1, 1, 32, 32768], 3, ttl.tensor.Layout.TILE),
         ([1, 1, 32, 32768], 3, ttl.tensor.Layout.ROW_MAJOR),
         # MLP AllGather. Llama 2 decode attn, mlp. Llama2, Falcon 40B decode mlp attn
         # Half shape for 4 chips, same per chip shape as 8 chips
@@ -38,8 +38,8 @@ from models.utility_functions import skip_for_grayskull
         ([1, 1, 32, 16384], 3, ttl.tensor.Layout.ROW_MAJOR),
         # Input, Selfout, Final AllGather. Llama2, Falcon 40B decode mlp attn
         # Full shape for 8 chips
-        # ([1, 1, 32, 8192], 3, ttl.tensor.Layout.TILE),
-        # ([1, 1, 32, 8192], 3, ttl.tensor.Layout.ROW_MAJOR),
+        ([1, 1, 32, 8192], 3, ttl.tensor.Layout.TILE),
+        ([1, 1, 32, 8192], 3, ttl.tensor.Layout.ROW_MAJOR),
         # Input, Selfout, Final AllGather. Llama2, Falcon 40B decode mlp attn
         # Half shape for running on 4 chips, same per chip shape as for 8 chips
         ([1, 1, 32, 4096], 3, ttl.tensor.Layout.TILE),
@@ -69,11 +69,11 @@ from models.utility_functions import skip_for_grayskull
         ([1, 1, 128, 1024], 2, ttl.tensor.Layout.ROW_MAJOR),
         ([1, 1, 128, 1024], 2, ttl.tensor.Layout.TILE),
         # ([1, 1, 32, 8192], 3, ttl.tensor.Layout.ROW_MAJOR), # ALREADY LISTED PREVIOUSLY
-        # ([1, 1, 32, 8192], 3, ttl.tensor.Layout.TILE),     # ALREADY LISTED PREVIOUSLY
+        # ([1, 1, 32, 8192], 3, ttl.tensor.Layout.TILE),      # ALREADY LISTED PREVIOUSLY
         ([1, 1, 128, 4096], 2, ttl.tensor.Layout.ROW_MAJOR),  #
         ([1, 1, 128, 4096], 2, ttl.tensor.Layout.TILE),
-        # ([1, 1, 32, 16384], 3, ttl.tensor.Layout.ROW_MAJOR), # duplicate of above. Update for 8 chip, actuall 32k for 8 chip but we are halving it for our 4 chip test
-        # ([1, 1, 32, 16384], 3, ttl.tensor.Layout.TILE),      # duplicate of above. Update for 8 chip, actuall 32k for 8 chip but we are halving it for our 4 chip test
+        # ([1, 1, 32, 16384], 3, ttl.tensor.Layout.ROW_MAJOR), # ALREADY LISTED PREVIOUSLY. Update for 8 chip, actuall 32k for 8 chip but we are halving it for our 4 chip test
+        # ([1, 1, 32, 16384], 3, ttl.tensor.Layout.TILE),      # ALREADY LISTED PREVIOUSLY. Update for 8 chip, actuall 32k for 8 chip but we are halving it for our 4 chip test
         ([1, 1, 8192, 32], 2, ttl.tensor.Layout.ROW_MAJOR),
         ([1, 1, 8192, 32], 2, ttl.tensor.Layout.TILE),
         ([1, 1, 1024, 128], 3, ttl.tensor.Layout.ROW_MAJOR),  # double on reduction dim for 8 chip
@@ -84,8 +84,8 @@ from models.utility_functions import skip_for_grayskull
         ([1, 1, 4096, 128], 3, ttl.tensor.Layout.TILE),  # only for 4 chip
         ([1, 1, 128, 2048], 2, ttl.tensor.Layout.ROW_MAJOR),  # double on reduction dim for 8 chip
         ([1, 1, 128, 2048], 2, ttl.tensor.Layout.TILE),  # double on reduction dim for 8 chip
-        # ([1, 1, 32, 8192], 3, ttl.tensor.Layout.ROW_MAJOR), # only for 4 chip
-        # ([1, 1, 32, 8192], 3, ttl.tensor.Layout.TILE),      # only for 4 chip
+        # ([1, 1, 32, 8192], 3, ttl.tensor.Layout.ROW_MAJOR), # only for 4 chip - ALREADY LISTED PREVIOUSLY
+        # ([1, 1, 32, 8192], 3, ttl.tensor.Layout.TILE),      # only for 4 chip - ALREADY LISTED PREVIOUSLY
         ([1, 1, 128, 8192], 2, ttl.tensor.Layout.ROW_MAJOR),  # double on reduction dim for 8 chip
         ([1, 1, 128, 8192], 2, ttl.tensor.Layout.TILE),  # double on reduction dim for 8 chip
     ],
@@ -143,10 +143,23 @@ def test_all_gather_interleaved(
 
     tt_out_tensors = ttl.tensor.all_gather(tt_input_tensors, dim, num_links, output_mem_config=mem_config)
 
+    failed = False
     for i, t in enumerate(tt_out_tensors):
         tt_output_tensor = t.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
         if input_dtype == ttl.tensor.DataType.BFLOAT16:
             eq, output = comp_equal(tt_output_tensor, input_tensor)
         else:
             eq, output = comp_pcc(tt_output_tensor, input_tensor)
-        assert eq, f"{i} FAILED: {output}"
+        # if not eq:
+        #     print (f"TENSOR {i} FAILED COMPARISON!!!!!!")
+        #     for w in range(tt_output_tensor.shape[0]):
+        #         for b in range(tt_output_tensor.shape[1]):
+        #             for y in range(tt_output_tensor.shape[2]):
+        #                 for x in range(tt_output_tensor.shape[3]):
+        #                     if (tt_output_tensor[w][b][y][x] != input_tensor[w][b][y][x]):
+        #                         print(f"Index {w} {b} {y} {x} Mismatch: Golden {input_tensor[w][b][y][x]}, Calculated {tt_output_tensor[w][b][y][x]}")
+        if not eq:
+            f"{i} FAILED: {output}"
+            failed = True
+
+    assert not failed, "Test Failed"

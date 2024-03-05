@@ -28,7 +28,9 @@ namespace tt_metal {
 
 
 uint32_t get_num_buffers_in_clockwise_direction() {
-    return all_gather_buffer_params::enable_bidirectional ? all_gather_buffer_params::num_buffers / 2 : all_gather_buffer_params::num_buffers;
+    return all_gather_buffer_params::enable_bidirectional ?
+        all_gather_buffer_params::num_buffers / 2 :
+        all_gather_buffer_params::num_buffers;
 
     // Force all through counter-clockwise direction
     // return 0;
@@ -38,7 +40,9 @@ bool is_buffer_in_clockwise_ring(const uint32_t buffer_index) {
     // For now we split it as lower half => clockwise, upper half => counter-clockwise
     // This is slightly suboptimal since the non-full-chunks go to the upper half.
     // A more optimal split would be round robin
-    return all_gather_buffer_params::enable_bidirectional ? buffer_index < (all_gather_buffer_params::num_buffers - get_num_buffers_in_clockwise_direction()) : true;
+    return all_gather_buffer_params::enable_bidirectional ?
+        buffer_index < (all_gather_buffer_params::num_buffers - get_num_buffers_in_clockwise_direction()) :
+        true;
 
     // Force all through counter-clockwise direction
     // return false;
@@ -202,6 +206,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
     std::vector<uint32_t> eth_buffer_addrs;
     eth_sem_addrs.reserve(all_gather_buffer_params::num_buffers);
     eth_buffer_addrs.reserve(all_gather_buffer_params::num_buffers);
+
     for (uint32_t b = 0, eth_sem_addr = all_gather_buffer_params::eth_sem_l1_byte_address, eth_buffer_addr = all_gather_buffer_params::eth_buffer_l1_byte_address; b < all_gather_buffer_params::num_buffers; ++b) {
         eth_sem_addrs.push_back(eth_sem_addr);
         eth_sem_addr += all_gather_buffer_params::semaphore_size;
@@ -214,8 +219,10 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
         // We can have overlap between a link's sender and receiver worker grids if we have the semaphores at different addresses
         constexpr uint32_t worker_grid_width = 8;
         constexpr bool fit_sender_and_receiver_workers_on_same_row = (worker_grid_width / 2) >= all_gather_buffer_params::num_buffers;
-        uint32_t receiver_worker_row = fit_sender_and_receiver_workers_on_same_row ? i : 2 * i;
-        uint32_t sender_worker_row = fit_sender_and_receiver_workers_on_same_row ? i : (2 * i) + 1;
+        // FIXME: Need to shift down a couple rows to avoid a runtime/dispatcher bug that prevents the first worker
+        //        core from receiving its "GO" signal
+        uint32_t receiver_worker_row = (fit_sender_and_receiver_workers_on_same_row ? i + 2: 2 * i) + 2;
+        uint32_t sender_worker_row = (fit_sender_and_receiver_workers_on_same_row ? i + 2: (2 * i) + 1) + 2;
         uint32_t sender_worker_col_offset = fit_sender_and_receiver_workers_on_same_row ? all_gather_buffer_params::num_buffers : 0;
         auto receiver_workers = CoreRange({0, receiver_worker_row}, {all_gather_buffer_params::num_buffers - 1, receiver_worker_row});
         auto sender_workers = CoreRange({sender_worker_col_offset, sender_worker_row}, {sender_worker_col_offset + all_gather_buffer_params::num_buffers - 1, sender_worker_row});
@@ -269,6 +276,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                 pages_per_buffer.back()++;
             }
         }
+        TT_ASSERT(std::accumulate(pages_per_buffer.begin(), pages_per_buffer.end(), 0) == pages_per_link.at(i));
 
 
         uint32_t bytes_per_chunk = 0, pages_per_chunk = 0, num_full_chunks = 0, rem_bytes = 0, rem_pages = 0;
@@ -476,13 +484,15 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                 static_cast<uint32_t>(output_addr_offset),
                 static_cast<uint32_t>(ring_index),
                 static_cast<uint32_t>(sender_worker_reader_semaphore_addr),
-                static_cast<uint32_t>(is_clockwise_direction ? 1 : 0)
+                static_cast<uint32_t>(is_clockwise_direction ? 1 : 0),
+                static_cast<uint32_t>(b)
             };
 
             std::vector<uint32_t> worker_reader_sender_rt_args = {
                 static_cast<uint32_t>(input_buffer->address()),
                 static_cast<uint32_t>(output_buffer->address())
             };
+            // std::cout << "SENDER WORKER CORE: x=" << sender_worker_cores.at(b).x << ", y=" << sender_worker_cores.at(b).y << std::endl;
             KernelHandle worker_reader_sender_kernel_id = tt_metal::CreateKernel(
                 program,
                 "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_interleaved_ring_gather_send_reader.cpp",
