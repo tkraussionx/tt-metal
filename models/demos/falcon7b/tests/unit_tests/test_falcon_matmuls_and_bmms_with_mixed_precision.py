@@ -38,26 +38,20 @@ def run_falcon_matmul_test(
         b_shape = [1, 1, 18176, 4544]
         expected_output_shape = [1, 1, seq_len, 4544]
 
-        if (seq_len == 1024 and in0_dtype == in1_dtype == out_dtype == ttl.tensor.DataType.BFLOAT16) or (
-            seq_len == 2048
-            and (
-                in0_dtype == ttl.tensor.DataType.BFLOAT16
-                or in1_dtype == ttl.tensor.DataType.BFLOAT16
-                or out_dtype == ttl.tensor.DataType.BFLOAT16
-            )
-        ):
-            logger.warning(
-                f"For seq_len: {seq_len}, in0_dtype: {in0_dtype}, in1_dtype: {in1_dtype}, and out_dtype: {out_dtype}, L1 space is not enough. Running with in0, in1, and out on DRAM instead!"
-            )
-            in0_mem_config = ttl.tensor.MemoryConfig(
-                ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM
-            )
-            in1_mem_config = ttl.tensor.MemoryConfig(
-                ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM
-            )
-            out_mem_config = ttl.tensor.MemoryConfig(
-                ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM
-            )
+        # if (seq_len == 1024 and in0_dtype == in1_dtype == out_dtype == ttl.tensor.DataType.BFLOAT16) or (
+        #     seq_len == 2048
+        #     and (
+        #         in0_dtype == ttl.tensor.DataType.BFLOAT16
+        #         or in1_dtype == ttl.tensor.DataType.BFLOAT16
+        #         or out_dtype == ttl.tensor.DataType.BFLOAT16
+        #     )
+        # ):
+        logger.warning(
+            f"For seq_len: {seq_len}, in0_dtype: {in0_dtype}, in1_dtype: {in1_dtype}, and out_dtype: {out_dtype}, L1 space is not enough. Running with in0, in1, and out on DRAM instead!"
+        )
+        in0_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
+        in1_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
+        out_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
     elif falcon_op == ttl.tensor.falcon_dense_h_to_4h_matmul:
         a_shape = [1, 1, seq_len, 4544]
         b_shape = [1, 1, 4544, 18176]
@@ -115,7 +109,82 @@ def run_falcon_matmul_test(
     b_t = ttl.tensor.Tensor(B, in1_dtype).to(ttl.tensor.Layout.TILE).to(device, in1_mem_config)
     bias_t = None
 
-    out = falcon_op(a_t, b_t, bias_t, output_mem_config=out_mem_config, output_dtype=out_dtype)
+    if falcon_op == ttl.tensor.falcon_dense_4h_to_h_matmul:
+        compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+            math_fidelity=ttl.tensor.MathFidelity.LoFi,
+            math_approx_mode=True,
+            fp32_dest_acc_en=False,
+            packer_l1_acc=True,
+        )
+
+        # struct MatmulMultiCoreReuseMultiCastProgramConfig {
+        #     CoreCoord compute_with_storage_grid_size;
+        #     std::size_t in0_block_w;
+        #     std::size_t out_subblock_h;
+        #     std::size_t out_subblock_w;
+        #     std::size_t per_core_M;
+        #     std::size_t per_core_N;
+        #     bool transpose_mcast;
+        #     std::optional<UnaryWithParam> fused_activation;
+
+        # seq_len 1024 top performance config!
+
+        # A = [32, 568] * [568, 142]
+        program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+            compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+            in0_block_w=8,
+            per_core_M=4,
+            per_core_N=18,
+            out_subblock_h=1,
+            out_subblock_w=6,
+            transpose_mcast=False,
+            fused_activation=None,
+        )
+
+        # this is not working :)
+        # program_config = ttl.operations.primary.MatmulMultiCoreReuseProgramConfig(
+        #     compute_with_storage_grid_size = device.compute_with_storage_grid_size(),
+        #     in0_block_w = 2,
+        #     out_subblock_h = 1,
+        #     out_subblock_w = 1,
+        #     per_core_M = 32,
+        #     per_core_N = 71
+        # )
+
+        # program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+        #     compute_with_storage_grid_size=(device.compute_with_storage_grid_size()),
+        #     in0_block_w = 2, # u_kt
+        #     out_subblock_h = 8,
+        #     out_subblock_w = 1,
+        #     per_core_M = 32,
+        #     per_core_N = 3,
+        #     fuse_batch = True,
+        #     fused_activation = None,
+        #     mcast_in0 = True,
+        # )
+
+        # out = ttl.operations.primary.matmul_1d(
+        #     a_t,
+        #     b_t,
+        #     bias = None,
+        #     program_config = program_config,
+        #     output_mem_config = out_mem_config,
+        #     output_dtype = out_dtype,
+        #     compute_kernel_config=compute_kernel_config
+        # )
+
+        out = ttl.operations.primary.matmul(
+            a_t,
+            b_t,
+            program_config=program_config,
+            output_mem_config=out_mem_config,
+            output_dtype=out_dtype,
+            compute_kernel_config=compute_kernel_config,
+        )
+
+        # out = falcon_op(a_t, b_t, bias_t, output_mem_config=out_mem_config, output_dtype=out_dtype)
+    else:
+        out = falcon_op(a_t, b_t, bias_t, output_mem_config=out_mem_config, output_dtype=out_dtype)
 
     # Check memory and dtype of inputs and outputs
     assert a_t.memory_config().buffer_type == in0_mem_config.buffer_type
@@ -140,8 +209,6 @@ def run_falcon_matmul_test(
     assert passing_pcc
 
 
-# TODO: We could parametrize these separately for comprehensive testing
-@skip_for_wormhole_b0("non-determinstic hang, see issue #5882")
 @pytest.mark.parametrize(
     "in0_mem_config, in1_mem_config, out_mem_config",
     (

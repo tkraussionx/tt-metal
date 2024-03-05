@@ -951,6 +951,9 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(cons
     if (transpose_mcast) {
         std::swap(num_blocks_x, num_blocks_y);
     }
+
+
+    log_info("Max num cores X: {}, Max num cores Y: {}", num_cores_x, num_cores_y);
     CoreCoord core_range = bmm_op_utils::get_core_range(num_blocks_y, num_blocks_x, num_cores_y, num_cores_x);
 
     ////////////////////////////////////////////////////////////////////////////
@@ -963,6 +966,8 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_2d_optimized_(cons
     //                      Application Setup
     ////////////////////////////////////////////////////////////////////////////
 
+    log_info("Num_Blocks X: {}, Num_Blocks Y: {}", num_blocks_x, num_blocks_y);
+    log_info("Cores X: {}, Cores Y: {}", core_range.x, core_range.y);
     if (core_range.x > 1 and core_range.y > 1) {
         return reuse_mcast_optimized_helpers::create_program_mcast_in0_in1(
             device,

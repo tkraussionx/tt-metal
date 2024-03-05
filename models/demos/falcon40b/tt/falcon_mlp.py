@@ -122,6 +122,21 @@ class TtFalconMLP:
             hidden_states[i] = tt_lib.tensor.interleaved_to_sharded(
                 hidden_states[i], sharded_mem_config=self.model_config["MLP_ALL_GATHER_OUTPUT_MEMCFG"]
             )
+
+            # model_config[
+            #     "DENSE_4H_TO_H_MM_PROGCFG"
+            # ] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+            #     compute_with_storage_grid_size=(8, 4),
+            #     in0_block_w=32,  # TODO: Can this be larger
+            #     out_subblock_h=1,  # TODO: Can this be larger
+            #     out_subblock_w=2,
+            #     per_core_M=shard_height // 32,
+            #     per_core_N=2,
+            #     fuse_batch=True,
+            #     fused_activation=None,
+            #     mcast_in0=True,
+            # )
+
         for i in range(len(hidden_states)):
             hidden_states[i] = tt_lib.operations.primary.matmul_1d(
                 hidden_states[i],
