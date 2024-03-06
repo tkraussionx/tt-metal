@@ -19,13 +19,14 @@ class MambaTT(torch.nn.Module):
         device,
         num_users,
         hidden_size,
+        configs
         
     ):
         super().__init__()
         print(f"Initalizing MambaTT with {num_layers} layers")
         self.args = reference_model.args
         self.device = device
-        self.layers = [TtResidualBlock(self.args, device, reference_model.layers[i].state_dict(), num_users, hidden_size) for i in range(num_layers)]
+        self.layers = [TtResidualBlock(self.args, device, reference_model.layers[i].state_dict(), num_users, hidden_size, configs) for i in range(num_layers)]
         
 
     def forward(self, x):
