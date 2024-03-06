@@ -48,6 +48,7 @@ class Conv2d:
         use_dram_for_matmul: bool = False,
         output_layout: ttnn.Layout = ttnn.TILE_LAYOUT,
     ):
+        use_shallow_conv_variant = False
         assert (
             padding_mode == "zeros"
         ), f"Only convs with padding_mode=zeroes supported. Found padding_mode set to {padding_mode}."

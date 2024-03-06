@@ -293,7 +293,7 @@ def mean(input_tensor: ttnn.Tensor, dim: Union[int, Tuple[int]], keepdim: bool =
 
 ## helper function for upsample. currently only supports HEIGHT sharding
 def _get_upsample_shard_grid_from_num_shards(ncores: int):
-    max_grid_size = (9, 12)  ## (y, x)
+    max_grid_size = (8, 8)  ## (y, x)
     if ncores % max_grid_size[1] == 0:
         core_grid = ttnn.CoreGrid(y=ncores // max_grid_size[1], x=max_grid_size[1])
         grid_coord = ttnn.experimental.tensor.CoreCoord(core_grid.x - 1, core_grid.y - 1)
@@ -325,7 +325,7 @@ def _get_upsample_shard_grid_from_num_shards(ncores: int):
 ## helper function for upsample
 def _get_upsample_num_shards(batch_size: int, height: int, num_channels: int, shard_strategy: ttnn.ShardStrategy):
     ## calculate ncores, corresponding grid_size and in_shard_shape based on the input_shape
-    max_grid_size = (9, 12)  ## (y, x)
+    max_grid_size = (8, 8)  ## (y, x)
     if shard_strategy == ttnn.ShardStrategy.HEIGHT:
         ## nsticks per shard should be divisible by in_w
         max_nshards = min(batch_size * height, max_grid_size[0] * max_grid_size[1])
