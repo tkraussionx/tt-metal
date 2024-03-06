@@ -136,6 +136,10 @@ namespace tt::tt_metal::detail
             py::arg().noconvert(), py::arg("output_mem_config") = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
             Shuffles [B, num_heads, S, head_dim] tensor into tensor with shape [B, 1, S, num_heads * head_dim].
         )doc");
+        m_tensor.def("tutorial_nlp_concat_heads", &tutorial_nlp_concat_heads,
+            py::arg().noconvert(), py::arg("output_mem_config") = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
+            Shuffles [B, num_heads, S, head_dim] tensor into tensor with shape [B, 1, S, num_heads * head_dim].
+        )doc");
 
         // Custom Resnet matmuls
         m_tensor.def("resnet_matmul", &resnet_matmul,

@@ -242,6 +242,46 @@ tt::stl::reflection::Attributes NlpConcatHeads::attributes() const {
     };
 }
 
+// Tutorial NLP ConcatHeads op
+void TutorialNlpConcatHeads::validate(const std::vector<Tensor>& input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
+    const auto input_shape = input_tensor.get_legacy_shape();
+
+    TT_FATAL(input_tensor.storage_type() == StorageType::DEVICE, "Operands to TM need to be on device!");
+    TT_FATAL(input_tensor.buffer() != nullptr, "Operands to TM need to be allocated in buffers on device!");
+    TT_FATAL(input_tensor.get_dtype() == tt::tt_metal::DataType::BFLOAT16 || input_tensor.get_dtype() == tt::tt_metal::DataType::BFLOAT8_B, "Unsupported data format");
+    TT_FATAL(input_tensor.get_layout() == Layout::TILE);
+}
+
+std::vector<Shape> TutorialNlpConcatHeads::compute_output_shapes(const std::vector<Tensor>& input_tensors) const {
+    std::vector<Shape> output_shape_vec;
+    const auto& input_tensor = input_tensors.at(0);
+    const auto input_shape = input_tensor.get_legacy_shape();
+    output_shape_vec = {(Shape) {input_shape[0], 1, input_shape[2], input_shape[1] * input_shape[3]}};
+
+    return output_shape_vec;
+}
+
+std::vector<Tensor> TutorialNlpConcatHeads::create_output_tensors(const std::vector<Tensor>& input_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
+    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor.get_dtype(), Layout::TILE, this->output_mem_config);
+}
+
+operation::ProgramWithCallbacks TutorialNlpConcatHeads::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
+    const auto& input_tensor = input_tensors.at(0);
+    auto& output_tensor = output_tensors.at(0);
+
+    CoreCoord compute_with_storage_grid_size = input_tensor.device()->compute_with_storage_grid_size();
+
+    return  multi_core_tutorial_nlp_concat_heads(input_tensor, output_tensor, compute_with_storage_grid_size);
+}
+
+tt::stl::reflection::Attributes TutorialNlpConcatHeads::attributes() const {
+    return {
+        {"output_mem_config", this->output_mem_config},
+    };
+}
+
 } // namespace tt_metal
 
 } // namespace tt

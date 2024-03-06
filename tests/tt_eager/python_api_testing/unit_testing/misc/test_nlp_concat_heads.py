@@ -99,3 +99,66 @@ def test_nlp_concat_heads_with_program_cache(use_program_cache, device):
         tt_dummy_tensor = ttl.tensor.Tensor(py_dummy_tensor, dtype).to(ttl.tensor.Layout.TILE).to(device, mem_config)
 
     assert ttl.program_cache.num_entries() == 2
+
+
+@pytest.mark.parametrize(
+    "out_mem_config",
+    (
+        ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
+        ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
+    ),
+    ids=["out_DRAM", "out_L1"],
+)
+@pytest.mark.parametrize(
+    "in0_mem_config",
+    (
+        ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM),
+        ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1),
+    ),
+    ids=["in0_DRAM", "in0_L1"],
+)
+@pytest.mark.parametrize(
+    "dtype",
+    (ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16),
+    ids=["BFLOAT8_B", "BFLOAT16"],
+)
+@pytest.mark.parametrize(
+    "batch, seq_len",
+    ((1, 96),),
+    ids=["batch1_seq64"],
+)
+def test_tutorial_concat_heads_test(batch, seq_len, dtype, in0_mem_config, out_mem_config, request, device):
+    ttl.profiler.set_profiler_location(f"tutorial_nlp_concat_heads_tm_{request.node.callspec.id}")
+    torch.manual_seed(1234)
+
+    num_heads = 3
+    head_dim = 64
+    in0_shape = [batch, num_heads, seq_len, head_dim]
+
+    A = torch.randn(in0_shape)
+
+    in0_t = ttl.tensor.Tensor(A, dtype).to(ttl.tensor.Layout.TILE).to(device, in0_mem_config)
+
+    out = ttl.tensor.tutorial_nlp_concat_heads(in0_t, out_mem_config)
+
+    # Check memory of inputs and outputs
+    assert in0_t.memory_config().buffer_type == in0_mem_config.buffer_type
+    assert out.memory_config().buffer_type == out_mem_config.buffer_type
+    logger.debug(f"in0: {in0_t.memory_config().buffer_type} and {in0_t.get_dtype()}")
+    logger.debug(f"out: {out.memory_config().buffer_type} and {out.get_dtype()}")
+
+    assert list(out.get_legacy_shape()) == [batch, 1, seq_len, num_heads * head_dim]
+
+    pyt_got_back_rm_out = tt2torch_tensor(out)
+
+    ref_out = torch.transpose(A, -3, -2).reshape([batch, 1, seq_len, num_heads * head_dim])
+
+    if dtype == ttl.tensor.DataType.BFLOAT8_B:
+        pcc = 0.99
+    else:
+        pcc = 1.0
+
+    passing_pcc, output_pcc = comp_pcc(pyt_got_back_rm_out, ref_out, pcc)
+    logger.info(f"passing={passing_pcc}")
+    logger.info(f"output pcc={output_pcc}")
+    assert passing_pcc
