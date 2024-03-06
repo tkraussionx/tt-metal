@@ -1,0 +1,2 @@
+pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "out_BFLOAT16 and in1_BFLOAT8_B and in0_BFLOAT16 and dense_4h_to_h and seq_len_1024"
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k \"out_BFLOAT16 and in1_BFLOAT8_B and in0_BFLOAT16 and dense_4h_to_h and seq_len_1024\""
