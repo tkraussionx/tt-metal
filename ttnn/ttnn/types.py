@@ -36,18 +36,14 @@ DEVICE_STORAGE_TYPE = StorageType.DEVICE
 TILE_SIZE = 32
 
 Shape = ttnn._ttnn.types.Shape
-
 Tensor = ttnn._ttnn.types.Tensor
 
 
-@dataclasses.dataclass
-class CoreGrid:
-    y: int
-    x: int
+CoreGrid = ttnn._ttnn.types.CoreGrid
 
-    @property
-    def num_cores(self):
-        return self.y * self.x
+DeviceComputeKernelConfig = ttl.tensor.DeviceComputeKernelConfig
+WormholeComputeKernelConfig = ttl.tensor.WormholeComputeKernelConfig
+GrayskullComputeKernelConfig = ttl.tensor.GrayskullComputeKernelConfig
 
 
 @dataclasses.dataclass

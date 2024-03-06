@@ -1,4 +1,4 @@
-name: "[post-commit] all - Fast dispatch post-commit main build and unit tests"
+name: "[post-commit] Fast dispatch unit tests"
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
   workflow_call:
 
 jobs:
-  unit-and-sweep:
+  python-api-ops-tests:
     strategy:
       # Do not fail-fast because we need to ensure all tests go to completion
       # so we try not to get hanging machines
@@ -34,17 +34,102 @@ jobs:
           echo "TT_METAL_HOME=$(pwd)" >> $GITHUB_ENV
       - name: Build tt-metal and libs
         run: make build
-      - name: Build tt-metal CPP tests
-        run: make tests
-      - name: Run pre/post regression tests - unit tests
+      - name: fallback-ops tests
         timeout-minutes: 120
         run: |
           source build/python_env/bin/activate
           cd $TT_METAL_HOME
           export PYTHONPATH=$TT_METAL_HOME
-          ./tests/scripts/run_python_unit_tests.sh
-
-  model-and-cpp:
+          ./tests/scripts/run_python_unit_test_fallback_ops.sh
+      - name: backward-ops tests
+        timeout-minutes: 120
+        run: |
+          source build/python_env/bin/activate
+          cd $TT_METAL_HOME
+          export PYTHONPATH=$TT_METAL_HOME
+          ./tests/scripts/run_python_unit_test_backward_ops.sh
+      - name: loss-ops tests
+        timeout-minutes: 120
+        run: |
+          source build/python_env/bin/activate
+          cd $TT_METAL_HOME
+          export PYTHONPATH=$TT_METAL_HOME
+          ./tests/scripts/run_python_unit_test_loss_ops.sh
+      - name: moreh tests
+        timeout-minutes: 120
+        run: |
+          source build/python_env/bin/activate
+          cd $TT_METAL_HOME
+          export PYTHONPATH=$TT_METAL_HOME
+          ./tests/scripts/run_python_unit_test_moreh.sh
+  python-api-misc-unit-tests:
+    strategy:
+      # Do not fail-fast because we need to ensure all tests go to completion
+      # so we try not to get hanging machines
+      fail-fast: false
+      matrix:
+        runner-info: [
+          # E150
+          {arch: grayskull, runs-on: ["grayskull"]},
+          # N150
+          {arch: wormhole_b0, runs-on: ["wormhole_b0", "multi-chip-num-pcie-1", "multi-chip-num-chips-1"]},
+          # N300
+          {arch: wormhole_b0, runs-on: ["wormhole_b0", "multi-chip-num-pcie-1", "multi-chip-num-chips-2"]},
+        ]
+    env:
+      TT_METAL_ENV: ${{ vars.TT_METAL_ENV }}
+      ARCH_NAME: ${{ matrix.runner-info.arch }}
+      CONFIG: ci
+    environment: dev
+    runs-on: ${{ matrix.runner-info.runs-on }}
+    steps:
+      - uses: tenstorrent-metal/metal-workflows/.github/actions/checkout-with-submodule-lfs@v2.0.0
+      - name: Set up dyanmic env vars for build
+        run: |
+          echo "TT_METAL_HOME=$(pwd)" >> $GITHUB_ENV
+      - name: Build tt-metal and libs
+        run: make build
+      - name: misc tests
+        timeout-minutes: 120
+        run: |
+          source build/python_env/bin/activate
+          cd $TT_METAL_HOME
+          export PYTHONPATH=$TT_METAL_HOME
+          ./tests/scripts/run_python_unit_test_misc.sh
+  model-tests:
+    strategy:
+      # Do not fail-fast because we need to ensure all tests go to completion
+      # so we try not to get hanging machines
+      fail-fast: false
+      matrix:
+        runner-info: [
+          # E150
+          {arch: grayskull, runs-on: ["grayskull"]},
+          # N150
+          {arch: wormhole_b0, runs-on: ["wormhole_b0", "multi-chip-num-pcie-1", "multi-chip-num-chips-1"]},
+          # N300
+          {arch: wormhole_b0, runs-on: ["wormhole_b0", "multi-chip-num-pcie-1", "multi-chip-num-chips-2"]},
+        ]
+    env:
+      TT_METAL_ENV: ${{ vars.TT_METAL_ENV }}
+      ARCH_NAME: ${{ matrix.runner-info.arch }}
+    environment: dev
+    runs-on: ${{ matrix.runner-info.runs-on }}
+    steps:
+      - uses: tenstorrent-metal/metal-workflows/.github/actions/checkout-with-submodule-lfs@v2.0.0
+      - name: Set up dyanmic env vars for build
+        run: |
+          echo "TT_METAL_HOME=$(pwd)" >> $GITHUB_ENV
+      - name: Build tt-metal and libs
+        run: make build
+      - name: Run API Model tests
+        timeout-minutes: 60
+        run: |
+          source build/python_env/bin/activate
+          cd $TT_METAL_HOME
+          export PYTHONPATH=$TT_METAL_HOME
+          ./tests/scripts/run_python_model_tests.sh
+  sweep-tests:
     strategy:
       # Do not fail-fast because we need to ensure all tests go to completion
       # so we try not to get hanging machines
@@ -79,13 +164,6 @@ jobs:
           cd $TT_METAL_HOME
           export PYTHONPATH=$TT_METAL_HOME
           ./tests/scripts/run_python_sweep_tests.sh
-      - name: Run API Model tests
-        timeout-minutes: 60
-        run: |
-          source build/python_env/bin/activate
-          cd $TT_METAL_HOME
-          export PYTHONPATH=$TT_METAL_HOME
-          ./tests/scripts/run_python_model_tests.sh
       - name: Run tt-metal and tt-eager tests
         timeout-minutes: 60
         run: |

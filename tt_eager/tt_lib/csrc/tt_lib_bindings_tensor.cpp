@@ -322,6 +322,8 @@ void TensorModule(py::module &m_tensor) {
     auto py_borrowed_buffer_for_bfloat16_t = py::class_<borrowed_buffer::Buffer<bfloat16>>(m_tensor, "borrowed_buffer_for_bfloat16_t", py::buffer_protocol());
     detail::implement_buffer_protocol<borrowed_buffer::Buffer<bfloat16>, bfloat16>(py_borrowed_buffer_for_bfloat16_t);
 
+    py::class_<DeviceComputeKernelConfig>(m_tensor, "DeviceComputeKernelConfig");
+
     py::class_<GrayskullComputeKernelConfig>(m_tensor, "GrayskullComputeKernelConfig")
         .def(
             py::init<MathFidelity, bool>(),
@@ -432,7 +434,7 @@ void TensorModule(py::module &m_tensor) {
                  py::arg().noconvert(), py::arg().noconvert(), py::arg().noconvert(), py::arg().noconvert(),
                  py::arg().noconvert(), py::arg().noconvert(), py::arg().noconvert(), py::arg().noconvert(), py::arg().noconvert() = 0,
                  py::arg("output_mem_config").noconvert() = std::nullopt, py::arg("output_dtype").noconvert() = std::nullopt, py::arg("input_tensor_shape").noconvert() = std::nullopt,
-                 py::arg("use_shallow_conv_variant").noconvert() = false, R"doc(
+                 py::arg("use_shallow_conv_variant").noconvert() = false, py::arg("compute_kernel_config").noconvert() = std::nullopt, R"doc(
         Perform a conv ``A x B`` with two tensors
         This op tilizes tensor A and untilizes the output
 

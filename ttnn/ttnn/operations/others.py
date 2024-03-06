@@ -83,10 +83,6 @@ def embedding(
             [1.35917e-38, 0, 4.49994e-39, 0]]], dtype=bfloat16 )
 
     """
-    if len(input_tensor.shape) != 2:
-        raise RuntimeError("Input Tensor must have rank of 2!")
-    if len(weight.shape) not in {2, 4}:
-        raise RuntimeError("Weight Tensor must either have rank of 2 or 4!")
 
     *_, hidden_embedding_dim = tuple(weight.shape)
     weight = ttnn.unsqueeze_to_4D(weight)
@@ -231,8 +227,7 @@ def softmax(
         input_tensor = ttnn.to_layout(input_tensor, ttnn.TILE_LAYOUT)
         ttl_input_tensor = input_tensor.value
 
-        ttl_output_tensor = ttnn.Tensor(ttl_input_tensor).value
-        ttl.operations.primary.moreh_softmax(ttl_input_tensor, ttl_output_tensor, dim=dim_4D)
+        ttl_output_tensor = ttl.operations.primary.moreh_softmax(ttl_input_tensor, dim=dim_4D)
     output_tensor = ttnn.Tensor(ttl_output_tensor)
     output_tensor = ttnn.reshape(output_tensor, input_shape)
     return output_tensor
