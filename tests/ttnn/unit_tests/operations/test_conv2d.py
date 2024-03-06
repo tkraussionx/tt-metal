@@ -868,18 +868,18 @@ def test_sd_conv_wh(
     (
         # unet convs with batch size 2
         # unique convs in unet (complete list)
-        (2, 16, 3, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 64}, True),
-        (2, 16, 16, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 64}, True),
+        (2, 16, 3, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
+        (2, 16, 16, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
         (2, 16, 16, 528, 80, 3, 3, 1, 1, 1, 1, True, None, False),
-        (2, 32, 16, 264, 40, 3, 3, 1, 1, 1, 1, True, None, True),
-        (2, 32, 32, 264, 40, 3, 3, 1, 1, 1, 1, True, None, True),
+        (2, 32, 16, 264, 40, 3, 3, 1, 1, 1, 1, True, None, False),
+        (2, 32, 32, 264, 40, 3, 3, 1, 1, 1, 1, True, None, False),
         (2, 32, 32, 132, 20, 3, 3, 1, 1, 1, 1, True, None, False),
         (2, 64, 32, 66, 10, 3, 3, 1, 1, 1, 1, True, None, False),
         (2, 64, 64, 66, 10, 3, 3, 1, 1, 1, 1, True, None, False),
         (2, 32, 96, 132, 20, 3, 3, 1, 1, 1, 1, True, None, False),
         (2, 32, 32, 132, 20, 3, 3, 1, 1, 1, 1, True, None, False),
-        (2, 32, 64, 264, 40, 3, 3, 1, 1, 1, 1, True, None, True),
-        (2, 32, 32, 264, 40, 3, 3, 1, 1, 1, 1, True, None, True),
+        (2, 32, 64, 264, 40, 3, 3, 1, 1, 1, 1, True, None, False),
+        (2, 32, 32, 264, 40, 3, 3, 1, 1, 1, 1, True, None, False),
         (
             2,
             16,
@@ -896,10 +896,9 @@ def test_sd_conv_wh(
             {"act_block_h": 32},
             False,
         ),  # fails. mismatch. It passes when input_channels=64. Probably an issue with padding when input_channels % 32 != 0.
-        (2, 16, 16, 528, 80, 3, 3, 1, 1, 1, 1, True, None, False),
-        (2, 16, 32, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 22 * 32}, False),
-        (2, 16, 16, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 22 * 32}, False),
-        (2, 1, 16, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 22 * 32}, False),
+        (2, 16, 32, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
+        (2, 16, 16, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
+        (2, 1, 16, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
     ),
 )
 @pytest.mark.parametrize(
@@ -951,5 +950,5 @@ def test_unet_conv(
         use_1d_systolic_array,
         config_override,
         use_shallow_conv_variant=use_shallow_conv_variant,
-        padded_input_channels=16 if input_channels == 3 else None,
+        padded_input_channels=None,
     )
