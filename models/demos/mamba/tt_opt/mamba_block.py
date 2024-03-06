@@ -19,6 +19,7 @@ class TtMambaBlock(torch.nn.Module):
         state_dict,
         num_users,
         hidden_size,
+        configs
     ):
         super().__init__()
 
@@ -27,7 +28,7 @@ class TtMambaBlock(torch.nn.Module):
         self.args = args
 
 
-        self.tt_ssm = TtMambaSSM(self.args,self.device,self.state_dict, num_users, hidden_size)
+        self.tt_ssm = TtMambaSSM(self.args,self.device,self.state_dict, num_users, hidden_size, configs)
 
     def forward(self, x):
 
