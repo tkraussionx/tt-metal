@@ -42,7 +42,7 @@ class TtMistralAttention(nn.Module):
         self.n_local_heads = self.n_heads // self.num_devices
         self.n_local_kv_heads = self.n_kv_heads // self.num_devices
 
-        self.dtype = dtype
+        self.dtype = ttnn.bfloat16  # dtype
 
         layer_name = f"layers.{layer_num}.attention"
         cache_name = lambda name: weight_cache_path / (f"{layer_name}.{name}")
@@ -139,6 +139,7 @@ class TtMistralAttention(nn.Module):
         start_pos: int,
         current_pos: int,
         attn_masks: List[ttnn.Tensor],
+        rot_mats: List[ttnn.Tensor],
     ) -> ttnn.Tensor:
         """
         x: (seq_len, 1, batch, hidden_dim)
@@ -154,6 +155,7 @@ class TtMistralAttention(nn.Module):
             wqkv = self.wqkv_list[i]
             wo = self.wo_list[i]
             layer_past = self.layer_past_list[i]
+            rot_mat = rot_mats[i]
             ###
             # QKV matmuls
             ###
@@ -178,24 +180,27 @@ class TtMistralAttention(nn.Module):
 
             ttnn.deallocate(xqkv_fused)
 
-            q_heads = ttnn.experimental.tensor.rotary_embedding(
-                q_heads, self.tt_cos_cached[i], self.tt_sin_cached[i], start_pos
-            )
+            # q_heads = ttnn.experimental.tensor.rotary_embedding(
+            # q_heads = ttnn.transformer.rotary_embedding(
+            #     q_heads, self.tt_cos_cached[i], self.tt_sin_cached[i], start_pos, memory_config=ttnn.DRAM_MEMORY_CONFIG
+            # )
+            q_heads = ttnn.linear(q_heads, rot_mat, core_grid=ttnn.CoreGrid(8, 8), memory_config=ttnn.L1_MEMORY_CONFIG)
 
-            k_heads = ttnn.experimental.tensor.rotary_embedding(
-                k_heads, self.tt_cos_cached[i], self.tt_sin_cached[i], start_pos
-            )
+            # k_heads = ttnn.experimental.tensor.rotary_embedding(
+            # k_heads = ttnn.transformer.rotary_embedding(
+            #     k_heads, self.tt_cos_cached[i], self.tt_sin_cached[i], start_pos, memory_config=ttnn.DRAM_MEMORY_CONFIG
+            # )
+            k_heads = ttnn.linear(k_heads, rot_mat, core_grid=ttnn.CoreGrid(8, 8), memory_config=ttnn.L1_MEMORY_CONFIG)
 
             ###
             # KV update
             ###
-
             keys = layer_past[0]
             values = layer_past[1]
+
             # k_heads, [seqlen, n_kv_heads, bsz, head_dim]
             # v_heads [seqlen, n_kv_heads, bsz, head_dim]
             # keys, [max_batch_size, n_kv_heads // self.num_devices, sliding_window, head_dim]
-
             ttnn.experimental.tensor.update_cache(keys, k_heads, current_pos)  # self.current)
             ttnn.experimental.tensor.update_cache(values, v_heads, current_pos)  # self.current)
             self.layer_past_list[i] = [keys, values]

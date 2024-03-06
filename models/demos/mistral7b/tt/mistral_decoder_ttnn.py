@@ -80,14 +80,16 @@ class TtTransformerBlock(torch.nn.Module):
         start_pos: int,
         current_pos: int,
         attn_masks: Optional[ttnn.Tensor],
+        rot_mat: ttnn.Tensor,
     ) -> ttnn.Tensor:
         attn_norm = self.attention_norm(x)
-        # Attention module expects a list of inputs, attn masks (multi-device support)
+        # Attention module expects a list of inputs, attn masks, rot_mat (multi-device support)
         r = self.attention.forward(
             [attn_norm],
             start_pos,
             current_pos,
             [attn_masks],
+            [rot_mat],
         )
         # Attention also returns multiple outputs (multi-device support)
         assert len(r) == 1, "Multiple devices not yet supported"

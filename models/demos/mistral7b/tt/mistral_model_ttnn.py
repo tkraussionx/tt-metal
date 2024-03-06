@@ -69,9 +69,10 @@ class TtTransformer(nn.Module):
         start_pos: int,
         current_pos: int,
         attn_masks: Optional[ttnn.Tensor],
+        rot_mat: ttnn.Tensor,
     ):
         for layer in self.layers:
-            x = layer(x, start_pos, current_pos, attn_masks)
+            x = layer(x, start_pos, current_pos, attn_masks, rot_mat)
 
         x = self.norm(x)
         output = ttnn.linear(x, self.output_weight, core_grid=ttnn.CoreGrid(8, 8))

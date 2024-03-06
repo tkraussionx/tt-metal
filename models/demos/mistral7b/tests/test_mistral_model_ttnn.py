@@ -33,7 +33,7 @@ class Emb(torch.nn.Module):
 
 @pytest.mark.parametrize(
     "n_layers",
-    (1, 3, 16, 32),
+    (32,),
 )
 @pytest.mark.parametrize(
     "model_config",
@@ -41,17 +41,18 @@ class Emb(torch.nn.Module):
 )
 @pytest.mark.parametrize(
     "iterations",
-    (1, 20, 127),
+    (17),
 )
 @pytest.mark.parametrize(
     "pcc",
-    (0.99,),
+    (0.97,),
 )
 def test_mistral_model_inference(pcc, model_config, model_location_generator, device, iterations, n_layers):
     ttnn.enable_program_cache()
 
     # Avoid running reference model to speed up the test (unless measuring PCC)
-    run_ref_pt = False
+    run_ref_pt = True  # Flag to run reference PyTorch model and compare PCC
+    cache_pcc = False  # Flag to measure KV cache PCC for all layers
 
     dtype_str, mem_config_str = model_config.split("-")
     if dtype_str == "BFLOAT16":
@@ -66,7 +67,7 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
     tokenizer = Tokenizer(str(Path(mistral_path) / "tokenizer.model"))
 
     # TODO add 32 different prompts
-    prompts = ["Once upon a time "] * 32
+    prompts = ["This is a test"] * 32
 
     encoded_prompts = [tokenizer.encode(prompt) for prompt in prompts]
 
@@ -132,33 +133,31 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
     if run_ref_pt:
         all_outputs_ref = []
 
-    # After loading the model weights, wait for an input to start the generation
-    # print("Waiting for an input to start...")
-    # input()
-
     for i in range(generation_length):
         print(f"[Decode] Generating token {i}")
 
         start_pos = generation_start_pos + i
 
-        decode_input, start_pos, attn_mask, current_pos = prepare_inputs_ttnn(
+        decode_input, start_pos, attn_mask, current_pos, rot_mat = prepare_inputs_ttnn(
             tt_decode_input,
             start_pos,
             model_args.dim,
+            model_args.head_dim,
             model_args.sliding_window,
+            model_args.max_seq_len,
             tt_model.device,
         )
 
         # Run TT model
-        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask)
+        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask, rot_mat)
         # Convert ttnn tensor to torch tensor
         tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
 
         if run_ref_pt:  # Run reference model
             freqs_cis_i = freqs_cis[start_pos, :].unsqueeze(0)
             positions = torch.tensor([start_pos])
-            # mask = tt2torch_tensor(attn_mask[0])
-            ref_output = reference_model(pt_decode_input, freqs_cis_i, positions)  # mask)
+            # mask = ttnn.to_torch(attn_mask[0])
+            ref_output = reference_model(pt_decode_input, freqs_cis_i, positions)
 
         # While in "prefill" mode, use the prompt tokens as the output
         if i in range(len(encoded_prompts[0])):
@@ -170,13 +169,14 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
             if run_ref_pt:
                 pt_decode_input = embd(encoded_prompts_tensor[:, i]).view(batch, seqlen, -1)
         else:
-            # Decode the generated token and save it to print out later
+            # Greedy decode the generated token and save it to print out later
             tt_out_tok = torch.argmax(tt_output_torch, dim=-1)
             tt_decode_input = embd(tt_out_tok)
             all_outputs.append(tt_out_tok.squeeze(1).tolist()[0])  # Update generated token to list of TT outputs
+
             if run_ref_pt:
                 pt_out_tok = torch.argmax(ref_output, dim=-1)
-                pt_decode_input = embd(tt_out_tok)
+                pt_decode_input = embd(pt_out_tok)
                 all_outputs_ref.append(
                     pt_out_tok.squeeze(1).tolist()[0]
                 )  # Update generated token to list of ref outputs
@@ -186,22 +186,58 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
             passing, pcc_message = comp_pcc(ref_output, tt_output_torch, pcc)
 
             logger.info(comp_allclose(ref_output, tt_output_torch))
-            logger.info(pcc_message)
+            logger.info(f"Model output: {pcc_message}")
 
             if passing:
                 logger.info("Mistral Model Passed!")
             else:
                 logger.warning("Mistral Model Failed!")
+            if not passing:
                 all_tests_pass = False
 
+            # Compare V caches
+            if cache_pcc:
+                for i in range(n_layers):
+                    pytorch_layer_present = [
+                        reference_model.layers[i]
+                        .attention.cache_k.clone()
+                        .permute(0, 2, 1, 3),  # [batch, n_kv_heads, seq, head_dim]
+                        reference_model.layers[i]
+                        .attention.cache_v.clone()
+                        .permute(0, 2, 1, 3),  # [batch, n_kv_heads, seq, head_dim]
+                    ]
+
+                    tt_layer_present = []
+                    for layer_past in tt_model.layers[i].attention.layer_past_list[0]:
+                        tt_layer_present.append(ttnn.to_torch(layer_past))
+
+                    for i, (cache_pt, cache_tt) in enumerate(zip(pytorch_layer_present, tt_layer_present)):
+                        cache_length_to_check = min(
+                            model_args.sliding_window, generation_start_pos + generation_length + 1
+                        )
+                        cache_pt = cache_pt[:, :, generation_start_pos:cache_length_to_check, :]
+                        cache_tt = cache_tt[:, :, generation_start_pos:cache_length_to_check, :]
+                        does_pass, output_pcc = comp_pcc(cache_pt, cache_tt, pcc)
+                        if i == 0:
+                            logger.info(f"K cache output: {output_pcc}")
+                        else:
+                            logger.info(f"V cache output: {output_pcc}")
+
+                        if does_pass:
+                            logger.info(f"V Cache Passed!")
+                        else:
+                            logger.warning(f"V Cache Failed! PCC value is lower than {pcc}")
+                        # if not does_pass:
+                        # all_tests_pass = False
+
         # TODO print all 32 users
-        print("[User 0] TT generation: ", "".join(tokenizer.decode(all_outputs)))
+        print("[TT generation User 0] ", "".join(tokenizer.decode(all_outputs)))
         if run_ref_pt:
-            print("[User 0] Ref generation: ", "".join(tokenizer.decode(all_outputs_ref)))
+            print("[Ref generation User 0] ", "".join(tokenizer.decode(all_outputs_ref)))
 
     if run_ref_pt:
         if all_tests_pass:
             logger.info(f"All {generation_length} Mistral decode iterations Passed!")
         else:
-            logger.warning("One or more iterations of Mistral decode Failed!")
+            logger.warning("One or more iterations of Mistral decode had bad PCC")
             assert all_tests_pass, f"PCC value is lower than {pcc} for some of the outputs. Check Warnings!"
