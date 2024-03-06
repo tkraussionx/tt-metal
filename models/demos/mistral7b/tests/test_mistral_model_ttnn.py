@@ -4,8 +4,6 @@
 import torch
 import pytest
 from loguru import logger
-import json
-from pathlib import Path
 import ttnn
 from models.demos.mistral7b.tt.mistral_common_ttnn import (
     precompute_freqs,
@@ -13,7 +11,7 @@ from models.demos.mistral7b.tt.mistral_common_ttnn import (
     prepare_inputs_ttnn,
 )
 from models.demos.mistral7b.tt.mistral_model_ttnn import TtTransformer
-from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs, get_model_config
+from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs
 from models.demos.mistral7b.reference.model import Transformer
 from models.demos.mistral7b.reference.tokenizer import Tokenizer
 from models.utility_functions import (
@@ -47,7 +45,7 @@ class Emb(torch.nn.Module):
     "pcc",
     (0.97,),
 )
-def test_mistral_model_inference(pcc, model_config, model_location_generator, device, iterations, n_layers):
+def test_mistral_model_inference(device, pcc, model_config, iterations, n_layers):
     ttnn.enable_program_cache()
 
     # Avoid running reference model to speed up the test (unless measuring PCC)
@@ -61,22 +59,12 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
         dtype = ttnn.bfloat8_b
     else:
         raise ValueError(f"Unknown dtype {dtype_str}")
-    model_config = get_model_config(model_config)
 
-    mistral_path = Path(model_location_generator(model_config["DEFAULT_CACHE_PATH"], model_subdir="mistral"))
-    tokenizer = Tokenizer(str(Path(mistral_path) / "tokenizer.model"))
-
-    # TODO add 32 different prompts
-    prompts = ["This is a test"] * 32
-
-    encoded_prompts = [tokenizer.encode(prompt) for prompt in prompts]
-
-    with open(mistral_path / "params.json", "r") as f:
-        model_args = TtModelArgs(**json.loads(f.read()))
+    model_args = TtModelArgs()
     model_args.max_batch_size = 32
     model_args.n_layers = n_layers
-
-    state_dict = torch.load(mistral_path / "consolidated.00.pth")
+    state_dict = torch.load(model_args.consolidated_weights_path)
+    tokenizer = Tokenizer(model_args.tokenizer_path)
     state_dict = {
         k: v
         for k, v in state_dict.items()
@@ -85,6 +73,11 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
             or k in ["tok_embeddings.weight", "norm.weight", "output.weight"]
         )
     }
+
+    prompts = ["This is a test"] * 32
+
+    encoded_prompts = [tokenizer.encode(prompt) for prompt in prompts]
+
     if run_ref_pt:
         reference_model = Transformer(args=model_args)
         reference_model.load_state_dict(state_dict)
@@ -104,7 +97,7 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
         device=device,
         dtype=dtype,
         state_dict=state_dict,
-        weight_cache_path=Path(model_config["DEFAULT_WEIGHT_PATH"]),
+        weight_cache_path=model_args.weight_cache_path(dtype),
         layers=list(range(model_args.n_layers)),
         tt_cos_cached=tt_cos_cached,
         tt_sin_cached=tt_sin_cached,
