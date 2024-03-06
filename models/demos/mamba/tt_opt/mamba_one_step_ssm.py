@@ -4,7 +4,7 @@
 
 import torch
 
-#import tt_lib
+#import tt_lib as ttl
 import ttnn
 
 from models.utility_functions import torch2tt_tensor
@@ -120,8 +120,12 @@ class TtMambaSSM(torch.nn.Module):
             tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
         )
         self.dt_proj = Linear(self.args.dt_rank, self.args.d_inner, self.dt_proj_weights, bias=self.dt_proj_bias)
-
-        prev_hidden_states = torch.zeros((args.batch_size, 1, args.d_inner, args.d_state))
+        '''
+        
+        prev_hidden_states = torch.zeros((1, 1, 32, 256), dtype=torch.bfloat16)
+        self.tt_hidden_state = ttnn.from_torch(prev_hidden_states, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+        
+        '''
         self.tt_hidden_state = torch2tt_tensor(
             prev_hidden_states,
             self.device,
@@ -131,6 +135,7 @@ class TtMambaSSM(torch.nn.Module):
             ),
             tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
         )
+        
         self.B_intermediate = torch.ones((args.batch_size, 1, args.d_inner, args.d_state))
         self.B_intermediate = torch2tt_tensor(
             self.B_intermediate,
@@ -194,14 +199,11 @@ class TtMambaSSM(torch.nn.Module):
         hidden_dim = 256
 
         abar = torch.rand((1,1,num_users,hidden_dim), dtype=torch.bfloat16)
-        h = torch.rand((1,1,num_users,hidden_dim), dtype=torch.bfloat16)
-
         cfg = ttnn.create_sharded_memory_config(shape=(1,1,num_users,hidden_dim), core_grid=ttnn.CoreGrid(y=num_users//32, x=8), strategy=ttnn.ShardStrategy.WIDTH, orientation=ttnn.ShardOrientation.ROW_MAJOR, use_height_and_width_as_shard_shape=False)
 
         abar = ttnn.from_torch(abar, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=cfg)
-        h = ttnn.from_torch(h, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=cfg)
-
-        output_tensor = ttnn.mul(abar, h, memory_config=cfg)
+        hidden_state = ttnn.to_memory_config(self.tt_hidden_state, cfg)
+        output_tensor = ttnn.mul(abar, hidden_state, memory_config=cfg)
 
         self.output = output_tensor
         return self.output
