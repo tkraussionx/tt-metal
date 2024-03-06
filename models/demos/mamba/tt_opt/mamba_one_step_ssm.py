@@ -20,6 +20,7 @@ class TtMambaSSM(torch.nn.Module):
         state_dict,
         num_users,
         hidden_size,
+        configs
     ):
         super().__init__()
 
@@ -36,16 +37,17 @@ class TtMambaSSM(torch.nn.Module):
         """
         self.num_users = num_users
         self.hidden_size = hidden_size
+        self.configs = configs
         self.tt_hidden_state = ttnn.zeros((1,1,self.num_users,self.hidden_size), layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
         
     def forward(self, x):
 
         abar = torch.rand((1,1,self.num_users,self.hidden_size), dtype=torch.bfloat16)
-        cfg = ttnn.create_sharded_memory_config(shape=(1,1,self.num_users,self.hidden_size), core_grid=ttnn.CoreGrid(y=self.num_users//32, x=8), strategy=ttnn.ShardStrategy.WIDTH, orientation=ttnn.ShardOrientation.ROW_MAJOR, use_height_and_width_as_shard_shape=False)
+        
 
-        abar = ttnn.from_torch(abar, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=cfg)
-        hidden_state = ttnn.to_memory_config(self.tt_hidden_state, cfg)
-        self.tt_hidden_state = ttnn.mul(abar, hidden_state, memory_config=cfg)
+        abar = ttnn.from_torch(abar, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=self.configs['sharded'])
+        hidden_state = ttnn.to_memory_config(self.tt_hidden_state, self.configs['sharded'])
+        self.tt_hidden_state = ttnn.mul(abar, hidden_state, memory_config=ttnn.DRAM_MEMORY_CONFIG)
 
         self.output = self.tt_hidden_state
         return self.output
