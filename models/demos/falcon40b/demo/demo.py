@@ -589,7 +589,7 @@ def test_demo(
     model_location_generator,
     get_tt_cache_path,
     all_devices,
-    use_program_cache,
+    # use_program_cache,
 ):
     num_devices = 4
     devices = get_devices_for_t3000(all_devices, num_devices)
@@ -617,5 +617,5 @@ def test_demo(
         model_location_generator=model_location_generator,
         tt_cache_path=tt_cache_path,
         devices=devices,
-        prefill_on_host=True,
+        prefill_on_host=False,
     )
