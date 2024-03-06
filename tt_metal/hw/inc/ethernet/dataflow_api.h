@@ -440,9 +440,6 @@ void eth_receiver_channel_ack(uint32_t channel) {
         1);
 }
 
-/*
- * Initiates an asynchronous call from receiver ethernet core to tell remote sender ethernet core that data sent
- * via eth_send_bytes has been received. Also, see \a eth_wait_for_receiver_done
 
 /**
  * Caller is expected to be receiver side. This sends the first level ack to sender, indicating that the last payload sent

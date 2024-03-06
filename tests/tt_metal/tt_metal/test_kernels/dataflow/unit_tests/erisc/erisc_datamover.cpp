@@ -51,10 +51,10 @@ void kernel_main() {
     // If true, will enable this erisc's receiver functionality
     constexpr bool enable_receiver_side = get_compile_time_arg_val(1) != 0;
 
-    std::array<erisc::datamover::ChannelBuffer, erisc_info_t::MAX_CONCURRENT_TRANSACTIONS> buffer_channels;
+    std::array<erisc::datamover::ChannelBuffer, eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS> buffer_channels;
 
     //
-    std::array<uint32_t, erisc_info_t::MAX_CONCURRENT_TRANSACTIONS> printed_receiver_done;
+    std::array<uint32_t, eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS> printed_receiver_done;
 
     // SENDER ARGS
     uint32_t args_offset = 0;

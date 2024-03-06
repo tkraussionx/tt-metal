@@ -9,7 +9,6 @@ import tt_lib as ttl
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_equal, comp_pcc
 from models.utility_functions import skip_for_grayskull, get_devices_for_t3000
 
-    
 
 @skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
@@ -51,7 +50,6 @@ from models.utility_functions import skip_for_grayskull, get_devices_for_t3000
         # Input, Selfout, Final AllGather
         ([1, 1, 32, 8192], 3, ttl.tensor.Layout.TILE),
         ([1, 1, 32, 8192], 3, ttl.tensor.Layout.ROW_MAJOR),
-    ]
         # MLP AllGather. Llama 2 decode attn, mlp. Llama2, Falcon 40B decode mlp attn
         # Half shape for 4 chips, same per chip shape as 8 chips
         ([1, 1, 32, 16384], 3, ttl.tensor.Layout.TILE),
@@ -136,43 +134,41 @@ def test_all_gather(
     use_program_cache,
     function_level_defaults,
 ):
-    # TODO: Switch to all_devices once we figure out what works on pipelines
-    devices = pcie_devices
+    if num_links > 1 and num_devices > 4:
+        pytest.skip("Multi-Link not supported on 8 chip t3000")
 
-    if num_links > 1:
-        pytest.skip("Multi-Link not working")
-        
-    if num_devices == 8:
-        pytest.skip("All gather on 8 chips requires tunnelling! Re-enable once that's merged in.")
-
-    if num_devices > len(devices):
-        pytest.skip("Not enough devices detected!")
-
+    # if num_devices == 8:
+    #     pytest.skip("All gather on 8 chips requires tunnelling! Re-enable once that's merged in.")
 
     if layout == ttl.tensor.Layout.ROW_MAJOR and input_dtype == ttl.tensor.DataType.BFLOAT8_B:
         pytest.skip("Invalid combination")
-        
-    if (
-        layout == ttl.tensor.Layout.ROW_MAJOR or num_links == 2
-    ) and mem_config.buffer_type == ttl.tensor.BufferType.DRAM:
-        pytest.skip("All gather tests are hanging for RM or 2 links in DRAM")
+
+    # if (
+    #     layout == ttl.tensor.Layout.ROW_MAJOR or num_links == 2
+    # ) and mem_config.buffer_type == ttl.tensor.BufferType.DRAM:
+    #     pytest.skip("All gather tests are hanging for RM or 2 links in DRAM")
 
     if num_devices < 2:
         pytest.skip("Requires multiple devices to run")
     elif num_devices == 2 and num_links == 2:
         pytest.skip("Not enough links to run")
 
-    if input_shape[dim] % num_devices != 0 or (dim == 3 and input_shape[dim] // num_devices % 32 != 0):
+    # if input_shape[dim] % num_devices != 0 or (dim == 3 and input_shape[dim] // num_devices % 32 != 0):
+    if dim == 3 and input_shape[dim] // num_devices % 32 != 0:
         pytest.skip("Unsupported test case")
-        
+
+    # TODO: Switch to all_devices once we figure out what works on pipelines
+    devices = pcie_devices
+
+    if num_devices > len(devices):
+        pytest.skip("Not enough devices detected!")
+
     devices = get_devices_for_t3000(devices, num_devices)
 
     logger.info(f"Input shape: {input_shape}")
     logger.info(f"dim: {dim}")
 
-
     input_tensor = torch.rand(input_shape).bfloat16()
-
 
     input_tensors = torch.chunk(input_tensor, num_devices, dim)
     tt_input_tensors = []
