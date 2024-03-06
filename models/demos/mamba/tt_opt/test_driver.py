@@ -51,8 +51,16 @@ def run_demo(num_users, hidden_size):
     model.eval()
 
     with torch.no_grad():
-
-
+        #create random torch tensor of hidden size and num_users, with datatype bfloat16
+        '''
+        input_data = torch.randn((1, 1, num_users, hidden_size), dtype=torch.bfloat16)
+        
+        cfg = ttnn.create_sharded_memory_config(shape=(1,1,num_users,hidden_size), core_grid=ttnn.CoreGrid(y=num_users//32, x=8), strategy=ttnn.ShardStrategy.WIDTH)
+        
+        input_data = ttnn.to_device(ttnn.from_torch(input_data), layout=ttnn.TILE_LAYOUT, device=device, memory_config=cfg)
+        '''
+        
+        
         out_data = model(None)
 
     ttnn.close_device(device)
