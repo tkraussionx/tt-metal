@@ -4,7 +4,7 @@
 
 import torch
 
-#import tt_lib as ttl
+import tt_lib as ttl
 import ttnn
 
 from models.utility_functions import torch2tt_tensor
@@ -121,8 +121,8 @@ class TtMambaSSM(torch.nn.Module):
         )
         self.dt_proj = Linear(self.args.dt_rank, self.args.d_inner, self.dt_proj_weights, bias=self.dt_proj_bias)
         '''
-        
-        self.tt_hidden_state = ttnn.zeros((1,1,32,40960), layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+        prev_hidden_states = torch.rand((1,1,32,40960), dtype=torch.bfloat16)
+        self.tt_hidden_state = ttnn.from_torch(prev_hidden_states, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
         
         '''
         self.tt_hidden_state = torch2tt_tensor(
@@ -202,8 +202,8 @@ class TtMambaSSM(torch.nn.Module):
 
         abar = ttnn.from_torch(abar, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=cfg)
         hidden_state = ttnn.to_memory_config(self.tt_hidden_state, cfg)
-        output_tensor = ttnn.mul(abar, hidden_state, memory_config=cfg)
+        #output_tensor = ttnn.mul(abar, hidden_state, memory_config=cfg)
+        self.tt_hidden_state = ttnn.Tensor(ttl.tensor.mul(abar.value, hidden_state.value, output_mem_config=ttnn.DRAM_MEMORY_CONFIG))
 
-        self.tt_hidden_state = ttnn.to_memory_config(output_tensor, ttnn.DRAM_MEMORY_CONFIG)
-        self.output = output_tensor
+        self.output = self.tt_hidden_state
         return self.output
