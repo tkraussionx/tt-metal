@@ -1136,6 +1136,8 @@ operation::ProgramWithCallbacks Matmul::create_program(
                 );
             }
             else if constexpr (std::is_same_v<ProgramConfigType, MatmulMultiCoreReuseMultiCastProgramConfig>) {
+                // Todo.pp fux me!!
+                fuse_batch = false;
                 return matmul_multi_core_reuse_mcast_2d_optimized(
                     input_tensor_a, input_tensor_b, bias, output_tensor,
                     broadcast_batch,
