@@ -20,6 +20,7 @@ class TtResidualBlock(torch.nn.Module):
         state_dict,
         num_users,
         hidden_size,
+        configs
     ):
         super().__init__()
 
@@ -27,7 +28,7 @@ class TtResidualBlock(torch.nn.Module):
         self.device = device
         self.args = args
 
-        self.tt_mamba_block = TtMambaBlock(self.args,self.device,self.state_dict, num_users, hidden_size)
+        self.tt_mamba_block = TtMambaBlock(self.args,self.device,self.state_dict, num_users, hidden_size, configs)
 
     def forward(self, x):
         xt = self.tt_mamba_block(x)
