@@ -8,21 +8,22 @@ from loguru import logger
 
 import tt_lib
 from models.demos.mamba.reference.decode_model import MambaDecode, MambaPretrainedModelName
-from models.demos.mamba.tt.mamba_one_step_ssm import TtMambaSSM
+from models.demos.mamba.tt.residual_block import TtResidualBlock
+from models.utility_functions import torch2tt_tensor, tt2torch_tensor
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_allclose,
     comp_pcc,
 )
 
 
-class PytorchMambaSSM(torch.nn.Module):
+class PytorchResidualBlock(torch.nn.Module):
     def __init__(self, hf_reference_model, layer_num):
         super().__init__()
-        self.block = hf_reference_model.layers[layer_num].mixer
+        self.block = hf_reference_model.layers[layer_num]
         self.block.eval()
 
     def forward(self, x):
-        result = self.block.ssm(x)
+        result = self.block(x)
         return result
 
 
@@ -31,35 +32,37 @@ class PytorchMambaSSM(torch.nn.Module):
     (
         (
             "state-spaces/mamba-370m",
-            1,
-            0.98,
+            32,
+            0.94,
         ),
     ),
 )
-def test_mamba_ssm_inference(
+def test_residual_block_inference(
     model_version: MambaPretrainedModelName,
     batch,
     pcc: float,
     device: tt_lib.device,
 ):
-    torch.manual_seed(0)
+    torch.manual_seed(10)
 
     LAYER_NUM = 0
 
     reference_model = MambaDecode.from_pretrained(model_version)
+    reference_model.args.batch_size = batch
 
-    d_in = reference_model.args.d_model * reference_model.args.expand
-    input = torch.rand(batch, 1, d_in)
+    d_model = reference_model.args.d_model
+    input = torch.rand(batch, d_model)
+    tt_input = input.clone()
 
-    reference_output = PytorchMambaSSM(reference_model, LAYER_NUM)(input)
+    reference_output = PytorchResidualBlock(reference_model, LAYER_NUM)(input)
 
     residual_block = reference_model.layers[LAYER_NUM]
     assert not isinstance(residual_block, torch.Tensor), "Expected torch.Module"
 
-    model = TtMambaSSM(reference_model.args, device, residual_block.state_dict())
-    input = input.unsqueeze(1)
+    model = TtResidualBlock(reference_model.args, device, residual_block.state_dict())
+    tt_input = tt_input.unsqueeze(1).unsqueeze(1)
     tt_input = torch2tt_tensor(
-                    input, 
+                    tt_input, 
                     device,
                     tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
                     tt_memory_config=tt_lib.tensor.MemoryConfig(
@@ -68,7 +71,7 @@ def test_mamba_ssm_inference(
                     tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
                 )
     tt_output = model(tt_input)
-    tt_output = tt2torch_tensor(tt_output).squeeze(1)
+    tt_output = tt2torch_tensor(tt_output).squeeze(1).squeeze(1)
     logger.info(comp_allclose(reference_output, tt_output))
 
     does_pass, output_pcc = comp_pcc(reference_output, tt_output, pcc)

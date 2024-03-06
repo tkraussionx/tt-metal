@@ -16,7 +16,8 @@ class ModelArgs:
     pad_vocab_size_multiple: int = 8
     conv_bias: bool = True
     bias: bool = False
-    batch_size: int = 1
+    batch_size: int = 32
+    eps: float = 1e-5
 
     def __post_init__(self):
         self.d_inner = int(self.expand * self.d_model)

@@ -31,7 +31,7 @@ class TtMambaSSM(torch.nn.Module):
         slicing, so we break up the weights ahead of time and do the linear ops
         separately.
         """
-        x_proj_weight_name = "x_proj.weight"
+        x_proj_weight_name = "mixer.x_proj.weight"
         self.delta_t_proj_weights = torch2tt_tensor(
             self.state_dict[x_proj_weight_name][: self.args.dt_rank, :],
             self.device,
@@ -52,7 +52,20 @@ class TtMambaSSM(torch.nn.Module):
         )
         self.BC_proj = Linear(self.args.d_inner, self.args.d_state * 2, self.BC_proj_weights, bias=None)
 
-        A_weight_name = "A_log"
+        self.C_proj_weights = torch2tt_tensor(
+            self.state_dict[x_proj_weight_name][(self.args.dt_rank+self.args.d_state):, :],
+            self.device,
+            tt_layout=tt_lib.tensor.Layout.ROW_MAJOR,
+            tt_memory_config=tt_lib.tensor.MemoryConfig(
+                tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.DRAM
+            ),
+            tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
+        )
+
+        self.B_proj = Linear(self.args.d_inner, self.args.d_state, self.B_proj_weights, bias=None)
+        self.C_proj = Linear(self.args.d_inner, self.args.d_state, self.C_proj_weights, bias=None)
+    
+        A_weight_name = "mixer.A_log"
         self.A = self.state_dict[A_weight_name]
         self.A = -torch.exp(self.A.float())  # (2E, N)
         self.A = self.A.repeat(self.args.batch_size, 1).reshape(
@@ -66,8 +79,8 @@ class TtMambaSSM(torch.nn.Module):
             ),
             tt_dtype=tt_lib.tensor.DataType.BFLOAT16,
         )
-        dt_proj_weight_name = "dt_proj.weight"
-        dt_proj_bias_name = f"dt_proj.bias"
+        dt_proj_weight_name = "mixer.dt_proj.weight"
+        dt_proj_bias_name = "mixer.dt_proj.bias"
         self.dt_proj_weights = torch2tt_tensor(
             self.state_dict[dt_proj_weight_name],
             self.device,
