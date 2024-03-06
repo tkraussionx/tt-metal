@@ -487,6 +487,7 @@ class FalconMLP(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.act(self.dense_h_to_4h(x))
+        # x = self.dense_h_to_4h(x)
         x = self.dense_4h_to_h(x)
         return x
 

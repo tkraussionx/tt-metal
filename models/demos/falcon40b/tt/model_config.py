@@ -594,6 +594,7 @@ def get_model_config(model_config_str, llm_mode, input_shape, num_devices):
                 per_core_N=8,
                 fuse_batch=True,
                 fused_activation=[ttl.tensor.FusibleActivation.GELU, True],
+                # fused_activation=None,
                 mcast_in0=True,
             )
             model_config[
@@ -633,6 +634,7 @@ def get_model_config(model_config_str, llm_mode, input_shape, num_devices):
                 per_core_N=4,
                 fuse_batch=True,
                 fused_activation=[ttl.tensor.FusibleActivation.GELU, True],
+                # fused_activation=None,
                 mcast_in0=True,
             )
             model_config[
