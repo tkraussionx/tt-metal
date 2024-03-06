@@ -17,13 +17,8 @@ def get_cpu_reference_model():
     return MambaDecode.from_pretrained("state-spaces/mamba-370m")
 
 
-def get_tt_metal_model():
-    #import tt_lib
+def get_tt_metal_model(num_users, hidden_size):
     from models.demos.mamba.tt_opt.full_model import MambaTT
-
-    #device = tt_lib.device.CreateDevice(0)
-    #tt_lib.device.SetDefaultDevice(device)
-    #device = tt_lib.device.GetDefaultDevice()
 
     device_id = 0
     device = ttnn.open_device(device_id=device_id)
@@ -32,7 +27,7 @@ def get_tt_metal_model():
     ttnn.enable_program_cache()
 
     reference_model = get_cpu_reference_model()
-    model = MambaTT(reference_model, 1, device)
+    model = MambaTT(reference_model, 1, device, num_users, hidden_size)
     return model, device
 
 
@@ -44,7 +39,7 @@ def get_tt_metal_model():
 
 def run_demo(num_users, hidden_size):
 
-    model, device = get_tt_metal_model()
+    model, device = get_tt_metal_model(num_users, hidden_size)
 
 
     # evaluate model:
