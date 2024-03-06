@@ -331,8 +331,8 @@ def run_test_FalconCausalLM_end_to_end(
 
     for i in range(num_layers):
         # Only check every 4 layers for full model
-        if num_layers == 60 and i % 4 > 0:
-            continue
+        # if num_layers == 60 and i % 4 > 0:
+        #     continue
 
         pytorch_layer_pres = pytorch_layer_present[i]
         tt_layer_pres = (
@@ -391,7 +391,7 @@ def run_test_FalconCausalLM_end_to_end(
 
 
 @skip_for_grayskull("Requires eth connected devices to run")
-@pytest.mark.parametrize("num_devices", (4, 8))
+@pytest.mark.parametrize("num_devices", (4, 8), ids=["4chips", "8chips"])
 @pytest.mark.parametrize(
     "llm_mode, batch, seq_len, kv_cache_len",
     (
@@ -402,8 +402,8 @@ def run_test_FalconCausalLM_end_to_end(
 )
 @pytest.mark.parametrize(
     "num_layers, out_pcc, cache_pcc, token_pcc",
-    ((1, 0.99, 0.99, 0.99), (2, 0.99, 0.99, 0.99), (60, 0.92, 0.99, 0.85)),
-    ids=["layers_1", "layers_2", "layers_60"],
+    ((1, 0.99, 0.99, 0.99), (2, 0.99, 0.99, 0.99), (30, 0.99, 0.99, 0.99), (60, 0.92, 0.99, 0.85)),
+    ids=["layers_1", "layers_2", "layers_30", "layers_60"],
 )
 @pytest.mark.parametrize(
     "model_version",
@@ -427,7 +427,7 @@ def test_FalconCausalLM_end_to_end_with_program_cache(
     model_location_generator,
     get_tt_cache_path,
     all_devices,
-    use_program_cache,
+    # use_program_cache,
 ):
     if llm_mode == "prefill":
         if model_config_str == "BFLOAT16-SHARDED":
