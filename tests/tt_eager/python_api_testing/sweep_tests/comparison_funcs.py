@@ -8,6 +8,10 @@ from loguru import logger
 
 
 def get_atol_rtol_pcc(golden, calculated):
+    # total = torch.numel(calculated)
+    # zero_datums = total - torch.count_nonzero(calculated)
+    # print(f"Zero datums in calculated tensor {zero_datums}/{total}")
+
     if golden.is_complex() and calculated.is_complex():
         golden = torch.view_as_real(golden.clone())
         calculated = torch.view_as_real(calculated.clone())
@@ -16,9 +20,84 @@ def get_atol_rtol_pcc(golden, calculated):
         golden = golden.to(torch.float)
         calculated = calculated.to(torch.float)
 
+    # for golden_element, calculated_element in zip(golden, calculated):
+    #     if calculated_element.item() == 0 and golden_element.item() != 0:
+    #         golden_value = golden_element.item()
+    #         print(f"Golden element is {golden_value} while calculated is 0")
+    #         assert False
+
+    # first_thousand = calculated[:1000]
+    # # Print the first 1,000 elements
+    # for element in first_thousand:
+    #     print(element)
+
+    # print("---------------------")
+
+    # first_thousand = golden[:1000]
+    # # Print the first 1,000 elements
+    # for element in first_thousand:
+    #     print(element)
+
+    # print("---------------------")
+
+    # shape = golden.shape
+
+    # print("Shape of the tensor is")
+    # print(shape)
+
+    # num_dims = golden.ndimension()
+
+    # count = 1024
+
+    # def iterate_tensor(golden, calculated, idx=(), dim=0):
+    #     nonlocal count
+    #     if dim == num_dims:
+    #         if calculated.item() == 0 and golden.item() != 0:
+
+    #             golden_value = golden.item()
+
+    #             if count > 0:
+    #                 print(f"Golden element at index {idx} is {golden_value} while calculated is 0")
+    #                 count -= 1
+
+    #             # assert False
+    #     else:
+    #         for i in range(shape[dim]):
+    #             iterate_tensor(golden[i], calculated[i], idx + (i,), dim + 1)
+
+    # iterate_tensor(golden, calculated)
+
+    # print("------------- golden 1k -------------------")
+    # first_thousand = golden.flatten()[-1024:]
+    # for i in range(0, first_thousand.numel(), 32):
+    #     print(" ".join(f"{value:.3f}" for value in first_thousand[i:min(i + 32, first_thousand.numel())]))
+    #     print()
+
+    # print("------------- calculated 1k -------------------")
+    # first_thousand = calculated.flatten()[-1024:]
+    # for i in range(0, first_thousand.numel(), 32):
+    #     print(" ".join(f"{value:.3f}" for value in first_thousand[i:min(i + 32, first_thousand.numel())]))
+    #     print()
+
+    # print("---------------- done  -------------------")
+
     # Calculate atol and rtol
     cal_atol = torch.max(torch.abs(golden - calculated)).item()
     cal_rtol = torch.max(torch.abs(golden - calculated) / torch.abs(calculated)).item()
+
+    # both_zero_mask = (golden == 0) & (calculated == 0)
+
+    # # Calculate absolute difference
+    # abs_diff = torch.abs(golden - calculated)
+
+    # # Calculate absolute value of calculated tensor
+    # abs_calculated = torch.abs(calculated)
+
+    # # Calculate relative error while handling the case when both golden and calculated are zero
+    # rel_error = torch.where(both_zero_mask, torch.zeros_like(abs_diff), abs_diff / abs_calculated)
+
+    # # Find maximum relative error
+    # cal_rtol = torch.max(rel_error).item()
 
     # Calculate PCC
     def get_pcc(golden, calculated):
