@@ -221,8 +221,8 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
         constexpr bool fit_sender_and_receiver_workers_on_same_row = (worker_grid_width / 2) >= all_gather_buffer_params::num_buffers;
         // FIXME: Need to shift down a couple rows to avoid a runtime/dispatcher bug that prevents the first worker
         //        core from receiving its "GO" signal
-        uint32_t receiver_worker_row = (fit_sender_and_receiver_workers_on_same_row ? i + 2: 2 * i) + 2;
-        uint32_t sender_worker_row = (fit_sender_and_receiver_workers_on_same_row ? i + 2: (2 * i) + 1) + 2;
+        uint32_t receiver_worker_row = (fit_sender_and_receiver_workers_on_same_row ? i: 2 * i);
+        uint32_t sender_worker_row = (fit_sender_and_receiver_workers_on_same_row ? i: (2 * i) + 1);
         uint32_t sender_worker_col_offset = fit_sender_and_receiver_workers_on_same_row ? all_gather_buffer_params::num_buffers : 0;
         auto receiver_workers = CoreRange({0, receiver_worker_row}, {all_gather_buffer_params::num_buffers - 1, receiver_worker_row});
         auto sender_workers = CoreRange({sender_worker_col_offset, sender_worker_row}, {sender_worker_col_offset + all_gather_buffer_params::num_buffers - 1, sender_worker_row});
