@@ -122,8 +122,7 @@ class TtMambaSSM(torch.nn.Module):
         self.dt_proj = Linear(self.args.dt_rank, self.args.d_inner, self.dt_proj_weights, bias=self.dt_proj_bias)
         '''
         
-        prev_hidden_states = torch.zeros((1, 1, 32, 256), dtype=torch.bfloat16)
-        self.tt_hidden_state = ttnn.from_torch(prev_hidden_states, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+        self.tt_hidden_state = ttnn.zeros((1,1,32,40960), layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
         
         '''
         self.tt_hidden_state = torch2tt_tensor(
@@ -196,7 +195,7 @@ class TtMambaSSM(torch.nn.Module):
         '''
 
         num_users = 32
-        hidden_dim = 256
+        hidden_dim = 40960
 
         abar = torch.rand((1,1,num_users,hidden_dim), dtype=torch.bfloat16)
         cfg = ttnn.create_sharded_memory_config(shape=(1,1,num_users,hidden_dim), core_grid=ttnn.CoreGrid(y=num_users//32, x=8), strategy=ttnn.ShardStrategy.WIDTH, orientation=ttnn.ShardOrientation.ROW_MAJOR, use_height_and_width_as_shard_shape=False)
