@@ -257,6 +257,18 @@ autofunction:: tt_lib.operations.primary.matmul
 
 .. autofunction:: tt_lib.operations.primary.softmax_in_place
 
+.. autofunction:: tt_lib.operations.primary.moreh_softmax
+
+.. autofunction:: tt_lib.operations.primary.moreh_softmax_backward
+
+.. autofunction:: tt_lib.operations.primary.moreh_softmin
+
+.. autofunction:: tt_lib.operations.primary.moreh_softmin_backward
+
+.. autofunction:: tt_lib.operations.primary.moreh_logsoftmax
+
+.. autofunction:: tt_lib.operations.primary.moreh_logsoftmax_backward
+
 .. autofunction:: tt_lib.operations.primary.transformers.scale_mask_softmax_in_place
 
 .. autofunction:: tt_lib.operations.primary.moreh_mean
@@ -944,7 +956,11 @@ Backward Operations
 
 .. autofunction:: tt_lib.tensor.acos_bw
 
+.. autofunction:: tt_lib.tensor.erfinv_bw
+
 .. autofunction:: tt_lib.tensor.leaky_relu_bw
+
+.. autofunction:: tt_lib.tensor.elu_bw
 
 .. autofunction:: tt_lib.tensor.hardtanh_bw
 
@@ -955,6 +971,42 @@ Backward Operations
 .. autofunction:: tt_lib.tensor.sinh_bw
 
 .. autofunction:: tt_lib.tensor.celu_bw
+
+.. autofunction:: tt_lib.tensor.binary_lt_bw
+
+.. autofunction:: tt_lib.tensor.subalpha_bw
+
+.. autofunction:: tt_lib.tensor.log10_bw
+
+.. autofunction:: tt_lib.tensor.log1p_bw
+
+.. autofunction:: tt_lib.tensor.binary_ne_bw
+
+.. autofunction:: tt_lib.tensor.erf_bw
+
+.. autofunction:: tt_lib.tensor.erfc_bw
+
+.. autofunction:: tt_lib.tensor.digamma_bw
+
+.. autofunction:: tt_lib.tensor.deg2rad_bw
+
+.. autofunction:: tt_lib.tensor.rad2deg_bw
+
+.. autofunction:: tt_lib.tensor.reciprocal_bw
+
+.. autofunction:: tt_lib.tensor.relu6_bw
+
+.. autofunction:: tt_lib.tensor.rpow_bw
+
+.. autofunction:: tt_lib.tensor.silu_bw
+
+.. autofunction:: tt_lib.tensor.selu_bw
+
+.. autofunction:: tt_lib.tensor.binary_ge_bw
+
+.. autofunction:: tt_lib.tensor.binary_eq_bw
+
+.. autofunction:: tt_lib.tensor.binary_gt_bw
 
 Loss Functions
 ==============

@@ -384,6 +384,7 @@ class TTPyCompositeConv(TTPyOp):
         deallocate_activation=True,
         padded_input_channels=None,
         compute_kernel_config=None,
+        output_layout=ttl.tensor.Layout.TILE,
     ):
         if padded_input_channels is None:
             self.padded_input_channels = _nearest_32(input_channels)
@@ -392,6 +393,7 @@ class TTPyCompositeConv(TTPyOp):
         self.enable_auto_formatting = enable_auto_formatting
         self.deallocate_activation = deallocate_activation
         self.use_shallow_conv_variant = use_shallow_conv_variant
+        self.untilize_out = output_layout == ttl.tensor.Layout.ROW_MAJOR
         if reader_patterns_cache is None:
             reader_patterns_cache = {}
 
@@ -552,6 +554,142 @@ class TTPyCompositeConv(TTPyOp):
             self.tt_py_untilize_with_halo_op = TTPyUntilizeWithHalo(
                 device, self.sliding_window_op_params, reader_patterns_cache["halo"]
             )
+        self.set_input_sharded_memory_config()
+        self.set_output_sharded_memory_config()
+
+    def set_input_sharded_memory_config(self):
+        num_cores_nhw = self.sliding_window_op_params.num_cores_nhw
+        num_cores_w = self.sliding_window_op_params.num_cores_w
+        num_cores_h = self.sliding_window_op_params.num_cores_h
+
+        input_channels = self.input_tensor_shape[3]
+        padded_input_channels = (
+            _nearest_y(input_channels, 16) if self.use_shallow_conv_variant else _nearest_32(input_channels)
+        )
+        assert padded_input_channels >= input_channels
+        act_c_num_blocks = self.opt_conv_block_conf_auto.act_c_num_blocks
+        grid_size = (num_cores_w, num_cores_h)
+
+        input_size_to_shard_evenly = _nearest_y(
+            self.input_tensor_shape[0] * self.input_tensor_shape[1] * self.input_tensor_shape[2], num_cores_nhw * 32
+        )
+        untilize_with_halo_input_shard_height = (int)(input_size_to_shard_evenly / num_cores_nhw)
+
+        if self.is_1d_systolic and num_cores_nhw % num_cores_w > 0:
+            assert num_cores_h * num_cores_w > num_cores_nhw
+            first_range_num_cores_h = num_cores_nhw // num_cores_w
+            assert num_cores_nhw % num_cores_w < num_cores_w
+
+            shard_grid = ttl.tensor.CoreRangeSet(
+                {
+                    ttl.tensor.CoreRange(
+                        ttl.tensor.CoreCoord(0, 0),
+                        ttl.tensor.CoreCoord(num_cores_w - 1, first_range_num_cores_h - 1),
+                    ),
+                    ttl.tensor.CoreRange(
+                        ttl.tensor.CoreCoord(0, first_range_num_cores_h),
+                        ttl.tensor.CoreCoord((num_cores_nhw % num_cores_w) - 1, first_range_num_cores_h),
+                    ),
+                }
+            )
+        else:
+            if self.is_1d_systolic:
+                assert num_cores_nhw == num_cores_h * num_cores_w
+            shard_grid = ttl.tensor.CoreRangeSet(
+                {
+                    ttl.tensor.CoreRange(
+                        ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(num_cores_w - 1, num_cores_h - 1)
+                    )
+                }
+            )
+
+        self.input_shard_orientation = (
+            ttl.tensor.ShardOrientation.ROW_MAJOR if self.is_1d_systolic else ttl.tensor.ShardOrientation.COL_MAJOR
+        )
+        shard_halo = False
+        shard_shape = [
+            untilize_with_halo_input_shard_height,
+            padded_input_channels if self.is_1d_systolic else (int)(padded_input_channels / act_c_num_blocks),
+        ]
+        shard_spec = ttl.tensor.ShardSpec(shard_grid, shard_shape, self.input_shard_orientation, shard_halo)
+        self.input_shard_scheme = (
+            ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED
+            if self.is_1d_systolic
+            else ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED
+        )
+        self.input_sharded_memory_config = ttl.tensor.MemoryConfig(
+            self.input_shard_scheme,
+            ttl.tensor.BufferType.L1,
+            shard_spec,
+        )
+        self.grid_size = (num_cores_w, num_cores_h)
+
+    def set_output_sharded_memory_config(self):
+        num_cores_nhw = self.sliding_window_op_params.num_cores_nhw
+        num_cores_w = self.sliding_window_op_params.num_cores_w
+        num_cores_h = self.sliding_window_op_params.num_cores_h
+
+        output_channels = self.conv_output_shape[3]
+        padded_output_channels = _nearest_32(output_channels)
+        assert padded_output_channels >= output_channels
+        act_c_num_blocks = self.opt_conv_block_conf_auto.act_c_num_blocks
+
+        output_size_to_shard_evenly = _nearest_y(
+            self.conv_output_shape[0] * self.conv_output_shape[1] * self.conv_output_shape[2], num_cores_nhw * 32
+        )
+        output_shard_height = (int)(output_size_to_shard_evenly / num_cores_nhw)
+
+        if self.is_1d_systolic and num_cores_nhw % num_cores_w > 0:
+            assert num_cores_h * num_cores_w > num_cores_nhw
+            first_range_num_cores_h = num_cores_nhw // num_cores_w
+            assert num_cores_nhw % num_cores_w < num_cores_w
+
+            shard_grid = ttl.tensor.CoreRangeSet(
+                {
+                    ttl.tensor.CoreRange(
+                        ttl.tensor.CoreCoord(0, 0),
+                        ttl.tensor.CoreCoord(num_cores_w - 1, first_range_num_cores_h - 1),
+                    ),
+                    ttl.tensor.CoreRange(
+                        ttl.tensor.CoreCoord(0, first_range_num_cores_h),
+                        ttl.tensor.CoreCoord((num_cores_nhw % num_cores_w) - 1, first_range_num_cores_h),
+                    ),
+                }
+            )
+        else:
+            if self.is_1d_systolic:
+                assert num_cores_nhw == num_cores_h * num_cores_w
+            shard_grid = ttl.tensor.CoreRangeSet(
+                {
+                    ttl.tensor.CoreRange(
+                        ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(num_cores_w - 1, num_cores_h - 1)
+                    )
+                }
+            )
+
+        self.output_shard_orientation = (
+            ttl.tensor.ShardOrientation.ROW_MAJOR if self.is_1d_systolic else ttl.tensor.ShardOrientation.COL_MAJOR
+        )
+        shard_halo = False
+        shard_shape = [
+            output_shard_height,
+            padded_output_channels if self.is_1d_systolic else (int)(padded_output_channels / act_c_num_blocks),
+        ]
+        assert shard_shape[0] == self.opt_conv_parall_conf_auto.per_core_out_matrix_height_ntiles * 32
+        if shard_shape[1] != self.opt_conv_parall_conf_auto.per_core_weight_matrix_width_ntiles * 32:
+            breakpoint()
+        assert shard_shape[1] == self.opt_conv_parall_conf_auto.per_core_weight_matrix_width_ntiles * 32
+        shard_spec = ttl.tensor.ShardSpec(shard_grid, shard_shape, self.output_shard_orientation, shard_halo)
+        self.output_shard_scheme = (
+            ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED
+            if self.is_1d_systolic
+            else ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED
+        )
+        self.output_sharded_memory_config = ttl.tensor.MemoryConfig(
+            self.output_shard_scheme,
+            ttl.tensor.BufferType.L1,
+            shard_spec,
+        )
 
     # override abstract methods from base class TTPyOp
     def set_op_configs(
@@ -690,13 +828,13 @@ class TTPyCompositeConv(TTPyOp):
                 S,
             ]
             if weights_dtype is None:
-                weights_dtype = weight.dtype()
+                weights_dtype = weight.get_dtype()
             weights_untiled_dtype = (
                 weights_dtype if weights_dtype != ttl.tensor.DataType.BFLOAT8_B else ttl.tensor.DataType.FLOAT32
             )
-            assert weight.layout() == ttl.tensor.Layout.ROW_MAJOR
-            assert weight.dtype() == weights_untiled_dtype
-            assert weight.shape() == weights_shape
+            assert weight.get_layout() == ttl.tensor.Layout.ROW_MAJOR
+            assert weight.get_dtype() == weights_untiled_dtype
+            assert weight.get_legacy_shape() == weights_shape
             weight_untiled = weight.pad(weights_channels_padded_shape, (0, 0, 0, 0), 0)
             # for conv op, pad the weights to block shape
             if self.is_1d_systolic:
@@ -718,9 +856,9 @@ class TTPyCompositeConv(TTPyOp):
             self.weight = weight_on_device
             if bias is not None:
                 bias_shape = [1, 1, 1, K]
-                assert bias.layout() == ttl.tensor.Layout.ROW_MAJOR
-                assert bias.dtype() == weights_untiled_dtype
-                assert bias.shape() == bias_shape
+                assert bias.get_layout() == ttl.tensor.Layout.ROW_MAJOR
+                assert bias.get_dtype() == weights_untiled_dtype
+                assert bias.get_legacy_shape() == bias_shape
 
                 bias_channels_padded_shape = [1, 1, 32, _nearest_y(K, weight_block_w_ntiles * 32)]
                 bias_untiled = bias.pad(bias_channels_padded_shape, (0, 0, 0, 0), 0)
@@ -752,7 +890,7 @@ class TTPyCompositeConv(TTPyOp):
                 conv_reader_indices,
                 [R, S, U, V, P_H, P_W],
                 K,
-                False,
+                self.untilize_out,
                 self.bias is not None,
                 fuse_relu,
                 math_fidelity,
@@ -768,18 +906,18 @@ class TTPyCompositeConv(TTPyOp):
             # assert(output.storage_type() == ttl.tensor.StorageType.DEVICE)
 
         def composite_conv_with_deallocate_input(activation):
-            # assert(activation.layout() == ttl.tensor.Layout.ROW_MAJOR)
+            # assert(activation.get_layout() == ttl.tensor.Layout.ROW_MAJOR)
             utwh_output = self.tt_py_untilize_with_halo_op(activation)
             activation.deallocate()
             return conv_(utwh_output)
 
         def composite_conv(activation):
-            # assert(activation.layout() == ttl.tensor.Layout.ROW_MAJOR)
+            # assert(activation.get_layout() == ttl.tensor.Layout.ROW_MAJOR)
             utwh_output = self.tt_py_untilize_with_halo_op(activation)
             return conv_(utwh_output)
 
         def composite_conv_with_move_utwh_output_with_deallocate_input(activation):
-            # assert(activation.layout() == ttl.tensor.Layout.ROW_MAJOR)
+            # assert(activation.get_layout() == ttl.tensor.Layout.ROW_MAJOR)
             utwh_output = self.tt_py_untilize_with_halo_op(activation)
             activation.deallocate()
             move_output = ttl.tensor.move_sharded(utwh_output)
@@ -787,7 +925,7 @@ class TTPyCompositeConv(TTPyOp):
             return conv_(move_output)
 
         def composite_conv_with_move_utwh_output(activation):
-            # assert(activation.layout() == ttl.tensor.Layout.ROW_MAJOR)
+            # assert(activation.get_layout() == ttl.tensor.Layout.ROW_MAJOR)
             utwh_output = self.tt_py_untilize_with_halo_op(activation)
             move_output = ttl.tensor.move_sharded(utwh_output)
             utwh_output.deallocate()
@@ -844,7 +982,7 @@ class TTPyCompositeConv(TTPyOp):
 
     # TODO: with this api, we get incorrect output
     def copy_input_to_device_with_sharded_api(self, conv_input: ttl.tensor.Tensor):
-        assert conv_input.shape() == self.input_tensor_shape
+        assert conv_input.get_legacy_shape() == self.input_tensor_shape
         num_cores_nhw = self.sliding_window_op_params.num_cores_nhw
         num_cores_w = self.sliding_window_op_params.num_cores_w
         num_cores_h = self.sliding_window_op_params.num_cores_h
@@ -887,7 +1025,7 @@ class TTPyCompositeConv(TTPyOp):
         num_cores_h = self.sliding_window_op_params.num_cores_h
 
         input_channels = self.input_tensor_shape[3]
-        padded_input_channels = conv_input_on_device.shape()[3]
+        padded_input_channels = conv_input_on_device.get_legacy_shape()[3]
         assert padded_input_channels >= input_channels
         assert padded_input_channels == self.padded_input_channels
         act_c_num_blocks = self.opt_conv_block_conf_auto.act_c_num_blocks
@@ -930,7 +1068,7 @@ class TTPyCompositeConv(TTPyOp):
         interleaved_mem_config = ttl.tensor.MemoryConfig(
             ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM
         )
-        assert conv_input.shape() == self.input_tensor_shape
+        assert conv_input.get_legacy_shape() == self.input_tensor_shape
         # Reshape 4d to 2d
         conv_input = conv_input.reshape(
             1,
@@ -942,20 +1080,22 @@ class TTPyCompositeConv(TTPyOp):
         if conv_input.storage_type() != ttl.tensor.StorageType.DEVICE:
             padded_input_channels = self.padded_input_channels
             channels_padded_shape = [
-                conv_input.shape()[0],
-                conv_input.shape()[1],
-                conv_input.shape()[2],
+                conv_input.get_legacy_shape()[0],
+                conv_input.get_legacy_shape()[1],
+                conv_input.get_legacy_shape()[2],
                 padded_input_channels,
             ]
             conv_input = conv_input.pad(channels_padded_shape, (0, 0, 0, 0), 0)
             conv_input_on_device = conv_input.to(self.device, interleaved_mem_config)
         else:
             conv_input_on_device = conv_input
-        assert conv_input_on_device.shape()[3] % 16 == 0
+        assert conv_input_on_device.get_legacy_shape()[3] % 16 == 0
         if not self.use_shallow_conv_variant:
-            input_padded_shape = ttl.tensor.pad_to_tile_shape(conv_input_on_device.shape(), False, False, True, True)
+            input_padded_shape = ttl.tensor.pad_to_tile_shape(
+                conv_input_on_device.get_legacy_shape(), False, False, True, True
+            )
             assert self.padded_input_channels == input_padded_shape[3]
-            if conv_input.shape() != input_padded_shape:
+            if conv_input.get_legacy_shape() != input_padded_shape:
                 conv_input_on_device = ttl.tensor.format_input_tensor(
                     conv_input_on_device,
                     self.device,
@@ -985,8 +1125,7 @@ class TTPyCompositeConv(TTPyOp):
         conv_output_on_device = self.conv_output_sharded_to_interleaved(conv_output_on_device)
 
         # convert tiled output to RM
-        assert conv_output_on_device.layout() == ttl.tensor.Layout.TILE
-        if conv_output_on_device.shape() != conv_output_on_device.shape_without_padding():
+        if conv_output_on_device.get_legacy_shape() != conv_output_on_device.shape_without_padding():
             conv_output_on_device = ttl.tensor.format_output_tensor(
                 conv_output_on_device,
                 conv_output_on_device.shape_without_padding(),
@@ -994,7 +1133,8 @@ class TTPyCompositeConv(TTPyOp):
                 ttl.tensor.Layout.ROW_MAJOR,
                 interleaved_mem_config,
             )
-        else:
+        elif not self.untilize_out:
+            assert conv_output_on_device.get_layout() == ttl.tensor.Layout.TILE
             conv_output_on_device = ttl.tensor.untilize(
                 conv_output_on_device, interleaved_mem_config, use_multicore=True
             )
@@ -1003,7 +1143,7 @@ class TTPyCompositeConv(TTPyOp):
             self.conv_output_shape[0],
             self.conv_output_shape[1],
             self.conv_output_shape[2],
-            self.conv_output_shape[3],
+            conv_output_on_device.shape_without_padding()[3],
         )
 
         # Copy to host

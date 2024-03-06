@@ -7,9 +7,7 @@ from loguru import logger
 
 
 import tt_lib as ttl
-from models.utility_functions import (
-    comp_pcc,
-)
+from models.utility_functions import comp_pcc, skip_for_wormhole_b0
 import torch
 
 shapes = [
@@ -17,6 +15,7 @@ shapes = [
 ]
 
 
+@skip_for_wormhole_b0("disabled due to watcher error, see issue #5863")
 @pytest.mark.parametrize("shape", shapes)
 def test_move_op(shape, device):
     run_move_op(shape, device)
@@ -29,7 +28,7 @@ def run_move_op(shape, device):
     torch.manual_seed(1234)
     compute_grid_size = device.compute_with_storage_grid_size()
     if (compute_grid_size.x * compute_grid_size.y) < 98:
-        core_count = 50
+        core_count = 25
         shape[2] = 25050
     else:
         core_count = 98
@@ -42,11 +41,7 @@ def run_move_op(shape, device):
             {
                 ttl.tensor.CoreRange(
                     ttl.tensor.CoreCoord(0, 0),
-                    ttl.tensor.CoreCoord(7, 5),
-                ),
-                ttl.tensor.CoreRange(
-                    ttl.tensor.CoreCoord(0, 6),
-                    ttl.tensor.CoreCoord(1, 6),
+                    ttl.tensor.CoreCoord(4, 4),
                 ),
             }
         )

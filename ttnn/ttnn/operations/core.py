@@ -235,12 +235,10 @@ def unsqueeze_to_4D(tensor):
 def squeeze(tensor, dim):
     if dim != 0:
         raise RuntimeError("Only dim=0 is supported for squeeze operation!")
-    if len(tensor.shape) == 1:
-        return tensor
-    if len(tensor.shape) > 4:
-        raise RuntimeError("Tensor cannot have more than 4 dimensions!")
     if tensor.shape[0] != 1:
         return tensor
+    if len(tensor.shape) == 1:
+        raise RuntimeError("Cannot squeeze a tensor of rank 1 because rank 0 is not supported by ttnn!")
     _, *shape = tensor.shape
     _, *full_shape = tensor.shape.with_tile_padding()
     return ttnn.reshape(tensor, shape=ttnn.Shape(shape, full_shape))
@@ -373,7 +371,7 @@ def to_torch(tensor: ttnn.Tensor, *, torch_rank: Optional[int] = None) -> "torch
     def impl(ttl_tensor):
         if ttl_tensor.storage_type() == ttnn.DEVICE_STORAGE_TYPE:
             raise RuntimeError("ttnn.Tensor cannot be on device when converting to torch.Tensor!")
-        if ttl_tensor.layout() != ttnn.ROW_MAJOR_LAYOUT:
+        if ttl_tensor.get_layout() != ttnn.ROW_MAJOR_LAYOUT:
             raise RuntimeError("ttnn.Tensor has to be in ROW_MAJOR Layout to be converted to torch.Tensor")
         output = ttl_tensor.to_torch()
 
