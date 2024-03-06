@@ -45,7 +45,7 @@ class Emb(torch.nn.Module):
     "pcc",
     (0.99,),
 )
-def test_mistral_model_inference(pcc, model_config, model_location_generator, device, iterations, n_layers):
+def test_mistral_model_inference(device, pcc, model_config, iterations, n_layers):
     ttnn.enable_program_cache()
 
     # Can avoid running reference model to speed up the test (but required to measure PCC)
@@ -73,7 +73,7 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
         )
     }
 
-    prompts = ["1, 2, 3, 4, "] * 32
+    prompts = ["1 2 3 4 "] * 32
 
     encoded_prompts = [tokenizer.encode(prompt) for prompt in prompts]
 
@@ -169,7 +169,7 @@ def test_mistral_model_inference(pcc, model_config, model_location_generator, de
             all_outputs.append(tt_out_tok.squeeze(1).tolist()[0])  # Update generated token to list of TT outputs
             if run_ref_pt:
                 pt_out_tok = torch.argmax(ref_output, dim=-1)
-                pt_decode_input = embd(tt_out_tok)
+                pt_decode_input = embd(pt_out_tok)
                 all_outputs_ref.append(
                     pt_out_tok.squeeze(1).tolist()[0]
                 )  # Update generated token to list of ref outputs
