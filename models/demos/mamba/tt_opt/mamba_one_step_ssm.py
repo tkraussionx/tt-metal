@@ -205,5 +205,6 @@ class TtMambaSSM(torch.nn.Module):
         hidden_state = ttnn.to_memory_config(self.tt_hidden_state, cfg)
         output_tensor = ttnn.mul(abar, hidden_state, memory_config=cfg)
 
+        self.tt_hidden_state = ttnn.to_memory_config(output_tensor, ttnn.DRAM_MEMORY_CONFIG)
         self.output = output_tensor
         return self.output
