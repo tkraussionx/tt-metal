@@ -18,6 +18,7 @@ class MambaTT(torch.nn.Module):
         reference_model,
         num_layers,
         device
+        
     ):
         super().__init__()
         print(f"Initalizing MambaTT with {num_layers} layers")
