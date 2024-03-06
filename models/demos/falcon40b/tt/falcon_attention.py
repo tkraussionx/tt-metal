@@ -306,6 +306,7 @@ class TtFalconAttention:
                     first_query_layer[i],
                     first_kv_layer[i],
                     output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+                    kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
                 )
             )
             first_query_layer[i].deallocate(True)
@@ -317,6 +318,7 @@ class TtFalconAttention:
                     second_query_layer[i],
                     second_kv_layer[i],
                     output_mem_config=self.model_config["DEFAULT_MEMCFG"],
+                    kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
                 )
             )
             second_query_layer[i].deallocate(True)
