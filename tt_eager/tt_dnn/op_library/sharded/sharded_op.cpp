@@ -33,6 +33,10 @@ void Sharded::validate(const std::vector<Tensor>& input_tensors) const {
         TT_FATAL(input_tensor.get_layout() == Layout::TILE);
     }
     auto device_grid = input_tensor.device()->compute_with_storage_grid_size();
+    std::cout << "this->grid_size.x=" << this->grid_size.x << std::endl;
+    std::cout << "this->device_grid.x=" << device_grid.x << std::endl;
+    std::cout << "this->grid_size.y=" << this->grid_size.y << std::endl;
+    std::cout << "this->device_grid.y=" << device_grid.y << std::endl;
     TT_FATAL(this->grid_size.x <= device_grid.x && this->grid_size.y <= device_grid.y);
     // Divisibility of num_cores and shard size with tensor shape is done in tensor creation, so no need to assert here
 }

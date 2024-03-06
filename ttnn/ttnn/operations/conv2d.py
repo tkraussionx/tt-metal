@@ -46,6 +46,7 @@ class Conv2d:
         padded_input_channels: Optional[int] = None,
         compute_kernel_config: Union[ttnn.GrayskullComputeKernelConfig, ttnn.WormholeComputeKernelConfig] = None,
     ):
+        use_shallow_conv_variant = False
         assert (
             padding_mode == "zeros"
         ), f"Only convs with padding_mode=zeroes supported. Found padding_mode set to {padding_mode}."

@@ -34,7 +34,7 @@ def custom_preprocessor(model, name, ttnn_module_args):
         ttnn_module_args.p4["deallocate_activation"] = False
 
         ttnn_module_args.c1["math_fidelity"] = ttnn.MathFidelity.LoFi
-        ttnn_module_args.c1["padded_input_channels"] = 16
+        # ttnn_module_args.c1["padded_input_channels"] = 16
         ttnn_module_args.c1["use_shallow_conv_variant"] = True
         ttnn_module_args.c1_2["math_fidelity"] = ttnn.MathFidelity.LoFi
         ttnn_module_args.c1_2["use_shallow_conv_variant"] = True
@@ -46,8 +46,8 @@ def custom_preprocessor(model, name, ttnn_module_args):
         ttnn_module_args.c1_2["activation"] = "relu"  # Fuse relu with conv1
         ttnn_module_args.c1["deallocate_activation"] = True
         ttnn_module_args.c1_2["deallocate_activation"] = True
-        ttnn_module_args.c1["conv_blocking_and_parallelization_config_override"] = {"act_block_h": 64}
-        ttnn_module_args.c1_2["conv_blocking_and_parallelization_config_override"] = {"act_block_h": 64}
+        ttnn_module_args.c1["conv_blocking_and_parallelization_config_override"] = {"act_block_h": 5 * 32}
+        ttnn_module_args.c1_2["conv_blocking_and_parallelization_config_override"] = {"act_block_h": 5 * 32}
 
         ttnn_module_args.c2["math_fidelity"] = ttnn.MathFidelity.LoFi
         ttnn_module_args.c2_2["math_fidelity"] = ttnn.MathFidelity.LoFi
