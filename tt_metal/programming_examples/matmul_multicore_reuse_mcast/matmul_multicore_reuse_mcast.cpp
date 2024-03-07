@@ -459,9 +459,9 @@ int main(int argc, char **argv) {
         // NOTE: Maximum number of tiles in output is 120 * 16^2 = 30,720 (eg. [1, 1, 5120, 6144])
 
         /* Create source data */
-        constexpr uint32_t M = 3200;  // user-defined
-        constexpr uint32_t N = 3200;  // user-defined
-        constexpr uint32_t K = 3200;  // user-defined
+        constexpr uint32_t M = 832;  // user-defined
+        constexpr uint32_t N = 832;  // user-defined
+        constexpr uint32_t K = 832;  // user-defined
         constexpr uint32_t B = 1;  // user-defined
 
         uint32_t Mt = M / TILE_HEIGHT;
