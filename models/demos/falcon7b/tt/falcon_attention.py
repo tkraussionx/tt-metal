@@ -364,6 +364,7 @@ class TtFalconAttention(nn.Module):
         ### POST-SOFTMAX MM ###
         ########################
         if llm_mode == "prefill":
+            # post-softmax :)
             attn_output = tt_lib.tensor.matmul(
                 attn_weights,
                 value_layer,
@@ -399,6 +400,7 @@ class TtFalconAttention(nn.Module):
             output_mem_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"],
         )
 
+        ## Selfout matmul
         attn_output = tt_lib.tensor.falcon_selfout_matmul(
             attn_output,
             self.dense_weights,

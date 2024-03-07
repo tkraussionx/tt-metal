@@ -25,18 +25,21 @@ def run_falcon_matmul_test(
     if out_dtype == ttl.tensor.DataType.BFLOAT8_B:
         pcc = 0.98
 
-    if falcon_op == ttl.tensor.falcon_fused_qkv_matmul:
+    if falcon_op == "ttl.tensor.falcon_fused_qkv_matmul":
         a_shape = [1, 1, seq_len, 4544]
         b_shape = [1, 1, 4544, 4672]
         expected_output_shape = [1, 1, seq_len, 4672]
-    elif falcon_op == ttl.tensor.falcon_selfout_matmul:
+        op = ttl.tensor.falcon_fused_qkv_matmul
+    elif falcon_op == "ttl.tensor.falcon_selfout_matmul":
         a_shape = [1, 1, seq_len, 4544]
         b_shape = [1, 1, 4544, 4544]
         expected_output_shape = [1, 1, seq_len, 4544]
-    elif falcon_op == ttl.tensor.falcon_dense_4h_to_h_matmul:
+        op = ttl.tensor.falcon_selfout_matmul
+    elif falcon_op == "ttl.tensor.falcon_dense_4h_to_h_matmul":
         a_shape = [1, 1, seq_len, 18176]
         b_shape = [1, 1, 18176, 4544]
         expected_output_shape = [1, 1, seq_len, 4544]
+        op = ttl.tensor.falcon_dense_4h_to_h_matmul
 
         if (seq_len == 1024 and in0_dtype == in1_dtype == out_dtype == ttl.tensor.DataType.BFLOAT16) or (
             seq_len == 2048
@@ -58,10 +61,11 @@ def run_falcon_matmul_test(
             out_mem_config = ttl.tensor.MemoryConfig(
                 ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM
             )
-    elif falcon_op == ttl.tensor.falcon_dense_h_to_4h_matmul:
+    elif falcon_op == "ttl.tensor.falcon_dense_h_to_4h_matmul":
         a_shape = [1, 1, seq_len, 4544]
         b_shape = [1, 1, 4544, 18176]
         expected_output_shape = [1, 1, seq_len, 18176]
+        op = ttl.tensor.falcon_dense_h_to_4h_matmul
 
         in0_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
         out_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
@@ -79,10 +83,11 @@ def run_falcon_matmul_test(
             out_mem_config = ttl.tensor.MemoryConfig(
                 ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM
             )
-    elif falcon_op == ttl.tensor.falcon_lm_head_matmul:
+    elif falcon_op == "ttl.tensor.falcon_lm_head_matmul":
         a_shape = [1, 1, seq_len, 4544]
         b_shape = [1, 1, 4544, 65024]
         expected_output_shape = [1, 1, seq_len, 65024]
+        op = ttl.tensor.falcon_lm_head_matmul
 
         if (
             seq_len == 512
@@ -106,11 +111,22 @@ def run_falcon_matmul_test(
             out_mem_config = ttl.tensor.MemoryConfig(
                 ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM
             )
-    elif falcon_op == ttl.tensor.matmul:
+    elif falcon_op == "post_transpose_mm":
         # attn matmul, post-transpose
         a_shape = [1, 71, seq_len, 64]
         b_shape = [1, 1, 64, seq_len]
         expected_output_shape = [1, 71, seq_len, seq_len]
+        op = ttl.tensor.matmul
+
+        in0_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
+        out_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
+    elif falcon_op == "post_softmax_mm":
+        # attn matmul, post-softmax
+        a_shape = [1, 71, seq_len, seq_len]
+        b_shape = [1, 1, seq_len, 64]
+        expected_output_shape = [1, 71, seq_len, 64]
+
+        op = ttl.tensor.matmul
 
         in0_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
         out_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
@@ -127,7 +143,7 @@ def run_falcon_matmul_test(
     b_t = ttl.tensor.Tensor(B, in1_dtype).to(ttl.tensor.Layout.TILE).to(device, in1_mem_config)
     bias_t = None
 
-    if falcon_op == ttl.tensor.falcon_dense_4h_to_h_matmul:
+    if falcon_op == "ttl.tensor.falcon_dense_4h_to_h_matmul":
         compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
             math_fidelity=ttl.tensor.MathFidelity.LoFi,
             math_approx_mode=True,
@@ -136,6 +152,7 @@ def run_falcon_matmul_test(
         )
 
         # A = [32, 568] * [568, 142]
+        # Arround 1.6 mil cycles
         program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
             compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
             in0_block_w=8,
@@ -157,7 +174,7 @@ def run_falcon_matmul_test(
         )
 
         # out = falcon_op(a_t, b_t, bias_t, output_mem_config=out_mem_config, output_dtype=out_dtype)
-    elif falcon_op == ttl.tensor.falcon_dense_h_to_4h_matmul:
+    elif falcon_op == "ttl.tensor.falcon_dense_h_to_4h_matmul":
         compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
             math_fidelity=ttl.tensor.MathFidelity.LoFi,
             math_approx_mode=True,
@@ -221,7 +238,7 @@ def run_falcon_matmul_test(
             output_dtype=out_dtype,
             compute_kernel_config=compute_kernel_config,
         )
-    elif falcon_op == ttl.tensor.matmul:
+    elif falcon_op == "post_transpose_mm":
         compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
             math_fidelity=ttl.tensor.MathFidelity.HiFi4,  # try this lower
             math_approx_mode=True,
@@ -244,6 +261,7 @@ def run_falcon_matmul_test(
         #         a_shape = [1, 71, seq_len, 64]
         #         b_shape = [1, 1, 64, seq_len]
         #         entire batch doesn't fit
+        # Arround ~2.6 mil cycles
         program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
             compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
             in0_block_w=1,
@@ -281,8 +299,70 @@ def run_falcon_matmul_test(
         #     b_t,
         #     output_mem_config = out_mem_config
         # )
+    elif falcon_op == "post_softmax_mm":
+        compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+            math_fidelity=ttl.tensor.MathFidelity.HiFi4,  # try this lower
+            math_approx_mode=True,
+            fp32_dest_acc_en=False,
+            packer_l1_acc=True,
+        )
+
+        # Optimum configuration for this case...
+        # The matmul is DRAM bound
+        # ~ 2.9 mil ns, theoretical is something like 181760ns!!!
+        program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+            compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+            in0_block_w=1,
+            out_subblock_h=4,
+            out_subblock_w=2,
+            per_core_M=36,
+            per_core_N=2,
+            fuse_batch=True,
+            fused_activation=None,
+            mcast_in0=False,
+        )
+
+        out = ttl.operations.primary.matmul(
+            a_t,
+            b_t,
+            program_config=program_config,
+            output_mem_config=out_mem_config,
+            output_dtype=out_dtype,
+            compute_kernel_config=compute_kernel_config,
+        )
+    elif falcon_op == "ttl.tensor.falcon_selfout_matmul":
+        compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+            math_fidelity=ttl.tensor.MathFidelity.LoFi,  # try this lower
+            math_approx_mode=True,
+            fp32_dest_acc_en=False,
+            packer_l1_acc=True,
+        )
+
+        # A = [32, 142] B = [142, 142]
+        # Best config - 475k ns
+        # Theoretical: 182k
+        # usage = theoretical / actual = 38%
+        program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+            compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+            in0_block_w=2,
+            per_core_M=4,
+            per_core_N=18,
+            out_subblock_h=1,
+            out_subblock_w=6,
+            transpose_mcast=False,
+            fused_activation=None,
+        )
+
+        out = ttl.operations.primary.matmul(
+            a_t,
+            b_t,
+            program_config=program_config,
+            output_mem_config=out_mem_config,
+            output_dtype=out_dtype,
+            compute_kernel_config=compute_kernel_config,
+        )
     else:
-        out = falcon_op(a_t, b_t, bias_t, output_mem_config=out_mem_config, output_dtype=out_dtype)
+        out = op(a_t, b_t, bias_t, output_mem_config=out_mem_config, output_dtype=out_dtype)
 
     # Check memory and dtype of inputs and outputs
     assert a_t.memory_config().buffer_type == in0_mem_config.buffer_type
@@ -336,14 +416,15 @@ def run_falcon_matmul_test(
 @pytest.mark.parametrize(
     "falcon_op",
     (
-        ttl.tensor.falcon_fused_qkv_matmul,
-        ttl.tensor.falcon_selfout_matmul,
-        ttl.tensor.falcon_dense_4h_to_h_matmul,
-        ttl.tensor.falcon_dense_h_to_4h_matmul,
-        ttl.tensor.falcon_lm_head_matmul,
-        ttl.tensor.matmul,
+        "ttl.tensor.falcon_fused_qkv_matmul",
+        "ttl.tensor.falcon_selfout_matmul",
+        "ttl.tensor.falcon_dense_4h_to_h_matmul",
+        "ttl.tensor.falcon_dense_h_to_4h_matmul",
+        "ttl.tensor.falcon_lm_head_matmul",
+        "post_transpose_mm",
+        "post_softmax_mm",
     ),
-    ids=["fused_qkv", "selfout", "dense_4h_to_h", "dense_h_to_4h", "lm_head", "post_transpose_mm"],
+    ids=["fused_qkv", "selfout", "dense_4h_to_h", "dense_h_to_4h", "lm_head", "post_transpose_mm", "post_softmax_mm"],
 )
 @pytest.mark.parametrize(
     "seq_len",
