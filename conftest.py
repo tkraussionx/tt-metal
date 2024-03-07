@@ -261,11 +261,15 @@ def device_init_destroy(request):
 
     device_id = request.config.getoption("device_id")
 
+    num_devices = ttl.device.GetNumPCIeDevices()
+    assert device_id < num_devices, "CreateDevice not supported for non-mmio device"
+
     device = ttl.device.CreateDevice(device_id)
     ttl.device.SetDefaultDevice(device)
 
     yield device
 
+    ttl.device.Synchronize(device)
     ttl.device.CloseDevice(device)
 
 

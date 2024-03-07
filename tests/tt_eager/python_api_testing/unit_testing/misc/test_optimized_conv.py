@@ -5,6 +5,7 @@
 import pytest
 from pathlib import Path
 import sys
+from loguru import logger
 
 import numpy as np
 
@@ -176,8 +177,8 @@ def test_run_optimized_conv(
             out = ttl.tensor.format_output_tensor(out, out.shape_without_padding(), device, ttl.tensor.Layout.ROW_MAJOR)
             out = out.reshape(conv_output_shape[0], conv_output_shape[1], conv_output_shape[2], conv_output_shape[3])
         out = out.cpu()
-        assert list(out.shape()) == conv_output_shape
-        assert out.layout() == ttl.tensor.Layout.ROW_MAJOR
+        assert list(out.get_legacy_shape()) == conv_output_shape
+        assert out.get_layout() == ttl.tensor.Layout.ROW_MAJOR
 
         # Copy output to host and convert tt tensor to pytorch tensor
         out_result = out.to_torch().float()
@@ -211,8 +212,8 @@ def test_run_optimized_conv(
         passing_allclose_and_pcc, output_info = comp_allclose_and_pcc(
             out_golden, out_result, rtol=1e-1, atol=1e-3, pcc=0.9999
         )  # For LowFi we need 0.99976
-        print("Passing=", passing_allclose_and_pcc)
-        print("Output info=", output_info)
+        logger.debug(f"Passing={passing_allclose_and_pcc}")
+        logger.debug(f"Output info={output_info}")
         passing_pcc, _ = comp_pcc(out_golden, out_result, pcc=0.9998)  # For LowFi we need 0.99976
         assert passing_pcc
         # assert passing_allclose_and_pcc

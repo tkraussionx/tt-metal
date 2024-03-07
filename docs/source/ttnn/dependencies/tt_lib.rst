@@ -910,6 +910,8 @@ Backward Operations
 
 .. autofunction:: tt_lib.tensor.hypot_bw
 
+.. autofunction:: tt_lib.tensor.maximum_bw
+
 .. autofunction:: tt_lib.tensor.gelu_bw
 
 .. autofunction:: tt_lib.tensor.bias_gelu_bw
@@ -993,6 +995,30 @@ Backward Operations
 .. autofunction:: tt_lib.tensor.rad2deg_bw
 
 .. autofunction:: tt_lib.tensor.reciprocal_bw
+
+.. autofunction:: tt_lib.tensor.relu6_bw
+
+.. autofunction:: tt_lib.tensor.rpow_bw
+
+.. autofunction:: tt_lib.tensor.silu_bw
+
+.. autofunction:: tt_lib.tensor.selu_bw
+
+.. autofunction:: tt_lib.tensor.binary_ge_bw
+
+.. autofunction:: tt_lib.tensor.binary_eq_bw
+
+.. autofunction:: tt_lib.tensor.binary_gt_bw
+
+.. autofunction:: tt_lib.tensor.square_bw
+
+.. autofunction:: tt_lib.tensor.lgamma_bw
+
+.. autofunction:: tt_lib.tensor.trunc_bw
+
+.. autofunction:: tt_lib.tensor.frac_bw
+
+.. autofunction:: tt_lib.tensor.log_sigmoid_bw
 
 Loss Functions
 ==============

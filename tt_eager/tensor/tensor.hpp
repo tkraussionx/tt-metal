@@ -79,9 +79,9 @@ class Tensor {
         //                                      Getters
         // ======================================================================================
         const Storage &storage() const;
-        const Shape &shape() const { return this->shape_; }
-        DataType dtype() const { return this->dtype_; }
-        Layout layout() const { return this->layout_; }
+        const Shape &get_legacy_shape() const { return this->shape_; }
+        DataType get_dtype() const { return this->dtype_; }
+        Layout get_layout() const { return this->layout_; }
 
         // ======================================================================================
         //                                      Extra Helper Functions
@@ -155,7 +155,7 @@ class Tensor {
 
 Tensor create_device_tensor(const Shape& shape, DataType dtype, Layout layout, Device *device, const MemoryConfig& memory_config = {.memory_layout=tt::tt_metal::TensorMemoryLayout::INTERLEAVED});
 
-Tensor create_sharded_device_tensor(const Shape& shape, DataType data_type, Layout layout, Device *device, const MemoryConfig& memory_config);
+Tensor create_sharded_device_tensor(const Shape& shape, DataType data_type, Layout layout, Device *device, const MemoryConfig& memory_config, bool pad_to_same_shard_size=false);
 
 // template<typename Buffer>
 // void *get_host_buffer(const Tensor &tensor);

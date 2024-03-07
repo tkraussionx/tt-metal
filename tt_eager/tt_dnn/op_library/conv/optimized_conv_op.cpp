@@ -71,15 +71,15 @@ Tensor optimized_conv(const Tensor& a,
             bool use_shallow_conv_variant,
             std::optional<const DeviceComputeKernelConfig> compute_kernel_config
 ) {
-    TT_ASSERT(!untilize_out, "Optimized conv only supports tiled out");
-    TT_ASSERT(b.layout() == Layout::TILE); // Weights should already be formatted
-    const auto& ashape = input_tensor_shape.has_value() ? Shape(input_tensor_shape.value()) : a.shape();
+    //TT_ASSERT(!untilize_out, "Optimized conv only supports tiled out");
+    TT_ASSERT(b.get_layout() == Layout::TILE); // Weights should already be formatted
+    const auto& ashape = input_tensor_shape.has_value() ? Shape(input_tensor_shape.value()) : a.get_legacy_shape();
     auto padded_a_shape = Shape({ashape[0], ashape[1], ashape[2], round_up(ashape[3], 16)});
     FormatParams input_a_format_params = {.pad_shape=padded_a_shape, .pad_value=0.0, .target_layout=Layout::ROW_MAJOR};
-    FormatParams input_b_format_params = {.pad_shape=b.shape(), .pad_value=0.0, .target_layout=Layout::TILE};
+    FormatParams input_b_format_params = {.pad_shape=b.get_legacy_shape(), .pad_value=0.0, .target_layout=Layout::TILE};
     FormatParams input_bias_format_params = {};
     if (has_bias) {
-        input_bias_format_params = {.pad_shape=bias.value().shape(), .pad_value=0, .target_layout=Layout::TILE};
+        input_bias_format_params = {.pad_shape=bias.value().get_legacy_shape(), .pad_value=0, .target_layout=Layout::TILE};
     }
     auto output_layout = untilize_out ? Layout::ROW_MAJOR : Layout::TILE;
     if (output_mem_config.has_value()) {
@@ -89,7 +89,7 @@ Tensor optimized_conv(const Tensor& a,
     bool fp32_accum = a.device()->arch() == ARCH::WORMHOLE_B0;  // && compute_kernel_config.has_value()) ? compute_kernel_config.value().fp32_dest_acc_en : false;
     auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config, MathFidelity::LoFi, true, fp32_accum, false);
     return operation::run_without_autoformat(
-        OptimizedConv(conv_params, output_channels, untilize_out, has_bias, fuse_relu, math_fidelity, parallelization_config, block_config, extra_padding_for_32B_alignment, output_mem_config.value_or(a.memory_config()), output_dtype.value_or(a.dtype()), ashape, use_shallow_conv_variant, kernel_config_val
+        OptimizedConv(conv_params, output_channels, untilize_out, has_bias, fuse_relu, math_fidelity, parallelization_config, block_config, extra_padding_for_32B_alignment, output_mem_config.value_or(a.memory_config()), output_dtype.value_or(a.get_dtype()), ashape, use_shallow_conv_variant, kernel_config_val
         ),
         {a, b},
         {bias, conv_reader_indices}).at(0);
@@ -104,9 +104,9 @@ void OptimizedConv::validate(const std::vector<Tensor>& input_tensors, const std
         TT_FATAL(this->output_dtype == DataType::BFLOAT16);
     }
     if (this->output_mem_config.is_sharded()) {
-        TT_FATAL(!this->untilize_out);
+//        TT_FATAL(not has_bias or !untilize_out, "Optimized conv only supports tiled out if bias isn't present");
         uint32_t out_block_h_ntiles = block_config.out_block_h_ntiles;
-        auto [act_matrix_shape, act_matrix_shape_unpadded] = optimized_conv_op_utils::compute_opt_conv_activation_as_mm_shape(input_tensor_a.shape(), conv_params, out_block_h_ntiles, extra_padding_for_32B_alignment);
+        auto [act_matrix_shape, act_matrix_shape_unpadded] = optimized_conv_op_utils::compute_opt_conv_activation_as_mm_shape(input_tensor_a.get_legacy_shape(), conv_params, out_block_h_ntiles, extra_padding_for_32B_alignment);
         uint32_t out_width_ntiles = this->compute_output_shapes(input_tensors).at(0)[-1] / TILE_WIDTH;
         if(this->output_mem_config.memory_layout == TensorMemoryLayout::HEIGHT_SHARDED) {
             TT_FATAL(this->parallelization_config.per_core_weight_matrix_width_ntiles == out_width_ntiles);
@@ -138,7 +138,7 @@ std::vector<Shape> OptimizedConv::compute_output_shapes(const std::vector<Tensor
         // RM output has unpadded output height and padded output width to 32.
         // pad the output channels to TILE_WIDTH as conv writer kernel does not remove padding for tile
         // TODO (nshanker): specify padding explicitly here with "Padding" object and add unit test
-        assert(batch_size == 1); // batch size > 1 not tested with "untilize_out" (TODO)
+        //assert(batch_size == 1); // batch size > 1 not tested with "untilize_out" (TODO)
         auto output_channels = round_up(this->output_channels, TILE_WIDTH);
         Shape output_tensor_shape = {batch_size, conv_output_h, conv_output_w, output_channels};
         return {output_tensor_shape};
@@ -175,7 +175,7 @@ std::vector<Tensor> OptimizedConv::create_output_tensors(const std::vector<Tenso
             uint32_t act_matrix_height = (uint32_t) act_matrix_shape[1];
             uint32_t act_matrix_height_ntiles = act_matrix_height / TILE_HEIGHT;
             uint32_t total_active_num_cores_per_weight_slice = act_matrix_height_ntiles / this->parallelization_config.per_core_out_matrix_height_ntiles;
-            uint32_t weight_matrix_width = weight_tensor.shape()[-1];
+            uint32_t weight_matrix_width = weight_tensor.get_legacy_shape()[-1];
             uint32_t weight_matrix_width_ntiles = weight_matrix_width / TILE_WIDTH;
             uint32_t num_weight_slices_width = weight_matrix_width_ntiles / this->parallelization_config.per_core_weight_matrix_width_ntiles ;
             uint32_t total_active_num_cores = total_active_num_cores_per_weight_slice * num_weight_slices_width;
@@ -210,6 +210,95 @@ operation::ProgramWithCallbacks OptimizedConv::create_program(const std::vector<
     } else {
         return multi_core_optimized_conv_(input_tensor_a, input_tensor_b, this->input_tensor_shape, input_tensor_bias, conv_params, output_channels, untilize_out, has_bias, fuse_relu, math_fidelity, parallelization_config, block_config, extra_padding_for_32B_alignment, output_tensor);
     }
+}
+
+#if 0
+void analyze_op(OperationSpec& op_spec, OperationAnalysis& op_analysis, const ExecutionConfig& exec_config) {
+    // Calculate output dimensions: relevant for window/stride based OPs (conv, maxpool, downsample)
+    op_spec.output_height = std::floor((op_spec.in0_height - op_spec.filter_height + 2 * op_spec.pad) / op_spec.stride + 1);
+    op_spec.output_width = std::floor((op_spec.in0_width - op_spec.filter_width + 2 * op_spec.pad) / op_spec.stride + 1);
+
+    // deduct the FW launch latency to get more accurate kernel execution time
+    op_analysis.measured_nano_sec -= exec_config.fw_launch_latency_nano_sec;
+
+    // compute the amout of data that needs to be consumed on in0 (Bytes)
+    if (op_spec.op_code == "OptimizedConv" || op_spec.op_code == "MaxPool" || op_spec.op_code == "Downsample") {
+        // filter window is only relevant for maxpool/convs, it's 1x1, s1 for all ohter OPs
+        // for each output we gather a filter window of data from input0
+        // for strided OPs, the output is smaller than input, so we need to read less data (eg, downsample)
+        op_analysis.in0_read_bytes = op_spec.output_height * op_spec.output_width * op_spec.in0_channels * op_spec.batch_size * exec_config.row_major_act_bytes_per_datum;
+        op_analysis.in0_read_bytes *= op_spec.filter_height * op_spec.filter_width;
+    } else {
+        // other OPs modeled as reading full input
+        // for eltwise binary OPs, we read both inputs but the each input and output is limited to 32 B/c because unpacker's 64 B/c is split across in0/in1, so each input and output get 32 B/c
+        op_analysis.in0_read_bytes = op_spec.in0_height * op_spec.in0_width * op_spec.in0_channels * op_spec.batch_size * exec_config.tile_act_bytes_per_datum;
+    }
+
+    if (op_spec.op_code == "Matmul" || op_spec.op_code == "OptimizedConv") {
+        // Calculate number of mul/add operations
+        // TODO: add bias modeling
+        long long num_mul_adds_per_elem = op_spec.in0_channels * op_spec.filter_height * op_spec.filter_width * 2; // 1 multiply and 1 add per element
+        op_analysis.num_mul_adds = num_mul_adds_per_elem * op_spec.output_height * op_spec.output_width * op_spec.output_channels * op_spec.batch_size;
+
+        op_analysis.ideal_dev_clock_cycles = std::ceil(((float)op_analysis.num_mul_adds / (float)(exec_config.device_num_rows * exec_config.device_num_cols * exec_config.tensix_mul_adds_per_cycle_lofi)) * (float)exec_config.num_fidelity_phases);
+        op_analysis.weights_bytes = op_spec.filter_height * op_spec.filter_width * op_spec.in0_channels * op_spec.output_channels * exec_config.weights_bytes_per_datum;
+    } else {
+        // eltwise and data movement OPs
+        op_analysis.weights_bytes = 0;
+        op_analysis.num_mul_adds = 0; // not modeled for eltwise and data movement OPs
+        // divide in0_read_bytes by 32B/c , the ideal BW unpackerA / single NOC can achieve
+        op_analysis.ideal_dev_clock_cycles = (float)op_analysis.in0_read_bytes / (32 * exec_config.device_num_rows * exec_config.device_num_cols);
+    }
+
+    // common for all OPs
+    op_analysis.ideal_dev_nano_sec = std::ceil((float)op_analysis.ideal_dev_clock_cycles / (float)exec_config.frequency_GHZ);
+    op_analysis.dev_util_pct = ((float)op_analysis.ideal_dev_nano_sec / (float)op_analysis.measured_nano_sec) * 100;
+}
+#endif
+
+operation::OpPerformanceModel OptimizedConv::create_op_performance_model(const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors, const std::vector<Tensor> &output_tensors) const {
+    const auto& input_tensor_a_shape = this->input_tensor_shape;
+    uint32_t batch_size = input_tensor_a_shape[0];
+    uint32_t conv_activation_h = input_tensor_a_shape[1];
+    uint32_t conv_activation_w = input_tensor_a_shape[2];
+    uint32_t conv_activation_c = input_tensor_a_shape[3];
+
+    uint32_t filter_h = (uint32_t) conv_params[0];
+    uint32_t filter_w = (uint32_t) conv_params[1];
+    uint32_t stride_h = (uint32_t) conv_params[2];
+    uint32_t stride_w = (uint32_t) conv_params[3];
+    uint32_t pad_h = (uint32_t) conv_params[4];
+    uint32_t pad_w = (uint32_t) conv_params[5];
+
+    // GS Specific parameters
+    constexpr int num_cores = 9 * 12;
+    constexpr int tensix_mul_adds_per_cycle_lofi = 2048;
+
+    // Calculate output dimensions: relevant for window/stride based OPs (conv, maxpool, downsample)
+    int output_height = std::floor((conv_activation_h - filter_h + 2 * pad_h) / stride_h + 1);
+    int output_width = std::floor((conv_activation_w - filter_w + 2 * pad_w) / stride_w + 1);
+
+    // Calculate number of mul/add operations
+    // TODO: add bias modeling
+    int64_t num_mul_adds_per_elem = conv_activation_c * filter_h * filter_w * 2; // 1 multiply and 1 add per element
+    int64_t num_mul_adds = num_mul_adds_per_elem * output_height * output_width * this->output_channels * batch_size;
+
+    int ideal_dev_clock_cycles = std::ceil(((float)num_mul_adds / (float)(num_cores * tensix_mul_adds_per_cycle_lofi)) * (float)operation::OpPerformanceModel::fidelity_multiplier(this->math_fidelity));
+
+    operation::OpPerformanceModel result(input_tensors, output_tensors, ideal_dev_clock_cycles);
+
+#if 0
+    tt::log_info(tt::LogOp, "OptimizedConv PerfModel:");
+    tt::log_info(tt::LogOp, "\t Batch: {}", batch_size);
+    tt::log_info(tt::LogOp, "\t In (H, W, C): ({}, {}, {})", conv_activation_h, conv_activation_w, conv_activation_c);
+    tt::log_info(tt::LogOp, "\t Filter (H, W): ({}, {})", filter_h, filter_w);
+    tt::log_info(tt::LogOp, "\t Filter Stride (H, W): ({}, {})", stride_h, stride_w);
+    tt::log_info(tt::LogOp, "\t Pad (H, W): ({}, {})", pad_h, pad_w);
+    tt::log_info(tt::LogOp, "\t Out (H, W, C): ({}, {}, {})", output_height, output_width, this->output_channels);
+    tt::log_info(tt::LogOp, "\t ideal_dev_clock_cycles: {}", ideal_dev_clock_cycles);
+#endif
+
+    return result;
 }
 
 }  // namespace tt_metal

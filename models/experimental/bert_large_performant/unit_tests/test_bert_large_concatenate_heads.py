@@ -40,17 +40,17 @@ def run_bert_large_concatenate_heads_test(device, batch, dtype, in0_mem_config, 
     assert a_t.memory_config().buffer_type == in0_mem_config.buffer_type
     assert out.memory_config().buffer_type == out_mem_config.buffer_type
 
-    logger.debug(f"in0: {a_t.memory_config().buffer_type} and {a_t.dtype()}")
-    logger.debug(f"out: {out.memory_config().buffer_type} and {out.dtype()}")
+    logger.debug(f"in0: {a_t.memory_config().buffer_type} and {a_t.get_dtype()}")
+    logger.debug(f"out: {out.memory_config().buffer_type} and {out.get_dtype()}")
 
-    assert out.shape() == [batch, 1, 384, 1024]
+    assert out.get_legacy_shape() == [batch, 1, 384, 1024]
     tt_host_rm_out = out.cpu().to(ttl.tensor.Layout.ROW_MAJOR)
     pyt_got_back_rm_out = tt_host_rm_out.to_torch()
 
     ref_out = torch.transpose(A, -3, -2).reshape([batch, 1, 384, 1024])
     passing_pcc, output_pcc = comp_pcc(pyt_got_back_rm_out, ref_out, 0.99)
-    logger.info(f"passing={passing_pcc}")
-    logger.info(f"output pcc={output_pcc}")
+    logger.debug(f"passing={passing_pcc}")
+    logger.debug(f"output pcc={output_pcc}")
     assert passing_pcc
 
 
