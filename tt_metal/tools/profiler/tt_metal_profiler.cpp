@@ -36,7 +36,7 @@ void InitDeviceProfiler(Device *device){
     TracySetCpuTime();
     auto device_id = device->id();
     // (TODO:MO) T3000 PCI only device support
-    if (device_id > 3) return;
+    //if (device_id > 3) return;
     if (tt_metal_device_profiler_map.find(device_id) == tt_metal_device_profiler_map.end())
     {
         if (tt_metal_device_profiler_map.size() == 0)

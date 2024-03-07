@@ -40,7 +40,7 @@ namespace op_profiler {
         vector<json> computeKernels;
         vector<json> datamovementKernels;
         for (size_t kernel_id = 0; kernel_id < program.num_kernels(); kernel_id++) {
-            Kernel * kernel = tt::tt_metal::detail::GetKernel(program, kernel_id);
+            auto kernel = tt::tt_metal::detail::GetKernel(program, kernel_id).get();
             if (kernel->processor() == RISCV::COMPUTE) {
                 ComputeKernel * computeKernel = static_cast<ComputeKernel*>(kernel);
                 MathFidelity mathFidelity = std::get<ComputeConfig>(computeKernel->config()).math_fidelity;
@@ -79,9 +79,9 @@ namespace op_profiler {
             ret["storage_type"] = fmt::format("{}", magic_enum::enum_name(tensor.storage_type()));
         }
 
-        ret["shape"] = fmt::format("{}", fmt::join(std::begin(tensor.shape()), std::end(tensor.shape()), "_"));
-        ret["layout"] = fmt::format("{}", magic_enum::enum_name(tensor.layout()));
-        ret["dtype"] = fmt::format("{}", magic_enum::enum_name(tensor.dtype()));
+        ret["shape"] = fmt::format("{}", fmt::join(std::begin(tensor.get_legacy_shape()), std::end(tensor.get_legacy_shape()), "_"));
+        ret["layout"] = fmt::format("{}", magic_enum::enum_name(tensor.get_layout()));
+        ret["dtype"] = fmt::format("{}", magic_enum::enum_name(tensor.get_dtype()));
 
         return ret;
     }
