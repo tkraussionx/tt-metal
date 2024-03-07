@@ -1,131 +1,122 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 
 # SPDX-License-Identifier: Apache-2.0
-
 import torch
-import math
+import torch.nn as nn
+from typing import Optional, Tuple
 import tt_lib
-
-from typing import Tuple
-
-from models.utility_functions import (
-    torch2tt_tensor,
-    tt2torch_tensor,
-    nearest_32,
-)
-from models.experimental.mistral.tt.mistral_common import tt_all_reduce
+from tt_lib import fallback_ops
+from models.experimental.mistral.tt.mistral_configuration import TtModelArgs
+from models.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor, torch_to_tt_tensor
+from models.experimental.mistral.mistral_helper_funcs import Linear as TtLinear, format_tensor, unpad_from_zero
 
 
-class TtMistralAttention(torch.nn.Module):
+class TtAttention(nn.Module):
     def __init__(
-        self, devices, state_dict, base_url, layer_num, model_config, configuration, tt_cos_cached, tt_sin_cached
+        self,
+        args: TtModelArgs,
+        base_address=None,
+        device=None,
+        tt_cache_path=None,
+        output_mem_config=None,
     ):
         super().__init__()
+        self.args = args
+        self.device = device
+        self.base_address = base_address
+        self.output_mem_config = output_mem_config
+        self.n_heads: int = args.n_heads
+        self.n_kv_heads: int = args.n_kv_heads
 
-        self.state_dict = state_dict
-        self.devices = devices
-        self.num_devices = len(devices)
+        self.repeats = self.n_heads // self.n_kv_heads
+        self.sliding_window = self.args.sliding_window
 
-        self.hidden_size = configuration.dim
-        self.n_heads = configuration.n_heads
-        self.head_dim = self.hidden_size // self.n_heads
-        self.max_seq_len = configuration.max_seq_len
-        self.max_batch_size = configuration.max_batch_size
-        self.n_kv_heads = configuration.n_kv_heads
-        self.sliding_window = configuration.sliding_window
+        self.scale = self.args.head_dim**-0.5
 
-        self.n_local_heads = self.n_heads // self.num_devices
-        self.n_local_kv_heads = self.n_kv_heads // self.num_devices
+        self.wq_weights = tt_lib.tensor.load_tensor(
+            tt_cache_path + base_address + "wq.weight" + str(self.args.WEIGHTS_DTYPE) + ".bin"
+        )
+        self.wq = TtLinear(
+            args.dim,
+            args.n_heads * args.head_dim,
+            self.wq_weights,
+            device=self.device,
+            output_mem_config=self.args.out_mem_config,
+        )
 
-        self.model_config = model_config
+        self.wk_weights = tt_lib.tensor.load_tensor(
+            tt_cache_path + base_address + "wk.weight" + str(self.args.WEIGHTS_DTYPE) + ".bin"
+        )
+        self.wk = TtLinear(
+            args.dim,
+            args.n_kv_heads * args.head_dim,
+            self.wk_weights,
+            device=self.device,
+            output_mem_config=self.args.out_mem_config,
+        )
 
-        if layer_num:
-            layer_name = f"{base_url}.{layer_num}.attention."
+        self.wv_weights = tt_lib.tensor.load_tensor(
+            tt_cache_path + base_address + "wv.weight" + str(self.args.WEIGHTS_DTYPE) + ".bin"
+        )
+        self.wv = TtLinear(
+            args.dim,
+            args.n_kv_heads * args.head_dim,
+            self.wv_weights,
+            device=self.device,
+            output_mem_config=self.args.out_mem_config,
+        )
+
+        self.wo_weights = tt_lib.tensor.load_tensor(
+            tt_cache_path + base_address + "wo.weight" + str(self.args.WEIGHTS_DTYPE) + ".bin"
+        )
+        self.wo = TtLinear(
+            args.n_heads * args.head_dim,
+            args.dim,
+            self.wo_weights,
+            device=self.device,
+            output_mem_config=self.args.out_mem_config,
+        )
+
+        if self.args.FALLBACK_EMPTY:
+            self.cache_k = torch.empty(
+                args.max_batch_size,
+                args.sliding_window,
+                self.n_kv_heads,
+                self.args.head_dim,
+            )
+            self.cache_v = torch.empty(args.max_batch_size, args.sliding_window, self.n_kv_heads, self.args.head_dim)
         else:
-            layer_name = base_url
-        wq_str = f"{layer_name}wq.weight"
-        wk_str = f"{layer_name}wk.weight"
-        wv_str = f"{layer_name}wv.weight"
-        wo_str = f"{layer_name}wo.weight"
-
-        # when splitting the devices, we need to make sure that the number of heads is divisible by the number of devices
-        assert self.n_heads % self.num_devices == 0
-        assert self.n_kv_heads % self.num_devices == 0
-
-        self.wqkv_list = []
-        self.wo_list = []
-        self.layer_past_list = []
-
-        for i in range(self.num_devices):
-            wqkv = torch2tt_tensor(
-                torch.concat(
-                    [
-                        torch.transpose(
-                            torch.chunk(self.state_dict[wq_str], self.num_devices)[i],
-                            -2,
-                            -1,
-                        ),
-                        torch.transpose(
-                            torch.chunk(self.state_dict[wk_str], self.num_devices)[i],
-                            -2,
-                            -1,
-                        ),
-                        torch.transpose(
-                            torch.chunk(self.state_dict[wv_str], self.num_devices)[i],
-                            -2,
-                            -1,
-                        ),
-                    ],
-                    dim=-1,
-                ),
-                self.devices[i],
-                tt_memory_config=self.model_config["FUSED_QKV_MM_WEIGHTS_MEMCFG"],
-                tt_dtype=self.model_config["FUSED_QKV_MM_WEIGHTS_DTYPE"],
+            cache_k = tt_lib.tensor.empty(
+                [args.max_batch_size, args.sliding_window, self.n_kv_heads, self.args.head_dim],
+                layout=tt_lib.tensor.Layout.ROW_MAJOR,
+                device=self.device,
+                output_mem_config=self.args.out_mem_config,
             )
+            self.cache_k = tt_to_torch_tensor(cache_k).to(torch.float32)
+            cache_v = tt_lib.tensor.empty(
+                [args.max_batch_size, args.sliding_window, self.n_kv_heads, self.args.head_dim],
+                layout=tt_lib.tensor.Layout.ROW_MAJOR,
+                device=self.device,
+                output_mem_config=self.args.out_mem_config,
+            )
+            self.cache_v = tt_to_torch_tensor(cache_v).to(torch.float32)
 
-            wo = torch2tt_tensor(
-                torch.transpose(
-                    torch.chunk(self.state_dict[wo_str], self.num_devices, dim=-1)[i],
-                    -2,
-                    -1,
-                ),
-                self.devices[i],
-                tt_memory_config=self.model_config["WO_MM_WEIGHTS_MEMCFG"],
-                tt_dtype=self.model_config["WO_MM_WEIGHTS_DTYPE"],
-            )
-
-            cache_k = torch.zeros(
-                (
-                    self.max_batch_size,
-                    self.n_kv_heads // self.num_devices,
-                    self.sliding_window,
-                    self.head_dim,
-                )
-            )
-            cache_v = torch.zeros(
-                (
-                    self.max_batch_size,
-                    self.n_kv_heads // self.num_devices,
-                    self.sliding_window,
-                    self.head_dim,
-                )
-            )
-            layer_past = [cache_k, cache_v]
-            # layer_past = [torch2tt_tensor(lp, self.devices[i]) for lp in layer_past]
-            # add to the list
-            self.wqkv_list.append(wqkv)
-            self.wo_list.append(wo)
-            self.layer_past_list.append(layer_past)
-        self.tt_sin_cached = tt_sin_cached
-        self.tt_cos_cached = tt_cos_cached
+    def repeat_kv(self, keys: torch.Tensor, values: torch.Tensor, repeats: int) -> tt_lib.tensor.Tensor:
+        dim = 2
+        keys = torch_to_tt_tensor_rm(keys, self.device)
+        values = torch_to_tt_tensor_rm(values, self.device)
+        keys = tt_lib.tensor.repeat_interleave(keys, repeats, dim, output_mem_config=self.args.out_mem_config)
+        values = tt_lib.tensor.repeat_interleave(values, repeats, dim, output_mem_config=self.args.out_mem_config)
+        return keys, values
 
     def forward(
         self,
-        xs: tt_lib.tensor.Tensor,
-        start_pos: int,
-        current_pos: int,
-        attn_masks: tt_lib.tensor.Tensor,
-        # layer_past: Tuple[tt_lib.tensor.Tensor],
+        x: tt_lib.tensor.Tensor,
+        bcast_freq_xq: tt_lib.tensor.complex_tensor,
+        bcast_freq_xk: tt_lib.tensor.complex_tensor,
+        positions: tt_lib.tensor.Tensor,
+        mask: Optional[torch.Tensor],
+        seqlen: int,
     ) -> tt_lib.tensor.Tensor:
         """
         x: (seq_len, 1, batch, hidden_dim)

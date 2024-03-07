@@ -83,11 +83,13 @@ def test_mistral_attention_inference(
         pt_attention_input = (torch.rand(batch, seq_len, model_args.dim) * 2) - 1
         tt_attention_input = pt_attention_input.clone()
         start_pos = generation_start_pos + i
-        attention_input, start_pos, attn_mask, current_pos = prepare_inputs_ttnn(
+        attention_input, start_pos, attn_mask, current_pos, rot_mat = prepare_inputs_ttnn(
             tt_attention_input,
             start_pos,
-            tt_model.hidden_size,
-            tt_model.sliding_window,
+            model_args.dim,
+            model_args.head_dim,
+            model_args.sliding_window,
+            model_args.max_seq_len,
             device,
         )
 
@@ -96,6 +98,7 @@ def test_mistral_attention_inference(
             start_pos,
             current_pos,
             [attn_mask],
+            [rot_mat],
         )
         # multi-device attention module returns replicated output
         assert isinstance(tt_out, list)

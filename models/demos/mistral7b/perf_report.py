@@ -55,12 +55,15 @@ def analyze_perf_csv(csv_file):
     matmul_rows["TFLOP/s"] = matmul_rows["flops"] / matmul_rows["DEVICE FW DURATION [ns]"] / 1000
     matmul_rows["% DRAM (240)"] = 100 * matmul_rows["GB/s"] / 240  # Peak expected WH bandwidth
     matmul_rows["% FPU (82)"] = 100 * matmul_rows["TFLOP/s"] / 82  # Peak theoretical FP16 FPU performance
+    matmul_rows["% TIME"] = 100 * matmul_rows["DEVICE FW DURATION [ns]"] / sum_duration
+    matmul_sum_duration = matmul_rows["DEVICE FW DURATION [ns]"].sum()
 
     selected_columns = [
         "OP CODE",
-        "DEVICE FW DURATION [ns]",
+        "% TIME",
         "% DRAM (240)",
         "% FPU (82)",
+        "DEVICE FW DURATION [ns]",
         "GB/s",
         "TFLOP/s",
         "CORE COUNT",
@@ -73,7 +76,7 @@ def analyze_perf_csv(csv_file):
     ]
     print(matmul_rows[selected_columns])
 
-    print(f"Layer ms: {sum_duration / 1000000:.1f}")
+    print(f"Layer ms: {sum_duration / 1000000:.1f} ({matmul_sum_duration / sum_duration:.1%} matmul)")
     print(f"Tokens/sec/user: {tokens_per_sec_user:.1f}")
     print(f"Tokens/sec: {tokens_per_sec:.1f}")
 

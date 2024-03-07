@@ -39,7 +39,10 @@ class Emb(torch.nn.Module):
 )
 @pytest.mark.parametrize(
     "iterations",
-    (17,),
+    (
+        1,
+        17,
+    ),
 )
 @pytest.mark.parametrize(
     "pcc",
