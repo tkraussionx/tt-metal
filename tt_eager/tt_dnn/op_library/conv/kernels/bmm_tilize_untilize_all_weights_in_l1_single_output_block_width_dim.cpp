@@ -173,8 +173,7 @@ void MAIN {
                 #endif
                 unpack_reconfig_data_format_srca(in1_cb_id, in0_cb_id);
                 tilize_in(in0_cb_id, in0_subblock_h, in0_block_w, in0_num_subblocks, tilized_in0_cb_id);
-                mm_init_short();
-                unpack_reconfig_data_format_srca(in0_cb_id, in1_cb_id);
+                mm_init_short_with_dt(mm_in0_cb_id, in1_cb_id, /*previous srca operand */in0_cb_id);
             }
             cb_wait_front(mm_in0_cb_id, in0_block_num_tiles);
 
@@ -192,8 +191,7 @@ void MAIN {
                 for (uint32_t in1_subblock_i = 0; in1_subblock_i < in1_num_subblocks; ++in1_subblock_i) {
                     if (enable_reload) {
                         // Reconfigure input
-                        copy_tile_to_dst_init_short();
-                        unpack_reconfig_data_format_srca(in1_cb_id, matmul_partials_cb);
+                        copy_tile_to_dst_init_short_with_dt(in1_cb_id, matmul_partials_cb);
                         cb_wait_front(matmul_partials_cb, out_subblock_num_tiles);
                         tile_regs_acquire();
                         for (uint32_t i = 0; i < out_subblock_num_tiles; ++i) {
@@ -201,8 +199,7 @@ void MAIN {
                         }
                         cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
                         // Reconfigure srcA back
-                        mm_init_short();
-                        unpack_reconfig_data_format_srca(matmul_partials_cb, in1_cb_id);
+                        mm_init_short_with_dt(mm_in0_cb_id, in1_cb_id, /*previous srca operand */ matmul_partials_cb);
                     } else {
                         // just acquire
                         tile_regs_acquire();
@@ -254,8 +251,8 @@ void MAIN {
         #ifdef PACK_RELU
         PACK(( llk_pack_relu_config(ReluType::ZERO_RELU) ));
         #endif
-        add_bcast_rows_init_short();
         unpack_reconfig_data_format(in1_cb_id, matmul_partials_cb, mm_in0_cb_id, bias_cb_id);
+        add_bcast_rows_init_short();
         cb_wait_front(bias_cb_id, bias_ntiles_w);
         cb_wait_front(matmul_partials_cb, out_block_num_tiles);
         for (uint32_t in0_subblock_i = 0; in0_subblock_i < in0_num_subblocks; ++in0_subblock_i) {
@@ -290,10 +287,10 @@ void MAIN {
             } // for in1_num_subblocks
         }
         if constexpr(in0_num_blocks_h > 1) {
+            unpack_reconfig_data_format(matmul_partials_cb, in1_cb_id, bias_cb_id, mm_in0_cb_id);
             if constexpr (!tilize_in0) {
                 mm_init_short();
             }
-            unpack_reconfig_data_format(matmul_partials_cb, in1_cb_id, bias_cb_id, mm_in0_cb_id);
         }
         #else
         if constexpr(untilize_out) {
@@ -316,10 +313,10 @@ void MAIN {
                 }
             }
             if constexpr(in0_num_blocks_h > 1) {
+                unpack_reconfig_data_format(matmul_partials_cb, in1_cb_id, untilize_mode_reblock_cb, mm_in0_cb_id);
                 if constexpr (!tilize_in) {
                     mm_init_short();
                 }
-                unpack_reconfig_data_format(matmul_partials_cb, in1_cb_id, untilize_mode_reblock_cb, mm_in0_cb_id);
             }
         }
         #endif
