@@ -11,6 +11,7 @@ import os
 import csv
 from pathlib import Path
 import json
+import yaml
 import re
 from datetime import datetime
 
@@ -22,7 +23,7 @@ import click
 from loguru import logger
 from dash import Dash, dcc, html, Input, Output
 
-from tt_metal.tools.profiler.process_device_log import import_log_run_stats
+from tt_metal.tools.profiler.process_device_log import import_log_run_stats, TupleEncoder
 from tt_metal.tools.profiler.process_host_log import import_host_log_run_stats
 import tt_metal.tools.profiler.device_post_proc_config as device_post_proc_config
 from tt_metal.tools.profiler.common import (
@@ -32,6 +33,8 @@ from tt_metal.tools.profiler.common import (
     PROFILER_HOST_SIDE_LOG,
     PROFILER_OUTPUT_DIR,
 )
+
+yaml.SafeDumper.ignore_aliases = lambda *args: True
 
 TRACY_OPS_TIMES_FILE_NAME = "tracy_ops_times.csv"
 TRACY_OPS_DATA_FILE_NAME = "tracy_ops_data.csv"
@@ -87,6 +90,7 @@ ttMetalFunctionsSet = set()
 
 
 def impprt_tracy_op_logs(tracyLogsFolder):
+    logger.info(f"Import ops logs")
     tracyOpTimesLog = os.path.join(tracyLogsFolder, TRACY_OPS_TIMES_FILE_NAME)
     tracyOpDataLog = os.path.join(tracyLogsFolder, TRACY_OPS_DATA_FILE_NAME)
 
@@ -115,6 +119,7 @@ def impprt_tracy_op_logs(tracyLogsFolder):
 
 
 def get_device_op_data(ops):
+    logger.info(f"Getting device ops")
     deviceOps = {}
     for opID, opData in ops.items():
         deviceID = -1
@@ -137,7 +142,13 @@ def get_device_op_data(ops):
     return deviceOps
 
 
+# def duration_tuple_to_list(series):
+# ret = series.copy()
+# ret["durationType"]
+
+
 def append_device_data(ops, deviceLogFolder):
+    logger.info(f"Appending device data")
     deviceOps = get_device_op_data(ops)
     deviceTimesLog = os.path.join(deviceLogFolder, PROFILER_DEVICE_SIDE_LOG)
     if os.path.isfile(deviceTimesLog):
@@ -149,11 +160,13 @@ def append_device_data(ops, deviceLogFolder):
             deviceOpsTime = deviceData["devices"][device]["cores"]["DEVICE"]["riscs"]["TENSIX"]["ops"]
             assert len(deviceOps[device]) == len(deviceOpsTime)
             for deviceOp, deviceOpTime in zip(deviceOps[device], deviceOpsTime):
-                deviceOp["device_time"] = deviceOpTime["analysis"]
+                deviceOp["device_time"] = {
+                    analysis: data["series"] for analysis, data in deviceOpTime["analysis"].items()
+                }
     return deviceOps
 
 
-def generateCSVReports(ops, deviceOps, outputFolder, date, nameAppend):
+def generate_reports(ops, deviceOps, outputFolder, date, nameAppend):
     logger.info(f"OPs' perf analysis is finished! Generating CSVs ...")
     outFolder = PROFILER_OUTPUT_DIR
     if outputFolder:
@@ -173,12 +186,36 @@ def generateCSVReports(ops, deviceOps, outputFolder, date, nameAppend):
 
     os.system(f"rm -rf {outFolder}; mkdir -p {outFolder}")
 
-    for device, deviceOps in deviceOps.items():
-        opsCSVPath = os.path.join(outFolder, f"{name}_{device}.csv")
-        with open(opsCSVPath, "w") as opsCSV:
-            for deviceOp in deviceOps:
-                continue
-        logger.info(f"Perf CSV: {opsCSVPath}")
+    logger.info(f"Generating OPs yaml")
+    allOpsYAMLPath = os.path.join(outFolder, f"{name}_all_ops.yaml")
+    with open(allOpsYAMLPath, "w") as allOpsYAML:
+        yaml.safe_dump(ops, allOpsYAML, default_flow_style=False)
+    logger.info(f"OPs yaml generated at: {allOpsYAMLPath}")
+
+    logger.info(f"Generating OPs yaml")
+    deviceOpsYAMLPath = os.path.join(outFolder, f"{name}_devices_ops.yaml")
+    with open(deviceOpsYAMLPath, "w") as deviceOpsYAML:
+        yaml.safe_dump(deviceOps, deviceOpsYAML, default_flow_style=False)
+    logger.info(f"Device OPs yaml generated at: {deviceOpsYAMLPath}")
+
+    # logger.info(f"Generating OPs yaml")
+    # allOpsYAMLPath = os.path.join(outFolder, f"{name}_all_ops.json")
+    # with open(allOpsYAMLPath, "w") as allOpsYAML:
+    # json.dump(ops, allOpsYAML, indent=2, cls=TupleEncoder, sort_keys=True)
+    # logger.info(f"OPs yaml generated at: {allOpsYAMLPath}")
+
+    # logger.info(f"Generating Device OPs yaml")
+    # deviceOpsYAMLPath = os.path.join(outFolder, f"{name}_devices_ops.json")
+    # with open(deviceOpsYAMLPath, "w") as deviceOpsYAML:
+    # json.dump(deviceOps, deviceOpsYAML, indent=2, cls=TupleEncoder, sort_keys=True)
+    # logger.info(f"Device OPs yaml generated at: {deviceOpsYAMLPath}")
+
+    # for device, deviceOps in deviceOps.items():
+    # opsCSVPath = os.path.join(outFolder, f"{name}_{device}.csv")
+    # with open(opsCSVPath, "w") as opsCSV:
+    # for deviceOp in deviceOps:
+    # continue
+    # logger.info(f"Perf CSV: {opsCSVPath}")
 
 
 def parse_io_data(ioString, ioType):
@@ -621,7 +658,7 @@ def main(ops_folder, output_folder, name_append, date):
 
     deviceOps = append_device_data(ops, PROFILER_LOGS_DIR)
 
-    generateCSVReports(ops, deviceOps, output_folder, date, name_append)
+    generate_reports(ops, deviceOps, output_folder, date, name_append)
 
     # opsFolder = PROFILER_OPS_LOGS_DIR
     # if ops_folder:

@@ -15,6 +15,7 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import click
+from loguru import logger
 
 from tt_metal.tools.profiler.common import PROFILER_ARTIFACTS_DIR
 import tt_metal.tools.profiler.device_post_proc_config as device_post_proc_config
@@ -322,13 +323,8 @@ def is_new_op_device(tsCore, coreOpMap):
     isNewOpFinished = False
     if timerID["id"] != 0:
         appendTs = True
-    if (
-        risc == "BRISC"
-        and timerID["zoneName"] == "BRISC-FW"
-        and timerID["zonePhase"] == "begin"
-        or risc == "ERISC"
-        and timerID["zoneName"] == "ERISC-FW"
-        and timerID["zonePhase"] == "begin"
+    if (risc == "BRISC" and timerID["zoneName"] == "BRISC-FW" and timerID["zonePhase"] == "begin") or (
+        risc == "ERISC" and timerID["zoneName"] == "ERISC-FW" and timerID["zonePhase"] == "begin"
     ):
         assert (
             core not in coreOpMap.keys()
@@ -336,13 +332,8 @@ def is_new_op_device(tsCore, coreOpMap):
         if not coreOpMap:
             isNewOp = True
         coreOpMap[core] = (tsValue,)
-    elif (
-        risc == "BRISC"
-        and timerID["zoneName"] == "BRISC-FW"
-        and timerID["zonePhase"] == "end"
-        or risc == "ERISC"
-        and timerID["zoneName"] == "ERISC-FW"
-        and timerID["zonePhase"] == "end"
+    elif (risc == "BRISC" and timerID["zoneName"] == "BRISC-FW" and timerID["zonePhase"] == "end") or (
+        risc == "ERISC" and timerID["zoneName"] == "ERISC-FW" and timerID["zonePhase"] == "end"
     ):
         assert core in coreOpMap.keys() and len(coreOpMap[core]) == 1, "Unexpected BRISC end"
         coreOpMap[core] = (coreOpMap[core][0], tsValue)
@@ -384,6 +375,7 @@ def risc_to_core_timeseries(devicesData, detectOps):
 
 def core_to_device_timeseries(devicesData, detectOps):
     for chipID, deviceData in devicesData["devices"].items():
+        logger.info(f"Importing Data For Device Number : {chipID}")
         tmpTimeseries = {"riscs": {}}
         for core, coreData in deviceData["cores"].items():
             for risc, riscData in coreData["riscs"].items():
@@ -528,7 +520,7 @@ def first_last_analysis(timeseries, analysis):
             currStart, currEnd, desStart, desEnd = determine_conditions(timerID, metaData, analysis)
             if currEnd in desEnd:
                 durations.append(
-                    dict(start=startTS, end=timestamp, durationType=(startID, timerID), diff=timestamp - startTS)
+                    dict(start=startTS, end=timestamp, duration_type=(startID, timerID), diff=timestamp - startTS)
                 )
                 break
 
@@ -549,7 +541,7 @@ def get_duration(riscData, analysis):
         timerID, delta, risc, *metaData = duration
         desMarker = {"risc": risc, "timerID": timerID}
         if desMarker == analysis["marker"]:
-            durations.append(dict(durationType=timerID, diff=delta))
+            durations.append(dict(duration_type=timerID, diff=delta))
 
     return durations
 
@@ -567,7 +559,7 @@ def adjacent_LF_analysis(riscData, analysis):
             if currEnd in desEnd:
                 startID, startTS = startFound
                 durations.append(
-                    dict(start=startTS, end=timestamp, durationType=(startID, timerID), diff=timestamp - startTS)
+                    dict(start=startTS, end=timestamp, duration_type=(startID, timerID), diff=timestamp - startTS)
                 )
                 startFound = None
             elif currStart in desStart:
@@ -633,6 +625,7 @@ def device_analysis(name, analysis, devicesData):
 
 def ops_analysis(name, analysis, devicesData):
     for chipID, deviceData in devicesData["devices"].items():
+        logger.info(f"Analyzing Device Number : {chipID}")
         core = "DEVICE"
         risc = "TENSIX"
         assert core in deviceData["cores"].keys()

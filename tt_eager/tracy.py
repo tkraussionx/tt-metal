@@ -152,7 +152,7 @@ def generate_report():
             stderr=subprocess.DEVNULL,
         )
 
-    logger.info(f"Host side profiling report generated at {PROFILER_LOGS_DIR / TRACY_OPS_TIMES_FILE_NAME}")
+    logger.info(f"Host side ops time report generated at {PROFILER_LOGS_DIR / TRACY_OPS_TIMES_FILE_NAME}")
 
     with open(PROFILER_LOGS_DIR / TRACY_OPS_DATA_FILE_NAME, "w") as csvFile:
         subprocess.run(
@@ -163,7 +163,7 @@ def generate_report():
             stderr=subprocess.DEVNULL,
         )
 
-    logger.info(f"Host side profiling report generated at {PROFILER_LOGS_DIR / TRACY_OPS_DATA_FILE_NAME}")
+    logger.info(f"Host side ops data report generated at {PROFILER_LOGS_DIR / TRACY_OPS_DATA_FILE_NAME}")
 
 
 def main():
