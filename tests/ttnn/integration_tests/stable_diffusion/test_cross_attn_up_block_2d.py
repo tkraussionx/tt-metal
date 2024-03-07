@@ -244,7 +244,7 @@ def test_cross_attn_up_block_2d_512x512(
         upsample_size=upsample_size,
     )
 
-    N, _, H, W = input_shape
+    N, C, H, W = input_shape
     model = tt2_ttnn_cross_attention_upblock2d(device, parameters, reader_patterns_cache, N, H, W)
 
     timestep = (None,)
@@ -335,6 +335,9 @@ def test_cross_attn_up_block_2d_512x512(
         cross_attention_dim=cross_attention_dim,
     )
 
+    # op = post_process_output(device, op, N, H*2, W*2, in_channels)
     op = ttnn_to_torch(op)
+    op = torch.reshape(op, (N, H, W, C))
+    op = torch.permute(op, (0, 3, 1, 2))
 
     assert_with_pcc(torch_output, op, 0.84)

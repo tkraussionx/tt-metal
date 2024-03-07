@@ -145,6 +145,8 @@ def test_upblock_512x512(reset_seeds, device, res_hidden_states_tuple, hidden_st
         upsample_size=None,
     )
 
-    op = post_process_output(device, op, N, H * 2, W * 2, in_channels)
     op = ttnn.to_torch(op)
+    op = torch.reshape(op, (N, H, W, op.shape[-1]))
+    op = torch.permute(op, (0, 3, 1, 2))
+
     assert_with_pcc(torch_output, op, 0.95)
