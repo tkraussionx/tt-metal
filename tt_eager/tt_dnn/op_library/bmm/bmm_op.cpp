@@ -1204,9 +1204,9 @@ operation::OpPerformanceModel Matmul::create_op_performance_model(
         std::vector<Tensor> &output_tensors
     ) const {
 
-    const auto& in_a_shape = input_tensors.at(0).get_legacy_shape();
-    const auto& in_b_shape = input_tensors.at(1).get_legacy_shape();
-    const auto& out_shape = output_tensors.at(0).get_legacy_shape();
+    const auto& in_a_shape = input_tensors.at(0).shape();
+    const auto& in_b_shape = input_tensors.at(1).shape();
+    const auto& out_shape = output_tensors.at(0).shape();
 
     // GS Specific parameters
     const auto& t = output_tensors.at(0);
