@@ -188,6 +188,7 @@ void kernel_main() {
         uint32_t completion_data_size = header->completion_data_size;
         DeviceCommand::WrapRegion wrap = (DeviceCommand::WrapRegion)header->wrap;
         uint32_t event = header->event;
+        bool is_event_sync = header->is_event_sync;
 
         dst_pr_cfg.cb_buff_cfg.global_page_idx = 0;
 
@@ -268,19 +269,25 @@ void kernel_main() {
 
             } else {
                 completion_queue_reserve_back(completion_data_size);
-                for (uint32_t i = 0; i < num_buffer_transfers; i++) {
-                    uint32_t num_pages_in_transfer = program_pull_and_push_config<PullAndRelayType::BUFFER, PullAndRelayType::BUFFER>(
-                        buffer_transfer_ptr,
-                        src_pr_cfg,
-                        dst_pr_cfg,
-                        page_size,
-                        num_pages_to_read,
-                        (num_pages_to_read / 2),
-                        is_sharded,
-                        sharded_buffer_num_cores
-                    );
-                    pull_and_relay<PullAndRelayType::BUFFER, PullAndRelayType::BUFFER, write_to_completion_queue>(src_pr_cfg, dst_pr_cfg, num_pages_in_transfer);
-                    buffer_transfer_ptr += DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION;
+                if (is_event_sync) {
+                    wait_for_event(header->event_sync_event_id, header->event_sync_core_x, header->event_sync_core_y);
+                    wait_consumer_idle<2>(dispatch_semaphore_addr);
+                    program_event_buffer.write_events<write_to_completion_queue>();
+                } else {
+                    for (uint32_t i = 0; i < num_buffer_transfers; i++) {
+                        uint32_t num_pages_in_transfer = program_pull_and_push_config<PullAndRelayType::BUFFER, PullAndRelayType::BUFFER>(
+                            buffer_transfer_ptr,
+                            src_pr_cfg,
+                            dst_pr_cfg,
+                            page_size,
+                            num_pages_to_read,
+                            (num_pages_to_read / 2),
+                            is_sharded,
+                            sharded_buffer_num_cores
+                        );
+                        pull_and_relay<PullAndRelayType::BUFFER, PullAndRelayType::BUFFER, write_to_completion_queue>(src_pr_cfg, dst_pr_cfg, num_pages_in_transfer);
+                        buffer_transfer_ptr += DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION;
+                    }
                 }
 
                 write_event((uint32_t)&header->event);
@@ -293,6 +300,7 @@ void kernel_main() {
                 }
 
                 completion_queue_push_back(completion_data_size, completion_queue_start_addr, host_completion_queue_write_ptr_addr);
+                record_last_completed_event(header->event);
             }
 
             issue_queue_pop_front<host_issue_queue_read_ptr_addr>(DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + issue_data_size);
