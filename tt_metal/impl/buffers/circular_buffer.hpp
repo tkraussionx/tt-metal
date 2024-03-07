@@ -31,6 +31,7 @@ class CircularBuffer {
 
     bool globally_allocated() const { return this->config_.globally_allocated_address().has_value(); }
 
+    bool global_address_set() const;
     uint32_t size() const { return this->config_.total_size(); }
 
     uint32_t num_pages(uint32_t buffer_index) const;

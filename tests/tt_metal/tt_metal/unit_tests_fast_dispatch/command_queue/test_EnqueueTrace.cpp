@@ -71,8 +71,8 @@ Program create_simple_unary_program(Buffer& input, Buffer& output) {
         input.num_pages()
     };
 
-    SetRuntimeArgs(device, detail::GetKernel(program, writer_kernel), worker, writer_runtime_args);
-    SetRuntimeArgs(device, detail::GetKernel(program, reader_kernel), worker, reader_runtime_args);
+    SetRuntimeArgs(device->command_queue(), detail::GetKernel(program, writer_kernel), worker, writer_runtime_args);
+    SetRuntimeArgs(device->command_queue(), detail::GetKernel(program, reader_kernel), worker, reader_runtime_args);
 
     CircularBufferConfig output_cb_config = CircularBufferConfig(2048, {{16, tt::DataFormat::Float16_b}})
             .set_page_size(16, 2048);

@@ -287,9 +287,9 @@ namespace tt::tt_metal{
             LAZY_COMMAND_QUEUE_MODE = lazy;
         }
 
-        void AllocateBuffer(Buffer* buffer, bool bottom_up);
+        void AllocateBuffer(Buffer* buffer, bool bottom_up, uint32_t cq_id);
 
-        void DeallocateBuffer(Buffer *buffer);
+        void DeallocateBuffer(Buffer *buffer, uint32_t cq_id);
 
         void GetBufferAddress(const Buffer* Buffer, uint32_t* address_on_host);
 

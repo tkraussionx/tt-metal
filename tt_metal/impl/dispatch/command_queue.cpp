@@ -563,6 +563,12 @@ void EnqueueProgramCommand::process() {
     array<uint32_t, 4> cb_data;
     TT_ASSERT(cb_data.size() * sizeof(uint32_t) <= padding_alignment, "cb_data size exceeds padding_alignment");
     for (const shared_ptr<CircularBuffer>& cb : program.circular_buffers()) {
+        // Before writing CB data, stall until dynamic CB is allocated
+        if (cb->globally_allocated()) {
+            while(not cb->global_address_set()) {
+                std::this_thread::sleep_for(std::chrono::microseconds(10));
+            }
+        }
         for (const auto buffer_index : cb->buffer_indices()) {
             cb_data = {
                 cb->address() >> 4,
@@ -803,6 +809,9 @@ void HWCommandQueue::enqueue_read_buffer(std::shared_ptr<Buffer> buffer, void* d
 void HWCommandQueue::enqueue_read_buffer(Buffer& buffer, void* dst, bool blocking) {
     ZoneScopedN("HWCommandQueue_read_buffer");
 
+    while(not buffer.is_allocated()) {
+        std::this_thread::sleep_for(std::chrono::microseconds(10));
+    }
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->device->id());
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->device->id());
     uint32_t read_buffer_command_size = DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
@@ -892,6 +901,11 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
         buffer.page_size() < MEM_L1_SIZE - get_data_section_l1_address(false),
         "Buffer pages must fit within the command queue data section");
 
+    // Buffer may be getting allocated through a different CQ. Ensure that its been allocated before
+    // writing to it
+    while (not buffer.is_allocated()) {
+        std::this_thread::sleep_for(std::chrono::microseconds(10));
+    }
     if (buffer.buffer_layout() == TensorMemoryLayout::WIDTH_SHARDED or
         buffer.buffer_layout() == TensorMemoryLayout::BLOCK_SHARDED) {
         convert_interleaved_to_sharded_on_host(src, buffer);
@@ -1188,7 +1202,48 @@ uint32_t Trace::instantiate(CommandQueue& cq) {
     return trace_id;
 }
 
+inline void ValidateKernelCQ(std::shared_ptr<Kernel> kernel, CommandQueue& cq) {
+    if (not kernel->runtime_args_sent_through_cq()) {
+        kernel->set_runtime_args_cq(cq.id());
+    }
+    else {
+        TT_FATAL((cq.get_mode() == CommandQueue::CommandQueueMode::TRACE) or kernel->get_runtime_args_cq() == cq.id(), "Different CQs cannot be used to interface with a kernel (CQ used for EnqueueProgram, SetRuntimeArgs and UpdateRuntimeArgs).");
+    }
+}
+
+inline void ValidateProgramCQ(std::variant < std::reference_wrapper<Program>, std::shared_ptr<Program> > program, CommandQueue& cq) {
+    std::visit([&cq] (auto&& p) {
+        using program_type = std::decay_t<decltype(p)>;
+        if constexpr (std::is_same_v<program_type, std::reference_wrapper<Program>>) {
+            auto num_kernels = p.get().num_kernels();
+            for (int k_id = 0; k_id < p.get().num_kernels(); k_id++) {
+                auto kernel = detail::GetKernel(p.get(), k_id);
+                ValidateKernelCQ(detail::GetKernel(p.get(), k_id), cq);
+            }
+            if(p.get().get_cq_id() == 0xffffffff) {
+                p.get().set_cq_id(cq.id());
+            }
+            else {
+                TT_FATAL((cq.get_mode() == CommandQueue::CommandQueueMode::TRACE) or p.get().get_cq_id() == cq.id(), "Different CQs cannot be used to interface with a program (CQ used for EnqueueProgram and EnqueueAddBufferToProgram).");
+            }
+        }
+        else {
+            auto num_kernels = p->num_kernels();
+            for (int k_id = 0; k_id < p->num_kernels(); k_id++) {
+                ValidateKernelCQ(detail::GetKernel(*p, k_id), cq);
+            }
+            if (p->get_cq_id() == 0xffffffff) {
+                p->set_cq_id(cq.id());
+            }
+            else {
+                TT_FATAL((cq.get_mode() == CommandQueue::CommandQueueMode::TRACE) or p->get_cq_id() == cq.id(), "Different CQs cannot be used to interface with a program (CQ used for EnqueueProgram and EnqueueAddBufferToProgram).");
+            }
+        }
+    }, program);
+}
+
 void EnqueueAddBufferToProgram(CommandQueue& cq, std::variant<std::reference_wrapper<Buffer>, std::shared_ptr<Buffer>> buffer, std::variant<std::reference_wrapper<Program>, std::shared_ptr<Program>> program, bool blocking) {
+    ValidateProgramCQ(program, cq);
     cq.run_command(CommandInterface{
         .type = EnqueueCommandType::ADD_BUFFER_TO_PROGRAM,
         .blocking = blocking,
@@ -1215,6 +1270,7 @@ void EnqueueAddBufferToProgramImpl(const std::variant<std::reference_wrapper<Buf
 }
 
 void EnqueueUpdateRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::vector<uint32_t> &update_idx, std::shared_ptr<RuntimeArgs> runtime_args_vec, bool blocking) {
+    ValidateKernelCQ(kernel, cq);
     auto runtime_args_md = RuntimeArgsMetadata {
             .core_coord = core_coord,
             .runtime_args_vec = runtime_args_vec,
@@ -1249,6 +1305,7 @@ void EnqueueUpdateRuntimeArgsImpl (const RuntimeArgsMetadata& runtime_args_md) {
 }
 
 void EnqueueSetRuntimeArgs(CommandQueue& cq, const std::shared_ptr<Kernel> kernel, const CoreCoord &core_coord, std::shared_ptr<RuntimeArgs> runtime_args_vec, bool blocking) {
+    ValidateKernelCQ(kernel, cq);
     auto runtime_args_md = RuntimeArgsMetadata {
             .core_coord = core_coord,
             .runtime_args_vec = runtime_args_vec,
@@ -1269,7 +1326,10 @@ void EnqueueSetRuntimeArgsImpl(const RuntimeArgsMetadata& runtime_args_md) {
         std::visit([&resolved_runtime_args] (auto&& a) {
             using T = std::decay_t<decltype(a)>;
             if constexpr (std::is_same_v<T, Buffer*>) {
-                resolved_runtime_args.push_back(a -> address());
+                while (!(a->is_allocated())) {
+                    std::this_thread::sleep_for(std::chrono::microseconds(10));
+                };
+                resolved_runtime_args.push_back(a->address());
             } else {
                 resolved_runtime_args.push_back(a);
             }
@@ -1288,6 +1348,9 @@ void EnqueueGetBufferAddr(CommandQueue& cq, uint32_t* dst_buf_addr, const Buffer
 }
 
 void EnqueueGetBufferAddrImpl(void* dst_buf_addr, const Buffer* buffer) {
+    while (not buffer->is_allocated()) {
+        std::this_thread::sleep_for(std::chrono::microseconds(10));
+    }
     *(static_cast<uint32_t*>(dst_buf_addr)) = buffer -> address();
 }
 void EnqueueAllocateBuffer(CommandQueue& cq, Buffer* buffer, bool bottom_up, bool blocking) {
@@ -1300,6 +1363,7 @@ void EnqueueAllocateBuffer(CommandQueue& cq, Buffer* buffer, bool bottom_up, boo
         .type = EnqueueCommandType::ALLOCATE_BUFFER,
         .blocking = blocking,
         .alloc_md = alloc_md,
+        .allocator_caller_id = CommandQueue::allocator_caller_id++,
     });
 }
 
@@ -1313,6 +1377,7 @@ void EnqueueAllocateBufferImpl(AllocBufferMetadata alloc_md) {
         allocated_addr = allocator::allocate_buffer(*(buffer->device()->allocator_), buffer->size(), buffer->page_size(), buffer->buffer_type(), alloc_md.bottom_up, std::nullopt);
     }
     buffer->set_address(static_cast<uint64_t>(allocated_addr));
+    buffer->set_allocated();
 }
 
 void EnqueueDeallocateBuffer(CommandQueue& cq, Allocator& allocator, uint32_t device_address, BufferType buffer_type, bool blocking) {
@@ -1322,11 +1387,19 @@ void EnqueueDeallocateBuffer(CommandQueue& cq, Allocator& allocator, uint32_t de
         .buffer_type = buffer_type,
         .device_address = device_address,
     };
-    cq.run_command(CommandInterface{
+    auto thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
+    auto dealloc_cmd = CommandInterface {
         .type = EnqueueCommandType::DEALLOCATE_BUFFER,
         .blocking = blocking,
         .alloc_md = alloc_md,
-    });
+        .allocator_caller_id = CommandQueue::allocator_caller_id++,
+    };
+    if (CommandQueue::worker_to_cq_id.find(thread_id) != CommandQueue::worker_to_cq_id.end()) {
+        cq.device()->command_queue(CommandQueue::worker_to_cq_id.at(thread_id)).run_command(dealloc_cmd);
+    }
+    else {
+        cq.run_command(dealloc_cmd);
+    }
 }
 
 void EnqueueDeallocateBufferImpl(AllocBufferMetadata alloc_md) {
@@ -1401,13 +1474,15 @@ void EnqueueWriteBufferImpl(CommandQueue& cq, std::variant<std::reference_wrappe
 
 void EnqueueProgram(CommandQueue& cq, std::variant < std::reference_wrapper<Program>, std::shared_ptr<Program> > program, bool blocking) {
     detail::DispatchStateCheck(true);
+    ValidateProgramCQ(program, cq);
     if (cq.get_mode() != CommandQueue::CommandQueueMode::TRACE) {
         TT_FATAL(cq.id() == 0, "EnqueueProgram only supported on first command queue on device for time being.");
     }
     cq.run_command(CommandInterface{
         .type = EnqueueCommandType::ENQUEUE_PROGRAM,
         .blocking = blocking,
-        .program = program
+        .program = program,
+        .allocator_caller_id = CommandQueue::allocator_caller_id++,
     });
 }
 
@@ -1643,7 +1718,12 @@ void CommandQueue::run_worker() {
     // forever loop checking for commands in the worker queue
     // Track the worker thread id, for cases where a command calls a sub command.
     // This is to detect cases where commands may be nested.
-    worker_thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
+    this->worker_thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
+    // Track the worker thread IDs and their corresponding CQs
+    worker_cq_map_mutex.lock();
+    worker_to_cq_id.insert({worker_thread_id, this->id()});
+    worker_cq_map_mutex.unlock();
+
     while (true) {
         if (this->worker_queue.empty()) {
             if (this->worker_state == CommandQueueState::TERMINATE) {
@@ -1652,7 +1732,9 @@ void CommandQueue::run_worker() {
             std::this_thread::sleep_for(std::chrono::microseconds(10));
         } else {
             std::shared_ptr<CommandInterface> command(this->worker_queue.pop());
+            reserve_allocator(*command);
             run_command_impl(*command);
+            release_allocator(*command);
         }
     }
 }
@@ -1661,6 +1743,12 @@ void CommandQueue::run_command(const CommandInterface& command) {
     log_trace(LogDispatch, "CQ{} received {} in {} mode", this->cq_id, command.type, this->mode);
     if (not this->passthrough_mode()) {
         if (std::hash<std::thread::id>{}(std::this_thread::get_id()) == parent_thread_id or this->trace_mode()) {
+            // This command is using the allocator. Push the caller ID of this cmd to the alloc_caller_queue.
+            // The worker thread running this cmd will stall until the caller ID is at the head of the alloc_caller_queue,
+            // signalling that this cmd is allowed to reserve the allocator (maintain memory allocation/deallocation order).
+            if (command.allocator_caller_id.has_value() && not this->trace_mode()) {
+                CommandQueue::alloc_caller_queue.push(command.allocator_caller_id.value());
+            }
             // Push to worker queue for trace or async mode. In trace mode, store the execution in the queue.
             // In async mode when parent pushes cmd, feed worker through queue.
             this->worker_queue.push(command);

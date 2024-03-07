@@ -155,13 +155,13 @@ bool flatten(Device *device, uint32_t num_tiles_r = 5, uint32_t num_tiles_c = 5)
         };
 
         SetRuntimeArgs(
-            device,
+            device->command_queue(),
             detail::GetKernel(program, flatten_kernel),
             core,
             compute_runtime_args);
 
         SetRuntimeArgs(
-            device,
+            device->command_queue(),
             detail::GetKernel(program, unary_writer_kernel),
             core,
             writer_runtime_args);
@@ -244,7 +244,7 @@ TEST_F(CommandQueueFixture, TestAsyncBufferRW) {
         EXPECT_EQ((*allocated_buffer_address), buffer->address());
         EXPECT_EQ((*allocated_buffer_address_2), buffer_objects.back().address());
         // Deallocate the second device side buffer
-        detail::DeallocateBuffer(&(buffer_objects.back()));
+        detail::DeallocateBuffer(&(buffer_objects.back()), 0);
         // Make the buffer_object address and the buffer address identical with a blocking call. buffer_object and buffer are now the same device side buffer
         buffer_objects.back().set_address(*allocated_buffer_address);
 
@@ -307,8 +307,8 @@ TEST_F(CommandQueueFixture, TestAsyncSetAndUpdateRuntimeArgs) {
     *writer_runtime_args = {src0.get(), src1.get()};
     std::shared_ptr<RuntimeArgs> reader_runtime_args= std::make_shared<RuntimeArgs>();
     *reader_runtime_args = {dst.get()};
-    SetRuntimeArgs(this->device_, detail::GetKernel(program, writer), core, writer_runtime_args);
-    SetRuntimeArgs(this->device_, detail::GetKernel(program, reader), core, reader_runtime_args);
+    SetRuntimeArgs(this->device_->command_queue(), detail::GetKernel(program, writer), core, writer_runtime_args);
+    SetRuntimeArgs(this->device_->command_queue(), detail::GetKernel(program, reader), core, reader_runtime_args);
     Finish(this->device_->command_queue());
 
     auto resolved_writer_args = detail::GetKernel(program, writer)->runtime_args(core);
@@ -330,8 +330,8 @@ TEST_F(CommandQueueFixture, TestAsyncSetAndUpdateRuntimeArgs) {
     std::vector<uint32_t> writer_update_idx = {0, 1};
     std::vector<uint32_t> reader_update_idx = {0};
     // Asynchronously update the runtime args based on (potentially unallocated) buffer addrs
-    UpdateRuntimeArgs(this->device_, detail::GetKernel(program, writer), core, writer_update_idx, writer_runtime_args);
-    UpdateRuntimeArgs(this->device_, detail::GetKernel(program, reader), core, reader_update_idx, reader_runtime_args);
+    UpdateRuntimeArgs(this->device_->command_queue(), detail::GetKernel(program, writer), core, writer_update_idx, writer_runtime_args);
+    UpdateRuntimeArgs(this->device_->command_queue(), detail::GetKernel(program, reader), core, reader_update_idx, reader_runtime_args);
     Finish(this->device_->command_queue());
 
     resolved_writer_args = detail::GetKernel(program, writer)->runtime_args(core);

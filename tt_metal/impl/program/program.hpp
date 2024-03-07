@@ -29,6 +29,7 @@ namespace detail{
     KernelHandle AddKernel ( Program & program, std::shared_ptr<Kernel> kernel);
     std::shared_ptr<Kernel> GetKernel(const Program &program, KernelHandle kernel_id);
     std::shared_ptr<CircularBuffer> GetCircularBuffer(const Program &program, CBHandle id);
+    Buffer GetProgramBuffer(const Program& program);
 }
 
 struct KernelGroup {
@@ -104,6 +105,11 @@ class Program {
 
     void allocate_circular_buffers();
 
+    uint32_t get_cq_id() const { return cq_id; }
+
+    void set_cq_id(uint32_t cq_id_) { cq_id = cq_id_; }
+
+    Buffer get_buffer() { return *buffer; }
    private:
     // Buffers temporarily owned by the program
     std::vector<std::shared_ptr<Buffer>> owned_buffer_pool = {};
@@ -141,6 +147,7 @@ class Program {
     };
 
     uint64_t id; // Need to make non-const due to move constructor
+    uint32_t cq_id = 0xffffffff;
     static std::atomic<uint64_t> program_counter;
     std::vector< std::shared_ptr<Kernel> > kernels_;
     CoreCoord grid_extent_;

@@ -140,11 +140,12 @@ class Buffer {
         device_(nullptr),
         buffer_type_(BufferType::DRAM),
         buffer_layout_(TensorMemoryLayout::INTERLEAVED),
-        shard_parameters_(std::nullopt) {}
+        shard_parameters_(std::nullopt),
+        cq_id_(0) {}
 
     Buffer(Device *device, uint64_t size, uint64_t page_size, const BufferType buffer_type,
         const TensorMemoryLayout buffer_layout=TensorMemoryLayout::INTERLEAVED,
-        std::optional<ShardSpecBuffer> shard_parameter = std::nullopt);
+        std::optional<ShardSpecBuffer> shard_parameter = std::nullopt, uint32_t cq_id = 0);
 
     Buffer(const Buffer &other);
     Buffer& operator=(const Buffer &other);
@@ -160,6 +161,9 @@ class Buffer {
     // Returns address of buffer in the first bank
     uint32_t address() const { return static_cast<uint32_t>(address_); }
 
+    bool is_allocated() const { return allocated; }
+    void set_allocated() { allocated = true; }
+    uint32_t get_cq_id() const { return cq_id_; }
     void set_address(uint64_t addr) { address_ = addr; }
 
     uint32_t page_size() const { return page_size_; }
@@ -285,9 +289,11 @@ class Buffer {
     uint64_t size_;                 // Size in bytes
     uint64_t address_;              // Address of buffer
     uint64_t page_size_;            // Size of unit being interleaved. For non-interleaved buffers: size == page_size
+    bool allocated = false;
     BufferType buffer_type_;
     TensorMemoryLayout buffer_layout_;
     std::optional<ShardSpecBuffer> shard_parameters_;
+    uint32_t cq_id_ = 0;                     // Handle to the command queue used to interface with this buffer
     std::vector< CoreCoord> all_cores_;
     std::vector< uint32_t> core_bank_indices_;
     std::vector< std::vector<uint32_t> > core_host_page_indices_;

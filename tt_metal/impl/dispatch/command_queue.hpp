@@ -61,6 +61,7 @@ class CommandQueue;
 class CommandInterface;
 
 using WorkerQueue = LockFreeQueue<CommandInterface>;
+using AllocatorCallerQueue = LockFreeQueue<uint32_t>;
 
 class Command {
     EnqueueCommandType type_ = EnqueueCommandType::INVALID;
@@ -548,6 +549,7 @@ struct CommandInterface {
     std::optional<HostBufferMemTypes> src;
     std::optional<void*> dst;
     std::optional<std::shared_ptr<Event>> event;
+    std::optional<uint32_t> allocator_caller_id;
 };
 
 class CommandQueue {
@@ -596,6 +598,9 @@ class CommandQueue {
     }
     // Determine if any CQ is using Async mode
     static bool async_mode_set() { return num_async_cqs > 0; }
+    inline static uint32_t allocator_caller_id = 0;
+    inline static std::unordered_map<uint64_t, uint32_t> worker_to_cq_id = {};
+
    private:
     enum class CommandQueueState {
         IDLE = 0,
@@ -630,6 +635,23 @@ class CommandQueue {
     // Track the number of CQs using async vs pt mode
     inline static uint32_t num_async_cqs = 0;
     inline static uint32_t num_pt_cqs = 0;
+    inline static AllocatorCallerQueue alloc_caller_queue = AllocatorCallerQueue();
+    inline static std::mutex worker_cq_map_mutex;
+
+    static void reserve_allocator(CommandInterface& cmd) {
+        if (cmd.allocator_caller_id.has_value()) {
+            while (*(alloc_caller_queue.begin()) != cmd.allocator_caller_id.value()) {
+                std::this_thread::sleep_for(std::chrono::microseconds(10));
+            }
+        }
+    }
+
+    static void release_allocator(CommandInterface& cmd) {
+        if (cmd.allocator_caller_id.has_value()) {
+            alloc_caller_queue.pop();
+        }
+    }
+
 };
 
 // Primitives used to place host only operations on the SW Command Queue.

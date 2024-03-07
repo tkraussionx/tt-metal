@@ -92,6 +92,13 @@ uint32_t CircularBuffer::address() const {
                                       : locally_allocated_address_.value();
 }
 
+bool CircularBuffer::global_address_set() const {
+    // The global address for this CB is set if its corresponding shadow buffer has been allocated and globally_allocated_address_
+    // matches the address of the shadow buffer
+    TT_FATAL(this->globally_allocated(), "Can only call global_address_set for dynamic CBs");
+    return this->config_.shadow_global_buffer->is_allocated() and globally_allocated_address_ == this->config_.shadow_global_buffer->address();
+}
+
 void CircularBuffer::assign_global_address() {
     detail::GetBufferAddress(config_.shadow_global_buffer, &globally_allocated_address_);
 }

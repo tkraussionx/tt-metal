@@ -1069,7 +1069,9 @@ void Program::compile( Device * device )
 
     if (std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr) {
         this->program_device_map = ConstructProgramDeviceMap(device, *this);
-        this->buffer = std::make_unique<Buffer>(device, this->program_device_map.program_pages.size() * sizeof(uint32_t),  DeviceCommand::PROGRAM_PAGE_SIZE, BufferType::DRAM);
+        // If the CQ ID is set (calling compile through EnqueueProgram), allocate the program buffer through the program CQ, to avoid having cross-queue communication
+        auto cq_id = (this->get_cq_id() == 0xffffffff) ? 0 : this->get_cq_id();
+        this->buffer = std::make_unique<Buffer>(device, this->program_device_map.program_pages.size() * sizeof(uint32_t), DeviceCommand::PROGRAM_PAGE_SIZE, BufferType::DRAM, TensorMemoryLayout::INTERLEAVED, std::nullopt, cq_id);
     }
 
     if (detail::CompilationReporter::enabled()) {

@@ -68,7 +68,9 @@ class Kernel : public JitBuildSettings {
     virtual void read_binaries(Device *device) = 0;
 
     void set_runtime_args(const CoreCoord &logical_core, const std::vector<uint32_t> &runtime_args);
-
+    uint32_t get_runtime_args_cq() { return runtime_args_cq; }
+    void set_runtime_args_cq(uint32_t cq_id) { runtime_args_cq = cq_id; }
+    bool runtime_args_sent_through_cq() { return runtime_args_cq != 0xffffffff; }
     int get_watcher_kernel_id() { return watcher_kernel_id_; }
 
     CoreType get_kernel_core_type() const;
@@ -83,6 +85,7 @@ class Kernel : public JitBuildSettings {
     std::string kernel_full_name_;                      // Name + hash
     CoreRangeSet core_range_set_;
     std::string binary_path_;
+    uint32_t runtime_args_cq = 0xffffffff;
     // DataMovement kernels have one binary each and Compute kernels have three binaries
     // Different set of binaries per device because kernel compilation is device dependent
     // TODO: break this dependency by https://github.com/tenstorrent-metal/tt-metal/issues/3381

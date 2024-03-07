@@ -108,9 +108,9 @@ inline std::vector< std::vector<uint32_t> > core_to_host_pages(
 
 Buffer::Buffer(Device *device, uint64_t size, uint64_t page_size, const BufferType buffer_type,
                 const TensorMemoryLayout buffer_layout,
-                std::optional< ShardSpecBuffer> shard_parameters
+                std::optional< ShardSpecBuffer> shard_parameters, uint32_t cq_id
                 )
-    : device_(device), size_(size), page_size_(page_size), buffer_type_(buffer_type), buffer_layout_(buffer_layout), shard_parameters_(shard_parameters) {
+    : device_(device), size_(size), page_size_(page_size), buffer_type_(buffer_type), buffer_layout_(buffer_layout), shard_parameters_(shard_parameters), cq_id_(cq_id) {
     TT_FATAL(this->device_ != nullptr and this->device_->allocator_ != nullptr);
     validate_buffer_size_and_page_size(size, page_size, buffer_type, buffer_layout, shard_parameters);
     if(is_sharded(buffer_layout)){
@@ -150,7 +150,7 @@ Buffer::Buffer(Device *device, uint64_t size, uint64_t page_size, const BufferTy
 
 Buffer::Buffer(const Buffer &other)
     : device_(other.device_), size_(other.size_), page_size_(other.page_size_),
-        buffer_type_(other.buffer_type_) , buffer_layout_(other.buffer_layout_), shard_parameters_(other.shard_parameters_){
+        buffer_type_(other.buffer_type_) , buffer_layout_(other.buffer_layout_), shard_parameters_(other.shard_parameters_), cq_id_(other.cq_id_) {
     this->allocate();
 }
 
@@ -162,13 +162,14 @@ Buffer &Buffer::operator=(const Buffer &other) {
         this->buffer_type_ = other.buffer_type_;
         this->buffer_layout_ = other.buffer_layout_;
         this->shard_parameters_ = other.shard_parameters_;
+        this->cq_id_ = other.cq_id_;
         this->allocate();
     }
     return *this;
 }
 
 Buffer::Buffer(Buffer &&other) : device_(other.device_), size_(other.size_), address_(other.address_), page_size_(other.page_size_), buffer_type_(other.buffer_type_) ,
-                                    buffer_layout_(other.buffer_layout_), shard_parameters_(other.shard_parameters_) {
+                                    buffer_layout_(other.buffer_layout_), shard_parameters_(other.shard_parameters_), cq_id_(other.cq_id_) {
     // Set `other.device_` to be nullptr so destroying other does not deallocate reserved address space that is transferred to `this`
     other.device_ = nullptr;
 }
@@ -182,6 +183,7 @@ Buffer &Buffer::operator=(Buffer &&other) {
         this->buffer_type_ = other.buffer_type_;
         this->buffer_layout_ = other.buffer_layout_;
         this->shard_parameters_ = other.shard_parameters_;
+        this->cq_id_ = other.cq_id_;
         // Set `other.device_` to be nullptr so destroying other does not deallocate reserved address space that is transferred to `this`
         other.device_ = nullptr;
     }
@@ -192,7 +194,7 @@ void Buffer::allocate() {
     TT_ASSERT(this->device_ != nullptr);
     // L1 buffers are allocated top down!
     bool bottom_up = this->buffer_type_ == BufferType::DRAM;
-    detail::AllocateBuffer(this, bottom_up);
+    detail::AllocateBuffer(this, bottom_up, cq_id_);
 }
 
 uint32_t Buffer::dram_channel_from_bank_id(uint32_t bank_id) const {
@@ -265,7 +267,7 @@ void Buffer::deallocate() {
     this->size_ = 0;
     TT_ASSERT(this->device_->allocator_ != nullptr, "Expected allocator to be initialized!");
     // Asynchronously deallocate
-    detail::DeallocateBuffer(this);
+    detail::DeallocateBuffer(this, cq_id_);
 }
 
 Buffer::~Buffer() {
