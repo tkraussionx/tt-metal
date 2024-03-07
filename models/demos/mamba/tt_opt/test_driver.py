@@ -32,29 +32,22 @@ def get_tt_metal_model(num_users, hidden_size, configs):
     return model, device
 
 
-
-
-
-
-
-
 def run_demo(num_users, hidden_size):
     configs = model_config.create_model_config(num_users, hidden_size)
     model, device = get_tt_metal_model(num_users, hidden_size, configs)
-    
 
     # evaluate model:
     model.eval()
 
     with torch.no_grad():
-        #create random torch tensor of hidden size and num_users, with datatype bfloat16
-        
+        # create random torch tensor of hidden size and num_users, with datatype bfloat16
+
         input_data = torch.randn((1, 1, num_users, hidden_size), dtype=torch.bfloat16)
-        
-        input_data = ttnn.to_device(ttnn.from_torch(input_data, layout=ttnn.TILE_LAYOUT), device=device, memory_config=configs['sharded'])
-        
-        
-        
+
+        input_data = ttnn.to_device(
+            ttnn.from_torch(input_data, layout=ttnn.TILE_LAYOUT), device=device, memory_config=ttnn.L1_MEMORY_CONFIG
+        )
+
         out_data = model(input_data)
 
     ttnn.close_device(device)
