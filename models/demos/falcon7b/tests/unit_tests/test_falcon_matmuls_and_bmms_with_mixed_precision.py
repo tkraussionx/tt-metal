@@ -30,6 +30,9 @@ def run_falcon_matmul_test(
         b_shape = [1, 1, 4544, 4672]
         expected_output_shape = [1, 1, seq_len, 4672]
         op = ttl.tensor.falcon_fused_qkv_matmul
+        in0_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
+        in1_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
+        out_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
     elif falcon_op == "ttl.tensor.falcon_selfout_matmul":
         a_shape = [1, 1, seq_len, 4544]
         b_shape = [1, 1, 4544, 4544]
@@ -357,16 +360,16 @@ def run_falcon_matmul_test(
         # we get 395K cycles
         # Theoretical: 259k
         # Usage: 65% (first one - theoretical_first/actual = 64%)
-        program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
-            compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-            in0_block_w=16,
-            per_core_M=4,
-            per_core_N=18,
-            out_subblock_h=1,
-            out_subblock_w=6,
-            transpose_mcast=False,
-            fused_activation=None,
-        )
+        # program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        #     compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+        #     in0_block_w=16,
+        #     per_core_M=4,
+        #     per_core_N=18,
+        #     out_subblock_h=1,
+        #     out_subblock_w=6,
+        #     transpose_mcast=False,
+        #     fused_activation=None,
+        # )
 
         out = ttl.operations.primary.matmul(
             a_t,
@@ -376,6 +379,52 @@ def run_falcon_matmul_test(
             output_dtype=out_dtype,
             compute_kernel_config=compute_kernel_config,
         )
+    elif falcon_op == "ttl.tensor.falcon_fused_qkv_matmul":
+        compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+            math_fidelity=ttl.tensor.MathFidelity.LoFi,  # try this lower
+            math_approx_mode=True,
+            fp32_dest_acc_en=False,
+            packer_l1_acc=True,
+        )
+
+        # A = [32, 142] B = [142, 146]
+        # Best config - 630K ns
+        # Theoretical: 259K - 64 cores, 296k - 56 cores
+        # usage = theoretical / actual = 41% (47% 56 cores)
+        # program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        #     compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+        #     in0_block_w=2,
+        #     per_core_M=4,
+        #     per_core_N=21,
+        #     out_subblock_h=1,
+        #     out_subblock_w=7,
+        #     transpose_mcast=False,
+        #     fused_activation=None,
+        # )
+
+        # Experiment: Pad inner dim to 144 (144 * 32 = 4608), to take advantage of in0_block_w
+        # This way we get 540k ns, which is (296 / 540) = 55%
+        # Max in0_block_w = 18
+        # program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        #     compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+        #     in0_block_w=18,
+        #     per_core_M=4,
+        #     per_core_N=21,
+        #     out_subblock_h=1,
+        #     out_subblock_w=7,
+        #     transpose_mcast=False,
+        #     fused_activation=None,
+        # )
+
+        out = ttl.operations.primary.matmul(
+            a_t,
+            b_t,
+            program_config=program_config,
+            output_mem_config=out_mem_config,
+            output_dtype=out_dtype,
+            compute_kernel_config=compute_kernel_config,
+        )
+
     else:
         out = op(a_t, b_t, bias_t, output_mem_config=out_mem_config, output_dtype=out_dtype)
 

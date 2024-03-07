@@ -237,6 +237,7 @@ class TtFalconAttention(nn.Module):
         #################
         ### FUSED QKV ###
         #################
+        # This is matmul 5
         fused_query_key_value = tt_lib.tensor.falcon_fused_qkv_matmul(
             hidden_states,
             self.query_key_value_weights,
@@ -292,6 +293,7 @@ class TtFalconAttention(nn.Module):
         key_layer.deallocate()
 
         if llm_mode == "prefill":
+            # pre softmax
             attn_weights = tt_lib.tensor.matmul(
                 query_layer,
                 key_layer_transposed,

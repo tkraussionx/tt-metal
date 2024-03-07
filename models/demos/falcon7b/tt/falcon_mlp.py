@@ -5,6 +5,7 @@
 import torch
 from torch import nn
 import tt_lib
+from loguru import logger
 
 from models.utility_functions import torch2tt_tensor
 
@@ -88,7 +89,46 @@ class TtFalconMLP(nn.Module):
                 self.dense_4h_to_h_weights.cpu(),
             )
 
-    def forward(self, x: tt_lib.tensor.Tensor) -> tt_lib.tensor.Tensor:
+    def forward(self, x: tt_lib.tensor.Tensor, llm_mode: str) -> tt_lib.tensor.Tensor:
+        # if x.shape()[-2] == 1024 and llm_mode == "prefill":
+        #     logger.info("Hit prefill case")
+        #     compute_kernel_config = tt_lib.tensor.WormholeComputeKernelConfig(
+        #         math_fidelity=tt_lib.tensor.MathFidelity.LoFi,
+        #         math_approx_mode=True,
+        #         fp32_dest_acc_en=False,
+        #         packer_l1_acc=True,
+        #     )
+
+        #     program_config = tt_lib.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+        #         compute_with_storage_grid_size=self.device.compute_with_storage_grid_size(),
+        #         in0_block_w=2,
+        #         per_core_M=32,
+        #         per_core_N=9,
+        #         out_subblock_h=2,
+        #         out_subblock_w=3,
+        #         fuse_batch=True,
+        #         fused_activation=[tt_lib.tensor.FusibleActivation.GELU, True],
+        #         mcast_in0=True,
+        #     )
+
+        #     hidden_states = tt_lib.operations.primary.matmul(
+        #         x,
+        #         self.dense_h_to_4h_weights,
+        #         program_config=program_config,
+        #         output_mem_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
+        #         output_dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
+        #         compute_kernel_config=compute_kernel_config,
+        #     )
+        # else:
+        #     logger.info("Hit decode case")
+        #     hidden_states = tt_lib.tensor.falcon_dense_h_to_4h_matmul(
+        #         x,
+        #         self.dense_h_to_4h_weights,
+        #         fused_activation=[tt_lib.tensor.FusibleActivation.GELU, True],
+        #         output_mem_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
+        #         output_dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
+        #     )
+
         hidden_states = tt_lib.tensor.falcon_dense_h_to_4h_matmul(
             x,
             self.dense_h_to_4h_weights,
@@ -98,13 +138,41 @@ class TtFalconMLP(nn.Module):
         )
         x.deallocate()
 
-        hidden_states = tt_lib.tensor.falcon_dense_4h_to_h_matmul(
-            hidden_states,
-            self.dense_4h_to_h_weights,
-            output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
-            output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
-            packer_l1_acc=True,
-        )
+        # 4h_to_h matmul
+        if hidden_states.shape()[-2] == 1024 and llm_mode == "prefill":
+            compute_kernel_config = tt_lib.tensor.WormholeComputeKernelConfig(
+                math_fidelity=tt_lib.tensor.MathFidelity.LoFi,
+                math_approx_mode=True,
+                fp32_dest_acc_en=False,
+                packer_l1_acc=True,
+            )
+            program_config = tt_lib.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+                compute_with_storage_grid_size=self.device.compute_with_storage_grid_size(),
+                in0_block_w=8,
+                per_core_M=4,
+                per_core_N=18,
+                out_subblock_h=1,
+                out_subblock_w=6,
+                transpose_mcast=False,
+                fused_activation=None,
+            )
+
+            hidden_states = tt_lib.operations.primary.matmul(
+                hidden_states,
+                self.dense_4h_to_h_weights,
+                program_config=program_config,
+                output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
+                output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
+                compute_kernel_config=compute_kernel_config,
+            )
+        else:
+            hidden_states = tt_lib.tensor.falcon_dense_4h_to_h_matmul(
+                hidden_states,
+                self.dense_4h_to_h_weights,
+                output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
+                output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
+                packer_l1_acc=True,
+            )
 
         # return TT Tensor
         return hidden_states

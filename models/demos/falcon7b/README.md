@@ -4,7 +4,7 @@
 
 To run the model for a single user you can use the command line input:
 
-`pytest --disable-warnings -q -s --input-method=cli --cli-input="YOUR PROMPT GOES HERE!"  models/demos/falcon7b/demo/demo.py`
+`pytest --disable-warnings -q -s --input-method=cli --cli-input="Tell me a joke!"  models/demos/falcon7b/demo/demo.py`
 
 To run the demo using prewritten prompts for a batch of 32 users run (currently only supports same token-length inputs):
 

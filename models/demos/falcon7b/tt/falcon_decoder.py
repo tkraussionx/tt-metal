@@ -162,7 +162,7 @@ class TtFalconDecoderLayer(nn.Module):
 
         # MLP
         # mlp will deallocate layernorm_output
-        mlp_output = self.mlp(layernorm_output)
+        mlp_output = self.mlp(layernorm_output, llm_mode)
 
         output = tt_lib.tensor.add(
             mlp_output,

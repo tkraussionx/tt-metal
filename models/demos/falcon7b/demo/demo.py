@@ -56,6 +56,7 @@ def preprocess_and_validate_inputs(input_prompts, tokenizer, max_seq_len):
         input_prompts, padding="max_length", max_length=max_seq_len, add_special_tokens=False, return_tensors="pt"
     )
     prefill_ids = tokenized_inputs["input_ids"]
+    # logger.info(f"Prefill ids pre nearest_32: {prefill_ids.shape}")
 
     tokenized_inputs_nopad = tokenizer(
         input_prompts, padding=False, max_length=max_seq_len, add_special_tokens=False, return_tensors="pt"
@@ -68,7 +69,9 @@ def preprocess_and_validate_inputs(input_prompts, tokenizer, max_seq_len):
     logger.info(f"# of users: {num_users}")
     logger.info(f"# of input tokens per user: {num_input_tokens}")
 
-    prefill_ids = prefill_ids[:, : nearest_32(num_input_tokens)]  # only pad up to nearest 32, not max seq len
+    # prefill_ids = prefill_ids[:, : nearest_32(num_input_tokens)]  # only pad up to nearest 32, not max seq len
+
+    # logger.info(f"Prefill ids post nearest_32: {prefill_ids.shape}")
 
     return prefill_ids, num_users, num_input_tokens
 
@@ -379,8 +382,8 @@ def run_falcon_demo_kv(
         kv_cache_len += 1
 
         # TODO: Remove if we don't want to print per generated token
-        os.system("clear")
-        print_output_prompts(generated_ids, tokenizer)
+        # os.system("clear")
+        # print_output_prompts(generated_ids, tokenizer)
 
     logger.info("Finished inference decode stage!")
     logger.info(f"Total number of tokens generated in decode: {batch_size*(kv_cache_len)}")
@@ -418,9 +421,9 @@ def run_falcon_demo_kv(
     logger.info(f"prefill inference time: {round(measurements['inference_prefill'], 5)} s")
     logger.info(f"decode inference time: {round(measurements['inference_decode'], 5)} s")
     logger.info(f"total inference time: {round(measurements['inference_total'], 5)} s")
-    logger.info(f"inference throughput prefill: {round(measurements['inference_throughput_prefill'], 5)} users/s")
+    logger.info(f"inference throughput prefill: {round(measurements['inference_throughput_prefill'], 5)} 1/s")
     logger.info(
-        f"inference throughput prefill | seq_len={prefill_ids.shape[1]} : {round(measurements['inference_throughput_prefill']*prefill_ids.shape[1], 5)} tok/s"
+        f"inference throughput prefill | seq_len={prefill_ids.shape[1]} : {round(measurements['inference_throughput_prefill']*prefill_ids.shape[1], 5)} 1/s"
     )
     logger.info(f"inference throughput decode: {round(measurements['inference_throughput_decode'], 5)} tok/s")
     logger.info(

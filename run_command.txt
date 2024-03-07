@@ -1,2 +1,28 @@
+
+4h to h
 pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "out_BFLOAT16 and in1_BFLOAT8_B and in0_BFLOAT16 and dense_4h_to_h and seq_len_1024"
 ./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k \"out_BFLOAT16 and in1_BFLOAT8_B and in0_BFLOAT16 and dense_4h_to_h and seq_len_1024\""
+
+
+h to 4h
+pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "out_BFLOAT16 and in1_BFLOAT8_B and in0_BFLOAT16 and dense_h_to_4h and seq_len_1024"
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k \"out_BFLOAT16 and in1_BFLOAT8_B and in0_BFLOAT16 and dense_h_to_4h and seq_len_1024\""
+
+Attention matmul - post transpose
+pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "out_BFLOAT16 and in1_BFLOAT16 and in0_BFLOAT16 and post_transpose_mm and seq_len_1024"
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k \"out_BFLOAT16 and in1_BFLOAT16 and in0_BFLOAT16 and post_transpose_mm and seq_len_1024\""
+
+Attention matmul - post softmax
+pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "out_BFLOAT16 and in1_BFLOAT16 and in0_BFLOAT16 and post_softmax_mm and seq_len_1024"
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k \"out_BFLOAT16 and in1_BFLOAT16 and in0_BFLOAT16 and post_softmax_mm and seq_len_1024\""
+
+Attention matmul - selfout
+pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "out_BFLOAT16 and in1_BFLOAT8_B and in0_BFLOAT16 and selfout and seq_len_1024"
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k \"out_BFLOAT16 and in1_BFLOAT8_B and in0_BFLOAT16 and selfout and seq_len_1024\""
+
+Attention matmul - fused_qkv
+pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k "out_BFLOAT16 and in1_BFLOAT8_B and in0_BFLOAT16 and fused_qkv and seq_len_1024"
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_falcon_matmuls_and_bmms_with_mixed_precision.py -k \"out_BFLOAT16 and in1_BFLOAT8_B and in0_BFLOAT16 and fused_qkv and seq_len_1024\""
+
+Falcon prefill decoder
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/test_falcon_decoder.py -k \"prefill_seq1024 and BFLOAT16-DRAM\""
