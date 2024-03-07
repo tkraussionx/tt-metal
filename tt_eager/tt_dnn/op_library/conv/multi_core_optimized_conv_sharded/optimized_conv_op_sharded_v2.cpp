@@ -61,10 +61,10 @@ tuple<CBHandle, CBHandle> create_CBs_for_sharded_input_v2(
     bool with_bias,
     bool split_reader,
     bool fp32_dest_acc_en,
-    bool packer_l1_acc
+    bool packer_l1_acc_en
 ) {
 
-    tt::DataFormat interm0_df = packer_l1_acc ? (fp32_dest_acc_en ? tt::DataFormat::Float32 : tt::DataFormat::Float16_b) : out_df;
+    tt::DataFormat interm0_df = packer_l1_acc_en ? (fp32_dest_acc_en ? tt::DataFormat::Float32 : tt::DataFormat::Float16_b) : out_df;
 
     uint32_t act_tile_size = tt_metal::detail::TileSize(act_df);
     uint32_t weight_tile_size = tt_metal::detail::TileSize(weight_df);

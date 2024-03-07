@@ -37,31 +37,36 @@ const uint32_t untilize_mode_reblock_cb               = CB::c_intermed2;
 const uint32_t out0_cb                                = CB::c_out0;
 
 
-tuple<CBHandle, CBHandle> create_CBs(tt_metal::Program &program,
-                                const Tensor& input,
-                                CoreRange core,
-                                uint32_t num_cb0_tiles,
-                                uint32_t num_cb1_tiles,
-                                uint32_t num_cb0_tilized_tiles,
-                                uint32_t num_output_tiles,
-                                uint32_t num_reblock_cb_tiles,
-                                uint32_t num_writer_output_tiles,
-                                bool untilize_out,
-                                DataFormat act_df,
-                                DataFormat weight_df,
-                                DataFormat tilized_act_df,
-                                DataFormat out_df,
-                                DataFormat bias_df,
-                                bool weight_width_sliced,
-                                const Tensor& output,
-                                uint32_t bias_ntiles = 0,
-                                bool with_bias = false
+tuple<CBHandle, CBHandle> create_CBs(
+    tt_metal::Program &program,
+    const Tensor& input,
+    CoreRange core,
+    uint32_t num_cb0_tiles,
+    uint32_t num_cb1_tiles,
+    uint32_t num_cb0_tilized_tiles,
+    uint32_t num_output_tiles,
+    uint32_t num_reblock_cb_tiles,
+    uint32_t num_writer_output_tiles,
+    bool untilize_out,
+    DataFormat act_df,
+    DataFormat weight_df,
+    DataFormat tilized_act_df,
+    DataFormat out_df,
+    DataFormat bias_df,
+    bool weight_width_sliced,
+    const Tensor& output,
+    uint32_t bias_ntiles = 0,
+    bool with_bias = false,
+    bool fp32_dest_acc_en = false,
+    bool packer_l1_acc_en = false
 ) {
 
+    tt::DataFormat interm0_df = packer_l1_acc_en ? (fp32_dest_acc_en ? tt::DataFormat::Float32 : tt::DataFormat::Float16_b) : out_df;
     uint32_t act_tile_size = tt_metal::detail::TileSize(act_df);
     uint32_t weight_tile_size = tt_metal::detail::TileSize(weight_df);
     uint32_t tilized_act_tile_size = tt_metal::detail::TileSize(tilized_act_df);
     uint32_t out_tile_size = tt_metal::detail::TileSize(out_df);
+    uint32_t interm0_single_tile_size = tt_metal::detail::TileSize(interm0_df);
 
     // Invariants
     CircularBufferConfig cb_act_config = CircularBufferConfig(num_cb0_tiles * act_tile_size, {{act_cb, act_df}})
@@ -98,8 +103,8 @@ tuple<CBHandle, CBHandle> create_CBs(tt_metal::Program &program,
 
     CBHandle cb_output = 0;
     if (untilize_out) {
-        CircularBufferConfig cb_matmul_partials_config = CircularBufferConfig(num_output_tiles * out_tile_size, {{matmul_partials_cb, out_df}})
-		    .set_page_size(matmul_partials_cb, out_tile_size);
+        CircularBufferConfig cb_matmul_partials_config = CircularBufferConfig(num_output_tiles * interm0_single_tile_size, {{matmul_partials_cb, interm0_df}})
+		    .set_page_size(matmul_partials_cb, interm0_single_tile_size);
         auto cb_matmul_partials = tt_metal::CreateCircularBuffer(program, core, cb_matmul_partials_config);
 
         // Supposed to be a small CB only responsible for reorganizing
@@ -115,18 +120,33 @@ tuple<CBHandle, CBHandle> create_CBs(tt_metal::Program &program,
         }
         cb_output = tt_metal::CreateCircularBuffer(program, core, cb_output_config);
     } else {
-        CoreRangeSet cores(std::set<CoreRange>({core}));
-        std::map<uint8_t, tt::DataFormat> cb_output_data_format_spec = {
-            {out0_cb, out_df},
-            {matmul_partials_cb, out_df}
-        };
-        CircularBufferConfig cb_matmul_partials_config = CircularBufferConfig(num_output_tiles * out_tile_size, cb_output_data_format_spec)
-		    .set_page_size(out0_cb, out_tile_size)
-            .set_page_size(matmul_partials_cb, out_tile_size);
-        if (output.is_sharded()) {
-            cb_matmul_partials_config = cb_matmul_partials_config.set_globally_allocated_address(*output.buffer());
+        //Share buffer if same data format
+        if(interm0_df == out_df) {
+            CoreRangeSet cores(std::set<CoreRange>({core}));
+            std::map<uint8_t, tt::DataFormat> cb_output_data_format_spec = {
+                {out0_cb, out_df},
+                {matmul_partials_cb, out_df}
+            };
+            CircularBufferConfig cb_matmul_partials_config = CircularBufferConfig(num_output_tiles * out_tile_size, cb_output_data_format_spec)
+                .set_page_size(out0_cb, out_tile_size)
+                .set_page_size(matmul_partials_cb, out_tile_size);
+            if (output.is_sharded()) {
+                cb_matmul_partials_config = cb_matmul_partials_config.set_globally_allocated_address(*output.buffer());
+            }
+            cb_output = tt_metal::CreateCircularBuffer(program, cores, cb_matmul_partials_config);
+        } else {
+            //Separate buffer if not same data format
+            CircularBufferConfig cb_matmul_partials_config = CircularBufferConfig(num_output_tiles * interm0_single_tile_size, {{matmul_partials_cb, interm0_df}})
+                .set_page_size(matmul_partials_cb, interm0_single_tile_size);
+            auto cb_matmul_partials = tt_metal::CreateCircularBuffer(program, core, cb_matmul_partials_config);
+
+            CircularBufferConfig cb_output_config = CircularBufferConfig(num_output_tiles * out_tile_size, {{out0_cb, out_df}})
+                .set_page_size(out0_cb, out_tile_size);
+            if (output.is_sharded()) {
+                cb_output_config = cb_output_config.set_globally_allocated_address(*output.buffer());
+            }
+            cb_output = tt_metal::CreateCircularBuffer(program, core, cb_output_config);
         }
-        cb_output = tt_metal::CreateCircularBuffer(program, cores, cb_matmul_partials_config);
     }
 
     if (with_bias) {
@@ -143,7 +163,23 @@ tuple<CBHandle, CBHandle> create_CBs(tt_metal::Program &program,
     return {cb_sharded_act, cb_output};
 }
 
-operation::ProgramWithCallbacks multi_core_optimized_conv_(const Tensor& a, const Tensor &b, const Shape& ashape, std::optional<const Tensor> bias, vector<int> conv_params, uint32_t output_channels, bool untilize_out, bool has_bias, bool fuse_relu, const MathFidelity math_fidelity, const OptimizedConvParallelizationConfig& parallelization_config, const OptimizedConvBlockConfig& block_config, uint32_t extra_padding_for_32B_alignment, Tensor &output) {
+operation::ProgramWithCallbacks multi_core_optimized_conv_(
+    const Tensor& a,
+    const Tensor &b,
+    const Shape& ashape,
+    std::optional<const Tensor> bias,
+    vector<int> conv_params,
+    uint32_t output_channels,
+    bool untilize_out,
+    bool has_bias,
+    bool fuse_relu,
+    const MathFidelity math_fidelity,
+    const OptimizedConvParallelizationConfig& parallelization_config,
+    const OptimizedConvBlockConfig& block_config,
+    uint32_t extra_padding_for_32B_alignment,
+    Tensor &output,
+    DeviceComputeKernelConfig compute_kernel_config) {
+
     bool pass = true;
     tt_metal::Device *device = a.device();
     TT_ASSERT(a.get_layout() == Layout::ROW_MAJOR, "Conv activation should be in row major layout");
@@ -343,6 +379,28 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_(const Tensor& a, cons
     uint32_t dst_l1_act_buffer_size_bytes = act_block_h_ntiles * act_block_w_ntiles * tt::tt_metal::detail::TileSize(act_df);
     uint32_t dst_l1_weight_buffer_size_bytes = weight_block_h_ntiles * weight_block_w_ntiles * tt::tt_metal::detail::TileSize(weight_df);
 
+    // compute kernel config
+    bool math_approx_mode;
+    bool fp32_dest_acc_en;
+    bool packer_l1_acc;
+
+    std::visit([&](auto&& compute_kernel_config) {
+        using T = std::decay_t<decltype(compute_kernel_config)>;
+        if constexpr (std::is_same_v<T, GrayskullComputeKernelConfig>) {
+            TT_ASSERT(device->arch() == ARCH::GRAYSKULL, "kernel config is not for graykull");
+            math_approx_mode = compute_kernel_config.math_approx_mode;
+            fp32_dest_acc_en = false;
+            packer_l1_acc = false;
+        } else if constexpr (std::is_same_v<T, WormholeComputeKernelConfig>) {
+            TT_ASSERT(device->arch() == ARCH::WORMHOLE_B0, "kernel config is not for wormhole_b0");
+            math_approx_mode = compute_kernel_config.math_approx_mode;
+            fp32_dest_acc_en = compute_kernel_config.fp32_dest_acc_en;
+            packer_l1_acc = compute_kernel_config.packer_l1_acc;
+        } else {
+            TT_FATAL("arch not supported");
+        }
+
+    }, compute_kernel_config);
 
     // For debug
     {
@@ -384,6 +442,8 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_(const Tensor& a, cons
         log_debug(tt::LogOp, "out_subblock_w_ntiles: {}", out_subblock_w_ntiles);
         log_debug(tt::LogOp, "out_subblock_num_tiles: {}", out_subblock_num_tiles);
         log_debug(tt::LogOp, "num_groups: {}", num_groups);
+        log_debug(tt::LogOp, "fp32_dest_acc_en: {}", fp32_dest_acc_en);
+        log_debug(tt::LogOp, "packer_l1_acc: {}", packer_l1_acc);
     }
     // parallelization config
     const auto& p_config = parallelization_config;

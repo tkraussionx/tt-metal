@@ -5,7 +5,7 @@
 import pytest
 from loguru import logger
 import numpy as np
-
+from ttnn import WormholeComputeKernelConfig
 import tt_lib as ttl
 from tt_lib.utils import (
     tilize_to_list,
@@ -19,7 +19,7 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_allclose_and_pcc,
     comp_pcc,
 )
-from models.utility_functions import is_wormhole_b0
+from models.utility_functions import is_wormhole_b0, is_grayskull
 from tests.tt_eager.python_api_testing.conv.conv_unit_test_utils import (
     create_conv_act_tensor,
     create_conv_act_tensor_special,
@@ -196,6 +196,14 @@ def test_resnet50_first_conv(
             if sharded_out
             else None
         )
+
+        if not is_grayskull():
+            compute_kernel_config = WormholeComputeKernelConfig(
+                math_fidelity=ttl.tensor.MathFidelity.HiFi4,
+                math_approx_mode=True,
+                fp32_dest_acc_en=False,
+                packer_l1_acc=False,
+            )
         out = ttl.tensor.optimized_conv(
             A_cl_device,
             B_tiled,
@@ -223,6 +231,7 @@ def test_resnet50_first_conv(
             ),
             extra_padding_for_32B_alignment,
             output_mem_config,
+            compute_kernel_config=compute_kernel_config if not is_grayskull() else None,
         )
         if sharded_out:
             out = ttl.tensor.sharded_to_interleaved(out, memory_config)
