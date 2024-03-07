@@ -82,7 +82,7 @@ def run_bert_large_ff2_matmul_test(device, dtype, in0_mem_config, in1_mem_config
         logger.debug(f"bias is on: {bias_t.memory_config().buffer_type}")
     logger.debug(f"out is on: {t2.memory_config().buffer_type}")
 
-    assert t2.shape() == [9, 1, 384, 1024]
+    assert t2.get_legacy_shape() == [9, 1, 384, 1024]
     tt_host_rm = t2.cpu().to(ttl.tensor.Layout.ROW_MAJOR)
     pyt_got_back_rm = tt_host_rm.to_torch()
 
@@ -90,8 +90,8 @@ def run_bert_large_ff2_matmul_test(device, dtype, in0_mem_config, in1_mem_config
     if bias_mem_config is not None:
         ref_bmm = ref_bmm + BIAS
     passing_pcc, output_pcc = comp_pcc(ref_bmm, pyt_got_back_rm, 0.99)
-    logger.info(f"Passing={passing_pcc}")
-    logger.info(f"Output pcc={output_pcc}")
+    logger.debug(f"Passing={passing_pcc}")
+    logger.debug(f"Output pcc={output_pcc}")
 
     assert passing_pcc
 

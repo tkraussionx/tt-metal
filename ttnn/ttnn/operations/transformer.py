@@ -161,6 +161,36 @@ def split_query_key_value_and_split_heads(
     if not ttnn.has_storage_type_of(input_tensor, ttnn.DEVICE_STORAGE_TYPE):
         raise RuntimeError("input_tensor must be on device!")
 
+    if num_kv_heads is not None:
+        if transpose_key is True:
+            raise RuntimeError("transpose_key cannot be True when num_kv_heads is passed in!")
+
+        batch_size, sequence_size, num_heads_plus_num_kv_heads_times_2_times_hidden_size = input_tensor.shape
+        (
+            _,
+            sequence_size_padded,
+            num_heads_plus_num_kv_heads_times_2_times_hidden_size_padded,
+        ) = input_tensor.shape.with_tile_padding()
+        head_size = num_heads_plus_num_kv_heads_times_2_times_hidden_size // (num_heads + num_kv_heads * 2)
+        padded_head_size = num_heads_plus_num_kv_heads_times_2_times_hidden_size_padded // (
+            num_heads + num_kv_heads * 2
+        )
+
+        if head_size % ttnn.TILE_SIZE != 0:
+            raise RuntimeError(
+                f"Head size must be a multiple of {ttnn.TILE_SIZE}! Update the preceding matmul to have the padding in the weights!"
+            )
+
+        if padded_head_size - head_size != 0:
+            raise RuntimeError("Head size cannot have tile padding!")
+
+        input_tensor = ttnn.unsqueeze_to_4D(input_tensor)
+        query, key, value = ttnn.experimental.tensor.nlp_create_qkv_heads_falcon7b(
+            input_tensor,
+            output_mem_config=memory_config,
+        )
+        return query, key, value
+
     if kv_input_tensor is not None:
         if num_kv_heads is not None:
             raise RuntimeError("num_kv_heads cannot be True when kv_input_tensor is passed in!")
@@ -171,26 +201,28 @@ def split_query_key_value_and_split_heads(
                 "kv_input_tensor must be of shape (batch_size, sequence_size, hidden_size * 2) when input_tensor is of shape (batch_size, sequence_size, hidden_size)"
             )
     else:
+        if num_kv_heads is not None:
+            raise RuntimeError("num_kv_heads cannot be True!")
         batch_size, sequence_size, three_times_hidden_size = input_tensor.shape
         _, sequence_size_padded, three_times_hidden_size_padded = input_tensor.shape.with_tile_padding()
         hidden_size = three_times_hidden_size // 3
         hidden_size_padded = three_times_hidden_size_padded // 3
-    head_size = hidden_size // num_heads
-
-    if num_kv_heads is not None:
-        if transpose_key is True:
-            raise RuntimeError("transpose_key cannot be True when num_kv_heads is passed in!")
-        input_tensor = ttnn.unsqueeze_to_4D(input_tensor)
-        query, key, value = ttnn.experimental.tensor.nlp_create_qkv_heads_falcon7b(
-            input_tensor,
-            output_mem_config=memory_config,
-        )
-        return query, key, value
 
     if not transpose_key:
         raise RuntimeError("transpose_key must be True when num_kv_heads is not passed in!")
 
-    if input_tensor.shape == (batch_size, 384, 1024 * 3) and 7 <= batch_size <= 9 and kv_input_tensor is None:
+    head_size = hidden_size // num_heads
+    padded_head_size = hidden_size_padded // num_heads
+
+    if head_size % ttnn.TILE_SIZE != 0:
+        raise RuntimeError(
+            f"Head size must be a multiple of {ttnn.TILE_SIZE}! Update the preceding matmul to have the padding in the weights!"
+        )
+
+    if padded_head_size - head_size != 0:
+        raise RuntimeError("Head size cannot have tile padding!")
+
+    if ttnn.is_sharded(input_tensor):
         input_tensor = ttnn.reshape(
             input_tensor,
             ttnn.Shape(
@@ -201,8 +233,9 @@ def split_query_key_value_and_split_heads(
 
         query, key, value = ttnn.experimental.operations.primary.transformers.split_query_key_value_and_split_heads(
             input_tensor,
-            input_tensor.device.compute_with_storage_grid_size(),
+            input_tensor.device().compute_with_storage_grid_size(),
             memory_config,
+            num_heads=num_heads,
         )
         return query, key, value
     else:
@@ -330,6 +363,9 @@ def attention_softmax(
     head_size: Optional[int],
     attention_mask: Optional[ttnn.Tensor],
     memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG,
+    program_config: Optional[
+        ttl.operations.primary.transformers.SoftmaxProgramConfig
+    ] = ttl.operations.primary.transformers.SoftmaxDefaultProgramConfig(),
 ) -> ttnn.Tensor:
     """
     attention_softmax(input_tensor: ttnn.Tensor, *, head_size: int, attention_mask: Optional[ttnn.Tensor], memory_config: MemoryConfig = DRAM_MEMORY_CONFIG) -> ttnn.Tensor
@@ -350,18 +386,16 @@ def attention_softmax(
 
     if attention_mask is not None:
         output_tensor = ttl.tensor.scale_mask_softmax(
-            input_tensor.value,
+            input_tensor,
             scaler,
-            attention_mask.value,
+            attention_mask,
             output_mem_config=memory_config,
             program_config=program_config,
         )
-        return ttnn.Tensor(output_tensor)
     else:
         scaled_input_tensor = input_tensor * scaler
-        ttl_scaled_input_tensor = scaled_input_tensor.value
-        ttl_output_tensor = ttl.tensor.softmax(ttl_scaled_input_tensor, output_mem_config=memory_config)
-        return ttnn.Tensor(ttl_output_tensor)
+        output_tensor = ttl.tensor.softmax(scaled_input_tensor, output_mem_config=memory_config)
+        return output_tensor
 
 
 @ttnn.register_operation(
@@ -403,8 +437,8 @@ def attention_softmax_(
         scaler = 1.0
 
     if attention_mask is not None:
-        ttl.operations.primary.transformers.scale_mask_softmax_in_place(
-            input_tensor.value, scaler, attention_mask.value, program_config=program_config
+        input_tensor = ttl.operations.primary.transformers.scale_mask_softmax_in_place(
+            input_tensor, scaler, attention_mask, program_config=program_config
         )
         return input_tensor
     else:
@@ -463,12 +497,18 @@ def concatenate_heads(
     batch_size, num_heads, sequence_size, head_size = input_tensor.shape
     batch_size, num_heads, padded_sequence_size, padded_head_size = input_tensor.shape.with_tile_padding()
 
-    ttl_input_tensor = input_tensor.value
-    ttl_output_tensor = ttl.tensor.nlp_concat_heads(
-        ttl_input_tensor,
+    if head_size % ttnn.TILE_SIZE != 0:
+        raise RuntimeError(
+            f"Head size must be a multiple of {ttnn.TILE_SIZE}! Update matmul that uses the output of this operation to have the padding in the weights!"
+        )
+
+    if padded_head_size - head_size != 0:
+        raise RuntimeError("Head size cannot have tile padding!")
+
+    output_tensor = ttl.tensor.nlp_concat_heads(
+        input_tensor,
         memory_config,
     )
-    output_tensor = ttnn.Tensor(ttl_output_tensor)
     output_tensor = ttnn.reshape(
         output_tensor,
         ttnn.Shape(

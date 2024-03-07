@@ -23,10 +23,11 @@
 #include "hostdevcommon/common_values.hpp"
 #include "risc_attribs.h"
 #include "third_party/umd/device/tt_silicon_driver_common.hpp"
+#ifndef COMPILE_FOR_ERISC
+#include "debug/dprint.h"
+#endif
 
 extern uint8_t noc_index;
-
-#define FORCE_INLINE inline __attribute__((always_inline))
 
 /** @file */
 
@@ -155,6 +156,12 @@ void cb_push_back(const int32_t operand, const int32_t num_pages) {
     // producer always writes into contiguous memory, it cannot wrap
     if (cb_interface[operand].fifo_wr_ptr >= cb_interface[operand].fifo_limit) {
         // TODO: change this to fifo_wr_ptr
+        #ifndef COMPILE_FOR_ERISC
+        if (cb_interface[operand].fifo_wr_ptr > cb_interface[operand].fifo_limit) {
+            DPRINT << "BAD STATE" << ENDL();
+            while(true);
+        }
+        #endif
         cb_interface[operand].fifo_wr_ptr -= cb_interface[operand].fifo_size;
     }
 }
@@ -283,6 +290,7 @@ inline void wait_for_sync_register_value(uint32_t addr, int32_t val) {
  */
 FORCE_INLINE
 void cb_reserve_back(int32_t operand, int32_t num_pages) {
+    kernel_profiler::mark_function_sum_start(CB_RESERVE_BACK_MARKER);
     uint32_t pages_acked_ptr = (uint32_t) get_cb_tiles_acked_ptr(operand);
 
     // while the producer (write-side interface) is waiting for space to free up "tiles_pushed" is not changing
@@ -306,6 +314,7 @@ void cb_reserve_back(int32_t operand, int32_t num_pages) {
         free_space_pages = (int32_t)free_space_pages_wrap;
     } while (free_space_pages < num_pages);
     DEBUG_STATUS('C', 'R', 'B', 'D');
+    kernel_profiler::mark_function_sum_end(CB_RESERVE_BACK_MARKER);
 }
 
 /**
@@ -332,6 +341,7 @@ void cb_reserve_back(int32_t operand, int32_t num_pages) {
  * */
 FORCE_INLINE
 void cb_wait_front(int32_t operand, int32_t num_pages) {
+    kernel_profiler::mark_function_sum_start(CB_WAIT_FRONT_MARKER);
     uint32_t pages_acked = get_cb_tiles_acked_ptr(operand)[0];
     uint32_t pages_received_ptr = (uint32_t) get_cb_tiles_received_ptr(operand);
 
@@ -342,6 +352,7 @@ void cb_wait_front(int32_t operand, int32_t num_pages) {
         pages_received = ((uint16_t)reg_read(pages_received_ptr)) - pages_acked;
     } while (pages_received < num_pages);
     DEBUG_STATUS('C', 'W', 'F', 'D');
+    kernel_profiler::mark_function_sum_end(CB_WAIT_FRONT_MARKER);
 }
 
 // NOC transfers
@@ -1552,6 +1563,8 @@ class Buffer {
         this->sharded = false;
     }
 
+    BufferType get_type() { return this->type; }
+
     void init_sharded(uint32_t page_size, uint32_t num_cores,  uint32_t addr, volatile tt_l1_ptr uint32_t* command_ptr){
         this->type = BufferType::L1;
         this->bank_base_address = addr;
@@ -1565,6 +1578,9 @@ class Buffer {
 
 
     void noc_async_write_buffer(uint32_t src, const uint32_t id, const uint32_t num_pages, const uint32_t offset=0) {
+        #ifndef COMPILE_FOR_ERISC
+        // DPRINT << "BUFFER WRITE" << ENDL();
+        #endif
         if (this->sharded) {
             noc_async_sharded_read_write_helper<false>(this->num_cores_, this->page_size_,
                                                 this->bank_base_address, this->base_command_addr_,
@@ -1575,8 +1591,20 @@ class Buffer {
                 noc_async_write(src, this->get_noc_addr_(id, offset), this->page_size_ * num_pages);
             }
             else {
+                // DPRINT << "BUF WRITE " << num_pages << " at " << (uint32_t)my_x[0] << ", " << (uint32_t)my_y[0] << ENDL();
+
+                // #ifndef COMPILE_FOR_ERISC
+                // #endif
                 for (uint32_t i = 0; i < num_pages; i++) {
                     uint64_t address = this->get_noc_addr_(id + i, offset);
+                    // #ifndef COMPILE_FOR_ERISC
+                    // DPRINT << "DRAM BUF WRITE" << ENDL();
+                    // uint32_t end = src + page_size_;
+                    // for (uint32_t i = src; i < end; i += sizeof(uint32_t)) {
+                    //     DPRINT << *reinterpret_cast<volatile tt_l1_ptr uint32_t*>(i) << ENDL();
+                    // }
+                    // DPRINT << ENDL();
+                    // #endif
                     noc_async_write(src, address, this->page_size_);
                     src += this->page_size_;
                 }
@@ -1586,6 +1614,9 @@ class Buffer {
     }
 
     void noc_async_read_buffer(uint32_t dst, const uint32_t id, const uint32_t num_pages, const uint32_t offset=0) {
+        #ifndef COMPILE_FOR_ERISC
+        // DPRINT << "BUFFER READ" << ENDL();
+        #endif
         if (this->sharded) {
             noc_async_sharded_read_write_helper<true>(this->num_cores_, this->page_size_,
                                             this->bank_base_address, this->base_command_addr_,

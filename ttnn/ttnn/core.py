@@ -16,23 +16,25 @@ from ttnn.types import (
     BufferType,
 )
 
+set_printoptions = ttnn._ttnn.core.set_printoptions
+
 
 def has_storage_type_of(tensor: "ttnn.Tensor", storage_type) -> bool:
-    return tensor.value.storage_type() == storage_type
+    return tensor.storage_type() == storage_type
 
 
 def is_sharded(tensor) -> bool:
-    return tensor.value.is_sharded()
+    return tensor.is_sharded()
 
 
 def get_memory_config(tensor) -> ttnn.MemoryConfig:
     if has_storage_type_of(tensor, DEVICE_STORAGE_TYPE):
-        return tensor.value.memory_config()
+        return tensor.memory_config()
     else:
         raise RuntimeError("Tensor is not on device!")
 
 
-def has_padding(tensor):
+def has_tile_padding(tensor):
     if len(tensor.shape) > 1:
         *_, h, w = tensor.shape
         *_, h_padded, w_padded = tensor.shape.with_tile_padding()

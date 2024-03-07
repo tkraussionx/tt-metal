@@ -1,4 +1,4 @@
-name: "[post-commit] all - Slow Dispatch post-commit main build and unit tests"
+name: "[post-commit] Slow Dispatch unit tests"
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
   workflow_call:
 
 jobs:
-  build-and-unit-tests-slow-dispatch:
+  unit-tests-slow-dispatch:
     strategy:
       # Do not fail-fast because we need to ensure all tests go to completion
       # so we try not to get hanging machines
@@ -25,6 +25,7 @@ jobs:
       ARCH_NAME: ${{ matrix.runner-info.arch }}
       CONFIG: ci
       TT_METAL_SLOW_DISPATCH_MODE: 1
+      LOGURU_LEVEL: INFO
     environment: dev
     runs-on: ${{ matrix.runner-info.runs-on }}
     steps:

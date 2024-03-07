@@ -65,14 +65,14 @@ def run_bert_large_post_softmax_bmm_test(device, dtype, in0_mem_config, in1_mem_
     logger.debug(f"in1 is on: {b_t.memory_config().buffer_type}")
     logger.debug(f"out is on: {t2.memory_config().buffer_type}")
 
-    assert t2.shape() == out_shape
+    assert t2.get_legacy_shape() == out_shape
     tt_host_rm = t2.cpu().to(ttl.tensor.Layout.ROW_MAJOR)
     pyt_got_back_rm = tt_host_rm.to_torch()
 
     ref_bmm = torch.matmul(A.reshape([9, 16, 384, 384]), B)
     passing_pcc, output_pcc = comp_pcc(ref_bmm, pyt_got_back_rm, 0.99)
-    logger.info(f"Passing={passing_pcc}")
-    logger.info(f"Output pcc={output_pcc}")
+    logger.debug(f"Passing={passing_pcc}")
+    logger.debug(f"Output pcc={output_pcc}")
 
     assert passing_pcc
 

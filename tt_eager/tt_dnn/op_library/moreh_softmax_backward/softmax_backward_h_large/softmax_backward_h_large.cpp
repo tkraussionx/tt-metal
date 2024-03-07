@@ -22,7 +22,7 @@ operation::ProgramWithCallbacks moreh_softmax_backward_h_large(const Tensor &out
     log_info(LogTest, "Large tensor algorithm selected");
 
     // split work
-    auto shape = input_grad.shape();
+    auto shape = input_grad.get_legacy_shape();
     auto N = shape[0];
     auto C = shape[1];
     auto H = shape[2];
@@ -40,7 +40,7 @@ operation::ProgramWithCallbacks moreh_softmax_backward_h_large(const Tensor &out
     Program program = Program();
 
     // create circular buffers
-    tt::DataFormat data_format = tt_metal::datatype_to_dataformat_converter(input_grad.dtype());
+    tt::DataFormat data_format = tt_metal::datatype_to_dataformat_converter(input_grad.get_dtype());
 
     CreateCircularBuffer(
         program,
@@ -132,11 +132,12 @@ operation::ProgramWithCallbacks moreh_softmax_backward_h_large(const Tensor &out
         const std::vector<Buffer*>& input_buffers,
         const std::vector<Buffer*>& output_buffers
     ) {
-        TT_ASSERT(input_buffers.size() == 3);
+        TT_ASSERT(input_buffers.size() == 2);
+        TT_ASSERT(output_buffers.size() == 1);
 
         auto output_dram_buffer = input_buffers.at(0);
         auto output_grad_dram_buffer = input_buffers.at(1);
-        auto input_grad_dram_buffer = input_buffers.at(2);
+        auto input_grad_dram_buffer = output_buffers.at(0);
 
         for (uint32_t icore = 0; icore < num_cores; icore++) {
             CoreCoord core = {icore / core_h, icore % core_h};

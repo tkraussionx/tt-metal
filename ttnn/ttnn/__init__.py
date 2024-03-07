@@ -43,8 +43,6 @@ from ttnn.types import (
     float32,
     MemoryConfig,
     MathFidelity,
-    WormholeComputeKernelConfig,
-    GrayskullComputeKernelConfig,
     DRAM_MEMORY_CONFIG,
     L1_MEMORY_CONFIG,
     L1_BLOCK_SHARDED_MEMORY_CONFIG,
@@ -61,13 +59,17 @@ from ttnn.types import (
     CoreRange,
     Shape,
     Tensor,
+    DeviceComputeKernelConfig,
+    WormholeComputeKernelConfig,
+    GrayskullComputeKernelConfig,
 )
 
 from ttnn.device import Device, open_device, close_device, manage_device, synchronize_device, dump_device_memory_state
 
 from ttnn.core import (
+    set_printoptions,
     has_storage_type_of,
-    has_padding,
+    has_tile_padding,
     is_sharded,
     get_memory_config,
     create_sharded_memory_config,
@@ -112,7 +114,8 @@ from ttnn.operations.core import (
 from ttnn.operations.matmul import (
     matmul,
     linear,
-    create_matmul_1d_systolic_array_config,
+    create_matmul_program_config,
+    create_matmul_1d_systolic_array_program_config,
 )
 
 from ttnn.operations.others import (

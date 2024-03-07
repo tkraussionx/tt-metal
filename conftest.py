@@ -261,11 +261,15 @@ def device_init_destroy(request):
 
     device_id = request.config.getoption("device_id")
 
+    num_devices = ttl.device.GetNumPCIeDevices()
+    assert device_id < num_devices, "CreateDevice not supported for non-mmio device"
+
     device = ttl.device.CreateDevice(device_id)
     ttl.device.SetDefaultDevice(device)
 
     yield device
 
+    ttl.device.Synchronize(device)
     ttl.device.CloseDevice(device)
 
 
@@ -283,6 +287,23 @@ def pcie_devices(request):
     import tt_lib as ttl
 
     num_devices = ttl.device.GetNumPCIeDevices()
+
+    # Get only physical devices
+    devices = ttl.device.CreateDevices([i for i in range(num_devices)])
+
+    yield [devices[i] for i in range(num_devices)]
+
+    for device in devices.values():
+        ttl.device.DeallocateBuffers(device)
+
+    ttl.device.CloseDevices(devices)
+
+
+@pytest.fixture(scope="function")
+def all_devices(request):
+    import tt_lib as ttl
+
+    num_devices = ttl.device.GetNumAvailableDevices()
 
     # Get only physical devices
     devices = ttl.device.CreateDevices([i for i in range(num_devices)])
