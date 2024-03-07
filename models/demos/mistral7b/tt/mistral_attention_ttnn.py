@@ -132,6 +132,7 @@ class TtMistralAttention(nn.Module):
             self.layer_past_list.append(layer_past)
         self.tt_sin_cached = tt_sin_cached
         self.tt_cos_cached = tt_cos_cached
+        self.grid = ttnn.CoreGrid(x=8, y=8)
 
     def forward(
         self,
@@ -160,7 +161,7 @@ class TtMistralAttention(nn.Module):
             # QKV matmuls
             ###
             xqkv_fused = ttnn.linear(
-                x, wqkv, core_grid=ttnn.CoreGrid(8, 8), memory_config=ttnn.L1_MEMORY_CONFIG, dtype=self.dtype
+                x, wqkv, core_grid=self.grid, memory_config=ttnn.L1_MEMORY_CONFIG, dtype=self.dtype
             )
 
             ###
@@ -184,13 +185,13 @@ class TtMistralAttention(nn.Module):
             # q_heads = ttnn.transformer.rotary_embedding(
             #     q_heads, self.tt_cos_cached[i], self.tt_sin_cached[i], start_pos, memory_config=ttnn.DRAM_MEMORY_CONFIG
             # )
-            q_heads = ttnn.linear(q_heads, rot_mat, core_grid=ttnn.CoreGrid(8, 8), memory_config=ttnn.L1_MEMORY_CONFIG)
+            q_heads = ttnn.linear(q_heads, rot_mat, core_grid=self.grid, memory_config=ttnn.L1_MEMORY_CONFIG)
 
             # k_heads = ttnn.experimental.tensor.rotary_embedding(
             # k_heads = ttnn.transformer.rotary_embedding(
             #     k_heads, self.tt_cos_cached[i], self.tt_sin_cached[i], start_pos, memory_config=ttnn.DRAM_MEMORY_CONFIG
             # )
-            k_heads = ttnn.linear(k_heads, rot_mat, core_grid=ttnn.CoreGrid(8, 8), memory_config=ttnn.L1_MEMORY_CONFIG)
+            k_heads = ttnn.linear(k_heads, rot_mat, core_grid=self.grid, memory_config=ttnn.L1_MEMORY_CONFIG)
 
             ###
             # KV update
@@ -307,7 +308,7 @@ class TtMistralAttention(nn.Module):
             # seqlen, 1, batch, hidden_size
 
             dense_out = ttnn.linear(
-                attn_output, wo, core_grid=ttnn.CoreGrid(8, 8), memory_config=ttnn.L1_MEMORY_CONFIG
+                attn_output, wo, core_grid=self.grid, memory_config=ttnn.L1_MEMORY_CONFIG
             )  # seqlen, 1, batch, hidden_size
 
             dense_outputs.append(dense_out)

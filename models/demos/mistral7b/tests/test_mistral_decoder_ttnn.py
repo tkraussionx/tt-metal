@@ -87,15 +87,17 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
         tt_decode_input = pt_decode_input.clone()
         start_pos = generation_start_pos + i
 
-        decode_input, start_pos, attn_mask, current_pos = prepare_inputs_ttnn(
+        decode_input, start_pos, attn_mask, current_pos, rot_mat = prepare_inputs_ttnn(
             tt_decode_input,
             start_pos,
-            tt_model.hidden_size,
-            tt_model.sliding_window,
+            model_args.dim,
+            model_args.head_dim,
+            model_args.sliding_window,
+            model_args.max_seq_len,
             tt_model.device,
         )
         # Run TT model
-        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask)
+        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask, rot_mat)
         # tt_output = tt_model(tt_input, bcast_freq_xq, bcast_freq_xk, tt_position, mask, seqlen)
 
         tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]

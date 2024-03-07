@@ -75,6 +75,6 @@ class TtTransformer(nn.Module):
             x = layer(x, start_pos, current_pos, attn_masks, rot_mat)
 
         x = self.norm(x)
-        output = ttnn.linear(x, self.output_weight, core_grid=ttnn.CoreGrid(8, 8))
+        output = ttnn.linear(x, self.output_weight, core_grid=ttnn.CoreGrid(x=8, y=8))
         ttnn.deallocate(x)
         return output
