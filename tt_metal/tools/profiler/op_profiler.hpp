@@ -178,7 +178,7 @@ std::string opName = "";
         j["optional_input_tensors"] = get_tensors_json(optional_input_tensors);
 
         std::string ser = j.dump(4);
-        return fmt::format("{}\n{}",opName, ser);
+        return fmt::format("TT_DNN_DEVICE_OP:{}\n{}",opName, ser);
     }
 
     namespace detail {

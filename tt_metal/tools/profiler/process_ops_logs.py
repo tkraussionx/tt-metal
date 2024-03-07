@@ -96,11 +96,12 @@ def impprt_tracy_op_logs(tracyLogsFolder):
         opsDataStrs = csvFile.read().split(";")
         opsData = []
         for opDataStr in opsDataStrs:
-            tmpStrs = opDataStr.split("{", 1)
-            if len(tmpStrs) > 1:
-                jsonStr = tmpStrs[-1]
-                jsonStr = "{" + jsonStr
-                opsData.append(json.loads(jsonStr))
+            if "TT_DNN_DEVICE_OP" in opDataStr:
+                tmpStrs = opDataStr.split("{", 1)
+                if len(tmpStrs) > 1:
+                    jsonStr = tmpStrs[-1]
+                    jsonStr = "{" + jsonStr
+                    opsData.append(json.loads(jsonStr))
     for opData in opsData:
         ops[opData["id"]] = opData
 
