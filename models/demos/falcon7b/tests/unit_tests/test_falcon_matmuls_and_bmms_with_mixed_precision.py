@@ -340,11 +340,26 @@ def run_falcon_matmul_test(
 
         # A = [32, 142] B = [142, 142]
         # Best config - 475k ns
-        # Theoretical: 182k
-        # usage = theoretical / actual = 38%
+        # Theoretical: 252K
+        # usage = theoretical / actual = 53%
         program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
             compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
             in0_block_w=2,
+            per_core_M=4,
+            per_core_N=18,
+            out_subblock_h=1,
+            out_subblock_w=6,
+            transpose_mcast=False,
+            fused_activation=None,
+        )
+
+        # if we pad A to [32, 144] and B to [144, 142]
+        # we get 395K cycles
+        # Theoretical: 259k
+        # Usage: 65% (first one - theoretical_first/actual = 64%)
+        program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+            compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+            in0_block_w=16,
             per_core_M=4,
             per_core_N=18,
             out_subblock_h=1,
