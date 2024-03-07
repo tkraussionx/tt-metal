@@ -323,18 +323,7 @@ def concat(
     )
 
     if rank <= 4 and all_tensors_are_tile_layout_without_padding:
-        any_tensor_has_padding = any(ttnn.has_padding(tensor) for tensor in tensors)
-
-        def convert_to_ttl_tensor(tensor):
-            if any_tensor_has_padding:
-                tensor = ttnn.to_layout(tensor, ttnn.ROW_MAJOR_LAYOUT)
-            rank = len(tensors[0].shape)
-            if rank < 4:
-                return ttnn.unsqueeze_to_4D(tensor).value
-            else:
-                return tensor.value
-
-        ttl_tensors = [convert_to_ttl_tensor(tensor) for tensor in tensors]
+        ttl_tensors = [ttnn.unsqueeze_to_4D(tensor) for tensor in tensors]
         dim = dim + 4 - rank
         output_tensor = ttnn.Tensor(ttl.tensor.concat(ttl_tensors, dim=dim, output_mem_config=memory_config))
         output_tensor = ttnn.to_layout(output_tensor, layout)
