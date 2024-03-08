@@ -9,10 +9,10 @@ import ast
 from models.lock import WaitLock
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="session", autouse=True)
 def lock_devices():
     w = WaitLock()
-    yield w
+    yield
     w.release()
 
 

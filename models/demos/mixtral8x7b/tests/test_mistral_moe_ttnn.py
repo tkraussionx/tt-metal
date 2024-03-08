@@ -35,7 +35,7 @@ from models.utility_functions import (
     "pcc",
     ((0.99,)),
 )
-def test_mistral_moe_inference(pcc, model_config, iterations, lock_devices):
+def test_mistral_moe_inference(pcc, model_config, iterations):
     ttnn.enable_program_cache()
 
     # TODO Scale the model (mixtral) to multiple devices when T3000 is available
