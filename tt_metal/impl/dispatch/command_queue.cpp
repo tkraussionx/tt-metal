@@ -996,8 +996,8 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
             pages_to_write = std::min(total_pages_to_write, (uint32_t)num_pages_available);
         }
 
-        tt::log_debug(tt::LogDispatch, "EnqueueWriteBuffer for channel {}", this->id);
         uint32_t event = this->manager.get_next_event(this->id);
+        tt::log_debug(tt::LogDispatch, "EnqueueWriteBuffer (event_id: {}) for channel {}", event, this->id);
         if (is_sharded(buffer.buffer_layout())) {
             auto command = EnqueueWriteShardedBufferCommand(
                 this->id, this->device, buffer, src, this->manager, event, dst_page_index, pages_to_write);
@@ -1048,12 +1048,14 @@ void HWCommandQueue::enqueue_program(
         this->issue_wrap();
     }
 
+    auto event_id = this->manager.get_next_event(this->id);
+    log_debug(tt::LogTest, "EnqueueProgram (event_id: {}) on CQ: {}", event_id, this->id);
     EnqueueProgramCommand command(
         this->id,
         this->device,
         program,
         this->manager,
-        this->manager.get_next_event(this->id),
+        event_id,
         stall,
         trace);
     this->enqueue_command(command, blocking);
@@ -1071,6 +1073,7 @@ void HWCommandQueue::enqueue_record_event(std::shared_ptr<Event> event) {
     event->event_id = this->manager.get_next_event(this->id);
     event->device = this->device;
     event->ready = true;
+    log_debug(tt::LogTest, "EnqueueRecordEvent (event_id: {}) on CQ: {}", event->event_id, this->id);
 
     if ((this->manager.get_issue_queue_write_ptr(this->id)) + command_size >= this->manager.get_issue_queue_limit(this->id)) {
         this->issue_wrap();
@@ -1089,7 +1092,10 @@ void HWCommandQueue::enqueue_wait_for_event(std::shared_ptr<Event> event) {
         this->issue_wrap();
     }
 
-    auto command = EnqueueWaitForEventCommand(this->id, this->device, this->manager, this->manager.get_next_event(this->id), *event);
+    auto event_id = this->manager.get_next_event(this->id);
+    log_debug(tt::LogTest, "EnqueueWaitForEvent (event_id: {}) on CQ: {}", event_id, this->id);
+
+    auto command = EnqueueWaitForEventCommand(this->id, this->device, this->manager, event_id, *event);
     this->enqueue_command(command, false);
     this->manager.next_completion_queue_push_back(align(EVENT_PADDED_SIZE, 32), this->id);
 }
@@ -1505,7 +1511,7 @@ void EnqueueWaitForEvent(CommandQueue& cq, std::shared_ptr<Event> event) {
 
 void EnqueueWaitForEventImpl(CommandQueue& cq, std::shared_ptr<Event> event) {
     event->wait_until_ready(); // Block until event populated. Worker thread.
-    log_trace(tt::LogMetal, "EnqueueWaitForEvent() issued on Event(device_id: {} cq_id: {} event_id: {}) from device_id: {} cq_id: {}",
+    log_debug(tt::LogMetal, "EnqueueWaitForEvent() issued on Event(device_id: {} cq_id: {} event_id: {}) from device_id: {} cq_id: {}",
         event->device->id(), event->cq_id, event->event_id, cq.device()->id(), cq.id());
     cq.hw_command_queue().enqueue_wait_for_event(event);
 }
