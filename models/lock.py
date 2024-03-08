@@ -36,6 +36,8 @@ class WaitLock:
                     # Attempt to acquire the lock
                     with open(self.lock_file, "w") as f:
                         f.write(str(self.pid))
+                    # Make the file world-writable in case our process dies
+                    os.chmod(self.lock_file, 0o666)
                     # Double-check if the lock was successfully acquired
                     if self._is_lock_valid():
                         break
