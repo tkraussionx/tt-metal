@@ -10,7 +10,7 @@ from models.lock import WaitLock
 
 
 @pytest.fixture(scope="session")
-def waitlock():
+def lock_devices():
     w = WaitLock()
     yield w
     w.release()
