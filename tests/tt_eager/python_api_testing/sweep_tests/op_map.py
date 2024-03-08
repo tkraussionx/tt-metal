@@ -1291,6 +1291,14 @@ op_map = {
         "tt_lib_op": ttnn_ops.eltwise_squared_difference,
         "pytorch_op": pytorch_ops.squared_difference,
     },
+    "ttnn-eltwise-add_and_apply_activation": {
+        "tt_lib_op": ttnn_ops.eltwise_add_and_apply_activation,
+        "pytorch_op": pytorch_ops.add_and_apply_activation,
+    },
+    "ttnn-eltwise-add_and_apply_activation_": {
+        "tt_lib_op": ttnn_ops.eltwise_add_and_apply_activation_,
+        "pytorch_op": pytorch_ops.add_and_apply_activation,
+    },
     "ttnn-eltwise-gtz": {
         "tt_lib_op": ttnn_ops.eltwise_gtz,
         "pytorch_op": pytorch_ops.gtz,
@@ -1547,5 +1555,13 @@ op_map = {
     "ttnn-addcmul": {
         "tt_lib_op": ttnn_ops.addcmul,
         "pytorch_op": pytorch_ops.addcmul,
+    },
+    "ttnn-groupnorm_noweights": {
+        "tt_lib_op": ttnn_ops.groupnorm_noweights,
+        "pytorch_op": pytorch_ops.groupnorm_noweights,
+    },
+    "ttnn-groupnorm": {
+        "tt_lib_op": ttnn_ops.groupnorm,
+        "pytorch_op": pytorch_ops.ttnn_groupnorm,
     },
 }

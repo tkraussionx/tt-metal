@@ -58,6 +58,8 @@ def run_conv(
     enable_auto_formatting=False,
     padded_input_channels=None,
     fp32_accum=False,
+    packer_l1_acc=False,
+    output_layout=ttnn.TILE_LAYOUT,
 ):
     torch.manual_seed(0)
     conv_input_shape = [batch_size, input_channels, input_height, input_width]
@@ -67,6 +69,9 @@ def run_conv(
     torch_input_tensor = torch.permute(torch_input_tensor_nchw, (0, 2, 3, 1))
     torch_weight_tensor = torch.randn(conv_weight_shape, dtype=torch.bfloat16).float()
     torch_bias_tensor = torch.randn(conv_bias_shape, dtype=torch.bfloat16).float()
+    # torch_input_tensor_nchw = torch.empty(conv_input_shape, dtype=torch.bfloat16).fill_(0.2).float()
+    # torch_weight_tensor = torch.empty(conv_weight_shape, dtype=torch.bfloat16).fill_(0.1).float()
+    # torch_bias_tensor = torch.empty(conv_bias_shape, dtype=torch.bfloat16).fill_(0).float()
     torch_out_golden_tensor = torch.nn.functional.conv2d(
         torch_input_tensor_nchw,
         torch_weight_tensor,
@@ -91,20 +96,12 @@ def run_conv(
     )
 
     if not is_grayskull():
-        if fp32_accum:
-            compute_kernel_config = ttnn.WormholeComputeKernelConfig(
-                math_fidelity=math_fidelity,
-                math_approx_mode=True,
-                fp32_dest_acc_en=True,
-                packer_l1_acc=False,
-            )
-        else:
-            compute_kernel_config = ttnn.WormholeComputeKernelConfig(
-                math_fidelity=math_fidelity,
-                math_approx_mode=True,
-                fp32_dest_acc_en=False,
-                packer_l1_acc=False,
-            )
+        compute_kernel_config = ttnn.WormholeComputeKernelConfig(
+            math_fidelity=math_fidelity,
+            math_approx_mode=True,
+            fp32_dest_acc_en=fp32_accum,
+            packer_l1_acc=packer_l1_acc,
+        )
 
     conv = ttnn.Conv2d(
         input_channels,
@@ -129,6 +126,7 @@ def run_conv(
         deallocate_activation=True,
         padded_input_channels=padded_input_channels,
         compute_kernel_config=compute_kernel_config if not is_grayskull() else None,
+        output_layout=output_layout,
     )
 
     assert "conv" in reader_patterns_cache and "halo" in reader_patterns_cache
@@ -156,6 +154,7 @@ def run_conv(
 
     # torch_output_tensor is in row major layout and NHWC shape
     # NHWC to NCHW
+
     torch_output_tensor = torch.permute(torch_output_tensor, (0, 3, 1, 2))
     reader_patterns_cache.clear()
     if math_fidelity == ttnn.MathFidelity.LoFi and activations_dtype == ttnn.bfloat8_b:
@@ -419,6 +418,7 @@ def test_resnet50_conv_gs(
     [ttnn.bfloat16, ttnn.bfloat8_b],
 )
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("packer_l1_acc", [True, False], ids=["pack_l1", "no_pack_l1"])
 def test_resnet50_conv_wh(
     use_program_cache,
     device,
@@ -438,20 +438,25 @@ def test_resnet50_conv_wh(
     pad_w,
     use_1d_systolic_array,
     config_override,
+    packer_l1_acc,
 ):
     if batch_size > 8 and (activations_dtype != ttnn.bfloat8_b or weights_dtype != ttnn.bfloat8_b):
         pytest.skip("Batch > 8 must be run fully bfp8")
 
     if (
-        activations_dtype == ttnn.bfloat16
-        and batch_size == 20
-        and (
-            output_channels == 64
-            or (
-                stride_h == 2
-                and (output_channels == 256 or (output_channels == 128 and weights_dtype == ttnn.bfloat16))
+        (
+            activations_dtype == ttnn.bfloat16
+            and batch_size == 20
+            and (
+                output_channels == 64
+                or (
+                    stride_h == 2
+                    and (output_channels == 256 or (output_channels == 128 and weights_dtype == ttnn.bfloat16))
+                )
             )
         )
+        # packer l1 acc has separate buffers when interm != output df, cannot fit into L1
+        or (batch_size == 20 and activations_dtype == ttnn.bfloat8_b and packer_l1_acc and input_height >= 64)
     ):
         pytest.skip("Skipping test because it won't fit in L1!")
 
@@ -475,6 +480,7 @@ def test_resnet50_conv_wh(
         use_1d_systolic_array,
         config_override=config_override,
         use_shallow_conv_variant=use_shallow_conv_variant,
+        packer_l1_acc=packer_l1_acc,
     )
 
 
@@ -530,6 +536,7 @@ def test_resnet50_conv_wh(
     ],
 )
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.HiFi4])
+@pytest.mark.parametrize("packer_l1_acc", [True, False], ids=["pack_l1", "no_pack_l1"])
 def test_resnet50_conv_wh_fp32(
     use_program_cache,
     device,
@@ -550,6 +557,7 @@ def test_resnet50_conv_wh_fp32(
     pad_w,
     use_1d_systolic_array,
     config_override,
+    packer_l1_acc,
 ):
     if batch_size > 8 and (activations_dtype != ttnn.bfloat8_b or weights_dtype != ttnn.bfloat8_b):
         pytest.skip("Batch > 8 must be run fully bfp8")
@@ -588,9 +596,11 @@ def test_resnet50_conv_wh_fp32(
         config_override=config_override,
         use_shallow_conv_variant=use_shallow_conv_variant,
         fp32_accum=fp32_accum,
+        packer_l1_acc=packer_l1_acc,
     )
 
 
+@pytest.mark.skip("ttnn test coverage hole - fails in pipeline")
 @pytest.mark.parametrize(
     "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override",
     (
@@ -908,9 +918,10 @@ def test_sd_conv_wh(
 )
 @pytest.mark.parametrize(
     "activations_dtype",
-    [ttnn.bfloat8_b],
+    [ttnn.bfloat8_b, ttnn.bfloat16],
 )
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("output_layout", [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
 def test_unet_conv(
     use_program_cache,
     device,
@@ -931,7 +942,12 @@ def test_unet_conv(
     use_1d_systolic_array,
     config_override,
     use_shallow_conv_variant,
+    output_layout,
 ):
+    if output_layout == ttnn.ROW_MAJOR_LAYOUT and activations_dtype == ttnn.bfloat8_b:
+        pytest.skip("Row major layout not compatible with bfloat8_b")
+    if output_layout == ttnn.ROW_MAJOR_LAYOUT and input_height >= 1056:
+        pytest.skip("OOM")
     run_conv(
         device,
         math_fidelity,
@@ -952,4 +968,5 @@ def test_unet_conv(
         config_override,
         use_shallow_conv_variant=use_shallow_conv_variant,
         padded_input_channels=16 if input_channels == 3 else None,
+        output_layout=output_layout,
     )

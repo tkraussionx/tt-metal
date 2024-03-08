@@ -567,6 +567,48 @@ def eltwise_squared_difference(
     return ttnn_tensor_to_torch(t2)
 
 
+def eltwise_add_and_apply_activation(
+    x,
+    y,
+    *args,
+    activation,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = setup_ttnn_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
+    t2 = ttnn.add_and_apply_activation(
+        t0, t1, activation=activation, memory_config=memory_config_to_ttnn(output_mem_config)
+    )
+
+    return ttnn_tensor_to_torch(t2)
+
+
+def eltwise_add_and_apply_activation_(
+    x,
+    y,
+    *args,
+    activation,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = setup_ttnn_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
+    t2 = ttnn.add_and_apply_activation_(
+        t0, t1, activation=activation, memory_config=memory_config_to_ttnn(output_mem_config)
+    )
+
+    return ttnn_tensor_to_torch(t2)
+
+
 def eltwise_gtz(
     x,
     *args,
@@ -1982,5 +2024,43 @@ def addcmul(
     t2 = setup_ttnn_tensor(z, device, layout[2], input_mem_config[2], dtype[2])
 
     t3 = ttnn.addcmul(t0, t1, t2, scalar, memory_config=memory_config_to_ttnn(output_mem_config))
+
+    return ttnn_tensor_to_torch(t3)
+
+
+def groupnorm_noweights(
+    x,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+
+    t1 = ttnn.group_norm(t0, num_groups=1, weight=None, bias=None)
+
+    return ttnn_tensor_to_torch(t1)
+
+
+def groupnorm(
+    x,
+    y,
+    z,
+    *args,
+    device,
+    dtype,
+    layout,
+    input_mem_config,
+    output_mem_config,
+    **kwargs,
+):
+    t0 = setup_ttnn_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
+    t1 = setup_ttnn_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
+    t2 = setup_ttnn_tensor(z, device, layout[2], input_mem_config[2], dtype[2])
+
+    t3 = ttnn.group_norm(t0, num_groups=1, weight=t1, bias=t2)
 
     return ttnn_tensor_to_torch(t3)

@@ -967,6 +967,18 @@ def squared_difference(x, y, *args, **kwargs):
     return torch.square(t_diff)
 
 
+def add_and_apply_activation(x, y, *args, **kwargs):
+    activation = kwargs.pop("activation")
+    output = torch.add(x, y)
+
+    if activation == "relu":
+        output = torch.relu(output)
+    elif activation == "gelu":
+        output = torch.gelu(output)
+
+    return output
+
+
 def logaddexp(x, y, *args, **kwargs):
     return torch.logaddexp(x, y)
 
@@ -1765,4 +1777,9 @@ def ttnn_rmsnorm(x, y, *args, **kwargs):
 def transformer_concatenate_heads(x, *args, **kwargs):
     torch_output_tensor = ttnn.transformer._torch_concatenate_heads(x)
 
+    return torch_output_tensor
+
+
+def ttnn_groupnorm(x, y, z, *args, **kwargs):
+    torch_output_tensor = torch.nn.functional.group_norm(x, num_groups=1, weight=y, bias=z)
     return torch_output_tensor
