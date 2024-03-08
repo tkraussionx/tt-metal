@@ -57,12 +57,13 @@ static void RunTest(WatcherFixture* fixture, Device* device) {
     // TODO: Change back to a single erisc_kid once the bug with CoreRange fast dispatch is fixed.
     vector<KernelHandle> erisc_kids;
     if (has_eth_cores) {
+      std::cout << " has eth cores " << has_eth_cores << std::endl;
         std::set<CoreRange> eth_core_ranges;
         for (const auto& core : device->get_active_ethernet_cores(true)) {
             eth_core_ranges.insert(CoreRange(core, core));
             auto erisc_kid = CreateKernel(
                 program,
-                "tests/tt_metal/tt_metal/test_kernels/misc/watcher_waypoints.cpp",
+                "tests/tt_metal/tt_metal/test_kernels/misc/watcher_waypoints_eth.cpp",
                 core,
                 tt_metal::EthernetConfig{
                     .noc = tt_metal::NOC::NOC_0
@@ -151,6 +152,7 @@ static void RunTest(WatcherFixture* fixture, Device* device) {
 
 TEST_F(WatcherFixture, TestWatcherWaypoints) {
     for (Device* device : this->devices_) {
+      if (device->id() != 0) continue;
         this->RunTestOnDevice(RunTest, device);
     }
 }

@@ -51,7 +51,7 @@ protected:
         CommonFixture::TearDown();
 
         // Remove the watcher output file after the test is finished.
-        std::remove(log_file_name.c_str());
+        //std::remove(log_file_name.c_str());
 
         // Reset watcher settings to their previous values
         tt::llrt::OptionsG.set_watcher_enabled(watcher_previous_enabled);
@@ -72,6 +72,6 @@ protected:
         CommonFixture::RunTestOnDevice(run_function_no_args, device);
         // Wait for a final watcher poll and then clear the log.
         std::this_thread::sleep_for(std::chrono::milliseconds(interval_ms));
-        tt::watcher_clear_log();
+//        tt::watcher_clear_log();
     }
 };
