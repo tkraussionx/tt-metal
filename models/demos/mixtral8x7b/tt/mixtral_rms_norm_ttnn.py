@@ -20,9 +20,8 @@ class TtRMSNorm(nn.Module):
         self.eps = eps
         self.state_dict = state_dict
 
-        if layer_num is None:
-            weight_name = f"{weight_key}.weight"
-        else:
+        weight_name = f"{weight_key}.weight"
+        if weight_name not in self.state_dict.keys():
             weight_name = f"layers.{layer_num}.{weight_key}.weight"
 
         torch_weight = self.state_dict[weight_name].unsqueeze(0).expand(32, 1, 1, -1)

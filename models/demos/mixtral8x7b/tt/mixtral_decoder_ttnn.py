@@ -79,7 +79,7 @@ class TtTransformerBlock(torch.nn.Module):
             TtRMSNorm(
                 device=dev,
                 state_dict=state_dict,
-                layer_num=None,  # TODO double check the logic for layer_num when scaling for all layers
+                layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
                 weight_key="attention_norm",
             )
             for dev in self.devices
@@ -88,7 +88,7 @@ class TtTransformerBlock(torch.nn.Module):
             TtRMSNorm(
                 device=dev,
                 state_dict=state_dict,
-                layer_num=None,  # TODO double check the logic for layer_num when scaling for all layers
+                layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
                 weight_key="ffn_norm",
             )
             for dev in self.devices
@@ -100,6 +100,7 @@ class TtTransformerBlock(torch.nn.Module):
         start_pos: int,
         current_pos: int,
         attn_masks: Optional[ttnn.Tensor],
+        layer_num: int = 0,
     ) -> ttnn.Tensor:
         # TODO Consider updating the remaining rms_norm and MLP modules to support multi-device
         assert isinstance(xs, list)
@@ -107,6 +108,8 @@ class TtTransformerBlock(torch.nn.Module):
         # Attention module expects a list of inputs, start_pos, attn mask (multi-device support)
         attn_norm = []
         for i in range(self.num_devices):
+            if layer_num != 0:
+                xs[i] = ttnn.permute(xs[i], (2, 1, 0, 3))
             attn_norm.append(self.attention_norm[i](xs[i]))
 
         r = self.attention(

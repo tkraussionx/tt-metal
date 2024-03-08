@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from dataclasses import dataclass
+import ttnn
+import tt_lib as ttl
 
 
 # TODO check if needed to remove this class and use the config below from HF instead
@@ -17,7 +19,6 @@ class TtModelArgs:
     sliding_window: int
     norm_eps: float
     vocab_size: int
-    moe: bool
 
     max_batch_size: int = 32
     max_seq_len: int = 4096
