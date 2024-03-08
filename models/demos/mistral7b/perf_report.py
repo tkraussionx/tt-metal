@@ -2,7 +2,7 @@ import pandas as pd
 import argparse
 
 
-def analyze_perf_csv(csv_file):
+def analyze_perf_csv(csv_file, show_all):
     df = pd.read_csv(csv_file)
     df = df[df["DEVICE FW DURATION [ns]"] != "-"]
     df["DEVICE FW DURATION [ns]"] = df["DEVICE FW DURATION [ns]"].astype(int)
@@ -56,11 +56,13 @@ def analyze_perf_csv(csv_file):
     matmul_rows["% DRAM (240)"] = 100 * matmul_rows["GB/s"] / 240  # Peak expected WH bandwidth
     matmul_rows["% FPU (82)"] = 100 * matmul_rows["TFLOP/s"] / 82  # Peak theoretical FP16 FPU performance
     matmul_rows["% TIME"] = 100 * matmul_rows["DEVICE FW DURATION [ns]"] / sum_duration
+    matmul_rows["% TIME SUM"] = matmul_rows["% TIME"].cumsum()
     matmul_sum_duration = matmul_rows["DEVICE FW DURATION [ns]"].sum()
 
     selected_columns = [
         "OP CODE",
         "% TIME",
+        "% TIME SUM",
         "% DRAM (240)",
         "% FPU (82)",
         "DEVICE FW DURATION [ns]",
@@ -76,6 +78,24 @@ def analyze_perf_csv(csv_file):
     ]
     print(matmul_rows[selected_columns])
 
+    if show_all:
+        selected_columns = [
+            "OP CODE",
+            "% TIME",
+            "% TIME SUM",
+            "DEVICE FW DURATION [ns]",
+            "CORE COUNT",
+            "INPUT_0_Y",
+            "INPUT_0_X",
+            "INPUT_1_Y",
+            "INPUT_1_X",
+            "OUTPUT_0_Y",
+            "OUTPUT_0_X",
+        ]
+        sorted_df["% TIME"] = 100 * sorted_df["DEVICE FW DURATION [ns]"] / sum_duration
+        sorted_df["% TIME SUM"] = sorted_df["% TIME"].cumsum()
+        print(sorted_df[selected_columns])
+
     print(f"Layer ms: {sum_duration / 1000000:.1f} ({matmul_sum_duration / sum_duration:.1%} matmul)")
     print(f"Tokens/sec/user: {tokens_per_sec_user:.1f}")
     print(f"Tokens/sec: {tokens_per_sec:.1f}")
@@ -84,11 +104,14 @@ def analyze_perf_csv(csv_file):
 def main():
     parser = argparse.ArgumentParser(description="Analyze perf CSV file")
     parser.add_argument(
+        "-a", "--all", action="store_true", help="List ops in the CSV file - by default only matmul ops are shown."
+    )
+    parser.add_argument(
         "csv_file", type=str, help="Path to the perf CSV file from tt-metal for a single decoder layer."
     )
     args = parser.parse_args()
 
-    analyze_perf_csv(args.csv_file)
+    analyze_perf_csv(args.csv_file, show_all=args.all)
 
 
 if __name__ == "__main__":
