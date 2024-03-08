@@ -5,7 +5,7 @@ import time
 
 
 class TtMoeLayer(nn.Module):
-    def __init__(self, experts, moe_args, devices, state_dict, num_devices, dtype):
+    def __init__(self, experts, moe_args, devices, state_dict, num_devices, dtype, base_address=""):
         super().__init__()
         assert len(experts) > 0
         self.experts = experts
@@ -14,7 +14,7 @@ class TtMoeLayer(nn.Module):
         self.dtype = dtype
         self.gates_H8 = [
             ttnn.from_torch(
-                state_dict["gate.weight"].permute(1, 0),
+                state_dict[base_address + "gate.weight"].permute(1, 0),
                 dtype=self.dtype,
                 device=device,
                 layout=ttnn.TILE_LAYOUT,
@@ -25,31 +25,30 @@ class TtMoeLayer(nn.Module):
 
     def forward(self, inputs):
         output_BS1O = []
-        results = []
         start_time = time.time()
         for i in range(len(self.devices)):
             print(f"started device {i}, time: {time.time() - start_time} ")
             self.devices[i] = self.devices[i]
-            input_i_BSH = inputs[i]
+            input_i_B1SH = inputs[i]
             expert_i_HO = self.experts[i]
-            gate_logits_BS8 = ttnn.matmul(input_i_BSH, self.gates_H8[i], core_grid=ttnn.CoreGrid(y=7, x=8))
+            gate_logits_B1S8 = ttnn.matmul(input_i_B1SH, self.gates_H8[i], core_grid=ttnn.CoreGrid(y=7, x=8))
             # TODO: falling back to pytorch for now
             # for i in range(len(self.devices)):
-            gate_logits_BS8_torch = ttnn.to_torch(gate_logits_BS8)
-            weights_BSK, selected_experts_BSK = torch.topk(gate_logits_BS8_torch, self.args.num_experts_per_tok)
-            weights_BSK = ttnn.from_torch(
-                weights_BSK, dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
+            gate_logits_B1S8_torch = ttnn.to_torch(gate_logits_B1S8)
+            weights_B1SK, selected_experts_B1SK = torch.topk(gate_logits_B1S8_torch, self.args.num_experts_per_tok)
+            weights_B1SK = ttnn.from_torch(
+                weights_B1SK, dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
             )
             # only choose i-th index
             selected_experts_0_1B = ttnn.from_torch(
-                selected_experts_BSK[:, :, 0], dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
+                selected_experts_B1SK[:, 0, :, 0], dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
             )
             selected_experts_1_1B = ttnn.from_torch(
-                selected_experts_BSK[:, :, 1], dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
+                selected_experts_B1SK[:, 0, :, 1], dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
             )
-            print("weight bsk pre sm", weights_BSK.shape)
+            print("weight bsk pre sm", weights_B1SK.shape)
             # for i in range(len(self.devices)):
-            weights_BSK = ttnn.softmax(weights_BSK, dim=-1)
+            weights_B1SK = ttnn.softmax(weights_B1SK, dim=-1)
             comp = ttnn.Tensor(
                 ttnn.experimental.tensor.full(
                     ttnn.Shape([32, 32]),
@@ -63,19 +62,18 @@ class TtMoeLayer(nn.Module):
 
             # for i in range(len(self.devices)):
             # send to host
-            weights_BSK_torch = ttnn.to_torch(weights_BSK)
+            weights_B1SK_torch = ttnn.to_torch(weights_B1SK)
             batch_ids_1B_torch = ttnn.to_torch(batch_ids_1B)
-            input_i_BSH_torch = ttnn.to_torch(input_i_BSH)
+            input_i_B1SH_torch = ttnn.to_torch(input_i_B1SH)
             head_pos_1B_torch = ttnn.to_torch(head_pos_1B)
 
             # convert batch_ids to list of indices
             batch_ids_1b_torch = batch_ids_1B_torch.view(-1).nonzero().view(-1)
             # slice input
-            input_i_bSH_torch = input_i_BSH_torch[batch_ids_1b_torch, :, :]
+            input_i_bSH_torch = input_i_B1SH_torch[batch_ids_1b_torch, 0, :, :]
             # slice weights
             head_pos_1b_torch = head_pos_1B_torch[batch_ids_1b_torch].to(dtype=torch.int64).view(-1)
-            weights_bS_torch = weights_BSK_torch[batch_ids_1b_torch, :, head_pos_1b_torch].unsqueeze(2)
-            print("weights_bS_torch", weights_bS_torch.shape, weights_BSK_torch.shape, weights_BSK.shape)
+            weights_bS_torch = weights_B1SK_torch[batch_ids_1b_torch, 0, :, head_pos_1b_torch].unsqueeze(2)
 
             # send to device
             batch_ids_b = ttnn.from_torch(
@@ -94,9 +92,6 @@ class TtMoeLayer(nn.Module):
             # create output tensor with results_bO at batch positions batch_ids_b
             output_i_BSO_torch = torch.zeros(32, 1, 4096, dtype=torch.bfloat16)
             results_bSO_torch = ttnn.to_torch(results_bSO)
-            results.append(
-                (results_bSO_torch, weights_bS_torch, batch_ids_1b_torch, head_pos_1b_torch, weights_BSK_torch)
-            )
             output_i_BSO_torch[batch_ids_1b_torch] = results_bSO_torch
             output_i_BS1O = ttnn.from_torch(
                 output_i_BSO_torch.unsqueeze(2), dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
@@ -106,9 +101,9 @@ class TtMoeLayer(nn.Module):
                 input_i_bSH,
                 weights_bS,
                 batch_ids_b,
-                weights_BSK,
+                weights_B1SK,
                 comp,
-                gate_logits_BS8,
+                gate_logits_B1S8,
                 results_bSO,
                 head_pos_1B,
                 batch_ids_1B,
@@ -137,4 +132,4 @@ class TtMoeLayer(nn.Module):
                 1.0,
             )
             print("Reduce sum done")
-        return output_BS1O_gathered, selected_experts_BSK, results
+        return output_BS1O_gathered

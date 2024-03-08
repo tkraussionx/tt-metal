@@ -48,16 +48,17 @@ def test_mistral_moe_inference(all_devices, iterations):
         for k, v in state_dict.items()
         if (k.startswith("layers.0.") and "attention" not in k and "norm" not in k)
     }
-    partial_state_dict["gate.weight"] = partial_state_dict["block_sparse_moe.gate.weight"]
+    base_address = ""
+    partial_state_dict[base_address + "gate.weight"] = partial_state_dict["block_sparse_moe.gate.weight"]
     del partial_state_dict["block_sparse_moe.gate.weight"]
 
     w1 = partial_state_dict["block_sparse_moe.w1"].view(8, 14336, 4096)
     w2 = partial_state_dict["block_sparse_moe.w2"].view(8, 4096, 14336)
     w3 = partial_state_dict["block_sparse_moe.w3"].view(8, 14336, 4096)
     for i in range(8):
-        partial_state_dict[f"experts.{i}.w1.weight"] = w1[i]
-        partial_state_dict[f"experts.{i}.w2.weight"] = w2[i]
-        partial_state_dict[f"experts.{i}.w3.weight"] = w3[i]
+        partial_state_dict[base_address + f"experts.{i}.w1.weight"] = w1[i]
+        partial_state_dict[base_address + f"experts.{i}.w2.weight"] = w2[i]
+        partial_state_dict[base_address + f"experts.{i}.w3.weight"] = w3[i]
     partial_state_dict.pop("block_sparse_moe.w1")
     partial_state_dict.pop("block_sparse_moe.w2")
     partial_state_dict.pop("block_sparse_moe.w3")
@@ -110,7 +111,7 @@ def test_mistral_moe_inference(all_devices, iterations):
         pt_decode_input = (torch.rand(batch, seqlen, model_args.dim) * 2) - 1
         tt_decode_input = [
             ttnn.from_torch(
-                pt_decode_input,
+                pt_decode_input.unsqueeze(1),
                 device=device,
                 dtype=ttnn.bfloat16,
                 memory_config=ttnn.L1_MEMORY_CONFIG,
@@ -119,22 +120,14 @@ def test_mistral_moe_inference(all_devices, iterations):
             for device in devices
         ]
         # Run TT model
-        tt_out, selected_tt, res_tt = tt_model(tt_decode_input)
+        tt_out = tt_model(tt_decode_input)
         print("Converting to torch")
         tt_output_torch = ttnn.to_torch(tt_out[0]).squeeze(2)  # [batch, seq, hidden_dim]
 
         print("Converted to torch")
 
         # Reference model
-        ref_output, selected_torch, res_torch = reference_model(pt_decode_input)
-        print("REF MODEL DONE", selected_tt, selected_torch)
-        for head in range(8):
-            print(f"head {head}")
-            # print("imtermediate results:", comp_pcc(res_tt[head][0], res_torch[head][0])[1])
-            print("imtermediate batches:", res_tt[head][2], res_torch[head][2])
-            # print("imtermediate weights:", comp_pcc(res_tt[head][1], res_torch[head][1])[1])
-            print("imtermediate heads:", res_tt[head][3], res_torch[head][3])
-            print("all weights:", comp_pcc(res_tt[head][4], res_torch[head][4])[1])
+        ref_output = reference_model(pt_decode_input)
         passing, pcc_message = comp_pcc(ref_output, tt_output_torch, pcc)
 
         logger.info(comp_allclose(ref_output, tt_output_torch))

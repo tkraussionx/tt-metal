@@ -178,9 +178,9 @@ class TransformerBlock(nn.Module):
         self.feed_forward: nn.Module
         if args.moe is not None:
             self.feed_forward = MoeLayer(
-                experts=[FeedForward(args=args) for _ in range(args.moe.num_experts)],
-                gate=nn.Linear(args.dim, args.moe.num_experts, bias=False),
-                moe_args=args.moe,
+                experts=[FeedForward(args=args) for _ in range(args.num_experts)],
+                gate=nn.Linear(args.dim, args.num_experts, bias=False),
+                moe_args=args,
             )
         else:
             self.feed_forward = FeedForward(args=args)

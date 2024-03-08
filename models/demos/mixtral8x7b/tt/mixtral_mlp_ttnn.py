@@ -8,7 +8,7 @@ import ttnn
 
 
 class TtMixtralMLP(torch.nn.Module):
-    def __init__(self, device, state_dict, args, layer_num, expert_num, dtype, grid=None):
+    def __init__(self, device, state_dict, args, layer_num, expert_num, dtype, grid=None, base_address=""):
         super().__init__()
 
         self.state_dict = state_dict
@@ -33,19 +33,19 @@ class TtMixtralMLP(torch.nn.Module):
         # self.w2 = as_tensor("w2", "FF2_MM_WEIGHTS_DTYPE")
         # self.w3 = as_tensor("w3", "FF3_MM_WEIGHTS_DTYPE")
         self.w1 = ttnn.from_torch(
-            self.state_dict[f"experts.{expert_num}.w1.weight"].permute(1, 0),
+            self.state_dict[base_address + f"experts.{expert_num}.w1.weight"].permute(1, 0),
             dtype=self.dtype,
             device=self.device,
             layout=ttnn.TILE_LAYOUT,
         )
         self.w2 = ttnn.from_torch(
-            self.state_dict[f"experts.{expert_num}.w2.weight"].permute(1, 0),
+            self.state_dict[base_address + f"experts.{expert_num}.w2.weight"].permute(1, 0),
             dtype=self.dtype,
             device=self.device,
             layout=ttnn.TILE_LAYOUT,
         )
         self.w3 = ttnn.from_torch(
-            self.state_dict[f"experts.{expert_num}.w3.weight"].permute(1, 0),
+            self.state_dict[base_address + f"experts.{expert_num}.w3.weight"].permute(1, 0),
             dtype=self.dtype,
             device=self.device,
             layout=ttnn.TILE_LAYOUT,

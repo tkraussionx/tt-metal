@@ -19,15 +19,7 @@ from models.utility_functions import (
 
 class TtMixtralAttention(nn.Module):
     def __init__(
-        self,
-        devices,
-        state_dict,
-        model_config,
-        layer_num,
-        dtype,
-        configuration,
-        tt_cos_cached,
-        tt_sin_cached,
+        self, devices, state_dict, layer_num, dtype, configuration, tt_cos_cached, tt_sin_cached, base_address
     ):
         super().__init__()
 
@@ -50,8 +42,14 @@ class TtMixtralAttention(nn.Module):
 
         # self.current = 0
 
-        layer_name = f"layers.{layer_num}.attention"
-        cache_name = lambda name: Path(model_config["DEFAULT_WEIGHT_PATH"]) / (f"{layer_name}.{name}")
+        if base_address != "":
+            layer_name = f"attention"
+        else:
+            layer_name = f"layers.{layer_num}.attention"
+        cache_name = lambda name: Path(
+            "/proj_sw/user_dev/hf_data/mistral/"
+            + {ttnn.bfloat16: "mixtral_tensor_cache_bf16", ttnn.bfloat8_b: "mixtral_tensor_cache_bfp8"}[dtype]
+        ) / (f"{layer_name}.{name}")
 
         wq_str = f"{layer_name}.wq.weight"
         wk_str = f"{layer_name}.wk.weight"
@@ -92,7 +90,7 @@ class TtMixtralAttention(nn.Module):
                 dtype=self.dtype,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 layout=ttnn.TILE_LAYOUT,
-                cache_file_name=cache_name("wqkv"),
+                cache_file_name=cache_name(f"wqkv_{i}_"),
             )
 
             wo = ttnn.as_tensor(
@@ -105,7 +103,7 @@ class TtMixtralAttention(nn.Module):
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 dtype=self.dtype,
                 layout=ttnn.TILE_LAYOUT,
-                cache_file_name=cache_name("wo"),
+                cache_file_name=cache_name(f"wo_{i}_"),
             )
 
             cache_k = torch.zeros(
@@ -154,6 +152,7 @@ class TtMixtralAttention(nn.Module):
         padded_layer_past_len = min(nearest_32(start_pos + 1), self.sliding_window)
         dense_outputs = []
         for i in range(self.num_devices):
+            print(f"started device {i}")
             x = xs[i]
             attn_mask = attn_masks[i]
             device = self.devices[i]
@@ -164,8 +163,10 @@ class TtMixtralAttention(nn.Module):
             # QKV matmuls
             ###
             xqkv_fused = ttnn.linear(
-                x, wqkv, core_grid=ttnn.CoreGrid(8, 8), memory_config=ttnn.L1_MEMORY_CONFIG, dtype=self.dtype
+                x, wqkv, memory_config=ttnn.L1_MEMORY_CONFIG, dtype=self.dtype, core_grid=ttnn.CoreGrid(y=7, x=8)
             )
+            # core_grid=ttnn.CoreGrid(y=8, x=8),
+            print(f"done wkqv on device {i}")
 
             ###
             # Reshape and rotary embeddings
@@ -262,7 +263,7 @@ class TtMixtralAttention(nn.Module):
             #     ),
             # )
 
-            attn = ttnn.experimental.operations.primary.transformers.group_attn_matmul(
+            attn = ttnn.experimental.operations.primary.transformers.attn_matmul(
                 q_heads,
                 keys,
                 compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
@@ -292,7 +293,7 @@ class TtMixtralAttention(nn.Module):
             ))
             """
 
-            attn_output = ttnn.experimental.operations.primary.transformers.group_attn_matmul(
+            attn_output = ttnn.experimental.operations.primary.transformers.attn_matmul(
                 attn,
                 values,
                 compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
@@ -307,17 +308,37 @@ class TtMixtralAttention(nn.Module):
             # ttnn.deallocate(values)
             ttnn.deallocate(q_heads)
 
-            attn_output = ttnn.transformer.concatenate_heads(attn_output, memory_config=ttnn.L1_MEMORY_CONFIG)
+            attn_output = ttnn.experimental.tensor.nlp_concat_heads(
+                attn_output, output_mem_config=ttnn.L1_MEMORY_CONFIG
+            )
             # seqlen, 1, batch, hidden_size
 
             dense_out = ttnn.linear(
-                attn_output, wo, core_grid=ttnn.CoreGrid(8, 8), memory_config=ttnn.L1_MEMORY_CONFIG
+                attn_output, wo, memory_config=ttnn.L1_MEMORY_CONFIG, core_grid=ttnn.CoreGrid(y=7, x=8)
             )  # seqlen, 1, batch, hidden_size
-
+            dense_out = ttnn.permute(dense_out, (2, 1, 0, 3))  # (32, 1, 1, 4096))
+            # dense_out = ttnn.reshape(dense_out, (1,32, 1, 4096))
             dense_outputs.append(dense_out)
+            print(f"finished device {i}")
 
         # return the sum of the outputs
         if len(dense_outputs) > 1:
-            return ttnn.experimental.tensor.all_gather(dense_outputs)
+            dense_outputs = ttnn.experimental.tensor.all_gather(dense_outputs, dim=2, num_links=1)
+            for i in range(len(dense_outputs)):
+                print("TT SHAPE", dense_outputs[i].shape)
+                # dense_outputs[i] = ttnn.experimental.tensor.pad(
+                # dense_outputs[i],
+                # [1, 256, 32, 4096],
+                # [0, 0, 0, 0], 0
+                # )
+                # dense_outputs[i] = ttnn.reshape(dense_outputs[i] , (32, 1, 256, 4096))
+                dense_outputs[i] = ttnn.experimental.tensor.reduce(
+                    dense_outputs[i],
+                    ttnn.experimental.tensor.ReduceOpMath.SUM,
+                    ttnn.experimental.tensor.ReduceOpDim.H,
+                    1.0,
+                )
+                print("done reduce")
+            return dense_outputs
         else:
             return dense_outputs

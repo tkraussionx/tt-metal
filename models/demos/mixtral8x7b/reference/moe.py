@@ -25,18 +25,8 @@ class MoeLayer(nn.Module):
         weights, selected_experts = torch.topk(gate_logits, self.args.num_experts_per_tok)
         weights = F.softmax(weights, dim=-1, dtype=torch.float).to(inputs.dtype)
         results = torch.zeros_like(inputs)
-        res_tmp = []
         for i, expert in enumerate(self.experts):
             batch_idx, _, nth_expert = torch.where(selected_experts == i)
             expert_ouput = expert(inputs[batch_idx])
-            res_tmp.append(
-                (
-                    weights[batch_idx, :, nth_expert].unsqueeze(2) * expert_ouput,
-                    weights[batch_idx, :, nth_expert],
-                    batch_idx,
-                    nth_expert,
-                    weights,
-                )
-            )
             results[batch_idx] += weights[batch_idx, :, nth_expert].unsqueeze(2) * expert_ouput
-        return results, selected_experts, res_tmp
+        return results
