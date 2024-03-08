@@ -391,16 +391,16 @@ def run_falcon_matmul_test(
         # Best config - 630K ns
         # Theoretical: 259K - 64 cores, 296k - 56 cores
         # usage = theoretical / actual = 41% (47% 56 cores)
-        # program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
-        #     compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-        #     in0_block_w=2,
-        #     per_core_M=4,
-        #     per_core_N=21,
-        #     out_subblock_h=1,
-        #     out_subblock_w=7,
-        #     transpose_mcast=False,
-        #     fused_activation=None,
-        # )
+        program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+            compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+            in0_block_w=2,
+            per_core_M=4,
+            per_core_N=21,
+            out_subblock_h=1,
+            out_subblock_w=7,
+            transpose_mcast=False,
+            fused_activation=None,
+        )
 
         # Experiment: Pad inner dim to 144 (144 * 32 = 4608), to take advantage of in0_block_w
         # This way we get 540k ns, which is (296 / 540) = 55%

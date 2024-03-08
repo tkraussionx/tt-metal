@@ -6,6 +6,7 @@ import torch
 import math
 from torch import nn
 from typing import Optional, Tuple
+from loguru import logger
 
 import tt_lib
 
@@ -238,12 +239,38 @@ class TtFalconAttention(nn.Module):
         ### FUSED QKV ###
         #################
         # This is matmul 5
-        fused_query_key_value = tt_lib.tensor.falcon_fused_qkv_matmul(
-            hidden_states,
-            self.query_key_value_weights,
-            output_mem_config=self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
-            output_dtype=self.model_config["FUSED_QKV_MM_OUTPUT_DTYPE"],
-        )
+        if llm_mode == "prefill" and is_wormhole_b0() and hidden_states.shape()[-2] == 1024:
+            compute_kernel_config = tt_lib.tensor.WormholeComputeKernelConfig(
+                math_fidelity=tt_lib.tensor.MathFidelity.LoFi,
+                math_approx_mode=True,
+                fp32_dest_acc_en=False,
+                packer_l1_acc=True,
+            )
+            program_config = tt_lib.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+                compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+                in0_block_w=2,
+                per_core_M=4,
+                per_core_N=21,
+                out_subblock_h=1,
+                out_subblock_w=7,
+                transpose_mcast=False,
+                fused_activation=None,
+            )
+            fused_query_key_value = tt_lib.operations.primary.matmul(
+                hidden_states,
+                self.query_key_value_weights,
+                program_config=program_config,
+                output_mem_config=self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
+                output_dtype=self.model_config["FUSED_QKV_MM_OUTPUT_DTYPE"],
+                compute_kernel_config=compute_kernel_config,
+            )
+        else:
+            fused_query_key_value = tt_lib.tensor.falcon_fused_qkv_matmul(
+                hidden_states,
+                self.query_key_value_weights,
+                output_mem_config=self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
+                output_dtype=self.model_config["FUSED_QKV_MM_OUTPUT_DTYPE"],
+            )
 
         ###########
         ### TMs ###
@@ -293,12 +320,43 @@ class TtFalconAttention(nn.Module):
         key_layer.deallocate()
 
         if llm_mode == "prefill":
-            # pre softmax
-            attn_weights = tt_lib.tensor.matmul(
-                query_layer,
-                key_layer_transposed,
-                output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
-            )
+            if is_wormhole_b0() and query_layer.shape()[-2] == 1024:
+                compute_kernel_config = tt_lib.tensor.WormholeComputeKernelConfig(
+                    math_fidelity=tt_lib.tensor.MathFidelity.HiFi4,
+                    math_approx_mode=True,
+                    fp32_dest_acc_en=False,
+                    packer_l1_acc=True,
+                )
+                program_config = tt_lib.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+                    compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+                    in0_block_w=1,
+                    per_core_M=4,
+                    per_core_N=4,
+                    out_subblock_h=1,
+                    out_subblock_w=1,
+                    transpose_mcast=False,
+                    fused_activation=None,
+                )
+                attn_weights = tt_lib.operations.primary.matmul(
+                    query_layer,
+                    key_layer_transposed,
+                    program_config=program_config,
+                    output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                    output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],
+                    compute_kernel_config=compute_kernel_config,
+                )
+                # attn_weights = tt_lib.tensor.matmul(
+                #     query_layer,
+                #     key_layer_transposed,
+                #     output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                # )
+            else:
+                # pre softmax
+                attn_weights = tt_lib.tensor.matmul(
+                    query_layer,
+                    key_layer_transposed,
+                    output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                )
 
         elif llm_mode == "decode":
             # TODO: switch to group_attn_matmul once multiple q heads is supported (issue #5318)
@@ -367,11 +425,39 @@ class TtFalconAttention(nn.Module):
         ########################
         if llm_mode == "prefill":
             # post-softmax :)
-            attn_output = tt_lib.tensor.matmul(
-                attn_weights,
-                value_layer,
-                output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
-            )
+            if is_wormhole_b0() and attn_weights.shape()[-2] == 1024:
+                compute_kernel_config = tt_lib.tensor.WormholeComputeKernelConfig(
+                    math_fidelity=tt_lib.tensor.MathFidelity.HiFi4,  # try this lower
+                    math_approx_mode=True,
+                    fp32_dest_acc_en=False,
+                    packer_l1_acc=True,
+                )
+                program_config = tt_lib.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                    compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+                    in0_block_w=1,
+                    out_subblock_h=4,
+                    out_subblock_w=2,
+                    per_core_M=36,
+                    per_core_N=2,
+                    fuse_batch=True,
+                    fused_activation=None,
+                    mcast_in0=False,
+                )
+
+                attn_output = tt_lib.operations.primary.matmul(
+                    attn_weights,
+                    value_layer,
+                    program_config=program_config,
+                    output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                    output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],
+                    compute_kernel_config=compute_kernel_config,
+                )
+            else:
+                attn_output = tt_lib.tensor.matmul(
+                    attn_weights,
+                    value_layer,
+                    output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                )
 
         elif llm_mode == "decode":
             # TODO: switch to group_attn_matmul once multiple q heads is supported (issue #5318)
@@ -403,11 +489,47 @@ class TtFalconAttention(nn.Module):
         )
 
         ## Selfout matmul
-        attn_output = tt_lib.tensor.falcon_selfout_matmul(
-            attn_output,
-            self.dense_weights,
-            output_mem_config=self.model_config["SELFOUT_MM_OUTPUT_MEMCFG"],
-            output_dtype=self.model_config["SELFOUT_MM_OUTPUT_DTYPE"],
-        )
+        if llm_mode == "prefill":
+            if is_wormhole_b0() and attn_output.shape()[-2] == 1024:
+                compute_kernel_config = tt_lib.tensor.WormholeComputeKernelConfig(
+                    math_fidelity=tt_lib.tensor.MathFidelity.LoFi,  # try this lower
+                    math_approx_mode=True,
+                    fp32_dest_acc_en=False,
+                    packer_l1_acc=True,
+                )
+
+                program_config = tt_lib.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+                    compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+                    in0_block_w=2,
+                    per_core_M=4,
+                    per_core_N=18,
+                    out_subblock_h=1,
+                    out_subblock_w=6,
+                    transpose_mcast=False,
+                    fused_activation=None,
+                )
+
+                attn_output = tt_lib.operations.primary.matmul(
+                    attn_output,
+                    self.dense_weights,
+                    program_config=program_config,
+                    output_mem_config=self.model_config["SELFOUT_MM_OUTPUT_MEMCFG"],
+                    output_dtype=self.model_config["SELFOUT_MM_OUTPUT_DTYPE"],
+                    compute_kernel_config=compute_kernel_config,
+                )
+            else:
+                attn_output = tt_lib.tensor.falcon_selfout_matmul(
+                    attn_output,
+                    self.dense_weights,
+                    output_mem_config=self.model_config["SELFOUT_MM_OUTPUT_MEMCFG"],
+                    output_dtype=self.model_config["SELFOUT_MM_OUTPUT_DTYPE"],
+                )
+        else:
+            attn_output = tt_lib.tensor.falcon_selfout_matmul(
+                attn_output,
+                self.dense_weights,
+                output_mem_config=self.model_config["SELFOUT_MM_OUTPUT_MEMCFG"],
+                output_dtype=self.model_config["SELFOUT_MM_OUTPUT_DTYPE"],
+            )
 
         return attn_output, layer_present
