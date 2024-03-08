@@ -7,19 +7,15 @@ from loguru import logger
 import json
 from pathlib import Path
 import ttnn
-from models.demos.mistral7b.tt.mistral_common_ttnn import (
+from models.demos.mixtral8x7b.tt.mixtral_common_ttnn import (
     precompute_freqs,
     generate_cos_sin_cache_ttnn,
     prepare_inputs_ttnn,
 )
-from models.demos.mistral7b.tt.mistral_decoder_ttnn import TtTransformerBlock
-from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs, get_model_config
-from models.demos.mistral7b.reference.model import TransformerBlock
-from models.utility_functions import (
-    comp_pcc,
-    comp_allclose,
-)
-import safetensors
+from models.demos.mixtral8x7b.tt.mixtral_decoder_ttnn import TtTransformerBlock
+from models.demos.mixtral8x7b.tt.model_config_ttnn import TtModelArgs
+from models.demos.mixtral8x7b.reference.model import TransformerBlock
+from models.utility_functions import comp_pcc, comp_allclose, get_devices_for_t3000
 
 
 @pytest.mark.parametrize(
@@ -28,14 +24,20 @@ import safetensors
 )
 @pytest.mark.parametrize(
     "iterations",
-    ((3),),
+    ((1),),
 )
 @pytest.mark.parametrize(
     "pcc",
     ((0.99),),
 )
-def test_mistral_decoder_inference(pcc, model_config, model_location_generator, device, iterations):
-    ttnn.enable_program_cache()
+def test_mixtral_decoder_inference(all_devices, pcc, model_config, iterations, lock_devices):
+    # TODO Scale the model (mixtral) to multiple devices when T3000 is available
+    num_devices = 8
+    devices = all_devices
+    print("DEVICES NUM", len(devices))
+    devices = get_devices_for_t3000(devices, num_devices)  # [ttnn.open_device(device_id=i) for i in range(8)]
+    if num_devices == 4:
+        devices += devices
     dtype_str, mem_config_str = model_config.split("-")
     if dtype_str == "BFLOAT16":
         dtype = ttnn.bfloat16
@@ -43,28 +45,39 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
         dtype = ttnn.bfloat8_b
     else:
         raise ValueError(f"Unknown dtype {dtype_str}")
-    model_config = get_model_config(model_config)
-
-    mistral_path = "/proj_sw/user_dev/mixtral-data/mistral8x7b"
+    mistral_path = "/proj_sw/user_dev/hf_data/mistral/Mixtral-8x7B-v0.1/"
     state_dict = {}
-    for i in range(20):
-        state_dict_i = safetensors.torch.load_file(mistral_path / f"model-000{i.zfill(2)}-of-00019.safetensors")
+    for i in range(1):
+        state_dict_i = torch.load(mistral_path + f"consolidated.{str(i).zfill(2)}.pt")
         state_dict.update(state_dict_i)
-    with open(mistral_path / "params.json", "r") as f:
-        model_args = TtModelArgs(**json.loads(f.read()))
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
     partial_state_dict = {k[9:]: v for k, v in state_dict.items() if (k.startswith("layers.0."))}
+    base_address = "feed_forward."
+    partial_state_dict[base_address + "gate.weight"] = partial_state_dict["block_sparse_moe.gate.weight"]
+    del partial_state_dict["block_sparse_moe.gate.weight"]
 
+    w1 = partial_state_dict["block_sparse_moe.w1"].view(8, 14336, 4096)
+    w2 = partial_state_dict["block_sparse_moe.w2"].view(8, 4096, 14336)
+    w3 = partial_state_dict["block_sparse_moe.w3"].view(8, 14336, 4096)
+    for i in range(8):
+        partial_state_dict[base_address + f"experts.{i}.w1.weight"] = w1[i]
+        partial_state_dict[base_address + f"experts.{i}.w2.weight"] = w2[i]
+        partial_state_dict[base_address + f"experts.{i}.w3.weight"] = w3[i]
+    partial_state_dict.pop("block_sparse_moe.w1")
+    partial_state_dict.pop("block_sparse_moe.w2")
+    partial_state_dict.pop("block_sparse_moe.w3")
+
+    print(partial_state_dict.keys())
+    with open("/proj_sw/user_dev/hf_data/mistral/mistral-7B-v0.1/params.json", "r") as f:
+        model_args = TtModelArgs(**json.loads(f.read()))
     model_args.max_batch_size = 32
+    model_args.moe = True
+    model_args.num_experts = 8
+    model_args.num_experts_per_tok = 2
 
     reference_model = TransformerBlock(args=model_args)
     reference_model.load_state_dict(partial_state_dict)
-
-    # TODO Scale the model (mixtral) to multiple devices when T3000 is available
-    devices = [
-        device,
-    ]
 
     tt_cos_cached, tt_sin_cached = generate_cos_sin_cache_ttnn(
         devices, model_args.head_dim, "", model_args.max_seq_len * 2, 10000, dtype
@@ -74,11 +87,11 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
         args=model_args,
         devices=devices,
         dtype=dtype,
-        state_dict=state_dict,
+        state_dict=partial_state_dict,
         layer_num=0,
-        model_config=model_config,
         tt_cos_cached=tt_cos_cached,
         tt_sin_cached=tt_sin_cached,
+        base_address=base_address,
     )
 
     generation_start_pos = 0
@@ -111,9 +124,8 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
         )
         # Run TT model
         tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask)
-        # tt_output = tt_model(tt_input, bcast_freq_xq, bcast_freq_xk, tt_position, mask, seqlen)
-
-        tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
+        print("DONE TT OUT")
+        tt_output_torch = ttnn.to_torch(tt_out[0]).squeeze(2)  # [batch, seq, hidden_dim]
 
         freqs_cis_i = freqs_cis[start_pos, :].unsqueeze(0)
         positions = torch.tensor([start_pos])
@@ -121,6 +133,7 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
         # Reference model
         # mask = tt2torch_tensor(attn_mask[0])
         ref_output = reference_model(pt_decode_input, freqs_cis_i, positions, mask=None)  # mask)
+        print("REF MODEL DONE", ref_output.shape)
 
         passing, pcc_message = comp_pcc(ref_output, tt_output_torch, pcc)
 

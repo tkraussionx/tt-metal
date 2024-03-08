@@ -18,9 +18,10 @@ class TtTransformerBlock(torch.nn.Module):
         dtype=None,
         state_dict=None,
         layer_num=None,
-        model_config=None,
         tt_cos_cached=None,
         tt_sin_cached=None,
+        num_devices=None,
+        base_address="",
     ):
         super().__init__()
 
@@ -40,20 +41,18 @@ class TtTransformerBlock(torch.nn.Module):
         self.sliding_window = args.sliding_window
 
         self.layer_num = layer_num
-        self.n_local_heads = self.n_heads // self.num_devices
-        self.n_local_kv_heads = self.n_kv_heads // self.num_devices
-
-        self.model_config = model_config
+        self.n_local_heads = self.n_heads // len(devices)
+        self.n_local_kv_heads = self.n_kv_heads // len(devices)
 
         self.attention = TtMixtralAttention(
             devices=devices,
             state_dict=state_dict,
-            model_config=model_config,
             layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
             dtype=dtype,
             configuration=args,
             tt_cos_cached=tt_cos_cached,
             tt_sin_cached=tt_sin_cached,
+            base_address=base_address,
         )
 
         self.feed_forward = TtMoeLayer(
@@ -61,22 +60,26 @@ class TtTransformerBlock(torch.nn.Module):
                 TtMixtralMLP(
                     device=devices[i],  # TODO Consider updating MLP code to support multiple devices when scaling up
                     state_dict=state_dict,
-                    model_config=model_config,
+                    args=args,
                     layer_num=layer_num,
+                    expert_num=i,
+                    dtype=dtype,
+                    base_address=base_address,
                 )
-                for i in range(args.moe.num_experts)
+                for i in range(args.num_experts)
             ],
             state_dict=state_dict,
-            layer_num=layer_num,
-            moe_args=args.moe,
-            device=devices,
+            moe_args=args,
+            devices=devices,
+            num_devices=num_devices,
+            dtype=dtype,
+            base_address=base_address,
         )
         self.attention_norm = [
             TtRMSNorm(
                 device=dev,
                 state_dict=state_dict,
-                model_config=model_config,
-                layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
+                layer_num=None,  # TODO double check the logic for layer_num when scaling for all layers
                 weight_key="attention_norm",
             )
             for dev in self.devices
@@ -85,8 +88,7 @@ class TtTransformerBlock(torch.nn.Module):
             TtRMSNorm(
                 device=dev,
                 state_dict=state_dict,
-                model_config=model_config,
-                layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
+                layer_num=None,  # TODO double check the logic for layer_num when scaling for all layers
                 weight_key="ffn_norm",
             )
             for dev in self.devices
@@ -116,8 +118,9 @@ class TtTransformerBlock(torch.nn.Module):
         h = []
         # Attention also returns multiple outputs (multi-device support)
         for i in range(self.num_devices):
-            r[i] = ttnn.reshape(r[i], (1, 1, 32, 4096))
-            h.append(self.ffn_norm[i](ttnn.experimental.tensor.add(xs[i], r[i])))
+            xs[i] = ttnn.permute(xs[i], (2, 1, 0, 3))
+            h_i = self.ffn_norm[i](ttnn.experimental.tensor.add(xs[i], r[i]))
+            h.append(h_i)
             ttnn.deallocate(xs[i])
             ttnn.deallocate(r[i])
         r = self.feed_forward(h)
@@ -125,6 +128,6 @@ class TtTransformerBlock(torch.nn.Module):
         out = []
         for i in range(self.num_devices):
             out.append(ttnn.experimental.tensor.add(h[i], r[i]))
-        ttnn.deallocate(h)
-        ttnn.deallocate(r)
+            ttnn.deallocate(h[i])
+            ttnn.deallocate(r[i])
         return out
