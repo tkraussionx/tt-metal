@@ -26,3 +26,8 @@ pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/unit_tests/test_f
 
 Falcon prefill decoder
 ./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/test_falcon_decoder.py -k \"prefill_seq1024 and BFLOAT16-DRAM\""
+
+
+Seq len 2048
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/test_falcon_decoder.py -k \"prefill_seq2048 and BFLOAT16-DRAM\""
+pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/test_falcon_decoder.py -k "prefill_seq2048 and BFLOAT16-DRAM"
