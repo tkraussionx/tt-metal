@@ -27,9 +27,7 @@ from models.experimental.mistral.reference.tokenizer import Tokenizer
 BATCH_SIZE = 1
 
 
-def run_perf_mistral(
-    expected_inference_time, expected_compile_time, device, model_location_generator, get_tt_cache_path
-):
+def run_perf_mistral(expected_inference_time, expected_compile_time, device, model_location_generator):
     profiler = Profiler()
     disable_persistent_kernel_cache()
     comments = "Mistral"
@@ -56,7 +54,7 @@ def run_perf_mistral(
         Path(mistral_path), n_layers=32, max_batch_size=max_batch_size, is_whole_model=True
     )
 
-    tt_cache_path = str(get_tt_cache_path("mistral-7B-v0.1", model_subdir="mistral")) + "/"
+    tt_cache_path = "/mnt/MLPerf/tt_dnn-models/tt/Mistral/"
     tt_model = TtTransformer(
         args=model_args,
         device=device,
@@ -129,16 +127,9 @@ def run_perf_mistral(
     ),
 )
 def test_perf_bare_metal(
-    use_program_cache,
-    expected_inference_time,
-    expected_compile_time,
-    device,
-    model_location_generator,
-    get_tt_cache_path,
+    use_program_cache, expected_inference_time, expected_compile_time, device, model_location_generator
 ):
-    run_perf_mistral(
-        expected_inference_time, expected_compile_time, device, model_location_generator, get_tt_cache_path
-    )
+    run_perf_mistral(expected_inference_time, expected_compile_time, device, model_location_generator)
 
 
 @pytest.mark.models_performance_virtual_machine
@@ -152,13 +143,6 @@ def test_perf_bare_metal(
     ),
 )
 def test_perf_virtual_machine(
-    use_program_cache,
-    expected_inference_time,
-    expected_compile_time,
-    device,
-    model_location_generator,
-    get_tt_cache_path,
+    use_program_cache, expected_inference_time, expected_compile_time, device, model_location_generator
 ):
-    run_perf_mistral(
-        expected_inference_time, expected_compile_time, device, model_location_generator, get_tt_cache_path
-    )
+    run_perf_mistral(expected_inference_time, expected_compile_time, device, model_location_generator)

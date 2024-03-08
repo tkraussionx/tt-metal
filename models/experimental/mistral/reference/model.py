@@ -126,11 +126,6 @@ class Attention(nn.Module):
         self.cache_k[:bsz].scatter_(dim=1, index=scatter_pos, src=xk[:, -self.sliding_window :])
         self.cache_v[:bsz].scatter_(dim=1, index=scatter_pos, src=xv[:, -self.sliding_window :])
 
-        # positions = [0].. 1D [0,1]
-        # src = [32,1,8,64]
-        # index = [32,1,8,64] -> [None, -1, :, :] [32,1,8,64] + [32,1,8,64]
-        # self = [32,4096,8,64]
-
         if positions.shape[0] > 1:
             # prefill
             key, value = repeat_kv(xk, xv, self.repeats)
@@ -229,11 +224,10 @@ class Transformer(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        freqs_cis_i,
         positions: torch.Tensor,
     ):
-        h = input_ids  # self.tok_embeddings(input_ids)
-        freqs_cis = freqs_cis_i  # [positions]
+        h = self.tok_embeddings(input_ids)
+        freqs_cis = self.freqs_cis[positions]
 
         mask: Optional[torch.Tensor] = None
         if input_ids.shape[1] > 1:
