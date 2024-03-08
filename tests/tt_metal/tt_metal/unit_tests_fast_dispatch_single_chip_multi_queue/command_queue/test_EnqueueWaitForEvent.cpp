@@ -204,7 +204,7 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsReadWriteWithWaitForEvent
     bool pass = true;
 
     auto current_mode = CommandQueue::default_mode();
-    for (const CommandQueue::CommandQueueMode mode : {CommandQueue::CommandQueueMode::PASSTHROUGH}) {
+    for (const CommandQueue::CommandQueueMode mode : {CommandQueue::CommandQueueMode::PASSTHROUGH, CommandQueue::CommandQueueMode::ASYNC}) {
         local_test_functions::SetAllCqsMode(cqs, mode);
         tt::log_info(tt::LogTest, "Using CQ Mode: {}", mode);
         auto start = std::chrono::system_clock::now();
@@ -255,7 +255,7 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsReadWriteWithWaitForEvent
     bool pass = true;
 
     auto current_mode = CommandQueue::default_mode();
-    for (const CommandQueue::CommandQueueMode mode : {CommandQueue::CommandQueueMode::PASSTHROUGH}) {
+    for (const CommandQueue::CommandQueueMode mode : {CommandQueue::CommandQueueMode::PASSTHROUGH, CommandQueue::CommandQueueMode::ASYNC}) {
         local_test_functions::SetAllCqsMode(cqs, mode);
         tt::log_info(tt::LogTest, "Using CQ Mode: {}", mode);
         auto start = std::chrono::system_clock::now();
@@ -323,7 +323,7 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsReadWriteWithWaitForEvent
     TT_ASSERT(cqs.size() == 2);
 
     auto current_mode = CommandQueue::default_mode();
-    for (const CommandQueue::CommandQueueMode mode : {CommandQueue::CommandQueueMode::PASSTHROUGH}) {
+    for (const CommandQueue::CommandQueueMode mode : {CommandQueue::CommandQueueMode::PASSTHROUGH, CommandQueue::CommandQueueMode::ASYNC}) {
         local_test_functions::SetAllCqsMode(cqs, mode);
         tt::log_info(tt::LogTest, "Using CQ Mode: {}", mode);
         auto start = std::chrono::system_clock::now();
