@@ -23,12 +23,20 @@ class TtMambaSSM(torch.nn.Module):
         self.num_users = num_users
         self.hidden_size = hidden_size
         self.configs = configs
-        self.tt_hidden_state = ttnn.zeros(
-            (1, 1, self.num_users, self.hidden_size * self.args.d_state),
-            layout=ttnn.TILE_LAYOUT,
-            device=self.device,
-            memory_config=ttnn.DRAM_MEMORY_CONFIG,
-        )
+        if hidden_size == args.d_inner:
+            self.tt_hidden_state = ttnn.zeros(
+                (1, 1, self.num_users, self.hidden_size * self.args.d_state),
+                layout=ttnn.TILE_LAYOUT,
+                device=self.device,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            )
+        else:
+            self.tt_hidden_state = ttnn.zeros(
+                (1, 1, self.num_users, self.hidden_size*32),
+                layout=ttnn.TILE_LAYOUT,
+                device=self.device,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            )
 
         """
         We need to split up the x_proj weights because in the reference
@@ -106,7 +114,7 @@ class TtMambaSSM(torch.nn.Module):
                     1,
                     1,
                     self.hidden_size,
-                    self.args.d_state,
+                    32,
                 ),
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
@@ -115,12 +123,20 @@ class TtMambaSSM(torch.nn.Module):
             )
 
         # zeros for broadcasting B
-        self.B_zeros = ttnn.zeros(
-            (1, 1, self.num_users, self.hidden_size * self.args.d_state),
-            layout=ttnn.TILE_LAYOUT,
-            memory_config=ttnn.DRAM_MEMORY_CONFIG,
-            device=self.device,
-        )
+        if hidden_size == self.args.d_inner:
+            self.B_zeros = ttnn.zeros(
+                (1, self.num_users, self.d_inner, self.args.d_state),
+                layout=ttnn.TILE_LAYOUT,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                device=self.device,
+            )
+        else:
+            self.B_zeros = ttnn.zeros(
+                (1, self.num_users, self.hidden_size, 32),
+                layout=ttnn.TILE_LAYOUT,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                device=self.device,
+            )
 
     def forward(self, x):
         # delta
@@ -134,28 +150,32 @@ class TtMambaSSM(torch.nn.Module):
         )
         ttnn.deallocate(dt_proj_weights)
         delta_t = ttnn.softplus(delta_t, memory_config=ttnn.L1_MEMORY_CONFIG)
-        delta_t = ttnn.to_memory_config(delta_t, memory_config=self.configs["sharded"])
 
         # B
         B_proj_weights = ttnn.to_memory_config(self.B_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
         B = ttnn.linear(x, B_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(B_proj_weights)
+        B = ttnn.permute(B, (0, 2, 1, 3))
         B_zeros = ttnn.to_memory_config(self.B_zeros, memory_config=ttnn.L1_MEMORY_CONFIG)
-        B = ttnn.Tensor(
-            ttl.tensor.bcast(B_zeros.value, B.value, math_op=ttl.tensor.BcastOpMath.ADD, dim=ttl.tensor.BcastOpDim.W)
-        )
         print(f"***************shape: {B_zeros.shape}, {B.shape}, {self.args.d_inner}, {delta_t.shape}***************")
-        # B = ttnn.to_memory_config(B, self.configs['sharded_large'])
+        
+        B = ttnn.Tensor(
+            ttl.tensor.bcast(B_zeros.value, B.value, math_op=ttl.tensor.BcastOpMath.ADD, dim=ttl.tensor.BcastOpDim.H)
+        )
         ttnn.deallocate(B_zeros)
-
+        
+        delta_t = ttnn.permute(delta_t, (0, 2, 3, 1))
         bbar = ttnn.Tensor(
             ttl.tensor.bcast(B.value, delta_t.value, math_op=ttl.tensor.BcastOpMath.MUL, dim=ttl.tensor.BcastOpDim.W)
         )
-        bbar = ttnn.to_memory_config(bbar, memory_config=self.configs["sharded_large"])
         ttnn.deallocate(B)
+        ttnn.deallocate(delta_t)
+        bbar = ttnn.reshape(bbar, (1, 1, self.num_users, self.hidden_size * 32))
+        bbar = ttnn.to_memory_config(bbar, memory_config=self.configs["sharded_large"])
+        
 
         # allocate abar
-        abar = torch.rand((1, 1, self.num_users, self.hidden_size * self.args.d_state), dtype=torch.bfloat16)
+        abar = torch.rand((1, 1, self.num_users, self.hidden_size * 32), dtype=torch.bfloat16)
         abar = ttnn.from_torch(
             abar, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=self.configs["sharded_large"]
         )
