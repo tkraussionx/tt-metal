@@ -9,6 +9,7 @@
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "impl/debug/watcher_server.hpp"
+#include "tt_metal/detail/tt_metal.hpp"
 
 using namespace tt::tt_metal;
 
@@ -172,11 +173,31 @@ TEST_F(CommandQueueFixture, TestEventsQueueWaitForEventHang) {
     EXPECT_TRUE(seen_expected_hang);
 }
 
-// Device sync. Single CQ here, less interesting than 2CQ but still useful. Ensure no hangs.
+// Readback L1 written to be CQ record_last_completed_event() / wait_for_event() functions for extra confidence they are working.
+// Alternatively, could maybe do something like check that completion queue last event ID matches that which was recorded.
+void verify_event_completed_and_synced_vals_from_l1(Device* device, uint32_t expected_last_completed, uint32_t expected_last_synced){
+    std::vector<uint32_t> last_completed_event_id;
+    std::vector<uint32_t> last_synced_event_id;
+
+    auto &completion_q_wr_core = device->command_queue().hw_command_queue().completion_queue_writer_core;
+    tt::tt_metal::detail::ReadFromDeviceL1(device, completion_q_wr_core, CQ_COMPLETION_LAST_EVENT, sizeof(uint32_t), last_completed_event_id);
+    tt::tt_metal::detail::ReadFromDeviceL1(device, completion_q_wr_core, CQ_COMPLETION_16B_SCRATCH, sizeof(uint32_t), last_synced_event_id);
+
+    log_debug(tt::LogTest, "From Core: {} Got last_completed_event_id: {} (expected: {}) last_synced_event_id: {} (expected: {})",
+        completion_q_wr_core.str(), last_completed_event_id.at(0), expected_last_completed, last_synced_event_id.at(0), expected_last_synced);
+
+    EXPECT_EQ(last_completed_event_id.at(0), expected_last_completed);
+    EXPECT_EQ(last_synced_event_id.at(0), expected_last_synced);
+}
+
+// Device sync. Single CQ here, less interesting than 2CQ but still useful. Ensure no hangs, and verify each CQ recorded
+// expected "last completed event id" and "last synced event id" in their L1 (used by WaitForEvent cmd handling).
 TEST_F(CommandQueueFixture, TestEventsQueueWaitForEventBasic) {
 
     const size_t num_events = 50;
     const size_t num_events_between_sync = 5;
+    uint32_t num_events_generated = 0;
+    uint32_t last_sync_event_idx = 0;
 
     auto current_mode = CommandQueue::default_mode();
     for (const CommandQueue::CommandQueueMode mode : {CommandQueue::CommandQueueMode::PASSTHROUGH, CommandQueue::CommandQueueMode::ASYNC}) {
@@ -189,19 +210,31 @@ TEST_F(CommandQueueFixture, TestEventsQueueWaitForEventBasic) {
         for (size_t i = 0; i < num_events; i++) {
             auto event = sync_events.emplace_back(std::make_shared<Event>());
             EnqueueRecordEvent(this->device_->command_queue(), event);
+            num_events_generated++;
 
             // Device synchronize every N number of events.
             if (i > 0 && ((i % num_events_between_sync) == 0)) {
                 log_debug(tt::LogTest, "Going to WaitForEvent for i: {}", i);
                 EnqueueWaitForEvent(this->device_->command_queue(), event);
+                last_sync_event_idx = sync_events.size() - 1;
+                num_events_generated++;
             }
         }
+
+        Finish(this->device_->command_queue());
+
+        // Safe to look at event ID now for async, since complete.
+        verify_event_completed_and_synced_vals_from_l1(this->device_, num_events_generated-1, sync_events.at(last_sync_event_idx)->event_id);
 
         // A bunch of bonus syncs where event_id is mod on earlier ID's.
         EnqueueWaitForEvent(this->device_->command_queue(), sync_events.at(0));
         EnqueueWaitForEvent(this->device_->command_queue(), sync_events.at(sync_events.size() - 5));
         EnqueueWaitForEvent(this->device_->command_queue(), sync_events.at(4));
+        num_events_generated += 3;
         Finish(this->device_->command_queue());
+
+        // The last event seen to be completed by wait_for_event would be 2 events ago.
+        verify_event_completed_and_synced_vals_from_l1(this->device_, num_events_generated-1, num_events_generated-2);
 
         std::chrono::duration<double> elapsed_seconds = (std::chrono::system_clock::now() - start);
         tt::log_info(tt::LogTest, "Test with CQ Mode: {} Finished in {:.2f} us", mode, elapsed_seconds.count() * 1000 * 1000);
