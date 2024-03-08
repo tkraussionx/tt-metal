@@ -136,6 +136,12 @@ class TtMixtralAttention(nn.Module):
             self.layer_past_list.append(layer_past)
         self.tt_sin_cached = tt_sin_cached
         self.tt_cos_cached = tt_cos_cached
+        self.compute_kernel = ttnn.WormholeComputeKernelConfig(
+            math_fidelity=ttnn.MathFidelity.LoFi,
+            fp32_dest_acc_en=True,
+            packer_l1_acc=True,
+        )
+        self.core_grid = ttnn.CoreGrid(y=7, x=8)
 
     def forward(
         self,
@@ -163,7 +169,12 @@ class TtMixtralAttention(nn.Module):
             # QKV matmuls
             ###
             xqkv_fused = ttnn.linear(
-                x, wqkv, memory_config=ttnn.L1_MEMORY_CONFIG, dtype=self.dtype, core_grid=ttnn.CoreGrid(y=7, x=8)
+                x,
+                wqkv,
+                dtype=self.dtype,
+                memory_config=ttnn.L1_MEMORY_CONFIG,
+                core_grid=self.core_grid,
+                compute_kernel_config=self.compute_kernel,
             )
             # core_grid=ttnn.CoreGrid(y=8, x=8),
             print(f"done wkqv on device {i}")
@@ -314,7 +325,11 @@ class TtMixtralAttention(nn.Module):
             # seqlen, 1, batch, hidden_size
 
             dense_out = ttnn.linear(
-                attn_output, wo, memory_config=ttnn.L1_MEMORY_CONFIG, core_grid=ttnn.CoreGrid(y=7, x=8)
+                attn_output,
+                wo,
+                memory_config=ttnn.L1_MEMORY_CONFIG,
+                core_grid=self.core_grid,
+                compute_kernel_config=self.compute_kernel,
             )  # seqlen, 1, batch, hidden_size
             dense_out = ttnn.permute(dense_out, (2, 1, 0, 3))  # (32, 1, 1, 4096))
             # dense_out = ttnn.reshape(dense_out, (1,32, 1, 4096))

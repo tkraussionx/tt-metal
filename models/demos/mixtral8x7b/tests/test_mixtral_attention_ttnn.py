@@ -31,8 +31,8 @@ from models.utility_functions import get_devices_for_t3000
     "iterations",
     ((1),),
 )
-def test_mixtral_attention_inference(all_devices, model_config, iterations, lock_devices):
-    # TODO Scale the model (mixtral) to multiple devices when T3000 is available
+def test_mixtral_attention_inference(all_devices, model_config, iterations):
+    pcc = 0.99
     num_devices = 8
     devices = all_devices
     print("DEVICES NUM", len(devices))
@@ -42,10 +42,8 @@ def test_mixtral_attention_inference(all_devices, model_config, iterations, lock
     dtype_str, mem_config_str = model_config.split("-")
     if dtype_str == "BFLOAT16":
         dtype = ttnn.bfloat16
-        pcc = 0.99
     elif dtype_str == "BFLOAT8":
         dtype = ttnn.bfloat8_b
-        pcc = 0.98
     else:
         raise ValueError(f"Unknown dtype {dtype_str}")
 
@@ -77,7 +75,7 @@ def test_mixtral_attention_inference(all_devices, model_config, iterations, lock
     tt_model = TtMixtralAttention(
         devices,
         state_dict,
-        model_config=model_config,
+        base_address="",
         layer_num=0,
         dtype=dtype,
         configuration=model_args,
