@@ -410,4 +410,221 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsReadWriteWithWaitForEvent
 }
 
 
+// Return 3 buffers (L1, DRAM, DRAM) for loopback kernel (DRAM -> L1 -> DRAM) program
+std::vector<std::shared_ptr<Buffer>> test_get_buffers(Device* device, uint32_t num_tiles){
+
+    constexpr uint32_t single_tile_size = 2 * (32 * 32);
+    uint32_t dram_buffer_size = single_tile_size * num_tiles;
+    // size_t buf_size = config.num_pages * config.page_size;
+
+
+    tt::tt_metal::InterleavedBufferConfig dram_config{
+                .device= device,
+                .size = dram_buffer_size,
+                .page_size = dram_buffer_size,
+                .buffer_type = tt::tt_metal::BufferType::DRAM
+    };
+    tt::tt_metal::InterleavedBufferConfig l1_config{
+                .device= device,
+                .size = dram_buffer_size,
+                .page_size = dram_buffer_size,
+                .buffer_type = tt::tt_metal::BufferType::L1
+    };
+
+    std::vector<std::shared_ptr<Buffer>> buffers;
+    buffers.emplace_back(CreateBuffer(l1_config));
+    buffers.emplace_back(CreateBuffer(dram_config));
+    buffers.emplace_back(CreateBuffer(dram_config));
+    return buffers;
+}
+
+Program test_set_runtime_args_get_program(Device* device, std::vector<std::shared_ptr<Buffer>> buffers) {
+
+    Program program = CreateProgram();
+    constexpr CoreCoord core = {0, 0};
+
+    KernelHandle dram_copy_kernel_id = CreateKernel(
+        program,
+        "tt_metal/programming_examples/loopback/kernels/loopback_dram_copy.cpp",
+        core,
+        DataMovementConfig{.processor = DataMovementProcessor::RISCV_0, .noc = NOC::RISCV_0_default}
+    );
+
+    TT_ASSERT(buffers.size() == 3);
+    TT_ASSERT(buffers.at(0)->size() == buffers.at(1)->size());
+    TT_ASSERT(buffers.at(1)->size() == buffers.at(2)->size());
+
+    std::shared_ptr<RuntimeArgs> runtime_args = std::make_shared<RuntimeArgs>();
+    *runtime_args = {
+        buffers.at(0).get(),
+        buffers.at(1).get(),
+        static_cast<uint32_t>(buffers.at(1)->noc_coordinates().x),
+        static_cast<uint32_t>(buffers.at(1)->noc_coordinates().y),
+        buffers.at(2).get(),
+        static_cast<uint32_t>(buffers.at(2)->noc_coordinates().x),
+        static_cast<uint32_t>(buffers.at(2)->noc_coordinates().y),
+        buffers.at(0)->size()
+    };
+
+    SetRuntimeArgs(
+        device,
+        detail::GetKernel(program, dram_copy_kernel_id),
+        core,
+        runtime_args
+    );
+
+    return program;
+}
+
+
+// TODO - Put in local functions namespace.
+bool test_events_write_program_read(EventsTestConfig &config, Device* device) {
+
+    vector<std::reference_wrapper<CommandQueue>> cqs;
+
+    for (auto i = 0; i < device->num_hw_cqs(); i++) {
+        cqs.push_back(device->command_queue(i));
+    }
+    TT_ASSERT(cqs.size() == 2);
+
+    auto current_cq_mode = CommandQueue::default_mode();
+    local_test_functions::SetAllCqsMode(cqs, config.cq_mode);
+
+    bool pass = true;
+
+    auto &cq_write  = cqs[config.cq_idx_write];
+    auto &cq_read   = cqs[config.cq_idx_read];
+    auto &cq_prog   = cqs[config.cq_idx_prog];
+    log_info(tt::LogTest, "{} starting w/ blocking: {} CqMode: {} cq_write: {} cq_prog: {} cq_read: {}", __FUNCTION__, config.blocking, config.cq_mode, cq_write.get().id(), cq_prog.get().id(), cq_read.get().id());
+
+    // FIXME - Add Events to synchronize between CQs. Always, or just with multi-CQ and non-blocking?
+    // FIXME - Loop to do this multiple times.
+    // FIXME - Multiple back to back programs.
+
+    auto buffers = test_get_buffers(device, config.num_tiles_or_pages);
+    auto program = test_set_runtime_args_get_program(device, buffers);
+    auto input_vec = generate_arange_vector(buffers.back()->size(), 0);
+    std::vector<uint32_t> result_vec;
+
+    for (int i=0; i < config.num_loops; i++) {
+        log_info(tt::LogTest, "Starting test loop: {}", i);
+
+        EnqueueWriteBuffer(cq_write, buffers[1], input_vec, config.blocking);
+
+        if (!config.never_use_events && (config.always_use_events || config.cq_idx_write != config.cq_idx_prog)) {
+            log_info(tt::LogTest, "Inserting RecordEvent on cq: {} (write) and WaitForEvent on cq: {} (prog)", cq_write.get().id(), cq_prog.get().id());
+            auto sync_event = std::make_shared<Event>();
+            EnqueueRecordEvent(cq_write, sync_event);
+            EnqueueWaitForEvent(cq_prog, sync_event);
+        }
+
+        EnqueueProgram(cq_prog, program, config.blocking);
+
+        if (!config.never_use_events && (config.always_use_events || config.cq_idx_read != config.cq_idx_prog)) {
+            log_info(tt::LogTest, "Inserting RecordEvent on cq: {} (prog) and WaitForEvent on cq: {} (read)", cq_prog.get().id(), cq_read.get().id());
+            auto sync_event = std::make_shared<Event>();
+            EnqueueRecordEvent(cq_prog, sync_event);
+            EnqueueWaitForEvent(cq_read, sync_event);
+        }
+
+        EnqueueReadBuffer(cq_read, buffers[2], result_vec, config.blocking);
+        local_test_functions::FinishAllCqs(cqs);
+
+        bool local_pass = input_vec == result_vec;
+        pass &= local_pass;
+
+        if (!local_pass) {
+            // log_info(tt::LogTest, "KCM Checking local_pass: {} input_vec: {} result_vec: {}", local_pass, input_vec, result_vec);
+            log_info(tt::LogTest, "KCM i: {} Checking local_pass: {} - First 16 elements of input_vec: {} result_vec: {}", i, local_pass,
+                fmt::join(input_vec.begin(), input_vec.size() > 16 ? input_vec.begin() + 16 : input_vec.end(), ", "),
+                fmt::join(result_vec.begin(), result_vec.size() > 16 ? result_vec.begin() + 16 : result_vec.end(), ", "));
+        } else {
+            log_info(tt::LogTest, "KCM i: {} Checking local_pass: {}", i, local_pass);
+        }
+    }
+
+    local_test_functions::SetAllCqsMode(cqs, current_cq_mode); // Restore for next test.
+
+    return pass;
+}
+
+
+// These all pass right now.
+// Consider merging async + passthrough modes into tests that pass both of them.
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+// Simple CQ0 tests                                                                                 //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsWriteProgram_B_CQ0_Passthrough) {
+    EventsTestConfig config = {.blocking = true, .cq_mode = CommandQueue::CommandQueueMode::PASSTHROUGH, .cq_idx_write = 0, .cq_idx_read = 0, .cq_idx_prog = 0, .num_tiles_or_pages = 1};
+    EXPECT_TRUE(test_events_write_program_read(config, this->device_));
+}
+
+TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsWriteProgram_NB_CQ0_Passthrough) {
+    EventsTestConfig config = {.blocking = false, .cq_mode = CommandQueue::CommandQueueMode::PASSTHROUGH, .cq_idx_write = 0, .cq_idx_read = 0, .cq_idx_prog = 0, .num_tiles_or_pages = 1};
+    EXPECT_TRUE(test_events_write_program_read(config, this->device_));
+}
+
+TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsWriteProgram_B_CQ0_Async) {
+    EventsTestConfig config = {.blocking = true, .cq_mode = CommandQueue::CommandQueueMode::ASYNC, .cq_idx_write = 0, .cq_idx_read = 0, .cq_idx_prog = 0, .num_tiles_or_pages = 1};
+    EXPECT_TRUE(test_events_write_program_read(config, this->device_));
+}
+
+TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsWriteProgram_NB_CQ0_Async) {
+    EventsTestConfig config = {.blocking = false, .cq_mode = CommandQueue::CommandQueueMode::ASYNC, .cq_idx_write = 0, .cq_idx_read = 0, .cq_idx_prog = 0, .num_tiles_or_pages = 1};
+    EXPECT_TRUE(test_events_write_program_read(config, this->device_));
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+// Mix of CQ0 and CQ1 tests - Program on CQ0, Write/Read input/output buffers on CQ1.               //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsWriteProgram_B_CQ01_Passthrough) {
+    EventsTestConfig config = {.blocking = true, .cq_mode = CommandQueue::CommandQueueMode::PASSTHROUGH, .cq_idx_write = 1, .cq_idx_read = 1, .cq_idx_prog = 0, .num_tiles_or_pages = 1};
+    EXPECT_TRUE(test_events_write_program_read(config, this->device_));
+}
+
+// Always | FATAL    | Event ID is expected to increase. Wrapping not supported for sync. (cq_id: 0 completed event 2 but last recorded completed event is 3)
+TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsWriteProgram_NB_CQ01_Passthrough) {
+    EventsTestConfig config = {.blocking = false, .cq_mode = CommandQueue::CommandQueueMode::PASSTHROUGH, .cq_idx_write = 1, .cq_idx_read = 1, .cq_idx_prog = 0, .num_tiles_or_pages = 1};
+    EXPECT_TRUE(test_events_write_program_read(config, this->device_));
+}
+
+TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsWriteProgram_B_CQ01_Async) {
+    EventsTestConfig config = {.blocking = true, .cq_mode = CommandQueue::CommandQueueMode::ASYNC, .cq_idx_write = 1, .cq_idx_read = 1, .cq_idx_prog = 0, .num_tiles_or_pages = 1};
+    EXPECT_TRUE(test_events_write_program_read(config, this->device_));
+}
+
+// This also hits assert.
+TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsWriteProgram_NB_CQ01_Async) {
+    EventsTestConfig config = {.blocking = false, .cq_mode = CommandQueue::CommandQueueMode::ASYNC, .cq_idx_write = 1, .cq_idx_read = 1, .cq_idx_prog = 0, .num_tiles_or_pages = 1};
+    EXPECT_TRUE(test_events_write_program_read(config, this->device_));
+}
+
+// Many loops
+TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsWriteProgram_NB_CQ01_Async_loops) {
+    EventsTestConfig config = {.blocking = false, .cq_mode = CommandQueue::CommandQueueMode::ASYNC, .cq_idx_write = 1, .cq_idx_read = 1, .cq_idx_prog = 0, .num_tiles_or_pages = 8, .num_loops = 20};
+    EXPECT_TRUE(test_events_write_program_read(config, this->device_));
+}
+
+// Expected to mismatch, negative test.
+// Hard to get to fail. Failed with 4 pages and 20 loops, but not with 8.
+TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsWriteProgram_NB_CQ01_Async_loops_no_events) {
+    EventsTestConfig config = {.blocking = false, .cq_mode = CommandQueue::CommandQueueMode::ASYNC, .cq_idx_write = 1, .cq_idx_read = 1, .cq_idx_prog = 0, .num_tiles_or_pages = 4, .never_use_events = true, .num_loops = 20};
+    EXPECT_TRUE(test_events_write_program_read(config, this->device_));
+}
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+// Interesting tests:                                                                               //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+// TODO - Multiple loops of programs.
+// TODO - Random test
+//
+
+
+
 }  // end namespace basic_tests
