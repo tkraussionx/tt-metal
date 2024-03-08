@@ -51,6 +51,12 @@ class TtMixtralMLP(torch.nn.Module):
             layout=ttnn.TILE_LAYOUT,
         )
 
+        self.compute_kernel = ttnn.WormholeComputeKernelConfig(
+            math_fidelity=ttnn.MathFidelity.LoFi,
+            fp32_dest_acc_en=True,
+            packer_l1_acc=True,
+        )
+
     def forward(self, x: ttnn.Tensor) -> ttnn.Tensor:
         """
         w1 -> gate_proj
@@ -62,12 +68,32 @@ class TtMixtralMLP(torch.nn.Module):
         # shard = ttnn.create_sharded_memory_config(ff1_output_shape, self.grid, ttnn.ShardStrategy.WIDTH)
 
         w1_out = ttnn.linear(
-            x, self.w1, activation="silu", core_grid=self.grid, use_1d_systolic_array=True  # , memory_config=shard
+            x,
+            self.w1,
+            activation="silu",
+            core_grid=self.grid,
+            use_1d_systolic_array=True,
+            memory_config=ttnn.L1_MEMORY_CONFIG,
+            # , memory_config=shard
+            compute_kernel_config=self.compute_kernel,
         )
-        w3_out = ttnn.linear(x, self.w3, core_grid=self.grid, use_1d_systolic_array=True)  # , memory_config=shard
+        w3_out = ttnn.linear(
+            x,
+            self.w3,
+            core_grid=self.grid,
+            use_1d_systolic_array=True,
+            memory_config=ttnn.L1_MEMORY_CONFIG,
+            # , memory_config=shard
+            compute_kernel_config=self.compute_kernel,
+        )
         w2_in = ttnn.mul(w1_out, w3_out)  # , memory_config=shard)
         w2_out = ttnn.linear(
-            w2_in, self.w2, core_grid=self.grid, use_1d_systolic_array=True, memory_config=ttnn.L1_MEMORY_CONFIG
+            w2_in,
+            self.w2,
+            core_grid=self.grid,
+            use_1d_systolic_array=True,
+            memory_config=ttnn.L1_MEMORY_CONFIG,
+            compute_kernel_config=self.compute_kernel,
         )
 
         return w2_out

@@ -20,32 +20,22 @@ from models.utility_functions import get_devices_for_t3000
 
 
 @pytest.mark.parametrize(
-    "model_config",
-    ("BFLOAT16-DRAM", "BFLOAT8-DRAM"),
-)
-@pytest.mark.parametrize(
     "iterations",
     ((1,)),
 )
-@pytest.mark.parametrize(
-    "pcc",
-    ((0.99,)),
-)
-def test_mistral_moe_inference(all_devices, pcc, model_config, iterations):
-    # TODO Scale the model (mixtral) to multiple devices when T3000 is available
-    num_devices = 8
+def test_mistral_moe_inference(all_devices, iterations):
+    pcc = 0.99
+    dtype = ttnn.bfloat8_b
+    torch.manual_seed(0)
+
     devices = all_devices
-    print("DEVICES NUM", len(devices))
+    num_devices = len(devices)
+    assert num_devices in (4, 8), "This test requires a T3000 (4 or 8 devices)"
+
     devices = get_devices_for_t3000(devices, num_devices)  # [ttnn.open_device(device_id=i) for i in range(8)]
     if num_devices == 4:
         devices += devices
-    dtype_str, mem_config_str = model_config.split("-")
-    if dtype_str == "BFLOAT16":
-        dtype = ttnn.bfloat16
-    elif dtype_str == "BFLOAT8":
-        dtype = ttnn.bfloat8_b
-    else:
-        raise ValueError(f"Unknown dtype {dtype_str}")
+
     mistral_path = "/proj_sw/user_dev/hf_data/mistral/Mixtral-8x7B-v0.1/"
     state_dict = {}
     for i in range(1):
@@ -84,7 +74,7 @@ def test_mistral_moe_inference(all_devices, pcc, model_config, iterations):
     tt_model = TtMoeLayer(
         experts=[
             TtMixtralMLP(
-                device=devices[i],  # TODO Consider updating MLP code to support multiple devices when scaling up
+                device=devices[i],
                 state_dict=partial_state_dict,
                 args=model_args,
                 layer_num=None,
