@@ -90,7 +90,7 @@ ttMetalFunctionsSet = set()
 
 
 def impprt_tracy_op_logs(tracyLogsFolder):
-    logger.info(f"Import ops logs")
+    logger.info(f"Importting ops logs")
     tracyOpTimesLog = os.path.join(tracyLogsFolder, TRACY_OPS_TIMES_FILE_NAME)
     tracyOpDataLog = os.path.join(tracyLogsFolder, TRACY_OPS_DATA_FILE_NAME)
 
@@ -100,7 +100,7 @@ def impprt_tracy_op_logs(tracyLogsFolder):
         opsDataStrs = csvFile.read().split(";")
         opsData = []
         for opDataStr in opsDataStrs:
-            if "TT_DNN_DEVICE_OP" in opDataStr:
+            if "TT_DNN" in opDataStr:
                 tmpStrs = opDataStr.split("{", 1)
                 if len(tmpStrs) > 1:
                     jsonStr = tmpStrs[-1]
@@ -113,6 +113,7 @@ def impprt_tracy_op_logs(tracyLogsFolder):
         csvReader = csv.DictReader(csvFile)
         for op in csvReader:
             opID = int(op["zone_text"].split(":")[-1])
+            assert opID in ops.keys(), f"Op time for op {opID} must present"
             ops[opID]["host_time"] = op
 
     return ops
@@ -142,32 +143,39 @@ def get_device_op_data(ops):
     return deviceOps
 
 
-# def duration_tuple_to_list(series):
-# ret = series.copy()
-# ret["durationType"]
-
-
 def append_device_data(ops, deviceLogFolder):
-    logger.info(f"Appending device data")
     deviceOps = get_device_op_data(ops)
+    logger.info(f"Appending device data")
     deviceTimesLog = os.path.join(deviceLogFolder, PROFILER_DEVICE_SIDE_LOG)
     if os.path.isfile(deviceTimesLog):
         setup = device_post_proc_config.default_setup()
         setup.deviceInputLog = deviceTimesLog
         deviceData = import_log_run_stats(setup)
+        freq = deviceData["deviceInfo"]["freq"]
         for device in deviceOps:
             assert device in deviceData["devices"].keys()
             deviceOpsTime = deviceData["devices"][device]["cores"]["DEVICE"]["riscs"]["TENSIX"]["ops"]
-            assert len(deviceOps[device]) == len(deviceOpsTime)
+            if len(deviceOps[device]) != len(deviceOpsTime):
+                logger.warning(
+                    f"Device data mismatch. Expected {len(deviceOps[device])} but recieved {len(deviceOpsTime)} ops on device {device}"
+                )
             for deviceOp, deviceOpTime in zip(deviceOps[device], deviceOpsTime):
+                cores = set()
+                for timeID, ts, risc, core in deviceOpTime["timeseries"]:
+                    if core not in cores:
+                        cores.add(core)
+                deviceOp["core_usage"] = {"count": len(cores), "cores": [str(core) for core in cores]}
                 deviceOp["device_time"] = {
                     analysis: data["series"] for analysis, data in deviceOpTime["analysis"].items()
                 }
+                for analysis, data in deviceOp["device_time"].items():
+                    for sample in data:
+                        sample["duration_ns"] = sample["duration_cycles"] * 1000 / freq
     return deviceOps
 
 
 def generate_reports(ops, deviceOps, outputFolder, date, nameAppend):
-    logger.info(f"OPs' perf analysis is finished! Generating CSVs ...")
+    logger.info(f"OPs' perf analysis is finished! Generating YAMLs and CSVs ...")
     outFolder = PROFILER_OUTPUT_DIR
     if outputFolder:
         outFolder = outputFolder
@@ -192,7 +200,7 @@ def generate_reports(ops, deviceOps, outputFolder, date, nameAppend):
         yaml.safe_dump(ops, allOpsYAML, default_flow_style=False)
     logger.info(f"OPs yaml generated at: {allOpsYAMLPath}")
 
-    logger.info(f"Generating OPs yaml")
+    logger.info(f"Generating Device OPs yaml")
     deviceOpsYAMLPath = os.path.join(outFolder, f"{name}_devices_ops.yaml")
     with open(deviceOpsYAMLPath, "w") as deviceOpsYAML:
         yaml.safe_dump(deviceOps, deviceOpsYAML, default_flow_style=False)

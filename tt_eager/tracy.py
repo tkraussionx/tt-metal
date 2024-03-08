@@ -11,7 +11,7 @@ import time
 
 from loguru import logger
 
-from tt_metal.tools.profiler.common import TT_METAL_HOME, PROFILER_BIN_DIR, PROFILER_LOGS_DIR
+from tt_metal.tools.profiler.common import TT_METAL_HOME, PROFILER_BIN_DIR, PROFILER_LOGS_DIR, PROFILER_SCRIPTS_ROOT
 
 TRACY_MODULE_PATH = TT_METAL_HOME / "tt_metal/third_party/tracy"
 TRACY_FILE_NAME = "tracy_profile_log_host.tracy"
@@ -164,6 +164,10 @@ def generate_report():
         )
 
     logger.info(f"Host side ops data report generated at {PROFILER_LOGS_DIR / TRACY_OPS_DATA_FILE_NAME}")
+
+    postProcessCmd = f"{PROFILER_SCRIPTS_ROOT}/process_ops_logs.py --date"
+
+    os.system(postProcessCmd)
 
 
 def main():

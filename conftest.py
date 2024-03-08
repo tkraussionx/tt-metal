@@ -279,7 +279,7 @@ def device(device_init_destroy):
 
     device = ttl.device.GetDefaultDevice()
     yield device
-    ttl.device.DumpDeviceProfiler(device)
+    ttl.device.DumpDeviceProfiler(device, True)
     ttl.device.DeallocateBuffers(device)
 
 

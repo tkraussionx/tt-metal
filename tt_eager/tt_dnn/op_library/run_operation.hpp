@@ -242,8 +242,7 @@ inline void log_operation(
 inline uint32_t assign_id()
 {
     static std::atomic<uint32_t> atomic_count{0};
-    atomic_count ++;
-    return atomic_count;
+    return atomic_count.fetch_add(1);
 }
 
 std::vector<Tensor> run(

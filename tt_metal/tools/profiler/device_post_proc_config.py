@@ -27,50 +27,50 @@ class default_setup(metaclass=MergeMetaclass):
         "FW_START->FW_END": {
             "across": "ops",
             "type": "op_first_last",
-            "start": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-FW" for risc in riscTypes]},
-            "end": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-FW" for risc in riscTypes]},
+            "start": {"core": "ANY", "risc": "ANY", "zone_name": [f"{risc}-FW" for risc in riscTypes]},
+            "end": {"core": "ANY", "risc": "ANY", "zone_name": [f"{risc}-FW" for risc in riscTypes]},
         },
         "KERNEL_START->KERNEL_END": {
             "across": "ops",
             "type": "op_first_last",
-            "start": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-KERNEL" for risc in riscTypes]},
-            "end": {"core": "ANY", "risc": "ANY", "zoneName": [f"{risc}-KERNEL" for risc in riscTypes]},
+            "start": {"core": "ANY", "risc": "ANY", "zone_name": [f"{risc}-KERNEL" for risc in riscTypes]},
+            "end": {"core": "ANY", "risc": "ANY", "zone_name": [f"{risc}-KERNEL" for risc in riscTypes]},
         },
         "BR_KERNEL_START->BR_KERNEL_END": {
             "across": "ops",
             "type": "op_first_last",
-            "start": {"core": "ANY", "risc": "BRISC", "zoneName": "BRISC-KERNEL"},
-            "end": {"core": "ANY", "risc": "BRISC", "zoneName": "BRISC-KERNEL"},
+            "start": {"core": "ANY", "risc": "BRISC", "zone_name": "BRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "BRISC", "zone_name": "BRISC-KERNEL"},
         },
         "NC_KERNEL_START->NC_KERNEL_END": {
             "across": "ops",
             "type": "op_first_last",
-            "start": {"core": "ANY", "risc": "NCRISC", "zoneName": "NCRISC-KERNEL"},
-            "end": {"core": "ANY", "risc": "NCRISC", "zoneName": "NCRISC-KERNEL"},
+            "start": {"core": "ANY", "risc": "NCRISC", "zone_name": "NCRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "NCRISC", "zone_name": "NCRISC-KERNEL"},
         },
         "T0_KERNEL_START->T0_KERNEL_END": {
             "across": "ops",
             "type": "op_first_last",
-            "start": {"core": "ANY", "risc": "TRISC_0", "zoneName": "TRISC-KERNEL"},
-            "end": {"core": "ANY", "risc": "TRISC_0", "zoneName": "TRISC-KERNEL"},
+            "start": {"core": "ANY", "risc": "TRISC_0", "zone_name": "TRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "TRISC_0", "zone_name": "TRISC-KERNEL"},
         },
         "T1_KERNEL_START->T1_KERNEL_END": {
             "across": "ops",
             "type": "op_first_last",
-            "start": {"core": "ANY", "risc": "TRISC_1", "zoneName": "TRISC-KERNEL"},
-            "end": {"core": "ANY", "risc": "TRISC_1", "zoneName": "TRISC-KERNEL"},
+            "start": {"core": "ANY", "risc": "TRISC_1", "zone_name": "TRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "TRISC_1", "zone_name": "TRISC-KERNEL"},
         },
         "T2_KERNEL_START->T2_KERNEL_END": {
             "across": "ops",
             "type": "op_first_last",
-            "start": {"core": "ANY", "risc": "TRISC_2", "zoneName": "TRISC-KERNEL"},
-            "end": {"core": "ANY", "risc": "TRISC_2", "zoneName": "TRISC-KERNEL"},
+            "start": {"core": "ANY", "risc": "TRISC_2", "zone_name": "TRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "TRISC_2", "zone_name": "TRISC-KERNEL"},
         },
         "ER_KERNEL_START->ER_KERNEL_END": {
             "across": "ops",
             "type": "op_first_last",
-            "start": {"core": "ANY", "risc": "ERISC", "zoneName": "ERISC-KERNEL"},
-            "end": {"core": "ANY", "risc": "ERISC", "zoneName": "ERISC-KERNEL"},
+            "start": {"core": "ANY", "risc": "ERISC", "zone_name": "ERISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "ERISC", "zone_name": "ERISC-KERNEL"},
         },
     }
 
@@ -90,8 +90,8 @@ class test_multi_op(default_setup):
         "BRISC KERNEL_START->KERNEL_END": {
             "across": "core",
             "type": "adjacent",
-            "start": {"core": "ANY", "risc": "BRISC", "zoneName": "BRISC-KERNEL"},
-            "end": {"core": "ANY", "risc": "BRISC", "zoneName": "BRISC-KERNEL"},
+            "start": {"core": "ANY", "risc": "BRISC", "zone_name": "BRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "BRISC", "zone_name": "BRISC-KERNEL"},
         },
     }
 
@@ -101,32 +101,32 @@ class test_custom_cycle_count(default_setup):
         "BRISC KERNEL_START->KERNEL_END": {
             "across": "core",
             "type": "adjacent",
-            "start": {"core": "ANY", "risc": "BRISC", "zoneName": "BRISC-KERNEL"},
-            "end": {"core": "ANY", "risc": "BRISC", "zoneName": "BRISC-KERNEL"},
+            "start": {"core": "ANY", "risc": "BRISC", "zone_name": "BRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "BRISC", "zone_name": "BRISC-KERNEL"},
         },
         "NCRISC KERNEL_START->KERNEL_END": {
             "across": "core",
             "type": "adjacent",
-            "start": {"core": "ANY", "risc": "NCRISC", "zoneName": "NCRISC-KERNEL"},
-            "end": {"core": "ANY", "risc": "NCRISC", "zoneName": "NCRISC-KERNEL"},
+            "start": {"core": "ANY", "risc": "NCRISC", "zone_name": "NCRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "NCRISC", "zone_name": "NCRISC-KERNEL"},
         },
         "TRISC_0 KERNEL_START->KERNEL_END": {
             "across": "core",
             "type": "adjacent",
-            "start": {"core": "ANY", "risc": "TRISC_0", "zoneName": "TRISC-KERNEL"},
-            "end": {"core": "ANY", "risc": "TRISC_0", "zoneName": "TRISC-KERNEL"},
+            "start": {"core": "ANY", "risc": "TRISC_0", "zone_name": "TRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "TRISC_0", "zone_name": "TRISC-KERNEL"},
         },
         "TRISC_1 KERNEL_START->KERNEL_END": {
             "across": "core",
             "type": "adjacent",
-            "start": {"core": "ANY", "risc": "TRISC_1", "zoneName": "TRISC-KERNEL"},
-            "end": {"core": "ANY", "risc": "TRISC_1", "zoneName": "TRISC-KERNEL"},
+            "start": {"core": "ANY", "risc": "TRISC_1", "zone_name": "TRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "TRISC_1", "zone_name": "TRISC-KERNEL"},
         },
         "TRISC_2 KERNEL_START->KERNEL_END": {
             "across": "core",
             "type": "adjacent",
-            "start": {"core": "ANY", "risc": "TRISC_2", "zoneName": "TRISC-KERNEL"},
-            "end": {"core": "ANY", "risc": "TRISC_2", "zoneName": "TRISC-KERNEL"},
+            "start": {"core": "ANY", "risc": "TRISC_2", "zone_name": "TRISC-KERNEL"},
+            "end": {"core": "ANY", "risc": "TRISC_2", "zone_name": "TRISC-KERNEL"},
         },
     }
 
@@ -136,8 +136,8 @@ class test_full_buffer(default_setup):
         "Marker Repeat": {
             "across": "core",
             "type": "adjacent",
-            "start": {"risc": "ANY", "zoneName": "TEST-FULL"},
-            "end": {"risc": "ANY", "zoneName": "TEST-FULL"},
+            "start": {"risc": "ANY", "zone_name": "TEST-FULL"},
+            "end": {"risc": "ANY", "zone_name": "TEST-FULL"},
         }
     }
 
@@ -147,7 +147,7 @@ class test_noc(default_setup):
         "NoC For Loop": {
             "across": "core",
             "type": "adjacent",
-            "start": {"risc": "NCRISC", "zoneName": "NOC-FOR-LOOP"},
-            "end": {"risc": "NCRISC", "zoneName": "NOC-FOR-LOOP"},
+            "start": {"risc": "NCRISC", "zone_name": "NOC-FOR-LOOP"},
+            "end": {"risc": "NCRISC", "zone_name": "NOC-FOR-LOOP"},
         }
     }

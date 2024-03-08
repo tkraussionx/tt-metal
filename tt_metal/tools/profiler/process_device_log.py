@@ -211,19 +211,19 @@ def import_device_profile_log(logPath):
                 chipID = int(row[0].strip())
                 core = (int(row[1].strip()), int(row[2].strip()))
                 risc = row[3].strip()
-                timerID = {"id": int(row[4].strip()), "zoneName": "", "zonePhase": "", "srcLine": "", "srcFile": ""}
+                timerID = {"id": int(row[4].strip()), "zone_name": "", "zone_phase": "", "src_line": "", "src_file": ""}
                 timeData = int(row[5].strip())
                 if len(row) > 6:
                     runID = int(row[6].strip())
-                    timerID["zoneName"] = row[7].strip()
-                    timerID["zonePhase"] = row[8].strip()
-                    timerID["srcLine"] = int(row[9].strip())
-                    timerID["srcFile"] = row[10].strip()
+                    timerID["zone_name"] = row[7].strip()
+                    timerID["zone_phase"] = row[8].strip()
+                    timerID["src_line"] = int(row[9].strip())
+                    timerID["src_file"] = row[10].strip()
 
                 if chipID in devicesData["devices"].keys():
                     if core in devicesData["devices"][chipID]["cores"].keys():
                         if risc in devicesData["devices"][chipID]["cores"][core]["riscs"].keys():
-                            if timerID["zonePhase"] == "sum":
+                            if timerID["zone_phase"] == "sum":
                                 devicesData["devices"][chipID]["cores"][core]["riscs"][risc]["durations"].append(
                                     (timerID, timeData)
                                 )
@@ -232,7 +232,7 @@ def import_device_profile_log(logPath):
                                     (timerID, timeData)
                                 )
                         else:
-                            if timerID["zonePhase"] == "sum":
+                            if timerID["zone_phase"] == "sum":
                                 devicesData["devices"][chipID]["cores"][core]["riscs"][risc] = {
                                     "timeseries": [],
                                     "durations": [(timerID, timeData)],
@@ -243,7 +243,7 @@ def import_device_profile_log(logPath):
                                     "durations": [],
                                 }
                     else:
-                        if timerID["zonePhase"] == "sum":
+                        if timerID["zone_phase"] == "sum":
                             devicesData["devices"][chipID]["cores"][core] = {
                                 "riscs": {risc: {"durations": [(timerID, timeData)], "timeseries": []}}
                             }
@@ -252,7 +252,7 @@ def import_device_profile_log(logPath):
                                 "riscs": {risc: {"timeseries": [(timerID, timeData)], "durations": []}}
                             }
                 else:
-                    if timerID["zonePhase"] == "sum":
+                    if timerID["zone_phase"] == "sum":
                         devicesData["devices"][chipID] = {
                             "cores": {core: {"riscs": {risc: {"durations": [(timerID, timeData)], "timeseries": []}}}}
                         }
@@ -289,7 +289,7 @@ def import_device_profile_log(logPath):
                     riscData["timeseries"].insert(
                         0,
                         (
-                            {"id": 0, "zoneName": "", "zonePhase": "", "srcLine": "", "srcFile": ""},
+                            {"id": 0, "zone_name": "", "zone_phase": "", "src_line": "", "src_file": ""},
                             deviceData["metadata"]["global_min"]["ts"],
                         ),
                     )
@@ -309,9 +309,9 @@ def import_device_profile_log(logPath):
 
 def is_new_op_core(tsRisc):
     timerID, tsValue, risc = tsRisc
-    if risc == "BRISC" and timerID["zoneName"] == "BRISC-FW" and timerID["zonePhase"] == "begin":
+    if risc == "BRISC" and timerID["zone_name"] == "BRISC-FW" and timerID["zone_phase"] == "begin":
         return True
-    if risc == "ERISC" and timerID["zoneName"] == "ERISC-FW" and timerID["zonePhase"] == "begin":
+    if risc == "ERISC" and timerID["zone_name"] == "ERISC-FW" and timerID["zone_phase"] == "begin":
         return True
     return False
 
@@ -323,8 +323,8 @@ def is_new_op_device(tsCore, coreOpMap):
     isNewOpFinished = False
     if timerID["id"] != 0:
         appendTs = True
-    if (risc == "BRISC" and timerID["zoneName"] == "BRISC-FW" and timerID["zonePhase"] == "begin") or (
-        risc == "ERISC" and timerID["zoneName"] == "ERISC-FW" and timerID["zonePhase"] == "begin"
+    if (risc == "BRISC" and timerID["zone_name"] == "BRISC-FW" and timerID["zone_phase"] == "begin") or (
+        risc == "ERISC" and timerID["zone_name"] == "ERISC-FW" and timerID["zone_phase"] == "begin"
     ):
         assert (
             core not in coreOpMap.keys()
@@ -332,8 +332,8 @@ def is_new_op_device(tsCore, coreOpMap):
         if not coreOpMap:
             isNewOp = True
         coreOpMap[core] = (tsValue,)
-    elif (risc == "BRISC" and timerID["zoneName"] == "BRISC-FW" and timerID["zonePhase"] == "end") or (
-        risc == "ERISC" and timerID["zoneName"] == "ERISC-FW" and timerID["zonePhase"] == "end"
+    elif (risc == "BRISC" and timerID["zone_name"] == "BRISC-FW" and timerID["zone_phase"] == "end") or (
+        risc == "ERISC" and timerID["zone_name"] == "ERISC-FW" and timerID["zone_phase"] == "end"
     ):
         assert core in coreOpMap.keys() and len(coreOpMap[core]) == 1, "Unexpected BRISC end"
         coreOpMap[core] = (coreOpMap[core][0], tsValue)
@@ -458,43 +458,43 @@ def translate_metaData(metaData, core, risc):
 def determine_conditions(timerID, metaData, analysis):
     currCore = analysis["start"]["core"] if "core" in analysis["start"].keys() else None
     currRisc = analysis["start"]["risc"]
-    currStart = (timerID["zoneName"],) + translate_metaData(metaData, currCore, currRisc)
+    currStart = (timerID["zone_name"],) + translate_metaData(metaData, currCore, currRisc)
 
     currCore = analysis["end"]["core"] if "core" in analysis["end"].keys() else None
     currRisc = analysis["end"]["risc"]
-    currEnd = (timerID["zoneName"],) + translate_metaData(metaData, currCore, currRisc)
+    currEnd = (timerID["zone_name"],) + translate_metaData(metaData, currCore, currRisc)
 
-    if type(analysis["start"]["zoneName"]) == list:
+    if type(analysis["start"]["zone_name"]) == list:
         desStart = [
             (
                 zoneName,
                 analysis["start"]["core"] if "core" in analysis["start"].keys() else None,
                 analysis["start"]["risc"],
             )
-            for zoneName in analysis["start"]["zoneName"]
+            for zoneName in analysis["start"]["zone_name"]
         ]
     else:
         desStart = [
             (
-                analysis["start"]["zoneName"],
+                analysis["start"]["zone_name"],
                 analysis["start"]["core"] if "core" in analysis["start"].keys() else None,
                 analysis["start"]["risc"],
             )
         ]
 
-    if type(analysis["end"]["zoneName"]) == list:
+    if type(analysis["end"]["zone_name"]) == list:
         desEnd = [
             (
                 zoneName,
                 analysis["end"]["core"] if "core" in analysis["end"].keys() else None,
                 analysis["end"]["risc"],
             )
-            for zoneName in analysis["end"]["zoneName"]
+            for zoneName in analysis["end"]["zone_name"]
         ]
     else:
         desEnd = [
             (
-                analysis["end"]["zoneName"],
+                analysis["end"]["zone_name"],
                 analysis["end"]["core"] if "core" in analysis["end"].keys() else None,
                 analysis["end"]["risc"],
             )
@@ -520,7 +520,12 @@ def first_last_analysis(timeseries, analysis):
             currStart, currEnd, desStart, desEnd = determine_conditions(timerID, metaData, analysis)
             if currEnd in desEnd:
                 durations.append(
-                    dict(start=startTS, end=timestamp, duration_type=(startID, timerID), diff=timestamp - startTS)
+                    dict(
+                        start_cycle=startTS,
+                        end_cycle=timestamp,
+                        duration_type=(startID, timerID),
+                        duration_cycles=timestamp - startTS,
+                    )
                 )
                 break
 
@@ -541,7 +546,7 @@ def get_duration(riscData, analysis):
         timerID, delta, risc, *metaData = duration
         desMarker = {"risc": risc, "timerID": timerID}
         if desMarker == analysis["marker"]:
-            durations.append(dict(duration_type=timerID, diff=delta))
+            durations.append(dict(duration_type=timerID, duration_cycles=delta))
 
     return durations
 
@@ -559,7 +564,12 @@ def adjacent_LF_analysis(riscData, analysis):
             if currEnd in desEnd:
                 startID, startTS = startFound
                 durations.append(
-                    dict(start=startTS, end=timestamp, duration_type=(startID, timerID), diff=timestamp - startTS)
+                    dict(
+                        start_cycle=startTS,
+                        end_cycle=timestamp,
+                        duration_type=(startID, timerID),
+                        duration_cycles=timestamp - startTS,
+                    )
                 )
                 startFound = None
             elif currStart in desStart:
@@ -585,14 +595,14 @@ def timeseries_analysis(riscData, name, analysis):
         tmpDict = {
             "analysis": analysis,
             "stats": {
-                "Count": tmpDF.loc[:, "diff"].count(),
-                "Average": tmpDF.loc[:, "diff"].mean(),
-                "Max": tmpDF.loc[:, "diff"].max(),
-                "Min": tmpDF.loc[:, "diff"].min(),
-                "Range": tmpDF.loc[:, "diff"].max() - tmpDF.loc[:, "diff"].min(),
-                "Median": tmpDF.loc[:, "diff"].median(),
-                "Sum": tmpDF.loc[:, "diff"].sum(),
-                "First": tmpDF.loc[0, "diff"],
+                "Count": tmpDF.loc[:, "duration_cycles"].count(),
+                "Average": tmpDF.loc[:, "duration_cycles"].mean(),
+                "Max": tmpDF.loc[:, "duration_cycles"].max(),
+                "Min": tmpDF.loc[:, "duration_cycles"].min(),
+                "Range": tmpDF.loc[:, "duration_cycles"].max() - tmpDF.loc[:, "duration_cycles"].min(),
+                "Median": tmpDF.loc[:, "duration_cycles"].median(),
+                "Sum": tmpDF.loc[:, "duration_cycles"].sum(),
+                "First": tmpDF.loc[0, "duration_cycles"],
             },
             "series": tmpList,
         }

@@ -84,16 +84,16 @@ constexpr auto decorate_device_operation(const Function& function) {
 }
 
 std::vector<Tensor> run_host_operation(const HostOperation& operation, const std::vector<Tensor>& input_tensors) {
-    ZoneScoped;
+    ZoneScopedN("TT_DNN_HOST_OP");
+    uint32_t op_id = assign_id();
 
     operation.validate(input_tensors);
     auto output_tensors = operation.compute_output_tensors(input_tensors);
 
-    //op_profiler::set_perf_model(operation.create_op_performance_model(input_tensors, optional_input_tensors, output_tensors));
-    //std::string op_message = op_profiler::op_meta_data_serialized_json(operation, input_tensors, output_tensors);
-    //std::string op_text = fmt::format("id:{}", operation.get_uniqe_id());
-    //ZoneText(op_text.c_str(), op_text.size());
-    //TracyMessage(op_message.c_str(), op_message.size());
+    std::string op_message = op_profiler::op_meta_data_serialized_json(op_id, operation, input_tensors, output_tensors);
+    std::string op_text = fmt::format("id:{}", op_id);
+    ZoneText(op_text.c_str(), op_text.size());
+    TracyMessage(op_message.c_str(), op_message.size());
 
     return output_tensors;
 }

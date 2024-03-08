@@ -79,7 +79,11 @@ namespace op_profiler {
             ret["storage_type"] = fmt::format("{}", magic_enum::enum_name(tensor.storage_type()));
         }
 
-        ret["shape"] = fmt::format("{}", fmt::join(std::begin(tensor.get_legacy_shape()), std::end(tensor.get_legacy_shape()), "_"));
+        auto tensor_shape = tensor.get_legacy_shape();
+        ret["shape"]["W"] = tensor_shape[0];
+        ret["shape"]["Z"] = tensor_shape[1];
+        ret["shape"]["Y"] = tensor_shape[2];
+        ret["shape"]["X"] = tensor_shape[3];
         ret["layout"] = fmt::format("{}", magic_enum::enum_name(tensor.get_layout()));
         ret["dtype"] = fmt::format("{}", magic_enum::enum_name(tensor.get_dtype()));
 
@@ -111,47 +115,34 @@ namespace op_profiler {
         return ret;
     }
 
-    template <typename Operation>
-    inline std::string op_meta_data_serialized_json(
+    template <bool IsExternal = false, typename Operation>
+    inline json get_base_json(
             uint32_t opID,
             const Operation& op,
-            const std::variant<std::shared_ptr<Program>, std::reference_wrapper<Program>>& program,
             const std::vector<Tensor>& input_tensors,
-            const std::vector<std::optional<const tt::tt_metal::Tensor>>& optional_input_tensors,
-            const std::vector<Tensor>& output_tensors)
+            std::optional<std::reference_wrapper<std::vector<Tensor>>> output_tensors = std::nullopt)
     {
         ZoneScoped;
-        auto profiler_info = op.create_profiler_info(input_tensors);
         json j;
         j["id"] = opID;
-std::string opName = "";
-        {
-            ZoneScopedN("Name and Parall");
-        opName = op.get_type_name();
-        if (profiler_info.preferred_name.has_value())
-        {
-            j["name"] = profiler_info.preferred_name.value();
-        }
-        j["name"] = opName;
 
-        if (profiler_info.parallelization_strategy.has_value())
-        {
-            j["parallelization_strategy"] = profiler_info.parallelization_strategy.value();
-        }
+        std::string opName = op.get_type_name();
 
-        if (std::holds_alternative<std::reference_wrapper<Program>>(program))
+        if constexpr (!IsExternal)
         {
-            j["kernel_info"] = get_kernels_json(std::get<std::reference_wrapper<Program>>(program));
-        }
-        else if (std::holds_alternative<std::shared_ptr<Program>>(program))
-        {
-            auto prg = std::get<std::shared_ptr<Program>>(program);
-            if (prg != nullptr)
+            auto profiler_info = op.create_profiler_info(input_tensors);
+            if (profiler_info.preferred_name.has_value())
             {
-                j["kernel_info"] = get_kernels_json(*prg);
+                j["name"] = profiler_info.preferred_name.value();
+            }
+
+            if (profiler_info.parallelization_strategy.has_value())
+            {
+                j["parallelization_strategy"] = profiler_info.parallelization_strategy.value();
             }
         }
-        }
+
+        j["name"] = opName;
 
         json attributesObj;
         if (not op.attributes().empty()) {
@@ -169,17 +160,81 @@ std::string opName = "";
                 attributesObj[nameStr] = fmt::format("{}",value);
             }
         }
+
         j["attributes"] = attributesObj;
 
         j["input_tensors"] = get_tensors_json(input_tensors);
 
-        j["output_tensors"] = get_tensors_json(output_tensors);
+        if (output_tensors.has_value())
+        {
+            j["output_tensors"] = get_tensors_json(output_tensors.value());
+        }
+        return j;
+
+    }
+
+    inline std::string op_meta_data_serialized_json(
+            uint32_t opID,
+            const tt::tt_metal::operation::ExternalOperation& op,
+            const std::vector<Tensor>& input_tensors)
+    {
+        auto j = get_base_json<true>(opID, op, input_tensors);
+        j["type"] = magic_enum::enum_name(OpType::python_fallback);
+        std::string ser = j.dump(4);
+        return fmt::format("TT_DNN_FALL_BACK_OP:{}\n{}",j["name"], ser);
+    }
+
+    inline std::string op_meta_data_serialized_json(
+            uint32_t opID,
+            const tt::tt_metal::operation::HostOperation& op,
+            const std::vector<Tensor>& input_tensors,
+            std::vector<Tensor>& output_tensors)
+    {
+        auto j = get_base_json(opID, op, input_tensors, output_tensors);
+        j["type"] = magic_enum::enum_name(OpType::tt_dnn_cpu);
+        std::string ser = j.dump(4);
+        return fmt::format("TT_DNN_HOST_OP:{}\n{}",j["name"], ser);
+    }
+
+    inline std::string op_meta_data_serialized_json(
+            uint32_t opID,
+            const tt::tt_metal::operation::DeviceOperation& op,
+            const std::variant<std::shared_ptr<Program>, std::reference_wrapper<Program>>& program,
+            const std::vector<Tensor>& input_tensors,
+            const std::vector<std::optional<const tt::tt_metal::Tensor>>& optional_input_tensors,
+            std::vector<Tensor>& output_tensors)
+    {
+        ZoneScoped;
+
+        auto j = get_base_json(opID, op, input_tensors, output_tensors);
+        j["type"] = magic_enum::enum_name(OpType::tt_dnn_device);
+        if (std::holds_alternative<std::reference_wrapper<Program>>(program))
+        {
+            j["kernel_info"] = get_kernels_json(std::get<std::reference_wrapper<Program>>(program));
+        }
+        else if (std::holds_alternative<std::shared_ptr<Program>>(program))
+        {
+            auto prg = std::get<std::shared_ptr<Program>>(program);
+            if (prg != nullptr)
+            {
+                j["kernel_info"] = get_kernels_json(*prg);
+            }
+        }
 
         j["optional_input_tensors"] = get_tensors_json(optional_input_tensors);
 
+        auto perfModel = op.create_op_performance_model(input_tensors, optional_input_tensors, output_tensors);
+        j["performance_model"]["compute_ns"] = perfModel.get_compute_ns();
+        j["performance_model"]["ideal_ns"] = perfModel.get_ideal_ns();
+        j["performance_model"]["bandwidth_ns"] = perfModel.get_bandwidth_ns();
+        j["performance_model"]["input_bws"] = perfModel.get_input_bws();
+        j["performance_model"]["output_bws"] = perfModel.get_output_bws();
+
         std::string ser = j.dump(4);
-        return fmt::format("TT_DNN_DEVICE_OP:{}\n{}",opName, ser);
+        return fmt::format("TT_DNN_DEVICE_OP:{}\n{}",j["name"], ser);
     }
+
+
 
     namespace detail {
         static std::filesystem::path const& getLogLocationsRecord()
