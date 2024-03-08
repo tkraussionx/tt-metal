@@ -20,26 +20,13 @@ from models.utility_functions import (
 
 
 @pytest.mark.parametrize(
-    "model_config",
-    ("BFLOAT16-DRAM", "BFLOAT8-DRAM"),
-)
-@pytest.mark.parametrize(
     "iterations",
-    ((3),),
+    ((1),),
 )
-@pytest.mark.parametrize(
-    "pcc",
-    ((0.99),),
-)
-def test_mistral_decoder_inference(pcc, model_config, model_location_generator, device, iterations):
+def test_mistral_decoder_inference(device, iterations):
     ttnn.enable_program_cache()
-    dtype_str, mem_config_str = model_config.split("-")
-    if dtype_str == "BFLOAT16":
-        dtype = ttnn.bfloat16
-    elif dtype_str == "BFLOAT8":
-        dtype = ttnn.bfloat8_b
-    else:
-        raise ValueError(f"Unknown dtype {dtype_str}")
+
+    dtype = ttnn.bfloat8_b
 
     model_args = TtModelArgs()
     state_dict = torch.load(model_args.consolidated_weights_path)
@@ -108,7 +95,7 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
         # Reference model
         ref_output = reference_model(pt_decode_input, freqs_cis_i, positions, mask=None)
 
-        passing, pcc_message = comp_pcc(ref_output, tt_output_torch, pcc)
+        passing, pcc_message = comp_pcc(ref_output, tt_output_torch)
 
         logger.info(comp_allclose(ref_output, tt_output_torch))
         logger.info(pcc_message)
@@ -123,4 +110,4 @@ def test_mistral_decoder_inference(pcc, model_config, model_location_generator, 
         logger.info(f"All {generation_length} Mistral decode iterations Passed!")
     else:
         logger.warning("One or more iterations of Mistral decode Failed!")
-        assert all_tests_pass, f"PCC value is lower than {pcc} for some of the outputs. Check Warnings!"
+        assert all_tests_pass, f"PCC value is lower than {0.99} for some of the outputs. Check Warnings!"

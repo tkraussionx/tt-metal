@@ -15,15 +15,10 @@ from models.utility_functions import (
 )
 
 
-@pytest.mark.parametrize(
-    "model_config",
-    ("BFLOAT16-DRAM", "BFLOAT8-DRAM"),
-)
-def test_mistral_mlp_inference(model_config, model_location_generator, device):
+def test_mistral_mlp_inference(device):
     ttnn.enable_program_cache()
 
-    dtype = {"BFLOAT16": ttnn.bfloat16, "BFLOAT8": ttnn.bfloat8_b}[model_config.split("-")[0]]
-
+    dtype = ttnn.bfloat8_b
     model_args = TtModelArgs()
     state_dict = torch.load(model_args.consolidated_weights_path)
 

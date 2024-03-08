@@ -63,6 +63,7 @@ class TtTransformerBlock(torch.nn.Module):
             device=device,
             state_dict=state_dict,
             weight_cache_path=weight_cache_path,
+            dtype=dtype,
             layer_num=layer_num,
             weight_key="attention_norm",
         )
@@ -70,6 +71,7 @@ class TtTransformerBlock(torch.nn.Module):
             device=device,
             state_dict=state_dict,
             weight_cache_path=weight_cache_path,
+            dtype=dtype,
             layer_num=layer_num,
             weight_key="ffn_norm",
         )

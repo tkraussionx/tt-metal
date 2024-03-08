@@ -49,6 +49,7 @@ class TtTransformer(nn.Module):
             device=device,
             state_dict=state_dict,
             weight_cache_path=weight_cache_path,
+            dtype=dtype,
             layer_num=None,
             weight_key="norm",
         )

@@ -60,18 +60,25 @@ class TtMistralMLP(torch.nn.Module):
             activation="silu",
             core_grid=self.grid,
             use_1d_systolic_array=True,
-            memory_config=shard,  # , compute_kernel_config=self.kernel_config,
+            memory_config=shard,
+            compute_kernel_config=self.kernel_config,
         )
         w3_out = ttnn.linear(
-            x, self.w3, core_grid=self.grid, use_1d_systolic_array=True, memory_config=shard
-        )  # , compute_kernel_config=self.kernel_config)
+            x,
+            self.w3,
+            core_grid=self.grid,
+            use_1d_systolic_array=True,
+            memory_config=shard,
+            compute_kernel_config=self.kernel_config,
+        )
         w2_in = ttnn.mul(w1_out, w3_out, memory_config=shard)
         w2_out = ttnn.linear(
             w2_in,
             self.w2,
             core_grid=self.grid,
             use_1d_systolic_array=True,
-            memory_config=ttnn.L1_MEMORY_CONFIG,  # , compute_kernel_config=self.kernel_config
+            memory_config=ttnn.L1_MEMORY_CONFIG,
+            compute_kernel_config=self.kernel_config,
         )
 
         return w2_out

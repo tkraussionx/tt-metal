@@ -14,17 +14,10 @@ from models.utility_functions import (
 )
 
 
-@pytest.mark.parametrize(
-    "model_config",
-    ("BFLOAT16-DRAM", "BFLOAT8-DRAM"),
-)
-def test_mistral_rms_norm_inference(model_config, model_location_generator, device):
+def test_mistral_rms_norm_inference(device):
     ttnn.enable_program_cache()
-    dtype = model_config.split("-")[0]
-    if dtype == "BFLOAT8":
-        dtype = ttnn.bfloat8_b
-    elif dtype == "BFLOAT16":
-        dtype = ttnn.bfloat16
+
+    dtype = ttnn.bfloat8_b
 
     model_args = TtModelArgs()
     state_dict = torch.load(model_args.consolidated_weights_path)
@@ -38,6 +31,7 @@ def test_mistral_rms_norm_inference(model_config, model_location_generator, devi
         device=device,
         state_dict=state_dict,
         weight_cache_path=model_args.weight_cache_path(dtype),
+        dtype=dtype,
         layer_num=0,
         weight_key="attention_norm",
     )

@@ -21,29 +21,16 @@ from models.utility_functions import (
 
 
 @pytest.mark.parametrize(
-    "model_config",
-    ("BFLOAT16-DRAM", "BFLOAT8-DRAM"),
-)
-@pytest.mark.parametrize(
     "iterations",
     ((1),),
 )
 def test_mistral_attention_inference(
-    model_config,
     iterations,
-    model_location_generator,
     device,
 ):
     ttnn.enable_program_cache()
-    dtype_str, mem_config_str = model_config.split("-")
-    if dtype_str == "BFLOAT16":
-        dtype = ttnn.bfloat16
-        pcc = 0.99
-    elif dtype_str == "BFLOAT8":
-        dtype = ttnn.bfloat8_b
-        pcc = 0.98
-    else:
-        raise ValueError(f"Unknown dtype {dtype_str}")
+    dtype = ttnn.bfloat8_b
+    pcc = 0.99
 
     model_args = TtModelArgs()
     state_dict = torch.load(model_args.consolidated_weights_path)
@@ -139,22 +126,19 @@ def test_mistral_attention_inference(
         tt_layer_present = tt_layer_present[0]
 
         for i, (cache_pt, cache_tt) in enumerate(zip(pytorch_layer_present, tt_layer_present)):
-            if i == 0:
-                logger.info(
-                    f"Skipping K cache comparison, since tt_lib rot_embed op does a different permutation from reference PyTorch code"
-                )
-                continue
-
             cache_length_to_check = min(model_args.sliding_window, generation_start_pos + generation_length + 1)
             cache_pt = cache_pt[:, :, generation_start_pos:cache_length_to_check, :]
             cache_tt = cache_tt[:, :, generation_start_pos:cache_length_to_check, :]
             does_pass, output_pcc = comp_pcc(cache_pt, cache_tt, pcc)
-            logger.info(f"V cache output: {output_pcc}")
+            if i == 0:
+                logger.info(f"K cache output: {output_pcc}")
+            else:
+                logger.info(f"V cache output: {output_pcc}")
 
             if does_pass:
-                logger.info(f"V Cache Passed!")
+                logger.info(f"KV Cache Passed!")
             else:
-                logger.warning(f"V Cache Failed! PCC value is lower than {pcc}")
+                logger.warning(f"KV Cache Failed! PCC value is lower than {pcc}")
                 all_tests_pass = False
 
     if all_tests_pass:

@@ -11,6 +11,7 @@ class TtRMSNorm(nn.Module):
         device,
         state_dict,
         weight_cache_path,
+        dtype,
         layer_num,
         weight_key,
         eps: float = 1e-05,
@@ -31,7 +32,7 @@ class TtRMSNorm(nn.Module):
         self.weight = ttnn.as_tensor(
             torch_weight,
             device=self.device,
-            dtype=ttnn.bfloat16,
+            dtype=dtype,
             layout=ttnn.TILE_LAYOUT,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             cache_file_name=cache_name,

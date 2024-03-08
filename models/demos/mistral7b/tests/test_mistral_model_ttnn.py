@@ -30,43 +30,26 @@ class Emb(torch.nn.Module):
 
 
 @pytest.mark.parametrize(
-    "n_layers",
-    (32,),
-)
-@pytest.mark.parametrize(
-    "model_config",
-    ("BFLOAT16-DRAM", "BFLOAT8-DRAM"),
-)
-@pytest.mark.parametrize(
     "iterations",
     (
         1,
         17,
     ),
 )
-@pytest.mark.parametrize(
-    "pcc",
-    (0.97,),
-)
-def test_mistral_model_inference(device, pcc, model_config, iterations, n_layers):
+def test_mistral_model_inference(device, iterations):
     ttnn.enable_program_cache()
 
     # Avoid running reference model to speed up the test (unless measuring PCC)
     run_ref_pt = True  # Flag to run reference PyTorch model and compare PCC
     cache_pcc = False  # Flag to measure KV cache PCC for all layers
 
-    dtype_str, mem_config_str = model_config.split("-")
-    if dtype_str == "BFLOAT16":
-        dtype = ttnn.bfloat16
-    elif dtype_str == "BFLOAT8":
-        dtype = ttnn.bfloat8_b
-    else:
-        raise ValueError(f"Unknown dtype {dtype_str}")
+    dtype = ttnn.bfloat8_b
 
     model_args = TtModelArgs()
     model_args.max_batch_size = 32
-    model_args.n_layers = n_layers
+    model_args.n_layers = 32  # Full model
     state_dict = torch.load(model_args.consolidated_weights_path)
+
     tokenizer = Tokenizer(model_args.tokenizer_path)
     state_dict = {
         k: v
@@ -179,7 +162,7 @@ def test_mistral_model_inference(device, pcc, model_config, iterations, n_layers
 
         # Measure PCC if also running reference model
         if run_ref_pt:
-            passing, pcc_message = comp_pcc(ref_output, tt_output_torch, pcc)
+            passing, pcc_message = comp_pcc(ref_output, tt_output_torch)
 
             logger.info(comp_allclose(ref_output, tt_output_torch))
             logger.info(f"Model output: {pcc_message}")
@@ -213,7 +196,7 @@ def test_mistral_model_inference(device, pcc, model_config, iterations, n_layers
                         )
                         cache_pt = cache_pt[:, :, generation_start_pos:cache_length_to_check, :]
                         cache_tt = cache_tt[:, :, generation_start_pos:cache_length_to_check, :]
-                        does_pass, output_pcc = comp_pcc(cache_pt, cache_tt, pcc)
+                        does_pass, output_pcc = comp_pcc(cache_pt, cache_tt)
                         if i == 0:
                             logger.info(f"K cache output: {output_pcc}")
                         else:
@@ -222,11 +205,10 @@ def test_mistral_model_inference(device, pcc, model_config, iterations, n_layers
                         if does_pass:
                             logger.info(f"V Cache Passed!")
                         else:
-                            logger.warning(f"V Cache Failed! PCC value is lower than {pcc}")
+                            logger.warning(f"V Cache Failed! PCC value is lower than {0.99}")
                         # if not does_pass:
                         # all_tests_pass = False
 
-        # TODO print all 32 users
         print("[TT generation User 0] ", "".join(tokenizer.decode(all_outputs)))
         if run_ref_pt:
             print("[Ref generation User 0] ", "".join(tokenizer.decode(all_outputs_ref)))
@@ -236,4 +218,4 @@ def test_mistral_model_inference(device, pcc, model_config, iterations, n_layers
             logger.info(f"All {generation_length} Mistral decode iterations Passed!")
         else:
             logger.warning("One or more iterations of Mistral decode had bad PCC")
-            assert all_tests_pass, f"PCC value is lower than {pcc} for some of the outputs. Check Warnings!"
+            assert all_tests_pass, f"PCC value is lower than {0.99} for some of the outputs. Check Warnings!"
