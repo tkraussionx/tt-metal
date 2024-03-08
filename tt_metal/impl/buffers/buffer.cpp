@@ -169,7 +169,7 @@ Buffer &Buffer::operator=(const Buffer &other) {
 }
 
 Buffer::Buffer(Buffer &&other) : device_(other.device_), size_(other.size_), address_(other.address_), page_size_(other.page_size_), buffer_type_(other.buffer_type_) ,
-                                    buffer_layout_(other.buffer_layout_), shard_parameters_(other.shard_parameters_), cq_id_(other.cq_id_) {
+                                    buffer_layout_(other.buffer_layout_), shard_parameters_(other.shard_parameters_), cq_id_(other.cq_id_), allocated(other.allocated) {
     // Set `other.device_` to be nullptr so destroying other does not deallocate reserved address space that is transferred to `this`
     other.device_ = nullptr;
 }
@@ -184,6 +184,7 @@ Buffer &Buffer::operator=(Buffer &&other) {
         this->buffer_layout_ = other.buffer_layout_;
         this->shard_parameters_ = other.shard_parameters_;
         this->cq_id_ = other.cq_id_;
+        this->allocated = other.allocated;
         // Set `other.device_` to be nullptr so destroying other does not deallocate reserved address space that is transferred to `this`
         other.device_ = nullptr;
     }
