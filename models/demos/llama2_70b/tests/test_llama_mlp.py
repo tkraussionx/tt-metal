@@ -10,6 +10,7 @@ from pathlib import Path
 import tt_lib
 from models.demos.llama2_70b.reference.llama import Llama
 from models.demos.llama2_70b.tt.llama_mlp_optimized import TtLlamaMLP_optimized
+from models.demos.llama2_70b.tt.llama_mlp_galaxy import TtLlamaMLP_galaxy
 from models.demos.llama2_70b.tt.llama_mlp import TtLlamaMLP
 from models.demos.llama2_70b.tt.model_config import (
     get_model_config,
@@ -48,7 +49,7 @@ def run_test_LlamaMLP_inference(
     if emulated:
         ckpt_dir = "/proj_sw/user_dev/llama-data-repacked-2/llama-2-70b/"
         tokenizer_path = "/proj_sw/user_dev/llama-data/tokenizer.model"
-        cache_path = Path("/proj_sw/user_dev/llama-data-cache/weights-cache")
+        cache_path = Path("/proj_sw/user_dev/llama-data-cache/weights-cache-2")
         device = devices[0]
         devices = [device for _ in range(n_devices)]  # Emulate fracturing on N chips
     else:
@@ -87,25 +88,40 @@ def run_test_LlamaMLP_inference(
     print(f"Running on {n_devices} devices")
 
     if optimized:
-        # TT hardware execution -------------------------------------------------------------
-        tt_LlamaMLP_model = TtLlamaMLP_optimized(
-            devices,
-            state_dict,
-            base_url,
-            layer_num,
-            configuration.dim,
-            model_config,
-            emulated=emulated,
-            cache_path=cache_path,
-        )
-        # Put input sharded in L1
-        tt_mlp_input = [
-            torch2tt_tensor(
-                tt_inp.clone(),
-                device,
+        if n_devices == 32:
+            tt_LlamaMLP_model = TtLlamaMLP_galaxy(
+                devices,
+                state_dict,
+                base_url,
+                layer_num,
+                configuration.dim,
+                model_config,
+                emulated=emulated,
+                cache_path=cache_path,
             )
-            for device in devices
-        ]
+            tt_mlp_input = tt_LlamaMLP_model.prepare_inputs(tt_inp)
+
+        else:
+            # TT hardware execution -------------------------------------------------------------
+            tt_LlamaMLP_model = TtLlamaMLP_optimized(
+                devices,
+                state_dict,
+                base_url,
+                layer_num,
+                configuration.dim,
+                model_config,
+                emulated=emulated,
+                cache_path=cache_path,
+            )
+
+            # TODO: Put input sharded in L1
+            tt_mlp_input = [
+                torch2tt_tensor(
+                    tt_inp.clone(),
+                    device,
+                )
+                for device in devices
+            ]
     else:
         # TT hardware execution -------------------------------------------------------------
         tt_LlamaMLP_model = TtLlamaMLP(
@@ -118,12 +134,18 @@ def run_test_LlamaMLP_inference(
         )
         tt_mlp_input = [torch2tt_tensor(tt_inp.clone(), device) for device in devices]
 
-    tt_out = tt_LlamaMLP_model(tt_mlp_input)
-    assert len(tt_out) == len(devices)
-    tt_outs = [tt2torch_tensor(o) for o in tt_out]
-    tt_out = torch.cat(tt_outs, dim=-1)
-    logger.info(comp_allclose(pytorch_out, tt_out))
+    if n_devices == 32:
+        tt_out = tt_LlamaMLP_model(tt_mlp_input)
+        assert len(tt_out) == 4
+        tt_outs = [tt2torch_tensor(o) for o in tt_out]
+        tt_out = torch.cat(tt_outs, dim=-1)
+    else:
+        tt_out = tt_LlamaMLP_model(tt_mlp_input)
+        assert len(tt_out) == len(devices)
+        tt_outs = [tt2torch_tensor(o) for o in tt_out]
+        tt_out = torch.cat(tt_outs, dim=-1)
 
+    logger.info(comp_allclose(pytorch_out, tt_out))
     does_pass, output_pcc = comp_pcc(pytorch_out, tt_out, pcc)
     logger.info(f"PCC value: {output_pcc}")
 
@@ -145,6 +167,7 @@ def run_test_LlamaMLP_inference(
         (32, 1, 0.9999, False, 8, False),
         (32, 1, 0.9999, False, 4, True),
         (32, 1, 0.9999, False, 8, True),
+        (32, 1, 0.964, True, 32, True),
     ),
 )
 @pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM",))
