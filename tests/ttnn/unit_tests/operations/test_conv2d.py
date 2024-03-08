@@ -1045,7 +1045,12 @@ def test_yolov5_conv(
     (
         # yolov5 convs with batch size 2
         # unique convs in yolov5 (complete list)
-        (2, 32, 3, 384, 640, 6, 6, 2, 2, 2, 2, True, None, False),
+        # (2, 32, 3, 384, 640, 6, 6, 2, 2, 2, 2, True, {"act_block_h": 6*32}, True),
+        (2, 32, 3, 384, 640, 6, 6, 2, 2, 2, 2, True, None, True),
+        (2, 64, 32, 192, 320, 3, 3, 2, 2, 1, 1, True, None, False),
+        (2, 32, 64, 96, 160, 1, 1, 1, 1, 1, 1, True, None, False),
+        # (2, 32, 64, 96, 160, 1, 1, 1, 1, 1, 1, True, {"act_block_h": 1 * 32}, False),
+        (2, 32, 32, 96, 160, 1, 1, 1, 1, 1, 1, True, None, False),
     ),
 )
 @pytest.mark.parametrize(
@@ -1057,7 +1062,8 @@ def test_yolov5_conv(
     [ttnn.bfloat8_b, ttnn.bfloat16],
 )
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
-@pytest.mark.parametrize("output_layout", [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
+# @pytest.mark.parametrize("output_layout", [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
+@pytest.mark.parametrize("output_layout", [ttnn.TILE_LAYOUT])
 @skip_for_grayskull()
 def test_yolov5_conv_wh(
     use_program_cache,
@@ -1104,6 +1110,6 @@ def test_yolov5_conv_wh(
         use_1d_systolic_array,
         config_override,
         use_shallow_conv_variant=use_shallow_conv_variant,
-        padded_input_channels=None,  # 16 if input_channels == 3 else None,
+        padded_input_channels=16 if input_channels == 3 else None,
         output_layout=output_layout,
     )

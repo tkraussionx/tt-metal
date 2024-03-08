@@ -1,5 +1,7 @@
 import torch
 from torchview import draw_graph
+from torchvision import models
+from torchsummary import summary
 
 # Model
 model = torch.hub.load("ultralytics/yolov5", "yolov5s", pretrained=True)
@@ -23,7 +25,7 @@ print(results.pandas().xyxy[0])  # img1 predictions (pandas)
 
 input_tensor = torch.randn(1, 3, 384, 640)  # Batch size of 1, 3 channels (RGB), 384x640 input
 output_tensor = model(input_tensor)
-print("the model is: ", model)
+# print("the model is: ", model)
 model_graph = draw_graph(
     model,
     input_size=(1, 3, 384, 640),
@@ -33,7 +35,7 @@ model_graph = draw_graph(
     depth=1000,
     directory=".",
 )
-model_graph.visual_graph.render(format="pdf")
+model_graph.visual_graph.render(format="svg")
 
 
 # import torch
@@ -44,3 +46,15 @@ model_graph.visual_graph.render(format="pdf")
 # writer = SummaryWriter("runs/yolov5")
 # writer.add_graph(model, dummy_input)
 # writer.close()
+
+
+import torch
+from models.experimental import attempt_load
+from utils.general import set_logging
+from utils.torch_utils import select_device
+
+set_logging()
+device = select_device("cpu")
+model = attempt_load("yolov5s.pt")  # , map_location=device)
+print(model)
+summary(model, (3, 384, 640))
