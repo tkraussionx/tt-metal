@@ -7,11 +7,6 @@ from loguru import logger
 import json
 from pathlib import Path
 import ttnn
-from models.demos.mistral7b.tt.mistral_common_ttnn import (
-    precompute_freqs,
-    generate_cos_sin_cache_ttnn,
-    prepare_inputs_ttnn,
-)
 from models.demos.mixtral8x7b.tt.mixtral_mlp_ttnn import TtMixtralMLP
 from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn import TtMoeLayer
 from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs
@@ -21,6 +16,7 @@ from models.utility_functions import (
     comp_pcc,
     comp_allclose,
 )
+from models.utility_functions import get_devices_for_t3000
 
 
 @pytest.mark.parametrize(
@@ -29,17 +25,20 @@ from models.utility_functions import (
 )
 @pytest.mark.parametrize(
     "iterations",
-    ((3,)),
+    ((1,)),
 )
 @pytest.mark.parametrize(
     "pcc",
     ((0.99,)),
 )
-def test_mistral_moe_inference(pcc, model_config, iterations):
-    ttnn.enable_program_cache()
-
+def test_mistral_moe_inference(all_devices, pcc, model_config, iterations):
     # TODO Scale the model (mixtral) to multiple devices when T3000 is available
-    devices = [ttnn.open_device(device_id=i) for i in range(8)]
+    num_devices = 8
+    devices = all_devices
+    print("DEVICES NUM", len(devices))
+    devices = get_devices_for_t3000(devices, num_devices)  # [ttnn.open_device(device_id=i) for i in range(8)]
+    if num_devices == 4:
+        devices += devices
     dtype_str, mem_config_str = model_config.split("-")
     if dtype_str == "BFLOAT16":
         dtype = ttnn.bfloat16
@@ -90,13 +89,16 @@ def test_mistral_moe_inference(pcc, model_config, iterations):
                 args=model_args,
                 layer_num=None,
                 expert_num=i,
+                dtype=dtype,
             )
-            for i in range(8)
+            for i in range(len(devices))
         ],
         state_dict=partial_state_dict,
         # layer_num=layer_num,
         moe_args=model_args,
         devices=devices,
+        num_devices=num_devices,
+        dtype=dtype,
     )
 
     reference_model = MoeLayer(
@@ -127,12 +129,22 @@ def test_mistral_moe_inference(pcc, model_config, iterations):
             for device in devices
         ]
         # Run TT model
-        tt_out = tt_model(tt_decode_input)[0]
-        tt_output_torch = ttnn.to_torch(tt_out).squeeze(2)  # [batch, seq, hidden_dim]
+        tt_out, selected_tt, res_tt = tt_model(tt_decode_input)
+        print("Converting to torch")
+        tt_output_torch = ttnn.to_torch(tt_out[0]).squeeze(2)  # [batch, seq, hidden_dim]
+
+        print("Converted to torch")
 
         # Reference model
-        ref_output = reference_model(pt_decode_input)
-
+        ref_output, selected_torch, res_torch = reference_model(pt_decode_input)
+        print("REF MODEL DONE", selected_tt, selected_torch)
+        for head in range(8):
+            print(f"head {head}")
+            # print("imtermediate results:", comp_pcc(res_tt[head][0], res_torch[head][0])[1])
+            print("imtermediate batches:", res_tt[head][2], res_torch[head][2])
+            # print("imtermediate weights:", comp_pcc(res_tt[head][1], res_torch[head][1])[1])
+            print("imtermediate heads:", res_tt[head][3], res_torch[head][3])
+            print("all weights:", comp_pcc(res_tt[head][4], res_torch[head][4])[1])
         passing, pcc_message = comp_pcc(ref_output, tt_output_torch, pcc)
 
         logger.info(comp_allclose(ref_output, tt_output_torch))

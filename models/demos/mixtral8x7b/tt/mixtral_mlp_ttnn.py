@@ -8,21 +8,14 @@ import ttnn
 
 
 class TtMixtralMLP(torch.nn.Module):
-    def __init__(
-        self,
-        device,
-        state_dict,
-        args,
-        layer_num,
-        expert_num,
-        grid=ttnn.CoreGrid(8, 8),
-    ):
+    def __init__(self, device, state_dict, args, layer_num, expert_num, dtype, grid=None):
         super().__init__()
 
         self.state_dict = state_dict
         self.device = device
         self.model_config = args
-        self.grid = grid
+        self.grid = ttnn.CoreGrid(y=7, x=8)
+        self.dtype = dtype
 
         # base_name = f"layers.{layer_num}.feed_forward"
         # torch_weight = lambda name: torch.transpose(self.state_dict[f"{base_name}.{name}.weight"], -2, -1)
@@ -41,19 +34,19 @@ class TtMixtralMLP(torch.nn.Module):
         # self.w3 = as_tensor("w3", "FF3_MM_WEIGHTS_DTYPE")
         self.w1 = ttnn.from_torch(
             self.state_dict[f"experts.{expert_num}.w1.weight"].permute(1, 0),
-            dtype=ttnn.bfloat16,
+            dtype=self.dtype,
             device=self.device,
             layout=ttnn.TILE_LAYOUT,
         )
         self.w2 = ttnn.from_torch(
             self.state_dict[f"experts.{expert_num}.w2.weight"].permute(1, 0),
-            dtype=ttnn.bfloat16,
+            dtype=self.dtype,
             device=self.device,
             layout=ttnn.TILE_LAYOUT,
         )
         self.w3 = ttnn.from_torch(
             self.state_dict[f"experts.{expert_num}.w3.weight"].permute(1, 0),
-            dtype=ttnn.bfloat16,
+            dtype=self.dtype,
             device=self.device,
             layout=ttnn.TILE_LAYOUT,
         )
@@ -66,7 +59,7 @@ class TtMixtralMLP(torch.nn.Module):
         HF reference: self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         """
         ff1_output_shape = ttnn.Shape([x.shape.with_tile_padding()[-2], self.w1.shape.with_tile_padding()[-1]])
-        shard = ttnn.create_sharded_memory_config(ff1_output_shape, self.grid, ttnn.ShardStrategy.WIDTH)
+        # shard = ttnn.create_sharded_memory_config(ff1_output_shape, self.grid, ttnn.ShardStrategy.WIDTH)
 
         w1_out = ttnn.linear(
             x, self.w1, activation="silu", core_grid=self.grid, use_1d_systolic_array=True  # , memory_config=shard
