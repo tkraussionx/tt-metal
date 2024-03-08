@@ -24,4 +24,5 @@
 # ——————————————
 # MULTICORE_REUSE_MCAST
 # ——————————————
-make programming_examples/matmul_multicore_reuse_mcast; ./build/programming_examples/matmul_multicore_reuse_mcast
+make programming_examples/matmul_multicore_reuse_mcast;
+#./build/programming_examples/matmul_multicore_reuse_mcast

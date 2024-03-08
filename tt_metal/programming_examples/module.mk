@@ -2,6 +2,7 @@ PROGRAMMING_EXAMPLES_TESTDIR = $(OUT)/programming_examples
 PROGRAMMING_EXAMPLES_OBJDIR = $(OBJDIR)/programming_examples
 
 PROGRAMMING_EXAMPLES_INCLUDES = $(COMMON_INCLUDES)
+PROGRAMMING_EXAMPLES_INCLUDES += -I$(TT_METAL_HOME)/tt_eager
 PROGRAMMING_EXAMPLES_LDFLAGS = -ltt_metal -ldl -lstdc++fs -pthread -lyaml-cpp -lm
 
 include $(TT_METAL_HOME)/tt_metal/programming_examples/loopback/module.mk

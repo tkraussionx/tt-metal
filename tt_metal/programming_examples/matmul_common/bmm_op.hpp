@@ -17,7 +17,8 @@
 #include "third_party/umd/device/tt_xy_pair.h"
 #include "third_party/magic_enum/magic_enum.hpp"
 
-#include "tt_metal/programming_examples/matmul_common/work_split.hpp"
+//#include "tt_metal/programming_examples/matmul_common/work_split.hpp"
+#include "tt_dnn/op_library/work_split.hpp"
 
 using std::pair;
 using CoreCoord = tt_xy_pair;
@@ -127,16 +128,16 @@ inline float check_bfloat16_vector_pcc(const vector<bfloat16> &vec_a, const vect
 
 namespace bmm_op_utils {
 
-constexpr std::array<tuple<uint32_t, uint32_t>, 20> SUBBLOCK_HW_CHOICES = {{
-    {4, 2}, {2, 4}, {8, 1}, {1, 8},
-    {7, 1}, {1, 7},
-    {3, 2}, {2, 3}, {6, 1}, {1, 6},
-    {5, 1}, {1, 5},
-    {2, 2}, {4, 1}, {1, 4},
-    {3, 1}, {1, 3},
-    {2, 1}, {1, 2},
-    {1, 1},
-}};
+// constexpr std::array<tuple<uint32_t, uint32_t>, 20> SUBBLOCK_HW_CHOICES = {{
+//     {4, 2}, {2, 4}, {8, 1}, {1, 8},
+//     {7, 1}, {1, 7},
+//     {3, 2}, {2, 3}, {6, 1}, {1, 6},
+//     {5, 1}, {1, 5},
+//     {2, 2}, {4, 1}, {1, 4},
+//     {3, 1}, {1, 3},
+//     {2, 1}, {1, 2},
+//     {1, 1},
+// }};
 
 tuple<uint32_t, uint32_t, uint32_t, uint32_t> get_large_matmul_params(uint32_t Mt, uint32_t Nt, uint32_t num_cores_y, uint32_t num_cores_x, uint32_t in0_block_w) {
     auto Nt_fac = _get_prime_factors(Nt);
