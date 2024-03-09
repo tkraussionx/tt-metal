@@ -84,10 +84,14 @@ void kernel_main() {
     bool diffed_NIU_SLV_POSTED_ATOMIC_RECEIVED = false;
     bool diffed_NIU_SLV_NONPOSTED_ATOMIC_SENT = false;
     while (num_pages_sent < total_pages_to_send) {
+        DPRINT << " sws: args waiting for erisc semaphore update at " (uint32_t)writer_send_semaphore_addr_ptr << "\n";
         noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
 
+        DPRINT << " sws: sending chunk\n";
         noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
         send_chunk(num_pages_per_send, total_pages_to_send, num_pages_sent, cb_id_in0, page_size, eth_l1_sender_base_noc_addr, writer_send_semaphore_addr_ptr);
+        DPRINT << " sws: noc_semaphore_inc\n";
         noc_semaphore_inc(eth_l1_sender_semaphore_addr, 1);
     }
+    DPRINT << " sws: DONE\n";
 }

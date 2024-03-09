@@ -266,6 +266,17 @@ void eth_send_done() {
         1);
 }
 
+/**
+ * Caller is expected to be sender side. This call will block until receiver sends both levels of ack
+ *
+ * Blocking
+ *
+ * Return value: None
+ *
+ * | Argument                    | Description                                             | Type     | Valid Range | Required |
+ * |-----------------------------|---------------------------------------------------------|----------|-------------|----------|
+ * | channel                     | Which transaction channel to block on                   | uint32_t | 0..7        | True     |
+ */
 FORCE_INLINE
 void eth_wait_receiver_done() {
     while (erisc_info->channels[0].bytes_sent != 0) {
@@ -346,12 +357,12 @@ void eth_wait_for_bytes_on_channel(uint32_t num_bytes, uint8_t channel) {
 
 /**
  * Initiates an asynchronous call from receiver ethernet core to tell remote sender ethernet core that data sent
- * via eth_send_bytes is no longer being used. Also, see \a eth_wait_for_receiver_done
+ * via eth_send_bytes is no longer being used. Also, see \a eth_wait_for_receiver_done. Sends over channel 0
  *
  * Return value: None
  *
- * | Argument          | Description                                             | Type     | Valid Range | Required |
- * |-------------------|---------------------------------------------------------|----------|-------------|----------|
+ * | Argument                    | Description                                             | Type     | Valid Range | Required |
+ * |-----------------------------|---------------------------------------------------------|----------|-------------|----------|
  */
 FORCE_INLINE
 void eth_receiver_done() {
@@ -429,14 +440,18 @@ void eth_receiver_channel_ack(uint32_t channel) {
         1);
 }
 
+
 /*
- * Initiates an asynchronous call from receiver ethernet core to tell remote sender ethernet core that data sent
- * via eth_send_bytes has been received. Also, see \a eth_wait_for_receiver_done
+ * Caller is expected to be receiver side. This sends the first level ack to sender, indicating that the last payload sent
+ * on the channel was received and that sender is free to clear its buffer
+ *
+ * Non-blocking
  *
  * Return value: None
  *
- * | Argument          | Description                                             | Type     | Valid Range | Required |
- * |-------------------|---------------------------------------------------------|----------|-------------|----------|
+ * | Argument                    | Description                                             | Type     | Valid Range | Required |
+ * |-----------------------------|---------------------------------------------------------|----------|-------------|----------|
+ * | channel                     | Which transaction channel to ack                        | uint32_t | 0..7        | True     |
  */
 FORCE_INLINE
 void eth_receiver_acknowledge(uint8_t channel = 0) {
