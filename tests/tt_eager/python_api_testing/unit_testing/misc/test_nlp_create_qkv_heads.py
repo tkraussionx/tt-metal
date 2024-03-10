@@ -102,7 +102,7 @@ def test_nlp_create_qkv_heads_falcon7b_test(batch, seq_len, dtype, in0_mem_confi
     run_nlp_create_qkv_heads_falcon7b_test(batch, seq_len, dtype, in0_mem_config, out_mem_config, device)
 
 
-def test_nlp_create_qkv_heads_falcon7b_with_program_cache(use_program_cache, device):
+def test_nlp_create_qkv_heads_falcon7b_with_program_cache(device, use_program_cache):
     dtype = ttl.tensor.DataType.BFLOAT8_B
     mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
     for _ in range(2):
@@ -277,7 +277,7 @@ def test_nlp_create_qkv_heads_test(
     )
 
 
-def test_nlp_create_qkv_heads_with_program_cache(use_program_cache, device):
+def test_nlp_create_qkv_heads_with_program_cache(device, use_program_cache):
     dtype = ttl.tensor.DataType.BFLOAT8_B
     mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
     for _ in range(2):
@@ -452,7 +452,7 @@ def test_sharded_nlp_create_qkv_heads_test(
     )
 
 
-def test_sharded_nlp_create_qkv_heads_with_program_cache(use_program_cache, device):
+def test_sharded_nlp_create_qkv_heads_with_program_cache(device, program_cache):
     dtype = ttl.tensor.DataType.BFLOAT8_B
     mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
     for _ in range(2):

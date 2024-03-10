@@ -82,7 +82,7 @@ def test_nlp_concat_heads_test(batch, seq_len, dtype, in0_mem_config, out_mem_co
     run_nlp_concat_heads_test(batch, seq_len, dtype, in0_mem_config, out_mem_config, device)
 
 
-def test_nlp_concat_heads_with_program_cache(use_program_cache, device):
+def test_nlp_concat_heads_with_program_cache(device, use_program_cache):
     dtype = ttl.tensor.DataType.BFLOAT8_B
     mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
     for _ in range(2):
