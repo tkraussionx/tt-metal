@@ -338,9 +338,6 @@ PYBIND11_MODULE(_C, m) {
     py::module_ m_dtx = m.def_submodule("dtx", "Submodule defining data transformation engine");
     tt::tt_metal::DTXModule(m_dtx);
 
-    // py::module_ m_program_cache = m.def_submodule("program_cache", "Submodule for caching operations");
-    // tt::tt_metal::ProgramCacheModule(m_program_cache);
-
     py::module_ m_operations = m.def_submodule("operations", "Submodule for operations");
     tt::operations::py_module(m_operations);
 
@@ -351,7 +348,6 @@ PYBIND11_MODULE(_C, m) {
     tracy_decorator(m_device);
     tracy_decorator(m_tensor);
     tracy_decorator(m_dtx);
-    tracy_decorator(m_program_cache);
     tracy_decorator(m_operations);
 #endif
 }

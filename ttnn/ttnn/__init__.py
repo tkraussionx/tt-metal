@@ -107,11 +107,6 @@ from ttnn.decorators import (
 
 import ttnn.experimental
 
-from ttnn.program_cache import (
-    enable_program_cache,
-    disable_and_clear_program_cache,
-)
-
 from ttnn.operations.core import (
     from_torch,
     to_torch,
