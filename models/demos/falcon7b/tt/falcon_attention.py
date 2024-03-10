@@ -133,6 +133,7 @@ class TtFalconAttention(nn.Module):
         self.device = device
         self.state_dict = state_dict
         self.model_config = model_config
+        self.padded_local_heads = 96
 
         if (self.head_dim * num_heads) != self.hidden_size:
             raise ValueError(
@@ -279,6 +280,39 @@ class TtFalconAttention(nn.Module):
                 [batch - 1, 0, nearest_32(layer_past_len + 1) - 1, self.head_dim - 1],
                 output_mem_config=self.model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"],
             )
+            padded_layer_past_len = nearest_32(layer_past_len + 1)
+
+            print(f"1.query_layer:{query_layer.get_legacy_shape()}")
+
+            # Pad and transpose Q for batched matmul
+            # if self.batched_attn:
+            query_layer = tt_lib.tensor.pad(
+                query_layer, [1, self.padded_local_heads, 32, self.head_dim], [0, 0, 0, 0], 0.0
+            )
+
+            print(f"2.query_layer:{query_layer.get_legacy_shape()}")
+
+            query_layer = tt_lib.tensor.transpose(
+                query_layer,
+                -2,
+                -3,
+            )
+
+            print(f"3.query_layer:{query_layer.get_legacy_shape()}")
+
+            query_layer = tt_lib.tensor.reshape(
+                query_layer,
+                32,
+                1,
+                self.padded_local_heads,
+                self.head_dim,  # Batch must be in dim 0 to match K cache
+            )
+
+            print(f"4.query_layer:{query_layer.get_legacy_shape()}")
+
+            query_layer = tt_lib.tensor.interleaved_to_sharded(
+                query_layer, sharded_mem_config=self.model_config["Q_TRANSPOSE_MEMCFG"]
+            )
 
         ######################
         ### PRE-SOFTMAX MM ###
@@ -301,13 +335,27 @@ class TtFalconAttention(nn.Module):
         elif llm_mode == "decode":
             # TODO: switch to group_attn_matmul once multiple q heads is supported (issue #5318)
             if is_wormhole_b0():
-                attn_weights = tt_lib.operations.primary.transformers.attn_matmul(
+                # attn_weights = tt_lib.operations.primary.transformers.attn_matmul(
+                #     query_layer,
+                #     key_layer_transposed,
+                #     compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+                #     output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                #     output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
+                # )
+                attn_prog_config = self.model_config["ATTN_BATCHED_MM_PROGCFG_LAMBDA"](padded_layer_past_len // 32)
+                attn_output_memcfg = self.model_config["ATTN_BATCHED_MM_OUTPUT_MEMCFG"]
+                attn_output_memcfg.shard_spec.shape[1] = padded_layer_past_len
+
+                attn_weights = tt_lib.operations.primary.matmul(
                     query_layer,
                     key_layer_transposed,
-                    compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-                    output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                    program_config=attn_prog_config,
+                    output_mem_config=attn_output_memcfg,
                     output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
+                    compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
                 )
+                print(f"attn_weights:{attn_weights.get_legacy_shape()}")
+
             else:
                 attn_weights = tt_lib.operations.primary.transformers.group_attn_matmul(
                     query_layer,
@@ -318,6 +366,9 @@ class TtFalconAttention(nn.Module):
                 )
         query_layer.deallocate()
         key_layer_transposed.deallocate()
+
+        print(f"self.scalar:{self.scalar}")
+        exit(0)
 
         attn_weights = tt_lib.tensor.bcast(
             attn_weights,
