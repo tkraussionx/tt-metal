@@ -9,12 +9,13 @@ import tt_lib
 
 @pytest.mark.eager_host_side
 @pytest.mark.post_commit
-def test_program_cache():
-    tt_lib.program_cache.disable_and_clear()
-    tt_lib.program_cache.enable()
-    assert tt_lib.program_cache.num_entries() == 0, f"Unused program cache has non-zero entries?"
-    tt_lib.program_cache.disable_and_clear()
+def test_program_cache(device):
+    device.disable_and_clear_program_cache()
+    device.enable_program_cache()
+    assert device.num_program_cache_entries() == 0, f"Unused program cache has non-zero entries?"
+    device.disable_and_clear_program_cache()
     pass
+
 
 @pytest.mark.eager_host_side
 @pytest.mark.post_commit
