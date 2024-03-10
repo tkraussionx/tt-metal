@@ -231,8 +231,10 @@ class Device {
 
     void enable_program_cache() { program_cache.enable(); }
     void disable_and_clear_program_cache() {
-        program_cache.clear();
-        program_cache.disable();
+        if (this->program_cache.is_enabled()) {
+            program_cache.clear();
+            program_cache.disable();
+        }
     }
     std::size_t num_program_cache_entries() { return program_cache.num_entries(); }
 };
