@@ -14,8 +14,13 @@
 #include "tt_metal/detail/util.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 
+#include "tt_metal/common/bfloat16.hpp"
 #include "tt_metal/programming_examples/matmul_common/bmm_op.hpp"
 #include "tt_metal/common/tilize_untilize.hpp"
+#include "tensor/owned_buffer.hpp"
+#include "tensor/owned_buffer_functions.hpp"
+#include "tt_numpy/functions.hpp"
+
 
 using namespace tt::constants;
 using namespace tt;
@@ -29,6 +34,21 @@ namespace reuse_mcast_1d_optimized_helpers {
 using namespace tt::constants;
 using namespace tt;
 using namespace tt_metal;
+
+namespace numpy {
+
+    template <typename DataType>
+    struct ndarray {
+        Shape shape;
+        void* data;
+
+        ndarray(Shape shape) : shape(shape), data(malloc(tt::tt_metal::compute_volume(shape) * sizeof(DataType))) {}
+        ~ndarray() { free(data); }
+
+        std::size_t size() const { return tt::tt_metal::compute_volume(shape); }
+    };
+
+}  // namespace numpy
 
 operation::ProgramWithCallbacks create_program_mcast_in0(
     tt_metal::Device *device,
@@ -1246,6 +1266,14 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_(cons
     }
     TT_ASSERT(Kt % in0_block_w == 0);
 
+    // NEW STUFF
+    // constexpr int device_id = 0;
+    // Device *device = CreateDevice(device_id);
+    // auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
+    // uint32_t num_cores_x = compute_with_storage_grid_size.x;
+    // uint32_t num_cores_y = compute_with_storage_grid_size.y;
+    ///////////////////
+
     // This should allocate a DRAM buffer on the device
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
@@ -1342,6 +1370,15 @@ void golden_matmul(vector<bfloat16>& a, vector<bfloat16>& b, vector<bfloat16>& o
 }
 
 int main(int argc, char **argv) {
+
+    using tt::tt_metal::BorrowedStorage;
+    using tt::tt_metal::DataType;
+    using tt::tt_metal::OwnedStorage;
+    using tt::tt_metal::Shape;
+    using tt::tt_metal::Tensor;
+    using namespace tt::tt_metal::borrowed_buffer;
+    using namespace tt::tt_metal::owned_buffer;
+
     bool pass = true;
 
     if (getenv("TT_METAL_SLOW_DISPATCH_MODE") != nullptr) {
@@ -1353,7 +1390,8 @@ int main(int argc, char **argv) {
         constexpr int device_id = 0;
         Device *device = CreateDevice(device_id);
 
-        // NEW STUFF
+        // This is already defind in above matmul function,
+        // but we need it here right now to pass these params into matmul_multi_core_reuse_mcast_1d_optimized() below
         auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
         uint32_t num_cores_x = compute_with_storage_grid_size.x;
         uint32_t num_cores_y = compute_with_storage_grid_size.y;
@@ -1389,24 +1427,41 @@ int main(int argc, char **argv) {
         uint32_t dram_buffer_B_size = single_tile_size * Nt * Kt; // num_tiles of FP16_B
         uint32_t dram_buffer_C_size = single_tile_size * Mt * Nt; // num_tiles of FP16_B
 
-        /* input vectors */
-        std::vector<bfloat16> src0_vec = create_random_vector_of_bfloat16_native(dram_buffer_A_size, 1, 123, -0.4);
-        std::vector<bfloat16> src1_vec = create_random_vector_of_bfloat16_native(dram_buffer_B_size, 1, 12522, -0.3);
+        // TO:DO
+        // 1. Make tensors called src0_tensor, src1_tensor, and result_tensor on the CPU host
+        // 2. Populate the tensors with values (same values for testing purposes)
+        // 3. Pass the tensors into the matmul_multicore_reuse_mcast_1d_optimized function below.
 
-        /* Golden Matmul running on CPU (Float)*/
-        vector<bfloat16> golden_vec(M * N, 0);
-        golden_matmul(src0_vec, src1_vec, golden_vec, M, N, K, B);
+        Shape shapeSrc0 = {B, M, K};
+        Shape shapeSrc1 = {B, K, N};
+        Shape shapeResult = {B, M, N};
 
-        /* Input vector tilizing */
-        tilize(src0_vec, M, K);
-        tilize(src1_vec, K, N);
+        // Create source tensors with specific values using the utilities from numpy functions.hpp
+        auto src0_tensor = tt::numpy::ones(shapeSrc0, DataType::BFLOAT16, Layout::ROW_MAJOR, device);
+        auto src1_tensor = tt::numpy::ones(shapeSrc1, DataType::BFLOAT16, Layout::ROW_MAJOR, device);
 
-        /* Calling the MatMul host program. Read in result into a host vector */
-        vector<bfloat16> result_vec(dram_buffer_C_size/sizeof(bfloat16));
-        matmul_multi_core_reuse_mcast_1d_optimized(src0_vec, src1_vec, result_vec, false, M, N, K, B, device);
-        untilize(result_vec, M, N);
+        // Result tensor will be created within mcast 1D/2D optzn, so define its shape here
+        auto result_tensor = tt::numpy::zeros(shapeResult, DataType::BFLOAT16, Layout::ROW_MAJOR, device);
 
-        log_info(tt::LogVerif, "Output vector of size {}", result_vec.size());
+        matmul_multi_core_reuse_mcast_1d_optimized(
+        src0_tensor,
+        src1_tensor,
+        std::nullopt, // Assuming no bias tensor is used
+        result_tensor,
+        false, // broadcast_batch,
+        compute_with_storage_grid_size,
+        compute_kernel_config,
+        in0_block_w,
+        out_subblock_h,
+        out_subblock_w,
+        per_core_M,
+        per_core_N,
+        false, // fuse_batch,
+        std::nullopt, // fused_activation,
+        false // mcast_in0
+    );
+        log_info(tt::LogVerif, "TENSOR OPS SUCCESSFUL", 0);
+        CloseDevice(device);
     } catch (const std::exception &e) {
         tt::log_error(tt::LogTest, "Test failed with exception!");
         tt::log_error(tt::LogTest, "{}", e.what());

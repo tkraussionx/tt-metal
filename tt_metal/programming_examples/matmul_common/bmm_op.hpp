@@ -17,6 +17,7 @@
 #include "third_party/umd/device/tt_xy_pair.h"
 #include "third_party/magic_enum/magic_enum.hpp"
 
+// This caused a collision error with op_library work_split.  Maybe this needs a fix later, but for now this is OK.
 //#include "tt_metal/programming_examples/matmul_common/work_split.hpp"
 #include "tt_dnn/op_library/work_split.hpp"
 

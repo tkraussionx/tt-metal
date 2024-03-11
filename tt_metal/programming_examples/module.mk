@@ -3,6 +3,17 @@ PROGRAMMING_EXAMPLES_OBJDIR = $(OBJDIR)/programming_examples
 
 PROGRAMMING_EXAMPLES_INCLUDES = $(COMMON_INCLUDES)
 PROGRAMMING_EXAMPLES_INCLUDES += -I$(TT_METAL_HOME)/tt_eager
+PROGRAMMING_EXAMPLES_INCLUDES += $(shell find $(TT_METAL_HOME)/tt_eager -type f -name '*.h' -exec dirname {} \; | sort | uniq | sed 's/^/-I/')
+PROGRAMMING_EXAMPLES_INCLUDES += $(shell find $(TT_METAL_HOME)/tt_metal/hw/inc -type f -name '*.h' -exec dirname {} \; | sort | uniq | sed 's/^/-I/')
+
+# WARNING: THIS CAUSES A TON OF ERRORS
+# PROGRAMMING_EXAMPLES_INCLUDES += -I$(TT_METAL_HOME)/tt_metal/hw/ckernels/grayskull/metal/llk_io/
+# PROGRAMMING_EXAMPLES_INCLUDES += -I$(TT_METAL_HOME)/tt_metal/hw/ckernels/wormhole/metal/llk_io/
+
+# TESTING NESTED DIRECTORY INCLUDES FROM TT_EAGER
+# PROGRAMMING_EXAMPLES_INCLUDES += -I$(TT_METAL_HOME)/tt_eager/tensor
+# PROGRAMMING_EXAMPLES_INCLUDES += -I$(TT_METAL_HOME)/tt_eager/tt_lib
+# PROGRAMMING_EXAMPLES_INCLUDES += -I$(TT_METAL_HOME)/tt_eager/tt_lib/tt_numpy
 PROGRAMMING_EXAMPLES_LDFLAGS = -ltt_metal -ldl -lstdc++fs -pthread -lyaml-cpp -lm
 
 include $(TT_METAL_HOME)/tt_metal/programming_examples/loopback/module.mk
