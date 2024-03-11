@@ -49,8 +49,8 @@ void kernel_main() {
                 // Read page by page so that writer can be kicked off instead of being blocked waiting for full chunk to be read
                 // Look into perf/optimizations for this
                 // DPRINT << "rwr fetch_chunk\n";
-                fetch_chunk(cb_id_in0, num_pages, page_size, eth_receiver_l1_base_noc_addr);
-                noc_semaphore_inc(eth_receiver_l1_semaphore_noc_addr, 1);
+                fetch_chunk(cb_id_in0, num_pages, page_size, eth_receiver_l1_base_noc_addr, eth_receiver_l1_semaphore_noc_addr);
+                // noc_semaphore_inc(eth_receiver_l1_semaphore_noc_addr, 1);
                 transfers_completed++;
                 // DPRINT << "rwr " << ID << " transfers_completed: " << transfers_completed << "\n";
             }
@@ -61,12 +61,13 @@ void kernel_main() {
             noc_semaphore_wait(receiver_read_semaphore_addr_ptr, 1);
             noc_semaphore_set(receiver_read_semaphore_addr_ptr, 0);
             // DPRINT << "rwr " << ID << " fetch_chunk\n";
-            fetch_chunk(cb_id_in0, rem_num_pages, page_size, eth_receiver_l1_base_noc_addr);
-            noc_semaphore_inc(eth_receiver_l1_semaphore_noc_addr, 1);
+            fetch_chunk(cb_id_in0, rem_num_pages, page_size, eth_receiver_l1_base_noc_addr, eth_receiver_l1_semaphore_noc_addr);
+            // noc_semaphore_inc(eth_receiver_l1_semaphore_noc_addr, 1);
+            push_filler_pages_to_cb(cb_id_in0, num_pages - rem_num_pages);
             transfers_completed++;
             // DPRINT << "rwr " << ID << " transfers_completed: " << transfers_completed << "\n";
         }
     }
 
-    DPRINT << "rwr " << ID << " DONE\n";
+    // DPRINT << "rwr " << ID << " DONE\n";
 }

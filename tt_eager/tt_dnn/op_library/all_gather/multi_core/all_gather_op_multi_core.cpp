@@ -4,6 +4,7 @@
 
 #include <algorithm>
 
+#include "common/core_coord.h"
 #include "eth_l1_address_map.h"
 #include "tensor/tensor_impl.hpp"
 #include "tt_dnn/op_library/all_gather/all_gather_op.hpp"
@@ -38,6 +39,35 @@ uint32_t get_num_buffers_in_counter_clockwise_direction() {
     // return all_gather_buffer_params::enable_bidirectional ? all_gather_buffer_params::num_buffers - all_gather_buffer_params::num_buffers / 2 : 0;
     // Force all through counter-clockwise direction
     return all_gather_buffer_params::num_buffers - get_num_buffers_in_clockwise_direction();
+}
+
+std::tuple<CoreRangeSet,CoreRangeSet> select_worker_cores(uint32_t num_links, uint32_t link) {
+    constexpr uint32_t worker_grid_width = 8;
+    constexpr bool fit_sender_and_receiver_workers_on_same_row = (worker_grid_width / 2) >= all_gather_buffer_params::num_buffers;
+    // FIXME: Need to shift down a couple rows to avoid a runtime/dispatcher bug that prevents the first worker
+    //        core from receiving its "GO" signal
+    std::set<CoreRange> receiver_worker_cores = {};
+    std::set<CoreRange> sender_worker_cores = {};
+    uint32_t max_cols = 8;
+    uint32_t curr_row = link * (((all_gather_buffer_params::num_buffers * 2 - 1) / max_cols) + 1);
+    uint32_t curr_col = 0;
+    for (uint32_t r = 0; r < all_gather_buffer_params::num_buffers; r++) {
+        receiver_worker_cores.insert(CoreRange(CoreCoord(curr_col, curr_row)));
+        curr_col ++;
+        if (curr_col == max_cols) {
+            curr_col = 0;
+            curr_row++;
+        }
+    }
+    for (uint32_t s = 0; s < all_gather_buffer_params::num_buffers; s++) {
+        sender_worker_cores.insert(CoreRange(CoreCoord(curr_col, curr_row)));
+        curr_col ++;
+        if (curr_col == max_cols) {
+            curr_col = 0;
+            curr_row++;
+        }
+    }
+    return {CoreRangeSet(receiver_worker_cores), CoreRangeSet(sender_worker_cores)};
 }
 
 operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor& input_tensor, Tensor& output_tensor, const uint32_t dim, const uint32_t num_links, const uint32_t ring_size, const uint32_t ring_index, const chip_id_t receiver_device_id, const chip_id_t sender_device_id) {
@@ -203,21 +233,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
     for (uint32_t i = 0; i < num_links; ++i) {
         // We can't have overlap between the mcast grid for worker cores for different links since mcasting the semaphore in receiver would corrupt other link semaphores
         // We can have overlap between a link's sender and receiver worker grids if we have the semaphores at different addresses
-        constexpr uint32_t worker_grid_width = 8;
-        constexpr bool fit_sender_and_receiver_workers_on_same_row = (worker_grid_width / 2) >= all_gather_buffer_params::num_buffers;
-        // FIXME: Need to shift down a couple rows to avoid a runtime/dispatcher bug that prevents the first worker
-        //        core from receiving its "GO" signal
-        uint32_t receiver_worker_row = (fit_sender_and_receiver_workers_on_same_row ? i + 2: 2 * i) + 2;
-        uint32_t sender_worker_row = (fit_sender_and_receiver_workers_on_same_row ? i + 2: (2 * i) + 1) + 2;
-        uint32_t sender_worker_col_offset = fit_sender_and_receiver_workers_on_same_row ? all_gather_buffer_params::num_buffers : 0;
-        auto receiver_workers = CoreRange({0, receiver_worker_row}, {all_gather_buffer_params::num_buffers - 1, receiver_worker_row});
-        auto sender_workers = CoreRange({sender_worker_col_offset, sender_worker_row}, {sender_worker_col_offset + all_gather_buffer_params::num_buffers - 1, sender_worker_row});
-        // std::cout << "Receiver workers start: (x=" << receiver_workers.start.x << ", y=" << receiver_workers.start.y << ") -> " <<
-        //             " (x=" << receiver_workers.end.x << ", y=" << receiver_workers.end.y << ")" << std::endl;
-        // std::cout << "Sender workers start: (x=" << sender_workers.start.x << ", y=" << sender_workers.start.y << ") -> " <<
-        //             " (x=" << sender_workers.end.x << ", y=" << sender_workers.end.y << ")" << std::endl;
-        worker_receiver_cores.push_back(receiver_workers);
-        worker_sender_cores.push_back(sender_workers);
+        auto const& [receiver_workers, sender_workers] = select_worker_cores(num_links, i);
 
         // Circular Buffer Setup
         // TODO: Optimize mem usage
@@ -278,8 +294,8 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
             rem_pages = pages_per_link.at(i);
         }
 
-        auto sender_worker_cores = grid_to_cores(sender_workers.start, sender_workers.end, true);
-        auto receiver_worker_cores = grid_to_cores(receiver_workers.start, receiver_workers.end, true);
+        auto sender_worker_cores = corerange_to_cores(sender_workers, std::nullopt, true);
+        auto receiver_worker_cores = corerange_to_cores(receiver_workers, std::nullopt, true);
         all_worker_sender_cores.insert(all_worker_sender_cores.end(), sender_worker_cores.begin(), sender_worker_cores.end());
         all_worker_receiver_cores.insert(all_worker_receiver_cores.end(), receiver_worker_cores.begin(), receiver_worker_cores.end());
 
@@ -327,14 +343,12 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
 
         std::vector<uint32_t> edm_clockwise_kernel_rt_args = {
             static_cast<uint32_t>(all_gather_buffer_params::erisc_handshake_address),
-            static_cast<uint32_t>(link_clockwise_sender_channels_offsets.at(i)),
-            static_cast<uint32_t>(link_clockwise_sender_num_channels.at(i)),
+            static_cast<uint32_t>(link_clockwise_sender_channels_offsets.at(i))
         };
 
         std::vector<uint32_t> edm_counter_clockwise_kernel_rt_args = {
             static_cast<uint32_t>(all_gather_buffer_params::erisc_handshake_address),
-            static_cast<uint32_t>(link_counter_clockwise_sender_channels_offsets.at(i)),
-            static_cast<uint32_t>(link_counter_clockwise_sender_num_channels.at(i)),
+            static_cast<uint32_t>(link_counter_clockwise_sender_channels_offsets.at(i))
         };
 
         for (uint32_t b = 0; b < all_gather_buffer_params::num_buffers; ++b) {
@@ -369,10 +383,8 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
 
         // Setup receiver direction args. Clockwise receiver is same offset as sender offset for clockwise direction
         edm_clockwise_kernel_rt_args.push_back(static_cast<uint32_t>(link_counter_clockwise_receiver_channels_offsets.at(i)));
-        edm_clockwise_kernel_rt_args.push_back(static_cast<uint32_t>(link_counter_clockwise_receiver_num_channels.at(i)));
 
         edm_counter_clockwise_kernel_rt_args.push_back(static_cast<uint32_t>(link_clockwise_receiver_channels_offsets.at(i)));
-        edm_counter_clockwise_kernel_rt_args.push_back(static_cast<uint32_t>(link_clockwise_receiver_num_channels.at(i)));
 
         for (uint32_t b = 0; b < all_gather_buffer_params::num_buffers; ++b) {
 
@@ -631,7 +643,9 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
         // Ethernet Kernels
         std::vector<uint32_t> eth_sender_ct_args = {
             static_cast<uint32_t>(get_num_buffers_in_clockwise_direction() ? 1 : 0),
-            static_cast<uint32_t>(get_num_buffers_in_counter_clockwise_direction() ? 1 : 0)
+            static_cast<uint32_t>(get_num_buffers_in_counter_clockwise_direction() ? 1 : 0),
+            static_cast<uint32_t>(link_clockwise_sender_num_channels.at(i)),
+            static_cast<uint32_t>(link_clockwise_receiver_num_channels.at(i))
         };
 
         auto eth_sender_kernel = tt_metal::CreateKernel(
@@ -651,7 +665,10 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
 
         std::vector<uint32_t> eth_receiver_ct_args = {
             static_cast<uint32_t>(get_num_buffers_in_counter_clockwise_direction() ? 1 : 0),
-            static_cast<uint32_t>(get_num_buffers_in_clockwise_direction() ? 1 : 0)};
+            static_cast<uint32_t>(get_num_buffers_in_clockwise_direction() ? 1 : 0),
+            static_cast<uint32_t>(link_counter_clockwise_sender_num_channels.at(i)),
+            static_cast<uint32_t>(link_counter_clockwise_receiver_num_channels.at(i))
+        };
 
         auto eth_receiver_kernel = tt_metal::CreateKernel(
             program,

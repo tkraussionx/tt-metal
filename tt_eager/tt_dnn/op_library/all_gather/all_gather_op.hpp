@@ -18,7 +18,7 @@ namespace all_gather_buffer_params {
     constexpr bool enable_bidirectional = true;
     constexpr uint32_t erisc_handshake_address = eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
     constexpr uint32_t total_l1_buffer_space = eth_l1_mem::address_map::MAX_L1_LOADING_SIZE - eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
-    constexpr uint32_t num_buffers = 6;
+    constexpr uint32_t num_buffers = 8;
     constexpr uint32_t semaphore_size = 32; // TODO: Remove this once dedicated semaphore space for user kernels are added
     constexpr uint32_t semaphore_offset = total_l1_buffer_space > 34*1024 ? semaphore_size * num_buffers : 0; // TODO: Remove this once dedicated semaphore space for user kernels are added
     constexpr uint32_t eth_buffer_size = total_l1_buffer_space > 34*1024 ? std::min<uint32_t>(16*1024, round_down((eth_l1_mem::address_map::MAX_L1_LOADING_SIZE - eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE - semaphore_offset) / num_buffers, 32)) : 0;

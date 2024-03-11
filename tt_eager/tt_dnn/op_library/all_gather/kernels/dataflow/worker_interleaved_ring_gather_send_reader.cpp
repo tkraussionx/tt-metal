@@ -8,7 +8,7 @@
 #include "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_ring_gather_utils.hpp"
 
 void kernel_main() {
-    DPRINT << "swr : START pre\n";
+    // DPRINT << "swr : START pre\n";
     const uint32_t src_addr = get_arg_val<uint32_t>(0);
     const uint32_t dst_addr = get_arg_val<uint32_t>(1);
 
@@ -79,6 +79,7 @@ void kernel_main() {
     if constexpr(rem_num_pages > 0) {
         // DPRINT << "swr " << ID << ": read_chunk\n";
         read_chunk(input_page_idx, cb_id_in0, s, rem_num_pages, page_size);
+        push_filler_pages_to_cb(cb_id_in0, num_pages - rem_num_pages);
     }
 
     uint32_t sem_idx = 1;
@@ -143,6 +144,7 @@ void kernel_main() {
             sem_idx++;
             // DPRINT << "swr " << ID << ": read_chunk\n";
             read_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, rem_num_pages, page_size);
+            push_filler_pages_to_cb(cb_id_in0, num_pages - rem_num_pages);
             // DPRINT << "swr " << ID << ": done read_chunk\n";
         }
     }

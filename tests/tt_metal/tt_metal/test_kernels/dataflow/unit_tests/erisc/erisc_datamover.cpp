@@ -43,13 +43,69 @@ FORCE_INLINE void eth_setup_handshake2(std::uint32_t handshake_register_address,
     }
 }
 
+template<uint8_t num_senders, uint8_t num_receivers>
+struct sender_receiver_index_t {
+    static constexpr bool NUM_SENDERS_IS_POW_2 = ((num_senders - 1) & num_senders) == 0;
+    static constexpr bool NUM_RECEIVERS_IS_POW_2 = ((num_receivers - 1) & num_receivers) == 0;
+    static constexpr uint16_t SENDER_INCR_MASK = num_senders - 1;
+    static constexpr uint16_t RECEIVER_INCR_MASK = num_senders - 1;
+    static constexpr uint16_t COMBINED_INCR_MASK = SENDER_INCR_MASK << 8 | RECEIVER_INCR_MASK;
+    static constexpr uint16_t COMBINED_INCR = (1 << 8) | 1;
+    union {
+        struct {
+            uint8_t sender;
+            uint8_t receiver;
+        };
+        uint16_t combined;
+    } index;
+    union {
+        struct {
+            uint8_t sender;
+            uint8_t receiver;
+        };
+        uint16_t combined;
+    } real_index;
+    union {
+        struct {
+            uint8_t sender;
+            uint8_t receiver;
+        };
+        uint16_t combined;
+    } start;
+
+    sender_receiver_index_t(uint8_t send_start, uint8_t receive_start, uint8_t num_send, uint8_t num_receive) {
+        start.sender = send_start;
+        start.receiver = receive_start;
+        index.sender = 0;
+        index.receiver = 0;
+        real_index.sender = send_start;
+        real_index.receiver = receive_start;
+    }
+
+    FORCE_INLINE void increment() {
+        if constexpr (NUM_SENDERS_IS_POW_2 and NUM_RECEIVERS_IS_POW_2) {
+            index.combined = (index.combined + COMBINED_INCR) & COMBINED_INCR_MASK;
+            real_index.combined = start.combined + index.combined;
+        } else {
+            index.combined += COMBINED_INCR;
+            index.sender = index.sender >= num_senders ? 0 : index.sender;
+            index.receiver = index.receiver >= num_senders ? 0 : index.receiver;
+            real_index.combined = start.combined + index.combined;
+        }
+    }
+};
+
 void kernel_main() {
+    DPRINT << "EDM TEST PRINT\n";
     // COMPILE TIME ARGS
     // If true, will enable this erisc's sender functionality
     constexpr bool enable_sender_side = get_compile_time_arg_val(0) != 0;
 
     // If true, will enable this erisc's receiver functionality
     constexpr bool enable_receiver_side = get_compile_time_arg_val(1) != 0;
+
+    constexpr uint32_t num_senders = get_compile_time_arg_val(2);
+    constexpr uint32_t num_receivers = get_compile_time_arg_val(3);
 
     std::array<erisc::datamover::ChannelBuffer, eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS> buffer_channels;
 
@@ -61,7 +117,7 @@ void kernel_main() {
     uint32_t handshake_addr = get_arg_val<uint32_t>(args_offset++);
 
     uint8_t const sender_channels_start = get_arg_val<uint32_t>(args_offset++);
-    uint32_t const sender_num_channels = get_arg_val<uint32_t>(args_offset++);
+    uint32_t const sender_num_channels = num_senders;//get_arg_val<uint32_t>(args_offset++);
     uint8_t num_senders_with_no_work = 0;;
     for (uint32_t channel = 0; channel < sender_num_channels; channel++) {
         uint32_t const sender_buffer_address = get_arg_val<uint32_t>(args_offset++);
@@ -84,7 +140,6 @@ void kernel_main() {
             worker_semaphore_address,
             sender_num_workers,
             sender_num_messages_to_send,
-            // sender_buffer_address,
             (volatile tt_l1_ptr uint32_t *const)sender_semaphores_base_address,
             (const erisc::datamover::WorkerXY *)workers_xy_list_addr,
             true);
@@ -95,7 +150,7 @@ void kernel_main() {
 
     // Receiver args
     uint8_t const receiver_channels_start = get_arg_val<uint32_t>(args_offset++);
-    uint32_t const receiver_num_channels = get_arg_val<uint32_t>(args_offset++);
+    uint32_t const receiver_num_channels = num_receivers;//get_arg_val<uint32_t>(args_offset++);
     uint8_t num_receivers_with_no_work = 0;
     for (uint32_t channel = 0; channel < receiver_num_channels; channel++) {
         uint32_t const receiver_buffers_base_address = get_arg_val<uint32_t>(args_offset++);
@@ -116,7 +171,6 @@ void kernel_main() {
             worker_semaphore_address,
             receiver_num_workers,
             receiver_num_messages_to_send,
-            // receiver_buffers_base_address,  // remote_eth_buffer_address,
             (volatile tt_l1_ptr uint32_t *const)receiver_semaphores_base_address,
             (const erisc::datamover::WorkerXY *)workers_xy_list_addr,
             false);
@@ -134,115 +188,81 @@ void kernel_main() {
     // DPRINT << "EDM handshaking with other eth. enable_sender_side " << (uint32_t)act_as_sender_in_handshake << "\n";
     erisc::datamover::eth_setup_handshake(handshake_addr, act_as_sender_in_handshake);
 
-    // DPRINT << "EDM args(" << (uint32_t)act_as_sender_in_handshake << "): sender_channels_start "
-    //        << (uint32_t)sender_channels_start << "\n";
-    // DPRINT << "EDM args(" << (uint32_t)act_as_sender_in_handshake << "): sender_num_channels " << sender_num_channels << "\n";
-    // args_offset = 3;
-    // for (uint32_t channel = 0; channel < sender_num_channels; channel++) {
-    //     uint32_t sender_buffer_address = get_arg_val<uint32_t>(args_offset++);
-    //     uint32_t sender_num_messages_to_send = get_arg_val<uint32_t>(args_offset++);
-    //     // Each channel buffer is at buffer_base + (channel_id * sender_channel_size)
-    //     // Each channel currently constrained to the same buffer size
-    //     std::uint32_t sender_channel_size = get_arg_val<uint32_t>(args_offset++);
-    //     // TODO(snijjar): we can consider computing this instead using a helper in erisc_datamover_api.h
-    //     // The erisc's local l1 copy of the semaphore workers remotely increment
-    //     uint32_t sender_semaphores_base_address = get_arg_val<uint32_t>(args_offset++);
-    //     // worker's semaphore L1 address
-    //     uint32_t worker_semaphore_address = get_arg_val<uint32_t>(args_offset++);
-    //     uint32_t sender_num_workers = get_arg_val<uint32_t>(args_offset++);
-    //     DPRINT << "EDM arg (" << (uint32_t)act_as_sender_in_handshake << "): \tsender_num_messages_to_send=" << sender_num_messages_to_send << "\n";
-    //     DPRINT << "EDM arg (" << (uint32_t)act_as_sender_in_handshake << "): \tsender_channel_size=" << sender_channel_size << "\n";
-    //     DPRINT << "EDM arg (" << (uint32_t)act_as_sender_in_handshake << "): \tsender_semaphores_base_address=" << sender_semaphores_base_address << "\n";
-    //     DPRINT << "EDM arg (" << (uint32_t)act_as_sender_in_handshake << "): \tworker_semaphore_address=" << worker_semaphore_address << "\n";
-    //     DPRINT << "EDM arg (" << (uint32_t)act_as_sender_in_handshake << "): \tsender_num_workers=" << sender_num_workers << "\n";
-    //     args_offset += sender_num_workers;
-    // }
-
-    // DPRINT << "EDM args(" << (uint32_t)act_as_sender_in_handshake << "): receiver_channels_start "<< (uint32_t)receiver_channels_start << "\n";
-    // DPRINT << "EDM args(" << (uint32_t)act_as_sender_in_handshake << "): receiver_num_channels " << receiver_num_channels
-    //        << "\n";
-    // args_offset += 2;
-    // for (uint32_t channel = 0; channel < receiver_num_channels; channel++) {
-    //     uint32_t receiver_buffers_base_address = get_arg_val<uint32_t>(args_offset++);
-    //     uint32_t receiver_num_messages_to_send = get_arg_val<uint32_t>(args_offset++);
-    //     // Each channel buffer is at buffer_base + (channel_id * sender_channel_size)
-    //     // Each channel currently constrained to the same buffer size
-    //     uint32_t receiver_channel_size = get_arg_val<uint32_t>(args_offset++);
-    //     // TODO(snijjar): we can consider computing this instead using a helper in erisc_datamover_api.h
-    //     uint32_t receiver_semaphores_base_address = get_arg_val<uint32_t>(args_offset++);
-    //     uint32_t worker_semaphore_address = get_arg_val<uint32_t>(args_offset++);
-    //     uint32_t receiver_num_workers = get_arg_val<uint32_t>(args_offset++);
-    //     DPRINT << "EDM arg (" << (uint32_t)act_as_sender_in_handshake << "): \treceiver_num_messages_to_send=" << receiver_num_messages_to_send << "\n";
-    //     DPRINT << "EDM arg (" << (uint32_t)act_as_sender_in_handshake << "): \treceiver_channel_size=" << receiver_channel_size << "\n";
-    //     DPRINT << "EDM arg (" << (uint32_t)act_as_sender_in_handshake << "): \treceiver_semaphores_base_address=" << receiver_semaphores_base_address << "\n";
-    //     DPRINT << "EDM arg (" << (uint32_t)act_as_sender_in_handshake << "): \tworker_semaphore_address=" << worker_semaphore_address << "\n";
-    //     DPRINT << "EDM arg (" << (uint32_t)act_as_sender_in_handshake << "): \treceiver_num_workers=" << receiver_num_workers << "\n";
-    //     args_offset += receiver_num_workers;
-    // }
-
-
-    constexpr uint32_t SWITCH_INTERVAL = 100000;
+    constexpr uint32_t SWITCH_INTERVAL = 4000000;
     uint32_t did_nothing_count = 0;
 
     uint32_t num_senders_complete = !enable_sender_side ? sender_num_channels : num_senders_with_no_work;
     uint32_t num_receivers_complete = !enable_receiver_side ? receiver_num_channels : num_receivers_with_no_work;
-    uint32_t curr_sender = sender_channels_start;
-    uint32_t curr_receiver = receiver_channels_start;
-    uint32_t receiver_channel_end = receiver_channels_start + receiver_num_channels;
-    uint32_t sender_channel_end = sender_channels_start + sender_num_channels;
-    while ((enable_sender_side && num_senders_complete != sender_num_channels) ||
-           (enable_receiver_side && num_receivers_complete != receiver_num_channels)) {
-        bool did_something = false;
+    bool senders_in_progress = num_receivers_complete != receiver_num_channels;
+    bool receivers_in_progress = num_senders_complete != sender_num_channels;
 
-        // Note, may want to interleave the sender and receiver calls to reduce latency for each
+    auto send_recv_index = sender_receiver_index_t<num_senders,num_receivers>(sender_channels_start, receiver_channels_start, sender_num_channels, receiver_num_channels);
+
+    while ((enable_sender_side && senders_in_progress) || (enable_receiver_side && receivers_in_progress)) {
+        bool did_something_sender = false;
+        bool did_something_receiver = false;
+
         //////////////////////////////////////
         // SENDER
-        //////////////////////////////////////
         if constexpr (enable_sender_side) {
-            erisc::datamover::ChannelBuffer &current_sender = buffer_channels[curr_sender];
-            if (!current_sender.is_done()) {
-                did_something =
-                    erisc::datamover::sender_noc_receive_payload_ack_check_sequence(current_sender) || did_something;
+            erisc::datamover::ChannelBuffer &current_sender = buffer_channels[send_recv_index.real_index.sender];
+            switch (current_sender.get_state()) {
+                case erisc::datamover::ChannelBuffer::STATE::WAITING_FOR_WORKER:
+                did_something_sender =
+                    erisc::datamover::sender_noc_receive_payload_ack_check_sequence(current_sender);
+                break;
 
-                did_something = erisc::datamover::sender_eth_send_data_sequence(current_sender) || did_something;
+                case erisc::datamover::ChannelBuffer::STATE::READY_FOR_ETH_TRANSFER:
+                did_something_sender = erisc::datamover::sender_eth_send_data_sequence(current_sender);
+                    break;
 
-                did_something = erisc::datamover::sender_notify_workers_if_buffer_available_sequence(
-                                    current_sender, num_senders_complete) ||
-                                did_something;
+                case erisc::datamover::ChannelBuffer::STATE::SIGNALING_WORKER:
+                did_something_sender = erisc::datamover::sender_notify_workers_if_buffer_available_sequence(
+                                    current_sender, num_senders_complete);
+                senders_in_progress = num_senders_complete != sender_num_channels;
+                break;
 
-                did_something =
-                    erisc::datamover::sender_eth_check_receiver_ack_sequence(current_sender) || did_something;
-            }
+                case erisc::datamover::ChannelBuffer::STATE::WAITING_FOR_ETH:
+                did_something_sender =
+                    erisc::datamover::sender_eth_check_receiver_ack_sequence(current_sender, num_senders_complete);
+                senders_in_progress = num_senders_complete != sender_num_channels;
 
-            curr_sender += 1;
-            curr_sender = (curr_sender >= sender_channel_end) ? sender_channels_start : curr_sender;
+                default:
+                break;
+            };
         }
+
         //////////////////////////////////////
         // RECEIVER
-        //////////////////////////////////////
-
         if constexpr (enable_receiver_side) {
-            erisc::datamover::ChannelBuffer &current_receiver = buffer_channels[curr_receiver];
-            if (!current_receiver.is_done()) {
-                bool received = erisc::datamover::receiver_eth_accept_payload_sequence(current_receiver);
-                did_something = received || did_something;
+            erisc::datamover::ChannelBuffer &current_receiver = buffer_channels[send_recv_index.real_index.receiver];
 
-                did_something =
-                    erisc::datamover::receiver_eth_notify_workers_payload_available_sequence(current_receiver) ||
-                    did_something;
+            switch (current_receiver.get_state()) {
+                case erisc::datamover::ChannelBuffer::STATE::WAITING_FOR_ETH:
+                did_something_receiver = erisc::datamover::receiver_eth_accept_payload_sequence(current_receiver);
+                break;
 
-                did_something = erisc::datamover::receiver_noc_read_worker_completion_check_sequence(
-                                    current_receiver, num_receivers_complete) ||
-                                did_something;
+                case erisc::datamover::ChannelBuffer::STATE::SIGNALING_WORKER:
+                did_something_receiver =
+                    erisc::datamover::receiver_eth_notify_workers_payload_available_sequence(current_receiver);
+                break;
 
-            }
+                case erisc::datamover::ChannelBuffer::STATE::WAITING_FOR_WORKER:
+                did_something_receiver = erisc::datamover::receiver_noc_read_worker_completion_check_sequence(
+                                    current_receiver, num_receivers_complete);
+                receivers_in_progress = num_receivers_complete != receiver_num_channels;
+                break;
 
-            curr_receiver += 1;
-            curr_receiver = (curr_receiver >= receiver_channel_end) ? receiver_channels_start : curr_receiver;
+                default:
+                break;
+            };
         }
+        send_recv_index.increment();
         //////////////////////////////////////
 
-        if (did_something) {
+        // Enabling this block as is (with all the "did_something"s, seems to cause a loss of about
+        // 0.5 GBps in throughput)
+        if (did_something_sender || did_something_receiver) {
             did_nothing_count = 0;
         } else {
             if (did_nothing_count++ > SWITCH_INTERVAL) {
@@ -253,10 +273,4 @@ void kernel_main() {
         }
     }
 
-    // kernel_profiler::mark_time(16);
-    // if (enable_sender_side) {
-    //     DPRINT << "1 ERISC DATAMOVER DONE!\n";
-    // } else {
-    //     DPRINT << "0 ERISC DATAMOVER DONE!\n";
-    // }
 }
