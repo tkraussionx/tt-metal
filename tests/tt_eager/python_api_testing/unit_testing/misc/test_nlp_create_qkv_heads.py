@@ -452,7 +452,7 @@ def test_sharded_nlp_create_qkv_heads_test(
     )
 
 
-def test_sharded_nlp_create_qkv_heads_with_program_cache(device, program_cache):
+def test_sharded_nlp_create_qkv_heads_with_program_cache(device, use_program_cache):
     dtype = ttl.tensor.DataType.BFLOAT8_B
     mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1)
     for _ in range(2):
