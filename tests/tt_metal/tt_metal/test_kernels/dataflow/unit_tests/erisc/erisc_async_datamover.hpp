@@ -304,6 +304,7 @@ FORCE_INLINE bool sender_notify_workers_if_buffer_available_sequence(
     } else {
         sender_buffer_channel.goto_state(ChannelBuffer::DONE);
         num_senders_complete++;
+        DPRINT << "EDM SENDER COMPLETE\n";
     }
 
     return true;
@@ -406,6 +407,7 @@ FORCE_INLINE bool receiver_noc_read_worker_completion_check_sequence(
             } else {
                 buffer_channel.goto_state(ChannelBuffer::DONE);
                 num_receivers_complete++;
+                DPRINT << "EDM FINISHED RECEIVER\n";
             }
 
             did_something = true;

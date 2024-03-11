@@ -8,6 +8,7 @@
 #include "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_ring_gather_utils.hpp"
 
 void kernel_main() {
+    DPRINT << "rws START\n";
     const uint32_t dst_addr = get_arg_val<uint32_t>(0);
     // Different per worker receiver writer
     const uint32_t worker_sender_reader_noc_x = get_arg_val<uint32_t>(1);
@@ -67,15 +68,14 @@ void kernel_main() {
         if constexpr (num_full_chunks > 0) {
             for (uint32_t c = 0; c < num_full_chunks; ++c) {
                 // DPRINT << "rws WRITE FULL CHUNK " << i << "\n";
-                write_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, num_pages, page_size, worker_send_reader_semaphore_noc_addr);
-                // noc_semaphore_inc(worker_send_reader_semaphore_noc_addr, 1);
+                write_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, num_pages, page_size);
+                noc_semaphore_inc(worker_send_reader_semaphore_noc_addr, 1);
             }
         }
         if constexpr (rem_num_pages > 0) {
             // DPRINT << "rws WRITE PARTIAL CHUNK " << i << "\n";
-            write_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, rem_num_pages, page_size,worker_send_reader_semaphore_noc_addr);
-            // noc_semaphore_inc(worker_send_reader_semaphore_noc_addr, 1);
-            pop_filler_pages_from_cb(cb_id_in0, num_pages - rem_num_pages);
+            write_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, rem_num_pages, page_size);
+            noc_semaphore_inc(worker_send_reader_semaphore_noc_addr, 1);
         }
 
         if (is_clockwise_direction) {
@@ -121,4 +121,6 @@ void kernel_main() {
         row_idx = row_start_idx;
     }
 
+
+    DPRINT << "rws DONE\n";
 }

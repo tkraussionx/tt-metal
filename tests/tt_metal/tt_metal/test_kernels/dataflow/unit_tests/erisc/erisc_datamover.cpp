@@ -45,10 +45,10 @@ FORCE_INLINE void eth_setup_handshake2(std::uint32_t handshake_register_address,
 
 template<uint8_t num_senders, uint8_t num_receivers>
 struct sender_receiver_index_t {
-    static constexpr bool NUM_SENDERS_IS_POW_2 = ((num_senders - 1) & num_senders) == 0;
-    static constexpr bool NUM_RECEIVERS_IS_POW_2 = ((num_receivers - 1) & num_receivers) == 0;
-    static constexpr uint16_t SENDER_INCR_MASK = num_senders - 1;
-    static constexpr uint16_t RECEIVER_INCR_MASK = num_senders - 1;
+    static constexpr bool NUM_SENDERS_IS_POW_2 = num_senders == 0 || (((num_senders - 1) & num_senders) == 0);
+    static constexpr bool NUM_RECEIVERS_IS_POW_2 = num_receivers == 0 || (((num_receivers - 1) & num_receivers) == 0);
+    static constexpr uint16_t SENDER_INCR_MASK = num_senders > 0 ? num_senders - 1 : 0;
+    static constexpr uint16_t RECEIVER_INCR_MASK = num_senders > 0 ? num_senders - 1 : 0;
     static constexpr uint16_t COMBINED_INCR_MASK = SENDER_INCR_MASK << 8 | RECEIVER_INCR_MASK;
     static constexpr uint16_t COMBINED_INCR = (1 << 8) | 1;
     union {
@@ -198,7 +198,12 @@ void kernel_main() {
 
     auto send_recv_index = sender_receiver_index_t<num_senders,num_receivers>(sender_channels_start, receiver_channels_start, sender_num_channels, receiver_num_channels);
 
-    while ((enable_sender_side && senders_in_progress) || (enable_receiver_side && receivers_in_progress)) {
+    DPRINT << "EDM START " << (uint32_t)enable_sender_side << " " << (uint32_t)enable_receiver_side << "\n";
+    DPRINT << "\tnum_receivers_complete:" << (uint32_t)num_receivers_complete << " receiver_num_channels:" << (uint32_t)receiver_num_channels << "\n";
+    DPRINT << "\tnum_sender_complete:" << (uint32_t)num_senders_complete << " sender_num_channels:" << (uint32_t)sender_num_channels << "\n";
+    DPRINT << "\tsenders_in_progress:" << (uint32_t)senders_in_progress << " receivers_in_progress:" << (uint32_t)receivers_in_progress << "\n";
+
+    while (senders_in_progress || receivers_in_progress) {
         bool did_something_sender = false;
         bool did_something_receiver = false;
 
@@ -219,13 +224,13 @@ void kernel_main() {
                 case erisc::datamover::ChannelBuffer::STATE::SIGNALING_WORKER:
                 did_something_sender = erisc::datamover::sender_notify_workers_if_buffer_available_sequence(
                                     current_sender, num_senders_complete);
-                senders_in_progress = num_senders_complete != sender_num_channels;
+                senders_in_progress = senders_in_progress && num_senders_complete != sender_num_channels;
                 break;
 
                 case erisc::datamover::ChannelBuffer::STATE::WAITING_FOR_ETH:
                 did_something_sender =
                     erisc::datamover::sender_eth_check_receiver_ack_sequence(current_sender, num_senders_complete);
-                senders_in_progress = num_senders_complete != sender_num_channels;
+                senders_in_progress = senders_in_progress && num_senders_complete != sender_num_channels;
 
                 default:
                 break;
@@ -250,7 +255,7 @@ void kernel_main() {
                 case erisc::datamover::ChannelBuffer::STATE::WAITING_FOR_WORKER:
                 did_something_receiver = erisc::datamover::receiver_noc_read_worker_completion_check_sequence(
                                     current_receiver, num_receivers_complete);
-                receivers_in_progress = num_receivers_complete != receiver_num_channels;
+                receivers_in_progress = receivers_in_progress && num_receivers_complete != receiver_num_channels;\
                 break;
 
                 default:
@@ -272,5 +277,7 @@ void kernel_main() {
             }
         }
     }
+
+    DPRINT << "EDM DONE\n";
 
 }

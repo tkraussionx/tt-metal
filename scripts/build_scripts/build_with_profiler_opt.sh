@@ -12,6 +12,6 @@ if [[ -z "$ARCH_NAME" ]]; then
 fi
 
 remove_default_log_locations
-make clean
+# make clean
 make build ENABLE_PROFILER=1 ENABLE_TRACY=1
 make programming_examples
