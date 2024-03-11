@@ -7,6 +7,8 @@
 #include "tt_eager/tt_dnn/op_library/all_gather/kernels/dataflow/worker_ring_gather_utils.hpp"
 
 void kernel_main() {
+
+    DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " START\n";
     const uint32_t dst_addr = get_arg_val<uint32_t>(0);
     const uint32_t eth_sender_l1_base_addr = get_arg_val<uint32_t>(1);
     const uint32_t eth_sender_l1_sem_addr = get_arg_val<uint32_t>(2);
