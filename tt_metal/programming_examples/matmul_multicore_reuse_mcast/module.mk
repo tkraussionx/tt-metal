@@ -1,20 +1,29 @@
-# # ######## ORIGINAL MODULE
-# MATMUL_MULTI_CORE_REUSE_MCAST_EXAMPLE_SRC = $(TT_METAL_HOME)/tt_metal/programming_examples/matmul_multicore_reuse_mcast/matmul_multicore_reuse_mcast.cpp
+######## LINKING CPP FILES RECURSIVELY
 
-# MATMUL_MULTI_CORE_REUSE_MCAST_EXAMPLES_DEPS = $(PROGRAMMING_EXAMPLES_OBJDIR)/matmul_multicore_reuse_mcast.d
+TENSOR_SRC_DIR = $(TT_METAL_HOME)/tt_eager/tensor
+DNN_OP_LIB_SRC_DIR = $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library
 
-# -include $(MATMUL_MULTI_CORE_REUSE_MCAST_EXAMPLES_DEPS)
+TENSOR_SRCS = $(shell find $(TENSOR_SRC_DIR) -name '*.cpp')
+DNN_OP_LIB_SRCS = $(shell find $(DNN_OP_LIB_SRC_DIR) -name '*.cpp')
 
-# .PRECIOUS: $(PROGRAMMING_EXAMPLES_TESTDIR)/matmul_multicore_reuse_mcast
-# $(PROGRAMMING_EXAMPLES_TESTDIR)/matmul_multicore_reuse_mcast: $(PROGRAMMING_EXAMPLES_OBJDIR)/matmul_multicore_reuse_mcast.o $(TT_METAL_LIB)
-# 	@mkdir -p $(@D)
-# 	$(CXX) $(CFLAGS) $(CXXFLAGS) $(PROGRAMMING_EXAMPLES_INCLUDES) -o $@ $^ $(LDFLAGS) $(PROGRAMMING_EXAMPLES_LDFLAGS)
+MATMUL_MULTI_CORE_REUSE_MCAST_EXAMPLE_SRC = $(TT_METAL_HOME)/tt_metal/programming_examples/matmul_multicore_reuse_mcast/matmul_multicore_reuse_mcast.cpp
 
-# .PRECIOUS: $(PROGRAMMING_EXAMPLES_OBJDIR)/matmul_multicore_reuse_mcast.o
-# $(PROGRAMMING_EXAMPLES_OBJDIR)/matmul_multicore_reuse_mcast.o: $(MATMUL_MULTI_CORE_REUSE_MCAST_EXAMPLE_SRC)
-# 	@mkdir -p $(@D)
-# 	$(CXX) $(CFLAGS) $(CXXFLAGS) $(PROGRAMMING_EXAMPLES_INCLUDES) -c -o $@ $<
+COMBINED_SRCS = $(MATMUL_MULTI_CORE_REUSE_MCAST_EXAMPLE_SRC) $(TENSOR_SRCS) $(DNN_OP_LIB_SRCS)
 
+COMBINED_OBJS = $(patsubst $(TT_METAL_HOME)%,$(PROGRAMMING_EXAMPLES_OBJDIR)%,$(COMBINED_SRCS:.cpp=.o))
+
+COMBINED_DEPS = $(COMBINED_OBJS:.o=.d)
+
+-include $(COMBINED_DEPS)
+
+.PRECIOUS: $(PROGRAMMING_EXAMPLES_TESTDIR)/matmul_multicore_reuse_mcast
+$(PROGRAMMING_EXAMPLES_TESTDIR)/matmul_multicore_reuse_mcast: $(COMBINED_OBJS) $(TT_METAL_LIB)
+	@mkdir -p $(@D)
+	$(CXX) $(CFLAGS) $(CXXFLAGS) $(PROGRAMMING_EXAMPLES_INCLUDES) -o $@ $^ $(LDFLAGS) $(PROGRAMMING_EXAMPLES_LDFLAGS)
+
+$(PROGRAMMING_EXAMPLES_OBJDIR)/%.o: $(TT_METAL_HOME)/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CFLAGS) $(CXXFLAGS) $(PROGRAMMING_EXAMPLES_INCLUDES) -c $< -o $@
 
 
 # ######## LINKING CPP FILES ONE-BY-ONE
@@ -51,36 +60,19 @@
 # 	$(CXX) $(CFLAGS) $(CXXFLAGS) $(PROGRAMMING_EXAMPLES_INCLUDES) -c -o $@ $<
 
 
-######## LINKING CPP FILES RECURSIVELY
+# ######## ORIGINAL MODULE
+# MATMUL_MULTI_CORE_REUSE_MCAST_EXAMPLE_SRC = $(TT_METAL_HOME)/tt_metal/programming_examples/matmul_multicore_reuse_mcast/matmul_multicore_reuse_mcast.cpp
 
-# Define paths to the source directories
-TENSOR_SRC_DIR = $(TT_METAL_HOME)/tt_eager/tensor
-DNN_OP_LIB_SRC_DIR = $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library
+# MATMUL_MULTI_CORE_REUSE_MCAST_EXAMPLES_DEPS = $(PROGRAMMING_EXAMPLES_OBJDIR)/matmul_multicore_reuse_mcast.d
 
-# Collect all .cpp files from the specified directories
-TENSOR_SRCS = $(shell find $(TENSOR_SRC_DIR) -name '*.cpp')
-DNN_OP_LIB_SRCS = $(shell find $(DNN_OP_LIB_SRC_DIR) -name '*.cpp')
+# -include $(MATMUL_MULTI_CORE_REUSE_MCAST_EXAMPLES_DEPS)
 
-# Specify the path to your matmul program source file
-MATMUL_MULTI_CORE_REUSE_MCAST_EXAMPLE_SRC = $(TT_METAL_HOME)/tt_metal/programming_examples/matmul_multicore_reuse_mcast/matmul_multicore_reuse_mcast.cpp
+# .PRECIOUS: $(PROGRAMMING_EXAMPLES_TESTDIR)/matmul_multicore_reuse_mcast
+# $(PROGRAMMING_EXAMPLES_TESTDIR)/matmul_multicore_reuse_mcast: $(PROGRAMMING_EXAMPLES_OBJDIR)/matmul_multicore_reuse_mcast.o $(TT_METAL_LIB)
+# 	@mkdir -p $(@D)
+# 	$(CXX) $(CFLAGS) $(CXXFLAGS) $(PROGRAMMING_EXAMPLES_INCLUDES) -o $@ $^ $(LDFLAGS) $(PROGRAMMING_EXAMPLES_LDFLAGS)
 
-# Combine your example source with the necessary TT_METAL sources
-COMBINED_SRCS = $(MATMUL_MULTI_CORE_REUSE_MCAST_EXAMPLE_SRC) $(TENSOR_SRCS) $(DNN_OP_LIB_SRCS)
-
-# Convert full source paths to object paths in the build directory
-COMBINED_OBJS = $(patsubst $(TT_METAL_HOME)%,$(PROGRAMMING_EXAMPLES_OBJDIR)%,$(COMBINED_SRCS:.cpp=.o))
-
-# Dependency files
-COMBINED_DEPS = $(COMBINED_OBJS:.o=.d)
-
--include $(COMBINED_DEPS)
-
-.PRECIOUS: $(PROGRAMMING_EXAMPLES_TESTDIR)/matmul_multicore_reuse_mcast
-$(PROGRAMMING_EXAMPLES_TESTDIR)/matmul_multicore_reuse_mcast: $(COMBINED_OBJS) $(TT_METAL_LIB)
-	@mkdir -p $(@D)
-	$(CXX) $(CFLAGS) $(CXXFLAGS) $(PROGRAMMING_EXAMPLES_INCLUDES) -o $@ $^ $(LDFLAGS) $(PROGRAMMING_EXAMPLES_LDFLAGS)
-
-# Rule for converting .cpp to .o, taking directory structure into account
-$(PROGRAMMING_EXAMPLES_OBJDIR)/%.o: $(TT_METAL_HOME)/%.cpp
-	@mkdir -p $(dir $@)
-	$(CXX) $(CFLAGS) $(CXXFLAGS) $(PROGRAMMING_EXAMPLES_INCLUDES) -c $< -o $@
+# .PRECIOUS: $(PROGRAMMING_EXAMPLES_OBJDIR)/matmul_multicore_reuse_mcast.o
+# $(PROGRAMMING_EXAMPLES_OBJDIR)/matmul_multicore_reuse_mcast.o: $(MATMUL_MULTI_CORE_REUSE_MCAST_EXAMPLE_SRC)
+# 	@mkdir -p $(@D)
+# 	$(CXX) $(CFLAGS) $(CXXFLAGS) $(PROGRAMMING_EXAMPLES_INCLUDES) -c -o $@ $<

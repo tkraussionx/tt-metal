@@ -14,6 +14,7 @@ PROGRAMMING_EXAMPLES_INCLUDES += $(shell find $(TT_METAL_HOME)/tt_metal/hw/inc -
 # PROGRAMMING_EXAMPLES_INCLUDES += -I$(TT_METAL_HOME)/tt_eager/tensor
 # PROGRAMMING_EXAMPLES_INCLUDES += -I$(TT_METAL_HOME)/tt_eager/tt_lib
 # PROGRAMMING_EXAMPLES_INCLUDES += -I$(TT_METAL_HOME)/tt_eager/tt_lib/tt_numpy
+
 PROGRAMMING_EXAMPLES_LDFLAGS = -ltt_metal -ldl -lstdc++fs -pthread -lyaml-cpp -lm
 
 include $(TT_METAL_HOME)/tt_metal/programming_examples/loopback/module.mk
