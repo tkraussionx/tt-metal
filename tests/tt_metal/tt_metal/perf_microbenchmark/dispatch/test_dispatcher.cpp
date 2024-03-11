@@ -54,7 +54,7 @@ bool perf_test_g;
 CoreCoord first_worker_g = { 0, 1 };
 CoreRange all_workers_g = {
     first_worker_g,
-    {first_worker_g.x + 2, first_worker_g.y + 2},
+    {first_worker_g.x + 1, first_worker_g.y + 1},
 };
 
 void init(int argc, char **argv) {
@@ -228,8 +228,8 @@ int main(int argc, char **argv) {
 #endif
         vector<uint32_t> cmds;
         worker_data_t worker_data;
-        for (uint32_t y = all_workers_g.start.y; y < all_workers_g.end.y; y++) {
-            for (uint32_t x = all_workers_g.start.x; x < all_workers_g.end.x; x++) {
+        for (uint32_t y = all_workers_g.start.y; y <= all_workers_g.end.y; y++) {
+            for (uint32_t x = all_workers_g.start.x; x <= all_workers_g.end.x; x++) {
                 one_worker_data_t one;
                 worker_data.insert({CoreCoord(x, y), one});
             }
