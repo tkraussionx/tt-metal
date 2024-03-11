@@ -6,6 +6,14 @@ import pytest
 from PIL import Image
 import torchvision.transforms as transforms
 import ast
+from models.lock import WaitLock
+
+
+@pytest.fixture(scope="session", autouse=True)
+def lock_devices():
+    w = WaitLock()
+    yield
+    w.release()
 
 
 @pytest.fixture
