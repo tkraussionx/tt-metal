@@ -153,6 +153,7 @@ operation::ProgramWithCallbacks groupnorm_sharded_(
     tt::DataFormat out_data_format = tt_metal::datatype_to_dataformat_converter(output.dtype());
     tt::DataFormat cb_data_format = tt_metal::datatype_to_dataformat_converter(im_data_format);
     tt::DataFormat gamma_beta_cb_data_format = tt::DataFormat::Float16_b;
+    uint32_t datum_size_bytes = 2; // bfloat16
     // tile sizes
     uint32_t in_single_tile_size = tt_metal::detail::TileSize(in_data_format);
     uint32_t single_tile_size = tt_metal::detail::TileSize(cb_data_format);
@@ -472,7 +473,8 @@ operation::ProgramWithCallbacks groupnorm_sharded_(
         (std::uint32_t) block_ht,
         (std::uint32_t) block_wt,
         (std::uint32_t) per_core_N * num_nz_rows_per_tile,
-        (std::uint32_t) TILE_WIDTH
+        (std::uint32_t) TILE_WIDTH,
+        (std::uint32_t) datum_size_bytes
     };
     std::vector<uint32_t> reader_mcast_receiver_compile_time_args = {
         (std::uint32_t) reduce_receiver_semaphore,
