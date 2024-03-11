@@ -163,7 +163,7 @@ def run_conv(
         pcc = 0.998
     passing, pcc_msg = check_with_pcc_without_tensor_printout(torch_output_tensor, torch_out_golden_tensor, pcc=pcc)
     logger.info(pcc_msg)
-    assert passing
+    assert passing, "pcc message: " + str(pcc_msg)
 
 
 def run_conv_with_split(
@@ -922,6 +922,348 @@ def test_sd_conv_wh(
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
 @pytest.mark.parametrize("output_layout", [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
 def test_unet_conv(
+    use_program_cache,
+    device,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+    config_override,
+    use_shallow_conv_variant,
+    output_layout,
+):
+    if output_layout == ttnn.ROW_MAJOR_LAYOUT and activations_dtype == ttnn.bfloat8_b:
+        pytest.skip("Row major layout not compatible with bfloat8_b")
+    if output_layout == ttnn.ROW_MAJOR_LAYOUT and input_height >= 1056:
+        pytest.skip("OOM")
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override,
+        use_shallow_conv_variant=use_shallow_conv_variant,
+        padded_input_channels=16 if input_channels == 3 else None,
+        output_layout=output_layout,
+    )
+
+
+@pytest.mark.parametrize(
+    "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override, use_shallow_conv_variant",
+    (
+        # unet convs with batch size 2
+        # unique convs in brain segmentation unet (complete list)
+        # (2, 32, 3, 256, 256, 3, 3, 1, 1, 1, 1, False, None, False), # c1 try block sharding
+        (2, 32, 3, 256, 256, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 16 * 32}, True),  # c1
+        (2, 32, 32, 256, 256, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 16 * 32}, True),  # c1_2
+        (2, 64, 32, 128, 128, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 16 * 32}, True),  # c2
+        (2, 64, 64, 128, 128, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 16 * 32}, True),  # c2_2
+        (2, 128, 64, 64, 64, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 4 * 32}, True),  # c3
+        (2, 128, 64, 64, 64, 3, 3, 1, 1, 1, 1, True, None, True),  # c3
+        (2, 128, 128, 64, 64, 3, 3, 1, 1, 1, 1, True, None, True),  # c3_2
+        (2, 128, 128, 64, 64, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 4 * 32}, True),  # c3_2
+        (2, 256, 128, 32, 32, 3, 3, 1, 1, 1, 1, True, None, False),  # c4
+        (2, 256, 256, 32, 32, 3, 3, 1, 1, 1, 1, True, None, False),  # c4_2
+        (2, 512, 256, 16, 16, 3, 3, 1, 1, 1, 1, True, None, False),  # bnc
+        (2, 512, 512, 16, 16, 3, 3, 1, 1, 1, 1, False, None, False),  # bnc_2
+        (
+            2,
+            256,
+            512,
+            32,
+            32,
+            3,
+            3,
+            1,
+            1,
+            1,
+            1,
+            False,
+            None,
+            False,
+        ),  # c5 block sharding # passes with bf8 and LoFi and tile layout, fails otherwise
+        (
+            2,
+            256,
+            512,
+            32,
+            32,
+            3,
+            3,
+            1,
+            1,
+            1,
+            1,
+            True,
+            None,
+            False,
+        ),  # c5 height sharding # passes for all variants with height sharding
+        (
+            2,
+            256,
+            256,
+            32,
+            32,
+            3,
+            3,
+            1,
+            1,
+            1,
+            1,
+            True,
+            None,
+            False,
+        ),  # c5_2 height sharding # passes for all variants with height sharding
+        (
+            2,
+            256,
+            256,
+            32,
+            32,
+            3,
+            3,
+            1,
+            1,
+            1,
+            1,
+            False,
+            None,
+            False,
+        ),  # c5_2 block sharding # passes for all variants with block sharding
+        (2, 128, 256, 64, 64, 3, 3, 1, 1, 1, 1, False, None, False),  # c6 block sharding # fails on all variants
+        (2, 128, 256, 64, 64, 3, 3, 1, 1, 1, 1, True, None, False),  # c6 height sharding # passes on all variants
+        (2, 128, 256, 64, 64, 3, 3, 1, 1, 1, 1, True, None, False),  # c6 height sharding # passes on all variants
+        (2, 128, 128, 64, 64, 3, 3, 1, 1, 1, 1, True, None, True),  # c6_2 height sharding # passes on all variants
+        (
+            2,
+            128,
+            128,
+            64,
+            64,
+            3,
+            3,
+            1,
+            1,
+            1,
+            1,
+            True,
+            {"act_block_h": 4 * 32},
+            True,
+        ),  # c6_2 height sharding + act_blovk_h config override passes on all variants
+        (
+            2,
+            64,
+            128,
+            128,
+            128,
+            3,
+            3,
+            1,
+            1,
+            1,
+            1,
+            True,
+            {"act_block_h": 4 * 32},
+            True,
+        ),  # c7 height sharding + act_blovk_h config override passes on all variants
+        (2, 64, 128, 128, 128, 3, 3, 1, 1, 1, 1, True, None, True),  # c7 height sharding - fails on all variants
+        (
+            2,
+            64,
+            64,
+            128,
+            128,
+            3,
+            3,
+            1,
+            1,
+            1,
+            1,
+            True,
+            {"act_block_h": 4 * 32},
+            True,
+        ),  # c7_2 height sharding + act_blovk_h config override passes on all variants
+        (2, 64, 64, 128, 128, 3, 3, 1, 1, 1, 1, True, None, True),  # c7_2 height sharding - passes on all variants
+        (
+            2,
+            32,
+            64,
+            256,
+            256,
+            3,
+            3,
+            1,
+            1,
+            1,
+            1,
+            True,
+            {"act_block_h": 16 * 32},
+            False,
+        ),  # c8 height sharding + act_blovk_h config override passes for one variant; tile layout, LoFi and bfp8
+        (
+            2,
+            32,
+            64,
+            256,
+            256,
+            3,
+            3,
+            1,
+            1,
+            1,
+            1,
+            True,
+            {"act_block_h": 8 * 32},
+            False,
+        ),  # c8 height sharding + act_blovk_h config override passes for 2 variants; tile layout, LoFi and (bfp8 or bfp16)
+        (
+            2,
+            32,
+            64,
+            256,
+            256,
+            3,
+            3,
+            1,
+            1,
+            1,
+            1,
+            True,
+            {"act_block_h": 4 * 32},
+            False,
+        ),  # c8 height sharding + act_blovk_h config override passes for all variants
+        (
+            2,
+            32,
+            32,
+            256,
+            256,
+            3,
+            3,
+            1,
+            1,
+            1,
+            1,
+            True,
+            {"act_block_h": 16 * 32},
+            False,
+        ),  # c8_2 height sharding + act_blovk_h config override passes for all variants
+        (
+            2,
+            32,
+            32,
+            256,
+            256,
+            3,
+            3,
+            1,
+            1,
+            1,
+            1,
+            True,
+            {"act_block_h": 16 * 32},
+            False,
+        ),  # c8_3 ( same as c8_2)  height sharding + act_blovk_h config override passes for all variants
+        (
+            2,
+            32,
+            32,
+            256,
+            256,
+            3,
+            3,
+            1,
+            1,
+            1,
+            1,
+            True,
+            {"act_block_h": 16 * 32},
+            True,
+        ),  # c8_3 ( same as c8_2 + run as shallow conv)  height sharding + act_blovk_h config override passes for all variants
+        (
+            2,
+            32,
+            32,
+            256,
+            256,
+            3,
+            3,
+            1,
+            1,
+            1,
+            1,
+            False,
+            None,
+            True,
+        ),  # c8_3 ( same as c8_2 + run as shallow conv + block shard)  height sharding + act_blovk_h config override fails for all variants
+        (
+            2,
+            2,
+            32,
+            256,
+            256,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            True,
+            None,
+            False,
+        ),  # ( classifier conv)  height sharding fails for all variants
+        (
+            2,
+            2,
+            32,
+            256,
+            256,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            False,
+            None,
+            False,
+        ),  # ( classifier conv)  block sharding fails for all variants
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat8_b, ttnn.bfloat16],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("output_layout", [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
+def test_unet_brain_conv(
     use_program_cache,
     device,
     math_fidelity,
