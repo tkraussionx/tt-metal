@@ -168,8 +168,17 @@ class TtMambaSSM(torch.nn.Module):
         ttnn.deallocate(B)
         ttnn.deallocate(delta_t)
         
+        # multiply bbar and x
+        x = ttnn.repeat_interleave(x, 16, dim=3)
+        x = ttnn.to_memory_config(x, memory_config=self.configs["sharded_large"])
+        bmulx = ttnn.mul(bbar, x, memory_config=self.configs["sharded_large"])
+        
+        # deallocate bbar
+        ttnn.deallocate(bbar)
+        
         return bbar
 
+        
         # allocate abar
         abar = torch.rand((1, 1, self.num_users, self.hidden_size * 32), dtype=torch.bfloat16)
         abar = ttnn.from_torch(
@@ -184,8 +193,6 @@ class TtMambaSSM(torch.nn.Module):
         ttnn.deallocate(abar)
         ttnn.deallocate(hidden_state)
 
-        # multiply bbar and x
-        bmulx = ttnn.mul(bbar, x, memory_config=self.configs["sharded_large"])
 
         # deallocate bbar and x
         ttnn.deallocate(bbar)
