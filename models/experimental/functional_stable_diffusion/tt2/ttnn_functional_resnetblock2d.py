@@ -72,6 +72,7 @@ class resnetBlock2D:
         input_width,
         compute_kernel_config=None,
         group_norm_on_device=True,
+        fallback_on_groupnorm=False,
     ):
         self.batch_size = batch_size
         self.input_height = input_height
@@ -79,7 +80,7 @@ class resnetBlock2D:
         self.device = device
         self.parameters = parameters
         self.conv1s = []
-        self.fallback_on_groupnorm = os.environ.get("FALLBACK_ON_GROUPNORM", "0") == "1"
+        self.fallback_on_groupnorm = os.environ.get("FALLBACK_ON_GROUPNORM", "0") == "1" or fallback_on_groupnorm
         parameters.conv1.weight, parameters.conv1.bias = permute_conv_parameters(
             parameters.conv1.weight, parameters.conv1.bias
         )

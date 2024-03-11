@@ -22,7 +22,15 @@ class cross_attention_upblock2d:
         self.device = device
         self.parameters = parameters
         self.resnets = [
-            resnetBlock2D(device, resnet, reader_patterns_cache, batch_size, input_height, input_width)
+            resnetBlock2D(
+                device,
+                resnet,
+                reader_patterns_cache,
+                batch_size,
+                input_height,
+                input_width,
+                fallback_on_groupnorm=resnet.conv1.weight.shape[1] == 960,
+            )
             for resnet in parameters.resnets
         ]
         self.attentions = [
@@ -111,9 +119,9 @@ class cross_attention_upblock2d:
                 )
             elif ttnn.is_sharded(on_dev_res_hidden_states):
                 on_dev_res_hidden_states = ttnn.to_memory_config(on_dev_res_hidden_states, ttnn.L1_MEMORY_CONFIG)
-            breakpoint()
+            # breakpoint()
             hidden_states = ttnn.concat([hidden_states, on_dev_res_hidden_states], dim=3)
-            breakpoint()
+            # breakpoint()
             ttnn.dump_device_memory_state(self.device, prefix="before_deallocate_")
             ttnn.deallocate(on_dev_res_hidden_states)
             ttnn.dump_device_memory_state(self.device, prefix="after_deallocate_")
