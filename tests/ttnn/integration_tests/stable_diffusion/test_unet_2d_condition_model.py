@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
+import time
 from diffusers import StableDiffusionPipeline
 import pytest
 from tqdm.auto import tqdm
@@ -119,7 +120,7 @@ def test_unet_2d_condition_model_512x512(device, batch_size, in_channels, input_
     # setup pytorch model
     torch.manual_seed(0)
     model_name = "CompVis/stable-diffusion-v1-4"
-    load_from_disk = True
+    load_from_disk = False
     if not load_from_disk:
         pipe = StableDiffusionPipeline.from_pretrained(model_name, torch_dtype=torch.float32)
 
@@ -170,6 +171,9 @@ def test_unet_2d_condition_model_512x512(device, batch_size, in_channels, input_
     model = UNet2D(device, parameters, batch_size, input_height, input_width, reader_patterns_cache)
 
     input = pre_process_input_new(model.device, input)
+
+    print("#Start measuring the 1st call")
+    start1 = time.time()
     ttnn_output = model(
         input,
         timestep=ttnn_timestep,
@@ -180,6 +184,26 @@ def test_unet_2d_condition_model_512x512(device, batch_size, in_channels, input_
         return_dict=return_dict,
         config=config,
     )
+    end1 = time.time()
+    print("#Finished the 1st call *")
+    print(f"Duration (1st): {end1 - start1}s")
+
+    print("#Start measuring the 2nd call")
+    start2 = time.time()
+    ttnn_output = model(
+        input,
+        timestep=ttnn_timestep,
+        encoder_hidden_states=encoder_hidden_states,
+        class_labels=class_labels,
+        attention_mask=attention_mask,
+        cross_attention_kwargs=cross_attention_kwargs,
+        return_dict=return_dict,
+        config=config,
+    )
+    end2 = time.time()
+    print("#Finished the 2nd call *")
+    print(f"Duration (2nd): {end2 - start2}s")
+
     ttnn_output = post_process_output(
         model.device,
         ttnn_output,
