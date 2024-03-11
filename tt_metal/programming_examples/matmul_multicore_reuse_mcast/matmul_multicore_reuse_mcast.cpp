@@ -1460,7 +1460,7 @@ int main(int argc, char **argv) {
         std::nullopt, // fused_activation,
         false // mcast_in0
     );
-        log_info(tt::LogVerif, "TENSOR OPS SUCCESSFUL", 0);
+        log_info(tt::LogVerif, "TENSOR OPS SUCCESSFUL!", 0);
         CloseDevice(device);
     } catch (const std::exception &e) {
         tt::log_error(tt::LogTest, "Test failed with exception!");
