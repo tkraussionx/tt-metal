@@ -922,13 +922,14 @@ void Matmul::validate(
                             TT_FATAL(input_tensor_a.memory_config().memory_layout == this->output_mem_config.memory_layout);
                         }
                         TT_FATAL(input_tensor_a.shard_spec().value().orientation == ShardOrientation::ROW_MAJOR);
+                        log_info("Shape of (in tiles) A: [{}, {}]", input_tensor_a.volume() / input_tensor_a.get_legacy_shape()[-1] / TILE_HEIGHT, input_tensor_a.get_legacy_shape()[-1] / TILE_WIDTH);
                         uint32_t M = (program_config.fuse_batch ? input_tensor_a.volume() / input_tensor_a.get_legacy_shape()[-1] : input_tensor_a.get_legacy_shape()[-2]) / TILE_HEIGHT;
                         uint32_t K = input_tensor_a.get_legacy_shape()[-1] / TILE_WIDTH;
                         uint32_t per_core_M = program_config.per_core_M;
                         auto shard_shape = input_tensor_a.shard_spec().value().shape;
 
                         // No padding
-                        TT_FATAL(M % per_core_M == 0);
+                        TT_FATAL(M % per_core_M == 0, "M is: {} per_core_M is: {}", M, per_core_M);
                         TT_FATAL(M / per_core_M == input_tensor_a.shard_spec().value().grid.num_cores());
                         TT_FATAL(per_core_M == (shard_shape[0] / TILE_HEIGHT));
                         TT_FATAL(K == program_config.in0_block_w);

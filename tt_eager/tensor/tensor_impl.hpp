@@ -159,7 +159,7 @@ template <typename T, template<typename> typename BufferType>
 inline std::vector<T> convert_layout_row_major_to_tile(const Shape& shape, const BufferType<T>& data_to_convert) {
     TT_ASSERT(
         (shape[-2] % tt::constants::TILE_HEIGHT == 0 && shape[-1] % tt::constants::TILE_WIDTH == 0),
-        "Unsupported shape for tensor conversion");
+        "Unsupported shape for tensor conversion Shape[-2] is {} Shape[-1] is {}", shape[-2], shape[-1]);
     auto shape_vec = detail::to_4D_shape(shape);
     return convert_layout(data_to_convert, shape_vec, TensorLayout::LIN_ROW_MAJOR, TensorLayout::TILED32_4FACES);
 }

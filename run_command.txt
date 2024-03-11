@@ -1,0 +1,41 @@
+pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k "my_sharded_binary in0_unsharded in1_unsharded out_unsharded inputs_BFLOAT16 out_BFLOAT16"
+
+pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k "my_sharded_binary and in0_unsharded and in1_unsharded and out_unsharded and inputs_BFLOAT16 and out_BFLOAT16"
+pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k "my_sharded_binary and in0_sharded and in1_unsharded and out_sharded and inputs_BFLOAT16 and out_BFLOAT16"
+
+
+// profiler
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k \"my_sharded_binary and inputs_BFLOAT16 and out_BFLOAT1\""
+
+
+partial sharded add - height sharded
+pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k "my_sharded_binary and inputs_BFLOAT16 and out_BFLOAT16"
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k \"my_sharded_binary and inputs_BFLOAT16 and out_BFLOAT1\""
+
+sharded spill & reload - height sharded
+pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k "sharded_partial_spill_reload and inputs_BFLOAT16 and out_BFLOAT16"
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k \"sharded_partial_spill_reload and inputs_BFLOAT16 and out_BFLOAT16\""
+
+sharded spill & reload - block sharded
+pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k "block_sharded_partial_spill_reload and inputs_BFLOAT16 and out_BFLOAT16"
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k \"block_sharded_partial_spill_reload and inputs_BFLOAT16 and out_BFLOAT16\""
+
+sharded add - block sharded
+pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k "test_block_sharded_binary and inputs_BFLOAT16 and out_BFLOAT16"
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k \"test_block_sharded_binary and inputs_BFLOAT16 and out_BFLOAT16\""
+
+// Regular binary
+pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k "sharded_binary and in0_sharded and in1_sharded and out_sharded and inputs_BFLOAT16 and out_BFLOAT16"
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k \"sharded_binary and in0_sharded and in1_sharded and out_sharded and inputs_BFLOAT16 and out_BFLOAT16\""
+
+// Test falcon attention
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/models/demos/falcon7b/tests/test_falcon_attention.py -k \"prefill_seq1024\""
+
+
+// Falcon attention reference
+pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k "falcon7b_attnention_reference_matmuls and seq_len_1024"
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k \"falcon7b_attnention_reference_matmuls and seq_len_1024 \""
+
+// Falcon attention slice
+pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k "falcon7b_attnention_slice_matmuls and seq_len_1024 and four_slices"
+./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k \"falcon7b_attnention_slice_matmuls and seq_len_1024 and four_slices\""

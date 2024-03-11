@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 
-#include "debug/dprint.h"
+//#include "debug/dprint.h"
 
 void kernel_main() {
     const uint32_t src_addr  = get_arg_val<uint32_t>(0);
@@ -20,9 +20,6 @@ void kernel_main() {
 
     const uint32_t tile_bytes = get_tile_size(cb_id_in0);
     const DataFormat data_format = get_dataformat(cb_id_in0);
-
-    // DPRINT << "Buffer address" << src_addr << ENDL();
-    // DPRINT << "Starting tile id: " << start_id << ENDL();
 
     const InterleavedAddrGenFast<src_is_dram> s = {
         .bank_base_address = src_addr,

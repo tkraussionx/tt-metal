@@ -20,6 +20,7 @@
 #include "tt_dnn/op_library/copy/copy_op.hpp"
 #include "tt_dnn/op_library/indexed_fill/indexed_fill_op.hpp"
 #include "tt_dnn/op_library/sharded/sharded_op.hpp"
+#include "tt_dnn/op_library/sharded_partial/sharded_op_partial.hpp"
 #include "tt_dnn/op_library/all_gather/all_gather_op.hpp"
 
 
@@ -45,6 +46,7 @@ namespace tt::tt_metal::detail{
         */
 
         detail::export_enum<BcastOpDim>(m_tensor);
+        detail::export_enum<ShardedOpSplitDim>(m_tensor);
 
         detail::bind_unary_op<true, true>(m_tensor, "clone", &clone, R"doc(  Returns a new tensor which is a new copy of input tensor ``{0}``.)doc");
         detail::bind_binary_op<false, false, false>(m_tensor, "copy", &copy, R"doc(  Copies the elements from ``{0}`` into ``{1}``. ``{1}`` is modified in place.)doc");
@@ -517,6 +519,33 @@ namespace tt::tt_metal::detail{
             R"doc(Replaces batch of input in input_b denoted by batch_ids into input_a)doc"
         );
 
+        m_tensor.def(
+            "interleaved_to_sharded_partial",
+            py::overload_cast<
+                const Tensor &,
+                const std::variant<CoreCoord, CoreRangeSet>,
+                std::array<uint32_t, 2>,
+                const ShardedOpSplitDim,
+                const uint32_t,
+                const uint32_t,
+                const TensorMemoryLayout,
+                const ShardOrientation,
+                const std::optional<const DataType>>(&interleaved_to_sharded_partial),
+            py::arg("input"),
+            py::arg("grid"),
+            py::arg("shard_shape"),
+            py::arg("split_dim"),
+            py::arg("num_slices"),
+            py::arg("slice_index"),
+            py::arg("shard_scheme").noconvert(),
+            py::arg("shard_layout").noconvert(),
+            py::arg("output_dtype").noconvert() = std::nullopt,
+            R"doc(Converts a partial tensor from interleaved to sharded memory layout)doc");
+
+        m_tensor.def("sharded_to_interleaved_partial", &sharded_to_interleaved_partial,
+            py::arg("input"), py::arg("cache_tensor"), py::arg("split_dim"), py::arg("num_slices"), py::arg("slice_index"), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, py::arg("output_dtype").noconvert() = std::nullopt,
+            R"doc(Converts a partial tensor from sharded_to_interleaved memory layout)doc"
+        );
 
         // Multi-Device ops
         m_tensor.def("all_gather", &all_gather,

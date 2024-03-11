@@ -160,6 +160,8 @@ class Buffer {
     // Returns address of buffer in the first bank
     uint32_t address() const { return static_cast<uint32_t>(address_); }
 
+    uint32_t address_of_page(uint64_t page_id) const { return static_cast<uint32_t>(address_ + page_id * this->page_size()); }
+
     void set_address(uint64_t addr) { address_ = addr; }
 
     uint32_t page_size() const { return page_size_; }

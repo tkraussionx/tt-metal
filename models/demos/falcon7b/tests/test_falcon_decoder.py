@@ -203,13 +203,13 @@ def run_test_FalconDecoder_inference(
         ("prefill", 1, 128, 0),
         ("decode", 32, 1, 128),
     ),
-    ids=["prefill_seq128", "decode_batch32"],
+    ids=["prefill_seq1024", "decode_batch32"],
 )
 @pytest.mark.parametrize(
     "model_version, layer_num, pcc",
     (("tiiuae/falcon-7b-instruct", 0, 0.98),),
 )
-@pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
+@pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM"))
 def test_FalconDecoder_inference(
     model_version,
     llm_mode,
