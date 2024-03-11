@@ -199,7 +199,8 @@ class TtFalconAttention(nn.Module):
             tt_cache_path=tt_cache_path,
         )
 
-        self.scalar = pad_by_zero(torch.Tensor([1 / math.sqrt(self.head_dim)]), self.device)[0]
+        self.scale = 1 / math.sqrt(self.head_dim)
+        self.scalar = pad_by_zero(torch.Tensor([self.scale]), self.device)[0]
 
     def forward(
         self,
@@ -354,7 +355,7 @@ class TtFalconAttention(nn.Module):
                     output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
                     compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
                 )
-                print(f"attn_weights:{attn_weights.get_legacy_shape()}")
+                print(f"attn_weights1:{attn_weights.get_legacy_shape()}")
 
             else:
                 attn_weights = tt_lib.operations.primary.transformers.group_attn_matmul(
@@ -368,22 +369,45 @@ class TtFalconAttention(nn.Module):
         key_layer_transposed.deallocate()
 
         print(f"self.scalar:{self.scalar}")
-        exit(0)
 
-        attn_weights = tt_lib.tensor.bcast(
+        # attn_weights = tt_lib.tensor.bcast(
+        #     attn_weights,
+        #     self.scalar,
+        #     tt_lib.tensor.BcastOpMath.MUL,
+        #     tt_lib.tensor.BcastOpDim.HW,
+        #     output_mem_config=self.model_config["PRE_SOFTMAX_SCALE_OUTPUT_MEMCFG"],
+        # )
+
+        # softmax_progcfg = self.model_config["BATCHED_SOFTMAX_PROGCFG"]
+        # softmax_progcfg.block_h = self.padded_local_heads // 32
+        # softmax_progcfg.block_w = padded_layer_past_len // 32
+
+        print(f"attention_mask:{attention_mask.get_legacy_shape()}")
+
+        attn_weights = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
             attn_weights,
-            self.scalar,
-            tt_lib.tensor.BcastOpMath.MUL,
-            tt_lib.tensor.BcastOpDim.HW,
-            output_mem_config=self.model_config["PRE_SOFTMAX_SCALE_OUTPUT_MEMCFG"],
+            self.scale,
+            attention_mask,
+            program_config=tt_lib.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
+                compute_with_storage_grid_size=(8, 4),
+                subblock_w=1,
+                block_h=self.padded_local_heads // 32,
+                block_w=padded_layer_past_len // 32,
+                math_fidelity=tt_lib.tensor.MathFidelity.HiFi4,
+                im_data_format=tt_lib.tensor.DataType.BFLOAT16,
+            ),
+            is_causal_mask=True,
         )
 
-        if attention_mask is not None:
-            attn_weights = tt_lib.tensor.add(
-                attn_weights,
-                attention_mask,
-                output_mem_config=self.model_config["PRE_SOFTMAX_MASK_OUTPUT_MEMCFG"],
-            )
+        print(f"attn_weights2:{attn_weights.get_legacy_shape()}")
+        exit(0)
+
+        # if attention_mask is not None:
+        #     attn_weights = tt_lib.tensor.add(
+        #         attn_weights,
+        #         attention_mask,
+        #         output_mem_config=self.model_config["PRE_SOFTMAX_MASK_OUTPUT_MEMCFG"],
+        #     )
 
         ###############
         ### SOFTMAX ###

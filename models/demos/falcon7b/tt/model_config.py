@@ -190,6 +190,17 @@ def get_model_config(model_config_str):
             packer_l1_acc=True,
         )
 
+        # model_config[
+        #     "BATCHED_SOFTMAX_PROGCFG"
+        # ] = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
+        #     compute_with_storage_grid_size=(8, 4),
+        #     subblock_w=1,
+        #     block_h=1,
+        #     block_w=1,  # Dynamic
+        #     math_fidelity=ttl.tensor.MathFidelity.HiFi4,
+        #     im_data_format=ttl.tensor.DataType.BFLOAT16,
+        # )
+
     # uncomment if need to see all the configs
     # logger.debug(f"Falcon model config: \n{pretty_print_model_config(model_config)}")
 
