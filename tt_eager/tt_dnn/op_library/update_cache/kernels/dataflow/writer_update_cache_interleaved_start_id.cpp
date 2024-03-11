@@ -4,7 +4,7 @@
 
 #include <stdint.h>
 #include "dataflow_api.h"
-#include "dprint.h"
+// #include "dprint.h"
 
 void kernel_main() {
     const uint32_t cache_addr  = get_arg_val<uint32_t>(0);
@@ -30,12 +30,17 @@ void kernel_main() {
     const uint32_t cache_tile_bytes = get_tile_size(cache_cb_id);
     const DataFormat cache_data_format = get_dataformat(cache_cb_id);
 
+    constexpr uint32_t sizeof_bf16 = 2;
+    const uint32_t bytes_per_face_row = 16 * sizeof_bf16;
+    const uint32_t bytes_per_face = 16 * 16 * sizeof_bf16;
+
     const uint32_t bytes_per_row = Wbytes / Wt;
 
-    DPRINT << "Wbytes: " << Wbytes << ENDL();
-    DPRINT << "Wt: " << Wt << ENDL();
-    DPRINT << "bytes_per_row: " << bytes_per_row << ENDL();
-    DPRINT << "offset: " << offset << ENDL();
+    // DPRINT << "Wbytes: " << Wbytes << ENDL();
+    // DPRINT << "Wt: " << Wt << ENDL();
+    // DPRINT << "bytes_per_row: " << bytes_per_row << ENDL();
+    // DPRINT << "offset: " << offset << ENDL();
+    // DPRINT << "cache_tile_bytes: " << cache_tile_bytes << ENDL();
 
 
     const InterleavedAddrGenFast<cache_is_dram> s0 = {
@@ -52,9 +57,6 @@ void kernel_main() {
         uint64_t input_l1_read_addr = get_noc_addr(get_read_ptr(untilized_input_cb_id));
 
         for (uint32_t u = 0; u < 32; ++u) {
-            // cb_wait_front(untilized_cache_cb_id, Wt);
-            // cb_reserve_back(untilized_cache2_cb_id, Wt);
-            // uint32_t cache_l1_write_addr = get_read_ptr(untilized_cache_cb_id) + offset;
 
             // Wait for reader to push Wt tiles into cache_cb_id
             cb_wait_front(cache_cb_id, Wt);
@@ -64,24 +66,21 @@ void kernel_main() {
 
             // Scatter untilized input row into tilized cache
             for (uint32_t tile_num = 0; tile_num < Wt; ++tile_num) {
-                DPRINT << "Writing " << bytes_per_row << " bytes from " << input_untilized_row_addr << " to " << cache_l1_write_addr << ENDL();
-                noc_async_read(input_untilized_row_addr, cache_l1_write_addr, bytes_per_row);
-
-                input_untilized_row_addr += bytes_per_row;
-                cache_l1_write_addr += cache_tile_bytes;
+                // DPRINT << "Writing " << bytes_per_row << " bytes from " << input_untilized_row_addr << " to " << cache_l1_write_addr << ENDL();
+                for (uint32_t face_col = 0; face_col < 2; ++face_col) {
+                    noc_async_read(input_untilized_row_addr, cache_l1_write_addr, bytes_per_face_row);
+                    input_untilized_row_addr += bytes_per_face_row;
+                    cache_l1_write_addr += bytes_per_face;
+                }
+                cache_l1_write_addr += cache_tile_bytes - 2*bytes_per_face;
             }
             // Block on writes to tilized output buffer
             noc_async_read_barrier();
-            // noc_async_read(input_l1_read_addr, cache_l1_write_addr, Wbytes);
-            // noc_async_read_barrier();
-            // cb_push_back(untilized_cache2_cb_id, Wt);
-            input_l1_read_addr += Wbytes;
-            // Compute will pop both cache cbs together
 
-            // cb_wait_front(cache_cb_id, Wt);
+            input_l1_read_addr += Wbytes;
             uint32_t out_l1_read_addr = get_read_ptr(cache_cb_id);
             for(uint32_t curr_cache_id = cache_id; curr_cache_id < cache_id + Wt; ++curr_cache_id) {
-                DPRINT << "Writing tile " << curr_cache_id << " to " << out_l1_read_addr << ENDL();
+                // DPRINT << "Writing tile ID" << curr_cache_id << " from L1 addr " << out_l1_read_addr << ENDL();
                 noc_async_write_tile(curr_cache_id, s0, out_l1_read_addr);
                 out_l1_read_addr += cache_tile_bytes;
             }

@@ -111,6 +111,8 @@ operation::ProgramWithCallbacks update_cache_multi_core(const Tensor& cache_tens
     // Output is same tensor as cache input, so cb/tile size is same
     uint32_t output_cb_index = CB::c_out0;
     uint32_t num_output_tiles = 2 * Wt;
+    // HACK: Single buffer for DEBUG
+    // uint32_t num_output_tiles = Wt;
     tt_metal::CircularBufferConfig cb_output_config = tt_metal::CircularBufferConfig(num_output_tiles * cache_single_tile_size, {{output_cb_index, cache_cb_data_format}})
 		.set_page_size(output_cb_index, cache_single_tile_size);
     auto cb_output = tt_metal::CreateCircularBuffer(program, all_cores, cb_output_config);
