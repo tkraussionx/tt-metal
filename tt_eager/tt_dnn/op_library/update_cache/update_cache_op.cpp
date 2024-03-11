@@ -92,7 +92,6 @@ operation::ProgramWithCallbacks UpdateCache::create_program(const std::vector<Te
             if (this->op_type == UpdateCacheOpType::FILL) {
                 return fill_cache_single_core(cache_tensor, input_tensor, this->batch_idx, this->update_idx);
             } else {
-                TT_FATAL(false);
                 return update_cache_single_core(cache_tensor, input_tensor, this->update_idx);
             }
     };

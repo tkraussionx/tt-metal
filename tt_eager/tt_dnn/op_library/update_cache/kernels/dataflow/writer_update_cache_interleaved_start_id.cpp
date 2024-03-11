@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include "dataflow_api.h"
+#include "dprint.h"
 
 void kernel_main() {
     const uint32_t cache_addr  = get_arg_val<uint32_t>(0);
@@ -31,6 +32,12 @@ void kernel_main() {
 
     const uint32_t bytes_per_row = Wbytes / Wt;
 
+    DPRINT << "Wbytes: " << Wbytes << ENDL();
+    DPRINT << "Wt: " << Wt << ENDL();
+    DPRINT << "bytes_per_row: " << bytes_per_row << ENDL();
+    DPRINT << "offset: " << offset << ENDL();
+
+
     const InterleavedAddrGenFast<cache_is_dram> s0 = {
         .bank_base_address = cache_addr,
         .page_size = cache_tile_bytes,
@@ -57,6 +64,7 @@ void kernel_main() {
 
             // Scatter untilized input row into tilized cache
             for (uint32_t tile_num = 0; tile_num < Wt; ++tile_num) {
+                DPRINT << "Writing " << bytes_per_row << " bytes from " << input_untilized_row_addr << " to " << cache_l1_write_addr << ENDL();
                 noc_async_read(input_untilized_row_addr, cache_l1_write_addr, bytes_per_row);
 
                 input_untilized_row_addr += bytes_per_row;
@@ -73,6 +81,7 @@ void kernel_main() {
             // cb_wait_front(cache_cb_id, Wt);
             uint32_t out_l1_read_addr = get_read_ptr(cache_cb_id);
             for(uint32_t curr_cache_id = cache_id; curr_cache_id < cache_id + Wt; ++curr_cache_id) {
+                DPRINT << "Writing tile " << curr_cache_id << " to " << out_l1_read_addr << ENDL();
                 noc_async_write_tile(curr_cache_id, s0, out_l1_read_addr);
                 out_l1_read_addr += cache_tile_bytes;
             }
