@@ -216,11 +216,10 @@ operation::ProgramWithCallbacks groupnorm_sharded_(
     }
 
     // subblock
-    bool is_channel_divisible_by_tile = true;
+    bool is_channel_divisible_by_tile = (num_datum_row_per_group % TILE_WIDTH == 0);
     uint32_t block_wt = per_core_Nt / num_groups_per_core;
     if (per_core_Nt % num_groups_per_core != 0) {
         block_wt = per_core_Nt / num_groups_per_core + 1;
-        is_channel_divisible_by_tile = false;
     }
 
     uint32_t num_rows_per_batch_per_core = per_core_M / num_batches_per_core;
