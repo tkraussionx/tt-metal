@@ -28,7 +28,7 @@ from models.utility_functions import (
     is_grayskull,
 )
 
-from models.experimental.functional_resnet.tt.ttnn_functional_resnet import resnet_basic_block, resnet_bottleneck_block
+from models.demos.ttnn_resnet.tt.ttnn_functional_resnet import resnet_basic_block, resnet_bottleneck_block
 
 
 def create_core_range_set_from_ncores(ncores: int, bb_ncores_w: int, bb_ncores_h: int):
