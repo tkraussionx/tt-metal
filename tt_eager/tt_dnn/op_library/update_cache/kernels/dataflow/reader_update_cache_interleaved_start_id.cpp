@@ -22,11 +22,14 @@ void kernel_main() {
     constexpr bool input_is_dram = get_compile_time_arg_val(1) == 1;
     constexpr uint32_t cache_cb_id = get_compile_time_arg_val(2);
     constexpr uint32_t input_cb_id = get_compile_time_arg_val(3);
+    constexpr uint32_t output_cache_cb_id = get_compile_time_arg_val(4);
 
     // ublocks size defined in tiles
     constexpr uint32_t onetile = 1;
-    const uint32_t cache_tile_bytes = get_tile_size(cache_cb_id);
-    const DataFormat cache_data_format = get_dataformat(cache_cb_id);
+    // const uint32_t cache_tile_bytes = get_tile_size(cache_cb_id);
+    const uint32_t cache_tile_bytes = get_tile_size(output_cache_cb_id);
+    // const DataFormat cache_data_format = get_dataformat(cache_cb_id);
+    const DataFormat cache_data_format = get_dataformat(output_cache_cb_id);
     const uint32_t input_tile_bytes = get_tile_size(input_cb_id);
     const DataFormat input_data_format = get_dataformat(input_cb_id);
 
@@ -63,8 +66,10 @@ void kernel_main() {
         cb_push_back(input_cb_id, Wt);
         #endif
         for (uint32_t u = 0; u < 32; ++u) {
-            cb_reserve_back(cache_cb_id, Wt);
-            uint32_t cache_l1_write_addr = get_write_ptr(cache_cb_id);
+            // cb_reserve_back(cache_cb_id, Wt);
+            cb_reserve_back(output_cache_cb_id, Wt);
+            // uint32_t cache_l1_write_addr = get_write_ptr(cache_cb_id);
+            uint32_t cache_l1_write_addr = get_write_ptr(output_cache_cb_id);
             for (uint32_t curr_cache_id = cache_id; curr_cache_id < cache_id + Wt; ++curr_cache_id) {
                 noc_async_read_tile(curr_cache_id, s0, cache_l1_write_addr);
                 cache_l1_write_addr += cache_tile_bytes;
@@ -76,7 +81,8 @@ void kernel_main() {
                 cache_id = cache_id - cache_total_num_tiles + cache_head_num_tiles; // Start of next head
             }
             noc_async_read_barrier();
-            cb_push_back(cache_cb_id, Wt);
+            // cb_push_back(cache_cb_id, Wt);
+            cb_push_back(output_cache_cb_id, Wt);
         }
     }
 }

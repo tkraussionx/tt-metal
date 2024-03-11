@@ -32,33 +32,33 @@ void MAIN {
         cb_pop_front(in_cb, Wt);
         untilize_uninit(in_cb);
 
-        unpack_reconfig_data_format_srca(in_cb, cache_cb);
+        // unpack_reconfig_data_format_srca(in_cb, cache_cb);
 
-        for(uint32_t u = 0; u < 32; ++u) {
-            untilize_init_short(cache_cb);
-            cb_wait_front(cache_cb, Wt);
-            cb_reserve_back(untilized_cache_cb, Wt);
-            untilize_block(cache_cb, Wt, untilized_cache_cb);
-            cb_push_back(untilized_cache_cb, Wt);
-            cb_pop_front(cache_cb, Wt);
-            untilize_uninit(cache_cb);
+        // for(uint32_t u = 0; u < 32; ++u) {
+        //     untilize_init_short(cache_cb);
+        //     cb_wait_front(cache_cb, Wt);
+        //     cb_reserve_back(untilized_cache_cb, Wt);
+        //     untilize_block(cache_cb, Wt, untilized_cache_cb);
+        //     cb_push_back(untilized_cache_cb, Wt);
+        //     cb_pop_front(cache_cb, Wt);
+        //     untilize_uninit(cache_cb);
 
-            unpack_reconfig_data_format_srca(cache_cb, untilized_cache2_cb);
-            pack_reconfig_data_format(untilized_cache_cb, out_cb);
+        //     unpack_reconfig_data_format_srca(cache_cb, untilized_cache2_cb);
+        //     pack_reconfig_data_format(untilized_cache_cb, out_cb);
 
-            tilize_init_short(untilized_cache2_cb, Wt);
-            cb_wait_front(untilized_cache2_cb, Wt);
-            cb_reserve_back(out_cb, Wt);
-            tilize_block(untilized_cache2_cb, Wt, out_cb);
-            cb_push_back(out_cb, Wt);
-            // Untilized cache CBs share same address space
-            // Compute pops both
-            cb_pop_front(untilized_cache2_cb, Wt);
-            cb_pop_front(untilized_cache_cb, Wt);
-            tilize_uninit_with_dt(untilized_cache2_cb, cache_cb);
-            pack_reconfig_data_format(out_cb, untilized_cache_cb);
-        }
-        unpack_reconfig_data_format_srca(cache_cb, in_cb);
+        //     tilize_init_short(untilized_cache2_cb, Wt);
+        //     cb_wait_front(untilized_cache2_cb, Wt);
+        //     cb_reserve_back(out_cb, Wt);
+        //     tilize_block(untilized_cache2_cb, Wt, out_cb);
+        //     cb_push_back(out_cb, Wt);
+        //     // Untilized cache CBs share same address space
+        //     // Compute pops both
+        //     cb_pop_front(untilized_cache2_cb, Wt);
+        //     cb_pop_front(untilized_cache_cb, Wt);
+        //     tilize_uninit_with_dt(untilized_cache2_cb, cache_cb);
+        //     pack_reconfig_data_format(out_cb, untilized_cache_cb);
+        // }
+        // unpack_reconfig_data_format_srca(cache_cb, in_cb);
     }
 }
 } // NAMESPACE

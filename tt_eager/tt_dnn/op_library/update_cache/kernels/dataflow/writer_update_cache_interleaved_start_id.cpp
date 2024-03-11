@@ -29,6 +29,8 @@ void kernel_main() {
     const uint32_t cache_tile_bytes = get_tile_size(cache_cb_id);
     const DataFormat cache_data_format = get_dataformat(cache_cb_id);
 
+    const uint32_t bytes_per_row = Wbytes / Wt;
+
     const InterleavedAddrGenFast<cache_is_dram> s0 = {
         .bank_base_address = cache_addr,
         .page_size = cache_tile_bytes,
@@ -43,16 +45,32 @@ void kernel_main() {
         uint64_t input_l1_read_addr = get_noc_addr(get_read_ptr(untilized_input_cb_id));
 
         for (uint32_t u = 0; u < 32; ++u) {
-            cb_wait_front(untilized_cache_cb_id, Wt);
-            cb_reserve_back(untilized_cache2_cb_id, Wt);
-            uint32_t cache_l1_write_addr = get_read_ptr(untilized_cache_cb_id) + offset;
-            noc_async_read(input_l1_read_addr, cache_l1_write_addr, Wbytes);
+            // cb_wait_front(untilized_cache_cb_id, Wt);
+            // cb_reserve_back(untilized_cache2_cb_id, Wt);
+            // uint32_t cache_l1_write_addr = get_read_ptr(untilized_cache_cb_id) + offset;
+
+            // Wait for reader to push Wt tiles into cache_cb_id
+            cb_wait_front(cache_cb_id, Wt);
+            // Get pointer to first tilized row of cache to write
+            uint32_t cache_l1_write_addr = get_read_ptr(cache_cb_id) + offset;
+            uint64_t input_untilized_row_addr = input_l1_read_addr;
+
+            // Scatter untilized input row into tilized cache
+            for (uint32_t tile_num = 0; tile_num < Wt; ++tile_num) {
+                noc_async_read(input_untilized_row_addr, cache_l1_write_addr, bytes_per_row);
+
+                input_untilized_row_addr += bytes_per_row;
+                cache_l1_write_addr += cache_tile_bytes;
+            }
+            // Block on writes to tilized output buffer
             noc_async_read_barrier();
-            cb_push_back(untilized_cache2_cb_id, Wt);
+            // noc_async_read(input_l1_read_addr, cache_l1_write_addr, Wbytes);
+            // noc_async_read_barrier();
+            // cb_push_back(untilized_cache2_cb_id, Wt);
             input_l1_read_addr += Wbytes;
             // Compute will pop both cache cbs together
 
-            cb_wait_front(cache_cb_id, Wt);
+            // cb_wait_front(cache_cb_id, Wt);
             uint32_t out_l1_read_addr = get_read_ptr(cache_cb_id);
             for(uint32_t curr_cache_id = cache_id; curr_cache_id < cache_id + Wt; ++curr_cache_id) {
                 noc_async_write_tile(curr_cache_id, s0, out_l1_read_addr);
