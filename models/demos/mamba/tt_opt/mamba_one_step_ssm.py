@@ -23,6 +23,7 @@ class TtMambaSSM(torch.nn.Module):
         self.num_users = num_users
         self.hidden_size = hidden_size
         self.configs = configs
+        
         if hidden_size == args.d_inner:
             self.tt_hidden_state = ttnn.zeros(
                 (1, 1, self.num_users, self.hidden_size * self.args.d_state),
@@ -207,10 +208,13 @@ class TtMambaSSM(torch.nn.Module):
         ttnn.deallocate(hidden_state0)
 
         # add amulh and bmulx
-        self.tt_hidden_state = ttnn.add(amulh0, bmulx0)
+        hidden_state1 = ttnn.add(amulh0, bmulx0, memory_config=self.configs["sharded_large"])
         
         # deallocate amulh and bmulx
         ttnn.deallocate(amulh0)
         ttnn.deallocate(bmulx0)
+        
+        self.tt_hidden_state = hidden_state1
+        ttnn.deallocate(hidden_state1)
     
         return self.tt_hidden_state
