@@ -100,7 +100,7 @@ class MambaTT(torch.nn.Module):
         for layer in self.layers:
             x = layer(x)
 
-        x = tt2torch_tensor(x).squeeze(1)
+        x = tt2torch_tensor(x).squeeze(1).to(torch.float32)
         x = self.norm_f(x)
         x = self.lm_head(x)
         return x
