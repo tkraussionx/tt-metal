@@ -5,7 +5,6 @@
 import torch
 
 import ttnn
-import tt_lib as ttl
 
 from models.utility_functions import torch2tt_tensor
 from models.helper_funcs import Linear
@@ -21,7 +20,7 @@ class TtMambaSSM(torch.nn.Module):
 
         # hidden state
         self.num_users = num_users
-        self.hidden_size = hidden_size
+        self.hidden_size = hidden_size * 2
         self.configs = configs
         
         if hidden_size == args.d_inner:
