@@ -156,6 +156,7 @@ def get_model_config(model_config_str, llm_mode, input_shape, num_devices):
     model_config = {
         "DEFAULT_DTYPE": dtype,
         "DEFAULT_MEMCFG": mem_config,
+        "DRAM_MEMCFG": DRAM_MEMCFG,
         "MOVE_DECODER_OUTPUT_BOOL": False,
         "NUM_DEVICES": num_devices,
         "MAX_GRID_SIZE": (8, 4),
@@ -207,6 +208,8 @@ def get_model_config(model_config_str, llm_mode, input_shape, num_devices):
         elif llm_mode == "decode":
             assert batch == 32
             shard_height = batch
+
+        shard_height_in_tiles = shard_height // 32
 
         shard_spec_32_cores_grid = ttl.tensor.CoreRangeSet(
             {
@@ -340,7 +343,7 @@ def get_model_config(model_config_str, llm_mode, input_shape, num_devices):
         model_config["LN_ATTN_PROGCFG"] = ttl.operations.primary.LayerNormShardedMultiCoreProgramConfig(
             compute_with_storage_grid_size=[8, 4],
             subblock_w=8,
-            block_h=1,
+            block_h=shard_height_in_tiles,
             block_w=8,
             math_fidelity=ttl.tensor.MathFidelity.HiFi4,
             im_data_format=ttl.tensor.DataType.BFLOAT16,
@@ -350,7 +353,7 @@ def get_model_config(model_config_str, llm_mode, input_shape, num_devices):
         model_config["LN_MLP_PROGCFG"] = ttl.operations.primary.LayerNormShardedMultiCoreProgramConfig(
             compute_with_storage_grid_size=[8, 4],
             subblock_w=8,
-            block_h=1,
+            block_h=shard_height_in_tiles,
             block_w=8,
             math_fidelity=ttl.tensor.MathFidelity.HiFi4,
             im_data_format=ttl.tensor.DataType.BFLOAT16,
