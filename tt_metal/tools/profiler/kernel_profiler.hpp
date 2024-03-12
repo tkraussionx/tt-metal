@@ -15,19 +15,25 @@
 #include "ckernel.h"
 #endif
 
+#include "hostdevcommon/profiler_common.h"
+#include "risc_attribs.h"
+
 #ifdef PROFILER_KERNEL_FORCE_INLINE
 #define PROFILER_INLINE inline __attribute__((always_inline))
 #else
 #define PROFILER_INLINE __attribute__((noinline))
 #endif
 
+#define DO_PRAGMA(x) _Pragma (#x)
+
+#define Stringize( L )     #L
+#define MakeString( M, L ) M(L)
+#define $Line MakeString( Stringize, __LINE__ )
+
+#define PROFILER_MSG __FILE__ "," $Line ",KERNEL_PROFILER"
+#define PROFILER_MSG_NAME( name )  name "," PROFILER_MSG
+
 #ifdef PROFILE_KERNEL
-#include "debug/dprint_buffer.h" // only needed because the address is shared
-#endif
-
-#include "hostdevcommon/profiler_common.h"
-#include "risc_attribs.h"
-
 namespace kernel_profiler{
 
     extern uint32_t wIndex;
@@ -347,17 +353,6 @@ namespace kernel_profiler{
     };
 }
 
-
-#define DO_PRAGMA(x) _Pragma (#x)
-
-#define Stringize( L )     #L
-#define MakeString( M, L ) M(L)
-#define $Line MakeString( Stringize, __LINE__ )
-
-#define PROFILER_MSG __FILE__ "," $Line ",KERNEL_PROFILER"
-#define PROFILER_MSG_NAME( name )  name "," PROFILER_MSG
-
-#ifdef PROFILE_KERNEL
 
 #define DeviceZoneScopedN( name ) DO_PRAGMA(message(PROFILER_MSG_NAME(name))); auto constexpr hash = kernel_profiler::Hash16_CT(PROFILER_MSG_NAME(name)); kernel_profiler::profileScope<hash> zone = kernel_profiler::profileScope<hash>();
 

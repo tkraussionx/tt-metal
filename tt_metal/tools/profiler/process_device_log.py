@@ -635,7 +635,6 @@ def device_analysis(name, analysis, devicesData):
 
 def ops_analysis(name, analysis, devicesData):
     for chipID, deviceData in devicesData["devices"].items():
-        logger.info(f"Analyzing Device Number : {chipID}")
         core = "DEVICE"
         risc = "TENSIX"
         assert core in deviceData["cores"].keys()

@@ -11,15 +11,18 @@ import time
 
 from loguru import logger
 
-from tt_metal.tools.profiler.common import TT_METAL_HOME, PROFILER_BIN_DIR, PROFILER_LOGS_DIR, PROFILER_SCRIPTS_ROOT
-
-TRACY_MODULE_PATH = TT_METAL_HOME / "tt_metal/third_party/tracy"
-TRACY_FILE_NAME = "tracy_profile_log_host.tracy"
-TRACY_OPS_TIMES_FILE_NAME = "tracy_ops_times.csv"
-TRACY_OPS_DATA_FILE_NAME = "tracy_ops_data.csv"
-
-TRACY_CAPTURE_TOOL = "capture"
-TRACY_CSVEXPROT_TOOL = "csvexport"
+from tt_metal.tools.profiler.common import (
+    TT_METAL_HOME,
+    PROFILER_BIN_DIR,
+    PROFILER_LOGS_DIR,
+    PROFILER_SCRIPTS_ROOT,
+    TRACY_MODULE_PATH,
+    TRACY_FILE_NAME,
+    TRACY_OPS_TIMES_FILE_NAME,
+    TRACY_OPS_DATA_FILE_NAME,
+    TRACY_CAPTURE_TOOL,
+    TRACY_CSVEXPROT_TOOL,
+)
 
 import tracy_state
 

@@ -24,49 +24,49 @@ class default_setup(metaclass=MergeMetaclass):
     ]
 
     timerAnalysis = {
-        "FW_START->FW_END": {
+        "device_fw_duration": {
             "across": "ops",
             "type": "op_first_last",
             "start": {"core": "ANY", "risc": "ANY", "zone_name": [f"{risc}-FW" for risc in riscTypes]},
             "end": {"core": "ANY", "risc": "ANY", "zone_name": [f"{risc}-FW" for risc in riscTypes]},
         },
-        "KERNEL_START->KERNEL_END": {
+        "device_kernel_duration": {
             "across": "ops",
             "type": "op_first_last",
             "start": {"core": "ANY", "risc": "ANY", "zone_name": [f"{risc}-KERNEL" for risc in riscTypes]},
             "end": {"core": "ANY", "risc": "ANY", "zone_name": [f"{risc}-KERNEL" for risc in riscTypes]},
         },
-        "BR_KERNEL_START->BR_KERNEL_END": {
+        "device_brisc_kernel_duration": {
             "across": "ops",
             "type": "op_first_last",
             "start": {"core": "ANY", "risc": "BRISC", "zone_name": "BRISC-KERNEL"},
             "end": {"core": "ANY", "risc": "BRISC", "zone_name": "BRISC-KERNEL"},
         },
-        "NC_KERNEL_START->NC_KERNEL_END": {
+        "device_ncrisc_kernel_duration": {
             "across": "ops",
             "type": "op_first_last",
             "start": {"core": "ANY", "risc": "NCRISC", "zone_name": "NCRISC-KERNEL"},
             "end": {"core": "ANY", "risc": "NCRISC", "zone_name": "NCRISC-KERNEL"},
         },
-        "T0_KERNEL_START->T0_KERNEL_END": {
+        "device_trisc0_kernel_duration": {
             "across": "ops",
             "type": "op_first_last",
             "start": {"core": "ANY", "risc": "TRISC_0", "zone_name": "TRISC-KERNEL"},
             "end": {"core": "ANY", "risc": "TRISC_0", "zone_name": "TRISC-KERNEL"},
         },
-        "T1_KERNEL_START->T1_KERNEL_END": {
+        "device_trisc1_kernel_duration": {
             "across": "ops",
             "type": "op_first_last",
             "start": {"core": "ANY", "risc": "TRISC_1", "zone_name": "TRISC-KERNEL"},
             "end": {"core": "ANY", "risc": "TRISC_1", "zone_name": "TRISC-KERNEL"},
         },
-        "T2_KERNEL_START->T2_KERNEL_END": {
+        "device_trisc2_kernel_duration": {
             "across": "ops",
             "type": "op_first_last",
             "start": {"core": "ANY", "risc": "TRISC_2", "zone_name": "TRISC-KERNEL"},
             "end": {"core": "ANY", "risc": "TRISC_2", "zone_name": "TRISC-KERNEL"},
         },
-        "ER_KERNEL_START->ER_KERNEL_END": {
+        "device_erisc_kernel_duration": {
             "across": "ops",
             "type": "op_first_last",
             "start": {"core": "ANY", "risc": "ERISC", "zone_name": "ERISC-KERNEL"},

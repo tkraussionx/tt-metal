@@ -124,7 +124,7 @@ namespace op_profiler {
     {
         ZoneScoped;
         json j;
-        j["id"] = opID;
+        j["global_id"] = opID;
 
         std::string opName = op.get_type_name();
 
@@ -133,7 +133,7 @@ namespace op_profiler {
             auto profiler_info = op.create_profiler_info(input_tensors);
             if (profiler_info.preferred_name.has_value())
             {
-                j["name"] = profiler_info.preferred_name.value();
+                j["op_code"] = profiler_info.preferred_name.value();
             }
 
             if (profiler_info.parallelization_strategy.has_value())
@@ -142,7 +142,7 @@ namespace op_profiler {
             }
         }
 
-        j["name"] = opName;
+        j["op_code"] = opName;
 
         json attributesObj;
         if (not op.attributes().empty()) {
@@ -179,9 +179,9 @@ namespace op_profiler {
             const std::vector<Tensor>& input_tensors)
     {
         auto j = get_base_json<true>(opID, op, input_tensors);
-        j["type"] = magic_enum::enum_name(OpType::python_fallback);
+        j["op_type"] = magic_enum::enum_name(OpType::python_fallback);
         std::string ser = j.dump(4);
-        return fmt::format("TT_DNN_FALL_BACK_OP:{}\n{}",j["name"], ser);
+        return fmt::format("TT_DNN_FALL_BACK_OP:{}\n{}",j["op_code"], ser);
     }
 
     inline std::string op_meta_data_serialized_json(
@@ -191,13 +191,14 @@ namespace op_profiler {
             std::vector<Tensor>& output_tensors)
     {
         auto j = get_base_json(opID, op, input_tensors, output_tensors);
-        j["type"] = magic_enum::enum_name(OpType::tt_dnn_cpu);
+        j["op_type"] = magic_enum::enum_name(OpType::tt_dnn_cpu);
         std::string ser = j.dump(4);
-        return fmt::format("TT_DNN_HOST_OP:{}\n{}",j["name"], ser);
+        return fmt::format("TT_DNN_HOST_OP:{}\n{}",j["op_code"], ser);
     }
 
     inline std::string op_meta_data_serialized_json(
             uint32_t opID,
+            uint32_t device_id,
             const tt::tt_metal::operation::DeviceOperation& op,
             const std::variant<std::shared_ptr<Program>, std::reference_wrapper<Program>>& program,
             const std::vector<Tensor>& input_tensors,
@@ -207,7 +208,8 @@ namespace op_profiler {
         ZoneScoped;
 
         auto j = get_base_json(opID, op, input_tensors, output_tensors);
-        j["type"] = magic_enum::enum_name(OpType::tt_dnn_device);
+        j["op_type"] = magic_enum::enum_name(OpType::tt_dnn_device);
+        j["device_id"] = device_id;
         if (std::holds_alternative<std::reference_wrapper<Program>>(program))
         {
             j["kernel_info"] = get_kernels_json(std::get<std::reference_wrapper<Program>>(program));
@@ -231,7 +233,7 @@ namespace op_profiler {
         j["performance_model"]["output_bws"] = perfModel.get_output_bws();
 
         std::string ser = j.dump(4);
-        return fmt::format("TT_DNN_DEVICE_OP:{}\n{}",j["name"], ser);
+        return fmt::format("TT_DNN_DEVICE_OP:{}\n{}",j["op_code"], ser);
     }
 
 

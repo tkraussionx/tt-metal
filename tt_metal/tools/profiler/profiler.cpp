@@ -240,9 +240,6 @@ DeviceProfiler::DeviceProfiler(const bool new_logs)
     output_dir = std::filesystem::path(string(PROFILER_RUNTIME_ROOT_DIR) + string(PROFILER_LOGS_DIR_NAME));
     std::filesystem::create_directories(output_dir);
 
-    if (new_log && std::filesystem::exists(tt::tt_metal::PROFILER_ZONE_SRC_LOCATIONSS_LOG)) {
-        std::remove(tt::tt_metal::PROFILER_ZONE_SRC_LOCATIONSS_LOG.c_str());
-    }
 #endif
 }
 
@@ -295,7 +292,7 @@ uint16_t DeviceProfiler::hash16CT( const std::string& str)
 
 void DeviceProfiler::generateZoneSourceLocationsHashes()
 {
-    std::ifstream log_file (tt::tt_metal::PROFILER_ZONE_SRC_LOCATIONSS_LOG);
+    std::ifstream log_file (tt::tt_metal::PROFILER_ZONE_SRC_LOCATIONS_LOG);
     std::string line;
     while(std::getline(log_file, line))
     {
