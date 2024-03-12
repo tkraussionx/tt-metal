@@ -272,9 +272,13 @@ def create_group_norm_weight_bias_rm(input_tensor, num_channels, num_groups):
 def _torch_group_norm(input_tensor: ttnn.Tensor, *, num_groups, epsilon=1e-05, weight=None, bias=None, **_):
     import torch
 
+    print("start copy from dev to host")
     input_tensor = ttnn.from_device(input_tensor)
+    print("done")
     input_tensor = ttnn.to_layout(input_tensor, ttnn.ROW_MAJOR_LAYOUT)
+    print("done untilize")
     input_tensor = ttnn.to_torch(input_tensor)
+    print("done to torch")
 
     if weight is not None:
         weight = ttnn.from_device(weight)
@@ -289,7 +293,7 @@ def _torch_group_norm(input_tensor: ttnn.Tensor, *, num_groups, epsilon=1e-05, w
         bias = ttnn.to_torch(bias)
         if len(bias.shape) == 2:
             bias = bias[0]
-
+    print("Starting gn functional torch")
     return torch.nn.functional.group_norm(input_tensor, num_groups, weight, bias, eps=epsilon)
 
 
@@ -390,7 +394,9 @@ def group_norm(
         return output_tensor
 
     else:
+        print("starting torch gn")
         output = _torch_group_norm(input_tensor, num_groups=num_groups, epsilon=epsilon, weight=weight, bias=bias)
+        print("done torch gn")
         return ttnn.from_torch(output, dtype=input_tensor.dtype, layout=input_tensor.layout, device=input_tensor.device)
 
 
