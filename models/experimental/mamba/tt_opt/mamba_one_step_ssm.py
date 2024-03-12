@@ -9,7 +9,7 @@ import tt_lib as ttl
 
 from models.utility_functions import torch2tt_tensor
 from models.helper_funcs import Linear
-from models.demos.mamba.reference.args import ModelArgs
+from models.experimental.mamba.reference.args import ModelArgs
 
 
 class TtMambaSSM(torch.nn.Module):
@@ -145,6 +145,9 @@ class TtMambaSSM(torch.nn.Module):
         # C pad
         C_pad = torch.zeros(1,1,self.num_users,16)
         self.C_pad = ttnn.from_torch(C_pad, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
+        
+        # D
+        self.D = ttnn.from_torch(torch.rand(1, 1, self.num_users, self.hidden_size), layout=ttnn.TILE_LAYOUT, device=self.device, dtype=ttnn.bfloat16, memory_config=ttnn.DRAM_MEMORY_CONFIG)
             
 
     def forward(self, x):
@@ -244,5 +247,14 @@ class TtMambaSSM(torch.nn.Module):
         C8 = ttnn.reshape(C7, (1, 1, self.hidden_size, self.num_users)) # 1, 1, d, b
         C9 = ttnn.permute(C8, (0, 1, 3, 2)) # 1, 1, b, d
         ttnn.deallocate(C7)
+        ttnn.deallocate(C9)
+        
+        # x * D
+        xD = ttnn.mul(x, self.D, memory_config=ttnn.L1_MEMORY_CONFIG)
+        
+        # add xD and x
+        output = ttnn.add(xD, x, memory_config=ttnn.L1_MEMORY_CONFIG)
+        ttnn.deallocate(xD)
+        ttnn.deallocate(x)
     
-        return C9
+        return output

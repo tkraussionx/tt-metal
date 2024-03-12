@@ -8,8 +8,8 @@ import torch
 
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor
 from models.helper_funcs import Linear
-from models.demos.mamba.reference.args import ModelArgs
-from models.demos.mamba.tt_opt.mamba_one_step_ssm import TtMambaSSM
+from models.experimental.mamba.reference.args import ModelArgs
+from models.experimental.mamba.tt_opt.mamba_one_step_ssm import TtMambaSSM
 
 class TtMambaBlock(torch.nn.Module):
     def __init__(

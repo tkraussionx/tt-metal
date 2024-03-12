@@ -9,8 +9,8 @@ import ttnn
 
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor
 from models.helper_funcs import Linear
-from models.demos.mamba.reference.args import ModelArgs
-from models.demos.mamba.tt_opt.mamba_block import TtMambaBlock
+from models.experimental.mamba.reference.args import ModelArgs
+from models.experimental.mamba.tt_opt.mamba_block import TtMambaBlock
 
 class TtResidualBlock(torch.nn.Module):
     def __init__(
