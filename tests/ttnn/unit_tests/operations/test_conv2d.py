@@ -1221,7 +1221,7 @@ def test_unet_conv(
         #        ),  # c8_3 ( same as c8_2 + run as shallow conv + block shard)  height sharding fails for all variants
         (
             2,
-            2,
+            1,
             32,
             256,
             256,
@@ -1237,7 +1237,7 @@ def test_unet_conv(
         ),  # ( classifier conv)  height sharding fails for all variants
         (
             2,
-            2,
+            1,
             32,
             256,
             256,
