@@ -4,13 +4,11 @@
 import torch
 import pytest
 from loguru import logger
-import json
-from pathlib import Path
 import ttnn
 from models.demos.mixtral8x7b.tt.mixtral_mlp_ttnn import TtMixtralMLP
 from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn import TtMoeLayer
-from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs
-from models.demos.mixtral8x7b.reference.moe import MoeArgs, MoeLayer
+from models.demos.mixtral8x7b.tt.model_config_ttnn import TtModelArgs
+from models.demos.mixtral8x7b.reference.moe import MoeLayer
 from models.demos.mixtral8x7b.reference.model import FeedForward
 from models.utility_functions import (
     comp_pcc,
@@ -36,11 +34,8 @@ def test_mistral_moe_inference(all_devices, iterations):
     if num_devices == 4:
         devices += devices
 
-    mistral_path = "/proj_sw/user_dev/hf_data/mistral/Mixtral-8x7B-v0.1/"
-    state_dict = {}
-    for i in range(1):
-        state_dict_i = torch.load(mistral_path + f"consolidated.{str(i).zfill(2)}.pt")
-        state_dict.update(state_dict_i)
+    model_args = TtModelArgs()
+    state_dict = torch.load(model_args.consolidated_weights_path(0), map_location="cpu")
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
     partial_state_dict = {
@@ -48,47 +43,41 @@ def test_mistral_moe_inference(all_devices, iterations):
         for k, v in state_dict.items()
         if (k.startswith("layers.0.") and "attention" not in k and "norm" not in k)
     }
-    base_address = ""
-    partial_state_dict[base_address + "gate.weight"] = partial_state_dict["block_sparse_moe.gate.weight"]
+
+    partial_state_dict["gate.weight"] = partial_state_dict["block_sparse_moe.gate.weight"]
     del partial_state_dict["block_sparse_moe.gate.weight"]
 
     w1 = partial_state_dict["block_sparse_moe.w1"].view(8, 14336, 4096)
     w2 = partial_state_dict["block_sparse_moe.w2"].view(8, 4096, 14336)
     w3 = partial_state_dict["block_sparse_moe.w3"].view(8, 14336, 4096)
     for i in range(8):
-        partial_state_dict[base_address + f"experts.{i}.w1.weight"] = w1[i]
-        partial_state_dict[base_address + f"experts.{i}.w2.weight"] = w2[i]
-        partial_state_dict[base_address + f"experts.{i}.w3.weight"] = w3[i]
+        partial_state_dict[f"experts.{i}.w1.weight"] = w1[i]
+        partial_state_dict[f"experts.{i}.w2.weight"] = w2[i]
+        partial_state_dict[f"experts.{i}.w3.weight"] = w3[i]
     partial_state_dict.pop("block_sparse_moe.w1")
     partial_state_dict.pop("block_sparse_moe.w2")
     partial_state_dict.pop("block_sparse_moe.w3")
 
-    with open("/proj_sw/user_dev/hf_data/mistral/mistral-7B-v0.1/params.json", "r") as f:
-        model_args = TtModelArgs(**json.loads(f.read()))
-    model_args.max_batch_size = 32
-    model_args.moe = True
-    model_args.num_experts = 8
-    model_args.num_experts_per_tok = 2
+    # Initialize TT models
 
-    state_dict = None
-    # Initialize TT model
+    experts = [
+        TtMixtralMLP(
+            device=devices[i],
+            state_dict=state_dict,
+            args=model_args,
+            layer_num=0,
+            expert_num=i,
+            dtype=dtype,
+        )
+        for i in range(len(devices))
+    ]
+
     tt_model = TtMoeLayer(
-        experts=[
-            TtMixtralMLP(
-                device=devices[i],
-                state_dict=partial_state_dict,
-                args=model_args,
-                layer_num=None,
-                expert_num=i,
-                dtype=dtype,
-            )
-            for i in range(len(devices))
-        ],
-        state_dict=partial_state_dict,
-        # layer_num=layer_num,
-        moe_args=model_args,
         devices=devices,
-        num_devices=num_devices,
+        state_dict=state_dict,
+        experts=experts,
+        args=model_args,
+        layer_num=0,
         dtype=dtype,
     )
 

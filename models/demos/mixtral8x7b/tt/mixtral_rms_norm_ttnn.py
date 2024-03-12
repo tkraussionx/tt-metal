@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 
 # SPDX-License-Identifier: Apache-2.0
-from pathlib import Path
 import torch.nn as nn
 import ttnn
 
@@ -11,6 +10,8 @@ class TtRMSNorm(nn.Module):
         self,
         device,
         state_dict,
+        args,
+        dtype,
         layer_num,
         weight_key,
         eps: float = 1e-05,
@@ -20,17 +21,18 @@ class TtRMSNorm(nn.Module):
         self.eps = eps
         self.state_dict = state_dict
 
-        weight_name = f"{weight_key}.weight"
-        if weight_name not in self.state_dict.keys():
+        if layer_num is None:
+            weight_name = f"{weight_key}.weight"
+        else:
             weight_name = f"layers.{layer_num}.{weight_key}.weight"
 
-        torch_weight = self.state_dict[weight_name].unsqueeze(0).expand(32, 1, 1, -1)
-        cache_name = Path("/proj_sw/user_dev/hf_data/mistral/mixtral_tensor_cache_bf16") / weight_name
+        torch_weight = self.state_dict[weight_name].unsqueeze(0).expand(32, -1)
+        cache_name = args.weight_cache_path(dtype) / weight_name
 
         self.weight = ttnn.as_tensor(
             torch_weight,
             device=self.device,
-            dtype=ttnn.bfloat16,
+            dtype=dtype,
             layout=ttnn.TILE_LAYOUT,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             cache_file_name=cache_name,

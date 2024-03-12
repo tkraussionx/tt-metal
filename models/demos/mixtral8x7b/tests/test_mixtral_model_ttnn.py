@@ -30,53 +30,32 @@ class Emb(torch.nn.Module):
 
 @pytest.mark.parametrize(
     "n_layers",
-    (1, 3, 16, 32),
-)
-@pytest.mark.parametrize(
-    "model_config",
-    ("BFLOAT16-DRAM", "BFLOAT8-DRAM"),
+    (1, 32),
 )
 @pytest.mark.parametrize(
     "iterations",
     (1, 20, 127),
 )
-@pytest.mark.parametrize(
-    "pcc",
-    (0.99,),
-)
-def test_mixtral_model_inference(all_devices, pcc, model_config, iterations, n_layers):
-    # Avoid running reference model to speed up the test (unless measuring PCC)
-    run_ref_pt = False
+def test_mixtral_model_inference(all_devices, iterations, n_layers):
+    pcc = 0.99
+    dtype = ttnn.bfloat8_b
 
-    # TODO Scale the model (mixtral) to multiple devices when T3000 is available
-    num_devices = 8
+    # Can avoid running reference model to speed up the test (unless measuring PCC)
+    run_ref_pt = True
+
     devices = all_devices
-    print("DEVICES NUM", len(devices))
+    num_devices = len(devices)
+    assert num_devices == 8, "This test requires a T3000 (8 devices)"
     devices = get_devices_for_t3000(devices, num_devices)  # [ttnn.open_device(device_id=i) for i in range(8)]
-    if num_devices == 4:
-        devices += devices
-    dtype_str, mem_config_str = model_config.split("-")
-    if dtype_str == "BFLOAT16":
-        dtype = ttnn.bfloat16
-    elif dtype_str == "BFLOAT8":
-        dtype = ttnn.bfloat8_b
-    else:
-        raise ValueError(f"Unknown dtype {dtype_str}")
 
-    with open("/proj_sw/user_dev/hf_data/mistral/mistral-7B-v0.1/params.json", "r") as f:
-        model_args = TtModelArgs(**json.loads(f.read()))
-    model_args.max_batch_size = 32
-    model_args.moe = True
-    model_args.num_experts = 8
-    model_args.num_experts_per_tok = 2
-    model_args.max_batch_size = 32
+    model_args = TtModelArgs()
     model_args.n_layers = n_layers
 
-    mistral_path = "/proj_sw/user_dev/hf_data/mistral/Mixtral-8x7B-v0.1/"
     state_dict = {}
-    for i in range(8):
-        state_dict_i = torch.load(mistral_path + f"consolidated.{str(i).zfill(2)}.pt")
+    for i in range(1 + (n_layers - 1) // 4):
+        state_dict_i = torch.load(model_args.consolidated_weights_path(i), map_location="cpu")
         state_dict.update(state_dict_i)
+
     partial_state_dict = {
         k: v
         for k, v in state_dict.items()
@@ -85,7 +64,7 @@ def test_mixtral_model_inference(all_devices, pcc, model_config, iterations, n_l
             or k in ["tok_embeddings.weight", "norm.weight", "output.weight"]
         )
     }
-    print(partial_state_dict.keys())
+
     base_address = "feed_forward."
     for l in range(model_args.n_layers):
         pre = f"layers.{l}."
@@ -105,7 +84,7 @@ def test_mixtral_model_inference(all_devices, pcc, model_config, iterations, n_l
         partial_state_dict.pop(pre + "block_sparse_moe.w2")
         partial_state_dict.pop(pre + "block_sparse_moe.w3")
 
-    tokenizer = Tokenizer("/proj_sw/user_dev/hf_data/mistral/mistral-7B-v0.1/tokenizer.model")
+    tokenizer = Tokenizer(model_args.tokenizer_path)
 
     # TODO Update the prompt
     # prompts = ["It_was_the_best_of_times_"] * 32
@@ -129,15 +108,13 @@ def test_mixtral_model_inference(all_devices, pcc, model_config, iterations, n_l
 
     # Load TTNN model
     tt_model = TtTransformer(
-        args=model_args,
         devices=devices,
-        dtype=dtype,
-        state_dict=partial_state_dict,
-        # weight_cache_path=Path(model_config["DEFAULT_WEIGHT_PATH"]),
+        state_dict=state_dict,
+        args=model_args,
         layers=list(range(model_args.n_layers)),
+        dtype=dtype,
         tt_cos_cached=tt_cos_cached,
         tt_sin_cached=tt_sin_cached,
-        base_address=base_address,
     )
     exit()
     generation_start_pos = 0

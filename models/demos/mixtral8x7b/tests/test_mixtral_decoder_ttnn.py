@@ -19,37 +19,19 @@ from models.utility_functions import comp_pcc, comp_allclose, get_devices_for_t3
 
 
 @pytest.mark.parametrize(
-    "model_config",
-    ("BFLOAT16-DRAM", "BFLOAT8-DRAM"),
-)
-@pytest.mark.parametrize(
     "iterations",
     ((1),),
 )
-@pytest.mark.parametrize(
-    "pcc",
-    ((0.99),),
-)
-def test_mixtral_decoder_inference(all_devices, pcc, model_config, iterations, lock_devices):
-    # TODO Scale the model (mixtral) to multiple devices when T3000 is available
-    num_devices = 8
+def test_mixtral_decoder_inference(all_devices, iterations):
+    pcc = 0.99
+    dtype = ttnn.bfloat8_b
     devices = all_devices
-    print("DEVICES NUM", len(devices))
+    num_devices = len(devices)
+    assert num_devices == 8, "This test requires a T3000 (8 devices)"
     devices = get_devices_for_t3000(devices, num_devices)  # [ttnn.open_device(device_id=i) for i in range(8)]
-    if num_devices == 4:
-        devices += devices
-    dtype_str, mem_config_str = model_config.split("-")
-    if dtype_str == "BFLOAT16":
-        dtype = ttnn.bfloat16
-    elif dtype_str == "BFLOAT8":
-        dtype = ttnn.bfloat8_b
-    else:
-        raise ValueError(f"Unknown dtype {dtype_str}")
-    mistral_path = "/proj_sw/user_dev/hf_data/mistral/Mixtral-8x7B-v0.1/"
-    state_dict = {}
-    for i in range(1):
-        state_dict_i = torch.load(mistral_path + f"consolidated.{str(i).zfill(2)}.pt")
-        state_dict.update(state_dict_i)
+
+    model_args = TtModelArgs()
+    state_dict = torch.load(model_args.consolidated_weights_path(0), map_location="cpu")
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
     partial_state_dict = {k[9:]: v for k, v in state_dict.items() if (k.startswith("layers.0."))}
@@ -68,30 +50,21 @@ def test_mixtral_decoder_inference(all_devices, pcc, model_config, iterations, l
     partial_state_dict.pop("block_sparse_moe.w2")
     partial_state_dict.pop("block_sparse_moe.w3")
 
-    print(partial_state_dict.keys())
-    with open("/proj_sw/user_dev/hf_data/mistral/mistral-7B-v0.1/params.json", "r") as f:
-        model_args = TtModelArgs(**json.loads(f.read()))
-    model_args.max_batch_size = 32
-    model_args.moe = True
-    model_args.num_experts = 8
-    model_args.num_experts_per_tok = 2
-
     reference_model = TransformerBlock(args=model_args)
     reference_model.load_state_dict(partial_state_dict)
 
     tt_cos_cached, tt_sin_cached = generate_cos_sin_cache_ttnn(
-        devices, model_args.head_dim, "", model_args.max_seq_len * 2, 10000, dtype
+        devices, model_args.head_dim, model_args.max_seq_len * 2, 10000, dtype
     )
     # Initialize TT model
     tt_model = TtTransformerBlock(
-        args=model_args,
         devices=devices,
-        dtype=dtype,
-        state_dict=partial_state_dict,
+        state_dict=state_dict,
+        args=model_args,
         layer_num=0,
+        dtype=dtype,
         tt_cos_cached=tt_cos_cached,
         tt_sin_cached=tt_sin_cached,
-        base_address=base_address,
     )
 
     generation_start_pos = 0

@@ -8,7 +8,7 @@ import ttnn
 
 
 class TtMixtralMLP(torch.nn.Module):
-    def __init__(self, device, state_dict, args, layer_num, expert_num, dtype, grid=None, base_address=""):
+    def __init__(self, device, state_dict, args, layer_num, expert_num, dtype):
         super().__init__()
 
         self.state_dict = state_dict
@@ -17,39 +17,26 @@ class TtMixtralMLP(torch.nn.Module):
         self.grid = ttnn.CoreGrid(y=7, x=8)
         self.dtype = dtype
 
-        # base_name = f"layers.{layer_num}.feed_forward"
-        # torch_weight = lambda name: torch.transpose(self.state_dict[f"{base_name}.{name}.weight"], -2, -1)
-        # cache_name = lambda name: Path(model_config["DEFAULT_WEIGHT_PATH"]) / (base_name + f".feed_forward.{name}")
-        # as_tensor = lambda name, dtype_name: ttnn.as_tensor(
-        #     torch_weight(name),
-        #     dtype=self.model_config[dtype_name],
-        #     device=self.device,
-        #     layout=ttnn.TILE_LAYOUT,
-        #     memory_config=ttnn.DRAM_MEMORY_CONFIG,
-        #     cache_file_name=cache_name(name),
-        # )
+        # Convert block sparse moe representation of e.g. (114688, 4096) into separate tensors for each expert
+        base_name = f"layers.{layer_num}.block_sparse_moe"
+        torch_weight = (
+            lambda name, shape: self.state_dict[f"{base_name}.{name}"]
+            .view(8, shape[1], shape[0])[expert_num]
+            .permute(1, 0)
+        )
+        cache_name = lambda name: self.model_config.weight_cache_path(dtype) / (f"{base_name}.{expert_num}.{name}")
+        as_tensor = lambda name, shape: ttnn.as_tensor(
+            torch_weight(name, shape),
+            dtype=dtype,
+            device=self.device,
+            layout=ttnn.TILE_LAYOUT,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            cache_file_name=cache_name(name),
+        )
 
-        # self.w1 = as_tensor("w1", "FF1_MM_WEIGHTS_DTYPE")
-        # self.w2 = as_tensor("w2", "FF2_MM_WEIGHTS_DTYPE")
-        # self.w3 = as_tensor("w3", "FF3_MM_WEIGHTS_DTYPE")
-        self.w1 = ttnn.from_torch(
-            self.state_dict[base_address + f"experts.{expert_num}.w1.weight"].permute(1, 0),
-            dtype=self.dtype,
-            device=self.device,
-            layout=ttnn.TILE_LAYOUT,
-        )
-        self.w2 = ttnn.from_torch(
-            self.state_dict[base_address + f"experts.{expert_num}.w2.weight"].permute(1, 0),
-            dtype=self.dtype,
-            device=self.device,
-            layout=ttnn.TILE_LAYOUT,
-        )
-        self.w3 = ttnn.from_torch(
-            self.state_dict[base_address + f"experts.{expert_num}.w3.weight"].permute(1, 0),
-            dtype=self.dtype,
-            device=self.device,
-            layout=ttnn.TILE_LAYOUT,
-        )
+        self.w1 = as_tensor("w1", (4096, 14336))
+        self.w2 = as_tensor("w2", (14336, 4096))
+        self.w3 = as_tensor("w3", (4096, 14336))
 
         self.compute_kernel = ttnn.WormholeComputeKernelConfig(
             math_fidelity=ttnn.MathFidelity.LoFi,

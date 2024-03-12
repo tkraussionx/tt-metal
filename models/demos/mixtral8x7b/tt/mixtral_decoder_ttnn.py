@@ -13,15 +13,13 @@ from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn import TtMoeLayer
 class TtTransformerBlock(torch.nn.Module):
     def __init__(
         self,
-        args=None,
-        devices=None,
-        dtype=None,
-        state_dict=None,
-        layer_num=None,
-        tt_cos_cached=None,
-        tt_sin_cached=None,
-        num_devices=None,
-        base_address="",
+        devices,
+        state_dict,
+        args,
+        layer_num,
+        dtype,
+        tt_cos_cached,
+        tt_sin_cached,
     ):
         super().__init__()
 
@@ -37,7 +35,6 @@ class TtTransformerBlock(torch.nn.Module):
         self.dim = args.dim
         self.max_batch_size = args.max_batch_size
         self.n_kv_heads = args.n_kv_heads
-        self.current = 0
         self.sliding_window = args.sliding_window
 
         self.layer_num = layer_num
@@ -47,39 +44,38 @@ class TtTransformerBlock(torch.nn.Module):
         self.attention = TtMixtralAttention(
             devices=devices,
             state_dict=state_dict,
-            layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
+            args=args,
+            layer_num=layer_num,
             dtype=dtype,
-            configuration=args,
             tt_cos_cached=tt_cos_cached,
             tt_sin_cached=tt_sin_cached,
-            base_address=base_address,
         )
 
         self.feed_forward = TtMoeLayer(
+            devices=devices,
+            state_dict=state_dict,
             experts=[
                 TtMixtralMLP(
-                    device=devices[i],  # TODO Consider updating MLP code to support multiple devices when scaling up
+                    device=devices[i],
                     state_dict=state_dict,
                     args=args,
                     layer_num=layer_num,
                     expert_num=i,
                     dtype=dtype,
-                    base_address=base_address,
                 )
                 for i in range(args.num_experts)
             ],
-            state_dict=state_dict,
-            moe_args=args,
-            devices=devices,
-            num_devices=num_devices,
+            args=args,
+            layer_num=layer_num,
             dtype=dtype,
-            base_address=base_address,
         )
         self.attention_norm = [
             TtRMSNorm(
                 device=dev,
                 state_dict=state_dict,
-                layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
+                args=args,
+                dtype=dtype,
+                layer_num=layer_num,
                 weight_key="attention_norm",
             )
             for dev in self.devices
@@ -88,7 +84,9 @@ class TtTransformerBlock(torch.nn.Module):
             TtRMSNorm(
                 device=dev,
                 state_dict=state_dict,
-                layer_num=layer_num,  # TODO double check the logic for layer_num when scaling for all layers
+                args=args,
+                dtype=dtype,
+                layer_num=layer_num,
                 weight_key="ffn_norm",
             )
             for dev in self.devices

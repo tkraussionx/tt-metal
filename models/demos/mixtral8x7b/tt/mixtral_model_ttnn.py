@@ -14,35 +14,31 @@ from typing import Optional
 class TtTransformer(nn.Module):
     def __init__(
         self,
-        args,
-        dtype,
         devices,
         state_dict,
-        # weight_cache_path,
+        args,
+        dtype,
         layers,
         tt_cos_cached,
         tt_sin_cached,
-        base_address,
     ):
         super().__init__()
         self.args = args
         self.vocab_size = args.vocab_size
         self.n_layers = args.n_layers
-        self.device = devices
+        self.devices = devices
         assert self.vocab_size > 0
 
         self.layers = torch.nn.ModuleList(
             [
                 TtTransformerBlock(
-                    args=args,
                     devices=devices,
-                    dtype=dtype,
                     state_dict=state_dict,
-                    # weight_cache_path=weight_cache_path,
+                    args=args,
+                    dtype=dtype,
                     layer_num=i,
                     tt_cos_cached=tt_cos_cached,
                     tt_sin_cached=tt_sin_cached,
-                    base_address=f"layers.{i}." + base_address,
                 )
                 for i in layers
             ]
@@ -51,6 +47,8 @@ class TtTransformer(nn.Module):
             TtRMSNorm(
                 device=dev,
                 state_dict=state_dict,
+                args=args,
+                dtype=dtype,
                 layer_num=None,
                 weight_key="norm",
             )

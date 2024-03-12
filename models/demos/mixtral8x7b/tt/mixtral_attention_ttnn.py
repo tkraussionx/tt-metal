@@ -2,54 +2,40 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-from pathlib import Path
 import torch
-import math
-from torch import nn
-from typing import Optional, Tuple
-
 import ttnn
 
 from models.utility_functions import (
     nearest_32,
 )
 
-# from models.experimental.mistral.tt.mistral_common import tt_all_reduce
 
-
-class TtMixtralAttention(nn.Module):
-    def __init__(
-        self, devices, state_dict, layer_num, dtype, configuration, tt_cos_cached, tt_sin_cached, base_address
-    ):
+class TtMixtralAttention(torch.nn.Module):
+    def __init__(self, devices, state_dict, args, layer_num, dtype, tt_cos_cached, tt_sin_cached):
         super().__init__()
 
         self.state_dict = state_dict
         self.devices = devices
         self.num_devices = len(devices)
+        self.model_args = args
 
-        self.hidden_size = configuration.dim
-        self.n_heads = configuration.n_heads
+        self.hidden_size = args.dim
+        self.n_heads = args.n_heads
         self.head_dim = self.hidden_size // self.n_heads
-        self.max_seq_len = configuration.max_seq_len
-        self.max_batch_size = configuration.max_batch_size
-        self.n_kv_heads = configuration.n_kv_heads
-        self.sliding_window = configuration.sliding_window
+        self.max_seq_len = args.max_seq_len
+        self.max_batch_size = args.max_batch_size
+        self.n_kv_heads = args.n_kv_heads
+        self.sliding_window = args.sliding_window
 
         self.n_local_heads = self.n_heads // self.num_devices
         self.n_local_kv_heads = self.n_kv_heads // self.num_devices
 
         self.dtype = dtype
+        self.tt_sin_cached = tt_sin_cached
+        self.tt_cos_cached = tt_cos_cached
 
-        # self.current = 0
-
-        if base_address != "":
-            layer_name = f"attention"
-        else:
-            layer_name = f"layers.{layer_num}.attention"
-        cache_name = lambda name: Path(
-            "/proj_sw/user_dev/hf_data/mistral/"
-            + {ttnn.bfloat16: "mixtral_tensor_cache_bf16", ttnn.bfloat8_b: "mixtral_tensor_cache_bfp8"}[dtype]
-        ) / (f"{layer_name}.{name}")
+        layer_name = f"layers.{layer_num}.attention"
+        cache_name = lambda name: self.model_args.weight_cache_path(dtype) / (f"{layer_name}.{name}")
 
         wq_str = f"{layer_name}.wq.weight"
         wk_str = f"{layer_name}.wk.weight"
@@ -92,7 +78,6 @@ class TtMixtralAttention(nn.Module):
                 layout=ttnn.TILE_LAYOUT,
                 cache_file_name=cache_name(f"wqkv_{i}_"),
             )
-
             wo = ttnn.as_tensor(
                 torch.transpose(
                     torch.chunk(self.state_dict[wo_str], self.num_devices, dim=-1)[i],
@@ -134,8 +119,7 @@ class TtMixtralAttention(nn.Module):
             self.wqkv_list.append(wqkv)
             self.wo_list.append(wo)
             self.layer_past_list.append(layer_past)
-        self.tt_sin_cached = tt_sin_cached
-        self.tt_cos_cached = tt_cos_cached
+
         self.compute_kernel = ttnn.WormholeComputeKernelConfig(
             math_fidelity=ttnn.MathFidelity.LoFi,
             fp32_dest_acc_en=True,

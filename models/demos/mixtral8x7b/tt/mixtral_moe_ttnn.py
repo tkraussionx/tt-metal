@@ -5,23 +5,27 @@ import time
 
 
 class TtMoeLayer(nn.Module):
-    def __init__(self, experts, moe_args, devices, state_dict, num_devices, dtype, base_address=""):
+    def __init__(self, devices, state_dict, experts, args, layer_num, dtype):
         super().__init__()
         assert len(experts) > 0
-        self.experts = experts
-        self.args = moe_args
         self.devices = devices
+        self.experts = experts
+        self.args = args
         self.dtype = dtype
+
+        gate_name = f"layers.{layer_num}.block_sparse_moe.gate.weight"
         self.gates_H8 = [
-            ttnn.from_torch(
-                state_dict[base_address + "gate.weight"].permute(1, 0),
+            ttnn.as_tensor(
+                state_dict[gate_name].permute(1, 0),
                 dtype=self.dtype,
                 device=device,
                 layout=ttnn.TILE_LAYOUT,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                cache_file_name=args.weight_cache_path(dtype) / gate_name,
             )
             for device in self.devices
         ]
-        self.num_devices = num_devices
+        self.num_devices = len(devices)
 
     def forward(self, inputs):
         output_BS1O = []

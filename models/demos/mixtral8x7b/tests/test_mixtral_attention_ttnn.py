@@ -14,8 +14,8 @@ from models.demos.mixtral8x7b.tt.mixtral_common_ttnn import (
     generate_cos_sin_cache_ttnn,
     prepare_inputs_ttnn,
 )
-from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs
-from models.demos.mistral7b.reference.model import Attention
+from models.demos.mixtral8x7b.tt.model_config_ttnn import TtModelArgs
+from models.demos.mixtral8x7b.reference.model import Attention
 from models.utility_functions import (
     comp_pcc,
     comp_allclose,
@@ -24,61 +24,39 @@ from models.utility_functions import get_devices_for_t3000
 
 
 @pytest.mark.parametrize(
-    "model_config",
-    ("BFLOAT16-DRAM", "BFLOAT8-DRAM"),
-)
-@pytest.mark.parametrize(
     "iterations",
-    ((1),),
+    ((10),),
 )
-def test_mixtral_attention_inference(all_devices, model_config, iterations):
+def test_mixtral_attention_inference(all_devices, iterations):
     pcc = 0.99
-    num_devices = 8
+    dtype = ttnn.bfloat8_b
+    torch.manual_seed(0)
     devices = all_devices
-    print("DEVICES NUM", len(devices))
+    num_devices = len(devices)
+    assert num_devices == 8, f"This test requires a T3000 (8 devices), found {num_devices} devices."
     devices = get_devices_for_t3000(devices, num_devices)  # [ttnn.open_device(device_id=i) for i in range(8)]
-    if num_devices == 4:
-        devices += devices
-    dtype_str, mem_config_str = model_config.split("-")
-    if dtype_str == "BFLOAT16":
-        dtype = ttnn.bfloat16
-    elif dtype_str == "BFLOAT8":
-        dtype = ttnn.bfloat8_b
-    else:
-        raise ValueError(f"Unknown dtype {dtype_str}")
 
-    mistral_path = "/proj_sw/user_dev/hf_data/mistral/Mixtral-8x7B-v0.1/"
-    state_dict = {}
-    for i in range(1):
-        state_dict_i = torch.load(mistral_path + f"consolidated.{str(i).zfill(2)}.pt")
-        state_dict.update(state_dict_i)
-
-    print(state_dict.keys())
-
-    base_address = f""
-    with open("/proj_sw/user_dev/hf_data/mistral/mistral-7B-v0.1/params.json", "r") as f:
-        model_args = TtModelArgs(**json.loads(f.read()))
+    model_args = TtModelArgs()
+    state_dict = torch.load(model_args.consolidated_weights_path(0), map_location="cpu")
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
     partial_state_dict = {k[19:]: v for k, v in state_dict.items() if (k.startswith("layers.0.attention."))}
 
-    model_args.max_batch_size = 32
     reference_model = Attention(args=model_args)
     reference_model.load_state_dict(partial_state_dict)
 
     batch = 32
-    seq_len = 1
+    seq_len = 1  # length to generate
 
     tt_cos_cached, tt_sin_cached = generate_cos_sin_cache_ttnn(
-        devices, model_args.head_dim, "", model_args.max_seq_len * 2, 10000, dtype
+        devices, model_args.head_dim, model_args.max_seq_len * 2, 10000, dtype
     )
     tt_model = TtMixtralAttention(
         devices,
         state_dict,
-        base_address="",
+        args=model_args,
         layer_num=0,
         dtype=dtype,
-        configuration=model_args,
         tt_cos_cached=tt_cos_cached,
         tt_sin_cached=tt_sin_cached,
     )

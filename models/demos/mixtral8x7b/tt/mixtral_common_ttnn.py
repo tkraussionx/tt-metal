@@ -35,7 +35,6 @@ def tt_all_reduce(tensors, output_mem_config=None):
 def generate_cos_sin_cache_ttnn(
     tt_devices,
     head_dim,
-    base_url,
     max_position_embeddings=2048,
     base=10000,
     dtype=None,
