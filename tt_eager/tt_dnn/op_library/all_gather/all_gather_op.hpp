@@ -22,18 +22,16 @@ class AllGatherConfig {
 
         // enable_bidirectional - currently doesn't support batch dim and multi-link (some tests are flaky with those configs)
         erisc_handshake_address(eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE),
-        enable_bidirectional(num_links == 1 && dim != 0 && dim != 1)
+        enable_bidirectional(dim != 0 && dim != 1)
     {
         constexpr uint32_t total_l1_buffer_space = eth_l1_mem::address_map::MAX_L1_LOADING_SIZE - eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE;
 
-
-        this->num_buffers = this->enable_bidirectional ? 8 : 4;
+        this->num_buffers = this->enable_bidirectional ? 8 : input_tensor.get_dtype() == DataType::BFLOAT8_B ? 2 : 4;
         this->eth_sems_l1_base_byte_address = this->erisc_handshake_address + 16;
         this->semaphore_offset = this->semaphore_size * this->num_buffers; // TODO: Remove this once dedicated semaphore space for user kernels are added
         this->eth_buffers_l1_base_byte_address = this->eth_sems_l1_base_byte_address + this->semaphore_offset;
 
         uint32_t const page_size = input_tensor.buffer()->page_size();
-        //this->eth_buffer_size = 16*1024;
         this->eth_buffer_size = round_down((total_l1_buffer_space - this->semaphore_offset) / this->num_buffers, page_size);
 
         TT_FATAL(eth_buffer_size == 0 or num_buffers <= eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS);

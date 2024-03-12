@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
-
+///
 #include <algorithm>
 
 #include "common/core_coord.h"
@@ -22,39 +22,34 @@ namespace tt {
 namespace tt_metal {
 
 
-// std::tuple<CoreRangeSet,CoreRangeSet> select_worker_cores(uint32_t num_links, uint32_t link) {
-//     constexpr uint32_t worker_grid_width = 8;
-//     constexpr bool fit_sender_and_receiver_workers_on_same_row = (worker_grid_width / 2) >= all_gather_config.get_num_buffers();
-//     // FIXME: Need to shift down a couple rows to avoid a runtime/dispatcher bug that prevents the first worker
-//     //        core from receiving its "GO" signal
-//     std::set<CoreRange> receiver_worker_cores = {};
-//     std::set<CoreRange> sender_worker_cores = {};
-//     uint32_t max_cols = 8;
-//     uint32_t curr_row = link * (((all_gather_config.get_num_buffers() * 2 - 1) / max_cols) + 1);
-//     std::cout << "Link " << link << " starting at row " << curr_row << std::endl;
-//     std::cout << "Receiver Cores:" << std::endl;
-//     uint32_t curr_col = 0;
-//     for (uint32_t r = 0; r < all_gather_config.get_num_buffers(); r++) {
-//         receiver_worker_cores.insert(CoreRange(CoreCoord(curr_col, curr_row)));
-//         std::cout << "\tx=" << curr_col << ", y=" << curr_row << std::endl;
-//         curr_col ++;
-//         if (curr_col == max_cols) {
-//             curr_col = 0;
-//             curr_row++;
-//         }
-//     }
-//     std::cout << "Sender Cores:" << std::endl;
-//     for (uint32_t s = 0; s < all_gather_config.get_num_buffers(); s++) {
-//         sender_worker_cores.insert(CoreRange(CoreCoord(curr_col, curr_row)));
-//         std::cout << "\tx=" << curr_col << ", y=" << curr_row << std::endl;
-//         curr_col ++;
-//         if (curr_col == max_cols) {
-//             curr_col = 0;
-//             curr_row++;
-//         }
-//     }
-//     return {CoreRangeSet(receiver_worker_cores), CoreRangeSet(sender_worker_cores)};
-// }
+std::tuple<CoreRangeSet,CoreRangeSet> select_worker_cores(AllGatherConfig const& all_gather_config, uint32_t num_links, uint32_t link) {
+    constexpr uint32_t worker_grid_width = 8;
+    const bool fit_sender_and_receiver_workers_on_same_row = (worker_grid_width / 2) >= all_gather_config.get_num_buffers();
+    // FIXME: Need to shift down a couple rows to avoid a runtime/dispatcher bug that prevents the first worker
+    //        core from receiving its "GO" signal
+    std::set<CoreRange> receiver_worker_cores = {};
+    std::set<CoreRange> sender_worker_cores = {};
+    uint32_t max_cols = 8;
+    uint32_t curr_row = link * (((all_gather_config.get_num_buffers() * 2 - 1) / max_cols) + 1);
+    uint32_t curr_col = 0;
+    for (uint32_t r = 0; r < all_gather_config.get_num_buffers(); r++) {
+        receiver_worker_cores.insert(CoreRange(CoreCoord(curr_col, curr_row)));
+        curr_col ++;
+        if (curr_col == max_cols) {
+            curr_col = 0;
+            curr_row++;
+        }
+    }
+    for (uint32_t s = 0; s < all_gather_config.get_num_buffers(); s++) {
+        sender_worker_cores.insert(CoreRange(CoreCoord(curr_col, curr_row)));
+        curr_col ++;
+        if (curr_col == max_cols) {
+            curr_col = 0;
+            curr_row++;
+        }
+    }
+    return {CoreRangeSet(receiver_worker_cores), CoreRangeSet(sender_worker_cores)};
+}
 
 operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor& input_tensor, Tensor& output_tensor, const uint32_t dim, const uint32_t num_links, const uint32_t ring_size, const uint32_t ring_index, const chip_id_t receiver_device_id, const chip_id_t sender_device_id) {
 
@@ -129,8 +124,6 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
         eth_sender_cores.push_back(eth_sender_core);
         auto eth_receiver_core = device->get_ethernet_sockets(sender_device_id).at(receiver_socket_idx + l);
         eth_receiver_cores.push_back(eth_receiver_core);
-
-        log_info("device {}. Link {} eth sender core: (x={},y={}) eth receiver core: (x={},y={})", device->id(), l, eth_sender_core.x, eth_sender_core.y, eth_receiver_core.x, eth_receiver_core.y);
     }
 
     uint32_t num_input_pages = input_tensor.buffer()->size() / input_tensor.buffer()->page_size();
@@ -233,21 +226,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
     for (uint32_t i = 0; i < num_links; ++i) {
         // We can't have overlap between the mcast grid for worker cores for different links since mcasting the semaphore in receiver would corrupt other link semaphores
         // We can have overlap between a link's sender and receiver worker grids if we have the semaphores at different addresses
-        constexpr uint32_t worker_grid_width = 8;
-        bool const fit_sender_and_receiver_workers_on_same_row = (worker_grid_width / 2) >= all_gather_config.get_num_buffers();
-        // FIXME: Need to shift down a couple rows to avoid a runtime/dispatcher bug that prevents the first worker
-        //        core from receiving its "GO" signal
-        uint32_t receiver_worker_row = (fit_sender_and_receiver_workers_on_same_row ? i: 2 * i);
-        uint32_t sender_worker_row = (fit_sender_and_receiver_workers_on_same_row ? i: (2 * i) + 1);
-        uint32_t sender_worker_col_offset = fit_sender_and_receiver_workers_on_same_row ? all_gather_config.get_num_buffers() : 0;
-        auto receiver_workers = CoreRange({0, receiver_worker_row}, {all_gather_config.get_num_buffers() - 1, receiver_worker_row});
-        auto sender_workers = CoreRange({sender_worker_col_offset, sender_worker_row}, {sender_worker_col_offset + all_gather_config.get_num_buffers() - 1, sender_worker_row});
-        // std::cout << "Receiver workers start: (x=" << receiver_workers.start.x << ", y=" << receiver_workers.start.y << ") -> " <<
-        //             " (x=" << receiver_workers.end.x << ", y=" << receiver_workers.end.y << ")" << std::endl;
-        // std::cout << "Sender workers start: (x=" << sender_workers.start.x << ", y=" << sender_workers.start.y << ") -> " <<
-        //             " (x=" << sender_workers.end.x << ", y=" << sender_workers.end.y << ")" << std::endl;
-        worker_receiver_cores.push_back(receiver_workers);
-        worker_sender_cores.push_back(sender_workers);
+        auto const& [receiver_workers, sender_workers] = select_worker_cores(all_gather_config, num_links, i);
 
         // Circular Buffer Setup
         // TODO: Optimize mem usage
@@ -270,6 +249,11 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
 
         auto sender_noc = detail::GetPreferredNOCForDRAMRead(tt::Cluster::instance().arch());
         auto receiver_noc = detail::GetPreferredNOCForDRAMWrite(tt::Cluster::instance().arch());
+
+        auto eth_sender_core = device->get_ethernet_sockets(receiver_device_id).at(sender_socket_idx);
+        eth_sender_cores.push_back(eth_sender_core);
+        auto eth_receiver_core = device->get_ethernet_sockets(sender_device_id).at(receiver_socket_idx);
+        eth_receiver_cores.push_back(eth_receiver_core);
 
         // Rename this the _channel
         std::vector<uint32_t> pages_per_buffer;
@@ -302,8 +286,9 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
             rem_bytes = link_size_bytes;
             rem_pages = pages_per_link.at(i);
         }
-        auto sender_worker_cores = grid_to_cores(sender_workers.start, sender_workers.end, true);
-        auto receiver_worker_cores = grid_to_cores(receiver_workers.start, receiver_workers.end, true);
+
+        auto sender_worker_cores = corerange_to_cores(sender_workers, std::nullopt, true);
+        auto receiver_worker_cores = corerange_to_cores(receiver_workers, std::nullopt, true);
         all_worker_sender_cores.insert(all_worker_sender_cores.end(), sender_worker_cores.begin(), sender_worker_cores.end());
         all_worker_receiver_cores.insert(all_worker_receiver_cores.end(), receiver_worker_cores.begin(), receiver_worker_cores.end());
 
@@ -498,7 +483,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                 static_cast<uint32_t>(ring_index),
                 static_cast<uint32_t>(sender_worker_reader_semaphore_addr),
                 static_cast<uint32_t>(is_clockwise_direction ? 1 : 0),
-                static_cast<uint32_t>(b)
+                static_cast<uint32_t>(b | (i << 16))
             };
 
             std::vector<uint32_t> worker_reader_sender_rt_args = {
@@ -602,7 +587,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                 static_cast<uint32_t>(device->ethernet_core_from_logical_core(worker_eth_receiver_core).y),
                 static_cast<uint32_t>(eth_sem_addrs.at(b)),
                 static_cast<uint32_t>(receiver_worker_semaphore_addr),
-                static_cast<uint32_t>(b)
+                static_cast<uint32_t>(b | (i << 16))
             };
             std::vector<uint32_t> worker_reader_receiver_rt_args = {
                 static_cast<uint32_t>(eth_buffer_addrs.at(b))
@@ -659,7 +644,8 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
                 static_cast<uint32_t>(output_addr_offset),
                 static_cast<uint32_t>(receiver_ring_index),
                 static_cast<uint32_t>(sender_worker_reader_semaphore_addr),
-                static_cast<uint32_t>(is_clockwise_direction ? 1 : 0)
+                static_cast<uint32_t>(is_clockwise_direction ? 1 : 0),
+                static_cast<uint32_t>(b | (i << 16))
             };
             // Each receiver writer signals the sender reader that data for their portion is available
             auto worker_sender_reader = device->worker_core_from_logical_core(sender_worker_cores.at(b));
@@ -707,8 +693,6 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
             static_cast<uint32_t>(link_clockwise_sender_num_channels.at(i)),
             static_cast<uint32_t>(link_counter_clockwise_receiver_num_channels.at(i))
         };
-        // std::cout << "TX EDM num_senders: " << link_clockwise_sender_num_channels.at(i) << std::endl;
-        // std::cout << "TX EDM num_receivers: " << link_counter_clockwise_receiver_num_channels.at(i) << std::endl;
 
         auto eth_sender_kernel = tt_metal::CreateKernel(
             program,
@@ -731,8 +715,6 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
             static_cast<uint32_t>(link_counter_clockwise_sender_num_channels.at(i)),
             static_cast<uint32_t>(link_clockwise_receiver_num_channels.at(i))
         };
-        // std::cout << "RX EDM num_senders: " << link_counter_clockwise_sender_num_channels.at(i) << std::endl;
-        // std::cout << "RX EDM num_receivers: " << link_clockwise_receiver_num_channels.at(i) << std::endl;
 
         auto eth_receiver_kernel = tt_metal::CreateKernel(
             program,
@@ -742,7 +724,7 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
 
         eth_receiver_kernels.push_back(eth_receiver_kernel);
 
-        log_info(tt::LogOp, "RingIndex: {}. Link {}. Clockwise EDM Core (x={},y={}), Counter-clockwise EDM Core (x={},y={})", ring_index, i, eth_sender_cores.at(i).x, eth_sender_cores.at(i).y, eth_receiver_cores.at(i).x, eth_receiver_cores.at(i).y);
+        log_trace(tt::LogOp, "RingIndex: {}. Link {}. Clockwise EDM Core (x={},y={}), Counter-clockwise EDM Core (x={},y={})", ring_index, i, eth_sender_cores.at(i).x, eth_sender_cores.at(i).y, eth_receiver_cores.at(i).x, eth_receiver_cores.at(i).y);
 
         if (enable_print) {
             std::stringstream ss;
@@ -776,9 +758,6 @@ operation::ProgramWithCallbacks all_gather_multi_core_with_workers(const Tensor&
             sender_socket_idx += 1;
         }
     }
-    // std::cout << "-------------------------------------------------" << std::endl;
-    // std::cout << "-------------------------------------------------" << std::endl;
-    // std::cout << "-------------------------------------------------" << std::endl;
 
     auto override_runtime_arguments_callback = [num_links, total_worker_core_pairs_used, worker_reader_sender_kernels, worker_writer_sender_kernels, worker_reader_receiver_kernels, worker_writer_receiver_kernels, all_worker_sender_cores, all_worker_receiver_cores] (
         const void* operation,
