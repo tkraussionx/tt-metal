@@ -32,7 +32,7 @@ class TtRMSNorm(nn.Module):
         self.weight = ttnn.as_tensor(
             torch_weight,
             device=self.device,
-            dtype=dtype,
+            dtype=ttnn.bfloat16,  # dtype,
             layout=ttnn.TILE_LAYOUT,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             cache_file_name=cache_name,

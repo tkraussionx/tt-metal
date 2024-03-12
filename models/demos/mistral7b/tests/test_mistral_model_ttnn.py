@@ -30,27 +30,54 @@ class Emb(torch.nn.Module):
 
 
 @pytest.mark.parametrize(
+    "version",
+    (
+        "generative",
+        "instruct",
+    ),
+)
+@pytest.mark.parametrize(
     "iterations",
     (
         1,
         17,
     ),
 )
-def test_mistral_model_inference(device, iterations):
+def test_mistral_model_inference(device, iterations, version):
     ttnn.enable_program_cache()
 
-    # Avoid running reference model to speed up the test (unless measuring PCC)
+    if version == "generative":
+        instruct = False
+    elif version == "instruct":
+        instruct = True
+    else:
+        assert "Invalid version. Please use 'generative' or 'instruct'"
+
     run_ref_pt = True  # Flag to run reference PyTorch model and compare PCC
     cache_pcc = False  # Flag to measure KV cache PCC for all layers
 
     dtype = ttnn.bfloat8_b
 
-    model_args = TtModelArgs()
+    model_args = TtModelArgs(instruct=instruct)
     model_args.max_batch_size = 32
     model_args.n_layers = 32  # Full model
-    state_dict = torch.load(model_args.consolidated_weights_path)
 
     tokenizer = Tokenizer(model_args.tokenizer_path)
+
+    if instruct:  # Instruct weights are divided into 3 checkpoints
+        state_dict = {}
+        for i in range(3):
+            state_dict_i = torch.load(model_args.consolidated_weights_path(i + 1), map_location="cpu")
+            state_dict.update(state_dict_i)
+        # Update state_dict keys to match the generative keys (saves modyfing the mistal modules)
+        state_dict = {
+            model_args.key_mapping[key]: value for key, value in state_dict.items() if key in model_args.key_mapping
+        }
+        # Match pad token to eos token when using instruct weights
+        tokenizer._model.pad_id = tokenizer._model.eos_id
+    else:  # Generative weights are consolidadted into a single checkpoint
+        state_dict = torch.load(model_args.consolidated_weights_path)
+
     state_dict = {
         k: v
         for k, v in state_dict.items()
@@ -60,7 +87,12 @@ def test_mistral_model_inference(device, iterations):
         )
     }
 
-    prompts = ["This is a test"] * 32
+    if instruct:
+        # The instruct prompts follow the format: <bos> [INST] prompt [/INST]. [INST] are strings. <bos> is the correspoding bos_id token
+        # prompts = ["[INST] What is your favourite condiment? [/INST]"] * 32
+        prompts = ["[INST] What is the capital of Spain? [/INST]"] * 32
+    else:
+        prompts = ["This is a test"] * 32
 
     encoded_prompts = [tokenizer.encode(prompt) for prompt in prompts]
 
@@ -83,7 +115,7 @@ def test_mistral_model_inference(device, iterations):
         device=device,
         dtype=dtype,
         state_dict=state_dict,
-        weight_cache_path=model_args.weight_cache_path(dtype),
+        weight_cache_path=model_args.weight_cache_path(dtype, instruct=instruct),
         layers=list(range(model_args.n_layers)),
         tt_cos_cached=tt_cos_cached,
         tt_sin_cached=tt_sin_cached,
@@ -113,8 +145,6 @@ def test_mistral_model_inference(device, iterations):
         all_outputs_ref = []
 
     for i in range(generation_length):
-        print(f"[Decode] Generating token {i}")
-
         start_pos = generation_start_pos + i
 
         decode_input, start_pos, attn_mask, current_pos, rot_mat = prepare_inputs_ttnn(
@@ -152,7 +182,6 @@ def test_mistral_model_inference(device, iterations):
             tt_out_tok = torch.argmax(tt_output_torch, dim=-1)
             tt_decode_input = embd(tt_out_tok)
             all_outputs.append(tt_out_tok.squeeze(1).tolist()[0])  # Update generated token to list of TT outputs
-
             if run_ref_pt:
                 pt_out_tok = torch.argmax(ref_output, dim=-1)
                 pt_decode_input = embd(pt_out_tok)
@@ -160,6 +189,7 @@ def test_mistral_model_inference(device, iterations):
                     pt_out_tok.squeeze(1).tolist()[0]
                 )  # Update generated token to list of ref outputs
 
+        # TODO Measure only PCC at the end, instead of at every iteration
         # Measure PCC if also running reference model
         if run_ref_pt:
             passing, pcc_message = comp_pcc(ref_output, tt_output_torch)
@@ -174,9 +204,9 @@ def test_mistral_model_inference(device, iterations):
             if not passing:
                 all_tests_pass = False
 
-            # Compare V caches
+            # Compare KV caches
             if cache_pcc:
-                for i in range(n_layers):
+                for i in range(model_args.n_layers):
                     pytorch_layer_present = [
                         reference_model.layers[i]
                         .attention.cache_k.clone()
