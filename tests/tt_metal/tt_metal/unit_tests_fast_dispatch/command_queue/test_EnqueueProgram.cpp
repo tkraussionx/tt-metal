@@ -624,6 +624,43 @@ TEST_F(CommandQueueSingleCardFixture, TestFillDispatchCoreBuffer) {
     }
 }
 
+TEST_F(CommandQueueFixture, TestOneKernelGroupPerCore) {
+    vector<uint32_t> compile_args = {1, 1, 1, 1, 1, 2048};
+    std::map<string, string> data_movement_defines = {{"DATA_MOVEMENT", "1"}};
+    std::map<string, string> compute_defines = {{"COMPUTE", "1"}};
+    Program program;
+    CoreCoord worker_grid_size = this->device_->compute_with_storage_grid_size();
+    CoreRange cr({0, 0}, {worker_grid_size.x - 1, worker_grid_size.y - 1});
+
+    CoresInCoreRangeGenerator core_range_generator(cr, this->device_->compute_with_storage_grid_size());
+    bool terminate = false;
+    do {
+        std::cout<< "Before" << std::endl;
+        const auto [core_coord, terminate_] = core_range_generator();
+
+        std::cout << "STR COORD: " << core_coord.str() << std::endl;
+        terminate = terminate_;
+        CoreRange cr = CoreRange(core_coord, core_coord);
+        auto dummy_brisc_kernel = CreateKernel(
+            program, "tests/tt_metal/tt_metal/test_kernels/dataflow/unit_tests/command_queue/random_program.cpp", cr, DataMovementConfig{
+                .processor = DataMovementProcessor::RISCV_0, .noc = NOC::RISCV_0_default, .compile_args = compile_args, .defines = data_movement_defines});
+        auto dummy_ncrisc_kernel = CreateKernel(
+            program, "tests/tt_metal/tt_metal/test_kernels/dataflow/unit_tests/command_queue/random_program.cpp", cr, DataMovementConfig{
+                .processor = DataMovementProcessor::RISCV_1, .noc = NOC::RISCV_1_default, .compile_args = compile_args, .defines = data_movement_defines});
+        auto dummy_trisc_kernel = CreateKernel(
+            program, "tests/tt_metal/tt_metal/test_kernels/dataflow/unit_tests/command_queue/random_program.cpp", cr, ComputeConfig{
+                .math_approx_mode = false,
+                .compile_args = compile_args,
+                .defines = compute_defines
+            });
+    } while (not terminate);
+
+    std::cout << "Enqueuing" << std::endl;
+    EnqueueProgram(*this->cmd_queue, program, false);
+    Finish(*this->cmd_queue);
+
+}
+
 TEST_F(CommandQueueFixture, TestRandomizedProgram) {
     uint32_t NUM_PROGRAMS = 100;
     uint32_t MAX_LOOP = 100;
