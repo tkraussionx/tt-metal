@@ -32,6 +32,7 @@ Welcome to TT-Metalium documentation!
    ttnn/adding_new_ttnn_operation
    ttnn/profiling_ttnn_operations
    ttnn/dependencies/index.rst
+   perf/perf_summary.rst
 
 .. toctree::
    :caption: Models
