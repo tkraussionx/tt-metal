@@ -124,7 +124,7 @@ namespace op_profiler {
     {
         ZoneScoped;
         json j;
-        j["global_id"] = opID;
+        j["global_call_count"] = opID;
 
         std::string opName = op.get_type_name();
 

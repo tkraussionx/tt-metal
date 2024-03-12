@@ -4,6 +4,7 @@
 
 import importlib.machinery
 import sys
+import signal
 import os
 import io
 import subprocess
@@ -239,7 +240,15 @@ def main():
             osCmd = " ".join(originalArgs[1:])
 
             testCommand = f"python -m tracy {osCmd}"
-            testProcess = subprocess.Popen([testCommand], shell=True, env=dict(os.environ))
+            testProcess = subprocess.Popen([testCommand], shell=True, env=dict(os.environ), preexec_fn=os.setsid)
+
+            def signal_handler(sig, frame):
+                os.killpg(os.getpgid(testProcess.pid), signal.SIGTERM)
+                captureProcess.terminate()
+                captureProcess.communicate()
+                sys.exit(3)
+
+            signal.signal(signal.SIGINT, signal_handler)
 
             testProcess.communicate()
             logger.info(f"Test fully finished. Waiting for tracy capture tool to finish ...")

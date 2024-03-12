@@ -38,7 +38,7 @@ OUT_NAME = "ops_perf_results"
 OPS_CSV_HEADER = [
     "OP CODE",
     "OP TYPE",
-    "GLOBAL ID",
+    "GLOBAL CALL COUNT",
     "DEVICE ID",
     "ATTRIBUTES",
     "MATH FIDELITY",
@@ -91,7 +91,7 @@ def import_tracy_op_logs():
                     jsonStr = "{" + jsonStr
                     opsData.append(json.loads(jsonStr))
     for opData in opsData:
-        ops[opData["global_id"]] = opData
+        ops[opData["global_call_count"]] = opData
 
     with open(tracyOpTimesLog, "r") as csvFile:
         csvReader = csv.DictReader(csvFile)
@@ -115,7 +115,7 @@ def get_device_op_data(ops):
                 deviceOps[deviceID].append(opData)
 
     def device_ops_compare(op):
-        return int(op["global_id"])
+        return int(op["global_call_count"])
 
     for deviceID in deviceOps:
         deviceOps[deviceID].sort(key=device_ops_compare)
@@ -171,6 +171,7 @@ def generate_reports(ops, deviceOps, outputFolder, date, nameAppend):
         name += f"_{dateStr}"
         outFolder = os.path.join(outFolder, dateStr)
 
+    logger.info(f"Copying runtime artifacts")
     os.system(f"rm -rf {outFolder}; mkdir -p {outFolder}")
     os.system(f"cp {PROFILER_LOGS_DIR / TRACY_FILE_NAME} {outFolder}")
     os.system(f"cp {PROFILER_LOGS_DIR / PROFILER_DEVICE_SIDE_LOG} {outFolder}")
