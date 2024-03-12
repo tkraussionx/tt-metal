@@ -9,17 +9,17 @@ import torch
 import model_config
 
 
-from models.demos.mamba.reference.decode_model import MambaPretrainedModelName
+from models.experimental.mamba.reference.decode_model import MambaPretrainedModelName
 
 
 def get_cpu_reference_model():
-    from models.demos.mamba.reference.decode_model import MambaDecode
+    from models.experimental.mamba.reference.decode_model import MambaDecode
 
     return MambaDecode.from_pretrained("state-spaces/mamba-370m")
 
 
 def get_tt_metal_model(num_users, hidden_size, configs):
-    from models.demos.mamba.tt_opt.full_model import MambaTT
+    from models.experimental.mamba.tt_opt.full_model import MambaTT
 
     device_id = 0
     device = ttnn.open_device(device_id=device_id)
