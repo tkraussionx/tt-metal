@@ -152,7 +152,6 @@ void kernel_main() {
         if (sender_num_messages_to_send == 0) {
             num_senders_with_no_work++;
         }
-    }
 
     // Receiver args
     uint8_t const receiver_channels_start = get_arg_val<uint32_t>(args_offset++);
@@ -180,10 +179,10 @@ void kernel_main() {
             (const ccl::WorkerXY *)workers_xy_list_addr,
             false);
 
-        if (receiver_num_messages_to_send == 0) {
-            num_receivers_with_no_work++;
+            if (receiver_num_messages_to_send == 0) {
+                num_receivers_with_no_work++;
+            }
         }
-    }
 
     // Handshake with other erisc to make sure it's safe to start sending/receiving
     // Chose an arbitrary ordering mechanism to guarantee one of the erisc's will always be "sender" and the other
@@ -277,7 +276,5 @@ void kernel_main() {
                 run_routing();
             }
         }
-    }
-
 
 }
