@@ -59,7 +59,7 @@ class TtMambaSSM(torch.nn.Module):
             )
         else:
             self.delta_t_proj = ttnn.from_torch(
-                torch.rand(1, 1, self.hidden_size, self.hidden_size // 8),
+                torch.rand(1, 1, self.hidden_size, self.hidden_size // 16),
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
@@ -86,7 +86,7 @@ class TtMambaSSM(torch.nn.Module):
             )
         else:
             self.dt_proj_weights = ttnn.from_torch(
-                torch.rand(1, 1, self.hidden_size // 8, self.hidden_size),
+                torch.rand(1, 1, self.hidden_size // 16, self.hidden_size),
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
@@ -141,7 +141,11 @@ class TtMambaSSM(torch.nn.Module):
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 dtype=ttnn.bfloat16,
             )
-
+        
+        # C pad
+        C_pad = torch.zeros(1,1,self.num_users,16)
+        self.C_pad = ttnn.from_torch(C_pad, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
+            
 
     def forward(self, x):
         # delta
@@ -212,20 +216,33 @@ class TtMambaSSM(torch.nn.Module):
         
         # compute C
         C_proj = ttnn.to_memory_config(self.C_proj, memory_config=ttnn.L1_MEMORY_CONFIG)
-        C0 = ttnn.linear(x, C_proj, memory_config=ttnn.L1_MEMORY_CONFIG)
-        print('**************', C0.shape, C_proj.shape, x.shape)
-        C1 = ttnn.repeat_interleave(C0, 2, dim=3)
+        C0 = ttnn.linear(x, C_proj, memory_config=ttnn.L1_MEMORY_CONFIG) # b,n
+        ttnn.deallocate(C_proj)
+        print('**********C0 shape', C0.shape)
+        C1 = ttnn.concat([C0, self.C_pad], dim=3) # b,32
+        C2 = ttnn.concat([self.C_pad, C0], dim=3) # b,32
         ttnn.deallocate(C0)
-        C2 = ttnn.permute(C1, (0, 2, 3, 1))
+        C3 = ttnn.permute(C1, (0, 2, 3, 1)) # b,32,1
         ttnn.deallocate(C1)
-        
+        C4 = ttnn.permute(C2, (0, 2, 3, 1)) # b,32,1
+        ttnn.deallocate(C2)
+        C5 = ttnn.concat([C3, C4], dim=3) # b,32,2
+        print('**********C5 shape', C5.shape)
+        ttnn.deallocate(C3)
+        ttnn.deallocate(C4)
         
         # hidden state @ C
-        hidden_state2 = ttnn.repeat_interleave(hidden_state1, 2, dim=3)
+        hidden_state2 = ttnn.to_memory_config(hidden_state1, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(hidden_state1)
-        hidden_state3 = ttnn.reshape(hidden_state2, (1, self.num_users, self.hidden_size, 32))
-        C3 = ttnn.matmul(hidden_state3, C2)
-        ttnn.deallocate(C2)
-        
+        hidden_state3 = ttnn.reshape(hidden_state2, (1, self.num_users, self.hidden_size//2, 32)) # b, d/2, 32
+        C6 = ttnn.matmul(hidden_state3, C5) # b, d/2, 2
+        print('**********C6 shape', C6.shape, hidden_state3.shape, C5.shape)
+        ttnn.deallocate(hidden_state3)
+        ttnn.deallocate(C5)
+        C7 = ttnn.permute(C6, (0, 3, 2, 1)) # 2, d/2, b
+        ttnn.deallocate(C6)
+        C8 = ttnn.reshape(C7, (1, 1, self.hidden_size, self.num_users)) # 1, 1, d, b
+        C9 = ttnn.permute(C8, (0, 1, 3, 2)) # 1, 1, b, d
+        ttnn.deallocate(C7)
     
-        return hidden_state3, C3
+        return C9
