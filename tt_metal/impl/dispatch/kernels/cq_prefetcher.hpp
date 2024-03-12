@@ -7,7 +7,7 @@
 #include "tt_metal/hostdevcommon/common_values.hpp"
 #include "tt_metal/impl/dispatch/kernels/command_queue_common.hpp"
 #include "cq_cmds.hpp"
-
+#include "debug/dprint.h"
 CQWriteInterface cq_write_interface;
 CQReadInterface cq_read_interface;
 
@@ -422,6 +422,10 @@ void pull_and_relay(
     uint32_t num_pages_to_read = min(num_pages, src_pr_cfg.num_pages_to_read);
     uint32_t num_pages_to_write = min(num_pages, dst_pr_cfg.num_pages_to_write);
 
+    DPRINT<<"num_pages_to_read = "<<num_pages_to_read<<ENDL();
+    DPRINT<<"num_pages_to_write = "<<num_pages_to_write<<ENDL();
+
+
     dst_pr_cfg.cb_buff_cfg.global_page_idx = 0;
     while (num_writes_completed != num_pages) {
         if (cb_producer_space_available(num_pages_to_read) and num_reads_issued < num_pages) {
@@ -508,7 +512,8 @@ void pull_and_relay(
                 dst_pr_cfg.buff_cfg.buffer.noc_async_write_buffer(get_read_ptr(0), dst_pr_cfg.buff_cfg.page_id, num_pages_to_write);
                 dst_pr_cfg.buff_cfg.page_id += num_pages_to_write;
             }
-            noc_async_writes_flushed();
+            //noc_async_writes_flushed();
+            noc_async_write_barrier();
             cb_pop_front(0, num_pages_to_write);
             num_writes_completed += num_pages_to_write;
             num_pages_to_write = min(num_pages - num_writes_completed, dst_pr_cfg.num_pages_to_write);

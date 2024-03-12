@@ -6,6 +6,7 @@
 
 #include "dataflow_api.h"
 #include "tt_metal/impl/dispatch/device_command.hpp"
+#include "debug/dprint.h"
 
 #define ATTR_ALIGNL1 __attribute__((aligned(L1_ALIGNMENT)))
 struct db_cb_config_t {
@@ -101,6 +102,10 @@ void multicore_cb_push_back(
     db_cb_config->wr_ptr_16B += db_cb_config->page_size_16B * num_to_write;
 
     if (db_cb_config->wr_ptr_16B >= consumer_fifo_16b_limit) {
+        if (db_cb_config->wr_ptr_16B > consumer_fifo_16b_limit) {
+            DPRINT<<"Bad State"<<ENDL();
+            while(1);
+        }
         db_cb_config->wr_ptr_16B -= db_cb_config->total_size_16B;
     }
 

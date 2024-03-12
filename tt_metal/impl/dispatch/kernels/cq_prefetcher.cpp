@@ -214,6 +214,10 @@ void kernel_main() {
 
         if constexpr (pull_and_push_config == tt::PullAndPushConfig::LOCAL) {
             if (wrap == DeviceCommand::WrapRegion::COMPLETION) {
+                DPRINT<<"Wrapping"<<ENDL();
+                for (volatile int i = 0; i < 1000000; i++) {
+
+                }
                 completion_queue_reserve_back(completion_data_size);
                 write_event((uint32_t)&header->event);
                 cq_write_interface.completion_fifo_wr_ptr = cq_write_interface.completion_fifo_limit - cq_write_interface.completion_fifo_size;     // Head to the beginning of the completion region
@@ -228,6 +232,7 @@ void kernel_main() {
         }
 
         program_local_cb(data_section_addr, pull_and_push_cb_num_pages, page_size, pull_and_push_cb_size);
+        DPRINT<<"pull_and_push_cb_size = "<<pull_and_push_cb_size<<ENDL();
 
         if constexpr (pull_and_push_config == tt::PullAndPushConfig::LOCAL) {
             wait_consumer_space_available(dispatch_semaphore_addr);
@@ -264,6 +269,7 @@ void kernel_main() {
                         local_dispatch_multicore_cb_cfg,
                         dispatch_multicore_cb_cfg
                     );
+                    DPRINT<<"LocalPR Program"<<ENDL();
                     pull_and_relay<PullAndRelayType::BUFFER, PullAndRelayType::CIRCULAR_BUFFER, write_to_completion_queue>(src_pr_cfg, dst_pr_cfg, num_pages_in_transfer);
                     uint32_t aligned_global_page_idx = align(dst_pr_cfg.cb_buff_cfg.global_page_idx, program_transfer_num_pages);
                     if (aligned_global_page_idx != dst_pr_cfg.cb_buff_cfg.global_page_idx) {
@@ -291,6 +297,9 @@ void kernel_main() {
                         is_sharded,
                         sharded_buffer_num_cores
                     );
+                    DPRINT<<"LocalPR rd "<<src_pr_cfg.num_pages_to_read<<ENDL();
+                    DPRINT<<"LocalPR wr "<<dst_pr_cfg.num_pages_to_write<<ENDL();
+
                     pull_and_relay<PullAndRelayType::BUFFER, PullAndRelayType::BUFFER, write_to_completion_queue>(src_pr_cfg, dst_pr_cfg, num_pages_in_transfer);
                     buffer_transfer_ptr += DeviceCommand::NUM_ENTRIES_PER_BUFFER_TRANSFER_INSTRUCTION;
                 }

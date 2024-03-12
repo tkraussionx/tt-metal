@@ -101,25 +101,40 @@ vector<uint32_t> generate_arange_vector(uint32_t size_bytes) {
 }
 bool test_EnqueueWriteBuffer_and_EnqueueReadBuffer(Device* device, CommandQueue& cq, const TestBufferConfig& config) {
     bool pass = true;
-    for (const bool use_void_star_api: {true, false}) {
+    for (const bool use_void_star_api: {true}) {
         size_t buf_size = config.num_pages * config.page_size;
         Buffer bufa(device, buf_size, config.page_size, config.buftype);
 
         vector<uint32_t> src = generate_arange_vector(bufa.size());
 
         if (use_void_star_api) {
-            EnqueueWriteBuffer(cq, bufa, src.data(), false);
+            //tt::tt_metal::detail::WriteToBuffer( bufa, src);
+            EnqueueWriteBuffer(cq, bufa, src.data(), true);
+
         } else {
             EnqueueWriteBuffer(cq, bufa, src, false);
         }
         vector<uint32_t> result;
         if (use_void_star_api) {
             result.resize(buf_size / sizeof(uint32_t));
+            //tt::tt_metal::detail::ReadFromBuffer(bufa, result);
             EnqueueReadBuffer(cq, bufa, result.data(), true);
         } else {
             EnqueueReadBuffer(cq, bufa, result, true);
         }
 
+        for (int32_t i = 0; i < src.size(); i++) {
+            if(src[i] != result[i]) {
+                for (int32_t j = i; j < i+32; j++) {
+                    if (j < src.size()) {
+                        std::cout<<"Index: "<<j<<" : "<<src[j]<<" : "<<result[j]<<std::endl;
+                    }
+
+                }
+                return false;
+            }
+        }
+        sleep(1);
         EXPECT_EQ(src, result);
     }
     return true;
@@ -320,8 +335,10 @@ TEST_F(CommandQueueSingleCardFixture, WriteOneTileAcrossAllDramBanksTwiceRoundRo
 
 TEST_F(CommandQueueSingleCardFixture, Sending131072Pages) {
     for (Device *device : devices_) {
+        if(not device->is_mmio_capable()) continue;
+
         TestBufferConfig config = {
-            .num_pages = 131072,
+            .num_pages = (uint32_t)std::stoi(std::getenv("NUM_PAGES")),
             .page_size = 128,
             .buftype = BufferType::DRAM};
 

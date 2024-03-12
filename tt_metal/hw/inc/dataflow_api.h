@@ -200,6 +200,12 @@ void cb_pop_front(int32_t operand, int32_t num_pages) {
     // this will basically reset fifo_rd_ptr to fifo_addr -- no other wrap is legal
     // consumer always reads from contiguous memory, it cannot wrap
     if (cb_interface[operand].fifo_rd_ptr >= cb_interface[operand].fifo_limit) {
+        #ifndef COMPILE_FOR_ERISC
+        if (cb_interface[operand].fifo_rd_ptr > cb_interface[operand].fifo_limit) {
+            DPRINT << "BAD STATE" << ENDL();
+            while(true);
+        }
+        #endif
         // TODO: change this to fifo_wr_ptr
         cb_interface[operand].fifo_rd_ptr -= cb_interface[operand].fifo_size;
     }
@@ -1615,15 +1621,28 @@ class Buffer {
         }
         else {
             if (this->type == BufferType::SYSTEM_MEMORY) {
-                noc_async_write(src, this->get_noc_addr_(id, offset), this->page_size_ * num_pages);
+                uint64_t noc_addr = this->get_noc_addr_(id, offset);
+                #ifndef COMPILE_FOR_ERISC
+                DPRINT << "SYS MEM WRITE ADDR " << (uint32_t)noc_addr << " size "<< (this->page_size_ * num_pages) << " PageId "<< id << ENDL();
+                if (id == 786) {
+                    DPRINT <<"P 786 "<< reinterpret_cast<uint32_t *>(src)[0]<<ENDL();
+                } else if (id == 1834) {
+                    DPRINT <<"P 1834 "<< reinterpret_cast<uint32_t *>(src)[0]<<ENDL();
+                }
+                #endif
+                noc_async_write(src, noc_addr, this->page_size_ * num_pages);
             }
             else {
-                // DPRINT << "BUF WRITE " << num_pages << " at " << (uint32_t)my_x[0] << ", " << (uint32_t)my_y[0] << ENDL();
-
+#ifndef COMPILE_FOR_ERISC
+                 //DPRINT << "BUF WRITE " << num_pages << " at " << (uint32_t)my_x[0] << ", " << (uint32_t)my_y[0] << ENDL();
+#endif
                 // #ifndef COMPILE_FOR_ERISC
                 // #endif
                 for (uint32_t i = 0; i < num_pages; i++) {
                     uint64_t address = this->get_noc_addr_(id + i, offset);
+#ifndef COMPILE_FOR_ERISC
+                    //DPRINT << "BUF WRITE ADDR " << (uint32_t)address << ENDL();
+#endif
                     // #ifndef COMPILE_FOR_ERISC
                     // DPRINT << "DRAM BUF WRITE" << ENDL();
                     // uint32_t end = src + page_size_;
