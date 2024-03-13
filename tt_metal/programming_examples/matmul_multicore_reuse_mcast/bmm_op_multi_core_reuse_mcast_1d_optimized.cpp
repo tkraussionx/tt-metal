@@ -696,6 +696,8 @@ operation::ProgramWithCallbacks create_program_mcast_in1(
         in3_is_dram = bias_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     }
     bool out_is_dram = out_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+
+
     std::vector<uint32_t> in0_sender_compile_time_args = {
             // interleaved accessor args
             (std::uint32_t) in0_is_dram,
