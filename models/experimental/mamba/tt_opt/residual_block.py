@@ -4,11 +4,10 @@
 
 import torch
 
-#import tt_lib
 import ttnn
 
-from models.utility_functions import torch2tt_tensor, tt2torch_tensor
-from models.helper_funcs import Linear
+from typing import Callable
+
 from models.experimental.mamba.reference.args import ModelArgs
 from models.experimental.mamba.tt_opt.mamba_block import TtMambaBlock
 
@@ -17,6 +16,7 @@ class TtResidualBlock(torch.nn.Module):
         self,
         args: ModelArgs,
         device,
+        load_fn: Callable,
         state_dict,
         num_users,
         hidden_size,
@@ -27,9 +27,15 @@ class TtResidualBlock(torch.nn.Module):
         self.state_dict = state_dict
         self.device = device
         self.args = args
+        
+        rms_norm_weight_name = "norm.weight"
+        self.rms_norm_weights = load_fn(rms_norm_weight_name)
 
         self.tt_mamba_block = TtMambaBlock(self.args,self.device,self.state_dict, num_users, hidden_size, configs)
 
     def forward(self, x):
-        xt = self.tt_mamba_block(x)
+        mamba_input = ttnn.rms_norm(x, self.rms_norm_weights, epsilon=self.args.eps)
+        mamba_input = self.tt_mamba_block(mamba_input)
+        x = ttnn.add(x, mamba_input)
         return x
+
