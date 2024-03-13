@@ -32,7 +32,7 @@ def __getitem__(input_tensor: ttnn.Tensor, slices) -> ttnn.Tensor:
     input_rank = len(input_tensor.shape)
     input_dtype = input_tensor.dtype
     input_layout = input_tensor.layout
-    if ttnn.has_storage_type_of(input_tensor, ttl.tensor.StorageType.DEVICE):
+    if ttnn.is_tensor_storage_on_device(input_tensor):
         input_device = input_tensor.device()
     else:
         input_device = None
@@ -83,7 +83,7 @@ def __getitem__(input_tensor: ttnn.Tensor, slices) -> ttnn.Tensor:
 
     # TODO(arakhmati): add support for running ROW_MAJOR_LAYOUT slicing on device. The underlying op already supports it.
     if (
-        ttnn.has_storage_type_of(input_tensor, ttnn.DEVICE_STORAGE_TYPE)
+        ttnn.is_tensor_storage_on_device(input_tensor)
         and input_layout == ttnn.TILE_LAYOUT
         and input_rank <= 4
         and are_valid_device_slices(slices)
@@ -102,7 +102,7 @@ def __getitem__(input_tensor: ttnn.Tensor, slices) -> ttnn.Tensor:
         output_shape = tuple(output.shape)[-input_rank:]
         return ttnn.reshape(output, shape=output_shape)
     """
-    elif not ttnn.has_storage_type_of(input_tensor, ttnn.DEVICE_STORAGE_TYPE):
+    elif not ttnn.is_tensor_storage_on_device(input_tensor):
         logger.debug(
             "ttnn.Tensor.__getitem__: using torch because the tensor is on device and the slicing using unpad is not supported!"
         )
@@ -171,7 +171,7 @@ def _reshape_fallback(input_tensor: ttnn.Tensor, shape: Union[ttnn.Shape, Tuple[
     layout = input_tensor.layout
 
     device = None
-    if ttnn.has_storage_type_of(input_tensor, ttnn.DEVICE_STORAGE_TYPE):
+    if ttnn.is_tensor_storage_on_device(input_tensor):
         device = input_tensor.device()
 
     tensor = input_tensor
@@ -264,10 +264,10 @@ def from_torch(
     layout: Optional[ttnn.Layout] = ttnn.ROW_MAJOR_LAYOUT,
     device: Optional[ttnn.Device] = None,
     memory_config: Optional[ttnn.MemoryConfig] = None,
-    mesh_mapper: Optional[ttnn.TensorToMeshMapper] = None,
+    mesh_mapper: Optional[ttnn.TensorToMesh] = None,
 ) -> ttnn.Tensor:
     """
-    from_torch(tensor: torch.Tensor, dtype: Optional[DataType] = None, layout: Optional[Layout] = ROW_MAJOR_LAYOUT, device: Optional[Device] = None, memory_config: Optional[MemoryConfig] = None) -> ttnn.Tensor
+    from_torch(tensor: torch.Tensor, dtype: Optional[ttnn.DataType] = None, layout: Optional[ttnn.Layout] = ROW_MAJOR_LAYOUT, device: Optional[ttnn.Device] = None, memory_config: Optional[ttnn.MemoryConfig] = None) -> ttnn.Tensor
 
     Converts the `torch.Tensor` :attr:`tensor` into a `ttnn.Tensor`.
 
@@ -349,7 +349,7 @@ class TorchTensor(torch.Tensor):
 
 @ttnn.register_operation(name="ttnn.to_torch", validate_input_tensors=_to_torch_validate_input_tensors)
 def to_torch(
-    tensor: ttnn.Tensor, *, torch_rank: Optional[int] = None, mesh_composer: Optional[ttnn.MeshToTensorComposer] = None
+    tensor: ttnn.Tensor, *, torch_rank: Optional[int] = None, mesh_composer: Optional[ttnn.MeshToTensor] = None
 ) -> "torch.Tensor":
     """
     to_torch(tensor: ttnn.Tensor, torch_rank: Optional[int] = None) -> torch.Tensor
@@ -370,29 +370,39 @@ def to_torch(
     if mesh_composer:
         return mesh_composer.compose(tensor)
 
-    if ttnn.has_storage_type_of(tensor, ttnn.DEVICE_STORAGE_TYPE):
+    if ttnn.is_tensor_storage_on_device(tensor):
         tensor = ttnn.from_device(tensor)
 
     if tensor.layout != ttnn.ROW_MAJOR_LAYOUT:
-        tensor = ttnn.to_layout(tensor, ttnn.ROW_MAJOR_LAYOUT)
 
-    def impl(ttl_tensor):
-        if ttl_tensor.storage_type() == ttnn.DEVICE_STORAGE_TYPE:
+        def impl(tensor, layout):
+            return tensor.to(layout)
+
+        to_layout = ttl.tensor.decorate_external_operation(impl, function_name="ttnn.to_layout")
+        tensor = to_layout(tensor, ttnn.ROW_MAJOR_LAYOUT)
+
+    def impl(tensor):
+        shape_without_tile_padding = tuple(tensor.shape)
+        tensor = tensor.reshape(tensor.shape.with_tile_padding().value)
+
+        if tensor.storage_type() == ttnn.DEVICE_STORAGE_TYPE:
             raise RuntimeError("ttnn.Tensor cannot be on device when converting to torch.Tensor!")
-        if ttl_tensor.get_layout() != ttnn.ROW_MAJOR_LAYOUT:
+        if tensor.get_layout() != ttnn.ROW_MAJOR_LAYOUT:
             raise RuntimeError("ttnn.Tensor has to be in ROW_MAJOR Layout to be converted to torch.Tensor")
-        output = ttl_tensor.to_torch()
+        tensor = tensor.to_torch()
+
+        slices = [slice(None, x) for x in shape_without_tile_padding]
+        tensor = tensor[slices]
 
         if torch_rank is None:
-            return output
+            return tensor
 
-        while len(output.shape) != torch_rank:
-            if output.shape[0] != 1:
+        while len(tensor.shape) != torch_rank:
+            if tensor.shape[0] != 1:
                 raise RuntimeError("ttnn: Unable to squeeze to desired rank!")
-            output = output.squeeze()
-        return output
+            tensor = tensor.squeeze()
+        return tensor
 
-    tensor = tensor.reshape(tensor.shape.with_tile_padding().value)
     tensor = ttl.tensor.decorate_external_operation(impl, function_name="ttnn.to_torch")(tensor)
 
     return TorchTensor(tensor)
@@ -642,7 +652,7 @@ def to_layout(tensor, layout: ttnn.Layout, dtype: ttnn.DataType = None):
     if layout not in supported_layouts:
         raise RuntimeError(f"Unsupported layout conversion from {tensor.layout} to {layout}")
 
-    is_on_device = ttnn.has_storage_type_of(tensor, ttl.tensor.StorageType.DEVICE)
+    is_on_device = ttnn.is_tensor_storage_on_device(tensor)
     if is_on_device and tensor.dtype not in {ttnn.bfloat16, ttnn.bfloat8_b}:
         raise RuntimeError("ttnn.to_layout: Only bfloat16 and bfloat8_b are supported on device")
 
@@ -767,7 +777,7 @@ def to_layout(tensor, layout: ttnn.Layout, dtype: ttnn.DataType = None):
         pad_w = (ttnn.TILE_SIZE - width % ttnn.TILE_SIZE) % ttnn.TILE_SIZE
         padded_height = height + pad_h
         padded_width = width + pad_w
-        tensor = ttnn.unsqueeze_to_4D(tensor)
+        tensor = ttnn.unsqueeze_to_4D(input_tensor)
         *batch_sizes, _, _ = tensor.shape
 
         if is_on_device:

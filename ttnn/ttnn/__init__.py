@@ -67,7 +67,17 @@ from ttnn.types import (
     DeviceGrid,
 )
 
-from ttnn.device import Device, open_device, close_device, manage_device, synchronize_device, dump_device_memory_state
+from ttnn.device import (
+    Device,
+    open_device,
+    close_device,
+    enable_program_cache,
+    disable_and_clear_program_cache,
+    manage_device,
+    synchronize_device,
+    dump_device_memory_state,
+)
+
 from ttnn.multi_device import (
     DeviceMesh,
     open_device_mesh,
@@ -76,17 +86,18 @@ from ttnn.multi_device import (
     get_pcie_device_ids,
     get_device_ids,
     create_device_mesh,
-    TensorToMeshMapper,
-    ShardTensorToMeshMapper,
-    ReplicateTensorToMeshMapper,
-    MeshToTensorComposer,
-    ConcatMeshToTensorComposer,
-    ListMeshToTensorComposer,
+    TensorToMesh,
+    ShardTensorToMesh,
+    ReplicateTensorToMesh,
+    MeshToTensor,
+    ConcatMeshToTensor,
+    ListMeshToTensor,
 )
 
 from ttnn.core import (
     set_printoptions,
     has_storage_type_of,
+    is_tensor_storage_on_device,
     has_tile_padding,
     is_sharded,
     get_memory_config,
@@ -105,11 +116,6 @@ from ttnn.decorators import (
 )
 
 import ttnn.experimental
-
-from ttnn.program_cache import (
-    enable_program_cache,
-    disable_and_clear_program_cache,
-)
 
 from ttnn.operations.core import (
     from_torch,
@@ -324,3 +330,5 @@ from ttnn.operations.maxpool2d import (
     MaxPool2d,
     global_avg_pool2d,
 )
+
+from ttnn._ttnn.reports import print_l1_buffers

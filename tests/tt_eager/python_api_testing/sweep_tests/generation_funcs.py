@@ -1857,3 +1857,48 @@ def gen_ttnn_groupnorm_args(
     mem_configs=[supported_mem_configs],
 ):
     return gen_dtype_layout_device(input_shapes, dtypes, layouts, mem_configs, do_sanitize_args=False)
+
+
+def gen_upsample_args(
+    input_shapes,
+    dtypes,
+    layouts,
+    buffer_types,
+    low=2,
+    high=10,
+    dtype=torch.int32,
+):
+    for input_info in gen_scalar_args(
+        input_shapes,
+        dtypes,
+        layouts,
+        buffer_types,
+        "scale_factor",
+        low,
+        high,
+        dtype,
+    ):
+        yield input_info
+
+
+def gen_softplus_args(
+    input_shapes,
+    dtypes,
+    layouts,
+    mem_configs,
+    low=-100,
+    high=100,
+    dtype=torch.bfloat16,
+):
+    for input_info in gen_two_scalar_args(
+        input_shapes,
+        dtypes,
+        layouts,
+        mem_configs,
+        "beta",
+        "threshold",
+        low,
+        high,
+        dtype,
+    ):
+        yield input_info

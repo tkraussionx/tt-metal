@@ -129,12 +129,7 @@ def run_perf_mistral(
     ),
 )
 def test_perf_bare_metal(
-    use_program_cache,
-    expected_inference_time,
-    expected_compile_time,
-    device,
-    model_location_generator,
-    get_tt_cache_path,
+    device, use_program_cache, expected_inference_time, expected_compile_time, model_location_generator
 ):
     run_perf_mistral(
         expected_inference_time, expected_compile_time, device, model_location_generator, get_tt_cache_path
@@ -152,12 +147,7 @@ def test_perf_bare_metal(
     ),
 )
 def test_perf_virtual_machine(
-    use_program_cache,
-    expected_inference_time,
-    expected_compile_time,
-    device,
-    model_location_generator,
-    get_tt_cache_path,
+    device, use_program_cache, expected_inference_time, expected_compile_time, model_location_generator
 ):
     run_perf_mistral(
         expected_inference_time, expected_compile_time, device, model_location_generator, get_tt_cache_path

@@ -8,6 +8,7 @@
 #include "ckernel.h"
 #include "ckernel_globals.h"
 #include "ckernel_include.h"
+#include "ckernel_debug.h"
 #include "hostdevcommon/kernel_structs.h"
 #include "risc_attribs.h"
 
@@ -644,4 +645,53 @@ ALWI void silu_tile(uint32_t idst) {
 ALWI void silu_tile_init() {
     MATH(( llk_math_eltwise_unary_sfpu_silu_init<APPROX>() ));
 }
+
+/**
+ * Pauses the cores so that the debug interface can be used to inspect the value of the registers.
+ *
+ * Return value: None
+ */
+ALWI void dbg_halt() {
+    PACK (dbg_thread_halt<PackThreadId>());
+    UNPACK (dbg_thread_halt<UnpackThreadId>());
+    MATH (dbg_thread_halt<MathThreadId>());
+}
+
+/**
+ * Resumes the execution of the cores after a debug halt.
+ *
+ * Return value: None
+ */
+ALWI void dbg_unhalt() {
+    PACK (dbg_thread_unhalt<PackThreadId>());
+    UNPACK (dbg_thread_unhalt<UnpackThreadId>());
+    MATH (dbg_thread_unhalt<MathThreadId>());
+}
+
+/**
+ * Reads the contents of the specified row of the destination register. It reads 8 dwords at a time.
+ *
+ * | Argument        | Description                                                                | Type      | Valid Range                                           | Required |
+ * |-----------------|----------------------------------------------------------------------------|-----------|-------------------------------------------------------|----------|
+ * | row_addr        | The row address in the destination register to read                        | int       |                                                       | True     |
+ * | rd_data         | The array of 8 dwords to store the data                                    | uint32_t* |                                                       | True     |
+ *
+ * Example usage:
+ *            dbg_halt()
+ *            MATH({
+ *               uint32_t rd_data[8+1]; // data + array_type
+ *               for (int row = 0; row < 64; row++) {
+ *                   // We read 8 dwords at the time, but the full row is 16 dwords
+ *                   dbg_read_dest_acc_row(row, rd_data);
+ *                   DPRINT << SETW(6) << TYPED_U32_ARRAY(TypedU32_ARRAY_Format_TensixRegister_FP16_B, rd_data, 8)
+ *                   if (row % 2 == 1) DPRINT << ENDL()
+ *               }
+*            })
+ *            dbg_unhalt()
+ * Return value: None
+*/
+ALWI void dbg_read_dest_acc_row(int row_addr, uint32_t *rd_data) {
+    MATH (( dbg_get_array_row(dbg_array_id::DEST, row_addr, rd_data)));
+}
+
 } // namespace ckernel
