@@ -46,10 +46,6 @@ def run_demo(num_users, hidden_size):
 
         input_data = torch.randn((1, 1, num_users, hidden_size), dtype=torch.bfloat16)
 
-        input_data = ttnn.to_device(
-            ttnn.from_torch(input_data, layout=ttnn.TILE_LAYOUT), device=device, memory_config=ttnn.L1_MEMORY_CONFIG
-        )
-
         out_data = model(input_data)
 
     ttnn.close_device(device)
