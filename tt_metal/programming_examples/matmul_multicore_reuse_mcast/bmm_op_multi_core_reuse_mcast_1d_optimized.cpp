@@ -342,7 +342,7 @@ operation::ProgramWithCallbacks create_program_mcast_in0(
     CBHandle cb_src2 = 0;
     if (in0_is_sharded) {
         tt_metal::CircularBufferConfig src2_cb_config = tt_metal::CircularBufferConfig(in2_CB_size, {{src2_cb_index, in0_data_format}})
-            .set_page_size(src2_cb_index, in0_single_tile_size).set_globally_allocated_address(*in0_buffer);
+            .set_page_size(src2_cb_index, in0_single_tilemm_kernel_in1_sender_writer_id_size).set_globally_allocated_address(*in0_buffer);
         cb_src2 = tt_metal::CreateCircularBuffer(program, all_cores, src2_cb_config);
         log_debug(LogOp, "CB {} :: PS = {}, NP = {}, TOTAL = {}", src2_cb_index, in0_single_tile_size, in2_CB_size / in0_single_tile_size, in2_CB_size);
     }

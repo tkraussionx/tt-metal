@@ -180,6 +180,10 @@ void matmul_multicore_reuse_mcast(vector<bfloat16>& a, vector<bfloat16>& b, vect
 
     uint32_t out_subblock_num_tiles = out_subblock_h*out_subblock_w;
 
+    // USER DEFINED
+    bool in0_is_sharded = false;
+    bool output_is_sharded = false;
+
     vector<uint32_t> compute_kernel_args = {
         in0_block_w, // in0_block_w
         in0_num_subblocks, // in0_num_subblocks
@@ -207,24 +211,30 @@ void matmul_multicore_reuse_mcast(vector<bfloat16>& a, vector<bfloat16>& b, vect
     */
 
      ////////// NEW STUFF //////////
-                    uint32_t start_core_x = 0;
-                    uint32_t start_core_y = 0;
+    uint32_t start_core_x = 0;
+    uint32_t start_core_y = 0;
 
-                    uint32_t num_blocks_y = (M - 1) / per_core_M + 1;
-                    uint32_t num_blocks_x = (N - 1) / per_core_N + 1;
-                    uint32_t num_blocks_total = num_blocks_y * num_blocks_x;
-                    uint32_t num_cores = num_blocks_total;
+    uint32_t num_blocks_y = (M - 1) / per_core_M + 1;
+    uint32_t num_blocks_x = (N - 1) / per_core_N + 1;
+    uint32_t num_blocks_total = num_blocks_y * num_blocks_x;
+    uint32_t num_cores = num_blocks_total;
 
-                    TT_ASSERT(num_blocks_total <= num_cores_x * num_cores_y);
+    log_info(tt::LogVerif, " -- num_blocks_total= {} --", num_blocks_total);
+    log_info(tt::LogVerif, " -- num_blocks_y = {} --", num_blocks_y);
+    log_info(tt::LogVerif, " -- num_blocks_x= {} --", num_blocks_x);
+    log_info(tt::LogVerif, " -- num_cores_x= {} --", num_cores_x);
+    log_info(tt::LogVerif, " -- num_cores_y)= {} --", num_cores_y);
 
-                    CoreCoord start_core = {0, 0};
-                    CoreCoord core_range = bmm_op_utils::get_core_range(num_blocks_y, num_blocks_x, num_cores_y, num_cores_x);
+    TT_ASSERT(num_blocks_total <= num_cores_x * num_cores_y);
 
-                    uint32_t num_cores_c = core_range.x;
-                    uint32_t num_cores_r = core_range.y;
-                    uint32_t num_mcast_cores = num_cores_c * num_cores_r; // Exclude Sender
+    CoreCoord start_core = {0, 0};
+    CoreCoord core_range = bmm_op_utils::get_core_range(num_blocks_y, num_blocks_x, num_cores_y, num_cores_x);
 
-                    CoreRangeSet all_cores = num_cores_to_corerange_set(num_cores, core_range, true);
+    uint32_t num_cores_c = core_range.x;
+    uint32_t num_cores_r = core_range.y;
+    uint32_t num_mcast_cores = num_cores_c * num_cores_r; // Exclude Sender
+
+    CoreRangeSet all_cores = num_cores_to_corerange_set(num_cores, core_range, true);
 
     ////////// END //////////
 
@@ -323,30 +333,33 @@ void matmul_multicore_reuse_mcast(vector<bfloat16>& a, vector<bfloat16>& b, vect
     uint32_t src1_addr = src1_dram_buffer->address();
     uint32_t dst_addr = dst_dram_buffer->address();
 
-    /*
-    * Config of Circular Buffer in the device L1
-    * input tiles count is = 2 because it's single tile process, and double-buffer
-    */
-    uint32_t src0_cb_index = CB::c_in0; //0
-    CircularBufferConfig cb_src0_config = CircularBufferConfig(in0_CB_size, {{src0_cb_index, cb_data_format}})
-		.set_page_size(src0_cb_index, single_tile_size);
-    auto cb_src0 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src0_config);
+    // /*
+    // * Config of Circular Buffer in the device L1
+    // * input tiles count is = 2 because it's single tile process, and double-buffer
+    // */
+    // uint32_t src0_cb_index = CB::c_in0; //0
+    // CircularBufferConfig cb_src0_config = CircularBufferConfig(in0_CB_size, {{src0_cb_index, cb_data_format}})
+	// 	.set_page_size(src0_cb_index, single_tile_size);
+    // auto cb_src0 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src0_config);
 
-    uint32_t src1_cb_index = CB::c_in1; // 1
-    CircularBufferConfig cb_src1_config = CircularBufferConfig(in1_CB_size, {{src1_cb_index, cb_data_format}})
-		.set_page_size(src1_cb_index, single_tile_size);
-    auto cb_src1 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src1_config);
+    // uint32_t src1_cb_index = CB::c_in1; // 1
+    // CircularBufferConfig cb_src1_config = CircularBufferConfig(in1_CB_size, {{src1_cb_index, cb_data_format}})
+	// 	.set_page_size(src1_cb_index, single_tile_size);
+    // auto cb_src1 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src1_config);
 
-    uint32_t output_cb_index = CB::c_out0; // output operands start at index 16
-    uint32_t interm0_cb_index = 24;
-    std::map<uint8_t, tt::DataFormat> output_cb_data_format_spec {
-        {output_cb_index, cb_data_format},
-        {interm0_cb_index, cb_data_format}
-    };
-    CircularBufferConfig cb_output_config = CircularBufferConfig(out_CB_size, output_cb_data_format_spec)
-		.set_page_size(output_cb_index, single_tile_size)
-        .set_page_size(interm0_cb_index, single_tile_size);
-    auto cb_output = tt_metal::CreateCircularBuffer(program, CoreRangeSet({all_cores}), cb_output_config);
+    // uint32_t output_cb_index = CB::c_out0; // output operands start at index 16
+    // uint32_t interm0_cb_index = 24;
+    // std::map<uint8_t, tt::DataFormat> output_cb_data_format_spec {
+    //     {output_cb_index, cb_data_format},
+    //     {interm0_cb_index, cb_data_format}
+    // };
+    // CircularBufferConfig cb_output_config = CircularBufferConfig(out_CB_size, output_cb_data_format_spec)
+	// 	.set_page_size(output_cb_index, single_tile_size)
+    //     .set_page_size(interm0_cb_index, single_tile_size);
+    // auto cb_output = tt_metal::CreateCircularBuffer(program, CoreRangeSet({all_cores}), cb_output_config);
+
+
+    /////////////
 
     ////////////////////////////
     /*
@@ -365,166 +378,162 @@ void matmul_multicore_reuse_mcast(vector<bfloat16>& a, vector<bfloat16>& b, vect
     //std::vector<uint32_t> writer_compile_time_args = {(std::uint32_t) output_cb_index, (uint32_t)dst_is_dram};
     std::vector<uint32_t> writer_compile_time_args = {(uint32_t)out_is_dram};
 
-    // USER DEFINED
-    bool in0_is_sharded = false;
-    bool output_is_sharded = false;
-
 
     // NEW STUFF.  1D_SYS IMPLEMENTATION
 
-                        std::vector<uint32_t> in0_sender_compile_time_args = {
-                                // interleaved accessor args
-                                (std::uint32_t) in0_is_dram,
+    std::vector<uint32_t> in0_sender_compile_time_args = {
+            // interleaved accessor args
+            (std::uint32_t) in0_is_dram,
 
-                                // in0 tensor args
-                                (std::uint32_t)  1, // in0_tensor_stride_w
-                                (std::uint32_t)  K, // in0_tensor_stride_h
-                                (std::uint32_t)  in0_block_w, // in0_tensor_next_block_stride
-                                // in0 block args
-                                (std::uint32_t)  in0_block_w, // in0_block_w
-                                (std::uint32_t)  per_core_M, // in0_block_h
-                                (std::uint32_t)  in0_block_w * per_core_M, // in0_block_num_tiles
-                                // in0/in1 common args
-                                (std::uint32_t)  num_blocks, // num_blocks
-                                // in0 mcast args
-                                (std::uint32_t)  0,
-                                (std::uint32_t)  0,
-                                (std::uint32_t)  0, // in0_mcast_num_dests
-                                (std::uint32_t)  0, // in0_mcast_num_cores
-                                // batch args
-                                (std::uint32_t)  M * K, // MtKt
-                                (std::uint32_t)  B // batch
-                        };
-                        std::vector<uint32_t> in1_sender_writer_compile_time_args = {
-                                // interleaved accessor args
-                                (std::uint32_t) in1_is_dram,
-                                (std::uint32_t) out_is_dram,
+            // in0 tensor args
+            (std::uint32_t)  1, // in0_tensor_stride_w
+            (std::uint32_t)  K, // in0_tensor_stride_h
+            (std::uint32_t)  in0_block_w, // in0_tensor_next_block_stride
+            // in0 block args
+            (std::uint32_t)  in0_block_w, // in0_block_w
+            (std::uint32_t)  per_core_M, // in0_block_h
+            (std::uint32_t)  in0_block_w * per_core_M, // in0_block_num_tiles
+            // in0/in1 common args
+            (std::uint32_t)  num_blocks, // num_blocks
+            // in0 mcast args
+            (std::uint32_t)  0,
+            (std::uint32_t)  0,
+            (std::uint32_t)  0, // in0_mcast_num_dests
+            (std::uint32_t)  0, // in0_mcast_num_cores
+            // batch args
+            (std::uint32_t)  M * K, // MtKt
+            (std::uint32_t)  B // batch
+    };
+    std::vector<uint32_t> in1_sender_writer_compile_time_args = {
+            // interleaved accessor args
+            (std::uint32_t) in1_is_dram,
+            (std::uint32_t) out_is_dram,
 
-                                // READER
-                                // in1 tensor args
-                                (std::uint32_t)  1, // in1_tensor_stride_w
-                                (std::uint32_t)  N, // in1_tensor_stride_h
-                                (std::uint32_t)  in0_block_w * N, //in1_tensor_next_block_stride
-                                // in1 block args
-                                (std::uint32_t)  per_core_N, // in1_block_w
-                                (std::uint32_t)  in0_block_w, //in1_block_h
-                                (std::uint32_t)  per_core_N * in0_block_w, // in1_block_num_tiles
-                                // in0/in1 common args
-                                (std::uint32_t)  num_blocks, // num_blocks
-                                // in1 mcast args
-                                (std::uint32_t)  in1_mcast_sender_semaphore,
-                                (std::uint32_t)  in1_mcast_receiver_semaphore,
-                                (std::uint32_t)  num_cores - 1, // in1_mcast_num_dests
-                                (std::uint32_t)  num_mcast_cores - 1, // in1_mcast_num_cores
-                                // batch args
-                                (std::uint32_t)  K * N, // KtNt
-                                (std::uint32_t)  B, // batch
-                                (std::uint32_t)  bcast_batch, // bcast_B
+            // READER
+            // in1 tensor args
+            (std::uint32_t)  1, // in1_tensor_stride_w
+            (std::uint32_t)  N, // in1_tensor_stride_h
+            (std::uint32_t)  in0_block_w * N, //in1_tensor_next_block_stride
+            // in1 block args
+            (std::uint32_t)  per_core_N, // in1_block_w
+            (std::uint32_t)  in0_block_w, //in1_block_h
+            (std::uint32_t)  per_core_N * in0_block_w, // in1_block_num_tiles
+            // in0/in1 common args
+            (std::uint32_t)  num_blocks, // num_blocks
+            // in1 mcast args
+            (std::uint32_t)  in1_mcast_sender_semaphore,
+            (std::uint32_t)  in1_mcast_receiver_semaphore,
+            (std::uint32_t)  num_cores - 1, // in1_mcast_num_dests
+            (std::uint32_t)  num_mcast_cores - 1, // in1_mcast_num_cores
+            // batch args
+            (std::uint32_t)  K * N, // KtNt
+            (std::uint32_t)  B, // batch
+            (std::uint32_t)  bcast_batch, // bcast_B
 
-                                // WRITER
-                                // out tensor args
-                                (std::uint32_t)  1, // out_tensor_stride_w
-                                (std::uint32_t)  N,  // out_tensor_stride_h
-                                (std::uint32_t)  out_subblock_w, // out_tensor_next_subblock_stride_w
-                                (std::uint32_t)  out_subblock_h * N, // out_tensor_next_subblock_stride_h
-                                // out subblock args
-                                (std::uint32_t)  out_subblock_w, // out_subblock_w
-                                (std::uint32_t)  out_subblock_h, // out_subblock_h
-                                (std::uint32_t)  (out_subblock_w * out_subblock_h), // out_subblocks_w * out_subblocks_h
-                                // batch args
-                                (std::uint32_t)  M * N // MtNt
-                        };
-                        // if (bias_buffer != nullptr) {
-                        //     in1_sender_writer_compile_time_args.push_back((std::uint32_t)  in3_is_dram);
-                        //     in1_sender_writer_compile_time_args.push_back((std::uint32_t)  1);
-                        // }
-                        std::vector<uint32_t> in1_receiver_writer_compile_time_args = {
-                                // interleaved accessor args
-                                (std::uint32_t) out_is_dram,
+            // WRITER
+            // out tensor args
+            (std::uint32_t)  1, // out_tensor_stride_w
+            (std::uint32_t)  N,  // out_tensor_stride_h
+            (std::uint32_t)  out_subblock_w, // out_tensor_next_subblock_stride_w
+            (std::uint32_t)  out_subblock_h * N, // out_tensor_next_subblock_stride_h
+            // out subblock args
+            (std::uint32_t)  out_subblock_w, // out_subblock_w
+            (std::uint32_t)  out_subblock_h, // out_subblock_h
+            (std::uint32_t)  (out_subblock_w * out_subblock_h), // out_subblocks_w * out_subblocks_h
+            // batch args
+            (std::uint32_t)  M * N // MtNt
+    };
+    // if (bias_buffer != nullptr) {
+    //     in1_sender_writer_compile_time_args.push_back((std::uint32_t)  in3_is_dram);
+    //     in1_sender_writer_compile_time_args.push_back((std::uint32_t)  1);
+    // }
+    std::vector<uint32_t> in1_receiver_writer_compile_time_args = {
+            // interleaved accessor args
+            (std::uint32_t) out_is_dram,
 
-                                // READER
-                                // in1 block args
-                                (std::uint32_t)  per_core_N * in0_block_w, // in1_block_num_tiles
-                                // in0/in1 common args
-                                (std::uint32_t)  num_blocks, // num_blocks
-                                // in1 mcast args
-                                (std::uint32_t)  in1_mcast_sender_semaphore,
-                                (std::uint32_t)  in1_mcast_receiver_semaphore,
-                                // batch args
-                                (std::uint32_t)  B, // batch
+            // READER
+            // in1 block args
+            (std::uint32_t)  per_core_N * in0_block_w, // in1_block_num_tiles
+            // in0/in1 common args
+            (std::uint32_t)  num_blocks, // num_blocks
+            // in1 mcast args
+            (std::uint32_t)  in1_mcast_sender_semaphore,
+            (std::uint32_t)  in1_mcast_receiver_semaphore,
+            // batch args
+            (std::uint32_t)  B, // batch
 
-                                // WRITER
-                                // out tensor args
-                                (std::uint32_t)  1, // out_tensor_stride_w
-                                (std::uint32_t)  N,  // out_tensor_stride_h
-                                (std::uint32_t)  out_subblock_w, // out_tensor_next_subblock_stride_w
-                                (std::uint32_t)  out_subblock_h * N, // out_tensor_next_subblock_stride_h
-                                // out subblock args
-                                (std::uint32_t)  out_subblock_w, // out_subblock_w
-                                (std::uint32_t)  out_subblock_h, // out_subblock_h
-                                (std::uint32_t)  (out_subblock_w * out_subblock_h), // out_subblocks_w * out_subblocks_h
-                                // batch args
-                                (std::uint32_t)  M * N // MtNt
-                        };
+            // WRITER
+            // out tensor args
+            (std::uint32_t)  1, // out_tensor_stride_w
+            (std::uint32_t)  N,  // out_tensor_stride_h
+            (std::uint32_t)  out_subblock_w, // out_tensor_next_subblock_stride_w
+            (std::uint32_t)  out_subblock_h * N, // out_tensor_next_subblock_stride_h
+            // out subblock args
+            (std::uint32_t)  out_subblock_w, // out_subblock_w
+            (std::uint32_t)  out_subblock_h, // out_subblock_h
+            (std::uint32_t)  (out_subblock_w * out_subblock_h), // out_subblocks_w * out_subblocks_h
+            // batch args
+            (std::uint32_t)  M * N // MtNt
+    };
 
-                        // if (bias_buffer != nullptr) {
-                        //     in1_receiver_writer_compile_time_args.push_back((std::uint32_t)  per_core_N);
-                        // }
+    // if (bias_buffer != nullptr) {
+    //     in1_receiver_writer_compile_time_args.push_back((std::uint32_t)  per_core_N);
+    // }
 
-                        std::map<string, string> mm_kernel_defines;
-                        std::map<string, string> mm_kernel_in0_sender_defines;
-                        std::map<string, string> mm_kernel_in1_sender_writer_defines;
-                        std::map<string, string> mm_kernel_in1_receiver_writer_defines;
-                        // if (bias_buffer != nullptr) {
-                        //     mm_kernel_defines["FUSE_BIAS"] = "1";
-                        //     mm_kernel_in1_sender_writer_defines["FUSE_BIAS"] = "1";
-                        //     mm_kernel_in1_receiver_writer_defines["FUSE_BIAS"] = "1";
-                        // }
-                        // if (fused_activation.has_value()) {
-                        //     if (fused_activation.value().op_type == UnaryOpType::RELU) {
-                        //         mm_kernel_defines["PACK_RELU"] = "1";
-                        //     } else {
-                        //         mm_kernel_defines.merge(eltwise_unary_op_utils::get_defines(fused_activation.value().op_type, fused_activation.value().param, "ACTIVATION", "i"));
-                        //     }
-                        // }
-                        if (packer_l1_acc) {
-                            mm_kernel_defines["PACKER_L1_ACC"] = "1";
-                        }
-                        if (fp32_dest_acc_en) {
-                            mm_kernel_defines["FP32_DEST_ACC_EN"] = "1";
-                        }
-                        if (in0_is_sharded) {
-                            mm_kernel_in0_sender_defines["IN0_SHARDED"] = "1";
-                        }
-                        if (output_is_sharded) {
-                            mm_kernel_in1_sender_writer_defines["OUT_SHARDED"] = "1";
-                            mm_kernel_in1_receiver_writer_defines["OUT_SHARDED"] = "1";
-                        }
+    std::map<string, string> mm_kernel_defines;
+    std::map<string, string> mm_kernel_in0_sender_defines;
+    std::map<string, string> mm_kernel_in1_sender_writer_defines;
+    std::map<string, string> mm_kernel_in1_receiver_writer_defines;
+    // if (bias_buffer != nullptr) {
+    //     mm_kernel_defines["FUSE_BIAS"] = "1";
+    //     mm_kernel_in1_sender_writer_defines["FUSE_BIAS"] = "1";
+    //     mm_kernel_in1_receiver_writer_defines["FUSE_BIAS"] = "1";
+    // }
+    // if (fused_activation.has_value()) {
+    //     if (fused_activation.value().op_type == UnaryOpType::RELU) {
+    //         mm_kernel_defines["PACK_RELU"] = "1";
+    //     } else {
+    //         mm_kernel_defines.merge(eltwise_unary_op_utils::get_defines(fused_activation.value().op_type, fused_activation.value().param, "ACTIVATION", "i"));
+    //     }
+    // }
+    if (packer_l1_acc) {
+        mm_kernel_defines["PACKER_L1_ACC"] = "1";
+    }
+    if (fp32_dest_acc_en) {
+        mm_kernel_defines["FP32_DEST_ACC_EN"] = "1";
+    }
+    if (in0_is_sharded) {
+        mm_kernel_in0_sender_defines["IN0_SHARDED"] = "1";
+    }
+    if (output_is_sharded) {
+        mm_kernel_in1_sender_writer_defines["OUT_SHARDED"] = "1";
+        mm_kernel_in1_receiver_writer_defines["OUT_SHARDED"] = "1";
+    }
 
-                        mm_kernel_in0_sender_defines["SKIP_MCAST"] = "1";
+    mm_kernel_in0_sender_defines["SKIP_MCAST"] = "1";
 
-                        // in1 is the reader of weights/output writer, and we choose to make it use the optimized reader noc
-                        tt_metal::NOC in0_noc = detail::GetPreferredNOCForDRAMWrite(device->arch());
-                        tt_metal::NOC in1_noc = detail::GetPreferredNOCForDRAMRead(device->arch());
+    // // in1 is the reader of weights/output writer, and we choose to make it use the optimized reader noc
+    tt_metal::NOC in0_noc = detail::GetPreferredNOCForDRAMWrite(device->arch());
+    tt_metal::NOC in1_noc = detail::GetPreferredNOCForDRAMRead(device->arch());
 
-                        auto mm_kernel_in0_sender_id = tt_metal::CreateKernel(
-                            program,
-                            "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_sender_padding.cpp",
-                            all_cores,
-                            tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = in0_noc, .compile_args = in0_sender_compile_time_args, .defines = mm_kernel_in0_sender_defines});
+    auto mm_kernel_in0_sender_id = tt_metal::CreateKernel(
+        program,
+        "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in0_sender_padding.cpp",
+        all_cores,
+        tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = in0_noc, .compile_args = in0_sender_compile_time_args, .defines = mm_kernel_in0_sender_defines});
 
-                        auto mm_kernel_in1_sender_writer_id = tt_metal::CreateKernel(
-                            program,
-                            "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in1_sender_writer_padding.cpp",
-                            mcast_sender,
-                            tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = in1_noc, .compile_args = in1_sender_writer_compile_time_args, .defines = mm_kernel_in1_sender_writer_defines});
+    auto mm_kernel_in1_sender_writer_id = tt_metal::CreateKernel(
+        program,
+        "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in1_sender_writer_padding.cpp",
+        mcast_sender,
+        tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = in1_noc, .compile_args = in1_sender_writer_compile_time_args, .defines = mm_kernel_in1_sender_writer_defines});
 
 
-                        auto mm_kernel_in1_receiver_writer_id = tt_metal::CreateKernel(
-                            program,
-                            "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in1_receiver_writer_padding.cpp",
-                            mcast_receivers,
-                            tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = in1_noc, .compile_args = in1_receiver_writer_compile_time_args, .defines = mm_kernel_in1_receiver_writer_defines});
+    auto mm_kernel_in1_receiver_writer_id = tt_metal::CreateKernel(
+        program,
+        "tt_eager/tt_dnn/op_library/bmm/kernels/dataflow/reader_bmm_tile_layout_in1_receiver_writer_padding.cpp",
+        mcast_receivers,
+        tt_metal::DataMovementConfig{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = in1_noc, .compile_args = in1_receiver_writer_compile_time_args, .defines = mm_kernel_in1_receiver_writer_defines});
 
     //////////// END /////////////
 
@@ -533,23 +542,211 @@ void matmul_multicore_reuse_mcast(vector<bfloat16>& a, vector<bfloat16>& b, vect
     */
     // Create reader and writer kernels per core group
 
-                    // Create compute kernel
-                    // bool fp32_dest_acc_en = false;
-                    // Gelu currently has better accuracy when run in approx mode
-                    // USER DEFINED MATH_APPROX_MODE
-                    bool math_approx_mode = false;
-                    auto mm_kernel = tt_metal::CreateKernel(
-                        program,
-                        "tt_eager/tt_dnn/op_library/bmm/kernels/compute/bmm_large_block_zm_fused_bias_activation.cpp",
-                        all_cores,
-                        tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .fp32_dest_acc_en = fp32_dest_acc_en, .math_approx_mode = math_approx_mode, .compile_args = compute_kernel_args, .defines = mm_kernel_defines}
-                    );
+    // Create compute kernel
+    // bool fp32_dest_acc_en = false;
+    // Gelu currently has better accuracy when run in approx mode
+    // USER DEFINED MATH_APPROX_MODE
+    bool math_approx_mode = false;
+    auto mm_kernel = tt_metal::CreateKernel(
+        program,
+        "tt_eager/tt_dnn/op_library/bmm/kernels/compute/bmm_large_block_zm_fused_bias_activation.cpp",
+        all_cores,
+        tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .fp32_dest_acc_en = fp32_dest_acc_en, .math_approx_mode = math_approx_mode, .compile_args = compute_kernel_args, .defines = mm_kernel_defines}
+    );
 
-                    auto in0_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
-                    auto in0_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
-                    //auto in1_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
-                    //auto in1_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    auto in0_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    auto in0_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    //auto in1_mcast_sender_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    //auto in1_mcast_receiver_semaphore = tt_metal::CreateSemaphore(program, all_cores, INVALID);
 
+    //////////// NEW STUFF /////////////
+
+    // Create circular buffers
+    uint32_t src0_cb_index = 0;
+    tt_metal::CircularBufferConfig src0_cb_config = tt_metal::CircularBufferConfig(in0_CB_size, {{src0_cb_index, in0_data_format}})
+        .set_page_size(src0_cb_index, in0_single_tile_size);
+    if (in0_is_sharded) {
+        src0_cb_config = src0_cb_config.set_globally_allocated_address(*src0_dram_buffer);
+    }
+    auto cb_src0 = tt_metal::CreateCircularBuffer(program, all_cores, src0_cb_config);
+    log_debug(LogOp, "CB {} :: PS = {}, NP = {}, TOTAL = {}", src0_cb_index, in0_single_tile_size, in0_CB_size / in0_single_tile_size, in0_CB_size);
+
+    uint32_t src1_cb_index = 1;
+    tt_metal::CircularBufferConfig src1_cb_config = tt_metal::CircularBufferConfig(in1_CB_size, {{src1_cb_index, in1_data_format}})
+        .set_page_size(src1_cb_index, in1_single_tile_size);
+    auto cb_src1 = tt_metal::CreateCircularBuffer(program, all_cores, src1_cb_config);
+    log_debug(LogOp, "CB {} :: PS = {}, NP = {}, TOTAL = {}", src1_cb_index, in1_single_tile_size, in1_CB_size / in1_single_tile_size, in1_CB_size);
+
+    uint32_t output_cb_index = 16; // output operands start at index 16
+    uint32_t interm0_cb_index = 24;
+    tt_metal::CircularBufferConfig interm0_cb_config = tt_metal::CircularBufferConfig(0, {{interm0_cb_index, interm0_data_format}});
+    tt_metal::CircularBufferConfig output_cb_config = tt_metal::CircularBufferConfig(0, {{output_cb_index, output_data_format}});
+
+    if (interm0_data_format != output_data_format) {
+        // output
+        std::map<uint8_t, tt::DataFormat> output_cb_data_format_spec {
+            {output_cb_index, output_data_format},
+        };
+        output_cb_config = tt_metal::CircularBufferConfig(out_CB_size, output_cb_data_format_spec)
+            .set_page_size(output_cb_index, output_single_tile_size);
+        // interm0
+        std::map<uint8_t, tt::DataFormat> interm0_cb_data_format_spec {
+            {interm0_cb_index, interm0_data_format},
+        };
+        interm0_cb_config = tt_metal::CircularBufferConfig(interm0_CB_size, interm0_cb_data_format_spec)
+            .set_page_size(interm0_cb_index, interm0_single_tile_size);
+
+        auto cb_interm0 = tt_metal::CreateCircularBuffer(program, CoreRangeSet({all_cores}), interm0_cb_config);
+        log_debug(LogOp, "CB {} :: PS = {}, NP = {}, TOTAL = {}", interm0_cb_index, interm0_single_tile_size, interm0_CB_size / interm0_single_tile_size, interm0_CB_size);
+    } else {
+        // share buffer
+        std::map<uint8_t, tt::DataFormat> output_cb_data_format_spec {
+            {output_cb_index, output_data_format},
+            {interm0_cb_index, interm0_data_format}
+        };
+        output_cb_config = tt_metal::CircularBufferConfig(out_CB_size, output_cb_data_format_spec)
+            .set_page_size(output_cb_index, output_single_tile_size)
+            .set_page_size(interm0_cb_index, interm0_single_tile_size);
+    }
+
+    if (output_is_sharded) {
+        output_cb_config = output_cb_config.set_globally_allocated_address(*dst_dram_buffer);
+    }
+    auto cb_output = tt_metal::CreateCircularBuffer(program, all_cores, output_cb_config);
+    log_debug(LogOp, "CB {} :: PS = {}, NP = {}, TOTAL = {}", output_cb_index, output_single_tile_size, out_CB_size / output_single_tile_size, out_CB_size);
+
+    //////////// END /////////////
+
+    //////////// NEW STUFF /////////////
+    // if (bias_buffer != nullptr) {
+    //         uint32_t src3_cb_index = 3;
+    //         tt_metal::CircularBufferConfig cb_src3_config = tt_metal::CircularBufferConfig(in3_CB_size, {{src3_cb_index, bias_data_format}})
+    //             .set_page_size(src3_cb_index, bias_single_tile_size);
+    //         auto cb_src3 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src3_config);
+    //         log_debug(LogOp, "CB {} :: PS = {}, NP = {}, TOTAL = {}", src3_cb_index, bias_single_tile_size, in3_CB_size / bias_single_tile_size, in3_CB_size);
+    //     }
+
+    // in1 is the reader of weights/output writer, and we choose to make it use the optimized reader noc
+
+
+    // Parameters for last row, col, or block
+    uint32_t last_block_h = M % per_core_M == 0 ? per_core_M : M % per_core_M;
+    uint32_t last_block_w = N % per_core_N == 0 ? per_core_N : N % per_core_N;
+    uint32_t last_block_num_nonzero_subblocks_h = (last_block_h  - 1) / out_subblock_h + 1;
+    uint32_t last_block_num_nonzero_subblocks_w = (last_block_w  - 1) / out_subblock_w + 1;
+    uint32_t last_subblock_of_last_block_h = last_block_h % out_subblock_h == 0 ? out_subblock_h : last_block_h % out_subblock_h;
+    uint32_t last_subblock_of_last_block_w = last_block_w % out_subblock_w == 0 ? out_subblock_w : last_block_w % out_subblock_w;
+    uint32_t last_block_padded_subblock_tiles_addr_skip = output_single_tile_size * (out_subblock_w - last_subblock_of_last_block_w);
+    uint32_t last_block_padded_block_tiles_w_skip =  (out_subblock_w * out_subblock_h) * (per_core_N / out_subblock_w - last_block_num_nonzero_subblocks_w);
+    uint32_t last_block_padded_block_tiles_h_skip = (per_core_M / out_subblock_h - last_block_num_nonzero_subblocks_h) * (per_core_N * out_subblock_h);
+
+    std::vector<KernelHandle> reader_kernel_ids;
+    std::vector<KernelHandle> writer_kernel_ids;
+
+    CoreCoord start_core_noc = bottom_right_core_physical;
+    CoreCoord end_core_noc = top_left_core_physical;
+    if (in1_noc == NOC::NOC_0) {
+        std::swap(start_core_noc, end_core_noc);
+    }
+
+    for(uint32_t i = 0; i < num_cores; i++) {
+        uint32_t core_idx_x = i % num_cores_c;
+        uint32_t core_idx_y = i / num_cores_c;
+        uint32_t output_idx_x = i / num_blocks_y;
+        uint32_t output_idx_y = i % num_blocks_y;
+        CoreCoord core = {(std::size_t) start_core_x + core_idx_x, (std::size_t) start_core_y + core_idx_y};
+
+        // in0 sender and in1 sender
+        if (core_idx_x == 0 and core_idx_y == 0) {
+            std::vector<uint32_t> mm_in1_sender_writer_args = {
+                // READER
+                // in1 tensor args
+                (std::uint32_t)  src1_dram_buffer->address(),
+                (std::uint32_t)  per_core_N * output_idx_x, //in1_tensor_start_tile_id
+                // in1 mcast args
+                (std::uint32_t)  start_core_noc.x, // in1_mcast_dest_noc_start_x
+                (std::uint32_t)  start_core_noc.y, // in1_mcast_dest_noc_start_y
+                (std::uint32_t)  end_core_noc.x, // in1_mcast_dest_noc_end_x
+                (std::uint32_t)  end_core_noc.y, // in1_mcast_dest_noc_end_y
+
+                // WRITER
+                // out tensor args
+                (std::uint32_t)  dst_dram_buffer->address(),
+                (std::uint32_t)  output_idx_x * per_core_N + output_idx_y * per_core_M * N, // out_tensor_start_tile_id
+
+                // padding args (READER)
+                (std::uint32_t)  per_core_N, // last_block_w
+                // padding args (WRITER)
+                (std::uint32_t)  per_core_M / out_subblock_h,
+                (std::uint32_t)  out_subblock_h,
+                (std::uint32_t)  0,
+                (std::uint32_t)  per_core_N / out_subblock_w,
+                (std::uint32_t)  out_subblock_w,
+                (std::uint32_t)  0,
+                (std::uint32_t)  0
+            };
+
+            // if (bias_buffer != nullptr) {
+            //     mm_in1_sender_writer_args.push_back((std::uint32_t)  bias_buffer->address());
+            //     mm_in1_sender_writer_args.push_back((std::uint32_t)  per_core_N * output_idx_x); //in3_tensor_start_tile_id
+            // }
+
+            tt_metal::SetRuntimeArgs(program, mm_kernel_in1_sender_writer_id, core, mm_in1_sender_writer_args); // RISCV_1_default
+            writer_kernel_ids.push_back(mm_kernel_in1_sender_writer_id);
+        }
+        // in0 sender and in1 receiver
+        else if (!(core_idx_x == 0 and core_idx_y == 0)) {
+            std::vector<uint32_t> mm_in1_receiver_writer_args = {
+                // READER
+                // in1 mcast args
+                (std::uint32_t)  top_left_core_physical.x, // in1_mcast_sender_noc_x
+                (std::uint32_t)  top_left_core_physical.y, // in1_mcast_sender_noc_y
+
+                // WRITER
+                // out tensor args
+                (std::uint32_t)  dst_dram_buffer->address(), // out_tensor_addr
+                (std::uint32_t)  output_idx_x * per_core_N + output_idx_y * per_core_M * N // out_tensor_start_tile_id
+            };
+
+            if (output_idx_y == num_blocks_y - 1) {
+                // padding args (WRITER)
+                mm_in1_receiver_writer_args.push_back(last_block_num_nonzero_subblocks_h);
+                mm_in1_receiver_writer_args.push_back(last_subblock_of_last_block_h);
+                mm_in1_receiver_writer_args.push_back(last_block_padded_block_tiles_h_skip);
+                mm_in1_receiver_writer_args.push_back(per_core_N / out_subblock_w);
+                mm_in1_receiver_writer_args.push_back(out_subblock_w);
+                mm_in1_receiver_writer_args.push_back(0);
+                mm_in1_receiver_writer_args.push_back(0);
+            } else {
+                // padding args (WRITER)
+                mm_in1_receiver_writer_args.push_back(per_core_M / out_subblock_h);
+                mm_in1_receiver_writer_args.push_back(out_subblock_h);
+                mm_in1_receiver_writer_args.push_back(0);
+                mm_in1_receiver_writer_args.push_back(per_core_N / out_subblock_w);
+                mm_in1_receiver_writer_args.push_back(out_subblock_w);
+                mm_in1_receiver_writer_args.push_back(0);
+                mm_in1_receiver_writer_args.push_back(0);
+            }
+
+            tt_metal::SetRuntimeArgs(program, mm_kernel_in1_receiver_writer_id, core, mm_in1_receiver_writer_args); // RISCV_0_default
+            writer_kernel_ids.push_back(mm_kernel_in1_receiver_writer_id);
+        }
+        std::vector<uint32_t> mm_in0_sender_args =  {
+            // in0 tensor args
+            (std::uint32_t)  src0_dram_buffer->address(),
+            (std::uint32_t)  K * per_core_M * output_idx_y, // in0_tensor_start_tile_id
+            // in0 mcast args
+            (std::uint32_t)  0, // in0_mcast_dest_noc_start_x
+            (std::uint32_t)  0, // in0_mcast_dest_noc_start_y
+            (std::uint32_t)  0, // in0_mcast_dest_noc_end_x
+            (std::uint32_t)  0, // in0_mcast_dest_noc_end_y
+
+            // padding args
+            (std::uint32_t) per_core_M // last_block_h
+        };
+        tt_metal::SetRuntimeArgs(program, mm_kernel_in0_sender_id, core, mm_in0_sender_args); // RISCV_1_default
+        reader_kernel_ids.push_back(mm_kernel_in0_sender_id);
+    }
 
     /*
     * Kernels - Runtime arguments
@@ -702,6 +899,11 @@ int main(int argc, char **argv) {
         constexpr uint32_t N = 832;  // user-defined
         constexpr uint32_t K = 832;  // user-defined
         constexpr uint32_t B = 1;  // user-defined
+
+        // constexpr uint32_t M = 1600;  // user-defined
+        // constexpr uint32_t N = 1600;  // user-defined
+        // constexpr uint32_t K = 1600;  // user-defined
+        // constexpr uint32_t B = 1;  // user-defined
 
         uint32_t Mt = M / TILE_HEIGHT;
         uint32_t Kt = K / TILE_WIDTH;
