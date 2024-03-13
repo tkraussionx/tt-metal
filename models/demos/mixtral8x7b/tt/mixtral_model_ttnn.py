@@ -8,7 +8,7 @@ import torch.nn as nn
 from models.demos.mixtral8x7b.tt.mixtral_decoder_ttnn import TtTransformerBlock
 from models.demos.mixtral8x7b.tt.mixtral_rms_norm_ttnn import TtRMSNorm
 import ttnn
-from typing import Optional
+from typing import Optional, List
 
 
 class TtTransformer(nn.Module):
@@ -74,9 +74,10 @@ class TtTransformer(nn.Module):
         start_pos: int,
         current_pos: int,
         attn_masks: Optional[ttnn.Tensor],
+        rot_mats: List[ttnn.Tensor],
     ):
         for i, layer in enumerate(self.layers):
-            x = layer(x, start_pos, current_pos, attn_masks, i)
+            x = layer(x, start_pos, current_pos, attn_masks, rot_mats)
 
         outputs = []
         for i in range(len(self.devices)):

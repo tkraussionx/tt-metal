@@ -71,14 +71,14 @@ def test_mixtral_attention_inference(all_devices, iterations):
         pt_attention_input = (torch.rand(batch, seq_len, model_args.dim) * 2) - 1
         tt_attention_input = pt_attention_input.clone()
         start_pos = generation_start_pos + i
-        attention_input, start_pos, attn_mask, current_pos = prepare_inputs_ttnn(
+        attention_input, start_pos, attn_mask, current_pos, rot_mat = prepare_inputs_ttnn(
             tt_attention_input,
             start_pos,
             tt_model.hidden_size,
-            tt_model.n_local_heads,
+            tt_model.head_dim,
             tt_model.sliding_window,
+            tt_model.max_seq_len,
             tt_model.devices,
-            tt_model.num_devices,
         )
 
         tt_out = tt_model(
@@ -86,6 +86,7 @@ def test_mixtral_attention_inference(all_devices, iterations):
             start_pos,
             current_pos,
             attn_mask,
+            rot_mat,
         )
         assert isinstance(tt_out, list)  # tt_out should be replicated on N devices
         tt_out = tt_out[0]

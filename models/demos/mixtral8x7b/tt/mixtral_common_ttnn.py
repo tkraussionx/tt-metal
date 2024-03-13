@@ -94,7 +94,42 @@ def precompute_freqs(dim: int, end: int, theta: float = 10000.0):
     return torch.cos(freqs), torch.sin(freqs)
 
 
-def prepare_inputs_ttnn(x, start_pos, hidden_size, n_local_heads, sliding_window, devices, num_devices):
+def freqs_to_rotation_matrix(cos_freqs, sin_freqs):
+    """
+    Transform cos/sin frequencies to a rotation matrix.
+    """
+    emb_size, emb_dim = cos_freqs.shape
+    dhead = emb_dim * 2
+    rot_emb_matrix = torch.zeros(emb_size, dhead, dhead)
+    rot_emb_matrix[..., torch.arange(0, dhead, 2), torch.arange(0, dhead, 2)] = cos_freqs.clone()
+    rot_emb_matrix[..., torch.arange(1, dhead, 2), torch.arange(1, dhead, 2)] = cos_freqs.clone()
+    rot_emb_matrix[..., torch.arange(0, dhead, 2), torch.arange(1, dhead, 2)] = -sin_freqs.clone()
+    rot_emb_matrix[..., torch.arange(1, dhead, 2), torch.arange(0, dhead, 2)] = sin_freqs.clone()
+
+    rot_emb_matrix = rot_emb_matrix.transpose(-1, -2)  # Necessary for correct rotation when applied as (x @ R)
+    return rot_emb_matrix
+
+
+def gather_rotary_emb(rot_emb_matrix, position_ids):
+    """
+    Gather the rotary embeddings for a given position_ids
+    """
+    batch_size, seqlen = position_ids.shape
+    emb_size, _, dhead = rot_emb_matrix.shape
+    position_ids = position_ids.view(-1).unsqueeze(-1).unsqueeze(-1).expand(-1, dhead, dhead)
+    rot_emb = rot_emb_matrix.gather(0, position_ids).view(batch_size, seqlen, dhead, dhead)
+    return rot_emb
+
+
+def get_rotation_mat(dhead, end, start_pos, seqlen, batch):
+    cos, sin = precompute_freqs(dhead, end)
+    rot_mat = freqs_to_rotation_matrix(cos, sin)
+    position_ids = torch.ones(seqlen, batch, dtype=torch.long) * start_pos
+    rot_emb = gather_rotary_emb(rot_mat, position_ids)
+    return rot_emb
+
+
+def prepare_inputs_ttnn(x, start_pos, hidden_size, head_dim, sliding_window, max_seq_len, devices):
     """
     Prepare inputs for decode mode. Assume that current token is at
     start_pos, and KV cache has valid data up to start_pos.
@@ -120,6 +155,9 @@ def prepare_inputs_ttnn(x, start_pos, hidden_size, n_local_heads, sliding_window
         attn_mask[:, :, :, sliding_window - current :] = torch.finfo(attn_mask.dtype).min
     # attn_mask = attn_mask.expand(-1, n_local_heads, -1, -1)
 
+    rot_mat = get_rotation_mat(dhead=head_dim, end=max_seq_len * 2, start_pos=start_pos, seqlen=seq_len, batch=batch)
+    rot_mat = rot_mat[:, :1]
+
     # expected shapes:
     # x: (seq_len, 1, batch, hidden_dim)
     # start_pos: int
@@ -127,17 +165,15 @@ def prepare_inputs_ttnn(x, start_pos, hidden_size, n_local_heads, sliding_window
     assert x.size() == (seq_len, 1, batch, hidden_size)
     # assert attn_mask.size() == (seq_len, n_local_heads, batch, padded_layer_past_len)
 
-    xs, attn_masks = [], []
-    for i in range(num_devices):
-        device = devices[i]
-        xs.append(ttnn.from_torch(x.clone(), device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT))
-        attn_masks.append(
-            ttnn.from_torch(attn_mask.clone(), device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
-        )
-
+    xs, attn_masks, rot_mats = [], [], []
+    for device in devices:
+        xs.append(ttnn.from_torch(x, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT))
+        attn_masks.append(ttnn.from_torch(attn_mask, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT))
+        rot_mats.append(ttnn.from_torch(rot_mat, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT))
     return (
         xs,
         start_pos,
         attn_masks,
         current,
+        rot_mats,
     )
