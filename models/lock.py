@@ -9,7 +9,14 @@ import pwd
 
 class WaitLock:
     def __init__(self):
-        self.lock_file = "/tmp/tenstorrent.lock"
+        # don't just use /tmp/filename because /tmp/ has the sticky bit set
+        # to prevent removal of another user's files
+        self.lock_file = "/tmp/tenstorrent/lock"
+        # make sure the directory exists and is world-writable
+        lock_dir = os.path.dirname(self.lock_file)
+        os.makedirs(lock_dir, exist_ok=True)
+        os.chmod(lock_dir, 0o777)
+
         self.pid = os.getpid()
         self._acquire_lock()
 
