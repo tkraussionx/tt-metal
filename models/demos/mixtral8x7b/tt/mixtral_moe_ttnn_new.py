@@ -170,12 +170,12 @@ class TtMoeLayer(nn.Module):
                 # for i in range(len(self.devices)):
                 input_i_11bH = ttnn.to_layout(input_i_11bH, layout=ttnn.TILE_LAYOUT)
                 results_11bD = expert_i_HD(input_i_11bH) * weights_11b1
-                results_b1SD = ttnn.permute(results_11bD, (2, 1, 0, 3))
+                results_b1SD = ttnn.to_layout(ttnn.permute(results_11bD, (2, 1, 0, 3)), layout=ttnn.ROW_MAJOR_LAYOUT)
                 print("done expert MLP")
 
                 # for i in range(len(self.devices)):
                 # create output tensor with results_bO at batch positions batch_ids_b
-                if True:
+                if False:
                     output_i_B1SD_torch = torch.zeros(32, 1, 1, 4096, dtype=torch.bfloat16)
                     results_b1SD_torch = ttnn.to_torch(results_b1SD)
                     output_i_B1SD_torch[batch_ids_1b_torch.view(-1)] = results_b1SD_torch
@@ -184,10 +184,10 @@ class TtMoeLayer(nn.Module):
                     )
                 else:
                     output_i_B1SD = ttnn.zeros(
-                        ttnn.Shape([32, 1, 1, 4096]),
+                        input_shape=ttnn.Shape([32, 1, 1, 4096]),
                         device=self.devices[i],
-                        dtype=torch.bfloat16,
-                        layout=ttnn.TILE_LAYOUT,
+                        dtype=ttnn.bfloat16,
+                        layout=ttnn.ROW_MAJOR_LAYOUT,
                         memory_config=ttnn.L1_MEMORY_CONFIG,
                     )
                     output_i_B1SD = ttnn.experimental.tensor.indexed_fill(batch_ids_1b, output_i_B1SD, results_b1SD)
