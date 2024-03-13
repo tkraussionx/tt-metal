@@ -14,13 +14,41 @@
 #include "tt_metal/detail/util.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 
+#include "tt_metal/common/bfloat16.hpp"
+#include "tt_metal/programming_examples/matmul_common/bmm_op.hpp"
+#include "tt_metal/common/tilize_untilize.hpp"
+#include "tensor/owned_buffer.hpp"
+#include "tensor/owned_buffer_functions.hpp"
+#include "tt_numpy/functions.hpp"
+
+
 using namespace tt::constants;
 using namespace tt;
+
+// using namespace tt::constants;
+using namespace std;
+// using namespace tt;
+using namespace tt::tt_metal;
 
 namespace reuse_mcast_1d_optimized_helpers {
 using namespace tt::constants;
 using namespace tt;
 using namespace tt_metal;
+
+namespace numpy {
+
+    template <typename DataType>
+    struct ndarray {
+        Shape shape;
+        void* data;
+
+        ndarray(Shape shape) : shape(shape), data(malloc(tt::tt_metal::compute_volume(shape) * sizeof(DataType))) {}
+        ~ndarray() { free(data); }
+
+        std::size_t size() const { return tt::tt_metal::compute_volume(shape); }
+    };
+
+}  // namespace numpy
 
 operation::ProgramWithCallbacks create_program_mcast_in0(
     tt_metal::Device *device,
@@ -1238,6 +1266,14 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized_(cons
     }
     TT_ASSERT(Kt % in0_block_w == 0);
 
+    // NEW STUFF
+    // constexpr int device_id = 0;
+    // Device *device = CreateDevice(device_id);
+    // auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
+    // uint32_t num_cores_x = compute_with_storage_grid_size.x;
+    // uint32_t num_cores_y = compute_with_storage_grid_size.y;
+    ///////////////////
+
     // This should allocate a DRAM buffer on the device
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
@@ -1301,3 +1337,121 @@ operation::ProgramWithCallbacks matmul_multi_core_reuse_mcast_1d_optimized(const
 }  // namespace tt_metal
 
 }  // namespace tt
+
+
+
+
+
+void golden_matmul(vector<bfloat16>& a, vector<bfloat16>& b, vector<bfloat16>& output,
+                        uint32_t M, uint32_t N, uint32_t K, uint32_t B) {
+    std::uint32_t idx_c = 0;
+    std::uint32_t idx_a = 0;
+    std::uint32_t idx_b = 0;
+
+    float c_f;
+    float float_tmp;
+    vector<bfloat16> c_bf(M * N, 0);
+
+    for (int i = 0; i < M; i++) {
+        for (int j = 0; j < N; j++) {
+            idx_c = j+ (i * N);
+            idx_a = i * K;
+            idx_b = j;
+            c_f = 0;
+            for (int k_m = 0; k_m < K; k_m++) {
+                float_tmp = a[idx_a].to_float() * b[idx_b].to_float();
+                c_f += float_tmp;
+                idx_a += 1;
+                idx_b += K;
+            }
+            output.at(idx_c) = bfloat16(c_f);
+        }
+    }
+}
+
+int main() {
+    bool pass = true;
+
+    try {
+        if (getenv("TT_METAL_SLOW_DISPATCH_MODE") != nullptr) {
+            throw std::runtime_error("Test not supported w/ slow dispatch, exiting");
+        }
+
+        /* Silicon accelerator setup */
+        constexpr int device_id = 0;
+        auto* device = tt::tt_metal::CreateDevice(device_id);
+
+        /* Define matrix dimensions */
+        constexpr uint32_t M = 832;  // user-defined
+        constexpr uint32_t N = 832;  // user-defined
+        constexpr uint32_t K = 832;  // user-defined
+        constexpr uint32_t B = 1;    // user-defined
+        uint32_t Mt = M / TILE_HEIGHT;
+        uint32_t Kt = K / TILE_WIDTH;
+        uint32_t Nt = N / TILE_WIDTH;
+
+        uint32_t in0_block_w = 2;
+
+        auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
+        uint32_t num_cores_x = compute_with_storage_grid_size.x;
+        uint32_t num_cores_y = compute_with_storage_grid_size.y;
+        const DeviceComputeKernelConfig compute_kernel_config;
+
+        auto matmul_params = bmm_op_utils::get_large_matmul_params(Mt, Nt, num_cores_y, num_cores_x, in0_block_w);
+        uint32_t per_core_M = std::get<0>(matmul_params);
+        uint32_t per_core_N = std::get<1>(matmul_params);
+        uint32_t out_subblock_h = std::get<2>(matmul_params);
+        uint32_t out_subblock_w = std::get<3>(matmul_params);
+
+        Shape shapeSrc0 = {B, M, K};
+        Shape shapeSrc1 = {B, K, N};
+        Shape shapeResult = {B, M, N};
+
+        // Create source tensors with specific values using the utilities from numpy functions.hpp
+        auto src0 = tt::numpy::ones(shapeSrc0, DataType::BFLOAT16, Layout::ROW_MAJOR, device);
+        auto src1 = tt::numpy::ones(shapeSrc1, DataType::BFLOAT16, Layout::ROW_MAJOR, device);
+        auto output = tt::numpy::zeros(shapeResult, DataType::BFLOAT16, Layout::ROW_MAJOR, device);
+
+        auto bias = std::nullopt;
+        auto fused_activation = std::nullopt;
+
+        bool bcast_batch_flag = false;
+        bool fuse_batch_flag = false;
+        bool mcast_in0_flag = true;
+
+        /* Execute matrix multiplication */
+        tt::tt_metal::matmul_multi_core_reuse_mcast_1d_optimized(
+            src0, src1, bias, output,
+            bcast_batch_flag, // broadcast_batch
+            compute_with_storage_grid_size, compute_kernel_config,
+
+            in0_block_w, // in0_block_w
+            out_subblock_h, // out_subblock_h
+            out_subblock_w, // out_subblock_w
+
+            per_core_M, // per_core_M
+            per_core_N, // per_core_N
+
+            fuse_batch_flag, // fuse_batch
+            fused_activation, // fused_activation
+
+            mcast_in0_flag // mcast_in0
+        );
+
+        /* Verify the results with golden */
+
+        pass &= tt::tt_metal::CloseDevice(device);
+
+    } catch (const std::exception &e) {
+        std::cerr << "Test failed with exception: " << e.what() << std::endl;
+        pass = false;
+    }
+
+    if (pass) {
+        std::cout << "Test Passed" << std::endl;
+    } else {
+        std::cerr << "Test Failed" << std::endl;
+    }
+
+    return pass ? 0 : 1;
+}

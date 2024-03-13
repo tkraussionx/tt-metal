@@ -3,8 +3,8 @@ PROGRAMMING_EXAMPLES_OBJDIR = $(OBJDIR)/programming_examples
 
 PROGRAMMING_EXAMPLES_INCLUDES = $(COMMON_INCLUDES)
 PROGRAMMING_EXAMPLES_INCLUDES += -I$(TT_METAL_HOME)/tt_eager
-PROGRAMMING_EXAMPLES_INCLUDES += $(shell find $(TT_METAL_HOME)/tt_eager -type f -name '*.h' -exec dirname {} \; | sort | uniq | sed 's/^/-I/')
-PROGRAMMING_EXAMPLES_INCLUDES += $(shell find $(TT_METAL_HOME)/tt_metal/hw/inc -type f -name '*.h' -exec dirname {} \; | sort | uniq | sed 's/^/-I/')
+# PROGRAMMING_EXAMPLES_INCLUDES += $(shell find $(TT_METAL_HOME)/tt_eager -type f -name '*.h' -exec dirname {} \; | sort | uniq | sed 's/^/-I/')
+# PROGRAMMING_EXAMPLES_INCLUDES += $(shell find $(TT_METAL_HOME)/tt_metal/hw/inc -type f -name '*.h' -exec dirname {} \; | sort | uniq | sed 's/^/-I/')
 
 # WARNING: THIS CAUSES A TON OF ERRORS RIGHT NOW
 # PROGRAMMING_EXAMPLES_INCLUDES += -I$(TT_METAL_HOME)/tt_metal/hw/ckernels/grayskull/metal/llk_io/

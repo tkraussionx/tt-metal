@@ -13,12 +13,6 @@
 #include <algorithm>
 #include "tt_metal/common/tilize_untilize.hpp"
 
-// Includes from 1D_systolic optimization
-// #include "tt_metal/programming_examples/matmul_common/eager_includes/bmm_op.hpp"
-// #include "tt_metal/programming_examples/matmul_common/eager_includes/operation.hpp"
-// #include "tt_metal/programming_examples/matmul_common/eager_includes/eltwise_unary/eltwise_unary_op.hpp"
-// #include "hostdevcommon/common_values.hpp"
-
 using namespace tt::constants;
 using namespace std;
 using namespace tt;
@@ -143,9 +137,10 @@ void matmul_multicore_reuse_mcast(vector<bfloat16>& a, vector<bfloat16>& b, vect
         out_subblock_h, // out_subblock_h
         out_subblock_w, // out_subblock_w
         out_subblock_num_tiles, // out_subblock_num_tiles
-        B // batch
+        B, // batch
+        out_block_tiles // out_block_num_tiles
     };
-
+    log_info(tt::LogVerif, " -- out_block_tiles= {} --", out_block_tiles);
 
     /*
     * Multi-Core prep
@@ -307,7 +302,7 @@ void matmul_multicore_reuse_mcast(vector<bfloat16>& a, vector<bfloat16>& b, vect
     // Create compute kernel
     auto mm_kernel_id = tt_metal::CreateKernel(
         program,
-        "tt_metal/programming_examples/matmul_common/kernels/compute/bmm_large_block_zm.cpp",
+        "tt_metal/programming_examples/matmul_common/kernels/compute/bmm_large_block_zm_fused_bias_activation.cpp",
         all_cores,
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .compile_args = compute_kernel_args}
     );

@@ -27,4 +27,4 @@
 clear;
 make programming_examples/matmul_multicore_reuse_mcast;
 # make clean programming_examples/matmul_multicore_reuse_mcast;
-#./build/programming_examples/matmul_multicore_reuse_mcast
+./build/programming_examples/matmul_multicore_reuse_mcast
