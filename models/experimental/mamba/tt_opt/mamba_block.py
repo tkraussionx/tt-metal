@@ -38,6 +38,10 @@ class TtMambaBlock(torch.nn.Module):
         self.mlp_proj = ttnn.from_torch(torch.rand(1,1,self.hidden_size,2*self.hidden_size), layout=ttnn.TILE_LAYOUT, device=self.device, 
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
         
+        # down proj wt
+        self.down_proj = ttnn.from_torch(torch.rand(1,1,self.hidden_size*2,self.hidden_size), layout=ttnn.TILE_LAYOUT, device=self.device, 
+                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
+        
         # conv states
         self.conv_states = []
         for i in range(4):
@@ -80,6 +84,6 @@ class TtMambaBlock(torch.nn.Module):
         x = ttnn.mul(x, res)
         ttnn.deallocate(res)
         
-        
+        x = ttnn.linear(x, self.down_proj, memory_config=ttnn.L1_MEMORY_CONFIG)
 
         return x
