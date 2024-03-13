@@ -259,10 +259,6 @@ def test_group_norm_with_block_sharded_unet(device, shape, num_groups):
         print("# LOADED #")
         torch_input_tensor = torch.load("gn2_input.pt")
         torch_input_tensor = torch.permute(torch_input_tensor, (0, 3, 1, 2))
-        torch_weight1 = torch.load("gn1_weight.pt")
-        torch_bias1 = torch.load("gn1_bias.pt")
-        torch_weight1 = torch_weight1[:1280]
-        torch_bias1 = torch_bias1[:1280]
         torch_weight = torch.load("gn2_weight.pt")
         torch_bias = torch.load("gn2_bias.pt")
     elif shape == (2, 1, 64, 2560):
@@ -275,12 +271,6 @@ def test_group_norm_with_block_sharded_unet(device, shape, num_groups):
         torch_weight = torch.rand((C,), dtype=torch.bfloat16)
         torch_bias = torch.rand((C,), dtype=torch.bfloat16)
 
-    # torch_norm_mod1 = torch.nn.GroupNorm(num_groups=num_groups, num_channels=C, eps=1e-6, affine=True)
-    # torch_norm_mod1.weight.data = torch_weight1
-    # torch_norm_mod1.bias.data = torch_bias1
-    # torch_norm_mod1.eval()
-    # torch_output_tensor = torch_norm_mod1(torch_input_tensor)
-
     # torch_output_tensor = torch.nn.functional.group_norm(
     #    torch_input_tensor, num_groups, weight=torch_weight, bias=torch_bias
     # )
@@ -290,34 +280,22 @@ def test_group_norm_with_block_sharded_unet(device, shape, num_groups):
     torch_output_tensor = torch_norm_mod(torch_input_tensor)
     torch_output_tensor = torch_output_tensor.permute(0, 2, 3, 1).view(N, 1, W * H, C)
 
+    _torch_input_tensor = torch_input_tensor.permute(0, 2, 3, 1).view(N, 1, W * H, C)
     input_tensor = torch_input_tensor.permute(0, 2, 3, 1).view(N, 1, W * H, C)
     input_tensor = ttnn.from_torch(
         input_tensor,
-        dtype=ttnn.DataType.BFLOAT16,
-        layout=ttnn.ROW_MAJOR_LAYOUT,
+        # dtype=ttnn.DataType.BFLOAT16,
+        dtype=ttnn.DataType.BFLOAT8_B,
+        # layout=ttnn.ROW_MAJOR_LAYOUT,
+        layout=ttnn.TILE_LAYOUT,
         device=device,
         memory_config=ttnn.L1_MEMORY_CONFIG,
     )
+    _input_tensor = ttnn.to_torch(input_tensor)
+    assert_with_pcc(_torch_input_tensor, _input_tensor, 0.99)
 
     # gamma = ttnn.create_group_norm_weight_bias_rm(torch_weight, C, num_groups)
     # beta = ttnn.create_group_norm_weight_bias_rm(torch_bias, C, num_groups)
-
-    # gamma_t1 = ttnn.from_torch(
-    #    torch_weight1, #gamma,
-    #    dtype=ttnn.DataType.BFLOAT16,
-    #    layout=ttnn.ROW_MAJOR_LAYOUT,
-    #    device=device,
-    #    memory_config=ttnn.DRAM_MEMORY_CONFIG,
-    # )
-    # beta_t1 = ttnn.from_torch(
-    #    torch_bias1, #beta,
-    #    dtype=ttnn.DataType.BFLOAT16,
-    #    layout=ttnn.ROW_MAJOR_LAYOUT,
-    #    device=device,
-    #    memory_config=ttnn.DRAM_MEMORY_CONFIG,
-    # )
-    # gamma_t1 = pad_group_norm_weight(gamma_t1, num_groups, C)
-    # beta_t1 = pad_group_norm_weight(beta_t1, num_groups, C)
 
     gamma_t = ttnn.from_torch(
         torch_weight,  # gamma,
@@ -359,20 +337,14 @@ def test_group_norm_with_block_sharded_unet(device, shape, num_groups):
         input_nhw=N * H * W,
         is_height_sharded=False,
     )
+    input_tensor = ttnn.to_layout(input_tensor, ttnn.ROW_MAJOR_LAYOUT)
     input_tensor = ttnn.to_memory_config(input_tensor, sharded_mem_config)
+    _input_tensor = ttnn.to_torch(input_tensor)
+    assert_with_pcc(_torch_input_tensor, _input_tensor, 0.99)
     print("  ")
     print("GN shape - ", shape)
     print("GN shard config - ", sharded_mem_config)
     print("  ")
-    # output_tensor = ttnn.group_norm(
-    #    input_tensor,
-    #    num_groups=num_groups,
-    #    weight=gamma_t1,
-    #    bias=beta_t1,
-    #    epsilon=1e-6,
-    #    memory_config=sharded_mem_config,
-    #    core_grid=core_grid,
-    # )
 
     output_tensor = ttnn.group_norm(
         input_tensor,
@@ -388,7 +360,7 @@ def test_group_norm_with_block_sharded_unet(device, shape, num_groups):
     output_tensor = ttnn.from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor)
 
-    assert_with_pcc(torch_output_tensor, output_tensor, 0.98)
+    assert_with_pcc(torch_output_tensor, output_tensor, 0.99)
 
     # pcc_pass, pcc_msg = check_with_pcc(torch_output_tensor, output_tensor, 0.9998)
     # logger.info(pcc_pass)
