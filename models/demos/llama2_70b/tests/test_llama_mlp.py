@@ -113,14 +113,14 @@ def run_test_LlamaMLP_inference(
                 cache_path=cache_path,
             )
 
-            # TODO: Put input sharded in L1
-            tt_mlp_input = [
-                torch2tt_tensor(
-                    tt_inp.clone(),
-                    device,
-                )
-                for device in devices
-            ]
+            # # TODO: Put input sharded in L1
+            # tt_mlp_input = [
+            #     torch2tt_tensor(
+            #         tt_inp.clone(),
+            #         device,
+            #     )
+            #     for device in devices
+            # ]
     else:
         # TT hardware execution -------------------------------------------------------------
         tt_LlamaMLP_model = TtLlamaMLP(
@@ -133,17 +133,28 @@ def run_test_LlamaMLP_inference(
         )
         tt_mlp_input = [torch2tt_tensor(tt_inp.clone(), device) for device in devices]
 
-    if n_devices == 32:
-        tt_out = tt_LlamaMLP_model(tt_mlp_input)
-        assert len(tt_out) == 4
-        tt_outs = [tt2torch_tensor(o) for o in tt_out]
-        tt_out = torch.cat(tt_outs, dim=-1)
-        tt_out = tt_out[..., :28672]
-    else:
-        tt_out = tt_LlamaMLP_model(tt_mlp_input)
-        assert len(tt_out) == len(devices)
-        tt_outs = [tt2torch_tensor(o) for o in tt_out]
-        tt_out = torch.cat(tt_outs, dim=-1)
+    for i in range(10):
+        # TODO: Put input sharded in L1
+        tt_mlp_input = [
+            torch2tt_tensor(
+                tt_inp.clone(),
+                device,
+            )
+            for device in devices
+        ]
+        if n_devices == 32:
+            tt_out = tt_LlamaMLP_model(tt_mlp_input)
+            assert len(tt_out) == 4
+            tt_outs = [tt2torch_tensor(o) for o in tt_out]
+            tt_out = torch.cat(tt_outs, dim=-1)
+            tt_out = tt_out[..., :28672]
+        else:
+            tt_out = tt_LlamaMLP_model(tt_mlp_input)
+            assert len(tt_out) == len(devices)
+            tt_outs = [tt2torch_tensor(o) for o in tt_out]
+            tt_out = torch.cat(tt_outs, dim=-1)
+
+        print(f"Generated token {i}")
 
     logger.info(comp_allclose(pytorch_out, tt_out))
     does_pass, output_pcc = comp_pcc(pytorch_out, tt_out, pcc)
@@ -188,6 +199,9 @@ def test_LlamaMLP_inference(
         pytest.skip(f"Requires at {n_devices} devices to run")
     if compute_grid_size.x < model_config["MAX_GRID_SIZE"][0] or compute_grid_size.y < model_config["MAX_GRID_SIZE"][1]:
         pytest.skip(f"Requires grid size of at least {model_config['MAX_GRID_SIZE']} to run")
+
+    for device in devices:
+        device.enable_program_cache()
 
     run_test_LlamaMLP_inference(
         devices,
