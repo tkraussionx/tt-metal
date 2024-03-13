@@ -283,7 +283,7 @@ class TtFalconAttention(nn.Module):
             )
             padded_layer_past_len = nearest_32(layer_past_len + 1)
 
-            print(f"1.query_layer:{query_layer.get_legacy_shape()}")
+            # print(f"1.query_layer:{query_layer.get_legacy_shape()}")
 
             # Pad and transpose Q for batched matmul
             # if self.batched_attn:
@@ -291,7 +291,7 @@ class TtFalconAttention(nn.Module):
                 query_layer, [1, self.padded_local_heads, 32, self.head_dim], [0, 0, 0, 0], 0.0
             )
 
-            print(f"2.query_layer:{query_layer.get_legacy_shape()}")
+            # print(f"2.query_layer:{query_layer.get_legacy_shape()}")
 
             query_layer = tt_lib.tensor.transpose(
                 query_layer,
@@ -299,7 +299,7 @@ class TtFalconAttention(nn.Module):
                 -3,
             )
 
-            print(f"3.query_layer:{query_layer.get_legacy_shape()}")
+            # print(f"3.query_layer:{query_layer.get_legacy_shape()}")
 
             query_layer = tt_lib.tensor.reshape(
                 query_layer,
@@ -309,7 +309,8 @@ class TtFalconAttention(nn.Module):
                 self.head_dim,  # Batch must be in dim 0 to match K cache
             )
 
-            print(f"4.query_layer:{query_layer.get_legacy_shape()}")
+            # tt_lib.device.Synchronize(device)
+            # print(f"4.query_layer:{query_layer.get_legacy_shape()}")
 
             query_layer = tt_lib.tensor.interleaved_to_sharded(
                 query_layer, sharded_mem_config=self.model_config["Q_TRANSPOSE_MEMCFG"]
@@ -344,8 +345,30 @@ class TtFalconAttention(nn.Module):
                 #     output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
                 # )
                 attn_prog_config = self.model_config["ATTN_BATCHED_MM_PROGCFG_LAMBDA"](padded_layer_past_len // 32)
-                attn_output_memcfg = self.model_config["ATTN_BATCHED_MM_OUTPUT_MEMCFG"]
-                attn_output_memcfg.shard_spec.shape[1] = padded_layer_past_len
+                attn_output_memcfg = tt_lib.tensor.MemoryConfig(
+                    tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                    tt_lib.tensor.BufferType.L1,
+                    tt_lib.tensor.ShardSpec(
+                        tt_lib.tensor.CoreRangeSet(
+                            {
+                                tt_lib.tensor.CoreRange(
+                                    # Volume must match num batches
+                                    tt_lib.tensor.CoreCoord(0, 0),
+                                    tt_lib.tensor.CoreCoord(7, 3),
+                                ),
+                            }
+                        ),
+                        [
+                            96,  # padded heads on each core
+                            padded_layer_past_len,
+                        ],
+                        tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+                        False,
+                    ),
+                )
+
+                # print(f"attn_prog_config:{attn_prog_config}")
+                # print(f"attn_output_memcfg:{attn_output_memcfg} padded_layer_past_len:{padded_layer_past_len}")
 
                 attn_weights = tt_lib.operations.primary.matmul(
                     query_layer,
@@ -355,7 +378,8 @@ class TtFalconAttention(nn.Module):
                     output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
                     compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
                 )
-                print(f"attn_weights1:{attn_weights.get_legacy_shape()}")
+                # tt_lib.device.Synchronize(device)
+                # print(f"attn_weights1:{attn_weights.get_legacy_shape()}")
 
             else:
                 attn_weights = tt_lib.operations.primary.transformers.group_attn_matmul(
@@ -368,7 +392,7 @@ class TtFalconAttention(nn.Module):
         query_layer.deallocate()
         key_layer_transposed.deallocate()
 
-        print(f"self.scalar:{self.scalar}")
+        # print(f"self.scale:{self.scale}")
 
         # attn_weights = tt_lib.tensor.bcast(
         #     attn_weights,
@@ -378,11 +402,8 @@ class TtFalconAttention(nn.Module):
         #     output_mem_config=self.model_config["PRE_SOFTMAX_SCALE_OUTPUT_MEMCFG"],
         # )
 
-        # softmax_progcfg = self.model_config["BATCHED_SOFTMAX_PROGCFG"]
-        # softmax_progcfg.block_h = self.padded_local_heads // 32
-        # softmax_progcfg.block_w = padded_layer_past_len // 32
-
-        print(f"attention_mask:{attention_mask.get_legacy_shape()}")
+        # print(f"attention_mask:{attention_mask.get_legacy_shape()}")
+        # tt_lib.device.Synchronize(device)
 
         attn_weights = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
             attn_weights,
@@ -399,8 +420,8 @@ class TtFalconAttention(nn.Module):
             is_causal_mask=True,
         )
 
-        print(f"attn_weights2:{attn_weights.get_legacy_shape()}")
-        exit(0)
+        # tt_lib.device.Synchronize(device)
+        # print(f"attn_weights2:{attn_weights.get_legacy_shape()}")
 
         # if attention_mask is not None:
         #     attn_weights = tt_lib.tensor.add(
@@ -413,9 +434,9 @@ class TtFalconAttention(nn.Module):
         ### SOFTMAX ###
         ###############
         # TODO: Replace with scaled_softmax_attention_mask from BERT
-        attn_weights = tt_lib.operations.primary.softmax_in_place(
-            attn_weights,
-        )
+        # attn_weights = tt_lib.operations.primary.softmax_in_place(
+        #     attn_weights,
+        # )
 
         ######################
         ### V CACHE UPDATE ###
@@ -433,6 +454,32 @@ class TtFalconAttention(nn.Module):
                 output_mem_config=self.model_config["V_CACHE_SLICE_OUTPUT_MEMCFG"],
             )
 
+            kv_cache_memcfg = tt_lib.tensor.MemoryConfig(
+                tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                tt_lib.tensor.BufferType.L1,
+                tt_lib.tensor.ShardSpec(
+                    tt_lib.tensor.CoreRangeSet(
+                        {
+                            tt_lib.tensor.CoreRange(
+                                tt_lib.tensor.CoreCoord(0, 0),
+                                tt_lib.tensor.CoreCoord(7, 3),
+                            ),
+                        }
+                    ),
+                    [
+                        padded_layer_past_len,
+                        64,
+                    ],
+                    tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            )
+
+            value_layer = tt_lib.tensor.interleaved_to_sharded(value_layer, sharded_mem_config=kv_cache_memcfg)
+
+            # tt_lib.device.Synchronize(device)
+            # print(f"value_layer:{value_layer.get_legacy_shape()}")
+
         layer_present = layer_past if use_cache else None
 
         ########################
@@ -448,13 +495,60 @@ class TtFalconAttention(nn.Module):
         elif llm_mode == "decode":
             # TODO: switch to group_attn_matmul once multiple q heads is supported (issue #5318)
             if is_wormhole_b0():
-                attn_output = tt_lib.operations.primary.transformers.attn_matmul(
+                # attn_output = tt_lib.operations.primary.transformers.attn_matmul(
+                #     attn_weights,
+                #     value_layer,
+                #     compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+                #     output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                #     output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
+                # )
+
+                scores_prog_config = tt_lib.operations.primary.MatmulMultiCoreReuseProgramConfig(
+                    compute_with_storage_grid_size=[8, 4],
+                    in0_block_w=padded_layer_past_len // 32,  # SEQ_LEN // TILE_DIM (dynamic)
+                    out_subblock_h=1,  # TODO: Maximize
+                    out_subblock_w=1,  # TODO: Maximize
+                    per_core_M=96 // 32,  # N_HEADS_PADDED // TILE_SIZE,
+                    per_core_N=64 // 32,  # HEAD_DIM // TILE_SIZE (dynamic)
+                )
+
+                scores_batched_mm_output_memcfg = tt_lib.tensor.MemoryConfig(
+                    tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                    tt_lib.tensor.BufferType.L1,
+                    tt_lib.tensor.ShardSpec(
+                        tt_lib.tensor.CoreRangeSet(
+                            {
+                                tt_lib.tensor.CoreRange(
+                                    # Volume must match # of attn heads
+                                    tt_lib.tensor.CoreCoord(0, 0),
+                                    tt_lib.tensor.CoreCoord(7, 3),
+                                ),
+                            }
+                        ),
+                        [
+                            96,  # heads
+                            64,  # head dim
+                        ],
+                        tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+                        False,
+                    ),
+                )
+
+                # tt_lib.device.Synchronize(device)
+                # print(f"attn_weights3:{attn_weights.get_legacy_shape()}")
+
+                attn_output = tt_lib.operations.primary.matmul(
                     attn_weights,
                     value_layer,
-                    compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-                    output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
-                    output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
+                    program_config=scores_prog_config,
+                    output_mem_config=scores_batched_mm_output_memcfg,
+                    output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],
+                    compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
                 )
+
+                # tt_lib.device.Synchronize(device)
+                # print(f"attn_output1:{attn_output.get_legacy_shape()}")
+
             else:
                 attn_output = tt_lib.operations.primary.transformers.group_attn_matmul(
                     attn_weights,
@@ -469,6 +563,39 @@ class TtFalconAttention(nn.Module):
         #########################
         ### ATTENTION SELFOUT ###
         #########################
+
+        attn_output = tt_lib.tensor.sharded_to_interleaved(
+            attn_output,
+            output_mem_config=self.model_config["L1_MEMCFG"],
+        )
+
+        # Get batch in dim 1
+        attn_output = tt_lib.tensor.reshape(attn_output, 1, 32, 96, 64)
+
+        # Get batch in dim 2
+        attn_output = tt_lib.tensor.transpose(
+            attn_output,
+            -2,
+            -3,
+        )
+
+        # UNPAD
+        attn_output_shape = attn_output.get_legacy_shape()
+        attn_output = tt_lib.tensor.unpad(
+            attn_output,
+            [0, 0, 0, 0],
+            [
+                attn_output_shape[0] - 1,
+                self.num_heads - 1,
+                attn_output_shape[2] - 1,
+                attn_output_shape[3] - 1,
+            ],
+            output_mem_config=self.model_config["L1_MEMCFG"],
+        )
+
+        # tt_lib.device.Synchronize(device)
+        # print(f"attn_output2:{attn_output.get_legacy_shape()}")
+
         attn_output = tt_lib.tensor.nlp_concat_heads(
             attn_output,
             output_mem_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"],

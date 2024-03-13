@@ -170,6 +170,32 @@ class TtFalconModelShared(torch.nn.Module):
                 tt_memory_config=self.model_config["ATTN_MASK_MEMCFG"],
                 tt_dtype=self.model_config["ATTN_MASK_DTYPE"],
             )
+            attention_mask_memconfig = tt_lib.tensor.MemoryConfig(
+                tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                tt_lib.tensor.BufferType.L1,
+                tt_lib.tensor.ShardSpec(
+                    tt_lib.tensor.CoreRangeSet(
+                        {
+                            tt_lib.tensor.CoreRange(
+                                # Volume must match # of attn heads
+                                tt_lib.tensor.CoreCoord(0, 0),
+                                tt_lib.tensor.CoreCoord(7, 3),
+                            ),
+                        }
+                    ),
+                    [
+                        96,  # heads
+                        num_max_tokens,  # Dynamic - must set before using this config
+                    ],
+                    tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            )
+
+            tt_attention_mask = tt_lib.tensor.interleaved_to_sharded(
+                tt_attention_mask, sharded_mem_config=attention_mask_memconfig
+            )
+
             print(f"tt_attention_mask:{tt_attention_mask.get_legacy_shape()}")
 
         else:

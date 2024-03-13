@@ -111,6 +111,7 @@ def get_model_config(model_config_str):
         "DEFAULT_DTYPE": dtype,
         "DEFAULT_MEMCFG": mem_config,
         "MOVE_DECODER_OUTPUT_BOOL": False,
+        "L1_MEMCFG": L1_MEMCFG,
     }  # DEFAULT_MEMCFG also used to determine banking for ttl.device.InitializeDevice
     model_config.update({f"{key}_MEMCFG": mem_config for key in OP_KEYS if key not in NO_MEMCFG})
     model_config.update({f"{key}_DTYPE": dtype for key in OP_KEYS if key not in NO_DTYPE})
