@@ -9,6 +9,10 @@
 
 #pragma once
 
+// Allocates additional sizeof(CQExtendedDebugCmd) bytes in the command
+// Enables automatic extended debug prints in the kernels
+#define TT_METAL_EXTENDED_DEBUG_CMD 1
+
 constexpr uint32_t CQ_PREFETCH_CMD_BARE_MIN_SIZE = 32; // for NOC PCIe alignemnt
 constexpr uint32_t CQ_DISPATCH_CMD_SIZE = 16;          // for L1 alignment
 
@@ -48,6 +52,17 @@ struct CQGenericDebugCmd {
     uint32_t stride;                       // stride to next Cmd (may be within the payload)
 } __attribute__((packed));
 
+// Extended debug command
+struct CQExtendedDebugCmd {
+    uint8_t cq_id = -1;
+    uint8_t gateway_id = -1;
+    uint8_t dst_x = -1;
+    uint8_t dst_y = -1;
+    uint32_t cmd_id = -1;
+    uint32_t flag = -1;
+    uint32_t reserved = -1;
+};
+
 //////////////////////////////////////////////////////////////////////////////
 
 // Prefetcher CMD structures
@@ -78,6 +93,10 @@ struct CQPrefetchCmd {
         CQPrefetchRelayInlineCmd relay_inline;
         CQGenericDebugCmd debug;
     } __attribute__((packed));
+
+#if TT_METAL_EXTENDED_DEBUG_CMD == 1
+    CQExtendedDebugCmd debug_ext;
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -137,6 +156,10 @@ struct CQDispatchCmd {
         CQDispatchWaitCmd wait;
         CQGenericDebugCmd debug;
     } __attribute__((packed));
+
+#if TT_METAL_EXTENDED_DEBUG_CMD == 1
+    CQExtendedDebugCmd debug_ext;
+#endif
 };
 
 

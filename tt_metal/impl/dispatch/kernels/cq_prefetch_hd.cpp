@@ -401,6 +401,15 @@ void kernel_main() {
 
         volatile CQPrefetchCmd tt_l1_ptr *cmd = (volatile CQPrefetchCmd tt_l1_ptr *)cmd_ptr;
 
+        if constexpr (TT_METAL_EXTENDED_DEBUG_CMD) {
+            auto &d = cmd->debug_ext;
+            DPRINT << "\033[94m"
+                   << "CQPrefetchCmd cmd=" << (uint32_t)cmd->base.cmd_id << "id=0x" << HEX() << d.cmd_id
+                   << DEC() << " debug_ext: {cq_id=" << (uint32_t)d.cq_id << ", gateway=" << (uint32_t)d.gateway_id
+                   << ", dst=(" << (uint32_t)d.dst_x << "," << (uint32_t)d.dst_y << ") flag=0x" << HEX() << d.flag
+                   << "} \033[0m" << ENDL();
+        }
+
         switch (cmd->base.cmd_id) {
         case CQ_PREFETCH_CMD_RELAY_PAGED:
             DPRINT << "relay dram page: " << fence << " " << cmd_ptr << ENDL();

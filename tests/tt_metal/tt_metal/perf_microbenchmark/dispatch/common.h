@@ -25,6 +25,13 @@ struct one_worker_data_t {
     vector<uint32_t> data;
 };
 
+struct debug_state_t {
+    Device *device;
+    CommandQueue *cq;
+};
+
+static debug_state_t debug_state_g;
+
 typedef unordered_map<CoreCoord, one_worker_data_t> worker_data_t;
 
 inline void reset_worker_data(worker_data_t& awd) {
@@ -156,6 +163,15 @@ inline void debug_epilogue(vector<uint32_t>& cmds,
     }
 }
 
+inline void set_debug_extended(CQDispatchCmd &cmd) {
+    if constexpr (TT_METAL_EXTENDED_DEBUG_CMD) {
+        uint32_t user_flag = 0xfeedbeef;
+        uint8_t cq_id = debug_state_g.cq ? debug_state_g.cq->id() : -1;
+        uint8_t device_id = debug_state_g.device ? debug_state_g.device->id() : -1;
+        tt::tt_metal::detail::SetExtDebugInfo(cmd, cq_id, device_id, -1, -1, user_flag);
+    }
+}
+
 inline void add_dispatcher_cmd(vector<uint32_t>& cmds,
                                const CoreRange& workers,
                                worker_data_t& worker_data,
@@ -164,6 +180,7 @@ inline void add_dispatcher_cmd(vector<uint32_t>& cmds,
 
     size_t prior_end = debug_prologue(cmds);
 
+    set_debug_extended(cmd);
     add_bare_dispatcher_cmd(cmds, cmd);
     uint32_t length_words = length / sizeof(uint32_t);
     generate_random_payload(cmds, workers, worker_data, length_words);

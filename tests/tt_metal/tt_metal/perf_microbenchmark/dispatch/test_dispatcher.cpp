@@ -214,6 +214,8 @@ int main(int argc, char **argv) {
 
         tt_metal::Program program = tt_metal::CreateProgram();
 
+        debug_state_g = {.device = device, .cq = &cq};
+
         CoreCoord spoof_prefetch_core = {0, 0};
         CoreCoord dispatch_core = {4, 0};
 

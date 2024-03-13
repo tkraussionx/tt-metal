@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <cstdint>
 #include <mutex>
 #include <variant>
 
@@ -12,6 +13,7 @@
 #include "tt_metal/impl/buffers/buffer.hpp"
 #include "tt_metal/impl/dispatch/command_queue.hpp"
 #include "tt_metal/impl/dispatch/dispatch_core_manager.hpp"
+#include "tt_metal/impl/dispatch/kernels/cq_cmds.hpp"
 #include "tt_metal/detail/program.hpp"
 #include "tt_metal/jit_build/genfiles.hpp"
 #include "tt_metal/host_api.hpp"
@@ -430,5 +432,32 @@ namespace tt::tt_metal{
                 specified_core_spec
             );
         }
+
+        template <typename T>
+        static void SetExtDebugInfo(
+            T &cmd,
+            const uint8_t cq,           // command queue id
+            const uint8_t device,       // gateway device id
+            const uint8_t dst_x = 255,  // dest chip x
+            const uint8_t dst_y = 255,  // dest chip y
+            const uint32_t flag = 0     // any user debug flag
+        ) {
+            static uint32_t unique_id = 0;
+            CQExtendedDebugCmd ext = {
+                .cq_id = cq,
+                .gateway_id = device,
+                .dst_x = dst_x,
+                .dst_y = dst_y,
+                .cmd_id = unique_id++,
+                .flag = flag,
+            };
+            cmd.debug_ext = ext;
+        }
     }
 }
+
+template void tt::tt_metal::detail::SetExtDebugInfo<CQPrefetchCmd>(
+    CQPrefetchCmd &, const uint8_t, const uint8_t, const uint8_t, const uint8_t, const uint32_t);
+
+template void tt::tt_metal::detail::SetExtDebugInfo<CQDispatchCmd>(
+    CQDispatchCmd &, const uint8_t, const uint8_t, const uint8_t, const uint8_t, const uint32_t);
