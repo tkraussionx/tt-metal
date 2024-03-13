@@ -28,7 +28,9 @@ def get_tt_metal_model(num_users, hidden_size, configs):
     ttnn.enable_program_cache()
 
     reference_model = get_cpu_reference_model()
-    model = MambaTT(reference_model, 1, device, num_users, hidden_size, configs)
+    cache_path = f"/tmp/state-spaces/mamba-370m"
+    
+    model = MambaTT(reference_model, cache_path, 1, device, num_users, hidden_size, configs)
     return model, device
 
 
