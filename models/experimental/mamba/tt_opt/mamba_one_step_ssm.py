@@ -22,17 +22,15 @@ class TtMambaSSM(torch.nn.Module):
         self.num_users = num_users
         self.hidden_size = hidden_size * 2
         self.configs = configs
+        self.n = 16
+        self.rank = self.args.dt_rank
         
-        if False:
-            self.tt_hidden_state = ttnn.zeros(
-                (1, 1, self.num_users, self.hidden_size * self.args.d_state),
-                layout=ttnn.TILE_LAYOUT,
-                device=self.device,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
-            )
-        else:
-            self.tt_hidden_state = ttnn.zeros(
-                (1, 1, self.num_users, self.hidden_size*16),
+        assert self.n == self.args.d_state, f"{self.n} != {self.args.d_state}"
+        assert self.rank == self.args.dt_rank, f"{self.rank} != {self.args.dt_rank}"
+        assert self.hidden_size == self.args.d_inner, f"{self.hidden_size} != {self.args.d_inner}"
+        
+        self.tt_hidden_state = ttnn.zeros(
+                (1, 1, self.num_users, self.hidden_size*self.n),
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
@@ -47,18 +45,20 @@ class TtMambaSSM(torch.nn.Module):
         """
 
         # delta rank weight
-        if False:
+        if True:
             x_proj_weight_name = "mixer.x_proj.weight"
+            delta_t_proj = torch.transpose(self.state_dict[x_proj_weight_name][: self.args.dt_rank, :], -1, -2)
             self.delta_t_proj = ttnn.from_torch(
-                self.state_dict[x_proj_weight_name][: self.args.dt_rank, :],
+                delta_t_proj.unsqueeze(0).unsqueeze(0),
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 dtype=ttnn.bfloat16,
             )
+            print('**********delta_t_proj shape', self.delta_t_proj.shape, delta_t_proj.shape)
         else:
             self.delta_t_proj = ttnn.from_torch(
-                torch.rand(1, 1, self.hidden_size, self.hidden_size // 16),
+                torch.rand(1, 1, self.hidden_size, self.rank),
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
@@ -85,7 +85,7 @@ class TtMambaSSM(torch.nn.Module):
             )
         else:
             self.dt_proj_weights = ttnn.from_torch(
-                torch.rand(1, 1, self.hidden_size // 16, self.hidden_size),
+                torch.rand(1, 1, self.rank, self.hidden_size),
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
@@ -114,7 +114,7 @@ class TtMambaSSM(torch.nn.Module):
                     1,
                     1,
                     self.hidden_size,
-                    16,
+                    self.n,
                 ),
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
@@ -124,7 +124,7 @@ class TtMambaSSM(torch.nn.Module):
 
 
         # A
-        self.A = ttnn.from_torch(torch.rand(1, 1, self.num_users, self.hidden_size*16), layout=ttnn.TILE_LAYOUT, device=self.device, 
+        self.A = ttnn.from_torch(torch.rand(1, 1, self.num_users, self.hidden_size*self.n), layout=ttnn.TILE_LAYOUT, device=self.device, 
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
         
         # C
@@ -133,7 +133,7 @@ class TtMambaSSM(torch.nn.Module):
                     1,
                     1,
                     self.hidden_size,
-                    16,
+                    self.n,
                 ),
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
@@ -142,7 +142,7 @@ class TtMambaSSM(torch.nn.Module):
             )
         
         # C pad
-        C_pad = torch.zeros(1,1,self.num_users,16)
+        C_pad = torch.zeros(1,1,self.num_users,self.n)
         self.C_pad = ttnn.from_torch(C_pad, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
         
         # D
@@ -152,6 +152,7 @@ class TtMambaSSM(torch.nn.Module):
     def forward(self, x):
         # delta
         delta_t_proj = ttnn.to_memory_config(self.delta_t_proj, memory_config=ttnn.L1_MEMORY_CONFIG)
+        print('**********delta_t_proj shape', delta_t_proj.shape, x.shape)
         delta_t0 = ttnn.linear(x, delta_t_proj, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(delta_t_proj)
 
@@ -165,7 +166,7 @@ class TtMambaSSM(torch.nn.Module):
         ttnn.deallocate(delta_t1)
 
         # calculate abar
-        delta_t3 = ttnn.repeat_interleave(delta_t2, 16, dim=3)
+        delta_t3 = ttnn.repeat_interleave(delta_t2, self.n, dim=3)
         delta_t4 = ttnn.to_memory_config(delta_t3, memory_config=self.configs["sharded_large"])
         ttnn.deallocate(delta_t3)
         abar0 = ttnn.to_memory_config(self.A, memory_config=self.configs["sharded_large"])
@@ -197,7 +198,7 @@ class TtMambaSSM(torch.nn.Module):
         ttnn.deallocate(B1)
               
         # bbar
-        delta_t3 = ttnn.repeat_interleave(delta_t2, 16, dim=3)
+        delta_t3 = ttnn.repeat_interleave(delta_t2, self.n, dim=3)
         ttnn.deallocate(delta_t2)
         delta_t4 = ttnn.to_memory_config(delta_t3, memory_config=self.configs["sharded_large"])
         ttnn.deallocate(delta_t3)
@@ -206,7 +207,7 @@ class TtMambaSSM(torch.nn.Module):
         ttnn.deallocate(B2)
         
         # multiply bbar and x
-        x0 = ttnn.repeat_interleave(x, 16, dim=3)
+        x0 = ttnn.repeat_interleave(x, self.n, dim=3)
         x1 = ttnn.to_memory_config(x0, memory_config=self.configs["sharded_large"])
         ttnn.deallocate(x0)
         bmulx0 = ttnn.mul(bbar0, x1, memory_config=self.configs["sharded_large"])
