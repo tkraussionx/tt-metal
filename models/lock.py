@@ -14,8 +14,11 @@ class WaitLock:
         self.lock_file = "/tmp/tenstorrent/lock"
         # make sure the directory exists and is world-writable
         lock_dir = os.path.dirname(self.lock_file)
-        os.makedirs(lock_dir, exist_ok=True)
-        os.chmod(lock_dir, 0o777)
+        try:
+            os.makedirs(lock_dir, exist_ok=True)
+            os.chmod(lock_dir, 0o777)
+        except (OSError, PermissionError):
+            pass
 
         self.pid = os.getpid()
         self._acquire_lock()
