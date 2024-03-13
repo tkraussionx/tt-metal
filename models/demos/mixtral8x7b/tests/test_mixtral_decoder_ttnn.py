@@ -86,17 +86,17 @@ def test_mixtral_decoder_inference(all_devices, iterations):
         tt_decode_input = pt_decode_input.clone()
         start_pos = generation_start_pos + i
 
-        decode_input, start_pos, attn_mask, current_pos = prepare_inputs_ttnn(
+        decode_input, start_pos, attn_mask, current_pos, rot_mat = prepare_inputs_ttnn(
             tt_decode_input,
             start_pos,
             tt_model.hidden_size,
-            tt_model.n_local_heads,
+            tt_model.head_dim,
             tt_model.sliding_window,
+            tt_model.max_seq_len,
             tt_model.devices,
-            tt_model.num_devices,
         )
         # Run TT model
-        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask)
+        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask, rot_mat)
         print("DONE TT OUT")
         tt_output_torch = ttnn.to_torch(tt_out[0]).squeeze(2)  # [batch, seq, hidden_dim]
 

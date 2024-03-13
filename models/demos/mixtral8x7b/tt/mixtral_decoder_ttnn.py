@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import torch
 import ttnn
-from typing import Optional
+from typing import List
 from models.demos.mixtral8x7b.tt.mixtral_attention_ttnn import TtMixtralAttention
 from models.demos.mixtral8x7b.tt.mixtral_mlp_ttnn import TtMixtralMLP
 from models.demos.mixtral8x7b.tt.mixtral_rms_norm_ttnn import TtRMSNorm
@@ -97,16 +97,15 @@ class TtTransformerBlock(torch.nn.Module):
         xs: ttnn.Tensor,
         start_pos: int,
         current_pos: int,
-        attn_masks: Optional[ttnn.Tensor],
-        layer_num: int = 0,
+        attn_masks: List[ttnn.Tensor],
+        rot_mats: List[ttnn.Tensor],
     ) -> ttnn.Tensor:
-        # TODO Consider updating the remaining rms_norm and MLP modules to support multi-device
         assert isinstance(xs, list)
 
         # Attention module expects a list of inputs, start_pos, attn mask (multi-device support)
         attn_norm = []
         for i in range(self.num_devices):
-            if layer_num != 0:
+            if self.layer_num != 0:
                 xs[i] = ttnn.permute(xs[i], (2, 1, 0, 3))
             attn_norm.append(self.attention_norm[i](xs[i]))
 
@@ -115,6 +114,7 @@ class TtTransformerBlock(torch.nn.Module):
             start_pos,
             current_pos,
             attn_masks,
+            rot_mats,
         )
         h = []
         # Attention also returns multiple outputs (multi-device support)

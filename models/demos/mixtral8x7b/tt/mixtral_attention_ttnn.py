@@ -4,10 +4,8 @@
 
 import torch
 import ttnn
-
-from models.utility_functions import (
-    nearest_32,
-)
+from typing import List
+from models.utility_functions import nearest_32
 
 
 class TtMixtralAttention(torch.nn.Module):
@@ -132,7 +130,8 @@ class TtMixtralAttention(torch.nn.Module):
         xs: ttnn.Tensor,
         start_pos: int,
         current_pos: int,
-        attn_masks: ttnn.Tensor,
+        attn_masks: List[ttnn.Tensor],
+        rot_mats: List[ttnn.Tensor],
     ) -> ttnn.Tensor:
         """
         x: (seq_len, 1, batch, hidden_dim)
@@ -149,6 +148,7 @@ class TtMixtralAttention(torch.nn.Module):
             wqkv = self.wqkv_list[i]
             wo = self.wo_list[i]
             layer_past = self.layer_past_list[i]
+            rot_mat = rot_mats[i]
             ###
             # QKV matmuls
             ###
@@ -180,12 +180,20 @@ class TtMixtralAttention(torch.nn.Module):
 
             ttnn.deallocate(xqkv_fused)
 
-            q_heads = ttnn.experimental.tensor.rotary_embedding(
-                q_heads, self.tt_cos_cached[i], self.tt_sin_cached[i], start_pos
+            # "1D mcast for in0 or in1 is not implemented yet." - tt::tt_metal::matmul_multi_core_reuse_mcast_2d_optimized
+            q_heads = ttnn.linear(
+                q_heads,
+                rot_mat,
+                core_grid=self.core_grid,
+                use_1d_systolic_array=True,
+                memory_config=ttnn.L1_MEMORY_CONFIG,
             )
-
-            k_heads = ttnn.experimental.tensor.rotary_embedding(
-                k_heads, self.tt_cos_cached[i], self.tt_sin_cached[i], start_pos
+            k_heads = ttnn.linear(
+                k_heads,
+                rot_mat,
+                core_grid=self.core_grid,
+                use_1d_systolic_array=True,
+                memory_config=ttnn.L1_MEMORY_CONFIG,
             )
 
             ###
