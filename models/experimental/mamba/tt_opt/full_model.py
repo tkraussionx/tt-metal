@@ -74,12 +74,30 @@ class MambaTT(torch.nn.Module):
         print(f"Initalizing MambaTT with {num_layers} layers")
         self.args = reference_model.args
         self.device = device
+        #self.embedding = reference_model.embedding
         loader = TtTensorLoader(reference_model.state_dict(), self.device, tt_cache_path=tt_cache_path)
         self.layers = [TtResidualBlock(self.args, device, loader.get_tensor_loader(i), reference_model.layers[i].state_dict(), num_users, hidden_size, configs) for i in range(num_layers)]
         
+        self.norm_f = reference_model.norm_f
+
+        self.lm_head = reference_model.lm_head
+        
 
     def forward(self, x):
-       for layer in self.layers:
+        #x = self.embedding(x)
+        #x = x.unsqueeze(1)  # (BS, 1, 1, E)
+        x = ttnn.from_torch(
+            x,
+            device=self.device,
+            layout=ttnn.TILE_LAYOUT,
+            memory_config=ttnn.L1_MEMORY_CONFIG,
+            dtype=ttnn.bfloat16,
+        )
+        for layer in self.layers:
             x = layer(x)
 
-       return x
+        #x = ttnn.to_torch(x).squeeze(1).to(torch.float32)
+        #x = self.norm_f(x)
+        #x = self.lm_head(x)
+        
+        return x
