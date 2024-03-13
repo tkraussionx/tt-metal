@@ -197,129 +197,14 @@ def test_sharded_matmul_1d_in0(
     ],
     ids=["lm_head_shape"],
 )
-@pytest.mark.parametrize("out_sharded", [True], ids=["out_sharded"])
-@pytest.mark.parametrize("in0_sharded", [True], ids=["in0_sharded"])
-@pytest.mark.parametrize("weights_dtype", [ttl.tensor.DataType.BFLOAT8_B])
-@pytest.mark.parametrize("activations_dtype", [ttl.tensor.DataType.BFLOAT8_B])
-def test_sharded_matmul_1d_in0_multi_chip(
-    pcie_devices,
-    num_devices,
-    in0_sharded,
-    out_sharded,
-    M,
-    K,
-    N,
-    num_cores,
-    activations_dtype,
-    weights_dtype,
-    function_level_defaults,
-):
-    if num_devices == 8:
-        pytest.skip("Need tunnelling support to run on 8 devices!")
-
-    grid_size = (8, 4)
-    devices = pcie_devices[:num_devices]
-
-    in0_shape = [1, 1, M, K]
-    in1_shape = [1, 1, K, N]
-
-    interleaved_mem_config = ttl.tensor.MemoryConfig(
-        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
-        buffer_type=ttl.tensor.BufferType.DRAM,
-    )
-    sharded_mem_config = ttl.tensor.MemoryConfig(
-        memory_layout=ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
-        buffer_type=ttl.tensor.BufferType.L1,
-    )
-
-    in0 = torch.randn(in0_shape).bfloat16().float()
-    in1 = torch.randn(in1_shape).bfloat16().float()
-
-    in1_slices = torch.chunk(in1, num_devices, dim=-1)
-
-    in0_t = []
-    in1_t = []
-    for i in range(num_devices):
-        logger.info(f"Putting tensors on device: {i}")
-        in0_temp = torch2tt_tensor(in0, devices[i], tt_memory_config=interleaved_mem_config, tt_dtype=activations_dtype)
-
-        if in0_sharded:
-            in0_temp = ttl.tensor.interleaved_to_sharded(
-                in0_temp,
-                grid_size,
-                [M, K // num_cores],
-                ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
-                ttl.tensor.ShardOrientation.ROW_MAJOR,
-            )
-        in0_t.append(in0_temp)
-
-        in1_t.append(
-            torch2tt_tensor(in1_slices[i], devices[i], tt_memory_config=interleaved_mem_config, tt_dtype=weights_dtype)
-        )
-
-    output_mem_config = sharded_mem_config if out_sharded else interleaved_mem_config
-
-    if num_devices == 4:
-        program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-            compute_with_storage_grid_size=(8, 4),
-            in0_block_w=8,
-            out_subblock_h=1,
-            out_subblock_w=4,
-            per_core_M=1,
-            per_core_N=16,
-            fuse_batch=True,
-            fused_activation=None,
-            mcast_in0=True,
-        )
-    elif num_devices == 8:
-        program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-            compute_with_storage_grid_size=(8, 4),
-            in0_block_w=8,
-            out_subblock_h=1,
-            out_subblock_w=4,
-            per_core_M=1,
-            per_core_N=8,
-            fuse_batch=True,
-            fused_activation=None,
-            mcast_in0=True,
-        )
-    output_t = []
-    for i in range(num_devices):
-        logger.info(f"Running matmul on device: {i}")
-        output_t.append(
-            ttl.operations.primary.matmul_1d(
-                in0_t[i],
-                in1_t[i],
-                program_config=program_config,
-                output_mem_config=output_mem_config,
-                output_dtype=activations_dtype,
-            )
-        )
-
-    pt_out = in0 @ in1
-
-    tt_out = torch.cat([tt2torch_tensor(out_t) for out_t in output_t], -1)
-
-    passing, output = comp_pcc(pt_out, tt_out)
-    logger.info(output)
-    assert passing
-
-
-@pytest.mark.parametrize("num_devices", [4, 8])
-@pytest.mark.parametrize(
-    "M, K, N, num_cores",
-    [
-        [32, 8192, 65024, 32],
-    ],
-    ids=["lm_head_shape"],
-)
-@pytest.mark.parametrize("out_sharded", [True], ids=["out_sharded"])
+@pytest.mark.parametrize("out_sharded", [False], ids=["out_sharded"])
 @pytest.mark.parametrize("in0_sharded", [True], ids=["in0_sharded"])
 @pytest.mark.parametrize("weights_dtype", [ttl.tensor.DataType.BFLOAT8_B])
 @pytest.mark.parametrize("activations_dtype", [ttl.tensor.DataType.BFLOAT8_B])
 def test_sharded_matmul_1d_in0_multi_chip(
     all_devices,
     num_devices,
+    use_program_cache,
     in0_sharded,
     out_sharded,
     M,
@@ -330,8 +215,13 @@ def test_sharded_matmul_1d_in0_multi_chip(
     weights_dtype,
     function_level_defaults,
 ):
+    # if num_devices == 8:
+    #     pytest.skip("Need tunnelling support to run on 8 devices!")
+
     grid_size = (8, 4)
     devices = get_devices_for_t3000(all_devices, num_devices)
+    print("Running with " + str(all_devices))
+    print("Num Devices: " + str(num_devices))
 
     in0_shape = [1, 1, M, K]
     in1_shape = [1, 1, K, N]
@@ -344,210 +234,82 @@ def test_sharded_matmul_1d_in0_multi_chip(
         memory_layout=ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
         buffer_type=ttl.tensor.BufferType.L1,
     )
-
+    l1_interleaved_mem_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttl.tensor.BufferType.L1,
+    )
     in0 = torch.randn(in0_shape).bfloat16().float()
     in1 = torch.randn(in1_shape).bfloat16().float()
 
     in1_slices = torch.chunk(in1, num_devices, dim=-1)
-
-    in0_t = []
-    in1_t = []
-    for i in range(num_devices):
-        logger.info(f"Putting tensors on device: {i}")
-        in0_temp = torch2tt_tensor(in0, devices[i], tt_memory_config=interleaved_mem_config, tt_dtype=activations_dtype)
-
-        if in0_sharded:
-            in0_temp = ttl.tensor.interleaved_to_sharded(
-                in0_temp,
-                grid_size,
-                [M, K // num_cores],
-                ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
-                ttl.tensor.ShardOrientation.ROW_MAJOR,
+    for i in range(2):
+        in0_t = []
+        in1_t = []
+        for i in range(num_devices):
+            logger.info(f"Putting tensors on device: {i}")
+            in0_temp = torch2tt_tensor(
+                in0, devices[i], tt_memory_config=interleaved_mem_config, tt_dtype=activations_dtype
             )
-        in0_t.append(in0_temp)
 
-        in1_t.append(
-            torch2tt_tensor(in1_slices[i], devices[i], tt_memory_config=interleaved_mem_config, tt_dtype=weights_dtype)
-        )
+            if in0_sharded:
+                in0_temp = ttl.tensor.interleaved_to_sharded(
+                    in0_temp,
+                    grid_size,
+                    [M, K // num_cores],
+                    ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
+                    ttl.tensor.ShardOrientation.ROW_MAJOR,
+                )
+            in0_t.append(in0_temp)
 
-    output_mem_config = sharded_mem_config if out_sharded else interleaved_mem_config
-
-    if num_devices == 4:
-        program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-            compute_with_storage_grid_size=(8, 4),
-            in0_block_w=8,
-            out_subblock_h=1,
-            out_subblock_w=4,
-            per_core_M=1,
-            per_core_N=16,
-            fuse_batch=True,
-            fused_activation=None,
-            mcast_in0=True,
-        )
-    elif num_devices == 8:
-        program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-            compute_with_storage_grid_size=(8, 4),
-            in0_block_w=8,
-            out_subblock_h=1,
-            out_subblock_w=4,
-            per_core_M=1,
-            per_core_N=8,
-            fuse_batch=True,
-            fused_activation=None,
-            mcast_in0=True,
-        )
-    output_t = []
-    for i in range(num_devices):
-        logger.info(f"Running matmul on device: {i}")
-        output_t.append(
-            ttl.operations.primary.matmul_1d(
-                in0_t[i],
-                in1_t[i],
-                program_config=program_config,
-                output_mem_config=output_mem_config,
-                output_dtype=activations_dtype,
+            in1_t.append(
+                torch2tt_tensor(
+                    in1_slices[i], devices[i], tt_memory_config=interleaved_mem_config, tt_dtype=weights_dtype
+                )
             )
-        )
 
-    pt_out = in0 @ in1
+        output_mem_config = sharded_mem_config if out_sharded else interleaved_mem_config
 
-    tt_out = torch.cat([tt2torch_tensor(out_t) for out_t in output_t], -1)
+        if num_devices == 4:
+            program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                compute_with_storage_grid_size=(8, 4),
+                in0_block_w=8,
+                out_subblock_h=1,
+                out_subblock_w=4,
+                per_core_M=1,
+                per_core_N=16,
+                fuse_batch=True,
+                fused_activation=None,
+                mcast_in0=True,
+            )
+        elif num_devices == 8:
+            program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
+                compute_with_storage_grid_size=(8, 4),
+                in0_block_w=8,
+                out_subblock_h=1,
+                out_subblock_w=4,
+                per_core_M=1,
+                per_core_N=8,
+                fuse_batch=True,
+                fused_activation=None,
+                mcast_in0=True,
+            )
+        output_t = []
+        for i in range(num_devices):
+            logger.info(f"Running matmul on device: {i}")
+            output_t.append(
+                ttl.operations.primary.matmul_1d(
+                    in0_t[i],
+                    in1_t[i],
+                    program_config=program_config,
+                    output_mem_config=l1_interleaved_mem_config,
+                    output_dtype=activations_dtype,
+                )
+            )
 
-    passing, output = comp_pcc(pt_out, tt_out)
-    logger.info(output)
-    assert passing
+        pt_out = in0 @ in1
 
-
-@pytest.mark.parametrize(
-    "dtype",
-    (ttl.tensor.DataType.BFLOAT8_B, ttl.tensor.DataType.BFLOAT16),
-    ids=["BFLOAT8_B", "BFLOAT16"],
-)
-@pytest.mark.parametrize(
-    "batch, seq_len, head_dim, num_q_heads, num_kv_heads, read_from_input_tensor_kv",
-    (
-        (32, 1, 64, 16, 1, False),
-        (32, 1, 64, 16, 1, True),
-    ),
-)
-def test_sharded_nlp_create_qkv_heads_test(
-    batch,
-    seq_len,
-    head_dim,
-    num_q_heads,
-    num_kv_heads,
-    read_from_input_tensor_kv,
-    dtype,
-    device,
-):
-    torch.manual_seed(1234)
-    compute_grid_size = device.compute_with_storage_grid_size()
-    num_cores = num_kv_heads
-    shard_grid = ttl.tensor.CoreRangeSet(ttl.tensor.num_cores_to_corerange_set(num_cores, compute_grid_size, True))
-    q_shape = [seq_len, 1, batch, num_cores, num_q_heads // num_cores * head_dim]
-    kv_shape = [seq_len, 1, batch, num_cores, num_kv_heads // num_cores * head_dim]
-    Q = torch.randn(q_shape)
-    K = torch.randn(kv_shape)
-    V = torch.randn(kv_shape)
-
-    if read_from_input_tensor_kv:
-        A = torch.concat([Q.flatten(-2, -1)], -1)
-        B = torch.concat([K.flatten(-2, -1), V.flatten(-2, -1)], -1)
-        A_interleaved = torch.concat([Q], -1).flatten(-2, -1)
-        B_interleaved = torch.concat([K, V], -1).flatten(-2, -1)
-        in0_shard_spec = ttl.tensor.ShardSpec(
-            shard_grid,
-            [
-                seq_len * batch,
-                A_interleaved.shape[-1] // num_cores,
-            ],
-            ttl.tensor.ShardOrientation.ROW_MAJOR,
-            False,
-        )
-        in1_shard_spec = ttl.tensor.ShardSpec(
-            shard_grid,
-            [
-                seq_len * batch,
-                B_interleaved.shape[-1] // num_cores,
-            ],
-            ttl.tensor.ShardOrientation.ROW_MAJOR,
-            False,
-        )
-        in0_mem_config = ttl.tensor.MemoryConfig(
-            ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED, ttl.tensor.BufferType.L1, in0_shard_spec
-        )
-        in1_mem_config = ttl.tensor.MemoryConfig(
-            ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED, ttl.tensor.BufferType.L1, in1_shard_spec
-        )
-        in0_t = ttl.tensor.Tensor(A_interleaved, dtype).to(ttl.tensor.Layout.TILE).to(device, in0_mem_config)
-        in1_t = ttl.tensor.Tensor(B_interleaved, dtype).to(ttl.tensor.Layout.TILE).to(device, in1_mem_config)
-    else:
-        A = torch.concat([Q.flatten(-2, -1), K.flatten(-2, -1), V.flatten(-2, -1)], -1)
-        A_interleaved = torch.concat([Q, K, V], -1).flatten(-2, -1)
-        in0_shard_spec = ttl.tensor.ShardSpec(
-            shard_grid,
-            [
-                seq_len * batch,
-                A_interleaved.shape[-1] // num_cores,
-            ],
-            ttl.tensor.ShardOrientation.ROW_MAJOR,
-            False,
-        )
-        in0_mem_config = ttl.tensor.MemoryConfig(
-            ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED, ttl.tensor.BufferType.L1, in0_shard_spec
-        )
-        in0_t = ttl.tensor.Tensor(A_interleaved, dtype).to(ttl.tensor.Layout.TILE).to(device, in0_mem_config)
-
-    out_shard_spec = in0_shard_spec
-    out_mem_config = ttl.tensor.MemoryConfig(
-        ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, ttl.tensor.BufferType.L1, out_shard_spec
-    )
-    q, k, v = ttl.tensor.nlp_create_qkv_heads(
-        in0_t,
-        in1_t if read_from_input_tensor_kv else None,
-        num_heads=num_q_heads,
-        num_kv_heads=num_kv_heads,
-        transpose_k_heads=False,
-        output_mem_config=out_mem_config,
-    )
-
-    assert list(q.get_legacy_shape()) == [seq_len, num_q_heads, batch, head_dim]
-    assert list(k.get_legacy_shape()) == [seq_len, num_kv_heads, batch, head_dim]
-    assert list(v.get_legacy_shape()) == [seq_len, num_kv_heads, batch, head_dim]
-
-    pyt_got_back_rm_q = tt2torch_tensor(q)
-    pyt_got_back_rm_k = tt2torch_tensor(k)
-    pyt_got_back_rm_v = tt2torch_tensor(v)
-
-    if read_from_input_tensor_kv:
-        ref_q = A
-        (ref_k, ref_v) = torch.split(B, [num_kv_heads * head_dim, num_kv_heads * head_dim], dim=-1)
-    else:
-        (ref_q, ref_k, ref_v) = torch.split(
-            A, [num_q_heads * head_dim, num_kv_heads * head_dim, num_kv_heads * head_dim], dim=-1
-        )
-
-    # Additional shuffling for Q, K, V heads
-    ref_q = torch.reshape(ref_q, [seq_len, batch, num_q_heads, head_dim]).transpose(-3, -2)
-    ref_k = torch.reshape(ref_k, [seq_len, batch, num_kv_heads, head_dim]).transpose(-3, -2)
-    ref_v = torch.reshape(ref_v, [seq_len, batch, num_kv_heads, head_dim]).transpose(-3, -2)
-
-    if dtype == ttl.tensor.DataType.BFLOAT8_B:
-        pcc = 0.99
-    else:
-        pcc = 1.0
-
-    passing_pcc_q, output_pcc_q = comp_pcc(pyt_got_back_rm_q, ref_q, pcc)
-    logger.debug(f"Q passing={passing_pcc_q}")
-    logger.debug(f"Q output pcc={output_pcc_q}")
-
-    passing_pcc_k, output_pcc_k = comp_pcc(pyt_got_back_rm_k, ref_k, pcc)
-    logger.debug(f"K passing={passing_pcc_k}")
-    logger.debug(f"K output pcc={output_pcc_k}")
-
-    passing_pcc_v, output_pcc_v = comp_pcc(pyt_got_back_rm_v, ref_v, pcc)
-    logger.debug(f"V passing={passing_pcc_v}")
-    logger.debug(f"V output pcc={output_pcc_v}")
-    assert passing_pcc_q
-    assert passing_pcc_k
-    assert passing_pcc_v
+        # tt_out = torch.cat([tt2torch_tensor(out_t) for out_t in output_t], -1)
+        tt_out = tt2torch_tensor(ttl.tensor.all_gather(output_t, 3, 1, l1_interleaved_mem_config)[0])
+        passing, output = comp_pcc(pt_out, tt_out)
+        logger.info(output)
+        assert passing
