@@ -6,7 +6,7 @@ import pytest
 from loguru import logger
 import ttnn
 from models.demos.mixtral8x7b.tt.mixtral_mlp_ttnn import TtMixtralMLP
-from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn import TtMoeLayer
+from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn_new import TtMoeLayer
 from models.demos.mixtral8x7b.tt.model_config_ttnn import TtModelArgs
 from models.demos.mixtral8x7b.reference.moe import MoeLayer
 from models.demos.mixtral8x7b.reference.model import FeedForward
@@ -100,7 +100,7 @@ def test_mistral_moe_inference(all_devices, iterations):
         pt_decode_input = (torch.rand(batch, seqlen, model_args.dim) * 2) - 1
         tt_decode_input = [
             ttnn.from_torch(
-                pt_decode_input.unsqueeze(1),
+                pt_decode_input.clone().unsqueeze(1).view(1, 1, 32, 4096),
                 device=device,
                 dtype=ttnn.bfloat16,
                 memory_config=ttnn.L1_MEMORY_CONFIG,
