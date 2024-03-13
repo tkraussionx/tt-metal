@@ -57,7 +57,7 @@ class TtMambaBlock(torch.nn.Module):
         self.tt_ssm = TtMambaSSM(self.args,self.device,self.state_dict, num_users, hidden_size, configs)
 
     def forward(self, x):
-        x_input = x
+        x_input = x # b, e=d_model
         x = ttnn.linear(x, self.ssm_proj, memory_config=ttnn.L1_MEMORY_CONFIG)
      
         # left shift conv states
