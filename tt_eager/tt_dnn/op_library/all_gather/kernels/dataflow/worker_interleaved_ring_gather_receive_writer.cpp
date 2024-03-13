@@ -123,4 +123,8 @@ void kernel_main() {
 
 
     DPRINT << "rws DONE\n";
+        for (uint32_t i = 0; i < 100000000; i++) {
+        asm("");
+    }
+
 }

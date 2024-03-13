@@ -57,13 +57,13 @@ def is_unsupported_case(input_shape, dim, mem_config, num_devices, num_links, in
             f"Input shape {input_shape} incompatible with {num_devices} on dim {dim} because some chips will have no tensor",
         )
 
-    if (
-        input_shape == [8, 8, 256, 384]
-        and dim == 1
-        and layout == ttl.tensor.Layout.TILE
-        and input_dtype == ttl.tensor.DataType.BFLOAT8_B
-    ):
-        return True, "Known failure"
+    # if (
+    #     input_shape == [8, 8, 256, 384]
+    #     and dim == 1
+    #     and layout == ttl.tensor.Layout.TILE
+    #     and input_dtype == ttl.tensor.DataType.BFLOAT8_B
+    # ):
+    #     return True, "Known failure"
 
     return False, ""
 
@@ -106,15 +106,14 @@ def run_all_gather_on_t3000_impl(
         tt_input_tensors.append(ttl.tensor.Tensor(t, input_dtype).to(layout).to(devices[i], mem_config))
 
     for i in range(num_iters):
-        if i == 0:
-            tt_out_tensors = ttl.tensor.all_gather(tt_input_tensors, dim, num_links, output_mem_config=mem_config)
-        else:
-            __ = ttl.tensor.all_gather(tt_input_tensors, dim, num_links, output_mem_config=mem_config)
-        for d in devices:
-            ttl.device.Synchronize(d)
-
-        print(f"Done iteration {i}")
-    print(f"Done all iterations {i}")
+        # if i == 0:
+        tt_out_tensors = ttl.tensor.all_gather(tt_input_tensors, dim, num_links, output_mem_config=mem_config)
+        # else:
+        #     tt_out_tensors = ttl.tensor.all_gather(tt_input_tensors, dim, num_links, output_mem_config=mem_config)
+        # print(f"Done iteration {i}")
+    for d in devices:
+        ttl.device.Synchronize(d)
+    print(f"Done all iterations")
 
     torch.set_printoptions(sci_mode=False)
     # import time
@@ -133,45 +132,12 @@ def run_all_gather_on_t3000_impl(
                 for z in range(input_shape[1]):
                     for y in range(input_shape[2]):
                         for x in range(input_shape[3]):
-                            if (
-                                count < 128
-                                and max(abs(tt_output_tensor[w, z, y, x]), abs(input_tensor[w, z, y, x]))
-                                / min(abs(tt_output_tensor[w, z, y, x]), abs(input_tensor[w, z, y, x]))
-                                > 1.15
-                            ):
+                            if count < 100 and tt_output_tensor[w, z, y, x] != input_tensor[w, z, y, x]:
                                 print(
                                     f"{w}, {z}, {y}, {x}: {tt_output_tensor[w, z, y, x]} != {input_tensor[w, z, y, x]}"
                                 )
                                 count += 1
         assert eq, f"{i} FAILED: {output}"
-
-
-def run_all_gather_on_t3000_impl_tight_loop(
-    all_devices,
-    num_devices,
-    input_shape,
-    dim,
-    num_links,
-    input_dtype,
-    layout,
-    mem_config,
-    use_program_cache,
-    function_level_defaults,
-    num_iters,
-):
-    run_all_gather_on_t3000_impl(
-        all_devices,
-        num_devices,
-        input_shape,
-        dim,
-        num_links,
-        input_dtype,
-        layout,
-        mem_config,
-        use_program_cache,
-        function_level_defaults,
-        num_iters,
-    )
 
 
 # Enumerate the post-commit cases explicitly
@@ -203,7 +169,7 @@ def run_all_gather_on_t3000_impl_tight_loop(
         ttl.tensor.MemoryConfig(buffer_type=ttl.tensor.BufferType.L1),
     ],
 )
-@pytest.mark.parametrize("mem_config", [1000])
+@pytest.mark.parametrize("num_iters", [200])
 def test_all_gather_on_t3000_post_commit_looping(
     all_devices,
     num_devices,
@@ -213,10 +179,11 @@ def test_all_gather_on_t3000_post_commit_looping(
     input_dtype,
     layout,
     mem_config,
+    num_iters,
     use_program_cache,
     function_level_defaults,
 ):
-    run_all_gather_on_t3000_impl_tight_loop(
+    run_all_gather_on_t3000_impl(
         all_devices,
         num_devices,
         input_shape,
@@ -242,7 +209,7 @@ def test_all_gather_on_t3000_post_commit_looping(
         # (8, 1, [8, 1, 256, 32], 0, ttl.tensor.Layout.TILE),
         (4, 2, [8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),
         (8, 1, [8, 8, 256, 384], 1, ttl.tensor.Layout.ROW_MAJOR),
-        (4, 2, [8, 8, 256, 384], 1, ttl.tensor.Layout.TILE),  # No hang
+        (4, 2, [8, 8, 256, 384], 1, ttl.tensor.Layout.TILE),
         (8, 1, [8, 8, 256, 384], 1, ttl.tensor.Layout.TILE),
         (4, 2, [8, 5, 13, 384], 3, ttl.tensor.Layout.ROW_MAJOR),
         (8, 1, [8, 5, 13, 512], 3, ttl.tensor.Layout.ROW_MAJOR),
