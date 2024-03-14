@@ -47,7 +47,7 @@ class TtMambaSSM(torch.nn.Module):
             x_proj_weight_name = "mixer.x_proj.weight"
             delta_t_proj = torch.transpose(self.state_dict[x_proj_weight_name][: self.args.dt_rank, :], -1, -2)
             self.delta_t_proj = ttnn.from_torch(
-                delta_t_proj.unsqueeze(0).unsqueeze(0),
+                delta_t_proj,
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
@@ -98,11 +98,12 @@ class TtMambaSSM(torch.nn.Module):
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 dtype=ttnn.bfloat16,
             )
-
         # B
-        if False:
+        if self.hidden_size == self.args.d_inner and self.n == self.args.d_state:
+            print('***********using B weight')
+            B_proj_weights = torch.transpose(self.state_dict[x_proj_weight_name][self.args.dt_rank : (self.args.dt_rank + self.args.d_state), :], -1, -2)
             self.B_proj_weights = ttnn.from_torch(
-                self.state_dict[x_proj_weight_name][self.args.dt_rank : (self.args.dt_rank + self.args.d_state), :],
+                B_proj_weights,
                 device=self.device,
                 layout=ttnn.TILE_LAYOUT,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
