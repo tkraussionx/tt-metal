@@ -7,7 +7,7 @@ import ttnn
 def create_model_config(num_users, hidden_size):
     configs = {}
     
-    row = 2
+    row = 4
     col = 8
     orientation = ttnn.ShardOrientation.ROW_MAJOR
 

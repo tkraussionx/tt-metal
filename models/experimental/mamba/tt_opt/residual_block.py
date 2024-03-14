@@ -37,6 +37,8 @@ class TtResidualBlock(torch.nn.Module):
         mamba_input = x
         #mamba_input = ttnn.rms_norm(x, self.rms_norm_weights, epsilon=self.args.eps)
         mamba_input = self.tt_mamba_block(mamba_input)
-        x = ttnn.add(x, mamba_input)
+        #x = ttnn.add(x, mamba_input)
+        ttnn.deallocate(x)
+        x = mamba_input
         return x
 
