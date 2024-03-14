@@ -550,20 +550,22 @@ def get_model_config(model_config_str, llm_mode, input_shape, num_devices):
             ),
         )
         model_config["K_TRANSPOSED_OUTPUT_MEMCFG"] = HEIGHT_SHARDED_MEMCFG
-        # model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"] = HEIGHT_SHARDED_MEMCFG
-        model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
-            ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-            ttl.tensor.BufferType.L1,
-            ttl.tensor.ShardSpec(
-                shard_spec_32_cores_grid,
-                [
-                    shard_height,
-                    shard_height,
-                ],
-                ttl.tensor.ShardOrientation.ROW_MAJOR,
-                False,
-            ),
-        )
+        if llm_mode == "decode":
+            model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"] = HEIGHT_SHARDED_MEMCFG
+        elif llm_mode == "prefill":
+            model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
+                ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                ttl.tensor.BufferType.L1,
+                ttl.tensor.ShardSpec(
+                    shard_spec_32_cores_grid,
+                    [
+                        shard_height,
+                        shard_height,
+                    ],
+                    ttl.tensor.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            )
         # TODO: Remove if we can update prefill matmul to directly output sharded
         model_config["PREFILL_4CHIPS_PRE_SOFTMAX_MM_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
             ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
@@ -609,20 +611,22 @@ def get_model_config(model_config_str, llm_mode, input_shape, num_devices):
                 math_fidelity=ttl.tensor.MathFidelity.HiFi4,
                 im_data_format=ttl.tensor.DataType.BFLOAT16,
             )
-        # model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"] = HEIGHT_SHARDED_MEMCFG
-        model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
-            ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-            ttl.tensor.BufferType.L1,
-            ttl.tensor.ShardSpec(
-                shard_spec_16_cores_grid,
-                [
-                    shard_height,
-                    head_dim,
-                ],
-                ttl.tensor.ShardOrientation.ROW_MAJOR,
-                False,
-            ),
-        )
+        if llm_mode == "decode":
+            model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"] = HEIGHT_SHARDED_MEMCFG
+        elif llm_mode == "prefill":
+            model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
+                ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                ttl.tensor.BufferType.L1,
+                ttl.tensor.ShardSpec(
+                    shard_spec_16_cores_grid,
+                    [
+                        shard_height,
+                        head_dim,
+                    ],
+                    ttl.tensor.ShardOrientation.ROW_MAJOR,
+                    False,
+                ),
+            )
         model_config["CONCAT_HEADS_OUTPUT_MEMCFG"] = WIDTH_SHARDED_MEMCFG
         model_config["ATTN_ALL_GATHER_OUTPUT_MEMCFG"] = ttl.tensor.MemoryConfig(
             ttl.tensor.TensorMemoryLayout.WIDTH_SHARDED,
