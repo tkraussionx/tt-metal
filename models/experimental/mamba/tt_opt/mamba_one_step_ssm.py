@@ -24,10 +24,7 @@ class TtMambaSSM(torch.nn.Module):
         self.configs = configs
         self.n = 16
         self.rank = self.args.dt_rank
-        
-        #assert self.n == self.args.d_state, f"{self.n} != {self.args.d_state}"
-        #assert self.rank == self.args.dt_rank, f"{self.rank} != {self.args.dt_rank}"
-        #assert self.hidden_size == self.args.d_inner, f"{self.hidden_size} != {self.args.d_inner}"
+
         
         self.tt_hidden_state = ttnn.zeros(
                 (1, 1, self.num_users, self.hidden_size*self.n),
@@ -45,7 +42,8 @@ class TtMambaSSM(torch.nn.Module):
         """
 
         # delta rank weight
-        if False:
+        if self.hidden_size == self.args.d_inner and self.rank == self.args.dt_rank:
+            print('***********using delta rank weight')
             x_proj_weight_name = "mixer.x_proj.weight"
             delta_t_proj = torch.transpose(self.state_dict[x_proj_weight_name][: self.args.dt_rank, :], -1, -2)
             self.delta_t_proj = ttnn.from_torch(
@@ -55,7 +53,7 @@ class TtMambaSSM(torch.nn.Module):
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 dtype=ttnn.bfloat16,
             )
-            print('**********delta_t_proj shape', self.delta_t_proj.shape, delta_t_proj.shape)
+            
         else:
             self.delta_t_proj = ttnn.from_torch(
                 torch.rand(1, 1, self.hidden_size, self.rank),
@@ -66,11 +64,13 @@ class TtMambaSSM(torch.nn.Module):
             )
 
         # delta full weight
-        if False:
+        if self.hidden_size == self.args.d_inner and self.rank == self.args.dt_rank:
+            print('***********using delta full weight')
             dt_proj_weight_name = "mixer.dt_proj.weight"
             dt_proj_bias_name = "mixer.dt_proj.bias"
+            dt_proj_weights = torch.transpose(self.state_dict[dt_proj_weight_name], -1, -2)
             self.dt_proj_weights = ttnn.from_torch(
-                self.state_dict[dt_proj_weight_name],
+                dt_proj_weights,
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
