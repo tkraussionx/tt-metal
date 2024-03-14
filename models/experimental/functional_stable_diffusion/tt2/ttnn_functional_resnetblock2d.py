@@ -332,7 +332,10 @@ class resnetBlock2D:
         ttnn.dump_device_memory_state(self.device, prefix="in_resnet_block_start")
         out_channels = in_channels if out_channels is None else out_channels
         assert out_channels == self.conv1s[0].out_channels
-        input_tensor = ttnn.to_memory_config(input_tensor, ttnn.L1_MEMORY_CONFIG)
+        if out_channels >= 640 and in_channels >= 960:
+            input_tensor = ttnn.to_memory_config(input_tensor, ttnn.DRAM_MEMORY_CONFIG)
+        else:
+            input_tensor = ttnn.to_memory_config(input_tensor, ttnn.L1_MEMORY_CONFIG)
         hidden_states = input_tensor
         if ttnn.get_memory_config(hidden_states) != self.first_gn_expected_input_sharded_memory_config:
             if ttnn.is_sharded(hidden_states):
