@@ -157,18 +157,30 @@ class TtMambaSSM(torch.nn.Module):
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
         
         # C
-        self.C_proj = ttnn.from_torch(
-                torch.rand(
-                    1,
-                    1,
-                    self.hidden_size,
-                    self.n,
-                ),
+        if self.hidden_size == self.args.d_inner and self.n == self.args.d_state:
+            print('***********using C weight')
+            x_proj_weight_name = "mixer.x_proj.weight"
+            C_proj_weights = torch.transpose(self.state_dict[x_proj_weight_name][(self.args.dt_rank + self.args.d_state) :, :], -1, -2)
+            self.C_proj = ttnn.from_torch(
+                C_proj_weights,
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 dtype=ttnn.bfloat16,
             )
+        else:
+            self.C_proj = ttnn.from_torch(
+                    torch.rand(
+                        1,
+                        1,
+                        self.hidden_size,
+                        self.n,
+                    ),
+                    layout=ttnn.TILE_LAYOUT,
+                    device=self.device,
+                    memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                    dtype=ttnn.bfloat16,
+                )
         
         # C pad
         C_pad = torch.zeros(1,1,self.num_users,self.n)
