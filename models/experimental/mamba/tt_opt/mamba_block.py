@@ -33,7 +33,14 @@ class TtMambaBlock(torch.nn.Module):
         self.configs = configs
         
         # ssm wt
-        self.ssm_proj = ttnn.from_torch(torch.rand(1,1,self.hidden_size,2*self.hidden_size), layout=ttnn.TILE_LAYOUT, device=self.device, 
+        if self.args.d_model == self.hidden_size:
+            print('**********using ssm proj wts')
+            in_proj_weight_name = "mixer.in_proj.weight"
+            ssm_proj = torch.transpose(self.state_dict[in_proj_weight_name][: self.args.d_inner, :], -1, -2)
+            self.ssm_proj = ttnn.from_torch(ssm_proj, layout=ttnn.TILE_LAYOUT, device=self.device, 
+                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
+        else:
+            self.ssm_proj = ttnn.from_torch(torch.rand(1,1,self.hidden_size,2*self.hidden_size), layout=ttnn.TILE_LAYOUT, device=self.device, 
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
         
         # mlp wt
