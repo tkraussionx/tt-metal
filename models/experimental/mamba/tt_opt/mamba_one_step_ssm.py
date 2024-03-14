@@ -187,13 +187,26 @@ class TtMambaSSM(torch.nn.Module):
         self.C_pad = ttnn.from_torch(C_pad, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
         
         # D
-        self.D = ttnn.from_torch(
-            torch.rand(1, 1, self.num_users, self.hidden_size),
-            layout=ttnn.TILE_LAYOUT,
-            device=self.device,
-            dtype=ttnn.bfloat16,
-            memory_config=ttnn.DRAM_MEMORY_CONFIG,
-        )
+        if self.hidden_size == self.args.d_inner:
+            print('***********using D weight')
+            D_weight_name = "mixer.D"
+            D = self.state_dict[D_weight_name]
+            D = D.repeat(self.num_users, 1)
+            self.D = ttnn.from_torch(
+                D,
+                layout=ttnn.TILE_LAYOUT,
+                device=self.device,
+                dtype=ttnn.bfloat16,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            )
+        else:
+            self.D = ttnn.from_torch(
+                torch.rand(1, 1, self.num_users, self.hidden_size),
+                layout=ttnn.TILE_LAYOUT,
+                device=self.device,
+                dtype=ttnn.bfloat16,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            )
 
     def forward(self, x):
         # delta
