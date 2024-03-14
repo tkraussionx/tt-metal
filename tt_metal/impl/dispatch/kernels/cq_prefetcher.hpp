@@ -7,6 +7,7 @@
 #include "tt_metal/hostdevcommon/common_values.hpp"
 #include "tt_metal/impl/dispatch/kernels/command_queue_common.hpp"
 #include "cq_cmds.hpp"
+#include "debug/dprint.h"
 
 CQWriteInterface cq_write_interface;
 CQReadInterface cq_read_interface;
@@ -356,6 +357,8 @@ class ProgramEventBuffer {
                 // update command with the event and set num buffer transfers to 0 so completion path gets a program completion command
                 header->event = event;
                 header->num_buffer_transfers = 0;
+
+                DPRINT << "PUSHING EVENT " << event << ENDL();
 
                 // Relay command from REMOTE_PULL_AND_PUSH to SRC router on the completion path
                 wait_consumer_space_available(push_semaphore_addr);

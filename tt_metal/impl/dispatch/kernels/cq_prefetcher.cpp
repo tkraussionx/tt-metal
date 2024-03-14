@@ -557,6 +557,7 @@ void kernel_main() {
             // Reads data from DST router and writes to completion queue
             completion_queue_reserve_back(completion_data_size);
             write_event(uint32_t(&header->event));
+            DPRINT << "EVENT RECV: " << header->event << ENDL();
 
             if (wrap == DeviceCommand::WrapRegion::COMPLETION) {
                 cq_write_interface.completion_fifo_wr_ptr = completion_queue_start_addr >> 4;     // Head to the beginning of the completion region

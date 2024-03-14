@@ -8,7 +8,7 @@
 
 void kernel_main() {
 
-    DPRINT << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " START\n";
+    //dprint << "sws: " << (uint32_t)((my_x[0] << 16) | my_y[0]) << " START\n";
     const uint32_t dst_addr = get_arg_val<uint32_t>(0);
     const uint32_t eth_sender_l1_base_addr = get_arg_val<uint32_t>(1);
     const uint32_t eth_sender_l1_sem_addr = get_arg_val<uint32_t>(2);
@@ -63,20 +63,20 @@ void kernel_main() {
 
     if constexpr(num_full_chunks > 0) {
         for (uint32_t c = 0; c < num_full_chunks; ++c) {
-            DPRINT << "sws: CHECKPOINT A " << ID << "|"<<(uint32_t)c << "\n";
+            // //dprint << "sws: CHECKPOINT A " << ID << "|"<<(uint32_t)c << "\n";
             noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
-            DPRINT << "\tsws: a1: " << ID << "|"<< (uint32_t)c << "\n";
+            // //dprint << "\tsws: a1: " << ID << "|"<< (uint32_t)c << "\n";
             noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
             // TODO: Might be better to split this?
-            DPRINT << "\tsws: b1: " << ID << "|"<< (uint32_t)c << "\n";
+            // //dprint << "\tsws: b1: " << ID << "|"<< (uint32_t)c << "\n";
             write_and_send_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, num_pages, page_size, eth_l1_sender_base_noc_addr);
-            DPRINT << "\tsws: c1: " << ID << "|"<< (uint32_t)c << "\n";
+            // //dprint << "\tsws: c1: " << ID << "|"<< (uint32_t)c << "\n";
             noc_semaphore_inc(eth_l1_sender_semaphore_addr, 1);
         }
     }
 
     if constexpr(rem_num_pages > 0) {
-        DPRINT << "sws: CHECKPOINTA rem pages" << ID << "\n";
+        //dprint << "sws: CHECKPOINTA rem pages" << ID << "\n";
         noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
         noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
         write_and_send_chunk(output_page_idx, col_idx, row_idx, cb_id_in0, d, num_cols, num_rows, col_offset, row_offset, rem_num_pages, page_size, eth_l1_sender_base_noc_addr);
@@ -87,7 +87,7 @@ void kernel_main() {
     for (uint32_t i = 1; i < num_transfers; ++i) {
         if constexpr(num_full_chunks > 0) {
             for (uint32_t c = 0; c < num_full_chunks; ++c) {
-                DPRINT << "sws: CHECKPOINT B " << ID << "|"<< c << "\n";
+                //dprint << "sws: CHECKPOINT B " << ID << "|"<< c << "\n";
                 noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
                 noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
                 send_chunk(cb_id_in0, num_pages, page_size, eth_l1_sender_base_noc_addr);
@@ -95,7 +95,7 @@ void kernel_main() {
             }
         }
         if constexpr(rem_num_pages > 0) {
-            DPRINT << "sws: CHECKPOINTB rem pages" << ID << "\n";
+            //dprint << "sws: CHECKPOINTB rem pages" << ID << "\n";
             noc_semaphore_wait(writer_send_semaphore_addr_ptr, 1);
             noc_semaphore_set(writer_send_semaphore_addr_ptr, 0);
             send_chunk(cb_id_in0, rem_num_pages, page_size, eth_l1_sender_base_noc_addr);
@@ -103,7 +103,7 @@ void kernel_main() {
         }
     }
 
-    DPRINT << "sws: DONE\n";
+    //dprint << "sws: DONE\n";
         for (uint32_t i = 0; i < 100000000; i++) {
         asm("");
     }

@@ -110,8 +110,9 @@ def run_all_gather_on_t3000_impl(
         tt_out_tensors = ttl.tensor.all_gather(tt_input_tensors, dim, num_links, output_mem_config=mem_config)
         # else:
         #     tt_out_tensors = ttl.tensor.all_gather(tt_input_tensors, dim, num_links, output_mem_config=mem_config)
-        # print(f"Done iteration {i}")
+        print(f"Done enqueuing iteration {i}")
     for d in devices:
+        print("Synchronizing device")
         ttl.device.Synchronize(d)
     print(f"Done all iterations")
 

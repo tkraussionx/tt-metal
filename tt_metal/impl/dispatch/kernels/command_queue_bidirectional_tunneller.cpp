@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_metal/hw/inc/ethernet/tunneling.h"
+#include "debug/dprint.h"
 
 void kernel_main() {
     constexpr bool sender_is_issue_path = get_compile_time_arg_val(0);
@@ -35,7 +36,7 @@ void kernel_main() {
             break;
         }
         // can make two copies of this kernel, one for SRC is issue, one for SRC is completion
-        if (!sender_is_issue_path) {
+        if constexpr (not sender_is_issue_path) {
             // Service completion path first
             // Acquired src for completion
             if (eth_src_db_semaphore_addr[0] != 0) {

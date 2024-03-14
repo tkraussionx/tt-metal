@@ -31,14 +31,14 @@
 // Intended only for (performance) test use cases
 FORCE_INLINE void eth_setup_handshake2(std::uint32_t handshake_register_address, bool is_sender) {
     if (is_sender) {
-        DPRINT << "eth_send_bytes\n";
+        //dprint<< "eth_send_bytes\n";
         eth_send_bytes(handshake_register_address, handshake_register_address, 16);
-        DPRINT << "eth_wait_for_receiver_done\n";
+        //dprint<< "eth_wait_for_receiver_done\n";
         eth_wait_for_receiver_done();
     } else {
-        DPRINT << "eth_wait_for_bytes\n";
+        //dprint<< "eth_wait_for_bytes\n";
         eth_wait_for_bytes(16);
-        DPRINT << "wait eth_receiver_done\n";
+        //dprint<< "wait eth_receiver_done\n";
         eth_receiver_channel_done(0);
     }
 }
@@ -104,7 +104,7 @@ struct sender_receiver_index_t {
 };
 
 void kernel_main() {
-    DPRINT << "EDM TEST PRINT\n";
+    //dprint<< "EDM TEST PRINT\n";
     // COMPILE TIME ARGS
     // If true, will enable this erisc's sender functionality
     constexpr bool enable_sender_side = get_compile_time_arg_val(0) != 0;
@@ -193,7 +193,7 @@ void kernel_main() {
     // will always be "receiver" (only for handshake purposes)
     bool act_as_sender_in_handshake =
         (sender_channels_start < receiver_channels_start || receiver_num_channels == 0) && sender_num_channels > 0;
-    // DPRINT << "EDM handshaking with other eth. enable_sender_side " << (uint32_t)act_as_sender_in_handshake << "\n";
+    // //dprint<< "EDM handshaking with other eth. enable_sender_side " << (uint32_t)act_as_sender_in_handshake << "\n";
     erisc::datamover::eth_setup_handshake(handshake_addr, act_as_sender_in_handshake);
 
     constexpr uint32_t SWITCH_INTERVAL = 4000000;

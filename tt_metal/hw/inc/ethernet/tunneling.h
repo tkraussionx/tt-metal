@@ -213,6 +213,10 @@ FORCE_INLINE void eth_tunnel_src_forward_one_cmd(db_cb_config_t *eth_db_cb_confi
     bool is_program = header->is_program_buffer;
     bool fwd_path = header->fwd_path;
     command_ptr += DeviceCommand::NUM_ENTRIES_IN_COMMAND_HEADER;
+
+    if constexpr (not sender_is_issue_path) {
+        DPRINT << "Header event: " << header->event << ENDL();
+    }
     if (routing_info->src_sent_valid_cmd != 1) {
         // send cmd even if there is no data associated
         internal_::eth_send_packet(
@@ -294,7 +298,9 @@ FORCE_INLINE void eth_tunnel_dst_forward_one_cmd(db_cb_config_t *eth_db_cb_confi
 
     // Poll until FD_SRC router sends FD packet
     // Each FD packet comprises of command header followed by command data
-    internal_::wait_for_fd_packet(buffer_id);
+    // DPRINT << "WAIT FOR FD PACKET on core " << (uint32_t)my_x[0] << ", " << (uint32_t)my_y[0] << ENDL();
+    // internal_::wait_for_fd_packet(buffer_id);
+    // DPRINT << "DONE WAIT FOR FD PACKET on core "  << (uint32_t)my_x[0] << ", " << (uint32_t)my_y[0] << ENDL();
 
     // tell pull_and_relay core that command is available
 

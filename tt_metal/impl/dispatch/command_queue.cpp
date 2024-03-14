@@ -1159,6 +1159,8 @@ void HWCommandQueue::read_completion_queue() {
                 uint32_t read_toggle = this->manager.get_completion_queue_read_toggle(this->id);
                 tt::Cluster::instance().read_sysmem(&event, 4, read_ptr, mmio_device_id, channel);
 
+                std::cout << "Reading event " << event << " for device " << (device->id()) << ", mmio " << (device->is_mmio_capable()) << std::endl;
+
                 if (this->issued_completion_wraps.count(event)) {
                     this->manager.wrap_completion_queue_rd_ptr(this->id);
                     this->manager.send_completion_queue_read_ptr(this->id);

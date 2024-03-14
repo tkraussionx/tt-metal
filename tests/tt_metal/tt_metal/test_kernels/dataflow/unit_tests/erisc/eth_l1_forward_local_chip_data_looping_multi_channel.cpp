@@ -211,23 +211,23 @@ void kernel_main() {
                 num_context_switches++;
                 if (num_context_switches > max_num_context_switches) {
                     if (!printed_hang) {
-                        DPRINT << "tx: HANG\n";
-                        DPRINT << "tx: HANG eth_sends_completed " << eth_sends_completed << "\n";
-                        DPRINT << "tx: HANG noc_reader_buffer_wrptr " << (uint32_t)noc_reader_buffer_ackptr.index() << "\n";
-                        DPRINT << "tx: HANG (raw) noc_reader_buffer_wrptr " << (uint32_t)noc_reader_buffer_ackptr.raw_index() << "\n";
-                        DPRINT << "tx: HANG noc_reader_buffer_ackptr " << (uint32_t)noc_reader_buffer_wrptr.index() << "\n";
-                        DPRINT << "tx: HANG (raw) noc_reader_buffer_ackptr " << (uint32_t)noc_reader_buffer_wrptr.raw_index() << "\n";
-                        DPRINT << "tx: HANG eth_sender_rdptr " << (uint32_t)eth_sender_rdptr.index() << "\n";
-                        DPRINT << "tx: HANG (raw) eth_sender_rdptr " << (uint32_t)eth_sender_rdptr.raw_index() << "\n";
-                        DPRINT << "tx: HANG eth_sender_ackptr " << (uint32_t)eth_sender_ackptr.index() << "\n";
-                        DPRINT << "tx: HANG (raw) eth_sender_ackptr " << (uint32_t)eth_sender_ackptr.raw_index() << "\n";
-                        DPRINT << "tx: HANG total_eth_sends " << (uint32_t)total_eth_sends << "\n";
-                        for (uint32_t i = 0; i < MAX_NUM_CHANNELS; i++) {
-                            DPRINT << "tx: HANG channel [" << i << "] bytes_sent " << erisc_info->channels[0].bytes_sent << "\n";
-                            DPRINT << "tx: HANG channel [" << i << "] bytes_receiver_ack " << erisc_info->channels[0].receiver_ack << "\n";
-                            DPRINT << "tx: HANG eth_is_receiver_channel_send_acked (" << i << ") " << (eth_is_receiver_channel_send_acked(i) ? "true" : "false") << "\n";
-                            DPRINT << "tx: HANG eth_is_receiver_channel_send_done(" << i << ") " << (eth_is_receiver_channel_send_done(i) ? "true" : "false") << "\n";
-                        }
+                        // DPRINT << "tx: HANG\n";
+                        // DPRINT << "tx: HANG eth_sends_completed " << eth_sends_completed << "\n";
+                        // DPRINT << "tx: HANG noc_reader_buffer_wrptr " << (uint32_t)noc_reader_buffer_ackptr.index() << "\n";
+                        // DPRINT << "tx: HANG (raw) noc_reader_buffer_wrptr " << (uint32_t)noc_reader_buffer_ackptr.raw_index() << "\n";
+                        // DPRINT << "tx: HANG noc_reader_buffer_ackptr " << (uint32_t)noc_reader_buffer_wrptr.index() << "\n";
+                        // DPRINT << "tx: HANG (raw) noc_reader_buffer_ackptr " << (uint32_t)noc_reader_buffer_wrptr.raw_index() << "\n";
+                        // DPRINT << "tx: HANG eth_sender_rdptr " << (uint32_t)eth_sender_rdptr.index() << "\n";
+                        // DPRINT << "tx: HANG (raw) eth_sender_rdptr " << (uint32_t)eth_sender_rdptr.raw_index() << "\n";
+                        // DPRINT << "tx: HANG eth_sender_ackptr " << (uint32_t)eth_sender_ackptr.index() << "\n";
+                        // DPRINT << "tx: HANG (raw) eth_sender_ackptr " << (uint32_t)eth_sender_ackptr.raw_index() << "\n";
+                        // DPRINT << "tx: HANG total_eth_sends " << (uint32_t)total_eth_sends << "\n";
+                        // for (uint32_t i = 0; i < MAX_NUM_CHANNELS; i++) {
+                        //     DPRINT << "tx: HANG channel [" << i << "] bytes_sent " << erisc_info->channels[0].bytes_sent << "\n";
+                        //     DPRINT << "tx: HANG channel [" << i << "] bytes_receiver_ack " << erisc_info->channels[0].receiver_ack << "\n";
+                        //     DPRINT << "tx: HANG eth_is_receiver_channel_send_acked (" << i << ") " << (eth_is_receiver_channel_send_acked(i) ? "true" : "false") << "\n";
+                        //     DPRINT << "tx: HANG eth_is_receiver_channel_send_done(" << i << ") " << (eth_is_receiver_channel_send_done(i) ? "true" : "false") << "\n";
+                        // }
                         // bool noc_read_is_in_progress =
                         //     is_noc_read_in_progress(noc_reader_buffer_wrptr, noc_reader_buffer_ackptr);
                         // bool more_data_to_read = page_index < num_pages;
@@ -249,8 +249,8 @@ void kernel_main() {
     }
 
 
-    DPRINT << "tx: DONE\n";
-    DPRINT << "tx: DONE eth_sends_completed " << (uint32_t)eth_sends_completed << "\n";
-    DPRINT << "tx: DONE total_num_message_sends " << (uint32_t)total_num_message_sends << "\n";
+    // DPRINT << "tx: DONE\n";
+    // DPRINT << "tx: DONE eth_sends_completed " << (uint32_t)eth_sends_completed << "\n";
+    // DPRINT << "tx: DONE total_num_message_sends " << (uint32_t)total_num_message_sends << "\n";
     kernel_profiler::mark_time(16);
 }

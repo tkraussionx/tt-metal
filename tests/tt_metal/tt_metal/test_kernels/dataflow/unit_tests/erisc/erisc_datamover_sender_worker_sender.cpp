@@ -45,15 +45,15 @@ void kernel_main() {
     constexpr uint32_t total_pages_to_send = get_compile_time_arg_val(1);
     constexpr uint32_t page_size = get_compile_time_arg_val(2);
 
-    DPRINT << " sws: args:" <<
-        "\n\teth_sender_l1_base_addr="<<eth_l1_base_addr<<
-        "\n\teth_sender_l1_sem_addr="<<eth_sender_l1_sem_addr<<
-        "\n\twriter_send_sem_addr="<<writer_send_sem_addr<<
-        "\n\teth_sender_noc_x="<<eth_sender_noc_x<<
-        "\n\teth_sender_noc_y="<<eth_sender_noc_y<<
-        "\n\tnum_pages_per_send="<<num_pages_per_send<<
-        "\n\ttotal_pages_to_send="<<total_pages_to_send<<
-        "\n\tpage_size="<<page_size<<"\n";
+    // //dprint<< " sws: args:" <<
+    //     "\n\teth_sender_l1_base_addr="<<eth_l1_base_addr<<
+    //     "\n\teth_sender_l1_sem_addr="<<eth_sender_l1_sem_addr<<
+    //     "\n\twriter_send_sem_addr="<<writer_send_sem_addr<<
+    //     "\n\teth_sender_noc_x="<<eth_sender_noc_x<<
+    //     "\n\teth_sender_noc_y="<<eth_sender_noc_y<<
+    //     "\n\tnum_pages_per_send="<<num_pages_per_send<<
+    //     "\n\ttotal_pages_to_send="<<total_pages_to_send<<
+    //     "\n\tpage_size="<<page_size<<"\n";
 
     constexpr uint32_t cb_id_in0 = tt::CB::c_in0;
 
@@ -70,9 +70,9 @@ void kernel_main() {
 
     // num_transfers = num_devices - 1
     uint32_t num_pages_sent = 0;
-    DPRINT << " sws: noc_index " << (uint32_t)noc_index << "\n";
-    DPRINT << " sws: my_x[0],my_y[0] " << (uint32_t)my_x[0] << "," << (uint32_t)my_y[0] << "\n";
-    DPRINT << " sws: my_x[1],my_y[1] " << (uint32_t)my_x[1] << "," << (uint32_t)my_y[1] << "\n";
+    //dprint<< " sws: noc_index " << (uint32_t)noc_index << "\n";
+    //dprint<< " sws: my_x[0],my_y[0] " << (uint32_t)my_x[0] << "," << (uint32_t)my_y[0] << "\n";
+    //dprint<< " sws: my_x[1],my_y[1] " << (uint32_t)my_x[1] << "," << (uint32_t)my_y[1] << "\n";
 
     uint32_t old_val_NIU_SLV_CMD_ACCEPTED = NOC_STATUS_READ_REG(noc_index, NIU_SLV_REQ_ACCEPTED);
     uint32_t old_val_NIU_SLV_ATOMIC_RESP_SENT = NOC_STATUS_READ_REG(noc_index, NIU_SLV_ATOMIC_RESP_SENT);
