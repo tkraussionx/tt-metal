@@ -89,10 +89,16 @@ def run_test_FalconAttention_inference(
         )
         tt_attention_input = []
         for device in devices:
-            tt_attention_input.append(tt_attention_input_host.to(device, model_config["LN_ATTN_OUTPUT_MEMCFG"]))
+            # TODO: Remove workaround to put sharded to device
+            tt_attention_input_per_device = tt_attention_input_host.to(device, model_config["DEFAULT_MEMCFG"])
+            tt_attention_input_device = tt_lib.tensor.interleaved_to_sharded(
+                tt_attention_input_per_device, sharded_mem_config=model_config["LN_ATTN_OUTPUT_MEMCFG"]
+            )
+            tt_attention_input.append(tt_attention_input_device)
 
         attention_mask_bool_chunks = torch.chunk(
-            (attention_mask_bool * -100000).expand(-1, configuration.num_attention_heads, -1, -1),
+            # (attention_mask_bool * -100000).expand(-1, configuration.num_attention_heads, -1, -1),
+            (attention_mask_bool * -100000).expand(-1, len(devices), -1, -1),
             len(devices),
             1,
         )
@@ -104,14 +110,17 @@ def run_test_FalconAttention_inference(
             attention_mask_memconfig.shard_spec.shape = attn_mask_shard_shape
 
         for i in range(len(devices)):
-            tt_attention_mask.append(
-                torch2tt_tensor(
-                    attention_mask_bool_chunks[i],
-                    devices[i],
-                    tt_memory_config=attention_mask_memconfig,
-                    tt_dtype=model_config["ATTN_MASK_DTYPE"],
-                )
+            # TODO: Remove workaround to put sharded to device
+            tt_attention_mask_per_device_host = torch2tt_tensor(
+                attention_mask_bool_chunks[i], None, tt_dtype=model_config["ATTN_MASK_DTYPE"]
+            )  # TODO: use BFLOAT16_DTYPE for attn mask!
+            tt_attention_mask_per_device = tt_attention_mask_per_device_host.to(
+                devices[i], model_config["DEFAULT_MEMCFG"]
             )
+            tt_attention_mask_per_device = tt_lib.tensor.interleaved_to_sharded(
+                tt_attention_mask_per_device, sharded_mem_config=attention_mask_memconfig
+            )
+            tt_attention_mask.append(tt_attention_mask_per_device)
 
         tt_k_cache_host = torch.zeros(batch, configuration.num_kv_heads, max_position_embeddings, head_dim)
         tt_v_cache_host = torch.zeros(batch, configuration.num_kv_heads, max_position_embeddings, head_dim)

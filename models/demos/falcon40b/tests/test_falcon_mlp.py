@@ -81,7 +81,12 @@ def run_test_FalconMLP_inference(
     tt_mlp_input_host = torch2tt_tensor(mlp_input, None, tt_dtype=model_config["LN_MLP_OUTPUT_DTYPE"])
     tt_mlp_input = []
     for device in devices:
-        tt_mlp_input.append(tt_mlp_input_host.to(device, model_config["LN_MLP_OUTPUT_MEMCFG"]))
+        # TODO: Remove workaround to put sharded to device
+        tt_mlp_input_per_device = tt_mlp_input_host.to(device, model_config["DEFAULT_MEMCFG"])
+        tt_mlp_input_per_device = tt_lib.tensor.interleaved_to_sharded(
+            tt_mlp_input_per_device, sharded_mem_config=model_config["LN_MLP_OUTPUT_MEMCFG"]
+        )
+        tt_mlp_input.append(tt_mlp_input_per_device)
 
     tt_out = tt_FalconMLP_model(tt_mlp_input)
     tt_out = torch.concat([tt2torch_tensor(tt_o) for tt_o in tt_out], -1)
