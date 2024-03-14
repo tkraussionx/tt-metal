@@ -9,6 +9,8 @@ namespace kernel_profiler{
     constexpr static uint32_t PADDING_MARKER = ((1<<16) - 1);
     constexpr static uint32_t NOC_ALIGNMENT_FACTOR = 4;
 
+    static constexpr int SUM_COUNT = 2;
+
     enum BufferIndex {
         ID_HH, ID_HL,
         ID_LH, ID_LL,
@@ -17,23 +19,6 @@ namespace kernel_profiler{
         GUARANTEED_MARKER_3_H, GUARANTEED_MARKER_3_L,
         GUARANTEED_MARKER_4_H, GUARANTEED_MARKER_4_L,
         CUSTOM_MARKERS};
-
-    enum GuaranteedMarkers {
-        FW_START = 1,
-        KERNEL_START,
-        KERNEL_END,
-        FW_END,
-        CQ_CONSUMER_START,
-        CQ_CONSUMER_END,
-        CQ_PRODUCER_START,
-        CQ_PRODUCER_END,
-        ETH_FD_SRC_START,
-        ETH_FD_SRC_END,
-        ETH_FD_DST_START,
-        ETH_FD_DST_END,
-        ETH_CTX_SW_START,
-        ETH_CTX_SW_END,
-        };
 
     enum ControlBuffer
     {

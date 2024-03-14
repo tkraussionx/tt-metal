@@ -140,7 +140,7 @@ def append_device_data(ops, deviceLogFolder):
             ), f"Device data mismatch. Expected {len(deviceOps[device])} but recieved {len(deviceOpsTime)} ops on device {device}"
             for deviceOp, deviceOpTime in zip(deviceOps[device], deviceOpsTime):
                 cores = set()
-                for timeID, ts, risc, core in deviceOpTime["timeseries"]:
+                for timeID, ts, statData, risc, core in deviceOpTime["timeseries"]:
                     if core not in cores:
                         cores.add(core)
                 deviceOp["core_usage"] = {"count": len(cores), "cores": [str(core) for core in cores]}
@@ -271,6 +271,8 @@ def generate_reports(ops, deviceOps, outputFolder, date, nameAppend):
         writer = csv.DictWriter(allOpsCSV, fieldnames=allHeaders)
         writer.writeheader()
         for rowDict in rowDicts:
+            for field, fieldData in rowDict.items():
+                rowDict[field] = str(fieldData).replace(",", ";")
             writer.writerow(rowDict)
     logger.info(f"OPs csv generated at: {allOpsCSVPath}")
 
