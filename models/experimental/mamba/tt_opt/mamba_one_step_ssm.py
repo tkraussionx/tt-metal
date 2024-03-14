@@ -5,6 +5,7 @@
 import torch
 
 import ttnn
+from typing import Callable
 
 from models.utility_functions import torch2tt_tensor
 from models.helper_funcs import Linear
@@ -12,8 +13,10 @@ from models.experimental.mamba.reference.args import ModelArgs
 
 
 class TtMambaSSM(torch.nn.Module):
-    def __init__(self, args: ModelArgs, device, state_dict, num_users, hidden_size, configs):
+    def __init__(self, args: ModelArgs, device, load_fn, state_dict, num_users, hidden_size, configs):
         super().__init__()
+        
+        
         self.state_dict = state_dict
         self.device = device
         self.args = args
@@ -133,7 +136,24 @@ class TtMambaSSM(torch.nn.Module):
         )
 
         # A
-        self.A = ttnn.from_torch(torch.rand(1, 1, self.num_users, self.hidden_size*self.n), layout=ttnn.TILE_LAYOUT, device=self.device, 
+        if self.hidden_size == self.args.d_inner and self.n == self.args.d_state:
+            print('***********using A weight')
+            A_weight_name = "mixer.A_log"
+            def preprocess_A(x):
+                x = -torch.exp(x.float()).reshape(1, self.hidden_size*self.n)  # (1, 2en)
+                return x.repeat(self.num_users, 1) # b, 2en
+
+            A = preprocess_A(self.state_dict[A_weight_name])
+            self.A = ttnn.from_torch(
+                A,
+                layout=ttnn.TILE_LAYOUT,
+                device=self.device,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                dtype=ttnn.bfloat16,
+            )
+
+        else:
+            self.A = ttnn.from_torch(torch.rand(1, 1, self.num_users, self.hidden_size*self.n), layout=ttnn.TILE_LAYOUT, device=self.device, 
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
         
         # C

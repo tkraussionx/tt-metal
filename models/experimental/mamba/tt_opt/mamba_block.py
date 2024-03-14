@@ -5,6 +5,7 @@
 import torch
 
 import ttnn
+from typing import Callable
 
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor
 from models.helper_funcs import Linear
@@ -16,6 +17,7 @@ class TtMambaBlock(torch.nn.Module):
         self,
         args: ModelArgs,
         device,
+        load_fn: Callable,
         state_dict,
         num_users,
         hidden_size,
@@ -54,7 +56,7 @@ class TtMambaBlock(torch.nn.Module):
         self.conv_bias = ttnn.from_torch(torch.rand(1,1,1,self.hidden_size*2), layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
 
 
-        self.tt_ssm = TtMambaSSM(self.args,self.device,self.state_dict, num_users, hidden_size, configs)
+        self.tt_ssm = TtMambaSSM(self.args,self.device,load_fn,self.state_dict, num_users, hidden_size, configs)
 
     def forward(self, x):
         x_input = x # b, e=d_model
