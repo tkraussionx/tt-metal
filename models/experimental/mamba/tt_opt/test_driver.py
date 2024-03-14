@@ -12,13 +12,13 @@ import model_config
 from models.experimental.mamba.reference.decode_model import MambaPretrainedModelName
 
 
-def get_cpu_reference_model():
+def get_cpu_reference_model(version):
     from models.experimental.mamba.reference.decode_model import MambaDecode
 
-    return MambaDecode.from_pretrained("state-spaces/mamba-370m")
+    return MambaDecode.from_pretrained(f"state-spaces/{version}")
 
 
-def get_tt_metal_model(num_users, hidden_size, configs):
+def get_tt_metal_model(num_users, hidden_size, configs, version):
     from models.experimental.mamba.tt_opt.full_model import MambaTT
 
     device_id = 0
@@ -27,8 +27,8 @@ def get_tt_metal_model(num_users, hidden_size, configs):
     torch.manual_seed(0)
     ttnn.enable_program_cache()
 
-    reference_model = get_cpu_reference_model()
-    cache_path = f"/tmp/state-spaces/mamba-370m"
+    reference_model = get_cpu_reference_model(version)
+    cache_path = f"/tmp/state-spaces/{version}"
     
     model = MambaTT(reference_model, cache_path, 1, device, num_users, hidden_size, configs)
     return model, device
@@ -36,7 +36,7 @@ def get_tt_metal_model(num_users, hidden_size, configs):
 
 def run_demo(num_users, hidden_size):
     configs = model_config.create_model_config(num_users, hidden_size)
-    model, device = get_tt_metal_model(num_users, hidden_size, configs)
+    model, device = get_tt_metal_model(num_users, hidden_size, configs, 'mamba-2.8b-slimpj')
 
     # evaluate model:
     model.eval()
