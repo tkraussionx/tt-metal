@@ -55,7 +55,14 @@ class TtMambaBlock(torch.nn.Module):
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
         
         # down proj wt
-        self.down_proj = ttnn.from_torch(torch.rand(1,1,self.hidden_size*2,self.hidden_size), layout=ttnn.TILE_LAYOUT, device=self.device, 
+        if self.args.d_model == self.hidden_size:
+            print('**********using down proj wts')
+            down_proj_weight_name = "mixer.out_proj.weight"
+            down_proj = torch.transpose(self.state_dict[down_proj_weight_name], -1, -2)
+            self.down_proj = ttnn.from_torch(down_proj, layout=ttnn.TILE_LAYOUT, device=self.device, 
+                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
+        else:
+            self.down_proj = ttnn.from_torch(torch.rand(1,1,self.hidden_size*2,self.hidden_size), layout=ttnn.TILE_LAYOUT, device=self.device, 
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
         
         # conv states
