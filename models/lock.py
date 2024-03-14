@@ -15,7 +15,7 @@ class WaitLock:
         # make sure the directory exists and is world-writable
         lock_dir = os.path.dirname(self.lock_file)
         os.makedirs(lock_dir, exist_ok=True)
-        os.chmod(lock_dir, 0o777)
+        # os.chmod(lock_dir, 0o777)
 
         self.pid = os.getpid()
         self._acquire_lock()
