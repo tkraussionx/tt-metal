@@ -22,7 +22,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Perform a safe reset.")
     parser.add_argument("-d", "--devices", type=str, default="0,1,2,3", help="Devices to reset (default: 0,1,2,3)")
     parser.add_argument(
-        "-t", "--topology", type=str, default="mesh", help="Topology to set after reset (default: mesh)"
+        "-t", "--topology", type=str, help="Topology to set after reset (default: mesh)"
     )
     args = parser.parse_args()
     safe_reset(args.devices, args.topology)
