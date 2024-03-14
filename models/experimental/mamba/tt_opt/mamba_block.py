@@ -71,10 +71,27 @@ class TtMambaBlock(torch.nn.Module):
             self.conv_states.append(ttnn.zeros((1,1,self.num_users,self.hidden_size*2), layout=ttnn.TILE_LAYOUT, device=self.device, 
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16))
         self.conv_wts = [] 
+        conv1d_weight_name = "mixer.conv1d.weight"
         for i in range(4):
-            self.conv_wts.append(ttnn.from_torch(torch.rand(1,1,1,self.hidden_size*2,), layout=ttnn.TILE_LAYOUT, device=self.device, 
+            if self.args.d_model == self.hidden_size:
+                print('**********using conv wts')
+                conv_wts = torch.transpose(self.state_dict[conv1d_weight_name][:, :, i], -1, -2).unsqueeze(0).unsqueeze(0)
+                print('**********conv wts', conv_wts.shape)
+                self.conv_wts.append(ttnn.from_torch(conv_wts, layout=ttnn.TILE_LAYOUT, device=self.device, 
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16))
-        self.conv_bias = ttnn.from_torch(torch.rand(1,1,1,self.hidden_size*2), layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
+            else:
+                self.conv_wts.append(ttnn.from_torch(torch.rand(1,1,1,self.hidden_size*2,), layout=ttnn.TILE_LAYOUT, device=self.device, 
+                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16))
+        # conv bias
+        if self.args.d_model == self.hidden_size:
+            print('**********using conv bias')
+            conv1d_bias_name = "mixer.conv1d.bias"
+            conv_bias = self.state_dict[conv1d_bias_name].unsqueeze(0).unsqueeze(0).unsqueeze(0)
+            print('**********conv bias', conv_bias.shape)
+            self.conv_bias = ttnn.from_torch(conv_bias, layout=ttnn.TILE_LAYOUT, device=self.device, 
+                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
+        else:
+            self.conv_bias = ttnn.from_torch(torch.rand(1,1,1,self.hidden_size*2), layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
 
 
         self.tt_ssm = TtMambaSSM(self.args,self.device,load_fn,self.state_dict, num_users, hidden_size, configs)
