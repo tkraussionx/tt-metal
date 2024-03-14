@@ -186,6 +186,8 @@ def get_model_config(model_config_str, llm_mode, input_shape, num_devices):
     model_config["KV_CACHE_MEMCFG"] = DRAM_MEMCFG
     model_config["KV_CACHE_DTYPE"] = dtype  # TODO: use BFP8_DTYPE independent of general dtype
 
+    model_config["ATTN_MASK_DTYPE"] = BFLOAT16_DTYPE
+
     if model_config_str in ("BFLOAT16-L1",):
         model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"] = L1_MEMCFG
         model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"] = L1_MEMCFG
