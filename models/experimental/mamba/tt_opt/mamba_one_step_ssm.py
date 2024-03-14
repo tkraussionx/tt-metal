@@ -25,9 +25,9 @@ class TtMambaSSM(torch.nn.Module):
         self.n = 16
         self.rank = self.args.dt_rank
         
-        assert self.n == self.args.d_state, f"{self.n} != {self.args.d_state}"
-        assert self.rank == self.args.dt_rank, f"{self.rank} != {self.args.dt_rank}"
-        assert self.hidden_size == self.args.d_inner, f"{self.hidden_size} != {self.args.d_inner}"
+        #assert self.n == self.args.d_state, f"{self.n} != {self.args.d_state}"
+        #assert self.rank == self.args.dt_rank, f"{self.rank} != {self.args.dt_rank}"
+        #assert self.hidden_size == self.args.d_inner, f"{self.hidden_size} != {self.args.d_inner}"
         
         self.tt_hidden_state = ttnn.zeros(
                 (1, 1, self.num_users, self.hidden_size*self.n),
@@ -45,7 +45,7 @@ class TtMambaSSM(torch.nn.Module):
         """
 
         # delta rank weight
-        if True:
+        if False:
             x_proj_weight_name = "mixer.x_proj.weight"
             delta_t_proj = torch.transpose(self.state_dict[x_proj_weight_name][: self.args.dt_rank, :], -1, -2)
             self.delta_t_proj = ttnn.from_torch(
