@@ -339,14 +339,14 @@ def run_test_FalconDecoder_inference(
         ("prefill", 1, 32, 0),
         ("prefill", 1, 64, 0),
         ("prefill", 1, 128, 0),
-        # ("prefill", 1, 256, 0),
+        ("prefill", 1, 256, 0),
         ("decode", 32, 1, 128),
     ),
     ids=[
         "prefill_seq32",
         "prefill_seq64",
         "prefill_seq128",
-        # "prefill_seq256",
+        "prefill_seq256",
         "decode_batch32",
     ],
 )
