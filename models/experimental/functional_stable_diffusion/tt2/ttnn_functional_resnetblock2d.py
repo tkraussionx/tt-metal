@@ -315,6 +315,7 @@ class resnetBlock2D:
         dtype: Optional[ttnn.DataType] = None,
         dump_to_file=False,
     ):
+        dump_to_file = False
         dump_file_prefix = "fallback_" if self.fallback_on_groupnorm else ""
         if dump_to_file:
             input_torch = ttnn.to_torch(input_tensor)
@@ -326,16 +327,19 @@ class resnetBlock2D:
             nonlinearity = ttnn.silu
         print("Input tensor of resnet block memory config=", ttnn.get_memory_config(input_tensor))
         print("Synchronizing device now")
-        ttnn.synchronize_device(self.device)
+        # ttnn.synchronize_device(self.device)
         if ttnn.get_memory_config(input_tensor) == ttnn.L1_MEMORY_CONFIG:
             print("Input tensor of resnet block is in L1 interleaved")
         ttnn.dump_device_memory_state(self.device, prefix="in_resnet_block_start")
         out_channels = in_channels if out_channels is None else out_channels
+        # breakpoint()
+        print("out_channels=", out_channels)
         assert out_channels == self.conv1s[0].out_channels
-        if out_channels >= 640 and in_channels >= 960:
-            input_tensor = ttnn.to_memory_config(input_tensor, ttnn.DRAM_MEMORY_CONFIG)
-        else:
-            input_tensor = ttnn.to_memory_config(input_tensor, ttnn.L1_MEMORY_CONFIG)
+        # if out_channels >= 640 and in_channels >= 960:
+        #    print("moving input tensor to dram")
+        input_tensor = ttnn.to_memory_config(input_tensor, ttnn.DRAM_MEMORY_CONFIG)
+        # else:
+        #    input_tensor = ttnn.to_memory_config(input_tensor, ttnn.L1_MEMORY_CONFIG)
         hidden_states = input_tensor
         if ttnn.get_memory_config(hidden_states) != self.first_gn_expected_input_sharded_memory_config:
             if ttnn.is_sharded(hidden_states):
@@ -364,7 +368,7 @@ class resnetBlock2D:
             hidden_states = ttnn.permute(hidden_states, (0, 3, 1, 2))
             print("gn1 input shape - ", hidden_states.shape)
             print("Synchronizing device now")
-            ttnn.synchronize_device(self.device)
+            # ttnn.synchronize_device(self.device)
             print("Run gn1")
             hidden_states = ttnn.operations.normalization._fallback_group_norm(
                 hidden_states,

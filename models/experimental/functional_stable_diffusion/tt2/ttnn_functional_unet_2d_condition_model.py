@@ -237,7 +237,7 @@ class UNet2DConditionModel:
             compute_kernel_config=conv_compute_kernel_config,
         )
 
-        self.fallback_on_groupnorm = os.environ.get("FALLBACK_ON_GROUPNORM", "0") == "1"
+        self.fallback_on_groupnorm = True  # os.environ.get("FALLBACK_ON_GROUPNORM", "0") == "1"
         self.norm_num_groups = 32
         if not self.fallback_on_groupnorm:
             parameters.conv_norm_out.weight = pad_group_norm_weight(
@@ -473,7 +473,7 @@ class UNet2DConditionModel:
             if up_block_type == "CrossAttnUpBlock2D":
                 # breakpoint()
                 ttnn.dump_device_memory_state(self.device, prefix="before_uplock_sample_reallocate_")
-                sample = ttnn.reallocate(sample)
+                # sample = ttnn.reallocate(sample)
                 ttnn.dump_device_memory_state(self.device, prefix="before_uplock_")
                 sample = up_block(
                     hidden_states=sample,
@@ -576,12 +576,14 @@ class UNet2DConditionModel:
                     x=self.group_norm_grid_size[0],
                 ),
             )
+        print("Done GN")
         sample = ttnn.to_memory_config(sample, ttnn.L1_MEMORY_CONFIG)
         sample = ttnn.to_layout(sample, ttnn.TILE_LAYOUT)
         sample = ttnn.silu(sample)
         if ttnn.get_memory_config(sample) != self.conv_out.conv.input_sharded_memory_config:
             sample = ttnn.to_memory_config(sample, self.conv_out.conv.input_sharded_memory_config)
         sample = self.conv_out(sample)
+        print("Done conv")
         sample = ttnn.to_memory_config(sample, ttnn.L1_MEMORY_CONFIG)
         # con_in completes
 
