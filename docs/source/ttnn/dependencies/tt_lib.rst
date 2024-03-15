@@ -834,6 +834,8 @@ Backward Operations
 
 .. autofunction:: tt_lib.tensor.addcdiv_bw
 
+.. autofunction:: tt_lib.tensor.conj_bw
+
 .. autofunction:: tt_lib.tensor.unary_mul_bw
 
 .. autofunction:: tt_lib.tensor.unary_add_bw
@@ -1051,6 +1053,10 @@ Backward Operations
 .. autofunction:: tt_lib.tensor.unary_fmod_bw
 
 .. autofunction:: tt_lib.tensor.unary_remainder_bw
+
+.. autofunction:: tt_lib.tensor.imag_bw
+
+.. autofunction:: tt_lib.tensor.real_bw
 
 Loss Functions
 ==============

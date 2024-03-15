@@ -27,6 +27,22 @@ namespace tt::tt_metal::detail{
                 "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
         )doc");
 
+    m_tensor.def("conj_bw", &tt::tt_metal::conj_bw,
+            py::arg("grad").noconvert(), py::arg("input").noconvert(), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
+            Performs backward operations for conjugate for complex tensor ``input`` with given ``grad``
+
+            Input tensors must have BFLOAT16 data type.
+
+            Output tensor will have BFLOAT16 data type.
+
+            .. csv-table::
+                :header: "Argument", "Description", "Data type", "Valid range", "Required"
+
+                "grad", "Gradient tensor", "Tensor", "Tensor of complex shape [W, Z, Y, X]", "Yes"
+                "input", "Input Tensor", "Tensor", "Tensor of complex shape [W, Z, Y, X]", "Yes"
+                "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+        )doc");
+
     m_tensor.def("unary_mul_bw", &tt::tt_metal::unary_mul_bw,
             py::arg("grad").noconvert(), py::arg("input").noconvert(), py::arg("scalar") = 1.0f, py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
                 Performs backward operations for multiplication with given ``grad`` and ``scalar``
@@ -1877,7 +1893,6 @@ namespace tt::tt_metal::detail{
                 "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
         )doc");
 
-
    m_tensor.def("unary_fmod_bw", &tt::tt_metal::unary_fmod_bw,
             py::arg("grad").noconvert(), py::arg("input").noconvert(), py::arg("scalar"), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
             Performs backward operations for fmod of ``input`` tensors with `scalar` for the given ``grad``.
@@ -1909,6 +1924,38 @@ namespace tt::tt_metal::detail{
                 "grad", "Gradient tensor", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
                 "input", "Input Tensor", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
                 "scalar", "scalar value", "float", "float", "Yes"
+                "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+        )doc");
+
+    m_tensor.def("imag_bw", &tt::tt_metal::imag_bw,
+            py::arg("grad").noconvert(), py::arg("input").noconvert(), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
+            Performs backward operations for imaginary part of complex tensor ``input`` with given ``grad``
+
+            Input tensors must have BFLOAT16 data type.
+
+            Output tensor will have BFLOAT16 data type.
+
+            .. csv-table::
+                :header: "Argument", "Description", "Data type", "Valid range", "Required"
+
+                "grad", "Gradient tensor", "Tensor", "Tensor of complex shape [W, Z, Y, X]", "Yes"
+                "input", "Input Tensor", "Tensor", "Tensor of complex shape [W, Z, Y, X]", "Yes"
+                "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+        )doc");
+
+    m_tensor.def("real_bw", &tt::tt_metal::real_bw,
+            py::arg("grad").noconvert(), py::arg("input").noconvert(), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
+            Performs backward operations for real part of complex tensor ``input`` with given ``grad``
+
+            Input tensors must have BFLOAT16 data type.
+
+            Output tensor will have BFLOAT16 data type.
+
+            .. csv-table::
+                :header: "Argument", "Description", "Data type", "Valid range", "Required"
+
+                "grad", "Gradient tensor", "Tensor", "Tensor of complex shape [W, Z, Y, X]", "Yes"
+                "input", "Input Tensor", "Tensor", "Tensor of complex shape [W, Z, Y, X]", "Yes"
                 "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
         )doc");
     }

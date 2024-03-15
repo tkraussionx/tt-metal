@@ -797,16 +797,10 @@ void py_module(py::module& m_primary) {
         py::arg("end"),
         py::arg("step"),
         py::arg("any").noconvert(),
+        py::arg("output_tensor").noconvert() = std::nullopt,
+        py::arg("untilize_out").noconvert() = false,
+        py::arg("output_dtype").noconvert() = std::nullopt,
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
-        "Performs an arange operation. Returns an output tensor.");
-
-    m_primary.def(
-        "moreh_arange_inplace",
-        &moreh_arange_inplace,
-        py::arg("input_tensor").noconvert(),
-        py::arg("start"),
-        py::arg("end"),
-        py::arg("step"),
         "Performs an arange operation. Returns an output tensor.");
 
     m_primary.def(
@@ -860,6 +854,7 @@ void py_module(py::module& m_primary) {
         py::arg("gamma").noconvert() = std::nullopt,
         py::arg("beta").noconvert() = std::nullopt,
         py::kw_only(),
+        py::arg("are_needed_outputs").noconvert() = std::vector<bool>{true, false, false},
         py::arg("output").noconvert() = std::nullopt,
         py::arg("mean").noconvert() = std::nullopt,
         py::arg("rstd").noconvert() = std::nullopt,
@@ -867,7 +862,7 @@ void py_module(py::module& m_primary) {
         py::arg("mean_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("rstd_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         R"doc(
-        "Performs a moreh_groupnorm operation.
+        Performs a moreh_groupnorm operation.
     )doc");
 
     // moreh_groupnorm_backward
@@ -880,6 +875,7 @@ void py_module(py::module& m_primary) {
         py::arg("rstd").noconvert(),
         py::arg("num_groups").noconvert(),
         py::kw_only(),
+        py::arg("are_needed_outputs").noconvert() = std::vector<bool>{true, true, true},
         py::arg("gamma").noconvert() = std::nullopt,
         py::arg("input_grad").noconvert() = std::nullopt,
         py::arg("gamma_grad").noconvert() = std::nullopt,
@@ -888,7 +884,7 @@ void py_module(py::module& m_primary) {
         py::arg("gamma_grad_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("beta_grad_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         R"doc(
-        "Performs a moreh_groupnorm_backward operation.
+        Performs a moreh_groupnorm_backward operation.
     )doc");
 
     m_primary.def(
