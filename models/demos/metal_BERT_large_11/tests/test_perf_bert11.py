@@ -196,7 +196,6 @@ def test_perf_bare_metal(
 ):
     if is_e75(device):
         pytest.skip("Bert large 11 is not supported on E75")
-
     run_perf_bert11(
         batch_size,
         model_config_str,

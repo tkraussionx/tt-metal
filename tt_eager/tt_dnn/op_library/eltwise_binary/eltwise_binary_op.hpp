@@ -110,17 +110,23 @@ struct make_eltwise_binary {
         std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt,
         const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         std::optional<const DataType> output_dtype = std::nullopt) const {
-        TT_FATAL(
-            input_tensor_a.get_legacy_shape() == input_tensor_b.get_legacy_shape(), "Input shapes must be the same!");
-        return operation::run_with_autoformat(
-                   EltwiseBinary{
-                       binary_op_type,
-                       fused_activations,
-                       output_mem_config,
-                       output_dtype.value_or(input_tensor_a.get_dtype()),
-                       false},
-                   {input_tensor_a, input_tensor_b})
-            .at(0);
+        auto worker = input_tensor_a.get_worker_handle();
+        Tensor output_tensor(worker);
+        worker->push_work([input_tensor_a, input_tensor_b, output_tensor, fused_activations, output_mem_config, output_dtype] () mutable {
+            TT_FATAL(
+                input_tensor_a.get_legacy_shape() == input_tensor_b.get_legacy_shape(), "Input shapes must be the same!");
+            auto local_tensor = operation::run_with_autoformat(
+                    EltwiseBinary{
+                        binary_op_type,
+                        fused_activations,
+                        output_mem_config,
+                        output_dtype.value_or(input_tensor_a.get_dtype()),
+                        false},
+                    {input_tensor_a, input_tensor_b})
+                .at(0);
+            output_tensor.deepcopy(local_tensor);
+        });
+        return output_tensor;
     }
 };
 
@@ -150,7 +156,6 @@ constexpr auto logical_or = make_eltwise_binary<BinaryOpType::LOGICAL_OR>{};
 namespace operations {
 
 namespace primary {
-
 // TODO: in_place should not take output args
 inline Tensor add(
     const Tensor &input_tensor_a,

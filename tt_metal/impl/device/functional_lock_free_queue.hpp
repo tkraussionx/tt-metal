@@ -7,19 +7,22 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <valarray>
 #include "tt_metal/common/assert.hpp"
+#include <iostream>
 
-template<typename T>
-class LockFreeQueue {
+namespace tt {
+
+namespace tt_metal {
+class FunctionalLockFreeQueue {
     private:
         struct Node {
-            std::shared_ptr<T> data = nullptr;
+            std::function<void()> executor;
             Node* next = nullptr;
         };
 
         std::atomic<Node*> head;
         std::atomic<Node*> tail;
-
         Node* pop_head() {
             Node* oldHead = head.load();
             if (oldHead == tail.load()) {
@@ -30,22 +33,30 @@ class LockFreeQueue {
         }
 
     public:
-        LockFreeQueue() : head(new Node), tail(head.load()) {}
+        std::atomic<uint64_t> worker_thread_id = 0;
+        std::atomic<uint64_t> parent_thread_id = 0;
+        FunctionalLockFreeQueue() : head(new Node), tail(head.load()) {}
+        FunctionalLockFreeQueue(FunctionalLockFreeQueue&& other) {
+            std::cout << "calling move constructor on lock free queue" << std::endl;
+            head.store(other.head.load());
+            tail.store(other.tail.load());
+            worker_thread_id.store(other.worker_thread_id.load());
+            parent_thread_id.store(other.parent_thread_id.load());
+        }
 
-        void push(const T& value) {
-            std::shared_ptr<T> newData(std::make_shared<T>(value));
+        void push(std::function<void()> work) {
             Node* newNode = new Node;
-            tail.load()->data = newData;
+            tail.load()->executor = work;
             tail.load()->next = newNode;
             tail.store(newNode);
         }
 
-        std::shared_ptr<T> pop() {
+        std::function<void()> pop() {
             Node* oldHead = pop_head();
             if (!oldHead) {
                 TT_THROW("Queue is empty");
             }
-            std::shared_ptr<T> result(oldHead->data);
+            std::function<void()> result(oldHead->executor);
             delete oldHead;
             return result;
         }
@@ -53,7 +64,7 @@ class LockFreeQueue {
         bool empty() const {
             return head.load() == tail.load();
         }
-        class Iterator : public std::iterator<std::forward_iterator_tag, T> {
+        class Iterator : public std::iterator<std::forward_iterator_tag, std::function<void()>> {
            private:
             Node* current;
 
@@ -69,9 +80,12 @@ class LockFreeQueue {
 
             bool operator!=(const Iterator& other) const { return current != other.current; }
 
-            const T& operator*() const { return *(current->data); }
+            const std::function<void()>& operator*() const { return current->executor; }
         };
 
         Iterator begin() { return Iterator(head.load()); }
         Iterator end() { return Iterator(tail.load()); }
 };
+
+}
+}
