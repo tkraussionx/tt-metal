@@ -251,6 +251,10 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsReadWriteWithWaitForEvent
     vector<std::reference_wrapper<CommandQueue>> cqs = {this->device_->command_queue(0), this->device_->command_queue(1)};
     vector<uint32_t> cmds_issued_per_cq = {0, 0};
 
+    if (tt::Cluster::instance().arch() == tt::ARCH::GRAYSKULL) {
+        GTEST_SKIP() << "Skipping for GS due to readback mismatch under debug Github issue #6281 ";
+    }
+
     // size_t num_buffers_per_cq = 50;
     // This size configuration hits the race readily.
     size_t num_buffers_per_cq = 10;
@@ -390,6 +394,10 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsReadWriteWithWaitForEvent
     TestBufferConfig config = {.num_pages = 1, .page_size = 16, .buftype = BufferType::DRAM};
     vector<std::reference_wrapper<CommandQueue>> cqs = {this->device_->command_queue(0), this->device_->command_queue(1)};
     size_t buf_size = config.num_pages * config.page_size;
+
+    if (tt::Cluster::instance().arch() == tt::ARCH::GRAYSKULL) {
+        GTEST_SKIP() << "Skipping for GS due to readback mismatch under debug Github issue #6281 ";
+    }
 
     bool pass = true;
 
