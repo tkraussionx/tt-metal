@@ -213,9 +213,10 @@ def custom_preprocessor(model, name, ttnn_module_args):
         update_ttnn_module_args(ttnn_module_args.c5_3)
         parameters["c5_3"] = preprocess_conv2d(conv5_3_weight, conv5_3_bias, ttnn_module_args.c5_3)
 
-        """
         ttnn_module_args.c6["math_fidelity"] = ttnn.MathFidelity.LoFi
-        ttnn_module_args.c6["use_shallow_conv_variant"] = (True if os.getenv("ARCH_NAME", "grayskull") == "grayskull" else False)
+        ttnn_module_args.c6["use_shallow_conv_variant"] = (
+            True if os.getenv("ARCH_NAME", "grayskull") == "grayskull" else False
+        )
         ttnn_module_args.c6["dtype"] = ttnn.bfloat8_b
         ttnn_module_args.c6["weights_dtype"] = ttnn.bfloat8_b
         ttnn_module_args.c6["activation"] = "relu"  # Fuse relu with conv6
@@ -226,7 +227,9 @@ def custom_preprocessor(model, name, ttnn_module_args):
         parameters["c6"] = preprocess_conv2d(conv6_weight, conv6_bias, ttnn_module_args.c6)
 
         ttnn_module_args.c6_2["math_fidelity"] = ttnn.MathFidelity.LoFi
-        ttnn_module_args.c6_2["use_shallow_conv_variant"] = (True if os.getenv("ARCH_NAME", "grayskull") == "grayskull" else False)
+        ttnn_module_args.c6_2["use_shallow_conv_variant"] = (
+            True if os.getenv("ARCH_NAME", "grayskull") == "grayskull" else False
+        )
         ttnn_module_args.c6_2["dtype"] = ttnn.bfloat8_b
         ttnn_module_args.c6_2["weights_dtype"] = ttnn.bfloat8_b
         ttnn_module_args.c6_2["activation"] = "relu"  # Fuse relu with conv6
@@ -305,6 +308,7 @@ def custom_preprocessor(model, name, ttnn_module_args):
         conv8_3_weight, conv8_3_bias = fold_batch_norm2d_into_conv2d(model.c8_3, model.b8_3)
         update_ttnn_module_args(ttnn_module_args.c8_3)
         parameters["c8_3"] = preprocess_conv2d(conv8_3_weight, conv8_3_bias, ttnn_module_args.c8_3)
+        """
 
         ttnn_module_args.output_layer["math_fidelity"] = ttnn.MathFidelity.LoFi
         ttnn_module_args.output_layer["dtype"] = ttnn.bfloat8_b
@@ -366,49 +370,48 @@ class UNet(nn.Module):
         self.u4 = nn.Upsample(scale_factor=(2, 2), mode="nearest")
 
         self.c5 = nn.Conv2d(96, 32, kernel_size=3, padding=1)
-        self.b5 = nn.BatchNorm2d(32)
+        self.b5 = nn.BatchNorm2d(32, momentum=1)
         self.r5 = nn.ReLU(inplace=True)
         self.c5_2 = nn.Conv2d(32, 32, kernel_size=3, padding=1)
-        self.b5_2 = nn.BatchNorm2d(32)
+        self.b5_2 = nn.BatchNorm2d(32, momentum=1)
         self.r5_2 = nn.ReLU(inplace=True)
         self.c5_3 = nn.Conv2d(32, 32, kernel_size=3, padding=1)
-        self.b5_3 = nn.BatchNorm2d(32)
+        self.b5_3 = nn.BatchNorm2d(32, momentum=1)
         self.r5_3 = nn.ReLU(inplace=True)
-        # self.u4 = nn.Upsample(scale_factor=2, mode="nearest", align_corners=False)
-        """
-        self.u3 = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
+        self.u3 = nn.Upsample(scale_factor=(2, 2), mode="nearest")
 
         self.c6 = nn.Conv2d(64, 32, kernel_size=3, padding=1)
-        self.b6 = nn.BatchNorm2d(32)
+        self.b6 = nn.BatchNorm2d(32, momentum=1)
         self.r6 = nn.ReLU(inplace=True)
         self.c6_2 = nn.Conv2d(32, 32, kernel_size=3, padding=1)
-        self.b6_2 = nn.BatchNorm2d(32)
+        self.b6_2 = nn.BatchNorm2d(32, momentum=1)
         self.r6_2 = nn.ReLU(inplace=True)
         self.c6_3 = nn.Conv2d(32, 32, kernel_size=3, padding=1)
-        self.b6_3 = nn.BatchNorm2d(32)
+        self.b6_3 = nn.BatchNorm2d(32, momentum=1)
         self.r6_3 = nn.ReLU(inplace=True)
-        self.u2 = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
+        self.u2 = nn.Upsample(scale_factor=(2, 2), mode="nearest")
 
         self.c7 = nn.Conv2d(48, 16, kernel_size=3, padding=1)
-        self.b7 = nn.BatchNorm2d(16)
+        self.b7 = nn.BatchNorm2d(16, momentum=1)
         self.r7 = nn.ReLU(inplace=True)
         self.c7_2 = nn.Conv2d(16, 16, kernel_size=3, padding=1)
-        self.b7_2 = nn.BatchNorm2d(16)
+        self.b7_2 = nn.BatchNorm2d(16, momentum=1)
         self.r7_2 = nn.ReLU(inplace=True)
         self.c7_3 = nn.Conv2d(16, 16, kernel_size=3, padding=1)
-        self.b7_3 = nn.BatchNorm2d(16)
+        self.b7_3 = nn.BatchNorm2d(16, momentum=1)
         self.r7_3 = nn.ReLU(inplace=True)
-        self.u1 = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
+        self.u1 = nn.Upsample(scale_factor=(2, 2), mode="nearest")
 
         self.c8 = nn.Conv2d(32, 16, kernel_size=3, padding=1)
-        self.b8 = nn.BatchNorm2d(16)
+        self.b8 = nn.BatchNorm2d(16, momentum=1)
         self.r8 = nn.ReLU(inplace=True)
         self.c8_2 = nn.Conv2d(16, 16, kernel_size=3, padding=1)
-        self.b8_2 = nn.BatchNorm2d(16)
+        self.b8_2 = nn.BatchNorm2d(16, momentum=1)
         self.r8_2 = nn.ReLU(inplace=True)
         self.c8_3 = nn.Conv2d(16, 16, kernel_size=3, padding=1)
-        self.b8_3 = nn.BatchNorm2d(16)
+        self.b8_3 = nn.BatchNorm2d(16, momentum=1)
         self.r8_3 = nn.ReLU(inplace=True)
+        """
 
         # Output layer
         self.output_layer = nn.Conv2d(16, 1, kernel_size=1)
@@ -468,8 +471,6 @@ class UNet(nn.Module):
         b5_3 = self.b5_3(c5_3)
         r5_3 = self.r5_3(b5_3)
 
-        return r5_3
-        """
         u3 = self.u3(r5_3)
         conc2 = torch.cat([u3, r3_2], dim=1)
 
@@ -508,6 +509,9 @@ class UNet(nn.Module):
         c8_3 = self.c8_3(r8_2)
         b8_3 = self.b8_3(c8_3)
         r8_3 = self.r8_3(b8_3)
+
+        return r8_3
+        """
 
         # Output layer
         output = self.output_layer(r8_3)
