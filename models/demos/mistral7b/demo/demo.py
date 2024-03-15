@@ -8,6 +8,7 @@ import ttnn
 from models.demos.mistral7b.tt.mistral_common_ttnn import (
     generate_cos_sin_cache_ttnn,
     prepare_inputs_ttnn,
+    sample,
 )
 from models.demos.mistral7b.tt.mistral_model_ttnn import TtTransformer
 from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs
@@ -94,20 +95,7 @@ def run_mistral_demo(user_input, batch_size, device):
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
     logger.info("Loading weights...")
-    if instruct_mode:  # Instruct weights are divided into 3 checkpoints
-        state_dict = {}
-        for i in range(3):
-            state_dict_i = torch.load(model_args.consolidated_weights_path(i + 1), map_location="cpu")
-            state_dict.update(state_dict_i)
-        # Update state_dict keys to match the generative keys (saves modyfing the mistal modules)
-        state_dict = {
-            model_args.key_mapping[key]: value for key, value in state_dict.items() if key in model_args.key_mapping
-        }
-        # Match pad token to eos token when using instruct weights
-        # tokenizer._model.pad_id = tokenizer._model.eos_id
-    else:  # Generative weights are consolidadted into a single checkpoint
-        state_dict = torch.load(model_args.consolidated_weights_path)
-
+    state_dict = torch.load(model_args.consolidated_weights_path)
     state_dict = {
         k: v
         for k, v in state_dict.items()
@@ -116,7 +104,6 @@ def run_mistral_demo(user_input, batch_size, device):
             or k in ["tok_embeddings.weight", "norm.weight", "output.weight"]
         )
     }
-
     logger.info("Loading weights finished!")
 
     # Embedding on host
@@ -147,7 +134,7 @@ def run_mistral_demo(user_input, batch_size, device):
     logger.info("Finished loading weights to device. Starting inference...")
 
     generation_start_pos = 0
-    max_generated_tokens = 100
+    max_generated_tokens = 150
     users_decoding = True
 
     # Keep track of generated outputs to print out every iteration
@@ -175,7 +162,9 @@ def run_mistral_demo(user_input, batch_size, device):
         # Convert ttnn tensor to torch tensor
         tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
 
-        tt_out_tok = torch.argmax(tt_output_torch, dim=-1)
+        # If temperature is 0, does greedy decoding (top-1)
+        tt_out_tok = sample(tt_output_torch, temperature=0, top_p=0.8)
+
         if iteration < input_mask.shape[1]:  # If prefill
             # If token is pad token, start generating new token, otherwise, push the next prompt token to the model
             tt_out_tok = torch.where(
@@ -206,7 +195,6 @@ def run_mistral_demo(user_input, batch_size, device):
         else:
             for user in range(batch_size):
                 logger.info("[User {}] {}".format(user, "".join(tokenizer.decode(all_outputs[user]))))
-                # logger.info("[User {}] {}".format(user, ",".join([str(tok) for tok in all_outputs[user]])))
 
         iteration += 1
 

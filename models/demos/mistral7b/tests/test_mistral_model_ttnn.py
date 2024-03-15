@@ -9,6 +9,7 @@ from models.demos.mistral7b.tt.mistral_common_ttnn import (
     precompute_freqs,
     generate_cos_sin_cache_ttnn,
     prepare_inputs_ttnn,
+    sample,
 )
 from models.demos.mistral7b.tt.mistral_model_ttnn import TtTransformer
 from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs
@@ -64,20 +65,8 @@ def test_mistral_model_inference(device, iterations, version):
 
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
-    if instruct:  # Instruct weights are divided into 3 checkpoints
-        state_dict = {}
-        for i in range(3):
-            state_dict_i = torch.load(model_args.consolidated_weights_path(i + 1), map_location="cpu")
-            state_dict.update(state_dict_i)
-        # Update state_dict keys to match the generative keys (saves modyfing the mistal modules)
-        state_dict = {
-            model_args.key_mapping[key]: value for key, value in state_dict.items() if key in model_args.key_mapping
-        }
-        # Match pad token to eos token when using instruct weights
-        tokenizer._model.pad_id = tokenizer._model.eos_id
-    else:  # Generative weights are consolidadted into a single checkpoint
-        state_dict = torch.load(model_args.consolidated_weights_path)
-
+    logger.info("Loading weights...")
+    state_dict = torch.load(model_args.consolidated_weights_path)
     state_dict = {
         k: v
         for k, v in state_dict.items()
@@ -86,11 +75,11 @@ def test_mistral_model_inference(device, iterations, version):
             or k in ["tok_embeddings.weight", "norm.weight", "output.weight"]
         )
     }
+    logger.info("Finished loading weights...")
 
     if instruct:
         # The instruct prompts follow the format: <bos> [INST] prompt [/INST]. [INST] are strings. <bos> is the correspoding bos_id token
-        # prompts = ["[INST] What is your favourite condiment? [/INST]"] * 32
-        prompts = ["[INST] What is the capital of Spain? [/INST]"] * 32
+        prompts = ["[INST] what is the capital of Canada? [/INST]"] * 32
     else:
         prompts = ["This is a test"] * 32
 
@@ -178,12 +167,12 @@ def test_mistral_model_inference(device, iterations, version):
             if run_ref_pt:
                 pt_decode_input = embd(encoded_prompts_tensor[:, i]).view(batch, seqlen, -1)
         else:
-            # Greedy decode the generated token and save it to print out later
-            tt_out_tok = torch.argmax(tt_output_torch, dim=-1)
+            # Greedy decode (temperature = 0) the generated token and save it to print out later
+            tt_out_tok = sample(tt_output_torch, temperature=0, top_p=0.8)
             tt_decode_input = embd(tt_out_tok)
             all_outputs.append(tt_out_tok.squeeze(1).tolist()[0])  # Update generated token to list of TT outputs
             if run_ref_pt:
-                pt_out_tok = torch.argmax(ref_output, dim=-1)
+                pt_out_tok = sample(ref_output, temperature=0, top_p=0.8)
                 pt_decode_input = embd(pt_out_tok)
                 all_outputs_ref.append(
                     pt_out_tok.squeeze(1).tolist()[0]
@@ -239,7 +228,7 @@ def test_mistral_model_inference(device, iterations, version):
                         # if not does_pass:
                         # all_tests_pass = False
 
-        print("[TT generation User 0] ", "".join(tokenizer.decode(all_outputs)))
+        print("[ttnn generation User 0] ", "".join(tokenizer.decode(all_outputs)))
         if run_ref_pt:
             print("[Ref generation User 0] ", "".join(tokenizer.decode(all_outputs_ref)))
 

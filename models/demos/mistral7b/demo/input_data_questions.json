@@ -42,7 +42,7 @@
 "prompt": "what is the capital of Japan?"
            },
         {
-"prompt": "what is the capital of Spain?"
+"prompt": "what is the capital of Portugal?"
            },
         {
 "prompt": "what is the capital of China?"
@@ -72,26 +72,26 @@
 "prompt": "what is the currency of Argentina?"
            },
         {
-"prompt": "describe the geographic location of London in UK"
+"prompt": "Are birds mammals?"
            },
         {
-"prompt": "describe the geographic location of Toronto in Canada"
+"prompt": "How do you play tennis?"
            },
         {
-"prompt": "describe the geographic location of Madrid in Spain"
+"prompt": "Suggest cities to visit in Japan"
            },
         {
-"prompt": "describe the geographic location of Paris in France"
+"prompt": "How far away is the moon from the earth?"
            },
         {
-"prompt": "describe the geographic location of Rome in Italy"
+"prompt": "What is a black hole?"
            },
         {
-"prompt": "describe the geographic location of Istanbul in Turkey"
+"prompt": "How do you play golf?"
            },
         {
-"prompt": "describe the geographic location of Shanghai in China"
+"prompt": "Recommend me a movie"
            },
         {
-"prompt": "describe the geographic location of Lagos in Nigeria"}
+"prompt": "what is the capital of Spain?"}
        ]
