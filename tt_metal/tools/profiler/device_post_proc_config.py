@@ -150,7 +150,13 @@ class test_full_buffer(default_setup):
             "type": "adjacent",
             "start": {"risc": "ANY", "zone_name": "TEST-FULL"},
             "end": {"risc": "ANY", "zone_name": "TEST-FULL"},
-        }
+        },
+        "Marker Repeat ETH": {
+            "across": "core",
+            "type": "adjacent",
+            "start": {"risc": "ERISC", "zone_name": "TEST-FULL"},
+            "end": {"risc": "ERISC", "zone_name": "TEST-FULL"},
+        },
     }
     detectOps = False
 

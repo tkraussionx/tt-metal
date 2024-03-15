@@ -81,7 +81,7 @@ void DeviceProfiler::readRiscProfilerResults(
             uint32_t bufferRiscShift = riscNum * PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC + startIndex;
             if (bufferEndIndex > PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC)
             {
-                log_warning("Profiler DRAM buffers were full, markers were dropped! device {}, worker core {}, {}, Risc {},  bufferEndIndex = {}, host_size = {}", device_id, worker_core.x, worker_core.y, riscEndIndex, bufferEndIndex , PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC );
+                log_warning("Profiler DRAM buffers were full, markers were dropped! device {}, worker core {}, {}, Risc {},  bufferEndIndex = {}, host_size = {}", device_id, worker_core.x, worker_core.y, tracy::riscName[riscEndIndex], bufferEndIndex , PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC );
                 bufferEndIndex = PROFILER_FULL_HOST_VECTOR_SIZE_PER_RISC;
             }
 
@@ -239,8 +239,8 @@ void DeviceProfiler::dumpResultToFile(
         log_file.open(log_path, std::ios_base::app);
     }
 
-    log_file << fmt::format("{:4},{:3},{:3},{:>7},{:7},{:15},{:15},{:5},{:>25},{:>6},{:6},{}",
-    //log_file << fmt::format("{},{},{},{},{},{},{},{},{},{},{}",
+    //log_file << fmt::format("{:4},{:3},{:3},{:>7},{:7},{:15},{:15},{:5},{:>25},{:>6},{:6},{}",
+    log_file << fmt::format("{},{},{},{},{},{},{},{},{},{},{},{}",
             device_id,
             core.x,
             core.y,

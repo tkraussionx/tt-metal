@@ -83,98 +83,94 @@ def is_print_supported(devicesData):
 
 
 def print_stats_outfile(devicesData, setup):
-    if is_print_supported(devicesData):
-        original_stdout = sys.stdout
-        with open(f"{PROFILER_ARTIFACTS_DIR}/{setup.outputFolder}/{setup.deviceStatsTXT}", "w") as statsFile:
-            sys.stdout = statsFile
-            print_stats(devicesData, setup)
-            sys.stdout = original_stdout
+    original_stdout = sys.stdout
+    with open(f"{PROFILER_ARTIFACTS_DIR}/{setup.outputFolder}/{setup.deviceStatsTXT}", "w") as statsFile:
+        sys.stdout = statsFile
+        print_stats(devicesData, setup)
+        sys.stdout = original_stdout
 
 
 def print_stats(devicesData, setup):
-    if not is_print_supported(devicesData):
-        print(f"{devicesData['deviceInfo']['arch']} stat print is not supported")
-    else:
-        numberWidth = 17
-        for chipID, deviceData in devicesData["devices"].items():
-            for analysis in setup.timerAnalysis.keys():
-                if (
-                    "analysis" in deviceData["cores"]["DEVICE"].keys()
-                    and analysis in deviceData["cores"]["DEVICE"]["analysis"].keys()
-                ):
-                    assert "stats" in deviceData["cores"]["DEVICE"]["analysis"][analysis].keys()
-                    stats = deviceData["cores"]["DEVICE"]["analysis"][analysis]["stats"]
-                    print()
-                    print(f"=================== {analysis} ===================")
-                    if stats["Count"] > 1:
-                        for stat in setup.displayStats:
-                            if stat in ["Count"]:
-                                print(f"{stat:>12}          = {stats[stat]:>10,.0f}")
-                            else:
-                                print(f"{stat:>12} [cycles] = {stats[stat]:>10,.0f}")
-                    else:
-                        print(f"{'Duration':>12} [cycles] = {stats['Max']:>10,.0f}")
-                    print()
-                    if setup.timerAnalysis[analysis]["across"] in ["risc", "core"]:
-                        for core_y in range(-2, 12):
-                            # Print row number
-                            if core_y > 0:
-                                print(f"{core_y:>2}|| ", end="")
-                            else:
-                                print(f"{' ':>4} ", end="")
+    numberWidth = 17
+    for chipID, deviceData in devicesData["devices"].items():
+        for analysis in setup.timerAnalysis.keys():
+            if (
+                "analysis" in deviceData["cores"]["DEVICE"].keys()
+                and analysis in deviceData["cores"]["DEVICE"]["analysis"].keys()
+            ):
+                assert "stats" in deviceData["cores"]["DEVICE"]["analysis"][analysis].keys()
+                stats = deviceData["cores"]["DEVICE"]["analysis"][analysis]["stats"]
+                print()
+                print(f"=================== {analysis} ===================")
+                if stats["Count"] > 1:
+                    for stat in setup.displayStats:
+                        if stat in ["Count"]:
+                            print(f"{stat:>12}          = {stats[stat]:>10,.0f}")
+                        else:
+                            print(f"{stat:>12} [cycles] = {stats[stat]:>10,.0f}")
+                else:
+                    print(f"{'Duration':>12} [cycles] = {stats['Max']:>10,.0f}")
+                print()
+                if is_print_supported(devicesData) and setup.timerAnalysis[analysis]["across"] in ["risc", "core"]:
+                    for core_y in range(-2, 12):
+                        # Print row number
+                        if core_y > 0:
+                            print(f"{core_y:>2}|| ", end="")
+                        else:
+                            print(f"{' ':>4} ", end="")
 
-                            for core_x in range(0, 13):
-                                if core_x > 0:
-                                    if core_y == -2:
-                                        print(f"{core_x:>{numberWidth}}", end="")
-                                    elif core_y == -1:
-                                        print(f"{'=':=>{numberWidth}}", end="")
-                                    elif core_y == 0:
-                                        if core_x in [1, 4, 7, 10]:
-                                            print(f"{f'DRAM{int(core_x/3)}':>{numberWidth}}", end="")
-                                        else:
-                                            print(f"{'---':>{numberWidth}}", end="")
-                                    elif core_y != 6:
-                                        core = (core_x, core_y)
-                                        noCoreData = True
-                                        if core in deviceData["cores"].keys():
-                                            for risc, riscData in deviceData["cores"][core]["riscs"].items():
-                                                if (
-                                                    "analysis" in riscData.keys()
-                                                    and analysis in riscData["analysis"].keys()
-                                                ):
-                                                    stats = riscData["analysis"][analysis]["stats"]
-                                                    plusMinus = (stats["Max"] - stats["Min"]) // 2
-                                                    median = stats["Median"]
-                                                    tmpStr = f"{median:,.0f}"
-                                                    if stats["Count"] > 1:
-                                                        tmpStr = "{tmpStr}{sign}{plusMinus:,}".format(
-                                                            tmpStr=tmpStr, sign="\u00B1", plusMinus=plusMinus
-                                                        )
-                                                    print(f"{tmpStr:>{numberWidth}}", end="")
-                                                    noCoreData = False
-                                        if noCoreData:
-                                            print(f"{'X':>{numberWidth}}", end="")
+                        for core_x in range(0, 13):
+                            if core_x > 0:
+                                if core_y == -2:
+                                    print(f"{core_x:>{numberWidth}}", end="")
+                                elif core_y == -1:
+                                    print(f"{'=':=>{numberWidth}}", end="")
+                                elif core_y == 0:
+                                    if core_x in [1, 4, 7, 10]:
+                                        print(f"{f'DRAM{int(core_x/3)}':>{numberWidth}}", end="")
                                     else:
-                                        if core_x in [1, 4, 7, 10]:
-                                            print(f"{f'DRAM{4 + int(core_x/3)}':>{numberWidth}}", end="")
-                                        else:
-                                            print(f"{'---':>{numberWidth}}", end="")
-
+                                        print(f"{'---':>{numberWidth}}", end="")
+                                elif core_y != 6:
+                                    core = (core_x, core_y)
+                                    noCoreData = True
+                                    if core in deviceData["cores"].keys():
+                                        for risc, riscData in deviceData["cores"][core]["riscs"].items():
+                                            if (
+                                                "analysis" in riscData.keys()
+                                                and analysis in riscData["analysis"].keys()
+                                            ):
+                                                stats = riscData["analysis"][analysis]["stats"]
+                                                plusMinus = (stats["Max"] - stats["Min"]) // 2
+                                                median = stats["Median"]
+                                                tmpStr = f"{median:,.0f}"
+                                                if stats["Count"] > 1:
+                                                    tmpStr = "{tmpStr}{sign}{plusMinus:,}".format(
+                                                        tmpStr=tmpStr, sign="\u00B1", plusMinus=plusMinus
+                                                    )
+                                                print(f"{tmpStr:>{numberWidth}}", end="")
+                                                noCoreData = False
+                                    if noCoreData:
+                                        print(f"{'X':>{numberWidth}}", end="")
                                 else:
-                                    if core_y == 1:
-                                        print("ARC", end="")
-                                    elif core_y == 3:
-                                        print("PCI", end="")
-                                    elif core_y > -1:
-                                        print("---", end="")
+                                    if core_x in [1, 4, 7, 10]:
+                                        print(f"{f'DRAM{4 + int(core_x/3)}':>{numberWidth}}", end="")
                                     else:
-                                        print("   ", end="")
+                                        print(f"{'---':>{numberWidth}}", end="")
 
-                            print()
+                            else:
+                                if core_y == 1:
+                                    print("ARC", end="")
+                                elif core_y == 3:
+                                    print("PCI", end="")
+                                elif core_y > -1:
+                                    print("---", end="")
+                                else:
+                                    print("   ", end="")
+
                         print()
-                        print()
-                        print()
+                    print()
+                    print()
+                    print()
 
 
 def print_help():

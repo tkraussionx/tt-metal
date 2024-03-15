@@ -54,7 +54,7 @@ def get_function_name():
 
 
 def test_multi_op():
-    OP_COUNT = 1100
+    OP_COUNT = 1000
     RUN_COUNT = 2
     REF_COUNT_DICT = {
         "grayskull": [108 * OP_COUNT * RUN_COUNT, 88 * OP_COUNT * RUN_COUNT],
@@ -97,7 +97,7 @@ def test_custom_cycle_count():
 
 
 def test_full_buffer():
-    OP_COUNT = 25
+    OP_COUNT = 26
     RISC_COUNT = 5
     ZONE_COUNT = 125
     REF_COUNT_DICT = {
@@ -116,6 +116,16 @@ def test_full_buffer():
 
     stats = devicesData["data"]["devices"]["0"]["cores"]["DEVICE"]["analysis"]
     statName = "Marker Repeat"
+    statNameEth = "Marker Repeat ETH"
 
     assert statName in stats.keys(), "Wrong device analysis format"
-    assert stats[statName]["stats"]["Count"] in REF_COUNT_DICT[ENV_VAR_ARCH_NAME], "Wrong Marker Repeat count"
+
+    if statNameEth in stats.keys():
+        assert (
+            stats[statName]["stats"]["Count"] - stats[statNameEth]["stats"]["Count"]
+            in REF_COUNT_DICT[ENV_VAR_ARCH_NAME]
+        ), "Wrong Marker Repeat count"
+        assert stats[statNameEth]["stats"]["Count"] > 0, "Wrong Eth Marker Repeat count"
+        assert stats[statNameEth]["stats"]["Count"] % (OP_COUNT * ZONE_COUNT) == 0, "Wrong Eth Marker Repeat count"
+    else:
+        assert stats[statName]["stats"]["Count"] in REF_COUNT_DICT[ENV_VAR_ARCH_NAME], "Wrong Marker Repeat count"

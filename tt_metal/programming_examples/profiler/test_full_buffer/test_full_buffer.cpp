@@ -8,12 +8,13 @@
 
 using namespace tt;
 
-void RunCustomCycle(tt_metal::Device *device, int loop_count, bool fast_dispatch)
+void RunFillUpAllBuffers(tt_metal::Device *device, int loop_count, bool fast_dispatch)
 {
     CoreCoord compute_with_storage_size = device->compute_with_storage_grid_size();
     CoreCoord start_core = {0, 0};
     CoreCoord end_core = {compute_with_storage_size.x - 1, compute_with_storage_size.y - 1};
     CoreRange all_cores(start_core, end_core);
+    auto eth_cores = device->get_active_ethernet_cores(true);
 
     tt_metal::Program program = tt_metal::CreateProgram();
 
@@ -36,6 +37,14 @@ void RunCustomCycle(tt_metal::Device *device, int loop_count, bool fast_dispatch
         program, "tt_metal/programming_examples/profiler/test_full_buffer/kernels/full_buffer_compute.cpp",
         all_cores,
         tt_metal::ComputeConfig{.compile_args = trisc_kernel_args, .defines = kernel_defines});
+
+    for (auto core : eth_cores)
+    {
+        auto eth_reader_kernel = tt_metal::CreateKernel(
+                program, "tt_metal/programming_examples/profiler/test_full_buffer/kernels/full_buffer_ether.cpp",
+                (CoreCoord){core.x,core.y},
+                tt_metal::EthernetConfig{.noc = tt_metal::NOC::NOC_0, .defines = kernel_defines});
+    }
 
     if (fast_dispatch)
     {
@@ -62,14 +71,12 @@ int main(int argc, char **argv) {
         tt_metal::Device *device =
             tt_metal::CreateDevice(device_id);
 
-        tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(true);
         const auto USE_FAST_DISPATCH = std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr;
 
         constexpr int device_loop_count = 150;
 
-        RunCustomCycle(device, device_loop_count, USE_FAST_DISPATCH);
+        RunFillUpAllBuffers(device, device_loop_count, USE_FAST_DISPATCH);
         tt_metal::detail::DumpDeviceProfileResults(device);
-        tt::Cluster::instance().set_internal_routing_info_for_ethernet_cores(false);
 
         pass &= tt_metal::CloseDevice(device);
 

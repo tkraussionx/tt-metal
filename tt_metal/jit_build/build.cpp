@@ -607,6 +607,8 @@ void JitBuildState::extract_zone_src_locations(const string& log_file) const
             tt::utils::create_file(tt::tt_metal::PROFILER_ZONE_SRC_LOCATIONS_LOG);
         }
 
+        // Only interested in log entries with KERNEL_PROFILER inside them as device code
+        // tags source location info with it using pragma messages
         string cmd = "cat " +  log_file + " | grep KERNEL_PROFILER";
         tt::utils::run_command(cmd, tt::tt_metal::PROFILER_ZONE_SRC_LOCATIONS_LOG, false);
     }

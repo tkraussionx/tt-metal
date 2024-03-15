@@ -444,6 +444,16 @@ std::string generate_bank_to_noc_coord_descriptor_string(
     ss << endl;
 
 #if defined(PROFILER)
+    /*
+     * This part is adding the 2D array for sharing the flat IDs soc descriptor has assigned to every NOC coordinate,
+     * and the ceiled number of cores per DRAM banks.
+     *
+     * The logic of flat ID assignment can be optimized to lower NOC traffic. With this design the heuristic can be implemented
+     * in host and device just does look up to the table.
+     *
+     * For DRAM banks in particular, integer division of flat_id/core_count_per_dram gives the dram bank id and the modulo
+     * is the offset.
+     * */
     ss << "uint16_t profiler_core_count_per_dram __attribute__((used)) = ";
     ss << core_count_per_dram <<  ";" << endl;
     ss << endl;
@@ -453,12 +463,10 @@ std::string generate_bank_to_noc_coord_descriptor_string(
         ss << "    {" << endl;
         for (unsigned int y = 0; y < grid_size.y; y++) {
             CoreCoord core = {x,y};
-            if (profiler_flat_id_map.find(core) == profiler_flat_id_map.end())
-            {
+            if (profiler_flat_id_map.find(core) == profiler_flat_id_map.end()){
                 ss << "        " << -1 << "," << endl;
             }
-            else
-            {
+            else{
                 ss << "        " << profiler_flat_id_map.at(core) << "," << endl;
             }
         }

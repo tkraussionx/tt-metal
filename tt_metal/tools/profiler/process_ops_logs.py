@@ -154,7 +154,7 @@ def append_device_data(ops, deviceLogFolder):
 
 
 def generate_reports(ops, deviceOps, outputFolder, date, nameAppend):
-    logger.info(f"OPs' perf analysis is finished! Generating YAMLs and CSVs ...")
+    logger.info(f"OPs' perf analysis is finished! Generating reports ...")
     outFolder = PROFILER_OUTPUT_DIR
     if outputFolder:
         outFolder = outputFolder
@@ -173,20 +173,22 @@ def generate_reports(ops, deviceOps, outputFolder, date, nameAppend):
 
     logger.info(f"Copying runtime artifacts")
     os.system(f"rm -rf {outFolder}; mkdir -p {outFolder}")
-    os.system(f"cp {PROFILER_LOGS_DIR / TRACY_FILE_NAME} {outFolder}")
-    os.system(f"cp {PROFILER_LOGS_DIR / PROFILER_DEVICE_SIDE_LOG} {outFolder}")
+    if os.path.isfile(f"{PROFILER_LOGS_DIR / TRACY_FILE_NAME}"):
+        os.system(f"cp {PROFILER_LOGS_DIR / TRACY_FILE_NAME} {outFolder}")
+    if os.path.isfile(f"{PROFILER_LOGS_DIR / PROFILER_DEVICE_SIDE_LOG}"):
+        os.system(f"cp {PROFILER_LOGS_DIR / PROFILER_DEVICE_SIDE_LOG} {outFolder}")
 
-    logger.info(f"Generating OPs yaml")
-    allOpsYAMLPath = os.path.join(outFolder, f"{name}_all_ops.yaml")
-    with open(allOpsYAMLPath, "w") as allOpsYAML:
-        yaml.safe_dump(ops, allOpsYAML, default_flow_style=False)
-    logger.info(f"OPs yaml generated at: {allOpsYAMLPath}")
+    # logger.info(f"Generating OPs yaml")
+    # allOpsYAMLPath = os.path.join(outFolder, f"{name}_all_ops.yaml")
+    # with open(allOpsYAMLPath, "w") as allOpsYAML:
+    # yaml.safe_dump(ops, allOpsYAML, default_flow_style=False)
+    # logger.info(f"OPs yaml generated at: {allOpsYAMLPath}")
 
-    logger.info(f"Generating Device OPs yaml")
-    deviceOpsYAMLPath = os.path.join(outFolder, f"{name}_devices_ops.yaml")
-    with open(deviceOpsYAMLPath, "w") as deviceOpsYAML:
-        yaml.safe_dump(deviceOps, deviceOpsYAML, default_flow_style=False)
-    logger.info(f"Device OPs yaml generated at: {deviceOpsYAMLPath}")
+    # logger.info(f"Generating Device OPs yaml")
+    # deviceOpsYAMLPath = os.path.join(outFolder, f"{name}_devices_ops.yaml")
+    # with open(deviceOpsYAMLPath, "w") as deviceOpsYAML:
+    # yaml.safe_dump(deviceOps, deviceOpsYAML, default_flow_style=False)
+    # logger.info(f"Device OPs yaml generated at: {deviceOpsYAMLPath}")
 
     logger.info(f"Generating OPs CSV")
     allOpsCSVPath = os.path.join(outFolder, f"{name}.csv")

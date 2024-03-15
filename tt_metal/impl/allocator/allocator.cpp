@@ -107,34 +107,18 @@ uint64_t BankManager::allocate_buffer(uint32_t size, uint32_t page_size, bool bo
         TT_THROW("Out of Memory: Not enough space to allocate {} B {} buffer across {} banks, where each bank needs to store {} B", size, magic_enum::enum_name(this->buffer_type_), num_banks, size_per_bank);
     }
     allocated_buffers_.insert(address.value());
-#if defined(TRACY_ENABLE)
-    TracyAllocN(reinterpret_cast<void const *>(address.value()), size_per_bank, get_memory_pool_name(buffer_type_));
-#endif
     return address.value();
 }
 
-void BankManager::deallocate_buffer_(uint64_t address)
-{
-    if (this->allocated_buffers_.find(address) != this->allocated_buffers_.end())
-    {
-        this->allocator_->deallocate(address);
-#if defined(TRACY_ENABLE)
-        TracyFreeN(reinterpret_cast<void const *>(address), get_memory_pool_name(buffer_type_));
-#endif
-    }
-}
-
 void BankManager::deallocate_buffer(uint64_t address) {
-    deallocate_buffer_(address);
-    this->allocated_buffers_.erase(address);
+    this->allocator_->deallocate(address);
 }
 
 void BankManager::deallocate_all(){
     for (uint64_t addr : this->allocated_buffers_)
     {
-        this->deallocate_buffer_(addr);
+        this->allocator_->deallocate(addr);
     }
-    this->allocated_buffers_.clear();
 }
 
 

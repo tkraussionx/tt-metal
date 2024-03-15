@@ -73,6 +73,7 @@ namespace kernel_profiler{
     inline __attribute__((always_inline)) void init_profiler(uint16_t briscKernelID = 0, uint16_t ncriscKernelID = 0, uint16_t triscsKernelID = 0)
     {
         wIndex = CUSTOM_MARKERS;
+        stackSize = 0;
 
         for (int i = 0; i < SUM_COUNT; i ++)
         {
