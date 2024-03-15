@@ -563,8 +563,8 @@ class UNet2DConditionModel:
             print(f"Starting final group norm")
             print("GN input shape - ", sample.shape)
             print(f"Final GN: memory_config={ttnn.get_memory_config(sample)}")
-            hidden_states = ttnn.reshape(
-                hidden_states,
+            sample = ttnn.reshape(
+                sample,
                 (
                     self.conv_out.batch_size,
                     1,
@@ -583,8 +583,8 @@ class UNet2DConditionModel:
             )
         print("Done GN")
         sample = ttnn.to_memory_config(sample, ttnn.L1_MEMORY_CONFIG)
-        hidden_states = ttnn.reshape(
-            hidden_states,
+        sample = ttnn.reshape(
+            sample,
             (
                 1,
                 1,
