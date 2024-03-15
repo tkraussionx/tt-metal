@@ -20,7 +20,8 @@ class TtResidualBlock(torch.nn.Module):
         state_dict,
         num_users,
         hidden_size,
-        configs
+        configs,
+        tt_cache_path
     ):
         super().__init__()
 
@@ -31,7 +32,7 @@ class TtResidualBlock(torch.nn.Module):
         rms_norm_weight_name = "norm.weight"
         self.rms_norm_weights = load_fn(rms_norm_weight_name)
 
-        self.tt_mamba_block = TtMambaBlock(self.args,self.device,load_fn,self.state_dict, num_users, hidden_size, configs)
+        self.tt_mamba_block = TtMambaBlock(self.args,self.device,load_fn,self.state_dict, num_users, hidden_size, configs, tt_cache_path)
 
     def forward(self, x):
         mamba_input = x
