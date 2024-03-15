@@ -390,7 +390,6 @@ inline Tensor to_device(
     }
     TT_ASSERT(target_device != nullptr && "Need target device in order to move tensor to device!");
     TT_ASSERT(tensor.is_allocated() && "Need data to exist in order to move it to device");
-
     auto shape = tensor.get_legacy_shape();
     auto data_type = tensor.get_dtype();
     auto layout = tensor.get_layout();

@@ -89,8 +89,18 @@ struct EltwiseBinary {
 template <BinaryOpType binary_op_type>
 struct make_eltwise_binary {
      Tensor operator()(const Tensor& input_tensor_a, const Tensor& input_tensor_b, std::optional<std::vector<UnaryWithParam>> fused_activations = std::nullopt, const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, std::optional<const DataType> output_dtype=std::nullopt) const {
-         TT_FATAL(input_tensor_a.get_legacy_shape() == input_tensor_b.get_legacy_shape(), "Input shapes must be the same!");
-         return operation::run_with_autoformat(EltwiseBinary{binary_op_type, fused_activations, output_mem_config, output_dtype.value_or(input_tensor_a.get_dtype()), false}, {input_tensor_a, input_tensor_b}).at(0);
+        auto device = input_tensor_a.device_synchronous;
+        Tensor output_tensor;
+        output_tensor.device_synchronous = device;
+        device->push_work([input_tensor_a, input_tensor_b, output_tensor, fused_activations, output_mem_config, output_dtype] () mutable {
+            TT_FATAL(input_tensor_a.get_legacy_shape() == input_tensor_b.get_legacy_shape(), "Input shapes must be the same!");
+            auto local_tensor = operation::run_with_autoformat(EltwiseBinary{binary_op_type, fused_activations, output_mem_config, output_dtype.value_or(input_tensor_a.get_dtype()), false}, {input_tensor_a, input_tensor_b}).at(0);
+            output_tensor.set_storage(local_tensor.get_storage());
+            output_tensor.set_shape(local_tensor.get_shape());
+            output_tensor.set_dtype(local_tensor.get_dtype());
+            output_tensor.set_layout(local_tensor.get_layout());
+        });
+        return output_tensor;
      }
  };
 

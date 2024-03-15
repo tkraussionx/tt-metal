@@ -8,6 +8,7 @@
 #include <mutex>
 
 #include "hostdevcommon/common_values.hpp"
+#include "impl/device/functional_lock_free_queue.hpp"
 #include "tt_metal/impl/allocator/basic_allocator.hpp"
 #include "tt_metal/impl/allocator/l1_banking_allocator.hpp"
 #include "tt_metal/jit_build/build.hpp"
@@ -66,6 +67,11 @@ public:
 class Device {
    public:
     // friend void tt_gdb(Device* device, int chip_id, const vector<CoreCoord> cores, vector<string> ops);
+    enum class WorkerState {
+        RUNNING = 0,
+        TERMINATE = 1,
+    };
+
     Device () = delete;
     Device(chip_id_t device_id, const uint8_t num_hw_cqs, const std::vector<uint32_t>& l1_bank_remap = {});
 
@@ -192,7 +198,10 @@ class Device {
     void compile_command_queue_programs_for_grayskull();
     void configure_command_queue_programs();
     void clear_l1_state();
-
+    void start_worker();
+    void run_worker();
+    void stop_worker();
+    void push_work(std::function<void()> work_executor, bool blocking = false);
     std::pair<int, int> build_processor_type_to_index(JitBuildProcessorType t) const;
 
     // Puts device into reset
@@ -221,6 +230,9 @@ class Device {
     // SystemMemoryManager is the interface to the hardware command queue
     std::vector<std::unique_ptr<HWCommandQueue>> hw_command_queues_;
     std::vector<std::unique_ptr<CommandQueue>> sw_command_queues_;
+    FunctionalLockFreeQueue worker_queue;
+    std::thread worker_thread;
+    WorkerState worker_state;
     std::unique_ptr<SystemMemoryManager> sysmem_manager_;
     vector<std::unique_ptr<Program, detail::ProgramDeleter>> command_queue_programs_;
     uint8_t num_hw_cqs_;

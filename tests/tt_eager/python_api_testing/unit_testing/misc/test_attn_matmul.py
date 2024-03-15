@@ -35,28 +35,29 @@ def test_attn_matmul(in0_dtype, in1_dtype, out_dtype, device):
     torch.manual_seed(0)
 
     for input_shape_a, input_shape_b in generate_input_shapes():
-        input_tensor_a = torch.randn(input_shape_a).bfloat16()
-        input_tensor_b = torch.randn(input_shape_b).bfloat16()
+        for i in range(10):
+            input_tensor_a = torch.randn(input_shape_a).bfloat16()
+            input_tensor_b = torch.randn(input_shape_b).bfloat16()
 
-        tt_input_tensor_a = ttl.tensor.Tensor(input_tensor_a, in0_dtype).to(ttl.tensor.Layout.TILE).to(device)
-        tt_input_tensor_b = ttl.tensor.Tensor(input_tensor_b, in1_dtype).to(ttl.tensor.Layout.TILE).to(device)
+            tt_input_tensor_a = ttl.tensor.Tensor(input_tensor_a, in0_dtype).to(ttl.tensor.Layout.TILE).to(device)
+            tt_input_tensor_b = ttl.tensor.Tensor(input_tensor_b, in1_dtype).to(ttl.tensor.Layout.TILE).to(device)
 
-        compute_grid_size = device.compute_with_storage_grid_size()
-        tt_output_tensor_on_device = ttl.operations.primary.transformers.attn_matmul(
-            tt_input_tensor_a,
-            tt_input_tensor_b,
-            compute_with_storage_grid_size=ttl.tensor.CoreCoord(compute_grid_size.x, compute_grid_size.y),
-            output_mem_config=ttl.tensor.MemoryConfig(
-                ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1
-            ),
-            output_dtype=out_dtype,
-        )
-        tt_output_tensor = tt_output_tensor_on_device.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
+            compute_grid_size = device.compute_with_storage_grid_size()
+            tt_output_tensor_on_device = ttl.operations.primary.transformers.attn_matmul(
+                tt_input_tensor_a,
+                tt_input_tensor_b,
+                compute_with_storage_grid_size=ttl.tensor.CoreCoord(compute_grid_size.x, compute_grid_size.y),
+                output_mem_config=ttl.tensor.MemoryConfig(
+                    ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1
+                ),
+                output_dtype=out_dtype,
+            )
+            tt_output_tensor = tt_output_tensor_on_device.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
 
-        golden_output_tensor = (input_tensor_a.transpose(0, 2) @ input_tensor_b).transpose(0, 2)
+            golden_output_tensor = (input_tensor_a.transpose(0, 2) @ input_tensor_b).transpose(0, 2)
 
-        allclose, output = comp_pcc(tt_output_tensor, golden_output_tensor)
-        assert allclose, f"FAILED: {output}"
+            allclose, output = comp_pcc(tt_output_tensor, golden_output_tensor)
+            assert allclose, f"FAILED: {output}"
 
 
 @pytest.mark.skipif(is_grayskull(), reason="GS does not support fp32")
@@ -291,7 +292,7 @@ def test_group_attn_matmul_with_program_cache(in0_dtype, in1_dtype, output_dtype
             )
         else:
             output_mem_config = interleaved_mem_config
-
+        temp = tt_input_tensor_b.cpu()
         num_cache_entries_start = device.num_program_cache_entries()
         tt_output_tensor_on_device = ttl.operations.primary.transformers.group_attn_matmul(
             tt_input_tensor_a,
@@ -300,6 +301,7 @@ def test_group_attn_matmul_with_program_cache(in0_dtype, in1_dtype, output_dtype
             output_mem_config=output_mem_config,
             output_dtype=output_dtype,
         )
+        temp = tt_output_tensor_on_device.cpu()
         num_cache_entries += device.num_program_cache_entries() - num_cache_entries_start
 
         if sharded:

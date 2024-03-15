@@ -63,6 +63,7 @@ Device::Device(chip_id_t device_id, const uint8_t num_hw_cqs, const std::vector<
     ZoneScoped;
     TT_ASSERT(num_hw_cqs > 0 and num_hw_cqs < 3, "num_hw_cqs can be between 1 and 2");
     this->initialize(l1_bank_remap);
+    this->start_worker();
 }
 
 void Device::initialize_cluster() {
@@ -851,6 +852,7 @@ bool Device::close() {
 }
 
 Device::~Device() {
+    stop_worker();
     if (this->initialized_) {
         this->close();
     }
@@ -1047,6 +1049,41 @@ CommandQueue& Device::command_queue(size_t cq_id) {
     TT_ASSERT( cq_id < sw_command_queues_.size(), "cq_id {} is out of range", cq_id );
     TT_FATAL(this->is_initialized(), "Device has not been initialized, did you forget to call InitializeDevice?");
     return *sw_command_queues_[cq_id];
+}
+
+void Device::push_work(std::function<void()> work_executor, bool blocking) {
+    this->worker_queue.push(work_executor);
+    if (blocking) {
+        this->worker_queue.push([](){});
+        while(not this->worker_queue.empty()) {
+            std::this_thread::sleep_for(std::chrono::microseconds(10));
+        };
+    }
+}
+
+void Device::start_worker() {
+    this->worker_state = WorkerState::RUNNING;
+    this->worker_thread = std::thread(&Device::run_worker, this);
+}
+
+void Device::run_worker() {
+    while (true) {
+        if(this->worker_queue.empty()) {
+            if (this->worker_state == WorkerState::TERMINATE) {
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(10));
+        }
+        else {
+            auto func = this->worker_queue.pop();
+            func();
+        }
+    }
+}
+
+void Device::stop_worker() {
+    this->worker_state = WorkerState::TERMINATE;
+    this->worker_thread.join();
 }
 
 bool Device::using_slow_dispatch() const {

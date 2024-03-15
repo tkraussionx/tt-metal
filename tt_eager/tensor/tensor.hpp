@@ -39,7 +39,7 @@ struct Tensor {
     // Shared pointer to all attributes associated with this tensor
     // Can be safely passed between threads when the tensor is copied
     std::shared_ptr<TensorAttributes> tensor_attributes;
-
+    Device* device_synchronous = nullptr;
     // ======================================================================================
     //                                  Hi Level APIs
     // ======================================================================================
@@ -49,7 +49,13 @@ struct Tensor {
     // Default constructor to initialize empty tensor
     Tensor() : tensor_attributes(std::make_shared<TensorAttributes>()) {}
 
-    Tensor(const Tensor &other) = default;
+    Tensor(const Tensor &other) {
+        this->tensor_attributes = other.tensor_attributes;
+        if (device_synchronous != nullptr) {
+            device_synchronous = other.device_synchronous;
+        }
+    }
+
     Tensor &operator=(const Tensor &other) = default;
 
     Tensor(Tensor &&other) = default;

@@ -128,22 +128,40 @@ Tensor Tensor::to(CommandQueue & queue, const MemoryConfig & mem_config) const {
 
 Tensor Tensor::to(Device *target_device, const MemoryConfig &mem_config) const {
     ZoneScoped;
-
-    if (storage_type() == StorageType::DEVICE) {
-        TT_ASSERT(this->device() == target_device && "Currently do not support moving between devices");
+    if (device_synchronous != nullptr) {
+        TT_ASSERT(device_synchronous == target_device, "Currently do not support moving between devices");
         return *this;
     }
 
-    tensor_impl::validate_on_device_dtype_and_layout(target_device, this->get_dtype(), this->get_layout());
-    return tensor_impl::to_device_wrapper(*this, target_device, mem_config);
+    Tensor device_tensor;
+    // Synchronously set the device, so that all subsequent operations using this thread know which device/thread to send work to
+    device_tensor.device_synchronous = target_device;
+    target_device->push_work([*this, device_tensor, mem_config, target_device] () mutable {
+        tensor_impl::validate_on_device_dtype_and_layout(target_device, this->get_dtype(), this->get_layout());
+        auto local_tensor = tensor_impl::to_device_wrapper(*this, target_device, mem_config);
+        device_tensor.set_storage(local_tensor.get_storage());
+        device_tensor.set_shape(local_tensor.get_shape());
+        device_tensor.set_dtype(local_tensor.get_dtype());
+        device_tensor.set_layout(local_tensor.get_layout());
+    });
+    return device_tensor;
 }
 
 Tensor Tensor::cpu(bool blocking) const {
     ZoneScoped;
-    if (storage_type() == StorageType::OWNED) {
+    if (device_synchronous == nullptr) {
         return *this;
     }
-    return tensor_impl::to_host_wrapper(*this, blocking);
+
+    Tensor host_tensor;
+    this->device_synchronous->push_work([*this, host_tensor, blocking] () mutable {
+        auto local_tensor = tensor_impl::to_host_wrapper(*this, blocking);
+        host_tensor.set_storage(local_tensor.get_storage());
+        host_tensor.set_shape(local_tensor.get_shape());
+        host_tensor.set_dtype(local_tensor.get_dtype());
+        host_tensor.set_layout(local_tensor.get_layout());
+    }, blocking);
+    return host_tensor;
 }
 
 Tensor Tensor::cpu_sharded() const {
