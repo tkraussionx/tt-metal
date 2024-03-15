@@ -5,6 +5,7 @@
 import os
 import time
 import pwd
+import logging
 
 
 class WaitLock:
@@ -21,9 +22,10 @@ class WaitLock:
             pass
 
         self.pid = os.getpid()
+        self.owns_lock = False
         self._acquire_lock()
 
-    def _is_lock_valid(self):
+    def _is_lock_valid(self, and_is_ours=False):
         """Check if the lock file exists and if the PID within it corresponds to a running process."""
         if not os.path.exists(self.lock_file):
             return False
@@ -35,25 +37,36 @@ class WaitLock:
         except (OSError, ValueError):
             # OSError if the process doesn't exist, ValueError if PID is not an integer
             return False
-        return True
+
+        if and_is_ours and pid != self.pid:
+            return False
+        else:
+            return True
 
     def _acquire_lock(self):
         """Acquire the lock, waiting and retrying if necessary."""
         prev_user = None
+        if self.owns_lock:
+            logging.warning(f"WaitLock::._aquire_lock: lock already acquired, skipping")
+            return
+
         while True:
             if not self._is_lock_valid():
                 try:
                     # Attempt to acquire the lock
+                    if os.path.exists(self.lock_file):
+                        os.remove(self.lock_file)  # recreate with us as owner
                     with open(self.lock_file, "w") as f:
                         f.write(str(self.pid))
                     # Make the file world-writable in case our process dies
-                    os.chown(self.lock_file, os.getuid(), os.getgid())
-                    # Mark it as owned by us
                     os.chmod(self.lock_file, 0o666)
+                    # Mark it as owned by us
+                    os.chown(self.lock_file, os.getuid(), os.getgid())
                     # Double-check if the lock was successfully acquired
-                    if self._is_lock_valid():
+                    if self._is_lock_valid(and_is_ours=True):
                         break
-                except OSError:
+                except OSError as e:
+                    print(f"Failed to acquire lock: {e}")
                     # If lock acquisition failed due to an OS error, assume another process is acquiring the lock
                     pass
             try:
@@ -64,14 +77,16 @@ class WaitLock:
                 print(f"Waiting for lock to be released by {user}")
                 prev_user = user
             time.sleep(1)
+        self.owns_lock = True
 
     def release(self):
         """Release the lock."""
-        try:
-            if self._is_lock_valid():
+        if self.owns_lock:
+            try:
                 os.remove(self.lock_file)
-        except OSError:
-            pass
+            except OSError:
+                pass
+            self.owns_lock = False
 
     def __del__(self):
         """Delete the lock file upon destruction of the object if this process holds the lock."""
