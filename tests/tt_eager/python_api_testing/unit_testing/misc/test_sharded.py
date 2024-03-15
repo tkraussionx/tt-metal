@@ -690,17 +690,17 @@ def test_falcon7b_attnention_slice_matmuls(
         torch_scalar, device, tt_memory_config=dram_interleaved_memory_config, tt_dtype=ttl.tensor.DataType.BFLOAT16
     )
 
-    attention_mask_slices = []
-    slice_width = seq_len // num_slices
-    for i in range(num_slices):
-        attention_mask_slices.append(
-            torch2tt_tensor(
-                torch_attention_mask[:, :, (i) * slice_width : (i + 1) * slice_width, :],
-                device,
-                tt_memory_config=dram_interleaved_memory_config,
-                tt_dtype=ttl.tensor.DataType.BFLOAT16,
-            )
-        )
+    # attention_mask_slices = []
+    # slice_width = seq_len // num_slices
+    # for i in range(num_slices):
+    #     attention_mask_slices.append(
+    #         torch2tt_tensor(
+    #             torch_attention_mask[:, :, (i) * slice_width : (i + 1) * slice_width, :],
+    #             device,
+    #             tt_memory_config=dram_interleaved_memory_config,
+    #             tt_dtype=ttl.tensor.DataType.BFLOAT16,
+    #         )
+    #     )
 
     attention_mask = torch2tt_tensor(
         torch_attention_mask,
@@ -719,6 +719,7 @@ def test_falcon7b_attnention_slice_matmuls(
     # matmul
     # optimised version
     passing = True
+    output = None
     if seq_len == 1024:
         # prepare interleaved output, temp
         mm_out = torch2tt_tensor(
@@ -730,13 +731,15 @@ def test_falcon7b_attnention_slice_matmuls(
         # tiles_per_shard = (math.ceil((71 * seq_len) // num_cores) // num_slices)
         tiles_per_shard = math.ceil((((71 * seq_len) / num_cores) / num_slices) / 32)
         print("Tiles per shard is: ", tiles_per_shard)
-        height_shard_spec = [tiles_per_shard * 32, 2 * 32]
+        mm_activations_height_shard_spec = [tiles_per_shard * 32, 2 * 32]
+        mm_output_height_shard_spec = [tiles_per_shard * 32, seq_len]
+
         for i in range(num_slices):
             print("Running slice: ", i)
             slice = ttl.tensor.interleaved_to_sharded_partial(
                 reference_query_layer,
                 device.compute_with_storage_grid_size(),
-                height_shard_spec,
+                mm_activations_height_shard_spec,
                 ttl.tensor.ShardedOpSplitDim.DimRow,
                 num_slices,  # num_slices
                 i,  # slice_index
@@ -757,6 +760,7 @@ def test_falcon7b_attnention_slice_matmuls(
                 mcast_in0=False,
             )
 
+            # [1, 1, 71, 32, 2] * [2, 32]
             mm_slice = ttl.operations.primary.matmul(
                 slice,
                 reference_key_layer_transposed,
@@ -766,28 +770,49 @@ def test_falcon7b_attnention_slice_matmuls(
                 compute_kernel_config=compute_kernel_config,
             )
 
-            # Perform add
-            # attn_mask_slice = ttl.tensor.interleaved_to_sharded_partial(
-            #     attention_mask,
-            #     device.compute_with_storage_grid_size(),
-            #     [9 * 32, 2 * 32],
-            #     ttl.tensor.ShardedOpSplitDim.DimRow,
-            #     num_slices,  # num_slices
-            #     i,  # slice_index
-            #     ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-            #     ttl.tensor.ShardOrientation.ROW_MAJOR,
-            # )
-
-            # mm_slice = ttl.tensor.add(mm_slice, attention_mask_slices[i], output_mem_config=height_sharded_memory_config)
-
             # Perform broadcast
-            # mm_slice = ttl.tensor.bcast(
-            #     mm_slice,
-            #     reference_scalar,
-            #     ttl.tensor.BcastOpMath.MUL,
-            #     ttl.tensor.BcastOpDim.HW,
-            #     output_mem_config=height_sharded_memory_config,
-            # )
+            print("Running bcast")
+            mm_slice = ttl.tensor.bcast(
+                mm_slice,
+                reference_scalar,
+                ttl.tensor.BcastOpMath.MUL,
+                ttl.tensor.BcastOpDim.HW,
+                output_mem_config=height_sharded_memory_config,
+            )
+
+            # Slice attention mask
+            # [1, 1, 71, 1024, 1024]
+            # [1, 1, 71, 256, 2024]
+            # This really should be [1, 1, 1024, 32!!!] tiles
+            # Sharded add bcast
+            attn_mask_slice = ttl.tensor.interleaved_to_sharded_partial(
+                attention_mask,
+                device.compute_with_storage_grid_size(),
+                mm_output_height_shard_spec,
+                ttl.tensor.ShardedOpSplitDim.DimRow,
+                num_slices,  # num_slices
+                i,  # slice_index
+                ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                ttl.tensor.ShardOrientation.ROW_MAJOR,
+            )
+
+            # tensor.add(mm_slice, att_mask[0:1024],)
+            mm_slice = ttl.tensor.add_without_autoformat(
+                mm_slice, attn_mask_slice, output_mem_config=height_sharded_memory_config, in_place=True
+            )
+
+            attn_mask_slice.deallocate()
+
+            softmax_program_config = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
+                compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+                subblock_w=1,
+                block_h=mm_output_height_shard_spec[0] // 32,
+                block_w=mm_output_height_shard_spec[1] // 32,
+                math_fidelity=ttl.tensor.MathFidelity.HiFi4,
+                im_data_format=ttl.tensor.DataType.BFLOAT16,
+            )
+
+            mm_slice = ttl.operations.primary.softmax_in_place(mm_slice, program_config=softmax_program_config)
 
             ttl.tensor.sharded_to_interleaved_partial(
                 mm_slice,
@@ -797,23 +822,27 @@ def test_falcon7b_attnention_slice_matmuls(
                 i,
                 dram_interleaved_memory_config,
             )  # produces dim of total tensor!
-            mm_slice.deallocate()
 
+            mm_slice.deallocate()
+            # attn_mask_slice.deallocate()
+
+        # mm_out = ttl.operations.primary.softmax_in_place(mm_out)
         mm_out_torch = tt2torch_tensor(mm_out)
 
         attn_weights = ttl.tensor.matmul(
             reference_query_layer, reference_key_layer_transposed, output_mem_config=dram_interleaved_memory_config
         )
 
-        attn_weights = ttl.tensor.add(attn_weights, attention_mask, output_mem_config=dram_interleaved_memory_config)
+        attn_weights = ttl.tensor.bcast(
+            attn_weights,
+            reference_scalar,
+            ttl.tensor.BcastOpMath.MUL,
+            ttl.tensor.BcastOpDim.HW,
+            output_mem_config=dram_interleaved_memory_config,
+        )
 
-        # attn_weights = ttl.tensor.bcast(
-        #     attn_weights,
-        #     reference_scalar,
-        #     ttl.tensor.BcastOpMath.MUL,
-        #     ttl.tensor.BcastOpDim.HW,
-        #     output_mem_config=dram_interleaved_memory_config,
-        # )
+        attn_weights = ttl.tensor.add(attn_weights, attention_mask, output_mem_config=dram_interleaved_memory_config)
+        attn_weights = ttl.operations.primary.softmax_in_place(attn_weights)
 
         attn_weights_torch = tt2torch_tensor(attn_weights)
         passing, output = comp_pcc(mm_out_torch, attn_weights_torch)
@@ -845,6 +874,9 @@ def test_falcon7b_attnention_slice_matmuls(
 
     # softmax
     attn_weights = ttl.operations.primary.softmax_in_place(attn_weights)
+
+    if not passing:
+        print(output)
 
     assert passing
 
