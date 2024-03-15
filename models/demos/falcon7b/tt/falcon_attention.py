@@ -283,6 +283,27 @@ class TtFalconAttention(nn.Module):
             )
             padded_layer_past_len = nearest_32(layer_past_len + 1)
 
+            key_layer = tt_lib.tensor.interleaved_to_sharded(
+                key_layer,
+                sharded_mem_config=tt_lib.tensor.MemoryConfig(
+                    tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                    tt_lib.tensor.BufferType.L1,
+                    tt_lib.tensor.ShardSpec(
+                        tt_lib.tensor.CoreRangeSet(
+                            {
+                                tt_lib.tensor.CoreRange(
+                                    tt_lib.tensor.CoreCoord(0, 0),
+                                    tt_lib.tensor.CoreCoord(7, 3),
+                                ),
+                            }
+                        ),
+                        [padded_layer_past_len, 64],
+                        tt_lib.tensor.ShardOrientation.ROW_MAJOR,
+                        False,
+                    ),
+                ),
+            )
+
             # print(f"1.query_layer:{query_layer.get_legacy_shape()}")
 
             # Pad and transpose Q for batched matmul
@@ -323,7 +344,10 @@ class TtFalconAttention(nn.Module):
             key_layer,
             -2,
             -1,
-            output_mem_config=self.model_config["K_TRANSPOSED_OUTPUT_MEMCFG"],
+            # output_mem_config=self.model_config["K_TRANSPOSED_OUTPUT_MEMCFG"],
+            output_mem_config=tt_lib.tensor.MemoryConfig(
+                tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, tt_lib.tensor.BufferType.L1
+            ),
         )
         key_layer.deallocate()
 
