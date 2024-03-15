@@ -54,6 +54,7 @@ class UNet:
         self.p4 = parameters.p4
         self.bnc = parameters.bnc
         self.bnc_2 = parameters.bnc_2
+        """
         self.c5 = parameters.c5
         self.c5_2 = parameters.c5_2
         self.c5_3 = parameters.c5_3
@@ -67,6 +68,7 @@ class UNet:
         self.c8_2 = parameters.c8_2
         self.c8_3 = parameters.c8_3
         self.output_layer = parameters.output_layer
+        """
 
     def __call__(self, device, input_tensor):
         input_tensor = input_tensor.to(device, self.c1.conv.input_sharded_memory_config)
@@ -103,17 +105,41 @@ class UNet:
         output_tensor = self.bnc(output_tensor)
         output_tensor = self.bnc_2(output_tensor)
 
+        output_tensor = ttl.tensor.sharded_to_interleaved(output_tensor, ttnn.DRAM_MEMORY_CONFIG)
+        output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
+
+        taps = ttnn.experimental.tensor.CoreRangeSet(
+            {
+                ttnn.experimental.tensor.CoreRange(
+                    ttnn.experimental.tensor.CoreCoord(0, 0), ttnn.experimental.tensor.CoreCoord(11, 2)
+                ),
+                ttnn.experimental.tensor.CoreRange(
+                    ttnn.experimental.tensor.CoreCoord(0, 3), ttnn.experimental.tensor.CoreCoord(5, 3)
+                ),
+            }
+        )
+        shard_spec = ttnn.experimental.tensor.ShardSpec(
+            taps, (32, 64), ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR, False
+        )
+        in_sharded_mem_config = ttnn.MemoryConfig(
+            ttnn.types.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.types.BufferType.L1, shard_spec
+        )
+        output_tensor = ttnn.to_memory_config(output_tensor, memory_config=in_sharded_mem_config)
+
         ## upsample block
         profiler.tracy_message("upsample1")
-        output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
         output_tensor = ttnn.reshape(output_tensor, (1, 132, 10, 64))
-        output_tensor = ttnn.upsample(output_tensor, 2)
+        output_tensor = ttnn.upsample(output_tensor, (2, 2, 1))
         output_tensor = ttnn.reshape(output_tensor, (1, 1, 5280, 64))
+        # output_tensor = ttl.tensor.sharded_to_interleaved(output_tensor, ttnn.L1_MEMORY_CONFIG)
+        # output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.TILE_LAYOUT)
 
         profiler.tracy_message("concat1")
         output_tensor = ttl.tensor.sharded_to_interleaved(output_tensor, ttnn.L1_MEMORY_CONFIG)
         output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.TILE_LAYOUT)
         output_tensor = ttnn.concat([output_tensor, save_c4_2_out], dim=3)
+        return ttnn.from_device(output_tensor)
+        """
 
         profiler.tracy_message("c5")
         output_tensor = ttl.tensor.interleaved_to_sharded(output_tensor, self.c5.conv.input_sharded_memory_config)
@@ -174,3 +200,4 @@ class UNet:
         output_tensor = self.c8_3(output_tensor)
         output_tensor = self.output_layer(output_tensor)
         return ttnn.from_device(output_tensor)
+        """

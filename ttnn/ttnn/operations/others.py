@@ -339,21 +339,6 @@ def _upsample_validate_input_tensors(operation_name, input_tensor, *args, **kwar
     )
 
 
-def _torch_upsample(input_tensor: ttnn.Tensor, scale_factor: [float, float], **_):
-    import torch
-
-    input_tensor = ttnn.from_device(input_tensor)
-    input_tensor = ttnn.to_layout(input_tensor, ttnn.ROW_MAJOR_LAYOUT)
-    input_tensor = ttnn.to_torch(input_tensor)
-
-    return torch.nn.functional.upsample(input_tensor, scale_factor=scale_factor)
-
-
-@ttnn.register_operation(
-    name="ttnn.upsample",
-    validate_input_tensors=_upsample_validate_input_tensors,
-    torch_function=_torch_upsample,
-)
 def upsample(
     input_tensor: ttnn.Tensor,
     scale_factor: Union[float, Tuple[float, float], Tuple[float, float, float], Tuple[float, float, float, float]],
@@ -435,6 +420,7 @@ def upsample(
             )
 
     output_tensor = ttl.tensor.upsample(input_tensor, int(scale_h), int(scale_w), output_mem_config=memory_config)
+    print("TAPSSSSTAPSSSSTAPSSSSTAPSSSSTAPSSSSTAPSSSSTAPSSSS")
     return output_tensor
 
 

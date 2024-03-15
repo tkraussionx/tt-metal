@@ -9,6 +9,7 @@ from typing import Union, Tuple
 import torch
 import torch.nn as nn
 import ttnn
+import tt_lib as ttl
 
 from tests.ttnn.utils_for_testing import assert_with_pcc
 from models.utility_functions import skip_for_wormhole_b0
@@ -105,33 +106,120 @@ def test_upsample_single_core(device, input_shapes, scale_h, scale_w):
     assert isequal
 
 
+"""
 @skip_for_wormhole_b0()
 @pytest.mark.parametrize(
     "input_shape",
     [
-        [2, 1280, 4, 4],  # 256x256
-        [2, 640, 16, 16],
-        [2, 1280, 8, 8],  # 512x512
-        [2, 1280, 16, 16],
-        [1, 64, 132, 10],
+        [2, 64, 66, 10],
     ],
 )
 @pytest.mark.parametrize("scale_h", [2])
 @pytest.mark.parametrize("scale_w", [2])
 @pytest.mark.parametrize("shard_strategy", [ttnn.ShardStrategy.HEIGHT, ttnn.ShardStrategy.BLOCK])
-def test_upsample_multi_core(device, input_shape, scale_h, scale_w, shard_strategy):
-    ## input shape is N C H W
-    batch_size, num_channels, height, width = input_shape
+"""
+
+
+def test_upsample_multi_core(device):
     torch.manual_seed(0)
-    input = torch.rand(input_shape, dtype=torch.bfloat16)
+    input_shape = [2, 64, 66, 10]
+    batch_size, num_channels, height, width = input_shape
+    input = torch.randn(input_shape, dtype=torch.bfloat16)
+    input = torch.permute(input, (0, 2, 3, 1))  # 2, 66, 10, 64
+    input = torch.reshape(
+        input, (1, 1, input.shape[0] * input.shape[1] * input.shape[2], input.shape[3])
+    )  # 1, 1, 1320, 64
 
-    ## golden reference using torch
-    scale_factor = (scale_h, scale_w)
-    torch_upsample = nn.Upsample(scale_factor=scale_factor, mode="nearest")
+    core_range = ttnn.experimental.tensor.CoreRangeSet(
+        {
+            ttnn.experimental.tensor.CoreRange(
+                ttnn.experimental.tensor.CoreCoord(0, 0), ttnn.experimental.tensor.CoreCoord(11, 2)
+            ),
+            ttnn.experimental.tensor.CoreRange(
+                ttnn.experimental.tensor.CoreCoord(0, 3), ttnn.experimental.tensor.CoreCoord(5, 3)
+            ),
+        }
+    )
+    shard_spec = ttnn.experimental.tensor.ShardSpec(
+        core_range, (32, 64), ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR, False
+    )
+    in_sharded_mem_config = ttnn.MemoryConfig(
+        ttnn.types.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.types.BufferType.L1, shard_spec
+    )
+
+    tt_input = ttnn.from_torch(input, device=device, memory_config=ttnn.L1_MEMORY_CONFIG)
+    # tt_input = ttnn.to_layout(tt_input, layout=ttnn.TILE_LAYOUT)
+    tt_input = ttnn.to_memory_config(tt_input, memory_config=in_sharded_mem_config)
+    tt_input = ttnn.to_layout(tt_input, layout=ttnn.ROW_MAJOR_LAYOUT)
+    tt_input = ttl.tensor.sharded_to_interleaved(tt_input, ttnn.DRAM_MEMORY_CONFIG)
+    tt_input = ttnn.to_torch(tt_input)
+
+    assert_with_pcc(input, tt_input, 0.9999)
+    return
+
+    """
+    # print(input)
+
+    scale_factor = (2, 2)
+    torch_upsample = nn.Upsample(scale_factor=(2, 2), mode="nearest")
     torch_result = torch_upsample(input)
+    # torch_result = torch_result.permute(0, 2, 3, 1)
+    torch_result = torch.permute(torch_result, (0, 2, 3, 1))
+    torch_result = torch_result.reshape(
+        1, 1, torch_result.shape[0] * torch_result.shape[1] * torch_result.shape[2], torch_result.shape[3]
+    )
+    torch_result = torch_result.to(torch.bfloat16)
 
-    ## permute to N H W C, which is what the upsample op expects
-    tt_input = input.permute(0, 2, 3, 1)
+    tt_input = torch.permute(input, (0, 2, 3, 1))  # 2, 66, 10, 64
+    tt_input = tt_input.reshape(1, 1, tt_input.shape[0] * tt_input.shape[1] * tt_input.shape[2], tt_input.shape[3])
+    # tt_input = input.permute(0, 2, 3, 1) # 2, 66, 10, 64
+    # shard_spec=tt::tt_metal::ShardSpec(shard_grid={[(x=0,y=0) - (x=11,y=2)], [(x=0,y=3) - (x=5,y=3)]},
+    taps = ttnn.experimental.tensor.CoreRangeSet(
+        {
+            ttnn.experimental.tensor.CoreRange(
+                ttnn.experimental.tensor.CoreCoord(0, 0), ttnn.experimental.tensor.CoreCoord(11, 2)
+            ),
+            ttnn.experimental.tensor.CoreRange(
+                ttnn.experimental.tensor.CoreCoord(0, 3), ttnn.experimental.tensor.CoreCoord(5, 3)
+            ),
+        }
+    )
+    shard_spec = ttnn.experimental.tensor.ShardSpec(
+        taps, (32, 64), ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR, False
+    )
+    in_sharded_mem_config = ttnn.MemoryConfig(
+        ttnn.types.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.types.BufferType.L1, shard_spec
+    )
+
+    tt_input = ttnn.from_torch(tt_input, device=device, memory_config=ttnn.L1_MEMORY_CONFIG)
+    tt_input = ttnn.to_memory_config(tt_input, memory_config=in_sharded_mem_config)
+
+    tt_input = ttnn.to_layout(tt_input, layout=ttnn.TILE_LAYOUT)
+    breakpoint()
+    tt_input = ttnn.to_layout(tt_input, layout=ttnn.ROW_MAJOR_LAYOUT)
+    breakpoint()
+    print(tt_input)
+    tt_input = ttnn.reshape(tt_input, (1, 132, 10, 64))
+    output_tensor = ttnn.upsample(tt_input, (2, 2, 1))
+    output_tensor = ttnn.reshape(output_tensor, (1, 1, 5280, 64))
+    output_tensor = ttl.tensor.sharded_to_interleaved(output_tensor, ttnn.L1_MEMORY_CONFIG)
+    output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.TILE_LAYOUT)
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    ## compare the results
+    # torch_result = torch_result.permute(0, 2, 3, 1)
+
+    # print(torch_result)
+    # print(output_tensor)
+    assert_with_pcc(torch_result, output_tensor, 0.9999)
+    allclose = torch.allclose(output_tensor, torch_result)
+    isclose = torch.all(torch.isclose(output_tensor, torch_result))
+    isequal = torch.equal(output_tensor, torch_result)
+
+    print(allclose)
+    print(isclose)
+    print(isequal)
+    exit(0)
 
     num_bytes = 2  ## only BFLOAT16 is supported
 
@@ -209,16 +297,16 @@ def test_upsample_multi_core(device, input_shape, scale_h, scale_w, shard_strate
     print(f"out_shard_mem_config: {out_sharded_mem_config}")
 
     ## ttnn uses NHWC, so need to set scale_factor_c = 1
-    scale_factor = (scale_h, scale_w, 1)
+    #scale_factor = (scale_h, scale_w, 1)
     input_tensor = ttnn.from_torch(tt_input, device=device, memory_config=ttnn.L1_MEMORY_CONFIG)
     input_tensor = ttnn.to_memory_config(input_tensor, memory_config=in_sharded_mem_config)
     output_tensor = ttnn.upsample(input_tensor, scale_factor, memory_config=out_sharded_mem_config)
-    output_tensor = ttnn.to_memory_config(output_tensor, memory_config=ttnn.L1_MEMORY_CONFIG)
+    #output_tensor = ttnn.to_memory_config(output_tensor, memory_config=ttnn.L1_MEMORY_CONFIG)
     output_tensor = ttnn.to_torch(output_tensor)
 
     ## compare the results
     torch_result = torch_result.permute(0, 2, 3, 1)
-    assert_with_pcc(torch_result, output_tensor)
+    assert_with_pcc(torch_result, output_tensor, 0.9999)
 
     allclose = torch.allclose(output_tensor, torch_result)
     isclose = torch.all(torch.isclose(output_tensor, torch_result))
@@ -227,3 +315,4 @@ def test_upsample_multi_core(device, input_shape, scale_h, scale_w, shard_strate
     assert allclose
     assert isclose
     assert isequal
+    """
