@@ -46,88 +46,50 @@ class TtMambaSSM(torch.nn.Module):
         """
 
         # delta rank weight
-        if self.hidden_size == self.args.d_inner and self.rank == self.args.dt_rank:
-            print('***********using delta rank weight')
-            x_proj_weight_name = "mixer.x_proj.weight"
-            delta_t_proj = torch.transpose(self.state_dict[x_proj_weight_name][: self.args.dt_rank, :], -1, -2)
-            self.delta_t_proj = ttnn.from_torch(
-                delta_t_proj,
-                layout=ttnn.TILE_LAYOUT,
-                device=self.device,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
-                dtype=ttnn.bfloat16,
-            )
+        print('***********using delta rank weight')
+        x_proj_weight_name = "mixer.x_proj.weight"
+        delta_t_proj = torch.transpose(self.state_dict[x_proj_weight_name][: self.args.dt_rank, :], -1, -2)
+        self.delta_t_proj = ttnn.from_torch(
+            delta_t_proj,
+            layout=ttnn.TILE_LAYOUT,
+            device=self.device,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            dtype=ttnn.bfloat16,
+        )
             
-        else:
-            self.delta_t_proj = ttnn.from_torch(
-                torch.rand(1, 1, self.hidden_size, self.rank),
-                layout=ttnn.TILE_LAYOUT,
-                device=self.device,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
-                dtype=ttnn.bfloat16,
-            )
-
         # delta full weight
-        if self.hidden_size == self.args.d_inner and self.rank == self.args.dt_rank:
-            print('***********using delta full weight')
-            dt_proj_weight_name = "mixer.dt_proj.weight"
-            dt_proj_bias_name = "mixer.dt_proj.bias"
-            dt_proj_weights = torch.transpose(self.state_dict[dt_proj_weight_name], -1, -2)
-            self.dt_proj_weights = ttnn.from_torch(
-                dt_proj_weights,
-                layout=ttnn.TILE_LAYOUT,
-                device=self.device,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
-                dtype=ttnn.bfloat16,
-            )
-            self.dt_proj_bias = ttnn.from_torch(
-                self.state_dict[dt_proj_bias_name],
-                layout=ttnn.TILE_LAYOUT,
-                device=self.device,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
-                dtype=ttnn.bfloat16,
-            )
-        else:
-            self.dt_proj_weights = ttnn.from_torch(
-                torch.rand(1, 1, self.rank, self.hidden_size),
-                layout=ttnn.TILE_LAYOUT,
-                device=self.device,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
-                dtype=ttnn.bfloat16,
-            )
-            self.dt_proj_bias = ttnn.from_torch(
-                torch.rand(1, 1, 1, self.hidden_size),
-                layout=ttnn.TILE_LAYOUT,
-                device=self.device,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
-                dtype=ttnn.bfloat16,
-            )
+        print('***********using delta full weight')
+        dt_proj_weight_name = "mixer.dt_proj.weight"
+        dt_proj_bias_name = "mixer.dt_proj.bias"
+        dt_proj_weights = torch.transpose(self.state_dict[dt_proj_weight_name], -1, -2)
+        self.dt_proj_weights = ttnn.from_torch(
+            dt_proj_weights,
+            layout=ttnn.TILE_LAYOUT,
+            device=self.device,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            dtype=ttnn.bfloat16,
+        )
+        self.dt_proj_bias = ttnn.from_torch(
+            self.state_dict[dt_proj_bias_name],
+            layout=ttnn.TILE_LAYOUT,
+            device=self.device,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            dtype=ttnn.bfloat16,
+        )
+        
         # B
-        if self.hidden_size == self.args.d_inner:
-            print('***********using B weight')
-            B_proj_weights = torch.transpose(self.state_dict[x_proj_weight_name][self.args.dt_rank : (self.args.dt_rank + self.args.d_state), :], -1, -2)
-            # pad 
-            B_proj_weights = F.pad(B_proj_weights, (0, 16), "constant", 0)
-            self.B_proj_weights = ttnn.from_torch(
-                B_proj_weights,
-                device=self.device,
-                layout=ttnn.TILE_LAYOUT,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
-                dtype=ttnn.bfloat16,
-            )
-        else:
-            self.B_proj_weights = ttnn.from_torch(
-                torch.rand(
-                    1,
-                    1,
-                    self.hidden_size,
-                    self.n,
-                ),
-                layout=ttnn.TILE_LAYOUT,
-                device=self.device,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
-                dtype=ttnn.bfloat16,
-            )
+        print('***********using B weight')
+        B_proj_weights = torch.transpose(self.state_dict[x_proj_weight_name][self.args.dt_rank : (self.args.dt_rank + self.args.d_state), :], -1, -2)
+        # pad 
+        B_proj_weights = F.pad(B_proj_weights, (0, 16), "constant", 0)
+        self.B_proj_weights = ttnn.from_torch(
+            B_proj_weights,
+            device=self.device,
+            layout=ttnn.TILE_LAYOUT,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            dtype=ttnn.bfloat16,
+        )
+        
 
         B_intermediate_tranform_weights = torch.eye(self.n).repeat(1, self.hidden_size).unsqueeze(0).unsqueeze(0)
         self.B_intermediate = ttnn.from_torch(
@@ -139,81 +101,54 @@ class TtMambaSSM(torch.nn.Module):
         )
 
         # A
-        if self.hidden_size == self.args.d_inner:
-            print('***********using A weight')
-            A_weight_name = "mixer.A_log"
-            def preprocess_A(x):
-                x = -torch.exp(x.float()).reshape(1, self.hidden_size*16)  # (1, 2en)
-                return x.repeat(self.num_users, 1) # b, 2en
+        print('***********using A weight')
+        A_weight_name = "mixer.A_log"
+        def preprocess_A(x):
+            x = -torch.exp(x.float()).reshape(1, self.hidden_size*16)  # (1, 2en)
+            return x.repeat(self.num_users, 1) # b, 2en
 
-            A = preprocess_A(self.state_dict[A_weight_name])
-            # pad
-            A = F.pad(A, (0, self.hidden_size*16), "constant", 0)
-            self.A = ttnn.from_torch(
-                A,
-                layout=ttnn.TILE_LAYOUT,
-                device=self.device,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
-                dtype=ttnn.bfloat16,
-            )
-
-        else:
-            self.A = ttnn.from_torch(torch.rand(1, 1, self.num_users, self.hidden_size*self.n), layout=ttnn.TILE_LAYOUT, device=self.device, 
-                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
+        A = preprocess_A(self.state_dict[A_weight_name])
+        # pad
+        A = F.pad(A, (0, self.hidden_size*16), "constant", 0)
+        self.A = ttnn.from_torch(
+            A,
+            layout=ttnn.TILE_LAYOUT,
+            device=self.device,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            dtype=ttnn.bfloat16,
+        )
         
         # C
-        if self.hidden_size == self.args.d_inner:
-            print('***********using C weight')
-            x_proj_weight_name = "mixer.x_proj.weight"
-            C_proj_weights = torch.transpose(self.state_dict[x_proj_weight_name][(self.args.dt_rank + self.args.d_state) :, :], -1, -2)
-            # pad
-            C_proj_weights = F.pad(C_proj_weights, (0, 16), "constant", 0)
-            self.C_proj = ttnn.from_torch(
-                C_proj_weights,
-                layout=ttnn.TILE_LAYOUT,
-                device=self.device,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
-                dtype=ttnn.bfloat16,
-            )
-        else:
-            self.C_proj = ttnn.from_torch(
-                    torch.rand(
-                        1,
-                        1,
-                        self.hidden_size,
-                        self.n,
-                    ),
-                    layout=ttnn.TILE_LAYOUT,
-                    device=self.device,
-                    memory_config=ttnn.DRAM_MEMORY_CONFIG,
-                    dtype=ttnn.bfloat16,
-                )
+        print('***********using C weight')
+        x_proj_weight_name = "mixer.x_proj.weight"
+        C_proj_weights = torch.transpose(self.state_dict[x_proj_weight_name][(self.args.dt_rank + self.args.d_state) :, :], -1, -2)
+        # pad
+        C_proj_weights = F.pad(C_proj_weights, (0, 16), "constant", 0)
+        self.C_proj = ttnn.from_torch(
+            C_proj_weights,
+            layout=ttnn.TILE_LAYOUT,
+            device=self.device,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            dtype=ttnn.bfloat16,
+        )
+        
         
         # C pad
         C_pad = torch.zeros(1,1,self.num_users,self.n)
         self.C_pad = ttnn.from_torch(C_pad, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
         
         # D
-        if self.hidden_size == self.args.d_inner:
-            print('***********using D weight')
-            D_weight_name = "mixer.D"
-            D = self.state_dict[D_weight_name]
-            D = D.repeat(self.num_users, 1)
-            self.D = ttnn.from_torch(
-                D,
-                layout=ttnn.TILE_LAYOUT,
-                device=self.device,
-                dtype=ttnn.bfloat16,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
-            )
-        else:
-            self.D = ttnn.from_torch(
-                torch.rand(1, 1, self.num_users, self.hidden_size),
-                layout=ttnn.TILE_LAYOUT,
-                device=self.device,
-                dtype=ttnn.bfloat16,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
-            )
+        print('***********using D weight')
+        D_weight_name = "mixer.D"
+        D = self.state_dict[D_weight_name]
+        D = D.repeat(self.num_users, 1)
+        self.D = ttnn.from_torch(
+            D,
+            layout=ttnn.TILE_LAYOUT,
+            device=self.device,
+            dtype=ttnn.bfloat16,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+        )
 
     def forward(self, x):
         # delta
@@ -228,7 +163,7 @@ class TtMambaSSM(torch.nn.Module):
         )
         ttnn.deallocate(delta_t0)
         ttnn.deallocate(dt_proj_weights)
-        delta_t2 = ttnn.softplus(delta_t1, memory_config=ttnn.L1_MEMORY_CONFIG)
+        delta_t2 = ttnn.softplus(delta_t1, parameter1=1.0, parameter2=20.0, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(delta_t1)
 
         # calculate abar
