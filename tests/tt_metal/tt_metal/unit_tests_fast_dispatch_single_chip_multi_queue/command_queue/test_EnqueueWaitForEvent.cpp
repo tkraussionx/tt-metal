@@ -251,7 +251,12 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsReadWriteWithWaitForEvent
     vector<std::reference_wrapper<CommandQueue>> cqs = {this->device_->command_queue(0), this->device_->command_queue(1)};
     vector<uint32_t> cmds_issued_per_cq = {0, 0};
 
-    size_t num_buffers_per_cq = 50;
+    // size_t num_buffers_per_cq = 50;
+    // This size configuration hits the race readily.
+    size_t num_buffers_per_cq = 10;
+    config.page_size = 512;
+    config.num_pages = 16;
+
     bool pass = true;
 
     auto current_mode = CommandQueue::default_mode();
@@ -268,11 +273,14 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsReadWriteWithWaitForEvent
                 config.num_pages *= 2;
             }
 
+            // Would see the same thing with just shared_ptr. I think.
+
             vector<std::shared_ptr<Buffer>> buffers;
             vector<vector<uint32_t>> srcs;
             size_t buf_size = config.num_pages * config.page_size;
 
-            for (uint i = 0; i < cqs.size(); i++) {
+            // for (uint i = 0; i < cqs.size(); i++) {
+            uint i = 0; // Start with CQ ID 0.
 
                 uint32_t wr_data_base = (buf_idx * 1000) + (i * 100);
                 auto &cq_write = cqs[i];
@@ -284,15 +292,83 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsReadWriteWithWaitForEvent
                 srcs.push_back(generate_arange_vector(buffers[i]->size(), wr_data_base));
 
                 // Blocking Read after Non-Blocking Write on alternate CQs, events ensure ordering.
-                log_debug(tt::LogTest, "Mode: {} buf_idx: {} Doing Write (page_size: {} num_pages: {}) to cq_id: {}", mode, buf_idx, config.page_size, config.num_pages, cq_write.get().id());
+                log_info(tt::LogTest, "Mode: {} buf_idx: {} cq_idx: {} Doing Write (page_size: {} num_pages: {}) to cq_id: {} starting_data: {}",
+                    mode, buf_idx, i, config.page_size, config.num_pages, cq_write.get().id(), srcs[i][0]);
                 EnqueueWriteBuffer(cq_write, *buffers[i], srcs[i], false);
-                EnqueueRecordEvent(cq_write, event);
-                EnqueueWaitForEvent(cq_read, event);
+                EnqueueRecordEvent(cq_write, event); // <== Is it possible that this is somehow arriving before the write-buffer?
+                EnqueueWaitForEvent(cq_read, event); // <== This is not working... somehow.
                 EnqueueReadBuffer(cq_read, *buffers[i], result, true);
+
+                // Is next write somehow clobbering this. We are changing buffer sizes.
+                // Is there some missing synchronization here maybe?
+                // Done - Can we get rid of cq loop?
+
+                // Doesn't matter where this is placed here, or further below, but placing it here allows the DPRINT from device
+                // in wait-for-event kernel to show up at a more sane location in log (here, before next test prints)
+                bool do_sleep_between_loops = tt::parse_env("SLEEP_BETWEEN_LOOPS", false);
+                if (do_sleep_between_loops) {
+                    constexpr int sleep_ms = 10;
+                    log_info(tt::LogTest, "Sleeping for {} ms", sleep_ms);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
+                }
+
+
                 bool local_pass = (srcs[i] == result);
-                log_debug(tt::LogTest, "Mode: {} Checking buf_idx: {} cq_idx: {} local_pass: {} write_data: {} read_results: {}", mode, buf_idx, i, local_pass, srcs[i], result);
+                // log_info(tt::LogTest, "Mode: {} Checking buf_idx: {} cq_idx: {} local_pass: {} write_data: {} read_results: {}", mode, buf_idx, i, local_pass, srcs[i], result);
+                log_info(tt::LogTest, "Mode: {} event.id: {} Checking buf_idx: {} cq_idx: {} local_pass: {} first_read_data: {}", mode, event->event_id, buf_idx, i, local_pass, result[0]);
+
+
+
+                std::vector<uint32_t> write_data_first_10(srcs[i].begin(), srcs[i].begin() + 10);
+                std::vector<uint32_t> read_data_first_10(result.begin(), result.begin() + 10);
+                log_info(tt::LogTest, "first 10 datums of write_data: {}", write_data_first_10);
+                log_info(tt::LogTest, "first 10 datums of read_results: {}", read_data_first_10);
+
                 pass &= local_pass;
-            }
+
+                // If mismatch detected, check if value changed since then.
+                if (!local_pass) {
+                    log_info(tt::LogTest, "FAIL mismatch detected! Printing first 10 datums of read vs write.");
+                    int num_datums = srcs[i].size() > 10 ? 10 : srcs[i].size();
+                    // int num_datums = srcs[i].size();
+                    for (int j=0; j<num_datums; j++) {
+                        log_info(tt::LogTest, "data at j: {} = expected: {} observed: {} => {}", j, srcs[i][j], result[j], srcs[i][j] == result[j] ? "YES_MATCH" : "NO_FAIL");
+                    }
+
+                    bool local_pass_prev = local_pass;
+
+                    // Read a few more times to see if expected values eventually arrive (spoiler: they do)
+                    for (uint j=0; j<10; j++) {
+
+                        log_info(tt::LogTest, "Reading again (j:{}) to see if expected results are seen...", j);
+                        EnqueueReadBuffer(cq_read, *buffers[i], result, true);
+
+                        bool local_pass_new = (srcs[i] == result);
+                        if (local_pass_new == local_pass_prev) {
+                            log_info(tt::LogTest, "local_pass for j:{} matches. local_pass_new: {} local_pass_prev: {}", j, local_pass_new, local_pass_prev);
+                        } else {
+                            log_info(tt::LogTest, "local_pass for j:{} changed! local_pass_new: {} local_pass_prev: {}", j, local_pass_new, local_pass_prev);
+
+                            int num_datums = srcs[i].size() > 10 ? 10 : srcs[i].size();
+                            for (int j=0; j<num_datums; j++) {
+                                log_info(tt::LogTest, "data at j: {} = expected: {} observed: {} => {}", j, srcs[i][j], result[j], srcs[i][j] == result[j] ? "YES_MATCH" : "NO_FAIL");
+                            }
+                            break;
+                        }
+                        std::this_thread::sleep_for(std::chrono::microseconds(10));
+                    }
+                }
+
+                // bool do_sleep_between_loops = tt::parse_env("SLEEP_BETWEEN_LOOPS", false);
+                // if (do_sleep_between_loops) {
+                //     constexpr int sleep_ms = 10;
+                //     log_info(tt::LogTest, "Sleeping for {} ms", sleep_ms);
+                //     std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
+                // }
+
+                // if (!pass) break;
+            // }
+            if (!pass) break;
         }
 
         local_test_functions::FinishAllCqs(cqs);
@@ -300,6 +376,8 @@ TEST_F(MultiCommandQueueSingleDeviceFixture, TestEventsReadWriteWithWaitForEvent
         auto end = std::chrono::system_clock::now();
         std::chrono::duration<double> elapsed_seconds = (end-start);
         tt::log_info(tt::LogTest, "Test with CQ Mode: {} Finished in {}us", mode, elapsed_seconds.count() * 1000 * 1000);
+
+        if (!pass) break;
     }
     local_test_functions::SetAllCqsMode(cqs, current_mode);
     EXPECT_TRUE(pass);
