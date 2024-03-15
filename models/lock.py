@@ -34,9 +34,12 @@ class WaitLock:
                 pid = int(f.read().strip())
             # Check if this PID process exists by sending signal 0 (no signal, just error checking)
             os.kill(pid, 0)
-        except (OSError, ValueError):
+        except (ProcessLookupError, ValueError):
             # OSError if the process doesn't exist, ValueError if PID is not an integer
             return False
+        except PermissionError:
+            # Permission error if the process is true and belongs to someone else
+            return True if and_is_ours == False else False
 
         if and_is_ours and pid != self.pid:
             return False
