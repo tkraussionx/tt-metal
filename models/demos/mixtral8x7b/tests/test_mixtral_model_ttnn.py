@@ -7,7 +7,7 @@ from loguru import logger
 import json
 from pathlib import Path
 import ttnn
-from models.demos.mistral7b.tt.mistral_common_ttnn import (
+from models.demos.mixtral8x7b.tt.mixtral_common_ttnn import (
     precompute_freqs,
     generate_cos_sin_cache_ttnn,
     prepare_inputs_ttnn,
@@ -116,7 +116,7 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers, reset_seeds)
         tt_cos_cached=tt_cos_cached,
         tt_sin_cached=tt_sin_cached,
     )
-    exit()
+
     generation_start_pos = 0
     generation_length = iterations
     if run_ref_pt:
@@ -162,7 +162,7 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers, reset_seeds)
         # Run TT model
         tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask, rot_mat)
         # Convert ttnn tensor to torch tensor
-        tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
+        tt_output_torch = ttnn.to_torch(tt_out[0]).squeeze(1).view(batch, seqlen, -1)  # [seq, batch, hidden_dim]
 
         if run_ref_pt:  # Run reference model
             freqs_cis_i = freqs_cis[start_pos, :].unsqueeze(0)
@@ -192,7 +192,9 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers, reset_seeds)
 
         # Measure PCC
         if run_ref_pt:
-            passing, pcc_message = comp_pcc(ref_output, tt_output_torch, pcc)
+            passing, pcc_message = comp_pcc(
+                ref_output.view(batch, seqlen, -1), tt_output_torch.view(batch, seqlen, -1), pcc
+            )
 
             logger.info(comp_allclose(ref_output, tt_output_torch))
             logger.info(pcc_message)

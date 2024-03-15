@@ -63,10 +63,16 @@ class TtTransformer(nn.Module):
                 layout=ttnn.TILE_LAYOUT,
                 dtype=dtype,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
-                # cache_file_name=weight_cache_path / "output.weight",
+                cache_file_name=args.weight_cache_path(dtype) / "output.weight",
             )
             for dev in self.devices
         ]
+
+        self.compute_kernel = ttnn.WormholeComputeKernelConfig(
+            math_fidelity=ttnn.MathFidelity.LoFi,
+            fp32_dest_acc_en=True,
+            packer_l1_acc=True,
+        )
 
     def forward(
         self,
@@ -80,10 +86,20 @@ class TtTransformer(nn.Module):
             x = layer(x, start_pos, current_pos, attn_masks, rot_mats)
 
         outputs = []
+        x_norm = []
         for i in range(len(self.devices)):
-            x[i] = self.norm[i](x[i])
-            output_i = ttnn.linear(x[i], self.output_weight[i], core_grid=ttnn.CoreGrid(y=7, x=8))
-            outputs.append(output_i)
+            x_norm.append(self.norm[i](x[i]))
             ttnn.deallocate(x[i])
+            x_norm[i] = ttnn.permute(x_norm[i], (2, 1, 0, 3))
+            output_i = ttnn.linear(
+                x_norm[i],
+                self.output_weight[i],
+                core_grid=ttnn.CoreGrid(y=7, x=8),
+                use_1d_systolic_array=True,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                compute_kernel_config=self.compute_kernel,
+            )
+            outputs.append(output_i)
+            ttnn.deallocate(x_norm[i])
 
         return outputs

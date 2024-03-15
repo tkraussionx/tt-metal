@@ -105,8 +105,6 @@ class TtTransformerBlock(torch.nn.Module):
         # Attention module expects a list of inputs, start_pos, attn mask (multi-device support)
         attn_norm = []
         for i in range(self.num_devices):
-            if self.layer_num != 0:
-                xs[i] = ttnn.permute(xs[i], (2, 1, 0, 3))
             attn_norm.append(self.attention_norm[i](xs[i]))
 
         r = self.attention(
