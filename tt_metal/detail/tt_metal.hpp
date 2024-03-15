@@ -443,15 +443,18 @@ namespace tt::tt_metal{
             const uint32_t flag = 0     // any user debug flag
         ) {
             static uint32_t unique_id = 0;
-            CQExtendedDebugCmd ext = {
-                .cq_id = cq,
-                .gateway_id = device,
-                .dst_x = dst_x,
-                .dst_y = dst_y,
-                .cmd_id = unique_id++,
-                .flag = flag,
-            };
-            cmd.debug_ext = ext;
+            constexpr bool supports_ext_debug =
+                (std::is_same_v<T, CQPrefetchCmd>) or (std::is_same_v<T, CQDispatchCmd>);
+            if constexpr (supports_ext_debug) {
+                cmd.debug_ext = CQExtendedDebugCmd{
+                    .cq_id = cq,
+                    .gateway_id = device,
+                    .dst_x = dst_x,
+                    .dst_y = dst_y,
+                    .cmd_id = unique_id++,
+                    .flag = flag,
+                };
+            }
         }
     }
 }

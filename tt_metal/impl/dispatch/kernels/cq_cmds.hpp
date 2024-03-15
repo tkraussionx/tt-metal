@@ -11,7 +11,9 @@
 
 // Allocates additional sizeof(CQExtendedDebugCmd) bytes in the command
 // Enables automatic extended debug prints in the kernels
+#ifndef TT_METAL_EXTENDED_DEBUG_CMD
 #define TT_METAL_EXTENDED_DEBUG_CMD 1
+#endif
 
 constexpr uint32_t CQ_PREFETCH_CMD_BARE_MIN_SIZE = 32; // for NOC PCIe alignemnt
 constexpr uint32_t CQ_DISPATCH_CMD_SIZE = 16;          // for L1 alignment

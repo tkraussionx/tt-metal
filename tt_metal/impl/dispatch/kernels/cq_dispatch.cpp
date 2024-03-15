@@ -363,16 +363,16 @@ void kernel_main() {
     re_run_command:
         volatile CQDispatchCmd tt_l1_ptr *cmd = (volatile CQDispatchCmd tt_l1_ptr *)cmd_ptr;
 
-        if constexpr (TT_METAL_EXTENDED_DEBUG_CMD) {
-            auto &d = cmd->debug_ext;
-            DPRINT << "\033[95m"
-                   << "CQDispatchCmd cmd=" << (uint32_t)cmd->base.cmd_id << " id=0x" << HEX() << d.cmd_id
-                   << DEC() << " debug_ext: {cq_id=" << (uint32_t)d.cq_id << ", gateway=" << (uint32_t)d.gateway_id
-                   << ", dst=(" << (uint32_t)d.dst_x << "," << (uint32_t)d.dst_y << ") flag=0x" << HEX() << d.flag
-                   << "} \033[0m" << ENDL();
-        }
+    #if TT_METAL_EXTENDED_DEBUG_CMD == 1
+        auto &d = cmd->debug_ext;
+        DPRINT << "\033[95m"
+               << "CQDispatchCmd cmd=" << (uint32_t)cmd->base.cmd_id << " id=0x" << HEX() << d.cmd_id << DEC()
+               << " debug_ext: {cq_id=" << (uint32_t)d.cq_id << ", gateway=" << (uint32_t)d.gateway_id << ", dst=("
+               << (uint32_t)d.dst_x << "," << (uint32_t)d.dst_y << ") flag=0x" << HEX() << d.flag << "} \033[0m"
+               << ENDL();
+    #endif
 
-        switch (cmd->base.cmd_id) {
+    switch (cmd->base.cmd_id) {
         case CQ_DISPATCH_CMD_WRITE:
         case CQ_DISPATCH_CMD_WRITE_HOST:
             DEBUG_STATUS('D', 'W', 'B');
