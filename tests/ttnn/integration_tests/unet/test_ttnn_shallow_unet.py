@@ -164,8 +164,8 @@ def custom_preprocessor(model, name, ttnn_module_args):
         }
 
         ttnn_module_args.bnc["math_fidelity"] = ttnn.MathFidelity.LoFi
-        ttnn_module_args.bnc["dtype"] = ttnn.bfloat16
-        ttnn_module_args.bnc["weights_dtype"] = ttnn.bfloat16
+        ttnn_module_args.bnc["dtype"] = ttnn.bfloat8_b
+        ttnn_module_args.bnc["weights_dtype"] = ttnn.bfloat8_b
         ttnn_module_args.bnc["activation"] = "relu"  # Fuse relu with bottle neck conv
         ttnn_module_args.bnc["deallocate_activation"] = True
         ttnn_module_args.bnc["conv_blocking_and_parallelization_config_override"] = None
@@ -174,8 +174,8 @@ def custom_preprocessor(model, name, ttnn_module_args):
         parameters["bnc"] = preprocess_conv2d(convbn_weight, convbn_bias, ttnn_module_args.bnc)
 
         ttnn_module_args.bnc_2["math_fidelity"] = ttnn.MathFidelity.LoFi
-        ttnn_module_args.bnc_2["dtype"] = ttnn.bfloat16
-        ttnn_module_args.bnc_2["weights_dtype"] = ttnn.bfloat16
+        ttnn_module_args.bnc_2["dtype"] = ttnn.bfloat8_b
+        ttnn_module_args.bnc_2["weights_dtype"] = ttnn.bfloat8_b
         ttnn_module_args.bnc_2["activation"] = "relu"  # Fuse relu with bottle neck conv
         ttnn_module_args.bnc_2["deallocate_activation"] = True
         ttnn_module_args.bnc_2["conv_blocking_and_parallelization_config_override"] = None
@@ -183,7 +183,6 @@ def custom_preprocessor(model, name, ttnn_module_args):
         update_ttnn_module_args(ttnn_module_args.bnc_2)
         parameters["bnc_2"] = preprocess_conv2d(convbn_2_weight, convbn_2_bias, ttnn_module_args.bnc_2)
 
-        """
         ttnn_module_args.c5["math_fidelity"] = ttnn.MathFidelity.LoFi
         ttnn_module_args.c5["dtype"] = ttnn.bfloat8_b
         ttnn_module_args.c5["weights_dtype"] = ttnn.bfloat8_b
@@ -214,6 +213,7 @@ def custom_preprocessor(model, name, ttnn_module_args):
         update_ttnn_module_args(ttnn_module_args.c5_3)
         parameters["c5_3"] = preprocess_conv2d(conv5_3_weight, conv5_3_bias, ttnn_module_args.c5_3)
 
+        """
         ttnn_module_args.c6["math_fidelity"] = ttnn.MathFidelity.LoFi
         ttnn_module_args.c6["use_shallow_conv_variant"] = (True if os.getenv("ARCH_NAME", "grayskull") == "grayskull" else False)
         ttnn_module_args.c6["dtype"] = ttnn.bfloat8_b
@@ -365,9 +365,6 @@ class UNet(nn.Module):
 
         self.u4 = nn.Upsample(scale_factor=(2, 2), mode="nearest")
 
-        # self.u4 = nn.Upsample(scale_factor=2, mode="nearest", align_corners=False)
-        """
-
         self.c5 = nn.Conv2d(96, 32, kernel_size=3, padding=1)
         self.b5 = nn.BatchNorm2d(32)
         self.r5 = nn.ReLU(inplace=True)
@@ -377,6 +374,8 @@ class UNet(nn.Module):
         self.c5_3 = nn.Conv2d(32, 32, kernel_size=3, padding=1)
         self.b5_3 = nn.BatchNorm2d(32)
         self.r5_3 = nn.ReLU(inplace=True)
+        # self.u4 = nn.Upsample(scale_factor=2, mode="nearest", align_corners=False)
+        """
         self.u3 = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
 
         self.c6 = nn.Conv2d(64, 32, kernel_size=3, padding=1)
@@ -459,8 +458,6 @@ class UNet(nn.Module):
         u4 = self.u4(bnr_2)
         conc1 = torch.cat([u4, r4_2], dim=1)
 
-        return conc1
-        """
         c5 = self.c5(conc1)
         b5 = self.b5(c5)
         r5 = self.r5(b5)
@@ -470,6 +467,9 @@ class UNet(nn.Module):
         c5_3 = self.c5_3(r5_2)
         b5_3 = self.b5_3(c5_3)
         r5_3 = self.r5_3(b5_3)
+
+        return r5_3
+        """
         u3 = self.u3(r5_3)
         conc2 = torch.cat([u3, r3_2], dim=1)
 
@@ -568,7 +568,7 @@ if __name__ == "__main__":
         )
         pad = 32 if device.arch() == ttl.device.Arch.WORMHOLE_B0 else 16
         input_tensor = torch.nn.functional.pad(input_tensor, (0, pad - input_tensor.shape[-1]))
-        input_tensor = ttnn.from_torch(input_tensor, dtype=ttnn.bfloat16)
+        input_tensor = ttnn.from_torch(input_tensor)  # , dtype=ttnn.bfloat16)
 
         warmup = 1
         start = None
@@ -596,7 +596,7 @@ if __name__ == "__main__":
             torch_output_tensor.shape[0] * torch_output_tensor.shape[1] * torch_output_tensor.shape[2],
             torch_output_tensor.shape[3],
         )
-        torch_output_tensor = torch_output_tensor.to(torch.bfloat16)
+        # torch_output_tensor = torch_output_tensor.to(torch.bfloat16)
 
         assert_with_pcc(torch_output_tensor, output_tensor, pcc=0.9999)
         ttnn.close_device(device)
