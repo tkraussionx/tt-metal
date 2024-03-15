@@ -41,12 +41,13 @@ class TtTensorLoader:
                 if torch_tensor is None:
                     torch_tensor = self.state_dict[tensor_name]
                 torch_tensor = tm_fn(torch_tensor)
-                tt_tensor = ttnn.from_torch(
+                tt_tensor = ttnn.as_tensor(
                     torch_tensor,
                     device=device,
                     layout=tt_layout,
                     memory_config=tt_memory_config,
                     dtype=tt_dtype,
+                    cache_file_name=str(tensor_cache_filepath),
                 )
                 if len(self.tt_cache_path) > 0:
                     ttnn.dump_tensor(
@@ -76,7 +77,7 @@ class MambaTT(torch.nn.Module):
         self.device = device
         #self.embedding = reference_model.embedding
         loader = TtTensorLoader(reference_model.state_dict(), self.device, tt_cache_path=tt_cache_path)
-        self.layers = [TtResidualBlock(self.args, device, loader.get_tensor_loader(i), reference_model.layers[i].state_dict(), num_users, hidden_size, configs) for i in range(num_layers)]
+        self.layers = [TtResidualBlock(self.args, device, loader.get_tensor_loader(i), reference_model.layers[i].state_dict(), num_users, hidden_size, configs, tt_cache_path) for i in range(num_layers)]
         
         self.norm_f = reference_model.norm_f
 

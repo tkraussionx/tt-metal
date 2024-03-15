@@ -13,7 +13,7 @@ from models.experimental.mamba.reference.args import ModelArgs
 
 
 class TtMambaSSM(torch.nn.Module):
-    def __init__(self, args: ModelArgs, device, load_fn, state_dict, num_users, hidden_size, configs):
+    def __init__(self, args: ModelArgs, device, load_fn, state_dict, num_users, hidden_size, configs, tt_cache_path):
         super().__init__()
         
         
@@ -49,12 +49,13 @@ class TtMambaSSM(torch.nn.Module):
             print('***********using delta rank weight')
             x_proj_weight_name = "mixer.x_proj.weight"
             delta_t_proj = torch.transpose(self.state_dict[x_proj_weight_name][: self.args.dt_rank, :], -1, -2)
-            self.delta_t_proj = ttnn.from_torch(
+            self.delta_t_proj = ttnn.as_tensor(
                 delta_t_proj,
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 dtype=ttnn.bfloat16,
+                cache_file_name=tt_cache_path + "/delta_t_proj.bin",
             )
             
         else:
@@ -72,19 +73,21 @@ class TtMambaSSM(torch.nn.Module):
             dt_proj_weight_name = "mixer.dt_proj.weight"
             dt_proj_bias_name = "mixer.dt_proj.bias"
             dt_proj_weights = torch.transpose(self.state_dict[dt_proj_weight_name], -1, -2)
-            self.dt_proj_weights = ttnn.from_torch(
+            self.dt_proj_weights = ttnn.as_tensor(
                 dt_proj_weights,
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 dtype=ttnn.bfloat16,
+                cache_file_name=tt_cache_path + "/dt_proj_weights.bin",
             )
-            self.dt_proj_bias = ttnn.from_torch(
+            self.dt_proj_bias = ttnn.as_tensor(
                 self.state_dict[dt_proj_bias_name],
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 dtype=ttnn.bfloat16,
+                cache_file_name=tt_cache_path + "/dt_proj_bias.bin",
             )
         else:
             self.dt_proj_weights = ttnn.from_torch(
@@ -105,12 +108,15 @@ class TtMambaSSM(torch.nn.Module):
         if self.hidden_size == self.args.d_inner and self.n == self.args.d_state:
             print('***********using B weight')
             B_proj_weights = torch.transpose(self.state_dict[x_proj_weight_name][self.args.dt_rank : (self.args.dt_rank + self.args.d_state), :], -1, -2)
-            self.B_proj_weights = ttnn.from_torch(
+            # pad 
+            B_proj_weights = F.pad(B_proj_weights, (0, 16), "constant", 0)
+            self.B_proj_weights = ttnn.as_tensor(
                 B_proj_weights,
                 device=self.device,
                 layout=ttnn.TILE_LAYOUT,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 dtype=ttnn.bfloat16,
+                cache_file_name=tt_cache_path + "/B_proj_weights.bin",
             )
         else:
             self.B_proj_weights = ttnn.from_torch(
@@ -126,13 +132,14 @@ class TtMambaSSM(torch.nn.Module):
                 dtype=ttnn.bfloat16,
             )
 
-        B_intermediate_tranform_weights = torch.eye(16).repeat(1, self.hidden_size).unsqueeze(0).unsqueeze(0)
-        self.B_intermediate = ttnn.from_torch(
+        B_intermediate_tranform_weights = torch.eye(self.n).repeat(1, self.hidden_size).unsqueeze(0).unsqueeze(0)
+        self.B_intermediate = ttnn.as_tensor(
             B_intermediate_tranform_weights,
             layout=ttnn.TILE_LAYOUT,
             device=self.device,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             dtype=ttnn.bfloat16,
+            cache_file_name=tt_cache_path + "/B_intermediate_tranform_weights.bin",
         )
 
         # A
@@ -144,12 +151,15 @@ class TtMambaSSM(torch.nn.Module):
                 return x.repeat(self.num_users, 1) # b, 2en
 
             A = preprocess_A(self.state_dict[A_weight_name])
-            self.A = ttnn.from_torch(
+            # pad
+            A = F.pad(A, (0, self.hidden_size*16), "constant", 0)
+            self.A = ttnn.as_tensor(
                 A,
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 dtype=ttnn.bfloat16,
+                cache_file_name=tt_cache_path + "/A.bin",
             )
 
         else:
@@ -161,12 +171,15 @@ class TtMambaSSM(torch.nn.Module):
             print('***********using C weight')
             x_proj_weight_name = "mixer.x_proj.weight"
             C_proj_weights = torch.transpose(self.state_dict[x_proj_weight_name][(self.args.dt_rank + self.args.d_state) :, :], -1, -2)
-            self.C_proj = ttnn.from_torch(
+            # pad
+            C_proj_weights = F.pad(C_proj_weights, (0, 16), "constant", 0)
+            self.C_proj = ttnn.as_tensor(
                 C_proj_weights,
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 dtype=ttnn.bfloat16,
+                cache_file_name=tt_cache_path + "/C_proj_weights.bin",
             )
         else:
             self.C_proj = ttnn.from_torch(
@@ -183,8 +196,8 @@ class TtMambaSSM(torch.nn.Module):
                 )
         
         # C pad
-        C_pad = torch.zeros(1,1,self.num_users,self.n)
-        self.C_pad = ttnn.from_torch(C_pad, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
+        # C_pad = torch.zeros(1,1,self.num_users,self.n)
+        # self.C_pad = ttnn.from_torch(C_pad, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
         
         # D
         if self.hidden_size == self.args.d_inner:
@@ -192,12 +205,13 @@ class TtMambaSSM(torch.nn.Module):
             D_weight_name = "mixer.D"
             D = self.state_dict[D_weight_name]
             D = D.repeat(self.num_users, 1)
-            self.D = ttnn.from_torch(
+            self.D = ttnn.as_tensor(
                 D,
                 layout=ttnn.TILE_LAYOUT,
                 device=self.device,
                 dtype=ttnn.bfloat16,
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                cache_file_name=tt_cache_path + "/D.bin",
             )
         else:
             self.D = ttnn.from_torch(
