@@ -4,56 +4,28 @@ import ttnn
 import time
 
 
-def top_2(gate_logits_1SB8, device):
-    onehot_88 = ttnn.from_torch(
-        (1 - torch.eye(8, 8)),
-        device=device,
-        dtype=ttnn.bfloat16,
-        memory_config=ttnn.L1_MEMORY_CONFIG,
-        layout=ttnn.ROW_MAJOR_LAYOUT,
-    )
-    selected_experts_0_1S1B = ttnn.experimental.tensor.unpad(
-        ttnn.experimental.tensor.argmax(gate_logits_1SB8, dim=3),
-        [0, 0, 0, 0],
-        [0, 0, 0, 31],
-        output_mem_config=ttnn.L1_MEMORY_CONFIG,
-    )
+def concat(tt_0, tt_1, mask_0, mask_1):
+    tt_0 = ttnn.repeat_interleave(tt_0, repeats=2, dim=3)
+    tt_1 = ttnn.repeat_interleave(tt_1, repeats=2, dim=3)
+    output = tt_0 * mask_0 + tt_1 * mask_1
+    return output
+
+
+def top_2(gate_logits_1SB8, top_2_mask, expert_mask, mask_0, mask_1):
     weights_ex0_1SB1 = ttnn.experimental.tensor.max(gate_logits_1SB8, dim=3)
-    # selected_experts_0_1S1B = ttnn.to_layout(ttnn.experimental.tensor.typecast(ttnn.to_layout(selected_experts_0_1S1B, layout=ttnn.TILE_LAYOUT), dtype=ttnn.uint32), layout=ttnn.ROW_MAJOR_LAYOUT)
+    cond0 = ttnn.eq(gate_logits_1SB8, ttnn.repeat_interleave(weights_ex0_1SB1, 8, dim=3))
 
-    # TODO: Fix this
-    selected_experts_0_1S1B_torch = ttnn.to_torch(selected_experts_0_1S1B)
-    selected_experts_0_1S1B = ttnn.from_torch(
-        selected_experts_0_1S1B_torch, dtype=ttnn.uint32, device=device, layout=ttnn.ROW_MAJOR_LAYOUT
-    )
-    selected_experts_0_1S1B_tile = ttnn.from_torch(
-        selected_experts_0_1S1B_torch, dtype=ttnn.uint32, device=device, layout=ttnn.TILE_LAYOUT
-    )
-
-    mask_1B8 = ttnn.embedding(ttnn.reshape(selected_experts_0_1S1B, ttnn.Shape([1, 32])), onehot_88)
-    mask_1B8 = ttnn.to_layout(mask_1B8, layout=ttnn.TILE_LAYOUT)
-    gate_logits_1SB8 = gate_logits_1SB8 * mask_1B8
-
-    selected_experts_1_1S1B = ttnn.experimental.tensor.unpad(
-        ttnn.experimental.tensor.argmax(gate_logits_1SB8, dim=3),
-        [0, 0, 0, 0],
-        [0, 0, 0, 31],
-        output_mem_config=ttnn.L1_MEMORY_CONFIG,
-    )
+    gate_logits_1SB8 = ttnn.where(cond0, top_2_mask, gate_logits_1SB8)
     weights_ex1_1SB1 = ttnn.experimental.tensor.max(gate_logits_1SB8, dim=3)
-    weights_1SBK = ttnn.concat([weights_ex0_1SB1, weights_ex1_1SB1], dim=3)
+    cond1 = ttnn.eq(gate_logits_1SB8, ttnn.repeat_interleave(weights_ex1_1SB1, 8, dim=3))
 
-    # selected_experts_1_1S1B = ttnn.experimental.tensor.typecast(ttnn.to_layout(selected_experts_1_1S1B, layout=ttnn.TILE_LAYOUT), dtype=ttnn.uint32)
-    # TODO: Fix this
-    selected_experts_1_1S1B_torch = ttnn.to_torch(selected_experts_1_1S1B)
-    selected_experts_1_1S1B = ttnn.from_torch(
-        selected_experts_1_1S1B_torch, dtype=ttnn.uint32, device=device, layout=ttnn.TILE_LAYOUT
-    )
+    weights_1SBK = concat(weights_ex0_1SB1, weights_ex1_1SB1, mask_0, mask_1)
 
-    selected_experts_1SBK = ttnn.permute(
-        ttnn.concat([selected_experts_0_1S1B_tile, selected_experts_1_1S1B], dim=2), (0, 1, 3, 2)
-    )
-    return weights_1SBK, selected_experts_1SBK
+    cond0 = ttnn.sum(cond0 * expert_mask, dim=3)
+    cond1 = ttnn.sum(cond1 * expert_mask, dim=3)
+    experts = cond0 + cond1
+
+    return weights_1SBK, experts, concat(cond0, cond1, mask_0, mask_1)
 
 
 class TtMoeLayer(nn.Module):
@@ -84,10 +56,48 @@ class TtMoeLayer(nn.Module):
             packer_l1_acc=True,
         )
 
+        self.top_2_mask = [
+            ttnn.experimental.tensor.tilize_with_zero_padding(
+                ttnn.experimental.tensor.full(
+                    ttnn.Shape([1, 1, 32, 8]), fill_value=0.0, data_type=ttnn.bfloat16, device=device
+                )
+            )
+            for device in self.devices
+        ]
+        self.expert_mask = []
+        for i in range(len(self.devices)):
+            torch_tensor = torch.zeros(1, 1, 32, 8)
+            torch_tensor[:, :, :, i] = 1
+            self.expert_mask.append(
+                ttnn.from_torch(torch_tensor, dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT)
+            )
+
+        self.mask_0 = [
+            ttnn.from_torch(
+                torch.tensor([1, 0] * 32).view(1, 1, 32, 2),
+                device=device,
+                dtype=ttnn.bfloat16,
+                memory_config=ttnn.L1_MEMORY_CONFIG,
+                layout=ttnn.TILE_LAYOUT,
+            )
+            for device in self.devices
+        ]
+
+        self.mask_1 = [
+            ttnn.from_torch(
+                torch.tensor([[0, 1]] * 32).view(1, 1, 32, 2),
+                device=device,
+                dtype=ttnn.bfloat16,
+                memory_config=ttnn.L1_MEMORY_CONFIG,
+                layout=ttnn.TILE_LAYOUT,
+            )
+            for device in self.devices
+        ]
+
     def forward(self, inputs):
         output_B1SD = []
         start_time = time.time()
-        for i in range(len(self.devices)):
+        for i in range(len(self.devices)):  # [0, 3, 4, 7]:  # range(len(self.devices)):
             print(f"started device {i}, time: {time.time() - start_time} ")
             self.devices[i] = self.devices[i]
             input_i_1SBH = inputs[i]
@@ -98,99 +108,87 @@ class TtMoeLayer(nn.Module):
                 memory_config=ttnn.L1_MEMORY_CONFIG,
                 compute_kernel_config=self.compute_kernel,
             )
-            # gate_logits_1SB8 = ttnn.reshape(gate_logits_1SB8, ttnn.Shape([1, 1, 32, 8]))
-            # TODO: falling back to pytorch for now
-            # for i in range(len(self.devices)):
-            if True:
-                gate_logits_1SB8_torch = ttnn.to_torch(gate_logits_1SB8)
-                weights_1SBK, selected_experts_1SBK = torch.topk(gate_logits_1SB8_torch, self.args.num_experts_per_tok)
-                weights_1SBK = ttnn.from_torch(
-                    weights_1SBK, dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
-                )
-                selected_experts_1SBK = ttnn.from_torch(
-                    selected_experts_1SBK, dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
-                )
-            else:
-                top_2(gate_logits_1SB8, self.devices[i])
 
-            # for i in range(len(self.devices)):
-            weights_1SBK = ttnn.softmax(weights_1SBK - ttnn.experimental.tensor.max(weights_1SBK, dim=3), dim=-1)
-            comp = ttnn.experimental.tensor.full(
-                ttnn.Shape([1, 1, 32, 2]),
-                i,
+            weights_1SBK, batch_ids_1SB1, selected_experts_1SBK = top_2(
+                gate_logits_1SB8, self.top_2_mask[i], self.expert_mask[i], self.mask_0[i], self.mask_1[i]
             )
+            weights_1SBK = ttnn.softmax(weights_1SBK - ttnn.experimental.tensor.max(weights_1SBK, dim=3), dim=-1)
+            print("done top 2")
 
-            comp = ttnn.to_layout(comp, layout=ttnn.TILE_LAYOUT)
-            comp = ttnn.to_device(comp, device=self.devices[i])
-            selected_experts_1SBK = ttnn.eq(selected_experts_1SBK, comp)
-            batch_ids_1SB1 = ttnn.experimental.tensor.sum(selected_experts_1SBK, dim=3)
-            batch_ids_1SB1 = batch_ids_1SB1 - 30
-
-            # for i in range(len(self.devices)):
             # send to host
             batch_ids_B_torch = ttnn.to_torch(batch_ids_1SB1)
             # convert batch_ids to list of indices
-            batch_ids_1b_torch = batch_ids_B_torch.view(-1).nonzero().view(1, -1)
-            print("BATCHES", batch_ids_1b_torch)
+            batch_ids_1b_torch = batch_ids_B_torch.view(-1).nonzero().view(1, -1).to(torch.int)
+            print("NON ZERO BATCHES", batch_ids_1b_torch)
+            batch_ids_1b = ttnn.from_torch(
+                batch_ids_1b_torch, dtype=ttnn.uint32, device=self.devices[i], layout=ttnn.TILE_LAYOUT
+            )
+            batch_ids_1b = ttnn.to_torch(batch_ids_1b)
+            batch_ids_1b = ttnn.from_torch(
+                batch_ids_1b, dtype=ttnn.uint32, device=self.devices[i], layout=ttnn.ROW_MAJOR_LAYOUT
+            )
+            print("tt batches", batch_ids_1b)
+            b = batch_ids_1b.shape[1]
 
             # in case, no batch selected this head
-            if len(batch_ids_1b_torch) == 0:
-                # TODO: double check this is correct
-                output_i_B1SD = ttnn.from_torch(
-                    [32, 1, 1, 4096], dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
+            if b == 0:
+                print("no batch selected this head")
+                output_i_B1SD = ttnn.zeros(
+                    input_shape=ttnn.Shape([32, 1, 1, 4096]),
+                    device=self.devices[i],
+                    dtype=ttnn.bfloat16,
+                    layout=ttnn.ROW_MAJOR_LAYOUT,
+                    memory_config=ttnn.L1_MEMORY_CONFIG,
                 )
 
             else:
                 # slice input
-                batch_ids_1b = ttnn.from_torch(
-                    batch_ids_1b_torch, dtype=ttnn.uint32, device=self.devices[i], layout=ttnn.ROW_MAJOR_LAYOUT
-                )
-                b = batch_ids_1b.shape[1]
                 input_i_1SBH = ttnn.to_layout(input_i_1SBH, layout=ttnn.ROW_MAJOR_LAYOUT)
                 input_i_1bH = ttnn.embedding(batch_ids_1b, input_i_1SBH)
                 input_i_11bH = ttnn.reshape(input_i_1bH, ttnn.Shape([1, 1, b, 4096]))
+                input_i_11bH = ttnn.experimental.tensor.tilize_with_zero_padding(input_i_11bH)
                 print("done input slicing")
 
                 # slice weights
                 weights_1SB1 = ttnn.experimental.tensor.sum(weights_1SBK * selected_experts_1SBK, dim=3)
-                weights_1SB2 = ttnn.concat([weights_1SB1, weights_1SB1], dim=3)
-                # TODO: Fix this
-                weights_1SB2 = ttnn.to_torch(weights_1SB2)
-                weights_1SB2 = ttnn.from_torch(
-                    weights_1SB2, dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.ROW_MAJOR_LAYOUT
+                weights_1SB2 = ttnn.experimental.tensor.untilize_with_unpadding(
+                    weights_1SB1,
+                    output_tensor_start=ttnn.Shape([0, 0, 0, 0]),
+                    output_tensor_end=ttnn.Shape([0, 0, 31, 1]),
+                    output_mem_config=ttnn.L1_MEMORY_CONFIG,
+                    use_pack_untilize=False,
                 )
-                weights_1SB2 = ttnn.to_layout(weights_1SB2, layout=ttnn.ROW_MAJOR_LAYOUT)
                 weights_1b2 = ttnn.embedding(batch_ids_1b, weights_1SB2)
                 weights_11b2 = ttnn.reshape(weights_1b2, ttnn.Shape([1, 1, b, 2]))
-                weights_11b2 = ttnn.experimental.tensor.pad(weights_11b2, [1, 1, 32, 32], [0, 0, 0, 0], 0.0)
-                weights_11b2 = ttnn.to_layout(weights_11b2, layout=ttnn.TILE_LAYOUT)
-                weights_11b1 = ttnn.experimental.tensor.max(weights_11b2, dim=3)
-                print("done weight slicing")
+                weights_11b1 = ttnn.split(
+                    ttnn.experimental.tensor.tilize_with_zero_padding(weights_11b2), split_size=1, dim=3
+                )[0]
+                print(
+                    "done weight slicing",
+                )
 
-                # for i in range(len(self.devices)):
-                input_i_11bH = ttnn.to_layout(input_i_11bH, layout=ttnn.TILE_LAYOUT)
+                # MLP
                 results_11bD = expert_i_HD(input_i_11bH) * weights_11b1
-                results_b1SD = ttnn.to_layout(ttnn.permute(results_11bD, (2, 1, 0, 3)), layout=ttnn.ROW_MAJOR_LAYOUT)
+                results_b1SD = ttnn.experimental.tensor.untilize_with_unpadding(
+                    results_11bD,
+                    output_tensor_start=ttnn.Shape([0, 0, 0, 0]),
+                    output_tensor_end=ttnn.Shape([0, 0, b - 1, 4095]),
+                    output_mem_config=ttnn.L1_MEMORY_CONFIG,
+                    use_pack_untilize=False,
+                )
+                results_b1SD = ttnn.permute(results_b1SD, (2, 1, 0, 3))
                 print("done expert MLP")
 
-                # for i in range(len(self.devices)):
                 # create output tensor with results_bO at batch positions batch_ids_b
-                if False:
-                    output_i_B1SD_torch = torch.zeros(32, 1, 1, 4096, dtype=torch.bfloat16)
-                    results_b1SD_torch = ttnn.to_torch(results_b1SD)
-                    output_i_B1SD_torch[batch_ids_1b_torch.view(-1)] = results_b1SD_torch
-                    output_i_B1SD = ttnn.from_torch(
-                        output_i_B1SD_torch, dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
-                    )
-                else:
-                    output_i_B1SD = ttnn.zeros(
-                        input_shape=ttnn.Shape([32, 1, 1, 4096]),
-                        device=self.devices[i],
-                        dtype=ttnn.bfloat16,
-                        layout=ttnn.ROW_MAJOR_LAYOUT,
-                        memory_config=ttnn.L1_MEMORY_CONFIG,
-                    )
-                    output_i_B1SD = ttnn.experimental.tensor.indexed_fill(batch_ids_1b, output_i_B1SD, results_b1SD)
+                output_i_B1SD = ttnn.zeros(
+                    input_shape=ttnn.Shape([32, 1, 1, 4096]),
+                    device=self.devices[i],
+                    dtype=ttnn.bfloat16,
+                    layout=ttnn.ROW_MAJOR_LAYOUT,
+                    memory_config=ttnn.L1_MEMORY_CONFIG,
+                )
+                batch_ids_1b = ttnn.reshape(batch_ids_1b, ttnn.Shape([1, 1, 1, b]))
+                output_i_B1SD = ttnn.experimental.tensor.indexed_fill(batch_ids_1b, output_i_B1SD, results_b1SD)
                 print("done output tensor creation")
 
             output_B1SD.append(output_i_B1SD)
@@ -198,13 +196,7 @@ class TtMoeLayer(nn.Module):
             print(f"finished device {i}, time: {time.time() - start_time} ")
         # all gather
         print(f"started ALL GATHER, time: {time.time() - start_time} ")
-        num_links = 1
-        if self.num_devices == 4:
-            for i in range(4):
-                output_B1SD[i] = ttnn.experimental.tensor.add(output_B1SD[i], output_B1SD[4 + i])
-            output_B1SD = output_B1SD[:4]
-            num_links = 2
-        output_B1SD_gathered = ttnn.experimental.tensor.all_gather(output_B1SD, dim=2, num_links=num_links)
+        output_B1SD_gathered = ttnn.experimental.tensor.all_gather(output_B1SD, dim=2, num_links=1)
         print(f"finished ALL GATHER, time: {time.time() - start_time}")
 
         # sum on each device

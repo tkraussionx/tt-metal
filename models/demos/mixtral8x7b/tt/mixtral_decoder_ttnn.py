@@ -7,7 +7,7 @@ from typing import List
 from models.demos.mixtral8x7b.tt.mixtral_attention_ttnn import TtMixtralAttention
 from models.demos.mixtral8x7b.tt.mixtral_mlp_ttnn import TtMixtralMLP
 from models.demos.mixtral8x7b.tt.mixtral_rms_norm_ttnn import TtRMSNorm
-from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn import TtMoeLayer
+from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn_new import TtMoeLayer
 
 
 class TtTransformerBlock(torch.nn.Module):
@@ -119,7 +119,7 @@ class TtTransformerBlock(torch.nn.Module):
         h = []
         # Attention also returns multiple outputs (multi-device support)
         for i in range(self.num_devices):
-            xs[i] = ttnn.permute(xs[i], (2, 1, 0, 3))
+            r[i] = ttnn.permute(r[i], (2, 1, 0, 3))
             h_i = self.ffn_norm[i](ttnn.experimental.tensor.add(xs[i], r[i]))
             h.append(h_i)
             ttnn.deallocate(xs[i])
@@ -128,6 +128,7 @@ class TtTransformerBlock(torch.nn.Module):
 
         out = []
         for i in range(self.num_devices):
+            h[i] = ttnn.permute(h[i], (2, 1, 0, 3))
             out.append(ttnn.experimental.tensor.add(h[i], r[i]))
             ttnn.deallocate(h[i])
             ttnn.deallocate(r[i])
