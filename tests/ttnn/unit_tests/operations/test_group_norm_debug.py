@@ -244,7 +244,8 @@ def test_group_norm_with_block_sharded(device, N, C, H, W, num_groups):
         # ((1, 1, 512, 1280)),
         # ((2, 1, 256, 1280)),
         # ((2, 1, 256, 2560)),
-        ((2, 1, 256, 1280)),
+        # ((2, 1, 256, 1280)),
+        ((2, 1, 4096, 320)),
     ],
 )
 @pytest.mark.parametrize("num_groups", [32])

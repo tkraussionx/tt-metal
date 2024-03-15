@@ -237,7 +237,7 @@ class UNet2DConditionModel:
             compute_kernel_config=conv_compute_kernel_config,
         )
 
-        self.fallback_on_groupnorm = True  # os.environ.get("FALLBACK_ON_GROUPNORM", "0") == "1"
+        self.fallback_on_groupnorm = os.environ.get("FALLBACK_ON_GROUPNORM", "0") == "1"
         self.norm_num_groups = 32
         if not self.fallback_on_groupnorm:
             parameters.conv_norm_out.weight = pad_group_norm_weight(
@@ -246,8 +246,16 @@ class UNet2DConditionModel:
             parameters.conv_norm_out.bias = pad_group_norm_weight(
                 parameters.conv_norm_out.bias, self.norm_num_groups, self.conv_out.in_channels
             )
-        self.group_norm_grid_size = list(self.conv_out.conv.grid_size)
-        self.gn_expected_input_sharded_memory_config = self.conv_out.conv.input_sharded_memory_config
+        (
+            self.gn_expected_input_sharded_memory_config,
+            self.group_norm_core_grid,
+        ) = ttnn.determine_expected_group_norm_sharded_config_and_grid_size(
+            device=self.device,
+            num_channels=in_channels,
+            num_groups=self.norm_num_groups,
+            input_nhw=batch_size * input_height * input_width,
+            is_height_sharded=False,
+        )
         # breakpoint()
         # self.gn_expected_input_sharded_memory_config = update_gn_expected_input_sharded_memory_config_and_grid_size(self.gn_expected_input_sharded_memory_config, self.group_norm_grid_size, self.norm_num_groups, in_channels)
 
@@ -570,14 +578,20 @@ class UNet2DConditionModel:
                 epsilon=norm_eps,
                 weight=self.parameters.conv_norm_out.weight,
                 bias=self.parameters.conv_norm_out.bias,
-                memory_config=self.conv_out.conv.input_sharded_memory_config,
-                core_grid=ttnn.CoreGrid(
-                    y=self.group_norm_grid_size[1],
-                    x=self.group_norm_grid_size[0],
-                ),
+                memory_config=self.gn_expected_input_sharded_memory_config,
+                core_grid=self.group_norm_core_grid,
             )
         print("Done GN")
         sample = ttnn.to_memory_config(sample, ttnn.L1_MEMORY_CONFIG)
+        hidden_states = ttnn.reshape(
+            hidden_states,
+            (
+                1,
+                1,
+                self.conv_out.batch_size * self.conv_out.input_height * self.conv_out.input_width,
+                self.conv_out.in_channels,
+            ),
+        )
         sample = ttnn.to_layout(sample, ttnn.TILE_LAYOUT)
         sample = ttnn.silu(sample)
         if ttnn.get_memory_config(sample) != self.conv_out.conv.input_sharded_memory_config:
