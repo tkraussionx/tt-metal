@@ -189,7 +189,7 @@ class TtMoeLayer(nn.Module):
                 )
                 batch_ids_1b = ttnn.reshape(batch_ids_1b, ttnn.Shape([1, 1, 1, b]))
                 output_i_B1SD = ttnn.experimental.tensor.indexed_fill(batch_ids_1b, output_i_B1SD, results_b1SD)
-                print("done output tensor creation", output_i_B1SD)
+                print("done output tensor creation")
 
             output_B1SD.append(output_i_B1SD)
 
