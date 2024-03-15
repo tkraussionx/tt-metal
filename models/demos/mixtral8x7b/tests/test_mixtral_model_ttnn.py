@@ -36,7 +36,7 @@ class Emb(torch.nn.Module):
     "iterations",
     (1,),
 )
-def test_mixtral_model_inference(all_devices, iterations, n_layers):
+def test_mixtral_model_inference(all_devices, iterations, n_layers, reset_seeds):
     pcc = 0.99
     dtype = ttnn.bfloat8_b
 

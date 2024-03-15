@@ -22,9 +22,10 @@ from models.utility_functions import comp_pcc, comp_allclose, get_devices_for_t3
     "iterations",
     ((1),),
 )
-def test_mixtral_decoder_inference(all_devices, iterations):
+def test_mixtral_decoder_inference(all_devices, iterations, reset_seeds):
     pcc = 0.99
     dtype = ttnn.bfloat8_b
+
     devices = all_devices
     num_devices = len(devices)
     assert num_devices == 8, "This test requires a T3000 (8 devices)"

@@ -21,10 +21,9 @@ from models.utility_functions import get_devices_for_t3000
     "iterations",
     ((1,)),
 )
-def test_mistral_moe_inference(all_devices, iterations):
+def test_mistral_moe_inference(all_devices, iterations, reset_seeds):
     pcc = 0.99
     dtype = ttnn.bfloat8_b
-    torch.manual_seed(0)
 
     devices = all_devices
     num_devices = len(devices)

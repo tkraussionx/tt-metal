@@ -27,10 +27,9 @@ from models.utility_functions import get_devices_for_t3000
     "iterations",
     ((10),),
 )
-def test_mixtral_attention_inference(all_devices, iterations):
+def test_mixtral_attention_inference(all_devices, iterations, reset_seeds):
     pcc = 0.99
     dtype = ttnn.bfloat8_b
-    torch.manual_seed(0)
     devices = all_devices
     num_devices = len(devices)
     assert num_devices == 8, f"This test requires a T3000 (8 devices), found {num_devices} devices."
