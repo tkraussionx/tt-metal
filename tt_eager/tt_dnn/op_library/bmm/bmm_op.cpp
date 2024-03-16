@@ -1292,11 +1292,21 @@ MatmulParallelizationStrategy Matmul::get_parallelization_strategy(const std::ve
 }
 
 Tensor matmul_1d(const Tensor &input_tensor_a, const Tensor &input_tensor_b, std::optional<const Tensor> bias, std::optional<MatmulMultiCoreReuseMultiCast1DProgramConfig> program_config, const MemoryConfig& mem_config, std::optional<const DataType> output_dtype, std::optional<const DeviceComputeKernelConfig> compute_kernel_config, bool untilize_out) {
-    if (!program_config.has_value()) {
-        program_config = bmm_op_utils::get_mcast_1d_config(input_tensor_a, input_tensor_b);
-    }
-    auto kernel_config_val = init_device_compute_kernel_config(input_tensor_a.device()->arch(), compute_kernel_config);
-    return operations::primary::matmul(input_tensor_a, input_tensor_b, bias, program_config.value(), mem_config, output_dtype, kernel_config_val, untilize_out);
+    Device* device = input_tensor_a.device_synchronous;
+    Tensor output_tensor;
+    output_tensor.device_synchronous = device;
+    device->push_work([input_tensor_a, input_tensor_b, output_tensor, bias, program_config, mem_config, output_dtype, compute_kernel_config, untilize_out] () mutable {
+        if (!program_config.has_value()) {
+            program_config = bmm_op_utils::get_mcast_1d_config(input_tensor_a, input_tensor_b);
+        }
+        auto kernel_config_val = init_device_compute_kernel_config(input_tensor_a.device()->arch(), compute_kernel_config);
+        auto local_tensor = operations::primary::matmul(input_tensor_a, input_tensor_b, bias, program_config.value(), mem_config, output_dtype, kernel_config_val, untilize_out);
+        output_tensor.set_storage(local_tensor.get_storage());
+        output_tensor.set_shape(local_tensor.get_shape());
+        output_tensor.set_dtype(local_tensor.get_dtype());
+        output_tensor.set_layout(local_tensor.get_layout());
+    });
+    return output_tensor;
 }
 
 operation::OpPerformanceModel Matmul::create_op_performance_model(

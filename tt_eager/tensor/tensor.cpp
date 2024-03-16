@@ -128,9 +128,17 @@ Tensor Tensor::to(CommandQueue & queue, const MemoryConfig & mem_config) const {
 
 Tensor Tensor::to(Device *target_device, const MemoryConfig &mem_config) const {
     ZoneScoped;
-    if (device_synchronous != nullptr) {
-        TT_ASSERT(device_synchronous == target_device, "Currently do not support moving between devices");
-        return *this;
+    if (Device::default_worker_queue_mode() == Device::WorkerQueueMode::SYNCHRONOUS) {
+        if (storage_type() == StorageType::DEVICE) {
+            TT_ASSERT(this->device() == target_device && "Currently do not support moving between devices");
+            return *this;
+        }
+    }
+    else {
+        if (device_synchronous != nullptr) {
+            TT_ASSERT(device_synchronous == target_device, "Currently do not support moving between devices");
+            return *this;
+        }
     }
 
     Tensor device_tensor;
@@ -149,8 +157,20 @@ Tensor Tensor::to(Device *target_device, const MemoryConfig &mem_config) const {
 
 Tensor Tensor::cpu(bool blocking) const {
     ZoneScoped;
-    if (device_synchronous == nullptr) {
-        return *this;
+    if (Device::default_worker_queue_mode() == Device::WorkerQueueMode::SYNCHRONOUS) {
+        // Synchronous Mode - Tensor Populated Immediately. Safe to query the storage type.
+        // Return if cpu() called on host tensor.
+        if (storage_type() == StorageType::OWNED) {
+            return *this;
+        }
+    }
+    else {
+        // Asynchronous mode - Its not safe to query any tensor attributes without flushing.
+        // Flush can be expensive. Instead, rely on the device_synchronous field being set.
+        // All operations creating device tensors must use this variable to indicate if the tensor is on device or not.
+        if (device_synchronous == nullptr) {
+            return *this;
+        }
     }
 
     Tensor host_tensor;

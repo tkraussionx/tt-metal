@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 
+#include "common/env_lib.hpp"
 #include "hostdevcommon/common_values.hpp"
 #include "impl/device/functional_lock_free_queue.hpp"
 #include "tt_metal/impl/allocator/basic_allocator.hpp"
@@ -66,12 +67,21 @@ public:
 // A physical PCIexpress Tenstorrent device
 class Device {
    public:
-    // friend void tt_gdb(Device* device, int chip_id, const vector<CoreCoord> cores, vector<string> ops);
+    // In asynchronous mode, each device has a worker thread that processes all host <--> cluster commands for this device.
+    // Commands are pushed to the worker queue and picked up + executed asyncrhonously.
+    // Higher level functions that have access to the device handle can queue up tasks asynchronously.
+    // In synchronous/pass through mode, we bypass the queue and tasks are executed immediately after being pushed.
+    enum class WorkerQueueMode {
+        SYNCHRONOUS = 0,
+        ASYNCRHONOUS = 1,
+    };
+
     enum class WorkerState {
         RUNNING = 0,
         TERMINATE = 1,
     };
 
+    // friend void tt_gdb(Device* device, int chip_id, const vector<CoreCoord> cores, vector<string> ops);
     Device () = delete;
     Device(chip_id_t device_id, const uint8_t num_hw_cqs, const std::vector<uint32_t>& l1_bank_remap = {});
 
@@ -198,15 +208,25 @@ class Device {
     void compile_command_queue_programs_for_grayskull();
     void configure_command_queue_programs();
     void clear_l1_state();
-    void start_worker();
-    void run_worker();
-    void stop_worker();
-    void push_work(std::function<void()> work_executor, bool blocking = false);
     std::pair<int, int> build_processor_type_to_index(JitBuildProcessorType t) const;
 
     // Puts device into reset
     bool close();
     friend bool CloseDevice(Device *device);
+    // Track the parent and worker thread ids. Allows for safely running nested commands.
+    uint64_t worker_thread_id = 0;
+    uint64_t parent_thread_id = 0;
+
+    void start_worker();
+    void run_worker();
+    void stop_worker();
+    void push_work(std::function<void()> work_executor, bool blocking = false);
+    // void flush_worker_queue();
+
+    static WorkerQueueMode default_worker_queue_mode() {
+        static int value = parse_env<int>("TT_METAL_ASYNC_DEVICE_QUEUE", static_cast<int>(WorkerQueueMode::SYNCHRONOUS));
+        return static_cast<WorkerQueueMode>(value);
+    }
 
     // TODO: Uplift usage of friends. Buffer and Program just need access to allocator
     friend class Buffer;
@@ -233,6 +253,7 @@ class Device {
     FunctionalLockFreeQueue worker_queue;
     std::thread worker_thread;
     WorkerState worker_state;
+    inline static WorkerQueueMode worker_queue_mode = default_worker_queue_mode();
     std::unique_ptr<SystemMemoryManager> sysmem_manager_;
     vector<std::unique_ptr<Program, detail::ProgramDeleter>> command_queue_programs_;
     uint8_t num_hw_cqs_;

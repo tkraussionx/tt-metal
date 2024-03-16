@@ -16,15 +16,25 @@ Tensor bmm_tilize_untilize(const Tensor& a, const Tensor& b, const Tensor& bias,
                            uint32_t out_subblock_height_ntiles, uint32_t out_subblock_width_ntiles,
                            bool tilize_in0, bool untilize_out, bool has_bias) {
     // NOTE: Currently only single core implementation exists.
-    return operation::run(BMMTilizeUntilize {
+    Device* device = a.device_synchronous;
+    Tensor output_tensor;
+    output_tensor.device_synchronous = device;
+    device->push_work([=] () mutable {
+        auto local_tensor = operation::run(BMMTilizeUntilize {
                             out_dt,
                             a_height_nblocks, a_width_nblocks, b_width_nblocks,
                             a_block_height_ntiles, a_block_width_ntiles, b_block_width_ntiles,
                             out_subblock_height_ntiles, out_subblock_width_ntiles,
                             tilize_in0, untilize_out,
                             has_bias},
-                          {a, b, bias},
-                          {}).at(0);
+                            {a, b, bias},
+                            {}).at(0);
+        output_tensor.set_storage(local_tensor.get_storage());
+        output_tensor.set_shape(local_tensor.get_shape());
+        output_tensor.set_dtype(local_tensor.get_dtype());
+        output_tensor.set_layout(local_tensor.get_layout());
+    });
+    return output_tensor;
 }
 
 void create_cb_bmm_single_core_tilize_untilize(Program &program,

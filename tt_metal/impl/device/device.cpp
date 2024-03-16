@@ -63,7 +63,10 @@ Device::Device(chip_id_t device_id, const uint8_t num_hw_cqs, const std::vector<
     ZoneScoped;
     TT_ASSERT(num_hw_cqs > 0 and num_hw_cqs < 3, "num_hw_cqs can be between 1 and 2");
     this->initialize(l1_bank_remap);
-    this->start_worker();
+    if (this->worker_queue_mode == WorkerQueueMode::ASYNCRHONOUS) {
+        this->worker_queue.parent_thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
+        this->start_worker();
+    }
 }
 
 void Device::initialize_cluster() {
@@ -852,7 +855,9 @@ bool Device::close() {
 }
 
 Device::~Device() {
-    stop_worker();
+    if (this->worker_queue_mode == WorkerQueueMode::ASYNCRHONOUS) {
+        stop_worker();
+    }
     if (this->initialized_) {
         this->close();
     }
@@ -1052,12 +1057,25 @@ CommandQueue& Device::command_queue(size_t cq_id) {
 }
 
 void Device::push_work(std::function<void()> work_executor, bool blocking) {
-    this->worker_queue.push(work_executor);
-    if (blocking) {
-        this->worker_queue.push([](){});
-        while(not this->worker_queue.empty()) {
-            std::this_thread::sleep_for(std::chrono::microseconds(10));
-        };
+    if (this->worker_queue_mode == WorkerQueueMode::ASYNCRHONOUS) {
+        if (std::hash<std::thread::id>{}(std::this_thread::get_id()) == worker_queue.parent_thread_id.load()) {
+            // Push function executor to worker queue
+            this->worker_queue.push(work_executor);
+            if (blocking) {
+                // Blocking = wait for queue flushed
+                this->worker_queue.push([](){}); // Send flush command (i.e. empty function)
+                // Wait for queue empty, i.e. flush command picked up
+                while(not this->worker_queue.empty()) {
+                    std::this_thread::sleep_for(std::chrono::microseconds(10));
+                };
+            }
+        } else {
+            TT_ASSERT(std::hash<std::thread::id>{}(std::this_thread::get_id()) == worker_queue.worker_thread_id.load(), "Only main thread or worker thread can push to device worker queue.");
+            work_executor();
+        }
+    } else {
+        // Synchronous execution: Run function right away.
+        work_executor();
     }
 }
 
@@ -1067,6 +1085,7 @@ void Device::start_worker() {
 }
 
 void Device::run_worker() {
+    worker_queue.worker_thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
     while (true) {
         if(this->worker_queue.empty()) {
             if (this->worker_state == WorkerState::TERMINATE) {

@@ -322,9 +322,19 @@ inline Tensor matmul(
     std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt,
     bool untilize_out = false
 ) {
-    auto arch = input_tensor_a.storage_type() == StorageType::DEVICE ? input_tensor_a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
-    auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config);
-    return operation::run(Matmul{program_config, mem_config, output_dtype.value_or(input_tensor_a.get_dtype()), kernel_config_val, untilize_out}, {input_tensor_a, input_tensor_b}, {std::nullopt}).at(0);
+    Device* device = input_tensor_a.device_synchronous;
+    Tensor output_tensor;
+    output_tensor.device_synchronous = device;
+    device->push_work([=] () mutable{
+        auto arch = device->arch();
+        auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config);
+        auto local_tensor = operation::run(Matmul{program_config, mem_config, output_dtype.value_or(input_tensor_a.get_dtype()), kernel_config_val, untilize_out}, {input_tensor_a, input_tensor_b}, {std::nullopt}).at(0);
+        output_tensor.set_storage(local_tensor.get_storage());
+        output_tensor.set_shape(local_tensor.get_shape());
+        output_tensor.set_dtype(local_tensor.get_dtype());
+        output_tensor.set_layout(local_tensor.get_layout());
+    });
+    return output_tensor;
 }
 
 inline Tensor matmul(
@@ -336,9 +346,19 @@ inline Tensor matmul(
     std::optional<const DataType> output_dtype = std::nullopt,
     std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt,
     bool untilize_out = false) {
-    auto arch = input_tensor_a.storage_type() == StorageType::DEVICE ? input_tensor_a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
-    auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config);
-    return operation::run(Matmul{program_config, mem_config, output_dtype.value_or(input_tensor_a.get_dtype()), kernel_config_val, untilize_out}, {input_tensor_a, input_tensor_b}, {bias}).at(0);
+    Device* device = input_tensor_a.device_synchronous;
+    Tensor output_tensor;
+    output_tensor.device_synchronous = device;
+    device->push_work([=] () mutable{
+        auto arch = input_tensor_a.storage_type() == StorageType::DEVICE ? input_tensor_a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
+        auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config);
+        auto local_tensor = operation::run(Matmul{program_config, mem_config, output_dtype.value_or(input_tensor_a.get_dtype()), kernel_config_val, untilize_out}, {input_tensor_a, input_tensor_b}, {bias}).at(0);
+        output_tensor.set_storage(local_tensor.get_storage());
+        output_tensor.set_shape(local_tensor.get_shape());
+        output_tensor.set_dtype(local_tensor.get_dtype());
+        output_tensor.set_layout(local_tensor.get_layout());
+    });
+    return output_tensor;
 }
 
 Tensor matmul_1d(const Tensor &input_tensor_a, const Tensor &input_tensor_b, std::optional<const Tensor> bias, std::optional<MatmulMultiCoreReuseMultiCast1DProgramConfig> program_config = std::nullopt, const MemoryConfig& mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, std::optional<const DataType> output_dtype=std::nullopt, std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt, bool untilize_out = false);

@@ -49,12 +49,7 @@ struct Tensor {
     // Default constructor to initialize empty tensor
     Tensor() : tensor_attributes(std::make_shared<TensorAttributes>()) {}
 
-    Tensor(const Tensor &other) {
-        this->tensor_attributes = other.tensor_attributes;
-        if (device_synchronous != nullptr) {
-            device_synchronous = other.device_synchronous;
-        }
-    }
+    Tensor(const Tensor &other) = default;
 
     Tensor &operator=(const Tensor &other) = default;
 
