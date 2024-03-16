@@ -87,13 +87,13 @@ operation::ProgramWithCallbacks s2s_rm_concat_multi_core(const std::vector<Tenso
 
    tt_metal::KernelHandle unary_reader_kernel_id = tt_metal::CreateKernel(
         program,
-        "tt_eager/tt_dnn/op_library/concat/kernels/dataflow/reader_s2i_width.cpp",
+        "tt_eager/tt_dnn/op_library/concat/kernels/dataflow/reader_height_sharded_width_concat.cpp",
         all_cores,
         tt_metal::ReaderDataMovementConfig(reader_compile_time_args));
 
    tt_metal::KernelHandle unary_writer_kernel_id = tt_metal::CreateKernel(
         program,
-        "tt_eager/tt_dnn/op_library/concat/kernels/dataflow/writer_s2s_width.cpp",
+        "tt_eager/tt_dnn/op_library/concat/kernels/dataflow/writer_height_s2s_width_concat.cpp",
         all_cores,
         tt_metal::WriterDataMovementConfig(writer_compile_time_args));
 
