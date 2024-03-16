@@ -296,7 +296,7 @@ def run_falcon_demo_kv(
 
     profiler.disable()
     # TODO: Is this safe? Disabling kernel caching disable program caching as well?
-    enable_persistent_kernel_cache()
+    # enable_persistent_kernel_cache()
 
     ### First prefill run with compile ###
     use_cache = True
@@ -593,7 +593,7 @@ def test_demo(
     all_devices,
     use_program_cache,
 ):
-    num_devices = 4
+    num_devices = 8
     devices = get_devices_for_t3000(all_devices, num_devices)
 
     # disable_persistent_kernel_cache()

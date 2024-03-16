@@ -132,6 +132,7 @@ def run_test_FalconCausalLM_inference(
         past_key_values = ()
         tt_layer_past = ()
         for i in range(num_layers):
+            print(f"Putting cache on device for layer: {i+1}")
             k_cache = torch.rand(batch, num_kv_heads, kv_cache_len, head_dim)
             v_cache = torch.rand(batch, num_kv_heads, kv_cache_len, head_dim)
             past_key_values += (
@@ -175,7 +176,9 @@ def run_test_FalconCausalLM_inference(
         raise NotImplementedError(f"Llm mode {llm_mode} is not supported! Must be one of prefill or decode.")
 
     # Prepare output -----------------------------------------------------------------------
+    logger.info("Setting up pytorch model")
     pytorch_FalconCausalLM = PytorchFalconCausalLM(hugging_face_reference_model, num_layers)
+    logger.info("Running pytorch")
     pytorch_out, pytorch_layer_present = pytorch_FalconCausalLM(
         input_ids=model_input, past_key_values=past_key_values, use_cache=use_cache
     )
@@ -183,6 +186,7 @@ def run_test_FalconCausalLM_inference(
     # NOTE: Passing in pytorch tensor here instead of ll buda tensor
     # since we don't yet have embedding support on device
     # device, state_dict, base_url, max_position_embeddings, config, num_decoders
+    logger.info("Setting up model")
     tt_FalconCausalLM = TtFalconCausalLM(
         devices,
         state_dict,
@@ -248,7 +252,7 @@ def run_test_FalconCausalLM_inference(
     does_pass, output_pcc = comp_pcc(pytorch_out, tt_out, out_pcc)
     logger.info(f"Output: {output_pcc}")
 
-    for i in range(num_layers):
+    for i in range(0, num_layers, 4):
         pytorch_layer_pres = pytorch_layer_present[i]
         tt_layer_pres = (
             torch.cat([tt2torch_tensor(tt_layer_p) for tt_layer_p in tt_layer_present[i][0]], 1),
@@ -315,7 +319,7 @@ def run_test_FalconCausalLM_inference(
 )
 @pytest.mark.parametrize(
     "num_layers",
-    (1,),
+    (60,),
     ids=["layers_1"],
 )
 @pytest.mark.parametrize(
