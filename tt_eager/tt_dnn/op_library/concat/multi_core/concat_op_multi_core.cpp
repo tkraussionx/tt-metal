@@ -36,7 +36,7 @@ operation::ProgramWithCallbacks s2s_rm_concat_multi_core(
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
 
-    uint32_t num_output_rows = output.get_legacy_shape()[-1];
+    uint32_t num_output_rows = output.get_legacy_shape()[-2];
     uint32_t num_input_tensors = input_tensors.size();
 
     vector<CBHandle> cb_input(num_input_tensors);
@@ -67,6 +67,7 @@ operation::ProgramWithCallbacks s2s_rm_concat_multi_core(
     uint32_t cb_dst_id = 16;
     auto num_output_units =
         input_num_units_per_shard_height[0] * input_num_units_per_shard_width[0] * num_input_tensors;
+    uint32_t intermed_cb_id = 8;
     auto output_page_size = round_up_to_mul32(input_unit_size);
     tt_metal::CircularBufferConfig output_cb_config =
         tt_metal::CircularBufferConfig(num_output_units * output_page_size, {{cb_dst_id, cb_data_format}})
@@ -76,21 +77,42 @@ operation::ProgramWithCallbacks s2s_rm_concat_multi_core(
 
     auto output_shard_spec = output.shard_spec().value();
 
-    bool dst_is_dram = output.buffer()->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
-    std::vector<uint32_t> reader_compile_time_args = {num_input_tensors};
-    std::vector<uint32_t> writer_compile_time_args = {num_input_tensors, std::uint32_t(dst_is_dram), cb_dst_id};
+    tt_metal::CircularBufferConfig intermed_cb_config =
+    tt_metal::CircularBufferConfig(num_output_units * output_page_size, {{intermed_cb_id, cb_data_format}})
+            .set_page_size(intermed_cb_id, output_page_size);
+    auto cb_intermed = tt_metal::CreateCircularBuffer(program, all_cores, intermed_cb_config);
+
+
+
+    bool writer = false;
+    std::map<string, string> defines;
+    std::vector <uint32_t> compile_time_args = {num_input_tensors, intermed_cb_id};
+    if(not writer) {
+        compile_time_args = {num_input_tensors, cb_dst_id};
+        defines["NO_WRITER"] = "1";
+    }
+
+    std::vector <uint32_t> writer_compile_time_args = {intermed_cb_id, cb_dst_id};
+    if (not writer) {
+        writer_compile_time_args = compile_time_args;
+    }
 
     tt_metal::KernelHandle unary_reader_kernel_id = tt_metal::CreateKernel(
         program,
-        "tt_eager/tt_dnn/op_library/concat/kernels/dataflow/reader_s2i_width.cpp",
+        "tt_eager/tt_dnn/op_library/concat/kernels/dataflow/reader_height_sharded_width_concat.cpp",
         all_cores,
-        tt_metal::ReaderDataMovementConfig(reader_compile_time_args));
+        tt_metal::ReaderDataMovementConfig(compile_time_args, defines));
+
+    std::string kernel_1 = "tt_eager/tt_dnn/op_library/concat/kernels/dataflow/writer_height_s2s_width_concat.cpp";
+    if(not writer) {
+        kernel_1 = "tt_eager/tt_dnn/op_library/concat/kernels/dataflow/reader_height_sharded_width_concat.cpp";
+    }
 
     tt_metal::KernelHandle unary_writer_kernel_id = tt_metal::CreateKernel(
         program,
-        "tt_eager/tt_dnn/op_library/concat/kernels/dataflow/writer_s2s_width.cpp",
+        kernel_1.c_str(),
         all_cores,
-        tt_metal::WriterDataMovementConfig(writer_compile_time_args));
+        tt_metal::WriterDataMovementConfig(writer_compile_time_args, defines));
 
     bool row_wise = input_tensors[0].shard_spec().value().orientation == ShardOrientation::ROW_MAJOR;
     auto cores = corerange_to_cores(all_cores, std::nullopt, row_wise);
@@ -109,18 +131,30 @@ operation::ProgramWithCallbacks s2s_rm_concat_multi_core(
             curr_num_input_tensors = 0;
             curr_num_output_rows = 0;
         }
+        uint32_t output_stick_size = output_shard_spec.shape[1] * output.element_size();
 
-        vector<uint32_t> reader_runtime_args = {};
-        vector<uint32_t> writer_runtime_args = {
-            output.buffer()->address(),
-            core_id,
-            curr_num_output_rows,
-            input_unit_size,
-            num_input_tensors * input0_shard_spec.shape[0],
-            input0_shard_spec.shape[0],
-        };
 
-        for (uint32_t input_id = 0; input_id < num_input_tensors; input_id++) {
+        vector<uint32_t> runtime_args_0 = {0,
+                                                curr_num_output_rows * num_input_tensors ,
+                                                0,
+                                                curr_num_output_rows};
+
+        vector<uint32_t> runtime_args_1 = {
+                                                curr_num_output_rows * num_input_tensors ,
+                                                curr_num_output_rows * output_stick_size
+                                            };
+        uint32_t page_id = div_up(curr_num_output_rows, 2);
+        if (not writer) {
+            runtime_args_0[3] = div_up(curr_num_output_rows, 2);
+            runtime_args_1 = {page_id*output_stick_size,
+                                                curr_num_output_rows * num_input_tensors ,
+                                                div_up(curr_num_output_rows, 2),
+                                                curr_num_output_rows
+                                };
+        }
+
+        uint32_t start_offset = 0;
+        for(uint32_t input_id = 0; input_id < num_input_tensors; input_id++) {
             auto input_i_shard_spec = input_tensors[input_id].shard_spec().value();
             TT_FATAL(
                 input_i_shard_spec.shape[0] == input0_shard_spec.shape[0],
@@ -128,13 +162,33 @@ operation::ProgramWithCallbacks s2s_rm_concat_multi_core(
                 input_id,
                 input_i_shard_spec,
                 input0_shard_spec);
-            reader_runtime_args.push_back(input_id);
-            reader_runtime_args.push_back(input_i_shard_spec.shape[0]);
-            writer_runtime_args.push_back(input_i_shard_spec.shape[1] * input_tensors[input_id].element_size());
-        }
-        tt_metal::SetRuntimeArgs(program, unary_reader_kernel_id, core, reader_runtime_args);
 
-        tt_metal::SetRuntimeArgs(program, unary_writer_kernel_id, core, writer_runtime_args);
+            auto input_stick_size = input_i_shard_spec.shape[1] * input_tensors[input_id].element_size();
+
+            runtime_args_0.push_back(input_stick_size);
+            runtime_args_0.push_back(output_stick_size - input_stick_size);
+            runtime_args_0.push_back(0);
+
+            if(not writer) {
+                runtime_args_1.push_back(input_stick_size);
+                runtime_args_1.push_back(output_stick_size - input_stick_size);
+                runtime_args_1.push_back(page_id*input_stick_size);
+                start_offset += input_stick_size;
+            }
+        }
+        tt_metal::SetRuntimeArgs(
+            program,
+            unary_reader_kernel_id,
+            core,
+            runtime_args_0
+        );
+
+        tt_metal::SetRuntimeArgs(
+            program,
+            unary_writer_kernel_id,
+            core,
+            runtime_args_1
+        );
         core_id++;
     }
 
