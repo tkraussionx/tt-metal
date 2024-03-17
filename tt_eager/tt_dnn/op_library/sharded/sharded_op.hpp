@@ -99,10 +99,7 @@ inline Tensor interleaved_to_sharded(
                     .output_dtype = output_dtype.value_or(input_tensor.get_dtype())},
                 {input_tensor})
             .at(0);
-        output_tensor.set_storage(local_tensor.get_storage());
-        output_tensor.set_shape(local_tensor.get_shape());
-        output_tensor.set_dtype(local_tensor.get_dtype());
-        output_tensor.set_layout(local_tensor.get_layout());
+        output_tensor = local_tensor;
     });
     return output_tensor;
 }
@@ -161,7 +158,6 @@ inline Tensor sharded_to_interleaved(
     const Tensor &input_tensor,
     const MemoryConfig &output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
     std::optional<const DataType> output_dtype = std::nullopt) {
-    std::cout << "Running sharded_to_interleaved" << std::endl;
     Tensor output_tensor;
     output_tensor.device_synchronous = input_tensor.device_synchronous;
     input_tensor.device_synchronous->push_work([input_tensor, output_tensor, output_mem_config, output_dtype] () mutable {
@@ -176,10 +172,7 @@ inline Tensor sharded_to_interleaved(
                     .output_dtype = output_dtype.value_or(input_tensor.get_dtype())},
                 {input_tensor})
             .at(0);
-        output_tensor.set_storage(local_tensor.get_storage());
-        output_tensor.set_shape(local_tensor.get_shape());
-        output_tensor.set_dtype(local_tensor.get_dtype());
-        output_tensor.set_layout(local_tensor.get_layout());
+        output_tensor = local_tensor;
     });
     return output_tensor;
 }

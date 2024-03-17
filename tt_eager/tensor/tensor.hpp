@@ -30,7 +30,7 @@ struct Tensor {
         ttnn::Shape shape;
         DataType dtype;
         Layout layout;
-
+        bool metadata_populated = false;
         TensorAttributes(const Storage storage, const ttnn::Shape shape, DataType dtype, Layout layout) : storage(storage), shape(shape), dtype(dtype), layout(layout) {}
         TensorAttributes() : shape({0xff, 0xff, 0xff, 0xff}), dtype(DataType::INVALID), layout(Layout::INVALID) {}
         ~TensorAttributes() = default;
@@ -51,7 +51,18 @@ struct Tensor {
 
     Tensor(const Tensor &other) = default;
 
-    Tensor &operator=(const Tensor &other) = default;
+    Tensor &operator=(const Tensor &other) {
+        // Wait until the tensor being copied is populated
+        while (not other.metadata_populated()) {}
+        // Populate tensor metadata
+        this->set_shape(other.get_shape());
+        this->set_storage(other.get_storage());
+        this->set_dtype(other.get_dtype());
+        this->set_layout(other.get_layout());
+        // Set metadata populated flag for getters
+        this->tensor_attributes->metadata_populated = true;
+        return *this;
+    }
 
     Tensor(Tensor &&other) = default;
     Tensor &operator=(Tensor &&other) = default;
@@ -97,13 +108,13 @@ struct Tensor {
     // ======================================================================================
     //                                      Getters
     // ======================================================================================
-    const TensorAttributes& get_attr() const { return *tensor_attributes; }
+    const TensorAttributes& get_attr() const;
     const Storage &get_storage() const;
-    const Shape &get_legacy_shape() const { return this->get_attr().shape.value(); }
-    const ttnn::Shape &get_shape() const { return this->get_attr().shape; }
-    const DataType& get_dtype() const { return this->get_attr().dtype; }
-    const Layout& get_layout() const { return this->get_attr().layout; }
-
+    const Shape &get_legacy_shape() const;
+    const ttnn::Shape &get_shape() const;
+    const DataType& get_dtype() const;
+    const Layout& get_layout() const;
+    bool metadata_populated() const;
 
     // ======================================================================================
     //                                      Setters

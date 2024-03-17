@@ -27,6 +27,7 @@ namespace tt {
 namespace tt_metal {
 
 Tensor::Tensor(const Storage storage, const ttnn::Shape shape, DataType dtype, Layout layout) : tensor_attributes(std::make_shared<TensorAttributes>(storage, shape, dtype, layout)) {
+    this->tensor_attributes->metadata_populated = true;
     std::visit(
         [&] (auto&& storage) {
             using StorageType = std::decay_t<decltype(storage)>;
@@ -116,6 +117,34 @@ void Tensor::deallocate(bool force) {
     }
 }
 
+bool Tensor::metadata_populated() const {
+    return this->tensor_attributes->metadata_populated;
+}
+
+// Getters - Spin until tensor is populated before querying tensor metadata
+const Tensor::TensorAttributes& Tensor::get_attr() const {
+    while (not this->metadata_populated());
+    return *tensor_attributes;
+}
+
+const Shape& Tensor::get_legacy_shape() const {
+    return this->get_attr().shape.value();
+}
+
+const ttnn::Shape& Tensor::get_shape() const {
+    return this->get_attr().shape;
+}
+const DataType& Tensor::get_dtype() const {
+    return this->get_attr().dtype;
+}
+const Layout& Tensor::get_layout() const {
+    return this->get_attr().layout;
+}
+
+const Storage& Tensor::get_storage() const {
+    return this->get_attr().storage;
+}
+
 Tensor Tensor::to(CommandQueue & queue, const MemoryConfig & mem_config) const {
     ZoneScoped;
     if (storage_type() == StorageType::DEVICE) {
@@ -147,10 +176,7 @@ Tensor Tensor::to(Device *target_device, const MemoryConfig &mem_config) const {
     target_device->push_work([*this, device_tensor, mem_config, target_device] () mutable {
         tensor_impl::validate_on_device_dtype_and_layout(target_device, this->get_dtype(), this->get_layout());
         auto local_tensor = tensor_impl::to_device_wrapper(*this, target_device, mem_config);
-        device_tensor.set_storage(local_tensor.get_storage());
-        device_tensor.set_shape(local_tensor.get_shape());
-        device_tensor.set_dtype(local_tensor.get_dtype());
-        device_tensor.set_layout(local_tensor.get_layout());
+        device_tensor = local_tensor;
     });
     return device_tensor;
 }
@@ -176,10 +202,7 @@ Tensor Tensor::cpu(bool blocking) const {
     Tensor host_tensor;
     this->device_synchronous->push_work([*this, host_tensor, blocking] () mutable {
         auto local_tensor = tensor_impl::to_host_wrapper(*this, blocking);
-        host_tensor.set_storage(local_tensor.get_storage());
-        host_tensor.set_shape(local_tensor.get_shape());
-        host_tensor.set_dtype(local_tensor.get_dtype());
-        host_tensor.set_layout(local_tensor.get_layout());
+        host_tensor = local_tensor;
     }, blocking);
     return host_tensor;
 }
@@ -364,8 +387,6 @@ StorageType Tensor::storage_type() const {
         this->get_storage()
     );
 }
-
-const Storage& Tensor::get_storage() const { return this->get_attr().storage; }
 
 namespace detail {
 const Shape compute_strides(const Shape& shape) {

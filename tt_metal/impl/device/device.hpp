@@ -221,7 +221,7 @@ class Device {
     void run_worker();
     void stop_worker();
     void push_work(std::function<void()> work_executor, bool blocking = false);
-    // void flush_worker_queue();
+    void synchronize();
 
     static WorkerQueueMode default_worker_queue_mode() {
         static int value = parse_env<int>("TT_METAL_ASYNC_DEVICE_QUEUE", static_cast<int>(WorkerQueueMode::SYNCHRONOUS));
@@ -262,14 +262,23 @@ class Device {
     bool using_fast_dispatch = false;
     program_cache::detail::ProgramCache program_cache;
 
-    void enable_program_cache() { program_cache.enable(); }
+    // Program cache interface. Syncrhonize with worker worker threads before querying or
+    // modifying this structure, since worker threads use this for compiling ops
+    void enable_program_cache() {
+        this->synchronize();
+        program_cache.enable();
+    }
     void disable_and_clear_program_cache() {
+        this->synchronize();
         if (this->program_cache.is_enabled()) {
             program_cache.clear();
             program_cache.disable();
         }
     }
-    std::size_t num_program_cache_entries() { return program_cache.num_entries(); }
+    std::size_t num_program_cache_entries() {
+        this->synchronize();
+        return program_cache.num_entries();
+    }
 };
 
 }  // namespace tt_metal

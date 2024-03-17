@@ -292,7 +292,7 @@ def test_group_attn_matmul_with_program_cache(in0_dtype, in1_dtype, output_dtype
             )
         else:
             output_mem_config = interleaved_mem_config
-        temp = tt_input_tensor_b.cpu()
+
         num_cache_entries_start = device.num_program_cache_entries()
         tt_output_tensor_on_device = ttl.operations.primary.transformers.group_attn_matmul(
             tt_input_tensor_a,
@@ -301,7 +301,6 @@ def test_group_attn_matmul_with_program_cache(in0_dtype, in1_dtype, output_dtype
             output_mem_config=output_mem_config,
             output_dtype=output_dtype,
         )
-        temp = tt_output_tensor_on_device.cpu()
         num_cache_entries += device.num_program_cache_entries() - num_cache_entries_start
 
         if sharded:

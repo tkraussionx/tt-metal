@@ -78,15 +78,11 @@ struct AttnMatmul {
 inline Tensor attn_matmul(const Tensor &input_tensor_a, const Tensor &input_tensor_b, const CoreCoord& compute_with_storage_grid_size, const MemoryConfig& mem_config, std::optional<const DataType> output_dtype=std::nullopt, std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt) {
     Tensor output_tensor;
     output_tensor.device_synchronous = input_tensor_a.device_synchronous;
-    std::cout << "Running attn matmul op" << std::endl;
     input_tensor_a.device()->push_work([input_tensor_a, input_tensor_b, output_tensor, compute_with_storage_grid_size, mem_config, output_dtype, compute_kernel_config] () mutable {
         auto arch = input_tensor_a.storage_type() == StorageType::DEVICE ? input_tensor_a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
         auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config);
         auto local_tensor =  operation::run(AttnMatmul{std::nullopt, std::nullopt, compute_with_storage_grid_size, mem_config, output_dtype.value_or(input_tensor_a.get_dtype()), kernel_config_val}, {input_tensor_a, input_tensor_b}).at(0);
-        output_tensor.set_storage(local_tensor.get_storage());
-        output_tensor.set_shape(local_tensor.get_shape());
-        output_tensor.set_dtype(local_tensor.get_dtype());
-        output_tensor.set_layout(local_tensor.get_layout());
+        output_tensor = local_tensor;
     });
     return output_tensor;
 }
@@ -120,7 +116,6 @@ struct GroupAttnMatmul {
 };
 
 inline Tensor group_attn_matmul(const Tensor &input_tensor_a, const Tensor &input_tensor_b, const CoreCoord& compute_with_storage_grid_size, const MemoryConfig& mem_config, std::optional<const DataType> output_dtype=std::nullopt, std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt) {
-    std::cout << "Running group_attn_matmul" << std::endl;
     Tensor output_tensor;
     output_tensor.device_synchronous = input_tensor_a.device_synchronous;
     input_tensor_a.device_synchronous->push_work([input_tensor_a, input_tensor_b, output_tensor, compute_with_storage_grid_size, mem_config, output_dtype, compute_kernel_config] () mutable {
@@ -155,10 +150,7 @@ inline Tensor group_attn_matmul(const Tensor &input_tensor_a, const Tensor &inpu
         }, kernel_config_val);
 
         auto local_tensor = operation::run(GroupAttnMatmul{std::nullopt, std::nullopt, out_subblock_w, compute_with_storage_grid_size, mem_config, output_dtype.value_or(input_tensor_a.get_dtype()), row_major, kernel_config_val}, {input_tensor_a, input_tensor_b}).at(0);
-        output_tensor.set_storage(local_tensor.get_storage());
-        output_tensor.set_shape(local_tensor.get_shape());
-        output_tensor.set_dtype(local_tensor.get_dtype());
-        output_tensor.set_layout(local_tensor.get_layout());
+        output_tensor = local_tensor;
     });
     return output_tensor;
 }

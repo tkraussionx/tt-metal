@@ -1062,12 +1062,7 @@ void Device::push_work(std::function<void()> work_executor, bool blocking) {
             // Push function executor to worker queue
             this->worker_queue.push(work_executor);
             if (blocking) {
-                // Blocking = wait for queue flushed
-                this->worker_queue.push([](){}); // Send flush command (i.e. empty function)
-                // Wait for queue empty, i.e. flush command picked up
-                while(not this->worker_queue.empty()) {
-                    std::this_thread::sleep_for(std::chrono::microseconds(10));
-                };
+                this->synchronize();
             }
         } else {
             TT_ASSERT(std::hash<std::thread::id>{}(std::this_thread::get_id()) == worker_queue.worker_thread_id.load(), "Only main thread or worker thread can push to device worker queue.");
@@ -1103,6 +1098,17 @@ void Device::run_worker() {
 void Device::stop_worker() {
     this->worker_state = WorkerState::TERMINATE;
     this->worker_thread.join();
+}
+
+void Device::synchronize() {
+    if (this->worker_queue_mode == WorkerQueueMode::ASYNCRHONOUS) {
+        // Blocking = wait for queue flushed
+        this->worker_queue.push([](){}); // Send flush command (i.e. empty function)
+        // Wait for queue empty, i.e. flush command picked up
+        while(not this->worker_queue.empty()) {
+            std::this_thread::sleep_for(std::chrono::microseconds(10));
+        };
+    }
 }
 
 bool Device::using_slow_dispatch() const {

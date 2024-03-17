@@ -1301,10 +1301,7 @@ Tensor matmul_1d(const Tensor &input_tensor_a, const Tensor &input_tensor_b, std
         }
         auto kernel_config_val = init_device_compute_kernel_config(input_tensor_a.device()->arch(), compute_kernel_config);
         auto local_tensor = operations::primary::matmul(input_tensor_a, input_tensor_b, bias, program_config.value(), mem_config, output_dtype, kernel_config_val, untilize_out);
-        output_tensor.set_storage(local_tensor.get_storage());
-        output_tensor.set_shape(local_tensor.get_shape());
-        output_tensor.set_dtype(local_tensor.get_dtype());
-        output_tensor.set_layout(local_tensor.get_layout());
+        output_tensor = local_tensor;
     });
     return output_tensor;
 }

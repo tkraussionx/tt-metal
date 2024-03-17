@@ -329,10 +329,7 @@ inline Tensor matmul(
         auto arch = device->arch();
         auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config);
         auto local_tensor = operation::run(Matmul{program_config, mem_config, output_dtype.value_or(input_tensor_a.get_dtype()), kernel_config_val, untilize_out}, {input_tensor_a, input_tensor_b}, {std::nullopt}).at(0);
-        output_tensor.set_storage(local_tensor.get_storage());
-        output_tensor.set_shape(local_tensor.get_shape());
-        output_tensor.set_dtype(local_tensor.get_dtype());
-        output_tensor.set_layout(local_tensor.get_layout());
+        output_tensor = local_tensor;
     });
     return output_tensor;
 }
@@ -353,10 +350,7 @@ inline Tensor matmul(
         auto arch = input_tensor_a.storage_type() == StorageType::DEVICE ? input_tensor_a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
         auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config);
         auto local_tensor = operation::run(Matmul{program_config, mem_config, output_dtype.value_or(input_tensor_a.get_dtype()), kernel_config_val, untilize_out}, {input_tensor_a, input_tensor_b}, {bias}).at(0);
-        output_tensor.set_storage(local_tensor.get_storage());
-        output_tensor.set_shape(local_tensor.get_shape());
-        output_tensor.set_dtype(local_tensor.get_dtype());
-        output_tensor.set_layout(local_tensor.get_layout());
+        output_tensor = local_tensor;
     });
     return output_tensor;
 }
