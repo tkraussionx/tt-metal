@@ -6,6 +6,7 @@
 #include <functional>
 #include <random>
 
+#include "logger.hpp"
 #include "tt_metal/host_api.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/llrt/rtoptions.hpp"
@@ -17,11 +18,18 @@ constexpr uint32_t DEFAULT_ITERATIONS = 10000;
 constexpr uint32_t DEFAULT_WARMUP_ITERATIONS = 100;
 constexpr uint32_t DEFAULT_DISPATCH_BUFFER_LOG_PAGE_SIZE = 12;
 constexpr uint32_t DEFAULT_DISPATCH_BUFFER_SIZE_BLOCKS = 4;
-constexpr uint32_t DEFAULT_DISPATCH_BUFFER_BLOCK_SIZE_PAGES = 768 * 1024 / (1 << DEFAULT_DISPATCH_BUFFER_LOG_PAGE_SIZE) / DEFAULT_DISPATCH_BUFFER_SIZE_BLOCKS;
-constexpr uint32_t DEFAULT_PREFETCHER_BUFFER_SIZE_PAGES = 768 * 1024 / (1 << DEFAULT_DISPATCH_BUFFER_LOG_PAGE_SIZE);
+constexpr uint32_t DEFAULT_DISPATCH_BUFFER_SIZE_BYTES = 768 * 1024;
+constexpr uint32_t DEFAULT_DISPATCH_BUFFER_BLOCK_SIZE_PAGES = DEFAULT_DISPATCH_BUFFER_SIZE_BYTES / (1 << DEFAULT_DISPATCH_BUFFER_LOG_PAGE_SIZE) / DEFAULT_DISPATCH_BUFFER_SIZE_BLOCKS;
+constexpr uint32_t DEFAULT_PREFETCHER_BUFFER_SIZE_PAGES = DEFAULT_DISPATCH_BUFFER_SIZE_BYTES / (1 << DEFAULT_DISPATCH_BUFFER_LOG_PAGE_SIZE);
 constexpr uint32_t MAX_XFER_SIZE_16B = 4 * 1024;
 constexpr uint32_t MIN_XFER_SIZE_16B = 1;
 constexpr uint32_t DEFAULT_PREFETCHER_PAGE_BATCH_SIZE = 1;
+
+constexpr uint32_t DEFAULT_PAGED_WRITE_PAGES = 4;
+constexpr uint32_t MAX_PAGED_WRITE_ADDR = 512 * 1024;
+constexpr uint32_t MIN_PAGED_WRITE_ADDR = 512 * 1024; // Disable randomization by default. 512 KB - 612 KB might be reasonable.
+constexpr uint32_t MIN_PAGED_WRITE_START_PAGE = 0;
+constexpr uint32_t MAX_PAGED_WRITE_START_PAGE = 0; // Disable randomization by default.
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Test dispatch program performance
@@ -44,6 +52,13 @@ uint32_t prefetcher_page_batch_size_g = DEFAULT_PREFETCHER_PAGE_BATCH_SIZE;
 uint32_t max_xfer_size_bytes_g = MAX_XFER_SIZE_16B << 4;
 uint32_t min_xfer_size_bytes_g = MIN_XFER_SIZE_16B << 4;
 uint32_t test_type_g;
+
+uint32_t max_paged_write_base_addr_g = MAX_PAGED_WRITE_ADDR;
+uint32_t min_paged_write_base_addr_g = MIN_PAGED_WRITE_ADDR;
+uint32_t min_paged_write_start_page_g = MIN_PAGED_WRITE_START_PAGE;
+uint32_t max_paged_write_start_page_g = MAX_PAGED_WRITE_START_PAGE;
+uint32_t num_pages_g = DEFAULT_PAGED_WRITE_PAGES;
+
 bool debug_g;
 bool lazy_g;
 bool fire_once_g;
@@ -75,12 +90,20 @@ void init(int argc, char **argv) {
         log_info(LogTest, "    -b: dispatcher buffer size in blocks (default {})", DEFAULT_DISPATCH_BUFFER_SIZE_BLOCKS);
         log_info(LogTest, "  -pbs: prefetcher buffer size pages (default {})", DEFAULT_PREFETCHER_BUFFER_SIZE_PAGES);
         log_info(LogTest, " -ppbs: prefetcher page batch size (process pages in batches of N to reduce overhead) (default {})", DEFAULT_PREFETCHER_PAGE_BATCH_SIZE);
-        log_info(LogTest, "  -max: max transfer size bytes (default {})", MAX_XFER_SIZE_16B << 4);
-        log_info(LogTest, "  -min: min transfer size bytes (default {})", MIN_XFER_SIZE_16B << 4);
         log_info(LogTest, "    -f: prefetcher fire once, use to measure dispatcher perf w/ prefetcher out of the way (default disabled)");
-        log_info(LogTest, "    -d: wrap all commands in debug commands (default disabled)");
+        log_info(LogTest, "    -d: wrap all commands in debug commands and clear DRAM (default disabled)");
         log_info(LogTest, "    -c: use coherent data as payload (default false)");
         log_info(LogTest, "    -z: enable dispatch lazy mode (default disabled)");
+        log_info(LogTest, "   -np: paged-write number of pages (default {})", num_pages_g);
+
+        log_info(LogTest, "Random Test args:");
+        log_info(LogTest, "  -max: max transfer size bytes (default {})", max_xfer_size_bytes_g);
+        log_info(LogTest, "  -min: min transfer size bytes (default {})", min_xfer_size_bytes_g);
+        log_info(LogTest, "  -max-addr: max paged-write dst base addr (default {})", max_paged_write_base_addr_g);
+        log_info(LogTest, "  -min-addr: min paged-write dst base addr (default {})", min_paged_write_base_addr_g);
+        log_info(LogTest, "  -max-page: max paged-write start_page id (default {})", max_paged_write_start_page_g);
+        log_info(LogTest, "  -min-page: min paged-write start_page id (default {})", min_paged_write_start_page_g);
+
         exit(0);
     }
 
@@ -105,8 +128,12 @@ void init(int argc, char **argv) {
     pbs_pages = pbs_pages / prefetcher_page_batch_size_g * prefetcher_page_batch_size_g + terminate_cmd_pages;
     prefetcher_buffer_size_g = pbs_pages * dispatch_buffer_page_size_g;
 
-    max_xfer_size_bytes_g = test_args::get_command_option_uint32(input_args, "-max", MAX_XFER_SIZE_16B << 4);
-    min_xfer_size_bytes_g = test_args::get_command_option_uint32(input_args, "-min", MIN_XFER_SIZE_16B << 4);
+    max_xfer_size_bytes_g = test_args::get_command_option_uint32(input_args, "-max", max_xfer_size_bytes_g);
+    min_xfer_size_bytes_g = test_args::get_command_option_uint32(input_args, "-min", min_xfer_size_bytes_g);
+    max_paged_write_base_addr_g = test_args::get_command_option_uint32(input_args, "-max-addr", max_paged_write_base_addr_g);
+    min_paged_write_base_addr_g = test_args::get_command_option_uint32(input_args, "-min-addr", min_paged_write_base_addr_g);
+    max_paged_write_start_page_g = test_args::get_command_option_uint32(input_args, "-max-page", max_paged_write_start_page_g);
+    min_paged_write_start_page_g = test_args::get_command_option_uint32(input_args, "-min-page", min_paged_write_start_page_g);
 
     send_to_all_g = test_args::has_command_option(input_args, "-a");
 
@@ -122,8 +149,24 @@ void init(int argc, char **argv) {
 
     debug_g = test_args::has_command_option(input_args, "-d");
     lazy_g = test_args::has_command_option(input_args, "-z");
+    num_pages_g = test_args::get_command_option_uint32(input_args, "-np", num_pages_g);
 
     perf_test_g = (send_to_all_g && iterations_g == 1); // XXXX find a better way?
+}
+
+// Keep these updated. One single place, for code to use.
+bool is_paged_dram_test() {
+    return (test_type_g == 2);
+}
+
+bool is_paged_l1_test() {
+    return (test_type_g == 3);
+}
+
+bool is_paged_test() {
+    bool is_paged_dram = is_paged_dram_test();
+    bool is_paged_l1 = is_paged_l1_test();
+    return (is_paged_dram || is_paged_l1);
 }
 
 void gen_cmds(Device *device,
@@ -137,6 +180,7 @@ void gen_cmds(Device *device,
     uint32_t total_data_size_bytes = 0;
     uint32_t buffer_size = prefetcher_buffer_size_g - page_size; // for terminate
     uint32_t cmd_count = 0;
+    bool is_dram = true;
 
     while (total_size_bytes < buffer_size) {
         total_size_bytes += sizeof(CQDispatchCmd);
@@ -178,8 +222,33 @@ void gen_cmds(Device *device,
 
             }
             break;
-
         case 2:
+        case 3:
+            {
+                is_dram = is_paged_dram_test();
+                log_info(tt::LogTest, "Generating paged write cmds (is_dram: {} for total_size_bytes: {} buffer_size: {})", is_dram, total_size_bytes, buffer_size);
+
+                // Figure out how to control these.  Random by default, constrained here.
+                uint32_t start_page = min_paged_write_start_page_g + (std::rand() % (1 + max_paged_write_start_page_g - min_paged_write_start_page_g));
+                uint32_t pages = num_pages_g;
+
+                // Treat xfer size test in test as page write page size here.
+                uint32_t xfer_size_16B = (std::rand() & (MAX_XFER_SIZE_16B - 1));
+                if (total_size_bytes + (xfer_size_16B << 4) > buffer_size) {
+                    xfer_size_16B = (buffer_size - total_size_bytes) >> 4;
+                }
+                xfer_size_bytes = xfer_size_16B << 4;
+                if (xfer_size_bytes > max_xfer_size_bytes_g) xfer_size_bytes = max_xfer_size_bytes_g;
+                if (xfer_size_bytes < min_xfer_size_bytes_g) xfer_size_bytes = min_xfer_size_bytes_g;
+
+                TT_ASSERT(is_paged_test()); // Ensure test-numbers kept up to date in this function.
+                gen_dispatcher_paged_write_cmd(device, dispatch_cmds, worker_data,
+                                               is_dram, start_page, worker_data_addr, xfer_size_bytes, pages);
+
+            }
+            break;
+
+        case 4:
             xfer_size_bytes = gen_rnd_dispatcher_packed_write_cmd(device, dispatch_cmds, worker_data, worker_data_addr);
             break;
         }
@@ -200,10 +269,30 @@ void gen_cmds(Device *device,
     log_info(LogTest, "Generated {} commands", cmd_count);
 }
 
+
+// Clear DRAM (helpful for paged write to DRAM debug to have a fresh slate)
+void initialize_dram_banks(Device *device)
+{
+
+    auto num_banks = device->num_banks(BufferType::DRAM);
+    auto bank_size = device->bank_size(BufferType::DRAM); // Or can hardcode to subset like 16MB.
+    auto fill = std::vector<uint32_t>(bank_size / sizeof(uint32_t), 0xBADDF00D);
+
+    for (int bank_id = 0; bank_id < num_banks; bank_id++) {
+        auto offset = device->dram_bank_offset_from_bank_id(bank_id);
+        auto dram_channel = device->dram_channel_from_bank_id(bank_id);
+        auto bank_core = device->core_from_dram_channel(dram_channel);
+        log_info(tt::LogTest, "Initializing DRAM {} bytes for bank_id: {} core: {} at addr: 0x{:x}", bank_size, bank_id, bank_core, offset);
+        tt::Cluster::instance().write_core(static_cast<const void*>(fill.data()), fill.size() * sizeof(uint32_t), tt_cxy_pair(device->id(), bank_core), offset);
+    }
+}
+
 int main(int argc, char **argv) {
     init(argc, argv);
+    std::srand(std::time(nullptr)); // Seed the RNG
 
     uint32_t dispatch_buffer_pages = dispatch_buffer_size_g / dispatch_buffer_page_size_g;
+    bool paged_test = is_paged_test();
 
     bool pass = true;
     try {
@@ -227,18 +316,43 @@ int main(int argc, char **argv) {
             log_fatal(LogTest, "Error, prefetcher buffer size too large\n");
             exit(-1);
         }
+
+        uint32_t write_buffer_addr = l1_buf_base;
+
+        // Seperate Buffer space for paged write testing to not conflict with dispatch or prefetch buffers in L1
+        if (paged_test) {
+            // Seems like 16B alignment is required otherwise mismatches in readback. Linear writes only target 16B aligned transfer sizes too.
+            // It's okay for these not to be, the random calc below will align final address.
+            if (max_paged_write_base_addr_g % 16 != 0) log_warning(tt::LogTest, "max_paged_write_base_addr_g should be 16B aligned.");
+            if (min_paged_write_base_addr_g % 16 != 0) log_warning(tt::LogTest, "min_paged_write_base_addr_g should be 16B aligned.");
+            auto range = 1 + max_paged_write_base_addr_g - min_paged_write_base_addr_g;
+            write_buffer_addr = ((min_paged_write_base_addr_g + (std::rand() % range)) >> 4) << 4;
+        }
+
+        log_info(tt::LogTest, "Using write buffer at 0x{:x} (paged_test: {}) l1_buf_base: {}", write_buffer_addr, paged_test, l1_buf_base);
+
 #if 0
         Buffer l1_buf(device, prefetcher_buffer_size_g, prefetcher_buffer_size_g, BufferType::L1, TensorMemoryLayout::SINGLE_BANK);
 #endif
         vector<uint32_t> cmds;
         worker_data_t worker_data;
-        for (uint32_t y = all_workers_g.start.y; y <= all_workers_g.end.y; y++) {
-            for (uint32_t x = all_workers_g.start.x; x <= all_workers_g.end.x; x++) {
-                one_worker_data_t one;
-                worker_data.insert({CoreCoord(x, y), one});
+
+        // No need to add entries for worker cores in paged test. They will be added as needed for L1 or DRAM.
+        if (!paged_test){
+            for (uint32_t y = all_workers_g.start.y; y <= all_workers_g.end.y; y++) {
+                for (uint32_t x = all_workers_g.start.x; x <= all_workers_g.end.x; x++) {
+                    one_worker_data_t one;
+                    worker_data.insert({CoreCoord(x, y), one});
+                }
             }
         }
-        gen_cmds(device, cmds, all_workers_g, worker_data, l1_buf_base, dispatch_buffer_page_size_g);
+
+        if (is_paged_dram_test() && debug_g) {
+            initialize_dram_banks(device);
+        }
+
+        // Generate commands once and write them to prefetcher core.
+        gen_cmds(device, cmds, all_workers_g, worker_data, write_buffer_addr, dispatch_buffer_page_size_g);
         llrt::write_hex_vec_to_core(device->id(), phys_spoof_prefetch_core, cmds, l1_buf_base);
 
         std::map<string, string> defines = {
@@ -313,6 +427,7 @@ int main(int argc, char **argv) {
         log_info(LogTest, "Dispatch buffer end {}", std::to_string(l1_buf_base + dispatch_buffer_page_size_g * dispatch_buffer_pages));
         log_info(LogTest, "Prefetcher CMD Buffer size {}", std::to_string(prefetcher_buffer_size_g));
         log_info(LogTest, "Worker result data size {} bytes", std::to_string(worker_data[first_worker_g].data.size() * sizeof(uint32_t)));
+        log_info(LogTest, "Buffer addr for writes: {:x}", write_buffer_addr);
 
         // Cache stuff
         for (int i = 0; i < warmup_iterations_g; i++) {
@@ -334,7 +449,13 @@ int main(int argc, char **argv) {
         Finish(cq);
         auto end = std::chrono::system_clock::now();
 
-        pass &= validate_results(device, all_workers_g, worker_data, l1_buf_base);
+        if (paged_test) {
+            bool is_dram = is_paged_dram_test(); // Would like to get rid of this but following function needs to know CoreType.
+            pass &= validate_results_paged(device, worker_data, write_buffer_addr, is_dram);
+        } else {
+            pass &= validate_results(device, all_workers_g, worker_data, write_buffer_addr);
+        }
+
         std::chrono::duration<double> elapsed_seconds = (end-start);
         log_info(LogTest, "Ran in {}us", elapsed_seconds.count() * 1000 * 1000);
         log_info(LogTest, "Ran in {}us per iteration", elapsed_seconds.count() * 1000 * 1000 / iterations_g);
@@ -345,12 +466,19 @@ int main(int argc, char **argv) {
             }
             switch (test_type_g) {
             case 0:
-                total_words = worker_data_size(worker_data);
-                break;
             case 1:
                 total_words = worker_data_size(worker_data);
                 break;
             case 2:
+            case 3:
+                // Hacky.. for now, just compute based on pages written. Ideally iterate over all worker_data.
+                if (max_xfer_size_bytes_g == min_xfer_size_bytes_g) {
+                    total_words = (num_pages_g * max_xfer_size_bytes_g) / sizeof(uint32_t);
+                } else {
+                    log_fatal("Set max_xfer_size_bytes_g to min_xfer_size_bytes_g to calculate perf accurately");
+                }
+                break;
+            case 4:
                 if (!send_to_all_g) {
                     log_fatal("Set send_to_all to true for reliable perf data");
                 }
