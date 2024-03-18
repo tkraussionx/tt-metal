@@ -242,14 +242,14 @@ class TtMambaSSM(torch.nn.Module):
         # calculate abar
         delta_t3 = ttnn.repeat_interleave(delta_t2, self.n, dim=3)
         delta_t4 = ttnn.to_memory_config(delta_t3, memory_config=self.configs["sharded_large"])
-        ttnn.deallocate(delta_t3)
+        #ttnn.deallocate(delta_t3)
         abar0 = ttnn.to_memory_config(self.A, memory_config=self.configs["sharded_large"])
         abar1 = ttnn.mul(delta_t4, abar0, memory_config=self.configs["sharded_large"])
         ttnn.deallocate(abar0)
         ttnn.deallocate(delta_t4)
         abar2 = ttnn.to_memory_config(abar1, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(abar1)
-        abar3 = ttnn.exp(abar2)
+        abar3 = ttnn.exp(abar2, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(abar2)
         abar4 = ttnn.to_memory_config(abar3, memory_config=self.configs["sharded_large"])
         ttnn.deallocate(abar3)
@@ -266,16 +266,16 @@ class TtMambaSSM(torch.nn.Module):
         B_proj_weights = ttnn.to_memory_config(self.B_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
         B0 = ttnn.linear(x, B_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(B_proj_weights)
-        B_intermediate_weights = ttnn.to_memory_config(self.B_intermediate, memory_config=ttnn.L1_MEMORY_CONFIG)
+        B_intermediate_weights = ttnn.to_memory_config(self.B_intermediate, memory_config=self.configs["sharded_large"])
         print('**********B0 shape', B0.shape, B_intermediate_weights.shape)
-        B1 = ttnn.matmul(B0, B_intermediate_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
+        B1 = ttnn.linear(B0, B_intermediate_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(B_intermediate_weights)
         ttnn.deallocate(B0)
         B2 = ttnn.to_memory_config(B1, memory_config=self.configs["sharded_large"])
         ttnn.deallocate(B1)
 
         # bbar
-        delta_t3 = ttnn.repeat_interleave(delta_t2, self.n, dim=3)
+        #delta_t3 = ttnn.repeat_interleave(delta_t2, self.n, dim=3)
         ttnn.deallocate(delta_t2)
         delta_t4 = ttnn.to_memory_config(delta_t3, memory_config=self.configs["sharded_large"])
         ttnn.deallocate(delta_t3)
@@ -327,7 +327,7 @@ class TtMambaSSM(torch.nn.Module):
         hidden_state2 = ttnn.to_memory_config(hidden_state1, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(hidden_state1)
         hidden_state3 = ttnn.reshape(hidden_state2, (1, self.num_users, self.hidden_size, self.n))  # b, d, 32
-        C2 = ttnn.matmul(hidden_state3, C1)  # b, d, 1
+        C2 = ttnn.matmul(hidden_state3, C1, memory_config=ttnn.L1_MEMORY_CONFIG)  # b, d, 1
         ttnn.deallocate(hidden_state2)
         ttnn.deallocate(C1)
         C3 = ttnn.permute(C2, (0, 3, 1, 2)) # b, d

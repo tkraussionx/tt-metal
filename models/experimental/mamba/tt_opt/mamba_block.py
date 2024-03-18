@@ -109,19 +109,19 @@ class TtMambaBlock(torch.nn.Module):
 
         # do the convolution
         conv_wts = ttnn.repeat_interleave(self.conv_wts[0], self.num_users, dim=2)
-        x = ttnn.mul(conv_wts, self.conv_states[0])
+        x = ttnn.mul(conv_wts, self.conv_states[0], memory_config=ttnn.L1_MEMORY_CONFIG)
         for i in range(1,4):
             print('**********', self.conv_wts[i].shape, self.conv_states[i].shape)
             conv_wts = ttnn.repeat_interleave(self.conv_wts[i], self.num_users, dim=2)
-            prod = ttnn.mul(conv_wts, self.conv_states[i])
-            x = ttnn.add(x, prod)
+            prod = ttnn.mul(conv_wts, self.conv_states[i], memory_config=ttnn.L1_MEMORY_CONFIG)
+            x = ttnn.add(x, prod, memory_config=ttnn.L1_MEMORY_CONFIG)
         conv_bias = ttnn.repeat_interleave(self.conv_bias, self.num_users, dim=2)
-        x = ttnn.add(x, conv_bias)
-        x = ttnn.silu(x)
+        x = ttnn.add(x, conv_bias, memory_config=ttnn.L1_MEMORY_CONFIG)
+        x = ttnn.silu(x, memory_config=ttnn.L1_MEMORY_CONFIG)
         print('**********', x.shape)
         x = self.tt_ssm(x)
         res = ttnn.linear(x_input, self.mlp_proj, memory_config=ttnn.L1_MEMORY_CONFIG)
-        x = ttnn.mul(x, res)
+        x = ttnn.mul(x, res, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(res)
         x = ttnn.linear(x, self.down_proj, memory_config=ttnn.L1_MEMORY_CONFIG)
 
