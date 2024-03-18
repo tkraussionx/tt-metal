@@ -25,7 +25,7 @@ def get_tt_metal_model(num_users, hidden_size, configs, version):
     device = ttnn.open_device(device_id=device_id)
 
     torch.manual_seed(0)
-    ttnn.enable_program_cache()
+    ttnn.enable_program_cache(device)
 
     reference_model = get_cpu_reference_model(version)
     cache_path = f"/tmp/state-spaces/{version}"

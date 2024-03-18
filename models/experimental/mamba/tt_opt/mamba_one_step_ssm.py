@@ -132,7 +132,7 @@ class TtMambaSSM(torch.nn.Module):
                 memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 dtype=ttnn.bfloat16,
             )
-
+        assert self.n == 32
         B_intermediate_tranform_weights = torch.eye(self.n).repeat(1, self.hidden_size).unsqueeze(0).unsqueeze(0)
         self.B_intermediate = ttnn.as_tensor(
             B_intermediate_tranform_weights,
@@ -140,7 +140,7 @@ class TtMambaSSM(torch.nn.Module):
             device=self.device,
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             dtype=ttnn.bfloat16,
-            cache_file_name=tt_cache_path + "/B_intermediate_tranform_weights.bin",
+            cache_file_name=tt_cache_path + "/B_intermediate_weights.bin",
         )
 
         # A
@@ -267,6 +267,7 @@ class TtMambaSSM(torch.nn.Module):
         B0 = ttnn.linear(x, B_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(B_proj_weights)
         B_intermediate_weights = ttnn.to_memory_config(self.B_intermediate, memory_config=ttnn.L1_MEMORY_CONFIG)
+        print('**********B0 shape', B0.shape, B_intermediate_weights.shape)
         B1 = ttnn.matmul(B0, B_intermediate_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(B_intermediate_weights)
         ttnn.deallocate(B0)

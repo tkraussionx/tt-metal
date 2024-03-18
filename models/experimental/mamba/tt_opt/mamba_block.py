@@ -38,8 +38,8 @@ class TtMambaBlock(torch.nn.Module):
             print('**********using ssm proj wts')
             in_proj_weight_name = "mixer.in_proj.weight"
             ssm_proj = torch.transpose(self.state_dict[in_proj_weight_name][: self.args.d_inner, :], -1, -2)
-            self.ssm_proj = ttnn.from_torch(ssm_proj, layout=ttnn.TILE_LAYOUT, device=self.device,
-                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
+            self.ssm_proj = ttnn.as_tensor(ssm_proj, layout=ttnn.TILE_LAYOUT, device=self.device,
+                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16, cache_file_name=tt_cache_path + "ssm_proj.bin")
         else:
             self.ssm_proj = ttnn.from_torch(torch.rand(1,1,self.hidden_size,2*self.hidden_size), layout=ttnn.TILE_LAYOUT, device=self.device,
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
@@ -49,8 +49,8 @@ class TtMambaBlock(torch.nn.Module):
             print('**********using mlp proj wts')
             mlp_proj_weight_name = "mixer.in_proj.weight"
             mlp_proj = torch.transpose(self.state_dict[mlp_proj_weight_name][self.args.d_inner :, :], -1, -2)
-            self.mlp_proj = ttnn.from_torch(mlp_proj, layout=ttnn.TILE_LAYOUT, device=self.device,
-                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
+            self.mlp_proj = ttnn.as_tensor(mlp_proj, layout=ttnn.TILE_LAYOUT, device=self.device,
+                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16, cache_file_name=tt_cache_path + "mlp_proj.bin")
         else:
             self.mlp_proj = ttnn.from_torch(torch.rand(1,1,self.hidden_size,2*self.hidden_size), layout=ttnn.TILE_LAYOUT, device=self.device,
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
@@ -60,8 +60,8 @@ class TtMambaBlock(torch.nn.Module):
             print('**********using down proj wts')
             down_proj_weight_name = "mixer.out_proj.weight"
             down_proj = torch.transpose(self.state_dict[down_proj_weight_name], -1, -2)
-            self.down_proj = ttnn.from_torch(down_proj, layout=ttnn.TILE_LAYOUT, device=self.device,
-                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
+            self.down_proj = ttnn.as_tensor(down_proj, layout=ttnn.TILE_LAYOUT, device=self.device,
+                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16, cache_file_name=tt_cache_path + "down_proj.bin")
         else:
             self.down_proj = ttnn.from_torch(torch.rand(1,1,self.hidden_size*2,self.hidden_size), layout=ttnn.TILE_LAYOUT, device=self.device,
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
@@ -69,8 +69,9 @@ class TtMambaBlock(torch.nn.Module):
         # conv states
         self.conv_states = []
         for i in range(4):
-            self.conv_states.append(ttnn.zeros((1,1,self.num_users,self.hidden_size*2), layout=ttnn.TILE_LAYOUT, device=self.device,
-                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16))
+            conv_state = torch.zeros((1,1,self.num_users,self.hidden_size*2))
+            self.conv_states.append(ttnn.as_tensor(conv_state, layout=ttnn.TILE_LAYOUT, device=self.device,
+                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16, cache_file_name=tt_cache_path + f"conv_state_{i}.bin"))
         self.conv_wts = []
         conv1d_weight_name = "mixer.conv1d.weight"
         for i in range(4):
@@ -78,8 +79,8 @@ class TtMambaBlock(torch.nn.Module):
                 print('**********using conv wts')
                 conv_wts = torch.transpose(self.state_dict[conv1d_weight_name][:, :, i], -1, -2).unsqueeze(0).unsqueeze(0)
                 print('**********conv wts', conv_wts.shape)
-                self.conv_wts.append(ttnn.from_torch(conv_wts, layout=ttnn.TILE_LAYOUT, device=self.device,
-                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16))
+                self.conv_wts.append(ttnn.as_tensor(conv_wts, layout=ttnn.TILE_LAYOUT, device=self.device,
+                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16, cache_file_name=tt_cache_path + f"conv_wts_{i}.bin"))
             else:
                 self.conv_wts.append(ttnn.from_torch(torch.rand(1,1,1,self.hidden_size*2,), layout=ttnn.TILE_LAYOUT, device=self.device,
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16))
@@ -89,8 +90,8 @@ class TtMambaBlock(torch.nn.Module):
             conv1d_bias_name = "mixer.conv1d.bias"
             conv_bias = self.state_dict[conv1d_bias_name].unsqueeze(0).unsqueeze(0).unsqueeze(0)
             print('**********conv bias', conv_bias.shape)
-            self.conv_bias = ttnn.from_torch(conv_bias, layout=ttnn.TILE_LAYOUT, device=self.device,
-                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
+            self.conv_bias = ttnn.as_tensor(conv_bias, layout=ttnn.TILE_LAYOUT, device=self.device,
+                                 memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16, cache_file_name=tt_cache_path + "conv_bias.bin")
         else:
             self.conv_bias = ttnn.from_torch(torch.rand(1,1,1,self.hidden_size*2), layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
 
