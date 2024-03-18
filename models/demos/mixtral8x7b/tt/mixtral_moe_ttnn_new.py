@@ -98,6 +98,11 @@ class TtMoeLayer(nn.Module):
         output_B1SD = []
         start_time = time.time()
         for i in range(len(self.devices)):  # [0, 3, 4, 7]:  # range(len(self.devices)):
+            # if i in [1, 2, 5, 6]:
+            #     continue
+            # dev_dict = {1: 0, 2:3, 5: 4, 6: 7}
+            # self.devices[i] = self.devices[dev_dict[i]]
+
             print(f"started device {i}, time: {time.time() - start_time} ")
             self.devices[i] = self.devices[i]
             input_i_1SBH = inputs[i]
@@ -108,7 +113,9 @@ class TtMoeLayer(nn.Module):
                 memory_config=ttnn.L1_MEMORY_CONFIG,
                 compute_kernel_config=self.compute_kernel,
             )
-
+            gate_logits_1SB8 = ttnn.softmax(
+                gate_logits_1SB8 - ttnn.experimental.tensor.max(gate_logits_1SB8, dim=3), dim=-1
+            )
             weights_1SBK, batch_ids_1SB1, selected_experts_1SBK = top_2(
                 gate_logits_1SB8, self.top_2_mask[i], self.expert_mask[i], self.mask_0[i], self.mask_1[i]
             )
@@ -214,7 +221,6 @@ class TtMoeLayer(nn.Module):
                         selected_experts_1SBK,
                         batch_ids_1SB1,
                         gate_logits_1SB8,
-                        indices_tt,
                     ]
                 ):
                     ttnn.deallocate(l)
