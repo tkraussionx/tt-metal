@@ -100,7 +100,6 @@ class TtMambaBlock(torch.nn.Module):
     def forward(self, x):
         x_input = x # b, e=d_model
         x = ttnn.linear(x, self.ssm_proj, memory_config=ttnn.L1_MEMORY_CONFIG)
-
         # left shift conv states
         ttnn.deallocate(self.conv_states[0])
         for i in range(3):
@@ -117,14 +116,12 @@ class TtMambaBlock(torch.nn.Module):
             x = ttnn.add(x, prod)
         conv_bias = ttnn.repeat_interleave(self.conv_bias, self.num_users, dim=2)
         x = ttnn.add(x, conv_bias)
-
         x = ttnn.silu(x)
         print('**********', x.shape)
         x = self.tt_ssm(x)
         res = ttnn.linear(x_input, self.mlp_proj, memory_config=ttnn.L1_MEMORY_CONFIG)
         x = ttnn.mul(x, res)
         ttnn.deallocate(res)
-
         x = ttnn.linear(x, self.down_proj, memory_config=ttnn.L1_MEMORY_CONFIG)
 
         return x
