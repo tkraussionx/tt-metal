@@ -1,8 +1,12 @@
+# SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+
+# SPDX-License-Identifier: Apache-2.0
+
 from typing import List
 import torch
 from models.demos.mistral7b.reference.model import Transformer, precompute_freqs_cis
 from models.demos.mistral7b.reference.tokenizer import Tokenizer
-from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs
+from models.demos.mistral7b.tt.model_config import TtModelArgs
 
 
 def main():
