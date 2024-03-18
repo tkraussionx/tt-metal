@@ -141,13 +141,36 @@ class dispatch_core_manager {
     ///         This list contains dispatch cores that have not been assigned to a particular dispatch function
     /// @param num_hw_cqs is used to get the correct collection of dispatch cores for a particular device
     dispatch_core_manager(uint8_t num_hw_cqs) {
-        for (chip_id_t device_id = 0; device_id < tt::Cluster::instance().number_of_devices(); device_id++) {
-            std::list<CoreCoord> &logical_dispatch_cores = this->available_dispatch_cores_by_device[device_id];
-            for (const CoreCoord &logical_dispatch_core : tt::get_logical_dispatch_cores(device_id, num_hw_cqs)) {
-                logical_dispatch_cores.push_back(logical_dispatch_core);
+        std::vector<int> chips;
+        char *env_var_str = std::getenv("TT_METAL_GALAXY_CHIPS");
+
+        // If the environment variable is not empty, parse it.
+        while (env_var_str != nullptr) {
+            uint32_t chip;
+            if (sscanf(env_var_str, "%d", &chip) != 1) {
+                log_assert(false, "Invalid {}", env_var_str);
+            }
+            chips.push_back(chip);
+            env_var_str = strchr(env_var_str, ',');
+            if (env_var_str != nullptr) env_var_str++;
+        }
+        if (chips.size() > 0) {
+            for (const auto& device_id: chips) {
+                std::list<CoreCoord> &logical_dispatch_cores = this->available_dispatch_cores_by_device[device_id];
+                for (const CoreCoord &logical_dispatch_core : tt::get_logical_dispatch_cores(device_id, num_hw_cqs)) {
+                    logical_dispatch_cores.push_back(logical_dispatch_core);
+                }
+            }
+        } else {
+            for (chip_id_t device_id = 0; device_id < tt::Cluster::instance().number_of_devices(); device_id++) {
+                std::list<CoreCoord> &logical_dispatch_cores = this->available_dispatch_cores_by_device[device_id];
+                for (const CoreCoord &logical_dispatch_core : tt::get_logical_dispatch_cores(device_id, num_hw_cqs)) {
+                    logical_dispatch_cores.push_back(logical_dispatch_core);
+                }
             }
         }
     }
+
 
     /// @brief getting any
     /// @param device_id
