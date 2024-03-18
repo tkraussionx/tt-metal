@@ -30,7 +30,8 @@ struct address_map {
   static constexpr std::int32_t COMMAND_Q_BASE = L1_EPOCH_Q_BASE + FIRMWARE_SIZE;
   static constexpr std::int32_t DATA_BUFFER_BASE = COMMAND_Q_BASE + COMMAND_Q_SIZE;
   static constexpr std::int32_t TILE_HEADER_BUFFER_BASE = DATA_BUFFER_BASE + DATA_BUFFER_SIZE;
-  static constexpr std::int32_t ERISC_MEM_MAILBOX_BASE = COMMAND_Q_BASE - 204 - 128;
+  static constexpr std::int32_t PRINT_BUFFER_ER = COMMAND_Q_BASE - 224;
+  static constexpr std::int32_t ERISC_MEM_MAILBOX_BASE = PRINT_BUFFER_ER - 128;
   // erisc early exit functionality re-uses mailboxes_t::ncrisc_halt_msg_t::stack_save memory
   static constexpr std::int32_t ERISC_MEM_MAILBOX_STACK_SAVE = ERISC_MEM_MAILBOX_BASE + 4;
 
@@ -40,9 +41,10 @@ struct address_map {
   //    -   1 * 1024 misc args
   //    -  53 * 1024 eth app reserved buffer space
   //    - 106 * 1024 L1 unreserved buffer space
+  static constexpr std::int32_t MAX_NUM_CONCURRENT_TRANSACTIONS = 8;
   static constexpr std::int32_t ERISC_BARRIER_SIZE = 32;
   static constexpr std::int32_t ERISC_APP_ROUTING_INFO_SIZE = 48;
-  static constexpr std::int32_t ERISC_APP_SYNC_INFO_SIZE = 32;
+  static constexpr std::int32_t ERISC_APP_SYNC_INFO_SIZE = 160 + 16 * MAX_NUM_CONCURRENT_TRANSACTIONS;
 
   static constexpr std::int32_t ERISC_BARRIER_BASE = TILE_HEADER_BUFFER_BASE;
   static constexpr std::int32_t ERISC_APP_ROUTING_INFO_BASE = ERISC_BARRIER_BASE + ERISC_BARRIER_SIZE;
@@ -63,7 +65,6 @@ struct address_map {
   static constexpr std::int32_t ERISC_L1_TUNNEL_BUFFER_SIZE = ERISC_L1_UNRESERVED_SIZE / 2;
 
   // TODO: risky, is there a check for FW size we can add?
-  static constexpr std::int32_t PRINT_BUFFER_ER = COMMAND_Q_BASE - 204;
   template <std::size_t A, std::size_t B>
   struct TAssertEquality {
       static_assert(A == B, "Not equal");

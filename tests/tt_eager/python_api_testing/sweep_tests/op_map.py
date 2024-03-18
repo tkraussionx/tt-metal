@@ -36,6 +36,10 @@ op_map = {
         "tt_lib_op": tt_lib_ops.concat,
         "pytorch_op": pytorch_ops.concat,
     },
+    "ttnn-concat": {
+        "tt_lib_op": ttnn_ops.concat,
+        "pytorch_op": pytorch_ops.concat,
+    },
     "move": {
         "tt_lib_op": tt_lib_ops.move,
         "pytorch_op": pytorch_ops.move,
@@ -518,6 +522,10 @@ op_map = {
         "tt_lib_op": tt_lib_ops.eltwise_addcdiv,
         "pytorch_op": pytorch_ops.addcdiv,
     },
+    "ttnn-eltwise-addcdiv": {
+        "tt_lib_op": ttnn_ops.eltwise_addcdiv,
+        "pytorch_op": pytorch_ops.addcdiv,
+    },
     "eltwise-sigmoid": {
         "tt_lib_op": tt_lib_ops.eltwise_sigmoid,
         "pytorch_op": pytorch_ops.sigmoid,
@@ -818,6 +826,10 @@ op_map = {
     },
     "eltwise-where": {
         "tt_lib_op": tt_lib_ops.where,
+        "pytorch_op": pytorch_ops.where,
+    },
+    "ttnn-eltwise-where": {
+        "tt_lib_op": ttnn_ops.where,
         "pytorch_op": pytorch_ops.where,
     },
     "where-bw": {
@@ -1563,5 +1575,37 @@ op_map = {
     "ttnn-groupnorm": {
         "tt_lib_op": ttnn_ops.groupnorm,
         "pytorch_op": pytorch_ops.ttnn_groupnorm,
+    },
+    "ttnn-global-avg-pool2d": {
+        "tt_lib_op": ttnn_ops.global_avg_pool2d,
+        "pytorch_op": pytorch_ops.global_avg_pool2d,
+    },
+    "ttnn-upsample": {
+        "tt_lib_op": ttnn_ops.upsample,
+        "pytorch_op": pytorch_ops.upsample,
+    },
+    "ttnn-l1_loss": {
+        "tt_lib_op": ttnn_ops.l1_loss,
+        "pytorch_op": pytorch_ops.l1_loss,
+    },
+    "ttnn-l1_loss_sum": {
+        "tt_lib_op": ttnn_ops.l1_loss_sum,
+        "pytorch_op": pytorch_ops.l1_loss_sum,
+    },
+    "ttnn-l1_loss_mean": {
+        "tt_lib_op": ttnn_ops.l1_loss_mean,
+        "pytorch_op": pytorch_ops.l1_loss_mean,
+    },
+    "ttnn-mse_loss": {
+        "tt_lib_op": ttnn_ops.mse_loss,
+        "pytorch_op": pytorch_ops.mse_loss,
+    },
+    "ttnn-mse_loss_sum": {
+        "tt_lib_op": ttnn_ops.mse_loss_sum,
+        "pytorch_op": pytorch_ops.mse_loss_sum,
+    },
+    "ttnn-mse_loss_mean": {
+        "tt_lib_op": ttnn_ops.mse_loss_mean,
+        "pytorch_op": pytorch_ops.mse_loss_mean,
     },
 }

@@ -6,11 +6,11 @@
 
 #include <chrono>
 #include <tt_eager/tensor/tensor.hpp>
+#include <tt_eager/tensor/tensor_utils.hpp>
 
 #include "third_party/magic_enum/magic_enum.hpp"
 #include "tt_dnn/op_library/auto_format.hpp"
 #include "tt_dnn/op_library/operation.hpp"
-#include "tt_dnn/op_library/program_cache.hpp"
 #include "tt_metal/detail/tt_metal.hpp"
 #include "tt_metal/third_party/tracy/public/tracy/Tracy.hpp"
 #include "tt_metal/tools/profiler/op_profiler.hpp"
@@ -23,6 +23,10 @@ bool skip_profile = false;
 std::map<chip_id_t, std::reference_wrapper<Program>> skipped_programs;
 
 namespace detail {
+
+inline bool any_tensor_on_multi_device(const std::vector<Tensor>& tensors) {
+    return std::any_of(tensors.begin(), tensors.end(), [](const Tensor& tensor) { return tensor.storage_type() == StorageType::MULTI_DEVICE; });
+}
 
 static Device* get_device(const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors = {}) {
     for (auto& input_tensor : input_tensors) {
@@ -165,22 +169,28 @@ std::vector<Tensor> run_device_operation(
         const std::vector<std::optional<const Tensor>>&,
         std::vector<Tensor>&)>
         get_or_create_program;
-    if (program_cache::is_enabled()) {
-        get_or_create_program = [](const DeviceOperation& operation,
+    auto& program_cache = input_tensors[0].device()->program_cache;
+    if (program_cache.is_enabled()) {
+        get_or_create_program = [&program_cache](const DeviceOperation& operation,
                                    const std::vector<Tensor>& input_tensors,
                                    const std::vector<std::optional<const Tensor>>& optional_input_tensors,
                                    std::vector<Tensor>& output_tensors) -> std::reference_wrapper<Program> {
-            auto&& [program_with_callbacks, cache_hit] =
-                program_cache::get_or_create(operation, input_tensors, optional_input_tensors, output_tensors);
+
+            auto program_hash = operation.compute_program_hash(input_tensors, optional_input_tensors);
+            auto&& [program_ptr, cache_hit] = program_cache.find(program_hash);
+            if (not cache_hit) {
+                program_ptr = std::make_shared<operation::ProgramWithCallbacks>(operation.create_program(input_tensors, optional_input_tensors, output_tensors));
+                program_cache.insert(program_hash, program_ptr);
+            }
+            auto& program_with_callbacks = *(reinterpret_cast<operation::ProgramWithCallbacks*>(program_ptr.get()));
             TT_ASSERT(program_with_callbacks.supports_program_cache());
 
-            auto& program = program_with_callbacks.program;
             if (cache_hit) {
                 ZoneScopedN("Cache_hit_set_runtime_args");
                 if (program_with_callbacks.override_addresses_callback.has_value()) {
                     auto override_addresses_callback = program_with_callbacks.override_addresses_callback.value();
                     override_addresses(
-                        override_addresses_callback, program, input_tensors, optional_input_tensors, output_tensors);
+                        override_addresses_callback, program_with_callbacks.program, input_tensors, optional_input_tensors, output_tensors);
                 }
 
                 if (program_with_callbacks.override_runtime_arguments_callback.has_value()) {
@@ -188,13 +198,13 @@ std::vector<Tensor> run_device_operation(
                         program_with_callbacks.override_runtime_arguments_callback.value();
                     operation.override_runtime_arguments(
                         override_runtime_arguments_callback,
-                        program,
+                        program_with_callbacks.program,
                         input_tensors,
                         optional_input_tensors,
                         output_tensors);
                 }
             }
-            return program;
+            return program_with_callbacks.program;
         };
     } else {
         get_or_create_program = [](const DeviceOperation& operation,
@@ -265,6 +275,59 @@ std::vector<Tensor> run_device_operation(
     return output_tensors;
 }
 
+std::vector<Tensor> run_multi_device_operation(
+    std::optional<std::reference_wrapper<CommandQueue>> queue,
+    const DeviceOperation& operation,
+    const std::vector<Tensor>& input_tensors,
+    const std::vector<std::optional<const Tensor>>& optional_input_tensors,
+    const std::vector<std::optional<Tensor>>& optional_output_tensors)
+{
+    // TODO: Assumes each input/output tensor is mapped to the same set of devices; relax this later
+    std::vector<Device*> devices = get_devices(input_tensors[0]);
+
+    std::map<Device*, std::vector<Tensor>> per_device_output_tensors;
+    std::optional<std::size_t> num_output_tensors_per_device;
+    for (Device *device : devices)
+    {
+        auto device_output_tensors = run_device_operation(
+            device->command_queue(),
+            operation,
+            get_device_tensors(device, input_tensors),
+            get_device_tensors(device, optional_input_tensors),
+            get_device_tensors(device, optional_output_tensors));
+
+        per_device_output_tensors[device] = device_output_tensors;
+
+        if (not num_output_tensors_per_device.has_value()) {
+            num_output_tensors_per_device = device_output_tensors.size();
+        } else {
+            TT_ASSERT(num_output_tensors_per_device == device_output_tensors.size(),
+                "Output tensors per device should be same for all devices");
+        }
+    }
+
+    std::vector<Tensor> multi_device_output_tensors;
+    for (int i = 0; i < num_output_tensors_per_device; ++i)
+    {
+        std::vector<DeviceBuffer> buffers;
+        std::vector<Shape> shapes;
+        for (Device *device : devices) {
+            buffers.push_back(per_device_output_tensors[device][i].device_buffer());
+            shapes.push_back(per_device_output_tensors[device][i].get_legacy_shape());
+        }
+
+        multi_device_output_tensors.push_back(
+            Tensor{
+                MultiDeviceStorage{buffers, shapes},
+                per_device_output_tensors[devices[0]][i].get_legacy_shape(),
+                per_device_output_tensors[devices[0]][i].get_dtype(),
+                per_device_output_tensors[devices[0]][i].get_layout()
+            }
+        );
+    }
+    return multi_device_output_tensors;
+}
+
 }  // namespace detail
 
 std::vector<Tensor> run(const HostOperation& operation, const std::vector<Tensor>& input_tensors) {
@@ -277,6 +340,10 @@ std::vector<Tensor> run(
     const std::vector<Tensor>& input_tensors,
     const std::vector<std::optional<const Tensor>>& optional_input_tensors,
     const std::vector<std::optional<Tensor>>& optional_output_tensors) {
+    if (detail::any_tensor_on_multi_device(input_tensors)) {
+        return detail::decorate_device_operation(detail::run_multi_device_operation)(
+            std::make_optional(std::ref(queue)), operation, input_tensors, optional_input_tensors, optional_output_tensors);
+    }
     return detail::decorate_device_operation(detail::run_device_operation)(
         queue, operation, input_tensors, optional_input_tensors, optional_output_tensors);
 }
@@ -286,6 +353,10 @@ std::vector<Tensor> run(
     const std::vector<Tensor>& input_tensors,
     const std::vector<std::optional<const Tensor>>& optional_input_tensors,
     const std::vector<std::optional<Tensor>>& optional_output_tensors) {
+    if (detail::any_tensor_on_multi_device(input_tensors)) {
+        return detail::decorate_device_operation(detail::run_multi_device_operation)(
+            std::nullopt, operation, input_tensors, optional_input_tensors, optional_output_tensors);
+    }
     auto device = detail::get_device(input_tensors, optional_input_tensors);
     return detail::decorate_device_operation(detail::run_device_operation)(
         detail::USE_FAST_DISPATCH ? std::make_optional(std::ref(device->command_queue())) : std::nullopt, operation, input_tensors, optional_input_tensors, optional_output_tensors);
@@ -356,6 +427,9 @@ std::vector<Tensor> run_with_autoformat(
     const float pad_value,
     const bool pad_c
 ) {
+    if (detail::any_tensor_on_multi_device(input_tensors)) {
+        return run(operation, input_tensors, optional_input_tensors);
+    }
     Device* device = detail::get_device(input_tensors, optional_input_tensors);
 
     auto output_shapes = operation.compute_output_shapes(input_tensors);
@@ -410,6 +484,9 @@ std::vector<Tensor> run_with_autoformat(
     const std::vector<std::optional<const Tensor>>& optional_input_tensors,
     const std::vector<std::optional<FormatParams>>& optional_input_formatting
 ) {
+    if (detail::any_tensor_on_multi_device(input_tensors)) {
+        return run(operation, input_tensors, optional_input_tensors);
+    }
     Device* device = detail::get_device(input_tensors, optional_input_tensors);
 
     auto output_shapes = operation.compute_output_shapes(input_tensors);

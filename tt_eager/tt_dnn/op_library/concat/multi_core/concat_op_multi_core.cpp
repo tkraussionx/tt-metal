@@ -29,6 +29,8 @@ struct CorePageRange {
 
 
 operation::ProgramWithCallbacks s2s_rm_concat_multi_core(const std::vector<Tensor> &input_tensors, uint32_t dim, Tensor &output) {
+    TT_FATAL(dim == 3, "Sharded concat RM only supports dim=3");
+
     tt_metal::Program program = tt_metal::CreateProgram();
 
     tt_metal::Device *device = output.device();
@@ -99,10 +101,10 @@ operation::ProgramWithCallbacks s2s_rm_concat_multi_core(const std::vector<Tenso
     auto cores = corerange_to_cores(all_cores, std::nullopt, row_wise);
     auto input_cores = input_tensors[0].shard_spec().value().grid;
     uint32_t num_output_rows_per_core = div_up(num_output_rows, input_cores.num_cores());
+    auto input0_shard_spec = input_tensors[0].shard_spec().value();
 
     uint32_t core_id = 0;
     for(auto core: cores) {
-        auto input_shard_spec = input_tensors[0].shard_spec().value();
         uint32_t curr_num_input_tensors;
         uint32_t curr_num_output_rows;
         if(input_cores.core_coord_in_core_ranges(core)) {
@@ -115,12 +117,26 @@ operation::ProgramWithCallbacks s2s_rm_concat_multi_core(const std::vector<Tenso
         }
 
         vector<uint32_t> reader_runtime_args = {};
-        vector<uint32_t> writer_runtime_args = {output.buffer()->address(), core_id,
-                            curr_num_output_rows, input_unit_size, num_input_tensors*input_shard_spec.shape[0], input_shard_spec.shape[0]};
+        vector<uint32_t> writer_runtime_args = {
+            output.buffer()->address(),
+            core_id,
+            curr_num_output_rows,
+            input_unit_size,
+            num_input_tensors * input0_shard_spec.shape[0],
+            input0_shard_spec.shape[0],
+        };
+
         for(uint32_t input_id = 0; input_id < num_input_tensors; input_id++) {
+            auto input_i_shard_spec = input_tensors[input_id].shard_spec().value();
+            TT_FATAL(
+                input_i_shard_spec.shape[0] == input0_shard_spec.shape[0],
+                "Input shard_spec mismatch (must match in y dim",
+                input_id,
+                input_i_shard_spec,
+                input0_shard_spec);
             reader_runtime_args.push_back(input_id);
-            reader_runtime_args.push_back(input_shard_spec.shape[0]);
-            writer_runtime_args.push_back(input_id);
+            reader_runtime_args.push_back(input_i_shard_spec.shape[0]);
+            writer_runtime_args.push_back(input_i_shard_spec.shape[1] * input_tensors[input_id].element_size());
         }
         tt_metal::SetRuntimeArgs(
             program,
@@ -421,7 +437,6 @@ operation::ProgramWithCallbacks concat_multi_core(const std::vector<Tensor> &inp
         num_output_tiles_per_block += num_accum_tiles * dim_tiles;
     }
     vector<uint32_t> common_reader_kernel_args = {
-        num_input_tensors,
         0, 0, 0
     };
     common_reader_kernel_args.insert(common_reader_kernel_args.end(), src_addr.begin(), src_addr.end());
@@ -433,7 +448,8 @@ operation::ProgramWithCallbacks concat_multi_core(const std::vector<Tensor> &inp
     bool dst_is_dram = dst_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     std::vector<uint32_t> reader_compile_time_args = {
         // interleaved accessor args
-        (std::uint32_t) src0_cb_index
+        (std::uint32_t) src0_cb_index,
+        (std::uint32_t) num_input_tensors,
     };
     std::vector<uint32_t> writer_compile_time_args = {
         // interleaved accessor args
@@ -484,9 +500,9 @@ operation::ProgramWithCallbacks concat_multi_core(const std::vector<Tensor> &inp
         }
 
         vector<uint32_t> reader_kernel_args = common_reader_kernel_args;
-        reader_kernel_args[1] = num_tiles_per_core;
-        reader_kernel_args[2] = curr_tensor;
-        reader_kernel_args[3] = curr_tensor_id;
+        reader_kernel_args[0] = num_tiles_per_core;
+        reader_kernel_args[1] = curr_tensor;
+        reader_kernel_args[2] = curr_tensor_id;
         reader_kernel_args.insert(reader_kernel_args.end(), tile_id_per_tensor.begin(), tile_id_per_tensor.end());
 
         vector<uint32_t> writer_kernel_args = {

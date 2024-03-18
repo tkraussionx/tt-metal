@@ -38,7 +38,7 @@ static void RunTest(DPrintFixture* fixture, Device* device) {
         Program program = Program();
 
         // Create the kernel
-        // TODO: When #5566 is implemented combine these kernels again.
+        // TODO: When #6424 is fixed combine these kernels again.
         KernelHandle erisc_kernel_id = CreateKernel(
             program,
             "tests/tt_metal/tt_metal/test_kernels/misc/erisc_print.cpp",
@@ -80,13 +80,6 @@ static void RunTest(DPrintFixture* fixture, Device* device) {
 }
 
 TEST_F(DPrintFixture, TestPrintEthCores) {
-    if (!this->slow_dispatch_) {
-        log_info(
-            tt::LogTest,
-            "Skipping test due to fast dispatch dprint unsupported on eth cores."
-        );
-        GTEST_SKIP();
-    }
     for (Device* device : this->devices_) {
         // Skip if no ethernet cores on this device
         if (device->get_active_ethernet_cores(true).size() == 0) {

@@ -23,9 +23,7 @@
 #include "hostdevcommon/common_values.hpp"
 #include "risc_attribs.h"
 #include "third_party/umd/device/tt_silicon_driver_common.hpp"
-#ifndef COMPILE_FOR_ERISC
-#include "debug/dprint.h"
-#endif
+#include "debug/assert.h"
 
 extern uint8_t noc_index;
 
@@ -154,14 +152,9 @@ void cb_push_back(const int32_t operand, const int32_t num_pages) {
 
     // this will basically reset fifo_wr_ptr to fifo_addr -- no other wrap is legal
     // producer always writes into contiguous memory, it cannot wrap
-    if (cb_interface[operand].fifo_wr_ptr >= cb_interface[operand].fifo_limit) {
+    ASSERT(cb_interface[operand].fifo_wr_ptr <= cb_interface[operand].fifo_limit);
+    if (cb_interface[operand].fifo_wr_ptr == cb_interface[operand].fifo_limit) {
         // TODO: change this to fifo_wr_ptr
-        #ifndef COMPILE_FOR_ERISC
-        if (cb_interface[operand].fifo_wr_ptr > cb_interface[operand].fifo_limit) {
-            DPRINT << "BAD STATE" << ENDL();
-            while(true);
-        }
-        #endif
         cb_interface[operand].fifo_wr_ptr -= cb_interface[operand].fifo_size;
     }
 }
@@ -199,7 +192,8 @@ void cb_pop_front(int32_t operand, int32_t num_pages) {
 
     // this will basically reset fifo_rd_ptr to fifo_addr -- no other wrap is legal
     // consumer always reads from contiguous memory, it cannot wrap
-    if (cb_interface[operand].fifo_rd_ptr >= cb_interface[operand].fifo_limit) {
+    ASSERT(cb_interface[operand].fifo_rd_ptr <= cb_interface[operand].fifo_limit);
+    if (cb_interface[operand].fifo_rd_ptr == cb_interface[operand].fifo_limit) {
         // TODO: change this to fifo_wr_ptr
         cb_interface[operand].fifo_rd_ptr -= cb_interface[operand].fifo_size;
     }
@@ -1392,6 +1386,27 @@ void noc_semaphore_wait(volatile tt_l1_ptr uint32_t* sem_addr, uint32_t val) {
     while ((*sem_addr) != val)
         ;
     DEBUG_STATUS('N', 'S', 'D');
+}
+
+/**
+ * A blocking call that waits until the value of a local L1 memory address on
+ * the Tensix core executing this function becomes equal or greater than a target value.
+ * This L1 memory address is used as a semaphore of size 4 Bytes, as a
+ * synchronization mechanism. Also, see *noc_semaphore_set*.
+ *
+ * Return value: None
+ *
+ * | Argument  | Description                                                    | Type     | Valid Range        | Required |
+ * |-----------|----------------------------------------------------------------|----------|--------------------|----------|
+ * | sem_addr  | Semaphore address in local L1 memory                           | uint32_t | 0..1MB             | True |
+ * | val       | The target value of the semaphore                              | uint32_t | Any uint32_t value | True |
+ */
+FORCE_INLINE
+void noc_semaphore_wait_min(volatile tt_l1_ptr uint32_t* sem_addr, uint32_t val) {
+    DEBUG_STATUS('N', 'S', 'M', 'W');
+    while ((*sem_addr) < val)
+        ;
+    DEBUG_STATUS('N', 'S', 'M', 'D');
 }
 
 /**

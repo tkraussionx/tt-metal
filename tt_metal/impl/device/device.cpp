@@ -429,7 +429,7 @@ void Device::compile_command_queue_programs() {
                         {"PRODUCER_NOC_X", std::to_string(issue_q_physical_core.x)},
                         {"PRODUCER_NOC_Y", std::to_string(issue_q_physical_core.y)},
                     };
-                    std::vector<uint32_t> eth_tunneller_compile_args = {true};
+                    std::vector<uint32_t> eth_tunneller_compile_args = {true, num_tensix_command_slots};
                     std::string command_q_tunneller_kernel = "tt_metal/impl/dispatch/kernels/command_queue_bidirectional_tunneller.cpp";
                     tt::tt_metal::CreateKernel(
                         *command_queue_program_ptr,
@@ -602,7 +602,7 @@ void Device::compile_command_queue_programs() {
                 {"PRODUCER_NOC_X", std::to_string(remote_processor_physical_core.x)},
                 {"PRODUCER_NOC_Y", std::to_string(remote_processor_physical_core.y)},
             };
-            std::vector<uint32_t> eth_tunneller_compile_args = {false}; // SENDER is ISSUE
+            std::vector<uint32_t> eth_tunneller_compile_args = {false, num_tensix_command_slots}; // SENDER is ISSUE
             std::string command_q_tunneller_kernel = "tt_metal/impl/dispatch/kernels/command_queue_bidirectional_tunneller.cpp";
             tt::tt_metal::CreateKernel(
                 *command_queue_program_ptr,
@@ -741,10 +741,10 @@ void Device::initialize_command_queue() {
     using_fast_dispatch = true;
     this->sysmem_manager_ = std::make_unique<SystemMemoryManager>(this->id_, this->num_hw_cqs());
     hw_command_queues_.resize(num_hw_cqs());
-    sw_command_queues_.resize(num_hw_cqs());
     for (size_t cq_id = 0; cq_id < num_hw_cqs(); cq_id++) {
         hw_command_queues_[cq_id] = std::make_unique<HWCommandQueue>(this, cq_id);
-        sw_command_queues_[cq_id] = std::make_unique<CommandQueue>(this, cq_id);
+        // Need to do this since CommandQueue constructor is private
+        sw_command_queues_.push_back(std::unique_ptr<CommandQueue>(new CommandQueue(this, cq_id)));
     }
     if (tt::Cluster::instance().arch() == tt::ARCH::GRAYSKULL) {
         this->compile_command_queue_programs_for_grayskull();
@@ -758,7 +758,7 @@ void Device::initialize_command_queue() {
     for (uint8_t cq_id = 0; cq_id < this->num_hw_cqs(); cq_id++) {
         for (const auto &[core_type, logical_dispatch_cores] : command_queue_program.logical_cores()) {
             for (const CoreCoord &logical_dispatch_core : logical_dispatch_cores) {
-                launch_msg_t msg = command_queue_program.kernels_on_core(logical_dispatch_core)->launch_msg;
+                launch_msg_t msg = command_queue_program.kernels_on_core(logical_dispatch_core, core_type)->launch_msg;
                 tt::llrt::write_launch_msg_to_core(this->id(), this->physical_core_from_logical_core(logical_dispatch_core, core_type), &msg);
             }
         }
@@ -769,9 +769,9 @@ void Device::initialize_command_queue() {
 void Device::initialize_synchronous_sw_cmd_queue() {
     // Initialize a single Software Command Queue for SD, using passthrough mode.
     // This queue is used for all host bound functions using the Software CQ in SD mode.
-    sw_command_queues_.resize(num_hw_cqs());
     for (size_t cq_id = 0; cq_id < num_hw_cqs(); cq_id++) {
-        sw_command_queues_[cq_id] = std::make_unique<CommandQueue>(this, cq_id);
+        // Need to do this since CommandQueue constructor is private
+        sw_command_queues_.push_back(std::unique_ptr<CommandQueue>(new CommandQueue(this, cq_id)));
         sw_command_queues_[cq_id]->set_mode(CommandQueue::CommandQueueMode::PASSTHROUGH);
     }
 }
@@ -841,8 +841,12 @@ bool Device::close() {
     allocator::clear(*this->allocator_);
 
     this->active_devices_.deactivate_device(this->id_);
+    this->disable_and_clear_program_cache();
+    this->sw_command_queues_.clear();
+    this->hw_command_queues_.clear();
 
     this->initialized_ = false;
+
     return true;
 }
 

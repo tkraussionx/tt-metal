@@ -404,7 +404,7 @@ inline Tensor to_device(
     }
 
     auto device_buffer = tensor_impl::to_device_buffer<T>(
-        tensor.storage(), target_device, shape, data_type, layout, memory_config, shard_spec_buffer_opt, queue);
+        tensor.get_storage(), target_device, shape, data_type, layout, memory_config, shard_spec_buffer_opt, queue);
     return Tensor(DeviceStorage{device_buffer}, shape, data_type, layout);
 }
 
@@ -465,7 +465,7 @@ inline Tensor to_layout(const Tensor& tensor, Layout target_layout) {
                 raise_unsupported_storage<StorageType>();
             }
         },
-        tensor.storage());
+        tensor.get_storage());
 
 
     return std::visit(
@@ -482,6 +482,7 @@ inline Tensor to_layout(const Tensor& tensor, Layout target_layout) {
 }
 
 Tensor to_layout_bfloat8_b(const Tensor& tensor, Layout target_layout);
+Tensor to_layout_bfloat4_b(const Tensor& tensor, Layout target_layout);
 
 // ======================================================================================
 //                                  .pad() and .unpad()
@@ -578,11 +579,13 @@ inline Tensor pad(
                 raise_unsupported_storage<StorageType>();
             }
         },
-        tensor.storage());
+        tensor.get_storage());
     return Tensor(OwnedStorage{output_buffer}, output_tensor_shape, tensor.get_dtype(), tensor.get_layout());
 }
 
 Tensor pad_bfloat8_b(
+    const Tensor& tensor, const Shape& output_tensor_shape, const Shape& input_tensor_start, float pad_value);
+Tensor pad_bfloat4_b(
     const Tensor& tensor, const Shape& output_tensor_shape, const Shape& input_tensor_start, float pad_value);
 
 template <typename T>
@@ -652,11 +655,12 @@ inline Tensor unpad(const Tensor& tensor, const Shape& output_tensor_start, cons
                 raise_unsupported_storage<StorageType>();
             }
         },
-        tensor.storage());
+        tensor.get_storage());
     return Tensor(OwnedStorage{output_buffer}, output_tensor_shape, tensor.get_dtype(), tensor.get_layout());
 }
 
 Tensor unpad_bfloat8_b(const Tensor& tensor, const Shape& output_tensor_start, const Shape& output_tensor_end);
+Tensor unpad_bfloat4_b(const Tensor& tensor, const Shape& output_tensor_start, const Shape& output_tensor_end);
 
 // ======================================================================================
 //                                         Print
@@ -717,8 +721,10 @@ inline void print_datum(std::ostream& ss, bfloat16 datum) {
     print_datum(ss, datum.to_float());
 }
 
+inline constexpr int constexpr_strlen(const char* str) { return *str ? 1 + constexpr_strlen(str + 1) : 0; }
+
 constexpr auto TENSOR_TYPE_STRING = "ttnn.Tensor";
-constexpr auto TENSOR_TYPE_STRING_PLUS_OPEN_PARENTHESIS_LENGTH = std::strlen(TENSOR_TYPE_STRING) + 1;
+constexpr auto TENSOR_TYPE_STRING_PLUS_OPEN_PARENTHESIS_LENGTH = constexpr_strlen(TENSOR_TYPE_STRING) + 1;
 
 static constexpr auto TAB = "    ";
 static constexpr auto TAB_MINUS_1 = "   ";
@@ -859,8 +865,18 @@ inline std::string to_string(const Tensor& tensor, std::optional<DataType> origi
         return to_string<float>(float_tensor, tensor.get_dtype());
     }
 
+    if (dtype == DataType::BFLOAT4_B and original_dtype == std::nullopt) {
+        // Convert to FLOAT32 tensor before printing
+        auto input_packed_data = owned_buffer::get_as<uint32_t>(tensor).get();
+        auto input_float_data = unpack_bfp4_tiles_into_float_vec(input_packed_data, /*row_major_output=*/false, /*is_exp_a=*/false);
+        auto input_float_buffer = owned_buffer::create<float>(std::move(input_float_data));
+        auto float_tensor =
+            Tensor(OwnedStorage{input_float_buffer}, tensor.get_legacy_shape(), DataType::FLOAT32, tensor.get_layout());
+        return to_string<float>(float_tensor, tensor.get_dtype());
+    }
+
     return std::visit(
-        [&] (auto&& storage) -> std::string {
+        [&](auto&& storage) -> std::string {
             using StorageType = std::decay_t<decltype(storage)>;
             if constexpr (std::is_same_v<StorageType, OwnedStorage>) {
                 const auto buffer = owned_buffer::get_as<T>(storage.buffer);
@@ -880,8 +896,7 @@ inline std::string to_string(const Tensor& tensor, std::optional<DataType> origi
                 raise_unsupported_storage<StorageType>();
             }
         },
-        tensor.storage()
-    );
+        tensor.get_storage());
 }
 
 template <typename T>
@@ -928,7 +943,7 @@ void* get_raw_host_data_ptr(const Tensor& tensor) {
                 raise_unsupported_storage<StorageType>();
             }
         },
-        tensor.storage());
+        tensor.get_storage());
 }
 
 }  // namespace tensor_impl

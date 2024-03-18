@@ -37,6 +37,7 @@
 #include "tt_dnn/op_library/moreh_groupnorm_backward/moreh_groupnorm_backward_op.hpp"
 #include "tt_dnn/op_library/moreh_mean/moreh_mean_op.hpp"
 #include "tt_dnn/op_library/moreh_mean_backward/moreh_mean_backward_op.hpp"
+#include "tt_dnn/op_library/moreh_getitem/moreh_getitem_op.hpp"
 
 namespace py = pybind11;
 
@@ -153,9 +154,10 @@ void py_module(py::module& m_primary) {
            const MatmulDefaultProgramConfig& program_config,
            const MemoryConfig& out_mem_config,
            std::optional<DataType> output_dtype,
-           std::optional<DeviceComputeKernelConfig> compute_kernel_config
+           std::optional<DeviceComputeKernelConfig> compute_kernel_config,
+           const bool untilize_out
            ) {
-            return matmul(input_tensor_a, input_tensor_b, program_config, out_mem_config, output_dtype, compute_kernel_config);
+            return matmul(input_tensor_a, input_tensor_b, program_config, out_mem_config, output_dtype, compute_kernel_config, untilize_out);
         },
         py::arg("input_tensor_a").noconvert(),
         py::arg("input_tensor_b").noconvert(),
@@ -164,6 +166,7 @@ void py_module(py::module& m_primary) {
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("output_dtype").noconvert() = std::nullopt,
         py::arg("compute_kernel_config").noconvert() = std::nullopt,
+        py::arg("untilize_out").noconvert() = false,
         R"doc(
             Perform a matrix multiplication ``input_tensor_a x input_tensor_b``.
 
@@ -184,9 +187,10 @@ void py_module(py::module& m_primary) {
            const MatmulMultiCoreReuseProgramConfig& program_config,
            const MemoryConfig& out_mem_config,
            std::optional<DataType> output_dtype,
-           std::optional<DeviceComputeKernelConfig> compute_kernel_config
+           std::optional<DeviceComputeKernelConfig> compute_kernel_config,
+           const bool untilize_out
            ) {
-            return matmul(input_tensor_a, input_tensor_b, program_config, out_mem_config, output_dtype, compute_kernel_config);
+            return matmul(input_tensor_a, input_tensor_b, program_config, out_mem_config, output_dtype, compute_kernel_config, untilize_out);
         },
         py::arg("input_tensor_a").noconvert(),
         py::arg("input_tensor_b").noconvert(),
@@ -195,6 +199,7 @@ void py_module(py::module& m_primary) {
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("output_dtype").noconvert() = std::nullopt,
         py::arg("compute_kernel_config").noconvert() = std::nullopt,
+        py::arg("untilize_out").noconvert() = false,
         R"doc(
             Perform a matrix multiplication ``input_tensor_a x input_tensor_b``.
 
@@ -216,10 +221,11 @@ void py_module(py::module& m_primary) {
            const MatmulDefaultProgramConfig& program_config,
            const MemoryConfig& out_mem_config,
            std::optional<DataType> output_dtype,
-           std::optional<DeviceComputeKernelConfig> compute_kernel_config
+           std::optional<DeviceComputeKernelConfig> compute_kernel_config,
+           const bool untilize_out
            ) {
             return matmul(
-                input_tensor_a, input_tensor_b, bias, program_config, out_mem_config, output_dtype, compute_kernel_config);
+                input_tensor_a, input_tensor_b, bias, program_config, out_mem_config, output_dtype, compute_kernel_config, untilize_out);
         },
         py::arg("input_tensor_a").noconvert(),
         py::arg("input_tensor_b").noconvert(),
@@ -229,6 +235,7 @@ void py_module(py::module& m_primary) {
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("output_dtype").noconvert() = std::nullopt,
         py::arg("compute_kernel_config").noconvert() = std::nullopt,
+        py::arg("untilize_out").noconvert() = false,
         R"doc(
             Perform a matrix multiplication ``input_tensor_a x input_tensor_b``.
 
@@ -251,7 +258,9 @@ void py_module(py::module& m_primary) {
            const MatmulMultiCoreReuseProgramConfig& program_config,
            const MemoryConfig& out_mem_config,
            std::optional<DataType> output_dtype,
-           std::optional<DeviceComputeKernelConfig> compute_kernel_config) {
+           std::optional<DeviceComputeKernelConfig> compute_kernel_config,
+           const bool untilize_out
+           ) {
             return matmul(
                 input_tensor_a,
                 input_tensor_b,
@@ -259,7 +268,9 @@ void py_module(py::module& m_primary) {
                 program_config,
                 out_mem_config,
                 output_dtype,
-                compute_kernel_config);
+                compute_kernel_config,
+                untilize_out
+                );
         },
         py::arg("input_tensor_a").noconvert(),
         py::arg("input_tensor_b").noconvert(),
@@ -269,6 +280,7 @@ void py_module(py::module& m_primary) {
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("output_dtype").noconvert() = std::nullopt,
         py::arg("compute_kernel_config").noconvert() = std::nullopt,
+        py::arg("untilize_out").noconvert() = false,
         R"doc(
             Perform a matrix multiplication ``input_tensor_a x input_tensor_b``.
 
@@ -291,10 +303,11 @@ void py_module(py::module& m_primary) {
            const MatmulMultiCoreReuseMultiCastProgramConfig& program_config,
            const MemoryConfig& out_mem_config,
            std::optional<DataType> output_dtype,
-           std::optional<DeviceComputeKernelConfig> compute_kernel_config
+           std::optional<DeviceComputeKernelConfig> compute_kernel_config,
+           const bool untilize_out
            ) {
             return matmul(
-                input_tensor_a, input_tensor_b, bias, program_config, out_mem_config, output_dtype, compute_kernel_config);
+                input_tensor_a, input_tensor_b, bias, program_config, out_mem_config, output_dtype, compute_kernel_config, untilize_out);
         },
         py::arg("input_tensor_a").noconvert(),
         py::arg("input_tensor_b").noconvert(),
@@ -304,6 +317,7 @@ void py_module(py::module& m_primary) {
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("output_dtype").noconvert() = std::nullopt,
         py::arg("compute_kernel_config").noconvert() = std::nullopt,
+        py::arg("untilize_out").noconvert() = false,
         R"doc(
             Perform a matrix multiplication ``input_tensor_a x input_tensor_b``.
 
@@ -326,10 +340,11 @@ void py_module(py::module& m_primary) {
            const MatmulMultiCoreReuseMultiCast1DProgramConfig& program_config,
            const MemoryConfig& out_mem_config,
            std::optional<DataType> output_dtype,
-           std::optional<DeviceComputeKernelConfig> compute_kernel_config
+           std::optional<DeviceComputeKernelConfig> compute_kernel_config,
+           const bool untilize_out
            ) {
             return matmul(
-                input_tensor_a, input_tensor_b, bias, program_config, out_mem_config, output_dtype, compute_kernel_config);
+                input_tensor_a, input_tensor_b, bias, program_config, out_mem_config, output_dtype, compute_kernel_config, untilize_out);
         },
         py::arg("input_tensor_a").noconvert(),
         py::arg("input_tensor_b").noconvert(),
@@ -339,6 +354,7 @@ void py_module(py::module& m_primary) {
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("output_dtype").noconvert() = std::nullopt,
         py::arg("compute_kernel_config").noconvert() = std::nullopt,
+        py::arg("untilize_out").noconvert() = false,
         R"doc(
             Perform a matrix multiplication ``input_tensor_a x input_tensor_b``.
 
@@ -781,16 +797,10 @@ void py_module(py::module& m_primary) {
         py::arg("end"),
         py::arg("step"),
         py::arg("any").noconvert(),
+        py::arg("output_tensor").noconvert() = std::nullopt,
+        py::arg("untilize_out").noconvert() = false,
+        py::arg("output_dtype").noconvert() = std::nullopt,
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
-        "Performs an arange operation. Returns an output tensor.");
-
-    m_primary.def(
-        "moreh_arange_inplace",
-        &moreh_arange_inplace,
-        py::arg("input_tensor").noconvert(),
-        py::arg("start"),
-        py::arg("end"),
-        py::arg("step"),
         "Performs an arange operation. Returns an output tensor.");
 
     m_primary.def(
@@ -844,6 +854,7 @@ void py_module(py::module& m_primary) {
         py::arg("gamma").noconvert() = std::nullopt,
         py::arg("beta").noconvert() = std::nullopt,
         py::kw_only(),
+        py::arg("are_needed_outputs").noconvert() = std::vector<bool>{true, false, false},
         py::arg("output").noconvert() = std::nullopt,
         py::arg("mean").noconvert() = std::nullopt,
         py::arg("rstd").noconvert() = std::nullopt,
@@ -851,7 +862,7 @@ void py_module(py::module& m_primary) {
         py::arg("mean_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("rstd_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         R"doc(
-        "Performs a moreh_groupnorm operation.
+        Performs a moreh_groupnorm operation.
     )doc");
 
     // moreh_groupnorm_backward
@@ -864,6 +875,7 @@ void py_module(py::module& m_primary) {
         py::arg("rstd").noconvert(),
         py::arg("num_groups").noconvert(),
         py::kw_only(),
+        py::arg("are_needed_outputs").noconvert() = std::vector<bool>{true, true, true},
         py::arg("gamma").noconvert() = std::nullopt,
         py::arg("input_grad").noconvert() = std::nullopt,
         py::arg("gamma_grad").noconvert() = std::nullopt,
@@ -872,7 +884,7 @@ void py_module(py::module& m_primary) {
         py::arg("gamma_grad_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         py::arg("beta_grad_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         R"doc(
-        "Performs a moreh_groupnorm_backward operation.
+        Performs a moreh_groupnorm_backward operation.
     )doc");
 
     m_primary.def(
@@ -890,6 +902,16 @@ void py_module(py::module& m_primary) {
         py::arg("output_grad").noconvert(),
         py::arg("input_grad").noconvert(),
         "Performs mean backward operation. Returns an input_grad tensor.");
+
+    m_primary.def(
+        "moreh_getitem",
+        &moreh_getitem,
+        py::arg("input_tensor").noconvert(),
+        py::arg("index_tensors").noconvert(),
+        py::arg("index_dims").noconvert(),
+        py::arg("output_tensor").noconvert() = std::nullopt,
+        py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        "Performs a getitem operation. Returns an output tensor.");
 }
 
 }  // namespace
