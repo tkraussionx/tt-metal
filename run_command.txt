@@ -39,3 +39,12 @@ pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testin
 // Falcon attention slice
 pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k "falcon7b_attnention_slice_matmuls and seq_len_1024 and four_slices"
 ./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k \"falcon7b_attnention_slice_matmuls and seq_len_1024 and four_slices\""
+
+// Matmul 1d padded
+pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k "height_sharded_matmul_1d_padding"
+
+All tests
+pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k "falcon7b_attnention_slice_matmuls and seq_len_1024 and four_slices"
+pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k "block_sharded_binary"
+pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k "sharded_partial_spill_reload"
+pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k "my_sharded_binary"

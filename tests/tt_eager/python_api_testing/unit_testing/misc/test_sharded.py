@@ -459,7 +459,7 @@ def test_sharded_partial_spill_reload(
     mid_index = in0_shape[2] // 2  # H dimension
     in0[:, :, mid_index:] = 2
 
-    torch.set_printoptions(profile="full", sci_mode=False, linewidth=220)
+    # torch.set_printoptions(profile="full", sci_mode=False, linewidth=220)
 
     in0_t = torch2tt_tensor(in0, device, tt_memory_config=interleaved_mem_config, tt_dtype=activations_dtype)
     out_tt_tensor = torch2tt_tensor(
@@ -837,14 +837,14 @@ def test_falcon7b_attnention_slice_matmuls(
             )
 
             # Perform broadcast
-            print("Running bcast")
-            mm_slice = ttl.tensor.bcast(
-                mm_slice,
-                reference_scalar,
-                ttl.tensor.BcastOpMath.MUL,
-                ttl.tensor.BcastOpDim.HW,
-                output_mem_config=height_sharded_memory_config,
-            )
+            # print("Running bcast")
+            # mm_slice = ttl.tensor.bcast(
+            #     mm_slice,
+            #     reference_scalar,
+            #     ttl.tensor.BcastOpMath.MUL,
+            #     ttl.tensor.BcastOpDim.HW,
+            #     output_mem_config=height_sharded_memory_config,
+            # )
 
             # Slice attention mask
             # [1, 1, 71, 1024, 1024]
@@ -899,13 +899,13 @@ def test_falcon7b_attnention_slice_matmuls(
             reference_query_layer, reference_key_layer_transposed, output_mem_config=dram_interleaved_memory_config
         )
 
-        attn_weights = ttl.tensor.bcast(
-            attn_weights,
-            reference_scalar,
-            ttl.tensor.BcastOpMath.MUL,
-            ttl.tensor.BcastOpDim.HW,
-            output_mem_config=dram_interleaved_memory_config,
-        )
+        # attn_weights = ttl.tensor.bcast(
+        #     attn_weights,
+        #     reference_scalar,
+        #     ttl.tensor.BcastOpMath.MUL,
+        #     ttl.tensor.BcastOpDim.HW,
+        #     output_mem_config=dram_interleaved_memory_config,
+        # )
 
         attn_weights = ttl.tensor.add(attn_weights, attention_mask, output_mem_config=dram_interleaved_memory_config)
         attn_weights = ttl.operations.primary.softmax_in_place(attn_weights)
