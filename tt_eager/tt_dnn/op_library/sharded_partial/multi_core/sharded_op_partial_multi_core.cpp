@@ -43,11 +43,10 @@ operation::ProgramWithCallbacks interleaved_to_sharded_partial_multi_core(const 
         num_units_per_shard_width = shard_spec.shape[1] / TILE_WIDTH;
         num_units_per_shard = num_units_per_shard_height * num_units_per_shard_width;
 
-        // Do we need this ?
         num_units_per_row = input.get_legacy_shape()[-1] / TILE_WIDTH;
         num_units_offset = num_units_per_row;
 
-        uint32_t num_units_height = input.volume() / input.get_legacy_shape()[-1] / TILE_HEIGHT;
+        uint32_t num_units_height = input.volume() /input.get_legacy_shape()[-1] / TILE_HEIGHT / num_slices;
         num_units_per_shard_height_last =
             num_units_per_shard_height - (round_up(num_units_height, num_units_per_shard_height) - num_units_height);
         num_units_per_shard_width_last =
@@ -249,8 +248,8 @@ operation::ProgramWithCallbacks sharded_to_interleaved_partial_multi_core(const 
         num_units_per_shard = num_units_per_shard_height * num_units_per_shard_width;
         num_units_per_row = output.get_legacy_shape()[-1] / TILE_WIDTH;
         num_units_offset = num_units_per_row;
-        // Might need a fix here :)
-        uint32_t num_units_height = output.volume() / output.get_legacy_shape()[-1] / TILE_HEIGHT;
+
+        uint32_t num_units_height = output.volume() / output.get_legacy_shape()[-1] / TILE_HEIGHT / num_slices;
         num_units_per_shard_height_last =
             num_units_per_shard_height - (round_up(num_units_height, num_units_per_shard_height) - num_units_height);
         num_units_per_shard_width_last =

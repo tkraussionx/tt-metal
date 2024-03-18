@@ -52,20 +52,12 @@ std::vector<Shape> ShardedPartial::compute_output_shapes(const std::vector<Tenso
     // For I->S, output shapes will be different because of slicing (and need to be divided)
     if (this->sharded_op_type == ShardedOpPartialType::InterleavedToShardedPartial) {
         if (this->split_dim == ShardedOpSplitDim::DimRow) {
-            log_info("Starting tile shape is: [{}, {}, {}, {}]", shape[0], shape[1], shape[2], shape[3]);
             uint32_t total_height = input_tensor.volume() / shape[-1];
             uint32_t new_height = total_height / this->num_slices;
 
-            uint32_t new_height_in_tiles = new_height / TILE_HEIGHT; // 1136
-            uint32_t shard_height_in_tiles = this->shard_spec.shape[0] / TILE_HEIGHT; // 18
-            uint32_t new_height_padded_in_tiles = div_up(new_height_in_tiles, shard_height_in_tiles) * shard_height_in_tiles;
-            // We need to make sure that new_height % shard_spec.height == 0
-            // new_height = div_up(new_height, shard_spec.shape[0]);
-
             shape[0] = 1;
             shape[1] = 1;
-            shape[2] = new_height_padded_in_tiles * TILE_HEIGHT;
-            log_info("New height is: {}, shape[2] is {} ", shape[2], new_height_padded_in_tiles);
+            shape[2] = new_height;
         }
     }
 

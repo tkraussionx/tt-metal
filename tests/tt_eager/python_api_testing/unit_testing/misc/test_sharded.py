@@ -599,115 +599,6 @@ def test_block_sharded_partial_spill_reload(
 
 
 @pytest.mark.parametrize("seq_len", [1024, 2048], ids=["seq_len_1024", "seq_len_2048"])
-# @pytest.mark.parametrize("slice", [False, True], ids=["one_slice", "two_slices"])
-@pytest.mark.parametrize("num_cores", [64])
-def test_falcon7b_attnention_reference_matmuls(
-    device,
-    seq_len,
-    num_cores,
-    function_level_defaults,
-):
-    # query layer
-    query_layer_shape = [1, 71, seq_len, 64]
-    key_layer_transposed_shape = [1, 1, 64, seq_len]
-    scalar_shape = [1, 1, 32, 32]
-    attention_mask_shape = [1, 71, seq_len, seq_len]
-
-    torch_query_layer = torch.randn(query_layer_shape).bfloat16().float()
-    torch_key_layer_transposed = torch.randn(key_layer_transposed_shape).bfloat16().float()
-    torch_scalar = torch.randn(scalar_shape).bfloat16().float()
-    torch_attention_mask = torch.randn(attention_mask_shape).bfloat16().float()
-
-    dram_interleaved_memory_config = ttl.tensor.MemoryConfig(
-        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
-        buffer_type=ttl.tensor.BufferType.DRAM,
-    )
-
-    # compare output to regular case
-    reference_query_layer = torch2tt_tensor(
-        torch_query_layer,
-        device,
-        tt_memory_config=dram_interleaved_memory_config,
-        tt_dtype=ttl.tensor.DataType.BFLOAT16,
-    )
-    reference_key_layer_transposed = torch2tt_tensor(
-        torch_key_layer_transposed,
-        device,
-        tt_memory_config=dram_interleaved_memory_config,
-        tt_dtype=ttl.tensor.DataType.BFLOAT16,
-    )
-
-    # matmul
-    # optimised version
-    if seq_len == 1024:
-        compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
-            math_fidelity=ttl.tensor.MathFidelity.HiFi4,
-            math_approx_mode=True,
-            fp32_dest_acc_en=False,
-            packer_l1_acc=True,
-        )
-
-        # program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-        #     compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-        #     in0_block_w=1,
-        #     per_core_M=36,
-        #     per_core_N=32,
-        #     out_subblock_h=1,
-        #     out_subblock_w=1,
-        #     fuse_batch = True,
-        #     fused_activation=None,
-        #     mcast_in0 = False
-        # )
-        # attn_weights = ttl.operations.primary.matmul(
-        #     reference_query_layer,
-        #     reference_key_layer_transposed,
-        #     program_config=program_config,
-        #     output_mem_config=dram_interleaved_memory_config,
-        #     output_dtype=ttl.tensor.DataType.BFLOAT16,
-        #     compute_kernel_config=compute_kernel_config,
-        # )
-        attn_weights = ttl.tensor.matmul(
-            reference_query_layer, reference_key_layer_transposed, output_mem_config=dram_interleaved_memory_config
-        )
-    else:
-        attn_weights = ttl.tensor.matmul(
-            reference_query_layer, reference_key_layer_transposed, output_mem_config=dram_interleaved_memory_config
-        )
-
-    # broadcast
-    reference_scalar = torch2tt_tensor(
-        torch_scalar, device, tt_memory_config=dram_interleaved_memory_config, tt_dtype=ttl.tensor.DataType.BFLOAT16
-    )
-
-    attn_weights = ttl.tensor.bcast(
-        attn_weights,
-        reference_scalar,
-        ttl.tensor.BcastOpMath.MUL,
-        ttl.tensor.BcastOpDim.HW,
-        output_mem_config=dram_interleaved_memory_config,
-    )
-
-    attention_mask = torch2tt_tensor(
-        torch_attention_mask,
-        device,
-        tt_memory_config=dram_interleaved_memory_config,
-        tt_dtype=ttl.tensor.DataType.BFLOAT16,
-    )
-
-    attn_weights = ttl.tensor.add(
-        attn_weights,
-        attention_mask,
-        output_mem_config=dram_interleaved_memory_config,
-    )
-
-    # softmax
-    attn_weights = ttl.operations.primary.softmax_in_place(attn_weights)
-
-    passing = True
-    assert passing
-
-
-@pytest.mark.parametrize("seq_len", [1024, 2048], ids=["seq_len_1024", "seq_len_2048"])
 @pytest.mark.parametrize("num_slices", [1, 2, 4], ids=["one_slice", "two_slices", "four_slices"])
 @pytest.mark.parametrize("num_cores", [64])
 def test_falcon7b_attnention_slice_matmuls(
@@ -755,18 +646,6 @@ def test_falcon7b_attnention_slice_matmuls(
     reference_scalar = torch2tt_tensor(
         torch_scalar, device, tt_memory_config=dram_interleaved_memory_config, tt_dtype=ttl.tensor.DataType.BFLOAT16
     )
-
-    # attention_mask_slices = []
-    # slice_width = seq_len // num_slices
-    # for i in range(num_slices):
-    #     attention_mask_slices.append(
-    #         torch2tt_tensor(
-    #             torch_attention_mask[:, :, (i) * slice_width : (i + 1) * slice_width, :],
-    #             device,
-    #             tt_memory_config=dram_interleaved_memory_config,
-    #             tt_dtype=ttl.tensor.DataType.BFLOAT16,
-    #         )
-    #     )
 
     attention_mask = torch2tt_tensor(
         torch_attention_mask,
