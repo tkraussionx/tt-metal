@@ -106,7 +106,7 @@ class TtMambaSSM(torch.nn.Module):
                 dtype=ttnn.bfloat16,
             )
         # B
-        if self.hidden_size == self.args.d_inner and self.n == self.args.d_state:
+        if self.hidden_size == self.args.d_inner:
             print('***********using B weight')
             B_proj_weights = torch.transpose(self.state_dict[x_proj_weight_name][self.args.dt_rank : (self.args.dt_rank + self.args.d_state), :], -1, -2)
             # pad
@@ -144,11 +144,11 @@ class TtMambaSSM(torch.nn.Module):
         )
 
         # A
-        if self.hidden_size == self.args.d_inner and self.n == self.args.d_state:
+        if self.hidden_size == self.args.d_inner:
             print('***********using A weight')
             A_weight_name = "mixer.A_log"
             def preprocess_A(x):
-                x = -torch.exp(x.float()).reshape(1, self.hidden_size*self.n)  # (1, 2en)
+                x = -torch.exp(x.float()).reshape(1, self.hidden_size*self.args.d_state)  # (1, 2en)
                 return x.repeat(self.num_users, 1) # b, 2en
 
             A = preprocess_A(self.state_dict[A_weight_name])
@@ -168,7 +168,7 @@ class TtMambaSSM(torch.nn.Module):
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
 
         # C
-        if self.hidden_size == self.args.d_inner and self.n == self.args.d_state:
+        if self.hidden_size == self.args.d_inner:
             print('***********using C weight')
             x_proj_weight_name = "mixer.x_proj.weight"
             C_proj_weights = torch.transpose(self.state_dict[x_proj_weight_name][(self.args.dt_rank + self.args.d_state) :, :], -1, -2)
