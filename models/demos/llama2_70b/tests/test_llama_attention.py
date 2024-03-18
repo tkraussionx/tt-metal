@@ -2,16 +2,16 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
 import pytest
 from loguru import logger
 from pathlib import Path
-
+import torch
+from torch import nn
 import tt_lib
+import ttnn
 
 from models.demos.llama2_70b.reference.llama.llama import Llama
 from models.demos.llama2_70b.reference.llama.llama.model import precompute_freqs_cis
-
 from models.demos.llama2_70b.tt.model_config import (
     get_model_config,
 )
@@ -138,7 +138,7 @@ def run_test_LlamaAttention_inference(
             tt_lib.device.Synchronize(device)
 
     generation_start_pos = 120
-    generation_length = 1
+    generation_length = 10
     all_tests_pass = True
     for i in range(generation_length):
         # Prepare input
@@ -247,7 +247,7 @@ def test_LlamaAttention_inference(
     all_devices,
     emulated,
 ):
-    devices = get_devices_for_t3000(all_devices, n_devices)
+    devices = get_devices_for_t3000(all_devices, num_devices=n_devices if not emulated else 1)
     model_config = get_model_config(model_config_str, num_devices=n_devices)
     compute_grid_size = devices[0].compute_with_storage_grid_size()
     if len(devices) < n_devices and not emulated:

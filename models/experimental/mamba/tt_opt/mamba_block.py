@@ -32,56 +32,56 @@ class TtMambaBlock(torch.nn.Module):
         self.num_users = num_users
         self.hidden_size = hidden_size
         self.configs = configs
-        
+
         # ssm wt
         if self.args.d_model == self.hidden_size:
             print('**********using ssm proj wts')
             in_proj_weight_name = "mixer.in_proj.weight"
             ssm_proj = torch.transpose(self.state_dict[in_proj_weight_name][: self.args.d_inner, :], -1, -2)
-            self.ssm_proj = ttnn.from_torch(ssm_proj, layout=ttnn.TILE_LAYOUT, device=self.device, 
+            self.ssm_proj = ttnn.from_torch(ssm_proj, layout=ttnn.TILE_LAYOUT, device=self.device,
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
         else:
-            self.ssm_proj = ttnn.from_torch(torch.rand(1,1,self.hidden_size,2*self.hidden_size), layout=ttnn.TILE_LAYOUT, device=self.device, 
+            self.ssm_proj = ttnn.from_torch(torch.rand(1,1,self.hidden_size,2*self.hidden_size), layout=ttnn.TILE_LAYOUT, device=self.device,
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
-        
+
         # mlp wt
         if self.args.d_model == self.hidden_size:
             print('**********using mlp proj wts')
             mlp_proj_weight_name = "mixer.in_proj.weight"
             mlp_proj = torch.transpose(self.state_dict[mlp_proj_weight_name][self.args.d_inner :, :], -1, -2)
-            self.mlp_proj = ttnn.from_torch(mlp_proj, layout=ttnn.TILE_LAYOUT, device=self.device, 
+            self.mlp_proj = ttnn.from_torch(mlp_proj, layout=ttnn.TILE_LAYOUT, device=self.device,
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
         else:
-            self.mlp_proj = ttnn.from_torch(torch.rand(1,1,self.hidden_size,2*self.hidden_size), layout=ttnn.TILE_LAYOUT, device=self.device, 
+            self.mlp_proj = ttnn.from_torch(torch.rand(1,1,self.hidden_size,2*self.hidden_size), layout=ttnn.TILE_LAYOUT, device=self.device,
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
-        
+
         # down proj wt
         if self.args.d_model == self.hidden_size:
             print('**********using down proj wts')
             down_proj_weight_name = "mixer.out_proj.weight"
             down_proj = torch.transpose(self.state_dict[down_proj_weight_name], -1, -2)
-            self.down_proj = ttnn.from_torch(down_proj, layout=ttnn.TILE_LAYOUT, device=self.device, 
+            self.down_proj = ttnn.from_torch(down_proj, layout=ttnn.TILE_LAYOUT, device=self.device,
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
         else:
-            self.down_proj = ttnn.from_torch(torch.rand(1,1,self.hidden_size*2,self.hidden_size), layout=ttnn.TILE_LAYOUT, device=self.device, 
+            self.down_proj = ttnn.from_torch(torch.rand(1,1,self.hidden_size*2,self.hidden_size), layout=ttnn.TILE_LAYOUT, device=self.device,
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
-        
+
         # conv states
         self.conv_states = []
         for i in range(4):
-            self.conv_states.append(ttnn.zeros((1,1,self.num_users,self.hidden_size*2), layout=ttnn.TILE_LAYOUT, device=self.device, 
+            self.conv_states.append(ttnn.zeros((1,1,self.num_users,self.hidden_size*2), layout=ttnn.TILE_LAYOUT, device=self.device,
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16))
-        self.conv_wts = [] 
+        self.conv_wts = []
         conv1d_weight_name = "mixer.conv1d.weight"
         for i in range(4):
             if self.args.d_model == self.hidden_size:
                 print('**********using conv wts')
                 conv_wts = torch.transpose(self.state_dict[conv1d_weight_name][:, :, i], -1, -2).unsqueeze(0).unsqueeze(0)
                 print('**********conv wts', conv_wts.shape)
-                self.conv_wts.append(ttnn.from_torch(conv_wts, layout=ttnn.TILE_LAYOUT, device=self.device, 
+                self.conv_wts.append(ttnn.from_torch(conv_wts, layout=ttnn.TILE_LAYOUT, device=self.device,
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16))
             else:
-                self.conv_wts.append(ttnn.from_torch(torch.rand(1,1,1,self.hidden_size*2,), layout=ttnn.TILE_LAYOUT, device=self.device, 
+                self.conv_wts.append(ttnn.from_torch(torch.rand(1,1,1,self.hidden_size*2,), layout=ttnn.TILE_LAYOUT, device=self.device,
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16))
         # conv bias
         if self.args.d_model == self.hidden_size:
@@ -89,7 +89,7 @@ class TtMambaBlock(torch.nn.Module):
             conv1d_bias_name = "mixer.conv1d.bias"
             conv_bias = self.state_dict[conv1d_bias_name].unsqueeze(0).unsqueeze(0).unsqueeze(0)
             print('**********conv bias', conv_bias.shape)
-            self.conv_bias = ttnn.from_torch(conv_bias, layout=ttnn.TILE_LAYOUT, device=self.device, 
+            self.conv_bias = ttnn.from_torch(conv_bias, layout=ttnn.TILE_LAYOUT, device=self.device,
                                  memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
         else:
             self.conv_bias = ttnn.from_torch(torch.rand(1,1,1,self.hidden_size*2), layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
@@ -100,16 +100,16 @@ class TtMambaBlock(torch.nn.Module):
     def forward(self, x):
         x_input = x # b, e=d_model
         x = ttnn.linear(x, self.ssm_proj, memory_config=ttnn.L1_MEMORY_CONFIG)
-     
+
         # left shift conv states
         ttnn.deallocate(self.conv_states[0])
         for i in range(3):
             self.conv_states[i] = self.conv_states[i + 1]
         self.conv_states[3] = x
-        
+
         # do the convolution
         conv_wts = ttnn.repeat_interleave(self.conv_wts[0], self.num_users, dim=2)
-        x = ttnn.mul(conv_wts, self.conv_states[0])        
+        x = ttnn.mul(conv_wts, self.conv_states[0])
         for i in range(1,4):
             print('**********', self.conv_wts[i].shape, self.conv_states[i].shape)
             conv_wts = ttnn.repeat_interleave(self.conv_wts[i], self.num_users, dim=2)
@@ -117,14 +117,14 @@ class TtMambaBlock(torch.nn.Module):
             x = ttnn.add(x, prod)
         conv_bias = ttnn.repeat_interleave(self.conv_bias, self.num_users, dim=2)
         x = ttnn.add(x, conv_bias)
-        
+
         x = ttnn.silu(x)
         print('**********', x.shape)
         x = self.tt_ssm(x)
         res = ttnn.linear(x_input, self.mlp_proj, memory_config=ttnn.L1_MEMORY_CONFIG)
         x = ttnn.mul(x, res)
         ttnn.deallocate(res)
-        
+
         x = ttnn.linear(x, self.down_proj, memory_config=ttnn.L1_MEMORY_CONFIG)
 
         return x

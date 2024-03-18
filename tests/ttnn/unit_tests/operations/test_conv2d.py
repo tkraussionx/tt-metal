@@ -316,8 +316,8 @@ def run_conv_with_split(
 )
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
 def test_resnet50_conv_gs(
-    use_program_cache,
     device,
+    use_program_cache,
     math_fidelity,
     activations_dtype,
     weights_dtype,
@@ -420,8 +420,8 @@ def test_resnet50_conv_gs(
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
 @pytest.mark.parametrize("packer_l1_acc", [True, False], ids=["pack_l1", "no_pack_l1"])
 def test_resnet50_conv_wh(
-    use_program_cache,
     device,
+    use_program_cache,
     math_fidelity,
     activations_dtype,
     weights_dtype,
@@ -538,8 +538,8 @@ def test_resnet50_conv_wh(
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.HiFi4])
 @pytest.mark.parametrize("packer_l1_acc", [True, False], ids=["pack_l1", "no_pack_l1"])
 def test_resnet50_conv_wh_fp32(
-    use_program_cache,
     device,
+    use_program_cache,
     math_fidelity,
     fp32_accum,
     activations_dtype,
@@ -600,6 +600,7 @@ def test_resnet50_conv_wh_fp32(
     )
 
 
+@skip_for_wormhole_b0()
 @pytest.mark.parametrize(
     "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override",
     (
@@ -663,8 +664,8 @@ def test_resnet50_conv_wh_fp32(
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
 @pytest.mark.parametrize("enable_auto_formatting", [True, False])
 def test_sd_conv(
-    use_program_cache,
     device,
+    use_program_cache,
     math_fidelity,
     activations_dtype,
     weights_dtype,
@@ -802,8 +803,8 @@ def test_sd_conv(
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
 @pytest.mark.parametrize("enable_auto_formatting", [True, False])
 def test_sd_conv_wh(
-    use_program_cache,
     device,
+    use_program_cache,
     math_fidelity,
     activations_dtype,
     weights_dtype,
@@ -872,6 +873,7 @@ def test_sd_conv_wh(
         )
 
 
+@skip_for_wormhole_b0()
 @pytest.mark.parametrize(
     "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override, use_shallow_conv_variant",
     (
@@ -922,6 +924,106 @@ def test_sd_conv_wh(
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
 @pytest.mark.parametrize("output_layout", [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
 def test_unet_conv(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+    config_override,
+    use_shallow_conv_variant,
+    output_layout,
+):
+    if output_layout == ttnn.ROW_MAJOR_LAYOUT and activations_dtype == ttnn.bfloat8_b:
+        pytest.skip("Row major layout not compatible with bfloat8_b")
+    if output_layout == ttnn.ROW_MAJOR_LAYOUT and input_height >= 1056:
+        pytest.skip("OOM")
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override,
+        use_shallow_conv_variant=use_shallow_conv_variant,
+        padded_input_channels=16 if input_channels == 3 else None,
+        output_layout=output_layout,
+    )
+
+
+@skip_for_grayskull()
+@pytest.mark.parametrize(
+    "batch_size, output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override, use_shallow_conv_variant",
+    (
+        # unet convs with batch size 2
+        # unique convs in unet (complete list)
+        (2, 16, 3, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
+        (2, 16, 16, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
+        (2, 16, 16, 528, 80, 3, 3, 1, 1, 1, 1, True, None, False),
+        (2, 32, 16, 264, 40, 3, 3, 1, 1, 1, 1, True, None, False),
+        (2, 32, 32, 264, 40, 3, 3, 1, 1, 1, 1, True, None, False),
+        (2, 32, 32, 132, 20, 3, 3, 1, 1, 1, 1, True, None, False),
+        (2, 64, 32, 66, 10, 3, 3, 1, 1, 1, 1, True, None, False),
+        (2, 64, 64, 66, 10, 3, 3, 1, 1, 1, 1, True, None, False),
+        (2, 32, 96, 132, 20, 3, 3, 1, 1, 1, 1, True, None, False),
+        (2, 32, 32, 132, 20, 3, 3, 1, 1, 1, 1, True, None, False),
+        (2, 32, 64, 264, 40, 3, 3, 1, 1, 1, 1, True, None, False),
+        (2, 32, 32, 264, 40, 3, 3, 1, 1, 1, 1, True, None, False),
+        (
+            2,
+            16,
+            48,
+            528,
+            80,
+            3,
+            3,
+            1,
+            1,
+            1,
+            1,
+            True,
+            {"act_block_h": 32},
+            False,
+        ),  # fails. mismatch. It passes when input_channels=64. Probably an issue with padding when input_channels % 32 != 0.
+        (2, 16, 16, 528, 80, 3, 3, 1, 1, 1, 1, True, None, False),
+        (2, 16, 32, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
+        (2, 16, 16, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
+        (2, 1, 16, 1056, 160, 3, 3, 1, 1, 1, 1, True, {"act_block_h": 5 * 32}, False),
+    ),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat8_b, ttnn.bfloat16],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat8_b, ttnn.bfloat16],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("output_layout", [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
+def test_unet_conv_wh(
     use_program_cache,
     device,
     math_fidelity,
@@ -966,6 +1068,6 @@ def test_unet_conv(
         use_1d_systolic_array,
         config_override,
         use_shallow_conv_variant=use_shallow_conv_variant,
-        padded_input_channels=16 if input_channels == 3 else None,
+        padded_input_channels=None,
         output_layout=output_layout,
     )

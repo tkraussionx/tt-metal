@@ -28,7 +28,7 @@ class TtResidualBlock(torch.nn.Module):
         self.state_dict = state_dict
         self.device = device
         self.args = args
-        
+
         rms_norm_weight_name = "norm.weight"
         self.rms_norm_weights = load_fn(rms_norm_weight_name)
 
@@ -40,4 +40,3 @@ class TtResidualBlock(torch.nn.Module):
         mamba_input = self.tt_mamba_block(mamba_input)
         x = ttnn.add(x, mamba_input)
         return x
-

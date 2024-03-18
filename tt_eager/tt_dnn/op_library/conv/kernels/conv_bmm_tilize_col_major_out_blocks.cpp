@@ -56,8 +56,6 @@ inline void reblock_and_untilize(
 
     uint32_t num_tiles_in_row_of_subblocks = mulsi3(out_subblock_num_tiles, num_out_subblocks_in_col);
     cb_wait_front(interm_cb_id, num_tiles_in_row_of_subblocks);
-    constexpr uint32_t num_faces_in_tile = 4;
-    constexpr uint32_t tile_face_r_dim = 16;
 
     uint32_t within_block_index = 0;
     for (uint32_t h = 0; h < out_subblock_h; h++) {
@@ -72,7 +70,7 @@ inline void reblock_and_untilize(
             }
             tile_regs_commit();
             tile_regs_wait();
-            pack_untilize_dst<out_subblock_w, out_block_w>(out_cb_id, tile_face_r_dim, num_faces_in_tile, n);
+            pack_untilize_dst<out_subblock_w, out_block_w>(out_cb_id, 1, n);
             tile_regs_release();
             block_offset += out_subblock_num_tiles;
         }
@@ -376,7 +374,7 @@ void MAIN {
                         matmul_partials_cb,
                         out_cb_id);
                 }
-                pack_untilize_uninit(in1_cb_id);
+                pack_untilize_uninit(matmul_partials_cb);
             }
             if constexpr((in1_num_blocks_w > 1 || in0_num_blocks_h > 1)) {
                 #ifdef FUSE_BIAS

@@ -3,19 +3,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import gc
-import torch
 import pytest
 from loguru import logger
-
 from pathlib import Path
-import scipy
-from sklearn.metrics import top_k_accuracy_score
-import numpy as np
-
+import torch
+from torch import nn
 import tt_lib
+import ttnn
 
 from models.demos.llama2_70b.reference.llama.llama import Llama
-
 from models.demos.llama2_70b.tt.model_config import (
     get_model_config,
 )
@@ -23,8 +19,7 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_allclose,
     comp_pcc,
 )
-from models.utility_functions import torch2tt_tensor, tt2torch_tensor
-from models.demos.llama2_70b.tt.llama_model import TtLlamaModel
+from models.utility_functions import torch2tt_tensor, tt2torch_tensor, get_devices_for_t3000
 from models.demos.llama2_70b.tt.llama_model_optimized import TtLlamaModel_optimized
 
 
@@ -133,18 +128,19 @@ def test_cache_model(
     model_config_str,
     n_layers,
     n_devices,
-    pcie_devices,
+    all_devices,
     emulated,
 ):
+    devices = get_devices_for_t3000(all_devices, num_devices=n_devices if not emulated else 1)
     model_config = get_model_config(model_config_str, num_devices=n_devices)
-    compute_grid_size = pcie_devices[0].compute_with_storage_grid_size()
-    if len(pcie_devices) < n_devices and not emulated:
+    compute_grid_size = devices[0].compute_with_storage_grid_size()
+    if len(devices) < n_devices and not emulated:
         pytest.skip(f"Requires at {n_devices} devices to run")
     if compute_grid_size.x < model_config["MAX_GRID_SIZE"][0] or compute_grid_size.y < model_config["MAX_GRID_SIZE"][1]:
         pytest.skip(f"Requires grid size of at least {model_config['MAX_GRID_SIZE']} to run")
 
     run_cache_model(
-        pcie_devices[:n_devices],
+        devices,
         batch,
         seq_len,
         model_config,
