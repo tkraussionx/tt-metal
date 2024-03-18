@@ -34,7 +34,7 @@ def get_tt_metal_model(num_users, hidden_size, configs, version):
     return model, device
 
 
-def run_demo(num_users, hidden_size):
+def run_demo(num_users, hidden_size, profile):
     configs = model_config.create_model_config(num_users, hidden_size)
     model, device = get_tt_metal_model(num_users, hidden_size, configs, 'mamba-2.8b-slimpj')
 
@@ -46,17 +46,22 @@ def run_demo(num_users, hidden_size):
 
         input_data = torch.randn((1, 1, num_users, hidden_size), dtype=torch.bfloat16)
 
+        if profile == 1:
+            out_data = model(input_data)
         out_data = model(input_data)
 
     ttnn.close_device(device)
+    
+    return out_data
 
 
 def main():
     num_users = int(sys.argv[1])
     hidden_size = int(sys.argv[2])
+    profile = int(sys.argv[3])
     assert num_users == 32
     assert (hidden_size // 8) % 32 == 0
-    run_demo(num_users, hidden_size)
+    return run_demo(num_users, hidden_size, profile)
 
 
 if __name__ == "__main__":
