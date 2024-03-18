@@ -120,28 +120,30 @@ class TtMoeLayer(nn.Module):
             # convert batch_ids to list of indices
             batch_ids_1b_torch = batch_ids_B_torch.view(-1).nonzero().view(1, -1).to(torch.int)
             print("NON ZERO BATCHES", batch_ids_1b_torch)
-            batch_ids_1b = ttnn.from_torch(
-                batch_ids_1b_torch, dtype=ttnn.uint32, device=self.devices[i], layout=ttnn.TILE_LAYOUT
-            )
-            batch_ids_1b = ttnn.to_torch(batch_ids_1b)
-            batch_ids_1b = ttnn.from_torch(
-                batch_ids_1b, dtype=ttnn.uint32, device=self.devices[i], layout=ttnn.ROW_MAJOR_LAYOUT
-            )
-            print("tt batches", batch_ids_1b)
-            b = batch_ids_1b.shape[1]
+            b = batch_ids_1b_torch.shape[1]
 
             # in case, no batch selected this head
             if b == 0:
                 print("no batch selected this head")
-                output_i_B1SD = ttnn.zeros(
+                Output_i_B1SD = ttnn.zeros(
                     input_shape=ttnn.Shape([32, 1, 1, 4096]),
                     device=self.devices[i],
                     dtype=ttnn.bfloat16,
                     layout=ttnn.ROW_MAJOR_LAYOUT,
                     memory_config=ttnn.L1_MEMORY_CONFIG,
                 )
+                for n, l in enumerate([weights_1SBK, selected_experts_1SBK, batch_ids_1SB1, gate_logits_1SB8]):
+                    ttnn.deallocate(l)
 
             else:
+                batch_ids_1b = ttnn.from_torch(
+                    batch_ids_1b_torch, dtype=ttnn.uint32, device=self.devices[i], layout=ttnn.TILE_LAYOUT
+                )
+                batch_ids_1b = ttnn.to_torch(batch_ids_1b)
+                batch_ids_1b = ttnn.from_torch(
+                    batch_ids_1b, dtype=ttnn.uint32, device=self.devices[i], layout=ttnn.ROW_MAJOR_LAYOUT
+                )
+                print("tt batches", batch_ids_1b)
                 # slice input
                 input_i_1SBH = ttnn.to_layout(input_i_1SBH, layout=ttnn.ROW_MAJOR_LAYOUT)
                 input_i_1bH = ttnn.embedding(batch_ids_1b, input_i_1SBH)
@@ -188,10 +190,29 @@ class TtMoeLayer(nn.Module):
                     memory_config=ttnn.L1_MEMORY_CONFIG,
                 )
                 batch_ids_1b = ttnn.reshape(batch_ids_1b, ttnn.Shape([1, 1, 1, b]))
-                output_i_B1SD = ttnn.experimental.tensor.indexed_fill(batch_ids_1b, output_i_B1SD, results_b1SD)
+                Output_i_B1SD = ttnn.experimental.tensor.indexed_fill(batch_ids_1b, output_i_B1SD, results_b1SD)
                 print("done output tensor creation")
 
-            output_B1SD.append(output_i_B1SD)
+                for n, l in enumerate(
+                    [
+                        results_b1SD,
+                        output_i_B1SD,
+                        batch_ids_1b,
+                        results_11bD,
+                        weights_11b1,
+                        weights_11b2,
+                        weights_1SB2,
+                        weights_1SB1,
+                        input_i_11bH,
+                        weights_1SBK,
+                        selected_experts_1SBK,
+                        batch_ids_1SB1,
+                        gate_logits_1SB8,
+                    ]
+                ):
+                    ttnn.deallocate(l)
+
+            output_B1SD.append(Output_i_B1SD)
 
             print(f"finished device {i}, time: {time.time() - start_time} ")
         # all gather
