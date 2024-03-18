@@ -196,11 +196,13 @@ operation::ProgramWithCallbacks bcast_multi_core_hw(const Tensor &a, const Tenso
             binary_reader_kernel_id,
             unary_writer_kernel_id,
 			bcast_kernel_id,
-            compute_with_storage_grid_size
+            compute_with_storage_grid_size,
+			cb_src0,
+			single_tile_size
         ]
     (
         const void* operation,
-        const Program& program,
+        Program& program,
         const std::vector<Tensor>& input_tensors,
         const std::vector<std::optional<const Tensor>>&,
         const std::vector<Tensor>& output_tensors
@@ -208,8 +210,10 @@ operation::ProgramWithCallbacks bcast_multi_core_hw(const Tensor &a, const Tenso
 		uint32_t num_cores_x = compute_with_storage_grid_size.x;
 		uint32_t num_cores_y = compute_with_storage_grid_size.y;
 
-        auto src_dram_buffer_a = input_tensors.at(0).buffer();
+        auto src_buffer_a = input_tensors.at(0).buffer();
         auto src_dram_buffer_b = input_tensors.at(1).buffer();
+		std::optional<ShardSpec> shard_spec = std::nullopt;
+		bool src0_sharded = input_tensors.at(0).memory_config().is_sharded();
 
         auto dst_dram_buffer = output_tensors.at(0).buffer();
 
@@ -230,6 +234,10 @@ operation::ProgramWithCallbacks bcast_multi_core_hw(const Tensor &a, const Tenso
 
    	 	auto [num_cores, all_cores, core_group_1, core_group_2, num_tiles_per_core_group_1, num_tiles_per_core_group_2] = split_work_to_cores(compute_with_storage_grid_size, num_tensor_tiles);
 
+		if (src0_sharded) {
+			num_tiles_per_core_group_1 = shard_spec.value().shape[0] * shard_spec.value().shape[1] / TILE_HW;
+		}
+
         for (uint32_t i = 0, num_tiles_read = 0; i < num_cores_y * num_cores_x; i++){
 			CoreCoord core = {i / num_cores_y, i % num_cores_y};
 			uint32_t num_tensor_tiles_per_core;
@@ -249,7 +257,7 @@ operation::ProgramWithCallbacks bcast_multi_core_hw(const Tensor &a, const Tenso
 				binary_reader_kernel_id,
 				core,
 				{
-					src_dram_buffer_a->address(), // 0
+					src_buffer_a->address(), // 0
 					src_dram_buffer_b->address(),
 					num_tensor_tiles_per_core,
 					HtWt,
@@ -279,6 +287,11 @@ operation::ProgramWithCallbacks bcast_multi_core_hw(const Tensor &a, const Tenso
 				}
 			);
 			num_tiles_read += num_tensor_tiles_per_core;
+		}
+
+		if (src0_sharded) {
+			UpdateDynamicCircularBufferAddress(program, cb_src0, *src_buffer_a);
+            UpdateCircularBufferTotalSize(program, cb_src0, num_tiles_per_core_group_1 * single_tile_size);
 		}
     };
 

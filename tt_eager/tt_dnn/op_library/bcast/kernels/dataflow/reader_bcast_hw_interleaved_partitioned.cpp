@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include "dataflow_api.h"
+#include "debug/dprint.h"
 
 void kernel_main() {
     uint32_t src0_addr          = get_arg_val<uint32_t>(0);
@@ -40,8 +41,13 @@ void kernel_main() {
         .data_format = in0_data_format
     };
     #else
+        // DPRINT << "PUSHING " << num_tiles << " Tiles to CB0 as part of sharding" << ENDL();
         cb_reserve_back(cb_id_in0, num_tiles);
         cb_push_back(cb_id_in0, num_tiles);
+        if (num_tiles == 1) {
+            // SliceRange sr = SliceRange{.h0 = 0, .h1 = (uint16_t)(1), .hs = 1, .w0 = 0, .w1 = 32, .ws = 1};
+            // DPRINT << "Reader CB0 Tile: " << 0 << TileSlice(cb_id_in0, 0, sr, true, true) << ENDL();
+        }
     #endif
 
     const InterleavedAddrGenFast<src1_is_dram> s1 = {
@@ -56,12 +62,19 @@ void kernel_main() {
     noc_async_read_tile(bcast_id, s1, l1_write_addr_in1);
     noc_async_read_barrier();
     cb_push_back(cb_id_in1, onetile);
+    if (num_tiles == 1) {
+        SliceRange sr = SliceRange{.h0 = 0, .h1 = (uint16_t)(1), .hs = 1, .w0 = 0, .w1 = 32, .ws = 1};
+        DPRINT << "Reader CB1 Bcast Tile: " << TileSlice(cb_id_in1, 0, sr, true, true) << ENDL();
+    }
     #endif
 
     for (uint32_t i = 0; i < num_tiles; i++) {
         uint32_t curr_id = base_start_id_HtWt + curr_id_from_base;
 
+        DPRINT << "In loop" << ENDL();
+
         #ifndef IN0_SHARDED
+        DPRINT << "Should not be here!" << ENDL();
         cb_reserve_back(cb_id_in0, onetile);
         l1_write_addr_in0 = get_write_ptr(cb_id_in0);
         noc_async_read_tile(curr_id, s0, l1_write_addr_in0);
@@ -72,6 +85,7 @@ void kernel_main() {
         curr_id_from_base++;
 
         #ifndef BCAST_SCALAR
+        DPRINT << "SHOULD NOT BE HERE!" << ENDL();
         cb_reserve_back(cb_id_in1, onetile);
         l1_write_addr_in1 = get_write_ptr(cb_id_in1);
         noc_async_read_tile(bcast_id, s1, l1_write_addr_in1);

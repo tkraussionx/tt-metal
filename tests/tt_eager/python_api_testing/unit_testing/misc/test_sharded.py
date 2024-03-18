@@ -598,6 +598,114 @@ def test_block_sharded_partial_spill_reload(
     assert passing
 
 
+@pytest.mark.parametrize("num_cores", [64])
+def test_bcast_slice(
+    device,
+    num_cores,
+):
+    # query layer
+    scalar_shape = [1, 1, 32, 32]
+    attention_mask_shape = [1, 1, 64, 32]
+
+    torch_scalar = torch.randn(scalar_shape).bfloat16().float()
+    torch_attention_mask = torch.randn(attention_mask_shape).bfloat16().float()
+
+    dram_interleaved_memory_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttl.tensor.BufferType.DRAM,
+    )
+
+    height_sharded_memory_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, buffer_type=ttl.tensor.BufferType.L1
+    )
+
+    # broadcast
+    reference_scalar = torch2tt_tensor(
+        torch_scalar, device, tt_memory_config=dram_interleaved_memory_config, tt_dtype=ttl.tensor.DataType.BFLOAT16
+    )
+
+    reference_attention_mask = torch2tt_tensor(
+        torch_attention_mask,
+        device,
+        tt_memory_config=dram_interleaved_memory_config,
+        tt_dtype=ttl.tensor.DataType.BFLOAT16,
+    )
+
+    passing = True
+    output = None
+    bcast_out = torch2tt_tensor(
+        torch_attention_mask,
+        device,
+        tt_memory_config=dram_interleaved_memory_config,
+        tt_dtype=ttl.tensor.DataType.BFLOAT16,
+    )
+
+    num_slices = 1
+    tiles_per_shard = 1
+    print("Tiles per shard is: ", tiles_per_shard)
+    height_shard_spec = [tiles_per_shard * 32, 32]
+
+    sharded_tensor = ttl.tensor.interleaved_to_sharded(
+        reference_attention_mask,
+        device.compute_with_storage_grid_size(),
+        height_shard_spec,
+        ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+        ttl.tensor.ShardOrientation.ROW_MAJOR,
+    )
+
+    # Perform broadcast
+    print("Running bcast")
+
+    # OUT SHARDED
+    # bcast_out_sharded = ttl.tensor.bcast(
+    #     sharded_tensor,
+    #     reference_scalar,
+    #     ttl.tensor.BcastOpMath.MUL,
+    #     ttl.tensor.BcastOpDim.HW,
+    #     output_mem_config = height_sharded_memory_config
+    # )
+
+    # bcast_out = ttl.tensor.sharded_to_interleaved(
+    #     bcast_out_sharded,
+    #     output_mem_config = dram_interleaved_memory_config
+    # )
+
+    # OUT NOT SHARDED
+    bcast_out = ttl.tensor.bcast(
+        sharded_tensor,
+        reference_scalar,
+        ttl.tensor.BcastOpMath.MUL,
+        ttl.tensor.BcastOpDim.HW,
+        output_mem_config=dram_interleaved_memory_config,
+    )
+
+    bcast_sliced_out = tt2torch_tensor(bcast_out)
+
+    attn_weights = ttl.tensor.bcast(
+        reference_attention_mask,
+        reference_scalar,
+        ttl.tensor.BcastOpMath.MUL,
+        ttl.tensor.BcastOpDim.HW,
+        output_mem_config=dram_interleaved_memory_config,
+    )
+
+    attn_weights_torch = tt2torch_tensor(attn_weights)
+    passing, output = comp_pcc(bcast_sliced_out, attn_weights_torch)
+
+    print("Regular tensor")
+    print(attn_weights_torch)
+
+    # torch.set_printoptions(profile="full", sci_mode=False, linewidth=220)
+
+    print("Sharded output")
+    print(bcast_sliced_out)
+
+    if not passing:
+        print(output)
+
+    assert passing
+
+
 @pytest.mark.parametrize("seq_len", [1024, 2048], ids=["seq_len_1024", "seq_len_2048"])
 @pytest.mark.parametrize("num_slices", [1, 2, 4], ids=["one_slice", "two_slices", "four_slices"])
 @pytest.mark.parametrize("num_cores", [64])
@@ -714,15 +822,17 @@ def test_falcon7b_attnention_slice_matmuls(
                 compute_kernel_config=compute_kernel_config,
             )
 
+            slice.deallocate()
+
             # Perform broadcast
             print("Running bcast")
-            mm_slice = ttl.tensor.bcast(
-                mm_slice,
-                reference_scalar,
-                ttl.tensor.BcastOpMath.MUL,
-                ttl.tensor.BcastOpDim.HW,
-                output_mem_config=height_sharded_memory_config,
-            )
+            # mm_slice = ttl.tensor.bcast(
+            #     mm_slice,
+            #     reference_scalar,
+            #     ttl.tensor.BcastOpMath.MUL,
+            #     ttl.tensor.BcastOpDim.HW,
+            #     output_mem_config=height_sharded_memory_config,
+            # )
 
             # Slice attention mask
             # [1, 1, 71, 1024, 1024]
@@ -777,13 +887,13 @@ def test_falcon7b_attnention_slice_matmuls(
             reference_query_layer, reference_key_layer_transposed, output_mem_config=dram_interleaved_memory_config
         )
 
-        attn_weights = ttl.tensor.bcast(
-            attn_weights,
-            reference_scalar,
-            ttl.tensor.BcastOpMath.MUL,
-            ttl.tensor.BcastOpDim.HW,
-            output_mem_config=dram_interleaved_memory_config,
-        )
+        # attn_weights = ttl.tensor.bcast(
+        #     attn_weights,
+        #     reference_scalar,
+        #     ttl.tensor.BcastOpMath.MUL,
+        #     ttl.tensor.BcastOpDim.HW,
+        #     output_mem_config=dram_interleaved_memory_config,
+        # )
 
         attn_weights = ttl.tensor.add(attn_weights, attention_mask, output_mem_config=dram_interleaved_memory_config)
         attn_weights = ttl.operations.primary.softmax_in_place(attn_weights)
