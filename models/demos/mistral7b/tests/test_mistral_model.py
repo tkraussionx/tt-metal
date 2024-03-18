@@ -5,14 +5,14 @@ import torch
 import pytest
 from loguru import logger
 import ttnn
-from models.demos.mistral7b.tt.mistral_common_ttnn import (
+from models.demos.mistral7b.tt.mistral_common import (
     precompute_freqs,
     generate_cos_sin_cache_ttnn,
     prepare_inputs_ttnn,
     sample,
 )
-from models.demos.mistral7b.tt.mistral_model_ttnn import TtTransformer
-from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs
+from models.demos.mistral7b.tt.mistral_model import TtTransformer
+from models.demos.mistral7b.tt.model_config import TtModelArgs
 from models.demos.mistral7b.reference.model import Transformer
 from models.demos.mistral7b.reference.tokenizer import Tokenizer
 from models.utility_functions import (

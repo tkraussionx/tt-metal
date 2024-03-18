@@ -5,13 +5,13 @@ import torch
 import pytest
 from loguru import logger
 import ttnn
-from models.demos.mistral7b.tt.mistral_common_ttnn import (
+from models.demos.mistral7b.tt.mistral_common import (
     precompute_freqs,
     generate_cos_sin_cache_ttnn,
     prepare_inputs_ttnn,
 )
-from models.demos.mistral7b.tt.mistral_decoder_ttnn import TtTransformerBlock
-from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs
+from models.demos.mistral7b.tt.mistral_decoder import TtTransformerBlock
+from models.demos.mistral7b.tt.model_config import TtModelArgs
 from models.demos.mistral7b.reference.model import TransformerBlock
 from models.utility_functions import (
     comp_pcc,

@@ -5,8 +5,8 @@ import torch
 import pytest
 from loguru import logger
 import ttnn
-from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs
-from models.demos.mistral7b.tt.mistral_rms_norm_ttnn import TtRMSNorm
+from models.demos.mistral7b.tt.model_config import TtModelArgs
+from models.demos.mistral7b.tt.mistral_rms_norm import TtRMSNorm
 from models.demos.mistral7b.reference.model import RMSNorm
 from models.utility_functions import (
     comp_pcc,

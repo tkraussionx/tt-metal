@@ -7,14 +7,14 @@ import json
 from pathlib import Path
 
 # import ttnn
-from models.demos.mistral7b.tt.mistral_common_ttnn import (
+from models.demos.mistral7b.tt.mistral_common import (
     precompute_freqs,
 )
-from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs
+from models.demos.mistral7b.tt.model_config import TtModelArgs
 from models.demos.mistral7b.reference.model import Transformer
 from models.demos.mistral7b.reference.tokenizer import Tokenizer
 
-from transformers.generation.utils import top_k_top_p_filtering
+# from transformers.generation.utils import top_k_top_p_filtering
 
 
 class Emb(torch.nn.Module):
