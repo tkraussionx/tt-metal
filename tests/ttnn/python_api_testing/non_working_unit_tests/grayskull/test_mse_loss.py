@@ -10,10 +10,10 @@ import ttnn
 
 from tests.ttnn.utils_for_testing import assert_with_pcc
 from tests.ttnn.python_api_testing.sweep_tests import ttnn_ops
-from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_allclose
+from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_pcc
 
 
-def run_l1_loss_tests(input_shape, dtype, dlayout, in_mem_config, output_mem_config, data_seed, device):
+def run_mse_loss_tests(input_shape, dtype, dlayout, in_mem_config, output_mem_config, data_seed, device):
     torch.manual_seed(data_seed)
 
     x = torch.Tensor(size=input_shape[0]).uniform_(-100, 100).to(torch.bfloat16)
@@ -21,13 +21,11 @@ def run_l1_loss_tests(input_shape, dtype, dlayout, in_mem_config, output_mem_con
 
     try:
         # get ref result
-        ref_value = torch.nn.L1Loss(reduction="sum")(x, y)
-        # x = x.unsqueeze(0)
-        # y = y.unsqueeze(0)
+        ref_value = torch.nn.MSELoss(reduction="none")(x, y)
         x = ttnn_ops.setup_ttnn_tensor(x, device, dlayout[0], in_mem_config[0], dtype[0])
         y = ttnn_ops.setup_ttnn_tensor(y, device, dlayout[1], in_mem_config[1], dtype[1])
 
-        tt_result = ttnn.l1_loss(x, y, loss_mode="sum")
+        tt_result = ttnn.mse_loss(x, y, loss_mode="none")
 
         tt_result = ttnn_ops.ttnn_tensor_to_torch(tt_result, output_mem_config)
 
@@ -38,7 +36,7 @@ def run_l1_loss_tests(input_shape, dtype, dlayout, in_mem_config, output_mem_con
     tt_result = tt_result.squeeze(0)
     tt_result = tt_result.squeeze(0)
 
-    success, pcc_value = comp_allclose(ref_value, tt_result[0, 0], atol=4, rtol=1e-1)
+    success, pcc_value = comp_pcc(ref_value, tt_result)
     logger.debug(pcc_value)
     logger.debug(success)
 
@@ -54,6 +52,22 @@ test_sweep_args = [
         ttnn.DRAM_MEMORY_CONFIG,
         15991940,
     ),
+    (
+        [(224, 128), (224, 128)],
+        [ttnn.bfloat16, ttnn.bfloat8_b],
+        [ttnn.TILE_LAYOUT, ttnn.TILE_LAYOUT],
+        [ttnn.L1_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
+        ttnn.DRAM_MEMORY_CONFIG,
+        8687804,
+    ),
+    (
+        [(224, 128), (224, 128)],
+        [ttnn.bfloat8_b, ttnn.bfloat8_b],
+        [ttnn.TILE_LAYOUT, ttnn.TILE_LAYOUT],
+        [ttnn.L1_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
+        ttnn.DRAM_MEMORY_CONFIG,
+        8687804,
+    ),
 ]
 
 
@@ -61,5 +75,5 @@ test_sweep_args = [
     "input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed",
     (test_sweep_args),
 )
-def test_l1_loss(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device):
-    run_l1_loss_tests(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device)
+def test_mse_loss(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device):
+    run_mse_loss_tests(input_shape, dtype, dlayout, in_mem_config, out_mem_config, data_seed, device)
