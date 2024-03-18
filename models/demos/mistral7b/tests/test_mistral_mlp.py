@@ -15,9 +15,7 @@ from models.utility_functions import (
 )
 
 
-def test_mistral_mlp_inference(device):
-    ttnn.enable_program_cache()
-
+def test_mistral_mlp_inference(device, use_program_cache):
     dtype = ttnn.bfloat8_b
     model_args = TtModelArgs()
     state_dict = torch.load(model_args.consolidated_weights_path)

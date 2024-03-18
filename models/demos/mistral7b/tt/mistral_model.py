@@ -5,8 +5,8 @@
 import ttnn
 import torch
 import torch.nn as nn
-from models.demos.mistral7b.tt.mistral_decoder_ttnn import TtTransformerBlock
-from models.demos.mistral7b.tt.mistral_rms_norm_ttnn import TtRMSNorm
+from models.demos.mistral7b.tt.mistral_decoder import TtTransformerBlock
+from models.demos.mistral7b.tt.mistral_rms_norm import TtRMSNorm
 import ttnn
 from typing import Optional
 

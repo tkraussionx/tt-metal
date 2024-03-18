@@ -27,7 +27,7 @@ class TtModelArgs:
         self.model_base_path = Path(model_base_path)
         # Some consumers like SentencePiece only accept str not Path for files
         if instruct:  # Load instruct weights and tokenizer (Mistral-7B-Instruct-v0.2)
-            self.consolidated_weights_path = str(self.model_base_path / "consolidated_instruct.00.pth")
+            self.consolidated_weights_path = str(self.model_base_path / "mistral-7B-v0.1/consolidated_instruct.00.pth")
             self.tokenizer_path = str(self.model_base_path / "tokenizer_instruct.model")
         else:  # Load generative weights and tokenizer (Mistral-7B-v0.1)
             self.consolidated_weights_path = str(self.model_base_path / "mistral-7B-v0.1/consolidated.00.pth")

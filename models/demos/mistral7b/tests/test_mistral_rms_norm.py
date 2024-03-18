@@ -14,9 +14,7 @@ from models.utility_functions import (
 )
 
 
-def test_mistral_rms_norm_inference(device):
-    ttnn.enable_program_cache()
-
+def test_mistral_rms_norm_inference(device, use_program_cache):
     dtype = ttnn.bfloat8_b
 
     model_args = TtModelArgs()

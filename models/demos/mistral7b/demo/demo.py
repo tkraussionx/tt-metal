@@ -5,13 +5,13 @@ import torch
 import json
 from loguru import logger
 import ttnn
-from models.demos.mistral7b.tt.mistral_common_ttnn import (
+from models.demos.mistral7b.tt.mistral_common import (
     generate_cos_sin_cache_ttnn,
     prepare_inputs_ttnn,
     sample,
 )
-from models.demos.mistral7b.tt.mistral_model_ttnn import TtTransformer
-from models.demos.mistral7b.tt.model_config_ttnn import TtModelArgs
+from models.demos.mistral7b.tt.mistral_model import TtTransformer
+from models.demos.mistral7b.tt.model_config import TtModelArgs
 from models.demos.mistral7b.reference.tokenizer import Tokenizer
 
 
@@ -74,8 +74,6 @@ def preprocess_inputs(input_prompts, tokenizer, model_args, dtype, embd, instruc
 
 
 def run_mistral_demo(user_input, batch_size, device):
-    ttnn.enable_program_cache()
-
     assert batch_size == 32, "Batch size must be 32"
 
     instruct_mode = True
@@ -203,8 +201,5 @@ def run_mistral_demo(user_input, batch_size, device):
             users_decoding = False
 
 
-def test_demo(
-    user_input,
-    device,
-):
+def test_demo(user_input, device, use_program_cache):
     return run_mistral_demo(user_input=user_input, batch_size=32, device=device)
