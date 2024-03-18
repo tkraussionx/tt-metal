@@ -692,7 +692,6 @@ def test_falcon7b_attnention_slice_matmuls(
                 ttl.tensor.ShardOrientation.ROW_MAJOR,
             )
 
-            # Let's do a partial matmul :)
             program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
                 compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
                 in0_block_w=2,
@@ -716,14 +715,14 @@ def test_falcon7b_attnention_slice_matmuls(
             )
 
             # Perform broadcast
-            # print("Running bcast")
-            # mm_slice = ttl.tensor.bcast(
-            #     mm_slice,
-            #     reference_scalar,
-            #     ttl.tensor.BcastOpMath.MUL,
-            #     ttl.tensor.BcastOpDim.HW,
-            #     output_mem_config=height_sharded_memory_config,
-            # )
+            print("Running bcast")
+            mm_slice = ttl.tensor.bcast(
+                mm_slice,
+                reference_scalar,
+                ttl.tensor.BcastOpMath.MUL,
+                ttl.tensor.BcastOpDim.HW,
+                output_mem_config=height_sharded_memory_config,
+            )
 
             # Slice attention mask
             # [1, 1, 71, 1024, 1024]
@@ -778,13 +777,13 @@ def test_falcon7b_attnention_slice_matmuls(
             reference_query_layer, reference_key_layer_transposed, output_mem_config=dram_interleaved_memory_config
         )
 
-        # attn_weights = ttl.tensor.bcast(
-        #     attn_weights,
-        #     reference_scalar,
-        #     ttl.tensor.BcastOpMath.MUL,
-        #     ttl.tensor.BcastOpDim.HW,
-        #     output_mem_config=dram_interleaved_memory_config,
-        # )
+        attn_weights = ttl.tensor.bcast(
+            attn_weights,
+            reference_scalar,
+            ttl.tensor.BcastOpMath.MUL,
+            ttl.tensor.BcastOpDim.HW,
+            output_mem_config=dram_interleaved_memory_config,
+        )
 
         attn_weights = ttl.tensor.add(attn_weights, attention_mask, output_mem_config=dram_interleaved_memory_config)
         attn_weights = ttl.operations.primary.softmax_in_place(attn_weights)

@@ -14,11 +14,11 @@ void kernel_main() {
     uint32_t curr_id_from_base  = get_arg_val<uint32_t>(5);
     uint32_t bcast_id           = get_arg_val<uint32_t>(6);
 
-    constexpr bool src0_is_dram = get_compile_time_arg_val(0) == 1;
-
     #ifndef  IN0_SHARDED
-    constexpr bool src1_is_dram = get_compile_time_arg_val(1) == 1;
+    constexpr bool src0_is_dram = get_compile_time_arg_val(0) == 1;
     #endif
+
+    constexpr bool src1_is_dram = get_compile_time_arg_val(1) == 1;
 
     constexpr uint32_t cb_id_in0 = 0;
     constexpr uint32_t cb_id_in1 = 1;

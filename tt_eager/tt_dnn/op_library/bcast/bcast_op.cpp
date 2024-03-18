@@ -96,8 +96,6 @@ void EltwiseBinaryBroadcast::validate(const std::vector<Tensor> &input_tensors) 
         TT_FATAL(input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED || input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED, "HW bcast in0 supprots Height Sharding or Interleaving");
     }
 
-    // Assert za output tensor
-
     auto batch_size_a = input_shape_a[0];
     auto num_channels_a = input_shape_a[1];
     auto height_a = input_shape_a[2];
@@ -127,7 +125,26 @@ std::vector<Shape> EltwiseBinaryBroadcast::compute_output_shapes(const std::vect
 
 std::vector<Tensor> EltwiseBinaryBroadcast::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
-    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor.get_dtype(), Layout::TILE, this->output_mem_config);
+    if (this->output_mem_config.is_sharded()) {
+        ShardSpec shard_spec{CoreRangeSet({}), {0, 0}};
+        if (input_tensor.memory_config().is_sharded()) {
+            // Derive output shard_spec based on input
+            shard_spec = input_tensor.shard_spec().value();
+        } else {
+            uint32_t num_blocks = input_tensor.volume() / input_tensor.get_legacy_shape()[-1] / TILE_HEIGHT;
+            auto core_grid = input_tensor.device()->compute_with_storage_grid_size();
+            uint32_t num_grid_cores = core_grid.x * core_grid.y;
+            uint32_t target_num_cores = num_blocks < num_grid_cores ? num_blocks : num_grid_cores;
+            shard_spec.grid = num_cores_to_corerange_set(target_num_cores, core_grid, true);
+            shard_spec.shape = {num_blocks / target_num_cores * TILE_HEIGHT, input_tensor.get_legacy_shape()[-1]};
+            shard_spec.orientation = ShardOrientation::ROW_MAJOR;
+        }
+        auto mem_config = this->output_mem_config;
+        mem_config.shard_spec = shard_spec;
+        return {create_sharded_device_tensor(this->compute_output_shapes(input_tensors).at(0), input_tensor.get_dtype(), Layout::TILE, input_tensor.device(), mem_config)};
+    } else {
+        return operation::generic_create_output_tensors(*this, input_tensors, input_tensor.get_dtype(), Layout::TILE, this->output_mem_config);
+    }
 }
 
 operation::ProgramWithCallbacks EltwiseBinaryBroadcast::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
