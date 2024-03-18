@@ -23,6 +23,11 @@ from models.utility_functions import comp_pcc, comp_allclose, get_devices_for_t3
     ((1),),
 )
 def test_mixtral_decoder_inference(all_devices, iterations, reset_seeds):
+    """
+    b: batch
+    s: sequence length
+    h: hidden size
+    """
     pcc = 0.99
     dtype = ttnn.bfloat8_b
 
@@ -83,12 +88,11 @@ def test_mixtral_decoder_inference(all_devices, iterations, reset_seeds):
         print(f"[Decoder] Generating token {i}")
 
         # input = torch.randn(1, 32, 4096)
-        pt_decode_input = (torch.rand(batch, seqlen, model_args.dim) * 2) - 1
-        tt_decode_input = pt_decode_input.clone()
+        pt_decode_input_bsh = (torch.rand(batch, seqlen, model_args.dim) * 2) - 1
         start_pos = generation_start_pos + i
 
-        decode_input, start_pos, attn_mask, current_pos, rot_mat = prepare_inputs_ttnn(
-            tt_decode_input,
+        decode_input_b1sh, start_pos, attn_mask, current_pos, rot_mat = prepare_inputs_ttnn(
+            pt_decode_input_bsh.clone(),
             start_pos,
             tt_model.hidden_size,
             tt_model.head_dim,
@@ -97,21 +101,21 @@ def test_mixtral_decoder_inference(all_devices, iterations, reset_seeds):
             tt_model.devices,
         )
         # Run TT model
-        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask, rot_mat)
+        tt_out_b1sh = tt_model(decode_input_b1sh, start_pos, current_pos, attn_mask, rot_mat)
         print("DONE TT OUT")
-        tt_output_torch = ttnn.to_torch(tt_out[0]).squeeze(2)  # [batch, seq, hidden_dim]
+        tt_output_torch_b1h = ttnn.to_torch(tt_out_b1sh[0]).squeeze(1)  # [batch, seq, hidden_dim]
 
         freqs_cis_i = freqs_cis[start_pos, :].unsqueeze(0)
         positions = torch.tensor([start_pos])
 
         # Reference model
         # mask = tt2torch_tensor(attn_mask[0])
-        ref_output = reference_model(pt_decode_input, freqs_cis_i, positions, mask=None)  # mask)
-        print("REF MODEL DONE", ref_output.shape)
+        ref_output_bsh = reference_model(pt_decode_input_bsh, freqs_cis_i, positions, mask=None)  # mask)
+        print("REF MODEL DONE", ref_output_bsh.shape)
 
-        passing, pcc_message = comp_pcc(ref_output, tt_output_torch, pcc)
+        passing, pcc_message = comp_pcc(ref_output_bsh, tt_output_torch_b1h, pcc)
 
-        logger.info(comp_allclose(ref_output, tt_output_torch))
+        logger.info(comp_allclose(ref_output_bsh, tt_output_torch_b1h))
         logger.info(pcc_message)
 
         if passing:

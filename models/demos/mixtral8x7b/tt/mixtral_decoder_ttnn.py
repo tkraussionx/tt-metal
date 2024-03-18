@@ -7,7 +7,7 @@ from typing import List
 from models.demos.mixtral8x7b.tt.mixtral_attention_ttnn import TtMixtralAttention
 from models.demos.mixtral8x7b.tt.mixtral_mlp_ttnn import TtMixtralMLP
 from models.demos.mixtral8x7b.tt.mixtral_rms_norm_ttnn import TtRMSNorm
-from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn_new import TtMoeLayer
+from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn import TtMoeLayer
 
 
 class TtTransformerBlock(torch.nn.Module):
@@ -94,42 +94,41 @@ class TtTransformerBlock(torch.nn.Module):
 
     def forward(
         self,
-        xs: ttnn.Tensor,
+        xs_b1sh: ttnn.Tensor,
         start_pos: int,
         current_pos: int,
         attn_masks: List[ttnn.Tensor],
         rot_mats: List[ttnn.Tensor],
     ) -> ttnn.Tensor:
-        assert isinstance(xs, list)
+        """
+        b: batch dim
+        s: seq dim
+        1: unary dim
+        h: hidden dim
+        """
+        assert isinstance(xs_b1sh, list)
+        deallocate = lambda ls: [ttnn.deallocate(l) for l in ls]
 
         # Attention module expects a list of inputs, start_pos, attn mask (multi-device support)
-        attn_norm = []
-        for i in range(self.num_devices):
-            if self.layer_num != 0:
-                xs[i] = ttnn.permute(xs[i], (2, 1, 0, 3))
-            attn_norm.append(self.attention_norm[i](xs[i]))
+        attn_norm_b1sh = [self.attention_norm[i](xs_b1sh[i]) for i in range(self.num_devices)]
+        attn_norm_s1bh = [ttnn.permute(attn_norm_b1sh[i], (2, 1, 0, 3)) for i in range(self.num_devices)]
+        deallocate(attn_norm_b1sh)
 
-        r = self.attention(
-            attn_norm,
+        attn_b1sh = self.attention(
+            attn_norm_s1bh,
             start_pos,
             current_pos,
             attn_masks,
             rot_mats,
         )
-        h = []
-        # Attention also returns multiple outputs (multi-device support)
-        for i in range(self.num_devices):
-            r[i] = ttnn.permute(r[i], (2, 1, 0, 3))
-            h_i = self.ffn_norm[i](ttnn.experimental.tensor.add(xs[i], r[i]))
-            h.append(h_i)
-            ttnn.deallocate(xs[i])
-            ttnn.deallocate(r[i])
-        r = self.feed_forward(h)
+        hs_b1sh = [ttnn.experimental.tensor.add(xs_b1sh[i], attn_b1sh[i]) for i in range(self.num_devices)]
+        deallocate(attn_b1sh)
 
-        out = []
-        for i in range(self.num_devices):
-            h[i] = ttnn.permute(h[i], (2, 1, 0, 3))
-            out.append(ttnn.experimental.tensor.add(h[i], r[i]))
-            ttnn.deallocate(h[i])
-            ttnn.deallocate(r[i])
-        return out
+        ffn_norm_b1sh = [self.ffn_norm[i](hs_b1sh[i]) for i in range(self.num_devices)]
+        ffn_b1sh = self.feed_forward(ffn_norm_b1sh)
+        deallocate(ffn_norm_b1sh)
+
+        out_b1sh = [ttnn.experimental.tensor.add(hs_b1sh[i], ffn_b1sh[i]) for i in range(self.num_devices)]
+        deallocate(ffn_b1sh)
+        deallocate(hs_b1sh)
+        return out_b1sh

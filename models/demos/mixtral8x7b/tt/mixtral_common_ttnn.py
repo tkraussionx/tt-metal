@@ -129,20 +129,23 @@ def get_rotation_mat(dhead, end, start_pos, seqlen, batch):
     return rot_emb
 
 
-def prepare_inputs_ttnn(x, start_pos, hidden_size, head_dim, sliding_window, max_seq_len, devices):
+def prepare_inputs_ttnn(x_bsh, start_pos, hidden_size, head_dim, sliding_window, max_seq_len, devices):
     """
     Prepare inputs for decode mode. Assume that current token is at
     start_pos, and KV cache has valid data up to start_pos.
     x: (batch, seq, hidden_dim)
     start_pos: int
-    """
-    assert x.size(2) == hidden_size
-    assert len(x.size()) == 3
 
-    batch = x.size(0)
-    seq_len = x.size(1)
+    b: batch
+    s: sequence len
+    h: hidden
+    """
+    assert x_bsh.size(2) == hidden_size
+    assert len(x_bsh.size()) == 3
+
+    batch = x_bsh.size(0)
+    seq_len = x_bsh.size(1)
     assert seq_len == 1, "Only supporting decode mode"
-    x = x.transpose(0, 1).unsqueeze(1)  # [seq_len, 1, batch, hidden_dim]
 
     padded_layer_past_len = min(nearest_32(start_pos + 1), sliding_window)
     current = start_pos % sliding_window
@@ -159,19 +162,20 @@ def prepare_inputs_ttnn(x, start_pos, hidden_size, head_dim, sliding_window, max
     rot_mat = rot_mat[:, :1]
 
     # expected shapes:
-    # x: (seq_len, 1, batch, hidden_dim)
+    # x: (batch, 1, seq_len, hidden_dim)
     # start_pos: int
     # attn_mask: [seq_len, n_heads, batch, padded_layer_past_len]
-    assert x.size() == (seq_len, 1, batch, hidden_size)
+    x_b1sh = x_bsh.unsqueeze(1)
+    assert x_b1sh.size() == (batch, 1, seq_len, hidden_size)
     # assert attn_mask.size() == (seq_len, n_local_heads, batch, padded_layer_past_len)
 
-    xs, attn_masks, rot_mats = [], [], []
+    xs_b1sh, attn_masks, rot_mats = [], [], []
     for device in devices:
-        xs.append(ttnn.from_torch(x, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT))
+        xs_b1sh.append(ttnn.from_torch(x_b1sh, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT))
         attn_masks.append(ttnn.from_torch(attn_mask, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT))
         rot_mats.append(ttnn.from_torch(rot_mat, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT))
     return (
-        xs,
+        xs_b1sh,
         start_pos,
         attn_masks,
         current,
