@@ -4,6 +4,7 @@
 
 import ttnn
 from pathlib import Path
+from models.utility_functions import is_wormhole_b0
 
 
 class TtModelArgs:
@@ -22,6 +23,8 @@ class TtModelArgs:
     # Parameters for our use
     max_batch_size = 32
     max_seq_len = 4096
+
+    max_grid_size = ttnn.CoreGrid(x=8, y=8) if is_wormhole_b0() else ttnn.CoreGrid(x=12, y=9)
 
     def __init__(self, model_base_path="/proj_sw/user_dev/hf_data/mistral", instruct=False):
         self.model_base_path = Path(model_base_path)

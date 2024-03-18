@@ -13,13 +13,14 @@ class TtMistralMLP(torch.nn.Module):
         state_dict,
         weight_cache_path,
         layer_num,
+        grid,
         dtype,
     ):
         super().__init__()
 
         self.state_dict = state_dict
         self.device = device
-        self.grid = ttnn.CoreGrid(x=8, y=8)
+        self.grid = grid
 
         base_name = f"layers.{layer_num}.feed_forward"
         torch_weight = lambda name: torch.transpose(self.state_dict[f"{base_name}.{name}.weight"], -2, -1)

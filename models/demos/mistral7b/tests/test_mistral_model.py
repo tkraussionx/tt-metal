@@ -226,9 +226,9 @@ def test_mistral_model_inference(device, iterations, version, use_program_cache)
                         # if not does_pass:
                         # all_tests_pass = False
 
-        print("[ttnn generation User 0] ", "".join(tokenizer.decode(all_outputs)))
+        logger.trace("[ttnn generation User 0] ", "".join(tokenizer.decode(all_outputs)))
         if run_ref_pt:
-            print("[Ref generation User 0] ", "".join(tokenizer.decode(all_outputs_ref)))
+            logger.trace("[Ref generation User 0] ", "".join(tokenizer.decode(all_outputs_ref)))
 
     if run_ref_pt:
         if all_tests_pass:

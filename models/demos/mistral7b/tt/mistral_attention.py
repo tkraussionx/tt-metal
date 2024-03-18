@@ -20,6 +20,7 @@ class TtMistralAttention(nn.Module):
         state_dict,
         weight_cache_path,
         layer_num,
+        grid,
         dtype,
         configuration,
         tt_cos_cached,
@@ -139,7 +140,7 @@ class TtMistralAttention(nn.Module):
             self.layer_past_list.append(layer_past)
         self.tt_sin_cached = tt_sin_cached
         self.tt_cos_cached = tt_cos_cached
-        self.grid = ttnn.CoreGrid(x=8, y=8)
+        self.grid = grid
 
     def forward(
         self,

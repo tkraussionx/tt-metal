@@ -47,6 +47,7 @@ class TtTransformerBlock(torch.nn.Module):
             state_dict=state_dict,
             weight_cache_path=weight_cache_path,
             layer_num=layer_num,
+            grid=args.max_grid_size,
             dtype=dtype,
             configuration=args,
             tt_cos_cached=tt_cos_cached,
@@ -57,6 +58,7 @@ class TtTransformerBlock(torch.nn.Module):
             state_dict=state_dict,
             weight_cache_path=weight_cache_path,
             layer_num=layer_num,
+            grid=args.max_grid_size,
             dtype=dtype,
         )
         self.attention_norm = TtRMSNorm(
