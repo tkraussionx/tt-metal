@@ -29,7 +29,7 @@ class Emb(torch.nn.Module):
 def test_mistral_torch_inference():
     iterations = 20
 
-    model_args = TtModelArgs()
+    model_args = TtModelArgs(device=None)
     state_dict = torch.load(model_args.consolidated_weights_path)
     tokenizer = Tokenizer(model_args.tokenizer_path)
 

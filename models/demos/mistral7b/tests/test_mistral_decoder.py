@@ -26,7 +26,7 @@ from models.utility_functions import (
 def test_mistral_decoder_inference(device, iterations, use_program_cache):
     dtype = ttnn.bfloat8_b
 
-    model_args = TtModelArgs()
+    model_args = TtModelArgs(device)
     state_dict = torch.load(model_args.consolidated_weights_path)
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names

@@ -45,7 +45,7 @@ class TtModelArgs:
         "ATTN_W_LAYOUT",
     )
 
-    def __init__(self, model_base_path="/proj_sw/user_dev/hf_data/mistral", instruct=False):
+    def __init__(self, device, model_base_path="/proj_sw/user_dev/hf_data/mistral", instruct=False):
         self.model_base_path = Path(model_base_path)
         # Some consumers like SentencePiece only accept str not Path for files
         if instruct:  # Load instruct weights and tokenizer (Mistral-7B-Instruct-v0.2)
@@ -65,7 +65,10 @@ class TtModelArgs:
         # Update memory layouts (Tile, except MLP)
         self.model_config.update({f"{key}_TILE": ttnn.TILE_LAYOUT for key in self.OP_KEYS if "LAYOUT" in key})
 
-        self.max_grid_size = ttnn.CoreGrid(x=4, y=8) if is_wormhole_b0() else ttnn.CoreGrid(x=12, y=9)
+        # Avoid issue with test_mistral_torch.py
+        if device is not None:
+            grid_size = device.compute_with_storage_grid_size()
+            self.max_grid_size = ttnn.CoreGrid(x=grid_size.x, y=grid_size.y)
 
         # Add sharded memory config for MLP FF1/FF3
         mlp_shard_config = ttnn.create_sharded_memory_config(

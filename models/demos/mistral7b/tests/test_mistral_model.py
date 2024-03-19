@@ -57,7 +57,7 @@ def test_mistral_model_inference(device, iterations, version, use_program_cache)
 
     dtype = ttnn.bfloat8_b
 
-    model_args = TtModelArgs(instruct=instruct)
+    model_args = TtModelArgs(device, instruct=instruct)
     model_args.max_batch_size = 32
     model_args.n_layers = 32  # Full model
 
