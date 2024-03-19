@@ -161,7 +161,6 @@ class TtMixtralAttention(torch.nn.Module):
                 compute_kernel_config=self.compute_kernel,
             )
             # core_grid=ttnn.CoreGrid(y=8, x=8),
-            print(f"done wkqv on device {i}")
 
             ###
             # Reshape and rotary embeddings
@@ -205,7 +204,6 @@ class TtMixtralAttention(torch.nn.Module):
             # k_heads, [seqlen, n_kv_heads, bsz, head_dim]
             # v_heads [seqlen, n_kv_heads, bsz, head_dim]
             # keys, [max_batch_size, n_kv_heads // self.num_devices, sliding_window, head_dim]
-
             ttnn.experimental.tensor.update_cache(keys, k_heads, current_pos)  # self.current)
             ttnn.experimental.tensor.update_cache(values, v_heads, current_pos)  # self.current)
             self.layer_past_list[i] = [keys, values]
@@ -323,14 +321,14 @@ class TtMixtralAttention(torch.nn.Module):
                 core_grid=self.core_grid,
                 compute_kernel_config=self.compute_kernel,
             )  # seqlen, 1, batch, hidden_size
-            dense_out = ttnn.permute(dense_out, (2, 1, 0, 3))  # (32, 1, 1, 4096))
+            # dense_out = ttnn.permute(dense_out, (2, 1, 0, 3))  # (32, 1, 1, 4096))
             # dense_out = ttnn.reshape(dense_out, (1,32, 1, 4096))
             dense_outputs.append(dense_out)
             print(f"finished device {i}")
 
         # return the sum of the outputs
         if len(dense_outputs) > 1:
-            dense_outputs = ttnn.experimental.tensor.all_gather(dense_outputs, dim=2, num_links=1)
+            dense_outputs = ttnn.experimental.tensor.all_gather(dense_outputs, dim=1, num_links=1)
             for i in range(len(dense_outputs)):
                 print("TT SHAPE", dense_outputs[i].shape)
                 # dense_outputs[i] = ttnn.experimental.tensor.pad(
@@ -339,13 +337,8 @@ class TtMixtralAttention(torch.nn.Module):
                 # [0, 0, 0, 0], 0
                 # )
                 # dense_outputs[i] = ttnn.reshape(dense_outputs[i] , (32, 1, 256, 4096))
-                dense_outputs[i] = ttnn.experimental.tensor.reduce(
-                    dense_outputs[i],
-                    ttnn.experimental.tensor.ReduceOpMath.SUM,
-                    ttnn.experimental.tensor.ReduceOpDim.H,
-                    1.0,
-                )
-                print("done reduce")
+                dense_outputs[i] = ttnn.experimental.tensor.sum(dense_outputs[i], dim=1)
+            print("done reduce")
             return dense_outputs
         else:
             return dense_outputs

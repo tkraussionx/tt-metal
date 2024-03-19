@@ -30,7 +30,7 @@ class Emb(torch.nn.Module):
 
 @pytest.mark.parametrize(
     "n_layers",
-    (1,),
+    (1, 2, 4, 8, 32),
 )
 @pytest.mark.parametrize(
     "iterations",

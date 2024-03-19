@@ -18,14 +18,13 @@ def top_2(gate_logits_1SB8, top_2_mask, expert_mask, mask_0, mask_1):
     gate_logits_1SB8 = ttnn.where(cond0, top_2_mask, gate_logits_1SB8)
     weights_ex1_1SB1 = ttnn.experimental.tensor.max(gate_logits_1SB8, dim=3)
     cond1 = ttnn.eq(gate_logits_1SB8, ttnn.repeat_interleave(weights_ex1_1SB1, 8, dim=3))
-
-    weights_1SBK = concat(weights_ex0_1SB1, weights_ex1_1SB1, mask_0, mask_1)
+    m = ttnn.reciprocal(weights_ex0_1SB1 + weights_ex1_1SB1)
+    weights_1SBK = concat(m * weights_ex0_1SB1, m * weights_ex1_1SB1, mask_0, mask_1)
 
     cond0 = ttnn.sum(cond0 * expert_mask, dim=3)
     cond1 = ttnn.sum(cond1 * expert_mask, dim=3)
-    experts = cond0 + cond1
 
-    return weights_1SBK, experts, concat(cond0, cond1, mask_0, mask_1)
+    return weights_1SBK, concat(cond0, cond1, mask_0, mask_1)
 
 
 class TtMoeLayer(nn.Module):
@@ -95,14 +94,9 @@ class TtMoeLayer(nn.Module):
         ]
 
     def forward(self, inputs):
-        output_B1SD = []
+        output_11BD = []
         start_time = time.time()
-        for i in range(len(self.devices)):  # [0, 3, 4, 7]:  # range(len(self.devices)):
-            # if i in [1, 2, 5, 6]:
-            #     continue
-            # dev_dict = {1: 0, 2:3, 5: 4, 6: 7}
-            # self.devices[i] = self.devices[dev_dict[i]]
-
+        for i in range(len(self.devices)):
             print(f"started device {i}, time: {time.time() - start_time} ")
             self.devices[i] = self.devices[i]
             input_i_1SBH = inputs[i]
@@ -116,130 +110,40 @@ class TtMoeLayer(nn.Module):
             gate_logits_1SB8 = ttnn.softmax(
                 gate_logits_1SB8 - ttnn.experimental.tensor.max(gate_logits_1SB8, dim=3), dim=-1
             )
-            weights_1SBK, batch_ids_1SB1, selected_experts_1SBK = top_2(
+            weights_1SBK, selected_experts_1SBK = top_2(
                 gate_logits_1SB8, self.top_2_mask[i], self.expert_mask[i], self.mask_0[i], self.mask_1[i]
             )
-            weights_1SBK = ttnn.softmax(weights_1SBK - ttnn.experimental.tensor.max(weights_1SBK, dim=3), dim=-1)
+            # weights_1SBK = ttnn.softmax(weights_1SBK - ttnn.experimental.tensor.max(weights_1SBK, dim=3), dim=-1)
+            # weights_1SBK = weights_1SBK * ttnn.reciprocal(2 *ttnn.mean(weights_1SBK, dim=3, keepdim=True))
             print("done top 2")
 
-            batch_ids_1SB1 = ttnn.experimental.tensor.untilize_with_unpadding(
-                ttnn.permute(batch_ids_1SB1, (0, 1, 3, 2)),
-                output_tensor_start=ttnn.Shape([0, 0, 0, 0]),
-                output_tensor_end=ttnn.Shape([0, 0, 0, 31]),
-                output_mem_config=ttnn.L1_MEMORY_CONFIG,
-                use_pack_untilize=False,
-            )
+            # mask weights
+            weights_1SB1 = ttnn.experimental.tensor.sum(weights_1SBK * selected_experts_1SBK, dim=3)
 
-            b, indices_tt = ttnn.experimental.tensor.non_zero(batch_ids_1SB1, ttnn.L1_MEMORY_CONFIG)
-            b = ttnn.to_torch(b)[0, 0, 0, 0].item()
+            # MLP
+            results_11BD = expert_i_HD(input_i_1SBH) * weights_1SB1
+            print("done output tensor creation")
 
-            # in case, no batch selected this head
-            if b == 0:
-                print("no batch selected this head")
-                Output_i_B1SD = ttnn.zeros(
-                    input_shape=ttnn.Shape([32, 1, 1, 4096]),
-                    device=self.devices[i],
-                    dtype=ttnn.bfloat16,
-                    layout=ttnn.ROW_MAJOR_LAYOUT,
-                    memory_config=ttnn.L1_MEMORY_CONFIG,
-                )
-                for n, l in enumerate(
-                    [indices_tt, weights_1SBK, selected_experts_1SBK, batch_ids_1SB1, gate_logits_1SB8]
-                ):
-                    ttnn.deallocate(l)
-
-            else:
-                batch_ids_1b = ttnn.reshape(
-                    ttnn.experimental.tensor.unpad(
-                        indices_tt, (0, 0, 0, 0), (0, 0, 0, b - 1), output_mem_config=ttnn.L1_MEMORY_CONFIG
-                    ),
-                    ttnn.Shape([1, b]),
-                )
-                print("tt batches", batch_ids_1b)
-
-                # slice input
-                input_i_1SBH = ttnn.to_layout(input_i_1SBH, layout=ttnn.ROW_MAJOR_LAYOUT)
-                input_i_1bH = ttnn.embedding(batch_ids_1b, input_i_1SBH)
-                input_i_11bH = ttnn.reshape(input_i_1bH, ttnn.Shape([1, 1, b, 4096]))
-                input_i_11bH = ttnn.experimental.tensor.tilize_with_zero_padding(input_i_11bH)
-                print("done input slicing")
-
-                # slice weights
-                weights_1SB1 = ttnn.experimental.tensor.sum(weights_1SBK * selected_experts_1SBK, dim=3)
-                weights_1SB2 = ttnn.experimental.tensor.untilize_with_unpadding(
+            for n, l in enumerate(
+                [
                     weights_1SB1,
-                    output_tensor_start=ttnn.Shape([0, 0, 0, 0]),
-                    output_tensor_end=ttnn.Shape([0, 0, 31, 1]),
-                    output_mem_config=ttnn.L1_MEMORY_CONFIG,
-                    use_pack_untilize=False,
-                )
-                weights_1b2 = ttnn.embedding(batch_ids_1b, weights_1SB2)
-                weights_11b2 = ttnn.reshape(weights_1b2, ttnn.Shape([1, 1, b, 2]))
-                weights_11b1 = ttnn.split(
-                    ttnn.experimental.tensor.tilize_with_zero_padding(weights_11b2), split_size=1, dim=3
-                )[0]
-                print(
-                    "done weight slicing",
-                )
+                    weights_1SBK,
+                    selected_experts_1SBK,
+                    gate_logits_1SB8,
+                ]
+            ):
+                ttnn.deallocate(l)
 
-                # MLP
-                results_11bD = expert_i_HD(input_i_11bH) * weights_11b1
-                results_b1SD = ttnn.experimental.tensor.untilize_with_unpadding(
-                    results_11bD,
-                    output_tensor_start=ttnn.Shape([0, 0, 0, 0]),
-                    output_tensor_end=ttnn.Shape([0, 0, b - 1, 4095]),
-                    output_mem_config=ttnn.L1_MEMORY_CONFIG,
-                    use_pack_untilize=False,
-                )
-                results_b1SD = ttnn.permute(results_b1SD, (2, 1, 0, 3))
-                print("done expert MLP")
-
-                # create output tensor with results_bO at batch positions batch_ids_b
-                output_i_B1SD = ttnn.zeros(
-                    input_shape=ttnn.Shape([32, 1, 1, 4096]),
-                    device=self.devices[i],
-                    dtype=ttnn.bfloat16,
-                    layout=ttnn.ROW_MAJOR_LAYOUT,
-                    memory_config=ttnn.L1_MEMORY_CONFIG,
-                )
-                batch_ids_1b = ttnn.reshape(batch_ids_1b, ttnn.Shape([1, 1, 1, b]))
-                Output_i_B1SD = ttnn.experimental.tensor.indexed_fill(batch_ids_1b, output_i_B1SD, results_b1SD)
-                print("done output tensor creation")
-
-                for n, l in enumerate(
-                    [
-                        results_b1SD,
-                        output_i_B1SD,
-                        batch_ids_1b,
-                        results_11bD,
-                        weights_11b1,
-                        weights_11b2,
-                        weights_1SB2,
-                        weights_1SB1,
-                        input_i_11bH,
-                        weights_1SBK,
-                        selected_experts_1SBK,
-                        batch_ids_1SB1,
-                        gate_logits_1SB8,
-                    ]
-                ):
-                    ttnn.deallocate(l)
-
-            output_B1SD.append(Output_i_B1SD)
+            output_11BD.append(results_11BD)
 
             print(f"finished device {i}, time: {time.time() - start_time} ")
         # all gather
         print(f"started ALL GATHER, time: {time.time() - start_time} ")
-        output_B1SD_gathered = ttnn.experimental.tensor.all_gather(output_B1SD, dim=2, num_links=1)
+        output_11BD_gathered = ttnn.experimental.tensor.all_gather(output_11BD, dim=1, num_links=1)
         print(f"finished ALL GATHER, time: {time.time() - start_time}")
 
         # sum on each device
-        for i in range(len(output_B1SD_gathered)):
-            output_B1SD_gathered[i] = ttnn.experimental.tensor.reduce(
-                output_B1SD_gathered[i],
-                ttnn.experimental.tensor.ReduceOpMath.SUM,
-                ttnn.experimental.tensor.ReduceOpDim.H,
-                1.0,
-            )
-            print("Reduce sum done")
-        return output_B1SD_gathered
+        for i in range(len(output_11BD_gathered)):
+            output_11BD_gathered[i] = ttnn.experimental.tensor.sum(output_11BD_gathered[i], dim=1)
+        print("Reduce sum done")
+        return output_11BD_gathered

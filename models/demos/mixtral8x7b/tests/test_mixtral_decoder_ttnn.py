@@ -103,7 +103,7 @@ def test_mixtral_decoder_inference(all_devices, iterations, reset_seeds):
         # Run TT model
         tt_out_b1sh = tt_model(decode_input_b1sh, start_pos, current_pos, attn_mask, rot_mat)
         print("DONE TT OUT")
-        tt_output_torch_b1h = ttnn.to_torch(tt_out_b1sh[0]).squeeze(1)  # [batch, seq, hidden_dim]
+        tt_output_torch_b1h = ttnn.to_torch(tt_out_b1sh[0]).squeeze(1).view(batch, 1, -1)
 
         freqs_cis_i = freqs_cis[start_pos, :].unsqueeze(0)
         positions = torch.tensor([start_pos])
