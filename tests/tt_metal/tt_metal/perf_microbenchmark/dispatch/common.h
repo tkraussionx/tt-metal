@@ -28,18 +28,27 @@ struct one_worker_data_t {
     vector<uint32_t> data;
 };
 
-typedef unordered_map<CoreCoord, one_worker_data_t> worker_data_t;
+typedef unordered_map<CoreCoord, unordered_map<uint32_t, one_worker_data_t>> worker_data_t;
 
 inline void reset_worker_data(worker_data_t& awd) {
-    for (auto& wd : awd) {
-        wd.second.valid.resize(0);
-        wd.second.data.resize(0);
+    for (auto& it : awd) {
+        for (auto &wd : it.second) {
+            wd.second.valid.resize(0);
+            wd.second.data.resize(0);
+        }
     }
 }
 
+// Arbitrary, just get first worker, and bank_id whatever that is and return num datums. Probably this
+// should be tweaked to only return valid datums, and perhaps consider all workers, banks.
 inline uint32_t worker_data_size(worker_data_t& awd) {
-    return awd[first_worker_g].data.size();
-
+    TT_ASSERT(awd.size() > 0, "Worker data is empty, not expected");
+    auto first_worker = awd.begin()->first;
+    TT_ASSERT(awd[first_worker].size() > 0, "Worker data for core: {} is empty, not expected.", first_worker.str());
+    auto first_bank_id = awd[first_worker].begin()->first;
+    auto size = awd[first_worker_g][first_bank_id].data.size();
+    log_debug(tt::LogTest, "{} - returning size: {} from worker: {} bank_id: {}", __FUNCTION__, size, first_worker.str(), first_bank_id);
+    return size;
 }
 
 inline uint32_t padded_size(uint32_t size, uint32_t alignment) {
@@ -61,6 +70,27 @@ inline std::vector<CoreCoord> get_cores_per_bank_id(Device *device, bool is_dram
     return bank_cores;
 }
 
+// Specific to this test. This test doesn't use Buffers, and for Storage cores in L1 that have 2 banks, they are intended
+// to be allocated top-down and carry "negative" offsets via bank_to_l1_offset for cores that have 2 banks. This function
+// will scan through all banks bank_to_l1_offset and return the minimum required buffer addr to avoid bank_to_l1_offset
+// being applied and underflowing.  In GS this is basically 512B or half the L1 Bank size.
+inline uint32_t get_min_required_buffer_addr(Device *device, bool is_dram){
+
+    int32_t smallest_offset = std::numeric_limits<int32_t>::max();
+    uint32_t num_banks = device->num_banks(is_dram ? BufferType::DRAM : BufferType::L1);
+
+    for (int bank_id = 0; bank_id < num_banks; bank_id++) {
+        int32_t offset = is_dram ? device->dram_bank_offset_from_bank_id(bank_id) : device->l1_bank_offset_from_bank_id(bank_id);
+        smallest_offset = offset < smallest_offset ? offset : smallest_offset;
+    }
+
+    // If negative, flip it and this becomes the min required positive offset for a buffer in bank.
+    uint32_t min_required_positive_offset = smallest_offset < 0 ? 0 - smallest_offset : 0;
+    log_debug(tt::LogTest, "{} - smallest_offset: {} min_required_positive_offset: {}", __FUNCTION__, smallest_offset, min_required_positive_offset);
+
+    return min_required_positive_offset;
+}
+
 inline void generate_random_payload(vector<uint32_t>& cmds,
                                     uint32_t length) {
 
@@ -76,6 +106,7 @@ inline void generate_random_payload(vector<uint32_t>& cmds,
                                     uint32_t length_words) {
 
     static uint32_t coherent_count = 0;
+    const uint32_t bank_id = 0; // No interleaved pages here.
 
     // Note: the dst address marches in unison regardless of weather or not a core is written to
     for (uint32_t i = 0; i < length_words; i++) {
@@ -84,8 +115,8 @@ inline void generate_random_payload(vector<uint32_t>& cmds,
         for (uint32_t y = all_workers_g.start.y; y <= all_workers_g.end.y; y++) {
             for (uint32_t x = all_workers_g.start.x; x <= all_workers_g.end.x; x++) {
                 CoreCoord core(x, y);
-                data[core].data.push_back(datum);
-                data[core].valid.push_back(workers.contains(core));
+                data[core][bank_id].data.push_back(datum);
+                data[core][bank_id].valid.push_back(workers.contains(core));
             }
         }
     }
@@ -121,27 +152,26 @@ inline void generate_random_paged_payload(Device *device,
         }
 
         // Add zero-padding if needed to reach required alignment in worker data for comparison.
-        uint32_t padding_words = bank_offset / sizeof(uint32_t) - data[bank_core].valid.size();
+        uint32_t padding_words = bank_offset / sizeof(uint32_t) - data[bank_core][bank_id].valid.size();
         if (padding_words > 0) {
             log_trace(tt::LogTest, "{} - Adding {} padding words for bank_core: {}", __FUNCTION__, padding_words, bank_core.str());
             for (uint32_t i = 0; i < padding_words; i++) {
-                data[bank_core].data.push_back(0);
-                data[bank_core].valid.push_back(false); // Skip checking padding words.
+                data[bank_core][bank_id].data.push_back(0);
+                data[bank_core][bank_id].valid.push_back(false); // Skip checking padding words.
             }
         }
 
         // We could have filled data with all zeros and then used bank_offset to write specific data.
-        TT_ASSERT(bank_offset / sizeof(uint32_t) == data[bank_core].valid.size());
+        TT_ASSERT(bank_offset / sizeof(uint32_t) == data[bank_core][bank_id].valid.size());
 
         // Generate data and add to cmd for sending to device, and worker_data for correctness checking.
         for (uint32_t i = 0; i < words_per_page; i++) {
             uint32_t datum = (use_coherent_data_g) ? coherent_count++ : std::rand();
             log_debug(tt::LogTest, "{} - Setting {} page_id: {} word: {} on core: {} (bank_id: {} bank_offset: {}) => datum: 0x{:x}",
                 __FUNCTION__, is_dram ? "DRAM" : "L1", page_id, i, bank_core.str(), bank_id, bank_offset, datum);
-            cmds.push_back(datum);
-            data[bank_core].data.push_back(datum);
-            data[bank_core].valid.push_back(true);
-
+            cmds.push_back(datum); // Push to device.
+            data[bank_core][bank_id].data.push_back(datum); // Checking
+            data[bank_core][bank_id].valid.push_back(true);
         }
     }
 }
@@ -152,6 +182,7 @@ inline void generate_random_packed_payload(vector<uint32_t>& cmds,
                                            uint32_t size_words) {
 
     static uint32_t coherent_count = 0;
+    const uint32_t bank_id = 0; // No interleaved pages here.
 
     // Note: the dst address marches in unison regardless of weather or not a core is written to
     for (uint32_t y = all_workers_g.start.y; y <= all_workers_g.end.y; y++) {
@@ -169,17 +200,17 @@ inline void generate_random_packed_payload(vector<uint32_t>& cmds,
                     uint32_t datum = (use_coherent_data_g) ? ((x << 16) | (y << 24) | coherent_count++) : std::rand();
 
                     cmds.push_back(datum);
-                    data[core].data.push_back(datum);
-                    data[core].valid.push_back(true);
+                    data[core][bank_id].data.push_back(datum);
+                    data[core][bank_id].valid.push_back(true);
                 } else {
-                    data[core].data.push_back(0xbaadf00d);
-                    data[core].valid.push_back(false);
+                    data[core][bank_id].data.push_back(0xbaadf00d);
+                    data[core][bank_id].valid.push_back(false);
                 }
             }
 
             cmds.resize(padded_size(cmds.size(), 4)); // XXXXX L1_ALIGNMENT16/sizeof(uint)
-            data[core].data.resize(padded_size(data[core].data.size(), 4)); // XXXXX L1_ALIGNMENT16/sizeof(uint)
-            data[core].valid.resize(padded_size(data[core].valid.size(), 4)); // XXXXX L1_ALIGNMENT16/sizeof(uint)
+            data[core][bank_id].data.resize(padded_size(data[core][bank_id].data.size(), 4)); // XXXXX L1_ALIGNMENT16/sizeof(uint)
+            data[core][bank_id].valid.resize(padded_size(data[core][bank_id].valid.size(), 4)); // XXXXX L1_ALIGNMENT16/sizeof(uint)
         }
     }
 }
@@ -309,10 +340,11 @@ inline void gen_dispatcher_unicast_write_cmd(Device *device,
     CQDispatchCmd cmd;
 
     CoreCoord phys_worker_core = device->worker_core_from_logical_core(worker_core);
+    const uint32_t bank_id = 0; // No interleaved pages here.
 
     cmd.base.cmd_id = CQ_DISPATCH_CMD_WRITE_LINEAR;
     cmd.write_linear.noc_xy_addr = NOC_XY_ENCODING(phys_worker_core.x, phys_worker_core.y);
-    cmd.write_linear.addr = dst_addr + worker_data[worker_core].data.size() * sizeof(uint32_t);
+    cmd.write_linear.addr = dst_addr + worker_data[worker_core][bank_id].data.size() * sizeof(uint32_t);
     cmd.write_linear.length = length;
     cmd.write_linear.num_mcast_dests = 0;
 
@@ -330,6 +362,7 @@ inline void gen_dispatcher_multicast_write_cmd(Device *device,
 
     CoreCoord physical_start = device->physical_core_from_logical_core(worker_core_range.start, CoreType::WORKER);
     CoreCoord physical_end = device->physical_core_from_logical_core(worker_core_range.end, CoreType::WORKER);
+    const uint32_t bank_id = 0; // No interleaved pages here.
 
     // Sanity check that worker_data covers all cores being targeted.
     for (uint32_t y = worker_core_range.start.y; y <= worker_core_range.end.y; y++) {
@@ -341,12 +374,12 @@ inline void gen_dispatcher_multicast_write_cmd(Device *device,
 
     cmd.base.cmd_id = CQ_DISPATCH_CMD_WRITE_LINEAR;
     cmd.write_linear.noc_xy_addr = NOC_MULTICAST_ENCODING(physical_start.x, physical_start.y, physical_end.x, physical_end.y);
-    cmd.write_linear.addr = dst_addr + worker_data[worker_core_range.start].data.size() * sizeof(uint32_t);
+    cmd.write_linear.addr = dst_addr + worker_data[worker_core_range.start][bank_id].data.size() * sizeof(uint32_t);
     cmd.write_linear.length = length;
     cmd.write_linear.num_mcast_dests = worker_core_range.size();
-    tt::log_debug(tt::LogTest, "{} Setting addr: {} from dst_addr: {} and worker_data[{}].data.size(): {}",
-        __FUNCTION__, (uint32_t) cmd.write_linear.addr, dst_addr, worker_core_range.start.str(),
-        worker_data[worker_core_range.start].data.size() * sizeof(uint32_t));
+    log_debug(tt::LogTest, "{} Setting addr: {} from dst_addr: {} and worker_data[{}][{}].data.size(): {}",
+        __FUNCTION__, (uint32_t) cmd.write_linear.addr, dst_addr, worker_core_range.start.str(), bank_id,
+        worker_data[worker_core_range.start][bank_id].data.size() * sizeof(uint32_t));
 
     add_dispatcher_cmd(cmds, worker_core_range, worker_data, cmd, length);
 }
@@ -361,10 +394,10 @@ inline void gen_dispatcher_paged_write_cmd(Device *device,
                                              uint32_t pages) {
 
     // To account for previous paged writes, go through all cores and find largest amt of data written so far.
-    uint32_t max_data_size = 0;
-    for (auto& [core, data] : worker_data) {
-        if (data.data.size() > max_data_size) {
-            max_data_size = data.data.size();
+    std::size_t max_data_size = 0;
+    for (auto& it : worker_data) {
+        for (auto &wd : it.second) {
+            max_data_size = std::max(max_data_size, wd.second.data.size());
         }
     }
 
@@ -446,28 +479,33 @@ inline void gen_dispatcher_terminate_cmd(vector<uint32_t>& cmds) {
 
 
 // Validate a single core's worth of results vs expected. bank_id is purely informational, can pass -1 for non-paged testing.
-inline bool validate_core_data(std::unordered_set<CoreCoord> &validated_cores, Device *device, const worker_data_t& worker_data, CoreCoord core, uint32_t base_addr, uint32_t bank_id, bool is_dram) {
+inline bool validate_core_data(std::unordered_set<CoreCoord> &validated_cores, Device *device, const worker_data_t& worker_data, CoreCoord core, uint32_t base_addr, bool is_paged, uint32_t bank_id, bool is_dram) {
 
     int fail_count = 0;
-    const vector<uint32_t>& dev_data = worker_data.at(core).data;
-    const vector<bool>& dev_valid = worker_data.at(core).valid;
+    const vector<uint32_t>& dev_data = worker_data.at(core).at(bank_id).data;
+    const vector<bool>& dev_valid = worker_data.at(core).at(bank_id).valid;
     uint32_t size_bytes =  dev_data.size() * sizeof(uint32_t);
 
     // If we had SOC desc, could get core type this way. Revisit this.
     // soc_desc.cores.at(core).type
     auto core_type = is_dram ? CoreType::DRAM : CoreType::WORKER;
     CoreCoord phys_core;
+    int32_t bank_offset = 0;
 
-    // Paged tests set bank_id to valid value.
-    if (bank_id != -1){
+    if (is_paged){
         if (is_dram) {
             auto channel = device->dram_channel_from_bank_id(bank_id);
             phys_core = device->core_from_dram_channel(channel);
-            base_addr += device->dram_bank_offset_from_bank_id(bank_id);
+            bank_offset = device->dram_bank_offset_from_bank_id(bank_id);
         } else {
             phys_core = device->physical_core_from_logical_core(core, core_type);
-            base_addr += device->l1_bank_offset_from_bank_id(bank_id);
+            bank_offset = device->l1_bank_offset_from_bank_id(bank_id);
         }
+
+        log_debug(tt::LogTest, "Paged-{} for bank_id: {} has base_addr: (0x{:x}) and DRAM bank offset: {}:x})",
+            is_dram ? "DRAM" : "L1", bank_id, base_addr, bank_offset);
+
+        base_addr += bank_offset;
     } else {
         TT_ASSERT(core_type == CoreType::WORKER, "Non-Paged write tests expected to target L1 only for now and not DRAM.");
         phys_core = device->physical_core_from_logical_core(core, core_type);
@@ -505,7 +543,7 @@ inline bool validate_results(Device *device, CoreRange workers, const worker_dat
     for (uint32_t y = workers.start.y; y <= workers.end.y; y++) {
         for (uint32_t x = workers.start.x; x <= workers.end.x; x++) {
             CoreCoord worker(x, y);
-            failed |= validate_core_data(validated_cores, device, worker_data, worker, l1_buf_base, -1, false);
+            failed |= validate_core_data(validated_cores, device, worker_data, worker, l1_buf_base, false, 0, false);
         }
     }
 
@@ -523,11 +561,13 @@ inline bool validate_results_paged(Device *device, const worker_data_t& worker_d
 
     for (int bank_id = 0; bank_id < bank_cores.size(); bank_id++) {
         auto bank_core = bank_cores.at(bank_id);
-        if (worker_data.find(bank_core) == worker_data.end()) {
+        if ((worker_data.find(bank_core) == worker_data.end()) ||
+            (worker_data.at(bank_core).find(bank_id) == worker_data.at(bank_core).end())) {
             log_debug(tt::LogTest, "Skipping bank_id: {} bank_core: {} as it has no data", bank_id, bank_core.str());
             continue;
         }
-        failed |= validate_core_data(validated_cores, device, worker_data, bank_core, l1_buf_base, bank_id, is_dram);
+
+        failed |= validate_core_data(validated_cores, device, worker_data, bank_core, l1_buf_base, true, bank_id, is_dram);
     }
 
     log_info(tt::LogTest, "{} - Validated {} cores total.", __FUNCTION__, validated_cores.size());

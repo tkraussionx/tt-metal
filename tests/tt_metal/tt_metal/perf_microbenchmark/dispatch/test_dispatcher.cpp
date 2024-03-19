@@ -180,7 +180,6 @@ void gen_cmds(Device *device,
     uint32_t total_data_size_bytes = 0;
     uint32_t buffer_size = prefetcher_buffer_size_g - page_size; // for terminate
     uint32_t cmd_count = 0;
-    bool is_dram = true;
 
     while (total_size_bytes < buffer_size) {
         total_size_bytes += sizeof(CQDispatchCmd);
@@ -225,7 +224,8 @@ void gen_cmds(Device *device,
         case 2:
         case 3:
             {
-                is_dram = is_paged_dram_test();
+
+                bool is_dram = is_paged_dram_test();
                 log_info(tt::LogTest, "Generating paged write cmds (is_dram: {} for total_size_bytes: {} buffer_size: {})", is_dram, total_size_bytes, buffer_size);
 
                 // Figure out how to control these.  Random by default, constrained here.
@@ -325,11 +325,27 @@ int main(int argc, char **argv) {
             // It's okay for these not to be, the random calc below will align final address.
             if (max_paged_write_base_addr_g % 16 != 0) log_warning(tt::LogTest, "max_paged_write_base_addr_g should be 16B aligned.");
             if (min_paged_write_base_addr_g % 16 != 0) log_warning(tt::LogTest, "min_paged_write_base_addr_g should be 16B aligned.");
+
+            // Need to be careful with write buffer address, especially for cases where L1 banks have negative offset (occurs for storage cores)
+            // so find minmum required bank offset such that the negative offsets will not cause underflow and bump up range to not be less.
+            bool is_dram = is_paged_dram_test();
+            uint32_t min_buffer_addr = get_min_required_buffer_addr(device, is_dram);
+
+            // Just avoid hazard by bumping up min, max - and let user know with a warning.
+            if (min_paged_write_base_addr_g < min_buffer_addr) {
+                log_warning("min_paged_write_base_addr_g: {:x} is too low. Increasing to min_buffer_addr: {:x}", min_paged_write_base_addr_g, min_buffer_addr);
+                min_paged_write_base_addr_g = min_buffer_addr;
+            }
+            if (max_paged_write_base_addr_g < min_buffer_addr || max_paged_write_base_addr_g < min_paged_write_base_addr_g) {
+                log_warning("max_paged_write_base_addr_g: {:x} is too low. Increasing to min_buffer_addr: {:x}", max_paged_write_base_addr_g, min_buffer_addr);
+                max_paged_write_base_addr_g = min_buffer_addr;
+            }
+
             auto range = 1 + max_paged_write_base_addr_g - min_paged_write_base_addr_g;
             write_buffer_addr = ((min_paged_write_base_addr_g + (std::rand() % range)) >> 4) << 4;
         }
 
-        log_info(tt::LogTest, "Using write buffer at 0x{:x} (paged_test: {}) l1_buf_base: {}", write_buffer_addr, paged_test, l1_buf_base);
+        log_info(tt::LogTest, "Using write buffer at 0x{:x} (paged_test: {}) l1_buf_base: {:x}", write_buffer_addr, paged_test, l1_buf_base);
 
 #if 0
         Buffer l1_buf(device, prefetcher_buffer_size_g, prefetcher_buffer_size_g, BufferType::L1, TensorMemoryLayout::SINGLE_BANK);
@@ -339,10 +355,10 @@ int main(int argc, char **argv) {
 
         // No need to add entries for worker cores in paged test. They will be added as needed for L1 or DRAM.
         if (!paged_test){
+            const uint32_t bank_id = 0; // No interleaved pages here.
             for (uint32_t y = all_workers_g.start.y; y <= all_workers_g.end.y; y++) {
                 for (uint32_t x = all_workers_g.start.x; x <= all_workers_g.end.x; x++) {
-                    one_worker_data_t one;
-                    worker_data.insert({CoreCoord(x, y), one});
+                    worker_data[CoreCoord(x,y)][bank_id] = one_worker_data_t();
                 }
             }
         }
@@ -426,7 +442,7 @@ int main(int argc, char **argv) {
         log_info(LogTest, "Dispatch buffer base {}", std::to_string(l1_buf_base));
         log_info(LogTest, "Dispatch buffer end {}", std::to_string(l1_buf_base + dispatch_buffer_page_size_g * dispatch_buffer_pages));
         log_info(LogTest, "Prefetcher CMD Buffer size {}", std::to_string(prefetcher_buffer_size_g));
-        log_info(LogTest, "Worker result data size {} bytes", std::to_string(worker_data[first_worker_g].data.size() * sizeof(uint32_t)));
+        log_info(LogTest, "Worker result data size {} bytes (single core)", std::to_string(worker_data_size(worker_data) * sizeof(uint32_t)));
         log_info(LogTest, "Buffer addr for writes: {:x}", write_buffer_addr);
 
         // Cache stuff
