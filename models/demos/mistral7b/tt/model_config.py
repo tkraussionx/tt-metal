@@ -26,6 +26,8 @@ class TtModelArgs:
     kv_seq_len = 512  # TODO Update the initial cache size when scaling up (Should be window_size == 4096)
 
     OP_KEYS = (
+        # Embedding
+        "EMB_WEIGHTS",
         # Feed forward
         "MLP_WEIGHTS",
         "FF1_OUTPUT",
