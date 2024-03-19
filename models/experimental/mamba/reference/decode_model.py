@@ -289,7 +289,12 @@ class MambaBlock(nn.Module):
         (delta, B, C) = x_dbl.split(
             split_size=[self.args.dt_rank, n, n], dim=-1
         )  # delta: (b, l, dt_rank). B, C: (b, l, n)
-        delta = F.softplus(self.dt_proj(delta))  # (b, l, d_in)
+        torch.save(B, "torch_B_proj.pt")
+        torch.save(delta, "torch_delta_t_proj.pt")
+        delta = self.dt_proj(delta)
+        torch.save(delta, "torch_dt_proj.pt")
+        delta = F.softplus(delta)  # (b, l, d_in)
+        torch.save(delta, "torch_softplus.pt")
 
         # y = self.selective_scan(x, delta, A, B, C, D)  # This is similar to run_SSM(A, B, C, u) in The Annotated S4 [2]
         y = self.one_step_ssm(x, delta, A, B, C, D)
@@ -300,7 +305,9 @@ class MambaBlock(nn.Module):
         n = A.shape[1]
 
         deltaA = torch.exp(einsum(delta, A, "b l d_in, d_in n -> b l d_in n"))
+        torch.save(deltaA, "torch_abar_exp.pt")
         deltaB_u = einsum(delta, B, u, "b l d_in, b l n, b l d_in -> b l d_in n")
+        torch.save(deltaB_u, "torch_bbar_x.pt")
 
         # on step ssm
         x = deltaA[:, -1] * self.prev_hidden_states + deltaB_u[:, -1]

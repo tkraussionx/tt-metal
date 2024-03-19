@@ -12,9 +12,19 @@ from models.utility_functions import torch2tt_tensor
 from models.helper_funcs import Linear
 from models.experimental.mamba.reference.args import ModelArgs
 
-
+def post_hook_to_print_output(operation, args, kwargs, output):
+    if operation.name != "ttnn.unsqueeze_to_4D" or operation.name != "ttnn.reshape":
+        print(f"Post-hook called for {operation.name}")
+        print(f"Output shape: {output.shape}")
+        # torch_output = ttnn.to_torch(output)
+        # print(f"Output shape: {torch_output.shape}")
+        # torch.save(torch_output, f"output_{operation.name}.pt")
+def register_op_output(output, op_name):
+    torch_output = ttnn.to_torch(output)
+    print(f"Op name : {op_name}, Output shape: {torch_output.shape}")
+    torch.save(torch_output, f"metal_{op_name}.pt")
 class TtMambaSSM(torch.nn.Module):
-    def __init__(self, args: ModelArgs, device, load_fn, state_dict, num_users, hidden_size, configs):
+    def __init__(self, args: ModelArgs, device, state_dict, num_users, hidden_size, configs):
         super().__init__()
         
         
@@ -155,15 +165,18 @@ class TtMambaSSM(torch.nn.Module):
         delta_t_proj = ttnn.to_memory_config(self.delta_t_proj, memory_config=ttnn.L1_MEMORY_CONFIG)
         print('**********delta_t_proj shape', delta_t_proj.shape, x.shape)
         delta_t0 = ttnn.linear(x, delta_t_proj, memory_config=ttnn.L1_MEMORY_CONFIG)
+        register_op_output(delta_t0, "delta_t_proj")
         ttnn.deallocate(delta_t_proj)
 
         dt_proj_weights = ttnn.to_memory_config(self.dt_proj_weights, memory_config=self.configs["sharded_rank"])
         delta_t1 = ttnn.linear(
             delta_t0, self.dt_proj_weights, bias=self.dt_proj_bias, memory_config=ttnn.L1_MEMORY_CONFIG
         )
+        register_op_output(delta_t1, "dt_proj")
         ttnn.deallocate(delta_t0)
         ttnn.deallocate(dt_proj_weights)
         delta_t2 = ttnn.softplus(delta_t1, parameter1=1.0, parameter2=20.0, memory_config=ttnn.L1_MEMORY_CONFIG)
+        register_op_output(delta_t2, "softplus")
         ttnn.deallocate(delta_t1)
 
         # calculate abar
@@ -174,9 +187,11 @@ class TtMambaSSM(torch.nn.Module):
         abar1 = ttnn.mul(delta_t4, abar0, memory_config=self.configs["sharded_large"])
         ttnn.deallocate(abar0)
         ttnn.deallocate(delta_t4)
+        register_op_output(abar1, "abar")
         abar2 = ttnn.to_memory_config(abar1, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(abar1)
         abar3 = ttnn.exp(abar2)
+        register_op_output(abar3, "abar_exp")
         ttnn.deallocate(abar2)
         abar4 = ttnn.to_memory_config(abar3, memory_config=self.configs["sharded_large"])
         ttnn.deallocate(abar3)
@@ -184,6 +199,7 @@ class TtMambaSSM(torch.nn.Module):
         # multiply abar and hidden_state
         hidden_state0 = ttnn.to_memory_config(self.tt_hidden_state, memory_config=self.configs["sharded_large"])
         amulh0 = ttnn.mul(abar4, hidden_state0, memory_config=self.configs["sharded_large"])
+        register_op_output(amulh0, "abar_h")
 
         # deallocate abar and hidden_state
         ttnn.deallocate(abar4)
@@ -192,28 +208,33 @@ class TtMambaSSM(torch.nn.Module):
         # B
         B_proj_weights = ttnn.to_memory_config(self.B_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
         B0 = ttnn.linear(x, B_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
+        register_op_output(B0, "B_proj")
         ttnn.deallocate(B_proj_weights)
         B_intermediate_weights = ttnn.to_memory_config(self.B_intermediate, memory_config=ttnn.L1_MEMORY_CONFIG)
-        B1 = ttnn.matmul(B0, B_intermediate_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
+        B1 = ttnn.matmul(B0, B_intermediate_weights, memory_config=ttnn.L1_MEMORY_CONFIG) # 1, 1, 32, 32 -> 1, 1, 32, 32*2048
         ttnn.deallocate(B_intermediate_weights)
         ttnn.deallocate(B0)
         B2 = ttnn.to_memory_config(B1, memory_config=self.configs["sharded_large"])
         ttnn.deallocate(B1)
 
         # bbar
-        delta_t3 = ttnn.repeat_interleave(delta_t2, self.n, dim=3)
+        delta_t3 = ttnn.repeat_interleave(delta_t2, self.n, dim=3) # 1, 1, 32, 2048 -> 1, 1, 32, 2048*32
+        print('**********delta_t3 shape', delta_t3.shape, delta_t2.shape)
         ttnn.deallocate(delta_t2)
         delta_t4 = ttnn.to_memory_config(delta_t3, memory_config=self.configs["sharded_large"])
         ttnn.deallocate(delta_t3)
+        print('**********delta_t4 shape', delta_t4.shape, B2.shape)
         bbar0 = ttnn.mul(delta_t4, B2, memory_config=self.configs["sharded_large"])
+        register_op_output(bbar0, "bbar")
         ttnn.deallocate(delta_t4)
         ttnn.deallocate(B2)
 
         # multiply bbar and x
-        x0 = ttnn.repeat_interleave(x, self.n, dim=3)
+        x0 = ttnn.repeat_interleave(x, self.n, dim=3) # 1, 1, 32, 2048 -> 1, 1, 32, 2048*32
         x1 = ttnn.to_memory_config(x0, memory_config=self.configs["sharded_large"])
         ttnn.deallocate(x0)
         bmulx0 = ttnn.mul(bbar0, x1, memory_config=self.configs["sharded_large"])
+        register_op_output(bmulx0, "bbar_x")
 
         # deallocate bbar
         ttnn.deallocate(bbar0)
