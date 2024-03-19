@@ -248,11 +248,11 @@ class TtMambaSSM(torch.nn.Module):
         ttnn.deallocate(abar0)
         ttnn.deallocate(delta_t4)
         abar2 = ttnn.to_memory_config(abar1, memory_config=ttnn.L1_MEMORY_CONFIG)
-        ttnn.deallocate(abar1)
+        #ttnn.deallocate(abar1)
         abar3 = ttnn.exp(abar2, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(abar2)
         abar4 = ttnn.to_memory_config(abar3, memory_config=self.configs["sharded_large"])
-        ttnn.deallocate(abar3)
+        #ttnn.deallocate(abar3)
 
         # multiply abar and hidden_state
         hidden_state0 = ttnn.to_memory_config(self.tt_hidden_state, memory_config=self.configs["sharded_large"])
@@ -272,13 +272,13 @@ class TtMambaSSM(torch.nn.Module):
         ttnn.deallocate(B_intermediate_weights)
         ttnn.deallocate(B0)
         B2 = ttnn.to_memory_config(B1, memory_config=self.configs["sharded_large"])
-        ttnn.deallocate(B1)
+        #ttnn.deallocate(B1)
 
         # bbar
         #delta_t3 = ttnn.repeat_interleave(delta_t2, self.n, dim=3)
         ttnn.deallocate(delta_t2)
         delta_t4 = ttnn.to_memory_config(delta_t3, memory_config=self.configs["sharded_large"])
-        ttnn.deallocate(delta_t3)
+        #ttnn.deallocate(delta_t3)
         bbar0 = ttnn.mul(delta_t4, B2, memory_config=self.configs["sharded_large"])
         ttnn.deallocate(delta_t4)
         ttnn.deallocate(B2)
@@ -286,7 +286,7 @@ class TtMambaSSM(torch.nn.Module):
         # multiply bbar and x
         x0 = ttnn.repeat_interleave(x, self.n, dim=3)
         x1 = ttnn.to_memory_config(x0, memory_config=self.configs["sharded_large"])
-        ttnn.deallocate(x0)
+        #ttnn.deallocate(x0)
         bmulx0 = ttnn.mul(bbar0, x1, memory_config=self.configs["sharded_large"])
 
         # deallocate bbar
@@ -325,7 +325,7 @@ class TtMambaSSM(torch.nn.Module):
 
         # hidden state @ C
         hidden_state2 = ttnn.to_memory_config(hidden_state1, memory_config=ttnn.L1_MEMORY_CONFIG)
-        ttnn.deallocate(hidden_state1)
+        #ttnn.deallocate(hidden_state1)
         hidden_state3 = ttnn.reshape(hidden_state2, (1, self.num_users, self.hidden_size, self.n))  # b, d, 32
         C2 = ttnn.matmul(hidden_state3, C1, memory_config=ttnn.L1_MEMORY_CONFIG)  # b, d, 1
         ttnn.deallocate(hidden_state2)
