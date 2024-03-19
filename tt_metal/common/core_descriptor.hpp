@@ -23,7 +23,7 @@ inline std::string get_core_descriptor_file(const tt::ARCH &arch) {
 
     // Ability to skip this runtime opt, since trimmed SOC desc limits which DRAM channels are available.
     string tt_metal_home;
-    string wh_arch = "tt_metal/core_descriptors/wormhole_b0_80_arch.yaml";
+    string wh_arch = "tt_metal/core_descriptors/wormhole_b0_80_arch_eth_dispatch.yaml";
     if (getenv("TT_METAL_HOME")) {
         tt_metal_home = getenv("TT_METAL_HOME");
     } else {
