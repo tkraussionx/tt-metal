@@ -64,7 +64,6 @@ class TtModelArgs:
         )
         # Update memory layouts (Tile, except MLP)
         self.model_config.update({f"{key}_TILE": ttnn.TILE_LAYOUT for key in self.OP_KEYS if "LAYOUT" in key})
-        print("self.model_config.keys = ", self.model_config.keys())
 
         self.max_grid_size = ttnn.CoreGrid(x=4, y=8) if is_wormhole_b0() else ttnn.CoreGrid(x=12, y=9)
 
