@@ -29,19 +29,26 @@ class Emb(torch.nn.Module):
         return self.emb(x)
 
 
+# expected_compile_time=155,
+#         expected_inference_time=0.085,
 @pytest.mark.models_performance_bare_metal
 @pytest.mark.parametrize(
-    "iterations",
-    (12,),
+    "batch, iterations, expected_compile_time, expected_inference_time",
+    ((32, 12, 155, 0.085),),
 )
-def test_mistral_model_inference(device, iterations, use_program_cache):
+# @pytest.mark.parametrize(
+#     "iterations",
+#     (12,),
+# )
+def test_mistral_model_inference(
+    device, batch, iterations, expected_compile_time, expected_inference_time, use_program_cache
+):
     dtype = ttnn.bfloat8_b
 
     run_ref_pt = True
 
     model_args = TtModelArgs(device)
-    model_args.max_batch_size = 32
-    model_args.n_layers = 32  # Full model
+    model_args.max_batch_size = batch
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
     # Clear global profiler state before starting measurements
@@ -170,11 +177,11 @@ def test_mistral_model_inference(device, iterations, use_program_cache):
 
     prep_perf_report(
         model_name=f"Mistral7B",
-        batch_size=model_args.max_batch_size,
+        batch_size=batch,
         inference_and_compile_time=first_iter_time,
         inference_time=second_iter_time,
-        expected_compile_time=155,
-        expected_inference_time=0.085,
+        expected_compile_time=expected_compile_time,
+        expected_inference_time=expected_inference_time,
         inference_time_cpu=ref_model_run_for_inference,
         comments=comment,
     )
