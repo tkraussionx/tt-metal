@@ -50,7 +50,6 @@ def test_mistral_attention_inference(iterations, device, use_program_cache):
         state_dict,
         weight_cache_path=model_args.weight_cache_path(dtype),
         layer_num=0,
-        grid=model_args.max_grid_size,
         dtype=dtype,
         configuration=model_args,
         tt_cos_cached=tt_cos_cached,

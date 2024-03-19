@@ -30,11 +30,12 @@ def test_mistral_mlp_inference(device, use_program_cache):
 
     tt_model = TtMistralMLP(
         device=device,
+        args=model_args,
         state_dict=state_dict,
         weight_cache_path=model_args.weight_cache_path(dtype),
         layer_num=0,
-        grid=model_args.max_grid_size,
         dtype=dtype,
+        model_config=model_args.get_model_config(),
     )
     torch_input = torch.randn(1, 1, 17, 4096)
     reference_output = reference_model(torch_input)

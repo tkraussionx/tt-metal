@@ -20,7 +20,6 @@ class TtMistralAttention(nn.Module):
         state_dict,
         weight_cache_path,
         layer_num,
-        grid,
         dtype,
         configuration,
         tt_cos_cached,
@@ -45,6 +44,12 @@ class TtMistralAttention(nn.Module):
 
         self.dtype = dtype
 
+        self.kv_seq_len = configuration.kv_seq_len
+        self.grid_size = configuration.max_grid_size
+
+        self.model_config = configuration.get_model_config()
+        self.compute_kernel_config = configuration.get_compute_kernel_config()
+
         layer_name = f"layers.{layer_num}.attention"
         cache_name = lambda name: weight_cache_path / (f"{layer_name}.{name}")
 
@@ -60,13 +65,6 @@ class TtMistralAttention(nn.Module):
         self.wqkv_list = []
         self.wo_list = []
         self.layer_past_list = []
-
-        self.kernel_config = ttnn.WormholeComputeKernelConfig(
-            math_fidelity=ttnn.MathFidelity.HiFi4,
-            math_approx_mode=False,
-            fp32_dest_acc_en=True,
-            packer_l1_acc=True,
-        )
 
         for i in range(self.num_devices):
             wqkv = ttnn.as_tensor(
@@ -92,8 +90,8 @@ class TtMistralAttention(nn.Module):
                 ),
                 device=self.devices[i],
                 dtype=self.dtype,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
-                layout=ttnn.TILE_LAYOUT,
+                memory_config=self.model_config["ATTN_WEIGHTS_MEMCFG"],
+                layout=self.model_config["ATTN_W_LAYOUT_TILE"],
                 cache_file_name=cache_name("wqkv"),
             )
 
@@ -104,9 +102,9 @@ class TtMistralAttention(nn.Module):
                     -1,
                 ),
                 device=self.devices[i],
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                memory_config=self.model_config["ATTN_WEIGHTS_MEMCFG"],
                 dtype=self.dtype,
-                layout=ttnn.TILE_LAYOUT,
+                layout=self.model_config["ATTN_W_LAYOUT_TILE"],
                 cache_file_name=cache_name("wo"),
             )
 
@@ -114,8 +112,7 @@ class TtMistralAttention(nn.Module):
                 (
                     self.max_batch_size,
                     self.n_kv_heads // self.num_devices,
-                    # self.sliding_window,
-                    512,  # TODO Update the initial cache size when scaling up (Target = window size == 4096)
+                    self.kv_seq_len,  # self.sliding_window,
                     self.head_dim,
                 )
             )
@@ -123,14 +120,15 @@ class TtMistralAttention(nn.Module):
                 (
                     self.max_batch_size,
                     self.n_kv_heads // self.num_devices,
-                    # self.sliding_window,
-                    512,  # TODO Update the initial cache size when scaling up (Target = window size == 4096)
+                    self.kv_seq_len,  # self.sliding_window,
                     self.head_dim,
                 )
             )
             layer_past = [cache_k, cache_v]
             layer_past = [
-                ttnn.from_torch(lp, device=self.devices[i], layout=ttnn.TILE_LAYOUT, dtype=self.dtype)
+                ttnn.from_torch(
+                    lp, device=self.devices[i], layout=self.model_config["ATTN_W_LAYOUT_TILE"], dtype=self.dtype
+                )
                 for lp in layer_past
             ]
 
@@ -140,7 +138,6 @@ class TtMistralAttention(nn.Module):
             self.layer_past_list.append(layer_past)
         self.tt_sin_cached = tt_sin_cached
         self.tt_cos_cached = tt_cos_cached
-        self.grid = grid
 
     def forward(
         self,
@@ -171,9 +168,9 @@ class TtMistralAttention(nn.Module):
             xqkv_fused = ttnn.linear(
                 x,
                 wqkv,
-                core_grid=self.grid,
-                memory_config=ttnn.L1_MEMORY_CONFIG,
-                compute_kernel_config=self.kernel_config,
+                core_grid=self.grid_size,
+                memory_config=self.model_config["XQKV_MM_OUTPUT_MEMCFG"],
+                compute_kernel_config=self.compute_kernel_config,
                 dtype=self.dtype,
             )
 
@@ -189,7 +186,7 @@ class TtMistralAttention(nn.Module):
                 num_heads=self.n_local_heads,
                 num_kv_heads=self.n_local_kv_heads,
                 transpose_k_heads=False,
-                output_mem_config=ttnn.DRAM_MEMORY_CONFIG,  # ttnn.L1_MEMORY_CONFIG,
+                output_mem_config=self.model_config["QKV_HEADS_OUTPUT_MEMCFG"],
             )
 
             ttnn.deallocate(xqkv_fused)
@@ -201,9 +198,9 @@ class TtMistralAttention(nn.Module):
             q_heads = ttnn.linear(
                 q_heads,
                 rot_mat,
-                core_grid=self.grid,
-                memory_config=ttnn.L1_MEMORY_CONFIG,
-                compute_kernel_config=self.kernel_config,
+                core_grid=self.grid_size,
+                memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
+                compute_kernel_config=self.compute_kernel_config,
             )
 
             # k_heads = ttnn.experimental.tensor.rotary_embedding(
@@ -213,9 +210,9 @@ class TtMistralAttention(nn.Module):
             k_heads = ttnn.linear(
                 k_heads,
                 rot_mat,
-                core_grid=self.grid,
-                memory_config=ttnn.L1_MEMORY_CONFIG,
-                compute_kernel_config=self.kernel_config,
+                core_grid=self.grid_size,
+                memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
+                compute_kernel_config=self.compute_kernel_config,
             )
 
             ###
@@ -243,7 +240,7 @@ class TtMistralAttention(nn.Module):
                     padded_layer_past_len - 1,
                     self.head_dim - 1,
                 ],
-                output_mem_config=ttnn.L1_MEMORY_CONFIG,
+                output_mem_config=self.model_config["KV_UNPAD_OUTPUT_MEMCFG"],
             )
             values = ttnn.experimental.tensor.unpad(
                 layer_past[1],
@@ -254,7 +251,7 @@ class TtMistralAttention(nn.Module):
                     padded_layer_past_len - 1,
                     self.head_dim - 1,
                 ],
-                output_mem_config=ttnn.L1_MEMORY_CONFIG,
+                output_mem_config=self.model_config["KV_UNPAD_OUTPUT_MEMCFG"],
             )
 
             ###
@@ -293,8 +290,8 @@ class TtMistralAttention(nn.Module):
                 q_heads,
                 keys,
                 compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-                output_mem_config=ttnn.L1_MEMORY_CONFIG,
-                output_dtype=ttnn.bfloat16,  # Must be BFLOAT16
+                output_mem_config=self.model_config["QK_MM_OUTPUT_MEMCFG"],
+                output_dtype=ttnn.bfloat16,  # Force bfloat16 for higher accuracy
             )  # seqlen, n_heads, batch, cache_len + seqlen
 
             attn = ttnn.transformer.attention_softmax_(attn, head_size=self.head_dim, attention_mask=attn_mask)
@@ -322,22 +319,24 @@ class TtMistralAttention(nn.Module):
                 attn,
                 values,
                 compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-                # output_mem_config=ttnn.L1_MEMORY_CONFIG,
-                output_dtype=ttnn.bfloat16,
+                output_mem_config=self.model_config["QKV_MM_OUTPUT_MEMCFG"],
+                output_dtype=ttnn.bfloat16,  # Force bfloat16 for higher accuracy
             )  # seqlen, n_heads, batch, dhead
 
             ttnn.deallocate(attn)
             ttnn.deallocate(q_heads)
 
-            attn_output = ttnn.transformer.concatenate_heads(attn_output, memory_config=ttnn.L1_MEMORY_CONFIG)
+            attn_output = ttnn.transformer.concatenate_heads(
+                attn_output, memory_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"]
+            )
             # seqlen, 1, batch, hidden_size
 
             dense_out = ttnn.linear(
                 attn_output,
                 wo,
-                core_grid=self.grid,
-                memory_config=ttnn.L1_MEMORY_CONFIG,
-                compute_kernel_config=self.kernel_config,
+                core_grid=self.grid_size,
+                memory_config=self.model_config["LM_HEAD_OUTPUT_MEMCFG"],
+                compute_kernel_config=self.compute_kernel_config,
             )  # seqlen, 1, batch, hidden_size
 
             dense_outputs.append(dense_out)

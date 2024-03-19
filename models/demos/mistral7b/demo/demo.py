@@ -180,7 +180,7 @@ def run_mistral_demo(user_input, batch_size, device):
                 ):  # Still in prefill, so ignore EOS token and save the generated token
                     all_outputs[user].append(user_tok[0])
                 else:
-                    print(f"[User {user}] Finished decoding at iteration {iteration}")
+                    logger.trace(f"[User {user}] Finished decoding at iteration {iteration}")
                     user_done[user] = True
                     if all(user_done):
                         users_decoding = False

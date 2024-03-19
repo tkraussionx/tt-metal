@@ -47,7 +47,6 @@ class TtTransformerBlock(torch.nn.Module):
             state_dict=state_dict,
             weight_cache_path=weight_cache_path,
             layer_num=layer_num,
-            grid=args.max_grid_size,
             dtype=dtype,
             configuration=args,
             tt_cos_cached=tt_cos_cached,
@@ -55,11 +54,12 @@ class TtTransformerBlock(torch.nn.Module):
         )
         self.feed_forward = TtMistralMLP(
             device=device,
+            args=args,
             state_dict=state_dict,
             weight_cache_path=weight_cache_path,
             layer_num=layer_num,
-            grid=args.max_grid_size,
             dtype=dtype,
+            model_config=self.args.get_model_config(),
         )
         self.attention_norm = TtRMSNorm(
             device=device,
