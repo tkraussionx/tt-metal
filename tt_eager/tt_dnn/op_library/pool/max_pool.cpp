@@ -116,8 +116,7 @@ operation::ProgramWithCallbacks MaxPool::create_program(const std::vector<Tensor
                                     stride_h_, stride_w_,
                                     pad_h_, pad_w_,
                                     dilation_h_, dilation_w_,
-                                    out_mem_config_,
-                                    nblocks_)};
+                                    out_mem_config_)};
     } else {
         if (!use_multicore_) {
             return {max_pool_2d_single_core(input, output,
