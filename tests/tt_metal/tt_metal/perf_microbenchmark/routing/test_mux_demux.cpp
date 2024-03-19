@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
                     max_packet_size_words, // 14: max_packet_size_words
                     src_endpoint_start_id, // 15: src_endpoint_start_id
                     dest_endpoint_start_id, // 16: dest_endpoint_start_id
-                    timeout_mcycles, // 17: timeout_cycles (in units of 1M)
+                    timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
                     0x1 // 18: debug_output_verbose
                 };
 
@@ -192,7 +192,7 @@ int main(int argc, char **argv) {
                 debug_buf_addr, // 14: debug_buf_addr
                 debug_buf_size, // 15: debug_buf_size
                 0x1, // 16: debug_output_verbose
-                timeout_mcycles, // 17: timeout_cycles (in units of 1M)
+                timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
             };
 
         log_info(LogTest, "run mux at x={},y={}", mux_core.x, mux_core.y);
@@ -231,7 +231,7 @@ int main(int argc, char **argv) {
                     rx_disable_data_check, // 14: disable data check
                     src_endpoint_start_id, // 15: src_endpoint_start_id
                     dest_endpoint_start_id, // 16: dest_endpoint_start_id
-                    timeout_mcycles, // 17: timeout_cycles (in units of 1M)
+                    timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
                     0x1 // 18: debug_output_verbose
                 };
 
@@ -291,7 +291,7 @@ int main(int argc, char **argv) {
                 debug_buf_addr, // 22: debug_buf_addr
                 debug_buf_size, // 23: debug_buf_size
                 0x1, // 24: debug_output_verbose
-                timeout_mcycles, // 25: timeout_cycles (in units of 1M)
+                timeout_mcycles * 1000 * 1000, // 25: timeout_cycles
             };
 
         log_info(LogTest, "run demux at x={},y={}", demux_core.x, demux_core.y);
@@ -351,6 +351,7 @@ int main(int argc, char **argv) {
             double total_tx_bw = 0.0;
             uint64_t total_tx_words_sent = 0;
             uint64_t total_rx_words_checked = 0;
+            uint64_t total_num_packets = 0;
             for (uint32_t i = 0; i < num_src_endpoints; i++) {
                 vector<uint32_t> tx_results =
                     tt::llrt::read_hex_vec_from_core(
@@ -362,6 +363,10 @@ int main(int argc, char **argv) {
                 uint64_t tx_elapsed_cycles = tx_results[18];
                 tx_elapsed_cycles <<= 32;
                 tx_elapsed_cycles |= tx_results[19];
+                uint64_t tx_num_packets = tx_results[22];
+                tx_num_packets <<= 32;
+                tx_num_packets |= tx_results[23];
+                total_num_packets += tx_num_packets;
                 double tx_bw = ((double)tx_words_sent) * PACKET_WORD_SIZE_BYTES / tx_elapsed_cycles;
                 log_info(LogTest,
                          "TX {} words sent = {}, elapsed cycles = {} -> BW = {:.2f} B/cycle",
@@ -403,10 +408,17 @@ int main(int argc, char **argv) {
             uint64_t mux_elapsed_cycles = mux_results[18];
             mux_elapsed_cycles <<= 32;
             mux_elapsed_cycles |= mux_results[19];
+            uint64_t mux_iter = mux_results[20];
+            mux_iter <<= 32;
+            mux_iter |= mux_results[21];
             double mux_bw = ((double)mux_words_sent) * PACKET_WORD_SIZE_BYTES / mux_elapsed_cycles;
+            double mux_cycles_per_iter = ((double)mux_elapsed_cycles) / mux_iter;
             log_info(LogTest,
                      "MUX words sent = {}, elapsed cycles = {} -> BW = {:.2f} B/cycle",
                      mux_words_sent, mux_elapsed_cycles, mux_bw);
+            log_info(LogTest,
+                        "MUX iters = {} -> cycles/iter = {:.1f}",
+                        mux_iter, mux_cycles_per_iter);
             if (mux_words_sent != total_rx_words_checked) {
                 log_error(LogTest, "MUX words sent = {} != Total RX words checked = {}", mux_words_sent, total_rx_words_checked);
                 pass = false;
@@ -424,15 +436,24 @@ int main(int argc, char **argv) {
             demux_elapsed_cycles <<= 32;
             demux_elapsed_cycles |= demux_results[19];
             double demux_bw = ((double)demux_words_sent) * PACKET_WORD_SIZE_BYTES / demux_elapsed_cycles;
+            uint64_t demux_iter = demux_results[20];
+            demux_iter <<= 32;
+            demux_iter |= demux_results[21];
+            double demux_cycles_per_iter = ((double)demux_elapsed_cycles) / demux_iter;
             log_info(LogTest,
                      "DEMUX words sent = {}, elapsed cycles = {} -> BW = {:.2f} B/cycle",
                      demux_words_sent, demux_elapsed_cycles, demux_bw);
+            log_info(LogTest,
+                     "DEMUX iters = {} -> cycles/iter = {:.1f}",
+                     demux_iter, demux_cycles_per_iter);
             if (demux_words_sent != total_rx_words_checked) {
                 log_error(LogTest, "DEMUX words sent = {} != Total RX words checked = {}", demux_words_sent, total_rx_words_checked);
                 pass = false;
             } else {
                 log_info(LogTest, "DEMUX words sent = {} == Total RX words checked = {} -> OK", demux_words_sent, total_rx_words_checked);
             }
+            double avg_packet_bytes = ((double)total_tx_words_sent) * PACKET_WORD_SIZE_BYTES / total_num_packets;
+            log_info(LogTest, "Total num packets = {} -> avg packet size = {:.2f} B", total_num_packets, avg_packet_bytes);
         }
 
     } catch (const std::exception& e) {

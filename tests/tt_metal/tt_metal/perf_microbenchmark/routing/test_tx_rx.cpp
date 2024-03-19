@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
                 max_packet_size_words, // 14: max_packet_size_words
                 0xaa, // 15: src_endpoint_start_id
                 0xbb, // 16: dest_endpoint_start_id
-                timeout_mcycles, // 17: timeout_cycles (in units of 1M)
+                timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
                 0x1 // 18: debug_output_verbose
             };
 
@@ -132,7 +132,7 @@ int main(int argc, char **argv) {
                 rx_disable_data_check, // 14: disable data check
                 0xaa, // 15: src_endpoint_start_id
                 0xbb, // 16: dest_endpoint_start_id
-                timeout_mcycles, // 17: timeout_cycles (in units of 1M)
+                timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
                 0x1 // 18: debug_output_verbose
             };
 

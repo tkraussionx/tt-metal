@@ -48,7 +48,7 @@ constexpr uint32_t disable_data_check = get_compile_time_arg_val(14);
 constexpr uint32_t src_endpoint_start_id = get_compile_time_arg_val(15);
 constexpr uint32_t dest_endpoint_start_id = get_compile_time_arg_val(16);
 
-constexpr uint64_t timeout_cycles = ((uint64_t)(get_compile_time_arg_val(17))) * 1000 * 1000;
+constexpr uint32_t timeout_cycles = get_compile_time_arg_val(17);
 
 constexpr uint32_t debug_output_verbose = get_compile_time_arg_val(18);
 
@@ -96,19 +96,17 @@ void kernel_main() {
     input_queue_rnd_state_t* src_endpoint_rnd_state;
     uint64_t words_sent = 0;
     uint64_t words_cleared = 0;
-    uint64_t elapsed_cycles = 0;
-    uint64_t start_timestamp = c_tensix_core::read_wall_clock();
+    uint64_t start_timestamp = get_timestamp();
+    uint32_t progress_timestamp = start_timestamp & 0xFFFFFFFF;
 
     while (!all_src_endpoints_last_packet) {
 
         iter++;
-        debug_log_index(3, iter>>32);
-        debug_log_index(4, iter);
 
         bool packet_available = false;
         while (!packet_available) {
-            elapsed_cycles = c_tensix_core::read_wall_clock() - start_timestamp;
-            if (elapsed_cycles > timeout_cycles) {
+            uint32_t cycles_since_progress = get_timestamp_32b() - progress_timestamp;
+            if (cycles_since_progress > timeout_cycles) {
                 debug_log_index(1, 0xff000006);
                 timeout = true;
                 break;
@@ -146,14 +144,6 @@ void kernel_main() {
                 debug_log_index(8, 0xee000001);
                 break;
         }
-
-        debug_log(0x11111111);
-        debug_log(reinterpret_cast<uint32_t>(curr_packet_header_ptr));
-        debug_log(curr_packet_size_words);
-        debug_log(curr_packet_dest);
-        debug_log(curr_packet_tag);
-        debug_log(curr_packet_flags);
-        debug_log(0x22222222);
 
         if (curr_packet_flags & PACKET_TEST_LAST) {
             if (src_endpoint_last_packet[src_endpoint_index] ||
@@ -230,6 +220,7 @@ void kernel_main() {
             input_queue->input_queue_advance_words_cleared(curr_packet_payload_words);
             words_cleared += curr_packet_payload_words;
         }
+        progress_timestamp = get_timestamp_32b();
         num_words_checked += curr_packet_size_words;
         all_src_endpoints_last_packet = true;
         uint32_t src_endpoint_last_index_dbg = 0xe0000000;
@@ -242,8 +233,8 @@ void kernel_main() {
         debug_log_index(5, src_endpoint_last_index_dbg);
     }
 
+    uint64_t elapsed_cycles = get_timestamp() - start_timestamp;
     if (!timeout && !check_failed) {
-        elapsed_cycles = c_tensix_core::read_wall_clock() - start_timestamp;
         debug_log_index(1, 0xff000002);
         input_queue->send_remote_finished_notification();
     }
@@ -252,6 +243,8 @@ void kernel_main() {
     debug_log_index(17, num_words_checked);
     debug_log_index(18, elapsed_cycles>>32);
     debug_log_index(19, elapsed_cycles);
+    debug_log_index(20, iter>>32);
+    debug_log_index(21, iter);
 
     if (timeout) {
         debug_log_index(0, PACKET_QUEUE_TEST_TIMEOUT);

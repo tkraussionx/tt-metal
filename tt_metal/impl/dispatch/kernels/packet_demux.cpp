@@ -94,9 +94,8 @@ constexpr DispatchRemoteNetworkType
 static_assert(MAX_DEST_ENDPOINTS <= 32 && MAX_SWITCH_FAN_OUT <= 4,
     "We assume MAX_DEST_ENDPOINTS <= 32 and MAX_SWITCH_FAN_OUT <= 4 for the initialization below to work");
 
-constexpr uint64_t dest_endpoint_output_map =
-    ((uint64_t)(get_compile_time_arg_val(20)) << 32) |
-    ((uint64_t)(get_compile_time_arg_val(21)));
+constexpr uint32_t dest_endpoint_output_map_hi = get_compile_time_arg_val(20);
+constexpr uint32_t dest_endpoint_output_map_lo = get_compile_time_arg_val(21);
 
 constexpr uint32_t output_queue_index_bits = 2;
 constexpr uint32_t output_queue_index_mask = (1 << output_queue_index_bits) - 1;
@@ -105,8 +104,14 @@ constexpr uint32_t debug_buf_addr_arg = get_compile_time_arg_val(22);
 constexpr uint32_t debug_buf_size_arg = get_compile_time_arg_val(23);
 constexpr uint32_t debug_output_verbose = get_compile_time_arg_val(24);
 
-constexpr uint64_t timeout_cycles = ((uint64_t)(get_compile_time_arg_val(25))) * 1000 * 1000;
+constexpr uint32_t timeout_cycles = get_compile_time_arg_val(25);
 
+FORCE_INLINE uint32_t packet_switch_dest_unpack(uint32_t dest_endpoint_id) {
+    uint32_t dest_endpoint_index = dest_endpoint_id - endpoint_id_start_index;
+    uint32_t result_bit0 = (dest_endpoint_output_map_lo >> dest_endpoint_index) & 0x1;
+    uint32_t result_bit1 = (dest_endpoint_output_map_hi >> dest_endpoint_index) & 0x1;
+    return (result_bit1 << 1) | result_bit0;
+}
 
 void kernel_main() {
 
@@ -116,8 +121,8 @@ void kernel_main() {
     debug_log_index(0, PACKET_QUEUE_TEST_STARTED);
     debug_log_index(1, 0xff000000);
     debug_log_index(2, 0xbb000000 | demux_fan_out);
-    debug_log_index(3, dest_endpoint_output_map >> 32);
-    debug_log_index(4, dest_endpoint_output_map);
+    debug_log_index(3, dest_endpoint_output_map_hi);
+    debug_log_index(4, dest_endpoint_output_map_lo);
     debug_log_index(5, endpoint_id_start_index);
 
     for (uint32_t i = 0; i < demux_fan_out; i++) {
@@ -135,25 +140,26 @@ void kernel_main() {
     bool timeout = false;
     bool all_outputs_finished = false;
     uint64_t data_words_sent = 0;
-    uint64_t start_timestamp = c_tensix_core::read_wall_clock();
-    uint64_t progress_timestamp = start_timestamp;
+    uint64_t iter = 0;
+    uint64_t start_timestamp = get_timestamp();
+    uint32_t progress_timestamp = start_timestamp & 0xFFFFFFFF;
     while (!all_outputs_finished && !timeout) {
+        iter++;
         if (timeout_cycles > 0) {
-            uint64_t cycles_elapsed = c_tensix_core::read_wall_clock() - progress_timestamp;
-            if (cycles_elapsed > timeout_cycles) {
+            uint32_t cycles_since_progress = get_timestamp_32b() - progress_timestamp;
+            if (cycles_since_progress > timeout_cycles) {
                 timeout = true;
                 break;
             }
         }
         if (input_queue.get_curr_packet_valid()) {
             uint32_t dest = input_queue.get_curr_packet_dest();
-            uint32_t output_queue_id = packet_switch_dest_unpack(dest, endpoint_id_start_index,
-                                                                 dest_endpoint_output_map);
+            uint32_t output_queue_id = packet_switch_dest_unpack(dest);
             bool full_packet_sent;
             uint32_t words_sent = output_queues[output_queue_id].forward_data_from_input(0, full_packet_sent);
             data_words_sent += words_sent;
             if ((words_sent > 0) && (timeout_cycles > 0)) {
-                progress_timestamp = c_tensix_core::read_wall_clock();
+                progress_timestamp = get_timestamp_32b();
             }
         }
         all_outputs_finished = true;
@@ -173,7 +179,7 @@ void kernel_main() {
         }
     }
 
-    uint64_t cycles_elapsed = c_tensix_core::read_wall_clock() - start_timestamp;
+    uint64_t cycles_elapsed = get_timestamp() - start_timestamp;
     if (!timeout) {
         debug_log_index(1, 0xff000003);
         input_queue.send_remote_finished_notification();
@@ -183,6 +189,8 @@ void kernel_main() {
     debug_log_index(17, data_words_sent);
     debug_log_index(18, cycles_elapsed>>32);
     debug_log_index(19, cycles_elapsed);
+    debug_log_index(20, iter>>32);
+    debug_log_index(21, iter);
 
     if (timeout) {
         debug_log_index(0, PACKET_QUEUE_TEST_TIMEOUT);
