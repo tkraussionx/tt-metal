@@ -65,10 +65,17 @@ class TtModelArgs:
         # Update memory layouts (Tile, except MLP)
         self.model_config.update({f"{key}_TILE": ttnn.TILE_LAYOUT for key in self.OP_KEYS if "LAYOUT" in key})
 
-        # Avoid issue with test_mistral_torch.py
-        if device is not None:
+        if device is not None:  # Avoid issue with test_mistral_torch.py not having a device
             grid_size = device.compute_with_storage_grid_size()
-            self.max_grid_size = ttnn.CoreGrid(x=grid_size.x, y=grid_size.y)
+            for i in range(grid_size.y, 0, -1):
+                # Force the number of rows in the grid to be a factor of max_batch_size for a valid sharding
+                if self.max_batch_size % i == 0:
+                    grid_size_y = i
+                    break
+            assert (
+                self.max_batch_size % grid_size_y == 0
+            ), f"Number of rows in the grid should be a factor of max_batch_size ({self.max_batch_size})"
+            self.max_grid_size = ttnn.CoreGrid(y=grid_size_y, x=grid_size.x)  # (y,x)
 
         # Add sharded memory config for MLP FF1/FF3
         mlp_shard_config = ttnn.create_sharded_memory_config(
