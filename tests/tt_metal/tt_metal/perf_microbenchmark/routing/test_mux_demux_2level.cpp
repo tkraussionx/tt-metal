@@ -166,7 +166,7 @@ int main(int argc, char **argv) {
                     max_packet_size_words, // 14: max_packet_size_words
                     src_endpoint_start_id, // 15: src_endpoint_start_id
                     dest_endpoint_start_id, // 16: dest_endpoint_start_id
-                    timeout_mcycles, // 17: timeout_cycles (in units of 1M)
+                    timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
                     0x1 // 18: debug_output_verbose
                 };
             log_info(LogTest, "run TX {} at x={},y={} (phys x={},y={})",
@@ -206,7 +206,7 @@ int main(int argc, char **argv) {
                     rx_disable_data_check, // 14: disable data check
                     src_endpoint_start_id, // 15: src_endpoint_start_id
                     dest_endpoint_start_id, // 16: dest_endpoint_start_id
-                    timeout_mcycles, // 17: timeout_cycles (in units of 1M)
+                    timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
                     0x1 // 18: debug_output_verbose
                 };
             log_info(LogTest, "run RX {} at x={},y={} (phys x={},y={})",
@@ -258,7 +258,7 @@ int main(int argc, char **argv) {
                     debug_buf_addr, // 14: debug_buf_addr
                     debug_buf_size, // 15: debug_buf_size
                     0x1, // 16: debug_output_verbose
-                    timeout_mcycles, // 17: timeout_cycles (in units of 1M)
+                    timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
                 };
             log_info(LogTest, "run L1 MUX {} at x={},y={} (phys x={},y={})",
                             i, mux_l1_core[i].x, mux_l1_core[i].y, mux_l1_phys_core[i].x, mux_l1_phys_core[i].y);
@@ -306,7 +306,7 @@ int main(int argc, char **argv) {
                 debug_buf_addr, // 14: debug_buf_addr
                 debug_buf_size, // 15: debug_buf_size
                 0x1, // 16: debug_output_verbose
-                timeout_mcycles, // 17: timeout_cycles (in units of 1M)
+                timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
             };
         log_info(LogTest, "run L2 MUX at x={},y={} (phys x={},y={})",
                  mux_l2_core.x, mux_l2_core.y, mux_l2_phys_core.x, mux_l2_phys_core.y);
@@ -366,7 +366,7 @@ int main(int argc, char **argv) {
                 debug_buf_addr, // 22: debug_buf_addr
                 debug_buf_size, // 23: debug_buf_size
                 0x1, // 24: debug_output_verbose
-                timeout_mcycles, // 25: timeout_cycles (in units of 1M)
+                timeout_mcycles * 1000 * 1000, // 25: timeout_cycles
             };
 
         log_info(LogTest, "run L1 DEMUX at x={},y={} (phys x={},y={})",
@@ -431,7 +431,7 @@ int main(int argc, char **argv) {
                     debug_buf_addr, // 22: debug_buf_addr
                     debug_buf_size, // 23: debug_buf_size
                     0x1, // 24: debug_output_verbose
-                    timeout_mcycles, // 25: timeout_cycles (in units of 1M)
+                    timeout_mcycles * 1000 * 1000, // 25: timeout_cycles
                 };
 
             log_info(LogTest, "run L2 DEMUX at x={},y={} (phys x={},y={})",
@@ -521,6 +521,7 @@ int main(int argc, char **argv) {
             double total_tx_bw = 0.0;
             uint64_t total_tx_words_sent = 0;
             uint64_t total_rx_words_checked = 0;
+            uint64_t total_num_packets = 0;
             for (uint32_t i = 0; i < num_src_endpoints; i++) {
                 uint64_t tx_words_sent = tx_results[i][16];
                 tx_words_sent <<= 32;
@@ -529,6 +530,10 @@ int main(int argc, char **argv) {
                 uint64_t tx_elapsed_cycles = tx_results[i][18];
                 tx_elapsed_cycles <<= 32;
                 tx_elapsed_cycles |= tx_results[i][19];
+                uint64_t tx_num_packets = tx_results[i][22];
+                tx_num_packets <<= 32;
+                tx_num_packets |= tx_results[i][23];
+                total_num_packets += tx_num_packets;
                 double tx_bw = ((double)tx_words_sent) * PACKET_WORD_SIZE_BYTES / tx_elapsed_cycles;
                 log_info(LogTest,
                          "TX {} words sent = {}, elapsed cycles = {} -> BW = {:.2f} B/cycle",
@@ -565,10 +570,17 @@ int main(int argc, char **argv) {
             uint64_t mux_l2_elapsed_cycles = mux_l2_results[18];
             mux_l2_elapsed_cycles <<= 32;
             mux_l2_elapsed_cycles |= mux_l2_results[19];
+            uint64_t mux_l2_iter = mux_l2_results[20];
+            mux_l2_iter <<= 32;
+            mux_l2_iter |= mux_l2_results[21];
             double mux_l2_bw = ((double)mux_l2_words_sent) * PACKET_WORD_SIZE_BYTES / mux_l2_elapsed_cycles;
+            double mux_l2_cycles_per_iter = ((double)mux_l2_elapsed_cycles) / mux_l2_iter;
             log_info(LogTest,
                      "L2 MUX words sent = {}, elapsed cycles = {} -> BW = {:.2f} B/cycle",
                      mux_l2_words_sent, mux_l2_elapsed_cycles, mux_l2_bw);
+            log_info(LogTest,
+                    "L2 MUX iter = {}, elapsed cycles = {} -> Cycles/iter = {:.2f}",
+                    mux_l2_iter, mux_l2_elapsed_cycles, mux_l2_cycles_per_iter);
             if (mux_l2_words_sent != total_rx_words_checked) {
                 log_error(LogTest, "L2 MUX words sent = {} != Total RX words checked = {}", mux_l2_words_sent, total_rx_words_checked);
                 pass = false;
@@ -582,16 +594,25 @@ int main(int argc, char **argv) {
             uint64_t demux_l1_elapsed_cycles = demux_l1_results[18];
             demux_l1_elapsed_cycles <<= 32;
             demux_l1_elapsed_cycles |= demux_l1_results[19];
+            uint64_t demux_l1_iter = demux_l1_results[20];
+            demux_l1_iter <<= 32;
+            demux_l1_iter |= demux_l1_results[21];
             double demux_l1_bw = ((double)demux_l1_words_sent) * PACKET_WORD_SIZE_BYTES / demux_l1_elapsed_cycles;
+            double demux_l1_cycles_per_iter = ((double)demux_l1_elapsed_cycles) / demux_l1_iter;
             log_info(LogTest,
                      "L1 DEMUX words sent = {}, elapsed cycles = {} -> BW = {:.2f} B/cycle",
                      demux_l1_words_sent, demux_l1_elapsed_cycles, demux_l1_bw);
+            log_info(LogTest,
+                    "L1 DEMUX iter = {}, elapsed cycles = {} -> Cycles/iter = {:.2f}",
+                    demux_l1_iter, demux_l1_elapsed_cycles, demux_l1_cycles_per_iter);
             if (demux_l1_words_sent != total_rx_words_checked) {
                 log_error(LogTest, "L1 DEMUX words sent = {} != Total RX words checked = {}", demux_l1_words_sent, total_rx_words_checked);
                 pass = false;
             } else {
                 log_info(LogTest, "L1 DEMUX words sent = {} == Total RX words checked = {} -> OK", demux_l1_words_sent, total_rx_words_checked);
             }
+            double avg_packet_bytes = ((double)total_tx_words_sent) * PACKET_WORD_SIZE_BYTES / total_num_packets;
+            log_info(LogTest, "Total num packets = {} -> avg packet size = {:.2f} B", total_num_packets, avg_packet_bytes);
         }
 
     } catch (const std::exception& e) {
