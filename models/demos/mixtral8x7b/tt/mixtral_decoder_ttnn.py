@@ -7,7 +7,7 @@ from typing import List
 from models.demos.mixtral8x7b.tt.mixtral_attention_ttnn import TtMixtralAttention
 from models.demos.mixtral8x7b.tt.mixtral_mlp_ttnn import TtMixtralMLP
 from models.demos.mixtral8x7b.tt.mixtral_rms_norm_ttnn import TtRMSNorm
-from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn import TtMoeLayer
+from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn_new import TtMoeLayer
 
 
 class TtTransformerBlock(torch.nn.Module):
@@ -110,9 +110,7 @@ class TtTransformerBlock(torch.nn.Module):
         deallocate = lambda ls: [ttnn.deallocate(l) for l in ls]
 
         # Attention module expects a list of inputs, start_pos, attn mask (multi-device support)
-        attn_norm_b1sh = [self.attention_norm[i](xs_b1sh[i]) for i in range(self.num_devices)]
-        attn_norm_s1bh = [ttnn.permute(attn_norm_b1sh[i], (2, 1, 0, 3)) for i in range(self.num_devices)]
-        deallocate(attn_norm_b1sh)
+        attn_norm_s1bh = [self.attention_norm[i](xs_b1sh[i]) for i in range(self.num_devices)]
 
         attn_b1sh = self.attention(
             attn_norm_s1bh,
@@ -124,9 +122,8 @@ class TtTransformerBlock(torch.nn.Module):
         hs_b1sh = [ttnn.experimental.tensor.add(xs_b1sh[i], attn_b1sh[i]) for i in range(self.num_devices)]
         deallocate(attn_b1sh)
 
-        ffn_norm_b1sh = [self.ffn_norm[i](hs_b1sh[i]) for i in range(self.num_devices)]
-        ffn_b1sh = self.feed_forward(ffn_norm_b1sh)
-        deallocate(ffn_norm_b1sh)
+        ffn_norm_s1bh = [self.ffn_norm[i](hs_b1sh[i]) for i in range(self.num_devices)]
+        ffn_b1sh = self.feed_forward(ffn_norm_s1bh)
 
         out_b1sh = [ttnn.experimental.tensor.add(hs_b1sh[i], ffn_b1sh[i]) for i in range(self.num_devices)]
         deallocate(ffn_b1sh)

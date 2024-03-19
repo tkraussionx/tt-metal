@@ -166,7 +166,7 @@ def prepare_inputs_ttnn(x_bsh, start_pos, hidden_size, head_dim, sliding_window,
     # start_pos: int
     # attn_mask: [seq_len, n_heads, batch, padded_layer_past_len]
     x_b1sh = x_bsh.unsqueeze(1)
-    assert x_b1sh.size() == (batch, 1, seq_len, hidden_size)
+    x_b1sh = x_b1sh.view(1, seq_len, batch, hidden_size)
     # assert attn_mask.size() == (seq_len, n_local_heads, batch, padded_layer_past_len)
 
     xs_b1sh, attn_masks, rot_mats = [], [], []

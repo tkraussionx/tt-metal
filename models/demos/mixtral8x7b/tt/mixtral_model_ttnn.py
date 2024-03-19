@@ -90,7 +90,7 @@ class TtTransformer(nn.Module):
         for i in range(len(self.devices)):
             x_norm.append(self.norm[i](x[i]))
             ttnn.deallocate(x[i])
-            x_norm[i] = ttnn.permute(x_norm[i], (2, 1, 0, 3))
+            # x_norm[i] = ttnn.permute(x_norm[i], (2, 1, 0, 3))
             output_i = ttnn.linear(
                 x_norm[i],
                 self.output_weight[i],

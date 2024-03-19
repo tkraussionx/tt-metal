@@ -6,7 +6,7 @@ import pytest
 from loguru import logger
 import ttnn
 from models.demos.mixtral8x7b.tt.mixtral_mlp_ttnn import TtMixtralMLP
-from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn import TtMoeLayer
+from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn_new import TtMoeLayer
 from models.demos.mixtral8x7b.tt.model_config_ttnn import TtModelArgs
 from models.demos.mixtral8x7b.reference.moe import MoeLayer
 from models.demos.mixtral8x7b.reference.model import FeedForward
@@ -21,7 +21,7 @@ from models.utility_functions import get_devices_for_t3000
     "iterations",
     ((1,)),
 )
-def test_mistral_moe_inference(all_devices, iterations, reset_seeds):
+def test_mistral_moe_inference(all_devices, iterations):
     pcc = 0.99
     dtype = ttnn.bfloat8_b
 
@@ -99,7 +99,7 @@ def test_mistral_moe_inference(all_devices, iterations, reset_seeds):
         pt_decode_input = (torch.rand(batch, seqlen, model_args.dim) * 2) - 1
         tt_decode_input = [
             ttnn.from_torch(
-                pt_decode_input.clone().unsqueeze(1),  # .view(1, 1, 32, 4096),
+                pt_decode_input.clone().unsqueeze(1).view(1, 1, 32, 4096),
                 device=device,
                 dtype=ttnn.bfloat16,
                 memory_config=ttnn.L1_MEMORY_CONFIG,
@@ -110,7 +110,7 @@ def test_mistral_moe_inference(all_devices, iterations, reset_seeds):
         # Run TT model
         tt_out = tt_model(tt_decode_input)
         print("Converting to torch")
-        tt_output_torch = ttnn.to_torch(tt_out[0]).squeeze(2)  # [batch, seq, hidden_dim]
+        tt_output_torch = ttnn.to_torch(tt_out[0]).squeeze(2).view(batch, 1, -1)
 
         print("Converted to torch")
 

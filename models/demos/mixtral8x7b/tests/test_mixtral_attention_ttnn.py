@@ -89,7 +89,7 @@ def test_mixtral_attention_inference(all_devices, iterations, reset_seeds):
         )
         assert isinstance(tt_out, list)  # tt_out should be replicated on N devices
         tt_out = tt_out[0]
-        tt_output_torch = ttnn.to_torch(tt_out).squeeze(2)  # [ batch, seq, hidden_dim]
+        tt_output_torch = ttnn.to_torch(tt_out).squeeze(2).view(batch, 1, -1)  # [ batch, seq, hidden_dim]
 
         freqs_cis_i = freqs_cis[start_pos, :].unsqueeze(0)
         positions = torch.tensor([start_pos])
