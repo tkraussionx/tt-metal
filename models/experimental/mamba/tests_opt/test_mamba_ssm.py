@@ -58,7 +58,7 @@ def test_mamba_ssm_inference(
     assert not isinstance(residual_block, torch.Tensor), "Expected torch.Module"
 
     device = ttnn.open_device(device_id=0)
-
+    ttnn.disable_and_clear_program_cache(device)
     config = model_config.create_model_config(batch, reference_model.args.d_model)
 
     model = TtMambaSSM(

@@ -291,6 +291,7 @@ class MambaBlock(nn.Module):
         )  # delta: (b, l, dt_rank). B, C: (b, l, n)
         torch.save(B, "torch_B_proj.pt")
         torch.save(delta, "torch_delta_t_proj.pt")
+        torch.save(C, "torch_C_proj.pt")
         delta = self.dt_proj(delta)
         torch.save(delta, "torch_dt_proj.pt")
         delta = F.softplus(delta)  # (b, l, d_in)
@@ -312,11 +313,15 @@ class MambaBlock(nn.Module):
         # on step ssm
         x = deltaA[:, -1] * self.prev_hidden_states + deltaB_u[:, -1]
         y = einsum(x, C[:, -1], "b d_in n, b n -> b d_in")
+        torch.save(y, "torch_C_h.pt")
 
         y = y.unsqueeze(1)
-        y = y + u * D
+        xD = u * D
+        torch.save(xD, "torch_xD.pt")
+        y = y + xD
 
         self.prev_hidden_states = x
+        torch.save(self.prev_hidden_states, "torch_hidden_state.pt")
         return y
 
     def selective_scan(self, u, delta, A, B, C, D):

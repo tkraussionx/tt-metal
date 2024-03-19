@@ -26,8 +26,8 @@ def register_op_output(output, op_name):
 class TtMambaSSM(torch.nn.Module):
     def __init__(self, args: ModelArgs, device, state_dict, num_users, hidden_size, configs):
         super().__init__()
-        
-        
+
+
         self.state_dict = state_dict
         self.device = device
         self.args = args
@@ -39,7 +39,7 @@ class TtMambaSSM(torch.nn.Module):
         self.n = 32
         self.rank = self.args.dt_rank
 
-        
+
         self.tt_hidden_state = ttnn.zeros(
                 (1, 1, self.num_users, self.hidden_size*self.n),
                 layout=ttnn.TILE_LAYOUT,
@@ -66,7 +66,7 @@ class TtMambaSSM(torch.nn.Module):
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             dtype=ttnn.bfloat16,
         )
-            
+
         # delta full weight
         print('***********using delta full weight')
         dt_proj_weight_name = "mixer.dt_proj.weight"
@@ -86,11 +86,11 @@ class TtMambaSSM(torch.nn.Module):
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             dtype=ttnn.bfloat16,
         )
-        
+
         # B
         print('***********using B weight')
         B_proj_weights = torch.transpose(self.state_dict[x_proj_weight_name][self.args.dt_rank : (self.args.dt_rank + self.args.d_state), :], -1, -2)
-        # pad 
+        # pad
         B_proj_weights = F.pad(B_proj_weights, (0, 16), "constant", 0)
         self.B_proj_weights = ttnn.from_torch(
             B_proj_weights,
@@ -99,7 +99,7 @@ class TtMambaSSM(torch.nn.Module):
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             dtype=ttnn.bfloat16,
         )
-        
+
 
         B_intermediate_tranform_weights = torch.eye(self.n).repeat(1, self.hidden_size).unsqueeze(0).unsqueeze(0)
         self.B_intermediate = ttnn.from_torch(
@@ -114,12 +114,14 @@ class TtMambaSSM(torch.nn.Module):
         print('***********using A weight')
         A_weight_name = "mixer.A_log"
         def preprocess_A(x):
-            x = -torch.exp(x.float()).reshape(1, self.hidden_size*16)  # (1, 2en)
+            x = -torch.exp(x.float())
+            # padding wit inf
+            x = F.pad(x, (0, 16), "constant", float("-inf"))
+            x = x.reshape(1, self.hidden_size*32)  # (1, 2en)
             return x.repeat(self.num_users, 1) # b, 2en
 
         A = preprocess_A(self.state_dict[A_weight_name])
-        # pad
-        A = F.pad(A, (0, self.hidden_size*16), "constant", 0)
+
         self.A = ttnn.from_torch(
             A,
             layout=ttnn.TILE_LAYOUT,
@@ -127,7 +129,7 @@ class TtMambaSSM(torch.nn.Module):
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             dtype=ttnn.bfloat16,
         )
-        
+
         # C
         print('***********using C weight')
         x_proj_weight_name = "mixer.x_proj.weight"
@@ -141,12 +143,12 @@ class TtMambaSSM(torch.nn.Module):
             memory_config=ttnn.DRAM_MEMORY_CONFIG,
             dtype=ttnn.bfloat16,
         )
-        
-        
+
+
         # C pad
         C_pad = torch.zeros(1,1,self.num_users,self.n)
         self.C_pad = ttnn.from_torch(C_pad, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.bfloat16)
-        
+
         # D
         print('***********using D weight')
         D_weight_name = "mixer.D"
@@ -242,6 +244,7 @@ class TtMambaSSM(torch.nn.Module):
 
         # add amulh and bmulx
         hidden_state1 = ttnn.add(amulh0, bmulx0, memory_config=self.configs["sharded_large"])
+        register_op_output(hidden_state1, "hidden_state")
         ttnn.deallocate(self.tt_hidden_state)
         self.tt_hidden_state = ttnn.to_memory_config(hidden_state1, memory_config=ttnn.DRAM_MEMORY_CONFIG)
 
@@ -251,9 +254,12 @@ class TtMambaSSM(torch.nn.Module):
 
         # compute C
         C_proj = ttnn.to_memory_config(self.C_proj, memory_config=ttnn.L1_MEMORY_CONFIG)
-        C0 = ttnn.linear(x, C_proj, memory_config=ttnn.L1_MEMORY_CONFIG)  # b,n
+
+        C0 = ttnn.linear(x, C_proj, memory_config=ttnn.L1_MEMORY_CONFIG)  # 1, 1, b,n
+        register_op_output(C0, "C_proj")
         ttnn.deallocate(C_proj)
-        C1 = ttnn.permute(C0, (0, 2, 3, 1))  # b,n,1
+        C1 = ttnn.permute(C0, (0, 2, 3, 1))  # b,n,1 #1,b,n,1
+        register_op_output(C1, "C_permute")
         ttnn.deallocate(C0)
         '''
         print("**********C0 shape", C0.shape)
@@ -273,12 +279,17 @@ class TtMambaSSM(torch.nn.Module):
         # hidden state @ C
         hidden_state2 = ttnn.to_memory_config(hidden_state1, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(hidden_state1)
-        hidden_state3 = ttnn.reshape(hidden_state2, (1, self.num_users, self.hidden_size, self.n))  # b, d, 32
-        C2 = ttnn.matmul(hidden_state3, C1)  # b, d, 1
+        hidden_state3 = ttnn.to_torch(hidden_state2)
         ttnn.deallocate(hidden_state2)
+        hidden_state3 = hidden_state3.reshape(1, self.num_users, self.hidden_size, self.n)  # b, d, 32
+        hidden_state3 = ttnn.from_torch(hidden_state3, layout=ttnn.TILE_LAYOUT, device=self.device, memory_config=ttnn.L1_MEMORY_CONFIG, dtype=ttnn.bfloat16)
+        #hidden_state3 = ttnn.reshape(hidden_state2, (1, self.num_users, self.hidden_size, self.n))  # b, d, 32
+        register_op_output(hidden_state3, "hidden_state_reshaped")
+        C2 = ttnn.matmul(hidden_state3, C1)  # b, d, 1
         ttnn.deallocate(C1)
         C3 = ttnn.permute(C2, (0, 3, 1, 2)) # b, d
-        ttnn.deallocate(C2)        
+        register_op_output(C3, "C_h")
+        ttnn.deallocate(C2)
         '''
         hidden_state2 = ttnn.to_memory_config(hidden_state1, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(hidden_state1)
@@ -297,8 +308,9 @@ class TtMambaSSM(torch.nn.Module):
 
         # x * D
         xD = ttnn.mul(x, self.D, memory_config=ttnn.L1_MEMORY_CONFIG)
+        register_op_output(xD, "xD")
         ttnn.deallocate(x)
-        
+
         # add xD and x
         print("**********xD shape", xD.shape, C3.shape)
         output = ttnn.add(xD, C3, memory_config=ttnn.L1_MEMORY_CONFIG)
