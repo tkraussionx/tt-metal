@@ -79,7 +79,7 @@ constexpr uint32_t debug_buf_addr_arg = get_compile_time_arg_val(14);
 constexpr uint32_t debug_buf_size_arg = get_compile_time_arg_val(15);
 constexpr uint32_t debug_output_verbose = get_compile_time_arg_val(16);
 
-constexpr uint64_t timeout_cycles = ((uint64_t)(get_compile_time_arg_val(17))) * 1000 * 1000;
+constexpr uint32_t timeout_cycles = get_compile_time_arg_val(17);
 
 
 void kernel_main() {
@@ -108,13 +108,14 @@ void kernel_main() {
     bool dest_finished = false;
     bool curr_input_partial_packet_sent = false;
     uint64_t data_words_sent = 0;
-    uint64_t start_timestamp = c_tensix_core::read_wall_clock();
-    uint64_t progress_timestamp = start_timestamp;
+    uint64_t iter = 0;
+    uint64_t start_timestamp = get_timestamp();
+    uint32_t progress_timestamp = start_timestamp & 0xFFFFFFFF;
     while (!dest_finished && !timeout) {
+        iter++;
         if (timeout_cycles > 0) {
-            uint64_t cycles_elapsed = c_tensix_core::read_wall_clock() - progress_timestamp;
-            if (cycles_elapsed > timeout_cycles) {
-                debug_log_index(1, 0xff000006);
+            uint32_t cycles_since_progress = get_timestamp_32b() - progress_timestamp;
+            if (cycles_since_progress > timeout_cycles) {
                 timeout = true;
                 break;
             }
@@ -124,7 +125,7 @@ void kernel_main() {
             uint32_t words_sent = output_queue.forward_data_from_input(curr_input, full_packet_sent);
             data_words_sent += words_sent;
             if ((words_sent > 0) && (timeout_cycles > 0)) {
-                progress_timestamp = c_tensix_core::read_wall_clock();
+                progress_timestamp = get_timestamp_32b();
             }
             curr_input_partial_packet_sent = !full_packet_sent;
         }
@@ -145,7 +146,7 @@ void kernel_main() {
         }
     }
 
-    uint64_t cycles_elapsed = c_tensix_core::read_wall_clock() - start_timestamp;
+    uint64_t cycles_elapsed = get_timestamp() - start_timestamp;
     if (!timeout) {
         debug_log_index(1, 0xff000003);
         for (uint32_t i = 0; i < mux_fan_in; i++) {
@@ -157,9 +158,12 @@ void kernel_main() {
     debug_log_index(17, data_words_sent);
     debug_log_index(18, cycles_elapsed>>32);
     debug_log_index(19, cycles_elapsed);
+    debug_log_index(20, iter>>32);
+    debug_log_index(21, iter);
 
     if (timeout) {
         debug_log_index(0, PACKET_QUEUE_TEST_TIMEOUT);
+        debug_log_index(1, 0xff000006);
     } else {
         debug_log_index(0, PACKET_QUEUE_TEST_PASS);
         debug_log_index(1, 0xff000005);

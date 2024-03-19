@@ -80,15 +80,12 @@ static_assert(MAX_SWITCH_FAN_OUT <= 4,
               "MAX_SWITCH_FAN_OUT must be <= 4 for the packing funcitons below to work");
 
 inline uint64_t packet_switch_dest_pack(uint32_t* dest_output_map_array, uint32_t num_dests) {
-    uint64_t result = 0;
+    uint32_t result_hi = 0;
+    uint32_t result_lo = 0;
     for (uint32_t i = 0; i < num_dests; i++) {
-        result |= ((uint64_t)dest_output_map_array[i]) << (2*i);
+        // result |= ((uint64_t)dest_output_map_array[i]) << (2*i);
+        result_hi |= ((dest_output_map_array[i] >> 1) << i);
+        result_lo |= ((dest_output_map_array[i] & 0x1) << i);
     }
-    return result;
-}
-
-inline uint32_t packet_switch_dest_unpack(uint32_t dest_endpoint_id,
-                                          uint32_t dest_endpoint_start_index,
-                                          uint64_t dest_endpoint_output_map) {
-    return (dest_endpoint_output_map >> (2*(dest_endpoint_id - dest_endpoint_start_index))) & 0x3;
+    return (((uint64_t)result_hi) << 32) | result_lo;
 }

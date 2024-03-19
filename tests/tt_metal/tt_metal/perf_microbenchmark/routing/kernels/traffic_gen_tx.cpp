@@ -55,7 +55,7 @@ static_assert(max_packet_size_words > 2, "max_packet_size_words must be greater 
 constexpr uint32_t src_endpoint_start_id = get_compile_time_arg_val(15);
 constexpr uint32_t dest_endpoint_start_id = get_compile_time_arg_val(16);
 
-constexpr uint64_t timeout_cycles = ((uint64_t)(get_compile_time_arg_val(17))) * 1000 * 1000;
+constexpr uint32_t timeout_cycles = get_compile_time_arg_val(17);
 
 constexpr uint32_t debug_output_verbose = get_compile_time_arg_val(18);
 
@@ -69,7 +69,7 @@ input_queue_rnd_state_t input_queue_rnd_state;
 
 
 // generates packets with ranom size and payload on the input side
-inline bool input_queue_handler() {
+FORCE_INLINE bool input_queue_handler() {
 
     if (input_queue_rnd_state.all_packets_done()) {
         return true;
@@ -157,22 +157,22 @@ void kernel_main() {
     uint64_t iter = 0;
     uint64_t words_flushed = 0;
     bool timeout = false;
-    uint64_t start_timestamp = c_tensix_core::read_wall_clock();
-    uint64_t cycles_elapsed = 0;
+    uint64_t start_timestamp = get_timestamp();
+    uint32_t progress_timestamp = start_timestamp & 0xFFFFFFFF;
 
     while (true) {
         iter++;
-        debug_log_index(3, iter>>32);
-        debug_log_index(4, iter);
-        cycles_elapsed = c_tensix_core::read_wall_clock() - start_timestamp;
-        if (cycles_elapsed > timeout_cycles) {
+        uint32_t cycles_since_progress = get_timestamp_32b() - progress_timestamp;
+        if (cycles_since_progress > timeout_cycles) {
             timeout = true;
             break;
         }
         bool all_packets_initialized = input_queue_handler();
         if (input_queue_ptr->get_curr_packet_valid()) {
             bool full_packet_sent;
-            data_words_sent += output_queue_ptr->forward_data_from_input(input_queue_id, full_packet_sent);
+            uint32_t curr_data_words_sent = output_queue_ptr->forward_data_from_input(input_queue_id, full_packet_sent);
+            data_words_sent += curr_data_words_sent;
+            progress_timestamp = (curr_data_words_sent > 0) ? get_timestamp_32b() : progress_timestamp;
         } else if (all_packets_initialized) {
             break;
         }
@@ -186,24 +186,31 @@ void kernel_main() {
         }
     }
 
+    uint64_t cycles_elapsed = get_timestamp() - start_timestamp;
+
     if (!timeout) {
         debug_log_index(1, 0xff00003);
+        progress_timestamp = get_timestamp_32b();
         while (!output_queue_ptr->is_remote_finished()) {
-            cycles_elapsed = c_tensix_core::read_wall_clock() - start_timestamp;
-            if (cycles_elapsed > timeout_cycles) {
+            uint32_t cycles_since_progress = get_timestamp_32b() - progress_timestamp;
+            if (cycles_since_progress > timeout_cycles) {
                 timeout = true;
                 break;
             }
         }
     }
 
-    cycles_elapsed = c_tensix_core::read_wall_clock() - start_timestamp;
+    uint64_t num_packets = input_queue_rnd_state.get_num_packets();
     debug_log_index(16, data_words_sent>>32);
     debug_log_index(17, data_words_sent);
     debug_log_index(18, cycles_elapsed>>32);
     debug_log_index(19, cycles_elapsed);
     debug_log_index(20, total_data_words>>32);
     debug_log_index(21, total_data_words);
+    debug_log_index(22, num_packets>>32);
+    debug_log_index(23, num_packets);
+    debug_log_index(24, iter>>32);
+    debug_log_index(25, iter);
 
     if (!timeout) {
         debug_log_index(0, PACKET_QUEUE_TEST_PASS);
