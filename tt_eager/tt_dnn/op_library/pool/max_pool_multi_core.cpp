@@ -633,8 +633,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
                                                                         uint32_t stride_h, uint32_t stride_w,
                                                                         uint32_t pad_h, uint32_t pad_w,
                                                                         uint32_t dilation_h, uint32_t dilation_w,
-                                                                        const MemoryConfig& out_mem_config,
-                                                                        uint32_t nblocks) {
+                                                                        const MemoryConfig& out_mem_config) {
     Program program = CreateProgram();
 
     // This should allocate a DRAM buffer on the device
@@ -664,14 +663,12 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
     uint32_t in_ntiles_c = (uint32_t) ceil((float) input_shape[3] / constants::TILE_WIDTH);
     uint32_t out_ntiles_c = (uint32_t) ceil((float) output_shape[3] / constants::TILE_WIDTH);
 
-    TT_ASSERT(nblocks == 1, "Multiple blocks not yet supported");
-
     uint32_t tile_w = constants::TILE_WIDTH;
     if (input_shape[3] < constants::TILE_WIDTH) {
         TT_FATAL(input_shape[3] == 16);
         tile_w = constants::FACE_WIDTH;
     }
-    uint32_t out_w_loop_count = ceil((float) out_w / nblocks);
+    uint32_t out_w_loop_count = out_w;
 
     // distributing out_hw across the grid
     auto grid_size = device->compute_with_storage_grid_size();
@@ -684,9 +681,6 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
     uint32_t out_nhw_per_core = output.shard_spec()->shape[0];
 
     uint32_t ncores_w = grid_size.x;
-
-    // TODO: support generic nblocks
-    TT_ASSERT(out_nhw_per_core % nblocks == 0, "number of sticks per core ({}) should be divisible by nblocks ({})", out_nhw_per_core, nblocks);
 
     // CBs
     uint32_t multi_buffering_factor = 2;
@@ -734,7 +728,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
     uint32_t in_cb_id_1 = CB::c_in1;          // input rows for "multiple (out_nelems)" output pixels
     uint32_t in_cb_page_padded = ceil_multiple_of(input_shape[3] * kernel_size_hw_padded, constants::TILE_HW);    // NOTE: ceil to tile size since triscs work with tilesize instead of pagesize
     uint32_t in_cb_pagesize = in_nbytes * in_cb_page_padded;
-    uint32_t in_cb_npages = multi_buffering_factor * nblocks;
+    uint32_t in_cb_npages = multi_buffering_factor;
 
     CircularBufferConfig in_cb_config_0 = CircularBufferConfig(in_cb_npages * in_cb_pagesize, {{in_cb_id_0, in_df}})
 		.set_page_size(in_cb_id_0, in_cb_pagesize);
@@ -751,7 +745,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
     // output of tilize == input to reduce
     uint32_t in_tiled_cb_id = CB::c_intermed0;  // tiled input
     uint32_t in_tiled_cb_pagesize = tile_size(in_df);
-    uint32_t in_tiled_cb_npages = in_ntiles_c * in_ntiles_hw * nblocks;
+    uint32_t in_tiled_cb_npages = in_ntiles_c * in_ntiles_hw;
     CircularBufferConfig in_tiled_cb_config = CircularBufferConfig(in_tiled_cb_npages * in_tiled_cb_pagesize, {{in_tiled_cb_id, in_df}})
 		.set_page_size(in_tiled_cb_id, in_tiled_cb_pagesize);
     auto in_tiled_cb = tt_metal::CreateCircularBuffer(program, all_cores, in_tiled_cb_config);
@@ -812,7 +806,6 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
         log_debug(LogOp, "in_c: {}", input_shape[3]);
         log_debug(LogOp, "in_nbytes_c: {}", in_nbytes_c);
         log_debug(LogOp, "out_ntiles_c: {}", out_ntiles_c);
-        log_debug(LogOp, "nblocks: {}", nblocks);
         log_debug(LogOp, "ncores: {}", ncores);
         log_debug(LogOp, "in_nhw_per_core: {}", in_nhw_per_core);
         log_debug(LogOp, "out_nhw_per_core: {}", out_nhw_per_core);
@@ -837,7 +830,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
                                             in_w,
                                             in_cb_page_padded * in_cb_npages / tile_w,
                                             input_shape[3],
-                                            nblocks,
+                                            1,      // nblocks -- remove
                                             split_reader, // enable split reader
                                             0, // split reader id
                                             bf16_one_u32
@@ -853,7 +846,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
                                             in_w,
                                             in_cb_page_padded * in_cb_npages / tile_w,
                                             input_shape[3],
-                                            nblocks,
+                                            1,      // nblocks -- remove
                                             split_reader, // enable split reader
                                             1, // split reader id
                                             bf16_one_u32
@@ -908,23 +901,22 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
     /**
      * Compute Kernel: input cb -> tilize_block -> input tiles -> reduce_h max -> output tiles -> untilize_block -> output cb
      */
-    std::vector<uint32_t> compute_ct_args = {
-        in_ntiles_hw,
-        in_ntiles_c,
-        in_ntiles_hw * in_ntiles_c,
-        kernel_size_hw,
-        out_h,
-        out_w,
-        div_up(output_shape[2], constants::TILE_HEIGHT),
-        div_up(output_shape[3], constants::TILE_WIDTH),
-        nblocks,
-        out_w_loop_count,
-        1,
-        out_nhw_per_core,
-        split_reader,                // enable split reader
-        out_nhw_per_core / nblocks,  // loop count with blocks
-        input_shape[3],
-    };
+    std::vector<uint32_t> compute_ct_args = {in_ntiles_hw,
+                                            in_ntiles_c,
+                                            in_ntiles_hw * in_ntiles_c,
+                                            kernel_size_hw,
+                                            out_h,
+                                            out_w,
+                                            (uint32_t) ceil((float) output_shape[2] / constants::TILE_HEIGHT),
+                                            (uint32_t) ceil((float) output_shape[3] / constants::TILE_WIDTH),
+                                            1,      // nblocks -- remove
+                                            out_w_loop_count,
+                                            nbatch,
+                                            out_nhw_per_core,
+                                            split_reader, // enable split reader
+                                            out_nhw_per_core,     // loop count with blocks
+                                            input_shape[3],
+                                            };
     auto compute_ct_args_cliff = compute_ct_args;
     auto reduce_op = ReduceOpMath::MAX;
     auto reduce_dim = ReduceOpDim::H;
