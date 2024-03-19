@@ -19,6 +19,7 @@ from models.utility_functions import (
     is_e75,
 )
 from models.perf.perf_utils import prep_perf_report
+import sys
 
 model_version = "phiyodr/bert-large-finetuned-squad2"
 comments = "Large"
@@ -52,6 +53,8 @@ def run_perf_bert11(
 
     HF_model = BertForQuestionAnswering.from_pretrained(model_name, torchscript=False, low_cpu_mem_usage=True)
     HF_model.eval()
+    print("Making model")
+    sys.stdout.flush()
     tt_model = TtBertBatchDram(
         HF_model.config,
         HF_model,
@@ -77,51 +80,74 @@ def run_perf_bert11(
 
     outputs = []
     with torch.no_grad():
-        profiler.start(cpu_key)
-        torch_out = HF_model(**inputs)
-        profiler.end(cpu_key)
+        # profiler.start(cpu_key)
+        # torch_out = HF_model(**inputs)
+        # profiler.end(cpu_key)
 
-        profiler.start(first_attention_mask_key)
+        # profiler.start(first_attention_mask_key)
         tt_attention_mask_host = tt_model.model_attention_mask(**inputs)
-        profiler.end(first_attention_mask_key, force_enable=True)
+        # profiler.end(first_attention_mask_key, force_enable=True)
 
-        profiler.start(first_embedding_key)
+        # profiler.start(first_embedding_key)
         tt_embedding_inputs_host = tt_model.embeddings.preprocess_embedding_inputs(**inputs)
-        profiler.end(first_embedding_key, force_enable=True)
+        # profiler.end(first_embedding_key, force_enable=True)
 
-        profiler.start(first_run_key)
-        tt_attention_mask = tt_attention_mask_host.to(device, model_config["OP4_SOFTMAX_ATTENTION_MASK_MEMCFG"])
-        tt_embedding_inputs = {
-            key: value.to(device, model_config["INPUT_EMBEDDINGS_MEMCFG"])
-            for (key, value) in tt_embedding_inputs_host.items()
-        }
-        tt_embedding = tt_model.model_embedding(**tt_embedding_inputs)
-        tt_output = tt_model(tt_embedding, tt_attention_mask).cpu()
-        profiler.end(first_run_key, force_enable=True)
-        del tt_attention_mask
-        del tt_embedding_inputs
-        del tt_embedding
-        del tt_output
+        # profiler.start(first_run_key)
+        # tt_attention_mask = tt_attention_mask_host.to(device, model_config["OP4_SOFTMAX_ATTENTION_MASK_MEMCFG"])
+        # tt_embedding_inputs = {
+        #     key: value.to(device, model_config["INPUT_EMBEDDINGS_MEMCFG"])
+        #     for (key, value) in tt_embedding_inputs_host.items()
+        # }
+        # tt_embedding = tt_model.model_embedding(**tt_embedding_inputs)
+        # tt_output = tt_model(tt_embedding, tt_attention_mask).cpu()
+        # profiler.end(first_run_key, force_enable=True)
+        # print("Deleting tensors")
+        # del tt_attention_mask
+        # del tt_embedding_inputs
+        # del tt_embedding
+        # del tt_output
+        # print("Done deleting tensors")
         enable_persistent_kernel_cache()
 
         profiler.start(second_run_accum_key)
         # First input to device
         # Run inference iterations - 1 times with sending next input/reading output interleaved
-        for _ in range(inference_iterations):
+        print("Running for " + str(inference_iterations))
+        sys.stdout.flush()
+        for itera in range(1):
+            print("Running iteration " + str(itera))
+            sys.stdout.flush()
+            print("Send mask to dev")
+            sys.stdout.flush()
             tt_attention_mask = tt_attention_mask_host.to(device, model_config["OP4_SOFTMAX_ATTENTION_MASK_MEMCFG"])
+            print("Done")
+            sys.stdout.flush()
+            print("Send embeddings to device")
+            sys.stdout.flush()
             tt_embedding_inputs = {
                 key: value.to(device, model_config["INPUT_EMBEDDINGS_MEMCFG"])
                 for (key, value) in tt_embedding_inputs_host.items()
             }
+            print("Done")
+            sys.stdout.flush()
+            print("Compute embeddings")
+            sys.stdout.flush()
             tt_embedding = tt_model.model_embedding(**tt_embedding_inputs)
+            print("Done")
+            sys.stdout.flush()
+            print("Run model")
+            sys.stdout.flush()
             tt_output = tt_model(tt_embedding, tt_attention_mask)
+            print("Done")
+            sys.stdout.flush()
             tt_output = tt_output.cpu(blocking=False)
             outputs.append(tt_output)
 
         # Run last inference iteration
         tt_lib.device.Synchronize(device)
         profiler.end(second_run_accum_key, force_enable=True)
-
+        print("Deleting tensors")
+        sys.stdout.flush()
         del tt_attention_mask
         del tt_embedding_inputs
         del tt_embedding
@@ -198,7 +224,8 @@ def test_perf_bare_metal(
 ):
     if is_e75(device):
         pytest.skip("Bert large 11 is not supported on E75")
-
+    print("Running baremetal")
+    sys.stdout.flush()
     run_perf_bert11(
         batch_size,
         model_config_str,

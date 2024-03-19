@@ -11,7 +11,7 @@ import tt_lib
 
 from models.demos.metal_BERT_large_11.tt.embeddings import TtEmbeddings
 from models.demos.metal_BERT_large_11.tt.bert_encoder import TtBertEncoder
-
+import sys
 from tt_lib.utils import pad_activation, pad_weight
 
 
@@ -88,6 +88,8 @@ class TtBertBatchDram:
             return output_plus_bias
 
         self.qa_linear = qa_linear_
+        print("Done Init")
+        sys.stdout.flush()
 
     def model_embedding(self, input_ids, token_type_ids=None, position_ids=None):
         tt_embeddings = self.embeddings(input_ids, token_type_ids, position_ids)
@@ -142,13 +144,18 @@ class TtBertBatchDram:
         hidden_states = tt_embeddings
         attention_mask = tt_attention_mask
 
-        for encoder in self.encoders:
+        for i, encoder in enumerate(self.encoders):
+            print("Running encoder " + str(i))
+            sys.stdout.flush()
             # profiler.start("__one_encoder")
             hidden_states = encoder(hidden_states, attention_mask)
             if self.model_config["MOVE_ENCODER_OUTPUT_BOOL"]:
                 hidden_states = tt_lib.tensor.move(hidden_states)
             # profiler.end("__one_encoder")
+
         if hidden_states.memory_config().is_sharded():
+            print("Getting interleaved hiden states")
+            sys.stdout.flush()
             hidden_states = tt_lib.tensor.sharded_to_interleaved(
                 hidden_states,
                 self.model_config["QA_LINEAR_OUTPUT_MEMCFG"],
@@ -157,7 +164,11 @@ class TtBertBatchDram:
         # profiler.end("_run_encoders")
 
         # profiler.start("_qa_linear")
+        print("Running qa linear")
+        sys.stdout.flush()
         res = self.qa_linear(hidden_states)
+        print("Done")
+        sys.stdout.flush()
         # profiler.end("_qa_linear")
 
         return res

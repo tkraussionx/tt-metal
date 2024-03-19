@@ -11,6 +11,7 @@ import tt_lib
 from models.demos.metal_BERT_large_11.tt.mha import TtMultiHeadAttentionModel
 from models.demos.metal_BERT_large_11.tt.ffn import TtFeedForwardModel
 from tt_lib.utils import pad_weight
+import sys
 
 
 class TtBertEncoder:

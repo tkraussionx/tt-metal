@@ -74,6 +74,8 @@ void Tensor::deallocate(bool force) {
                             std::visit([](auto&& buffer) { buffer.reset(); }, storage.buffer);
                         }
                     } else if constexpr (std::is_same_v<T, DeviceStorage>) {
+                        std::cout << " Force: " << force << " " << this->tensor_attributes.use_count() << " " << storage.buffer.use_count() << std::endl;
+                        cout.flush();
                         if (force or (this->tensor_attributes.use_count() == 1 and storage.buffer.use_count() == 1)) {
                             // This tensor can be force deallocated by the user. Automatic memory management policy is to deallocate
                             // this buffer on device when there are no more users: i.e. deallocate called on the last tensor_attributes
@@ -90,6 +92,7 @@ void Tensor::deallocate(bool force) {
                         if (force) {
                             TT_THROW("Cannot deallocate tensor with borrowed storage!");
                         }
+
                     } else if constexpr (std::is_same_v<T, MultiDeviceStorage>) {
                         for (auto& buffer : storage.buffers) {
                             if (force or (this->tensor_attributes.use_count() == 1 and buffer.use_count() == 1)) {
