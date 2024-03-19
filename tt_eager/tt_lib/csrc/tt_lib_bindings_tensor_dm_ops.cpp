@@ -329,7 +329,7 @@ namespace tt::tt_metal::detail{
         )doc");
 
         m_tensor.def("bcast_without_autoformat", &bcast_without_autoformat,
-            py::arg("input_a").noconvert(), py::arg("input_b").noconvert(), py::arg("math_op"), py::arg("dim"), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
+            py::arg("input_a").noconvert(), py::arg("input_b").noconvert(), py::arg("math_op"), py::arg("dim"), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, py::arg("in_place").noconvert() = false, R"doc(
             Perform a binary elementwise operation ``math_op`` between tensors ``input_a`` and ``input_b``, where values from tensor ``input_b`` are broadcast.
 
             Let tensor ``input_a`` have shape ``[W0, Z0, Y0, X0]`` and tensor ``input_b`` shape ``[W1, Z1, Y1, X1]``. ``dim`` determines the type of broadcast performed.
@@ -354,6 +354,7 @@ namespace tt::tt_metal::detail{
                 "math_op", "Aggregating math operation", " BcastOpMath", "ADD, SUB, MUL", "Yes"
                 "dim", "Dimension on which to broadcast", "BcastOpDim", "W, H, HW", "Yes"
                 "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+                "in_place", "Whether to perform op in place of input_a, without consuming extra memory on device to store output.", "Bool", "True, False", "No"
         )doc");
 
         m_tensor.def("reduce", &reduce,

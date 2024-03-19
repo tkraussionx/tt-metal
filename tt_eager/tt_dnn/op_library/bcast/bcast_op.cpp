@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_dnn/op_library/bcast/bcast_op.hpp"
+#include "common/assert.hpp"
 #include "impl/buffers/buffer.hpp"
 #include "tt_metal/tools/profiler/op_profiler.hpp"
 
@@ -90,6 +91,10 @@ void EltwiseBinaryBroadcast::validate(const std::vector<Tensor> &input_tensors) 
     TT_FATAL(input_tensor_b.get_layout() == Layout::TILE);
     TT_FATAL(input_tensor_a.get_dtype() == input_tensor_b.get_dtype());
     TT_FATAL(input_tensor_a.get_dtype() == tt::tt_metal::DataType::BFLOAT16 || input_tensor_a.get_dtype() == tt::tt_metal::DataType::BFLOAT8_B, "Unsupported data format");
+    if (this->in_place) {
+        TT_FATAL(input_tensor_a.memory_config().memory_layout == this->output_mem_config.memory_layout);
+        TT_FATAL(input_tensor_a.memory_config().buffer_type == this->output_mem_config.buffer_type);
+    }
     if (this->dim != BcastOpDim::HW) {
         TT_FATAL(input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED && this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED, "Bcast does not currently support input0 sharding, except if dim is HW");
     } else{
@@ -124,6 +129,9 @@ std::vector<Shape> EltwiseBinaryBroadcast::compute_output_shapes(const std::vect
 
 
 std::vector<Tensor> EltwiseBinaryBroadcast::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
+    if (this->in_place) {
+        return {};
+    }
     const auto& input_tensor = input_tensors.at(0);
     if (this->output_mem_config.is_sharded()) {
         ShardSpec shard_spec{CoreRangeSet({}), {0, 0}};
@@ -150,7 +158,7 @@ std::vector<Tensor> EltwiseBinaryBroadcast::create_output_tensors(const std::vec
 operation::ProgramWithCallbacks EltwiseBinaryBroadcast::create_program(const std::vector<Tensor>& input_tensors, std::vector<Tensor> &output_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
     const auto& input_tensor_b = input_tensors.at(1);
-    auto& output_tensor = output_tensors.at(0);
+    const auto& output_tensor = this->in_place ? input_tensor_a : output_tensors.at(0);
 
     auto parallelization_strategy = this->get_parallelization_strategy(input_tensors);
 
@@ -178,7 +186,8 @@ const operation::Hash EltwiseBinaryBroadcast::compute_program_hash(
         input_tensors.at(0).get_dtype(),
         input_tensors.at(1).memory_config(),
         input_tensors.at(1).get_dtype(),
-        bcast_scalar);
+        bcast_scalar,
+        this->in_place);
 }
 
 BcastOpParallelizationStrategy EltwiseBinaryBroadcast::get_parallelization_strategy(const std::vector<Tensor> &input_tensors) const {

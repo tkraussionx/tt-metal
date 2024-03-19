@@ -52,3 +52,5 @@ pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testin
 // bcast
 pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k "bcast_slice"
 ./tt_metal/tools/profiler/profile_this.py -c "pytest /localdev/ppopovic/tt-metal/tests/tt_eager/python_api_testing/unit_testing/misc/test_sharded.py -k \"bcast_slice\""
+
+export TT_METAL_DPRINT_CORES=all

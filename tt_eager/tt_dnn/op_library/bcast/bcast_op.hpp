@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <functional>
 #include "tensor/tensor.hpp"
 #include "tt_metal/common/constants.hpp"
 #include "tt_metal/host_api.hpp"
@@ -30,15 +31,16 @@ enum class BcastOpParallelizationStrategy {
     MULTI_CORE_H = 0, MULTI_CORE_W = 1, MULTI_CORE_HW = 2, SINGLE_CORE = 3
 };
 
-operation::ProgramWithCallbacks bcast_single_core(const Tensor &input_tensor_a, const Tensor &input_tensor_b, Tensor& output_tensor, BcastOpMath bcast_op, BcastOpDim bcast_dim);
-operation::ProgramWithCallbacks bcast_multi_core_h(const Tensor &input_tensor_a, const Tensor &input_tensor_b, Tensor& output_tensor, BcastOpMath bcast_op, BcastOpDim bcast_dim);
-operation::ProgramWithCallbacks bcast_multi_core_w(const Tensor &input_tensor_a, const Tensor &input_tensor_b, Tensor& output_tensor, BcastOpMath bcast_op, BcastOpDim bcast_dim);
-operation::ProgramWithCallbacks bcast_multi_core_hw(const Tensor &input_tensor_a, const Tensor &input_tensor_b, Tensor& output_tensor, BcastOpMath bcast_op, BcastOpDim bcast_dim);
+operation::ProgramWithCallbacks bcast_single_core(const Tensor &input_tensor_a, const Tensor &input_tensor_b, const Tensor& output_tensor, BcastOpMath bcast_op, BcastOpDim bcast_dim);
+operation::ProgramWithCallbacks bcast_multi_core_h(const Tensor &input_tensor_a, const Tensor &input_tensor_b, const Tensor& output_tensor, BcastOpMath bcast_op, BcastOpDim bcast_dim);
+operation::ProgramWithCallbacks bcast_multi_core_w(const Tensor &input_tensor_a, const Tensor &input_tensor_b, const Tensor& output_tensor, BcastOpMath bcast_op, BcastOpDim bcast_dim);
+operation::ProgramWithCallbacks bcast_multi_core_hw(const Tensor &input_tensor_a, const Tensor &input_tensor_b, const Tensor& output_tensor, BcastOpMath bcast_op, BcastOpDim bcast_dim);
 
 struct EltwiseBinaryBroadcast {
     const BcastOpMath math_op;
     const BcastOpDim dim;
     const MemoryConfig output_mem_config;
+    const bool in_place;
 
     void validate(const std::vector<Tensor> &input_tensors) const;
     std::vector<Shape> compute_output_shapes(const std::vector<Tensor> &input_tensors) const;
@@ -47,9 +49,9 @@ struct EltwiseBinaryBroadcast {
     BcastOpParallelizationStrategy get_parallelization_strategy(const std::vector<Tensor> &input_tensors) const;
 
     static constexpr auto attribute_names =
-        std::make_tuple("math_op", "dim", "output_mem_config");
+        std::make_tuple("math_op", "dim", "output_mem_config", "in_place");
     const auto attribute_values() const {
-        return std::make_tuple(std::cref(this->math_op), std::cref(this->dim), std::cref(this->output_mem_config));
+        return std::make_tuple(std::cref(this->math_op), std::cref(this->dim), std::cref(this->output_mem_config), std::cref(this->in_place));
     }
 
     const operation::Hash compute_program_hash(
@@ -86,11 +88,16 @@ inline Tensor bcast(const Tensor &input_tensor_a, const Tensor &input_tensor_b, 
             TT_FATAL((input_tensor_b.get_legacy_shape()[2] == 1 && input_tensor_b.get_legacy_shape()[3] == 1) || (input_tensor_b.get_legacy_shape()[2] == TILE_HEIGHT && input_tensor_b.get_legacy_shape()[3] == TILE_WIDTH));
         }
     }
-    return operation::run_with_autoformat(EltwiseBinaryBroadcast{bcast_op, bcast_dim, output_mem_config}, {input_tensor_a, input_tensor_b}).at(0);
+    return operation::run_with_autoformat(EltwiseBinaryBroadcast{bcast_op, bcast_dim, output_mem_config, false}, {input_tensor_a, input_tensor_b}).at(0);
 }
 
-inline Tensor bcast_without_autoformat(const Tensor &input_tensor_a, const Tensor &input_tensor_b, BcastOpMath bcast_op, BcastOpDim bcast_dim, const MemoryConfig& mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) {
-    return operation::run_without_autoformat(EltwiseBinaryBroadcast{bcast_op, bcast_dim, mem_config}, {input_tensor_a, input_tensor_b}).at(0);
+inline Tensor bcast_without_autoformat(const Tensor &input_tensor_a, const Tensor &input_tensor_b, BcastOpMath bcast_op, BcastOpDim bcast_dim, const MemoryConfig& mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, bool in_place = false) {
+    vector<Tensor> output = operation::run_without_autoformat(EltwiseBinaryBroadcast{bcast_op, bcast_dim, mem_config, in_place}, {input_tensor_a, input_tensor_b});
+    if (in_place) {
+        return input_tensor_a;
+    } else {
+        return output.at(0);
+    }
 }
 
 }  // namespace tt_metal

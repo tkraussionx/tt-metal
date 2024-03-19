@@ -645,39 +645,36 @@ def test_bcast_slice(
     print("Tiles per shard is: ", tiles_per_shard)
     height_shard_spec = [tiles_per_shard * 32, 32]
 
-    sharded_tensor = ttl.tensor.interleaved_to_sharded(
-        reference_attention_mask,
-        device.compute_with_storage_grid_size(),
-        height_shard_spec,
-        ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-        ttl.tensor.ShardOrientation.ROW_MAJOR,
-    )
+    # sharded_tensor = ttl.tensor.interleaved_to_sharded(
+    #     reference_attention_mask,
+    #     device.compute_with_storage_grid_size(),
+    #     height_shard_spec,
+    #     ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+    #     ttl.tensor.ShardOrientation.COL_MAJOR,
+    # )
 
     # Perform broadcast
     print("Running bcast")
 
     # OUT SHARDED
-    # bcast_out_sharded = ttl.tensor.bcast(
+    bcast_out_sharded = ttl.tensor.bcast(
+        reference_attention_mask,
+        reference_scalar,
+        ttl.tensor.BcastOpMath.MUL,
+        ttl.tensor.BcastOpDim.HW,
+        output_mem_config=height_sharded_memory_config,
+    )
+
+    bcast_out = ttl.tensor.sharded_to_interleaved(bcast_out_sharded, output_mem_config=dram_interleaved_memory_config)
+
+    # OUT NOT SHARDED
+    # bcast_out = ttl.tensor.bcast(
     #     sharded_tensor,
     #     reference_scalar,
     #     ttl.tensor.BcastOpMath.MUL,
     #     ttl.tensor.BcastOpDim.HW,
-    #     output_mem_config = height_sharded_memory_config
+    #     output_mem_config=dram_interleaved_memory_config,
     # )
-
-    # bcast_out = ttl.tensor.sharded_to_interleaved(
-    #     bcast_out_sharded,
-    #     output_mem_config = dram_interleaved_memory_config
-    # )
-
-    # OUT NOT SHARDED
-    bcast_out = ttl.tensor.bcast(
-        sharded_tensor,
-        reference_scalar,
-        ttl.tensor.BcastOpMath.MUL,
-        ttl.tensor.BcastOpDim.HW,
-        output_mem_config=dram_interleaved_memory_config,
-    )
 
     bcast_sliced_out = tt2torch_tensor(bcast_out)
 
@@ -700,8 +697,7 @@ def test_bcast_slice(
     print("Sharded output")
     print(bcast_sliced_out)
 
-    if not passing:
-        print(output)
+    print(output)
 
     assert passing
 
@@ -826,13 +822,14 @@ def test_falcon7b_attnention_slice_matmuls(
 
             # Perform broadcast
             print("Running bcast")
-            # mm_slice = ttl.tensor.bcast(
-            #     mm_slice,
-            #     reference_scalar,
-            #     ttl.tensor.BcastOpMath.MUL,
-            #     ttl.tensor.BcastOpDim.HW,
-            #     output_mem_config=height_sharded_memory_config,
-            # )
+            mm_slice = ttl.tensor.bcast_without_autoformat(
+                mm_slice,
+                reference_scalar,
+                ttl.tensor.BcastOpMath.MUL,
+                ttl.tensor.BcastOpDim.HW,
+                output_mem_config=height_sharded_memory_config,
+                in_place=True,
+            )
 
             # Slice attention mask
             # [1, 1, 71, 1024, 1024]
@@ -887,13 +884,13 @@ def test_falcon7b_attnention_slice_matmuls(
             reference_query_layer, reference_key_layer_transposed, output_mem_config=dram_interleaved_memory_config
         )
 
-        # attn_weights = ttl.tensor.bcast(
-        #     attn_weights,
-        #     reference_scalar,
-        #     ttl.tensor.BcastOpMath.MUL,
-        #     ttl.tensor.BcastOpDim.HW,
-        #     output_mem_config=dram_interleaved_memory_config,
-        # )
+        attn_weights = ttl.tensor.bcast(
+            attn_weights,
+            reference_scalar,
+            ttl.tensor.BcastOpMath.MUL,
+            ttl.tensor.BcastOpDim.HW,
+            output_mem_config=dram_interleaved_memory_config,
+        )
 
         attn_weights = ttl.tensor.add(attn_weights, attention_mask, output_mem_config=dram_interleaved_memory_config)
         attn_weights = ttl.operations.primary.softmax_in_place(attn_weights)
@@ -929,9 +926,7 @@ def test_falcon7b_attnention_slice_matmuls(
     # softmax
     attn_weights = ttl.operations.primary.softmax_in_place(attn_weights)
 
-    if not passing:
-        print(output)
-
+    print(output)
     assert passing
 
 
