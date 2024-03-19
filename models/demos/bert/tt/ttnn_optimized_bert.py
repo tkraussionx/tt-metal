@@ -267,6 +267,35 @@ def bert_for_question_answering(
     return qa_outputs
 
 
+def bert_for_token_classification(
+    config,
+    input_ids,
+    token_type_ids,
+    position_ids,
+    attention_mask,
+    *,
+    parameters,
+    name="bert",
+):
+    bert_output = bert(
+        config,
+        input_ids,
+        token_type_ids,
+        position_ids,
+        attention_mask,
+        parameters[name],
+    )
+
+    tc_outputs = ttnn.linear(
+        bert_output,
+        parameters.classifier.weight,
+        bias=parameters.classifier.bias,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
+    )
+
+    return tc_outputs
+
+
 def preprocess_inputs(
     input_ids,
     token_type_ids,

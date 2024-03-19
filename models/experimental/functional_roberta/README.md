@@ -12,6 +12,11 @@ Our second demo is designed to run SQuADV2 dataset, run this with `pytest --disa
 If you wish to run for `n_iterations` samples, use `pytest --disable-warnings models/experimental/functional_roberta/demo/demo.py::test_demo_squadv2[<n_iterations>-models.demos.bert.tt.ttnn_bert-deepset/roberta-large-squad2]`
 
 
+Our third demo is for roberta for token classification task, use `pytest --disable-warnings --input-path="models/experimental/functional_roberta/demo/conll2003_validation.txt" models/experimental/functional_roberta/demo/demo.py::test_token_demo` to run the demo.
+
+
+Our Fourth demo is designed for conll2003 dataset, for 10 iterations, use `pytest --disable-warnings models/experimental/functional_roberta/demo/demo.py::test_token_demo_conll2003` to run the demo
+
 # Inputs
 Inputs by default are provided from `input_data.json`. If you wish you to change the inputs, provide a different path to test_demo.
 
