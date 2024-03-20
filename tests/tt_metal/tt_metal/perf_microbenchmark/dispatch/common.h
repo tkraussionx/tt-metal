@@ -131,8 +131,6 @@ inline void generate_random_paged_payload(Device *device,
                                           bool is_dram) {
 
     static uint32_t coherent_count = 0;
-    uint32_t bank_id = 0;
-    uint32_t bank_offset = 0;
     auto buf_type = is_dram ? BufferType::DRAM : BufferType::L1;
     uint32_t num_banks = device->num_banks(buf_type);
     uint32_t words_per_page = cmd.write_paged.page_size / sizeof(uint32_t);
@@ -140,9 +138,11 @@ inline void generate_random_paged_payload(Device *device,
     // Note: the dst address marches in unison regardless of weather or not a core is written to
     for (uint32_t page_id = start_page; page_id < start_page + cmd.write_paged.pages; page_id++) {
 
+        // 32B alignment taken from InterleavedAddrGen. If 16B page size, pad to 32B.
+        const uint32_t page_size_alignment_bytes = 32;
         CoreCoord bank_core;
-        bank_id = page_id % num_banks;
-        bank_offset = align(cmd.write_paged.page_size, 32) * (page_id / num_banks); // 32B alignment taken from InterleavedAddrGen
+        uint32_t bank_id = page_id % num_banks;
+        uint32_t bank_offset = align(cmd.write_paged.page_size, page_size_alignment_bytes) * (page_id / num_banks);
 
         if (is_dram) {
             auto dram_channel = device->dram_channel_from_bank_id(bank_id);
@@ -150,19 +150,6 @@ inline void generate_random_paged_payload(Device *device,
         } else {
             bank_core = device->logical_core_from_bank_id(bank_id);
         }
-
-        // Add zero-padding if needed to reach required alignment in worker data for comparison.
-        uint32_t padding_words = bank_offset / sizeof(uint32_t) - data[bank_core][bank_id].valid.size();
-        if (padding_words > 0) {
-            log_trace(tt::LogTest, "{} - Adding {} padding words for bank_core: {}", __FUNCTION__, padding_words, bank_core.str());
-            for (uint32_t i = 0; i < padding_words; i++) {
-                data[bank_core][bank_id].data.push_back(0);
-                data[bank_core][bank_id].valid.push_back(false); // Skip checking padding words.
-            }
-        }
-
-        // We could have filled data with all zeros and then used bank_offset to write specific data.
-        TT_ASSERT(bank_offset / sizeof(uint32_t) == data[bank_core][bank_id].valid.size());
 
         // Generate data and add to cmd for sending to device, and worker_data for correctness checking.
         for (uint32_t i = 0; i < words_per_page; i++) {
@@ -173,6 +160,10 @@ inline void generate_random_paged_payload(Device *device,
             data[bank_core][bank_id].data.push_back(datum); // Checking
             data[bank_core][bank_id].valid.push_back(true);
         }
+
+        data[bank_core][bank_id].data.resize(padded_size(data[bank_core][bank_id].data.size(), page_size_alignment_bytes / sizeof(uint32_t)));
+        data[bank_core][bank_id].valid.resize(padded_size(data[bank_core][bank_id].valid.size(), page_size_alignment_bytes / sizeof(uint32_t)));
+
     }
 }
 
@@ -393,24 +384,43 @@ inline void gen_dispatcher_paged_write_cmd(Device *device,
                                              uint32_t page_size,
                                              uint32_t pages) {
 
-    // To account for previous paged writes, go through all cores and find largest amt of data written so far.
-    std::size_t max_data_size = 0;
-    for (auto& it : worker_data) {
-        for (auto &wd : it.second) {
-            max_data_size = std::max(max_data_size, wd.second.data.size());
-        }
-    }
+    const uint32_t page_size_alignment_bytes = 32;
+    const uint32_t start_page_wrap = (1 << 8); // start_page is 8 bits.
+    uint32_t num_banks = device->num_banks(is_dram ? BufferType::DRAM : BufferType::L1);
+
+    // Not safe to mix paged L1 and paged DRAM writes currently in this test since same book-keeping.
+    static uint32_t prev_is_dram = -1;
+    TT_ASSERT(prev_is_dram == -1 || prev_is_dram == is_dram, "Mixing paged L1 and paged DRAM writes not supported in this test.");
+    prev_is_dram = is_dram;
+
+    // Assumption embedded in this function (seems reasonable, true with a single buffer) that paged size will never change.
+    static uint32_t prev_page_size = -1;
+    TT_ASSERT(prev_page_size == -1 || prev_page_size == page_size, "Page size changed between calls to gen_dispatcher_paged_write_cmd - not supported.");
+    prev_page_size = page_size;
+
+    // Keep track of pages written, and use as next cmd start page to have writes to memory without gaps and verify start_page works. Keep
+    // start_page as a function input as long as we want test cmd line control too.
+    static uint32_t pages_written = 0;
+    start_page += pages_written;
+
+    // For the CMD generation, start_page is 8 bits, so much wrap around, and increase base_addr instead based on page size, which assumes
+    // page size never changed between calls to this function (checked above).
+    TT_ASSERT(num_banks < start_page_wrap, "num_banks: {} is too large for start_page field", num_banks, start_page_wrap);
+    uint32_t bank_offset = align(page_size, page_size_alignment_bytes) * (start_page / num_banks);
+    uint32_t base_addr = dst_addr + bank_offset;
+    uint8_t start_page_cmd = start_page % num_banks;
 
     CQDispatchCmd cmd;
     cmd.base.cmd_id = CQ_DISPATCH_CMD_WRITE_PAGED;
     cmd.write_paged.is_dram = is_dram;
-    cmd.write_paged.start_page = start_page;
-    cmd.write_paged.base_addr = dst_addr + (max_data_size * sizeof(uint32_t));
+    cmd.write_paged.start_page = start_page_cmd;
+    cmd.write_paged.base_addr = base_addr;
     cmd.write_paged.page_size = page_size;
     cmd.write_paged.pages = pages;
+    pages_written += pages;
 
-    log_info(tt::LogTest, "Adding CQ_DISPATCH_CMD_WRITE_PAGED, is_dram: {} start_page: {} base_addr: {:x} page_size: {} pages: {} (max_data_size: {})",
-        is_dram, start_page, dst_addr + max_data_size * sizeof(uint32_t), page_size, pages, max_data_size);
+    log_info(tt::LogTest, "Adding CQ_DISPATCH_CMD_WRITE_PAGED - is_dram: {} start_page: {} start_page_cmd: {} base_addr: {:x} page_size: {} pages: {})",
+        is_dram, start_page, start_page_cmd, base_addr, page_size, pages);
 
     add_dispatcher_paged_cmd(device, cmds, worker_data, cmd, start_page, is_dram);
 }

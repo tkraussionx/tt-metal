@@ -106,6 +106,22 @@ for TEST_ID in ${TEST_IDS[@]}; do
     ${TT_METAL_HOME}/build/test/tt_metal/perf_microbenchmark/dispatch/test_dispatcher -i 1 -w 0 -t $TEST_ID -wx 0 -wy 1 -min 16 -max 16 -lps 4 -pbs 1 -np 1 -min-page 100 -max-page 100 -c |& tee ${DIR}/write_1_page_16b_size_dispatch_buffer_16b_pages_page100.log
 
     #################################################################################
+    # MULTIPLE WRITE CMDS using start_page to write to mem without gaps             #
+    #################################################################################
+
+    # Testcase: Increase prefetcher buffer size to 6 pages so that 2 paged write cmds (3 pages each) are needed to fill buffer. End at small even page number.
+    ${TT_METAL_HOME}/build/test/tt_metal/perf_microbenchmark/dispatch/test_dispatcher -i 1 -w 0 -t $TEST_ID -wx 0 -wy 1 -min 16 -max 16 -lps 4 -pbs 6 -np 3 -c |& tee ${DIR}/write_3_page_2x_16b_size_dispatch_buffer_16b_pages_pbs6.log
+
+    # Testcase: Increase prefetcher buffer size to 15 pages so that 5 paged write cmds (3 pages each) are needed to fill buffer. End at small even page number.
+    ${TT_METAL_HOME}/build/test/tt_metal/perf_microbenchmark/dispatch/test_dispatcher -i 1 -w 0 -t $TEST_ID -wx 0 -wy 1 -min 16 -max 16 -lps 4 -pbs 15 -np 3 -c |& tee ${DIR}/write_3_page_5x_16b_size_dispatch_buffer_16b_pages_pbs15.log
+
+    # Testcase: Increase prefetcher buffer size to 280 pages so that 20 paged write cmds (14 pages each) are needed to fill buffer. Wrap around and finish writes on lower banks before starting the next.
+    ${TT_METAL_HOME}/build/test/tt_metal/perf_microbenchmark/dispatch/test_dispatcher -i 1 -w 0 -t $TEST_ID -wx 0 -wy 1 -min 16 -max 16 -lps 4 -pbs 280 -np 14 -c |& tee ${DIR}/write_14_page_20x_16b_size_dispatch_buffer_16b_pages_pbs280.log
+
+    # Testcase: Arbitrary non-even numbers. This caught some test issues with overflowing start_page one test implementation.
+    ${TT_METAL_HOME}/build/test/tt_metal/perf_microbenchmark/dispatch/test_dispatcher -i 1 -w 0 -t $TEST_ID -wx 0 -wy 1 -min 16 -max 16 -lps 5 -pbs 275 -np 13 -c |& tee ${DIR}/write_13_page_21x_16b_size_dispatch_buffer_16b_pages_pbs275.log
+
+    #################################################################################
     # MISC                                                                          #
     #################################################################################
 
