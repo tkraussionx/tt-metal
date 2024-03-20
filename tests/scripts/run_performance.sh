@@ -20,7 +20,9 @@ run_perf_models() {
 
     env pytest models/demos/falcon7b/tests -m $pipeline_type
 
-    env pytest models/demos/mistral7b/tests -m $pipeline_type
+    if [ "$ARCH_NAME" == "wormhole_b0" ]; then
+        env pytest models/demos/mistral7b/tests -m $pipeline_type
+    fi
 
     if [ "$ARCH_NAME" == "grayskull" ]; then
         env pytest models/demos/ttnn_falcon7b/tests -m $pipeline_type
