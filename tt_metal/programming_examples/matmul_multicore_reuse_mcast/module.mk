@@ -43,40 +43,8 @@ $(PROGRAMMING_EXAMPLES_OBJDIR)/matmul_multicore_reuse_mcast.o: $(MATMUL_MULTI_CO
 # 	$(CXX) $(CFLAGS) $(CXXFLAGS) $(PROGRAMMING_EXAMPLES_INCLUDES) -c $< -o $@
 
 
-######## LINKING CPP FILES ONE-BY-ONE
-# TT_METAL_SRC = $(TT_METAL_HOME)/tt_eager/tensor/tensor.cpp \
-#                $(TT_METAL_HOME)/tt_eager/tensor/tensor_utils.cpp \
-#                $(TT_METAL_HOME)/tt_eager/tensor/types.cpp \
-# 			   $(TT_METAL_HOME)/tt_eager/tensor/tensor_impl.cpp \
-# 			   $(TT_METAL_HOME)/tt_eager/tensor/tensor_impl_wrapper.cpp \
-#                $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/downsample/downsample_op.cpp \
-# 			   $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/downsample/downsample_op.cpp \
-# 			   $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/eltwise_unary/eltwise_unary_op.cpp \
-# 			   $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/eltwise_unary/single_core/eltwise_unary_op_single_core.cpp \
-# 			   $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/eltwise_unary/multi_core/eltwise_unary_op_multi_core.cpp \
-# 			   $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/operation_history.cpp \
-# 			   $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/auto_format.cpp
-
-# TT_METAL_SRC := $(TT_METAL_HOME)/tt_eager/tensor/tensor.cpp \
-#                 $(TT_METAL_HOME)/tt_eager/tensor/tensor_utils.cpp \
-#                 $(TT_METAL_HOME)/tt_eager/tensor/types.cpp \
-#                 $(TT_METAL_HOME)/tt_eager/tensor/tensor_impl.cpp \
-#                 $(TT_METAL_HOME)/tt_eager/tensor/tensor_impl_wrapper.cpp \
-#                 $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/downsample/downsample_op.cpp \
-#                 $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/eltwise_unary/eltwise_unary_op.cpp \
-#                 $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/eltwise_unary/single_core/eltwise_unary_op_single_core.cpp \
-#                 $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/eltwise_unary/multi_core/eltwise_unary_op_multi_core.cpp \
-#                 $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/operation_history.cpp \
-#                 $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/auto_format.cpp \
-#                 $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/run_operation.cpp \
-# 				$(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/bcast/bcast_op.cpp \
-# 				$(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/data_transfer/data_transfer_op.cpp \
-# 				$(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/pad/pad_op.cpp \
-#                 $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/unpad/unpad_op.cpp \
-#                 $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/copy/copy_op.cpp \
-#                 $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/layout_conversion/layout_conversion_op.cpp \
-#                 $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/tilize/tilize_op.cpp \
-#                 $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/untilize/untilize_op.cpp \
+# ####### LINKING CPP FILES ONE-BY-ONE
+# TT_METAL_SRC = $(TT_METAL_HOME)/tt_eager/tt_dnn/op_library/operation_history.cpp \
 
 # MATMUL_MULTI_CORE_REUSE_MCAST_EXAMPLE_SRC = $(TT_METAL_HOME)/tt_metal/programming_examples/matmul_multicore_reuse_mcast/matmul_multicore_reuse_mcast.cpp
 
