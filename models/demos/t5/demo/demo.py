@@ -13,8 +13,8 @@ import ttnn
 import tt_lib
 
 from transformers import T5ForConditionalGeneration, AutoTokenizer, T5Config
-from models.experimental.functional_t5.tt import ttnn_functional_t5
-from models.experimental.functional_t5.tt import ttnn_optimized_functional_t5
+from models.demos.t5.tt import ttnn_functional_t5
+from models.demos.t5.tt import ttnn_optimized_functional_t5
 from ttnn.model_preprocessing import preprocess_model_parameters
 
 from models.utility_functions import (
