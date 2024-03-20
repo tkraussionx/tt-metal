@@ -136,6 +136,8 @@ def test_mistral_model_inference(
 
         # Run TT model
         tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask, rot_mat)
+        # Convert ttnn tensor to torch tensor
+        tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
 
         if i == 0 or i == 10:  # Skip the first few iterations to warm up
             profiler.end(f"model_run_for_inference_{i}")
@@ -150,9 +152,6 @@ def test_mistral_model_inference(
 
             if i == 0:  # Skip the first few iterations to warm up
                 profiler.end(f"ref_model_run_for_inference_{i}")
-
-        # Convert ttnn tensor to torch tensor
-        tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
 
         # While in "prefill" mode, use the prompt tokens as the output
         if i in range(len(encoded_prompts[0])):
