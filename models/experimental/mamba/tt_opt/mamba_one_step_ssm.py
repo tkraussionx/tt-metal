@@ -21,11 +21,19 @@ class TtMambaSSM(torch.nn.Module):
         self.args = args
 
         # hidden state
-        self.num_users = args.batch_size
-        self.hidden_size = args.d_inner
+        self.num_users = num_users
+        self.hidden_size = hidden_size * 2
         self.configs = configs
         self.n = 32
         self.rank = self.args.dt_rank
+
+
+        self.tt_hidden_state = ttnn.zeros(
+                (1, 1, self.num_users, self.hidden_size*self.n),
+                layout=ttnn.TILE_LAYOUT,
+                device=self.device,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            )
 
         """
         We need to split up the x_proj weights because in the reference
