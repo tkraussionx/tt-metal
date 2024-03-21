@@ -20,7 +20,7 @@ def construct_pcc_assert_message(message, expected_pytorch_result, actual_pytorc
     return "\n".join(messages)
 
 
-def assert_with_pcc(expected_pytorch_result, actual_pytorch_result, pcc=0.9999):
+def assert_with_pcc(expected_pytorch_result, actual_pytorch_result, pcc=0.9999, print_mismatch=True):
     assert list(expected_pytorch_result.shape) == list(
         actual_pytorch_result.shape
     ), f"list(expected_pytorch_result.shape)={list(expected_pytorch_result.shape)} vs list(actual_pytorch_result.shape)={list(actual_pytorch_result.shape)}"

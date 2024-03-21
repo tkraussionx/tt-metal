@@ -91,6 +91,7 @@ class MaxPool2d:
             deallocate_activation=deallocate_activation,
             act_dtype=dtype,
             channels=channels,
+            use_rectangular_shards_with_col_major=True,
         )
 
     @ttnn.register_operation(

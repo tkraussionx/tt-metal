@@ -656,6 +656,7 @@ void TensorModule(py::module &m_tensor) {
     m_tensor.def("max_pool2d_v2", &max_pool2d_v2,
         py::arg("input").noconvert(),
         py::arg("reader_indices").noconvert(),
+        py::arg("use_rectangular_shards_with_col_major").noconvert(),
         py::arg("in_n").noconvert(),
         py::arg("in_h").noconvert(),
         py::arg("in_w").noconvert(),
