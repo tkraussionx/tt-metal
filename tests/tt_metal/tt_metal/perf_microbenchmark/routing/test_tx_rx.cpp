@@ -24,14 +24,14 @@ int main(int argc, char **argv) {
     constexpr uint32_t default_total_data_kb = 16*1024;
     constexpr uint32_t default_max_packet_size_words = 0x100;
 
-    constexpr uint32_t default_tx_queue_start_addr = 0x80000;
+    constexpr uint32_t default_tx_queue_start_addr = L1_UNRESERVED_BASE;
     constexpr uint32_t default_tx_queue_size_bytes = 0x10000;
-    constexpr uint32_t default_rx_queue_start_addr = 0x90000;
+    constexpr uint32_t default_rx_queue_start_addr = L1_UNRESERVED_BASE + 0x2000;
     constexpr uint32_t default_rx_queue_size_bytes = 0x20000;
-    constexpr uint32_t default_debug_buf_addr = 0x100000;
-    constexpr uint32_t default_debug_buf_size = 0x40000;
+    constexpr uint32_t default_test_result_buf_addr = BRISC_L1_RESULT_BASE;
+    constexpr uint32_t default_test_result_buf_size = 1024;
 
-    constexpr uint32_t default_timeout_mcycles = 4000;
+    constexpr uint32_t default_timeout_mcycles = 1000;
     constexpr uint32_t default_rx_disable_data_check = 0;
 
     std::vector<std::string> input_args(argv, argv + argc);
@@ -49,8 +49,8 @@ int main(int argc, char **argv) {
         log_info(LogTest, "  --tx_queue_size_bytes: TX queue size in bytes, default = 0x{:x}", default_tx_queue_size_bytes);
         log_info(LogTest, "  --rx_queue_start_addr: RX queue start address, default = 0x{:x}", default_rx_queue_start_addr);
         log_info(LogTest, "  --rx_queue_size_bytes: RX queue size in bytes, default = 0x{:x}", default_rx_queue_size_bytes);
-        log_info(LogTest, "  --debug_buf_addr: Debug buffer address, default = 0x{:x}", default_debug_buf_addr);
-        log_info(LogTest, "  --debug_buf_size: Debug buffer size, default = 0x{:x}", default_debug_buf_size);
+        log_info(LogTest, "  --test_result_buf_addr: Test results buffer address, default = 0x{:x}", default_test_result_buf_addr);
+        log_info(LogTest, "  --test_result_buf_size: Test results buffer size, default = {} bytes", default_test_result_buf_size);
         log_info(LogTest, "  --timeout_mcycles: Timeout in MCycles, default = {}", default_timeout_mcycles);
         log_info(LogTest, "  --rx_disable_data_check: Disable data check on RX, default = {}", default_rx_disable_data_check);
         return 0;
@@ -67,8 +67,8 @@ int main(int argc, char **argv) {
     uint32_t tx_queue_size_bytes = test_args::get_command_option_uint32(input_args, "--tx_queue_size_bytes", default_tx_queue_size_bytes);
     uint32_t rx_queue_start_addr = test_args::get_command_option_uint32(input_args, "--rx_queue_start_addr", default_rx_queue_start_addr);
     uint32_t rx_queue_size_bytes = test_args::get_command_option_uint32(input_args, "--rx_queue_size_bytes", default_rx_queue_size_bytes);
-    uint32_t debug_buf_addr = test_args::get_command_option_uint32(input_args, "--debug_buf_addr", default_debug_buf_addr);
-    uint32_t debug_buf_size = test_args::get_command_option_uint32(input_args, "--debug_buf_size", default_debug_buf_size);
+    uint32_t test_result_buf_addr = test_args::get_command_option_uint32(input_args, "--test_result_buf_addr", default_test_result_buf_addr);
+    uint32_t test_result_buf_size = test_args::get_command_option_uint32(input_args, "--test_result_buf_size", default_test_result_buf_size);
     uint32_t timeout_mcycles = test_args::get_command_option_uint32(input_args, "--timeout_mcycles", default_timeout_mcycles);
     uint32_t rx_disable_data_check = test_args::get_command_option_uint32(input_args, "--rx_disable_data_check", default_rx_disable_data_check);
 
@@ -102,15 +102,14 @@ int main(int argc, char **argv) {
                 (uint32_t)phys_traffic_gen_rx_core.y, // 7: remote_rx_y
                 0x0, // 8: remote_rx_queue_id
                 (uint32_t)DispatchRemoteNetworkType::NOC0, // 9: tx_network_type
-                debug_buf_addr, // 10: debug_buf_addr
-                debug_buf_size, // 11: debug_buf_size
+                test_result_buf_addr, // 10: test_result_buf_addr
+                test_result_buf_size, // 11: test_result_buf_size
                 prng_seed, // 12: prng_seed
                 total_data_kb, // 13: total_data_kb
                 max_packet_size_words, // 14: max_packet_size_words
                 0xaa, // 15: src_endpoint_start_id
                 0xbb, // 16: dest_endpoint_start_id
                 timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
-                0x1 // 18: debug_output_verbose
             };
 
         std::vector<uint32_t> traffic_gen_rx_compile_args =
@@ -124,8 +123,8 @@ int main(int argc, char **argv) {
                 (uint32_t)phys_traffic_gen_tx_core.y, // 6: remote_rx_y
                 1, // 7: remote_tx_queue_id
                 (uint32_t)DispatchRemoteNetworkType::NOC0, // 8: rx_rptr_update_network_type
-                debug_buf_addr, // 9: debug_buf_addr
-                debug_buf_size, // 10: debug_buf_size
+                test_result_buf_addr, // 9: test_result_buf_addr
+                test_result_buf_size, // 10: test_result_buf_size
                 prng_seed, // 11: prng_seed
                 total_data_kb, // 12: total_data_kb
                 max_packet_size_words, // 13: max_packet_size_words
@@ -133,7 +132,6 @@ int main(int argc, char **argv) {
                 0xaa, // 15: src_endpoint_start_id
                 0xbb, // 16: dest_endpoint_start_id
                 timeout_mcycles * 1000 * 1000, // 17: timeout_cycles
-                0x1 // 18: debug_output_verbose
             };
 
         auto tg_tx = tt_metal::CreateKernel(
@@ -172,29 +170,27 @@ int main(int argc, char **argv) {
 
         vector<uint32_t> tx_results =
             tt::llrt::read_hex_vec_from_core(
-                device->id(), phys_traffic_gen_tx_core, debug_buf_addr, 32 * 4);
+                device->id(), phys_traffic_gen_tx_core, test_result_buf_addr, test_result_buf_size);
 
         vector<uint32_t> rx_results =
             tt::llrt::read_hex_vec_from_core(
-                device->id(), phys_traffic_gen_rx_core, debug_buf_addr, 32 * 4);
+                device->id(), phys_traffic_gen_rx_core, test_result_buf_addr, test_result_buf_size);
 
-        log_info(LogTest, "TX status = {}", packet_queue_test_status_to_string(tx_results[0]));
-        log_info(LogTest, "RX status = {}", packet_queue_test_status_to_string(rx_results[0]));
+        log_info(LogTest, "TX status = {}",
+                packet_queue_test_status_to_string(tx_results[PQ_TEST_STATUS_INDEX]));
+        log_info(LogTest, "RX status = {}",
+                packet_queue_test_status_to_string(rx_results[PQ_TEST_STATUS_INDEX]));
 
-        pass &= (tx_results[0] == PACKET_QUEUE_TEST_PASS);
-        pass &= (rx_results[0] == PACKET_QUEUE_TEST_PASS);
+        pass &= (tx_results[PQ_TEST_STATUS_INDEX] == PACKET_QUEUE_TEST_PASS);
+        pass &= (rx_results[PQ_TEST_STATUS_INDEX] == PACKET_QUEUE_TEST_PASS);
 
         pass &= tt_metal::CloseDevice(device);
 
         if (pass) {
             uint64_t total_data_bytes = ((uint64_t)total_data_kb) * 1024;
             uint64_t total_data_words = total_data_bytes / PACKET_WORD_SIZE_BYTES;
-            uint64_t tx_words_sent = tx_results[16];
-            tx_words_sent <<= 32;
-            tx_words_sent |= tx_results[17];
-            uint64_t rx_words_checked = rx_results[16];
-            rx_words_checked <<= 32;
-            rx_words_checked |= rx_results[17];
+            uint64_t tx_words_sent = get_64b_result(tx_results, PQ_TEST_WORD_CNT_INDEX);
+            uint64_t rx_words_checked = get_64b_result(rx_results, PQ_TEST_WORD_CNT_INDEX);
             if (tx_words_sent == rx_words_checked) {
                 log_info(LogTest, "TX words sent = {}, RX words checked = {} -> OK", tx_words_sent, rx_words_checked);
                 if (tx_words_sent < total_data_words) {
@@ -208,12 +204,8 @@ int main(int argc, char **argv) {
             double wall_clock_bw = ((double)total_data_bytes) / elapsed_us;
             log_info(LogTest, "Wall clock time = {:.2f}us, bytes = {} -> wall clock BW = {:.2f} MB/s",
                 elapsed_us, total_data_bytes, wall_clock_bw);
-            uint64_t tx_elapsed_cycles = tx_results[18];
-            tx_elapsed_cycles <<= 32;
-            tx_elapsed_cycles |= tx_results[19];
-            uint64_t rx_elapsed_cycles = rx_results[18];
-            rx_elapsed_cycles <<= 32;
-            rx_elapsed_cycles |= rx_results[19];
+            uint64_t tx_elapsed_cycles = get_64b_result(tx_results, PQ_TEST_CYCLES_INDEX);
+            uint64_t rx_elapsed_cycles = get_64b_result(rx_results, PQ_TEST_CYCLES_INDEX);
             double tx_bw = ((double)total_data_bytes) / tx_elapsed_cycles;
             double rx_bw = ((double)total_data_bytes) / rx_elapsed_cycles;
             log_info(LogTest, "TX elapsed cycles = {} -> TX BW = {:.2f} B/cycle", tx_elapsed_cycles, tx_bw);

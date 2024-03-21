@@ -61,17 +61,25 @@ def print_input_queue_status(vals, index):
 def print_output_queue_status(vals, index):
     index += 1
     print(f"     Max num words to forward: {vals[index]}")
-    index += 2
-    print(f"     Curr index: {vals[index]}")
     index += 1
-    for i in range(2):
+    index += 1
+    print(f"     Curr total words in flight: {vals[index]}")
+    index += 1
+    for j in range(4):
+        # print(f"       Delimiter: {vals[index]:x}")
         index += 1
-        print(f"     Index {i} total words in flight: {vals[index]}")
+        print(f"       Input queue {j} curr words in flight: {vals[index]}")
         index += 1
-        for j in range(4):
-            index += 1
-            print(f"       Input queue {j} words in flight: {vals[index]}")
-            index += 1
+
+    index += 1
+    print(f"     Prev total words in flight: {vals[index]}")
+    index += 1
+    for j in range(4):
+        # print(f"       Delimiter: {vals[index]:x}")
+        index += 1
+        print(f"       Input queue {j} prev words in flight: {vals[index]}")
+        index += 1
+
     return index
 
 
