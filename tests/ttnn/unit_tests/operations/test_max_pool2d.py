@@ -194,14 +194,14 @@ def test_run_max_pool(
     out_pytorch = out_pytorch.reshape(golden_pytorch.shape)
     # assert_with_pcc(out_pytorch, golden_pytorch)
     pcc_pass, pcc_msg = check_with_pcc_without_tensor_printout(out_pytorch, golden_pytorch)
-    out_pytorch = torch.transpose(out_pytorch, 1, 2)
-    out_pytorch = torch.transpose(out_pytorch, 2, 3)
-    golden_pytorch = torch.transpose(golden_pytorch, 1, 2)
-    golden_pytorch = torch.transpose(golden_pytorch, 2, 3)
-    print(pcc_msg)
-    print(f"golden: {golden_pytorch}")
-    print(f"out_pytorch: {out_pytorch}")
-    assert pcc_pass
+    # out_pytorch = torch.transpose(out_pytorch, 1, 2)
+    # out_pytorch = torch.transpose(out_pytorch, 2, 3)
+    # golden_pytorch = torch.transpose(golden_pytorch, 1, 2)
+    # golden_pytorch = torch.transpose(golden_pytorch, 2, 3)
+    # print(pcc_msg)
+    # print(f"golden: {golden_pytorch}")
+    # print(f"out_pytorch: {out_pytorch}")
+    assert pcc_pass, pcc_msg
 
     ## do more rigorous comparision for each element
     atol, rtol = torch.testing._comparison.default_tolerances(torch.bfloat16)

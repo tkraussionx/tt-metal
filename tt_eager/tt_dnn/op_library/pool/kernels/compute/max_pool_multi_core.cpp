@@ -65,8 +65,6 @@ inline void reduce_h_fused(
     constexpr uint32_t num_faces_in_tile = is_partial_tile ? 1 : 2;
     constexpr uint32_t num_out_rows = 1;
 
-    // cb_reserve_back(out_cb_id, 1);
-
     tile_regs_acquire();
     const uint32_t curr_in_cb_id = split_reader ? (in_cb_id + (in_stick_index)&0x1) : in_cb_id;
     cb_wait_front(curr_in_cb_id, 1);
@@ -78,10 +76,8 @@ inline void reduce_h_fused(
     tile_regs_wait();
     tile_regs_commit();
     // pack_untilize_dst<num_output_tiles>(out_cb_id, 1/*out_subblock_h*/, 0, num_out_rows, num_faces_in_tile);  /* pack 1 row (1x16 or 1x32) */
-    pack_untilize_dst<num_output_tiles>(out_cb_id, 1/*out_subblock_h*/, 0, num_out_rows, num_faces_in_tile /* pack 1 row (1x16 or 1x32) */, out_stick_index);
+    pack_untilize_dst<num_output_tiles>(out_cb_id, 1 /*out_subblock_h*/, 0, num_out_rows, num_faces_in_tile /* pack 1 row (1x16 or 1x32) */, out_stick_index);
     tile_regs_release();
-
-    // cb_push_back(out_cb_id, 1);
 }
 
 namespace NAMESPACE {
@@ -124,15 +120,15 @@ void MAIN {
     cb_wait_front(in_scalar_cb_id, 1);
     cb_reserve_back(out_cb_id, nsticks_per_core);
     if (use_rectangular_shards_with_col_major) {
-
+        // shard is a rectangle, use the column-wise optimization
         for (uint32_t w = 0, i = 0; w < out_w; ++ w, ++ i) {
             for (uint32_t h = 0; h < out_nh_per_core; ++ h, ++ i) {
                 uint32_t out_i = h * out_w + w;
                 reduce_h_fused<in_ntiles_hw, in_ntiles_c, out_ntiles_c, is_partial_tile, split_reader>(in_cb_id, in_scalar_cb_id, in_ntiles_hwc, i, out_cb_id, out_i);
             }
         }
-
     } else {
+        // general case, where shard is any size.
         for (uint32_t i = 0; i < nsticks_per_core; ++ i) {
             // NOTE: Assuming in_ntiles_hw < 8 for now.
             // TODO: subblocking to support this.
