@@ -213,9 +213,10 @@ inline void llk_unpack_tilizeA_B_block(
     std::uint32_t operandA,
     std::uint32_t operandB,
     std::uint32_t block_c_tiles_a,
+    std::uint32_t tile_idx_a,
     std::uint32_t tile_idx_b,
     std::uint32_t num_faces = 4) {
-    for (std::uint32_t tile_idx_a = 0; tile_idx_a < block_c_tiles_a; tile_idx_a++) {
-        llk_unpack_tilizeA_B(operandA, operandB, tile_idx_a, tile_idx_b, block_c_tiles_a, num_faces);
+    for (std::uint32_t n = 0; n < block_c_tiles_a; n++) {
+        llk_unpack_tilizeA_B(operandA, operandB, tile_idx_a+n, tile_idx_b, block_c_tiles_a, num_faces);
     }
 }

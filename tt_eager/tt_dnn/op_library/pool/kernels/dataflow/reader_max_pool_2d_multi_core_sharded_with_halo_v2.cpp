@@ -92,24 +92,26 @@ void kernel_main() {
     uint32_t in_w_padded = in_w + 2 * pad_w;
 
     uint32_t npages_to_reserve = nblocks;
-    uint32_t counter = reader_id;
+    uint32_t counter = 8*nblocks*reader_id;
     while (counter < reader_nindices) {
-        cb_reserve_back(in_cb_id, npages_to_reserve);
+        cb_reserve_back(in_cb_id, 8*npages_to_reserve);
 
-        uint32_t out_l1_write_addr_base = get_write_ptr(in_cb_id);
-        uint32_t out_l1_write_addr = out_l1_write_addr_base;
-        for (uint32_t i = 0; i < nblocks; ++ i) {
-            uint16_t top_left_local_index = reader_indices_ptr[counter ++];
-            uint32_t h_multiples = 0;
-            for (uint32_t h = 0; h < window_h; ++ h, h_multiples += in_w_padded) {
-                uint32_t stick_offset = top_left_local_index + h_multiples;
-                uint32_t read_offset = in_l1_read_base_addr + (stick_offset << in_nbytes_c_log2);
-                noc_async_read_one_packet(get_noc_addr(read_offset), out_l1_write_addr, in_nbytes_c * window_w);
-                out_l1_write_addr += in_nbytes_c * window_w;
+        for (uint32_t n = 0; n < 8; ++ n) {
+            uint32_t out_l1_write_addr_base = get_write_ptr(in_cb_id) + cb_interface[in_cb_id].fifo_page_size * n;
+            uint32_t out_l1_write_addr = out_l1_write_addr_base;
+            for (uint32_t i = 0; i < nblocks; ++ i) {
+                uint16_t top_left_local_index = reader_indices_ptr[counter ++];
+                uint32_t h_multiples = 0;
+                for (uint32_t h = 0; h < window_h; ++ h, h_multiples += in_w_padded) {
+                    uint32_t stick_offset = top_left_local_index + h_multiples;
+                    uint32_t read_offset = in_l1_read_base_addr + (stick_offset << in_nbytes_c_log2);
+                    noc_async_read_one_packet(get_noc_addr(read_offset), out_l1_write_addr, in_nbytes_c * window_w);
+                    out_l1_write_addr += in_nbytes_c * window_w;
+                }
             }
-            if (split_reader) counter++; // interleave the indices
         }
+        if (split_reader) counter+=(8*nblocks); // interleave the indices
         noc_async_read_barrier();
-        cb_push_back(in_cb_id, npages_to_reserve);
+        cb_push_back(in_cb_id, 8*npages_to_reserve);
     }
 } // kernel_main()

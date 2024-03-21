@@ -746,7 +746,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
     uint32_t in_cb_id_1 = CB::c_in1;          // input rows for "multiple (out_nelems)" output pixels
     uint32_t in_cb_page_padded = ceil_multiple_of(input_shape[3] * kernel_size_hw_padded, constants::TILE_HW);    // NOTE: ceil to tile size since triscs work with tilesize instead of pagesize
     uint32_t in_cb_pagesize = in_nbytes * in_cb_page_padded;
-    uint32_t in_cb_npages = multi_buffering_factor * nblocks;
+    uint32_t in_cb_npages = 8*multi_buffering_factor * nblocks;
 
     CircularBufferConfig in_cb_config_0 = CircularBufferConfig(in_cb_npages * in_cb_pagesize, {{in_cb_id_0, in_df}})
 		.set_page_size(in_cb_id_0, in_cb_pagesize);
