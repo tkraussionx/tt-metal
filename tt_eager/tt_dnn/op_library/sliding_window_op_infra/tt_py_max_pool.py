@@ -237,6 +237,8 @@ class TTPyMaxPool(TTPyOp):
 
         def max_pool_(activation):
             act_mem_config = activation.memory_config()
+            activation = ttl.tensor.move_sharded(activation)
+            ttl.device.DumpDeviceMemoryState(self.device)
             haloed_act = self.untilize_with_halo(activation)
 
             if self.deallocate_activation:

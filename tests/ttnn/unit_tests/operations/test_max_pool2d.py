@@ -150,6 +150,7 @@ def test_run_max_pool(
         input_height=in_h,
         input_width=in_w,
         reader_patterns_cache=reader_patterns_cache,
+        parallel_config_override={"num_cores_nhw": 64},
     )
 
     if dtype == ttnn.bfloat8_b:
