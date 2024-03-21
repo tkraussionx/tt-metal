@@ -9,10 +9,6 @@
 packet_input_queue_state_t input_queues[MAX_SWITCH_FAN_IN];
 packet_output_queue_state_t output_queue;
 
-tt_l1_ptr uint32_t* debug_buf;
-uint32_t debug_buf_index;
-uint32_t debug_buf_size;
-
 constexpr uint32_t reserved = get_compile_time_arg_val(0);
 
 // assume up to MAX_SWITCH_FAN_IN queues with contiguous storage,
@@ -75,21 +71,22 @@ constexpr DispatchRemoteNetworkType
     tx_network_type =
         static_cast<DispatchRemoteNetworkType>(get_compile_time_arg_val(13));
 
-constexpr uint32_t debug_buf_addr_arg = get_compile_time_arg_val(14);
-constexpr uint32_t debug_buf_size_arg = get_compile_time_arg_val(15);
-constexpr uint32_t debug_output_verbose = get_compile_time_arg_val(16);
+constexpr uint32_t test_results_buf_addr_arg = get_compile_time_arg_val(14);
+constexpr uint32_t test_results_buf_size_bytes = get_compile_time_arg_val(15);
 
-constexpr uint32_t timeout_cycles = get_compile_time_arg_val(17);
+tt_l1_ptr uint32_t* const test_results =
+    reinterpret_cast<tt_l1_ptr uint32_t*>(test_results_buf_addr_arg);
+
+constexpr uint32_t timeout_cycles = get_compile_time_arg_val(16);
 
 
 void kernel_main() {
 
     noc_init(0xF);
-    debug_set_buf(reinterpret_cast<tt_l1_ptr uint32_t*>(debug_buf_addr_arg), debug_buf_size_arg);
-    debug_advance_index(32);
-    debug_log_index(0, PACKET_QUEUE_TEST_STARTED);
-    debug_log_index(1, 0xff000000);
-    debug_log_index(2, 0xaa000000 | mux_fan_in);
+
+    test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_STARTED;
+    test_results[PQ_TEST_MISC_INDEX] = 0xff000000;
+    test_results[PQ_TEST_MISC_INDEX+1] = 0xaa000000 | mux_fan_in;
 
     for (uint32_t i = 0; i < mux_fan_in; i++) {
         input_queues[i].init(i, rx_queue_start_addr_words + i*rx_queue_size_words, rx_queue_size_words,
@@ -97,11 +94,11 @@ void kernel_main() {
     }
     output_queue.init(mux_fan_in, remote_tx_queue_start_addr_words, remote_tx_queue_size_words,
                       remote_tx_x, remote_tx_y, remote_tx_queue_id, tx_network_type,
-                      input_queues);
+                      input_queues, mux_fan_in);
 
     wait_all_src_dest_ready(input_queues, mux_fan_in, &output_queue, 1, timeout_cycles);
 
-    debug_log_index(1, 0xff000001);
+    test_results[PQ_TEST_MISC_INDEX] = 0xff000001;
 
     uint32_t curr_input = 0;
     bool timeout = false;
@@ -140,7 +137,7 @@ void kernel_main() {
     }
 
     if (!timeout) {
-        debug_log_index(1, 0xff000002);
+        test_results[PQ_TEST_MISC_INDEX] = 0xff000002;
         if (!output_queue.output_barrier(timeout_cycles)) {
             timeout = true;
         }
@@ -148,32 +145,20 @@ void kernel_main() {
 
     uint64_t cycles_elapsed = get_timestamp() - start_timestamp;
     if (!timeout) {
-        debug_log_index(1, 0xff000003);
+        test_results[PQ_TEST_MISC_INDEX] = 0xff000003;
         for (uint32_t i = 0; i < mux_fan_in; i++) {
             input_queues[i].send_remote_finished_notification();
         }
     }
 
-    debug_log_index(16, data_words_sent>>32);
-    debug_log_index(17, data_words_sent);
-    debug_log_index(18, cycles_elapsed>>32);
-    debug_log_index(19, cycles_elapsed);
-    debug_log_index(20, iter>>32);
-    debug_log_index(21, iter);
+    set_64b_result(test_results, data_words_sent, PQ_TEST_WORD_CNT_INDEX);
+    set_64b_result(test_results, cycles_elapsed, PQ_TEST_CYCLES_INDEX);
+    set_64b_result(test_results, iter, PQ_TEST_ITER_INDEX);
 
     if (timeout) {
-        debug_log_index(0, PACKET_QUEUE_TEST_TIMEOUT);
-        debug_log_index(1, 0xff000006);
+        test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_TIMEOUT;
     } else {
-        debug_log_index(0, PACKET_QUEUE_TEST_PASS);
-        debug_log_index(1, 0xff000005);
-    }
-    if (debug_output_verbose) {
-        for (uint32_t i = 0; i < mux_fan_in; i++) {
-            debug_log(0xaaaaaa00 + i);
-            input_queues[i].debug_log_object();
-        }
-        debug_log(0xbbbbbbbb);
-        output_queue.debug_log_object();
+        test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_PASS;
+        test_results[PQ_TEST_MISC_INDEX] = 0xff00005;
     }
 }

@@ -4,19 +4,14 @@
 
 #pragma once
 
+#include "debug/dprint.h"
+
 FORCE_INLINE uint32_t prng_next(uint32_t n) {
     uint32_t x = n;
     x ^= x << 13;
     x ^= x >> 17;
     x ^= x << 5;
     return x;
-}
-
-void zero_queue_data(uint32_t queue_start_addr_words, uint32_t queue_size_words) {
-    tt_l1_ptr uint32_t* queue_ptr = reinterpret_cast<tt_l1_ptr uint32_t*>(queue_start_addr_words*PACKET_WORD_SIZE_BYTES);
-    for (uint32_t i = 0; i < queue_size_words*PACKET_WORD_SIZE_BYTES/4; i++) {
-        queue_ptr[i] = 0;
-    }
 }
 
 FORCE_INLINE uint32_t packet_rnd_seed_to_size(uint32_t rnd_seed, uint32_t max_packet_size_words) {
@@ -125,16 +120,17 @@ typedef struct {
         return this->num_packets;
     }
 
-    void debug_log_object() {
-        debug_log(this->num_packets>>32);
-        debug_log(this->num_packets);
-        debug_log(this->packet_rnd_seed);
-        debug_log(this->curr_packet_size_words);
-        debug_log(this->curr_packet_dest);
-        debug_log(this->curr_packet_flags);
-        debug_log(this->curr_packet_words_remaining);
-        debug_log(this->data_and_last_packets_done);
-        debug_log(this->data_packets_done);
+    void dprint_object() {
+        DPRINT << "input_queue_rnd_state_t: " << ENDL();
+        DPRINT << "  data_words_input: " << DEC() << this->data_words_input << ENDL();
+        DPRINT << "  num_packets: " << DEC() << this->num_packets << ENDL();
+        DPRINT << "  packet_rnd_seed: 0x" << HEX() << this->packet_rnd_seed << ENDL();
+        DPRINT << "  curr_packet_size_words: " << DEC() << this->curr_packet_size_words << ENDL();
+        DPRINT << "  curr_packet_dest: 0x" << HEX() << this->curr_packet_dest << ENDL();
+        DPRINT << "  curr_packet_flags: 0x" << HEX() << this->curr_packet_flags << ENDL();
+        DPRINT << "  curr_packet_words_remaining: " << DEC() << this->curr_packet_words_remaining << ENDL();
+        DPRINT << "  data_and_last_packets_done: " << DEC() << this->data_and_last_packets_done << ENDL();
+        DPRINT << "  data_packets_done: " << DEC() << this->data_packets_done << ENDL();
     }
 
 } input_queue_rnd_state_t;

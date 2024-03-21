@@ -11,10 +11,6 @@
 packet_input_queue_state_t input_queue;
 packet_output_queue_state_t output_queues[MAX_SWITCH_FAN_OUT];
 
-tt_l1_ptr uint32_t* debug_buf;
-uint32_t debug_buf_index;
-uint32_t debug_buf_size;
-
 constexpr uint32_t endpoint_id_start_index = get_compile_time_arg_val(0);
 
 constexpr uint32_t rx_queue_start_addr_words = get_compile_time_arg_val(1);
@@ -97,45 +93,80 @@ static_assert(MAX_DEST_ENDPOINTS <= 32 && MAX_SWITCH_FAN_OUT <= 4,
 constexpr uint32_t dest_endpoint_output_map_hi = get_compile_time_arg_val(20);
 constexpr uint32_t dest_endpoint_output_map_lo = get_compile_time_arg_val(21);
 
+constexpr uint8_t dest_output_queue_id_map[MAX_DEST_ENDPOINTS] =
+    {
+        (dest_endpoint_output_map_lo >> 0) & 0x3,
+        (dest_endpoint_output_map_lo >> 2) & 0x3,
+        (dest_endpoint_output_map_lo >> 4) & 0x3,
+        (dest_endpoint_output_map_lo >> 6) & 0x3,
+        (dest_endpoint_output_map_lo >> 8) & 0x3,
+        (dest_endpoint_output_map_lo >> 10) & 0x3,
+        (dest_endpoint_output_map_lo >> 12) & 0x3,
+        (dest_endpoint_output_map_lo >> 14) & 0x3,
+        (dest_endpoint_output_map_lo >> 16) & 0x3,
+        (dest_endpoint_output_map_lo >> 18) & 0x3,
+        (dest_endpoint_output_map_lo >> 20) & 0x3,
+        (dest_endpoint_output_map_lo >> 22) & 0x3,
+        (dest_endpoint_output_map_lo >> 24) & 0x3,
+        (dest_endpoint_output_map_lo >> 26) & 0x3,
+        (dest_endpoint_output_map_lo >> 28) & 0x3,
+        (dest_endpoint_output_map_lo >> 30) & 0x3,
+        (dest_endpoint_output_map_hi >> 0) & 0x3,
+        (dest_endpoint_output_map_hi >> 2) & 0x3,
+        (dest_endpoint_output_map_hi >> 4) & 0x3,
+        (dest_endpoint_output_map_hi >> 6) & 0x3,
+        (dest_endpoint_output_map_hi >> 8) & 0x3,
+        (dest_endpoint_output_map_hi >> 10) & 0x3,
+        (dest_endpoint_output_map_hi >> 12) & 0x3,
+        (dest_endpoint_output_map_hi >> 14) & 0x3,
+        (dest_endpoint_output_map_hi >> 16) & 0x3,
+        (dest_endpoint_output_map_hi >> 18) & 0x3,
+        (dest_endpoint_output_map_hi >> 20) & 0x3,
+        (dest_endpoint_output_map_hi >> 22) & 0x3,
+        (dest_endpoint_output_map_hi >> 24) & 0x3,
+        (dest_endpoint_output_map_hi >> 26) & 0x3,
+        (dest_endpoint_output_map_hi >> 28) & 0x3,
+        (dest_endpoint_output_map_hi >> 30) & 0x3
+    };
+
 constexpr uint32_t output_queue_index_bits = 2;
 constexpr uint32_t output_queue_index_mask = (1 << output_queue_index_bits) - 1;
 
-constexpr uint32_t debug_buf_addr_arg = get_compile_time_arg_val(22);
-constexpr uint32_t debug_buf_size_arg = get_compile_time_arg_val(23);
-constexpr uint32_t debug_output_verbose = get_compile_time_arg_val(24);
+constexpr uint32_t test_results_buf_addr_arg = get_compile_time_arg_val(22);
+constexpr uint32_t test_results_buf_size_bytes = get_compile_time_arg_val(23);
 
-constexpr uint32_t timeout_cycles = get_compile_time_arg_val(25);
+tt_l1_ptr uint32_t* const test_results =
+    reinterpret_cast<tt_l1_ptr uint32_t*>(test_results_buf_addr_arg);
 
-FORCE_INLINE uint32_t packet_switch_dest_unpack(uint32_t dest_endpoint_id) {
+constexpr uint32_t timeout_cycles = get_compile_time_arg_val(24);
+
+FORCE_INLINE uint8_t dest_output_queue_id(uint32_t dest_endpoint_id) {
     uint32_t dest_endpoint_index = dest_endpoint_id - endpoint_id_start_index;
-    uint32_t result_bit0 = (dest_endpoint_output_map_lo >> dest_endpoint_index) & 0x1;
-    uint32_t result_bit1 = (dest_endpoint_output_map_hi >> dest_endpoint_index) & 0x1;
-    return (result_bit1 << 1) | result_bit0;
+    return dest_output_queue_id_map[dest_endpoint_index];
 }
 
 void kernel_main() {
 
     noc_init(0xF);
-    debug_set_buf(reinterpret_cast<tt_l1_ptr uint32_t*>(debug_buf_addr_arg), debug_buf_size_arg);
-    debug_advance_index(32);
-    debug_log_index(0, PACKET_QUEUE_TEST_STARTED);
-    debug_log_index(1, 0xff000000);
-    debug_log_index(2, 0xbb000000 | demux_fan_out);
-    debug_log_index(3, dest_endpoint_output_map_hi);
-    debug_log_index(4, dest_endpoint_output_map_lo);
-    debug_log_index(5, endpoint_id_start_index);
+
+    test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_STARTED;
+    test_results[PQ_TEST_MISC_INDEX] = 0xff000000;
+    test_results[PQ_TEST_MISC_INDEX+1] = 0xbb000000 | demux_fan_out;
+    test_results[PQ_TEST_MISC_INDEX+2] = dest_endpoint_output_map_hi;
+    test_results[PQ_TEST_MISC_INDEX+3] = dest_endpoint_output_map_lo;
+    test_results[PQ_TEST_MISC_INDEX+4] = endpoint_id_start_index;
 
     for (uint32_t i = 0; i < demux_fan_out; i++) {
        output_queues[i].init(i, remote_tx_queue_start_addr_words[i], remote_tx_queue_size_words[i],
                              remote_tx_x[i], remote_tx_y[i], remote_tx_queue_id[i], remote_tx_network_type[i],
-                             &input_queue);
+                             &input_queue, 1);
     }
     input_queue.init(demux_fan_out, rx_queue_start_addr_words, rx_queue_size_words,
                      remote_rx_x, remote_rx_y, remote_rx_queue_id, remote_rx_network_type);
 
     wait_all_src_dest_ready(&input_queue, 1, output_queues, demux_fan_out, timeout_cycles);
 
-    debug_log_index(1, 0xff000001);
+    test_results[PQ_TEST_MISC_INDEX] = 0xff000001;
 
     bool timeout = false;
     bool all_outputs_finished = false;
@@ -154,7 +185,7 @@ void kernel_main() {
         }
         if (input_queue.get_curr_packet_valid()) {
             uint32_t dest = input_queue.get_curr_packet_dest();
-            uint32_t output_queue_id = packet_switch_dest_unpack(dest);
+            uint8_t output_queue_id = dest_output_queue_id(dest);
             bool full_packet_sent;
             uint32_t words_sent = output_queues[output_queue_id].forward_data_from_input(0, full_packet_sent);
             data_words_sent += words_sent;
@@ -170,7 +201,7 @@ void kernel_main() {
     }
 
     if (!timeout) {
-        debug_log_index(1, 0xff000002);
+        test_results[PQ_TEST_MISC_INDEX] = 0xff000002;
         for (uint32_t i = 0; i < demux_fan_out; i++) {
             if (!output_queues[i].output_barrier(timeout_cycles)) {
                 timeout = true;
@@ -181,29 +212,18 @@ void kernel_main() {
 
     uint64_t cycles_elapsed = get_timestamp() - start_timestamp;
     if (!timeout) {
-        debug_log_index(1, 0xff000003);
+        test_results[PQ_TEST_MISC_INDEX] = 0xff000003;
         input_queue.send_remote_finished_notification();
     }
 
-    debug_log_index(16, data_words_sent>>32);
-    debug_log_index(17, data_words_sent);
-    debug_log_index(18, cycles_elapsed>>32);
-    debug_log_index(19, cycles_elapsed);
-    debug_log_index(20, iter>>32);
-    debug_log_index(21, iter);
+    set_64b_result(test_results, data_words_sent, PQ_TEST_WORD_CNT_INDEX);
+    set_64b_result(test_results, cycles_elapsed, PQ_TEST_CYCLES_INDEX);
+    set_64b_result(test_results, iter, PQ_TEST_ITER_INDEX);
 
     if (timeout) {
-        debug_log_index(0, PACKET_QUEUE_TEST_TIMEOUT);
+        test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_TIMEOUT;
     } else {
-        debug_log_index(0, PACKET_QUEUE_TEST_PASS);
-        debug_log_index(1, 0xff000005);
-    }
-    if (debug_output_verbose) {
-        debug_log(0xaaaaaaaa);
-        input_queue.debug_log_object();
-        for (uint32_t i = 0; i < demux_fan_out; i++) {
-            debug_log(0xbbbbbb00 + i);
-            output_queues[i].debug_log_object();
-        }
+        test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_PASS;
+        test_results[PQ_TEST_MISC_INDEX] = 0xff00005;
     }
 }

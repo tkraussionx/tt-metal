@@ -9,10 +9,6 @@
 
 packet_input_queue_state_t input_queues[MAX_SWITCH_FAN_IN];
 
-tt_l1_ptr uint32_t* debug_buf;
-uint32_t debug_buf_index;
-uint32_t debug_buf_size;
-
 constexpr uint32_t endpoint_id = get_compile_time_arg_val(0);
 
 constexpr uint32_t num_src_endpoints = get_compile_time_arg_val(1);
@@ -34,8 +30,11 @@ constexpr uint32_t remote_tx_queue_id = get_compile_time_arg_val(7);
 
 constexpr DispatchRemoteNetworkType rx_rptr_update_network_type = static_cast<DispatchRemoteNetworkType>(get_compile_time_arg_val(8));
 
-constexpr uint32_t debug_buf_addr_arg = get_compile_time_arg_val(9);
-constexpr uint32_t debug_buf_size_arg = get_compile_time_arg_val(10);
+constexpr uint32_t test_results_addr_arg = get_compile_time_arg_val(9);
+constexpr uint32_t test_results_size_bytes = get_compile_time_arg_val(10);
+
+tt_l1_ptr uint32_t* const test_results =
+    reinterpret_cast<tt_l1_ptr uint32_t*>(test_results_addr_arg);
 
 constexpr uint32_t prng_seed = get_compile_time_arg_val(11);
 
@@ -50,8 +49,6 @@ constexpr uint32_t dest_endpoint_start_id = get_compile_time_arg_val(16);
 
 constexpr uint32_t timeout_cycles = get_compile_time_arg_val(17);
 
-constexpr uint32_t debug_output_verbose = get_compile_time_arg_val(18);
-
 
 // predicts size and payload of packets from each destination, should have
 // the same random seed as the corresponding traffic_gen_tx
@@ -60,13 +57,13 @@ input_queue_rnd_state_t src_rnd_state[num_src_endpoints];
 
 void kernel_main() {
 
-    debug_set_buf(reinterpret_cast<tt_l1_ptr uint32_t*>(debug_buf_addr_arg), debug_buf_size_arg);
-    debug_advance_index(32);
-    debug_log_index(0, PACKET_QUEUE_TEST_STARTED);
-    debug_log_index(1, 0xff000000);
-    debug_log_index(2, 0xdd000000 | endpoint_id);
+    zero_l1_buf(test_results, test_results_size_bytes);
+    test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_STARTED;
+    test_results[PQ_TEST_MISC_INDEX] = 0xff000000;
+    test_results[PQ_TEST_MISC_INDEX+1] = 0xdd000000 | endpoint_id;
 
-    zero_queue_data(queue_start_addr_words, queue_size_words);
+    zero_l1_buf(reinterpret_cast<tt_l1_ptr uint32_t*>(queue_start_addr_words*PACKET_WORD_SIZE_BYTES),
+                queue_size_words);
     noc_init(0xF);
 
     for (uint32_t i = 0; i < num_src_endpoints; i++) {
@@ -81,7 +78,7 @@ void kernel_main() {
 
     wait_all_src_dest_ready(input_queue, 1, NULL, 0, timeout_cycles);
 
-    debug_log_index(1, 0xff000001);
+    test_results[PQ_TEST_MISC_INDEX] = 0xff000001;
 
     uint64_t num_words_checked = 0;
     uint32_t curr_packet_payload_words_remaining_to_check = 0;
@@ -107,7 +104,7 @@ void kernel_main() {
         while (!packet_available) {
             uint32_t cycles_since_progress = get_timestamp_32b() - progress_timestamp;
             if (cycles_since_progress > timeout_cycles) {
-                debug_log_index(1, 0xff000006);
+                test_results[PQ_TEST_MISC_INDEX] = 0xff000006;
                 timeout = true;
                 break;
             }
@@ -141,7 +138,7 @@ void kernel_main() {
                 mismatch_addr = reinterpret_cast<uint32_t>(curr_packet_header_ptr);
                 mismatch_val = 0;
                 expected_val = 0;
-                debug_log_index(8, 0xee000001);
+                test_results[PQ_TEST_MISC_INDEX+3] = 0xee000001;
                 break;
         }
 
@@ -153,7 +150,7 @@ void kernel_main() {
                     mismatch_addr = reinterpret_cast<uint32_t>(curr_packet_header_ptr);
                     mismatch_val = 0;
                     expected_val = 0;
-                    debug_log_index(8, 0xee000002);
+                    test_results[PQ_TEST_MISC_INDEX+3] = 0xee000002;
                     break;
             }
             src_endpoint_last_packet[src_endpoint_index] = true;
@@ -167,7 +164,7 @@ void kernel_main() {
                     mismatch_addr = reinterpret_cast<uint32_t>(curr_packet_header_ptr);
                     mismatch_val = curr_packet_tag;
                     expected_val = src_endpoint_rnd_state->packet_rnd_seed;
-                    debug_log_index(8, 0xee000003);
+                    test_results[PQ_TEST_MISC_INDEX+3] = 0xee000003;
                     break;
             }
         }
@@ -195,9 +192,9 @@ void kernel_main() {
                                    (curr_packet_tag & 0xFFFF0000)+1,
                                    mismatch_addr, mismatch_val, expected_val)) {
                 check_failed = true;
-                debug_log_index(8, 0xee000004);
-                debug_log_index(9, words_before_wrap);
-                debug_log_index(10, words_after_wrap);
+                test_results[PQ_TEST_MISC_INDEX+3] = 0xee000005;
+                test_results[PQ_TEST_MISC_INDEX+4] = words_before_wrap;
+                test_results[PQ_TEST_MISC_INDEX+5] = words_after_wrap;
                 break;
             }
             input_queue->input_queue_advance_words_cleared(words_before_wrap);
@@ -208,9 +205,9 @@ void kernel_main() {
                                        (curr_packet_tag & 0xFFFF0000) + 1 + words_before_wrap,
                                        mismatch_addr, mismatch_val, expected_val)) {
                     check_failed = true;
-                    debug_log_index(8, 0xee000005);
-                    debug_log_index(9, words_before_wrap);
-                    debug_log_index(10, words_after_wrap);
+                    test_results[PQ_TEST_MISC_INDEX+3] = 0xee000006;
+                    test_results[PQ_TEST_MISC_INDEX+4] = words_before_wrap;
+                    test_results[PQ_TEST_MISC_INDEX+5] = words_after_wrap;
                     break;
                 }
                 input_queue->input_queue_advance_words_cleared(words_after_wrap);
@@ -230,53 +227,34 @@ void kernel_main() {
                 src_endpoint_last_index_dbg |= (0x1 << i);
             }
         }
-        debug_log_index(5, src_endpoint_last_index_dbg);
+        test_results[PQ_TEST_MISC_INDEX+6] = src_endpoint_last_index_dbg;
     }
 
-    uint64_t elapsed_cycles = get_timestamp() - start_timestamp;
+    uint64_t cycles_elapsed = get_timestamp() - start_timestamp;
+
     if (!timeout && !check_failed) {
-        debug_log_index(1, 0xff000002);
+        test_results[PQ_TEST_MISC_INDEX] = 0xff000002;
         input_queue->send_remote_finished_notification();
     }
 
-    debug_log_index(16, num_words_checked>>32);
-    debug_log_index(17, num_words_checked);
-    debug_log_index(18, elapsed_cycles>>32);
-    debug_log_index(19, elapsed_cycles);
-    debug_log_index(20, iter>>32);
-    debug_log_index(21, iter);
+    set_64b_result(test_results, num_words_checked, PQ_TEST_WORD_CNT_INDEX);
+    set_64b_result(test_results, cycles_elapsed, PQ_TEST_CYCLES_INDEX);
+    set_64b_result(test_results, iter, PQ_TEST_ITER_INDEX);
 
     if (timeout) {
-        debug_log_index(0, PACKET_QUEUE_TEST_TIMEOUT);
-        debug_log(words_sent>>32);
-        debug_log(words_sent);
-        debug_log(words_cleared>>32);
-        debug_log(words_cleared);
-        debug_log(0xdddddddd);
-        input_queue->debug_log_object();
+        test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_TIMEOUT;
+        set_64b_result(test_results, words_sent, PQ_TEST_MISC_INDEX+12);
+        set_64b_result(test_results, words_cleared, PQ_TEST_MISC_INDEX+14);
+        input_queue->dprint_object();
     } else if (check_failed) {
-        debug_log_index(0, PACKET_QUEUE_TEST_DATA_MISMATCH);
-        debug_log(words_sent>>32);
-        debug_log(words_sent);
-        debug_log(words_cleared>>32);
-        debug_log(words_cleared);
-        debug_log(0xcccccccc);
-        debug_log(mismatch_addr);
-        debug_log(mismatch_val);
-        debug_log(expected_val);
-        debug_log(0xdddddddd);
-        src_endpoint_rnd_state->debug_log_object();
-        debug_log(0xeeeeeeee);
-        input_queue->debug_log_object();
+        test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_DATA_MISMATCH;
+        test_results[PQ_TEST_MISC_INDEX+12] = mismatch_addr;
+        test_results[PQ_TEST_MISC_INDEX+12] = mismatch_val;
+        test_results[PQ_TEST_MISC_INDEX+12] = expected_val;
+        src_endpoint_rnd_state->dprint_object();
+        input_queue->dprint_object();
     } else {
-        debug_log_index(0, PACKET_QUEUE_TEST_PASS);
-        debug_log_index(1, 0xff000005);
-        if (debug_output_verbose) {
-            debug_log(0xee000002);
-            debug_log(words_sent);
-            debug_log(words_cleared);
-            debug_log(0xffffffff);
-            input_queue->debug_log_object();
-        }
+        test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_PASS;
+        test_results[PQ_TEST_MISC_INDEX] = 0xff000005;
     }
 }
