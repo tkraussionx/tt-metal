@@ -699,7 +699,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
     // CBs
     uint32_t multi_buffering_factor = 2;
 
-    uint32_t split_reader = 0;
+    uint32_t split_reader = !use_rectangular_shards_with_col_major; // don't use split reader with col major output -> will have a different one.
 
     // scalar CB as coefficient of reduce
     uint32_t in_scalar_cb_id = CB::c_in4;
