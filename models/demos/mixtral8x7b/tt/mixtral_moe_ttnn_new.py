@@ -18,8 +18,7 @@ def top_2(gate_logits_1SB8, top_2_mask, expert_mask, mask_0, mask_1):
     gate_logits_1SB8 = ttnn.where(cond0, top_2_mask, gate_logits_1SB8)
     weights_ex1_1SB1 = ttnn.experimental.tensor.max(gate_logits_1SB8, dim=3)
     cond1 = ttnn.eq(gate_logits_1SB8, ttnn.repeat_interleave(weights_ex1_1SB1, 8, dim=3))
-    m = ttnn.reciprocal(weights_ex0_1SB1 + weights_ex1_1SB1)
-    weights_1SBK = concat(m * weights_ex0_1SB1, m * weights_ex1_1SB1, mask_0, mask_1)
+    weights_1SBK = concat(weights_ex0_1SB1, weights_ex1_1SB1, mask_0, mask_1)
 
     cond0 = ttnn.sum(cond0 * expert_mask, dim=3)
     cond1 = ttnn.sum(cond1 * expert_mask, dim=3)
@@ -50,16 +49,17 @@ class TtMoeLayer(nn.Module):
         ]
         self.num_devices = len(devices)
         self.compute_kernel = ttnn.WormholeComputeKernelConfig(
-            math_fidelity=ttnn.MathFidelity.LoFi,
+            math_fidelity=ttnn.MathFidelity.HiFi2,
             fp32_dest_acc_en=True,
             packer_l1_acc=True,
         )
 
         self.top_2_mask = [
-            ttnn.experimental.tensor.tilize_with_zero_padding(
-                ttnn.experimental.tensor.full(
-                    ttnn.Shape([1, 1, 32, 8]), fill_value=0.0, data_type=ttnn.bfloat16, device=device
-                )
+            ttnn.from_torch(
+                torch.full((1, 1, 32, 8), fill_value=torch.finfo(torch.float).min),
+                dtype=ttnn.bfloat16,
+                device=device,
+                layout=ttnn.TILE_LAYOUT,
             )
             for device in self.devices
         ]
@@ -101,26 +101,29 @@ class TtMoeLayer(nn.Module):
             self.devices[i] = self.devices[i]
             input_i_1SBH = inputs[i]
             expert_i_HD = self.experts[i]
+
             gate_logits_1SB8 = ttnn.linear(
                 input_i_1SBH,
                 self.gates_H8[i],
                 memory_config=ttnn.L1_MEMORY_CONFIG,
                 compute_kernel_config=self.compute_kernel,
+                use_1d_systolic_array=True,
             )
-            gate_logits_1SB8 = ttnn.softmax(
-                gate_logits_1SB8 - ttnn.experimental.tensor.max(gate_logits_1SB8, dim=3), dim=-1
-            )
+
             weights_1SBK, selected_experts_1SBK = top_2(
                 gate_logits_1SB8, self.top_2_mask[i], self.expert_mask[i], self.mask_0[i], self.mask_1[i]
             )
-            # weights_1SBK = ttnn.softmax(weights_1SBK - ttnn.experimental.tensor.max(weights_1SBK, dim=3), dim=-1)
-            # weights_1SBK = weights_1SBK * ttnn.reciprocal(2 *ttnn.mean(weights_1SBK, dim=3, keepdim=True))
+            # with ttnn.enable_debug_decorator():
+            # with ttnn.override_pcc_of_debug_decorator(0.99):
+            weights_1SBK = ttnn.softmax(weights_1SBK, dim=-1)
             print("done top 2")
 
             # mask weights
             weights_1SB1 = ttnn.experimental.tensor.sum(weights_1SBK * selected_experts_1SBK, dim=3)
-
+            print("done mask weights")
             # MLP
+            # with ttnn.enable_debug_decorator():
+            #    with ttnn.override_pcc_of_debug_decorator(0.999):
             results_11BD = expert_i_HD(input_i_1SBH) * weights_1SB1
             print("done output tensor creation")
 
