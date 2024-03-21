@@ -1075,6 +1075,7 @@ void Program::compile( Device * device )
     if (std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr) {
         this->program_device_map = ConstructProgramDeviceMap(device, *this);
         this->buffer = std::make_unique<Buffer>(device, this->program_device_map.program_pages.size() * sizeof(uint32_t),  DeviceCommand::PROGRAM_PAGE_SIZE, BufferType::DRAM);
+        std::cout << "allocated program buffer at: " << this->buffer->address() << std::endl;
     }
 
     if (detail::CompilationReporter::enabled()) {

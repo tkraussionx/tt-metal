@@ -26,38 +26,44 @@ def test_deallocate_full(device, num_cores):
     )
 
     # TT tensors
+    print("Creating query layer")
     tt_query_layer = torch2tt_tensor(
         torch_query_layer,
         device,
         tt_memory_config=dram_interleaved_memory_config,
         tt_dtype=ttl.tensor.DataType.BFLOAT16,
     )
-
+    print("Done creating query layer")
+    print("Creating key layer")
     tt_key_layer = torch2tt_tensor(
         torch_key_layer, device, tt_memory_config=dram_interleaved_memory_config, tt_dtype=ttl.tensor.DataType.BFLOAT16
     )
-
+    print("Done creating key layer")
+    print("Creating value layer")
     tt_value_layer = torch2tt_tensor(
         torch_value_layer,
         device,
         tt_memory_config=dram_interleaved_memory_config,
         tt_dtype=ttl.tensor.DataType.BFLOAT16,
     )
-
+    print("Done creating value layer")
     mm2_out_torch = torch.randn(mm_out_shape).bfloat16().float()
+    print("Sending mm2out to device")
     mm2_out = torch2tt_tensor(
         mm2_out_torch, device, tt_memory_config=dram_interleaved_memory_config, tt_dtype=ttl.tensor.DataType.BFLOAT16
     )
-
+    print("Done sending mm2out to device")
+    print("Creating ref_mm1")
     ref_mm1 = ttl.tensor.matmul(tt_query_layer, tt_key_layer)
+    print("Done Creating ref_mm1")
     ref_mm2 = ttl.tensor.matmul(ref_mm1, tt_value_layer)
-
+    print("Done creating ref_mm2")
     height_sharded_memory_config = ttl.tensor.MemoryConfig(
         memory_layout=ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, buffer_type=ttl.tensor.BufferType.L1
     )
 
     height_shard_spec_1 = [9 * 32, 1 * 32]
-
+    print("Creating query_layer_sharded")
     query_layer_sharded = ttl.tensor.interleaved_to_sharded(
         tt_query_layer,
         (8, 8),
@@ -65,7 +71,7 @@ def test_deallocate_full(device, num_cores):
         ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
         ttl.tensor.ShardOrientation.ROW_MAJOR,
     )
-
+    print("Done creating query_layer_sharded")
     compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
         math_fidelity=ttl.tensor.MathFidelity.HiFi4,
         math_approx_mode=True,
@@ -84,7 +90,7 @@ def test_deallocate_full(device, num_cores):
         fused_activation=None,
         mcast_in0=False,
     )
-
+    print("Making mm1_sharded")
     mm1_sharded = ttl.operations.primary.matmul(
         query_layer_sharded,
         tt_key_layer,
@@ -93,10 +99,11 @@ def test_deallocate_full(device, num_cores):
         output_dtype=ttl.tensor.DataType.BFLOAT16,
         compute_kernel_config=compute_kernel_config,
     )
-
+    print("Done making mm1_sharded")
     # If deallocate is moved after the next matmul, the test passes
+    print("Deallocating query_layer")
     query_layer_sharded.deallocate()
-
+    print("Done deallocating query_layer")
     program_config_2 = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
         compute_with_storage_grid_size=(8, 8),
         in0_block_w=32,
@@ -108,7 +115,7 @@ def test_deallocate_full(device, num_cores):
         fused_activation=None,
         mcast_in0=False,
     )
-
+    print("Making mm2_sharded")
     mm2_sharded = ttl.operations.primary.matmul(
         mm1_sharded,
         tt_value_layer,
@@ -117,7 +124,7 @@ def test_deallocate_full(device, num_cores):
         output_dtype=ttl.tensor.DataType.BFLOAT16,
         compute_kernel_config=compute_kernel_config,
     )
-
+    print("Done making mm2_sharded")
     # If deallocate is here, the test passes
     # query_layer_sharded.deallocate()
 

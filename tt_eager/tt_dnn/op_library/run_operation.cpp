@@ -272,6 +272,12 @@ std::vector<Tensor> run_device_operation(
     if (!operation::skip_profile) {
         op_profiler::append_all_tensor_io_data(input_tensors, optional_input_tensors, output_tensors);
     }
+    for (const auto& tensor : output_tensors) {
+        if (std::holds_alternative<tt::tt_metal::DeviceStorage>(tensor.get_storage())) {
+            auto storage = std::get<tt::tt_metal::DeviceStorage>(tensor.get_storage());
+            std::cout << "Created tensor with address: " << storage.buffer->address() << std::endl;
+        }
+    }
     return output_tensors;
 }
 

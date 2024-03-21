@@ -198,6 +198,7 @@ void Buffer::allocate() {
     // L1 buffers are allocated top down!
     bool bottom_up = this->buffer_type_ == BufferType::DRAM;
     detail::AllocateBuffer(this, bottom_up);
+    std::cout << "Allocated buffer at: " << this->address_ << std::endl;
     detail::BUFFER_MAP[{this->device_->id(), this->address_}] = this;
 }
 
@@ -272,6 +273,7 @@ void Buffer::deallocate() {
     TT_ASSERT(this->device_->allocator_ != nullptr, "Expected allocator to be initialized!");
     // Asynchronously deallocate
     detail::BUFFER_MAP.erase({this->device_->id(), this->address_});
+    std::cout << "Deallocated buffer at: " << this->address_ << std::endl;
     detail::DeallocateBuffer(this);
 }
 
