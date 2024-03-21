@@ -285,6 +285,7 @@ class UNet2DConditionModel:
         reader_patterns_cache: Optional[Dict] = None,
         dtype: Optional[ttnn.DataType] = None,
     ):
+        print("sample shape - ", sample.shape)
         num_upsamplers = len(block_out_channels) - 1
         default_overall_up_factor = 2**num_upsamplers
         forward_upsample_size = False
@@ -370,7 +371,7 @@ class UNet2DConditionModel:
         down_block_res_samples = (sample,)
         output_channel = block_out_channels[0]
         for i, (down_block_type, down_block) in enumerate(zip(self.down_block_types, self.down_blocks)):
-            # print(f"Down block {i}")
+            print(f"Down block {i}")
             input_channel = output_channel
             output_channel = block_out_channels[i]
             is_final_block = i == len(block_out_channels) - 1
@@ -424,7 +425,7 @@ class UNet2DConditionModel:
             down_block_res_samples += res_samples
 
         # 4.mid
-        # print("Mid block")
+        print("Mid block")
         sample = self.mid_block(
             hidden_states=sample,
             temb=emb,
@@ -454,7 +455,7 @@ class UNet2DConditionModel:
         only_cross_attention = list(reversed(only_cross_attention))
         output_channel = reversed_block_out_channels[0]
         for i, (up_block_type, up_block) in enumerate(zip(self.up_block_types, self.up_blocks)):
-            # print(f"Up block {i}")
+            print(f"Up block {i}")
             is_final_block = i == len(block_out_channels) - 1
 
             prev_output_channel = output_channel
@@ -526,7 +527,7 @@ class UNet2DConditionModel:
                 ), f"CrossAttnUpBlock2D, and UpBlock2D are the only up blocks implemented! you requested {up_block_type}"
 
         # 6.post-process
-
+        print("starting post process")
         sample = ttnn.permute(sample, (0, 2, 3, 1))  # permute from NCHW to NHWC
         sample = ttnn.reshape(
             sample,
@@ -610,5 +611,7 @@ class UNet2DConditionModel:
         )
         sample = ttnn.permute(sample, (0, 3, 1, 2))  # permute from NHWC to NCHW
         # con_in completes
-
+        print("Here")
+        sample = ttnn.to_layout(sample, ttnn.TILE_LAYOUT)
+        print("Done")
         return sample
