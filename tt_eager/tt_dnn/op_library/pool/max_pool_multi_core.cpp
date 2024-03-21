@@ -626,6 +626,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
 
 // this version uses distribution along height = N * H * W
 operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(const Tensor &input, const Tensor &reader_indices,
+                                                                        bool use_rectangular_shards_with_col_major,
                                                                         Tensor& output,
                                                                         uint32_t in_n, uint32_t in_h, uint32_t in_w,
                                                                         uint32_t out_h, uint32_t out_w,
@@ -691,13 +692,14 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
     uint32_t in_nhw_per_core = nbatch * in_h * in_w / ncores;
     uint32_t in_nhw_per_core_cliff = 0;
     uint32_t out_nhw_per_core = out_nhw / ncores;
+    uint32_t out_nh_per_core = out_nhw_per_core / out_w;
 
     uint32_t ncores_w = grid_size.x;
 
     // CBs
     uint32_t multi_buffering_factor = 2;
 
-    uint32_t split_reader = 1;
+    uint32_t split_reader = 0;
 
     // scalar CB as coefficient of reduce
     uint32_t in_scalar_cb_id = CB::c_in4;
@@ -850,7 +852,8 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
                                             1,      // nblocks -- remove
                                             split_reader, // enable split reader
                                             0, // split reader id
-                                            bf16_one_u32
+                                            bf16_one_u32,
+                                            use_rectangular_shards_with_col_major
                                             };
 
     std::vector<uint32_t> reader1_ct_args = {
@@ -866,9 +869,9 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
                                             1,      // nblocks -- remove
                                             split_reader, // enable split reader
                                             1, // split reader id
-                                            bf16_one_u32
+                                            bf16_one_u32,
+                                            use_rectangular_shards_with_col_major
                                             };
-
 
     std::string reader_kernel_fname("tt_eager/tt_dnn/op_library/pool/kernels/dataflow/reader_max_pool_2d_multi_core_sharded_with_halo_v2.cpp");
 
@@ -918,7 +921,8 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
     /**
      * Compute Kernel: input cb -> tilize_block -> input tiles -> reduce_h max -> output tiles -> untilize_block -> output cb
      */
-    std::vector<uint32_t> compute_ct_args = {in_ntiles_hw,
+    std::vector<uint32_t> compute_ct_args = {
+                                            in_ntiles_hw,
                                             in_ntiles_c,
                                             in_ntiles_hw * in_ntiles_c,
                                             kernel_size_hw,
@@ -929,10 +933,11 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
                                             1,      // nblocks -- remove
                                             out_w_loop_count,
                                             nbatch,
-                                            out_nhw_per_core,
+                                            out_nh_per_core,
                                             split_reader, // enable split reader
                                             out_nhw_per_core,     // loop count with blocks
                                             input_shape[3],
+                                            use_rectangular_shards_with_col_major
                                             };
     auto compute_ct_args_cliff = compute_ct_args;
     auto reduce_op = ReduceOpMath::MAX;
@@ -944,22 +949,11 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
                                         .defines = reduce_op_utils::get_defines(reduce_op, reduce_dim)};
     std::string compute_kernel_fname("tt_eager/tt_dnn/op_library/pool/kernels/compute/max_pool_multi_core.cpp");
     auto compute_kernel = CreateKernel(program,
-                                              compute_kernel_fname,
-                                              core_range,
-                                              compute_config);
-
-    /*
-    uint32_t curr_out_stick_id = 0; // track output sticks with batch folded in
-    for (int32_t i = 0; i < ncores; ++ i) {
-        CoreCoord core(i % ncores_w, i / ncores_w); // logical
-        writer_rt_args[4] = curr_out_stick_id;
-        SetRuntimeArgs(program, writer_kernel, core, writer_rt_args);
-        curr_out_stick_id += out_nhw_per_core;
-    }
-    */
+                                       compute_kernel_fname,
+                                       core_range,
+                                       compute_config);
 
     auto override_runtime_arguments_callback = [
-            //reader_kernel, writer_kernel, raw_in_cb, in_reader_indices_cb, cb_sharded_out, ncores, ncores_w
             reader0_kernel, reader1_kernel, raw_in_cb, in_reader_indices_cb, cb_out, ncores, ncores_w
         ]
     (
@@ -976,15 +970,6 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
         auto dst_buffer = output_tensors.at(0).buffer();
         bool out_sharded = output_tensors.at(0).is_sharded();
 
-        /*
-        for (uint32_t i = 0; i < ncores; ++ i) {
-            CoreCoord core{i % ncores_w, i / ncores_w };
-            {
-                auto &runtime_args = GetRuntimeArgs(program, writer_kernel, core);
-                runtime_args[0] = dst_buffer->address();
-            }
-        }
-        */
         if (input_sharded) {
             UpdateDynamicCircularBufferAddress(program, raw_in_cb, *src_buffer);
             UpdateDynamicCircularBufferAddress(program, in_reader_indices_cb, *reader_indices_buffer);

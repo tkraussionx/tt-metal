@@ -6,7 +6,7 @@
 #include <cstring>
 #include "dataflow_api.h"
 
-#define ENABLE_DEBUG_PRINT 0
+#define ENABLE_DEBUG_PRINT 1
 
 #if ENABLE_DEBUG_PRINT == 1
     #include "debug/dprint.h"
@@ -60,11 +60,10 @@ void kernel_main() {
     const uint32_t split_reader = get_compile_time_arg_val(10);
     const uint32_t reader_id = get_compile_time_arg_val(11);
 
-    // compile time args
     // value of 1 in bf16 in a uin32_t
     constexpr uint32_t bf16_one_u32 = get_compile_time_arg_val(12);
 
-    // static_assert(0 == reader_nindices%2, "reader_nindices must be multiple of 2");
+    constexpr bool use_rectangular_shards_with_col_major = get_compile_time_arg_val(13);
 
     constexpr uint32_t TILE_WIDTH = 32;
 
@@ -98,8 +97,10 @@ void kernel_main() {
 
         uint32_t out_l1_write_addr_base = get_write_ptr(in_cb_id);
         uint32_t out_l1_write_addr = out_l1_write_addr_base;
+        DPRINT << reader_id << " :: ======================================" << ENDL();
         for (uint32_t i = 0; i < nblocks; ++ i) {
             uint16_t top_left_local_index = reader_indices_ptr[counter ++];
+            DPRINT << reader_id << " :: top_left_local_index: " << top_left_local_index << ENDL();
             uint32_t h_multiples = 0;
             for (uint32_t h = 0; h < window_h; ++ h, h_multiples += in_w_padded) {
                 uint32_t stick_offset = top_left_local_index + h_multiples;
@@ -110,6 +111,10 @@ void kernel_main() {
             if (split_reader) counter++; // interleave the indices
         }
         noc_async_read_barrier();
+        // if (counter % 2 == 0) {
+        //     print_pages(out_l1_write_addr_base, in_c, 10);
+        // }
+        DPRINT << reader_id << " :: ======================================" << ENDL();
         cb_push_back(in_cb_id, npages_to_reserve);
     }
 } // kernel_main()

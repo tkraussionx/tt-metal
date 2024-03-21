@@ -8,7 +8,7 @@ import torch
 import pytest
 import math
 from models.utility_functions import is_wormhole_b0
-from tests.ttnn.utils_for_testing import assert_with_pcc
+from tests.ttnn.utils_for_testing import assert_with_pcc, check_with_pcc_without_tensor_printout
 import ttnn
 
 
@@ -182,7 +182,16 @@ def test_run_max_pool(
 
     ## test for equivalance
     out_pytorch = out_pytorch.reshape(golden_pytorch.shape)
-    assert_with_pcc(out_pytorch, golden_pytorch)
+    # assert_with_pcc(out_pytorch, golden_pytorch)
+    pcc_pass, pcc_msg = check_with_pcc_without_tensor_printout(out_pytorch, golden_pytorch)
+    out_pytorch = torch.transpose(out_pytorch, 1, 2)
+    out_pytorch = torch.transpose(out_pytorch, 2, 3)
+    golden_pytorch = torch.transpose(golden_pytorch, 1, 2)
+    golden_pytorch = torch.transpose(golden_pytorch, 2, 3)
+    print(pcc_msg)
+    print(f"golden: {golden_pytorch}")
+    print(f"out_pytorch: {out_pytorch}")
+    assert pcc_pass
 
     ## do more rigorous comparision for each element
     atol, rtol = torch.testing._comparison.default_tolerances(torch.bfloat16)

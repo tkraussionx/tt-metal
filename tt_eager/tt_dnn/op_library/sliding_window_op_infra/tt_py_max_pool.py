@@ -41,7 +41,11 @@ class TTPyMaxPool(TTPyOp):
         output_mem_config=None,
         deallocate_activation=True,
         act_dtype=None,
+        use_rectangular_shards_with_col_major=False,
     ):
+        self.deallocate_activation = deallocate_activation
+        self.use_rectangular_shards_with_col_major = use_rectangular_shards_with_col_major
+
         if parallel_config_override is None:
             parallel_config_override = {}
         if "max_pool" not in reader_patterns_cache:
@@ -63,6 +67,8 @@ class TTPyMaxPool(TTPyOp):
             config_override=parallel_config_override,
             is_out_tiled=True if act_dtype is not None and act_dtype == ttl.tensor.DataType.BFLOAT8_B else False,
         )
+        self.device = device
+        self.pad_val = pad_val
         self.grid_size = (conv_parallel_config.grid_size.x, conv_parallel_config.grid_size.y)
         self.ncores_nhw = conv_parallel_config.num_cores_nhw
         self.shard_grid, self.shard_layout = calculate_shard_grid(self.grid_size, self.ncores_nhw)
@@ -90,8 +96,6 @@ class TTPyMaxPool(TTPyOp):
 
         sliding_window_op_params_hash = get_hash_from_sliding_window_op_params(self.sliding_window_op_params)
 
-        self.device = device
-
         self.set_op_configs(
             sliding_window_op_params_hash,
             reader_patterns_cache["max_pool"],
@@ -105,7 +109,7 @@ class TTPyMaxPool(TTPyOp):
             reader_indices,
         )
 
-        self.pad_val = pad_val
+        ## initialize the utwh op object
         self.untilize_with_halo = TTPyUntilizeWithHalo(
             self.device,
             self.sliding_window_op_params,
@@ -113,8 +117,6 @@ class TTPyMaxPool(TTPyOp):
             pad_val=self.pad_val,
             is_out_tiled=False,
         )
-
-        self.deallocate_activation = deallocate_activation
 
     # override abstract methods from base class TTPyOp
     def set_op_configs(self, sliding_window_op_params_hash, reader_patterns_cache):
@@ -128,12 +130,16 @@ class TTPyMaxPool(TTPyOp):
             batch_size = self.sliding_window_op_params.batch_size
             input_h = self.sliding_window_op_params.input_h
             input_w = self.sliding_window_op_params.input_w
-
             ncores_h = self.sliding_window_op_params.num_cores_h
             ncores_w = self.sliding_window_op_params.num_cores_w
             ncores_nhw = self.sliding_window_op_params.num_cores_nhw
 
             input_nchw_shape = [batch_size, 1, input_h, input_w]
+
+            pad_metadata, data_top_left_indices = trace_conv_to_generate_data_top_left_indices_and_pad_metadata(
+                (1, 1, window_h, window_w, stride_h, stride_w, pad_h, pad_w, 1, 1), input_nchw_shape
+            )
+
             input_volume = batch_size * input_h * input_w
             output_h = ((int)((input_h + (2 * pad_h) - window_h) / stride_h)) + 1
             output_w = ((int)((input_w + (2 * pad_w) - window_w) / stride_w)) + 1
@@ -142,18 +148,26 @@ class TTPyMaxPool(TTPyOp):
             # input_size_to_shard_evenly = _nearest_y(input_volume, ncores_nhw * 32)
             assert input_volume % ncores_nhw == 0
             input_shard_height = input_volume // ncores_nhw
-
-            # output_size_to_shard_evenly = _nearest_y(output_volume, ncores_nhw * 32)
             assert output_volume % ncores_nhw == 0
             output_shard_height = output_volume // ncores_nhw
 
+            if self.use_rectangular_shards_with_col_major:
+                ## make cuts without splitting an image row
+                input_num_rows = batch_size * input_h
+                assert (
+                    input_num_rows % ncores_nhw == 0
+                )  ## TODO: this can be relaxed by adding padding to the input tensor
+                input_shard_height = (input_num_rows // ncores_nhw) * input_w
+                output_num_rows = batch_size * output_h
+                assert (
+                    output_num_rows % ncores_nhw == 0
+                )  ## TODO: this can be relaxed by adding padding to the output tensor
+                output_shard_height = (output_num_rows // ncores_nhw) * output_w
+
+            print(f"input_shard_height: {input_shard_height}, output_shard_height: {output_shard_height}")
             input_padded_width = input_w + 2 * pad_w
 
-            pad_metadata, data_top_left_indices = trace_conv_to_generate_data_top_left_indices_and_pad_metadata(
-                (1, 1, window_h, window_w, stride_h, stride_w, pad_h, pad_w, 1, 1), input_nchw_shape
-            )
-
-            req_conv_input_shard_start_end, tensor_metadata = decompose_conv_into_shards_and_generate_tensor_metadata(
+            req_conv_input_shard_start_end, _ = decompose_conv_into_shards_and_generate_tensor_metadata(
                 data_top_left_indices,
                 pad_metadata,
                 input_padded_width,
@@ -164,11 +178,28 @@ class TTPyMaxPool(TTPyOp):
                 window_w,
             )
 
+            print(f"req_conv_input_shard_start_end: {req_conv_input_shard_start_end}")
+
             sliding_window_op_sharded_input_top_left_indices = (
                 generate_sliding_window_op_sharded_input_top_left_indices(
-                    data_top_left_indices, req_conv_input_shard_start_end, pad_tile=True, pad_last_core=True
+                    data_top_left_indices,
+                    req_conv_input_shard_start_end,
+                    pad_tile=not self.use_rectangular_shards_with_col_major,
+                    pad_last_core=True,
                 )
             )
+
+            if self.use_rectangular_shards_with_col_major:
+                ## transpose each shard to be in col-major format
+                transposed_swo_sharded_input_top_left_indices = []
+                print(f"FROM THIS: {sliding_window_op_sharded_input_top_left_indices[0]}")
+                for indices_shard in sliding_window_op_sharded_input_top_left_indices:
+                    # print(f'len(indices_shard): {len(indices_shard)}')
+                    torch_indices_shard = torch.tensor(indices_shard).reshape(-1, output_w)
+                    transposed_shard = torch.transpose(torch_indices_shard, 0, 1)
+                    transposed_swo_sharded_input_top_left_indices.append(transposed_shard.flatten().tolist())
+                sliding_window_op_sharded_input_top_left_indices = transposed_swo_sharded_input_top_left_indices
+                print(f"TO THIS: {sliding_window_op_sharded_input_top_left_indices[0]}")
 
             indices_torch_dtype = torch.int16
             indices_tt_dtype = ttl.tensor.DataType.UINT16
@@ -213,6 +244,7 @@ class TTPyMaxPool(TTPyOp):
             output = ttl.tensor.max_pool2d_v2(
                 haloed_act,
                 reader_indices,
+                self.use_rectangular_shards_with_col_major,
                 in_n,
                 in_h,
                 in_w,

@@ -89,6 +89,7 @@ class MaxPool2d:
             parallel_config_override=parallel_config_override,
             deallocate_activation=deallocate_activation,
             act_dtype=dtype,
+            use_rectangular_shards_with_col_major=True,
         )
 
     @ttnn.register_operation(

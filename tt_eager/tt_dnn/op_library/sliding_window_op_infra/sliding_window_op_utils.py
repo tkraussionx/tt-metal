@@ -83,14 +83,3 @@ def calculate_shard_grid(grid_size, num_cores_nhw):
             )
             shard_grid = ttl.tensor.CoreRangeSet({core_range_1})
     return shard_grid, shard_layout
-
-
-class SWOParallelConfig:
-    config_keys = ["num_cores", "grid_size", "shard_layout"]
-
-    def __init__(
-        self, num_cores=1, grid_size=(1, 1), shard_layout=ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED
-    ) -> None:
-        self.num_cores = num_cores
-        self.grid_size = grid_size
-        self.shard_layout = shard_layout

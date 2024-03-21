@@ -25,6 +25,7 @@ struct MaxPool {
     MemoryConfig out_mem_config_;
     uint32_t nblocks_;
     bool use_multicore_;
+    bool use_rectangular_shards_with_col_major_;
 
     void validate(const std::vector<Tensor> &input_tensors) const;
     std::vector<tt::tt_metal::Shape> compute_output_shapes(const std::vector<Tensor> &input_tensors) const;
@@ -46,7 +47,8 @@ struct MaxPool {
         "dilation_w",
         "out_mem_config",
         "nblocks",
-        "use_multicore");
+        "use_multicore",
+        "use_rectangular_shards_with_col_major");
     const auto attribute_values() const {
         return std::make_tuple(
             std::cref(this->in_n_),
@@ -62,7 +64,8 @@ struct MaxPool {
             std::cref(this->dilation_w_),
             std::cref(this->out_mem_config_),
             std::cref(this->nblocks_),
-            std::cref(this->use_multicore_));
+            std::cref(this->use_multicore_),
+            std::cref(this->use_rectangular_shards_with_col_major_));
     }
 };
 
@@ -106,6 +109,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo(const T
 } // namespace deprecated
 operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(const Tensor &input,
                                                                 const Tensor& reader_indices,
+                                                                bool use_rectangular_shards_with_col_major,
                                                                 Tensor& output,
                                                                 uint32_t in_n, uint32_t in_h, uint32_t in_w,
                                                                 uint32_t out_h, uint32_t out_w,
@@ -124,6 +128,7 @@ Tensor max_pool2d(const Tensor &input,
                   uint32_t nblocks = 1, bool use_multicore = true);
 
 Tensor max_pool2d_v2(const Tensor &input, const Tensor &reader_indices,
+                  bool use_rectangular_shards_with_col_major,
                   uint32_t in_n, uint32_t in_h, uint32_t in_w,
                   uint32_t kernel_size_h, uint32_t kernel_size_w,
                   uint32_t stride_h = 1, uint32_t stride_w = 1,

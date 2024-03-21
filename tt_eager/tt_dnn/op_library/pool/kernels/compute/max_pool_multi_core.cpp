@@ -58,12 +58,15 @@ inline void reduce_h_fused(
     const uint32_t in_scalar_cb_id,
     const uint32_t in_ntiles_hwc,
     const uint32_t in_stick_index,
-    const uint32_t out_cb_id) {
+    const uint32_t out_cb_id,
+    const uint32_t out_stick_index) {
 
     constexpr uint32_t num_output_tiles = out_ntiles_c;
     constexpr uint32_t num_faces_in_tile = is_partial_tile ? 1 : 2;
     constexpr uint32_t num_out_rows = 1;
-    cb_reserve_back(out_cb_id, 1);
+
+    // cb_reserve_back(out_cb_id, 1);
+
     tile_regs_acquire();
     const uint32_t curr_in_cb_id = split_reader ? (in_cb_id + (in_stick_index)&0x1) : in_cb_id;
     cb_wait_front(curr_in_cb_id, 1);
@@ -74,10 +77,11 @@ inline void reduce_h_fused(
     cb_pop_front(curr_in_cb_id, 1);
     tile_regs_wait();
     tile_regs_commit();
-    pack_untilize_dst<num_output_tiles>(out_cb_id, 1/*out_subblock_h*/, 0, num_out_rows, num_faces_in_tile);  /* pack 1 row (1x16 or 1x32) */
+    // pack_untilize_dst<num_output_tiles>(out_cb_id, 1/*out_subblock_h*/, 0, num_out_rows, num_faces_in_tile);  /* pack 1 row (1x16 or 1x32) */
+    pack_untilize_dst<num_output_tiles>(out_cb_id, 1/*out_subblock_h*/, 0, num_out_rows, num_faces_in_tile /* pack 1 row (1x16 or 1x32) */, out_stick_index);
     tile_regs_release();
 
-    cb_push_back(out_cb_id, 1);
+    // cb_push_back(out_cb_id, 1);
 }
 
 namespace NAMESPACE {
@@ -93,10 +97,14 @@ void MAIN {
     constexpr uint32_t out_w = get_compile_time_arg_val(5);
     constexpr uint32_t out_ntiles_c = get_compile_time_arg_val(7);
 
+    constexpr uint32_t out_nh_per_core = get_compile_time_arg_val(11);
     constexpr uint32_t split_reader = get_compile_time_arg_val(12);
 
     constexpr uint32_t nsticks_per_core = get_compile_time_arg_val(13);
     constexpr uint32_t in_c = get_compile_time_arg_val(14);
+
+    constexpr bool use_rectangular_shards_with_col_major = get_compile_time_arg_val(15);
+
     constexpr uint32_t num_output_tiles = out_ntiles_c;
 
     constexpr uint32_t in_cb_id = tt::CB::c_in0; // and tt::CB::c_in1 for split reader
@@ -114,11 +122,24 @@ void MAIN {
     pack_untilize_dst_init_short<num_output_tiles>(out_cb_id, num_out_rows, num_faces_in_tile); /* pack 1 row (1x16 or 1x32) */
 
     cb_wait_front(in_scalar_cb_id, 1);
-    for (uint32_t i = 0; i < nsticks_per_core; ++ i) {
-        // NOTE: Assuming in_ntiles_hw < 8 for now.
-        // TODO: subblocking to support this.
-        reduce_h_fused<in_ntiles_hw, in_ntiles_c, out_ntiles_c, is_partial_tile, split_reader>(in_cb_id, in_scalar_cb_id, in_ntiles_hwc, i, out_cb_id);
+    cb_reserve_back(out_cb_id, nsticks_per_core);
+    if (use_rectangular_shards_with_col_major) {
+
+        for (uint32_t w = 0, i = 0; w < out_w; ++ w, ++ i) {
+            for (uint32_t h = 0; h < out_nh_per_core; ++ h, ++ i) {
+                uint32_t out_i = h * out_w + w;
+                reduce_h_fused<in_ntiles_hw, in_ntiles_c, out_ntiles_c, is_partial_tile, split_reader>(in_cb_id, in_scalar_cb_id, in_ntiles_hwc, i, out_cb_id, out_i);
+            }
+        }
+
+    } else {
+        for (uint32_t i = 0; i < nsticks_per_core; ++ i) {
+            // NOTE: Assuming in_ntiles_hw < 8 for now.
+            // TODO: subblocking to support this.
+            reduce_h_fused<in_ntiles_hw, in_ntiles_c, out_ntiles_c, is_partial_tile, split_reader>(in_cb_id, in_scalar_cb_id, in_ntiles_hwc, i, out_cb_id, i);
+        }
     }
+    cb_push_back(out_cb_id, nsticks_per_core);
     cb_pop_front(in_scalar_cb_id, 1);
 }
 
