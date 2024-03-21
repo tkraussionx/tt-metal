@@ -25,7 +25,25 @@ constexpr uint32_t PACKET_QUEUE_TEST_PASS = PACKET_QUEUE_STAUS_MASK | 0x1;
 constexpr uint32_t PACKET_QUEUE_TEST_TIMEOUT = PACKET_QUEUE_STAUS_MASK | 0x2;
 constexpr uint32_t PACKET_QUEUE_TEST_DATA_MISMATCH = PACKET_QUEUE_STAUS_MASK | 0x3;
 
-extern jmp_buf buf;
+// indexes of return values in test results buffer
+constexpr uint32_t PQ_TEST_STATUS_INDEX = 0;
+constexpr uint32_t PQ_TEST_WORD_CNT_INDEX = 2;
+constexpr uint32_t PQ_TEST_CYCLES_INDEX = 4;
+constexpr uint32_t PQ_TEST_ITER_INDEX = 6;
+constexpr uint32_t PQ_TEST_MISC_INDEX = 16;
+
+inline uint64_t get_64b_result(uint32_t* buf, uint32_t index) {
+    return (((uint64_t)buf[index]) << 32) | buf[index+1];
+}
+
+inline uint64_t get_64b_result(const std::vector<uint32_t>& vec, uint32_t index) {
+    return (((uint64_t)vec[index]) << 32) | vec[index+1];
+}
+
+inline void set_64b_result(uint32_t* buf, uint64_t val, uint32_t index = 0) {
+    buf[index] = val >> 32;
+    buf[index+1] = val & 0xFFFFFFFF;
+}
 
 enum DispatchPacketFlag : uint32_t {
     PACKET_CMD_START = (0x1 << 1),
@@ -80,12 +98,9 @@ static_assert(MAX_SWITCH_FAN_OUT <= 4,
               "MAX_SWITCH_FAN_OUT must be <= 4 for the packing funcitons below to work");
 
 inline uint64_t packet_switch_dest_pack(uint32_t* dest_output_map_array, uint32_t num_dests) {
-    uint32_t result_hi = 0;
-    uint32_t result_lo = 0;
+    uint64_t result = 0;
     for (uint32_t i = 0; i < num_dests; i++) {
-        // result |= ((uint64_t)dest_output_map_array[i]) << (2*i);
-        result_hi |= ((dest_output_map_array[i] >> 1) << i);
-        result_lo |= ((dest_output_map_array[i] & 0x1) << i);
+        result |= ((uint64_t)(dest_output_map_array[i])) << (2*i);
     }
-    return (((uint64_t)result_hi) << 32) | result_lo;
+    return result;
 }

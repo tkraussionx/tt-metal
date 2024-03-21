@@ -20,41 +20,6 @@ constexpr uint32_t DEFAULT_MAX_ETH_SEND_WORDS = 2*1024;
 
 constexpr uint32_t NUM_PTR_REGS_PER_QUEUE = 3;
 
-extern tt_l1_ptr uint32_t* debug_buf;
-extern uint32_t debug_buf_index;
-extern uint32_t debug_buf_size;
-
-void debug_set_buf(tt_l1_ptr uint32_t* buf, uint32_t size) {
-    debug_buf = buf;
-    debug_buf_index = 0;
-    debug_buf_size = size;
-    for (uint32_t i = 0; i < debug_buf_size; i++) {
-        debug_buf[i] = 0;
-    }
-}
-
-void debug_log(uint32_t val) {
-    debug_buf[debug_buf_index++] = val;
-    if (debug_buf_index >= debug_buf_size) {
-        debug_buf_index = 0;
-    }
-}
-
-void debug_advance_index(uint32_t n) {
-    debug_buf_index += n;
-    if (debug_buf_index >= debug_buf_size) {
-        debug_buf_index =- debug_buf_size;
-    }
-}
-
-void debug_set_index(uint32_t n) {
-    debug_buf_index = n;
-}
-
-void debug_log_index(uint32_t index, uint32_t val) {
-    debug_buf[index] = val;
-}
-
 
 FORCE_INLINE uint64_t get_timestamp() {
     uint32_t timestamp_low = reg_read(RISCV_DEBUG_REG_WALL_CLOCK_L);
@@ -64,6 +29,12 @@ FORCE_INLINE uint64_t get_timestamp() {
 
 FORCE_INLINE uint64_t get_timestamp_32b() {
     return reg_read(RISCV_DEBUG_REG_WALL_CLOCK_L);
+}
+
+void zero_l1_buf(tt_l1_ptr uint32_t* buf, uint32_t size_bytes) {
+    for (uint32_t i = 0; i < size_bytes/4; i++) {
+        buf[i] = 0;
+    }
 }
 
 typedef struct dispatch_packet_header_t dispatch_packet_header_t;
@@ -166,6 +137,9 @@ public:
             STREAM_REG_ADDR(queue_id, STREAM_REMOTE_SRC_REG_INDEX));
     }
 
+    FORCE_INLINE uint32_t get_queue_id() const {
+        return this->queue_id;
+    }
 
     FORCE_INLINE uint32_t get_queue_local_wptr() const {
         return *this->local_wptr_val;
@@ -328,17 +302,18 @@ public:
         // TODO: implement yield for ethernet here
     }
 
-    void debug_log_object() {
-        debug_log(this->queue_id);
-        debug_log(this->queue_start_addr_words);
-        debug_log(this->queue_size_words);
-        debug_log(this->remote_x);
-        debug_log(this->remote_y);
-        debug_log(this->remote_queue_id);
-        debug_log(this->get_queue_local_wptr());
-        debug_log(this->get_queue_local_rptr_sent());
-        debug_log(this->get_queue_local_rptr_cleared());
-        debug_log(static_cast<uint32_t>(this->remote_update_network_type));
+    void dprint_object() {
+        DPRINT << "  id: " << DEC() << this->queue_id << ENDL();
+        DPRINT << "  start_addr: 0x" << HEX() << (this->queue_start_addr_words*PACKET_WORD_SIZE_BYTES) << ENDL();
+        DPRINT << "  size_bytes: 0x" << HEX() << (this->queue_size_words*PACKET_WORD_SIZE_BYTES) << ENDL();
+        DPRINT << "  remote_x: " << DEC() << this->remote_x << ENDL();
+        DPRINT << "  remote_y: " << DEC() << this->remote_y << ENDL();
+        DPRINT << "  remote_queue_id: " << DEC() << this->remote_queue_id << ENDL();
+        DPRINT << "  remote_update_network_type: " << DEC() << static_cast<uint32_t>(this->remote_update_network_type) << ENDL();
+        DPRINT << "  ready_status: 0x" << HEX() << this->get_remote_ready_status() << ENDL();
+        DPRINT << "  local_wptr: 0x" << HEX() << this->get_queue_local_wptr() << ENDL();
+        DPRINT << "  local_rptr_sent: 0x" << HEX() << this->get_queue_local_rptr_sent() << ENDL();
+        DPRINT << "  local_rptr_cleared: 0x" << HEX() << this->get_queue_local_rptr_cleared() << ENDL();
     }
 };
 
@@ -388,9 +363,7 @@ public:
 
         tt_l1_ptr uint32_t* queue_ptr =
             reinterpret_cast<tt_l1_ptr uint32_t*>(queue_start_addr_words*PACKET_WORD_SIZE_BYTES);
-        for (uint32_t i = 0; i < queue_size_words*PACKET_WORD_SIZE_BYTES/4; i++) {
-            queue_ptr[i] = 0;
-        }
+        zero_l1_buf(queue_ptr, queue_size_words*PACKET_WORD_SIZE_BYTES);
 
         this->ptr_offset_mask = queue_size_words - 1;
         this->queue_size_mask = (queue_size_words << 1) - 1;
@@ -504,15 +477,16 @@ public:
         this->input_queue_advance_words_cleared(this->get_num_words_sent_not_cleared());
     }
 
-    void debug_log_object() {
-        debug_log(0xabcdef00);
-        packet_queue_state_t::debug_log_object();
-        debug_log(0xFFFFFFFF);
-        debug_log(this->curr_packet_valid);
-        debug_log(this->curr_packet_tag);
-        debug_log(this->curr_packet_dest);
-        debug_log(this->curr_packet_size_words);
-        debug_log(this->curr_packet_words_sent);
+    void dprint_object() {
+        DPRINT << "Input queue:" << ENDL();
+        packet_queue_state_t::dprint_object();
+        DPRINT << "  packet_valid: " << DEC() << this->curr_packet_valid << ENDL();
+        DPRINT << "  packet_tag: 0x" << HEX() << this->curr_packet_tag << ENDL();
+        DPRINT << "  packet_src: 0x" << HEX() << this->curr_packet_src << ENDL();
+        DPRINT << "  packet_dest: 0x" << HEX() << this->curr_packet_dest << ENDL();
+        DPRINT << "  packet_flags: 0x" << HEX() << this->curr_packet_flags << ENDL();
+        DPRINT << "  packet_size_words: " << DEC() << this->curr_packet_size_words << ENDL();
+        DPRINT << "  packet_words_sent: " << DEC() << this->curr_packet_words_sent << ENDL();
     }
 
 };
@@ -526,62 +500,75 @@ class packet_output_queue_state_t : public packet_queue_state_t {
     struct {
 
         packet_input_queue_state_t* input_queue_array;
-        uint32_t input_queue_words_in_flight[2][MAX_SWITCH_FAN_IN];
-        uint32_t total_words_in_flight[2];
-        uint32_t curr_index;
+        uint32_t input_queue_words_in_flight[2*MAX_SWITCH_FAN_IN];
 
-        void init(packet_input_queue_state_t* input_queue_array) {
+        uint32_t* curr_input_queue_words_in_flight;
+        uint32_t* prev_input_queue_words_in_flight;
+        uint32_t curr_total_words_in_flight;
+        uint32_t prev_total_words_in_flight;
+
+        uint32_t num_input_queues;
+
+        void init(packet_input_queue_state_t* input_queue_array, uint32_t num_input_queues) {
+            this->num_input_queues = num_input_queues;
             this->input_queue_array = input_queue_array;
+            this->curr_input_queue_words_in_flight = &(this->input_queue_words_in_flight[0]);
+            this->prev_input_queue_words_in_flight = &(this->input_queue_words_in_flight[MAX_SWITCH_FAN_IN]);
+            this->curr_total_words_in_flight = 0;
+            this->prev_total_words_in_flight = 0;
             for (uint32_t i = 0; i < MAX_SWITCH_FAN_IN; i++) {
-                this->input_queue_words_in_flight[0][i] = 0;
-                this->input_queue_words_in_flight[1][i] = 0;
+                this->curr_input_queue_words_in_flight[i] = 0;
+                this->prev_input_queue_words_in_flight[i] = 0;
             }
-            this->curr_index = 0;
-            this->total_words_in_flight[0] = 0;
-            this->total_words_in_flight[1] = 0;
         }
 
         FORCE_INLINE uint32_t get_curr_total_words_in_flight() const {
-            return this->total_words_in_flight[this->curr_index];
+            return this->curr_total_words_in_flight;
         }
 
         FORCE_INLINE uint32_t get_prev_total_words_in_flight() const {
-            return this->total_words_in_flight[this->curr_index ^ 1];
+            return this->prev_total_words_in_flight;
         }
 
         FORCE_INLINE uint32_t prev_words_in_flight_flush() {
-            uint32_t prev_index = this->curr_index ^ 1;
-            uint32_t total_words_in_flight = 0;
-            if (this->total_words_in_flight[prev_index] > 0) {
-                for (uint32_t i = 0; i < MAX_SWITCH_FAN_IN; i++) {
-                    uint32_t words_in_flight = this->input_queue_words_in_flight[prev_index][i];
-                    total_words_in_flight += words_in_flight;
-                    if (words_in_flight > 0) {
-                        this->input_queue_array[i].input_queue_advance_words_cleared(words_in_flight);
-                        this->input_queue_words_in_flight[prev_index][i] = 0;
-                    }
+
+            uint32_t words_flushed = this->prev_total_words_in_flight;
+            if (words_flushed > 0) {
+                for (uint32_t i = 0; i < num_input_queues; i++) {
+                    this->input_queue_array[i].input_queue_advance_words_cleared(this->prev_input_queue_words_in_flight[i]);
+                    this->prev_input_queue_words_in_flight[i] = 0;
                 }
-                this->total_words_in_flight[prev_index] = 0;
             }
-            this->curr_index = prev_index;
-            return total_words_in_flight;
+
+            uint32_t* tmp = this->prev_input_queue_words_in_flight;
+            this->prev_input_queue_words_in_flight = this->curr_input_queue_words_in_flight;
+            this->curr_input_queue_words_in_flight = tmp;
+            this->prev_total_words_in_flight = this->curr_total_words_in_flight;
+            this->curr_total_words_in_flight = 0;
+
+            return words_flushed;
         }
 
         FORCE_INLINE void register_words_in_flight(uint32_t input_queue_id, uint32_t num_words) {
-            this->input_queue_words_in_flight[this->curr_index][input_queue_id] += num_words;
-            this->total_words_in_flight[this->curr_index] += num_words;
+            this->curr_input_queue_words_in_flight[input_queue_id] += num_words;
+            this->curr_total_words_in_flight += num_words;
             this->input_queue_array[input_queue_id].input_queue_advance_words_sent(num_words);
         }
 
-        void debug_log_object() {
-            debug_log(this->curr_index);
-            for (uint32_t i = 0; i < 2; i++) {
-                debug_log(0xaa000000 + i);
-                debug_log(this->total_words_in_flight[i]);
-                for (uint32_t j = 0; j < MAX_SWITCH_FAN_IN; j++) {
-                    debug_log(0xbb000000 + j);
-                    debug_log(this->input_queue_words_in_flight[i][j]);
-                }
+        void dprint_object() {
+            DPRINT << "  curr_total_words_in_flight: " << DEC() << this->curr_total_words_in_flight << ENDL();
+            for (uint32_t j = 0; j < MAX_SWITCH_FAN_IN; j++) {
+                DPRINT << "       from input queue id " << DEC() <<
+                            this->input_queue_array[j].get_queue_id() << ": "
+                            << DEC() << this->curr_input_queue_words_in_flight[j]
+                            << ENDL();
+            }
+            DPRINT << "  prev_total_words_in_flight: " << DEC() << this->prev_total_words_in_flight << ENDL();
+            for (uint32_t j = 0; j < MAX_SWITCH_FAN_IN; j++) {
+                DPRINT << "       from input queue id " << DEC() <<
+                            this->input_queue_array[j].get_queue_id() << ": "
+                            << DEC() << this->prev_input_queue_words_in_flight[j]
+                            << ENDL();
             }
         }
 
@@ -596,7 +583,8 @@ public:
               uint32_t remote_y,
               uint32_t remote_queue_id,
               DispatchRemoteNetworkType remote_update_network_type,
-              packet_input_queue_state_t* input_queue_array) {
+              packet_input_queue_state_t* input_queue_array,
+              uint32_t num_input_queues) {
 
         packet_queue_state_t::init(queue_id, queue_start_addr_words, queue_size_words,
                                    remote_x, remote_y, remote_queue_id, remote_update_network_type);
@@ -605,7 +593,7 @@ public:
         this->queue_size_mask = (queue_size_words << 1) - 1;
         this->max_noc_send_words = DEFAULT_MAX_NOC_SEND_WORDS;
         this->max_eth_send_words = DEFAULT_MAX_ETH_SEND_WORDS;
-        this->input_queue_status.init(input_queue_array);
+        this->input_queue_status.init(input_queue_array, num_input_queues);
         this->reset_queue_local_rptr_sent();
         this->reset_queue_local_rptr_cleared();
         this->reset_queue_local_wptr();
@@ -733,13 +721,10 @@ public:
         return num_words_to_forward;
     }
 
-    void debug_log_object() {
-        debug_log(0xabcdef01);
-        packet_queue_state_t::debug_log_object();
-        debug_log(0xeeeeeeee);
-        debug_log(this->output_max_num_words_to_forward());
-        debug_log(0xffffffff);
-        this->input_queue_status.debug_log_object();
+    void dprint_object() {
+        DPRINT << "Output queue:" << ENDL();
+        packet_queue_state_t::dprint_object();
+        this->input_queue_status.dprint_object();
     }
 };
 
@@ -757,14 +742,6 @@ bool wait_all_src_dest_ready(packet_input_queue_state_t* input_queue_array, uint
     bool src_ready[MAX_SWITCH_FAN_IN] = {false};
     bool dest_ready[MAX_SWITCH_FAN_OUT] = {false};
 
-    // debug_log(0x33330000 | num_input_queues);
-    // for (uint32_t i = 0; i < num_input_queues; i++) {
-    //     debug_log(input_queue_array[i].get_remote_ready_status());
-    // }
-    // debug_log(0x44440000 | num_output_queues);
-    // for (uint32_t i = 0; i < num_output_queues; i++) {
-    //     debug_log(output_queue_array[i].get_remote_ready_status());
-    // }
     uint32_t iters = 0;
 
     uint32_t start_timestamp = get_timestamp_32b();
@@ -784,8 +761,7 @@ bool wait_all_src_dest_ready(packet_input_queue_state_t* input_queue_array, uint
                     input_queue_array[i].send_remote_ready_notification();
                     all_src_dest_ready = false;
                 } else {
-                    // debug_log(0x11110000 | i);
-                    // debug_log(input_queue_array[i].get_remote_ready_status());
+                    // handshake with src complete
                 }
             }
         }
@@ -794,15 +770,11 @@ bool wait_all_src_dest_ready(packet_input_queue_state_t* input_queue_array, uint
                 dest_ready[i] = output_queue_array[i].is_remote_ready();
                 if (dest_ready[i]) {
                     output_queue_array[i].send_remote_ready_notification();
-                    // debug_log(0x22220000 | i);
-                    // debug_log(output_queue_array[i].get_remote_ready_status());
                 } else {
                     all_src_dest_ready = false;
                 }
             }
         }
     }
-    // debug_log(0x55555555);
-    // debug_log(iters);
     return true;
 }
