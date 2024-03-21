@@ -6,11 +6,13 @@ import json
 from loguru import logger
 import ttnn
 from models.demos.mistral7b.tt.mistral_common import (
-    generate_cos_sin_cache_ttnn,
     prepare_inputs_ttnn,
     sample,
+    precompute_freqs,
+    freqs_to_rotation_matrix,
 )
 from models.demos.mistral7b.tt.mistral_model import TtTransformer
+from models.demos.mistral7b.tt.mistral_embedding import TtMistralEmbedding
 from models.demos.mistral7b.tt.model_config import TtModelArgs
 from models.demos.mistral7b.reference.tokenizer import Tokenizer
 
@@ -52,7 +54,6 @@ def preprocess_inputs(input_prompts, tokenizer, model_args, dtype, embd, instruc
     max_prompt_len = max(prompt_lens)
     input_tokens = torch.full((len(input_prompts), max_prompt_len), tokenizer.pad_id, dtype=torch.long)
 
-    # TODO Change padding to be left padding instead of right padding
     for i, encoded in enumerate(encoded_prompts):
         input_tokens[i, : len(encoded)] = torch.tensor(encoded).to(input_tokens)
     input_mask = input_tokens != tokenizer.pad_id
@@ -60,17 +61,24 @@ def preprocess_inputs(input_prompts, tokenizer, model_args, dtype, embd, instruc
     num_users = len(encoded_prompts)
     logger.info(f"# of users: {num_users}")
 
-    # Helper function supports multiple devices but we are only using one in this demo
-    tt_cos_cached, tt_sin_cached = generate_cos_sin_cache_ttnn(
-        [device], model_args.head_dim, model_args.max_seq_len * 2, 10000, dtype
-    )
-
     seqlen = 1  # Generating one token per user at a time
     # Select the first token from the prompts for initial decoding
     pt_tokenized_inputs = torch.tensor(input_tokens)
     emb_inputs = embd(pt_tokenized_inputs[:, 0]).view(model_args.max_batch_size, seqlen, -1)
 
-    return emb_inputs, tt_cos_cached, tt_sin_cached, pt_tokenized_inputs, max_prompt_len, input_mask
+    # Return the rotational embedding matrix on device
+    cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
+    rot_emb_matrix = freqs_to_rotation_matrix(cos, sin)
+
+    rot_emb_matrix_list = []
+    for i in range(rot_emb_matrix.shape[0]):
+        rot_emb_matrix_list.append(
+            ttnn.from_torch(
+                rot_emb_matrix[i, :, :].unsqueeze(0).unsqueeze(0), device=device, dtype=dtype, layout=ttnn.TILE_LAYOUT
+            )
+        )  # ttnn.bfloat16
+
+    return emb_inputs, pt_tokenized_inputs, input_mask, rot_emb_matrix_list
 
 
 def run_mistral_demo(user_input, batch_size, device):
@@ -88,7 +96,9 @@ def run_mistral_demo(user_input, batch_size, device):
 
     # Load model args, weights, and tokenizer
     # Specify model_base_path=<MISTRAL_WEIGHTS_PATH> below to use your own weights
-    model_args = TtModelArgs(instruct=instruct_mode)  # TtModelArgs(model_base_path=<weights_path>)
+    model_args = TtModelArgs(device, instruct=instruct_mode)  # TtModelArgs(model_base_path=<weights_path>)
+
+    model_args.n_layers = 32
 
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
@@ -104,16 +114,20 @@ def run_mistral_demo(user_input, batch_size, device):
     }
     logger.info("Loading weights finished!")
 
-    # Embedding on host
+    # TODO Should we keep initial embedding on host?
     embd = Emb()
     embd.load_state_dict({"emb.weight": state_dict["tok_embeddings.weight"]})
 
+    generation_start_pos = 0
+    max_generated_tokens = 120
+    users_decoding = True
+
     # Preprocess initial prompt inputs
-    tt_decode_input, tt_cos_cached, tt_sin_cached, pt_encoded_input, max_prompt_len, input_mask = preprocess_inputs(
+
+    tt_decode_input, pt_encoded_input, input_mask, rot_emb_matrix_list = preprocess_inputs(
         input_prompts, tokenizer, model_args, dtype, embd, instruct_mode, device
     )
 
-    # TODO should we just change the pad after initial pad of the inputs?
     if instruct_mode:
         tokenizer._model.pad_id = tokenizer._model.eos_id
 
@@ -126,14 +140,18 @@ def run_mistral_demo(user_input, batch_size, device):
         state_dict=state_dict,
         weight_cache_path=model_args.weight_cache_path(dtype, instruct=instruct_mode),
         layers=list(range(model_args.n_layers)),
-        tt_cos_cached=tt_cos_cached,
-        tt_sin_cached=tt_sin_cached,
+        rot_mat=rot_emb_matrix_list,
+        start_pos=generation_start_pos,
+    )
+    # Load TTNN embedding module
+    tt_embd = TtMistralEmbedding(
+        device=device,
+        args=model_args,
+        weight_cache_path=model_args.weight_cache_path(dtype, instruct=instruct_mode),
+        state_dict=state_dict,
+        dtype=ttnn.bfloat16,  # Row major layout requires bfloat16
     )
     logger.info("Finished loading weights to device. Starting inference...")
-
-    generation_start_pos = 0
-    max_generated_tokens = 150
-    users_decoding = True
 
     # Keep track of generated outputs to print out every iteration
     all_outputs = [[] for _ in range(batch_size)]
@@ -142,26 +160,33 @@ def run_mistral_demo(user_input, batch_size, device):
     iteration = 0
     # Keep running inference as long as there is a user in the batch still decoding or max tokens per user are decoded
     while users_decoding:
-        start_pos = generation_start_pos + iteration
+        curr_pos = generation_start_pos + iteration
 
         # Prepare inputs for decode mode (rotary embeddings, attention mask, padding)
-        decode_input, start_pos, attn_mask, current_pos, rot_mat = prepare_inputs_ttnn(
+        # TODO Move the attn mask to device
+        decode_input, attn_mask, current_pos = prepare_inputs_ttnn(
             tt_decode_input,
-            start_pos,
+            curr_pos,
             model_args.dim,
-            model_args.head_dim,
             model_args.sliding_window,
-            model_args.max_seq_len,
             tt_model.device,
         )
 
         # Run ttnn mistral model
-        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask, rot_mat)
-        # Convert ttnn tensor to torch tensor
-        tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
+        tt_out = tt_model(decode_input, current_pos, attn_mask)
+        tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [batch, seq, hidden_dim]
 
         # If temperature is 0, does greedy decoding (top-1)
         tt_out_tok = sample(tt_output_torch, temperature=0, top_p=0.8)
+
+        # TODO argmax on device
+        # tt_out = ttnn.to_layout(tt_out, ttnn.ROW_MAJOR_LAYOUT)
+        # tt_out = ttnn.permute(tt_out, (2, 1, 0, 3))
+        # tt_out = ttnn.reshape(tt_out, (tt_out.shape[0], tt_out.shape[2], tt_out.shape[3]))  # Squeeze(1)
+        # tt_out_argmax = ttnn.experimental.tensor.argmax(tt_out, dim=-1)
+        # Typecast from bf16 to uint32 for embedding
+        # tt_out_tok = ttnn.clone(tt_out_argmax, ttnn.DRAM_MEMORY_CONFIG, dtype=ttnn.uint32)
+        # tt_out_tok = ttnn.experimental.tensor.typecast(tt_out_tok, dtype=ttnn.uint32)
 
         if iteration < input_mask.shape[1]:  # If prefill
             # If token is pad token, start generating new token, otherwise, push the next prompt token to the model
@@ -185,7 +210,10 @@ def run_mistral_demo(user_input, batch_size, device):
                     if all(user_done):
                         users_decoding = False
 
-        tt_decode_input = embd(tt_out_tok)
+        # Embedding on device
+        # TODO send tensor to host can be remove when argmax on device is working
+        tt_out_tok = ttnn.from_torch(tt_out_tok, device=device, dtype=ttnn.uint32, layout=ttnn.ROW_MAJOR_LAYOUT)
+        tt_decode_input = tt_embd(tt_out_tok)
 
         # Print out generated outputs for each user at the end of every iteration
         if len(user_input) == 1:

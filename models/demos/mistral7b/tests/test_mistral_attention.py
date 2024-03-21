@@ -9,8 +9,8 @@ import ttnn
 from models.demos.mistral7b.tt.mistral_attention import TtMistralAttention
 from models.demos.mistral7b.tt.mistral_common import (
     precompute_freqs,
-    generate_cos_sin_cache_ttnn,
     prepare_inputs_ttnn,
+    freqs_to_rotation_matrix,
 )
 from models.demos.mistral7b.tt.model_config import TtModelArgs
 from models.demos.mistral7b.reference.model import Attention
@@ -41,10 +41,22 @@ def test_mistral_attention_inference(iterations, device, use_program_cache):
     batch = 32
     seq_len = 1
 
-    # We are using just one device
-    tt_cos_cached, tt_sin_cached = generate_cos_sin_cache_ttnn(
-        [device], model_args.head_dim, model_args.max_seq_len * 2, 10000, dtype
-    )
+    # pre-compute the rotational embedding matrix and send to device
+    cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
+    rot_emb_matrix = freqs_to_rotation_matrix(cos, sin)
+
+    rot_emb_matrix_list = []
+    for i in range(rot_emb_matrix.shape[0]):
+        rot_emb_matrix_list.append(
+            ttnn.from_torch(
+                rot_emb_matrix[i, :, :].unsqueeze(0).unsqueeze(0), device=device, dtype=dtype, layout=ttnn.TILE_LAYOUT
+            )
+        )  # ttnn.bfloat16
+
+    generation_start_pos = 0
+    generation_length = iterations
+    all_tests_pass = True
+
     tt_model = TtMistralAttention(
         [device],
         state_dict,
@@ -52,12 +64,9 @@ def test_mistral_attention_inference(iterations, device, use_program_cache):
         layer_num=0,
         dtype=dtype,
         configuration=model_args,
-        tt_cos_cached=tt_cos_cached,
-        tt_sin_cached=tt_sin_cached,
+        rot_mat=rot_emb_matrix_list,
+        start_pos=generation_start_pos,
     )
-    generation_start_pos = 0
-    generation_length = iterations
-    all_tests_pass = True
 
     cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
     freqs_cis = torch.complex(cos, sin)
@@ -65,34 +74,27 @@ def test_mistral_attention_inference(iterations, device, use_program_cache):
     for i in range(generation_length):
         pt_attention_input = (torch.rand(batch, seq_len, model_args.dim) * 2) - 1
         tt_attention_input = pt_attention_input.clone()
-        start_pos = generation_start_pos + i
-        attention_input, start_pos, attn_mask, current_pos, rot_mat = prepare_inputs_ttnn(
+        current_pos = generation_start_pos + i
+        attention_input, attn_mask, pos = prepare_inputs_ttnn(
             tt_attention_input,
-            start_pos,
+            current_pos,
             model_args.dim,
-            model_args.head_dim,
             model_args.sliding_window,
-            model_args.max_seq_len,
             device,
         )
 
         tt_out = tt_model(
             [attention_input],
-            start_pos,
-            current_pos,
+            pos,
             [attn_mask],
-            [rot_mat],
         )
         # multi-device attention module returns replicated output
         assert isinstance(tt_out, list)
         tt_out = tt_out[0]
         tt_output_torch = ttnn.to_torch(tt_out).permute(1, 0, 2)  # [ batch, seq, hidden_dim]
 
-        # empty_tensor = torch.zeros((start_pos+1, 64))
-        # cos, sin = precompute_freqs(model_args.head_dim, 1)
-        # freqs_cis = torch.complex(cos, sin)
-        freqs_cis_i = freqs_cis[start_pos, :].unsqueeze(0)
-        positions = torch.tensor([start_pos])
+        freqs_cis_i = freqs_cis[current_pos, :].unsqueeze(0)
+        positions = torch.tensor([current_pos])
         # mask = torch.randn(1, 1)
 
         reference_output = reference_model(pt_attention_input, freqs_cis_i, positions, mask=None)
@@ -103,9 +105,9 @@ def test_mistral_attention_inference(iterations, device, use_program_cache):
         logger.info(pcc_message)
 
         if passing:
-            logger.info(f"[start_pos={start_pos}] Mistral_Attention Passed!")
+            logger.info(f"[pos={current_pos}] Mistral_Attention Passed!")
         else:
-            logger.warning(f"[start_pos={start_pos}] Mistral_Attention Failed!")
+            logger.warning(f"[pos={current_pos}] Mistral_Attention Failed!")
             all_tests_pass = False
 
         # Check kv cache

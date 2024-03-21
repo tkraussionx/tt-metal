@@ -10,22 +10,13 @@ from models.demos.mistral7b.tt.mistral_rms_norm import TtRMSNorm
 
 
 class TtTransformerBlock(torch.nn.Module):
-    def __init__(
-        self,
-        args,
-        device,
-        dtype,
-        state_dict,
-        layer_num,
-        weight_cache_path,
-        tt_cos_cached,
-        tt_sin_cached,
-    ):
+    def __init__(self, args, device, dtype, state_dict, layer_num, weight_cache_path, rot_mat, start_pos):
         super().__init__()
 
         self.state_dict = state_dict
         self.device = device
         self.num_devices = 1
+        self.start_pos = start_pos
 
         self.args = args
         self.hidden_size = args.dim
@@ -49,8 +40,8 @@ class TtTransformerBlock(torch.nn.Module):
             layer_num=layer_num,
             dtype=dtype,
             configuration=args,
-            tt_cos_cached=tt_cos_cached,
-            tt_sin_cached=tt_sin_cached,
+            rot_mat=rot_mat,
+            start_pos=start_pos,
         )
         self.feed_forward = TtMistralMLP(
             device=device,
@@ -81,19 +72,15 @@ class TtTransformerBlock(torch.nn.Module):
     def forward(
         self,
         x: ttnn.Tensor,
-        start_pos: int,
         current_pos: int,
         attn_masks: Optional[ttnn.Tensor],
-        rot_mat: ttnn.Tensor,
     ) -> ttnn.Tensor:
         attn_norm = self.attention_norm(x)
-        # Attention module expects a list of inputs, attn masks, rot_mat (multi-device support)
+        # Attention module expects a list of inputs, attn masks (multi-device support)
         r = self.attention.forward(
             [attn_norm],
-            start_pos,
             current_pos,
             [attn_masks],
-            [rot_mat],
         )
         # Attention also returns multiple outputs (multi-device support)
         assert len(r) == 1, "Multiple devices not yet supported"

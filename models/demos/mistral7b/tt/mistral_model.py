@@ -20,13 +20,14 @@ class TtTransformer(nn.Module):
         state_dict,
         weight_cache_path,
         layers,
-        tt_cos_cached,
-        tt_sin_cached,
+        rot_mat,
+        start_pos,
     ):
         super().__init__()
         self.args = args
         self.vocab_size = args.vocab_size
         self.n_layers = args.n_layers
+        self.start_pos = start_pos
         self.device = device
         assert self.vocab_size > 0
 
@@ -39,8 +40,8 @@ class TtTransformer(nn.Module):
                     state_dict=state_dict,
                     weight_cache_path=weight_cache_path,
                     layer_num=i,
-                    tt_cos_cached=tt_cos_cached,
-                    tt_sin_cached=tt_sin_cached,
+                    rot_mat=rot_mat,
+                    start_pos=start_pos,
                 )
                 for i in layers
             ]
@@ -67,13 +68,11 @@ class TtTransformer(nn.Module):
     def forward(
         self,
         x: ttnn.Tensor,
-        start_pos: int,
         current_pos: int,
         attn_masks: Optional[ttnn.Tensor],
-        rot_mat: ttnn.Tensor,
     ):
         for layer in self.layers:
-            x = layer(x, start_pos, current_pos, attn_masks, rot_mat)
+            x = layer(x, current_pos, attn_masks)
 
         x = self.norm(x)
         output = ttnn.linear(x, self.output_weight, core_grid=self.args.max_grid_size)

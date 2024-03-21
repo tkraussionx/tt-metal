@@ -7,8 +7,8 @@ from loguru import logger
 import ttnn
 from models.demos.mistral7b.tt.mistral_common import (
     precompute_freqs,
-    generate_cos_sin_cache_ttnn,
     prepare_inputs_ttnn,
+    freqs_to_rotation_matrix,
     sample,
 )
 from models.demos.mistral7b.tt.mistral_model import TtTransformer
@@ -82,12 +82,26 @@ def test_mistral_model_inference(
     # Embedding on host
     embd = Emb()
     embd.load_state_dict({"emb.weight": state_dict["tok_embeddings.weight"]})
+    # TODO Add argmax + embedding on device, same as the demo.py code
+
+    generation_start_pos = 0
+    generation_length = iterations
+    seqlen = 1  # Generating one token per user at a time
+    batch = 32
 
     profiler.start("TtMistral_model_setup")
-    # Helper function supports multiple devices but we are only using one in this demo
-    tt_cos_cached, tt_sin_cached = generate_cos_sin_cache_ttnn(
-        [device], model_args.head_dim, model_args.max_seq_len * 2, 10000, dtype
-    )
+
+    # pre-compute the rotational embedding matrix and send to device
+    cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
+    rot_emb_matrix = freqs_to_rotation_matrix(cos, sin)
+
+    rot_emb_matrix_list = []
+    for i in range(rot_emb_matrix.shape[0]):
+        rot_emb_matrix_list.append(
+            ttnn.from_torch(
+                rot_emb_matrix[i, :, :].unsqueeze(0).unsqueeze(0), device=device, dtype=dtype, layout=ttnn.TILE_LAYOUT
+            )
+        )  # ttnn.bfloat16
 
     # Load TTNN model
     tt_model = TtTransformer(
@@ -97,15 +111,10 @@ def test_mistral_model_inference(
         state_dict=state_dict,
         weight_cache_path=model_args.weight_cache_path(dtype),
         layers=list(range(model_args.n_layers)),
-        tt_cos_cached=tt_cos_cached,
-        tt_sin_cached=tt_sin_cached,
+        rot_mat=rot_emb_matrix_list,
+        start_pos=generation_start_pos,
     )
     profiler.end("TtMistral_model_setup")
-
-    generation_start_pos = 0
-    generation_length = iterations
-    seqlen = 1  # Generating one token per user at a time
-    batch = 32
 
     # Select the first token from the prompts for initial decoding
     encoded_prompts_tensor = torch.tensor(encoded_prompts)  # [:,0]
@@ -115,19 +124,18 @@ def test_mistral_model_inference(
 
     profiler.disable()  # Disable profiler for first 10 iterations
     for i in range(generation_length):
-        start_pos = generation_start_pos + i
+        current_pos = generation_start_pos + i
 
         if i == 0 or i == 10:  # Skip the first few iterations to warm up
             profiler.enable()
             enable_persistent_kernel_cache()
             profiler.start(f"input_processing_{i}")
-        decode_input, start_pos, attn_mask, current_pos, rot_mat = prepare_inputs_ttnn(
+
+        decode_input, attn_mask, pos = prepare_inputs_ttnn(
             tt_decode_input,
-            start_pos,
+            current_pos,
             model_args.dim,
-            model_args.head_dim,
             model_args.sliding_window,
-            model_args.max_seq_len,
             tt_model.device,
         )
         if i == 0 or i == 10:  # Skip the first few iterations to warm up
@@ -135,7 +143,7 @@ def test_mistral_model_inference(
             profiler.start(f"model_run_for_inference_{i}")
 
         # Run TT model
-        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask, rot_mat)
+        tt_out = tt_model(decode_input, pos, attn_mask)
         # Convert ttnn tensor to torch tensor
         tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
 
@@ -146,8 +154,8 @@ def test_mistral_model_inference(
             if i == 0:  # Skip the first few iterations to warm up
                 profiler.start(f"ref_model_run_for_inference_{i}")
 
-            freqs_cis_i = freqs_cis[start_pos, :].unsqueeze(0)
-            positions = torch.tensor([start_pos])
+            freqs_cis_i = freqs_cis[current_pos, :].unsqueeze(0)
+            positions = torch.tensor([current_pos])
             ref_output = reference_model(pt_decode_input, freqs_cis_i, positions)
 
             if i == 0:  # Skip the first few iterations to warm up

@@ -36,6 +36,7 @@ def test_mistral_embedding(device, use_program_cache):
     tt_emb = TtMistralEmbedding(
         device=device,
         args=model_args,
+        weight_cache_path=model_args.weight_cache_path(dtype),
         state_dict=state_dict,
         dtype=dtype,
     )
@@ -43,12 +44,12 @@ def test_mistral_embedding(device, use_program_cache):
     prompts = ["Joy"] * 32
     pt_input = torch.tensor([tokenizer.encode(prompt) for prompt in prompts])
     reference_output = reference_emb(pt_input)
-    print(f"reference_output: {reference_output.shape}")
+    logger.info(f"reference_output: {reference_output.shape}")
 
     tt_input = ttnn.from_torch(pt_input, device=device, dtype=ttnn.uint32, layout=ttnn.ROW_MAJOR_LAYOUT)
     tt_output = tt_emb(tt_input)
     tt_output_torch = ttnn.to_torch(tt_output)
-    print(f"tt_output_torch: {tt_output_torch.shape}")
+    logger.info(f"tt_output_torch: {tt_output_torch.shape}")
 
     passing, pcc_message = comp_pcc(reference_output, tt_output_torch)
 

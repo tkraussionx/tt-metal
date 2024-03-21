@@ -7,7 +7,6 @@ import torch
 from torch import nn
 
 import ttnn
-
 from models.utility_functions import (
     nearest_32,
 )
@@ -22,8 +21,8 @@ class TtMistralAttention(nn.Module):
         layer_num,
         dtype,
         configuration,
-        tt_cos_cached,
-        tt_sin_cached,
+        rot_mat,
+        start_pos,
     ):
         super().__init__()
 
@@ -38,6 +37,7 @@ class TtMistralAttention(nn.Module):
         self.max_batch_size = configuration.max_batch_size
         self.n_kv_heads = configuration.n_kv_heads
         self.sliding_window = configuration.sliding_window
+        self.start_pos = start_pos
 
         self.n_local_heads = self.n_heads // self.num_devices
         self.n_local_kv_heads = self.n_kv_heads // self.num_devices
@@ -49,6 +49,8 @@ class TtMistralAttention(nn.Module):
 
         self.model_config = configuration.get_model_config()
         self.compute_kernel_config = configuration.get_compute_kernel_config()
+
+        self.rot_mat = rot_mat  # Rotational matrix in the form of a list of 8K tensors [1,1,head_dim,head_dim] for positional embedding on device
 
         layer_name = f"layers.{layer_num}.attention"
         cache_name = lambda name: weight_cache_path / (f"{layer_name}.{name}")
@@ -136,23 +138,20 @@ class TtMistralAttention(nn.Module):
             self.wqkv_list.append(wqkv)
             self.wo_list.append(wo)
             self.layer_past_list.append(layer_past)
-        self.tt_sin_cached = tt_sin_cached
-        self.tt_cos_cached = tt_cos_cached
 
     def forward(
         self,
         xs: List[ttnn.Tensor],
-        start_pos: int,
         current_pos: int,
         attn_masks: List[ttnn.Tensor],
-        rot_mats: List[ttnn.Tensor],
     ) -> ttnn.Tensor:
         """
         x: (seq_len, 1, batch, hidden_dim)
         start_pos: the length of the KV cache. Same as current token's index.
         attn_mask: (seq_len, n_heads, batch, cache_len + seqlen
         """
-        padded_layer_past_len = min(nearest_32(start_pos + 1), self.sliding_window)
+        self.start_pos += 1
+        padded_layer_past_len = min(nearest_32(self.start_pos), self.sliding_window)
         dense_outputs = []
         for i in range(self.num_devices):
             x = xs[i]
@@ -161,7 +160,7 @@ class TtMistralAttention(nn.Module):
             wqkv = self.wqkv_list[i]
             wo = self.wo_list[i]
             layer_past = self.layer_past_list[i]
-            rot_mat = rot_mats[i]
+
             ###
             # QKV matmuls
             ###
@@ -191,25 +190,20 @@ class TtMistralAttention(nn.Module):
 
             ttnn.deallocate(xqkv_fused)
 
-            # q_heads = ttnn.experimental.tensor.rotary_embedding(
-            # q_heads = ttnn.transformer.rotary_embedding(
-            #     q_heads, self.tt_cos_cached[i], self.tt_sin_cached[i], start_pos, memory_config=ttnn.DRAM_MEMORY_CONFIG
-            # )
+            # Update rotary matrix on device
+            rotary_mat = self.rot_mat[current_pos]
+
             q_heads = ttnn.linear(
                 q_heads,
-                rot_mat,
+                rotary_mat,
                 core_grid=self.grid_size,
                 memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
                 compute_kernel_config=self.compute_kernel_config,
             )
 
-            # k_heads = ttnn.experimental.tensor.rotary_embedding(
-            # k_heads = ttnn.transformer.rotary_embedding(
-            #     k_heads, self.tt_cos_cached[i], self.tt_sin_cached[i], start_pos, memory_config=ttnn.DRAM_MEMORY_CONFIG
-            # )
             k_heads = ttnn.linear(
                 k_heads,
-                rot_mat,
+                rotary_mat,
                 core_grid=self.grid_size,
                 memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
                 compute_kernel_config=self.compute_kernel_config,

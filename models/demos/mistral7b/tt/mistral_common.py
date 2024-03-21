@@ -26,6 +26,7 @@ def generate_cos_sin_cache_ttnn(
     emb = torch.cat((freqs, freqs), dim=-1)
     emb_cos = emb.cos()[None, None, :, :]
     emb_sin = emb.sin()[None, None, :, :]
+
     tt_cos_cached = [
         ttnn.from_torch(
             emb_cos,
@@ -64,6 +65,7 @@ def precompute_freqs(dim: int, end: int, theta: float = 10000.0):
         Tuple[torch.Tensor, torch.Tensor]: Tensors containing cosine and sine values.
     """
     freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+
     t = torch.arange(end)
     freqs = torch.outer(t, freqs).float()
     return torch.cos(freqs), torch.sin(freqs)
@@ -104,29 +106,36 @@ def get_rotation_mat(dhead, end, start_pos, seqlen, batch):
     return rot_emb
 
 
-def prepare_inputs_ttnn(x, start_pos, hidden_size, head_dim, sliding_window, max_seq_len, device):
+def prepare_inputs_ttnn(x, current_pos, hidden_size, sliding_window, device):
     """
     Prepare inputs for decode mode. Assume that current token is at
     start_pos, and KV cache has valid data up to start_pos.
     x: (batch, seq, hidden_dim)
     start_pos: int
     """
-    assert x.size(2) == hidden_size
-    assert len(x.size()) == 3
 
-    batch = x.size(0)
-    seq_len = x.size(1)
+    assert len(x.shape) == 3
+    assert x.shape[2] == hidden_size
+
+    batch = x.shape[0]
+    seq_len = x.shape[1]
+    hidden_size = x.shape[2]
     assert seq_len == 1, "Only supporting decode mode"
-    x = x.transpose(0, 1).unsqueeze(1)  # [seq_len, 1, batch, hidden_dim]
 
-    rot_mat = get_rotation_mat(dhead=head_dim, end=max_seq_len * 2, start_pos=start_pos, seqlen=seq_len, batch=batch)
-    rot_mat = rot_mat[:, :1]
+    # Support input on device
+    if torch.is_tensor(x):  # Input on host -> Use torch
+        x = x.transpose(0, 1).unsqueeze(1)  # [seq_len, 1, batch, hidden_dim]
+    else:  # Input on device -> Use ttnn
+        x = ttnn.reshape(
+            x, (batch, seq_len, 1, hidden_size)
+        )  # [batch, seqlen, hidden_dim] -> [batch, seqlen, 1, hidden_dim]
+        x = ttnn.permute(x, (1, 2, 0, 3))  # [seq_len, 1, batch, hidden_dim]
 
-    padded_layer_past_len = min(nearest_32(start_pos + 1), sliding_window)
-    current = start_pos % sliding_window
+    padded_layer_past_len = min(nearest_32(current_pos + 1), sliding_window)
+    current = current_pos % sliding_window
     attn_mask = torch.zeros(seq_len, 1, batch, padded_layer_past_len)
 
-    if start_pos < sliding_window:
+    if current_pos < sliding_window:
         attn_mask[:, :, :, current + 1 :] = torch.finfo(attn_mask.dtype).min
     else:
         attn_mask[:, :, :, :current] = torch.finfo(attn_mask.dtype).min
@@ -139,20 +148,18 @@ def prepare_inputs_ttnn(x, start_pos, hidden_size, head_dim, sliding_window, max
     # attn_mask: [seq_len, n_heads, batch, padded_layer_past_len]
     # rot_mat: [1, 1, head_dim, head_dim]
 
-    assert x.size() == (seq_len, 1, batch, hidden_size)
-    assert rot_mat.size() == (1, 1, head_dim, head_dim)
+    # assert x.size() == (seq_len, 1, batch, hidden_size)
 
     # assert attn_mask.size() == (seq_len, n_local_heads, batch, padded_layer_past_len)
-
-    x = ttnn.from_torch(x, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
+    if torch.is_tensor(x):
+        x = ttnn.from_torch(x, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
+    else:  # Convert the row major layout from embedding back to tile layout
+        x = ttnn.to_layout(x, layout=ttnn.TILE_LAYOUT)
     attn_mask = ttnn.from_torch(attn_mask, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
-    rot_mat = ttnn.from_torch(rot_mat, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
     return (
         x,
-        start_pos,
         attn_mask,
         current,
-        rot_mat,
     )
 
 

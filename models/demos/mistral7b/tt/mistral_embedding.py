@@ -11,6 +11,7 @@ class TtMistralEmbedding(torch.nn.Module):
         self,
         device,
         args,
+        weight_cache_path,
         state_dict,
         dtype,
     ):
@@ -21,7 +22,7 @@ class TtMistralEmbedding(torch.nn.Module):
 
         base_name = "tok_embeddings.weight"
         torch_weight = self.state_dict[base_name]
-        cache_name = args.weight_cache_path(dtype) / base_name
+        cache_name = weight_cache_path / base_name
         self.weights = ttnn.as_tensor(
             torch_weight,
             dtype=dtype,
@@ -32,6 +33,4 @@ class TtMistralEmbedding(torch.nn.Module):
         )
 
     def forward(self, x: ttnn.Tensor) -> ttnn.Tensor:
-        print(x.shape)
-        print(self.weights.shape)
         return ttnn.embedding(x, self.weights)

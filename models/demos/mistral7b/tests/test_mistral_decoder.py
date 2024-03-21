@@ -7,8 +7,8 @@ from loguru import logger
 import ttnn
 from models.demos.mistral7b.tt.mistral_common import (
     precompute_freqs,
-    generate_cos_sin_cache_ttnn,
     prepare_inputs_ttnn,
+    freqs_to_rotation_matrix,
 )
 from models.demos.mistral7b.tt.mistral_decoder import TtTransformerBlock
 from models.demos.mistral7b.tt.model_config import TtModelArgs
@@ -37,10 +37,22 @@ def test_mistral_decoder_inference(device, iterations, use_program_cache):
     reference_model = TransformerBlock(args=model_args)
     reference_model.load_state_dict(partial_state_dict)
 
-    # Helper function supports multiple devices but we only use one
-    tt_cos_cached, tt_sin_cached = generate_cos_sin_cache_ttnn(
-        [device], model_args.head_dim, model_args.max_seq_len * 2, 10000, dtype
-    )
+    generation_start_pos = 0
+    generation_length = iterations
+    all_tests_pass = True
+
+    # pre-compute the rotational embedding matrix and send to device
+    cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
+    rot_emb_matrix = freqs_to_rotation_matrix(cos, sin)
+
+    rot_emb_matrix_list = []
+    for i in range(rot_emb_matrix.shape[0]):
+        rot_emb_matrix_list.append(
+            ttnn.from_torch(
+                rot_emb_matrix[i, :, :].unsqueeze(0).unsqueeze(0), device=device, dtype=dtype, layout=ttnn.TILE_LAYOUT
+            )
+        )  # ttnn.bfloat16
+
     # Initialize TT model
     tt_model = TtTransformerBlock(
         args=model_args,
@@ -49,13 +61,9 @@ def test_mistral_decoder_inference(device, iterations, use_program_cache):
         state_dict=state_dict,
         layer_num=0,
         weight_cache_path=model_args.weight_cache_path(dtype),
-        tt_cos_cached=tt_cos_cached,
-        tt_sin_cached=tt_sin_cached,
+        rot_mat=rot_emb_matrix_list,
+        start_pos=generation_start_pos,
     )
-
-    generation_start_pos = 0
-    generation_length = iterations
-    all_tests_pass = True
 
     seqlen = 1
     batch = 32
@@ -70,25 +78,22 @@ def test_mistral_decoder_inference(device, iterations, use_program_cache):
         # input = torch.randn(1, 32, 4096)
         pt_decode_input = (torch.rand(batch, seqlen, model_args.dim) * 2) - 1
         tt_decode_input = pt_decode_input.clone()
-        start_pos = generation_start_pos + i
+        current_pos = generation_start_pos + i
 
-        decode_input, start_pos, attn_mask, current_pos, rot_mat = prepare_inputs_ttnn(
+        decode_input, attn_mask, pos = prepare_inputs_ttnn(
             tt_decode_input,
-            start_pos,
+            current_pos,
             model_args.dim,
-            model_args.head_dim,
             model_args.sliding_window,
-            model_args.max_seq_len,
             tt_model.device,
         )
-        # Run TT model
-        tt_out = tt_model(decode_input, start_pos, current_pos, attn_mask, rot_mat)
-        # tt_output = tt_model(tt_input, bcast_freq_xq, bcast_freq_xk, tt_position, mask, seqlen)
 
+        # Run TT model
+        tt_out = tt_model(decode_input, pos, attn_mask)
         tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
 
-        freqs_cis_i = freqs_cis[start_pos, :].unsqueeze(0)
-        positions = torch.tensor([start_pos])
+        freqs_cis_i = freqs_cis[current_pos, :].unsqueeze(0)
+        positions = torch.tensor([current_pos])
 
         # Reference model
         ref_output = reference_model(pt_decode_input, freqs_cis_i, positions, mask=None)
