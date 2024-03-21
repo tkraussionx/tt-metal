@@ -309,11 +309,11 @@ std::vector<Tensor> run_multi_device_operation(
     std::vector<Tensor> multi_device_output_tensors;
     for (int i = 0; i < num_output_tensors_per_device; ++i)
     {
-        std::vector<DeviceBuffer> buffers;
-        std::vector<Shape> shapes;
+        std::unordered_map<Device*, DeviceBuffer> buffers;
+        std::unordered_map<Device*, Shape> shapes;
         for (Device *device : devices) {
-            buffers.push_back(per_device_output_tensors[device][i].device_buffer());
-            shapes.push_back(per_device_output_tensors[device][i].get_legacy_shape());
+            buffers.insert({device, per_device_output_tensors[device][i].device_buffer()});
+            shapes.insert({device, per_device_output_tensors[device][i].get_legacy_shape()});
         }
 
         multi_device_output_tensors.push_back(

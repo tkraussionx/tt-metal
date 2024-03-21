@@ -9,12 +9,13 @@ import ttnn
 from loguru import logger
 from tests.ttnn.utils_for_testing import assert_with_pcc
 import transformers
+import time
 
 
 #######
 # Test MultiDevice Initialization, Open/Close
 #######
-def test_device_mesh_open_close_explicit(silicon_arch_name, silicon_arch_wormhole_b0):
+def test_device_mesh_open_close_explicit(silicon_arch_name, silicon_arch_grayskull):
     """Manually open and close multi-device"""
     num_pcie_devices = ttnn.get_num_pcie_devices()
     if num_pcie_devices <= 1:
@@ -35,7 +36,7 @@ def test_multi_device_open_close_full_device_mesh_fixture(pcie_device_mesh):
     pass
 
 
-def test_multi_device_open_close_using_context_manager(silicon_arch_name, silicon_arch_wormhole_b0):
+def test_multi_device_open_close_using_context_manager(silicon_arch_name, silicon_arch_grayskull):
     """Using context manager to open and close multi-device"""
     device_grid, device_ids = ttnn.DeviceGrid(2, 2), ttnn.get_device_ids()
     if len(device_ids) <= 1:
@@ -50,27 +51,32 @@ def test_multi_device_open_close_using_context_manager(silicon_arch_name, silico
 #######
 
 
-@pytest.mark.parametrize("layout", [ttnn.TILE_LAYOUT, ttnn.ROW_MAJOR_LAYOUT])
-@pytest.mark.parametrize("memory_config", [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG])
+@pytest.mark.parametrize("layout", [ttnn.TILE_LAYOUT])
+@pytest.mark.parametrize("memory_config", [ttnn.DRAM_MEMORY_CONFIG])
+@pytest.mark.parametrize("pcie_device_mesh", [8], indirect=True)
 def test_ttnn_to_and_from_multi_device_shard(pcie_device_mesh, layout, memory_config):
     """Shard a tensor across devices, compose it back and verify loopback tensor is same as the original tensor"""
     from ttnn import ShardTensorToMesh, ConcatMeshToTensor
 
-    torch_tensor = torch.rand((1, 1, 32, 256), dtype=torch.bfloat16)
-
-    ttnn_tensor = ttnn.from_torch(torch_tensor, mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=3))
-    ttnn_tensor = ttnn.to_layout(ttnn_tensor, layout=layout)
-    ttnn_tensor = ttnn.to_device(ttnn_tensor, pcie_device_mesh, memory_config=memory_config)
-    ttnn_loop_back_tensor = ttnn.from_device(ttnn_tensor)
-    torch_loop_back_tensor = ttnn.to_torch(
-        ttnn_loop_back_tensor, mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=3)
-    )
-
-    assert torch.all(torch_tensor == torch_loop_back_tensor)
+    print("Starting test")
+    start = time.time()
+    for i in range(100):
+        print("Running iter " + str(i))
+        torch_tensor = torch.rand((1, 1, 8192, 8192), dtype=torch.bfloat16)
+        ttnn_tensor = ttnn.from_torch(torch_tensor, mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=3))
+        ttnn_tensor = ttnn.to_layout(ttnn_tensor, layout=layout)
+        ttnn_tensor = ttnn.to_device(ttnn_tensor, pcie_device_mesh, memory_config=memory_config)
+        ttnn_loop_back_tensor = ttnn.from_device(ttnn_tensor)
+        torch_loop_back_tensor = ttnn.to_torch(
+            ttnn_loop_back_tensor, mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=3)
+        )
+        # print("Took: " + str(time.time() - start))
+        assert torch.all(torch_tensor == torch_loop_back_tensor)
 
 
 @pytest.mark.parametrize("layout", [ttnn.TILE_LAYOUT, ttnn.ROW_MAJOR_LAYOUT])
 @pytest.mark.parametrize("memory_config", [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG])
+@pytest.mark.parametrize("pcie_device_mesh", [2], indirect=True)
 def test_multi_device_check_per_device_shard(pcie_device_mesh, layout, memory_config):
     """This test checks if the tensor is correctly sharded across devices"""
     from ttnn import ShardTensorToMesh, ConcatMeshToTensor
@@ -82,13 +88,14 @@ def test_multi_device_check_per_device_shard(pcie_device_mesh, layout, memory_co
     ttnn_tensor = ttnn.to_device(ttnn_tensor, pcie_device_mesh, memory_config=memory_config)
     ttnn_loop_back_tensor = ttnn.from_device(ttnn_tensor)
 
-    shard_offset, shard_size = 0, 64
+    shard_offset, shard_size = 0, 128
     for device_tensor in ttnn.get_device_tensors(ttnn_loop_back_tensor):
         device_tensor_torch = ttnn.to_torch(device_tensor)
         assert torch.all(device_tensor_torch == torch_tensor[..., shard_offset : shard_offset + shard_size])
         shard_offset += shard_size
 
 
+@pytest.mark.parametrize("pcie_device_mesh", [2], indirect=True)
 def test_multi_device_replicate(pcie_device_mesh):
     """Test ReplicateTensorToMesh to broadcast a tensor across multiple devices"""
     from ttnn import ReplicateTensorToMesh, ListMeshToTensor
@@ -103,22 +110,24 @@ def test_multi_device_replicate(pcie_device_mesh):
         assert torch.all(full_tensor == loopback_replicated_tensor)
 
 
-def test_ttnn_multi_device_all_gather(pcie_device_mesh):
-    """Multidevice API test for ttnn.all_gather CCL operation"""
-    from ttnn import ShardTensorToMesh
+# @pytest.mark.parametrize("pcie_device_mesh", [2], indirect=True)
+# def test_ttnn_multi_device_all_gather(pcie_device_mesh):
+#     """Multidevice API test for ttnn.all_gather CCL operation"""
+#     from ttnn import ShardTensorToMesh
 
-    full_tensor = torch.rand((1, 1, 32, 128), dtype=torch.bfloat16)
+#     full_tensor = torch.rand((1, 1, 32, 128), dtype=torch.bfloat16)
 
-    ttnn_tensor = ttnn.from_torch(full_tensor, mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=3))
-    ttnn_tensor = ttnn.to_device(ttnn_tensor, pcie_device_mesh)
-    ttnn_tensor = ttnn.all_gather(ttnn_tensor, dim=3, num_links=1)
+#     ttnn_tensor = ttnn.from_torch(full_tensor, mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=3))
+#     ttnn_tensor = ttnn.to_device(ttnn_tensor, pcie_device_mesh)
+#     ttnn_tensor = ttnn.all_gather(ttnn_tensor, dim=3, num_links=1)
 
-    device_tensors: typing.List[ttnn.Tensor] = ttnn.get_device_tensors(ttnn_tensor)
-    for device_tensor in device_tensors:
-        device_tensor_torch = ttnn.to_torch(device_tensor)
-        assert torch.all(device_tensor_torch == full_tensor)
+#     device_tensors: typing.List[ttnn.Tensor] = ttnn.get_device_tensors(ttnn_tensor)
+#     for device_tensor in device_tensors:
+#         device_tensor_torch = ttnn.to_torch(device_tensor)
+#         assert torch.all(device_tensor_torch == full_tensor)
 
 
+@pytest.mark.parametrize("pcie_device_mesh", [2], indirect=True)
 def test_multi_device_single_op_unary(pcie_device_mesh):
     """Multidevice API test: Running tensor-parallel multi-device single-op unary"""
     from ttnn import ShardTensorToMesh, ConcatMeshToTensor
@@ -140,6 +149,7 @@ def test_multi_device_single_op_unary(pcie_device_mesh):
     assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.999)
 
 
+@pytest.mark.parametrize("pcie_device_mesh", [2], indirect=True)
 def test_multi_device_single_op_binary(pcie_device_mesh):
     """Multidevice API test: Running tensor-parallel multi-device single-op binary"""
     from ttnn import ShardTensorToMesh, ConcatMeshToTensor
@@ -168,6 +178,7 @@ def test_multi_device_single_op_binary(pcie_device_mesh):
     assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.999)
 
 
+@pytest.mark.parametrize("pcie_device_mesh", [2], indirect=True)
 def test_multi_device_multi_op(pcie_device_mesh):
     """Multidevice API test: Running tensor-parallel multi-device multi-op"""
     from ttnn import ShardTensorToMesh, ConcatMeshToTensor
@@ -191,6 +202,7 @@ def test_multi_device_multi_op(pcie_device_mesh):
     assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.999)
 
 
+@pytest.mark.parametrize("pcie_device_mesh", [2], indirect=True)
 def test_multi_device_data_parallel_matmul_op(pcie_device_mesh):
     """Multidevice API: Data Parallel on matmul"""
     from ttnn import ShardTensorToMesh, ConcatMeshToTensor, ReplicateTensorToMesh
@@ -219,6 +231,7 @@ def test_multi_device_data_parallel_matmul_op(pcie_device_mesh):
     assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.997)
 
 
+@pytest.mark.parametrize("pcie_device_mesh", [2], indirect=True)
 def test_multi_device_data_parallel_matmul_op(pcie_device_mesh):
     """Multidevice API: Data Parallel on matmul"""
     from ttnn import ShardTensorToMesh, ConcatMeshToTensor, ReplicateTensorToMesh

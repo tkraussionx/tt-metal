@@ -287,6 +287,7 @@ uint64_t base_alloc(const AllocatorConfig &config, BankManager &bank_manager, ui
 
 uint64_t allocate_buffer(Allocator &allocator, uint32_t size, uint32_t page_size, const BufferType &buffer_type, bool bottom_up, std::optional<uint32_t> num_shards) {
     uint64_t address = 0;
+    std::lock_guard<std::mutex>(allocator.mtx);
     switch (buffer_type) {
         case BufferType::DRAM: return allocator.descriptor.dram.alloc(allocator.config, allocator.dram_manager, size, page_size, bottom_up, std::nullopt);
         case BufferType::L1: return allocator.descriptor.l1.alloc(allocator.config, allocator.l1_manager, size, page_size, bottom_up, num_shards);
@@ -294,10 +295,12 @@ uint64_t allocate_buffer(Allocator &allocator, uint32_t size, uint32_t page_size
             TT_THROW("Unsupported buffer type!");
         }
     }
+
     return address;
 }
 
 void deallocate_buffer(Allocator &allocator, uint64_t address, const BufferType &buffer_type) {
+    std::lock_guard<std::mutex>(allocator.mtx);
     switch (buffer_type) {
         case BufferType::DRAM:
             allocator.dram_manager.deallocate_buffer(address);

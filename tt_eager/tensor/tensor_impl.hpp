@@ -364,14 +364,16 @@ inline Tensor to_host(const Tensor& tensor, bool blocking = true) {
         return to_host_helper<T>(tensor, blocking);
     } else if (tensor.storage_type() == StorageType::MULTI_DEVICE) {
         auto& device_storage = std::get<tt::tt_metal::MultiDeviceStorage>(tensor.get_storage());
-        std::vector<OwnedBuffer> host_buffers;
-
-        for (int i = 0; i < device_storage.buffers.size(); ++i) {
-            auto shard = Tensor{DeviceStorage{device_storage.buffers[i]}, device_storage.shapes[i], tensor.get_dtype(), tensor.get_layout()};
+        auto devices = get_devices(tensor);
+        std::vector<OwnedBuffer> host_buffers = std::vector<OwnedBuffer>(devices.size(), OwnedBuffer());
+        std::vector<Shape> shapes = std::vector<Shape>(devices.size(), tensor.get_legacy_shape());
+        for (const auto& device : devices) {
+            auto shard = Tensor{DeviceStorage{device_storage.buffers.at(device)}, device_storage.shapes.at(device), tensor.get_dtype(), tensor.get_layout()};
             shard = to_host_helper<T>(shard, blocking);
-            host_buffers.push_back(std::get<OwnedStorage>(shard.get_storage()).buffer);
+            host_buffers[device->id()] = std::get<OwnedStorage>(shard.get_storage()).buffer;
+            shapes[device->id()] = device_storage.shapes.at(device);
         }
-        return Tensor(MultiDeviceHostStorage{std::move(host_buffers), device_storage.shapes}, tensor.get_shape(), tensor.get_dtype(), tensor.get_layout());
+        return Tensor(MultiDeviceHostStorage(std::move(host_buffers), shapes), tensor.get_shape(), tensor.get_dtype(), tensor.get_layout());
     } else {
         return tensor;
     }
@@ -473,7 +475,7 @@ inline Tensor to_layout(const Tensor& tensor, Layout target_layout) {
                     output_buffers.push_back(output_buffer);
                     output_shapes.push_back(storage.shapes[i]);
                 }
-                return MultiDeviceHostStorage{output_buffers, output_shapes};
+                return MultiDeviceHostStorage(output_buffers, output_shapes);
             } else if constexpr (std::is_same_v<StorageType, DeviceStorage>) {
                 TT_THROW("Device storage isn't supported");
             } else if constexpr (std::is_same_v<StorageType, MultiDeviceStorage>) {
