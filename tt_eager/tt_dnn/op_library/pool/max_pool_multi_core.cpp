@@ -756,14 +756,14 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
         log_debug(LogOp, "CB {} :: PS = {}, NP = {}", in_cb_id_1, in_cb_pagesize, in_cb_npages);
     }
 
-    // output of tilize == input to reduce
-    uint32_t in_tiled_cb_id = CB::c_intermed0;  // tiled input
-    uint32_t in_tiled_cb_pagesize = tile_size(in_df);
-    uint32_t in_tiled_cb_npages = in_ntiles_c * in_ntiles_hw;
-    CircularBufferConfig in_tiled_cb_config = CircularBufferConfig(in_tiled_cb_npages * in_tiled_cb_pagesize, {{in_tiled_cb_id, in_df}})
-		.set_page_size(in_tiled_cb_id, in_tiled_cb_pagesize);
-    auto in_tiled_cb = tt_metal::CreateCircularBuffer(program, all_cores, in_tiled_cb_config);
-    log_debug(LogOp, "CB {} :: PS = {}, NP = {}", in_tiled_cb_id, in_tiled_cb_pagesize, in_tiled_cb_npages);
+    // // output of tilize == input to reduce
+    // uint32_t in_tiled_cb_id = CB::c_intermed0;  // tiled input
+    // uint32_t in_tiled_cb_pagesize = tile_size(in_df);
+    // uint32_t in_tiled_cb_npages = in_ntiles_c * in_ntiles_hw;
+    // CircularBufferConfig in_tiled_cb_config = CircularBufferConfig(in_tiled_cb_npages * in_tiled_cb_pagesize, {{in_tiled_cb_id, in_df}})
+	// 	.set_page_size(in_tiled_cb_id, in_tiled_cb_pagesize);
+    // auto in_tiled_cb = tt_metal::CreateCircularBuffer(program, all_cores, in_tiled_cb_config);
+    // log_debug(LogOp, "CB {} :: PS = {}, NP = {}", in_tiled_cb_id, in_tiled_cb_pagesize, in_tiled_cb_npages);
 
     // output of reduce == writer to write
     uint32_t out_cb_id = CB::c_out0;            // output rows in RM
@@ -790,15 +790,11 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
 
     #if 1
     {   // debug
-        //log_debug(LogOp, "OUTPUT SHARD: {} {}", shard_shape[0], shard_shape[1]);
-        //log_debug(LogOp, "OUTPUT CB: {} {}", sharded_out_cb_page_size, sharded_out_num_pages);
         log_debug(LogOp, "raw_in_cb :: PS = {}, NP = {}", raw_in_cb_pagesize, raw_in_cb_npages);
         log_debug(LogOp, "in_cb :: PS = {}, NP = {}", in_cb_pagesize, in_cb_npages);
         log_debug(LogOp, "in_reader_indices_cb :: PS = {}, NP = {}", in_reader_indices_cb_pagesize, in_reader_indices_cb_npages);
         log_debug(LogOp, "in_scalar_cb :: PS = {}, NP = {}", in_scalar_cb_pagesize, in_scalar_cb_npages);
-        log_debug(LogOp, "in_tiled_cb :: PS = {}, NP = {}", in_tiled_cb_pagesize, in_tiled_cb_npages);
         log_debug(LogOp, "out_cb :: PS = {}, NP = {}", out_cb_pagesize, out_cb_npages);
-        //log_debug(LogOp, "sharded_out_cb :: PS = {}, NP = {}", sharded_out_cb_page_size, sharded_out_num_pages);
         log_debug(LogOp, "in_addr: {}", src_dram_buffer->address());
         log_debug(LogOp, "in_reader_indices_addr: {}", reader_indices_buffer->address());
         log_debug(LogOp, "out_addr: {}", dst_dram_buffer->address());
@@ -830,6 +826,8 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
         log_debug(LogOp, "out_nhw_per_core: {}", out_nhw_per_core);
         log_debug(LogOp, "is_in_sharded: {}", input.memory_config().is_sharded());
         log_debug(LogOp, "is_out_sharded: {}", output.memory_config().is_sharded());
+        log_debug(LogOp, "split_reader: {}", split_reader);
+        log_debug(LogOp, "use_rectangular_shards_with_col_major: {}", use_rectangular_shards_with_col_major);
     }
     #endif
 
