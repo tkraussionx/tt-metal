@@ -68,14 +68,18 @@ def resnet_bottleneck_block(x, parameters, layer=None, module=None, device=None)
 
     conv1 = do_reshard(conv1, parameters.conv2.conv.input_sharded_memory_config)
 
-    # if device is not None:
-    #     ttnn.dump_device_memory_state(device)
+    if device is not None:
+        ttnn.dump_device_memory_state(device)
 
+    # layer 2 module 1 we run out of space here!
     conv2 = parameters.conv2(conv1)
     if conv1.is_allocated():
         ttnn.deallocate(conv1)
+        conv2 = ttnn.experimental.tensor.move_sharded(conv2)
+
     conv3 = parameters.conv3(conv2)
     ttnn.deallocate(conv2)
+    # conv3 = ttnn.experimental.tensor.move_sharded(conv3)
 
     conv3_mem_config = ttnn.get_memory_config(conv3)
     if layer is not None and layer >= 3:
@@ -99,9 +103,12 @@ def resnet_bottleneck_block(x, parameters, layer=None, module=None, device=None)
     if x is not identity:
         ttnn.deallocate(identity)
 
-    if (layer is not None and module is not None) and (
-        (layer == 2 and module == 1) or (layer == 1 and module == 1 and is_wormhole_b0())
-    ):
-        out = ttnn.experimental.tensor.move_sharded(out)
+    # if (layer is not None and module is not None) and (
+    #     (layer == 2 and module == 1) or (layer == 1 and module == 1 and is_wormhole_b0())
+    # ):
+    out = ttnn.experimental.tensor.move_sharded(out)
+
+    # if self.module_input_shape[0] == 20 and self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64:
+    #     out = tt_lib.tensor.move_sharded(out)
 
     return out
