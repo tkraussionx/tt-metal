@@ -42,6 +42,7 @@ struct Tensor {
     std::shared_ptr<TensorAttributes> tensor_attributes;
     // Tensor gets worker queue handle through the device
     Device* worker = nullptr;
+    std::vector<Device*> workers = {};
     bool deallocate_through_destructor = false;
     // ======================================================================================
     //                                  Hi Level APIs
@@ -51,7 +52,11 @@ struct Tensor {
 
     // Default constructor to initialize empty tensor
     Tensor(Device* worker = nullptr) : tensor_attributes(std::make_shared<TensorAttributes>()), worker(worker) {}
-
+    Tensor(DeviceMesh* device_mesh) {
+        tensor_attributes = std::make_shared<TensorAttributes>();
+        tensor_attributes->storage = MultiDeviceStorage();
+        workers = device_mesh->get_devices();
+    }
     Tensor(const Tensor &other) = default;
 
     Tensor &operator=(const Tensor &other) = default;

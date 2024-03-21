@@ -55,7 +55,7 @@ namespace tt_metal {
    bool is_device_tensor(const Tensor& tensor);
 
 // Given a multi-device tensor and a device, returns the tensor on the given device.
-Tensor get_device_tensor(const Device* device, const Tensor& multi_device_tensor);
+Tensor get_device_tensor(Device* device, const Tensor& multi_device_tensor);
 
 // Given a multi-device tensor, return all the devices it is mapped to.
 std::vector<Device*> get_devices(const Tensor& multi_device_tensor);

@@ -197,8 +197,11 @@ void Buffer::allocate() {
     TT_ASSERT(this->device_ != nullptr);
     // L1 buffers are allocated top down!
     bool bottom_up = this->buffer_type_ == BufferType::DRAM;
+    // std::cout << "Calling buffer allocate: " << std::this_thread::get_id() << std::endl;
     detail::AllocateBuffer(this, bottom_up);
-    detail::BUFFER_MAP[{this->device_->id(), this->address_}] = this;
+    // Need to make this thread safe too
+    // detail::BUFFER_MAP[{this->device_->id(), this->address_}] = this;
+    // std::cout << "done allocate " << std::endl;
 }
 
 uint32_t Buffer::dram_channel_from_bank_id(uint32_t bank_id) const {
@@ -264,18 +267,22 @@ uint64_t Buffer::sharded_page_address(uint32_t bank_id, uint32_t page_index) con
 }
 
 void Buffer::deallocate() {
+    // std::cout << "calling buffer deallocate " << this << std::endl;
     if (this->device_ == nullptr or not this->device_->initialized_ or this->size_ == 0) {
         return;
     }
     // Mark as deallocated
     this->size_ = 0;
-    TT_ASSERT(this->device_->allocator_ != nullptr, "Expected allocator to be initialized!");
+    // TT_ASSERT(this->device_->allocator_ != nullptr, "Expected allocator to be initialized!");
     // Asynchronously deallocate
-    detail::BUFFER_MAP.erase({this->device_->id(), this->address_});
+    // std::cout << "Calling deallocate operation " << std::this_thread::get_id() << std::endl;
+    // detail::BUFFER_MAP.erase({this->device_->id(), this->address_});
     detail::DeallocateBuffer(this);
+    // std::cout << "Done buffer  dealloacte " << std::endl;
 }
 
 Buffer::~Buffer() {
+    // std::cout << "calling buffer destructor " << std::this_thread::get_id() << std::endl;
     this->deallocate();
 }
 

@@ -43,8 +43,11 @@ Tensor::Tensor(const Storage storage, const ttnn::Shape shape, DataType dtype, L
             else if constexpr (std::is_same_v<StorageType, BorrowedStorage>) {
                 // do nothing
             } else if constexpr (std::is_same_v<StorageType, MultiDeviceStorage>) {
-                for (const auto& buffer : storage.buffers) {
+                for (const auto& device_buf_pair : storage.buffers) {
+                    auto device = device_buf_pair.first;
+                    auto buffer = device_buf_pair.second;
                     TT_ASSERT(buffer->device() != nullptr);
+                    TT_ASSERT(buffer->device() == device);
                     tensor_impl::validate_on_device_dtype_and_layout(buffer->device(), dtype, layout);
                 }
             } else if constexpr (std::is_same_v<StorageType, MultiDeviceHostStorage>) {
@@ -106,7 +109,8 @@ void Tensor::deallocate(bool force) {
                             TT_THROW("Cannot deallocate tensor with borrowed storage!");
                         }
                     } else if constexpr (std::is_same_v<T, MultiDeviceStorage>) {
-                        for (auto& buffer : storage.buffers) {
+                        for (auto& device_buf_pair : storage.buffers) {
+                            auto buffer = device_buf_pair.second;
                             if (force or (this->tensor_attributes.use_count() == 1 and buffer.use_count() == 1)) {
                                 // Same logic as above for device buffers
                                 DeallocateBuffer(*buffer);
@@ -217,22 +221,32 @@ Tensor Tensor::to(Device *target_device, const MemoryConfig &mem_config) const {
 
 Tensor Tensor::to(DeviceMesh *device_mesh, const MemoryConfig &mem_config) const {
     ZoneScoped;
-
     if (storage_type() == StorageType::MULTI_DEVICE_HOST) {
-        auto& host_storage = std::get<tt::tt_metal::MultiDeviceHostStorage>(this->get_storage());
-        std::vector<DeviceBuffer> device_buffers;
-
-        for (int i = 0; i < host_storage.buffers.size(); ++i) {
-            Device& target_device = device_mesh->get_device(i);
-            auto shard = Tensor{OwnedStorage{host_storage.buffers[i]},  host_storage.shapes[i], this->get_dtype(), this->get_layout()};
-            shard = shard.to(&target_device, mem_config);
-            device_buffers.push_back(std::get<DeviceStorage>(shard.get_storage()).buffer);
+        Tensor multi_device_tensor = Tensor(device_mesh);
+        for (auto target_device : device_mesh->get_devices()) {
+            target_device->push_work([*this, multi_device_tensor, mem_config, target_device] () mutable {
+                std::visit([*this, mem_config, target_device] (auto& storage) {
+                    using T = std::decay_t<decltype(storage)>;
+                    if constexpr (std::is_same_v<T, MultiDeviceStorage>) {
+                        auto host_storage = std::get<tt::tt_metal::MultiDeviceHostStorage>(this->get_storage());
+                        auto shard_shape = host_storage.get_tensor_shape_for_device(target_device);
+                        auto shard_buffer = host_storage.get_buffer_for_device(target_device);
+                        auto shard = Tensor{OwnedStorage{shard_buffer},  shard_shape, this->get_dtype(), this->get_layout()};
+                        shard = tensor_impl::to_device_wrapper(shard, target_device, mem_config);
+                        storage.insert_buffer_for_device(target_device, std::get<DeviceStorage>(shard.get_storage()).buffer);
+                        storage.insert_tensor_shape_for_device(target_device, shard_shape);
+                    }
+                }, multi_device_tensor.tensor_attributes->storage);
+                if (not (target_device->id())) {
+                    multi_device_tensor.set_shape(this->get_shape());
+                    multi_device_tensor.set_dtype(this->get_dtype());
+                    multi_device_tensor.set_layout(this->get_layout());
+                    multi_device_tensor.tensor_attributes->metadata_populated = true;
+                }
+            });
         }
-        return Tensor(
-            MultiDeviceStorage{std::move(device_buffers), host_storage.shapes},
-            this->get_shape(),
-            this->get_dtype(),
-            this->get_layout());
+
+        return multi_device_tensor;
     } else if (std::holds_alternative<tt::tt_metal::MultiDeviceStorage>(this->get_storage())) {
         return *this; // already on device
     }
@@ -245,16 +259,33 @@ Tensor Tensor::cpu(bool blocking) const {
     ZoneScoped;
     auto worker = this->get_worker_handle(blocking);
     Tensor host_tensor;
-
-    worker->push_work([*this, host_tensor, blocking] () mutable {
-        if (this->storage_type() == StorageType::OWNED) {
-            host_tensor.deepcopy(*this);
-        }
-        else {
-            auto local_tensor = tensor_impl::to_host_wrapper(*this, blocking);
-            host_tensor.deepcopy(local_tensor);
-        }
-    }, blocking);
+    auto tensor_storage = MultiDeviceHostStorage();
+    tensor_storage.buffers = std::vector<OwnedBuffer>((this->workers).size(), OwnedBuffer());
+    tensor_storage.shapes = std::vector<Shape>((this->workers).size(), this->get_legacy_shape());
+    host_tensor.set_storage(tensor_storage);
+    for (auto target_device : this->workers) {
+        target_device->push_work([host_tensor, blocking, target_device, *this] () mutable {
+            std::visit([*this, target_device, blocking] (auto& storage) {
+                using T = std::decay_t<decltype(storage)>;
+                if constexpr (std::is_same_v<T, MultiDeviceHostStorage>) {
+                    auto device_id = target_device->id();
+                    auto device_storage = std::get<tt::tt_metal::MultiDeviceStorage>(this->get_storage());
+                    auto shard_shape = device_storage.get_tensor_shape_for_device(target_device);
+                    auto shard_buffer = device_storage.get_buffer_for_device(target_device);
+                    auto shard = Tensor{DeviceStorage{shard_buffer}, shard_shape, this->get_dtype(), this->get_layout()};
+                    shard = tensor_impl::to_host_wrapper(shard, blocking);
+                    storage.insert_buffer_for_device(target_device, std::get<OwnedStorage>(shard.get_storage()).buffer);
+                    storage.insert_tensor_shape_for_device(target_device, shard_shape);
+                }
+            }, host_tensor.tensor_attributes->storage);
+            if (not target_device->id()) {
+                host_tensor.set_shape(this->get_shape());
+                host_tensor.set_dtype(this->get_dtype());
+                host_tensor.set_layout(this->get_layout());
+                host_tensor.tensor_attributes->metadata_populated = true;
+            }
+        }, blocking);
+    }
     return host_tensor;
 }
 
@@ -385,7 +416,8 @@ bool Tensor::is_allocated() const {
             }
             else if constexpr (std::is_same_v<T, MultiDeviceStorage>) {
                 bool is_allocated = true;
-                for (const auto& buffer : storage.buffers) {
+                for (const auto& device_buf_pair : storage.buffers) {
+                    auto buffer = device_buf_pair.second;
                     is_allocated &= bool(buffer) and buffer->size() > 0;
                 }
                 return is_allocated;

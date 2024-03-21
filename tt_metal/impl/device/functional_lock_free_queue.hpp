@@ -37,7 +37,6 @@ class FunctionalLockFreeQueue {
         std::atomic<uint64_t> parent_thread_id = 0;
         FunctionalLockFreeQueue() : head(new Node), tail(head.load()) {}
         FunctionalLockFreeQueue(FunctionalLockFreeQueue&& other) {
-            std::cout << "calling move constructor on lock free queue" << std::endl;
             head.store(other.head.load());
             tail.store(other.tail.load());
             worker_thread_id.store(other.worker_thread_id.load());
