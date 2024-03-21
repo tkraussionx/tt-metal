@@ -66,9 +66,7 @@ class UNet:
         self.c8 = parameters.c8
         self.c8_2 = parameters.c8_2
         self.c8_3 = parameters.c8_3
-        """
         self.output_layer = parameters.output_layer
-        """
 
     def __call__(self, device, input_tensor):
         input_tensor = input_tensor.to(device, self.c1.conv.input_sharded_memory_config)
@@ -228,8 +226,6 @@ class UNet:
         output_tensor = self.c7_2(output_tensor)
         output_tensor = self.c7_3(output_tensor)
 
-        breakpoint()
-
         output_tensor = ttl.tensor.sharded_to_interleaved(output_tensor, ttnn.DRAM_MEMORY_CONFIG)
         output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
 
@@ -267,9 +263,6 @@ class UNet:
         output_tensor = self.c8_2(output_tensor)
         output_tensor = self.c8_3(output_tensor)
 
-        return ttnn.from_device(output_tensor)
-        """
         output_tensor = self.output_layer(output_tensor)
 
         return ttnn.from_device(output_tensor)
-        """

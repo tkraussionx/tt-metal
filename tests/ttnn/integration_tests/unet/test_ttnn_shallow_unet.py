@@ -308,17 +308,17 @@ def custom_preprocessor(model, name, ttnn_module_args):
         conv8_3_weight, conv8_3_bias = fold_batch_norm2d_into_conv2d(model.c8_3, model.b8_3)
         update_ttnn_module_args(ttnn_module_args.c8_3)
         parameters["c8_3"] = preprocess_conv2d(conv8_3_weight, conv8_3_bias, ttnn_module_args.c8_3)
-        """
 
         ttnn_module_args.output_layer["math_fidelity"] = ttnn.MathFidelity.LoFi
-        ttnn_module_args.output_layer["dtype"] = ttnn.bfloat8_b
-        ttnn_module_args.output_layer["weights_dtype"] = ttnn.bfloat8_b
+        ttnn_module_args.output_layer["dtype"] = ttnn.bfloat16
+        ttnn_module_args.output_layer["weights_dtype"] = ttnn.bfloat16
         ttnn_module_args.output_layer["conv_blocking_and_parallelization_config_override"] = None
         ttnn_module_args.output_layer["activation"] = None
         ttnn_module_args.output_layer["deallocate_activation"] = True
         update_ttnn_module_args(ttnn_module_args.output_layer)
-        parameters["output_layer"] = preprocess_conv2d(model.output_layer.weight, model.output_layer.bias, ttnn_module_args.output_layer)
-        """
+        parameters["output_layer"] = preprocess_conv2d(
+            model.output_layer.weight, model.output_layer.bias, ttnn_module_args.output_layer
+        )
 
     return parameters
 
@@ -411,11 +411,9 @@ class UNet(nn.Module):
         self.c8_3 = nn.Conv2d(16, 16, kernel_size=3, padding=1)
         self.b8_3 = nn.BatchNorm2d(16, momentum=1)
         self.r8_3 = nn.ReLU(inplace=True)
-        """
 
         # Output layer
         self.output_layer = nn.Conv2d(16, 1, kernel_size=1)
-        """
 
     def forward(self, x):
         c1 = self.c1(x)
@@ -510,15 +508,10 @@ class UNet(nn.Module):
         b8_3 = self.b8_3(c8_3)
         r8_3 = self.r8_3(b8_3)
 
-        return r8_3
-        """
-
         # Output layer
         output = self.output_layer(r8_3)
 
         return output
-        # return output
-        """
 
 
 if __name__ == "__main__":
@@ -590,6 +583,8 @@ if __name__ == "__main__":
             print(f"Frames processed: {total_frame_count}")
             print(f"Host perf (fps): {total_frame_count / total_time}")
 
+        """
+
         output_tensor = ttnn.to_torch(output_tensor)
         # output_tensor = output_tensor.to(torch_input_tensor.dtype)
 
@@ -602,9 +597,10 @@ if __name__ == "__main__":
         )
         # torch_output_tensor = torch_output_tensor.to(torch.bfloat16)
 
+        output_tensor = output_tensor[:, :, :, 0].unsqueeze(-1)
+
         assert_with_pcc(torch_output_tensor, output_tensor, pcc=0.9999)
         ttnn.close_device(device)
-
         """
 
         #
@@ -615,13 +611,12 @@ if __name__ == "__main__":
         output_tensor = output_tensor[:, :, :, :3]
         output_tensor = output_tensor.reshape(input_shape[0], input_shape[2], input_shape[3], input_shape[1])
         output_tensor = torch.permute(output_tensor, (0, 3, 1, 2))
-        output_tensor = output_tensor.to(torch_input_tensor.dtype)
+        # output_tensor = output_tensor.to(torch_input_tensor.dtype)
 
         output_tensor = output_tensor[:, 0, :, :]
         output_tensor = torch.reshape(
             output_tensor, (output_tensor.shape[0], 1, output_tensor.shape[1], output_tensor.shape[2])
         )
         # todo: taps - Disable assert with pcc as pcc is really bad
-        # assert_with_pcc(torch_output_tensor, output_tensor, pcc=0.9999)
+        assert_with_pcc(torch_output_tensor, output_tensor, pcc=0.9999)
         ttnn.close_device(device)
-        """
