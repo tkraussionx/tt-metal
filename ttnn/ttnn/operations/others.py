@@ -256,7 +256,7 @@ def mean(input_tensor: ttnn.Tensor, dim: Union[int, Tuple[int]], keepdim: bool =
 
 ## helper function for upsample. currently only supports HEIGHT sharding
 def _get_upsample_shard_grid_from_num_shards(ncores: int, device):
-    max_grid_size = (9, 8) if device.arch() == ttl.device.Arch.WORMHOLE_B0 else (9, 12)  ## (y, x)
+    max_grid_size = (8, 8) if device.arch() == ttl.device.Arch.WORMHOLE_B0 else (9, 12)  ## (y, x)
     if ncores % max_grid_size[1] == 0:
         core_grid = ttnn.CoreGrid(y=ncores // max_grid_size[1], x=max_grid_size[1])
         grid_coord = ttnn.experimental.tensor.CoreCoord(core_grid.x - 1, core_grid.y - 1)
@@ -290,7 +290,7 @@ def _get_upsample_num_shards(
     batch_size: int, height: int, num_channels: int, shard_strategy: ttnn.ShardStrategy, device
 ):
     ## calculate ncores, corresponding grid_size and in_shard_shape based on the input_shape
-    max_grid_size = (9, 8) if device.arch() == ttl.device.Arch.WORMHOLE_B0 else (9, 12)  ## (y, x)
+    max_grid_size = (8, 8) if device.arch() == ttl.device.Arch.WORMHOLE_B0 else (9, 12)  ## (y, x)
     if shard_strategy == ttnn.ShardStrategy.HEIGHT:
         ## nsticks per shard should be divisible by in_w
         max_nshards = min(batch_size * height, max_grid_size[0] * max_grid_size[1])
@@ -410,7 +410,7 @@ def upsample(
             print(f"Resharding input tensor to {nshards} shards with HEIGHT sharding")
 
             ## sharded to interleaved
-            input_tensor = ttnn.to_memory_config(input_tensor, ttnn.DRAM_MEMORY_CONFIG)
+            # input_tensor = ttnn.to_memory_config(input_tensor, ttnn.DRAM_MEMORY_CONFIG)
 
             ## construct new shard_spec
             shard_width = num_channels
@@ -422,8 +422,10 @@ def upsample(
                 ttnn.types.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.types.BufferType.L1, shard_spec
             )
 
+            input_tensor = ttl.tensor.reshard(input_tensor, sharded_mem_config)
+
             ## interleaved to sharded
-            input_tensor = ttnn.to_memory_config(input_tensor, memory_config=sharded_mem_config)
+            # input_tensor = ttnn.to_memory_config(input_tensor, memory_config=sharded_mem_config)
 
             ## also update the output memory_config
             shard_height = shard_height * scale_h * scale_w
