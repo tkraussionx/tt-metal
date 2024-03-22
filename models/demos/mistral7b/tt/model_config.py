@@ -47,15 +47,15 @@ class TtModelArgs:
         "ATTN_W_LAYOUT",
     )
 
-    def __init__(self, device, model_base_path="/proj_sw/user_dev/hf_data/mistral", instruct=False):
+    def __init__(self, device, model_base_path="/mnt/MLPerf/ttnn/models/demos/mistral7b", instruct=False):
         self.model_base_path = Path(model_base_path)
         # Some consumers like SentencePiece only accept str not Path for files
         if instruct:  # Load instruct weights and tokenizer (Mistral-7B-Instruct-v0.2)
-            self.consolidated_weights_path = str(self.model_base_path / "mistral-7B-v0.1/consolidated_instruct.00.pth")
+            self.consolidated_weights_path = str(self.model_base_path / "consolidated_instruct.00.pth")
             self.tokenizer_path = str(self.model_base_path / "tokenizer_instruct.model")
         else:  # Load generative weights and tokenizer (Mistral-7B-v0.1)
-            self.consolidated_weights_path = str(self.model_base_path / "mistral-7B-v0.1/consolidated.00.pth")
-            self.tokenizer_path = str(self.model_base_path / "mistral-7B-v0.1/tokenizer.model")
+            self.consolidated_weights_path = str(self.model_base_path / "consolidated.00.pth")
+            self.tokenizer_path = str(self.model_base_path / "tokenizer.model")
 
         DRAM_MEMCFG = ttnn.DRAM_MEMORY_CONFIG
         L1_MEMCFG = ttnn.L1_MEMORY_CONFIG
