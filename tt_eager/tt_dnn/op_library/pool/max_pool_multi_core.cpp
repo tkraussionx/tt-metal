@@ -627,6 +627,7 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_generic(const Tensor &inp
 // this version uses distribution along height = N * H * W
 operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(const Tensor &input, const Tensor &reader_indices,
                                                                         bool use_rectangular_shards_with_col_major,
+                                                                        bool use_split_reader,
                                                                         Tensor& output,
                                                                         uint32_t in_n, uint32_t in_h, uint32_t in_w,
                                                                         uint32_t out_h, uint32_t out_w,
@@ -685,9 +686,9 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
     uint32_t ncores_w = grid_size.x;
 
     // CBs
-    uint32_t multi_buffering_factor = 2;
+    uint32_t multi_buffering_factor = use_rectangular_shards_with_col_major ? 1 : 2;
 
-    uint32_t split_reader = !use_rectangular_shards_with_col_major; // don't use split reader with col major output -> will have a different one.
+    uint32_t split_reader = use_split_reader ? 1 : 0;
 
     // scalar CB as coefficient of reduce
     uint32_t in_scalar_cb_id = CB::c_in4;
@@ -834,7 +835,9 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
                                             split_reader, // enable split reader
                                             0, // split reader id
                                             bf16_one_u32,
-                                            use_rectangular_shards_with_col_major
+                                            use_rectangular_shards_with_col_major,
+                                            out_nh_per_core,
+                                            out_w
                                             };
 
     std::vector<uint32_t> reader1_ct_args = {
@@ -851,7 +854,9 @@ operation::ProgramWithCallbacks max_pool_2d_multi_core_sharded_with_halo_v2(cons
                                             split_reader, // enable split reader
                                             1, // split reader id
                                             bf16_one_u32,
-                                            use_rectangular_shards_with_col_major
+                                            use_rectangular_shards_with_col_major,
+                                            out_nh_per_core,
+                                            out_w
                                             };
 
     std::string reader_kernel_fname("tt_eager/tt_dnn/op_library/pool/kernels/dataflow/reader_max_pool_2d_multi_core_sharded_with_halo_v2.cpp");

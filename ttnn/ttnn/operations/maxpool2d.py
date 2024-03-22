@@ -92,6 +92,7 @@ class MaxPool2d:
             act_dtype=dtype,
             channels=channels,
             use_rectangular_shards_with_col_major=True,
+            use_split_reader=True,
         )
 
     @ttnn.register_operation(
