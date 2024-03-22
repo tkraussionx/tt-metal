@@ -121,7 +121,9 @@ def get_model_config(model_config_str):
         if "MM_WEIGHTS_DTYPE" in key:
             model_config[key] = BFP8_DTYPE
 
+    # TODO: support BFLOAT16-DRAM, rename BFLOAT16-L1 to BFLOAT16-L1-batched_attn
     if model_config_str in ("BFLOAT16-L1",):
+        # TODO: are these still used?
         model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"] = L1_MEMCFG
         model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"] = L1_MEMCFG
         model_config["V_CACHE_SLICE_OUTPUT_MEMCFG"] = L1_MEMCFG
@@ -130,6 +132,47 @@ def get_model_config(model_config_str):
         model_config["PRE_SOFTMAX_SCALE_OUTPUT_MEMCFG"] = L1_MEMCFG
         model_config["PRE_SOFTMAX_MASK_OUTPUT_MEMCFG"] = L1_MEMCFG
         model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"] = L1_MEMCFG
+
+        # Q, K, V are batch sharded across cores
+        model_config["ATTN_BATCH_SHARDED_MEMCFG"] = lambda shard_height, shard_width: ttl.tensor.MemoryConfig(
+            ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+            ttl.tensor.BufferType.L1,
+            ttl.tensor.ShardSpec(
+                ttl.tensor.CoreRangeSet(
+                    {
+                        ttl.tensor.CoreRange(
+                            # Volume must match batch size
+                            ttl.tensor.CoreCoord(0, 0),
+                            ttl.tensor.CoreCoord(7, 3),
+                        ),
+                    }
+                ),
+                [
+                    shard_height,
+                    shard_width,
+                ],
+                ttl.tensor.ShardOrientation.ROW_MAJOR,
+                False,
+            ),
+        )
+
+        model_config[
+            "ATTN_BATCHED_MM_PROGCFG"
+        ] = lambda block_w, per_core_M, per_core_N: ttl.operations.primary.MatmulMultiCoreReuseProgramConfig(
+            compute_with_storage_grid_size=[8, 4],
+            in0_block_w=block_w,
+            out_subblock_h=1,  # TODO: Maximize
+            out_subblock_w=1,  # TODO: Maximize
+            per_core_M=per_core_M,
+            per_core_N=per_core_N,
+        )
+
+        model_config["COMPUTE_KERNEL_CONFIG"] = ttl.tensor.WormholeComputeKernelConfig(
+            math_fidelity=ttl.tensor.MathFidelity.LoFi,
+            math_approx_mode=True,
+            fp32_dest_acc_en=True,
+            packer_l1_acc=True,
+        )
 
     # uncomment if need to see all the configs
     # logger.debug(f"Falcon model config: \n{pretty_print_model_config(model_config)}")

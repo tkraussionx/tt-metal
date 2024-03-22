@@ -401,11 +401,15 @@ def run_falcon_demo_kv(
         "compile_total": time_prefill_compile - time_prefill_inference + time_decode_compile - time_decode_inference,
         "inference_prefill": time_prefill_inference,
         "inference_decode": time_decode_inference,
+        "inference_decode_per_token": time_decode_inference / (output_token_index + 1),
         "inference_total": time_prefill_inference + time_decode_inference,
         "inference_throughput_prefill": num_users / time_prefill_inference,
-        "inference_throughput_decode": batch_size / time_decode_inference,
+        "inference_throughput_decode": batch_size * (output_token_index + 1) / time_decode_inference,
     }
 
+    logger.info(f"max_seq_len:{max_seq_len}")
+    logger.info(f"num_input_tokens:{num_input_tokens}")
+    logger.info(f"num_tokens:{output_token_index+1}")
     logger.info(f"pre processing: {round(measurements['preprocessing'], 5)} s")
     logger.info(f"loading weights (+downloading if not on machine): {round(measurements['loading_weights'], 5)} s")
     logger.info(
@@ -417,6 +421,7 @@ def run_falcon_demo_kv(
     logger.info(f"total compile time (single layer): {round(measurements['compile_total'], 5)} s")
     logger.info(f"prefill inference time: {round(measurements['inference_prefill'], 5)} s")
     logger.info(f"decode inference time: {round(measurements['inference_decode'], 5)} s")
+    logger.info(f"decode inference time per token: {round(measurements['inference_decode_per_token'], 5)} s")
     logger.info(f"total inference time: {round(measurements['inference_total'], 5)} s")
     logger.info(f"inference throughput prefill: {round(measurements['inference_throughput_prefill'], 5)} users/s")
     logger.info(
@@ -446,7 +451,8 @@ def test_demo(
         batch_size=32,
         num_layers=32,
         max_seq_len=1024,
-        model_config=get_model_config("BFLOAT16-DRAM"),
+        # model_config=get_model_config("BFLOAT16-DRAM"),
+        model_config=get_model_config("BFLOAT16-L1"),
         model_location_generator=model_location_generator,
         device=device,
     )
