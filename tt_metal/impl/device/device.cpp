@@ -162,7 +162,9 @@ void Device::initialize_build() {
 void Device::build_firmware() {
     ZoneScoped;
 
+    std::cout << "  build firmware : Generate headers " << std::endl;
     detail::GenerateDeviceHeaders(this, this->build_env_.get_out_firmware_root_path());
+    std::cout << "  build firmware : jit build" << std::endl;
     jit_build_set(this->firmware_build_states_, nullptr, "");
 }
 
@@ -681,6 +683,7 @@ void Device::compile_command_queue_programs() {
 
 // Writes issue and completion queue pointers to device and in sysmem and loads fast dispatch program onto dispatch cores
 void Device::configure_command_queue_programs() {
+   std::cout << "configure queue programs " << std::endl;
     chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(this->id());
     uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(this->id());
 
@@ -732,6 +735,7 @@ void Device::configure_command_queue_programs() {
             }
         }
     }
+    std::cout << " configure device with program " << std::endl;
     detail::ConfigureDeviceWithProgram(this, command_queue_program, true);
     tt::Cluster::instance().l1_barrier(this->id());
 }
@@ -781,20 +785,26 @@ bool Device::initialize(const std::vector<uint32_t>& l1_bank_remap) {
     log_info(tt::LogMetal, "Initializing device {}", this->id_);
     bool already_initialized = this->active_devices_.activate_device(this->id_);
     this->initialize_cluster();
+    std::cout << " init and launch " << std::endl;
     this->initialize_allocator(l1_bank_remap);
+    std::cout << " init and launch " << std::endl;
     this->initialize_build();
+    std::cout << " init and launch " << std::endl;
     if (!already_initialized) {
+        std::cout << " building firmware " << std::endl;
         this->build_firmware();
     }
 
     DprintServerAttach(this);
     watcher_init(this);
 
+    std::cout << " init and launch " << std::endl;
     this->initialize_and_launch_firmware();
 
     watcher_attach(this, build_env_.get_out_root_path());
 
     // Mark initialized before compiling and sending dispatch kernels to device because compilation expects device to be initialized
+    std::cout << " init and launch " << std::endl;
     this->initialized_ = true;
 
     // Create system memory writer for this device to have an associated interface to hardware command queue (i.e. hugepage)
@@ -807,6 +817,7 @@ bool Device::initialize(const std::vector<uint32_t>& l1_bank_remap) {
         TT_ASSERT(this->num_hw_cqs() == 1, "num_hw_cqs must be 1 in slow dispatch");
     }
 
+    std::cout << " device done init " << std::endl;
     return true;
 }
 

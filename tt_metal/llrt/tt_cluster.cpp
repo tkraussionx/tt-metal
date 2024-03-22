@@ -51,6 +51,12 @@ Cluster::Cluster() {
     this->initialize_ethernet_sockets();
 
     this->assert_risc_reset();
+    std::cout << " dumping routing info " << std::endl;
+    for (const auto &[chip, map]:  this->device_eth_routing_info_) {
+        for (const auto &[core, mode]: map) {
+            std::cout << " chip " << chip << " core " << core.str() << " mode "<< (uint32_t)mode << std::endl;
+        }
+    }
 }
 
 void Cluster::detect_arch_and_target() {

@@ -186,7 +186,6 @@ bool writer_kernel_no_receive(
 }
 
 TEST_F(N300DeviceFixture, EthKernelsNocReadNoSend) {
-    GTEST_SKIP();
     const auto& device_0 = devices_.at(0);
     const auto& device_1 = devices_.at(1);
 

@@ -136,6 +136,7 @@ std::map<chip_id_t, Device *> CreateDevices(
         if (active_devices.find(mmio_device_id) == active_devices.end()) {
             for (const auto &mmio_controlled_device_id :
                  tt::Cluster::instance().get_devices_controlled_by_mmio_device(mmio_device_id)) {
+              std::cout << " devices controllec by " << mmio_device_id << " : " << mmio_controlled_device_id << std::endl;
                 Device * dev = new Device(mmio_controlled_device_id, num_hw_cqs, l1_bank_remap);
                 active_devices.insert({mmio_controlled_device_id, dev});
             }
@@ -518,7 +519,24 @@ void CloseDevices(std::map<chip_id_t, Device *> devices) {
         for (const auto &[core_type, logical_cores] : logical_cores_used_in_program) {
             for (const auto &logical_core : logical_cores) {
                 KernelGroup *kernel_group = program.kernels_on_core(logical_core, core_type);
+        vector<KernelHandle> kernel_ids;
+        if (kernel_group->riscv0_id)
+            kernel_ids.push_back(kernel_group->riscv0_id.value());
+        if (kernel_group->riscv1_id)
+            kernel_ids.push_back(kernel_group->riscv1_id.value());
+        if (kernel_group->compute_id)
+            kernel_ids.push_back(kernel_group->compute_id.value());
+        if (kernel_group->erisc_id)
+            kernel_ids.push_back(kernel_group->erisc_id.value());
+
+        for (size_t i = 0; i < kernel_ids.size(); i++) {
+            KernelHandle kernel_id = kernel_ids[i];
+            vector<RISCV> sub_kernels;
+            std::shared_ptr<Kernel> kernel = detail::GetKernel(program, kernel_id);
+            std::cout << " kernel->name() " << kernel->name() << std::endl;
+        }
                 CoreCoord physical_core = device->physical_core_from_logical_core(logical_core, core_type);
+        std::cout << " on physical core " << device->physical_core_from_logical_core(logical_core, core_type).str() << " on device " << device->id() << std::endl;
 
                 ConfigureKernelGroup(
                     program, kernel_group, device, logical_core);  // PROF_BEGIN("CONF_KERN") PROF_END("CONF_KERN")

@@ -37,6 +37,7 @@ class dispatch_core_manager {
 
     // Ugly to accept num HW CQs here but it is needed to pull the correct number of initially available dispatch cores for assignment
     static dispatch_core_manager &get(uint8_t num_hw_cqs) {
+      std::cout <<  " dispatch core manager " << std::endl;
         static dispatch_core_manager inst = dispatch_core_manager(num_hw_cqs);
         return inst;
     }
@@ -105,6 +106,7 @@ class dispatch_core_manager {
     /// @return tt_cxy_pair logical location (chip + core coordinate) of the dispatcher core
     const tt_cxy_pair &command_dispatcher_core(chip_id_t device_id, uint16_t channel, uint8_t cq_id) {
         dispatch_core_types_t &assignment = this->dispatch_core_assignments[device_id][channel][cq_id];
+        std::cout << " herre" << std::endl;
         if (assignment.command_dispatcher.has_value()) {
             return assignment.command_dispatcher.value();
         }
