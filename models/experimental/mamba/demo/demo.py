@@ -37,6 +37,23 @@ def get_tt_metal_model(version: MambaPretrainedModelName, use_cache: bool, batch
     model = MambaTT(reference_model, device, tt_cache_path=cache_path)
     return model, device
 
+def get_tt_opt_metal_model(version: MambaPretrainedModelName, use_cache: bool, batch_size: int):
+    from models.experimental.mamba.tt_opt.full_model import MambaTT
+    from models.experimental.mamba.tt_opt import model_config
+
+    device = ttnn.open_device(device_id=0)
+    ttnn.enable_program_cache(device)
+    reference_model = get_cpu_reference_model(version, batch_size=batch_size)
+    if use_cache:
+        cache_path = f"/tmp/{version}"
+    else:
+        cache_path = None
+
+    config = model_config.create_model_config(batch_size, reference_model.args.d_model)
+    model = MambaTT(reference_model, device, config, tt_cache_path=cache_path)
+
+    return model, device
+
 
 def get_tt_opt_metal_model(version: MambaPretrainedModelName, use_cache: bool, batch_size: int):
     from models.experimental.mamba.tt_opt.full_model import MambaTT
