@@ -33,3 +33,31 @@ def test_repeat_interleave_with_repeat_tensor(device):
     output = ttnn.to_torch(output)
 
     assert_with_pcc(torch_result, output, 0.9999)
+
+
+def test_f2(device):
+    t = torch.randn((1, 1, 32, 5120), dtype=torch.bfloat16)
+
+    ## golden
+    torch_result = torch.repeat_interleave(t, (32), dim=3)
+
+    delta_orig = ttnn.from_torch(t, device=device, layout=ttnn.TILE_LAYOUT, memory_config=ttnn.L1_MEMORY_CONFIG)
+    delta_orig = ttnn.permute(delta_orig, (3, 0, 1, 2))
+    repeat_interleaved_output = ttnn.repeat_interleave(delta_orig, 32, dim=0)
+    repeat_interleaved_output = ttnn.permute(repeat_interleaved_output, (1, 2, 3, 0))
+    repeat_interleaved_output = ttnn.to_torch(repeat_interleaved_output)
+    assert torch.allclose(torch_result, repeat_interleaved_output)
+
+    delta_orig = ttnn.from_torch(t, device=device, layout=ttnn.TILE_LAYOUT, memory_config=ttnn.L1_MEMORY_CONFIG)
+    delta_orig = ttnn.permute(delta_orig, (0, 3, 1, 2))
+    repeat_interleaved_output = ttnn.repeat_interleave(delta_orig, 32, dim=1)
+    repeat_interleaved_output = ttnn.permute(repeat_interleaved_output, (0, 2, 3, 1))
+    repeat_interleaved_output = ttnn.to_torch(repeat_interleaved_output)
+    assert torch.allclose(torch_result, repeat_interleaved_output)
+
+    ## fallback
+    delta_orig = ttnn.from_torch(t, device=device, layout=ttnn.TILE_LAYOUT, memory_config=ttnn.L1_MEMORY_CONFIG)
+    delta_repeat = ttnn.repeat_interleave(delta_orig, 32, dim=3)
+    delta_repeat_out = ttnn.to_torch(delta_repeat)
+    print(delta_repeat_out.shape)
+    assert torch.allclose(torch_result, delta_repeat_out)
