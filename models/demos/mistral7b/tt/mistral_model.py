@@ -76,5 +76,4 @@ class TtTransformer(nn.Module):
 
         x = self.norm(x)
         output = ttnn.linear(x, self.output_weight, core_grid=self.args.max_grid_size)
-        ttnn.deallocate(x)
         return output

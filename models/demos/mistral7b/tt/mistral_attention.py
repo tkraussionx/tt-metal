@@ -188,8 +188,6 @@ class TtMistralAttention(nn.Module):
                 output_mem_config=self.model_config["QKV_HEADS_OUTPUT_MEMCFG"],
             )
 
-            ttnn.deallocate(xqkv_fused)
-
             # Update rotary matrix on device
             rotary_mat = self.rot_mat[current_pos]
 
@@ -221,9 +219,6 @@ class TtMistralAttention(nn.Module):
             ttnn.experimental.tensor.update_cache(keys, k_heads, current_pos)  # self.current)
             ttnn.experimental.tensor.update_cache(values, v_heads, current_pos)  # self.current)
             self.layer_past_list[i] = [keys, values]
-
-            ttnn.deallocate(k_heads)
-            ttnn.deallocate(v_heads)
 
             keys = ttnn.experimental.tensor.unpad(
                 layer_past[0],
@@ -316,9 +311,6 @@ class TtMistralAttention(nn.Module):
                 output_mem_config=self.model_config["QKV_MM_OUTPUT_MEMCFG"],
                 output_dtype=ttnn.bfloat16,  # Force bfloat16 for higher accuracy
             )  # seqlen, n_heads, batch, dhead
-
-            ttnn.deallocate(attn)
-            ttnn.deallocate(q_heads)
 
             attn_output = ttnn.transformer.concatenate_heads(
                 attn_output, memory_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"]

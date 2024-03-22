@@ -87,9 +87,6 @@ class TtTransformerBlock(torch.nn.Module):
         r = r[0]
         r = ttnn.reshape(r, (1, 1, 32, 4096))
         h = ttnn.experimental.tensor.add(x, r)
-        ttnn.deallocate(x)
-        ttnn.deallocate(r)
         r = self.feed_forward.forward(self.ffn_norm(h))
         out = ttnn.experimental.tensor.add(h, r)
-        ttnn.deallocate(h)
         return out
