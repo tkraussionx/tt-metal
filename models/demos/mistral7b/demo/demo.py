@@ -164,7 +164,7 @@ def run_mistral_demo(user_input, batch_size, device):
 
         # Prepare inputs for decode mode (rotary embeddings, attention mask, padding)
         # TODO Move the attn mask to device
-        decode_input, attn_mask, current_pos = prepare_inputs_ttnn(
+        decode_input, current_pos = prepare_inputs_ttnn(
             tt_decode_input,
             curr_pos,
             model_args.dim,
@@ -173,7 +173,7 @@ def run_mistral_demo(user_input, batch_size, device):
         )
 
         # Run ttnn mistral model
-        tt_out = tt_model(decode_input, current_pos, attn_mask)
+        tt_out = tt_model(decode_input, current_pos)
         tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [batch, seq, hidden_dim]
 
         # If temperature is 0, does greedy decoding (top-1)

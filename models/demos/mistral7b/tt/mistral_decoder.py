@@ -73,7 +73,7 @@ class TtTransformerBlock(torch.nn.Module):
         self,
         x: ttnn.Tensor,
         current_pos: int,
-        attn_masks: Optional[ttnn.Tensor],
+        attn_masks: Optional[ttnn.Tensor] = None,
     ) -> ttnn.Tensor:
         attn_norm = self.attention_norm(x)
         # Attention module expects a list of inputs, attn masks (multi-device support)

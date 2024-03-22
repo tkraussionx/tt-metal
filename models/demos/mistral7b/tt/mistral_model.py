@@ -69,7 +69,7 @@ class TtTransformer(nn.Module):
         self,
         x: ttnn.Tensor,
         current_pos: int,
-        attn_masks: Optional[ttnn.Tensor],
+        attn_masks: Optional[ttnn.Tensor] = None,
     ):
         for layer in self.layers:
             x = layer(x, current_pos, attn_masks)

@@ -2,7 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import List
+from typing import List, Optional
 import torch
 from torch import nn
 
@@ -143,7 +143,7 @@ class TtMistralAttention(nn.Module):
         self,
         xs: List[ttnn.Tensor],
         current_pos: int,
-        attn_masks: List[ttnn.Tensor],
+        attn_masks: Optional[List[ttnn.Tensor]] = None,
     ) -> ttnn.Tensor:
         """
         x: (seq_len, 1, batch, hidden_dim)
@@ -155,7 +155,10 @@ class TtMistralAttention(nn.Module):
         dense_outputs = []
         for i in range(self.num_devices):
             x = xs[i]
-            attn_mask = attn_masks[i]
+            if attn_masks is not None:
+                attn_mask = attn_masks[i]
+            else:
+                attn_mask = None
             device = self.devices[i]
             wqkv = self.wqkv_list[i]
             wo = self.wo_list[i]
@@ -283,7 +286,7 @@ class TtMistralAttention(nn.Module):
                 output_dtype=ttnn.bfloat16,  # Force bfloat16 for higher accuracy
             )  # seqlen, n_heads, batch, cache_len + seqlen
 
-            attn = ttnn.transformer.attention_softmax_(attn, head_size=self.head_dim, attention_mask=attn_mask)
+            attn = ttnn.transformer.attention_softmax(attn, head_size=self.head_dim, attention_mask=attn_mask)
 
             """
             attn = ttnn.to_memory_config(attn, memory_config=ttnn.create_sharded_memory_config(

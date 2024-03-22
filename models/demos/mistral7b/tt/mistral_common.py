@@ -131,34 +131,21 @@ def prepare_inputs_ttnn(x, current_pos, hidden_size, sliding_window, device):
         )  # [batch, seqlen, hidden_dim] -> [batch, seqlen, 1, hidden_dim]
         x = ttnn.permute(x, (1, 2, 0, 3))  # [seq_len, 1, batch, hidden_dim]
 
-    padded_layer_past_len = min(nearest_32(current_pos + 1), sliding_window)
     current = current_pos % sliding_window
-    attn_mask = torch.zeros(seq_len, 1, batch, padded_layer_past_len)
-
-    if current_pos < sliding_window:
-        attn_mask[:, :, :, current + 1 :] = torch.finfo(attn_mask.dtype).min
-    else:
-        attn_mask[:, :, :, :current] = torch.finfo(attn_mask.dtype).min
-        attn_mask[:, :, :, sliding_window - current :] = torch.finfo(attn_mask.dtype).min
-    # attn_mask = attn_mask.expand(-1, n_local_heads, -1, -1)
 
     # expected shapes:
     # x: (seq_len, 1, batch, hidden_dim)
     # start_pos: int
     # attn_mask: [seq_len, n_heads, batch, padded_layer_past_len]
     # rot_mat: [1, 1, head_dim, head_dim]
-
     # assert x.size() == (seq_len, 1, batch, hidden_size)
 
-    # assert attn_mask.size() == (seq_len, n_local_heads, batch, padded_layer_past_len)
     if torch.is_tensor(x):
         x = ttnn.from_torch(x, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
     else:  # Convert the row major layout from embedding back to tile layout
         x = ttnn.to_layout(x, layout=ttnn.TILE_LAYOUT)
-    attn_mask = ttnn.from_torch(attn_mask, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
     return (
         x,
-        attn_mask,
         current,
     )
 

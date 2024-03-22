@@ -12,6 +12,7 @@ from models.demos.mistral7b.tt.mistral_common import (
     sample,
 )
 from models.demos.mistral7b.tt.mistral_model import TtTransformer
+from models.demos.mistral7b.tt.mistral_embedding import TtMistralEmbedding
 from models.demos.mistral7b.tt.model_config import TtModelArgs
 from models.demos.mistral7b.reference.model import Transformer
 from models.demos.mistral7b.reference.tokenizer import Tokenizer
@@ -114,6 +115,14 @@ def test_mistral_model_inference(
         rot_mat=rot_emb_matrix_list,
         start_pos=generation_start_pos,
     )
+    # Load TTNN embedding module
+    tt_embd = TtMistralEmbedding(
+        device=device,
+        args=model_args,
+        weight_cache_path=model_args.weight_cache_path(dtype),
+        state_dict=state_dict,
+        dtype=ttnn.bfloat16,  # Row major layout requires bfloat16
+    )
     profiler.end("TtMistral_model_setup")
 
     # Select the first token from the prompts for initial decoding
@@ -131,7 +140,7 @@ def test_mistral_model_inference(
             enable_persistent_kernel_cache()
             profiler.start(f"input_processing_{i}")
 
-        decode_input, attn_mask, pos = prepare_inputs_ttnn(
+        decode_input, pos = prepare_inputs_ttnn(
             tt_decode_input,
             current_pos,
             model_args.dim,
@@ -143,7 +152,7 @@ def test_mistral_model_inference(
             profiler.start(f"model_run_for_inference_{i}")
 
         # Run TT model
-        tt_out = tt_model(decode_input, pos, attn_mask)
+        tt_out = tt_model(decode_input, pos)
         # Convert ttnn tensor to torch tensor
         tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
 
@@ -163,13 +172,21 @@ def test_mistral_model_inference(
 
         # While in "prefill" mode, use the prompt tokens as the output
         if i in range(len(encoded_prompts[0])):
-            tt_decode_input = embd(encoded_prompts_tensor[:, i]).view(batch, seqlen, -1)
+            # tt_decode_input = embd(encoded_prompts_tensor[:, i]).view(batch, seqlen, -1)
+            tt_out_tok = ttnn.from_torch(
+                encoded_prompts_tensor[:, i].unsqueeze(-1),
+                device=device,
+                dtype=ttnn.uint32,
+                layout=ttnn.ROW_MAJOR_LAYOUT,
+            )
+            tt_decode_input = tt_embd(tt_out_tok)  # Embedding on device
             if run_ref_pt:
                 pt_decode_input = embd(encoded_prompts_tensor[:, i]).view(batch, seqlen, -1)
         else:
             # Greedy decode (temperature = 0) the generated token and save it to print out later
             tt_out_tok = sample(tt_output_torch, temperature=0, top_p=0.8)
-            tt_decode_input = embd(tt_out_tok)
+            tt_out_tok = ttnn.from_torch(tt_out_tok, device=device, dtype=ttnn.uint32, layout=ttnn.ROW_MAJOR_LAYOUT)
+            tt_decode_input = tt_embd(tt_out_tok)  # Embedding on device
             if run_ref_pt:
                 pt_out_tok = sample(ref_output, temperature=0, top_p=0.8)
                 pt_decode_input = embd(pt_out_tok)

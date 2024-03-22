@@ -80,7 +80,7 @@ def test_mistral_decoder_inference(device, iterations, use_program_cache):
         tt_decode_input = pt_decode_input.clone()
         current_pos = generation_start_pos + i
 
-        decode_input, attn_mask, pos = prepare_inputs_ttnn(
+        decode_input, pos = prepare_inputs_ttnn(
             tt_decode_input,
             current_pos,
             model_args.dim,
@@ -89,7 +89,7 @@ def test_mistral_decoder_inference(device, iterations, use_program_cache):
         )
 
         # Run TT model
-        tt_out = tt_model(decode_input, pos, attn_mask)
+        tt_out = tt_model(decode_input, pos)
         tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
 
         freqs_cis_i = freqs_cis[current_pos, :].unsqueeze(0)

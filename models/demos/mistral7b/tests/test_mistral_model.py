@@ -142,7 +142,7 @@ def test_mistral_model_inference(device, iterations, version, use_program_cache)
     for i in range(generation_length):
         current_pos = generation_start_pos + i
 
-        decode_input, attn_mask, pos = prepare_inputs_ttnn(
+        decode_input, pos = prepare_inputs_ttnn(
             tt_decode_input,
             current_pos,
             model_args.dim,
@@ -151,7 +151,7 @@ def test_mistral_model_inference(device, iterations, version, use_program_cache)
         )
 
         # Run TT model
-        tt_out = tt_model(decode_input, pos, attn_mask)
+        tt_out = tt_model(decode_input, pos)
         # Convert ttnn tensor to torch tensor
         tt_output_torch = ttnn.to_torch(tt_out).permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
 

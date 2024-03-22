@@ -75,7 +75,7 @@ def test_mistral_attention_inference(iterations, device, use_program_cache):
         pt_attention_input = (torch.rand(batch, seq_len, model_args.dim) * 2) - 1
         tt_attention_input = pt_attention_input.clone()
         current_pos = generation_start_pos + i
-        attention_input, attn_mask, pos = prepare_inputs_ttnn(
+        attention_input, pos = prepare_inputs_ttnn(
             tt_attention_input,
             current_pos,
             model_args.dim,
@@ -86,7 +86,6 @@ def test_mistral_attention_inference(iterations, device, use_program_cache):
         tt_out = tt_model(
             [attention_input],
             pos,
-            [attn_mask],
         )
         # multi-device attention module returns replicated output
         assert isinstance(tt_out, list)
