@@ -66,7 +66,7 @@ inline void reduce_h_fused(
     constexpr uint32_t num_out_rows = 1;
 
     tile_regs_acquire();
-    const uint32_t curr_in_cb_id = split_reader ? (in_cb_id + (in_stick_index)&0x1) : in_cb_id;
+    const uint32_t curr_in_cb_id = in_cb_id;
     cb_wait_front(curr_in_cb_id, 1);
     unpack_tilizeA_B_block(curr_in_cb_id, in_scalar_cb_id, in_ntiles_hwc, 0 /*tile idx for Src b is 0 because only 1 tile of constants is loaded*/, num_faces_in_tile /* unpack 1 or 2 faces ) */);
     for (uint32_t c_i = 0; c_i < in_ntiles_c; ++c_i) {
@@ -120,11 +120,28 @@ void MAIN {
     cb_wait_front(in_scalar_cb_id, 1);
     cb_reserve_back(out_cb_id, nsticks_per_core);
     if (use_rectangular_shards_with_col_major) {
+        uint32_t in_cb_id_0, in_cb_id_1;
+        if (split_reader) {
+            in_cb_id_0 = tt::CB::c_in0;
+            in_cb_id_1 = tt::CB::c_in1;
+        } else {
+            in_cb_id_0 = tt::CB::c_in0;
+            in_cb_id_1 = tt::CB::c_in0;
+        }
         // shard is a rectangle, use the column-wise optimization
-        for (uint32_t w = 0, i = 0; w < out_w; ++ w, ++ i) {
-            for (uint32_t h = 0; h < out_nh_per_core; ++ h, ++ i) {
-                uint32_t out_i = h * out_w + w;
-                reduce_h_fused<in_ntiles_hw, in_ntiles_c, out_ntiles_c, is_partial_tile, split_reader>(in_cb_id, in_scalar_cb_id, in_ntiles_hwc, i, out_cb_id, out_i);
+        uint32_t i = 0;
+        for (uint32_t w = 0; w < out_w >> 1; ++ w) {        // assuming even size for now, TODO: relax this constraint.
+            for (uint32_t h = 0; h < out_nh_per_core; ++ h) {
+                // even
+                uint32_t in_i = 2 * w * out_nh_per_core + h;
+                uint32_t out_i = h * out_w + 2 * w;
+                // UNPACK(( DPRINT << "0 :: in_i: " << in_i << ", out_i: " << out_i << ENDL() ));
+                reduce_h_fused<in_ntiles_hw, in_ntiles_c, out_ntiles_c, is_partial_tile, split_reader>(in_cb_id_0, in_scalar_cb_id, in_ntiles_hwc, in_i, out_cb_id, out_i);
+                // odd
+                in_i = (2 * w + 1) * out_nh_per_core + h;
+                out_i = h * out_w +  2 * w + 1;
+                // UNPACK(( DPRINT << "1 :: in_i: " << in_i << ", out_i: " << out_i << ENDL() ));
+                reduce_h_fused<in_ntiles_hw, in_ntiles_c, out_ntiles_c, is_partial_tile, split_reader>(in_cb_id_1, in_scalar_cb_id, in_ntiles_hwc, in_i, out_cb_id, out_i);
             }
         }
     } else {
@@ -132,7 +149,8 @@ void MAIN {
         for (uint32_t i = 0; i < nsticks_per_core; ++ i) {
             // NOTE: Assuming in_ntiles_hw < 8 for now.
             // TODO: subblocking to support this.
-            reduce_h_fused<in_ntiles_hw, in_ntiles_c, out_ntiles_c, is_partial_tile, split_reader>(in_cb_id, in_scalar_cb_id, in_ntiles_hwc, i, out_cb_id, i);
+            const uint32_t curr_in_cb_id = split_reader ? (in_cb_id + (i & 0x1)) : in_cb_id;
+            reduce_h_fused<in_ntiles_hw, in_ntiles_c, out_ntiles_c, is_partial_tile, split_reader>(curr_in_cb_id, in_scalar_cb_id, in_ntiles_hwc, i, out_cb_id, i);
         }
     }
     cb_push_back(out_cb_id, nsticks_per_core);

@@ -55,7 +55,7 @@ void kernel_main() {
     const uint32_t in_cb_nsticks = get_compile_time_arg_val(7);
 
     const uint32_t in_c = get_compile_time_arg_val(8);
-    const uint32_t nblocks = get_compile_time_arg_val(9);
+    // const uint32_t nblocks = get_compile_time_arg_val(9);
 
     const uint32_t split_reader = get_compile_time_arg_val(10);
     const uint32_t reader_id = get_compile_time_arg_val(11);
@@ -64,6 +64,8 @@ void kernel_main() {
     constexpr uint32_t bf16_one_u32 = get_compile_time_arg_val(12);
 
     constexpr bool use_rectangular_shards_with_col_major = get_compile_time_arg_val(13);
+    constexpr uint32_t out_nh_per_core = get_compile_time_arg_val(14);
+    const uint32_t out_w = get_compile_time_arg_val(15);
 
     constexpr uint32_t TILE_WIDTH = 32;
 
@@ -90,17 +92,75 @@ void kernel_main() {
 
     uint32_t in_w_padded = in_w + 2 * pad_w;
 
-    uint32_t npages_to_reserve = nblocks;
+    uint32_t npages_to_reserve = 1;
     uint32_t counter = reader_id;
-    while (counter < reader_nindices) {
-        cb_reserve_back(in_cb_id, npages_to_reserve);
 
-        uint32_t out_l1_write_addr_base = get_write_ptr(in_cb_id);
-        uint32_t out_l1_write_addr = out_l1_write_addr_base;
-        DPRINT << reader_id << " :: ======================================" << ENDL();
-        for (uint32_t i = 0; i < nblocks; ++ i) {
+    uint32_t print_reader_id = 1;
+
+    constexpr uint32_t stride_h = 2;
+    constexpr uint32_t stride_w = 2;
+
+    if constexpr (use_rectangular_shards_with_col_major) {
+        uint32_t start_w = reader_id;
+        uint32_t step_w = split_reader ? 2 : 1;
+        // each reader takes a unique set of columns, 0 takes even cols, 1 takes odd cols
+        counter = reader_id * out_nh_per_core;
+        for (uint32_t w = 0; w < out_w; w += step_w) {
+            // h = 0, load all three rows
+            cb_reserve_back(in_cb_id, npages_to_reserve);
+            uint32_t out_l1_write_addr_base = get_write_ptr(in_cb_id);
+            uint32_t out_l1_write_addr = out_l1_write_addr_base;
+            if (print_reader_id == reader_id) DPRINT << reader_id << " :: ======================================" << ENDL();
             uint16_t top_left_local_index = reader_indices_ptr[counter ++];
-            DPRINT << reader_id << " :: top_left_local_index: " << top_left_local_index << ENDL();
+            if (print_reader_id == reader_id) DPRINT << reader_id << " :: top_left_local_index: " << top_left_local_index << ENDL();
+            uint32_t h_multiples = 0;
+            for (uint32_t h = 0; h < window_h; ++ h, h_multiples += in_w_padded) {
+                uint32_t stick_offset = top_left_local_index + h_multiples;
+                if (print_reader_id == reader_id) DPRINT << reader_id << " :: in stick_offset: " << stick_offset << ENDL();
+                uint32_t read_offset = in_l1_read_base_addr + (stick_offset << in_nbytes_c_log2);
+                noc_async_read_one_packet(get_noc_addr(read_offset), out_l1_write_addr, in_nbytes_c * window_w);
+                if (print_reader_id == reader_id) DPRINT << reader_id << " :: out_l1_write_addr: " << out_l1_write_addr << ENDL();
+                out_l1_write_addr += in_nbytes_c * window_w;
+            }
+            noc_async_read_barrier();
+            if (print_reader_id == reader_id) DPRINT << reader_id << " :: ======================================" << ENDL();
+            cb_push_back(in_cb_id, npages_to_reserve);
+
+            // following assumes stride == 2
+            uint32_t dst_start_idx = 0;
+            // remaining, only load lower 2 rows
+            for (uint32_t h = 1; h < out_nh_per_core; ++ h) {
+                cb_reserve_back(in_cb_id, npages_to_reserve);
+                // uint32_t out_l1_write_addr_base = get_write_ptr(in_cb_id);
+                if (print_reader_id == reader_id) DPRINT << reader_id << " :: ======================================" << ENDL();
+                uint16_t top_left_local_index = reader_indices_ptr[counter ++];
+                if (print_reader_id == reader_id) DPRINT << reader_id << " :: top_left_local_index: " << top_left_local_index << ENDL();
+                uint32_t dst_idx = dst_start_idx;
+                for (uint32_t k = 1; k < window_h; ++ k) {
+                    uint32_t out_l1_write_addr = out_l1_write_addr_base + dst_idx * in_nbytes_c * window_w;
+                    uint32_t stick_offset = top_left_local_index + k * in_w_padded;
+                    if (print_reader_id == reader_id) DPRINT << reader_id << " :: in stick_offset: " << stick_offset << ENDL();
+                    uint32_t read_offset = in_l1_read_base_addr + (stick_offset << in_nbytes_c_log2);
+                    noc_async_read_one_packet(get_noc_addr(read_offset), out_l1_write_addr, in_nbytes_c * window_w);
+                    if (print_reader_id == reader_id) DPRINT << reader_id << " :: out_l1_write_addr: " << out_l1_write_addr << ENDL();
+                    dst_idx = (dst_idx + 1) % window_h;
+                }
+                noc_async_read_barrier();
+                if (print_reader_id == reader_id) DPRINT << reader_id << " :: ======================================" << ENDL();
+                cb_push_back(in_cb_id, npages_to_reserve);
+                dst_start_idx = (dst_start_idx + stride_h) % window_h;
+            }
+            if (split_reader) counter += out_nh_per_core - 1;
+        }
+    } else {
+        while (counter < reader_nindices) {
+            cb_reserve_back(in_cb_id, npages_to_reserve);
+
+            uint32_t out_l1_write_addr_base = get_write_ptr(in_cb_id);
+            uint32_t out_l1_write_addr = out_l1_write_addr_base;
+            // DPRINT << reader_id << " :: ======================================" << ENDL();
+            uint16_t top_left_local_index = reader_indices_ptr[counter ++];
+            // DPRINT << reader_id << " :: top_left_local_index: " << top_left_local_index << ENDL();
             uint32_t h_multiples = 0;
             for (uint32_t h = 0; h < window_h; ++ h, h_multiples += in_w_padded) {
                 uint32_t stick_offset = top_left_local_index + h_multiples;
@@ -109,12 +169,9 @@ void kernel_main() {
                 out_l1_write_addr += in_nbytes_c * window_w;
             }
             if (split_reader) counter++; // interleave the indices
+            noc_async_read_barrier();
+            // DPRINT << reader_id << " :: ======================================" << ENDL();
+            cb_push_back(in_cb_id, npages_to_reserve);
         }
-        noc_async_read_barrier();
-        // if (counter % 2 == 0) {
-        //     print_pages(out_l1_write_addr_base, in_c, 10);
-        // }
-        DPRINT << reader_id << " :: ======================================" << ENDL();
-        cb_push_back(in_cb_id, npages_to_reserve);
     }
 } // kernel_main()

@@ -42,7 +42,7 @@ class MaxPool2d:
         input_width: int,
         reader_patterns_cache: Dict,
         parallel_config_override: Dict = None,
-        deallocate_activation: bool = False,
+        deallocate_activation: bool = True,
     ):
         if isinstance(kernel_size, int):
             window_h = kernel_size
@@ -90,6 +90,7 @@ class MaxPool2d:
             deallocate_activation=deallocate_activation,
             act_dtype=dtype,
             use_rectangular_shards_with_col_major=True,
+            use_split_reader=True,
         )
 
     @ttnn.register_operation(

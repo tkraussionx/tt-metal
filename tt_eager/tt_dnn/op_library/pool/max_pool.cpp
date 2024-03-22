@@ -110,6 +110,7 @@ operation::ProgramWithCallbacks MaxPool::create_program(const std::vector<Tensor
         return {max_pool_2d_multi_core_sharded_with_halo_v2(
                                     input, reader_indices,
                                     use_rectangular_shards_with_col_major_,
+                                    use_split_reader_,
                                     output,
                                     in_n_, in_h_, in_w_,
                                     out_h_, out_w_,
@@ -177,6 +178,7 @@ Tensor max_pool2d(const Tensor &input,
 Tensor max_pool2d_v2(const Tensor &input,
                   const Tensor &reader_indices,
                   bool use_rectangular_shards_with_col_major,
+                  bool use_split_reader,
                   uint32_t in_n, uint32_t in_h, uint32_t in_w,
                   uint32_t kernel_size_h, uint32_t kernel_size_w,
                   uint32_t stride_h, uint32_t stride_w,
@@ -200,7 +202,8 @@ Tensor max_pool2d_v2(const Tensor &input,
                                                      out_mem_config,
                                                      nblocks,
                                                      use_multicore,
-                                                     use_rectangular_shards_with_col_major},
+                                                     use_rectangular_shards_with_col_major,
+                                                     use_split_reader},
                                              {input, reader_indices}).at(0);
 }
 

@@ -42,9 +42,11 @@ class TTPyMaxPool(TTPyOp):
         deallocate_activation=True,
         act_dtype=None,
         use_rectangular_shards_with_col_major=False,
+        use_split_reader=False,
     ):
         self.deallocate_activation = deallocate_activation
         self.use_rectangular_shards_with_col_major = use_rectangular_shards_with_col_major
+        self.use_split_reader = use_split_reader
 
         if parallel_config_override is None:
             parallel_config_override = {}
@@ -238,15 +240,16 @@ class TTPyMaxPool(TTPyOp):
         def max_pool_(activation):
             act_mem_config = activation.memory_config()
             activation = ttl.tensor.move_sharded(activation)
-            ttl.device.DumpDeviceMemoryState(self.device)
             haloed_act = self.untilize_with_halo(activation)
-
             if self.deallocate_activation:
                 activation.deallocate()
+            # haloed_act = ttl.tensor.move_sharded(haloed_act)
+            ttl.device.DumpDeviceMemoryState(self.device)
             output = ttl.tensor.max_pool2d_v2(
                 haloed_act,
                 reader_indices,
                 self.use_rectangular_shards_with_col_major,
+                self.use_split_reader,
                 in_n,
                 in_h,
                 in_w,
