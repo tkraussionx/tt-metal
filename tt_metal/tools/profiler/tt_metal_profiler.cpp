@@ -110,7 +110,8 @@ void DumpDeviceProfileResults(Device *device, bool free_buffers) {
         workerCores.push_back(curr_core);
     }
     for (const CoreCoord& core : tt::get_logical_dispatch_cores(device_id, device_num_hw_cqs)) {
-        const CoreCoord curr_core = device->worker_core_from_logical_core(core);
+        CoreType dispatch_core_type = tt::get_dispatch_core_type(device_id, device_num_hw_cqs);
+        const auto curr_core = device->physical_core_from_logical_core(core, dispatch_core_type);
         workerCores.push_back(curr_core);
     }
     for (const CoreCoord& core : tt::Cluster::instance().get_soc_desc(device_id).physical_ethernet_cores)
