@@ -37,6 +37,7 @@ def get_tt_metal_model(version: MambaPretrainedModelName, use_cache: bool, batch
     model = MambaTT(reference_model, device, tt_cache_path=cache_path)
     return model, device
 
+
 def get_tt_opt_metal_model(version: MambaPretrainedModelName, use_cache: bool, batch_size: int):
     from models.experimental.mamba.tt_opt.full_model import MambaTT
     from models.experimental.mamba.tt_opt import model_config
@@ -142,7 +143,7 @@ def run_demo(
 def main():
     parser = argparse.ArgumentParser(description="Run inference benchmarks on set of supported models")
     parser.add_argument("prompts", nargs="+")
-    parser.add_argument("--model", choices=["cpu", "wh", "wh-opt"], default="wh-opt", help="The model under test")
+    parser.add_argument("--model", choices=["cpu", "wh", "wh-opt"], default="wh", help="The model under test")
     args = parser.parse_args()
     if args.model == "wh-opt":
         args.prompts = args.prompts * 32
