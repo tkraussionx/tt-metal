@@ -157,6 +157,19 @@ inline void debug_epilogue(vector<uint32_t>& cmds,
 }
 
 inline void add_dispatcher_cmd(vector<uint32_t>& cmds,
+                               CQDispatchCmd cmd,
+                               uint32_t length) {
+
+    size_t prior_end = debug_prologue(cmds);
+
+    add_bare_dispatcher_cmd(cmds, cmd);
+    uint32_t length_words = length / sizeof(uint32_t);
+    generate_random_payload(cmds, length_words);
+
+    debug_epilogue(cmds, prior_end);
+}
+
+inline void add_dispatcher_cmd(vector<uint32_t>& cmds,
                                const CoreRange& workers,
                                worker_data_t& worker_data,
                                CQDispatchCmd cmd,
@@ -204,11 +217,11 @@ inline void gen_bare_dispatcher_unicast_write_cmd(Device *device,
 
     CoreCoord phys_worker_core = device->worker_core_from_logical_core(worker_core);
 
-    cmd.base.cmd_id = CQ_DISPATCH_CMD_WRITE;
-    cmd.write.noc_xy_addr = NOC_XY_ENCODING(phys_worker_core.x, phys_worker_core.y);
-    cmd.write.addr = dst_addr + worker_data_size(worker_data) * sizeof(uint32_t);
-    cmd.write.length = length;
-    cmd.write.num_mcast_dests = 0;
+    cmd.base.cmd_id = CQ_DISPATCH_CMD_WRITE_LINEAR;
+    cmd.write_linear.noc_xy_addr = NOC_XY_ENCODING(phys_worker_core.x, phys_worker_core.y);
+    cmd.write_linear.addr = dst_addr + worker_data_size(worker_data) * sizeof(uint32_t);
+    cmd.write_linear.length = length;
+    cmd.write_linear.num_mcast_dests = 0;
 
     add_bare_dispatcher_cmd(cmds, cmd);
 }
@@ -224,11 +237,11 @@ inline void gen_dispatcher_unicast_write_cmd(Device *device,
 
     CoreCoord phys_worker_core = device->worker_core_from_logical_core(worker_core);
 
-    cmd.base.cmd_id = CQ_DISPATCH_CMD_WRITE;
-    cmd.write.noc_xy_addr = NOC_XY_ENCODING(phys_worker_core.x, phys_worker_core.y);
-    cmd.write.addr = dst_addr + worker_data[worker_core].data.size() * sizeof(uint32_t);
-    cmd.write.length = length;
-    cmd.write.num_mcast_dests = 0;
+    cmd.base.cmd_id = CQ_DISPATCH_CMD_WRITE_LINEAR;
+    cmd.write_linear.noc_xy_addr = NOC_XY_ENCODING(phys_worker_core.x, phys_worker_core.y);
+    cmd.write_linear.addr = dst_addr + worker_data[worker_core].data.size() * sizeof(uint32_t);
+    cmd.write_linear.length = length;
+    cmd.write_linear.num_mcast_dests = 0;
 
     add_dispatcher_cmd(cmds, worker_core, worker_data, cmd, length);
 }
@@ -253,11 +266,11 @@ inline void gen_dispatcher_multicast_write_cmd(Device *device,
         }
     }
 
-    cmd.base.cmd_id = CQ_DISPATCH_CMD_WRITE;
-    cmd.write.noc_xy_addr = NOC_MULTICAST_ENCODING(physical_start.x, physical_start.y, physical_end.x, physical_end.y);
-    cmd.write.addr = dst_addr + worker_data[worker_core_range.start].data.size() * sizeof(uint32_t);
-    cmd.write.length = length;
-    cmd.write.num_mcast_dests = worker_core_range.size();
+    cmd.base.cmd_id = CQ_DISPATCH_CMD_WRITE_LINEAR;
+    cmd.write_linear.noc_xy_addr = NOC_MULTICAST_ENCODING(physical_start.x, physical_start.y, physical_end.x, physical_end.y);
+    cmd.write_linear.addr = dst_addr + worker_data[worker_core_range.start].data.size() * sizeof(uint32_t);
+    cmd.write_linear.length = length;
+    cmd.write_linear.num_mcast_dests = worker_core_range.size();
 
     add_dispatcher_cmd(cmds, worker_core_range, worker_data, cmd, length);
 }
@@ -314,13 +327,21 @@ inline uint32_t gen_rnd_dispatcher_packed_write_cmd(Device *device,
     return xfer_size_bytes;
 }
 
+inline void gen_dispatcher_host_write_cmd(vector<uint32_t>& cmds, uint32_t length) {
+
+    CQDispatchCmd cmd;
+    cmd.base.cmd_id = CQ_DISPATCH_CMD_WRITE_LINEAR_HOST;
+    // Include cmd in transfer
+    cmd.write_linear_host.length = length + sizeof(CQDispatchCmd);
+
+    add_dispatcher_cmd(cmds, cmd, length);
+}
+
 inline void gen_dispatcher_terminate_cmd(vector<uint32_t>& cmds) {
 
-    worker_data_t dummy_data;
-    CoreCoord worker_dummy;
     CQDispatchCmd cmd;
     cmd.base.cmd_id = CQ_DISPATCH_CMD_TERMINATE;
-    add_dispatcher_cmd(cmds, worker_dummy, dummy_data, cmd, 0);
+    add_dispatcher_cmd(cmds, cmd, 0);
 }
 
 inline bool validate_results(Device *device, CoreRange workers, const worker_data_t& worker_data, uint64_t l1_buf_base) {

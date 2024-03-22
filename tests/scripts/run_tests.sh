@@ -102,15 +102,24 @@ run_frequent_api_pipeline_tests() {
 
     source build/python_env/bin/activate
     export PYTHONPATH=$TT_METAL_HOME
+}
 
-    ./tests/scripts/run_temporary_frequent_api_tests.sh
+# Run frequent multi device pipeline tests - these are the t3000 + 4xn300 tests
+run_frequent_multi_device_pipeline_tests() {
+    local tt_arch=$1
+    local pipeline_type=$2
+    local dispatch_mode=$3
+
+    # Switch to modules only soon
+    # run_module_tests "$tt_arch" "llrt" "$pipeline_type"
+    ./tests/scripts/run_frequent_regressions_multi_device.sh
 }
 
 run_models_performance() {
     local tt_arch=$1
     local pipeline_type=$2
 
-    ./tests/scripts/run_performance.sh --pipeline-type $pipeline_type
+    ./tests/scripts/run_performance.sh --pipeline-type $pipeline_type --tt-arch $tt_arch
 }
 
 run_models_performance_bare_metal_pipeline_tests() {
@@ -212,7 +221,7 @@ run_pipeline_tests() {
         run_eager_package_end_to_end_pipeline_tests "$tt_arch" "$pipeline_type"
     elif [[ $pipeline_type == "eager_package_silicon" ]]; then
         run_eager_package_end_to_end_pipeline_tests "$tt_arch" "$pipeline_type"
-    elif [[ $pipeline_type == "models_performance_bare_metal" || $pipeline_type == "models_device_performance_bare_metal" ]]; then
+    elif [[ $pipeline_type == *"models_performance_bare_metal" || $pipeline_type == "models_device_performance_bare_metal" ]]; then
         run_models_performance_bare_metal_pipeline_tests "$tt_arch" "$pipeline_type" "$dispatch_mode"
     elif [[ $pipeline_type == "models_performance_virtual_machine" ]]; then
         run_models_performance_virtual_machine_pipeline_tests "$tt_arch" "$pipeline_type"
@@ -220,6 +229,8 @@ run_pipeline_tests() {
         run_stress_post_commit_pipeline_tests "$tt_arch" "$pipeline_type" "$dispatch_mode"
     elif [[ $pipeline_type == "post_commit_multi_device" ]]; then
         run_post_commit_multi_device_pipeline_tests "$tt_arch" "$pipeline_type" "$dispatch_mode"
+    elif [[ $pipeline_type == "frequent_multi_device" ]]; then
+        run_frequent_multi_device_pipeline_tests "$tt_arch" "$pipeline_type" "$dispatch_mode"
     elif [[ $pipeline_type == "microbenchmarks" ]]; then
         run_microbenchmarks_pipeline_tests "$tt_arch" "$pipeline_type" "$dispatch_mode"
     elif [[ $pipeline_type == "ttnn_sweeps" ]]; then
