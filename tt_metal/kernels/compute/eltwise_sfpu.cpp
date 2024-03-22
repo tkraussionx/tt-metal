@@ -7,6 +7,7 @@
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/eltwise_unary/eltwise_unary.h"
 #include "compute_kernel_api/eltwise_unary/sfpu_split_includes.h"
+#include "debug/dprint.h"
 
 namespace NAMESPACE {
 void MAIN {
@@ -40,6 +41,8 @@ void MAIN {
     }
 
     kernel_profiler::mark_time(9998);
+    //DPRINT << "complete compute"<< ENDL();
+
 
 }
 }

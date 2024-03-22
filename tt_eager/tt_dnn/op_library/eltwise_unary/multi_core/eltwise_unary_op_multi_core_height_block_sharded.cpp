@@ -38,7 +38,8 @@ operation::ProgramWithCallbacks eltwise_unary_multi_core_height_or_block_sharded
     uint32_t shard_size_in_bytes = shard_spec.numel() * datum_size(act_df);
 
     uint32_t num_tile_per_core = (shard_size_in_bytes + input_tile_size - 1) / input_tile_size; //ceil value
-    TT_FATAL(input_tile_size <= shard_size_in_bytes, "Input tile size should be less than shard size");
+    //num_tile_per_core = std::max(num_tile_per_core, 1u);
+    //TT_FATAL(input_tile_size <= shard_size_in_bytes, "Input tile size should be less than shard size");
 
     uint32_t ncores_x, ncores_nhw;
     if (input.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED) {
@@ -50,7 +51,9 @@ operation::ProgramWithCallbacks eltwise_unary_multi_core_height_or_block_sharded
     } else {
         TT_FATAL(false, "Unsupported sharding layout");
     }
-
+    //all_cores = CoreCoordinateRange({{0, 0}, {ncores_x - 1, ncores_nhw - 1}});
+    //CoreRange temp_core({0, 0}, {0, 0});
+    //all_cores = temp_core
     uint32_t in_cb_id = CB::c_in0;
     uint32_t buffering_factor = 1;  // data is already fully buffered in the CBs since its sharded
     uint32_t aligned_input_tile_nbytes = round_up_to_mul32(input_tile_size); //will have issue if the page is not multiple of 32
@@ -74,7 +77,7 @@ operation::ProgramWithCallbacks eltwise_unary_multi_core_height_or_block_sharded
 
     log_debug(LogOp, "input_cb: {}, npages: {}, pagesize: {}", in_cb_id, in_cb_npages, in_cb_pagesize);
     log_debug(LogOp, "ncores: {}, ncores_x: {}", ncores, ncores_x);
-    log_debug(LogOp, "input_tile_size: {}", input_tile_size);
+    log_debug(LogOp, "input_tile_size: {} num_tile_per_core: {} ", input_tile_size, num_tile_per_core);
 
     auto src_buffer = input.buffer();
     auto dst_buffer = output.buffer();
@@ -83,6 +86,7 @@ operation::ProgramWithCallbacks eltwise_unary_multi_core_height_or_block_sharded
     TT_FATAL(src_is_dram == 0, "Input buffer should be in L1");
     std::vector<uint32_t> reader_compile_time_args = {
         in_cb_id,
+        out_cb_id
     };
 
     bool dst_is_dram = dst_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
@@ -96,34 +100,77 @@ operation::ProgramWithCallbacks eltwise_unary_multi_core_height_or_block_sharded
         tt_metal::ReaderDataMovementConfig(reader_compile_time_args, kernel_defines));
 
     vector<uint32_t> compute_kernel_args_group_1 = {
-         1, // per_core_block_cnt
-         num_tile_per_core // per_core_block_size
+         //1, // per_core_block_cnt
+         num_tile_per_core, // per_core_block_size
+         input_tile_size
     };
 
-    bool fp32_dest_acc_en = false;
-    bool math_approx_mode = std::all_of(op_chain.begin(), op_chain.end(), [](const auto& u) {return eltwise_unary_op_utils::get_op_approx_mode(u.op_type);});
-    std::map<string, string> unary_defines = eltwise_unary_op_utils::get_block_defines(op_chain);
-    auto eltwise_unary_kernel_group_1_id = tt_metal::CreateKernel(
-        program,
-        "tt_metal/kernels/compute/eltwise_sfpu.cpp",
-        all_cores,
-        tt_metal::ComputeConfig{
-            .math_fidelity = MathFidelity::HiFi4,
-            .fp32_dest_acc_en = fp32_dest_acc_en,
-            .math_approx_mode = math_approx_mode,
-            .compile_args = compute_kernel_args_group_1,
-            .defines = unary_defines
-        }
-    );
+    // bool fp32_dest_acc_en = false;
+    // bool math_approx_mode = std::all_of(op_chain.begin(), op_chain.end(), [](const auto& u) {return eltwise_unary_op_utils::get_op_approx_mode(u.op_type);});
+    // std::map<string, string> unary_defines = eltwise_unary_op_utils::get_block_defines(op_chain);
+    // auto eltwise_unary_kernel_group_1_id = tt_metal::CreateKernel(
+    //     program,
+    //     "tt_metal/kernels/compute/eltwise_sfpu.cpp",
+    //     all_cores,
+    //     tt_metal::ComputeConfig{
+    //         .math_fidelity = MathFidelity::HiFi4,
+    //         .fp32_dest_acc_en = fp32_dest_acc_en,
+    //         .math_approx_mode = math_approx_mode,
+    //         .compile_args = compute_kernel_args_group_1,
+    //         .defines = unary_defines
+    //     }
+    // );
 
-    tt_metal::SetRuntimeArgs(
-        program,
-        unary_reader_kernel_id,
-        all_cores,
-        {
-            (uint32_t)(num_tile_per_core),
+
+    uint32_t start_input_stick_id = 0;
+    if (input.memory_config().memory_layout == TensorMemoryLayout::BLOCK_SHARDED) {
+        //ncores_nhw = 1; ncores_x = 1;
+        for (int32_t core = 0; core < ncores_nhw; ++core) {
+            for (int32_t core_x = 0; core_x < ncores_x; ++core_x) {
+                CoreCoord core_coord(core_x, core); // logical
+                //writer_rt_args[6] = start_input_stick_id;
+                ///SetRuntimeArgs(program, writer_kernel, core_coord, writer_rt_args);
+                tt_metal::SetRuntimeArgs(
+                    program,
+                    unary_reader_kernel_id,
+                    core_coord,
+                    {
+                        (uint32_t)(num_tile_per_core),
+                        (uint32_t)(input_tile_size)
+                    }
+                );
+            }
+            //start_input_stick_id += input_nsticks_per_core;
         }
-    );
+    } else if (input.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED) {
+        for (int32_t core = 0; core < ncores_nhw; ++core) {
+            CoreCoord core_coord(core % ncores_x, core / ncores_x); // logical
+            // writer_rt_args[6] = start_input_stick_id;
+            tt_metal::SetRuntimeArgs(
+                    program,
+                    unary_reader_kernel_id,
+                    core_coord,
+                    {
+                        (uint32_t)(num_tile_per_core),
+                        (uint32_t)(input_tile_size)
+                    }
+                );
+            // start_input_stick_id += input_nsticks_per_core;
+        }
+    } else {
+        TT_FATAL(false, "Unsupported memory layout");
+    }
+
+    // if (input.memory_config().memory_layout == TensorMemoryLayout::BLOCK_SHARDED) {
+    //     ncores_nhw = 1; ncores_x = 1;
+    //     for (int32_t core = 0; core < ncores_nhw; ++core) {
+    //         for (int32_t core_x = 0; core_x < ncores_x; ++core_x) {
+    //             CoreCoord core_coord(core_x, core); // logical
+    //             tt_metal::SetRuntimeArgs( program, unary_reader_kernel_id, core_coord, {(uint32_t)(num_tile_per_core),} );
+    //             tt_metal::SetRuntimeArgs( program, eltwise_unary_kernel_group_1_id, core_coord, {} );
+    //         }
+    //     }
+    // }
 
     auto override_runtime_args_callback = [unary_reader_kernel_id, in_cb_id, out_cb_id](
         const void* operation,

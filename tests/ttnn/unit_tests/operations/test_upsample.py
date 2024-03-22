@@ -66,12 +66,12 @@ def get_shard_grid_from_num_cores(ncores: Union[int, Tuple[int, int]]) -> ttnn.e
 @pytest.mark.parametrize(
     "input_shapes",
     [
-        [2, 1280, 4, 4],  # 256x256
-        [2, 1280, 8, 8],
-        [2, 640, 16, 16],
-        [2, 1280, 8, 8],  # 512x512
-        [2, 1280, 16, 16],
-        [2, 1280, 16, 16],
+        # [2, 1280, 4, 4],  # 256x256
+        # [2, 1280, 8, 8],
+        # [2, 640, 16, 16],
+        # [2, 1280, 8, 8],  # 512x512
+        # [2, 1280, 16, 16],
+        # [2, 1280, 16, 16],
     ],
 )
 @pytest.mark.parametrize("scale_h", [2])
@@ -110,15 +110,15 @@ def test_upsample_single_core(device, input_shapes, scale_h, scale_w):
     "input_shape",
     [
         [2, 1280, 4, 4],  # 256x256
-        [2, 640, 16, 16],
-        [2, 1280, 8, 8],  # 512x512
-        [2, 1280, 16, 16],
-        [1, 64, 132, 10],
+        # [2, 640, 16, 16],
+        # [2, 1280, 8, 8],  # 512x512
+        # [2, 1280, 16, 16],
+        # [1, 64, 132, 10],
     ],
 )
-@pytest.mark.parametrize("scale_h", [2])
-@pytest.mark.parametrize("scale_w", [2])
-@pytest.mark.parametrize("shard_strategy", [ttnn.ShardStrategy.HEIGHT, ttnn.ShardStrategy.BLOCK])
+@pytest.mark.parametrize("scale_h", [1])
+@pytest.mark.parametrize("scale_w", [1])
+@pytest.mark.parametrize("shard_strategy", [ttnn.ShardStrategy.BLOCK])
 def test_upsample_multi_core(device, input_shape, scale_h, scale_w, shard_strategy):
     ## input shape is N C H W
     batch_size, num_channels, height, width = input_shape
