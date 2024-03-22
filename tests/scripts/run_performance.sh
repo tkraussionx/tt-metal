@@ -43,8 +43,6 @@ run_perf_models_other() {
         env pytest "tests/ttnn/integration_tests/whisper/test_performance.py::test_performance" -m $test_marker
 
         env pytest "tests/ttnn/integration_tests/roberta/test_performance.py" -m $test_marker
-    elif [ "$tt_arch" == "wormhole_b0" ]; then
-        env pytest models/demos/mistral7b/tests -m $pipeline_type
     else
         echo "There are no other model perf tests for Javelin yet specified. Arch $tt_arch requested"
     fi
@@ -58,6 +56,8 @@ run_perf_models_llm_javelin() {
     local test_marker=$2
 
     env pytest models/demos/falcon7b/tests -m $test_marker
+
+    env pytest models/demos/mistral7b/tests -m $test_marker
 
     ## Merge all the generated reports
     env python models/perf/merge_perf_results.py
