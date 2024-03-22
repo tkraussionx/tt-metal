@@ -29,20 +29,17 @@ class PytorchResidualBlock(torch.nn.Module):
 
 
 @pytest.mark.parametrize(
-    "model_version, batch, pcc",
+    "model_version, batch, pcc, enable_cache",
     (
         (
-            "state-spaces/mamba-370m",
+            "state-spaces/mamba-2.8b",
             32,
             0.99,
+            False,
         ),
     ),
 )
-def test_mamba_ssm_inference(
-    model_version: MambaPretrainedModelName,
-    batch,
-    pcc: float,
-):
+def test_mamba_ssm_inference(model_version: MambaPretrainedModelName, batch, pcc: float, enable_cache: bool):
     torch.manual_seed(0)
 
     LAYER_NUM = 0
@@ -60,16 +57,23 @@ def test_mamba_ssm_inference(
 
     device = ttnn.open_device(device_id=0)
 
-    ttnn.disable_and_clear_program_cache(device)
+    if enable_cache:
+        cache_path = f"/tmp/{model_version}"
+        ttnn.enable_program_cache(device)
+    else:
+        cache_path = None
+        ttnn.disable_and_clear_program_cache(device)
 
     config = model_config.create_model_config(batch, d_model)
 
-    loader = TtTensorLoader(reference_model.state_dict(), device, tt_cache_path=f"/tmp/{model_version}")
+    loader = TtTensorLoader(reference_model.state_dict(), device, tt_cache_path=cache_path)
 
     model = TtResidualBlock(reference_model.args, device, config, loader.get_tensor_loader(LAYER_NUM))
     tt_input = input.view(1, 1, batch, d_model)
     tt_input = ttnn.to_device(
-        ttnn.from_torch(tt_input, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat16), device=device, memory_config=ttnn.L1_MEMORY_CONFIG
+        ttnn.from_torch(tt_input, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat16),
+        device=device,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
     )
     tt_output = model(tt_input)
     tt_output = ttnn.to_torch(tt_output)

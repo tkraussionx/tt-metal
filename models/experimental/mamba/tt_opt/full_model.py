@@ -11,6 +11,7 @@ from typing import Callable
 
 from models.experimental.mamba.tt_opt.residual_block import TtResidualBlock
 
+
 class TtTensorLoader:
     def __init__(self, state_dict, device, tt_cache_path: str = ""):
         self.state_dict = state_dict
@@ -29,8 +30,10 @@ class TtTensorLoader:
             torch_tensor=None,
         ):
             tensor_name = f"layers.{layer_num}.{name}"
-
-            tensor_cache_filepath = Path(self.tt_cache_path) / (tensor_name + postfix)
+            if self.tt_cache_path is not None:
+                tensor_cache_filepath = str(Path(self.tt_cache_path) / (tensor_name + postfix))
+            else:
+                tensor_cache_filepath = None
             if torch_tensor is None:
                 torch_tensor = self.state_dict[tensor_name]
             torch_tensor = tm_fn(torch_tensor)
@@ -40,7 +43,7 @@ class TtTensorLoader:
                 layout=tt_layout,
                 memory_config=tt_memory_config,
                 dtype=tt_dtype,
-                cache_file_name=str(tensor_cache_filepath),
+                cache_file_name=tensor_cache_filepath,
             )
             return tt_tensor
 
@@ -64,13 +67,13 @@ class MambaTT(torch.nn.Module):
 
         loader = TtTensorLoader(reference_model.state_dict(), self.device, tt_cache_path=tt_cache_path)
 
-        self.layers = [TtResidualBlock(self.args, device, configs, loader.get_tensor_loader(i)) for i in range(self.num_layers)]
+        self.layers = [
+            TtResidualBlock(self.args, device, configs, loader.get_tensor_loader(i)) for i in range(self.num_layers)
+        ]
 
         self.norm_f = reference_model.norm_f
 
         self.lm_head = reference_model.lm_head
-
-
 
     def forward(self, x):
         x = self.embedding(x)

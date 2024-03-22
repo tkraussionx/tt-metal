@@ -40,20 +40,17 @@ class MambaPytorch(torch.nn.Module):
 
 
 @pytest.mark.parametrize(
-    "model_version, batch, pcc",
+    "model_version, batch, pcc, enable_cache",
     (
         (
-            "state-spaces/mamba-370m",
+            "state-spaces/mamba-2.8b",
             32,
             0.99,
+            False,
         ),
     ),
 )
-def test_mamba_model_inference(
-    model_version: MambaPretrainedModelName,
-    batch: int,
-    pcc: float,
-):
+def test_mamba_model_inference(model_version: MambaPretrainedModelName, batch: int, pcc: float, enable_cache: bool):
     torch.manual_seed(10)
 
     reference_model = MambaDecode.from_pretrained(model_version, batch_size=batch)
@@ -66,8 +63,15 @@ def test_mamba_model_inference(
 
     device = ttnn.open_device(device_id=0)
 
+    if enable_cache:
+        cache_path = f"/tmp/{model_version}"
+        ttnn.enable_program_cache(device)
+    else:
+        cache_path = None
+        ttnn.disable_and_clear_program_cache(device)
+
     config = model_config.create_model_config(batch, reference_model.args.d_model)
-    mamba_model = MambaTT(reference_model, device, config, tt_cache_path=f"/tmp/{model_version}")
+    mamba_model = MambaTT(reference_model, device, config, tt_cache_path=cache_path)
 
     tt_output = mamba_model(input_ids)
 
