@@ -1959,3 +1959,28 @@ def gen_min_max_dim_args(
 
         input_info.update({"dim": dims})
         yield input_info
+
+
+def gen_repeat_args(
+    input_shapes,
+    dtypes,
+    layouts,
+    mem_configs,
+    low=-100,
+    high=100,
+    dtype=torch.bfloat16,
+):
+    for input_info in gen_two_scalar_args(
+        input_shapes,
+        dtypes,
+        layouts,
+        mem_configs,
+        "repeat",
+        low,
+        high,
+        dtype,
+    ):
+        repeats = np.random.randint(1, 5)
+        dims = np.random.choice([0, 2])
+        input_info.update({"repeat": repeats})
+        yield input_info
