@@ -18,11 +18,6 @@ void kernel_main() {
     constexpr uint32_t out_cb_id = get_compile_time_arg_val(1);
     constexpr uint32_t is_reader = get_compile_time_arg_val(2);
 
-    uint32_t half_nsticks_local = in_nsticks_local / 2;
-    if constexpr (is_reader) {
-        start_in_stick_id += half_nsticks_local;
-    }
-
     uint32_t in_image_row_nbytes = in_w * stick_nbytes;
     uint32_t out_image_row_nbytes = out_w * stick_nbytes;
     uint32_t reader_image_rows_per_core = (in_image_rows_per_core + is_reader) / 2;
@@ -32,46 +27,39 @@ void kernel_main() {
     uint32_t l1_read_addr = get_read_ptr(in_cb_id) + image_row_begin * in_image_row_nbytes;
     uint32_t l1_write_addr = get_write_ptr(out_cb_id) + image_row_begin * scale_h * out_image_row_nbytes;
 
-    uint32_t in_stick_row_id = start_in_stick_id / in_w;  // assuming shard begins with a new row. TODO: generalize?
-    uint32_t l1_write_addr_stick = l1_write_addr;
+    cb_reserve_back(out_cb_id, out_w);
 
-    if constexpr (is_reader) {
-        cb_reserve_back(out_cb_id, in_nsticks_local * scale_h * scale_w);
-    }
-
-    // for each input stick
-    for (uint32_t i = start_in_stick_id; i < start_in_stick_id + half_nsticks_local; ++i) {
-        uint32_t l1_write_addr_local = l1_write_addr_stick;
-        for (uint32_t j = 0; j < scale_h; ++j) {
-            l1_write_addr_local = l1_write_addr_stick + j * out_w * stick_nbytes;
-            // replicate stick scale_h times.
-            for (size_t k = 0; k < scale_w; ++k) {
+    // assuming shard begins with a new row. TODO: generalize?
+    for (uint32_t image_row = image_row_begin; image_row < image_row_end; ++image_row) {
+        uint32_t l1_write_addr_image_row_start = l1_write_addr;
+        for (uint32_t i = 0; i < in_w; ++i) {
+            // replicate stick scale_w times.
+            for (uint32_t sw = 0; sw < scale_w; ++sw) {
                 // replicate stick scale_w times.
                 if constexpr (is_reader) {
                     uint64_t src_noc_addr = get_noc_addr(l1_read_addr);
-                    noc_async_read(src_noc_addr, l1_write_addr_local, stick_nbytes);
-                    l1_write_addr_local += stick_nbytes;
+                    noc_async_read(src_noc_addr, l1_write_addr, stick_nbytes);
                 } else {
-                    uint64_t dst_noc_addr = get_noc_addr(l1_write_addr_local);
+                    uint64_t dst_noc_addr = get_noc_addr(l1_write_addr);
                     noc_async_write(l1_read_addr, dst_noc_addr, stick_nbytes);
-                    l1_write_addr_local += stick_nbytes;
                 }
+                l1_write_addr += stick_nbytes;
             }
             l1_read_addr += stick_nbytes;
         }
-        // move to the next input stick
-        l1_read_addr += stick_nbytes;
-        // move to the next output stick
-        l1_write_addr_stick += stick_nbytes * scale_w;
 
-        // if this is the end of a row, skip the next (scale_h - 1) rows
-        l1_write_addr_stick += (i == (in_w * (in_stick_row_id + 1) - 1)) * out_w * stick_nbytes * (scale_h - 1);
-        in_stick_row_id += (i == (in_w * (in_stick_row_id + 1) - 1));
+        // Duplicate the whole image row in one shot
+        if constexpr (is_reader) {
+            uint64_t src_noc_addr = get_noc_addr(l1_write_addr_image_row_start);
+            noc_async_read(src_noc_addr, l1_write_addr, out_image_row_nbytes);
+        } else {
+            uint64_t dst_noc_addr = get_noc_addr(l1_write_addr);
+            noc_async_write(l1_write_addr_image_row_start, dst_noc_addr, out_image_row_nbytes);
+        }
+        l1_write_addr += out_image_row_nbytes;
     }
 
-    if constexpr (is_reader) {
-        cb_push_back(out_cb_id, in_nsticks_local * scale_h * scale_w);
-    }
+    cb_push_back(out_cb_id, out_w);
 
     noc_async_write_barrier();
     noc_async_read_barrier();
