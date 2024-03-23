@@ -13,7 +13,7 @@ from models.utility_functions import comp_pcc, tt2torch_tensor, torch2tt_tensor,
 
 # Test matmul attention sequence with InterleavedToShardedPartialOp
 @pytest.mark.parametrize("seq_len", [4096])
-@pytest.mark.parametrize("num_slices", [8])
+@pytest.mark.parametrize("num_slices", [16])
 @pytest.mark.parametrize("num_cores", [64])
 @pytest.mark.parametrize("num_heads", [16])
 @pytest.mark.parametrize("data_format", [ttl.tensor.DataType.BFLOAT8_B])
@@ -32,8 +32,8 @@ def test_attnention(
     grid_size = (8, 8)
 
     query_layer_shape = [1, num_heads, seq_len, 64]
-    key_layer_transposed_shape = [1, 1, 64, seq_len]
-    value_layer_shape = [1, 1, seq_len, 64]
+    key_layer_transposed_shape = [1, num_heads, 64, seq_len]
+    value_layer_shape = [1, num_heads, seq_len, 64]
     output_shape = [1, num_heads, seq_len, 64]
 
     torch_query_layer = torch.randn(query_layer_shape).bfloat16().float()
@@ -113,16 +113,21 @@ def test_attnention(
             mcast_in0=False,
         )
 
-        # k_slice = ttl.tensor.unpad(reference_key_layer_transposed, (0, (i*heads_per_slice), 0, 0), (0, (i*heads_per_slice) + 1, 63, seq_len-1), output_mem_config=dram_interleaved_memory_config)
+        k_slice = ttl.tensor.unpad(
+            reference_key_layer_transposed,
+            (0, (i * heads_per_slice), 0, 0),
+            (0, (i * heads_per_slice) + (heads_per_slice - 1), 63, seq_len - 1),
+            output_mem_config=dram_interleaved_memory_config,
+        )
         mm_slice = ttl.operations.primary.matmul(
             slice,
-            reference_key_layer_transposed,
+            k_slice,
             program_config=program_config,
             output_mem_config=height_sharded_memory_config,
             output_dtype=data_format,
             compute_kernel_config=compute_kernel_config,
         )
-        # k_slice.deallocate()
+        k_slice.deallocate()
         slice.deallocate()
 
         softmax_program_config = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
@@ -147,15 +152,21 @@ def test_attnention(
             fused_activation=None,
             mcast_in0=False,
         )
-        # v_slice = ttl.tensor.unpad(reference_value_layer, (0, (i*heads_per_slice), 0, 0), (0, (i*heads_per_slice) + 1, seq_len-1, 63), output_mem_config=dram_interleaved_memory_config)
+        v_slice = ttl.tensor.unpad(
+            reference_value_layer,
+            (0, (i * heads_per_slice), 0, 0),
+            (0, (i * heads_per_slice) + (heads_per_slice - 1), seq_len - 1, 63),
+            output_mem_config=dram_interleaved_memory_config,
+        )
         mm_slice = ttl.operations.primary.matmul(
             mm_slice,
-            reference_value_layer,
+            v_slice,
             program_config=program_config,
             output_mem_config=height_sharded_memory_config,
             output_dtype=data_format,
             compute_kernel_config=compute_kernel_config,
         )
+        v_slice.deallocate()
 
         ttl.tensor.sharded_to_interleaved_partial(
             mm_slice,
@@ -169,13 +180,11 @@ def test_attnention(
 
     mm_out_torch = tt2torch_tensor(mm_out)
 
-    attn_weights = ttl.tensor.matmul(
+    attn_weights = ttl.tensor.bmm(
         reference_query_layer, reference_key_layer_transposed, output_mem_config=dram_interleaved_memory_config
     )
     attn_weights = ttl.operations.primary.softmax_in_place(attn_weights)
-    attn_weights = ttl.tensor.matmul(
-        attn_weights, reference_value_layer, output_mem_config=dram_interleaved_memory_config
-    )
+    attn_weights = ttl.tensor.bmm(attn_weights, reference_value_layer, output_mem_config=dram_interleaved_memory_config)
 
     attn_weights_torch = tt2torch_tensor(attn_weights)
     passing, output = comp_pcc(mm_out_torch, attn_weights_torch)
