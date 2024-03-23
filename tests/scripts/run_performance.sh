@@ -86,6 +86,8 @@ run_device_perf_models() {
 
     env pytest models/demos/bert/tests -m $test_marker
 
+    env pytest models/demos/mistral7b/tests -m $test_marker
+
     ## Merge all the generated reports
     env python models/perf/merge_device_perf_results.py
 }
