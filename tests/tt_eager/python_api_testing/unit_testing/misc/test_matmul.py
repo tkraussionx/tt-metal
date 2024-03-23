@@ -267,13 +267,14 @@ def test_matmul_no_mcast_fp32_acc_l1(
             ttl.tensor.ShardOrientation.COL_MAJOR,
         )
 
+    breakpoint()
     program_config = ttl.operations.primary.MatmulMultiCoreReuseProgramConfig(
         compute_with_storage_grid_size=grid_size,
-        in0_block_w=K // 32,
-        out_subblock_h=out_subblock_h,
-        out_subblock_w=out_subblock_w,
-        per_core_M=B * H * M // num_cores // 32,
-        per_core_N=N // 32,
+        in0_block_w=K // 32,  # 2
+        out_subblock_h=out_subblock_h,  # 1
+        out_subblock_w=out_subblock_w,  # 4
+        per_core_M=B * H * M // num_cores // 32,  # 12
+        per_core_N=N // 32,  # 128
     )
 
     compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
