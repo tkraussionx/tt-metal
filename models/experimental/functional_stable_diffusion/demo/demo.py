@@ -511,7 +511,7 @@ def test_demo(device, reset_seeds, input_path, num_prompts, num_inference_steps,
 )
 @pytest.mark.parametrize(
     "num_inference_steps",
-    ((2),),
+    ((10),),
 )
 @pytest.mark.parametrize(
     "image_size",
