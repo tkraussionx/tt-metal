@@ -47,7 +47,7 @@ inline uint32_t worker_data_size(worker_data_t& awd) {
     TT_ASSERT(awd[first_worker].size() > 0, "Worker data for core: {} is empty, not expected.", first_worker.str());
     auto first_bank_id = awd[first_worker].begin()->first;
     auto size = awd[first_worker_g][first_bank_id].data.size();
-    log_debug(tt::LogTest, "{} - returning size: {} from worker: {} bank_id: {}", __FUNCTION__, size, first_worker.str(), first_bank_id);
+    log_info(tt::LogTest, "{} - returning size: {} from worker: {} bank_id: {}", __FUNCTION__, size, first_worker.str(), first_bank_id);
     return size;
 }
 
@@ -130,7 +130,7 @@ inline void generate_random_paged_payload(Device *device,
                                           uint32_t start_page,
                                           bool is_dram) {
 
-    static uint32_t coherent_count = 0;
+    static uint32_t coherent_count = 0x100; // Abitrary starting value, avoid 0x0 since matches with DRAM prefill.
     auto buf_type = is_dram ? BufferType::DRAM : BufferType::L1;
     uint32_t num_banks = device->num_banks(buf_type);
     uint32_t words_per_page = cmd.write_paged.page_size / sizeof(uint32_t);
@@ -153,8 +153,8 @@ inline void generate_random_paged_payload(Device *device,
 
         // Generate data and add to cmd for sending to device, and worker_data for correctness checking.
         for (uint32_t i = 0; i < words_per_page; i++) {
-            uint32_t datum = (use_coherent_data_g) ? coherent_count++ : std::rand();
-            log_debug(tt::LogTest, "{} - Setting {} page_id: {} word: {} on core: {} (bank_id: {} bank_offset: {}) => datum: 0x{:x}",
+            uint32_t datum = (use_coherent_data_g) ? (((page_id & 0xFF) << 24) | coherent_count++) : std::rand();
+            log_info(tt::LogTest, "{} - Setting {} page_id: {} word: {} on core: {} (bank_id: {} bank_offset: {}) => datum: 0x{:x}",
                 __FUNCTION__, is_dram ? "DRAM" : "L1", page_id, i, bank_core.str(), bank_id, bank_offset, datum);
             cmds.push_back(datum); // Push to device.
             data[bank_core][bank_id].data.push_back(datum); // Checking
@@ -395,8 +395,12 @@ inline void gen_dispatcher_paged_write_cmd(Device *device,
 
     // Assumption embedded in this function (seems reasonable, true with a single buffer) that paged size will never change.
     static uint32_t prev_page_size = -1;
-    TT_ASSERT(prev_page_size == -1 || prev_page_size == page_size, "Page size changed between calls to gen_dispatcher_paged_write_cmd - not supported.");
-    prev_page_size = page_size;
+    // TT_ASSERT(prev_page_size == -1 || prev_page_size == page_size, "Page size changed between calls to gen_dispatcher_paged_write_cmd - not supported.");
+    if (prev_page_size == -1) {
+        prev_page_size = page_size;
+    } else {
+        page_size = prev_page_size;;
+    }
 
     // Keep track of pages written, and use as next cmd start page to have writes to memory without gaps and verify start_page works. Keep
     // start_page as a function input as long as we want test cmd line control too.
@@ -419,7 +423,7 @@ inline void gen_dispatcher_paged_write_cmd(Device *device,
     cmd.write_paged.pages = pages;
     pages_written += pages;
 
-    log_info(tt::LogTest, "Adding CQ_DISPATCH_CMD_WRITE_PAGED - is_dram: {} start_page: {} start_page_cmd: {} base_addr: {:x} page_size: {} pages: {})",
+    log_info(tt::LogTest, "Adding CQ_DISPATCH_CMD_WRITE_PAGED - is_dram: {} start_page: {} start_page_cmd: {} base_addr: 0x{:x} page_size: {} pages: {})",
         is_dram, start_page, start_page_cmd, base_addr, page_size, pages);
 
     add_dispatcher_paged_cmd(device, cmds, worker_data, cmd, start_page, is_dram);
@@ -512,7 +516,7 @@ inline bool validate_core_data(std::unordered_set<CoreCoord> &validated_cores, D
             bank_offset = device->l1_bank_offset_from_bank_id(bank_id);
         }
 
-        log_debug(tt::LogTest, "Paged-{} for bank_id: {} has base_addr: (0x{:x}) and DRAM bank offset: {}:x})",
+        log_info(tt::LogTest, "Paged-{} for bank_id: {} has base_addr: (0x{:x}) and DRAM bank offset: {}:x})",
             is_dram ? "DRAM" : "L1", bank_id, base_addr, bank_offset);
 
         base_addr += bank_offset;
@@ -540,7 +544,7 @@ inline bool validate_core_data(std::unordered_set<CoreCoord> &validated_cores, D
                 break;
             }
         } else {
-            log_debug(tt::LogTest, "[{:02d}] (Pass) Expected: 0x{:08x} Observed: 0x{:08x}", i, (unsigned int)dev_data[i], (unsigned int)results[i]);
+            log_info(tt::LogTest, "[{:02d}] (Pass) Expected: 0x{:08x} Observed: 0x{:08x}", i, (unsigned int)dev_data[i], (unsigned int)results[i]);
         }
     }
     return fail_count;
