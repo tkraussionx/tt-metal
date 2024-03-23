@@ -19,7 +19,7 @@ from models.demos.mistral7b.reference.tokenizer import Tokenizer
 
 from models.perf.perf_utils import prep_perf_report
 from models.perf.device_perf_utils import run_device_perf, check_device_perf, prep_device_perf_report
-from models.utility_functions import profiler, enable_persistent_kernel_cache
+from models.utility_functions import profiler, enable_persistent_kernel_cache, skip_for_grayskull
 
 
 class Emb(torch.nn.Module):
@@ -31,6 +31,7 @@ class Emb(torch.nn.Module):
         return self.emb(x)
 
 
+@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.models_performance_bare_metal
 @pytest.mark.parametrize(
     "batch, iterations, expected_compile_time, expected_inference_time",
@@ -206,6 +207,7 @@ def test_mistral_model_perf(
     )
 
 
+@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.models_device_performance_bare_metal
 @pytest.mark.parametrize(
     "batch, iterations, expected_perf",
