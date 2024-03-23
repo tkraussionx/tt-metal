@@ -24,6 +24,9 @@
 #include "risc_attribs.h"
 #include "third_party/umd/device/tt_silicon_driver_common.hpp"
 #include "debug/assert.h"
+#ifndef COMPILE_FOR_ERISC
+#include "debug/dprint.h"
+#endif
 
 extern uint8_t noc_index;
 
@@ -702,9 +705,9 @@ struct InterleavedAddrGen {
 
     FORCE_INLINE
     std::uint64_t get_noc_addr(const uint32_t id, const uint32_t offset = 0) const {
-        uint32_t bank_id;
-        uint32_t addr;
-        uint32_t noc_xy;
+        uint32_t bank_id = 0;
+        uint32_t addr = 0;
+        uint32_t noc_xy = 0;
 
         if constexpr (DRAM) {
 #ifdef IS_NOT_POW2_NUM_DRAM_BANKS
@@ -723,12 +726,18 @@ struct InterleavedAddrGen {
             addr =
                 (udivsi3_const_divisor<NUM_L1_BANKS>(id) * align(this->page_size, 32)) + this->bank_base_address + offset;
 #else
-            uint32_t bank_id = id & (NUM_L1_BANKS - 1);
+            bank_id = id & (NUM_L1_BANKS - 1);
             addr = (id >> LOG_BASE_2_OF_NUM_L1_BANKS) * align(this->page_size, 32) + this->bank_base_address + offset;
 #endif
             addr += bank_to_l1_offset[bank_id];
             noc_xy = l1_bank_to_noc_xy[noc_index][bank_id];
         }
+
+
+        #ifndef COMPILE_FOR_ERISC
+        DPRINT << "InterleavedAddrGen.get_noc_addr: bank_id: " << bank_id << " noc_xy: " << HEX() << noc_xy << " addr: " << addr;
+        DPRINT << " offset: " << offset << " bank_base_addr: " << this->bank_base_address << DEC() << " page_size: " << this->page_size <<  ENDL();
+        #endif
 
         uint64_t noc_addr = get_noc_addr_helper(noc_xy, addr);
         return noc_addr;

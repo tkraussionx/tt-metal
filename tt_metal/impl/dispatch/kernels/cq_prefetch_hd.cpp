@@ -314,6 +314,11 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr) {
     uint32_t pages = cmd->relay_paged.pages;
     uint32_t read_length = pages * page_size;
 
+    DPRINT << "KCM process_relay_paged_cmd starting w/ page_id: " << page_id << " base_addr: " << HEX() << base_addr << DEC();
+    DPRINT << " page_size: " << page_size << " pages: " << pages << " read_length: " << read_length << ENDL();
+
+    // KCM FIXME - Why is base_addr non-zero?
+
     InterleavedAddrGen<is_dram> addr_gen;
     addr_gen.bank_base_address = base_addr;
     addr_gen.page_size = page_size;
@@ -324,6 +329,7 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr) {
     uint32_t amt_read = 0;
     while (amt_to_read >= page_size) {
         uint64_t noc_addr = addr_gen.get_noc_addr(page_id); // XXXX replace this w/ walking the banks to save mul on GS
+        DPRINT << "process_relay_paged_cmd(A) called get_noc_addr_helper w/ page_id: " << page_id << " got noc_addr: " << HEX() << noc_addr << " going to read page_size: " << page_size << " to scratch_read_addr: " << scratch_read_addr << DEC() << ENDL();
         noc_async_read(noc_addr, scratch_read_addr, page_size);
         scratch_read_addr += page_size;
         page_id++;
@@ -331,6 +337,13 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr) {
         amt_read += page_size;
     }
     noc_async_read_barrier();
+
+    // Can I print data here.
+    uint32_t *data = (uint32_t *)scratch_db_top[0];
+    for (uint32_t i = 0; i < amt_read/4; i++) {
+        DPRINT << "data[" << i << "]: " << HEX() << data[i] << DEC() << ENDL();
+    }
+
 
     // Second step - read into DB[x], write from DB[x], toggle x, iterate
     // Writes are fast, reads are slow
@@ -351,6 +364,7 @@ uint32_t process_relay_paged_cmd(uint32_t cmd_ptr) {
         amt_read = 0;
         while (amt_to_read >= page_size) {
             uint64_t noc_addr = addr_gen.get_noc_addr(page_id); // XXXX replace this w/ walking the banks to save mul on GS
+            DPRINT << "process_relay_paged_cmd(B) called get_noc_addr_helper w/ page_id: " << page_id << " got noc_addr: " << HEX() << noc_addr << " going to read page_size: " << page_size << ENDL();
             noc_async_read(noc_addr, scratch_read_addr, page_size);
             scratch_read_addr += page_size;
             page_id++;

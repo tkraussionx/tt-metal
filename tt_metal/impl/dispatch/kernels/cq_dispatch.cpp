@@ -177,6 +177,13 @@ void process_write_linear(uint32_t num_mcast_dests) {
             dispatch_cb_block_release_pages();
         }
 
+        DPRINT << "Writing xfer_size: " << xfer_size << " to addr: " << HEX() << (uint32_t) (dst & 0xFFFFFFFF);
+        DPRINT << " noc_xy: " << (uint32_t) ((dst >> 32) & 0xFFFFFFFF) << DEC() << " length: " << length << ENDL();
+        uint32_t *data = (uint32_t *)data_ptr;
+        for (uint32_t i = 0; i < xfer_size / 4; i++) {
+            DPRINT << "data[" << i << "]: " << HEX() << data[i] << DEC() << ENDL();
+        }
+
         if constexpr (multicast){
             noc_async_write_multicast(data_ptr, dst, xfer_size, num_mcast_dests);
         } else {
