@@ -18,6 +18,7 @@ from models.demos.mistral7b.reference.model import Transformer
 from models.demos.mistral7b.reference.tokenizer import Tokenizer
 
 from models.perf.perf_utils import prep_perf_report
+from models.perf.device_perf_utils import run_device_perf, check_device_perf, prep_device_perf_report
 from models.utility_functions import profiler, enable_persistent_kernel_cache
 
 
@@ -30,18 +31,12 @@ class Emb(torch.nn.Module):
         return self.emb(x)
 
 
-# expected_compile_time=155,
-#         expected_inference_time=0.085,
-@pytest.mark.models_device_performance_bare_metal
+@pytest.mark.models_performance_bare_metal
 @pytest.mark.parametrize(
     "batch, iterations, expected_compile_time, expected_inference_time",
     ((32, 12, 155, 0.15),),
 )
-# @pytest.mark.parametrize(
-#     "iterations",
-#     (12,),
-# )
-def test_mistral_model_inference(
+def test_mistral_model_perf(
     device, batch, iterations, expected_compile_time, expected_inference_time, use_program_cache
 ):
     dtype = ttnn.bfloat8_b
@@ -208,4 +203,29 @@ def test_mistral_model_inference(
         expected_inference_time=expected_inference_time,
         inference_time_cpu=ref_model_run_for_inference,
         comments=comment,
+    )
+
+
+@pytest.mark.models_device_performance_bare_metal
+@pytest.mark.parametrize(
+    "batch, iterations, expected_perf",
+    ((32, 17, 0.15),),
+)
+def test_mistral_perf_device(batch, iterations, expected_perf):
+    subdir = "ttnn_mistral7b"
+    margin = 0.03
+    command = f"pytest models/demos/mistral7b/tests/test_mistral_model.py::test_mistral_model_inference[{iterations}-generative]"
+    cols = ["DEVICE FW", "DEVICE KERNEL", "DEVICE BRISC KERNEL"]
+
+    inference_time_key = "AVG DEVICE KERNEL SAMPLES/S"
+    expected_perf_cols = {inference_time_key: expected_perf}
+
+    post_processed_results = run_device_perf(command, subdir, iterations, cols, batch)
+    expected_results = check_device_perf(post_processed_results, margin, expected_perf_cols)
+    prep_device_perf_report(
+        model_name=f"mistral-7B_{batch}batch",
+        batch_size=batch,
+        post_processed_results=post_processed_results,
+        expected_results=expected_results,
+        comments=test.replace("/", "_"),
     )
