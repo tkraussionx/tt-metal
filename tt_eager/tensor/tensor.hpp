@@ -56,7 +56,7 @@ struct Tensor {
 
     Tensor &operator=(const Tensor &other) = default;
 
-    Tensor(Tensor &&other) = default;
+    Tensor(Tensor &&other) noexcept : tensor_attributes(std::move(other.tensor_attributes)), workers(std::move(other.workers)), deallocate_through_destructor(other.deallocate_through_destructor) {};
     Tensor &operator=(Tensor &&other) = default;
 
     ~Tensor();
