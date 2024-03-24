@@ -136,6 +136,46 @@ def postprocess_return_value(return_value, output_tensors):
         return return_value
 
 
+# This code (or hack really) below would go to torchtrail if we want to keep it
+module_stack = []
+id_for_module = {}
+module_id_for_torch_module_instance = {}
+extended_module_name = {}
+
+
+def get_next_module_id(name):
+    if name in id_for_module:
+        id_for_module[name] += 1
+    else:
+        id_for_module[name] = 1
+    return id_for_module[name]
+
+
+def module_id_for_torch_instance(operation):
+    if not id(operation) in module_id_for_torch_module_instance.keys():
+        return ""
+    else:
+        return f"{module_id_for_torch_module_instance[id(operation)]}"
+
+
+def extended_module_name(operation):
+    return f"{type(operation.module).__name__}{module_id_for_torch_instance(operation)}"
+
+
+def add_module_ids(graph):
+    for node in nx.topological_sort(graph):
+        operation = graph.nodes[node]["operation"]
+        # note, class is frozen from torchtrail, so this is a temporary work-around
+        if isinstance(operation, ttnn.tracer.TorchModule):
+            if not id(operation) in module_id_for_torch_module_instance.keys():
+                name = f"{type(operation.module).__name__}"
+                if name == "Sequential":
+                    logger.info("Here")
+                module_id = get_next_module_id(name)
+                module_id_for_torch_module_instance[id(operation)] = module_id
+            add_module_ids(operation.graph)
+
+
 def trace_ttnn_operation(pretty_operation_name, operation):
     import torch
 
@@ -311,7 +351,8 @@ def node_to_statement(string_io, graph, node, variable, input_variables, prefix)
         string_io.write(f"    {variable} = {operation}({arguments_string})")
 
     elif isinstance(operation, ttnn.tracer.TorchModule):
-        module_name = f"{type(operation.module).__name__}"
+        module_name = "_".join(module_stack) + "_" if module_stack else ""
+        module_name += extended_module_name(operation)
         torchtrail_name = operation.module.torchtrail_name
         torchtrail_name = torchtrail_name.replace(f"{prefix}.", "", 1)
 
@@ -379,7 +420,7 @@ def module_to_source_code(module_operation, prefix=""):
     input_tensor_names = get_module_input_tensor_names(module_operation)
     input_tensor_names_as_string = ", ".join(input_tensor_names)
 
-    module_name = f"{type(module_operation.module).__name__}"
+    module_name = "_".join(module_stack) if module_stack else ""
 
     string_io.write(f"def {module_name}(config, {input_tensor_names_as_string}, *, parameters):\n")
 
@@ -430,9 +471,11 @@ def codegen_submodules(graph):
     for node in nx.topological_sort(graph):
         operation = graph.nodes[node]["operation"]
         if isinstance(operation, ttnn.tracer.TorchModule):
+            module_stack.append(extended_module_name(operation))
             module = operation.module
             codegen_submodules(operation.graph)
             module_to_source_code(operation, module.torchtrail_name)
+            module_stack.pop()
 
 
 def codegen_top_level_module(graph):
@@ -459,5 +502,6 @@ def codegen_top_level_module(graph):
 def codegen(output):
     logger.warning("Codegen is an experimental feature and may not work as expected.")
     graph = get_graph(output)
+    add_module_ids(graph)
     codegen_submodules(graph)
     codegen_top_level_module(graph)

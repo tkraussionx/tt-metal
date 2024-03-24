@@ -159,10 +159,12 @@ class ResNet50TestInfra:
         self.input_tensor = self.model.convert_from_torch(
             torch_input_tensor, *self.torch_model.conv1.padding, *self.torch_model.conv1.stride
         )
+        return self.input_tensor
 
     def run(self, torch_input_tensor=None):
-        # Note: currently not including the time to flip from torch to ttnn tensors.
-        # self.preprocess_torch_input(torch_input_tensor)
+        self.input_tensor = (
+            self.self_input_tensor if torch_input_tensor is None else self.preprocess_torch_input(torch_input_tensor)
+        )
         self.output_tensor = self.model(self.input_tensor)
         return self.output_tensor
 
@@ -214,3 +216,15 @@ def test_resnet_50(device, batch_size, act_dtype, weight_dtype, math_fidelity):
     test_infra.preprocess_torch_input()
     test_infra.run()
     test_infra.validate()
+
+
+@pytest.mark.parametrize(
+    "batch_size, act_dtype, weight_dtype, math_fidelity",
+    ((20, ttnn.bfloat8_b, ttnn.bfloat8_b, ttnn.MathFidelity.LoFi),),  ## pass
+)
+def test_code_gen(device, batch_size, act_dtype, weight_dtype, math_fidelity):
+    test_infra = create_test_infra(device, batch_size, act_dtype, weight_dtype, math_fidelity)
+    with ttnn.tracer.trace():
+        torch_input_tensor = test_infra.torch_input_tensor
+        outputs = test_infra.torch_model(torch_input_tensor)
+    ttnn.tracer.codegen(outputs)
