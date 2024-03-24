@@ -376,9 +376,17 @@ class TtFalconAttention(nn.Module):
             ### SOFTMAX ###
             ###############
             # TODO: Replace with scaled_softmax_attention_mask from BERT
-            attn_weights = tt_lib.operations.primary.softmax_in_place(
+            # attn_weights = tt_lib.operations.primary.softmax_in_place(
+            #     attn_weights,
+            # )
+            print(f"attention_mask:{attention_mask.get_legacy_shape()}")
+            attn_weights = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
                 attn_weights,
             )
+            #     self.scale,
+            #     attention_mask,
+            #     program_config=tt_lib.operations.primary.transformers.SoftmaxDefaultProgramConfig(),
+            # )
         else:
             attn_weights = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
                 attn_weights,
