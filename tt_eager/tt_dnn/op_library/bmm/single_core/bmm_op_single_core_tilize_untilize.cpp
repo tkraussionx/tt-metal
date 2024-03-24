@@ -16,8 +16,7 @@ Tensor bmm_tilize_untilize(const Tensor& a, const Tensor& b, const Tensor& bias,
                            uint32_t out_subblock_height_ntiles, uint32_t out_subblock_width_ntiles,
                            bool tilize_in0, bool untilize_out, bool has_bias) {
     // NOTE: Currently only single core implementation exists.
-    auto worker = a.get_worker_handle();
-    Tensor output_tensor(worker);
+    Tensor output_tensor(a.get_workers());
     operation::launch_op(
         [out_dt, a_height_nblocks, a_width_nblocks, b_width_nblocks,
          a_block_height_ntiles, a_block_width_ntiles, b_block_width_ntiles,
