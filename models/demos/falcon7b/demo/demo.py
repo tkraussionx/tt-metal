@@ -460,7 +460,7 @@ def test_demo(
         model_version="tiiuae/falcon-7b-instruct",
         batch_size=32,
         num_layers=32,
-        max_seq_len=512,
+        max_seq_len=128,
         model_config=get_model_config("BFLOAT16-DRAM"),
         model_location_generator=model_location_generator,
         device=device,
