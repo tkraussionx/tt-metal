@@ -182,10 +182,17 @@ struct make_eltwise_unary_with_param {
         const Tensor& input_tensor,
         T param,
         const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) const {
-        return run_eltwise_unary(
-            input_tensor,
-            {UnaryWithParam{.op_type = unary_op_type, .param = static_cast<float>(param)}},
-            output_mem_config);
+        Tensor output_tensor(input_tensor.get_workers());
+        operation::launch_op(
+            [param, output_mem_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> Tensor {
+                const auto& input_tensor = input_tensors.at(0);
+                return run_eltwise_unary(
+                    input_tensor,
+                    {UnaryWithParam{.op_type = unary_op_type, .param = static_cast<float>(param)}},
+                    output_mem_config);
+            },
+            {input_tensor}, output_tensor);
+        return output_tensor;
     }
 };
 
@@ -194,7 +201,14 @@ struct make_eltwise_unary {
     Tensor operator()(
         const Tensor& input_tensor,
         const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) const {
-        return run_eltwise_unary(input_tensor, {UnaryWithParam{.op_type = unary_op_type}}, output_mem_config);
+        Tensor output_tensor(input_tensor.get_workers());
+        operation::launch_op(
+            [output_mem_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> Tensor {
+                const auto& input_tensor = input_tensors.at(0);
+                return run_eltwise_unary(input_tensor, {UnaryWithParam{.op_type = unary_op_type}}, output_mem_config);
+            },
+        {input_tensor}, output_tensor);
+        return output_tensor;
     }
 };
 
@@ -450,10 +464,16 @@ namespace primary {
 
 inline Tensor relu(
     const Tensor& input_tensor, const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG) {
-    return operation::run(
-               EltwiseUnary{{UnaryWithParam{.op_type = UnaryOpType::RELU}}, output_mem_config}, {input_tensor})
-        .at(0);
-}
+    Tensor output_tensor(input_tensor.get_workers());
+    operation::launch_op(
+        [output_mem_config] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) {
+            const auto& input_tensor = input_tensors.at(0);
+            return operation::run(
+               EltwiseUnary{{UnaryWithParam{.op_type = UnaryOpType::RELU}}, output_mem_config}, {input_tensor}).at(0);
+        },
+    {input_tensor}, output_tensor);
+    return output_tensor;
+    }
 
 }  // namespace primary
 

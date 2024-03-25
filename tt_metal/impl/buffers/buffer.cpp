@@ -276,10 +276,10 @@ void Buffer::deallocate() {
     TT_ASSERT(this->device_->allocator_ != nullptr, "Expected allocator to be initialized!");
     // All DeviceBuffer allocations are done through the device worker thread.
     // Thus, buffer deallocation must also be done through the worker to avoid races.
-    this->device_->push_work([address = this->address(), device = this->device(), buf_type = this->buffer_type()] {
-        allocator::deallocate_buffer(*(device->allocator_), address, buf_type);
-        detail::BUFFER_MAP.erase({device->id(), address});
-    });
+    // this->device_->push_work([address = this->address_, device = this->device_, buf_type = this->buffer_type_] {
+        allocator::deallocate_buffer(*(device_->allocator_), this->address_, this->buffer_type_);
+        // detail::BUFFER_MAP.erase({device->id(), address});
+    // });
 }
 
 Buffer::~Buffer() {

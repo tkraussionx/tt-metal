@@ -324,12 +324,15 @@ inline Tensor matmul(
 ) {
     Tensor output_tensor(input_tensor_a.get_workers());
     operation::launch_op(
-        [program_config, mem_config, output_dtype, compute_kernel_config, untilize_out] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> Tensor {
+        [program_config, mem_config, output_dtype, compute_kernel_config, untilize_out]
+        (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> Tensor {
             const auto& input_tensor_a = input_tensors.at(0);
             const auto& input_tensor_b = input_tensors.at(1);
             auto arch = input_tensor_a.device()->arch();
             auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config);
-            return operation::run(Matmul{program_config, mem_config, output_dtype.value_or(input_tensor_a.get_dtype()), kernel_config_val, untilize_out}, {input_tensor_a, input_tensor_b}, optional_input_tensors).at(0);
+
+            return operation::run(Matmul{program_config, mem_config, output_dtype.value_or(input_tensor_a.get_dtype()),
+                                  kernel_config_val, untilize_out}, {input_tensor_a, input_tensor_b}, optional_input_tensors).at(0);
         },
     {input_tensor_a, input_tensor_b}, output_tensor, {std::nullopt});
     return output_tensor;
@@ -400,40 +403,48 @@ namespace tt {
 namespace tt_metal {
 
 inline Tensor matmul (const Tensor &input_tensor_a, const Tensor &input_tensor_b, const MemoryConfig& mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt, bool untilize_out = false) {
-    TT_FATAL(input_tensor_a.get_dtype() == input_tensor_b.get_dtype());
-    TT_FATAL(input_tensor_a.get_legacy_shape()[3] == input_tensor_b.get_legacy_shape()[2] && "Dimension K (A.shape[3] and B.shape[2]) must match for A and B in bmm_op"); // A.K == B.K
-    TT_FATAL(input_tensor_b.get_legacy_shape()[0]*input_tensor_b.get_legacy_shape()[1] == 1 && "matmul (batch bcast variant) expects input tensors of shapes BCMK*11KN=BCMN");
-
-    auto arch = input_tensor_a.storage_type() == StorageType::DEVICE ? input_tensor_a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
-    auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config, MathFidelity::HiFi4);
-
     // TODO: Uplift interleaved path to call tt::operation::primary::Matmul and deprecate old tt::tt_metal::Matmul
-    if (input_tensor_a.is_sharded()) {
-        auto matmul_program_config = bmm_op_utils::get_matmul_program_config(input_tensor_a, input_tensor_b, mem_config, std::nullopt, true);
-        return operation::run(
-                   tt::operations::primary::Matmul{
-                       .program_config = matmul_program_config,
-                       .output_mem_config = mem_config,
-                       .output_dtype = input_tensor_a.get_dtype(),
-                       .compute_kernel_config = kernel_config_val,
-                       .untilize_out = untilize_out,
-                   },
-                   {input_tensor_a, input_tensor_b},
-                   {std::nullopt})
-            .at(0);
-    } else {
-        return operation::run_with_autoformat(
-                   Matmul{
-                       .bcast_batch = true,
-                       .output_mem_config = mem_config,
-                       .output_dtype = input_tensor_a.get_dtype(),
-                       .compute_kernel_config = kernel_config_val,
-                       .untilize_out = untilize_out,
-                   },
-                   {input_tensor_a, input_tensor_b},
-                   {std::nullopt})
-            .at(0);
-    }
+    Tensor output_tensor(input_tensor_a.get_workers());
+    operation::launch_op(
+        [mem_config, compute_kernel_config, untilize_out] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> Tensor {
+            const auto& input_tensor_a = input_tensors.at(0);
+            const auto& input_tensor_b = input_tensors.at(1);
+            TT_FATAL(input_tensor_a.get_dtype() == input_tensor_b.get_dtype());
+            TT_FATAL(input_tensor_a.get_legacy_shape()[3] == input_tensor_b.get_legacy_shape()[2] && "Dimension K (A.shape[3] and B.shape[2]) must match for A and B in bmm_op"); // A.K == B.K
+            TT_FATAL(input_tensor_b.get_legacy_shape()[0]*input_tensor_b.get_legacy_shape()[1] == 1 && "matmul (batch bcast variant) expects input tensors of shapes BCMK*11KN=BCMN");
+
+            auto arch = input_tensor_a.storage_type() == StorageType::DEVICE ? input_tensor_a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
+            auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config, MathFidelity::HiFi4);
+
+            if (input_tensor_a.is_sharded()) {
+                auto matmul_program_config = bmm_op_utils::get_matmul_program_config(input_tensor_a, input_tensor_b, mem_config, std::nullopt, true);
+                return operation::run(
+                        tt::operations::primary::Matmul{
+                            .program_config = matmul_program_config,
+                            .output_mem_config = mem_config,
+                            .output_dtype = input_tensor_a.get_dtype(),
+                            .compute_kernel_config = kernel_config_val,
+                            .untilize_out = untilize_out,
+                        },
+                        {input_tensor_a, input_tensor_b},
+                        {std::nullopt})
+                    .at(0);
+            } else {
+                return operation::run_with_autoformat(
+                        Matmul{
+                            .bcast_batch = true,
+                            .output_mem_config = mem_config,
+                            .output_dtype = input_tensor_a.get_dtype(),
+                            .compute_kernel_config = kernel_config_val,
+                            .untilize_out = untilize_out,
+                        },
+                        {input_tensor_a, input_tensor_b},
+                        {std::nullopt})
+                    .at(0);
+            }
+        },
+    {input_tensor_a, input_tensor_b}, output_tensor);
+    return output_tensor;
 }
 // TODO: Should we merge this with matmul and expose an option (or infer it from shape) to bcast_batch
 inline Tensor bmm    (const Tensor &input_tensor_a, const Tensor &input_tensor_b, const MemoryConfig& mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt, bool untilize_out = false) {
@@ -444,7 +455,6 @@ inline Tensor bmm    (const Tensor &input_tensor_a, const Tensor &input_tensor_b
 
     auto arch = input_tensor_a.storage_type() == StorageType::DEVICE ? input_tensor_a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
     auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config, MathFidelity::HiFi4);
-
     if (input_tensor_a.is_sharded()) {
         auto matmul_program_config = bmm_op_utils::get_matmul_program_config(input_tensor_a, input_tensor_b, mem_config, std::nullopt, false);
         return operation::run(tt::operations::primary::Matmul{

@@ -171,8 +171,8 @@ std::vector<Device*> Tensor::get_workers(bool blocking) const {
                 }
                 else if constexpr (std::is_same_v<StorageType, MultiDeviceStorage>) {
                     workers.reserve(storage.buffers.size());
-                    for (const auto& buffer : storage.buffers) {
-                        workers.push_back(buffer->device());
+                    for (const auto& device_buf_pair : storage.buffers) {
+                        workers.push_back(device_buf_pair.first);
                     }
                 }
             }, this->get_storage());
@@ -237,8 +237,9 @@ Tensor Tensor::to(Device *target_device, const MemoryConfig &mem_config) const {
 Tensor Tensor::to(DeviceMesh *device_mesh, const MemoryConfig &mem_config) const {
     ZoneScoped;
     if (storage_type() == StorageType::MULTI_DEVICE_HOST) {
-        Tensor multi_device_tensor = Tensor(device_mesh);
-        for (auto target_device : device_mesh->get_devices()) {
+        Tensor multi_device_tensor = Tensor(device_mesh->get_devices());
+        multi_device_tensor.tensor_attributes->storage = MultiDeviceStorage();
+        for (auto target_device : multi_device_tensor.workers) {
             target_device->push_work([*this, multi_device_tensor, mem_config, target_device] () mutable {
                 std::visit([*this, mem_config, target_device] (auto& storage) {
                     using T = std::decay_t<decltype(storage)>;

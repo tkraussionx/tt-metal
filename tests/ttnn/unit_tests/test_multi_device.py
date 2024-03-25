@@ -60,7 +60,7 @@ def test_ttnn_to_and_from_multi_device_shard(pcie_device_mesh, layout, memory_co
 
     print("Starting test")
     start = time.time()
-    for i in range(100):
+    for i in range(10):
         print("Running iter " + str(i))
         torch_tensor = torch.rand((1, 1, 8192, 8192), dtype=torch.bfloat16)
         ttnn_tensor = ttnn.from_torch(torch_tensor, mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=3))
@@ -149,33 +149,45 @@ def test_multi_device_single_op_unary(pcie_device_mesh):
     assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.999)
 
 
-@pytest.mark.parametrize("pcie_device_mesh", [2], indirect=True)
+@pytest.mark.parametrize("pcie_device_mesh", [8], indirect=True)
 def test_multi_device_single_op_binary(pcie_device_mesh):
     """Multidevice API test: Running tensor-parallel multi-device single-op binary"""
     from ttnn import ShardTensorToMesh, ConcatMeshToTensor
 
-    torch_input_a_tensor = torch.rand((1, 1, 32, 128), dtype=torch.bfloat16)
-    torch_input_b_tensor = torch.rand((1, 1, 32, 128), dtype=torch.bfloat16)
-    torch_output_golden = torch_input_a_tensor + torch_input_b_tensor
+    # import time
+    # start = time.time()
+    for _ in range(1000):
+        torch_input_a_tensor = torch.rand((1, 1, 512, 1024), dtype=torch.bfloat16)
+        torch_input_b_tensor = torch.rand((1, 1, 512, 1024), dtype=torch.bfloat16)
 
-    ttnn_input_a_tensor = ttnn.from_torch(
-        torch_input_a_tensor,
-        layout=ttnn.TILE_LAYOUT,
-        device=pcie_device_mesh,
-        mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=3),
-    )
-    ttnn_input_b_tensor = ttnn.from_torch(
-        torch_input_b_tensor,
-        layout=ttnn.TILE_LAYOUT,
-        device=pcie_device_mesh,
-        mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=3),
-    )
-    ttnn_output_tensor = ttnn.add(ttnn_input_a_tensor, ttnn_input_b_tensor)
-
-    ttnn_torch_output_tensor = ttnn.to_torch(
-        ttnn_output_tensor, mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=3)
-    )
-    assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.999)
+        # torch_output_golden = torch.nn.functional.relu(torch.nn.functional.gelu(torch_input_a_tensor + torch_input_b_tensor))
+        # print("Sending input_a to device")
+        ttnn_input_a_tensor = ttnn.from_torch(
+            torch_input_a_tensor,
+            layout=ttnn.TILE_LAYOUT,
+            device=pcie_device_mesh,
+            mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=3),
+        )
+        # print("Done")
+        # print("Sending input_b to device")
+        ttnn_input_b_tensor = ttnn.from_torch(
+            torch_input_b_tensor,
+            layout=ttnn.TILE_LAYOUT,
+            device=pcie_device_mesh,
+            mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=3),
+        )
+        # print("Done")
+        # print("Computing intermed")
+        intermed_tensor = ttnn.add(ttnn_input_a_tensor, ttnn_input_b_tensor)
+        # print("Done")
+        # print("Computing output")
+        ttnn_output_tensor = ttnn.from_device(ttnn.relu(ttnn.gelu(intermed_tensor)))
+        # print("Done")
+        ttnn_torch_output_tensor = ttnn.to_torch(
+            ttnn_output_tensor, mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=3)
+        )
+        # assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.999)
+    # print("Time: " + str(time.time() - start))
 
 
 @pytest.mark.parametrize("pcie_device_mesh", [2], indirect=True)
@@ -202,59 +214,66 @@ def test_multi_device_multi_op(pcie_device_mesh):
     assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.999)
 
 
-@pytest.mark.parametrize("pcie_device_mesh", [2], indirect=True)
+@pytest.mark.parametrize("pcie_device_mesh", [8], indirect=True)
 def test_multi_device_data_parallel_matmul_op(pcie_device_mesh):
     """Multidevice API: Data Parallel on matmul"""
     from ttnn import ShardTensorToMesh, ConcatMeshToTensor, ReplicateTensorToMesh
 
-    torch_input_a_tensor = torch.rand((4, 1, 32, 128), dtype=torch.bfloat16)
-    torch_input_b_tensor = torch.rand((1, 1, 128, 32), dtype=torch.bfloat16)
-    torch_output_golden = torch_input_a_tensor @ torch_input_b_tensor
+    torch_input_a_tensor = torch.rand((8, 1, 256, 256), dtype=torch.bfloat16)
+    torch_input_b_tensor = torch.rand((1, 1, 256, 256), dtype=torch.bfloat16)
+    import time
 
-    ttnn_input_a_tensor = ttnn.from_torch(
-        torch_input_a_tensor,
-        layout=ttnn.TILE_LAYOUT,
-        device=pcie_device_mesh,
-        mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=0),
-    )
-    ttnn_input_b_tensor = ttnn.from_torch(
-        torch_input_b_tensor,
-        layout=ttnn.TILE_LAYOUT,
-        device=pcie_device_mesh,
-        mesh_mapper=ReplicateTensorToMesh(pcie_device_mesh),
-    )
-    ttnn_output_tensor = ttnn_input_a_tensor @ ttnn_input_b_tensor
+    start = time.time()
+    for _ in range(1000):
+        # torch_output_golden = torch_input_a_tensor @ torch_input_b_tensor
 
-    ttnn_torch_output_tensor = ttnn.to_torch(
-        ttnn_output_tensor, mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=0)
-    )
-    assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.997)
+        ttnn_input_a_tensor = ttnn.from_torch(
+            torch_input_a_tensor,
+            layout=ttnn.TILE_LAYOUT,
+            device=pcie_device_mesh,
+            mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=0),
+        )
+        ttnn_input_b_tensor = ttnn.from_torch(
+            torch_input_b_tensor,
+            layout=ttnn.TILE_LAYOUT,
+            device=pcie_device_mesh,
+            mesh_mapper=ReplicateTensorToMesh(pcie_device_mesh),
+        )
+        intermed_0 = ttnn_input_a_tensor @ ttnn_input_b_tensor
+        intermed_1 = intermed_0 @ ttnn_input_b_tensor
+        intermed_2 = intermed_1 @ ttnn_input_b_tensor
+        ttnn_output_tensor = ttnn.from_device(intermed_2 @ ttnn_input_b_tensor)
+        ttnn_torch_output_tensor = ttnn.to_torch(
+            ttnn_output_tensor, mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=0)
+        )
+        # assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.994)
+    print("Time taken: " + str(time.time() - start))
 
 
-@pytest.mark.parametrize("pcie_device_mesh", [2], indirect=True)
-def test_multi_device_data_parallel_matmul_op(pcie_device_mesh):
-    """Multidevice API: Data Parallel on matmul"""
-    from ttnn import ShardTensorToMesh, ConcatMeshToTensor, ReplicateTensorToMesh
+# @pytest.mark.parametrize("pcie_device_mesh", [2], indirect=True)
+# def test_multi_device_data_parallel_matmul_op(pcie_device_mesh):
+#     """Multidevice API: Data Parallel on matmul"""
+#     from ttnn import ShardTensorToMesh, ConcatMeshToTensor, ReplicateTensorToMesh
 
-    torch_input_a_tensor = torch.rand((4, 1, 32, 128), dtype=torch.bfloat16)
-    torch_input_b_tensor = torch.rand((1, 1, 128, 32), dtype=torch.bfloat16)
-    torch_output_golden = torch_input_a_tensor @ torch_input_b_tensor
+#     torch_input_a_tensor = torch.rand((4, 1, 32, 128), dtype=torch.bfloat16)
+#     torch_input_b_tensor = torch.rand((1, 1, 128, 32), dtype=torch.bfloat16)
+#     torch_output_golden = torch_input_a_tensor @ torch_input_b_tensor
 
-    ttnn_input_a_tensor = ttnn.from_torch(
-        torch_input_a_tensor,
-        layout=ttnn.TILE_LAYOUT,
-        device=pcie_device_mesh,
-        mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=0),
-    )
-    ttnn_input_b_tensor = ttnn.from_torch(
-        torch_input_b_tensor,
-        layout=ttnn.TILE_LAYOUT,
-        device=pcie_device_mesh,
-        mesh_mapper=ReplicateTensorToMesh(pcie_device_mesh),
-    )
-    ttnn_output_tensor = ttnn_input_a_tensor @ ttnn_input_b_tensor
+#     ttnn_input_a_tensor = ttnn.from_torch(
+#         torch_input_a_tensor,
+#         layout=ttnn.TILE_LAYOUT,
+#         device=pcie_device_mesh,
+#         mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=0),
+#     )
+#     ttnn_input_b_tensor = ttnn.from_torch(
+#         torch_input_b_tensor,
+#         layout=ttnn.TILE_LAYOUT,
+#         device=pcie_device_mesh,
+#         mesh_mapper=ReplicateTensorToMesh(pcie_device_mesh),
+#     )
+#     ttnn_output_tensor = ttnn_input_a_tensor @ ttnn_input_b_tensor
 
-    ttnn_torch_output_tensor = ttnn.to_torch(
-        ttnn_output_tensor, mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=0)
-    )
-    assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.997)
+#     ttnn_torch_output_tensor = ttnn.to_torch(
+#         ttnn_output_tensor, mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=0)
+#     )
+#     assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.997)

@@ -53,7 +53,7 @@ class BankManager {
 
    private:
     constexpr static uint32_t min_allocation_size_bytes_ = 32;
-
+    std::mutex mtx;
     // Types of buffers allocated in the banks
     BufferType buffer_type_;
     std::unordered_set<uint64_t> allocated_buffers_;

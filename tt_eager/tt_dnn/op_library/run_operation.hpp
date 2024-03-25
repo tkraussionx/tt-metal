@@ -353,12 +353,48 @@ inline void launch_op(
     Tensor output_tensor,
     const std::vector<std::optional<const Tensor>> optional_input_tensors = {}
 ) {
+    output_tensor.tensor_attributes->storage = MultiDeviceStorage();
     // Send host side op compile and run to the worker queue
     // Async mode changes for tensor-parallel execution not mainlined. Use the first worker thread.
-    output_tensor.workers.at(0)->push_work([op_func, input_tensors, optional_input_tensors, output_tensor] () mutable {
-        auto local_tensor = op_func(input_tensors, optional_input_tensors);
-        output_tensor.deepcopy(local_tensor);
-    });
+    for (auto worker : output_tensor.workers) {
+        worker->push_work([op_func, input_tensors, optional_input_tensors, output_tensor, worker] () mutable {
+            std::visit([=] (auto&& storage) mutable {
+                using T = std::decay_t<decltype(storage)>;
+                if constexpr (std::is_same_v<T, MultiDeviceStorage>) {
+                    std::vector<Tensor> input_shards = {};
+                    std::vector<std::optional<const Tensor>> optional_input_shards = {};
+
+                    for (const auto& input : input_tensors) {
+                        auto input_storage = std::get<tt::tt_metal::MultiDeviceStorage>(input.get_storage());
+                        auto shard_shape = input_storage.get_tensor_shape_for_device(worker);
+                        auto shard_buffer = input_storage.get_buffer_for_device(worker);
+                        input_shards.push_back(Tensor{DeviceStorage{shard_buffer}, shard_shape, input.get_dtype(), input.get_layout()});
+                    }
+                    for (auto& input : optional_input_tensors) {
+                        if (input.has_value()) {
+                            auto input_storage = std::get<tt::tt_metal::MultiDeviceStorage>(input.value().get_storage());
+                            auto shard_shape = input_storage.get_tensor_shape_for_device(worker);
+                            auto shard_buffer = input_storage.get_buffer_for_device(worker);
+                            optional_input_shards.push_back(Tensor{DeviceStorage{shard_buffer}, shard_shape, input.value().get_dtype(), input.value().get_layout()});
+                        }
+                        else {
+                            optional_input_shards.push_back(std::nullopt);
+                        }
+                    }
+                    auto local_tensor = op_func(input_shards, optional_input_shards);
+                    storage.insert_buffer_for_device(worker, std::get<DeviceStorage>(local_tensor.get_storage()).buffer);
+                    storage.insert_tensor_shape_for_device(worker, local_tensor.get_legacy_shape());
+
+                    if (not (worker->id())) {
+                        output_tensor.set_shape(local_tensor.get_shape()); // Need all gather here??
+                        output_tensor.set_dtype(local_tensor.get_dtype());
+                        output_tensor.set_layout(local_tensor.get_layout());
+                        output_tensor.tensor_attributes->metadata_populated = true;
+                    }
+                }
+            }, output_tensor.tensor_attributes->storage);
+        });
+    }
 }
 } //namespace operation
 

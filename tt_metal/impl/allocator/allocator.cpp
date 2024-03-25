@@ -102,7 +102,16 @@ uint64_t BankManager::allocate_buffer(uint32_t size, uint32_t page_size, bool bo
         address_limit = this->interleaved_address_limit_;
         TT_FATAL(address_limit > 0);
     }
-    auto address = this->allocator_->allocate(size_per_bank, bottom_up, address_limit);
+    std::optional<uint64_t> address = std::nullopt;
+    auto start_time = std::chrono::system_clock::now();
+    while (not address.has_value()) {
+        mtx.lock();
+        address = this->allocator_->allocate(size_per_bank, bottom_up, address_limit);
+        mtx.unlock();
+        if ((std::chrono::system_clock::now() - start_time).count() > 3) {
+            break;
+        }
+    }
     if (not address.has_value()) {
         TT_THROW("Out of Memory: Not enough space to allocate {} B {} buffer across {} banks, where each bank needs to store {} B", size, magic_enum::enum_name(this->buffer_type_), num_banks, size_per_bank);
     }
@@ -117,7 +126,9 @@ void BankManager::deallocate_buffer(uint64_t address) {
 #if defined(TRACY_ENABLE)
     TracyFreeN(reinterpret_cast<void const *>(address), get_memory_pool_name(buffer_type_));
 #endif
+    mtx.lock();
     this->allocator_->deallocate(address);
+    mtx.unlock();
 }
 
 void BankManager::deallocate_all(){
@@ -287,7 +298,7 @@ uint64_t base_alloc(const AllocatorConfig &config, BankManager &bank_manager, ui
 
 uint64_t allocate_buffer(Allocator &allocator, uint32_t size, uint32_t page_size, const BufferType &buffer_type, bool bottom_up, std::optional<uint32_t> num_shards) {
     uint64_t address = 0;
-    std::lock_guard<std::mutex>(allocator.mtx);
+    // std::lock_guard<std::mutex>(allocator.mtx);
     switch (buffer_type) {
         case BufferType::DRAM: return allocator.descriptor.dram.alloc(allocator.config, allocator.dram_manager, size, page_size, bottom_up, std::nullopt);
         case BufferType::L1: return allocator.descriptor.l1.alloc(allocator.config, allocator.l1_manager, size, page_size, bottom_up, num_shards);
@@ -300,7 +311,7 @@ uint64_t allocate_buffer(Allocator &allocator, uint32_t size, uint32_t page_size
 }
 
 void deallocate_buffer(Allocator &allocator, uint64_t address, const BufferType &buffer_type) {
-    std::lock_guard<std::mutex>(allocator.mtx);
+    // std::lock_guard<std::mutex>(allocator.mtx);
     switch (buffer_type) {
         case BufferType::DRAM:
             allocator.dram_manager.deallocate_buffer(address);

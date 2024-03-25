@@ -33,7 +33,6 @@ inline void close_device_mesh(DeviceMesh &multi_device) {
 }
 
 std::vector<ttnn::Tensor> get_device_tensors(const ttnn::Tensor& tensor) {
-    std::cout << "Got storage type: " << static_cast<int>(tensor.storage_type()) << std::endl;
     if (std::holds_alternative<tt::tt_metal::MultiDeviceHostStorage>(tensor.get_storage())) {
         std::vector<ttnn::Tensor> tensors;
         auto& host_storage = std::get<tt::tt_metal::MultiDeviceHostStorage>(tensor.get_storage());
