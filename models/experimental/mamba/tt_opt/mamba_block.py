@@ -31,14 +31,14 @@ class TtMambaBlock(torch.nn.Module):
         in_proj_weight_name = "mixer.in_proj.weight"
 
         # ssm wt
-        self.ssm_in_proj_weights = load_fn(in_proj_weight_name, lambda x: x[: self.args.d_inner, :].transpose(-1, -2), postfix="ssm")
+        self.ssm_in_proj_weights = load_fn(in_proj_weight_name, lambda x: x[: self.args.d_inner, :].transpose(-1, -2), postfix="ssm_bfp8", tt_dtype=ttnn.bfloat8_b)
 
         # mlp wt
-        self.mlp_proj_weights = load_fn(in_proj_weight_name, lambda x: x[self.args.d_inner :, :].transpose(-1, -2), postfix="mlp")
+        self.mlp_proj_weights = load_fn(in_proj_weight_name, lambda x: x[self.args.d_inner :, :].transpose(-1, -2), postfix="mlp_bfp8", tt_dtype=ttnn.bfloat8_b)
 
         # down proj wt
         out_proj_weight_name = "mixer.out_proj.weight"
-        self.out_proj_weights = load_fn(out_proj_weight_name, lambda x: x.transpose(-1, -2))
+        self.out_proj_weights = load_fn(out_proj_weight_name, lambda x: x.transpose(-1, -2), postfix="bfp8", tt_dtype=ttnn.bfloat8_b)
 
         # conv states
         conv1d_weight_name = "mixer.conv1d.weight"
@@ -77,7 +77,7 @@ class TtMambaBlock(torch.nn.Module):
 
     def forward(self, x):
         x_input = x # b, e=d_model
-        x = ttnn.linear(x, self.ssm_in_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
+        x = ttnn.linear(x, self.ssm_in_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG, core_grid=ttnn.CoreGrid(y=4, x=8))
         # left shift conv states
         ttnn.deallocate(self.conv_states[0])
         for i in range(3):
@@ -92,11 +92,11 @@ class TtMambaBlock(torch.nn.Module):
         x = ttnn.add(x, self.conv1d_bias, memory_config=ttnn.L1_MEMORY_CONFIG)
         x = ttnn.silu(x, memory_config=ttnn.L1_MEMORY_CONFIG)
         x = self.tt_ssm(x)
-        res = ttnn.linear(x_input, self.mlp_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
+        res = ttnn.linear(x_input, self.mlp_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG, core_grid=ttnn.CoreGrid(y=4, x=8))
         res_after_silu = ttnn.silu(res, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(res)
         x = ttnn.mul(x, res_after_silu, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(res_after_silu)
-        x = ttnn.linear(x, self.out_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
+        x = ttnn.linear(x, self.out_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG, core_grid=ttnn.CoreGrid(y=4, x=8))
 
         return x
