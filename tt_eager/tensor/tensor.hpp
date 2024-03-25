@@ -42,6 +42,7 @@ struct Tensor {
     std::shared_ptr<TensorAttributes> tensor_attributes;
     // Tensor gets worker queue handle through the device
     std::vector<Device*> workers = {};
+    // Modified at runtime, when user explictly deallocates tensor to insert a sync before deallocation
     bool deallocate_through_destructor = false;
     // ======================================================================================
     //                                  Hi Level APIs
@@ -56,7 +57,7 @@ struct Tensor {
 
     Tensor &operator=(const Tensor &other) = default;
 
-    Tensor(Tensor &&other) noexcept : tensor_attributes(std::move(other.tensor_attributes)), workers(std::move(other.workers)), deallocate_through_destructor(other.deallocate_through_destructor) {};
+    Tensor(Tensor &&other) noexcept : tensor_attributes(std::move(other.tensor_attributes)), workers(std::move(other.workers)) {};
     Tensor &operator=(Tensor &&other) = default;
 
     ~Tensor();
