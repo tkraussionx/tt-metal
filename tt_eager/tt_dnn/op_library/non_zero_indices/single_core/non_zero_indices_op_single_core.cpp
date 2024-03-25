@@ -62,19 +62,8 @@ operation::ProgramWithCallbacks non_zero_indices_single_core(const Tensor &input
 
 
     std::map<string, string> defines;
+    defines["NUM_BYTES"] = std::to_string(input.element_size());
 
-    if(input.get_dtype() == DataType::FLOAT32) {
-        defines["NUM_BYTES"] = "4";
-    }
-    else if(input.get_dtype() == DataType::UINT32) {
-        defines["NUM_BYTES"] = "4";
-    }
-    else if(input.get_dtype() == DataType::BFLOAT16) {
-        defines["NUM_BYTES"] = "2";
-    }
-    else if(input.get_dtype() == DataType::BFLOAT8_B) {
-        defines["NUM_BYTES"] = "1";
-    }
     // Create Kernel
     std::vector<uint32_t> compile_time_args = {
         (std::uint32_t) input_cb_index,

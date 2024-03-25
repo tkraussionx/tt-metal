@@ -12,6 +12,7 @@
 #include "tt_dnn/op_library/moreh_clip_grad_norm/moreh_clip_grad_norm_op.hpp"
 #include "tt_dnn/op_library/layernorm/layernorm_op.hpp"
 #include "tt_dnn/op_library/moreh_adam/moreh_adam_op.hpp"
+#include "tt_dnn/op_library/moreh_adamw/moreh_adamw_op.hpp"
 #include "tt_dnn/op_library/moreh_layernorm/moreh_layernorm_op.hpp"
 #include "tt_dnn/op_library/moreh_layernorm_backward/moreh_layernorm_backward_op.hpp"
 #include "tt_dnn/op_library/moreh_bmm/moreh_bmm_op.hpp"
@@ -506,6 +507,27 @@ void py_module(py::module& m_primary) {
         "Performs a moreh_adam operation.
         )doc");
 
+    // moreh_adamw
+    m_primary.def(
+        "moreh_adamw",
+        &moreh_adamw,
+        py::arg("param").noconvert(),
+        py::arg("grad").noconvert(),
+        py::arg("exp_avg").noconvert(),
+        py::arg("exp_avg_sq").noconvert(),
+        py::arg("lr").noconvert() = 0.001f,
+        py::arg("beta1").noconvert() = 0.9f,
+        py::arg("beta2").noconvert() = 0.999f,
+        py::arg("eps").noconvert() = 1e-8f,
+        py::arg("weight_decay").noconvert() = 0.01f,
+        py::arg("step").noconvert(),
+        py::arg("amsgrad").noconvert() = false,
+        py::arg("max_exp_avg_sq").noconvert() = std::nullopt,
+        py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        R"doc(
+        "Performs a moreh_adamw operation.
+        )doc");
+
     // moreh_clip_grad_norm
     m_primary.def(
         "moreh_clip_grad_norm_",
@@ -683,6 +705,58 @@ void py_module(py::module& m_primary) {
         py::arg("program_config").noconvert() = transformers::SoftmaxDefaultProgramConfig{},
         "Performs a softmax operation on the last tensor dimension. Returns a reference to the input tensor modified "
         "in place.");
+
+    m_primary.def("relu", &tt::operations::primary::relu,
+        py::arg("input").noconvert(), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
+        Applies the rectified linear unit (ReLU) function to the elements of the input tensor ``input``.
+
+        Input tensor must have TILE layout. Output tensor will have TILE layout.
+
+        .. csv-table::
+            :header: "Argument", "Description", "Data type", "Valid range", "Required"
+
+            "input", "Tensor RELU is applied to", "Tensor", "Tensor of shape [W, Z, Y, X]", "Yes"
+            "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+    )doc");
+
+    m_primary.def("add", &tt::operations::primary::add,
+        py::arg("input_a").noconvert(), py::arg("input_b").noconvert(),
+        py::arg("fused_activations") = std::nullopt,
+        py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
+        py::arg("output_dtype").noconvert() = std::nullopt,
+        py::arg("in_place") = false,
+        R"doc(Perform an eltwise-binary add (``{0} + {1}``) on two tensors.
+
+        Both input tensors must have TILE layout. Output tensor will have TILE layout.
+    )doc");
+
+    m_primary.def("bcast", &tt::operations::primary::bcast,
+        py::arg("input_a").noconvert(), py::arg("input_b").noconvert(), py::arg("math_op"), py::arg("dim"), py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG, R"doc(
+        Perform a binary elementwise operation ``math_op`` between tensors ``input_a`` and ``input_b``, where values from tensor ``input_b`` are broadcast.
+
+        Let tensor ``input_a`` have shape ``[W0, Z0, Y0, X0]`` and tensor ``input_b`` shape ``[W1, Z1, Y1, X1]``. ``dim`` determines the type of broadcast performed.
+
+        For ``dim=BcastOpDim::W`` broadcast is performed on dimension ``X``. ``Y0`` and ``Y1`` must be the same and either (W1=1 and Z1=1) or (W0=W1 and Z0=Z1).
+
+        For ``dim=BcastOpDim::H`` broadcast is performed on dimension  ``Y``. ``X0`` and ``X1`` must be the same and either (W1=1 and Z1=1) or (W0=W1 and Z0=Z1).
+
+        For ``dim=BcastOpDim::HW`` broadcast is performed on dimensions ``X`` and ``Y``. Either (W1=1 and Z1=1) or (W0=W1 and Z0=Z1) must hold for input shapes.
+
+        Both input tensors must have BFLOAT16 data type.
+
+        Output tensor will have BFLOAT16 data type.
+
+        Input tensors must have TILE layout. Output tensors will have TILE layout.
+
+        .. csv-table::
+            :header: "Argument", "Description", "Data type", "Valid range", "Required"
+
+            "input_a", "Input tensor", "Tensor", "Tensor of shape [W0, Z0, Y0, X0], where Y0%32=0 and X0%32=0", "Yes"
+            "input_b", "Input tensor to broadcast", "Tensor", "Tensor of shape [W1, Z1, Y1, X1], where Y1%32=0 and X1%32=0", "Yes"
+            "math_op", "Aggregating math operation", " BcastOpMath", "ADD, SUB, MUL", "Yes"
+            "dim", "Dimension on which to broadcast", "BcastOpDim", "W, H, HW", "Yes"
+            "output_mem_config", "Layout of tensor in TT Accelerator device memory banks", "MemoryConfig", "Default is interleaved in DRAM", "No"
+    )doc");
 
     py::enum_<MorehSoftmaxOpParallelizationStrategy>(m_primary, "MorehSoftmaxOpParallelizationStrategy")
         .value("NONE", MorehSoftmaxOpParallelizationStrategy::NONE)

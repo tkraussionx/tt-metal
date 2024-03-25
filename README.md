@@ -1,7 +1,7 @@
 <div align="center">
 
-<img src="./docs/source/_static/tt_metalium_w_logo.png" alt="TT-Metalium logo" height="250"/>
-<img src="./docs/source/_static/tt_nn_w_logo.png" alt="ttnn logo" height="250"/>
+<img src="./docs/source/common/_static/tt_metalium_w_logo.png" alt="TT-Metalium logo" height="250"/>
+<img src="./docs/source/common/_static/tt_nn_w_logo.png" alt="ttnn logo" height="250"/>
 
 **TT-Metalium** is our low-level programming model, enabling kernel development for Tenstorrent hardware.
 
@@ -9,7 +9,7 @@
 
 <h3>
 
-[Documentation](https://tenstorrent-metal.github.io/tt-metal/latest/index.html) | [Working models](./models/demos/) | [Discord](https://discord.gg/tvhGzHQwaj) | [Tenstorrent website](https://tenstorrent.com)
+[TT-Metalium API Reference](https://tenstorrent-metal.github.io/tt-metal/latest/tt-metalium) | [TT-NN API Reference](https://tenstorrent-metal.github.io/tt-metal/latest/ttnn) | [Demo models](./models/demos/) | [Discord](https://discord.gg/tvhGzHQwaj) | [Tenstorrent website](https://tenstorrent.com) | [Buy an E150 Grayskull card](https://tenstorrent.com/cards/)
 
 </h3>
 
@@ -59,31 +59,33 @@ ttnn.tracer.visualize(output)
 
 We also provide tools to review the graphs you create and run in TT-NN.
 
-<img src="./docs/source/_static/add.svg" alt="ttnn tracer example" height="250"/>
+<img src="./docs/source/common/_static/add.svg" alt="ttnn tracer example" height="250"/>
 
-## Running performant out-of-the-box models
+## Running model demos on Grayskull (GS)
 
-We have working demos for models such as [ResNet](./models/demos/resnet), [BERT](./models/demos/bert), [Falcon7B](./models/demos/ttnn_falcon7b) and [Falcon40B](./models/demos/falcon40b).
+We have prepared demos for the following models: [ResNet](./models/demos/resnet), [BERT](./models/demos/bert), [Falcon7B](./models/demos/ttnn_falcon7b) and [Falcon40B](./models/demos/falcon40b).
+In each model folder the `README.md` file provides detailed instructions how to run the model demo, with option to use provided inputs in demo folder or to supply your own.
 
-These are some performance metrics for our models running on Grayskull (GS). We constantly improve these
-and publish these metrics on [GitHub
+The demo models have the following performance measured on Grayskull. We publish up to date metrics on [GitHub
 Actions](https://github.com/tenstorrent-metal/tt-metal/actions/workflows/perf-models.yaml).
 
 | Model                            | Batch size          | GS end-to-end throughput [1] | GS on-device throughput [2] | Target GS end-to-end throughput [1] |
 |----------------------------------|---------------------|------------------------------|-----------------------------|-------------------------------------|
-| ResNet-50 (fps)                  | 20                  | 2070                         | 6943                        | 10000                               |
+| ResNet-50 (fps)                  | 20                  | 2070                         | 7200                        | 10000                               |
 | BERT-Large (sen/s)                  | 12                  | 362                          | 406                         | 410                                 |
 | TT-NN Falcon-7B decode (t/s)     | 32                  | 135                          | coming soon      | 140                                 |
 | ViT                              | Coming end of March |                              |                             |                                     |
 | U-Net                            | Coming end of March |                              |                             |                                     |
+| T5                               | Coming end of March |                              |                             |                                     |
+| bloom                            | Coming end of March |                              |                             |                                     |
 
 [1] - Throughput is measured by taking batch size and dividing by accelerator inference time, and reported per sec.
 
 [2] - Throughput on device is measured by directly counting the clock cycles for operations done on device.
 
-## What's coming for models
+## Model demos on Wormhole (WH)
 
-We are writing efficient versions of the following models to run on our Wormhole (WH) architecture (N300 2x WH card):
+We are preparing demos for the following models to run on our Wormhole (WH) architecture (N300 2x WH card):
 
 | Model            | N300 (2x WH) Throughput |
 |------------------|-------------------------|
@@ -163,7 +165,7 @@ source build/python_env/bin/activate
 ### Running example programs
 
 After installing, please refer to our [Getting Started
-page](https://tenstorrent-metal.github.io/tt-metal/latest/get_started/get_started.html)
+page](https://tenstorrent-metal.github.io/tt-metal/latest/tt-metalium/get_started/get_started.html)
 in our documentation.
 
 Note that example programs are only available through source installation at
@@ -171,8 +173,10 @@ this time.
 
 ## Documentation
 
-Please refer to our
-[documentation](https://tenstorrent-metal.github.io/tt-metal/latest/index.html).
+Please refer to our documentation:
+
+- [TT-Metalium](https://tenstorrent-metal.github.io/tt-metal/latest/tt-metalium)
+- [TT-NN](https://tenstorrent-metal.github.io/tt-metal/latest/ttnn)
 
 ## Troubleshooting and debugging tips
 
@@ -203,7 +207,6 @@ page](https://github.com/tenstorrent-metal/tt-metal/discussions/categories/gener
 We also have a Discord channel that you can join. You may discuss with other
 members of the community and developers there. You may use this invite
 [link](https://discord.gg/tvhGzHQwaj).
-
 If you would like to formally propose a new feature, report a bug, or have
 issues with permissions, please file through [GitHub
 issues](https://github.com/tenstorrent-metal/tt-metal/issues/new/choose).

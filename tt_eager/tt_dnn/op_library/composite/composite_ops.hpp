@@ -5,7 +5,7 @@
 #pragma once
 #include <type_traits>
 
-#include "common/constants.hpp"
+#include "tt_metal/common/constants.hpp"
 #include "tensor/owned_buffer_functions.hpp"
 #include "tensor/tensor.hpp"
 #include "tensor/tensor_utils.hpp"
@@ -483,12 +483,6 @@ Tensor triu(
 Tensor power_fp(
     const Tensor& input_a,
     float exponent,
-    const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
-
-// repeat a input tensor @input_a as specified by the number of dimensions
-Tensor repeat(
-    const Tensor& input_a,
-    const Shape& shape,
     const MemoryConfig& output_mem_config = operation::DEFAULT_OUTPUT_MEMORY_CONFIG);
 
 Tensor pow(

@@ -8,7 +8,7 @@
 #include <iostream>
 #include <string>
 
-#include "common/assert.hpp"
+#include "tt_metal/common/assert.hpp"
 #include "dev_mem_map.h"
 #include "tt_metal/third_party/umd/device/tt_device.h"
 #include "yaml-cpp/yaml.h"
@@ -79,6 +79,19 @@ CoreCoord metal_SocDescriptor::get_physical_ethernet_core_from_logical(const Cor
         "Bounds-Error -- Logical_core={} is outside of ethernet logical grid",
         logical_coord.str());
     return this->physical_ethernet_cores.at(eth_chan_map.at(logical_coord));
+}
+
+CoreCoord metal_SocDescriptor::get_logical_ethernet_core_from_physical(const CoreCoord &physical_coord) const {
+    const auto &phys_eth_map = this->physical_ethernet_cores;
+    auto it = std::find(phys_eth_map.begin(), phys_eth_map.end(), physical_coord);
+
+    TT_ASSERT(
+        (it != phys_eth_map.end()),
+        "Bounds-Error -- Physical_core={} is outside of ethernet physical grid",
+        physical_coord.str());
+
+    int chan = it - phys_eth_map.begin();
+    return this->chan_to_logical_eth_core_map.at(chan);
 }
 
 CoreCoord metal_SocDescriptor::get_physical_tensix_core_from_logical(const CoreCoord &logical_coord) const {

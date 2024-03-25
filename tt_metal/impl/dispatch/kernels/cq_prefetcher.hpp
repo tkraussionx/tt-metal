@@ -84,10 +84,16 @@ void issue_queue_wait_front() {
     uint32_t issue_write_ptr_and_toggle;
     uint32_t issue_write_ptr;
     uint32_t issue_write_toggle;
+#if defined(COMPILE_FOR_IDLE_ERISC)
+    uint32_t heartbeat = 0;
+#endif
     do {
         issue_write_ptr_and_toggle = *get_cq_issue_write_ptr();
         issue_write_ptr = issue_write_ptr_and_toggle & 0x7fffffff;
         issue_write_toggle = issue_write_ptr_and_toggle >> 31;
+#if defined(COMPILE_FOR_IDLE_ERISC)
+        RISC_POST_HEARTBEAT(heartbeat);
+#endif
     } while (cq_read_interface.issue_fifo_rd_ptr == issue_write_ptr and cq_read_interface.issue_fifo_rd_toggle == issue_write_toggle);
     DEBUG_STATUS('N', 'Q', 'D');
 }
@@ -139,7 +145,7 @@ FORCE_INLINE volatile uint32_t* get_16b_scratch_l1() {
 
 FORCE_INLINE
 void completion_queue_reserve_back(uint32_t data_size_B) {
-    DEBUG_STATUS('N', 'Q', 'R', 'B', 'W');
+    DEBUG_STATUS('Q', 'R', 'B', 'W');
     uint32_t data_size_16B = align(data_size_B, 32) >> 4;
     uint32_t completion_rd_ptr_and_toggle;
     uint32_t completion_rd_ptr;
@@ -153,7 +159,7 @@ void completion_queue_reserve_back(uint32_t data_size_B) {
         (completion_rd_toggle != cq_write_interface.completion_fifo_wr_toggle) and (cq_write_interface.completion_fifo_wr_ptr == completion_rd_ptr)
     );
 
-    DEBUG_STATUS('N', 'Q', 'R', 'B', 'D');
+    DEBUG_STATUS('Q', 'R', 'B', 'D');
 }
 
 FORCE_INLINE

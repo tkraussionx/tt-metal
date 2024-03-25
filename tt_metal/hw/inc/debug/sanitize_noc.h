@@ -16,14 +16,9 @@
 
 #include "watcher_common.h"
 
-#if defined(COMPILE_FOR_BRISC) || defined(COMPILE_FOR_NCRISC) || defined(COMPILE_FOR_ERISC)
+#if defined(COMPILE_FOR_BRISC) || defined(COMPILE_FOR_NCRISC) || defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_IDLE_ERISC)
 
 #if defined(WATCHER_ENABLED)
-
-#if defined(COMPILE_FOR_ERISC)
-#include "erisc.h"
-extern "C" void erisc_early_exit(std::int32_t stack_save_addr);
-#endif
 
 extern uint8_t noc_index;
 
