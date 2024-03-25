@@ -53,6 +53,8 @@ class geglu:
         self.parameters = parameters
 
     def __call__(self, config, hidden_states):
+        ttnn.dump_device_memory_state(self.device)
+        # breakpoint()
         proj = ttnn.linear(
             hidden_states,
             self.parameters.proj.proj_weight,

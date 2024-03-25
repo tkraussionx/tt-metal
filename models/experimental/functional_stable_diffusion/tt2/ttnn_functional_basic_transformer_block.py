@@ -55,6 +55,7 @@ class basic_transformer_block:
         attention_bias: bool = False,
         attention_head_dim=None,
     ):
+        ttnn.dump_device_memory_state(self.device, prefix="in_transformer_block")
         use_ada_layer_norm_zero = (num_embeds_ada_norm is not None) and norm_type == "ada_norm_zero"
         use_ada_layer_norm = (num_embeds_ada_norm is not None) and norm_type == "ada_norm"
 
@@ -110,7 +111,7 @@ class basic_transformer_block:
             )
 
             hidden_states = ttnn.add(attn_output, hidden_states)
-
+            ttnn.deallocate(attn_output)
         # 3. Feed-forward
         norm_hidden_states = ttnn.layer_norm(
             hidden_states, epsilon=1e-05, weight=self.parameters.norm3.weight, bias=self.parameters.norm3.bias
@@ -121,8 +122,9 @@ class basic_transformer_block:
         norm_hidden_states = ttnn.clone(
             norm_hidden_states, memory_config=ttnn.get_memory_config(hidden_states), dtype=ttnn.bfloat16
         )
+        hidden_states = ttnn.to_memory_config(hidden_states, ttnn.DRAM_MEMORY_CONFIG)
         ff_output = self.ff(config=config, hidden_states=norm_hidden_states)
-
+        ttnn.deallocate(norm_hidden_states)
         hidden_states = ttnn.add(ff_output, hidden_states)
-
+        ttnn.deallocate(ff_output)
         return hidden_states

@@ -129,7 +129,8 @@ class resnetBlock2D:
                     use_shallow_conv_variant=False,
                     compute_kernel_config=compute_kernel_config,
                     # enable_auto_formatting=(conv1_split_chunks > 1) or not group_norm_on_device,
-                    # reallocate_halo_output=True,
+                    reallocate_halo_output=True,
+                    deallocate_activation=True,
                 )
             )
 
@@ -299,6 +300,7 @@ class resnetBlock2D:
         use_in_shortcut: Optional[bool] = None,
         dtype: Optional[ttnn.DataType] = None,
     ):
+        ttnn.dump_device_memory_state(self.device, prefix="in_resnet_block_")
         assert groups == self.groups
         if non_linearity == "mish":
             assert False, "Mish is not implemented!"
@@ -352,7 +354,7 @@ class resnetBlock2D:
             )
             hidden_states = ttnn.to_layout(hidden_states, ttnn.TILE_LAYOUT)
         hidden_states = nonlinearity(hidden_states)
-
+        hidden_states = ttnn.reallocate(hidden_states)
         if up:
             assert False, "Up block within residual block is not implemented!"
         elif down:

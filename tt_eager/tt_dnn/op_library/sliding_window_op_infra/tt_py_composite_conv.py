@@ -869,6 +869,7 @@ class TTPyCompositeConv(TTPyOp):
             activation.deallocate()
             move_output = ttl.tensor.move_sharded(utwh_output)
             utwh_output.deallocate()
+            ttl.device.DumpDeviceMemoryState(self.device, prefix="conv_")
             return conv_(move_output)
 
         def composite_conv_with_move_utwh_output(activation):

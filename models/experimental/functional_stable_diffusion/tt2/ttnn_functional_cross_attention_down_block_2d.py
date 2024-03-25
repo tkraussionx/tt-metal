@@ -58,9 +58,10 @@ class cross_attention_down_block_2d:
         resnet_time_scale_shift: str = "default",
     ):
         output_states = ()
-
+        ttnn.dump_device_memory_state(self.device, prefix="in_cross_att2d")
         for index, (resnet, attn) in enumerate(zip(self.resnets, self.attentions)):
             print(f"    resnet: {index}")
+            # breakpoint()
             in_channels = in_channels if index == 0 else out_channels
             use_in_shortcut = True if "conv_shortcut" in resnet.parameters else False
             hidden_states = resnet(
@@ -77,6 +78,10 @@ class cross_attention_down_block_2d:
                 output_scale_factor=output_scale_factor,
                 pre_norm=resnet_pre_norm,
             )
+            # breakpoint()
+            ttnn.dump_device_memory_state(self.device, prefix="in_cross_att2d_after_resnet_block")
+            hidden_states = ttnn.reallocate(hidden_states)
+            ttnn.dump_device_memory_state(self.device, prefix="in_cross_att2d_after_resnet_block_after_reallocate")
             if not dual_cross_attention:
                 print(f"    attn: {index}")
                 hidden_states = attn(

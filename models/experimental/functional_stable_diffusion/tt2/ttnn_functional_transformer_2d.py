@@ -145,6 +145,7 @@ class transformer_2d_model:
         norm_elementwise_affine: bool = True,
         output_bfloat16: bool = False,
     ):
+        ttnn.dump_device_memory_state(self.device, prefix="in_transformer2d")
         inner_dim = num_attention_heads * attention_head_dim
         assert norm_num_groups == 32
         is_input_continuous = (in_channels is not None) and (patch_size is None)
@@ -179,7 +180,7 @@ class transformer_2d_model:
         if ttnn.get_memory_config(hidden_states) != self.proj_in.conv.input_sharded_memory_config:
             hidden_states = ttnn.to_memory_config(hidden_states, self.proj_in.conv.input_sharded_memory_config)
         residual = hidden_states
-
+        residual = ttnn.to_memory_config(residual, ttnn.DRAM_MEMORY_CONFIG)
         hidden_states = ttnn.to_layout(
             hidden_states,
             ttnn.ROW_MAJOR_LAYOUT,
@@ -239,7 +240,7 @@ class transformer_2d_model:
         inner_dim = hidden_states.shape[-1]
         # hidden_states = ttnn.to_layout(hidden_states, layout=ttnn.ROW_MAJOR_LAYOUT)
         hidden_states = ttnn.reshape(hidden_states, (1, batch, height * width, inner_dim))
-
+        hidden_states = ttnn.reallocate(hidden_states)
         # hidden_states = ttnn.to_memory_config(
         #     hidden_states, ttnn.L1_MEMORY_CONFIG
         # )  # sharded to interleaved since we can't tilize block sharded
@@ -277,7 +278,8 @@ class transformer_2d_model:
                 # )  # sharded to interleaved since we can't tilize block sharded
                 # hidden_states = ttnn.to_layout(hidden_states, layout=ttnn.TILE_LAYOUT, use_multicore=True)
                 # hidden_states = ttnn.to_memory_config(hidden_states, ttnn.DRAM_MEMORY_CONFIG)
-
+                if ttnn.get_memory_config(residual) != ttnn.get_memory_config(hidden_states):
+                    residual = ttnn.to_memory_config(residual, ttnn.get_memory_config(hidden_states))
                 if output_bfloat16:
                     hidden_states = ttnn.add(
                         hidden_states,
@@ -289,6 +291,7 @@ class transformer_2d_model:
                         hidden_states,
                         residual,
                     )
+                ttnn.deallocate(residual)
             else:
                 hidden_states = ttnn.to_device(hidden_states, self.device)
                 hidden_states = ttnn.matmul(hidden_states, self.parameters.proj_out.weight)

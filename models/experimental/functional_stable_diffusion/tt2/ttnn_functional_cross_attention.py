@@ -282,7 +282,7 @@ class cross_attention:
         if hidden_states.shape[-2] == 4096:
             query = ttnn.reallocate(query)
             key = ttnn.reallocate(key)
-            value = ttnn.reallocate(value)
+            value = ttnn.to_memory_config(value, ttnn.DRAM_MEMORY_CONFIG)
 
         attention_probs = self.get_attention_scores_opt(
             query,
@@ -300,7 +300,7 @@ class cross_attention:
             memory_config=ttnn.L1_MEMORY_CONFIG,
             dtype=ttnn.bfloat8_b,
         )
-
+        ttnn.deallocate(attention_probs)
         hidden_states = ttnn.transformer.concatenate_heads(
             hidden_states, memory_config=ttnn.get_memory_config(hidden_states)
         )
