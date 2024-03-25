@@ -7,6 +7,7 @@ import sys
 import ttnn
 import torch
 import model_config
+from transformers import AutoTokenizer
 
 
 from models.experimental.mamba.reference.decode_model import MambaPretrainedModelName
@@ -30,7 +31,7 @@ def get_tt_metal_model(num_users, hidden_size, configs, version):
     reference_model = get_cpu_reference_model(version)
     cache_path = f"/tmp/state-spaces/{version}"
 
-    model = MambaTT(reference_model, cache_path, 1, device, num_users, hidden_size, configs)
+    model = MambaTT(reference_model, device, configs, cache_path, 1)
     return model, device
 
 
@@ -44,7 +45,9 @@ def run_demo(num_users, hidden_size, profile):
     with torch.no_grad():
         # create random torch tensor of hidden size and num_users, with datatype bfloat16
 
-        input_data = torch.randn((1, 1, num_users, hidden_size), dtype=torch.bfloat16)
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
+        input_data = tokenizer("Hello", return_tensors="pt")["input_ids"]
+        input_data = input_data.repeat(num_users, 1)
 
         if profile == 1:
             out_data = model(input_data)
