@@ -2,25 +2,26 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <thread>
+#include "watcher_server.hpp"
+
 #include <unistd.h>
+
+#include <atomic>
 #include <chrono>
 #include <ctime>
-#include <unordered_map>
+#include <filesystem>
 #include <memory>
 #include <mutex>
-#include <filesystem>
-
-#include "llrt/llrt.hpp"
-#include "watcher_server.hpp"
-#include "llrt/rtoptions.hpp"
-#include "dev_mem_map.h"
-#include "dev_msgs.h"
+#include <thread>
+#include <unordered_map>
 
 #include "debug/sanitize_noc.h"
-
-#include "noc/noc_parameters.h"
+#include "dev_mem_map.h"
+#include "dev_msgs.h"
+#include "llrt/llrt.hpp"
+#include "llrt/rtoptions.hpp"
 #include "noc/noc_overlay_parameters.h"
+#include "noc/noc_parameters.h"
 
 #include "hostdevcommon/common_runtime_address_map.h"
 #include "hostdevcommon/debug_ring_buffer_common.h"

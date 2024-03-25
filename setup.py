@@ -16,10 +16,6 @@ from setuptools import setup, Extension, find_namespace_packages
 from setuptools.command.build_ext import build_ext
 
 
-class BUDAEagerBuildConstants:
-    BUDA_EAGER_SO_SRC_LOCATION = "build/lib/libtt_lib_csrc.so"
-
-
 class EnvVarNotFoundException(Exception):
     pass
 
@@ -106,14 +102,22 @@ class BUDAEagerBuild(build_ext):
         a lot of extra stuff that's added to the environment in dev that the
         wheel doesn't need
         """
+        env = os.environ.copy()
+        if "OUT" not in env:
+            env["OUT"] = "build"
         return {
-            **os.environ.copy(),
+            **env,
             "TT_METAL_HOME": Path(__file__).parent,
             "TT_METAL_ENV": "production",
             # Need to create static lib for tt_metal runtime because currently
             # we package it with the wheel at the moment
             "TT_METAL_CREATE_STATIC_LIB": "1",
         }
+
+    @staticmethod
+    def get_buda_eager_so_src_location():
+        env = BUDAEagerBuild.get_buda_eager_build_env()
+        return f"{env['OUT']}/lib/libtt_lib_csrc.so"
 
     def run(self):
         assert (
@@ -129,7 +133,7 @@ class BUDAEagerBuild(build_ext):
 
         build_env = BUDAEagerBuild.get_buda_eager_build_env()
         subprocess.check_call(["make", "build"], env=build_env)
-        subprocess.check_call(["ls", "-hal", "build/lib"], env=build_env)
+        subprocess.check_call(["ls", "-hal", f"{build_env['OUT']}/lib"], env=build_env)
 
         fullname = self.get_ext_fullname(ext.name)
         filename = self.get_ext_filename(fullname)
@@ -141,7 +145,7 @@ class BUDAEagerBuild(build_ext):
         if not os.path.exists(dir_path):
             os.makedirs(dir_path)
 
-        src = BUDAEagerBuildConstants.BUDA_EAGER_SO_SRC_LOCATION
+        src = BUDAEagerBuild.get_buda_eager_so_src_location()
         self.copy_file(src, full_lib_path)
 
     def is_editable_install_(self):
