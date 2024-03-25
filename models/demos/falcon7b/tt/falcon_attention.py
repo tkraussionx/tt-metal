@@ -284,36 +284,39 @@ class TtFalconAttention(nn.Module):
                 output_mem_config=self.model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"],
             )
 
-            key_layer = tt_lib.tensor.interleaved_to_sharded(
-                key_layer,
-                sharded_mem_config=self.model_config["ATTN_BATCH_SHARDED_MEMCFG"](padded_layer_past_len, self.head_dim),
-            )
+            if self.model_config["model_config_str"] == "BFLOAT16-L1":
+                key_layer = tt_lib.tensor.interleaved_to_sharded(
+                    key_layer,
+                    sharded_mem_config=self.model_config["ATTN_BATCH_SHARDED_MEMCFG"](
+                        padded_layer_past_len, self.head_dim
+                    ),
+                )
 
-            # Pad and transpose Q for batched matmul
-            query_layer = tt_lib.tensor.pad(
-                query_layer, [1, self.padded_local_heads, batch, self.head_dim], [0, 0, 0, 0], 0.0
-            )
+                # Pad and transpose Q for batched matmul
+                query_layer = tt_lib.tensor.pad(
+                    query_layer, [1, self.padded_local_heads, batch, self.head_dim], [0, 0, 0, 0], 0.0
+                )
 
-            query_layer = tt_lib.tensor.transpose(
-                query_layer,
-                -2,
-                -3,
-            )
+                query_layer = tt_lib.tensor.transpose(
+                    query_layer,
+                    -2,
+                    -3,
+                )
 
-            query_layer = tt_lib.tensor.reshape(
-                query_layer,
-                batch,
-                1,
-                self.padded_local_heads,
-                self.head_dim,  # Batch must be in dim 0 to match K cache
-            )
+                query_layer = tt_lib.tensor.reshape(
+                    query_layer,
+                    batch,
+                    1,
+                    self.padded_local_heads,
+                    self.head_dim,  # Batch must be in dim 0 to match K cache
+                )
 
-            query_layer = tt_lib.tensor.interleaved_to_sharded(
-                query_layer,
-                sharded_mem_config=self.model_config["ATTN_BATCH_SHARDED_MEMCFG"](
-                    self.padded_local_heads, self.head_dim
-                ),
-            )
+                query_layer = tt_lib.tensor.interleaved_to_sharded(
+                    query_layer,
+                    sharded_mem_config=self.model_config["ATTN_BATCH_SHARDED_MEMCFG"](
+                        self.padded_local_heads, self.head_dim
+                    ),
+                )
 
         ######################
         ### PRE-SOFTMAX MM ###
@@ -324,7 +327,7 @@ class TtFalconAttention(nn.Module):
             -1,
             output_mem_config=(
                 self.model_config["K_TRANSPOSED_OUTPUT_MEMCFG"]
-                if llm_mode == "prefill"
+                if llm_mode == "prefill" or self.model_config["model_config_str"] == "BFLOAT16-DRAM"
                 else tt_lib.tensor.MemoryConfig(
                     tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, tt_lib.tensor.BufferType.L1
                 )
@@ -338,8 +341,15 @@ class TtFalconAttention(nn.Module):
                 key_layer_transposed,
                 output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
             )
-
-        elif llm_mode == "decode":
+        elif self.model_config["model_config_str"] == "BFLOAT16-DRAM":
+            attn_weights = tt_lib.operations.primary.transformers.attn_matmul(
+                query_layer,
+                key_layer_transposed,
+                compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+                output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
+            )
+        else:
             attn_weights = tt_lib.operations.primary.matmul(
                 query_layer,
                 key_layer_transposed,
@@ -356,7 +366,7 @@ class TtFalconAttention(nn.Module):
         query_layer.deallocate()
         key_layer_transposed.deallocate()
 
-        if llm_mode == "prefill":
+        if llm_mode == "prefill" or self.model_config["model_config_str"] == "BFLOAT16-DRAM":
             attn_weights = tt_lib.tensor.bcast(
                 attn_weights,
                 self.scalar,
@@ -372,25 +382,25 @@ class TtFalconAttention(nn.Module):
                     output_mem_config=self.model_config["PRE_SOFTMAX_MASK_OUTPUT_MEMCFG"],
                 )
 
-        ###############
-        ### SOFTMAX ###
-        ###############
-        attn_weights = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
-            attn_weights,
-            scale=self.scale if llm_mode == "decode" else None,
-            mask=attention_mask if llm_mode == "decode" else None,
-            program_config=tt_lib.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
-                compute_with_storage_grid_size=(8, 4),
-                subblock_w=1,
-                block_h=self.padded_local_heads // 32,
-                block_w=padded_layer_past_len // 32,
-                math_fidelity=tt_lib.tensor.MathFidelity.HiFi4,
-                im_data_format=tt_lib.tensor.DataType.BFLOAT16,
+            attn_weights = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(attn_weights)
+        else:
+            ###############
+            ### SOFTMAX ###
+            ###############
+            attn_weights = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
+                attn_weights,
+                scale=self.scale,
+                mask=attention_mask,
+                program_config=tt_lib.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
+                    compute_with_storage_grid_size=(8, 4),
+                    subblock_w=1,
+                    block_h=self.padded_local_heads // 32,
+                    block_w=padded_layer_past_len // 32,
+                    math_fidelity=tt_lib.tensor.MathFidelity.HiFi4,
+                    im_data_format=tt_lib.tensor.DataType.BFLOAT16,
+                ),
+                is_causal_mask=True,
             )
-            if llm_mode == "decode"
-            else tt_lib.operations.primary.transformers.SoftmaxDefaultProgramConfig(),
-            is_causal_mask=True if llm_mode == "decode" else False,
-        )
 
         ######################
         ### V CACHE UPDATE ###
@@ -408,10 +418,13 @@ class TtFalconAttention(nn.Module):
                 output_mem_config=self.model_config["V_CACHE_SLICE_OUTPUT_MEMCFG"],
             )
 
-            value_layer = tt_lib.tensor.interleaved_to_sharded(
-                value_layer,
-                sharded_mem_config=self.model_config["ATTN_BATCH_SHARDED_MEMCFG"](padded_layer_past_len, self.head_dim),
-            )
+            if self.model_config["model_config_str"] == "BFLOAT16-L1":
+                value_layer = tt_lib.tensor.interleaved_to_sharded(
+                    value_layer,
+                    sharded_mem_config=self.model_config["ATTN_BATCH_SHARDED_MEMCFG"](
+                        padded_layer_past_len, self.head_dim
+                    ),
+                )
 
         layer_present = layer_past if use_cache else None
 
@@ -424,16 +437,15 @@ class TtFalconAttention(nn.Module):
                 value_layer,
                 output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
             )
-
+        elif self.model_config["model_config_str"] == "BFLOAT16-DRAM":
+            attn_output = tt_lib.operations.primary.transformers.attn_matmul(
+                attn_weights,
+                value_layer,
+                compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+                output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
+            )
         elif llm_mode == "decode":
-            # attn_output = tt_lib.operations.primary.transformers.attn_matmul(
-            #     attn_weights,
-            #     value_layer,
-            #     compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-            #     output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
-            #     output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
-            # )
-
             attn_output = tt_lib.operations.primary.matmul(
                 attn_weights,
                 value_layer,

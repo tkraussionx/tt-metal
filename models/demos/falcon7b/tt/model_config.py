@@ -108,6 +108,7 @@ def get_model_config(model_config_str):
 
     # Set defaults for dtype and mem_config for all ops
     model_config = {
+        "model_config_str": model_config_str,
         "DEFAULT_DTYPE": dtype,
         "DEFAULT_MEMCFG": mem_config,
         "MOVE_DECODER_OUTPUT_BOOL": False,
@@ -121,9 +122,7 @@ def get_model_config(model_config_str):
         if "MM_WEIGHTS_DTYPE" in key:
             model_config[key] = BFP8_DTYPE
 
-    # TODO: support BFLOAT16-DRAM, rename BFLOAT16-L1 to BFLOAT16-L1-batched_attn
     if model_config_str in ("BFLOAT16-L1",):
-        # TODO: are these still used?
         model_config["ROTARY_EMBEDDING_OUTPUT_MEMCFG"] = L1_MEMCFG
         model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"] = L1_MEMCFG
         model_config["V_CACHE_SLICE_OUTPUT_MEMCFG"] = L1_MEMCFG
