@@ -201,13 +201,14 @@ def test_time_sharded_attnention(
 # @pytest.mark.parametrize("num_cores", [64])
 @pytest.mark.parametrize("num_heads", [16])
 @pytest.mark.parametrize("data_format", [ttl.tensor.DataType.BFLOAT8_B])
+@pytest.mark.parametrize("reshard_for_softmax", [True, False])
 def test_attnention(
     device,
     seq_len,
     kv_len,
-    # num_cores,
     num_heads,
     data_format,
+    reshard_for_softmax,
     function_level_defaults,
 ):
     compute_grid_size = device.compute_with_storage_grid_size()
@@ -229,6 +230,10 @@ def test_attnention(
     dram_interleaved_memory_config = ttl.tensor.MemoryConfig(
         memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
         buffer_type=ttl.tensor.BufferType.DRAM,
+    )
+    l1_interleaved_memory_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttl.tensor.BufferType.L1,
     )
 
     height_sharded_memory_config = ttl.tensor.MemoryConfig(
@@ -273,14 +278,6 @@ def test_attnention(
         ttl.tensor.ShardOrientation.COL_MAJOR,
     )
 
-    # k_sharded = ttl.tensor.interleaved_to_sharded(
-    #     reference_key_layer_transposed,
-    #     grid_size,
-    #     [num_heads * 64 // num_cores, kv_len],
-    #     ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
-    #     ttl.tensor.ShardOrientation.COL_MAJOR,
-    # )
-
     program_config = ttl.operations.primary.MatmulMultiCoreReuseProgramConfig(
         compute_with_storage_grid_size=grid_size,
         in0_block_w=2,
@@ -307,25 +304,57 @@ def test_attnention(
     )
     q_sharded.deallocate()
 
-    # breakpoint()
-    # compute_grid = ttl.tensor.CoreCoord(8, 8)
+    # compute_grid = ttl.tensor.CoreCoord(7, 7)
     # output_shard_grid = ttl.tensor.CoreRangeSet({ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), compute_grid)})
-    # output_shard_spec = ttl.tensor.ShardSpec(output_shard_grid, [1024, 96], ttl.tensor.ShardOrientation.ROW_MAJOR, False)
+    # output_shard_spec = ttl.tensor.ShardSpec(output_shard_grid, [1024, 96], ttl.tensor.ShardOrientation.COL_MAJOR, False)
     # output_mem_config = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, ttl.tensor.BufferType.L1, output_shard_spec)
     # mm_slice = ttl.tensor.reshard(
     #     mm_slice,
     #     output_mem_config,
     # )
-    softmax_program_config = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
-        compute_with_storage_grid_size=grid_size,
-        subblock_w=1,
-        block_h=128,
-        block_w=3,
-        math_fidelity=ttl.tensor.MathFidelity.LoFi,
-        im_data_format=ttl.tensor.DataType.BFLOAT16,
-    )
+    if reshard_for_softmax:
+        mm_slice = ttl.tensor.sharded_to_interleaved(
+            mm_slice,
+            l1_interleaved_memory_config,
+        )
+        mm_slice = ttl.tensor.interleaved_to_sharded(
+            mm_slice,
+            (8, 8),
+            [num_heads * seq_len // 64, 96],
+            ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+            ttl.tensor.ShardOrientation.COL_MAJOR,
+        )
 
-    mm_slice = ttl.operations.primary.softmax_in_place(mm_slice, program_config=softmax_program_config)
+        softmax_program_config = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
+            compute_with_storage_grid_size=(8, 8),
+            subblock_w=1,
+            block_h=32,
+            block_w=3,
+            math_fidelity=ttl.tensor.MathFidelity.LoFi,
+            im_data_format=ttl.tensor.DataType.BFLOAT16,
+        )
+        mm_slice = ttl.operations.primary.softmax_in_place(mm_slice, program_config=softmax_program_config)
+        mm_slice = ttl.tensor.sharded_to_interleaved(
+            mm_slice,
+            l1_interleaved_memory_config,
+        )
+        mm_slice = ttl.tensor.interleaved_to_sharded(
+            mm_slice,
+            (8, 2),
+            [4096, 96],
+            ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+            ttl.tensor.ShardOrientation.COL_MAJOR,
+        )
+    else:
+        softmax_program_config = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
+            compute_with_storage_grid_size=grid_size,
+            subblock_w=1,
+            block_h=128,
+            block_w=3,
+            math_fidelity=ttl.tensor.MathFidelity.LoFi,
+            im_data_format=ttl.tensor.DataType.BFLOAT16,
+        )
+        mm_slice = ttl.operations.primary.softmax_in_place(mm_slice, program_config=softmax_program_config)
 
     v_sharded = ttl.tensor.interleaved_to_sharded(
         reference_value_layer,
