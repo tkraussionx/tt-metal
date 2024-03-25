@@ -372,36 +372,25 @@ class TtFalconAttention(nn.Module):
                     output_mem_config=self.model_config["PRE_SOFTMAX_MASK_OUTPUT_MEMCFG"],
                 )
 
-            ###############
-            ### SOFTMAX ###
-            ###############
-            # TODO: Replace with scaled_softmax_attention_mask from BERT
-            # attn_weights = tt_lib.operations.primary.softmax_in_place(
-            #     attn_weights,
-            # )
-            print(f"attention_mask:{attention_mask.get_legacy_shape()}")
-            attn_weights = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
-                attn_weights,
+        ###############
+        ### SOFTMAX ###
+        ###############
+        attn_weights = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
+            attn_weights,
+            scale=self.scale if llm_mode == "decode" else None,
+            mask=attention_mask if llm_mode == "decode" else None,
+            program_config=tt_lib.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
+                compute_with_storage_grid_size=(8, 4),
+                subblock_w=1,
+                block_h=self.padded_local_heads // 32,
+                block_w=padded_layer_past_len // 32,
+                math_fidelity=tt_lib.tensor.MathFidelity.HiFi4,
+                im_data_format=tt_lib.tensor.DataType.BFLOAT16,
             )
-            #     self.scale,
-            #     attention_mask,
-            #     program_config=tt_lib.operations.primary.transformers.SoftmaxDefaultProgramConfig(),
-            # )
-        else:
-            attn_weights = tt_lib.operations.primary.transformers.scale_mask_softmax_in_place(
-                attn_weights,
-                self.scale,
-                attention_mask,
-                program_config=tt_lib.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
-                    compute_with_storage_grid_size=(8, 4),
-                    subblock_w=1,
-                    block_h=self.padded_local_heads // 32,
-                    block_w=padded_layer_past_len // 32,
-                    math_fidelity=tt_lib.tensor.MathFidelity.HiFi4,
-                    im_data_format=tt_lib.tensor.DataType.BFLOAT16,
-                ),
-                is_causal_mask=True,
-            )
+            if llm_mode == "decode"
+            else tt_lib.operations.primary.transformers.SoftmaxDefaultProgramConfig(),
+            is_causal_mask=True if llm_mode == "decode" else False,
+        )
 
         ######################
         ### V CACHE UPDATE ###
