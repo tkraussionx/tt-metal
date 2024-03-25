@@ -650,7 +650,7 @@ def to_layout(tensor, layout: ttnn.Layout, dtype: ttnn.DataType = None):
         raise RuntimeError(f"Unsupported layout conversion from {tensor.layout} to {layout}")
 
     is_on_device = ttnn.is_tensor_storage_on_device(tensor)
-    if is_on_device and tensor.dtype not in {ttnn.bfloat16, ttnn.bfloat8_b, ttnn.bfloat4_b}:
+    if is_on_device and tensor.dtype not in {ttnn.bfloat16, ttnn.bfloat8_b, ttnn.bfloat4_b, ttnn.float32, ttnn.uint32}:
         raise RuntimeError("ttnn.to_layout: Only bfloat16 and bfloat8_b are supported on device")
 
     def requires_padding_change(layout, shape):
