@@ -25,10 +25,13 @@ def unet_reshard(
         return ttnn_tensor
 
     if use_reshard:
-        return ttnn.to_memory_config(
+        i = ttnn_tensor
+        ttnn_tensor = ttnn.to_memory_config(
             ttnn_tensor,
             memory_config=sharded_memory_config,
         )
+        ttnn.deallocate(i)
+        return ttnn_tensor
     else:
         ttl_tensor = ttnn_tensor
         if ttl_tensor.is_sharded():
@@ -93,7 +96,10 @@ def unet_concat(ttnn_tensors, dim=-1, use_reshard=True):
                 ttlib_tensors[i] = ttl.tensor.sharded_to_interleaved(ttlib_tensors[i], ttnn.L1_MEMORY_CONFIG)
 
     dim = dim + 4 - rank
-    return ttl.tensor.concat(ttlib_tensors, dim=dim, output_mem_config=output_mem_config)
+    ret = ttl.tensor.concat(ttlib_tensors, dim=dim, output_mem_config=output_mem_config)
+    for t in ttlib_tensors:
+        ttnn.deallocate(t)
+    return ret
 
 
 class UNet:
@@ -129,81 +135,75 @@ class UNet:
         self.c8_3 = parameters.c8_3
         self.output_layer = parameters.output_layer
 
-    def __call__(self, device, input_tensor):
+    def __call__(self, device, input_tensor, orig_shape):
+        nhw = orig_shape[-4] * orig_shape[-2] * orig_shape[-1]
         input_tensor = input_tensor.to(device, self.c1.conv.input_sharded_memory_config)
 
-        profiler.signpost("c1")
         output_tensor = self.c1(input_tensor)
         output_tensor = self.c1_2(output_tensor)
         save_c1_2_out = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
+        # save_c1_2_out = ttnn.to_memory_config(output_tensor, ttnn.DRAM_MEMORY_CONFIG)
         output_tensor = self.p1(output_tensor)
 
-        profiler.signpost("c2")
         output_tensor = unet_reshard(output_tensor, self.c2.conv.input_sharded_memory_config)
         output_tensor = self.c2(output_tensor)
         output_tensor = self.c2_2(output_tensor)
         save_c2_2_out = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
         output_tensor = self.p2(output_tensor)
 
-        profiler.signpost("c3")
         output_tensor = unet_reshard(output_tensor, self.c3.conv.input_sharded_memory_config)
         output_tensor = self.c3(output_tensor)
         output_tensor = self.c3_2(output_tensor)
         save_c3_2_out = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
         output_tensor = self.p3(output_tensor)
 
-        profiler.signpost("c4")
         output_tensor = unet_reshard(output_tensor, self.c4.conv.input_sharded_memory_config)
         output_tensor = self.c4(output_tensor)
         output_tensor = self.c4_2(output_tensor)
-        save_c4_2_out = output_tensor
+        save_c4_2_out = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
         output_tensor = self.p4(output_tensor)
 
-        profiler.signpost("bnc")
         output_tensor = self.bnc(output_tensor)
         output_tensor = self.bnc_2(output_tensor)
 
         ## upsample block
-        profiler.signpost("upsample1")
         output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
-        output_tensor = ttnn.reshape(output_tensor, (1, 132, 10, 64))
+        output_tensor = ttnn.reshape(
+            output_tensor, (orig_shape[-4], orig_shape[-2] // 16, orig_shape[-1] // 16, output_tensor.shape[-1])
+        )
         output_tensor = ttnn.upsample(output_tensor, 2)
-        output_tensor = ttnn.reshape(output_tensor, (1, 1, 5280, 64))
+        output_tensor = ttnn.reshape(output_tensor, (1, 1, nhw // 64, output_tensor.shape[-1]))
 
-        profiler.signpost("concat1")
         output_tensor = unet_concat([output_tensor, save_c4_2_out], dim=-1)
 
-        profiler.signpost("c5")
         output_tensor = unet_reshard(output_tensor, self.c5.conv.input_sharded_memory_config)
         output_tensor = self.c5(output_tensor)
         output_tensor = self.c5_2(output_tensor)
         output_tensor = self.c5_3(output_tensor)
 
-        profiler.signpost("upsample2")
         output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
-        output_tensor = ttnn.reshape(output_tensor, (1, 264, 20, 32))
+        output_tensor = ttnn.reshape(
+            output_tensor, (orig_shape[-4], orig_shape[-2] // 8, orig_shape[-1] // 8, output_tensor.shape[-1])
+        )
         output_tensor = ttnn.upsample(output_tensor, 2)
-        output_tensor = ttnn.reshape(output_tensor, (1, 1, 21120, 32))
+        output_tensor = ttnn.reshape(output_tensor, (1, 1, nhw // 16, output_tensor.shape[-1]))
 
-        profiler.signpost("concat2")
         output_tensor = unet_concat([output_tensor, save_c3_2_out], dim=-1)
 
-        profiler.signpost("c6")
         output_tensor = unet_reshard(output_tensor, self.c6.conv.input_sharded_memory_config)
         output_tensor = self.c6(output_tensor)
         output_tensor = self.c6_2(output_tensor)
         output_tensor = self.c6_3(output_tensor)
 
-        profiler.signpost("upsample3")
         output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
-        output_tensor = ttnn.reshape(output_tensor, (1, 528, 40, 32))
+        output_tensor = ttnn.reshape(
+            output_tensor, (orig_shape[-4], orig_shape[-2] // 4, orig_shape[-1] // 4, output_tensor.shape[-1])
+        )
         output_tensor = ttnn.upsample(output_tensor, 2)
-        output_tensor = ttnn.reshape(output_tensor, (1, 1, 84480, 32))
+        output_tensor = ttnn.reshape(output_tensor, (1, 1, nhw // 4, output_tensor.shape[-1]))
 
-        profiler.signpost("concat3")
         output_tensor = unet_concat([output_tensor, save_c2_2_out], dim=-1)
 
-        profiler.signpost("c7")
         hacked_shard_shape = self.c7.conv.input_sharded_memory_config.shard_spec.shape
         hacked_shard_shape[1] = output_tensor.shape[-1]
         self.c7.conv.input_sharded_memory_config.shard_spec.shape = hacked_shard_shape
@@ -211,16 +211,18 @@ class UNet:
         output_tensor = self.c7_2(output_tensor)
         output_tensor = self.c7_3(output_tensor)
 
-        profiler.signpost("upsample4")
         output_tensor = ttnn.to_layout(output_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
-        output_tensor = ttnn.reshape(output_tensor, (1, 1056, 80, 16))
+        output_tensor = ttnn.reshape(
+            output_tensor, (orig_shape[-4], orig_shape[-2] // 2, orig_shape[-1] // 2, output_tensor.shape[-1])
+        )
         output_tensor = ttnn.upsample(output_tensor, 2)
-        output_tensor = ttnn.reshape(output_tensor, (1, 1, 160 * 1056 * 2, 16))
+        output_tensor = ttnn.reshape(output_tensor, (1, 1, nhw, output_tensor.shape[-1]))
 
-        profiler.signpost("concat4")
+        # tmp = output_tensor
+        # output_tensor = ttnn.to_memory_config(output_tensor, ttnn.DRAM_MEMORY_CONFIG)
+        # ttnn.deallocate(tmp)
         output_tensor = unet_concat([output_tensor, save_c1_2_out], dim=-1)
 
-        profiler.signpost("c8")
         output_tensor = self.c8(output_tensor)
         output_tensor = self.c8_2(output_tensor)
         output_tensor = self.c8_3(output_tensor)
