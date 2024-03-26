@@ -518,14 +518,8 @@ class UNet(nn.Module):
         # return r8_3
 
 
-if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--loop", default=0, type=int)
-    args = ap.parse_args()
-
-    device_id = 0
-    device = ttnn.open_device(device_id=device_id)
-
+@pytest.mark.parametrize("loop", [0])
+def test_shallow_unet(device, loop):
     torch.manual_seed(0)
 
     torch_model = UNet()
@@ -573,7 +567,7 @@ if __name__ == "__main__":
 
     warmup = 1
     start = None
-    for i in range(args.loop + warmup):
+    for i in range(loop + warmup):
         if i == warmup:
             start = time.perf_counter()
         profiler.tracy_frame()
@@ -582,7 +576,7 @@ if __name__ == "__main__":
         stop = time.perf_counter()
         total_time = stop - start
         batch = input_shape[0]
-        total_frame_count = batch * args.loop
+        total_frame_count = batch * loop
         print(f"Elapsed host time (sec): {total_time}")
         print(f"Frames processed: {total_frame_count}")
         print(f"Host perf (fps): {total_frame_count / total_time}")
@@ -603,4 +597,14 @@ if __name__ == "__main__":
     )
     # todo: taps - Disable assert with pcc as pcc is really bad
     # assert_with_pcc(torch_output_tensor, output_tensor, pcc=0.9999)
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--loop", default=0, type=int)
+    args = ap.parse_args()
+
+    device_id = 0
+    device = ttnn.open_device(device_id=device_id)
+    test_unet_shallow(device, args.loop)
     ttnn.close_device(device)
