@@ -47,8 +47,7 @@ int main(int argc, char **argv) {
     constexpr uint32_t src_endpoint_start_id = 0xaa;
     constexpr uint32_t dest_endpoint_start_id = 0xbb;
 
-    constexpr uint32_t num_src_endpoints = 4;
-    constexpr uint32_t num_dest_endpoints = 4;
+    constexpr uint32_t default_num_endpoints = 4;
 
     std::vector<std::string> input_args(argv, argv + argc);
     if (test_args::has_command_option(input_args, "-h") ||
@@ -77,6 +76,7 @@ int main(int argc, char **argv) {
         log_info(LogTest, "  --test_results_size: test results buf size, default = 0x{:x}", default_test_results_size);
         log_info(LogTest, "  --timeout_mcycles: Timeout in MCycles, default = {}", default_timeout_mcycles);
         log_info(LogTest, "  --rx_disable_data_check: Disable data check on RX, default = {}", default_rx_disable_data_check);
+        log_info(LogTest, "  --num_endpoints: Number of endpoints, default = {}", default_num_endpoints);
         return 0;
     }
 
@@ -103,6 +103,10 @@ int main(int argc, char **argv) {
     uint32_t test_results_size = test_args::get_command_option_uint32(input_args, "--test_results_size", default_test_results_size);
     uint32_t timeout_mcycles = test_args::get_command_option_uint32(input_args, "--timeout_mcycles", default_timeout_mcycles);
     uint32_t rx_disable_data_check = test_args::get_command_option_uint32(input_args, "--rx_disable_data_check", default_rx_disable_data_check);
+    uint32_t num_endpoints = test_args::get_command_option_uint32(input_args, "--num_endpoints", default_num_endpoints);
+
+    uint32_t num_src_endpoints = num_endpoints;
+    uint32_t num_dest_endpoints = num_endpoints;
 
     bool pass = true;
     try {

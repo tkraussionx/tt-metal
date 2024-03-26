@@ -209,7 +209,6 @@ void kernel_main() {
         test_results[PQ_TEST_MISC_INDEX] = 0xff00004;
     } else {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_TIMEOUT;
-        test_results[PQ_TEST_MISC_INDEX] = 0xff00005;
         set_64b_result(test_results, words_flushed, PQ_TEST_MISC_INDEX+10);
         input_queue_ptr->dprint_object();
         output_queue_ptr->dprint_object();

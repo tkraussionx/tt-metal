@@ -8,6 +8,7 @@
 #include "tt_metal/hostdevcommon/common_values.hpp"
 #include "tt_metal/impl/dispatch/kernels/command_queue_common.hpp"
 #include "cq_cmds.hpp"
+#include "dataflow_api.h"
 #include "noc_overlay_parameters.h"
 #include "ethernet/dataflow_api.h"
 #include "tt_metal/impl/dispatch/kernels/packet_queue_ctrl.hpp"
@@ -65,18 +66,25 @@ class packet_queue_state_t {
     uint32_t remote_rptr_sent_update_addr;
     uint32_t remote_rptr_cleared_update_addr;
 
+protected:
+
+    bool cb_mode;
+    uint16_t cb_mode_page_size_words;
+    uint64_t cb_mode_local_sem_noc_addr;
+    uint64_t cb_mode_remote_sem_noc_addr;
+
 public:
 
-    uint32_t queue_id;
+    uint8_t queue_id;
     uint32_t queue_start_addr_words;
-    uint32_t queue_size_words;
+    uint16_t queue_size_words;
     uint32_t ptr_offset_mask;
     uint32_t queue_size_mask;
 
     bool queue_is_input;
 
-    uint32_t remote_x, remote_y; // remote source for input queues, remote dest for output queues
-    uint32_t remote_queue_id;
+    uint8_t remote_x, remote_y; // remote source for input queues, remote dest for output queues
+    uint8_t remote_queue_id;
     DispatchRemoteNetworkType remote_update_network_type;
 
     // For read/write pointers, we use stream credit registers with auto-increment.
@@ -84,13 +92,17 @@ public:
     // automatic wrapping. (If needed, we can fix the pointer advance functions later
     // to handle non-power-of-2 buffer sizes.)
 
-    void init(uint32_t queue_id,
+    void init(uint8_t queue_id,
               uint32_t queue_start_addr_words,
-              uint32_t queue_size_words,
-              uint32_t remote_x,
-              uint32_t remote_y,
-              uint32_t remote_queue_id,
-              DispatchRemoteNetworkType remote_update_network_type) {
+              uint16_t queue_size_words,
+              uint8_t remote_x,
+              uint8_t remote_y,
+              uint8_t remote_queue_id,
+              DispatchRemoteNetworkType remote_update_network_type,
+              bool cb_mode,
+              uint64_t cb_mode_local_sem_noc_addr,
+              uint64_t cb_mode_remote_sem_noc_addr,
+              uint16_t cb_mode_page_size_words) {
 
         this->queue_id = queue_id;
         this->queue_start_addr_words = queue_start_addr_words;
@@ -99,6 +111,11 @@ public:
         this->remote_y = remote_y;
         this->remote_queue_id = remote_queue_id;
         this->remote_update_network_type = remote_update_network_type;
+
+        this->cb_mode = cb_mode;
+        this->cb_mode_local_sem_noc_addr = cb_mode_local_sem_noc_addr;
+        this->cb_mode_remote_sem_noc_addr = cb_mode_remote_sem_noc_addr;
+        this->cb_mode_page_size_words = cb_mode_page_size_words;
 
         this->local_wptr_val = reinterpret_cast<volatile uint32_t*>(
             STREAM_REG_ADDR(NUM_PTR_REGS_PER_QUEUE*queue_id, STREAM_REMOTE_DEST_BUF_SPACE_AVAILABLE_REG_INDEX));
@@ -137,7 +154,7 @@ public:
             STREAM_REG_ADDR(queue_id, STREAM_REMOTE_SRC_REG_INDEX));
     }
 
-    FORCE_INLINE uint32_t get_queue_id() const {
+    FORCE_INLINE uint8_t get_queue_id() const {
         return this->queue_id;
     }
 
@@ -235,7 +252,7 @@ public:
 
     FORCE_INLINE void remote_reg_update(uint32_t reg_addr, uint32_t val, uint32_t cmd_buf = 0) {
 
-        if (this->remote_update_network_type == DispatchRemoteNetworkType::NONE) {
+        if ((this->remote_update_network_type == DispatchRemoteNetworkType::NONE) || this->cb_mode) {
             return;
         }
         else if (this->remote_update_network_type == DispatchRemoteNetworkType::ETH) {
@@ -298,6 +315,25 @@ public:
         return *this->local_ready_status_ptr == PACKET_QUEUE_REMOTE_FINISHED_FLAG;
     }
 
+    FORCE_INLINE uint32_t cb_mode_get_local_sem_val() {
+        if (!this->cb_mode) {
+            return 0xFFFFFFFF;
+        }
+        return *reinterpret_cast<volatile uint32_t*>(this->cb_mode_local_sem_noc_addr & 0xFFFFFFFF);
+    }
+
+    FORCE_INLINE void cb_mode_inc_local_sem_val(uint32_t val) {
+        if (this->cb_mode) {
+            noc_semaphore_inc(this->cb_mode_local_sem_noc_addr, val);
+        }
+    }
+
+    FORCE_INLINE void cb_mode_inc_remote_sem_val(uint32_t val) {
+        if (this->cb_mode) {
+            noc_semaphore_inc(this->cb_mode_remote_sem_noc_addr, val);
+        }
+    }
+
     void yield() {
         // TODO: implement yield for ethernet here
     }
@@ -324,25 +360,39 @@ protected:
 
     bool curr_packet_valid;
     tt_l1_ptr dispatch_packet_header_t* curr_packet_header_ptr;
-    uint32_t curr_packet_src;
-    uint32_t curr_packet_dest;
-    uint32_t curr_packet_size_words;
-    uint32_t curr_packet_words_sent;
+    uint16_t curr_packet_src;
+    uint16_t curr_packet_dest;
+    uint16_t curr_packet_size_words;
+    uint16_t curr_packet_words_sent;
     uint32_t curr_packet_tag;
-    uint32_t curr_packet_flags;
+    uint16_t curr_packet_flags;
+
+    uint32_t packetizer_page_words_cleared;
 
     FORCE_INLINE void advance_next_packet() {
+        if (this->curr_packet_valid) {
+            return;
+        }
+        if (this->is_packetizer_input()) {
+            uint32_t pages_available = this->cb_mode_get_local_sem_val();
+            for (uint32_t i = 0; i < pages_available; i++) {
+                this->advance_queue_local_wptr(this->cb_mode_page_size_words);
+            }
+            this->cb_mode_inc_local_sem_val(-pages_available);
+        }
         if(this->get_queue_data_num_words_available_to_send() > 0) {
-            tt_l1_ptr dispatch_packet_header_t* next_packet_header_ptr =
-                reinterpret_cast<tt_l1_ptr dispatch_packet_header_t*>(
-                    (this->queue_start_addr_words + this->get_queue_rptr_sent_offset_words())*PACKET_WORD_SIZE_BYTES
-                );
-            this->curr_packet_header_ptr = next_packet_header_ptr;
-            this->curr_packet_dest = next_packet_header_ptr->packet_dest;
-            this->curr_packet_src = next_packet_header_ptr->packet_src;
-            this->curr_packet_size_words = next_packet_header_ptr->packet_size_words;
-            this->curr_packet_tag = next_packet_header_ptr->tag;
-            this->curr_packet_flags = next_packet_header_ptr->packet_flags;
+            if (!this->is_packetizer_input()) {
+                tt_l1_ptr dispatch_packet_header_t* next_packet_header_ptr =
+                    reinterpret_cast<tt_l1_ptr dispatch_packet_header_t*>(
+                        (this->queue_start_addr_words + this->get_queue_rptr_sent_offset_words())*PACKET_WORD_SIZE_BYTES
+                    );
+                this->curr_packet_header_ptr = next_packet_header_ptr;
+                this->curr_packet_dest = next_packet_header_ptr->packet_dest;
+                this->curr_packet_src = next_packet_header_ptr->packet_src;
+                this->curr_packet_size_words = next_packet_header_ptr->packet_size_words;
+                this->curr_packet_tag = next_packet_header_ptr->tag;
+                this->curr_packet_flags = next_packet_header_ptr->packet_flags;
+            }
             this->curr_packet_words_sent = 0;
             this->curr_packet_valid = true;
        }
@@ -350,20 +400,43 @@ protected:
 
 public:
 
-    void init(uint32_t queue_id,
+    void init(uint8_t queue_id,
               uint32_t queue_start_addr_words,
-              uint32_t queue_size_words,
-              uint32_t remote_x,
-              uint32_t remote_y,
-              uint32_t remote_queue_id,
-              DispatchRemoteNetworkType remote_update_network_type) {
+              uint16_t queue_size_words,
+              uint8_t remote_x,
+              uint8_t remote_y,
+              uint8_t remote_queue_id,
+              DispatchRemoteNetworkType remote_update_network_type,
+              bool packetizer_input = false,
+              uint16_t packetizer_input_page_size_words = 0,
+              uint64_t packetizer_input_sem_noc_addr = 0,
+              uint64_t packetizer_input_remote_sem_noc_addr = 0,
+              uint16_t packetizer_input_src = 0,
+              uint16_t packetizer_input_dest = 0,
+              tt_l1_ptr dispatch_packet_header_t* packetizer_header_buf_ptr = nullptr) {
 
         packet_queue_state_t::init(queue_id, queue_start_addr_words, queue_size_words,
-                                   remote_x, remote_y, remote_queue_id, remote_update_network_type);
+                                   remote_x, remote_y, remote_queue_id, remote_update_network_type,
+                                   packetizer_input, packetizer_input_sem_noc_addr,
+                                   packetizer_input_remote_sem_noc_addr,
+                                   packetizer_input_page_size_words);
 
         tt_l1_ptr uint32_t* queue_ptr =
             reinterpret_cast<tt_l1_ptr uint32_t*>(queue_start_addr_words*PACKET_WORD_SIZE_BYTES);
         zero_l1_buf(queue_ptr, queue_size_words*PACKET_WORD_SIZE_BYTES);
+
+        this->curr_packet_header_ptr = packetizer_header_buf_ptr;
+        this->packetizer_page_words_cleared = 0;
+
+        if (packetizer_input) {
+            packetizer_header_buf_ptr->packet_size_words = this->curr_packet_size_words =
+                packetizer_input_page_size_words + 1;
+            packetizer_header_buf_ptr->packet_src = this->curr_packet_src = packetizer_input_src;
+            packetizer_header_buf_ptr->packet_dest = this->curr_packet_dest = packetizer_input_dest;
+            packetizer_header_buf_ptr->packet_flags = this->curr_packet_flags = 0;
+            packetizer_header_buf_ptr->num_cmds = 1;
+            packetizer_header_buf_ptr->tag = this->curr_packet_tag = 0xabcd;
+        }
 
         this->ptr_offset_mask = queue_size_words - 1;
         this->queue_size_mask = (queue_size_words << 1) - 1;
@@ -374,6 +447,9 @@ public:
         this->reset_ready_flag();
     }
 
+    FORCE_INLINE bool is_packetizer_input() const {
+        return this->cb_mode;
+    }
 
     FORCE_INLINE bool get_curr_packet_valid() {
         if (!this->curr_packet_valid && (this->get_queue_data_num_words_available_to_send() > 0)){
@@ -470,11 +546,14 @@ public:
         if (num_words > 0) {
             this->advance_queue_local_rptr_cleared(num_words);
             this->advance_queue_remote_rptr_cleared(num_words);
+            if (this->is_packetizer_input()) {
+                this->packetizer_page_words_cleared += num_words;
+                while (this->packetizer_page_words_cleared >= this->cb_mode_page_size_words) {
+                    this->cb_mode_inc_remote_sem_val(1);
+                    this->packetizer_page_words_cleared -= this->cb_mode_page_size_words;
+                }
+            }
         }
-    }
-
-    FORCE_INLINE void input_queue_clear_all_words_sent() {
-        this->input_queue_advance_words_cleared(this->get_num_words_sent_not_cleared());
     }
 
     void dprint_object() {
@@ -494,6 +573,8 @@ public:
 
 class packet_output_queue_state_t : public packet_queue_state_t {
 
+protected:
+
     uint32_t max_noc_send_words;
     uint32_t max_eth_send_words;
 
@@ -507,7 +588,7 @@ class packet_output_queue_state_t : public packet_queue_state_t {
         uint32_t curr_total_words_in_flight;
         uint32_t prev_total_words_in_flight;
 
-        uint32_t num_input_queues;
+        uint8_t num_input_queues;
 
         void init(packet_input_queue_state_t* input_queue_array, uint32_t num_input_queues) {
             this->num_input_queues = num_input_queues;
@@ -576,18 +657,25 @@ class packet_output_queue_state_t : public packet_queue_state_t {
 
 public:
 
-    void init(uint32_t queue_id,
+    void init(uint8_t queue_id,
               uint32_t queue_start_addr_words,
-              uint32_t queue_size_words,
-              uint32_t remote_x,
-              uint32_t remote_y,
-              uint32_t remote_queue_id,
+              uint16_t queue_size_words,
+              uint8_t remote_x,
+              uint8_t remote_y,
+              uint8_t remote_queue_id,
               DispatchRemoteNetworkType remote_update_network_type,
               packet_input_queue_state_t* input_queue_array,
-              uint32_t num_input_queues) {
+              uint8_t num_input_queues,
+              bool unpacketizer_output = false,
+              uint16_t unpacketizer_output_page_size_words = 0,
+              uint64_t unpacketizer_output_sem_noc_addr = 0,
+              uint64_t unpacketizer_output_remote_sem_noc_addr = 0) {
 
         packet_queue_state_t::init(queue_id, queue_start_addr_words, queue_size_words,
-                                   remote_x, remote_y, remote_queue_id, remote_update_network_type);
+                                   remote_x, remote_y, remote_queue_id, remote_update_network_type,
+                                   unpacketizer_output, unpacketizer_output_sem_noc_addr,
+                                   unpacketizer_output_remote_sem_noc_addr,
+                                   unpacketizer_output_page_size_words);
 
         this->ptr_offset_mask = queue_size_words - 1;
         this->queue_size_mask = (queue_size_words << 1) - 1;
@@ -598,6 +686,10 @@ public:
         this->reset_queue_local_rptr_cleared();
         this->reset_queue_local_wptr();
         this->reset_ready_flag();
+    }
+
+    FORCE_INLINE bool is_unpacketizer_output() const {
+        return this->cb_mode;
     }
 
     FORCE_INLINE void set_max_noc_send_words(uint32_t max_noc_send_words) {
@@ -756,7 +848,8 @@ bool wait_all_src_dest_ready(packet_input_queue_state_t* input_queue_array, uint
         all_src_dest_ready = true;
         for (uint32_t i = 0; i < num_input_queues; i++) {
             if (!src_ready[i]) {
-                src_ready[i] = input_queue_array[i].is_remote_ready();
+                src_ready[i] = input_queue_array[i].is_packetizer_input() ||
+                               input_queue_array[i].is_remote_ready();
                 if (!src_ready[i]) {
                     input_queue_array[i].send_remote_ready_notification();
                     all_src_dest_ready = false;
