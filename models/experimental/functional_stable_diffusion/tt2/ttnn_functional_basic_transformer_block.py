@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import ttnn
+import tt_lib as ttl
 from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_cross_attention import cross_attention
 from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_feedforward import feedforward
 from models.utility_functions import comp_pcc
@@ -63,17 +64,38 @@ class basic_transformer_block:
         elif use_ada_layer_norm_zero:
             assert False, "AdaLayerNormZero not supported and not used in stable diffusion"
 
-        hidden_states = ttnn.to_layout(hidden_states, ttnn.TILE_LAYOUT)
-        hidden_states = ttnn.to_memory_config(
-            hidden_states, ttnn.L1_MEMORY_CONFIG
-        )  # layernorm doesn't support block_sharding
+        breakpoint()
+        # hidden_states = ttnn.to_layout(hidden_states, ttnn.TILE_LAYOUT)
+        # hidden_states = ttnn.to_memory_config(
+        #    hidden_states, ttnn.L1_MEMORY_CONFIG
+        # )  # layernorm doesn't support block_sharding
+
+        # TODO: move it to __init__ if it works
+        c = hidden_states.shape[3]
+        nhw = hidden_states.shape[0] * hidden_states.shape[1] * hidden_states.shape[2]
+        _program_config = ttl.operations.primary.LayerNormShardedMultiCoreProgramConfig(
+            compute_with_storage_grid_size=(8, 8),
+            subblock_w=2,  # 4,
+            block_h=32,  # nhw // 32,
+            block_w=2,  # c // (8 * 8) // 32,
+            math_fidelity=ttl.tensor.MathFidelity.HiFi4,
+            im_data_format=hidden_states.dtype,
+            out_data_format=hidden_states.dtype,
+            inplace=False,  # True, # NOTE: based on the condition applied in unit-test at test/tt_eager/python_api_testing/unit_testing/misc/test_layernorm_sharded.py
+        )
+
         norm_hidden_states = ttnn.layer_norm(
             hidden_states,
             epsilon=1e-05,
             weight=self.parameters.norm1.weight,
             bias=self.parameters.norm1.bias,
-            memory_config=ttnn.L1_MEMORY_CONFIG,
+            memory_config=ttnn.get_memory_config(hidden_states),
+            program_config=_program_config,
+            # memory_config=ttnn.L1_MEMORY_CONFIG,
         )
+        breakpoint()
+
+        norm_hidden_states = ttnn.to_memory_config(norm_hidden_states, ttnn.L1_MEMORY_CONFIG)
 
         # 1. Self-Attention
         cross_attention_kwargs = cross_attention_kwargs if cross_attention_kwargs is not None else {}
