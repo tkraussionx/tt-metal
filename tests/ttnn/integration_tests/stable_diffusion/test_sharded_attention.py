@@ -822,4 +822,4 @@ def test_q_and_kv(
     passing, output = comp_pcc(mm_out_torch, out_torch)
 
     print(output)
-    # assert passing
+    assert passing
