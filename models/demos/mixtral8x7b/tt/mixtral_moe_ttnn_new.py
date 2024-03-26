@@ -35,7 +35,7 @@ class TtMoeLayer(nn.Module):
         self.args = args
         self.dtype = dtype
 
-        gate_name = f"layers.{layer_num}.block_sparse_moe.gate.weight"
+        gate_name = f"layers.{layer_num}.feed_forward.gate.weight"
         self.gates_H8 = [
             ttnn.as_tensor(
                 state_dict[gate_name].permute(1, 0),

@@ -5,6 +5,7 @@
 from pathlib import Path
 import torch
 import ttnn
+from torch import nn
 
 
 class TtMixtralMLP(torch.nn.Module):
@@ -18,15 +19,11 @@ class TtMixtralMLP(torch.nn.Module):
         self.dtype = dtype
 
         # Convert block sparse moe representation of e.g. (114688, 4096) into separate tensors for each expert
-        base_name = f"layers.{layer_num}.block_sparse_moe"
-        torch_weight = (
-            lambda name, shape: self.state_dict[f"{base_name}.{name}"]
-            .view(8, shape[1], shape[0])[expert_num]
-            .permute(1, 0)
-        )
+        base_name = f"layers.{layer_num}.feed_forward.experts.{expert_num}"
+        torch_weight = lambda name: self.state_dict[f"{base_name}.{name}.weight"].permute(1, 0)
         cache_name = lambda name: self.model_config.weight_cache_path(dtype) / (f"{base_name}.{expert_num}.{name}")
-        as_tensor = lambda name, shape: ttnn.as_tensor(
-            torch_weight(name, shape),
+        as_tensor = lambda name: ttnn.as_tensor(
+            torch_weight(name),
             dtype=dtype,
             device=self.device,
             layout=ttnn.TILE_LAYOUT,
@@ -34,9 +31,9 @@ class TtMixtralMLP(torch.nn.Module):
             cache_file_name=cache_name(name),
         )
 
-        self.w1 = as_tensor("w1", (4096, 14336))
-        self.w2 = as_tensor("w2", (14336, 4096))
-        self.w3 = as_tensor("w3", (4096, 14336))
+        self.w1 = as_tensor("w1")
+        self.w2 = as_tensor("w2")
+        self.w3 = as_tensor("w3")
 
         self.compute_kernel = ttnn.WormholeComputeKernelConfig(
             math_fidelity=ttnn.MathFidelity.LoFi,
@@ -51,7 +48,7 @@ class TtMixtralMLP(torch.nn.Module):
         w3 -> up_proj
         HF reference: self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         """
-        ff1_output_shape = ttnn.Shape([x.shape.with_tile_padding()[-2], self.w1.shape.with_tile_padding()[-1]])
+        # ff1_output_shape = ttnn.Shape([x.shape.with_tile_padding()[-2], self.w1.shape.with_tile_padding()[-1]])
         # shard = ttnn.create_sharded_memory_config(ff1_output_shape, self.grid, ttnn.ShardStrategy.WIDTH)
 
         w1_out = ttnn.linear(
@@ -64,7 +61,12 @@ class TtMixtralMLP(torch.nn.Module):
             # , memory_config=shard
             compute_kernel_config=self.compute_kernel,
         )
-        w3_out = ttnn.linear(
+        # print("pre torch", w1_out)
+        # w1_torch = ttnn.to_torch(w1_out)
+        # print(torch.std_mean(w1_torch), torch.min(w1_torch), torch.max(w1_torch))
+        # w1_out = ttnn.from_torch(nn.functional.silu(w1_torch), device=self.device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
+
+        w3_out = ttnn.matmul(
             x,
             self.w3,
             core_grid=self.grid,
@@ -74,7 +76,7 @@ class TtMixtralMLP(torch.nn.Module):
             compute_kernel_config=self.compute_kernel,
         )
         w2_in = ttnn.mul(w1_out, w3_out)  # , memory_config=shard)
-        w2_out = ttnn.linear(
+        w2_out = ttnn.matmul(
             w2_in,
             self.w2,
             core_grid=self.grid,

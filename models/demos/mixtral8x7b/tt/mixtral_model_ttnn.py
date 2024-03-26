@@ -19,8 +19,6 @@ class TtTransformer(nn.Module):
         args,
         dtype,
         layers,
-        tt_cos_cached,
-        tt_sin_cached,
     ):
         super().__init__()
         self.args = args
@@ -37,8 +35,6 @@ class TtTransformer(nn.Module):
                     args=args,
                     dtype=dtype,
                     layer_num=i,
-                    tt_cos_cached=tt_cos_cached,
-                    tt_sin_cached=tt_sin_cached,
                 )
                 for i in layers
             ]

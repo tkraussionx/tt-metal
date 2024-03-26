@@ -18,8 +18,6 @@ class TtTransformerBlock(torch.nn.Module):
         args,
         layer_num,
         dtype,
-        tt_cos_cached,
-        tt_sin_cached,
     ):
         super().__init__()
 
@@ -47,8 +45,6 @@ class TtTransformerBlock(torch.nn.Module):
             args=args,
             layer_num=layer_num,
             dtype=dtype,
-            tt_cos_cached=tt_cos_cached,
-            tt_sin_cached=tt_sin_cached,
         )
 
         self.feed_forward = TtMoeLayer(
@@ -92,6 +88,8 @@ class TtTransformerBlock(torch.nn.Module):
             for dev in self.devices
         ]
 
+        self.comps = []
+
     def forward(
         self,
         xs_b1sh: ttnn.Tensor,
@@ -111,7 +109,7 @@ class TtTransformerBlock(torch.nn.Module):
 
         # Attention module expects a list of inputs, start_pos, attn mask (multi-device support)
         attn_norm_s1bh = [self.attention_norm[i](xs_b1sh[i]) for i in range(self.num_devices)]
-
+        # self.comps.append(ttnn.to_torch(attn_norm_s1bh[0]))
         attn_b1sh = self.attention(
             attn_norm_s1bh,
             start_pos,
@@ -119,13 +117,18 @@ class TtTransformerBlock(torch.nn.Module):
             attn_masks,
             rot_mats,
         )
-        hs_b1sh = [ttnn.experimental.tensor.add(xs_b1sh[i], attn_b1sh[i]) for i in range(self.num_devices)]
+        # self.comps.append(ttnn.to_torch(attn_b1sh[0]))
+        hs_b1sh = [ttnn.add(xs_b1sh[i], attn_b1sh[i]) for i in range(self.num_devices)]
+        # self.comps.append(ttnn.to_torch(hs_b1sh[0]))
         deallocate(attn_b1sh)
 
         ffn_norm_s1bh = [self.ffn_norm[i](hs_b1sh[i]) for i in range(self.num_devices)]
+        # self.comps.append(ttnn.to_torch(ffn_norm_s1bh[0]))
         ffn_b1sh = self.feed_forward(ffn_norm_s1bh)
-
-        out_b1sh = [ttnn.experimental.tensor.add(hs_b1sh[i], ffn_b1sh[i]) for i in range(self.num_devices)]
+        # self.comps.append(ttnn.to_torch(ffn_b1sh[0]))
+        out_b1sh = [ttnn.add(hs_b1sh[i], ffn_b1sh[i]) for i in range(self.num_devices)]
+        # self.comps.append(ttnn.to_torch(out_b1sh[0]))
         deallocate(ffn_b1sh)
         deallocate(hs_b1sh)
+        # deallocate(attn_b1sh)
         return out_b1sh
