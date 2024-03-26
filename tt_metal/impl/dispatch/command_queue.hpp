@@ -66,9 +66,13 @@ using WorkerQueue = LockFreeQueue<CommandInterface>;
 class Command {
     EnqueueCommandType type_ = EnqueueCommandType::INVALID;
 
+   protected:
+    bool issued_ = false;
+
    public:
     Command() {}
     virtual void process() {};
+    virtual bool issued() { return this->issued_; };
     virtual EnqueueCommandType type() = 0;
     virtual const DeviceCommand assemble_device_command(uint32_t buffer_size) = 0;
 };
@@ -541,13 +545,13 @@ class CommandQueue {
     private:
     CommandQueue(Device* device, uint32_t id, CommandQueueMode mode = CommandQueue::default_mode());
 
-    // Trace queue constructor
     public:
-    CommandQueue(Trace* trace);
+
+    // Trace queue constructor
+    CommandQueue(Trace& trace);
 
     // Getters for private members
     Device* device() const { return this->device_ptr; }
-    Trace* trace() const { return this->trace_ptr; }
     uint32_t id() const { return this->cq_id; }
 
     // Blocking method to wait for all commands to drain from the queue
@@ -575,6 +579,7 @@ class CommandQueue {
     }
     // Determine if any CQ is using Async mode
     static bool async_mode_set() { return num_async_cqs > 0; }
+
    private:
     enum class CommandQueueState {
         IDLE = 0,
@@ -592,7 +597,6 @@ class CommandQueue {
     WorkerQueue worker_queue;
     uint32_t cq_id;
     Device* device_ptr;
-    Trace* trace_ptr;
 
     void start_worker();
     void stop_worker();

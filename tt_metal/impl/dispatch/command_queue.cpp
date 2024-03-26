@@ -212,6 +212,7 @@ void EnqueueReadBufferCommand::process() {
     this->manager.cq_write(cmd.data(), DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, write_ptr);
     this->manager.issue_queue_push_back(
         DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, detail::LAZY_COMMAND_QUEUE_MODE, this->command_queue_id);
+    this->issued_ = true;
 }
 
 // EnqueueWriteBufferCommand section
@@ -416,6 +417,7 @@ void EnqueueWriteBufferCommand::process() {
         cmd_size,
         data_size_in_bytes);
     this->manager.issue_queue_push_back(cmd_size, detail::LAZY_COMMAND_QUEUE_MODE, this->command_queue_id);
+    this->issued_ = true;
 }
 
 EnqueueProgramCommand::EnqueueProgramCommand(
@@ -610,17 +612,16 @@ const DeviceCommand EnqueueProgramCommand::assemble_device_command(uint32_t host
 }
 
 void EnqueueProgramCommand::process() {
-    const bool tracing = this->trace.has_value();
-
     uint32_t write_ptr = this->manager.get_issue_queue_write_ptr(this->command_queue_id);
     uint32_t system_memory_temporary_storage_address = write_ptr + DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND;
 
     // TODO_TMZ: modify system_memory_temporary_storage_address for trace buffer?
     const DeviceCommand cmd = this->assemble_device_command(system_memory_temporary_storage_address);
+    const bool trace_staging = this->trace.has_value() and this->trace.value().get().instantiating();
 
     uint32_t data_size_in_bytes = cmd.get_issue_data_size();
     const uint32_t cmd_size = DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND + data_size_in_bytes;
-    if (not tracing) {
+    if (not trace_staging) {
         this->manager.issue_queue_reserve_back(cmd_size, this->command_queue_id);
         this->manager.cq_write(cmd.data(), DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, write_ptr);
     }
@@ -632,7 +633,7 @@ void EnqueueProgramCommand::process() {
         std::shared_ptr<Kernel> kernel = detail::GetKernel(program, kernel_id);
         for (const auto& c : kernel->cores_with_runtime_args()) {
             const auto& core_runtime_args = kernel->runtime_args(c);
-            if (tracing) {
+            if (trace_staging) {
                 trace_host_data.insert(trace_host_data.end(), core_runtime_args.begin(), core_runtime_args.end());
                 trace_host_data.resize(align(trace_host_data.size(), padding_alignment / sizeof(uint32_t)));
             } else {
@@ -659,7 +660,7 @@ void EnqueueProgramCommand::process() {
                 cb->size() >> 4,
                 cb->num_pages(buffer_index),
                 cb->size() / cb->num_pages(buffer_index) >> 4};
-            if (tracing) {
+            if (trace_staging) {
                 // No need to resize since cb_data size is guaranteed to be 16 bytes
                 trace_host_data.insert(trace_host_data.end(), cb_data.begin(), cb_data.end());
             } else {
@@ -670,7 +671,7 @@ void EnqueueProgramCommand::process() {
     }
 
     this->manager.issue_queue_push_back(cmd_size, detail::LAZY_COMMAND_QUEUE_MODE, this->command_queue_id);
-    if (tracing) {
+    if (trace_staging) {
         Trace::TraceNode trace_node = {
             .command = cmd,
             .data = trace_host_data,
@@ -682,11 +683,13 @@ void EnqueueProgramCommand::process() {
 
     tt::log_debug(
         tt::LogDispatch,
-        "EnqueueProgramCommand processed, sysmem storage = {}, cmd_size = {}, data_size = {}, trace_size = {}",
+        "EnqueueProgramCommand processed, trace staging = {}, sysmem storage = {}, cmd_size = {}, data_size = {}, trace_size = {}",
+        trace_staging,
         system_memory_temporary_storage_address - start_addr,
         cmd_size,
         cmd.get_issue_data_size(),
         trace_host_data.size() * sizeof(uint32_t));
+    this->issued_ = not trace_staging;
 }
 
 EnqueueWrapCommand::EnqueueWrapCommand(uint32_t command_queue_id, Device* device, SystemMemoryManager& manager) :
@@ -719,6 +722,7 @@ void EnqueueIssueWrapCommand::process() {
     this->manager.cq_write(cmd.data(), wrap_packet_size_bytes, write_ptr);
 
     this->manager.wrap_issue_queue_wr_ptr(this->command_queue_id);
+    this->issued_ = true;
 }
 
 EnqueueCompletionWrapCommand::EnqueueCompletionWrapCommand(
@@ -743,6 +747,7 @@ void EnqueueCompletionWrapCommand::process() {
     this->manager.cq_write(cmd.data(), wrap_packet_size_bytes, write_ptr);
     this->manager.wrap_next_completion_queue_wr_ptr(this->command_queue_id);
     this->manager.issue_queue_push_back(wrap_packet_size_bytes, detail::LAZY_COMMAND_QUEUE_MODE, this->command_queue_id);
+    this->issued_ = true;
 }
 
 
@@ -770,6 +775,7 @@ void EnqueueRecordEventCommand::process() {
     this->manager.issue_queue_reserve_back(cmd_size, this->command_queue_id);
     this->manager.cq_write(cmd.data(), DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, write_ptr);
     this->manager.issue_queue_push_back(cmd_size, detail::LAZY_COMMAND_QUEUE_MODE, this->command_queue_id);
+    this->issued_ = true;
 }
 
 EnqueueWaitForEventCommand::EnqueueWaitForEventCommand(
@@ -814,6 +820,7 @@ void EnqueueWaitForEventCommand::process() {
     this->manager.issue_queue_reserve_back(cmd_size, this->command_queue_id);
     this->manager.cq_write(cmd.data(), DeviceCommand::NUM_BYTES_IN_DEVICE_COMMAND, write_ptr);
     this->manager.issue_queue_push_back(cmd_size, detail::LAZY_COMMAND_QUEUE_MODE, this->command_queue_id);
+    this->issued_ = true;
 }
 
 // HWCommandQueue section
@@ -864,10 +871,13 @@ HWCommandQueue::~HWCommandQueue() {
 template <typename T>
 void HWCommandQueue::enqueue_command(T& command, bool blocking) {
     command.process();
-    this->num_issued_commands++;
-    if (blocking) {
-        this->finish();
+    if (command.issued()) {
+        this->num_issued_commands++;
+        if (blocking) {
+            this->finish();
+        }
     }
+    log_info(LogDispatch, "enqueued command {}, issued={}, num_issued={}, num_completed={}", command.type(), command.issued(), this->num_issued_commands, this->num_completed_commands);
 
     // If this command has side-effects, then the next scheduled read needs
     // to stall before fetching. Else, it can pre-fetch
@@ -1050,6 +1060,7 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
         dst_page_index += pages_to_write;
     }
 
+    log_info(LogDispatch, "Launched EnqueueWriteBuffer for CQ {}", this->id);
     if (blocking) {
         this->finish();
     }
@@ -1234,7 +1245,10 @@ void HWCommandQueue::finish() {
             }
         }
     } else {
-        while (this->num_issued_commands > this->num_completed_commands);
+        while (this->num_issued_commands > this->num_completed_commands) {
+            log_info(LogDispatch, "Finish waiting issued({}) == completed({})", this->num_issued_commands, this->num_completed_commands);
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+        };
     }
 }
 
@@ -1580,20 +1594,16 @@ void FinishImpl(CommandQueue& cq) {
 }
 
 CommandQueue& BeginTrace(Trace& trace) {
-    TT_ASSERT(not trace.captured(), "Already completed this trace");
-    TT_ASSERT(trace.queue().empty(), "Cannot begin trace on one that already captured commands");
+    trace.begin_capture();
     return trace.queue();
 }
 
 void EndTrace(Trace& trace) {
-    TT_ASSERT(not trace.captured(), "Already completed this trace");
-    trace.captured(true);
-    trace.validate();
+    trace.end_capture();
 }
 
 uint32_t InstantiateTrace(Trace& trace, CommandQueue& cq) {
     detail::DispatchStateCheck(true);
-    TT_ASSERT(cq.trace() == nullptr, "Multiple traces on a CQ is not supported yet");
     uint32_t trace_id = trace.instantiate(cq);
     return trace_id;
 }
@@ -1609,15 +1619,14 @@ void EnqueueTrace(CommandQueue& cq, uint32_t trace_id, bool blocking) {
 
 void EnqueueTraceImpl(CommandQueue& cq) {
     // STUB: Run the trace in eager mode for now
-    auto& tq = cq.trace()->queue();
-    for (const auto& cmd : tq.worker_queue) {
-        cq.run_command_impl(cmd);
-    }
+    // auto& tq = cq.trace()->queue();
+    // for (const auto& cmd : tq.worker_queue) {
+    //     cq.run_command_impl(cmd);
+    // }
 }
 
 CommandQueue::CommandQueue(Device* device, uint32_t id, CommandQueueMode mode) :
     device_ptr(device),
-    trace_ptr(nullptr),
     cq_id(id),
     mode(mode),
     worker_state(CommandQueueState::IDLE) {
@@ -1631,21 +1640,21 @@ CommandQueue::CommandQueue(Device* device, uint32_t id, CommandQueueMode mode) :
     }
 }
 
-CommandQueue::CommandQueue(Trace* trace) :
+CommandQueue::CommandQueue(Trace& trace) :
     device_ptr(nullptr),
     parent_thread_id(0),
-    trace_ptr(trace),
     cq_id(-1),
     mode(CommandQueueMode::TRACE),
     worker_state(CommandQueueState::IDLE) {
-    TT_ASSERT(this->trace_ptr, "A valid trace must be provided for a trace mode queue");
 }
 
 CommandQueue::~CommandQueue() {
     if (this->async_mode()) {
         this->stop_worker();
     }
-    TT_ASSERT(this->worker_queue.empty(), "CQ{} worker queue must be empty on destruction", this->cq_id);
+    if (not this->trace_mode()) {
+        TT_FATAL(this->worker_queue.empty(), "CQ{} worker queue must be empty on destruction", this->cq_id);
+    }
 }
 
 HWCommandQueue& CommandQueue::hw_command_queue() {

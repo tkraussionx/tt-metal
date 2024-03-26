@@ -37,6 +37,14 @@ enum class EnqueueCommandType;
 // static unordered_map<uint32_t, shared_ptr<Buffer>> buffer_pool;
 // }
 
+enum class TraceState {
+    EMPTY,
+    CAPTURING,
+    CAPTURED,
+    INSTANTIATING,
+    READY
+};
+
 class Trace {
    // TODO: delete the extra bloat not needed once implementation is complete
    private:
@@ -47,6 +55,7 @@ class Trace {
         uint32_t num_data_bytes;
     };
 
+    TraceState state;
     bool capture_complete;
     vector<TraceNode> history;
     uint32_t num_data_bytes;
@@ -77,7 +86,10 @@ class Trace {
 
    public :
     Trace();
-    ~Trace() { TT_FATAL(this->captured(), "Trace capture incomplete before destruction!"); }
+    ~Trace() {
+        TT_FATAL(this->state != TraceState::CAPTURING, "Trace capture incomplete before destruction!");
+        TT_FATAL(this->state != TraceState::INSTANTIATING, "Trace instantiation incomplete before destruction!");
+    }
 
     // Return the captured trace queue
     CommandQueue& queue() const { return *tq; };
@@ -85,10 +97,12 @@ class Trace {
     // Stages a trace buffer into device DRAM via the CQ passed in and returns a unique trace id
     uint32_t instantiate(CommandQueue& tq);
 
-    // Trace capture validation, completion query and setter
+    // Trace capture, validation, and query methods
+    void begin_capture();
+    void end_capture();
     void validate();
-    bool captured() { return this->capture_complete; }
-    void captured(bool complete) { this->capture_complete = complete; }
+    bool captured() { return this->state != TraceState::EMPTY; }
+    bool instantiating() { return this->state == TraceState::INSTANTIATING; }
 
     // Thread-safe accessors to manage trace instances
     static bool has_instance(const uint32_t tid);

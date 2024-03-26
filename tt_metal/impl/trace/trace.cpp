@@ -19,8 +19,20 @@ const unordered_set<EnqueueCommandType> trace_supported_commands = {
 unordered_map<uint32_t, shared_ptr<Buffer>> Trace::buffer_pool;
 std::mutex Trace::pool_mutex;
 
-Trace::Trace() : capture_complete(false), num_data_bytes(0) {
-    this->tq = std::make_unique<CommandQueue>(this);
+Trace::Trace() : capture_complete(false), num_data_bytes(0), state(TraceState::EMPTY) {
+    this->tq = std::make_unique<CommandQueue>(*this);
+}
+
+void Trace::begin_capture() {
+    TT_FATAL(this->state == TraceState::EMPTY, "Cannot begin capture in a non-empty state");
+    TT_FATAL(this->queue().empty(), "Cannot begin trace on one that already captured commands");
+    this->state = TraceState::CAPTURING;
+}
+
+void Trace::end_capture() {
+    TT_FATAL(this->state == TraceState::CAPTURING, "Cannot end capture that has not begun");
+    this->validate();
+    this->state = TraceState::CAPTURED;
 }
 
 void Trace::record(const TraceNode& trace_node) {
@@ -45,6 +57,7 @@ uint32_t Trace::next_id() {
 }
 
 uint32_t Trace::instantiate(CommandQueue& cq) {
+    this->state = TraceState::INSTANTIATING;
     uint32_t tid = next_id();
     TT_FATAL(this->has_instance(tid) == false, "Trace ID " + std::to_string(tid) + " already exists");
 
@@ -54,7 +67,6 @@ uint32_t Trace::instantiate(CommandQueue& cq) {
     // - commit the DRAM buffer via an enqueue WB command
     // - map the trace id to the DRAM buffer for later enqueue Trace
 
-    this->history.clear();
     for (auto cmd : this->queue().worker_queue) {
         TT_FATAL(
             trace_supported_commands.find(cmd.type) != trace_supported_commands.end(),
@@ -64,6 +76,7 @@ uint32_t Trace::instantiate(CommandQueue& cq) {
         // however the use of it offloads work to a worker thread for speedup
         // while can be queued up behind other commands and requires sync before
         // yielding back to the main thread (eg. this->history usage below requires wait_until_empty)
+        tt::log_debug(tt::LogDispatch, "Trace::instantiate found command {}", cmd.type);
         cq.run_command(cmd);
     }
     cq.wait_until_empty();
@@ -92,6 +105,9 @@ uint32_t Trace::instantiate(CommandQueue& cq) {
     // Commit the trace buffer to device DRAM in a blocking fashion
     // Optional optimization: use a non-blocking enqueue WB command
     EnqueueWriteBuffer(cq, trace_buffer, trace_data, true);
+
+    this->history.clear();
+    this->state = TraceState::READY;
     return tid;
 }
 
