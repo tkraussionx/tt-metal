@@ -194,7 +194,7 @@ def test_time_sharded_attnention(
 
 
 # Test matmul attention sequence with InterleavedToShardedPartialOp
-@pytest.mark.parametrize("seq_len", [4096, 1024])
+@pytest.mark.parametrize("seq_len", [4096, 1024, 256, 64])
 @pytest.mark.parametrize("kv_len", [96])
 @pytest.mark.parametrize("num_heads", [16])
 @pytest.mark.parametrize("data_format", [ttl.tensor.DataType.BFLOAT8_B])
@@ -208,6 +208,8 @@ def test_cross_attnention(
     reshard_for_softmax,
     function_level_defaults,
 ):
+    if seq_len == 64 and reshard_for_softmax:
+        pytest.skip()
     compute_grid_size = device.compute_with_storage_grid_size()
     grid_size = (8, 2)
     num_cores = grid_size[0] * grid_size[1]
@@ -241,7 +243,7 @@ def test_cross_attnention(
     reference_query_layer = torch2tt_tensor(
         torch_query_layer,
         device,
-        tt_memory_config=dram_interleaved_memory_config,
+        tt_memory_config=l1_interleaved_memory_config,
         tt_dtype=data_format,
     )
     reference_key_layer_transposed = torch2tt_tensor(
@@ -383,20 +385,20 @@ def test_cross_attnention(
 
 
 # Test matmul attention sequence with InterleavedToShardedPartialOp
-@pytest.mark.parametrize("seq_len", [1024])
-@pytest.mark.parametrize("kv_len", [1024])
+@pytest.mark.parametrize("seq_len", [1024, 256, 64])
 @pytest.mark.parametrize("num_heads", [16])
 @pytest.mark.parametrize("data_format", [ttl.tensor.DataType.BFLOAT8_B])
 @pytest.mark.parametrize("reshard_for_softmax", [True, False])
 def test_attnention(
     device,
     seq_len,
-    kv_len,
     num_heads,
     data_format,
     reshard_for_softmax,
     function_level_defaults,
 ):
+    if seq_len == 64 and reshard_for_softmax:
+        pytest.skip()
     compute_grid_size = device.compute_with_storage_grid_size()
     grid_size = (8, 2)
     num_cores = grid_size[0] * grid_size[1]
@@ -404,8 +406,8 @@ def test_attnention(
         pytest.skip(f"Need {num_cores} cores to run this test but core grid is {compute_grid_size}")
 
     query_layer_shape = [1, num_heads, seq_len, 64]
-    key_layer_transposed_shape = [1, num_heads, 64, kv_len]
-    value_layer_shape = [1, num_heads, kv_len, 64]
+    key_layer_transposed_shape = [1, num_heads, 64, seq_len]
+    value_layer_shape = [1, num_heads, seq_len, 64]
     output_shape = [1, num_heads, seq_len, 64]
 
     torch_query_layer = torch.randn(query_layer_shape).bfloat16().float()
@@ -470,7 +472,7 @@ def test_attnention(
         out_subblock_h=1,
         out_subblock_w=1,
         per_core_M=num_heads * seq_len // num_cores // 32,
-        per_core_N=kv_len // 32,
+        per_core_N=seq_len // 32,
     )
     print(program_config)
 
@@ -499,7 +501,7 @@ def test_attnention(
             {ttl.tensor.CoreRange(ttl.tensor.CoreCoord(0, 0), ttl.tensor.CoreCoord(7, 7))}
         )
         output_shard_spec = ttl.tensor.ShardSpec(
-            output_shard_grid, [height_per_core, kv_len], ttl.tensor.ShardOrientation.COL_MAJOR, False
+            output_shard_grid, [height_per_core, seq_len], ttl.tensor.ShardOrientation.COL_MAJOR, False
         )
         output_mem_config = ttl.tensor.MemoryConfig(
             ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, ttl.tensor.BufferType.L1, output_shard_spec
@@ -513,7 +515,7 @@ def test_attnention(
             compute_with_storage_grid_size=(8, 8),
             subblock_w=1,
             block_h=height_per_core // 32,
-            block_w=kv_len // 32,
+            block_w=seq_len // 32,
             math_fidelity=ttl.tensor.MathFidelity.LoFi,
             im_data_format=ttl.tensor.DataType.BFLOAT16,
         )
@@ -526,7 +528,7 @@ def test_attnention(
             compute_with_storage_grid_size=grid_size,
             subblock_w=1,
             block_h=seq_len // 32,
-            block_w=kv_len // 32,
+            block_w=seq_len // 32,
             math_fidelity=ttl.tensor.MathFidelity.LoFi,
             im_data_format=ttl.tensor.DataType.BFLOAT16,
         )
@@ -536,7 +538,7 @@ def test_attnention(
     v_sharded = ttl.tensor.interleaved_to_sharded(
         reference_value_layer,
         grid_size,
-        [num_heads * kv_len // num_cores, 64],
+        [num_heads * seq_len // num_cores, 64],
         ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
         ttl.tensor.ShardOrientation.COL_MAJOR,
     )
@@ -548,7 +550,7 @@ def test_attnention(
     )
     program_config = ttl.operations.primary.MatmulMultiCoreReuseProgramConfig(
         compute_with_storage_grid_size=grid_size,
-        in0_block_w=kv_len // 32,
+        in0_block_w=seq_len // 32,
         out_subblock_h=1,
         out_subblock_w=1,
         per_core_M=num_heads * seq_len // num_cores // 32,
