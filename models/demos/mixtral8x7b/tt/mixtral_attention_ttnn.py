@@ -87,33 +87,27 @@ class TtMixtralAttention(torch.nn.Module):
                 cache_file_name=cache_name(f"wo_{i}_"),
             )
 
-            cache_k = (
-                torch.ones(
-                    (
-                        self.max_batch_size,
-                        self.n_kv_heads // self.num_devices,
-                        # self.sliding_window,
-                        32,  # TODO Update the initial cache size when scaling up
-                        self.head_dim,
-                    )
+            cache_k = torch.zeros(
+                (
+                    self.max_batch_size,
+                    self.n_kv_heads // self.num_devices,
+                    # self.sliding_window,
+                    32,  # TODO Update the initial cache size when scaling up
+                    self.head_dim,
                 )
-                * 0
             )  # torch.finfo(torch.float).min
-            cache_v = (
-                torch.ones(
-                    (
-                        self.max_batch_size,
-                        self.n_kv_heads // self.num_devices,
-                        # self.sliding_window,
-                        32,  # TODO Update the initial cache size when scaling up
-                        self.head_dim,
-                    )
+            cache_v = torch.zeros(
+                (
+                    self.max_batch_size,
+                    self.n_kv_heads // self.num_devices,
+                    # self.sliding_window,
+                    32,  # TODO Update the initial cache size when scaling up
+                    self.head_dim,
                 )
-                * 0
             )  # torch.finfo(torch.float).min
             layer_past = [cache_k, cache_v]
             layer_past = [
-                ttnn.from_torch(lp, device=self.devices[i], layout=ttnn.TILE_LAYOUT, dtype=self.dtype)
+                ttnn.from_torch(lp, device=self.devices[i], layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat16)
                 for lp in layer_past
             ]
 
@@ -208,33 +202,11 @@ class TtMixtralAttention(torch.nn.Module):
 
             keys_B1PD = layer_past[0]
             values_B1PD = layer_past[1]
-
-            ttnn.experimental.tensor.update_cache(keys_B1PD, k_heads_11BD, current_pos)
-            ttnn.experimental.tensor.update_cache(values_B1PD, v_heads_11BD, current_pos)
+            ttnn.kv_cache.update_cache_for_token_(keys_B1PD, k_heads_11BD, current_pos)
+            ttnn.kv_cache.update_cache_for_token_(values_B1PD, v_heads_11BD, current_pos)
             self.layer_past_list[i] = [keys_B1PD, values_B1PD]
-
-            keys_B1PD = ttnn.experimental.tensor.unpad(
-                layer_past[0],
-                [0, 0, 0, 0],
-                [
-                    self.max_batch_size - 1,
-                    self.n_local_kv_heads - 1,
-                    padded_layer_past_len - 1,
-                    self.head_dim - 1,
-                ],
-                output_mem_config=ttnn.L1_MEMORY_CONFIG,
-            )
-            values_B1PD = ttnn.experimental.tensor.unpad(
-                layer_past[1],
-                [0, 0, 0, 0],
-                [
-                    self.max_batch_size - 1,
-                    self.n_local_kv_heads - 1,
-                    padded_layer_past_len - 1,
-                    self.head_dim - 1,
-                ],
-                output_mem_config=ttnn.L1_MEMORY_CONFIG,
-            )
+            keys_B1PD = keys_B1PD[:, :, :padded_layer_past_len, :]
+            values_B1PD = values_B1PD[:, :, : start_pos + 1, :]
 
             ###
             # Attention
@@ -258,12 +230,12 @@ class TtMixtralAttention(torch.nn.Module):
                     q_heads_B14D,
                     keys_B1DP,
                     dtype=ttnn.bfloat16,
-                    memory_config=ttnn.L1_MEMORY_CONFIG,
+                    memory_config=ttnn.L1_MEMORY_CONFIG,  # attn_output_memcfg
                     core_grid=self.core_grid,
                     compute_kernel_config=self.compute_kernel_attn,
                 )
-                attn_B14P = ttnn.softmax(attn_B14P * (1.0 / self.head_dim), dim=-1, memory_config=ttnn.L1_MEMORY_CONFIG)
-
+                attn_B14P = attn_B14P[:, :, :, : start_pos + 1]
+                attn_B14P = ttnn.softmax(attn_B14P * (self.head_dim**-0.5), dim=-1, memory_config=attn_output_memcfg)
             else:
                 attn_B14P = ttnn.experimental.operations.primary.transformers.attn_matmul(
                     q_heads_14BD,
@@ -274,27 +246,21 @@ class TtMixtralAttention(torch.nn.Module):
                     # output_mem_config=ttnn.L1_MEMORY_CONFIG,  # ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1), #self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
                     output_dtype=ttnn.bfloat16,  # Must be BFLOAT16
                 )  # seqlen, n_heads, batch, cache_len + seqlen
-
-                attn_B14P = ttnn.transformer.attention_softmax(attn_B14P, head_size=self.head_dim, attention_mask=None)
+                attn_B14P = attn_B14P[:, :, :, : start_pos + 1]
+                attn_B14P = ttnn.softmax(attn_B14P * (self.head_dim**-0.5), dim=-1)
 
             if self.batched_attn:
-                attn_B14P = ttnn.to_memory_config(attn_B14P, attn_output_memcfg)
                 # shard values
                 v_cache_memcfg = self.model_config["V_CACHE_SLICE_OUTPUT_MEMCFG"](padded_layer_past_len)
                 values_B1PD = ttnn.to_memory_config(values_B1PD, v_cache_memcfg)
-                attn_output_memcfg = self.model_config["SCORES_BATCHED_MM_OUTPUT_MEMCFG"]
 
                 attn_output_B14D = ttnn.matmul(
                     attn_B14P,
                     values_B1PD,
                     dtype=ttnn.bfloat16,
-                    memory_config=attn_output_memcfg,
+                    memory_config=ttnn.L1_MEMORY_CONFIG,  # attn_output_memcfg,
                     core_grid=self.core_grid,
                     compute_kernel_config=self.compute_kernel_attn,
-                )
-                attn_output_B14D = ttnn.experimental.tensor.sharded_to_interleaved(
-                    attn_output_B14D,
-                    output_mem_config=ttnn.L1_MEMORY_CONFIG,
                 )
                 attn_output_14BD = ttnn.permute(attn_output_B14D, (1, 2, 0, 3))
             else:
