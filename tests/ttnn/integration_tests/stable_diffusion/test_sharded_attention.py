@@ -575,3 +575,123 @@ def test_attnention(
 
     print(output)
     assert passing
+
+
+# Test matmul attention sequence with InterleavedToShardedPartialOp
+@pytest.mark.parametrize("B", [1])
+@pytest.mark.parametrize("M", [8192])
+@pytest.mark.parametrize("K", [320])
+@pytest.mark.parametrize("N", [1536])
+@pytest.mark.parametrize("data_format", [ttl.tensor.DataType.BFLOAT8_B])
+def test_qkv(
+    device,
+    B,
+    M,
+    N,
+    K,
+    data_format,
+    function_level_defaults,
+):
+    compute_grid_size = device.compute_with_storage_grid_size()
+    grid_size = (8, 5)
+    num_cores = grid_size[0] * grid_size[1]
+    if num_cores > (compute_grid_size.x * compute_grid_size.y):
+        pytest.skip(f"Need {num_cores} cores to run this test but core grid is {compute_grid_size}")
+
+    in_0_shape = [1, B, M, K]
+    in_1_shape = [1, B, K, N]
+
+    in_0_torch = torch.randn(in_0_shape).bfloat16().float()
+    in_1_torch = torch.randn(in_1_shape).bfloat16().float()
+
+    dram_interleaved_memory_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttl.tensor.BufferType.DRAM,
+    )
+    l1_interleaved_memory_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttl.tensor.BufferType.L1,
+    )
+
+    height_sharded_memory_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, buffer_type=ttl.tensor.BufferType.L1
+    )
+
+    block_sharded_memory_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED, buffer_type=ttl.tensor.BufferType.L1
+    )
+
+    # compare output to regular case
+    in_0 = torch2tt_tensor(
+        in_0_torch,
+        device,
+        tt_memory_config=l1_interleaved_memory_config,
+        tt_dtype=data_format,
+    )
+    in_1 = torch2tt_tensor(
+        in_1_torch,
+        device,
+        tt_memory_config=l1_interleaved_memory_config,
+        tt_dtype=data_format,
+    )
+
+    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+        math_fidelity=ttl.tensor.MathFidelity.LoFi,
+        math_approx_mode=True,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=False,
+    )
+
+    passing = True
+    output = None
+
+    in_0_sharded = ttl.tensor.interleaved_to_sharded(
+        in_0,
+        grid_size,
+        [M // 8, K // 5],
+        ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+        ttl.tensor.ShardOrientation.COL_MAJOR,
+    )
+
+    program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        compute_with_storage_grid_size=grid_size,
+        in0_block_w=2,
+        out_subblock_h=1,
+        out_subblock_w=1,
+        per_core_M=32,
+        per_core_N=10,
+        fused_activation=None,
+        transpose_mcast=True,
+    )
+    print(program_config)
+    print(in_0_sharded.memory_config())
+
+    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+        math_fidelity=ttl.tensor.MathFidelity.LoFi,
+        math_approx_mode=True,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=False,
+    )
+    mm = ttl.operations.primary.matmul(
+        in_0_sharded,
+        in_1,
+        program_config=program_config,
+        output_mem_config=block_sharded_memory_config,
+        output_dtype=data_format,
+        compute_kernel_config=compute_kernel_config,
+    )
+    # mm = ttl.tensor.bmm(
+    #     in_0,
+    #     in_1,
+    #     l1_interleaved_memory_config,
+    #     compute_kernel_config,
+    # )
+
+    mm_out_torch = tt2torch_tensor(mm)
+
+    out_torch = in_0_torch @ in_1_torch
+
+    passing, output = comp_pcc(mm_out_torch, out_torch)
+
+    print(output)
+    assert passing

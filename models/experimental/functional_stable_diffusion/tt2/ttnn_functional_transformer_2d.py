@@ -234,6 +234,7 @@ class transformer_2d_model:
             use_multicore=True,
         )  # tilize
 
+        breakpoint()
         hidden_states = self.proj_in(hidden_states)
 
         inner_dim = hidden_states.shape[-1]
