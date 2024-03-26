@@ -30,6 +30,7 @@ class TtResidualBlock(torch.nn.Module):
         self.tt_mamba_block = TtMambaBlock(self.args, self.device, configs, load_fn)
 
     def forward(self, x):
+        print('****residual block', x.shape)
         mamba_input = x
         rms_norm_weights = ttnn.to_memory_config(self.rms_norm_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
         mamba_input = ttnn.rms_norm(x, rms_norm_weights, epsilon=self.args.eps)

@@ -35,7 +35,9 @@ class TtTensorLoader:
                 torch_tensor = self.state_dict[tensor_name]
             torch_tensor = tm_fn(torch_tensor)
             if len(torch_tensor.size()) == 1:
-                torch_tensor = torch_tensor.unsqueeze(0)
+                torch_tensor = torch_tensor.unsqueeze(0).unsqueeze(0).unsqueeze(0)
+            if len(torch_tensor.size()) == 2:
+                torch_tensor = torch_tensor.unsqueeze(0).unsqueeze(0)
             tt_tensor = ttnn.as_tensor(
                 torch_tensor,
                 device=device,
@@ -73,6 +75,7 @@ class MambaTT(torch.nn.Module):
         self.lm_head = reference_model.lm_head
 
     def forward(self, x):
+        print('****full model', x.shape)
         x = self.embedding(x)
         x = x.squeeze(1)
         x = ttnn.from_torch(
