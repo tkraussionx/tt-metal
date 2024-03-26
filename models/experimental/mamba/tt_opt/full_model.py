@@ -34,6 +34,8 @@ class TtTensorLoader:
             if torch_tensor is None:
                 torch_tensor = self.state_dict[tensor_name]
             torch_tensor = tm_fn(torch_tensor)
+            if len(torch_tensor.size()) == 1:
+                torch_tensor = torch_tensor.unsqueeze(0)
             tt_tensor = ttnn.as_tensor(
                 torch_tensor,
                 device=device,

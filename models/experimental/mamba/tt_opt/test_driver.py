@@ -53,6 +53,7 @@ def run_demo(num_users, hidden_size, profile):
             out_data = model(input_data)
         out_data = model(input_data)
 
+    ttnn.synchronize_device(device)
     ttnn.close_device(device)
     
     return out_data

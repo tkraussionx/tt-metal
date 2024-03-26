@@ -26,6 +26,9 @@ class TtMambaSSM(torch.nn.Module):
         self.configs = configs
         self.n = 32
         self.rank = self.args.dt_rank
+        
+        self.row = 4
+        self.col = 8
 
         """
         We need to split up the x_proj weights because in the reference
@@ -64,8 +67,8 @@ class TtMambaSSM(torch.nn.Module):
         # dt_proj_weights
         dt_proj_weight_name = "mixer.dt_proj.weight"
         dt_proj_bias_name = "mixer.dt_proj.bias"
-        self.dt_proj_weights = load_fn(dt_proj_weight_name, lambda x: x.transpose(-1, -2))
-        self.dt_proj_bias = load_fn(dt_proj_bias_name)
+        self.dt_proj_weights = load_fn(dt_proj_weight_name, lambda x: x.transpose(-1, -2), tt_dtype=ttnn.bfloat8_b, postfix="bfp8")
+        self.dt_proj_bias = load_fn(dt_proj_bias_name, tt_dtype=ttnn.bfloat8_b, postfix="bfp8")
 
         # B_intermediate_tranform_weights = torch.eye(self.n).repeat(1, self.hidden_size).unsqueeze(0).unsqueeze(0)
 
@@ -95,16 +98,12 @@ class TtMambaSSM(torch.nn.Module):
 
     def forward(self, x):
         # delta
-        delta_t_proj_weights = ttnn.to_memory_config(self.delta_t_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
-        delta_t0 = ttnn.linear(x, delta_t_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
-        ttnn.deallocate(delta_t_proj_weights)
-
-        dt_proj_weights = ttnn.to_memory_config(self.dt_proj_weights, memory_config=self.configs["sharded_rank"])
-        delta_t1 = ttnn.linear(
-            delta_t0, self.dt_proj_weights, bias=self.dt_proj_bias, memory_config=ttnn.L1_MEMORY_CONFIG
-        )
+        delta_t0 = ttnn.linear(x, self.delta_t_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
+        
+        delta_t1 = ttnn.linear(delta_t0, self.dt_proj_weights, bias=self.dt_proj_bias, memory_config=ttnn.L1_MEMORY_CONFIG, core_grid=ttnn.CoreGrid(y=self.row, x=self.col))
         ttnn.deallocate(delta_t0)
-        ttnn.deallocate(dt_proj_weights)
+        return x
+
         delta_t2 = ttnn.softplus(delta_t1, parameter1=1.0, parameter2=20.0, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(delta_t1)
 
