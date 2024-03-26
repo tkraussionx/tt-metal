@@ -102,10 +102,12 @@ class TtMambaSSM(torch.nn.Module):
         
         delta_t1 = ttnn.linear(delta_t0, self.dt_proj_weights, bias=self.dt_proj_bias, memory_config=ttnn.L1_MEMORY_CONFIG, core_grid=ttnn.CoreGrid(y=self.row, x=self.col))
         ttnn.deallocate(delta_t0)
-        return x
+        
 
         delta_t2 = ttnn.softplus(delta_t1, parameter1=1.0, parameter2=20.0, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(delta_t1)
+        
+        return x
 
         # calculate abar
         delta_t3 = ttnn.repeat_interleave(delta_t2, self.n, dim=3)
