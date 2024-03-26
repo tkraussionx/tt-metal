@@ -163,7 +163,7 @@ class TtFalconModelShared(torch.nn.Module):
                 dim=-1,
             )
 
-            if self.model_config["model_config_str"] == "BFLOAT16-DRAM":
+            if self.model_config["l1_sharded"] == False:
                 tt_attention_mask = torch2tt_tensor(
                     (attention_mask_bool_padded.transpose(0, 2) * -1e3).expand(
                         -1, self.config.num_attention_heads, -1, -1

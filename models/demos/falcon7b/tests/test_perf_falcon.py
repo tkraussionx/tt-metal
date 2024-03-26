@@ -381,7 +381,7 @@ def run_test_FalconCausalLM_end_to_end(
     ("tiiuae/falcon-7b-instruct",),
     ids=["falcon_7b"],
 )
-@pytest.mark.parametrize("model_config_str", ("BFLOAT16-L1",))
+@pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1", "BFLOAT16-L1_SHARDED"))
 def test_perf_bare_metal(
     use_program_cache,
     model_version,

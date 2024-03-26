@@ -284,7 +284,7 @@ class TtFalconAttention(nn.Module):
                 output_mem_config=self.model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"],
             )
 
-            if self.model_config["model_config_str"] == "BFLOAT16-L1":
+            if self.model_config["l1_sharded"]:
                 key_layer = tt_lib.tensor.interleaved_to_sharded(
                     key_layer,
                     sharded_mem_config=self.model_config["ATTN_BATCH_SHARDED_MEMCFG"](
@@ -327,7 +327,7 @@ class TtFalconAttention(nn.Module):
             -1,
             output_mem_config=(
                 self.model_config["K_TRANSPOSED_OUTPUT_MEMCFG"]
-                if llm_mode == "prefill" or self.model_config["model_config_str"] == "BFLOAT16-DRAM"
+                if llm_mode == "prefill" or self.model_config["l1_sharded"] == False
                 else tt_lib.tensor.MemoryConfig(
                     tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED, tt_lib.tensor.BufferType.L1
                 )
@@ -341,7 +341,7 @@ class TtFalconAttention(nn.Module):
                 key_layer_transposed,
                 output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
             )
-        elif self.model_config["model_config_str"] == "BFLOAT16-DRAM":
+        elif self.model_config["l1_sharded"] == False:
             attn_weights = tt_lib.operations.primary.transformers.attn_matmul(
                 query_layer,
                 key_layer_transposed,
@@ -366,7 +366,7 @@ class TtFalconAttention(nn.Module):
         query_layer.deallocate()
         key_layer_transposed.deallocate()
 
-        if llm_mode == "prefill" or self.model_config["model_config_str"] == "BFLOAT16-DRAM":
+        if llm_mode == "prefill" or self.model_config["l1_sharded"] == False:
             attn_weights = tt_lib.tensor.bcast(
                 attn_weights,
                 self.scalar,
@@ -418,7 +418,7 @@ class TtFalconAttention(nn.Module):
                 output_mem_config=self.model_config["V_CACHE_SLICE_OUTPUT_MEMCFG"],
             )
 
-            if self.model_config["model_config_str"] == "BFLOAT16-L1":
+            if self.model_config["l1_sharded"]:
                 value_layer = tt_lib.tensor.interleaved_to_sharded(
                     value_layer,
                     sharded_mem_config=self.model_config["ATTN_BATCH_SHARDED_MEMCFG"](
@@ -437,7 +437,7 @@ class TtFalconAttention(nn.Module):
                 value_layer,
                 output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
             )
-        elif self.model_config["model_config_str"] == "BFLOAT16-DRAM":
+        elif self.model_config["l1_sharded"] == False:
             attn_output = tt_lib.operations.primary.transformers.attn_matmul(
                 attn_weights,
                 value_layer,
