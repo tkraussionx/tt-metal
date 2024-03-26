@@ -580,18 +580,18 @@ class UNet2DConditionModel:
                 memory_config=self.gn_expected_input_sharded_memory_config,
                 core_grid=self.group_norm_core_grid,
             )
-        sample = ttnn.to_memory_config(sample, ttnn.L1_MEMORY_CONFIG)
-        sample = ttnn.reshape(
-            sample,
-            (
-                1,
-                1,
-                self.conv_out.batch_size * self.conv_out.input_height * self.conv_out.input_width,
-                self.conv_out.in_channels,
-            ),
-        )
-        sample = ttnn.to_layout(sample, ttnn.TILE_LAYOUT)
-        sample = ttnn.silu(sample)
+        # sample = ttnn.to_memory_config(sample, ttnn.L1_MEMORY_CONFIG)
+        # sample = ttnn.reshape(
+        #    sample,
+        #    (
+        #        1,
+        #        1,
+        #        self.conv_out.batch_size * self.conv_out.input_height * self.conv_out.input_width,
+        #        self.conv_out.in_channels,
+        #    ),
+        # )
+        # sample = ttnn.to_layout(sample, ttnn.TILE_LAYOUT)
+        sample = ttnn.silu(sample, memory_config=ttnn.get_memory_config(sample))
         if ttnn.get_memory_config(sample) != self.conv_out.conv.input_sharded_memory_config:
             sample = ttnn.to_memory_config(sample, self.conv_out.conv.input_sharded_memory_config)
         sample = self.conv_out(sample)
