@@ -13,6 +13,7 @@ import ttnn
 from models.utility_functions import (
     disable_compilation_reports,
     disable_persistent_kernel_cache,
+    skip_for_wormhole_b0,
     profiler,
 )
 from models.demos.bert.tt import ttnn_bert
@@ -261,6 +262,7 @@ def run_bert_question_and_answering_inference_squad_v2(
         logger.info(f"\tCPU_Eval: exact: {cpu_eval_score['exact']} -- F1:  {cpu_eval_score['f1']}")
 
 
+@skip_for_wormhole_b0()
 @pytest.mark.parametrize("model_name", ["phiyodr/bert-large-finetuned-squad2"])
 @pytest.mark.parametrize("bert", [ttnn_bert, ttnn_optimized_bert])
 def test_demo(
