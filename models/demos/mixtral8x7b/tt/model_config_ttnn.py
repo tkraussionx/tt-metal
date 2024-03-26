@@ -4,6 +4,7 @@
 
 import ttnn
 from pathlib import Path
+import tt_lib as ttl
 
 
 class TtModelArgs:
@@ -30,9 +31,52 @@ class TtModelArgs:
             self.model_base_path / f"Mixtral-8x7B-v0.1/consolidated.{i:02d}.pt"
         )
         self.tokenizer_path = str(self.model_base_path / "Mixtral-8x7B-v0.1/tokenizer.model")
+        self.state_dict_path = str(self.model_base_path / "Mixtral-8x7B-v0.1/partial_state_dict.pt")
 
     def weight_cache_path(self, dtype):
         return (
             self.model_base_path
             / {ttnn.bfloat16: "mixtral_tensor_cache_bf16", ttnn.bfloat8_b: "mixtral_tensor_cache_bfp8"}[dtype]
         )
+
+    model_config = dict()
+
+    model_config["Q_TRANSPOSE_MEMCFG"] = ttnn.create_sharded_memory_config(
+        shape=(32, 128),
+        core_grid=ttnn.CoreGrid(y=4, x=8),
+        strategy=ttnn.ShardStrategy.HEIGHT,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )
+
+    model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"] = lambda padded_layer_past_len: ttnn.create_sharded_memory_config(
+        shape=(128, padded_layer_past_len),
+        core_grid=ttnn.CoreGrid(y=4, x=8),
+        strategy=ttnn.ShardStrategy.HEIGHT,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )
+
+    model_config["V_CACHE_SLICE_OUTPUT_MEMCFG"] = lambda padded_layer_past_len: ttnn.create_sharded_memory_config(
+        shape=(padded_layer_past_len, 128),
+        core_grid=ttnn.CoreGrid(y=4, x=8),
+        strategy=ttnn.ShardStrategy.HEIGHT,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )
+
+    model_config["ATTN_BATCHED_MM_OUTPUT_MEMCFG"] = lambda padded_layer_past_len: ttnn.create_sharded_memory_config(
+        shape=(32, padded_layer_past_len),
+        core_grid=ttnn.CoreGrid(y=4, x=8),
+        strategy=ttnn.ShardStrategy.HEIGHT,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )
+
+    model_config["SCORES_BATCHED_MM_OUTPUT_MEMCFG"] = ttnn.create_sharded_memory_config(
+        shape=(32, 128),
+        core_grid=ttnn.CoreGrid(y=4, x=8),
+        strategy=ttnn.ShardStrategy.HEIGHT,
+        orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )

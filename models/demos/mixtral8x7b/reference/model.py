@@ -107,10 +107,10 @@ class Attention(nn.Module):
         xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
         # The cache is a rotating buffer
-        scatter_pos = (positions[-self.sliding_window :] % self.sliding_window)[None, :, None, None]
+        scatter_pos = (positions % self.args.max_seq_len)[None, :, None, None]
         scatter_pos = scatter_pos.repeat(bsz, 1, self.n_kv_heads, self.args.head_dim)
-        self.cache_k[:bsz].scatter_(dim=1, index=scatter_pos, src=xk[:, -self.sliding_window :])
-        self.cache_v[:bsz].scatter_(dim=1, index=scatter_pos, src=xv[:, -self.sliding_window :])
+        self.cache_k[:bsz].scatter_(dim=1, index=scatter_pos, src=xk)
+        self.cache_v[:bsz].scatter_(dim=1, index=scatter_pos, src=xv)
 
         # positions = [0].. 1D [0,1]
         # src = [32,1,8,64]
@@ -121,7 +121,8 @@ class Attention(nn.Module):
             # prefill
             key, value = repeat_kv(xk, xv, self.repeats)
         else:
-            cur_pos = positions[-1].item() + 1
+            assert mask is None
+            cur_pos = int(positions[-1].item() + 1)
             key, value = repeat_kv(self.cache_k[:bsz, :cur_pos, ...], self.cache_v[:bsz, :cur_pos, ...], self.repeats)
 
         query = xq.transpose(1, 2)
@@ -150,6 +151,7 @@ class FeedForward(nn.Module):
 
     def forward(self, x) -> torch.Tensor:
         return self.w2(nn.functional.silu(self.w1(x)) * self.w3(x))
+        # return self.w2(self.w1(x) * self.w3(x))
 
 
 class RMSNorm(torch.nn.Module):
@@ -184,18 +186,27 @@ class TransformerBlock(nn.Module):
             )
         else:
             self.feed_forward = FeedForward(args=args)
+        self.comps = []
 
     def forward(
         self, x: torch.Tensor, freqs_cis: torch.Tensor, positions: torch.Tensor, mask: Optional[torch.Tensor]
     ) -> torch.Tensor:
-        r = self.attention.forward(self.attention_norm(x), freqs_cis, positions, mask)
+        x1 = self.attention_norm(x)
+        self.comps.append(x1)
+        r = self.attention.forward(x1, freqs_cis, positions, mask)
+        self.comps.append(r)
         h = x + r
-        r = self.feed_forward.forward(self.ffn_norm(h))
+        self.comps.append(h)
+        h1 = self.ffn_norm(h)
+        self.comps.append(h1)
+        r = self.feed_forward.forward(h1)
+        self.comps.append(r)
         out = h + r
+        self.comps.append(out)
         return out
 
 
-def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0) -> torch.Tensor:
+def precompute_freqs_cis(dim: int, end: int, theta: float = 1000000.0) -> torch.Tensor:
     freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
     t = torch.arange(end, device=freqs.device)  # type: ignore
     freqs = torch.outer(t, freqs).float()  # type: ignore
@@ -210,8 +221,6 @@ class Transformer(nn.Module):
         self.n_layers = args.n_layers
         assert self.vocab_size > 0
 
-        self.tok_embeddings = nn.Embedding(args.vocab_size, args.dim)
-
         self.layers = torch.nn.ModuleList([TransformerBlock(args=args) for _ in range(args.n_layers)])
 
         self.norm = RMSNorm(args.dim, eps=args.norm_eps)
@@ -219,15 +228,15 @@ class Transformer(nn.Module):
         self.output = nn.Linear(args.dim, args.vocab_size, bias=False)
 
         self.freqs_cis = precompute_freqs_cis(self.args.head_dim, 128_000)
+        self.tok_embeddings = nn.Embedding(args.vocab_size, args.dim)
 
     def forward(
         self,
         input_ids: torch.Tensor,
-        freqs_cis_i,
         positions: torch.Tensor,
     ):
         h = input_ids  # self.tok_embeddings(input_ids)
-        freqs_cis = freqs_cis_i  # [positions]
+        freqs_cis = self.freqs_cis[positions]
 
         mask: Optional[torch.Tensor] = None
         if input_ids.shape[1] > 1:
@@ -240,38 +249,9 @@ class Transformer(nn.Module):
             )
             mask = torch.tril(tensor, diagonal=0).to(h.dtype)
             # make the mask banded to account for sliding window
-            mask = torch.triu(mask, diagonal=-self.args.sliding_window)
+            # mask = torch.triu(mask, diagonal=-self.args.sliding_window)
             mask = torch.log(mask)
         for layer in self.layers:
             h = layer(h, freqs_cis, positions, mask)
 
         return self.output(self.norm(h)).float()
-
-    def from_folder(
-        folder: Path,
-        n_layers: int = 1,
-        max_batch_size: int = 1,
-        device="cpu",
-        dtype=torch.float32,
-        is_whole_model: bool = True,
-    ):
-        with open(folder / "params.json", "r") as f:
-            model_args = ModelArgs(**json.loads(f.read()))
-        model_args.max_batch_size = max_batch_size
-        model_args.n_layers = n_layers
-        state_dict = torch.load(folder / "consolidated.00.pth")
-        if not is_whole_model:
-            state_dict = {
-                k: v
-                for k, v in state_dict.items()
-                if (
-                    k.startswith("layers.0")
-                    or k.startswith("tok_embeddings")
-                    or k.startswith("norm.weight")
-                    or k.startswith("output.weight")
-                )
-            }
-        model = Transformer(model_args).to(device=device, dtype=dtype)
-        model.load_state_dict(state_dict)
-
-        return model

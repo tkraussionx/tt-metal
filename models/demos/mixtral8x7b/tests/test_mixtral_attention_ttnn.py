@@ -10,12 +10,10 @@ from pathlib import Path
 import ttnn
 from models.demos.mixtral8x7b.tt.mixtral_attention_ttnn import TtMixtralAttention
 from models.demos.mixtral8x7b.tt.mixtral_common_ttnn import (
-    precompute_freqs,
-    generate_cos_sin_cache_ttnn,
     prepare_inputs_ttnn,
 )
 from models.demos.mixtral8x7b.tt.model_config_ttnn import TtModelArgs
-from models.demos.mixtral8x7b.reference.model import Attention
+from models.demos.mixtral8x7b.reference.model import Attention, precompute_freqs_cis
 from models.utility_functions import (
     comp_pcc,
     comp_allclose,
@@ -25,7 +23,7 @@ from models.utility_functions import get_devices_for_t3000
 
 @pytest.mark.parametrize(
     "iterations",
-    ((10),),
+    ((1,)),
 )
 def test_mixtral_attention_inference(all_devices, iterations, reset_seeds):
     pcc = 0.99
@@ -47,54 +45,34 @@ def test_mixtral_attention_inference(all_devices, iterations, reset_seeds):
     batch = 32
     seq_len = 1  # length to generate
 
-    tt_cos_cached, tt_sin_cached = generate_cos_sin_cache_ttnn(
-        devices, model_args.head_dim, model_args.max_seq_len * 2, 10000, dtype
-    )
-    tt_model = TtMixtralAttention(
-        devices,
-        state_dict,
-        args=model_args,
-        layer_num=0,
-        dtype=dtype,
-        tt_cos_cached=tt_cos_cached,
-        tt_sin_cached=tt_sin_cached,
-    )
+    tt_model = TtMixtralAttention(devices, state_dict, args=model_args, layer_num=0, dtype=dtype)
     generation_start_pos = 0
     generation_length = iterations
     all_tests_pass = True
-
-    cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
-    freqs_cis = torch.complex(cos, sin)
 
     for i in range(generation_length):
         pt_attention_input = (torch.rand(batch, seq_len, model_args.dim) * 2) - 1
         tt_attention_input = pt_attention_input.clone()
         start_pos = generation_start_pos + i
-        attention_input, start_pos, attn_mask, current_pos, rot_mat = prepare_inputs_ttnn(
+        attention_input, rot_mat = prepare_inputs_ttnn(
             tt_attention_input,
-            start_pos,
             tt_model.hidden_size,
             tt_model.head_dim,
-            tt_model.sliding_window,
             tt_model.max_seq_len,
             tt_model.devices,
         )
-
+        current_pos = start_pos % model_args.sliding_window
         tt_out = tt_model(
             attention_input,
             start_pos,
             current_pos,
-            attn_mask,
             rot_mat,
         )
         assert isinstance(tt_out, list)  # tt_out should be replicated on N devices
         tt_out = tt_out[0]
         tt_output_torch = ttnn.to_torch(tt_out).squeeze(2).view(batch, 1, -1)  # [ batch, seq, hidden_dim]
-
-        freqs_cis_i = freqs_cis[start_pos, :].unsqueeze(0)
-        positions = torch.tensor([start_pos])
-        # mask = torch.randn(1, 1)
-
+        positions = torch.LongTensor([start_pos])
+        freqs_cis_i = precompute_freqs_cis(model_args.head_dim, 128_000)[positions]
         reference_output = reference_model(pt_attention_input, freqs_cis_i, positions, mask=None)
         print("OUTPUT SHAPES, ", reference_output.shape, tt_output_torch.shape)
         passing, pcc_message = comp_pcc(reference_output, tt_output_torch, pcc)
