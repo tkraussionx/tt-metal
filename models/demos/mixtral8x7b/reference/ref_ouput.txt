@@ -1,0 +1,135 @@
+2024-03-26 17:31:23.491 | INFO     | __main__:run_mistral_demo:138 - [User 0] This is a test.
+
+This is a test.
+
+This is a test.
+
+This is a test.
+
+This is a test.
+
+This is a test.
+
+This is
+2024-03-26 17:31:23.491 | INFO     | __main__:run_mistral_demo:138 - [User 1] It was the best of times, it was the worst of times.
+
+It was the age of wisdom, it was the age of foolishness.
+
+It was the epoch of belief, it was the epoch
+2024-03-26 17:31:23.491 | INFO     | __main__:run_mistral_demo:138 - [User 2] Run to the hills, run for your lives! The end is nigh!
+
+The end of the world is a common theme in science fiction, and it’s been done to death. But it’s
+2024-03-26 17:31:23.492 | INFO     | __main__:run_mistral_demo:138 - [User 3] You've got another thing coming if you think you're going to get a good night's sleep tonight.
+
+The 1980s are back in a big way, and we're
+2024-03-26 17:31:23.492 | INFO     | __main__:run_mistral_demo:138 - [User 4] The meaning of life is to find your gift. The purpose of life is to give it away.
+
+Pablo Picasso
+
+# The Gift of Giving
+
+## The Gift of Giving
+2024-03-26 17:31:23.492 | INFO     | __main__:run_mistral_demo:138 - [User 5] write a short poem about London in English.
+
+# London
+
+London is a city of the world
+
+It is a city of the world
+
+It is a city of the world
+
+It is
+2024-03-26 17:31:23.492 | INFO     | __main__:run_mistral_demo:138 - [User 6] How to tie your shoes.
+
+How to tie your shoes.
+
+How to tie your shoes.
+
+How to tie your shoes.
+
+How to tie your shoes.
+
+How to tie your
+2024-03-26 17:31:23.492 | INFO     | __main__:run_mistral_demo:138 - [User 7] Give me the address of the closest bakery.
+
+I’m not sure.
+
+I’m not sure.
+
+I’m not sure.
+
+I’m not sure.
+
+2024-03-26 17:31:23.492 | INFO     | __main__:run_mistral_demo:138 - [User 8] In a world far far away, there was a little girl who loved to read. She read everything she could get her hands on. She read books, magazines, newspapers, cereal boxes, and even the back of
+2024-03-26 17:31:23.492 | INFO     | __main__:run_mistral_demo:138 - [User 9] A poem about trees and nature:
+
+The trees are the lungs of the earth
+
+They breathe in the carbon dioxide
+
+And breathe out the oxygen we need
+
+To live and thrive
+
+2024-03-26 17:31:23.493 | INFO     | __main__:run_mistral_demo:138 - [User 10] Egg fried rice is a delicacy that is enjoyed by many people all over the world. It is a dish that is made with rice, eggs, and other ingredients such as vegetables and meat. The dish
+2024-03-26 17:31:23.493 | INFO     | __main__:run_mistral_demo:138 - [User 11] This is another test of the new WordPress editor.
+
+I’m not sure if I like it or not.
+
+I’m not sure if I like it or not.
+
+I’m not
+2024-03-26 17:31:23.493 | INFO     | __main__:run_mistral_demo:138 - [User 12] This is yet another testament to the fact that the world is a small place.
+
+I was in the middle of a conversation with a friend of mine, and I was telling him about my recent trip to the
+2024-03-26 17:31:23.493 | INFO     | __main__:run_mistral_demo:138 - [User 13] Large language models are the latest trend in AI. They are trained on massive amounts of text data and can generate human-like text. But what are they good for? In this blog post, we will explore some of
+2024-03-26 17:31:23.493 | INFO     | __main__:run_mistral_demo:138 - [User 14] The capital of Portugal, Lisbon is a city that has a lot to offer. It is a city that is full of history, culture, and beauty. It is also a city that is very affordable, making it
+2024-03-26 17:31:23.493 | INFO     | __main__:run_mistral_demo:138 - [User 15] The word 'dog' in French is 'chien'.
+
+# French 1 - Animals
+
+This French Easy Learning quiz takes a look at animals. Animals are all around us. We see
+2024-03-26 17:31:23.493 | INFO     | __main__:run_mistral_demo:138 - [User 16] Water is essential for life. It is the most important nutrient for the body. It is a major component of all body cells and is involved in all body functions and processes.
+
+Water is the most important nut
+2024-03-26 17:31:23.493 | INFO     | __main__:run_mistral_demo:138 - [User 17] My favorite hobby is videogames. I’ve been playing them since I was a kid, and I’ve been playing them for a long time. I’ve been playing them for a long time,
+2024-03-26 17:31:23.493 | INFO     | __main__:run_mistral_demo:138 - [User 18] The best way to cook a steak is to cook it on a grill. The best way to cook a steak on a grill is to cook it on a charcoal grill. The best way
+2024-03-26 17:31:23.494 | INFO     | __main__:run_mistral_demo:138 - [User 19] Top 10 things to do in the Lake District
+
+# Top 10 things to do in the Lake District
+
+The Lake District is a beautiful part of the world, and there are so many things
+2024-03-26 17:31:23.494 | INFO     | __main__:run_mistral_demo:138 - [User 20] The job of a computer architect is to design and build computers. They are responsible for the design of the computer’s hardware and software. They also design the computer’s operating system and other software.
+
+Comput
+2024-03-26 17:31:23.494 | INFO     | __main__:run_mistral_demo:138 - [User 21] The number you have dialled is not available. Please try again later.
+
+I’m not sure if you’ve ever had this experience, but I have.
+
+I’ve been trying to call
+2024-03-26 17:31:23.494 | INFO     | __main__:run_mistral_demo:138 - [User 22] The best way to learn a new language is to immerse yourself in it.
+
+That’s why we’ve created a new way to learn Spanish that’s fun, easy, and effective.
+
+
+2024-03-26 17:31:23.494 | INFO     | __main__:run_mistral_demo:138 - [User 23] Madrid is the capital of Spain and the largest city in the country. It is also the third largest city in the European Union, after London and Berlin, and its metropolitan area is the third largest in the European Union
+2024-03-26 17:31:23.494 | INFO     | __main__:run_mistral_demo:138 - [User 24] A good night's sleep is essential for your health and well-being. It helps you feel refreshed and energized, and it can also help improve your mood and cognitive function. But what if you're
+2024-03-26 17:31:23.494 | INFO     | __main__:run_mistral_demo:138 - [User 25] Typing prompts can be fun, but they can also be a bit of a pain.
+
+I’ve been doing them for a while now, and I’ve found that they can be a great way
+2024-03-26 17:31:23.494 | INFO     | __main__:run_mistral_demo:138 - [User 26] I'm going to the store to buy a new computer. I'm going to buy a new computer. I'm going to buy a new computer. I'm going to buy a new computer. I
+2024-03-26 17:31:23.494 | INFO     | __main__:run_mistral_demo:138 - [User 27] I am a world renown spy. I have been in the business for 10 years. I have been in the business for 10 years. I have been in the business for 10 years. I
+2024-03-26 17:31:23.494 | INFO     | __main__:run_mistral_demo:138 - [User 28] Ready, set, go!
+
+The 2018-19 school year is off and running.
+
+The first day of school is always a special day for students, parents and teachers.
+2024-03-26 17:31:23.495 | INFO     | __main__:run_mistral_demo:138 - [User 29] Climate change is the most important issue of our time. It is a global problem that requires a global solution. The United States has a responsibility to lead the way in addressing this crisis, and we must do so by
+2024-03-26 17:31:23.495 | INFO     | __main__:run_mistral_demo:138 - [User 30] Tell me the story of the three little pigs.
+
+I’m sure you know the story.
+
+The first little pig built his house out of straw. The wolf came and blew it down.
+
+2024-03-26 17:31:23.495 | INFO     | __main__:run_mistral_demo:138 - [User 31] Once upon a time in a land far far away, there was a little girl who loved to read. She read everything she could get her hands on. She read books, magazines, newspapers, cereal boxes, and

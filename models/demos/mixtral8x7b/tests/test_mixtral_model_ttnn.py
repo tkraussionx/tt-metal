@@ -151,12 +151,6 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers):
                 logger.warning("Mistral Model Failed!")
                 all_tests_pass = False
 
-        # TODO Space decoding is currently not working as expected
-        # TODO print All 32 users
-        # print("[User 0] TT generation: ", "".join(all_outputs))
-        # if run_ref_pt:
-        #     print("[User 0] Ref generation: ", "".join(all_outputs_ref))
-
     if run_ref_pt:
         if all_tests_pass:
             logger.info(f"All {generation_length} Mistral decode iterations Passed!")

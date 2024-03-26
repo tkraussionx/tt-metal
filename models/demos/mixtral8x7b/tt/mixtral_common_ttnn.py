@@ -106,3 +106,46 @@ def sample(logits: torch.Tensor, temperature: float, top_p: float):
         next_token = torch.argmax(logits, dim=-1)
 
     return next_token
+
+
+def create_state_dict(model_args):
+    state_dict = {}
+    for i in range(1 + (model_args.n_layers - 1) // 4):
+        state_dict_i = torch.load(model_args.consolidated_weights_path(i), map_location="cpu")
+        state_dict.update(state_dict_i)
+
+    partial_state_dict = {
+        k: v
+        for k, v in state_dict.items()
+        if (
+            any([f"layers.{i}." in k for i in range(model_args.n_layers)])
+            or k in ["tok_embeddings.weight", "norm.weight", "output.weight"]
+        )
+    }
+
+    base_address = "feed_forward."
+    for l in range(model_args.n_layers):
+        pre = f"layers.{l}."
+        partial_state_dict[pre + base_address + "gate.weight"] = partial_state_dict[
+            pre + "block_sparse_moe.gate.weight"
+        ]
+        del partial_state_dict[pre + "block_sparse_moe.gate.weight"]
+
+        w1 = partial_state_dict[pre + "block_sparse_moe.w1"].contiguous().clone()
+        w2 = partial_state_dict[pre + "block_sparse_moe.w2"].contiguous().clone()
+        w3 = partial_state_dict[pre + "block_sparse_moe.w3"].contiguous().clone()
+        ffn_dim = 14336
+        for i in range(8):
+            partial_state_dict[pre + base_address + f"experts.{i}.w1.weight"] = (
+                w1[ffn_dim * i : ffn_dim * (i + 1), :].contiguous().clone()
+            )
+            partial_state_dict[pre + base_address + f"experts.{i}.w2.weight"] = (
+                w2[ffn_dim * i : ffn_dim * (i + 1), :].T.clone().contiguous()
+            )
+            partial_state_dict[pre + base_address + f"experts.{i}.w3.weight"] = (
+                w3[ffn_dim * i : ffn_dim * (i + 1), :].contiguous().clone()
+            )
+        partial_state_dict.pop(pre + "block_sparse_moe.w1")
+        partial_state_dict.pop(pre + "block_sparse_moe.w2")
+        partial_state_dict.pop(pre + "block_sparse_moe.w3")
+    torch.save(partial_state_dict, "partial_state_dict.pt")
