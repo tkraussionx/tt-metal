@@ -341,15 +341,7 @@ class TtFalconAttention(nn.Module):
                 key_layer_transposed,
                 output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
             )
-        elif self.model_config["l1_sharded"] == False:
-            attn_weights = tt_lib.operations.primary.transformers.attn_matmul(
-                query_layer,
-                key_layer_transposed,
-                compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-                output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
-                output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
-            )
-        else:
+        elif self.model_config["l1_sharded"]:
             attn_weights = tt_lib.operations.primary.matmul(
                 query_layer,
                 key_layer_transposed,
@@ -361,6 +353,22 @@ class TtFalconAttention(nn.Module):
                 ),
                 output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
                 compute_kernel_config=self.model_config["COMPUTE_KERNEL_CONFIG"],
+            )
+        elif is_wormhole_b0():
+            attn_weights = tt_lib.operations.primary.transformers.attn_matmul(
+                query_layer,
+                key_layer_transposed,
+                compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+                output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
+            )
+        else:
+            attn_weights = tt_lib.operations.primary.transformers.group_attn_matmul(
+                query_layer,
+                key_layer_transposed,
+                compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+                output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
             )
 
         query_layer.deallocate()
@@ -437,15 +445,7 @@ class TtFalconAttention(nn.Module):
                 value_layer,
                 output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
             )
-        elif self.model_config["l1_sharded"] == False:
-            attn_output = tt_lib.operations.primary.transformers.attn_matmul(
-                attn_weights,
-                value_layer,
-                compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-                output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
-                output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
-            )
-        elif llm_mode == "decode":
+        elif self.model_config["l1_sharded"]:
             attn_output = tt_lib.operations.primary.matmul(
                 attn_weights,
                 value_layer,
@@ -489,6 +489,23 @@ class TtFalconAttention(nn.Module):
                 ],
                 output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
             )
+        elif is_wormhole_b0():
+            attn_output = tt_lib.operations.primary.transformers.attn_matmul(
+                attn_weights,
+                value_layer,
+                compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+                output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
+            )
+        else:
+            attn_output = tt_lib.operations.primary.transformers.group_attn_matmul(
+                attn_weights,
+                value_layer,
+                compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+                output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
+                output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
+            )
+
         attn_weights.deallocate()
         value_layer.deallocate()
 

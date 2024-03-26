@@ -5,6 +5,8 @@
 import tt_lib as ttl
 from loguru import logger
 from pathlib import Path
+from models.utility_functions import is_wormhole_b0
+
 
 OP_KEYS = (
     # Inputs
@@ -172,12 +174,18 @@ def get_model_config(model_config_str):
             per_core_N=per_core_N,
         )
 
-        model_config["COMPUTE_KERNEL_CONFIG"] = ttl.tensor.WormholeComputeKernelConfig(
-            math_fidelity=ttl.tensor.MathFidelity.LoFi,
-            math_approx_mode=True,
-            fp32_dest_acc_en=True,
-            packer_l1_acc=True,
-        )
+        if is_wormhole_b0():
+            model_config["COMPUTE_KERNEL_CONFIG"] = ttl.tensor.WormholeComputeKernelConfig(
+                math_fidelity=ttl.tensor.MathFidelity.LoFi,
+                math_approx_mode=True,
+                fp32_dest_acc_en=True,
+                packer_l1_acc=True,
+            )
+        else:
+            model_config["COMPUTE_KERNEL_CONFIG"] = ttl.tensor.GrayskullComputeKernelConfig(
+                math_fidelity=ttl.tensor.MathFidelity.LoFi,
+                math_approx_mode=True,
+            )
 
     # uncomment if need to see all the configs
     # logger.debug(f"Falcon model config: \n{pretty_print_model_config(model_config)}")
