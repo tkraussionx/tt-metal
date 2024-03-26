@@ -8,13 +8,11 @@ import json
 from pathlib import Path
 import ttnn
 from models.demos.mixtral8x7b.tt.mixtral_common_ttnn import (
-    precompute_freqs,
-    generate_cos_sin_cache_ttnn,
     prepare_inputs_ttnn,
 )
 from models.demos.mixtral8x7b.tt.mixtral_decoder_ttnn import TtTransformerBlock
 from models.demos.mixtral8x7b.tt.model_config_ttnn import TtModelArgs
-from models.demos.mixtral8x7b.reference.model import TransformerBlock
+from models.demos.mixtral8x7b.reference.model import TransformerBlock, precompute_freqs_cis
 from models.utility_functions import comp_pcc, comp_allclose, get_devices_for_t3000
 
 
@@ -37,31 +35,11 @@ def test_mixtral_decoder_inference(all_devices, iterations, reset_seeds):
     devices = get_devices_for_t3000(devices, num_devices)  # [ttnn.open_device(device_id=i) for i in range(8)]
 
     model_args = TtModelArgs()
-    state_dict = torch.load(model_args.consolidated_weights_path(0), map_location="cpu")
-
-    # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
+    state_dict = torch.load(model_args.state_dict_path)
     partial_state_dict = {k[9:]: v for k, v in state_dict.items() if (k.startswith("layers.0."))}
-    base_address = "feed_forward."
-    partial_state_dict[base_address + "gate.weight"] = partial_state_dict["block_sparse_moe.gate.weight"]
-    del partial_state_dict["block_sparse_moe.gate.weight"]
-
-    w1 = partial_state_dict["block_sparse_moe.w1"].view(8, 14336, 4096)
-    w2 = partial_state_dict["block_sparse_moe.w2"].view(8, 4096, 14336)
-    w3 = partial_state_dict["block_sparse_moe.w3"].view(8, 14336, 4096)
-    for i in range(8):
-        partial_state_dict[base_address + f"experts.{i}.w1.weight"] = w1[i]
-        partial_state_dict[base_address + f"experts.{i}.w2.weight"] = w2[i]
-        partial_state_dict[base_address + f"experts.{i}.w3.weight"] = w3[i]
-    partial_state_dict.pop("block_sparse_moe.w1")
-    partial_state_dict.pop("block_sparse_moe.w2")
-    partial_state_dict.pop("block_sparse_moe.w3")
-
     reference_model = TransformerBlock(args=model_args)
     reference_model.load_state_dict(partial_state_dict)
 
-    tt_cos_cached, tt_sin_cached = generate_cos_sin_cache_ttnn(
-        devices, model_args.head_dim, model_args.max_seq_len * 2, 10000, dtype
-    )
     # Initialize TT model
     tt_model = TtTransformerBlock(
         devices=devices,
@@ -69,8 +47,6 @@ def test_mixtral_decoder_inference(all_devices, iterations, reset_seeds):
         args=model_args,
         layer_num=0,
         dtype=dtype,
-        tt_cos_cached=tt_cos_cached,
-        tt_sin_cached=tt_sin_cached,
     )
 
     generation_start_pos = 0
@@ -80,9 +56,6 @@ def test_mixtral_decoder_inference(all_devices, iterations, reset_seeds):
     seqlen = 1
     batch = 32
 
-    cos, sin = precompute_freqs(model_args.head_dim, model_args.max_seq_len * 2)
-    freqs_cis = torch.complex(cos, sin)
-
     # TODO Update start_pos (check llama test for reference)
     for i in range(generation_length):
         print(f"[Decoder] Generating token {i}")
@@ -90,23 +63,21 @@ def test_mixtral_decoder_inference(all_devices, iterations, reset_seeds):
         # input = torch.randn(1, 32, 4096)
         pt_decode_input_bsh = (torch.rand(batch, seqlen, model_args.dim) * 2) - 1
         start_pos = generation_start_pos + i
+        current_pos = start_pos % model_args.sliding_window
 
-        decode_input_b1sh, start_pos, attn_mask, current_pos, rot_mat = prepare_inputs_ttnn(
+        decode_input_b1sh, rot_mat = prepare_inputs_ttnn(
             pt_decode_input_bsh.clone(),
-            start_pos,
             tt_model.hidden_size,
             tt_model.head_dim,
-            tt_model.sliding_window,
             tt_model.max_seq_len,
             tt_model.devices,
         )
         # Run TT model
-        tt_out_b1sh = tt_model(decode_input_b1sh, start_pos, current_pos, attn_mask, rot_mat)
+        tt_out_b1sh = tt_model(decode_input_b1sh, start_pos, current_pos, rot_mat)
         print("DONE TT OUT")
         tt_output_torch_b1h = ttnn.to_torch(tt_out_b1sh[0]).squeeze(1).view(batch, 1, -1)
-
-        freqs_cis_i = freqs_cis[start_pos, :].unsqueeze(0)
-        positions = torch.tensor([start_pos])
+        positions = torch.LongTensor([start_pos])
+        freqs_cis_i = precompute_freqs_cis(model_args.head_dim, 128_000)[positions]
 
         # Reference model
         # mask = tt2torch_tensor(attn_mask[0])

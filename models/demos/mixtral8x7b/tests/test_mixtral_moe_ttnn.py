@@ -21,7 +21,7 @@ from models.utility_functions import get_devices_for_t3000
     "iterations",
     ((1,)),
 )
-def test_mistral_moe_inference(all_devices, iterations):
+def test_mixtral_moe_inference(all_devices, iterations):
     pcc = 0.99
     dtype = ttnn.bfloat8_b
 
@@ -34,7 +34,7 @@ def test_mistral_moe_inference(all_devices, iterations):
         devices += devices
 
     model_args = TtModelArgs()
-    state_dict = torch.load(model_args.consolidated_weights_path(0), map_location="cpu")
+    state_dict = torch.load(model_args.state_dict_path)
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
     partial_state_dict = {
@@ -43,20 +43,13 @@ def test_mistral_moe_inference(all_devices, iterations):
         if (k.startswith("layers.0.") and "attention" not in k and "norm" not in k)
     }
 
-    partial_state_dict["gate.weight"] = partial_state_dict["block_sparse_moe.gate.weight"]
-    del partial_state_dict["block_sparse_moe.gate.weight"]
-
-    w1 = partial_state_dict["block_sparse_moe.w1"].view(8, 14336, 4096)
-    w2 = partial_state_dict["block_sparse_moe.w2"].view(8, 4096, 14336)
-    w3 = partial_state_dict["block_sparse_moe.w3"].view(8, 14336, 4096)
-    for i in range(8):
-        partial_state_dict[f"experts.{i}.w1.weight"] = w1[i]
-        partial_state_dict[f"experts.{i}.w2.weight"] = w2[i]
-        partial_state_dict[f"experts.{i}.w3.weight"] = w3[i]
-    partial_state_dict.pop("block_sparse_moe.w1")
-    partial_state_dict.pop("block_sparse_moe.w2")
-    partial_state_dict.pop("block_sparse_moe.w3")
-
+    partial_state_dict_ref = {k[13:]: v for k, v in partial_state_dict.items()}
+    reference_model = MoeLayer(
+        experts=[FeedForward(args=model_args) for _ in range(8)],
+        gate=torch.nn.Linear(model_args.dim, 8, bias=False),
+        moe_args=model_args,
+    )
+    reference_model.load_state_dict(partial_state_dict_ref)
     # Initialize TT models
 
     experts = [
@@ -80,12 +73,6 @@ def test_mistral_moe_inference(all_devices, iterations):
         dtype=dtype,
     )
 
-    reference_model = MoeLayer(
-        experts=[FeedForward(args=model_args) for _ in range(8)],
-        gate=torch.nn.Linear(model_args.dim, 8, bias=False),
-        moe_args=model_args,
-    )
-    reference_model.load_state_dict(partial_state_dict)
     all_tests_pass = True
 
     seqlen = 1

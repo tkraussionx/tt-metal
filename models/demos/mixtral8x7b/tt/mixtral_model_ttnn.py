@@ -75,11 +75,10 @@ class TtTransformer(nn.Module):
         x: ttnn.Tensor,
         start_pos: int,
         current_pos: int,
-        attn_masks: Optional[ttnn.Tensor],
         rot_mats: List[ttnn.Tensor],
     ):
         for i, layer in enumerate(self.layers):
-            x = layer(x, start_pos, current_pos, attn_masks, rot_mats)
+            x = layer(x, start_pos, current_pos, rot_mats)
 
         outputs = []
         x_norm = []

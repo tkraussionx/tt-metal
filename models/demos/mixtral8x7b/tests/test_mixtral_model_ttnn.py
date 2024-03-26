@@ -145,14 +145,6 @@ def test_mixtral_model_inference(all_devices, iterations, n_layers):
             logger.info(comp_allclose(ref_output, tt_output_torch))
             logger.info(pcc_message)
 
-            for n_l in range(n_layers):
-                tt = tt_model.layers[n_l].comps
-                trch = reference_model.layers[n_l].comps
-                print("LAYER", n_l)
-                for c in range(6):
-                    passing, pcc_message = comp_pcc(tt[c], trch[c], pcc)
-                    print(passing, pcc_message)
-
             if passing:
                 logger.info("Mistral Model Passed!")
             else:

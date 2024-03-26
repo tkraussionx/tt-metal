@@ -141,7 +141,6 @@ class TtMixtralAttention(torch.nn.Module):
         """
         x: (seq_len, 1, batch, hidden_dim)
         start_pos: the length of the KV cache. Same as current token's index.
-        attn_mask: (seq_len, n_heads, batch, cache_len + seqlen
         """
         padded_layer_past_len = min(nearest_32(start_pos + 1), self.sliding_window)
         dense_outputs = []
@@ -199,14 +198,14 @@ class TtMixtralAttention(torch.nn.Module):
             ###
             # KV update
             ###
-
+            layer_slice = min((start_pos + 1), self.sliding_window)
             keys_B1PD = layer_past[0]
             values_B1PD = layer_past[1]
             ttnn.kv_cache.update_cache_for_token_(keys_B1PD, k_heads_11BD, current_pos)
             ttnn.kv_cache.update_cache_for_token_(values_B1PD, v_heads_11BD, current_pos)
             self.layer_past_list[i] = [keys_B1PD, values_B1PD]
             keys_B1PD = keys_B1PD[:, :, :padded_layer_past_len, :]
-            values_B1PD = values_B1PD[:, :, : start_pos + 1, :]
+            values_B1PD = values_B1PD[:, :, :layer_slice, :]
 
             ###
             # Attention
@@ -234,10 +233,10 @@ class TtMixtralAttention(torch.nn.Module):
                     core_grid=self.core_grid,
                     compute_kernel_config=self.compute_kernel_attn,
                 )
-                attn_B14P = attn_B14P[:, :, :, : start_pos + 1]
+                attn_B14P = attn_B14P[:, :, :, :layer_slice]
                 attn_B14P = ttnn.softmax(attn_B14P * (self.head_dim**-0.5), dim=-1, memory_config=attn_output_memcfg)
             else:
-                attn_B14P = ttnn.experimental.operations.primary.transformers.attn_matmul(
+                attn_14BP = ttnn.experimental.operations.primary.transformers.attn_matmul(
                     q_heads_14BD,
                     keys_B1DP,
                     compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
@@ -245,9 +244,9 @@ class TtMixtralAttention(torch.nn.Module):
                     # packer_l1_acc=True,
                     # output_mem_config=ttnn.L1_MEMORY_CONFIG,  # ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.L1), #self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
                     output_dtype=ttnn.bfloat16,  # Must be BFLOAT16
-                )  # seqlen, n_heads, batch, cache_len + seqlen
-                attn_B14P = attn_B14P[:, :, :, : start_pos + 1]
-                attn_B14P = ttnn.softmax(attn_B14P * (self.head_dim**-0.5), dim=-1)
+                )
+                attn_14BP = attn_14BP[:, :, :, :layer_slice]
+                attn_14BP = ttnn.softmax(attn_14BP * (self.head_dim**-0.5), dim=-1)
 
             if self.batched_attn:
                 # shard values
@@ -258,14 +257,14 @@ class TtMixtralAttention(torch.nn.Module):
                     attn_B14P,
                     values_B1PD,
                     dtype=ttnn.bfloat16,
-                    memory_config=ttnn.L1_MEMORY_CONFIG,  # attn_output_memcfg,
+                    memory_config=ttnn.L1_MEMORY_CONFIG,
                     core_grid=self.core_grid,
                     compute_kernel_config=self.compute_kernel_attn,
                 )
                 attn_output_14BD = ttnn.permute(attn_output_B14D, (1, 2, 0, 3))
             else:
                 attn_output_14BD = ttnn.experimental.operations.primary.transformers.attn_matmul(
-                    attn_B14P,
+                    attn_14BP,
                     values_B1PD,
                     compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
                     output_dtype=ttnn.bfloat16,
@@ -293,7 +292,6 @@ class TtMixtralAttention(torch.nn.Module):
         if len(dense_outputs) > 1:
             dense_outputs = ttnn.experimental.tensor.all_gather(dense_outputs, dim=1, num_links=1)
             for i in range(len(dense_outputs)):
-                print("TT SHAPE", dense_outputs[i].shape)
                 dense_outputs[i] = ttnn.experimental.tensor.sum(dense_outputs[i], dim=1)
             print("done reduce")
             return dense_outputs

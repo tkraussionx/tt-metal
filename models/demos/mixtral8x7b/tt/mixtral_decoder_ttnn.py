@@ -95,7 +95,6 @@ class TtTransformerBlock(torch.nn.Module):
         xs_b1sh: ttnn.Tensor,
         start_pos: int,
         current_pos: int,
-        attn_masks: List[ttnn.Tensor],
         rot_mats: List[ttnn.Tensor],
     ) -> ttnn.Tensor:
         """
@@ -114,7 +113,6 @@ class TtTransformerBlock(torch.nn.Module):
             attn_norm_s1bh,
             start_pos,
             current_pos,
-            attn_masks,
             rot_mats,
         )
         # self.comps.append(ttnn.to_torch(attn_b1sh[0]))
