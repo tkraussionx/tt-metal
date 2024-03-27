@@ -66,22 +66,29 @@ run_post_commit_pipeline_tests() {
     if [[ $dispatch_mode == "slow" ]]; then
         ./tests/scripts/run_pre_post_commit_regressions_slow_dispatch.sh
     elif [[ $dispatch_mode == "fast" ]]; then
-        ./tests/scripts/run_pre_post_commit_regressions_fast_dispatch.sh
+        echo "Fast dispatch post commit pipeline tests not supported in FD2.0"
+        # ./tests/scripts/run_pre_post_commit_regressions_fast_dispatch.sh
     elif [[ $dispatch_mode == "fast-multi-queue-single-device" ]]; then
-        TT_METAL_NUM_HW_CQS=2 ./build/test/tt_metal/unit_tests_fast_dispatch_single_chip_multi_queue --gtest_filter=MultiCommandQueueSingleDeviceFixture.*
+        echo "Fast dispatch multi queue single device post commit pipeline tests not supported in FD2.0"
+    #     TT_METAL_NUM_HW_CQS=2 ./build/test/tt_metal/unit_tests_fast_dispatch_single_chip_multi_queue --gtest_filter=MultiCommandQueueSingleDeviceFixture.*
     fi
 }
 
 run_eager_package_end_to_end_pipeline_tests() {
     local tt_arch=$1
     local pipeline_type=$2
+    local dispatch_mode=$3
 
-    # This is important for validating our wheel. Ideally end to end testing should
-    # be a diff repo
-    unset PYTHONPATH
+    if [[ $dispatch_mode == "slow" ]]; then
+        # This is important for validating our wheel. Ideally end to end testing should
+        # be a diff repo
+        unset PYTHONPATH
 
-    cd tests/end_to_end_tests
-    env pytest -c conftest.py . -m $pipeline_type
+        cd tests/end_to_end_tests
+        env pytest -c conftest.py . -m $pipeline_type
+    else
+        echo "Package end to end pipeline tests not supported in FD2.0"
+    fi
 }
 
 run_frequent_api_pipeline_tests() {
@@ -94,11 +101,12 @@ run_frequent_api_pipeline_tests() {
         echo "Running Python API unit tests in SD for frequent..."
         ./tests/scripts/run_python_api_unit_tests.sh
     else
-        if [[ $tt_arch == "wormhole_b0" ]]; then
-            pytest  tests/tt_eager/python_api_testing/unit_testing/misc/test_all_gather.py -k nightly
-        else
-            echo "API tests are not available for fast dispatch because they're already covered in post-commit"
-        fi
+        echo "Frequent pipeline tests not supported by FD2.0"
+        # if [[ $tt_arch == "wormhole_b0" ]]; then
+        #     pytest  tests/tt_eager/python_api_testing/unit_testing/misc/test_all_gather.py -k nightly
+        # else
+        #     echo "API tests are not available for fast dispatch because they're already covered in post-commit"
+        # fi
     fi
 }
 
@@ -110,7 +118,11 @@ run_frequent_multi_device_pipeline_tests() {
 
     # Switch to modules only soon
     # run_module_tests "$tt_arch" "llrt" "$pipeline_type"
-    ./tests/scripts/run_frequent_regressions_multi_device.sh
+    if [[ $dispatch_mode == "slow" ]]; then
+        ./tests/scripts/run_frequent_regressions_multi_device.sh
+    else
+        echo "Frequent multi-device pipeline tests not supported by FD2.0"
+    fi
 }
 
 run_models_performance() {
@@ -125,14 +137,32 @@ run_models_performance_bare_metal_pipeline_tests() {
     local pipeline_type=$2
     local dispatch_mode=$3
 
+<<<<<<< HEAD
     run_models_performance "$tt_arch" "$pipeline_type"
+=======
+    # BERT large via new enqueue APIs. I know this is not a unit test, but I would like to avoid BERT large breaking, so this
+    # is a safe place to put it for the time being. Need to run these as separate tests to avoid segfault (TODO(agrebenisan): Investigate why)
+    if [[ $dispatch_mode == "slow" ]]; then
+        env pytest -svv models/demos/metal_BERT_large_11/tests/test_bert_batch_dram.py::test_bert_batch_dram[BERT_LARGE-batch_9-BFLOAT16-DRAM]
+        env pytest -svv models/demos/metal_BERT_large_11/tests/test_bert_batch_dram.py::test_bert_batch_dram_with_program_cache[BERT_LARGE-batch_9-BFLOAT16-DRAM]
+        run_models_performance "$tt_arch" "$pipeline_type"
+    else
+        echo "Bare metal model performance tests not supported in FD2.0"
+        #echo "Not running bert-large in fast-dispatch mode on bare-metal"
+    fi
+>>>>>>> #6801: skip over FD post commit tests
 }
 
 run_models_performance_virtual_machine_pipeline_tests() {
     local tt_arch=$1
     local pipeline_type=$2
+    local dispatch_mode=$3
 
-    run_models_performance "$tt_arch" "$pipeline_type"
+    if [[ $dispatch_mode == "slow" ]]; then
+        run_models_performance "$tt_arch" "$pipeline_type"
+    else
+        echo "Virtual metal model performance tests not supported in FD2.0"
+    fi
 }
 
 run_stress_post_commit_pipeline_tests() {
@@ -141,26 +171,30 @@ run_stress_post_commit_pipeline_tests() {
     local dispatch_mode=$3
 
     # Run for 23.5h to allow next run to kick off
-    max_duration=84600
-    iter=1
-    cur_duration=0
-    expected_duration=0
-    while [ $expected_duration -lt $max_duration ]; do
-        echo "Info: [stress] Doing iteration $iter"
-        start_time=$(date +%s%N) # capture nanoseconds
-        if [[ $dispatch_mode == "slow" ]]; then
-            ./tests/scripts/run_pre_post_commit_regressions_slow_dispatch.sh
-        else
-            ./tests/scripts/run_pre_post_commit_regressions_fast_dispatch.sh
-        fi
-        end_time=$(date +%s%N)
-        elapsed=$((end_time - start_time))/1000000000
-        cur_duration=$((cur_duration + elapsed))
-        avg_duration=$((cur_duration / iter))
-        expected_duration=$((cur_duration + avg_duration))
-        iter=$((iter+1))
-        echo "Info: [stress] expected elapsed time $expected_duration, elapsed time $cur_duration, avg iteration time $avg_duration"
-    done
+    if [[ $dispatch_mode == "slow" ]]; then
+        max_duration=84600
+        iter=1
+        cur_duration=0
+        expected_duration=0
+        while [ $expected_duration -lt $max_duration ]; do
+            echo "Info: [stress] Doing iteration $iter"
+            start_time=$(date +%s%N) # capture nanoseconds
+            if [[ $dispatch_mode == "slow" ]]; then
+                ./tests/scripts/run_pre_post_commit_regressions_slow_dispatch.sh
+            else
+                ./tests/scripts/run_pre_post_commit_regressions_fast_dispatch.sh
+            fi
+            end_time=$(date +%s%N)
+            elapsed=$((end_time - start_time))/1000000000
+            cur_duration=$((cur_duration + elapsed))
+            avg_duration=$((cur_duration / iter))
+            expected_duration=$((cur_duration + avg_duration))
+            iter=$((iter+1))
+            echo "Info: [stress] expected elapsed time $expected_duration, elapsed time $cur_duration, avg iteration time $avg_duration"
+        done
+    else
+        echo "Stress post commit not supported in FD2.0"
+    fi
 }
 
 run_post_commit_multi_device_pipeline_tests() {
@@ -170,7 +204,11 @@ run_post_commit_multi_device_pipeline_tests() {
 
     # Switch to modules only soon
     # run_module_tests "$tt_arch" "llrt" "$pipeline_type"
-    ./tests/scripts/run_pre_post_commit_regressions_multi_device.sh
+    if [[ $dispatch_mode == "slow" ]]; then
+        ./tests/scripts/run_pre_post_commit_regressions_multi_device.sh
+    else
+        echo "Multi device post commit not supported in FD2.0"
+    fi
 }
 
 run_microbenchmarks_pipeline_tests() {
@@ -180,9 +218,13 @@ run_microbenchmarks_pipeline_tests() {
 
     export TT_METAL_DEVICE_PROFILER=1
 
-    source build/python_env/bin/activate
-    ./tests/scripts/run_moreh_microbenchmark.sh
-    pytest -svv tests/tt_metal/microbenchmarks
+    if [[ $dispatch_mode == "slow" ]]; then
+        source build/python_env/bin/activate
+        ./tests/scripts/run_moreh_microbenchmark.sh
+        pytest -svv tests/tt_metal/microbenchmarks
+    else
+        echo "Microbenchmark tests not supported in FD2.0"
+    fi
 }
 
 run_ttnn_sweeps_pipeline_tests() {
@@ -190,7 +232,11 @@ run_ttnn_sweeps_pipeline_tests() {
     local pipeline_type=$2
     local dispatch_mode=$3
 
-    ./tests/scripts/run_ttnn_sweeps.sh
+    if [[ $dispatch_mode == "slow" ]]; then
+        ./tests/scripts/run_ttnn_sweeps.sh
+    else
+        echo "TTNN sweep tests not supported in FD2.0"
+    fi
 }
 
 run_pipeline_tests() {
