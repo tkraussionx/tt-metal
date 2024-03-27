@@ -359,6 +359,7 @@ class resnetBlock2D:
         down=False,
         use_in_shortcut: Optional[bool] = None,
         dtype: Optional[ttnn.DataType] = None,
+        index=-1,
     ):
         assert groups == self.groups
         if non_linearity == "mish":
@@ -377,14 +378,12 @@ class resnetBlock2D:
         input_tensor_in_dram = ttnn.get_memory_config(input_tensor) == ttnn.DRAM_MEMORY_CONFIG
         if not input_tensor_in_dram:
             input_tensor_dram = ttnn.to_memory_config(input_tensor, memory_config=ttnn.DRAM_MEMORY_CONFIG)
-            ttnn.deallocate(input_tensor)
+            del input_tensor
         else:
             input_tensor_dram = input_tensor
 
         # if not input_tensor_in_dram:
         #     input_tensor = ttnn.to_memory_config(input_tensor, memory_config=ttnn.DRAM_MEMORY_CONFIG)
-
-        # ttnn.dump_device_memory_state(self.device, prefix="GN_resnet_3_")
 
         if ttnn.get_memory_config(hidden_states) != self.first_gn_expected_input_sharded_memory_config:
             # if ttnn.is_sharded(hidden_states):
@@ -393,8 +392,6 @@ class resnetBlock2D:
                 hidden_states, (self.conv2.batch_size, 1, self.conv2.input_height * self.conv2.input_width, in_channels)
             )
             hidden_states = ttnn.to_memory_config(hidden_states, self.first_gn_expected_input_sharded_memory_config)
-
-            # ttnn.dump_device_memory_state(self.device, prefix="GN_resnet_4_")
 
         if self.fallback_on_groupnorm:
             hidden_states = ttnn.to_memory_config(hidden_states, ttnn.DRAM_MEMORY_CONFIG)
@@ -414,6 +411,8 @@ class resnetBlock2D:
             hidden_states = ttnn.to_memory_config(hidden_states, ttnn.DRAM_MEMORY_CONFIG)
             hidden_states = ttnn.to_layout(hidden_states, ttnn.TILE_LAYOUT, use_multicore=True)
         else:
+            if index == 3:
+                hidden_states = ttnn.reallocate(hidden_states)
             hidden_states = ttnn.group_norm(
                 hidden_states,
                 num_groups=groups,
