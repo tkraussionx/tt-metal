@@ -15,7 +15,7 @@ from models.utility_functions import (
 )
 
 
-def test_mistral_mlp_inference(device, reset_seeds):
+def test_mixtral_mlp_inference(device, reset_seeds):
     dtype = ttnn.bfloat8_b
 
     model_args = TtModelArgs(device)
@@ -27,7 +27,6 @@ def test_mistral_mlp_inference(device, reset_seeds):
     }
 
     partial_state_dict_ref = {k[32:]: v for k, v in partial_state_dict.items() if "experts.0" in k}
-
     reference_model = FeedForward(args=model_args)
     reference_model.load_state_dict(partial_state_dict_ref)
 
