@@ -15,41 +15,24 @@ from models.utility_functions import (
 )
 
 
-def test_mistral_mlp_inference(device, reset_seeds):
+def test_mixtral_mlp_inference(device, reset_seeds):
     dtype = ttnn.bfloat8_b
 
     model_args = TtModelArgs()
-    state_dict = torch.load(model_args.consolidated_weights_path(0))
+    state_dict = torch.load(model_args.state_dict_path)
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names
     partial_state_dict = {
-        k[9:]: v
-        for k, v in state_dict.items()
-        if (k.startswith("layers.0.") and "attention" not in k and "norm" not in k)
+        k: v for k, v in state_dict.items() if (k.startswith("layers.0.") and "attention" not in k and "norm" not in k)
     }
 
-    partial_state_dict["gate.weight"] = partial_state_dict["block_sparse_moe.gate.weight"]
-    del partial_state_dict["block_sparse_moe.gate.weight"]
-
-    w1 = partial_state_dict["block_sparse_moe.w1"].view(8, 14336, 4096)
-    w2 = partial_state_dict["block_sparse_moe.w2"].view(8, 4096, 14336)
-    w3 = partial_state_dict["block_sparse_moe.w3"].view(8, 14336, 4096)
-    for i in range(8):
-        partial_state_dict[f"experts.{i}.w1.weight"] = w1[i]
-        partial_state_dict[f"experts.{i}.w2.weight"] = w2[i]
-        partial_state_dict[f"experts.{i}.w3.weight"] = w3[i]
-    partial_state_dict.pop("block_sparse_moe.w1")
-    partial_state_dict.pop("block_sparse_moe.w2")
-    partial_state_dict.pop("block_sparse_moe.w3")
-
-    partial_state_dict = {k[10:]: v for k, v in partial_state_dict.items() if k.startswith("experts.0.")}
-
+    partial_state_dict_ref = {k[32:]: v for k, v in partial_state_dict.items() if "experts.0" in k}
     reference_model = FeedForward(args=model_args)
-    reference_model.load_state_dict(partial_state_dict)
+    reference_model.load_state_dict(partial_state_dict_ref)
 
     tt_model = TtMixtralMLP(
         device=device,
-        state_dict=state_dict,
+        state_dict=partial_state_dict,
         args=model_args,
         layer_num=0,
         expert_num=0,
