@@ -579,19 +579,23 @@ def test_attnention(
     assert passing
 
 
-# Test matmul attention sequence with InterleavedToShardedPartialOp
-sizes = {4096: [1, 8192, 320, 1536], 1024: [1, 2048, 640, 2304], 256: [1, 512, 1280, 3840], 64: [1, 128, 1280, 3840]}
-grid_sizes = {4096: (8, 5), 1024: (8, 5), 256: (8, 8), 64: (4, 8)}
-
-
 @pytest.mark.parametrize("size", [4096, 1024, 256, 64])
 @pytest.mark.parametrize("data_format", [ttl.tensor.DataType.BFLOAT16])
+@pytest.mark.parametrize("interleaved_output", [True, False])
 def test_qkv(
     device,
     size,
     data_format,
+    interleaved_output,
     function_level_defaults,
 ):
+    sizes = {
+        4096: [1, 8192, 320, 1536],
+        1024: [1, 2048, 640, 2304],
+        256: [1, 512, 1280, 3840],
+        64: [1, 128, 1280, 3840],
+    }
+    grid_sizes = {4096: (8, 5), 1024: (8, 5), 256: (8, 8), 64: (4, 8)}
     B, M, K, N = sizes[size]
     grid_size = grid_sizes[size]
     compute_grid_size = device.compute_with_storage_grid_size()
@@ -678,7 +682,7 @@ def test_qkv(
         in_0_sharded,
         in_1,
         program_config=program_config,
-        output_mem_config=block_sharded_memory_config,
+        output_mem_config=dram_interleaved_memory_config if interleaved_output else block_sharded_memory_config,
         output_dtype=data_format,
         compute_kernel_config=compute_kernel_config,
     )
@@ -707,13 +711,18 @@ grid_sizes = {4096: (8, 5), 1024: (8, 5), 256: (8, 8), 64: (4, 8)}
 @pytest.mark.parametrize("size", [4096, 1024, 256, 64])
 @pytest.mark.parametrize("is_kv", [True, False])
 @pytest.mark.parametrize("data_format", [ttl.tensor.DataType.BFLOAT16])
+@pytest.mark.parametrize("interleaved_output", [True, False])
 def test_q_and_kv(
     device,
     size,
     is_kv,
     data_format,
+    interleaved_output,
     function_level_defaults,
 ):
+    if size == 4096 and not is_kv:
+        pytest.skip()
+
     B, M, K, N = sizes[size]
     if is_kv:
         N *= 2
@@ -804,7 +813,7 @@ def test_q_and_kv(
         in_0_sharded,
         in_1,
         program_config=program_config,
-        output_mem_config=block_sharded_memory_config,
+        output_mem_config=dram_interleaved_memory_config if interleaved_output else block_sharded_memory_config,
         output_dtype=data_format,
         compute_kernel_config=compute_kernel_config,
     )
