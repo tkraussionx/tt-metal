@@ -255,9 +255,11 @@ class transformer_2d_model:
             hidden_states = ttnn.reshape(
                 hidden_states, (self.batch_size, 1, self.input_height * self.input_width, in_channels)
             )
+            print(f"Transformer GN: memory_config={ttnn.get_memory_config(hidden_states)}")
             if ttnn.get_memory_config(hidden_states) != self.gn_expected_input_sharded_memory_config:
+                hidden_states = ttnn.to_memory_config(hidden_states, ttnn.L1_MEMORY_CONFIG)
                 hidden_states = ttnn.to_memory_config(hidden_states, self.gn_expected_input_sharded_memory_config)
-            # print(f"Transformer GN: memory_config={ttnn.get_memory_config(hidden_states)}")
+            print(f"Transformer GN: memory_config={ttnn.get_memory_config(hidden_states)}")
             # print(f"Hidden states shape: {hidden_states.shape}")
             hidden_states = ttnn.group_norm(
                 input_tensor=hidden_states,
