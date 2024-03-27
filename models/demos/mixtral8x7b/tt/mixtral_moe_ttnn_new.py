@@ -110,9 +110,25 @@ class TtMoeLayer(nn.Module):
                 use_1d_systolic_array=True,
             )
 
-            weights_1SBK, selected_experts_1SBK = top_2(
-                gate_logits_1SB8, self.top_2_mask[i], self.expert_mask[i], self.mask_0[i], self.mask_1[i]
-            )
+            if True:
+                weights_1SBK, selected_experts_1SBK = torch.topk(ttnn.to_torch(gate_logits_1SB8)[0, 0], 2)
+                selected_experts_1SBK = (selected_experts_1SBK == i).to(torch.int)
+                weights_1SBK = ttnn.from_torch(
+                    weights_1SBK.unsqueeze(0).unsqueeze(0),
+                    device=self.devices[i],
+                    dtype=ttnn.bfloat16,
+                    layout=ttnn.TILE_LAYOUT,
+                )
+                selected_experts_1SBK = ttnn.from_torch(
+                    selected_experts_1SBK.unsqueeze(0).unsqueeze(0),
+                    device=self.devices[i],
+                    dtype=ttnn.bfloat16,
+                    layout=ttnn.TILE_LAYOUT,
+                )
+            else:
+                weights_1SBK, selected_experts_1SBK = top_2(
+                    gate_logits_1SB8, self.top_2_mask[i], self.expert_mask[i], self.mask_0[i], self.mask_1[i]
+                )
             # with ttnn.enable_debug_decorator():
             # with ttnn.override_pcc_of_debug_decorator(0.99):
             weights_1SBK = ttnn.softmax(weights_1SBK, dim=-1)
