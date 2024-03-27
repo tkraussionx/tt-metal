@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
+#include "debug/dprint.h"
 
 void kernel_main() {
     // in0 tensor args
@@ -85,6 +86,7 @@ void kernel_main() {
         0);
     #endif
 
+    DPRINT << "R" << ENDL();
     for (uint32_t b = 0; b < batch; ++b) {
         uint32_t in0_tensor_current_block_start_tile_id = in0_tensor_start_tile_id;
         for(uint32_t block = 0; block < num_blocks; ++block) {
@@ -139,4 +141,5 @@ void kernel_main() {
         in0_tensor_start_tile_id += MtKt;
     }
     #endif
+    DPRINT << "DONE" << ENDL();
 }

@@ -320,8 +320,10 @@ inline Tensor matmul(
     std::optional<const DataType> output_dtype = std::nullopt,
     std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt
 ) {
+    std::cout << "HERE" << std::endl;
     auto arch = input_tensor_a.storage_type() == StorageType::DEVICE ? input_tensor_a.device()->arch() : AutoFormat::GetDefaultDevice()->arch();
     auto kernel_config_val = init_device_compute_kernel_config(arch, compute_kernel_config);
+    std::cout << "running matmul" << std::endl;
     return operation::run(Matmul{program_config, mem_config, output_dtype.value_or(input_tensor_a.dtype()), kernel_config_val}, {input_tensor_a, input_tensor_b}, {bias}).at(0);
 }
 

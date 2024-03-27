@@ -138,6 +138,7 @@ class cross_attention:
             encoder_hidden_states = squeeze(encoder_hidden_states, 0)
 
         if self.fused_qkv:
+            breakpoint()
             qkv_out = ttnn.matmul(
                 hidden_states,
                 self.parameters.qkv.weight,
@@ -145,6 +146,7 @@ class cross_attention:
                 dtype=ttnn.bfloat16,
                 core_grid=ttnn.CoreGrid(y=8, x=8),
             )
+            breakpoint()
             query, key, value = ttnn.transformer.split_query_key_value_and_split_heads(
                 qkv_out,
                 memory_config=ttnn.L1_MEMORY_CONFIG,

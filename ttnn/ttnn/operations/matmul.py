@@ -345,6 +345,7 @@ def _matmul(
 
         apply_activation_separately = not hasattr(program_config, "fused_activation")
 
+        breakpoint()
         try:
             output_tensor = ttnn.experimental.operations.primary.matmul(
                 input_tensor_a,

@@ -500,3 +500,46 @@ def test_falcon_query_key_value_matmul(device, batch_size, m_size, k_size, n_siz
 
     output_tensor = ttnn.to_torch(output_tensor)
     assert_with_pcc(torch_output_tensor, output_tensor, pcc=0.996)
+
+
+def test_matmul_debug(device):
+    torch.manual_seed(0)
+
+    B, C, M, K, N = 2, 1, 1024, 640, 1920
+    torch_input_tensor_a = torch.randn((B, C, M, K), dtype=torch.bfloat16)
+    torch_input_tensor_b = torch.randn((1, 1, K, N), dtype=torch.bfloat16)
+    torch_output_tensor = torch_input_tensor_a @ torch_input_tensor_b
+
+    dtype = ttnn.bfloat16
+    input_tensor_a = ttnn.from_torch(torch_input_tensor_a, dtype=dtype, layout=ttnn.TILE_LAYOUT, device=device)
+    input_tensor_b = ttnn.from_torch(torch_input_tensor_b, dtype=dtype, layout=ttnn.TILE_LAYOUT, device=device)
+
+    grid_x, grid_y = 8, 8
+    m_tiles_per_core = 8
+    n_tiles_per_core = 8
+    k_tiles_per_core = 4
+    m_subblock_size = 2
+    n_subblock_size = 4
+    program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        compute_with_storage_grid_size=(grid_x, grid_y),
+        per_core_M=m_tiles_per_core,
+        per_core_N=n_tiles_per_core,
+        in0_block_w=k_tiles_per_core,
+        out_subblock_h=m_subblock_size,
+        out_subblock_w=n_subblock_size,
+        transpose_mcast=False,
+        fused_activation=None,
+    )
+    memory_config = ttnn.DRAM_MEMORY_CONFIG
+    out_dtype = ttnn.bfloat16
+    output_tensor = ttnn.experimental.operations.primary.matmul(
+        input_tensor_a,
+        input_tensor_b,
+        bias=None,
+        program_config=program_config,
+        output_mem_config=memory_config,
+        output_dtype=out_dtype,
+    )
+
+    output_tensor = ttnn.to_torch(output_tensor)
+    assert_with_pcc(torch_output_tensor, output_tensor, pcc=0.999)
