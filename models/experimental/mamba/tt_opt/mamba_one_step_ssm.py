@@ -12,6 +12,20 @@ from models.utility_functions import torch2tt_tensor
 from models.helper_funcs import Linear
 from models.experimental.mamba.reference.args import ModelArgs
 
+def run(f, x0=None, x1=None):
+    x0_old = None
+    x1_old = None
+    if x0:
+        x0_old = x0
+        if x1:
+            x1_old = x1
+    x = f
+    if x0_old:
+        ttnn.deallocate(x0_old)
+        if x1_old:
+            ttnn.deallocate(x1_old)
+    return x
+
 
 class TtMambaSSM(torch.nn.Module):
     def __init__(self, args: ModelArgs, device, configs, load_fn: Callable):
@@ -100,29 +114,19 @@ class TtMambaSSM(torch.nn.Module):
     def forward(self, x):
         print("**********ssm block", x.shape)
         # delta
-        delta_t = ttnn.linear(x, self.delta_t_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG)
+        delta_t = run(ttnn.linear(x, self.delta_t_proj_weights, memory_config=ttnn.L1_MEMORY_CONFIG))
+        delta_t = run(ttnn.linear(delta_t, self.dt_proj_weights, bias=self.dt_proj_bias, memory_config=ttnn.L1_MEMORY_CONFIG, core_grid=ttnn.CoreGrid(y=self.row, x=self.col)), delta_t)
+        delta_t = run(ttnn.softplus(delta_t, parameter1=1.0, parameter2=20.0, memory_config=ttnn.L1_MEMORY_CONFIG), delta_t)
+        delta_t = run(ttnn.repeat_interleave(delta_t, self.n, dim=3), delta_t)
         
-        delta_t_old = delta_t
-        delta_t = ttnn.linear(delta_t, self.dt_proj_weights, bias=self.dt_proj_bias, memory_config=ttnn.L1_MEMORY_CONFIG, core_grid=ttnn.CoreGrid(y=self.row, x=self.col))
-        ttnn.deallocate(delta_t_old)
+        # shard delta and A
+        delta_t = run(ttnn.to_memory_config(delta_t, memory_config=self.configs["sharded_dn"]), delta_t)
+        A = run(ttnn.to_memory_config(self.A, memory_config=self.configs["sharded_dn"]))
         
-        #shard delta_t
-        delta_t_old = delta_t
-        delta_t = ttnn.to_memory_config(delta_t, memory_config=self.configs['sharded_d'])
-        ttnn.deallocate(delta_t_old)
-
-        delta_t_old = delta_t
-        delta_t = ttnn.softplus(delta_t, parameter1=1.0, parameter2=20.0, memory_config=self.configs['sharded_d'])
-        ttnn.deallocate(delta_t_old)
+        abar = run(ttnn.mul(delta_t, A, memory_config=self.configs['sharded_dn']), A, delta_t)
+        
         
         return x
-
-        # calculate abar
-        delta_t3 = ttnn.repeat_interleave(delta_t2, self.n, dim=3)
-        delta_t4 = delta_t3 #ttnn.to_memory_config(delta_t3, memory_config=self.configs["sharded_large"])
-        print("**********delta_t4", delta_t4.shape, self.A.shape)
-        abar1 = ttnn.mul(delta_t4, self.A, memory_config=self.configs["sharded_large"])
-        #ttnn.deallocate(delta_t4)
         
 
         

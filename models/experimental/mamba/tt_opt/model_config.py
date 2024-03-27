@@ -12,9 +12,15 @@ def create_model_config(num_users, hidden_size):
     latent = 32
     orientation = ttnn.ShardOrientation.ROW_MAJOR
     rank = 160
+    n = 32
     
     configs["sharded_d"] = ttnn.create_sharded_memory_config(
         shape=(1, 1, num_users, hidden_size*2),
+        core_grid=ttnn.CoreGrid(y=row, x=col),
+        strategy=ttnn.ShardStrategy.WIDTH
+    )
+    configs["sharded_dn"] = ttnn.create_sharded_memory_config(
+        shape=(1, 1, num_users, hidden_size*2*n),
         core_grid=ttnn.CoreGrid(y=row, x=col),
         strategy=ttnn.ShardStrategy.WIDTH
     )
