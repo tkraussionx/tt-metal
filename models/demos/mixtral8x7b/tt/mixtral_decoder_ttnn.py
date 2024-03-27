@@ -7,7 +7,7 @@ from typing import List
 from models.demos.mixtral8x7b.tt.mixtral_attention_ttnn import TtMixtralAttention
 from models.demos.mixtral8x7b.tt.mixtral_mlp_ttnn import TtMixtralMLP
 from models.demos.mixtral8x7b.tt.mixtral_rms_norm_ttnn import TtRMSNorm
-from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn_new import TtMoeLayer
+from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn import TtMoeLayer
 
 
 class TtTransformerBlock(torch.nn.Module):

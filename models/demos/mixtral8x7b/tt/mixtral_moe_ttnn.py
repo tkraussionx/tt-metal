@@ -4,6 +4,28 @@ import ttnn
 import time
 
 
+def concat(tt_0, tt_1, mask_0, mask_1):
+    tt_0 = ttnn.repeat_interleave(tt_0, repeats=2, dim=3)
+    tt_1 = ttnn.repeat_interleave(tt_1, repeats=2, dim=3)
+    output = tt_0 * mask_0 + tt_1 * mask_1
+    return output
+
+
+def top_2(gate_logits_1SB8, top_2_mask, expert_mask, mask_0, mask_1):
+    weights_ex0_1SB1 = ttnn.experimental.tensor.max(gate_logits_1SB8, dim=3)
+    cond0 = ttnn.eq(gate_logits_1SB8, ttnn.repeat_interleave(weights_ex0_1SB1, 8, dim=3))
+
+    gate_logits_1SB8 = ttnn.where(cond0, top_2_mask, gate_logits_1SB8)
+    weights_ex1_1SB1 = ttnn.experimental.tensor.max(gate_logits_1SB8, dim=3)
+    cond1 = ttnn.eq(gate_logits_1SB8, ttnn.repeat_interleave(weights_ex1_1SB1, 8, dim=3))
+    weights_1SBK = concat(weights_ex0_1SB1, weights_ex1_1SB1, mask_0, mask_1)
+
+    cond0 = ttnn.sum(cond0 * expert_mask, dim=3)
+    cond1 = ttnn.sum(cond1 * expert_mask, dim=3)
+
+    return weights_1SBK, concat(cond0, cond1, mask_0, mask_1)
+
+
 class TtMoeLayer(nn.Module):
     def __init__(self, devices, state_dict, experts, args, layer_num, dtype):
         super().__init__()
@@ -12,128 +34,133 @@ class TtMoeLayer(nn.Module):
         self.experts = experts
         self.args = args
         self.dtype = dtype
+        self.model_config = args.get_model_config()
 
-        gate_name = f"layers.{layer_num}.block_sparse_moe.gate.weight"
+        gate_name = f"layers.{layer_num}.feed_forward.gate.weight"
         self.gates_H8 = [
             ttnn.as_tensor(
                 state_dict[gate_name].permute(1, 0),
-                dtype=self.dtype,
+                dtype=ttnn.bfloat16,
                 device=device,
-                layout=ttnn.TILE_LAYOUT,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                layout=self.model_config["GATE_W_LAYOUT_TILE"],
+                memory_config=self.model_config["GATE_WEIGHTS_MEMCFG"],
                 cache_file_name=args.weight_cache_path(dtype) / gate_name,
             )
             for device in self.devices
         ]
         self.num_devices = len(devices)
+        self.compute_kernel = args.get_compute_kernel_attn_config()
+
+        # TODO Should we add the layout of the masks below to model_config?
+        self.top_2_mask = [
+            ttnn.from_torch(
+                torch.full((1, 1, 32, 8), fill_value=torch.finfo(torch.float).min),
+                dtype=ttnn.bfloat16,
+                device=device,
+                layout=ttnn.TILE_LAYOUT,
+            )
+            for device in self.devices
+        ]
+        self.expert_mask = []
+        for i in range(len(self.devices)):
+            torch_tensor = torch.zeros(1, 1, 32, 8)
+            torch_tensor[:, :, :, i] = 1
+            self.expert_mask.append(
+                ttnn.from_torch(torch_tensor, dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT)
+            )
+
+        self.mask_0 = [
+            ttnn.from_torch(
+                torch.tensor([1, 0] * 32).view(1, 1, 32, 2),
+                device=device,
+                dtype=ttnn.bfloat16,
+                memory_config=ttnn.L1_MEMORY_CONFIG,
+                layout=ttnn.TILE_LAYOUT,
+            )
+            for device in self.devices
+        ]
+
+        self.mask_1 = [
+            ttnn.from_torch(
+                torch.tensor([[0, 1]] * 32).view(1, 1, 32, 2),
+                device=device,
+                dtype=ttnn.bfloat16,
+                memory_config=ttnn.L1_MEMORY_CONFIG,
+                layout=ttnn.TILE_LAYOUT,
+            )
+            for device in self.devices
+        ]
 
     def forward(self, inputs):
-        output_BS1O = []
+        output_11BD = []
         start_time = time.time()
         for i in range(len(self.devices)):
             print(f"started device {i}, time: {time.time() - start_time} ")
             self.devices[i] = self.devices[i]
-            input_i_B1SH = inputs[i]
-            expert_i_HO = self.experts[i]
-            gate_logits_B1S8 = ttnn.matmul(input_i_B1SH, self.gates_H8[i], core_grid=ttnn.CoreGrid(y=7, x=8))
-            # TODO: falling back to pytorch for now
-            # for i in range(len(self.devices)):
-            gate_logits_B1S8_torch = ttnn.to_torch(gate_logits_B1S8)
-            weights_B1SK, selected_experts_B1SK = torch.topk(gate_logits_B1S8_torch, self.args.num_experts_per_tok)
-            weights_B1SK = ttnn.from_torch(
-                weights_B1SK, dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
+            input_i_1SBH = inputs[i]
+            expert_i_HD = self.experts[i]
+
+            gate_logits_1SB8 = ttnn.linear(
+                input_i_1SBH,
+                self.gates_H8[i],
+                memory_config=self.model_config["GATE_MM_OUTPUT_MEMCFG"],
+                compute_kernel_config=self.compute_kernel,
+                use_1d_systolic_array=True,
             )
-            # only choose i-th index
-            selected_experts_0_1B = ttnn.from_torch(
-                selected_experts_B1SK[:, 0, :, 0], dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
-            )
-            selected_experts_1_1B = ttnn.from_torch(
-                selected_experts_B1SK[:, 0, :, 1], dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
-            )
-            print("weight bsk pre sm", weights_B1SK.shape)
-            # for i in range(len(self.devices)):
-            weights_B1SK = ttnn.softmax(weights_B1SK, dim=-1)
-            comp = ttnn.Tensor(
-                ttnn.experimental.tensor.full(
-                    ttnn.Shape([32, 32]),
-                    i,
+
+            if True:
+                weights_1SBK, selected_experts_1SBK = torch.topk(ttnn.to_torch(gate_logits_1SB8)[0, 0], 2)
+                selected_experts_1SBK = (selected_experts_1SBK == i).to(torch.int)
+                weights_1SBK = ttnn.from_torch(
+                    weights_1SBK.unsqueeze(0).unsqueeze(0),
+                    device=self.devices[i],
+                    dtype=ttnn.bfloat16,
+                    layout=ttnn.TILE_LAYOUT,
                 )
-            )
-            comp = ttnn.to_layout(comp, layout=ttnn.TILE_LAYOUT)
-            comp = ttnn.to_device(comp, device=self.devices[i])
-            head_pos_1B = ttnn.eq(selected_experts_1_1B, comp)
-            batch_ids_1B = ttnn.logical_or(ttnn.eq(selected_experts_0_1B, comp), head_pos_1B)
+                selected_experts_1SBK = ttnn.from_torch(
+                    selected_experts_1SBK.unsqueeze(0).unsqueeze(0),
+                    device=self.devices[i],
+                    dtype=ttnn.bfloat16,
+                    layout=ttnn.TILE_LAYOUT,
+                )
+            else:
+                weights_1SBK, selected_experts_1SBK = top_2(
+                    gate_logits_1SB8, self.top_2_mask[i], self.expert_mask[i], self.mask_0[i], self.mask_1[i]
+                )
+            # with ttnn.enable_debug_decorator():
+            # with ttnn.override_pcc_of_debug_decorator(0.99):
+            weights_1SBK = ttnn.softmax(weights_1SBK, dim=-1)
+            print("done top 2")
 
-            # for i in range(len(self.devices)):
-            # send to host
-            weights_B1SK_torch = ttnn.to_torch(weights_B1SK)
-            batch_ids_1B_torch = ttnn.to_torch(batch_ids_1B)
-            input_i_B1SH_torch = ttnn.to_torch(input_i_B1SH)
-            head_pos_1B_torch = ttnn.to_torch(head_pos_1B)
+            # mask weights
+            weights_1SB1 = ttnn.experimental.tensor.sum(weights_1SBK * selected_experts_1SBK, dim=3)
+            print("done mask weights")
+            # MLP
+            # with ttnn.enable_debug_decorator():
+            #    with ttnn.override_pcc_of_debug_decorator(0.999):
+            results_11BD = expert_i_HD(input_i_1SBH) * weights_1SB1
+            print("done output tensor creation")
 
-            # convert batch_ids to list of indices
-            batch_ids_1b_torch = batch_ids_1B_torch.view(-1).nonzero().view(-1)
-            # slice input
-            input_i_bSH_torch = input_i_B1SH_torch[batch_ids_1b_torch, 0, :, :]
-            # slice weights
-            head_pos_1b_torch = head_pos_1B_torch[batch_ids_1b_torch].to(dtype=torch.int64).view(-1)
-            weights_bS_torch = weights_B1SK_torch[batch_ids_1b_torch, 0, :, head_pos_1b_torch].unsqueeze(2)
-
-            # send to device
-            batch_ids_b = ttnn.from_torch(
-                batch_ids_1b_torch, dtype=ttnn.uint16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
-            )
-            input_i_bSH = ttnn.from_torch(
-                input_i_bSH_torch, dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
-            )
-            weights_bS = ttnn.from_torch(
-                weights_bS_torch, dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
-            )
-            # for i in range(len(self.devices)):
-            results_bSO = expert_i_HO(input_i_bSH) * weights_bS
-
-            # for i in range(len(self.devices)):
-            # create output tensor with results_bO at batch positions batch_ids_b
-            output_i_BSO_torch = torch.zeros(32, 1, 4096, dtype=torch.bfloat16)
-            results_bSO_torch = ttnn.to_torch(results_bSO)
-            output_i_BSO_torch[batch_ids_1b_torch] = results_bSO_torch
-            output_i_BS1O = ttnn.from_torch(
-                output_i_BSO_torch.unsqueeze(2), dtype=ttnn.bfloat16, device=self.devices[i], layout=ttnn.TILE_LAYOUT
-            )
-            output_BS1O.append(output_i_BS1O)
-            for l in [
-                input_i_bSH,
-                weights_bS,
-                batch_ids_b,
-                weights_B1SK,
-                comp,
-                gate_logits_B1S8,
-                results_bSO,
-                head_pos_1B,
-                batch_ids_1B,
-                selected_experts_0_1B,
-                selected_experts_1_1B,
-            ]:
+            for n, l in enumerate(
+                [
+                    weights_1SB1,
+                    weights_1SBK,
+                    selected_experts_1SBK,
+                    gate_logits_1SB8,
+                ]
+            ):
                 ttnn.deallocate(l)
+
+            output_11BD.append(results_11BD)
+
             print(f"finished device {i}, time: {time.time() - start_time} ")
         # all gather
         print(f"started ALL GATHER, time: {time.time() - start_time} ")
-        num_links = 1
-        if self.num_devices == 4:
-            for i in range(4):
-                output_BS1O[i] = ttnn.experimental.tensor.add(output_BS1O[i], output_BS1O[4 + i])
-            output_BS1O = output_BS1O[:4]
-            num_links = 2
-        output_BS1O_gathered = ttnn.experimental.tensor.all_gather(output_BS1O, dim=2, num_links=num_links)
+        output_11BD_gathered = ttnn.experimental.tensor.all_gather(output_11BD, dim=1, num_links=1)
         print(f"finished ALL GATHER, time: {time.time() - start_time}")
 
         # sum on each device
-        for i in range(len(output_BS1O_gathered)):
-            output_BS1O_gathered[i] = ttnn.experimental.tensor.reduce(
-                output_BS1O_gathered[i],
-                ttnn.experimental.tensor.ReduceOpMath.SUM,
-                ttnn.experimental.tensor.ReduceOpDim.H,
-                1.0,
-            )
-            print("Reduce sum done")
-        return output_BS1O_gathered
+        for i in range(len(output_11BD_gathered)):
+            output_11BD_gathered[i] = ttnn.experimental.tensor.sum(output_11BD_gathered[i], dim=1)
+        print("Reduce sum done")
+        return output_11BD_gathered

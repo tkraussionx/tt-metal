@@ -6,7 +6,7 @@ import pytest
 from loguru import logger
 import ttnn
 from models.demos.mixtral8x7b.tt.mixtral_mlp_ttnn import TtMixtralMLP
-from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn_new import TtMoeLayer
+from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn import TtMoeLayer
 from models.demos.mixtral8x7b.tt.model_config_ttnn import TtModelArgs
 from models.demos.mixtral8x7b.reference.moe import MoeLayer
 from models.demos.mixtral8x7b.reference.model import FeedForward
