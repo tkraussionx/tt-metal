@@ -33,7 +33,7 @@ def test_mixtral_attention_inference(all_devices, iterations, reset_seeds):
     assert num_devices == 8, f"This test requires a T3000 (8 devices), found {num_devices} devices."
     devices = get_devices_for_t3000(devices, num_devices)  # [ttnn.open_device(device_id=i) for i in range(8)]
 
-    model_args = TtModelArgs()
+    model_args = TtModelArgs(devices[0])
     state_dict = torch.load(model_args.consolidated_weights_path(0), map_location="cpu")
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names

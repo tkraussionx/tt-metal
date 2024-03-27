@@ -14,32 +14,26 @@ class TtMixtralMLP(torch.nn.Module):
 
         self.state_dict = state_dict
         self.device = device
-        self.model_config = args
-        self.grid = ttnn.CoreGrid(y=7, x=8)
         self.dtype = dtype
+        self.model_args = args
+        self.model_config = args.get_model_config()
 
         # Convert block sparse moe representation of e.g. (114688, 4096) into separate tensors for each expert
         base_name = f"layers.{layer_num}.feed_forward.experts.{expert_num}"
         torch_weight = lambda name: self.state_dict[f"{base_name}.{name}.weight"].permute(1, 0)
-        cache_name = lambda name: self.model_config.weight_cache_path(dtype) / (f"{base_name}.{expert_num}.{name}")
+        cache_name = lambda name: args.weight_cache_path(dtype) / (f"{base_name}.{expert_num}.{name}")
         as_tensor = lambda name: ttnn.as_tensor(
             torch_weight(name),
             dtype=dtype,
             device=self.device,
-            layout=ttnn.TILE_LAYOUT,
-            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            layout=self.model_config["MLP_W_LAYOUT_TILE"],
+            memory_config=self.model_config["MLP_WEIGHTS_MEMCFG"],
             cache_file_name=cache_name(name),
         )
 
         self.w1 = as_tensor("w1")
         self.w2 = as_tensor("w2")
         self.w3 = as_tensor("w3")
-
-        self.compute_kernel = ttnn.WormholeComputeKernelConfig(
-            math_fidelity=ttnn.MathFidelity.LoFi,
-            fp32_dest_acc_en=True,
-            packer_l1_acc=True,
-        )
 
     def forward(self, x: ttnn.Tensor) -> ttnn.Tensor:
         """
@@ -55,11 +49,11 @@ class TtMixtralMLP(torch.nn.Module):
             x,
             self.w1,
             activation="silu",
-            core_grid=self.grid,
+            core_grid=self.model_args.max_grid_size,
             use_1d_systolic_array=True,
-            memory_config=ttnn.L1_MEMORY_CONFIG,
+            memory_config=self.model_config["FF1_OUTPUT_MEMCFG"],
             # , memory_config=shard
-            compute_kernel_config=self.compute_kernel,
+            compute_kernel_config=self.model_args.get_compute_kernel_config(),
         )
         # print("pre torch", w1_out)
         # w1_torch = ttnn.to_torch(w1_out)
@@ -69,20 +63,20 @@ class TtMixtralMLP(torch.nn.Module):
         w3_out = ttnn.matmul(
             x,
             self.w3,
-            core_grid=self.grid,
+            core_grid=self.model_args.max_grid_size,
             use_1d_systolic_array=True,
-            memory_config=ttnn.L1_MEMORY_CONFIG,
+            memory_config=self.model_config["FF3_OUTPUT_MEMCFG"],
             # , memory_config=shard
-            compute_kernel_config=self.compute_kernel,
+            compute_kernel_config=self.model_args.get_compute_kernel_config(),
         )
         w2_in = ttnn.mul(w1_out, w3_out)  # , memory_config=shard)
         w2_out = ttnn.matmul(
             w2_in,
             self.w2,
-            core_grid=self.grid,
+            core_grid=self.model_args.max_grid_size,
             use_1d_systolic_array=True,
-            memory_config=ttnn.L1_MEMORY_CONFIG,
-            compute_kernel_config=self.compute_kernel,
+            memory_config=self.model_config["FF2_OUTPUT_MEMCFG"],
+            compute_kernel_config=self.model_args.get_compute_kernel_config(),
         )
 
         return w2_out

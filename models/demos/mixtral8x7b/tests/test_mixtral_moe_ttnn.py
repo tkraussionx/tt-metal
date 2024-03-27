@@ -33,7 +33,7 @@ def test_mixtral_moe_inference(all_devices, iterations):
     if num_devices == 4:
         devices += devices
 
-    model_args = TtModelArgs()
+    model_args = TtModelArgs(devices[0])
     state_dict = torch.load(model_args.state_dict_path)
 
     # Ref model needs partial state dict, but our models use full state dict keys as cached weight names

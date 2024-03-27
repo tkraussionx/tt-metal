@@ -25,6 +25,7 @@ class TtTransformer(nn.Module):
         self.vocab_size = args.vocab_size
         self.n_layers = args.n_layers
         self.devices = devices
+        self.model_config = args.get_model_config()
         assert self.vocab_size > 0
 
         self.layers = torch.nn.ModuleList(
@@ -56,19 +57,15 @@ class TtTransformer(nn.Module):
             ttnn.as_tensor(
                 self.state_dict["output.weight"].permute(1, 0),
                 device=dev,
-                layout=ttnn.TILE_LAYOUT,
+                layout=self.model_config["OUTPUT_W_LAYOUT_TILE"],
                 dtype=dtype,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                memory_config=self.model_config["OUTPUT_WEIGHTS_MEMCFG"],
                 cache_file_name=args.weight_cache_path(dtype) / "output.weight",
             )
             for dev in self.devices
         ]
 
-        self.compute_kernel = ttnn.WormholeComputeKernelConfig(
-            math_fidelity=ttnn.MathFidelity.LoFi,
-            fp32_dest_acc_en=True,
-            packer_l1_acc=True,
-        )
+        self.compute_kernel = self.args.get_compute_kernel_config()
 
     def forward(
         self,
@@ -89,9 +86,9 @@ class TtTransformer(nn.Module):
             output_i = ttnn.linear(
                 x_norm[i],
                 self.output_weight[i],
-                core_grid=ttnn.CoreGrid(y=7, x=8),
+                core_grid=self.args.max_grid_size,  # ttnn.CoreGrid(y=7, x=8),
                 use_1d_systolic_array=True,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                memory_config=self.model_config["OUTPUT_MM_MEMCFG"],
                 compute_kernel_config=self.compute_kernel,
             )
             outputs.append(output_i)

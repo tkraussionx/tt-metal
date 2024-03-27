@@ -34,6 +34,7 @@ class TtMoeLayer(nn.Module):
         self.experts = experts
         self.args = args
         self.dtype = dtype
+        self.model_config = args.get_model_config()
 
         gate_name = f"layers.{layer_num}.feed_forward.gate.weight"
         self.gates_H8 = [
@@ -41,19 +42,16 @@ class TtMoeLayer(nn.Module):
                 state_dict[gate_name].permute(1, 0),
                 dtype=ttnn.bfloat16,
                 device=device,
-                layout=ttnn.TILE_LAYOUT,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+                layout=self.model_config["GATE_W_LAYOUT_TILE"],
+                memory_config=self.model_config["GATE_WEIGHTS_MEMCFG"],
                 cache_file_name=args.weight_cache_path(dtype) / gate_name,
             )
             for device in self.devices
         ]
         self.num_devices = len(devices)
-        self.compute_kernel = ttnn.WormholeComputeKernelConfig(
-            math_fidelity=ttnn.MathFidelity.HiFi2,
-            fp32_dest_acc_en=True,
-            packer_l1_acc=True,
-        )
+        self.compute_kernel = args.get_compute_kernel_attn_config()
 
+        # TODO Should we add the layout of the masks below to model_config?
         self.top_2_mask = [
             ttnn.from_torch(
                 torch.full((1, 1, 32, 8), fill_value=torch.finfo(torch.float).min),
@@ -105,14 +103,30 @@ class TtMoeLayer(nn.Module):
             gate_logits_1SB8 = ttnn.linear(
                 input_i_1SBH,
                 self.gates_H8[i],
-                memory_config=ttnn.L1_MEMORY_CONFIG,
+                memory_config=self.model_config["GATE_MM_OUTPUT_MEMCFG"],
                 compute_kernel_config=self.compute_kernel,
                 use_1d_systolic_array=True,
             )
 
-            weights_1SBK, selected_experts_1SBK = top_2(
-                gate_logits_1SB8, self.top_2_mask[i], self.expert_mask[i], self.mask_0[i], self.mask_1[i]
-            )
+            if True:
+                weights_1SBK, selected_experts_1SBK = torch.topk(ttnn.to_torch(gate_logits_1SB8)[0, 0], 2)
+                selected_experts_1SBK = (selected_experts_1SBK == i).to(torch.int)
+                weights_1SBK = ttnn.from_torch(
+                    weights_1SBK.unsqueeze(0).unsqueeze(0),
+                    device=self.devices[i],
+                    dtype=ttnn.bfloat16,
+                    layout=ttnn.TILE_LAYOUT,
+                )
+                selected_experts_1SBK = ttnn.from_torch(
+                    selected_experts_1SBK.unsqueeze(0).unsqueeze(0),
+                    device=self.devices[i],
+                    dtype=ttnn.bfloat16,
+                    layout=ttnn.TILE_LAYOUT,
+                )
+            else:
+                weights_1SBK, selected_experts_1SBK = top_2(
+                    gate_logits_1SB8, self.top_2_mask[i], self.expert_mask[i], self.mask_0[i], self.mask_1[i]
+                )
             # with ttnn.enable_debug_decorator():
             # with ttnn.override_pcc_of_debug_decorator(0.99):
             weights_1SBK = ttnn.softmax(weights_1SBK, dim=-1)

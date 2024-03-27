@@ -34,7 +34,7 @@ def test_mixtral_decoder_inference(all_devices, iterations, reset_seeds):
     assert num_devices == 8, "This test requires a T3000 (8 devices)"
     devices = get_devices_for_t3000(devices, num_devices)  # [ttnn.open_device(device_id=i) for i in range(8)]
 
-    model_args = TtModelArgs()
+    model_args = TtModelArgs(devices[0])
     state_dict = torch.load(model_args.state_dict_path)
     partial_state_dict = {k[9:]: v for k, v in state_dict.items() if (k.startswith("layers.0."))}
     reference_model = TransformerBlock(args=model_args)

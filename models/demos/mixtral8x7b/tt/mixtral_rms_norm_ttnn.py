@@ -20,6 +20,7 @@ class TtRMSNorm(nn.Module):
         self.device = device
         self.eps = eps
         self.state_dict = state_dict
+        self.model_config = args.get_model_config()
 
         if layer_num is None:
             weight_name = f"{weight_key}.weight"
@@ -33,8 +34,8 @@ class TtRMSNorm(nn.Module):
             torch_weight,
             device=self.device,
             dtype=dtype,
-            layout=ttnn.TILE_LAYOUT,
-            memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            layout=self.model_config["NORM_W_LAYOUT_TILE"],
+            memory_config=self.model_config["NORM_WEIGHTS_MEMCFG"],
             cache_file_name=cache_name,
         )
 

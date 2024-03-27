@@ -30,6 +30,8 @@ class TtMixtralAttention(torch.nn.Module):
 
         self.dtype = dtype
 
+        self.model_config = self.model_args.get_model_config()
+
         layer_name = f"layers.{layer_num}.attention"
         cache_name = lambda name: self.model_args.weight_cache_path(dtype) / (f"{layer_name}.{name}")
 
@@ -70,8 +72,8 @@ class TtMixtralAttention(torch.nn.Module):
                 ),
                 device=self.devices[i],
                 dtype=self.dtype,
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
-                layout=ttnn.TILE_LAYOUT,
+                memory_config=self.model_config["ATTN_WEIGHTS_MEMCFG"],
+                layout=self.model_config["ATTN_W_LAYOUT_TILE"],
                 cache_file_name=cache_name(f"wqkv_{i}_"),
             )
             wo = ttnn.as_tensor(
@@ -81,9 +83,9 @@ class TtMixtralAttention(torch.nn.Module):
                     -1,
                 ),
                 device=self.devices[i],
-                memory_config=ttnn.DRAM_MEMORY_CONFIG,
                 dtype=self.dtype,
-                layout=ttnn.TILE_LAYOUT,
+                memory_config=self.model_config["ATTN_WEIGHTS_MEMCFG"],
+                layout=self.model_config["ATTN_W_LAYOUT_TILE"],
                 cache_file_name=cache_name(f"wo_{i}_"),
             )
 
@@ -107,7 +109,9 @@ class TtMixtralAttention(torch.nn.Module):
             )  # torch.finfo(torch.float).min
             layer_past = [cache_k, cache_v]
             layer_past = [
-                ttnn.from_torch(lp, device=self.devices[i], layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat16)
+                ttnn.from_torch(
+                    lp, device=self.devices[i], layout=self.model_config["ATTN_W_LAYOUT_TILE"], dtype=ttnn.bfloat16
+                )  # TODO check dtype
                 for lp in layer_past
             ]
 
@@ -116,20 +120,11 @@ class TtMixtralAttention(torch.nn.Module):
             self.wo_list.append(wo)
             self.layer_past_list.append(layer_past)
 
-        self.compute_kernel = ttnn.WormholeComputeKernelConfig(
-            math_fidelity=ttnn.MathFidelity.LoFi,
-            fp32_dest_acc_en=True,
-            packer_l1_acc=True,
-        )
+        self.compute_kernel = self.model_args.get_compute_kernel_config()
+        self.compute_kernel_attn = self.model_args.get_compute_kernel_attn_config()
 
-        self.compute_kernel_attn = ttnn.WormholeComputeKernelConfig(
-            math_fidelity=ttnn.MathFidelity.HiFi2,
-            fp32_dest_acc_en=True,
-            packer_l1_acc=True,
-        )
-        self.core_grid = ttnn.CoreGrid(y=7, x=8)  # self.devices[0].compute_with_storage_grid_size()
+        self.core_grid = self.model_args.max_grid_size
         self.batched_attn = True
-        self.model_config = args.model_config
 
     def forward(
         self,
@@ -159,7 +154,7 @@ class TtMixtralAttention(torch.nn.Module):
                 x_11BH,
                 wqkv,
                 dtype=ttnn.bfloat16,
-                memory_config=ttnn.L1_MEMORY_CONFIG,
+                memory_config=self.model_config["XQKV_MM_OUTPUT_MEMCFG"],
                 core_grid=self.core_grid,
                 compute_kernel_config=self.compute_kernel,
             )
@@ -173,7 +168,7 @@ class TtMixtralAttention(torch.nn.Module):
                 num_heads=self.n_local_heads,
                 num_kv_heads=self.n_local_kv_heads,
                 transpose_k_heads=False,
-                output_mem_config=ttnn.L1_MEMORY_CONFIG,
+                output_mem_config=self.model_config["QKV_HEADS_OUTPUT_MEMCFG"],
             )
 
             # "1D mcast for in0 or in1 is not implemented yet." - tt::tt_metal::matmul_multi_core_reuse_mcast_2d_optimized
@@ -185,14 +180,14 @@ class TtMixtralAttention(torch.nn.Module):
                 rot_mat,
                 core_grid=self.core_grid,
                 use_1d_systolic_array=True,
-                memory_config=ttnn.L1_MEMORY_CONFIG,
+                memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
             )
             k_heads_11BD = ttnn.linear(
                 k_heads_11BD,
                 rot_mat,
                 core_grid=self.core_grid,
                 use_1d_systolic_array=True,
-                memory_config=ttnn.L1_MEMORY_CONFIG,
+                memory_config=self.model_config["QV_ROT_EMB_OUTPUT_MEMCFG"],
             )
 
             ###
@@ -229,7 +224,7 @@ class TtMixtralAttention(torch.nn.Module):
                     q_heads_B14D,
                     keys_B1DP,
                     dtype=ttnn.bfloat16,
-                    memory_config=ttnn.L1_MEMORY_CONFIG,  # attn_output_memcfg
+                    memory_config=self.model_config["QK_MM_OUTPUT_MEMCFG"],  # attn_output_memcfg
                     core_grid=self.core_grid,
                     compute_kernel_config=self.compute_kernel_attn,
                 )
@@ -257,7 +252,7 @@ class TtMixtralAttention(torch.nn.Module):
                     attn_B14P,
                     values_B1PD,
                     dtype=ttnn.bfloat16,
-                    memory_config=ttnn.L1_MEMORY_CONFIG,
+                    memory_config=self.model_config["QKV_MM_OUTPUT_MEMCFG"],
                     core_grid=self.core_grid,
                     compute_kernel_config=self.compute_kernel_attn,
                 )
@@ -270,8 +265,10 @@ class TtMixtralAttention(torch.nn.Module):
                     output_dtype=ttnn.bfloat16,
                 )  # seqlen, n_heads, batch, dhead
 
+            # TODO Update to ttnn.transformer.concatenate_heads?
             attn_output_11BH = ttnn.experimental.tensor.nlp_concat_heads(
-                attn_output_14BD, output_mem_config=ttnn.L1_MEMORY_CONFIG
+                attn_output_14BD,
+                output_mem_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"],
             )
 
             ###
@@ -280,7 +277,7 @@ class TtMixtralAttention(torch.nn.Module):
             dense_out_11BH = ttnn.linear(
                 attn_output_11BH,
                 wo,
-                memory_config=ttnn.L1_MEMORY_CONFIG,
+                memory_config=self.model_config["LM_HEAD_OUTPUT_MEMCFG"],
                 core_grid=self.core_grid,
                 compute_kernel_config=self.compute_kernel,
             )
