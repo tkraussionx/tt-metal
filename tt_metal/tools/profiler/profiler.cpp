@@ -258,14 +258,15 @@ void DeviceProfiler::dumpResultToFile(
     log_file.close();
 }
 
-DeviceProfiler::DeviceProfiler(const bool new_logs)
+DeviceProfiler::DeviceProfiler(const Device *device_arg, bool new_log_arg): device(device_arg), new_log(new_log_arg)
 {
 #if defined(PROFILER)
     ZoneScopedC(tracy::Color::Green);
-    new_log = new_logs;
     output_dir = std::filesystem::path(string(PROFILER_RUNTIME_ROOT_DIR) + string(PROFILER_LOGS_DIR_NAME));
     std::filesystem::create_directories(output_dir);
 
+    device_architecture = device->arch();
+    device_core_frequency = tt::Cluster::instance().get_device_aiclk(device->id());
 #endif
 }
 
@@ -294,14 +295,6 @@ void DeviceProfiler::setOutputDir(const std::string& new_output_dir)
 #if defined(PROFILER)
     std::filesystem::create_directories(new_output_dir);
     output_dir = new_output_dir;
-#endif
-}
-
-
-void DeviceProfiler::setDeviceArchitecture(tt::ARCH device_arch)
-{
-#if defined(PROFILER)
-    device_architecture = device_arch;
 #endif
 }
 
@@ -339,12 +332,10 @@ void DeviceProfiler::generateZoneSourceLocationsHashes()
 }
 
 void DeviceProfiler::dumpResults (
-        Device *device,
         const vector<CoreCoord> &worker_cores){
 #if defined(PROFILER)
     ZoneScoped;
     auto device_id = device->id();
-    device_core_frequency = tt::Cluster::instance().get_device_aiclk(device_id);
 
     generateZoneSourceLocationsHashes();
 

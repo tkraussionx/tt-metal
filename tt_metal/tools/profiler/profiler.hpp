@@ -29,6 +29,9 @@ namespace tt_metal {
 class DeviceProfiler {
     private:
 
+        // Pointer to device
+        const Device *device;
+
         // Recreate device side log file with header
         bool new_log;
 
@@ -93,7 +96,7 @@ class DeviceProfiler {
         void firstTimestamp(uint64_t timestamp);
 
     public:
-        DeviceProfiler(const bool new_logs);
+        DeviceProfiler(const Device *device_arg, bool new_log_arg);
 
         DeviceProfiler() = delete;
 
@@ -113,7 +116,7 @@ class DeviceProfiler {
         void setOutputDir(const std::string& new_output_dir);
 
         //Traverse all cores on the device and dump the device profile results
-        void dumpResults(Device *device, const vector<CoreCoord> &worker_cores);
+        void dumpResults(const vector<CoreCoord> &worker_cores);
 };
 
 }  // namespace tt_metal

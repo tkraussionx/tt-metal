@@ -43,11 +43,11 @@ void InitDeviceProfiler(Device *device){
         {
             if (firstInit.exchange(false))
             {
-                tt_metal_device_profiler_map.emplace(device_id, DeviceProfiler(true));
+                tt_metal_device_profiler_map.emplace(device_id, DeviceProfiler(device, true));
             }
             else
             {
-                tt_metal_device_profiler_map.emplace(device_id, DeviceProfiler(false));
+                tt_metal_device_profiler_map.emplace(device_id, DeviceProfiler(device, false));
             }
         }
         uint32_t dramBankCount = tt::Cluster::instance().get_soc_desc(device_id).get_num_dram_channels();
@@ -136,8 +136,7 @@ void DumpDeviceProfileResults(Device *device, std::vector<CoreCoord> &worker_cor
         auto device_id = device->id();
         if (tt_metal_device_profiler_map.find(device_id) != tt_metal_device_profiler_map.end())
         {
-            tt_metal_device_profiler_map.at(device_id).setDeviceArchitecture(device->arch());
-            tt_metal_device_profiler_map.at(device_id).dumpResults(device, worker_cores);
+            tt_metal_device_profiler_map.at(device_id).dumpResults(worker_cores);
             if (free_buffers)
             {
                 // Process is ending, no more device dumps are coming, reset your ref on the buffer so deallocate is the last
