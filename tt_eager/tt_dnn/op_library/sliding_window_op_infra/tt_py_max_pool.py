@@ -190,7 +190,6 @@ class TTPyMaxPool(TTPyOp):
                 )  ## TODO: this can be relaxed by adding padding to the output tensor
                 output_shard_height = (output_num_rows // ncores_nhw) * output_w
 
-            print(f"input_shard_height: {input_shard_height}, output_shard_height: {output_shard_height}")
             input_padded_width = input_w + 2 * pad_w
 
             req_conv_input_shard_start_end, _ = decompose_conv_into_shards_and_generate_tensor_metadata(
@@ -204,8 +203,6 @@ class TTPyMaxPool(TTPyOp):
                 window_w,
             )
 
-            print(f"req_conv_input_shard_start_end: {req_conv_input_shard_start_end}")
-
             sliding_window_op_sharded_input_top_left_indices = (
                 generate_sliding_window_op_sharded_input_top_left_indices(
                     data_top_left_indices,
@@ -218,14 +215,11 @@ class TTPyMaxPool(TTPyOp):
             if self.use_rectangular_shards_with_col_major:
                 ## transpose each shard to be in col-major format
                 transposed_swo_sharded_input_top_left_indices = []
-                print(f"FROM THIS: {sliding_window_op_sharded_input_top_left_indices[0]}")
                 for indices_shard in sliding_window_op_sharded_input_top_left_indices:
-                    # print(f'len(indices_shard): {len(indices_shard)}')
                     torch_indices_shard = torch.tensor(indices_shard).reshape(-1, output_w)
                     transposed_shard = torch.transpose(torch_indices_shard, 0, 1)
                     transposed_swo_sharded_input_top_left_indices.append(transposed_shard.flatten().tolist())
                 sliding_window_op_sharded_input_top_left_indices = transposed_swo_sharded_input_top_left_indices
-                print(f"TO THIS: {sliding_window_op_sharded_input_top_left_indices[0]}")
 
             indices_torch_dtype = torch.int16
             indices_tt_dtype = ttl.tensor.DataType.UINT16
