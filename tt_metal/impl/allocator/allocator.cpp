@@ -106,17 +106,19 @@ uint64_t BankManager::allocate_buffer(uint32_t size, uint32_t page_size, bool bo
     if (not address.has_value()) {
         TT_THROW("Out of Memory: Not enough space to allocate {} B {} buffer across {} banks, where each bank needs to store {} B", size, magic_enum::enum_name(this->buffer_type_), num_banks, size_per_bank);
     }
-    allocated_buffers_.insert(address.value());
+    allocated_buffers_.insert({address.value(), size_per_bank});
     return address.value();
 }
 
 void BankManager::deallocate_buffer(uint64_t address) {
     this->allocator_->deallocate(address);
+    auto match = allocated_buffers_.find(address);
+    if (match != allocated_buffers_.end())
+        allocated_buffers_.erase(match);
 }
 
 void BankManager::deallocate_all(){
-    for (uint64_t addr : this->allocated_buffers_)
-    {
+    for (auto [addr, size] : this->allocated_buffers_) {
         this->allocator_->deallocate(addr);
     }
 }
@@ -257,6 +259,17 @@ Statistics get_statistics(const Allocator &allocator, const BufferType &buffer_t
         }
     }
     return stats;
+}
+
+const std::unordered_map<std::uint64_t, std::uint64_t> &get_allocated_buffers(
+    const Allocator &allocator, const BufferType &buffer_type) {
+    switch (buffer_type) {
+        case BufferType::DRAM: return allocator.dram_manager.get_allocated_buffers();
+        case BufferType::L1: return allocator.l1_manager.get_allocated_buffers();
+        default: {
+            TT_THROW("Unsupported buffer type!");
+        }
+    }
 }
 
 void dump_memory_blocks(const Allocator &allocator, const BufferType &buffer_type, std::ofstream &out) {
