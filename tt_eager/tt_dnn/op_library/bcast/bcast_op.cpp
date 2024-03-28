@@ -98,10 +98,10 @@ void EltwiseBinaryBroadcast::validate(const std::vector<Tensor> &input_tensors) 
         TT_FATAL(input_tensor_a.memory_config().buffer_type == this->output_mem_config.buffer_type);
     }
     if (this->dim != BcastOpDim::HW) {
-        TT_FATAL(
-            input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED &&
-                this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED,
-            "Bcast does not currently support input0 sharding, except if dim is HW");
+        // TT_FATAL(
+        //     input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED &&
+        //         this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED,
+        //     "Bcast does not currently support input0 sharding, except if dim is HW");
     } else {
         TT_FATAL(
             input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED ||
@@ -164,7 +164,7 @@ operation::ProgramWithCallbacks EltwiseBinaryBroadcast::create_program(const std
     const auto& output_tensor = this->in_place ? input_tensor_a : output_tensors.at(0);
 
     auto parallelization_strategy = this->get_parallelization_strategy(input_tensors);
-
+    std::cout << "get_parallelization_strategy: " << magic_enum::enum_name(parallelization_strategy) << "\n";
     switch (parallelization_strategy){
         case BcastOpParallelizationStrategy::MULTI_CORE_H:
             return bcast_multi_core_h(input_tensor_a, input_tensor_b, output_tensor, this->math_op, this->dim);

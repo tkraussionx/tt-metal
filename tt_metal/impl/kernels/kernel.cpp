@@ -203,6 +203,8 @@ void Kernel::set_runtime_args(const CoreCoord &logical_core, const std::vector<u
     // TT_FATAL(this->is_on_logical_core(logical_core), "Cannot set runtime args for core {} since kernel {} is not placed on it!", logical_core.str(), this->name());
     validate_runtime_args_size();
     auto &set_rt_args = this->core_to_runtime_args_[logical_core.x][logical_core.y];
+    // std::cout << "Logical core testing "<< logical_core.x << "    " << logical_core.y << std::endl;
+    // std::cout << "testing run time args size must  be equal"<<set_rt_args.size() << "    " << runtime_args.size()<< std::endl;
     TT_ASSERT(set_rt_args.empty() or set_rt_args.size() == runtime_args.size(), "Illegal Runtime Args: Number of runtime args cannot be modified!");
     set_rt_args = runtime_args;
     this->core_with_runtime_args_.insert( logical_core );
