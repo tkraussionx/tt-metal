@@ -51,15 +51,15 @@ class TtFalconDecoderLayer(nn.Module):
             tt_cache_path=tt_cache_path,
         )
 
-        # self.mlp = TtFalconMLP(
-        #     devices=devices,
-        #     state_dict=state_dict,
-        #     base_url=base_url,
-        #     layer_num=layer_num,
-        #     hidden_size=config.hidden_size,
-        #     model_config=model_config,
-        #     tt_cache_path=tt_cache_path,
-        # )
+        self.mlp = TtFalconMLP(
+            devices=devices,
+            state_dict=state_dict,
+            base_url=base_url,
+            layer_num=layer_num,
+            hidden_size=config.hidden_size,
+            model_config=model_config,
+            tt_cache_path=tt_cache_path,
+        )
 
         layer_name = f"{base_url}.{layer_num}"
 
@@ -150,8 +150,8 @@ class TtFalconDecoderLayer(nn.Module):
 
         # MLP
         # mlp will deallocate layernorm_output
-        # mlp_output = self.mlp(layernorm_output)
-        mlp_output = [tt_lib.tensor.clone(layernorm_output[0])]
+        mlp_output = self.mlp(layernorm_output)
+        # mlp_output = [tt_lib.tensor.clone(layernorm_output[0])]
 
         output = []
         for i in range(self.num_devices):

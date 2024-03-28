@@ -138,7 +138,7 @@ def run_falcon_demo_kv(
         [device],
         state_dict,
         base_url,
-        4,
+        32,
         configuration,
         max_seq_len,
         model_config,
@@ -169,7 +169,7 @@ def run_falcon_demo_kv(
         logger.info("Initializing KV cache...")
         # profiler.start(f"initializing_KV_cache")
         kv_cache_singlelayer = initialize_kv_cache(
-            configuration, 4, batch_size, max_seq_len, device
+            configuration, 32, batch_size, max_seq_len, device
         )  # only used for compile
         kv_cache = initialize_kv_cache(configuration, num_layers, batch_size, max_seq_len, device)
         # profiler.end(f"initializing_KV_cache")
@@ -202,12 +202,27 @@ def run_falcon_demo_kv(
                 layer_past_len=0,
                 use_cache=use_cache,
             )
-            attn_out3.append(tt_FalconCausalLM_singlelayer.layers[3].attn_out)
-            decode_out3.append(tt_FalconCausalLM_singlelayer.layers[3].decode_out)
+
+            attn_out3.append([tt_FalconCausalLM_singlelayer.layers[j].attn_out for j in range(num_layers)])
+            decode_out3.append([tt_FalconCausalLM_singlelayer.layers[j].decode_out for j in range(num_layers)])
             layers_out.append(tt_FalconCausalLM_singlelayer.layers_out)
             lnf_out.append(tt_FalconCausalLM_singlelayer.lnf_out)
             b4log_out.append(tt_FalconCausalLM_singlelayer.b4log_out)
             log_out.append(tt_FalconCausalLM_singlelayer.log_out)
+
+            for j in range(num_layers):
+                assert (
+                    attn_out3[0][j] - attn_out3[i][j]
+                ).abs().sum() == 0, f"attnout{j} mismatch \n {attn_out3[0][j]} \n {attn_out3[i][j]}"
+                assert (
+                    decode_out3[0][j] - decode_out3[i][j]
+                ).abs().sum() == 0, f"decodeout{j} mismatch \n {decode_out3[0][j]} \n {decode_out3[i][j]}"
+            assert (
+                layers_out[0] - layers_out[i]
+            ).abs().sum() == 0, f"layers_out mismatch \n {layers_out[0]} \n {layers_out[i]}"
+            assert (lnf_out[0] - lnf_out[i]).abs().sum() == 0, f"lnf mismatch \n {lnf_out[0]} \n {lnf_out[i]}"
+            assert (b4log_out[0] - b4log_out[i]).abs().sum() == 0, f"b4log mismatch \n {b4log_out[0]} \n {b4log_out[i]}"
+            assert (log_out[0] - log_out[i]).abs().sum() == 0, f"log mismatch \n {log_out[0]} \n {log_out[i]}"
 
             # time_prefill_compile_end = time.time()
             # time_prefill_compile += time_prefill_compile_end - time_prefill_compile_start
@@ -221,18 +236,6 @@ def run_falcon_demo_kv(
             logs.append(logits)
             # assert (embs[0] - embs[i]).abs().sum() == 0, f"embs mismatch \n {embs[0]} \n {embs[i]}"
             # assert (masks[0] - masks[i]).abs().sum() == 0, f"masks mismatch \n {masks[0]} \n {masks[i]}"
-            assert (
-                attn_out3[0] - attn_out3[i]
-            ).abs().sum() == 0, f"attnout3 mismatch \n {attn_out3[0]} \n {attn_out3[i]}"
-            assert (
-                decode_out3[0] - decode_out3[i]
-            ).abs().sum() == 0, f"decodeout3 mismatch \n {decode_out3[0]} \n {decode_out3[i]}"
-            assert (
-                layers_out[0] - layers_out[i]
-            ).abs().sum() == 0, f"layers_out mismatch \n {layers_out[0]} \n {layers_out[i]}"
-            assert (lnf_out[0] - lnf_out[i]).abs().sum() == 0, f"lnf mismatch \n {lnf_out[0]} \n {lnf_out[i]}"
-            assert (b4log_out[0] - b4log_out[i]).abs().sum() == 0, f"b4log mismatch \n {b4log_out[0]} \n {b4log_out[i]}"
-            assert (log_out[0] - log_out[i]).abs().sum() == 0, f"log mismatch \n {log_out[0]} \n {log_out[i]}"
             assert (logs[0] - logs[i]).abs().sum() == 0, f"logits mismatch \n {logs[0]} \n {logs[i]}"
 
         # user_output_ids = post_processor(logits=logits, index=num_input_tokens - 1)
