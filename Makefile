@@ -1,6 +1,6 @@
 .SUFFIXES:
 
-MAKEFLAGS := --jobs=$(shell nproc)
+MAKEFLAGS := --jobs=48 #$(shell nproc)
 
 # Setup CONFIG, DEVICE_RUNNER, and out/build dirs first
 TT_METAL_HOME ?= $(shell git rev-parse --show-toplevel)

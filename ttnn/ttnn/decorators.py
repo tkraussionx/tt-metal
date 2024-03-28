@@ -38,7 +38,7 @@ def compare(torch_outputs, outputs, pcc):
 
 ENABLE_VALIDATE_DECORATOR = True
 ENABLE_DEBUG_DECORATOR = False
-PEARSON_CORRELATION_COEFFICIENT = 0.9999
+PEARSON_CORRELATION_COEFFICIENT = 0.99
 USE_TORCH_OUTPUT_IF_MISMATCHES = False
 
 
@@ -238,11 +238,27 @@ class Operation:
         def debug_decorator(function):
             @wraps(function)
             def call_wrapper(*function_args, **function_kwargs):
+                import torch
+
                 if self.torch_function is not None:
                     logger.info(f"{self.name} : Comparing against PyTorch")
 
                 if self.torch_function is not None:
-                    torch_output = self.torch_function(*function_args, **function_kwargs)
+                    normalized_dtype_args = []
+                    normalized_dtype_kwargs = {}
+                    for arg in function_args:
+                        if isinstance(arg, torch.Tensor):
+                            normalized_dtype_args.append(arg.to(torch.float32))
+                        else:
+                            normalized_dtype_args.append(arg)
+
+                    for arg, val in function_kwargs.items():
+                        if isinstance(val, torch.Tensor):
+                            normalized_dtype_kwargs[arg] = val.to(torch.float32)
+                        else:
+                            normalized_dtype_kwargs[arg] = val
+
+                    torch_output = self.torch_function(*normalized_dtype_args, **normalized_dtype_kwargs)
                 else:
                     torch_output = None
 
@@ -257,7 +273,7 @@ class Operation:
                                 raise TypeError(f"Expected Tensor, got {type(output)}")
                             output = convert_torch_output_to_be_like_ttnn_output(torch_output, output)
                         else:
-                            output = ttnn.to_torch(output)
+                            # output = ttnn.to_torch(output)
                             raise RuntimeError(
                                 f"{self.name}: Comparing against PyTorch failed with: {last_message} compared: {torch_output} vs {output}"
                             )

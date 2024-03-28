@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import pytest
+from loguru import logger
 
 import torch
 import transformers
@@ -26,10 +27,10 @@ def test_bert_for_question_answering(device, model_name, batch_size, sequence_si
 
     config = transformers.BertConfig.from_pretrained(model_name)
     config.num_hidden_layers = 2
-
+    logger.info(f"config.num_hidden_layers: {config.num_hidden_layers}")
     # TODO(arakhmati): re-enable the line below once the issue with ttnn.embedding is fixed
-    # torch_bert_input = torch.randint(0, config.config.vocab_size, (batch_size, sequence_size)).to(torch.int32)
-    torch_bert_input = torch.randint(0, 1, (batch_size, sequence_size)).to(torch.int32)
+    torch_bert_input = torch.randint(0, config.vocab_size, (batch_size, sequence_size)).to(torch.int32)
+    # torch_bert_input = torch.randint(0, 1, (batch_size, sequence_size)).to(torch.int32)
     torch_token_type_ids = torch.zeros((batch_size, sequence_size), dtype=torch.int32)
     torch_position_ids = torch.zeros((batch_size, sequence_size), dtype=torch.int32)
     torch_attention_mask = torch.ones(1, sequence_size)
