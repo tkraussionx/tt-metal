@@ -187,6 +187,8 @@ def determine_parallel_config(
         return per_core_out_matrix_width_ntiles
 
     num_cores_nhw = calculate_num_cores_nhw(config_override.get("num_cores_nhw", None))
+    print("num_cores_nhw = ", num_cores_nhw)
+    print("conv_out_2d_matrix_height = ", conv_out_2d_matrix_height)
     grid_size = calculate_grid_size(num_cores_nhw, config_override.get("grid_size", None))
     logical_grid_x = num_cores_nhw if is_1d_systolic else grid_size[0]
     logical_grid_y = 1 if is_1d_systolic else grid_size[1]
@@ -200,7 +202,10 @@ def determine_parallel_config(
     # logger.debug(
     #     f"PARALLEL CONFIG :: {is_1d_systolic} :: {input_channels} :: {output_channels} :: {sliding_window_op_params} :: {config_override} -> {num_cores_nhw} :: {grid_size} :: {per_core_out_matrix_height_ntiles} :: {per_core_out_matrix_width_ntiles}"
     # )
-
+    print("grid size - ", grid_size)
+    print("num_cores_nhw - ", num_cores_nhw)
+    print("per_core_out_matrix_height_ntiles - ", per_core_out_matrix_height_ntiles)
+    print("per_core_out_matrix_width_ntiles - ", per_core_out_matrix_width_ntiles)
     return ttl.tensor.OptimizedConvParallelizationConfig(
         grid_size=grid_size,
         num_cores_nhw=num_cores_nhw,
@@ -790,7 +795,7 @@ class TTPyCompositeConv(TTPyOp):
             assert weight.get_legacy_shape() == weights_shape
             weight_untiled = weight.pad(weights_channels_padded_shape, (0, 0, 0, 0), 0)
             # for conv op, pad the weights to block shape
-            if self.is_1d_systolic:
+            if self.is_1d_systolic and weight_block_h_ntiles == _nearest_32(padded_input_channels * S):
                 weight_tiled_ = ttl.tensor.convert_conv_weight_tensor_to_special_padding_tiled_layout(
                     weight_untiled,
                     weight_block_h_ntiles,

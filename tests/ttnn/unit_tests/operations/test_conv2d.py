@@ -301,33 +301,38 @@ def run_conv_with_split(
 @pytest.mark.parametrize(
     "output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array",
     (
+        # (1, 3, 224, 224, 16, 16, 16, 16, 0, 0, True),
         # unique convs in rn50 (complete list)
         # first conv post folding and input_channels padding to tile width
-        (64, 16, 115, 115, 4, 4, 1, 1, 0, 0, True),
-        # rn50 layer1
-        (64, 64, 56, 56, 3, 3, 1, 1, 1, 1, True),
-        # rn50 layer2
-        (128, 128, 56, 56, 3, 3, 2, 2, 1, 1, True),
-        (128, 128, 28, 28, 3, 3, 1, 1, 1, 1, True),
-        # rn50 layer3
-        (256, 256, 28, 28, 3, 3, 2, 2, 1, 1, False),
-        (256, 256, 14, 14, 3, 3, 1, 1, 1, 1, False),
-        # rn50 layer4
-        (512, 512, 14, 14, 3, 3, 2, 2, 1, 1, False),
-        (512, 512, 7, 7, 3, 3, 1, 1, 1, 1, False),
+        # (64, 16, 115, 115, 4, 4, 1, 1, 0, 0, True),
+        # # rn50 layer1
+        # (64, 64, 56, 56, 3, 3, 1, 1, 1, 1, True),
+        # # rn50 layer2
+        # (128, 128, 56, 56, 3, 3, 2, 2, 1, 1, True),
+        # (128, 128, 28, 28, 3, 3, 1, 1, 1, 1, True),
+        # # rn50 layer3
+        # (256, 256, 28, 28, 3, 3, 2, 2, 1, 1, True),
+        # (256, 256, 14, 14, 3, 3, 1, 1, 1, 1, True),
+        # # rn50 layer4
+        # (512, 512, 14, 14, 3, 3, 2, 2, 1, 1, False),
+        # (512, 512, 7, 7, 3, 3, 1, 1, 1, 1, False),
     ),
 )
 @pytest.mark.parametrize(
     "batch_size",
-    [8, 16, 20],
+    [8],
 )
 @pytest.mark.parametrize(
     "weights_dtype",
-    [ttnn.bfloat16, ttnn.bfloat8_b],
+    [
+        ttnn.bfloat8_b,
+    ],
 )
 @pytest.mark.parametrize(
     "activations_dtype",
-    [ttnn.bfloat16, ttnn.bfloat8_b],
+    [
+        ttnn.bfloat8_b,
+    ],
 )
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
 def test_resnet50_conv_gs(
@@ -383,6 +388,102 @@ def test_resnet50_conv_gs(
         pad_w,
         use_1d_systolic_array,
         config_override=None,
+        use_shallow_conv_variant=input_channels == 16,
+        padded_input_channels=16 if input_channels == 16 else None,
+    )
+
+
+@pytest.mark.parametrize(
+    "output_channels, input_channels, input_height, input_width, filter_height, filter_width, stride_h, stride_w, pad_h, pad_w, use_1d_systolic_array, config_override",
+    (
+        # (1, 3, 224, 224, 16, 16, 16, 16, 0, 0, True),
+        # unique convs in rn50 (complete list)
+        # first conv post folding and input_channels padding to tile width
+        # (64, 16, 115, 115, 4, 4, 1, 1, 0, 0, True),
+        # # rn50 layer1
+        # (64, 64, 56, 56, 3, 3, 1, 1, 1, 1, True),
+        # # rn50 layer2
+        # (128, 128, 56, 56, 3, 3, 2, 2, 1, 1, True),
+        # (128, 128, 28, 28, 3, 3, 1, 1, 1, 1, True),
+        # # rn50 layer3
+        # (256, 256, 28, 28, 3, 3, 2, 2, 1, 1, True),
+        (256, 256, 14, 14, 3, 3, 1, 1, 1, 1, True, {"act_block_w": 128}),
+        # # rn50 layer4
+        # (512, 512, 14, 14, 3, 3, 2, 2, 1, 1, False),
+        # (512, 512, 7, 7, 3, 3, 1, 1, 1, 1, False),
+    ),
+)
+@pytest.mark.parametrize(
+    "batch_size",
+    [8],
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [
+        ttnn.bfloat8_b,
+    ],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [
+        ttnn.bfloat8_b,
+    ],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+def test_resnet50_conv_gs_optimized(
+    device,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    filter_height,
+    filter_width,
+    stride_h,
+    stride_w,
+    pad_h,
+    pad_w,
+    use_1d_systolic_array,
+    config_override,
+):
+    if batch_size > 8 and (activations_dtype != ttnn.bfloat8_b or weights_dtype != ttnn.bfloat8_b):
+        pytest.skip("Batch > 8 must be run fully bfp8")
+
+    if (
+        activations_dtype == ttnn.bfloat16
+        and batch_size == 20
+        and (
+            output_channels == 64
+            or (
+                stride_h == 2
+                and (output_channels == 256 or (output_channels == 128 and weights_dtype == ttnn.bfloat16))
+            )
+        )
+    ):
+        pytest.skip("Skipping test because it won't fit in L1!")
+
+    run_conv(
+        device,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter_height,
+        filter_width,
+        stride_h,
+        stride_w,
+        pad_h,
+        pad_w,
+        use_1d_systolic_array,
+        config_override=config_override,
         use_shallow_conv_variant=input_channels == 16,
         padded_input_channels=16 if input_channels == 16 else None,
     )

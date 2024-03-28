@@ -637,12 +637,15 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
     uint32_t num_cb0_tilized_tiles = num_act_cb_tiles;
 
     if (fully_buffer_weights) {
+        std::cout << "Fully buffer weights" << std::endl;
         num_weight_cb_tiles *= window_outer;
     } else if (per_core_out_matrix_width_ntiles < 5 && per_core_out_matrix_height_ntiles < 22) {
+        cout << "Double buffer weight circular buffer" << std::endl;
         num_weight_cb_tiles = num_weight_cb_tiles * 2;
     }
 
     if (conv_act_size_c / conv_act_c_blocks < 160 && per_core_out_matrix_height_ntiles < 22) {
+        std::cout << "Double buffer activation circular buffer" << std::endl;
         num_act_cb_tiles = num_act_cb_tiles * 2; // double buffered
     }
 
@@ -704,8 +707,14 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
         }
         // 1D conv
         else {
-            assert(act_block_w_datums == round_up(conv_act_size_c * weight_size_w, TILE_WIDTH));
-            reader_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/reader_conv_activations_padded_with_halo_3x3_weights_v2.cpp";
+            if (act_block_w_datums == round_up(conv_act_size_c * weight_size_w, TILE_WIDTH)) {
+                reader_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/reader_conv_activations_padded_with_halo_3x3_weights_v2.cpp";
+            } else {
+                assert(!split_reader);
+                assert(conv_act_size_c % act_block_w_datums == 0);
+                cout << "Running new reader for large channels" << endl;
+                reader_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/reader_conv_1d_sys_large_channels.cpp";
+            }
             if (split_reader) {
                 writer_mcast_sender_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/reader_writer_tiled_out_1d_mcast_sender_conv_weights_tiled_col_to_rm_blocks.cpp";
                 writer_mcast_receiver_kernel = "tt_eager/tt_dnn/op_library/conv/kernels/reader_writer_tiled_out_1d_mcast_receiver_conv_weights_tiled_col_to_rm_blocks.cpp";
@@ -738,6 +747,9 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
 
     uint32_t conv_act_c_read_bytes = conv_act_size_c * a.element_size() / conv_act_c_blocks;
     uint32_t act_block_w_extra_align_bytes = (round_up(conv_act_size_c * weight_size_w, TILE_WIDTH) - (conv_act_size_c * weight_size_w)) * a.element_size();
+    uint32_t act_block_w_bytes = act_block_w_datums * a.element_size();
+    TT_ASSERT(conv_act_c_read_bytes % act_block_w_bytes == 0);
+    uint32_t num_partial_channel_reads = conv_act_c_read_bytes / act_block_w_bytes;
     reader_compile_time_args = {(uint32_t)
         (src0_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0),
         (uint32_t) stride_h,
@@ -752,7 +764,9 @@ operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_v2_(const Tens
         (uint32_t) act_block_num_tiles / conv_act_c_blocks,
         (uint32_t) weight_size_w,
         (uint32_t) conv_act_size_w + (2 * pad_w),
-        (uint32_t) act_block_w_extra_align_bytes, // only used for 1d systolic variant
+        (uint32_t) act_block_w_extra_align_bytes, // only used for 1d systolic, coaelesced reads variant
+        (uint32_t) act_block_w_bytes, // only used for 1d systolic, large channels variant
+        (uint32_t) num_partial_channel_reads
         };
 
     // define for bias
