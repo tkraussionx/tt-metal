@@ -31,9 +31,9 @@ def pad_heads(tensor, num_heads=8, dim=-1):
         padding_needed = round_up_to_tile_dim(unpadded_len) - unpadded_len
         unpadded_tensors = torch.split(tensor, tensor.shape[dim] // num_heads, dim=dim)
         padding = (
-            torch.zeros((tensor.shape[-2], padding_needed))
+            torch.zeros((1, 1, tensor.shape[-2], padding_needed))
             if dim == -1
-            else torch.zeros((padding_needed, tensor.shape[-1]))
+            else torch.zeros((1, 1, padding_needed, tensor.shape[-1]))
         )
         padded_tensor = torch.Tensor()
         for unpadded_tensor in unpadded_tensors:
@@ -82,7 +82,7 @@ def weight_to_bfp8(weight):
 
 class cross_attention:
     def __init__(self, device, parameters):
-        self.fused_qkv = parameters.to_q.weight.shape[0] == parameters.to_k.weight.shape[0]
+        self.fused_qkv = parameters.to_q.weight.shape[-2] == parameters.to_k.weight.shape[-2]
         for key in ["to_q", "to_k", "to_v"]:
             parameters[key].weight = pad_heads(parameters[key].weight, 8)
             assert "bias" not in parameters[key]
