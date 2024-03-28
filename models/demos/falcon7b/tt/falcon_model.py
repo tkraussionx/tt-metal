@@ -15,6 +15,7 @@ from models.utility_functions import (
     nearest_32,
 )
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
+from models.utility_functions import tt2torch_tensor
 
 
 class TtFalconModelShared(torch.nn.Module):
@@ -223,6 +224,8 @@ class TtFalconModelShared(torch.nn.Module):
             presents += (layer_output[1],)
             layer_output = layer_output[0]
 
+        self.layers_out = tt2torch_tensor(layer_output[0])
+
         # apply final norm layer
         for i in range(self.num_devices):
             layer_output[i] = tt_lib.tensor.layernorm(
@@ -246,6 +249,8 @@ class TtFalconModelShared(torch.nn.Module):
                 tt_lib.tensor.BcastOpDim.H,
                 output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
             )
+
+        self.lnf_out = tt2torch_tensor(layer_output[0])
 
         return layer_output, presents
 

@@ -12,6 +12,7 @@ import tt_lib
 from models.demos.falcon7b.tt.falcon_attention import TtFalconAttention
 from models.demos.falcon7b.tt.falcon_mlp import TtFalconMLP
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
+from models.utility_functions import tt2torch_tensor
 
 
 class TtFalconDecoderLayer(nn.Module):
@@ -145,6 +146,8 @@ class TtFalconDecoderLayer(nn.Module):
         attention_output, layer_present = attn_outputs[0], attn_outputs[1]
         # attention_output, layer_present = [tt_lib.tensor.clone(layernorm_output[0])], layer_past
 
+        self.attn_out = tt2torch_tensor(attention_output[0])
+
         # MLP
         # mlp will deallocate layernorm_output
         # mlp_output = self.mlp(layernorm_output)
@@ -171,6 +174,8 @@ class TtFalconDecoderLayer(nn.Module):
                 output_mem_config=self.model_config["DROPOUT_ADD_OUTPUT_MEMCFG"],
             )
             residual[i].deallocate()
+
+        self.decode_out = tt2torch_tensor(output[0])
 
         if use_cache:
             outputs = (output, layer_present)

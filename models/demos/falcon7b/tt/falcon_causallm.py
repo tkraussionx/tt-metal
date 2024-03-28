@@ -11,6 +11,7 @@ import tt_lib
 
 from models.demos.falcon7b.tt.falcon_model import TtFalconModelShared
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
+from models.utility_functions import tt2torch_tensor
 
 
 class TtFalconCausalLM(TtFalconModelShared):
@@ -71,6 +72,8 @@ class TtFalconCausalLM(TtFalconModelShared):
             use_cache=use_cache,
         )
 
+        self.b4log_out = tt2torch_tensor(hidden_states[0])
+
         lm_logits = []
         for i in range(self.num_devices):
             lm_logits.append(
@@ -82,5 +85,7 @@ class TtFalconCausalLM(TtFalconModelShared):
                     output_dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
                 )
             )
+
+        self.log_out = tt2torch_tensor(lm_logits[0])
 
         return lm_logits, presents
