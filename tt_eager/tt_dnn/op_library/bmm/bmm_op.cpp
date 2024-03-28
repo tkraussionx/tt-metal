@@ -283,12 +283,12 @@ MatmulParallelizationStrategy get_parallelization_strategy(const std::vector<Ten
     }
 }
 
-tt::operations::primary::MatmulMultiCoreReuseMultiCast1DProgramConfig get_mcast_1d_config(const Tensor &input_tensor_a, const Tensor &input_tensor_b, bool fuse_batch, std::optional<UnaryWithParam> fused_activation, bool mcast_in0, bool out_sharded) {
+tt::operations::primary::MatmulMultiCoreReuseMultiCast1DProgramConfig get_mcast_1d_config(const Tensor &input_tensor_a, const Tensor &input_tensor_b, bool fuse_batch, std::optional<UnaryWithParam> fused_activation, bool mcast_in0, bool out_sharded, bool is_lmhead) {
     auto device = input_tensor_a.device();
     auto grid_size = device->compute_with_storage_grid_size();
-    // if (grid_size.y == 8) {
-    //      grid_size.y = 7;
-    // }
+    if (is_lmhead && grid_size.y == 8) {
+         grid_size.y = 7;
+    }
     uint32_t M = fuse_batch ? input_tensor_a.volume() / input_tensor_a.get_legacy_shape()[-1] : input_tensor_a.get_legacy_shape()[-2];
     uint32_t K = input_tensor_a.get_legacy_shape()[-1];
     uint32_t N = input_tensor_b.get_legacy_shape()[-1];
@@ -802,7 +802,7 @@ Tensor falcon_lm_head_matmul(const Tensor &input_tensor_a, const Tensor &input_t
         TT_FATAL((input_tensor_b.get_legacy_shape() == Shape({1, 1, 4544, 65024})), "Unsupported input shape");
         return operation::run_with_autoformat(Matmul{.bcast_batch=true, .output_mem_config=mem_config, .output_dtype=output_dtype.value_or(input_tensor_a.get_dtype())}, {input_tensor_a, input_tensor_b}, {bias}).at(0);
     } else {
-        auto program_config = bmm_op_utils::get_mcast_1d_config(input_tensor_a, input_tensor_b, true, std::nullopt, true, mem_config.is_sharded());
+        auto program_config = bmm_op_utils::get_mcast_1d_config(input_tensor_a, input_tensor_b, true, std::nullopt, true, mem_config.is_sharded(), false /* is_lmhead*/);
         std::optional<const DeviceComputeKernelConfig> config = std::nullopt;
         auto compute_kernel_config = init_device_compute_kernel_config(input_tensor_a.device()->arch(), config, MathFidelity::LoFi, true /* math_approx_mode */, false /* fp32_dest_acc_en */, true /* packer_l1_acc */);
         return operations::primary::matmul_1d(input_tensor_a, input_tensor_b, bias, program_config, mem_config, output_dtype, compute_kernel_config);
