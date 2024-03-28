@@ -158,57 +158,62 @@ def run_falcon_demo_kv(
 
     profiler.end(f"tokenizing_inputs")
 
-    logger.info("Initializing KV cache...")
-    profiler.start(f"initializing_KV_cache")
-    kv_cache_singlelayer = initialize_kv_cache(
-        configuration, 4, batch_size, max_seq_len, device
-    )  # only used for compile
-    kv_cache = initialize_kv_cache(configuration, num_layers, batch_size, max_seq_len, device)
-    profiler.end(f"initializing_KV_cache")
-    profiler.disable()
+    embs, masks, logs = [], [], []
+    for i in range(10):
+        logger.info("Initializing KV cache...")
+        # profiler.start(f"initializing_KV_cache")
+        kv_cache_singlelayer = initialize_kv_cache(
+            configuration, 4, batch_size, max_seq_len, device
+        )  # only used for compile
+        kv_cache = initialize_kv_cache(configuration, num_layers, batch_size, max_seq_len, device)
+        # profiler.end(f"initializing_KV_cache")
+        # profiler.disable()
 
-    ### First prefill run with compile ###
-    logger.info("Running 1st run prefill stage with compile...")
-    post_processor = partial(post_process)
-    use_cache = True
-    output_ids = torch.zeros(num_users, 1, dtype=torch.int64)
-    time_prefill_compile = 0
-    for user_id in tqdm(range(num_users)):
-        time_prefill_compile_start = time.time()
-        (
-            tt_prefill_embeddings,
-            tt_prefill_attention_mask,
-        ) = tt_FalconCausalLM_singlelayer.model_preprocessing(
-            "prefill", prefill_ids[user_id : user_id + 1], 0, num_input_tokens=num_input_tokens
-        )
-        assert tt_prefill_attention_mask is not None
+        ### First prefill run with compile ###
+        logger.info("Running 1st run prefill stage with compile...")
+        # post_processor = partial(post_process)
+        use_cache = True
+        output_ids = torch.zeros(num_users, 1, dtype=torch.int64)
+        time_prefill_compile = 0
+        for user_id in tqdm(range(num_users)):
+            # time_prefill_compile_start = time.time()
+            (
+                tt_prefill_embeddings,
+                tt_prefill_attention_mask,
+            ) = tt_FalconCausalLM_singlelayer.model_preprocessing(
+                "prefill", prefill_ids[user_id : user_id + 1], 0, num_input_tokens=num_input_tokens
+            )
+            assert tt_prefill_attention_mask is not None
+            # embs.append(tt2torch_tensor(tt_prefill_embeddings[0]))
+            # masks.append(tt2torch_tensor(tt_prefill_attention_mask[0]))
 
-        emb = tt2torch_tensor(tt_prefill_embeddings[0])
-        mask = tt2torch_tensor(tt_prefill_attention_mask[0])
+            tt_logits, kv_cache_singlelayer = tt_FalconCausalLM_singlelayer(
+                input_embeddings=tt_prefill_embeddings,
+                llm_mode="prefill",
+                attention_mask=tt_prefill_attention_mask,
+                user_id=user_id,
+                layer_past=kv_cache_singlelayer,
+                layer_past_len=0,
+                use_cache=use_cache,
+            )
+            # time_prefill_compile_end = time.time()
+            # time_prefill_compile += time_prefill_compile_end - time_prefill_compile_start
 
-        tt_logits, kv_cache_singlelayer = tt_FalconCausalLM_singlelayer(
-            input_embeddings=tt_prefill_embeddings,
-            llm_mode="prefill",
-            attention_mask=tt_prefill_attention_mask,
-            user_id=user_id,
-            layer_past=kv_cache_singlelayer,
-            layer_past_len=0,
-            use_cache=use_cache,
-        )
-        tt_lib.device.Synchronize(device)
-        time_prefill_compile_end = time.time()
-        time_prefill_compile += time_prefill_compile_end - time_prefill_compile_start
+            tt_prefill_embeddings[0].deallocate()
+            if tt_prefill_attention_mask is not None:
+                tt_prefill_attention_mask[0].deallocate()
 
-        # tt_prefill_embeddings[0].deallocate()
-        # if tt_prefill_attention_mask is not None:
-        #    tt_prefill_attention_mask[0].deallocate()
+            logits = tt2torch_tensor(tt_logits[0]).squeeze(1)
+            tt_logits[0].deallocate()
+            logs.append(logits)
+            # assert (embs[0] - embs[i]).abs().sum() == 0, f"embs mismatch \n {embs[0]} \n {embs[i]}"
+            # assert (masks[0] - masks[i]).abs().sum() == 0, f"masks mismatch \n {masks[0]} \n {masks[i]}"
+            assert (logs[0] - logs[i]).abs().sum() == 0, f"logits mismatch \n {logs[0]} \n {logs[i]}"
 
-        logits = tt2torch_tensor(tt_logits[0]).squeeze(1)
-        return emb, mask, logits
-        tt_logits[0].deallocate()
+        # user_output_ids = post_processor(logits=logits, index=num_input_tokens - 1)
+        # output_ids[user_id] = user_output_ids
 
-        user_output_ids = post_processor(logits=logits, index=num_input_tokens - 1)
-        output_ids[user_id] = user_output_ids
+    return
 
     generated_ids = torch.concat((prefill_ids[..., :num_input_tokens], output_ids), dim=1)
 
@@ -482,20 +487,13 @@ def test_demo(
     disable_persistent_kernel_cache()
     disable_compilation_reports()
 
-    emb, mask, log = [], [], []
-
-    for i in range(5):
-        tt_prefill_embeddings, tt_prefill_attention_mask, logits = run_falcon_demo_kv(
-            user_input=user_input,
-            model_version="tiiuae/falcon-7b-instruct",
-            batch_size=32,
-            num_layers=32,
-            max_seq_len=1024,
-            model_config=get_model_config("BFLOAT16-DRAM"),
-            model_location_generator=model_location_generator,
-            device=device,
-        )
-        emb.append(tt_prefill_embeddings)
-        mask.append(tt_prefill_attention_mask)
-        log.append(logits)
-        assert (log[0] - log[i]).abs().sum() == 0, f"\n {log[0]} \n {log[1]}"
+    return run_falcon_demo_kv(
+        user_input=user_input,
+        model_version="tiiuae/falcon-7b-instruct",
+        batch_size=32,
+        num_layers=32,
+        max_seq_len=1024,
+        model_config=get_model_config("BFLOAT16-DRAM"),
+        model_location_generator=model_location_generator,
+        device=device,
+    )
