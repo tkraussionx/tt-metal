@@ -148,6 +148,7 @@ class Device {
     const std::vector<uint32_t> &bank_ids_from_logical_core(const CoreCoord &logical_core) const;
 
     allocator::Statistics get_memory_allocation_statistics(const BufferType &buffer_type) const;
+    const std::unordered_map<std::uint64_t, std::uint64_t> &get_allocated_buffers(const BufferType &buffer_type) const;
 
     void dump_memory_blocks(const BufferType &buffer_type, std::ofstream &out) const;
 

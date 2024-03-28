@@ -48,6 +48,7 @@ class BankManager {
     std::optional<uint64_t> lowest_occupied_address(uint32_t bank_id) const;
 
     Statistics get_statistics() const;
+    std::unordered_map<uint64_t, uint64_t> const &get_allocated_buffers() const { return allocated_buffers_; }
 
     void dump_blocks(std::ofstream &out) const;
 
@@ -58,7 +59,7 @@ class BankManager {
 
     // Types of buffers allocated in the banks
     BufferType buffer_type_;
-    std::unordered_set<uint64_t> allocated_buffers_;
+    std::unordered_map<uint64_t, uint64_t> allocated_buffers_;
     // This is to store offsets for any banks that share a core or node (dram in wh/storage core), so we can view all banks using only bank_id
     // Set to 0 for cores/nodes with only 1 bank
     std::unordered_map<uint32_t, int64_t> bank_id_to_bank_offset_;
@@ -91,6 +92,9 @@ const std::vector<uint32_t> &bank_ids_from_dram_channel(const Allocator &allocat
 const std::vector<uint32_t> &bank_ids_from_logical_core(const Allocator &allocator, const CoreCoord &logical_core);
 
 Statistics get_statistics(const Allocator &allocator, const BufferType &buffer_type);
+
+const std::unordered_map<std::uint64_t, std::uint64_t> &get_allocated_buffers(
+    const Allocator &allocator, const BufferType &buffer_type);
 
 void dump_memory_blocks(const Allocator &allocator, const BufferType &buffer_type, std::ofstream &out);
 

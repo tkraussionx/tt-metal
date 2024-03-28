@@ -4,15 +4,19 @@
 
 #pragma once
 
-#include <filesystem>
 #include <atomic>
+#include <filesystem>
 #include <fstream>
 #include <string>
+#include <unordered_map>
 namespace tt::tt_metal {
 
 class Program;
 class Device;
 namespace detail {
+
+using MemoryUsageStatsOrAllocations = std::unordered_map<std::string, std::size_t>;
+using MemoryUsageInfo = std::unordered_map<std::string, std::unordered_map<std::string, MemoryUsageStatsOrAllocations>>;
 
 /**
  * Enable generation of reports for memory allocation statistics.
@@ -50,6 +54,15 @@ void DisableMemoryReports();
  * */
 void DumpDeviceMemoryState(const Device *device, std::string prefix="");
 
+/**
+ * Return value: void
+ *
+ * | Argument      | Description                                       | Type            | Valid Range                                            | Required |
+ * |---------------|---------------------------------------------------|-----------------|--------------------------------------------------------|----------|
+ * | device        | The device for which memory stats will be dumped. | const Device *  |                                                        | True     |
+ * */
+MemoryUsageInfo GetDeviceMemoryState(const Device *device);
+
 class MemoryReporter {
    public:
     MemoryReporter& operator=(const MemoryReporter&) = delete;
@@ -60,6 +73,7 @@ class MemoryReporter {
     void flush_program_memory_usage(const Program &program, const Device *device);
 
     void dump_memory_usage_state(const Device *device, std::string prefix="") const;
+    MemoryUsageInfo get_memory_usage_info(const Device *device) const;
 
     static void toggle(bool state);
     static MemoryReporter& inst();
@@ -76,4 +90,4 @@ class MemoryReporter {
 
 }   // namespace detail
 
-}   // namespace tt::tt_metal
+}  // namespace tt::tt_metal

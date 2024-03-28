@@ -149,6 +149,14 @@ void DeviceModule(py::module &m_device) {
         +------------------+----------------------------------+-----------------------+-------------+----------+
     )doc");
 
+    m_device.def("GetDeviceMemoryState", &detail::GetDeviceMemoryState, R"doc(
+        +------------------+----------------------------------+-----------------------+-------------+----------+
+        | Argument         | Description                      | Data type             | Valid range | Required |
+        +==================+==================================+=======================+=============+==========+
+        | device           | Device to dump memory state for  | tt_lib.device.Device  |             | Yes      |
+        +------------------+----------------------------------+-----------------------+-------------+----------+
+    )doc");
+
     m_device.def("Synchronize", &detail::Synchronize, R"doc(
         Wait for all kernels on TT device to complete.
     )doc");
