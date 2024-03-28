@@ -138,7 +138,7 @@ def run_falcon_demo_kv(
         [device],
         state_dict,
         base_url,
-        32,
+        4,
         configuration,
         max_seq_len,
         model_config,
@@ -161,7 +161,7 @@ def run_falcon_demo_kv(
     logger.info("Initializing KV cache...")
     profiler.start(f"initializing_KV_cache")
     kv_cache_singlelayer = initialize_kv_cache(
-        configuration, 32, batch_size, max_seq_len, device
+        configuration, 4, batch_size, max_seq_len, device
     )  # only used for compile
     kv_cache = initialize_kv_cache(configuration, num_layers, batch_size, max_seq_len, device)
     profiler.end(f"initializing_KV_cache")
@@ -183,6 +183,9 @@ def run_falcon_demo_kv(
         )
         assert tt_prefill_attention_mask is not None
 
+        emb = tt2torch_tensor(tt_prefill_embeddings[0])
+        mask = tt2torch_tensor(tt_prefill_attention_mask[0])
+
         tt_logits, kv_cache_singlelayer = tt_FalconCausalLM_singlelayer(
             input_embeddings=tt_prefill_embeddings,
             llm_mode="prefill",
@@ -196,11 +199,12 @@ def run_falcon_demo_kv(
         time_prefill_compile_end = time.time()
         time_prefill_compile += time_prefill_compile_end - time_prefill_compile_start
 
-        tt_prefill_embeddings[0].deallocate()
-        if tt_prefill_attention_mask is not None:
-            tt_prefill_attention_mask[0].deallocate()
+        # tt_prefill_embeddings[0].deallocate()
+        # if tt_prefill_attention_mask is not None:
+        #    tt_prefill_attention_mask[0].deallocate()
 
         logits = tt2torch_tensor(tt_logits[0]).squeeze(1)
+        return emb, mask, logits
         tt_logits[0].deallocate()
 
         user_output_ids = post_processor(logits=logits, index=num_input_tokens - 1)
@@ -210,6 +214,10 @@ def run_falcon_demo_kv(
 
     tt_lib.device.Synchronize(device)
     logger.info("Finished 1st run prefill stage with compile!")
+
+    # print(output_ids)
+
+    return
 
     ### First run decode stage with compile ###
     logger.info("Running 1st run decode stage with compile...")
@@ -474,13 +482,20 @@ def test_demo(
     disable_persistent_kernel_cache()
     disable_compilation_reports()
 
-    return run_falcon_demo_kv(
-        user_input=user_input,
-        model_version="tiiuae/falcon-7b-instruct",
-        batch_size=32,
-        num_layers=32,
-        max_seq_len=1024,
-        model_config=get_model_config("BFLOAT16-DRAM"),
-        model_location_generator=model_location_generator,
-        device=device,
-    )
+    emb, mask, log = [], [], []
+
+    for i in range(5):
+        tt_prefill_embeddings, tt_prefill_attention_mask, logits = run_falcon_demo_kv(
+            user_input=user_input,
+            model_version="tiiuae/falcon-7b-instruct",
+            batch_size=32,
+            num_layers=32,
+            max_seq_len=1024,
+            model_config=get_model_config("BFLOAT16-DRAM"),
+            model_location_generator=model_location_generator,
+            device=device,
+        )
+        emb.append(tt_prefill_embeddings)
+        mask.append(tt_prefill_attention_mask)
+        log.append(logits)
+        assert (log[0] - log[i]).abs().sum() == 0, f"\n {log[0]} \n {log[1]}"
