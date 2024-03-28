@@ -6,6 +6,8 @@ import json
 import pytest
 import torch
 from loguru import logger
+from models.demos.bert.reference import torch_bert
+from tests.ttnn.utils_for_testing import assert_with_pcc
 
 import transformers
 import tt_lib
@@ -16,8 +18,10 @@ from models.utility_functions import (
     skip_for_wormhole_b0,
     profiler,
 )
+
 from models.demos.bert.tt import ttnn_bert
 from models.demos.bert.tt import ttnn_optimized_bert
+from models.demos.bert.tt import ttnn_optimized_sharded_bert
 
 from models.datasets.dataset_squadv2 import squadv2_1K_samples_input, squadv2_answer_decode_batch
 from ttnn.model_preprocessing import (
@@ -58,6 +62,7 @@ def run_bert_question_and_answering_inference(
 
     model = str(model_location_generator(model_name, model_subdir="Bert"))
     hugging_face_reference_model = BertForQuestionAnswering.from_pretrained(model, torchscript=False)
+    # hugging_face_reference_model.config.num_hidden_layers = 2
     hugging_face_reference_model.eval()
 
     # set up tokenizer
@@ -70,6 +75,8 @@ def run_bert_question_and_answering_inference(
         tt_model_name = f"ttnn_{model_name}"
     elif bert == ttnn_optimized_bert:
         tt_model_name = f"ttnn_{model_name}_optimized"
+    elif bert == ttnn_optimized_sharded_bert:
+        tt_model_name = f"ttnn_{model_name}_optimized_sharded"
     else:
         raise ValueError(f"Unknown bert: {bert}")
 
@@ -108,17 +115,36 @@ def run_bert_question_and_answering_inference(
         return_tensors="pt",
     )
     profiler.start(f"preprocessing_input")
-    torch_attention_mask = None
+
     ttnn_bert_inputs = bert.preprocess_inputs(
         bert_input["input_ids"],
         bert_input["token_type_ids"],
         torch.zeros(batch_size, sequence_size),
-        torch_attention_mask,
+        bert_input["attention_mask"],
         device=device,
     )
     profiler.end(f"preprocessing_input")
 
+    torch_parameters = preprocess_model_parameters(
+        model_name=f"torch_{model_name}",
+        initialize_model=lambda: transformers.BertForQuestionAnswering.from_pretrained(
+            model_name, config=config
+        ).eval(),
+        convert_to_ttnn=lambda *_: False,
+    )
+
+    torch_output = torch_bert.bert_for_question_answering(
+        config,
+        bert_input["input_ids"].to(torch.int32),
+        bert_input["token_type_ids"].to(torch.int32),
+        torch.zeros(batch_size, sequence_size).to(torch.int32),
+        bert_input["attention_mask"].to(torch.int32),
+        parameters=torch_parameters,
+    )
+
+    config = ttnn_optimized_sharded_bert.update_model_config(config, batch_size)
     profiler.start(f"inference_time")
+    ttnn.decorators.ENABLE_DEBUG_DECORATOR = True
     tt_output = bert.bert_for_question_answering(
         config,
         *ttnn_bert_inputs,
@@ -127,6 +153,10 @@ def run_bert_question_and_answering_inference(
     profiler.end(f"inference_time")
 
     tt_output = ttnn.to_torch(ttnn.from_device(tt_output)).reshape(batch_size, 1, sequence_size, -1).to(torch.float32)
+
+    tt_output_for_pcc = torch.squeeze(tt_output, dim=1)
+
+    # assert_with_pcc(torch_output, tt_output_for_pcc, 0.9999)
 
     tt_start_logits = tt_output[..., :, 0].squeeze(1)
     tt_end_logits = tt_output[..., :, 1].squeeze(1)
@@ -142,7 +172,8 @@ def run_bert_question_and_answering_inference(
         }
 
         tt_answer = nlp.postprocess([tt_res], **postprocess_params)
-
+        logger.info(f"context: {context[i]}")
+        logger.info(f"question: {question[i]}")
         logger.info(f"answer: {tt_answer['answer']}\n")
         model_answers[i] = tt_answer["answer"]
 
@@ -264,7 +295,7 @@ def run_bert_question_and_answering_inference_squad_v2(
 
 @skip_for_wormhole_b0()
 @pytest.mark.parametrize("model_name", ["phiyodr/bert-large-finetuned-squad2"])
-@pytest.mark.parametrize("bert", [ttnn_bert, ttnn_optimized_bert])
+@pytest.mark.parametrize("bert", [ttnn_bert, ttnn_optimized_bert, ttnn_optimized_sharded_bert])
 def test_demo(
     input_path,
     model_name,
