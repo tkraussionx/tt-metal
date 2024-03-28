@@ -175,8 +175,6 @@ def decompose_conv_into_shards_and_generate_tensor_metadata(
     tensor_metadata = []
     unpadded_input_shard_local_idx = 0
     core_id = 0
-    print(f"len(pad_metadata)={len(pad_metadata)}")
-    print(f"unpad_input_shard_height={unpadded_input_shard_height}")
     for padded_input_tensor_idx in range(len(pad_metadata)):
         pad_stick = pad_metadata[padded_input_tensor_idx]
         if pad_stick:

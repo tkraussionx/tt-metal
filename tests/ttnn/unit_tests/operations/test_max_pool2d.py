@@ -7,9 +7,23 @@ from loguru import logger
 import torch
 import pytest
 import math
-from models.utility_functions import is_wormhole_b0
+from models.utility_functions import is_wormhole_b0, is_grayskull
 from tests.ttnn.utils_for_testing import assert_with_pcc, check_with_pcc_without_tensor_printout
 import ttnn
+
+
+def plot_diff(vals, fid, nsticks, stick_len):
+    import matplotlib.pyplot as plt
+
+    plt.clf()
+    plt.figure(figsize=(100, 50))
+    plt.xticks(torch.arange(0, stick_len) + 0.5, range(0, stick_len))
+    plt.yticks(torch.arange(0, nsticks) + 0.5, range(0, nsticks))
+    # plt.grid()
+    bool_vals = vals > 0
+    plt.imshow(bool_vals, interpolation="none", vmin=0, vmax=1, cmap="Blues")
+    plt.savefig(f"diff_core_{fid}.png", bbox_inches="tight", pad_inches=0.1)
+    plt.close()
 
 
 # @skip_for_wormhole_b0()
@@ -28,27 +42,27 @@ import ttnn
             [16, 64, 112, 112],
             # [20, 64, 112, 112],
             ## hpr shapes
-            [8, 32, 132, 20],  ## pass
-            [16, 32, 132, 20],  ## pass
-            [32, 32, 132, 20],  ## pass
-            [64, 32, 132, 20],  ## pass
-            [128, 32, 132, 20],  ## pass
-            # [256, 32, 132, 20],   ## oom
-            [8, 32, 264, 40],  ## pass
-            [16, 32, 264, 40],  ## pass
-            [32, 32, 264, 40],  ## pass
+            [8, 32, 132, 20],
+            [16, 32, 132, 20],
+            [32, 32, 132, 20],
+            [64, 32, 132, 20],
+            [128, 32, 132, 20],
+            # [256, 32, 132, 20],
+            [8, 32, 264, 40],
+            [16, 32, 264, 40],
+            [32, 32, 264, 40],
             # [64, 32, 264, 40],    ## oom
             # [128, 32, 264, 40],   ## oom
             # [256, 32, 264, 40],   ## oom
-            [4, 16, 1056, 160],  ## pass
+            [4, 16, 1056, 160],
             # [8, 16, 1056, 160],     ## oom
             # [16, 16, 1056, 160],    ## oom
             # [32, 16, 1056, 160],    ## oom
             # [64, 16, 1056, 160],    ## oom
             # [128, 16, 1056, 160],   ## oom
             # [256, 16, 1056, 160],   ## oom
-            [8, 16, 528, 80],  ## pass
-            [16, 16, 528, 80],  ## pass
+            [8, 16, 528, 80],
+            [16, 16, 528, 80],
             # [32, 16, 528, 80],  ## oom
             # [64, 16, 528, 80],  ## oom
             # [128, 16, 528, 80], ## oom
@@ -138,6 +152,23 @@ def test_run_max_pool(
     act_permuted = torch.permute(act, (0, 2, 3, 1))
     act_reshaped = act_permuted.reshape(act_shape)
 
+    max_grid_size = (8, 8)
+    if is_wormhole_b0():
+        max_grid_size = (8, 8)
+    elif is_grayskull():
+        max_grid_size = (12, 9)
+
+    max_num_cores_nhw = max_grid_size[0] * max_grid_size[1]
+    num_cores_nhw = max_num_cores_nhw
+    while num_cores_nhw > 0:
+        if in_n * out_h % num_cores_nhw == 0:
+            break
+        num_cores_nhw -= 1
+    if (in_n, in_c, in_h, in_w) == (64, 32, 132, 20) or (in_n, in_c, in_h, in_w) == (128, 32, 132, 20):
+        num_cores_nhw = 64
+    elif (in_n, in_c, in_h, in_w) == (8, 32, 264, 40):
+        num_cores_nhw = 66
+
     reader_patterns_cache = {}
     max_pool = ttnn.MaxPool2d(
         kernel_size=(kernel_h, kernel_w),
@@ -150,7 +181,7 @@ def test_run_max_pool(
         input_height=in_h,
         input_width=in_w,
         reader_patterns_cache=reader_patterns_cache,
-        parallel_config_override={"num_cores_nhw": 64},
+        parallel_config_override={"num_cores_nhw": num_cores_nhw},
     )
 
     if dtype == ttnn.bfloat8_b:
@@ -185,11 +216,13 @@ def test_run_max_pool(
     out_pytorch = out_pytorch.reshape(golden_pytorch.shape)
     # assert_with_pcc(out_pytorch, golden_pytorch)
     pcc_pass, pcc_msg = check_with_pcc_without_tensor_printout(out_pytorch, golden_pytorch)
-    # out_pytorch = torch.transpose(out_pytorch, 1, 2)
-    # out_pytorch = torch.transpose(out_pytorch, 2, 3)
-    # golden_pytorch = torch.transpose(golden_pytorch, 1, 2)
-    # golden_pytorch = torch.transpose(golden_pytorch, 2, 3)
-    # print(pcc_msg)
+    out_pytorch = torch.transpose(out_pytorch, 1, 2)
+    out_pytorch = torch.transpose(out_pytorch, 2, 3)
+    golden_pytorch = torch.transpose(golden_pytorch, 1, 2)
+    golden_pytorch = torch.transpose(golden_pytorch, 2, 3)
+    print(pcc_msg)
+    torch.save(out_pytorch, "out_pytorch.pt")
+    torch.save(golden_pytorch, "golden_pytorch.pt")
     # print(f"golden: {golden_pytorch}")
     # print(f"out_pytorch: {out_pytorch}")
     assert pcc_pass, pcc_msg
