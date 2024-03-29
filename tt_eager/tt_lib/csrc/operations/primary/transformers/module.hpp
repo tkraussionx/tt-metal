@@ -64,6 +64,16 @@ void py_module(py::module& m_transformers) {
         )
         .def_readwrite("block_w", &SoftmaxShardedMultiCoreProgramConfig::block_w);
 
+    py::class_<SoftmaxShardedMaskInterleavedMultiCoreProgramConfig>(m_transformers, "SoftmaxShardedMaskInterleavedMultiCoreProgramConfig")
+        .def(
+            py::init<CoreCoord, std::size_t, std::size_t, std::size_t>(),
+            py::kw_only(),
+            py::arg("compute_with_storage_grid_size"),
+            py::arg("subblock_w").noconvert(),
+            py::arg("block_h").noconvert(),
+            py::arg("block_w").noconvert())
+        .def_readwrite("block_w", &SoftmaxShardedMaskInterleavedMultiCoreProgramConfig::block_w);
+
     m_transformers.def(
         "scale_mask_softmax_in_place",
         &scale_mask_softmax_in_place,

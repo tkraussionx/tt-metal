@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include "common/base_types.hpp"
+#include "common/core_coord.h"
+#include "tensor/types.hpp"
 #include "tt_eager/tensor/tensor.hpp"
 
 #include "tt_dnn/op_library/operation.hpp"
@@ -36,9 +39,26 @@ struct SoftmaxShardedMultiCoreProgramConfig {
     };
 };
 
+struct SoftmaxShardedMaskInterleavedMultiCoreProgramConfig {
+    CoreCoord compute_with_storage_grid_size;
+    std::size_t subblock_w;
+    std::size_t block_h;
+    std::size_t block_w;
+
+    tt::stl::reflection::Attributes attributes() const {
+        return {
+            {"compute_with_storage_grid_size", compute_with_storage_grid_size},
+            {"subblock_w", subblock_w},
+            {"block_h", block_h},
+            {"block_w", block_w},
+        };
+    };
+};
+
 using SoftmaxProgramConfig = std::variant<
     SoftmaxDefaultProgramConfig,
-    SoftmaxShardedMultiCoreProgramConfig
+    SoftmaxShardedMultiCoreProgramConfig,
+    SoftmaxShardedMaskInterleavedMultiCoreProgramConfig
 >;
 }  // namespace transformers
 
@@ -80,6 +100,18 @@ operation::ProgramWithCallbacks scale_mask_softmax_sharded_multi_core(
     const std::optional<const Tensor> mask,
     std::optional<float> scale,
     bool causal_mask,
+    CoreCoord grid_size,
+    uint32_t subblock_wt,
+    uint32_t block_ht,
+    uint32_t block_wt,
+    DeviceComputeKernelConfig compute_kernel_config
+);
+
+operation::ProgramWithCallbacks scale_mask_softmax_sharded_mask_interleaved_multi_core(
+    const Tensor &input_tensor,
+    const Tensor &output_tensor,
+    const Tensor& mask,
+    std::optional<float> scale,
     CoreCoord grid_size,
     uint32_t subblock_wt,
     uint32_t block_ht,

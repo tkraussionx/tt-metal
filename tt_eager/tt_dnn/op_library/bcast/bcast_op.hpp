@@ -4,12 +4,9 @@
 
 #pragma once
 
-#include <functional>
 #include "tensor/tensor.hpp"
 #include "tt_dnn/op_library/run_operation.hpp"
 #include "tt_metal/common/constants.hpp"
-#include "tt_metal/host_api.hpp"
-#include "tt_dnn/op_library/work_split.hpp"
 
 using namespace tt::tt_metal;
 

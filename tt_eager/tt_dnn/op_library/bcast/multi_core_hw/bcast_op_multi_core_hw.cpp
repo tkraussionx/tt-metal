@@ -23,8 +23,6 @@ namespace tt_metal {
 
 operation::ProgramWithCallbacks bcast_multi_core_hw(const Tensor &a, const Tensor &b, const Tensor& output, BcastOpMath bcast_math, BcastOpDim bcast_dim) {
     TT_ASSERT(bcast_dim == BcastOpDim::HW);
-	// Todo.pp : fix
-	TT_ASSERT(a.memory_config().memory_layout == output.memory_config().memory_layout);
 
     const auto ashape = a.get_legacy_shape();
     const auto bshape = b.get_legacy_shape();

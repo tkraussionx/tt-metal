@@ -3,6 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "tt_eager/tt_dnn/op_library/softmax/softmax_op.hpp"
+#include "common/assert.hpp"
+#include "common/base_types.hpp"
+#include "tensor/types.hpp"
 #include "tt_eager/tt_dnn/op_library/math.hpp"
 #include "tt_eager/tt_dnn/op_library/work_split.hpp"
 #include "tt_dnn/op_library/run_operation.hpp"
@@ -13,6 +16,7 @@
 #include "tt_metal/detail/util.hpp"
 
 #include <optional>
+#include <type_traits>
 
 using uint32_t = std::uint32_t;
 using namespace tt::constants;
@@ -21,6 +25,18 @@ using namespace tt::tt_metal;
 namespace tt {
 namespace operations {
 namespace primary {
+
+void softmax_sharded_checks(const Tensor& input, uint32_t block_w, uint32_t subblock_w, bool in_place) {
+    const auto shape = input.get_legacy_shape();
+    uint32_t M = input.volume() / shape[-1];
+    uint32_t K = shape[-1];
+
+    TT_FATAL(M % TILE_HEIGHT == 0, "M must be divisible by tile height.");
+    TT_FATAL(K % TILE_WIDTH == 0, "K must be divisible by tile width.");
+    TT_FATAL(block_w % subblock_w == 0, "block_w must be divisible by subblock_w.");
+    TT_FATAL(block_w * TILE_WIDTH == shape[3], "shard width must equal to input tensor shape[3]!");
+    TT_FATAL(in_place);
+}
 
 void Softmax::validate(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) const {
     TT_FATAL(input_tensors.size() == 1 and optional_input_tensors.size() <= 1, "Must have 1 or 2 input tensors");
@@ -57,24 +73,22 @@ void Softmax::validate(const std::vector<Tensor> &input_tensors, const std::vect
                     } else if constexpr (
                         std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SoftmaxShardedMultiCoreProgramConfig>
                     ) {
-                        const auto shape = input_tensor.get_legacy_shape();
-                        uint32_t M = input_tensor.volume() / shape[-1];
-                        uint32_t K = shape[-1];
-                        // block
-                        uint32_t block_w = program_config.block_w * TILE_WIDTH;
-                        uint32_t block_h = program_config.block_h * TILE_HEIGHT;
-                        uint32_t num_subblocks_w = program_config.block_w / program_config.subblock_w;
+                        softmax_sharded_checks(input_tensor, program_config.block_w, program_config.subblock_w, this->inplace);
                         // grid
                         auto num_cores_c = program_config.compute_with_storage_grid_size.x;
                         auto num_cores_r = program_config.compute_with_storage_grid_size.y;
+                        uint32_t M = input_tensor.volume() / input_tensor.get_legacy_shape()[-1] / TILE_HEIGHT;
+                        uint32_t K = input_tensor.get_legacy_shape()[-1] / TILE_WIDTH;
                         // check dims
-                        TT_FATAL(program_config.block_w % program_config.subblock_w == 0, "block_w must be divisible by subblock_w.");
-                        TT_FATAL(M % TILE_HEIGHT == 0, "M must be divisible by tile height.");
-                        TT_FATAL(K % TILE_WIDTH == 0, "K must be divisible by tile width.");
-                        TT_FATAL(M * K / (block_w * block_h) == num_cores_r * num_cores_c, "number of shards must equal to number of cores");
-                        TT_FATAL(this->inplace);
-                        // check sharding dim
-                        TT_FATAL(block_w == shape[3], "shard width must equal to input tensor shape[3]!");
+                        TT_FATAL(M * K / (program_config.block_w * program_config.block_h) == num_cores_r * num_cores_c, "number of shards must equal to number of cores. M = {}, K = {}, block_w = {}, block_h = {}, num_cores = {}", M, K, program_config.block_w, program_config.block_h, num_cores_r * num_cores_c);
+                    } else if constexpr (
+                        std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SoftmaxShardedMaskInterleavedMultiCoreProgramConfig>
+                    ) {
+                        softmax_sharded_checks(input_tensor, program_config.block_w, program_config.subblock_w, this->inplace);
+                        TT_FATAL(this->is_causal_mask);
+                        TT_FATAL(input_tensor.get_layout() == Layout::TILE);
+                        TT_FATAL(mask.get_layout() == Layout::TILE);
+                        TT_FATAL(mask.is_sharded() == false);
                     }
                 },
                 this->program_config
@@ -84,6 +98,10 @@ void Softmax::validate(const std::vector<Tensor> &input_tensors, const std::vect
         }
     } else {
         TT_FATAL(not this->scale.has_value());
+        using ProgramConfigType = std::decay_t<decltype(this->program_config)>;
+        if constexpr (std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SoftmaxShardedMaskInterleavedMultiCoreProgramConfig>) {
+            TT_FATAL(false, "Usage of SoftmaxShardedMaskInterleavedMultiCoreProgramConfig requires a causal mask");
+        }
     }
 }
 
@@ -130,6 +148,20 @@ operation::ProgramWithCallbacks Softmax::create_program(
                                             program_config.block_w,
                                             this->compute_kernel_config
                                             );
+            }
+            else if constexpr (
+                std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SoftmaxShardedMaskInterleavedMultiCoreProgramConfig>
+            ) {
+                return scale_mask_softmax_sharded_mask_interleaved_multi_core(
+                                            input_tensor,
+                                            output_tensor,
+                                            mask.value(),
+                                            this->scale,
+                                            program_config.compute_with_storage_grid_size,
+                                            program_config.subblock_w,
+                                            program_config.block_h,
+                                            program_config.block_w,
+                                            this->compute_kernel_config);
             } else {
                 return scale_mask_softmax_multi_core(input_tensor, output_tensor, mask, this->scale, causal_mask, this->compute_kernel_config);
             }
