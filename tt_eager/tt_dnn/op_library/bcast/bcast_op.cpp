@@ -96,9 +96,18 @@ void EltwiseBinaryBroadcast::validate(const std::vector<Tensor> &input_tensors) 
         TT_FATAL(input_tensor_a.memory_config().buffer_type == this->output_mem_config.buffer_type);
     }
     if (this->dim != BcastOpDim::HW) {
-        TT_FATAL(input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED && this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED, "Bcast does not currently support input0 sharding, except if dim is HW");
-    } else{
-        TT_FATAL(input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED || input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED, "HW bcast in0 supprots Height Sharding or Interleaving");
+        TT_FATAL(
+            input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED &&
+                this->output_mem_config.memory_layout == TensorMemoryLayout::INTERLEAVED,
+            "Bcast does not currently support input0 sharding, except if dim is HW");
+    } else {
+        TT_FATAL(
+            input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED ||
+                input_tensor_a.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED,
+            "HW bcast in0 supports Height Sharding or Interleaving");
+        TT_FATAL(
+            input_tensor_a.memory_config().memory_layout == this->output_mem_config.memory_layout,
+            "Input and output mem layouts must be the same for bcast HW op!");
     }
 
     auto batch_size_a = input_shape_a[0];
@@ -138,14 +147,6 @@ std::vector<Tensor> EltwiseBinaryBroadcast::create_output_tensors(const std::vec
         if (input_tensor.memory_config().is_sharded()) {
             // Derive output shard_spec based on input
             shard_spec = input_tensor.shard_spec().value();
-        } else {
-            uint32_t num_blocks = input_tensor.volume() / input_tensor.get_legacy_shape()[-1] / TILE_HEIGHT;
-            auto core_grid = input_tensor.device()->compute_with_storage_grid_size();
-            uint32_t num_grid_cores = core_grid.x * core_grid.y;
-            uint32_t target_num_cores = num_blocks < num_grid_cores ? num_blocks : num_grid_cores;
-            shard_spec.grid = num_cores_to_corerange_set(target_num_cores, core_grid, true);
-            shard_spec.shape = {num_blocks / target_num_cores * TILE_HEIGHT, input_tensor.get_legacy_shape()[-1]};
-            shard_spec.orientation = ShardOrientation::ROW_MAJOR;
         }
         auto mem_config = this->output_mem_config;
         mem_config.shard_spec = shard_spec;
