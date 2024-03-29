@@ -22,8 +22,6 @@ from tt_eager.tt_dnn.op_library.sliding_window_op_infra.sliding_window_op_utils 
 from tt_lib.utils import (
     _nearest_32,
     _nearest_y,
-    find_closest_largest_divisor,
-    find_closest_largest_divisor_with_num_padding,
     divup,
 )
 from models.utility_functions import is_wormhole_b0, is_grayskull
