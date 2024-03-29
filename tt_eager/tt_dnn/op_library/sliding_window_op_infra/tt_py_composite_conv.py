@@ -19,7 +19,13 @@ from tt_eager.tt_dnn.op_library.sliding_window_op_infra.sliding_window_op_utils 
     get_hash_from_sliding_window_op_params,
     calculate_shard_grid,
 )
-from tt_lib.utils import _nearest_32, _nearest_y
+from tt_lib.utils import (
+    _nearest_32,
+    _nearest_y,
+    find_closest_largest_divisor,
+    find_closest_largest_divisor_with_num_padding,
+    divup,
+)
 from models.utility_functions import is_wormhole_b0, is_grayskull
 from models.utility_functions import torch2tt_tensor, tt2torch_tensor
 
@@ -114,10 +120,9 @@ def determine_parallel_config(
     conv_out_2d_matrix_height = batch_size * output_height * output_width
 
     # pad height to 32
-    conv_out_2d_matrix_height = _nearest_32(conv_out_2d_matrix_height)
     if is_out_tiled:
-        conv_out_2d_matrix_height_ntiles = (int)(conv_out_2d_matrix_height / 32)
-        conv_out_2d_matrix_width_ntiles = (int)(_nearest_32(output_channels) / 32)
+        conv_out_2d_matrix_height_ntiles = _nearest_32(conv_out_2d_matrix_height) // 32
+        conv_out_2d_matrix_width_ntiles = _nearest_32(output_channels) // 32
     else:
         conv_out_2d_matrix_height_ntiles = conv_out_2d_matrix_height
         conv_out_2d_matrix_width_ntiles = output_channels
@@ -163,9 +168,7 @@ def determine_parallel_config(
         return grid_size
 
     def calculate_per_core_out_matrix_height_ntiles(logical_grid_x, override):
-        round_up = 0 if is_1d_systolic else (logical_grid_x - 1)
-        # per_core_out_matrix_height_ntiles = _nearest_32(conv_out_2d_matrix_height / num_cores_nhw) // 32
-        per_core_out_matrix_height_ntiles = (conv_out_2d_matrix_height_ntiles + round_up) // logical_grid_x
+        per_core_out_matrix_height_ntiles = divup(divup(conv_out_2d_matrix_height, num_cores_nhw), 32)
         if override is not None:
             assert override % 32 == 0, "per_core_out_matrix_height must be divisible by 32 (tile height)"
             if (override // 32) != per_core_out_matrix_height_ntiles:
