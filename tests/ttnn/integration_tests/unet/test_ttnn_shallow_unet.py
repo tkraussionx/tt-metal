@@ -22,7 +22,7 @@ import tt_lib.profiler as profiler
 
 import ttnn
 
-num_groups = 2
+num_groups = 4
 
 
 def update_ttnn_module_args(ttnn_module_args):

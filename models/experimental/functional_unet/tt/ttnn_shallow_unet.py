@@ -20,10 +20,10 @@ def dealloc_input(fn, *args, **kwargs):
         if type(a) is list:
             for e in a:
                 if type(a) is ttl.tensor.Tensor:
-                    if a.is_allocated():
+                    while a.is_allocated():
                         ttnn.deallocate(a)
         if type(a) is ttl.tensor.Tensor:
-            if a.is_allocated():
+            while a.is_allocated():
                 ttnn.deallocate(a)
     return out
 
@@ -50,7 +50,7 @@ def dump(message, device, *args):
     mstats.append(d)
 
 
-def unet_concat(ttnn_tensors, dim=-1, use_reshard=True):
+def unet_concat(ttnn_tensors, dim=-1, use_reshard=True, move=False):
     assert len(ttnn_tensors) > 0
     assert dim < 0
     rank = len(ttnn_tensors[0].shape)
@@ -78,6 +78,9 @@ def unet_concat(ttnn_tensors, dim=-1, use_reshard=True):
                 t_mem_config.shard_spec.orientation = output_mem_config.shard_spec.orientation
                 ttlib_tensors[i] = dealloc_input(ttl.tensor.reshard, t, t_mem_config)
                 dump("asdf reshard (cc)", ttlib_tensors[i].device())
+                if move:
+                    ttlib_tensors[i] = ttl.tensor.move_sharded(ttlib_tensors[i])
+                    dump("asdf move (cc)", ttlib_tensors[i].device())
     else:
         output_mem_config = ttnn.DRAM_MEMORY_CONFIG
         for i in range(0, len(ttlib_tensors)):
@@ -185,6 +188,8 @@ class UNet:
 
         save_c4_2_out = ttnn.to_layout(save_c4_2_out, layout=ttnn.ROW_MAJOR_LAYOUT)
         output_tensor = unet_concat([output_tensor, save_c4_2_out], dim=-1)
+        while save_c4_2_out.is_allocated():
+            ttnn.deallocate(save_c4_2_out)
         dump("asdf concat0", device)
 
         output_tensor = dealloc_input(ttl.tensor.reshard, output_tensor, self.c5.conv.input_sharded_memory_config)
@@ -207,6 +212,8 @@ class UNet:
 
         save_c3_2_out = ttnn.to_layout(save_c3_2_out, layout=ttnn.ROW_MAJOR_LAYOUT)
         output_tensor = unet_concat([output_tensor, save_c3_2_out], dim=-1)
+        while save_c3_2_out.is_allocated():
+            ttnn.deallocate(save_c3_2_out)
         dump("asdf concat1", device)
 
         output_tensor = dealloc_input(ttl.tensor.reshard, output_tensor, self.c6.conv.input_sharded_memory_config)
@@ -229,6 +236,8 @@ class UNet:
 
         save_c2_2_out = ttnn.to_layout(save_c2_2_out, layout=ttnn.ROW_MAJOR_LAYOUT)
         output_tensor = unet_concat([output_tensor, save_c2_2_out], dim=-1)
+        while save_c2_2_out.is_allocated():
+            ttnn.deallocate(save_c2_2_out)
         dump("asdf concat2", device)
 
         hacked_shard_shape = self.c7.conv.input_sharded_memory_config.shard_spec.shape
@@ -252,7 +261,11 @@ class UNet:
 
         save_c1_2_out = dealloc_input(ttnn.to_layout, save_c1_2_out, layout=ttnn.ROW_MAJOR_LAYOUT)
         dump("asdf to_layout", device)
-        output_tensor = unet_concat([output_tensor, save_c1_2_out], dim=-1)
+        save_c1_2_out = ttl.tensor.move_sharded(save_c1_2_out)
+        dump("asdf move save_c1_2_out", device)
+        output_tensor = ttl.tensor.move_sharded(output_tensor)
+        dump("asdf move output_tensor", device)
+        output_tensor = unet_concat([output_tensor, save_c1_2_out], dim=-1, move=True)
         while save_c1_2_out.is_allocated():
             ttnn.deallocate(save_c1_2_out)
         dump("asdf concat3", device)
