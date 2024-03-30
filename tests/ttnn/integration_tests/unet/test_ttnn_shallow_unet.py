@@ -76,8 +76,8 @@ def create_custom_preprocessor(device):
             ttnn_module_args.c2_2["activation"] = "relu"  # Fuse relu with conv2
             ttnn_module_args.c2["deallocate_activation"] = True
             ttnn_module_args.c2_2["deallocate_activation"] = True
-            ttnn_module_args.c2["conv_blocking_and_parallelization_config_override"] = None
-            ttnn_module_args.c2_2["conv_blocking_and_parallelization_config_override"] = None
+            ttnn_module_args.c2["conv_blocking_and_parallelization_config_override"] = {"num_cores_nhw": 55}
+            ttnn_module_args.c2_2["conv_blocking_and_parallelization_config_override"] = {"num_cores_nhw": 55}
 
             ttnn_module_args.c3["math_fidelity"] = ttnn.MathFidelity.LoFi
             ttnn_module_args.c3["use_shallow_conv_variant"] = False
@@ -91,8 +91,8 @@ def create_custom_preprocessor(device):
             ttnn_module_args.c3_2["activation"] = "relu"  # Fuse relu with conv3
             ttnn_module_args.c3["deallocate_activation"] = True
             ttnn_module_args.c3_2["deallocate_activation"] = True
-            ttnn_module_args.c3["conv_blocking_and_parallelization_config_override"] = None
-            ttnn_module_args.c3_2["conv_blocking_and_parallelization_config_override"] = None
+            ttnn_module_args.c3["conv_blocking_and_parallelization_config_override"] = {"num_cores_nhw": 42}
+            ttnn_module_args.c3_2["conv_blocking_and_parallelization_config_override"] = {"num_cores_nhw": 42}
 
             ttnn_module_args.c4["math_fidelity"] = ttnn.MathFidelity.LoFi
             ttnn_module_args.c4["use_shallow_conv_variant"] = False
@@ -106,8 +106,8 @@ def create_custom_preprocessor(device):
             ttnn_module_args.c4_2["activation"] = "relu"  # Fuse relu with conv4
             ttnn_module_args.c4["deallocate_activation"] = True
             ttnn_module_args.c4_2["deallocate_activation"] = True
-            ttnn_module_args.c4["conv_blocking_and_parallelization_config_override"] = None
-            ttnn_module_args.c4_2["conv_blocking_and_parallelization_config_override"] = None
+            ttnn_module_args.c4["conv_blocking_and_parallelization_config_override"] = {"num_cores_nhw": 21}
+            ttnn_module_args.c4_2["conv_blocking_and_parallelization_config_override"] = {"num_cores_nhw": 21}
 
             ttnn_module_args.bnc["math_fidelity"] = ttnn.MathFidelity.LoFi
             ttnn_module_args.bnc_2["math_fidelity"] = ttnn.MathFidelity.LoFi
@@ -137,9 +137,9 @@ def create_custom_preprocessor(device):
             ttnn_module_args.c5["deallocate_activation"] = True
             ttnn_module_args.c5_2["deallocate_activation"] = True
             ttnn_module_args.c5_3["deallocate_activation"] = True
-            ttnn_module_args.c5["conv_blocking_and_parallelization_config_override"] = None
-            ttnn_module_args.c5_2["conv_blocking_and_parallelization_config_override"] = None
-            ttnn_module_args.c5_3["conv_blocking_and_parallelization_config_override"] = None
+            ttnn_module_args.c5["conv_blocking_and_parallelization_config_override"] = {"num_cores_nhw": 42}
+            ttnn_module_args.c5_2["conv_blocking_and_parallelization_config_override"] = {"num_cores_nhw": 42}
+            ttnn_module_args.c5_3["conv_blocking_and_parallelization_config_override"] = {"num_cores_nhw": 42}
 
             ttnn_module_args.c6["math_fidelity"] = ttnn.MathFidelity.LoFi
             ttnn_module_args.c6["use_shallow_conv_variant"] = (
@@ -162,9 +162,9 @@ def create_custom_preprocessor(device):
             ttnn_module_args.c6["deallocate_activation"] = True
             ttnn_module_args.c6_2["deallocate_activation"] = True
             ttnn_module_args.c6_3["deallocate_activation"] = True
-            ttnn_module_args.c6["conv_blocking_and_parallelization_config_override"] = {"act_block_h": 32}
-            ttnn_module_args.c6_2["conv_blocking_and_parallelization_config_override"] = {"act_block_h": 32}
-            ttnn_module_args.c6_3["conv_blocking_and_parallelization_config_override"] = {"act_block_h": 32}
+            ttnn_module_args.c6["conv_blocking_and_parallelization_config_override"] = {"num_cores_nhw": 55}
+            ttnn_module_args.c6_2["conv_blocking_and_parallelization_config_override"] = {"num_cores_nhw": 55}
+            ttnn_module_args.c6_3["conv_blocking_and_parallelization_config_override"] = {"num_cores_nhw": 55}
 
             ttnn_module_args.c7["math_fidelity"] = ttnn.MathFidelity.LoFi
             ttnn_module_args.c7_2["math_fidelity"] = ttnn.MathFidelity.LoFi
@@ -309,17 +309,27 @@ def create_custom_preprocessor(device):
             parameters["c5_3"] = preprocess_conv2d(conv5_3_weight, conv5_3_bias, ttnn_module_args.c5_3)
             print("asdf preprocess c6")
             parameters["c6"] = preprocess_conv2d(conv6_weight, conv6_bias, ttnn_module_args.c6)
+            print("asdf preprocess c6_2")
             parameters["c6_2"] = preprocess_conv2d(conv6_2_weight, conv6_2_bias, ttnn_module_args.c6_2)
+            print("asdf preprocess c6_3")
             parameters["c6_3"] = preprocess_conv2d(conv6_3_weight, conv6_3_bias, ttnn_module_args.c6_3)
+            print("asdf preprocess c7")
             parameters["c7"] = preprocess_conv2d(conv7_weight, conv7_bias, ttnn_module_args.c7)
+            print("asdf preprocess c7_2")
             parameters["c7_2"] = preprocess_conv2d(conv7_2_weight, conv7_2_bias, ttnn_module_args.c7_2)
+            print("asdf preprocess c7_3")
             parameters["c7_3"] = preprocess_conv2d(conv7_3_weight, conv7_3_bias, ttnn_module_args.c7_3)
+            print("asdf preprocess c8")
             parameters["c8"] = preprocess_conv2d(conv8_weight, conv8_bias, ttnn_module_args.c8)
+            print("asdf preprocess c8_2")
             parameters["c8_2"] = preprocess_conv2d(conv8_2_weight, conv8_2_bias, ttnn_module_args.c8_2)
+            print("asdf preprocess c8_3")
             parameters["c8_3"] = preprocess_conv2d(conv8_3_weight, conv8_3_bias, ttnn_module_args.c8_3)
+            print("asdf preprocess output_layer")
             parameters["output_layer"] = preprocess_conv2d(
                 model.output_layer.weight, model.output_layer.bias, ttnn_module_args.output_layer
             )
+            print("asdf preprocess done")
 
         return parameters
 
@@ -531,8 +541,8 @@ def test_shallow_unet(device, loop):
 
     torch_model.load_state_dict(new_state_dict)
 
-    # torch_input_tensor = torch.randn(1, 4 * num_groups, 1056, 160)  # Batch size of 2, 3 channels (RGB), 1056x160 input
-    torch_input_tensor = torch.randn(1, 4 * num_groups, 1088, 192)  # Batch size of 2, 3 channels (RGB), 1056x160 input
+    torch_input_tensor = torch.randn(1, 4 * num_groups, 1056, 160)  # Batch size of 2, 3 channels (RGB), 1056x160 input
+    # torch_input_tensor = torch.randn(1, 4 * num_groups, 1088, 192)  # Batch size of 2, 3 channels (RGB), 1056x160 input
     torch_output_tensor = torch_model(torch_input_tensor)
 
     reader_patterns_cache = {}
@@ -570,6 +580,7 @@ def test_shallow_unet(device, loop):
         if i == warmup:
             start = time.perf_counter()
         profiler.tracy_frame()
+        print("asdf run model")
         output_tensor = ttnn_model(device, input_tensor, input_shape)
     if start is not None:
         stop = time.perf_counter()
