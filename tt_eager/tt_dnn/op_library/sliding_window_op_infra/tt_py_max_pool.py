@@ -23,7 +23,7 @@ from tt_eager.tt_dnn.op_library.sliding_window_op_infra.sliding_window_op_utils 
 
 from typing import Union
 
-from tt_lib.utils import _nearest_32
+from tt_lib.utils import _nearest_32, divup
 import tt_lib as ttl
 
 import math
@@ -140,17 +140,18 @@ class TTPyMaxPool(TTPyOp):
             output_volume = batch_size * output_h * output_w
 
             # input_size_to_shard_evenly = _nearest_y(input_volume, ncores_nhw * 32)
-            assert input_volume % ncores_nhw == 0
-            input_shard_height = input_volume // ncores_nhw
+            # assert input_volume % ncores_nhw == 0
+            input_shard_height = divup(divup(input_volume, ncores_nhw), 32) * 32
 
             # output_size_to_shard_evenly = _nearest_y(output_volume, ncores_nhw * 32)
-            assert output_volume % ncores_nhw == 0
-            output_shard_height = output_volume // ncores_nhw
+            # assert output_volume % ncores_nhw == 0
+            output_shard_height = divup(divup(output_volume, ncores_nhw), 32) * 32
 
             input_padded_width = input_w + 2 * pad_w
 
             pad_metadata, data_top_left_indices = trace_conv_to_generate_data_top_left_indices_and_pad_metadata(
-                (1, 1, window_h, window_w, stride_h, stride_w, pad_h, pad_w, 1, 1), input_nchw_shape
+                (1, 1, window_h, window_w, stride_h, stride_w, pad_h, pad_w, 1, 1),
+                input_nchw_shape,
             )
 
             req_conv_input_shard_start_end, tensor_metadata = decompose_conv_into_shards_and_generate_tensor_metadata(
