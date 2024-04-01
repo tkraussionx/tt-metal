@@ -6,7 +6,7 @@ import torch
 from torch import nn
 import tt_lib
 
-from models.utility_functions import torch2tt_tensor
+from models.utility_functions import torch2tt_tensor, tt2torch_tensor
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
 
 
@@ -62,6 +62,7 @@ class TtFalconMLP(nn.Module):
                 )
             )
             # x[device_id].deallocate()
+        self.h4hout = tt2torch_tensor(hidden_states[0])
         for device_id in range(len(x)):
             hidden_states[device_id] = tt_lib.tensor.falcon_dense_4h_to_h_matmul(
                 hidden_states[device_id],

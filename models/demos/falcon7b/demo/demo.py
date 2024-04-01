@@ -161,6 +161,7 @@ def run_falcon_demo_kv(
     embs, masks, logs = [], [], []
     preselfout3 = []
     attn_out3 = []
+    h4h_out3 = []
     mlp_out3 = []
     attnadd_out3 = []
     decode_out3 = []
@@ -208,6 +209,7 @@ def run_falcon_demo_kv(
 
             # preselfout3.append([tt_FalconCausalLM_singlelayer.layers[j].self_attn.preselfout for j in range(num_layers)])
             attn_out3.append([tt_FalconCausalLM_singlelayer.layers[j].attn_out for j in range(num_layers)])
+            h4h_out3.append([tt_FalconCausalLM_singlelayer.layers[j].mlp.h4hout for j in range(num_layers)])
             mlp_out3.append([tt_FalconCausalLM_singlelayer.layers[j].mlp_out for j in range(num_layers)])
             attnadd_out3.append([tt_FalconCausalLM_singlelayer.layers[j].attnadd_out for j in range(num_layers)])
             decode_out3.append([tt_FalconCausalLM_singlelayer.layers[j].decode_out for j in range(num_layers)])
@@ -223,6 +225,9 @@ def run_falcon_demo_kv(
                 assert (
                     attn_out3[0][j] - attn_out3[i][j]
                 ).abs().sum() == 0, f"attnout{j} mismatch \n {attn_out3[0][j]} \n {attn_out3[i][j]}"
+                assert (
+                    h4h_out3[0][j] - h4h_out3[i][j]
+                ).abs().sum() == 0, f"h4h{j} mismatch \n {h4h_out3[0][j]} \n {h4h_out3[i][j]}"
                 assert (
                     mlp_out3[0][j] - mlp_out3[i][j]
                 ).abs().sum() == 0, f"mlp{j} mismatch \n {mlp_out3[0][j]} \n {mlp_out3[i][j]}"

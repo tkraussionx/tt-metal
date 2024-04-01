@@ -156,14 +156,16 @@ class TtFalconDecoderLayer(nn.Module):
 
         # time.sleep(0.3)
 
+        tt_lib.device.Synchronize(self.devices[0])
+
         ln2 = tt2torch_tensor(layernorm_output[0])
         assert torch.allclose(ln1, ln2), "layernorm_output changed after self_attn"
 
         # MLP
         # mlp will deallocate layernorm_output
-        mlp_output = layernorm_output
+        # mlp_output = layernorm_output
         for i in range(1):
-            mlp_output = self.mlp(mlp_output)
+            mlp_output = self.mlp(layernorm_output)
         # mlp_output = [tt_lib.tensor.clone(layernorm_output[0])]
 
         self.mlp_out = tt2torch_tensor(mlp_output[0])
