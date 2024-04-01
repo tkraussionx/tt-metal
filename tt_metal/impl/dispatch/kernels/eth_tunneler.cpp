@@ -96,7 +96,7 @@ constexpr uint32_t timeout_cycles = get_compile_time_arg_val(14);
 void kernel_main() {
 
     rtos_context_switch_ptr = (void (*)())RtosTable[0];
-    noc_init(0xF);
+    noc_init();
 
     test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_STARTED;
     test_results[PQ_TEST_MISC_INDEX] = 0xff000000;
