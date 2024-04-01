@@ -226,7 +226,7 @@ class TtFalconAttention(nn.Module):
                 fused_query_key_value[i],
                 output_mem_config=self.model_config["CREATE_QKV_HEADS_OUTPUT_MEMCFG"],
             )
-            fused_query_key_value[i].deallocate()
+            # fused_query_key_value[i].deallocate()
             query_layer.append(query_layer_i)
             key_layer.append(key_layer_i)
             value_layer.append(value_layer_i)
@@ -244,22 +244,22 @@ class TtFalconAttention(nn.Module):
         ######################
         ### K CACHE UPDATE ###
         ######################
-        if llm_mode == "prefill":
-            for i in range(self.num_devices):
-                tt_lib.tensor.fill_cache(layer_past[i][0], key_layer[i], user_id)
+        # if llm_mode == "prefill":
+        #     for i in range(self.num_devices):
+        #         tt_lib.tensor.fill_cache(layer_past[i][0], key_layer[i], user_id)
 
-        elif llm_mode == "decode":
-            for i in range(self.num_devices):
-                # Update kv_cache in place
-                tt_lib.tensor.update_cache(layer_past[i][0], key_layer[i], layer_past_len)
-            for i in range(self.num_devices):
-                # key and value layers will have kv_seq_len padded to nearest 32
-                key_layer[i] = tt_lib.tensor.unpad(
-                    layer_past[i][0],
-                    [0, 0, 0, 0],
-                    [batch - 1, 0, nearest_32(layer_past_len + 1) - 1, self.head_dim - 1],
-                    output_mem_config=self.model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"],
-                )
+        # elif llm_mode == "decode":
+        #     for i in range(self.num_devices):
+        #         # Update kv_cache in place
+        #         tt_lib.tensor.update_cache(layer_past[i][0], key_layer[i], layer_past_len)
+        #     for i in range(self.num_devices):
+        #         # key and value layers will have kv_seq_len padded to nearest 32
+        #         key_layer[i] = tt_lib.tensor.unpad(
+        #             layer_past[i][0],
+        #             [0, 0, 0, 0],
+        #             [batch - 1, 0, nearest_32(layer_past_len + 1) - 1, self.head_dim - 1],
+        #             output_mem_config=self.model_config["K_CACHE_SLICE_OUTPUT_MEMCFG"],
+        #         )
 
         ######################
         ### PRE-SOFTMAX MM ###
@@ -274,7 +274,7 @@ class TtFalconAttention(nn.Module):
                     output_mem_config=self.model_config["K_TRANSPOSED_OUTPUT_MEMCFG"],
                 )
             )
-            key_layer[i].deallocate()
+            # key_layer[i].deallocate()
 
         attn_weights = []
         if llm_mode == "prefill":
@@ -286,8 +286,8 @@ class TtFalconAttention(nn.Module):
                         output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
                     )
                 )
-                query_layer[i].deallocate()
-                key_layer_transposed[i].deallocate()
+                # query_layer[i].deallocate()
+                # key_layer_transposed[i].deallocate()
 
         elif llm_mode == "decode":
             for i, device in enumerate(self.devices):
@@ -312,8 +312,8 @@ class TtFalconAttention(nn.Module):
                             output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
                         )
                     )
-                query_layer[i].deallocate()
-                key_layer_transposed[i].deallocate()
+                # query_layer[i].deallocate()
+                # key_layer_transposed[i].deallocate()
 
         for i in range(self.num_devices):
             attn_weights[i] = tt_lib.tensor.bcast(
@@ -344,21 +344,21 @@ class TtFalconAttention(nn.Module):
         ######################
         ### V CACHE UPDATE ###
         ######################
-        if llm_mode == "prefill":
-            for i in range(self.num_devices):
-                tt_lib.tensor.fill_cache(layer_past[i][1], value_layer[i], user_id)
+        # if llm_mode == "prefill":
+        #     for i in range(self.num_devices):
+        #         tt_lib.tensor.fill_cache(layer_past[i][1], value_layer[i], user_id)
 
-        elif llm_mode == "decode":
-            for i in range(self.num_devices):
-                # Update kv_cache in place
-                tt_lib.tensor.update_cache(layer_past[i][1], value_layer[i], layer_past_len)
-            for i in range(self.num_devices):
-                value_layer[i] = tt_lib.tensor.unpad(
-                    layer_past[i][1],
-                    [0, 0, 0, 0],
-                    [batch - 1, 0, nearest_32(layer_past_len + 1) - 1, self.head_dim - 1],
-                    output_mem_config=self.model_config["V_CACHE_SLICE_OUTPUT_MEMCFG"],
-                )
+        # elif llm_mode == "decode":
+        #     for i in range(self.num_devices):
+        #         # Update kv_cache in place
+        #         tt_lib.tensor.update_cache(layer_past[i][1], value_layer[i], layer_past_len)
+        #     for i in range(self.num_devices):
+        #         value_layer[i] = tt_lib.tensor.unpad(
+        #             layer_past[i][1],
+        #             [0, 0, 0, 0],
+        #             [batch - 1, 0, nearest_32(layer_past_len + 1) - 1, self.head_dim - 1],
+        #             output_mem_config=self.model_config["V_CACHE_SLICE_OUTPUT_MEMCFG"],
+        #         )
 
         layer_present = layer_past if use_cache else None
 
@@ -375,8 +375,8 @@ class TtFalconAttention(nn.Module):
                         output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
                     )
                 )
-                attn_weights[i].deallocate()
-                value_layer[i].deallocate()
+                # attn_weights[i].deallocate()
+                # value_layer[i].deallocate()
 
         elif llm_mode == "decode":
             for i in range(self.num_devices):
@@ -401,8 +401,8 @@ class TtFalconAttention(nn.Module):
                             output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
                         )
                     )
-                attn_weights[i].deallocate()
-                value_layer[i].deallocate()
+                # attn_weights[i].deallocate()
+                # value_layer[i].deallocate()
 
         #########################
         ### ATTENTION SELFOUT ###
@@ -412,6 +412,10 @@ class TtFalconAttention(nn.Module):
                 attn_output[i],
                 output_mem_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"],
             )
+
+        self.preselfout = tt2torch_tensor(attn_output[0])
+
+        # attn_output, layer_present = hidden_states, layer_past
 
         for i in range(self.num_devices):
             attn_output[i] = tt_lib.tensor.falcon_selfout_matmul(

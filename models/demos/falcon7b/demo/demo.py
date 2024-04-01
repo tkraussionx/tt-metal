@@ -159,19 +159,22 @@ def run_falcon_demo_kv(
     profiler.end(f"tokenizing_inputs")
 
     embs, masks, logs = [], [], []
+    preselfout3 = []
     attn_out3 = []
+    mlp_out3 = []
+    attnadd_out3 = []
     decode_out3 = []
     layers_out = []
     lnf_out = []
     b4log_out = []
     log_out = []
-    for i in range(10):
+    for i in range(20):
         logger.info("Initializing KV cache...")
         # profiler.start(f"initializing_KV_cache")
         kv_cache_singlelayer = initialize_kv_cache(
             configuration, 32, batch_size, max_seq_len, device
         )  # only used for compile
-        kv_cache = initialize_kv_cache(configuration, num_layers, batch_size, max_seq_len, device)
+        # kv_cache = initialize_kv_cache(configuration, num_layers, batch_size, max_seq_len, device)
         # profiler.end(f"initializing_KV_cache")
         # profiler.disable()
 
@@ -203,7 +206,10 @@ def run_falcon_demo_kv(
                 use_cache=use_cache,
             )
 
+            # preselfout3.append([tt_FalconCausalLM_singlelayer.layers[j].self_attn.preselfout for j in range(num_layers)])
             attn_out3.append([tt_FalconCausalLM_singlelayer.layers[j].attn_out for j in range(num_layers)])
+            mlp_out3.append([tt_FalconCausalLM_singlelayer.layers[j].mlp_out for j in range(num_layers)])
+            attnadd_out3.append([tt_FalconCausalLM_singlelayer.layers[j].attnadd_out for j in range(num_layers)])
             decode_out3.append([tt_FalconCausalLM_singlelayer.layers[j].decode_out for j in range(num_layers)])
             layers_out.append(tt_FalconCausalLM_singlelayer.layers_out)
             lnf_out.append(tt_FalconCausalLM_singlelayer.lnf_out)
@@ -211,9 +217,18 @@ def run_falcon_demo_kv(
             log_out.append(tt_FalconCausalLM_singlelayer.log_out)
 
             for j in range(num_layers):
+                # assert (
+                #    preselfout3[0][j] - preselfout3[i][j]
+                # ).abs().sum() == 0, f"preselfout{j} mismatch \n {preselfout3[0][j]} \n {preselfout3[i][j]}"
                 assert (
                     attn_out3[0][j] - attn_out3[i][j]
                 ).abs().sum() == 0, f"attnout{j} mismatch \n {attn_out3[0][j]} \n {attn_out3[i][j]}"
+                assert (
+                    mlp_out3[0][j] - mlp_out3[i][j]
+                ).abs().sum() == 0, f"mlp{j} mismatch \n {mlp_out3[0][j]} \n {mlp_out3[i][j]}"
+                assert (
+                    attnadd_out3[0][j] - attnadd_out3[i][j]
+                ).abs().sum() == 0, f"attadd{j} mismatch \n {attnadd_out3[0][j]} \n {attnadd_out3[i][j]}"
                 assert (
                     decode_out3[0][j] - decode_out3[i][j]
                 ).abs().sum() == 0, f"decodeout{j} mismatch \n {decode_out3[0][j]} \n {decode_out3[i][j]}"

@@ -14,6 +14,8 @@ from models.demos.falcon7b.tt.falcon_mlp import TtFalconMLP
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
 from models.utility_functions import tt2torch_tensor
 
+import time
+
 
 class TtFalconDecoderLayer(nn.Module):
     def __init__(
@@ -103,33 +105,37 @@ class TtFalconDecoderLayer(nn.Module):
 
         assert not output_attentions
 
-        layernorm_output = []
-        for i in range(self.num_devices):
-            layernorm_output.append(
-                tt_lib.tensor.layernorm(
-                    hidden_states[i],
-                    self.layernorm_eps,
-                    output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
-                )
-            )
-        for i in range(self.num_devices):
-            layernorm_output[i] = tt_lib.tensor.bcast(
-                layernorm_output[i],
-                self.layernorm_gamma[i],
-                tt_lib.tensor.BcastOpMath.MUL,
-                tt_lib.tensor.BcastOpDim.H,
-                output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
-            )
-        for i in range(self.num_devices):
-            layernorm_output[i] = tt_lib.tensor.bcast(
-                layernorm_output[i],
-                self.layernorm_beta[i],
-                tt_lib.tensor.BcastOpMath.ADD,
-                tt_lib.tensor.BcastOpDim.H,
-                output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
-            )
+        # layernorm_output = []
+        # for i in range(self.num_devices):
+        #     layernorm_output.append(
+        #         tt_lib.tensor.layernorm(
+        #             hidden_states[i],
+        #             self.layernorm_eps,
+        #             output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
+        #         )
+        #     )
+        # for i in range(self.num_devices):
+        #     layernorm_output[i] = tt_lib.tensor.bcast(
+        #         layernorm_output[i],
+        #         self.layernorm_gamma[i],
+        #         tt_lib.tensor.BcastOpMath.MUL,
+        #         tt_lib.tensor.BcastOpDim.H,
+        #         output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
+        #     )
+        # for i in range(self.num_devices):
+        #     layernorm_output[i] = tt_lib.tensor.bcast(
+        #         layernorm_output[i],
+        #         self.layernorm_beta[i],
+        #         tt_lib.tensor.BcastOpMath.ADD,
+        #         tt_lib.tensor.BcastOpDim.H,
+        #         output_mem_config=self.model_config["INPUT_LAYERNORM_OUTPUT_MEMCFG"],
+        #     )
+
+        layernorm_output = hidden_states
 
         residual = hidden_states
+
+        ln1 = tt2torch_tensor(layernorm_output[0])
 
         # Self Attention
         attn_outputs = self.self_attn(
@@ -148,10 +154,21 @@ class TtFalconDecoderLayer(nn.Module):
 
         self.attn_out = tt2torch_tensor(attention_output[0])
 
+        # time.sleep(0.3)
+
+        ln2 = tt2torch_tensor(layernorm_output[0])
+        assert torch.allclose(ln1, ln2), "layernorm_output changed after self_attn"
+
         # MLP
         # mlp will deallocate layernorm_output
-        mlp_output = self.mlp(layernorm_output)
+        mlp_output = layernorm_output
+        for i in range(1):
+            mlp_output = self.mlp(mlp_output)
         # mlp_output = [tt_lib.tensor.clone(layernorm_output[0])]
+
+        self.mlp_out = tt2torch_tensor(mlp_output[0])
+
+        # output = mlp_output
 
         output = []
         for i in range(self.num_devices):
@@ -162,18 +179,20 @@ class TtFalconDecoderLayer(nn.Module):
                     output_mem_config=self.model_config["PARALLEL_ATTN_ADD_OUTPUT_MEMCFG"],
                 )
             )
-            mlp_output[i].deallocate()
-            attention_output[i].deallocate()
+            # mlp_output[i].deallocate()
+            # attention_output[i].deallocate()
+
+        self.attnadd_out = tt2torch_tensor(output[0])
 
         # dropout_add
         # For inference, this is just add
-        for i in range(self.num_devices):
-            output[i] = tt_lib.tensor.add(
-                output[i],
-                residual[i],
-                output_mem_config=self.model_config["DROPOUT_ADD_OUTPUT_MEMCFG"],
-            )
-            residual[i].deallocate()
+        # for i in range(self.num_devices):
+        #     output[i] = tt_lib.tensor.add(
+        #         output[i],
+        #         residual[i],
+        #         output_mem_config=self.model_config["DROPOUT_ADD_OUTPUT_MEMCFG"],
+        #     )
+        # residual[i].deallocate()
 
         self.decode_out = tt2torch_tensor(output[0])
 
