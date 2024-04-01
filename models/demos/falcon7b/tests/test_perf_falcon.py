@@ -349,7 +349,7 @@ def run_test_FalconCausalLM_end_to_end(
     ("tiiuae/falcon-7b-instruct",),
     ids=["falcon_7b"],
 )
-@pytest.mark.parametrize("model_config_str", ("BFLOAT16-L1",))
+@pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1", "BFLOAT16-L1_SHARDED"))
 class TestParametrized:
     @pytest.mark.parametrize(
         "llm_mode, batch, seq_len, kv_cache_len, expected_inference_time",
