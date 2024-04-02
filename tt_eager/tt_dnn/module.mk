@@ -19,6 +19,7 @@ TT_DNN_SRCS = \
 	tt_eager/tt_dnn/op_library/eltwise_binary/eltwise_binary_op.cpp \
 	tt_eager/tt_dnn/op_library/eltwise_binary/single_core/eltwise_binary_op_single_core.cpp \
 	tt_eager/tt_dnn/op_library/eltwise_binary/multi_core/eltwise_binary_op_multi_core.cpp \
+	tt_eager/tt_dnn/op_library/moreh_sfpu_test/moreh_sfpu_test.cpp \
 	tt_eager/tt_dnn/op_library/eltwise_unary/eltwise_unary_op.cpp \
 	tt_eager/tt_dnn/op_library/eltwise_unary/single_core/eltwise_unary_op_single_core.cpp \
 	tt_eager/tt_dnn/op_library/eltwise_unary/multi_core/eltwise_unary_op_multi_core.cpp \

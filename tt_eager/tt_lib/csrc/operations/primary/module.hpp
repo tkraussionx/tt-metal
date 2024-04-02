@@ -33,6 +33,7 @@
 #include "tt_dnn/op_library/moreh_cumsum/moreh_cumsum_op.hpp"
 #include "tt_dnn/op_library/moreh_arange/moreh_arange_op.hpp"
 #include "tt_dnn/op_library/moreh_sgd/moreh_sgd_op.hpp"
+#include "tt_dnn/op_library/moreh_sfpu_test/moreh_sfpu_test.hpp"
 #include "tt_dnn/op_library/groupnorm/groupnorm_op.hpp"
 #include "tt_dnn/op_library/moreh_groupnorm/moreh_groupnorm_op.hpp"
 #include "tt_dnn/op_library/moreh_groupnorm_backward/moreh_groupnorm_backward_op.hpp"
@@ -824,6 +825,14 @@ void py_module(py::module& m_primary) {
         py::arg("strategy").noconvert() = MorehSoftmaxBackwardOpParallelizationStrategy::NONE,
         py::arg("output_mem_config").noconvert() = operation::DEFAULT_OUTPUT_MEMORY_CONFIG,
         "Performs a logsoftmax backward operation. Returns an input grad tensor.");
+
+    m_primary.def(
+        "moreh_sfpu_test",
+        &moreh_sfpu_test,
+        py::arg("input").noconvert(),
+        py::arg("output").noconvert(),
+        py::arg("test_case").noconvert() = 0,
+        "Performs sfpu test operation.");
 
     m_primary.def(
         "moreh_sum",
