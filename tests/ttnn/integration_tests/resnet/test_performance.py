@@ -2,19 +2,14 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from loguru import logger
 import time
-
 import pytest
 
-from loguru import logger
-
 from tests.ttnn.integration_tests.resnet.test_ttnn_functional_resnet50 import create_test_infra
-from models.perf.device_perf_utils import run_device_perf, check_device_perf, prep_device_perf_report
-
 from models.utility_functions import skip_for_wormhole_b0
-
 import ttnn
-
+from models.perf.device_perf_utils import run_device_perf, check_device_perf, prep_device_perf_report
 from models.utility_functions import (
     enable_persistent_kernel_cache,
     disable_persistent_kernel_cache,
@@ -81,7 +76,7 @@ def test_performance(
     for _ in range(num_iterations):
         test_infra.preprocess_torch_input()
         start = time.time()
-        with ttnn.disable_validate_decorator():
+        with ttnn.enable_fast_runtime_mode():
             tt_output = test_infra.run()
             tt_output = ttnn.from_device(tt_output)
         end = time.time()
