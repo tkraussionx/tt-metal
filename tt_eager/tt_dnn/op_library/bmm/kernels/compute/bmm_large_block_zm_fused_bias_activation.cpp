@@ -15,7 +15,7 @@
 #endif
 
 #include "compute_kernel_api/eltwise_unary/sfpu_split_includes.h"
-
+#include "debug/dprint_tensix.h"
 
 namespace NAMESPACE {
 
@@ -85,6 +85,10 @@ void MAIN {
     constexpr uint32_t batch = get_compile_time_arg_val(11); // batch dim
     constexpr uint32_t out_block_num_tiles = get_compile_time_arg_val(12); // number of tiles in out_block
     constexpr bool untilize_out = get_compile_time_arg_val(13); // untilize output
+
+    // for(uint i = 0; i < 16; i++){
+    //     dprint_tensix_dest_reg(i);
+    // }
 
     constexpr uint32_t out_block_w = out_subblock_w*in1_num_subblocks;
 

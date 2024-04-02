@@ -307,6 +307,9 @@ tt::operations::primary::MatmulMultiCoreReuseMultiCast1DProgramConfig get_mcast_
     for (auto &subblock_hw : bmm_op_utils::SUBBLOCK_HW_CHOICES) {
         out_subblock_h = std::get<0>(subblock_hw);
         out_subblock_w = std::get<1>(subblock_hw);
+        // out_subblock_h = 1;
+        // out_subblock_w = 1;
+
         if (out_sharded) {
             if (!mcast_in0) {
                 if (out_subblock_w != per_core_N || out_subblock_h != 1) {

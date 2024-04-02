@@ -96,7 +96,7 @@ def run_falcon_demo_kv(
 ):
     torch.manual_seed(0)
 
-    device.enable_program_cache()
+    # device.enable_program_cache()
 
     tt_cache_path = get_tt_cache_path(model_version)
 
@@ -134,11 +134,12 @@ def run_falcon_demo_kv(
     profiler.start(f"moving_to_device")
 
     base_url = ""
+    num_layers = 5
     tt_FalconCausalLM_singlelayer = TtFalconCausalLM(
         [device],
         state_dict,
         base_url,
-        32,
+        num_layers,
         configuration,
         max_seq_len,
         model_config,
@@ -162,6 +163,10 @@ def run_falcon_demo_kv(
     preselfout3 = []
     attn_out3 = []
     h4h_out3 = []
+    h4h_in3 = []
+    h4h_weight3 = []
+    h4h_in23 = []
+    h4h_weight23 = []
     mlp_out3 = []
     attnadd_out3 = []
     decode_out3 = []
@@ -173,7 +178,7 @@ def run_falcon_demo_kv(
         logger.info("Initializing KV cache...")
         # profiler.start(f"initializing_KV_cache")
         kv_cache_singlelayer = initialize_kv_cache(
-            configuration, 32, batch_size, max_seq_len, device
+            configuration, num_layers, batch_size, max_seq_len, device
         )  # only used for compile
         # kv_cache = initialize_kv_cache(configuration, num_layers, batch_size, max_seq_len, device)
         # profiler.end(f"initializing_KV_cache")
@@ -209,6 +214,10 @@ def run_falcon_demo_kv(
 
             # preselfout3.append([tt_FalconCausalLM_singlelayer.layers[j].self_attn.preselfout for j in range(num_layers)])
             attn_out3.append([tt_FalconCausalLM_singlelayer.layers[j].attn_out for j in range(num_layers)])
+            h4h_in3.append([tt_FalconCausalLM_singlelayer.layers[j].mlp.h4hin for j in range(num_layers)])
+            # h4h_weight3.append([tt_FalconCausalLM_singlelayer.layers[j].mlp.h4hweight for j in range(num_layers)])
+            h4h_in23.append([tt_FalconCausalLM_singlelayer.layers[j].mlp.h4hin2 for j in range(num_layers)])
+            # h4h_weight23.append([tt_FalconCausalLM_singlelayer.layers[j].mlp.h4hweight2 for j in range(num_layers)])
             h4h_out3.append([tt_FalconCausalLM_singlelayer.layers[j].mlp.h4hout for j in range(num_layers)])
             mlp_out3.append([tt_FalconCausalLM_singlelayer.layers[j].mlp_out for j in range(num_layers)])
             attnadd_out3.append([tt_FalconCausalLM_singlelayer.layers[j].attnadd_out for j in range(num_layers)])
@@ -225,6 +234,17 @@ def run_falcon_demo_kv(
                 assert (
                     attn_out3[0][j] - attn_out3[i][j]
                 ).abs().sum() == 0, f"attnout{j} mismatch \n {attn_out3[0][j]} \n {attn_out3[i][j]}"
+                # assert (
+                #     h4h_weight3[0][j] - h4h_weight3[i][j]
+                # ).abs().sum() == 0, f"h4hweight{j} mismatch \n {h4h_weight3[0][j]} \n {h4h_weight3[i][j]}"
+                assert (
+                    h4h_in3[0][j] - h4h_in3[i][j]
+                ).abs().sum() == 0, f"h4hin{j} mismatch \n {h4h_in3[0][j]} \n {h4h_in3[i][j]}"
+                if (h4h_out3[0][j] - h4h_out3[i][j]).abs().sum() != 0:
+                    print(f"h4h {j} mismatch")
+                    print((h4h_in23[0][j] - h4h_in23[i][j]).abs().sum() != 0)
+                    # print((h4h_weight23[0][j] - h4h_weight23[i][j]).abs().sum() != 0)
+                    breakpoint()
                 assert (
                     h4h_out3[0][j] - h4h_out3[i][j]
                 ).abs().sum() == 0, f"h4h{j} mismatch \n {h4h_out3[0][j]} \n {h4h_out3[i][j]}"

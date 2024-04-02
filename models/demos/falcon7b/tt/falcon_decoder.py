@@ -12,7 +12,7 @@ import tt_lib
 from models.demos.falcon7b.tt.falcon_attention import TtFalconAttention
 from models.demos.falcon7b.tt.falcon_mlp import TtFalconMLP
 from models.demos.falcon7b.tt.model_utils import get_weights_cached
-from models.utility_functions import tt2torch_tensor
+from models.utility_functions import tt2torch_tensor, torch2tt_tensor
 
 import time
 
@@ -160,6 +160,14 @@ class TtFalconDecoderLayer(nn.Module):
 
         ln2 = tt2torch_tensor(layernorm_output[0])
         assert torch.allclose(ln1, ln2), "layernorm_output changed after self_attn"
+
+        tmp1 = torch2tt_tensor(torch.zeros(1, 1, 32, 4544), self.devices[0])
+        tmp2 = torch2tt_tensor(torch.zeros(1, 1, 32, 4544), self.devices[0])
+        tt_lib.tensor.add(
+            tmp1,
+            tmp2,
+            output_mem_config=self.model_config["PARALLEL_ATTN_ADD_OUTPUT_MEMCFG"],
+        )
 
         # MLP
         # mlp will deallocate layernorm_output

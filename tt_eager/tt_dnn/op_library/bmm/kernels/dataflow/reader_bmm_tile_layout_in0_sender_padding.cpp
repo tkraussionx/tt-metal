@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
+#include "debug/dprint.h"
 
 void kernel_main() {
     // in0 tensor args
@@ -87,6 +88,10 @@ void kernel_main() {
     uint64_t in0_start_address = get_write_ptr(cb_id_in0);
     #endif
     #endif
+
+    // DPRINT << "READER" << ENDL();
+    // uint64_t dummy = 1;
+    // for (uint32_t i = 0; i < 10000; i++) dummy *= i;
 
     for (uint32_t b = 0; b < batch; ++b) {
         uint32_t in0_tensor_current_block_start_tile_id = in0_tensor_start_tile_id;
