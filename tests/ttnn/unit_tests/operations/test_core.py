@@ -8,11 +8,13 @@ import torch
 
 import ttnn
 
+import tt_lib as ttl
+
 from tests.ttnn.utils_for_testing import assert_with_pcc
 
 
 @pytest.mark.parametrize(
-    "input_height, input_width, input_memory_layout, input_sharded_memory_config_args, output_sharded_memory_config_args, input_override, output_override",
+    "input_height, input_width, input_memory_layout, input_sharded_memory_config_args, output_sharded_memory_config_args, input_override, output_override, is_latest_SD",
     [
         (
             128,
@@ -22,6 +24,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=1, x=2), strategy=ttnn.ShardStrategy.WIDTH),
             None,
             None,
+            False,
         ),
         (
             128,
@@ -31,6 +34,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=2, x=1), strategy=ttnn.ShardStrategy.HEIGHT),
             None,
             None,
+            False,
         ),
         (
             128,
@@ -40,6 +44,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=4, x=2), strategy=ttnn.ShardStrategy.BLOCK),
             None,
             None,
+            False,
         ),
         (
             128,
@@ -49,6 +54,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=4, x=1), strategy=ttnn.ShardStrategy.HEIGHT),
             None,
             None,
+            False,
         ),
         (
             128,
@@ -58,6 +64,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=4, x=1), strategy=ttnn.ShardStrategy.HEIGHT),
             None,
             None,
+            False,
         ),
         (
             128,
@@ -67,6 +74,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=4, x=2), strategy=ttnn.ShardStrategy.BLOCK),
             None,
             None,
+            False,
         ),
         (
             32,
@@ -76,6 +84,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=1, x=2), strategy=ttnn.ShardStrategy.BLOCK),
             None,
             None,
+            False,
         ),
         (
             32,
@@ -85,6 +94,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=1, x=2), strategy=ttnn.ShardStrategy.BLOCK),
             None,
             None,
+            False,
         ),
         (
             32,
@@ -94,6 +104,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=2, x=1), strategy=ttnn.ShardStrategy.BLOCK),
             None,
             None,
+            False,
         ),
         (
             32,
@@ -103,6 +114,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=1, x=2), strategy=ttnn.ShardStrategy.WIDTH),
             None,
             None,
+            False,
         ),
         (
             32,
@@ -112,6 +124,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=1, x=8), strategy=ttnn.ShardStrategy.BLOCK),
             [32, 32],
             None,
+            False,
         ),
         (
             32,
@@ -121,6 +134,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=1, x=8), strategy=ttnn.ShardStrategy.BLOCK),
             [32, 128],
             None,
+            False,
         ),
         (
             32,
@@ -130,6 +144,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=1, x=5), strategy=ttnn.ShardStrategy.BLOCK),
             None,
             None,
+            False,
         ),
         (
             8192,
@@ -139,6 +154,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=8, x=5), strategy=ttnn.ShardStrategy.BLOCK),
             None,
             None,
+            False,
         ),
         # (1, 1, 32, 8192) (32 to 8 cores width shardrd)
         (
@@ -149,6 +165,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=1, x=8), strategy=ttnn.ShardStrategy.WIDTH),
             (32, 256),
             None,
+            False,
         ),
         # (1, 1, 32, 8192) (64 to 8 cores width shardrd)
         (
@@ -159,6 +176,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=1, x=8), strategy=ttnn.ShardStrategy.WIDTH),
             (32, 128),
             None,
+            False,
         ),
         # (1, 1, 32, 1280) (8 to 1 cores width shardrd)
         (
@@ -169,6 +187,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=1, x=1), strategy=ttnn.ShardStrategy.WIDTH),
             None,
             None,
+            False,
         ),
         # (1, 1, 128, 1280) (32 cores block sharded to 4 cores height sharded)
         (
@@ -179,7 +198,136 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
             dict(core_grid=ttnn.CoreGrid(y=4, x=1), strategy=ttnn.ShardStrategy.HEIGHT),
             None,
             None,
+            False,
         ),
+        # NOTE: latest SD model specs - begin
+        (
+            8192,
+            320,
+            ttnn.ROW_MAJOR_LAYOUT,
+            dict(
+                core_grid=ttnn.CoreGrid(y=8, x=8),
+                strategy=ttnn.ShardStrategy.BLOCK,
+                orientation=ttnn.ShardOrientation.COLUMN_MAJOR,
+            ),
+            dict(
+                core_grid=ttnn.CoreGrid(y=5, x=8),
+                strategy=ttnn.ShardStrategy.BLOCK,
+                orientation=ttnn.ShardOrientation.COLUMN_MAJOR,
+            ),
+            [40, 1024],
+            [64, 1024],
+            True,
+        ),
+        (
+            2048,
+            320,
+            ttnn.ROW_MAJOR_LAYOUT,
+            dict(
+                core_grid=ttnn.CoreGrid(y=8, x=8),
+                strategy=ttnn.ShardStrategy.BLOCK,
+                orientation=ttnn.ShardOrientation.COLUMN_MAJOR,
+            ),
+            dict(
+                core_grid=ttnn.CoreGrid(y=5, x=8),
+                strategy=ttnn.ShardStrategy.BLOCK,
+                orientation=ttnn.ShardOrientation.COLUMN_MAJOR,
+            ),
+            [40, 256],
+            [64, 256],
+            True,
+        ),
+        (
+            2048,
+            640,
+            ttnn.ROW_MAJOR_LAYOUT,
+            dict(
+                core_grid=ttnn.CoreGrid(y=8, x=8),
+                strategy=ttnn.ShardStrategy.BLOCK,
+                orientation=ttnn.ShardOrientation.COLUMN_MAJOR,
+            ),
+            dict(
+                core_grid=ttnn.CoreGrid(y=5, x=8),
+                strategy=ttnn.ShardStrategy.BLOCK,
+                orientation=ttnn.ShardOrientation.COLUMN_MAJOR,
+            ),
+            [80, 256],
+            [128, 256],
+            True,
+        ),
+        (
+            512,
+            640,
+            ttnn.ROW_MAJOR_LAYOUT,
+            dict(
+                core_grid=ttnn.CoreGrid(y=8, x=8),
+                strategy=ttnn.ShardStrategy.BLOCK,
+                orientation=ttnn.ShardOrientation.COLUMN_MAJOR,
+            ),
+            dict(
+                core_grid=ttnn.CoreGrid(y=5, x=8),
+                strategy=ttnn.ShardStrategy.BLOCK,
+                orientation=ttnn.ShardOrientation.COLUMN_MAJOR,
+            ),
+            [80, 64],
+            [128, 64],
+            True,
+        ),
+        (
+            512,
+            1280,
+            ttnn.ROW_MAJOR_LAYOUT,
+            dict(
+                core_grid=ttnn.CoreGrid(y=8, x=8),
+                strategy=ttnn.ShardStrategy.BLOCK,
+                orientation=ttnn.ShardOrientation.COLUMN_MAJOR,
+            ),
+            dict(
+                core_grid=ttnn.CoreGrid(y=5, x=8),
+                strategy=ttnn.ShardStrategy.BLOCK,
+                orientation=ttnn.ShardOrientation.COLUMN_MAJOR,
+            ),
+            [160, 64],
+            [256, 64],
+            True,
+        ),
+        (
+            2048,
+            640,
+            ttnn.ROW_MAJOR_LAYOUT,
+            dict(
+                core_grid=ttnn.CoreGrid(y=5, x=8),
+                strategy=ttnn.ShardStrategy.BLOCK,
+                orientation=ttnn.ShardOrientation.COLUMN_MAJOR,
+            ),
+            dict(
+                core_grid=ttnn.CoreGrid(y=8, x=8),
+                strategy=ttnn.ShardStrategy.BLOCK,
+                orientation=ttnn.ShardOrientation.COLUMN_MAJOR,
+            ),
+            [128, 256],
+            [80, 256],
+            True,
+        ),
+        (
+            8192,
+            640,
+            ttnn.ROW_MAJOR_LAYOUT,
+            dict(
+                core_grid=ttnn.CoreGrid(y=8, x=8),
+                strategy=ttnn.ShardStrategy.BLOCK,
+                orientation=ttnn.ShardOrientation.COLUMN_MAJOR,
+            ),
+            dict(
+                core_grid=ttnn.CoreGrid(y=5, x=8),
+                strategy=ttnn.ShardStrategy.BLOCK,
+                orientation=ttnn.ShardOrientation.COLUMN_MAJOR,
+            ),
+            [80, 1024],
+            [128, 1024],
+            True,
+        ),
+        # NOTE: latest SD model specs - end
     ],
 )
 def test_reshard(
@@ -191,13 +339,19 @@ def test_reshard(
     output_sharded_memory_config_args,
     input_override,
     output_override,
+    is_latest_SD,
 ):
     input_shape = [1, 1, input_height, input_width]
 
     torch_input_tensor = torch.rand(input_shape, dtype=torch.bfloat16)
-    interleaved_input_tensor = ttnn.from_torch(
-        torch_input_tensor, layout=input_memory_layout, device=device, memory_config=ttnn.DRAM_MEMORY_CONFIG
-    )
+    if is_latest_SD:
+        interleaved_input_tensor = ttnn.from_torch(
+            torch_input_tensor, layout=input_memory_layout, device=device, memory_config=ttnn.L1_MEMORY_CONFIG
+        )
+    else:
+        interleaved_input_tensor = ttnn.from_torch(
+            torch_input_tensor, layout=input_memory_layout, device=device, memory_config=ttnn.DRAM_MEMORY_CONFIG
+        )
 
     if input_override == None:
         input_shard_memory_config = ttnn.create_sharded_memory_config(input_shape, **input_sharded_memory_config_args)
@@ -217,7 +371,10 @@ def test_reshard(
     sharded_input_tensor = ttnn.to_memory_config(interleaved_input_tensor, input_shard_memory_config)
 
     # reshard
-    sharded_output_tensor = ttnn.to_memory_config(sharded_input_tensor, output_shard_memory_config)
+    if is_latest_SD:
+        sharded_output_tensor = ttl.tensor.reshard(sharded_input_tensor, output_shard_memory_config)
+    else:
+        sharded_output_tensor = ttnn.to_memory_config(sharded_input_tensor, output_shard_memory_config)
 
     # sharded_to_interleaved
     interleaved_output_tensor = ttnn.to_memory_config(sharded_output_tensor, ttnn.DRAM_MEMORY_CONFIG)
