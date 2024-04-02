@@ -113,9 +113,10 @@ def run_falcon_demo_kv(
     # State dict is needed for embeddings
     logger.info("Loading weights...")
     profiler.start(f"loading_weights")
-    if (tt_cache_path == Path(f"models/demos/falcon7b/datasets/{model_version}")) and (
-        len(os.listdir(f"models/demos/falcon7b/datasets/{model_version}")) < 260
-    ):
+    if tt_cache_path == Path(f"models/demos/falcon7b/datasets/{model_version}"):
+        # if (tt_cache_path == Path(f"models/demos/falcon7b/datasets/{model_version}")) and (
+        #     len(os.listdir(f"models/demos/falcon7b/datasets/{model_version}")) < 260
+        # ):
         logger.info("Weights not found on machine; downloading weights...")
         model_name = model_location_generator(model_version, model_subdir="Falcon")
         hugging_face_reference_model = FalconForCausalLM.from_pretrained(model_name, low_cpu_mem_usage=True)
@@ -174,7 +175,7 @@ def run_falcon_demo_kv(
     lnf_out = []
     b4log_out = []
     log_out = []
-    for i in range(20):
+    for i in range(100):
         logger.info("Initializing KV cache...")
         # profiler.start(f"initializing_KV_cache")
         kv_cache_singlelayer = initialize_kv_cache(

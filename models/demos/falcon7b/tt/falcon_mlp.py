@@ -53,11 +53,11 @@ class TtFalconMLP(nn.Module):
         hidden_states = []
         self.h4hin = tt2torch_tensor(x[0])
         # self.h4hweight = tt2torch_tensor(self.dense_h_to_4h_weights[0])
-        self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"] = tt_lib.tensor.MemoryConfig(
-            tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1
-        )
+        # self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"] = tt_lib.tensor.MemoryConfig(
+        #     tt_lib.tensor.TensorMemoryLayout.INTERLEAVED, tt_lib.tensor.BufferType.L1
+        # )
 
-        self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"] = tt_lib.tensor.DataType.BFLOAT8_B
+        # self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"] = tt_lib.tensor.DataType.BFLOAT8_B
         for device_id in range(len(x)):
             hidden_states.append(
                 tt_lib.tensor.falcon_dense_h_to_4h_matmul(
@@ -82,7 +82,7 @@ class TtFalconMLP(nn.Module):
                 self.dense_4h_to_h_weights[device_id],
                 output_mem_config=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_MEMCFG"],
                 output_dtype=self.model_config["DENSE_4H_TO_H_MM_OUTPUT_DTYPE"],
-                packer_l1_acc=True,
+                packer_l1_acc=False,
             )
 
         # return TT Tensor
