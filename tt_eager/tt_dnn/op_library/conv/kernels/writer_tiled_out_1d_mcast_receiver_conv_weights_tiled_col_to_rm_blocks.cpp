@@ -136,15 +136,15 @@ void kernel_main() {
                 for(uint32_t weight_tile_h_outer_i = 0; weight_tile_h_outer_i < weight_block_height_num_outer; weight_tile_h_outer_i++) {
                     for(uint32_t block_weight_h = 0; block_weight_h < num_blocks_weight_h; block_weight_h++) {
                         cb_reserve_back(cb_id_weight, weight_block_num_tiles);
-                        // Set weights semaphore value to INVALID
-                        noc_semaphore_set(weights_mcast_receiver_semaphore_addr_ptr, INVALID);
+                        // // Set weights semaphore value to INVALID
+                        // noc_semaphore_set(weights_mcast_receiver_semaphore_addr_ptr, INVALID);
 
-                        // Atomic increment source core counter
-                        uint64_t weights_mcast_sender_semaphore_noc_addr = get_noc_addr(weights_mcast_sender_noc_x, weights_mcast_sender_noc_y, weights_mcast_sender_semaphore_addr);
-                        noc_semaphore_inc(weights_mcast_sender_semaphore_noc_addr, 1);
+                        // // Atomic increment source core counter
+                        // uint64_t weights_mcast_sender_semaphore_noc_addr = get_noc_addr(weights_mcast_sender_noc_x, weights_mcast_sender_noc_y, weights_mcast_sender_semaphore_addr);
+                        // noc_semaphore_inc(weights_mcast_sender_semaphore_noc_addr, 1);
 
-                        // wait on weights semaphore value to become VALID (set by mcast sender after it multicasts data)
-                        noc_semaphore_wait(weights_mcast_receiver_semaphore_addr_ptr, VALID);
+                        // // wait on weights semaphore value to become VALID (set by mcast sender after it multicasts data)
+                        // // noc_semaphore_wait(weights_mcast_receiver_semaphore_addr_ptr, VALID);
 
                         cb_push_back(cb_id_weight, weight_block_num_tiles);
                     } // for num_blocks_weight_h
@@ -154,15 +154,15 @@ void kernel_main() {
                 if (load_bias) {
                     cb_reserve_back(bias_cb_id, bias_ntiles);
 
-                    // Set weights semaphore value to INVALID
-                    noc_semaphore_set(weights_mcast_receiver_semaphore_addr_ptr, INVALID);
+                    // // Set weights semaphore value to INVALID
+                    // noc_semaphore_set(weights_mcast_receiver_semaphore_addr_ptr, INVALID);
 
-                    // Atomic increment source core counter
-                    uint64_t weights_mcast_sender_semaphore_noc_addr = get_noc_addr(weights_mcast_sender_noc_x, weights_mcast_sender_noc_y, weights_mcast_sender_semaphore_addr);
-                    noc_semaphore_inc(weights_mcast_sender_semaphore_noc_addr, 1);
+                    // // Atomic increment source core counter
+                    // uint64_t weights_mcast_sender_semaphore_noc_addr = get_noc_addr(weights_mcast_sender_noc_x, weights_mcast_sender_noc_y, weights_mcast_sender_semaphore_addr);
+                    // noc_semaphore_inc(weights_mcast_sender_semaphore_noc_addr, 1);
 
-                    // wait on weights semaphore value to become VALID (set by mcast sender after it multicasts data)
-                    noc_semaphore_wait(weights_mcast_receiver_semaphore_addr_ptr, VALID);
+                    // // wait on weights semaphore value to become VALID (set by mcast sender after it multicasts data)
+                    // // noc_semaphore_wait(weights_mcast_receiver_semaphore_addr_ptr, VALID);
 
                     cb_push_back(bias_cb_id, bias_ntiles);
                     load_bias = false;
@@ -183,30 +183,30 @@ void kernel_main() {
                     uint32_t out_sb_row_start_tile_id = out_sbw_start_tile_id;
                     // wait for one subblock worth tiles
                     cb_wait_front(cb_id_out0, out_subblock_tile_count);
-                    uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
-                    for(uint32_t h = 0; h < out_subblock_h; h++) {
-                        uint32_t out_tile_id = out_sb_row_start_tile_id;
-                        uint32_t out_tile_id_h = out_sbh_start_tile_id_h + h;
-                        if (out_tile_id_h >= out_height_num_tiles) { // block shape height padding
-                            break;
-                        }
-                        for(uint32_t w = 0; w < out_subblock_w; w++) {
-                            uint32_t out_tile_id_w = out_sbw_start_tile_id_w + w;
-                            if (out_tile_id_w >= out_width_num_tiles) { // block shape width padding
-                                l1_read_addr += tile_nbytes;
-                            } else {
-                                //DPRINT << "out_tile_id - " << out_tile_id << ENDL();
-                                uint64_t out_tile_noc_addr = get_noc_addr(out_tile_id, s);
-                                //DPRINT << "out_tile_id=" << out_tile_id << ENDL();
-                                noc_async_write(l1_read_addr, out_tile_noc_addr, tile_nbytes);
-                                l1_read_addr += tile_nbytes;
-                                out_tile_id += out_next_tile_stride_w;
-                            }
-                        } // out_subblock_w (ntiles)
-                        out_sb_row_start_tile_id += out_next_tile_stride_h;
-                    } // out_subblock_h (ntiles)
-                    noc_async_write_barrier();
-                    //DPRINT << "Done writing subblock." << ENDL();
+                    // uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
+                    // for(uint32_t h = 0; h < out_subblock_h; h++) {
+                    //     uint32_t out_tile_id = out_sb_row_start_tile_id;
+                    //     uint32_t out_tile_id_h = out_sbh_start_tile_id_h + h;
+                    //     if (out_tile_id_h >= out_height_num_tiles) { // block shape height padding
+                    //         break;
+                    //     }
+                    //     for(uint32_t w = 0; w < out_subblock_w; w++) {
+                    //         uint32_t out_tile_id_w = out_sbw_start_tile_id_w + w;
+                    //         if (out_tile_id_w >= out_width_num_tiles) { // block shape width padding
+                    //             l1_read_addr += tile_nbytes;
+                    //         } else {
+                    //             //DPRINT << "out_tile_id - " << out_tile_id << ENDL();
+                    //             uint64_t out_tile_noc_addr = get_noc_addr(out_tile_id, s);
+                    //             //DPRINT << "out_tile_id=" << out_tile_id << ENDL();
+                    //             // noc_async_write(l1_read_addr, out_tile_noc_addr, tile_nbytes);
+                    //             l1_read_addr += tile_nbytes;
+                    //             out_tile_id += out_next_tile_stride_w;
+                    //         }
+                    //     } // out_subblock_w (ntiles)
+                    //     out_sb_row_start_tile_id += out_next_tile_stride_h;
+                    // } // out_subblock_h (ntiles)
+                    // // noc_async_write_barrier();
+                    // //DPRINT << "Done writing subblock." << ENDL();
                     cb_pop_front(cb_id_out0, out_subblock_tile_count);
                     out_sbw_start_tile_id += out_next_subblock_stride_w;
                     out_sbw_start_tile_id_w += out_subblock_w;

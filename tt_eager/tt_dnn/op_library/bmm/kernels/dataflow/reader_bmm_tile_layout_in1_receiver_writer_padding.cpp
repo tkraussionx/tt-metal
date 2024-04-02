@@ -92,14 +92,14 @@ void kernel_main() {
             // Operand 1
             cb_reserve_back(cb_id_in1, in1_block_num_tiles);
 
-            // Set in1 semaphore value to INVALID
-            noc_semaphore_set(in1_mcast_receiver_semaphore_addr_ptr, INVALID);
+            // // Set in1 semaphore value to INVALID
+            // noc_semaphore_set(in1_mcast_receiver_semaphore_addr_ptr, INVALID);
 
-            // Atomic increment source core counter
-            noc_semaphore_inc(in1_mcast_sender_semaphore_noc_addr, 1);
+            // // Atomic increment source core counter
+            // noc_semaphore_inc(in1_mcast_sender_semaphore_noc_addr, 1);
 
-            // wait on in1 semaphore value to become VALID (set by mcast sender after it multicasts data)
-            noc_semaphore_wait(in1_mcast_receiver_semaphore_addr_ptr, VALID);
+            // // wait on in1 semaphore value to become VALID (set by mcast sender after it multicasts data)
+            // // noc_semaphore_wait(in1_mcast_receiver_semaphore_addr_ptr, VALID);
 
             cb_push_back(cb_id_in1, in1_block_num_tiles);
         }
@@ -110,14 +110,14 @@ void kernel_main() {
                 // Operand 2
                 cb_reserve_back(cb_id_in3, in3_block_w);
 
-                // Set in1 semaphore value to INVALID
-                noc_semaphore_set(in1_mcast_receiver_semaphore_addr_ptr, INVALID);
+                // // Set in1 semaphore value to INVALID
+                // noc_semaphore_set(in1_mcast_receiver_semaphore_addr_ptr, INVALID);
 
-                // Atomic increment source core counter
-                noc_semaphore_inc(in1_mcast_sender_semaphore_noc_addr, 1);
+                // // Atomic increment source core counter
+                // noc_semaphore_inc(in1_mcast_sender_semaphore_noc_addr, 1);
 
-                // wait on in1 semaphore value to become VALID (set by mcast sender after it multicasts data)
-                noc_semaphore_wait(in1_mcast_receiver_semaphore_addr_ptr, VALID);
+                // // wait on in1 semaphore value to become VALID (set by mcast sender after it multicasts data)
+                // // noc_semaphore_wait(in1_mcast_receiver_semaphore_addr_ptr, VALID);
 
                 cb_push_back(cb_id_in3, in3_block_w);
             }
@@ -143,23 +143,23 @@ void kernel_main() {
                 }
 
                 cb_wait_front(cb_id_out0, out_subblock_tile_count);
-                uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
+                // uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
 
-                for(uint32_t h = 0; h < out_subblock_h_; ++h) {
-                    uint32_t out_tensor_tile_id = out_tensor_sb_row_start_tile_id;
-                    for(uint32_t w = 0; w < out_subblock_w_; ++w) {
-                        noc_async_write_tile(out_tensor_tile_id, s, l1_read_addr);
+                // for(uint32_t h = 0; h < out_subblock_h_; ++h) {
+                //     uint32_t out_tensor_tile_id = out_tensor_sb_row_start_tile_id;
+                //     for(uint32_t w = 0; w < out_subblock_w_; ++w) {
+                //         // noc_async_write_tile(out_tensor_tile_id, s, l1_read_addr);
 
-                        l1_read_addr+=output_single_tile_size_bytes;
+                //         l1_read_addr+=output_single_tile_size_bytes;
 
-                        out_tensor_tile_id += out_tensor_stride_w;
-                    }
-                    // Skip padded tiles in subblock along row
-                    l1_read_addr += subblock_tiles_addr_skip;
-                    out_tensor_sb_row_start_tile_id += out_tensor_stride_h;
-                }
+                //         out_tensor_tile_id += out_tensor_stride_w;
+                //     }
+                //     // Skip padded tiles in subblock along row
+                //     l1_read_addr += subblock_tiles_addr_skip;
+                //     out_tensor_sb_row_start_tile_id += out_tensor_stride_h;
+                // }
 
-                noc_async_write_barrier();
+                // // noc_async_write_barrier();
                 cb_pop_front(cb_id_out0, out_subblock_tile_count);
                 out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
             }
