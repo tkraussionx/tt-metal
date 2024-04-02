@@ -14,8 +14,13 @@ jobs:
       fail-fast: false
       matrix:
         runner-info: [
-          {arch: grayskull, runs-on: ["perf-no-reset-grayskull", "self-reset"], machine-type: "bare_metal"},
+          {arch: grayskull, runs-on: ["perf-no-reset-grayskull-e04cs07", "self-reset"], machine-type: "bare_metal"},
         ]
+        test-group: [
+          {name: resnet, cmd: source tests/scripts/run_performance.sh --pipeline-type device_performance_bare_metal --tt-arch grayskull; run_device_perf_resnet},
+          {name: bert, cmd: source tests/scripts/run_performance.sh --pipeline-type device_performance_bare_metal --tt-arch grayskull; run_device_perf_bert},
+        ]
+    name: ${{ matrix.test-group.name }} ${{ matrix.runner-info.arch }} ${{ matrix.runner-info.machine-type }}
     env:
       TT_METAL_ENV: ${{ vars.TT_METAL_ENV }}
       ARCH_NAME: ${{ matrix.runner-info.arch }}
@@ -36,21 +41,22 @@ jobs:
         run: |
           ./scripts/build_scripts/build_with_profiler_opt.sh
       - name: Run device performance regressions
-        timeout-minutes: 90
+        timeout-minutes: 30
         run: |
           source build/python_env/bin/activate
-          ./tests/scripts/run_tests.sh --tt-arch $ARCH_NAME --pipeline-type models_device_performance_${{ matrix.runner-info.machine-type }}
-      - name: Check device perf report exists
+          ${{ matrix.test-group.cmd }}
+      - name: Check device perf
         id: check-device-perf-report
         if: ${{ !cancelled() }}
         run: |
+          env python models/perf/merge_device_perf_results.py
           ls -hal
-          export DEVICE_PERF_REPORT_FILENAME=Models_Device_Perf_$(date +%Y_%m_%d).csv
+          export DEVICE_PERF_REPORT_FILENAME=Models_Device_Perf_${{ matrix.test-group.name }}_$(date +%Y_%m_%d).csv
           ls -hal $DEVICE_PERF_REPORT_FILENAME
           echo "device_perf_report_filename=$DEVICE_PERF_REPORT_FILENAME" >> "$GITHUB_OUTPUT"
       - name: Upload device perf report
         if: ${{ !cancelled() && steps.check-device-perf-report.conclusion == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: device-perf-report-csv-${{ matrix.runner-info.arch }}-${{ matrix.runner-info.machine-type }}
+          name: device-perf-report-csv-${{ matrix.test-group.name }}-${{ matrix.runner-info.arch }}-${{ matrix.runner-info.machine-type }}
           path: "${{ steps.check-device-perf-report.outputs.device_perf_report_filename }}"

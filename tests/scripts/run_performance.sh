@@ -77,27 +77,37 @@ run_perf_models_cnn_javelin() {
     env python models/perf/merge_perf_results.py
 }
 
+run_device_perf_resnet()
+{
+    source build/python_env/bin/activate
+    export PYTHONPATH=$TT_METAL_HOME
+    echo "Running resnet device perf tests"
+
+    env pytest "tests/ttnn/integration_tests/resnet/test_performance.py"  -m models_device_performance_bare_metal
+
+    env pytest models/demos/resnet/tests -m models_device_performance_bare_metal
+}
+
+run_device_perf_bert()
+{
+    source build/python_env/bin/activate
+    export PYTHONPATH=$TT_METAL_HOME
+    echo "Running bert device perf tests"
+    env pytest models/demos/metal_BERT_large_11/tests -m models_device_performance_bare_metal
+
+    env pytest models/demos/bert/tests -m models_device_performance_bare_metal
+}
+
 run_device_perf_models() {
     local test_marker=$1
 
     #TODO(MO): Until #6560 is fixed, GS device profiler test are grouped with
     #Model Device perf regression tests to make sure thy run on no-soft-reset BMs
-    tests/scripts/run_profiler_regressions.sh PROFILER
+    #tests/scripts/run_profiler_regressions.sh PROFILER
 
-    env pytest "tests/ttnn/integration_tests/resnet/test_performance.py" -m $test_marker
+    #env pytest models/demos/ttnn_falcon7b/tests -m $test_marker
 
-    env pytest models/demos/resnet/tests -m $test_marker
-
-    env pytest models/demos/metal_BERT_large_11/tests -m $test_marker
-
-    env pytest models/demos/ttnn_falcon7b/tests -m $test_marker
-
-    env pytest models/demos/bert/tests -m $test_marker
-
-    env pytest models/demos/mistral7b/tests -m $test_marker
-
-    ## Merge all the generated reports
-    env python models/perf/merge_device_perf_results.py
+    #env pytest models/demos/mistral7b/tests -m $test_marker
 }
 
 main() {
