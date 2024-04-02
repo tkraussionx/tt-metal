@@ -227,28 +227,28 @@ class TtFalconModelShared(torch.nn.Module):
         self.layers_out = tt2torch_tensor(layer_output[0])
 
         # apply final norm layer
-        for i in range(self.num_devices):
-            layer_output[i] = tt_lib.tensor.layernorm(
-                layer_output[i],
-                self.layernorm_eps,
-                output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
-            )
-        for i in range(self.num_devices):
-            layer_output[i] = tt_lib.tensor.bcast(
-                layer_output[i],
-                self.layernorm_gamma[i],
-                tt_lib.tensor.BcastOpMath.MUL,
-                tt_lib.tensor.BcastOpDim.H,
-                output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
-            )
-        for i in range(self.num_devices):
-            layer_output[i] = tt_lib.tensor.bcast(
-                layer_output[i],
-                self.layernorm_beta[i],
-                tt_lib.tensor.BcastOpMath.ADD,
-                tt_lib.tensor.BcastOpDim.H,
-                output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
-            )
+        # for i in range(self.num_devices):
+        #     layer_output[i] = tt_lib.tensor.layernorm(
+        #         layer_output[i],
+        #         self.layernorm_eps,
+        #         output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
+        #     )
+        # for i in range(self.num_devices):
+        #     layer_output[i] = tt_lib.tensor.bcast(
+        #         layer_output[i],
+        #         self.layernorm_gamma[i],
+        #         tt_lib.tensor.BcastOpMath.MUL,
+        #         tt_lib.tensor.BcastOpDim.H,
+        #         output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
+        #     )
+        # for i in range(self.num_devices):
+        #     layer_output[i] = tt_lib.tensor.bcast(
+        #         layer_output[i],
+        #         self.layernorm_beta[i],
+        #         tt_lib.tensor.BcastOpMath.ADD,
+        #         tt_lib.tensor.BcastOpDim.H,
+        #         output_mem_config=self.model_config["LN_F_OUTPUT_MEMCFG"],
+        #     )
 
         self.lnf_out = tt2torch_tensor(layer_output[0])
 
