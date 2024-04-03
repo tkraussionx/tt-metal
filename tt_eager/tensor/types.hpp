@@ -309,19 +309,105 @@ struct BorrowedStorage {
 struct MultiDeviceHostStorage {
     std::vector<OwnedBuffer> buffers;
     std::vector<Shape> shapes;
-
+    std::mutex mtx;
     MultiDeviceHostStorage() = default;
+    MultiDeviceHostStorage(std::vector<OwnedBuffer> buffers_, std::vector<Shape> shapes_) : buffers(buffers_), shapes(shapes_) {}
+    MultiDeviceHostStorage(MultiDeviceHostStorage &&other) {
+        buffers = other.buffers;
+        shapes = other.shapes;
+    }
+
+    MultiDeviceHostStorage(const MultiDeviceHostStorage &other) {
+        buffers = other.buffers;
+        shapes = other.shapes;
+    }
+
+    MultiDeviceHostStorage &operator=(const MultiDeviceHostStorage &other) {
+        buffers = other.buffers;
+        shapes = other.shapes;
+        return *this;
+    }
+
+    MultiDeviceHostStorage &operator=( MultiDeviceHostStorage &&other) {
+        buffers = other.buffers;
+        shapes = other.shapes;
+        return *this;
+    }
+
+    bool operator == (const MultiDeviceHostStorage& other) {
+        return this->buffers == other.buffers and this->shapes == other.shapes;
+    }
+
     static constexpr auto attribute_names = std::make_tuple();
     const auto attribute_values() const { return std::make_tuple(); }
+
+    void insert_buffer_and_shape_for_device(Device* device, const OwnedBuffer buffer, const Shape shape) {
+        std::lock_guard<std::mutex> lock(mtx);
+        buffers[device->id()] = buffer;
+        shapes[device->id()] = shape;
+    }
+
+    OwnedBuffer get_buffer_for_device(Device* device) {
+        std::lock_guard<std::mutex> lock(mtx);
+        return buffers[device->id()];
+    }
+
+    Shape get_tensor_shape_for_device(Device* device) {
+        std::lock_guard<std::mutex> lock(mtx);
+        return shapes[device->id()];
+    }
 };
 
 struct MultiDeviceStorage {
-    std::vector<DeviceBuffer> buffers;
-    std::vector<Shape> shapes;
-
+    std::unordered_map<Device*, DeviceBuffer> buffers;
+    std::unordered_map<Device*, Shape> shapes;
+    std::mutex mtx;
     MultiDeviceStorage() = default;
+    MultiDeviceStorage(std::unordered_map<Device*, DeviceBuffer> buffers_, std::unordered_map<Device*, Shape> shapes_) : buffers(buffers_), shapes(shapes_) {}
+    MultiDeviceStorage(MultiDeviceStorage &&other) {
+        buffers = other.buffers;
+        shapes = other.shapes;
+    }
+
+    MultiDeviceStorage(const MultiDeviceStorage &other) {
+        buffers = other.buffers;
+        shapes = other.shapes;
+    }
+
+    MultiDeviceStorage &operator=(const MultiDeviceStorage &other) {
+        buffers = other.buffers;
+        shapes = other.shapes;
+        return *this;
+    }
+
+    MultiDeviceStorage &operator=( MultiDeviceStorage &&other) {
+        buffers = other.buffers;
+        shapes = other.shapes;
+        return *this;
+    }
+
+    bool operator == (const MultiDeviceStorage& other) {
+        return this->buffers == other.buffers and this->shapes == other.shapes;
+    }
+
     static constexpr auto attribute_names = std::make_tuple();
     const auto attribute_values() const { return std::make_tuple(); }
+
+    void insert_buffer_and_shape_for_device(Device* device, const DeviceBuffer buffer, const Shape shape) {
+        std::lock_guard<std::mutex> lock(mtx);
+        buffers.insert({device, buffer});
+        shapes.insert({device, shape});
+    }
+
+    DeviceBuffer get_buffer_for_device(Device* device) {
+        std::lock_guard<std::mutex> lock(mtx);
+        return buffers.at(device);
+    }
+
+    Shape get_tensor_shape_for_device(Device* device) {
+        std::lock_guard<std::mutex> lock(mtx);
+        return shapes.at(device);
+    }
 };
 
 using Storage = std::variant<OwnedStorage, DeviceStorage, BorrowedStorage, MultiDeviceHostStorage, MultiDeviceStorage>;

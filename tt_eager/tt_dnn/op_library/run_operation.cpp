@@ -42,6 +42,12 @@ static Device* get_device(const std::vector<Tensor>& input_tensors, const std::v
     return device;
 }
 
+void validate_op_launch(Device* worker) {
+    if (worker->get_worker_mode() == WorkExecutorMode::ASYNCHRONOUS) {
+        TT_FATAL(not worker->in_main_thread(), "launch_op or launch_with_autoformat must be used when running in async mode.");
+    }
+}
+
 void override_addresses(
     const OverrideAddressesCallback& override_addresses_callback,
     const Program &program,
@@ -212,7 +218,7 @@ std::vector<Tensor> run_multi_device_operation(
 {
     // TODO: Assumes each input/output tensor is mapped to the same set of devices; relax this later
     std::vector<Device*> devices = get_devices(input_tensors[0]);
-
+    detail::validate_op_launch(devices.at(0));
     std::map<Device*, std::vector<Tensor>> per_device_output_tensors;
     std::optional<std::size_t> num_output_tensors_per_device;
     for (Device *device : devices)
@@ -237,11 +243,11 @@ std::vector<Tensor> run_multi_device_operation(
     std::vector<Tensor> multi_device_output_tensors;
     for (int i = 0; i < num_output_tensors_per_device; ++i)
     {
-        std::vector<DeviceBuffer> buffers;
-        std::vector<Shape> shapes;
+        std::unordered_map<Device*, DeviceBuffer> buffers;
+        std::unordered_map<Device*, Shape> shapes;
         for (Device* device : devices) {
-            buffers.push_back(per_device_output_tensors[device][i].device_buffer());
-            shapes.push_back(per_device_output_tensors[device][i].get_legacy_shape());
+            buffers.insert({device, per_device_output_tensors[device][i].device_buffer()});
+            shapes.insert({device, per_device_output_tensors[device][i].get_legacy_shape()});\
         }
 
         multi_device_output_tensors.push_back(
@@ -268,15 +274,6 @@ std::vector<Tensor> run(
     const std::vector<Tensor>& input_tensors,
     const std::vector<std::optional<const Tensor>>& optional_input_tensors,
     const std::vector<std::optional<Tensor>>& optional_output_tensors) {
-    // Async Mode: Asserts to ensure that tensors are populated before running op
-    for (const Tensor& tensor : input_tensors) {
-        TT_ASSERT(tensor.metadata_populated(), "Input tensors must be populated before running op.");
-    }
-    for (auto& tensor : optional_input_tensors) {
-        if (tensor.has_value()) {
-            TT_ASSERT(tensor.value().metadata_populated(), "Input tensors must be populated before running op.");
-        }
-    }
     if (detail::any_tensor_on_multi_device(input_tensors)) {
         return detail::decorate_device_operation(detail::run_multi_device_operation)(
             std::make_optional(std::ref(queue)), operation, input_tensors, optional_input_tensors, optional_output_tensors);
@@ -290,20 +287,12 @@ std::vector<Tensor> run(
     const std::vector<Tensor>& input_tensors,
     const std::vector<std::optional<const Tensor>>& optional_input_tensors,
     const std::vector<std::optional<Tensor>>& optional_output_tensors) {
-    // Async Mode: Asserts to ensure that tensors are populated before running op
-    for (const Tensor& tensor : input_tensors) {
-        TT_ASSERT(tensor.metadata_populated(), "Input tensors must be populated before running op.");
-    }
-    for (auto& tensor : optional_input_tensors) {
-        if (tensor.has_value()) {
-            TT_ASSERT(tensor.value().metadata_populated(), "Input tensors must be populated before running op.");
-        }
-    }
     if (detail::any_tensor_on_multi_device(input_tensors)) {
         return detail::decorate_device_operation(detail::run_multi_device_operation)(
             std::nullopt, operation, input_tensors, optional_input_tensors, optional_output_tensors);
     }
     auto device = detail::get_device(input_tensors, optional_input_tensors);
+    detail::validate_op_launch(device);
     return detail::decorate_device_operation(detail::run_device_operation)(
         detail::USE_FAST_DISPATCH ? std::make_optional(std::ref(device->command_queue())) : std::nullopt, operation, input_tensors, optional_input_tensors, optional_output_tensors);
 }
@@ -315,7 +304,7 @@ std::vector<Tensor> run_without_autoformat(
 ) {
     ZoneScoped;
     Device* device = detail::get_device(input_tensors, optional_input_tensors);
-
+    detail::validate_op_launch(device);
     std::vector<Tensor> input_tensors_on_dev;
     input_tensors_on_dev.reserve(input_tensors.size());
     for (auto& input_tensor : input_tensors) {
@@ -345,7 +334,7 @@ std::vector<Tensor> run_without_autoformat(
 ) {
     ZoneScoped;
     Device* device = detail::get_device(input_tensors, optional_input_tensors);
-
+    detail::validate_op_launch(device);
     std::vector<Tensor> input_tensors_on_dev;
     input_tensors_on_dev.reserve(input_tensors.size());
     for (auto& input_tensor : input_tensors) {
@@ -380,7 +369,7 @@ std::vector<Tensor> run_with_autoformat(
         return run(operation, input_tensors, optional_input_tensors);
     }
     Device* device = detail::get_device(input_tensors, optional_input_tensors);
-
+    detail::validate_op_launch(device);
     auto output_shapes = operation.compute_output_shapes(input_tensors);
 
     std::vector<Tensor> formatted_input_tensors;
@@ -438,7 +427,7 @@ std::vector<Tensor> run_with_autoformat(
         return run(operation, input_tensors, optional_input_tensors);
     }
     Device* device = detail::get_device(input_tensors, optional_input_tensors);
-
+    detail::validate_op_launch(device);
     auto output_shapes = operation.compute_output_shapes(input_tensors);
 
     TT_ASSERT(input_tensors.size() == input_formatting.size());
@@ -504,30 +493,25 @@ void launch_op(
     for (auto& output_tensor : output_tensors) {
         TT_FATAL(output_tensor.workers.size(), "Worker threads must be specified for outputs populated by launch_op. This API can only be used for creating output tensors on device.");
         TT_FATAL(output_tensor.workers == workers, "Worker threads must be consistent across all outputs populated by launch_op.");
-        // Populate device storage outside of thread, so that downstream
-        // functions running in main can get storage type without blocking
-        // Assume that outputs will be allocated on device (this will happen unless
-        // autoformat moves them to host, in which case storage is dynamic and we
-        // need to repopulate it in the worker + block in main thread: see dynamic_storage
-        // var set in launch_with_autoformat).
-        if (workers.size() == 1) {
-            output_tensor.tensor_attributes->storage = DeviceStorage();
-        }
-        else {
-            output_tensor.tensor_attributes->storage = MultiDeviceStorage();
-        }
     }
+    validate_worker_modes(workers);
     // Record ref counts for all tensors before pushing to worker queue.
     std::vector<uint32_t> input_tensor_ref_count = {};
     std::vector<uint32_t> optional_input_tensor_ref_count = {};
     std::vector<uint32_t> output_tensor_ref_count = {};
 
+    std::vector<Tensor> async_safe_input_tensors = {};
+    std::vector<std::optional<const Tensor>> async_safe_optional_input_tensors = {};
+    // When running on a single device, input tensors can be using borrowed storage. If so, when running in async mode,
+    // copy borrowed tensors to owned storage.
     for (int i = 0; i < input_tensors.size(); i++) {
-        input_tensor_ref_count.push_back(input_tensors[i].tensor_attributes->record_main_thread_ref_count());
+        async_safe_input_tensors.push_back(copy_borrowed_tensor_in_async_mode(workers.at(0), input_tensors.at(i)));
+        input_tensor_ref_count.push_back(async_safe_input_tensors[i].tensor_attributes->record_main_thread_ref_count());
     }
     for (int i = 0; i < optional_input_tensors.size(); i++) {
         if (optional_input_tensors[i].has_value()) {
-            optional_input_tensor_ref_count.push_back(optional_input_tensors[i].value().tensor_attributes->record_main_thread_ref_count());
+            async_safe_optional_input_tensors.push_back(copy_borrowed_tensor_in_async_mode(workers.at(0), optional_input_tensors[i].value()));
+            optional_input_tensor_ref_count.push_back(async_safe_optional_input_tensors[i].value().tensor_attributes->record_main_thread_ref_count());
         }
         else {
             optional_input_tensor_ref_count.push_back(0);
@@ -537,26 +521,52 @@ void launch_op(
         output_tensor_ref_count.push_back(output_tensors[i].tensor_attributes->record_main_thread_ref_count());
     }
     // Async mode changes for tensor-parallel execution not mainlined. Use the first worker thread.
-    workers.at(0)->push_work([op_func, optional_input_tensors, inputs = input_tensors, outputs = output_tensors] () mutable {
-        auto local_tensors = op_func(inputs, optional_input_tensors);
-        // Populate output tensors
-        for (int i = 0; i < local_tensors.size(); i++) {
-            if (local_tensors.at(i).storage_type() == StorageType::OWNED) {
-                TT_ASSERT(outputs.at(i).tensor_attributes->dynamic_storage, "launch_with_autoformat must be used if output tensor for op can be placed on host.");
-                // This can happen when autoformat is used, moving tensors from device -> host
-                outputs.at(i).tensor_attributes->storage = OwnedStorage();
+    for (auto target_device : workers) {
+        target_device->push_work([target_device, workers, op_func, async_safe_optional_input_tensors, inputs = async_safe_input_tensors, outputs = output_tensors] () mutable {
+            std::vector<Tensor> input_shards = {};
+            std::vector<std::optional<const Tensor>> optional_input_shards = {};
+
+            for (const auto& input : inputs) {
+                input_shards.push_back(get_shard_for_device(input, target_device));
             }
-            outputs.at(i).populate_buffers_and_metadata(local_tensors.at((i)));
-        }
-    });
+            for (auto& input : async_safe_optional_input_tensors) {
+                if (input.has_value()) {
+                    optional_input_shards.push_back(get_shard_for_device(input.value(), target_device));
+                }
+                else {
+                    optional_input_shards.push_back(std::nullopt);
+                }
+            }
+            auto local_tensors = op_func(input_shards, optional_input_shards);
+            for (int i = 0; i < local_tensors.size(); i++) {
+                if (local_tensors.at(i).storage_type() == StorageType::OWNED) {
+                    TT_ASSERT(outputs.at(i).tensor_attributes->dynamic_storage, "launch_with_autoformat must be used if output tensor for op can be placed on host.");
+                    TT_ASSERT(std::holds_alternative<DeviceStorage>(outputs.at(i).tensor_attributes->storage), "All inputs and outputs to an op must be on device for multi-device tensors.");
+                    outputs.at(i).tensor_attributes->storage = OwnedStorage();
+                }
+                insert_buffer_and_shape_for_device(target_device, local_tensors.at(i), outputs.at(i));
+                if (not target_device->id() or workers.size() == 1) {
+                    outputs.at(i).set_shape(local_tensors.at(i).get_shape());
+                    outputs.at(i).set_dtype(local_tensors.at(i).get_dtype());
+                    outputs.at(i).set_layout(local_tensors.at(i).get_layout());
+                }
+                if (workers.size() == 1) {
+                    outputs.at(i).set_populated();
+                }
+                else {
+                    outputs.at(i).set_populated(target_device);
+                }
+            }
+        });
+    }
 
     // Update ref counts of all tensors after push was performed (done only in main thread).
-    for (int i = 0; i < input_tensors.size(); i++) {
-        input_tensors[i].tensor_attributes->update_main_thread_ref_count(workers.at(0), input_tensor_ref_count[i]);
+    for (int i = 0; i < async_safe_input_tensors.size(); i++) {
+        async_safe_input_tensors[i].tensor_attributes->update_main_thread_ref_count(workers.at(0), input_tensor_ref_count[i]);
     }
-    for (int i = 0; i < optional_input_tensors.size(); i++) {
-        if (optional_input_tensors[i].has_value()) {
-            optional_input_tensors[i].value().tensor_attributes->update_main_thread_ref_count(workers.at(0), optional_input_tensor_ref_count[i]);
+    for (int i = 0; i < async_safe_optional_input_tensors.size(); i++) {
+        if (async_safe_optional_input_tensors[i].has_value()) {
+            async_safe_optional_input_tensors[i].value().tensor_attributes->update_main_thread_ref_count(workers.at(0), optional_input_tensor_ref_count[i]);
         }
     }
     for (int i = 0; i < output_tensors.size(); i++) {
@@ -567,7 +577,7 @@ void launch_op(
 void validate_workers_and_storage(const std::vector<Tensor>& inputs, const std::vector<std::optional<const Tensor>>& optional_inputs, const std::vector<Device*>& workers) {
     bool single_device_storage = false;
     bool multi_device_storage = false;
-    // Verify that storage types are consistent - cannot mix single and multidevice storage. For multi-device tensors, ensure that workers are specified, since they cannot be inferred.
+    // Verify that storage types are consistent - cannot mix single and multi-device storage. For multi-device tensors, ensure that workers are specified, since they cannot be inferred.
     // This means that launch_op/launch_with_autoformat cannot be called with MultiDeviceHostStorage.
     for (const auto& input: inputs) {
         if (std::holds_alternative<DeviceStorage>(input.tensor_attributes->storage) or std::holds_alternative<OwnedStorage>(input.tensor_attributes->storage)) {

@@ -32,7 +32,7 @@ struct Buffer {
 
     inline void* data() noexcept { return static_cast<void*>(this->data_ptr_); }
     inline const void* data() const noexcept { return static_cast<void*>(this->data_ptr_); }
-
+    inline std::shared_ptr<std::vector<T>> copy_to_vec() const noexcept { return std::make_shared<std::vector<T>>(std::vector<T>(this->begin(), this->end())); }
    private:
     T* data_ptr_;
     std::size_t size_;
