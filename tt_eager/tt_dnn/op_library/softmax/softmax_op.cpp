@@ -82,13 +82,15 @@ void Softmax::validate(const std::vector<Tensor> &input_tensors, const std::vect
                         // check dims
                         TT_FATAL(M * K / (program_config.block_w * program_config.block_h) == num_cores_r * num_cores_c, "number of shards must equal to number of cores. M = {}, K = {}, block_w = {}, block_h = {}, num_cores = {}", M, K, program_config.block_w, program_config.block_h, num_cores_r * num_cores_c);
                     } else if constexpr (
-                        std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SoftmaxShardedMaskInterleavedMultiCoreProgramConfig>
+                        std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SoftmaxShardedCausalMaskHWDimsProgramConfig>
                     ) {
                         softmax_sharded_checks(input_tensor, program_config.block_w, program_config.subblock_w, this->inplace);
                         TT_FATAL(this->is_causal_mask);
-                        TT_FATAL(input_tensor.get_layout() == Layout::TILE);
                         TT_FATAL(mask.get_layout() == Layout::TILE);
                         TT_FATAL(mask.is_sharded() == false);
+                        TT_FATAL(input_tensor.get_layout() == Layout::TILE);
+                        TT_FATAL(input_tensor.is_sharded());
+                        TT_FATAL(input_tensor.shard_spec()->orientation == ShardOrientation::ROW_MAJOR);
                     }
                 },
                 this->program_config
@@ -99,8 +101,8 @@ void Softmax::validate(const std::vector<Tensor> &input_tensors, const std::vect
     } else {
         TT_FATAL(not this->scale.has_value());
         using ProgramConfigType = std::decay_t<decltype(this->program_config)>;
-        if constexpr (std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SoftmaxShardedMaskInterleavedMultiCoreProgramConfig>) {
-            TT_FATAL(false, "Usage of SoftmaxShardedMaskInterleavedMultiCoreProgramConfig requires a causal mask");
+        if constexpr (std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SoftmaxShardedCausalMaskHWDimsProgramConfig>) {
+            TT_FATAL(false, "Usage of SoftmaxShardedCausalMaskHWDimsProgramConfig requires a causal mask");
         }
     }
 }
@@ -141,27 +143,33 @@ operation::ProgramWithCallbacks Softmax::create_program(
                 std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SoftmaxShardedMultiCoreProgramConfig>
             ) {
                 return scale_mask_softmax_sharded_multi_core(
-                                            input_tensor, output_tensor, mask, this->scale, causal_mask,
-                                            program_config.compute_with_storage_grid_size,
-                                            program_config.subblock_w,
-                                            program_config.block_h,
-                                            program_config.block_w,
-                                            this->compute_kernel_config
-                                            );
+                    input_tensor,
+                    output_tensor,
+                    mask,
+                    this->scale,
+                    causal_mask,
+                    false,
+                    program_config.compute_with_storage_grid_size,
+                    program_config.subblock_w,
+                    program_config.block_h,
+                    program_config.block_w,
+                    this->compute_kernel_config);
             }
             else if constexpr (
-                std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SoftmaxShardedMaskInterleavedMultiCoreProgramConfig>
+                std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SoftmaxShardedCausalMaskHWDimsProgramConfig>
             ) {
-                return scale_mask_softmax_sharded_mask_interleaved_multi_core(
-                                            input_tensor,
-                                            output_tensor,
-                                            mask.value(),
-                                            this->scale,
-                                            program_config.compute_with_storage_grid_size,
-                                            program_config.subblock_w,
-                                            program_config.block_h,
-                                            program_config.block_w,
-                                            this->compute_kernel_config);
+                return scale_mask_softmax_sharded_multi_core(
+                    input_tensor,
+                    output_tensor,
+                    mask,
+                    this->scale,
+                    causal_mask,
+                    true,
+                    program_config.compute_with_storage_grid_size,
+                    program_config.subblock_w,
+                    program_config.block_h,
+                    program_config.block_w,
+                    this->compute_kernel_config);
             } else {
                 return scale_mask_softmax_multi_core(input_tensor, output_tensor, mask, this->scale, causal_mask, this->compute_kernel_config);
             }

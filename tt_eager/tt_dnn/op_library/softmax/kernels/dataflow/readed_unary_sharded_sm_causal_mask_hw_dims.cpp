@@ -22,7 +22,6 @@ void kernel_main() {
 
     constexpr uint32_t block_wt = get_compile_time_arg_val(0);
     constexpr bool is_dram_mask = get_compile_time_arg_val(1) == 1;
-    constexpr uint32_t block_ht = get_compile_time_arg_val(2);
 
     const uint32_t mask_addr = get_arg_val<uint32_t>(2);
     const uint32_t mask_start_tile_id = get_arg_val<uint32_t>(3);
@@ -40,6 +39,7 @@ void kernel_main() {
     const uint32_t pre_scale = get_arg_val<uint32_t>(1);
     generate_bcast_unary_scalar(cb_fused_scale, pre_scale);
 
+    constexpr uint32_t block_ht = get_compile_time_arg_val(4);
     for (uint32_t h = 0; h < block_ht; h++) {
         cb_reserve_back(cb_attn, block_wt);
         uint32_t l1_write_addr = get_write_ptr(cb_attn);

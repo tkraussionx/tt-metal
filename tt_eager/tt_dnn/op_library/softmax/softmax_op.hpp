@@ -39,7 +39,11 @@ struct SoftmaxShardedMultiCoreProgramConfig {
     };
 };
 
-struct SoftmaxShardedMaskInterleavedMultiCoreProgramConfig {
+// Same as SoftmaxShardedMultiCoreProgramConfig
+// With the following limits:
+// - Must have a causal mask of dims [1, 1, x, y]
+// - Causal mask must be interleaved
+struct SoftmaxShardedCausalMaskHWDimsProgramConfig {
     CoreCoord compute_with_storage_grid_size;
     std::size_t subblock_w;
     std::size_t block_h;
@@ -58,7 +62,7 @@ struct SoftmaxShardedMaskInterleavedMultiCoreProgramConfig {
 using SoftmaxProgramConfig = std::variant<
     SoftmaxDefaultProgramConfig,
     SoftmaxShardedMultiCoreProgramConfig,
-    SoftmaxShardedMaskInterleavedMultiCoreProgramConfig
+    SoftmaxShardedCausalMaskHWDimsProgramConfig
 >;
 }  // namespace transformers
 
@@ -94,24 +98,15 @@ operation::ProgramWithCallbacks scale_mask_softmax_multi_core(
     DeviceComputeKernelConfig compute_kernel_config
 );
 
+// hw_dims_only_causal_mask - represents if the causal mask is of shape [1, 1, h, w]
+// valid only if causal_mask == true, and is interleaved
 operation::ProgramWithCallbacks scale_mask_softmax_sharded_multi_core(
     const Tensor &input_tensor,
     const Tensor &output_tensor,
     const std::optional<const Tensor> mask,
     std::optional<float> scale,
     bool causal_mask,
-    CoreCoord grid_size,
-    uint32_t subblock_wt,
-    uint32_t block_ht,
-    uint32_t block_wt,
-    DeviceComputeKernelConfig compute_kernel_config
-);
-
-operation::ProgramWithCallbacks scale_mask_softmax_sharded_mask_interleaved_multi_core(
-    const Tensor &input_tensor,
-    const Tensor &output_tensor,
-    const Tensor& mask,
-    std::optional<float> scale,
+    bool hw_dims_only_causal_mask,
     CoreCoord grid_size,
     uint32_t subblock_wt,
     uint32_t block_ht,
