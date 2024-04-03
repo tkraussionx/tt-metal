@@ -135,7 +135,7 @@ def run_falcon_demo_kv(
     profiler.start(f"moving_to_device")
 
     base_url = ""
-    num_layers = 5
+    num_layers = 4
     tt_FalconCausalLM_singlelayer = TtFalconCausalLM(
         [device],
         state_dict,
@@ -175,12 +175,17 @@ def run_falcon_demo_kv(
     lnf_out = []
     b4log_out = []
     log_out = []
+
+    tt_lib.device.EnableMemoryReports()
+    kv_cache_singlelayer = initialize_kv_cache(
+        configuration, num_layers, batch_size, max_seq_len, device
+    )  # only used for compile
     for i in range(100):
         logger.info("Initializing KV cache...")
         # profiler.start(f"initializing_KV_cache")
-        kv_cache_singlelayer = initialize_kv_cache(
-            configuration, num_layers, batch_size, max_seq_len, device
-        )  # only used for compile
+        # kv_cache_singlelayer = initialize_kv_cache(
+        #     configuration, num_layers, batch_size, max_seq_len, device
+        # )  # only used for compile
         # kv_cache = initialize_kv_cache(configuration, num_layers, batch_size, max_seq_len, device)
         # profiler.end(f"initializing_KV_cache")
         # profiler.disable()

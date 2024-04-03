@@ -187,21 +187,21 @@ class TtFalconAttention(nn.Module):
         Decode input shape: [seq_len, 1, batch, hidden_size]
         """
 
-        assert not output_attentions
+        # assert not output_attentions
 
-        if llm_mode == "prefill":
-            batch = hidden_states[0].get_legacy_shape()[0]
-            q_len = hidden_states[0].get_legacy_shape()[2]
-            assert layer_past is not None
-        elif llm_mode == "decode":
-            batch = hidden_states[0].get_legacy_shape()[2]
-            q_len = hidden_states[0].get_legacy_shape()[0]
-            # We always store max_position_embeddings for kv_cache,
-            # so we need separate variable to store the actual len of the kv_cache
-            assert layer_past is not None
-            assert layer_past_len > 0 and layer_past_len <= self.max_position_embeddings
-        else:
-            raise NotImplementedError(f"Llm mode {llm_mode} is not supported! Must be one of prefill or decode.")
+        # if llm_mode == "prefill":
+        #     batch = hidden_states[0].get_legacy_shape()[0]
+        #     q_len = hidden_states[0].get_legacy_shape()[2]
+        #     assert layer_past is not None
+        # elif llm_mode == "decode":
+        #     batch = hidden_states[0].get_legacy_shape()[2]
+        #     q_len = hidden_states[0].get_legacy_shape()[0]
+        #     # We always store max_position_embeddings for kv_cache,
+        #     # so we need separate variable to store the actual len of the kv_cache
+        #     assert layer_past is not None
+        #     assert layer_past_len > 0 and layer_past_len <= self.max_position_embeddings
+        # else:
+        #     raise NotImplementedError(f"Llm mode {llm_mode} is not supported! Must be one of prefill or decode.")
 
         #################
         ### FUSED QKV ###
@@ -237,9 +237,9 @@ class TtFalconAttention(nn.Module):
         if llm_mode == "prefill":
             query_layer = self.rotary_embedding(query_layer)
             key_layer = self.rotary_embedding(key_layer)
-        elif llm_mode == "decode":
-            query_layer = self.rotary_embedding(query_layer, layer_past_len)
-            key_layer = self.rotary_embedding(key_layer, layer_past_len)
+        # elif llm_mode == "decode":
+        #     query_layer = self.rotary_embedding(query_layer, layer_past_len)
+        #     key_layer = self.rotary_embedding(key_layer, layer_past_len)
 
         ######################
         ### K CACHE UPDATE ###
@@ -289,57 +289,57 @@ class TtFalconAttention(nn.Module):
                 # query_layer[i].deallocate()
                 # key_layer_transposed[i].deallocate()
 
-        elif llm_mode == "decode":
-            for i, device in enumerate(self.devices):
-                # TODO: switch to group_attn_matmul once multiple q heads is supported (issue #5318)
-                if is_wormhole_b0():
-                    attn_weights.append(
-                        tt_lib.operations.primary.transformers.attn_matmul(
-                            query_layer[i],
-                            key_layer_transposed[i],
-                            compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-                            output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
-                            output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
-                        )
-                    )
-                else:
-                    attn_weights.append(
-                        tt_lib.operations.primary.transformers.group_attn_matmul(
-                            query_layer[i],
-                            key_layer_transposed[i],
-                            compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-                            output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
-                            output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
-                        )
-                    )
-                # query_layer[i].deallocate()
-                # key_layer_transposed[i].deallocate()
+        # elif llm_mode == "decode":
+        #     for i, device in enumerate(self.devices):
+        #         # TODO: switch to group_attn_matmul once multiple q heads is supported (issue #5318)
+        #         if is_wormhole_b0():
+        #             attn_weights.append(
+        #                 tt_lib.operations.primary.transformers.attn_matmul(
+        #                     query_layer[i],
+        #                     key_layer_transposed[i],
+        #                     compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+        #                     output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
+        #                     output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
+        #                 )
+        #             )
+        #         else:
+        #             attn_weights.append(
+        #                 tt_lib.operations.primary.transformers.group_attn_matmul(
+        #                     query_layer[i],
+        #                     key_layer_transposed[i],
+        #                     compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+        #                     output_mem_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
+        #                     output_dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
+        #                 )
+        #             )
+        # query_layer[i].deallocate()
+        # key_layer_transposed[i].deallocate()
 
-        for i in range(self.num_devices):
-            attn_weights[i] = tt_lib.tensor.bcast(
-                attn_weights[i],
-                self.scalar[i],
-                tt_lib.tensor.BcastOpMath.MUL,
-                tt_lib.tensor.BcastOpDim.HW,
-                output_mem_config=self.model_config["PRE_SOFTMAX_SCALE_OUTPUT_MEMCFG"],
-            )
+        # for i in range(self.num_devices):
+        #     attn_weights[i] = tt_lib.tensor.bcast(
+        #         attn_weights[i],
+        #         self.scalar[i],
+        #         tt_lib.tensor.BcastOpMath.MUL,
+        #         tt_lib.tensor.BcastOpDim.HW,
+        #         output_mem_config=self.model_config["PRE_SOFTMAX_SCALE_OUTPUT_MEMCFG"],
+        #     )
 
-        if attention_mask is not None:
-            for i in range(self.num_devices):
-                attn_weights[i] = tt_lib.tensor.add(
-                    attn_weights[i],
-                    attention_mask[i],
-                    output_mem_config=self.model_config["PRE_SOFTMAX_MASK_OUTPUT_MEMCFG"],
-                )
+        # if attention_mask is not None:
+        #     for i in range(self.num_devices):
+        #         attn_weights[i] = tt_lib.tensor.add(
+        #             attn_weights[i],
+        #             attention_mask[i],
+        #             output_mem_config=self.model_config["PRE_SOFTMAX_MASK_OUTPUT_MEMCFG"],
+        #         )
 
         ###############
         ### SOFTMAX ###
         ###############
         # TODO: Replace with scaled_softmax_attention_mask from BERT
-        for i in range(self.num_devices):
-            attn_weights[i] = tt_lib.operations.primary.softmax_in_place(
-                attn_weights[i],
-            )
+        # for i in range(self.num_devices):
+        #     attn_weights[i] = tt_lib.operations.primary.softmax_in_place(
+        #         attn_weights[i],
+        #     )
 
         ######################
         ### V CACHE UPDATE ###
@@ -365,64 +365,72 @@ class TtFalconAttention(nn.Module):
         ########################
         ### POST-SOFTMAX MM ###
         ########################
-        attn_output = []
-        if llm_mode == "prefill":
-            for i in range(self.num_devices):
-                attn_output.append(
-                    tt_lib.tensor.matmul(
-                        attn_weights[i],
-                        value_layer[i],
-                        output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
-                    )
-                )
-                # attn_weights[i].deallocate()
-                # value_layer[i].deallocate()
 
-        elif llm_mode == "decode":
-            for i in range(self.num_devices):
-                # TODO: switch to group_attn_matmul once multiple q heads is supported (issue #5318)
-                if is_wormhole_b0():
-                    attn_output.append(
-                        tt_lib.operations.primary.transformers.attn_matmul(
-                            attn_weights[i],
-                            value_layer[i],
-                            compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-                            output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
-                            output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
-                        )
-                    )
-                else:
-                    attn_output.append(
-                        tt_lib.operations.primary.transformers.group_attn_matmul(
-                            attn_weights[i],
-                            value_layer[i],
-                            compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-                            output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
-                            output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
-                        )
-                    )
-                # attn_weights[i].deallocate()
-                # value_layer[i].deallocate()
+        attn_output = [
+            torch2tt_tensor(tt2torch_tensor(attn_weights[0]) @ tt2torch_tensor(value_layer[0]), self.devices[0])
+        ]
+
+        # attn_output = []
+        # if llm_mode == "prefill":
+        #     for i in range(self.num_devices):
+        #         attn_output.append(
+        #             tt_lib.tensor.matmul(
+        #                 attn_weights[i],
+        #                 value_layer[i],
+        #                 output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
+        #             )
+        #         )
+        # attn_weights[i].deallocate()
+        # value_layer[i].deallocate()
+
+        # elif llm_mode == "decode":
+        #     for i in range(self.num_devices):
+        #         # TODO: switch to group_attn_matmul once multiple q heads is supported (issue #5318)
+        #         if is_wormhole_b0():
+        #             attn_output.append(
+        #                 tt_lib.operations.primary.transformers.attn_matmul(
+        #                     attn_weights[i],
+        #                     value_layer[i],
+        #                     compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+        #                     output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
+        #                     output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
+        #                 )
+        #             )
+        #         else:
+        #             attn_output.append(
+        #                 tt_lib.operations.primary.transformers.group_attn_matmul(
+        #                     attn_weights[i],
+        #                     value_layer[i],
+        #                     compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+        #                     output_mem_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
+        #                     output_dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
+        #                 )
+        #             )
+        # attn_weights[i].deallocate()
+        # value_layer[i].deallocate()
 
         #########################
         ### ATTENTION SELFOUT ###
         #########################
-        for i in range(self.num_devices):
-            attn_output[i] = tt_lib.tensor.nlp_concat_heads(
-                attn_output[i],
-                output_mem_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"],
-            )
+        attn_output = [torch2tt_tensor(tt2torch_tensor(attn_output[0]).reshape(1, 1, 32, 4544), self.devices[0])]
+        # for i in range(self.num_devices):
+        #     attn_output[i] = tt_lib.tensor.nlp_concat_heads(
+        #         attn_output[i],
+        #         output_mem_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"],
+        #     )
 
         self.preselfout = tt2torch_tensor(attn_output[0])
 
+        # attn_output = [torch2tt_tensor(torch.ones(1, 1, 32, 4544), self.devices[0])]
+
         # attn_output, layer_present = hidden_states, layer_past
 
-        for i in range(self.num_devices):
-            attn_output[i] = tt_lib.tensor.falcon_selfout_matmul(
-                attn_output[i],
-                self.dense_weights[i],
-                output_mem_config=self.model_config["SELFOUT_MM_OUTPUT_MEMCFG"],
-                output_dtype=self.model_config["SELFOUT_MM_OUTPUT_DTYPE"],
-            )
+        # for i in range(self.num_devices):
+        #     attn_output[i] = tt_lib.tensor.falcon_selfout_matmul(
+        #         attn_output[i],
+        #         self.dense_weights[i],
+        #         output_mem_config=self.model_config["SELFOUT_MM_OUTPUT_MEMCFG"],
+        #         output_dtype=self.model_config["SELFOUT_MM_OUTPUT_DTYPE"],
+        #     )
 
         return attn_output, layer_present

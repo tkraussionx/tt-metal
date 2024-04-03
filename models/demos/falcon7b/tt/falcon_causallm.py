@@ -74,6 +74,8 @@ class TtFalconCausalLM(TtFalconModelShared):
 
         self.b4log_out = tt2torch_tensor(hidden_states[0])
 
+        tt_lib.device.DumpDeviceMemoryState(self.devices[0])
+
         lm_logits = []
         for i in range(self.num_devices):
             lm_logits.append(
@@ -85,6 +87,8 @@ class TtFalconCausalLM(TtFalconModelShared):
                     output_dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
                 )
             )
+
+        # tt_lib.device.DumpDeviceMemoryState(self.devices[0])
 
         self.log_out = tt2torch_tensor(lm_logits[0])
 
