@@ -7,7 +7,6 @@ from typing import Tuple
 
 import transformers
 import torch
-from torch.nn import functional as F
 from transformers.models.bloom.configuration_bloom import BloomConfig
 
 import ttnn
@@ -16,10 +15,194 @@ from ttnn.model_preprocessing import (
     preprocess_linear_weight,
     preprocess_linear_bias,
 )
+import math
+from typing import Tuple
+
+import transformers
+import torch
+from torch.nn import functional as F
+from transformers.models.bloom.configuration_bloom import BloomConfig
+from tests.ttnn.utils_for_testing import check_with_pcc
+from models.utility_functions import comp_allclose
+from loguru import logger
+import csv
+import matplotlib.pyplot as plt
+import os
+import numpy as np
 
 BLOOM_MEMORY_CONFIG = ttnn.L1_MEMORY_CONFIG
 BLOOM_DTYPE = ttnn.bfloat8_b
 ASSUME_FUSED_SOFTMAX = False
+num_tokens = 0
+iter = 0
+# Global CSV file path
+csv_file_path = "tests/ttnn/integration_tests/bloom/bloom_block_analysis.csv"
+torch_attn_dumps_path = "tests/ttnn/integration_tests/bloom/opwise_intermediate_dumps/"
+tensor_csv_path = "tests/ttnn/integration_tests/bloom/tensor_csv/"
+
+
+def write_header():
+    with open(csv_file_path, "w", newline="") as file:
+        writer = csv.writer(file)
+        column_names = [
+            "Layer/Sub-module",
+            "PCC",
+            "tolerance = atol_delta*0.02",
+            "elements_count",
+            "count(abs(diff) > tolerance)",
+            "mismatch %",
+            "allclose",
+            "atol_delta",
+            "rtol_delta",
+            "torch_min",
+            "torch_max",
+            "ttnn_min",
+            "ttnn_max",
+        ]
+        writer.writerow(column_names)  # Write only column names
+
+
+def append_to_csv(data):
+    with open(csv_file_path, "a", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(data)
+
+
+def get_2dsliced_tensor(computed_tensor):
+    comp_num_dims = computed_tensor.ndim
+    # Extract the last two dimensions and squeeze
+    if comp_num_dims >= 2:
+        last_two_dims = computed_tensor[(*[0] * (comp_num_dims - 2), slice(None), slice(None))]
+        computed_tensor = last_two_dims.squeeze()
+
+    if computed_tensor.shape[0] == 384:  # Remove the padded outputs
+        computed_tensor = computed_tensor[:num_tokens, :]
+    if computed_tensor.shape[1] == 384:
+        computed_tensor = computed_tensor[:, :num_tokens]
+    return computed_tensor
+
+
+def dump_csv(key, golden_tensor, computed_tensor):
+    if not os.path.exists(tensor_csv_path):
+        os.makedirs(tensor_csv_path)
+        if not os.path.exists(tensor_csv_path + "torch/"):
+            os.makedirs(tensor_csv_path + "torch/")
+        if not os.path.exists(tensor_csv_path + "tt/"):
+            os.makedirs(tensor_csv_path + "tt/")
+
+    golden_tensor = get_2dsliced_tensor(golden_tensor)
+    computed_tensor = get_2dsliced_tensor(computed_tensor)
+
+    golden_tensor = golden_tensor.detach().numpy()
+    computed_tensor = computed_tensor.float().detach().numpy()
+
+    np.savetxt(f"{tensor_csv_path}torch/{key}.csv", golden_tensor, delimiter=",")
+    np.savetxt(f"{tensor_csv_path}tt/{key}.csv", computed_tensor, delimiter=",")
+
+
+def make_histogram(key, sliced_g, sliced_c):
+    path = "tests/ttnn/integration_tests/bloom/plots"
+    plt.figure(figsize=(13, 7))
+    num_bins = 100
+
+    # Define the colors for each histogram
+    color_x1 = "blue"
+    color_x2 = "orange"
+
+    plt.hist(
+        sliced_g, bins=num_bins, color=color_x1, alpha=0.5, label="torch_tensor"
+    )  # alpha controls the transparency
+    plt.hist(sliced_c, bins=num_bins, color=color_x2, alpha=0.5, label="tt_tensor")
+
+    plt.xlim([min(min(sliced_g), min(sliced_c)), max(max(sliced_g), max(sliced_c))])
+    title_font = {"weight": "bold", "size": 16}
+    plt.title(f"{key}'s torch vs tt distribution", fontdict=title_font)
+    plt.legend()
+    legend_font = {"weight": "bold", "size": 10}
+    plt.xlabel("Value", fontdict=legend_font)
+    plt.ylabel("Frequency", fontdict=legend_font)
+    plt.legend()
+    plt.grid(True)
+    if not os.path.exists(path):
+        os.makedirs(path)
+    plt.savefig(path + f"/{key}_histogram.png")
+
+
+def plot_figure(key, golden_tensor, computed_tensor, is_sliced=False):
+    global num_tokens
+    if not is_sliced:
+        computed_tensor = computed_tensor[:1, :num_tokens, :]
+        sliced_g = golden_tensor[:1, :, :].flatten().detach().numpy()
+        sliced_c = (torch.flatten(computed_tensor[:1, :, :].float())).detach().numpy()
+    else:
+        sliced_g = golden_tensor.flatten().detach().numpy()
+        sliced_c = torch.flatten(computed_tensor.float()).detach().numpy()
+
+    golden_tensor = get_2dsliced_tensor(golden_tensor)
+    computed_tensor = get_2dsliced_tensor(computed_tensor)
+
+    plt.figure(figsize=(13, 7))
+    plt.scatter(range(len(sliced_g)), sliced_g, label="torch_tensor", marker="o", color="blue", s=1.333)
+    plt.scatter(range(len(sliced_c)), sliced_c, label="tt_tensor", marker="o", color="orange", s=1.333)
+    plt.scatter(
+        range(len(sliced_c)),
+        abs(sliced_c - sliced_g),
+        label="Absolute(torch_tensor - tt_tensor)",
+        marker="o",
+        color="red",
+        s=1.333,
+    )
+    legend_font = {"weight": "bold", "size": 10}
+    plt.xlabel("Index", fontdict=legend_font)
+    plt.ylabel("Value", fontdict=legend_font)
+    title_font = {"weight": "bold", "size": 16}  # Adjust the size as needed
+    plt.title(f"{key}'s torch vs tt ", fontdict=title_font)
+    plt.legend()
+    plt.grid(True)
+    path = "tests/ttnn/integration_tests/bloom/plots"
+    if not os.path.exists(path):
+        os.makedirs(path)
+    plt.savefig(path + f"/{key}_scatter.png")
+    make_histogram(key, sliced_g, sliced_c)
+
+
+def write_data_to_csv(key, golden_tensor, computed_tensor, is_sliced=False):
+    global num_tokens
+    if not is_sliced:
+        computed_tensor = computed_tensor[:, :num_tokens, :]
+
+    golden_tensor = get_2dsliced_tensor(golden_tensor)
+    computed_tensor = get_2dsliced_tensor(computed_tensor)
+
+    g_min = torch.min(golden_tensor)
+    g_max = torch.max(golden_tensor)
+    c_min = torch.min(computed_tensor)
+    c_max = torch.max(computed_tensor)
+    gt = torch.flatten(golden_tensor)
+    ct = torch.flatten(computed_tensor.float())
+    dt = torch.abs(gt - ct)
+    pcc = check_with_pcc(golden_tensor, computed_tensor)[1]
+    allclose, atol_delta, rtol_delta = comp_allclose(golden_tensor, computed_tensor)
+    tolerance = atol_delta * 0.02  # setting tolerance to 2% of max difference
+    num_values_gt_tolerance = (dt > tolerance).sum().item()
+    logger.info(f"{key}:  allclose: {allclose}, atol_delta: {atol_delta}, rtol_delta: {rtol_delta}")
+    data = [
+        f"{key}",
+        pcc,
+        tolerance,
+        len(gt),
+        num_values_gt_tolerance,
+        (num_values_gt_tolerance / len(gt)) * 100,
+        allclose,
+        atol_delta,
+        rtol_delta,
+        g_min.item(),
+        g_max.item(),
+        c_min.item(),
+        c_max.item(),
+    ]
+    append_to_csv(data)
+    dump_csv(key, golden_tensor, computed_tensor)
 
 
 # From transformers/models/bloom/modeling_bloom.py
@@ -86,7 +269,9 @@ def split_query_key_value_and_split_heads(
     return output
 
 
-def create_query_key_value(config: BloomConfig, hidden_states, *, parameters: ParameterDict):
+def create_query_key_value(
+    config: BloomConfig, hidden_states, *, parameters: ParameterDict, base_address="", intermediate_outputs=None
+):
     query_key_value = ttnn.linear(
         hidden_states,
         input_tensor_b=parameters.query_key_value.weight,
@@ -96,6 +281,13 @@ def create_query_key_value(config: BloomConfig, hidden_states, *, parameters: Pa
         dtype=BLOOM_DTYPE,
     )
     ttnn.deallocate(hidden_states)
+    if intermediate_outputs is not None:
+        key = base_address + "query_key_value"
+        golden_tensor = intermediate_outputs[key]
+        computed_tensor = ttnn.to_torch(query_key_value)
+        write_data_to_csv(key, golden_tensor, computed_tensor)
+        plot_figure(key, golden_tensor, computed_tensor)
+
     query, key, value = split_query_key_value_and_split_heads(query_key_value, num_heads=config.n_head)
     ttnn.deallocate(query_key_value)
 
@@ -127,12 +319,30 @@ def compute_attention_scores(query_layer, key_layer, alibi):
     return scaled_attention_scores_plus_alibi
 
 
-def compute_attention_probs(attention_scores, causal_mask):
+def compute_attention_probs(attention_scores, causal_mask, base_address="", intermediate_outputs=None):
     if ASSUME_FUSED_SOFTMAX:
         attention_weights = attention_scores
     else:
         attention_weights = ttnn.add(attention_scores, causal_mask, memory_config=ttnn.DRAM_MEMORY_CONFIG)
         ttnn.deallocate(attention_scores)
+
+    if intermediate_outputs is not None:
+        torch_attention_weights = torch.load(torch_attn_dumps_path + f"attention_weights.pt")
+        torch_attention_weights = torch_attention_weights[:1, 1, :, :].squeeze().squeeze()
+        tt_attention_weights = ttnn.to_torch(attention_weights)
+        tt_attention_weights = tt_attention_weights[:1, 1, :num_tokens, :num_tokens].squeeze().squeeze()
+        write_data_to_csv(
+            base_address + "attention_weights",
+            golden_tensor=torch_attention_weights,
+            computed_tensor=tt_attention_weights,
+            is_sliced=True,
+        )
+        plot_figure(
+            key=base_address + "attention_weights",
+            golden_tensor=torch_attention_weights,
+            computed_tensor=tt_attention_weights,
+            is_sliced=True,
+        )
 
     attention_probs = ttnn.softmax(attention_weights, dim=-1, memory_config=ttnn.DRAM_MEMORY_CONFIG)
     if not ASSUME_FUSED_SOFTMAX:
@@ -146,7 +356,7 @@ def merge_heads(x: ttnn.Tensor) -> ttnn.Tensor:
     return ttnn.transformer.concatenate_heads(x, memory_config=BLOOM_MEMORY_CONFIG)
 
 
-def compute_context_layer(attention_probs, value_layer):
+def compute_context_layer(attention_probs, value_layer, base_address="", intermediate_outputs=None):
     context_layer = ttnn.matmul(
         attention_probs,
         value_layer,
@@ -154,6 +364,25 @@ def compute_context_layer(attention_probs, value_layer):
         memory_config=BLOOM_MEMORY_CONFIG,
         dtype=BLOOM_DTYPE,
     )
+
+    if intermediate_outputs is not None:
+        torch_context_layer = torch.load(torch_attn_dumps_path + f"attention_context_matmul.pt")
+        torch_context_layer = torch_context_layer[:1, :, :].squeeze()
+        tt_context_layer = ttnn.to_torch(context_layer)
+        tt_context_layer = tt_context_layer[:1, 1, :num_tokens, :].squeeze().squeeze()
+        write_data_to_csv(
+            base_address + "context_matmul",
+            golden_tensor=torch_context_layer,
+            computed_tensor=tt_context_layer,
+            is_sliced=True,
+        )
+        plot_figure(
+            key=base_address + "context_matmul",
+            golden_tensor=torch_context_layer,
+            computed_tensor=tt_context_layer,
+            is_sliced=True,
+        )
+
     ttnn.deallocate(attention_probs)
     ttnn.deallocate(value_layer)
     return merge_heads(context_layer)
@@ -180,12 +409,85 @@ def bloom_attention(
     attention_mask: ttnn.Tensor,
     *,
     parameters: ParameterDict,
+    base_address="",
+    intermediate_outputs=None,
 ):
-    query_layer, key_layer, value_layer = create_query_key_value(config, hidden_states, parameters=parameters)
+    query_layer, key_layer, value_layer = create_query_key_value(
+        config,
+        hidden_states,
+        parameters=parameters,
+        base_address=base_address,
+        intermediate_outputs=intermediate_outputs,
+    )
+
     attention_scores = compute_attention_scores(query_layer, key_layer, alibi)
-    attention_probs = compute_attention_probs(attention_scores, attention_mask)
-    context_layer = compute_context_layer(attention_probs, value_layer)
+    if intermediate_outputs is not None:
+        torch_attention_scores = torch.load(torch_attn_dumps_path + f"attention_scores.pt")
+        torch_attention_scores = torch_attention_scores[:1, 1, :, :].squeeze().squeeze()
+        tt_attention_scores = ttnn.to_torch(attention_scores)
+        tt_attention_scores = tt_attention_scores[:1, 1, :num_tokens, :num_tokens].squeeze().squeeze()
+        write_data_to_csv(
+            base_address + "attention_scores",
+            golden_tensor=torch_attention_scores,
+            computed_tensor=tt_attention_scores,
+            is_sliced=True,
+        )
+        plot_figure(
+            key=base_address + "attention_scores",
+            golden_tensor=torch_attention_scores,
+            computed_tensor=tt_attention_scores,
+            is_sliced=True,
+        )
+
+    attention_probs = compute_attention_probs(
+        attention_scores, attention_mask, base_address=base_address, intermediate_outputs=intermediate_outputs
+    )
+    if intermediate_outputs is not None:
+        torch_attention_probs = torch.load(torch_attn_dumps_path + f"attention_probs.pt")
+        torch_attention_probs = torch_attention_probs[:1, 1, :, :].squeeze().squeeze()
+        tt_attention_probs = ttnn.to_torch(attention_probs)
+        tt_attention_probs = tt_attention_probs[:1, 1, :num_tokens, :num_tokens].squeeze().squeeze()
+        write_data_to_csv(
+            base_address + "attention_probs",
+            golden_tensor=torch_attention_scores,
+            computed_tensor=tt_attention_scores,
+            is_sliced=True,
+        )
+        plot_figure(
+            key=base_address + "attention_probs",
+            golden_tensor=torch_attention_probs,
+            computed_tensor=tt_attention_probs,
+            is_sliced=True,
+        )
+
+    context_layer = compute_context_layer(
+        attention_probs, value_layer, base_address=base_address, intermediate_outputs=intermediate_outputs
+    )
+    if intermediate_outputs is not None:
+        torch_context_layer = torch.load(torch_attn_dumps_path + f"attention_context_layer.pt")
+        torch_context_layer = torch_context_layer[:1, :num_tokens, :]
+        tt_context_layer = ttnn.to_torch(context_layer)
+        tt_context_layer = tt_context_layer[:1, :num_tokens, :]
+        write_data_to_csv(
+            base_address + ".context_layer",
+            golden_tensor=torch_attention_scores,
+            computed_tensor=tt_attention_scores,
+            is_sliced=True,
+        )
+        plot_figure(
+            key=base_address + ".context_layer",
+            golden_tensor=torch_context_layer,
+            computed_tensor=tt_context_layer,
+            is_sliced=True,
+        )
+
     output_tensor = finalize_output(context_layer, parameters=parameters)
+    if intermediate_outputs is not None:
+        key = base_address + "dense"
+        golden_tensor = intermediate_outputs[key]
+        computed_tensor = ttnn.to_torch(output_tensor)
+        write_data_to_csv(key, golden_tensor, computed_tensor)
+        plot_figure(key, golden_tensor, computed_tensor)
 
     attention_output = ttnn.add(output_tensor, residual, memory_config=BLOOM_MEMORY_CONFIG)
     return attention_output
@@ -196,6 +498,8 @@ def bloom_mlp(
     residual: torch.Tensor,
     *,
     parameters: ParameterDict,
+    base_address="",
+    intermediate_outputs=None,
 ):
     ff1_output = ttnn.linear(
         hidden_states,
@@ -208,6 +512,13 @@ def bloom_mlp(
     )
     ttnn.deallocate(hidden_states)
 
+    if intermediate_outputs is not None:
+        key = base_address + "gelu_impl"
+        golden_tensor = intermediate_outputs[key]
+        computed_tensor = ttnn.to_torch(ff1_output)
+        write_data_to_csv(key, golden_tensor, computed_tensor)
+        plot_figure(key, golden_tensor, computed_tensor)
+
     ff2_output = ttnn.linear(
         ff1_output,
         parameters.dense_4h_to_h.weight,
@@ -216,8 +527,17 @@ def bloom_mlp(
         memory_config=BLOOM_MEMORY_CONFIG,
         dtype=ttnn.bfloat16,
     )
+
+    if intermediate_outputs is not None:
+        key = base_address + "dense_4h_to_h"
+        golden_tensor = intermediate_outputs[key]
+        computed_tensor = ttnn.to_torch(ff2_output)
+        write_data_to_csv(key, golden_tensor, computed_tensor)
+        plot_figure(key, golden_tensor, computed_tensor)
+
     ttnn.deallocate(ff1_output)
     mlp_output = ttnn.add(ff2_output, residual, memory_config=BLOOM_MEMORY_CONFIG)
+
     return mlp_output
 
 
@@ -228,13 +548,31 @@ def bloom_block(
     attention_mask: ttnn.Tensor,
     *,
     parameters: ParameterDict,
+    base_address="",
+    intermediate_outputs=None,
 ) -> ttnn.Tensor:
+    global iter
+    path = "tests/ttnn/integration_tests/bloom/inputs_bb_analysis/"
+    torch.save(ttnn.to_torch(hidden_states), path + f"hidden_states_{iter}.pt")
+    torch.save(ttnn.to_torch(alibi), path + f"alibi_{iter}.pt")
+    torch.save(ttnn.to_torch(attention_mask), path + f"attention_mask_{iter}.pt")
+
     normalized_hidden_states = ttnn.layer_norm(
         hidden_states,
         weight=parameters.input_layernorm.weight,
         bias=parameters.input_layernorm.bias,
         memory_config=BLOOM_MEMORY_CONFIG,
     )
+
+    if intermediate_outputs is not None:
+        write_header()
+        global num_tokens
+        num_tokens = intermediate_outputs["input_layernorm"].shape[1]
+        key = base_address + "input_layernorm"
+        golden_tensor = intermediate_outputs[key]
+        computed_tensor = ttnn.to_torch(normalized_hidden_states)
+        write_data_to_csv(key, golden_tensor, computed_tensor)
+        plot_figure(key, golden_tensor, computed_tensor)
 
     attention_output = bloom_attention(
         config,
@@ -243,8 +581,17 @@ def bloom_block(
         alibi,
         attention_mask,
         parameters=parameters.self_attention,
+        base_address=base_address + "self_attention.",
+        intermediate_outputs=intermediate_outputs,
     )
     ttnn.deallocate(hidden_states)
+
+    if intermediate_outputs is not None:
+        key = base_address + "self_attention"
+        golden_tensor = intermediate_outputs[key][0]
+        computed_tensor = ttnn.to_torch(attention_output)
+        write_data_to_csv(key, golden_tensor, computed_tensor)
+        plot_figure(key, golden_tensor, computed_tensor)
 
     normalized_attention_output = ttnn.layer_norm(
         attention_output,
@@ -253,12 +600,28 @@ def bloom_block(
         memory_config=BLOOM_MEMORY_CONFIG,
     )
 
+    if intermediate_outputs is not None:
+        key = base_address + "post_attention_layernorm"
+        golden_tensor = intermediate_outputs[key]
+        computed_tensor = ttnn.to_torch(normalized_attention_output)
+        write_data_to_csv(key, golden_tensor, computed_tensor)
+        plot_figure(key, golden_tensor, computed_tensor)
+
     mlp_output = bloom_mlp(
         normalized_attention_output,
         residual=attention_output,
         parameters=parameters.mlp,
+        base_address=base_address + "mlp.",
+        intermediate_outputs=intermediate_outputs,
     )
     ttnn.deallocate(attention_output)
+
+    if intermediate_outputs is not None:
+        key = base_address + "mlp"
+        golden_tensor = intermediate_outputs[key]
+        computed_tensor = ttnn.to_torch(mlp_output)
+        write_data_to_csv(key, golden_tensor, computed_tensor)
+        plot_figure(key, golden_tensor, computed_tensor)
 
     hidden_states = mlp_output
     hidden_states = ttnn.reallocate(hidden_states)
@@ -286,7 +649,7 @@ def bloom(
         memory_config=BLOOM_MEMORY_CONFIG,
     )
     ttnn.deallocate(inputs_embeds)
-
+    global iter
     for layer_parameters in parameters.h:
         hidden_states = bloom_block(
             config,
@@ -295,6 +658,7 @@ def bloom(
             causal_mask,
             parameters=layer_parameters,
         )
+        iter += 1
 
     hidden_states = ttnn.layer_norm(
         hidden_states,

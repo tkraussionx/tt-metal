@@ -28,11 +28,13 @@ def test_bloom_for_question_answering(device, use_program_cache, ttnn_model, bat
 
     num_heads = config.n_head
 
-    question = "What is my name?"
-    context = "My name is John."
-    inputs = tokenizer.encode_plus(question, context, return_tensors="pt")
+    context = "The Norman dynasty had a major political, cultural and military impact on medieval Europe and even the Near East. The Normans were famed for their martial spirit and eventually for their Christian piety, becoming exponents of the Catholic orthodoxy into which they assimilated. They adopted the Gallo-Romance language of the Frankish land they settled, their dialect becoming known as Norman, Normaund or Norman French, an important literary language. The Duchy of Normandy, which they formed by treaty with the French crown, was a great fief of medieval France, and under Richard I of Normandy was forged into a cohesive and formidable principality in feudal tenure. The Normans are noted both for their culture, such as their unique Romanesque architecture and musical traditions, and for their significant military accomplishments and innovations. Norman adventurers founded the Kingdom of Sicily under Roger II after conquering southern Italy on the Saracens and Byzantines, and an expedition on behalf of their duke, William the Conqueror, led to the Norman conquest of England at the Battle of Hastings in 1066. Norman cultural and military influence spread from these new European centres to the Crusader states of the Near East, where their prince Bohemond I founded the Principality of Antioch in the Levant, to Scotland and Wales in Great Britain, to Ireland, and to the coasts of north Africa and the Canary Islands."
+    question = "Who ruled the duchy of Normandy"
 
-    torch_output = torch_model(**inputs)
+    inputs = tokenizer.encode_plus(question, context, return_tensors="pt", max_length=384)
+    batch_inputs = {key: value.repeat(batch_size, 1) for key, value in inputs.items()}
+
+    torch_output = torch_model(**batch_inputs)
     torch_start_logits = torch_output.start_logits
     torch_end_logits = torch_output.end_logits
 
@@ -60,8 +62,8 @@ def test_bloom_for_question_answering(device, use_program_cache, ttnn_model, bat
     tt_output = ttnn.from_device(tt_output)
     tt_output = ttnn.to_layout(tt_output, ttnn.ROW_MAJOR_LAYOUT)
     tt_output = ttnn.to_torch(tt_output)
-    tt_start_logits = tt_output[:1, :num_tokens, 0]
-    tt_end_logits = tt_output[:1, :num_tokens, 1]
+    tt_start_logits = tt_output[:batch_size, :num_tokens, 0]
+    tt_end_logits = tt_output[:batch_size, :num_tokens, 1]
 
     if ttnn_model == ttnn_functional_bloom:
         assert_with_pcc(torch_start_logits, tt_start_logits, 0.96677)
