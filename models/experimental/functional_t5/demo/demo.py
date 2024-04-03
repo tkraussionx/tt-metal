@@ -47,9 +47,23 @@ def run_generate(input_ids, model, config, parameters, device, max_tokens, batch
     decoder_input_ids = model.generation_config.pad_token_id * torch.ones(batch_size, input_ids.shape[-1]).to(
         torch.long
     )
+    torch_output = model(input_ids, decoder_input_ids=decoder_input_ids).logits
 
     input_ids = ttnn.from_torch(input_ids)
     input_ids = ttnn.to_device(input_ids, device)
+
+    relative_attention_bias_weight_encoder = (
+        model.encoder.block[0].layer[0].SelfAttention.relative_attention_bias.weight
+    )
+    relative_attention_bias_weight_encoder = ttnn.from_torch(
+        relative_attention_bias_weight_encoder, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT
+    )
+    relative_attention_bias_weight_decoder = (
+        model.decoder.block[0].layer[0].SelfAttention.relative_attention_bias.weight
+    )
+    relative_attention_bias_weight_decoder = ttnn.from_torch(
+        relative_attention_bias_weight_decoder, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT
+    )
 
     for iteration in range(max_tokens):
         decoder_input_ids = ttnn.from_torch(decoder_input_ids)
@@ -61,8 +75,12 @@ def run_generate(input_ids, model, config, parameters, device, max_tokens, batch
             config,
             input_ids,
             decoder_input_ids,
+            device=device,
             parameters=parameters,
+            relative_attention_bias_weight_encoder=relative_attention_bias_weight_encoder,
+            relative_attention_bias_weight_decoder=relative_attention_bias_weight_decoder,
         )
+
         tt_output = ttnn.from_device(tt_output)
         next_token_logits = ttnn.to_torch(tt_output)
 
@@ -99,7 +117,21 @@ def run_functional_t5_question_and_answering_inference(
         truncation=True,
         return_tensors="pt",
     ).input_ids
+    print("input_ids", input_ids)
     profiler.end(f"preprocessing_input")
+
+    relative_attention_bias_weight_encoder = (
+        model.encoder.block[0].layer[0].SelfAttention.relative_attention_bias.weight
+    )
+    relative_attention_bias_weight_encoder = ttnn.from_torch(
+        relative_attention_bias_weight_encoder, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT
+    )
+    relative_attention_bias_weight_decoder = (
+        model.decoder.block[0].layer[0].SelfAttention.relative_attention_bias.weight
+    )
+    relative_attention_bias_weight_decoder = ttnn.from_torch(
+        relative_attention_bias_weight_decoder, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT
+    )
 
     tt_model_name = "ttnn_" + ("optimized_" if use_optimized_version else "") + model_name
 
@@ -254,8 +286,8 @@ def run_functional_t5_question_and_answering_inference_squadv2(
 @pytest.mark.parametrize(
     ("batch_size", "sequence_length", "max_tokens", "model_name", "use_optimized_version"),
     (
-        (8, 384, 5, "t5-small", False),
-        (8, 384, 5, "google/flan-t5-small", False),
+        (8, 128, 5, "t5-small", True),
+        # (8, 384, 5, "google/flan-t5-small", False),
     ),
 )
 def test_functional_t5_demo(

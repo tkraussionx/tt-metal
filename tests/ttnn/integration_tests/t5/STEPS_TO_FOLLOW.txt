@@ -1,0 +1,13 @@
+
+1) This branch includes "All close comparison of output after each OP in each sub-module"
+2) Pytorch tensors are stored from the file "build/python_env/lib64/python3.8/site-packages/transformers/models/t5/modeling_t5.py". Since it is available under build environment and cannot be traced in git, the modelling_t5 is added under "models/experimental/functional_t5/modelling_t5.py". Copy the code from "models/experimental/functional_t5/modelling_t5.py" to "build/python_env/lib64/python3.8/site-packages/transformers/models/t5/modeling_t5.py" to dump the torch outputs.
+3) Create directories for storing the dumped tensors
+        i) PyTorch tensors - "tests/ttnn/integration_tests/t5/t5_torch_outputs"
+        ii) TTNN tensors - "tests/ttnn/integration_tests/t5/t5_ttnn_outputs"
+4) The dumped tensors are tested in "tests/ttnn/integration_tests/t5/test_pcc_allclose.py"
+5) The maximum difference in values between tensors will be stored in a CSV file. Set the path to where the CSV file should to be stored in the "test_pcc_allclose.py"
+
+TO GENERATE PLOTS OF TENSORS TORCH VS TTNN
+1) Run the file "tests/ttnn/integration_tests/t5/test_plot.py" for generating plot to compare the torch and ttnn output of the suspected ops for attention sub-module.
+2) Tes analysis will be generated under "models/experimental/functional_t5/dumps/t5_debugging_plot.csv"
+2) The plots will be saved as "<name>.png" under "tests/ttnn/integration_tests/t5"

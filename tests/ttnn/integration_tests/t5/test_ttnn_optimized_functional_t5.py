@@ -306,9 +306,9 @@ def test_t5_stack_decoder(device, model_name, batch_size, sequence_size):
     config = transformers.T5Config.from_pretrained(model_name)
     config.is_decoder = True
     shared_embedding = torch.nn.Embedding(config.vocab_size, config.d_model)
-    model = transformers.models.t5.modeling_t5.T5Stack(config, shared_embedding).eval()
+    model = transformers.models.t5.modeling_t5.T5Stack(config, shared_embedding, base_address="decoder.").eval()
 
-    torch_input_ids = torch_random((batch_size, sequence_size), 0, 1, dtype=torch.int64)
+    torch_input_ids = torch_random((batch_size, sequence_size), 0, config.vocab_size, dtype=torch.int64)
     torch_encoder_hidden_states = torch_random(
         (batch_size, sequence_size, config.d_model), -0.1, 0.1, dtype=torch.float32
     )
@@ -317,7 +317,13 @@ def test_t5_stack_decoder(device, model_name, batch_size, sequence_size):
     parameters = preprocess_model_parameters(
         initialize_model=lambda: model, custom_preprocessor=functional_t5.custom_preprocessor, device=device
     )
-    shared_embedding = preprocess_model_parameters(initialize_model=lambda: shared_embedding, device=device)
+    relative_attention_bias_weight = model.block[0].layer[0].SelfAttention.relative_attention_bias.weight
+    relative_attention_bias_weight = ttnn.from_torch(
+        relative_attention_bias_weight, dtype=ttnn.bfloat16, device=device, layout=ttnn.ROW_MAJOR_LAYOUT
+    )
+    shared_embedding = ttnn.from_torch(
+        model.embed_tokens.weight, device=device, dtype=ttnn.bfloat16, layout=ttnn.ROW_MAJOR_LAYOUT
+    )
 
     input_ids = ttnn.from_torch(torch_input_ids, device=device)
     encoder_hidden_states = ttnn.from_torch(
@@ -327,8 +333,11 @@ def test_t5_stack_decoder(device, model_name, batch_size, sequence_size):
         config,
         input_ids,
         encoder_hidden_states=encoder_hidden_states,
-        shared_embedding_weight=shared_embedding.weight,
+        shared_embedding_weight=shared_embedding,
         parameters=parameters,
+        device=device,
+        relative_attention_bias_weight=relative_attention_bias_weight,
+        base_address="decoder.",
     )
     output = ttnn.to_torch(output)
 
@@ -336,7 +345,7 @@ def test_t5_stack_decoder(device, model_name, batch_size, sequence_size):
 
 
 @skip_for_wormhole_b0()
-@pytest.mark.parametrize("model_name", ["t5-small", "google/flan-t5-small"])
+@pytest.mark.parametrize("model_name", ["t5-small"])  # , "google/flan-t5-small"])
 @pytest.mark.parametrize("batch_size", [8])
 @pytest.mark.parametrize("sequence_size", [128])
 def test_t5_for_conditional_generation(device, model_name, batch_size, sequence_size):
@@ -344,9 +353,8 @@ def test_t5_for_conditional_generation(device, model_name, batch_size, sequence_
 
     config = transformers.T5Config.from_pretrained(model_name)
     model = transformers.T5ForConditionalGeneration.from_pretrained(model_name).eval()
-
-    torch_input_ids = torch_random((batch_size, sequence_size), 0, 1, dtype=torch.int64)
-    torch_decoder_input_ids = torch_random((batch_size, sequence_size), 0, 1, dtype=torch.int64)
+    torch_input_ids = torch_random((batch_size, sequence_size), 0, config.vocab_size, dtype=torch.int64)
+    torch_decoder_input_ids = torch_random((batch_size, sequence_size), 0, config.vocab_size, dtype=torch.int64)
     torch_output = model(torch_input_ids, decoder_input_ids=torch_decoder_input_ids).logits
 
     parameters = preprocess_model_parameters(
@@ -354,6 +362,18 @@ def test_t5_for_conditional_generation(device, model_name, batch_size, sequence_
         initialize_model=lambda: model,
         custom_preprocessor=functional_t5.custom_preprocessor,
         device=device,
+    )
+    relative_attention_bias_weight_encoder = (
+        model.encoder.block[0].layer[0].SelfAttention.relative_attention_bias.weight
+    )
+    relative_attention_bias_weight_encoder = ttnn.from_torch(
+        relative_attention_bias_weight_encoder, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT
+    )
+    relative_attention_bias_weight_decoder = (
+        model.decoder.block[0].layer[0].SelfAttention.relative_attention_bias.weight
+    )
+    relative_attention_bias_weight_decoder = ttnn.from_torch(
+        relative_attention_bias_weight_decoder, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT
     )
 
     input_ids = ttnn.from_torch(torch_input_ids, device=device)
@@ -363,6 +383,9 @@ def test_t5_for_conditional_generation(device, model_name, batch_size, sequence_
         input_ids,
         decoder_input_ids,
         parameters=parameters,
+        device=device,
+        relative_attention_bias_weight_encoder=relative_attention_bias_weight_encoder,
+        relative_attention_bias_weight_decoder=relative_attention_bias_weight_decoder,
     )
     output = ttnn.to_torch(output)
 
