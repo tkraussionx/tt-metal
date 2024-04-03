@@ -198,7 +198,7 @@ void Buffer::allocate() {
     // L1 buffers are allocated top down!
     bool bottom_up = this->buffer_type_ == BufferType::DRAM;
     detail::AllocateBuffer(this, bottom_up);
-    detail::BUFFER_MAP[{this->device_->id(), this->address_}] = this;
+    // detail::BUFFER_MAP[{this->device_->id(), this->address_}] = this;
 }
 
 uint32_t Buffer::dram_channel_from_bank_id(uint32_t bank_id) const {
@@ -270,7 +270,7 @@ void Buffer::deallocate() {
     // Mark as deallocated
     this->size_ = 0;
     TT_ASSERT(this->device_->allocator_ != nullptr, "Expected allocator to be initialized!");
-    detail::BUFFER_MAP.erase({this->device_->id(), this->address_});
+    // detail::BUFFER_MAP.erase({this->device_->id(), this->address_});
     detail::DeallocateBuffer(this);
 }
 
