@@ -2,9 +2,12 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+import torch
+import math
+
 import tt_lib as ttl
 import ttnn
-import math
+from models.utility_functions import torch2tt_tensor
 
 
 def convert_to_layout(tensor, input_memory_layout, output_memory_layout):
@@ -235,3 +238,90 @@ def falcon_prefill_matmul(
             output_dtype=output_dtype,
             compute_kernel_config=compute_kernel_config,
         )
+
+
+def partial_layernorm(
+    xs, ln_gamma, ln_beta, ln_eps, layernorm_params, memconfig, pgmconfig, dtype, hidden_size, devices
+):
+    # Do partial layernorm by partial sequence length of 128
+    # Input xs[0] is [1, 1, seq_len, 8192]
+    seq_len = xs[0].shape[2]
+
+    slice_size = layernorm_params["slice_size"]
+
+    layernorm_num_cores_x, layernorm_num_cores_y = (
+        layernorm_params["layernorm_num_cores_x"],
+        layernorm_params["layernorm_num_cores_y"],
+    )
+    layernorm_shard_height_hidden_dim, layernorm_shard_width_hidden_dim = (
+        layernorm_params["layernorm_shard_height_hidden_dim"],
+        layernorm_params["layernorm_shard_width_hidden_dim"],
+    )
+
+    num_devices = len(devices)
+
+    dram_memcfg = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
+
+    if seq_len > slice_size:
+        num_slices = seq_len // slice_size  # we do 128 per iteration (slice), then we concat the result.
+
+        xs_output_cat = []  # this is the output we write to. Initiate as empty tensors
+        for i in range(len(xs)):
+            xs_output_cat.append(
+                torch2tt_tensor(
+                    torch.zeros([1, 1, seq_len, hidden_size]),
+                    devices[i],
+                    tt_memory_config=dram_memcfg,
+                    tt_dtype=ttl.tensor.DataType.BFLOAT16,
+                )
+            )
+
+        for slice_i in range(num_slices):
+            xs_slice = []
+            for i in range(num_devices):
+                xs_slice.append(
+                    ttl.tensor.interleaved_to_sharded_partial(
+                        xs[i],
+                        (layernorm_num_cores_x, layernorm_num_cores_y),
+                        [layernorm_shard_height_hidden_dim, layernorm_shard_width_hidden_dim],
+                        num_slices,  # num_slices
+                        slice_i,  # slice_index
+                        ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+                        ttl.tensor.ShardOrientation.ROW_MAJOR,
+                    )
+                )
+
+            for i in range(num_devices):
+                xs_slice[i] = ttl.operations.primary.layernorm(
+                    xs_slice[i],
+                    ln_eps,
+                    ln_gamma[i],
+                    ln_beta[i],
+                    memconfig,
+                    pgmconfig,
+                )
+
+                ttl.tensor.sharded_to_interleaved_partial(
+                    xs_slice[i],
+                    xs_output_cat[i],
+                    num_slices,
+                    slice_i,
+                    dram_memcfg,
+                )
+                xs_slice[i].deallocate(True)
+    else:
+        xs = convert_to_layout(xs, dram_memcfg, memconfig)
+        for i in range(len(xs)):
+            xs[i] = ttl.operations.primary.layernorm(
+                xs[i],
+                ln_eps,
+                ln_gamma[i],
+                ln_beta[i],
+                memconfig,
+                pgmconfig,
+            )
+        xs = convert_to_layout(xs, memconfig, dram_memcfg)
+        xs_output_cat = xs
+    for i in range(num_devices):
+        xs_output_cat[i] = ttl.tensor.typecast(xs_output_cat[i], dtype)
+    return xs_output_cat
