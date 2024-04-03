@@ -801,13 +801,19 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
     layernorm_num_cores_x = 8
     layernorm_max_num_cores_y = 7
 
+    layernorm_slice_size = 512
+
     (
         layernorm_block_sharded_mem_config,
         layernorm_block_sharded_prg_config,
         layernorm_block_sharded_prg_config_inplace,
         layernorm_params,
     ) = get_sharded_layernorm_specs_for_seqlen(
-        layernorm_num_cores_x, layernorm_max_num_cores_y, row_height if row_height <= 128 else 128, hidden_size, dtype
+        layernorm_num_cores_x,
+        layernorm_max_num_cores_y,
+        row_height if row_height <= layernorm_slice_size else layernorm_slice_size,
+        hidden_size,
+        dtype,
     )
 
     # partial block sharded layernorm
@@ -818,18 +824,8 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
     model_config["layernorm_params"] = layernorm_params
 
     # Specify program configs
+
     # QKV Projection
-    # model_config["QKV_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-    #     compute_with_storage_grid_size=(8, 1),
-    #     in0_block_w=32,  # TODO: Can this be larger
-    #     out_subblock_h=1,  # TODO: Can this be larger
-    #     out_subblock_w=1,
-    #     per_core_M=row_height // 32,
-    #     per_core_N=5,
-    #     fuse_batch=True,
-    #     fused_activation=None,
-    #     mcast_in0=True,
-    # )
     model_config["QKV_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=(8, 4),
         in0_block_w=16,  # TODO: Can this be larger # 256 tiles in K
@@ -850,17 +846,6 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
     )
 
     # Dense Out
-    # model_config["SELFOUT_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-    #     compute_with_storage_grid_size=(8, 4),
-    #     in0_block_w=8,  # TODO: Can this be larger
-    #     out_subblock_h=1,  # TODO: Can this be larger
-    #     out_subblock_w=1,
-    #     per_core_M=row_height // 32,
-    #     per_core_N=1,
-    #     fuse_batch=True,
-    #     fused_activation=None,
-    #     mcast_in0=True,
-    # )
     # input: [S, 8k], weight: [8k, 1k]
     model_config["SELFOUT_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=(8, 4),
@@ -874,19 +859,6 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
     )
 
     # MLP FF1
-    # model_config[
-    #     "DENSE_H_TO_4H_MM_PROGCFG"
-    # ] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-    #     compute_with_storage_grid_size=(8, 4),
-    #     in0_block_w=8,  # TODO: Can this be larger
-    #     out_subblock_h=1,  # TODO: Can this be larger
-    #     out_subblock_w=4,
-    #     per_core_M=row_height // 32,
-    #     per_core_N=4,
-    #     fuse_batch=True,
-    #     fused_activation=[ttl.tensor.FusibleActivation.GELU, True],
-    #     mcast_in0=True,
-    # )
     model_config["DENSE_H_TO_4H_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=(8, 4),
         in0_block_w=8,  # how much inner dim you take each time
@@ -899,19 +871,6 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
     )
 
     # MLP FF2
-    # model_config[
-    #     "DENSE_4H_TO_H_MM_PROGCFG"
-    # ] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-    #     compute_with_storage_grid_size=(8, 4),
-    #     in0_block_w=32,  # TODO: Can this be larger
-    #     out_subblock_h=1,  # TODO: Can this be larger
-    #     out_subblock_w=1,
-    #     per_core_M=row_height // 32,
-    #     per_core_N=1,
-    #     fuse_batch=True,
-    #     fused_activation=None,
-    #     mcast_in0=True,
-    # )
     model_config["DENSE_4H_TO_H_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=(8, 4),
         in0_block_w=8,  # how much inner dim you take each time
@@ -924,17 +883,6 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
     )
 
     # LM Head
-    # model_config["LM_HEAD_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-    #     compute_with_storage_grid_size=(8, 4),
-    #     in0_block_w=8,
-    #     out_subblock_h=1,
-    #     out_subblock_w=4,
-    #     per_core_M=row_height // 32,
-    #     per_core_N=8,
-    #     fuse_batch=True,
-    #     fused_activation=None,
-    #     mcast_in0=True,
-    # )
     # input: [S, 8k], weight: [8k, 8k]
     model_config["LM_HEAD_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=(8, 8),
