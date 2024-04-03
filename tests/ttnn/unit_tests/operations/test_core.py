@@ -328,3 +328,47 @@ def test_create_sharded_memory_config(device, shape, strategy, orientation, core
 
     passing = torch.equal(input_data, output_data)
     assert passing
+
+
+@pytest.mark.parametrize(
+    "shape, strategy, orientation, core_grid",
+    [
+        ([2, 1, 4096, 320], ttnn.ShardStrategy.BLOCK, ttnn.ShardOrientation.COLUMN_MAJOR, ttnn.CoreGrid(y=8, x=8)),
+        ([2, 1, 1024, 320], ttnn.ShardStrategy.BLOCK, ttnn.ShardOrientation.COLUMN_MAJOR, ttnn.CoreGrid(y=8, x=8)),
+        ([2, 1, 1024, 640], ttnn.ShardStrategy.BLOCK, ttnn.ShardOrientation.COLUMN_MAJOR, ttnn.CoreGrid(y=8, x=8)),
+        ([2, 1, 256, 1280], ttnn.ShardStrategy.BLOCK, ttnn.ShardOrientation.COLUMN_MAJOR, ttnn.CoreGrid(y=8, x=8)),
+        ([2, 1, 64, 1280], ttnn.ShardStrategy.BLOCK, ttnn.ShardOrientation.COLUMN_MAJOR, ttnn.CoreGrid(y=8, x=4)),
+        ([2, 1, 64, 2560], ttnn.ShardStrategy.BLOCK, ttnn.ShardOrientation.COLUMN_MAJOR, ttnn.CoreGrid(y=8, x=4)),
+        ([2, 1, 256, 2560], ttnn.ShardStrategy.BLOCK, ttnn.ShardOrientation.COLUMN_MAJOR, ttnn.CoreGrid(y=8, x=8)),
+        ([2, 1, 256, 1920], ttnn.ShardStrategy.BLOCK, ttnn.ShardOrientation.COLUMN_MAJOR, ttnn.CoreGrid(y=8, x=8)),
+        ([2, 1, 1024, 1920], ttnn.ShardStrategy.BLOCK, ttnn.ShardOrientation.COLUMN_MAJOR, ttnn.CoreGrid(y=8, x=8)),
+        ([2, 1, 1024, 1280], ttnn.ShardStrategy.BLOCK, ttnn.ShardOrientation.COLUMN_MAJOR, ttnn.CoreGrid(y=8, x=8)),
+        ([2, 1, 1024, 960], ttnn.ShardStrategy.BLOCK, ttnn.ShardOrientation.COLUMN_MAJOR, ttnn.CoreGrid(y=8, x=8)),
+        ([2, 1, 4096, 960], ttnn.ShardStrategy.BLOCK, ttnn.ShardOrientation.COLUMN_MAJOR, ttnn.CoreGrid(y=8, x=8)),
+        ([2, 1, 4096, 640], ttnn.ShardStrategy.BLOCK, ttnn.ShardOrientation.COLUMN_MAJOR, ttnn.CoreGrid(y=8, x=8)),
+    ],
+)
+def test_reallocate(device, shape, strategy, orientation, core_grid):
+    input_data = torch.randn(shape, dtype=torch.bfloat16)
+    x = ttnn.from_torch(
+        input_data,
+        device=device,
+        layout=ttnn.TILE_LAYOUT,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
+        dtype=ttnn.bfloat8_b,
+    )
+    shard_config = ttnn.create_sharded_memory_config(
+        shape=shape,
+        core_grid=core_grid,
+        strategy=strategy,
+        orientation=orientation,
+        use_height_and_width_as_shard_shape=False,
+    )
+
+    x_t = ttnn.to_layout(x, ttnn.ROW_MAJOR_LAYOUT, use_multicore=True)
+    x_t = ttnn.to_memory_config(x_t, memory_config=shard_config)
+    x_t = ttnn.reallocate(x_t)
+    output_data = ttnn.from_device(x_t)
+    output_data = ttnn.to_torch(output_data)
+
+    assert_with_pcc(input_data, output_data, 0.99)
