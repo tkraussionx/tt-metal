@@ -43,8 +43,8 @@ struct Tensor {
         // Use these functions to manage the main_thread_ref_count for a tensor attr instance.
         // This variable is used for on device memory deallocation in async mode, where the main
         // thread owns all tensors and enqueues a deallocate command for each shard, when a tensor
-        // is implcitly or explictly dellocated.
-        // Call increment when a tensor is default, copy or assignment constructed, since an additonal
+        // is implicitly or explicitly dellocated.
+        // Call increment when a tensor is default, copy or assignment constructed, since an additional
         // object will own a tensor_attr instance.
         // Call decrement when a tensor is destroyed and the number of owners of the tensor_attr object
         // decreases.
