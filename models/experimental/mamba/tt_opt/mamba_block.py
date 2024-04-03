@@ -99,7 +99,7 @@ class TtMambaBlock(torch.nn.Module):
             self.conv_states[i] = self.conv_states[i + 1]
 
         # update the last state
-        self.conv_states[3] = x
+        self.conv_states[3] = ttnn.to_memory_config(x, memory_config=ttnn.DRAM_MEMORY_CONFIG)
 
         # do the convolution
         # shard wt and state
