@@ -263,6 +263,7 @@ def partial_layernorm(
     dram_memcfg = ttl.tensor.MemoryConfig(ttl.tensor.TensorMemoryLayout.INTERLEAVED, ttl.tensor.BufferType.DRAM)
 
     if seq_len > slice_size:
+        assert seq_len % slice_size == 0, "Sequence length must be divisible by layernorm slice size {slice_size}"
         num_slices = seq_len // slice_size  # we do 128 per iteration (slice), then we concat the result.
 
         xs_output_cat = []  # this is the output we write to. Initiate as empty tensors
