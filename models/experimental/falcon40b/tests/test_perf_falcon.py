@@ -295,6 +295,8 @@ def run_test_FalconCausalLM_end_to_end(
     # Run warmup interations - profiler still disabled
     profiler.start(f"model_warmup_run_for_inference")
     for _ in range(inference_iterations - 1):
+        for device in devices:
+            tt_lib.device.DumpDeviceProfiler(device)
         if llm_mode == "prefill":
             tt_outs = []
             for user_id in range(batch):
@@ -339,6 +341,8 @@ def run_test_FalconCausalLM_end_to_end(
         tt_lib.device.Synchronize(device)
 
     # Run for perf iteration - profiler enabled
+    for device in devices:
+        tt_lib.device.DumpDeviceProfiler(device)
     profiler.enable()
     enable_persistent_kernel_cache()
     logger.info(f"Enable profiler and enable binary and compile cache")
