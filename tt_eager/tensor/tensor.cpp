@@ -328,31 +328,26 @@ Tensor Tensor::to(Device *target_device, const MemoryConfig &mem_config) const {
 
 Tensor Tensor::to(DeviceMesh *device_mesh, const MemoryConfig &mem_config) const {
     ZoneScoped;
-    if (storage_type() == StorageType::MULTI_DEVICE_HOST) {
-        auto workers = device_mesh->get_devices();
-        Tensor multi_device_tensor = Tensor(workers);
-        uint32_t device_tensor_ref_count = multi_device_tensor.tensor_attributes->record_main_thread_ref_count();
-        for (auto target_device : workers) {
-            target_device->push_work([*this, multi_device_tensor, mem_config, target_device] () mutable {
-                auto shard = get_shard_for_device(*this, target_device);
-                shard = tensor_impl::to_device_wrapper(shard, target_device, mem_config);
-                insert_buffer_and_shape_for_device(target_device, shard, multi_device_tensor);
-                 if (not (target_device->id())) {
-                    multi_device_tensor.set_shape(this->get_shape());
-                    multi_device_tensor.set_dtype(this->get_dtype());
-                    multi_device_tensor.set_layout(this->get_layout());
-                }
-                multi_device_tensor.set_populated(target_device);
-            });
-        }
-        multi_device_tensor.tensor_attributes->update_main_thread_ref_count(multi_device_tensor.workers.at(0), device_tensor_ref_count);
-        return multi_device_tensor;
-    } else if (std::holds_alternative<tt::tt_metal::MultiDeviceStorage>(this->get_storage())) {
-        return *this; // already on device
-    }
+    auto workers = device_mesh->get_devices();
+    Tensor multi_device_tensor = Tensor(workers);
+    uint32_t device_tensor_ref_count = multi_device_tensor.tensor_attributes->record_main_thread_ref_count();
 
-    TT_THROW("Tensor::to(...) requires the tensor the be multi-device tensor.");
-    return *this;
+    for (auto& target_device : workers) {
+        target_device->push_work([*this, multi_device_tensor, mem_config, target_device] () mutable {
+            TT_ASSERT(this->storage_type() == StorageType::MULTI_DEVICE_HOST or this->storage_type() == StorageType::MULTI_DEVICE, "Tensor::to(...) requires the tensor the be multi-device tensor.");
+            auto shard = get_shard_for_device(*this, target_device);
+            shard = tensor_impl::to_device_wrapper(shard, target_device, mem_config);
+            insert_buffer_and_shape_for_device(target_device, shard, multi_device_tensor);
+            if (not (target_device->id())) {
+                multi_device_tensor.set_shape(this->get_shape());
+                multi_device_tensor.set_dtype(this->get_dtype());
+                multi_device_tensor.set_layout(this->get_layout());
+            }
+            multi_device_tensor.set_populated(target_device);
+        });
+    }
+    multi_device_tensor.tensor_attributes->update_main_thread_ref_count(multi_device_tensor.workers.at(0), device_tensor_ref_count);
+    return multi_device_tensor;
 }
 
 Tensor Tensor::cpu(bool blocking) const {

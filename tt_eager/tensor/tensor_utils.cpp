@@ -329,7 +329,7 @@ Tensor get_shard_for_device(const Tensor& tensor, Device* target_device) {
         auto shard_shape = host_storage.get_tensor_shape_for_device(target_device);
         auto shard_buffer = host_storage.get_buffer_for_device(target_device);
         return Tensor{OwnedStorage{shard_buffer}, shard_shape, tensor.get_dtype(), tensor.get_layout()};
-    } else if (std::holds_alternative<DeviceStorage>(tensor.get_storage()) || std::holds_alternative<OwnedStorage>(tensor.get_storage())) {
+    } else if (std::holds_alternative<DeviceStorage>(tensor.get_storage()) || std::holds_alternative<OwnedStorage>(tensor.get_storage()) || std::holds_alternative<BorrowedStorage>(tensor.get_storage())) {
         return tensor;
     } else {
         TT_FATAL(false, "get_shard_for_device only supports multi-device or device tensors");
