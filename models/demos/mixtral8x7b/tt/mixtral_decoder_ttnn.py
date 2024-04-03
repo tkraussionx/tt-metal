@@ -118,7 +118,7 @@ class TtTransformerBlock(torch.nn.Module):
         # self.comps.append(ttnn.to_torch(attn_b1sh[0]))
         hs_b1sh = [ttnn.add(xs_b1sh[i], attn_b1sh[i]) for i in range(self.num_devices)]
         # self.comps.append(ttnn.to_torch(hs_b1sh[0]))
-        deallocate(attn_b1sh)
+        # deallocate(attn_b1sh)
 
         ffn_norm_s1bh = [self.ffn_norm[i](hs_b1sh[i]) for i in range(self.num_devices)]
         # self.comps.append(ttnn.to_torch(ffn_norm_s1bh[0]))
@@ -126,7 +126,7 @@ class TtTransformerBlock(torch.nn.Module):
         # self.comps.append(ttnn.to_torch(ffn_b1sh[0]))
         out_b1sh = [ttnn.add(hs_b1sh[i], ffn_b1sh[i]) for i in range(self.num_devices)]
         # self.comps.append(ttnn.to_torch(out_b1sh[0]))
-        deallocate(ffn_b1sh)
-        deallocate(hs_b1sh)
+        # deallocate(ffn_b1sh)
+        # deallocate(hs_b1sh)
         # deallocate(attn_b1sh)
         return out_b1sh

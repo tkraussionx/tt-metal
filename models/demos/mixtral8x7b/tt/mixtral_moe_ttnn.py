@@ -73,6 +73,13 @@ class TtMoeLayer(nn.Module):
             ttnn.from_torch(torch.ones(1, 1, 32, 1), device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
             for device in self.devices
         ]
+        reduce_mask_torch = torch.zeros(1, 1, 32, 256)
+        for i in range(32):
+            reduce_mask_torch[:, :, i, range(i, 256, 32)] = 1
+        self.reduce_mask = [
+            ttnn.from_torch(reduce_mask_torch, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
+            for device in self.devices
+        ]
 
     def forward(self, inputs):
         output_11BD = []
@@ -122,11 +129,11 @@ class TtMoeLayer(nn.Module):
             print(f"finished device {i}, time: {time.time() - start_time} ")
         # all gather
         print(f"started ALL GATHER, time: {time.time() - start_time} ")
-        output_11BD_gathered = ttnn.experimental.tensor.all_gather(output_11BD, dim=1, num_links=1)
+        output_11BD_gathered = ttnn.experimental.tensor.all_gather(output_11BD, dim=2, num_links=1)
         print(f"finished ALL GATHER, time: {time.time() - start_time}")
 
         # sum on each device
         for i in range(len(output_11BD_gathered)):
-            output_11BD_gathered[i] = ttnn.experimental.tensor.sum(output_11BD_gathered[i], dim=1)
+            output_11BD_gathered[i] = ttnn.matmul(self.reduce_mask[i], output_11BD_gathered[i])
         print("Reduce sum done")
         return output_11BD_gathered

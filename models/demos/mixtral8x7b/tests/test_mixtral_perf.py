@@ -48,7 +48,7 @@ def test_mistral_model_perf(
 
     run_ref_pt = True
 
-    model_args = TtModelArgs()
+    model_args = TtModelArgs(devices[0])
     model_args.max_batch_size = batch
     model_args.n_layers = 1
     tokenizer = Tokenizer(model_args.tokenizer_path)
@@ -135,9 +135,9 @@ def test_mistral_model_perf(
         # Run TT model
         tt_out = tt_model(decode_input, start_pos, current_pos, rot_mat)
         # Convert ttnn tensor to torch tensor
-        tt_output_torch = ttnn.to_torch(tt_out[0]).view(
-            32, 1, -1
-        )  # permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
+        # tt_output_torch = ttnn.to_torch(tt_out[0]).view(
+        #     32, 1, -1
+        # )  # permute(2, 1, 0, 3).squeeze(1)  # [seq, batch, hidden_dim]
 
         if i == 0 or i == 10:  # Skip the first few iterations to warm up
             profiler.end(f"model_run_for_inference_{i}")
@@ -160,7 +160,7 @@ def test_mistral_model_perf(
                 pt_decode_input = embd(encoded_prompts_tensor[:, i]).view(batch, seqlen, -1)
         else:
             # Greedy decode (temperature = 0) the generated token and save it to print out later
-            tt_out_tok = sample(tt_output_torch, temperature=0, top_p=0.8)
+            tt_out_tok = sample(ref_output, temperature=0, top_p=0.8)
             tt_decode_input = embd(tt_out_tok)  # Embedding on device
             if run_ref_pt:
                 pt_out_tok = sample(ref_output, temperature=0, top_p=0.8)
