@@ -447,7 +447,7 @@ class TtLlamaDecoder_optimized:
         # Do sharded RMS by partial sequence length of 128
         # Input xs[0] is [1, 1, seq_len, 8192]
         seq_len = xs[0].shape[2]
-        slice_size = 128
+        slice_size = 512
         num_slices = seq_len // slice_size  # we do 128 per iteration (slice), then we concat the result.
 
         xs_output_cat = []  # this is the output we write to. Initiate as empty tensors
