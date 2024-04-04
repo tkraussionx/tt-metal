@@ -6,6 +6,7 @@ import ttnn
 import torch
 from models.utility_functions import (
     is_grayskull,
+    is_wormhole_b0,
     pad_and_fold_conv_activation_for_unity_stride,
 )
 
@@ -201,7 +202,12 @@ class resnet50Bottleneck:
         out_channels = parameters.conv2.weight.shape[0]
         in_channels = parameters.conv2.weight.shape[1]
         conv2_config_override = {}
-        if out_channels == 64 and self.module_input_shape[1] == 56 and self.module_input_shape[0] == 20:
+        if (
+            out_channels == 64
+            and self.module_input_shape[1] == 56
+            and self.module_input_shape[0] == 20
+            and is_grayskull()
+        ):
             conv2_config_override = {"act_block_h": 320}
         self.conv2 = ttnn.Conv2d(
             in_channels=in_channels,
@@ -264,7 +270,11 @@ class resnet50Bottleneck:
     def __call__(self, x):
         # logger.info("This module input shape - ", self.module_input_shape)
         # conv1 is 1x1 conv
-        # logger.info("Running conv1")
+        if is_wormhole_b0():
+            if ttnn.get_memory_config(x) != self.conv1.conv.input_sharded_memory_config:
+                x = ttnn.to_memory_config(x, self.conv1.conv.input_sharded_memory_config)
+
+        # print("Running conv1")
         out = self.conv1(x)
 
         if not (self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64):
@@ -272,11 +282,10 @@ class resnet50Bottleneck:
             if self.deallocate:
                 ttnn.deallocate(x)
 
-        # logger.info("Running conv2")
-
+        # print("Running conv2")
         out = self.conv2(out)
         # conv3 is 1x1 conv
-        # logger.info("Running conv3")
+        # print("Running conv3")
         out = self.conv3(out)
 
         if self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64:
@@ -327,6 +336,13 @@ class resnet50:
         parameters.conv1.bias = ttnn.from_device(parameters.conv1.bias)
         out_channels = parameters.conv1.weight.shape[0]
         in_channels = parameters.conv1.weight.shape[1]
+        self.first_conv_padded_input_channels = 16 if not is_wormhole_b0() else 32
+        conv1_config_override = {}
+        if is_wormhole_b0():
+            if batch_size == 16:
+                conv1_config_override = {"act_block_h": 1568}
+            elif batch_size == 20:
+                conv1_config_override = {"act_block_h": 640}
         self.conv1 = ttnn.Conv2d(
             in_channels=in_channels,
             out_channels=out_channels,
@@ -344,11 +360,11 @@ class resnet50:
             bias=parameters.conv1.bias,
             math_fidelity=model_config["MATH_FIDELITY"],
             weights_dtype=model_config["WEIGHTS_DTYPE"],
-            use_shallow_conv_variant=True,
+            use_shallow_conv_variant=not is_wormhole_b0(),
             deallocate_activation=True,
-            padded_input_channels=16,
+            padded_input_channels=self.first_conv_padded_input_channels,
             activation="relu",
-            conv_blocking_and_parallelization_config_override={},
+            conv_blocking_and_parallelization_config_override=conv1_config_override,
             compute_kernel_config=compute_kernel_config,
         )
 
@@ -563,8 +579,17 @@ class resnet50:
         input_tensor_height_snapped_to_tile = (
             self.conv1.conv.input_sharded_memory_config.shard_spec.shape[0] * input_num_cores_nhw
         )
+        assert self.first_conv_padded_input_channels >= input_tensor.shape[3]
         input_tensor = torch.nn.functional.pad(
-            input_tensor, (0, 0, 0, input_tensor_height_snapped_to_tile - input_tensor.shape[2], 0, 0)
+            input_tensor,
+            (
+                0,
+                self.first_conv_padded_input_channels - input_tensor.shape[3],
+                0,
+                input_tensor_height_snapped_to_tile - input_tensor.shape[2],
+                0,
+                0,
+            ),
         )
         input_tensor = ttnn.from_torch(input_tensor, dtype=ttnn.bfloat16)
         return input_tensor
@@ -580,18 +605,24 @@ class resnet50:
 
         if self.batch_size == 20:
             x = ttnn.experimental.tensor.move_sharded(x)
-
+        # breakpoint()
         x = self.max_pool(x)
+        # breakpoint()
         x = ttnn.reshape(x, (1, 1, 56 * 56 * self.batch_size, 64))
+        if is_wormhole_b0():
+            # TODO: fix the need to do the reshard here
+            x = ttnn.to_memory_config(x, self.layer1_module1.conv1.conv.input_sharded_memory_config)
+        # breakpoint()
         x = ttnn.to_layout(x, ttnn.TILE_LAYOUT, dtype=self.model_config["ACTIVATIONS_DTYPE"])
 
-        if self.batch_size == 20:
+        if self.batch_size == 20 and not is_wormhole_b0():
             x = ttnn.experimental.tensor.move_sharded(x)
+        # breakpoint()
 
         x = self.layer1_module1(x)
         x = self.layer1_module2(x)
         x = self.layer1_module3(x)
-
+        # breakpoint()
         x = self.layer2_module1(x)
         x = self.layer2_module2(x)
         x = self.layer2_module3(x)
