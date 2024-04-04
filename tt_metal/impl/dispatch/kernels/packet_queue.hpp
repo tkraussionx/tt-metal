@@ -747,6 +747,14 @@ bool wait_all_src_dest_ready(packet_input_queue_state_t* input_queue_array, uint
                 }
             }
         }
+#if defined(COMPILE_FOR_ERISC)
+        if ((timeout_cycles == 0) && (iters & 0xFFF) == 0) {
+            //if timeout is disabled, context switch every 4096 iterations.
+            //this is necessary to allow ethernet routing layer to operate.
+            //this core may have pending ethernet routing work.
+            internal_::risc_context_switch();
+        }
+#endif
     }
     return true;
 }

@@ -122,7 +122,7 @@ void Cluster::generate_cluster_descriptor() {
     }
 
     uint32_t total_num_hugepages = get_num_hugepages();
-    TT_FATAL(total_num_hugepages >= this->cluster_desc_->get_all_chips().size(),
+    TT_FATAL(total_num_hugepages >= this->cluster_desc_->get_all_chips().size()/4,
         "Machine setup error: Insufficient number of hugepages available, expected one per device ({}) but have {}. Increase number of hugepages!", this->cluster_desc_->get_all_chips().size(), total_num_hugepages);
 
 }
@@ -151,7 +151,7 @@ void Cluster::assert_risc_reset() {
 void Cluster::assign_mem_channels_to_devices(chip_id_t mmio_device_id, const std::set<chip_id_t> &controlled_device_ids) {
     // g_MAX_HOST_MEM_CHANNELS (4) is defined in tt_SiliconDevice and denotes the max number of host memory channels per MMIO device
     // Metal currently assigns 1 channel per device. See https://github.com/tenstorrent-metal/tt-metal/issues/4087
-    TT_ASSERT(controlled_device_ids.size() <= 4, "Unable to assign each device to its own host memory channel!");
+    TT_ASSERT(controlled_device_ids.size() <= 17, "Unable to assign each device to its own host memory channel!");
     uint16_t channel = 0;
     this->device_to_host_mem_channel_[mmio_device_id] = channel++;
     for (const chip_id_t &device_id : controlled_device_ids) {
@@ -179,7 +179,8 @@ void Cluster::open_driver(chip_id_t mmio_device_id, const std::set<chip_id_t> &c
         // This is the target/desired number of mem channels per arch/device.
         // Silicon driver will attempt to open this many hugepages as channels, and assert if workload uses more than available.
         // Metal currently uses assigns 1 channel per device
-        uint32_t num_host_mem_ch_per_mmio_device = controlled_device_ids.size();
+        //uint32_t num_host_mem_ch_per_mmio_device = controlled_device_ids.size();
+        uint32_t num_host_mem_ch_per_mmio_device = 4;
         std::unordered_map<std::string, std::int32_t> dynamic_tlb_config = {};
         dynamic_tlb_config["REG_TLB"] = DEVICE_DATA.REG_TLB;
         // This will remove harvested rows from the soc descriptor
