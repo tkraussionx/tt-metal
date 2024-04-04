@@ -185,6 +185,9 @@ def main():
     parser.add_option("-r", dest="report", action="store_true", help="Generate ops report", default=False)
     parser.add_option("-v", dest="verbose", action="store_true", help="More info is printed to stdout", default=False)
     parser.add_option(
+        "--no-signposts", dest="signposts", action="store_false", help="Do not include signposts", default=True
+    )
+    parser.add_option(
         "--no-device", dest="device", action="store_false", help="Do not include device data", default=True
     )
     parser.add_option(
@@ -207,22 +210,34 @@ def main():
         sys.exit(2)
 
     originalArgs = sys.argv.copy()
+    print(originalArgs)
 
     (options, args) = parser.parse_args()
     sys.argv[:] = args
+
+    if options.device:
+        logger.info(f"Collecting device profiling data")
+        os.environ["TT_METAL_DEVICE_PROFILER"] = "1"
+    else:
+        logger.info(f"Not collecting device profiling data")
+        if "TT_METAL_DEVICE_PROFILER" in os.environ.keys():
+            del os.environ["TT_METAL_DEVICE_PROFILER"]
 
     if options.port:
         port = options.port
     else:
         port = get_available_port()
 
+    if port:
+        os.environ["TRACY_PORT"] = port
+        logger.info(f"Using port {port}")
+    else:
+        logger.error("No available port found")
+        sys.exit(1)
+
     if len(args) > 0:
         doReport = False
         if options.report:
-            if not port:
-                logger.error("No available port found")
-                sys.exit(1)
-            logger.info(f"Using port {port}")
             doReport, captureProcess = run_report_setup(options.verbose, port)
 
         if not doReport:
@@ -251,6 +266,9 @@ def main():
             if options.partial:
                 tracy_state.doPartial = True
 
+            if options.partial:
+                tracy_state.doPartial = True
+
             if options.lines:
                 tracy_state.doLine = True
 
@@ -266,17 +284,7 @@ def main():
 
             testCommand = f"python -m tracy {osCmd}"
 
-            envVars = dict(os.environ)
-            if options.device:
-                envVars["TT_METAL_DEVICE_PROFILER"] = "1"
-            else:
-                if "TT_METAL_DEVICE_PROFILER" in envVars.keys():
-                    del envVars["TT_METAL_DEVICE_PROFILER"]
-
-            if port:
-                envVars["TRACY_PORT"] = port
-
-            testProcess = subprocess.Popen([testCommand], shell=True, env=envVars, preexec_fn=os.setsid)
+            testProcess = subprocess.Popen([testCommand], shell=True, preexec_fn=os.setsid)
             logger.info(f"Test process started")
 
             def signal_handler(sig, frame):

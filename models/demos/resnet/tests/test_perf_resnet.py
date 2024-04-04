@@ -8,7 +8,6 @@ from torchvision import models
 from transformers import AutoImageProcessor
 import pytest
 import tt_lib
-import tracy
 
 from models.utility_functions import is_e75
 from models.utility_functions import profiler
@@ -79,7 +78,6 @@ def run_perf_resnet(
         tt_inputs = tt_resnet50.preprocessing(inputs)
         warmup_end = 5
         for iter in range(0, warmup_end):
-            tracy.signpost(f"warm up {iter}")
             profiler.start(f"{iter}_key")
             _ = tt_resnet50(tt_inputs).cpu(blocking=True)
             profiler.end(f"{iter}_key")
@@ -92,7 +90,6 @@ def run_perf_resnet(
         outputs = []
         inference_time_sum = 0
         for iter in range(warm_start, warm_end):
-            tracy.signpost(f"cahced run {iter}")
             profiler.start(f"run")
             outputs.append(tt_resnet50(tt_inputs).cpu(blocking=False))
             profiler.end(f"run")
