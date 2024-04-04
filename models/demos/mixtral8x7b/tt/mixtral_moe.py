@@ -90,8 +90,8 @@ class TtMoeLayer(torch.nn.Module):
             )
             for device in self.devices
         ]
-        reduce_mask_torch = torch.zeros(1, 1, self.args.max_batch_size, self.max_batch_size * len(self.devices))
-        for i in range(self.max_batch_size):
+        reduce_mask_torch = torch.zeros(1, 1, self.args.max_batch_size, self.args.max_batch_size * len(self.devices))
+        for i in range(self.args.max_batch_size):
             reduce_mask_torch[
                 :, :, i, range(i, self.args.max_batch_size * len(self.devices), self.args.max_batch_size)
             ] = 1

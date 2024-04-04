@@ -66,7 +66,7 @@ def preprocess_inputs(input_prompts, tokenizer, model_args, dtype, instruct, dev
 def run_mixtral_demo(user_input, batch_size, devices):
     assert batch_size == 32, "Batch size must be 32"
 
-    instruct_mode = False
+    instruct_mode = True
 
     dtype = ttnn.bfloat8_b
 
@@ -78,7 +78,7 @@ def run_mixtral_demo(user_input, batch_size, devices):
 
     # Load model args, weights, and tokenizer
     # Specify model_base_path=<mixtral_WEIGHTS_PATH> below to use your own weights
-    model_args = TtModelArgs(devices[0])  # TtModelArgs(model_base_path=<weights_path>)
+    model_args = TtModelArgs(devices[0], instruct=instruct_mode)  # TtModelArgs(model_base_path=<weights_path>)
 
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
