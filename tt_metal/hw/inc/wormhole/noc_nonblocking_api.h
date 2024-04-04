@@ -74,8 +74,14 @@ inline __attribute__((always_inline)) void ncrisc_noc_fast_write(uint32_t noc, u
       (mcast ? (NOC_CMD_PATH_RESERVE | NOC_CMD_BRCST_PACKET) : 0x0) |
       NOC_CMD_RESP_MARKED;
 
+    uint32_t noc_id_reg = NOC_CMD_BUF_READ_REG(noc, 0, NOC_NODE_ID);
+    uint32_t my_x = noc_id_reg & NOC_NODE_ID_MASK;
+    uint32_t my_y = (noc_id_reg >> NOC_ADDR_NODE_ID_BITS) & NOC_NODE_ID_MASK;
+    uint64_t xy_local_addr = NOC_XY_ADDR(my_x, my_y, 0);
+
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_CTRL, noc_cmd_field);
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_TARG_ADDR_LO, src_addr);
+    NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_TARG_ADDR_MID, (uint32_t)(xy_local_addr >> 32));
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_RET_ADDR_LO, (uint32_t)dest_addr);
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_RET_ADDR_MID, dest_addr >> 32);
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_AT_LEN_BE, len_bytes);
@@ -96,8 +102,14 @@ inline __attribute__((always_inline)) void ncrisc_noc_fast_write_loopback_src(ui
       NOC_CMD_BRCST_SRC_INCLUDE |
       NOC_CMD_RESP_MARKED;
 
+    uint32_t noc_id_reg = NOC_CMD_BUF_READ_REG(noc, 0, NOC_NODE_ID);
+    uint32_t my_x = noc_id_reg & NOC_NODE_ID_MASK;
+    uint32_t my_y = (noc_id_reg >> NOC_ADDR_NODE_ID_BITS) & NOC_NODE_ID_MASK;
+    uint64_t xy_local_addr = NOC_XY_ADDR(my_x, my_y, 0);
+
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_CTRL, noc_cmd_field);
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_TARG_ADDR_LO, src_addr);
+    NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_TARG_ADDR_MID, (uint32_t)(xy_local_addr >> 32));
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_RET_ADDR_LO, (uint32_t)dest_addr);
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_RET_ADDR_MID, dest_addr >> 32);
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_AT_LEN_BE, len_bytes);
