@@ -19,11 +19,7 @@ from models.utility_functions import (
 from models.utility_functions import get_devices_for_t3000
 
 
-@pytest.mark.parametrize(
-    "iterations",
-    ((1,)),
-)
-def test_mixtral_attention_inference(all_devices, iterations, reset_seeds):
+def test_mixtral_attention_inference(all_devices, reset_seeds):
     pcc = 0.99
     dtype = ttnn.bfloat8_b
     devices = all_devices
@@ -45,7 +41,7 @@ def test_mixtral_attention_inference(all_devices, iterations, reset_seeds):
 
     tt_model = TtMixtralAttention(devices, state_dict, args=model_args, layer_num=0, dtype=dtype)
     generation_start_pos = 0
-    generation_length = iterations
+    generation_length = 1
     all_tests_pass = True
 
     for i in range(generation_length):
