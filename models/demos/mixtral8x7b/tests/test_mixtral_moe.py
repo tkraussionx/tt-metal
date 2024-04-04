@@ -17,12 +17,9 @@ from models.utility_functions import (
 from models.utility_functions import get_devices_for_t3000
 
 
-@pytest.mark.parametrize(
-    "iterations",
-    ((1,)),
-)
-def test_mixtral_moe_inference(all_devices, iterations):
+def test_mixtral_moe_inference(all_devices, reset_seeds):
     pcc = 0.99
+    iterations = 1
     dtype = ttnn.bfloat8_b
 
     devices = all_devices
