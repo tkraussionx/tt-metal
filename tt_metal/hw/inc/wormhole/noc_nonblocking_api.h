@@ -22,10 +22,15 @@ const uint32_t NCRISC_RD_CMD_BUF = 2;
 const uint32_t NCRISC_WR_REG_CMD_BUF = 3;
 const uint32_t NCRISC_AT_CMD_BUF = 3;
 
-const uint32_t BRISC_WR_CMD_BUF = 1;
-const uint32_t BRISC_RD_CMD_BUF = 0;
-const uint32_t BRISC_WR_REG_CMD_BUF = 1;
-const uint32_t BRISC_AT_CMD_BUF = 1;
+// const uint32_t BRISC_WR_CMD_BUF = 1;
+// const uint32_t BRISC_RD_CMD_BUF = 0;
+// const uint32_t BRISC_WR_REG_CMD_BUF = 1;
+// const uint32_t BRISC_AT_CMD_BUF = 1;
+
+const uint32_t BRISC_WR_CMD_BUF = 3;
+const uint32_t BRISC_RD_CMD_BUF = 2;
+const uint32_t BRISC_WR_REG_CMD_BUF = 3;
+const uint32_t BRISC_AT_CMD_BUF = 3;
 
 
 extern uint32_t noc_reads_num_issued[NUM_NOCS];
@@ -163,6 +168,23 @@ inline __attribute__((always_inline)) void noc_init() {
   }
 }
 
+inline __attribute__((always_inline)) void noc_init_brisc() {
+#pragma GCC unroll 0
+  for (int noc = 0; noc < NUM_NOCS; noc++) {
+    uint32_t noc_id_reg = NOC_CMD_BUF_READ_REG(noc, 0, NOC_NODE_ID);
+    uint32_t my_x = noc_id_reg & NOC_NODE_ID_MASK;
+    uint32_t my_y = (noc_id_reg >> NOC_ADDR_NODE_ID_BITS) & NOC_NODE_ID_MASK;
+    xy_local_addr[noc] = NOC_XY_ADDR(my_x, my_y, 0);
+
+    NOC_CMD_BUF_WRITE_REG(noc, BRISC_WR_CMD_BUF, NOC_TARG_ADDR_MID, (uint32_t)(xy_local_addr[noc] >> 32));
+    NOC_CMD_BUF_WRITE_REG(noc, BRISC_WR_REG_CMD_BUF, NOC_TARG_ADDR_MID, (uint32_t)(xy_local_addr[noc] >> 32));
+
+    uint32_t noc_rd_cmd_field = NOC_CMD_CPY | NOC_CMD_RD | NOC_CMD_RESP_MARKED | NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(1);
+
+    NOC_CMD_BUF_WRITE_REG(noc, BRISC_RD_CMD_BUF, NOC_CTRL, noc_rd_cmd_field);
+    NOC_CMD_BUF_WRITE_REG(noc, BRISC_RD_CMD_BUF, NOC_RET_ADDR_MID, (uint32_t)(xy_local_addr[noc] >> 32));
+  }
+}
 
 // set noc local memory state for a single kernel from the global state
 inline __attribute__((always_inline)) void noc_local_state_init(int noc) {

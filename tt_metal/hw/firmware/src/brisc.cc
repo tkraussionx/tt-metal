@@ -287,7 +287,7 @@ int main() {
 
     risc_init();
     device_setup();
-    noc_init();
+    noc_init_brisc();
 
     // Set ncrisc's resume address to 0 so we know when ncrisc has overwritten it
     mailboxes->ncrisc_halt.resume_addr = 0;
@@ -303,7 +303,7 @@ int main() {
     mailboxes->launch.run = RUN_MSG_DONE;
 
     while (1) {
-        noc_init();
+        noc_init_brisc();
         init_sync_registers();
         assert_just_ncrisc_reset();
 
