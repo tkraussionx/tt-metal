@@ -334,6 +334,10 @@ struct MultiDeviceHostStorage {
         return *this;
     }
 
+    bool operator == (const MultiDeviceHostStorage& other) {
+        return this->buffers == other.buffers and this->shapes == other.shapes;
+    }
+
     static constexpr auto attribute_names = std::make_tuple();
     const auto attribute_values() const { return std::make_tuple(); }
 
@@ -386,6 +390,10 @@ struct MultiDeviceStorage {
         return *this;
     }
 
+    bool operator == (const MultiDeviceStorage& other) {
+        return this->buffers == other.buffers and this->shapes == other.shapes;
+    }
+
     static constexpr auto attribute_names = std::make_tuple();
     const auto attribute_values() const { return std::make_tuple(); }
 
@@ -417,18 +425,18 @@ constexpr void raise_unsupported_storage() {
     static_assert(tt::stl::concepts::always_false_v<T>, "Unsupported Storage");
 }
 
-// inline bool operator==(const Storage &v1, const Storage &v2) {
-//     return std::visit(
-//         [](const auto &a, const auto &b) -> bool {
-//             if constexpr (std::is_same_v<decltype(a), decltype(b)>) {
-//                 return a == b;
-//             } else {
-//                 return false;
-//             }
-//         },
-//         v1,
-//         v2);
-// };
+inline bool operator==(const Storage &v1, const Storage &v2) {
+    return std::visit(
+        [](const auto &a, const auto &b) -> bool {
+            if constexpr (std::is_same_v<decltype(a), decltype(b)>) {
+                return a == b;
+            } else {
+                return false;
+            }
+        },
+        v1,
+        v2);
+};
 
 }  // namespace tt_metal
 
