@@ -14,11 +14,7 @@ from models.demos.mixtral8x7b.reference.model import TransformerBlock, precomput
 from models.utility_functions import comp_pcc, comp_allclose, get_devices_for_t3000
 
 
-@pytest.mark.parametrize(
-    "iterations",
-    ((1),),
-)
-def test_mixtral_decoder_inference(all_devices, iterations, reset_seeds):
+def test_mixtral_decoder_inference(all_devices, reset_seeds):
     """
     b: batch
     s: sequence length
@@ -48,14 +44,14 @@ def test_mixtral_decoder_inference(all_devices, iterations, reset_seeds):
     )
 
     generation_start_pos = 0
-    generation_length = iterations
+    generation_length = 1
     all_tests_pass = True
 
     seqlen = 1
     batch = 32
 
     for i in range(generation_length):
-        print(f"[Decoder] Generating token {i}")
+        logger.info(f"[Decoder] Generating token {i}")
 
         # input = torch.randn(1, 32, 4096)
         pt_decode_input_bsh = (torch.rand(batch, seqlen, model_args.dim) * 2) - 1
@@ -72,10 +68,10 @@ def test_mixtral_decoder_inference(all_devices, iterations, reset_seeds):
         # Run TT model
         tt_out_b1sh = tt_model(decode_input_b1sh, start_pos, current_pos, rot_mat)
         tt_output_torch_b1h = ttnn.to_torch(tt_out_b1sh[0]).squeeze(1).view(batch, 1, -1)
-        positions = torch.LongTensor([start_pos])
-        freqs_cis_i = precompute_freqs_cis(model_args.head_dim, 128_000)[positions]
 
         # Reference model
+        positions = torch.LongTensor([start_pos])
+        freqs_cis_i = precompute_freqs_cis(model_args.head_dim, 128_000)[positions]
         ref_output_bsh = reference_model(pt_decode_input_bsh, freqs_cis_i, positions, mask=None)
 
         passing, pcc_message = comp_pcc(ref_output_bsh, tt_output_torch_b1h, pcc)
