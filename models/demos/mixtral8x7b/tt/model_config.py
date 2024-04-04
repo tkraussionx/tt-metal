@@ -56,14 +56,21 @@ class TtModelArgs:
         "OUTPUT_MM",
     )
 
-    def __init__(self, device=None, model_base_path="/proj_sw/user_dev/hf_data/mistral"):
+    def __init__(self, device=None, model_base_path="/proj_sw/user_dev/hf_data/mistral", instruct=False):
         self.model_base_path = Path(model_base_path)
         # Some consumers like SentencePiece only accept str not Path for files
-        self.consolidated_weights_path = lambda i: str(
-            self.model_base_path / f"Mixtral-8x7B-v0.1/consolidated.{i:02d}.pt"
-        )
-        self.tokenizer_path = str(self.model_base_path / "Mixtral-8x7B-v0.1/tokenizer.model")
-        self.state_dict_path = str(self.model_base_path / "Mixtral-8x7B-v0.1/partial_state_dict.pt")
+        if instruct:  # Load instruct weights and tokenizer (Mixtral-8x7B-Instruct-v0.1)
+            self.consolidated_weights_path = lambda i: str(
+                self.model_base_path / f"Mixtral-8x7B-v0.1/consolidated_instruct.{i:02d}.pt"
+            )
+            self.tokenizer_path = str(self.model_base_path / "Mixtral-8x7B-v0.1/tokenizer_instruct.model")
+            self.state_dict_path = str(self.model_base_path / "Mixtral-8x7B-v0.1/partial_state_dict_instruct.pt")
+        else:  # Load generative weights and tokenizer (Mixtral-8x7B-v0.1)
+            self.consolidated_weights_path = lambda i: str(
+                self.model_base_path / f"Mixtral-8x7B-v0.1/consolidated.{i:02d}.pt"
+            )
+            self.tokenizer_path = str(self.model_base_path / "Mixtral-8x7B-v0.1/tokenizer.model")
+            self.state_dict_path = str(self.model_base_path / "Mixtral-8x7B-v0.1/partial_state_dict.pt")
 
         DRAM_MEMCFG = ttnn.DRAM_MEMORY_CONFIG
         L1_MEMCFG = ttnn.L1_MEMORY_CONFIG
@@ -140,11 +147,21 @@ class TtModelArgs:
             packer_l1_acc=True,
         )
 
-    def weight_cache_path(self, dtype):
-        return (
-            self.model_base_path
-            / {ttnn.bfloat16: "mixtral_tensor_cache_bf16", ttnn.bfloat8_b: "mixtral_tensor_cache_bfp8"}[dtype]
-        )
+    def weight_cache_path(self, dtype, instruct=False):
+        # Keep the weight cache separate for generative and instruct weights
+        if instruct:
+            return (
+                self.model_base_path
+                / {
+                    ttnn.bfloat16: "mixtral_tensor_cache_instruct_bf16",
+                    ttnn.bfloat8_b: "mixtral_tensor_cache_instruct_bfp8",
+                }[dtype]
+            )
+        else:
+            return (
+                self.model_base_path
+                / {ttnn.bfloat16: "mixtral_tensor_cache_bf16", ttnn.bfloat8_b: "mixtral_tensor_cache_bfp8"}[dtype]
+            )
 
     def get_model_config(self):
         return self.model_config
