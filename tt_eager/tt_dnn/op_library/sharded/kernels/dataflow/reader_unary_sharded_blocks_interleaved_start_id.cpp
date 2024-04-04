@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 
-#include "debug/dprint.h"
+//#include "debug/dprint.h"
 
 void kernel_main() {
     const uint32_t src_addr  = get_arg_val<uint32_t>(0);
@@ -27,8 +27,6 @@ void kernel_main() {
         .data_format = data_format
     };
 
-    DPRINT << "worker run"  <<ENDL();
-
     uint32_t curr_tile_id = start_id;
     cb_reserve_back(cb_id_in0, block_num_tiles);
     uint32_t l1_write_addr = get_write_ptr(cb_id_in0);
@@ -43,6 +41,4 @@ void kernel_main() {
         curr_tile_id += input_width_offset_tiles;
     }
     cb_push_back(cb_id_in0, block_num_tiles);
-
-    DPRINT << "worker ends"  <<ENDL();
 }
