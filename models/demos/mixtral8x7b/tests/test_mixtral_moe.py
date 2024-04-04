@@ -80,7 +80,7 @@ def test_mixtral_moe_inference(all_devices, iterations):
 
     # TODO Update start_pos (check llama test for reference)
     for i in range(iterations):
-        print(f"[Decoder] Generating token {i}")
+        logger.info(f"[Decoder] Generating token {i}")
 
         # input = torch.randn(1, 32, 4096)
         pt_decode_input = (torch.rand(batch, seqlen, model_args.dim) * 2) - 1
@@ -96,10 +96,7 @@ def test_mixtral_moe_inference(all_devices, iterations):
         ]
         # Run TT model
         tt_out = tt_model(tt_decode_input)
-        print("Converting to torch")
         tt_output_torch = ttnn.to_torch(tt_out[0]).squeeze(2).view(batch, 1, -1)
-
-        print("Converted to torch")
 
         # Reference model
         ref_output = reference_model(pt_decode_input)
