@@ -116,6 +116,8 @@ class TtMixtralAttention(torch.nn.Module):
             self.wqkv_list.append(wqkv)
             self.wo_list.append(wo)
             self.layer_past_list.append(layer_past)
+
+        # Scale tensor for q_heads to avoid falling back to host.
         self.head_dims = [
             ttnn.from_torch(
                 torch.ones(self.max_batch_size, 1, self.n_local_heads, self.head_dim) * (self.head_dim**-0.5),
@@ -233,7 +235,7 @@ class TtMixtralAttention(torch.nn.Module):
             q_heads_14BD = ttnn.pad(
                 q_heads_14BD, ((0, 0), (0, self.max_batch_size - self.n_local_heads), (0, 0), (0, 0)), value=0
             )
-            q_heads_B14D = ttnn.permute(q_heads_14BD, (2, 0, 1, 3)) * head_dim_B14D
+            q_heads_B14D = ttnn.permute(q_heads_14BD, (2, 0, 1, 3)) * head_dim_B14D  # Apply head scaling here instead of after Q.V to avoid fallback to host (multiplication by a tensor instead of a float)
             q_heads_B14D = ttnn.to_memory_config(q_heads_B14D, self.model_config["Q_TRANSPOSE_MEMCFG"])
 
             # shard keys
