@@ -5,8 +5,8 @@ import torch
 import pytest
 from loguru import logger
 import ttnn
-from models.demos.mixtral8x7b.tt.model_config_ttnn import TtModelArgs
-from models.demos.mixtral8x7b.tt.mixtral_rms_norm_ttnn import TtRMSNorm
+from models.demos.mixtral8x7b.tt.model_config import TtModelArgs
+from models.demos.mixtral8x7b.tt.mixtral_rms_norm import TtRMSNorm
 from models.demos.mixtral8x7b.reference.model import RMSNorm
 from models.utility_functions import (
     comp_pcc,
@@ -36,9 +36,7 @@ def test_mistral_rms_norm_inference(device, reset_seeds):
     input = torch.rand(1, 32, 4096)
     reference_output = reference_model(input)
 
-    tt_input = ttnn.from_torch(
-        input, device=device, dtype=dtype, layout=ttnn.TILE_LAYOUT
-    )  # , device, put_on_device=False)
+    tt_input = ttnn.from_torch(input, device=device, dtype=dtype, layout=ttnn.TILE_LAYOUT)
 
     tt_output = tt_model(tt_input)
     tt_output_torch = ttnn.to_torch(tt_output).squeeze(0)

@@ -4,15 +4,13 @@
 import torch
 import pytest
 from loguru import logger
-import json
-from pathlib import Path
 
 import ttnn
-from models.demos.mixtral8x7b.tt.mixtral_attention_ttnn import TtMixtralAttention
-from models.demos.mixtral8x7b.tt.mixtral_common_ttnn import (
+from models.demos.mixtral8x7b.tt.mixtral_attention import TtMixtralAttention
+from models.demos.mixtral8x7b.tt.mixtral_common import (
     prepare_inputs_ttnn,
 )
-from models.demos.mixtral8x7b.tt.model_config_ttnn import TtModelArgs
+from models.demos.mixtral8x7b.tt.model_config import TtModelArgs
 from models.demos.mixtral8x7b.reference.model import Attention, precompute_freqs_cis
 from models.utility_functions import (
     comp_pcc,
@@ -74,7 +72,6 @@ def test_mixtral_attention_inference(all_devices, iterations, reset_seeds):
         positions = torch.LongTensor([start_pos])
         freqs_cis_i = precompute_freqs_cis(model_args.head_dim, 128_000)[positions]
         reference_output = reference_model(pt_attention_input, freqs_cis_i, positions, mask=None)
-        print("OUTPUT SHAPES, ", reference_output.shape, tt_output_torch.shape)
         passing, pcc_message = comp_pcc(reference_output, tt_output_torch, pcc)
 
         logger.info(comp_allclose(reference_output, tt_output_torch))
@@ -105,9 +102,6 @@ def test_mixtral_attention_inference(all_devices, iterations, reset_seeds):
             tt_layer_present = tt_layer_present[0]
 
         for i, (cache_pt, cache_tt) in enumerate(zip(pytorch_layer_present, tt_layer_present)):
-            # print("CACHE PT", cache_pt, cache_pt.shape) #[32, 8, 4096, 128]
-            # print("CACHE TT", cache_tt, cache_tt.shape) #[32, 8, 4096, 128]
-
             if i == 0:
                 logger.info(
                     f"Skipping K cache comparison, since tt_lib rot_embed op does a different permutation from reference PyTorch code"

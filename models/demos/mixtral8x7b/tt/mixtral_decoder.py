@@ -3,11 +3,10 @@
 # SPDX-License-Identifier: Apache-2.0
 import torch
 import ttnn
-from typing import List
-from models.demos.mixtral8x7b.tt.mixtral_attention_ttnn import TtMixtralAttention
-from models.demos.mixtral8x7b.tt.mixtral_mlp_ttnn import TtMixtralMLP
-from models.demos.mixtral8x7b.tt.mixtral_rms_norm_ttnn import TtRMSNorm
-from models.demos.mixtral8x7b.tt.mixtral_moe_ttnn import TtMoeLayer
+from models.demos.mixtral8x7b.tt.mixtral_attention import TtMixtralAttention
+from models.demos.mixtral8x7b.tt.mixtral_mlp import TtMixtralMLP
+from models.demos.mixtral8x7b.tt.mixtral_rms_norm import TtRMSNorm
+from models.demos.mixtral8x7b.tt.mixtral_moe import TtMoeLayer
 
 
 class TtTransformerBlock(torch.nn.Module):
@@ -88,45 +87,34 @@ class TtTransformerBlock(torch.nn.Module):
             for dev in self.devices
         ]
 
-        self.comps = []
-
     def forward(
         self,
-        xs_b1sh: ttnn.Tensor,
-        start_pos: int,
-        current_pos: int,
-        rot_mats: List[ttnn.Tensor],
+        xs_1SBH,
+        start_pos,
+        current_pos,
+        rot_mats,
     ) -> ttnn.Tensor:
         """
-        b: batch dim
-        s: seq dim
+        Tensors are postfixed with 4 characters that represent their 4-D shape:
+        B: batch dim (32)
+        S: seq dim (1)
         1: unary dim
-        h: hidden dim
+        H: hidden dim (4096)
         """
-        assert isinstance(xs_b1sh, list)
-        deallocate = lambda ls: [ttnn.deallocate(l) for l in ls]
+        assert isinstance(xs_1SBH, list)
 
-        # Attention module expects a list of inputs, start_pos, attn mask (multi-device support)
-        attn_norm_s1bh = [self.attention_norm[i](xs_b1sh[i]) for i in range(self.num_devices)]
-        # self.comps.append(ttnn.to_torch(attn_norm_s1bh[0]))
-        attn_b1sh = self.attention(
-            attn_norm_s1bh,
+        attn_norm_1SBH = [self.attention_norm[i](xs_1SBH[i]) for i in range(self.num_devices)]
+
+        attn_1SBH = self.attention(
+            attn_norm_1SBH,
             start_pos,
             current_pos,
             rot_mats,
         )
-        # self.comps.append(ttnn.to_torch(attn_b1sh[0]))
-        hs_b1sh = [ttnn.add(xs_b1sh[i], attn_b1sh[i]) for i in range(self.num_devices)]
-        # self.comps.append(ttnn.to_torch(hs_b1sh[0]))
-        # deallocate(attn_b1sh)
+        hs_1SBH = [ttnn.add(xs_1SBH[i], attn_1SBH[i]) for i in range(self.num_devices)]
 
-        ffn_norm_s1bh = [self.ffn_norm[i](hs_b1sh[i]) for i in range(self.num_devices)]
-        # self.comps.append(ttnn.to_torch(ffn_norm_s1bh[0]))
-        ffn_b1sh = self.feed_forward(ffn_norm_s1bh)
-        # self.comps.append(ttnn.to_torch(ffn_b1sh[0]))
-        out_b1sh = [ttnn.add(hs_b1sh[i], ffn_b1sh[i]) for i in range(self.num_devices)]
-        # self.comps.append(ttnn.to_torch(out_b1sh[0]))
-        # deallocate(ffn_b1sh)
-        # deallocate(hs_b1sh)
-        # deallocate(attn_b1sh)
-        return out_b1sh
+        ffn_norm_1SBH = [self.ffn_norm[i](hs_1SBH[i]) for i in range(self.num_devices)]
+        ffn_1SBH = self.feed_forward(ffn_norm_1SBH)
+        out_1SBH = [ttnn.add(hs_1SBH[i], ffn_1SBH[i]) for i in range(self.num_devices)]
+
+        return out_1SBH

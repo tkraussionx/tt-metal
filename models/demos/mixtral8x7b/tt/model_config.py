@@ -4,7 +4,6 @@
 
 import ttnn
 from pathlib import Path
-import tt_lib as ttl
 
 
 class TtModelArgs:
@@ -57,7 +56,7 @@ class TtModelArgs:
         "OUTPUT_MM",
     )
 
-    def __init__(self, device, model_base_path="/proj_sw/user_dev/hf_data/mistral"):
+    def __init__(self, device=None, model_base_path="/proj_sw/user_dev/hf_data/mistral"):
         self.model_base_path = Path(model_base_path)
         # Some consumers like SentencePiece only accept str not Path for files
         self.consolidated_weights_path = lambda i: str(
@@ -124,30 +123,11 @@ class TtModelArgs:
 
         if device is not None:  # Avoid issue with test_mistral_torch.py not having a device
             grid_size = device.compute_with_storage_grid_size()
-            # for i in range(grid_size.y, 0, -1):
-            #     # Force the number of rows in the grid to be a factor of max_batch_size for a valid sharding
-            #     if self.max_batch_size % i == 0:
-            #         grid_size_y = i
-            #         break
-            # assert (
-            #     self.max_batch_size % grid_size_y == 0
-            # ), f"Number of rows in the grid should be a factor of max_batch_size ({self.max_batch_size})"
             self.max_grid_size = ttnn.CoreGrid(y=grid_size.y, x=grid_size.x)  # (y,x)  (y=7, x=8)
+            self.core_grid_attention = (
+                ttnn.CoreGrid(y=4, x=8) if (4 <= grid_size.y and 8 <= grid_size.x) else self.max_grid_size
+            )
 
-        # # Add sharded memory config for MLP FF1/FF3
-        # mlp_shard_config = ttnn.create_sharded_memory_config(
-        #     [self.max_batch_size, self.hidden_dim], self.max_grid_size, ttnn.ShardStrategy.WIDTH
-        # )
-        # self.model_config["FF1_OUTPUT_MEMCFG"] = mlp_shard_config
-        # self.model_config["FF3_OUTPUT_MEMCFG"] = mlp_shard_config
-
-        # # Compute kernel shared by attention and MLP. FP32 acc is needed for accuracy
-        # self.compute_kernel_config = ttnn.WormholeComputeKernelConfig(
-        #     math_fidelity=ttnn.MathFidelity.HiFi4,
-        #     math_approx_mode=False,
-        #     fp32_dest_acc_en=True,
-        #     packer_l1_acc=True,
-        # )
         self.compute_kernel_config = ttnn.WormholeComputeKernelConfig(
             math_fidelity=ttnn.MathFidelity.LoFi,
             fp32_dest_acc_en=True,

@@ -54,9 +54,9 @@ def prepare_inputs_ttnn(x_bsh, hidden_size, head_dim, max_seq_len, devices):
     x: (batch, seq, hidden_dim)
     start_pos: int
 
-    b: batch
-    s: sequence len
-    h: hidden
+    B: batch (32)
+    S: sequence len (1)
+    H: dim (4096)
     """
     assert x_bsh.size(2) == hidden_size
     assert len(x_bsh.size()) == 3
@@ -67,11 +67,11 @@ def prepare_inputs_ttnn(x_bsh, hidden_size, head_dim, max_seq_len, devices):
 
     rot_mat = get_rotation_mat(dhead=head_dim, end=max_seq_len * 2)
 
-    x_b1sh = x_bsh.view(1, seq_len, batch, hidden_size)
+    x_1SBH = x_bsh.view(1, seq_len, batch, hidden_size)
 
-    xs_b1sh, rot_mats = [], []
+    xs_1SBH, rot_mats = [], []
     for device in devices:
-        xs_b1sh.append(ttnn.from_torch(x_b1sh, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT))
+        xs_1SBH.append(ttnn.from_torch(x_1SBH, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT))
         rot_mats.append(
             [
                 ttnn.from_torch(rot_mat_i, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
@@ -79,7 +79,7 @@ def prepare_inputs_ttnn(x_bsh, hidden_size, head_dim, max_seq_len, devices):
             ]
         )
     return (
-        xs_b1sh,
+        xs_1SBH,
         rot_mats,
     )
 

@@ -3,11 +3,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
-import pytest
 from loguru import logger
 import ttnn
-from models.demos.mixtral8x7b.tt.model_config_ttnn import TtModelArgs
-from models.demos.mixtral8x7b.tt.mixtral_mlp_ttnn import TtMixtralMLP
+from models.demos.mixtral8x7b.tt.model_config import TtModelArgs
+from models.demos.mixtral8x7b.tt.mixtral_mlp import TtMixtralMLP
 from models.demos.mixtral8x7b.reference.model import FeedForward, RMSNorm
 from models.utility_functions import (
     comp_pcc,
@@ -46,7 +45,6 @@ def test_mixtral_mlp_inference(device, reset_seeds):
 
     torch_input = (torch.rand(1, 1, 32, model_args.dim) * 2) - 1
     torch_input = rms(torch_input)  # apply rmsnorm to input
-    torch.save(torch_input, "ff_norm_input.pt")
 
     reference_output = reference_model(torch_input)
     tt_input = ttnn.from_torch(

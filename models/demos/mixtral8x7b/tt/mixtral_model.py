@@ -4,14 +4,11 @@
 
 import ttnn
 import torch
-import torch.nn as nn
-from models.demos.mixtral8x7b.tt.mixtral_decoder_ttnn import TtTransformerBlock
-from models.demos.mixtral8x7b.tt.mixtral_rms_norm_ttnn import TtRMSNorm
-import ttnn
-from typing import Optional, List
+from models.demos.mixtral8x7b.tt.mixtral_decoder import TtTransformerBlock
+from models.demos.mixtral8x7b.tt.mixtral_rms_norm import TtRMSNorm
 
 
-class TtTransformer(nn.Module):
+class TtTransformer(torch.nn.Module):
     def __init__(
         self,
         devices,
@@ -69,10 +66,10 @@ class TtTransformer(nn.Module):
 
     def forward(
         self,
-        x: ttnn.Tensor,
-        start_pos: int,
-        current_pos: int,
-        rot_mats: List[ttnn.Tensor],
+        x,
+        start_pos,
+        current_pos,
+        rot_mats,
     ):
         for i, layer in enumerate(self.layers):
             x = layer(x, start_pos, current_pos, rot_mats)
@@ -81,17 +78,14 @@ class TtTransformer(nn.Module):
         x_norm = []
         for i in range(len(self.devices)):
             x_norm.append(self.norm[i](x[i]))
-            ttnn.deallocate(x[i])
-            # x_norm[i] = ttnn.permute(x_norm[i], (2, 1, 0, 3))
             output_i = ttnn.linear(
                 x_norm[i],
                 self.output_weight[i],
-                core_grid=self.args.max_grid_size,  # ttnn.CoreGrid(y=7, x=8),
+                core_grid=self.args.max_grid_size,
                 use_1d_systolic_array=True,
                 memory_config=self.model_config["OUTPUT_MM_MEMCFG"],
                 compute_kernel_config=self.compute_kernel,
             )
             outputs.append(output_i)
-            ttnn.deallocate(x_norm[i])
 
         return outputs

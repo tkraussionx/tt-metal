@@ -5,9 +5,9 @@ import torch
 from loguru import logger
 import json
 import ttnn
-from models.demos.mixtral8x7b.tt.mixtral_common_ttnn import prepare_inputs_ttnn, sample
-from models.demos.mixtral8x7b.tt.mixtral_model_ttnn import TtTransformer
-from models.demos.mixtral8x7b.tt.model_config_ttnn import TtModelArgs
+from models.demos.mixtral8x7b.tt.mixtral_common import prepare_inputs_ttnn, sample
+from models.demos.mixtral8x7b.tt.mixtral_model import TtTransformer
+from models.demos.mixtral8x7b.tt.model_config import TtModelArgs
 from models.demos.mixtral8x7b.reference.tokenizer import Tokenizer
 from models.utility_functions import get_devices_for_t3000
 
@@ -63,7 +63,7 @@ def preprocess_inputs(input_prompts, tokenizer, model_args, dtype, instruct, dev
 
 
 @torch.no_grad()
-def run_mistral_demo(user_input, batch_size, devices):
+def run_mixtral_demo(user_input, batch_size, devices):
     assert batch_size == 32, "Batch size must be 32"
 
     instruct_mode = False
@@ -77,8 +77,8 @@ def run_mistral_demo(user_input, batch_size, devices):
         input_prompts = load_inputs(user_input, 32)
 
     # Load model args, weights, and tokenizer
-    # Specify model_base_path=<MISTRAL_WEIGHTS_PATH> below to use your own weights
-    model_args = TtModelArgs()  # TtModelArgs(model_base_path=<weights_path>)
+    # Specify model_base_path=<mixtral_WEIGHTS_PATH> below to use your own weights
+    model_args = TtModelArgs(devices[0])  # TtModelArgs(model_base_path=<weights_path>)
 
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
@@ -98,7 +98,7 @@ def run_mistral_demo(user_input, batch_size, devices):
     if instruct_mode:
         tokenizer._model.pad_id = tokenizer._model.eos_id
 
-    # Load TTNN mistral model
+    # Load TTNN mixtral model
     logger.info("Loading weights to device...")
     tt_model = TtTransformer(
         devices=devices,
@@ -134,7 +134,7 @@ def run_mistral_demo(user_input, batch_size, devices):
             tt_model.devices,
         )
 
-        # Run ttnn mistral model
+        # Run ttnn mixtral model
         tt_out = tt_model(decode_input, start_pos, current_pos, rot_mat)
         # Convert ttnn tensor to torch tensor
         tt_output_torch = ttnn.to_torch(tt_out[0]).squeeze(1).view(32, 1, -1)  # [seq, batch, hidden_dim]
@@ -177,7 +177,6 @@ def run_mistral_demo(user_input, batch_size, devices):
             users_decoding = False
 
 
-def test_demo(all_devices):
-    user_input = "models/demos/mixtral8x7b/reference/input_data.json"
+def test_demo(all_devices, user_input="models/demos/mixtral8x7b/reference/input_data.json"):
     devices = get_devices_for_t3000(all_devices, 8)
-    return run_mistral_demo(user_input=user_input, batch_size=32, devices=devices)
+    return run_mixtral_demo(user_input=user_input, batch_size=32, devices=devices)

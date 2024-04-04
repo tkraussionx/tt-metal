@@ -24,11 +24,8 @@
 
 import torch
 from torch import nn
-from dataclasses import dataclass
-from pathlib import Path
-import json
 from typing import Optional, Tuple
-from models.demos.mixtral8x7b.reference.moe import MoeArgs, MoeLayer
+from models.demos.mixtral8x7b.reference.moe import MoeLayer
 
 
 def repeat_kv(keys: torch.Tensor, values: torch.Tensor, repeats: int):
@@ -151,7 +148,6 @@ class FeedForward(nn.Module):
 
     def forward(self, x) -> torch.Tensor:
         return self.w2(nn.functional.silu(self.w1(x)) * self.w3(x))
-        # return self.w2(self.w1(x) * self.w3(x))
 
 
 class RMSNorm(torch.nn.Module):
@@ -235,7 +231,7 @@ class Transformer(nn.Module):
         input_ids: torch.Tensor,
         positions: torch.Tensor,
     ):
-        h = input_ids  # self.tok_embeddings(input_ids)
+        h = input_ids
         freqs_cis = self.freqs_cis[positions]
 
         mask: Optional[torch.Tensor] = None

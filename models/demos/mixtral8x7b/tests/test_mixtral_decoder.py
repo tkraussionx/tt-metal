@@ -4,14 +4,12 @@
 import torch
 import pytest
 from loguru import logger
-import json
-from pathlib import Path
 import ttnn
-from models.demos.mixtral8x7b.tt.mixtral_common_ttnn import (
+from models.demos.mixtral8x7b.tt.mixtral_common import (
     prepare_inputs_ttnn,
 )
-from models.demos.mixtral8x7b.tt.mixtral_decoder_ttnn import TtTransformerBlock
-from models.demos.mixtral8x7b.tt.model_config_ttnn import TtModelArgs
+from models.demos.mixtral8x7b.tt.mixtral_decoder import TtTransformerBlock
+from models.demos.mixtral8x7b.tt.model_config import TtModelArgs
 from models.demos.mixtral8x7b.reference.model import TransformerBlock, precompute_freqs_cis
 from models.utility_functions import comp_pcc, comp_allclose, get_devices_for_t3000
 
@@ -56,7 +54,6 @@ def test_mixtral_decoder_inference(all_devices, iterations, reset_seeds):
     seqlen = 1
     batch = 32
 
-    # TODO Update start_pos (check llama test for reference)
     for i in range(generation_length):
         print(f"[Decoder] Generating token {i}")
 
@@ -74,15 +71,12 @@ def test_mixtral_decoder_inference(all_devices, iterations, reset_seeds):
         )
         # Run TT model
         tt_out_b1sh = tt_model(decode_input_b1sh, start_pos, current_pos, rot_mat)
-        print("DONE TT OUT")
         tt_output_torch_b1h = ttnn.to_torch(tt_out_b1sh[0]).squeeze(1).view(batch, 1, -1)
         positions = torch.LongTensor([start_pos])
         freqs_cis_i = precompute_freqs_cis(model_args.head_dim, 128_000)[positions]
 
         # Reference model
-        # mask = tt2torch_tensor(attn_mask[0])
-        ref_output_bsh = reference_model(pt_decode_input_bsh, freqs_cis_i, positions, mask=None)  # mask)
-        print("REF MODEL DONE", ref_output_bsh.shape)
+        ref_output_bsh = reference_model(pt_decode_input_bsh, freqs_cis_i, positions, mask=None)
 
         passing, pcc_message = comp_pcc(ref_output_bsh, tt_output_torch_b1h, pcc)
 

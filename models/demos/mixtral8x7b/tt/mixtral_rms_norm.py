@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 
 # SPDX-License-Identifier: Apache-2.0
-import torch.nn as nn
+import torch
 import ttnn
 
 
-class TtRMSNorm(nn.Module):
+class TtRMSNorm(torch.nn.Module):
     def __init__(
         self,
         device,

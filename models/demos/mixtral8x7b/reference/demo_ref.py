@@ -2,7 +2,7 @@ import torch
 from loguru import logger
 import json
 
-from models.demos.mixtral8x7b.tt.model_config_ttnn import TtModelArgs
+from models.demos.mixtral8x7b.tt.model_config import TtModelArgs
 from models.demos.mixtral8x7b.reference.model import Transformer
 from models.demos.mixtral8x7b.reference.tokenizer import Tokenizer
 
@@ -51,7 +51,7 @@ def preprocess_inputs(input_prompts, tokenizer, model_args, embd):
 
 
 @torch.no_grad()
-def run_mistral_demo(user_input, batch_size):
+def run_mixtral_demo(user_input, batch_size):
     assert batch_size == 32, "Batch size must be 32"
 
     logger.info(f"Reading inputs...")
@@ -61,9 +61,7 @@ def run_mistral_demo(user_input, batch_size):
         input_prompts = load_inputs(user_input, 32)
 
     # Load model args, weights, and tokenizer
-    # Specify model_base_path=<MISTRAL_WEIGHTS_PATH> below to use your own weights
-    model_args = TtModelArgs()  # TtModelArgs(model_base_path=<weights_path>)
-
+    model_args = TtModelArgs()
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
     logger.info("Loading weights...")
@@ -80,7 +78,7 @@ def run_mistral_demo(user_input, batch_size):
         embd,
     )
 
-    # Load TTNN mistral model
+    # Load TTNN mixtral model
     logger.info("Loading weights to device...")
     reference_model = Transformer(args=model_args)
     reference_model.load_state_dict(state_dict)
@@ -144,4 +142,5 @@ def run_mistral_demo(user_input, batch_size):
             users_decoding = False
 
 
-run_mistral_demo(user_input="models/demos/mixtral8x7b/reference/input_data.json", batch_size=32)
+def test_ref_demo(user_input="models/demos/mixtral8x7b/reference/input_data.json", batch_size=32):
+    return run_mixtral_demo(user_input=user_input, batch_size=batch_size)
