@@ -107,7 +107,7 @@ def sample(logits: torch.Tensor, temperature: float, top_p: float):
 
     return next_token
 
-
+# Helper function to recreate Mixtral state dictionary. Reads the consolidated weights provided in HuggingFace, separates the 8 experts and saves the updated dict into a new single file.
 def create_state_dict(model_args):
     state_dict = {}
     for i in range(1 + (model_args.n_layers - 1) // 4):
