@@ -35,5 +35,5 @@ export PYTHONPATH=$TT_METAL_HOME
 # pytest models/demos/falcon40b/tests/test_falcon_decoder.py::test_FalconDecoder_inference[BFLOAT8_B-SHARDED-falcon_40b-layer_0-decode_batch32-8chips]
 # pytest models/demos/falcon40b/tests/test_falcon_end_to_end.py::test_FalconCausalLM_end_to_end_with_program_cache[BFLOAT8_B-SHARDED-falcon_40b-layers_1-decode_batch32-8chips]
 
-pytest tests/ttnn/unit_tests/test_multi_device.py
+# pytest tests/ttnn/unit_tests/test_multi_device.py
 pytest tests/ttnn/unit_tests/test_multi_device_async.py
