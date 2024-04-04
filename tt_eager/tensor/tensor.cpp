@@ -336,7 +336,9 @@ Tensor Tensor::to(DeviceMesh *device_mesh, const MemoryConfig &mem_config) const
         target_device->push_work([*this, multi_device_tensor, mem_config, target_device] () mutable {
             TT_ASSERT(this->storage_type() == StorageType::MULTI_DEVICE_HOST or this->storage_type() == StorageType::MULTI_DEVICE, "Tensor::to(...) requires the tensor the be multi-device tensor.");
             auto shard = get_shard_for_device(*this, target_device);
-            shard = tensor_impl::to_device_wrapper(shard, target_device, mem_config);
+            if (this->storage_type() ==  StorageType::MULTI_DEVICE_HOST) {
+                shard = tensor_impl::to_device_wrapper(shard, target_device, mem_config);
+            }
             insert_buffer_and_shape_for_device(target_device, shard, multi_device_tensor);
             if (not (target_device->id())) {
                 multi_device_tensor.set_shape(this->get_shape());

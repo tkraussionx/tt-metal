@@ -9,6 +9,7 @@
 
 #include "common/env_lib.hpp"
 #include "lock_free_queue.hpp"
+#include <iostream>
 
 namespace tt {
 
@@ -47,7 +48,6 @@ class WorkExecutor {
     }
 
     inline void run_worker() {
-        this->worker_queue.worker_thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
         while (true) {
             if(this->worker_queue.empty()) {
                 if (this->worker_state == WorkerState::TERMINATE) {
@@ -97,7 +97,6 @@ class WorkExecutor {
         }
         this->worker_queue_mode = mode;
         if (this->worker_queue_mode == WorkExecutorMode::ASYNCHRONOUS) {
-            this->worker_queue.parent_thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
             this->start_worker();
         } else if (this->worker_queue_mode == WorkExecutorMode::SYNCHRONOUS) {
             this->synchronize();
@@ -105,7 +104,7 @@ class WorkExecutor {
         }
     }
 
-    static WorkExecutorMode get_worker_mode() { return worker_queue_mode; }
+    WorkExecutorMode get_worker_mode() { return worker_queue_mode; }
 
     inline std::size_t get_parent_thread_id() { return this->worker_queue.parent_thread_id; }
     private:
@@ -116,6 +115,7 @@ class WorkExecutor {
         this->worker_queue.parent_thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
         this->worker_state = WorkerState::RUNNING;
         this->worker_thread = std::thread(&WorkExecutor::run_worker, this);
+        this->worker_queue.worker_thread_id = std::hash<std::thread::id>{}(this->worker_thread.get_id());
     }
 
     inline void stop_worker() {
@@ -132,7 +132,7 @@ class WorkExecutor {
         return static_cast<WorkExecutorMode>(value);
     }
 
-    inline static WorkExecutorMode worker_queue_mode = default_worker_queue_mode();
+    WorkExecutorMode worker_queue_mode = default_worker_queue_mode();
 };
 
 } // namespace tt
