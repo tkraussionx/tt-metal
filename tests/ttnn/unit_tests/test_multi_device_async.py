@@ -42,7 +42,7 @@ def test_ttnn_to_and_from_multi_device_shard(pcie_device_mesh, layout, memory_co
 
 @pytest.mark.parametrize("layout", [ttnn.TILE_LAYOUT, ttnn.ROW_MAJOR_LAYOUT])
 @pytest.mark.parametrize("memory_config", [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG])
-# @pytest.mark.parametrize("pcie_device_mesh", [8], indirect=True)
+@pytest.mark.parametrize("pcie_device_mesh", [8], indirect=True)
 def test_multi_device_check_per_device_shard(pcie_device_mesh, layout, memory_config):
     """This test checks if the tensor is correctly sharded across devices"""
     from ttnn import ShardTensorToMesh, ConcatMeshToTensor
@@ -58,7 +58,7 @@ def test_multi_device_check_per_device_shard(pcie_device_mesh, layout, memory_co
         ttnn_tensor = ttnn.to_device(ttnn_tensor, pcie_device_mesh, memory_config=memory_config)
         ttnn_loop_back_tensor = ttnn.from_device(ttnn_tensor)
 
-        shard_offset, shard_size = 0, 128
+        shard_offset, shard_size = 0, int(1024 / len(pcie_device_mesh.get_device_ids()))
         for device_tensor in ttnn.get_device_tensors(ttnn_loop_back_tensor):
             device_tensor_torch = ttnn.to_torch(device_tensor)
             assert torch.all(device_tensor_torch == torch_tensor[..., shard_offset : shard_offset + shard_size])
@@ -71,7 +71,7 @@ def test_multi_device_check_per_device_shard(pcie_device_mesh, layout, memory_co
 @pytest.mark.parametrize("shape", [(1, 1, 512, 512), (1, 1, 1024, 1024)])
 @pytest.mark.parametrize("layout", [ttnn.TILE_LAYOUT, ttnn.ROW_MAJOR_LAYOUT])
 @pytest.mark.parametrize("memory_config", [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG])
-# @pytest.mark.parametrize("pcie_device_mesh", [8], indirect=True)
+# @pytest.mark.parametrize("pcie_device_mesh", [4], indirect=True)
 def test_multi_device_replicate(pcie_device_mesh, shape, layout, memory_config):
     """Test ReplicateTensorToMesh to broadcast a tensor across multiple devices"""
     from ttnn import ReplicateTensorToMesh, ListMeshToTensor
@@ -80,7 +80,6 @@ def test_multi_device_replicate(pcie_device_mesh, shape, layout, memory_config):
         pcie_device_mesh.get_device(device).enable_async(True)
 
     for i in range(100):
-        print("Running iter: " + str(i))
         full_tensor = torch.rand(shape, dtype=torch.bfloat16)
 
         ttnn_tensor = ttnn.from_torch(
@@ -102,7 +101,7 @@ def test_multi_device_replicate(pcie_device_mesh, shape, layout, memory_config):
         pcie_device_mesh.get_device(device).enable_async(False)
 
 
-# @pytest.mark.parametrize("pcie_device_mesh", [8], indirect=True)
+@pytest.mark.parametrize("pcie_device_mesh", [2], indirect=True)
 @pytest.mark.parametrize("program_cache", [False, True])
 @pytest.mark.parametrize("shape", [(1, 1, 512, 512), (1, 3, 1024, 1024)])
 def test_multi_device_unary_binary_op_chain(pcie_device_mesh, program_cache, shape):
@@ -135,7 +134,7 @@ def test_multi_device_unary_binary_op_chain(pcie_device_mesh, program_cache, sha
             ttnn.sub(ttnn.exp(ttnn.relu(ttnn.gelu(ttnn_input_tensor))), ttnn.exp(ttnn_input_tensor)),
             ttnn.silu(ttnn_input_tensor),
         )
-        ttnn_torch_output_tensor = ttnn.from_device(ttnn_output_tensor)
+        ttnn_output_tensor = ttnn.from_device(ttnn_output_tensor)
         ttnn_torch_output_tensor = ttnn.to_torch(
             ttnn_output_tensor, mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=3)
         )
@@ -161,7 +160,6 @@ def test_multi_device_data_parallel_op_chain(pcie_device_mesh, program_cache):
     torch_silu = torch.nn.SiLU()
     start = time.time()
     for i in range(5):
-        print("Running iter " + str(i))
         torch_input_a_tensor = torch.rand((16, 1, 512, 512), dtype=torch.bfloat16)
         torch_input_b_tensor = torch.rand((1, 1, 512, 512), dtype=torch.bfloat16)
         torch_output_golden = torch_silu(
@@ -194,48 +192,43 @@ def test_multi_device_data_parallel_op_chain(pcie_device_mesh, program_cache):
         pcie_device_mesh.get_device(device).enable_async(False)
 
 
-# @pytest.mark.parametrize("pcie_device_mesh", [2], indirect=True)
-# def test_multi_device_explicit_dealloc(pcie_device_mesh):
-#     """Multidevice API: Data Parallel on matmul"""
-#     from ttnn import ShardTensorToMesh, ConcatMeshToTensor, ReplicateTensorToMesh
-#     import time
+@pytest.mark.parametrize("pcie_device_mesh", [2], indirect=True)
+def test_multi_device_explicit_dealloc(pcie_device_mesh):
+    """Multidevice API: Ensure that deallocating multi-device tensors works as expected"""
+    from ttnn import ShardTensorToMesh, ConcatMeshToTensor, ReplicateTensorToMesh
 
-#     for device in pcie_device_mesh.get_device_ids():
-#         pcie_device_mesh.get_device(device).enable_async(True)
-#     start = time.time()
-#     for i in range(1):
-#         print("Running iter " + str(i))
-#         torch_input_a_tensor = torch.rand((512, 1, 2048, 2048), dtype=torch.bfloat16)
-#         torch_input_b_tensor = torch.rand((1, 1, 2048, 2048), dtype=torch.bfloat16)
-#         torch_output_golden = torch.nn.functional.relu(
-#             torch.nn.functional.gelu(torch_input_a_tensor @ torch_input_b_tensor)
-#         ) @ torch_input_a_tensor
-#         ttnn_input_a_tensor = ttnn.from_torch(
-#             torch_input_a_tensor,
-#             layout=ttnn.TILE_LAYOUT,
-#             device=pcie_device_mesh,
-#             mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=0),
-#         )
-#         ttnn_input_b_tensor = ttnn.from_torch(
-#             torch_input_b_tensor,
-#             layout=ttnn.TILE_LAYOUT,
-#             device=pcie_device_mesh,
-#             mesh_mapper=ReplicateTensorToMesh(pcie_device_mesh),
-#         )
-#         ttnn_output_tensor_1 = ttnn_input_a_tensor @ ttnn_input_b_tensor
-#         ttnn_output_tensor_2 = ttnn.gelu(ttnn_output_tensor_1)
-#         ttnn_output_tensor_1.deallocate()
-#         ttnn_input_b_tensor.deallocate()
-#         ttnn_output_tensor_3 = ttnn.relu(ttnn_output_tensor_2)
-#         ttnn_output_tensor_2.deallocate()
-#         ttnn_output_tensor_4 = ttnn_output_tensor_3 @ ttnn_input_a_tensor
-#         ttnn_output_tensor_3.deallocate()
-#         ttnn_output_tensor = ttnn.from_device(ttnn_output_tensor_4)
-#         ttnn_torch_output_tensor = ttnn.to_torch(
-#             ttnn_output_tensor, mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=0)
-#         )
-#         assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.97)
-#     print("Time taken: " + str(time.time() - start))
+    for device in pcie_device_mesh.get_device_ids():
+        pcie_device_mesh.get_device(device).enable_async(True)
 
-#     for device in pcie_device_mesh.get_device_ids():
-#         pcie_device_mesh.get_device(device).enable_async(False)
+    # Create input tensors that cause OOM during op execution
+    # Explictly deallocate buffers after each op to ensure we don't run OOM.
+    torch_input_a_tensor = torch.rand((512, 1, 2048, 2048), dtype=torch.bfloat16)
+    torch_input_b_tensor = torch.rand((1, 1, 2048, 2048), dtype=torch.bfloat16)
+
+    ttnn_input_a_tensor = ttnn.from_torch(
+        torch_input_a_tensor,
+        layout=ttnn.TILE_LAYOUT,
+        device=pcie_device_mesh,
+        mesh_mapper=ShardTensorToMesh(pcie_device_mesh, dim=0),
+    )
+    ttnn_input_b_tensor = ttnn.from_torch(
+        torch_input_b_tensor,
+        layout=ttnn.TILE_LAYOUT,
+        device=pcie_device_mesh,
+        mesh_mapper=ReplicateTensorToMesh(pcie_device_mesh),
+    )
+    ttnn_output_tensor_1 = ttnn_input_a_tensor @ ttnn_input_b_tensor
+    ttnn_output_tensor_2 = ttnn.gelu(ttnn_output_tensor_1)
+    ttnn_output_tensor_1.deallocate()
+    ttnn_input_b_tensor.deallocate()
+    ttnn_output_tensor_3 = ttnn.relu(ttnn_output_tensor_2)
+    ttnn_output_tensor_2.deallocate()
+    ttnn_output_tensor_4 = ttnn_output_tensor_3 @ ttnn_input_a_tensor
+    ttnn_output_tensor_3.deallocate()
+    ttnn_output_tensor = ttnn.from_device(ttnn_output_tensor_4)
+    ttnn_torch_output_tensor = ttnn.to_torch(
+        ttnn_output_tensor, mesh_composer=ConcatMeshToTensor(pcie_device_mesh, dim=0)
+    )
+
+    for device in pcie_device_mesh.get_device_ids():
+        pcie_device_mesh.get_device(device).enable_async(False)

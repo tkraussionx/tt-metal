@@ -42,6 +42,12 @@ static Device* get_device(const std::vector<Tensor>& input_tensors, const std::v
     return device;
 }
 
+void validate_op_launch(Device* worker) {
+    if (worker->get_worker_mode() == WorkExecutorMode::ASYNCHRONOUS) {
+        TT_FATAL(not worker->in_main_thread(), "launch_op or launch_with_autoformat must be used when running in async mode.");
+    }
+}
+
 void override_addresses(
     const OverrideAddressesCallback& override_addresses_callback,
     const Program &program,
@@ -212,7 +218,7 @@ std::vector<Tensor> run_multi_device_operation(
 {
     // TODO: Assumes each input/output tensor is mapped to the same set of devices; relax this later
     std::vector<Device*> devices = get_devices(input_tensors[0]);
-
+    detail::validate_op_launch(devices.at(0));
     std::map<Device*, std::vector<Tensor>> per_device_output_tensors;
     std::optional<std::size_t> num_output_tensors_per_device;
     for (Device *device : devices)
@@ -286,6 +292,7 @@ std::vector<Tensor> run(
             std::nullopt, operation, input_tensors, optional_input_tensors, optional_output_tensors);
     }
     auto device = detail::get_device(input_tensors, optional_input_tensors);
+    detail::validate_op_launch(device);
     return detail::decorate_device_operation(detail::run_device_operation)(
         detail::USE_FAST_DISPATCH ? std::make_optional(std::ref(device->command_queue())) : std::nullopt, operation, input_tensors, optional_input_tensors, optional_output_tensors);
 }
@@ -297,7 +304,7 @@ std::vector<Tensor> run_without_autoformat(
 ) {
     ZoneScoped;
     Device* device = detail::get_device(input_tensors, optional_input_tensors);
-
+    detail::validate_op_launch(device);
     std::vector<Tensor> input_tensors_on_dev;
     input_tensors_on_dev.reserve(input_tensors.size());
     for (auto& input_tensor : input_tensors) {
@@ -327,7 +334,7 @@ std::vector<Tensor> run_without_autoformat(
 ) {
     ZoneScoped;
     Device* device = detail::get_device(input_tensors, optional_input_tensors);
-
+    detail::validate_op_launch(device);
     std::vector<Tensor> input_tensors_on_dev;
     input_tensors_on_dev.reserve(input_tensors.size());
     for (auto& input_tensor : input_tensors) {
@@ -362,7 +369,7 @@ std::vector<Tensor> run_with_autoformat(
         return run(operation, input_tensors, optional_input_tensors);
     }
     Device* device = detail::get_device(input_tensors, optional_input_tensors);
-
+    detail::validate_op_launch(device);
     auto output_shapes = operation.compute_output_shapes(input_tensors);
 
     std::vector<Tensor> formatted_input_tensors;
@@ -420,7 +427,7 @@ std::vector<Tensor> run_with_autoformat(
         return run(operation, input_tensors, optional_input_tensors);
     }
     Device* device = detail::get_device(input_tensors, optional_input_tensors);
-
+    detail::validate_op_launch(device);
     auto output_shapes = operation.compute_output_shapes(input_tensors);
 
     TT_ASSERT(input_tensors.size() == input_formatting.size());
@@ -486,13 +493,8 @@ void launch_op(
     for (auto& output_tensor : output_tensors) {
         TT_FATAL(output_tensor.workers.size(), "Worker threads must be specified for outputs populated by launch_op. This API can only be used for creating output tensors on device.");
         TT_FATAL(output_tensor.workers == workers, "Worker threads must be consistent across all outputs populated by launch_op.");
-        // Populate device storage outside of thread, so that downstream
-        // functions running in main can get storage type without blocking
-        // Assume that outputs will be allocated on device (this will happen unless
-        // autoformat moves them to host, in which case storage is dynamic and we
-        // need to repopulate it in the worker + block in main thread: see dynamic_storage
-        // var set in launch_with_autoformat).
     }
+    validate_worker_modes(workers);
     // Record ref counts for all tensors before pushing to worker queue.
     std::vector<uint32_t> input_tensor_ref_count = {};
     std::vector<uint32_t> optional_input_tensor_ref_count = {};
