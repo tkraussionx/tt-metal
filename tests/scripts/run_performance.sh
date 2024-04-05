@@ -73,6 +73,8 @@ run_perf_models_cnn_javelin() {
 
     echo "There are no CNN tests for Javelin yet specified. Arch $tt_arch requested"
 
+    env pytest models/experimental/functional_stable_diffusion/tests -m $test_marker
+
     ## Merge all the generated reports
     env python models/perf/merge_perf_results.py
 }
@@ -87,6 +89,8 @@ run_device_perf_models() {
     env pytest "tests/ttnn/integration_tests/resnet/test_performance.py" -m $test_marker
 
     env pytest models/demos/resnet/tests -m $test_marker
+
+    env pytest models/experimental/functional_stable_diffusion/tests -m $test_marker
 
     env pytest models/demos/metal_BERT_large_11/tests -m $test_marker
 
