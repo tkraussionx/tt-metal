@@ -56,26 +56,26 @@ if not is_grayskull():
 
 
 def permute_conv_weights(weight, bias):
-    weight = ttnn.to_layout(weight, layout=ttnn.ROW_MAJOR_LAYOUT)
+    weight = ttnn.to_layout(weight, layout=ttnn.ROW_MAJOR_LAYOUT, use_multicore=True)
     weight = ttnn.to_torch(weight)
     weight = torch.permute(weight, (2, 3, 0, 1))
-    bias = ttnn.to_layout(bias, layout=ttnn.ROW_MAJOR_LAYOUT)
+    bias = ttnn.to_layout(bias, layout=ttnn.ROW_MAJOR_LAYOUT, use_multicore=True)
     bias = ttnn.to_torch(bias)
     return weight, bias
 
 
-def torch_to_ttnn(input, device, layout=ttnn.TILE_LAYOUT):
-    input = ttnn.from_torch(input, ttnn.bfloat16)
-    input = ttnn.to_layout(input, layout)
-    input = ttnn.to_device(input, device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
-    return input
+# def torch_to_ttnn(input, device, layout=ttnn.TILE_LAYOUT):
+#    input = ttnn.from_torch(input, ttnn.bfloat16)
+#    input = ttnn.to_layout(input, layout)
+#    input = ttnn.to_device(input, device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+#    return input
 
 
-def ttnn_to_torch(input):
-    input = ttnn.to_layout(input, ttnn.ROW_MAJOR_LAYOUT)
-    input = ttnn.from_device(input)
-    input = ttnn.to_torch(input)
-    return input
+# def ttnn_to_torch(input):
+#    input = ttnn.to_layout(input, ttnn.ROW_MAJOR_LAYOUT, use_multicore=True)
+#    input = ttnn.from_device(input)
+#    input = ttnn.to_torch(input)
+#    return input
 
 
 class UNet2DConditionModel:
@@ -594,7 +594,7 @@ class UNet2DConditionModel:
                 ), f"CrossAttnUpBlock2D, and UpBlock2D are the only up blocks implemented! you requested {up_block_type}"
 
         # 6.post-process
-        sample = ttnn.to_layout(sample, ttnn.ROW_MAJOR_LAYOUT)
+        sample = ttnn.to_layout(sample, ttnn.ROW_MAJOR_LAYOUT, use_multicore=True)
         if self.fallback_on_groupnorm:
             assert self.norm_num_groups == norm_num_groups
             # sample = ttnn.to_memory_config(sample, ttnn.L1_MEMORY_CONFIG)
@@ -649,6 +649,7 @@ class UNet2DConditionModel:
                 self.conv_out.in_channels,
             ),
         )
+        sample = ttnn.to_layout(sample, ttnn.TILE_LAYOUT, use_multicore=True)
         sample = ttnn.silu(sample, memory_config=ttnn.get_memory_config(sample))
         if ttnn.get_memory_config(sample) != self.conv_out.conv.input_sharded_memory_config:
             sample = ttnn.to_memory_config(sample, self.conv_out.conv.input_sharded_memory_config)

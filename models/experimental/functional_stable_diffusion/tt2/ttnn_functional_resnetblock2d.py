@@ -20,18 +20,18 @@ from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_utility
 import time
 
 
-def torch_to_ttnn(input, device, layout=ttnn.TILE_LAYOUT):
-    input = ttnn.from_torch(input, ttnn.bfloat16)
-    input = ttnn.to_layout(input, layout)
-    input = ttnn.to_device(input, device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
-    return input
+# def torch_to_ttnn(input, device, layout=ttnn.TILE_LAYOUT):
+#    input = ttnn.from_torch(input, ttnn.bfloat16)
+#    input = ttnn.to_layout(input, layout, use_multicore=True)
+#    input = ttnn.to_device(input, device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+#    return input
 
 
-def ttnn_to_torch(input):
-    input = ttnn.to_layout(input, ttnn.ROW_MAJOR_LAYOUT)
-    input = ttnn.from_device(input)
-    input = ttnn.to_torch(input)
-    return input
+# def ttnn_to_torch(input):
+#    input = ttnn.to_layout(input, ttnn.ROW_MAJOR_LAYOUT, use_multicore=True)
+#    input = ttnn.from_device(input)
+#    input = ttnn.to_torch(input)
+#    return input
 
 
 config_override = {
@@ -397,6 +397,7 @@ class resnetBlock2D:
                 hidden_states,
                 (1, 1, self.conv2.batch_size * self.conv2.input_height * self.conv2.input_width, in_channels),
             )
+            hidden_states = ttnn.to_layout(hidden_states, ttnn.TILE_LAYOUT, use_multicore=True)
         hidden_states = nonlinearity(hidden_states, memory_config=ttnn.get_memory_config(hidden_states))
 
         if up:
@@ -514,6 +515,7 @@ class resnetBlock2D:
             hidden_states,
             (1, 1, self.conv2.batch_size * self.conv2.input_height * self.conv2.input_width, out_channels),
         )
+        hidden_states = ttnn.to_layout(hidden_states, ttnn.TILE_LAYOUT, use_multicore=True)
         hidden_states = nonlinearity(hidden_states, memory_config=ttnn.get_memory_config(hidden_states))
 
         hidden_states = ttnn.to_memory_config(hidden_states, self.conv2.conv.input_sharded_memory_config)
