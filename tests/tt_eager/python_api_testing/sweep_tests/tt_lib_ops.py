@@ -2323,7 +2323,8 @@ def make_binary_op(ttl_tensor_binop):
     ):
         t0 = setup_tt_tensor(x, device, layout[0], input_mem_config[0], dtype[0])
         t1 = setup_tt_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
-        t2 = ttl_tensor_binop(t0, t1, output_mem_config=output_mem_config)
+        tt1 = setup_tt_tensor(y, device, layout[1], input_mem_config[1], dtype[1])
+        t2 = ttl_tensor_binop(t0, t1, output_mem_config=output_mem_config, opt_output_tensor=[tt1])
 
         return tt2torch_tensor(t2)
 
