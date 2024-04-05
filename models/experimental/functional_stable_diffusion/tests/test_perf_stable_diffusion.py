@@ -281,9 +281,6 @@ def test_stable_diffusion_perf(
     ((0.16),),
 )
 def test_stable_diffusion_device_perf(expected_perf):
-    if device.core_grid.y == 7:
-        pytest.skip("Not supporting N300 yet")
-
     subdir = "ttnn_stable_diffusion"
     margin = 0.03
     batch = 1
