@@ -415,8 +415,8 @@ class TtFalconAttention:
                 q_slices.append(
                     tt_lib.tensor.interleaved_to_sharded_partial(
                         query_layer[i],
-                        (8, 4),
-                        [64, self.head_dim],  # each slice is [1,16,128,64], we use 32 cores
+                        (8, 8),
+                        [slice_size * 16 // 64, self.head_dim],  # each slice is [1,16,128,64], we use 64 cores
                         num_slices,  # num_slices
                         slice_i,  # slice_index
                         tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
@@ -426,8 +426,8 @@ class TtFalconAttention:
                 attn_mask_slices.append(
                     tt_lib.tensor.interleaved_to_sharded_partial(
                         attention_mask[i],
-                        (8, 4),
-                        [64, q_len],  # each slice is [1,16,128,128], we use 32 cores
+                        (8, 8),
+                        [slice_size * 16 // 64, q_len],  # each slice is [1,16,128,128], we use 64 cores
                         num_slices,  # num_slices
                         slice_i,  # slice_index
                         tt_lib.tensor.TensorMemoryLayout.HEIGHT_SHARDED,

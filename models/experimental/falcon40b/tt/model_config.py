@@ -800,7 +800,7 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
 
     # Layernorm is an exception that are sharded also here, because the interleaved OP does not fit in L1 for 40b hidden size
     layernorm_num_cores_x = 8
-    layernorm_max_num_cores_y = 7
+    layernorm_max_num_cores_y = 8
 
     layernorm_slice_size = 512
     attetnion_slice_size = 128
@@ -827,30 +827,32 @@ def get_prefill_model_config(model_config_str, input_shape, num_devices):
 
     # Specify program configs
 
+    attetnion_mm_M = attetnion_slice_size * 16 // 64 // 32  # attetnion_slice_size * 16 qheads // 32 cores // TILE_SIZE
+
     # Attention
     model_config["ATTENTION_MM_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-        compute_with_storage_grid_size=(8, 4),
+        compute_with_storage_grid_size=(8, 8),
         in0_block_w=head_dim // 32,
         out_subblock_h=1,
         out_subblock_w=1,
-        per_core_M=attetnion_slice_size * 16 // 32 // 32,  # attetnion_slice_size * 16 qheads // 32 cores // TILE_SIZE
+        per_core_M=attetnion_mm_M,  # attetnion_slice_size * 16 qheads // num cores // TILE_SIZE
         per_core_N=row_height // 32,
         fuse_batch=True,
         fused_activation=None,
         mcast_in0=False,
     )
     model_config["SOFTMAX_PROGCFG"] = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
-        compute_with_storage_grid_size=(8, 4),
+        compute_with_storage_grid_size=(8, 8),
         subblock_w=1,
-        block_h=attetnion_slice_size * 16 // 32 // 32,  # attetnion_slice_size * 16 qheads // 32 cores // TILE_SIZE
+        block_h=attetnion_mm_M,  # attetnion_slice_size * 16 qheads // num cores // TILE_SIZE
         block_w=1,  # Dynamic
     )
     model_config["ATTENTION_MM_2_PROGCFG"] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-        compute_with_storage_grid_size=(8, 4),
+        compute_with_storage_grid_size=(8, 8),
         in0_block_w=row_height // 32,
         out_subblock_h=1,
         out_subblock_w=1,
-        per_core_M=attetnion_slice_size * 16 // 32 // 32,  # attetnion_slice_size * 16 qheads // 32 cores // TILE_SIZE
+        per_core_M=attetnion_mm_M,  # attetnion_slice_size * 16 qheads // num cores // TILE_SIZE
         per_core_N=head_dim // 32,
         fuse_batch=True,
         fused_activation=None,
@@ -964,14 +966,14 @@ def get_sharded_layernorm_specs_for_seqlen(
     )
 
     layernorm_block_sharded_prg_config = ttl.operations.primary.LayerNormShardedMultiCoreProgramConfig(
-        compute_with_storage_grid_size=[layernorm_num_cores_x, layernorm_max_num_cores_y],
+        compute_with_storage_grid_size=[layernorm_num_cores_x, layernorm_num_cores_y],
         subblock_w=8,
         block_h=num_tiles_per_core_h,
         block_w=num_tiles_per_core_w,
         inplace=False,
     )
     layernorm_block_sharded_prg_config_inplace = ttl.operations.primary.LayerNormShardedMultiCoreProgramConfig(
-        compute_with_storage_grid_size=[layernorm_num_cores_x, layernorm_max_num_cores_y],
+        compute_with_storage_grid_size=[layernorm_num_cores_x, layernorm_num_cores_y],
         subblock_w=8,
         block_h=num_tiles_per_core_h,
         block_w=num_tiles_per_core_w,
