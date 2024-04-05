@@ -514,6 +514,7 @@ void launch_op(
             optional_input_tensor_ref_count.push_back(async_safe_optional_input_tensors[i].value().tensor_attributes->record_main_thread_ref_count());
         }
         else {
+            async_safe_optional_input_tensors.push_back(std::nullopt);
             optional_input_tensor_ref_count.push_back(0);
         }
     }
