@@ -376,6 +376,11 @@ class resnet50:
         )
 
         self.max_pool_reader_patterns_cache = {}
+        max_pool_parallel_config_override = {}
+        if is_grayskull() and self.batch_size != 20:
+            max_pool_parallel_config_override["grid_size"] = self.conv1.conv.grid_size
+            max_pool_parallel_config_override["num_cores_nhw"] = self.conv1.conv.sliding_window_op_params.num_cores_nhw
+
         self.max_pool = ttnn.MaxPool2d(
             kernel_size=(3, 3),
             stride=(2, 2),
@@ -388,32 +393,13 @@ class resnet50:
             input_width=112,
             reader_patterns_cache=self.max_pool_reader_patterns_cache,
             deallocate_activation=True,
+            parallel_config_override=max_pool_parallel_config_override,
+            channels=out_channels,
         )
 
         # for Wh, batch size 20 run, max pool input sharded memory config != conv1 output sharded memory config
-        grid_size = self.max_pool.max_pool.grid_size
-        shard_grid = ttnn.experimental.tensor.CoreRangeSet(
-            {
-                ttnn.experimental.tensor.CoreRange(
-                    ttnn.experimental.tensor.CoreCoord(0, 0),
-                    ttnn.experimental.tensor.CoreCoord(grid_size[0] - 1, grid_size[1] - 1),
-                )
-            }
-        )
-        max_pool_input_nhw = 112 * 112 * self.batch_size
-        assert max_pool_input_nhw % self.max_pool.max_pool.ncores_nhw == 0
-        shard_shape = [
-            max_pool_input_nhw // self.max_pool.max_pool.ncores_nhw,
-            out_channels,
-        ]
-        shard_spec = ttnn.experimental.tensor.ShardSpec(
-            shard_grid, shard_shape, ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR, False
-        )
-        self.max_pool_input_sharded_config = ttnn.types.MemoryConfig(
-            ttnn.types.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.types.BufferType.L1, shard_spec
-        )
-        if not is_wormhole_b0 or self.batch_size != 20:
-            assert self.max_pool_input_sharded_config == self.conv1.conv.output_sharded_memory_config
+        if not is_wormhole_b0() or self.batch_size != 20:
+            assert self.max_pool.max_pool.input_sharded_memory_config == self.conv1.conv.output_sharded_memory_config
         self.layer1, self.layer1_output_height, self.layer1_output_width = self._make_layer(
             parameters=parameters.layer1,
             planes=64,

@@ -43,6 +43,7 @@ class MaxPool2d:
         reader_patterns_cache: Dict,
         parallel_config_override: Dict = None,
         deallocate_activation: bool = False,
+        channels: int = None,
     ):
         if isinstance(kernel_size, int):
             window_h = kernel_size
@@ -89,6 +90,7 @@ class MaxPool2d:
             parallel_config_override=parallel_config_override,
             deallocate_activation=deallocate_activation,
             act_dtype=dtype,
+            channels=channels,
         )
 
     @ttnn.register_operation(
