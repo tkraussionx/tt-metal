@@ -577,6 +577,10 @@ static uint32_t process_relay_inline_all(uint32_t data_ptr, uint32_t fence) {
         (volatile tt_l1_ptr CQPrefetchHToPrefetchDHeader *)data_ptr;
     dptr->length = length;
 
+    DPRINT << HEX() << " **1 dptr=" << (uint32_t)dptr << ENDL();
+    DPRINT << HEX() << " **1 len=" << length << ENDL();
+    DPRINT << HEX() << " **1 downstr_dptr=" << downstream_data_ptr << ENDL();
+
     uint32_t npages = (length + downstream_cb_page_size - 1) >> downstream_cb_log_page_size;
 
     // Assume the dispatch buffer is big relative to cmddat command size that we can
@@ -668,6 +672,8 @@ void kernel_main_h() {
     volatile tt_l1_ptr uint32_t* sem_addr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(my_downstream_cb_sem_id));
 
+    DPRINT << "sem_addr=" << HEX() << (uint32_t)sem_addr << ENDL();
+
     bool done = false;
     while (!done) {
         fetch_q_get_cmds<sizeof(CQPrefetchHToPrefetchDHeader)>(fence, cmd_ptr, pcie_read_ptr);
@@ -744,7 +750,19 @@ void kernel_main_hd() {
 }
 
 void kernel_main() {
-    DPRINT << "prefetcher_" << is_h_variant << is_d_variant << ": start" << ENDL();
+
+    uint32_t noc_id_reg = NOC_CMD_BUF_READ_REG(0, 0, NOC_NODE_ID);
+    uint32_t my_x = noc_id_reg & NOC_NODE_ID_MASK;
+    uint32_t my_y = (noc_id_reg >> NOC_ADDR_NODE_ID_BITS) & NOC_NODE_ID_MASK;
+    DPRINT << "prefetcher_" << is_h_variant << is_d_variant <<
+    ", cmmdat_q_base = " << HEX() << cmddat_q_base <<
+    ", cmmdat_q_size = " << HEX() << cmddat_q_size <<
+    ", prefetch_q_base = " << HEX() << prefetch_q_base <<
+    ", prefetch_q_size = " << HEX() << prefetch_q_size <<
+    ", x = " << HEX() << my_x <<
+    ", y = " << HEX() << my_y <<
+    ENDL();
+
     if (is_h_variant and is_d_variant) {
         kernel_main_hd();
     } else if (is_h_variant) {

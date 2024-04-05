@@ -7,9 +7,6 @@
 #include "tt_metal/impl/dispatch/kernels/packet_queue.hpp"
 #include "tests/tt_metal/tt_metal/perf_microbenchmark/routing/kernels/traffic_gen.hpp"
 
-packet_input_queue_state_t input_queues[MAX_SWITCH_FAN_IN];
-packet_output_queue_state_t output_queues[MAX_SWITCH_FAN_OUT];
-
 constexpr uint32_t src_endpoint_id = get_compile_time_arg_val(0);
 constexpr uint32_t num_dest_endpoints = get_compile_time_arg_val(1);
 
@@ -59,8 +56,11 @@ constexpr uint32_t timeout_cycles = get_compile_time_arg_val(17);
 constexpr uint32_t input_queue_id = 0;
 constexpr uint32_t output_queue_id = 1;
 
-constexpr packet_input_queue_state_t* input_queue_ptr = &(input_queues[input_queue_id]);
-constexpr packet_output_queue_state_t* output_queue_ptr = &(output_queues[output_queue_id]);
+packet_input_queue_state_t input_queue;
+packet_output_queue_state_t output_queue;
+
+constexpr packet_input_queue_state_t* input_queue_ptr = &input_queue;
+constexpr packet_output_queue_state_t* output_queue_ptr = &output_queue;
 
 input_queue_rnd_state_t input_queue_rnd_state;
 
@@ -127,6 +127,8 @@ inline bool input_queue_handler() {
 
 void kernel_main() {
 
+    DPRINT << "tx gen\n";
+
     zero_l1_buf(test_results, test_results_size_bytes);
     test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_STARTED;
     test_results[PQ_TEST_MISC_INDEX] = 0xff000000;
@@ -144,7 +146,7 @@ void kernel_main() {
 
     output_queue_ptr->init(output_queue_id, remote_rx_queue_start_addr_words, remote_rx_queue_size_words,
                            remote_rx_x, remote_rx_y, remote_rx_queue_id, tx_network_type,
-                           input_queues, 1);
+                           input_queue_ptr, 1);
 
     wait_all_src_dest_ready(NULL, 0, output_queue_ptr, 1, timeout_cycles);
 

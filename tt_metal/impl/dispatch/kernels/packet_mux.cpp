@@ -22,8 +22,8 @@ static_assert(is_power_of_2(rx_queue_size_words), "rx_queue_size_words must be a
 constexpr uint32_t mux_fan_in = get_compile_time_arg_val(3);
 
 // FIXME imatosevic - is there a way to do this without explicit indexes?
-static_assert(mux_fan_in <= MAX_SWITCH_FAN_IN,
-    "mux fan-in higher than MAX_SWITCH_FAN_IN");
+static_assert(mux_fan_in > 0 && mux_fan_in <= MAX_SWITCH_FAN_IN,
+    "mux fan-in 0 or higher than MAX_SWITCH_FAN_IN");
 static_assert(MAX_SWITCH_FAN_IN == 4,
     "MAX_SWITCH_FAN_IN must be 4 for the initialization below to work");
 
@@ -79,8 +79,65 @@ tt_l1_ptr uint32_t* const test_results =
 
 constexpr uint32_t timeout_cycles = get_compile_time_arg_val(16);
 
+constexpr bool output_depacketize = get_compile_time_arg_val(17);
+constexpr uint32_t output_depacketize_info = get_compile_time_arg_val(18);
+
+constexpr uint32_t output_depacketize_log_page_size = output_depacketize_info & 0xFF;
+constexpr uint32_t output_depacketize_downstream_sem = (output_depacketize_info >> 8) & 0xFF;
+constexpr uint32_t output_depacketize_local_sem = (output_depacketize_info >> 16) & 0xFF;
+
+constexpr uint32_t input_packetize[MAX_SWITCH_FAN_IN] =
+    {
+        (get_compile_time_arg_val(19) >> 0) & 0x1,
+        (get_compile_time_arg_val(20) >> 0) & 0x1,
+        (get_compile_time_arg_val(21) >> 0) & 0x1,
+        (get_compile_time_arg_val(22) >> 0) & 0x1
+    };
+
+constexpr uint32_t input_packetize_log_page_size[MAX_SWITCH_FAN_IN] =
+    {
+        (get_compile_time_arg_val(19) >> 8) & 0xFF,
+        (get_compile_time_arg_val(20) >> 8) & 0xFF,
+        (get_compile_time_arg_val(21) >> 8) & 0xFF,
+        (get_compile_time_arg_val(22) >> 8) & 0xFF
+    };
+
+constexpr uint32_t input_packetize_upstream_sem[MAX_SWITCH_FAN_IN] =
+    {
+        (get_compile_time_arg_val(19) >> 16) & 0xFF,
+        (get_compile_time_arg_val(20) >> 16) & 0xFF,
+        (get_compile_time_arg_val(21) >> 16) & 0xFF,
+        (get_compile_time_arg_val(22) >> 16) & 0xFF
+    };
+
+constexpr uint32_t input_packetize_local_sem[MAX_SWITCH_FAN_IN] =
+    {
+        (get_compile_time_arg_val(19) >> 24) & 0xFF,
+        (get_compile_time_arg_val(20) >> 24) & 0xFF,
+        (get_compile_time_arg_val(21) >> 24) & 0xFF,
+        (get_compile_time_arg_val(22) >> 24) & 0xFF
+    };
+
+constexpr uint32_t input_packetize_src_endpoint[MAX_SWITCH_FAN_IN] =
+    {
+        (get_compile_time_arg_val(23) >> 0) & 0xFF,
+        (get_compile_time_arg_val(23) >> 8) & 0xFF,
+        (get_compile_time_arg_val(23) >> 16) & 0xFF,
+        (get_compile_time_arg_val(23) >> 24) & 0xFF
+    };
+
+constexpr uint32_t input_packetize_dest_endpoint[MAX_SWITCH_FAN_IN] =
+    {
+        (get_compile_time_arg_val(24) >> 0) & 0xFF,
+        (get_compile_time_arg_val(24) >> 8) & 0xFF,
+        (get_compile_time_arg_val(24) >> 16) & 0xFF,
+        (get_compile_time_arg_val(24) >> 24) & 0xFF
+    };
+
 
 void kernel_main() {
+
+    DPRINT << "mux at: x=" << ((uint32_t)(my_x[0])) << ", y=" << ((uint32_t)(my_y[0])) << "\n";
 
     noc_init();
 
@@ -89,12 +146,28 @@ void kernel_main() {
     test_results[PQ_TEST_MISC_INDEX+1] = 0xaa000000 | mux_fan_in;
 
     for (uint32_t i = 0; i < mux_fan_in; i++) {
+
+        // DPRINT << " MUX input " << HEX() << i
+        //         << "  ip=" << input_packetize[i]
+        //         << "  ip_log_page_size=" << input_packetize_log_page_size[i]
+        //         << "  ip_upstream_sem=" << input_packetize_upstream_sem[i]
+        //         << "  ip_local_sem=" << input_packetize_local_sem[i]
+        //         << "  ip_src_endpoint=" << input_packetize_src_endpoint[i]
+        //         << "  ip_dest_endpoint=" << input_packetize_dest_endpoint[i]
+        //        << ENDL();
+
         input_queues[i].init(i, rx_queue_start_addr_words + i*rx_queue_size_words, rx_queue_size_words,
-                            remote_rx_x[i], remote_rx_y[i], remote_rx_queue_id[i], remote_rx_network_type[i]);
+                             remote_rx_x[i], remote_rx_y[i], remote_rx_queue_id[i], remote_rx_network_type[i],
+                             input_packetize[i], input_packetize_log_page_size[i],
+                             input_packetize_local_sem[i], input_packetize_upstream_sem[i],
+                             input_packetize_src_endpoint[i], input_packetize_dest_endpoint[i]);
     }
+
     output_queue.init(mux_fan_in, remote_tx_queue_start_addr_words, remote_tx_queue_size_words,
                       remote_tx_x, remote_tx_y, remote_tx_queue_id, tx_network_type,
-                      input_queues, mux_fan_in);
+                      input_queues, mux_fan_in,
+                      output_depacketize, output_depacketize_log_page_size,
+                      output_depacketize_downstream_sem, output_depacketize_local_sem);
 
     wait_all_src_dest_ready(input_queues, mux_fan_in, &output_queue, 1, timeout_cycles);
 
@@ -157,6 +230,8 @@ void kernel_main() {
 
     if (timeout) {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_TIMEOUT;
+        input_queues[0].dprint_object();
+        output_queue.dprint_object();
     } else {
         test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_PASS;
         test_results[PQ_TEST_MISC_INDEX] = 0xff00005;

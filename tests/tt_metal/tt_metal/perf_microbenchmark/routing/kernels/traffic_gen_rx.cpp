@@ -57,6 +57,8 @@ input_queue_rnd_state_t src_rnd_state[num_src_endpoints];
 
 void kernel_main() {
 
+    DPRINT << "rx gen\n";
+
     zero_l1_buf(test_results, test_results_size_bytes);
     test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_STARTED;
     test_results[PQ_TEST_MISC_INDEX] = 0xff000000;

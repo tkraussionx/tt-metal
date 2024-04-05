@@ -22,8 +22,8 @@ static_assert(is_power_of_2(rx_queue_size_words), "rx_queue_size_words must be a
 constexpr uint32_t demux_fan_out = get_compile_time_arg_val(3);
 
 // FIXME imatosevic - is there a way to do this without explicit indexes?
-static_assert(demux_fan_out <= MAX_SWITCH_FAN_OUT,
-    "demux fan-out higher than MAX_SWITCH_FAN_OUT");
+static_assert(demux_fan_out > 0 && demux_fan_out <= MAX_SWITCH_FAN_OUT,
+    "demux fan-out 0 or higher than MAX_SWITCH_FAN_OUT");
 static_assert(MAX_SWITCH_FAN_OUT == 4,
     "MAX_SWITCH_FAN_OUT must be 4 for the initialization below to work");
 
@@ -76,9 +76,9 @@ constexpr uint32_t remote_tx_queue_size_words[MAX_SWITCH_FAN_OUT] =
     };
 
 static_assert(is_power_of_2(remote_tx_queue_size_words[0]), "remote_tx_queue_size_words must be a power of 2");
-static_assert(is_power_of_2(remote_tx_queue_size_words[1]), "remote_tx_queue_size_words must be a power of 2");
-static_assert(is_power_of_2(remote_tx_queue_size_words[2]), "remote_tx_queue_size_words must be a power of 2");
-static_assert(is_power_of_2(remote_tx_queue_size_words[3]), "remote_tx_queue_size_words must be a power of 2");
+static_assert((demux_fan_out < 2) || is_power_of_2(remote_tx_queue_size_words[1]), "remote_tx_queue_size_words must be a power of 2");
+static_assert((demux_fan_out < 3) || is_power_of_2(remote_tx_queue_size_words[2]), "remote_tx_queue_size_words must be a power of 2");
+static_assert((demux_fan_out < 4) || is_power_of_2(remote_tx_queue_size_words[3]), "remote_tx_queue_size_words must be a power of 2");
 
 constexpr uint32_t remote_rx_x = get_compile_time_arg_val(16);
 constexpr uint32_t remote_rx_y = get_compile_time_arg_val(17);
@@ -140,12 +140,42 @@ tt_l1_ptr uint32_t* const test_results =
 
 constexpr uint32_t timeout_cycles = get_compile_time_arg_val(24);
 
+constexpr bool output_depacketize = get_compile_time_arg_val(25);
+
+constexpr uint32_t output_depacketize_log_page_size[MAX_SWITCH_FAN_OUT] =
+    {
+        (get_compile_time_arg_val(26) >> 0) & 0xFF,
+        (get_compile_time_arg_val(27) >> 0) & 0xFF,
+        (get_compile_time_arg_val(28) >> 0) & 0xFF,
+        (get_compile_time_arg_val(29) >> 0) & 0xFF
+    };
+
+constexpr uint32_t output_depacketize_downstream_sem[MAX_SWITCH_FAN_OUT] =
+    {
+        (get_compile_time_arg_val(26) >> 8) & 0xFF,
+        (get_compile_time_arg_val(27) >> 8) & 0xFF,
+        (get_compile_time_arg_val(28) >> 8) & 0xFF,
+        (get_compile_time_arg_val(29) >> 8) & 0xFF
+    };
+
+constexpr uint32_t output_depacketize_local_sem[MAX_SWITCH_FAN_OUT] =
+    {
+        (get_compile_time_arg_val(26) >> 16) & 0xFF,
+        (get_compile_time_arg_val(27) >> 16) & 0xFF,
+        (get_compile_time_arg_val(28) >> 16) & 0xFF,
+        (get_compile_time_arg_val(29) >> 16) & 0xFF
+    };
+
+
+
 inline uint8_t dest_output_queue_id(uint32_t dest_endpoint_id) {
     uint32_t dest_endpoint_index = dest_endpoint_id - endpoint_id_start_index;
     return dest_output_queue_id_map[dest_endpoint_index];
 }
 
 void kernel_main() {
+
+    DPRINT << "demux at: x=" << ((uint32_t)(my_x[0])) << ", y=" << ((uint32_t)(my_y[0])) << "\n";
 
     noc_init();
 
@@ -159,7 +189,9 @@ void kernel_main() {
     for (uint32_t i = 0; i < demux_fan_out; i++) {
        output_queues[i].init(i, remote_tx_queue_start_addr_words[i], remote_tx_queue_size_words[i],
                              remote_tx_x[i], remote_tx_y[i], remote_tx_queue_id[i], remote_tx_network_type[i],
-                             &input_queue, 1);
+                             &input_queue, 1,
+                             output_depacketize, output_depacketize_log_page_size[i],
+                             output_depacketize_downstream_sem[i], output_depacketize_local_sem[i]);
     }
     input_queue.init(demux_fan_out, rx_queue_start_addr_words, rx_queue_size_words,
                      remote_rx_x, remote_rx_y, remote_rx_queue_id, remote_rx_network_type);
