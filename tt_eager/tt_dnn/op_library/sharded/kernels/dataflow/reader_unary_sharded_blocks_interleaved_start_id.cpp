@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 
-//#include "debug/dprint.h"
+#include "debug/dprint.h"
 
 void kernel_main() {
     const uint32_t src_addr  = get_arg_val<uint32_t>(0);
@@ -26,6 +26,8 @@ void kernel_main() {
         .page_size = tile_bytes,
         .data_format = data_format
     };
+
+    // DPRINT << is_ncrisc << ENDL();
 
     uint32_t curr_tile_id = start_id;
     cb_reserve_back(cb_id_in0, block_num_tiles);

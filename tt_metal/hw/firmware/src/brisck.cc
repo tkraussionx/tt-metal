@@ -22,7 +22,23 @@
 
 #include <kernel.cpp>
 
+#include "debug/status.h"
+#include "debug/dprint.h"
+
 uint8_t noc_index = NOC_INDEX;
+
+// const uint32_t noc_index_to_dram_bank_map[NUM_DRAM_BANKS] __attribute__((used)) = {
+//     NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX,
+//     1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX
+// };
+
+const uint32_t noc_index_to_dram_bank_map[NUM_DRAM_BANKS] __attribute__((used)) = {
+    NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX,
+    NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX };
+
+// const uint32_t noc_index_to_dram_bank_map[NUM_DRAM_BANKS] __attribute__((used)) = {
+//     1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX,
+//     1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX };
 
 void kernel_launch() {
 
@@ -33,6 +49,8 @@ void kernel_launch() {
 #endif
 #else
     firmware_kernel_common_init((void tt_l1_ptr *)MEM_BRISC_INIT_LOCAL_L1_BASE);
+
+    // DPRINT << noc_index_to_dram_bank_map[0] << ENDL();
 
     noc_local_state_init(0);
     noc_local_state_init(1);

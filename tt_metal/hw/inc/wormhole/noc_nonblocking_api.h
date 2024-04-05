@@ -67,13 +67,14 @@ inline __attribute__((always_inline)) bool noc_cmd_buf_ready(uint32_t noc, uint3
   return (NOC_CMD_BUF_READ_REG(noc, cmd_buf, NOC_CMD_CTRL) == NOC_CTRL_STATUS_READY);
 }
 
-inline __attribute__((always_inline)) void ncrisc_noc_fast_read(uint32_t noc, uint32_t cmd_buf, uint64_t src_addr, uint32_t dest_addr, uint32_t len_bytes) {
+inline __attribute__((always_inline)) void ncrisc_noc_fast_read(uint32_t noc, uint32_t cmd_buf, uint64_t src_addr, uint32_t dest_addr, uint32_t len_bytes, uint32_t transcation_id = 0) {
   if (len_bytes > 0) {
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_RET_ADDR_LO, dest_addr);
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_TARG_ADDR_LO, (uint32_t)src_addr);
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_TARG_ADDR_MID, src_addr >> 32);
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_AT_LEN_BE, len_bytes);
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+    NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_PACKET_TAG, NOC_PACKET_TAG_TRANSACTION_ID(transcation_id));
     noc_reads_num_issued[noc] += 1;
   }
 }
@@ -82,7 +83,7 @@ inline __attribute__((always_inline)) bool ncrisc_noc_reads_flushed(uint32_t noc
   return (NOC_STATUS_READ_REG(noc, NIU_MST_RD_RESP_RECEIVED) == noc_reads_num_issued[noc]);
 }
 
-inline __attribute__((always_inline)) void ncrisc_noc_fast_write(uint32_t noc, uint32_t cmd_buf, uint32_t src_addr, uint64_t dest_addr, uint32_t len_bytes, uint32_t vc, bool mcast, bool linked, uint32_t num_dests) {
+inline __attribute__((always_inline)) void ncrisc_noc_fast_write(uint32_t noc, uint32_t cmd_buf, uint32_t src_addr, uint64_t dest_addr, uint32_t len_bytes, uint32_t vc, bool mcast, bool linked, uint32_t num_dests, uint32_t transcation_id = 0) {
   if (len_bytes > 0) {
     uint32_t noc_cmd_field =
       NOC_CMD_CPY | NOC_CMD_WR |
@@ -99,6 +100,7 @@ inline __attribute__((always_inline)) void ncrisc_noc_fast_write(uint32_t noc, u
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_RET_ADDR_MID, dest_addr >> 32);
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_AT_LEN_BE, len_bytes);
     NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+    NOC_CMD_BUF_WRITE_REG(noc, cmd_buf, NOC_PACKET_TAG, NOC_PACKET_TAG_TRANSACTION_ID(transcation_id));
     noc_nonposted_writes_num_issued[noc] += 1;
     noc_nonposted_writes_acked[noc] += num_dests;
   }
@@ -168,27 +170,18 @@ inline __attribute__((always_inline)) void noc_init() {
   }
 }
 
-inline __attribute__((always_inline)) void ncrisc_noc_init_registers() {
+inline __attribute__((always_inline)) void noc_init_registers() {
 #pragma GCC unroll 0
   for (int noc = 0; noc < NUM_NOCS; noc++) {
     NOC_CMD_BUF_WRITE_REG(noc, NCRISC_WR_CMD_BUF, NOC_TARG_ADDR_MID, (uint32_t)(xy_local_addr[noc] >> 32));
     NOC_CMD_BUF_WRITE_REG(noc, NCRISC_WR_REG_CMD_BUF, NOC_TARG_ADDR_MID, (uint32_t)(xy_local_addr[noc] >> 32));
-
-    uint32_t noc_rd_cmd_field = NOC_CMD_CPY | NOC_CMD_RD | NOC_CMD_RESP_MARKED | NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(1);
-
-    NOC_CMD_BUF_WRITE_REG(noc, NCRISC_RD_CMD_BUF, NOC_CTRL, noc_rd_cmd_field);
-    NOC_CMD_BUF_WRITE_REG(noc, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_MID, (uint32_t)(xy_local_addr[noc] >> 32));
-  }
-}
-
-inline __attribute__((always_inline)) void brisc_noc_init_registers() {
-#pragma GCC unroll 0
-  for (int noc = 0; noc < NUM_NOCS; noc++) {
     NOC_CMD_BUF_WRITE_REG(noc, BRISC_WR_CMD_BUF, NOC_TARG_ADDR_MID, (uint32_t)(xy_local_addr[noc] >> 32));
     NOC_CMD_BUF_WRITE_REG(noc, BRISC_WR_REG_CMD_BUF, NOC_TARG_ADDR_MID, (uint32_t)(xy_local_addr[noc] >> 32));
 
     uint32_t noc_rd_cmd_field = NOC_CMD_CPY | NOC_CMD_RD | NOC_CMD_RESP_MARKED | NOC_CMD_VC_STATIC | NOC_CMD_STATIC_VC(1);
 
+    NOC_CMD_BUF_WRITE_REG(noc, NCRISC_RD_CMD_BUF, NOC_CTRL, noc_rd_cmd_field);
+    NOC_CMD_BUF_WRITE_REG(noc, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_MID, (uint32_t)(xy_local_addr[noc] >> 32));
     NOC_CMD_BUF_WRITE_REG(noc, BRISC_RD_CMD_BUF, NOC_CTRL, noc_rd_cmd_field);
     NOC_CMD_BUF_WRITE_REG(noc, BRISC_RD_CMD_BUF, NOC_RET_ADDR_MID, (uint32_t)(xy_local_addr[noc] >> 32));
   }

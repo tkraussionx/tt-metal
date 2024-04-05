@@ -26,6 +26,8 @@
 #include "debug/assert.h"
 
 extern uint8_t noc_index;
+extern const uint32_t is_ncrisc;
+extern const uint32_t noc_index_to_dram_bank_map[NUM_DRAM_BANKS];
 
 /** @file */
 
@@ -789,6 +791,7 @@ struct InterleavedAddrGenFast {
         uint32_t bank_id;
         uint32_t addr;
         uint32_t noc_xy;
+        uint32_t noc_id;
 
         if constexpr (DRAM) {
 #ifdef IS_NOT_POW2_NUM_DRAM_BANKS
@@ -801,7 +804,8 @@ struct InterleavedAddrGenFast {
                    this->bank_base_address + offset;
 #endif
             addr += bank_to_dram_offset[bank_id];
-            noc_xy = dram_bank_to_noc_xy[noc_index][bank_id];
+            noc_id = noc_index_to_dram_bank_map[bank_id];
+            noc_xy = dram_bank_to_noc_xy[noc_id][bank_id];
         } else {
 #ifdef IS_NOT_POW2_NUM_L1_BANKS
             bank_id = umodsi3_const_divisor<NUM_L1_BANKS>(id);
@@ -813,7 +817,8 @@ struct InterleavedAddrGenFast {
                    this->bank_base_address + offset;
 #endif
             addr += bank_to_l1_offset[bank_id];
-            noc_xy = l1_bank_to_noc_xy[noc_index][bank_id];
+            noc_id = noc_index;
+            noc_xy = l1_bank_to_noc_xy[noc_id][bank_id];
         }
 
         uint64_t noc_addr = get_noc_addr_helper(noc_xy, addr);
@@ -825,6 +830,9 @@ struct InterleavedAddrGenFast {
         uint32_t bank_id;
         uint32_t src_addr;
         uint32_t src_noc_xy;
+        uint32_t noc_id;
+        uint32_t cmd_buf;
+        uint32_t transcation_id;
 
         if constexpr (DRAM) {
 #ifdef IS_NOT_POW2_NUM_DRAM_BANKS
@@ -837,7 +845,10 @@ struct InterleavedAddrGenFast {
                        this->bank_base_address + offset;
 #endif
             src_addr += bank_to_dram_offset[bank_id];
-            src_noc_xy = dram_bank_to_noc_xy[noc_index][bank_id];
+            noc_id = noc_index_to_dram_bank_map[bank_id];
+            src_noc_xy = dram_bank_to_noc_xy[noc_id][bank_id];
+            cmd_buf = is_ncrisc ? NCRISC_RD_CMD_BUF : BRISC_RD_CMD_BUF;
+            transcation_id = is_ncrisc ? 1 : 0;
         } else {
 #ifdef IS_NOT_POW2_NUM_L1_BANKS
             bank_id = umodsi3_const_divisor<NUM_L1_BANKS>(id);
@@ -849,20 +860,24 @@ struct InterleavedAddrGenFast {
                        this->bank_base_address + offset;
 #endif
             src_addr += bank_to_l1_offset[bank_id];
-            src_noc_xy = l1_bank_to_noc_xy[noc_index][bank_id];
+            noc_id = noc_index;
+            src_noc_xy = l1_bank_to_noc_xy[noc_id][bank_id];
+            cmd_buf = is_ncrisc ? NCRISC_RD_CMD_BUF : BRISC_RD_CMD_BUF;
+            transcation_id = is_ncrisc ? 1 : 0;
         }
 
         DEBUG_STATUS('N', 'R', 'T', 'W');
         DEBUG_SANITIZE_NOC_READ_TRANSACTION(get_noc_addr_helper(src_noc_xy, src_addr), dest_addr, this->page_size);
-        while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
+        while (!noc_cmd_buf_ready(noc_id, cmd_buf));
         DEBUG_STATUS('N', 'R', 'T', 'D');
 
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);      // (uint32_t)src_addr
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_MID, src_noc_xy);   // src_addr >> 32
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_AT_LEN_BE, this->page_size);  // len_bytes
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
-        noc_reads_num_issued[noc_index] += 1;
+        NOC_CMD_BUF_WRITE_REG(noc_id, cmd_buf, NOC_RET_ADDR_LO, dest_addr);
+        NOC_CMD_BUF_WRITE_REG(noc_id, cmd_buf, NOC_TARG_ADDR_LO, src_addr);      // (uint32_t)src_addr
+        NOC_CMD_BUF_WRITE_REG(noc_id, cmd_buf, NOC_TARG_ADDR_MID, src_noc_xy);   // src_addr >> 32
+        NOC_CMD_BUF_WRITE_REG(noc_id, cmd_buf, NOC_AT_LEN_BE, this->page_size);  // len_bytes
+        NOC_CMD_BUF_WRITE_REG(noc_id, cmd_buf, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+        NOC_CMD_BUF_WRITE_REG(noc_id, cmd_buf, NOC_PACKET_TAG, NOC_PACKET_TAG_TRANSACTION_ID(transcation_id));
+        noc_reads_num_issued[noc_id] += 1;
     }
 
     FORCE_INLINE
@@ -870,6 +885,9 @@ struct InterleavedAddrGenFast {
         uint32_t bank_id;
         uint32_t dest_addr;
         uint32_t dest_noc_xy;
+        uint32_t noc_id;
+        uint32_t cmd_buf;
+        uint32_t transcation_id;
 
         if constexpr (DRAM) {
 #ifdef IS_NOT_POW2_NUM_DRAM_BANKS
@@ -882,7 +900,10 @@ struct InterleavedAddrGenFast {
                         this->bank_base_address;
 #endif
             dest_addr += bank_to_dram_offset[bank_id];
-            dest_noc_xy = dram_bank_to_noc_xy[noc_index][bank_id];
+            noc_id = noc_index_to_dram_bank_map[bank_id];
+            dest_noc_xy = dram_bank_to_noc_xy[noc_id][bank_id];
+            cmd_buf = is_ncrisc ? NCRISC_WR_REG_CMD_BUF : BRISC_WR_REG_CMD_BUF;
+            transcation_id = is_ncrisc ? 1 : 0;
         } else {
 #ifdef IS_NOT_POW2_NUM_L1_BANKS
             bank_id = umodsi3_const_divisor<NUM_L1_BANKS>(id);
@@ -894,12 +915,15 @@ struct InterleavedAddrGenFast {
                 MUL_WITH_TILE_SIZE((uint)this->data_format, id >> LOG_BASE_2_OF_NUM_L1_BANKS) + this->bank_base_address;
 #endif
             dest_addr += bank_to_l1_offset[bank_id];
-            dest_noc_xy = l1_bank_to_noc_xy[noc_index][bank_id];
+            noc_id = noc_index;
+            dest_noc_xy = l1_bank_to_noc_xy[noc_id][bank_id];
+            cmd_buf = is_ncrisc ? NCRISC_WR_REG_CMD_BUF : BRISC_WR_REG_CMD_BUF;
+            transcation_id = is_ncrisc ? 1 : 0;
         }
 
         DEBUG_STATUS('N', 'W', 'T', 'W');
         DEBUG_SANITIZE_NOC_WRITE_TRANSACTION(get_noc_addr_helper(dest_noc_xy, dest_addr), src_addr, this->page_size);
-        while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_REG_CMD_BUF));
+        while (!noc_cmd_buf_ready(noc_id, cmd_buf));
         DEBUG_STATUS('N', 'W', 'T', 'D');
 
         uint32_t noc_cmd_field = NOC_CMD_CPY | NOC_CMD_WR | NOC_CMD_VC_STATIC |
@@ -907,14 +931,16 @@ struct InterleavedAddrGenFast {
                                  0x0 |  // (mcast ? (NOC_CMD_PATH_RESERVE | NOC_CMD_BRCST_PACKET) : 0x0)
                                  NOC_CMD_RESP_MARKED;
 
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_CTRL, noc_cmd_field);
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);  // (uint32_t)dest_addr
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_RET_ADDR_MID, dest_noc_xy);   // dest_addr >> 32
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_AT_LEN_BE, this->page_size);  // len_bytes
-        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
-        noc_nonposted_writes_num_issued[noc_index] += 1;
-        noc_nonposted_writes_acked[noc_index] += 1;  // num_dests
+        NOC_CMD_BUF_WRITE_REG(noc_id, cmd_buf, NOC_CTRL, noc_cmd_field);
+        NOC_CMD_BUF_WRITE_REG(noc_id, cmd_buf, NOC_TARG_ADDR_LO, src_addr);
+        NOC_CMD_BUF_WRITE_REG(noc_id, cmd_buf, NOC_TARG_ADDR_MID, (uint32_t)(xy_local_addr[noc_id] >> 32));
+        NOC_CMD_BUF_WRITE_REG(noc_id, cmd_buf, NOC_RET_ADDR_LO, dest_addr);  // (uint32_t)dest_addr
+        NOC_CMD_BUF_WRITE_REG(noc_id, cmd_buf, NOC_RET_ADDR_MID, dest_noc_xy);   // dest_addr >> 32
+        NOC_CMD_BUF_WRITE_REG(noc_id, cmd_buf, NOC_AT_LEN_BE, this->page_size);  // len_bytes
+        NOC_CMD_BUF_WRITE_REG(noc_id, cmd_buf, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+        NOC_CMD_BUF_WRITE_REG(noc_id, cmd_buf, NOC_PACKET_TAG, NOC_PACKET_TAG_TRANSACTION_ID(transcation_id));
+        noc_nonposted_writes_num_issued[noc_id] += 1;
+        noc_nonposted_writes_acked[noc_id] += 1;  // num_dests
     }
 };
 
@@ -1332,7 +1358,9 @@ void noc_async_write_multicast_loopback_src(
 FORCE_INLINE
 void noc_async_read_barrier() {
     DEBUG_STATUS('N', 'R', 'B', 'W');
-    while (!ncrisc_noc_reads_flushed(noc_index))
+    while (!ncrisc_noc_reads_flushed(0))
+        ;
+    while (!ncrisc_noc_reads_flushed(1))
         ;
     DEBUG_STATUS('N', 'R', 'B', 'D');
 }

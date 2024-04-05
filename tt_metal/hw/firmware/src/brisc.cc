@@ -55,6 +55,7 @@ uint32_t noc_nonposted_writes_num_issued[NUM_NOCS] __attribute__((used));
 uint32_t noc_nonposted_writes_acked[NUM_NOCS] __attribute__((used));
 
 uint64_t xy_local_addr[NUM_NOCS] __attribute__((used));
+const uint32_t is_ncrisc __attribute__((used)) = 0;
 
 CBInterface cb_interface[NUM_CIRCULAR_BUFFERS] __attribute__((used));
 
@@ -302,8 +303,7 @@ int main() {
     mailboxes->launch.run = RUN_MSG_DONE;
 
     while (1) {
-        ncrisc_noc_init_registers();
-        brisc_noc_init_registers();
+        noc_init_registers();
         init_sync_registers();
         assert_just_ncrisc_reset();
 
