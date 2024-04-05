@@ -10,6 +10,7 @@ from models.demos.mixtral8x7b.tt.mixtral_model import TtTransformer
 from models.demos.mixtral8x7b.tt.model_config import TtModelArgs
 from models.demos.mixtral8x7b.reference.tokenizer import Tokenizer
 from models.utility_functions import get_devices_for_t3000
+from models.demos.mixtral8x7b.reference.model import Transformer
 
 
 class Emb(torch.nn.Module):
@@ -66,7 +67,7 @@ def preprocess_inputs(input_prompts, tokenizer, model_args, dtype, instruct, dev
 def run_mixtral_demo(user_input, batch_size, devices):
     assert batch_size == 32, "Batch size must be 32"
 
-    instruct_mode = True
+    instruct_mode = False
 
     dtype = ttnn.bfloat8_b
 
@@ -83,7 +84,8 @@ def run_mixtral_demo(user_input, batch_size, devices):
     tokenizer = Tokenizer(model_args.tokenizer_path)
 
     logger.info("Loading weights...")
-    state_dict = torch.load(model_args.state_dict_path)
+    reference_model = Transformer(args=model_args)
+    state_dict = reference_model.state_dict()  # torch.load(model_args.state_dict_path)
 
     # Embedding on host
     embd = Emb()
