@@ -168,14 +168,9 @@ inline __attribute__((always_inline)) void noc_init() {
   }
 }
 
-inline __attribute__((always_inline)) void noc_init_brisc() {
+inline __attribute__((always_inline)) void noc_init_registers() {
 #pragma GCC unroll 0
   for (int noc = 0; noc < NUM_NOCS; noc++) {
-    uint32_t noc_id_reg = NOC_CMD_BUF_READ_REG(noc, 0, NOC_NODE_ID);
-    uint32_t my_x = noc_id_reg & NOC_NODE_ID_MASK;
-    uint32_t my_y = (noc_id_reg >> NOC_ADDR_NODE_ID_BITS) & NOC_NODE_ID_MASK;
-    xy_local_addr[noc] = NOC_XY_ADDR(my_x, my_y, 0);
-
     NOC_CMD_BUF_WRITE_REG(noc, BRISC_WR_CMD_BUF, NOC_TARG_ADDR_MID, (uint32_t)(xy_local_addr[noc] >> 32));
     NOC_CMD_BUF_WRITE_REG(noc, BRISC_WR_REG_CMD_BUF, NOC_TARG_ADDR_MID, (uint32_t)(xy_local_addr[noc] >> 32));
 

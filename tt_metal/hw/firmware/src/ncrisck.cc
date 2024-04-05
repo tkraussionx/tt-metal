@@ -26,8 +26,6 @@ uint32_t noc_reads_num_issued[NUM_NOCS];
 uint32_t noc_nonposted_writes_num_issued[NUM_NOCS];
 uint32_t noc_nonposted_writes_acked[NUM_NOCS];
 
-uint64_t xy_local_addr[NUM_NOCS];
-
 void kernel_launch() {
 
   DeviceZoneScopedMainChildN("NCRISC-KERNEL");

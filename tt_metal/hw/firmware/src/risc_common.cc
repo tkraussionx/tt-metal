@@ -12,6 +12,7 @@ void risc_init() {
     uint32_t noc_id_reg = NOC_CMD_BUF_READ_REG(n, 0, NOC_NODE_ID);
     my_x[n] = noc_id_reg & NOC_NODE_ID_MASK;
     my_y[n] = (noc_id_reg >> NOC_ADDR_NODE_ID_BITS) & NOC_NODE_ID_MASK;
+    xy_local_addr[n] = NOC_XY_ADDR(my_x[n], my_y[n], 0);
   }
 }
 
