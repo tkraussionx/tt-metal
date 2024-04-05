@@ -74,40 +74,6 @@ def get_lms_coefficient(order, t, current_order, sigmas):
     return integrated_coeff
 
 
-# def save_image_and_latents(latents, iter, vae, pre_fix="", pre_fix2=""):
-#    pre_fix = "" if pre_fix == "" else f"{pre_fix}_"
-#    pre_fix2 = "" if pre_fix2 == "" else f"{pre_fix2}_"
-#    latents = ttnn.to_torch(latents).to(torch.float32)
-#    _latents = 1 / 0.18215 * latents
-#    with torch.no_grad():
-#        image = vae.decode(_latents).sample
-#    # Image post-processing
-#    image = (image / 2 + 0.5).clamp(0, 1)
-#    image = image.detach().cpu().permute(0, 2, 3, 1).numpy()
-#    images = (image * 255).round().astype("uint8")
-#    pil_images = [Image.fromarray(image) for image in images][0]
-#    pil_images.save(f"{pre_fix}{pre_fix2}image_iter_{iter}.png")
-#    torch.save(_latents, f"{pre_fix}{pre_fix2}latents_{iter}.pt")
-
-
-# def calculate_fid_score(imgs_path1, imgs_path2):
-#    fid = FrechetInceptionDistance(normalize=True)
-#    fid.update(imgs_path1, real=False)
-#    fid.update(imgs_path2, real=True)
-#    return fid.compute()
-
-
-# def preprocess_images(image_paths):
-#    images = []
-#    for image_path in image_paths:
-#        image = Image.open(image_path)
-#        image = image.convert("RGB")
-#        image = image.resize((299, 299))
-#        image = ToTensor()(image)
-#        images.append(image)
-#    return torch.stack(images)
-
-
 @skip_for_grayskull()
 @pytest.mark.models_performance_bare_metal
 @pytest.mark.parametrize(
@@ -264,24 +230,21 @@ def test_stable_diffusion_perf(
         for i in range(len(time_step_list)):
             # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
             ttnn_latent_model_input = tt_latent_expansion(ttnn_latents, ttnn_scheduler, float(ttnn_sigma[i]), device)
-            profiler.start(f"model_run_for_inference_{i}")
 
             # predict the noise residual
             with torch.no_grad():
+                profiler.start(f"model_run_for_inference_{i}")
                 ttnn_noise_pred = model(
                     sample=ttnn_latent_model_input,
                     timestep=time_step_list[i],
                     encoder_hidden_states=ttnn_text_embeddings,
                     config=config,
                 )
-                # profiler.end(f"model_run_for_inference_{i}")
+                profiler.end(f"model_run_for_inference_{i}")
 
             # perform guidance
-            # profiler.start(f"tt_guide_{i}")
             noise_pred = tt_guide(ttnn_noise_pred, guidance_scale)
-            # profiler.end(f"tt_guide_{i}")
 
-            # profiler.start(f"ttnn_scheduler_{i}")
             ttnn_latents = ttnn_scheduler.step(
                 model_output=noise_pred,
                 sample=ttnn_latents,
@@ -290,42 +253,8 @@ def test_stable_diffusion_perf(
                 device=device,
                 order=order_list[i],
             ).prev_sample
-            # profiler.end(f"ttnn_scheduler_{i}")
-            profiler.end(f"model_run_for_inference_{i}")
-            # save_image_and_latents(ttnn_latents, i, vae, pre_fix=f"{experiment_name}_tt", pre_fix2="")
-
             enable_persistent_kernel_cache()
-
         latents = ttnn.to_torch(ttnn_latents).to(torch.float32)
-        # scale and decode the image latents with vae
-        # latents = 1 / 0.18215 * latents
-        # with torch.no_grad():
-        #    image = vae.decode(latents).sample
-
-        # Image post-processing
-        # image = (image / 2 + 0.5).clamp(0, 1)
-        # image = image.detach().cpu().permute(0, 2, 3, 1).numpy()
-        # images = (image * 255).round().astype("uint8")
-        # pil_images = [Image.fromarray(image) for image in images][0]
-        # ttnn_output_path = f"{experiment_name}_ttnn.png"
-        # pil_images.save(ttnn_output_path)
-
-        # ref_paths = [ref_img_path, ref_img_path]
-        # ttnn_paths = [ttnn_output_path, ttnn_output_path]
-
-        # ref_images = preprocess_images(ref_paths)
-        # ttnn_images = preprocess_images(ttnn_paths)
-
-        # Calculate FID scores
-        # fid_score_ref_ttnn = calculate_fid_score(ref_images, ttnn_images)
-        # logger.info(f"FID Score (Reference vs TTNN): {fid_score_ref_ttnn}")
-
-        # calculate Clip score
-        # clip_score = CLIPScore(model_name_or_path="openai/clip-vit-base-patch16")
-
-        # clip_score_ttnn = clip_score(ttnn_images[0], input_prompt)
-        # clip_score_ttnn = clip_score_ttnn.detach()
-        # logger.info(f"CLIP Score (TTNN): {clip_score_ttnn}")
 
         # printout the perf
         profiler.print()
@@ -352,11 +281,14 @@ def test_stable_diffusion_perf(
     ((0.16),),
 )
 def test_stable_diffusion_device_perf(expected_perf):
+    if device.core_grid.y == 7:
+        pytest.skip("Not supporting N300 yet")
+
     subdir = "ttnn_stable_diffusion"
     margin = 0.03
     batch = 1
-    iterations = 30
-    command = f"pytest models/experimental/functional_stable_diffusion/demo/demo.py::test_demo_diffusiondb"
+    iterations = 2
+    command = f"pytest tests/ttnn/integration_tests/stable_diffusion/test_unet_2d_condition_model.py::test_unet_2d_condition_model_512x512[batch_size=2-in_channels=4-input_height=64-input_width=64]"
     cols = ["DEVICE FW", "DEVICE KERNEL", "DEVICE BRISC KERNEL"]
 
     inference_time_key = "AVG DEVICE KERNEL SAMPLES/S"
