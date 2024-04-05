@@ -42,7 +42,6 @@ def test_ttnn_to_and_from_multi_device_shard(pcie_device_mesh, layout, memory_co
 
 @pytest.mark.parametrize("layout", [ttnn.TILE_LAYOUT, ttnn.ROW_MAJOR_LAYOUT])
 @pytest.mark.parametrize("memory_config", [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG])
-@pytest.mark.parametrize("pcie_device_mesh", [8], indirect=True)
 def test_multi_device_check_per_device_shard(pcie_device_mesh, layout, memory_config):
     """This test checks if the tensor is correctly sharded across devices"""
     from ttnn import ShardTensorToMesh, ConcatMeshToTensor
@@ -68,10 +67,9 @@ def test_multi_device_check_per_device_shard(pcie_device_mesh, layout, memory_co
         pcie_device_mesh.get_device(device).enable_async(False)
 
 
-@pytest.mark.parametrize("shape", [(1, 1, 512, 512), (1, 1, 1024, 1024)])
+@pytest.mark.parametrize("shape", [(1, 1, 512, 512), (1, 1, 1040, 1040)])
 @pytest.mark.parametrize("layout", [ttnn.TILE_LAYOUT, ttnn.ROW_MAJOR_LAYOUT])
 @pytest.mark.parametrize("memory_config", [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG])
-# @pytest.mark.parametrize("pcie_device_mesh", [4], indirect=True)
 def test_multi_device_replicate(pcie_device_mesh, shape, layout, memory_config):
     """Test ReplicateTensorToMesh to broadcast a tensor across multiple devices"""
     from ttnn import ReplicateTensorToMesh, ListMeshToTensor
@@ -101,7 +99,6 @@ def test_multi_device_replicate(pcie_device_mesh, shape, layout, memory_config):
         pcie_device_mesh.get_device(device).enable_async(False)
 
 
-@pytest.mark.parametrize("pcie_device_mesh", [2], indirect=True)
 @pytest.mark.parametrize("program_cache", [False, True])
 @pytest.mark.parametrize("shape", [(1, 1, 512, 512), (1, 3, 1024, 1024)])
 def test_multi_device_unary_binary_op_chain(pcie_device_mesh, program_cache, shape):
@@ -144,7 +141,6 @@ def test_multi_device_unary_binary_op_chain(pcie_device_mesh, program_cache, sha
         pcie_device_mesh.get_device(device).enable_async(False)
 
 
-# @pytest.mark.parametrize("pcie_device_mesh", [8], indirect=True)
 @pytest.mark.parametrize("program_cache", [False, True])
 def test_multi_device_data_parallel_op_chain(pcie_device_mesh, program_cache):
     """Multidevice API: Running data-parallel chain of ops with matmul"""

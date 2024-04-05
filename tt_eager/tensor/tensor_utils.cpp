@@ -224,11 +224,10 @@ bool is_multi_device_tensor(const Tensor& tensor) {
 
 
 std::vector<Tensor> get_tensors_from_multi_device_storage(const Tensor& multi_device_tensor) {
-    std::vector<Tensor> tensors;
-
+    std::vector<ttnn::Tensor> tensors;
     if (multi_device_tensor.storage_type() == StorageType::MULTI_DEVICE) {
         const auto& tensor_storage = std::get<MultiDeviceStorage>(multi_device_tensor.get_storage());
-        std::vector<ttnn::Tensor> tensors = std::vector<ttnn::Tensor>(tensor_storage.buffers.size(), Tensor());
+        tensors = std::vector<ttnn::Tensor>(tensor_storage.buffers.size(), Tensor());
         for (auto& device_buf_pair : tensor_storage.buffers) {
             auto buffer = device_buf_pair.second;
             auto device = device_buf_pair.first;
@@ -236,7 +235,6 @@ std::vector<Tensor> get_tensors_from_multi_device_storage(const Tensor& multi_de
         }
         return tensors;
     } else if (multi_device_tensor.storage_type() == StorageType::MULTI_DEVICE_HOST) {
-        std::vector<ttnn::Tensor> tensors;
         const auto& tensor_storage = std::get<MultiDeviceHostStorage>(multi_device_tensor.get_storage());
         for (int i = 0; i < tensor_storage.buffers.size(); ++i) {
             tensors.push_back(Tensor{
@@ -246,6 +244,9 @@ std::vector<Tensor> get_tensors_from_multi_device_storage(const Tensor& multi_de
                 multi_device_tensor.get_layout()
             });
         }
+    }
+    else {
+        TT_FATAL(false, "get_tensors_from_multi_device_storage only support multi device tensors");
     }
     return tensors;
 }
