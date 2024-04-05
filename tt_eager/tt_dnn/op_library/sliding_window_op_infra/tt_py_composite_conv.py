@@ -182,10 +182,10 @@ def determine_parallel_config(
     logical_grid_x = num_cores_nhw if is_1d_systolic else grid_size[0]
     logical_grid_y = 1 if is_1d_systolic else grid_size[1]
     per_core_out_matrix_height_ntiles = calculate_per_core_out_matrix_height_ntiles(
-        logical_grid_x, config_override.get("per_core_out_matrix_height_ntiles", None)
+        logical_grid_x, config_override.get("per_core_out_matrix_height", None)
     )
     per_core_out_matrix_width_ntiles = calculate_per_core_out_matrix_width_ntiles(
-        logical_grid_y, config_override.get("per_core_out_matrix_width_ntiles", None)
+        logical_grid_y, config_override.get("per_core_out_matrix_width", None)
     )
 
     # logger.debug(
@@ -625,8 +625,6 @@ class TTPyCompositeConv(TTPyOp):
             padded_output_channels if self.is_1d_systolic else (int)(padded_output_channels / act_c_num_blocks),
         ]
         assert shard_shape[0] == self.opt_conv_parall_conf_auto.per_core_out_matrix_height_ntiles * 32
-        if shard_shape[1] != self.opt_conv_parall_conf_auto.per_core_out_matrix_width_ntiles * 32:
-            breakpoint()
         assert shard_shape[1] == self.opt_conv_parall_conf_auto.per_core_out_matrix_width_ntiles * 32
         shard_spec = ttl.tensor.ShardSpec(shard_grid, shard_shape, self.output_shard_orientation, shard_halo)
         self.output_shard_scheme = (
