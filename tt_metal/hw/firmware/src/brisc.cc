@@ -302,7 +302,8 @@ int main() {
     mailboxes->launch.run = RUN_MSG_DONE;
 
     while (1) {
-        noc_init_registers();
+        ncrisc_noc_init_registers();
+        brisc_noc_init_registers();
         init_sync_registers();
         assert_just_ncrisc_reset();
 
