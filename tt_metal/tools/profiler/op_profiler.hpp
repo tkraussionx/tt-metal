@@ -141,7 +141,7 @@ namespace op_profiler {
         return ret;
     }
 
-    static inline vector<json> get_tensors_json(const vector<Tensor>& tensors)
+    static inline vector<json> get_tensors_json(const tt::tt_metal::operation::OptionalTensors& tensors)
     {
         ZoneScoped;
         vector<json> ret;
@@ -152,7 +152,7 @@ namespace op_profiler {
         return ret;
     }
 
-    static inline vector<json> get_tensors_json(const vector<std::optional<const Tensor>>& tensors)
+    static inline vector<json> get_tensors_json(const tt::tt_metal::operation::OptionalTensors& tensors)
     {
         ZoneScoped;
         vector<json> ret;
@@ -171,7 +171,7 @@ namespace op_profiler {
             uint32_t opID,
             const Operation& op,
             const std::vector<Tensor>& input_tensors,
-            std::optional<std::reference_wrapper<std::vector<Tensor>>> output_tensors = std::nullopt)
+            std::optional<tt::tt_metal::operation::OptionalTensors> output_tensors = std::nullopt)
     {
         ZoneScoped;
         json j;
@@ -237,7 +237,19 @@ namespace op_profiler {
 
     inline std::string op_meta_data_serialized_json(
             uint32_t opID,
-            const tt::tt_metal::operation::HostOperation& op,
+            const tt::tt_metal::operation::HostOperation<tt::tt_metal::operation::Tensors>& op,
+            const std::vector<Tensor>& input_tensors,
+            std::vector<Tensor>& output_tensors)
+    {
+        auto j = get_base_json(opID, op, input_tensors, output_tensors);
+        j["op_type"] = magic_enum::enum_name(OpType::tt_dnn_cpu);
+        std::string ser = j.dump(4);
+        return fmt::format("TT_DNN_HOST_OP:{}\n{}",j["op_code"], ser);
+    }
+
+    inline std::string op_meta_data_serialized_json(
+            uint32_t opID,
+            const tt::tt_metal::operation::HostOperation<tt::tt_metal::operation::OptionalTensors>& op,
             const std::vector<Tensor>& input_tensors,
             std::vector<Tensor>& output_tensors)
     {
@@ -250,7 +262,7 @@ namespace op_profiler {
     inline std::string op_meta_data_serialized_json(
             uint32_t opID,
             uint32_t device_id,
-            const tt::tt_metal::operation::DeviceOperation& op,
+            const tt::tt_metal::operation::DeviceOperation<tt::tt_metal::operation::Tensors>& op,
             const std::variant<std::shared_ptr<Program>, std::reference_wrapper<Program>>& program,
             const std::vector<Tensor>& input_tensors,
             const std::vector<std::optional<const tt::tt_metal::Tensor>>& optional_input_tensors,
@@ -287,6 +299,45 @@ namespace op_profiler {
         return fmt::format("TT_DNN_DEVICE_OP:{}\n{}",j["op_code"], ser);
     }
 
+    inline std::string op_meta_data_serialized_json(
+            uint32_t opID,
+            uint32_t device_id,
+            const tt::tt_metal::operation::DeviceOperation<tt::tt_metal::operation::OptionalTensors>& op,
+            const std::variant<std::shared_ptr<Program>, std::reference_wrapper<Program>>& program,
+            const std::vector<Tensor>& input_tensors,
+            const std::vector<std::optional<const tt::tt_metal::Tensor>>& optional_input_tensors,
+            tt::tt_metal::operation::OptionalTensors& output_tensors)
+    {
+        ZoneScoped;
+
+        auto j = get_base_json(opID, op, input_tensors, output_tensors);
+        j["op_type"] = magic_enum::enum_name(OpType::tt_dnn_device);
+        j["device_id"] = device_id;
+        if (std::holds_alternative<std::reference_wrapper<Program>>(program))
+        {
+            j["kernel_info"] = get_kernels_json(std::get<std::reference_wrapper<Program>>(program));
+        }
+        else if (std::holds_alternative<std::shared_ptr<Program>>(program))
+        {
+            auto prg = std::get<std::shared_ptr<Program>>(program);
+            if (prg != nullptr)
+            {
+                j["kernel_info"] = get_kernels_json(*prg);
+            }
+        }
+
+        j["optional_input_tensors"] = get_tensors_json(optional_input_tensors);
+
+        auto perfModel = op.create_op_performance_model(input_tensors, optional_input_tensors, output_tensors);
+        j["performance_model"]["compute_ns"] = perfModel.get_compute_ns();
+        j["performance_model"]["ideal_ns"] = perfModel.get_ideal_ns();
+        j["performance_model"]["bandwidth_ns"] = perfModel.get_bandwidth_ns();
+        j["performance_model"]["input_bws"] = perfModel.get_input_bws();
+        j["performance_model"]["output_bws"] = perfModel.get_output_bws();
+
+        std::string ser = j.dump(4);
+        return fmt::format("TT_DNN_DEVICE_OP:{}\n{}",j["op_code"], ser);
+    }
 #define TracyOpTTNNDevice(op_id, device_id, operation, program, input_tensors, optional_input_tensors, output_tensors)\
     std::string op_message = op_profiler::op_meta_data_serialized_json(op_id, device_id, operation, program, input_tensors, optional_input_tensors, output_tensors);\
     std::string op_text = fmt::format("id:{}", op_id);\
