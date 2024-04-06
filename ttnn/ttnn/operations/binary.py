@@ -520,6 +520,7 @@ def add_and_apply_activation(
         fused_activations=fused_activations,
         output_mem_config=memory_config,
         output_dtype=dtype,
+        in_place=False,
     )
     return output
 
