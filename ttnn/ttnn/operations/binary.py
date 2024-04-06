@@ -486,7 +486,6 @@ def add_and_apply_activation(
     activation: Optional[str] = None,
     memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG,
     dtype: Optional[ttnn.DataType] = None,
-    in_place: Optional[bool] = False,
 ) -> ttnn.Tensor:
     r"""
     add_and_apply_activation(input_tensor_a: ttnn.Tensor, input_tensor_b: ttnn.Tensor, *, activation: Optional[str] = None, memory_config: ttnn.MemoryConfig = ttnn.DRAM_MEMORY_CONFIG, dtype: Optional[ttnn.DataType] = None) -> ttnn.Tensor
@@ -504,7 +503,6 @@ def add_and_apply_activation(
         :attr:`activation`: (Optional[str]): activation to apply to the output tensor
         :attr:`memory_config` (ttnn.MemoryConfig): memory config for the output tensor
         :attr:`dtype` (Optional[ttnn.DataType]): data type for the output tensor
-        :attr:`in_place` (Optional[bool]): Output tensor in place if set to true
 
 
     """
@@ -522,7 +520,6 @@ def add_and_apply_activation(
         fused_activations=fused_activations,
         output_mem_config=memory_config,
         output_dtype=dtype,
-        in_place=in_place,
     )
     return output
 

@@ -299,9 +299,13 @@ class resnet50Bottleneck:
             ds_out = self.downsample_or_noop(x)
             if self.deallocate:
                 ttnn.deallocate(x)
-        out = ttnn.add_and_apply_activation(
-            out, ds_out, activation="relu", memory_config=self.output_memory_config, in_place=self.out_in_place
-        )
+        if self.out_in_place:
+            # underscore version is in_place = True
+            out = ttnn.add_and_apply_activation_(
+                out, ds_out, activation="relu", memory_config=self.output_memory_config
+            )
+        else:
+            out = ttnn.add_and_apply_activation(out, ds_out, activation="relu", memory_config=self.output_memory_config)
         ttnn.deallocate(ds_out)
         if self.module_input_shape[0] == 20 and self.module_input_shape[1] == 56 and self.module_input_shape[3] == 64:
             out = ttnn.experimental.tensor.move_sharded(out)
