@@ -342,7 +342,7 @@ def device_mesh(request, silicon_arch_name, silicon_arch_wormhole_b0):
 
 
 @pytest.fixture(scope="function")
-def pcie_device_mesh(request, silicon_arch_name, silicon_arch_wormhole_b0):
+def pcie_device_mesh(request, silicon_arch_name, silicon_arch_grayskull):
     import ttnn
 
     device_ids = ttnn.get_pcie_device_ids()

@@ -630,22 +630,30 @@ MatmulParallelizationStrategy Matmul::get_parallelization_strategy(const std::ve
  * Bert large matmuls using operations::primary::matmul + program_config
  */
 Tensor bert_large_fused_qkv_matmul(const Tensor &input_tensor_a, const Tensor &input_tensor_b, std::optional<const Tensor> bias, const MemoryConfig& mem_config, std::optional<const DataType> output_dtype) {
-    auto batch_size = input_tensor_a.get_legacy_shape()[0];
+    std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}, {bias}))};
+    operation::launch_op(
+        [mem_config, output_dtype] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
+            const auto& input_tensor_a = input_tensors.at(0);
+            const auto& input_tensor_b = input_tensors.at(1);
+            const auto& bias = optional_input_tensors.at(0);
+            auto batch_size = input_tensor_a.get_legacy_shape()[0];
 
-    TT_FATAL((input_tensor_a.get_legacy_shape() == Shape({batch_size, 1, 384, 1024})), "Unsupported input shape");
-    TT_FATAL((input_tensor_b.get_legacy_shape() == Shape({1, 1, 1024, 3072})), "Unsupported input shape");
+            TT_FATAL((input_tensor_a.get_legacy_shape() == Shape({batch_size, 1, 384, 1024})), "Unsupported input shape");
+            TT_FATAL((input_tensor_b.get_legacy_shape() == Shape({1, 1, 1024, 3072})), "Unsupported input shape");
 
-    auto program_config = operations::primary::MatmulMultiCoreReuseMultiCastProgramConfig{
-        .compute_with_storage_grid_size = {12, batch_size},
-        .in0_block_w = 4,
-        .out_subblock_h = 4,
-        .out_subblock_w = 2,
-        .per_core_M = 12,
-        .per_core_N = 8,
-        .transpose_mcast = false,
-        .fused_activation = std::nullopt,
-    };
-    return operations::primary::matmul(input_tensor_a, input_tensor_b, bias, program_config, mem_config, output_dtype);
+            auto program_config = operations::primary::MatmulMultiCoreReuseMultiCastProgramConfig{
+                .compute_with_storage_grid_size = {12, batch_size},
+                .in0_block_w = 4,
+                .out_subblock_h = 4,
+                .out_subblock_w = 2,
+                .per_core_M = 12,
+                .per_core_N = 8,
+                .transpose_mcast = false,
+                .fused_activation = std::nullopt,
+            };
+            return {operations::primary::matmul(input_tensor_a, input_tensor_b, bias, program_config, mem_config, output_dtype)};
+        }, {input_tensor_a, input_tensor_b}, output_tensors, {bias});
+    return output_tensors.at(0);
 }
 
 Tensor bert_large_ff1_matmul(const Tensor &input_tensor_a, const Tensor &input_tensor_b, std::optional<const Tensor> bias, std::optional<UnaryWithParam> fused_activation, const MemoryConfig& mem_config, std::optional<const DataType> output_dtype) {
@@ -725,21 +733,26 @@ Tensor bert_large_pre_softmax_bmm(const Tensor &input_tensor_a, const Tensor &in
 }
 
 Tensor bert_large_post_softmax_bmm(const Tensor &input_tensor_a, const Tensor &input_tensor_b, const MemoryConfig& mem_config, std::optional<const DataType> output_dtype) {
-    auto batch_size = input_tensor_a.get_legacy_shape()[0];
+   std::vector<Tensor> output_tensors = {Tensor(operation::get_workers_for_op_output({input_tensor_a, input_tensor_b}))};
+   operation::launch_op(
+    [mem_config, output_dtype] (const std::vector<Tensor>& input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) mutable -> std::vector<Tensor> {
+        const auto& input_tensor_a = input_tensors.at(0);
+        const auto& input_tensor_b = input_tensors.at(1);
+        auto batch_size = input_tensor_a.get_legacy_shape()[0];
+        TT_FATAL((input_tensor_a.get_legacy_shape() == Shape({batch_size, 16, 384, 384})), "Unsupported input shape");
+        TT_FATAL((input_tensor_b.get_legacy_shape() == Shape({batch_size, 16, 384, 64})), "Unsupported input shape");
 
-    TT_FATAL((input_tensor_a.get_legacy_shape() == Shape({batch_size, 16, 384, 384})), "Unsupported input shape");
-    TT_FATAL((input_tensor_b.get_legacy_shape() == Shape({batch_size, 16, 384, 64})), "Unsupported input shape");
-
-    auto program_config = operations::primary::MatmulMultiCoreReuseProgramConfig{
-        .compute_with_storage_grid_size = {12, batch_size},
-        .in0_block_w = 2,
-        .out_subblock_h = 4,
-        .out_subblock_w = 2,
-        .per_core_M = 12,
-        .per_core_N = 2,
-    };
-    return operations::primary::matmul(input_tensor_a, input_tensor_b, program_config, mem_config, output_dtype);
-
+        auto program_config = operations::primary::MatmulMultiCoreReuseProgramConfig{
+            .compute_with_storage_grid_size = {12, batch_size},
+            .in0_block_w = 2,
+            .out_subblock_h = 4,
+            .out_subblock_w = 2,
+            .per_core_M = 12,
+            .per_core_N = 2,
+        };
+        return {operations::primary::matmul(input_tensor_a, input_tensor_b, program_config, mem_config, output_dtype)};
+    }, {input_tensor_a, input_tensor_b}, output_tensors);
+    return output_tensors.at(0);
 }
 
 CoreCoord get_falcon_matmul_grid_size(Device *device){
