@@ -8,13 +8,14 @@ import ttnn
 from loguru import logger
 
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 from models.experimental.mamba.tt_opt.residual_block import TtResidualBlock
+from models.experimental.mamba.tt_opt.transforms import MambaSsmBlockTransformer
 
 
 class TtTensorLoader:
-    def __init__(self, state_dict, device, tt_cache_path: str = ""):
+    def __init__(self, state_dict, device, tt_cache_path: Optional[str] = None):
         self.state_dict = state_dict
         self.tt_cache_path = tt_cache_path
         self.device = device
@@ -58,7 +59,9 @@ class TtTensorLoader:
 
 
 class MambaTT(torch.nn.Module):
-    def __init__(self, reference_model, device: ttnn.Device, configs, tt_cache_path: str = "", num_layers=None):
+    def __init__(
+        self, reference_model, device: ttnn.Device, configs, tt_cache_path: Optional[str] = None, num_layers=None
+    ):
         super().__init__()
         self.args = reference_model.args
         self.device = device
@@ -74,8 +77,11 @@ class MambaTT(torch.nn.Module):
 
         loader = TtTensorLoader(reference_model.state_dict(), self.device, tt_cache_path=tt_cache_path)
 
+        transformer = MambaSsmBlockTransformer(self.device, self.args.d_inner, self.args.d_state)
+
         self.layers = [
-            TtResidualBlock(self.args, device, configs, loader.get_tensor_loader(i)) for i in range(self.num_layers)
+            TtResidualBlock(self.args, device, configs, loader.get_tensor_loader(i), transformer)
+            for i in range(self.num_layers)
         ]
 
         self.norm_f = reference_model.norm_f

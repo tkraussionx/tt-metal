@@ -20,8 +20,6 @@ from ttnn.tracer import trace, visualize
 
 def preprocess_linear_weight(weight, *, dtype, layout=ttnn.TILE_LAYOUT):
     weight = weight.T.contiguous()
-    while len(weight.shape) < 4:
-        weight = weight.unsqueeze(0)
     weight = ttnn.from_torch(weight, dtype=dtype, layout=layout)
     return weight
 
@@ -427,7 +425,7 @@ def infer_ttnn_module_args(*, model, run_model, device):
     with trace():
         output = run_model(model)
 
-    visualize(output, file_name=ttnn.CONFIG.tmp_dir / "model_graph.svg")
+    visualize(output, file_name=ttnn.CONFIG.reports_path / "model_graph.svg")
 
     def _infer_ttnn_module_args(graph):
         ttnn_module_args = {}

@@ -239,7 +239,7 @@ std::vector<Tensor> run_multi_device_operation(
     {
         std::vector<DeviceBuffer> buffers;
         std::vector<Shape> shapes;
-        for (Device *device : devices) {
+        for (Device* device : devices) {
             buffers.push_back(per_device_output_tensors[device][i].device_buffer());
             shapes.push_back(per_device_output_tensors[device][i].get_legacy_shape());
         }
@@ -313,6 +313,7 @@ std::vector<Tensor> run_without_autoformat(
     const std::vector<Tensor>& input_tensors,
     const std::vector<std::optional<const Tensor>>& optional_input_tensors
 ) {
+    ZoneScoped;
     Device* device = detail::get_device(input_tensors, optional_input_tensors);
 
     std::vector<Tensor> input_tensors_on_dev;
@@ -342,6 +343,7 @@ std::vector<Tensor> run_without_autoformat(
     const std::vector<std::optional<const Tensor>>& optional_input_tensors,
     const std::vector<std::optional<Tensor>>& optional_output_tensors
 ) {
+    ZoneScoped;
     Device* device = detail::get_device(input_tensors, optional_input_tensors);
 
     std::vector<Tensor> input_tensors_on_dev;
@@ -373,6 +375,7 @@ std::vector<Tensor> run_with_autoformat(
     const float pad_value,
     const bool pad_c
 ) {
+    ZoneScoped;
     if (detail::any_tensor_on_multi_device(input_tensors)) {
         return run(operation, input_tensors, optional_input_tensors);
     }
@@ -430,6 +433,7 @@ std::vector<Tensor> run_with_autoformat(
     const std::vector<std::optional<const Tensor>>& optional_input_tensors,
     const std::vector<std::optional<FormatParams>>& optional_input_formatting
 ) {
+    ZoneScoped;
     if (detail::any_tensor_on_multi_device(input_tensors)) {
         return run(operation, input_tensors, optional_input_tensors);
     }

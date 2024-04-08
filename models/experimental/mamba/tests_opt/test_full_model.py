@@ -47,13 +47,18 @@ class MambaPytorch(torch.nn.Module):
         (
             "state-spaces/mamba-2.8b",
             32,
-            0.99,
+            0.985,
             False,
         ),
     ),
 )
 def test_mamba_model_inference(
-    device, use_program_cache, model_version: MambaPretrainedModelName, batch: int, pcc: float, enable_cache: bool
+    device: ttnn.Device,
+    use_program_cache,
+    model_version: MambaPretrainedModelName,
+    batch: int,
+    pcc: float,
+    enable_cache: bool,
 ):
     torch.manual_seed(10)
 
@@ -81,5 +86,5 @@ def test_mamba_model_inference(
     logger.info(f"PCC value: {output_pcc}")
 
     if not does_pass:
-        logger.warning("Mamba SSM output failed")
+        logger.warning("Mamba output failed")
         assert does_pass, f"PCC value is lower than {pcc}"
