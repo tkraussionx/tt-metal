@@ -82,6 +82,9 @@ inline __attribute__((always_inline)) void ncrisc_noc_fast_read(uint32_t noc, ui
 inline __attribute__((always_inline)) bool ncrisc_noc_reads_flushed(uint32_t noc) {
   return (NOC_STATUS_READ_REG(noc, NIU_MST_RD_RESP_RECEIVED) == noc_reads_num_issued[noc]);
 }
+inline __attribute__((always_inline)) bool ncrisc_noc_reads_flushed_with_id(uint32_t noc, uint32_t transcation_id) {
+  return (NOC_STATUS_READ_REG(noc, NIU_MST_REQS_OUTSTANDING_ID(transcation_id)) == 0);
+}
 
 inline __attribute__((always_inline)) void ncrisc_noc_fast_write(uint32_t noc, uint32_t cmd_buf, uint32_t src_addr, uint64_t dest_addr, uint32_t len_bytes, uint32_t vc, bool mcast, bool linked, uint32_t num_dests, uint32_t transcation_id = 0) {
   if (len_bytes > 0) {
@@ -147,9 +150,15 @@ inline __attribute__((always_inline)) void ncrisc_noc_blitz_write_setup(uint32_t
 inline __attribute__((always_inline)) bool ncrisc_noc_nonposted_writes_sent(uint32_t noc) {
   return (NOC_STATUS_READ_REG(noc, NIU_MST_NONPOSTED_WR_REQ_SENT) == noc_nonposted_writes_num_issued[noc]);
 }
+inline __attribute__((always_inline)) bool ncrisc_noc_nonposted_writes_sent_with_id(uint32_t noc, uint32_t transcation_id) {
+  return (NOC_STATUS_READ_REG(noc, NIU_MST_WRITE_REQS_OUTGOING_ID(transcation_id)) == 0);
+}
 
 inline __attribute__((always_inline)) bool ncrisc_noc_nonposted_writes_flushed(uint32_t noc) {
   return (NOC_STATUS_READ_REG(noc, NIU_MST_WR_ACK_RECEIVED) == noc_nonposted_writes_acked[noc]);
+}
+inline __attribute__((always_inline)) bool ncrisc_noc_nonposted_writes_flushed_with_id(uint32_t noc, uint32_t transcation_id) {
+  return (NOC_STATUS_READ_REG(noc, NIU_MST_REQS_OUTSTANDING_ID(transcation_id)) == 0);
 }
 
 inline __attribute__((always_inline)) void noc_init() {

@@ -4,6 +4,8 @@
 
 #include "dataflow_api.h"
 
+#include "debug/dprint.h"
+
 void kernel_main() {
     uint32_t dst_addr  = get_arg_val<uint32_t>(0);
     uint32_t num_tiles = get_arg_val<uint32_t>(1);
@@ -15,6 +17,9 @@ void kernel_main() {
     #ifdef OUT_SHARDED
     cb_wait_front(cb_id_out, num_tiles);
     #else
+
+
+    DPRINT << "writer clone " << (uint)noc_index_to_dram_bank_map[0] << ENDL();
 
     // single-tile ublocks
     constexpr uint32_t onetile = 1;
@@ -37,6 +42,7 @@ void kernel_main() {
         cb_wait_front(cb_id_out, onetile);
         uint32_t l1_read_addr = get_read_ptr(cb_id_out);
         noc_async_write_tile(i, s, l1_read_addr);
+        // noc_async_write_barrier_with_id();
         noc_async_write_barrier();
         cb_pop_front(cb_id_out, onetile);
     }
