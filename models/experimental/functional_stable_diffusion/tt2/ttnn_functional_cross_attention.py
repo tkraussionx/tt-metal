@@ -94,11 +94,16 @@ class cross_attention:
             parameters.qkv["weight"] = concatenate_qkv(
                 parameters.to_q.weight, parameters.to_k.weight, parameters.to_v.weight
             )
+            parameters.qkv.weight = ttnn.unsqueeze_to_4D(parameters.qkv.weight)
         else:
             parameters["kv"] = ttnn.model_preprocessing.ParameterDict()
             parameters.kv["weight"] = concatenate_qkv(None, parameters.to_k.weight, parameters.to_v.weight)
             parameters.to_q.weight = weight_to_bfp8(parameters.to_q.weight)
 
+            parameters.kv.weight = ttnn.unsqueeze_to_4D(parameters.kv.weight)
+            parameters.to_q.weight = ttnn.unsqueeze_to_4D(parameters.to_q.weight)
+
+        parameters.to_out[0].weight = ttnn.unsqueeze_to_4D(parameters.to_out[0].weight)
         parameters.to_out[0].bias = ttnn.unsqueeze_to_4D(parameters.to_out[0].bias)
         self.parameters = parameters
         self.device = device

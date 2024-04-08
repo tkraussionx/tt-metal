@@ -122,9 +122,6 @@ def test_unet_2d_condition_model_256x256(device, batch_size, in_channels, input_
     ],
 )
 def test_unet_2d_condition_model_512x512(device, batch_size, in_channels, input_height, input_width):
-    if device.core_grid.y == 7:
-        pytest.skip("Not supporting N300 yet")
-
     # setup pytorch model
     torch.manual_seed(0)
     model_name = "CompVis/stable-diffusion-v1-4"
