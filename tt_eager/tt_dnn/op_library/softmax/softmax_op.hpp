@@ -39,31 +39,11 @@ struct SoftmaxShardedMultiCoreProgramConfig {
     };
 };
 
-// Same as SoftmaxShardedMultiCoreProgramConfig
-// With the following limits:
-// - Must have a causal mask of dims [1, 1, x, y]
-// - Causal mask must be interleaved
-struct SoftmaxShardedCausalMaskHWDimsProgramConfig {
-    CoreCoord compute_with_storage_grid_size;
-    std::size_t subblock_w;
-    std::size_t block_h;
-    std::size_t block_w;
-
-    tt::stl::reflection::Attributes attributes() const {
-        return {
-            {"compute_with_storage_grid_size", compute_with_storage_grid_size},
-            {"subblock_w", subblock_w},
-            {"block_h", block_h},
-            {"block_w", block_w},
-        };
-    };
-};
-
 using SoftmaxProgramConfig = std::variant<
     SoftmaxDefaultProgramConfig,
-    SoftmaxShardedMultiCoreProgramConfig,
-    SoftmaxShardedCausalMaskHWDimsProgramConfig
+    SoftmaxShardedMultiCoreProgramConfig
 >;
+
 }  // namespace transformers
 
 struct Softmax {
@@ -73,6 +53,7 @@ struct Softmax {
     const tt::operations::primary::transformers::SoftmaxProgramConfig program_config;
     const bool is_causal_mask;
     const DeviceComputeKernelConfig compute_kernel_config;
+    const bool is_scale_causal_mask_hw_dims_softmax;
 
     void validate(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) const;
     std::vector<Shape> compute_output_shapes(const std::vector<Tensor> &input_tensors) const;
@@ -124,6 +105,13 @@ namespace transformers {
 // y = softmax(tmp2)              ; r=result
 // If scale == 0.0f then just y = softmax(x) is computed
 Tensor scale_mask_softmax_in_place(Tensor& input_tensor, std::optional<float> scale = std::nullopt, std::optional<const Tensor> mask = std::nullopt, const SoftmaxProgramConfig& program_config = SoftmaxDefaultProgramConfig{}, const bool is_causal_mask = false, std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt);
+
+// Experimental feature. Does the same same as above, with the following assumptions:
+// 1. Input must be sharded
+// 2. Scale must exist
+// 3. Attention mask must be interleaved and be of this shape [1, 1, H, W]
+// 4. Causal mask argument is set to true.
+Tensor scale_causal_mask_hw_dims_softmax_in_place(Tensor& input_tensor, std::optional<float> scale, std::optional<const Tensor> mask, const SoftmaxProgramConfig& program_config = SoftmaxShardedMultiCoreProgramConfig{}, std::optional<const DeviceComputeKernelConfig> compute_kernel_config = std::nullopt);
 }  // namespace transformers
 
 }  // namespace primary

@@ -26,18 +26,6 @@ namespace tt {
 namespace operations {
 namespace primary {
 
-void softmax_sharded_checks(const Tensor& input, uint32_t block_w, uint32_t subblock_w, bool in_place) {
-    const auto shape = input.get_legacy_shape();
-    uint32_t M = input.volume() / shape[-1];
-    uint32_t K = shape[-1];
-
-    TT_FATAL(M % TILE_HEIGHT == 0, "M must be divisible by tile height.");
-    TT_FATAL(K % TILE_WIDTH == 0, "K must be divisible by tile width.");
-    TT_FATAL(block_w % subblock_w == 0, "block_w must be divisible by subblock_w.");
-    TT_FATAL(block_w * TILE_WIDTH == shape[3], "shard width must equal to input tensor shape[3]!");
-    TT_FATAL(in_place);
-}
-
 void Softmax::validate(const std::vector<Tensor> &input_tensors, const std::vector<std::optional<const Tensor>>& optional_input_tensors) const {
     TT_FATAL(input_tensors.size() == 1 and optional_input_tensors.size() <= 1, "Must have 1 or 2 input tensors");
     auto& input_tensor = input_tensors.at(0);
@@ -70,27 +58,34 @@ void Softmax::validate(const std::vector<Tensor> &input_tensors, const std::vect
                         std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SoftmaxDefaultProgramConfig>
                     ) {
                         TT_FATAL(input_tensor.get_legacy_shape()[0] == mask.get_legacy_shape()[0]);
+                        TT_FATAL(!this->is_scale_causal_mask_hw_dims_softmax);
                     } else if constexpr (
                         std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SoftmaxShardedMultiCoreProgramConfig>
                     ) {
-                        softmax_sharded_checks(input_tensor, program_config.block_w, program_config.subblock_w, this->inplace);
-                        // grid
-                        auto num_cores_c = program_config.compute_with_storage_grid_size.x;
-                        auto num_cores_r = program_config.compute_with_storage_grid_size.y;
-                        uint32_t M = input_tensor.volume() / input_tensor.get_legacy_shape()[-1] / TILE_HEIGHT;
-                        uint32_t K = input_tensor.get_legacy_shape()[-1] / TILE_WIDTH;
-                        // check dims
-                        TT_FATAL(M * K / (program_config.block_w * program_config.block_h) == num_cores_r * num_cores_c, "number of shards must equal to number of cores. M = {}, K = {}, block_w = {}, block_h = {}, num_cores = {}", M, K, program_config.block_w, program_config.block_h, num_cores_r * num_cores_c);
-                    } else if constexpr (
-                        std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SoftmaxShardedCausalMaskHWDimsProgramConfig>
-                    ) {
-                        softmax_sharded_checks(input_tensor, program_config.block_w, program_config.subblock_w, this->inplace);
-                        TT_FATAL(this->is_causal_mask);
-                        TT_FATAL(mask.get_layout() == Layout::TILE);
-                        TT_FATAL(mask.is_sharded() == false);
-                        TT_FATAL(input_tensor.get_layout() == Layout::TILE);
-                        TT_FATAL(input_tensor.is_sharded());
-                        TT_FATAL(input_tensor.shard_spec()->orientation == ShardOrientation::ROW_MAJOR);
+                        const auto shape = input_tensor.get_legacy_shape();
+                        uint32_t M = input_tensor.volume() / shape[-1];
+                        uint32_t K = shape[-1];
+
+                        TT_FATAL(M % TILE_HEIGHT == 0, "M must be divisible by tile height.");
+                        TT_FATAL(K % TILE_WIDTH == 0, "K must be divisible by tile width.");
+                        TT_FATAL(program_config.block_w % program_config.subblock_w == 0, "block_w must be divisible by subblock_w.");
+                        TT_FATAL(program_config.block_w * TILE_WIDTH == shape[3], "shard width must equal to input tensor shape[3]!");
+                        TT_FATAL(this->inplace);
+                        if (!this->is_scale_causal_mask_hw_dims_softmax) {
+                            // grid
+                            auto num_cores_c = program_config.compute_with_storage_grid_size.x;
+                            auto num_cores_r = program_config.compute_with_storage_grid_size.y;
+                            // check dims
+                            TT_FATAL(M * K / ((program_config.block_w * program_config.block_h) * TILE_HW) == num_cores_r * num_cores_c, "number of shards must equal to number of cores. M = {}, K = {}, block_w = {}, block_h = {}, num_cores = {}", M, K, program_config.block_w, program_config.block_h, num_cores_r * num_cores_c);
+                        } else {
+                            TT_FATAL(this->is_causal_mask);
+                            TT_FATAL(mask.get_layout() == Layout::TILE);
+                            TT_FATAL(mask.is_sharded() == false);
+                            TT_FATAL(input_tensor.get_layout() == Layout::TILE);
+                            TT_FATAL(input_tensor.is_sharded());
+                            TT_FATAL(input_tensor.shard_spec()->orientation == ShardOrientation::ROW_MAJOR);
+                            TT_FATAL(this->scale.has_value());
+                        }
                     }
                 },
                 this->program_config
@@ -100,10 +95,7 @@ void Softmax::validate(const std::vector<Tensor> &input_tensors, const std::vect
         }
     } else {
         TT_FATAL(not this->scale.has_value());
-        using ProgramConfigType = std::decay_t<decltype(this->program_config)>;
-        if constexpr (std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SoftmaxShardedCausalMaskHWDimsProgramConfig>) {
-            TT_FATAL(false, "Usage of SoftmaxShardedCausalMaskHWDimsProgramConfig requires a causal mask");
-        }
+        TT_FATAL(not this->is_scale_causal_mask_hw_dims_softmax);
     }
 }
 
@@ -148,29 +140,14 @@ operation::ProgramWithCallbacks Softmax::create_program(
                     mask,
                     this->scale,
                     causal_mask,
-                    false,
+                    this->is_scale_causal_mask_hw_dims_softmax,
                     program_config.compute_with_storage_grid_size,
                     program_config.subblock_w,
                     program_config.block_h,
                     program_config.block_w,
                     this->compute_kernel_config);
             }
-            else if constexpr (
-                std::is_same_v<ProgramConfigType, tt::operations::primary::transformers::SoftmaxShardedCausalMaskHWDimsProgramConfig>
-            ) {
-                return scale_mask_softmax_sharded_multi_core(
-                    input_tensor,
-                    output_tensor,
-                    mask,
-                    this->scale,
-                    causal_mask,
-                    true,
-                    program_config.compute_with_storage_grid_size,
-                    program_config.subblock_w,
-                    program_config.block_h,
-                    program_config.block_w,
-                    this->compute_kernel_config);
-            } else {
+            else {
                 return scale_mask_softmax_multi_core(input_tensor, output_tensor, mask, this->scale, causal_mask, this->compute_kernel_config);
             }
         },
@@ -207,7 +184,13 @@ Tensor softmax_in_place(Tensor& input_tensor, const transformers::SoftmaxProgram
 namespace transformers {
 Tensor scale_mask_softmax_in_place(Tensor& input_tensor, std::optional<float> scale, std::optional<const Tensor> mask, const SoftmaxProgramConfig& program_config, const bool is_causal_mask, std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
     auto kernel_config_val = init_device_compute_kernel_config(input_tensor.device()->arch(), compute_kernel_config, MathFidelity::HiFi4, true, false, false);
-    operation::run(Softmax{.scale=scale, .inplace=true, .output_mem_config=input_tensor.memory_config(), .program_config=program_config, .is_causal_mask=is_causal_mask, .compute_kernel_config=kernel_config_val}, {input_tensor}, {mask});
+    operation::run(Softmax{.scale=scale, .inplace=true, .output_mem_config=input_tensor.memory_config(), .program_config=program_config, .is_causal_mask=is_causal_mask, .compute_kernel_config=kernel_config_val, .is_scale_causal_mask_hw_dims_softmax=false}, {input_tensor}, {mask});
+    return input_tensor;
+}
+
+Tensor scale_causal_mask_hw_dims_softmax_in_place(Tensor& input_tensor, std::optional<float> scale, std::optional<const Tensor> mask, const SoftmaxProgramConfig& program_config, std::optional<const DeviceComputeKernelConfig> compute_kernel_config) {
+    auto kernel_config_val = init_device_compute_kernel_config(input_tensor.device()->arch(), compute_kernel_config, MathFidelity::HiFi4, true, false, false);
+    operation::run(Softmax{.scale=scale, .inplace=true, .output_mem_config=input_tensor.memory_config(), .program_config=program_config, .is_causal_mask=true, .compute_kernel_config=kernel_config_val, .is_scale_causal_mask_hw_dims_softmax=true}, {input_tensor}, {mask});
     return input_tensor;
 }
 
@@ -236,7 +219,7 @@ Tensor scale_mask_softmax(const Tensor& input_tensor, std::optional<float> scale
         mask_format_params = {.pad_shape=mask_pad_shape, .pad_value=-std::numeric_limits<float>::infinity(), .target_layout=Layout::TILE};
     }
     auto kernel_config_val = init_device_compute_kernel_config(input_tensor.device()->arch(), compute_kernel_config, MathFidelity::HiFi4, true, false, false);
-    return operation::run_with_autoformat(tt::operations::primary::Softmax{.scale=scale, .inplace=false, .output_mem_config=output_mem_config, .is_causal_mask=is_causal_mask, .compute_kernel_config=kernel_config_val}, {input_tensor}, {input_format_params}, {Layout::TILE}, {mask}, {mask_format_params}).at(0);
+    return operation::run_with_autoformat(tt::operations::primary::Softmax{.scale=scale, .inplace=false, .output_mem_config=output_mem_config, .is_causal_mask=is_causal_mask, .compute_kernel_config=kernel_config_val, .is_scale_causal_mask_hw_dims_softmax=false}, {input_tensor}, {input_format_params}, {Layout::TILE}, {mask}, {mask_format_params}).at(0);
 }
 }  // namespace transformers
 }  // namespace tt_metal

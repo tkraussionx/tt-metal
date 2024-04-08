@@ -647,19 +647,18 @@ def test_falcon7b_attention_softmax_sequence(
         subblock_w = 1
         if seq_len == 2048:
             subblock_w = 8
-        softmax_program_config = ttl.operations.primary.transformers.SoftmaxShardedCausalMaskHWDimsProgramConfig(
+        softmax_program_config = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
             compute_with_storage_grid_size=grid_size,
             subblock_w=subblock_w,
             block_h=mm_output_height_shard_spec[0] // 32,
             block_w=mm_output_height_shard_spec[1] // 32,
         )
 
-        mm_slice = ttl.operations.primary.transformers.scale_mask_softmax_in_place(
+        mm_slice = ttl.operations.primary.transformers.scale_causal_mask_hw_dims_softmax_in_place(
             mm_slice,
             scalar_value,
             attention_masks_per_slice[i],
             program_config=softmax_program_config,
-            is_causal_mask=True,
             compute_kernel_config=compute_kernel_config,
         )
 
@@ -849,19 +848,18 @@ def test_softmax(device, num_cores, seq_len):
             ttl.tensor.ShardOrientation.ROW_MAJOR,
         )
 
-        softmax_program_config = ttl.operations.primary.transformers.SoftmaxShardedCausalMaskHWDimsProgramConfig(
+        softmax_program_config = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
             compute_with_storage_grid_size=grid_size,
             subblock_w=1,
             block_h=height_shard_spec[0] // 32,
             block_w=height_shard_spec[1] // 32,
         )
 
-        input_slice = ttl.operations.primary.transformers.scale_mask_softmax_in_place(
+        input_slice = ttl.operations.primary.transformers.scale_causal_mask_hw_dims_softmax_in_place(
             input_slice,
             scalar_value,
             tt_attention_masks_per_slice[i],
             program_config=softmax_program_config,
-            is_causal_mask=True,
             compute_kernel_config=compute_kernel_config,
         )
 
