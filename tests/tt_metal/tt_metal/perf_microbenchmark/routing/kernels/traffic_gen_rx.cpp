@@ -76,7 +76,10 @@ void kernel_main() {
                       remote_tx_x, remote_tx_y, remote_tx_queue_id,
                       rx_rptr_update_network_type);
 
-    wait_all_src_dest_ready(input_queue, 1, NULL, 0, timeout_cycles);
+    if (!wait_all_src_dest_ready(input_queue, 1, NULL, 0, timeout_cycles)) {
+        test_results[PQ_TEST_STATUS_INDEX] = PACKET_QUEUE_TEST_TIMEOUT;
+        return;
+    }
 
     test_results[PQ_TEST_MISC_INDEX] = 0xff000001;
 
@@ -102,11 +105,13 @@ void kernel_main() {
 
         bool packet_available = false;
         while (!packet_available) {
-            uint32_t cycles_since_progress = get_timestamp_32b() - progress_timestamp;
-            if (cycles_since_progress > timeout_cycles) {
-                test_results[PQ_TEST_MISC_INDEX] = 0xff000006;
-                timeout = true;
-                break;
+            if (timeout_cycles > 0) {
+                uint32_t cycles_since_progress = get_timestamp_32b() - progress_timestamp;
+                if (cycles_since_progress > timeout_cycles) {
+                    test_results[PQ_TEST_MISC_INDEX] = 0xff000006;
+                    timeout = true;
+                    break;
+                }
             }
             uint32_t num_words_available;
             packet_available = input_queue->input_queue_full_packet_available_to_send(num_words_available);
