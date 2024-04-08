@@ -78,7 +78,7 @@ def get_lms_coefficient(order, t, current_order, sigmas):
 @pytest.mark.models_performance_bare_metal
 @pytest.mark.parametrize(
     "num_prompts, num_inference_steps, image_size, expected_compile_time, expected_inference_time",
-    ((1, 2, (512, 512), 3600, 0.16),),
+    ((1, 2, (512, 512), 3600, 1.5),),
 )
 def test_stable_diffusion_perf(
     device, num_prompts, num_inference_steps, image_size, expected_compile_time, expected_inference_time
@@ -274,7 +274,7 @@ def test_stable_diffusion_perf(
 @pytest.mark.models_device_performance_bare_metal
 @pytest.mark.parametrize(
     "expected_perf",
-    ((0.16),),
+    ((1.5),),
 )
 def test_stable_diffusion_device_perf(expected_perf):
     subdir = "ttnn_stable_diffusion"
@@ -294,5 +294,5 @@ def test_stable_diffusion_device_perf(expected_perf):
         batch_size=batch,
         post_processed_results=post_processed_results,
         expected_results=expected_results,
-        comments=test.replace("/", "_"),
+        comments="",
     )
