@@ -31,14 +31,15 @@ def pad_heads(tensor, num_heads=8, dim=-1):
         padding_needed = round_up_to_tile_dim(unpadded_len) - unpadded_len
         unpadded_tensors = torch.split(tensor, tensor.shape[dim] // num_heads, dim=dim)
         padding = (
-            torch.zeros((tensor.shape[-4], tensor.shape[-3], tensor.shape[-2], padding_needed))
+            torch.zeros((tensor.shape[-2], padding_needed))
             if dim == -1
-            else torch.zeros((tensor.shape[-4], tensor.shape[-3], padding_needed, tensor.shape[-1]))
+            else torch.zeros((padding_needed, tensor.shape[-1]))
         )
         padded_tensor = torch.Tensor()
         for unpadded_tensor in unpadded_tensors:
             padded_tensor = torch.cat([padded_tensor, unpadded_tensor, padding], dim=dim)
 
+        padded_tensor = padded_tensor.unsqueeze(0).unsqueeze(0)
         padded_tensor = ttnn.from_torch(padded_tensor, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT)
         padded_tensor = ttnn.to_device(padded_tensor, device, memory_config=memory_config)
         tensor = padded_tensor
