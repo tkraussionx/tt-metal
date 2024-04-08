@@ -34,8 +34,9 @@ constexpr uint32_t downstream_cb_base = get_compile_time_arg_val(9);
 constexpr uint32_t downstream_cb_size = get_compile_time_arg_val(10);
 constexpr uint32_t my_downstream_cb_sem_id = get_compile_time_arg_val(11);
 constexpr uint32_t downstream_cb_sem_id = get_compile_time_arg_val(12);
-constexpr uint32_t is_d_variant = get_compile_time_arg_val(13);
-constexpr uint32_t is_h_variant = get_compile_time_arg_val(14);
+constexpr uint32_t split_dispatch_page_preamble_size = get_compile_time_arg_val(13);
+constexpr uint32_t is_d_variant = get_compile_time_arg_val(14);
+constexpr uint32_t is_h_variant = get_compile_time_arg_val(15);
 
 constexpr uint32_t upstream_noc_xy = uint32_t(NOC_XY_ENCODING(UPSTREAM_NOC_X, UPSTREAM_NOC_Y));
 constexpr uint32_t downstream_noc_xy = uint32_t(NOC_XY_ENCODING(DOWNSTREAM_NOC_X, DOWNSTREAM_NOC_Y));
@@ -198,6 +199,7 @@ void process_write_host_h() {
     cmd_ptr = data_ptr;
 }
 
+template<uint32_t preamble_size>
 FORCE_INLINE
 void relay_to_next_cb(uint32_t data_ptr,
                       uint32_t length) {
@@ -205,8 +207,10 @@ void relay_to_next_cb(uint32_t data_ptr,
     while (length > 0) {
         uint32_t avail = downstream_cb_end - downstream_cb_data_ptr;
 
-        uint32_t xfer_size = (length > dispatch_cb_page_size) ? dispatch_cb_page_size : length;
-        uint64_t dst = get_noc_addr_helper(downstream_noc_xy, downstream_cb_data_ptr);
+        uint32_t xfer_size = (length > dispatch_cb_page_size - preamble_size) ?
+            dispatch_cb_page_size - preamble_size :
+            length;
+        uint64_t dst = get_noc_addr_helper(downstream_noc_xy, downstream_cb_data_ptr + preamble_size);
 
         // Get a page if needed
         if (data_ptr + xfer_size > cb_fence) {
@@ -248,7 +252,7 @@ void relay_to_next_cb(uint32_t data_ptr,
 
         length -= xfer_size;
         data_ptr += xfer_size;
-        downstream_cb_data_ptr += xfer_size;
+        downstream_cb_data_ptr += xfer_size + preamble_size;
         if (downstream_cb_data_ptr == downstream_cb_end) {
             downstream_cb_data_ptr = downstream_cb_base;
         }
@@ -264,7 +268,7 @@ void process_write_host_d() {
     uint32_t length = cmd->write_linear_host.length;
     uint32_t data_ptr = cmd_ptr;
 
-    relay_to_next_cb(data_ptr, length);
+    relay_to_next_cb<split_dispatch_page_preamble_size>(data_ptr, length);
 
     // Move to next page
     downstream_cb_data_ptr += (dispatch_cb_page_size - (downstream_cb_data_ptr & (dispatch_cb_page_size - 1))) & (dispatch_cb_page_size - 1);
@@ -678,7 +682,7 @@ static inline bool process_cmd_d(uint32_t& cmd_ptr) {
     case CQ_DISPATCH_CMD_TERMINATE:
         DPRINT << "dispatch terminate\n";
         if (is_d_variant && !is_h_variant) {
-            relay_to_next_cb(cmd_ptr, sizeof(CQDispatchCmd));
+            relay_to_next_cb<split_dispatch_page_preamble_size>(cmd_ptr, sizeof(CQDispatchCmd));
         }
         done = true;
         break;
@@ -704,6 +708,7 @@ static inline bool process_cmd_h(uint32_t& cmd_ptr) {
 
     switch (cmd->base.cmd_id) {
     case CQ_DISPATCH_CMD_WRITE_LINEAR_HOST:
+        DPRINT << "dispatch_h write_host: "<< cmd_ptr << ENDL();;
         process_write_host_h();
         break;
 
@@ -727,6 +732,8 @@ static inline bool process_cmd_h(uint32_t& cmd_ptr) {
 
 void kernel_main() {
     DPRINT << "dispatch_" << is_d_variant << is_h_variant << ": start" << ENDL();
+
+    static_assert(is_d_variant || split_dispatch_page_preamble_size == 0);
 
     for (uint32_t i = 0; i < dispatch_cb_blocks; i++) {
         uint32_t next_block = i + 1;
