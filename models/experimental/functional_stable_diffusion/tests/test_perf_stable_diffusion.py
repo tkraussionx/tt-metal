@@ -83,9 +83,6 @@ def get_lms_coefficient(order, t, current_order, sigmas):
 def test_stable_diffusion_perf(
     device, num_prompts, num_inference_steps, image_size, expected_compile_time, expected_inference_time
 ):
-    if device.core_grid.y == 7:
-        pytest.skip("Not supporting N300 yet")
-
     disable_persistent_kernel_cache()
 
     # Clear global profiler state before starting measurements
@@ -94,7 +91,6 @@ def test_stable_diffusion_perf(
     # 0. Load a sample prompt from the dataset
     dataset = load_dataset("poloclub/diffusiondb", "2m_random_1k")
     data_1k = dataset["train"]
-
     height, width = image_size
 
     for i in range(num_prompts):
@@ -285,7 +281,7 @@ def test_stable_diffusion_device_perf(expected_perf):
     margin = 0.03
     batch = 1
     iterations = 2
-    command = f"pytest tests/ttnn/integration_tests/stable_diffusion/test_unet_2d_condition_model.py::test_unet_2d_condition_model_512x512[batch_size=2-in_channels=4-input_height=64-input_width=64]"
+    command = f"WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest tests/ttnn/integration_tests/stable_diffusion/test_unet_2d_condition_model.py::test_unet_2d_condition_model_512x512[batch_size=2-in_channels=4-input_height=64-input_width=64]"
     cols = ["DEVICE FW", "DEVICE KERNEL", "DEVICE BRISC KERNEL"]
 
     inference_time_key = "AVG DEVICE KERNEL SAMPLES/S"

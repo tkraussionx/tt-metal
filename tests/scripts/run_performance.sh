@@ -73,7 +73,9 @@ run_perf_models_cnn_javelin() {
 
     echo "There are no CNN tests for Javelin yet specified. Arch $tt_arch requested"
 
-    env pytest models/experimental/functional_stable_diffusion/tests -m $test_marker
+    if [ "$tt_arch" == "wormhole_b0" ]; then
+        env WH_ARCH_YAML=wormhole_b0_80_arch_eth_dispatch.yaml pytest models/experimental/functional_stable_diffusion/tests -m $test_marker
+    fi
 
     ## Merge all the generated reports
     env python models/perf/merge_perf_results.py
