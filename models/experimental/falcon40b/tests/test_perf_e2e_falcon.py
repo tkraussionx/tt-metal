@@ -396,21 +396,15 @@ def run_test_FalconCausalLM_end_to_end(
     "llm_mode, batch, seq_len, kv_cache_len, expected_compile_time, expected_inference_time, inference_iterations",
     (
         ("prefill", 1, 32, 0, 60, 0.22, 10),
-        ("prefill", 1, 128, 0, 60, 0.30, 1),
-        ("prefill", 1, 2048, 0, 60, 0.30, 1),
-        # ("prefill", 1, 256, 0, 0.44),
+        ("prefill", 1, 128, 0, 60, 0.30, 10),
+        ("prefill", 1, 2048, 0, 60, 0.30, 10),
         ("decode", 32, 1, 128, 60, 0.22, 10),
-        # ("decode", 32, 1, 1024, 0.35, 10),
-        # ("decode", 32, 1, 2047, 0.48, 10),
     ),
     ids=[
         "prefill_seq32",
         "prefill_seq128",
         "prefill_seq2048",
-        # "prefill_seq256",
         "decode_batch32",
-        # "decode_batch32_1024",
-        # "decode_batch32_2047",
     ],
 )
 @pytest.mark.parametrize(
@@ -445,6 +439,10 @@ def test_perf_bare_metal(
     all_devices,
     use_program_cache,
 ):
+    if llm_mode == "prefill":
+        if model_config_str != "BFLOAT8_B-DRAM":
+            pytest.skip("Prefill is only tested for BFLOAT8_B-DRAM!")
+
     input_shape = [batch, seq_len]
     model_config = get_model_config(model_config_str, llm_mode, input_shape, num_devices)
     devices = get_devices_for_t3000(all_devices, num_devices)

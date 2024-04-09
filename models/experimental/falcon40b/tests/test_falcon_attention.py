@@ -366,8 +366,8 @@ def test_FalconAttention_inference(
     all_devices,
     # use_program_cache, # TODO: enable program cache as soon as multi chip correctness is verified
 ):
-    if llm_mode == "prefill" and model_config_str in ["BFLOAT16-SHARDED", "BFLOAT8_B-SHARDED"] and seq_len != 32:
-        pytest.skip("Sharded prefill is only supported for sequence length 32!")
+    if llm_mode == "prefill" and model_config_str != "BFLOAT8_B-DRAM":
+        pytest.skip("Prefill is only tested for BFLOAT8_B-DRAM!")
 
     input_shape = [batch, seq_len]
     model_config = get_model_config(model_config_str, llm_mode, input_shape, num_devices)

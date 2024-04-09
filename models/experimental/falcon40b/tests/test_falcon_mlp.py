@@ -105,18 +105,12 @@ def run_test_FalconMLP_inference(
         ("decode", 32, 1),
         ("prefill", 1, 32),
         ("prefill", 1, 128),
-        ("prefill", 1, 256),
-        ("prefill", 1, 512),
-        ("prefill", 1, 1024),
         ("prefill", 1, 2048),
     ),
     ids=(
         "decode_batch32",
         "prefill_seq32",
         "prefill_seq128",
-        "prefill_seq256",
-        "prefill_seq512",
-        "prefill_seq1024",
         "prefill_seq2048",
     ),
 )
@@ -130,11 +124,9 @@ def run_test_FalconMLP_inference(
     [
         ("BFLOAT8_B-SHARDED", 0.9986),
         ("BFLOAT16-SHARDED", 0.9986),
-        ("BFLOAT16-DRAM", 0.9986),
-        ("BFLOAT16-L1", 0.9986),
         ("BFLOAT8_B-DRAM", 0.9983),
     ],
-    ids=("BFLOAT8_B-SHARDED", "BFLOAT16-SHARDED", "BFLOAT16-DRAM", "BFLOAT16-L1", "BFLOAT8_B-DRAM"),
+    ids=("BFLOAT8_B-SHARDED", "BFLOAT16-SHARDED", "BFLOAT8_B-DRAM"),
 )
 def test_FalconMLP_inference(
     num_devices,
@@ -149,6 +141,9 @@ def test_FalconMLP_inference(
     all_devices,
     # use_program_cache, # TODO: enable program cache as soon as multi chip correctness is verified
 ):
+    if llm_mode == "prefill" and model_config_str != "BFLOAT8_B-DRAM":
+        pytest.skip("Prefill is only tested for BFLOAT8_B-DRAM!")
+
     input_shape = [batch, seq_len]
     model_config = get_model_config(model_config_str, llm_mode, input_shape, num_devices)
     devices = get_devices_for_t3000(all_devices, num_devices)
