@@ -25,7 +25,6 @@ enum class KernelType {
     COMPUTE = 1,
 };
 
-
 Program initialize_program_data_movement(Device *device, const CoreRangeSet &core_range_set) {
     Program program = tt_metal::CreateProgram();
 
@@ -39,8 +38,6 @@ Program initialize_program_data_movement(Device *device, const CoreRangeSet &cor
     detail::CompileProgram(device, program);
     return std::move(program);
 }
-
-
 
 Program initialize_program_compute(Device *device, const CoreRangeSet &core_range_set) {
     Program program = tt_metal::CreateProgram();
@@ -60,7 +57,6 @@ Program initialize_program_compute(Device *device, const CoreRangeSet &core_rang
     return std::move(program);
 }
 
-
 uint32_t get_runtime_arg_addr(std::shared_ptr<Kernel> kernel) {
     uint32_t result_base = 0;
     switch (kernel->processor()) {
@@ -78,6 +74,7 @@ uint32_t get_runtime_arg_addr(std::shared_ptr<Kernel> kernel) {
     return result_base;
 };
 
+// Verify the runtime args for a single core (apply optional non-zero increment amounts to values written to match compute kernel)
 bool verify_core_rt_args(Device *device, bool is_common, CoreCoord core, uint32_t base_addr, const std::vector<uint32_t> &written_args, const std::vector<uint32_t> &incr_amts) {
     bool pass = true;
 
@@ -262,7 +259,7 @@ TEST_F(DeviceFixture, SetRuntimeArgsUniqueValuesCompute) {
             for (auto x = core_range.start.x; x <= core_range.end.x; x++) {
                 for (auto y = core_range.start.y; y <= core_range.end.y; y++) {
                     CoreCoord logical_core(x, y);
-                    // Generate an rt arg val based on x and y:
+                    // Generate an rt arg val based on x and y.
                     uint32_t val_offset = x * 100 + y * 10;
                     std::vector<uint32_t> initial_runtime_args = {101 + val_offset, 202 + val_offset};
                     SetRuntimeArgs(program, 0, logical_core, initial_runtime_args);
@@ -279,6 +276,49 @@ TEST_F(DeviceFixture, SetRuntimeArgsUniqueValuesCompute) {
         EXPECT_TRUE(unit_tests::runtime_args::verify_results(true, this->devices_.at(id), program, core_to_rt_args, common_runtime_args));
     }
 }
+
+// Some cores have more unique runtime args than others. Unused in kernel, but API supports it, so verify it works and that
+// common runtime args are appropriately offset by amount from core(s) with most unique runtime args.
+TEST_F(DeviceFixture, SetRuntimeArgsVaryingLengthPerCore) {
+
+    for (unsigned int id = 0; id < num_devices_; id++) {
+        // First run the program with the initial runtime args
+        CoreRange first_core_range(CoreCoord(0, 0), CoreCoord(1, 1));
+        CoreRange second_core_range(CoreCoord(3, 3), CoreCoord(5, 5));
+        CoreRangeSet core_range_set({first_core_range, second_core_range});
+        auto program = unit_tests::runtime_args::initialize_program_compute(this->devices_.at(id), core_range_set);
+
+        std::map<CoreCoord, std::vector<uint32_t>> core_to_rt_args;
+        for (auto core_range : core_range_set.ranges()) {
+            for (auto x = core_range.start.x; x <= core_range.end.x; x++) {
+                for (auto y = core_range.start.y; y <= core_range.end.y; y++) {
+                    CoreCoord logical_core(x, y);
+                    // Generate rt args length and val based on x,y arbitrarily.
+                    uint32_t val_offset = x * 100 + y * 10;
+                    uint32_t num_rt_args = 2 + x + y;
+                    std::vector<uint32_t> initial_runtime_args;
+                    for (uint32_t i = 0; i < num_rt_args; i++) {
+                        initial_runtime_args.push_back(101 + val_offset + (i * 100));
+                    }
+                    SetRuntimeArgs(program, 0, logical_core, initial_runtime_args);
+                    // The kernel only consumes 2 unique runtime args per core, so must only check those.
+                    std::vector<uint32_t> rt_args_to_check(initial_runtime_args.begin(), initial_runtime_args.begin() + 2);
+                    core_to_rt_args[logical_core] = rt_args_to_check;
+                }
+            }
+        }
+
+        // Set common runtime args, automatically sent to all cores used by kernel.
+        std::vector<uint32_t> common_runtime_args = {11, 22, 33, 44};
+        SetCommonRuntimeArgs(program, 0, common_runtime_args);
+
+        tt_metal::detail::LaunchProgram(this->devices_.at(id), program);
+        EXPECT_TRUE(unit_tests::runtime_args::verify_results(true, this->devices_.at(id), program, core_to_rt_args, common_runtime_args));
+    }
+}
+// TODO - Many thousands of runtime args, should hit assert.
+// TODO - Many thousands of common runtime args, should hit assert.
+
 
 TEST_F(DeviceFixture, IllegallyModifyRTArgs) {
     for (unsigned int id = 0; id < num_devices_; id++) {

@@ -276,23 +276,15 @@ void ComputeKernel::generate_binaries(Device *device, JitBuildOptions& build_opt
     jit_build_subset(build_states, this, this->kernel_path_file_name_);
 }
 
+// Calculate offset to reach common runtime args from core with most unique runtime args.
 uint32_t Kernel::get_common_runtime_args_offset() {
-
-    // FIXME - Should take max, and remove assertion, for case where some cores have fewer runtime args. And add test.
-    uint32_t num_unique_rt_args = -1;
+    uint32_t max_unique_rt_args = 0;
     for (const auto &logical_core : this->cores_with_runtime_args()) {
         auto rt_args = this->runtime_args(logical_core);
-
-        if (num_unique_rt_args == -1) {
-            num_unique_rt_args = rt_args.size();
-        } else {
-            TT_ASSERT(rt_args.size() == num_unique_rt_args,
-                "All cores must have same number of runtime args. Core {} has only {} but previously seen {}.",
-                logical_core.str(), rt_args.size(), num_unique_rt_args);
-        }
+        max_unique_rt_args = rt_args.size() > max_unique_rt_args ? rt_args.size() : max_unique_rt_args;
     }
 
-    uint32_t common_rt_args_offset = num_unique_rt_args * sizeof(uint32_t);
+    uint32_t common_rt_args_offset = max_unique_rt_args * sizeof(uint32_t);
     return common_rt_args_offset;
 }
 
