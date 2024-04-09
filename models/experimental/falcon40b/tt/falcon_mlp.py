@@ -158,6 +158,8 @@ class TtFalconMLP:
                     output_mem_config=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_MEMCFG"],
                     output_dtype=self.model_config["DENSE_H_TO_4H_MM_OUTPUT_DTYPE"],
                     act=[tt_lib.tensor.FusibleActivation.GELU, True],
+                    overwrite_subblock_w=1,  # Workaround for non deterministic output/hang; issue: 7066
+                    overwrite_subblock_h=1,
                 )
             )
             x[i].deallocate(True)

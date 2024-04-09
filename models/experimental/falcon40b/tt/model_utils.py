@@ -70,7 +70,15 @@ def matmul_1d_config_from_tensor_shapes(
 
 
 def matmul_1d_config(
-    m, k, n, grid=ttnn.CoreGrid(x=8, y=8), act=None, is_fp32_accumulate=False, overwrite_per_core_k=None
+    m,
+    k,
+    n,
+    grid=ttnn.CoreGrid(x=8, y=8),
+    act=None,
+    is_fp32_accumulate=False,
+    overwrite_per_core_k=None,
+    overwrite_subblock_w=None,
+    overwrite_subblock_h=None,
 ):
     tile_width = 32
     tile_height = 32
@@ -83,9 +91,6 @@ def matmul_1d_config(
     per_core_m = m // tile_height
     per_core_k = math.ceil(k / tile_width / grid.num_cores)
     per_core_n = math.ceil(n / tile_width / grid.num_cores)
-
-    if overwrite_per_core_k is not None:
-        per_core_k = overwrite_per_core_k
 
     if is_fp32_accumulate:
         max_subblock_w_h = 4
@@ -101,6 +106,15 @@ def matmul_1d_config(
     out_subblock_h = max(
         [i for i in range(1, max_subblock_w_h + 1) if per_core_m % i == 0 and i * out_subblock_w <= max_subblock_w_h]
     )
+
+    if overwrite_per_core_k is not None:
+        per_core_k = overwrite_per_core_k
+
+    if overwrite_subblock_w is not None:
+        out_subblock_w = overwrite_subblock_w
+
+    if overwrite_subblock_h is not None:
+        out_subblock_h = overwrite_subblock_h
 
     return ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
         compute_with_storage_grid_size=(grid.x, grid.y),
@@ -131,6 +145,8 @@ def matmul_2d_config(
     is_fp32_accumulate=False,
     transpose_mcast=False,
     overwrite_per_core_k=None,
+    overwrite_subblock_w=None,
+    overwrite_subblock_h=None,
 ):
     tile_width = 32
     tile_height = 32
@@ -179,6 +195,12 @@ def matmul_2d_config(
     else:
         per_core_k = min(per_core_k, max_per_core_k)
 
+    if overwrite_subblock_w is not None:
+        out_subblock_w = overwrite_subblock_w
+
+    if overwrite_subblock_h is not None:
+        out_subblock_h = overwrite_subblock_h
+
     # print(
     #     f"per_core_m: {per_core_m}, per_core_k: {per_core_k}, per_core_n: {per_core_n}, out_subblock_h: {out_subblock_h}, out_subblock_w: {out_subblock_w}"
     # )
@@ -205,6 +227,8 @@ def falcon_prefill_matmul(
     act=None,
     transpose_mcast=False,
     overwrite_per_core_k=None,
+    overwrite_subblock_w=None,
+    overwrite_subblock_h=None,
 ):
     in0_shape = in0.shape
     in1_shape = in1.shape
@@ -216,7 +240,18 @@ def falcon_prefill_matmul(
 
     if use_2d_mm:
         # print("Selecting MM 2d")
-        matmul_pgmcfg = matmul_2d_config(m, k, n, grid, act, is_fp32_accumulate, transpose_mcast, overwrite_per_core_k)
+        matmul_pgmcfg = matmul_2d_config(
+            m,
+            k,
+            n,
+            grid,
+            act,
+            is_fp32_accumulate,
+            transpose_mcast,
+            overwrite_per_core_k=overwrite_per_core_k,
+            overwrite_subblock_w=overwrite_subblock_w,
+            overwrite_subblock_h=overwrite_subblock_h,
+        )
         # print(f"Program config: {matmul_pgmcfg}")
         return ttl.operations.primary.matmul(
             in0,
@@ -228,7 +263,17 @@ def falcon_prefill_matmul(
         )
     else:
         # print("Selecting MM 1d")
-        matmul_pgmcfg = matmul_1d_config(m, k, n, grid, act, is_fp32_accumulate, overwrite_per_core_k)
+        matmul_pgmcfg = matmul_1d_config(
+            m,
+            k,
+            n,
+            grid,
+            act,
+            is_fp32_accumulate,
+            overwrite_per_core_k=overwrite_per_core_k,
+            overwrite_subblock_w=overwrite_subblock_w,
+            overwrite_subblock_h=overwrite_subblock_h,
+        )
         # print(f"Program config: {matmul_pgmcfg}")
         return ttl.operations.primary.matmul_1d(
             in0,

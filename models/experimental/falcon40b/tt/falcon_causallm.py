@@ -142,6 +142,8 @@ class TtFalconCausalLM(TtFalconModelShared):
                     output_mem_config=self.model_config["LM_HEAD_MM_OUTPUT_MEMCFG"],
                     output_dtype=self.model_config["LM_HEAD_MM_OUTPUT_DTYPE"],
                     overwrite_per_core_k=1,  # TODO: can we increase this?
+                    overwrite_subblock_w=1,  # Workaround for non deterministic output/hang; issue: 7066
+                    overwrite_subblock_h=1,
                 )
             )
             hidden_states[i].deallocate(True)
