@@ -25,7 +25,7 @@ class TtModelArgs:
 
     OP_KEYS = (
         # Embedding
-        # "EMB_WEIGHTS",
+        "EMB_WEIGHTS",
         # Feed forward
         "MLP_WEIGHTS",
         "FF1_OUTPUT",
