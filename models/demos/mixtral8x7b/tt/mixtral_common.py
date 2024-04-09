@@ -58,30 +58,42 @@ def prepare_inputs_ttnn(x_bsh, hidden_size, head_dim, max_seq_len, devices):
     S: sequence len (1)
     H: dim (4096)
     """
-    assert x_bsh.size(2) == hidden_size
-    assert len(x_bsh.size()) == 3
+    if x_bsh is None:  # First token
+        rot_mat = get_rotation_mat(dhead=head_dim, end=max_seq_len * 2)
+        rot_mats = []
+        for device in devices:
+            rot_mats.append(
+                [
+                    ttnn.from_torch(rot_mat_i, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
+                    for rot_mat_i in rot_mat
+                ]
+            )
+        return rot_mats
+    else:
+        assert x_bsh.size(2) == hidden_size
+        assert len(x_bsh.size()) == 3
 
-    batch = x_bsh.size(0)
-    seq_len = x_bsh.size(1)
-    assert seq_len == 1, "Only supporting decode mode"
+        batch = x_bsh.size(0)
+        seq_len = x_bsh.size(1)
+        assert seq_len == 1, "Only supporting decode mode"
 
-    rot_mat = get_rotation_mat(dhead=head_dim, end=max_seq_len * 2)
+        rot_mat = get_rotation_mat(dhead=head_dim, end=max_seq_len * 2)
 
-    x_1SBH = x_bsh.view(1, seq_len, batch, hidden_size)
+        x_1SBH = x_bsh.view(1, seq_len, batch, hidden_size)
 
-    xs_1SBH, rot_mats = [], []
-    for device in devices:
-        xs_1SBH.append(ttnn.from_torch(x_1SBH, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT))
-        rot_mats.append(
-            [
-                ttnn.from_torch(rot_mat_i, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
-                for rot_mat_i in rot_mat
-            ]
+        xs_1SBH, rot_mats = [], []
+        for device in devices:
+            xs_1SBH.append(ttnn.from_torch(x_1SBH, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT))
+            rot_mats.append(
+                [
+                    ttnn.from_torch(rot_mat_i, device=device, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT)
+                    for rot_mat_i in rot_mat
+                ]
+            )
+        return (
+            xs_1SBH,
+            rot_mats,
         )
-    return (
-        xs_1SBH,
-        rot_mats,
-    )
 
 
 # Sample logits from a distribution
@@ -106,6 +118,7 @@ def sample(logits: torch.Tensor, temperature: float, top_p: float):
         next_token = torch.argmax(logits, dim=-1)
 
     return next_token
+
 
 # Helper function to recreate Mixtral state dictionary. Reads the consolidated weights provided in HuggingFace, separates the 8 experts and saves the updated dict into a new single file.
 def create_state_dict(model_args):
