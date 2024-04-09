@@ -239,8 +239,8 @@ def test_falcon40B_attn_sequence(device, num_cores, seq_len):
 
         subblock_h = 1
         subblock_w = 1
-        #        if seq_len == 2048:
-        #            subblock_w = 8  # best option
+        if seq_len == 2048:
+            subblock_w = 4  # best option
         program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
             compute_with_storage_grid_size=grid_size,
             in0_block_w=2,
@@ -263,8 +263,8 @@ def test_falcon40B_attn_sequence(device, num_cores, seq_len):
         )
 
         subblock_w = 1
-        # if seq_len == 2048:
-        #     subblock_w = 4
+        if seq_len == 2048:
+            subblock_w = 8
         softmax_program_config = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
             compute_with_storage_grid_size=grid_size,
             subblock_w=subblock_w,
@@ -276,9 +276,7 @@ def test_falcon40B_attn_sequence(device, num_cores, seq_len):
             mm_slice, scale, reference_attn_mask_tiny, program_config=softmax_program_config
         )
 
-        # subblock_w = 2
-        # subblock_h = 1
-        subblock_w = 1
+        subblock_w = 2
         subblock_h = 1
         program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
             compute_with_storage_grid_size=grid_size,
