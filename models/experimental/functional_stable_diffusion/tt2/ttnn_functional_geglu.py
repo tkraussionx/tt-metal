@@ -70,6 +70,12 @@ class geglu:
         self.compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
             math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
             math_approx_mode=False,
+            fp32_dest_acc_en=True,
+            packer_l1_acc=False,
+        )
+        self.compute_kernel_config_fp16 = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+            math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
+            math_approx_mode=False,
             fp32_dest_acc_en=False,
             packer_l1_acc=False,
         )
@@ -100,7 +106,9 @@ class geglu:
             program_config=program_config,
             output_mem_config=self.l1_interleaved_memory_config,
             output_dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
-            compute_kernel_config=self.compute_kernel_config,
+            compute_kernel_config=self.compute_kernel_config_fp16
+            if size == 8192 or size == 2048
+            else self.compute_kernel_config,
         )
         proj = ttnn.experimental.tensor.interleaved_to_sharded(
             proj,
@@ -129,7 +137,9 @@ class geglu:
             program_config=program_config,
             output_mem_config=self.l1_interleaved_memory_config,
             output_dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
-            compute_kernel_config=self.compute_kernel_config,
+            compute_kernel_config=self.compute_kernel_config_fp16
+            if size == 8192 or size == 2048
+            else self.compute_kernel_config,
         )
         gate = ttnn.experimental.tensor.interleaved_to_sharded(
             gate,

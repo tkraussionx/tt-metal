@@ -6,6 +6,37 @@ from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_resnetb
 from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_transformer_2d import transformer_2d_model
 
 
+def compare(tensors, name, permute=True):
+    return
+    import torch
+    import ttnn
+    import tt_lib as ttl
+    from models.utility_functions import comp_pcc
+
+    goldens = torch.load(name)
+    if isinstance(goldens, torch.Tensor):
+        goldens = [goldens]
+    if isinstance(tensors, ttl.tensor.Tensor):
+        tensors = [tensors]
+
+    for tensor, golden in zip(tensors, goldens):
+        tensor = ttnn.to_layout(tensor, ttnn.ROW_MAJOR_LAYOUT)
+        tensor = ttnn.from_device(tensor)
+        tensor = ttnn.to_torch(tensor)
+
+        if permute:
+            golden = golden.permute(0, 2, 3, 1)
+            golden = golden.reshape(tensor.shape)
+
+        while len(tensor.shape) > len(golden.shape):
+            golden = golden.unsqueeze(0)
+        while len(golden.shape) > len(tensor.shape):
+            tensor = tensor.unsqueeze(0)
+
+        passed, message = comp_pcc(tensor, golden, 0.99)
+        print(f"Maches on {name}: {passed} with message {message}, tensor shape: {tensor.shape}")
+
+
 class unet_mid_block_2d_cross_attn:
     def __init__(
         self, device, parameters, reader_patterns_cache, batch_size, input_height, input_width, compute_kernel_config
@@ -53,7 +84,7 @@ class unet_mid_block_2d_cross_attn:
         upcast_attention=False,
     ):
         has_cross_attention = True
-
+        compare(hidden_states, "mid_0.pt")
         resnet_groups = resnet_groups if resnet_groups is not None else min(in_channels // 4, 32)
 
         hidden_states = self.resnets[0](
@@ -70,8 +101,9 @@ class unet_mid_block_2d_cross_attn:
             eps=resnet_eps,
             use_in_shortcut=None,
         )
+        compare(hidden_states, "mid_1.pt")
 
-        for attn, resnet in zip(self.attentions, self.resnets[1:]):
+        for index, (attn, resnet) in enumerate(zip(self.attentions, self.resnets[1:])):
             if not dual_cross_attention:
                 hidden_states = attn(
                     hidden_states=hidden_states,
@@ -90,7 +122,9 @@ class unet_mid_block_2d_cross_attn:
                     eps=1e-5,
                     cross_attention_dim=cross_attention_dim,
                     upcast_attention=upcast_attention,
+                    index=index,
                 )
+                compare(hidden_states, f"mid_{index+2}_att.pt")
             else:
                 assert False, "We do not support Dual Transformer"
 
@@ -108,5 +142,7 @@ class unet_mid_block_2d_cross_attn:
                 eps=resnet_eps,
                 use_in_shortcut=None,
             )
+            compare(hidden_states, f"mid_{index+2}_res.pt")
 
+        compare(hidden_states, f"mid_2.pt")
         return hidden_states

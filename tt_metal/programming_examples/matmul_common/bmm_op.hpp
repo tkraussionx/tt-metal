@@ -128,10 +128,10 @@ inline float check_bfloat16_vector_pcc(const vector<bfloat16> &vec_a, const vect
 namespace bmm_op_utils {
 
 constexpr std::array<tuple<uint32_t, uint32_t>, 20> SUBBLOCK_HW_CHOICES = {{
-    {4, 2}, {2, 4}, {8, 1}, {1, 8},
-    {7, 1}, {1, 7},
-    {3, 2}, {2, 3}, {6, 1}, {1, 6},
-    {5, 1}, {1, 5},
+    // {4, 2}, {2, 4}, {8, 1}, {1, 8},
+    // {7, 1}, {1, 7},
+    // {3, 2}, {2, 3}, {6, 1}, {1, 6},
+    // {5, 1}, {1, 5},
     {2, 2}, {4, 1}, {1, 4},
     {3, 1}, {1, 3},
     {2, 1}, {1, 2},

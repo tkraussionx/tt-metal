@@ -35,6 +35,35 @@ from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_utility
     pre_process_input,
 )
 
+
+def compare(tensors, name, permute=True):
+    return
+    from models.utility_functions import comp_pcc
+
+    goldens = torch.load(name)
+    if isinstance(goldens, torch.Tensor):
+        goldens = [goldens]
+    if isinstance(tensors, ttl.tensor.Tensor):
+        tensors = [tensors]
+
+    for tensor, golden in zip(tensors, goldens):
+        tensor = ttnn.to_layout(tensor, ttnn.ROW_MAJOR_LAYOUT)
+        tensor = ttnn.from_device(tensor)
+        tensor = ttnn.to_torch(tensor)
+
+        if permute:
+            golden = golden.permute(0, 2, 3, 1)
+            golden = golden.reshape(tensor.shape)
+
+        while len(tensor.shape) > len(golden.shape):
+            golden = golden.unsqueeze(0)
+        while len(golden.shape) > len(tensor.shape):
+            tensor = tensor.unsqueeze(0)
+
+        passed, message = comp_pcc(tensor, golden, 0.99)
+        print(f"Maches on {name}: {passed} with message {message}, tensor shape: {tensor.shape}")
+
+
 fp32_accum = True
 
 conv_compute_kernel_config = None
@@ -50,7 +79,7 @@ if not is_grayskull():
         conv_compute_kernel_config = ttnn.WormholeComputeKernelConfig(
             math_fidelity=ttnn.MathFidelity.LoFi,
             math_approx_mode=True,
-            fp32_dest_acc_en=True,
+            fp32_dest_acc_en=False,
             packer_l1_acc=False,
         )
 
@@ -433,6 +462,7 @@ class UNet2DConditionModel:
         sample_copied_to_dram = ttnn.to_memory_config(sample, ttnn.DRAM_MEMORY_CONFIG)
         down_block_res_samples = (sample_copied_to_dram,)
         output_channel = block_out_channels[0]
+        compare(sample, "pre_down.pt")
         for i, (down_block_type, down_block) in enumerate(zip(self.down_block_types, self.down_blocks)):
             ttl.device.DumpDeviceProfiler(self.device)
             print(f"Down block {i}")
@@ -463,6 +493,7 @@ class UNet2DConditionModel:
                     only_cross_attention=only_cross_attention[i],
                     upcast_attention=upcast_attention,
                     resnet_time_scale_shift=resnet_time_scale_shift,
+                    down_block_index=i,
                 )
             elif down_block_type == "DownBlock2D":
                 sample, res_samples = down_block(
@@ -485,7 +516,8 @@ class UNet2DConditionModel:
                 assert (
                     False
                 ), f"CrossAttnDownBlock2D, and DownBlock2D are the only down blocks implemented! you requested {down_block_type}"
-
+            compare(sample, f"down_{i}.pt")
+            compare(res_samples, f"res_{i}.pt")
             down_block_res_samples += res_samples
 
         # 4.mid
@@ -510,7 +542,7 @@ class UNet2DConditionModel:
             use_linear_projection=use_linear_projection,
             upcast_attention=upcast_attention,
         )
-
+        compare(sample, "mid.pt")
         # 5.up
         num_upsamplers = 0
 
@@ -592,6 +624,7 @@ class UNet2DConditionModel:
                 assert (
                     False
                 ), f"CrossAttnUpBlock2D, and UpBlock2D are the only up blocks implemented! you requested {up_block_type}"
+            compare(sample, f"up_{i}.pt")
 
         # 6.post-process
         sample = ttnn.to_layout(sample, ttnn.ROW_MAJOR_LAYOUT)

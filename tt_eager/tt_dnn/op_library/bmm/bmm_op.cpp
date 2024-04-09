@@ -578,7 +578,7 @@ operation::ProgramWithCallbacks Matmul::create_program(const std::vector<Tensor>
                 input_tensor_a.device()->compute_with_storage_grid_size(),
                 // MathFidelity::HiFi4, false, true, false,
                 this->compute_kernel_config,
-                2, 4, 2,
+                2, 4, 1,
                 16, 16, false, false, std::nullopt,
                 this->untilize_out
             );
@@ -1204,7 +1204,7 @@ operation::ProgramWithCallbacks Matmul::create_program(
                             broadcast_batch,
                             input_tensor_a.device()->compute_with_storage_grid_size(),
                             this->compute_kernel_config,
-                            2, 4, 2,
+                            2, 4, 1,
                             16, 16, false, false, std::nullopt,
                             this->untilize_out
                         );
@@ -1214,7 +1214,7 @@ operation::ProgramWithCallbacks Matmul::create_program(
                             broadcast_batch,
                             input_tensor_a.device()->compute_with_storage_grid_size(),
                             this->compute_kernel_config,
-                            2, 4, 2,
+                            2, 4, 1,
                             16, 16, false, std::nullopt, true,
                             this->untilize_out
                         );
@@ -1224,7 +1224,7 @@ operation::ProgramWithCallbacks Matmul::create_program(
                             broadcast_batch,
                             input_tensor_a.device()->compute_with_storage_grid_size(),
                             this->compute_kernel_config,
-                            2, 4, 2,
+                            2, 4, 1,
                             16, 16, false, std::nullopt, false,
                             this->untilize_out
                         );

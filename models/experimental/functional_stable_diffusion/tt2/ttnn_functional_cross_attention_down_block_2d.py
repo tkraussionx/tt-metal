@@ -8,6 +8,36 @@ from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_transfo
 from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_downsample_2d import downsample_2d
 
 
+def compare(tensors, name, permute=True):
+    return
+    from models.utility_functions import comp_pcc
+    import torch
+    import tt_lib as ttl
+
+    goldens = torch.load(name)
+    if isinstance(goldens, torch.Tensor):
+        goldens = [goldens]
+    if isinstance(tensors, ttl.tensor.Tensor):
+        tensors = [tensors]
+
+    for tensor, golden in zip(tensors, goldens):
+        tensor = ttnn.to_layout(tensor, ttnn.ROW_MAJOR_LAYOUT)
+        tensor = ttnn.from_device(tensor)
+        tensor = ttnn.to_torch(tensor)
+
+        if permute:
+            golden = golden.permute(0, 2, 3, 1)
+            golden = golden.reshape(tensor.shape)
+
+        while len(tensor.shape) > len(golden.shape):
+            golden = golden.unsqueeze(0)
+        while len(golden.shape) > len(tensor.shape):
+            tensor = tensor.unsqueeze(0)
+
+        passed, message = comp_pcc(tensor, golden, 0.99)
+        print(f"Maches on {name}: {passed} with message {message}, tensor shape: {tensor.shape}")
+
+
 class cross_attention_down_block_2d:
     def __init__(
         self, device, parameters, reader_patterns_cache, batch_size, input_height, input_width, compute_kernel_config
@@ -68,11 +98,14 @@ class cross_attention_down_block_2d:
         only_cross_attention=False,
         upcast_attention=False,
         resnet_time_scale_shift: str = "default",
+        down_block_index=0,
     ):
         output_states = ()
 
+        # global ttnn_down_block_index
         for index, (resnet, attn) in enumerate(zip(self.resnets, self.attentions)):
             print(f"    resnet: {index}")
+            compare(hidden_states, f"hidden_states_{down_block_index}_{index}_0.pt")
             in_channels = in_channels if index == 0 else out_channels
             use_in_shortcut = True if "conv_shortcut" in resnet.parameters else False
             hidden_states = resnet(
@@ -89,6 +122,7 @@ class cross_attention_down_block_2d:
                 output_scale_factor=output_scale_factor,
                 pre_norm=resnet_pre_norm,
             )
+            compare(hidden_states, f"hidden_states_{down_block_index}_{index}_1.pt")
             if not dual_cross_attention:
                 print(f"    attn: {index}")
                 hidden_states = attn(
@@ -103,9 +137,12 @@ class cross_attention_down_block_2d:
                     use_linear_projection=use_linear_projection,
                     only_cross_attention=only_cross_attention,
                     upcast_attention=upcast_attention,
+                    index=index,
                 )
+                compare(hidden_states, f"hidden_states_{down_block_index}_{index}_2.pt")
 
             output_states += (hidden_states,)
+            compare(hidden_states, f"hidden_states_{down_block_index}_{index}_3.pt")
 
         if add_downsample is not None:
             hidden_states = self.downsample_2d(
@@ -115,6 +152,8 @@ class cross_attention_down_block_2d:
                 padding=downsample_padding,
                 use_conv=True,
             )
+            compare(hidden_states, f"hidden_states_{down_block_index}_4.pt")
             hidden_states = ttnn.reallocate(hidden_states)
             output_states += (hidden_states,)
+            compare(hidden_states, f"hidden_states_{down_block_index}_5.pt")
         return hidden_states, output_states

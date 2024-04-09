@@ -45,6 +45,12 @@ class feedforward:
         self.compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
             math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
             math_approx_mode=True,
+            fp32_dest_acc_en=True,
+            packer_l1_acc=False,
+        )
+        self.compute_kernel_config_fp16 = ttnn.experimental.tensor.WormholeComputeKernelConfig(
+            math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
+            math_approx_mode=True,
             fp32_dest_acc_en=False,
             packer_l1_acc=False,
         )
@@ -66,7 +72,7 @@ class feedforward:
             compute_with_storage_grid_size=grid_size,
             in0_block_w=K // grid_size[1] // 32,
             out_subblock_h=1,
-            out_subblock_w=per_core_N,
+            out_subblock_w=1,  # per_core_N,
             per_core_M=M // grid_size[0] // 32,
             per_core_N=per_core_N,
             fused_activation=None,
@@ -83,7 +89,7 @@ class feedforward:
             if interleaved_output
             else self.block_sharded_memory_config,
             output_dtype=ttnn.experimental.tensor.DataType.BFLOAT8_B,
-            compute_kernel_config=self.compute_kernel_config,
+            compute_kernel_config=self.compute_kernel_config_fp16 if size == 8192 else self.compute_kernel_config,
         )
         if interleaved_output:
             hidden_states = ttnn.experimental.tensor.interleaved_to_sharded(

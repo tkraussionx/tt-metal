@@ -11,6 +11,36 @@ from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_transfo
 from models.experimental.functional_stable_diffusion.tt2.ttnn_functional_utility_functions import dealloc_input
 
 
+def compare(tensors, name, permute=True):
+    return
+    from models.utility_functions import comp_pcc
+    import torch
+    import tt_lib as ttl
+
+    goldens = torch.load(name)
+    if isinstance(goldens, torch.Tensor):
+        goldens = [goldens]
+    if isinstance(tensors, ttl.tensor.Tensor):
+        tensors = [tensors]
+
+    for tensor, golden in zip(tensors, goldens):
+        tensor = ttnn.to_layout(tensor, ttnn.ROW_MAJOR_LAYOUT)
+        tensor = ttnn.from_device(tensor)
+        tensor = ttnn.to_torch(tensor)
+
+        if permute:
+            golden = golden.permute(0, 2, 3, 1)
+            golden = golden.reshape(tensor.shape)
+
+        while len(tensor.shape) > len(golden.shape):
+            golden = golden.unsqueeze(0)
+        while len(golden.shape) > len(tensor.shape):
+            tensor = tensor.unsqueeze(0)
+
+        passed, message = comp_pcc(tensor, golden, 0.99)
+        print(f"Maches on {name}: {passed} with message {message}, tensor shape: {tensor.shape}")
+
+
 def torch_to_ttnn(input, device, layout=ttnn.TILE_LAYOUT):
     input = ttnn.from_torch(input, ttnn.bfloat16)
     input = ttnn.to_layout(input, layout)
@@ -96,6 +126,7 @@ class cross_attention_upblock2d:
         index=-1,
     ):
         for i, (resnet, attention) in enumerate(zip(self.resnets, self.attentions)):
+            compare(hidden_states, f"hidden_states_{index}_{i}_0.pt")
             ttnn.dump_device_memory_state(self.device, prefix="in_uplock_")
             res_skip_channels = in_channels if (i == num_layers - 1) else out_channels
             resnet_in_channels = prev_output_channel if i == 0 else out_channels
@@ -134,6 +165,7 @@ class cross_attention_upblock2d:
                     ttnn.clone, hidden_states, memory_config=ttnn.get_memory_config(hidden_states), dtype=ttnn.bfloat8_b
                 )
             hidden_states = dealloc_input(ttnn.concat, [hidden_states, on_dev_res_hidden_states], dim=3)
+            compare(hidden_states, f"hidden_states_{index}_{i}_1.pt")
             # breakpoint()
             ttnn.deallocate(on_dev_res_hidden_states)
             # breakpoint()
@@ -154,6 +186,7 @@ class cross_attention_upblock2d:
                 non_linearity=resnet_act_fn,
                 index=index,
             )
+            compare(hidden_states, f"hidden_states_{index}_{i}_2.pt")
             if not dual_cross_attention:
                 hidden_states = attention(
                     hidden_states=hidden_states,
@@ -174,7 +207,9 @@ class cross_attention_upblock2d:
                     upcast_attention=upcast_attention,
                     cross_attention_dim=cross_attention_dim,
                     output_bfloat16=(not add_upsample) and (i == len(self.resnets) - 1),
+                    index=i,
                 )
+                compare(hidden_states, f"hidden_states_{index}_{i}_3.pt")
             else:
                 assert False, "We do not support Dual Transformer2DModel"
 
@@ -185,5 +220,6 @@ class cross_attention_upblock2d:
                 out_channels,
                 out_channels,
             )
+            compare(hidden_states, f"hidden_states_{index}_4.pt")
 
         return hidden_states

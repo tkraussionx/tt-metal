@@ -66,6 +66,19 @@ def register_ttl_unary_function(name, ttl_unary_function):
         original_shape = input_tensor.shape
         input_tensor = ttnn.unsqueeze_to_4D(input_tensor)
 
+        # if ttl_unary_function == ttl.tensor.silu:
+        #     print(f"Decomposing silu")
+        #     layout = input_tensor.layout
+        #     input_tensor = ttnn.to_layout(input_tensor, ttnn.TILE_LAYOUT)
+        #     orig_in = input_tensor
+        #     input_tensor = input_tensor * -1
+        #     input_tensor = ttnn.exp(input_tensor)
+        #     input_tensor = input_tensor + 1
+        #     input_tensor = ttnn.reciprocal(input_tensor)
+        #     input_tensor = input_tensor * orig_in
+        #     input_tensor = ttnn.to_layout(input_tensor, layout)
+        #     return input_tensor
+
         if not isinstance(input_tensor, ttnn.Tensor):
             raise TypeError("Expected first argument to be a ttnn.Tensor")
 

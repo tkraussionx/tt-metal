@@ -328,7 +328,8 @@ def run_demo_inference_diffusiondb(
 
     for i in range(num_prompts):
         experiment_name = f"diffusiondb_{i}__{height}x{width}"
-        input_prompt = [f"{data_1k['prompt'][i]}"]
+        # input_prompt = [f"{data_1k['prompt'][i]}"]
+        input_prompt = [f"A girl doing cartwheels in the park."]
         logger.info(f"input_prompts: {input_prompt}")
 
         image = np.array(data_1k["image"][i])
@@ -429,6 +430,7 @@ def run_demo_inference_diffusiondb(
 
                 _t = constant_prop_time_embeddings(t, ttnn_latent_model_input, unet.time_proj)
                 _t = _t.unsqueeze(0).unsqueeze(0)
+                _t = _t.permute(2, 0, 1, 3)  # pre-permute temb
                 _t = ttnn.from_torch(_t, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT, device=device)
 
                 # predict the noise residual
@@ -444,6 +446,8 @@ def run_demo_inference_diffusiondb(
                         config=config,
                     )
                     noise_pred = ttnn.to_torch(ttnn_output)
+                    print(f"Sample: {iter}")
+                    # noise_pred = unet(ttnn.to_torch(ttnn_latent_model_input).float(), t, ttnn.to_torch(ttnn_text_embeddings).float()).sample
 
                 # perform guidance
                 noise_pred = guide(noise_pred, guidance_scale, t)
@@ -589,7 +593,7 @@ def test_demo(device, reset_seeds, input_path, num_prompts, num_inference_steps,
 )
 @pytest.mark.parametrize(
     "num_inference_steps",
-    ((2),),
+    ((30),),
 )
 @pytest.mark.parametrize(
     "image_size",
