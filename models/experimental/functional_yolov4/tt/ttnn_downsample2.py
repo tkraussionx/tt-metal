@@ -10,7 +10,9 @@ from ttnn.model_preprocessing import preprocess_model
 
 import ttnn
 import tt_lib
-from ttnn_resblock import TtResBlock
+
+# from ttnn_resblock import TtResBlock
+from models.experimental.functional_yolov4.tt.ttnn_resblock import TtResBlock
 
 
 class TtDownSample2:

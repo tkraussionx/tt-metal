@@ -5,7 +5,9 @@
 
 import torch
 import torch.nn as nn
-from resblock import ResBlock
+
+# from resblock import ResBlock
+from models.experimental.functional_yolov4.reference.resblock import ResBlock
 
 
 class DownSample3(nn.Module):
