@@ -18,7 +18,11 @@ void kernel_main() {
     constexpr uint32_t cb_id_out = get_compile_time_arg_val(0);
     constexpr bool dst_is_dram = get_compile_time_arg_val(1) == 1;
 
-    DPRINT << "writer " << ENDL();
+    if (is_ncrisc){
+        DPRINT << "ncrisc writer  " << (uint)noc_index_to_dram_bank_map[0] << " multi noc " << (uint)use_multi_noc<< ENDL();
+    } else {
+        DPRINT << "brisc writer  " << (uint)noc_index_to_dram_bank_map[0] <<" multi noc " << (uint)use_multi_noc<< ENDL();
+    }
 
     // single-tile ublocks
     const uint32_t tile_bytes = get_tile_size(cb_id_out);
@@ -38,7 +42,7 @@ void kernel_main() {
     for (uint32_t h = 0; h < unpadded_block_height_tiles; h++) {
         uint32_t tile_id = row_start_tile_id;
         for (uint32_t w = 0; w < unpadded_block_width_tiles; w++) {
-            noc_async_write_tile(tile_id, s, l1_read_addr);
+            noc_async_write_tile_with_id(tile_id, s, l1_read_addr);
             tile_id++;
             l1_read_addr += tile_bytes;
             noc_async_write_barrier_with_id();
@@ -47,4 +51,6 @@ void kernel_main() {
         row_start_tile_id += output_width_tiles;
     }
     cb_pop_front(cb_id_out, block_num_tiles);
+
+    DPRINT << "writer done " << ENDL();
 }

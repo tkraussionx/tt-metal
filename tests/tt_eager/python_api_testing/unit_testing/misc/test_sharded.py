@@ -2299,196 +2299,198 @@ from models.utility_functions import torch2tt_tensor, tt2torch_tensor, pad_by_ze
 #     assert passing
 
 
-@pytest.mark.parametrize(
-    "input_shape",
-    [
-        [1, 1, 256, 512],
-    ],
-)
-@pytest.mark.parametrize("input_dtype", [ttl.tensor.DataType.BFLOAT16])
-@pytest.mark.parametrize("output_dtype", [ttl.tensor.DataType.BFLOAT16])
-def test_clone(device, input_shape, input_dtype, output_dtype, function_level_defaults):
-    # torch.manual_seed(1)
-    grid_size = device.compute_with_storage_grid_size()
-    input_size = torch.Size(input_shape)
-
-    # x = torch.arange(input_size.numel()).reshape(input_size).bfloat16().float()
-    # x = torch.ones(input_shape).bfloat16().float()
-    x = torch.ones(input_shape).bfloat16().float()
-    # x += torch.arange(input_shape[2]).view(-1, 1).float()
-    pattern_length = 32
-    repeats_per_pattern = input_shape[2] * input_shape[3] // pattern_length
-    pattern = torch.arange(1, repeats_per_pattern + 1).repeat_interleave(pattern_length)
-
-    # Reshape the pattern to match the tensor's shape and add it to x
-    x += pattern.view(input_shape).bfloat16().float()
-
-    print(x)
-
-    xt = (
-        ttl.tensor.Tensor(
-            x.reshape(-1).tolist(),
-            x.shape,
-            input_dtype,
-            ttl.tensor.Layout.ROW_MAJOR,
-        )
-        .to(ttl.tensor.Layout.TILE)
-        .to(
-            device,
-            ttl.tensor.MemoryConfig(
-                memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
-                buffer_type=ttl.tensor.BufferType.DRAM,
-            ),
-        )
-    )
-
-    zt = ttl.tensor.clone(
-        xt,
-        ttl.tensor.MemoryConfig(
-            memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
-            buffer_type=ttl.tensor.BufferType.DRAM,
-        ),
-        output_dtype=input_dtype,
-    )
-
-    tt_og = xt.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
-
-    tt_got_back = zt.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
-
-    if input_dtype == output_dtype:
-        passing, output = comp_equal(tt_og, tt_got_back)
-    else:
-        passing, output = comp_pcc(tt_og, tt_got_back, 0.999)
-    logger.info(output)
-
-    # torch.set_printoptions(threshold=1000_000)
-    # print(tt_got_back)
-
-    assert passing
-
-
 # @pytest.mark.parametrize(
-#     "fidelity",
+#     "input_shape",
 #     [
-#         ttl.tensor.MathFidelity.LoFi,
-#     ],
-#     ids=["LoFi"],
-# )
-# @pytest.mark.parametrize("has_bias", [True,], ids=["bias"])
-# @pytest.mark.parametrize(
-#     "M, K, N, activation",
-#     [
-#         (1536, 1024, 3072, None),
+#         [1, 1, 256, 512],
 #     ],
 # )
-# def test_bert_linear_batch4_fp32_input_output(
-#     device,
-#     fidelity,
-#     has_bias,
-#     M,
-#     K,
-#     N,
-#     activation,
-#     function_level_defaults,
-# ):
-#     in0_shape = [1, 1, M, K]
-#     in1_shape = [1, 1, K, N]
-#     bias_shape = [1, 1, N]
-#     grid_size = (8, 4)
+# @pytest.mark.parametrize("input_dtype", [ttl.tensor.DataType.BFLOAT16])
+# @pytest.mark.parametrize("output_dtype", [ttl.tensor.DataType.BFLOAT16])
+# def test_clone(device, input_shape, input_dtype, output_dtype, function_level_defaults):
+#     # torch.manual_seed(1)
+#     grid_size = device.compute_with_storage_grid_size()
+#     input_size = torch.Size(input_shape)
 
-#     in0_block_h = M // grid_size[1] // 32
-#     in0_block_w = K // grid_size[0] // 32
-#     out_block_h = M // grid_size[1] // 32
-#     out_block_w = N // grid_size[0] // 32
+#     # x = torch.arange(input_size.numel()).reshape(input_size).bfloat16().float()
+#     # x = torch.ones(input_shape).bfloat16().float()
+#     x = torch.ones(input_shape).bfloat16().float()
+#     # x += torch.arange(input_shape[2]).view(-1, 1).float()
+#     pattern_length = 32
+#     repeats_per_pattern = input_shape[2] * input_shape[3] // pattern_length
+#     pattern = torch.arange(1, repeats_per_pattern + 1).repeat_interleave(pattern_length)
 
-#     # full block too large to fit in L1
-#     if in0_block_h * in0_block_w >= 48 or in0_block_w * out_block_w >= 48:
-#         in0_block_w = in0_block_w // 2
+#     # Reshape the pattern to match the tensor's shape and add it to x
+#     x += pattern.view(input_shape).bfloat16().float()
 
-#     if out_block_w < 4:
-#         out_subblock_w = out_block_w
-#         out_subblock_h = out_block_h // out_subblock_w
-#     else:
-#         out_subblock_w = 4
-#         out_subblock_h = 1
+#     print(x)
 
-#     logger.debug("in0 block w h " + str(in0_block_w * 32) + " " + str(in0_block_h * 32))
-#     logger.debug("in1 block w h " + str(out_block_w * 32) + " " + str(in0_block_w * 32))
-#     logger.debug("out block w h " + str(out_block_w * 32) + " " + str(out_block_h * 32))
-#     logger.debug("out subblock w h " + str(out_subblock_w * 32) + " " + str(out_subblock_h * 32))
-
-#     interleaved_mem_config_L1 = ttl.tensor.MemoryConfig(
-#         memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
-#         buffer_type=ttl.tensor.BufferType.L1,
-#     )
-#     interleaved_mem_config_DRAM = ttl.tensor.MemoryConfig(
-#         memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
-#         buffer_type=ttl.tensor.BufferType.DRAM,
-#     )
-#     sharded_mem_config = ttl.tensor.MemoryConfig(
-#         memory_layout=ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
-#         buffer_type=ttl.tensor.BufferType.L1,
-#     )
-
-#     in0 = torch.rand(in0_shape).float()
-#     in1 = torch.rand(in1_shape).float()
-#     bias = torch.rand(bias_shape).float()
-
-#     in0_t = torch2tt_tensor(
-#         in0, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.FLOAT32
-#     )
-#     in1_t = torch2tt_tensor(
-#         in1, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.FLOAT32
-#     )
-
-#     output_mem_config = interleaved_mem_config_DRAM
-#     bias_t = pad_by_zero(
-#         bias, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.FLOAT32
-#     )[0]
-
-#     program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
-#         compute_with_storage_grid_size=grid_size,
-#         in0_block_w=in0_block_w,
-#         out_subblock_h=out_subblock_h,
-#         out_subblock_w=out_subblock_w,
-#         per_core_M=out_block_h,
-#         per_core_N=out_block_w,
-#         transpose_mcast=False,
-#         fused_activation=activation,
-#     )
-
-#     compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
-#         math_fidelity=fidelity,
-#         math_approx_mode=True,
-#         fp32_dest_acc_en=False,
-#         packer_l1_acc=False,
-#     )
-
-#     if has_bias:
-#         output_t = ttl.operations.primary.matmul(
-#             in0_t,
-#             in1_t,
-#             bias=bias_t,
-#             program_config=program_config,
-#             output_mem_config=output_mem_config,
-#             compute_kernel_config=compute_kernel_config,
+#     xt = (
+#         ttl.tensor.Tensor(
+#             x.reshape(-1).tolist(),
+#             x.shape,
+#             input_dtype,
+#             ttl.tensor.Layout.ROW_MAJOR,
 #         )
-#     else:
-#         output_t = ttl.operations.primary.matmul(
-#             in0_t,
-#             in1_t,
-#             program_config=program_config,
-#             output_mem_config=output_mem_config,
-#             compute_kernel_config=compute_kernel_config,
+#         .to(ttl.tensor.Layout.TILE)
+#         .to(
+#             device,
+#             ttl.tensor.MemoryConfig(
+#                 memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+#                 buffer_type=ttl.tensor.BufferType.DRAM,
+#             ),
 #         )
+#     )
 
-#     pt_out = in0 @ in1
-#     if has_bias:
-#         pt_out = pt_out + bias
-#     if activation != None:
-#         pt_out = torch.nn.functional.gelu(pt_out)
-#     tt_out = tt2torch_tensor(output_t)
+#     zt = ttl.tensor.clone(
+#         xt,
+#         ttl.tensor.MemoryConfig(
+#             memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+#             buffer_type=ttl.tensor.BufferType.DRAM,
+#         ),
+#         output_dtype=input_dtype,
+#     )
 
-#     passing, output = comp_pcc(pt_out, tt_out)
+#     tt_og = xt.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
+
+#     tt_got_back = zt.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
+
+#     if input_dtype == output_dtype:
+#         passing, output = comp_equal(tt_og, tt_got_back)
+#     else:
+#         passing, output = comp_pcc(tt_og, tt_got_back, 0.999)
 #     logger.info(output)
 #     assert passing
+
+
+@pytest.mark.parametrize(
+    "fidelity",
+    [
+        ttl.tensor.MathFidelity.LoFi,
+    ],
+    ids=["LoFi"],
+)
+@pytest.mark.parametrize(
+    "has_bias",
+    [
+        False,
+    ],
+    ids=["bias"],
+)
+@pytest.mark.parametrize(
+    "M, K, N, activation",
+    [
+        (1536, 1024, 3072, None),
+    ],
+)
+def test_bert_linear_batch4_fp32_input_output(
+    device,
+    fidelity,
+    has_bias,
+    M,
+    K,
+    N,
+    activation,
+    function_level_defaults,
+):
+    in0_shape = [1, 1, M, K]
+    in1_shape = [1, 1, K, N]
+    bias_shape = [1, 1, N]
+    grid_size = (8, 4)
+
+    in0_block_h = M // grid_size[1] // 32
+    in0_block_w = K // grid_size[0] // 32
+    out_block_h = M // grid_size[1] // 32
+    out_block_w = N // grid_size[0] // 32
+
+    # full block too large to fit in L1
+    if in0_block_h * in0_block_w >= 48 or in0_block_w * out_block_w >= 48:
+        in0_block_w = in0_block_w // 2
+
+    if out_block_w < 4:
+        out_subblock_w = out_block_w
+        out_subblock_h = out_block_h // out_subblock_w
+    else:
+        out_subblock_w = 4
+        out_subblock_h = 1
+
+    logger.debug("in0 block w h " + str(in0_block_w * 32) + " " + str(in0_block_h * 32))
+    logger.debug("in1 block w h " + str(out_block_w * 32) + " " + str(in0_block_w * 32))
+    logger.debug("out block w h " + str(out_block_w * 32) + " " + str(out_block_h * 32))
+    logger.debug("out subblock w h " + str(out_subblock_w * 32) + " " + str(out_subblock_h * 32))
+
+    interleaved_mem_config_L1 = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttl.tensor.BufferType.L1,
+    )
+    interleaved_mem_config_DRAM = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttl.tensor.BufferType.DRAM,
+    )
+    sharded_mem_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+        buffer_type=ttl.tensor.BufferType.L1,
+    )
+
+    in0 = torch.rand(in0_shape).float()
+    in1 = torch.rand(in1_shape).float()
+    bias = torch.rand(bias_shape).float()
+
+    in0_t = torch2tt_tensor(
+        in0, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.FLOAT32
+    )
+    in1_t = torch2tt_tensor(
+        in1, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.FLOAT32
+    )
+
+    output_mem_config = interleaved_mem_config_DRAM
+    bias_t = pad_by_zero(
+        bias, device, tt_memory_config=interleaved_mem_config_DRAM, tt_dtype=ttl.tensor.DataType.FLOAT32
+    )[0]
+
+    program_config = ttl.operations.primary.MatmulMultiCoreReuseMultiCastProgramConfig(
+        compute_with_storage_grid_size=grid_size,
+        in0_block_w=in0_block_w,
+        out_subblock_h=out_subblock_h,
+        out_subblock_w=out_subblock_w,
+        per_core_M=out_block_h,
+        per_core_N=out_block_w,
+        transpose_mcast=False,
+        fused_activation=activation,
+    )
+
+    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+        math_fidelity=fidelity,
+        math_approx_mode=True,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=False,
+    )
+
+    if has_bias:
+        output_t = ttl.operations.primary.matmul(
+            in0_t,
+            in1_t,
+            bias=bias_t,
+            program_config=program_config,
+            output_mem_config=output_mem_config,
+            compute_kernel_config=compute_kernel_config,
+        )
+    else:
+        output_t = ttl.operations.primary.matmul(
+            in0_t,
+            in1_t,
+            program_config=program_config,
+            output_mem_config=output_mem_config,
+            compute_kernel_config=compute_kernel_config,
+        )
+
+    pt_out = in0 @ in1
+    if has_bias:
+        pt_out = pt_out + bias
+    if activation != None:
+        pt_out = torch.nn.functional.gelu(pt_out)
+    tt_out = tt2torch_tensor(output_t)
+
+    passing, output = comp_pcc(pt_out, tt_out)
+    logger.info(output)
+    assert passing
