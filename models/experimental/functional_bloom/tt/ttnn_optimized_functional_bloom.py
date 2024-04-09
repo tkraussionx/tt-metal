@@ -7,6 +7,7 @@ from typing import Tuple
 
 import transformers
 import torch
+from torch import nn
 from torch.nn import functional as F
 from transformers.models.bloom.configuration_bloom import BloomConfig
 
@@ -131,8 +132,13 @@ def compute_attention_probs(attention_scores, causal_mask):
     if ASSUME_FUSED_SOFTMAX:
         attention_weights = attention_scores
     else:
-        attention_weights = ttnn.add(attention_scores, causal_mask, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+        device = attention_scores.device()
+        attention_scores_1 = ttnn.to_torch(attention_scores).to(dtype=torch.float)
+        causal_mask_1 = ttnn.to_torch(causal_mask).to(dtype=torch.bool)
+        attn_weights = torch.masked_fill(attention_scores_1, causal_mask_1, torch.finfo(attention_scores_1.dtype).min)
+        # attention_weights = ttnn.add(attention_scores_1, causal_mask_1, memory_config=ttnn.DRAM_MEMORY_CONFIG)
         ttnn.deallocate(attention_scores)
+        attention_weights = ttnn.from_torch(attn_weights, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat16, device=device)
 
     attention_probs = ttnn.softmax(attention_weights, dim=-1, memory_config=ttnn.DRAM_MEMORY_CONFIG)
     if not ASSUME_FUSED_SOFTMAX:
@@ -181,9 +187,17 @@ def bloom_attention(
     *,
     parameters: ParameterDict,
 ):
+    device = hidden_states.device()
     query_layer, key_layer, value_layer = create_query_key_value(config, hidden_states, parameters=parameters)
     attention_scores = compute_attention_scores(query_layer, key_layer, alibi)
-    attention_probs = compute_attention_probs(attention_scores, attention_mask)
+
+    attention_scores_1 = ttnn.to_torch(attention_scores).to(dtype=torch.float)
+    attention_mask_1 = ttnn.to_torch(attention_mask).to(dtype=torch.bool)
+    # attention_probs = compute_attention_probs(attention_scores, attention_mask)
+    attn_weights = torch.masked_fill(attention_scores_1, attention_mask_1, torch.finfo(attention_scores_1.dtype).min)
+    attention_probs = F.softmax(attn_weights, dim=-1, dtype=torch.float32)
+    attention_probs = ttnn.from_torch(attention_probs, layout=ttnn.TILE_LAYOUT, dtype=ttnn.bfloat16, device=device)
+
     context_layer = compute_context_layer(attention_probs, value_layer)
     output_tensor = finalize_output(context_layer, parameters=parameters)
 
@@ -196,16 +210,21 @@ def bloom_mlp(
     residual: torch.Tensor,
     *,
     parameters: ParameterDict,
+    torch_model,
+    index,
 ):
-    ff1_output = ttnn.linear(
-        hidden_states,
-        parameters.dense_h_to_4h.weight,
-        bias=parameters.dense_h_to_4h.bias,
-        core_grid=ttnn.CoreGrid(y=9, x=12),
-        activation="gelu",
-        memory_config=BLOOM_MEMORY_CONFIG,
-        dtype=BLOOM_DTYPE,
-    )
+    # ff1_output = ttnn.linear(
+    #     hidden_states,
+    #     parameters.dense_h_to_4h.weight,
+    #     bias=parameters.dense_h_to_4h.bias,
+    #     core_grid=ttnn.CoreGrid(y=9, x=12),
+    #     activation="gelu",
+    #     memory_config=BLOOM_MEMORY_CONFIG,
+    #     dtype=BLOOM_DTYPE,
+    # )
+    hidden_states = hidden_states @ parameters.dense_h_to_4h.weight
+    ff1_output = hidden_states + parameters.dense_h_to_4h.bias
+    ff1_output = ttnn.gelu(ff1_output)
     ttnn.deallocate(hidden_states)
 
     ff2_output = ttnn.linear(
@@ -228,6 +247,8 @@ def bloom_block(
     attention_mask: ttnn.Tensor,
     *,
     parameters: ParameterDict,
+    torch_model,
+    index,
 ) -> ttnn.Tensor:
     normalized_hidden_states = ttnn.layer_norm(
         hidden_states,
@@ -257,6 +278,8 @@ def bloom_block(
         normalized_attention_output,
         residual=attention_output,
         parameters=parameters.mlp,
+        torch_model=torch_model,
+        index=index,
     )
     ttnn.deallocate(attention_output)
 
@@ -272,7 +295,9 @@ def bloom(
     causal_mask,
     *,
     parameters,
+    torch_model,
 ):
+    index = 0
     inputs_embeds = ttnn.embedding(
         input_ids,
         parameters.word_embeddings.weight,
@@ -294,7 +319,10 @@ def bloom(
             alibi,
             causal_mask,
             parameters=layer_parameters,
+            torch_model=torch_model,
+            index=index,
         )
+        index += 1
 
     hidden_states = ttnn.layer_norm(
         hidden_states,
@@ -316,8 +344,10 @@ def bloom_for_causal_lm(config, input_ids, alibi, causal_mask, *, parameters):
     return output
 
 
-def bloom_for_question_answering(config, input_ids, alibi, casual_mask, *, parameters):
-    hidden_states = bloom(config, input_ids, alibi, casual_mask, parameters=parameters.transformer)
+def bloom_for_question_answering(config, input_ids, alibi, casual_mask, *, parameters, torch_model):
+    hidden_states = bloom(
+        config, input_ids, alibi, casual_mask, parameters=parameters.transformer, torch_model=torch_model
+    )
     hidden_states = ttnn.linear(
         hidden_states,
         parameters.qa_outputs.weight,
