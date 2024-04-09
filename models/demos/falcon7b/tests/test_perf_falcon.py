@@ -72,6 +72,7 @@ def run_test_FalconCausalLM_end_to_end(
     num_layers,
     pcc,
     model_config,
+    model_config_str,
     tt_cache_path,
     model_location_generator,
     expected_inference_time,
@@ -313,7 +314,7 @@ def run_test_FalconCausalLM_end_to_end(
 
     profiler.print()
 
-    comment = f"kv_cache_len={kv_cache_len}_seq_len={seq_len}_num_layers={num_layers}_config=L1-bf16"
+    comment = f"kv_cache_len={kv_cache_len}_seq_len={seq_len}_num_layers={num_layers}_config={model_config_str}"
     cpu_time = profiler.get("hugging_face_reference_model")
     first_iter_time = profiler.get("first_model_run_with_compile")
     second_iter_time = profiler.get("model_run_for_inference")
@@ -352,16 +353,15 @@ def run_test_FalconCausalLM_end_to_end(
     ("tiiuae/falcon-7b-instruct",),
     ids=["falcon_7b"],
 )
-@pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1", "BFLOAT16-L1_SHARDED"))
 class TestParametrized:
     @pytest.mark.parametrize(
-        "llm_mode, batch, seq_len, kv_cache_len, expected_inference_time",
+        "llm_mode, batch, seq_len, kv_cache_len, model_config_str, expected_inference_time",
         (
-            ("prefill", 1, 128, 0, 0.30),
-            ("prefill", 1, 256, 0, 0.44),
-            ("decode", 32, 1, 128, 0.27),
-            ("decode", 32, 1, 1024, 0.35),
-            ("decode", 32, 1, 2047, 0.48),
+            ("prefill", 1, 128, 0, "BFLOAT16-L1", 0.30),
+            ("prefill", 1, 256, 0, "BFLOAT16-L1", 0.44),
+            ("decode", 32, 1, 128, "BFLOAT16-L1", 0.27),
+            ("decode", 32, 1, 1024, "BFLOAT16-L1", 0.35),
+            ("decode", 32, 1, 2047, "BFLOAT16-L1", 0.48),
         ),
         ids=[
             "prefill_seq128",
@@ -409,6 +409,7 @@ class TestParametrized:
             num_layers,
             pcc,
             model_config,
+            model_config_str,
             tt_cache_path,
             model_location_generator,
             expected_inference_time,
@@ -416,20 +417,34 @@ class TestParametrized:
 
     @pytest.mark.parametrize("num_devices", (1, 2, 4))
     @pytest.mark.parametrize(
-        "llm_mode, batch, seq_len, kv_cache_len, expected_inference_time",
+        "llm_mode, batch, seq_len, kv_cache_len, model_config_str, expected_inference_time",
         (
-            ("prefill", 1, 128, 0, 0.4),
-            ("prefill", 1, 256, 0, 0.6),
-            ("decode", 32, 1, 128, 0.4),
-            ("decode", 32, 1, 1024, 0.5),
-            ("decode", 32, 1, 2047, 0.8),
+            ("prefill", 1, 128, 0, "BFLOAT16-DRAM", 0.4),
+            ("prefill", 1, 128, 0, "BFLOAT16-L1", 0.4),
+            ("prefill", 1, 256, 0, "BFLOAT16-DRAM", 0.6),
+            ("prefill", 1, 256, 0, "BFLOAT16-L1", 0.6),
+            ("decode", 32, 1, 128, "BFLOAT16-DRAM", 0.4),
+            ("decode", 32, 1, 128, "BFLOAT16-L1", 0.4),
+            ("decode", 32, 1, 128, "BFLOAT16-L1_SHARDED", 0.4),
+            ("decode", 32, 1, 1024, "BFLOAT16-DRAM", 0.5),
+            ("decode", 32, 1, 1024, "BFLOAT16-L1", 0.5),
+            ("decode", 32, 1, 1024, "BFLOAT16-L1_SHARDED", 0.5),
+            ("decode", 32, 1, 2047, "BFLOAT16-DRAM", 0.8),
+            ("decode", 32, 1, 2047, "BFLOAT16-L1", 0.8),
         ),
         ids=[
-            "prefill_seq128",
-            "prefill_seq256",
-            "decode_batch32",
-            "decode_batch32_1024",
-            "decode_batch32_2047",
+            "prefill_seq128_bf16_dram",
+            "prefill_seq128_bf16_l1",
+            "prefill_seq256_bf16_dram",
+            "prefill_seq256_bf16_l1",
+            "decode_batch32_128_bf16_dram",
+            "decode_batch32_128_bf16_l1",
+            "decode_batch32_128_bf16_l1_sharded",
+            "decode_batch32_1024_bf16_dram",
+            "decode_batch32_1024_bf16_l1",
+            "decode_batch32_1024_bf16_l1_sharded",
+            "decode_batch32_2047_bf16_dram",
+            "decode_batch32_2047_bf16_l1",
         ],
     )
     @skip_for_grayskull()
@@ -453,6 +468,8 @@ class TestParametrized:
             pytest.skip(f"num_devices={num_devices} is not supported on CI yet")
         if model_config_str == "BFLOAT16-L1_SHARDED" and kv_cache_len == 2047:
             pytest.skip(f"kv_cache_len={kv_cache_len} does not fit with L1_SHARDED")
+        if model_config_str == "BFLOAT16-L1_SHARDED" and llm_mode == "prefill":
+            pytest.skip(f"prefill does not support L1_SHARDED")
         devices = get_devices_for_t3000(all_devices, num_devices)
 
         model_config = get_model_config(model_config_str)
@@ -471,6 +488,7 @@ class TestParametrized:
             num_layers,
             pcc,
             model_config,
+            model_config_str,
             tt_cache_path,
             model_location_generator,
             expected_inference_time,
