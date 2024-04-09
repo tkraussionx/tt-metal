@@ -104,14 +104,37 @@ def run_test_FalconMLP_inference(
     (
         ("decode", 32, 1),
         ("prefill", 1, 32),
-        ("prefill", 1, 64),
+        ("prefill", 1, 128),
+        ("prefill", 1, 256),
+        ("prefill", 1, 512),
+        ("prefill", 1, 1024),
+        ("prefill", 1, 2048),
+    ),
+    ids=(
+        "decode_batch32",
+        "prefill_seq32",
+        "prefill_seq128",
+        "prefill_seq256",
+        "prefill_seq512",
+        "prefill_seq1024",
+        "prefill_seq2048",
     ),
 )
 @pytest.mark.parametrize(
     "model_version",
     (("tiiuae/falcon-40b-instruct"),),
+    ids=("falcon_40b",),
 )
-@pytest.mark.parametrize("model_config_str, pcc", [("BFLOAT8_B-SHARDED", 0.9987), ("BFLOAT16-SHARDED", 0.9987)])
+@pytest.mark.parametrize(
+    "model_config_str, pcc",
+    [
+        ("BFLOAT8_B-SHARDED", 0.9986),
+        ("BFLOAT16-SHARDED", 0.9986),
+        ("BFLOAT16-DRAM", 0.9986),
+        ("BFLOAT8_B-DRAM", 0.9983),
+    ],
+    ids=("BFLOAT8_B-SHARDED", "BFLOAT16-SHARDED", "BFLOAT16-DRAM", "BFLOAT8_B-DRAM"),
+)
 def test_FalconMLP_inference(
     num_devices,
     model_version,

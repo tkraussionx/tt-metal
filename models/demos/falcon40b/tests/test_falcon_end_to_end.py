@@ -397,23 +397,39 @@ def run_test_FalconCausalLM_end_to_end(
 @pytest.mark.parametrize(
     "llm_mode, batch, seq_len, kv_cache_len",
     (
+        ("prefill", 1, 32, 0),
         ("prefill", 2, 32, 0),
-        ("prefill", 2, 64, 0),
+        ("prefill", 1, 64, 0),
+        ("prefill", 1, 128, 0),
+        ("prefill", 1, 256, 0),
+        ("prefill", 1, 512, 0),
+        ("prefill", 1, 1024, 0),
+        ("prefill", 1, 2048, 0),
         ("decode", 32, 1, 128),
     ),
-    ids=["prefill_seq32", "prefill_seq64", "decode_batch32"],
+    ids=[
+        "prefill_seq32",
+        "prefill_seq32_batch2",
+        "prefill_seq64",
+        "prefill_seq128",
+        "prefill_seq256",
+        "prefill_seq512",
+        "prefill_seq1024",
+        "prefill_seq2048",
+        "decode_batch32",
+    ],
 )
 @pytest.mark.parametrize(
     "num_layers, out_pcc, cache_pcc, token_pcc",
-    ((1, 0.99, 0.99, 0.99), (2, 0.99, 0.99, 0.99), (60, 0.92, 0.99, 0.85)),
-    ids=["layers_1", "layers_2", "layers_60"],
+    ((1, 0.99, 0.99, 0.99), (2, 0.99, 0.99, 0.99), (8, 0.99, 0.99, 0.99), (60, 0.92, 0.99, 0.85)),
+    ids=["layers_1", "layers_2", "layers_8", "layers_60"],
 )
 @pytest.mark.parametrize(
     "model_version",
     ("tiiuae/falcon-40b-instruct",),
     ids=["falcon_40b"],
 )
-@pytest.mark.parametrize("model_config_str", ("BFLOAT8_B-SHARDED",))
+@pytest.mark.parametrize("model_config_str", ("BFLOAT8_B-SHARDED", "BFLOAT8_B-DRAM", "BFLOAT16-DRAM"))
 def test_FalconCausalLM_end_to_end_with_program_cache(
     num_devices,
     model_version,
@@ -436,7 +452,7 @@ def test_FalconCausalLM_end_to_end_with_program_cache(
         if model_config_str == "BFLOAT16-SHARDED":
             pytest.skip("Prefill is only tested for BFLOAT8_B!")
         elif model_config_str == "BFLOAT8_B-SHARDED":
-            # TODO: Investigate why PCC is lower for prefill?
+            # TODO: Investigate why PCC is lower for prefill sharded?
             if num_layers == 1:
                 out_pcc = 0.92
             elif num_layers == 2:
@@ -445,6 +461,10 @@ def test_FalconCausalLM_end_to_end_with_program_cache(
             elif num_layers == 60:
                 out_pcc = 0.75
                 cache_pcc = 0.32
+        elif model_config_str == "BFLOAT8_B-DRAM":
+            if num_layers == 60:
+                out_pcc = 0.91
+                cache_pcc = 0.94
 
     input_shape = [batch, seq_len]
     model_config = get_model_config(model_config_str, llm_mode, input_shape, num_devices)
