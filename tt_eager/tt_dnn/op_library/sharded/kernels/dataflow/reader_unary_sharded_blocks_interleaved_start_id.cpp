@@ -36,9 +36,9 @@ void kernel_main() {
             noc_async_read_tile(tile_id, s, l1_write_addr);
             tile_id++;
             l1_write_addr += tile_bytes;
-            noc_async_read_barrier();
+            noc_async_read_tile_barrier();
         }
         curr_tile_id += input_width_offset_tiles;
-    } 
+    }
     cb_push_back(cb_id_in0, block_num_tiles);
 }

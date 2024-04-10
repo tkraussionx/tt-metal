@@ -54,6 +54,9 @@ uint32_t noc_reads_num_issued[NUM_NOCS] __attribute__((used));
 uint32_t noc_nonposted_writes_num_issued[NUM_NOCS] __attribute__((used));
 uint32_t noc_nonposted_writes_acked[NUM_NOCS] __attribute__((used));
 
+uint64_t xy_local_addr[NUM_NOCS] __attribute__((used));
+const uint32_t is_ncrisc __attribute__((used)) = 0;
+
 CBInterface cb_interface[NUM_CIRCULAR_BUFFERS] __attribute__((used));
 
 #define MEM_MOVER_VIEW_IRAM_BASE_ADDR (0x4 << 12)
@@ -285,7 +288,6 @@ int main() {
 
     risc_init();
     device_setup();
-    noc_init();
 
     // Set ncrisc's resume address to 0 so we know when ncrisc has overwritten it
     mailboxes->ncrisc_halt.resume_addr = 0;
@@ -301,6 +303,7 @@ int main() {
     mailboxes->launch.run = RUN_MSG_DONE;
 
     while (1) {
+        noc_init_registers();
         init_sync_registers();
         assert_just_ncrisc_reset();
 

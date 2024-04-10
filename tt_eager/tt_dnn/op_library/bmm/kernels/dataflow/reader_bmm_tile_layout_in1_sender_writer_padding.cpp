@@ -175,7 +175,7 @@ void kernel_main() {
             in1_tensor_current_block_start_tile_id += in1_tensor_next_block_stride;
 
             // Barrier! make sure the reads are done
-            noc_async_read_barrier();
+            noc_async_read_tile_barrier();
             #endif
 
             #ifndef SKIP_MCAST
@@ -224,7 +224,7 @@ void kernel_main() {
                     in3_block_size_bytes += bias_single_tile_size_bytes;
                 }
                 // Barrier! make sure the reads are done
-                noc_async_read_barrier();
+                noc_async_read_tile_barrier();
 
                 #ifndef SKIP_MCAST
 
@@ -290,7 +290,7 @@ void kernel_main() {
                     out_tensor_sb_row_start_tile_id += out_tensor_stride_h;
                 }
 
-                noc_async_write_barrier();
+                noc_async_write_tile_barrier();
                 cb_pop_front(cb_id_out0, out_subblock_tile_count);
                 out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
             }

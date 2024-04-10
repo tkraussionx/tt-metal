@@ -114,7 +114,7 @@ void kernel_main() {
             in0_tensor_current_block_start_tile_id += in0_tensor_next_block_stride;
 
             // Barrier! make sure the reads are done
-            noc_async_read_barrier();
+            noc_async_read_tile_barrier();
             #endif
 
             #ifndef SKIP_MCAST

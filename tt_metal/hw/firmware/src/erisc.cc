@@ -39,6 +39,8 @@ uint32_t noc_reads_num_issued[NUM_NOCS] __attribute__((used));
 uint32_t noc_nonposted_writes_num_issued[NUM_NOCS] __attribute__((used));
 uint32_t noc_nonposted_writes_acked[NUM_NOCS] __attribute__((used));
 
+uint64_t xy_local_addr[NUM_NOCS] __attribute__((used));
+
 void __attribute__((section("code_l1"))) risc_init() {
     for (uint32_t n = 0; n < NUM_NOCS; n++) {
         uint32_t noc_id_reg = NOC_CMD_BUF_READ_REG(n, 0, NOC_NODE_ID);
