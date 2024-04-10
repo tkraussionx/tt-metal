@@ -1300,6 +1300,25 @@ FORCE_INLINE void noc_async_read_tile(
  * | size              | Size of data transfer in bytes | uint32_t | 0..1MB                                                    | True     |
  */
 inline
+void noc_async_write_with_id(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr, std::uint32_t size) {
+    DEBUG_STATUS('N', 'A', 'W', 'W');
+    DEBUG_SANITIZE_NOC_WRITE_TRANSACTION(dst_noc_addr, src_local_l1_addr,size);
+    uint32_t transaction_id = is_ncrisc ? 6:5;
+    uint32_t cmd_buf = is_ncrisc ? NCRISC_WR_REG_CMD_BUF : BRISC_WR_REG_CMD_BUF;
+    ncrisc_noc_fast_write_any_len_with_id(
+        noc_index,
+        cmd_buf,
+        src_local_l1_addr,
+        dst_noc_addr,
+        size,
+        NOC_UNICAST_WRITE_VC,
+        false,
+        false,
+        1,
+        transaction_id);
+    DEBUG_STATUS('N', 'A', 'W', 'D');
+}
+inline
 void noc_async_write(std::uint32_t src_local_l1_addr, std::uint64_t dst_noc_addr, std::uint32_t size) {
     DEBUG_STATUS('N', 'A', 'W', 'W');
     DEBUG_SANITIZE_NOC_WRITE_TRANSACTION(dst_noc_addr, src_local_l1_addr,size);

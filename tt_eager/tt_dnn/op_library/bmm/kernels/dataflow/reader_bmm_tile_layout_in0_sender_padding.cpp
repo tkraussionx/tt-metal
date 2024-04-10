@@ -130,16 +130,26 @@ void kernel_main() {
             #ifndef SKIP_MCAST
             // wait until all in0 mcast destinations have atomically incremented the in0 semaphore_addr (i.e. its value should be in0_mcast_num_dests), then reset
             // the semaphore_addr value back to zero for the next block
-            noc_semaphore_wait(in0_mcast_sender_semaphore_addr_ptr, in0_mcast_num_dests);
-            noc_semaphore_set(in0_mcast_sender_semaphore_addr_ptr, 0);
+            // noc_semaphore_wait(in0_mcast_sender_semaphore_addr_ptr, in0_mcast_num_dests);
+            // noc_semaphore_set(in0_mcast_sender_semaphore_addr_ptr, 0);
 
             // Now we have the block in the CB address, we can mcast to dests!
             uint64_t in0_multicast_data_addr = in0_multicast_data_noc | in0_start_address;
 
-            // DPRINT << NOC_STATUS_READ_REG(1, NIU_MST_REQS_OUTSTANDING_ID(3)) << ENDL();
+            DPRINT << in0_block_size_bytes << ENDL();
+
+            uint32_t transaction_id = is_ncrisc ? 6:5;
+            DPRINT << NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(transaction_id)) << ENDL();
 
             // num_dests must not include source, since we are NOT really doing a local copy!
             noc_async_write_multicast_with_id(in0_start_address, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores, false);
+            // noc_async_write_with_id(in0_start_address, in0_multicast_data_addr, in0_block_size_bytes);
+
+            DPRINT << NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(transaction_id)) << ENDL();
+
+            while (NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(transaction_id)) > ((NOC_MAX_TRANSACTION_ID_COUNT+1)/2));
+
+
 
             // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
             // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
@@ -155,7 +165,7 @@ void kernel_main() {
 
             // We should also multicast the flag to destinations
             // num_dests must not include source, since we are NOT really doing a local copy!
-            noc_semaphore_set_multicast_with_id(in0_mcast_receiver_semaphore_addr, in0_mcast_receiver_semaphore_noc_addr, in0_mcast_num_cores, false);
+            // noc_semaphore_set_multicast_with_id(in0_mcast_receiver_semaphore_addr, in0_mcast_receiver_semaphore_noc_addr, in0_mcast_num_cores, false);
 
             // DPRINT << NOC_STATUS_READ_REG(1, NIU_MST_REQS_OUTSTANDING_ID(3)) << ENDL();
             #endif

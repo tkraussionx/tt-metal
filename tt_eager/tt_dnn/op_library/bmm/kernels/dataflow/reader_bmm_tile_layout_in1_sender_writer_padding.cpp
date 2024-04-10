@@ -199,21 +199,21 @@ void kernel_main() {
             #ifndef SKIP_MCAST
             // wait until all in1 mcast destinations have atomically incremented the in1 semaphore_addr (i.e. its value should be in0_mcast_num_dests), then reset
             // the semaphore_addr value back to zero for the next block
-            noc_semaphore_wait(in1_mcast_sender_semaphore_addr_ptr, in1_mcast_num_dests);
-            noc_semaphore_set(in1_mcast_sender_semaphore_addr_ptr, 0);
+            // noc_semaphore_wait(in1_mcast_sender_semaphore_addr_ptr, in1_mcast_num_dests);
+            // noc_semaphore_set(in1_mcast_sender_semaphore_addr_ptr, 0);
 
             // Now we have the block in the CB address, we can mcast to dests!
             uint64_t in1_multicast_data_addr = in1_multicast_data_noc | in1_start_address;
 
             // num_dests must not include source, since we are NOT really doing a local copy!
-            noc_async_write_multicast_with_id(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, true);
+            // noc_async_write_multicast_with_id(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, true);
 
             // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
             // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
 
             // We should also multicast the flag to destinations
             // num_dests must not include source, since we are NOT really doing a local copy!
-            noc_semaphore_set_multicast_with_id(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false);
+            // noc_semaphore_set_multicast_with_id(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false);
 
             #endif
 
