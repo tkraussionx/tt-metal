@@ -333,7 +333,7 @@ class TtFalconAttention:
                     self.model_config["COMPUTE_KERNEL_CONFIG"],
                     output_mem_config=self.model_config["FUSED_QKV_MM_OUTPUT_MEMCFG"],
                     output_dtype=self.model_config["FUSED_QKV_MM_OUTPUT_DTYPE"],
-                    grid=ttnn.CoreGrid(x=8, y=1) if q_len <= 512 else ttnn.CoreGrid(x=8, y=4),
+                    grid=ttnn.CoreGrid(x=8, y=4) if q_len >= 512 else ttnn.CoreGrid(x=8, y=1),
                     transpose_mcast=True,
                 )
             )
@@ -484,6 +484,8 @@ class TtFalconAttention:
                 self.model_config["COMPUTE_KERNEL_CONFIG"],
                 output_mem_config=self.model_config["SELFOUT_MM_OUTPUT_MEMCFG"],
                 output_dtype=self.model_config["SELFOUT_MM_OUTPUT_DTYPE"],
+                overwrite_subblock_w=1,  # Workaround for non deterministic output/hang; issue: 7066
+                overwrite_subblock_h=1,
             )
 
         return attn_output, layer_present

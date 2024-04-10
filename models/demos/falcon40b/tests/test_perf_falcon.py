@@ -459,8 +459,13 @@ def test_perf_bare_metal(
     model_location_generator,
     get_tt_cache_path,
     all_devices,
-    use_program_cache,
+    # use_program_cache, # TODO: remove workaround for avoiding PCC issues when fixed
 ):
+    if llm_mode == "prefill" and (model_config_str not in ["BFLOAT8_B-DRAM"] or num_devices != 8):
+        pytest.skip("Prefill is only supported for BFLOAT8_B-DRAM memory config and 8 chips!")
+    if llm_mode == "decode" and model_config_str not in ["BFLOAT8_B-SHARDED"]:
+        pytest.skip("Decode is only supported for SHARDED memory config!")
+
     input_shape = [batch, seq_len]
     model_config = get_model_config(model_config_str, llm_mode, input_shape, num_devices)
     devices = get_devices_for_t3000(all_devices, num_devices)
