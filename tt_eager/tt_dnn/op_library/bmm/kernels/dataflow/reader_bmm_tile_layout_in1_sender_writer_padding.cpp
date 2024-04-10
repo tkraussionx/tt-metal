@@ -177,7 +177,7 @@ void kernel_main() {
 
                         // DPRINT << NOC_STATUS_READ_REG(0, NIU_MST_REQS_OUTSTANDING_ID(1)) << ENDL();
 
-                        noc_async_read_tile_with_id(in1_tensor_tile_id, s1, l1_write_addr_in1);
+                        noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1);
 
                         // DPRINT << NOC_STATUS_READ_REG(0, NIU_MST_REQS_OUTSTANDING_ID(1)) << ENDL();
                     }
@@ -191,7 +191,7 @@ void kernel_main() {
             // Barrier! make sure the reads are done
             // DPRINT << NOC_STATUS_READ_REG(0, NIU_MST_REQS_OUTSTANDING_ID(1)) << ENDL();
 
-            noc_async_read_barrier_with_id();
+            noc_async_read_tile_barrier();
 
             // DPRINT << NOC_STATUS_READ_REG(0, NIU_MST_REQS_OUTSTANDING_ID(1)) << ENDL();
             #endif
@@ -206,14 +206,14 @@ void kernel_main() {
             uint64_t in1_multicast_data_addr = in1_multicast_data_noc | in1_start_address;
 
             // num_dests must not include source, since we are NOT really doing a local copy!
-            noc_async_write_multicast_with_id(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, true);
+            noc_async_write_multicast(in1_start_address, in1_multicast_data_addr, in1_block_size_bytes, in1_mcast_num_cores, true);
 
             // Note: no need for write barrier, since these two multicasts are done on the same noc id, same vc, same cmd_buf
             // Also, this only works because we are setting VCs statically (using NOC_CMD_STATIC_VC).
 
             // We should also multicast the flag to destinations
             // num_dests must not include source, since we are NOT really doing a local copy!
-            noc_semaphore_set_multicast_with_id(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false);
+            noc_semaphore_set_multicast(in1_mcast_receiver_semaphore_addr, in1_mcast_receiver_semaphore_noc_addr, in1_mcast_num_cores, false);
 
             #endif
 
@@ -302,7 +302,7 @@ void kernel_main() {
                 for(uint32_t h = 0; h < out_subblock_h_; ++h) {
                     uint32_t out_tensor_tile_id = out_tensor_sb_row_start_tile_id;
                     for(uint32_t w = 0; w < out_subblock_w_; ++w) {
-                        noc_async_write_tile_with_id(out_tensor_tile_id, s, l1_read_addr);
+                        noc_async_write_tile(out_tensor_tile_id, s, l1_read_addr);
 
                         l1_read_addr+=output_single_tile_size_bytes;
 
@@ -315,7 +315,7 @@ void kernel_main() {
 
                 // DPRINT << "b" << ENDL();
 
-                noc_async_write_barrier_with_id();
+                noc_async_write_tile_barrier();
                 cb_pop_front(cb_id_out0, out_subblock_tile_count);
                 out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
             }

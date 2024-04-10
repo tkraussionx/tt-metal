@@ -38,7 +38,7 @@ void kernel_main() {
             noc_semaphore_set(in0_mcast_receiver_semaphore_addr_ptr, INVALID);
 //
             // Atomic increment source core counter
-            noc_semaphore_inc_with_id(in0_mcast_sender_semaphore_noc_addr, 1);
+            noc_semaphore_inc(in0_mcast_sender_semaphore_noc_addr, 1);
 
             // wait on in0 semaphore value to become VALID (set by mcast sender after it multicasts data)
             noc_semaphore_wait(in0_mcast_receiver_semaphore_addr_ptr, VALID);

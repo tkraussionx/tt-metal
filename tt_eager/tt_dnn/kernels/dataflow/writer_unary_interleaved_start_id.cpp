@@ -43,7 +43,7 @@ void kernel_main() {
         uint32_t l1_read_addr = get_read_ptr(cb_id_out);
         noc_async_write_tile(i, s, l1_read_addr);
         // noc_async_write_barrier_with_id();
-        noc_async_write_barrier();
+        noc_async_write_tile_barrier();
         cb_pop_front(cb_id_out, onetile);
     }
     #endif

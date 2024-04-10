@@ -113,7 +113,7 @@ void kernel_main() {
                 for(uint32_t w = 0; w < in0_block_w; ++w) {
                     if (h < last_block_h) {
                         // noc_async_read_tile(in0_tensor_tile_id, s0, l1_write_addr_in0);
-                        noc_async_read_tile_with_id(in0_tensor_tile_id, s0, l1_write_addr_in0);
+                        noc_async_read_tile(in0_tensor_tile_id, s0, l1_write_addr_in0);
                     }
                     l1_write_addr_in0 += in0_single_tile_size_bytes;
                     in0_tensor_tile_id += in0_tensor_stride_w;
@@ -124,7 +124,7 @@ void kernel_main() {
 
             // Barrier! make sure the reads are done
             // noc_async_read_barrier();
-            noc_async_read_barrier_with_id();
+            noc_async_read_tile_barrier();
             #endif
 
             #ifndef SKIP_MCAST
@@ -142,7 +142,7 @@ void kernel_main() {
             // DPRINT << NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(transaction_id)) << ENDL();
 
             // num_dests must not include source, since we are NOT really doing a local copy!
-            noc_async_write_multicast_with_id(in0_start_address, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores, true);
+            noc_async_write_multicast(in0_start_address, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores, true);
             // noc_async_write_with_id(in0_start_address, in0_multicast_data_addr, in0_block_size_bytes);
 
             // DPRINT << NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(transaction_id)) << ENDL();
@@ -167,7 +167,7 @@ void kernel_main() {
 
             // We should also multicast the flag to destinations
             // num_dests must not include source, since we are NOT really doing a local copy!
-            noc_semaphore_set_multicast_with_id(in0_mcast_receiver_semaphore_addr, in0_mcast_receiver_semaphore_noc_addr, in0_mcast_num_cores, false);
+            noc_semaphore_set_multicast(in0_mcast_receiver_semaphore_addr, in0_mcast_receiver_semaphore_noc_addr, in0_mcast_num_cores, false);
 
             // DPRINT << NOC_STATUS_READ_REG(1, NIU_MST_REQS_OUTSTANDING_ID(3)) << ENDL();
             #endif

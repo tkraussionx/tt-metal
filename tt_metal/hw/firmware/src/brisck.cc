@@ -27,7 +27,11 @@
 
 uint8_t noc_index = NOC_INDEX;
 
-const uint32_t use_multi_noc = true;
+const uint32_t read_cmd_buf __attribute__((used)) = BRISC_RD_CMD_BUF;
+const uint32_t write_cmd_buf __attribute__((used)) = BRISC_WR_REG_CMD_BUF;
+const uint32_t read_transaction_id __attribute__((used)) = BRISC_RD_TRANSACTION_ID;
+const uint32_t write_transaction_id __attribute__((used)) = BRISC_WR_REG_TRANSACTION_ID;
+const uint32_t use_multi_noc __attribute__((used)) = true;
 const uint32_t noc_index_to_dram_bank_map[NUM_DRAM_BANKS] __attribute__((used)) = {
     NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX,
     1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX
@@ -37,9 +41,6 @@ const uint32_t noc_index_to_dram_bank_map[NUM_DRAM_BANKS] __attribute__((used)) 
 //     NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX,
 //     NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX, NOC_INDEX };
 
-// const uint32_t noc_index_to_dram_bank_map[NUM_DRAM_BANKS] __attribute__((used)) = {
-//     1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX,
-//     1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX, 1 - NOC_INDEX };
 
 void kernel_launch() {
 
