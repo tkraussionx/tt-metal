@@ -374,7 +374,7 @@ inline Tensor to_host(const Tensor& tensor, bool blocking = true) {
             insert_buffer_and_shape_for_device(device, shard, host_tensor);
             host_tensor.set_populated(device);
         }
-        return host_tensor;
+        return Tensor(MultiDeviceHostStorage{device_storage.strategy, std::move(host_buffers), device_storage.shapes}, tensor.get_shape(), tensor.get_dtype(), tensor.get_layout());
     } else {
         return tensor;
     }
@@ -476,7 +476,7 @@ inline Tensor to_layout(const Tensor& tensor, Layout target_layout) {
                     output_buffers.push_back(output_buffer);
                     output_shapes.push_back(storage.shapes[i]);
                 }
-                return MultiDeviceHostStorage{output_buffers, output_shapes};
+                return MultiDeviceHostStorage{storage.strategy, output_buffers, output_shapes};
             } else if constexpr (std::is_same_v<StorageType, DeviceStorage>) {
                 TT_THROW("Device storage isn't supported");
             } else if constexpr (std::is_same_v<StorageType, MultiDeviceStorage>) {

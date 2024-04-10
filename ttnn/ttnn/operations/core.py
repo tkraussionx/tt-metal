@@ -278,7 +278,7 @@ def from_torch(
         if mesh_mapper:
             device_id_to_shard_ranges = mesh_mapper.map(tensor)
             shards = list(device_id_to_shard_ranges.values())
-            return ttl.tensor.Tensor(shards, dtype)
+            return ttl.tensor.Tensor(shards, dtype, mesh_mapper.strategy())
         return ttl.tensor.Tensor(tensor, dtype)
 
     tensor = ttl.tensor.decorate_external_operation(impl, function_name="(ttnn) from_torch")(tensor, dtype, mesh_mapper)

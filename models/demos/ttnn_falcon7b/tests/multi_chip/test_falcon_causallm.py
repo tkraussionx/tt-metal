@@ -76,11 +76,7 @@ def test_falcon_causal_lm(
 ):
     torch.manual_seed(0)
     batch = device_batch_size * device_mesh.get_num_devices()
-    if llm_mode == "decode":
-        shard_dim = 2
-    else:
-        shard_dim = 0
-
+    shard_dim = 2 if llm_mode == "decode" else 0
     configuration = transformers.FalconConfig.from_pretrained(model_version)
     configuration.num_hidden_layers = num_layers
     model = transformers.models.falcon.modeling_falcon.FalconForCausalLM.from_pretrained(
@@ -106,7 +102,6 @@ def test_falcon_causal_lm(
                 mesh_mapper=ShardTensorToMesh(device_mesh, dim=0),
             )
             tt_layer_past += (tt_current_layer_past,)
-        attention_mask = None
 
     elif llm_mode == "decode":
         past_key_values = ()

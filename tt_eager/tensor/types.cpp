@@ -12,6 +12,26 @@ namespace tt {
 
 namespace tt_metal {
 
+static DistributionStrategy create_shard_distribution_strategy(std::unordered_map<std::string, std::string>& metadata) {
+    return ShardTensor(std::stoi(metadata.at("shard_dim")));
+}
+static DistributionStrategy create_replicate_distribution_strategy(std::unordered_map<std::string, std::string>& metadata) {
+    return ReplicateTensor{};
+}
+
+DistributionStrategy get_distribution_strategy(std::unordered_map<std::string, std::string>& metadata) {
+    if (auto it = metadata.find("strategy"); strategy != metadata.end()) {
+        const std::string& strategy = it->second;
+        if (strategy == "shard") {
+            return create_shard_distribution_strategy(metadata);
+
+        } else if (strategy == "replicate") {
+            return create_replicate_distribution_strategy(metadata);
+        }
+    }
+    TT_THROW("Unsupported distribution strategy: {}", strategy);
+}
+
 
 tt::DataFormat datatype_to_dataformat_converter(tt::tt_metal::DataType datatype) {
     switch (datatype) {

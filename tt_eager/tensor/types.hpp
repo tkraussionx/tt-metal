@@ -43,6 +43,16 @@ enum class StorageType {
     MULTI_DEVICE_HOST,  // host storage for multi-device context
 };
 
+enum class DistributionType { NONE, SHARD, REPLICATE};
+struct ReplicateTensor {};
+struct ShardTensor {
+    int shard_dimension;
+    ShardTensor(int shard_dimension) : shard_dimension(shard_dimension) {}
+};
+using DistributionStrategy = std::variant<ReplicateTensor, ShardTensor>;
+DistributionStrategy get_distribution_strategy(std::unordered_map<std::string, std::string>& metadata);
+
+
 tt::DataFormat datatype_to_dataformat_converter(DataType datatype);
 
 static constexpr std::size_t MAX_NUM_DIMENSIONS = 8;
@@ -315,16 +325,11 @@ struct BorrowedStorage {
     const auto attribute_values() const { return std::make_tuple(); }
 };
 
-    struct MultiDeviceHostStorage {
-        std::vector<OwnedBuffer> buffers;
-        std::vector<Shape> shapes;
-        std::mutex mtx;
-        MultiDeviceHostStorage() = default;
-        MultiDeviceHostStorage(std::vector<OwnedBuffer> buffers_, std::vector<Shape> shapes_) : buffers(buffers_), shapes(shapes_) {}
-        MultiDeviceHostStorage(MultiDeviceHostStorage &&other) {
-            buffers = other.buffers;
-            shapes = other.shapes;
-        }
+struct MultiDeviceHostStorage {
+    std::string strategy;
+
+    std::vector<OwnedBuffer> buffers;
+    std::vector<Shape> shapes;
 
         MultiDeviceHostStorage(const MultiDeviceHostStorage &other) {
             buffers = other.buffers;
@@ -369,7 +374,7 @@ struct BorrowedStorage {
             TT_FATAL(device->id() < shapes.size(), "Buffer not found for device " + std::to_string(device->id()));
             return shapes[device->id()];
         }
-        
+
         uint32_t num_buffers() {
             std::lock_guard<std::mutex> lock(mtx);
             return buffers.size();

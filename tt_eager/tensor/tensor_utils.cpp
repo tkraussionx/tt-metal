@@ -249,8 +249,20 @@ std::vector<Tensor> get_tensors_from_multi_device_storage(const Tensor& multi_de
     return tensors;
 }
 
+DistributionStrategy get_distribution_strategy(const Tensor& tensor) {
+    if (tensor.storage_type() == StorageType::MULTI_DEVICE) {
+        const auto& tensor_storage = std::get<MultiDeviceStorage>(multi_device_tensor.get_storage());
+        return tensor_storage.strategy;
+    }
+    else if (tensor.storage_type() == StorageType::MULTI_DEVICE_HOST) {
+        const auto& tensor_storage = std::get<MultiDeviceHostStorage>(multi_device_tensor.get_storage());
+        return tensor_storage.strategy;
+    }
+    TT_THROW("Tensor is not a multi-device tensor");
+}
 
-Tensor create_multi_device_tensor(const std::vector<Tensor>& tensors, StorageType storage_type) {
+
+Tensor create_multi_device_tensor(const std::vector<Tensor>& tensors, StorageType storage_type, DistributionStrategy& strategy) {
     if (tensors.empty()) {
         TT_THROW("Cannot create multi-device tensor with empty tensor list");
     }
@@ -277,7 +289,7 @@ Tensor create_multi_device_tensor(const std::vector<Tensor>& tensors, StorageTyp
             shapes.push_back(tensor.get_legacy_shape());
         }
         return Tensor{
-            MultiDeviceHostStorage{owned_buffers, shapes},
+            MultiDeviceHostStorage{strategy, owned_buffers, shapes},
             tensors.at(0).get_legacy_shape(),
             tensors.at(0).get_dtype(),
             tensors.at(0).get_layout()
@@ -292,7 +304,7 @@ Tensor transform(const Tensor& tensor, std::function<Tensor(const Tensor&)> tran
     std::vector<Tensor> output_tensors(input_tensors.size());
     std::transform(input_tensors.begin(), input_tensors.end(), output_tensors.begin(),
         [&](const auto& device_tensor) { return transform_func(device_tensor); });
-    return create_multi_device_tensor(output_tensors, tensor.storage_type());
+    return create_multi_device_tensor(output_tensors, tensor.storage_type(), get_distribution_strategy(tensor));
 }
 
 void apply(const Tensor& tensor, std::function<void(const Tensor&)> callable) {
