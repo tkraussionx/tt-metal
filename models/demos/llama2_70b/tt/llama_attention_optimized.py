@@ -908,7 +908,8 @@ class TtLlamaAttention_optimized(torch.nn.Module):
         user_id: int = 0,
     ) -> tt_lib.tensor.Tensor:
         seq_len = query_layer[0].shape[2]
-        slice_size = 256
+        slice_size = 256 if seq_len == 2048 else 128
+        cores_y = 4 if slice_size == 128 else 8
         num_slices = seq_len // slice_size  # we do q_lens of 128 per iteration (slice), then we concat the result.
         attn_output_cat = []  # this is the output we write to. Initiate as empty tensors
         for i in range(len(query_layer)):
@@ -962,7 +963,7 @@ class TtLlamaAttention_optimized(torch.nn.Module):
                 q_slices.append(
                     tt_lib.tensor.interleaved_to_sharded_partial(
                         query_layer[i],
-                        (8, 8),
+                        (8, cores_y),
                         [32, self.head_dim],  # each slice is [1,8,128,128], we use 32 cores
                         num_slices,  # num_slices
                         slice_i,  # slice_index
@@ -973,7 +974,7 @@ class TtLlamaAttention_optimized(torch.nn.Module):
                 attn_mask_slices.append(
                     tt_lib.tensor.interleaved_to_sharded_partial(
                         attn_masks[i],
-                        (8, 8),
+                        (8, cores_y),
                         [32, seq_len],  # each slice is [1,8,128,128], we use 32 cores
                         num_slices,  # num_slices
                         slice_i,  # slice_index

@@ -127,6 +127,12 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
             fp32_dest_acc_en=False,
             packer_l1_acc=True,
         ),
+        "LN_COMPUTE_KERNEL_CONFIG": ttl.tensor.WormholeComputeKernelConfig(
+            math_fidelity=ttl.tensor.MathFidelity.HiFi2,
+            math_approx_mode=False,
+            fp32_dest_acc_en=False,
+            packer_l1_acc=False,
+        ),
         "L1_MEMCFG": L1_MEMCFG,
         "DRAM_MEMCFG": DRAM_MEMCFG,
         "BFLOAT16_DTYPE": BFLOAT16_DTYPE,
@@ -232,7 +238,7 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
 
     # For Prefill. we can calculate based on the dynamic seqlen for block sharded layernorm.
     # shard_height_slice = 128 for prefill
-    shard_height_slice = 512
+    shard_height_slice = 512 if seq_len == 2048 else 128
     layernorm_num_cores_x = model_config["MAX_GRID_SIZE"][0]
     layernorm_max_num_cores_y = model_config["MAX_GRID_SIZE"][1]
     for i in range(layernorm_max_num_cores_y, 0, -1):
@@ -683,7 +689,7 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
             model_config[
                 "ATTN_BATCHED_MM_PROGCFG"
             ] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-                compute_with_storage_grid_size=(8, 8),
+                compute_with_storage_grid_size=(8, 4 if seq_len == 128 else 8),
                 in0_block_w=head_dim // 32,
                 out_subblock_h=1,
                 out_subblock_w=1,
@@ -696,7 +702,7 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
             model_config[
                 "SCORES_BATCHED_MM_PROGCFG"
             ] = ttl.operations.primary.MatmulMultiCoreReuseMultiCast1DProgramConfig(
-                compute_with_storage_grid_size=(8, 8),
+                compute_with_storage_grid_size=(8, 4 if seq_len == 128 else 8),
                 in0_block_w=seq_len // 32,
                 out_subblock_h=1,
                 out_subblock_w=1,
@@ -798,7 +804,7 @@ def get_model_config(model_config_str="BFLOAT16-DRAM", num_devices=8, seq_len=1)
             model_config[
                 "BATCHED_SOFTMAX_PROGCFG"
             ] = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
-                compute_with_storage_grid_size=(8, 8),
+                compute_with_storage_grid_size=(8, 4 if seq_len == 128 else 8),
                 subblock_w=1,
                 block_h=32 // 32,  # 128 * 8 // 32 cores // TILE_SIZE
                 block_w=1,  # Dynamic

@@ -213,6 +213,7 @@ class TtLlamaMLP_optimized(nn.Module):
                     program_config=self.model_config["PADDED_FF1_MM_PROGCFG"],
                     output_mem_config=block_sharded_memcfg,
                     compute_kernel_config=self.model_config["COMPUTE_KERNEL_FP16_ACC_CONFIG"],
+                    output_dtype=self.model_config["BFP8_DTYPE"],
                 )
             )
 
@@ -224,6 +225,7 @@ class TtLlamaMLP_optimized(nn.Module):
                     program_config=self.model_config["PADDED_FF3_MM_PROGCFG"],
                     output_mem_config=block_sharded_memcfg,
                     compute_kernel_config=self.model_config["COMPUTE_KERNEL_FP16_ACC_CONFIG"],
+                    output_dtype=self.model_config["BFP8_DTYPE"],
                 )
             )
             x[i].deallocate(True)
