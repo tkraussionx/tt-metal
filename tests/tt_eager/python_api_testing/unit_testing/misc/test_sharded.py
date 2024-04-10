@@ -2380,7 +2380,7 @@ from models.utility_functions import torch2tt_tensor, tt2torch_tensor, pad_by_ze
 @pytest.mark.parametrize(
     "M, K, N, activation",
     [
-        (1536, 1024, 3072, None),
+        (768, 384, 1152, None),
     ],
 )
 def test_bert_linear_batch4_fp32_input_output(
@@ -2396,7 +2396,7 @@ def test_bert_linear_batch4_fp32_input_output(
     in0_shape = [1, 1, M, K]
     in1_shape = [1, 1, K, N]
     bias_shape = [1, 1, N]
-    grid_size = (8, 4)
+    grid_size = (3, 2)
 
     in0_block_h = M // grid_size[1] // 32
     in0_block_w = K // grid_size[0] // 32

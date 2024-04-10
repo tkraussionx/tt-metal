@@ -136,10 +136,10 @@ void kernel_main() {
             // Now we have the block in the CB address, we can mcast to dests!
             uint64_t in0_multicast_data_addr = in0_multicast_data_noc | in0_start_address;
 
-            DPRINT << in0_block_size_bytes << ENDL();
+            // DPRINT << in0_block_size_bytes << ENDL();
 
             uint32_t transaction_id = is_ncrisc ? 6:5;
-            DPRINT << NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(transaction_id)) << ENDL();
+            // DPRINT << NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(transaction_id)) << ENDL();
 
             // num_dests must not include source, since we are NOT really doing a local copy!
             noc_async_write_multicast_with_id(in0_start_address, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_cores, false);
@@ -147,7 +147,9 @@ void kernel_main() {
 
             DPRINT << NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(transaction_id)) << ENDL();
 
-            while (NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(transaction_id)) > ((NOC_MAX_TRANSACTION_ID_COUNT+1)/2));
+            noc_async_write_barrier_with_id_2(transaction_id);
+
+            // while (NOC_STATUS_READ_REG(noc_index, NIU_MST_REQS_OUTSTANDING_ID(transaction_id)) > ((NOC_MAX_TRANSACTION_ID_COUNT+1)/2));
 
 
 

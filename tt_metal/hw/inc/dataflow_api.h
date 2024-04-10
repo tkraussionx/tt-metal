@@ -1619,6 +1619,22 @@ void noc_async_write_barrier_with_id() {
     }
     DEBUG_STATUS('N', 'W', 'B', 'D');
 }
+FORCE_INLINE
+void noc_async_write_barrier_with_id_2(uint32_t transcation_id) {
+    DEBUG_STATUS('N', 'W', 'B', 'W');
+    // uint32_t transcation_id = 2;
+    if (use_multi_noc) {
+        while (!ncrisc_noc_nonposted_writes_flushed_with_id(0, transcation_id))
+            ;
+        while (!ncrisc_noc_nonposted_writes_flushed_with_id(1, transcation_id))
+            ;
+    } else {
+        uint32_t noc_id = noc_index_to_dram_bank_map[0];
+        while (!ncrisc_noc_nonposted_writes_flushed_with_id(noc_id, transcation_id))
+            ;
+    }
+    DEBUG_STATUS('N', 'W', 'B', 'D');
+}
 
 /**
  * This blocking call waits for all outstanding enqueued *noc_async_write*

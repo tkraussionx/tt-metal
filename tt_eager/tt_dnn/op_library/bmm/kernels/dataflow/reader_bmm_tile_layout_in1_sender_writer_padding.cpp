@@ -151,12 +151,12 @@ void kernel_main() {
     #endif
     #endif
 
-    if (is_ncrisc){
-        DPRINT << "ncrisc in1 sender  " << (uint)noc_index_to_dram_bank_map[0] << " multi noc " << (uint)use_multi_noc<< ENDL();
-    } else {
-        DPRINT << "brisc in1 sender  " << (uint)noc_index_to_dram_bank_map[0] <<" multi noc " << (uint)use_multi_noc<< ENDL();
-    }
-    DPRINT << "num_blocks " << num_blocks <<ENDL();
+    // if (is_ncrisc){
+    //     DPRINT << "ncrisc in1 sender  " << (uint)noc_index_to_dram_bank_map[0] << " multi noc " << (uint)use_multi_noc<< ENDL();
+    // } else {
+    //     DPRINT << "brisc in1 sender  " << (uint)noc_index_to_dram_bank_map[0] <<" multi noc " << (uint)use_multi_noc<< ENDL();
+    // }
+    // DPRINT << "num_blocks " << num_blocks <<ENDL();
 
     for (uint32_t b = 0; b < batch; ++b) {
         uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;
@@ -219,7 +219,7 @@ void kernel_main() {
 
             // noc_async_write_barrier();
 
-            DPRINT << "a" << ENDL();
+            // DPRINT << "a" << ENDL();
             // DPRINT << NOC_STATUS_READ_REG(0, NIU_MST_REQS_OUTSTANDING_ID(0)) << ENDL();
 
             #ifndef IN1_SHARDED
@@ -313,7 +313,7 @@ void kernel_main() {
                     out_tensor_sb_row_start_tile_id += out_tensor_stride_h;
                 }
 
-                DPRINT << "b" << ENDL();
+                // DPRINT << "b" << ENDL();
 
                 noc_async_write_barrier_with_id();
                 cb_pop_front(cb_id_out0, out_subblock_tile_count);
