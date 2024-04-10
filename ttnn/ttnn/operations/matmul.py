@@ -384,11 +384,14 @@ def matmul(
         >>> print(output.shape)
         [10, 64, 128]
     """
+    import os
+
+    fp32_accum = os.environ.get("TTNN_MM_FP32", "0") == "1"
     if compute_kernel_config is None:
         compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
             math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
             math_approx_mode=True,
-            fp32_dest_acc_en=True,
+            fp32_dest_acc_en=fp32_accum,
             packer_l1_acc=False,
         )
     if use_1d_systolic_array is not None or core_grid is not None:
@@ -488,11 +491,14 @@ def linear(
         >>> print(output.shape)
         [10, 64, 128]
     """
+    import os
+
+    fp32_accum = os.environ.get("TTNN_MM_FP32", "0") == "1"
     if compute_kernel_config is None:
         compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
             math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
             math_approx_mode=True,
-            fp32_dest_acc_en=True,
+            fp32_dest_acc_en=fp32_accum,
             packer_l1_acc=False,
         )
     if use_1d_systolic_array is not None or core_grid is not None:

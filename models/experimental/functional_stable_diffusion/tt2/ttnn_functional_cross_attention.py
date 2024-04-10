@@ -219,10 +219,13 @@ class cross_attention:
             buffer_type=ttnn.experimental.tensor.BufferType.L1,
         )
 
+        import os
+
+        fp32_accum = os.environ.get("XA_MM_FP32", "0") == "1"
         self.compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
             math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
             math_approx_mode=True,
-            fp32_dest_acc_en=True,
+            fp32_dest_acc_en=fp32_accum,
             packer_l1_acc=False,
         )
 
@@ -478,10 +481,13 @@ class cross_attention:
             ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
             ttnn.experimental.tensor.ShardOrientation.COL_MAJOR,
         )
+        import os
+
+        fp32_accum = os.environ.get("XA_MM_FP32", "0") == "1"
         compute_kernel_config = ttnn.experimental.tensor.WormholeComputeKernelConfig(
             math_fidelity=ttnn.experimental.tensor.MathFidelity.LoFi,
             math_approx_mode=True,
-            fp32_dest_acc_en=True,
+            fp32_dest_acc_en=fp32_accum,
             packer_l1_acc=False,
         )
         program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseProgramConfig(

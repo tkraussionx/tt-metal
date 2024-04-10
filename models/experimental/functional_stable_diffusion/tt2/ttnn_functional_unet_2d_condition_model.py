@@ -64,7 +64,9 @@ def compare(tensors, name, permute=True):
         print(f"Maches on {name}: {passed} with message {message}, tensor shape: {tensor.shape}")
 
 
-fp32_accum = True
+import os
+
+fp32_accum = os.environ.get("CONV_FP32", "0") == "1"
 
 conv_compute_kernel_config = None
 if not is_grayskull():
@@ -72,7 +74,7 @@ if not is_grayskull():
         conv_compute_kernel_config = ttnn.WormholeComputeKernelConfig(
             math_fidelity=ttnn.MathFidelity.LoFi,
             math_approx_mode=True,
-            fp32_dest_acc_en=True,
+            fp32_dest_acc_en=False,
             packer_l1_acc=False,
         )
     else:

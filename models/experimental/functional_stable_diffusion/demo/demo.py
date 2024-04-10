@@ -18,6 +18,7 @@ from diffusers import (
     AutoencoderKL,
     UNet2DConditionModel,
     LMSDiscreteScheduler,
+    PNDMScheduler,
 )
 from models.utility_functions import (
     skip_for_grayskull,
@@ -148,8 +149,10 @@ def run_demo_inference(device, reset_seeds, input_path, num_prompts, num_inferen
     vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae")
 
     # 2. Load the tokenizer and text encoder to tokenize and encode the text.
-    tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
-    text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-large-patch14")
+    # tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
+    # text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-large-patch14")
+    tokenizer = CLIPTokenizer.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="tokenizer")
+    text_encoder = CLIPTextModel.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="text_encoder")
 
     # 3. The UNet model for generating the latents.
     unet = UNet2DConditionModel.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="unet")
@@ -321,8 +324,8 @@ def run_demo_inference_diffusiondb(
     disable_persistent_kernel_cache()
 
     # 0. Load a sample prompt from the dataset
-    dataset = load_dataset("poloclub/diffusiondb", "2m_random_1k")
-    data_1k = dataset["train"]
+    # dataset = load_dataset("poloclub/diffusiondb", "2m_random_1k")
+    # data_1k = dataset["train"]
 
     height, width = image_size
 
@@ -332,17 +335,19 @@ def run_demo_inference_diffusiondb(
         input_prompt = [f"A girl doing cartwheels in the park."]
         logger.info(f"input_prompts: {input_prompt}")
 
-        image = np.array(data_1k["image"][i])
-        ref_images = Image.fromarray(image)
-        ref_img_path = f"{experiment_name}_ref.png"
-        ref_images.save(ref_img_path)
+        # image = np.array(data_1k["image"][i])
+        # ref_images = Image.fromarray(image)
+        # ref_img_path = f"{experiment_name}_ref.png"
+        # ref_images.save(ref_img_path)
 
         # 1. Load the autoencoder model which will be used to decode the latents into image space.
         vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae")
 
         # 2. Load the tokenizer and text encoder to tokenize and encode the text.
-        tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
-        text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-large-patch14")
+        # tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
+        # text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-large-patch14")
+        tokenizer = CLIPTokenizer.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="tokenizer")
+        text_encoder = CLIPTextModel.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="text_encoder")
 
         # 3. The UNet model for generating the latents.
         unet = UNet2DConditionModel.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="unet")
@@ -350,12 +355,13 @@ def run_demo_inference_diffusiondb(
         # 4. load the K-LMS scheduler with some fitting parameters.
         USE_DIFFUSER_SCHEDULER = True
         if USE_DIFFUSER_SCHEDULER:
-            ttnn_scheduler = LMSDiscreteScheduler(
-                beta_start=0.00085,
-                beta_end=0.012,
-                beta_schedule="scaled_linear",
-                num_train_timesteps=1000,
-            )
+            # ttnn_scheduler = LMSDiscreteScheduler(
+            #    beta_start=0.00085,
+            #    beta_end=0.012,
+            #    beta_schedule="scaled_linear",
+            #    num_train_timesteps=1000,
+            # )
+            ttnn_scheduler = PNDMScheduler.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="scheduler")
         else:
             ttnn_scheduler = TtLMSDiscreteScheduler(
                 beta_start=0.00085,
@@ -373,39 +379,106 @@ def run_demo_inference_diffusiondb(
         generator = torch.manual_seed(174)  # 10233 Seed generator to create the inital latent noise
         batch_size = len(input_prompt)
 
-        ## First, we get the text_embeddings for the prompt. These embeddings will be used to condition the UNet model.
-        # Tokenizer and Text Encoder
-        text_input = tokenizer(
-            input_prompt,
-            padding="max_length",
-            max_length=tokenizer.model_max_length,
-            truncation=True,
-            return_tensors="pt",
-        )
-        text_embeddings = text_encoder(text_input.input_ids.to(torch_device))[0]
-        max_length = text_input.input_ids.shape[-1]
-        uncond_input = tokenizer([""] * batch_size, padding="max_length", max_length=max_length, return_tensors="pt")
-        uncond_embeddings = text_encoder(uncond_input.input_ids.to(torch_device))[0]
+        USE_DIFFUSER_EMBEDDING = True
+        if USE_DIFFUSER_EMBEDDING:
+            text_inputs = tokenizer(
+                input_prompt,
+                padding="max_length",
+                max_length=tokenizer.model_max_length,
+                truncation=True,
+                return_tensors="pt",
+            )
+            text_input_ids = text_inputs.input_ids
 
-        # For classifier-free guidance, we need to do two forward passes: one with the conditioned input (text_embeddings),
-        # and another with the unconditional embeddings (uncond_embeddings).
-        # In practice, we can concatenate both into a single batch to avoid doing two forward passes.
-        text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
+            untruncated_ids = tokenizer(input_prompt, padding="longest", return_tensors="pt").input_ids
+            if untruncated_ids.shape[-1] >= text_input_ids.shape[-1] and not torch.equal(
+                text_input_ids, untruncated_ids
+            ):
+                removed_text = tokenizer.batch_decode(untruncated_ids[:, tokenizer.model_max_length - 1 : -1])
+
+            if hasattr(text_encoder.config, "use_attention_mask") and text_encoder.config.use_attention_mask:
+                attention_mask = text_inputs.attention_mask.to(device)
+            else:
+                attention_mask = None
+
+            prompt_embeds = text_encoder(
+                text_input_ids.to(torch_device),
+                attention_mask=attention_mask,
+            )
+            prompt_embeds = prompt_embeds[0]
+            prompt_embeds = prompt_embeds.to(dtype=text_encoder.dtype, device=torch_device)
+
+            bs_embed, seq_len, _ = prompt_embeds.shape
+            # duplicate text embeddings for each generation per prompt, using mps friendly method
+            prompt_embeds = prompt_embeds.repeat(1, 1, 1)
+            prompt_embeds = prompt_embeds.view(bs_embed, seq_len, -1)
+
+            uncond_tokens: List[str]
+            uncond_tokens = [""] * batch_size
+            max_length = prompt_embeds.shape[1]
+            uncond_input = tokenizer(
+                uncond_tokens,
+                padding="max_length",
+                max_length=max_length,
+                truncation=True,
+                return_tensors="pt",
+            )
+
+            if hasattr(text_encoder.config, "use_attention_mask") and text_encoder.config.use_attention_mask:
+                attention_mask = uncond_input.attention_mask.to(torch_device)
+            else:
+                attention_mask = None
+
+            negative_prompt_embeds = text_encoder(
+                uncond_input.input_ids.to(torch_device),
+                attention_mask=attention_mask,
+            )
+            negative_prompt_embeds = negative_prompt_embeds[0]
+
+            # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
+            seq_len = negative_prompt_embeds.shape[1]
+
+            negative_prompt_embeds = negative_prompt_embeds.to(dtype=text_encoder.dtype, device=torch_device)
+            negative_prompt_embeds = negative_prompt_embeds.repeat(1, 1, 1)
+            negative_prompt_embeds = negative_prompt_embeds.view(batch_size, seq_len, -1)
+            text_embeddings = torch.cat([negative_prompt_embeds, prompt_embeds])
+        else:
+            ## First, we get the text_embeddings for the prompt. These embeddings will be used to condition the UNet model.
+            # Tokenizer and Text Encoder
+            text_input = tokenizer(
+                input_prompt,
+                padding="max_length",
+                max_length=tokenizer.model_max_length,
+                truncation=True,
+                return_tensors="pt",
+            )
+            text_embeddings = text_encoder(text_input.input_ids.to(torch_device))[0]
+
+            max_length = text_input.input_ids.shape[-1]
+            uncond_input = tokenizer(
+                [""] * batch_size, padding="max_length", max_length=max_length, return_tensors="pt"
+            )
+            uncond_embeddings = text_encoder(uncond_input.input_ids.to(torch_device))[0]
+
+            # For classifier-free guidance, we need to do two forward passes: one with the conditioned input (text_embeddings),
+            # and another with the unconditional embeddings (uncond_embeddings).
+            # In practice, we can concatenate both into a single batch to avoid doing two forward passes.
+            text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
         ttnn_text_embeddings = torch.nn.functional.pad(text_embeddings, (0, 0, 0, 19))
         ttnn_text_embeddings = ttnn.from_torch(
             ttnn_text_embeddings, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT, device=device
         )
 
+        # 4. Prepare timesteps
+        ttnn_scheduler.set_timesteps(num_inference_steps)
+
+        # 5. Prepare latent variables - Initial random noise
         vae_scale_factor = 2 ** (len(vae.config.block_out_channels) - 1)
-        # Initial random noise
         latents = torch.randn(
             (batch_size, unet.config.in_channels, height // vae_scale_factor, width // vae_scale_factor),
             generator=generator,
         )
         latents = latents.to(torch_device)
-
-        ttnn_scheduler.set_timesteps(num_inference_steps)
-
         latents = latents * ttnn_scheduler.init_noise_sigma
         ttnn_latents = torch.tensor(latents)
 
@@ -448,10 +521,13 @@ def run_demo_inference_diffusiondb(
                     noise_pred = ttnn.to_torch(ttnn_output)
                     print(f"Sample: {iter}")
                     # noise_pred = unet(ttnn.to_torch(ttnn_latent_model_input).float(), t, ttnn.to_torch(ttnn_text_embeddings).float()).sample
+                    # noise_pred = unet(ttnn_latent_model_input, t, text_embeddings).sample
 
                 # perform guidance
                 noise_pred = guide(noise_pred, guidance_scale, t)
+
                 ttnn_latents = ttnn_scheduler.step(noise_pred, t, ttnn_latents).prev_sample
+
                 _save_image_and_latents(ttnn_latents, iter, vae, pre_fix=f"{experiment_name}_tt", pre_fix2="")
 
                 iter += 1
@@ -546,27 +622,28 @@ def run_demo_inference_diffusiondb(
         # Image post-processing
         image = (image / 2 + 0.5).clamp(0, 1)
         image = image.detach().cpu().permute(0, 2, 3, 1).numpy()
+
         images = (image * 255).round().astype("uint8")
         pil_images = [Image.fromarray(image) for image in images][0]
         ttnn_output_path = f"{experiment_name}_ttnn.png"
         pil_images.save(ttnn_output_path)
 
-        ref_paths = [ref_img_path, ref_img_path]
-        ttnn_paths = [ttnn_output_path, ttnn_output_path]
+        # ref_paths = [ref_img_path, ref_img_path]
+        # ttnn_paths = [ttnn_output_path, ttnn_output_path]
 
-        ref_images = preprocess_images(ref_paths)
-        ttnn_images = preprocess_images(ttnn_paths)
+        # ref_images = preprocess_images(ref_paths)
+        # ttnn_images = preprocess_images(ttnn_paths)
 
         # Calculate FID scores
-        fid_score_ref_ttnn = calculate_fid_score(ref_images, ttnn_images)
-        logger.info(f"FID Score (Reference vs TTNN): {fid_score_ref_ttnn}")
+        # fid_score_ref_ttnn = calculate_fid_score(ref_images, ttnn_images)
+        # logger.info(f"FID Score (Reference vs TTNN): {fid_score_ref_ttnn}")
 
         # calculate Clip score
-        clip_score = CLIPScore(model_name_or_path="openai/clip-vit-base-patch16")
+        # clip_score = CLIPScore(model_name_or_path="openai/clip-vit-base-patch16")
 
-        clip_score_ttnn = clip_score(ttnn_images[0], input_prompt)
-        clip_score_ttnn = clip_score_ttnn.detach()
-        logger.info(f"CLIP Score (TTNN): {clip_score_ttnn}")
+        # clip_score_ttnn = clip_score(ttnn_images[0], input_prompt)
+        # clip_score_ttnn = clip_score_ttnn.detach()
+        # logger.info(f"CLIP Score (TTNN): {clip_score_ttnn}")
 
 
 @skip_for_grayskull()
