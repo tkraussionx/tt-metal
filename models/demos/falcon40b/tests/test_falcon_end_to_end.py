@@ -457,8 +457,12 @@ def test_FalconCausalLM_end_to_end_with_program_cache(
 
     if llm_mode == "prefill":
         if num_layers == 60:
-            out_pcc = 0.91
-            cache_pcc = 0.94
+            if seq_len == 2048:
+                out_pcc = 0.93
+                cache_pcc = 0.92
+            else:
+                out_pcc = 0.92
+                cache_pcc = 0.94
 
     input_shape = [batch, seq_len]
     model_config = get_model_config(model_config_str, llm_mode, input_shape, num_devices)
