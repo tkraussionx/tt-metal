@@ -1563,8 +1563,7 @@ void noc_async_write_multicast_loopback_src(
 FORCE_INLINE
 void noc_async_read_barrier() {
     DEBUG_STATUS('N', 'R', 'B', 'W');
-    uint32_t noc_id = noc_index_to_dram_bank_map[0];
-    while (!ncrisc_noc_reads_flushed(noc_id))
+    while (!ncrisc_noc_reads_flushed(noc_index))
         ;
     DEBUG_STATUS('N', 'R', 'B', 'D');
 }
@@ -1597,8 +1596,7 @@ void noc_async_read_barrier_with_id() {
 FORCE_INLINE
 void noc_async_write_barrier() {
     DEBUG_STATUS('N', 'W', 'B', 'W');
-    uint32_t noc_id = noc_index_to_dram_bank_map[0];
-    while (!ncrisc_noc_nonposted_writes_flushed(noc_id))
+    while (!ncrisc_noc_nonposted_writes_flushed(noc_index))
         ;
     DEBUG_STATUS('N', 'W', 'B', 'D');
 }
