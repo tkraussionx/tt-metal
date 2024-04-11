@@ -75,23 +75,23 @@ inline void calculate_reciprocal()
         vFloat orig = dst_reg[0];
 
         vFloat res=0;
-        if (val>0){
-            while (val>1){
-                val-=1;
+        v_if (val>0){
+            for (; val > 1; val -= 1) {
             }
-            res = orig-val-1;
-            if (orig-res==1){
+            res = orig-val;
+            v_if (orig-res==1){
                 res+=1;
             }
+            v_endif
         }
-        else if(val<0){
+        v_elseif(val<0){
             val*=-1;
-            while (val>1){
-                val-=1;
+            for (; val > 1; val -= 1) {
             }
-            res = -orig-val+2;
+            res = -orig-val+1;
             res*=-1;
         }
+        v_endif
         dst_reg[0] = res;
         dst_reg++;
     }
