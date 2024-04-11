@@ -1532,17 +1532,18 @@ void HWCommandQueue::enqueue_write_buffer(const Buffer& buffer, const void* src,
 void HWCommandQueue::enqueue_program(
     Program& program, bool blocking) {
     ZoneScopedN("HWCommandQueue_enqueue_program");
+
     if (not program.loaded_onto_device) {
         TT_ASSERT(program.program_transfer_info.kernel_bins.size() == program.kg_buffers.size());
         for (int buffer_idx = 0; buffer_idx < program.program_transfer_info.kernel_bins.size(); buffer_idx++) {
             this->enqueue_write_buffer(*program.kg_buffers[buffer_idx], program.program_transfer_info.kernel_bins[buffer_idx].data.data(), false);
         }
     }
-    tt::log_debug(tt::LogDispatch, "EnqueueProgram for channel {}", this->id);
 
     auto command = EnqueueProgramCommand(this->id, this->device, program, this->manager, this->expected_num_workers_completed);
     this->enqueue_command(command, blocking);
-    this->expected_num_workers_completed += program.program_transfer_info.num_active_cores;
+    if (not this->manager.get_bypass_mode())
+        this->expected_num_workers_completed += program.program_transfer_info.num_active_cores;
 }
 
 void HWCommandQueue::enqueue_record_event(std::shared_ptr<Event> event) {
@@ -1830,7 +1831,7 @@ void HWCommandQueue::read_completion_queue() {
                             TT_ASSERT(event_completed == read_descriptor.event_id, "Event Order Issue: expected to read back completion signal for event {} but got {}!", read_descriptor.event_id, event_completed);
                             this->manager.completion_queue_pop_front(1, this->id);
                             this->manager.set_last_completed_event(this->id, read_descriptor.get_global_event_id());
-                            log_info(LogAlways, "DEBUG completed event {} (global: {})", event_completed, read_descriptor.get_global_event_id());
+                            log_trace(LogAlways, "Completion queue popped event {} (global: {})", event_completed, read_descriptor.get_global_event_id());
                         }
                     },
                     read_descriptor

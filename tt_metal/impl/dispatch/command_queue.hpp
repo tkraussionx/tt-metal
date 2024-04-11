@@ -279,7 +279,7 @@ class EnqueueRecordEventCommand : public Command {
     static std::vector<uint32_t> commands;
 
    public:
-    EnqueueRecordEventCommand(uint32_t command_queue_id, Device* device, SystemMemoryManager& manager, uint32_t event_id, uint32_t expected_num_workers_completed);
+    EnqueueRecordEventCommand(uint32_t command_queue_id, Device* device, SystemMemoryManager& manager, uint32_t event_id, uint32_t expected_num_workers_completed, bool clear_wait_count = false);
 
     const void assemble_device_commands(uint32_t);
 

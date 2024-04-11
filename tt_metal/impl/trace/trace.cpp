@@ -69,6 +69,8 @@ uint32_t Trace::instantiate(CommandQueue& cq) {
     TT_FATAL(this->has_instance(tid) == false, "Trace ID " + std::to_string(tid) + " already exists");
     auto desc = std::make_shared<detail::TraceDescriptor>();
 
+    // this->expected_num_workers_completed = 0;
+
     // Record the captured Host API as commands via trace_commands,
     // extracted command data is returned as a vector of uint32_t
     vector<uint32_t> data = cq.trace_commands(desc, [&]() {

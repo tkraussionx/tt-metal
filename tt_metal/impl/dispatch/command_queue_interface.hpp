@@ -371,6 +371,7 @@ class SystemMemoryManager {
     }
 
     void wrap_issue_queue_wr_ptr(const uint8_t cq_id) {
+        if (this->bypass_enable) return;
         SystemMemoryCQInterface& cq_interface = this->cq_interfaces[cq_id];
         cq_interface.issue_fifo_wr_ptr = (CQ_START + cq_interface.offset) >> 4;
         cq_interface.issue_fifo_wr_toggle = not cq_interface.issue_fifo_wr_toggle;
@@ -398,8 +399,7 @@ class SystemMemoryManager {
     }
 
     void fetch_queue_reserve_back(const uint8_t cq_id) {
-        if (this->bypass_enable)
-            return;
+        if (this->bypass_enable) return;
 
         // Wait for space in the FetchQ
         uint32_t fence;
