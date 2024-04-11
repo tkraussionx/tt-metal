@@ -70,7 +70,7 @@ def run_test_FalconCausalLM_end_to_end(
     seq_len,
     kv_cache_len,
     num_layers,
-    pcc,
+    expected_pcc,
     model_config,
     model_config_str,
     tt_cache_path,
@@ -278,7 +278,7 @@ def run_test_FalconCausalLM_end_to_end(
         tt_out = torch.concat(tt_out)
 
     # check outputs ----------------------------------------------------------------------
-    does_pass, output_pcc = comp_pcc(pytorch_out, tt_out, pcc)
+    does_pass, output_pcc, device_pcc = comp_pcc(pytorch_out, tt_out, expected_pcc)
     logger.info(f"Output: {output_pcc}")
 
     reference_logits = pytorch_out.view(global_batch * seq_len, -1).float().detach().numpy()
@@ -289,6 +289,8 @@ def run_test_FalconCausalLM_end_to_end(
     logger.info(f"Top-1 Accuracy: {top1_acc}")
     logger.info(f"Top-5 Accuracy: {top5_acc}")
 
+    device_pcc_k = 1.0
+    device_pcc_v = 1.0
     for i in range(num_layers):
         if llm_mode == "prefill":
             pytorch_layer_pres = (pytorch_layer_present[i][0].squeeze(1), pytorch_layer_present[i][1].squeeze(1))
@@ -302,15 +304,20 @@ def run_test_FalconCausalLM_end_to_end(
                 num_devices, tt_layer_present[i], kv_cache_len, end_idx_only=True
             )
 
-        does_pass2, output_pcc = comp_pcc(pytorch_layer_pres[0], tt_layer_pres[0], pcc)
+        does_pass2, output_pcc, device_pcc = comp_pcc(pytorch_layer_pres[0], tt_layer_pres[0], expected_pcc)
         logger.info(f"K Cache Layer {i}: {output_pcc}")
+        device_pcc_k = min(device_pcc_k, device_pcc)
 
         does_pass = does_pass and does_pass2
 
-        does_pass2, output_pcc = comp_pcc(pytorch_layer_pres[1], tt_layer_pres[1], pcc)
+        does_pass2, output_pcc, device_pcc = comp_pcc(pytorch_layer_pres[1], tt_layer_pres[1], expected_pcc)
         logger.info(f"V Cache Layer {i}: {output_pcc}")
+        device_pcc_v = min(device_pcc_v, device_pcc)
 
         does_pass = does_pass and does_pass2
+
+    logger.info(f"Device PCC K: {device_pcc_k}")
+    logger.info(f"Device PCC V: {device_pcc_v}")
 
     profiler.print()
 
@@ -339,15 +346,10 @@ def run_test_FalconCausalLM_end_to_end(
     else:
         logger.warning("Falcon PCC Check Failed!")
         if is_wormhole_b0():  # only assert for pcc on wormhole until grayskull pcc is fixed
-            assert does_pass, f"PCC value is lower than {pcc}"
+            assert does_pass, f"PCC value is lower than {expected_pcc}"
 
 
 @pytest.mark.models_performance_bare_metal
-@pytest.mark.parametrize(
-    "num_layers, pcc",
-    ((32, 0.88),),
-    ids=["layers_32"],
-)
 @pytest.mark.parametrize(
     "model_version",
     ("tiiuae/falcon-7b-instruct",),
@@ -355,13 +357,13 @@ def run_test_FalconCausalLM_end_to_end(
 )
 class TestParametrized:
     @pytest.mark.parametrize(
-        "llm_mode, batch, seq_len, kv_cache_len, model_config_str, expected_inference_time",
+        "llm_mode, num_layers, batch, seq_len, kv_cache_len, model_config_str, expected_pcc, expected_inference_time",
         (
-            ("prefill", 1, 128, 0, "BFLOAT16-L1", 0.30),
-            ("prefill", 1, 256, 0, "BFLOAT16-L1", 0.44),
-            ("decode", 32, 1, 128, "BFLOAT16-L1", 0.27),
-            ("decode", 32, 1, 1024, "BFLOAT16-L1", 0.35),
-            ("decode", 32, 1, 2047, "BFLOAT16-L1", 0.48),
+            ("prefill", 32, 1, 128, 0, "BFLOAT16-L1", 0.99, 0.30),
+            ("prefill", 32, 1, 256, 0, "BFLOAT16-L1", 0.99, 0.44),
+            ("decode", 32, 32, 1, 128, "BFLOAT16-L1", 0.99, 0.27),
+            ("decode", 32, 32, 1, 1024, "BFLOAT16-L1", 0.99, 0.35),
+            ("decode", 32, 32, 1, 2047, "BFLOAT16-L1", 0.99, 0.48),
         ),
         ids=[
             "prefill_seq128",
@@ -381,7 +383,7 @@ class TestParametrized:
         kv_cache_len,
         expected_inference_time,
         num_layers,
-        pcc,
+        expected_pcc,
         request,
         model_config_str,
         model_location_generator,
@@ -407,7 +409,7 @@ class TestParametrized:
             seq_len,
             kv_cache_len,
             num_layers,
-            pcc,
+            expected_pcc,
             model_config,
             model_config_str,
             tt_cache_path,
@@ -417,20 +419,20 @@ class TestParametrized:
 
     @pytest.mark.parametrize("num_devices", (1, 2, 4))
     @pytest.mark.parametrize(
-        "llm_mode, batch, seq_len, kv_cache_len, model_config_str, expected_inference_time",
+        "llm_mode, num_layers, batch, seq_len, kv_cache_len, model_config_str, expected_pcc, expected_inference_time",
         (
-            ("prefill", 1, 128, 0, "BFLOAT16-DRAM", 0.4),
-            ("prefill", 1, 128, 0, "BFLOAT16-L1", 0.4),
-            ("prefill", 1, 256, 0, "BFLOAT16-DRAM", 0.6),
-            ("prefill", 1, 256, 0, "BFLOAT16-L1", 0.6),
-            ("decode", 32, 1, 128, "BFLOAT16-DRAM", 0.4),
-            ("decode", 32, 1, 128, "BFLOAT16-L1", 0.4),
-            ("decode", 32, 1, 128, "BFLOAT16-L1_SHARDED", 0.4),
-            ("decode", 32, 1, 1024, "BFLOAT16-DRAM", 0.5),
-            ("decode", 32, 1, 1024, "BFLOAT16-L1", 0.5),
-            ("decode", 32, 1, 1024, "BFLOAT16-L1_SHARDED", 0.5),
-            ("decode", 32, 1, 2047, "BFLOAT16-DRAM", 0.8),
-            ("decode", 32, 1, 2047, "BFLOAT16-L1", 0.8),
+            ("prefill", 32, 1, 128, 0, "BFLOAT16-DRAM", 0.99, 0.4),
+            ("prefill", 32, 1, 128, 0, "BFLOAT16-L1", 0.99, 0.4),
+            ("prefill", 32, 1, 256, 0, "BFLOAT16-DRAM", 0.99, 0.6),
+            ("prefill", 32, 1, 256, 0, "BFLOAT16-L1", 0.99, 0.6),
+            ("decode", 32, 32, 1, 128, "BFLOAT16-DRAM", 0.99, 0.4),
+            ("decode", 32, 32, 1, 128, "BFLOAT16-L1", 0.99, 0.4),
+            ("decode", 32, 32, 1, 128, "BFLOAT16-L1_SHARDED", 0.99, 0.4),
+            ("decode", 32, 32, 1, 1024, "BFLOAT16-DRAM", 0.99, 0.5),
+            ("decode", 32, 32, 1, 1024, "BFLOAT16-L1", 0.99, 0.5),
+            ("decode", 32, 32, 1, 1024, "BFLOAT16-L1_SHARDED", 0.99, 0.5),
+            ("decode", 32, 32, 1, 2047, "BFLOAT16-DRAM", 0.99, 0.8),
+            ("decode", 32, 32, 1, 2047, "BFLOAT16-L1", 0.99, 0.8),
         ),
         ids=[
             "prefill_seq128_bf16_dram",
@@ -458,7 +460,7 @@ class TestParametrized:
         kv_cache_len,
         expected_inference_time,
         num_layers,
-        pcc,
+        expected_pcc,
         request,
         model_config_str,
         model_location_generator,
@@ -486,7 +488,7 @@ class TestParametrized:
             seq_len,
             kv_cache_len,
             num_layers,
-            pcc,
+            expected_pcc,
             model_config,
             model_config_str,
             tt_cache_path,
@@ -511,7 +513,7 @@ class TestParametrized:
     ],  # "prefill_seq256","decode_batch32_1024", "decode_batch32_2047"],
 )
 @pytest.mark.parametrize(
-    "num_layers, pcc",
+    "num_layers, expected_pcc",
     ((32, 0.89),),
     ids=["layers_32"],
 )
@@ -530,7 +532,7 @@ def test_perf_virtual_machine(
     kv_cache_len,
     expected_inference_time,
     num_layers,
-    pcc,
+    expected_pcc,
     request,
     model_config_str,
     model_location_generator,
@@ -552,7 +554,7 @@ def test_perf_virtual_machine(
         seq_len,
         kv_cache_len,
         num_layers,
-        pcc,
+        expected_pcc,
         model_config,
         tt_cache_path,
         model_location_generator,

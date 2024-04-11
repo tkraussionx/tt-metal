@@ -141,7 +141,7 @@ def comp_pcc(golden, calculated, pcc=0.99):
     passing = cal_pcc >= pcc
     if not passing:
         output_str += ", PCC check failed"
-    return passing, output_str
+    return passing, output_str, cal_pcc
 
 
 def comp_pcc_list(golden, calculated, pcc=0.99):
