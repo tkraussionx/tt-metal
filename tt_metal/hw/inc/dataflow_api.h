@@ -796,6 +796,139 @@ struct InterleavedAddrGenFast {
         uint32_t bank_id;
         uint32_t addr;
         uint32_t noc_xy;
+
+        if constexpr (DRAM) {
+#ifdef IS_NOT_POW2_NUM_DRAM_BANKS
+            bank_id = umodsi3_const_divisor<NUM_DRAM_BANKS>(id);
+            addr = MUL_WITH_TILE_SIZE((uint)this->data_format, udivsi3_const_divisor<NUM_DRAM_BANKS>(id)) +
+                   this->bank_base_address + offset;
+#else
+            bank_id = id & (NUM_DRAM_BANKS - 1);
+            addr = MUL_WITH_TILE_SIZE((uint)this->data_format, id >> LOG_BASE_2_OF_NUM_DRAM_BANKS) +
+                   this->bank_base_address + offset;
+#endif
+            addr += bank_to_dram_offset[bank_id];
+            noc_xy = dram_bank_to_noc_xy[noc_index][bank_id];
+        } else {
+#ifdef IS_NOT_POW2_NUM_L1_BANKS
+            bank_id = umodsi3_const_divisor<NUM_L1_BANKS>(id);
+            addr = MUL_WITH_TILE_SIZE((uint)this->data_format, udivsi3_const_divisor<NUM_L1_BANKS>(id)) +
+                   this->bank_base_address + offset;
+#else
+            bank_id = id & (NUM_L1_BANKS - 1);
+            addr = MUL_WITH_TILE_SIZE((uint)this->data_format, id >> LOG_BASE_2_OF_NUM_L1_BANKS) +
+                   this->bank_base_address + offset;
+#endif
+            addr += bank_to_l1_offset[bank_id];
+            noc_xy = l1_bank_to_noc_xy[noc_index][bank_id];
+        }
+
+        uint64_t noc_addr = get_noc_addr_helper(noc_xy, addr);
+        return noc_addr;
+    }
+
+    FORCE_INLINE
+    void noc_async_read_tile(const uint32_t id, uint32_t dest_addr, const uint32_t offset = 0) const {
+        uint32_t bank_id;
+        uint32_t src_addr;
+        uint32_t src_noc_xy;
+
+        if constexpr (DRAM) {
+#ifdef IS_NOT_POW2_NUM_DRAM_BANKS
+            bank_id = umodsi3_const_divisor<NUM_DRAM_BANKS>(id);
+            src_addr = MUL_WITH_TILE_SIZE((uint)this->data_format, udivsi3_const_divisor<NUM_DRAM_BANKS>(id)) +
+                       this->bank_base_address + offset;
+#else
+            bank_id = id & (NUM_DRAM_BANKS - 1);
+            src_addr = MUL_WITH_TILE_SIZE((uint)this->data_format, id >> LOG_BASE_2_OF_NUM_DRAM_BANKS) +
+                       this->bank_base_address + offset;
+#endif
+            src_addr += bank_to_dram_offset[bank_id];
+            src_noc_xy = dram_bank_to_noc_xy[noc_index][bank_id];
+        } else {
+#ifdef IS_NOT_POW2_NUM_L1_BANKS
+            bank_id = umodsi3_const_divisor<NUM_L1_BANKS>(id);
+            src_addr = MUL_WITH_TILE_SIZE((uint)this->data_format, udivsi3_const_divisor<NUM_L1_BANKS>(id)) +
+                       this->bank_base_address + offset;
+#else
+            uint32_t bank_id = id & (NUM_L1_BANKS - 1);
+            src_addr = MUL_WITH_TILE_SIZE((uint)this->data_format, id >> LOG_BASE_2_OF_NUM_L1_BANKS) +
+                       this->bank_base_address + offset;
+#endif
+            src_addr += bank_to_l1_offset[bank_id];
+            src_noc_xy = l1_bank_to_noc_xy[noc_index][bank_id];
+        }
+
+        DEBUG_STATUS('N', 'R', 'T', 'W');
+        DEBUG_SANITIZE_NOC_READ_TRANSACTION(get_noc_addr_helper(src_noc_xy, src_addr), dest_addr, this->page_size);
+        while (!noc_cmd_buf_ready(noc_index, NCRISC_RD_CMD_BUF));
+        DEBUG_STATUS('N', 'R', 'T', 'D');
+
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);      // (uint32_t)src_addr
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_TARG_ADDR_MID, src_noc_xy);   // src_addr >> 32
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_AT_LEN_BE, this->page_size);  // len_bytes
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_RD_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+        noc_reads_num_issued[noc_index] += 1;
+    }
+
+    FORCE_INLINE
+    void noc_async_write_tile(const uint32_t id, uint32_t src_addr) const {
+        uint32_t bank_id;
+        uint32_t dest_addr;
+        uint32_t dest_noc_xy;
+
+        if constexpr (DRAM) {
+#ifdef IS_NOT_POW2_NUM_DRAM_BANKS
+            bank_id = umodsi3_const_divisor<NUM_DRAM_BANKS>(id);
+            dest_addr = MUL_WITH_TILE_SIZE((uint)this->data_format, udivsi3_const_divisor<NUM_DRAM_BANKS>(id)) +
+                        this->bank_base_address;
+#else
+            bank_id = id & (NUM_DRAM_BANKS - 1);
+            dest_addr = MUL_WITH_TILE_SIZE((uint)this->data_format, id >> LOG_BASE_2_OF_NUM_DRAM_BANKS) +
+                        this->bank_base_address;
+#endif
+            dest_addr += bank_to_dram_offset[bank_id];
+            dest_noc_xy = dram_bank_to_noc_xy[noc_index][bank_id];
+        } else {
+#ifdef IS_NOT_POW2_NUM_L1_BANKS
+            bank_id = umodsi3_const_divisor<NUM_L1_BANKS>(id);
+            dest_addr = MUL_WITH_TILE_SIZE((uint)this->data_format, udivsi3_const_divisor<NUM_L1_BANKS>(id)) +
+                        this->bank_base_address;
+#else
+            bank_id = id & (NUM_L1_BANKS - 1);
+            dest_addr =
+                MUL_WITH_TILE_SIZE((uint)this->data_format, id >> LOG_BASE_2_OF_NUM_L1_BANKS) + this->bank_base_address;
+#endif
+            dest_addr += bank_to_l1_offset[bank_id];
+            dest_noc_xy = l1_bank_to_noc_xy[noc_index][bank_id];
+        }
+
+        DEBUG_STATUS('N', 'W', 'T', 'W');
+        DEBUG_SANITIZE_NOC_WRITE_TRANSACTION(get_noc_addr_helper(dest_noc_xy, dest_addr), src_addr, this->page_size);
+        while (!noc_cmd_buf_ready(noc_index, NCRISC_WR_REG_CMD_BUF));
+        DEBUG_STATUS('N', 'W', 'T', 'D');
+
+        uint32_t noc_cmd_field = NOC_CMD_CPY | NOC_CMD_WR | NOC_CMD_VC_STATIC |
+                                 NOC_CMD_STATIC_VC(NOC_UNICAST_WRITE_VC) | 0x0 |  // (linked ? NOC_CMD_VC_LINKED : 0x0)
+                                 0x0 |  // (mcast ? (NOC_CMD_PATH_RESERVE | NOC_CMD_BRCST_PACKET) : 0x0)
+                                 NOC_CMD_RESP_MARKED;
+
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_CTRL, noc_cmd_field);
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_TARG_ADDR_LO, src_addr);
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_RET_ADDR_LO, dest_addr);  // (uint32_t)dest_addr
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_RET_ADDR_MID, dest_noc_xy);   // dest_addr >> 32
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_AT_LEN_BE, this->page_size);  // len_bytes
+        NOC_CMD_BUF_WRITE_REG(noc_index, NCRISC_WR_REG_CMD_BUF, NOC_CMD_CTRL, NOC_CTRL_SEND_REQ);
+        noc_nonposted_writes_num_issued[noc_index] += 1;
+        noc_nonposted_writes_acked[noc_index] += 1;  // num_dests
+    }
+
+    FORCE_INLINE
+    std::uint64_t get_noc_addr_with_trid(const uint32_t id, const uint32_t offset = 0) const {
+        uint32_t bank_id;
+        uint32_t addr;
+        uint32_t noc_xy;
         uint32_t noc_id;
 
         if constexpr (DRAM) {
@@ -831,7 +964,7 @@ struct InterleavedAddrGenFast {
     }
 
     FORCE_INLINE
-    void noc_async_read_tile(const uint32_t id, uint32_t dest_addr, const uint32_t offset = 0) const {
+    void noc_async_read_tile_with_trid(const uint32_t id, uint32_t dest_addr, const uint32_t offset = 0) const {
         uint32_t bank_id;
         uint32_t src_addr;
         uint32_t src_noc_xy;
@@ -881,7 +1014,7 @@ struct InterleavedAddrGenFast {
     }
 
     FORCE_INLINE
-    void noc_async_write_tile(const uint32_t id, uint32_t src_addr) const {
+    void noc_async_write_tile_with_trid(const uint32_t id, uint32_t src_addr) const {
         uint32_t bank_id;
         uint32_t dest_addr;
         uint32_t dest_noc_xy;
@@ -1144,6 +1277,16 @@ FORCE_INLINE void noc_async_read_tile(
     s.noc_async_read_tile(id, dst_local_l1_addr, offset);
 }
 
+template <bool DRAM>
+FORCE_INLINE void noc_async_read_tile_with_trid(
+    const uint32_t id, const InterleavedAddrGenFast<DRAM>& s, std::uint32_t dst_local_l1_addr, uint32_t offset = 0) {
+    /*
+        Read requests - use static VC
+        Read responses - assigned VCs dynamically
+    */
+    s.noc_async_read_tile_with_trid(id, dst_local_l1_addr, offset);
+}
+
 /**
  * Initiates an asynchronous write from a source address in L1 memory on the
  * Tensix core executing this function call. The destination is specified using
@@ -1183,6 +1326,12 @@ template <bool DRAM>
 FORCE_INLINE void noc_async_write_tile(
     const uint32_t id, const InterleavedAddrGenFast<DRAM>& s, std::uint32_t src_local_l1_addr) {
     s.noc_async_write_tile(id, src_local_l1_addr);
+}
+
+template <bool DRAM>
+FORCE_INLINE void noc_async_write_tile_with_trid(
+    const uint32_t id, const InterleavedAddrGenFast<DRAM>& s, std::uint32_t src_local_l1_addr) {
+    s.noc_async_write_tile_with_trid(id, src_local_l1_addr);
 }
 
 FORCE_INLINE
@@ -1358,7 +1507,7 @@ void noc_async_read_barrier() {
 }
 
 FORCE_INLINE
-void noc_async_read_tile_barrier() {
+void noc_async_read_barrier_with_trid() {
     DEBUG_STATUS('N', 'R', 'B', 'W');
     if (use_multi_noc) {
         while (!ncrisc_noc_read_tiles_flushed(0, read_transaction_id))
@@ -1389,7 +1538,7 @@ void noc_async_write_barrier() {
 }
 
 FORCE_INLINE
-void noc_async_write_tile_barrier() {
+void noc_async_write_barrier_with_trid() {
     DEBUG_STATUS('N', 'W', 'B', 'W');
     if (use_multi_noc) {
         while (!ncrisc_noc_nonposted_write_tiles_flushed(0, write_transaction_id))

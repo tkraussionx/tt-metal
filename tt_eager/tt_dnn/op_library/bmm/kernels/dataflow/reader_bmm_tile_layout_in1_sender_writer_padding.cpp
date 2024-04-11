@@ -6,6 +6,8 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
 
+#include "debug/dprint.h"
+
 void kernel_main() {
     // READER
     // in1 tensor args
@@ -165,7 +167,7 @@ void kernel_main() {
                 uint32_t in1_tensor_tile_id = in1_tensor_row_start_tile_id;
                 for(uint32_t w = 0; w < in1_block_w; ++w) {
                     if (w < last_block_w) {
-                        noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1);
+                        noc_async_read_tile_with_trid(in1_tensor_tile_id, s1, l1_write_addr_in1);
                     }
                     l1_write_addr_in1 += in1_single_tile_size_bytes;
                     in1_tensor_tile_id += in1_tensor_stride_w;
@@ -175,7 +177,7 @@ void kernel_main() {
             in1_tensor_current_block_start_tile_id += in1_tensor_next_block_stride;
 
             // Barrier! make sure the reads are done
-            noc_async_read_tile_barrier();
+            noc_async_read_barrier_with_trid();
             #endif
 
             #ifndef SKIP_MCAST
@@ -279,7 +281,7 @@ void kernel_main() {
                 for(uint32_t h = 0; h < out_subblock_h_; ++h) {
                     uint32_t out_tensor_tile_id = out_tensor_sb_row_start_tile_id;
                     for(uint32_t w = 0; w < out_subblock_w_; ++w) {
-                        noc_async_write_tile(out_tensor_tile_id, s, l1_read_addr);
+                        noc_async_write_tile_with_trid(out_tensor_tile_id, s, l1_read_addr);
 
                         l1_read_addr+=output_single_tile_size_bytes;
 
@@ -290,7 +292,7 @@ void kernel_main() {
                     out_tensor_sb_row_start_tile_id += out_tensor_stride_h;
                 }
 
-                noc_async_write_tile_barrier();
+                noc_async_write_barrier_with_trid();
                 cb_pop_front(cb_id_out0, out_subblock_tile_count);
                 out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
             }

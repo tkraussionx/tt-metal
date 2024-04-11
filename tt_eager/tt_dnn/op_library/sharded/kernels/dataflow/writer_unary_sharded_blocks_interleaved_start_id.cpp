@@ -35,10 +35,10 @@ void kernel_main() {
     for (uint32_t h = 0; h < unpadded_block_height_tiles; h++) {
         uint32_t tile_id = row_start_tile_id;
         for (uint32_t w = 0; w < unpadded_block_width_tiles; w++) {
-            noc_async_write_tile(tile_id, s, l1_read_addr);
+            noc_async_write_tile_with_trid(tile_id, s, l1_read_addr);
             tile_id++;
             l1_read_addr += tile_bytes;
-            noc_async_write_tile_barrier();
+            noc_async_write_barrier_with_trid();
         }
         l1_read_addr += padded_width_diff;
         row_start_tile_id += output_width_tiles;

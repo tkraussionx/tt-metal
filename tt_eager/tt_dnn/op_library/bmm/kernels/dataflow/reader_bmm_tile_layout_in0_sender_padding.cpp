@@ -6,6 +6,8 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
 
+#include "debug/dprint.h"
+
 void kernel_main() {
     // in0 tensor args
     const uint32_t in0_tensor_addr                    = get_arg_val<uint32_t>(0);
@@ -104,7 +106,7 @@ void kernel_main() {
                 uint32_t in0_tensor_tile_id = in0_tensor_row_start_tile_id;
                 for(uint32_t w = 0; w < in0_block_w; ++w) {
                     if (h < last_block_h) {
-                        noc_async_read_tile(in0_tensor_tile_id, s0, l1_write_addr_in0);
+                        noc_async_read_tile_with_trid(in0_tensor_tile_id, s0, l1_write_addr_in0);
                     }
                     l1_write_addr_in0 += in0_single_tile_size_bytes;
                     in0_tensor_tile_id += in0_tensor_stride_w;
@@ -114,7 +116,7 @@ void kernel_main() {
             in0_tensor_current_block_start_tile_id += in0_tensor_next_block_stride;
 
             // Barrier! make sure the reads are done
-            noc_async_read_tile_barrier();
+            noc_async_read_barrier_with_trid();
             #endif
 
             #ifndef SKIP_MCAST

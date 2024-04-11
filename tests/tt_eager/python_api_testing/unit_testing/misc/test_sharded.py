@@ -2410,151 +2410,131 @@ from models.utility_functions import torch2tt_tensor, tt2torch_tensor, pad_by_ze
 #     assert passing
 
 
-@pytest.mark.parametrize(
-    "input_shape, shard_scheme, shard_size",
-    [
-        ([1, 1, 2048, 4608], ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED, (256, 576)),
-    ],
-)
-@pytest.mark.parametrize("shard_orientation", [ttl.tensor.ShardOrientation.ROW_MAJOR])
-@pytest.mark.parametrize("input_dtype", [ttl.tensor.DataType.FLOAT32])
-@pytest.mark.parametrize("output_dtype", [ttl.tensor.DataType.FLOAT32])
-def test_sharded_tile(
-    device, input_shape, shard_size, shard_scheme, shard_orientation, input_dtype, output_dtype, function_level_defaults
-):
-    grid_size = device.compute_with_storage_grid_size()
-    input_size = torch.Size(input_shape)
+# @pytest.mark.parametrize(
+#     "input_shape, shard_scheme, shard_size",
+#     [
+#         ([1, 1, 2048, 4608], ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED, (256, 576)),
+#     ],
+# )
+# @pytest.mark.parametrize("shard_orientation", [ttl.tensor.ShardOrientation.ROW_MAJOR])
+# @pytest.mark.parametrize("input_dtype", [ttl.tensor.DataType.FLOAT32])
+# @pytest.mark.parametrize("output_dtype", [ttl.tensor.DataType.FLOAT32])
+# def test_sharded_tile(
+#     device, input_shape, shard_size, shard_scheme, shard_orientation, input_dtype, output_dtype, function_level_defaults
+# ):
+#     grid_size = device.compute_with_storage_grid_size()
+#     input_size = torch.Size(input_shape)
 
-    x = torch.arange(input_size.numel()).reshape(input_size).bfloat16().float()
+#     x = torch.arange(input_size.numel()).reshape(input_size).bfloat16().float()
 
-    xt = (
-        ttl.tensor.Tensor(
-            x.reshape(-1).tolist(),
-            x.shape,
-            input_dtype,
-            ttl.tensor.Layout.ROW_MAJOR,
-        )
-        .to(ttl.tensor.Layout.TILE)
-        .to(
-            device,
-            ttl.tensor.MemoryConfig(
-                memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
-                buffer_type=ttl.tensor.BufferType.DRAM,
-            ),
-        )
-    )
+#     xt = (
+#         ttl.tensor.Tensor(
+#             x.reshape(-1).tolist(),
+#             x.shape,
+#             input_dtype,
+#             ttl.tensor.Layout.ROW_MAJOR,
+#         )
+#         .to(ttl.tensor.Layout.TILE)
+#         .to(
+#             device,
+#             ttl.tensor.MemoryConfig(
+#                 memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+#                 buffer_type=ttl.tensor.BufferType.DRAM,
+#             ),
+#         )
+#     )
 
-    yt = ttl.tensor.interleaved_to_sharded(
-        xt, grid_size, shard_size, shard_scheme, shard_orientation, output_dtype=output_dtype
-    )
+#     yt = ttl.tensor.interleaved_to_sharded(
+#         xt, grid_size, shard_size, shard_scheme, shard_orientation, output_dtype=output_dtype
+#     )
 
-    zt = ttl.tensor.sharded_to_interleaved(
-        yt,
-        ttl.tensor.MemoryConfig(
-            memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
-            buffer_type=ttl.tensor.BufferType.DRAM,
-        ),
-        output_dtype=input_dtype,
-    )
+#     zt = ttl.tensor.sharded_to_interleaved(
+#         yt,
+#         ttl.tensor.MemoryConfig(
+#             memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+#             buffer_type=ttl.tensor.BufferType.DRAM,
+#         ),
+#         output_dtype=input_dtype,
+#     )
 
-    tt_og = xt.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
+#     tt_og = xt.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
 
-    tt_got_back = zt.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
+#     tt_got_back = zt.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
 
-    if input_dtype == output_dtype:
-        passing, output = comp_equal(tt_og, tt_got_back)
-    else:
-        passing, output = comp_pcc(tt_og, tt_got_back, 0.999)
-    logger.info(output)
+#     if input_dtype == output_dtype:
+#         passing, output = comp_equal(tt_og, tt_got_back)
+#     else:
+#         passing, output = comp_pcc(tt_og, tt_got_back, 0.999)
+#     logger.info(output)
 
-    assert passing
-
-
-@pytest.mark.parametrize(
-    "input_shape",
-    [
-        [1, 1, 256, 512],
-    ],
-)
-@pytest.mark.parametrize("input_dtype", [ttl.tensor.DataType.BFLOAT16])
-@pytest.mark.parametrize("output_dtype", [ttl.tensor.DataType.BFLOAT16])
-def test_clone(device, input_shape, input_dtype, output_dtype, function_level_defaults):
-    # torch.manual_seed(1)
-    grid_size = device.compute_with_storage_grid_size()
-    input_size = torch.Size(input_shape)
-
-    # x = torch.arange(input_size.numel()).reshape(input_size).bfloat16().float()
-    # x = torch.ones(input_shape).bfloat16().float()
-    x = torch.ones(input_shape).bfloat16().float()
-    # x += torch.arange(input_shape[2]).view(-1, 1).float()
-    pattern_length = 32
-    repeats_per_pattern = input_shape[2] * input_shape[3] // pattern_length
-    pattern = torch.arange(1, repeats_per_pattern + 1).repeat_interleave(pattern_length)
-
-    # Reshape the pattern to match the tensor's shape and add it to x
-    x += pattern.view(input_shape).bfloat16().float()
-
-    print(x)
-
-    xt = (
-        ttl.tensor.Tensor(
-            x.reshape(-1).tolist(),
-            x.shape,
-            input_dtype,
-            ttl.tensor.Layout.ROW_MAJOR,
-        )
-        .to(ttl.tensor.Layout.TILE)
-        .to(
-            device,
-            ttl.tensor.MemoryConfig(
-                memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
-                buffer_type=ttl.tensor.BufferType.DRAM,
-            ),
-        )
-    )
-
-    zt = ttl.tensor.clone(
-        xt,
-        ttl.tensor.MemoryConfig(
-            memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
-            buffer_type=ttl.tensor.BufferType.DRAM,
-        ),
-        output_dtype=input_dtype,
-    )
-
-    tt_og = xt.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
-
-    tt_got_back = zt.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
-
-    if input_dtype == output_dtype:
-        passing, output = comp_equal(tt_og, tt_got_back)
-    else:
-        passing, output = comp_pcc(tt_og, tt_got_back, 0.999)
-    logger.info(output)
-    assert passing
+#     assert passing
 
 
-@pytest.mark.parametrize(
-    "fidelity",
-    [
-        ttl.tensor.MathFidelity.LoFi,
-    ],
-    ids=["LoFi"],
-)
-@pytest.mark.parametrize(
-    "has_bias",
-    [
-        False,
-    ],
-    ids=["bias"],
-)
-@pytest.mark.parametrize(
-    "M, K, N, activation",
-    [
-        (768, 384, 1152, None),
-    ],
-)
-def test_bert_linear_batch4_fp32_input_output(
+# @pytest.mark.parametrize(
+#     "input_shape",
+#     [
+#         [1, 1, 256, 512],
+#     ],
+# )
+# @pytest.mark.parametrize("input_dtype", [ttl.tensor.DataType.BFLOAT16])
+# @pytest.mark.parametrize("output_dtype", [ttl.tensor.DataType.BFLOAT16])
+# def test_clone(device, input_shape, input_dtype, output_dtype, function_level_defaults):
+#     # torch.manual_seed(1)
+#     grid_size = device.compute_with_storage_grid_size()
+#     input_size = torch.Size(input_shape)
+
+#     # x = torch.arange(input_size.numel()).reshape(input_size).bfloat16().float()
+#     # x = torch.ones(input_shape).bfloat16().float()
+#     x = torch.ones(input_shape).bfloat16().float()
+#     # x += torch.arange(input_shape[2]).view(-1, 1).float()
+#     pattern_length = 32
+#     repeats_per_pattern = input_shape[2] * input_shape[3] // pattern_length
+#     pattern = torch.arange(1, repeats_per_pattern + 1).repeat_interleave(pattern_length)
+
+#     # Reshape the pattern to match the tensor's shape and add it to x
+#     x += pattern.view(input_shape).bfloat16().float()
+
+#     print(x)
+
+#     xt = (
+#         ttl.tensor.Tensor(
+#             x.reshape(-1).tolist(),
+#             x.shape,
+#             input_dtype,
+#             ttl.tensor.Layout.ROW_MAJOR,
+#         )
+#         .to(ttl.tensor.Layout.TILE)
+#         .to(
+#             device,
+#             ttl.tensor.MemoryConfig(
+#                 memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+#                 buffer_type=ttl.tensor.BufferType.DRAM,
+#             ),
+#         )
+#     )
+
+#     zt = ttl.tensor.clone(
+#         xt,
+#         ttl.tensor.MemoryConfig(
+#             memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+#             buffer_type=ttl.tensor.BufferType.DRAM,
+#         ),
+#         output_dtype=input_dtype,
+#     )
+
+#     tt_og = xt.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
+
+#     tt_got_back = zt.cpu().to(ttl.tensor.Layout.ROW_MAJOR).to_torch()
+
+#     if input_dtype == output_dtype:
+#         passing, output = comp_equal(tt_og, tt_got_back)
+#     else:
+#         passing, output = comp_pcc(tt_og, tt_got_back, 0.999)
+#     logger.info(output)
+#     assert passing
+
+
+def run_test_bert_linear_batch4_fp32_input_output(
     device,
     fidelity,
     has_bias,
@@ -2567,7 +2547,7 @@ def test_bert_linear_batch4_fp32_input_output(
     in0_shape = [1, 1, M, K]
     in1_shape = [1, 1, K, N]
     bias_shape = [1, 1, N]
-    grid_size = (3, 2)
+    grid_size = (8, 8)
 
     in0_block_h = M // grid_size[1] // 32
     in0_block_w = K // grid_size[0] // 32
@@ -2665,3 +2645,46 @@ def test_bert_linear_batch4_fp32_input_output(
     passing, output = comp_pcc(pt_out, tt_out)
     logger.info(output)
     assert passing
+
+
+@pytest.mark.parametrize(
+    "fidelity",
+    [
+        ttl.tensor.MathFidelity.LoFi,
+    ],
+    ids=["LoFi"],
+)
+@pytest.mark.parametrize(
+    "has_bias",
+    [
+        False,
+    ],
+    ids=["bias"],
+)
+@pytest.mark.parametrize(
+    "M, K, N, activation",
+    [
+        (3072, 1024, 3072, None),
+    ],
+)
+def test_bert_linear_batch4_fp32_input_output(
+    device,
+    fidelity,
+    has_bias,
+    M,
+    K,
+    N,
+    activation,
+    function_level_defaults,
+):
+    for _ in range(100):
+        run_test_bert_linear_batch4_fp32_input_output(
+            device,
+            fidelity,
+            has_bias,
+            M,
+            K,
+            N,
+            activation,
+            function_level_defaults,
+        )

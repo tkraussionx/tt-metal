@@ -37,8 +37,8 @@ void kernel_main() {
     #endif
         cb_reserve_back(cb_id_in0, onetile);
         uint32_t l1_write_addr = get_write_ptr(cb_id_in0);
-        noc_async_read_tile(i, s, l1_write_addr);
-        noc_async_read_tile_barrier();
+        noc_async_read_tile_with_trid(i, s, l1_write_addr);
+        noc_async_read_barrier_with_trid();
         cb_push_back(cb_id_in0, onetile);
     }
 }
