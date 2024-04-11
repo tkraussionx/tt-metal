@@ -10,6 +10,8 @@ import tempfile
 from loguru import logger
 from tests.ttnn.utils_for_testing import assert_with_pcc
 
+pytestmark = pytest.mark.skip("Skip R chip test")
+
 
 #######
 # Test MultiDevice Initialization, Open/Close

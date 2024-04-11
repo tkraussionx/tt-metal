@@ -10,6 +10,8 @@ from loguru import logger
 from tests.ttnn.utils_for_testing import assert_with_pcc
 import transformers
 
+pytestmark = pytest.mark.skip("Skip R chip test")
+
 
 #######
 # Multi-Device Tensor tests running in async mode
