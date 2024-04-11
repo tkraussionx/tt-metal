@@ -13,6 +13,7 @@
 #include "tt_metal/impl/dispatch/cq_commands.hpp"
 #include "tt_metal/impl/dispatch/dispatch_address_map.hpp"
 #include "tt_metal/impl/dispatch/kernels/cq_common.hpp"
+#include "tt_metal/impl/dispatch/kernels/packet_queue_ctrl.hpp"
 #include "debug/dprint.h"
 #include "debug/assert.h"
 
@@ -204,6 +205,17 @@ template<uint32_t preamble_size>
 FORCE_INLINE
 void relay_to_next_cb(uint32_t data_ptr,
                       uint32_t length) {
+
+    static_assert(
+        preamble_size == 0 || preamble_size == sizeof(dispatch_packet_header_t),
+        "Dispatcher preamble size must be 0 or sizeof(dispatch_packet_header_t)");
+
+    // The downstream packetizing stage will initialize the other fields, but it needs info on
+    // the length of the transfer to be packetized.
+    if (preamble_size > 0) {
+        uint64_t downstream_noc_addr = get_noc_addr_helper(downstream_noc_xy, downstream_cb_data_ptr);
+        noc_inline_dw_write(data_ptr, downstream_cb_data_ptr, length);
+    }
 
     while (length > 0) {
         uint32_t avail = downstream_cb_end - downstream_cb_data_ptr;
@@ -732,7 +744,7 @@ static inline bool process_cmd_h(uint32_t& cmd_ptr) {
 }
 
 void kernel_main() {
-    DPRINT << "dispatch_" << is_d_variant << is_h_variant << ": start" << ENDL();
+    DPRINT << "dispatch_" << is_d_variant << is_h_variant << ": start, buf_size=" << HEX() << dispatch_cb_size << ENDL();
 
     static_assert(is_d_variant || split_dispatch_page_preamble_size == 0);
 
@@ -790,6 +802,14 @@ void kernel_main() {
                            dispatch_cb_pages_per_block>(block_noc_writes_to_clear,
                                                         wr_block_idx);
     noc_async_write_barrier();
+
+    if (is_h_variant && !is_d_variant) {
+        // Set upstream semaphore MSB to signal completion and path teardown
+        // in case dispatch_h is connected to a depacketizing stage.
+        // This should be replaced with a signal similar to what packetized components
+        // use.
+        noc_semaphore_inc(get_noc_addr_helper(upstream_noc_xy, get_semaphore(upstream_dispatch_cb_sem_id)), 0x80000000);
+    }
 
     DPRINT << "dispatch_" << is_d_variant << is_h_variant << ": out" << ENDL();
 }

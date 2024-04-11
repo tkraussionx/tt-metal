@@ -346,12 +346,12 @@ public:
         uint32_t rptr_val = this->get_queue_local_rptr_sent();
         uint32_t page_size_words_mask = this->cb_mode_page_size_words - 1;
         uint32_t num_words_past_page_boundary = rptr_val & page_size_words_mask;
-        uint32_t pad_words = 0;
+        uint32_t input_pad_words_skipped = 0;
         if (num_words_past_page_boundary > 0) {
-            pad_words = this->cb_mode_page_size_words - num_words_past_page_boundary;
-            this->advance_queue_local_rptr_sent(pad_words);
+            input_pad_words_skipped = this->cb_mode_page_size_words - num_words_past_page_boundary;
+            this->advance_queue_local_rptr_sent(input_pad_words_skipped);
         }
-        return pad_words;
+        return input_pad_words_skipped;
     }
 
     inline void cb_mode_local_sem_wptr_update() {
@@ -412,7 +412,11 @@ protected:
                     (this->queue_start_addr_words + this->get_queue_rptr_sent_offset_words())*PACKET_WORD_SIZE_BYTES
                 );
             this->curr_packet_header_ptr = next_packet_header_ptr;
-            this->curr_packet_size_words = next_packet_header_ptr->packet_size_bytes/PACKET_WORD_SIZE_BYTES;
+            uint32_t packet_size_bytes = next_packet_header_ptr->packet_size_bytes;
+            this->curr_packet_size_words = packet_size_bytes/PACKET_WORD_SIZE_BYTES;
+            if (packet_size_bytes % PACKET_WORD_SIZE_BYTES) {
+                this->curr_packet_size_words++;
+            }
             if (this->cb_mode) {
                 // prefetcher has size in bytes
                 next_packet_header_ptr->packet_dest = this->curr_packet_dest;
@@ -567,7 +571,7 @@ public:
 
     // returns the number of words skipped for page padding if in packetizer mode
     inline uint32_t input_queue_advance_words_sent(uint32_t num_words) {
-        uint32_t pad_words = 0;
+        uint32_t input_pad_words_skipped = 0;
         if (num_words > 0) {
             this->advance_queue_local_rptr_sent(num_words);
             this->advance_queue_remote_rptr_sent(num_words);
@@ -575,13 +579,13 @@ public:
             uint32_t curr_packet_words_remaining = this->get_curr_packet_words_remaining();
             if (curr_packet_words_remaining == 0) {
                 if (this->is_packetizer_input()) {
-                    pad_words = this->cb_mode_rptr_sent_advance_page_align();
+                    input_pad_words_skipped = this->cb_mode_rptr_sent_advance_page_align();
                 }
                 this->curr_packet_valid = false;
                 this->advance_next_packet();
             }
         }
-        return pad_words;
+        return input_pad_words_skipped;
     }
 
     inline void input_queue_advance_words_cleared(uint32_t num_words) {
@@ -630,6 +634,7 @@ protected:
     uint32_t max_eth_send_words;
 
     uint32_t unpacketizer_page_words_sent;
+    bool unpacketizer_remove_header;
 
     struct {
 
@@ -684,8 +689,8 @@ protected:
         }
 
         inline void register_words_in_flight(uint32_t input_queue_id, uint32_t num_words) {
-            uint32_t pad_words_skipped = this->input_queue_array[input_queue_id].input_queue_advance_words_sent(num_words);
-            this->curr_input_queue_words_in_flight[input_queue_id] += (num_words + pad_words_skipped);
+            uint32_t input_pad_words_skipped = this->input_queue_array[input_queue_id].input_queue_advance_words_sent(num_words);
+            this->curr_input_queue_words_in_flight[input_queue_id] += (num_words + input_pad_words_skipped);
             this->curr_output_total_words_in_flight += num_words;
         }
 
@@ -722,7 +727,8 @@ public:
               bool unpacketizer_output = false,
               uint16_t unpacketizer_output_log_page_size = 0,
               uint8_t unpacketizer_output_sem_id = 0,
-              uint8_t unpacketizer_output_remote_sem_id = 0) {
+              uint8_t unpacketizer_output_remote_sem_id = 0,
+              bool unpacketizer_output_remove_header = false) {
 
         packet_queue_state_t::init(queue_id, queue_start_addr_words, queue_size_words,
                                    remote_x, remote_y, remote_queue_id, remote_update_network_type,
@@ -730,6 +736,7 @@ public:
                                    unpacketizer_output_remote_sem_id,
                                    unpacketizer_output_log_page_size);
 
+        this->unpacketizer_remove_header = unpacketizer_output_remove_header;
         this->unpacketizer_page_words_sent = 0;
         this->ptr_offset_mask = queue_size_words - 1;
         this->queue_size_mask = (queue_size_words << 1) - 1;
@@ -843,6 +850,14 @@ public:
         packet_input_queue_state_t* input_queue_ptr = &(this->input_queue_status.input_queue_array[input_queue_index]);
         uint32_t num_words_to_forward = this->get_num_words_to_send(input_queue_index);
         full_packet_sent = (num_words_to_forward == input_queue_ptr->get_curr_packet_words_remaining());
+        if (num_words_to_forward == 0) {
+            return 0;
+        }
+
+        if (this->unpacketizer_remove_header && input_queue_ptr->curr_packet_start()) {
+            num_words_to_forward--;
+            this->input_queue_status.register_words_in_flight(input_queue_index, 1);
+        }
         if (num_words_to_forward == 0) {
             return 0;
         }
