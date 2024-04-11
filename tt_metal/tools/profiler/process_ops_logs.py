@@ -80,6 +80,7 @@ def import_tracy_op_logs():
     ops = {}
     signposts = {}
     signpostsCount = 0
+    cached_ops = {}
     with open(tracyOpDataLog, "r", newline="") as csvFile:
         opDataDicts = csv.DictReader(csvFile, delimiter=";", quotechar="`")
         opsData = []
@@ -87,13 +88,23 @@ def import_tracy_op_logs():
             opDataStr = opDataDict["MessageName"]
             opDataTime = opDataDict["total_ns"]
             if "TT_DNN" in opDataStr:
-                tmpStrs = opDataStr.split("{", 1)
+                tmpStrs = opDataStr.split(", uncached\n", 1)
+                opData = {}
                 if len(tmpStrs) > 1:
                     jsonStr = tmpStrs[-1]
-                    jsonStr = "{" + jsonStr
                     opData = json.loads(jsonStr)
-                    opData["tracy_time"] = opDataTime
-                    opsData.append(opData)
+                    cached_ops[int(opData["op_hash"])] = opData.copy()
+                    del cached_ops[int(opData["op_hash"])]["global_call_count"]
+                else:
+                    opDataList = opDataStr.split(":", 1)[-1].split(",")
+                    opCode = opDataList[0].strip()
+                    opHash = int(opDataList[1])
+                    opID = int(opDataList[2])
+                    opData = cached_ops[opHash].copy()
+                    opData["global_call_count"] = opID
+                opData["tracy_time"] = opDataTime
+                opsData.append(opData)
+
             if "TT_SIGNPOST" in opDataStr:
                 signpostsCount += 1
                 signposts[f"sp_{signpostsCount}"] = {"data": opDataStr, "tracy_time": opDataTime}
