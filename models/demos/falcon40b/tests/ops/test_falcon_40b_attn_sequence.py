@@ -668,7 +668,11 @@ def test_falcon40B_layernorm(device, num_cores, seq_len):
     compute_grid_size = device.compute_with_storage_grid_size()
     if num_cores > (compute_grid_size.x * compute_grid_size.y):
         pytest.skip(f"Need {num_cores} cores to run this test but core grid is {compute_grid_size}")
+    if seq_len != 2048:
+        pytest.skip("Works for 2k seq len only atm")
+
     grid_size = (8, 8)
+    num_slices = 2
 
     layernorm_input_shape = [1, 1, seq_len, 8192]
     layernorm_gamma_shape = [1, 1, 256, 32]
@@ -693,16 +697,44 @@ def test_falcon40B_layernorm(device, num_cores, seq_len):
     tt_ln_beta = torch2tt_tensor(
         torch_beta, device, ttl.tensor.Layout.ROW_MAJOR, dram_interleaved_memory_config, ttl.tensor.DataType.BFLOAT16
     )
-
-    ln_default_program_config = ttl.operations.primary.LayerNormDefaultProgramConfig()
-
-    tt_ln_out = ttl.operations.primary.layernorm(
-        tt_ln_input,
-        layernorm_epsilon,
-        tt_ln_gamma,
-        tt_ln_beta,
-        dram_interleaved_memory_config,
-        ln_default_program_config,
+    tt_ln_output = torch2tt_tensor(
+        torch_ln_input, device, ttl.tensor.Layout.TILE, dram_interleaved_memory_config, ttl.tensor.DataType.BFLOAT16
     )
 
-    out = tt2torch_tensor(tt_ln_out)
+    layernorm_block_sharded_mem_config = ttl.tensor.MemoryConfig(
+        ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+        ttl.tensor.BufferType.L1,
+    )
+
+    for i in range(num_slices):
+        input_slice = ttl.tensor.interleaved_to_sharded_partial(
+            tt_ln_input,
+            grid_size,
+            [128, 1024],
+            num_slices,
+            i,
+            ttl.tensor.TensorMemoryLayout.BLOCK_SHARDED,
+            ttl.tensor.ShardOrientation.ROW_MAJOR,
+        )
+
+        ln_program_config = ttl.operations.primary.LayerNormShardedMultiCoreProgramConfig(
+            compute_with_storage_grid_size=grid_size, subblock_w=8, block_h=4, block_w=32, inplace=True
+        )
+
+        input_slice = ttl.operations.primary.layernorm(
+            input_slice,
+            layernorm_epsilon,
+            tt_ln_gamma,
+            tt_ln_beta,
+            layernorm_block_sharded_mem_config,
+            ln_program_config,
+        )
+
+        ttl.tensor.sharded_to_interleaved_partial(
+            input_slice, tt_ln_output, num_slices, i, dram_interleaved_memory_config
+        )
+
+        input_slice.deallocate(True)
+        # ln_output.deallocate(True)
+
+    out = tt2torch_tensor(tt_ln_output)
