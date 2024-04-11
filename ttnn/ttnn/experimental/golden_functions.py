@@ -60,6 +60,19 @@ def _golden_function(tensor, starts, stops, *args, **kwargs):
 ttnn.experimental.tensor.unpad.golden_function = _golden_function
 
 
+def _golden_function(tensor, grid_size, shard_spec, num_slices, slice, *args, **kwargs):
+    return tensor
+    tensor = tensor.reshape(1, 1, -1, tensor.shape[-1])
+    slice_size = tensor.shape[-2] // num_slices
+    start = slice * slice_size
+    stop = start + slice_size
+    tensor = tensor[:, :, start:stop, :]
+    return tensor
+
+
+ttnn.experimental.tensor.interleaved_to_sharded_partial = _golden_function
+
+
 def _nop_golden_function(input_tensor, *args, **kwargs):
     return input_tensor
 
@@ -67,3 +80,4 @@ def _nop_golden_function(input_tensor, *args, **kwargs):
 ttnn.experimental.tensor.interleaved_to_sharded.golden_function = _nop_golden_function
 ttnn.experimental.tensor.reshard.golden_function = _nop_golden_function
 ttnn.experimental.tensor.tilize.golden_function = _nop_golden_function
+# ttnn.experimental.tensor.sharded_to_interleaved_partial = _nop_golden_function
