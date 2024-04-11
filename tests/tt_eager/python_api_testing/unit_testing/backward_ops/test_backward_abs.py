@@ -34,6 +34,7 @@ def test_bw_abs(input_shapes, device):
     logger.debug(comp_pass)
     logger.debug(comp_all)
     logger.debug(comp_out)
+    print(input_tensor)
     print(tt_out_tensor)
     print(golden_tensor)
     comp_pass = compare_pcc(tt_output_tensor_on_device, golden_tensor)
