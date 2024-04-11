@@ -41,6 +41,16 @@ uint32_t noc_nonposted_writes_acked[NUM_NOCS] __attribute__((used));
 
 uint64_t xy_local_addr[NUM_NOCS] __attribute__((used));
 
+const uint32_t read_cmd_buf __attribute__((used)) = NCRISC_RD_CMD_BUF;
+const uint32_t write_cmd_buf __attribute__((used)) = NCRISC_WR_REG_CMD_BUF;
+const uint32_t read_transaction_id __attribute__((used)) = NCRISC_RD_TRANSACTION_ID;
+const uint32_t write_transaction_id __attribute__((used)) = NCRISC_WR_REG_TRANSACTION_ID;
+const uint32_t use_multi_noc __attribute__((used)) = false;
+const uint32_t noc_index_to_dram_bank_map[NUM_DRAM_BANKS] __attribute__((used)) =
+{
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+};
+
 void __attribute__((section("code_l1"))) risc_init() {
     for (uint32_t n = 0; n < NUM_NOCS; n++) {
         uint32_t noc_id_reg = NOC_CMD_BUF_READ_REG(n, 0, NOC_NODE_ID);

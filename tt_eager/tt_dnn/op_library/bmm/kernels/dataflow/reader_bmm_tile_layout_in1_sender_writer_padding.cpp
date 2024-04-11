@@ -6,7 +6,7 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
 
-#include "debug/dprint.h"
+// #include "debug/dprint.h"
 
 void kernel_main() {
     // READER
@@ -150,6 +150,8 @@ void kernel_main() {
     uint64_t in1_start_address = get_write_ptr(cb_id_in1);
     #endif
     #endif
+
+    // DPRINT << "writer " <<ENDL();
 
     for (uint32_t b = 0; b < batch; ++b) {
         uint32_t in1_tensor_current_block_start_tile_id = in1_tensor_start_tile_id;

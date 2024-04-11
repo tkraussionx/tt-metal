@@ -57,6 +57,17 @@ uint32_t noc_nonposted_writes_acked[NUM_NOCS] __attribute__((used));
 uint64_t xy_local_addr[NUM_NOCS] __attribute__((used));
 const uint32_t is_ncrisc __attribute__((used)) = 0;
 
+const uint32_t read_cmd_buf __attribute__((used)) = BRISC_RD_CMD_BUF;
+const uint32_t write_cmd_buf __attribute__((used)) = BRISC_WR_REG_CMD_BUF;
+const uint32_t read_transaction_id __attribute__((used)) = BRISC_RD_TRANSACTION_ID;
+const uint32_t write_transaction_id __attribute__((used)) = BRISC_WR_REG_TRANSACTION_ID;
+const uint32_t use_multi_noc __attribute__((used)) = false;
+const uint32_t noc_index_to_dram_bank_map[NUM_DRAM_BANKS] __attribute__((used)) =
+{
+    // 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+};
+
 CBInterface cb_interface[NUM_CIRCULAR_BUFFERS] __attribute__((used));
 
 #define MEM_MOVER_VIEW_IRAM_BASE_ADDR (0x4 << 12)
@@ -287,6 +298,7 @@ int main() {
     l1_to_local_mem_copy((uint*)__ldm_data_start, (uint tt_l1_ptr *)MEM_BRISC_INIT_LOCAL_L1_BASE, num_words);
 
     risc_init();
+    noc_init_registers();
     device_setup();
 
     // Set ncrisc's resume address to 0 so we know when ncrisc has overwritten it
@@ -303,7 +315,6 @@ int main() {
     mailboxes->launch.run = RUN_MSG_DONE;
 
     while (1) {
-        noc_init_registers();
         init_sync_registers();
         assert_just_ncrisc_reset();
 
