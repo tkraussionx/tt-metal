@@ -23,7 +23,7 @@ def get_tt_metal_model(device, num_users, configs, version):
 
     torch.manual_seed(0)
 
-    reference_model = get_cpu_reference_model(version, batch_size)
+    reference_model = get_cpu_reference_model(version, num_users)
     cache_path = f"/tmp/state-spaces/{version}"
 
     model = MambaTT(reference_model, device, configs, cache_path, 1)
@@ -42,7 +42,7 @@ def run_demo(device, num_users, hidden_size, profile):
 
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
         input_data = tokenizer("Hello", return_tensors="pt")["input_ids"]
-        input_data = input_data.repeat(batch_size, 1)
+        input_data = input_data.repeat(num_users, 1)
 
         if profile == 1:
             out_data = model(input_data)

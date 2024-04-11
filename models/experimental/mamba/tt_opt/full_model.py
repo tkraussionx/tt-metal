@@ -124,7 +124,7 @@ class MambaTT(torch.nn.Module):
             self.lm_head_weights,
             memory_config=ttnn.L1_MEMORY_CONFIG,
             use_1d_systolic_array=True,
-            core_grid=ttnn.CoreGrid(y=7, x=8),
+            core_grid=ttnn.CoreGrid(y=8, x=8),
         )
 
         x = ttnn.to_torch(x).to(torch.float32)  # (1, 1, B, E)

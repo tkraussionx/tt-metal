@@ -145,7 +145,7 @@ class TtMambaSSM(torch.nn.Module):
             delta_t2,
             memory_config=ttnn.L1_MEMORY_CONFIG,
             compute_kernel_config=self.compute_kernel_config_mask,
-            core_grid=ttnn.CoreGrid(y=7, x=8),
+            core_grid=ttnn.CoreGrid(y=8, x=8),
         )  # b,n
 
         ttnn.deallocate(delta_t2)
@@ -189,7 +189,7 @@ class TtMambaSSM(torch.nn.Module):
             B0,
             memory_config=ttnn.L1_MEMORY_CONFIG,
             compute_kernel_config=self.compute_kernel_config_mask,
-            core_grid=ttnn.CoreGrid(y=7, x=8),
+            core_grid=ttnn.CoreGrid(y=8, x=8),
         )
         ttnn.deallocate(B0)
 
@@ -211,7 +211,7 @@ class TtMambaSSM(torch.nn.Module):
             x,
             memory_config=ttnn.L1_MEMORY_CONFIG,
             compute_kernel_config=self.compute_kernel_config_mask,
-            core_grid=ttnn.CoreGrid(y=7, x=8),
+            core_grid=ttnn.CoreGrid(y=8, x=8),
         )  # b,n
 
         x1 = ttnn.to_memory_config(x0, memory_config=self.configs["sharded_dn"])
@@ -246,10 +246,10 @@ class TtMambaSSM(torch.nn.Module):
             C0,
             memory_config=ttnn.L1_MEMORY_CONFIG,
             compute_kernel_config=self.compute_kernel_config_mask,
-            core_grid=ttnn.CoreGrid(y=7, x=8),
+            core_grid=ttnn.CoreGrid(y=8, x=8),
         )
         ttnn.deallocate(C0)
-
+        
         # shard c
         C2 = ttnn.to_memory_config(C1, memory_config=self.configs["sharded_dn"])
         ttnn.deallocate(C1)
@@ -264,10 +264,10 @@ class TtMambaSSM(torch.nn.Module):
             C3,
             memory_config=ttnn.L1_MEMORY_CONFIG,
             compute_kernel_config=self.compute_kernel_config_mask,
-            core_grid=ttnn.CoreGrid(y=7, x=8),
+            core_grid=ttnn.CoreGrid(y=8, x=8),
         )  # b,n
         ttnn.deallocate(C3)
-
+        
         # shard x, C
         x = ttnn.to_memory_config(x, memory_config=self.configs["sharded_d"])
         C5 = ttnn.to_memory_config(C4, memory_config=self.configs["sharded_d"])
