@@ -82,6 +82,7 @@ inline void calculate_reciprocal()
                 v_if(val<1){
                     check = false;
                 }
+                v_endif
             }
             res = orig-val;
             v_if (orig-res==1){
@@ -96,6 +97,7 @@ inline void calculate_reciprocal()
                 v_if(val<1){
                     check = false;
                 }
+                v_endif
             }
             res = -orig-val+1;
             res*=-1;
