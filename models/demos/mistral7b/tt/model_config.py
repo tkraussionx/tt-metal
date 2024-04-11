@@ -47,7 +47,7 @@ class TtModelArgs:
         "ATTN_W_LAYOUT",
     )
 
-    def __init__(self, device, model_base_path="/mnt/MLPerf/ttnn/models/demos/mistral7b", instruct=False):
+    def __init__(self, device, model_base_path="/proj_sw/user_dev/hf_data/mistral/mistral-7B-v0.1/", instruct=False):
         self.model_base_path = Path(model_base_path)
         # Some consumers like SentencePiece only accept str not Path for files
         if instruct:  # Load instruct weights and tokenizer (Mistral-7B-Instruct-v0.2)
@@ -79,20 +79,20 @@ class TtModelArgs:
             ), f"Number of rows in the grid should be a factor of max_batch_size ({self.max_batch_size})"
             self.max_grid_size = ttnn.CoreGrid(y=grid_size_y, x=grid_size.x)  # (y,x)
 
-        # Add sharded memory config for MLP FF1/FF3
-        mlp_shard_config = ttnn.create_sharded_memory_config(
-            [self.max_batch_size, self.hidden_dim], self.max_grid_size, ttnn.ShardStrategy.WIDTH
-        )
-        self.model_config["FF1_OUTPUT_MEMCFG"] = mlp_shard_config
-        self.model_config["FF3_OUTPUT_MEMCFG"] = mlp_shard_config
+            # Add sharded memory config for MLP FF1/FF3
+            mlp_shard_config = ttnn.create_sharded_memory_config(
+                [self.max_batch_size, self.hidden_dim], self.max_grid_size, ttnn.ShardStrategy.WIDTH
+            )
+            self.model_config["FF1_OUTPUT_MEMCFG"] = mlp_shard_config
+            self.model_config["FF3_OUTPUT_MEMCFG"] = mlp_shard_config
 
-        # Compute kernel shared by attention and MLP. FP32 acc is needed for accuracy
-        self.compute_kernel_config = ttnn.WormholeComputeKernelConfig(
-            math_fidelity=ttnn.MathFidelity.HiFi4,
-            math_approx_mode=False,
-            fp32_dest_acc_en=True,
-            packer_l1_acc=True,
-        )
+            # Compute kernel shared by attention and MLP. FP32 acc is needed for accuracy
+            self.compute_kernel_config = ttnn.WormholeComputeKernelConfig(
+                math_fidelity=ttnn.MathFidelity.HiFi4,
+                math_approx_mode=False,
+                fp32_dest_acc_en=True,
+                packer_l1_acc=True,
+            )
 
     def weight_cache_path(self, dtype, instruct=False):
         # Keep the weight cache separate for generative and instruct weights
