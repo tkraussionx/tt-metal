@@ -317,10 +317,12 @@ def create_group_norm_input_mask(num_channel, num_groups, num_cores_across_chann
 def _golden_function(input_tensor: ttnn.Tensor, *, num_groups, epsilon=1e-05, weight=None, bias=None, **_):
     import torch
 
-    if len(weight.shape) == 2:
-        weight = weight[0]
-    if len(bias.shape) == 2:
-        bias = bias[0]
+    num_channels = input_tensor.shape[-1]
+    weight = weight[:, :, :, : num_channels // num_groups].flatten()
+    if bias is not None:
+        bias = bias[:, :, :, : num_channels // num_groups].flatten()
+
+    input_tensor = input_tensor.permute(0, 3, 1, 2)
     return torch.nn.functional.group_norm(input_tensor, num_groups, weight, bias, eps=epsilon)
 
 

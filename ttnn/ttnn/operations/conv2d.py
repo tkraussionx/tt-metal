@@ -12,34 +12,6 @@ from tt_eager.tt_dnn.op_library.sliding_window_op_infra.tt_py_composite_conv imp
 )
 
 
-def _golden_function_conv2d(self, activations):
-    # inputs in [1, 1, NWH, C] format, reshape to N, H, W, C
-    activations = activations.reshape(self.batch_size, self.input_height, self.input_width, self.in_channels)
-    # permute to N, C, H, W
-    activations = activations.permute(0, 3, 1, 2)
-
-    torch_out = torch.nn.functional.conv2d(
-        activations.float(),
-        ttnn.to_torch(self.original_weight).float(),
-        bias=ttnn.to_torch(self.original_bias).squeeze().float() if self.original_bias is not None else None,
-        stride=(self.stride_h, self.stride_w),
-        padding=(self.pad_h, self.pad_w),
-        dilation=(self.dilation_h, self.dilation_w),
-        groups=self.groups,
-    )
-    torch_out = torch_out.permute(0, 2, 3, 1)
-    torch_out = torch_out.reshape(1, 1, -1, self.out_channels)
-    return torch_out
-
-
-def _golden_function_copy_input(self, input):
-    return input
-
-
-def _golden_function_copy_output(self, output):
-    return output
-
-
 class Conv2d:
     def __init__(
         self,
@@ -164,6 +136,25 @@ class Conv2d:
         self.dilation_w = dilation_w
         self.groups = groups
 
+    def _golden_function_conv2d(self, activations):
+        # inputs in [1, 1, NWH, C] format, reshape to N, H, W, C
+        activations = activations.reshape(self.batch_size, self.input_height, self.input_width, self.in_channels)
+        # permute to N, C, H, W
+        activations = activations.permute(0, 3, 1, 2)
+
+        torch_out = torch.nn.functional.conv2d(
+            activations.float(),
+            ttnn.to_torch(self.original_weight).float(),
+            bias=ttnn.to_torch(self.original_bias).squeeze().float() if self.original_bias is not None else None,
+            stride=(self.stride_h, self.stride_w),
+            padding=(self.pad_h, self.pad_w),
+            dilation=(self.dilation_h, self.dilation_w),
+            groups=self.groups,
+        )
+        torch_out = torch_out.permute(0, 2, 3, 1)
+        torch_out = torch_out.reshape(1, 1, -1, self.out_channels)
+        return torch_out
+
     @ttnn.register_operation(
         name="ttnn.Conv2d.__call__",
         validate_input_tensors=lambda *args, **kwargs: None,
@@ -173,6 +164,9 @@ class Conv2d:
     def __call__(self, activation: ttnn.Tensor):
         return self.conv(activation)
 
+    def _golden_function_copy_input(self, input):
+        return input
+
     @ttnn.register_operation(
         name="ttnn.Conv2d.copy_input_to_device",
         validate_input_tensors=lambda *args, **kwargs: None,
@@ -181,6 +175,9 @@ class Conv2d:
     )
     def copy_input_to_device(self, input: ttnn.Tensor):
         return self.conv.copy_input_to_device(input)
+
+    def _golden_function_copy_output(self, output):
+        return output
 
     @ttnn.register_operation(
         name="ttnn.Conv2d.copy_output_from_device",
