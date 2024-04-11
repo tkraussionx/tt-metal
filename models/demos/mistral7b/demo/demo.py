@@ -88,6 +88,7 @@ def run_mistral_demo(user_input, batch_size, device):
 
     enable_persistent_kernel_cache()
     instruct_mode = True
+    embed_on_device = False
     dtype = ttnn.bfloat8_b
 
     logger.info(f"Reading inputs...")
@@ -122,7 +123,6 @@ def run_mistral_demo(user_input, batch_size, device):
     users_decoding = True
 
     # Preprocess initial prompt inputs
-
     tt_decode_input, pt_encoded_input, input_mask, rot_emb_matrix_list = preprocess_inputs(
         input_prompts, tokenizer, model_args, dtype, embd, instruct_mode, device
     )
@@ -142,14 +142,13 @@ def run_mistral_demo(user_input, batch_size, device):
         rot_mat=rot_emb_matrix_list,
         start_pos=generation_start_pos,
     )
-    # TODO: TTNN embedding module on device
-    # tt_embd = TtMistralEmbedding(
-    #     device=device,
-    #     args=model_args,
-    #     weight_cache_path=model_args.weight_cache_path(dtype, instruct=instruct_mode),
-    #     state_dict=state_dict,
-    #     dtype=ttnn.bfloat16,  # Row major layout requires bfloat16
-    # )
+    tt_embd = TtMistralEmbedding(
+        device=device,
+        args=model_args,
+        weight_cache_path=model_args.weight_cache_path(dtype, instruct=instruct_mode),
+        state_dict=state_dict,
+        dtype=ttnn.bfloat16,  # Row major layout requires bfloat16
+    )
     logger.info("Finished loading weights to device. Starting inference...")
 
     # Keep track of generated outputs to print out every iteration
@@ -210,8 +209,11 @@ def run_mistral_demo(user_input, batch_size, device):
                     if all(user_done):
                         users_decoding = False
 
-        # TODO: Embedding on device
-        tt_decode_input = embd(tt_out_tok)
+        if embed_on_device:
+            tt_out_tok = ttnn.from_torch(tt_out_tok, device=device, dtype=ttnn.uint32, layout=ttnn.ROW_MAJOR_LAYOUT)
+            tt_decode_input = tt_embd(tt_out_tok)
+        else:
+            tt_decode_input = embd(tt_out_tok)
 
         # Print out generated outputs for each user at the end of every iteration
         iteration_time = time() - iteration_time_start
