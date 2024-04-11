@@ -75,6 +75,8 @@ def test_split_query_key_value_and_split_heads_with_program_cache(device, dtype,
     tt_v = tt_v.cpu().to_torch().float()
     tt_v = untilize(tt_v)
 
+    print(tt_q.shape())
+
     fused_qkv_heads = torch.split(in0, input_shape[-1] // grid_size[1], dim=-1)
     ref_q_list = []
     ref_k_list = []
