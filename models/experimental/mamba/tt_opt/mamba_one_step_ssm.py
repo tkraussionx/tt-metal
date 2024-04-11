@@ -22,7 +22,7 @@ class TtMambaSSM(torch.nn.Module):
         self.args = args
 
         # hidden state
-        self.num_users = args.batch_size
+        self.batch_size = args.batch_size
         self.hidden_size = args.d_inner
         self.configs = configs
         self.n = 16
@@ -40,7 +40,10 @@ class TtMambaSSM(torch.nn.Module):
 
         # delta_t_proj_weights
         self.delta_t_proj_weights = load_fn(
-            x_proj_weight_name, lambda x: x[: self.args.dt_rank, :].transpose(-1, -2), postfix="delta_t"
+            x_proj_weight_name,
+            lambda x: x[: self.args.dt_rank, :].transpose(-1, -2),
+            postfix="delta_t",
+            tt_dtype=ttnn.bfloat8_b,
         )
 
         # B_proj_weights
@@ -54,6 +57,7 @@ class TtMambaSSM(torch.nn.Module):
             x_proj_weight_name,
             tm_fn=preprocess_B,
             postfix="B_proj",
+            tt_dtype=ttnn.bfloat8_b,
         )
 
         # C_proj_weights
@@ -62,13 +66,13 @@ class TtMambaSSM(torch.nn.Module):
             # x = F.pad(x, (0, 16), "constant", 0)
             return x
 
-        self.C_proj_weights = load_fn(x_proj_weight_name, preprocess_C, postfix="C_proj")
+        self.C_proj_weights = load_fn(x_proj_weight_name, preprocess_C, postfix="C_proj", tt_dtype=ttnn.bfloat8_b)
 
         # dt_proj_weights
         dt_proj_weight_name = "mixer.dt_proj.weight"
         dt_proj_bias_name = "mixer.dt_proj.bias"
-        self.dt_proj_weights = load_fn(dt_proj_weight_name, lambda x: x.transpose(-1, -2))
-        self.dt_proj_bias = load_fn(dt_proj_bias_name)
+        self.dt_proj_weights = load_fn(dt_proj_weight_name, lambda x: x.transpose(-1, -2), tt_dtype=ttnn.bfloat8_b)
+        self.dt_proj_bias = load_fn(dt_proj_bias_name, tt_dtype=ttnn.bfloat8_b)
 
         # B_intermediate_tranform_weights = torch.eye(self.n).repeat(1, self.hidden_size).unsqueeze(0).unsqueeze(0)
 
@@ -80,7 +84,7 @@ class TtMambaSSM(torch.nn.Module):
             # padding with inf
             # x = F.pad(x, (0, 16), "constant", float("-inf"))
             x = x.reshape(1, self.hidden_size * self.n)  # (1, 2en)
-            return x.repeat(self.num_users, 1)  # b, 2en
+            return x.repeat(self.batch_size, 1)  # b, 2en
 
         self.A = load_fn(A_weight_name, tm_fn=preprocess_A, postfix=f"A_{self.args.batch_size}")
 
@@ -93,7 +97,7 @@ class TtMambaSSM(torch.nn.Module):
         )
 
         # hidden state
-        prev_hidden_states = torch.zeros((1, 1, self.num_users, self.hidden_size * self.n))
+        prev_hidden_states = torch.zeros((1, 1, self.batch_size, self.hidden_size * self.n))
         self.tt_hidden_state = load_fn(f"tt_hidden_state_{args.batch_size}", torch_tensor=prev_hidden_states)
 
         self.compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
@@ -195,7 +199,7 @@ class TtMambaSSM(torch.nn.Module):
 
         # shard delta
         delta_t4 = ttnn.to_memory_config(delta_t3, memory_config=self.configs["sharded_dn"])
-        delta_t3.deallocate()
+        ttnn.deallocate(delta_t3)
 
         # bbar
         bbar0 = ttnn.mul(delta_t4, B2, memory_config=self.configs["sharded_dn"])

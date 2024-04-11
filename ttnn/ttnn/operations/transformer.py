@@ -299,10 +299,10 @@ def _golden_function(input_tensor: ttnn.Tensor, *, head_size: int, attention_mas
     else:
         scaler = 1.0
 
-    input_tensor *= scaler
+    input_tensor = input_tensor * scaler
 
     if attention_mask is not None:
-        input_tensor += attention_mask[..., :1, :]
+        input_tensor += attention_mask
 
     return torch.softmax(input_tensor, -1)
 
@@ -387,6 +387,7 @@ def attention_softmax_(
     program_config: Optional[
         ttl.operations.primary.transformers.SoftmaxProgramConfig
     ] = ttl.operations.primary.transformers.SoftmaxDefaultProgramConfig(),
+    casual_mask: Optional[bool] = False,
 ) -> ttnn.Tensor:
     """
     attention_softmax_(tensor: ttnn.Tensor, *, head_size: int, attention_mask: Optional[ttnn.Tensor], program_config: Optional[SoftmaxProgramConfig] = SoftmaxDefaultProgramConfig()) -> ttnn.Tensor
@@ -413,21 +414,9 @@ def attention_softmax_(
         scaler = 1.0
 
     if attention_mask is not None:
-        input_shape = tensor.shape
-        input_shape_with_tile_padding = tensor.shape.with_tile_padding()
-        tensor = ttnn.reshape(
-            tensor,
-            (
-                input_shape_with_tile_padding[0],
-                1,
-                input_shape_with_tile_padding[1] * input_shape_with_tile_padding[2],
-                input_shape_with_tile_padding[3],
-            ),
-        )
         tensor = ttl.operations.primary.transformers.scale_mask_softmax_in_place(
-            tensor, scaler, attention_mask, program_config=program_config
+            tensor, scaler, attention_mask, program_config=program_config, is_causal_mask=casual_mask
         )
-        tensor = ttnn.reshape(tensor, input_shape)
         return tensor
     else:
         raise RuntimeError("Cannot apply divide by sqrt(head_size) using in-place version!")

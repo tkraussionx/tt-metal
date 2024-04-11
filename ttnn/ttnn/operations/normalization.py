@@ -8,7 +8,7 @@ from typing import Optional, Union
 import ttnn
 
 import tt_lib as ttl
-from tt_lib.utils import find_closest_largest_divisor, find_closest_largest_divisor_with_num_padding
+from tt_lib.utils import find_closest_largest_divisor
 import math
 
 
@@ -162,9 +162,22 @@ def _rms_norm_validate_input_tensors(operation_name, input_tensor, weight, *args
     )
 
 
+def _golden_function(input_tensor: ttnn.Tensor, weight=None, *, epsilon=1e-12, **_):
+    import torch
+
+    variance = input_tensor.to(torch.float32).pow(2).mean(-1, keepdim=True)
+    input_tensor = input_tensor * torch.rsqrt(variance + epsilon)
+
+    if weight.dtype in [torch.float16, torch.bfloat16]:
+        input_tensor = input_tensor.to(weight.dtype)
+
+    return weight * input_tensor
+
+
 @ttnn.register_operation(
     name="ttnn.rms_norm",
     validate_input_tensors=_rms_norm_validate_input_tensors,
+    golden_function=_golden_function,
 )
 def rms_norm(input_tensor: ttnn.Tensor, weight: ttnn.Tensor, *, epsilon: float = 1e-6) -> ttnn.Tensor:
     r"""

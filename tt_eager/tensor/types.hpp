@@ -21,7 +21,7 @@ namespace tt {
 
 namespace tt_metal {
 
-static constexpr std::uint8_t VERSION_ID = 1;
+static constexpr std::uint8_t VERSION_ID = 2;
 
 enum class Layout { ROW_MAJOR = 0, TILE = 1, INVALID = 2 };
 
@@ -38,8 +38,8 @@ enum class DataType {
 enum class StorageType {
     OWNED,
     DEVICE,
-    BORROWED,  // for storing torch/numpy/etc tensors
-    MULTI_DEVICE,  // on-device storage for multi-device context
+    BORROWED,           // for storing torch/numpy/etc tensors
+    MULTI_DEVICE,       // on-device storage for multi-device context
     MULTI_DEVICE_HOST,  // host storage for multi-device context
 };
 
@@ -209,7 +209,10 @@ struct MemoryConfig {
 bool operator==(const MemoryConfig &config_a, const MemoryConfig &config_b);
 bool operator!=(const MemoryConfig &config_a, const MemoryConfig &config_b);
 
+void dump_memory_config(std::ofstream &output_stream, const MemoryConfig &memory_config);
 void dump_memory_config(const std::string &file_name, const MemoryConfig &memory_config);
+
+MemoryConfig load_memory_config(std::ifstream &input_stream);
 MemoryConfig load_memory_config(const std::string &file_name);
 
 using OwnedBuffer = std::variant<
@@ -230,142 +233,244 @@ struct OwnedStorage {
     const auto attribute_values() const { return std::make_tuple(); }
 };
 
-    using DeviceBuffer = std::shared_ptr<Buffer>;
-    struct DeviceStorage {
-        DeviceBuffer buffer;
+using DeviceBuffer = std::shared_ptr<Buffer>;
+struct DeviceStorage {
+    DeviceBuffer buffer;
 
-        DeviceStorage() = default;
-        const MemoryConfig memory_config() const {
-            if (this->buffer.get() == nullptr) {
-                TT_THROW("MemoryConfig can only be obtained if the buffer is not null");
-            }
-
-            std::optional<ShardSpec> shard_spec = std::nullopt;
-            if (is_sharded(this->buffer->buffer_layout())) {
-                shard_spec = this->buffer->shard_spec().tensor_shard_spec;
-            }
-            return MemoryConfig{
-                .memory_layout = this->buffer->buffer_layout(),
-                .buffer_type = this->buffer->buffer_type(),
-                .shard_spec = shard_spec};
-        }
-
-        static constexpr auto attribute_names = std::make_tuple("memory_config");
-        const auto attribute_values() const { return std::make_tuple(this->memory_config()); }
-    };
-
-    using BorrowedBuffer = std::variant<
-        borrowed_buffer::Buffer<uint16_t>,
-        borrowed_buffer::Buffer<uint32_t>,
-        borrowed_buffer::Buffer<float>,
-        borrowed_buffer::Buffer<bfloat16>>;
-    struct BorrowedStorage {
-        BorrowedBuffer buffer;
-
-        BorrowedStorage() = default;
-        std::function<void()> on_creation_callback = [] {};
-        std::function<void()> on_destruction_callback = [] {};
-
-        explicit BorrowedStorage(
-            const BorrowedBuffer &buffer,
-            const std::function<void()> &on_creation_callback,
-            const std::function<void()> &on_destruction_callback) :
-            buffer(buffer),
-            on_creation_callback(on_creation_callback),
-            on_destruction_callback(on_destruction_callback) {
-            this->on_creation_callback();
-        }
-
-        BorrowedStorage(const BorrowedStorage &other) :
-            buffer(other.buffer),
-            on_creation_callback(other.on_creation_callback),
-            on_destruction_callback(other.on_destruction_callback) {
-            this->on_creation_callback();
-        }
-
-        BorrowedStorage operator=(const BorrowedStorage &other) {
-            this->buffer = other.buffer;
-            this->on_creation_callback = other.on_creation_callback;
-            this->on_destruction_callback = other.on_destruction_callback;
-            this->on_creation_callback();
-            return *this;
-        }
-
-        BorrowedStorage(BorrowedStorage &&other) :
-            buffer(other.buffer),
-            on_creation_callback(other.on_creation_callback),
-            on_destruction_callback(other.on_destruction_callback) {
-            other.on_creation_callback = [] {};
-            other.on_destruction_callback = [] {};
-        }
-
-        BorrowedStorage operator=(BorrowedStorage &&other) {
-            this->buffer = other.buffer;
-            this->on_creation_callback = other.on_creation_callback;
-            this->on_destruction_callback = other.on_destruction_callback;
-            other.on_creation_callback = [] {};
-            other.on_destruction_callback = [] {};
-            return *this;
-        }
-
-        ~BorrowedStorage() { this->on_destruction_callback(); }
-
-        static constexpr auto attribute_names = std::make_tuple();
-        const auto attribute_values() const { return std::make_tuple(); }
-    };
-
-    struct MultiDeviceHostStorage {
-        std::vector<OwnedBuffer> buffers;
-        std::vector<Shape> shapes;
-
-        MultiDeviceHostStorage() = default;
-        static constexpr auto attribute_names = std::make_tuple();
-        const auto attribute_values() const { return std::make_tuple(); }
-    };
-
-    struct MultiDeviceStorage {
-        std::vector<DeviceBuffer> buffers;
-        std::vector<Shape> shapes;
-
-    MultiDeviceStorage() = default;
+    DeviceStorage() = default;
     const MemoryConfig memory_config() const {
-        if (this->buffers.at(0).get() == nullptr) {
+        if (this->buffer.get() == nullptr) {
             TT_THROW("MemoryConfig can only be obtained if the buffer is not null");
         }
 
         std::optional<ShardSpec> shard_spec = std::nullopt;
-        if (is_sharded(this->buffers.at(0)->buffer_layout())) {
-            shard_spec = this->buffers.at(0)->shard_spec().tensor_shard_spec;
+        if (is_sharded(this->buffer->buffer_layout())) {
+            shard_spec = this->buffer->shard_spec().tensor_shard_spec;
         }
         return MemoryConfig{
-            .memory_layout = this->buffers.at(0)->buffer_layout(),
-            .buffer_type = this->buffers.at(0)->buffer_type(),
+            .memory_layout = this->buffer->buffer_layout(),
+            .buffer_type = this->buffer->buffer_type(),
             .shard_spec = shard_spec};
     }
+
+    static constexpr auto attribute_names = std::make_tuple("memory_config");
+    const auto attribute_values() const { return std::make_tuple(this->memory_config()); }
+};
+
+using BorrowedBuffer = std::variant<
+    borrowed_buffer::Buffer<uint16_t>,
+    borrowed_buffer::Buffer<uint32_t>,
+    borrowed_buffer::Buffer<float>,
+    borrowed_buffer::Buffer<bfloat16>>;
+struct BorrowedStorage {
+    BorrowedBuffer buffer;
+
+    BorrowedStorage() = default;
+    std::function<void()> on_creation_callback = [] {};
+    std::function<void()> on_destruction_callback = [] {};
+
+    explicit BorrowedStorage(
+        const BorrowedBuffer &buffer,
+        const std::function<void()> &on_creation_callback,
+        const std::function<void()> &on_destruction_callback) :
+        buffer(buffer), on_creation_callback(on_creation_callback), on_destruction_callback(on_destruction_callback) {
+        this->on_creation_callback();
+    }
+
+    BorrowedStorage(const BorrowedStorage &other) :
+        buffer(other.buffer),
+        on_creation_callback(other.on_creation_callback),
+        on_destruction_callback(other.on_destruction_callback) {
+        this->on_creation_callback();
+    }
+
+    BorrowedStorage operator=(const BorrowedStorage &other) {
+        this->buffer = other.buffer;
+        this->on_creation_callback = other.on_creation_callback;
+        this->on_destruction_callback = other.on_destruction_callback;
+        this->on_creation_callback();
+        return *this;
+    }
+
+    BorrowedStorage(BorrowedStorage &&other) :
+        buffer(other.buffer),
+        on_creation_callback(other.on_creation_callback),
+        on_destruction_callback(other.on_destruction_callback) {
+        other.on_creation_callback = [] {};
+        other.on_destruction_callback = [] {};
+    }
+
+    BorrowedStorage operator=(BorrowedStorage &&other) {
+        this->buffer = other.buffer;
+        this->on_creation_callback = other.on_creation_callback;
+        this->on_destruction_callback = other.on_destruction_callback;
+        other.on_creation_callback = [] {};
+        other.on_destruction_callback = [] {};
+        return *this;
+    }
+
+    ~BorrowedStorage() { this->on_destruction_callback(); }
+
     static constexpr auto attribute_names = std::make_tuple();
     const auto attribute_values() const { return std::make_tuple(); }
 };
 
-    using Storage =
-        std::variant<OwnedStorage, DeviceStorage, BorrowedStorage, MultiDeviceHostStorage, MultiDeviceStorage>;
+    struct MultiDeviceHostStorage {
+        std::vector<OwnedBuffer> buffers;
+        std::vector<Shape> shapes;
+        std::mutex mtx;
+        MultiDeviceHostStorage() = default;
+        MultiDeviceHostStorage(std::vector<OwnedBuffer> buffers_, std::vector<Shape> shapes_) : buffers(buffers_), shapes(shapes_) {}
+        MultiDeviceHostStorage(MultiDeviceHostStorage &&other) {
+            buffers = other.buffers;
+            shapes = other.shapes;
+        }
 
-    template <typename T>
-    constexpr void raise_unsupported_storage() {
-        static_assert(tt::stl::concepts::always_false_v<T>, "Unsupported Storage");
-    }
+        MultiDeviceHostStorage(const MultiDeviceHostStorage &other) {
+            buffers = other.buffers;
+            shapes = other.shapes;
+        }
 
-    inline bool operator==(const Storage &v1, const Storage &v2) {
-        return std::visit(
-            [](const auto &a, const auto &b) -> bool {
-                if constexpr (std::is_same_v<decltype(a), decltype(b)>) {
-                    return a == b;
-                } else {
-                    return false;
-                }
-            },
-            v1,
-            v2);
+        MultiDeviceHostStorage &operator=(const MultiDeviceHostStorage &other) {
+            buffers = other.buffers;
+            shapes = other.shapes;
+            return *this;
+        }
+
+        MultiDeviceHostStorage &operator=( MultiDeviceHostStorage &&other) {
+            buffers = other.buffers;
+            shapes = other.shapes;
+            return *this;
+        }
+
+        bool operator == (const MultiDeviceHostStorage& other) {
+            return this->buffers == other.buffers and this->shapes == other.shapes;
+        }
+
+        static constexpr auto attribute_names = std::make_tuple();
+        const auto attribute_values() const { return std::make_tuple(); }
+
+        // Helper Functions - Getters and setters to get/modify storage attributes. These are needed to
+        // preinitialize empty tensor handles and use/populate them in the worker threads.
+        void insert_buffer_and_shape_for_device(Device* device, const OwnedBuffer buffer, const Shape shape) {
+            std::lock_guard<std::mutex> lock(mtx);
+            buffers[device->id()] = buffer;
+            shapes[device->id()] = shape;
+        }
+
+        OwnedBuffer get_buffer_for_device(Device* device) {
+            std::lock_guard<std::mutex> lock(mtx);
+            TT_FATAL(device->id() < buffers.size(), "Buffer not found for device " + std::to_string(device->id()));
+            return buffers[device->id()];;
+        }
+
+        Shape get_tensor_shape_for_device(Device* device) {
+            std::lock_guard<std::mutex> lock(mtx);
+            TT_FATAL(device->id() < shapes.size(), "Buffer not found for device " + std::to_string(device->id()));
+            return shapes[device->id()];
+        }
+        
+        uint32_t num_buffers() {
+            std::lock_guard<std::mutex> lock(mtx);
+            return buffers.size();
+        }
     };
+
+    struct MultiDeviceStorage {
+        std::unordered_map<int, DeviceBuffer> buffers;
+        std::unordered_map<int, Shape> shapes;
+        mutable std::mutex mtx;
+        MultiDeviceStorage() = default;
+        MultiDeviceStorage(std::unordered_map<int, DeviceBuffer> buffers_, std::unordered_map<int, Shape> shapes_) : buffers(buffers_), shapes(shapes_) {}
+        MultiDeviceStorage(MultiDeviceStorage &&other) {
+            buffers = other.buffers;
+            shapes = other.shapes;
+        }
+        MultiDeviceStorage(const MultiDeviceStorage &other) {
+            buffers = other.buffers;
+            shapes = other.shapes;
+        }
+
+        MultiDeviceStorage &operator=(const MultiDeviceStorage &other) {
+            buffers = other.buffers;
+            shapes = other.shapes;
+            return *this;
+        }
+
+        MultiDeviceStorage &operator=( MultiDeviceStorage &&other) {
+            buffers = other.buffers;
+            shapes = other.shapes;
+            return *this;
+        }
+
+        bool operator == (const MultiDeviceStorage& other) {
+            return this->buffers == other.buffers and this->shapes == other.shapes;
+        }
+
+        const MemoryConfig memory_config() const {
+            std::lock_guard<std::mutex> lock(mtx);
+            if (this->buffers.at(0).get() == nullptr) {
+                TT_THROW("MemoryConfig can only be obtained if the buffer is not null");
+            }
+            std::optional<ShardSpec> shard_spec = std::nullopt;
+            if (is_sharded(this->buffers.at(0)->buffer_layout())) {
+                shard_spec = this->buffers.at(0)->shard_spec().tensor_shard_spec;
+            }
+            return MemoryConfig{
+                .memory_layout = this->buffers.at(0)->buffer_layout(),
+                .buffer_type = this->buffers.at(0)->buffer_type(),
+                .shard_spec = shard_spec};
+
+        }
+
+        static constexpr auto attribute_names = std::make_tuple();
+        const auto attribute_values() const { return std::make_tuple(); }
+
+        // Helper Functions - Getters and setters to get/modify storage attributes. These are needed to
+        // preinitialize empty tensor handles and use/populate them in the worker threads.
+        void insert_buffer_and_shape_for_device(Device* device, const DeviceBuffer buffer, const Shape shape) {
+            std::lock_guard<std::mutex> lock(mtx);
+            buffers.insert({device->id(), buffer});
+            shapes.insert({device->id(), shape});
+        }
+
+        DeviceBuffer get_buffer_for_device(Device* device) {
+            std::lock_guard<std::mutex> lock(mtx);
+            TT_FATAL(buffers.find(device->id()) != buffers.end(), "Buffer not found for device " + std::to_string(device->id()));
+            return buffers.at(device->id());
+        }
+
+        Shape get_tensor_shape_for_device(Device* device) {
+            std::lock_guard<std::mutex> lock(mtx);
+            TT_FATAL(shapes.find(device->id()) != shapes.end(), "Shape not found for device " + std::to_string(device->id()));
+            return shapes.at(device->id());
+        }
+
+        uint32_t num_buffers() {
+            std::lock_guard<std::mutex> lock(mtx);
+            return buffers.size();
+        }
+    };
+
+using Storage = std::variant<OwnedStorage, DeviceStorage, BorrowedStorage, MultiDeviceHostStorage, MultiDeviceStorage>;
+
+template <typename T>
+constexpr void raise_unsupported_storage() {
+    static_assert(tt::stl::concepts::always_false_v<T>, "Unsupported Storage");
+}
+
+inline bool operator==(const Storage &v1, const Storage &v2) {
+    return std::visit(
+        [](const auto &a, const auto &b) -> bool {
+            if constexpr (std::is_same_v<decltype(a), decltype(b)>) {
+                return a == b;
+            } else {
+                return false;
+            }
+        },
+        v1,
+        v2);
+};
 
 }  // namespace tt_metal
 
