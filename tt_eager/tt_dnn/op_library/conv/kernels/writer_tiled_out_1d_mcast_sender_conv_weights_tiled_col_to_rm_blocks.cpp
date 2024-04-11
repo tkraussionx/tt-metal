@@ -187,7 +187,6 @@ void kernel_main() {
                             } // for weight_block_w
                             weight_row_start_tile_id += weight_stride_h;
                         } // for weight_block_h
-                        noc_async_read_barrier();
 
                         #ifndef SKIP_MCAST
                         // wait until all weights mcast destinations have atomically incremented the weights semaphore_addr (i.e. its value should be weights_mcast_num_dests), then reset
@@ -202,6 +201,10 @@ void kernel_main() {
                         weights_mcast_dest_noc_end_x,
                         weights_mcast_dest_noc_end_y,
                         weights_start_address);
+
+                        // Wait for all reads to complete
+                        noc_async_read_barrier();
+
                         // num_dests must not include source, since we are NOT really doing a local copy!
                         noc_async_write_multicast(weights_start_address, weights_multicast_data_addr, weights_block_size_bytes, weights_mcast_num_cores, false, false);
 
@@ -211,6 +214,8 @@ void kernel_main() {
                         // We should also multicast the flag to destinations
                         // num_dests must not include source, since we are NOT really doing a local copy!
                         noc_semaphore_set_multicast(weights_mcast_receiver_semaphore_addr, weights_mcast_receiver_semaphore_noc_addr, weights_mcast_num_cores, false, false);
+                        #else
+                        noc_async_read_barrier();
                         #endif
 
                         weight_current_block_start_tile_id += weight_next_block_stride_h;
@@ -234,7 +239,6 @@ void kernel_main() {
                         bias_l1_addr += bias_pagesize;
                         bias_block_size_bytes += bias_pagesize;
                     }
-                    noc_async_read_barrier();
 
                     // MCAST BIAS (shares some mcast args with weights)
                     #ifndef SKIP_MCAST
@@ -250,6 +254,10 @@ void kernel_main() {
                     weights_mcast_dest_noc_end_x,
                     weights_mcast_dest_noc_end_y,
                     bias_start_address);
+
+                    // Wait for all reads to complete
+                    noc_async_read_barrier();
+
                     // num_dests must not include source, since we are NOT really doing a local copy!
                     noc_async_write_multicast(bias_start_address, bias_multicast_data_addr, bias_block_size_bytes, weights_mcast_num_cores, false, false);
 
@@ -259,6 +267,9 @@ void kernel_main() {
                     // We should also multicast the flag to destinations
                     // num_dests must not include source, since we are NOT really doing a local copy!
                     noc_semaphore_set_multicast(weights_mcast_receiver_semaphore_addr, weights_mcast_receiver_semaphore_noc_addr, weights_mcast_num_cores, false, false);
+                    #else
+                    // Wait for all reads to complete
+                    noc_async_read_barrier();
                     #endif
 
                     cb_push_back(bias_cb_id, bias_ntiles);
