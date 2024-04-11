@@ -216,7 +216,7 @@ def test_falcon_matmul(
 
 
 # Test matmul attention sequence with InterleavedToShardedPartialOp
-@skip_for_wormhole_b0("non-determinstic hang, see issue #5882")
+# @skip_for_wormhole_b0("non-determinstic hang, see issue #5882")
 @pytest.mark.parametrize("seq_len", [128, 1024, 2048], ids=["seq_len_128", "seq_len_1024", "seq_len_2048"])
 @pytest.mark.parametrize("num_cores", [64])
 def test_falcon7b_attnention_sliced(
@@ -474,7 +474,7 @@ def test_falcon7b_attnention_sliced(
 
 @pytest.mark.parametrize("seq_len", [128, 1024, 2048], ids=["seq_len_128", "seq_len_1024", "seq_len_2048"])
 @pytest.mark.parametrize("num_cores", [64])
-@skip_for_wormhole_b0("non-determinstic hang, see issue #5882")
+# @skip_for_wormhole_b0("non-determinstic hang, see issue #5882")
 def test_falcon7b_attention_softmax_sequence(
     device,
     seq_len,
