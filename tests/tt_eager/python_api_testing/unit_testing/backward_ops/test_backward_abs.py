@@ -26,7 +26,7 @@ def test_bw_abs(input_shapes, device):
 
     golden_tensor = torch.floor(in_data)
 
-    tt_output_tensor_on_device = tt_lib.tensor.add1(input_tensor)
+    tt_output_tensor_on_device = tt_lib.tensor.recip(input_tensor)
     tt_out_tensor = tt_output_tensor_on_device.cpu().to(tt_lib.tensor.Layout.ROW_MAJOR).to_torch()
 
     comp_pass, comp_out = comparison_funcs.comp_pcc(golden_tensor, tt_out_tensor)
