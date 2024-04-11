@@ -27,8 +27,11 @@ inline void calculate_add1()
                 val-=1;
             }
             res = orig-val-1;
+            if (orig-res==1){
+                res+=1;
+            }
         }
-        else{
+        else if(val<0){
             val*=-1;
             while (val>1){
                 val-=1;
