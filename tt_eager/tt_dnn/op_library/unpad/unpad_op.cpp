@@ -122,6 +122,11 @@ void Unpad::validate(const std::vector<Tensor> &input_tensors) const {
                   (this->output_tensor_start[-1] * input_tensor_a.element_size() % sizeof(uint32_t) == 0)
                     ,"RM unpadding requires output X size to be packable");
     }
+
+    // TODO in valide: if the memory config is sharded, then we need to make sure
+    // 1. input (B,T,W,H) tensor is tile
+    // 2. output B*T dimension == total cores in the shard config
+    // 3. output W and H dimension == shard shape
 }
 std::vector<Shape> Unpad::compute_output_shapes(const std::vector<Tensor> &input_tensors) const {
     std::vector<uint32_t> out_shape;
@@ -135,7 +140,25 @@ std::vector<Shape> Unpad::compute_output_shapes(const std::vector<Tensor> &input
 }
 std::vector<Tensor> Unpad::create_output_tensors(const std::vector<Tensor> &input_tensors) const {
     const auto& input_tensor_a = input_tensors.at(0);
-    return operation::generic_create_output_tensors(*this, input_tensors, input_tensor_a.get_dtype(), input_tensor_a.get_layout(), this->output_mem_config);
+    // log_info("[xuncai] Unpad::create_output_tensors");
+    // log_info("[xuncai] input_tensor_a.get_dtype() = {}", input_tensor_a.get_dtype());
+    // log_info("[xuncai] input_tensor_a.get_layout() = {}", input_tensor_a.get_layout());
+    // log_info("[xuncai] mem_config = {}", this->output_mem_config);
+    if (this->output_mem_config.is_sharded()) {
+        // log_info("[xuncai] create_sharded_device_tensor");
+        auto mem_config = this->output_mem_config;
+        return {create_sharded_device_tensor(
+            this->compute_output_shapes(input_tensors).at(0),
+            input_tensor_a.get_dtype(),
+            input_tensor_a.get_layout(),
+            input_tensor_a.device(),
+            mem_config,
+            true
+            )};
+    } else {
+        // log_info("[xuncai] generic_create_output_tensors");
+        return operation::generic_create_output_tensors(*this, input_tensors, input_tensor_a.get_dtype(), input_tensor_a.get_layout(), this->output_mem_config);
+    }
 }
 
 // TODO: If unpad is called on a tile and output is not tile, we could untilize then unpad, and output is RM
@@ -145,9 +168,11 @@ operation::ProgramWithCallbacks Unpad::create_program(const std::vector<Tensor>&
     auto& output_tensor = output_tensors.at(0);
     switch(this->get_parallelization_strategy(input_tensors)) {
         case UnpadOpParallelizationStrategy::MULTI_CORE:
+            // log_info("[xuncai] UnpadOpParallelizationStrategy::MULTI_CORE");
             return unpad_multi_core(input_tensor_a, output_tensor, output_tensor_start, output_tensor_end);
         case UnpadOpParallelizationStrategy::SINGLE_CORE:
         default:
+            // log_info("[xuncai] UnpadOpParallelizationStrategy::MULTI_CORE");
             return unpad_single_core(input_tensor_a, output_tensor, output_tensor_start, output_tensor_end);
     };
 }
