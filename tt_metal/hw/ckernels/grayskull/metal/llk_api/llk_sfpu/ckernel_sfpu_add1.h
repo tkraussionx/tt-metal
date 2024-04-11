@@ -26,14 +26,14 @@ inline void calculate_add1()
             while (val>1){
                 val-=1;
             }
-            res = orig-val;
+            res = orig-val-1;
         }
         else{
             val*=-1;
             while (val>1){
                 val-=1;
             }
-            res = -orig-val+1;
+            res = -orig-val+2;
             res*=-1;
         }
         dst_reg[0] = res;
