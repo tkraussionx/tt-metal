@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from typing import Tuple, Union, Dict, Optional
-
+import torch
 import ttnn
 
 from tt_eager.tt_dnn.op_library.sliding_window_op_infra.tt_py_composite_conv import (
@@ -12,8 +12,32 @@ from tt_eager.tt_dnn.op_library.sliding_window_op_infra.tt_py_composite_conv imp
 )
 
 
-def _golden_function(self, activations):
-    breakpoint()
+def _golden_function_conv2d(self, activations):
+    # inputs in [1, 1, NWH, C] format, reshape to N, H, W, C
+    activations = activations.reshape(self.batch_size, self.input_height, self.input_width, self.in_channels)
+    # permute to N, C, H, W
+    activations = activations.permute(0, 3, 1, 2)
+
+    torch_out = torch.nn.functional.conv2d(
+        activations.float(),
+        ttnn.to_torch(self.original_weight).float(),
+        bias=ttnn.to_torch(self.original_bias).squeeze().float() if self.original_bias is not None else None,
+        stride=(self.stride_h, self.stride_w),
+        padding=(self.pad_h, self.pad_w),
+        dilation=(self.dilation_h, self.dilation_w),
+        groups=self.groups,
+    )
+    torch_out = torch_out.permute(0, 2, 3, 1)
+    torch_out = torch_out.reshape(1, 1, -1, self.out_channels)
+    return torch_out
+
+
+def _golden_function_copy_input(self, input):
+    return input
+
+
+def _golden_function_copy_output(self, output):
+    return output
 
 
 class Conv2d:
@@ -130,24 +154,39 @@ class Conv2d:
         self.output_width = (input_width + (2 * pad_w) - dilation_w * (window_w - 1) - 1) // stride_w + 1
         self.in_channels = in_channels
         self.out_channels = out_channels
+        self.original_weight = weight
+        self.original_bias = bias
+        self.stride_h = stride_h
+        self.stride_w = stride_w
+        self.pad_h = pad_h
+        self.pad_w = pad_w
+        self.dilation_h = dilation_h
+        self.dilation_w = dilation_w
+        self.groups = groups
 
     @ttnn.register_operation(
         name="ttnn.Conv2d.__call__",
         validate_input_tensors=lambda *args, **kwargs: None,
         is_method=True,
-        golden_function=_golden_function,
+        golden_function=_golden_function_conv2d,
     )
     def __call__(self, activation: ttnn.Tensor):
         return self.conv(activation)
 
     @ttnn.register_operation(
-        name="ttnn.Conv2d.copy_input_to_device", validate_input_tensors=lambda *args, **kwargs: None, is_method=True
+        name="ttnn.Conv2d.copy_input_to_device",
+        validate_input_tensors=lambda *args, **kwargs: None,
+        golden_function=_golden_function_copy_input,
+        is_method=True,
     )
     def copy_input_to_device(self, input: ttnn.Tensor):
         return self.conv.copy_input_to_device(input)
 
     @ttnn.register_operation(
-        name="ttnn.Conv2d.copy_output_from_device", validate_input_tensors=lambda *args, **kwargs: None, is_method=True
+        name="ttnn.Conv2d.copy_output_from_device",
+        validate_input_tensors=lambda *args, **kwargs: None,
+        golden_function=_golden_function_copy_output,
+        is_method=True,
     )
     def copy_output_from_device(self, output: ttnn.Tensor):
         return self.conv.copy_output_from_device(output)
