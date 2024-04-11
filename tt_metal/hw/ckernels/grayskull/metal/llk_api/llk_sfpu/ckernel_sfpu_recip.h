@@ -84,11 +84,7 @@ inline void calculate_reciprocal()
                 }
                 v_endif
             }
-            res = orig-val;
-            v_if (orig-res==1.0F){
-                res+=1.0F;
-            }
-            v_endif
+            res = val;
         }
         v_elseif(val<0.0F){
             val*=-1.0F;
@@ -99,11 +95,7 @@ inline void calculate_reciprocal()
                 }
                 v_endif
             }
-            res = -orig-val+1.0F;
-            v_if (orig+res==1.0F){
-                res-=1.0F;
-            }
-            v_endif
+            res = val;
             res*=-1.0F;
         }
         v_endif
