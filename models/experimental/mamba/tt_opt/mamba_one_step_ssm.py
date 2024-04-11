@@ -151,24 +151,24 @@ class TtMambaSSM(torch.nn.Module):
         ttnn.deallocate(delta_t2)
 
         # shard delta and A
-        delta_t4 = ttnn.to_memory_config(delta_t3, memory_config=self.configs["sharded_dn"])
-        abar0 = ttnn.to_memory_config(self.A, memory_config=self.configs["sharded_dn"])
+        delta_t4 = delta_t3 #ttnn.to_memory_config(delta_t3, memory_config=self.configs["sharded_dn"])
+        abar0 = self.A #ttnn.to_memory_config(self.A, memory_config=self.configs["sharded_dn"])
 
-        abar1 = ttnn.mul(delta_t4, abar0, memory_config=self.configs["sharded_dn"])
-        ttnn.deallocate(abar0)
-        ttnn.deallocate(delta_t4)
+        abar1 = ttnn.mul(delta_t4, abar0, memory_config=ttnn.L1_MEMORY_CONFIG) #self.configs["sharded_dn"])
+        #ttnn.deallocate(abar0)
+        #ttnn.deallocate(delta_t4)
 
-        abar2 = ttnn.to_memory_config(abar1, memory_config=ttnn.L1_MEMORY_CONFIG)
-        ttnn.deallocate(abar1)
+        abar2 = abar1 #ttnn.to_memory_config(abar1, memory_config=ttnn.L1_MEMORY_CONFIG)
+        #ttnn.deallocate(abar1)
         abar3 = ttnn.exp(abar2, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(abar2)
 
-        abar4 = ttnn.to_memory_config(abar3, memory_config=self.configs["sharded_dn"])
-        ttnn.deallocate(abar3)
+        abar4 = abar3 #ttnn.to_memory_config(abar3, memory_config=self.configs["sharded_dn"])
+        #ttnn.deallocate(abar3)
 
         # multiply abar and hidden_state
-        hidden_state0 = ttnn.to_memory_config(self.tt_hidden_state, memory_config=self.configs["sharded_dn"])
-        amulh0 = ttnn.mul(abar4, hidden_state0, memory_config=self.configs["sharded_dn"])
+        hidden_state0 = ttnn.to_memory_config(self.tt_hidden_state, memory_config=ttnn.L1_MEMORY_CONFIG) #self.configs["sharded_dn"])
+        amulh0 = ttnn.mul(abar4, hidden_state0, memory_config=ttnn.L1_MEMORY_CONFIG) #self.configs["sharded_dn"])
 
         # deallocate abar and hidden_state
         ttnn.deallocate(abar4)
@@ -194,15 +194,15 @@ class TtMambaSSM(torch.nn.Module):
         ttnn.deallocate(B0)
 
         # shard B
-        B2 = ttnn.to_memory_config(B1, memory_config=self.configs["sharded_dn"])
-        ttnn.deallocate(B1)
+        B2 = B1 #ttnn.to_memory_config(B1, memory_config=self.configs["sharded_dn"])
+        #ttnn.deallocate(B1)
 
         # shard delta
-        delta_t4 = ttnn.to_memory_config(delta_t3, memory_config=self.configs["sharded_dn"])
-        ttnn.deallocate(delta_t3)
+        #delta_t4 = ttnn.to_memory_config(delta_t3, memory_config=self.configs["sharded_dn"])
+        #ttnn.deallocate(delta_t3)
 
         # bbar
-        bbar0 = ttnn.mul(delta_t4, B2, memory_config=self.configs["sharded_dn"])
+        bbar0 = ttnn.mul(delta_t4, B2, memory_config=ttnn.L1_MEMORY_CONFIG) #self.configs["sharded_dn"])
         ttnn.deallocate(delta_t4)
         ttnn.deallocate(B2)
 
@@ -214,16 +214,16 @@ class TtMambaSSM(torch.nn.Module):
             core_grid=ttnn.CoreGrid(y=8, x=8),
         )  # b,n
 
-        x1 = ttnn.to_memory_config(x0, memory_config=self.configs["sharded_dn"])
-        ttnn.deallocate(x0)
-        bmulx0 = ttnn.mul(bbar0, x1, memory_config=self.configs["sharded_dn"])
+        x1 = x0 #ttnn.to_memory_config(x0, memory_config=self.configs["sharded_dn"])
+        #ttnn.deallocate(x0)
+        bmulx0 = ttnn.mul(bbar0, x1, memory_config=ttnn.L1_MEMORY_CONFIG) #self.configs["sharded_dn"])
 
         # deallocate bbar
         ttnn.deallocate(bbar0)
         ttnn.deallocate(x1)
 
         # add amulh and bmulx
-        hidden_state1 = ttnn.add(amulh0, bmulx0, memory_config=self.configs["sharded_dn"])
+        hidden_state1 = ttnn.add(amulh0, bmulx0, memory_config=ttnn.L1_MEMORY_CONFIG) #self.configs["sharded_dn"])
         ttnn.deallocate(self.tt_hidden_state)
         self.tt_hidden_state = ttnn.to_memory_config(hidden_state1, memory_config=ttnn.DRAM_MEMORY_CONFIG)
 
@@ -251,15 +251,15 @@ class TtMambaSSM(torch.nn.Module):
         ttnn.deallocate(C0)
         
         # shard c
-        C2 = ttnn.to_memory_config(C1, memory_config=self.configs["sharded_dn"])
-        ttnn.deallocate(C1)
+        C2 = C1 #ttnn.to_memory_config(C1, memory_config=self.configs["sharded_dn"])
+        #ttnn.deallocate(C1)
 
-        C3 = ttnn.mul(hidden_state1, C2, memory_config=self.configs["sharded_dn"])
+        C3 = ttnn.mul(hidden_state1, C2, memory_config=ttnn.L1_MEMORY_CONFIG) #self.configs["sharded_dn"])
         ttnn.deallocate(hidden_state1)
         ttnn.deallocate(C2)
 
         # Reduction matmul
-        C3 = ttnn.to_memory_config(C3, memory_config=ttnn.L1_MEMORY_CONFIG)
+        #C3 = ttnn.to_memory_config(C3, memory_config=ttnn.L1_MEMORY_CONFIG)
         C4 = self.transformer.reduce(
             C3,
             memory_config=ttnn.L1_MEMORY_CONFIG,
@@ -269,19 +269,19 @@ class TtMambaSSM(torch.nn.Module):
         ttnn.deallocate(C3)
         
         # shard x, C
-        x = ttnn.to_memory_config(x, memory_config=self.configs["sharded_d"])
-        C5 = ttnn.to_memory_config(C4, memory_config=self.configs["sharded_d"])
-        ttnn.deallocate(C4)
+        #x = ttnn.to_memory_config(x, memory_config=self.configs["sharded_d"])
+        C5 = C4 #ttnn.to_memory_config(C4, memory_config=self.configs["sharded_d"])
+        #ttnn.deallocate(C4)
 
         # shard D
-        D = ttnn.to_memory_config(self.D, memory_config=self.configs["sharded_d"])
+        D = self.D #ttnn.to_memory_config(self.D, memory_config=self.configs["sharded_d"])
 
         # x * D
-        xD = ttnn.mul(x, D, memory_config=self.configs["sharded_d"])
-        ttnn.deallocate(x)
+        xD = ttnn.mul(x, D, memory_config=ttnn.L1_MEMORY_CONFIG) #self.configs["sharded_d"])
+        #ttnn.deallocate(x)
 
         # add xD and x
-        output = ttnn.add(xD, C5, memory_config=self.configs["sharded_d"])
+        output = ttnn.add(xD, C5, memory_config=ttnn.L1_MEMORY_CONFIG) #self.configs["sharded_d"])
         ttnn.deallocate(xD)
         ttnn.deallocate(C5)
 

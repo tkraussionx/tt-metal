@@ -96,7 +96,7 @@ class TtMambaBlock(torch.nn.Module):
         x = ttnn.linear(
             x,
             self.ssm_in_proj_weights,
-            memory_config=ttnn.L1_MEMORY_CONFIG,
+            memory_config=ttnn.DRAM_MEMORY_CONFIG,
             compute_kernel_config=self.compute_kernel_config,
             use_1d_systolic_array=True,
             core_grid=ttnn.CoreGrid(y=4, x=8),
@@ -108,30 +108,30 @@ class TtMambaBlock(torch.nn.Module):
             self.conv_states[i] = self.conv_states[i + 1]
 
         # update the last state and move it back to DRAM with all the other states
-        self.conv_states[3] = ttnn.to_memory_config(x, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+        self.conv_states[3] = x #ttnn.to_memory_config(x, memory_config=ttnn.DRAM_MEMORY_CONFIG)
 
         # do the convolution
-        conv1d_wt = ttnn.to_memory_config(self.conv1d_weights[0], memory_config=self.configs["sharded_d"])
-        conv_state = ttnn.to_memory_config(self.conv_states[0], memory_config=self.configs["sharded_d"])
-        x = ttnn.mul(conv_state, conv1d_wt, memory_config=self.configs["sharded_d"])
-        ttnn.deallocate(conv1d_wt)
-        ttnn.deallocate(conv_state)
+        conv1d_wt = self.conv1d_weights[0] #ttnn.to_memory_config(self.conv1d_weights[0], memory_config=self.configs["sharded_d"])
+        conv_state = self.conv_states[0] #ttnn.to_memory_config(self.conv_states[0], memory_config=self.configs["sharded_d"])
+        x = ttnn.mul(conv_state, conv1d_wt, memory_config=ttnn.L1_MEMORY_CONFIG) #self.configs["sharded_d"])
+        #ttnn.deallocate(conv1d_wt)
+        #ttnn.deallocate(conv_state)
 
         for i in range(1, 4):
-            conv1d_wt = ttnn.to_memory_config(self.conv1d_weights[i], memory_config=self.configs["sharded_d"])
-            conv_state = ttnn.to_memory_config(self.conv_states[i], memory_config=self.configs["sharded_d"])
-            prod = ttnn.mul(conv_state, conv1d_wt, memory_config=self.configs["sharded_d"])
-            ttnn.deallocate(conv1d_wt)
-            ttnn.deallocate(conv_state)
+            conv1d_wt = self.conv1d_weights[i] #ttnn.to_memory_config(self.conv1d_weights[i], memory_config=self.configs["sharded_d"])
+            conv_state = self.conv_states[i] #ttnn.to_memory_config(self.conv_states[i], memory_config=self.configs["sharded_d"])
+            prod = ttnn.mul(conv_state, conv1d_wt, memory_config=ttnn.L1_MEMORY_CONFIG) #self.configs["sharded_d"])
+            #ttnn.deallocate(conv1d_wt)
+            #ttnn.deallocate(conv_state)
 
-            x = ttnn.add(x, prod, memory_config=self.configs["sharded_d"])
+            x = ttnn.add(x, prod, memory_config=ttnn.L1_MEMORY_CONFIG) #self.configs["sharded_d"])
             ttnn.deallocate(prod)
 
-        conv1d_bias = ttnn.to_memory_config(self.conv1d_bias, memory_config=self.configs["sharded_d"])
-        x = ttnn.add(x, conv1d_bias, memory_config=self.configs["sharded_d"])
-        ttnn.deallocate(conv1d_bias)
+        conv1d_bias = self.conv1d_bias #ttnn.to_memory_config(self.conv1d_bias, memory_config=self.configs["sharded_d"])
+        x = ttnn.add(x, conv1d_bias, memory_config=ttnn.L1_MEMORY_CONFIG) #self.configs["sharded_d"])
+        #ttnn.deallocate(conv1d_bias)
 
-        x = ttnn.to_memory_config(x, memory_config=ttnn.L1_MEMORY_CONFIG)
+        #x = ttnn.to_memory_config(x, memory_config=ttnn.L1_MEMORY_CONFIG)
         x = ttnn.silu(x, memory_config=ttnn.L1_MEMORY_CONFIG)
 
         x = self.tt_ssm(x)
@@ -149,12 +149,12 @@ class TtMambaBlock(torch.nn.Module):
         residual_with_silu = ttnn.silu(residual, memory_config=ttnn.L1_MEMORY_CONFIG)
         ttnn.deallocate(residual)
 
-        residual_with_silu = ttnn.to_memory_config(residual_with_silu, memory_config=self.configs["sharded_d"])
-        out = ttnn.mul(x, residual_with_silu, memory_config=self.configs["sharded_d"])
-        ttnn.deallocate(residual_with_silu)
-        ttnn.deallocate(x)
+        #residual_with_silu = ttnn.to_memory_config(residual_with_silu, memory_config=self.configs["sharded_d"])
+        out = ttnn.mul(x, residual_with_silu, memory_config=ttnn.L1_MEMORY_CONFIG) #self.configs["sharded_d"])
+        #ttnn.deallocate(residual_with_silu)
+        #ttnn.deallocate(x)
 
-        out = ttnn.to_memory_config(out, memory_config=ttnn.L1_MEMORY_CONFIG)
+        #out = ttnn.to_memory_config(out, memory_config=ttnn.L1_MEMORY_CONFIG)
         out = ttnn.linear(
             out,
             self.out_proj_weights,
