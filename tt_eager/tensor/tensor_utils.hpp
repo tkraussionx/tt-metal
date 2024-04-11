@@ -132,6 +132,8 @@ inline bool any_tensor_on_multi_device(const std::vector<ttnn::Tensor>& tensors)
     return false;
 }
 
+DistributionStrategy get_distribution_strategy_from_tensor(const Tensor& tensor);
+
 } // namespace tt_metal
 
 } // namespace tt

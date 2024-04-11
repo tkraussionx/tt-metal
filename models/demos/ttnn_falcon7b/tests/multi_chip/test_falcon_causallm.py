@@ -57,9 +57,7 @@ PRETRAINED_MODEL_NAME = f"tiiuae/falcon-7b-instruct"
 @pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
 @pytest.mark.parametrize(
     "device_mesh",
-    [
-        2,
-    ],
+    [4, 8],
     indirect=True,
 )
 def test_falcon_causal_lm(

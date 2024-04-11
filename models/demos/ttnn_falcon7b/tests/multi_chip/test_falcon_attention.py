@@ -60,9 +60,7 @@ def torch_model():
 @pytest.mark.parametrize("model_config_str", ("BFLOAT16-DRAM", "BFLOAT16-L1"))
 @pytest.mark.parametrize(
     "device_mesh",
-    [
-        2,
-    ],
+    [2, 4],
     indirect=True,
 )
 def test_falcon_attention(
