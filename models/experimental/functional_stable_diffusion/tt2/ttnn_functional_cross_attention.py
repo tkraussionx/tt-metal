@@ -137,40 +137,40 @@ class cross_attention:
 
         self.scales = {40: self.scale_40, 80: self.scale_80, 160: self.scale_160}
 
-        attention_mask_4096_96 = torch.ones((2, 1, 4096, 96)) * -1e9
+        attention_mask_4096_96 = torch.ones((1, 1, 4096, 96)) * -1e9
         attention_mask_4096_96[:, :, :, :77] = 0
         attention_mask_4096_96 = ttnn.from_torch(
             attention_mask_4096_96, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=self.device
         )
-        attention_mask_1024_96 = torch.ones((2, 1, 1024, 96)) * -1e9
+        attention_mask_1024_96 = torch.ones((1, 1, 1024, 96)) * -1e9
         attention_mask_1024_96[:, :, :, :77] = 0
         attention_mask_1024_96 = ttnn.from_torch(
             attention_mask_1024_96, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=self.device
         )
-        attention_mask_256_96 = torch.ones((2, 1, 256, 96)) * -1e9
+        attention_mask_256_96 = torch.ones((1, 1, 256, 96)) * -1e9
         attention_mask_256_96[:, :, :, :77] = 0
         attention_mask_256_96 = ttnn.from_torch(
             attention_mask_256_96, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=self.device
         )
-        attention_mask_96_96 = torch.ones((2, 1, 96, 96)) * -1e9
+        attention_mask_96_96 = torch.ones((1, 1, 96, 96)) * -1e9
         attention_mask_96_96[:, :, :, :77] = 0
         attention_mask_96_96 = ttnn.from_torch(
             attention_mask_96_96, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=self.device
         )
 
-        attention_mask_4096_4096 = torch.zeros((2, 1, 4096, 4096))
+        attention_mask_4096_4096 = torch.zeros((1, 1, 4096, 4096))
         attention_mask_4096_4096 = ttnn.from_torch(
             attention_mask_4096_4096, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=self.device
         )
-        attention_mask_1024_1024 = torch.zeros((2, 1, 1024, 1024))
+        attention_mask_1024_1024 = torch.zeros((1, 1, 1024, 1024))
         attention_mask_1024_1024 = ttnn.from_torch(
             attention_mask_1024_1024, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=self.device
         )
-        attention_mask_256_256 = torch.zeros((2, 1, 256, 256))
+        attention_mask_256_256 = torch.zeros((1, 1, 256, 256))
         attention_mask_256_256 = ttnn.from_torch(
             attention_mask_256_256, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=self.device
         )
-        attention_mask_64_64 = torch.zeros((2, 1, 64, 64))
+        attention_mask_64_64 = torch.zeros((1, 1, 64, 64))
         attention_mask_64_64 = ttnn.from_torch(
             attention_mask_64_64, dtype=ttnn.bfloat8_b, layout=ttnn.TILE_LAYOUT, device=self.device
         )
@@ -469,10 +469,20 @@ class cross_attention:
         )
         ttnn.deallocate(query)
         ttnn.deallocate(t_key)
+        orig_shape = attention_scores.shape
+        attention_scores = ttnn.reshape(
+            attention_scores,
+            (
+                1,
+                attention_scores.shape[-4] * attention_scores.shape[-3],
+                attention_scores.shape[-2],
+                attention_scores.shape[-1],
+            ),
+        )
         attention_scores = ttnn.transformer.attention_softmax_(
             attention_scores, attention_mask=attention_mask, head_size=head_size
         )
-
+        attention_scores = ttnn.reshape(attention_scores, orig_shape)
         if attention_scores.shape[-2] > original_seq_len:
             attention_scores = attention_scores[:, :, :original_seq_len, :]
         attention_scores = ttnn.matmul(
