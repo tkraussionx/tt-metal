@@ -18,7 +18,7 @@ from ttnn.model_preprocessing import (
 )
 
 BLOOM_MEMORY_CONFIG = ttnn.L1_MEMORY_CONFIG
-BLOOM_DTYPE = ttnn.bfloat8_b
+BLOOM_DTYPE = ttnn.bfloat16
 ASSUME_FUSED_SOFTMAX = False
 
 
@@ -108,7 +108,7 @@ def compute_attention_scores(query_layer, key_layer, alibi):
         query_layer,
         key_layer,
         core_grid=ttnn.CoreGrid(y=9, x=12),
-        memory_config=BLOOM_MEMORY_CONFIG,
+        memory_config=ttnn.DRAM_MEMORY_CONFIG,
         dtype=ttnn.bfloat16,
     )
     ttnn.deallocate(query_layer)
@@ -121,7 +121,7 @@ def compute_attention_scores(query_layer, key_layer, alibi):
     scaled_attention_scores = ttnn.mul(attention_scores, inv_norm_factor, memory_config=BLOOM_MEMORY_CONFIG)
     ttnn.deallocate(attention_scores)
 
-    scaled_attention_scores_plus_alibi = ttnn.add(scaled_attention_scores, alibi, memory_config=BLOOM_MEMORY_CONFIG)
+    scaled_attention_scores_plus_alibi = ttnn.add(scaled_attention_scores, alibi, memory_config=ttnn.DRAM_MEMORY_CONFIG)
     ttnn.deallocate(scaled_attention_scores)
 
     return scaled_attention_scores_plus_alibi
@@ -203,7 +203,7 @@ def bloom_mlp(
         bias=parameters.dense_h_to_4h.bias,
         core_grid=ttnn.CoreGrid(y=9, x=12),
         activation="gelu",
-        memory_config=BLOOM_MEMORY_CONFIG,
+        memory_config=ttnn.DRAM_MEMORY_CONFIG,
         dtype=BLOOM_DTYPE,
     )
     ttnn.deallocate(hidden_states)
