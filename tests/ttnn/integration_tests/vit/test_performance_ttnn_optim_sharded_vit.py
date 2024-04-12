@@ -192,7 +192,11 @@ def test_performance_vit_e2e(
 
     config = ttnn_optimized_sharded_vit.update_model_config(config, batch_size)
 
+    import tracy
+
+    profiler = tracy.Profiler()
     durations = []
+    profiler.enable()
     for _ in range(2):
         start = time.time()
         pixel_values = torch.permute(torch_pixel_values, (0, 2, 3, 1))
@@ -237,6 +241,8 @@ def test_performance_vit_e2e(
         end = time.time()
         durations.append(end - start)
         enable_persistent_kernel_cache()
+
+    profiler.disable()
 
     inference_and_compile_time, inference_time, *_ = durations
 
