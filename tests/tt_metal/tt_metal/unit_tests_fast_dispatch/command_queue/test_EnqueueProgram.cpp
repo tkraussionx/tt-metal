@@ -297,6 +297,68 @@ bool test_EnqueueWrap_on_EnqueueProgram(Device* device, CommandQueue& cq, const 
     return pass;
 }
 
+
+// Verify RT args for a core at a given address by comparing to expected values.
+bool verify_rt_args(bool unique, Device* device, CoreCoord logical_core, uint32_t addr, std::vector<uint32_t> expected_rt_args, std::vector<uint32_t> increments) {
+    bool pass = true;
+    std::string label = unique ? "Unique" : "Common";
+    log_debug(tt::LogTest, "Verifying {} {} RT args for {} at addr: 0x{:x} w/ increments: {}", expected_rt_args.size(), label, logical_core.str(), addr, increments);
+
+    std::vector<uint32_t> written_args;
+    tt::tt_metal::detail::ReadFromDeviceL1(device, logical_core, addr, expected_rt_args.size() * sizeof(uint32_t), written_args);
+
+    for(int i=0; i<expected_rt_args.size(); i++){
+        uint32_t expected_val = expected_rt_args[i] + increments[i];
+        log_debug(tt::LogTest, "Checking {} RT Arg. i: {} expected: {} observed: {}", label, i, expected_val, written_args[i]);
+        EXPECT_EQ(written_args[i], expected_val);
+        pass &= (written_args[i] == expected_val);
+    }
+    return pass;
+}
+
+// Write unique and common RT args, increment in kernel, and verify correctness via readback.
+bool test_increment_runtime_args_sanity(Device* device, const DummyProgramConfig& program_config) {
+
+    Program program;
+    bool pass = true;
+    CoreRangeSet cr_set = program_config.cr_set;
+
+    auto compute_kernel_id = CreateKernel(
+        program,
+        "tests/tt_metal/tt_metal/test_kernels/compute/increment_runtime_arg.cpp",
+        cr_set,
+        tt::tt_metal::ComputeConfig{});
+    const auto kernel = tt::tt_metal::detail::GetKernel(program, compute_kernel_id);
+
+    // Unique Runtime Args.
+    std::vector<uint32_t> unique_runtime_args = {101, 202};
+    std::vector<uint32_t> unique_arg_increments = {87, 216};
+    SetRuntimeArgs(program, 0, cr_set, unique_runtime_args);
+
+    // Setup Common Runtime Args.
+    std::vector<uint32_t> common_runtime_args = {11, 22, 33, 44};
+    std::vector<uint32_t> common_arg_increments = {123, 234, 345, 456};
+    SetCommonRuntimeArgs(program, 0, common_runtime_args);
+
+    // Compile and Launch the Program now.
+    EnqueueProgram(device->command_queue(), program, false);
+    Finish(device->command_queue());
+    auto common_args_addr = TRISC_L1_ARG_BASE + kernel->get_common_runtime_args_offset();
+
+    // Verify Unique/Common Args.
+    for (auto &core_range : kernel->logical_coreranges()) {
+        for (auto x = core_range.start.x; x <= core_range.end.x; x++) {
+            for (auto y = core_range.start.y; y <= core_range.end.y; y++) {
+                CoreCoord core_coord(x, y);
+                pass &= verify_rt_args(true, device, core_coord, TRISC_L1_ARG_BASE, unique_runtime_args, unique_arg_increments);
+                pass &= verify_rt_args(false, device, core_coord, common_args_addr, common_runtime_args, common_arg_increments);
+            }
+        }
+    }
+
+    return pass;
+}
+
 }  // namespace local_test_functions
 
 namespace basic_tests {
@@ -462,35 +524,24 @@ TEST_F(CommandQueueSingleCardFixture, TestAutoInsertedBlankBriscKernelInDeviceDi
     }
 }
 
-TEST_F(CommandQueueSingleCardFixture, ComputeRuntimeArgs) {
+// Sanity test for setting and verifying common and unique runtime args to a single core, the simplest case.
+TEST_F(CommandQueueSingleCardFixture, IncrementRuntimeArgsSanitySingleCore) {
+    CoreRange cr0({0, 0}, {0, 0});
+    CoreRangeSet cr_set({cr0});
+    DummyProgramConfig dummy_program_config = {.cr_set = cr_set};
     for (Device *device : devices_) {
-        Program program;
+        EXPECT_TRUE(local_test_functions::test_increment_runtime_args_sanity(device, dummy_program_config));
+    }
+}
 
-        CoreRange cr({0, 0}, {0, 0});
-        CoreRangeSet cr_set({cr});
-
-        auto compute_kernel_id = CreateKernel(
-            program,
-            "tests/tt_metal/tt_metal/test_kernels/compute/increment_runtime_arg.cpp",
-            cr_set,
-            tt::tt_metal::ComputeConfig{});
-
-
-        std::vector<uint32_t> initial_runtime_args = {101, 202};
-        SetRuntimeArgs(program, 0, cr_set, initial_runtime_args);
-
-        EnqueueProgram(device->command_queue(), program, false);
-        Finish(device->command_queue());
-
-        std::vector<uint32_t> increments = {87, 216};
-        std::vector<uint32_t> written_args;
-        CoreCoord logical_core(0,0);
-        tt::tt_metal::detail::ReadFromDeviceL1(
-            device, logical_core, TRISC_L1_ARG_BASE, initial_runtime_args.size() * sizeof(uint32_t), written_args);
-        for(int i=0; i<initial_runtime_args.size(); i++){
-            bool got_expected_result = (written_args[i] == (initial_runtime_args[i] + increments[i]));
-            EXPECT_TRUE(got_expected_result);
-        }
+// Sanity test for setting and verifying common and unique runtime args to multiple cores.
+TEST_F(CommandQueueSingleCardFixture, IncrementRuntimeArgsSanityMultiCore) {
+    CoreRange cr0({1, 1}, {2, 2});
+    CoreRange cr1({3, 3}, {4, 4});
+    CoreRangeSet cr_set({cr0, cr1});
+    DummyProgramConfig dummy_program_config = {.cr_set = cr_set};
+    for (Device *device : devices_) {
+        EXPECT_TRUE(local_test_functions::test_increment_runtime_args_sanity(device, dummy_program_config));
     }
 }
 

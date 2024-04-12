@@ -259,7 +259,24 @@ const DeviceCommand EnqueueProgramCommand::assemble_device_commands() {
     uint32_t cmd_sequence_sizeB = CQ_PREFETCH_CMD_BARE_MIN_SIZE + // CQ_PREFETCH_CMD_RELAY_INLINE + CQ_DISPATCH_CMD_WAIT
         CQ_PREFETCH_CMD_BARE_MIN_SIZE; // CQ_PREFETCH_CMD_STALL
 
-    for (const auto& [dst, transfer_info] : program.program_transfer_info.runtime_args) {
+    for (const auto& [dst, transfer_info_vec] : program.program_transfer_info.multicast_runtime_args) {
+        uint32_t num_packed_cmds = 0;
+        uint32_t write_packed_len = transfer_info_vec[0].data.size();
+
+        for (const auto& transfer_info: transfer_info_vec) {
+            for (const auto& dst_noc_info: transfer_info.dst_noc_info) {
+                TT_ASSERT(transfer_info.data.size() == write_packed_len, "Not all data vectors in write packed common rtargs cmd equal in len");
+                num_packed_cmds += 1;
+            }
+        }
+
+        uint32_t aligned_semaphore_data_sizeB = align(write_packed_len * sizeof(uint32_t), L1_ALIGNMENT) * num_packed_cmds;
+        uint32_t dispatch_cmd_sizeB = align(sizeof(CQDispatchCmd) + num_packed_cmds * sizeof(CQDispatchWritePackedMulticastSubCmd), L1_ALIGNMENT);
+        uint32_t mcast_payload_sizeB = dispatch_cmd_sizeB + aligned_semaphore_data_sizeB;
+        cmd_sequence_sizeB += align(sizeof(CQPrefetchCmd) +  mcast_payload_sizeB, PCIE_ALIGNMENT);
+    }
+
+    for (const auto& [dst, transfer_info] : program.program_transfer_info.unicast_runtime_args) {
         uint32_t num_packed_cmds = transfer_info.size();
         uint32_t dispatch_cmd_sizeB = align(sizeof(CQDispatchCmd) + num_packed_cmds * sizeof(CQDispatchWritePackedUnicastSubCmd), L1_ALIGNMENT);
 
@@ -346,9 +363,42 @@ const DeviceCommand EnqueueProgramCommand::assemble_device_commands() {
     command_sequence.add_dispatch_wait_with_prefetch_stall(true, DISPATCH_MESSAGE_ADDR, this->expected_num_workers_completed);
 
     // Runtime Args
-    // Runtime Args Cmd
     program.update_runtime_args_transfer_info(this->device);
-    for (const auto& [dst, transfer_info] : program.program_transfer_info.runtime_args) {
+
+    // Multicast common runtime args.
+    for (const auto& [dst, transfer_info_vec] : program.program_transfer_info.multicast_runtime_args) {
+        uint32_t num_packed_cmds = 0;
+        uint32_t write_packed_len = transfer_info_vec[0].data.size();
+
+        std::vector<CQDispatchWritePackedMulticastSubCmd> multicast_sub_cmds;
+        std::vector<const void *> rtarg_data;
+
+        for (const auto& transfer_info: transfer_info_vec) {
+            for (const auto& dst_noc_info: transfer_info.dst_noc_info) {
+                num_packed_cmds += 1;
+                multicast_sub_cmds.emplace_back(
+                    CQDispatchWritePackedMulticastSubCmd{.noc_xy_addr = dst_noc_info.first, .num_mcast_dests = dst_noc_info.second}
+                );
+                rtarg_data.emplace_back(transfer_info.data.data());
+            }
+        }
+
+        uint32_t aligned_semaphore_data_sizeB = align(write_packed_len * sizeof(uint32_t), L1_ALIGNMENT) * num_packed_cmds;
+        uint32_t dispatch_cmd_sizeB = align(sizeof(CQDispatchCmd) + num_packed_cmds * sizeof(CQDispatchWritePackedMulticastSubCmd), L1_ALIGNMENT);
+        uint32_t payload_sizeB = dispatch_cmd_sizeB + aligned_semaphore_data_sizeB;
+
+        command_sequence.add_dispatch_write_packed<CQDispatchWritePackedMulticastSubCmd>(
+            num_packed_cmds,
+            dst,
+            write_packed_len * sizeof(uint32_t),
+            payload_sizeB,
+            multicast_sub_cmds,
+            rtarg_data
+        );
+    }
+
+    // Unicast unique runtime args.
+    for (const auto& [dst, transfer_info] : program.program_transfer_info.unicast_runtime_args) {
         uint32_t num_packed_cmds = transfer_info.size();
         uint32_t runtime_args_len = transfer_info[0].data.size();
 
