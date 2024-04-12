@@ -6,7 +6,7 @@ from typing import Tuple, Union, Dict, Optional
 import warnings
 import math
 import ttnn
-
+from tt_eager.tt_dnn.op_library.sliding_window_op_infra.sliding_window_op_utils import calculate_shard_grid, roundup
 from tt_eager.tt_dnn.op_library.sliding_window_op_infra.tt_py_composite_conv import (
     TTPyCompositeConv,
     SlidingWindowOpParams,
@@ -166,18 +166,18 @@ class ParallelConfig:
         num_cores_y: int,
         num_cores_x: int,
         num_cores_nhw: int,
-        shard_strategy: ttnn.TensorMemoryLayout,
+        shard_scheme: ttnn.TensorMemoryLayout,
         shard_orientation: ttnn.ShardOrientation,
     ):
         # TODO: using core range set would be better
         self.grid_size = ttnn.experimental.tensor.CoreCoord(num_cores_x, num_cores_y)
         self.num_cores_nhw = num_cores_nhw
-        self.shard_strategy = shard_strategy
+        self.shard_scheme = shard_scheme
         self.shard_orientation = shard_orientation
 
 
 def determine_parallel_config(
-    is_1d_systolic,
+    shard_scheme,
     batch_size,
     input_channels,
     output_height,
@@ -187,6 +187,7 @@ def determine_parallel_config(
     config_override=None,
     is_out_tiled=True,
 ):
+    is_1d_systolic = shard_scheme == ttnn.TensorMemoryLayout.HEIGHT_SHARDED
     if config_override is None:
         config_override = {}
     for k in config_override.keys():
@@ -244,9 +245,37 @@ def determine_parallel_config(
 
     num_cores_nhw = calculate_num_cores_nhw(config_override.get("num_cores_nhw", None))
     grid_size = calculate_grid_size(num_cores_nhw, config_override.get("grid_size", None))
-    shard_strategy = ttnn.TensorMemoryLayout.HEIGHT_SHARDED if is_1d_systolic else ttnn.TensorMemoryLayout.BLOCK_SHARDED
     shard_orientation = ttnn.ShardOrientation.ROW_MAJOR if is_1d_systolic else ttnn.ShardOrientation.COL_MAJOR
-    return ParallelConfig(grid_size[1], grid_size[0], num_cores_nhw, shard_strategy, shard_orientation)
+    return ParallelConfig(grid_size[1], grid_size[0], num_cores_nhw, shard_scheme, shard_orientation)
+
+
+# todo: there are different versions of this function. Commonize.
+def create_sharded_memory_config_from_parallel_config(tensor_shape, parallel_config, tile_size):
+    # tensor_shape is [N, H, W, C]
+    assert len(tensor_shape) == 4
+    assert tensor_shape[0] == 1 and tensor_shape[1] == 1  # todo: add support for generic non-2d shapes
+    channels = tensor_shape[3]
+    num_cores_nhw = parallel_config.num_cores_nhw
+    num_cores_x = parallel_config.grid_size.x
+    num_cores_y = parallel_config.grid_size.y
+    shard_scheme = parallel_config.shard_scheme
+    shard_orientation = parallel_config.shard_orientation
+    is_1d_systolic = shard_scheme == ttnn.TensorMemoryLayout.HEIGHT_SHARDED
+    if is_1d_systolic:
+        logical_grid_size = (num_cores_nhw, 1)
+    else:
+        logical_grid_size = (num_cores_x, num_cores_y)
+
+    shard_grid, shard_layout = calculate_shard_grid((num_cores_x, num_cores_y), num_cores_nhw)
+    assert shard_layout == shard_scheme
+    nhw_shape = tensor_shape[0] * tensor_shape[1] * tensor_shape[2]
+    nhw_padded = roundup(nhw_shape, num_cores_nhw * tile_size)
+    nhw_shard = nhw_padded // num_cores_nhw
+    assert channels % logical_grid_size[1] == 0
+    shard_shape = [nhw_shard, channels // logical_grid_size[1]]
+    shard_halo = False
+    shard_spec = ttnn.experimental.tensor.ShardSpec(shard_grid, shard_shape, shard_orientation, shard_halo)
+    return ttnn.MemoryConfig(shard_scheme, ttnn.BufferType.L1, shard_spec)
 
 
 @ttnn.register_operation(name="ttnn.conv2d", is_cpp_function=True)
@@ -267,35 +296,47 @@ def conv2d(
     *,
     device: ttnn.Device,
     bias_tensor: Optional[ttnn.Tensor] = None,
+    shard_scheme: Optional[ttnn.TensorMemoryLayout] = None,
+    parallel_config: Optional[ParallelConfig] = None,
     math_fidelity: ttnn.MathFidelity = None,
     weights_dtype: ttnn.DataType = None,
     conv_kernel_block_config_override: Optional[ConvKernelBlockConfig],
-    parallel_config: Optional[ParallelConfig] = None,
     compute_kernel_config: Optional[ttnn.DeviceComputeKernelConfig] = None,
     activation: str = None,
 ) -> ttnn.Tensor:
+    output_height = ((int)((input_height - kernel_size[0] + 2 * padding[0]) / stride[0])) + 1
+    output_width = ((int)((input_width - kernel_size[1] + 2 * padding[1]) / stride[1])) + 1
+    if shard_scheme is not None:
+        parallel_config = ttnn.determine_parallel_config(
+            shard_scheme, batch_size, in_channels, output_height, output_width, out_channels, device
+        )
+        input_tensor_sharded_memory_config_new = create_sharded_memory_config_from_parallel_config(
+            [batch_size, input_height, input_width, in_channels], parallel_config, tile_size=32
+        )
+        print("Running reshard or interleaved to sharded op on input tensor")
+        input_tensor = input_tensor.to_memory_config(input_tensor_sharded_memory_config_new)
+    # if parallel_config is None:
+    # input_memory_config =
     block_and_parallel_config_override = {}
     if conv_kernel_block_config_override is not None:
         block_and_parallel_config_override["act_block_h"] = conv_kernel_block_config_override.act_block_h
     if parallel_config is not None:
         block_and_parallel_config_override["grid_size"] = [parallel_config.grid_size.x, parallel_config.grid_size.y]
         block_and_parallel_config_override["num_cores_nhw"] = parallel_config.num_cores_nhw
-    input_memory_config = ttnn.get_memory_config(input_tensor)
-    shard_strategy = input_memory_config.memory_layout
-    shard_orientation = input_memory_config.shard_spec.orientation
-    assert (
-        shard_strategy == ttnn.TensorMemoryLayout.HEIGHT_SHARDED
-        or shard_strategy == ttnn.TensorMemoryLayout.BLOCK_SHARDED
-    )
-    if shard_strategy == ttnn.TensorMemoryLayout.HEIGHT_SHARDED:
-        assert shard_orientation == ttnn.ShardOrientation.ROW_MAJOR
-    else:
-        assert shard_orientation == ttnn.ShardOrientation.COL_MAJOR
-    if parallel_config is not None:
-        # input and output should have same shard strategy and orientation
-        # halo doesnt support reshard between different strategies or orientation
-        assert shard_strategy == parallel_config.shard_strategy
-        assert shard_orientation == parallel_config.shard_orientation
+
+    # assert (
+    #     shard_scheme == ttnn.TensorMemoryLayout.HEIGHT_SHARDED
+    #     or shard_scheme == ttnn.TensorMemoryLayout.BLOCK_SHARDED
+    # )
+    # if shard_scheme == ttnn.TensorMemoryLayout.HEIGHT_SHARDED:
+    #     assert shard_orientation == ttnn.ShardOrientation.ROW_MAJOR
+    # else:
+    #     assert shard_orientation == ttnn.ShardOrientation.COL_MAJOR
+    # if parallel_config is not None:
+    #     # input and output should have same shard strategy and orientation
+    #     # halo doesnt support reshard between different strategies or orientation
+    #     assert shard_scheme == parallel_config.shard_scheme
+    #     assert shard_orientation == parallel_config.shard_orientation
 
     # Build conv op object
     conv = ttnn.Conv2d(
@@ -308,7 +349,7 @@ def conv2d(
         groups=groups,
         dtype=dtype,
         device=device,
-        use_1d_systolic_array=shard_strategy == ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
+        use_1d_systolic_array=shard_scheme == ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
         batch_size=batch_size,
         input_height=input_height,
         input_width=input_width,
@@ -322,6 +363,7 @@ def conv2d(
         activation=activation,
     )
     # Run conv
+    print("Running halo op followed by conv op")
     return conv(input_tensor)
 
 

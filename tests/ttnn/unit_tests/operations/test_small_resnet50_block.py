@@ -31,57 +31,29 @@ class resnet50Bottleneck:
 
     def __init__(self, parameters, downsample, model_config) -> None:
         # init is just to pre-process pytorch weights and bias tensors
-        self.conv1_weight_tensor = ttnn.from_torch(
-            parameters.conv1.weight,
-            dtype=model_config["WEIGHTS_DTYPE"] if model_config["WEIGHTS_DTYPE"] != ttnn.bfloat8_b else ttnn.float32,
-        )
-        self.conv1_bias_tensor = ttnn.from_torch(
-            parameters.conv1.bias,
-            dtype=model_config["WEIGHTS_DTYPE"] if model_config["WEIGHTS_DTYPE"] != ttnn.bfloat8_b else ttnn.float32,
-        )
+        self.conv1_weight_tensor = ttnn.from_torch(parameters.conv1.weight, dtype=ttnn.bfloat16)
+        self.conv1_bias_tensor = ttnn.from_torch(parameters.conv1.bias, dtype=ttnn.bfloat16)
         self.conv1_input_channels = self.conv1_weight_tensor.shape[1]
         self.conv1_output_channels = self.conv1_weight_tensor.shape[0]
         assert self.conv1_weight_tensor.shape[2] == 1
 
-        self.conv2_weight_tensor = ttnn.from_torch(
-            parameters.conv2.weight,
-            dtype=model_config["WEIGHTS_DTYPE"] if model_config["WEIGHTS_DTYPE"] != ttnn.bfloat8_b else ttnn.float32,
-        )
-        self.conv2_bias_tensor = ttnn.from_torch(
-            parameters.conv2.bias,
-            dtype=model_config["WEIGHTS_DTYPE"] if model_config["WEIGHTS_DTYPE"] != ttnn.bfloat8_b else ttnn.float32,
-        )
+        self.conv2_weight_tensor = ttnn.from_torch(parameters.conv2.weight, dtype=ttnn.bfloat16)
+        self.conv2_bias_tensor = ttnn.from_torch(parameters.conv2.bias, dtype=ttnn.bfloat16)
         self.conv2_input_channels = self.conv2_weight_tensor.shape[1]
         self.conv2_output_channels = self.conv2_weight_tensor.shape[0]
         self.conv2_stride = 2 if downsample else 1
         assert self.conv2_weight_tensor.shape[2] == 3
 
-        self.conv3_weight_tensor = ttnn.from_torch(
-            parameters.conv3.weight,
-            dtype=model_config["WEIGHTS_DTYPE"] if model_config["WEIGHTS_DTYPE"] != ttnn.bfloat8_b else ttnn.float32,
-        )
-        self.conv3_bias_tensor = ttnn.from_torch(
-            parameters.conv3.bias,
-            dtype=model_config["WEIGHTS_DTYPE"] if model_config["WEIGHTS_DTYPE"] != ttnn.bfloat8_b else ttnn.float32,
-        )
+        self.conv3_weight_tensor = ttnn.from_torch(parameters.conv3.weight, dtype=ttnn.bfloat16)
+        self.conv3_bias_tensor = ttnn.from_torch(parameters.conv3.bias, dtype=ttnn.bfloat16)
         self.conv3_input_channels = self.conv3_weight_tensor.shape[1]
         self.conv3_output_channels = self.conv3_weight_tensor.shape[0]
         assert self.conv3_weight_tensor.shape[2] == 1
 
         self.downsample = downsample
         if downsample:
-            self.ds_conv_weight_tensor = ttnn.from_torch(
-                parameters.ds_conv.weight,
-                dtype=model_config["WEIGHTS_DTYPE"]
-                if model_config["WEIGHTS_DTYPE"] != ttnn.bfloat8_b
-                else ttnn.float32,
-            )
-            self.ds_conv_bias_tensor = ttnn.from_torch(
-                parameters.ds_conv.bias,
-                dtype=model_config["WEIGHTS_DTYPE"]
-                if model_config["WEIGHTS_DTYPE"] != ttnn.bfloat8_b
-                else ttnn.float32,
-            )
+            self.ds_conv_weight_tensor = ttnn.from_torch(parameters.ds_conv.weight, dtype=ttnn.bfloat16)
+            self.ds_conv_bias_tensor = ttnn.from_torch(parameters.ds_conv.bias, dtype=ttnn.bfloat16)
             self.ds_conv_input_channels = self.ds_conv_weight_tensor.shape[1]
             self.ds_conv_output_channels = self.ds_conv_weight_tensor.shape[0]
             assert self.ds_conv_weight_tensor.shape[2] == 1
@@ -524,16 +496,16 @@ def create_sharded_memory_config_from_parallel_config(tensor_shape, parallel_con
     num_cores_nhw = parallel_config.num_cores_nhw
     num_cores_x = parallel_config.grid_size.x
     num_cores_y = parallel_config.grid_size.y
-    shard_strategy = parallel_config.shard_strategy
+    shard_scheme = parallel_config.shard_scheme
     shard_orientation = parallel_config.shard_orientation
-    is_1d_systolic = shard_strategy == ttnn.TensorMemoryLayout.HEIGHT_SHARDED
+    is_1d_systolic = shard_scheme == ttnn.TensorMemoryLayout.HEIGHT_SHARDED
     if is_1d_systolic:
         logical_grid_size = (num_cores_nhw, 1)
     else:
         logical_grid_size = (num_cores_x, num_cores_y)
 
     shard_grid, shard_layout = calculate_shard_grid((num_cores_x, num_cores_y), num_cores_nhw)
-    assert shard_layout == shard_strategy
+    assert shard_layout == shard_scheme
     nhw_shape = tensor_shape[0] * tensor_shape[1] * tensor_shape[2]
     nhw_padded = roundup(nhw_shape, num_cores_nhw * tile_size)
     nhw_shard = nhw_padded // num_cores_nhw
@@ -541,7 +513,7 @@ def create_sharded_memory_config_from_parallel_config(tensor_shape, parallel_con
     shard_shape = [nhw_shard, channels // logical_grid_size[1]]
     shard_halo = False
     shard_spec = ttnn.experimental.tensor.ShardSpec(shard_grid, shard_shape, shard_orientation, shard_halo)
-    return ttnn.MemoryConfig(shard_strategy, ttnn.BufferType.L1, shard_spec)
+    return ttnn.MemoryConfig(shard_scheme, ttnn.BufferType.L1, shard_spec)
 
 
 def build_run_and_validate_ttnn_model_old(
