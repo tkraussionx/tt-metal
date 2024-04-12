@@ -212,7 +212,7 @@ class TtMistralAttention(nn.Module):
             wqkv = self.wqkv_list[i]
             wo = self.wo_list[i]
             layer_past = self.layer_past_list[i]
-            head_dim = self.head_dims[i]
+            head_dim_tensor = self.head_dims[i]
 
             ###
             # QKV matmuls
@@ -278,7 +278,7 @@ class TtMistralAttention(nn.Module):
             values = values[:, :, :layer_slice, :]  # [batch, num_kv_heads, cache_len + seqlen, dhead]
 
             self.scaled_dot_product_attention(
-                queries, keys_transposed, values, head_dim, padded_layer_past_len, layer_slice
+                queries, keys_transposed, values, head_dim_tensor, padded_layer_past_len, layer_slice
             )
 
             attn_output = ttnn.transformer.concatenate_heads(
@@ -303,7 +303,7 @@ class TtMistralAttention(nn.Module):
             return dense_outputs
 
     def scaled_dot_product_attention(
-        self, queries, keys_transposed, values, head_dim, padded_layer_past_len, layer_slice
+        self, queries, keys_transposed, values, head_dim_tensor, padded_layer_past_len, layer_slice
     ):
         ###
         # Attention
@@ -333,7 +333,7 @@ class TtMistralAttention(nn.Module):
             ),
         )
         """
-        queries = queries * head_dim  # Scale queries instead of QK before softmax
+        queries = queries * head_dim_tensor  # Scale queries instead of QK before softmax
 
         print(f"queries.shape: {queries.shape}, keys_transposed.shape: {keys_transposed.shape}")
 
@@ -369,7 +369,7 @@ class TtMistralAttention(nn.Module):
                 shard_spec_32_cores_grid,  # Sharded on batch dim
                 [
                     self.n_local_kv_heads,  # Each core has all the kv heads
-                    head_dim,
+                    self.head_dim,
                 ],
                 ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
                 False,
@@ -387,7 +387,7 @@ class TtMistralAttention(nn.Module):
                 shard_spec_32_cores_grid,  # Sharded on batch dim
                 [
                     self.n_local_heads,  # Each core has all the q heads
-                    head_dim,
+                    self.head_dim,
                 ],
                 ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
                 False,
