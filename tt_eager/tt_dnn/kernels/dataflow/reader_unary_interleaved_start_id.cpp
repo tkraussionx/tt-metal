@@ -27,8 +27,6 @@ void kernel_main() {
         .data_format = data_format
     };
 
-    DPRINT << noc_reads_num_issued[noc_index] << ENDL();
-
 
 
     // read a ublock of tiles from src to CB, and then push the ublock to unpacker
@@ -41,10 +39,8 @@ void kernel_main() {
     #endif
         cb_reserve_back(cb_id_in0, onetile);
         uint32_t l1_write_addr = get_write_ptr(cb_id_in0);
-        // DPRINT << noc_reads_num_issued[0] << ENDL();
         noc_async_read_tile_with_trid(i, s, l1_write_addr);
         noc_async_read_barrier_with_trid();
-        // DPRINT << noc_reads_num_issued[0] << ENDL();
         cb_push_back(cb_id_in0, onetile);
     }
 }

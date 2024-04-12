@@ -299,7 +299,6 @@ int main() {
     l1_to_local_mem_copy((uint*)__ldm_data_start, (uint tt_l1_ptr *)MEM_BRISC_INIT_LOCAL_L1_BASE, num_words);
 
     risc_init();
-    noc_init_registers();
     device_setup();
 
     // Set ncrisc's resume address to 0 so we know when ncrisc has overwritten it
@@ -316,6 +315,7 @@ int main() {
     mailboxes->launch.run = RUN_MSG_DONE;
 
     while (1) {
+        noc_init_registers();
         init_sync_registers();
         assert_just_ncrisc_reset();
 

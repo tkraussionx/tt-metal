@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include "dataflow_api.h"
 
-//#include "debug/dprint.h"
+// #include "debug/dprint.h"
 
 void kernel_main() {
     const uint32_t src_addr  = get_arg_val<uint32_t>(0);
@@ -34,9 +34,11 @@ void kernel_main() {
         uint32_t tile_id = curr_tile_id;
         for (uint32_t w = 0; w < block_width_tiles; w++) {
             noc_async_read_tile_with_trid(tile_id, s, l1_write_addr);
+            // noc_async_read_tile(tile_id, s, l1_write_addr);
             tile_id++;
             l1_write_addr += tile_bytes;
             noc_async_read_barrier_with_trid();
+            // noc_async_read_barrier();
         }
         curr_tile_id += input_width_offset_tiles;
     }
