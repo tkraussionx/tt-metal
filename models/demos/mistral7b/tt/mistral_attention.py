@@ -273,9 +273,9 @@ class TtMistralAttention(nn.Module):
             ttnn.experimental.tensor.update_cache(values, v_heads, current_pos)  # self.current)
             self.layer_past_list[i] = [keys, values]
 
-            keys = keys[:, :, :padded_layer_past_len, :]
-            keys = ttnn.permute(keys, (0, 1, 3, 2))  #  [batch, num_kv_heads, dhead, cache_len + seqlen]
-            values = values[:, :, :layer_slice, :]
+            keys = keys[:, :, :padded_layer_past_len, :]  # [batch, num_kv_heads, cache_len + seqlen, dhead]
+            # keys = ttnn.permute(keys, (0, 1, 3, 2))  #  [batch, num_kv_heads, dhead, cache_len + seqlen]
+            values = values[:, :, :layer_slice, :]  # [batch, num_kv_heads, cache_len + seqlen, dhead]
 
             ###
             # Attention
@@ -306,43 +306,149 @@ class TtMistralAttention(nn.Module):
             )
             """
             q_heads = q_heads * head_dim  # Scale q_heads instead of QK before softmax
+            # q_heads = ttnn.permute(q_heads, (2, 0, 1, 3))  # [1, n_heads, bsz, head_dim] -> [bsz, 1, n_heads, head_dim]
+            print(f"q_heads.shape: {q_heads.shape}")  # [1, n_heads, bsz, head_dim]
 
-            attn = ttnn.experimental.operations.primary.transformers.group_attn_matmul(
-                q_heads,
-                keys,
-                compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-                output_mem_config=self.model_config["QK_MM_OUTPUT_MEMCFG"],
-                output_dtype=ttnn.bfloat16,  # Force bfloat16 for higher accuracy
-            )  # seqlen, n_heads, batch, cache_len + seqlen
+            shard_spec_32_cores_grid = ttnn.experimental.tensor.CoreRangeSet(
+                {
+                    ttnn.experimental.tensor.CoreRange(
+                        ttnn.experimental.tensor.CoreCoord(0, 0),
+                        ttnn.experimental.tensor.CoreCoord(7, 3),
+                    ),
+                }
+            )
+            # q_transpose_memcfg = ttnn.experimental.tensor.MemoryConfig(
+            #     ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+            #     ttnn.experimental.tensor.BufferType.L1,
+            #     ttnn.experimental.tensor.ShardSpec(
+            #         shard_spec_32_cores_grid,  # Sharded on batch dim
+            #         [
+            #             32,  # Each core has 32 padded heads
+            #             self.head_dim,
+            #         ],
+            #         ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+            #         False,
+            #     ),
+            # )
+            # q_heads = ttnn.experimental.tensor.interleaved_to_sharded(q_heads, sharded_mem_config=q_transpose_memcfg)
+            # attn_program_config = ttnn.experimental.operations.primary.MatmulMultiCoreReuseProgramConfig(
+            #     compute_with_storage_grid_size=[8, 4],
+            #     in0_block_w=self.head_dim // 32,  # HEAD_DIM // TILE_SIZE
+            #     out_subblock_h=1,  # TODO: Maximize
+            #     out_subblock_w=1,  # TODO: Maximize
+            #     per_core_M=32 // 32,  # N_HEADS_PADDED // TILE_SIZE,
+            #     per_core_N=padded_layer_past_len // 32,  # SEQ_LEN // TILE_SIZE (dynamic)
+            # )
 
-            attn = attn[:, :, :, :layer_slice]
-            attn = ttnn.softmax(attn, dim=-1)  # (attn * (self.head_dim**-0.5))
-            """
-            attn = ttnn.to_memory_config(attn, memory_config=ttnn.create_sharded_memory_config(
-                (32, padded_layer_past_len),
-                ttnn.CoreGrid(8, 4),
-                ttnn.ShardStrategy.HEIGHT,
-                ttnn.ShardOrientation.ROW_MAJOR,
-                use_height_and_width_as_shard_shape=True,
-            ))
+            print(f"q_heads.shape: {q_heads.shape}, keys.shape: {keys.shape}")
 
-            values = ttnn.to_memory_config(values, memory_config=ttnn.create_sharded_memory_config(
-                (1 * 8 * padded_layer_past_len, 128),
-                ttnn.CoreGrid(8, 4),
-                ttnn.ShardStrategy.HEIGHT,
-                ttnn.ShardOrientation.ROW_MAJOR,
-                False,
-                use_height_and_width_as_shard_shape=True,
-            ))
-            """
+            # To use a normal matmul we need to separate both the users (batch dim) and the groups (kv_heads dim)
+            # We're going to use height sharding in the batch rows to place each user on one core
+            # And then we're going to iterate through the 8 groups of kv_heads
+            # If we do this we can use a normal matmul for the Q*K^T instead of using group_attn_matmul which can't
+            # handle sequences longer than ~384 tokens and is suuuuper slow
+            # Users (batch): 32
+            # Groups (kv_heads): 8
+            # Q heads: 32
+            # head dim: 128
+            # hidden dim: 4096
 
-            attn_output = ttnn.experimental.operations.primary.transformers.group_attn_matmul(
+            # keys: [batch, num_kv_heads, cache_len + seqlen, dhead]
+            keys = ttnn.permute(keys, (1, 0, 2, 3))  #  [num_kv_heads, batch, cache_len + seqlen, dhead]
+            for slice_i in range(self.n_local_kv_heads):
+                single_k_head = ttnn.experimental.tensor.interleaved_to_sharded_partial(
+                    keys,
+                    (8, 4),
+                    [
+                        self.max_batch_size * padded_layer_past_len // 32,
+                        self.head_dim,
+                    ],  # each slice is [1,1,bsz*padded_layer_past_len,128], we use 32 cores
+                    self.n_local_kv_heads,  # num_slices
+                    slice_i,  # slice_index
+                    ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                    ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+                )
+                single_k_head = ttnn.experimental.tensor.transpose(
+                    single_k_head,
+                    -2,
+                    -1,
+                    output_mem_config=ttnn.experimental.tensor.MemoryConfig(
+                        ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                        ttnn.experimental.tensor.BufferType.L1,
+                    ),
+                )
+                # query dims [1, n_heads=32, bsz, head_dim]
+                # q_slice dims [1, n_heads=4, bsz, head_dim]
+                q_heads_per_kv_head = self.n_local_heads // self.n_local_kv_heads
+                single_q_head = ttnn.experimental.tensor.interleaved_to_sharded_partial(
+                    q_heads,
+                    (8, 4),
+                    [
+                        q_heads_per_kv_head * self.max_batch_size // 32,
+                        self.head_dim,
+                    ],  # each slice is [1,4,1,128], we use 32 cores
+                    self.n_local_kv_heads,  # num_slices
+                    slice_i,  # slice_index
+                    ttnn.experimental.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+                    ttnn.experimental.tensor.ShardOrientation.ROW_MAJOR,
+                )
+                print(f"q_heads.shape: {q_heads.shape}, single_kv_head.shape: {single_k_head.shape}")
+                attn = ttnn.experimental.operations.primary.matmul(
+                    q_heads,
+                    single_k_head,
+                    program_config=attn_program_config,
+                    output_mem_config=ttnn.DRAM_MEMORY_CONFIG,  # self.model_config["QK_MM_OUTPUT_MEMCFG"],
+                    compute_kernel_config=self.compute_kernel_config,
+                    output_dtype=ttnn.bfloat16,  # Force bfloat16 for higher accuracy
+                )  # seqlen, n_heads, batch, cache_len + seqlen
+                print(f"single_head_attn.shape: {attn.shape}")
+
+                # TODO: continue this with the rest of attention through to the value matmul and then collect them all back into dram
+                # Sharded to interleaved
+                # tt_lib.tensor.sharded_to_interleaved_partial(
+                #                 attn_output_slice[i],
+                #                 attn_output[i], # pre-allocate this in dram!
+                #                 num_slices,
+                #                 slice_i,
+                #                 self.model_config["DRAM_MEMCFG"],
+                #             )
+
+                attn = attn[:, :, :, :layer_slice]
+                attn = ttnn.softmax(attn, dim=-1)  # (attn * (self.head_dim**-0.5))
+                """
+                attn = ttnn.to_memory_config(attn, memory_config=ttnn.create_sharded_memory_config(
+                    (32, padded_layer_past_len),
+                    ttnn.CoreGrid(8, 4),
+                    ttnn.ShardStrategy.HEIGHT,
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    use_height_and_width_as_shard_shape=True,
+                ))
+
+                values = ttnn.to_memory_config(values, memory_config=ttnn.create_sharded_memory_config(
+                    (1 * 8 * padded_layer_past_len, 128),
+                    ttnn.CoreGrid(8, 4),
+                    ttnn.ShardStrategy.HEIGHT,
+                    ttnn.ShardOrientation.ROW_MAJOR,
+                    False,
+                    use_height_and_width_as_shard_shape=True,
+                ))
+                """
+
+            print(f"attn.shape: {attn.shape}, values.shape: {values.shape}")
+            attn_output = ttnn.matmul(
                 attn,
                 values,
-                compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
-                output_mem_config=self.model_config["QKV_MM_OUTPUT_MEMCFG"],
-                output_dtype=ttnn.bfloat16,  # Force bfloat16 for higher accuracy
+                core_grid=self.grid_size,
+                memory_config=self.model_config["QKV_MM_OUTPUT_MEMCFG"],
+                dtype=ttnn.bfloat16,  # Force bfloat16 for higher accuracy
             )  # seqlen, n_heads, batch, dhead
+            # attn_output = ttnn.experimental.operations.primary.transformers.group_attn_matmul(
+            #     attn,
+            #     values,
+            #     compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
+            #     output_mem_config=self.model_config["QKV_MM_OUTPUT_MEMCFG"],
+            #     output_dtype=ttnn.bfloat16,  # Force bfloat16 for higher accuracy
+            # )  # seqlen, n_heads, batch, dhead
 
             attn_output = ttnn.transformer.concatenate_heads(
                 attn_output, memory_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"]

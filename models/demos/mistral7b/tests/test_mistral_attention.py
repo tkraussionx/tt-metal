@@ -55,7 +55,7 @@ def test_mistral_attention_inference(iterations, device, use_program_cache, rese
             )
         )  # ttnn.bfloat16
 
-    generation_start_pos = 0
+    generation_start_pos = 1000
     generation_length = iterations
     all_tests_pass = True
 

@@ -62,7 +62,8 @@ class TtModelArgs:
         self.model_config = {}
         # Update memory configs (weights->DRAM, activations->L1)
         self.model_config.update(
-            {f"{key}_MEMCFG": DRAM_MEMCFG if "WEIGHTS" in key else L1_MEMCFG for key in self.OP_KEYS}
+            # {f"{key}_MEMCFG": DRAM_MEMCFG if "WEIGHTS" in key else L1_MEMCFG for key in self.OP_KEYS}
+            {f"{key}_MEMCFG": DRAM_MEMCFG for key in self.OP_KEYS}
         )
         # Update memory layouts (Tile, except MLP)
         self.model_config.update({f"{key}_TILE": ttnn.TILE_LAYOUT for key in self.OP_KEYS if "LAYOUT" in key})
