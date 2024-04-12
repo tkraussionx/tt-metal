@@ -64,8 +64,8 @@ const uint32_t write_transaction_id __attribute__((used)) = BRISC_WR_REG_TRANSAC
 const uint32_t use_multi_noc __attribute__((used)) = false;
 const uint32_t noc_index_to_dram_bank_map[NUM_DRAM_BANKS] __attribute__((used)) =
 {
+    // 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-    // 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0
     // 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
 };
 
