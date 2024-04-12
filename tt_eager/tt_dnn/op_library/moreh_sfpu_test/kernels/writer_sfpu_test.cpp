@@ -32,7 +32,9 @@ void kernel_main() {
 
     for (uint32_t i = 0; i < num_tiles; ++i) {
         auto write_tile_id{start_id + i};
+        DPRINT << "writer before cb_wait_fronat(cb_id_out0)" << ENDL();
         cb_wait_front(cb_id_out0, onetile);
+        DPRINT << "writer after cb_wait_fronat(cb_id_out0)" << ENDL();
         l1_read_addr = get_read_ptr(cb_id_out0);
         noc_async_write_tile(write_tile_id, dram_output_addrg, l1_read_addr);
         noc_async_write_barrier();

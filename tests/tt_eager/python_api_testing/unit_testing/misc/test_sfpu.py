@@ -157,3 +157,7 @@ def test_sfpu_bfloat16_output_is_weird(device):
 
 def test_sfpu_bfloat16_output_is_ok(device):
     moreh_sfpu_test(1, device)
+
+
+def test_copy_tiles(device):
+    moreh_sfpu_test(2, device)

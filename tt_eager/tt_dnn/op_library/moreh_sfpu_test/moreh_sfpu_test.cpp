@@ -94,17 +94,27 @@ operation::ProgramWithCallbacks MorehSFPUTest::create_program(
         all_cores,
         output_data_format,
         {
+            {CB::c_in1, in1_t},
             {CB::c_out0, out0_t},
         });
 
     ////////////////////////////////////////////////////////////////////////////
     //                      DataMovementKernel SetUp
     ////////////////////////////////////////////////////////////////////////////
-    const std::string reader_kernel_file("tt_eager/tt_dnn/op_library/moreh_sfpu_test/kernels/reader_sfpu_test.cpp");
-    const auto reader_kernel_id = CreateReadKernel(program, reader_kernel_file, all_cores);
 
+    const std::vector<uint32_t> reader_args_group{};
+    std::map<string, string> reader_defines;
+    std::string test_define = "SFPU_OP_TEST_CASE_" + std::to_string(this->test_case);
+    reader_defines[test_define] = "1";
+    const std::string reader_kernel_file("tt_eager/tt_dnn/op_library/moreh_sfpu_test/kernels/reader_sfpu_test.cpp");
+    const auto reader_kernel_id = CreateReadKernel(program, reader_kernel_file, all_cores, reader_args_group, reader_defines);
+
+    const std::vector<uint32_t> writer_args_group{};
+    std::map<string, string> writer_defines;
+    writer_defines[test_define] = "1";
     const std::string writer_kernel_file("tt_eager/tt_dnn/op_library/moreh_sfpu_test/kernels/writer_sfpu_test.cpp");
-    const auto writer_kernel_id = CreateWriteKernel(program, writer_kernel_file, all_cores);
+    const auto writer_kernel_id =
+        CreateWriteKernel(program, writer_kernel_file, all_cores, writer_args_group, writer_defines);
 
     ////////////////////////////////////////////////////////////////////////////
     //                      ComputeKernel SetUp
@@ -112,7 +122,7 @@ operation::ProgramWithCallbacks MorehSFPUTest::create_program(
     const std::vector<uint32_t> compute_args_group_1{};
     std::map<string, string> compute_defines;
     // compute_defines["SFPU_OP_IDENTITY_INCLUDE"] = "1";
-    std::string test_define = "SFPU_OP_TEST_CASE_" + std::to_string(this->test_case);
+    // std::string test_define = "SFPU_OP_TEST_CASE_" + std::to_string(this->test_case);
     compute_defines[test_define] = "1";
 
     bool fp32_dest_acc = (input_data_format == tt::DataFormat::UInt32) ? (true) : (false);
@@ -152,7 +162,7 @@ operation::ProgramWithCallbacks MorehSFPUTest::create_program(
         }
 
         tt_metal::SetRuntimeArgs(
-            program, reader_kernel_id, core, {input_addr, num_output_tiles_per_core, num_tiles_written});
+            program, reader_kernel_id, core, {input_addr, output_addr, num_output_tiles_per_core, num_tiles_written});
 
         tt_metal::SetRuntimeArgs(
             program, writer_kernel_id, core, {output_addr, num_output_tiles_per_core, num_tiles_written});
