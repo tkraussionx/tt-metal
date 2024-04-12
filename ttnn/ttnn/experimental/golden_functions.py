@@ -76,6 +76,7 @@ def _nop_golden_function(input_tensor, *args, **kwargs):
     return input_tensor
 
 
+ttnn.experimental.tensor.sharded_to_interleaved.golden_function = _nop_golden_function
 ttnn.experimental.tensor.interleaved_to_sharded.golden_function = _nop_golden_function
 ttnn.experimental.tensor.reshard.golden_function = _nop_golden_function
 ttnn.experimental.tensor.tilize.golden_function = _nop_golden_function
