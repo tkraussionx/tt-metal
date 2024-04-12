@@ -4,6 +4,7 @@
 
 #include "common/logger.hpp"
 #include "impl/buffers/buffer.hpp"
+#include "impl/buffers/circular_buffer_types.hpp"
 #include "tt_dnn/op_library/operation.hpp"
 #include "tt_eager/tt_dnn/op_library/softmax/softmax_op.hpp"
 #include "tt_eager/tt_dnn/op_library/math.hpp"
@@ -492,6 +493,14 @@ operation::ProgramWithCallbacks scale_mask_softmax_sharded_multi_core(
     uint32_t im1_CB_size = 1 * im_tile_size;
     // attn mask im
     uint32_t im2_CB_size = block_wt * im_tile_size;
+
+    // scaler for reduce - one tile size
+    // Todo: check if this is ok to be in
+    uint32_t im3_CB_size = 1 * im_tile_size;
+
+    // single tile for max(x)
+    uint32_t im4_CB_size = 1 * im_tile_size;
+
     // output buffer size
     uint32_t out_CB_size = block_wt * block_ht * out0_tile_size;
 
@@ -629,6 +638,14 @@ operation::ProgramWithCallbacks scale_mask_softmax_sharded_multi_core(
     auto c_intermed1_config = CircularBufferConfig(im1_CB_size, {{CB::c_intermed1, im_cb_data_format}})
         .set_page_size(CB::c_intermed1, im_tile_size);
     auto cb_intermed1_id = CreateCircularBuffer( program, all_device_cores, c_intermed1_config );
+
+    auto c_intermed3_config = CircularBufferConfig(im3_CB_size, {{CB::c_intermed3, im_cb_data_format}})
+        .set_page_size(CB::c_intermed3, im_tile_size);
+    auto cb_intermed3_id = CreateCircularBuffer(program, all_device_cores, c_intermed3_config);
+
+    auto c_intermed4_config = CircularBufferConfig(im4_CB_size, {{CB::c_intermed4, im_cb_data_format}})
+        .set_page_size(CB::c_intermed4, im_tile_size);
+    auto cb_intermed4_id = CreateCircularBuffer(program, all_device_cores, c_intermed4_config);
 
     // Runtime Args
     uint32_t mask_addr = mask.has_value() ? mask.value().buffer()->address() : 0;

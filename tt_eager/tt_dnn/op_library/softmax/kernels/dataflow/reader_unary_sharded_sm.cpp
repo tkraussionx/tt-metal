@@ -19,7 +19,11 @@ FORCE_INLINE void generate_inv_sqrt_hw_bcast_tile() {
 void kernel_main() {
 
     constexpr uint32_t cb_reduce_scaler = tt::CB::c_in1;
+    constexpr uint32_t cb_reduce_constant_one = tt::CB::c_intermed3;
     const uint32_t reduce_scaler = get_arg_val<uint32_t>(0);
+
+    // 0x3f800000 is float 1.0f
+    generate_reduce_scaler(cb_reduce_constant_one, 0x3f803f80);
 
     #if FUSED_SCALE_MASK
     constexpr uint32_t block_wt = get_compile_time_arg_val(0);

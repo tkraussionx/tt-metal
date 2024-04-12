@@ -311,6 +311,7 @@ def test_falcon7b_attnention_sliced(
     mm_activations_height_shard_spec = [tiles_per_shard * 32, 2 * 32]
     mm_output_height_shard_spec = [tiles_per_shard * 32, seq_len]
 
+    printed = False
     for i in range(num_slices):
         slice = ttl.tensor.interleaved_to_sharded_partial(
             reference_query_layer,
@@ -384,12 +385,18 @@ def test_falcon7b_attnention_sliced(
         subblock_w = 1
         if seq_len == 2048:
             subblock_w = 8
+        block_h = mm_output_height_shard_spec[0] // 32
+        block_w = mm_output_height_shard_spec[1] // 32
         softmax_program_config = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
             compute_with_storage_grid_size=grid_size,
             subblock_w=subblock_w,
-            block_h=mm_output_height_shard_spec[0] // 32,
-            block_w=mm_output_height_shard_spec[1] // 32,
+            block_h=block_h,
+            block_w=block_w,
         )
+
+        if not printed:
+            printed = True
+            print("Softmax program config - Block_W: ", block_w, " Block_H: ", block_h, " Subblock_W: ", subblock_w)
 
         mm_slice = ttl.operations.primary.softmax_in_place(
             mm_slice, program_config=softmax_program_config, compute_kernel_config=compute_kernel_config
@@ -908,5 +915,75 @@ def test_softmax(device, num_cores, seq_len):
     entire_tensor_passing, output = comp_pcc(out_torch_view, out_torch_softmax_view)
     passing = entire_tensor_passing and passing
 
+    print(output)
+    assert passing
+
+
+@pytest.mark.parametrize("num_cores", [64])
+def test_stable_softmax(device, num_cores):
+    width = 128
+
+    input_shape = [1, 1, 160, width]
+
+    grid_size = (8, 8)
+    torch.manual_seed(0)
+
+    torch_input = torch.randn(input_shape).bfloat16().float()
+    torch_input[0, 0, 0, 3] = 500
+    # torch.set_printoptions(profile="full", sci_mode=False)
+    # print(torch_input)
+
+    dram_interleaved_memory_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.INTERLEAVED,
+        buffer_type=ttl.tensor.BufferType.DRAM,
+    )
+
+    height_sharded_memory_config = ttl.tensor.MemoryConfig(
+        memory_layout=ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED, buffer_type=ttl.tensor.BufferType.DRAM
+    )
+
+    compute_kernel_config = ttl.tensor.WormholeComputeKernelConfig(
+        math_fidelity=ttl.tensor.MathFidelity.HiFi4,
+        math_approx_mode=True,
+        fp32_dest_acc_en=False,
+        packer_l1_acc=True,
+    )
+
+    tt_input = torch2tt_tensor(
+        torch_input, device, ttl.tensor.Layout.TILE, dram_interleaved_memory_config, ttl.tensor.DataType.BFLOAT16
+    )
+
+    # Sharded Softmax
+    tt_input_shard = ttl.tensor.interleaved_to_sharded(
+        tt_input,
+        grid_size,
+        [160, width],
+        ttl.tensor.TensorMemoryLayout.HEIGHT_SHARDED,
+        ttl.tensor.ShardOrientation.ROW_MAJOR,
+    )
+
+    sharded_softmax_program_config = ttl.operations.primary.transformers.SoftmaxShardedMultiCoreProgramConfig(
+        compute_with_storage_grid_size=grid_size,
+        subblock_w=1,
+        block_h=5,
+        block_w=width // 32,  # 4
+    )
+
+    tt_input_shard = ttl.operations.primary.softmax_in_place(
+        tt_input_shard, sharded_softmax_program_config, compute_kernel_config
+    )
+
+    tt_out = ttl.tensor.sharded_to_interleaved(tt_input_shard, output_mem_config=dram_interleaved_memory_config)
+
+    # Reference implementation, regular softmax
+    ref_out = ttl.operations.primary.softmax_in_place(tt_input, compute_kernel_config=compute_kernel_config)
+
+    out_torch = tt2torch_tensor(tt_out)
+    out_torch_ref = tt2torch_tensor(ref_out)
+
+    # Compare pcc
+    passing = False
+
+    passing, output = comp_pcc(out_torch_ref, out_torch)
     print(output)
     assert passing
