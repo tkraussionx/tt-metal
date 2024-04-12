@@ -61,7 +61,6 @@ ttnn.experimental.tensor.unpad.golden_function = _golden_function
 
 
 def _golden_function(tensor, grid_size, shard_spec, num_slices, slice, *args, **kwargs):
-    return tensor
     tensor = tensor.reshape(1, 1, -1, tensor.shape[-1])
     slice_size = tensor.shape[-2] // num_slices
     start = slice * slice_size
