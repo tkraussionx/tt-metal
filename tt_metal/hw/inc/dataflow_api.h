@@ -982,7 +982,6 @@ struct InterleavedAddrGenFast {
 #endif
             src_addr += bank_to_dram_offset[bank_id];
             noc_id = noc_index_to_dram_bank_map[bank_id];
-            noc_id = noc_index;
             src_noc_xy = dram_bank_to_noc_xy[noc_id][bank_id];
         } else {
 #ifdef IS_NOT_POW2_NUM_L1_BANKS

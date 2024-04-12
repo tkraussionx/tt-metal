@@ -107,6 +107,7 @@ void kernel_main() {
                 for(uint32_t w = 0; w < in0_block_w; ++w) {
                     if (h < last_block_h) {
                         noc_async_read_tile_with_trid(in0_tensor_tile_id, s0, l1_write_addr_in0);
+                        // noc_async_read_tile(in0_tensor_tile_id, s0, l1_write_addr_in0);
                     }
                     l1_write_addr_in0 += in0_single_tile_size_bytes;
                     in0_tensor_tile_id += in0_tensor_stride_w;
@@ -117,6 +118,7 @@ void kernel_main() {
 
             // Barrier! make sure the reads are done
             noc_async_read_barrier_with_trid();
+            // noc_async_read_barrier();
             #endif
 
             #ifndef SKIP_MCAST
