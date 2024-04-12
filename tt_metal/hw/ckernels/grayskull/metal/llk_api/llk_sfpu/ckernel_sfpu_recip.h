@@ -79,6 +79,7 @@ inline void calculate_reciprocal()
                 v_if(val<1.0f){
                     i=1;
                 }
+                v_endif;
             }
         }
         v_endif;
