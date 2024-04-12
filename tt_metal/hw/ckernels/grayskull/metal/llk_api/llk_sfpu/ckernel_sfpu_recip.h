@@ -74,16 +74,20 @@ inline void calculate_reciprocal()
         vFloat val = dst_reg[0];
         int i=0;
         v_if (dst_reg[0]>0.0f){
-            while (i<10){
+            while (i==0){
                 val = val - 1.0f;
-                i++;
+                v_if(val<1.0f){
+                    i=1;
+                }
             }
         }
         v_elseif(dst_reg[0]<0.0f){
             val = -1.0f*val;
-            while (i<10){
+            while (i==0){
                 val = val - 1.0f;
-                i++;
+                v_if(val<1.0f){
+                    i=1;
+                }
             }
             val = -1.0f*val;
         }
