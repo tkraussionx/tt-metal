@@ -324,11 +324,13 @@ class transformer_2d_model:
                         hidden_states,
                         residual,
                         dtype=ttnn.bfloat16,
+                        # memory_config=hidden_states.memory_config()
                     )
                 else:
                     hidden_states = ttnn.add(
                         hidden_states,
                         residual,
+                        # memory_config=hidden_states.memory_config()
                     )
             else:
                 hidden_states = ttnn.to_device(hidden_states, self.device)
