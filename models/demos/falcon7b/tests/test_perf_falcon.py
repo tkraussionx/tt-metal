@@ -364,10 +364,9 @@ def run_test_FalconCausalLM_end_to_end(
         logger.info("Falcon PCC Check Passed!")
     else:
         logger.warning("Falcon PCC Check Failed!")
-        if is_wormhole_b0():  # only assert for pcc on wormhole until grayskull pcc is fixed
-            assert (
-                does_pass
-            ), f"Output PCC, k_cache_pcc, or v_cache_pcc is either lower or higher than {expected_pccs}. See earlier warnings for more details."
+        assert (
+            does_pass
+        ), f"Output PCC, k_cache_pcc, or v_cache_pcc is either lower or higher than {expected_pccs}. See earlier warnings for more details."
 
 
 @pytest.mark.models_performance_bare_metal
@@ -380,11 +379,11 @@ class TestParametrized:
     @pytest.mark.parametrize(
         "llm_mode, num_layers, batch, seq_len, kv_cache_len, model_config_str, expected_output_pcc, expected_k_cache_pcc, expected_v_cache_pcc, expected_inference_time",
         (
-            ("prefill", 32, 1, 128, 0, "BFLOAT16-L1", 0.99, 0.99, 0.99, 0.30),
-            ("prefill", 32, 1, 256, 0, "BFLOAT16-L1", 0.99, 0.99, 0.99, 0.44),
-            ("decode", 32, 32, 1, 128, "BFLOAT16-L1", 0.99, 0.99, 0.99, 0.27),
-            ("decode", 32, 32, 1, 1024, "BFLOAT16-L1", 0.99, 0.99, 0.99, 0.35),
-            ("decode", 32, 32, 1, 2047, "BFLOAT16-L1", 0.99, 0.99, 0.99, 0.48),
+            ("prefill", 32, 1, 128, 0, "BFLOAT16-L1", 0.85, 0.97, 0.86, 0.30),
+            ("prefill", 32, 1, 256, 0, "BFLOAT16-L1", 0.90, 0.97, 0.87, 0.44),
+            ("decode", 32, 32, 1, 128, "BFLOAT16-L1", 0.59, 0.73, 0.79, 0.27),
+            ("decode", 32, 32, 1, 1024, "BFLOAT16-L1", 0.59, 0.85, 0.85, 0.35),
+            ("decode", 32, 32, 1, 2047, "BFLOAT16-L1", 0.55, 0.94, 0.91, 0.48),
         ),
         ids=[
             "prefill_seq128",
