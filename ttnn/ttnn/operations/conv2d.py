@@ -3,13 +3,19 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from typing import Tuple, Union, Dict, Optional
-
+import warnings
+import math
 import ttnn
 
 from tt_eager.tt_dnn.op_library.sliding_window_op_infra.tt_py_composite_conv import (
     TTPyCompositeConv,
     SlidingWindowOpParams,
+    _nearest_32,
+    find_closest_common_largest_divisor,
+    find_closest_largest_divisor,
+    find_closest_largest_divisor_with_num_padding,
 )
+import ttnn.experimental
 
 
 class Conv2d:
@@ -147,6 +153,176 @@ class Conv2d:
 
     def get_parallel_config(self):
         return self.conv.get_parallel_config()
+
+
+class ConvKernelBlockConfig:
+    def __init__(self, act_block_h):
+        self.act_block_h = act_block_h
+
+
+class ParallelConfig:
+    def __init__(
+        self,
+        num_cores_y: int,
+        num_cores_x: int,
+        num_cores_nhw: int,
+        shard_strategy: ttnn.TensorMemoryLayout,
+        shard_orientation: ttnn.ShardOrientation,
+    ):
+        # TODO: using core range set would be better
+        self.grid_size = ttnn.experimental.tensor.CoreCoord(num_cores_x, num_cores_y)
+        self.num_cores_nhw = num_cores_nhw
+        self.shard_strategy = shard_strategy
+        self.shard_orientation = shard_orientation
+
+
+def determine_parallel_config(
+    is_1d_systolic,
+    batch_size,
+    input_channels,
+    output_height,
+    output_width,
+    output_channels,
+    device,
+    config_override=None,
+    is_out_tiled=True,
+):
+    if config_override is None:
+        config_override = {}
+    for k in config_override.keys():
+        assert k == "grid_size" or k == "num_cores_nhw"
+
+    conv_out_2d_matrix_height = batch_size * output_height * output_width
+    # pad height to 32
+    conv_out_2d_matrix_height = _nearest_32(conv_out_2d_matrix_height)
+    if is_out_tiled:
+        conv_out_2d_matrix_height_ntiles = (int)(conv_out_2d_matrix_height / 32)
+        conv_out_2d_matrix_width_ntiles = (int)(_nearest_32(output_channels) / 32)
+    else:
+        conv_out_2d_matrix_height_ntiles = conv_out_2d_matrix_height
+        conv_out_2d_matrix_width_ntiles = output_channels
+
+    compute_with_storage_grid_size = device.compute_with_storage_grid_size()
+    device_grid_size = (compute_with_storage_grid_size.x, compute_with_storage_grid_size.y)
+    max_num_cores = device_grid_size[0] * device_grid_size[1]
+
+    def calculate_num_cores_nhw(override):
+        num_cores_nhw = (
+            find_closest_largest_divisor(conv_out_2d_matrix_height_ntiles, max_num_cores)
+            if is_1d_systolic
+            else find_closest_largest_divisor_with_num_padding(conv_out_2d_matrix_height_ntiles, device_grid_size[0])
+        )
+        if override is not None and num_cores_nhw != override:
+            warnings.warn(f"Overriding config: num_cores_nhw from {num_cores_nhw} to user provided config={override}")
+            num_cores_nhw = override
+        return num_cores_nhw
+
+    def calculate_grid_size(num_cores_nhw, override):
+        if is_1d_systolic:
+            grid_size = [
+                device_grid_size[0] if num_cores_nhw >= device_grid_size[0] else num_cores_nhw,
+                math.ceil(num_cores_nhw / device_grid_size[0]),
+            ]  # for 1d systolic array, grid size is the tightest bound of num_cores_nhw as a rectangle (x,y)
+            assert (
+                num_cores_nhw <= grid_size[0] * grid_size[1]
+            ), "Error: For 1d systolic conv, num_cores_nhw must be <= grid size"
+        else:
+            grid_size = [
+                num_cores_nhw,
+                find_closest_common_largest_divisor(
+                    conv_out_2d_matrix_width_ntiles, _nearest_32(input_channels) // 32, device_grid_size[1]
+                ),
+            ]
+            assert (
+                num_cores_nhw == grid_size[0]
+            ), "Error: For 2d systolic conv, num_cores_nhw must be == # of cols in grid size"
+
+        if override is not None and grid_size != override:
+            warnings.warn(f"Overriding config: grid_size from {grid_size} to user provided config={override}")
+            grid_size = override
+        return grid_size
+
+    num_cores_nhw = calculate_num_cores_nhw(config_override.get("num_cores_nhw", None))
+    grid_size = calculate_grid_size(num_cores_nhw, config_override.get("grid_size", None))
+    shard_strategy = ttnn.TensorMemoryLayout.HEIGHT_SHARDED if is_1d_systolic else ttnn.TensorMemoryLayout.BLOCK_SHARDED
+    shard_orientation = ttnn.ShardOrientation.ROW_MAJOR if is_1d_systolic else ttnn.ShardOrientation.COL_MAJOR
+    return ParallelConfig(grid_size[1], grid_size[0], num_cores_nhw, shard_strategy, shard_orientation)
+
+
+@ttnn.register_operation(name="ttnn.conv2d", is_cpp_function=True)
+def conv2d(
+    input_tensor: ttnn.Tensor,
+    weight_tensor: ttnn.Tensor,
+    in_channels: int,
+    out_channels: int,
+    batch_size: int,
+    input_height: int,
+    input_width: int,
+    kernel_size: Union[int, Tuple[int, int]],
+    stride: Union[int, Tuple[int, int]] = 1,
+    padding: Union[int, Tuple[int, int]] = 0,
+    dilation: Union[int, Tuple[int, int]] = 1,
+    groups: int = 1,
+    dtype: ttnn.DataType = None,
+    *,
+    device: ttnn.Device,
+    bias_tensor: Optional[ttnn.Tensor] = None,
+    math_fidelity: ttnn.MathFidelity = None,
+    weights_dtype: ttnn.DataType = None,
+    conv_kernel_block_config_override: Optional[ConvKernelBlockConfig],
+    parallel_config: Optional[ParallelConfig] = None,
+    compute_kernel_config: Optional[ttnn.DeviceComputeKernelConfig] = None,
+    activation: str = None,
+) -> ttnn.Tensor:
+    block_and_parallel_config_override = {}
+    if conv_kernel_block_config_override is not None:
+        block_and_parallel_config_override["act_block_h"] = conv_kernel_block_config_override.act_block_h
+    if parallel_config is not None:
+        block_and_parallel_config_override["grid_size"] = [parallel_config.grid_size.x, parallel_config.grid_size.y]
+        block_and_parallel_config_override["num_cores_nhw"] = parallel_config.num_cores_nhw
+    input_memory_config = ttnn.get_memory_config(input_tensor)
+    shard_strategy = input_memory_config.memory_layout
+    shard_orientation = input_memory_config.shard_spec.orientation
+    assert (
+        shard_strategy == ttnn.TensorMemoryLayout.HEIGHT_SHARDED
+        or shard_strategy == ttnn.TensorMemoryLayout.BLOCK_SHARDED
+    )
+    if shard_strategy == ttnn.TensorMemoryLayout.HEIGHT_SHARDED:
+        assert shard_orientation == ttnn.ShardOrientation.ROW_MAJOR
+    else:
+        assert shard_orientation == ttnn.ShardOrientation.COL_MAJOR
+    if parallel_config is not None:
+        # input and output should have same shard strategy and orientation
+        # halo doesnt support reshard between different strategies or orientation
+        assert shard_strategy == parallel_config.shard_strategy
+        assert shard_orientation == parallel_config.shard_orientation
+
+    # Build conv op object
+    conv = ttnn.Conv2d(
+        in_channels=in_channels,
+        out_channels=out_channels,
+        kernel_size=kernel_size,
+        stride=stride,
+        padding=padding,
+        dilation=dilation,
+        groups=groups,
+        dtype=dtype,
+        device=device,
+        use_1d_systolic_array=shard_strategy == ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
+        batch_size=batch_size,
+        input_height=input_height,
+        input_width=input_width,
+        reader_patterns_cache={},
+        weight=weight_tensor,
+        bias=bias_tensor,
+        math_fidelity=math_fidelity,
+        weights_dtype=weights_dtype,
+        conv_blocking_and_parallelization_config_override=block_and_parallel_config_override,
+        compute_kernel_config=compute_kernel_config,
+        activation=activation,
+    )
+    # Run conv
+    return conv(input_tensor)
 
 
 __all__ = []
